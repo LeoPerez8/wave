@@ -4,12 +4,16 @@ import { describe, it } from "node:test";
 import {
   UPDATE_APK_RETRY_INTERVAL_MS,
   UPDATE_CHECK_INTERVAL_MS,
+  installTapAfter,
   latestApkUrl,
   nativeUpdateIsNew,
   nextUpdateStep,
+  offeredApk,
   playerKeepsPlaying,
   readLatestApk,
   readSignedApk,
+  updatePillShown,
+  updatePillSwipeDismisses,
   versionOrder,
   type UpdateState,
 } from "./index.ts";
@@ -29,8 +33,8 @@ const state = (changes: Partial<UpdateState> = {}): UpdateState => ({
   bundleDownloaded: false,
   nativeUpdate: "none",
   installAccess: "silent",
-  lastInstallAskAt: null,
-  lastInstallAt: null,
+  installTap: "none",
+  apkChecked: true,
   offeredApkVersion: "1.3.0-ti",
   lastApkAttempt: null,
   ...changes,
@@ -172,87 +176,191 @@ describe("when Wave downloads an APK", () => {
   });
 });
 
-describe("when Wave installs a downloaded APK silently", () => {
-  const ready = { nativeUpdate: "downloaded", visible: false } as const;
-
-  it("installs in the background with nothing playing", () => {
-    assert.equal(nextUpdateStep(state(ready)), "installApk");
-  });
-
-  it("never installs while Wave is visible", () => {
-    assert.equal(nextUpdateStep(state({ ...ready, visible: true })), "wait");
-  });
-
-  it("never installs while music plays", () => {
-    assert.equal(nextUpdateStep(state({ ...ready, playing: true })), "wait");
-  });
-
-  it("installs offline, as nothing's left to fetch", () => {
-    assert.equal(nextUpdateStep(state({ ...ready, network: "none" })), "installApk");
-  });
-
-  it("gives a failed install 15 minutes before trying again", () => {
-    assert.equal(nextUpdateStep(state({ ...ready, lastInstallAt: NOW - 15 * MINUTE + 1 })), "wait");
-    assert.equal(
-      nextUpdateStep(state({ ...ready, lastInstallAt: NOW - 15 * MINUTE })),
-      "installApk",
-    );
+describe("a downloaded APK nobody tapped for", () => {
+  it("never installs, whether Wave is in front or behind, on any install access", () => {
+    for (const installAccess of ["needsPermission", "needsConfirmation", "silent"] as const) {
+      for (const visible of [true, false]) {
+        for (const playing of [true, false]) {
+          assert.equal(
+            nextUpdateStep(state({ nativeUpdate: "downloaded", installAccess, visible, playing })),
+            "wait",
+            `${installAccess} visible=${visible} playing=${playing}`,
+          );
+        }
+      }
+    }
   });
 });
 
-describe("the first native update", () => {
-  const ready = { nativeUpdate: "downloaded" } as const;
-  const DAY = 24 * 60 * MINUTE;
+describe("a tap on Update the app", () => {
+  const tapped = { nativeUpdate: "downloaded", installTap: "tapped" } as const;
 
-  it("asks for the permission once the APK is ready and Wave is in front", () => {
+  it("installs at once, in front and while music plays", () => {
+    for (const installAccess of ["needsConfirmation", "silent"] as const) {
+      assert.equal(nextUpdateStep(state({ ...tapped, installAccess })), "installApk");
+      assert.equal(
+        nextUpdateStep(state({ ...tapped, installAccess, playing: true })),
+        "installApk",
+      );
+    }
+  });
+
+  it("installs offline, as nothing's left to fetch", () => {
+    assert.equal(nextUpdateStep(state({ ...tapped, network: "none" })), "installApk");
+  });
+
+  it("waits for a running step to end", () => {
+    assert.equal(nextUpdateStep(state({ ...tapped, working: true })), "wait");
+  });
+
+  it("keeps a confirmation for Wave in front, since no app may show it behind", () => {
     assert.equal(
-      nextUpdateStep(state({ ...ready, installAccess: "needsPermission" })),
-      "askInstallPermission",
+      nextUpdateStep(state({ ...tapped, installAccess: "needsConfirmation", visible: false })),
+      "wait",
+    );
+    assert.equal(
+      nextUpdateStep(state({ ...tapped, installAccess: "silent", visible: false })),
+      "installApk",
     );
   });
 
-  it("doesn't ask before the APK is ready", () => {
+  it("opens Android's permission screen without the permission", () => {
     assert.equal(
-      nextUpdateStep(
-        state({ nativeUpdate: "available", network: "metered", installAccess: "needsPermission" }),
-      ),
+      nextUpdateStep(state({ ...tapped, installAccess: "needsPermission" })),
+      "openInstallPermission",
+    );
+    assert.equal(
+      nextUpdateStep(state({ ...tapped, installAccess: "needsPermission", visible: false })),
       "wait",
     );
   });
 
-  it("doesn't ask from the background, and doesn't install without the permission", () => {
-    assert.equal(
-      nextUpdateStep(state({ ...ready, installAccess: "needsPermission", visible: false })),
-      "wait",
-    );
+  it("starts nothing more once it's at Android's screen or handed over", () => {
+    for (const installTap of [
+      "atPermissionScreen",
+      "awayAtPermissionScreen",
+      "handedOver",
+    ] as const) {
+      assert.equal(
+        nextUpdateStep(state({ nativeUpdate: "downloaded", installTap, installAccess: "silent" })),
+        "wait",
+        installTap,
+      );
+    }
+  });
+});
+
+describe("what becomes of a tap", () => {
+  const front = { visible: true, installAccess: "needsPermission" } as const;
+  const behind = { visible: false, installAccess: "needsPermission" } as const;
+  const granted = { visible: true, installAccess: "needsConfirmation" } as const;
+
+  it("survives until Android's screen has actually taken Wave's place", () => {
+    assert.equal(installTapAfter("atPermissionScreen", front), "atPermissionScreen");
+    assert.equal(installTapAfter("atPermissionScreen", behind), "awayAtPermissionScreen");
+    assert.equal(installTapAfter("awayAtPermissionScreen", behind), "awayAtPermissionScreen");
   });
 
-  it("after a decline, keeps the update and asks again a day later", () => {
-    const declined = { ...ready, installAccess: "needsPermission" } as const;
-    assert.equal(nextUpdateStep(state({ ...declined, lastInstallAskAt: NOW - DAY + 1 })), "wait");
-    assert.equal(
-      nextUpdateStep(state({ ...declined, lastInstallAskAt: NOW - DAY })),
-      "askInstallPermission",
-    );
+  it("continues the install on coming back with the permission", () => {
+    assert.equal(installTapAfter("awayAtPermissionScreen", granted), "tapped");
   });
 
-  it("with the permission, shows Android's confirmation in front, since no app may show it behind", () => {
-    const first = { ...ready, installAccess: "needsConfirmation" } as const;
-    assert.equal(nextUpdateStep(state(first)), "installApk");
-    assert.equal(nextUpdateStep(state({ ...first, visible: false })), "wait");
+  it("ends on coming back without it, so the screen doesn't open again by itself", () => {
+    assert.equal(installTapAfter("awayAtPermissionScreen", front), "none");
   });
 
-  it("doesn't show Android's confirmation while music plays, as accepting ends the process", () => {
-    assert.equal(
-      nextUpdateStep(state({ ...ready, installAccess: "needsConfirmation", playing: true })),
-      "wait",
-    );
+  it("ends when Wave leaves for Android's confirmation, so a decline offers it again", () => {
+    assert.equal(installTapAfter("handedOver", granted), "handedOver");
+    assert.equal(installTapAfter("handedOver", behind), "none");
   });
 
-  it("after a declined confirmation, shows it again a day later", () => {
-    const first = { ...ready, installAccess: "needsConfirmation" } as const;
-    assert.equal(nextUpdateStep(state({ ...first, lastInstallAt: NOW - DAY + 1 })), "wait");
-    assert.equal(nextUpdateStep(state({ ...first, lastInstallAt: NOW - DAY })), "installApk");
+  it("leaves no tap and a fresh tap as they are", () => {
+    assert.equal(installTapAfter("none", behind), "none");
+    assert.equal(installTapAfter("tapped", behind), "tapped");
+  });
+});
+
+describe("the APK on offer", () => {
+  const offer = {
+    nativeUpdate: "downloaded",
+    offeredApkVersion: "1.3.0",
+    installTap: "none",
+  } as const;
+
+  it("is the downloaded version", () => {
+    assert.equal(offeredApk(offer), "1.3.0");
+  });
+
+  it("isn't one still to download", () => {
+    assert.equal(offeredApk({ ...offer, nativeUpdate: "available" }), null);
+    assert.equal(offeredApk({ ...offer, nativeUpdate: "none" }), null);
+  });
+
+  it("isn't there while a tap is under way", () => {
+    assert.equal(offeredApk({ ...offer, installTap: "tapped" }), null);
+    assert.equal(offeredApk({ ...offer, installTap: "handedOver" }), null);
+  });
+});
+
+describe("the update pill", () => {
+  const clear = {
+    offered: "1.3.0",
+    ignored: null,
+    nowPlayingShown: false,
+    cardOpen: false,
+    otherPillShown: false,
+  };
+
+  it("shows with an APK on offer and nothing in the way", () => {
+    assert.equal(updatePillShown(clear), true);
+  });
+
+  it("doesn't show with nothing on offer", () => {
+    assert.equal(updatePillShown({ ...clear, offered: null }), false);
+  });
+
+  it("hides while Now Playing or a card is open", () => {
+    assert.equal(updatePillShown({ ...clear, nowPlayingShown: true }), false);
+    assert.equal(updatePillShown({ ...clear, cardOpen: true }), false);
+  });
+
+  it("waits for another floating pill to leave", () => {
+    assert.equal(updatePillShown({ ...clear, otherPillShown: true }), false);
+  });
+
+  it("stays away for the version swiped, and comes back for a newer one", () => {
+    assert.equal(updatePillShown({ ...clear, ignored: "1.3.0" }), false);
+    assert.equal(updatePillShown({ ...clear, ignored: "1.2.9" }), true);
+  });
+
+  it("goes on a sideways swipe a third of its width, or a flick, either way", () => {
+    const swipe = (translationX: number, velocityX = 0) =>
+      updatePillSwipeDismisses({ translationX, velocityX, width: 300 });
+    assert.equal(swipe(100), true);
+    assert.equal(swipe(-100), true);
+    assert.equal(swipe(60), false);
+    assert.equal(swipe(-60), false);
+    assert.equal(swipe(20, 1500), true);
+    assert.equal(swipe(-20, -1500), true);
+  });
+});
+
+describe("the APK check at a launch", () => {
+  it("runs inside the 15 minutes, so a downloaded APK's pill returns after a restart", () => {
+    assert.equal(nextUpdateStep(state({ apkChecked: false })), "checkApk");
+  });
+
+  it("runs once per launch", () => {
+    assert.equal(nextUpdateStep(state({ apkChecked: true })), "wait");
+  });
+
+  it("waits for Wave in front and a network", () => {
+    assert.equal(nextUpdateStep(state({ apkChecked: false, visible: false })), "wait");
+    assert.equal(nextUpdateStep(state({ apkChecked: false, network: "none" })), "wait");
+  });
+
+  it("leaves it to a check that's due anyway", () => {
+    assert.equal(nextUpdateStep(state({ apkChecked: false, lastCheckAt: null })), "check");
   });
 });
 
@@ -266,10 +374,10 @@ describe("a pending APK and a bundle", () => {
     }
   });
 
-  it("doesn't apply a downloaded bundle, and installs the APK instead", () => {
+  it("doesn't apply a downloaded bundle while an ignored APK stays on the phone", () => {
     assert.equal(
       nextUpdateStep(state({ nativeUpdate: "downloaded", bundleDownloaded: true, visible: false })),
-      "installApk",
+      "wait",
     );
   });
 

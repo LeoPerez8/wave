@@ -1,5 +1,8 @@
 import {
+  installTapAfter,
   nextUpdateStep,
+  offeredApk,
+  type InstallTap,
   type LogLevel,
   type NativeUpdate,
   type UpdateState,
@@ -20,8 +23,8 @@ export interface UpdateClient {
   readonly checkNative: Effect.Effect<NativeUpdate, unknown>;
   /** Fetches the APK the last check found; false when what came isn't the file CI signed. */
   readonly downloadApk: Effect.Effect<boolean, unknown>;
-  /** Asks for the install permission; false when something was in the way and it didn't ask. */
-  readonly askInstallPermission: Effect.Effect<boolean, unknown>;
+  /** Opens Android's "install from this source" screen. */
+  readonly openInstallPermission: Effect.Effect<void, unknown>;
   /** Hands the APK to Android, which ends this process when it installs. */
   readonly installApk: Effect.Effect<void, unknown>;
   /** The version the last check found on the channel, if any. */
@@ -45,8 +48,6 @@ export interface UpdateRunnerOptions {
   readonly surroundings: () => UpdateSurroundings;
   readonly now: () => number;
   readonly lastCheckAt: KeptTime;
-  readonly lastInstallAskAt: KeptTime;
-  readonly lastInstallAt: KeptTime;
   /** Kept across launches, so a reopened Wave doesn't fetch again what just came to nothing. */
   readonly lastApkAttempt: {
     readonly get: () => UpdateState["lastApkAttempt"];
@@ -67,8 +68,6 @@ export const createUpdateRunner = ({
   surroundings,
   now,
   lastCheckAt,
-  lastInstallAskAt,
-  lastInstallAt,
   lastApkAttempt,
   log,
 }: UpdateRunnerOptions) => {
@@ -76,6 +75,13 @@ export const createUpdateRunner = ({
   let bundleAvailable = false;
   let bundleDownloaded = false;
   let nativeUpdate: NativeUpdate = "none";
+  let installTap: InstallTap = "none";
+  let apkChecked = false;
+  const listeners = new Set<() => void>();
+
+  const notify = (): void => {
+    for (const listener of listeners) listener();
+  };
 
   const noteApkAttempt = (): void => {
     const version = client.offeredApkVersion();
@@ -87,6 +93,8 @@ export const createUpdateRunner = ({
     Effect.map((found) => {
       if (found !== nativeUpdate) log("info", `The channel's APK: ${found}`);
       nativeUpdate = found;
+      // The tap was for a file that's gone; a later download waits for one of its own.
+      if (found !== "downloaded") installTap = "none";
     }),
     Effect.catch((error) =>
       Effect.sync(() => log("warn", `The APK check failed: ${reason(error)}`)),
@@ -96,6 +104,7 @@ export const createUpdateRunner = ({
   const steps: Record<Exclude<UpdateStep, "wait">, Effect.Effect<boolean>> = {
     check: Effect.suspend(() => {
       lastCheckAt.set(now());
+      apkChecked = true;
       log("info", "Checking for an update");
       return client.check;
     }).pipe(
@@ -112,6 +121,10 @@ export const createUpdateRunner = ({
       ),
       Effect.andThen((goOn) => checkNative.pipe(Effect.as(goOn))),
     ),
+    checkApk: Effect.suspend(() => {
+      apkChecked = true;
+      return checkNative.pipe(Effect.as(true));
+    }),
     downloadBundle: Effect.suspend(() => {
       log("info", "Downloading the update");
       return client.download;
@@ -172,37 +185,39 @@ export const createUpdateRunner = ({
         }),
       ),
     ),
-    askInstallPermission: Effect.suspend(() => {
-      log("info", "Asking for the install permission");
-      return client.askInstallPermission;
+    openInstallPermission: Effect.suspend(() => {
+      // Before the call: Wave can leave for the screen before the call has answered.
+      installTap = "atPermissionScreen";
+      log("info", "Opening the install permission screen");
+      return client.openInstallPermission;
     }).pipe(
-      Effect.map((asked) => {
-        if (asked) lastInstallAskAt.set(now());
-        return false;
-      }),
+      // Coming back brings Wave to the front, which asks the policy again.
+      Effect.as(false),
       Effect.catch((error) =>
         Effect.sync(() => {
-          log("warn", `Asking for the install permission failed: ${reason(error)}`);
+          log("warn", `Opening the install permission screen failed: ${reason(error)}`);
+          installTap = "none";
           return false;
         }),
       ),
     ),
     installApk: Effect.suspend(() => {
-      lastInstallAt.set(now());
+      installTap = "handedOver";
       // Android's refusal only reaches the app log, and it may take the file with it. A version
       // that installed isn't offered again, so the policy reads this as a failure only if it is.
       noteApkAttempt();
       log("info", "Installing the APK");
       return client.installApk;
     }).pipe(
-      // Android answers in the app log, and on success this process is gone. A later try waits
-      // out the policy's interval.
+      // Android answers in the app log, and on success this process is gone. A later try takes
+      // another tap.
       Effect.as(false),
       Effect.catch((error) =>
         Effect.sync(() => {
           log("warn", `The APK install failed: ${reason(error)}`);
           // The file may be gone. The next check says, and the policy holds off a new download.
           nativeUpdate = "available";
+          installTap = "none";
           return false;
         }),
       ),
@@ -210,12 +225,18 @@ export const createUpdateRunner = ({
   };
 
   const reconsider = (): void => {
+    const around = surroundings();
+    const tap = installTapAfter(installTap, around);
+    if (tap !== installTap) {
+      installTap = tap;
+      notify();
+    }
     const step = nextUpdateStep({
-      ...surroundings(),
+      ...around,
       now: now(),
       lastCheckAt: lastCheckAt.get(),
-      lastInstallAskAt: lastInstallAskAt.get(),
-      lastInstallAt: lastInstallAt.get(),
+      installTap,
+      apkChecked,
       offeredApkVersion: client.offeredApkVersion(),
       lastApkAttempt: lastApkAttempt.get(),
       nativeUpdate,
@@ -231,15 +252,35 @@ export const createUpdateRunner = ({
       Effect.catchCause((cause) =>
         Effect.sync(() => {
           log("warn", `The ${step} step stopped: ${reason(Cause.squash(cause))}`);
+          installTap = "none";
           return false;
         }),
       ),
     );
     void Effect.runPromise(guarded).then((goOn) => {
       working = false;
-      if (goOn) reconsider();
+      notify();
+      // A tap made while the step ran is owed its install now, whatever the step would do next.
+      if (goOn || installTap === "tapped") reconsider();
     });
   };
 
-  return { reconsider };
+  /** The version a tap would install; null with none ready or a tap under way. */
+  const offeredVersion = (): string | null =>
+    offeredApk({ nativeUpdate, offeredApkVersion: client.offeredApkVersion(), installTap });
+
+  return {
+    reconsider,
+    offeredVersion,
+    /** A tap on the offer; only this ever installs. Call `reconsider` after it. */
+    requestInstall: (): void => {
+      if (offeredVersion() === null) return;
+      installTap = "tapped";
+      notify();
+    },
+    subscribe: (listener: () => void): (() => void) => {
+      listeners.add(listener);
+      return () => listeners.delete(listener);
+    },
+  };
 };

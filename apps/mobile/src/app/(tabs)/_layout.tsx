@@ -18,6 +18,7 @@ import { useIsSelecting } from "@/selection/selection";
 import { SelectionChrome } from "@/selection/SelectionChrome";
 import { useTabBar } from "@/settings/tabBar";
 import { useThemeColor } from "@/theme/useThemeColor";
+import { UpdatePill } from "@/updates/UpdatePill";
 
 /** Every tab the bar can hold; the bar shows those the owner picked. */
 const TABS = Object.entries(TAB_PATH) as [TabBarTab, (typeof TAB_PATH)[TabBarTab]][];
@@ -66,6 +67,7 @@ export default function TabsLayout() {
           <SelectionChrome backdropId={BACKDROP.tabs} />
         ) : (
           <>
+            <UpdatePill />
             <MiniPlayer backdropId={BACKDROP.tabs} onOpen={openNowPlaying} />
             <TabBar onTabTap={onTabTap} />
           </>
