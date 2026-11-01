@@ -22,15 +22,18 @@ class RecognizeTileActivity : Activity() {
   override fun onResume() {
     super.onResume()
     if (intent.action == ACTION_RETRY) RecognizeNotifications.clearFailure(this)
-    if (RecognizeTileRun.shared.tap() == RecognizeTileTap.LISTEN) listen()
+    when (RecognizeTileRun.shared.tap(
+      microphone = checkSelfPermission(Manifest.permission.RECORD_AUDIO) == PackageManager.PERMISSION_GRANTED,
+      notifications = RecognizeNotifications.resultsShown(this),
+    )) {
+      RecognizeTileTap.LISTEN -> listen()
+      RecognizeTileTap.OPEN_CARD -> startActivity(recognizeIntent(this))
+      RecognizeTileTap.CANCEL, RecognizeTileTap.IGNORE -> Unit
+    }
     finish()
   }
 
   private fun listen() {
-    if (checkSelfPermission(Manifest.permission.RECORD_AUDIO) != PackageManager.PERMISSION_GRANTED) {
-      startActivity(recognizeIntent(this))
-      return
-    }
     try {
       startForegroundService(
         Intent(this, RecognizeListeningService::class.java)

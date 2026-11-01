@@ -100,14 +100,7 @@ class RecognizeModule : Module() {
     OnActivityResult { _, result ->
       val start = pending
       if (start != null && result.requestCode == start.code) {
-        val data = result.data
-        if (result.resultCode != Activity.RESULT_OK || data == null) {
-          pending = null
-          start.promise.reject("ERR_RECOGNIZE_CONSENT", "Phone audio access declined", null)
-        } else {
-          start.consent = result.resultCode to data
-          startPlaybackWhenForeground(start)
-        }
+        consentResult(start, result.resultCode, result.data)
       }
     }
 
@@ -177,16 +170,7 @@ class RecognizeModule : Module() {
         pending = start
         if (detached) {
           start.cancelConsent = RecognizeConsentActivity.open(context, request, intent) { code, data ->
-            if (pending === start) {
-              start.cancelConsent = null
-              if (code != Activity.RESULT_OK || data == null) {
-                pending = null
-                start.promise.reject("ERR_RECOGNIZE_CONSENT", "Phone audio access declined", null)
-              } else {
-                start.consent = code to data
-                startPlaybackWhenForeground(start)
-              }
-            }
+            consentResult(start, code, data)
           }
         } else {
           val activity = appContext.currentActivity ?: throw Exceptions.MissingActivity()
@@ -196,6 +180,19 @@ class RecognizeModule : Module() {
     } catch (e: Exception) {
       pending = null
       promise.reject("ERR_RECOGNIZE_CAPTURE", e.message, e)
+    }
+  }
+
+  /** Both consent hosts complete only the start that is still pending. */
+  private fun consentResult(start: PendingStart, code: Int, data: Intent?) {
+    if (pending !== start) return
+    start.cancelConsent = null
+    if (code != Activity.RESULT_OK || data == null) {
+      pending = null
+      start.promise.reject("ERR_RECOGNIZE_CONSENT", "Phone audio access declined", null)
+    } else {
+      start.consent = code to data
+      startPlaybackWhenForeground(start)
     }
   }
 

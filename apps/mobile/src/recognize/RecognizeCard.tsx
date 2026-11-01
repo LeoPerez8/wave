@@ -3,7 +3,6 @@ import {
   LISTENING_WAVE,
   recognizeCardActionLabels,
   recognizeCardView,
-  recognizePlaylistSong,
   type RecognizeCard as RecognizeCardState,
   type RecognizeCardAction,
   type RecognizeSource,
@@ -28,12 +27,13 @@ import { CardEntries } from "@/overlay/CardEntries";
 import { MenuRow } from "@/overlay/MenuRow";
 import { playSongs, playYtSongs, playNext, playYtNext } from "@/playback/actions";
 import { useYtMusicEnabled } from "@/settings/ytMusic";
-import { currentLibraryFinder, useLoadedInLibrary } from "@/ytmusic/libraryFinder";
+import { useLoadedInLibrary } from "@/ytmusic/libraryFinder";
 import { cancelYtDownload, downloadYtSong, useYtDownloadStatus } from "@/ytmusic/YtDownloads";
 import type { NativeYtSong } from "@/native/waveYtMusic";
 import { openOverlay } from "@/overlay/overlay";
 import { useThemeColor } from "@/theme/useThemeColor";
 
+import { resolveRecognitionSave } from "./resolveRecognitionSave";
 import { hasMicrophone } from "./microphone";
 import { createRecognizeEntry } from "./recognizeEntry";
 import { recognizeDeps } from "./recognizeDeps";
@@ -52,15 +52,14 @@ export const recognizeAvailable = recognizeNative !== null;
  * start listening at once (the tile and the app shortcut, #772). Closing the card,
  * by Cancel, Back or a tap outside, ends the session.
  */
-const entry = createRecognizeEntry({
+const entry = createRecognizeEntry<NativeYtSong>({
   foreground: () => AppState.currentState === "active",
+  cancelTile: cancelRecognizeTile,
   show: (opening, closed) => {
-    const match = typeof opening === "object" ? (opening as RecognizeMatch<NativeYtSong>) : null;
-    const source = typeof opening === "object" ? "auto" : opening;
+    const match = opening.kind === "match" ? opening.match : null;
+    const source = opening.kind === "capture" ? opening.source : "auto";
     const native = recognizeNative;
     if (native === null) return closed();
-    // One capture at a time: the card's replaces the tile's, which ends without a result.
-    cancelRecognizeTile();
     const handle = openOverlay({
       label: currentLocalisation().strings.playbackText.recognizeSong,
       render: (close) => (
@@ -133,6 +132,8 @@ function RecognizeCard({
         current = false;
       };
     }
+    // Listen Again and source changes on a result card also replace tile capture.
+    if (attempt > 0) cancelRecognizeTile();
     const session = startRecognizeSession(
       recognizeDeps(native),
       source,
@@ -227,31 +228,14 @@ function RecognizeCard({
         if (result === null || !view.actions.includes(action)) return;
         switch (action) {
           case "addToShazam":
-            void (async () => {
-              const track =
-                result.kind === "stream" ? (await currentLibraryFinder())(result.song) : null;
-              await addToShazam(
-                track === null
-                  ? recognizePlaylistSong(result)
-                  : { source: "library", trackId: track.id },
-              );
-            })().catch((error: unknown) =>
-              showError(strings.playbackText.couldntAddToShazam, error),
-            );
+            void resolveRecognitionSave(result)
+              .then(addToShazam)
+              .catch((error: unknown) => showError(strings.playbackText.couldntAddToShazam, error));
             return;
           case "addToPlaylist":
             openAddToPlaylist({
               title: result.song.title,
-              songs: async () => {
-                // A download may have joined the Library while this card stayed open.
-                const track =
-                  result.kind === "stream" ? (await currentLibraryFinder())(result.song) : null;
-                return [
-                  track === null
-                    ? recognizePlaylistSong(result)
-                    : { source: "library", trackId: track.id },
-                ];
-              },
+              songs: async () => [await resolveRecognitionSave(result)],
             });
             return;
           case "play":
