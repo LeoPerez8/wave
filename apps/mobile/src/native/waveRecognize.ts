@@ -11,6 +11,7 @@ type WaveRecognizeEvents = {
   /** Session [session]'s audio stopped on its own. */
   onRecognizeCaptureFailed: (event: { session: number }) => void;
   /** A tile or launcher shortcut asks the foreground UI to open Recognize. */
+  onRecognizeMatchRequested: () => void;
   onRecognizeRequested: () => void;
   /** A tile tap is waiting for `takeTileRequest`. */
   onRecognizeTileRequested: () => void;
@@ -27,13 +28,15 @@ declare class WaveRecognizeModule extends NativeModule<WaveRecognizeEvents> {
   ask(session: number, last: boolean, windowMs: number): Promise<RecognizeAnswer>;
   stop(session: number): void;
   takeRequest(): boolean;
+  takeMatchRequest(): string | null;
   /** The tile's capture: the microphone, not ending with Wave's screen. */
   startDetached(request: number): Promise<number>;
   takeTileRequest(): { tap: number; microphone: boolean } | null;
   setCardSession(running: boolean): void;
   tileListeningEnded(tap: number): void;
   tileFinished(): void;
-  notifyTileMatch(title: string, text: string, coverUrl: string | null): void;
+  notifyTileMatch(title: string, text: string, coverUrl: string | null, match: string | null): void;
+  tileMatchSaved(line: string, match: string): void;
   /** [microphone]: the action is Use Microphone rather than Try Again. */
   notifyTileFailure(title: string, text: string, actionLabel: string, microphone: boolean): void;
 }
@@ -101,9 +104,10 @@ export const recognizeTile: (RecognizeTileNative & { readonly capture: Recognize
         },
         listeningEnded: (tap) => WaveRecognize.tileListeningEnded(tap),
         finished: () => WaveRecognize.tileFinished(),
+        matchSaved: (line, match) => WaveRecognize.tileMatchSaved(line, match),
         notify: (notice) => {
           if (notice.kind === "match") {
-            WaveRecognize.notifyTileMatch(notice.title, notice.text, notice.coverUrl);
+            WaveRecognize.notifyTileMatch(notice.title, notice.text, notice.coverUrl, notice.match);
           } else {
             WaveRecognize.notifyTileFailure(
               notice.title,
@@ -119,3 +123,14 @@ export const recognizeTile: (RecognizeTileNative & { readonly capture: Recognize
 export const reportCardSession = (running: boolean): void => {
   if (recognizeTile !== null) WaveRecognize?.setCardSession(running);
 };
+
+export const recognizeMatches =
+  WaveRecognize === null || typeof WaveRecognize.takeMatchRequest !== "function"
+    ? null
+    : {
+        take: () => WaveRecognize.takeMatchRequest(),
+        subscribe: (listener: () => void) => {
+          const subscription = WaveRecognize.addListener("onRecognizeMatchRequested", listener);
+          return () => subscription.remove();
+        },
+      };

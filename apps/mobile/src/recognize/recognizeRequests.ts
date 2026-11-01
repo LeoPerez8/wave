@@ -1,10 +1,12 @@
+import { readRecognizeMatch } from "@wave/core";
+import type { NativeYtSong } from "@/native/waveYtMusic";
 import { useEffect } from "react";
 import { AppState } from "react-native";
 
-import { recognizeRequests } from "@/native/waveRecognize";
+import { recognizeRequests, recognizeMatches } from "@/native/waveRecognize";
 
 import { openRecognize, resumeRecognizeEntry } from "./RecognizeCard";
-import { followRecognizeRequests } from "./recognizeEntry";
+import { followRecognizeRequests, followRecognizeMatches } from "./recognizeEntry";
 
 /** The root receives launches over whichever screen is open, once the Library is ready. */
 export const useRecognizeRequests = (ready: boolean): void => {
@@ -14,9 +16,17 @@ export const useRecognizeRequests = (ready: boolean): void => {
       if (state === "active") resumeRecognizeEntry();
     });
     const stop = followRecognizeRequests(recognizeRequests, openRecognize);
+    const stopMatches =
+      recognizeMatches === null
+        ? () => {}
+        : followRecognizeMatches(recognizeMatches, (text) => {
+            const match = readRecognizeMatch<NativeYtSong>(text);
+            if (match !== null) openRecognize(match);
+          });
     resumeRecognizeEntry();
     return () => {
       stop();
+      stopMatches();
       foreground.remove();
     };
   }, [ready]);

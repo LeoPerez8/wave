@@ -20,10 +20,13 @@ export const playbackTextEn = {
   clear: "Clear",
   clearSearch: "Clear search",
   closeNowPlaying: "Close Now Playing",
+  /** Shared by manual saves and the tile notification's silent save update. */
   couldntAddToShazam: "Couldn't add to Shazam",
+  /** Also shown by tile notifications after an automatic save. */
   addedToShazam: "Added to Shazam",
   /** A notice's name for a song the queue knows no title of. */
   thisSong: "This song",
+  /** Also shown by tile notifications when the entry is already saved. */
   alreadyInShazam: "Already in Shazam",
   couldntDownloadTheSong: "Couldn't download the song",
   couldntOpenTheArtist: "Couldn't open the artist",
