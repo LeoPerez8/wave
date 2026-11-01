@@ -3,6 +3,8 @@ import { describe, it } from "node:test";
 
 import * as Effect from "effect/Effect";
 
+import type { NativeUpdate } from "@wave/core";
+
 import { createUpdateRunner, type UpdateClient, type UpdateSurroundings } from "./updateRunner.ts";
 
 /** A runner over a scripted update service, with what it did and logged written down. */
@@ -12,6 +14,7 @@ const setup = ({
 }: Partial<UpdateClient> & { lastCheckAt?: number | null } = {}) => {
   const did: string[] = [];
   const logged: { level: string; message: string }[] = [];
+  const notices: string[] = [];
   const surroundings: { -readonly [K in keyof UpdateSurroundings]: UpdateSurroundings[K] } = {
     network: "unmetered",
     playing: false,
@@ -45,6 +48,14 @@ const setup = ({
       installApk: Effect.sync(() => {
         did.push("install");
       }),
+      downloadApkOnMobileData: Effect.sync(() => {
+        did.push("downloadApkOnMobileData");
+        return true;
+      }),
+      askMobileData: Effect.sync(() => {
+        did.push("askMobileData");
+        return true;
+      }),
       offeredApkVersion: () => "1.3.0",
       ...client,
     },
@@ -56,11 +67,13 @@ const setup = ({
       set: (attempt) => (lastApkAttempt = attempt),
     },
     log: (level, message) => logged.push({ level, message }),
+    report: (notice) => notices.push(notice),
   });
   return {
     runner,
     did,
     logged,
+    notices,
     surroundings,
     passMinutes: (minutes: number) => (now += minutes * 60_000),
     settle: () => new Promise<void>((resolve) => setTimeout(resolve, 0)),
@@ -686,6 +699,202 @@ describe("the update runner", () => {
       runner.reconsider();
       await settle();
       assert.deepEqual(did, ["install", "downloadApk"]);
+    });
+  });
+
+  describe("the update button", () => {
+    const apkAvailable: UpdateClient["checkNative"] = Effect.succeed("available");
+    const apkDownloaded: UpdateClient["checkNative"] = Effect.succeed("downloaded");
+
+    /** Past the first open's own check, so what follows comes from the tap. */
+    const opened = async (client: Partial<UpdateClient> = {}) => {
+      const run = setup({ lastCheckAt: 999_999_000, ...client });
+      run.runner.reconsider();
+      await run.settle();
+      run.did.length = 0;
+      return run;
+    };
+
+    const tap = async ({ runner, settle }: Pick<ReturnType<typeof setup>, "runner" | "settle">) => {
+      runner.tapUpdateButton();
+      runner.reconsider();
+      await settle();
+    };
+
+    it("checks at a tap inside the 15 minutes and says Wave is up to date", async () => {
+      const run = await opened();
+      await tap(run);
+      assert.deepEqual(run.did, ["check"]);
+      assert.deepEqual(run.notices, ["upToDate"]);
+    });
+
+    it("installs at a tap a downloaded APK the pill was swiped away for", async () => {
+      const run = await opened({ checkNative: apkDownloaded });
+      assert.equal(run.runner.offeredVersion(), "1.3.0");
+      await tap(run);
+      assert.deepEqual(run.did, ["install"]);
+      assert.deepEqual(run.notices, []);
+    });
+
+    it("downloads and installs what the check finds", async () => {
+      let answer: NativeUpdate = "none";
+      const run = await opened({ checkNative: Effect.sync(() => answer) });
+      answer = "available";
+      await tap(run);
+      assert.deepEqual(run.did, ["check", "downloadApk", "install"]);
+    });
+
+    it("follows the pill's permission path once the download is in", async () => {
+      let answer: NativeUpdate = "none";
+      const run = await opened({ checkNative: Effect.sync(() => answer) });
+      run.surroundings.installAccess = "needsPermission";
+      answer = "available";
+      await tap(run);
+      assert.deepEqual(run.did, ["check", "downloadApk", "permission"]);
+    });
+
+    it("asks before mobile data, then downloads on it and installs", async () => {
+      let answer: NativeUpdate = "none";
+      const run = await opened({ checkNative: Effect.sync(() => answer) });
+      run.surroundings.network = "metered";
+      answer = "available";
+      await tap(run);
+      assert.deepEqual(run.did, ["check", "askMobileData", "downloadApkOnMobileData", "install"]);
+    });
+
+    it("downloads nothing when the person declines mobile data", async () => {
+      let answer: NativeUpdate = "none";
+      const run = await opened({
+        checkNative: Effect.sync(() => answer),
+        askMobileData: Effect.succeed(false),
+      });
+      run.surroundings.network = "metered";
+      answer = "available";
+      await tap(run);
+      assert.deepEqual(run.did, ["check"]);
+      assert.deepEqual(run.notices, []);
+      assert.equal(run.runner.buttonLook(), "idle");
+    });
+
+    it("leaves a bundle to its silent path, closing nothing", async () => {
+      let available = false;
+      const run = await opened({ check: Effect.sync(() => available) });
+      available = true;
+      await tap(run);
+      assert.deepEqual(run.did, ["download"]);
+      assert.deepEqual(run.notices, ["bundleOnItsWay"]);
+    });
+
+    it("says when the check fails", async () => {
+      const run = await opened({ checkNative: failing });
+      await tap(run);
+      assert.deepEqual(run.notices, ["checkFailed"]);
+      run.notices.length = 0;
+      run.passMinutes(1);
+      await tap(run);
+      assert.deepEqual(run.notices, ["checkFailed"]);
+    });
+
+    it("says the check failed with no network, and tries nothing", async () => {
+      const run = await opened();
+      run.surroundings.network = "none";
+      await tap(run);
+      assert.deepEqual(run.did, []);
+      assert.deepEqual(run.notices, ["checkFailed"]);
+      assert.equal(run.runner.buttonLook(), "idle");
+    });
+
+    it("says when the download fails or isn't the signed file", async () => {
+      for (const downloadApk of [failing, Effect.succeed(false)]) {
+        let answer: NativeUpdate = "none";
+        const run = await opened({ checkNative: Effect.sync(() => answer), downloadApk });
+        answer = "available";
+        await tap(run);
+        assert.deepEqual(run.notices, ["downloadFailed"]);
+        assert.deepEqual(run.did, ["check"]);
+      }
+    });
+
+    it("says nothing of an automatic download that fails", async () => {
+      const run = setup({ checkNative: apkAvailable, downloadApk: failing });
+      run.runner.reconsider();
+      await run.settle();
+      assert.deepEqual(run.notices, []);
+    });
+
+    it("says when an install fails, from the pill too", async () => {
+      const run = await opened({ checkNative: apkDownloaded, installApk: failing });
+      run.runner.requestInstall();
+      run.runner.reconsider();
+      await run.settle();
+      assert.deepEqual(run.notices, ["installFailed"]);
+    });
+
+    it("says when Android refuses the install, and a tap can try again", async () => {
+      const run = await opened({ checkNative: apkDownloaded });
+      await tap(run);
+      run.runner.installRefused();
+      assert.deepEqual(run.notices, ["installFailed"]);
+      run.did.length = 0;
+      await tap(run);
+      assert.deepEqual(run.did, ["check", "install"]);
+    });
+
+    it("spins while checking, and a second tap doesn't check twice", async () => {
+      let finish = (_: Effect.Effect<boolean>) => {};
+      const run = await opened({
+        check: Effect.callback<boolean>((resume) => {
+          run.did.push("check");
+          finish = resume;
+        }),
+      });
+      run.runner.tapUpdateButton();
+      run.runner.reconsider();
+      assert.equal(run.runner.buttonLook(), "checking");
+      run.runner.tapUpdateButton();
+      run.runner.reconsider();
+      finish(Effect.succeed(false));
+      await run.settle();
+      assert.deepEqual(run.did, ["check"]);
+      assert.equal(run.runner.buttonLook(), "idle");
+    });
+
+    it("shows the percentage of a download, then rests", async () => {
+      let finish = (_: Effect.Effect<boolean>) => {};
+      let answer: NativeUpdate = "none";
+      const run = await opened({
+        checkNative: Effect.sync(() => answer),
+        downloadApk: Effect.callback<boolean>((resume) => {
+          finish = resume;
+        }),
+      });
+      answer = "available";
+      await tap(run);
+      assert.equal(run.runner.buttonLook(), 0);
+      run.runner.downloadProgress(42);
+      assert.equal(run.runner.buttonLook(), 42);
+      finish(Effect.succeed(true));
+      await run.settle();
+      assert.equal(run.runner.buttonLook(), "idle");
+      assert.deepEqual(run.did, ["check", "install"]);
+    });
+
+    it("joins an automatic download, installing what it brings", async () => {
+      let finish = (_: Effect.Effect<boolean>) => {};
+      const run = setup({
+        checkNative: apkAvailable,
+        downloadApk: Effect.callback<boolean>((resume) => {
+          finish = resume;
+        }),
+      });
+      run.runner.reconsider();
+      await run.settle();
+      assert.equal(run.runner.buttonLook(), 0);
+      run.runner.tapUpdateButton();
+      run.runner.reconsider();
+      finish(Effect.succeed(true));
+      await run.settle();
+      assert.deepEqual(run.did, ["check", "install"]);
     });
   });
 });

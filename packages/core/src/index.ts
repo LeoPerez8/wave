@@ -254,6 +254,7 @@ export type { SleepTimer, SleepTimerChoice, SleepTimerClock } from "./sleepTimer
 export {
   UPDATE_APK_RETRY_INTERVAL_MS,
   UPDATE_CHECK_INTERVAL_MS,
+  afterRequestedCheck,
   installTapAfter,
   latestApkUrl,
   nativeUpdateIsNew,
@@ -262,6 +263,9 @@ export {
   playerKeepsPlaying,
   readLatestApk,
   readSignedApk,
+  strandedUpdateRequest,
+  updateButtonAction,
+  updateButtonLook,
   updatePillShown,
   updatePillSwipeDismisses,
   versionOrder,
@@ -272,7 +276,10 @@ export type {
   LatestApk,
   NativeUpdate,
   SignedApk,
+  UpdateButtonLook,
   UpdateNetwork,
+  UpdateNotice,
+  UpdateRequest,
   UpdateState,
   UpdateStep,
 } from "./updatePolicy.ts";

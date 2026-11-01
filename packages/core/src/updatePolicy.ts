@@ -30,6 +30,17 @@ export type InstallAccess = "needsPermission" | "needsConfirmation" | "silent";
 export type InstallTap =
   "none" | "tapped" | "atPermissionScreen" | "awayAtPermissionScreen" | "handedOver";
 
+/**
+ * What a tap on the update button in Settings still wants done: `check` now, whatever the wait,
+ * `askMobileData` before a download on a metered network, or `download` the version found. Whatever
+ * these lead to installs as a tap on the pill does.
+ */
+export type UpdateRequest = "none" | "check" | "askMobileData" | "download";
+
+/** What a toast tells the person. Only what they asked for, or an install, gets one. */
+export type UpdateNotice =
+  "upToDate" | "bundleOnItsWay" | "checkFailed" | "downloadFailed" | "installFailed";
+
 export interface UpdateState {
   readonly now: number;
   /** When a check last started, whatever came of it; null when none has. */
@@ -57,11 +68,13 @@ export interface UpdateState {
    * is no longer offered, so one still offered with its file gone came to nothing.
    */
   readonly lastApkAttempt: { readonly version: string; readonly at: number } | null;
+  readonly updateRequest: UpdateRequest;
 }
 
 export type UpdateStep =
   | "check"
   | "checkApk"
+  | "askMobileData"
   | "downloadBundle"
   | "applyBundle"
   | "downloadApk"
@@ -160,6 +173,11 @@ const apkDownloadIsDue = ({ now, offeredApkVersion, lastApkAttempt }: UpdateStat
 export const nextUpdateStep = (state: UpdateState): UpdateStep => {
   if (state.working) return "wait";
   const online = state.network !== "none";
+  if (state.updateRequest === "check" && online) return "check";
+  if (state.nativeUpdate === "available") {
+    if (state.updateRequest === "askMobileData" && state.visible) return "askMobileData";
+    if (state.updateRequest === "download" && online) return "downloadApk";
+  }
   if (
     state.nativeUpdate === "available" &&
     state.network === "unmetered" &&
@@ -183,6 +201,71 @@ export const nextUpdateStep = (state: UpdateState): UpdateStep => {
   // What the last check found isn't kept, so a downloaded APK's offer returns after a restart.
   if (state.visible && online && !state.apkChecked) return "checkApk";
   return "wait";
+};
+
+/** What a tap on the update button does, given what's already under way. */
+export const updateButtonAction = ({
+  nativeUpdate,
+  installTap,
+  updateRequest,
+  downloadingApk,
+}: Pick<UpdateState, "nativeUpdate" | "installTap" | "updateRequest"> & {
+  /** The automatic path is fetching the APK right now. */
+  readonly downloadingApk: boolean;
+}): "install" | "check" | "followDownload" | "none" => {
+  if (updateRequest !== "none" || installTap !== "none") return "none";
+  if (nativeUpdate === "downloaded") return "install";
+  return downloadingApk ? "followDownload" : "check";
+};
+
+/**
+ * Where a tap's check leads. An APK comes first, as a pending one holds bundles back. A bundle only
+ * gets a toast: it follows its silent path and doesn't close Wave. A check that failed and found
+ * nothing can't say Wave is up to date.
+ */
+export const afterRequestedCheck = ({
+  nativeUpdate,
+  network,
+  bundleAvailable,
+  bundleDownloaded,
+  checkFailed,
+}: Pick<UpdateState, "nativeUpdate" | "network" | "bundleAvailable" | "bundleDownloaded"> & {
+  /** The service failed either question, the bundle's or the APK's. */
+  readonly checkFailed: boolean;
+}): {
+  readonly next: "none" | "install" | "askMobileData" | "download";
+  readonly outcome: UpdateNotice | null;
+} => {
+  if (nativeUpdate === "downloaded") return { next: "install", outcome: null };
+  if (nativeUpdate === "available") {
+    return { next: network === "metered" ? "askMobileData" : "download", outcome: null };
+  }
+  if (bundleAvailable || bundleDownloaded) return { next: "none", outcome: "bundleOnItsWay" };
+  return { next: "none", outcome: checkFailed ? "checkFailed" : "upToDate" };
+};
+
+/** What to say when a request can't go on with no network; null when it can. */
+export const strandedUpdateRequest = (
+  request: UpdateRequest,
+  network: UpdateNetwork,
+): UpdateNotice | null => {
+  if (request === "none" || network !== "none") return null;
+  return request === "check" ? "checkFailed" : "downloadFailed";
+};
+
+/** The button's face: at rest, spinning, or a download's percentage, whoever started it. */
+export type UpdateButtonLook = "idle" | "checking" | number;
+
+export const updateButtonLook = ({
+  updateRequest,
+  downloadPercent,
+}: {
+  readonly updateRequest: UpdateRequest;
+  /** How far the APK download is, while one runs. */
+  readonly downloadPercent: number | null;
+}): UpdateButtonLook => {
+  if (downloadPercent !== null) return downloadPercent;
+  return updateRequest === "check" ? "checking" : "idle";
 };
 
 /** The channel's newest APK, as CI signed it. The channel stops one reaching the other's phones. */

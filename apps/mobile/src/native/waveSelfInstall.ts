@@ -1,9 +1,18 @@
 import type { InstallAccess } from "@wave/core";
 import { NativeModule, requireOptionalNativeModule } from "expo";
 
-declare class WaveSelfInstallModule extends NativeModule {
+type WaveSelfInstallEvents = {
+  /** The running APK download has reached [percent], at each whole percent. */
+  onApkDownloadProgress: (event: { percent: number }) => void;
+  /** Android turned down an install it had taken, and the APK is gone. */
+  onInstallRefused: () => void;
+};
+
+declare class WaveSelfInstallModule extends NativeModule<WaveSelfInstallEvents> {
   /** What installing an APK takes on this phone right now. */
   installAccess(): Promise<InstallAccess>;
+  /** Whether Android counts the network as metered, which a metered Wi-Fi is too. */
+  networkIsMetered(): Promise<boolean>;
   /** The APK's versionName, whatever bundle is running. */
   installedVersion(): Promise<string>;
   /** Whether that version's whole APK is already on the phone, going by its size. */
@@ -16,10 +25,17 @@ declare class WaveSelfInstallModule extends NativeModule {
   /** Android's "install from this source" screen. */
   openPermissionScreen(): void;
   /**
-   * Fetches the APK, keeping a whole one already there. Fails on a metered network, and answers
-   * false when what came isn't the signed file.
+   * Fetches the APK, keeping a whole one already there. Fails on a metered network unless
+   * [onMobileData] says the person allowed it, and answers false when what came isn't the signed
+   * file.
    */
-  downloadApk(url: string, version: string, size: number, sha256: string): Promise<boolean>;
+  downloadApk(
+    url: string,
+    version: string,
+    size: number,
+    sha256: string,
+    onMobileData: boolean,
+  ): Promise<boolean>;
   /**
    * Hands the APK to Android, once its SHA-256 matches. Its answer reaches the app log; on success
    * this process is gone.

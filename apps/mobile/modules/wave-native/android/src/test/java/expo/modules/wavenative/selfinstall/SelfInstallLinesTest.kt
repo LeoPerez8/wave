@@ -113,6 +113,13 @@ class SelfInstallLinesTest {
   }
 
   @Test
+  fun aDownloadsPercentStaysWhole() {
+    assertEquals(0, downloadPercent(done = 10, size = 0))
+    assertEquals(41, downloadPercent(done = 419, size = 1000))
+    assertEquals(100, downloadPercent(done = 2000, size = 1000))
+  }
+
+  @Test
   fun logsADownloadAtEachQuarter() {
     assertNull(downloadProgressToLog(done = 24, size = 100, logged = 0))
     assertEquals(25, downloadProgressToLog(done = 25, size = 100, logged = 0))
