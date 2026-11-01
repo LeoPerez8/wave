@@ -25,6 +25,34 @@ class RecognizeTileRunTest {
     assertEquals(RecognizeTileTap.LISTEN, run.tap())
   }
 
+  @Test fun `without the microphone a tap opens the card`() {
+    assertEquals(RecognizeTileTap.OPEN_CARD, run.tap(microphone = false, notifications = true))
+  }
+
+  @Test fun `with no way to tell the result a tap opens the card`() {
+    assertEquals(RecognizeTileTap.OPEN_CARD, run.tap(microphone = true, notifications = false))
+  }
+
+  @Test fun `with both a tap never opens the card`() {
+    assertEquals(RecognizeTileTap.LISTEN, run.tap(microphone = true, notifications = true))
+  }
+
+  @Test fun `a tap that opens the card starts no tile session`() {
+    run.tap(microphone = true, notifications = false)
+    assertFalse(run.listening)
+    assertEquals(0, run.take())
+  }
+
+  @Test fun `a permission lost mid-session doesn't stop a tap cancelling`() {
+    run.request()
+    assertEquals(RecognizeTileTap.CANCEL, run.tap(microphone = false, notifications = false))
+  }
+
+  @Test fun `a permission lost during a card session still leaves it alone`() {
+    run.cardRunning = true
+    assertEquals(RecognizeTileTap.IGNORE, run.tap(microphone = false, notifications = false))
+  }
+
   @Test fun `JS takes a tap once, even if it came before JS was running`() {
     val tap = run.request()
     assertEquals(tap, run.take())

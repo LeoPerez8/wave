@@ -2,8 +2,11 @@ package expo.modules.wavenative.recognize
 
 import java.util.concurrent.CopyOnWriteArrayList
 
-/** What a tile tap does: listen, cancel the tile's session, or leave the card's alone. */
-enum class RecognizeTileTap { LISTEN, CANCEL, IGNORE }
+/**
+ * What a tile tap does: listen, cancel the tile's session, leave the card's alone, or
+ * open the card when a tile session couldn't give an answer.
+ */
+enum class RecognizeTileTap { LISTEN, CANCEL, IGNORE, OPEN_CARD }
 
 /**
  * The tile's session as native knows it. JS runs the session and Core decides it; this
@@ -24,9 +27,10 @@ class RecognizeTileRun {
 
   val listening: Boolean @Synchronized get() = current != 0
 
-  fun tap(): RecognizeTileTap = when {
+  fun tap(microphone: Boolean = true, notifications: Boolean = true): RecognizeTileTap = when {
     listening -> RecognizeTileTap.CANCEL
     cardRunning -> RecognizeTileTap.IGNORE
+    !microphone || !notifications -> RecognizeTileTap.OPEN_CARD
     else -> RecognizeTileTap.LISTEN
   }
 

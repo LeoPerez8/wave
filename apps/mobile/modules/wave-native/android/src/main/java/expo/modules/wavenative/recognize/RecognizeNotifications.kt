@@ -39,6 +39,13 @@ object RecognizeNotifications {
     return LISTENING_CHANNEL
   }
 
+  /** Whether a result would reach the user. A channel not made yet will be made open. */
+  fun resultsShown(context: Context): Boolean {
+    val manager = context.getSystemService(NotificationManager::class.java)
+    return manager.areNotificationsEnabled() &&
+      manager.getNotificationChannel(RESULTS_CHANNEL)?.importance != NotificationManager.IMPORTANCE_NONE
+  }
+
   /** Posts a match at once and adds its cover after, without alerting again. */
   fun postMatch(context: Context, title: String, text: String, coverUrl: String?) {
     val app = context.applicationContext
