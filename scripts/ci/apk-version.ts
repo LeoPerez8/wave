@@ -203,6 +203,89 @@ export const withManifestVersion = (xml: Buffer, version: ApkVersion): Buffer =>
   return patched;
 };
 
+// android:name and android:value, by resource id.
+const ATTR_NAME = 0x01010003;
+const ATTR_VALUE = 0x01010024;
+const TYPE_BOOLEAN = 0x12;
+
+// The string pool, and the android:value attribute of the <meta-data> called `name`.
+const findMetaData = (xml: Buffer, name: string): { pool: StringPool; value: number } => {
+  const file = chunkAt(xml, 0);
+  if (file.type !== XML) throw new Error("This isn't a compiled Android XML file.");
+  let pool: StringPool | undefined;
+  let resourceIds: number[] = [];
+  let offset = file.headerSize;
+  while (offset < file.size) {
+    const chunk = chunkAt(xml, offset);
+    offset += chunk.size;
+    if (chunk.type === STRING_POOL) pool = readStringPool(xml, chunk);
+    else if (chunk.type === RESOURCE_MAP)
+      resourceIds = Array.from({ length: (chunk.size - chunk.headerSize) / 4 }, (_, index) =>
+        xml.readUInt32LE(chunk.offset + chunk.headerSize + index * 4),
+      );
+    else if (chunk.type === START_ELEMENT && pool) {
+      const ext = chunk.offset + chunk.headerSize;
+      if (pool.strings[xml.readUInt32LE(ext + 4)] !== "meta-data") continue;
+      const attributes = Array.from(
+        { length: xml.readUInt16LE(ext + 12) },
+        (_, index) => ext + xml.readUInt16LE(ext + 8) + index * xml.readUInt16LE(ext + 10),
+      );
+      const attribute = (id: number) =>
+        attributes.find((at) => resourceIds[xml.readUInt32LE(at + 4)] === id);
+      const nameAttribute = attribute(ATTR_NAME);
+      const value = attribute(ATTR_VALUE);
+      if (nameAttribute === undefined || value === undefined) continue;
+      if (pool.strings[xml.readUInt32LE(nameAttribute + 16)] === name) return { pool, value };
+    }
+  }
+  throw new Error(`The manifest has no <meta-data> called ${name}.`);
+};
+
+/** A <meta-data> value of a compiled AndroidManifest.xml, when it's a string or a boolean. */
+export const manifestMetaData = (xml: Buffer, name: string): string | boolean => {
+  const { pool, value } = findMetaData(xml, name);
+  const type = xml.readUInt8(value + 15);
+  const data = xml.readUInt32LE(value + 16);
+  if (type === TYPE_BOOLEAN) return data !== 0;
+  const text = type === TYPE_STRING ? pool.strings[data] : undefined;
+  if (text === undefined) throw new Error(`${name} isn't a string or a boolean.`);
+  return text;
+};
+
+const NO_STRING = 0xffffffff;
+
+/**
+ * A copy of a compiled AndroidManifest.xml with these <meta-data> values, whatever type each
+ * had (prebuild's runtime version is a reference to a string resource). A name it doesn't have
+ * throws: a kept build without it isn't one this run can configure.
+ */
+export const withManifestMetaData = (
+  xml: Buffer,
+  values: Record<string, string | boolean>,
+): Buffer =>
+  Object.entries(values).reduce((current, [name, value]) => {
+    const { pool, value: attribute } = findMetaData(current, name);
+    if (typeof value === "boolean") {
+      const patched = Buffer.from(current);
+      patched.writeUInt32LE(NO_STRING, attribute + 8);
+      patched.writeUInt8(TYPE_BOOLEAN, attribute + 15);
+      patched.writeUInt32LE(value ? 0xffffffff : 0, attribute + 16);
+      return patched;
+    }
+    const newPool = withString(current, pool, value);
+    const shift = newPool.length - pool.size;
+    const patched = Buffer.concat([
+      current.subarray(0, pool.offset),
+      newPool,
+      current.subarray(pool.offset + pool.size),
+    ]);
+    patched.writeUInt32LE(patched.length, 4);
+    patched.writeUInt32LE(pool.count, attribute + shift + 8);
+    patched.writeUInt8(TYPE_STRING, attribute + shift + 15);
+    patched.writeUInt32LE(pool.count, attribute + shift + 16);
+    return patched;
+  }, xml);
+
 /** The version prebuild wrote into the generated app/build.gradle's defaultConfig. */
 export const gradleVersion = (buildGradle: string): ApkVersion => {
   const code = /^\s*versionCode\s+(\d+)\s*$/m.exec(buildGradle)?.[1];

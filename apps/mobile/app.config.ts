@@ -66,7 +66,20 @@ const config: ExpoConfig = {
     // Instagram Stories destination (docs/spec.md, "Sharing lyrics").
     facebookAppId: "944759748411173",
   },
+  // Over-the-air updates (docs/spec.md, Build and CI). These are placeholders: every APK's
+  // generated project starts the same, off, so its key (scripts/ci/repack.ts) doesn't depend on
+  // the channel, and a local build never updates. CI then stamps the run's channel and runtime
+  // version, the key itself, into the manifest (scripts/ci/update-config.ts).
+  runtimeVersion: "unstamped",
+  updates: {
+    enabled: false,
+    url: "https://wave-updates.leonardolp2424.workers.dev/v1/manifest",
+    checkAutomatically: "ON_LOAD",
+    fallbackToCacheTimeout: 0,
+    requestHeaders: { "expo-channel-name": "none" },
+  },
   plugins: [
+    "expo-updates",
     "expo-router",
     "expo-status-bar",
     [
