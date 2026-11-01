@@ -6,7 +6,7 @@
 import {
   type Channel,
   type LatestUpdate,
-  type StoredAsset,
+  type SignedManifest,
   type StoredUpdate,
   assetKey,
   isChannel,
@@ -35,22 +35,18 @@ const noUpdate = (): Response => new Response(null, { status: 204, headers: PROT
 const refuse = (message: string): Response => new Response(message, { status: 400 });
 const notFound = (): Response => new Response("Not found", { status: 404 });
 
-const multipart = (parts: Record<string, unknown>): string =>
-  [
-    ...Object.entries(parts).map(
-      ([name, value]) =>
-        `--${BOUNDARY}\r\n` +
-        `content-disposition: form-data; name="${name}"\r\n` +
-        `content-type: application/json; charset=utf-8\r\n\r\n` +
-        `${JSON.stringify(value)}\r\n`,
-    ),
-    `--${BOUNDARY}--\r\n`,
-  ].join("");
+const part = (name: string, body: string, signature?: string): string =>
+  `--${BOUNDARY}\r\n` +
+  `content-disposition: form-data; name="${name}"\r\n` +
+  `content-type: application/json; charset=utf-8\r\n` +
+  (signature === undefined ? "" : `expo-signature: ${signature}\r\n`) +
+  `\r\n${body}\r\n`;
 
-const withUrl = (origin: string, asset: StoredAsset) => ({
-  ...asset,
-  url: `${origin}/v1/assets/${asset.key}`,
-});
+// The manifest goes out byte for byte as it was signed. expo-updates doesn't check the extensions.
+const updateAnswer = ({ manifest, signature }: SignedManifest): string =>
+  part("manifest", manifest, signature) +
+  part("extensions", JSON.stringify({ assetRequestHeaders: {} })) +
+  `--${BOUNDARY}--\r\n`;
 
 const latestUpdate = async (
   storage: UpdateStorage,
@@ -80,13 +76,7 @@ const manifestRoute = async (request: Request, storage: UpdateStorage): Promise<
   const update = await latestUpdate(storage, channel, runtimeVersion);
   if (!update || update.id === header("expo-current-update-id")) return noUpdate();
 
-  const { origin } = new URL(request.url);
-  const manifest = {
-    ...update,
-    launchAsset: withUrl(origin, update.launchAsset),
-    assets: update.assets.map((asset) => withUrl(origin, asset)),
-  };
-  return new Response(multipart({ manifest, extensions: { assetRequestHeaders: {} } }), {
+  return new Response(updateAnswer(update.signed), {
     headers: { ...PROTOCOL_HEADERS, "content-type": `multipart/mixed; boundary=${BOUNDARY}` },
   });
 };

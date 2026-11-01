@@ -21,9 +21,14 @@ The check `expo-updates` makes at launch, with its headers `expo-protocol-versio
 `expo-platform: android`, `expo-channel-name` (`ti` or `main`), `expo-runtime-version` and
 `expo-current-update-id`.
 
-`200`, `multipart/mixed` with the update's manifest, when the channel has an update for that
+`200`, `multipart/mixed` with the update's manifest and its `expo-signature`, when the channel has an update for that
 runtime version and the phone isn't on it. `204` when there's nothing new. `400` for any other
 platform, protocol or channel.
+
+An APK with the certificate also sends `expo-expect-signature`, and rejects an answer whose
+signature is missing or isn't from CI's key. The Worker holds no key: the publish script signs the
+manifest with its asset URLs at `UPDATES_ORIGIN` (`src/layout.ts`), and the Worker serves those
+exact bytes from any host. Changing the Worker's address takes a new publish as well as a new APK.
 
 ### `GET /v1/assets/<sha256 hex>`
 
@@ -33,7 +38,7 @@ A bundle or asset, named by its content and cached for good. `404` when there's 
 
 ```
 assets/<sha256 hex>                       a bundle or asset
-updates/<channel>/<runtime>/<id>.json     a published update
+updates/<channel>/<runtime>/<id>.json     a published update, with its signed manifest
 updates/<channel>/<runtime>/latest.json   { "updateId": ... }: what that channel's phones get
 ```
 
@@ -54,6 +59,8 @@ update` and is published as usual, and phones find no update. The Worker's URL i
 4. Add the repository secrets (GitHub › Settings › Secrets and variables › Actions):
    - `CLOUDFLARE_API_TOKEN`: that token.
    - `CLOUDFLARE_ACCOUNT_ID`: the account's id, from the Cloudflare dashboard.
+   - `UPDATES_SIGNING_KEY`: the signing key, set up as in "Build and CI" in `docs/spec.md`. Do
+     that before step 5, so the first APK holds the certificate.
 5. Install the first APK with `expo-updates` by hand. Later JS-only releases reach it with no
    install.
 

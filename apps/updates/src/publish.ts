@@ -4,13 +4,14 @@
  * `put` is the storage: wrangler in CI (scripts/publish.ts), memory in the tests.
  */
 
-import { createHash } from "node:crypto";
+import { type KeyObject, createHash, createPrivateKey, createSign } from "node:crypto";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import {
   type Channel,
   type StoredAsset,
   type StoredUpdate,
+  UPDATES_ORIGIN,
   assetKey,
   latestKey,
   updateKey,
@@ -37,6 +38,32 @@ interface ExportMetadata {
   };
 }
 
+// What the certificate's metadata says in the APK (apps/mobile/plugins/updateSigning.ts).
+const SIGNATURE_PARAMETERS = 'keyid="main", alg="rsa-v1_5-sha256"';
+
+/**
+ * An update with its manifest rendered for `origin` and signed. A change to any field, as when
+ * promoting an update under a new id, takes signing it again.
+ */
+export const signUpdate = (
+  update: Omit<StoredUpdate, "signed">,
+  signingKey: KeyObject | string,
+  origin: string = UPDATES_ORIGIN,
+): StoredUpdate => {
+  const { signed: _, ...fields } = update as StoredUpdate;
+  const withUrl = (asset: StoredAsset) => ({
+    ...asset,
+    url: `${origin}/v1/assets/${asset.key}`,
+  });
+  const manifest = JSON.stringify({
+    ...fields,
+    launchAsset: withUrl(fields.launchAsset),
+    assets: fields.assets.map(withUrl),
+  });
+  const sig = createSign("RSA-SHA256").update(manifest, "utf8").sign(signingKey, "base64");
+  return { ...fields, signed: { manifest, signature: `sig="${sig}", ${SIGNATURE_PARAMETERS}` } };
+};
+
 export interface PublishOptions {
   /** `expo export --platform android`'s output folder. */
   readonly dir: string;
@@ -44,6 +71,10 @@ export interface PublishOptions {
   readonly runtimeVersion: string;
   /** `expo config --type public`: under an update, Constants.expoConfig is this. */
   readonly appConfig: Record<string, unknown>;
+  /** The private key's PEM. An invalid one throws before anything is uploaded. */
+  readonly signingKey: string;
+  /** Where phones reach the Worker. */
+  readonly origin?: string;
   readonly put: (key: string, data: Uint8Array, contentType: string) => Promise<void>;
   readonly now?: () => number;
   readonly newId?: () => string;
@@ -55,10 +86,13 @@ export const publishUpdate = async ({
   channel,
   runtimeVersion,
   appConfig,
+  signingKey,
+  origin,
   put,
   now = Date.now,
   newId = () => crypto.randomUUID(),
 }: PublishOptions): Promise<string> => {
+  const privateKey = createPrivateKey(signingKey);
   const metadata = JSON.parse(readFileSync(join(dir, "metadata.json"), "utf8")) as ExportMetadata;
   const android = metadata.fileMetadata.android;
   if (!android) throw new Error("The export has no Android bundle.");
@@ -82,15 +116,19 @@ export const publishUpdate = async ({
   }
 
   const id = newId();
-  const update: StoredUpdate = {
-    id,
-    createdAt: new Date(now()).toISOString(),
-    runtimeVersion,
-    launchAsset,
-    assets,
-    metadata: {},
-    extra: { expoClient: { ...appConfig, runtimeVersion } },
-  };
+  const update = signUpdate(
+    {
+      id,
+      createdAt: new Date(now()).toISOString(),
+      runtimeVersion,
+      launchAsset,
+      assets,
+      metadata: {},
+      extra: { expoClient: { ...appConfig, runtimeVersion } },
+    },
+    privateKey,
+    origin,
+  );
   const json = (value: unknown) => new TextEncoder().encode(JSON.stringify(value));
   await put(updateKey(channel, runtimeVersion, id), json(update), "application/json");
   await put(latestKey(channel, runtimeVersion), json({ updateId: id }), "application/json");

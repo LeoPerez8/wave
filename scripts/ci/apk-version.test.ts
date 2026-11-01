@@ -37,6 +37,13 @@ describe("withManifestMetaData", () => {
     assert.deepEqual(manifestVersion(patched), { versionCode: 503, versionName: "0.5.3-ti" });
   });
 
+  it("keeps a long value when stamping the version, as a kept build's signing certificate", () => {
+    const certificate = `-----BEGIN CERTIFICATE-----\n${"A".repeat(1800)}\n-----END CERTIFICATE-----\n`;
+    const signed = withManifestMetaData(manifest, { [name]: certificate });
+    const stamped = withManifestVersion(signed, { versionCode: 504, versionName: "0.5.4-ti" });
+    assert.equal(manifestMetaData(stamped, name), certificate);
+  });
+
   it('sets a boolean, as aapt2 compiles android:value="true"', () => {
     assert.equal(manifestMetaData(withManifestMetaData(manifest, { [name]: true }), name), true);
     assert.equal(manifestMetaData(withManifestMetaData(manifest, { [name]: false }), name), false);

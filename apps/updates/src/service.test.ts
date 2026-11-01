@@ -1,14 +1,34 @@
 import assert from "node:assert/strict";
-import { mkdtempSync, mkdirSync, writeFileSync } from "node:fs";
-import { createHash } from "node:crypto";
+import { execFileSync } from "node:child_process";
+import {
+  chmodSync,
+  existsSync,
+  mkdtempSync,
+  mkdirSync,
+  readFileSync,
+  writeFileSync,
+} from "node:fs";
+import { createHash, createVerify, generateKeyPairSync } from "node:crypto";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { describe, it } from "node:test";
+import { fileURLToPath } from "node:url";
+import { UPDATES_ORIGIN } from "./layout.ts";
 import { publishUpdate } from "./publish.ts";
 import { createUpdateService } from "./service.ts";
 import { memoryStorage } from "./testing.ts";
 
 const ORIGIN = "https://updates.test";
+
+// Throwaway pairs made for the test run. Nothing here is Wave's key.
+const pem = () =>
+  generateKeyPairSync("rsa", {
+    modulusLength: 2048,
+    publicKeyEncoding: { type: "spki", format: "pem" },
+    privateKeyEncoding: { type: "pkcs8", format: "pem" },
+  });
+const shipped = pem();
+const another = pem();
 
 const askFor = (
   storage: ReturnType<typeof memoryStorage>,
@@ -61,6 +81,8 @@ const publish = (
     channel: "ti",
     runtimeVersion: "native-a",
     appConfig: { name: "Wave", version: "1.2.3-ti", extra: { syncUrl: "https://sync.test" } },
+    origin: ORIGIN,
+    signingKey: shipped.privateKey,
     put: storage.put,
     now: () => (clock += 1000),
     newId: () => `00000000-0000-4000-8000-${String(++ids).padStart(12, "0")}`,
@@ -75,6 +97,28 @@ const manifestOf = async (response: Response) => {
   const part = parts.find((text) => /name="manifest"/.test(text));
   assert.ok(part, "the answer has a manifest part");
   return JSON.parse(part.slice(part.indexOf("\r\n\r\n") + 4).trim());
+};
+
+// The `manifest` part as expo-updates' signature check sees it: its exact body and its header.
+const signedPart = async (response: Response) => {
+  const boundary = /boundary=(\S+)/.exec(response.headers.get("content-type") ?? "")?.[1];
+  const part = (await response.text())
+    .split(`--${boundary}`)
+    .find((text) => /name="manifest"/.test(text));
+  assert.ok(part, "the answer has a manifest part");
+  const headerEnd = part.indexOf("\r\n\r\n");
+  const header = /^expo-signature: (.*)$/im.exec(part.slice(0, headerEnd))?.[1]?.trim();
+  assert.ok(header, "the manifest part has an expo-signature header");
+  return { header, body: part.slice(headerEnd + 4, part.lastIndexOf("\r\n")) };
+};
+
+// What expo-updates' CodeSigningConfiguration does: SHA256withRSA over the body's UTF-8 bytes.
+const accepts = (publicKey: string, part: { header: string; body: string }) => {
+  const signature = /(?:^|, )sig="([^"]+)"/.exec(part.header)?.[1];
+  assert.ok(signature, "the header's sig is a quoted string");
+  return createVerify("RSA-SHA256")
+    .update(Buffer.from(part.body, "utf8"))
+    .verify(publicKey, signature, "base64");
 };
 
 const base64urlSha256 = (text: string) => createHash("sha256").update(text).digest("base64url");
@@ -168,6 +212,52 @@ describe("GET /v1/manifest", () => {
   }
 });
 
+describe("a signed update", () => {
+  it("is accepted by a phone holding the matching certificate", async () => {
+    const storage = memoryStorage();
+    await publish(storage);
+    const part = await signedPart(await askFor(storage, { "expo-expect-signature": "sig" }));
+    assert.equal(accepts(shipped.publicKey, part), true);
+    assert.match(part.header, /keyid="main"/);
+    assert.match(part.header, /alg="rsa-v1_5-sha256"/);
+  });
+
+  it("is rejected by a phone holding another key's certificate", async () => {
+    const storage = memoryStorage();
+    await publish(storage);
+    assert.equal(accepts(another.publicKey, await signedPart(await askFor(storage))), false);
+  });
+
+  it("stays valid with non-ASCII text in the app config", async () => {
+    const storage = memoryStorage();
+    await publish(storage, { appConfig: { name: "Wavê ♪" } });
+    assert.equal(accepts(shipped.publicKey, await signedPart(await askFor(storage))), true);
+  });
+
+  it("names its files at the origin it was signed for, whatever host was asked", async () => {
+    const storage = memoryStorage();
+    await publish(storage);
+    const response = await createUpdateService(storage).fetch(
+      new Request("https://elsewhere.test/v1/manifest", {
+        headers: {
+          "expo-protocol-version": "1",
+          "expo-platform": "android",
+          "expo-channel-name": "ti",
+          "expo-runtime-version": "native-a",
+        },
+      }),
+    );
+    const part = await signedPart(response);
+    assert.equal(accepts(shipped.publicKey, part), true);
+    assert.ok(JSON.parse(part.body).launchAsset.url.startsWith(`${ORIGIN}/v1/assets/`));
+  });
+
+  it("is signed for the URL the app asks", () => {
+    const appConfig = new URL("../../mobile/app.config.ts", import.meta.url);
+    assert.ok(readFileSync(appConfig, "utf8").includes(`url: "${UPDATES_ORIGIN}/v1/manifest"`));
+  });
+});
+
 describe("GET /v1/assets/<key>", () => {
   it("serves an update's files by the URLs its manifest gives", async () => {
     const storage = memoryStorage();
@@ -222,9 +312,66 @@ describe("publishUpdate", () => {
     assert.equal((await manifestOf(await askFor(storage))).id, previous);
   });
 
+  it("uploads nothing when the signing key is no key", async () => {
+    let uploads = 0;
+    await assert.rejects(
+      publish(memoryStorage(), {
+        signingKey: "not a key",
+        put: async () => {
+          uploads += 1;
+        },
+      }),
+    );
+    assert.equal(uploads, 0);
+  });
+
   it("refuses an export with no Android bundle", async () => {
     const dir = mkdtempSync(join(tmpdir(), "wave-update-"));
     writeFileSync(join(dir, "metadata.json"), JSON.stringify({ fileMetadata: {} }));
     await assert.rejects(publish(memoryStorage(), { dir }), /Android/);
+  });
+});
+
+describe("scripts/publish.ts", () => {
+  // Runs the script with an `npx` that records each upload and whether it could see the key.
+  const run = (env: Record<string, string>) => {
+    const bin = mkdtempSync(join(tmpdir(), "wave-npx-"));
+    const log = join(bin, "uploads.log");
+    writeFileSync(
+      join(bin, "npx"),
+      `#!/bin/sh\necho "$6 key=\${UPDATES_SIGNING_KEY:-none}" >> "${log}"\n`,
+    );
+    chmodSync(join(bin, "npx"), 0o755);
+    const dir = exported("bundle");
+    writeFileSync(join(dir, "expo-config.json"), JSON.stringify({ name: "Wave" }));
+    const output = execFileSync(
+      process.execPath,
+      [fileURLToPath(new URL("../scripts/publish.ts", import.meta.url)), dir],
+      {
+        encoding: "utf8",
+        env: {
+          PATH: `${bin}:${process.env.PATH}`,
+          CLOUDFLARE_API_TOKEN: "token",
+          CLOUDFLARE_ACCOUNT_ID: "account",
+          WAVE_UPDATE_CHANNEL: "ti",
+          WAVE_RUNTIME_VERSION: "native-a",
+          ...env,
+        },
+      },
+    );
+    return { output, uploads: existsSync(log) ? readFileSync(log, "utf8") : "" };
+  };
+
+  it("skips with a log line and publishes nothing without the signing key", () => {
+    const { output, uploads } = run({});
+    assert.match(output, /Skipping the over-the-air update: UPDATES_SIGNING_KEY/);
+    assert.equal(uploads, "");
+  });
+
+  it("publishes with the key and keeps it from what it runs", () => {
+    const { output, uploads } = run({ UPDATES_SIGNING_KEY: shipped.privateKey });
+    assert.match(output, /Published update/);
+    assert.match(uploads, /latest\.json key=none/);
+    assert.doesNotMatch(uploads, /PRIVATE KEY/);
   });
 });
