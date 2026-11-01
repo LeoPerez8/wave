@@ -155,6 +155,12 @@ export const dismissTopOverlay = (): boolean => {
   return list.length > 0;
 };
 
+/** Whether a card is open now (one fading out doesn't count). */
+export const isOverlayOpen = (): boolean => entries.get().some((entry) => !entry.closing);
+
+/** Calls [listener] when a card opens or closes; gives the function that stops it. */
+export const onOverlaysChange = (listener: () => void): (() => void) => entries.subscribe(listener);
+
 // For OverlayHost.
 
 export const useOverlayEntries = (): readonly OverlayEntry[] =>
