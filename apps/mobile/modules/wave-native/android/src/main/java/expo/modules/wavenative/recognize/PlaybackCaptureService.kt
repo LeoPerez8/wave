@@ -30,13 +30,16 @@ class PlaybackCaptureService : Service() {
   /** A session never outlives Wave's process, so Android shouldn't restart the service. */
   override fun onStartCommand(intent: Intent?, flags: Int, startId: Int) = START_NOT_STICKY
 
-  fun open(resultCode: Int, data: Intent, onReleased: () -> Unit): PlaybackAudio {
-    startForeground(NOTIFICATION, Notification.Builder(this, RecognizeNotifications.listeningChannel(this))
+  fun open(resultCode: Int, data: Intent, onReleased: () -> Unit, detached: Boolean): PlaybackAudio {
+    val notification = if (detached) RecognizeListeningService.notification(this) else Notification.Builder(this, RecognizeNotifications.listeningChannel(this))
       .setSmallIcon(R.drawable.wave_notification)
       .setContentTitle(NativeText.get("recognize"))
       .setContentText(NativeText.get("listeningToPhone"))
       .setOngoing(true)
-      .build(), ServiceInfo.FOREGROUND_SERVICE_TYPE_MEDIA_PROJECTION)
+      .build()
+    // Both foreground services share the tile's Listening notification and Cancel action.
+    startForeground(if (detached) RecognizeListeningService.NOTIFICATION else NOTIFICATION,
+      notification, ServiceInfo.FOREGROUND_SERVICE_TYPE_MEDIA_PROJECTION)
     val projection = checkNotNull(getSystemService(MediaProjectionManager::class.java).getMediaProjection(resultCode, data)) {
       "Android didn't grant a media projection"
     }
@@ -59,7 +62,7 @@ class PlaybackCaptureService : Service() {
 }
 
 /**
- * Main-thread start and binding, while Wave is in the foreground. Releasing the audio
+ * Main-thread start and binding after consent, from Wave or the tile consent host. Releasing the audio
  * unbinds and stops the service, which removes its foreground notification.
  */
 fun openPlaybackCapture(
@@ -68,6 +71,7 @@ fun openPlaybackCapture(
   data: Intent,
   opened: (PlaybackAudio) -> Unit,
   failed: (Exception) -> Unit,
+  detached: Boolean = false,
 ): () -> Unit {
   val main = Handler(Looper.getMainLooper())
   val service = Intent(context, PlaybackCaptureService::class.java)
@@ -96,9 +100,9 @@ fun openPlaybackCapture(
     override fun onServiceConnected(name: ComponentName, binder: IBinder) {
       if (closed) return
       try {
-        val capture = (binder as PlaybackCaptureService.LocalBinder).service.open(resultCode, data) {
+        val capture = (binder as PlaybackCaptureService.LocalBinder).service.open(resultCode, data, onReleased = {
           main.post { close() }
-        }
+        }, detached = detached)
         audio = capture
         opened(capture)
       } catch (e: Exception) {

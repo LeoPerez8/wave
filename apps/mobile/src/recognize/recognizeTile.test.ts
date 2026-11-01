@@ -81,15 +81,19 @@ const setup = (
     library?: () => Promise<readonly RecognizeTrack[]>;
     otherPlaying?: boolean;
     offline?: boolean;
+    /** What Android's consent dialog does with a phone-audio start; held open by default. */
+    consent?: "held";
   } = {},
 ) => {
   let online = options.offline !== true;
   const answers: ((answer: RecognizeAnswer) => void)[] = [];
   let heard: ((session: number, ms: number, audible: boolean) => void) | null = null;
+  let consent: { accept: () => void; decline: () => void } | null = null;
   const native = {
     sources: [] as RecognizeSource[],
     requests: [] as number[],
     stopped: [] as number[],
+    cancelled: [] as number[],
     playbackActivity: async () => ({
       activeMediaPlayers: options.otherPlaying ? 1 : 0,
       waveMediaPlayers: 0,
@@ -97,9 +101,16 @@ const setup = (
     start: async (source: RecognizeSource, request: number) => {
       native.sources.push(source);
       native.requests.push(request);
-      return request;
+      if (source === "microphone" || options.consent !== "held") return request;
+      return new Promise<number>((resolve, reject) => {
+        consent = {
+          accept: () => resolve(request),
+          decline: () =>
+            reject(Object.assign(new Error("declined"), { code: "ERR_RECOGNIZE_CONSENT" })),
+        };
+      });
     },
-    cancelStart: () => undefined,
+    cancelStart: (request: number) => void native.cancelled.push(request),
     ask: () => new Promise<RecognizeAnswer>((resolve) => answers.push(resolve)),
     stop: (session: number) => void native.stopped.push(session),
     onHeard: (listener: (session: number, ms: number, audible: boolean) => void) => {
@@ -149,9 +160,19 @@ const setup = (
     held,
     reconnect: () => void (online = true),
     saves,
+    /** Android's consent dialog is answered. */
+    accept: async () => {
+      consent?.accept();
+      await settle();
+    },
+    decline: async () => {
+      consent?.decline();
+      await settle();
+    },
+
     /** The session running has heard [seconds] in all. */
-    hear: async (seconds: number) => {
-      heard?.(native.requests.at(-1)!, seconds * 1000, true);
+    hear: async (seconds: number, audible = true) => {
+      heard?.(native.requests.at(-1)!, seconds * 1000, audible);
       await settle();
     },
     /** Answers the oldest ask still out. */
@@ -186,13 +207,83 @@ test("a tap with JS running starts the session, and nothing else does", async ()
   assert.deepEqual(world.native.sources, ["microphone"]);
 });
 
-test("another player doesn't change the source until the tile can ask for phone audio", async () => {
+test("another player active: Core's source choice takes the tile to phone audio", async () => {
   const world = setup({ otherPlaying: true });
   const tile = fakeTile();
   followRecognizeTile(tile, world.deps, () => null);
   tile.tap(1);
   await settle();
-  assert.deepEqual(world.native.sources, ["microphone"]);
+  assert.deepEqual(world.native.sources, ["playback"]);
+});
+
+test("phone audio leaves Wave's playback alone from the tap to the match", async () => {
+  const world = setup({ otherPlaying: true });
+  const tile = fakeTile();
+  followRecognizeTile(tile, world.deps, recognizeTileNotice);
+  tile.tap(1);
+  await settle();
+  await world.hear(4);
+  await world.answer({ kind: "match", song: SONG });
+  assert.deepEqual(world.held, []);
+  assert.deepEqual(tile.calls, ["ended 1", "notify match I Will Survive", "finished"]);
+});
+
+test("the consent dialog can stay up as long as it likes: only capture counts as stalling", async () => {
+  const world = setup({ otherPlaying: true, consent: "held" });
+  const tile = fakeTile();
+  followRecognizeTile(tile, world.deps, recognizeTileNotice);
+  tile.tap(1);
+  await settle();
+  // Far past Core's 3-second stall, which would end the session as a failed capture.
+  world.tick(60);
+  await settle();
+  assert.deepEqual(tile.calls, []);
+  await world.accept();
+  await world.hear(4);
+  await world.answer({ kind: "match", song: SONG });
+  assert.deepEqual(tile.calls, ["ended 1", "notify match I Will Survive", "finished"]);
+});
+
+test("once consent is given a capture that stalls fails as it does from the microphone", async () => {
+  const world = setup({ otherPlaying: true, consent: "held" });
+  const tile = fakeTile();
+  followRecognizeTile(tile, world.deps, recognizeTileNotice);
+  tile.tap(1);
+  await settle();
+  await world.accept();
+  await world.hear(1);
+  world.tick(7);
+  await settle();
+  assert.deepEqual(tile.calls, [
+    "ended 1",
+    "notify failure Couldn't recognize the song",
+    "finished",
+  ]);
+  assert.match(world.logs[0]!, /failed/);
+});
+
+test("declining the consent dialog ends the session with no notification", async () => {
+  const world = setup({ otherPlaying: true, consent: "held" });
+  const tile = fakeTile();
+  followRecognizeTile(tile, world.deps, recognizeTileNotice);
+  tile.tap(1);
+  await settle();
+  await world.decline();
+  assert.deepEqual(tile.calls, ["ended 1", "finished"]);
+  assert.deepEqual(world.held, []);
+  assert.equal(world.logs.length, 1);
+});
+
+test("Cancel while the consent dialog is up withdraws it, with no notification", async () => {
+  const world = setup({ otherPlaying: true, consent: "held" });
+  const tile = fakeTile();
+  followRecognizeTile(tile, world.deps, recognizeTileNotice);
+  tile.tap(2);
+  await settle();
+  tile.cancel(2);
+  await settle();
+  assert.deepEqual(world.native.cancelled, [world.native.requests[0]]);
+  assert.deepEqual(tile.calls, ["ended 2", "finished"]);
 });
 
 test("a match says so as soon as Shazam answers, and the tile lets go after the lookup", async () => {
@@ -474,13 +565,29 @@ test("Try Again is a new tap: it listens again after a failure", async () => {
   assert.deepEqual(world.native.sources, ["microphone"]);
 });
 
-test("Use Microphone listens through the microphone with another player active", async () => {
+test("blocked phone audio offers Use Microphone, then a normal retry chooses phone audio again", async () => {
   const world = setup({ otherPlaying: true });
   const tile = fakeTile();
   followRecognizeTile(tile, world.deps, recognizeTileNotice);
-  tile.tap(1, true);
+  tile.tap(1);
   await settle();
-  assert.deepEqual(world.native.sources, ["microphone"]);
+  assert.deepEqual(world.native.sources, ["playback"]);
+  await world.hear(4, false);
+  assert.deepEqual(tile.calls, [
+    "ended 1",
+    "notify failure This app blocks audio capture",
+    "finished",
+  ]);
+  tile.tap(2, true);
+  await settle();
+  assert.deepEqual(world.native.sources, ["playback", "microphone"]);
+  assert.deepEqual(world.held, ["paused"]);
+  tile.cancel(2);
+  await settle();
+  tile.tap(3);
+  await settle();
+  assert.deepEqual(world.native.sources, ["playback", "microphone", "playback"]);
+  assert.deepEqual(world.held, ["paused", "resumed"]);
 });
 
 test("Cancel ends the session with no notification, and resumes playback", async () => {

@@ -28,9 +28,6 @@ export interface RecognizeTileNative {
   readonly notify: (notice: RecognizeTileNotice) => void;
 }
 
-/** What a tap listens through. Phone audio is #901's: it needs Android's consent dialog. */
-const TAP_SOURCE: RecognizeSource | "auto" = "microphone";
-
 export interface RecognizeTileDeps<
   L extends RecognizeTrack = RecognizeTrack,
   S extends YtSong = YtSong,
@@ -119,7 +116,7 @@ export const followRecognizeTile = <L extends RecognizeTrack, S extends YtSong>(
 
   const receive = (): void => {
     const request = tile.take();
-    if (request !== null) start(request.tap, request.microphone ? "microphone" : TAP_SOURCE);
+    if (request !== null) start(request.tap, request.microphone ? "microphone" : "auto");
   };
 
   const stops = [

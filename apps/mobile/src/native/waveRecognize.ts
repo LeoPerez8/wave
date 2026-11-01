@@ -29,8 +29,8 @@ declare class WaveRecognizeModule extends NativeModule<WaveRecognizeEvents> {
   stop(session: number): void;
   takeRequest(): boolean;
   takeMatchRequest(): string | null;
-  /** The tile's capture: the microphone, not ending with Wave's screen. */
-  startDetached(request: number): Promise<number>;
+  /** The tile's capture, not ending with Wave's screen. */
+  startDetached(source: RecognizeSource, request: number): Promise<number>;
   takeTileRequest(): { tap: number; microphone: boolean } | null;
   setCardSession(running: boolean): void;
   tileListeningEnded(tap: number): void;
@@ -89,7 +89,7 @@ export const recognizeTile: (RecognizeTileNative & { readonly capture: Recognize
     : {
         capture: {
           ...recognizeNative,
-          start: (_source, request) => WaveRecognize.startDetached(request),
+          start: (source, request) => WaveRecognize.startDetached(source, request),
         },
         take: () => WaveRecognize.takeTileRequest(),
         onRequested: (listener) => {

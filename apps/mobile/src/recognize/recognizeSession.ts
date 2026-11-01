@@ -196,7 +196,8 @@ export const startRecognizeSession = <L extends RecognizeTrack, S extends YtSong
     );
   };
 
-  const tick = (): void => step({ kind: "tick", atMs: deps.now(), foreground: deps.foreground() });
+  const tick = (): void =>
+    step({ kind: "tick", atMs: deps.now(), foreground: !awaitingDialog && deps.foreground() });
 
   /** A capture failure is judged with the clock as it is when it arrives. */
   const fromNative = (event: RecognizeEvent): void => {
@@ -263,6 +264,8 @@ export const startRecognizeSession = <L extends RecognizeTrack, S extends YtSong
       // Any other failure is Cancel too when Wave is still hidden a moment later (Core).
       else failCapture();
     } finally {
+      // Consent can take arbitrarily long; exclude its last fraction of a tick too.
+      if (awaitingDialog && !finished) tick();
       awaitingDialog = false;
     }
   };

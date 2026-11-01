@@ -46,7 +46,7 @@ class RecognizeListeningService : Service() {
     }
     try {
       NativeLanguage.init(this)
-      startForeground(NOTIFICATION, notification(), ServiceInfo.FOREGROUND_SERVICE_TYPE_MICROPHONE)
+      startForeground(NOTIFICATION, notification(this), ServiceInfo.FOREGROUND_SERVICE_TYPE_MICROPHONE)
     } catch (e: RuntimeException) {
       WaveLog.w(LOG_TAG, "The tile's session couldn't start", e)
       stopSelf()
@@ -57,24 +57,6 @@ class RecognizeListeningService : Service() {
     return START_NOT_STICKY
   }
 
-  private fun notification(): Notification {
-    val cancel = PendingIntent.getService(
-      this,
-      0,
-      Intent(this, RecognizeListeningService::class.java).setAction(ACTION_CANCEL),
-      PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE,
-    )
-    return Notification.Builder(this, RecognizeNotifications.listeningChannel(this))
-      .setSmallIcon(R.drawable.wave_notification)
-      .setContentTitle(NativeText.get("listening"))
-      .setOngoing(true)
-      .setForegroundServiceBehavior(Notification.FOREGROUND_SERVICE_IMMEDIATE)
-      .addAction(
-        Notification.Action.Builder(Icon.createWithResource(this, R.drawable.wave_notification), NativeText.get("cancel"), cancel)
-          .build(),
-      )
-      .build()
-  }
 
   override fun onDestroy() {
     leave?.invoke()
@@ -90,9 +72,29 @@ class RecognizeListeningService : Service() {
     /** Use Microphone: this session skips Core's source choice. */
     const val EXTRA_MICROPHONE = "expo.modules.wavenative.recognize.MICROPHONE"
     private const val ACTION_CANCEL = "expo.modules.wavenative.recognize.CANCEL"
-    private const val NOTIFICATION = 774
+    const val NOTIFICATION = 774
     private const val RUNTIME_OWNER = "recognize"
     private const val LOG_TAG = "WaveRecognize"
+
+
+    fun notification(context: Context): Notification {
+      val cancel = PendingIntent.getService(
+        context,
+        0,
+        Intent(context, RecognizeListeningService::class.java).setAction(ACTION_CANCEL),
+        PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE,
+      )
+      return Notification.Builder(context, RecognizeNotifications.listeningChannel(context))
+        .setSmallIcon(R.drawable.wave_notification)
+        .setContentTitle(NativeText.get("listening"))
+        .setOngoing(true)
+        .setForegroundServiceBehavior(Notification.FOREGROUND_SERVICE_IMMEDIATE)
+        .addAction(
+          Notification.Action.Builder(Icon.createWithResource(context, R.drawable.wave_notification), NativeText.get("cancel"), cancel)
+            .build(),
+        )
+        .build()
+    }
 
     /** A second tap or Cancel: JS ends the session, and no result is told. */
     fun cancel(context: Context) {
