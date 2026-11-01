@@ -2382,6 +2382,7 @@ export {
 
 export {
   RECOGNIZE_CARD_ACTION_LABELS,
+  RECOGNIZE_WINDOW_MS,
   recognizeCardActionLabels,
   recognizeCardView,
   recognizeHoldsPlayback,

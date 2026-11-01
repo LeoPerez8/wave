@@ -16,16 +16,18 @@ const SOURCE_NAMES: Readonly<Record<RecognizeSource, string>> = {
 };
 
 /**
- * The session's one app log line: the source, the seconds heard and the outcome
- * (with a refusal's HTTP status). Never the song, the audio or the signature.
+ * The session's one app log line: the source, the seconds heard, the outcome (with a
+ * refusal's HTTP status) and how many requests failed before it, when any did. Never
+ * the song, the audio or the signature.
  */
 export const recognizeLogLine = (session: {
   readonly source: RecognizeSource;
   readonly heardMs: number;
   readonly outcome: RecognizeLogOutcome;
+  readonly failedAsks?: number;
   readonly lookup?: RecognizeLookup;
 }): string => {
-  const { outcome } = session;
+  const { outcome, failedAsks = 0 } = session;
   const after = `after ${(session.heardMs / 1000).toFixed(1)} s`;
   const what = (() => {
     switch (outcome.kind) {
@@ -47,5 +49,9 @@ export const recognizeLogLine = (session: {
         return `failed ${after} (${outcome.failure}${outcome.status === null ? "" : `, HTTP ${outcome.status}`})`;
     }
   })();
-  return `Recognize through ${SOURCE_NAMES[session.source]}: ${what}${session.lookup === undefined ? "" : `, YT Music lookup: ${session.lookup}`}`;
+  const failedBefore =
+    failedAsks === 0
+      ? ""
+      : `, ${failedAsks} ${failedAsks === 1 ? "request" : "requests"} failed before it`;
+  return `Recognize through ${SOURCE_NAMES[session.source]}: ${what}${failedBefore}${session.lookup === undefined ? "" : `, YT Music lookup: ${session.lookup}`}`;
 };

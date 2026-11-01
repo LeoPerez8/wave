@@ -38,7 +38,8 @@ class RecognizeSessions(
   fun get(id: Int): RecognizeSession? = current?.takeIf { it.first == id }?.second
 
   /** Blocking: call it off the main thread. Throws [RecognizeSessionEnded] once [id] isn't live. */
-  fun ask(id: Int, last: Boolean): RecognizeOutcome = (get(id) ?: throw RecognizeSessionEnded()).ask(last)
+  fun ask(id: Int, last: Boolean, windowMs: Int): RecognizeOutcome =
+    (get(id) ?: throw RecognizeSessionEnded()).ask(last, windowMs)
 
   @Synchronized
   fun stop(id: Int) {

@@ -3,6 +3,7 @@ package expo.modules.wavenative.recognize
 import expo.modules.wavenative.Fixtures
 import java.nio.ByteBuffer
 import java.nio.ByteOrder
+import java.util.Random
 import java.util.concurrent.CopyOnWriteArrayList
 import java.util.concurrent.CountDownLatch
 import java.util.concurrent.TimeUnit
@@ -89,6 +90,12 @@ class RecognizeSessionTest {
     }
   }
 
+  /** [seconds] of 16 kHz audio that never repeats, so each stretch has peaks of its own. */
+  private fun changingNoise(seconds: Int): ShortArray {
+    val random = Random(905)
+    return ShortArray(seconds * 16_000) { (random.nextGaussian() * 6_000).toInt().toShort() }
+  }
+
   private val heard = CopyOnWriteArrayList<Int>()
   private val captureFailed = CountDownLatch(1)
 
@@ -121,11 +128,84 @@ class RecognizeSessionTest {
     session.start()
     waitForHeard(4_000)
 
-    assertEquals(RecognizeOutcome.NoMatch, session.ask(last = false))
+    assertEquals(RecognizeOutcome.NoMatch, session.ask(last = false, windowMs = WINDOW_MS))
     assertEquals(Fixtures.file("shazam/chord-song.uri").readText().trim(), asked.single().uri)
     assertEquals(4_000, asked.single().sampleMs)
     assertFalse("the capture goes on after an ask that isn't the last", audio.isStopped)
     session.stop()
+  }
+
+  @Test
+  fun `past the window, asks with what a new generator gives for only the latest 12 seconds`() {
+    val samples = changingNoise(20)
+    val audio = FakeAudio(samples)
+    val asked = CopyOnWriteArrayList<ShazamSignature>()
+    val session = session(audio) { asked += it; RecognizeOutcome.NoMatch }
+    session.start()
+    waitForHeard(20_000)
+
+    session.ask(last = false, windowMs = WINDOW_MS)
+
+    val alone = SignatureGenerator().apply { append(samples.copyOfRange(8 * 16_000, 20 * 16_000)) }.signature()
+    assertEquals(alone, asked.single())
+    assertEquals(12_000, asked.single().sampleMs)
+    assertTrue("the window has peaks to compare", alone.uri.length > 1_000)
+    session.stop()
+  }
+
+  @Test
+  fun `a second ask covers the latest window, not the one before`() {
+    val samples = changingNoise(16)
+    val audio = FakeAudio(samples)
+    val asked = CopyOnWriteArrayList<ShazamSignature>()
+    val session = session(audio) { asked += it; RecognizeOutcome.NoMatch }
+    session.start()
+    waitForHeard(16_000)
+
+    session.ask(last = false, windowMs = WINDOW_MS)
+    session.ask(last = true, windowMs = WINDOW_MS)
+
+    assertEquals("nothing new was heard between them", asked[0], asked[1])
+  }
+
+  @Test
+  fun `a retry of the last ask signs the same audio after the capture has stopped`() {
+    val audio = FakeAudio(changingNoise(16))
+    val asked = CopyOnWriteArrayList<ShazamSignature>()
+    val session = session(audio) { asked += it; RecognizeOutcome.NoMatch }
+    session.start()
+    waitForHeard(16_000)
+
+    session.ask(last = true, windowMs = WINDOW_MS)
+    assertTrue(audio.released.await(5, TimeUnit.SECONDS))
+    session.ask(last = true, windowMs = WINDOW_MS)
+
+    assertEquals(asked[0], asked[1])
+    assertEquals(12_000, asked[1].sampleMs)
+  }
+
+  @Test
+  fun `no window reaches the 15 seconds at which Shazam stops matching`() {
+    val audio = FakeAudio(changingNoise(20))
+    val asked = CopyOnWriteArrayList<ShazamSignature>()
+    val session = session(audio) { asked += it; RecognizeOutcome.NoMatch }
+    session.start()
+    waitForHeard(20_000)
+
+    session.ask(last = false, windowMs = 60_000)
+
+    assertTrue("${asked.single().sampleMs} ms", asked.single().sampleMs < 15_000)
+    session.stop()
+  }
+
+  @Test
+  fun `a capture that goes on past the window still reports everything it has heard`() {
+    val audio = FakeAudio(ShortArray(20 * 16_000))
+    session(audio).start()
+    waitForHeard(20_000)
+
+    assertEquals((1..80).map { it * 250 }, heard.toList())
+    audio.stop()
   }
 
   @Test
@@ -136,7 +216,7 @@ class RecognizeSessionTest {
     session.start()
     waitForHeard(4_000)
 
-    assertEquals(refused, session.ask(last = false))
+    assertEquals(refused, session.ask(last = false, windowMs = WINDOW_MS))
     session.stop()
   }
 
@@ -147,7 +227,7 @@ class RecognizeSessionTest {
     val session = session(audio) { stoppedWhenAsked = audio.isStopped; RecognizeOutcome.NoMatch }
     session.start()
     waitForHeard(4_000)
-    session.ask(last = true)
+    session.ask(last = true, windowMs = WINDOW_MS)
 
     assertTrue(stoppedWhenAsked)
     assertTrue("the capture thread lets the audio go", audio.released.await(5, TimeUnit.SECONDS))
@@ -174,5 +254,9 @@ class RecognizeSessionTest {
     assertTrue(captureFailed.await(5, TimeUnit.SECONDS))
     assertTrue(audio.released.await(5, TimeUnit.SECONDS))
     assertEquals(1_000, heard.last())
+  }
+
+  private companion object {
+    const val WINDOW_MS = 12_000
   }
 }

@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import { describe, test } from "node:test";
 
 import {
+  RECOGNIZE_WINDOW_MS,
   resolveRecognizedSong,
   type RecognizeAnswer,
   type RecognizeCard,
@@ -38,6 +39,7 @@ const fakeNative = (
   const native = {
     started: 0,
     asks: [] as { session: number; last: boolean }[],
+    windows: [] as number[],
     stopped: [] as number[],
     sources: [] as RecognizeSource[],
     playbackActivity: async () => ({
@@ -55,8 +57,9 @@ const fakeNative = (
       native.started++;
       return 6 + native.started;
     },
-    ask: (session: number, last: boolean) => {
+    ask: (session: number, last: boolean, windowMs: number) => {
       native.asks.push({ session, last });
+      native.windows.push(windowMs);
       return new Promise<RecognizeAnswer>((resolve, reject) => {
         answers.push(resolve);
         rejections.push(reject);
@@ -367,40 +370,115 @@ describe("a Recognize session", () => {
     assert.deepEqual(levels, ["info"]);
   });
 
-  test("asks again at 8 and 12 seconds, then says No match", async () => {
+  test("asks every 4 seconds up to 28, each over Core's window, then says No match", async () => {
     const { native, last, lines, session } = setup();
     await settle();
-    await native.hear(4);
-    await native.answer({ kind: "noMatch" });
-    await native.hear(8);
-    await native.answer({ kind: "noMatch" });
-    await native.hear(12);
-    await native.answer({ kind: "noMatch" });
+    for (const seconds of [4, 8, 12, 16, 20, 24, 28]) {
+      await native.hear(seconds);
+      await native.answer({ kind: "noMatch" });
+    }
     await session.done;
 
     assert.deepEqual(
       native.asks.map((ask) => ask.last),
-      [false, false, true],
+      [false, false, false, false, false, false, true],
     );
+    assert.deepEqual(native.windows, Array(7).fill(RECOGNIZE_WINDOW_MS));
     assert.deepEqual(last(), { kind: "ended", end: { kind: "noMatch" } });
-    assert.deepEqual(lines, ["Recognize through the microphone: no match after 12.0 s"]);
+    assert.deepEqual(lines, ["Recognize through the microphone: no match after 28.0 s"]);
   });
 
   test("ends with a refused ask's failure and its HTTP status", async () => {
     const { native, last, lines, levels, session } = setup();
     await settle();
     await native.hear(4);
-    await native.answer({ kind: "failed", failure: "refused", status: 429 });
+    await native.answer({ kind: "failed", failure: "refused", status: 403 });
     await session.done;
 
     assert.deepEqual(last(), {
       kind: "ended",
-      end: { kind: "failed", failure: "refused", status: 429 },
+      end: { kind: "failed", failure: "refused", status: 403 },
     });
     assert.deepEqual(lines, [
-      "Recognize through the microphone: failed after 4.0 s (refused, HTTP 429)",
+      "Recognize through the microphone: failed after 4.0 s (refused, HTTP 403)",
     ]);
     assert.deepEqual(levels, ["warn"]);
+  });
+
+  test("a rate limit at 4 seconds keeps listening and the next ask can name the song", async () => {
+    const { native, last, lines, session } = setup();
+    await settle();
+    await native.hear(4);
+    await native.answer({ kind: "failed", failure: "refused", status: 429 });
+    assert.deepEqual(last(), { kind: "listening" });
+    assert.deepEqual(native.stopped, []);
+
+    await native.hear(8);
+    assert.deepEqual(
+      native.asks.map((ask) => ask.last),
+      [false, false],
+    );
+    await native.answer({ kind: "match", song: SONG });
+    await session.done;
+    assert.equal(last()?.kind, "resolved");
+    assert.deepEqual(lines, [
+      "Recognize through the microphone: a match after 8.0 s, 1 request failed before it, YT Music lookup: disabled",
+    ]);
+  });
+
+  test("the last step's retry goes out on the clock, and its failure shows on the card", async () => {
+    const { native, last, lines, session, clock } = setup();
+    const unanswered = { kind: "failed", failure: "network", status: null } as const;
+    await settle();
+    await native.hear(1);
+    await clock.advance(1);
+    await native.hear(4);
+    await native.answer({ kind: "noMatch" });
+    await clock.advance(1);
+    await native.hear(16);
+    await native.answer({ kind: "noMatch" });
+    await clock.advance(1);
+    await native.hear(28);
+    await native.answer(unanswered);
+    assert.equal(native.asks.length, 3);
+
+    await clock.advance(1);
+    assert.deepEqual(native.asks.at(-1), { session: 7, last: true });
+    assert.equal(native.asks.length, 4);
+    await native.answer(unanswered);
+    await clock.advance(2);
+    assert.equal(native.asks.length, 5);
+    await native.answer(unanswered);
+    await clock.advance(4);
+    assert.equal(native.asks.length, 6);
+    await native.answer(unanswered);
+    await session.done;
+
+    assert.deepEqual(last(), { kind: "ended", end: unanswered });
+    assert.deepEqual(lines, [
+      "Recognize through the microphone: failed after 28.0 s (network), 3 requests failed before it",
+    ]);
+  });
+
+  test("Cancel during a retry's wait sends nothing more and ignores the answer still out", async () => {
+    const { native, cards, lines, session, clock } = setup();
+    await settle();
+    await native.hear(4);
+    await native.answer({ kind: "noMatch" });
+    await native.hear(16);
+    await native.answer({ kind: "noMatch" });
+    await native.hear(28);
+    await native.answer({ kind: "failed", failure: "refused", status: 503 });
+    session.cancel();
+    await session.done;
+    await clock.advance(2);
+    await native.answer({ kind: "match", song: SONG });
+
+    assert.equal(native.asks.length, 3);
+    assert.deepEqual(cards, [{ kind: "listening" }]);
+    assert.deepEqual(lines, [
+      "Recognize through the microphone: cancelled after 28.0 s, 1 request failed before it",
+    ]);
   });
 
   test("ignores another session's audio", async () => {
@@ -449,9 +527,7 @@ describe("a Recognize session", () => {
     await settle();
     await native.hear(4);
     await native.answer({ kind: "noMatch" });
-    await native.hear(8);
-    await native.answer({ kind: "noMatch" });
-    await native.hear(12);
+    await native.hear(28);
     await native.reject();
     await session.done;
     assert.deepEqual(last(), {
@@ -708,13 +784,14 @@ describe("Wave's playback during a session", () => {
       "no match",
       async (native) => {
         await native.answer({ kind: "noMatch" });
-        await native.hear(8);
-        await native.answer({ kind: "noMatch" });
-        await native.hear(12);
+        await native.hear(28);
         await native.answer({ kind: "noMatch" });
       },
     ],
-    ["an error", (native) => native.answer({ kind: "failed", failure: "network", status: null })],
+    [
+      "an error",
+      (native) => native.answer({ kind: "failed", failure: "unreadable", status: null }),
+    ],
     [
       "a capture failure",
       async (native) => {
