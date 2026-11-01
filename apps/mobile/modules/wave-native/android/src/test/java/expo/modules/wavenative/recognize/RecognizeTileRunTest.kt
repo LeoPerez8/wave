@@ -53,6 +53,39 @@ class RecognizeTileRunTest {
     assertEquals(RecognizeTileTap.IGNORE, run.tap(microphone = false, notifications = false))
   }
 
+  @Test fun `every permission combination preserves the session that owns the tap`() {
+    for (microphone in listOf(false, true)) {
+      for (notifications in listOf(false, true)) {
+        val idle = RecognizeTileRun()
+        val expected = if (microphone && notifications) RecognizeTileTap.LISTEN else RecognizeTileTap.OPEN_CARD
+        assertEquals(expected, idle.tap(microphone, notifications))
+        assertFalse(idle.listening)
+        assertEquals(0, idle.take())
+
+        idle.cardRunning = true
+        assertEquals(RecognizeTileTap.IGNORE, idle.tap(microphone, notifications))
+        val session = idle.request()
+        assertEquals(RecognizeTileTap.CANCEL, idle.tap(microphone, notifications))
+        // Deciding what the tap does must not consume or end the session itself.
+        assertEquals(session, idle.take())
+        assertTrue(idle.listening)
+      }
+    }
+  }
+
+  @Test fun `rechecking a decision uses current permissions and card ownership`() {
+    assertEquals(RecognizeTileTap.LISTEN, run.tap(true, true))
+    assertEquals(RecognizeTileTap.OPEN_CARD, run.tap(false, true))
+    assertEquals(RecognizeTileTap.OPEN_CARD, run.tap(true, false))
+    assertEquals(RecognizeTileTap.LISTEN, run.tap(true, true))
+    run.cardRunning = true
+    assertEquals(RecognizeTileTap.IGNORE, run.tap(false, false))
+    run.cardRunning = false
+    assertEquals(RecognizeTileTap.OPEN_CARD, run.tap(false, false))
+    assertFalse(run.listening)
+    assertEquals(0, run.take())
+  }
+
   @Test fun `JS takes a tap once, even if it came before JS was running`() {
     val tap = run.request()
     assertEquals(tap, run.take())
