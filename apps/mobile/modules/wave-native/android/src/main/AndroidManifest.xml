@@ -26,7 +26,7 @@
   <!-- The Wi-Fi pre-download's job is kept across reboots (PreDownloads, JobInfo.setPersisted). -->
   <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED" />
 
-  <!-- The self-install spike (#886, SelfInstallSpike): the "install from this source" permission and silent updates. -->
+  <!-- Native updates (SelfInstaller): the "install from this source" permission and silent updates. -->
   <uses-permission android:name="android.permission.REQUEST_INSTALL_PACKAGES" />
   <uses-permission android:name="android.permission.UPDATE_PACKAGES_WITHOUT_USER_ACTION" />
 
@@ -73,10 +73,19 @@
       android:exported="false"
       android:foregroundServiceType="dataSync" />
 
-    <!-- Android's answer to a self-install, with the confirmation it may ask for (#886). -->
+    <!-- Android's answer to a self-install, with the confirmation it may ask for (SelfInstaller). -->
     <receiver
       android:name="expo.modules.wavenative.selfinstall.SelfInstallStatusReceiver"
       android:exported="false" />
+
+    <!-- Brings Wave's process and download journal back after an update (docs/spec.md, Build and CI). -->
+    <receiver
+      android:name="expo.modules.wavenative.selfinstall.PackageReplacedReceiver"
+      android:exported="false">
+      <intent-filter>
+        <action android:name="android.intent.action.MY_PACKAGE_REPLACED" />
+      </intent-filter>
+    </receiver>
 
     <!--
       Media buttons with nothing playing resume the last queue (playback resumption,

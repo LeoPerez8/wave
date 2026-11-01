@@ -7,14 +7,25 @@ import android.content.pm.PackageInstaller
 import android.os.Build
 import expo.modules.wavenative.log.WaveLog
 
-/** Android's answer to [SelfInstallSpike]'s session: logged, and any confirmation it asks for shown. */
+/**
+ * Android's answer to [SelfInstaller]'s session: logged, and any confirmation it asks for shown if
+ * Wave is in front. Behind another app it isn't shown: Android blocks an activity start from the
+ * background anyway, and Wave never opens over someone else. The next try is with Wave in front.
+ */
 class SelfInstallStatusReceiver : BroadcastReceiver() {
   override fun onReceive(context: Context, intent: Intent) {
     val status = intent.getIntExtra(PackageInstaller.EXTRA_STATUS, Int.MIN_VALUE)
     val session = intent.getIntExtra(PackageInstaller.EXTRA_SESSION_ID, -1)
     val message = intent.getStringExtra(PackageInstaller.EXTRA_STATUS_MESSAGE)
     WaveLog.i(SELF_INSTALL_TAG, "Session $session status ${installStatusName(status)}: ${message ?: "no message"}")
+    if (!keepsApkAfter(status)) SelfInstaller.deleteApks(context)
     if (status != PackageInstaller.STATUS_PENDING_USER_ACTION) return
+    if (!showsConfirmation(SelfInstaller.isInForeground())) {
+      WaveLog.i(SELF_INSTALL_TAG, "Android asks for a confirmation with Wave behind; it waits for Wave in front")
+      SelfInstaller.oweConfirmation(context)
+      runCatching { context.packageManager.packageInstaller.abandonSession(session) }
+      return
+    }
     val confirm = confirmation(intent)
     if (confirm == null) {
       WaveLog.w(SELF_INSTALL_TAG, "Android asked for a confirmation without its screen")

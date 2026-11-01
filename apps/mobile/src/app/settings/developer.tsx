@@ -1,15 +1,12 @@
 import { useScreenContent } from "@/lib/screenTiming";
 import { router } from "@/lib/timingRouter";
-import { useState } from "react";
-import { Text, TextInput, View } from "react-native";
+import { Text, View } from "react-native";
 
 import { EntryRow } from "@/catalog/EntryRow";
 import { Hairline } from "@/catalog/Hairline";
 import { exportAppLog, saveAppLog } from "@/log/appLog";
 import { WaveAppLog } from "@/native/waveAppLog";
-import { WaveSelfInstall } from "@/native/waveSelfInstall";
 import { showToast } from "@/overlay/toast";
-import { selfInstallSpikeApkUrl, selfInstallSpikeAvailable } from "@/settings/selfInstallSpike";
 import { SettingsPageScreen } from "@/settings/SettingsPage";
 
 const exportLogs = (): void => {
@@ -39,34 +36,6 @@ const stallJsThread = (): void => {
   }, 0);
 };
 
-const BUILD_LABEL = process.env.EXPO_PUBLIC_WAVE_BUILD_LABEL;
-
-/** The self-install spike's trigger (#886), on test builds only. Its steps go to the app log. */
-function SelfInstallSpikeSection() {
-  const [url, setUrl] = useState(() => selfInstallSpikeApkUrl(BUILD_LABEL));
-  const [state, setState] = useState(() => WaveSelfInstall?.report() ?? "");
-  const install = (): void => {
-    setState("Working…");
-    WaveSelfInstall?.start(url.trim()).then(setState, (error: unknown) => setState(String(error)));
-  };
-  return (
-    <View>
-      <Hairline />
-      <EntryRow label="Install APK over Wave (spike)" onPress={install} />
-      <TextInput
-        className="mt-2 font-sans text-footnote text-foreground"
-        value={url}
-        onChangeText={setUrl}
-        placeholder="https://…/wave.apk"
-        autoCapitalize="none"
-        autoCorrect={false}
-        keyboardType="url"
-      />
-      <Text className="mt-2 font-sans text-footnote text-secondary">{state}</Text>
-    </View>
-  );
-}
-
 /** Settings › Developer: logs, the Design preview and, in a debug build, the log's triggers. */
 export default function DeveloperSettingsScreen() {
   useScreenContent(true);
@@ -88,10 +57,6 @@ export default function DeveloperSettingsScreen() {
           The Library's components on synthetic data, until Wave can scan your music.
         </Text>
       </View>
-      {WaveSelfInstall !== null &&
-        selfInstallSpikeAvailable({ dev: __DEV__, buildLabel: BUILD_LABEL }) && (
-          <SelfInstallSpikeSection />
-        )}
       {__DEV__ && WaveAppLog !== null && (
         <View>
           <Hairline />

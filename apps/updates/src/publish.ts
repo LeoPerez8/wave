@@ -6,7 +6,15 @@
 import { createHash, createPrivateKey } from "node:crypto";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
-import { type Channel, type ReleaseNotes, type StoredAsset, assetKey, notesKey } from "./layout.ts";
+import {
+  type Channel,
+  type LatestApk,
+  type ReleaseNotes,
+  type StoredAsset,
+  assetKey,
+  latestApkKey,
+  notesKey,
+} from "./layout.ts";
 import { type UpdateBucket, releaseUpdate } from "./release.ts";
 
 const CONTENT_TYPES: Record<string, string> = {
@@ -61,6 +69,23 @@ export const publishNotes = async ({
   const data = new TextEncoder().encode(JSON.stringify(notes));
   await put(notesKey(channel, version), data, "application/json");
   return true;
+};
+
+/** Makes `apk` what the channel's phones are told of. Throws on one they wouldn't download. */
+export const publishLatestApk = async ({
+  channel,
+  apk,
+  put,
+}: {
+  readonly channel: Channel;
+  readonly apk: LatestApk;
+  readonly put: PublishOptions["put"];
+}): Promise<void> => {
+  if (!apk.url.startsWith("https://")) throw new Error(`Not an https address: ${apk.url}`);
+  if (!(apk.size > 0)) throw new Error(`Not an APK's size: ${apk.size}`);
+  if (apk.runtimeVersion === "") throw new Error("No runtime version");
+  const data = new TextEncoder().encode(JSON.stringify(apk));
+  await put(latestApkKey(channel), data, "application/json");
 };
 
 /** Publishes the update and answers its id. */
