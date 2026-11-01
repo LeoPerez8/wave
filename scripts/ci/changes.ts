@@ -15,6 +15,8 @@ const AREAS = {
   core: ["packages/core/"],
   // The Wave account's sync service. Not in the APK, but users see what it does.
   sync: ["apps/sync/"],
+  // The update service. It delivers releases and isn't one: a change to it doesn't release.
+  updates: ["apps/updates/"],
   workspace: ["package.json", "pnpm-workspace.yaml", "pnpm-lock.yaml"],
   ci: [".github/", "scripts/ci/"],
   // The release performance runner (docs/performance/README.md). Not in the APK; its

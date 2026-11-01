@@ -1,0 +1,39 @@
+name: Portuguese note
+
+# Its own workflow because adding the line edits the PR's body, which shouldn't run all of CI.
+on:
+  pull_request:
+    types: [opened, edited, reopened, synchronize]
+
+permissions:
+  contents: read
+  pull-requests: write
+
+concurrency:
+  group: pt-br-note-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+jobs:
+  warn:
+    name: Warn about a missing pt-BR line
+    # A fork's token can't comment.
+    if: github.event.pull_request.head.repo.full_name == github.repository
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          ref: ${{ github.event.pull_request.head.sha }}
+          sparse-checkout: scripts/ci
+
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 22
+          package-manager-cache: false
+
+      # A missing line, or this step failing, never fails the job.
+      - name: Warn or clear the warning
+        continue-on-error: true
+        env:
+          GH_TOKEN: ${{ github.token }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+        run: scripts/ci/pt-br-note.sh

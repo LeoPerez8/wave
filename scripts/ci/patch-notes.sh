@@ -7,7 +7,8 @@
 # Needs the whole history and its tags (actions/checkout with fetch-depth: 0).
 #   scripts/ci/patch-notes.sh [<ref>]
 # Env: GH_TOKEN, GITHUB_REPOSITORY, PATCH_NOTES_SINCE (optional: count from this ref
-# instead of the previous version's tag).
+# instead of the previous version's tag), LOCALIZED_NOTES_FILE (optional: also write the
+# release's notes in each language there, as localized-notes.ts prints them).
 set -euo pipefail
 
 here="$(dirname "$0")"
@@ -36,5 +37,11 @@ gh issue list --repo "$repo" --label bug --state all --limit 1000 --json number 
   --jq '.[].number' > "$tmp/bugs.txt"
 
 "$here/merged-prs.sh" "$since" "$head" > "$tmp/prs.jsonl"
+
+if [ -n "${LOCALIZED_NOTES_FILE:-}" ]; then
+  node "$here/localized-notes.ts" "$tmp/commits.txt" "$tmp/bugs.txt" < "$tmp/prs.jsonl" \
+    > "$LOCALIZED_NOTES_FILE" ||
+    echo "::warning::Couldn't build the notes in each language; the release goes without them." >&2
+fi
 
 node "$here/patch-notes.ts" "$tmp/commits.txt" "$tmp/bugs.txt" < "$tmp/prs.jsonl"

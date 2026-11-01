@@ -4,7 +4,7 @@ import { createDeveloperTitleTaps, visibleSettingsPages, type SettingsPage } fro
 import { useFocusEffect } from "expo-router";
 import { useCallback, useState } from "react";
 import { router } from "@/lib/timingRouter";
-import { ScrollView, View } from "react-native";
+import { ScrollView, Text, View } from "react-native";
 
 import { grid } from "@/catalog/grid";
 import { Hairline } from "@/catalog/Hairline";
@@ -18,6 +18,7 @@ import {
 } from "@/settings/developer";
 import { SettingsPageRow } from "@/settings/SettingsPage";
 import { useSettingsSummaries } from "@/settings/settingsSummaries";
+import { RUNNING_VERSION } from "@/updates/runningVersion";
 
 /** A row for each page, in Core's order; a handful, so a plain list. */
 function SettingsPageRows({
@@ -62,6 +63,11 @@ export default function SettingsScreen() {
       <ScrollView contentContainerStyle={{ paddingHorizontal: grid.margin, paddingBottom: 48 }}>
         <Hairline />
         <SettingsPageRows summaries={summaries} developerVisible={developerVisible} />
+        {RUNNING_VERSION !== null && (
+          <Text className="pt-6 text-center font-sans text-footnote text-secondary" selectable>
+            {strings.appUpdates.version(RUNNING_VERSION)}
+          </Text>
+        )}
       </ScrollView>
     </View>
   );

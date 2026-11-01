@@ -13,6 +13,8 @@
     "scripts/ci/kept-apk.ts",
     "scripts/ci/next-version.ts",
     "scripts/ci/apk-version.ts",
+    "scripts/ci/update-config.ts",
+    "apps/updates/scripts/publish.ts",
     "scripts/ci/previous-tag.ts",
     "scripts/ci/merged-prs.ts",
     "scripts/music-folder/organize.ts",
@@ -57,7 +59,12 @@
     // Expo autolinks these modules; Expo Router requires native screens.
     "expo-constants",
     "expo-system-ui",
+    "expo-updates",
     "react-native-screens",
+    // Plugins in app.config.ts, which Fallow can't read now that it exports a function.
+    "expo-build-properties",
+    "expo-font",
+    "expo-splash-screen",
   ],
   "rules": {
     // Independent modules intentionally share names such as Effect's `layer`.
