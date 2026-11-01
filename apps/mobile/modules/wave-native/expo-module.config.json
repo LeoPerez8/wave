@@ -12,7 +12,8 @@
       "expo.modules.wavenative.lookup.LibraryLookupModule",
       "expo.modules.wavenative.log.AppLogModule",
       "expo.modules.wavenative.share.ShareModule",
-      "expo.modules.wavenative.recognize.RecognizeModule"
+      "expo.modules.wavenative.recognize.RecognizeModule",
+      "expo.modules.wavenative.selfinstall.SelfInstallModule"
     ]
   }
 }
