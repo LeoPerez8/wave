@@ -82,7 +82,7 @@ class RecognizeSessionsTest {
     sessions.start(8, FakeAudio()) {}
     sessions.stopAll()
 
-    val error = runCatching { sessions.ask(8, last = false) }.exceptionOrNull()
+    val error = runCatching { sessions.ask(8, last = false, windowMs = 12_000) }.exceptionOrNull()
     assertTrue("$error", error is RecognizeSessionEnded)
   }
 
@@ -95,7 +95,7 @@ class RecognizeSessionsTest {
     )
     throwing.start(9, FakeAudio()) {}
 
-    val error = runCatching { throwing.ask(9, last = false) }.exceptionOrNull()
+    val error = runCatching { throwing.ask(9, last = false, windowMs = 12_000) }.exceptionOrNull()
     assertTrue("$error", error is IllegalStateException)
     throwing.stopAll()
   }

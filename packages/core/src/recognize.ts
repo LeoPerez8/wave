@@ -23,8 +23,21 @@ export const recognizeSource = (activity: {
 }): RecognizeSource =>
   activity.activeMediaPlayers > activity.waveMediaPlayers ? "playback" : "microphone";
 
-/** How much audio each ask covers: everything heard so far, at about 4, 8 and 12 seconds. */
-const RECOGNIZE_STEPS_MS: readonly number[] = [4_000, 8_000, 12_000];
+/**
+ * How much audio an ask covers: the latest 12 seconds, or everything heard before that.
+ * It stays under 15 seconds because ShazamIO warns Shazam returns no matches for that long.
+ */
+export const RECOGNIZE_WINDOW_MS = 12_000;
+
+/** How much more audio Wave hears between asks. */
+const RECOGNIZE_STEP_MS = 4_000;
+/** The last ask: with its answer, a session that hasn't found the song ends at about 30 seconds. */
+const RECOGNIZE_LAST_ASK_MS = 28_000;
+
+const RECOGNIZE_STEPS_MS: readonly number[] = Array.from(
+  { length: RECOGNIZE_LAST_ASK_MS / RECOGNIZE_STEP_MS },
+  (_, index) => (index + 1) * RECOGNIZE_STEP_MS,
+);
 const LAST_STEP_MS = RECOGNIZE_STEPS_MS.at(-1)!;
 
 /**
@@ -51,7 +64,7 @@ export interface RecognizeSession {
   readonly source: RecognizeSource;
   /** Audio captured so far. */
   readonly heardMs: number;
-  /** How many asks went out. */
+  /** How many of the schedule's steps are done: a step an answer outlasted counts. */
   readonly asked: number;
   /** An ask is out and hasn't been answered. */
   readonly asking: boolean;
@@ -143,17 +156,14 @@ export const startRecognize = (source: RecognizeSource): RecognizeSession => ({
 
 const CAPTURE_FAILURE: RecognizeAnswer = { kind: "failed", failure: "capture", status: null };
 
-/** Asks now when nothing is out and the next step's audio is heard (and can still be signed). */
+/**
+ * Asks now when nothing is out and a new step's audio is heard (and can still be signed).
+ * It goes for the latest step heard, so slow answers can't stretch the session.
+ */
 const askIfDue = (session: RecognizeSession): RecognizeStep => {
-  const due = RECOGNIZE_STEPS_MS[session.asked];
-  if (
-    session.asking ||
-    session.captureEndedMs !== null ||
-    due === undefined ||
-    session.heardMs < due
-  )
+  const asked = RECOGNIZE_STEPS_MS.filter((ms) => ms <= session.heardMs).length;
+  if (session.asking || session.captureEndedMs !== null || asked <= session.asked)
     return { session, ask: null };
-  const asked = session.asked + 1;
   return {
     session: { ...session, asked, asking: true, askedMs: session.listenedMs },
     ask: { last: asked === RECOGNIZE_STEPS_MS.length },
