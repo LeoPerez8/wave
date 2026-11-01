@@ -5,13 +5,14 @@
 bucket. It's separate from the sync service, so a bad sync deploy can't take down the path that
 delivers its fix, and it needs no account or sign-in. See "Build and CI" in `docs/spec.md`.
 
-| File                 | What it holds                                                    |
-| -------------------- | ---------------------------------------------------------------- |
-| `src/worker.ts`      | The Worker entry: the service over the bucket in `wrangler.toml` |
-| `src/service.ts`     | The routes                                                       |
-| `src/layout.ts`      | What R2 holds, which the service and the publish script share    |
-| `src/publish.ts`     | Turns `expo export`'s output into a published update             |
-| `scripts/publish.ts` | CI's entry to it, uploading with wrangler                        |
+| File                       | What it holds                                                    |
+| -------------------------- | ---------------------------------------------------------------- |
+| `src/worker.ts`            | The Worker entry: the service over the bucket in `wrangler.toml` |
+| `src/service.ts`           | The routes                                                       |
+| `src/layout.ts`            | What R2 holds, which the service and the publish script share    |
+| `src/publish.ts`           | Turns `expo export`'s output into a published update             |
+| `scripts/publish.ts`       | CI's entry to it, uploading with wrangler                        |
+| `scripts/publish-notes.ts` | CI's entry for a release's notes                                 |
 
 ## Routes
 
@@ -29,12 +30,36 @@ platform, protocol or channel.
 
 A bundle or asset, named by its content and cached for good. `404` when there's none.
 
+### `GET /v1/notes?channel=<ti|main>&from=<version>[&to=<version>]`
+
+The notes of a channel's releases after `from` and up to `to` (the newest with no `to`), newest
+first. Versions count on the sequence both channels share, so `from` may be the other channel's.
+`400` for any other channel, or a `from` or `to` that isn't a version. A release that listed no
+PR isn't there.
+
+```json
+{
+  "releases": [
+    {
+      "version": "1.2.4-ti",
+      "notes": {
+        "en": { "new": ["Artist pages"], "fixes": ["Lyrics show again"] },
+        "pt-BR": { "new": ["Páginas de artista"], "fixes": ["As letras voltaram"] }
+      }
+    }
+  ]
+}
+```
+
+A PR with no `pt-BR: …` line has its English title under `pt-BR`.
+
 ## What R2 holds
 
 ```
 assets/<sha256 hex>                       a bundle or asset
 updates/<channel>/<runtime>/<id>.json     a published update
 updates/<channel>/<runtime>/latest.json   { "updateId": ... }: what that channel's phones get
+notes/<channel>/<version>.json            a release's notes, as `notes` above
 ```
 
 A publish writes `latest.json` last, so a failed upload leaves phones on the previous update.

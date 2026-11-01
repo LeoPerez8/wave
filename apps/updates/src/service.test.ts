@@ -4,7 +4,7 @@ import { createHash } from "node:crypto";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { describe, it } from "node:test";
-import { publishUpdate } from "./publish.ts";
+import { publishNotes, publishUpdate } from "./publish.ts";
 import { createUpdateService } from "./service.ts";
 import { memoryStorage } from "./testing.ts";
 
@@ -194,12 +194,126 @@ describe("GET /v1/assets/<key>", () => {
   });
 });
 
+describe("GET /v1/notes", () => {
+  const notes = (word: string) => ({
+    en: { new: [`${word} in English`], fixes: [] },
+    "pt-BR": { new: [`${word} em português`], fixes: [] },
+  });
+
+  const release = (
+    storage: ReturnType<typeof memoryStorage>,
+    version: string,
+    channel: "ti" | "main" = "ti",
+  ) => publishNotes({ channel, version, notes: notes(version), put: storage.put });
+
+  const askForNotes = (storage: ReturnType<typeof memoryStorage>, query: string) =>
+    createUpdateService(storage).fetch(new Request(`${ORIGIN}/v1/notes?${query}`));
+
+  const versions = async (response: Response) =>
+    ((await response.json()) as { releases: { version: string }[] }).releases.map(
+      (it) => it.version,
+    );
+
+  it("answers each release's notes per language, newest first", async () => {
+    const storage = memoryStorage();
+    await release(storage, "1.2.3-ti");
+    await release(storage, "1.2.4-ti");
+
+    const response = await askForNotes(storage, "channel=ti&from=1.2.2-ti&to=1.2.4-ti");
+
+    assert.equal(response.status, 200);
+    assert.match(response.headers.get("content-type") ?? "", /application\/json/);
+    assert.deepEqual(await response.json(), {
+      releases: [
+        { version: "1.2.4-ti", notes: notes("1.2.4-ti") },
+        { version: "1.2.3-ti", notes: notes("1.2.3-ti") },
+      ],
+    });
+  });
+
+  it("leaves out the version the phone had and keeps the one it's on", async () => {
+    const storage = memoryStorage();
+    for (const version of ["1.2.3-ti", "1.2.4-ti", "1.2.5-ti", "1.2.6-ti"])
+      await release(storage, version);
+    const answer = await askForNotes(storage, "channel=ti&from=1.2.3-ti&to=1.2.5-ti");
+    assert.deepEqual(await versions(answer), ["1.2.5-ti", "1.2.4-ti"]);
+  });
+
+  it("orders versions by number, not as text", async () => {
+    const storage = memoryStorage();
+    for (const version of ["1.9.0-ti", "1.10.0-ti", "1.2.0-ti"]) await release(storage, version);
+    const answer = await askForNotes(storage, "channel=ti&from=1.1.0-ti&to=1.10.0-ti");
+    assert.deepEqual(await versions(answer), ["1.10.0-ti", "1.9.0-ti", "1.2.0-ti"]);
+  });
+
+  it("goes up to the newest release with no `to`", async () => {
+    const storage = memoryStorage();
+    await release(storage, "1.2.3-ti");
+    await release(storage, "1.2.4-ti");
+    const answer = await askForNotes(storage, "channel=ti&from=1.2.3-ti");
+    assert.deepEqual(await versions(answer), ["1.2.4-ti"]);
+  });
+
+  it("counts both channels' versions on one sequence, keeping each channel's notes apart", async () => {
+    const storage = memoryStorage();
+    await release(storage, "1.2.3-ti");
+    await release(storage, "1.2.4", "main");
+    await release(storage, "1.2.5-ti");
+    const ti = await askForNotes(storage, "channel=ti&from=1.2.3&to=1.2.5-ti");
+    assert.deepEqual(await versions(ti), ["1.2.5-ti"]);
+    const main = await askForNotes(storage, "channel=main&from=1.2.0");
+    assert.deepEqual(await versions(main), ["1.2.4"]);
+  });
+
+  it("answers no releases when none falls between the versions", async () => {
+    const answer = await askForNotes(memoryStorage(), "channel=ti&from=1.2.3-ti");
+    assert.equal(answer.status, 200);
+    assert.deepEqual(await answer.json(), { releases: [] });
+  });
+
+  it("finds releases past a page of the storage's listing", async () => {
+    const storage = memoryStorage({ listPageSize: 2 });
+    for (const version of ["1.2.3", "1.2.4", "1.2.5", "1.2.6", "1.2.7"])
+      await release(storage, version, "main");
+    const answer = await askForNotes(storage, "channel=main&from=1.2.3");
+    assert.deepEqual(await versions(answer), ["1.2.7", "1.2.6", "1.2.5", "1.2.4"]);
+  });
+
+  for (const query of [
+    "from=1.2.3",
+    "channel=none&from=1.2.3",
+    "channel=ti",
+    "channel=ti&from=latest",
+    "channel=ti&from=1.2.3&to=1.2",
+  ]) {
+    it(`refuses ${query}`, async () => {
+      assert.equal((await askForNotes(memoryStorage(), query)).status, 400);
+    });
+  }
+});
+
 describe("the service", () => {
   it("answers 404 anywhere else and 405 to anything but GET", async () => {
     const service = createUpdateService(memoryStorage());
     assert.equal((await service.fetch(new Request(`${ORIGIN}/`))).status, 404);
     const post = new Request(`${ORIGIN}/v1/manifest`, { method: "POST" });
     assert.equal((await service.fetch(post)).status, 405);
+  });
+});
+
+describe("publishNotes", () => {
+  it("publishes nothing for a release with no notes to list", async () => {
+    const storage = memoryStorage();
+    await publishNotes({
+      channel: "ti",
+      version: "1.2.3-ti",
+      notes: { en: { new: [], fixes: [] }, "pt-BR": { new: [], fixes: [] } },
+      put: storage.put,
+    });
+    const answer = await createUpdateService(storage).fetch(
+      new Request(`${ORIGIN}/v1/notes?channel=ti&from=1.0.0`),
+    );
+    assert.deepEqual(await answer.json(), { releases: [] });
   });
 });
 

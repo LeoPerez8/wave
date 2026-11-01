@@ -6,11 +6,13 @@
 import {
   type Channel,
   type LatestUpdate,
+  type ReleaseNotes,
   type StoredAsset,
   type StoredUpdate,
   assetKey,
   isChannel,
   latestKey,
+  notesPrefix,
   updateKey,
 } from "./layout.ts";
 
@@ -20,6 +22,14 @@ export interface UpdateStorage {
     text(): Promise<string>;
     readonly httpMetadata?: { readonly contentType?: string };
   } | null>;
+  list(options: {
+    prefix: string;
+    cursor?: string;
+  }): Promise<
+    { readonly objects: readonly { readonly key: string }[] } & (
+      { readonly truncated: true; readonly cursor: string } | { readonly truncated: false }
+    )
+  >;
 }
 
 // The headers every answer to expo-updates' check carries; max-age=0 so a phone always asks.
@@ -104,11 +114,57 @@ const assetRoute = async (key: string, storage: UpdateStorage): Promise<Response
   });
 };
 
+// A version's place in the sequence both channels share, or null if it isn't a version. Minor
+// and patch stay under 100 (docs/spec.md, Releases).
+const versionOrder = (version: string): number | null => {
+  const match = /^(\d+)\.(\d{1,2})\.(\d{1,2})(?:-ti)?$/.exec(version);
+  return match ? Number(match[1]) * 10000 + Number(match[2]) * 100 + Number(match[3]) : null;
+};
+
+const publishedVersions = async (storage: UpdateStorage, prefix: string): Promise<string[]> => {
+  const versions: string[] = [];
+  let cursor: string | undefined;
+  do {
+    const page = await storage.list(cursor === undefined ? { prefix } : { prefix, cursor });
+    for (const { key } of page.objects) versions.push(key.slice(prefix.length, -".json".length));
+    cursor = page.truncated ? page.cursor : undefined;
+  } while (cursor !== undefined);
+  return versions;
+};
+
+const notesRoute = async (url: URL, storage: UpdateStorage): Promise<Response> => {
+  const channel = url.searchParams.get("channel") ?? "";
+  if (!isChannel(channel)) return refuse("Unknown channel");
+  const from = versionOrder(url.searchParams.get("from") ?? "");
+  if (from === null) return refuse("No version to count from");
+  const toParam = url.searchParams.get("to");
+  const to = toParam === null ? Number.POSITIVE_INFINITY : versionOrder(toParam);
+  if (to === null) return refuse("Not a version to count up to");
+
+  const prefix = notesPrefix(channel);
+  const between = (await publishedVersions(storage, prefix))
+    .map((version) => ({ version, order: versionOrder(version) ?? -1 }))
+    .filter(({ order }) => order > from && order <= to)
+    .toSorted((a, b) => b.order - a.order);
+  const releases = await Promise.all(
+    between.map(async ({ version }) => {
+      const object = await storage.get(`${prefix}${version}.json`);
+      return object ? [{ version, notes: JSON.parse(await object.text()) as ReleaseNotes }] : [];
+    }),
+  );
+  return Response.json(
+    { releases: releases.flat() },
+    { headers: { "cache-control": "private, max-age=0" } },
+  );
+};
+
 export const createUpdateService = (storage: UpdateStorage) => ({
   fetch: async (request: Request): Promise<Response> => {
     if (request.method !== "GET") return new Response("Method not allowed", { status: 405 });
-    const { pathname } = new URL(request.url);
+    const url = new URL(request.url);
+    const { pathname } = url;
     if (pathname === "/v1/manifest") return manifestRoute(request, storage);
+    if (pathname === "/v1/notes") return notesRoute(url, storage);
     const asset = /^\/v1\/assets\/([^/]+)$/.exec(pathname)?.[1];
     if (asset !== undefined) return assetRoute(asset, storage);
     return notFound();
