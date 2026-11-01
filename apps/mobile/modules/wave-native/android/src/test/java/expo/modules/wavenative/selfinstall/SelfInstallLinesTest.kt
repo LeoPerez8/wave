@@ -2,12 +2,32 @@ package expo.modules.wavenative.selfinstall
 
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
+import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
 class SelfInstallLinesTest {
+  private val wave = "dev.leoperez.wave"
+  private fun phone(
+    installer: String? = wave,
+    updateOwner: String? = null,
+    canRequestInstalls: Boolean = true,
+    confirmationOwed: Boolean = false,
+  ) = PhoneState(
+    android = "14",
+    api = 34,
+    targetSdk = 36,
+    packageName = wave,
+    version = "0.46.2 (4602)",
+    installer = installer,
+    initiator = installer,
+    updateOwner = updateOwner,
+    canRequestInstalls = canRequestInstalls,
+    confirmationOwed = confirmationOwed,
+  )
+
   @Test
-  fun `names the statuses the spike decides on`() {
+  fun `names the statuses`() {
     assertEquals("SUCCESS", installStatusName(0))
     assertEquals("PENDING_USER_ACTION", installStatusName(-1))
     assertEquals("FAILURE_BLOCKED", installStatusName(2))
@@ -21,45 +41,80 @@ class SelfInstallLinesTest {
 
   @Test
   fun `says when Wave is the installer of record`() {
-    val line = PhoneState(
-      android = "14",
-      api = 34,
-      targetSdk = 36,
-      packageName = "dev.leoperez.wave",
-      version = "0.46.2 (4602)",
-      installer = "dev.leoperez.wave",
-      initiator = "dev.leoperez.wave",
-      updateOwner = null,
-      canRequestInstalls = true,
-    ).line()
     assertEquals(
       "Android 14 (API 34), target SDK 36, version 0.46.2 (4602), Wave is the installer of record: yes " +
-        "(installer dev.leoperez.wave, initiator dev.leoperez.wave, update owner none), may install: yes",
-      line,
+        "(installer $wave, initiator $wave, update owner none), may install: yes",
+      phone().line(),
     )
   }
 
   @Test
   fun `says when another app is the installer of record`() {
-    val line = PhoneState(
-      android = "14",
-      api = 34,
-      targetSdk = 36,
-      packageName = "dev.leoperez.wave",
-      version = "0.46.2 (4602)",
-      installer = "com.samsung.android.packageinstaller",
-      initiator = null,
-      updateOwner = null,
-      canRequestInstalls = false,
-    ).line()
-    assertTrue(line, line.contains("installer of record: no (installer com.samsung.android.packageinstaller, initiator none"))
+    val line = phone(installer = "com.samsung.android.packageinstaller", canRequestInstalls = false).line()
+    assertTrue(line, line.contains("installer of record: no (installer com.samsung.android.packageinstaller"))
     assertTrue(line, line.endsWith("may install: no"))
   }
 
   @Test
   fun `downloads only over https`() {
-    assertTrue(isDownloadableApkUrl("https://github.com/LeoPerez8/wave/releases/download/pr-1/wave-pr-1.apk"))
+    assertTrue(isDownloadableApkUrl("https://github.com/LeoPerez8/wave/releases/download/v1.0.0/wave-1.0.0.apk"))
     assertFalse(isDownloadableApkUrl("http://example.com/wave.apk"))
     assertFalse(isDownloadableApkUrl(""))
+  }
+
+  @Test
+  fun `names a file only for a real version`() {
+    assertEquals("wave-1.2.3-ti.apk", apkFileName("1.2.3-ti"))
+    assertNull(apkFileName("../../evil"))
+    assertNull(apkFileName("1.2.3/../x"))
+    assertNull(apkFileName(""))
+  }
+
+  @Test
+  fun `asks for the permission first`() {
+    assertEquals(InstallAccess.NEEDS_PERMISSION, phone(installer = "other", canRequestInstalls = false).access())
+  }
+
+  @Test
+  fun `needs one confirmation until Wave is the installer of record`() {
+    assertEquals(InstallAccess.NEEDS_CONFIRMATION, phone(installer = "com.google.android.packageinstaller").access())
+    assertEquals(InstallAccess.NEEDS_CONFIRMATION, phone(installer = null).access())
+  }
+
+  @Test
+  fun `needs a confirmation when another app owns the updates`() {
+    assertEquals(InstallAccess.NEEDS_CONFIRMATION, phone(updateOwner = "com.android.vending").access())
+  }
+
+  @Test
+  fun `a confirmation Android asked for in the background is owed`() {
+    assertEquals(InstallAccess.NEEDS_CONFIRMATION, phone(confirmationOwed = true).access())
+  }
+
+  @Test
+  fun `is silent as the installer of record`() {
+    assertEquals(InstallAccess.SILENT, phone().access())
+    assertEquals(InstallAccess.SILENT, phone(updateOwner = wave).access())
+  }
+
+  @Test
+  fun `speaks the policy's names`() {
+    assertEquals("needsPermission", InstallAccess.NEEDS_PERMISSION.policyName)
+    assertEquals("needsConfirmation", InstallAccess.NEEDS_CONFIRMATION.policyName)
+    assertEquals("silent", InstallAccess.SILENT.policyName)
+  }
+
+  @Test
+  fun `keeps the APK after a decline, drops it after a failure that may be the file's`() {
+    assertTrue(keepsApkAfter(3))
+    assertTrue(keepsApkAfter(-1))
+    assertFalse(keepsApkAfter(4))
+    assertFalse(keepsApkAfter(1))
+  }
+
+  @Test
+  fun `shows Android's confirmation only with Wave in front`() {
+    assertTrue(showsConfirmation(waveInForeground = true))
+    assertFalse(showsConfirmation(waveInForeground = false))
   }
 }

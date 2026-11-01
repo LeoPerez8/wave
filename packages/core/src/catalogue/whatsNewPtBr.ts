@@ -5,5 +5,10 @@ export const whatsNewPtBr: typeof whatsNewEn = {
   new: "Novo",
   fixes: "Correções",
   done: "OK",
+  installTitle: "Instalar atualizações",
+  installMessage:
+    "Permita que o Wave instale as próprias atualizações, para as novas versões chegarem sem nenhum passo.",
+  installAllow: "Permitir",
+  installNotNow: "Agora não",
   version: (version) => `Versão ${version}`,
 };

@@ -6,6 +6,7 @@
  *   updates/<channel>/<runtime>/latest.json     { updateId }: what that channel's phones get
  *   notes/<channel>/<version>.json              a release's notes (ReleaseNotes)
  *   updates/<channel>/history.json              HistoryEntry[], newest first: what R2 still keeps
+ *   apks/<channel>/latest.json                  LatestApk: the channel's newest APK
  *
  * Moving `latest.json` is the only step that changes what phones receive, so a publish writes it
  * after everything that update needs (release.ts).
@@ -39,6 +40,17 @@ export interface HistoryEntry {
   readonly createdAt: string;
   /** The files it needs, by their name in R2. */
   readonly assetKeys: readonly string[];
+}
+
+export const latestApkKey = (channel: Channel): string => `apks/${channel}/latest.json`;
+
+/** A channel's newest APK. R2 holds this much; the APK itself stays on its GitHub Release. */
+export interface LatestApk {
+  readonly version: string;
+  /** Its native side (`scripts/ci/repack.ts`'s key): phones on another one have this to install. */
+  readonly runtimeVersion: string;
+  readonly url: string;
+  readonly size: number;
 }
 
 export const notesPrefix = (channel: Channel): string => `notes/${channel}/`;

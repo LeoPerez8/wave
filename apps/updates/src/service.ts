@@ -11,6 +11,7 @@ import {
   type StoredUpdate,
   assetKey,
   isChannel,
+  latestApkKey,
   latestKey,
   notesPrefix,
   updateKey,
@@ -148,6 +149,16 @@ const notesRoute = async (url: URL, storage: UpdateStorage): Promise<Response> =
   );
 };
 
+const apkRoute = async (url: URL, storage: UpdateStorage): Promise<Response> => {
+  const channel = url.searchParams.get("channel") ?? "";
+  if (!isChannel(channel)) return refuse("Unknown channel");
+  const object = await storage.get(latestApkKey(channel));
+  if (!object) return notFound();
+  return new Response(object.body, {
+    headers: { "content-type": "application/json", "cache-control": "private, max-age=0" },
+  });
+};
+
 export const createUpdateService = (storage: UpdateStorage) => ({
   fetch: async (request: Request): Promise<Response> => {
     if (request.method !== "GET") return new Response("Method not allowed", { status: 405 });
@@ -155,6 +166,7 @@ export const createUpdateService = (storage: UpdateStorage) => ({
     const { pathname } = url;
     if (pathname === "/v1/manifest") return manifestRoute(request, storage);
     if (pathname === "/v1/notes") return notesRoute(url, storage);
+    if (pathname === "/v1/apk") return apkRoute(url, storage);
     const asset = /^\/v1\/assets\/([^/]+)$/.exec(pathname)?.[1];
     if (asset !== undefined) return assetRoute(asset, storage);
     return notFound();

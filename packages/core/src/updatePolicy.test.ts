@@ -3,8 +3,11 @@ import { describe, it } from "node:test";
 
 import {
   UPDATE_CHECK_INTERVAL_MS,
+  latestApkUrl,
+  nativeUpdateIsNew,
   nextUpdateStep,
   playerKeepsPlaying,
+  readLatestApk,
   type UpdateState,
 } from "./index.ts";
 
@@ -21,6 +24,10 @@ const state = (changes: Partial<UpdateState> = {}): UpdateState => ({
   working: false,
   bundleAvailable: false,
   bundleDownloaded: false,
+  nativeUpdate: "none",
+  installAccess: "silent",
+  lastInstallAskAt: null,
+  lastInstallAt: null,
   ...changes,
 });
 
@@ -144,4 +151,221 @@ describe("whether the player counts as playing", () => {
   it("doesn't count a queue that ended", () => assert.equal(player("ended", false, true), false));
   it("doesn't count an idle player left wanting to play", () =>
     assert.equal(player("idle", false, true), false));
+});
+
+describe("when Wave downloads an APK", () => {
+  const found = { nativeUpdate: "available" } as const;
+
+  it("downloads only on an unmetered network", () => {
+    assert.equal(nextUpdateStep(state(found)), "downloadApk");
+    assert.equal(nextUpdateStep(state({ ...found, network: "metered" })), "wait");
+    assert.equal(nextUpdateStep(state({ ...found, network: "none" })), "wait");
+  });
+
+  it("downloads in the background and while music plays, which a download doesn't disturb", () => {
+    assert.equal(nextUpdateStep(state({ ...found, visible: false, playing: true })), "downloadApk");
+  });
+});
+
+describe("when Wave installs a downloaded APK silently", () => {
+  const ready = { nativeUpdate: "downloaded", visible: false } as const;
+
+  it("installs in the background with nothing playing", () => {
+    assert.equal(nextUpdateStep(state(ready)), "installApk");
+  });
+
+  it("never installs while Wave is visible", () => {
+    assert.equal(nextUpdateStep(state({ ...ready, visible: true })), "wait");
+  });
+
+  it("never installs while music plays", () => {
+    assert.equal(nextUpdateStep(state({ ...ready, playing: true })), "wait");
+  });
+
+  it("installs offline, as nothing's left to fetch", () => {
+    assert.equal(nextUpdateStep(state({ ...ready, network: "none" })), "installApk");
+  });
+
+  it("gives a failed install 15 minutes before trying again", () => {
+    assert.equal(nextUpdateStep(state({ ...ready, lastInstallAt: NOW - 15 * MINUTE + 1 })), "wait");
+    assert.equal(
+      nextUpdateStep(state({ ...ready, lastInstallAt: NOW - 15 * MINUTE })),
+      "installApk",
+    );
+  });
+});
+
+describe("the first native update", () => {
+  const ready = { nativeUpdate: "downloaded" } as const;
+  const DAY = 24 * 60 * MINUTE;
+
+  it("asks for the permission once the APK is ready and Wave is in front", () => {
+    assert.equal(
+      nextUpdateStep(state({ ...ready, installAccess: "needsPermission" })),
+      "askInstallPermission",
+    );
+  });
+
+  it("doesn't ask before the APK is ready", () => {
+    assert.equal(
+      nextUpdateStep(
+        state({ nativeUpdate: "available", network: "metered", installAccess: "needsPermission" }),
+      ),
+      "wait",
+    );
+  });
+
+  it("doesn't ask from the background, and doesn't install without the permission", () => {
+    assert.equal(
+      nextUpdateStep(state({ ...ready, installAccess: "needsPermission", visible: false })),
+      "wait",
+    );
+  });
+
+  it("after a decline, keeps the update and asks again a day later", () => {
+    const declined = { ...ready, installAccess: "needsPermission" } as const;
+    assert.equal(nextUpdateStep(state({ ...declined, lastInstallAskAt: NOW - DAY + 1 })), "wait");
+    assert.equal(
+      nextUpdateStep(state({ ...declined, lastInstallAskAt: NOW - DAY })),
+      "askInstallPermission",
+    );
+  });
+
+  it("with the permission, shows Android's confirmation in front, since no app may show it behind", () => {
+    const first = { ...ready, installAccess: "needsConfirmation" } as const;
+    assert.equal(nextUpdateStep(state(first)), "installApk");
+    assert.equal(nextUpdateStep(state({ ...first, visible: false })), "wait");
+  });
+
+  it("doesn't show Android's confirmation while music plays, as accepting ends the process", () => {
+    assert.equal(
+      nextUpdateStep(state({ ...ready, installAccess: "needsConfirmation", playing: true })),
+      "wait",
+    );
+  });
+
+  it("after a declined confirmation, shows it again a day later", () => {
+    const first = { ...ready, installAccess: "needsConfirmation" } as const;
+    assert.equal(nextUpdateStep(state({ ...first, lastInstallAt: NOW - DAY + 1 })), "wait");
+    assert.equal(nextUpdateStep(state({ ...first, lastInstallAt: NOW - DAY })), "installApk");
+  });
+});
+
+describe("a pending APK and a bundle", () => {
+  it("doesn't download a bundle, as the APK holds the JS", () => {
+    for (const nativeUpdate of ["available", "downloaded"] as const) {
+      assert.equal(
+        nextUpdateStep(state({ nativeUpdate, bundleAvailable: true, network: "metered" })),
+        "wait",
+      );
+    }
+  });
+
+  it("doesn't apply a downloaded bundle, and installs the APK instead", () => {
+    assert.equal(
+      nextUpdateStep(state({ nativeUpdate: "downloaded", bundleDownloaded: true, visible: false })),
+      "installApk",
+    );
+  });
+
+  it("holds the bundle while the APK waits for Wi-Fi", () => {
+    assert.equal(
+      nextUpdateStep(
+        state({
+          nativeUpdate: "available",
+          bundleDownloaded: true,
+          visible: false,
+          network: "metered",
+        }),
+      ),
+      "wait",
+    );
+  });
+
+  it("keeps checking, as a newer APK may have come out", () => {
+    assert.equal(
+      nextUpdateStep(state({ nativeUpdate: "downloaded", lastCheckAt: NOW - 15 * MINUTE })),
+      "check",
+    );
+  });
+});
+
+describe("whether the channel's APK is an update", () => {
+  const latest = { version: "1.3.0-ti", runtimeVersion: "b", url: "https://x/a.apk", size: 9 };
+
+  it("is when its runtime version differs and its version is higher", () => {
+    assert.equal(
+      nativeUpdateIsNew({ installedRuntimeVersion: "a", installedVersion: "1.2.9-ti", latest }),
+      true,
+    );
+  });
+
+  it("isn't with the same runtime version, as a repacked APK's JS arrives over the air", () => {
+    assert.equal(
+      nativeUpdateIsNew({ installedRuntimeVersion: "b", installedVersion: "1.2.9-ti", latest }),
+      false,
+    );
+  });
+
+  it("isn't at the same or a lower version, which Android would refuse", () => {
+    for (const installedVersion of ["1.3.0", "1.3.0-ti", "1.10.0", "2.0.0"]) {
+      assert.equal(
+        nativeUpdateIsNew({ installedRuntimeVersion: "a", installedVersion, latest }),
+        false,
+        installedVersion,
+      );
+    }
+  });
+
+  it("counts minors as numbers, not text", () => {
+    assert.equal(
+      nativeUpdateIsNew({
+        installedRuntimeVersion: "a",
+        installedVersion: "1.9.0",
+        latest: { ...latest, version: "1.10.0" },
+      }),
+      true,
+    );
+  });
+
+  it("isn't when a version can't be read", () => {
+    assert.equal(
+      nativeUpdateIsNew({ installedRuntimeVersion: "a", installedVersion: "dev", latest }),
+      false,
+    );
+  });
+});
+
+describe("the service's latest APK", () => {
+  const apk = {
+    version: "1.3.0",
+    runtimeVersion: "b",
+    url: "https://github.com/o/r/releases/download/v1.3.0/wave-1.3.0.apk",
+    size: 1000,
+  };
+
+  it("reads an answer", () => {
+    assert.deepEqual(readLatestApk(apk), apk);
+  });
+
+  it("refuses an address that isn't https, or anything malformed", () => {
+    assert.equal(readLatestApk({ ...apk, url: "http://x/a.apk" }), null);
+    assert.equal(readLatestApk({ ...apk, size: 0 }), null);
+    assert.equal(readLatestApk({ ...apk, version: 1 }), null);
+    assert.equal(readLatestApk(null), null);
+  });
+
+  it("is asked on the service the manifest comes from, by channel", () => {
+    assert.equal(
+      latestApkUrl({ manifestUrl: "https://u.test/v1/manifest", channel: "ti" }),
+      "https://u.test/v1/apk?channel=ti",
+    );
+  });
+
+  it("has no address without a channel the service knows", () => {
+    const manifestUrl = "https://u.test/v1/manifest";
+    assert.equal(latestApkUrl({ manifestUrl, channel: "none" }), null);
+    assert.equal(latestApkUrl({ manifestUrl, channel: null }), null);
+    assert.equal(latestApkUrl({ manifestUrl: undefined, channel: "main" }), null);
+  });
 });

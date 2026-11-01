@@ -17,7 +17,18 @@ fun installStatusName(status: Int): String = when (status) {
 
 fun isDownloadableApkUrl(url: String): Boolean = url.startsWith("https://")
 
-/** What the spike's verdict needs from the phone. */
+/** The downloaded APK's file name, or null for a version that isn't one, as it comes from the network. */
+fun apkFileName(version: String): String? =
+  if (Regex("""\d+\.\d{1,2}\.\d{1,2}(-ti)?""").matches(version)) "wave-$version.apk" else null
+
+/** What installing an APK takes. The names are what Core's update policy reads. */
+enum class InstallAccess(val policyName: String) {
+  NEEDS_PERMISSION("needsPermission"),
+  NEEDS_CONFIRMATION("needsConfirmation"),
+  SILENT("silent"),
+}
+
+/** The install source facts that decide what an install takes, and the log's line about them. */
 data class PhoneState(
   val android: String,
   val api: Int,
@@ -28,7 +39,21 @@ data class PhoneState(
   val initiator: String?,
   val updateOwner: String?,
   val canRequestInstalls: Boolean,
+  /** Android asked for a confirmation in the background, which Wave couldn't show. */
+  val confirmationOwed: Boolean,
 ) {
+  /**
+   * Android installs silently only for the installer of record, and on Android 14+ only if no other
+   * app owns the updates.
+   */
+  fun access(): InstallAccess = when {
+    !canRequestInstalls -> InstallAccess.NEEDS_PERMISSION
+    confirmationOwed -> InstallAccess.NEEDS_CONFIRMATION
+    installer != packageName -> InstallAccess.NEEDS_CONFIRMATION
+    updateOwner != null && updateOwner != packageName -> InstallAccess.NEEDS_CONFIRMATION
+    else -> InstallAccess.SILENT
+  }
+
   fun line(): String =
     "Android $android (API $api), target SDK $targetSdk, version $version, " +
       "Wave is the installer of record: ${yesNo(installer == packageName)} " +
@@ -37,3 +62,12 @@ data class PhoneState(
 }
 
 private fun yesNo(value: Boolean) = if (value) "yes" else "no"
+
+/**
+ * Whether to keep the APK after Android's answer. A declined confirmation or a pending one leaves it
+ * good. Any other failure may be the file's, so the next try downloads it afresh.
+ */
+fun keepsApkAfter(status: Int): Boolean = status == -1 || status == 3 || status == 0
+
+/** What to do when Android asks for a confirmation. Wave never opens a screen over another app. */
+fun showsConfirmation(waveInForeground: Boolean): Boolean = waveInForeground

@@ -251,8 +251,23 @@ export {
   stepSleepMinutes,
 } from "./sleepTimer.ts";
 export type { SleepTimer, SleepTimerChoice, SleepTimerClock } from "./sleepTimer.ts";
-export { UPDATE_CHECK_INTERVAL_MS, nextUpdateStep, playerKeepsPlaying } from "./updatePolicy.ts";
-export type { UpdateNetwork, UpdateState, UpdateStep } from "./updatePolicy.ts";
+export {
+  UPDATE_CHECK_INTERVAL_MS,
+  UPDATE_INSTALL_ASK_INTERVAL_MS,
+  latestApkUrl,
+  nativeUpdateIsNew,
+  nextUpdateStep,
+  playerKeepsPlaying,
+  readLatestApk,
+} from "./updatePolicy.ts";
+export type {
+  InstallAccess,
+  LatestApk,
+  NativeUpdate,
+  UpdateNetwork,
+  UpdateState,
+  UpdateStep,
+} from "./updatePolicy.ts";
 export {
   mergeReleaseNotes,
   nextWhatsNewStep,

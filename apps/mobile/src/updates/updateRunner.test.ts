@@ -13,8 +13,11 @@ const setup = (client: Partial<UpdateClient> = {}) => {
     network: "unmetered",
     playing: false,
     visible: true,
+    installAccess: "silent",
   };
   let lastCheckAt: number | null = null;
+  let lastInstallAskAt: number | null = null;
+  let lastInstallAt: number | null = null;
   let now = 1_000_000_000;
   const runner = createUpdateRunner({
     client: {
@@ -29,11 +32,24 @@ const setup = (client: Partial<UpdateClient> = {}) => {
       apply: Effect.sync(() => {
         did.push("apply");
       }),
+      checkNative: Effect.succeed("none"),
+      downloadApk: Effect.sync(() => {
+        did.push("downloadApk");
+      }),
+      askInstallPermission: Effect.sync(() => {
+        did.push("ask");
+        return true;
+      }),
+      installApk: Effect.sync(() => {
+        did.push("install");
+      }),
       ...client,
     },
     surroundings: () => surroundings,
     now: () => now,
     lastCheckAt: { get: () => lastCheckAt, set: (at) => (lastCheckAt = at) },
+    lastInstallAskAt: { get: () => lastInstallAskAt, set: (at) => (lastInstallAskAt = at) },
+    lastInstallAt: { get: () => lastInstallAt, set: (at) => (lastInstallAt = at) },
     log: (level, message) => logged.push({ level, message }),
   });
   return {
@@ -208,5 +224,139 @@ describe("the update runner", () => {
     runner.reconsider();
     await settle();
     assert.deepEqual(did, []);
+  });
+
+  describe("with a native update", () => {
+    const nothingElse = { check: Effect.succeed(false) };
+    const foundApk = { ...nothingElse, checkNative: Effect.succeed("available" as const) };
+
+    it("downloads the APK, holds it while Wave is visible, and installs it once hidden", async () => {
+      const { runner, did, surroundings, settle } = setup(foundApk);
+      runner.reconsider();
+      await settle();
+      assert.deepEqual(did, ["downloadApk"]);
+      surroundings.visible = false;
+      runner.reconsider();
+      await settle();
+      assert.deepEqual(did, ["downloadApk", "install"]);
+    });
+
+    it("skips the download of an APK already on the phone", async () => {
+      const { runner, did, surroundings, settle } = setup({
+        ...nothingElse,
+        checkNative: Effect.succeed("downloaded"),
+      });
+      runner.reconsider();
+      await settle();
+      surroundings.visible = false;
+      runner.reconsider();
+      await settle();
+      assert.deepEqual(did, ["install"]);
+    });
+
+    it("waits for Wi-Fi, and doesn't take the bundle meanwhile", async () => {
+      const { runner, did, surroundings, settle } = setup({ ...foundApk, check: found });
+      surroundings.network = "metered";
+      runner.reconsider();
+      await settle();
+      assert.deepEqual(did, []);
+      surroundings.network = "unmetered";
+      runner.reconsider();
+      await settle();
+      assert.deepEqual(did, ["downloadApk"]);
+    });
+
+    it("installs only the APK when a bundle waits too", async () => {
+      const { runner, did, surroundings, settle } = setup({ ...foundApk, check: found });
+      runner.reconsider();
+      await settle();
+      surroundings.visible = false;
+      runner.reconsider();
+      await settle();
+      assert.deepEqual(did, ["downloadApk", "install"]);
+    });
+
+    it("keeps a native check's failure from stopping the bundle's", async () => {
+      const { runner, did, logged, settle } = setup({ check: found, checkNative: failing });
+      runner.reconsider();
+      await settle();
+      assert.deepEqual(did, ["download"]);
+      assert.ok(logged.some(({ level, message }) => level === "warn" && /APK/.test(message)));
+    });
+
+    it("doesn't install again right after a commit, while Android works on it", async () => {
+      const { runner, did, surroundings, settle } = setup(foundApk);
+      runner.reconsider();
+      await settle();
+      surroundings.visible = false;
+      runner.reconsider();
+      await settle();
+      runner.reconsider();
+      await settle();
+      assert.deepEqual(did, ["downloadApk", "install"]);
+    });
+
+    it("after a failed install, downloads again 15 minutes on, as the file may be gone", async () => {
+      let installs = 0;
+      const { runner, did, logged, surroundings, passMinutes, settle } = setup({
+        ...foundApk,
+        installApk: Effect.suspend(() => {
+          installs++;
+          return failing;
+        }),
+      });
+      runner.reconsider();
+      await settle();
+      surroundings.visible = false;
+      runner.reconsider();
+      await settle();
+      assert.equal(installs, 1);
+      assert.ok(logged.some(({ message }) => /install failed/i.test(message)));
+      passMinutes(15);
+      surroundings.visible = true;
+      runner.reconsider();
+      await settle();
+      assert.ok(did.filter((step) => step === "downloadApk").length >= 2);
+    });
+
+    it("asks for the permission once a day, and doesn't install without it", async () => {
+      const { runner, did, surroundings, passMinutes, settle } = setup(foundApk);
+      surroundings.installAccess = "needsPermission";
+      runner.reconsider();
+      await settle();
+      assert.deepEqual(did, ["downloadApk", "ask"]);
+      runner.reconsider();
+      await settle();
+      surroundings.visible = false;
+      runner.reconsider();
+      await settle();
+      assert.deepEqual(did, ["downloadApk", "ask"]);
+      passMinutes(24 * 60);
+      surroundings.visible = true;
+      runner.reconsider();
+      await settle();
+      assert.equal(did.filter((step) => step === "ask").length, 2);
+    });
+
+    it("doesn't spend the day's question when something was in the way", async () => {
+      let asks = 0;
+      const { runner, surroundings, settle } = setup({
+        ...foundApk,
+        askInstallPermission: Effect.sync(() => {
+          asks++;
+          return asks > 1;
+        }),
+      });
+      surroundings.installAccess = "needsPermission";
+      runner.reconsider();
+      await settle();
+      assert.equal(asks, 1);
+      runner.reconsider();
+      await settle();
+      assert.equal(asks, 2);
+      runner.reconsider();
+      await settle();
+      assert.equal(asks, 2);
+    });
   });
 });

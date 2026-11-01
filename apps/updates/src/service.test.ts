@@ -8,7 +8,7 @@ import { describe, it } from "node:test";
 import { fileURLToPath } from "node:url";
 import { UPDATES_ORIGIN, latestKey, updateKey } from "./layout.ts";
 import { promoteUpdate } from "./promote.ts";
-import { publishNotes, publishUpdate } from "./publish.ts";
+import { publishLatestApk, publishNotes, publishUpdate } from "./publish.ts";
 import { createUpdateService } from "./service.ts";
 import { memoryStorage } from "./testing.ts";
 
@@ -822,5 +822,54 @@ esac
       assert.match(output, /Published the notes/);
       assert.match(calls, /notes\/ti\/1\.0\.0-ti\.json key=none/);
     });
+  });
+});
+
+describe("GET /v1/apk", () => {
+  const apk = {
+    version: "1.3.0-ti",
+    runtimeVersion: "native-b",
+    url: "https://github.com/o/r/releases/download/v1.3.0-ti/wave-1.3.0-ti.apk",
+    size: 123456,
+  };
+  const askForApk = (storage: ReturnType<typeof memoryStorage>, query: string) =>
+    createUpdateService(storage).fetch(new Request(`${ORIGIN}/v1/apk?${query}`));
+
+  it("answers the channel's newest APK, never cached", async () => {
+    const storage = memoryStorage();
+    await publishLatestApk({ channel: "ti", apk, put: storage.put });
+    const response = await askForApk(storage, "channel=ti");
+    assert.equal(response.status, 200);
+    assert.deepEqual(await response.json(), apk);
+    assert.match(response.headers.get("cache-control") ?? "", /max-age=0/);
+  });
+
+  it("the newest publish replaces the last", async () => {
+    const storage = memoryStorage();
+    await publishLatestApk({ channel: "ti", apk, put: storage.put });
+    const newer = { ...apk, version: "1.3.1-ti" };
+    await publishLatestApk({ channel: "ti", apk: newer, put: storage.put });
+    assert.deepEqual(await (await askForApk(storage, "channel=ti")).json(), newer);
+  });
+
+  it("keeps each channel's apart", async () => {
+    const storage = memoryStorage();
+    await publishLatestApk({ channel: "ti", apk, put: storage.put });
+    assert.equal((await askForApk(storage, "channel=main")).status, 404);
+  });
+
+  it("refuses an unknown channel", async () => {
+    assert.equal((await askForApk(memoryStorage(), "channel=pr")).status, 400);
+  });
+
+  it("refuses to publish an address phones wouldn't download from", async () => {
+    const storage = memoryStorage();
+    await assert.rejects(
+      publishLatestApk({ channel: "ti", apk: { ...apk, url: "http://x/a.apk" }, put: storage.put }),
+    );
+    await assert.rejects(
+      publishLatestApk({ channel: "ti", apk: { ...apk, size: 0 }, put: storage.put }),
+    );
+    assert.equal((await askForApk(storage, "channel=ti")).status, 404);
   });
 });

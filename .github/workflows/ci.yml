@@ -651,6 +651,7 @@ jobs:
           path: ${{ runner.temp }}/release
 
       - name: Publish the release
+        id: published
         env:
           GH_TOKEN: ${{ github.token }}
           RELEASE_TAG: ${{ needs.checks.outputs.release_tag }}
@@ -682,6 +683,19 @@ jobs:
           WAVE_RELEASE_TAG: ${{ needs.checks.outputs.release_tag }}
           WAVE_RELEASE_NOTES: ${{ needs.notes.outputs.localized }}
         run: node apps/updates/scripts/publish-notes.ts
+
+      # The APK phones on another native side install (docs/spec.md, Build and CI).
+      - name: Publish the latest APK
+        continue-on-error: true
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          WAVE_UPDATE_CHANNEL: ${{ needs.android.outputs.update_channel }}
+          WAVE_RUNTIME_VERSION: ${{ needs.android.outputs.runtime_version }}
+          WAVE_RELEASE_TAG: ${{ needs.checks.outputs.release_tag }}
+          WAVE_APK_URL: ${{ steps.published.outputs.url }}
+          APK_NAME: ${{ needs.android.outputs.artifact }}
+        run: WAVE_APK_PATH="$RUNNER_TEMP/release/$APK_NAME" node apps/updates/scripts/publish-apk.ts
 
       - name: Fetch the over-the-air update
         if: env.UPDATES_CONFIGURED == 'true'

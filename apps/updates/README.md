@@ -15,6 +15,7 @@ delivers its fix, and it needs no account or sign-in. See "Build and CI" in `doc
 | `src/release.ts`           | Where both end: signs the update, moves phones, trims R2         |
 | `scripts/publish.ts`       | CI's entry to publishing                                         |
 | `scripts/publish-notes.ts` | CI's entry for a release's notes                                 |
+| `scripts/publish-apk.ts`   | CI's entry for a release's APK                                   |
 | `scripts/promote.ts`       | The rollback workflow's entry to promoting                       |
 | `scripts/bucket.ts`        | R2 through wrangler, with the signing key kept from its env      |
 
@@ -62,6 +63,21 @@ PR isn't there.
 
 A PR with no `pt-BR: …` line has its English title under `pt-BR`.
 
+### `GET /v1/apk?channel=<ti|main>`
+
+The channel's newest APK, which a phone on another runtime version installs. The APK stays on its
+GitHub Release, and this tells phones where. `404` before the first release that publishes one;
+`400` for any other channel.
+
+```json
+{
+  "version": "1.3.0-ti",
+  "runtimeVersion": "<the kept-APK key>",
+  "url": "https://github.com/LeoPerez8/wave/releases/download/v1.3.0-ti/wave-1.3.0-ti.apk",
+  "size": 123456789
+}
+```
+
 ## What R2 holds
 
 ```
@@ -70,6 +86,7 @@ updates/<channel>/<runtime>/<id>.json     a published update, with its signed ma
 updates/<channel>/<runtime>/latest.json   { "updateId": ... }: what that channel's phones get
 notes/<channel>/<version>.json            a release's notes, as `notes` above
 updates/<channel>/history.json            what the channel keeps, newest first
+apks/<channel>/latest.json                the channel's newest APK, as `apk` above
 ```
 
 A failed upload leaves phones on the previous update: `latest.json` moves after everything the

@@ -1,4 +1,10 @@
-import { nextUpdateStep, type LogLevel, type UpdateState, type UpdateStep } from "@wave/core";
+import {
+  nextUpdateStep,
+  type LogLevel,
+  type NativeUpdate,
+  type UpdateState,
+  type UpdateStep,
+} from "@wave/core";
 import * as Effect from "effect/Effect";
 
 /** The update service, as far as the runner needs it. */
@@ -9,20 +15,35 @@ export interface UpdateClient {
   readonly download: Effect.Effect<boolean, unknown>;
   /** Restarts the JS on the downloaded bundle, which ends this runtime when it works. */
   readonly apply: Effect.Effect<void, unknown>;
+  /** What the channel's newest APK means for this phone. */
+  readonly checkNative: Effect.Effect<NativeUpdate, unknown>;
+  /** Fetches the APK the last check found. */
+  readonly downloadApk: Effect.Effect<void, unknown>;
+  /** Asks for the install permission; false when something was in the way and it didn't ask. */
+  readonly askInstallPermission: Effect.Effect<boolean, unknown>;
+  /** Hands the APK to Android, which ends this process when it installs. */
+  readonly installApk: Effect.Effect<void, unknown>;
+}
+
+/** A value kept across launches, so a reopened Wave doesn't repeat a step inside its interval. */
+interface KeptTime {
+  readonly get: () => number | null;
+  readonly set: (at: number) => void;
 }
 
 /** What the policy reads from the phone, as it stands when asked. */
-export type UpdateSurroundings = Pick<UpdateState, "network" | "playing" | "visible">;
+export type UpdateSurroundings = Pick<
+  UpdateState,
+  "network" | "playing" | "visible" | "installAccess"
+>;
 
 export interface UpdateRunnerOptions {
   readonly client: UpdateClient;
   readonly surroundings: () => UpdateSurroundings;
   readonly now: () => number;
-  /** Kept across launches, so a reopened Wave doesn't check again inside the interval. */
-  readonly lastCheckAt: {
-    readonly get: () => number | null;
-    readonly set: (at: number) => void;
-  };
+  readonly lastCheckAt: KeptTime;
+  readonly lastInstallAskAt: KeptTime;
+  readonly lastInstallAt: KeptTime;
   readonly log: (level: LogLevel, message: string) => void;
 }
 
@@ -38,11 +59,25 @@ export const createUpdateRunner = ({
   surroundings,
   now,
   lastCheckAt,
+  lastInstallAskAt,
+  lastInstallAt,
   log,
 }: UpdateRunnerOptions) => {
   let working = false;
   let bundleAvailable = false;
   let bundleDownloaded = false;
+  let nativeUpdate: NativeUpdate = "none";
+
+  // On its own, so a service that fails one question still answers the other.
+  const checkNative = client.checkNative.pipe(
+    Effect.map((found) => {
+      if (found !== nativeUpdate) log("info", `The channel's APK: ${found}`);
+      nativeUpdate = found;
+    }),
+    Effect.catch((error) =>
+      Effect.sync(() => log("warn", `The APK check failed: ${reason(error)}`)),
+    ),
+  );
 
   const steps: Record<Exclude<UpdateStep, "wait">, Effect.Effect<boolean>> = {
     check: Effect.suspend(() => {
@@ -61,6 +96,7 @@ export const createUpdateRunner = ({
           return true;
         }),
       ),
+      Effect.andThen((goOn) => checkNative.pipe(Effect.as(goOn))),
     ),
     downloadBundle: Effect.suspend(() => {
       log("info", "Downloading the update");
@@ -97,6 +133,56 @@ export const createUpdateRunner = ({
         }),
       ),
     ),
+    downloadApk: Effect.suspend(() => {
+      log("info", "Downloading the APK");
+      return client.downloadApk;
+    }).pipe(
+      Effect.map(() => {
+        nativeUpdate = "downloaded";
+        log("info", "Downloaded the APK");
+        return true;
+      }),
+      Effect.catch((error) =>
+        Effect.sync(() => {
+          log("warn", `The APK download failed: ${reason(error)}`);
+          // The next check finds it again.
+          nativeUpdate = "none";
+          return true;
+        }),
+      ),
+    ),
+    askInstallPermission: Effect.suspend(() => {
+      log("info", "Asking for the install permission");
+      return client.askInstallPermission;
+    }).pipe(
+      Effect.map((asked) => {
+        if (asked) lastInstallAskAt.set(now());
+        return false;
+      }),
+      Effect.catch((error) =>
+        Effect.sync(() => {
+          log("warn", `Asking for the install permission failed: ${reason(error)}`);
+          return false;
+        }),
+      ),
+    ),
+    installApk: Effect.suspend(() => {
+      lastInstallAt.set(now());
+      log("info", "Installing the APK");
+      return client.installApk;
+    }).pipe(
+      // Android answers in the app log, and on success this process is gone. A later try waits
+      // out the policy's interval.
+      Effect.as(false),
+      Effect.catch((error) =>
+        Effect.sync(() => {
+          log("warn", `The APK install failed: ${reason(error)}`);
+          // The file may be gone, so it goes through the download again, which reuses a whole one.
+          nativeUpdate = "available";
+          return false;
+        }),
+      ),
+    ),
   };
 
   const reconsider = (): void => {
@@ -104,6 +190,9 @@ export const createUpdateRunner = ({
       ...surroundings(),
       now: now(),
       lastCheckAt: lastCheckAt.get(),
+      lastInstallAskAt: lastInstallAskAt.get(),
+      lastInstallAt: lastInstallAt.get(),
+      nativeUpdate,
       working,
       bundleAvailable,
       bundleDownloaded,
