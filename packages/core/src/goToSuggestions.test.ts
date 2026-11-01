@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 
 import {
+  GO_TO_SUGGESTIONS_WAIT_MS,
   goToSuggestionsOffered,
   goToSuggestionsPillAfter,
   goToSuggestionsPillShown,
@@ -13,6 +14,10 @@ import {
 } from "./index.ts";
 
 const list = { scroll: 0, listHeight: 800, bottomInset: 100 };
+
+test("the pill stays for 1 s after the list stops", () => {
+  assert.equal(GO_TO_SUGGESTIONS_WAIT_MS, 1000);
+});
 
 test("a section below the list's visible part is away, the moment the playlist opens too", () => {
   assert.equal(playlistSuggestionsPlace({ ...list, top: 5000 }), "away");
