@@ -187,19 +187,20 @@ test("a match says so as soon as Shazam answers, and the tile lets go after the 
   assert.equal(world.logs.length, 1);
 });
 
-test("Core's schedule runs the session: no match waits for the 12-second request", async () => {
+test("Core's schedule runs the session: no match only ends it after its last request", async () => {
   const world = setup();
   const tile = fakeTile();
   followRecognizeTile(tile, world.deps, recognizeTileNotice);
   tile.tap(1);
   await settle();
-  await world.hear(4);
-  await world.answer({ kind: "noMatch" });
-  await world.hear(8);
-  await world.answer({ kind: "noMatch" });
-  assert.deepEqual(tile.calls, []);
-  await world.hear(12);
-  await world.answer({ kind: "noMatch" });
+  // However long Core keeps asking: this test holds no copy of its schedule.
+  let requests = 0;
+  for (let seconds = 4; tile.calls.length === 0 && seconds < 300; seconds += 4) {
+    await world.hear(seconds);
+    await world.answer({ kind: "noMatch" });
+    requests++;
+  }
+  assert.ok(requests > 1);
   assert.deepEqual(tile.calls, ["ended 1", "notify noMatch No match", "finished"]);
   assert.equal(world.logs.length, 1);
 });
