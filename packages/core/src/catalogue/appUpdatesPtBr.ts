@@ -1,10 +1,7 @@
 import type { appUpdatesEn } from "./appUpdatesEn.ts";
 
 export const appUpdatesPtBr: typeof appUpdatesEn = {
-  installTitle: "Instalar Atualizações",
-  installMessage:
-    "Permita que o Wave instale as próprias atualizações, para as novas versões chegarem sem nenhum passo.",
-  installAllow: "Permitir",
-  installNotNow: "Agora Não",
+  updateTheApp: "Atualizar o app",
+  ignoreThisUpdate: "Ignorar Esta Atualização",
   version: (version) => `Versão ${version}`,
 };

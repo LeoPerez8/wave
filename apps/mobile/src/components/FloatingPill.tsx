@@ -1,9 +1,11 @@
 import type { Icon } from "@tabler/icons-react-native";
+import { useEffect, type ComponentProps, type ReactNode } from "react";
 import { Text } from "react-native";
 import Animated, { FadeIn, FadeOut, ReduceMotion, useReducedMotion } from "react-native-reanimated";
 
 import { CELL } from "@/catalog/grid";
 import { TextButton } from "@/components/TextButton";
+import { makeExternalStore } from "@/lib/externalStore";
 import { TAP_ANIMATION_MS } from "@/motion/timing";
 
 /** The pill's height. */
@@ -14,25 +16,46 @@ export const FLOATING_PILL_ROOM = PILL + CELL;
 const pillIn = FadeIn.duration(TAP_ANIMATION_MS).reduceMotion(ReduceMotion.Never);
 const pillOut = FadeOut.duration(TAP_ANIMATION_MS).reduceMotion(ReduceMotion.Never);
 
+/** How many list pills are up. The update pill waits for them to leave. */
+export const listPillsUp = makeExternalStore(0);
+
+type PillProps = {
+  icon: Icon;
+  label: string;
+  accessibilityLabel?: string;
+  bottom: number;
+  onPress: () => void;
+  accessibilityActions?: ComponentProps<typeof TextButton>["accessibilityActions"];
+  onAccessibilityAction?: ComponentProps<typeof TextButton>["onAccessibilityAction"];
+  /** Wraps the button, for a pill that also takes a gesture. */
+  wrapButton?: (button: ReactNode) => ReactNode;
+};
+
 /**
  * A pill floating over a list's bottom, [bottom] up, that takes the list somewhere
  * out of sight (the Queue's Current Song, a playlist's Go to Suggestions). It fades
  * in and out with the tap animation, or just appears and goes under reduce motion.
  * [accessibilityLabel] is what a screen reader hears, when not the [label].
  */
-export function FloatingPill({
+export function FloatingPill(props: PillProps) {
+  useEffect(() => {
+    listPillsUp.set(listPillsUp.get() + 1);
+    return () => listPillsUp.set(listPillsUp.get() - 1);
+  }, []);
+  return <FloatingPillLook {...props} />;
+}
+
+/** The pill's look and placement, for one that isn't over a list and so holds nothing back. */
+export function FloatingPillLook({
   icon: Arrow,
   label,
   accessibilityLabel = label,
   bottom,
   onPress,
-}: {
-  icon: Icon;
-  label: string;
-  accessibilityLabel?: string;
-  bottom: number;
-  onPress: () => void;
-}) {
+  accessibilityActions,
+  onAccessibilityAction,
+  wrapButton = (button) => button,
+}: PillProps) {
   const reduceMotion = useReducedMotion();
   return (
     <Animated.View
@@ -42,23 +65,27 @@ export function FloatingPill({
       className="absolute left-0 right-0 items-center"
       style={{ bottom }}
     >
-      <TextButton
-        variant="pill"
-        label={label}
-        accessibilityLabel={accessibilityLabel}
-        onPress={onPress}
-        className="flex-row items-center"
-        style={{ minHeight: PILL, gap: CELL }}
-      >
-        {(color) => (
-          <>
-            <Arrow size={16} color={color} strokeWidth={2} />
-            <Text className="font-sans text-subheadline font-semibold" style={{ color }}>
-              {label}
-            </Text>
-          </>
-        )}
-      </TextButton>
+      {wrapButton(
+        <TextButton
+          variant="pill"
+          label={label}
+          accessibilityLabel={accessibilityLabel}
+          accessibilityActions={accessibilityActions}
+          onAccessibilityAction={onAccessibilityAction}
+          onPress={onPress}
+          className="flex-row items-center"
+          style={{ minHeight: PILL, gap: CELL }}
+        >
+          {(color) => (
+            <>
+              <Arrow size={16} color={color} strokeWidth={2} />
+              <Text className="font-sans text-subheadline font-semibold" style={{ color }}>
+                {label}
+              </Text>
+            </>
+          )}
+        </TextButton>,
+      )}
     </Animated.View>
   );
 }

@@ -9,6 +9,7 @@ import { MiniPlayer } from "@/playback/MiniPlayer";
 import { useIsSelecting } from "@/selection/selection";
 import { SelectionChrome } from "@/selection/SelectionChrome";
 import { useThemeColor } from "@/theme/useThemeColor";
+import { UpdatePill } from "@/updates/UpdatePill";
 
 /** Library screens pushed over the tabs keep the floating mini player, above the system inset. */
 export default function LibraryLayout() {
@@ -27,7 +28,10 @@ export default function LibraryLayout() {
       {selecting ? (
         <SelectionChrome backdropId={BACKDROP.library} />
       ) : (
-        <MiniPlayer backdropId={BACKDROP.library} onOpen={openNowPlaying} />
+        <>
+          <UpdatePill />
+          <MiniPlayer backdropId={BACKDROP.library} onOpen={openNowPlaying} />
+        </>
       )}
     </View>
   );

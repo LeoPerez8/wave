@@ -18,16 +18,13 @@ import {
 import * as Effect from "effect/Effect";
 import Constants from "expo-constants";
 import * as Updates from "expo-updates";
+import { useSyncExternalStore } from "react";
 import { AppState } from "react-native";
 
 import { persistedSetting } from "@/lib/persistedSetting";
-import { currentLocalisation } from "@/localisation/localisation";
 import { appLog, flushAppLogNow } from "@/log/appLog";
 import { connectivityNow } from "@/native/waveNative";
 import { WaveSelfInstall } from "@/native/waveSelfInstall";
-import { isNowPlayingShown } from "@/nowPlaying/sheet";
-import { showAlert } from "@/overlay/alert";
-import { isOverlayOpen } from "@/overlay/overlay";
 import { playbackState } from "@/playback/Player";
 
 import { createUpdateRunner } from "./updateRunner";
@@ -46,8 +43,6 @@ const keptTime = (key: string) =>
   });
 
 const lastCheckAt = keptTime("updates.lastCheckAt");
-const lastInstallAskAt = keptTime("updates.lastInstallAskAt");
-const lastInstallAt = keptTime("updates.lastInstallAt");
 const lastApkAttempt = persistedSetting<UpdateState["lastApkAttempt"]>({
   key: "updates.lastApkAttempt",
   read: (stored) => {
@@ -57,6 +52,13 @@ const lastApkAttempt = persistedSetting<UpdateState["lastApkAttempt"]>({
     return Number.isFinite(at) ? { version: stored.slice(0, separator), at } : null;
   },
   write: (attempt) => (attempt === null ? null : `${attempt.version} ${attempt.at}`),
+});
+
+/** The version last swiped off the update pill. A newer one has another name, so it shows. */
+const ignoredApkVersion = persistedSetting<string | null>({
+  key: "updates.ignoredApkVersion",
+  read: (stored) => stored,
+  write: (version) => version,
 });
 
 const network = (): UpdateNetwork => {
@@ -123,21 +125,6 @@ const checkNative: Effect.Effect<NativeUpdate, unknown> = Effect.suspend(() => {
   );
 });
 
-/** Asks once something else isn't up; it answers false when it didn't, so it asks again soon. */
-const askInstallPermission = Effect.tryPromise(async () => {
-  if (isNowPlayingShown() || isOverlayOpen()) return false;
-  const strings = currentLocalisation().strings.appUpdates;
-  const choice = await showAlert({
-    title: strings.installTitle,
-    message: strings.installMessage,
-    action: { label: strings.installAllow },
-    dismissLabel: strings.installNotNow,
-  });
-  // Coming back from Android's screen brings Wave to the front, which asks the policy again.
-  if (choice === "action") WaveSelfInstall?.openPermissionScreen();
-  return true;
-});
-
 /** It can only change while Wave is away, so it's read then and not at every player change. */
 let installAccess: InstallAccess = "needsPermission";
 
@@ -169,7 +156,11 @@ const runner = createUpdateRunner({
       const { url, version, size, sha256 } = needLatestApk();
       return WaveSelfInstall.downloadApk(url, version, size, sha256);
     }),
-    askInstallPermission,
+    // Coming back from Android's screen brings Wave to the front, which asks the policy again.
+    openInstallPermission: Effect.try(() => {
+      if (WaveSelfInstall === null) throw new Error("No installer in this build");
+      WaveSelfInstall.openPermissionScreen();
+    }),
     installApk: Effect.tryPromise(() => {
       if (WaveSelfInstall === null) throw new Error("No installer in this build");
       // The install takes the waiting lines with it.
@@ -187,8 +178,6 @@ const runner = createUpdateRunner({
   }),
   now: Date.now,
   lastCheckAt,
-  lastInstallAskAt,
-  lastInstallAt,
   lastApkAttempt,
   log: (level, message) => appLog(level, "WaveUpdates", message),
 });
@@ -196,6 +185,28 @@ const runner = createUpdateRunner({
 const reconsiderWithFreshAccess = (): void => {
   void refreshInstallAccess().then(runner.reconsider);
 };
+
+/**
+ * What "Update the app" does, wherever it's offered: installs the downloaded APK now, or opens
+ * Android's permission screen first. It's the only thing that installs an APK.
+ */
+export const installAppUpdate = (): void => {
+  runner.requestInstall();
+  reconsiderWithFreshAccess();
+};
+
+/** Stops the pill offering the version on offer. A newer one offers itself again. */
+export const ignoreAppUpdate = (): void => {
+  const version = runner.offeredVersion();
+  if (version !== null) ignoredApkVersion.set(version);
+};
+
+/** The APK version ready to install at a tap, or null. */
+export const useOfferedAppUpdate = (): string | null =>
+  useSyncExternalStore(runner.subscribe, runner.offeredVersion);
+
+/** The version swiped off the pill, if any. */
+export const useIgnoredAppUpdate = (): string | null => ignoredApkVersion.useValue();
 
 let started = false;
 

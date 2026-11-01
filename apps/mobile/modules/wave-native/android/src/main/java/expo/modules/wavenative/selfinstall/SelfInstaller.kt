@@ -26,8 +26,8 @@ private const val UPDATE_CERTIFICATE = "expo.modules.updates.CODE_SIGNING_CERTIF
 
 /**
  * Native updates (docs/spec.md, Build and CI): Wave downloads the channel's APK and installs it over
- * itself through [PackageInstaller] with USER_ACTION_NOT_REQUIRED. Core's update policy says when;
- * each step goes to the app log. minSdk is 31, the API that silent install needs.
+ * itself through [PackageInstaller] with USER_ACTION_NOT_REQUIRED, only after a tap on "Update the
+ * app", so usually with Wave in front. Core's update policy says when; each step goes to the app log. minSdk is 31, the API that silent install needs.
  */
 object SelfInstaller {
   private fun preferences(context: Context) = context.getSharedPreferences(PREFERENCES, Context.MODE_PRIVATE)
@@ -172,8 +172,6 @@ object SelfInstaller {
             session.fsync(output)
           }
         }
-        // The copy took a moment, and a silent install mustn't close Wave under someone back in it.
-        check(state.access() != InstallAccess.SILENT || !isInForeground()) { "Wave came back to the front" }
         // Mutable because Android fills in the status. Explicit, so only Wave's receiver gets it.
         val status = PendingIntent.getBroadcast(
           context,
