@@ -389,20 +389,24 @@ export const WHOLE_LIBRARY: Record<string, WholeLibraryException> = {
   },
   "recognize/RecognizeCard.tsx#RecognizeCard": {
     howOften:
-      "Once per shared Library version while a streamed result is visible, plus one current-finder lookup when Add to Playlist saves it.",
+      "Once per shared Library version while a streamed result is visible.",
     reason:
       "The explicitly opened result card follows download membership only for a streamed result and rechecks identity before saving, so a completed download is not offered again or saved as a streamed duplicate.",
-    capabilities: [
-      "ytmusic/libraryFinder.ts#useLoadedInLibrary",
-      "ytmusic/libraryFinder.ts#currentLibraryFinder",
-    ],
+    capabilities: ["ytmusic/libraryFinder.ts#useLoadedInLibrary"],
+  },
+  "recognize/resolveRecognitionSave.ts#resolveRecognitionSave": {
+    howOften:
+      "Once per streamed match saved: Add to Playlist or Add to Shazam on the card, or the tile's automatic save. Never while listening.",
+    reason:
+      "Both paths recheck Library identity at save time, so a download completed during recognition is saved as the Library track and not as a stream.",
+    capabilities: ["ytmusic/libraryFinder.ts#currentLibraryFinder"],
   },
   "recognize/startRecognizeTile.ts#startRecognizeTile": {
     howOften:
-      "Once per streamed match saved after an explicit tile recognition for the finder; once per result notification tap for songs, unless the live lookup is reused. Registering callbacks and listening read neither.",
+      "Once per result notification tap for songs, unless the live lookup is reused. Registering callbacks and listening read nothing.",
     reason:
-      "The save callback rechecks Library identity so a download completed during recognition is saved as the Library track. The result callback resolves a kept notification answer against current songs without another search; followRecognizeTile reuses an in-flight lookup when available. recognizeTile.test.ts covers saving and notification result reuse.",
-    capabilities: ["library/hooks.ts#songs", "ytmusic/libraryFinder.ts#currentLibraryFinder"],
+      "The result callback resolves a kept notification answer against current songs without another search; followRecognizeTile reuses an in-flight lookup when available. recognizeTile.test.ts covers saving and notification result reuse.",
+    capabilities: ["library/hooks.ts#songs"],
   },
   "recognize/startRecognizeTile.ts#recognizeTileResult": {
     howOften:
