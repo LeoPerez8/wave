@@ -11,8 +11,12 @@ delivers its fix, and it needs no account or sign-in. See "Build and CI" in `doc
 | `src/service.ts`           | The routes                                                       |
 | `src/layout.ts`            | What R2 holds, which the service and the publish script share    |
 | `src/publish.ts`           | Turns `expo export`'s output into a published update             |
-| `scripts/publish.ts`       | CI's entry to it, uploading with wrangler                        |
+| `src/promote.ts`           | Republishes an earlier version as a channel's newest update      |
+| `src/release.ts`           | Where both end: writes the update, moves phones, trims R2        |
+| `scripts/publish.ts`       | CI's entry to publishing                                         |
 | `scripts/publish-notes.ts` | CI's entry for a release's notes                                 |
+| `scripts/promote.ts`       | The rollback workflow's entry to promoting                       |
+| `scripts/bucket.ts`        | R2 through wrangler, which the update scripts use                |
 
 ## Routes
 
@@ -60,9 +64,28 @@ assets/<sha256 hex>                       a bundle or asset
 updates/<channel>/<runtime>/<id>.json     a published update
 updates/<channel>/<runtime>/latest.json   { "updateId": ... }: what that channel's phones get
 notes/<channel>/<version>.json            a release's notes, as `notes` above
+updates/<channel>/history.json            what the channel keeps, newest first
 ```
 
-A publish writes `latest.json` last, so a failed upload leaves phones on the previous update.
+A failed upload leaves phones on the previous update: `latest.json` moves after everything the
+update needs. wrangler can't list a bucket, so `history.json` is the listing that rollback and
+retention read.
+
+Each channel keeps its last 10 updates, promotions included, and a release removes the older
+ones. A file stays while an update of either channel names it. An APK whose runtime version has
+no update left finds nothing new and stays on the JS it has.
+
+## Rolling back
+
+GitHub › Actions › **Roll back an update** › Run workflow, with the channel and the version to go
+back to (`0.46.1-ti`, as in the release's tag). `expo-updates` only moves to a newer `createdAt`,
+so this republishes that version's bundle under a new id and time. Phones on the channel with the
+same runtime version move to it at their next check, and the next release replaces it.
+
+The run fails and says why when the channel doesn't keep that version, phones are already on it,
+or it was built for another runtime version than the channel's newest update. A bundle can't
+cross a native change: release a fix instead. `Constants.expoConfig.version` on the phone reads
+the promoted version.
 
 ## What the owner sets up
 
