@@ -51,7 +51,7 @@ import { TrackSkeletons } from "@/catalog/Skeletons";
 import { RecommendationsFailed } from "@/components/RecommendationsFailed";
 import { useMissingSongs } from "@/library/hooks";
 import { IconButton } from "@/components/IconButton";
-import { FLOATING_PILL_ROOM, FloatingPill } from "@/components/FloatingPill";
+import { FLOATING_PILL_ROOM, FloatingPillLook } from "@/components/FloatingPill";
 import { usePerfVisible, useRenderCount } from "@/perf/perf";
 import {
   cycleRepeat,
@@ -723,7 +723,7 @@ export function UpNextList({
         />
       </BarGroundContext>
       {pill !== null && drag === null && (
-        <FloatingPill
+        <FloatingPillLook
           icon={pill === "up" ? IconArrowUp : IconArrowDown}
           label={strings.playbackText.currentSong}
           accessibilityLabel={strings.playbackText.backToCurrentSong}

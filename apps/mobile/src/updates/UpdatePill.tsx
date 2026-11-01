@@ -13,7 +13,8 @@ import { scheduleOnRN } from "react-native-worklets";
 
 import { CELL } from "@/catalog/grid";
 import { useChromeInset } from "@/chrome/chrome";
-import { FloatingPillLook, listPillsUp } from "@/components/FloatingPill";
+import { FloatingPillLook } from "@/components/FloatingPill";
+import { listPillsUp } from "@/components/listPills";
 import { useLocalisation } from "@/localisation/localisation";
 import { useBounceSpring } from "@/motion/bounce";
 import { useNowPlayingShown } from "@/nowPlaying/sheet";

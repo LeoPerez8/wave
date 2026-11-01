@@ -10,8 +10,13 @@ import { createUpdateRunner, type UpdateClient, type UpdateSurroundings } from "
 /** A runner over a scripted update service, with what it did and logged written down. */
 const setup = ({
   lastCheckAt: lastCheckAtAtStart = null,
+  downloadApk,
   ...client
-}: Partial<UpdateClient> & { lastCheckAt?: number | null } = {}) => {
+}: Partial<Omit<UpdateClient, "downloadApk">> & {
+  /** What the download does, whichever network it's allowed on. */
+  downloadApk?: Effect.Effect<boolean, unknown>;
+  lastCheckAt?: number | null;
+} = {}) => {
   const did: string[] = [];
   const logged: { level: string; message: string }[] = [];
   const notices: string[] = [];
@@ -38,19 +43,17 @@ const setup = ({
         did.push("apply");
       }),
       checkNative: Effect.succeed("none"),
-      downloadApk: Effect.sync(() => {
-        did.push("downloadApk");
-        return true;
-      }),
+      downloadApk: (allowMetered) =>
+        downloadApk ??
+        Effect.sync(() => {
+          did.push(allowMetered ? "downloadApkOnMobileData" : "downloadApk");
+          return true;
+        }),
       openInstallPermission: Effect.sync(() => {
         did.push("permission");
       }),
       installApk: Effect.sync(() => {
         did.push("install");
-      }),
-      downloadApkOnMobileData: Effect.sync(() => {
-        did.push("downloadApkOnMobileData");
-        return true;
       }),
       askMobileData: Effect.sync(() => {
         did.push("askMobileData");
@@ -707,7 +710,7 @@ describe("the update runner", () => {
     const apkDownloaded: UpdateClient["checkNative"] = Effect.succeed("downloaded");
 
     /** Past the first open's own check, so what follows comes from the tap. */
-    const opened = async (client: Partial<UpdateClient> = {}) => {
+    const opened = async (client: Parameters<typeof setup>[0] = {}) => {
       const run = setup({ lastCheckAt: 999_999_000, ...client });
       run.runner.reconsider();
       await run.settle();
@@ -841,7 +844,7 @@ describe("the update runner", () => {
     });
 
     it("spins while checking, and a second tap doesn't check twice", async () => {
-      let finish = (_: Effect.Effect<boolean>) => {};
+      let finish: (result: Effect.Effect<boolean>) => void = () => {};
       const run = await opened({
         check: Effect.callback<boolean>((resume) => {
           run.did.push("check");
@@ -860,7 +863,7 @@ describe("the update runner", () => {
     });
 
     it("shows the percentage of a download, then rests", async () => {
-      let finish = (_: Effect.Effect<boolean>) => {};
+      let finish: (result: Effect.Effect<boolean>) => void = () => {};
       let answer: NativeUpdate = "none";
       const run = await opened({
         checkNative: Effect.sync(() => answer),
@@ -870,9 +873,10 @@ describe("the update runner", () => {
       });
       answer = "available";
       await tap(run);
-      assert.equal(run.runner.buttonLook(), 0);
+      assert.deepEqual(run.runner.buttonLook(), { downloading: 0 });
       run.runner.downloadProgress(42);
-      assert.equal(run.runner.buttonLook(), 42);
+      assert.deepEqual(run.runner.buttonLook(), { downloading: 42 });
+      assert.equal(run.runner.buttonLook(), run.runner.buttonLook(), "a stable snapshot");
       finish(Effect.succeed(true));
       await run.settle();
       assert.equal(run.runner.buttonLook(), "idle");
@@ -880,7 +884,7 @@ describe("the update runner", () => {
     });
 
     it("joins an automatic download, installing what it brings", async () => {
-      let finish = (_: Effect.Effect<boolean>) => {};
+      let finish: (result: Effect.Effect<boolean>) => void = () => {};
       const run = setup({
         checkNative: apkAvailable,
         downloadApk: Effect.callback<boolean>((resume) => {
@@ -889,12 +893,249 @@ describe("the update runner", () => {
       });
       run.runner.reconsider();
       await run.settle();
-      assert.equal(run.runner.buttonLook(), 0);
+      assert.deepEqual(run.runner.buttonLook(), { downloading: 0 });
       run.runner.tapUpdateButton();
       run.runner.reconsider();
       finish(Effect.succeed(true));
       await run.settle();
       assert.deepEqual(run.did, ["check", "install"]);
+    });
+  });
+
+  describe("when Wave leaves after a tap", () => {
+    type Run = Pick<ReturnType<typeof setup>, "runner" | "surroundings" | "settle">;
+    const apkDownloaded: UpdateClient["checkNative"] = Effect.succeed("downloaded");
+    const leave = async ({ runner, surroundings, settle }: Run) => {
+      surroundings.visible = false;
+      runner.reconsider();
+      await settle();
+    };
+    const comeBack = async ({ runner, surroundings, settle }: Run) => {
+      surroundings.visible = true;
+      runner.cameToFront();
+      runner.reconsider();
+      await settle();
+    };
+    /** Wave open with nothing found yet, so a tap's check is what finds the APK. */
+    const openedFinding = async (client: Parameters<typeof setup>[0] = {}) => {
+      const answer = { now: "none" as NativeUpdate };
+      const run = setup({
+        lastCheckAt: 999_999_000,
+        checkNative: Effect.sync(() => answer.now),
+        ...client,
+      });
+      run.runner.reconsider();
+      await run.settle();
+      run.did.length = 0;
+      return { ...run, answer };
+    };
+
+    it("drops a tap waiting on a running step, so it installs nothing, then or on return", async () => {
+      let finish: (result: Effect.Effect<boolean>) => void = () => {};
+      const run = setup({
+        checkNative: apkDownloaded,
+        check: Effect.callback<boolean>((resume) => {
+          finish = resume;
+        }),
+      });
+      run.runner.reconsider();
+      await run.settle();
+      finish(Effect.succeed(false));
+      await run.settle();
+      // A later check under way holds the tap back.
+      run.passMinutes(15);
+      run.runner.reconsider();
+      await run.settle();
+      run.runner.requestInstall();
+      run.runner.reconsider();
+      await leave(run);
+      finish(Effect.succeed(false));
+      await run.settle();
+      assert.deepEqual(run.did, []);
+      await comeBack(run);
+      assert.deepEqual(run.did, []);
+      assert.equal(run.runner.offeredVersion(), "1.3.0");
+    });
+
+    it("keeps a download going, installs nothing when it ends, and offers the APK on return", async () => {
+      let finish: (result: Effect.Effect<boolean>) => void = () => {};
+      const run = await openedFinding({
+        downloadApk: Effect.callback<boolean>((resume) => {
+          finish = resume;
+        }),
+      });
+      run.answer.now = "available";
+      run.runner.tapUpdateButton();
+      run.runner.reconsider();
+      await run.settle();
+      assert.deepEqual(run.runner.buttonLook(), { downloading: 0 });
+      await leave(run);
+      assert.deepEqual(run.runner.buttonLook(), { downloading: 0 }, "still running");
+      finish(Effect.succeed(true));
+      await run.settle();
+      assert.deepEqual(run.did, ["check"]);
+      await comeBack(run);
+      assert.deepEqual(run.did, ["check"]);
+      assert.equal(run.runner.offeredVersion(), "1.3.0");
+      assert.deepEqual(run.notices, []);
+    });
+
+    it("doesn't take a download ending behind for a tap, before Wave has seen itself leave", async () => {
+      let finish: (result: Effect.Effect<boolean>) => void = () => {};
+      const run = await openedFinding({
+        downloadApk: Effect.callback<boolean>((resume) => {
+          finish = resume;
+        }),
+      });
+      run.answer.now = "available";
+      run.runner.tapUpdateButton();
+      run.runner.reconsider();
+      await run.settle();
+      run.surroundings.visible = false;
+      finish(Effect.succeed(true));
+      await run.settle();
+      assert.deepEqual(run.did, ["check"]);
+      assert.equal(run.runner.offeredVersion(), "1.3.0");
+    });
+
+    it("never opens the permission screen by itself when a requested download ends behind", async () => {
+      let finish: (result: Effect.Effect<boolean>) => void = () => {};
+      const run = await openedFinding({
+        downloadApk: Effect.callback<boolean>((resume) => {
+          finish = resume;
+        }),
+      });
+      run.surroundings.installAccess = "needsPermission";
+      run.answer.now = "available";
+      run.runner.tapUpdateButton();
+      run.runner.reconsider();
+      await run.settle();
+      await leave(run);
+      finish(Effect.succeed(true));
+      await run.settle();
+      await comeBack(run);
+      assert.deepEqual(run.did, ["check"]);
+    });
+
+    it("doesn't ask about mobile data on a later return", async () => {
+      let finish: (result: Effect.Effect<boolean>) => void = () => {};
+      const run = await openedFinding({
+        check: Effect.callback<boolean>((resume) => {
+          finish = resume;
+        }),
+      });
+      run.surroundings.network = "metered";
+      run.answer.now = "available";
+      run.runner.tapUpdateButton();
+      run.runner.reconsider();
+      await leave(run);
+      finish(Effect.succeed(false));
+      await run.settle();
+      await comeBack(run);
+      assert.deepEqual(run.did, []);
+      assert.equal(run.runner.buttonLook(), "idle");
+    });
+
+    it("says nothing of a requested check that ends behind", async () => {
+      let finish: (result: Effect.Effect<boolean>) => void = () => {};
+      const run = await openedFinding({
+        check: Effect.callback<boolean>((resume) => {
+          finish = resume;
+        }),
+      });
+      run.runner.tapUpdateButton();
+      run.runner.reconsider();
+      assert.equal(run.runner.buttonLook(), "checking");
+      await leave(run);
+      assert.equal(run.runner.buttonLook(), "idle");
+      finish(Effect.succeed(false));
+      await run.settle();
+      assert.deepEqual(run.notices, []);
+    });
+
+    it("lets a tap made on return follow a download still running", async () => {
+      let finish: (result: Effect.Effect<boolean>) => void = () => {};
+      const run = await openedFinding({
+        downloadApk: Effect.callback<boolean>((resume) => {
+          finish = resume;
+        }),
+      });
+      run.answer.now = "available";
+      run.runner.tapUpdateButton();
+      run.runner.reconsider();
+      await run.settle();
+      await leave(run);
+      await comeBack(run);
+      run.runner.tapUpdateButton();
+      run.runner.reconsider();
+      finish(Effect.succeed(true));
+      await run.settle();
+      assert.deepEqual(run.did, ["check", "install"]);
+    });
+
+    it("still continues from the permission screen with access granted", async () => {
+      const run = await openedFinding({ checkNative: apkDownloaded });
+      run.surroundings.installAccess = "needsPermission";
+      run.runner.requestInstall();
+      run.runner.reconsider();
+      await run.settle();
+      assert.deepEqual(run.did, ["permission"]);
+      await leave(run);
+      run.surroundings.installAccess = "needsConfirmation";
+      await comeBack(run);
+      assert.deepEqual(run.did, ["permission", "install"]);
+    });
+  });
+
+  describe("when a handover to Android goes nowhere", () => {
+    const handedOver = async () => {
+      const run = setup({ lastCheckAt: 999_999_000, checkNative: Effect.succeed("downloaded") });
+      run.runner.reconsider();
+      await run.settle();
+      run.runner.requestInstall();
+      run.runner.reconsider();
+      await run.settle();
+      assert.deepEqual(run.did, ["install"]);
+      assert.equal(run.runner.offeredVersion(), null, "no offer while Android has it");
+      run.did.length = 0;
+      return run;
+    };
+
+    it("offers the APK again on a return to the front, and the button works", async () => {
+      const run = await handedOver();
+      run.runner.cameToFront();
+      assert.equal(run.runner.offeredVersion(), "1.3.0");
+      run.runner.tapUpdateButton();
+      run.runner.reconsider();
+      await run.settle();
+      assert.deepEqual(run.did, ["install"]);
+    });
+
+    it("offers it again with no toast when Android's session is abandoned, Wave in front", async () => {
+      const run = await handedOver();
+      const heard: (string | null)[] = [];
+      run.runner.subscribe(() => heard.push(run.runner.offeredVersion()));
+      run.runner.installAbandoned(false);
+      assert.equal(run.runner.offeredVersion(), "1.3.0");
+      assert.equal(heard.at(-1), "1.3.0");
+      assert.deepEqual(run.notices, []);
+    });
+
+    it("says so when Android's confirmation couldn't be shown", async () => {
+      const run = await handedOver();
+      run.runner.installAbandoned(true);
+      assert.equal(run.runner.offeredVersion(), "1.3.0");
+      assert.deepEqual(run.notices, ["installFailed"]);
+    });
+
+    it("doesn't drop a new tap when an old session's abandonment arrives", async () => {
+      const run = await handedOver();
+      run.runner.cameToFront();
+      run.runner.requestInstall();
+      run.runner.installAbandoned(false);
+      run.runner.reconsider();
+      await run.settle();
+      assert.deepEqual(run.did, ["install"]);
     });
   });
 });

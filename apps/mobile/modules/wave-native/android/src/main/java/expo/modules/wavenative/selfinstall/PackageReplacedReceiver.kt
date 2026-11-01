@@ -12,15 +12,15 @@ import kotlin.concurrent.thread
  * After an update Android delivers this to the new version, which brings Wave's process back.
  *
  * It doesn't reopen the Activity. Android's background-start rules give a receiver no exception, and
- * Wave won't hold SYSTEM_ALERT_WINDOW to get round them. The installs that close Wave run with it
- * out of use, so opening a screen would land over whatever the person went to instead.
+ * Wave won't hold SYSTEM_ALERT_WINDOW to get round them. An install follows a tap, so the person
+ * may have moved on by the time it ends, and a screen would land over whatever they went to.
  *
  * It brings back what ought to be running: the download journal, whose foreground service an update
  * ends for good and which Android doesn't restart. MY_PACKAGE_REPLACED is an exception to the
- * limits on starting a foreground service from the background. Playback doesn't come back, as a
- * silent install only runs with nothing playing: [expo.modules.wavenative.player.PlaybackService]
- * starts when a media button or Android Auto asks, and resumes from its saved queue. Persisted jobs
- * and scheduled work survive an update on their own.
+ * limits on starting a foreground service from the background. Playback doesn't come back, even if
+ * music was playing at the tap: [expo.modules.wavenative.player.PlaybackService] starts when a media
+ * button or Android Auto asks, and resumes from its saved queue. Persisted jobs and scheduled work
+ * survive an update on their own.
  *
  * It also posts [UpdatedNotification], whose tap reopens Wave. Android sends this broadcast only when
  * an APK replaced the app, so a fresh install or a JS bundle update posts nothing.

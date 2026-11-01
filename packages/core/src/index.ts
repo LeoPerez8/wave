@@ -269,6 +269,10 @@ export {
   updatePillShown,
   updatePillSwipeDismisses,
   versionOrder,
+  afterApkDownload,
+  installTapWhenHandoverEnds,
+  stoppedStepNotice,
+  updateRequestAfter,
 } from "./updatePolicy.ts";
 export type {
   InstallAccess,

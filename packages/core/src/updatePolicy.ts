@@ -23,9 +23,10 @@ export type NativeUpdate = "none" | "available" | "downloaded";
 export type InstallAccess = "needsPermission" | "needsConfirmation" | "silent";
 
 /**
- * Where a tap on "Update the app" has got to; nothing installs without one. `atPermissionScreen`
- * has asked Android for its screen, and `awayAtPermissionScreen` has seen Wave leave for it.
- * `handedOver` gave Android the APK, which ends this process or asks for a confirmation.
+ * Where a tap on "Update the app" has got to; nothing installs without one. `tapped` hasn't reached
+ * Android yet. `atPermissionScreen` has asked Android for its screen, and `awayAtPermissionScreen`
+ * has seen Wave leave for it. `handedOver` gave Android the APK, which ends this process or asks for
+ * a confirmation.
  */
 export type InstallTap =
   "none" | "tapped" | "atPermissionScreen" | "awayAtPermissionScreen" | "handedOver";
@@ -89,25 +90,20 @@ const isDue = (now: number, last: number | null, interval: number): boolean =>
   now - last >= interval;
 
 /**
- * Installing ends the process, so it only ever follows a tap, and then at once, music or not.
- * Android's permission screen and confirmation can't open from the background.
+ * Installing ends the process, so it only ever follows a tap, and then at once, music or not. Only
+ * with Wave in front: it would close Wave under another app, and Android's permission screen and
+ * confirmation can't open from the background.
  */
 const apkStep = ({ installTap, installAccess, visible }: UpdateState): UpdateStep | null => {
-  if (installTap !== "tapped") return null;
-  switch (installAccess) {
-    case "needsPermission":
-      return visible ? "openInstallPermission" : null;
-    case "needsConfirmation":
-      return visible ? "installApk" : null;
-    case "silent":
-      return "installApk";
-  }
+  if (installTap !== "tapped" || !visible) return null;
+  return installAccess === "needsPermission" ? "openInstallPermission" : "installApk";
 };
 
 /**
- * A tap, given what's become of Wave since. Coming back from the permission screen continues the
- * install if it was granted and ends the tap if not, so the screen never reopens by itself. Leaving
- * for Android's confirmation ends it too, so a decline brings the offer back.
+ * A tap, given what's become of Wave since. Leaving ends a tap that hasn't reached Android, so it
+ * can't act long after the fact. The exception is leaving for the permission screen: coming back
+ * continues the install if it was granted and ends the tap if not, so the screen never reopens by
+ * itself. Leaving for Android's confirmation ends it too, so a decline brings the offer back.
  */
 export const installTapAfter = (
   tap: InstallTap,
@@ -119,13 +115,30 @@ export const installTapAfter = (
     case "awayAtPermissionScreen":
       if (!visible) return tap;
       return installAccess === "needsPermission" ? "none" : "tapped";
+    case "tapped":
     case "handedOver":
       return visible ? tap : "none";
     case "none":
-    case "tapped":
       return tap;
   }
 };
+
+/**
+ * A tap once Android's installer has let go of the APK with no install to show for it, or Wave has
+ * come back to the front: nothing more will come of the handover, so the offer returns. A newer tap
+ * isn't this handover's to end.
+ */
+export const installTapWhenHandoverEnds = (tap: InstallTap): InstallTap =>
+  tap === "handedOver" ? "none" : tap;
+
+/**
+ * A request from the update button, given what's become of Wave since. Like a tap, it ends when Wave
+ * leaves. A download already running keeps going, and what it brings waits to be offered.
+ */
+export const updateRequestAfter = (
+  request: UpdateRequest,
+  { visible }: Pick<UpdateState, "visible">,
+): UpdateRequest => (visible ? request : "none");
 
 /**
  * The version a tap would install: the file exists under its final name only once its SHA-256
@@ -221,27 +234,64 @@ export const updateButtonAction = ({
 /**
  * Where a tap's check leads. An APK comes first, as a pending one holds bundles back. A bundle only
  * gets a toast: it follows its silent path and doesn't close Wave. A check that failed and found
- * nothing can't say Wave is up to date.
+ * nothing can't say Wave is up to date. With Wave behind it leads nowhere: the tap is over.
  */
 export const afterRequestedCheck = ({
+  visible,
   nativeUpdate,
   network,
   bundleAvailable,
   bundleDownloaded,
   checkFailed,
-}: Pick<UpdateState, "nativeUpdate" | "network" | "bundleAvailable" | "bundleDownloaded"> & {
+}: Pick<
+  UpdateState,
+  "visible" | "nativeUpdate" | "network" | "bundleAvailable" | "bundleDownloaded"
+> & {
   /** The service failed either question, the bundle's or the APK's. */
   readonly checkFailed: boolean;
 }): {
   readonly next: "none" | "install" | "askMobileData" | "download";
   readonly outcome: UpdateNotice | null;
 } => {
+  if (!visible) return { next: "none", outcome: null };
   if (nativeUpdate === "downloaded") return { next: "install", outcome: null };
   if (nativeUpdate === "available") {
     return { next: network === "metered" ? "askMobileData" : "download", outcome: null };
   }
   if (bundleAvailable || bundleDownloaded) return { next: "none", outcome: "bundleOnItsWay" };
   return { next: "none", outcome: checkFailed ? "checkFailed" : "upToDate" };
+};
+
+/**
+ * What an APK download ends in. A signed one that a live request asked for becomes a tap, as
+ * installing it is what the request meant. With Wave behind no request is live, whatever's been
+ * noticed of that yet, so the APK only waits to be offered.
+ */
+export const afterApkDownload = ({
+  download,
+  updateRequest,
+  visible,
+}: Pick<UpdateState, "updateRequest" | "visible"> & {
+  /** `signed` is the file CI signed; `failed` is anything else. */
+  readonly download: "signed" | "failed";
+}): { readonly tapped: boolean; readonly outcome: UpdateNotice | null } => {
+  const asked = updateRequest !== "none" && visible;
+  return {
+    tapped: asked && download === "signed",
+    outcome: asked && download === "failed" ? "downloadFailed" : null,
+  };
+};
+
+/** What to tell the person of a step that stopped on a throw; null when nobody asked for it. */
+export const stoppedStepNotice = ({
+  step,
+  updateRequest,
+}: Pick<UpdateState, "updateRequest"> & {
+  readonly step: UpdateStep;
+}): UpdateNotice | null => {
+  if (step === "installApk" || step === "openInstallPermission") return "installFailed";
+  if (updateRequest === "none") return null;
+  return step === "check" ? "checkFailed" : "downloadFailed";
 };
 
 /** What to say when a request can't go on with no network; null when it can. */
@@ -254,7 +304,7 @@ export const strandedUpdateRequest = (
 };
 
 /** The button's face: at rest, spinning, or a download's percentage, whoever started it. */
-export type UpdateButtonLook = "idle" | "checking" | number;
+export type UpdateButtonLook = "idle" | "checking" | { readonly downloading: number };
 
 export const updateButtonLook = ({
   updateRequest,
@@ -264,7 +314,7 @@ export const updateButtonLook = ({
   /** How far the APK download is, while one runs. */
   readonly downloadPercent: number | null;
 }): UpdateButtonLook => {
-  if (downloadPercent !== null) return downloadPercent;
+  if (downloadPercent !== null) return { downloading: downloadPercent };
   return updateRequest === "check" ? "checking" : "idle";
 };
 

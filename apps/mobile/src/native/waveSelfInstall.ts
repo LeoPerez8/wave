@@ -6,6 +6,8 @@ type WaveSelfInstallEvents = {
   onApkDownloadProgress: (event: { percent: number }) => void;
   /** Android turned down an install it had taken, and the APK is gone. */
   onInstallRefused: () => void;
+  /** Android let go of an install and the APK is still there; [failed] if the person wasn't asked. */
+  onInstallAbandoned: (event: { failed: boolean }) => void;
 };
 
 declare class WaveSelfInstallModule extends NativeModule<WaveSelfInstallEvents> {
@@ -26,7 +28,7 @@ declare class WaveSelfInstallModule extends NativeModule<WaveSelfInstallEvents> 
   openPermissionScreen(): void;
   /**
    * Fetches the APK, keeping a whole one already there. Fails on a metered network unless
-   * [onMobileData] says the person allowed it, and answers false when what came isn't the signed
+   * [allowMetered] says the person allowed it, and answers false when what came isn't the signed
    * file.
    */
   downloadApk(
@@ -34,7 +36,7 @@ declare class WaveSelfInstallModule extends NativeModule<WaveSelfInstallEvents> 
     version: string,
     size: number,
     sha256: string,
-    onMobileData: boolean,
+    allowMetered: boolean,
   ): Promise<boolean>;
   /**
    * Hands the APK to Android, once its SHA-256 matches. Its answer reaches the app log; on success

@@ -1,14 +1,19 @@
 import {
+  afterApkDownload,
   afterRequestedCheck,
   installTapAfter,
+  installTapWhenHandoverEnds,
   nextUpdateStep,
   offeredApk,
+  stoppedStepNotice,
   strandedUpdateRequest,
   updateButtonAction,
   updateButtonLook,
+  updateRequestAfter,
   type InstallTap,
   type LogLevel,
   type NativeUpdate,
+  type UpdateButtonLook,
   type UpdateNotice,
   type UpdateRequest,
   type UpdateState,
@@ -27,10 +32,11 @@ export interface UpdateClient {
   readonly apply: Effect.Effect<void, unknown>;
   /** What the channel's newest APK means for this phone. */
   readonly checkNative: Effect.Effect<NativeUpdate, unknown>;
-  /** Fetches the APK the last check found; false when what came isn't the file CI signed. */
-  readonly downloadApk: Effect.Effect<boolean, unknown>;
-  /** The same, on a metered network, which only a yes to `askMobileData` allows. */
-  readonly downloadApkOnMobileData: Effect.Effect<boolean, unknown>;
+  /**
+   * Fetches the APK the last check found; false when what came isn't the file CI signed. Only a yes
+   * to `askMobileData` gives [allowMetered].
+   */
+  readonly downloadApk: (allowMetered: boolean) => Effect.Effect<boolean, unknown>;
   /** Whether the person lets this download use mobile data. */
   readonly askMobileData: Effect.Effect<boolean, unknown>;
   /** Opens Android's "install from this source" screen. */
@@ -84,7 +90,6 @@ export const createUpdateRunner = ({
   log,
   report,
 }: UpdateRunnerOptions) => {
-  let working = false;
   let bundleAvailable = false;
   let bundleDownloaded = false;
   let nativeUpdate: NativeUpdate = "none";
@@ -94,7 +99,7 @@ export const createUpdateRunner = ({
   /** The running check started for the button's request, so it's the one to answer it. */
   let checkAnswersRequest = false;
   let checkFailed = false;
-  let mobileDataAllowed = false;
+  let meteredAllowed = false;
   /** Set for as long as an APK download runs. */
   let downloadPercent: number | null = null;
   const listeners = new Set<() => void>();
@@ -105,23 +110,31 @@ export const createUpdateRunner = ({
 
   const endRequest = (notice: UpdateNotice | null): void => {
     updateRequest = "none";
-    mobileDataAllowed = false;
+    checkAnswersRequest = false;
+    meteredAllowed = false;
     if (notice !== null) report(notice);
   };
 
-  /** An APK a tap asked for is in: installing it is what the tap meant. */
-  const endDownload = (outcome: "signed" | "failed"): void => {
-    const asked = updateRequest !== "none";
-    if (outcome === "signed" && asked) installTap = "tapped";
-    endRequest(outcome === "failed" && asked ? "downloadFailed" : null);
+  const endDownload = (download: "signed" | "failed"): void => {
+    const { visible } = surroundings();
+    const { tapped, outcome } = afterApkDownload({ download, updateRequest, visible });
+    if (tapped) installTap = "tapped";
+    endRequest(outcome);
+  };
+
+  const failInstall = (): void => {
+    installTap = "none";
+    report("installFailed");
   };
 
   const answerRequestedCheck = (): void => {
     if (!checkAnswersRequest) return;
     checkAnswersRequest = false;
+    const { network, visible } = surroundings();
     const { next, outcome } = afterRequestedCheck({
+      visible,
       nativeUpdate,
-      network: surroundings().network,
+      network,
       bundleAvailable,
       bundleDownloaded,
       checkFailed,
@@ -187,7 +200,7 @@ export const createUpdateRunner = ({
     ),
     askMobileData: Effect.suspend(() => client.askMobileData).pipe(
       Effect.map((allowed) => {
-        mobileDataAllowed = allowed;
+        meteredAllowed = allowed;
         if (allowed) updateRequest = "download";
         else endRequest(null);
         return true;
@@ -243,7 +256,7 @@ export const createUpdateRunner = ({
       log("info", "Downloading the APK");
       downloadPercent = 0;
       notify();
-      return mobileDataAllowed ? client.downloadApkOnMobileData : client.downloadApk;
+      return client.downloadApk(meteredAllowed);
     }).pipe(
       Effect.map((isSigned) => {
         if (isSigned) {
@@ -281,8 +294,7 @@ export const createUpdateRunner = ({
       Effect.catch((error) =>
         Effect.sync(() => {
           log("warn", `Opening the install permission screen failed: ${reason(error)}`);
-          installTap = "none";
-          report("installFailed");
+          failInstall();
           return false;
         }),
       ),
@@ -303,8 +315,7 @@ export const createUpdateRunner = ({
           log("warn", `The APK install failed: ${reason(error)}`);
           // The file may be gone. The next check says, and the policy holds off a new download.
           nativeUpdate = "available";
-          installTap = "none";
-          report("installFailed");
+          failInstall();
           return false;
         }),
       ),
@@ -313,17 +324,18 @@ export const createUpdateRunner = ({
 
   let running: UpdateStep | null = null;
 
-  const failureOf = (step: UpdateStep): UpdateNotice =>
-    step === "check" ? "checkFailed" : "downloadFailed";
+  let look: UpdateButtonLook = "idle";
 
   const reconsider = (): void => {
     const around = surroundings();
     const tap = installTapAfter(installTap, around);
-    if (tap !== installTap) {
+    const request = updateRequestAfter(updateRequest, around);
+    if (tap !== installTap || request !== updateRequest) {
       installTap = tap;
+      if (request === "none") endRequest(null);
       notify();
     }
-    const stranded = working ? null : strandedUpdateRequest(updateRequest, around.network);
+    const stranded = running === null ? strandedUpdateRequest(updateRequest, around.network) : null;
     if (stranded !== null) {
       endRequest(stranded);
       notify();
@@ -338,29 +350,25 @@ export const createUpdateRunner = ({
       lastApkAttempt: lastApkAttempt.get(),
       updateRequest,
       nativeUpdate,
-      working,
+      working: running !== null,
       bundleAvailable,
       bundleDownloaded,
     });
     if (step === "wait") return;
-    working = true;
     running = step;
     const guarded = steps[step].pipe(
       // A throw from native code in a step is a defect, which the steps' catches don't see. Waiting
-      // for the next change is all that's left, and it mustn't leave `working` on for good.
+      // for the next change is all that's left, and it mustn't leave `running` set for good.
       Effect.catchCause((cause) =>
         Effect.sync(() => {
           log("warn", `The ${step} step stopped: ${reason(Cause.squash(cause))}`);
           installTap = "none";
-          checkAnswersRequest = false;
-          endRequest(updateRequest === "none" ? null : failureOf(step));
-          if (step === "installApk" || step === "openInstallPermission") report("installFailed");
+          endRequest(stoppedStepNotice({ step, updateRequest }));
           return false;
         }),
       ),
     );
     void Effect.runPromise(guarded).then((goOn) => {
-      working = false;
       running = null;
       notify();
       // A tap made while the step ran is owed its answer now, whatever the step would do next.
@@ -381,7 +389,10 @@ export const createUpdateRunner = ({
   return {
     reconsider,
     offeredVersion,
-    /** A tap on the offer; only this and the update button ever install. Call `reconsider` after. */
+    /**
+     * A tap on the offer. Nothing installs but from a tap: this, or what the update button asked for
+     * when its check or download ends. Call `reconsider` after.
+     */
     requestInstall,
     /** A tap on the update button in Settings. Call `reconsider` after it. */
     tapUpdateButton: (): void => {
@@ -406,7 +417,16 @@ export const createUpdateRunner = ({
         case "none":
       }
     },
-    buttonLook: () => updateButtonLook({ updateRequest, downloadPercent }),
+    /** The same object while it says the same, as `useSyncExternalStore` needs. */
+    buttonLook: (): UpdateButtonLook => {
+      const next = updateButtonLook({ updateRequest, downloadPercent });
+      const unchanged =
+        typeof next === "object" && typeof look === "object"
+          ? next.downloading === look.downloading
+          : next === look;
+      if (!unchanged) look = next;
+      return look;
+    },
     /** How far the running APK download has got. */
     downloadProgress: (percent: number): void => {
       if (downloadPercent === null) return;
@@ -416,8 +436,21 @@ export const createUpdateRunner = ({
     /** Android turned down an install after taking the APK, and deleted the file. */
     installRefused: (): void => {
       nativeUpdate = "available";
-      installTap = "none";
-      report("installFailed");
+      failInstall();
+      notify();
+    },
+    /**
+     * Android's installer let go of the APK and kept the file: the session was declined or dropped,
+     * or its confirmation couldn't show, which is the one that's [failed].
+     */
+    installAbandoned: (failed: boolean): void => {
+      installTap = installTapWhenHandoverEnds(installTap);
+      if (failed) report("installFailed");
+      notify();
+    },
+    /** Wave has come back to the front, so an install still handed over is one that went nowhere. */
+    cameToFront: (): void => {
+      installTap = installTapWhenHandoverEnds(installTap);
       notify();
     },
     subscribe: (listener: () => void): (() => void) => {

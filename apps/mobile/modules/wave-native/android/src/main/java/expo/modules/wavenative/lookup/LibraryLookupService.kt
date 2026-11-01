@@ -16,7 +16,7 @@ import android.os.Looper
 import android.os.PowerManager
 import android.os.SystemClock
 import expo.modules.wavenative.R
-import expo.modules.wavenative.launcher.LauncherIconSwitcher
+import expo.modules.wavenative.launcher.openAppIntent
 import expo.modules.wavenative.locale.NativeText
 import expo.modules.wavenative.log.ServiceTimeout
 import expo.modules.wavenative.log.WaveLog
@@ -92,7 +92,7 @@ class LibraryLookupService : Service() {
       .setCategory(Notification.CATEGORY_PROGRESS)
       .setForegroundServiceBehavior(Notification.FOREGROUND_SERVICE_IMMEDIATE)
       .setContentTitle(progress?.title ?: NativeText.get("fixingSongs"))
-    LibraryLookupNotice.openApp(this)?.let(builder::setContentIntent)
+    openAppIntent(this)?.let(builder::setContentIntent)
     if (progress == null) return builder.build()
     progress.detail?.let(builder::setContentText)
     if (progress.total > 0) builder.setProgress(progress.total, progress.done.coerceIn(0, progress.total), false)
@@ -225,13 +225,6 @@ internal object LibraryLookupNotice {
     context.getSystemService(NotificationManager::class.java).createNotificationChannel(channel)
   }
 
-  /** Opens Wave: MainActivity rather than the launcher icon's alias, which a theme change can turn off. */
-  fun openApp(context: Context): PendingIntent? {
-    val launch = context.packageManager.getLaunchIntentForPackage(context.packageName) ?: return null
-    launch.component?.let { launch.component = LauncherIconSwitcher.launchTarget(context.packageManager, it) }
-    return PendingIntent.getActivity(context, 0, launch, PendingIntent.FLAG_IMMUTABLE)
-  }
-
   private fun postSummary(context: Context, title: String, message: String) {
     createChannel(context)
     val builder = Notification.Builder(context, LibraryLookupService.CHANNEL)
@@ -240,7 +233,7 @@ internal object LibraryLookupNotice {
       .setContentText(message.substringBefore("\n"))
       .setStyle(Notification.BigTextStyle().bigText(message))
       .setAutoCancel(true)
-    openApp(context)?.let { builder.setContentIntent(it) }
+    openAppIntent(context)?.let { builder.setContentIntent(it) }
     val notification = builder.build()
     context.getSystemService(NotificationManager::class.java)
       .notify(LibraryLookupService.SUMMARY_ID, notification)
