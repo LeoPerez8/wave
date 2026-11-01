@@ -16,7 +16,6 @@ import {
 
 import {
   startRecognizeSession,
-  type RecognizeDeps,
   type RecognizeNative,
 } from "./recognizeSession.ts";
 import {
