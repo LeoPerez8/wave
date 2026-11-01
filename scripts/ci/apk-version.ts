@@ -123,10 +123,10 @@ const withString = (xml: Buffer, pool: StringPool, text: string): Buffer => {
   return Buffer.concat([header, offsets, added, styleOffsets, strings, styles]);
 };
 
-// Where the <manifest> element's version attributes are, and the strings they index.
-type Manifest = { pool: StringPool; versionCode: number; versionName: number };
+// A compiled XML file's elements in order: the name, the attribute offsets, and what those index.
+type Element = { name: string; pool: StringPool; resourceIds: number[]; attributes: number[] };
 
-const readManifest = (xml: Buffer): Manifest => {
+function* readElements(xml: Buffer): Generator<Element> {
   const file = chunkAt(xml, 0);
   if (file.type !== XML) throw new Error("This isn't a compiled Android XML file.");
   let pool: StringPool | undefined;
@@ -143,26 +143,33 @@ const readManifest = (xml: Buffer): Manifest => {
     else if (chunk.type === START_ELEMENT) {
       if (!pool) throw new Error("The manifest has no string pool before its first element.");
       const ext = chunk.offset + chunk.headerSize;
-      const name = pool.strings[xml.readUInt32LE(ext + 4)];
-      if (name !== "manifest") throw new Error(`The root element is <${name}>, not <manifest>.`);
       const attributeStart = xml.readUInt16LE(ext + 8);
       const attributeSize = xml.readUInt16LE(ext + 10);
-      const attributeCount = xml.readUInt16LE(ext + 12);
       const attributes = Array.from(
-        { length: attributeCount },
+        { length: xml.readUInt16LE(ext + 12) },
         (_, index) => ext + attributeStart + index * attributeSize,
       );
-      const find = (id: number, label: string) => {
-        const attribute = attributes.find((at) => resourceIds[xml.readUInt32LE(at + 4)] === id);
-        if (attribute === undefined) throw new Error(`<manifest> has no android:${label}.`);
-        return attribute;
-      };
-      return {
-        pool,
-        versionCode: find(VERSION_CODE, "versionCode"),
-        versionName: find(VERSION_NAME, "versionName"),
-      };
+      yield { name: pool.strings[xml.readUInt32LE(ext + 4)] ?? "", pool, resourceIds, attributes };
     }
+  }
+}
+
+// Where the <manifest> element's version attributes are, and the strings they index.
+type Manifest = { pool: StringPool; versionCode: number; versionName: number };
+
+const readManifest = (xml: Buffer): Manifest => {
+  for (const { name, pool, resourceIds, attributes } of readElements(xml)) {
+    if (name !== "manifest") throw new Error(`The root element is <${name}>, not <manifest>.`);
+    const find = (id: number, label: string) => {
+      const attribute = attributes.find((at) => resourceIds[xml.readUInt32LE(at + 4)] === id);
+      if (attribute === undefined) throw new Error(`<manifest> has no android:${label}.`);
+      return attribute;
+    };
+    return {
+      pool,
+      versionCode: find(VERSION_CODE, "versionCode"),
+      versionName: find(VERSION_NAME, "versionName"),
+    };
   }
   throw new Error("The manifest has no <manifest> element.");
 };
@@ -210,33 +217,15 @@ const TYPE_BOOLEAN = 0x12;
 
 // The string pool, and the android:value attribute of the <meta-data> called `name`.
 const findMetaData = (xml: Buffer, name: string): { pool: StringPool; value: number } => {
-  const file = chunkAt(xml, 0);
-  if (file.type !== XML) throw new Error("This isn't a compiled Android XML file.");
-  let pool: StringPool | undefined;
-  let resourceIds: number[] = [];
-  let offset = file.headerSize;
-  while (offset < file.size) {
-    const chunk = chunkAt(xml, offset);
-    offset += chunk.size;
-    if (chunk.type === STRING_POOL) pool = readStringPool(xml, chunk);
-    else if (chunk.type === RESOURCE_MAP)
-      resourceIds = Array.from({ length: (chunk.size - chunk.headerSize) / 4 }, (_, index) =>
-        xml.readUInt32LE(chunk.offset + chunk.headerSize + index * 4),
-      );
-    else if (chunk.type === START_ELEMENT && pool) {
-      const ext = chunk.offset + chunk.headerSize;
-      if (pool.strings[xml.readUInt32LE(ext + 4)] !== "meta-data") continue;
-      const attributes = Array.from(
-        { length: xml.readUInt16LE(ext + 12) },
-        (_, index) => ext + xml.readUInt16LE(ext + 8) + index * xml.readUInt16LE(ext + 10),
-      );
-      const attribute = (id: number) =>
-        attributes.find((at) => resourceIds[xml.readUInt32LE(at + 4)] === id);
-      const nameAttribute = attribute(ATTR_NAME);
-      const value = attribute(ATTR_VALUE);
-      if (nameAttribute === undefined || value === undefined) continue;
-      if (pool.strings[xml.readUInt32LE(nameAttribute + 16)] === name) return { pool, value };
-    }
+  for (const element of readElements(xml)) {
+    if (element.name !== "meta-data") continue;
+    const { pool, resourceIds, attributes } = element;
+    const attribute = (id: number) =>
+      attributes.find((at) => resourceIds[xml.readUInt32LE(at + 4)] === id);
+    const nameAttribute = attribute(ATTR_NAME);
+    const value = attribute(ATTR_VALUE);
+    if (nameAttribute === undefined || value === undefined) continue;
+    if (pool.strings[xml.readUInt32LE(nameAttribute + 16)] === name) return { pool, value };
   }
   throw new Error(`The manifest has no <meta-data> called ${name}.`);
 };

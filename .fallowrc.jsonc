@@ -61,6 +61,10 @@
     "expo-system-ui",
     "expo-updates",
     "react-native-screens",
+    // Plugins in app.config.ts, which Fallow can't read now that it exports a function.
+    "expo-build-properties",
+    "expo-font",
+    "expo-splash-screen",
   ],
   "rules": {
     // Independent modules intentionally share names such as Effect's `layer`.

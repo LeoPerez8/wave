@@ -98,7 +98,7 @@ describe("the update runner", () => {
   });
 
   it("applies when a download ends after Wave left the foreground", async () => {
-    let finish = (_: boolean): void => {};
+    let finish: (isNew: boolean) => void = () => {};
     const { runner, did, surroundings, settle } = setup({
       check: found,
       download: Effect.callback<boolean>((resume) => {
