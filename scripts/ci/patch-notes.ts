@@ -78,7 +78,8 @@ const closedIssues = (pr: MergedPr) => [
 // Users see what changes the APK or the sync service. A PR that changes only CI, docs or
 // specs (by the change rule) isn't news to them. `files` is null when GitHub couldn't list
 // them all.
-const isListed = (pr: MergedPr) => pr.files === null || reachesUsers(pr.files);
+export const isListed = (pr: Pick<MergedPr, "files">) =>
+  pr.files === null || reachesUsers(pr.files);
 
 // A title is plain text with `code` in it: Markdown would drop "<version>" as an HTML
 // tag and let brackets end the link early.
@@ -112,18 +113,22 @@ export const listedPullRequests = ({
     .toSorted((a, b) => a.number - b.number);
 };
 
-export const patchNotes = ({ commits, bugIssues, pullRequests }: PatchNotesInput): string => {
+/** The listed PRs, sorted into the notes' two sections. */
+export const notesSections = ({
+  commits,
+  bugIssues,
+  pullRequests,
+}: PatchNotesInput): { new: MergedPr[]; fixes: MergedPr[] } => {
   const bugs = new Set(bugIssues);
   const isFix = (pr: MergedPr) =>
     pr.branch.startsWith("fix/") || closedIssues(pr).some((issue) => bugs.has(issue));
   const listed = listedPullRequests({ commits, pullRequests });
-  return [
-    ...section(
-      "New",
-      listed.filter((pr) => !isFix(pr)),
-    ),
-    ...section("Fixes", listed.filter(isFix)),
-  ].join("\n");
+  return { new: listed.filter((pr) => !isFix(pr)), fixes: listed.filter(isFix) };
+};
+
+export const patchNotes = (input: PatchNotesInput): string => {
+  const sections = notesSections(input);
+  return [...section("New", sections.new), ...section("Fixes", sections.fixes)].join("\n");
 };
 
 if (process.argv[1] === fileURLToPath(import.meta.url)) {

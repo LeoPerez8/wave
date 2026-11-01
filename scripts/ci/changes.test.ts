@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { execFileSync } from "node:child_process";
 import { describe, it } from "node:test";
 import { fileURLToPath } from "node:url";
-import { changes } from "./changes.ts";
+import { changes, reachesUsers } from "./changes.ts";
 
 const script = fileURLToPath(new URL("./changes.ts", import.meta.url));
 const run = (args: string[], stdin: string) =>
@@ -22,6 +22,16 @@ describe("changes", () => {
     assert.equal(result.apk, false);
     assert.equal(result.nativeTests, false);
     assert.equal(result.allPackages, false);
+  });
+
+  it("checks an update-service change without building the APK or releasing", () => {
+    const paths = ["apps/updates/src/service.ts", "apps/updates/package.json"];
+    const result = changes(paths);
+    assert.equal(result.updates, true);
+    assert.equal(result.apk, false);
+    assert.equal(result.nativeTests, false);
+    assert.equal(result.allPackages, false);
+    assert.equal(reachesUsers(paths), false);
   });
 
   for (const path of [
@@ -120,6 +130,7 @@ describe("changes", () => {
       app: false,
       core: true,
       sync: false,
+      updates: false,
       workspace: true,
       ci: false,
       perf: false,
@@ -133,6 +144,7 @@ describe("changes", () => {
       app: true,
       core: false,
       sync: false,
+      updates: false,
       workspace: false,
       ci: true,
       perf: false,
@@ -149,14 +161,14 @@ describe("changes.ts as a command", () => {
   it("prints one GitHub output line per area for the paths on stdin", () => {
     assert.equal(
       run([], "docs/spec.md\npackages/core/src/queue.ts\n"),
-      "app=false\ncore=true\nsync=false\nworkspace=false\nci=false\nperf=false\ntsconfig=false\nnative=false\napk=true\nallPackages=false\nnativeTests=false\n",
+      "app=false\ncore=true\nsync=false\nupdates=false\nworkspace=false\nci=false\nperf=false\ntsconfig=false\nnative=false\napk=true\nallPackages=false\nnativeTests=false\n",
     );
   });
 
   it("counts every area as changed with --all, as on pushes to main", () => {
     assert.equal(
       run(["--all"], ""),
-      "app=true\ncore=true\nsync=true\nworkspace=true\nci=true\nperf=true\ntsconfig=true\nnative=true\napk=true\nallPackages=true\nnativeTests=true\n",
+      "app=true\ncore=true\nsync=true\nupdates=true\nworkspace=true\nci=true\nperf=true\ntsconfig=true\nnative=true\napk=true\nallPackages=true\nnativeTests=true\n",
     );
   });
 });

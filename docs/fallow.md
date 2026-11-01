@@ -37,9 +37,10 @@ loaded directly by its standalone HTML page rather than the mobile app.
 The Android WebView asset is loaded from Kotlin and is marked as dynamically loaded.
 
 The configuration excludes generated native projects, builds, dependencies, caches,
-scratch directories, and local worktrees. It documents four dependency exceptions:
-the bundled Inter font assets, Expo's autolinked constants/system-UI modules, and
-Expo Router's native screens dependency. Independent modules sharing export names
+scratch directories, and local worktrees. It documents its dependency exceptions:
+the bundled Inter font assets, Expo's autolinked modules, Expo Router's native screens
+dependency, and the plugins `app.config.ts` names, which Fallow can't read from a config
+that exports a function. Independent modules sharing export names
 such as Effect's `layer` produce advisory duplicate-export findings.
 
 ## Pull requests

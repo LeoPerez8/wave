@@ -252,7 +252,7 @@ class AndroidDownloads private constructor(private val context: Context) {
     changed()
   }
 
-  /** Called from the user's tap or the resumed Activity. Failure never starts unprotected work. */
+  /** Called from the user's tap, the resumed Activity or an update's restart. Failure never starts unprotected work. */
   fun requestService() {
     if (!jobs.hasWork()) return
     try { context.startForegroundService(Intent(context, YtDownloadService::class.java)) }

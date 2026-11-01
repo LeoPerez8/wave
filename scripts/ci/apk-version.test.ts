@@ -7,8 +7,10 @@ import { describe, it } from "node:test";
 import { fileURLToPath } from "node:url";
 import {
   gradleVersion,
+  manifestMetaData,
   manifestVersion,
   withAppConfigVersion,
+  withManifestMetaData,
   withManifestVersion,
 } from "./apk-version.ts";
 
@@ -19,6 +21,36 @@ const manifest = readFileSync(new URL("./fixtures/AndroidManifest-0.5.3-ti.axml"
 describe("manifestVersion", () => {
   it("reads versionCode and versionName from a compiled AndroidManifest.xml", () => {
     assert.deepEqual(manifestVersion(manifest), { versionCode: 503, versionName: "0.5.3-ti" });
+  });
+});
+
+describe("withManifestMetaData", () => {
+  const name = "dev.leoperez.wave.BUILT_AS";
+
+  it("reads a <meta-data> value", () => {
+    assert.equal(manifestMetaData(manifest, name), "0.5.3-ti");
+  });
+
+  it("sets a string, and leaves the app's version alone", () => {
+    const patched = withManifestMetaData(manifest, { [name]: "apk-v1-abc" });
+    assert.equal(manifestMetaData(patched, name), "apk-v1-abc");
+    assert.deepEqual(manifestVersion(patched), { versionCode: 503, versionName: "0.5.3-ti" });
+  });
+
+  it("keeps a long value when stamping the version, as a kept build's signing certificate", () => {
+    const certificate = `-----BEGIN CERTIFICATE-----\n${"A".repeat(1800)}\n-----END CERTIFICATE-----\n`;
+    const signed = withManifestMetaData(manifest, { [name]: certificate });
+    const stamped = withManifestVersion(signed, { versionCode: 504, versionName: "0.5.4-ti" });
+    assert.equal(manifestMetaData(stamped, name), certificate);
+  });
+
+  it('sets a boolean, as aapt2 compiles android:value="true"', () => {
+    assert.equal(manifestMetaData(withManifestMetaData(manifest, { [name]: true }), name), true);
+    assert.equal(manifestMetaData(withManifestMetaData(manifest, { [name]: false }), name), false);
+  });
+
+  it("refuses a name the manifest doesn't have", () => {
+    assert.throws(() => withManifestMetaData(manifest, { "no.such.name": "x" }), /no\.such\.name/);
   });
 });
 

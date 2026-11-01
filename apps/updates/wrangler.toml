@@ -1,0 +1,9 @@
+# Wave's update service. It holds no secret and asks for no sign-in: what it serves is public.
+# Separate from the sync service, so a bad sync deploy can't take down the path to its fix.
+name = "wave-updates"
+main = "src/worker.ts"
+compatibility_date = "2026-10-01"
+
+[[r2_buckets]]
+binding = "UPDATES"
+bucket_name = "wave-updates"

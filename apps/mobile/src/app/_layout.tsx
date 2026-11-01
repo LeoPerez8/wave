@@ -43,6 +43,7 @@ import { useRecognizeRequests } from "@/recognize/recognizeRequests";
 import { SongShareLayer } from "@/share/SongShareLayer";
 import { useNavigationBarScheme } from "@/settings/appearance";
 import { startSync } from "@/sync/startSync";
+import { startWhatsNew } from "@/updates/whatsNew";
 import { useThemeColor } from "@/theme/useThemeColor";
 
 /** Every touch holds background work; a perf build also notes its native timestamp. */
@@ -130,6 +131,12 @@ export default function RootLayout() {
   }, [granted]);
 
   useEffect(() => startMediumCovers(), []);
+
+  // After an update, what's new, once the first screen is up: never over first run's access screen.
+  useEffect(() => {
+    // Called inside the arrow: naming it here would load the card with the first screen (#727).
+    if (granted) return afterFirstSettled("whatsNew", () => startWhatsNew());
+  }, [granted]);
 
   // A whole-Library lyrics and genre run that ended in the background says how it went.
   useEffect(() => afterFirstSettled("lookupSummary", followFixSongsSummary), []);
