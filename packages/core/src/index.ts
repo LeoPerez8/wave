@@ -254,6 +254,13 @@ export type { SleepTimer, SleepTimerChoice, SleepTimerClock } from "./sleepTimer
 export { UPDATE_CHECK_INTERVAL_MS, nextUpdateStep, playerKeepsPlaying } from "./updatePolicy.ts";
 export type { UpdateNetwork, UpdateState, UpdateStep } from "./updatePolicy.ts";
 export {
+  mergeReleaseNotes,
+  nextWhatsNewStep,
+  readPublishedNotes,
+  whatsNewNotesUrl,
+} from "./whatsNew.ts";
+export type { MergedReleaseNotes, PublishedRelease } from "./whatsNew.ts";
+export {
   COUNTED_PLAY_MS,
   EMPTY_PLAY_TRACKER,
   fadingPlaySoFar,
