@@ -1,18 +1,21 @@
 /**
  * Hands an update to a channel's phones. A publish and a promotion both end here, so this is the
- * one place an update's manifest is written: whatever a phone must be able to verify about a
- * manifest, such as its signature, belongs here.
+ * one place an update's manifest is written and signed. A signature covers the id and the time,
+ * so a promotion is signed again here and never reuses the one it found in R2.
  *
- * It writes the update, then the channel's history, then `latest.json`, so a failure part way
- * leaves phones on the previous update.
+ * It signs first, so a bad key changes nothing, then writes the update, the channel's history and
+ * `latest.json`, so a failure part way leaves phones on the previous update.
  */
 
+import { type KeyObject, createSign } from "node:crypto";
 import {
   type Channel,
   type HistoryEntry,
+  type StoredAsset,
   type StoredUpdate,
   CHANNELS,
   KEPT_UPDATES,
+  UPDATES_ORIGIN,
   assetKey,
   historyKey,
   latestKey,
@@ -27,6 +30,36 @@ export interface UpdateBucket {
   /** Removing what isn't there is fine. */
   readonly remove: (key: string) => Promise<void>;
 }
+
+/** What signs a manifest. CI alone holds the key; the Worker serves the bytes as they are. */
+export interface UpdateSigning {
+  /** The private key, or its PEM. */
+  readonly signingKey: KeyObject | string;
+  /** Where phones reach the Worker: a signed manifest names its files' URLs. */
+  readonly origin?: string | undefined;
+}
+
+// What the certificate's metadata says in the APK (apps/mobile/plugins/updateSigning.ts).
+const SIGNATURE_PARAMETERS = 'keyid="main", alg="rsa-v1_5-sha256"';
+
+/** The update with a manifest rendered and signed from its fields, whatever it was signed with. */
+const signUpdate = (
+  update: Omit<StoredUpdate, "signed">,
+  { signingKey, origin = UPDATES_ORIGIN }: UpdateSigning,
+): StoredUpdate => {
+  const { signed: _, ...fields } = update as StoredUpdate;
+  const withUrl = (asset: StoredAsset) => ({
+    ...asset,
+    url: `${origin}/v1/assets/${asset.key}`,
+  });
+  const manifest = JSON.stringify({
+    ...fields,
+    launchAsset: withUrl(fields.launchAsset),
+    assets: fields.assets.map(withUrl),
+  });
+  const sig = createSign("RSA-SHA256").update(manifest, "utf8").sign(signingKey, "base64");
+  return { ...fields, signed: { manifest, signature: `sig="${sig}", ${SIGNATURE_PARAMETERS}` } };
+};
 
 const json = (value: unknown) => new TextEncoder().encode(JSON.stringify(value));
 
@@ -70,12 +103,14 @@ const prune = async (bucket: UpdateBucket, channel: Channel, history: readonly H
   await writeHistory(bucket, channel, kept);
 };
 
-/** Makes `update` what the channel's phones get for its runtime version, and trims the channel. */
+/** Signs `update`, makes it what the channel's phones get for its runtime version, trims. */
 export const releaseUpdate = async (
   bucket: UpdateBucket,
   channel: Channel,
-  update: StoredUpdate,
+  unsigned: Omit<StoredUpdate, "signed">,
+  signing: UpdateSigning,
 ): Promise<void> => {
+  const update = signUpdate(unsigned, signing);
   const { id, createdAt, runtimeVersion } = update;
   const entry: HistoryEntry = {
     id,

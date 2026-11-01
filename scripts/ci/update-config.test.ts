@@ -54,6 +54,13 @@ describe("stampManifestSource", () => {
     assert.match(stamped, /android:value="\{&quot;expo-channel-name&quot;:&quot;main&quot;\}"/);
   });
 
+  it("leaves the signing certificate as prebuild wrote it", () => {
+    const certificate = `<meta-data android:name="expo.modules.updates.CODE_SIGNING_CERTIFICATE" android:value="-----BEGIN CERTIFICATE-----&#xA;AAAA&#xA;-----END CERTIFICATE-----&#xA;"/>`;
+    const signed = source.replace("</application>", `${certificate}</application>`);
+    const stamped = stampManifestSource(signed, updateMetaData("main", "apk-v1-abc"));
+    assert.ok(stamped.includes(certificate));
+  });
+
   it("refuses a manifest prebuild wrote no updates entry into", () => {
     assert.throws(
       () => stampManifestSource("<manifest/>", updateMetaData("ti", "x")),

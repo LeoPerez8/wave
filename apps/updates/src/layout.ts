@@ -11,6 +11,9 @@
  * after everything that update needs (release.ts).
  */
 
+/** The Worker's address, which a signed manifest's asset URLs name. app.config.ts asks it too. */
+export const UPDATES_ORIGIN = "https://wave-updates.leonardolp2424.workers.dev";
+
 export const CHANNELS = ["ti", "main"] as const;
 export type Channel = (typeof CHANNELS)[number];
 
@@ -72,6 +75,17 @@ export interface StoredUpdate {
   readonly assets: readonly StoredAsset[];
   readonly metadata: Record<string, string>;
   readonly extra: { readonly expoClient: Record<string, unknown> };
+  readonly signed: SignedManifest;
+}
+
+/**
+ * The manifest as phones receive it. The signature covers these exact bytes, asset URLs included,
+ * and the Worker has no key, so it serves them as they are.
+ */
+export interface SignedManifest {
+  readonly manifest: string;
+  /** The value of the manifest part's `expo-signature` header. */
+  readonly signature: string;
 }
 
 export interface LatestUpdate {

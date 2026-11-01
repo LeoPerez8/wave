@@ -1,9 +1,10 @@
-import type { ExpoConfig } from "expo/config";
+import type { ConfigContext, ExpoConfig } from "expo/config";
 
 import packageJson from "./package.json" with { type: "json" };
 
 import { versionCode } from "./plugins/appVersion.ts";
 import { withAppLanguages } from "./plugins/withAppLanguages.ts";
+import { updateSigning } from "./plugins/updateSigning.ts";
 import { withArtProfiles } from "./plugins/withArtProfiles.ts";
 import { withGradleBuildCache } from "./plugins/withGradleBuildCache.ts";
 import { withHermesFlags } from "./plugins/withHermesFlags.ts";
@@ -136,10 +137,15 @@ const config: ExpoConfig = {
 // share target comes first so it runs last, once the launcher icons' aliases exist.
 // Gradle reuses cached outputs (#185), and Hermes skips the unused source map (#187).
 // The APK ships Wave's own ART profiles from profiles/ (#317).
-export default withAppLanguages(
+const configured = withAppLanguages(
   withArtProfiles(
     withHermesFlags(
       withGradleBuildCache(withLaunchSplash(withLauncherIcons(withShareShortcut(config)))),
     ),
   ),
 );
+
+export default ({ projectRoot }: ConfigContext): ExpoConfig => ({
+  ...configured,
+  updates: { ...configured.updates, ...updateSigning(projectRoot) },
+});

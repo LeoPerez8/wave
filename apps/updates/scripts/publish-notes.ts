@@ -1,15 +1,11 @@
-// Publishes a release's notes in each language to R2. Like publish.ts, CI's release job runs it
-// from a sparse checkout, with no install: wrangler comes through npx.
+// Publishes a release's notes in each language to R2. CI's release job runs it.
 //   node apps/updates/scripts/publish-notes.ts
 // Env: CLOUDFLARE_API_TOKEN, CLOUDFLARE_ACCOUNT_ID, WAVE_UPDATE_CHANNEL, WAVE_RELEASE_TAG (the
 // `v` tag), WAVE_RELEASE_NOTES (the JSON scripts/ci/localized-notes.ts prints).
 // Without the secrets, a channel or the notes, it says why and publishes nothing.
-import { execFileSync } from "node:child_process";
-import { mkdtempSync, writeFileSync } from "node:fs";
-import { tmpdir } from "node:os";
-import { join } from "node:path";
 import { isChannel } from "../src/layout.ts";
 import { publishNotes } from "../src/publish.ts";
+import { wranglerBucket } from "./bucket.ts";
 
 const {
   CLOUDFLARE_API_TOKEN: token,
@@ -34,27 +30,7 @@ if (!token || !account) {
     channel,
     version,
     notes: JSON.parse(notes),
-    put: async (key, data, contentType) => {
-      const file = join(mkdtempSync(join(tmpdir(), "wave-notes-")), "object");
-      writeFileSync(file, data);
-      execFileSync(
-        "npx",
-        [
-          "--yes",
-          "wrangler@4",
-          "r2",
-          "object",
-          "put",
-          `wave-updates/${key}`,
-          "--remote",
-          "--file",
-          file,
-          "--content-type",
-          contentType,
-        ],
-        { stdio: ["ignore", "ignore", "inherit"] },
-      );
-    },
+    put: wranglerBucket().put,
   });
   console.log(
     published

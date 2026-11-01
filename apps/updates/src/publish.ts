@@ -3,17 +3,10 @@
  * (release.ts), so a failure part way leaves phones on the previous update.
  */
 
-import { createHash } from "node:crypto";
+import { createHash, createPrivateKey } from "node:crypto";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
-import {
-  type Channel,
-  type ReleaseNotes,
-  type StoredAsset,
-  type StoredUpdate,
-  assetKey,
-  notesKey,
-} from "./layout.ts";
+import { type Channel, type ReleaseNotes, type StoredAsset, assetKey, notesKey } from "./layout.ts";
 import { type UpdateBucket, releaseUpdate } from "./release.ts";
 
 const CONTENT_TYPES: Record<string, string> = {
@@ -44,6 +37,10 @@ export interface PublishOptions extends UpdateBucket {
   readonly runtimeVersion: string;
   /** `expo config --type public`: under an update, Constants.expoConfig is this. */
   readonly appConfig: Record<string, unknown>;
+  /** The private key's PEM. An invalid one throws before anything is uploaded. */
+  readonly signingKey: string;
+  /** Where phones reach the Worker. */
+  readonly origin?: string;
   readonly now?: () => number;
   readonly newId?: () => string;
 }
@@ -72,10 +69,13 @@ export const publishUpdate = async ({
   channel,
   runtimeVersion,
   appConfig,
+  signingKey,
+  origin,
   now = Date.now,
   newId = () => crypto.randomUUID(),
   ...bucket
 }: PublishOptions): Promise<string> => {
+  const privateKey = createPrivateKey(signingKey);
   const metadata = JSON.parse(readFileSync(join(dir, "metadata.json"), "utf8")) as ExportMetadata;
   const android = metadata.fileMetadata.android;
   if (!android) throw new Error("The export has no Android bundle.");
@@ -99,7 +99,7 @@ export const publishUpdate = async ({
   }
 
   const id = newId();
-  const update: StoredUpdate = {
+  const update = {
     id,
     createdAt: new Date(now()).toISOString(),
     runtimeVersion,
@@ -108,6 +108,6 @@ export const publishUpdate = async ({
     metadata: {},
     extra: { expoClient: { ...appConfig, runtimeVersion } },
   };
-  await releaseUpdate(bucket, channel, update);
+  await releaseUpdate(bucket, channel, update, { signingKey: privateKey, origin });
   return id;
 };

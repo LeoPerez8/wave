@@ -12,11 +12,11 @@ delivers its fix, and it needs no account or sign-in. See "Build and CI" in `doc
 | `src/layout.ts`            | What R2 holds, which the service and the publish script share    |
 | `src/publish.ts`           | Turns `expo export`'s output into a published update             |
 | `src/promote.ts`           | Republishes an earlier version as a channel's newest update      |
-| `src/release.ts`           | Where both end: writes the update, moves phones, trims R2        |
+| `src/release.ts`           | Where both end: signs the update, moves phones, trims R2         |
 | `scripts/publish.ts`       | CI's entry to publishing                                         |
 | `scripts/publish-notes.ts` | CI's entry for a release's notes                                 |
 | `scripts/promote.ts`       | The rollback workflow's entry to promoting                       |
-| `scripts/bucket.ts`        | R2 through wrangler, which the update scripts use                |
+| `scripts/bucket.ts`        | R2 through wrangler, with the signing key kept from its env      |
 
 ## Routes
 
@@ -26,9 +26,14 @@ The check `expo-updates` makes at launch, with its headers `expo-protocol-versio
 `expo-platform: android`, `expo-channel-name` (`ti` or `main`), `expo-runtime-version` and
 `expo-current-update-id`.
 
-`200`, `multipart/mixed` with the update's manifest, when the channel has an update for that
+`200`, `multipart/mixed` with the update's manifest and its `expo-signature`, when the channel has an update for that
 runtime version and the phone isn't on it. `204` when there's nothing new. `400` for any other
 platform, protocol or channel.
+
+An APK with the certificate also sends `expo-expect-signature`, and rejects an answer whose
+signature is missing or isn't from CI's key. The Worker holds no key: the publish script signs the
+manifest with its asset URLs at `UPDATES_ORIGIN` (`src/layout.ts`), and the Worker serves those
+exact bytes from any host. Changing the Worker's address takes a new publish as well as a new APK.
 
 ### `GET /v1/assets/<sha256 hex>`
 
@@ -61,7 +66,7 @@ A PR with no `pt-BR: …` line has its English title under `pt-BR`.
 
 ```
 assets/<sha256 hex>                       a bundle or asset
-updates/<channel>/<runtime>/<id>.json     a published update
+updates/<channel>/<runtime>/<id>.json     a published update, with its signed manifest
 updates/<channel>/<runtime>/latest.json   { "updateId": ... }: what that channel's phones get
 notes/<channel>/<version>.json            a release's notes, as `notes` above
 updates/<channel>/history.json            what the channel keeps, newest first
@@ -80,10 +85,12 @@ no update left finds nothing new and stays on the JS it has.
 GitHub › Actions › **Roll back an update** › Run workflow, with the channel and the version to go
 back to (`0.46.1-ti`, as in the release's tag). `expo-updates` only moves to a newer `createdAt`,
 so this republishes that version's bundle under a new id and time. Phones on the channel with the
-same runtime version move to it at their next check, and the next release replaces it.
+same runtime version move to it at their next check, and the next release replaces it. The new
+id and time need a new signature, so the workflow takes the `UPDATES_SIGNING_KEY` secret too.
 
-The run fails and says why when the channel doesn't keep that version, phones are already on it,
-or it was built for another runtime version than the channel's newest update. A bundle can't
+The run fails and says why when `UPDATES_SIGNING_KEY` isn't set (phones reject an unsigned update,
+so it promotes nothing), the channel doesn't keep that version, phones are already on it, or it
+was built for another runtime version than the channel's newest update. A bundle can't
 cross a native change: release a fix instead. `Constants.expoConfig.version` on the phone reads
 the promoted version.
 
@@ -102,6 +109,9 @@ update` and is published as usual, and phones find no update. The Worker's URL i
 4. Add the repository secrets (GitHub › Settings › Secrets and variables › Actions):
    - `CLOUDFLARE_API_TOKEN`: that token.
    - `CLOUDFLARE_ACCOUNT_ID`: the account's id, from the Cloudflare dashboard.
+   - `UPDATES_SIGNING_KEY`: the signing key, set up as in "Build and CI" in `docs/spec.md`. A
+     release and a rollback both sign with it. Do that before step 5, so the first APK holds the
+     certificate.
 5. Install the first APK with `expo-updates` by hand. Later JS-only releases reach it with no
    install.
 

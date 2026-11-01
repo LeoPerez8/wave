@@ -1,5 +1,6 @@
 // R2 from CI, through wrangler: the jobs that use it run from a sparse checkout with no install,
 // so it comes through npx. Env: CLOUDFLARE_API_TOKEN, CLOUDFLARE_ACCOUNT_ID.
+// wrangler comes from the registry at run time and needs no signing key: it gets none in its env.
 import { execFileSync } from "node:child_process";
 import { mkdtempSync, readFileSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
@@ -8,11 +9,14 @@ import type { UpdateBucket } from "../src/release.ts";
 
 const BUCKET = "wave-updates";
 
-const wrangler = (...args: readonly string[]) =>
-  execFileSync("npx", ["--yes", "wrangler@4", "r2", "object", ...args, "--remote"], {
+const wrangler = (...args: readonly string[]) => {
+  const { UPDATES_SIGNING_KEY: _, ...env } = process.env;
+  return execFileSync("npx", ["--yes", "wrangler@4", "r2", "object", ...args, "--remote"], {
+    env,
     stdio: ["ignore", "ignore", "pipe"],
     encoding: "utf8",
   });
+};
 
 export const wranglerBucket = (): UpdateBucket => {
   const temp = join(mkdtempSync(join(tmpdir(), "wave-updates-")), "object");

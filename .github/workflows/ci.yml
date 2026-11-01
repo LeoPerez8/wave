@@ -321,7 +321,7 @@ jobs:
       WAVE_CI_BUNDLE_MANIFEST: ${{ github.workspace }}/../wave-ci-bundle.json
       # Over-the-air updates need these (apps/updates/README.md). Without them a release skips
       # its update and is otherwise the same.
-      UPDATES_CONFIGURED: ${{ secrets.CLOUDFLARE_API_TOKEN != '' && secrets.CLOUDFLARE_ACCOUNT_ID != '' }}
+      UPDATES_CONFIGURED: ${{ secrets.CLOUDFLARE_API_TOKEN != '' && secrets.CLOUDFLARE_ACCOUNT_ID != '' && secrets.UPDATES_SIGNING_KEY != '' }}
     steps:
       - uses: actions/checkout@v5
         with:
@@ -627,7 +627,7 @@ jobs:
     if: needs.checks.outputs.release_tag != ''
     runs-on: ubuntu-latest
     env:
-      UPDATES_CONFIGURED: ${{ secrets.CLOUDFLARE_API_TOKEN != '' && secrets.CLOUDFLARE_ACCOUNT_ID != '' }}
+      UPDATES_CONFIGURED: ${{ secrets.CLOUDFLARE_API_TOKEN != '' && secrets.CLOUDFLARE_ACCOUNT_ID != '' && secrets.UPDATES_SIGNING_KEY != '' }}
     steps:
       - name: Check the patch notes
         env:
@@ -696,6 +696,7 @@ jobs:
         env:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          UPDATES_SIGNING_KEY: ${{ secrets.UPDATES_SIGNING_KEY }}
           WAVE_UPDATE_CHANNEL: ${{ needs.android.outputs.update_channel }}
           WAVE_RUNTIME_VERSION: ${{ needs.android.outputs.runtime_version }}
         run: node apps/updates/scripts/publish.ts "$RUNNER_TEMP/update"

@@ -1,9 +1,11 @@
 /**
  * Rolls a channel back: republishes a version R2 still holds as the channel's newest update.
  * expo-updates only moves to a newer `createdAt`, so pointing `latest.json` at the old update
- * wouldn't move a phone; the promoted update has the old one's files under a new id and time.
+ * wouldn't move a phone; the promoted update has the old one's files under a new id and time,
+ * and so a new signature (release.ts).
  */
 
+import { createPrivateKey } from "node:crypto";
 import {
   type Channel,
   type LatestUpdate,
@@ -17,6 +19,10 @@ export interface PromoteOptions extends UpdateBucket {
   readonly channel: Channel;
   /** The release's version, as in `apps/mobile/package.json`. */
   readonly version: string;
+  /** The private key's PEM. An invalid one throws before anything changes. */
+  readonly signingKey: string;
+  /** Where phones reach the Worker. */
+  readonly origin?: string;
   readonly now?: () => number;
   readonly newId?: () => string;
 }
@@ -25,10 +31,13 @@ export interface PromoteOptions extends UpdateBucket {
 export const promoteUpdate = async ({
   channel,
   version,
+  signingKey,
+  origin,
   now = Date.now,
   newId = () => crypto.randomUUID(),
   ...bucket
 }: PromoteOptions): Promise<string> => {
+  const privateKey = createPrivateKey(signingKey);
   const history = await readHistory(bucket, channel);
   const current = history[0];
   const target = history.find((entry) => entry.version === version);
@@ -59,6 +68,6 @@ export const promoteUpdate = async ({
     id,
     createdAt: new Date(now()).toISOString(),
   };
-  await releaseUpdate(bucket, channel, update);
+  await releaseUpdate(bucket, channel, update, { signingKey: privateKey, origin });
   return id;
 };
