@@ -5,6 +5,9 @@ import java.util.concurrent.CopyOnWriteArrayList
 /** What a tile tap does: listen, cancel the tile's session, or leave the card's alone. */
 enum class RecognizeTileTap { LISTEN, CANCEL, IGNORE }
 
+/** A tap JS takes; [microphone] is a press of Use Microphone, which skips Core's source choice. */
+data class RecognizeTileRequest(val tap: Int, val microphone: Boolean)
+
 /**
  * The tile's session as native knows it. JS runs the session and Core decides it; this
  * keeps what the tile and its service must know with JS still loading: whether it
@@ -14,6 +17,7 @@ enum class RecognizeTileTap { LISTEN, CANCEL, IGNORE }
 class RecognizeTileRun {
   private var current = 0
   private var waiting = false
+  private var microphone = false
   private var last = 0
   private val listeners = CopyOnWriteArrayList<() -> Unit>()
 
@@ -31,9 +35,10 @@ class RecognizeTileRun {
   }
 
   /** A session starts listening; JS takes its tap, at once or once it's running. */
-  fun request(): Int {
+  fun request(microphone: Boolean = false): Int {
     val tap = synchronized(this) {
       waiting = true
+      this.microphone = microphone
       current = ++last
       current
     }
@@ -42,12 +47,12 @@ class RecognizeTileRun {
     return tap
   }
 
-  /** The tap waiting for JS, once; 0 when none is. */
+  /** The tap waiting for JS, once; null when none is. */
   @Synchronized
-  fun take(): Int {
-    if (!waiting) return 0
+  fun take(): RecognizeTileRequest? {
+    if (!waiting) return null
     waiting = false
-    return current
+    return RecognizeTileRequest(current, microphone)
   }
 
   fun cancel() {

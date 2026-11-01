@@ -29,12 +29,13 @@ declare class WaveRecognizeModule extends NativeModule<WaveRecognizeEvents> {
   takeRequest(): boolean;
   /** The tile's capture: the microphone, not ending with Wave's screen. */
   startDetached(request: number): Promise<number>;
-  takeTileRequest(): number;
+  takeTileRequest(): { tap: number; microphone: boolean } | null;
   setCardSession(running: boolean): void;
   tileListeningEnded(tap: number): void;
   tileFinished(): void;
   notifyTileMatch(title: string, text: string, coverUrl: string | null): void;
-  notifyTileNoMatch(title: string, text: string): void;
+  /** [microphone]: the action is Use Microphone rather than Try Again. */
+  notifyTileFailure(title: string, text: string, actionLabel: string, microphone: boolean): void;
 }
 
 /** Null in a build without it (a JS repack over an older APK): Search then has no Recognize button. */
@@ -100,9 +101,17 @@ export const recognizeTile: (RecognizeTileNative & { readonly capture: Recognize
         },
         listeningEnded: (tap) => WaveRecognize.tileListeningEnded(tap),
         finished: () => WaveRecognize.tileFinished(),
-        notify: ({ kind, title, text, coverUrl }) => {
-          if (kind === "match") WaveRecognize.notifyTileMatch(title, text, coverUrl);
-          else WaveRecognize.notifyTileNoMatch(title, text);
+        notify: (notice) => {
+          if (notice.kind === "match") {
+            WaveRecognize.notifyTileMatch(notice.title, notice.text, notice.coverUrl);
+          } else {
+            WaveRecognize.notifyTileFailure(
+              notice.title,
+              notice.text,
+              notice.actionLabel,
+              notice.action === "useMicrophone",
+            );
+          }
         },
       };
 
