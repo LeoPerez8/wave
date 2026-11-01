@@ -21,6 +21,11 @@ import { Artwork } from "@/catalog/Artwork";
 import { CELL, grid } from "@/catalog/grid";
 import { PlayShuffle, type LineToggle } from "@/catalog/PlayShuffle";
 import { TrackSkeletons } from "@/catalog/Skeletons";
+import {
+  CompactTitleHead,
+  CompactTitleMark,
+  useCompactTitleTopList,
+} from "@/components/CompactTitle";
 
 import { Press } from "@/motion/Press";
 import { playPage, playSongs } from "@/playback/actions";
@@ -184,13 +189,15 @@ function AlbumHead({
     <View style={{ gap: CELL * 2, paddingBottom: CELL }}>
       <Artwork uri={artworkUri(album, "original")} size={width - grid.margin * 2} />
       <View style={{ gap: CELL / 2 }}>
-        <Text
-          accessibilityRole="header"
-          className="font-sans text-title1 font-light text-foreground"
-          style={{ letterSpacing: -0.4 }}
-        >
-          {album.title}
-        </Text>
+        <CompactTitleMark>
+          <Text
+            accessibilityRole="header"
+            className="font-sans text-title1 font-light text-foreground"
+            style={{ letterSpacing: -0.4 }}
+          >
+            {album.title}
+          </Text>
+        </CompactTitleMark>
         <Press
           accessibilityRole="link"
           accessibilityLabel={strings.library.goTo(album.albumArtist)}
@@ -263,6 +270,7 @@ function AlbumTracks({ shown, openedIntegrated }: { shown: Shown; openedIntegrat
   const mixed = useMemo(() => (entries === null ? null : mixedSongs(entries)), [entries]);
   const scrollable = useListScrollable();
   const bottomInset = useChromeInset();
+  const { list, listProps } = useCompactTitleTopList();
   // Selection keys the tracks themselves (every disc), not the disc heads.
   const selectable = useMemo(
     (): TrackItem[] =>
@@ -315,6 +323,8 @@ function AlbumTracks({ shown, openedIntegrated }: { shown: Shown; openedIntegrat
 
   return (
     <SongList
+      {...listProps}
+      ref={list}
       scrollEnabled={scrollable}
       className="flex-1"
       data={items}
@@ -336,13 +346,15 @@ function AlbumTracks({ shown, openedIntegrated }: { shown: Shown; openedIntegrat
       }}
       contentContainerStyle={{ paddingHorizontal: grid.margin, paddingBottom: bottomInset }}
       ListHeaderComponent={
-        <AlbumHead
-          shown={shown}
-          mixed={mixed}
-          ytSongs={ytView?.songs ?? NO_SONGS}
-          toggle={ytView === null ? null : yt.toggle}
-          songs={ytAlbumSongCount(shown.album.trackCount, ytView)}
-        />
+        <CompactTitleHead>
+          <AlbumHead
+            shown={shown}
+            mixed={mixed}
+            ytSongs={ytView?.songs ?? NO_SONGS}
+            toggle={ytView === null ? null : yt.toggle}
+            songs={ytAlbumSongCount(shown.album.trackCount, ytView)}
+          />
+        </CompactTitleHead>
       }
       ListFooterComponent={
         // Until the combined tracklist arrives, skeleton rows follow the Library's tracks.
@@ -377,7 +389,7 @@ export default function AlbumScreen() {
       ? { album: known, genre: null, tracks: undefined }
       : detail;
   return (
-    <DetailFrame detail={shown} noun="album">
+    <DetailFrame detail={shown} noun="album" compactTitle={({ album }) => album.title}>
       {(album) => <AlbumTracks shown={album} openedIntegrated={openedIntegrated} />}
     </DetailFrame>
   );

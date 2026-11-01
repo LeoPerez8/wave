@@ -93,6 +93,25 @@ export const parseLyricsTranslation = (
   return { kind: "translated", from: from ?? "", lines: translated };
 };
 
+/**
+ * [reply], Google's answer to a request for whole [texts] rather than a
+ * song's lines, read back into one text per text: as it came when Google
+ * found it already in [target], or gave it back unchanged. Null when it isn't
+ * a reply to that request, or leaves a text empty.
+ */
+export const parseTranslatedTexts = (
+  texts: readonly string[],
+  target: string,
+  reply: unknown,
+): string[] | null => {
+  if (!Array.isArray(reply) || reply.length !== texts.length || texts.length === 0) return null;
+  const answers = reply.map(answerOf);
+  if (answers.some((answer) => answer === null || answer.text.trim() === "")) return null;
+  return (answers as readonly { text: string; from: string | null }[]).map((answer, at) =>
+    answer.from !== null && sameLanguage(answer.from, target) ? texts[at]! : answer.text.trim(),
+  );
+};
+
 /** The language Google found for most lines (the first of those tied), null when it named none. */
 const mostFound = (languages: readonly (string | null)[]): string | null => {
   const counts = new Map<string, number>();
@@ -162,7 +181,7 @@ export const lyricsTranslationKey = (song: string, target: string): string =>
  * FNV-1a hash of their text, so a saved translation of other lyrics (Fix
  * Song, a new file) is never shown against these.
  */
-const fingerprint = (lines: readonly string[]): string => {
+export const fingerprint = (lines: readonly string[]): string => {
   let hash = 0x811c9dc5;
   for (const char of lines.join("\n")) {
     hash ^= char.codePointAt(0)!;

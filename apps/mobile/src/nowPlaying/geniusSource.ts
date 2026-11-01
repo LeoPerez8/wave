@@ -6,9 +6,11 @@ import {
   geniusReferentsUrl,
   geniusSearchUrl,
   geniusSongUrl,
+  geniusTranslationRequests,
   pickGeniusSong,
   savedGenius,
   storedGenius,
+  withGeniusTranslation,
   type GeniusReferent,
   type SavedGenius,
   type SongLookup,
@@ -16,26 +18,39 @@ import {
 
 /**
  * What Genius insights need from the phone: its key-value store, a GET to
- * Genius with the bearer token, and whether asking is still allowed (the
- * switch on, the Lyrics view still showing).
+ * Genius with the bearer token, a POST to Google Translate, and whether
+ * asking is still allowed (the switch on, the Lyrics view still showing).
  */
 export interface GeniusService {
   readonly read: (key: string) => Promise<string | null>;
   readonly keep: (key: string, value: string) => Promise<void>;
   /** GETs [url] with [token] as its bearer token and gives its JSON; rejects when it can't. */
   readonly get: (url: string, token: string) => Promise<unknown>;
+  /** POSTs the form [body] to [url] and gives its JSON; rejects when it can't. */
+  readonly post: (url: string, body: string) => Promise<unknown>;
   readonly enabled: () => boolean;
 }
 
-/** Which song to ask about: its saved answer's [key] (a Library track by its id, a non-D song by its track id). */
+/**
+ * Which song to ask about: its saved answer's [key] (a Library track by its
+ * id, a non-D song by its track id), and what its text is translated into
+ * ([target], `geniusTranslationTarget`; null for none).
+ */
 export interface GeniusAsk {
   readonly key: string;
   readonly song: SongLookup;
   readonly token: string;
+  readonly target: string | null;
 }
 
 /** Where the phone keeps [song]'s Genius answer (`geniusStorage`'s keys all start so). */
 export const geniusStorageKey = (song: string): string => `genius.v1:${song}`;
+
+/** Saves [ask]'s song's [answer]; a failed write only costs the next opening a request. */
+const saveGenius = (ask: GeniusAsk, answer: SavedGenius, service: GeniusService): Promise<void> =>
+  service
+    .keep(geniusStorageKey(ask.key), storedGenius(ask.song, answer))
+    .catch((cause: unknown) => console.warn("[wave] couldn't save Genius's answer", cause));
 
 /**
  * Every page of the annotated fragments of Genius's song [id] (docs/spec.md,
@@ -82,10 +97,6 @@ export const loadGenius = async (
 ): Promise<SavedGenius | null> => {
   if (!service.enabled()) return null;
   const key = geniusStorageKey(ask.key);
-  const save = (result: SavedGenius): Promise<void> =>
-    service
-      .keep(key, storedGenius(ask.song, result))
-      .catch((cause: unknown) => console.warn("[wave] couldn't save Genius's answer", cause));
   try {
     const saved = savedGenius(await service.read(key), now, ask.song);
     if (!service.enabled()) return null;
@@ -95,7 +106,7 @@ export const loadGenius = async (
       if (!service.enabled()) return null;
       if (referents === null) return saved;
       const result: SavedGenius = { ...saved, referents };
-      await save(result);
+      await saveGenius(ask, result, service);
       return result;
     }
     if (ask.token.trim() === "") return null;
@@ -114,11 +125,45 @@ export const loadGenius = async (
       description = about.text;
       referents = annotated;
     }
-    const result: SavedGenius = { checkedAt: now, match, description, referents };
-    await save(result);
+    const result: SavedGenius = { checkedAt: now, match, description, referents, translations: {} };
+    await saveGenius(ask, result, service);
     return result;
   } catch (cause) {
     console.warn("[wave] couldn't ask Genius", cause);
     return null;
   }
+};
+
+/**
+ * [saved] with its text translated into [ask]'s target (docs/spec.md, "Genius
+ * About" and "Genius annotations"), saved with the answer. [saved] as it is
+ * when there's nothing to ask (no target, no token, insights off, already
+ * translated) and when Google can't be reached or answers something
+ * unreadable, or asking stops being allowed, on any of a long song's
+ * requests: nothing is saved, so the next opening asks again. Never rejects.
+ */
+export const translateGenius = async (
+  ask: GeniusAsk,
+  saved: SavedGenius,
+  service: GeniusService,
+): Promise<SavedGenius> => {
+  if (ask.target === null || ask.token.trim() === "" || !service.enabled()) return saved;
+  const replies: unknown[] = [];
+  try {
+    for (const request of geniusTranslationRequests(saved, ask.target)) {
+      if (!service.enabled()) return saved;
+      replies.push(await service.post(request.url, request.body));
+    }
+  } catch (cause) {
+    console.warn("[wave] couldn't translate Genius's text", cause);
+    return saved;
+  }
+  if (replies.length === 0 || !service.enabled()) return saved;
+  const translated = withGeniusTranslation(saved, ask.target, replies);
+  if (translated === null) {
+    console.warn("[wave] Google Translate's reply couldn't be read");
+    return saved;
+  }
+  await saveGenius(ask, translated, service);
+  return translated;
 };

@@ -30,6 +30,12 @@ import {
   TrackSkeletons,
 } from "@/catalog/Skeletons";
 import { useChromeInset } from "@/chrome/chrome";
+import {
+  CompactTitleFrame,
+  CompactTitleHead,
+  CompactTitleMark,
+  useCompactTitleTopList,
+} from "@/components/CompactTitle";
 import { ScreenHeader } from "@/components/ScreenHeader";
 import { TextButton } from "@/components/TextButton";
 import { albumRowHeight, toAlbumSummary } from "@/library/AlbumGrid";
@@ -209,14 +215,16 @@ function Head({
             <HiddenSkeletonLine lineHeight={34} width="100%" />
           </View>
         ) : (
-          <Text
-            accessibilityRole="header"
-            numberOfLines={2}
-            className="text-center font-sans text-title1 font-light text-foreground"
-            style={{ letterSpacing: -0.4 }}
-          >
-            {name}
-          </Text>
+          <CompactTitleMark>
+            <Text
+              accessibilityRole="header"
+              numberOfLines={2}
+              className="text-center font-sans text-title1 font-light text-foreground"
+              style={{ letterSpacing: -0.4 }}
+            >
+              {name}
+            </Text>
+          </CompactTitleMark>
         )}
       </View>
       {loading ? (
@@ -258,29 +266,16 @@ function QuietLine({
   );
 }
 
-/**
- * A YouTube Music artist the Library doesn't have, opened by their browse id
- * (`/library/yt-artist/<UC…>?name=<name>`) or, from a streamed song, by their
- * name (`/library/yt-artist/by-name?name=<name>`, found with an Artists
- * search; "Not found online." when nobody matches): their image and
- * name, Play and Shuffle, their Albums and Singles & EPs (a release the Library has opens
- * the Library album) and every song of theirs, their songs playlist read
- * whole (the Library's play its files, the rest stream). It's read as it opens and saved for a week; offline or
- * failing, a quiet line with Try Again; with YT Music off, it says so.
- */
-export default function YtArtistScreen() {
-  useScreenContent(true);
+/** The page's list, inside the screen's `CompactTitleFrame`. */
+function YtArtistList({
+  page: { view, retry, browseId, name, contextId },
+}: {
+  page: ReturnType<typeof useYtArtistPage>;
+}) {
   const { strings } = useLocalisation();
-  const params = useLocalSearchParams<{ id: string; name?: string; offline?: string }>();
-  const browseId = params.id === YT_ARTIST_BY_NAME ? null : (params.id ?? "");
-  const knownName = params.name === undefined || params.name === "" ? null : params.name;
   const scrollable = useListScrollable();
   const bottomInset = useChromeInset();
-  const {
-    view,
-    retry,
-    browseId: resolvedBrowseId,
-  } = useYtArtistPage(browseId, knownName, params.offline === "1");
+  const { list, listProps } = useCompactTitleTopList();
   const songs = view?.songs ?? NO_SONGS;
   const selectable = useMemo(
     () => (view === null ? [] : artistSelectionItems(view.shelves, view.songs)),
@@ -313,14 +308,12 @@ export default function YtArtistScreen() {
           : (songKeys.get(item.song) ?? discoverTrackId(item.song)),
     [songKeys],
   );
-  const contextId = browseId ?? `name:${knownName ?? ""}`;
   const context = useMemo(() => ({ kind: "ytArtist", id: contextId }) as const, [contextId]);
   const play = useCallback(
     (startIndex: number | undefined, shuffle = false) =>
       void playPage(songs, startIndex, context, { shuffle }),
     [songs, context],
   );
-  const name = view?.name ?? knownName;
   // Until the artist's page is in, skeletons hold its place (the view waits on the Library first).
   const loading = view === null || view.note === "loading";
   const artworkUrl = view?.artworkUrl ?? null;
@@ -329,13 +322,13 @@ export default function YtArtistScreen() {
       name === null && !loading ? null : (
         <Head
           name={name}
-          browseId={resolvedBrowseId}
+          browseId={browseId}
           artworkUrl={artworkUrl}
           loading={loading}
           onPlay={songs.length === 0 ? null : (shuffle) => play(undefined, shuffle)}
         />
       ),
-    [name, resolvedBrowseId, artworkUrl, loading, songs.length, play],
+    [name, browseId, artworkUrl, loading, songs.length, play],
   );
   const footer = useMemo(
     () =>
@@ -367,33 +360,58 @@ export default function YtArtistScreen() {
   );
 
   return (
-    <View className="flex-1 bg-background">
-      <ScreenHeader />
-      <SongList
-        scrollEnabled={scrollable}
-        className="flex-1"
-        data={items}
-        keyExtractor={itemKey}
-        song={(item) => (item.type === "song" ? mixedSongEntry(item.song) : null)}
-        context={context}
-        renderSlot={renderSlot}
-        slotType={itemType}
-        slotSize={slotSize}
-        extraData={selection.selection}
-        selection={rowSelection}
-        onPlay={(item) => {
-          if (item.type === "song") play(item.index);
-        }}
-        {...mixedPageSongHandlers}
-        contentContainerStyle={contentStyle}
-        ListHeaderComponent={
-          <>
-            {header}
-            <ArtistShows name={name ?? ""} />
-          </>
-        }
-        ListFooterComponent={footer}
-      />
-    </View>
+    <SongList
+      {...listProps}
+      ref={list}
+      scrollEnabled={scrollable}
+      className="flex-1"
+      data={items}
+      keyExtractor={itemKey}
+      song={(item) => (item.type === "song" ? mixedSongEntry(item.song) : null)}
+      context={context}
+      renderSlot={renderSlot}
+      slotType={itemType}
+      slotSize={slotSize}
+      extraData={selection.selection}
+      selection={rowSelection}
+      onPlay={(item) => {
+        if (item.type === "song") play(item.index);
+      }}
+      {...mixedPageSongHandlers}
+      contentContainerStyle={contentStyle}
+      ListHeaderComponent={
+        <CompactTitleHead>
+          {header}
+          <ArtistShows name={name ?? ""} />
+        </CompactTitleHead>
+      }
+      ListFooterComponent={footer}
+    />
+  );
+}
+
+/**
+ * A YouTube Music artist the Library doesn't have, opened by their browse id
+ * (`/library/yt-artist/<UC…>?name=<name>`) or, from a streamed song, by their
+ * name (`/library/yt-artist/by-name?name=<name>`, found with an Artists
+ * search; "Not found online." when nobody matches): their image and
+ * name, Play and Shuffle, their Albums and Singles & EPs (a release the Library has opens
+ * the Library album) and every song of theirs, their songs playlist read
+ * whole (the Library's play its files, the rest stream). It's read as it opens and saved for a week; offline or
+ * failing, a quiet line with Try Again; with YT Music off, it says so.
+ */
+export default function YtArtistScreen() {
+  useScreenContent(true);
+  const params = useLocalSearchParams<{ id: string; name?: string; offline?: string }>();
+  const browseId = params.id === YT_ARTIST_BY_NAME ? null : (params.id ?? "");
+  const knownName = params.name === undefined || params.name === "" ? null : params.name;
+  const page = useYtArtistPage(browseId, knownName, params.offline === "1");
+  return (
+    <CompactTitleFrame title={page.name ?? undefined}>
+      <View className="flex-1 bg-background">
+        <ScreenHeader />
+        <YtArtistList page={page} />
+      </View>
+    </CompactTitleFrame>
   );
 }

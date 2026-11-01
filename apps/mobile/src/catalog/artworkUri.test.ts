@@ -102,3 +102,28 @@ test("an already sized local image keeps its file URI at that size", () => {
     `file:///files/artwork/${hash}_medium.jpg`,
   );
 });
+
+test("a playlist's own image shows its thumbnail through 300 px and its large file above", () => {
+  const dir = "/data/user/0/dev.leoperez.wave/files/artwork/playlists";
+  const hash = "0123456789abcdef0123456789abcdef01234567";
+  const thumb = `${dir}/${hash}_thumb.jpg`;
+  const large = `${dir}/${hash}.jpg`;
+  assert.equal(artworkUri(thumb, 300), `file://${thumb}`);
+  assert.equal(artworkUri(thumb, 301), `file://${large}`);
+  assert.equal(artworkUri(thumb, 1080), `file://${large}`);
+  assert.equal(artworkUri(large, 300), `file://${thumb}`);
+  assert.equal(artworkUri(large, 1080), `file://${large}`);
+});
+
+test("a playlist image keeps its size through the mosaic's two passes", () => {
+  const dir = "/files/artwork/playlists";
+  const hash = "0123456789abcdef0123456789abcdef01234567";
+  const mosaicCover = artworkUri(`${dir}/${hash}_thumb.jpg`, "original");
+  assert.equal(artworkUri(mosaicCover, 120), `file://${dir}/${hash}_thumb.jpg`);
+  assert.equal(artworkUri(mosaicCover, 900), `file://${dir}/${hash}.jpg`);
+});
+
+test("a photo framed from Wave's storage opens as itself at its original size", () => {
+  const photo = "/files/artwork/playlists/0123456789abcdef0123456789abcdef01234567.jpg";
+  assert.equal(artworkUri({ artworkPath: photo }, "original"), `file://${photo}`);
+});

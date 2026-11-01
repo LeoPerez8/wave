@@ -425,7 +425,7 @@ export const WHOLE_LIBRARY: Record<string, WholeLibraryException> = {
       "Visible online lists and their download buttons resolve local files between frames, once per list read; they are not the hidden Now Playing subtree.",
     capabilities: ["ytmusic/libraryFinder.ts#useInLibraryBetweenFrames"],
   },
-  "ytmusic/YtSongList.tsx#YtSongList": {
+  "ytmusic/YtSongList.tsx#YtSongListPage": {
     howOften: FOLLOWED_FINDER,
     reason:
       "Only a loaded remote list after screen settlement follows the finder; offline/loading pages render without acquiring it.",
@@ -608,7 +608,7 @@ export const OPENING_REQUESTS: Record<string, Exception> = {
   "nowPlaying/useGenius.ts#useGenius": {
     kind: "gesture",
     reason:
-      "Genius is asked only in the explicitly selected Lyrics view showing lyrics, with Genius insights on, and only while Now Playing is visible. Each sheet opening starts on player; api.genius.com is outside the three guarded hosts.",
+      "Genius is asked only in the explicitly selected Lyrics view showing lyrics, with Genius insights on, and only while Now Playing is visible. Each sheet opening starts on player; api.genius.com and Google Translate are outside the three guarded hosts.",
   },
   "nowPlaying/useLyricsTranslation.ts#useLyricsTranslation": {
     kind: "gesture",
@@ -905,6 +905,9 @@ export const OWN_PRESS: Record<string, Exception> = {
   "nowPlaying/SongButtons.tsx#DownloadButton": {
     reason:
       "While it waits or downloads it has no tap, only a slot's long press (#800), and its face is a progress bar.",
+  },
+  "components/CompactTitle.tsx#CompactTitleLine": {
+    reason: "The page's title beside Back: a line of text whose tap returns the list to the top.",
   },
   "components/TitleLongPress.tsx#TitlePress": {
     reason: "A screen title whose long press runs its action; it has the header role.",

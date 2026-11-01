@@ -58,6 +58,9 @@ object AutoLibrary {
   /** How long Auto waits for a running JS. */
   const val WARM_TIMEOUT_MS = 5_000L
 
+  /** Root hint with the art size a browser recommends (androidx.media's `MediaConstants`), in px; not every host sends it. */
+  private const val ART_SIZE_HINT = "android.media.extras.MEDIA_ART_SIZE_HINT_PIXELS"
+
   /** Shown when JS's answer can't be read (a bug, not a state the user can fix). */
   private val UNREADABLE get() = NativeText.get("unreadable")
 
@@ -66,13 +69,16 @@ object AutoLibrary {
    * thread until a legacy browser (Auto on a phone) gets it, while a cold JS
    * start needs that thread. Core's `AUTO_ROOT` (`packages/core/src/auto.ts`).
    */
-  fun root(params: LibraryParams?): ListenableFuture<LibraryResult<MediaItem>> =
-    Futures.immediateFuture(
+  fun root(params: LibraryParams?): ListenableFuture<LibraryResult<MediaItem>> {
+    // What the car says about its artwork, read from Developer › Export Logs (#883).
+    WaveLog.i(JsRuntime.LOG_TAG, "Auto's art size hint: ${params?.extras?.getInt(ART_SIZE_HINT, 0) ?: 0} px")
+    return Futures.immediateFuture(
       LibraryResult.ofItem(
         browseItem(mediaId = "root", title = "Wave", subtitle = null, browsable = true, playable = false),
         params,
       ),
     )
+  }
 
   /** Asks JS for one page of [parentId]'s children (an `AutoItem[]`). */
   fun children(
@@ -218,10 +224,17 @@ object AutoLibrary {
 
   private fun JSONObject.stringOrNull(name: String): String? = if (isNull(name)) null else getString(name)
 
-  /** The strings of array [name], or none when it's absent. */
-  private fun JSONObject.stringList(name: String): List<String> {
+  /** The `AutoArtwork` in array [name], each cover as its file or addresses; none when it's absent. */
+  private fun JSONObject.coverList(name: String): List<List<String>> {
     val array = optJSONArray(name) ?: return emptyList()
-    return (0 until array.length()).mapNotNull { array.optString(it, null) }
+    return (0 until array.length()).map { index ->
+      val addresses = array.optJSONArray(index)
+      if (addresses == null) {
+        listOf(array.getString(index))
+      } else {
+        (0 until addresses.length()).map(addresses::getString)
+      }
+    }
   }
 
   /** An `AutoItem` (Core's `packages/core/src/auto.ts`) as a Media3 item. */
@@ -232,7 +245,7 @@ object AutoLibrary {
       subtitle = json.stringOrNull("subtitle"),
       browsable = json.getBoolean("browsable"),
       playable = json.getBoolean("playable"),
-      artwork = json.stringList("artwork"),
+      artwork = json.coverList("artwork"),
     )
 
   /** A browse node as a Media3 item. */
@@ -242,7 +255,7 @@ object AutoLibrary {
     subtitle: String?,
     browsable: Boolean,
     playable: Boolean,
-    artwork: List<String> = emptyList(),
+    artwork: List<List<String>> = emptyList(),
   ): MediaItem {
     val metadata = MediaMetadata.Builder()
       .setTitle(title)
@@ -253,7 +266,7 @@ object AutoLibrary {
         if (browsable) MediaMetadata.MEDIA_TYPE_FOLDER_MIXED else MediaMetadata.MEDIA_TYPE_MUSIC,
       )
       // Without artwork Auto shows its own placeholder.
-      .setArtworkUri(ArtworkProvider.uriFor(artwork))
+      .setArtworkUri(ArtworkProvider.uriForCovers(artwork))
       .build()
     return MediaItem.Builder().setMediaId(mediaId).setMediaMetadata(metadata).build()
   }
