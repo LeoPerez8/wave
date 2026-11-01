@@ -1,0 +1,92 @@
+package expo.modules.wavenative.recognize
+
+import java.util.concurrent.CopyOnWriteArrayList
+
+/**
+ * What a tile tap does: listen, cancel the tile's session, leave the card's alone, or
+ * open the card when a tile session couldn't give an answer.
+ */
+enum class RecognizeTileTap { LISTEN, CANCEL, IGNORE, OPEN_CARD }
+
+/** A tap JS takes; [microphone] is a press of Use Microphone, which skips Core's source choice. */
+data class RecognizeTileRequest(val tap: Int, val microphone: Boolean)
+
+/**
+ * The tile's session as native knows it. JS runs the session and Core decides it; this
+ * keeps what the tile and its service must know with JS still loading: whether it
+ * listens, and the tap JS hasn't taken. Each tap has a number, so the late end of a
+ * cancelled session can't end the one after it.
+ */
+class RecognizeTileRun {
+  private var current = 0
+  private var waiting = false
+  private var microphone = false
+  private var last = 0
+  private val listeners = CopyOnWriteArrayList<() -> Unit>()
+
+  /** Whether a card session runs, from its start until its lookup ends. */
+  @Volatile var cardRunning = false
+  @Volatile var onRequested: (() -> Unit)? = null
+  @Volatile var onCancelled: ((Int) -> Unit)? = null
+
+  val listening: Boolean @Synchronized get() = current != 0
+
+  // Native decides before JS exists on cold start, because the tap must launch an activity.
+  fun tap(microphone: Boolean, notifications: Boolean): RecognizeTileTap = when {
+    listening -> RecognizeTileTap.CANCEL
+    cardRunning -> RecognizeTileTap.IGNORE
+    !microphone || !notifications -> RecognizeTileTap.OPEN_CARD
+    else -> RecognizeTileTap.LISTEN
+  }
+
+  /** A session starts listening; JS takes its tap, at once or once it's running. */
+  fun request(microphone: Boolean = false): Int {
+    val tap = synchronized(this) {
+      waiting = true
+      this.microphone = microphone
+      current = ++last
+      current
+    }
+    changed()
+    onRequested?.invoke()
+    return tap
+  }
+
+  /** The tap waiting for JS, once; null when none is. */
+  @Synchronized
+  fun take(): RecognizeTileRequest? {
+    if (!waiting) return null
+    waiting = false
+    return RecognizeTileRequest(current, microphone)
+  }
+
+  fun cancel() {
+    val tap = synchronized(this) {
+      waiting = false
+      current.also { current = 0 }
+    }
+    if (tap == 0) return
+    changed()
+    onCancelled?.invoke(tap)
+  }
+
+  /** Tap [tap]'s session stopped listening. */
+  fun ended(tap: Int) {
+    val ending = synchronized(this) {
+      (current == tap).also { if (it) current = 0 }
+    }
+    if (ending) changed()
+  }
+
+  /** Calls [listener] after each change; returns its removal. */
+  fun listen(listener: () -> Unit): () -> Unit {
+    listeners += listener
+    return { listeners -= listener }
+  }
+
+  private fun changed() = listeners.forEach { it() }
+
+  companion object {
+    val shared = RecognizeTileRun()
+  }
+}

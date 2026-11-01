@@ -3,10 +3,10 @@ import {
   LISTENING_WAVE,
   recognizeCardActionLabels,
   recognizeCardView,
-  recognizePlaylistSong,
   type RecognizeCard as RecognizeCardState,
   type RecognizeCardAction,
   type RecognizeSource,
+  type RecognizeMatch,
 } from "@wave/core";
 import { useEffect, useEffectEvent, useRef, useState } from "react";
 import { AppState, Linking, Text, View } from "react-native";
@@ -17,37 +17,28 @@ import { CatalogLine } from "@/catalog/CatalogLine";
 import { CELL } from "@/catalog/grid";
 import { TextButton } from "@/components/TextButton";
 import { NativeWaveUnderline } from "@/glass/waveGlass";
-import { libraryListQueries } from "@/library/hooks";
 import type { SongRow } from "@/library/LibraryStore";
 import { openAddToPlaylist } from "@/library/PlaylistSheets";
 import { addToShazam } from "@/library/playlists";
 import { openAlbum } from "@/library/routes";
-import { appRuntime } from "@/library/runtime";
-import { appLog } from "@/log/appLog";
-import { online } from "@/native/waveNative";
 import { recognizeNative } from "@/native/waveRecognize";
 import { showError } from "@/overlay/alert";
 import { CardEntries } from "@/overlay/CardEntries";
 import { MenuRow } from "@/overlay/MenuRow";
 import { playSongs, playYtSongs, playNext, playYtNext } from "@/playback/actions";
-import { useYtMusicEnabled, ytMusicEnabled } from "@/settings/ytMusic";
-import { currentLibraryFinder, useLoadedInLibrary } from "@/ytmusic/libraryFinder";
-import { searchSongsInTurn } from "@/ytmusic/askYtMusic";
+import { useYtMusicEnabled } from "@/settings/ytMusic";
+import { useLoadedInLibrary } from "@/ytmusic/libraryFinder";
 import { cancelYtDownload, downloadYtSong, useYtDownloadStatus } from "@/ytmusic/YtDownloads";
 import type { NativeYtSong } from "@/native/waveYtMusic";
 import { openOverlay } from "@/overlay/overlay";
-import { holdPlayback } from "@/playback/holdPlayback";
 import { useThemeColor } from "@/theme/useThemeColor";
 
-import { resolveRecognition } from "./resolveRecognition";
-import { hasMicrophone, microphonePermission } from "./microphone";
+import { resolveRecognitionSave } from "./resolveRecognitionSave";
+import { hasMicrophone } from "./microphone";
 import { createRecognizeEntry } from "./recognizeEntry";
-import {
-  startRecognizeSession,
-  type RecognizeDeps,
-  type RecognizeNative,
-  type RecognizeRun,
-} from "./recognizeSession";
+import { recognizeDeps } from "./recognizeDeps";
+import { startRecognizeSession, type RecognizeNative, type RecognizeRun } from "./recognizeSession";
+import { cancelRecognizeTile, trackCardSession, recognizeTileResult } from "./startRecognizeTile";
 
 const COVER = CELL * 9;
 const WAVE_HEIGHT = LISTENING_WAVE.amplitude * 2 + LISTENING_WAVE.stroke;
@@ -55,47 +46,33 @@ const WAVE_HEIGHT = LISTENING_WAVE.amplitude * 2 + LISTENING_WAVE.stroke;
 /** Whether this build can recognize (its APK has the native half). */
 export const recognizeAvailable = recognizeNative !== null;
 
-const depsFor = (native: RecognizeNative): RecognizeDeps<SongRow, NativeYtSong> => ({
-  online,
-  foreground: () => AppState.currentState === "active",
-  now: () => performance.now(),
-  every: (ms, tick) => {
-    const timer = setInterval(tick, ms);
-    return () => clearInterval(timer);
-  },
-  microphone: microphonePermission,
-  holdPlayback,
-  native,
-  resolve: (song, signal) =>
-    resolveRecognition(
-      {
-        library: () => appRuntime.runPromise(libraryListQueries.songs.read),
-        ytMusic: ytMusicEnabled,
-        search: searchSongsInTurn,
-      },
-      song,
-      signal,
-    ),
-  log: (level, line) => appLog(level, "WaveRecognize", line),
-});
-
 /**
  * Opens the Recognize card, already listening (docs/spec.md, "Recognize"). The
  * Search field's Recognize Song button opens it; so can anything else that should
  * start listening at once (the tile and the app shortcut, #772). Closing the card,
  * by Cancel, Back or a tap outside, ends the session.
  */
-const entry = createRecognizeEntry({
+const entry = createRecognizeEntry<NativeYtSong>({
   foreground: () => AppState.currentState === "active",
-  show: (source, closed) => {
+  cancelTile: cancelRecognizeTile,
+  show: (opening, closed) => {
+    const match = opening.kind === "match" ? opening.match : null;
+    const source = opening.kind === "capture" ? opening.source : "auto";
     const native = recognizeNative;
     if (native === null) return closed();
-    openOverlay({
+    const handle = openOverlay({
       label: currentLocalisation().strings.playbackText.recognizeSong,
       render: (close) => (
-        <RecognizeCard native={native} source={source} close={close} onClosed={closed} />
+        <RecognizeCard
+          native={native}
+          source={source}
+          match={match}
+          close={close}
+          onClosed={closed}
+        />
       ),
     });
+    return handle.close;
   },
 });
 
@@ -112,11 +89,13 @@ export const resumeRecognizeEntry = entry.resume;
 function RecognizeCard({
   native,
   source: initialSource,
+  match,
   close,
   onClosed,
 }: {
   native: RecognizeNative;
   source: RecognizeSource | "auto";
+  match: RecognizeMatch<NativeYtSong> | null;
   close: () => void;
   onClosed: () => void;
 }) {
@@ -132,7 +111,7 @@ function RecognizeCard({
     card: RecognizeCardState<SongRow, NativeYtSong>;
   }>({
     attempt: 0,
-    card: { kind: "listening" },
+    card: match === null ? { kind: "listening" } : { kind: "resolving", song: match.song },
   });
   const run = useRef<RecognizeRun | null>(null);
   const closeFromEffect = useEffectEvent(close);
@@ -144,8 +123,19 @@ function RecognizeCard({
       closeFromEffect();
       return;
     }
+    if (attempt === 0 && match !== null) {
+      let current = true;
+      void recognizeTileResult(match).then((result) => {
+        if (current) setShown({ attempt, card: { kind: "resolved", result } });
+      });
+      return () => {
+        current = false;
+      };
+    }
+    // Listen Again and source changes on a result card also replace tile capture.
+    if (attempt > 0) cancelRecognizeTile();
     const session = startRecognizeSession(
-      depsFor(native),
+      recognizeDeps(native),
       source,
       (card) => {
         if (card.kind === "listening" && card.source !== undefined) setActiveSource(card.source);
@@ -155,8 +145,9 @@ function RecognizeCard({
       () => closeFromEffect(),
     );
     run.current = session;
+    trackCardSession(session);
     return () => session.cancel();
-  }, [native, source, attempt]);
+  }, [native, source, attempt, match]);
 
   const card: RecognizeCardState<SongRow, NativeYtSong> =
     shown.attempt === attempt ? shown.card : { kind: "listening" };
@@ -237,31 +228,14 @@ function RecognizeCard({
         if (result === null || !view.actions.includes(action)) return;
         switch (action) {
           case "addToShazam":
-            void (async () => {
-              const track =
-                result.kind === "stream" ? (await currentLibraryFinder())(result.song) : null;
-              await addToShazam(
-                track === null
-                  ? recognizePlaylistSong(result)
-                  : { source: "library", trackId: track.id },
-              );
-            })().catch((error: unknown) =>
-              showError(strings.playbackText.couldntAddToShazam, error),
-            );
+            void resolveRecognitionSave(result)
+              .then(addToShazam)
+              .catch((error: unknown) => showError(strings.playbackText.couldntAddToShazam, error));
             return;
           case "addToPlaylist":
             openAddToPlaylist({
               title: result.song.title,
-              songs: async () => {
-                // A download may have joined the Library while this card stayed open.
-                const track =
-                  result.kind === "stream" ? (await currentLibraryFinder())(result.song) : null;
-                return [
-                  track === null
-                    ? recognizePlaylistSong(result)
-                    : { source: "library", trackId: track.id },
-                ];
-              },
+              songs: async () => [await resolveRecognitionSave(result)],
             });
             return;
           case "play":

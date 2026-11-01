@@ -21,9 +21,12 @@ export const playbackTextPtBr: typeof playbackTextEn = {
   clear: "Limpar",
   clearSearch: "Limpar busca",
   closeNowPlaying: "Fechar Tocando Agora",
+  /** Shared by manual saves and the tile notification's silent save update. */
   couldntAddToShazam: "Não foi possível adicionar ao Shazam",
+  /** Also shown by tile notifications after an automatic save. */
   addedToShazam: "Adicionada ao Shazam",
   thisSong: "Esta música",
+  /** Also shown by tile notifications when the entry is already saved. */
   alreadyInShazam: "Já está no Shazam",
   couldntDownloadTheSong: "Não foi possível baixar a música",
   couldntOpenTheArtist: "Não foi possível abrir o artista",

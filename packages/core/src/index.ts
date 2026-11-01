@@ -2382,6 +2382,7 @@ export {
 
 export {
   RECOGNIZE_CARD_ACTION_LABELS,
+  RECOGNIZE_WINDOW_MS,
   recognizeCardActionLabels,
   recognizeCardView,
   recognizeHoldsPlayback,
@@ -2392,6 +2393,13 @@ export {
 export { recognizeLogLine } from "./recognizeLog.ts";
 export type { RecognizeLogOutcome } from "./recognizeLog.ts";
 export { recognizeEntryAction } from "./recognizeEntry.ts";
+export {
+  readRecognizeMatch,
+  recognizeMatchResult,
+  recognizeTileNotice,
+  writeRecognizeMatch,
+} from "./recognizeTile.ts";
+export type { RecognizeMatch, RecognizeTileNotice } from "./recognizeTile.ts";
 export type {
   RecognizeAnswer,
   RecognizeCard,

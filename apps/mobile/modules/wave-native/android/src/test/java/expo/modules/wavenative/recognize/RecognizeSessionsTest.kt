@@ -43,6 +43,18 @@ class RecognizeSessionsTest {
   }
 
   @Test
+  fun `going to the background ends a card session and leaves a detached one capturing`() {
+    sessions.start(3, FakeAudio()) {}
+    sessions.stopScreenSession()
+    assertNull(sessions.get(3))
+
+    sessions.start(4, FakeAudio(), detached = true) {}
+    sessions.stopScreenSession()
+    assertTrue(sessions.get(4) != null)
+    sessions.stopAll()
+  }
+
+  @Test
   fun `stopping every session, as going to the background does, isn't a capture failure`() {
     val audio = FakeAudio()
     sessions.start(3, audio) {}
@@ -82,7 +94,7 @@ class RecognizeSessionsTest {
     sessions.start(8, FakeAudio()) {}
     sessions.stopAll()
 
-    val error = runCatching { sessions.ask(8, last = false) }.exceptionOrNull()
+    val error = runCatching { sessions.ask(8, last = false, windowMs = 12_000) }.exceptionOrNull()
     assertTrue("$error", error is RecognizeSessionEnded)
   }
 
@@ -95,7 +107,7 @@ class RecognizeSessionsTest {
     )
     throwing.start(9, FakeAudio()) {}
 
-    val error = runCatching { throwing.ask(9, last = false) }.exceptionOrNull()
+    val error = runCatching { throwing.ask(9, last = false, windowMs = 12_000) }.exceptionOrNull()
     assertTrue("$error", error is IllegalStateException)
     throwing.stopAll()
   }

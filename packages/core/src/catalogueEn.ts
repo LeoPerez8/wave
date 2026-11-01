@@ -42,6 +42,10 @@ export const en = {
   imports: importsEn,
   lyricsLanguages: lyricsLanguagesEn,
   playbackText: playbackTextEn,
+  recognizeTile: {
+    tryAgain: playbackTextEn.tryAgain,
+    useMicrophone: playbackTextEn.useMicrophone,
+  },
   shows: showsEn,
   upcomingShows: upcomingShowsEn,
   home: homeEn,

@@ -41,6 +41,10 @@ export const ptBR: Catalogue = {
   imports: importsPtBr,
   lyricsLanguages: lyricsLanguagesPtBr,
   playbackText: playbackTextPtBr,
+  recognizeTile: {
+    tryAgain: playbackTextPtBr.tryAgain,
+    useMicrophone: playbackTextPtBr.useMicrophone,
+  },
   shows: showsPtBr,
   upcomingShows: upcomingShowsPtBr,
   home: homePtBr,

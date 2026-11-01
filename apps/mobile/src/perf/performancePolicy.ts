@@ -380,22 +380,39 @@ export const WHOLE_LIBRARY: Record<string, WholeLibraryException> = {
       "Download recovery runs on explicit/background work; the failed-download UI follows only while shown.",
     capabilities: ["ytmusic/libraryFinder.ts#useLoadedLibraryFinder"],
   },
-  "recognize/RecognizeCard.tsx#depsFor": {
+  "recognize/recognizeDeps.ts#recognizeDeps": {
     howOften:
-      "Once per recognized match after capture ends, from an explicitly opened card; never while listening.",
+      "Once per recognized match after capture ends, from an explicitly opened card or tile tap; constructing the adapter and listening do not read the Library.",
     reason:
-      "Recognition needs the Library before searching online, using the shared songs query. resolveRecognition.test.ts covers one Library read per match and no online search for a Library match.",
+      "The card and tile share this adapter: resolution needs the Library before searching online, using the shared songs query. startRecognizeSession finishes capture once before resolving a match, so listening updates cannot trigger reads. resolveRecognition.test.ts covers one Library read per match and no online search for a Library match.",
     capabilities: ["library/hooks.ts#songs"],
   },
   "recognize/RecognizeCard.tsx#RecognizeCard": {
-    howOften:
-      "Once per shared Library version while a streamed result is visible, plus one current-finder lookup when Add to Playlist saves it.",
+    howOften: "Once per shared Library version while a streamed result is visible.",
     reason:
       "The explicitly opened result card follows download membership only for a streamed result and rechecks identity before saving, so a completed download is not offered again or saved as a streamed duplicate.",
-    capabilities: [
-      "ytmusic/libraryFinder.ts#useLoadedInLibrary",
-      "ytmusic/libraryFinder.ts#currentLibraryFinder",
-    ],
+    capabilities: ["ytmusic/libraryFinder.ts#useLoadedInLibrary"],
+  },
+  "recognize/resolveRecognitionSave.ts#resolveRecognitionSave": {
+    howOften:
+      "Once per streamed match saved: Add to Playlist or Add to Shazam on the card, or the tile's automatic save. Never while listening.",
+    reason:
+      "Both paths recheck Library identity at save time, so a download completed during recognition is saved as the Library track and not as a stream.",
+    capabilities: ["ytmusic/libraryFinder.ts#currentLibraryFinder"],
+  },
+  "recognize/startRecognizeTile.ts#startRecognizeTile": {
+    howOften:
+      "Once per result notification tap for songs, unless the live lookup is reused. Registering callbacks and listening read nothing.",
+    reason:
+      "The result callback resolves a kept notification answer against current songs without another search; followRecognizeTile reuses an in-flight lookup when available. recognizeTile.test.ts covers saving and notification result reuse.",
+    capabilities: ["library/hooks.ts#songs"],
+  },
+  "recognize/startRecognizeTile.ts#recognizeTileResult": {
+    howOften:
+      "Once per explicit result notification tap when the tile follower is unavailable; otherwise delegates to its result callback, which can reuse the live lookup.",
+    reason:
+      "Opening a kept notification result needs current Library identity after the runtime restarts. This fallback reads the shared songs query only for that explicit action and resolves the kept answer without searching, rather than subscribing during startup or listening.",
+    capabilities: ["library/hooks.ts#songs"],
   },
   "ytmusic/YtSongActions.tsx#runYtSongSwipe": {
     howOften: "Once per completed song swipe; finder reads are shared per Library version.",

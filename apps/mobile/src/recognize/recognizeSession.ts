@@ -1,4 +1,5 @@
 import {
+  RECOGNIZE_WINDOW_MS,
   recognizeHoldsPlayback,
   recognizeLogLine,
   recognizeSource,
@@ -28,8 +29,8 @@ export interface RecognizeNative {
   readonly start: (source: RecognizeSource, request: number) => Promise<number>;
   /** Cancels a start still waiting for consent or for its foreground service. */
   readonly cancelStart: (request: number) => void;
-  /** Sends the signature of everything [session] has heard; [last] stops its capture first. */
-  readonly ask: (session: number, last: boolean) => Promise<RecognizeAnswer>;
+  /** Sends the signature of the latest [windowMs] [session] has heard; [last] stops its capture first. */
+  readonly ask: (session: number, last: boolean, windowMs: number) => Promise<RecognizeAnswer>;
   readonly stop: (session: number) => void;
   /** How much a session has heard in all; returns the unsubscribe. */
   readonly onHeard: (
@@ -129,6 +130,7 @@ export const startRecognizeSession = <L extends RecognizeTrack, S extends YtSong
         source: session.source,
         heardMs: session.heardMs,
         outcome,
+        failedAsks: session.failedAsks,
         ...(lookup === undefined ? {} : { lookup }),
       }),
     );
@@ -177,7 +179,7 @@ export const startRecognizeSession = <L extends RecognizeTrack, S extends YtSong
     if (session.ended !== null) return finish(session.ended);
     const id = nativeId;
     if (next.ask === null || id === null) return;
-    deps.native.ask(id, next.ask.last).then(
+    deps.native.ask(id, next.ask.last, RECOGNIZE_WINDOW_MS).then(
       (answer) => step({ kind: "answer", answer }),
       // The native side couldn't sign or send what it heard: an answer that ends the
       // session, even after the last ask. A session that's gone means its capture is
@@ -194,7 +196,8 @@ export const startRecognizeSession = <L extends RecognizeTrack, S extends YtSong
     );
   };
 
-  const tick = (): void => step({ kind: "tick", atMs: deps.now(), foreground: deps.foreground() });
+  const tick = (): void =>
+    step({ kind: "tick", atMs: deps.now(), foreground: !awaitingDialog && deps.foreground() });
 
   /** A capture failure is judged with the clock as it is when it arrives. */
   const fromNative = (event: RecognizeEvent): void => {
@@ -261,6 +264,8 @@ export const startRecognizeSession = <L extends RecognizeTrack, S extends YtSong
       // Any other failure is Cancel too when Wave is still hidden a moment later (Core).
       else failCapture();
     } finally {
+      // Consent can take arbitrarily long; exclude its last fraction of a tick too.
+      if (awaitingDialog && !finished) tick();
       awaitingDialog = false;
     }
   };

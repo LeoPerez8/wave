@@ -39,18 +39,43 @@ class RecognizeModule : Module() {
   private var lastRequestCode = 17710
   private var pending: PendingStart? = null
   private var foreground = true
+  private val tile = RecognizeTileRun.shared
 
-  private class PendingStart(val request: Int, val code: Int, val promise: Promise) {
+  private class PendingStart(val request: Int, val code: Int, val promise: Promise, val detached: Boolean) {
+    var cancelConsent: (() -> Unit)? = null
     var cancelCapture: (() -> Unit)? = null
     var consent: Pair<Int, Intent>? = null
   }
 
   override fun definition() = ModuleDefinition {
     Name("WaveRecognize")
-    Events(HEARD, CAPTURE_FAILED, "onRecognizeRequested")
+    Events("onRecognizeMatchRequested", HEARD, CAPTURE_FAILED, "onRecognizeRequested", TILE_REQUESTED, TILE_CANCELLED)
 
-    OnCreate { RecognizeInbox.onReceived = { sendEvent("onRecognizeRequested") } }
+    OnCreate {
+      RecognizeInbox.onMatchReceived = { sendEvent("onRecognizeMatchRequested") }
+      RecognizeInbox.onReceived = { sendEvent("onRecognizeRequested") }
+      tile.onRequested = { sendEvent(TILE_REQUESTED) }
+      tile.onCancelled = { tap -> sendEvent(TILE_CANCELLED, mapOf("tap" to tap)) }
+    }
+    Function("takeMatchRequest") { RecognizeInbox.takeMatch() }
     Function("takeRequest") { RecognizeInbox.take() }
+
+    Function("takeTileRequest") {
+      tile.take()?.let { mapOf<String, Any>("tap" to it.tap, "microphone" to it.microphone) }
+    }
+    Function("setCardSession") { running: Boolean -> tile.cardRunning = running }
+    Function("tileListeningEnded") { tap: Int -> tile.ended(tap) }
+    // A tap may have come in the meantime, and it needs the service.
+    Function("tileFinished") { if (!tile.listening) RecognizeListeningService.stop(context) }
+    Function("notifyTileMatch") { title: String, text: String, coverUrl: String?, match: String? ->
+      RecognizeNotifications.postMatch(context, title, text, coverUrl, match)
+    }
+    Function("tileMatchSaved") { line: String, match: String ->
+      RecognizeNotifications.saved(context, line, match)
+    }
+    Function("notifyTileFailure") { title: String, text: String, actionLabel: String, microphone: Boolean ->
+      RecognizeNotifications.postFailure(context, title, text, actionLabel, microphone)
+    }
 
     AsyncFunction("playbackActivity") {
       val media = if (Build.VERSION.SDK_INT < 29) 0 else
@@ -63,45 +88,19 @@ class RecognizeModule : Module() {
     // A request id lets JS cancel even while start is waiting for Android's consent result.
     // It is also the session's id, so JS knows it before any event names it.
     AsyncFunction("start") { source: String, request: Int, promise: Promise ->
-      cancelPending()
-      sessions.stopAll()
-      try {
-        require(source == "microphone" || source == "playback") { "Unknown source $source" }
-        if (context.checkSelfPermission(Manifest.permission.RECORD_AUDIO) != PackageManager.PERMISSION_GRANTED) {
-          throw CodedException("ERR_RECOGNIZE_PERMISSION", "Wave may not capture audio", null)
-        }
-        if (installId == null) installId = ShazamInstallId(File(context.filesDir, "recognize/shazam-install-id"))
-        if (source == "microphone") {
-          sessions.start(request, MicrophoneAudio.open()) { promise.resolve(it) }
-        } else {
-          check(Build.VERSION.SDK_INT >= 29) { "Phone audio capture requires Android 10" }
-          val activity = appContext.currentActivity ?: throw Exceptions.MissingActivity()
-          val manager = context.getSystemService(MediaProjectionManager::class.java)
-          // Capture across the phone, rather than the single-app default on Android 14+.
-          val intent = if (Build.VERSION.SDK_INT >= 34)
-            manager.createScreenCaptureIntent(MediaProjectionConfig.createConfigForDefaultDisplay())
-          else manager.createScreenCaptureIntent()
-          val start = PendingStart(request, ++lastRequestCode, promise)
-          pending = start
-          activity.startActivityForResult(intent, start.code)
-        }
-      } catch (e: Exception) {
-        pending = null
-        promise.reject("ERR_RECOGNIZE_CAPTURE", e.message, e)
-      }
+      begin(source, request, promise, detached = false)
+    }.runOnQueue(Queues.MAIN)
+
+    // The tile's session, which doesn't end with Wave's screen. Its foreground service
+    // (RecognizeListeningService) is what lets it keep the microphone in the background.
+    AsyncFunction("startDetached") { source: String, request: Int, promise: Promise ->
+      begin(source, request, promise, detached = true)
     }.runOnQueue(Queues.MAIN)
 
     OnActivityResult { _, result ->
       val start = pending
       if (start != null && result.requestCode == start.code) {
-        val data = result.data
-        if (result.resultCode != Activity.RESULT_OK || data == null) {
-          pending = null
-          start.promise.reject("ERR_RECOGNIZE_CONSENT", "Phone audio access declined", null)
-        } else {
-          start.consent = result.resultCode to data
-          startPlaybackWhenForeground(start)
-        }
+        consentResult(start, result.resultCode, result.data)
       }
     }
 
@@ -111,9 +110,9 @@ class RecognizeModule : Module() {
 
     // ERR_RECOGNIZE_ENDED: the session is gone (its capture is over). ERR_RECOGNIZE_ASK:
     //  anything else kept the request from going, which says nothing about the capture.
-    AsyncFunction("ask") Coroutine { id: Int, last: Boolean ->
+    AsyncFunction("ask") Coroutine { id: Int, last: Boolean, windowMs: Int ->
       try {
-        withContext(Dispatchers.IO) { sessions.ask(id, last).toMap() }
+        withContext(Dispatchers.IO) { sessions.ask(id, last, windowMs).toMap() }
       } catch (_: RecognizeSessionEnded) {
         throw CodedException("ERR_RECOGNIZE_ENDED", "The session has ended", null)
       } catch (e: CancellationException) {
@@ -133,21 +132,73 @@ class RecognizeModule : Module() {
     OnActivityEntersBackground {
       foreground = false
       // Consent itself can pause the activity. Only cancel a start already binding its service.
-      if (pending?.cancelCapture != null) cancelPending()
+      if (pending?.let { !it.detached && it.cancelCapture != null } == true) cancelPending()
       // Wave's own stop, not a capture failure: JS cancels the session when it sees the background.
-      sessions.stopAll()
+      sessions.stopScreenSession()
     }
 
     OnDestroy {
+      RecognizeInbox.onMatchReceived = null
       RecognizeInbox.onReceived = null
+      tile.onRequested = null
+      tile.onCancelled = null
+      tile.cardRunning = false
       main.post { cancelPending() }
       sessions.stopAll()
     }
   }
 
-  /** Activity results can precede onResume; capture waits for Wave to be visible again. */
+  private fun begin(source: String, request: Int, promise: Promise, detached: Boolean) {
+    cancelPending()
+    sessions.stopAll()
+    try {
+      require(source == "microphone" || source == "playback") { "Unknown source $source" }
+      if (context.checkSelfPermission(Manifest.permission.RECORD_AUDIO) != PackageManager.PERMISSION_GRANTED) {
+        throw CodedException("ERR_RECOGNIZE_PERMISSION", "Wave may not capture audio", null)
+      }
+      if (installId == null) installId = ShazamInstallId(File(context.filesDir, "recognize/shazam-install-id"))
+      if (source == "microphone") {
+        sessions.start(request, MicrophoneAudio.open(), detached) { promise.resolve(it) }
+      } else {
+        check(Build.VERSION.SDK_INT >= 29) { "Phone audio capture requires Android 10" }
+        val manager = context.getSystemService(MediaProjectionManager::class.java)
+        // Capture across the phone, rather than the single-app default on Android 14+.
+        val intent = if (Build.VERSION.SDK_INT >= 34)
+          manager.createScreenCaptureIntent(MediaProjectionConfig.createConfigForDefaultDisplay())
+        else manager.createScreenCaptureIntent()
+        val start = PendingStart(request, ++lastRequestCode, promise, detached)
+        pending = start
+        if (detached) {
+          start.cancelConsent = RecognizeConsentActivity.open(context, request, intent) { code, data ->
+            consentResult(start, code, data)
+          }
+        } else {
+          val activity = appContext.currentActivity ?: throw Exceptions.MissingActivity()
+          activity.startActivityForResult(intent, start.code)
+        }
+      }
+    } catch (e: Exception) {
+      pending = null
+      promise.reject("ERR_RECOGNIZE_CAPTURE", e.message, e)
+    }
+  }
+
+  /** Both consent hosts complete only the start that is still pending. */
+  private fun consentResult(start: PendingStart, code: Int, data: Intent?) {
+    if (pending !== start) return
+    start.cancelConsent = null
+    if (code != Activity.RESULT_OK || data == null) {
+      pending = null
+      start.promise.reject("ERR_RECOGNIZE_CONSENT", "Phone audio access declined", null)
+    } else {
+      start.consent = code to data
+      startPlaybackWhenForeground(start)
+    }
+  }
+
+  /** Card capture waits for onResume; a tile's consent host needs no Wave screen. */
   private fun startPlaybackWhenForeground(start: PendingStart) {
-    if (!foreground || pending !== start || start.cancelCapture != null) return
+    if ((!start.detached && !foreground) || pending !== start || start.cancelCapture != null) return
     val (code, data) = start.consent ?: return
     start.consent = null
     try {
@@ -155,9 +206,10 @@ class RecognizeModule : Module() {
         opened = { audio ->
           if (pending !== start) audio.release() else {
             pending = null
-            sessions.start(start.request, audio) { start.promise.resolve(it) }
+            sessions.start(start.request, audio, start.detached) { start.promise.resolve(it) }
           }
         },
+        detached = start.detached,
         failed = { error ->
           if (pending === start) {
             pending = null
@@ -173,6 +225,7 @@ class RecognizeModule : Module() {
   private fun cancelPending() {
     val start = pending ?: return
     pending = null
+    start.cancelConsent?.invoke()
     start.cancelCapture?.invoke()
     start.promise.reject("ERR_RECOGNIZE_ENDED", "The session has ended", null)
   }
@@ -186,6 +239,8 @@ class RecognizeModule : Module() {
   private companion object {
     const val HEARD = "onRecognizeHeard"
     const val CAPTURE_FAILED = "onRecognizeCaptureFailed"
+    const val TILE_REQUESTED = "onRecognizeTileRequested"
+    const val TILE_CANCELLED = "onRecognizeTileCancelled"
     val MEDIA_USAGES = setOf(AudioAttributes.USAGE_MEDIA, AudioAttributes.USAGE_GAME, AudioAttributes.USAGE_UNKNOWN)
   }
 }
