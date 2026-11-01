@@ -2,6 +2,7 @@ package expo.modules.wavenative.recognize
 
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
+import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
@@ -27,9 +28,22 @@ class RecognizeTileRunTest {
 
   @Test fun `JS takes a tap once, even if it came before JS was running`() {
     val tap = run.request()
-    assertEquals(tap, run.take())
-    assertEquals(0, run.take())
+    assertEquals(tap, run.take()?.tap)
+    assertNull(run.take())
     assertTrue(run.listening)
+  }
+
+  @Test fun `a tap leaves the source to JS`() {
+    run.request()
+    assertEquals(false, run.take()?.microphone)
+  }
+
+  @Test fun `Use Microphone tells JS to listen through the microphone, for that tap only`() {
+    val forced = run.request(microphone = true)
+    assertEquals(true, run.take()?.microphone)
+    run.ended(forced)
+    run.request()
+    assertEquals(false, run.take()?.microphone)
   }
 
   @Test fun `a request tells JS it is waiting`() {
@@ -42,7 +56,7 @@ class RecognizeTileRunTest {
   @Test fun `a cancel before JS took the tap leaves nothing for it to take`() {
     run.request()
     run.cancel()
-    assertEquals(0, run.take())
+    assertNull(run.take())
     assertFalse(run.listening)
   }
 

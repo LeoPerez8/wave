@@ -21,8 +21,8 @@ import expo.modules.wavenative.player.JsRuntime
  * microphone type, while it listens: "Listening…" with Cancel, and the right to the
  * microphone. Then only started, so JS finishes the song's lookup. It holds the JS
  * runtime throughout (headless on a cold start), and JS opens the capture through
- * `RecognizeModule`. RecognizeTileActivity starts it; #900's Try Again can start it from
- * its notification's action, which Android allows the same way.
+ * `RecognizeModule`. RecognizeTileActivity starts it, for a tap and for a failure
+ * notification's action.
  */
 class RecognizeListeningService : Service() {
   private val main = Handler(Looper.getMainLooper())
@@ -52,7 +52,7 @@ class RecognizeListeningService : Service() {
       stopSelf()
       return START_NOT_STICKY
     }
-    if (!run.listening) run.request()
+    if (!run.listening) run.request(intent?.getBooleanExtra(EXTRA_MICROPHONE, false) == true)
     JsRuntime.ensureStarted(this, RUNTIME_OWNER)
     return START_NOT_STICKY
   }
@@ -87,6 +87,8 @@ class RecognizeListeningService : Service() {
   }
 
   companion object {
+    /** Use Microphone: this session skips Core's source choice. */
+    const val EXTRA_MICROPHONE = "expo.modules.wavenative.recognize.MICROPHONE"
     private const val ACTION_CANCEL = "expo.modules.wavenative.recognize.CANCEL"
     private const val NOTIFICATION = 774
     private const val RUNTIME_OWNER = "recognize"
