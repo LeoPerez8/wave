@@ -18,8 +18,8 @@ declare class WaveRecognizeModule extends NativeModule<WaveRecognizeEvents> {
   /** Starts capturing; phone audio waits for fresh Android consent. */
   start(source: RecognizeSource, request: number): Promise<number>;
   cancelStart(request: number): void;
-  /** Sends the signature of everything the session heard; [last] stops its capture first. */
-  ask(session: number, last: boolean): Promise<RecognizeAnswer>;
+  /** Sends the signature of the latest [windowMs] the session heard; [last] stops its capture first. */
+  ask(session: number, last: boolean, windowMs: number): Promise<RecognizeAnswer>;
   stop(session: number): void;
   takeRequest(): boolean;
 }
@@ -47,7 +47,7 @@ export const recognizeNative: RecognizeNative | null =
         playbackActivity: () => WaveRecognize.playbackActivity(),
         start: (source, request) => WaveRecognize.start(source, request),
         cancelStart: (request) => WaveRecognize.cancelStart(request),
-        ask: (session, last) => WaveRecognize.ask(session, last),
+        ask: (session, last, windowMs) => WaveRecognize.ask(session, last, windowMs),
         stop: (session) => WaveRecognize.stop(session),
         onHeard: (listener) => {
           const subscription = WaveRecognize.addListener("onRecognizeHeard", (event) =>

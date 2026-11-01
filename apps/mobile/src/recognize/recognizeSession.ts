@@ -1,4 +1,5 @@
 import {
+  RECOGNIZE_WINDOW_MS,
   recognizeHoldsPlayback,
   recognizeLogLine,
   recognizeSource,
@@ -28,8 +29,8 @@ export interface RecognizeNative {
   readonly start: (source: RecognizeSource, request: number) => Promise<number>;
   /** Cancels a start still waiting for consent or for its foreground service. */
   readonly cancelStart: (request: number) => void;
-  /** Sends the signature of everything [session] has heard; [last] stops its capture first. */
-  readonly ask: (session: number, last: boolean) => Promise<RecognizeAnswer>;
+  /** Sends the signature of the latest [windowMs] [session] has heard; [last] stops its capture first. */
+  readonly ask: (session: number, last: boolean, windowMs: number) => Promise<RecognizeAnswer>;
   readonly stop: (session: number) => void;
   /** How much a session has heard in all; returns the unsubscribe. */
   readonly onHeard: (
@@ -178,7 +179,7 @@ export const startRecognizeSession = <L extends RecognizeTrack, S extends YtSong
     if (session.ended !== null) return finish(session.ended);
     const id = nativeId;
     if (next.ask === null || id === null) return;
-    deps.native.ask(id, next.ask.last).then(
+    deps.native.ask(id, next.ask.last, RECOGNIZE_WINDOW_MS).then(
       (answer) => step({ kind: "answer", answer }),
       // The native side couldn't sign or send what it heard: an answer that ends the
       // session, even after the last ask. A session that's gone means its capture is

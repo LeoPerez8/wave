@@ -111,9 +111,9 @@ class RecognizeModule : Module() {
 
     // ERR_RECOGNIZE_ENDED: the session is gone (its capture is over). ERR_RECOGNIZE_ASK:
     //  anything else kept the request from going, which says nothing about the capture.
-    AsyncFunction("ask") Coroutine { id: Int, last: Boolean ->
+    AsyncFunction("ask") Coroutine { id: Int, last: Boolean, windowMs: Int ->
       try {
-        withContext(Dispatchers.IO) { sessions.ask(id, last).toMap() }
+        withContext(Dispatchers.IO) { sessions.ask(id, last, windowMs).toMap() }
       } catch (_: RecognizeSessionEnded) {
         throw CodedException("ERR_RECOGNIZE_ENDED", "The session has ended", null)
       } catch (e: CancellationException) {

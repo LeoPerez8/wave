@@ -16,9 +16,8 @@ data class ShazamSignature(val uri: String, val sampleMs: Int)
  * Turns 16 kHz mono PCM into a Shazam signature: Kotlin's port of shazamio-core 2.0.0's
  * `SignatureGenerator` (itself SongRec's), giving the same bytes for the same samples.
  *
- * Audio is [append]ed as it is captured, and [signature] encodes everything heard so
- * far, so a session can send a longer signature at each step without starting over.
- * Not thread-safe: one capture thread appends and asks for signatures.
+ * Audio is [append]ed in order, and [signature] encodes everything appended so far.
+ * Not thread-safe: each ask of a session signs its audio with a new one.
  */
 class SignatureGenerator {
   private val ring = ShortArray(WINDOW)
@@ -38,9 +37,6 @@ class SignatureGenerator {
   private var samples = 0L
   /** Peaks per band (index 0 to 3), each as (FFT pass, magnitude, corrected bin) triples. */
   private val peaks = Array(4) { IntList() }
-
-  /** How many samples have been appended. */
-  val sampleCount: Long get() = samples
 
   /** Takes the next [length] samples of [source], from [offset]. */
   fun append(source: ShortArray, offset: Int = 0, length: Int = source.size - offset) {
