@@ -397,6 +397,20 @@ export const WHOLE_LIBRARY: Record<string, WholeLibraryException> = {
       "ytmusic/libraryFinder.ts#currentLibraryFinder",
     ],
   },
+  "recognize/startRecognizeTile.ts#startRecognizeTile": {
+    howOften:
+      "Once per streamed match saved after an explicit tile recognition for the finder; once per result notification tap for songs, unless the live lookup is reused. Registering callbacks and listening read neither.",
+    reason:
+      "The save callback rechecks Library identity so a download completed during recognition is saved as the Library track. The result callback resolves a kept notification answer against current songs without another search; followRecognizeTile reuses an in-flight lookup when available. recognizeTile.test.ts covers saving and notification result reuse.",
+    capabilities: ["library/hooks.ts#songs", "ytmusic/libraryFinder.ts#currentLibraryFinder"],
+  },
+  "recognize/startRecognizeTile.ts#recognizeTileResult": {
+    howOften:
+      "Once per explicit result notification tap when the tile follower is unavailable; otherwise delegates to its result callback, which can reuse the live lookup.",
+    reason:
+      "Opening a kept notification result needs current Library identity after the runtime restarts. This fallback reads the shared songs query only for that explicit action and resolves the kept answer without searching, rather than subscribing during startup or listening.",
+    capabilities: ["library/hooks.ts#songs"],
+  },
   "ytmusic/YtSongActions.tsx#runYtSongSwipe": {
     howOften: "Once per completed song swipe; finder reads are shared per Library version.",
     reason: "Explicit song menus and completed swipes resolve Library identity for their action.",
