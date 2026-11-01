@@ -9,7 +9,7 @@ import {
   whatsNewNotesUrl,
   type PublishedRelease,
   type WhatsNewState,
-} from "./whatsNew.ts";
+} from "./index.ts";
 
 const release = (
   version: string,
@@ -150,7 +150,7 @@ describe("nextWhatsNewStep", () => {
 
   it("compares versions as numbers", () => {
     assert.equal(
-      nextWhatsNewStep({ ...state, runningVersion: "0.100.0", seenVersion: "0.99.0" }),
+      nextWhatsNewStep({ ...state, runningVersion: "0.46.10", seenVersion: "0.46.9" }),
       "fetch",
     );
   });

@@ -8,10 +8,12 @@ import {
   nativeUpdateIsNew,
   playerKeepsPlaying,
   readLatestApk,
+  readSignedApk,
   type InstallAccess,
   type LatestApk,
   type NativeUpdate,
   type UpdateNetwork,
+  type UpdateState,
 } from "@wave/core";
 import * as Effect from "effect/Effect";
 import Constants from "expo-constants";
@@ -46,6 +48,16 @@ const keptTime = (key: string) =>
 const lastCheckAt = keptTime("updates.lastCheckAt");
 const lastInstallAskAt = keptTime("updates.lastInstallAskAt");
 const lastInstallAt = keptTime("updates.lastInstallAt");
+const lastApkAttempt = persistedSetting<UpdateState["lastApkAttempt"]>({
+  key: "updates.lastApkAttempt",
+  read: (stored) => {
+    const separator = stored?.lastIndexOf(" ") ?? -1;
+    if (stored == null || separator < 0) return null;
+    const at = Number(stored.slice(separator + 1));
+    return Number.isFinite(at) ? { version: stored.slice(0, separator), at } : null;
+  },
+  write: (attempt) => (attempt === null ? null : `${attempt.version} ${attempt.at}`),
+});
 
 const network = (): UpdateNetwork => {
   const { online, onMobileData } = connectivityNow();
@@ -61,15 +73,29 @@ const needLatestApk = (): LatestApk => {
   return latestApk;
 };
 
-const fetchLatestApk = (url: string): Effect.Effect<LatestApk | null, unknown> =>
+/** Why the answer isn't to be trusted, for the log. Phones install only what CI signed. */
+const refuseApk = (why: string): null => {
+  appLog("warn", "WaveUpdates", `No native update: ${why}`);
+  return null;
+};
+
+const fetchLatestApk = (
+  url: string,
+  installer: NonNullable<typeof WaveSelfInstall>,
+): Effect.Effect<LatestApk | null, unknown> =>
   Effect.tryPromise(async (signal) => {
     const response = await fetch(url, { signal });
     // The channel hasn't published one yet.
     if (response.status === 404) return null;
     if (!response.ok) throw new Error(`The service answered ${response.status}`);
-    const apk = readLatestApk((await response.json()) as unknown);
-    if (apk === null) throw new Error("Unreadable answer");
-    return apk;
+    const signed = readSignedApk((await response.json()) as unknown);
+    if (signed === null) return refuseApk("the metadata has no signature");
+    const check = await installer.checkApkMetadata(signed.metadata, signed.signature);
+    if (check !== "valid") return refuseApk(`the metadata's signature check said ${check}`);
+    return (
+      readLatestApk(signed.metadata, Updates.channel) ??
+      refuseApk("the signed metadata is unusable")
+    );
   }).pipe(Effect.timeout(APK_CHECK_TIMEOUT));
 
 const checkNative: Effect.Effect<NativeUpdate, unknown> = Effect.suspend(() => {
@@ -82,21 +108,25 @@ const checkNative: Effect.Effect<NativeUpdate, unknown> = Effect.suspend(() => {
     return Effect.succeed<NativeUpdate>("none");
   }
   const installer = WaveSelfInstall;
-  return fetchLatestApk(url).pipe(
-    Effect.map((latest): NativeUpdate => {
-      latestApk = latest;
-      if (latest === null) return "none";
-      const installedVersion = installer.installedVersion();
-      if (!nativeUpdateIsNew({ installedRuntimeVersion, installedVersion, latest })) return "none";
-      return installer.hasApk(latest.version, latest.size) ? "downloaded" : "available";
-    }),
+  return fetchLatestApk(url, installer).pipe(
+    Effect.andThen((latest) =>
+      Effect.tryPromise(async (): Promise<NativeUpdate> => {
+        latestApk = latest;
+        if (latest === null) return "none";
+        const installedVersion = await installer.installedVersion();
+        if (!nativeUpdateIsNew({ installedRuntimeVersion, installedVersion, latest })) {
+          return "none";
+        }
+        return (await installer.hasApk(latest.version, latest.size)) ? "downloaded" : "available";
+      }),
+    ),
   );
 });
 
 /** Asks once something else isn't up; it answers false when it didn't, so it asks again soon. */
 const askInstallPermission = Effect.tryPromise(async () => {
   if (isNowPlayingShown() || isOverlayOpen()) return false;
-  const strings = currentLocalisation().strings.whatsNew;
+  const strings = currentLocalisation().strings.appUpdates;
   const choice = await showAlert({
     title: strings.installTitle,
     message: strings.installMessage,
@@ -108,11 +138,17 @@ const askInstallPermission = Effect.tryPromise(async () => {
   return true;
 });
 
-const readInstallAccess = (): InstallAccess =>
-  WaveSelfInstall?.installAccess() ?? "needsPermission";
-
 /** It can only change while Wave is away, so it's read then and not at every player change. */
 let installAccess: InstallAccess = "needsPermission";
+
+/** Keeps the last answer when the phone gives none. */
+const refreshInstallAccess = async (): Promise<void> => {
+  try {
+    installAccess = (await WaveSelfInstall?.installAccess()) ?? "needsPermission";
+  } catch (error) {
+    appLog("warn", "WaveUpdates", `Couldn't read the install access: ${String(error)}`);
+  }
+};
 
 const runner = createUpdateRunner({
   client: {
@@ -130,16 +166,18 @@ const runner = createUpdateRunner({
     checkNative,
     downloadApk: Effect.tryPromise(() => {
       if (WaveSelfInstall === null) throw new Error("No installer in this build");
-      const { url, version, size } = needLatestApk();
-      return WaveSelfInstall.downloadApk(url, version, size);
+      const { url, version, size, sha256 } = needLatestApk();
+      return WaveSelfInstall.downloadApk(url, version, size, sha256);
     }),
     askInstallPermission,
     installApk: Effect.tryPromise(() => {
       if (WaveSelfInstall === null) throw new Error("No installer in this build");
       // The install takes the waiting lines with it.
       flushAppLogNow();
-      return WaveSelfInstall.install(needLatestApk().version);
+      const { version, sha256 } = needLatestApk();
+      return WaveSelfInstall.install(version, sha256);
     }),
+    offeredApkVersion: () => latestApk?.version ?? null,
   },
   surroundings: () => ({
     network: network(),
@@ -151,8 +189,13 @@ const runner = createUpdateRunner({
   lastCheckAt,
   lastInstallAskAt,
   lastInstallAt,
+  lastApkAttempt,
   log: (level, message) => appLog(level, "WaveUpdates", message),
 });
+
+const reconsiderWithFreshAccess = (): void => {
+  void refreshInstallAccess().then(runner.reconsider);
+};
 
 let started = false;
 
@@ -160,7 +203,6 @@ let started = false;
 export const startAppUpdates = (): void => {
   if (started || !Updates.isEnabled) return;
   started = true;
-  installAccess = readInstallAccess();
   let stopFollowingPlayer: (() => void) | null = null;
   const followPlayerIfHidden = (): void => {
     if (AppState.currentState === "active") {
@@ -171,10 +213,9 @@ export const startAppUpdates = (): void => {
     }
   };
   AppState.addEventListener("change", () => {
-    installAccess = readInstallAccess();
     followPlayerIfHidden();
-    runner.reconsider();
+    reconsiderWithFreshAccess();
   });
   followPlayerIfHidden();
-  runner.reconsider();
+  reconsiderWithFreshAccess();
 };

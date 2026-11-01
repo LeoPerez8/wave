@@ -71,12 +71,27 @@ GitHub Release, and this tells phones where. `404` before the first release that
 
 ```json
 {
+  "metadata": "<the JSON below, as text>",
+  "signature": "<base64 of the RSA-SHA256 signature over metadata's UTF-8 bytes>"
+}
+```
+
+```json
+{
   "version": "1.3.0-ti",
   "runtimeVersion": "<the kept-APK key>",
   "url": "https://github.com/LeoPerez8/wave/releases/download/v1.3.0-ti/wave-1.3.0-ti.apk",
-  "size": 123456789
+  "size": 123456789,
+  "sha256": "<hex of the file's SHA-256>",
+  "channel": "ti"
 }
 ```
+
+CI signs it with `UPDATES_SIGNING_KEY`, the key updates are signed with, and the Worker serves the
+bytes as they are. A phone checks the signature against the certificate in its APK before it
+downloads anything, and the file's SHA-256 before it installs. Holding the Cloudflare token isn't
+enough to offer an APK, which matters as the APKs are signed with Expo's public debug keystore.
+Without the key, `publish-apk.ts` logs that it skipped and the release goes on.
 
 ## What R2 holds
 

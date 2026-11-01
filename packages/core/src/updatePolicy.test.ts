@@ -2,12 +2,15 @@ import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 
 import {
+  UPDATE_APK_RETRY_INTERVAL_MS,
   UPDATE_CHECK_INTERVAL_MS,
   latestApkUrl,
   nativeUpdateIsNew,
   nextUpdateStep,
   playerKeepsPlaying,
   readLatestApk,
+  readSignedApk,
+  versionOrder,
   type UpdateState,
 } from "./index.ts";
 
@@ -28,6 +31,8 @@ const state = (changes: Partial<UpdateState> = {}): UpdateState => ({
   installAccess: "silent",
   lastInstallAskAt: null,
   lastInstallAt: null,
+  offeredApkVersion: "1.3.0-ti",
+  lastApkAttempt: null,
   ...changes,
 });
 
@@ -291,7 +296,14 @@ describe("a pending APK and a bundle", () => {
 });
 
 describe("whether the channel's APK is an update", () => {
-  const latest = { version: "1.3.0-ti", runtimeVersion: "b", url: "https://x/a.apk", size: 9 };
+  const latest = {
+    version: "1.3.0-ti",
+    runtimeVersion: "b",
+    url: "https://x/a.apk",
+    size: 9,
+    channel: "ti",
+    sha256: "ab".repeat(32),
+  };
 
   it("is when its runtime version differs and its version is higher", () => {
     assert.equal(
@@ -342,17 +354,42 @@ describe("the service's latest APK", () => {
     runtimeVersion: "b",
     url: "https://github.com/o/r/releases/download/v1.3.0/wave-1.3.0.apk",
     size: 1000,
+    channel: "ti",
+    sha256: "ab".repeat(32),
   };
 
-  it("reads an answer", () => {
-    assert.deepEqual(readLatestApk(apk), apk);
+  const read = (metadata: unknown, channel = "ti") =>
+    readLatestApk(JSON.stringify(metadata), channel);
+
+  it("reads the metadata CI signed", () => {
+    assert.deepEqual(read(apk), apk);
   });
 
   it("refuses an address that isn't https, or anything malformed", () => {
-    assert.equal(readLatestApk({ ...apk, url: "http://x/a.apk" }), null);
-    assert.equal(readLatestApk({ ...apk, size: 0 }), null);
-    assert.equal(readLatestApk({ ...apk, version: 1 }), null);
-    assert.equal(readLatestApk(null), null);
+    assert.equal(read({ ...apk, url: "http://x/a.apk" }), null);
+    assert.equal(read({ ...apk, size: 0 }), null);
+    assert.equal(read({ ...apk, version: 1 }), null);
+    assert.equal(read(null), null);
+    assert.equal(readLatestApk("not json", "ti"), null);
+  });
+
+  it("refuses metadata with no file hash to check the download against", () => {
+    const { sha256: _, ...unhashed } = apk;
+    assert.equal(read(unhashed), null);
+    assert.equal(read({ ...apk, sha256: "abc" }), null);
+  });
+
+  it("refuses another channel's metadata, though CI signed that too", () => {
+    assert.equal(read(apk, "main"), null);
+  });
+
+  it("takes the signed answer apart, and calls one with no signature unreadable", () => {
+    const signed = { metadata: JSON.stringify(apk), signature: "c2ln" };
+    assert.deepEqual(readSignedApk(signed), signed);
+    assert.equal(readSignedApk(apk), null);
+    assert.equal(readSignedApk({ metadata: JSON.stringify(apk) }), null);
+    assert.equal(readSignedApk({ metadata: JSON.stringify(apk), signature: "" }), null);
+    assert.equal(readSignedApk(null), null);
   });
 
   it("is asked on the service the manifest comes from, by channel", () => {
@@ -367,5 +404,50 @@ describe("the service's latest APK", () => {
     assert.equal(latestApkUrl({ manifestUrl, channel: "none" }), null);
     assert.equal(latestApkUrl({ manifestUrl, channel: null }), null);
     assert.equal(latestApkUrl({ manifestUrl: undefined, channel: "main" }), null);
+  });
+});
+
+describe("an APK whose last install or download came to nothing", () => {
+  const found = { nativeUpdate: "available", offeredApkVersion: "1.3.0-ti" } as const;
+  const tried = (ago: number, version = "1.3.0-ti") => ({
+    lastApkAttempt: { version, at: NOW - ago },
+  });
+
+  it("isn't downloaded again for a day", () => {
+    assert.equal(UPDATE_APK_RETRY_INTERVAL_MS, 24 * 60 * MINUTE);
+    const soon = state({ ...found, ...tried(UPDATE_APK_RETRY_INTERVAL_MS - 1) });
+    assert.equal(nextUpdateStep(soon), "wait");
+  });
+
+  it("is downloaded again after that", () => {
+    const later = state({ ...found, ...tried(UPDATE_APK_RETRY_INTERVAL_MS) });
+    assert.equal(nextUpdateStep(later), "downloadApk");
+  });
+
+  it("doesn't hold back a newer version", () => {
+    assert.equal(nextUpdateStep(state({ ...found, ...tried(MINUTE, "1.2.9-ti") })), "downloadApk");
+  });
+
+  it("doesn't stay held by a clock set back", () => {
+    assert.equal(nextUpdateStep(state({ ...found, ...tried(-MINUTE) })), "downloadApk");
+  });
+
+  it("still checks while it's held", () => {
+    const held = state({ ...found, ...tried(MINUTE), lastCheckAt: NOW - 15 * MINUTE });
+    assert.equal(nextUpdateStep(held), "check");
+  });
+});
+
+describe("a version's place in the sequence", () => {
+  it("orders the channels' versions as one sequence", () => {
+    assert.equal(versionOrder("0.46.2"), 4602);
+    assert.equal(versionOrder("0.46.3-ti"), 4603);
+    assert.equal(versionOrder("1.0.0"), 10000);
+  });
+
+  it("isn't a place for anything else", () => {
+    assert.equal(versionOrder("1.2"), null);
+    assert.equal(versionOrder("1.100.0"), null);
+    assert.equal(versionOrder("1.2.3-beta"), null);
   });
 });

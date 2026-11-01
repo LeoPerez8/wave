@@ -5,6 +5,7 @@ import android.app.PendingIntent
 import android.content.Context
 import android.content.Intent
 import android.content.pm.PackageInstaller
+import android.content.pm.PackageManager
 import android.net.ConnectivityManager
 import android.net.Uri
 import android.os.Build
@@ -21,6 +22,7 @@ private const val CONFIRMATION_OWED = "confirmationOwed"
 private const val CONNECT_TIMEOUT_MS = 15_000
 private const val READ_TIMEOUT_MS = 30_000
 private const val METERED_CHECK_BYTES = 1L shl 20
+private const val UPDATE_CERTIFICATE = "expo.modules.updates.CODE_SIGNING_CERTIFICATE"
 
 /**
  * Native updates (docs/spec.md, Build and CI): Wave downloads the channel's APK and installs it over
@@ -54,6 +56,15 @@ object SelfInstaller {
   fun installedVersion(context: Context): String =
     context.packageManager.getPackageInfo(context.packageName, 0).versionName ?: ""
 
+  /**
+   * Whether CI signed the channel's APK metadata, by the certificate this APK checks updates with.
+   * Android only checks that an APK has the keystore's signature, and that keystore is public.
+   */
+  fun checkMetadata(context: Context, metadata: String, signature: String): ApkMetadataCheck {
+    val manifest = context.packageManager.getApplicationInfo(context.packageName, PackageManager.GET_META_DATA).metaData
+    return checkApkMetadata(metadata, signature, manifest?.getString(UPDATE_CERTIFICATE))
+  }
+
   /** Android's screen for the "install from this source" permission. Only Wave in front calls it. */
   fun openPermissionScreen(context: Context) {
     WaveLog.i(SELF_INSTALL_TAG, "Opening the install-from-this-source screen")
@@ -71,11 +82,17 @@ object SelfInstaller {
   fun hasApk(context: Context, version: String, size: Long): Boolean =
     apkFile(context, version).length() == size
 
-  /** Blocks on the download: call it off the main thread. A whole file already there is kept. */
-  fun download(context: Context, url: String, version: String, size: Long) {
+  private fun holdsApk(file: File, size: Long, sha256: String): Boolean =
+    file.length() == size && file.inputStream().use(::sha256Hex) == sha256
+
+  /**
+   * Blocks on the download: call it off the main thread. A whole file already there is kept. False
+   * when what came isn't the file CI signed for, which downloading again wouldn't change.
+   */
+  fun download(context: Context, url: String, version: String, size: Long, sha256: String): Boolean {
     require(isDownloadableApkUrl(url)) { "The APK URL must be https" }
     val apk = apkFile(context, version)
-    if (apk.length() == size) return
+    if (holdsApk(apk, size, sha256)) return true
     deleteApks(context)
     val dir = apk.parentFile ?: error("No folder for the APK")
     dir.mkdirs()
@@ -95,11 +112,16 @@ object SelfInstaller {
           val buffer = ByteArray(DEFAULT_BUFFER_SIZE)
           var total = 0L
           var nextCheck = METERED_CHECK_BYTES
+          var logged = 0
           while (true) {
             val read = input.read(buffer)
             if (read < 0) break
             output.write(buffer, 0, read)
             total += read
+            downloadProgressToLog(total, size, logged)?.let {
+              logged = it
+              WaveLog.i(SELF_INSTALL_TAG, "Downloaded $it% of the APK")
+            }
             if (total >= nextCheck) {
               check(!connectivity.isActiveNetworkMetered) { "The network became metered" }
               nextCheck = total + METERED_CHECK_BYTES
@@ -107,22 +129,30 @@ object SelfInstaller {
           }
         }
       }
-      check(part.length() == size) { "Downloaded ${part.length()} bytes of $size" }
+      if (!holdsApk(part, size, sha256)) {
+        WaveLog.w(SELF_INSTALL_TAG, "Refused the download: ${part.length()} bytes of $size, or not the signed SHA-256")
+        return false
+      }
       check(part.renameTo(apk)) { "Couldn't keep the download" }
     } finally {
       connection.disconnect()
       part.delete()
     }
     WaveLog.i(SELF_INSTALL_TAG, "Downloaded ${apk.length()} bytes")
+    return true
   }
 
   /**
    * Blocks while it copies the APK into the session: call it off the main thread. Android checks
    * the APK's signing certificate, and its answer reaches [SelfInstallStatusReceiver].
    */
-  fun install(context: Context, version: String) {
+  fun install(context: Context, version: String, sha256: String) {
     val apk = apkFile(context, version)
     check(apk.isFile) { "No APK of $version on the phone" }
+    if (apk.inputStream().use(::sha256Hex) != sha256) {
+      apk.delete()
+      error("The APK of $version isn't the file CI signed for")
+    }
     val state = phoneState(context)
     WaveLog.i(SELF_INSTALL_TAG, state.line())
     check(state.access() != InstallAccess.NEEDS_PERMISSION) { "Wave may not install yet" }

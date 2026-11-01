@@ -12,11 +12,10 @@ import kotlin.concurrent.thread
 class SelfInstallModule : Module() {
   private val context: Context get() = appContext.reactContext ?: throw Exceptions.ReactContextLost()
 
-  private fun inBackground(promise: Promise, work: () -> Unit) {
+  private fun inBackground(promise: Promise, work: () -> Any?) {
     thread(name = "WaveSelfInstall") {
       try {
-        work()
-        promise.resolve(null)
+        promise.resolve(work())
       } catch (error: Exception) {
         WaveLog.w(SELF_INSTALL_TAG, "The self-install stopped", error)
         promise.reject("ERR_SELF_INSTALL", error.message ?: "The self-install stopped", error)
@@ -27,22 +26,27 @@ class SelfInstallModule : Module() {
   override fun definition() = ModuleDefinition {
     Name("WaveSelfInstall")
 
-    Function("installAccess") { SelfInstaller.access(context).policyName }
+    // Async, as they're binder calls and preference reads and Wave asks at every AppState change.
+    AsyncFunction("installAccess") { SelfInstaller.access(context).policyName }
 
-    Function("installedVersion") { SelfInstaller.installedVersion(context) }
+    AsyncFunction("installedVersion") { SelfInstaller.installedVersion(context) }
 
-    Function("hasApk") { version: String, size: Double -> SelfInstaller.hasApk(context, version, size.toLong()) }
+    AsyncFunction("hasApk") { version: String, size: Double -> SelfInstaller.hasApk(context, version, size.toLong()) }
+
+    AsyncFunction("checkApkMetadata") { metadata: String, signature: String ->
+      SelfInstaller.checkMetadata(context, metadata, signature).jsName
+    }
 
     Function("openPermissionScreen") { SelfInstaller.openPermissionScreen(context) }
 
-    AsyncFunction("downloadApk") { url: String, version: String, size: Double, promise: Promise ->
+    AsyncFunction("downloadApk") { url: String, version: String, size: Double, sha256: String, promise: Promise ->
       val context = context
-      inBackground(promise) { SelfInstaller.download(context, url, version, size.toLong()) }
+      inBackground(promise) { SelfInstaller.download(context, url, version, size.toLong(), sha256) }
     }
 
-    AsyncFunction("install") { version: String, promise: Promise ->
+    AsyncFunction("install") { version: String, sha256: String, promise: Promise ->
       val context = context
-      inBackground(promise) { SelfInstaller.install(context, version) }
+      inBackground(promise) { SelfInstaller.install(context, version, sha256) }
     }
   }
 }

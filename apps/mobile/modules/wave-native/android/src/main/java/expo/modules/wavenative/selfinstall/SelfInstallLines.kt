@@ -69,5 +69,12 @@ private fun yesNo(value: Boolean) = if (value) "yes" else "no"
  */
 fun keepsApkAfter(status: Int): Boolean = status == -1 || status == 3 || status == 0
 
-/** What to do when Android asks for a confirmation. Wave never opens a screen over another app. */
-fun showsConfirmation(waveInForeground: Boolean): Boolean = waveInForeground
+/** The step of [DOWNLOAD_LOG_STEP] percent a download just reached past [logged], if it did. */
+fun downloadProgressToLog(done: Long, size: Long, logged: Int): Int? {
+  if (size <= 0) return null
+  val percent = (done.toDouble() / size * 100).toInt()
+  val step = percent / DOWNLOAD_LOG_STEP * DOWNLOAD_LOG_STEP
+  return step.takeIf { it > logged && it < 100 }
+}
+
+private const val DOWNLOAD_LOG_STEP = 25

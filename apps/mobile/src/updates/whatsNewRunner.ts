@@ -66,7 +66,7 @@ export const createWhatsNewRunner = ({
     finish();
   };
 
-  const fetchThem = (from: string, to: string): void => {
+  const fetchNotesBetween = (from: string, to: string): void => {
     fetching = true;
     void Effect.runPromise(
       fetchNotes(from, to).pipe(
@@ -112,7 +112,7 @@ export const createWhatsNewRunner = ({
         finish();
         return;
       case "fetch":
-        if (seen !== null && runningVersion !== null) fetchThem(seen, runningVersion);
+        if (seen !== null && runningVersion !== null) fetchNotesBetween(seen, runningVersion);
         return;
       case "show":
         if (notes === null) return;

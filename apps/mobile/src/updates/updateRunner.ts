@@ -5,6 +5,7 @@ import {
   type UpdateState,
   type UpdateStep,
 } from "@wave/core";
+import * as Cause from "effect/Cause";
 import * as Effect from "effect/Effect";
 
 /** The update service, as far as the runner needs it. */
@@ -17,12 +18,14 @@ export interface UpdateClient {
   readonly apply: Effect.Effect<void, unknown>;
   /** What the channel's newest APK means for this phone. */
   readonly checkNative: Effect.Effect<NativeUpdate, unknown>;
-  /** Fetches the APK the last check found. */
-  readonly downloadApk: Effect.Effect<void, unknown>;
+  /** Fetches the APK the last check found; false when what came isn't the file CI signed. */
+  readonly downloadApk: Effect.Effect<boolean, unknown>;
   /** Asks for the install permission; false when something was in the way and it didn't ask. */
   readonly askInstallPermission: Effect.Effect<boolean, unknown>;
   /** Hands the APK to Android, which ends this process when it installs. */
   readonly installApk: Effect.Effect<void, unknown>;
+  /** The version the last check found on the channel, if any. */
+  readonly offeredApkVersion: () => string | null;
 }
 
 /** A value kept across launches, so a reopened Wave doesn't repeat a step inside its interval. */
@@ -44,6 +47,11 @@ export interface UpdateRunnerOptions {
   readonly lastCheckAt: KeptTime;
   readonly lastInstallAskAt: KeptTime;
   readonly lastInstallAt: KeptTime;
+  /** Kept across launches, so a reopened Wave doesn't fetch again what just came to nothing. */
+  readonly lastApkAttempt: {
+    readonly get: () => UpdateState["lastApkAttempt"];
+    readonly set: (attempt: NonNullable<UpdateState["lastApkAttempt"]>) => void;
+  };
   readonly log: (level: LogLevel, message: string) => void;
 }
 
@@ -61,12 +69,18 @@ export const createUpdateRunner = ({
   lastCheckAt,
   lastInstallAskAt,
   lastInstallAt,
+  lastApkAttempt,
   log,
 }: UpdateRunnerOptions) => {
   let working = false;
   let bundleAvailable = false;
   let bundleDownloaded = false;
   let nativeUpdate: NativeUpdate = "none";
+
+  const noteApkAttempt = (): void => {
+    const version = client.offeredApkVersion();
+    if (version !== null) lastApkAttempt.set({ version, at: now() });
+  };
 
   // On its own, so a service that fails one question still answers the other.
   const checkNative = client.checkNative.pipe(
@@ -137,9 +151,16 @@ export const createUpdateRunner = ({
       log("info", "Downloading the APK");
       return client.downloadApk;
     }).pipe(
-      Effect.map(() => {
-        nativeUpdate = "downloaded";
-        log("info", "Downloaded the APK");
+      Effect.map((isSigned) => {
+        if (isSigned) {
+          nativeUpdate = "downloaded";
+          log("info", "Downloaded the APK");
+        } else {
+          // A later try would fetch the same file, so the policy holds this version off.
+          noteApkAttempt();
+          nativeUpdate = "available";
+          log("warn", "The downloaded APK isn't the file CI signed");
+        }
         return true;
       }),
       Effect.catch((error) =>
@@ -168,6 +189,9 @@ export const createUpdateRunner = ({
     ),
     installApk: Effect.suspend(() => {
       lastInstallAt.set(now());
+      // Android's refusal only reaches the app log, and it may take the file with it. A version
+      // that installed isn't offered again, so the policy reads this as a failure only if it is.
+      noteApkAttempt();
       log("info", "Installing the APK");
       return client.installApk;
     }).pipe(
@@ -177,7 +201,7 @@ export const createUpdateRunner = ({
       Effect.catch((error) =>
         Effect.sync(() => {
           log("warn", `The APK install failed: ${reason(error)}`);
-          // The file may be gone, so it goes through the download again, which reuses a whole one.
+          // The file may be gone. The next check says, and the policy holds off a new download.
           nativeUpdate = "available";
           return false;
         }),
@@ -192,6 +216,8 @@ export const createUpdateRunner = ({
       lastCheckAt: lastCheckAt.get(),
       lastInstallAskAt: lastInstallAskAt.get(),
       lastInstallAt: lastInstallAt.get(),
+      offeredApkVersion: client.offeredApkVersion(),
+      lastApkAttempt: lastApkAttempt.get(),
       nativeUpdate,
       working,
       bundleAvailable,
@@ -199,7 +225,17 @@ export const createUpdateRunner = ({
     });
     if (step === "wait") return;
     working = true;
-    void Effect.runPromise(steps[step]).then((goOn) => {
+    const guarded = steps[step].pipe(
+      // A throw from native code in a step is a defect, which the steps' catches don't see. Waiting
+      // for the next change is all that's left, and it mustn't leave `working` on for good.
+      Effect.catchCause((cause) =>
+        Effect.sync(() => {
+          log("warn", `The ${step} step stopped: ${reason(Cause.squash(cause))}`);
+          return false;
+        }),
+      ),
+    );
+    void Effect.runPromise(guarded).then((goOn) => {
       working = false;
       if (goOn) reconsider();
     });

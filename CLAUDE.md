@@ -31,6 +31,14 @@ Pick tickets whose blockers are closed.
   ti pushes and tags repack a kept APK when only JS changed, and the repack writes the new
   version into it; a new native input or Metro resource first needs a full build. See
   `docs/spec.md`, Build and CI.
+- Releases also reach phones over the air (`docs/spec.md`, Build and CI). Channels are `ti` and
+  `main`, fixed in the APK by the run that built it; PR and local builds have updates off. A JS
+  change arrives as a bundle, and a change to the runtime version (the kept APK's key) as an APK
+  Wave installs itself. Phones run only updates, and install only APKs, that CI signed with
+  `UPDATES_SIGNING_KEY`, checked against the certificate in their own APK. Never publish around
+  that: the APK keystore is public, so it's all that keeps a stranger's code off phones. A change to `apps/updates` doesn't release: the Worker is deployed by
+  hand (`pnpm --filter @wave/updates run deploy`). Undo a bad update that doesn't crash with the
+  **Roll back an update** workflow (channel and version); it can't cross a runtime version.
 - Decision-heavy logic (queue, counted plays, search, sorting, scan reconciliation, LRC,
   sleep timer) goes in `packages/core`, which must keep **zero runtime dependencies** and
   use only erasable TypeScript syntax with `.ts` import extensions. Test it through its

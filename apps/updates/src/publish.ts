@@ -3,13 +3,14 @@
  * (release.ts), so a failure part way leaves phones on the previous update.
  */
 
-import { createHash, createPrivateKey } from "node:crypto";
+import { createHash, createPrivateKey, createSign } from "node:crypto";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import {
   type Channel,
   type LatestApk,
   type ReleaseNotes,
+  type SignedApk,
   type StoredAsset,
   assetKey,
   latestApkKey,
@@ -71,20 +72,32 @@ export const publishNotes = async ({
   return true;
 };
 
-/** Makes `apk` what the channel's phones are told of. Throws on one they wouldn't download. */
+/**
+ * Makes `apk` what the channel's phones are told of, signed like an update: phones install nothing
+ * else. Throws on a bad key or on an APK they wouldn't download.
+ */
 export const publishLatestApk = async ({
   channel,
   apk,
+  signingKey,
   put,
 }: {
   readonly channel: Channel;
   readonly apk: LatestApk;
+  /** The private key's PEM. */
+  readonly signingKey: string;
   readonly put: PublishOptions["put"];
 }): Promise<void> => {
   if (!apk.url.startsWith("https://")) throw new Error(`Not an https address: ${apk.url}`);
   if (!(apk.size > 0)) throw new Error(`Not an APK's size: ${apk.size}`);
   if (apk.runtimeVersion === "") throw new Error("No runtime version");
-  const data = new TextEncoder().encode(JSON.stringify(apk));
+  if (!/^[0-9a-f]{64}$/.test(apk.sha256)) throw new Error(`Not a SHA-256: ${apk.sha256}`);
+  const metadata = JSON.stringify({ ...apk, channel });
+  const signature = createSign("RSA-SHA256")
+    .update(metadata, "utf8")
+    .sign(createPrivateKey(signingKey), "base64");
+  const signed: SignedApk = { metadata, signature };
+  const data = new TextEncoder().encode(JSON.stringify(signed));
   await put(latestApkKey(channel), data, "application/json");
 };
 

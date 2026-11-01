@@ -18,6 +18,7 @@ const setup = (client: Partial<UpdateClient> = {}) => {
   let lastCheckAt: number | null = null;
   let lastInstallAskAt: number | null = null;
   let lastInstallAt: number | null = null;
+  let lastApkAttempt: { version: string; at: number } | null = null;
   let now = 1_000_000_000;
   const runner = createUpdateRunner({
     client: {
@@ -35,6 +36,7 @@ const setup = (client: Partial<UpdateClient> = {}) => {
       checkNative: Effect.succeed("none"),
       downloadApk: Effect.sync(() => {
         did.push("downloadApk");
+        return true;
       }),
       askInstallPermission: Effect.sync(() => {
         did.push("ask");
@@ -43,6 +45,7 @@ const setup = (client: Partial<UpdateClient> = {}) => {
       installApk: Effect.sync(() => {
         did.push("install");
       }),
+      offeredApkVersion: () => "1.3.0",
       ...client,
     },
     surroundings: () => surroundings,
@@ -50,6 +53,10 @@ const setup = (client: Partial<UpdateClient> = {}) => {
     lastCheckAt: { get: () => lastCheckAt, set: (at) => (lastCheckAt = at) },
     lastInstallAskAt: { get: () => lastInstallAskAt, set: (at) => (lastInstallAskAt = at) },
     lastInstallAt: { get: () => lastInstallAt, set: (at) => (lastInstallAt = at) },
+    lastApkAttempt: {
+      get: () => lastApkAttempt,
+      set: (attempt) => (lastApkAttempt = attempt),
+    },
     log: (level, message) => logged.push({ level, message }),
   });
   return {
@@ -296,7 +303,7 @@ describe("the update runner", () => {
       assert.deepEqual(did, ["downloadApk", "install"]);
     });
 
-    it("after a failed install, downloads again 15 minutes on, as the file may be gone", async () => {
+    it("after a failed install, waits a day to download again, as the failure may repeat", async () => {
       let installs = 0;
       const { runner, did, logged, surroundings, passMinutes, settle } = setup({
         ...foundApk,
@@ -312,11 +319,16 @@ describe("the update runner", () => {
       await settle();
       assert.equal(installs, 1);
       assert.ok(logged.some(({ message }) => /install failed/i.test(message)));
+      const downloads = () => did.filter((step) => step === "downloadApk").length;
       passMinutes(15);
       surroundings.visible = true;
       runner.reconsider();
       await settle();
-      assert.ok(did.filter((step) => step === "downloadApk").length >= 2);
+      assert.equal(downloads(), 1);
+      passMinutes(24 * 60);
+      runner.reconsider();
+      await settle();
+      assert.ok(downloads() > 1);
     });
 
     it("asks for the permission once a day, and doesn't install without it", async () => {
@@ -357,6 +369,135 @@ describe("the update runner", () => {
       runner.reconsider();
       await settle();
       assert.equal(asks, 2);
+    });
+  });
+
+  describe("when something throws where nothing expected it", () => {
+    const thrown = Effect.sync((): never => {
+      throw new Error("the binder died");
+    });
+
+    it("isn't stuck: a throw in the APK check is logged, and the next check runs", async () => {
+      let checks = 0;
+      const { runner, logged, passMinutes, settle } = setup({
+        check: Effect.sync(() => {
+          checks++;
+          return false;
+        }),
+        checkNative: thrown,
+      });
+      runner.reconsider();
+      await settle();
+      assert.ok(logged.some(({ level, message }) => level === "warn" && /binder/.test(message)));
+      passMinutes(15);
+      runner.reconsider();
+      await settle();
+      assert.equal(checks, 2);
+    });
+
+    it("isn't stuck by a throw in any other step", async () => {
+      const { runner, did, logged, surroundings, settle } = setup({
+        check: found,
+        download: thrown,
+      });
+      runner.reconsider();
+      await settle();
+      assert.ok(logged.some(({ message }) => /binder/.test(message)));
+      surroundings.network = "metered";
+      runner.reconsider();
+      await settle();
+      assert.deepEqual(did, []);
+    });
+  });
+
+  describe("when an APK's install or download comes to nothing", () => {
+    it("doesn't download the same version again for a day after an install", async () => {
+      let update: "available" | "downloaded" = "downloaded";
+      const { runner, did, surroundings, passMinutes, settle } = setup({
+        check: Effect.succeed(false),
+        checkNative: Effect.suspend(() => Effect.succeed(update)),
+      });
+      runner.reconsider();
+      await settle();
+      surroundings.visible = false;
+      runner.reconsider();
+      await settle();
+      assert.deepEqual(did, ["install"]);
+
+      // Android refused it, and the file went with its answer.
+      update = "available";
+      surroundings.visible = true;
+      for (const minutes of [15, 15, 15]) {
+        passMinutes(minutes);
+        runner.reconsider();
+        await settle();
+      }
+      assert.deepEqual(did, ["install"]);
+
+      passMinutes(24 * 60);
+      runner.reconsider();
+      await settle();
+      assert.deepEqual(did.slice(0, 2), ["install", "downloadApk"]);
+    });
+
+    it("holds off the same way after a download that isn't the signed file", async () => {
+      let downloads = 0;
+      const { runner, logged, passMinutes, settle } = setup({
+        checkNative: Effect.succeed("available"),
+        downloadApk: Effect.sync(() => {
+          downloads++;
+          return false;
+        }),
+      });
+      runner.reconsider();
+      await settle();
+      assert.equal(downloads, 1);
+      assert.ok(logged.some(({ level, message }) => level === "warn" && /signed/.test(message)));
+      passMinutes(15);
+      runner.reconsider();
+      await settle();
+      runner.reconsider();
+      await settle();
+      assert.equal(downloads, 1);
+    });
+
+    it("doesn't hold off after a download that only failed", async () => {
+      let downloads = 0;
+      const { runner, passMinutes, settle } = setup({
+        checkNative: Effect.succeed("available"),
+        downloadApk: Effect.suspend(() => {
+          downloads++;
+          return failing;
+        }),
+      });
+      runner.reconsider();
+      await settle();
+      passMinutes(15);
+      runner.reconsider();
+      await settle();
+      assert.equal(downloads, 2);
+    });
+
+    it("doesn't hold back the next version", async () => {
+      let offered = "1.3.0";
+      let update: "available" | "downloaded" = "downloaded";
+      const { runner, did, surroundings, passMinutes, settle } = setup({
+        check: Effect.succeed(false),
+        checkNative: Effect.suspend(() => Effect.succeed(update)),
+        offeredApkVersion: () => offered,
+      });
+      runner.reconsider();
+      await settle();
+      surroundings.visible = false;
+      runner.reconsider();
+      await settle();
+      offered = "1.3.1";
+      update = "available";
+      surroundings.visible = true;
+      passMinutes(15);
+      runner.reconsider();
+      await settle();
+      assert.deepEqual(did, ["install", "downloadApk"]);
     });
   });
 });

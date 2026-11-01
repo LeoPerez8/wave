@@ -65,7 +65,7 @@ export default function SettingsScreen() {
         <SettingsPageRows summaries={summaries} developerVisible={developerVisible} />
         {RUNNING_VERSION !== null && (
           <Text className="pt-6 text-center font-sans text-footnote text-secondary" selectable>
-            {strings.whatsNew.version(RUNNING_VERSION)}
+            {strings.appUpdates.version(RUNNING_VERSION)}
           </Text>
         )}
       </ScrollView>

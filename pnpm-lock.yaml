@@ -177,6 +177,10 @@ importers:
         version: 4.151.0(@types/node@24.12.4)
 
   apps/updates:
+    dependencies:
+      '@wave/core':
+        specifier: workspace:*
+        version: link:../../packages/core
     devDependencies:
       '@types/node':
         specifier: 'catalog:'

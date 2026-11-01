@@ -70,7 +70,8 @@ export const startServices = (by: ServicesStarter): void => {
   // Registering is idempotent, so it doesn't matter who started the services first.
   if (by === "app") afterFirstSettled("followCheck", scheduleFollowCheck);
   // Once per runtime, and only with the app: a headless start has no open to check on.
-  if (by === "app") afterFirstSettled("updates", startAppUpdates);
+  // Called inside the arrow: naming it here would load expo-updates with the first screen (#727).
+  if (by === "app") afterFirstSettled("updates", () => startAppUpdates());
   if (startedBy !== null) {
     console.log(`[wave] services already started by the ${startedBy}; the ${by} reuses them`);
     return;

@@ -9,6 +9,9 @@ export const UPDATE_CHECK_INTERVAL_MS = 15 * 60_000;
 /** After a declined question or confirmation, Wave asks again this long after, so it never nags. */
 export const UPDATE_INSTALL_ASK_INTERVAL_MS = 24 * 60 * 60_000;
 
+/** After a failed install or a rejected download, that version's APK waits this long to download. */
+export const UPDATE_APK_RETRY_INTERVAL_MS = 24 * 60 * 60_000;
+
 /** What the phone is on. A bundle downloads on anything but `none`, an APK only on `unmetered`. */
 export type UpdateNetwork = "none" | "metered" | "unmetered";
 
@@ -42,6 +45,13 @@ export interface UpdateState {
   readonly lastInstallAskAt: number | null;
   /** When an install last started, kept across launches; null when none has. */
   readonly lastInstallAt: number | null;
+  /** The version the last check found on the channel; null when it found none. */
+  readonly offeredApkVersion: string | null;
+  /**
+   * The last install begun, or download rejected, kept across launches. A version that installed
+   * is no longer offered, so one still offered with its file gone came to nothing.
+   */
+  readonly lastApkAttempt: { readonly version: string; readonly at: number } | null;
 }
 
 export type UpdateStep =
@@ -79,11 +89,23 @@ const apkStep = (state: UpdateState): UpdateStep | null => {
   }
 };
 
+/** A whole APK is a lot to fetch again for a failure that may well repeat. */
+const apkDownloadIsDue = ({ now, offeredApkVersion, lastApkAttempt }: UpdateState): boolean =>
+  lastApkAttempt === null ||
+  lastApkAttempt.version !== offeredApkVersion ||
+  isDue(now, lastApkAttempt.at, UPDATE_APK_RETRY_INTERVAL_MS);
+
 /** What to do now. Nothing here ticks: the app asks when something it follows changes. */
 export const nextUpdateStep = (state: UpdateState): UpdateStep => {
   if (state.working) return "wait";
   const online = state.network !== "none";
-  if (state.nativeUpdate === "available" && state.network === "unmetered") return "downloadApk";
+  if (
+    state.nativeUpdate === "available" &&
+    state.network === "unmetered" &&
+    apkDownloadIsDue(state)
+  ) {
+    return "downloadApk";
+  }
   if (state.nativeUpdate === "downloaded") {
     const step = apkStep(state);
     if (step !== null) return step;
@@ -100,22 +122,57 @@ export const nextUpdateStep = (state: UpdateState): UpdateStep => {
   return "wait";
 };
 
-/** What the update service says of a channel's newest APK (`GET /v1/apk`). */
+/** The channel's newest APK, as CI signed it. The channel stops one reaching the other's phones. */
 export interface LatestApk {
   readonly version: string;
   readonly runtimeVersion: string;
   readonly url: string;
   readonly size: number;
+  readonly channel: string;
+  /** Hex of the file's SHA-256, which the phone checks before it installs. */
+  readonly sha256: string;
 }
 
-/** The answer, or null when it's malformed or names an address Wave won't download from. */
-export const readLatestApk = (answer: unknown): LatestApk | null => {
+/** What the update service answers (`GET /v1/apk`): the exact bytes CI signed, and the signature. */
+export interface SignedApk {
+  readonly metadata: string;
+  /** Base64 of the RSA-SHA256 signature over `metadata`'s UTF-8 bytes. */
+  readonly signature: string;
+}
+
+/** The answer's two parts, or null when either is missing. Says nothing of the signature's worth. */
+export const readSignedApk = (answer: unknown): SignedApk | null => {
   if (typeof answer !== "object" || answer === null) return null;
-  const { version, runtimeVersion, url, size } = answer as Record<string, unknown>;
+  const { metadata, signature } = answer as Record<string, unknown>;
+  if (typeof metadata !== "string" || typeof signature !== "string" || signature === "") {
+    return null;
+  }
+  return { metadata, signature };
+};
+
+const parsedJson = (text: string): unknown => {
+  try {
+    return JSON.parse(text) as unknown;
+  } catch {
+    return null;
+  }
+};
+
+/**
+ * The metadata a verified signature covers, or null when it's malformed, belongs to another channel
+ * or names an address Wave won't download from.
+ */
+export const readLatestApk = (metadata: string, channel: string | null): LatestApk | null => {
+  const read = parsedJson(metadata);
+  if (typeof read !== "object" || read === null) return null;
+  const { version, runtimeVersion, url, size, sha256 } = read as Record<string, unknown>;
+  const { channel: signedFor } = read as Record<string, unknown>;
   if (typeof version !== "string" || typeof runtimeVersion !== "string") return null;
   if (typeof url !== "string" || !url.startsWith("https://")) return null;
   if (typeof size !== "number" || !(size > 0)) return null;
-  return { version, runtimeVersion, url, size };
+  if (typeof signedFor !== "string" || signedFor !== channel) return null;
+  if (typeof sha256 !== "string" || !/^[0-9a-f]{64}$/.test(sha256)) return null;
+  return { version, runtimeVersion, url, size, channel: signedFor, sha256 };
 };
 
 /** Where the channel's APK is told: on the service the manifest comes from. */
@@ -133,8 +190,11 @@ export const latestApkUrl = ({
   return `${manifestUrl.slice(0, -manifestPath.length)}/v1/apk?channel=${channel}`;
 };
 
-// The sequence both channels share; the versionCode Android compares comes from the same numbers.
-const versionOrder = (version: string): number | null => {
+/**
+ * A version's place in the sequence both channels share, or null if it isn't a version. Android's
+ * versionCode is the same number, and minor and patch stay under 100 (docs/spec.md, Releases).
+ */
+export const versionOrder = (version: string): number | null => {
   const match = /^(\d+)\.(\d{1,2})\.(\d{1,2})(?:-ti)?$/.exec(version);
   return match ? Number(match[1]) * 10000 + Number(match[2]) * 100 + Number(match[3]) : null;
 };

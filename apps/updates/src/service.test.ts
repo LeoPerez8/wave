@@ -831,30 +831,51 @@ describe("GET /v1/apk", () => {
     runtimeVersion: "native-b",
     url: "https://github.com/o/r/releases/download/v1.3.0-ti/wave-1.3.0-ti.apk",
     size: 123456,
+    sha256: "ab".repeat(32),
   };
+  const signingKey = shipped.privateKey;
   const askForApk = (storage: ReturnType<typeof memoryStorage>, query: string) =>
     createUpdateService(storage).fetch(new Request(`${ORIGIN}/v1/apk?${query}`));
+  const answerOf = async (response: Response) =>
+    (await response.json()) as { metadata: string; signature: string };
+  const metadataOf = async (response: Response) =>
+    JSON.parse((await answerOf(response)).metadata) as unknown;
 
   it("answers the channel's newest APK, never cached", async () => {
     const storage = memoryStorage();
-    await publishLatestApk({ channel: "ti", apk, put: storage.put });
+    await publishLatestApk({ channel: "ti", apk, signingKey, put: storage.put });
     const response = await askForApk(storage, "channel=ti");
     assert.equal(response.status, 200);
-    assert.deepEqual(await response.json(), apk);
+    assert.deepEqual(await metadataOf(response), { ...apk, channel: "ti" });
     assert.match(response.headers.get("cache-control") ?? "", /max-age=0/);
+  });
+
+  it("answers metadata the shipped certificate's key signed, the file's hash included", async () => {
+    const storage = memoryStorage();
+    await publishLatestApk({ channel: "ti", apk, signingKey, put: storage.put });
+    const { metadata, signature } = await answerOf(await askForApk(storage, "channel=ti"));
+    assert.equal((JSON.parse(metadata) as { sha256: string }).sha256, apk.sha256);
+    const verifies = (publicKey: string, text: string) =>
+      createVerify("RSA-SHA256").update(text, "utf8").verify(publicKey, signature, "base64");
+    assert.equal(verifies(shipped.publicKey, metadata), true);
+    assert.equal(verifies(another.publicKey, metadata), false);
+    assert.equal(verifies(shipped.publicKey, metadata.replace("1.3.0-ti", "9.9.9-ti")), false);
   });
 
   it("the newest publish replaces the last", async () => {
     const storage = memoryStorage();
-    await publishLatestApk({ channel: "ti", apk, put: storage.put });
+    await publishLatestApk({ channel: "ti", apk, signingKey, put: storage.put });
     const newer = { ...apk, version: "1.3.1-ti" };
-    await publishLatestApk({ channel: "ti", apk: newer, put: storage.put });
-    assert.deepEqual(await (await askForApk(storage, "channel=ti")).json(), newer);
+    await publishLatestApk({ channel: "ti", apk: newer, signingKey, put: storage.put });
+    assert.deepEqual(await metadataOf(await askForApk(storage, "channel=ti")), {
+      ...newer,
+      channel: "ti",
+    });
   });
 
   it("keeps each channel's apart", async () => {
     const storage = memoryStorage();
-    await publishLatestApk({ channel: "ti", apk, put: storage.put });
+    await publishLatestApk({ channel: "ti", apk, signingKey, put: storage.put });
     assert.equal((await askForApk(storage, "channel=main")).status, 404);
   });
 
@@ -862,14 +883,86 @@ describe("GET /v1/apk", () => {
     assert.equal((await askForApk(memoryStorage(), "channel=pr")).status, 400);
   });
 
-  it("refuses to publish an address phones wouldn't download from", async () => {
+  it("refuses to publish what phones wouldn't download or couldn't check", async () => {
     const storage = memoryStorage();
-    await assert.rejects(
-      publishLatestApk({ channel: "ti", apk: { ...apk, url: "http://x/a.apk" }, put: storage.put }),
-    );
-    await assert.rejects(
-      publishLatestApk({ channel: "ti", apk: { ...apk, size: 0 }, put: storage.put }),
-    );
+    const refused = (changes: Partial<typeof apk>, key = signingKey) =>
+      assert.rejects(
+        publishLatestApk({
+          channel: "ti",
+          apk: { ...apk, ...changes },
+          signingKey: key,
+          put: storage.put,
+        }),
+      );
+    await refused({ url: "http://x/a.apk" });
+    await refused({ size: 0 });
+    await refused({ sha256: "abc" });
+    await refused({}, "not a key");
     assert.equal((await askForApk(storage, "channel=ti")).status, 404);
+  });
+});
+
+describe("publish-apk.ts", () => {
+  const run = (env: Record<string, string>) => {
+    const bin = mkdtempSync(join(tmpdir(), "wave-npx-apk-"));
+    const log = join(bin, "calls.log");
+    const uploaded = join(bin, "uploaded");
+    writeFileSync(log, "");
+    writeFileSync(
+      join(bin, "npx"),
+      `#!/bin/sh\necho "$5 $6 key=\${UPDATES_SIGNING_KEY:-none}" >> "${log}"\ncp "$8" "${uploaded}"\n`,
+    );
+    chmodSync(join(bin, "npx"), 0o755);
+    const apkPath = join(bin, "wave.apk");
+    writeFileSync(apkPath, "the APK's bytes");
+    const { status, stdout } = spawnSync(
+      process.execPath,
+      [fileURLToPath(new URL("../scripts/publish-apk.ts", import.meta.url))],
+      {
+        encoding: "utf8",
+        env: {
+          PATH: `${bin}:${process.env.PATH}`,
+          CLOUDFLARE_API_TOKEN: "token",
+          CLOUDFLARE_ACCOUNT_ID: "account",
+          WAVE_UPDATE_CHANNEL: "ti",
+          WAVE_RUNTIME_VERSION: "native-b",
+          WAVE_RELEASE_TAG: "v1.3.0-ti",
+          WAVE_APK_URL: "https://github.com/o/r/releases/download/v1.3.0-ti/wave-1.3.0-ti.apk",
+          WAVE_APK_PATH: apkPath,
+          ...env,
+        },
+      },
+    );
+    return { status, output: stdout, calls: readFileSync(log, "utf8"), uploaded };
+  };
+
+  it("with no key, skips with a log, publishes nothing and doesn't fail the release", () => {
+    const { status, output, calls } = run({});
+    assert.equal(status, 0);
+    assert.match(output, /Skipping the latest APK: UPDATES_SIGNING_KEY/);
+    assert.equal(calls, "");
+  });
+
+  it("with a bad key, warns, publishes nothing and doesn't fail the release", () => {
+    const { status, output, calls } = run({ UPDATES_SIGNING_KEY: "not a key" });
+    assert.equal(status, 0);
+    assert.match(output, /::warning::/);
+    assert.equal(calls, "");
+  });
+
+  it("signs the file's real SHA-256, and keeps the key from wrangler", () => {
+    const { status, calls, uploaded } = run({ UPDATES_SIGNING_KEY: shipped.privateKey });
+    assert.equal(status, 0);
+    assert.match(calls, /apks\/ti\/latest\.json key=none/);
+    const { metadata, signature } = JSON.parse(readFileSync(uploaded, "utf8")) as {
+      metadata: string;
+      signature: string;
+    };
+    const verified = createVerify("RSA-SHA256")
+      .update(metadata, "utf8")
+      .verify(shipped.publicKey, signature, "base64");
+    assert.equal(verified, true);
+    const expected = createHash("sha256").update("the APK's bytes").digest("hex");
+    assert.equal((JSON.parse(metadata) as { sha256: string }).sha256, expected);
   });
 });
