@@ -14,10 +14,7 @@ import {
   type RecognizeTrack,
 } from "@wave/core";
 
-import {
-  startRecognizeSession,
-  type RecognizeNative,
-} from "./recognizeSession.ts";
+import { startRecognizeSession, type RecognizeNative } from "./recognizeSession.ts";
 import {
   followRecognizeTile,
   trackCardSessions,
