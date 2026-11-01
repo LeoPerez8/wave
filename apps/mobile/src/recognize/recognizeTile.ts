@@ -1,11 +1,17 @@
-import type { RecognizeCard, RecognizeTileNotice, RecognizeTrack, YtSong } from "@wave/core";
+import type {
+  RecognizeCard,
+  RecognizeSource,
+  RecognizeTileNotice,
+  RecognizeTrack,
+  YtSong,
+} from "@wave/core";
 
 import { startRecognizeSession, type RecognizeDeps } from "./recognizeSession.ts";
 
 /** The tile's half of native (`recognize/RecognizeTileRun.kt`, `RecognizeListeningService.kt`). */
 export interface RecognizeTileNative {
-  /** Takes the tap waiting for JS; 0 when none is. */
-  readonly take: () => number;
+  /** Takes the tap waiting for JS, if one is; [microphone] is a press of Use Microphone. */
+  readonly take: () => { readonly tap: number; readonly microphone: boolean } | null;
   /** A tap is waiting; returns the unsubscribe. */
   readonly onRequested: (listener: () => void) => () => void;
   /** Tap [tap]'s session was cancelled from the tile or its notification. */
@@ -17,8 +23,12 @@ export interface RecognizeTileNative {
   readonly notify: (notice: RecognizeTileNotice) => void;
 }
 
+/** What a tap listens through. Phone audio is #901's: it needs Android's consent dialog. */
+const TAP_SOURCE: RecognizeSource | "auto" = "microphone";
+
 /**
- * Follows the tile's taps. Each runs the card's session (Core decides everything in it)
+ * Follows the tile's taps, and the notification's Try Again and Use Microphone, which
+ * reach it as taps. Each runs the card's session (Core decides everything in it)
  * with no card: its capture doesn't depend on Wave's screen, so Wave always counts as
  * foreground for Core's clock, and what it ends on goes to [notice]'s notification.
  * Returns the cancel of a session still listening, for a card session taking over the
@@ -32,7 +42,7 @@ export const followRecognizeTile = <L extends RecognizeTrack, S extends YtSong>(
   let listening: { readonly tap: number; readonly cancel: () => void } | null = null;
   let running = 0;
 
-  const start = (tap: number): void => {
+  const start = (tap: number, source: RecognizeSource | "auto"): void => {
     let ended = false;
     const end = (): void => {
       if (ended) return;
@@ -41,10 +51,9 @@ export const followRecognizeTile = <L extends RecognizeTrack, S extends YtSong>(
       tile.listeningEnded(tap);
     };
     running++;
-    // Phone audio is #901's: it needs Android's consent dialog, with Core's source choice.
     const run = startRecognizeSession(
       { ...deps, foreground: () => true },
-      "microphone",
+      source,
       (card) => {
         if (card.kind === "listening") return;
         end();
@@ -61,8 +70,8 @@ export const followRecognizeTile = <L extends RecognizeTrack, S extends YtSong>(
   };
 
   const receive = (): void => {
-    const tap = tile.take();
-    if (tap !== 0) start(tap);
+    const request = tile.take();
+    if (request !== null) start(request.tap, request.microphone ? "microphone" : TAP_SOURCE);
   };
 
   const stops = [

@@ -2,8 +2,14 @@ package expo.modules.wavenative.recognize
 
 import java.util.concurrent.CopyOnWriteArrayList
 
-/** What a tile tap does: listen, cancel the tile's session, or leave the card's alone. */
-enum class RecognizeTileTap { LISTEN, CANCEL, IGNORE }
+/**
+ * What a tile tap does: listen, cancel the tile's session, leave the card's alone, or
+ * open the card when a tile session couldn't give an answer.
+ */
+enum class RecognizeTileTap { LISTEN, CANCEL, IGNORE, OPEN_CARD }
+
+/** A tap JS takes; [microphone] is a press of Use Microphone, which skips Core's source choice. */
+data class RecognizeTileRequest(val tap: Int, val microphone: Boolean)
 
 /**
  * The tile's session as native knows it. JS runs the session and Core decides it; this
@@ -14,6 +20,7 @@ enum class RecognizeTileTap { LISTEN, CANCEL, IGNORE }
 class RecognizeTileRun {
   private var current = 0
   private var waiting = false
+  private var microphone = false
   private var last = 0
   private val listeners = CopyOnWriteArrayList<() -> Unit>()
 
@@ -24,16 +31,18 @@ class RecognizeTileRun {
 
   val listening: Boolean @Synchronized get() = current != 0
 
-  fun tap(): RecognizeTileTap = when {
+  fun tap(microphone: Boolean = true, notifications: Boolean = true): RecognizeTileTap = when {
     listening -> RecognizeTileTap.CANCEL
     cardRunning -> RecognizeTileTap.IGNORE
+    !microphone || !notifications -> RecognizeTileTap.OPEN_CARD
     else -> RecognizeTileTap.LISTEN
   }
 
   /** A session starts listening; JS takes its tap, at once or once it's running. */
-  fun request(): Int {
+  fun request(microphone: Boolean = false): Int {
     val tap = synchronized(this) {
       waiting = true
+      this.microphone = microphone
       current = ++last
       current
     }
@@ -42,12 +51,12 @@ class RecognizeTileRun {
     return tap
   }
 
-  /** The tap waiting for JS, once; 0 when none is. */
+  /** The tap waiting for JS, once; null when none is. */
   @Synchronized
-  fun take(): Int {
-    if (!waiting) return 0
+  fun take(): RecognizeTileRequest? {
+    if (!waiting) return null
     waiting = false
-    return current
+    return RecognizeTileRequest(current, microphone)
   }
 
   fun cancel() {

@@ -57,7 +57,9 @@ class RecognizeModule : Module() {
     }
     Function("takeRequest") { RecognizeInbox.take() }
 
-    Function("takeTileRequest") { tile.take() }
+    Function("takeTileRequest") {
+      tile.take()?.let { mapOf<String, Any>("tap" to it.tap, "microphone" to it.microphone) }
+    }
     Function("setCardSession") { running: Boolean -> tile.cardRunning = running }
     Function("tileListeningEnded") { tap: Int -> tile.ended(tap) }
     // A tap may have come in the meantime, and it needs the service.
@@ -65,8 +67,8 @@ class RecognizeModule : Module() {
     Function("notifyTileMatch") { title: String, text: String, coverUrl: String? ->
       RecognizeNotifications.postMatch(context, title, text, coverUrl)
     }
-    Function("notifyTileNoMatch") { title: String, text: String ->
-      RecognizeNotifications.postNoMatch(context, title, text)
+    Function("notifyTileFailure") { title: String, text: String, actionLabel: String, microphone: Boolean ->
+      RecognizeNotifications.postFailure(context, title, text, actionLabel, microphone)
     }
 
     AsyncFunction("playbackActivity") {

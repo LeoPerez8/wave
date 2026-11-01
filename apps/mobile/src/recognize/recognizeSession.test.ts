@@ -3,6 +3,7 @@ import { describe, test } from "node:test";
 
 import {
   RECOGNIZE_WINDOW_MS,
+  recognizeResultActions,
   resolveRecognizedSong,
   type RecognizeAnswer,
   type RecognizeCard,
@@ -906,4 +907,35 @@ test("a failed lookup still offers an unsearched result and logs a warning", asy
   assert.deepEqual(lines, [
     "Recognize through the microphone: a match after 4.0 s, YT Music lookup: failed",
   ]);
+});
+
+test("a permission fallback card asks before capturing and offers a manual save on its result", async () => {
+  let grant!: (permission: "granted" | "denied") => void;
+  let requests = 0;
+  const { native, last, session } = setup({
+    source: "auto",
+    askMicrophone: () => {
+      requests++;
+      return new Promise((resolve) => {
+        grant = resolve;
+      });
+    },
+  });
+  await settle();
+  assert.equal(requests, 1);
+  assert.equal(native.started, 0);
+  grant("granted");
+  await settle();
+  await native.hear(4);
+  await native.answer({ kind: "match", song: SONG });
+  await session.done;
+  const card = last();
+  assert.equal(card?.kind, "resolved");
+  if (card?.kind !== "resolved") throw new Error("Expected the card's result");
+  assert.deepEqual(recognizeResultActions(card.result, { ytMusic: false }), [
+    "addToShazam",
+    "addToPlaylist",
+    "listenAgain",
+  ]);
+  assert.deepEqual(native.stopped, [7]);
 });

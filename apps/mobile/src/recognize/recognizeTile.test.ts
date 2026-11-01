@@ -33,12 +33,12 @@ const resolved = (): RecognizeResolution =>
 
 /** Android's half: taps waiting in native, and what JS tells it. */
 const fakeTile = () => {
-  const taps: number[] = [];
+  const taps: { tap: number; microphone: boolean }[] = [];
   let requested: (() => void) | null = null;
   let cancelled: ((tap: number) => void) | null = null;
   const tile = {
     calls: [] as string[],
-    take: () => taps.shift() ?? 0,
+    take: () => taps.shift() ?? null,
     onRequested: (listener: () => void) => {
       requested = listener;
       return () => void (requested = null);
@@ -51,12 +51,12 @@ const fakeTile = () => {
     finished: () => void tile.calls.push("finished"),
     notify: (notice) => void tile.calls.push(`notify ${notice.kind} ${notice.title}`),
     /** A tap reaches JS, which is already running. */
-    tap: (id: number) => {
-      taps.push(id);
+    tap: (id: number, microphone = false) => {
+      taps.push({ tap: id, microphone });
       requested?.();
     },
     /** A tap made before JS was running. */
-    waiting: (id: number) => void taps.push(id),
+    waiting: (id: number) => void taps.push({ tap: id, microphone: false }),
     cancel: (id: number) => cancelled?.(id),
   } satisfies RecognizeTileNative & Record<string, unknown>;
   return tile;
@@ -64,8 +64,13 @@ const fakeTile = () => {
 
 /** Capture and Shazam, driven by the test; the session between them is the real one. */
 const setup = (
-  options: { resolve?: () => Promise<RecognizeResolution>; otherPlaying?: boolean } = {},
+  options: {
+    resolve?: () => Promise<RecognizeResolution>;
+    otherPlaying?: boolean;
+    offline?: boolean;
+  } = {},
 ) => {
+  let online = options.offline !== true;
   const answers: ((answer: RecognizeAnswer) => void)[] = [];
   let heard: ((session: number, ms: number, audible: boolean) => void) | null = null;
   const native = {
@@ -95,7 +100,7 @@ const setup = (
   const logs: string[] = [];
   const held: string[] = [];
   const deps: RecognizeDeps = {
-    online: () => true,
+    online: () => online,
     // The card's answer with Wave hidden, as it is for a tile session.
     foreground: () => false,
     now: () => (clock += 500),
@@ -117,6 +122,7 @@ const setup = (
     native,
     logs,
     held,
+    reconnect: () => void (online = true),
     /** The session running has heard [seconds] in all. */
     hear: async (seconds: number) => {
       heard?.(native.requests.at(-1)!, seconds * 1000, true);
@@ -201,7 +207,7 @@ test("Core's schedule runs the session: no match only ends it after its last req
     requests++;
   }
   assert.ok(requests > 1);
-  assert.deepEqual(tile.calls, ["ended 1", "notify noMatch No match", "finished"]);
+  assert.deepEqual(tile.calls, ["ended 1", "notify failure No match", "finished"]);
   assert.equal(world.logs.length, 1);
 });
 
@@ -215,8 +221,59 @@ test("Wave staying hidden doesn't end a capture that stops: the failure is a fai
   // Core's 3-second stall only counts time in the foreground.
   world.tick(7);
   await settle();
-  assert.deepEqual(tile.calls, ["ended 1", "finished"]);
+  assert.deepEqual(tile.calls, [
+    "ended 1",
+    "notify failure Couldn't recognize the song",
+    "finished",
+  ]);
   assert.match(world.logs[0]!, /failed/);
+});
+
+test("a refused request tells the card's reason, and the tile lets go", async () => {
+  const world = setup();
+  const tile = fakeTile();
+  followRecognizeTile(tile, world.deps, recognizeTileNotice);
+  tile.tap(1);
+  await settle();
+  await world.hear(4);
+  await world.answer({ kind: "failed", failure: "refused", status: 403 });
+  assert.deepEqual(tile.calls, [
+    "ended 1",
+    "notify failure Couldn't recognize the song",
+    "finished",
+  ]);
+  assert.deepEqual(world.held, ["paused", "resumed"]);
+});
+
+test("offline says No connection without capturing", async () => {
+  const world = setup({ offline: true });
+  const tile = fakeTile();
+  followRecognizeTile(tile, world.deps, recognizeTileNotice);
+  tile.tap(1);
+  await settle();
+  assert.deepEqual(tile.calls, ["ended 1", "notify failure No connection", "finished"]);
+  assert.deepEqual(world.native.sources, []);
+});
+
+test("Try Again is a new tap: it listens again after a failure", async () => {
+  const world = setup({ offline: true });
+  const tile = fakeTile();
+  followRecognizeTile(tile, world.deps, recognizeTileNotice);
+  tile.tap(1);
+  await settle();
+  world.reconnect();
+  tile.tap(2);
+  await settle();
+  assert.deepEqual(world.native.sources, ["microphone"]);
+});
+
+test("Use Microphone listens through the microphone with another player active", async () => {
+  const world = setup({ otherPlaying: true });
+  const tile = fakeTile();
+  followRecognizeTile(tile, world.deps, recognizeTileNotice);
+  tile.tap(1, true);
+  await settle();
+  assert.deepEqual(world.native.sources, ["microphone"]);
 });
 
 test("Cancel ends the session with no notification, and resumes playback", async () => {

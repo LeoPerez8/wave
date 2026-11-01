@@ -10,7 +10,8 @@ import android.service.quicksettings.TileService
 
 /**
  * Listens without opening Wave: RecognizeTileActivity starts the session's service, and
- * notifications take it from there. A second tap cancels.
+ * notifications take it from there. A second tap cancels. A tap that session couldn't
+ * answer opens the card instead.
  */
 class RecognizeTileService : TileService() {
   private val run = RecognizeTileRun.shared
@@ -39,21 +40,28 @@ class RecognizeTileService : TileService() {
 
   override fun onClick() {
     super.onClick()
-    when (run.tap()) {
+    when (tap()) {
       RecognizeTileTap.CANCEL -> RecognizeListeningService.cancel(this)
       RecognizeTileTap.IGNORE -> Unit
-      RecognizeTileTap.LISTEN -> if (isLocked) unlockAndRun(::listen) else listen()
+      RecognizeTileTap.LISTEN, RecognizeTileTap.OPEN_CARD -> if (isLocked) unlockAndRun(::answer) else answer()
     }
   }
 
+  /**
+   * The service can't start without the microphone, and only the card can ask for it;
+   * with results not reaching the user, only the card can show one (#902).
+   */
+  private fun tap() = run.tap(
+    microphone = checkSelfPermission(Manifest.permission.RECORD_AUDIO) == PackageManager.PERMISSION_GRANTED,
+    notifications = RecognizeNotifications.resultsShown(this),
+  )
+
   /** After an unlock too, which can take long enough for a card session to start. */
-  private fun listen() {
-    if (run.tap() != RecognizeTileTap.LISTEN) return
-    // The service can't start without it, and only the card can ask (#902).
-    if (checkSelfPermission(Manifest.permission.RECORD_AUDIO) != PackageManager.PERMISSION_GRANTED) {
-      collapseInto(recognizeIntent(this))
-    } else {
-      collapseInto(Intent(this, RecognizeTileActivity::class.java).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
+  private fun answer() {
+    when (tap()) {
+      RecognizeTileTap.LISTEN -> collapseInto(Intent(this, RecognizeTileActivity::class.java).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
+      RecognizeTileTap.OPEN_CARD -> collapseInto(recognizeIntent(this))
+      RecognizeTileTap.CANCEL, RecognizeTileTap.IGNORE -> Unit
     }
   }
 
