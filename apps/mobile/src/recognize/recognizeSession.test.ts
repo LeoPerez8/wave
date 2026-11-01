@@ -390,17 +390,93 @@ describe("a Recognize session", () => {
     const { native, last, lines, levels, session } = setup();
     await settle();
     await native.hear(4);
-    await native.answer({ kind: "failed", failure: "refused", status: 429 });
+    await native.answer({ kind: "failed", failure: "refused", status: 403 });
     await session.done;
 
     assert.deepEqual(last(), {
       kind: "ended",
-      end: { kind: "failed", failure: "refused", status: 429 },
+      end: { kind: "failed", failure: "refused", status: 403 },
     });
     assert.deepEqual(lines, [
-      "Recognize through the microphone: failed after 4.0 s (refused, HTTP 429)",
+      "Recognize through the microphone: failed after 4.0 s (refused, HTTP 403)",
     ]);
     assert.deepEqual(levels, ["warn"]);
+  });
+
+  test("a rate limit at 4 seconds keeps listening and the next ask can name the song", async () => {
+    const { native, last, lines, session } = setup();
+    await settle();
+    await native.hear(4);
+    await native.answer({ kind: "failed", failure: "refused", status: 429 });
+    assert.deepEqual(last(), { kind: "listening" });
+    assert.deepEqual(native.stopped, []);
+
+    await native.hear(8);
+    assert.deepEqual(
+      native.asks.map((ask) => ask.last),
+      [false, false],
+    );
+    await native.answer({ kind: "match", song: SONG });
+    await session.done;
+    assert.equal(last()?.kind, "resolved");
+    assert.deepEqual(lines, [
+      "Recognize through the microphone: a match after 8.0 s, 1 request failed before it, YT Music lookup: disabled",
+    ]);
+  });
+
+  test("the last step's retry goes out on the clock, and its failure shows on the card", async () => {
+    const { native, last, lines, session, clock } = setup();
+    const unanswered = { kind: "failed", failure: "network", status: null } as const;
+    await settle();
+    await native.hear(1);
+    await clock.advance(1);
+    await native.hear(4);
+    await native.answer({ kind: "noMatch" });
+    await clock.advance(1);
+    await native.hear(8);
+    await native.answer({ kind: "noMatch" });
+    await clock.advance(1);
+    await native.hear(12);
+    await native.answer(unanswered);
+    assert.equal(native.asks.length, 3);
+
+    await clock.advance(1);
+    assert.deepEqual(native.asks.at(-1), { session: 7, last: true });
+    assert.equal(native.asks.length, 4);
+    await native.answer(unanswered);
+    await clock.advance(2);
+    assert.equal(native.asks.length, 5);
+    await native.answer(unanswered);
+    await clock.advance(4);
+    assert.equal(native.asks.length, 6);
+    await native.answer(unanswered);
+    await session.done;
+
+    assert.deepEqual(last(), { kind: "ended", end: unanswered });
+    assert.deepEqual(lines, [
+      "Recognize through the microphone: failed after 12.0 s (network), 3 requests failed before it",
+    ]);
+  });
+
+  test("Cancel during a retry's wait sends nothing more and ignores the answer still out", async () => {
+    const { native, cards, lines, session, clock } = setup();
+    await settle();
+    await native.hear(4);
+    await native.answer({ kind: "noMatch" });
+    await native.hear(8);
+    await native.answer({ kind: "noMatch" });
+    await native.hear(12);
+    await native.answer({ kind: "failed", failure: "refused", status: 503 });
+    session.cancel();
+    await session.done;
+    await clock.advance(2);
+    await native.answer({ kind: "match", song: SONG });
+
+    assert.equal(native.asks.length, 3);
+    assert.deepEqual(cards, [{ kind: "listening" }]);
+    assert.deepEqual(lines, [
+      "Recognize through the microphone: cancelled after 12.0 s, 1 request failed before it",
+    ]);
   });
 
   test("ignores another session's audio", async () => {
@@ -714,7 +790,10 @@ describe("Wave's playback during a session", () => {
         await native.answer({ kind: "noMatch" });
       },
     ],
-    ["an error", (native) => native.answer({ kind: "failed", failure: "network", status: null })],
+    [
+      "an error",
+      (native) => native.answer({ kind: "failed", failure: "unreadable", status: null }),
+    ],
     [
       "a capture failure",
       async (native) => {
