@@ -380,11 +380,11 @@ export const WHOLE_LIBRARY: Record<string, WholeLibraryException> = {
       "Download recovery runs on explicit/background work; the failed-download UI follows only while shown.",
     capabilities: ["ytmusic/libraryFinder.ts#useLoadedLibraryFinder"],
   },
-  "recognize/RecognizeCard.tsx#depsFor": {
+  "recognize/recognizeDeps.ts#recognizeDeps": {
     howOften:
-      "Once per recognized match after capture ends, from an explicitly opened card; never while listening.",
+      "Once per recognized match after capture ends, from an explicitly opened card or tile tap; constructing the adapter and listening do not read the Library.",
     reason:
-      "Recognition needs the Library before searching online, using the shared songs query. resolveRecognition.test.ts covers one Library read per match and no online search for a Library match.",
+      "The card and tile share this adapter: resolution needs the Library before searching online, using the shared songs query. startRecognizeSession finishes capture once before resolving a match, so listening updates cannot trigger reads. resolveRecognition.test.ts covers one Library read per match and no online search for a Library match.",
     capabilities: ["library/hooks.ts#songs"],
   },
   "recognize/RecognizeCard.tsx#RecognizeCard": {
