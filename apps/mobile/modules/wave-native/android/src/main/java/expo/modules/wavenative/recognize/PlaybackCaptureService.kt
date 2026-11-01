@@ -1,8 +1,6 @@
 package expo.modules.wavenative.recognize
 
 import android.app.Notification
-import android.app.NotificationChannel
-import android.app.NotificationManager
 import android.app.Service
 import android.content.ComponentName
 import android.content.Context
@@ -33,12 +31,7 @@ class PlaybackCaptureService : Service() {
   override fun onStartCommand(intent: Intent?, flags: Int, startId: Int) = START_NOT_STICKY
 
   fun open(resultCode: Int, data: Intent, onReleased: () -> Unit): PlaybackAudio {
-    getSystemService(NotificationManager::class.java).createNotificationChannel(
-      NotificationChannel(CHANNEL, NativeText.get("recognize"), NotificationManager.IMPORTANCE_LOW).apply {
-        setShowBadge(false)
-      },
-    )
-    startForeground(NOTIFICATION, Notification.Builder(this, CHANNEL)
+    startForeground(NOTIFICATION, Notification.Builder(this, RecognizeNotifications.listeningChannel(this))
       .setSmallIcon(R.drawable.wave_notification)
       .setContentTitle(NativeText.get("recognize"))
       .setContentText(NativeText.get("listeningToPhone"))
@@ -61,7 +54,6 @@ class PlaybackCaptureService : Service() {
   }
 
   private companion object {
-    const val CHANNEL = "wave-recognize"
     const val NOTIFICATION = 771
   }
 }

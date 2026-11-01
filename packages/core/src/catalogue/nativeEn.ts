@@ -1,6 +1,8 @@
 export const nativeEn = {
   recognize: "Recognize Song",
   listeningToPhone: "Listening to audio from this phone",
+  listening: "Listening…",
+  recognizedSongs: "Recognized songs",
   fixSongs: "Fix Songs",
   fixSongsDescription: "Fixing songs in the whole Library",
   fixingSongs: "Fixing songs…",
