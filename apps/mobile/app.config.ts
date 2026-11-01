@@ -74,7 +74,8 @@ const config: ExpoConfig = {
   updates: {
     enabled: false,
     url: "https://wave-updates.leonardolp2424.workers.dev/v1/manifest",
-    checkAutomatically: "ON_LOAD",
+    // Core's update policy decides when to check (apps/mobile/src/updates).
+    checkAutomatically: "NEVER",
     fallbackToCacheTimeout: 0,
     requestHeaders: { "expo-channel-name": "none" },
   },

@@ -108,7 +108,7 @@ const flushAppLog = (collect = false): Promise<void> => {
 };
 
 /** Writes the waiting entries at once, on the JS thread: for an error that may end the process. */
-const flushAppLogNow = (): void => {
+export const flushAppLogNow = (): void => {
   const text = takePending(true);
   if (text === null || WaveAppLog === null) return;
   try {
