@@ -1,5 +1,7 @@
 package expo.modules.wavenative.recognize
 
+import android.app.PendingIntent
+import android.net.Uri
 import android.app.Notification
 import android.app.NotificationChannel
 import android.app.NotificationManager
@@ -29,6 +31,7 @@ object RecognizeNotifications {
 
   private val main = Handler(Looper.getMainLooper())
   private var latestMatch = 0
+  private var matchBuilder: Notification.Builder? = null
 
   fun listeningChannel(context: Context): String {
     context.getSystemService(NotificationManager::class.java).createNotificationChannel(
@@ -40,11 +43,17 @@ object RecognizeNotifications {
   }
 
   /** Posts a match at once and adds its cover after, without alerting again. */
-  fun postMatch(context: Context, title: String, text: String, coverUrl: String?) {
+  fun postMatch(context: Context, title: String, text: String, coverUrl: String?, kept: String?) {
+    main.post { postMatchOnMain(context, title, text, coverUrl, kept) }
+  }
+
+  private fun postMatchOnMain(context: Context, title: String, text: String, coverUrl: String?, kept: String?) {
     val app = context.applicationContext
     val manager = app.getSystemService(NotificationManager::class.java)
     val match = synchronized(this) { ++latestMatch }
     val builder = result(app, title, text)
+    if (kept != null) builder.setContentIntent(openMatch(app, kept, match))
+    matchBuilder = builder
     manager.notify(MATCH, builder.build())
     if (coverUrl == null) return
     thread(name = "WaveRecognizeCover", isDaemon = true) {
@@ -57,6 +66,25 @@ object RecognizeNotifications {
         }
       }
     }
+  }
+
+  /** Updating the same builder keeps a late cover from restoring the old tap or save line. */
+  fun saved(context: Context, line: String, kept: String) {
+    main.post {
+      val manager = context.getSystemService(NotificationManager::class.java)
+      val builder = matchBuilder ?: return@post
+      if (manager.activeNotifications.none { it.id == MATCH }) return@post
+      builder.setSubText(line).setContentIntent(openMatch(context, kept, latestMatch))
+      manager.notify(MATCH, builder.build())
+    }
+  }
+
+  private fun openMatch(context: Context, kept: String, generation: Int): PendingIntent {
+    val intent = recognizeIntent(context).setAction(RecognizeInbox.MATCH_ACTION)
+      .setData(Uri.parse("wave-recognize://match/$generation"))
+      .putExtra(RecognizeInbox.MATCH_EXTRA, kept)
+    return PendingIntent.getActivity(context, MATCH, intent,
+      PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE)
   }
 
   fun postNoMatch(context: Context, title: String, text: String) {

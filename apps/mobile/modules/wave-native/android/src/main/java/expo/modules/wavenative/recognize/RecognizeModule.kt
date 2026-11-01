@@ -48,13 +48,15 @@ class RecognizeModule : Module() {
 
   override fun definition() = ModuleDefinition {
     Name("WaveRecognize")
-    Events(HEARD, CAPTURE_FAILED, "onRecognizeRequested", TILE_REQUESTED, TILE_CANCELLED)
+    Events("onRecognizeMatchRequested", HEARD, CAPTURE_FAILED, "onRecognizeRequested", TILE_REQUESTED, TILE_CANCELLED)
 
     OnCreate {
+      RecognizeInbox.onMatchReceived = { sendEvent("onRecognizeMatchRequested") }
       RecognizeInbox.onReceived = { sendEvent("onRecognizeRequested") }
       tile.onRequested = { sendEvent(TILE_REQUESTED) }
       tile.onCancelled = { tap -> sendEvent(TILE_CANCELLED, mapOf("tap" to tap)) }
     }
+    Function("takeMatchRequest") { RecognizeInbox.takeMatch() }
     Function("takeRequest") { RecognizeInbox.take() }
 
     Function("takeTileRequest") { tile.take() }
@@ -62,8 +64,11 @@ class RecognizeModule : Module() {
     Function("tileListeningEnded") { tap: Int -> tile.ended(tap) }
     // A tap may have come in the meantime, and it needs the service.
     Function("tileFinished") { if (!tile.listening) RecognizeListeningService.stop(context) }
-    Function("notifyTileMatch") { title: String, text: String, coverUrl: String? ->
-      RecognizeNotifications.postMatch(context, title, text, coverUrl)
+    Function("notifyTileMatch") { title: String, text: String, coverUrl: String?, match: String? ->
+      RecognizeNotifications.postMatch(context, title, text, coverUrl, match)
+    }
+    Function("tileMatchSaved") { line: String, match: String ->
+      RecognizeNotifications.saved(context, line, match)
     }
     Function("notifyTileNoMatch") { title: String, text: String ->
       RecognizeNotifications.postNoMatch(context, title, text)
@@ -137,6 +142,7 @@ class RecognizeModule : Module() {
     }
 
     OnDestroy {
+      RecognizeInbox.onMatchReceived = null
       RecognizeInbox.onReceived = null
       tile.onRequested = null
       tile.onCancelled = null

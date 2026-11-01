@@ -2,18 +2,27 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 
 import {
+  readRecognizeMatch,
   recognizeTileNotice,
   resolveRecognizedSong,
+  writeRecognizeMatch,
   type RecognizeAnswer,
   type RecognizedSong,
   type RecognizeResolution,
+  type RecognizeResult,
   type RecognizeSource,
+  type RecognizeTrack,
 } from "@wave/core";
 
-import type { RecognizeDeps, RecognizeNative } from "./recognizeSession.ts";
+import {
+  startRecognizeSession,
+  type RecognizeDeps,
+  type RecognizeNative,
+} from "./recognizeSession.ts";
 import {
   followRecognizeTile,
   trackCardSessions,
+  type RecognizeTileDeps,
   type RecognizeTileNative,
 } from "./recognizeTile.ts";
 
@@ -50,6 +59,8 @@ const fakeTile = () => {
     listeningEnded: (tap: number) => void tile.calls.push(`ended ${tap}`),
     finished: () => void tile.calls.push("finished"),
     notify: (notice) => void tile.calls.push(`notify ${notice.kind} ${notice.title}`),
+    saved: [] as { line: string; match: string }[],
+    matchSaved: (line: string, match: string) => void tile.saved.push({ line, match }),
     /** A tap reaches JS, which is already running. */
     tap: (id: number) => {
       taps.push(id);
@@ -64,7 +75,12 @@ const fakeTile = () => {
 
 /** Capture and Shazam, driven by the test; the session between them is the real one. */
 const setup = (
-  options: { resolve?: () => Promise<RecognizeResolution>; otherPlaying?: boolean } = {},
+  options: {
+    resolve?: () => Promise<RecognizeResolution>;
+    save?: (result: RecognizeResult) => Promise<string>;
+    library?: () => Promise<readonly RecognizeTrack[]>;
+    otherPlaying?: boolean;
+  } = {},
 ) => {
   const answers: ((answer: RecognizeAnswer) => void)[] = [];
   let heard: ((session: number, ms: number, audible: boolean) => void) | null = null;
@@ -94,7 +110,9 @@ const setup = (
   let clock = 0;
   const logs: string[] = [];
   const held: string[] = [];
-  const deps: RecognizeDeps = {
+  const saves: RecognizeResult[] = [];
+  const logLevels: string[] = [];
+  const deps: RecognizeTileDeps = {
     online: () => true,
     // The card's answer with Wave hidden, as it is for a tile session.
     foreground: () => false,
@@ -110,13 +128,24 @@ const setup = (
     },
     native,
     resolve: options.resolve ?? (async () => resolved()),
-    log: (_level, line) => void logs.push(line),
+    log: (level, line) => {
+      logLevels.push(level);
+      logs.push(line);
+    },
+    save: (result) => {
+      saves.push(result);
+      return options.save?.(result) ?? Promise.resolve("Added to Shazam");
+    },
+    couldntSave: () => "Couldn't add to Shazam",
+    library: options.library ?? (async () => []),
   };
   return {
     deps,
     native,
     logs,
+    logLevels,
     held,
+    saves,
     /** The session running has heard [seconds] in all. */
     hear: async (seconds: number) => {
       heard?.(native.requests.at(-1)!, seconds * 1000, true);
@@ -185,6 +214,187 @@ test("a match says so as soon as Shazam answers, and the tile lets go after the 
   await settle();
   assert.deepEqual(tile.calls, ["ended 1", "notify match I Will Survive", "finished"]);
   assert.equal(world.logs.length, 1);
+});
+
+/** A session that has got as far as Shazam naming [song]. */
+const matched = async (
+  world: ReturnType<typeof setup>,
+  tile: ReturnType<typeof fakeTile>,
+  tap: number,
+  song = SONG,
+) => {
+  tile.tap(tap);
+  await settle();
+  await world.hear(4);
+  await world.answer({ kind: "match", song });
+};
+
+test("a match goes to the Shazam playlist on its own, and the notification says so", async () => {
+  const world = setup();
+  const tile = fakeTile();
+  followRecognizeTile(tile, world.deps, recognizeTileNotice);
+  await matched(world, tile, 1);
+  await settle();
+  assert.deepEqual(world.saves, [resolved().result]);
+  assert.deepEqual(tile.saved, [
+    { line: "Added to Shazam", match: writeRecognizeMatch(SONG, resolved().result) },
+  ]);
+});
+
+test("the notification says what the save said", async () => {
+  const world = setup({ save: async () => "Already in Shazam" });
+  const tile = fakeTile();
+  followRecognizeTile(tile, world.deps, recognizeTileNotice);
+  await matched(world, tile, 1);
+  await settle();
+  assert.equal(tile.saved[0]?.line, "Already in Shazam");
+});
+
+test("the tile lets go only after the save ends", async () => {
+  let finishSave!: (line: string) => void;
+  const world = setup({
+    save: () => new Promise((resolve) => (finishSave = resolve)),
+  });
+  const tile = fakeTile();
+  followRecognizeTile(tile, world.deps, recognizeTileNotice);
+  await matched(world, tile, 1);
+  await settle();
+  assert.equal(tile.calls.includes("finished"), false);
+  finishSave("Added to Shazam");
+  await settle();
+  assert.equal(tile.calls.at(-1), "finished");
+});
+
+test("a save that fails says so, warns without the song, and lets the tile go", async () => {
+  const world = setup({ save: () => Promise.reject(new Error(`Disk full: ${SONG.title}`)) });
+  const tile = fakeTile();
+  followRecognizeTile(tile, world.deps, recognizeTileNotice);
+  await matched(world, tile, 1);
+  await settle();
+  assert.equal(tile.saved[0]?.line, "Couldn't add to Shazam");
+  assert.equal(tile.calls.at(-1), "finished");
+  assert.equal(world.logLevels.at(-1), "warn");
+  assert.equal(world.logs.join().includes(SONG.title), false);
+});
+
+test("the log line names the lookup and never the song", async () => {
+  const world = setup();
+  const tile = fakeTile();
+  followRecognizeTile(tile, world.deps, recognizeTileNotice);
+  await matched(world, tile, 1);
+  await settle();
+  assert.equal(world.logs.length, 1);
+  assert.match(world.logs[0]!, /disabled/);
+  for (const held of [SONG.title, SONG.artist, SONG.album!])
+    assert.equal(world.logs[0]!.includes(held), false);
+});
+
+test("a save that ends after a newer match leaves its notification alone", async () => {
+  const lookups: (() => void)[] = [];
+  const world = setup({
+    resolve: () => new Promise((resolve) => lookups.push(() => resolve(resolved()))),
+  });
+  const tile = fakeTile();
+  followRecognizeTile(tile, world.deps, recognizeTileNotice);
+  await matched(world, tile, 1);
+  await matched(world, tile, 2, { ...SONG, title: "Le Freak" });
+  lookups.shift()!();
+  await settle();
+  assert.equal(world.saves.length, 1);
+  assert.deepEqual(tile.saved, []);
+  lookups.shift()!();
+  await settle();
+  assert.equal(world.saves.length, 2);
+  assert.equal(tile.saved.length, 1);
+});
+
+test("a session cancelled while listening saves nothing", async () => {
+  const world = setup();
+  const tile = fakeTile();
+  followRecognizeTile(tile, world.deps, recognizeTileNotice);
+  tile.tap(1);
+  await settle();
+  tile.cancel(1);
+  await settle();
+  assert.deepEqual(world.saves, []);
+  assert.deepEqual(tile.saved, []);
+});
+
+test("a session from the card saves nothing on its own", async () => {
+  const world = setup();
+  const run = startRecognizeSession(
+    world.deps,
+    "microphone",
+    () => undefined,
+    () => undefined,
+  );
+  await settle();
+  await world.hear(4);
+  await world.answer({ kind: "match", song: SONG });
+  await run.done;
+  await settle();
+  assert.deepEqual(world.saves, []);
+});
+
+test("a tap before the lookup ends gets its answer, with no second search or save", async () => {
+  let settleLookup!: () => void;
+  let searches = 0;
+  const world = setup({
+    resolve: () =>
+      new Promise((resolve) => {
+        searches++;
+        settleLookup = () => resolve(resolved());
+      }),
+  });
+  const tile = fakeTile();
+  const following = followRecognizeTile(tile, world.deps, recognizeTileNotice);
+  await matched(world, tile, 1);
+  const shown = following.result(readRecognizeMatch(writeRecognizeMatch(SONG))!);
+  settleLookup();
+  assert.deepEqual(await shown, resolved().result);
+  await settle();
+  assert.equal(searches, 1);
+  assert.equal(world.saves.length, 1);
+});
+
+test("a tap that arrives after the save, on what it kept before, still gets the answer", async () => {
+  const world = setup();
+  const tile = fakeTile();
+  const following = followRecognizeTile(tile, world.deps, recognizeTileNotice);
+  await matched(world, tile, 1);
+  await settle();
+  const shown = await following.result(readRecognizeMatch(writeRecognizeMatch(SONG))!);
+  assert.deepEqual(shown, resolved().result);
+  assert.equal(world.saves.length, 1);
+});
+
+test("a tap on a settled match reads the Library as it is now, and saves nothing", async () => {
+  const track = {
+    id: 9,
+    title: SONG.title,
+    artist: SONG.artist,
+    album: "Love Tracks",
+    durationMs: 200_000,
+  };
+  const world = setup({ library: async () => [track] });
+  const tile = fakeTile();
+  const following = followRecognizeTile(tile, world.deps, recognizeTileNotice);
+  const kept = writeRecognizeMatch(SONG, {
+    kind: "library",
+    track,
+    song: resolved().result.song as never,
+  });
+  const shown = await following.result(readRecognizeMatch(kept)!);
+  assert.equal(shown.kind === "library" ? shown.track : null, track);
+  assert.deepEqual(world.saves, []);
+});
+
+test("a Library that can't be read still shows a kept match", async () => {
+  const world = setup({ library: () => Promise.reject(new Error("closed")) });
+  const tile = fakeTile();
+  const following = followRecognizeTile(tile, world.deps, recognizeTileNotice);
+  const shown = await following.result(readRecognizeMatch(writeRecognizeMatch(SONG))!);
+  assert.deepEqual(shown, resolved().result);
 });
 
 test("Core's schedule runs the session: no match only ends it after its last request", async () => {

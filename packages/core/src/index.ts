@@ -2393,8 +2393,13 @@ export {
 export { recognizeLogLine } from "./recognizeLog.ts";
 export type { RecognizeLogOutcome } from "./recognizeLog.ts";
 export { recognizeEntryAction } from "./recognizeEntry.ts";
-export { recognizeTileNotice } from "./recognizeTile.ts";
-export type { RecognizeTileNotice } from "./recognizeTile.ts";
+export {
+  readRecognizeMatch,
+  recognizeMatchResult,
+  recognizeTileNotice,
+  writeRecognizeMatch,
+} from "./recognizeTile.ts";
+export type { RecognizeMatch, RecognizeTileNotice } from "./recognizeTile.ts";
 export type {
   RecognizeAnswer,
   RecognizeCard,

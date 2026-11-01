@@ -1,4 +1,13 @@
-import type { RecognizeCard, RecognizeTileNotice, RecognizeTrack, YtSong } from "@wave/core";
+import {
+  recognizeMatchResult,
+  writeRecognizeMatch,
+  type RecognizeMatch,
+  type RecognizeResult,
+  type RecognizeCard,
+  type RecognizeTileNotice,
+  type RecognizeTrack,
+  type YtSong,
+} from "@wave/core";
 
 import { startRecognizeSession, type RecognizeDeps } from "./recognizeSession.ts";
 
@@ -14,7 +23,17 @@ export interface RecognizeTileNative {
   readonly listeningEnded: (tap: number) => void;
   /** No session has work left, so native lets go of the service holding JS. */
   readonly finished: () => void;
+  readonly matchSaved: (line: string, match: string) => void;
   readonly notify: (notice: RecognizeTileNotice) => void;
+}
+
+export interface RecognizeTileDeps<
+  L extends RecognizeTrack = RecognizeTrack,
+  S extends YtSong = YtSong,
+> extends RecognizeDeps<L, S> {
+  readonly save: (result: RecognizeResult<L, S>) => Promise<string>;
+  readonly couldntSave: () => string;
+  readonly library: () => Promise<readonly L[]>;
 }
 
 /**
@@ -26,11 +45,16 @@ export interface RecognizeTileNative {
  */
 export const followRecognizeTile = <L extends RecognizeTrack, S extends YtSong>(
   tile: RecognizeTileNative,
-  deps: RecognizeDeps<L, S>,
+  deps: RecognizeTileDeps<L, S>,
   notice: (card: RecognizeCard<L, S>) => RecognizeTileNotice | null,
-): { readonly cancel: () => void; readonly stop: () => void } => {
+): {
+  readonly cancel: () => void;
+  readonly stop: () => void;
+  readonly result: (match: RecognizeMatch<S>) => Promise<RecognizeResult<L, S>>;
+} => {
   let listening: { readonly tap: number; readonly cancel: () => void } | null = null;
   let running = 0;
+  let latest: { key: string; result: Promise<RecognizeResult<L, S>> } | null = null;
 
   const start = (tap: number): void => {
     let ended = false;
@@ -40,6 +64,10 @@ export const followRecognizeTile = <L extends RecognizeTrack, S extends YtSong>(
       if (listening?.tap === tap) listening = null;
       tile.listeningEnded(tap);
     };
+    let song: RecognizeMatch<S>["song"] | null = null;
+    let saved: Promise<void> = Promise.resolve();
+    let deliver!: (result: RecognizeResult<L, S>) => void;
+    let match: typeof latest = null;
     running++;
     // Phone audio is #901's: it needs Android's consent dialog, with Core's source choice.
     const run = startRecognizeSession(
@@ -48,16 +76,41 @@ export const followRecognizeTile = <L extends RecognizeTrack, S extends YtSong>(
       (card) => {
         if (card.kind === "listening") return;
         end();
+        if (card.kind === "resolving") {
+          song = card.song;
+          match = {
+            key: writeRecognizeMatch(song),
+            result: new Promise((resolve) => {
+              deliver = resolve;
+            }),
+          };
+          latest = match;
+        }
+        if (card.kind === "resolved" && song !== null) {
+          deliver(card.result);
+          const kept = writeRecognizeMatch(song, card.result);
+          saved = Promise.resolve()
+            .then(() => deps.save(card.result))
+            .catch(() => {
+              deps.log("warn", "Recognize tile: playlist save failed");
+              return deps.couldntSave();
+            })
+            .then((line) => {
+              if (latest === match) tile.matchSaved(line, kept);
+            });
+        }
         const shown = notice(card);
         if (shown !== null) tile.notify(shown);
       },
       () => undefined,
     );
     listening = { tap, cancel: run.cancel };
-    void run.done.then(() => {
-      end();
-      if (--running === 0) tile.finished();
-    });
+    void run.done
+      .then(() => saved)
+      .then(() => {
+        end();
+        if (--running === 0) tile.finished();
+      });
   };
 
   const receive = (): void => {
@@ -73,6 +126,11 @@ export const followRecognizeTile = <L extends RecognizeTrack, S extends YtSong>(
   ];
   receive();
   return {
+    result: async (match) => {
+      if (match.result === null && latest?.key === writeRecognizeMatch(match.song))
+        return latest.result;
+      return recognizeMatchResult(match, await deps.library().catch(() => []));
+    },
     cancel: () => listening?.cancel(),
     stop: () => {
       for (const stop of stops) stop();
