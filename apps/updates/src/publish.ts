@@ -9,10 +9,12 @@ import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import {
   type Channel,
+  type ReleaseNotes,
   type StoredAsset,
   type StoredUpdate,
   assetKey,
   latestKey,
+  notesKey,
   updateKey,
 } from "./layout.ts";
 
@@ -48,6 +50,24 @@ export interface PublishOptions {
   readonly now?: () => number;
   readonly newId?: () => string;
 }
+
+/** Publishes a release's notes, unless the release lists no PR. Answers whether it did. */
+export const publishNotes = async ({
+  channel,
+  version,
+  notes,
+  put,
+}: {
+  readonly channel: Channel;
+  readonly version: string;
+  readonly notes: ReleaseNotes;
+  readonly put: PublishOptions["put"];
+}): Promise<boolean> => {
+  if (notes.en.new.length === 0 && notes.en.fixes.length === 0) return false;
+  const data = new TextEncoder().encode(JSON.stringify(notes));
+  await put(notesKey(channel, version), data, "application/json");
+  return true;
+};
 
 /** Publishes the update and answers its id. */
 export const publishUpdate = async ({

@@ -14,7 +14,9 @@ Pick tickets whose blockers are closed.
 - Start work from the latest `main`, on a branch `feat/<issue>-<slug>` (`fix/<issue>-<slug>`
   for a bug fix), and land it on `ti` through a PR. A PR can carry several tickets; its body
   has a `Closes #<issue>` line for each. The PR title is the release's patch-note line: one
-  line a user understands, saying what changed for them. Merge the PR without waiting for its
+  line a user understands, saying what changed for them. Its body gives the same line in
+  Brazilian Portuguese as `pt-BR: …`; without it CI comments a warning, never blocks, and the
+  Portuguese notes use the English title. Merge the PR without waiting for its
   checks (wait only for CI's lockfile autofix when a `package.json` changed); the push run on
   `ti` is the build that counts. GitHub only closes issues from merges into `main`, so close
   each ticket by hand with a comment naming the PR.

@@ -2,9 +2,18 @@
 
 import type { UpdateStorage } from "./service.ts";
 
-export const memoryStorage = () => {
+export const memoryStorage = ({ listPageSize = 1000 }: { listPageSize?: number } = {}) => {
   const objects = new Map<string, { data: Uint8Array; contentType: string }>();
   const storage: UpdateStorage = {
+    list: async ({ prefix, cursor }) => {
+      const keys = [...objects.keys()].filter((key) => key.startsWith(prefix)).toSorted();
+      const start = Number(cursor ?? 0);
+      const end = start + listPageSize;
+      const page = keys.slice(start, end).map((key) => ({ key }));
+      return end < keys.length
+        ? { objects: page, truncated: true, cursor: String(end) }
+        : { objects: page, truncated: false };
+    },
     get: async (key) => {
       const object = objects.get(key);
       if (!object) return null;
