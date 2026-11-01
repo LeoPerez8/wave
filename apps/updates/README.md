@@ -101,6 +101,8 @@ update` and is published as usual, and phones find no update. The Worker's URL i
 `apps/mobile/app.config.ts`, so deploy it under the account whose subdomain is
 `leonardolp2424.workers.dev`, or change the URL there (which takes a new APK).
 
+`apps/updates/setup.sh` walks through steps 1 to 4. These are the same steps by hand:
+
 1. Create the bucket: `pnpm --filter @wave/updates exec wrangler r2 bucket create wave-updates`.
    Keep it private: phones reach it only through the Worker.
 2. Deploy the Worker: `pnpm --filter @wave/updates run deploy`. Check it answers:
