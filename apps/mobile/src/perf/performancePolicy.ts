@@ -388,8 +388,7 @@ export const WHOLE_LIBRARY: Record<string, WholeLibraryException> = {
     capabilities: ["library/hooks.ts#songs"],
   },
   "recognize/RecognizeCard.tsx#RecognizeCard": {
-    howOften:
-      "Once per shared Library version while a streamed result is visible.",
+    howOften: "Once per shared Library version while a streamed result is visible.",
     reason:
       "The explicitly opened result card follows download membership only for a streamed result and rechecks identity before saving, so a completed download is not offered again or saved as a streamed duplicate.",
     capabilities: ["ytmusic/libraryFinder.ts#useLoadedInLibrary"],
