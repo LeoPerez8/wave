@@ -1,20 +1,13 @@
 /**
- * Turns `expo export`'s output into a published update: its files, then the update, then the
- * channel's `latest.json`, so a failure part way leaves phones on the previous update.
- * `put` is the storage: wrangler in CI (scripts/publish.ts), memory in the tests.
+ * Turns `expo export`'s output into a published update: its files, then the update itself
+ * (release.ts), so a failure part way leaves phones on the previous update.
  */
 
 import { createHash } from "node:crypto";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
-import {
-  type Channel,
-  type StoredAsset,
-  type StoredUpdate,
-  assetKey,
-  latestKey,
-  updateKey,
-} from "./layout.ts";
+import { type Channel, type StoredAsset, type StoredUpdate, assetKey } from "./layout.ts";
+import { type UpdateBucket, releaseUpdate } from "./release.ts";
 
 const CONTENT_TYPES: Record<string, string> = {
   gif: "image/gif",
@@ -37,14 +30,13 @@ interface ExportMetadata {
   };
 }
 
-export interface PublishOptions {
+export interface PublishOptions extends UpdateBucket {
   /** `expo export --platform android`'s output folder. */
   readonly dir: string;
   readonly channel: Channel;
   readonly runtimeVersion: string;
   /** `expo config --type public`: under an update, Constants.expoConfig is this. */
   readonly appConfig: Record<string, unknown>;
-  readonly put: (key: string, data: Uint8Array, contentType: string) => Promise<void>;
   readonly now?: () => number;
   readonly newId?: () => string;
 }
@@ -55,9 +47,9 @@ export const publishUpdate = async ({
   channel,
   runtimeVersion,
   appConfig,
-  put,
   now = Date.now,
   newId = () => crypto.randomUUID(),
+  ...bucket
 }: PublishOptions): Promise<string> => {
   const metadata = JSON.parse(readFileSync(join(dir, "metadata.json"), "utf8")) as ExportMetadata;
   const android = metadata.fileMetadata.android;
@@ -71,7 +63,7 @@ export const publishUpdate = async ({
     const data = readFileSync(join(dir, path));
     const sha256 = createHash("sha256").update(data);
     const key = sha256.copy().digest("hex");
-    await put(assetKey(key), data, contentType);
+    await bucket.put(assetKey(key), data, contentType);
     return { hash: sha256.digest("base64url"), key, contentType, fileExtension };
   };
 
@@ -91,8 +83,6 @@ export const publishUpdate = async ({
     metadata: {},
     extra: { expoClient: { ...appConfig, runtimeVersion } },
   };
-  const json = (value: unknown) => new TextEncoder().encode(JSON.stringify(value));
-  await put(updateKey(channel, runtimeVersion, id), json(update), "application/json");
-  await put(latestKey(channel, runtimeVersion), json({ updateId: id }), "application/json");
+  await releaseUpdate(bucket, channel, update);
   return id;
 };

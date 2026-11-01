@@ -4,9 +4,10 @@
  *   assets/<sha256 hex>                         a bundle or asset, by its content
  *   updates/<channel>/<runtime>/<id>.json       a published update (StoredUpdate)
  *   updates/<channel>/<runtime>/latest.json     { updateId }: what that channel's phones get
+ *   updates/<channel>/history.json              HistoryEntry[], newest first: what R2 still keeps
  *
  * Moving `latest.json` is the only step that changes what phones receive, so a publish writes it
- * last, and an earlier update stays in R2 for it to point back to.
+ * after everything that update needs (release.ts).
  */
 
 export const CHANNELS = ["ti", "main"] as const;
@@ -20,6 +21,21 @@ export const updateKey = (channel: Channel, runtimeVersion: string, id: string):
   `updates/${channel}/${encodeURIComponent(runtimeVersion)}/${id}.json`;
 export const latestKey = (channel: Channel, runtimeVersion: string): string =>
   `updates/${channel}/${encodeURIComponent(runtimeVersion)}/latest.json`;
+export const historyKey = (channel: Channel): string => `updates/${channel}/history.json`;
+
+/** How many updates R2 keeps per channel. Older ones can't be promoted any more. */
+export const KEPT_UPDATES = 10;
+
+/** One line of a channel's history. wrangler can't list a bucket, so this is the listing. */
+export interface HistoryEntry {
+  readonly id: string;
+  /** The release's version, which is how the owner names an update to promote. */
+  readonly version: string;
+  readonly runtimeVersion: string;
+  readonly createdAt: string;
+  /** The files it needs, by their name in R2. */
+  readonly assetKeys: readonly string[];
+}
 
 export interface StoredAsset {
   /** Base64url of the file's SHA-256, which expo-updates checks after downloading it. */

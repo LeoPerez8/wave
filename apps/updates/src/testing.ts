@@ -21,5 +21,12 @@ export const memoryStorage = () => {
     put: async (key: string, data: Uint8Array, contentType: string) => {
       objects.set(key, { data, contentType });
     },
+    read: async (key: string) => {
+      const object = objects.get(key);
+      return object ? new TextDecoder().decode(object.data) : null;
+    },
+    remove: async (key: string) => {
+      objects.delete(key);
+    },
   };
 };

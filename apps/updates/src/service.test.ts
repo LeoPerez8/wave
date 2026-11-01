@@ -4,6 +4,7 @@ import { createHash } from "node:crypto";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { describe, it } from "node:test";
+import { promoteUpdate } from "./promote.ts";
 import { publishUpdate } from "./publish.ts";
 import { createUpdateService } from "./service.ts";
 import { memoryStorage } from "./testing.ts";
@@ -62,6 +63,36 @@ const publish = (
     runtimeVersion: "native-a",
     appConfig: { name: "Wave", version: "1.2.3-ti", extra: { syncUrl: "https://sync.test" } },
     put: storage.put,
+    read: storage.read,
+    remove: storage.remove,
+    now: () => (clock += 1000),
+    newId: () => `00000000-0000-4000-8000-${String(++ids).padStart(12, "0")}`,
+    ...overrides,
+  });
+
+// A release of that version: CI's export carries it in the app config.
+const release = (
+  storage: ReturnType<typeof memoryStorage>,
+  version: string,
+  overrides: Partial<Parameters<typeof publishUpdate>[0]> = {},
+) =>
+  publish(storage, {
+    dir: exported(`bundle of ${version}`, `image of ${version}`),
+    appConfig: { name: "Wave", version },
+    ...overrides,
+  });
+
+const promote = (
+  storage: ReturnType<typeof memoryStorage>,
+  version: string,
+  overrides: Partial<Parameters<typeof promoteUpdate>[0]> = {},
+) =>
+  promoteUpdate({
+    channel: "ti",
+    version,
+    put: storage.put,
+    read: storage.read,
+    remove: storage.remove,
     now: () => (clock += 1000),
     newId: () => `00000000-0000-4000-8000-${String(++ids).padStart(12, "0")}`,
     ...overrides,
@@ -226,5 +257,195 @@ describe("publishUpdate", () => {
     const dir = mkdtempSync(join(tmpdir(), "wave-update-"));
     writeFileSync(join(dir, "metadata.json"), JSON.stringify({ fileMetadata: {} }));
     await assert.rejects(publish(memoryStorage(), { dir }), /Android/);
+  });
+});
+
+describe("promoteUpdate", () => {
+  it("moves a channel's phones to the earlier version's bundle, as a newer update", async () => {
+    const storage = memoryStorage();
+    await release(storage, "1.0.0-ti");
+    const good = await manifestOf(await askFor(storage));
+    const bad = await release(storage, "1.0.1-ti");
+
+    const promoted = await promote(storage, "1.0.0-ti");
+
+    const manifest = await manifestOf(await askFor(storage, { "expo-current-update-id": bad }));
+    assert.equal(manifest.id, promoted);
+    assert.notEqual(manifest.id, good.id);
+    assert.ok(Date.parse(manifest.createdAt) > Date.parse(good.createdAt));
+    const bundle = await createUpdateService(storage).fetch(new Request(manifest.launchAsset.url));
+    assert.equal(await bundle.text(), "bundle of 1.0.0-ti");
+    assert.deepEqual(manifest.launchAsset, good.launchAsset);
+    assert.deepEqual(manifest.assets, good.assets);
+    assert.equal(manifest.extra.expoClient.version, "1.0.0-ti");
+  });
+
+  it("refuses a version built for another runtime version, and says why", async () => {
+    const storage = memoryStorage();
+    await release(storage, "1.0.0-ti", { runtimeVersion: "native-a" });
+    const current = await release(storage, "1.1.0-ti", { runtimeVersion: "native-b" });
+
+    await assert.rejects(promote(storage, "1.0.0-ti"), /native-a.*native-b/);
+
+    const answer = await askFor(storage, { "expo-runtime-version": "native-b" });
+    assert.equal((await manifestOf(answer)).id, current);
+  });
+
+  it("refuses a version the channel doesn't keep, and names the ones it does", async () => {
+    const storage = memoryStorage();
+    await release(storage, "1.0.0-ti");
+    await release(storage, "1.0.1-ti");
+    await assert.rejects(promote(storage, "0.9.0-ti"), /0\.9\.0-ti.*1\.0\.1-ti, 1\.0\.0-ti/);
+  });
+
+  it("doesn't take a version from the other channel", async () => {
+    const storage = memoryStorage();
+    await release(storage, "1.0.0", { channel: "main" });
+    await release(storage, "1.0.1-ti");
+    await assert.rejects(promote(storage, "1.0.0"), /doesn't keep/);
+  });
+
+  it("refuses the version phones are already on", async () => {
+    const storage = memoryStorage();
+    await release(storage, "1.0.0-ti");
+    await release(storage, "1.0.1-ti");
+    await assert.rejects(promote(storage, "1.0.1-ti"), /already on 1\.0\.1-ti/);
+    await promote(storage, "1.0.0-ti");
+    await assert.rejects(promote(storage, "1.0.0-ti"), /already on 1\.0\.0-ti/);
+  });
+
+  it("leaves phones where they are when an upload fails", async () => {
+    const storage = memoryStorage();
+    await release(storage, "1.0.0-ti");
+    const current = await release(storage, "1.0.1-ti");
+    await assert.rejects(
+      promote(storage, "1.0.0-ti", {
+        put: async () => {
+          throw new Error("network");
+        },
+      }),
+      /network/,
+    );
+    assert.equal((await manifestOf(await askFor(storage))).id, current);
+  });
+
+  it("gives way to the next release, and can move forward again", async () => {
+    const storage = memoryStorage();
+    await release(storage, "1.0.0-ti");
+    await release(storage, "1.0.1-ti");
+    await promote(storage, "1.0.0-ti");
+
+    const again = await promote(storage, "1.0.1-ti");
+    assert.equal((await manifestOf(await askFor(storage))).id, again);
+
+    const next = await release(storage, "1.0.2-ti");
+    assert.equal((await manifestOf(await askFor(storage))).id, next);
+  });
+});
+
+describe("retention", () => {
+  // The hex name of a file with that content, the way its manifest's URL ends.
+  const assetStatus = (storage: ReturnType<typeof memoryStorage>, content: string) =>
+    createUpdateService(storage)
+      .fetch(
+        new Request(`${ORIGIN}/v1/assets/${createHash("sha256").update(content).digest("hex")}`),
+      )
+      .then(({ status }) => status);
+
+  const releases = async (
+    storage: ReturnType<typeof memoryStorage>,
+    from: number,
+    to: number,
+    overrides: Partial<Parameters<typeof publishUpdate>[0]> = {},
+  ) => {
+    for (let n = from; n <= to; n += 1) await release(storage, `1.0.${n}-ti`, overrides);
+  };
+
+  it("keeps the channel's last ten updates and removes the older ones", async () => {
+    const storage = memoryStorage();
+    await releases(storage, 1, 11);
+
+    assert.equal(await assetStatus(storage, "bundle of 1.0.1-ti"), 404);
+    assert.equal(await assetStatus(storage, "image of 1.0.1-ti"), 404);
+    await assert.rejects(promote(storage, "1.0.1-ti"), /doesn't keep/);
+
+    assert.equal(await assetStatus(storage, "bundle of 1.0.2-ti"), 200);
+    await promote(storage, "1.0.2-ti");
+    assert.equal(await assetStatus(storage, "bundle of 1.0.2-ti"), 200);
+    const bundleUrl = (await manifestOf(await askFor(storage))).launchAsset.url;
+    const bundle = await createUpdateService(storage).fetch(new Request(bundleUrl));
+    assert.equal(await bundle.text(), "bundle of 1.0.2-ti");
+  });
+
+  it("counts a promotion as an update, without losing the files it reuses", async () => {
+    const storage = memoryStorage();
+    await releases(storage, 1, 10);
+    // Takes the 11th place, so 1.0.1's first update goes, while the promoted one still needs its files.
+    await promote(storage, "1.0.1-ti");
+    assert.equal(await assetStatus(storage, "bundle of 1.0.1-ti"), 200);
+    assert.equal(await assetStatus(storage, "image of 1.0.1-ti"), 200);
+  });
+
+  it("keeps a file a newer update still needs", async () => {
+    const storage = memoryStorage();
+    const sameImage = (bundle: string) => ({ dir: exported(bundle, "the shared image") });
+    await publish(storage, sameImage("first"));
+    for (let n = 2; n <= 11; n += 1) await publish(storage, sameImage(`bundle ${n}`));
+    assert.equal(await assetStatus(storage, "first"), 404);
+    assert.equal(await assetStatus(storage, "the shared image"), 200);
+  });
+
+  it("keeps a file the other channel still needs", async () => {
+    const storage = memoryStorage();
+    await publish(storage, { channel: "main", dir: exported("the same bundle", "main's image") });
+    await publish(storage, { channel: "ti", dir: exported("the same bundle", "ti's image") });
+    await releases(storage, 1, 10);
+    assert.equal(await assetStatus(storage, "ti's image"), 404);
+    assert.equal(await assetStatus(storage, "the same bundle"), 200);
+    assert.equal((await askFor(storage, { "expo-channel-name": "main" })).status, 200);
+  });
+
+  it("counts per channel", async () => {
+    const storage = memoryStorage();
+    await publish(storage, { channel: "main", dir: exported("main's bundle", "main's image") });
+    await releases(storage, 1, 11);
+    assert.equal(await assetStatus(storage, "main's bundle"), 200);
+  });
+
+  it("gives a runtime version with nothing kept no update", async () => {
+    const storage = memoryStorage();
+    await release(storage, "1.0.0-ti", { runtimeVersion: "native-a" });
+    await releases(storage, 1, 9, { runtimeVersion: "native-b" });
+    assert.equal((await askFor(storage, { "expo-runtime-version": "native-a" })).status, 200);
+
+    await release(storage, "1.0.10-ti", { runtimeVersion: "native-b" });
+
+    const errors = console.error;
+    let logged = 0;
+    console.error = () => (logged += 1);
+    const answer = await askFor(storage, { "expo-runtime-version": "native-a" });
+    console.error = errors;
+    assert.equal(answer.status, 204);
+    assert.equal(logged, 0);
+  });
+
+  it("doesn't fail a release when a removal fails, and retries on the next", async () => {
+    const storage = memoryStorage();
+    await releases(storage, 1, 10);
+    const warn = console.warn;
+    console.warn = () => {};
+    const id = await release(storage, "1.0.11-ti", {
+      remove: async () => {
+        throw new Error("network");
+      },
+    });
+    console.warn = warn;
+    assert.equal((await manifestOf(await askFor(storage))).id, id);
+    assert.equal(await assetStatus(storage, "bundle of 1.0.1-ti"), 200);
+
+    await release(storage, "1.0.12-ti");
+    assert.equal(await assetStatus(storage, "bundle of 1.0.1-ti"), 404);
+    assert.equal(await assetStatus(storage, "bundle of 1.0.2-ti"), 404);
+    assert.equal(await assetStatus(storage, "bundle of 1.0.3-ti"), 200);
   });
 });
