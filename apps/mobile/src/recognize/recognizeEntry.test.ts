@@ -24,18 +24,19 @@ test("launches choose the audio source automatically and keep an open card's sou
   const sources: (RecognizeSource | "auto")[] = [];
   let close!: () => void;
   const entry = createRecognizeEntry({
+    cancelTile: () => {},
     foreground: () => true,
-    show: (source, closed) => {
-      assert.equal(typeof source, "string");
-      sources.push(source as RecognizeSource | "auto");
+    show: (opening, closed) => {
+      assert.equal(opening.kind, "capture");
+      if (opening.kind === "capture") sources.push(opening.source);
       close = closed;
     },
   });
   entry.request();
-  entry.request("microphone");
+  entry.request({ kind: "capture", source: "microphone" });
   assert.deepEqual(sources, ["auto"]);
   close();
-  entry.request("playback");
+  entry.request({ kind: "capture", source: "playback" });
   entry.request();
   assert.deepEqual(sources, ["auto", "playback"]);
 });
@@ -43,6 +44,7 @@ test("launches choose the audio source automatically and keep an open card's sou
 test("tile, shortcut and Search share one card until it closes", () => {
   const cards: (() => void)[] = [];
   const entry = createRecognizeEntry({
+    cancelTile: () => {},
     foreground: () => true,
     show: (_source, closed) => {
       cards.push(closed);
@@ -93,6 +95,7 @@ test("a cold or hidden launch waits for foreground, then consumes the request on
   let foreground = false;
   let opened = 0;
   const entry = createRecognizeEntry({
+    cancelTile: () => {},
     foreground: () => foreground,
     show: () => {
       opened++;
@@ -111,19 +114,21 @@ test("a match waits for the foreground like any other launch", () => {
   const shown: unknown[] = [];
   let foreground = false;
   const entry = createRecognizeEntry({
+    cancelTile: () => {},
     foreground: () => foreground,
     show: (opening) => void shown.push(opening),
   });
-  entry.request(MATCH);
+  entry.request({ kind: "match", match: MATCH });
   assert.deepEqual(shown, []);
   foreground = true;
   entry.resume();
-  assert.deepEqual(shown, [MATCH]);
+  assert.deepEqual(shown, [{ kind: "match", match: MATCH }]);
 });
 
 test("a match replaces the card open, whose late close leaves the new one counted", () => {
   const cards: { closed: () => void; closes: number }[] = [];
   const entry = createRecognizeEntry({
+    cancelTile: () => {},
     foreground: () => true,
     show: (_opening, closed) => {
       const card = { closed, closes: 0 };
@@ -132,7 +137,7 @@ test("a match replaces the card open, whose late close leaves the new one counte
     },
   });
   entry.request();
-  entry.request(MATCH);
+  entry.request({ kind: "match", match: MATCH });
   assert.equal(cards.length, 2);
   assert.equal(cards[0]!.closes, 1);
   cards[0]!.closed();
@@ -163,4 +168,25 @@ test("a match's inbox delivers what it holds, cold and warm, until cleanup", () 
   assert.deepEqual(opened, ["cold", "warm"]);
   stop();
   assert.equal(warm, null);
+});
+
+test("a notification match leaves the tile capture alone; a capturing card replaces it", () => {
+  let cancelled = 0;
+  let closed!: () => void;
+  const entry = createRecognizeEntry({
+    foreground: () => true,
+    cancelTile: () => {
+      cancelled++;
+    },
+    show: (_opening, onClosed) => {
+      closed = onClosed;
+    },
+  });
+  entry.request({ kind: "match", match: MATCH });
+  assert.equal(cancelled, 0);
+  entry.request();
+  assert.equal(cancelled, 0);
+  closed();
+  entry.request();
+  assert.equal(cancelled, 1);
 });

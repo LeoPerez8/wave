@@ -21,7 +21,7 @@ export const useRecognizeRequests = (ready: boolean): void => {
         ? () => {}
         : followRecognizeMatches(recognizeMatches, (text) => {
             const match = readRecognizeMatch<NativeYtSong>(text);
-            if (match !== null) openRecognize(match);
+            if (match !== null) openRecognize({ kind: "match", match });
           });
     resumeRecognizeEntry();
     return () => {

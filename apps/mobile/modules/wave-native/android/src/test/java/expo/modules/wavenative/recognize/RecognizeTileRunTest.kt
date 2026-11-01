@@ -11,19 +11,19 @@ class RecognizeTileRunTest {
   private val run = RecognizeTileRun()
 
   @Test fun `an idle tile's tap listens`() {
-    assertEquals(RecognizeTileTap.LISTEN, run.tap())
+    assertEquals(RecognizeTileTap.LISTEN, run.tap(microphone = true, notifications = true))
   }
 
   @Test fun `a tap while the tile listens cancels`() {
     run.request()
-    assertEquals(RecognizeTileTap.CANCEL, run.tap())
+    assertEquals(RecognizeTileTap.CANCEL, run.tap(microphone = true, notifications = true))
   }
 
   @Test fun `a tap while the card's session runs leaves it alone`() {
     run.cardRunning = true
-    assertEquals(RecognizeTileTap.IGNORE, run.tap())
+    assertEquals(RecognizeTileTap.IGNORE, run.tap(microphone = true, notifications = true))
     run.cardRunning = false
-    assertEquals(RecognizeTileTap.LISTEN, run.tap())
+    assertEquals(RecognizeTileTap.LISTEN, run.tap(microphone = true, notifications = true))
   }
 
   @Test fun `without the microphone a tap opens the card`() {
@@ -87,6 +87,15 @@ class RecognizeTileRunTest {
     assertNull(run.take())
   }
 
+  @Test fun `retry after a failure rechecks permissions before requesting capture`() {
+    val failed = run.request()
+    run.take()
+    run.ended(failed)
+    assertEquals(RecognizeTileTap.OPEN_CARD, run.tap(microphone = true, notifications = false))
+    assertFalse(run.listening)
+    assertNull(run.take())
+  }
+
   @Test fun `JS takes a tap once, even if it came before JS was running`() {
     val tap = run.request()
     assertEquals(tap, run.take()?.tap)
@@ -144,7 +153,7 @@ class RecognizeTileRunTest {
     val tap = run.request()
     run.ended(tap)
     assertFalse(run.listening)
-    assertEquals(RecognizeTileTap.LISTEN, run.tap())
+    assertEquals(RecognizeTileTap.LISTEN, run.tap(microphone = true, notifications = true))
   }
 
   @Test fun `listeners hear each change until they leave`() {

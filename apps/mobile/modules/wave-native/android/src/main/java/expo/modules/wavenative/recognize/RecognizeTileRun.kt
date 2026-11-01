@@ -31,7 +31,8 @@ class RecognizeTileRun {
 
   val listening: Boolean @Synchronized get() = current != 0
 
-  fun tap(microphone: Boolean = true, notifications: Boolean = true): RecognizeTileTap = when {
+  // Native decides before JS exists on cold start, because the tap must launch an activity.
+  fun tap(microphone: Boolean, notifications: Boolean): RecognizeTileTap = when {
     listening -> RecognizeTileTap.CANCEL
     cardRunning -> RecognizeTileTap.IGNORE
     !microphone || !notifications -> RecognizeTileTap.OPEN_CARD

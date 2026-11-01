@@ -1,9 +1,4 @@
-import {
-  recognizeTileNotice,
-  recognizeMatchResult,
-  recognizePlaylistSong,
-  type RecognizeMatch,
-} from "@wave/core";
+import { recognizeTileNotice, recognizeMatchResult, type RecognizeMatch } from "@wave/core";
 
 import { currentLocalisation } from "@/localisation/localisation";
 import { recognizeTile, reportCardSession } from "@/native/waveRecognize";
@@ -13,7 +8,7 @@ import { appRuntime } from "@/library/runtime";
 import type { SongRow } from "@/library/LibraryStore";
 import type { NativeYtSong } from "@/native/waveYtMusic";
 import { saveToShazam } from "@/library/playlists";
-import { currentLibraryFinder } from "@/ytmusic/libraryFinder";
+import { resolveRecognitionSave } from "./resolveRecognitionSave";
 
 import { hasMicrophone } from "./microphone";
 import { recognizeDeps } from "./recognizeDeps";
@@ -33,12 +28,7 @@ export const startRecognizeTile = (): void => {
       ...recognizeDeps(recognizeTile.capture),
       library: () => appRuntime.runPromise(libraryListQueries.songs.read),
       couldntSave: () => currentLocalisation().strings.playbackText.couldntAddToShazam,
-      save: async (result) => {
-        const track = result.kind === "stream" ? (await currentLibraryFinder())(result.song) : null;
-        return saveToShazam(
-          track === null ? recognizePlaylistSong(result) : { source: "library", trackId: track.id },
-        );
-      },
+      save: async (result) => saveToShazam(await resolveRecognitionSave(result)),
       microphone: async () => ((await hasMicrophone()) ? "granted" : "denied"),
     },
     (card) => recognizeTileNotice(card, currentLocalisation().strings),
