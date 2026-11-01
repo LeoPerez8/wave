@@ -2,6 +2,7 @@ import type { RecognizeAnswer, RecognizeSource } from "@wave/core";
 import { NativeModule, requireOptionalNativeModule } from "expo";
 
 import type { RecognizeNative } from "@/recognize/recognizeSession";
+import type { RecognizeTileNative } from "@/recognize/recognizeTile";
 
 /** Recognize's native half (`modules/wave-native`, `recognize/RecognizeModule.kt`). */
 type WaveRecognizeEvents = {
@@ -10,7 +11,12 @@ type WaveRecognizeEvents = {
   /** Session [session]'s audio stopped on its own. */
   onRecognizeCaptureFailed: (event: { session: number }) => void;
   /** A tile or launcher shortcut asks the foreground UI to open Recognize. */
+  onRecognizeMatchRequested: () => void;
   onRecognizeRequested: () => void;
+  /** A tile tap is waiting for `takeTileRequest`. */
+  onRecognizeTileRequested: () => void;
+  /** The tile or its notification cancelled tap [tap]'s session. */
+  onRecognizeTileCancelled: (event: { tap: number }) => void;
 };
 
 declare class WaveRecognizeModule extends NativeModule<WaveRecognizeEvents> {
@@ -18,10 +24,21 @@ declare class WaveRecognizeModule extends NativeModule<WaveRecognizeEvents> {
   /** Starts capturing; phone audio waits for fresh Android consent. */
   start(source: RecognizeSource, request: number): Promise<number>;
   cancelStart(request: number): void;
-  /** Sends the signature of everything the session heard; [last] stops its capture first. */
-  ask(session: number, last: boolean): Promise<RecognizeAnswer>;
+  /** Sends the signature of the latest [windowMs] the session heard; [last] stops its capture first. */
+  ask(session: number, last: boolean, windowMs: number): Promise<RecognizeAnswer>;
   stop(session: number): void;
   takeRequest(): boolean;
+  takeMatchRequest(): string | null;
+  /** The tile's capture, not ending with Wave's screen. */
+  startDetached(source: RecognizeSource, request: number): Promise<number>;
+  takeTileRequest(): { tap: number; microphone: boolean } | null;
+  setCardSession(running: boolean): void;
+  tileListeningEnded(tap: number): void;
+  tileFinished(): void;
+  notifyTileMatch(title: string, text: string, coverUrl: string | null, match: string | null): void;
+  tileMatchSaved(line: string, match: string): void;
+  /** [microphone]: the action is Use Microphone rather than Try Again. */
+  notifyTileFailure(title: string, text: string, actionLabel: string, microphone: boolean): void;
 }
 
 /** Null in a build without it (a JS repack over an older APK): Search then has no Recognize button. */
@@ -47,7 +64,7 @@ export const recognizeNative: RecognizeNative | null =
         playbackActivity: () => WaveRecognize.playbackActivity(),
         start: (source, request) => WaveRecognize.start(source, request),
         cancelStart: (request) => WaveRecognize.cancelStart(request),
-        ask: (session, last) => WaveRecognize.ask(session, last),
+        ask: (session, last, windowMs) => WaveRecognize.ask(session, last, windowMs),
         stop: (session) => WaveRecognize.stop(session),
         onHeard: (listener) => {
           const subscription = WaveRecognize.addListener("onRecognizeHeard", (event) =>
@@ -59,6 +76,61 @@ export const recognizeNative: RecognizeNative | null =
           const subscription = WaveRecognize.addListener("onRecognizeCaptureFailed", (event) =>
             listener(event.session),
           );
+          return () => subscription.remove();
+        },
+      };
+
+/** Null in an older APK, whose tile opens the card. */
+export const recognizeTile: (RecognizeTileNative & { readonly capture: RecognizeNative }) | null =
+  WaveRecognize === null ||
+  recognizeNative === null ||
+  typeof WaveRecognize.takeTileRequest !== "function"
+    ? null
+    : {
+        capture: {
+          ...recognizeNative,
+          start: (source, request) => WaveRecognize.startDetached(source, request),
+        },
+        take: () => WaveRecognize.takeTileRequest(),
+        onRequested: (listener) => {
+          const subscription = WaveRecognize.addListener("onRecognizeTileRequested", listener);
+          return () => subscription.remove();
+        },
+        onCancelled: (listener) => {
+          const subscription = WaveRecognize.addListener("onRecognizeTileCancelled", (event) =>
+            listener(event.tap),
+          );
+          return () => subscription.remove();
+        },
+        listeningEnded: (tap) => WaveRecognize.tileListeningEnded(tap),
+        finished: () => WaveRecognize.tileFinished(),
+        matchSaved: (line, match) => WaveRecognize.tileMatchSaved(line, match),
+        notify: (notice) => {
+          if (notice.kind === "match") {
+            WaveRecognize.notifyTileMatch(notice.title, notice.text, notice.coverUrl, notice.match);
+          } else {
+            WaveRecognize.notifyTileFailure(
+              notice.title,
+              notice.text,
+              notice.actionLabel,
+              notice.action === "useMicrophone",
+            );
+          }
+        },
+      };
+
+/** Tells the tile whether a card session runs; a tap then leaves it alone. */
+export const reportCardSession = (running: boolean): void => {
+  if (recognizeTile !== null) WaveRecognize?.setCardSession(running);
+};
+
+export const recognizeMatches =
+  WaveRecognize === null || typeof WaveRecognize.takeMatchRequest !== "function"
+    ? null
+    : {
+        take: () => WaveRecognize.takeMatchRequest(),
+        subscribe: (listener: () => void) => {
+          const subscription = WaveRecognize.addListener("onRecognizeMatchRequested", listener);
           return () => subscription.remove();
         },
       };

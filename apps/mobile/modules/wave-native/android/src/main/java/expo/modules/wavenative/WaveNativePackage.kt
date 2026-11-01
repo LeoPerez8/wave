@@ -55,6 +55,7 @@ class WaveNativePackage : Package {
   private fun receiveRecognize(intent: Intent?) {
     RecognizeInbox.receive(
       intent?.action,
+      match = intent?.getStringExtra(RecognizeInbox.MATCH_EXTRA),
       fromHistory = ((intent?.flags ?: 0) and Intent.FLAG_ACTIVITY_LAUNCHED_FROM_HISTORY) != 0,
     )
   }

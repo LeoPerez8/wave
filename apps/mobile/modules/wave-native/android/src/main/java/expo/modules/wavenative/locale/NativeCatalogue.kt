@@ -5,6 +5,8 @@ object NativeCatalogue {
   val en = mapOf(
     "recognize" to "Recognize Song",
     "listeningToPhone" to "Listening to audio from this phone",
+    "listening" to "Listening…",
+    "recognizedSongs" to "Recognized songs",
     "fixSongs" to "Fix Songs",
     "fixSongsDescription" to "Fixing songs in the whole Library",
     "fixingSongs" to "Fixing songs…",
@@ -36,6 +38,8 @@ object NativeCatalogue {
   val pt = mapOf(
     "recognize" to "Reconhecer Música",
     "listeningToPhone" to "Ouvindo o áudio deste celular",
+    "listening" to "Ouvindo…",
+    "recognizedSongs" to "Músicas reconhecidas",
     "fixSongs" to "Corrigir Músicas",
     "fixSongsDescription" to "Corrigindo músicas da Biblioteca inteira",
     "fixingSongs" to "Corrigindo músicas…",

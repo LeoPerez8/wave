@@ -143,17 +143,26 @@ export const createPlaylist = (
 let shazamSave: Promise<void> = Promise.resolve();
 
 /** One-tap Recognize save; the ordinary playlist and preference use normal sync. */
-export const addToShazam = (song: PlaylistSong): Promise<void> => {
+export const saveToShazam = (song: PlaylistSong): Promise<string> => {
   const save = shazamSave.then(async () => {
     const result = await edit((store) =>
       store.addToShazam(shazamPlaylistId(), song, currentLocalisation().language),
     );
     setShazamPlaylistId(result.syncId);
-    showToast(result.toast);
+    return result.toast;
   });
-  shazamSave = save.catch(() => {});
+  shazamSave = save.then(
+    () => {},
+    () => {},
+  );
   return save;
 };
+
+/** The card's manual save gives feedback in the foreground. */
+export const addToShazam = (song: PlaylistSong): Promise<void> =>
+  saveToShazam(song).then((line) => {
+    showToast(line);
+  });
 
 /** A playlist just created empty, as Library › Playlists will list it: for its screen's first frame. */
 export const emptyPlaylistRow = (id: number, name: string): PlaylistRow => ({
