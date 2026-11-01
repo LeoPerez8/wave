@@ -2,12 +2,10 @@
  * The update policy (docs/spec.md, Build and CI): given where Wave stands, the one thing to do
  * next about an update, or nothing. The app carries the step out and asks again.
  */
+import { resolveSkipSwipe } from "./swipe.ts";
 
 /** Checks are at least this far apart. */
 export const UPDATE_CHECK_INTERVAL_MS = 15 * 60_000;
-
-/** After a declined question or confirmation, Wave asks again this long after, so it never nags. */
-export const UPDATE_INSTALL_ASK_INTERVAL_MS = 24 * 60 * 60_000;
 
 /** After a failed install or a rejected download, that version's APK waits this long to download. */
 export const UPDATE_APK_RETRY_INTERVAL_MS = 24 * 60 * 60_000;
@@ -23,6 +21,26 @@ export type NativeUpdate = "none" | "available" | "downloaded";
  * permission, then for one confirmation until Wave is the installer of record, then nothing.
  */
 export type InstallAccess = "needsPermission" | "needsConfirmation" | "silent";
+
+/**
+ * Where a tap on "Update the app" has got to; nothing installs without one. `tapped` hasn't reached
+ * Android yet. `atPermissionScreen` has asked Android for its screen, and `awayAtPermissionScreen`
+ * has seen Wave leave for it. `handedOver` gave Android the APK, which ends this process or asks for
+ * a confirmation.
+ */
+export type InstallTap =
+  "none" | "tapped" | "atPermissionScreen" | "awayAtPermissionScreen" | "handedOver";
+
+/**
+ * What a tap on the update button in Settings still wants done: `check` now, whatever the wait,
+ * `askMobileData` before a download on a metered network, or `download` the version found. Whatever
+ * these lead to installs as a tap on the pill does.
+ */
+export type UpdateRequest = "none" | "check" | "askMobileData" | "download";
+
+/** What a toast tells the person. Only what they asked for, or an install, gets one. */
+export type UpdateNotice =
+  "upToDate" | "bundleOnItsWay" | "checkFailed" | "downloadFailed" | "installFailed";
 
 export interface UpdateState {
   readonly now: number;
@@ -41,10 +59,9 @@ export interface UpdateState {
   readonly bundleDownloaded: boolean;
   readonly nativeUpdate: NativeUpdate;
   readonly installAccess: InstallAccess;
-  /** When Wave last asked for the install permission, kept across launches; null when it hasn't. */
-  readonly lastInstallAskAt: number | null;
-  /** When an install last started, kept across launches; null when none has. */
-  readonly lastInstallAt: number | null;
+  readonly installTap: InstallTap;
+  /** This launch has asked the service for the channel's APK. */
+  readonly apkChecked: boolean;
   /** The version the last check found on the channel; null when it found none. */
   readonly offeredApkVersion: string | null;
   /**
@@ -52,14 +69,17 @@ export interface UpdateState {
    * is no longer offered, so one still offered with its file gone came to nothing.
    */
   readonly lastApkAttempt: { readonly version: string; readonly at: number } | null;
+  readonly updateRequest: UpdateRequest;
 }
 
 export type UpdateStep =
   | "check"
+  | "checkApk"
+  | "askMobileData"
   | "downloadBundle"
   | "applyBundle"
   | "downloadApk"
-  | "askInstallPermission"
+  | "openInstallPermission"
   | "installApk"
   | "wait";
 
@@ -69,25 +89,92 @@ const isDue = (now: number, last: number | null, interval: number): boolean =>
   now < last ||
   now - last >= interval;
 
-/** Installing ends the process, so a silent install needs Wave out of use and nothing playing. */
-const apkStep = (state: UpdateState): UpdateStep | null => {
-  const { now, visible, playing, installAccess, lastInstallAt, lastInstallAskAt } = state;
-  switch (installAccess) {
-    case "needsPermission":
-      return visible && isDue(now, lastInstallAskAt, UPDATE_INSTALL_ASK_INTERVAL_MS)
-        ? "askInstallPermission"
-        : null;
-    case "needsConfirmation":
-      // Android's confirmation can't open from the background (docs/spec.md, Native updates).
-      return visible && !playing && isDue(now, lastInstallAt, UPDATE_INSTALL_ASK_INTERVAL_MS)
-        ? "installApk"
-        : null;
-    case "silent":
-      return !visible && !playing && isDue(now, lastInstallAt, UPDATE_CHECK_INTERVAL_MS)
-        ? "installApk"
-        : null;
+/**
+ * Installing ends the process, so it only ever follows a tap, and then at once, music or not. Only
+ * with Wave in front: it would close Wave under another app, and Android's permission screen and
+ * confirmation can't open from the background.
+ */
+const apkStep = ({ installTap, installAccess, visible }: UpdateState): UpdateStep | null => {
+  if (installTap !== "tapped" || !visible) return null;
+  return installAccess === "needsPermission" ? "openInstallPermission" : "installApk";
+};
+
+/**
+ * A tap, given what's become of Wave since. Leaving ends a tap that hasn't reached Android, so it
+ * can't act long after the fact. The exception is leaving for the permission screen: coming back
+ * continues the install if it was granted and ends the tap if not, so the screen never reopens by
+ * itself. Leaving for Android's confirmation ends it too, so a decline brings the offer back.
+ */
+export const installTapAfter = (
+  tap: InstallTap,
+  { visible, installAccess }: Pick<UpdateState, "visible" | "installAccess">,
+): InstallTap => {
+  switch (tap) {
+    case "atPermissionScreen":
+      return visible ? tap : "awayAtPermissionScreen";
+    case "awayAtPermissionScreen":
+      if (!visible) return tap;
+      return installAccess === "needsPermission" ? "none" : "tapped";
+    case "tapped":
+    case "handedOver":
+      return visible ? tap : "none";
+    case "none":
+      return tap;
   }
 };
+
+/**
+ * A tap once Android's installer has let go of the APK with no install to show for it, or Wave has
+ * come back to the front: nothing more will come of the handover, so the offer returns. A newer tap
+ * isn't this handover's to end.
+ */
+export const installTapWhenHandoverEnds = (tap: InstallTap): InstallTap =>
+  tap === "handedOver" ? "none" : tap;
+
+/**
+ * A request from the update button, given what's become of Wave since. Like a tap, it ends when Wave
+ * leaves. A download already running keeps going, and what it brings waits to be offered.
+ */
+export const updateRequestAfter = (
+  request: UpdateRequest,
+  { visible }: Pick<UpdateState, "visible">,
+): UpdateRequest => (visible ? request : "none");
+
+/**
+ * The version a tap would install: the file exists under its final name only once its SHA-256
+ * matched, so "downloaded" means verified. Null while nothing's ready or a tap is under way.
+ */
+export const offeredApk = ({
+  nativeUpdate,
+  offeredApkVersion,
+  installTap,
+}: Pick<UpdateState, "nativeUpdate" | "offeredApkVersion" | "installTap">): string | null =>
+  nativeUpdate === "downloaded" && installTap === "none" ? offeredApkVersion : null;
+
+/** Whether the "Update the app" pill is up. A version swiped away stays away; a newer one doesn't. */
+export const updatePillShown = ({
+  offered,
+  ignored,
+  nowPlayingShown,
+  cardOpen,
+  otherPillShown,
+}: {
+  readonly offered: string | null;
+  /** The version last swiped away, kept across launches. */
+  readonly ignored: string | null;
+  readonly nowPlayingShown: boolean;
+  readonly cardOpen: boolean;
+  /** Another floating pill (Go to Suggestions, Current Song) is on screen. */
+  readonly otherPillShown: boolean;
+}): boolean =>
+  offered !== null && offered !== ignored && !nowPlayingShown && !cardOpen && !otherPillShown;
+
+/** Either way sideways, with the mini player's thresholds (a third of the way, or a flick). */
+export const updatePillSwipeDismisses = (swipe: {
+  readonly translationX: number;
+  readonly velocityX: number;
+  readonly width: number;
+}): boolean => resolveSkipSwipe(swipe) !== null;
 
 /** A whole APK is a lot to fetch again for a failure that may well repeat. */
 const apkDownloadIsDue = ({ now, offeredApkVersion, lastApkAttempt }: UpdateState): boolean =>
@@ -99,6 +186,11 @@ const apkDownloadIsDue = ({ now, offeredApkVersion, lastApkAttempt }: UpdateStat
 export const nextUpdateStep = (state: UpdateState): UpdateStep => {
   if (state.working) return "wait";
   const online = state.network !== "none";
+  if (state.updateRequest === "check" && online) return "check";
+  if (state.nativeUpdate === "available") {
+    if (state.updateRequest === "askMobileData" && state.visible) return "askMobileData";
+    if (state.updateRequest === "download" && online) return "downloadApk";
+  }
   if (
     state.nativeUpdate === "available" &&
     state.network === "unmetered" &&
@@ -119,7 +211,111 @@ export const nextUpdateStep = (state: UpdateState): UpdateStep => {
   if (state.visible && online && isDue(state.now, state.lastCheckAt, UPDATE_CHECK_INTERVAL_MS)) {
     return "check";
   }
+  // What the last check found isn't kept, so a downloaded APK's offer returns after a restart.
+  if (state.visible && online && !state.apkChecked) return "checkApk";
   return "wait";
+};
+
+/** What a tap on the update button does, given what's already under way. */
+export const updateButtonAction = ({
+  nativeUpdate,
+  installTap,
+  updateRequest,
+  downloadingApk,
+}: Pick<UpdateState, "nativeUpdate" | "installTap" | "updateRequest"> & {
+  /** The automatic path is fetching the APK right now. */
+  readonly downloadingApk: boolean;
+}): "install" | "check" | "followDownload" | "none" => {
+  if (updateRequest !== "none" || installTap !== "none") return "none";
+  if (nativeUpdate === "downloaded") return "install";
+  return downloadingApk ? "followDownload" : "check";
+};
+
+/**
+ * Where a tap's check leads. An APK comes first, as a pending one holds bundles back. A bundle only
+ * gets a toast: it follows its silent path and doesn't close Wave. A check that failed and found
+ * nothing can't say Wave is up to date. With Wave behind it leads nowhere: the tap is over.
+ */
+export const afterRequestedCheck = ({
+  visible,
+  nativeUpdate,
+  network,
+  bundleAvailable,
+  bundleDownloaded,
+  checkFailed,
+}: Pick<
+  UpdateState,
+  "visible" | "nativeUpdate" | "network" | "bundleAvailable" | "bundleDownloaded"
+> & {
+  /** The service failed either question, the bundle's or the APK's. */
+  readonly checkFailed: boolean;
+}): {
+  readonly next: "none" | "install" | "askMobileData" | "download";
+  readonly outcome: UpdateNotice | null;
+} => {
+  if (!visible) return { next: "none", outcome: null };
+  if (nativeUpdate === "downloaded") return { next: "install", outcome: null };
+  if (nativeUpdate === "available") {
+    return { next: network === "metered" ? "askMobileData" : "download", outcome: null };
+  }
+  if (bundleAvailable || bundleDownloaded) return { next: "none", outcome: "bundleOnItsWay" };
+  return { next: "none", outcome: checkFailed ? "checkFailed" : "upToDate" };
+};
+
+/**
+ * What an APK download ends in. A signed one that a live request asked for becomes a tap, as
+ * installing it is what the request meant. With Wave behind no request is live, whatever's been
+ * noticed of that yet, so the APK only waits to be offered.
+ */
+export const afterApkDownload = ({
+  download,
+  updateRequest,
+  visible,
+}: Pick<UpdateState, "updateRequest" | "visible"> & {
+  /** `signed` is the file CI signed; `failed` is anything else. */
+  readonly download: "signed" | "failed";
+}): { readonly tapped: boolean; readonly outcome: UpdateNotice | null } => {
+  const asked = updateRequest !== "none" && visible;
+  return {
+    tapped: asked && download === "signed",
+    outcome: asked && download === "failed" ? "downloadFailed" : null,
+  };
+};
+
+/** What to tell the person of a step that stopped on a throw; null when nobody asked for it. */
+export const stoppedStepNotice = ({
+  step,
+  updateRequest,
+}: Pick<UpdateState, "updateRequest"> & {
+  readonly step: UpdateStep;
+}): UpdateNotice | null => {
+  if (step === "installApk" || step === "openInstallPermission") return "installFailed";
+  if (updateRequest === "none") return null;
+  return step === "check" ? "checkFailed" : "downloadFailed";
+};
+
+/** What to say when a request can't go on with no network; null when it can. */
+export const strandedUpdateRequest = (
+  request: UpdateRequest,
+  network: UpdateNetwork,
+): UpdateNotice | null => {
+  if (request === "none" || network !== "none") return null;
+  return request === "check" ? "checkFailed" : "downloadFailed";
+};
+
+/** The button's face: at rest, spinning, or a download's percentage, whoever started it. */
+export type UpdateButtonLook = "idle" | "checking" | { readonly downloading: number };
+
+export const updateButtonLook = ({
+  updateRequest,
+  downloadPercent,
+}: {
+  readonly updateRequest: UpdateRequest;
+  /** How far the APK download is, while one runs. */
+  readonly downloadPercent: number | null;
+}): UpdateButtonLook => {
+  if (downloadPercent !== null) return { downloading: downloadPercent };
+  return updateRequest === "check" ? "checking" : "idle";
 };
 
 /** The channel's newest APK, as CI signed it. The channel stops one reaching the other's phones. */

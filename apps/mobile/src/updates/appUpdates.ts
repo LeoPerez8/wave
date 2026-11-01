@@ -4,6 +4,7 @@
  * leaves it, and in the background when the player changes; it holds no timer.
  */
 import {
+  formatStorageSize,
   latestApkUrl,
   nativeUpdateIsNew,
   playerKeepsPlaying,
@@ -12,12 +13,14 @@ import {
   type InstallAccess,
   type LatestApk,
   type NativeUpdate,
+  type UpdateButtonLook,
   type UpdateNetwork,
   type UpdateState,
 } from "@wave/core";
 import * as Effect from "effect/Effect";
 import Constants from "expo-constants";
 import * as Updates from "expo-updates";
+import { useSyncExternalStore } from "react";
 import { AppState } from "react-native";
 
 import { persistedSetting } from "@/lib/persistedSetting";
@@ -25,9 +28,8 @@ import { currentLocalisation } from "@/localisation/localisation";
 import { appLog, flushAppLogNow } from "@/log/appLog";
 import { connectivityNow } from "@/native/waveNative";
 import { WaveSelfInstall } from "@/native/waveSelfInstall";
-import { isNowPlayingShown } from "@/nowPlaying/sheet";
-import { showAlert } from "@/overlay/alert";
-import { isOverlayOpen } from "@/overlay/overlay";
+import { confirmAction } from "@/overlay/alert";
+import { showToast } from "@/overlay/toast";
 import { playbackState } from "@/playback/Player";
 
 import { createUpdateRunner } from "./updateRunner";
@@ -46,8 +48,6 @@ const keptTime = (key: string) =>
   });
 
 const lastCheckAt = keptTime("updates.lastCheckAt");
-const lastInstallAskAt = keptTime("updates.lastInstallAskAt");
-const lastInstallAt = keptTime("updates.lastInstallAt");
 const lastApkAttempt = persistedSetting<UpdateState["lastApkAttempt"]>({
   key: "updates.lastApkAttempt",
   read: (stored) => {
@@ -59,14 +59,29 @@ const lastApkAttempt = persistedSetting<UpdateState["lastApkAttempt"]>({
   write: (attempt) => (attempt === null ? null : `${attempt.version} ${attempt.at}`),
 });
 
+/** The version last swiped off the update pill. A newer one has another name, so it shows. */
+const ignoredApkVersion = persistedSetting<string | null>({
+  key: "updates.ignoredApkVersion",
+  read: (stored) => stored,
+  write: (version) => version,
+});
+
+/** A metered Wi-Fi counts as mobile data, which only Android's own answer tells. */
+let meteredWifi = false;
+
 const network = (): UpdateNetwork => {
   const { online, onMobileData } = connectivityNow();
   if (!online) return "none";
-  return onMobileData ? "metered" : "unmetered";
+  return onMobileData || meteredWifi ? "metered" : "unmetered";
 };
 
 /** What the last check found, which the download and the install act on. */
 let latestApk: LatestApk | null = null;
+
+const needInstaller = (): NonNullable<typeof WaveSelfInstall> => {
+  if (WaveSelfInstall === null) throw new Error("No installer in this build");
+  return WaveSelfInstall;
+};
 
 const needLatestApk = (): LatestApk => {
   if (latestApk === null) throw new Error("No APK found yet");
@@ -123,31 +138,34 @@ const checkNative: Effect.Effect<NativeUpdate, unknown> = Effect.suspend(() => {
   );
 });
 
-/** Asks once something else isn't up; it answers false when it didn't, so it asks again soon. */
-const askInstallPermission = Effect.tryPromise(async () => {
-  if (isNowPlayingShown() || isOverlayOpen()) return false;
-  const strings = currentLocalisation().strings.appUpdates;
-  const choice = await showAlert({
-    title: strings.installTitle,
-    message: strings.installMessage,
-    action: { label: strings.installAllow },
-    dismissLabel: strings.installNotNow,
-  });
-  // Coming back from Android's screen brings Wave to the front, which asks the policy again.
-  if (choice === "action") WaveSelfInstall?.openPermissionScreen();
-  return true;
-});
-
 /** It can only change while Wave is away, so it's read then and not at every player change. */
 let installAccess: InstallAccess = "needsPermission";
 
-/** Keeps the last answer when the phone gives none. */
+/** Keeps the last answers when the phone gives none. */
 const refreshInstallAccess = async (): Promise<void> => {
   try {
     installAccess = (await WaveSelfInstall?.installAccess()) ?? "needsPermission";
+    meteredWifi = (await WaveSelfInstall?.networkIsMetered()) ?? false;
   } catch (error) {
     appLog("warn", "WaveUpdates", `Couldn't read the install access: ${String(error)}`);
   }
+};
+
+const downloadLatestApk = (allowMetered: boolean): Effect.Effect<boolean, unknown> =>
+  Effect.tryPromise(() => {
+    const { url, version, size, sha256 } = needLatestApk();
+    return needInstaller().downloadApk(url, version, size, sha256, allowMetered);
+  });
+
+const askMobileData = (): Promise<boolean> => {
+  const { strings, language } = currentLocalisation();
+  const text = strings.appUpdates;
+  return confirmAction({
+    title: text.mobileDataTitle,
+    message: text.mobileDataMessage(formatStorageSize(needLatestApk().size, language)),
+    action: { label: text.download },
+    dismissLabel: text.notNow,
+  });
 };
 
 const runner = createUpdateRunner({
@@ -164,18 +182,16 @@ const runner = createUpdateRunner({
       return Updates.reloadAsync();
     }),
     checkNative,
-    downloadApk: Effect.tryPromise(() => {
-      if (WaveSelfInstall === null) throw new Error("No installer in this build");
-      const { url, version, size, sha256 } = needLatestApk();
-      return WaveSelfInstall.downloadApk(url, version, size, sha256);
-    }),
-    askInstallPermission,
+    downloadApk: downloadLatestApk,
+    askMobileData: Effect.tryPromise(askMobileData),
+    // Coming back from Android's screen brings Wave to the front, which asks the policy again.
+    openInstallPermission: Effect.try(() => needInstaller().openPermissionScreen()),
     installApk: Effect.tryPromise(() => {
-      if (WaveSelfInstall === null) throw new Error("No installer in this build");
+      const installer = needInstaller();
       // The install takes the waiting lines with it.
       flushAppLogNow();
       const { version, sha256 } = needLatestApk();
-      return WaveSelfInstall.install(version, sha256);
+      return installer.install(version, sha256);
     }),
     offeredApkVersion: () => latestApk?.version ?? null,
   },
@@ -187,15 +203,56 @@ const runner = createUpdateRunner({
   }),
   now: Date.now,
   lastCheckAt,
-  lastInstallAskAt,
-  lastInstallAt,
   lastApkAttempt,
   log: (level, message) => appLog(level, "WaveUpdates", message),
+  report: (notice) => void showToast(currentLocalisation().strings.appUpdates[notice]),
 });
+
+WaveSelfInstall?.addListener("onApkDownloadProgress", ({ percent }) =>
+  runner.downloadProgress(percent),
+);
+WaveSelfInstall?.addListener("onInstallRefused", runner.installRefused);
+WaveSelfInstall?.addListener("onInstallAbandoned", ({ failed }) => runner.installAbandoned(failed));
 
 const reconsiderWithFreshAccess = (): void => {
   void refreshInstallAccess().then(runner.reconsider);
 };
+
+/**
+ * A tap on the "Update the app" pill: installs the downloaded APK now, or opens Android's permission
+ * screen first. Nothing installs but from a tap, this one or the update button's (`tapUpdateButton`),
+ * whose check or download becomes one when it ends with Wave still in front.
+ */
+export const installAppUpdate = (): void => {
+  runner.requestInstall();
+  reconsiderWithFreshAccess();
+};
+
+/**
+ * The update button in Settings: what "Update the app" does when an APK is ready, and otherwise a
+ * check now, whose finding it downloads and installs.
+ */
+export const tapUpdateButton = (): void => {
+  runner.tapUpdateButton();
+  reconsiderWithFreshAccess();
+};
+
+/** What the update button shows. */
+export const useUpdateButtonLook = (): UpdateButtonLook =>
+  useSyncExternalStore(runner.subscribe, runner.buttonLook);
+
+/** Stops the pill offering the version on offer. A newer one offers itself again. */
+export const ignoreAppUpdate = (): void => {
+  const version = runner.offeredVersion();
+  if (version !== null) ignoredApkVersion.set(version);
+};
+
+/** The APK version ready to install at a tap, or null. */
+export const useOfferedAppUpdate = (): string | null =>
+  useSyncExternalStore(runner.subscribe, runner.offeredVersion);
+
+/** The version swiped off the pill, if any. */
+export const useIgnoredAppUpdate = (): string | null => ignoredApkVersion.useValue();
 
 let started = false;
 
@@ -212,8 +269,11 @@ export const startAppUpdates = (): void => {
       stopFollowingPlayer ??= playbackState.subscribe(runner.reconsider);
     }
   };
-  AppState.addEventListener("change", () => {
+  AppState.addEventListener("change", (appState) => {
     followPlayerIfHidden();
+    // On the spot, as a quick return could beat the fresh answers and hide that Wave ever left.
+    if (appState === "active") runner.cameToFront();
+    else runner.reconsider();
     reconsiderWithFreshAccess();
   });
   followPlayerIfHidden();

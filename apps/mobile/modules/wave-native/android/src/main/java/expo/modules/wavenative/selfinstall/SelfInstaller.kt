@@ -26,10 +26,18 @@ private const val UPDATE_CERTIFICATE = "expo.modules.updates.CODE_SIGNING_CERTIF
 
 /**
  * Native updates (docs/spec.md, Build and CI): Wave downloads the channel's APK and installs it over
- * itself through [PackageInstaller] with USER_ACTION_NOT_REQUIRED. Core's update policy says when;
- * each step goes to the app log. minSdk is 31, the API that silent install needs.
+ * itself through [PackageInstaller] with USER_ACTION_NOT_REQUIRED, only after a tap on "Update the
+ * app", with Wave in front. Core's update policy says when; each step goes to the app log. minSdk is 31, the API that silent install needs.
  */
 object SelfInstaller {
+  /** Told when Android turns down an install it took, while JS is there to hear. */
+  @Volatile
+  internal var onInstallRefused: (() -> Unit)? = null
+
+  /** Told when Android lets go of an install and the APK stays; true if the person wasn't asked. */
+  @Volatile
+  internal var onInstallAbandoned: ((Boolean) -> Unit)? = null
+
   private fun preferences(context: Context) = context.getSharedPreferences(PREFERENCES, Context.MODE_PRIVATE)
 
   private fun phoneState(context: Context): PhoneState {
@@ -52,6 +60,9 @@ object SelfInstaller {
   }
 
   fun access(context: Context): InstallAccess = phoneState(context).access()
+
+  fun networkIsMetered(context: Context): Boolean =
+    context.getSystemService(ConnectivityManager::class.java).isActiveNetworkMetered
 
   fun installedVersion(context: Context): String =
     context.packageManager.getPackageInfo(context.packageName, 0).versionName ?: ""
@@ -87,9 +98,18 @@ object SelfInstaller {
 
   /**
    * Blocks on the download: call it off the main thread. A whole file already there is kept. False
-   * when what came isn't the file CI signed for, which downloading again wouldn't change.
+   * when what came isn't the file CI signed for, which downloading again wouldn't change. A metered
+   * network stops it unless [allowMetered] says the person allowed that.
    */
-  fun download(context: Context, url: String, version: String, size: Long, sha256: String): Boolean {
+  fun download(
+    context: Context,
+    url: String,
+    version: String,
+    size: Long,
+    sha256: String,
+    allowMetered: Boolean,
+    onPercent: (Int) -> Unit,
+  ): Boolean {
     require(isDownloadableApkUrl(url)) { "The APK URL must be https" }
     val apk = apkFile(context, version)
     if (holdsApk(apk, size, sha256)) return true
@@ -99,7 +119,7 @@ object SelfInstaller {
     val part = File(dir, "${apk.name}.part")
     val connectivity = context.getSystemService(ConnectivityManager::class.java)
     // A metered Wi-Fi counts as mobile data here, which JS can't tell.
-    check(!connectivity.isActiveNetworkMetered) { "The network is metered" }
+    check(allowMetered || !connectivity.isActiveNetworkMetered) { "The network is metered" }
     WaveLog.i(SELF_INSTALL_TAG, "Downloading $url ($size bytes)")
     val connection = URL(url).openConnection() as HttpURLConnection
     connection.connectTimeout = CONNECT_TIMEOUT_MS
@@ -113,6 +133,7 @@ object SelfInstaller {
           var total = 0L
           var nextCheck = METERED_CHECK_BYTES
           var logged = 0
+          var percent = 0
           while (true) {
             val read = input.read(buffer)
             if (read < 0) break
@@ -122,8 +143,12 @@ object SelfInstaller {
               logged = it
               WaveLog.i(SELF_INSTALL_TAG, "Downloaded $it% of the APK")
             }
+            downloadPercent(total, size).takeIf { it != percent }?.let {
+              percent = it
+              onPercent(it)
+            }
             if (total >= nextCheck) {
-              check(!connectivity.isActiveNetworkMetered) { "The network became metered" }
+              check(allowMetered || !connectivity.isActiveNetworkMetered) { "The network became metered" }
               nextCheck = total + METERED_CHECK_BYTES
             }
           }
@@ -172,8 +197,6 @@ object SelfInstaller {
             session.fsync(output)
           }
         }
-        // The copy took a moment, and a silent install mustn't close Wave under someone back in it.
-        check(state.access() != InstallAccess.SILENT || !isInForeground()) { "Wave came back to the front" }
         // Mutable because Android fills in the status. Explicit, so only Wave's receiver gets it.
         val status = PendingIntent.getBroadcast(
           context,

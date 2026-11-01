@@ -34,6 +34,9 @@ object NativeCatalogue {
     "savingCount" to "%s saving",
     "leftOne" to "%s left",
     "leftCount" to "%s left",
+    "appUpdates" to "App updates",
+    "waveUpdated" to "Wave updated",
+    "tapToOpen" to "Tap to open it",
   )
   val pt = mapOf(
     "recognize" to "Reconhecer Música",
@@ -67,5 +70,8 @@ object NativeCatalogue {
     "savingCount" to "%s salvando",
     "leftOne" to "%s restante",
     "leftCount" to "%s restantes",
+    "appUpdates" to "Atualizações do app",
+    "waveUpdated" to "Wave atualizado",
+    "tapToOpen" to "Toque para abrir",
   )
 }

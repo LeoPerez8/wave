@@ -99,7 +99,7 @@
       android:name="expo.modules.wavenative.selfinstall.SelfInstallStatusReceiver"
       android:exported="false" />
 
-    <!-- Brings Wave's process and download journal back after an update (docs/spec.md, Build and CI). -->
+    <!-- Brings Wave's process and download journal back after an update and posts "Wave updated" (docs/spec.md, Build and CI). -->
     <receiver
       android:name="expo.modules.wavenative.selfinstall.PackageReplacedReceiver"
       android:exported="false">

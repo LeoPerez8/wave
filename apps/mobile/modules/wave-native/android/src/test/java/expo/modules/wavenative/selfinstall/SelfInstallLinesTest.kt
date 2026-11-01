@@ -113,6 +113,21 @@ class SelfInstallLinesTest {
   }
 
   @Test
+  fun `only a declined or dropped session counts as abandoned`() {
+    assertTrue(isInstallAbandoned(3))
+    assertFalse(isInstallAbandoned(-1))
+    assertFalse(isInstallAbandoned(0))
+    assertFalse(isInstallAbandoned(1))
+  }
+
+  @Test
+  fun aDownloadsPercentStaysWhole() {
+    assertEquals(0, downloadPercent(done = 10, size = 0))
+    assertEquals(41, downloadPercent(done = 419, size = 1000))
+    assertEquals(100, downloadPercent(done = 2000, size = 1000))
+  }
+
+  @Test
   fun logsADownloadAtEachQuarter() {
     assertNull(downloadProgressToLog(done = 24, size = 100, logged = 0))
     assertEquals(25, downloadProgressToLog(done = 25, size = 100, logged = 0))
@@ -139,5 +154,19 @@ class SelfInstallLinesTest {
   fun aFileOfSeveralGigabytesDoesntOverflow() {
     val size = 8L * 1024 * 1024 * 1024
     assertEquals(50, downloadProgressToLog(done = size / 2, size = size, logged = 25))
+  }
+
+  @Test
+  fun `a failed step after an update leaves the others to run`() {
+    val ran = mutableListOf<String>()
+    val failed = mutableListOf<String>()
+    runUpdateSteps(
+      listOf(
+        "notification" to { throw SecurityException("no permission") },
+        "downloads" to { ran += "downloads" },
+      ),
+    ) { name, _ -> failed += name }
+    assertEquals(listOf("downloads"), ran)
+    assertEquals(listOf("notification"), failed)
   }
 }
