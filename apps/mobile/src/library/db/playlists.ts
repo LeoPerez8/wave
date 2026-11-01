@@ -1183,10 +1183,11 @@ export const selectPlaylistTotals = (
 const NO_COVERS = { thumbPaths: [], artworkPaths: [] } as const;
 const NO_SONGS = { trackCount: 0, durationMs: 0, unavailableCount: 0 } as const;
 
-/** A playlist's mosaic and totals, as Library › Playlists and its page show them. */
+/** A playlist's artwork, totals and newest entry date, shared by lists, cards and its page. */
 interface PlaylistSummary {
   readonly covers: PlaylistCovers;
   readonly totals: PlaylistTotals;
+  readonly lastEntryAddedAt: number | null;
 }
 
 /**
@@ -1204,7 +1205,7 @@ const summaryCache = new WeakMap<
 const LIBRARY_REVISION = 0;
 
 /**
- * [playlistIds]' mosaics and totals. Those whose entries (or the Library's
+ * [playlistIds]' mosaics, totals and newest entry dates. Those whose entries (or the Library's
  * tracks, albums and covers) changed since they were last worked out are
  * worked out again, together; the others are taken as they were. SQLite's
  * triggers keep the revisions (migration 0022), so every write counts: this
@@ -1234,6 +1235,19 @@ const playlistSummaries = (
   const stale = playlistIds.filter((id) => cache.get(id)?.at !== at(id));
   if (stale.length > 0) {
     const covers = selectPlaylistCovers(db, stale);
+    const { playlistItems } = schema;
+    const latest = new Map(
+      db
+        .select({
+          playlistId: playlistItems.playlistId,
+          addedAt: sql<number>`max(${playlistItems.addedAt})`,
+        })
+        .from(playlistItems)
+        .where(and(live, sql`${playlistItems.playlistId} IN ${jsonList(stale)}`))
+        .groupBy(playlistItems.playlistId)
+        .all()
+        .map((row) => [row.playlistId, row.addedAt]),
+    );
     const uncounted = stale.filter((id) => counted?.get(id) === undefined);
     const totals = uncounted.length === 0 ? new Map() : selectPlaylistTotals(db, uncounted);
     for (const id of stale) {
@@ -1243,6 +1257,7 @@ const playlistSummaries = (
         summary: {
           covers: covers.get(id) ?? NO_COVERS,
           totals: counted?.get(id) ?? totals.get(id) ?? NO_SONGS,
+          lastEntryAddedAt: latest.get(id) ?? null,
         },
       });
     }
@@ -1352,6 +1367,7 @@ export const selectPlaylists = (db: LibraryDatabase): PlaylistRow[] => {
       .map(({ imagePath, imageThumbPath, ...row }) => ({
         ...row,
         sort: sortKey(row.name),
+        lastEntryAddedAt: summaries.get(row.id)?.lastEntryAddedAt ?? null,
         ...(summaries.get(row.id)?.totals ?? NO_SONGS),
         ...playlistArt({ imagePath, imageThumbPath }, summaries.get(row.id)?.covers ?? NO_COVERS),
       }))
@@ -1391,6 +1407,7 @@ export const selectPlaylist = (
     playlist: {
       ...playlist,
       sort: sortKey(playlist.name),
+      lastEntryAddedAt: summary?.lastEntryAddedAt ?? null,
       trackCount,
       durationMs,
       unavailableCount,

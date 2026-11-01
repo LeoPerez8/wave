@@ -4,6 +4,7 @@ import {
   confirmPlaylistDeletion,
   describePlaylistAdd,
   nextPlaylistName,
+  sortPlaylistsForAdd,
   type Catalogue,
   type PlaylistNameCheck,
   type PlaylistSong,
@@ -196,7 +197,7 @@ const addSongs = (playlistId: number, songs: () => Promise<readonly PlaylistSong
 };
 
 function AddCard({ subject, close }: { subject: AddSubject; close: () => void }) {
-  const playlists = usePlaylists();
+  const playlists = sortPlaylistsForAdd(usePlaylists());
   const { strings } = useLocalisation();
 
   return (
