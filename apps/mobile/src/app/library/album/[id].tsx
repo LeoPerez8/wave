@@ -1,6 +1,5 @@
 import { useScreenContent } from "@/lib/screenTiming";
 
-import type { LegendListRef } from "@legendapp/list/react-native";
 import {
   artistLink,
   ytAlbumSongCount,
@@ -13,7 +12,7 @@ import {
   albumDownloadOrigin,
 } from "@wave/core";
 import { useLocalSearchParams } from "expo-router";
-import { useCallback, useEffect, useMemo, useRef } from "react";
+import { useCallback, useEffect, useMemo } from "react";
 import { Text, useWindowDimensions, View } from "react-native";
 
 import { artworkUri } from "@/catalog/artworkUri";
@@ -22,7 +21,11 @@ import { Artwork } from "@/catalog/Artwork";
 import { CELL, grid } from "@/catalog/grid";
 import { PlayShuffle, type LineToggle } from "@/catalog/PlayShuffle";
 import { TrackSkeletons } from "@/catalog/Skeletons";
-import { CompactTitleHead, CompactTitleMark, useCompactTitleList } from "@/components/CompactTitle";
+import {
+  CompactTitleHead,
+  CompactTitleMark,
+  useCompactTitleTopList,
+} from "@/components/CompactTitle";
 
 import { Press } from "@/motion/Press";
 import { playPage, playSongs } from "@/playback/actions";
@@ -35,7 +38,6 @@ import type { AlbumRow, AlbumTrackRow, SongRow } from "@/library/LibraryStore";
 import { parseId, useKnownRow, useOpenedIntegrated } from "@/library/routes";
 import { songCount } from "@/library/TrackList";
 import { useLocalisation } from "@/localisation/localisation";
-import { useListScroll } from "@/lib/useListScroll";
 import { useVisitState } from "@/lib/useVisitState";
 import { usePlayPage } from "@/playback/hooks";
 import { useChromeInset } from "@/chrome/chrome";
@@ -268,9 +270,7 @@ function AlbumTracks({ shown, openedIntegrated }: { shown: Shown; openedIntegrat
   const mixed = useMemo(() => (entries === null ? null : mixedSongs(entries)), [entries]);
   const scrollable = useListScrollable();
   const bottomInset = useChromeInset();
-  const list = useRef<LegendListRef>(null);
-  const { scroll, listProps } = useListScroll(0);
-  useCompactTitleList({ list, find: null, scroll });
+  const { list, listProps } = useCompactTitleTopList();
   // Selection keys the tracks themselves (every disc), not the disc heads.
   const selectable = useMemo(
     (): TrackItem[] =>

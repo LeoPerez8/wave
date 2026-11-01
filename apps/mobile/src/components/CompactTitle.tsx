@@ -25,6 +25,7 @@ import { scheduleOnRN } from "react-native-worklets";
 
 import { grid } from "@/catalog/grid";
 import { afterPaint } from "@/lib/afterPaint";
+import { useListScroll } from "@/lib/useListScroll";
 import { useLocalisation } from "@/localisation/localisation";
 import { Press } from "@/motion/Press";
 
@@ -125,6 +126,14 @@ export function CompactTitleMark({ children }: { children: ReactNode }) {
       {children}
     </View>
   );
+}
+
+/** A list with no Find field, opening at its top: its ref and scroll props, joined to the title. */
+export function useCompactTitleTopList() {
+  const list = useRef<LegendListRef>(null);
+  const { scroll, listProps } = useListScroll(0);
+  useCompactTitleList({ list, find: null, scroll });
+  return { list, listProps };
 }
 
 /**
