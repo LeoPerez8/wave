@@ -59,16 +59,15 @@ export function useGoToSuggestionsPill(scrollRef: AnimatedRef<ScrollView>) {
     ["onScroll", "onScrollBeginDrag", "onScrollEndDrag"],
   );
 
-  useEffect(
-    () =>
-      scrollRef.observe((tag) => {
-        if (tag === null) return;
-        const handler = registeredHandler(onScrollEvent);
-        handler?.registerForEvents(tag);
-        return () => handler?.unregisterFromEvents(tag);
-      }),
-    [scrollRef, onScrollEvent],
-  );
+  useEffect(() => {
+    const stopObserving = scrollRef.observe((tag) => {
+      if (tag === null) return;
+      const handler = registeredHandler(onScrollEvent);
+      handler?.registerForEvents(tag);
+      return () => handler?.unregisterFromEvents(tag);
+    });
+    return () => stopObserving?.();
+  }, [scrollRef, onScrollEvent]);
 
   const tapped = useCallback(() => {
     scheduleOnUI(() => {

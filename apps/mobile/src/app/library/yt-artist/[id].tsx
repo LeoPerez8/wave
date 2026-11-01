@@ -13,10 +13,9 @@ import {
   type YtArtistRelease,
   type YtArtistShelf,
 } from "@wave/core";
-import type { LegendListRef } from "@legendapp/list/react-native";
 import { Image } from "expo-image";
 import { useLocalSearchParams } from "expo-router";
-import { useCallback, useMemo, useRef } from "react";
+import { useCallback, useMemo } from "react";
 import { Text, useWindowDimensions, View } from "react-native";
 
 import { AlbumTile } from "@/catalog/AlbumTile";
@@ -35,14 +34,13 @@ import {
   CompactTitleFrame,
   CompactTitleHead,
   CompactTitleMark,
-  useCompactTitleList,
+  useCompactTitleTopList,
 } from "@/components/CompactTitle";
 import { ScreenHeader } from "@/components/ScreenHeader";
 import { TextButton } from "@/components/TextButton";
 import { albumRowHeight, toAlbumSummary } from "@/library/AlbumGrid";
 import type { AlbumRow, SongRow } from "@/library/LibraryStore";
 import { openAlbum } from "@/library/routes";
-import { useListScroll } from "@/lib/useListScroll";
 import { useListScrollable } from "@/motion/heldTouch";
 import type { NativeYtSong } from "@/native/waveYtMusic";
 import { openAlbumActions } from "@/playback/ActionsMenu";
@@ -277,9 +275,7 @@ function YtArtistList({
   const { strings } = useLocalisation();
   const scrollable = useListScrollable();
   const bottomInset = useChromeInset();
-  const list = useRef<LegendListRef>(null);
-  const { scroll, listProps } = useListScroll(0);
-  useCompactTitleList({ list, find: null, scroll });
+  const { list, listProps } = useCompactTitleTopList();
   const songs = view?.songs ?? NO_SONGS;
   const selectable = useMemo(
     () => (view === null ? [] : artistSelectionItems(view.shelves, view.songs)),
