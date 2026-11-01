@@ -15,16 +15,21 @@ class RecognizeSessions(
   private val onCaptureFailed: (session: Int) -> Unit,
 ) {
   private var current: Pair<Int, RecognizeSession>? = null
+  private var detached = false
 
-  /** Replaces any live session with one capturing [audio]; [started] gets its id before the capture starts. */
+  /**
+   * Replaces any live session with one capturing [audio]; [started] gets its id before the
+   * capture starts. A [detached] session (the tile's) doesn't end with Wave's screen.
+   */
   @Synchronized
-  fun start(id: Int, audio: RecognizeAudio, started: (Int) -> Unit) {
+  fun start(id: Int, audio: RecognizeAudio, detached: Boolean = false, started: (Int) -> Unit) {
     stopAll()
     lateinit var session: RecognizeSession
     session = RecognizeSession(audio, recognize,
       onHeard = { ms, audible -> onHeard(id, ms, audible) },
       onCaptureFailed = { if (get(id) === session) onCaptureFailed(id) })
     current = id to session
+    this.detached = detached
     started(id)
     session.start()
   }
@@ -38,6 +43,12 @@ class RecognizeSessions(
   @Synchronized
   fun stop(id: Int) {
     if (current?.first == id) stopAll()
+  }
+
+  /** Wave's screen went to the background: only a session tied to it ends. */
+  @Synchronized
+  fun stopScreenSession() {
+    if (!detached) stopAll()
   }
 
   @Synchronized

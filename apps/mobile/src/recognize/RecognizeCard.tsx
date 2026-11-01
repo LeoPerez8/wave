@@ -17,67 +17,33 @@ import { CatalogLine } from "@/catalog/CatalogLine";
 import { CELL } from "@/catalog/grid";
 import { TextButton } from "@/components/TextButton";
 import { NativeWaveUnderline } from "@/glass/waveGlass";
-import { libraryListQueries } from "@/library/hooks";
 import type { SongRow } from "@/library/LibraryStore";
 import { openAddToPlaylist } from "@/library/PlaylistSheets";
 import { addToShazam } from "@/library/playlists";
 import { openAlbum } from "@/library/routes";
-import { appRuntime } from "@/library/runtime";
-import { appLog } from "@/log/appLog";
-import { online } from "@/native/waveNative";
 import { recognizeNative } from "@/native/waveRecognize";
 import { showError } from "@/overlay/alert";
 import { CardEntries } from "@/overlay/CardEntries";
 import { MenuRow } from "@/overlay/MenuRow";
 import { playSongs, playYtSongs, playNext, playYtNext } from "@/playback/actions";
-import { useYtMusicEnabled, ytMusicEnabled } from "@/settings/ytMusic";
+import { useYtMusicEnabled } from "@/settings/ytMusic";
 import { currentLibraryFinder, useLoadedInLibrary } from "@/ytmusic/libraryFinder";
-import { searchSongsInTurn } from "@/ytmusic/askYtMusic";
 import { cancelYtDownload, downloadYtSong, useYtDownloadStatus } from "@/ytmusic/YtDownloads";
 import type { NativeYtSong } from "@/native/waveYtMusic";
 import { openOverlay } from "@/overlay/overlay";
-import { holdPlayback } from "@/playback/holdPlayback";
 import { useThemeColor } from "@/theme/useThemeColor";
 
-import { resolveRecognition } from "./resolveRecognition";
-import { hasMicrophone, microphonePermission } from "./microphone";
+import { hasMicrophone } from "./microphone";
 import { createRecognizeEntry } from "./recognizeEntry";
-import {
-  startRecognizeSession,
-  type RecognizeDeps,
-  type RecognizeNative,
-  type RecognizeRun,
-} from "./recognizeSession";
+import { recognizeDeps } from "./recognizeDeps";
+import { startRecognizeSession, type RecognizeNative, type RecognizeRun } from "./recognizeSession";
+import { cancelRecognizeTile, trackCardSession } from "./startRecognizeTile";
 
 const COVER = CELL * 9;
 const WAVE_HEIGHT = LISTENING_WAVE.amplitude * 2 + LISTENING_WAVE.stroke;
 
 /** Whether this build can recognize (its APK has the native half). */
 export const recognizeAvailable = recognizeNative !== null;
-
-const depsFor = (native: RecognizeNative): RecognizeDeps<SongRow, NativeYtSong> => ({
-  online,
-  foreground: () => AppState.currentState === "active",
-  now: () => performance.now(),
-  every: (ms, tick) => {
-    const timer = setInterval(tick, ms);
-    return () => clearInterval(timer);
-  },
-  microphone: microphonePermission,
-  holdPlayback,
-  native,
-  resolve: (song, signal) =>
-    resolveRecognition(
-      {
-        library: () => appRuntime.runPromise(libraryListQueries.songs.read),
-        ytMusic: ytMusicEnabled,
-        search: searchSongsInTurn,
-      },
-      song,
-      signal,
-    ),
-  log: (level, line) => appLog(level, "WaveRecognize", line),
-});
 
 /**
  * Opens the Recognize card, already listening (docs/spec.md, "Recognize"). The
@@ -90,6 +56,8 @@ const entry = createRecognizeEntry({
   show: (source, closed) => {
     const native = recognizeNative;
     if (native === null) return closed();
+    // One capture at a time: the card's replaces the tile's, which ends without a result.
+    cancelRecognizeTile();
     openOverlay({
       label: currentLocalisation().strings.playbackText.recognizeSong,
       render: (close) => (
@@ -145,7 +113,7 @@ function RecognizeCard({
       return;
     }
     const session = startRecognizeSession(
-      depsFor(native),
+      recognizeDeps(native),
       source,
       (card) => {
         if (card.kind === "listening" && card.source !== undefined) setActiveSource(card.source);
@@ -155,6 +123,7 @@ function RecognizeCard({
       () => closeFromEffect(),
     );
     run.current = session;
+    trackCardSession(session);
     return () => session.cancel();
   }, [native, source, attempt]);
 
