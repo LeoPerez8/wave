@@ -31,9 +31,12 @@ cp "$kept/app-release.apk" "$work/unsigned.apk"
 (cd "$work/bundle" && zip -q -0 -X -r "$work/unsigned.apk" assets)
 
 # The version prebuild wrote into app/build.gradle, as a full build would package it.
-(cd "$work/version" && unzip -q "$kept/app-release.apk" AndroidManifest.xml assets/app.config)
+(cd "$work/version" && unzip -q "$kept/app-release.apk" AndroidManifest.xml assets/app.config assets/app.manifest)
 version="$(node "$here/apk-version.ts" "$app/android/app/build.gradle" "$work/version")"
-(cd "$work/version" && zip -q -X "$work/unsigned.apk" AndroidManifest.xml assets/app.config)
+# This run's update channel and runtime version (a kept build may come from another channel),
+# and an identity for the embedded update, whose JS is this run's.
+node "$here/update-config.ts" stamp-apk "$work/version"
+(cd "$work/version" && zip -q -X "$work/unsigned.apk" AndroidManifest.xml assets/app.config assets/app.manifest)
 
 tools="$(ls -d "${ANDROID_HOME:?}"/build-tools/* | sort -V | tail -n 1)"
 # -P 16: native libraries stay aligned to 16 KB pages, as AGP aligns them.
