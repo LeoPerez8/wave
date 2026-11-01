@@ -7,6 +7,7 @@ import {
   type RecognizeCard as RecognizeCardState,
   type RecognizeCardAction,
   type RecognizeSource,
+  type RecognizeMatch,
 } from "@wave/core";
 import { useEffect, useEffectEvent, useRef, useState } from "react";
 import { AppState, Linking, Text, View } from "react-native";
@@ -37,7 +38,7 @@ import { hasMicrophone } from "./microphone";
 import { createRecognizeEntry } from "./recognizeEntry";
 import { recognizeDeps } from "./recognizeDeps";
 import { startRecognizeSession, type RecognizeNative, type RecognizeRun } from "./recognizeSession";
-import { cancelRecognizeTile, trackCardSession } from "./startRecognizeTile";
+import { cancelRecognizeTile, trackCardSession, recognizeTileResult } from "./startRecognizeTile";
 
 const COVER = CELL * 9;
 const WAVE_HEIGHT = LISTENING_WAVE.amplitude * 2 + LISTENING_WAVE.stroke;
@@ -53,17 +54,26 @@ export const recognizeAvailable = recognizeNative !== null;
  */
 const entry = createRecognizeEntry({
   foreground: () => AppState.currentState === "active",
-  show: (source, closed) => {
+  show: (opening, closed) => {
+    const match = typeof opening === "object" ? (opening as RecognizeMatch<NativeYtSong>) : null;
+    const source = typeof opening === "object" ? "auto" : opening;
     const native = recognizeNative;
     if (native === null) return closed();
     // One capture at a time: the card's replaces the tile's, which ends without a result.
     cancelRecognizeTile();
-    openOverlay({
+    const handle = openOverlay({
       label: currentLocalisation().strings.playbackText.recognizeSong,
       render: (close) => (
-        <RecognizeCard native={native} source={source} close={close} onClosed={closed} />
+        <RecognizeCard
+          native={native}
+          source={source}
+          match={match}
+          close={close}
+          onClosed={closed}
+        />
       ),
     });
+    return handle.close;
   },
 });
 
@@ -80,11 +90,13 @@ export const resumeRecognizeEntry = entry.resume;
 function RecognizeCard({
   native,
   source: initialSource,
+  match,
   close,
   onClosed,
 }: {
   native: RecognizeNative;
   source: RecognizeSource | "auto";
+  match: RecognizeMatch<NativeYtSong> | null;
   close: () => void;
   onClosed: () => void;
 }) {
@@ -100,7 +112,7 @@ function RecognizeCard({
     card: RecognizeCardState<SongRow, NativeYtSong>;
   }>({
     attempt: 0,
-    card: { kind: "listening" },
+    card: match === null ? { kind: "listening" } : { kind: "resolving", song: match.song },
   });
   const run = useRef<RecognizeRun | null>(null);
   const closeFromEffect = useEffectEvent(close);
@@ -111,6 +123,15 @@ function RecognizeCard({
     if (AppState.currentState !== "active") {
       closeFromEffect();
       return;
+    }
+    if (attempt === 0 && match !== null) {
+      let current = true;
+      void recognizeTileResult(match).then((result) => {
+        if (current) setShown({ attempt, card: { kind: "resolved", result } });
+      });
+      return () => {
+        current = false;
+      };
     }
     const session = startRecognizeSession(
       recognizeDeps(native),
@@ -125,7 +146,7 @@ function RecognizeCard({
     run.current = session;
     trackCardSession(session);
     return () => session.cancel();
-  }, [native, source, attempt]);
+  }, [native, source, attempt, match]);
 
   const card: RecognizeCardState<SongRow, NativeYtSong> =
     shown.attempt === attempt ? shown.card : { kind: "listening" };

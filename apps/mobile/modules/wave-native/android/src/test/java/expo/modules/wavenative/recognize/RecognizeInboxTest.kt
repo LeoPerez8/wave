@@ -5,6 +5,15 @@ import org.junit.Before
 import org.junit.Test
 
 class RecognizeInboxTest {
+  @Test fun `notification taps carry the result once without listening or replaying Recents`() {
+    RecognizeInbox.receive(RecognizeInbox.MATCH_ACTION, match = "kept answer")
+    assertFalse(RecognizeInbox.take())
+    assertEquals("kept answer", RecognizeInbox.takeMatch())
+    assertNull(RecognizeInbox.takeMatch())
+    RecognizeInbox.receive(RecognizeInbox.MATCH_ACTION, fromHistory = true, match = "old answer")
+    assertNull(RecognizeInbox.takeMatch())
+  }
+
   @Before fun clear() { RecognizeInbox.take(); RecognizeInbox.onReceived = null }
 
   @Test fun `a cold launch stays pending until JS takes it once`() {
