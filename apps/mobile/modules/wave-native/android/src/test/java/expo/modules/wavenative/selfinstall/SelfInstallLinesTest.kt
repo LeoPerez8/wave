@@ -140,4 +140,18 @@ class SelfInstallLinesTest {
     val size = 8L * 1024 * 1024 * 1024
     assertEquals(50, downloadProgressToLog(done = size / 2, size = size, logged = 25))
   }
+
+  @Test
+  fun `a failed step after an update leaves the others to run`() {
+    val ran = mutableListOf<String>()
+    val failed = mutableListOf<String>()
+    runUpdateSteps(
+      listOf(
+        "notification" to { throw SecurityException("no permission") },
+        "downloads" to { ran += "downloads" },
+      ),
+    ) { name, _ -> failed += name }
+    assertEquals(listOf("downloads"), ran)
+    assertEquals(listOf("notification"), failed)
+  }
 }

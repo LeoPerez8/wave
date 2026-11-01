@@ -78,3 +78,14 @@ fun downloadProgressToLog(done: Long, size: Long, logged: Int): Int? {
 }
 
 private const val DOWNLOAD_LOG_STEP = 25
+
+/** Runs what follows an update. One step failing, the notification say, doesn't cost the others. */
+fun runUpdateSteps(steps: List<Pair<String, () -> Unit>>, failed: (String, Exception) -> Unit) {
+  for ((name, step) in steps) {
+    try {
+      step()
+    } catch (error: Exception) {
+      failed(name, error)
+    }
+  }
+}
