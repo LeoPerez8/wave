@@ -130,6 +130,7 @@ export const startRecognizeSession = <L extends RecognizeTrack, S extends YtSong
         source: session.source,
         heardMs: session.heardMs,
         outcome,
+        failedAsks: session.failedAsks,
         ...(lookup === undefined ? {} : { lookup }),
       }),
     );

@@ -203,17 +203,6 @@ describe("the session's end", () => {
     assert.equal(end.session.heardMs, 28_000);
   });
 
-  test("a failed ask ends it with its failure, never as no match", () => {
-    assert.deepEqual(run(heard(4), failed("network")).session.ended, {
-      kind: "failed",
-      failure: "network",
-      status: null,
-    });
-    // Even the last ask: a refusal isn't a song Shazam doesn't know.
-    const refused = run(...upToAsk(28), failed("refused", 429));
-    assert.deepEqual(refused.session.ended, { kind: "failed", failure: "refused", status: 429 });
-  });
-
   test("a capture that stops ends it as a failure once Wave stays in the foreground for a second", () => {
     const stopped = run(tick(1), heard(2), tick(2), captureFailed);
     assert.equal(stopped.session.ended, null);
@@ -293,6 +282,121 @@ describe("the session's end", () => {
       kind: "match",
       song: SONG,
     });
+  });
+});
+
+describe("a failed request", () => {
+  test("a 429 at the first step keeps listening and the next step's match ends it", () => {
+    const refused = run(heard(4), failed("refused", 429));
+    assert.equal(refused.session.ended, null);
+    assert.equal(refused.ask, null);
+    const next = stepRecognize(refused.session, heard(8));
+    assert.deepEqual(next.ask, { last: false });
+    assert.deepEqual(stepRecognize(next.session, match).session.ended, {
+      kind: "match",
+      song: SONG,
+    });
+  });
+
+  test("a 5xx or no answer before the last step also waits for the next step", () => {
+    for (const failure of [failed("refused", 500), failed("refused", 503), failed("network")]) {
+      assert.deepEqual(asks(heard(4), failure, heard(6), heard(8), failure, heard(12)), [4, 8, 12]);
+    }
+  });
+
+  test("a retryable failure in the rolling window waits for the next step too", () => {
+    const refused = run(...upToAsk(20), failed("refused", 429));
+    assert.equal(refused.session.ended, null);
+    assert.equal(refused.ask, null);
+    assert.deepEqual(stepRecognize(refused.session, heard(24)).ask, { last: false });
+  });
+
+  /** A session whose last step's request went out at 4 seconds on the clock. */
+  const lastStep = [tick(0), heard(4), noMatch, tick(2), heard(16), noMatch, tick(4), heard(28)];
+
+  test("the last step retries after growing delays, then ends as that failure", () => {
+    const refused = failed("refused", 429);
+    const first = run(...lastStep, refused);
+    assert.equal(first.session.ended, null);
+    assert.equal(first.ask, null);
+    assert.equal(stepRecognize(first.session, tick(4.5)).ask, null);
+
+    const second = run(...lastStep, refused, tick(5));
+    assert.deepEqual(second.ask, { last: true });
+    assert.equal(run(...lastStep, refused, tick(5), refused, tick(6.5)).ask, null);
+
+    const third = [...lastStep, refused, tick(5), refused, tick(7)];
+    assert.deepEqual(run(...third).ask, { last: true });
+    assert.equal(run(...third, refused, tick(10.5)).ask, null);
+
+    const fourth = [...third, refused, tick(11)];
+    assert.deepEqual(run(...fourth).ask, { last: true });
+
+    // The next delay would pass the limit Core sets for the card's wait.
+    assert.deepEqual(run(...fourth, refused).session.ended, {
+      kind: "failed",
+      failure: "refused",
+      status: 429,
+    });
+  });
+
+  test("a request that takes long to fail uses up the last step's wait", () => {
+    const slow = run(...lastStep, tick(14), failed("network"));
+    assert.deepEqual(slow.session.ended, { kind: "failed", failure: "network", status: null });
+  });
+
+  test("a retry's answer ends the session as any last answer does", () => {
+    const retried = [...lastStep, failed("network"), tick(5)];
+    assert.deepEqual(run(...retried, match).session.ended, { kind: "match", song: SONG });
+    assert.deepEqual(run(...retried, noMatch).session.ended, { kind: "noMatch" });
+    assert.deepEqual(run(...retried, failed("unreadable")).session.ended, {
+      kind: "failed",
+      failure: "unreadable",
+      status: null,
+    });
+  });
+
+  test("any other failure ends it at once, at any step", () => {
+    for (const [failure, status] of [
+      ["refused", 400],
+      ["refused", 403],
+      ["refused", 404],
+      ["refused", null],
+      ["unreadable", null],
+      ["capture", null],
+    ] as const) {
+      const ended = { kind: "failed", failure, status };
+      assert.deepEqual(run(heard(4), failed(failure, status)).session.ended, ended);
+      const last = run(...lastStep, failed(failure, status));
+      assert.deepEqual(last.session.ended, ended);
+      assert.equal(last.ask, null);
+    }
+  });
+
+  test("a capture failure before the last step ends it even after a retryable failure", () => {
+    const stopped = run(tick(0), heard(4), failed("refused", 429), tick(1), captureFailed, tick(2));
+    assert.deepEqual(stopped.session.ended, CAPTURE_FAILED);
+  });
+
+  test("Cancel during a backoff ends it, and neither the clock nor a late answer moves it", () => {
+    const waiting = run(...lastStep, failed("refused", 503));
+    const cancelled = stepRecognize(waiting.session, cancel);
+    assert.deepEqual(cancelled.session.ended, { kind: "cancelled" });
+    const later = stepRecognize(cancelled.session, tick(5));
+    assert.equal(later.ask, null);
+    assert.deepEqual(stepRecognize(later.session, match).session.ended, { kind: "cancelled" });
+  });
+
+  test("a backoff waits only while Wave is in the foreground", () => {
+    const hidden = run(...lastStep, failed("network"), tick(9, false));
+    assert.equal(hidden.ask, null);
+    assert.equal(hidden.session.ended, null);
+    assert.deepEqual(stepRecognize(hidden.session, tick(10)).ask, { last: true });
+  });
+
+  test("a no match followed by a failure on the last step ends as the failure, never No match", () => {
+    const ended = run(...lastStep, failed("refused", 400));
+    assert.deepEqual(ended.session.ended, { kind: "failed", failure: "refused", status: 400 });
   });
 });
 
@@ -419,6 +523,8 @@ describe("the card", () => {
 
 const line = (outcome: RecognizeLogOutcome, heardMs: number): string =>
   recognizeLogLine({ source: "microphone", heardMs, outcome });
+const logged = (outcome: RecognizeLogOutcome, failedAsks: number): string =>
+  recognizeLogLine({ source: "microphone", heardMs: 8_000, outcome, failedAsks });
 
 describe("the app log's line", () => {
   test("names the source, the seconds heard and the outcome", () => {
@@ -450,6 +556,42 @@ describe("the app log's line", () => {
       line({ kind: "denied" }, 0),
       "Recognize through the microphone: microphone permission denied, nothing heard",
     );
+  });
+
+  test("says how many requests failed before the outcome", () => {
+    assert.equal(
+      logged({ kind: "match", song: SONG }, 1),
+      "Recognize through the microphone: a match after 8.0 s, 1 request failed before it",
+    );
+    assert.equal(
+      logged({ kind: "failed", failure: "refused", status: 429 }, 3),
+      "Recognize through the microphone: failed after 8.0 s (refused, HTTP 429), 3 requests failed before it",
+    );
+    assert.equal(
+      recognizeLogLine({
+        source: "microphone",
+        heardMs: 8_000,
+        outcome: { kind: "match", song: SONG },
+        failedAsks: 2,
+        lookup: "library",
+      }),
+      "Recognize through the microphone: a match after 8.0 s, 2 requests failed before it, YT Music lookup: library",
+    );
+    assert.equal(
+      logged({ kind: "noMatch" }, 0),
+      "Recognize through the microphone: no match after 8.0 s",
+    );
+  });
+
+  test("a session counts the failed requests it went on from", () => {
+    assert.equal(startRecognize("microphone").failedAsks, 0);
+    const refused = failed("refused", 429);
+    const going = run(heard(4), refused, heard(8), refused, heard(12), failed("network"));
+    assert.equal(going.session.ended, null);
+    assert.equal(going.session.failedAsks, 3);
+    // The failure that ends a session is its outcome, not a failure before it.
+    assert.equal(run(heard(4), failed("unreadable")).session.failedAsks, 0);
+    assert.equal(run(heard(4), refused, heard(8), failed("unreadable")).session.failedAsks, 1);
   });
 
   test("never holds the song", () => {

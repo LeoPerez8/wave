@@ -58,6 +58,10 @@ const RECOGNIZE_ASK_DEADLINE_MS = 35_000;
  * that stopped and is followed by a hidden Wave within this time is Cancel.
  */
 const RECOGNIZE_CAPTURE_END_GRACE_MS = 1_000;
+/** The last step has no next step to wait for: a retryable failure asks again after this, doubling each time. */
+const RECOGNIZE_RETRY_DELAY_MS = 1_000;
+/** No retry goes later than this after the last step's first ask, so the card doesn't wait for long. */
+const RECOGNIZE_RETRY_LIMIT_MS = 10_000;
 
 /** A recognition session as the schedule sees it. */
 export interface RecognizeSession {
@@ -68,6 +72,8 @@ export interface RecognizeSession {
   readonly asked: number;
   /** An ask is out and hasn't been answered. */
   readonly asking: boolean;
+  /** How many asks failed and the session went on; the failure that ends it isn't one. */
+  readonly failedAsks: number;
   /** The last tick's clock reading; null before the first. */
   readonly clockMs: number | null;
   /** Foreground time since the first tick. */
@@ -76,6 +82,12 @@ export interface RecognizeSession {
   readonly progressMs: number;
   /** [listenedMs] when the ask out went out. */
   readonly askedMs: number;
+  /** [listenedMs] when the step's first ask went out; a retry doesn't move it. */
+  readonly stepAskedMs: number;
+  /** The wait before the latest retry; 0 before the first. */
+  readonly retryDelayMs: number;
+  /** [listenedMs] when the retry being waited for goes out; null with none. */
+  readonly retryAtMs: number | null;
   /** [listenedMs] when the capture stopped on its own; null while it goes on. */
   readonly captureEndedMs: number | null;
   /** How it ended; null while it goes on. */
@@ -110,6 +122,8 @@ export type RecognizeAnswer =
       /** The HTTP status of a refused ask. */
       readonly status: number | null;
     };
+
+type RecognizeFailedAnswer = Extract<RecognizeAnswer, { readonly kind: "failed" }>;
 
 /** How a session ended: an answer that ends it, or Cancel. */
 export type RecognizeEnd =
@@ -146,10 +160,14 @@ export const startRecognize = (source: RecognizeSource): RecognizeSession => ({
   heardMs: 0,
   asked: 0,
   asking: false,
+  failedAsks: 0,
   clockMs: null,
   listenedMs: 0,
   progressMs: 0,
   askedMs: 0,
+  stepAskedMs: 0,
+  retryDelayMs: 0,
+  retryAtMs: null,
   captureEndedMs: null,
   ended: null,
 });
@@ -165,7 +183,13 @@ const askIfDue = (session: RecognizeSession): RecognizeStep => {
   if (session.asking || session.captureEndedMs !== null || asked <= session.asked)
     return { session, ask: null };
   return {
-    session: { ...session, asked, asking: true, askedMs: session.listenedMs },
+    session: {
+      ...session,
+      asked,
+      asking: true,
+      askedMs: session.listenedMs,
+      stepAskedMs: session.listenedMs,
+    },
     ask: { last: asked === RECOGNIZE_STEPS_MS.length },
   };
 };
@@ -201,6 +225,11 @@ const tickRecognize = (
     return end(ticked, CAPTURE_FAILURE);
   if (ticked.asking && ticked.listenedMs - ticked.askedMs >= RECOGNIZE_ASK_DEADLINE_MS)
     return end(ticked, { kind: "failed", failure: "network", status: null });
+  if (ticked.retryAtMs !== null && ticked.listenedMs >= ticked.retryAtMs)
+    return {
+      session: { ...ticked, asking: true, askedMs: ticked.listenedMs, retryAtMs: null },
+      ask: { last: true },
+    };
   return { session: ticked, ask: null };
 };
 
@@ -208,6 +237,26 @@ const end = (session: RecognizeSession, ended: RecognizeEnd): RecognizeStep => (
   session: { ...session, asking: false, ended },
   ask: null,
 });
+
+/** A failure another request may get past: a rate limit, a server error, or no answer. */
+const isRetryable = ({ failure, status }: RecognizeFailedAnswer): boolean =>
+  failure === "network" ||
+  (failure === "refused" && status !== null && (status === 429 || (status >= 500 && status < 600)));
+
+/**
+ * A failed ask ends the session unless another request can still answer: the next
+ * step's, or on the last step a retry within the limit. A stopped capture has no next step.
+ */
+const failedAsk = (session: RecognizeSession, answer: RecognizeFailedAnswer): RecognizeStep => {
+  if (!isRetryable(answer) || session.captureEndedMs !== null) return end(session, answer);
+  const failedAsks = session.failedAsks + 1;
+  if (session.asked < RECOGNIZE_STEPS_MS.length)
+    return askIfDue({ ...session, asking: false, failedAsks });
+  const retryDelayMs = Math.max(RECOGNIZE_RETRY_DELAY_MS, session.retryDelayMs * 2);
+  const retryAtMs = session.listenedMs + retryDelayMs;
+  if (retryAtMs - session.stepAskedMs > RECOGNIZE_RETRY_LIMIT_MS) return end(session, answer);
+  return { session: { ...session, asking: false, failedAsks, retryDelayMs, retryAtMs }, ask: null };
+};
 
 /** Moves [session] on by [event]. Once it has ended, nothing changes it. */
 export const stepRecognize = (session: RecognizeSession, event: RecognizeEvent): RecognizeStep => {
@@ -227,7 +276,8 @@ export const stepRecognize = (session: RecognizeSession, event: RecognizeEvent):
     case "answer": {
       if (!session.asking) return { session, ask: null };
       const { answer } = event;
-      if (answer.kind !== "noMatch" || session.asked === RECOGNIZE_STEPS_MS.length)
+      if (answer.kind === "failed") return failedAsk(session, answer);
+      if (answer.kind === "match" || session.asked === RECOGNIZE_STEPS_MS.length)
         return end(session, answer);
       // A capture that stopped can't hear the next step: it ends once its grace is over.
       if (session.captureEndedMs !== null) return endStoppedCapture({ ...session, asking: false });
