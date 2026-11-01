@@ -15,6 +15,7 @@ import { startPlayingSearches } from "@/playback/playingSearches";
 import { applyCrossfade } from "@/settings/crossfade";
 import { applyStreamBuffer } from "@/settings/streamBuffer";
 import { WaveSync } from "@/sync/WaveSync";
+import { startAppUpdates } from "@/updates/appUpdates";
 import { startDownloads } from "@/ytmusic/YtDownloads";
 
 /** What starts the app services: the Activity's root layout or the headless `WaveService` task. */
@@ -68,6 +69,8 @@ export const startServices = (by: ServicesStarter): void => {
   else startDownloads(false);
   // Registering is idempotent, so it doesn't matter who started the services first.
   if (by === "app") afterFirstSettled("followCheck", scheduleFollowCheck);
+  // Once per runtime, and only with the app: a headless start has no open to check on.
+  if (by === "app") afterFirstSettled("updates", startAppUpdates);
   if (startedBy !== null) {
     console.log(`[wave] services already started by the ${startedBy}; the ${by} reuses them`);
     return;
