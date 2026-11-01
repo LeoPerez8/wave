@@ -4,6 +4,7 @@
  */
 
 import type { AppLanguage } from "./localisation.ts";
+import { versionOrder } from "./updatePolicy.ts";
 
 export interface ReleaseNoteSections {
   readonly new: readonly string[];
@@ -123,22 +124,6 @@ export interface WhatsNewState {
  */
 export type WhatsNewStep = "remember" | "fetch" | "show" | "hide" | "wait" | "finished";
 
-/** A version's place in the sequence ti and main share; null if it isn't a version. */
-const versionParts = (version: string): readonly [number, number, number] | null => {
-  const match = /^(\d+)\.(\d+)\.(\d+)(?:-ti)?$/.exec(version);
-  return match && [Number(match[1]), Number(match[2]), Number(match[3])];
-};
-
-const isAfter = (
-  [major, minor, patch]: readonly [number, number, number],
-  [seenMajor, seenMinor, seenPatch]: readonly [number, number, number],
-): boolean =>
-  major !== seenMajor
-    ? major > seenMajor
-    : minor !== seenMinor
-      ? minor > seenMinor
-      : patch > seenPatch;
-
 const retryIsDue = ({ now, lastFailureAt }: WhatsNewState): boolean =>
   lastFailureAt === null ||
   // A clock set back would otherwise hold the retry off until it caught up.
@@ -151,11 +136,11 @@ const retryIsDue = ({ now, lastFailureAt }: WhatsNewState): boolean =>
  * than the seen one, after a rollback, says nothing and doesn't move it.
  */
 export const nextWhatsNewStep = (state: WhatsNewState): WhatsNewStep => {
-  const running = state.runningVersion === null ? null : versionParts(state.runningVersion);
+  const running = state.runningVersion === null ? null : versionOrder(state.runningVersion);
   if (running === null) return "finished";
-  const seen = state.seenVersion === null ? null : versionParts(state.seenVersion);
+  const seen = state.seenVersion === null ? null : versionOrder(state.seenVersion);
   if (seen === null) return "remember";
-  if (!isAfter(running, seen)) return "finished";
+  if (running <= seen) return "finished";
   if (state.showing) return state.nowPlayingShown ? "hide" : "wait";
   if (state.fetching || !state.visible) return "wait";
   if (!state.notesReady) return retryIsDue(state) ? "fetch" : "wait";

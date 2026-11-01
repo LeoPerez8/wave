@@ -665,9 +665,11 @@ jobs:
           fi
           scripts/ci/publish-release.sh "$RUNNER_TEMP/release/$APK_NAME"
 
-      # After the release, so phones never get a version that has none. None of these can fail
-      # the release: without the secrets the last one says so and publishes nothing.
+      # After the release, so phones never get a version that has none: publish-release.sh answers
+      # no url when it published nothing (a moved tag). None of these can fail the release: without
+      # the secrets the last one says so and publishes nothing.
       - uses: actions/setup-node@v5
+        if: steps.published.outputs.url != ''
         continue-on-error: true
         with:
           node-version: 22
@@ -675,6 +677,7 @@ jobs:
 
       # Before the update, so a phone that gets it finds its notes.
       - name: Publish the release notes
+        if: steps.published.outputs.url != ''
         continue-on-error: true
         env:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
@@ -686,10 +689,12 @@ jobs:
 
       # The APK phones on another native side install (docs/spec.md, Build and CI).
       - name: Publish the latest APK
+        if: steps.published.outputs.url != ''
         continue-on-error: true
         env:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          UPDATES_SIGNING_KEY: ${{ secrets.UPDATES_SIGNING_KEY }}
           WAVE_UPDATE_CHANNEL: ${{ needs.android.outputs.update_channel }}
           WAVE_RUNTIME_VERSION: ${{ needs.android.outputs.runtime_version }}
           WAVE_RELEASE_TAG: ${{ needs.checks.outputs.release_tag }}
@@ -698,7 +703,7 @@ jobs:
         run: WAVE_APK_PATH="$RUNNER_TEMP/release/$APK_NAME" node apps/updates/scripts/publish-apk.ts
 
       - name: Fetch the over-the-air update
-        if: env.UPDATES_CONFIGURED == 'true'
+        if: env.UPDATES_CONFIGURED == 'true' && steps.published.outputs.url != ''
         continue-on-error: true
         uses: actions/download-artifact@v4
         with:
@@ -706,6 +711,7 @@ jobs:
           path: ${{ runner.temp }}/update
 
       - name: Publish the over-the-air update
+        if: steps.published.outputs.url != ''
         continue-on-error: true
         env:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}

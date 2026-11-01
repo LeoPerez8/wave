@@ -186,13 +186,17 @@ finish() {
 
 TOTAL_STAGES=6
 
-BRANCH=feat/885-transparent-updates
 export GH_REPO=LeoPerez8/wave
 WORKER_URL=https://wave-updates.leonardolp2424.workers.dev
 
 ROOT=$(git -C "$(dirname "${BASH_SOURCE[0]}")" rev-parse --show-toplevel)
 UPDATES="$ROOT/apps/updates"
 MOBILE="$ROOT/apps/mobile"
+# The branch this checkout is on, so the wizard survives its feature branch landing.
+BRANCH=$(git -C "$ROOT" symbolic-ref --quiet --short HEAD) || {
+  warn "This checkout isn't on a branch. Check one out and run this again."
+  exit 1
+}
 wrangler() { (cd "$UPDATES" && pnpm exec wrangler "$@"); }
 
 banner "Wave update service setup"
@@ -290,10 +294,13 @@ if [[ "$generate" == yes ]]; then
   WRITTEN_SECRET+=(UPDATES_SIGNING_KEY)
   printf '  %s✓ set%s GitHub secret UPDATES_SIGNING_KEY\n' "$GREEN" "$RESET"
   rm -rf "$keys"
+fi
+# Apart from making the pair, so a run that declined the commit, or stopped there, offers it again.
+if [[ -n "$(git -C "$ROOT" status --porcelain -- apps/mobile/certs/certificate.pem)" ]]; then
   say "The certificate is public and goes in the repo. Pushing it starts a new full APK."
   if confirm "Commit and push it to $BRANCH?"; then
     git -C "$ROOT" add apps/mobile/certs/certificate.pem
-    git -C "$ROOT" commit -qm "chore: add the update signing certificate"
+    git -C "$ROOT" commit -qm "chore: add the update signing certificate" -- apps/mobile/certs/certificate.pem
     git -C "$ROOT" push -q origin "HEAD:$BRANCH"
     printf '  %s✓ pushed%s the certificate\n' "$GREEN" "$RESET"
   else

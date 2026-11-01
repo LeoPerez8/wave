@@ -113,8 +113,31 @@ class SelfInstallLinesTest {
   }
 
   @Test
-  fun `shows Android's confirmation only with Wave in front`() {
-    assertTrue(showsConfirmation(waveInForeground = true))
-    assertFalse(showsConfirmation(waveInForeground = false))
+  fun logsADownloadAtEachQuarter() {
+    assertNull(downloadProgressToLog(done = 24, size = 100, logged = 0))
+    assertEquals(25, downloadProgressToLog(done = 25, size = 100, logged = 0))
+    assertNull(downloadProgressToLog(done = 49, size = 100, logged = 25))
+    assertEquals(50, downloadProgressToLog(done = 60, size = 100, logged = 25))
+  }
+
+  @Test
+  fun aBigStepLogsOnlyWhereItLanded() {
+    assertEquals(75, downloadProgressToLog(done = 80, size = 100, logged = 0))
+  }
+
+  @Test
+  fun theEndOfADownloadHasItsOwnLine() {
+    assertNull(downloadProgressToLog(done = 100, size = 100, logged = 75))
+  }
+
+  @Test
+  fun aSizeOfNothingLogsNothing() {
+    assertNull(downloadProgressToLog(done = 10, size = 0, logged = 0))
+  }
+
+  @Test
+  fun aFileOfSeveralGigabytesDoesntOverflow() {
+    val size = 8L * 1024 * 1024 * 1024
+    assertEquals(50, downloadProgressToLog(done = size / 2, size = size, logged = 25))
   }
 }

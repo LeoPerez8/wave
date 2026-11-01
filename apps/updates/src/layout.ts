@@ -6,7 +6,7 @@
  *   updates/<channel>/<runtime>/latest.json     { updateId }: what that channel's phones get
  *   notes/<channel>/<version>.json              a release's notes (ReleaseNotes)
  *   updates/<channel>/history.json              HistoryEntry[], newest first: what R2 still keeps
- *   apks/<channel>/latest.json                  LatestApk: the channel's newest APK
+ *   apks/<channel>/latest.json                  SignedApk: the channel's newest APK
  *
  * Moving `latest.json` is the only step that changes what phones receive, so a publish writes it
  * after everything that update needs (release.ts).
@@ -44,13 +44,25 @@ export interface HistoryEntry {
 
 export const latestApkKey = (channel: Channel): string => `apks/${channel}/latest.json`;
 
-/** A channel's newest APK. R2 holds this much; the APK itself stays on its GitHub Release. */
+/** A channel's newest APK. The APK itself stays on its GitHub Release. */
 export interface LatestApk {
   readonly version: string;
   /** Its native side (`scripts/ci/repack.ts`'s key): phones on another one have this to install. */
   readonly runtimeVersion: string;
   readonly url: string;
   readonly size: number;
+  /** Hex of the file's SHA-256, which the phone checks before it installs. */
+  readonly sha256: string;
+}
+
+/**
+ * A channel's newest APK as R2 holds it. The metadata is `LatestApk` and its channel, as text, as
+ * the signature covers those exact bytes and the Worker has no key.
+ */
+export interface SignedApk {
+  readonly metadata: string;
+  /** Base64 of the RSA-SHA256 signature, by the key whose certificate ships in the APK. */
+  readonly signature: string;
 }
 
 export const notesPrefix = (channel: Channel): string => `notes/${channel}/`;

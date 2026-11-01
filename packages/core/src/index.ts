@@ -252,6 +252,7 @@ export {
 } from "./sleepTimer.ts";
 export type { SleepTimer, SleepTimerChoice, SleepTimerClock } from "./sleepTimer.ts";
 export {
+  UPDATE_APK_RETRY_INTERVAL_MS,
   UPDATE_CHECK_INTERVAL_MS,
   UPDATE_INSTALL_ASK_INTERVAL_MS,
   latestApkUrl,
@@ -259,22 +260,26 @@ export {
   nextUpdateStep,
   playerKeepsPlaying,
   readLatestApk,
+  readSignedApk,
+  versionOrder,
 } from "./updatePolicy.ts";
 export type {
   InstallAccess,
   LatestApk,
   NativeUpdate,
+  SignedApk,
   UpdateNetwork,
   UpdateState,
   UpdateStep,
 } from "./updatePolicy.ts";
 export {
+  WHATS_NEW_RETRY_MS,
   mergeReleaseNotes,
   nextWhatsNewStep,
   readPublishedNotes,
   whatsNewNotesUrl,
 } from "./whatsNew.ts";
-export type { MergedReleaseNotes, PublishedRelease } from "./whatsNew.ts";
+export type { MergedReleaseNotes, PublishedRelease, WhatsNewState } from "./whatsNew.ts";
 export {
   COUNTED_PLAY_MS,
   EMPTY_PLAY_TRACKER,

@@ -10,6 +10,9 @@
     "test": "node --test",
     "typecheck": "tsc --noEmit"
   },
+  "dependencies": {
+    "@wave/core": "workspace:*"
+  },
   "devDependencies": {
     "@types/node": "catalog:",
     "typescript": "catalog:",

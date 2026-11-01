@@ -94,7 +94,7 @@ function WhatsNewCard({
           {strings.whatsNew.title}
         </Text>
         <Text className="font-sans text-footnote text-secondary">
-          {strings.whatsNew.version(RUNNING_VERSION ?? notes.version)}
+          {strings.appUpdates.version(RUNNING_VERSION ?? notes.version)}
         </Text>
       </View>
       <CardEntries>

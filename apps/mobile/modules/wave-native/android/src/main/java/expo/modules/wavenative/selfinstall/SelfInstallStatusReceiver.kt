@@ -20,7 +20,7 @@ class SelfInstallStatusReceiver : BroadcastReceiver() {
     WaveLog.i(SELF_INSTALL_TAG, "Session $session status ${installStatusName(status)}: ${message ?: "no message"}")
     if (!keepsApkAfter(status)) SelfInstaller.deleteApks(context)
     if (status != PackageInstaller.STATUS_PENDING_USER_ACTION) return
-    if (!showsConfirmation(SelfInstaller.isInForeground())) {
+    if (!SelfInstaller.isInForeground()) {
       WaveLog.i(SELF_INSTALL_TAG, "Android asks for a confirmation with Wave behind; it waits for Wave in front")
       SelfInstaller.oweConfirmation(context)
       runCatching { context.packageManager.packageInstaller.abandonSession(session) }

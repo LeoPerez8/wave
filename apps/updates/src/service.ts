@@ -3,6 +3,8 @@
  * production (worker.ts) and memory in the tests. See README.md.
  */
 
+import { versionOrder } from "@wave/core";
+
 import {
   type Channel,
   type LatestUpdate,
@@ -103,13 +105,6 @@ const assetRoute = async (key: string, storage: UpdateStorage): Promise<Response
       "cache-control": "public, max-age=31536000, immutable",
     },
   });
-};
-
-// A version's place in the sequence both channels share, or null if it isn't a version. Minor
-// and patch stay under 100 (docs/spec.md, Releases).
-const versionOrder = (version: string): number | null => {
-  const match = /^(\d+)\.(\d{1,2})\.(\d{1,2})(?:-ti)?$/.exec(version);
-  return match ? Number(match[1]) * 10000 + Number(match[2]) * 100 + Number(match[3]) : null;
 };
 
 const publishedVersions = async (storage: UpdateStorage, prefix: string): Promise<string[]> => {
