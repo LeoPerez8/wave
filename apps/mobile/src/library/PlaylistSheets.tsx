@@ -212,33 +212,33 @@ function AddCard({ subject, close }: { subject: AddSubject; close: () => void })
         </Text>
       </View>
       <Hairline />
-      {search.showNewPlaylist && (
-        <TextButton
-          label={strings.playlists.newPlaylist}
-          accessibilityRole="button"
-          accessibilityLabel={strings.playlists.newPlaylist}
-          onPress={() => {
-            close();
-            void newPlaylist(subject.songs);
-          }}
-          className="flex-row items-center"
-          style={{ height: grid.row, gap: CELL * 1.5, justifyContent: "flex-start" }}
-        >
-          {(accent) => (
-            <>
-              <View className="items-center justify-center" style={{ width: CELL * 5 }}>
-                <IconPlus size={24} color={accent} strokeWidth={1.5} />
-              </View>
-              <Text className="font-sans text-body font-medium text-accent">
-                {strings.playlists.newPlaylist}
-              </Text>
-            </>
-          )}
-        </TextButton>
-      )}
-      {/* The card stops short of the screen edges; a long list scrolls inside it.
+      {/* Keep every choice reachable above a landscape keyboard.
           Each playlist follows a divider, so none trails the last. */}
       <CardEntries onOverflowChange={search.onOverflowChange}>
+        {search.showNewPlaylist && (
+          <TextButton
+            label={strings.playlists.newPlaylist}
+            accessibilityRole="button"
+            accessibilityLabel={strings.playlists.newPlaylist}
+            onPress={() => {
+              close();
+              void newPlaylist(subject.songs);
+            }}
+            className="flex-row items-center"
+            style={{ height: grid.row, gap: CELL * 1.5, justifyContent: "flex-start" }}
+          >
+            {(accent) => (
+              <>
+                <View className="items-center justify-center" style={{ width: CELL * 5 }}>
+                  <IconPlus size={24} color={accent} strokeWidth={1.5} />
+                </View>
+                <Text className="font-sans text-body font-medium text-accent">
+                  {strings.playlists.newPlaylist}
+                </Text>
+              </>
+            )}
+          </TextButton>
+        )}
         {search.noMatch && (
           <Text
             accessibilityLiveRegion="polite"
