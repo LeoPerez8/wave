@@ -929,8 +929,15 @@ export class LibraryStore extends Context.Service<
     /** Adds a search to the recent ones (see Core's `rememberSearch`); returns them, newest first. */
     readonly rememberSearch: (query: string) => Effect.Effect<readonly string[], LibraryStoreError>;
     readonly clearRecentSearches: Effect.Effect<void, LibraryStoreError>;
+    /**
+     * Keeps a found first-release date for a song without one; the song's file (null for a
+     * missing song) when it went in, so the date is written there once (`releaseTagDate`).
+     */
+    readonly saveReleaseDate: (
+      id: number,
+      date: string,
+    ) => Effect.Effect<{ readonly path: string | null } | null, LibraryStoreError>;
     /** Every playlist by name, with its mosaic. */
-    readonly saveReleaseDate: (id: number, date: string) => Effect.Effect<void, LibraryStoreError>;
     readonly listPlaylists: Effect.Effect<readonly PlaylistRow[], LibraryStoreError>;
     /** When a song last played from each playlist, by playlist id (never played: absent). */
     readonly playlistsLastPlayed: Effect.Effect<ReadonlyMap<number, number>, LibraryStoreError>;

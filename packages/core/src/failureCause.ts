@@ -107,10 +107,12 @@ export type TagWriteStep = "read" | "write" | "reindex";
 
 /**
  * Where a song being filled in came from: a quality replacement's new copy
- * (which way), an ordinary download, a Fix Song run, or the Lyrics view's
- * search writing the lyrics it found.
+ * (which way), an ordinary download, a Fix Song run, the Lyrics view's
+ * search writing the lyrics it found, or a playlist's release date lookup
+ * writing the first-release date it found.
  */
-export type TagWriteOrigin = "upgrade" | "downgrade" | "download" | "fixSong" | "lyricsSearch";
+export type TagWriteOrigin =
+  "upgrade" | "downgrade" | "download" | "fixSong" | "lyricsSearch" | "releaseDate";
 
 /** Where download job [jobId]'s song came from: a quality replacement (which way) or a download. */
 export const downloadTagWriteOrigin = (jobId: string): TagWriteOrigin => {
@@ -147,6 +149,7 @@ const ORIGIN: Record<TagWriteOrigin, string> = {
   download: "a download",
   fixSong: "a Fix Song run",
   lyricsSearch: "the Lyrics view's search",
+  releaseDate: "a release date lookup",
 };
 
 /** [path]'s extension with its dot, lower-cased, or "no extension". */
@@ -183,3 +186,10 @@ export const tagWriteFailureLine = ({
   const failed = step === null ? "the write failed" : STEP_FAILED[step];
   return `${what}: ${failed} (${ORIGIN[origin]}; ${fileFacts(file, path)}): ${describeCause(cause)}`;
 };
+
+/**
+ * The log line for a first-release [date] that stays in the Library because [path]'s format is
+ * one Wave doesn't write tags to (Opus, raw AAC).
+ */
+export const releaseTagNotWrittenLine = (path: string, date: string): string =>
+  `kept ${date} as ${path}'s release date in the Library only: Wave doesn't write tags to ${extensionOf(path)} files`;

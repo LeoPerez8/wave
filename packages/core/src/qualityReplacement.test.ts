@@ -442,8 +442,17 @@ describe("qualityReplacementTags", () => {
       lyrics: "Plain words",
       artworkUrl: "/data/artwork/hash.jpg",
       advisory: 1,
+      releaseDate: null,
       keepTagsOf: track().path,
     });
+  });
+
+  test("the new file keeps the song's first-release date", () => {
+    const tags = qualityReplacementTags(track({ releaseDate: "1985-06-21" }), {
+      embedded: null,
+      sidecar: null,
+    });
+    assert.equal(tags.releaseDate, "1985-06-21");
   });
 
   test("synced lyrics in a sidecar win, as the Lyrics view picks them", () => {

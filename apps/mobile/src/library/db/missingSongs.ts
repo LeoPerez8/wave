@@ -108,6 +108,7 @@ export const selectMissingSongs = (
         genre: genres.name,
         durationMs: tracks.durationMs,
         videoId: tracks.videoId,
+        releaseDate: tracks.releaseDate,
         titleSort: tracks.titleSort,
       })
       .from(tracks)
@@ -134,6 +135,7 @@ export const selectMissingSongs = (
       genre: row.genre ?? null,
       durationMs: row.durationMs,
       videoId: row.videoId,
+      releaseDate: row.releaseDate,
     }));
 };
 
