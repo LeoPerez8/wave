@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { createRequire, registerHooks } from "node:module";
 import { test } from "node:test";
-import { createElement, type ReactElement } from "react";
+import { createElement, type Context, type ReactElement } from "react";
 import { act, create, type ReactTestRenderer } from "react-test-renderer";
 
 import { stubModule } from "../perf/reactCompilerBuilds.ts";
@@ -18,6 +18,7 @@ const rows = stubModule(`
 const overlay = stubModule(`
   import { createContext } from ${react};
   export const OverlayId = createContext(undefined);
+  export const OverlayContentHeight = createContext(Infinity);
   export let opened;
   export const openOverlay = request => { opened = request; };
   export const setOverlaySearch = () => {};
@@ -28,6 +29,8 @@ const stubs: Record<string, string> = {
   "react-native": stubModule(`
     export const Text = "text", TextInput = "input", View = "view";
     export const Keyboard = { dismiss() {}, addListener: () => ({ remove() {} }) };
+    export const StyleSheet = { hairlineWidth: 1 };
+    export const useWindowDimensions = () => ({ width: 412, height: 915, fontScale: 1 });
   `),
   "@tabler/icons-react-native": stubModule(`
     export const IconPlus = "plus", IconSearch = "search", IconX = "clear";
@@ -70,6 +73,7 @@ const hooks = registerHooks({
     const stub = stubs[specifier];
     if (stub !== undefined) return { url: stub, shortCircuit: true };
     if (specifier === "./PlaylistPickerSearch") specifier += ".tsx";
+    if (specifier === "./usePlaylistPickerSearch") specifier += ".ts";
     if (specifier === "@/catalog/grid") specifier = "../catalog/grid.ts";
     return nextResolve(specifier, context);
   },
@@ -95,7 +99,10 @@ const hooks = registerHooks({
 let sheets: typeof import("./PlaylistSheets.tsx");
 let picker: typeof import("./PlaylistPickerSearch.tsx");
 let source: { setRows: (rows: readonly PlaylistRow[]) => void };
-let host: { opened: { render: (close: () => void) => ReactElement } };
+let host: {
+  opened: { render: (close: () => void) => ReactElement; anchor?: unknown };
+  OverlayContentHeight: Context<number>;
+};
 try {
   sheets = await import("./PlaylistSheets.tsx");
   picker = await import("./PlaylistPickerSearch.tsx");
@@ -121,9 +128,43 @@ const morning = {
   hasImage: false,
 } satisfies PlaylistRow;
 
+test("short search scrolls the subject with entries while the field stays fixed, then restores portrait", () => {
+  source.setRows([morning]);
+  sheets.openAddToPlaylist({ title: "Song", songs: async () => [] });
+  let maxHeight = 600;
+  const card = () => createElement(host.OverlayContentHeight, { value: maxHeight }, renderCard());
+  let renderer: ReactTestRenderer;
+  act(() => {
+    renderer = create(card());
+  });
+  const entries = () => renderer!.root.findByType("section");
+  const scrollingSubject = () =>
+    entries()
+      .findAllByType("text")
+      .some((node) => node.children.includes("Song"));
+  try {
+    act(() => entries().props.onOverflowChange(true));
+    act(() => renderer!.root.findByType("nav").props.onPress());
+    const field = () => renderer!.root.findByType("input");
+    assert.equal(field().props.disableFullscreenUI, true);
+    assert.equal(scrollingSubject(), false);
+    maxHeight = 66; // 98dp card above a landscape keyboard, minus the host's 32dp padding.
+    act(() => renderer!.update(card()));
+    assert.equal(scrollingSubject(), true);
+    assert.equal(entries().findAllByType("input").length, 0);
+    assert.equal(field().props.autoFocus, true);
+    maxHeight = 600;
+    act(() => renderer!.update(card()));
+    assert.equal(scrollingSubject(), false);
+  } finally {
+    act(() => renderer!.unmount());
+  }
+});
+
 test("New Playlist stays above the scrolling choices until an empty search opens", () => {
   source.setRows([morning]);
   sheets.openAddToPlaylist({ title: "Song", songs: async () => [] });
+  assert.equal(host.opened.anchor, undefined);
   let renderer: ReactTestRenderer;
   act(() => {
     renderer = create(host.opened.render(() => {}));

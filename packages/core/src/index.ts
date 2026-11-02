@@ -2490,4 +2490,8 @@ export { genrePlayShares } from "./recap.ts";
 export { statsGenrePodium, countedGenreSongIds } from "./statsGenres.ts";
 export { isVoiceNoteOrRecording } from "./voiceNotes.ts";
 export type { AudioFileFacts } from "./voiceNotes.ts";
-export { createPlaylistPickerSearch, stepPlaylistPickerSearch } from "./playlistPickerSearch.ts";
+export {
+  createPlaylistPickerSearch,
+  playlistPickerSubjectScrolls,
+  stepPlaylistPickerSearch,
+} from "./playlistPickerSearch.ts";

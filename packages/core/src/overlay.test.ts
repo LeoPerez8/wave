@@ -25,7 +25,26 @@ test("search is offered from measured overflow, including a smaller landscape vi
   assert.equal(cardListOverflows(280, 0), false);
 });
 
+test("sub-dp rounding does not offer search on a list that fits", () => {
+  assert.equal(cardListOverflows(280.4, 280), false);
+  assert.equal(cardListOverflows(281, 280), false);
+  assert.equal(cardListOverflows(281.1, 280), true);
+});
+
 describe("placeOverlayCard", () => {
+  test("a keyboard taller than the available window leaves a zero-height card", () => {
+    assert.equal(
+      placeOverlayCard({
+        ...phone,
+        window: { width: 800, height: 260 },
+        cardHeight: 600,
+        searching: true,
+        keyboard: 190,
+      }).maxHeight,
+      0,
+    );
+  });
+
   test("a short card floats in the middle of the screen, a margin in from each side", () => {
     assert.deepEqual(placeOverlayCard({ ...phone, cardHeight: 300 }), {
       left: 24,
@@ -85,6 +104,18 @@ const tile = (left: number, right: number) => ({
 });
 
 describe("placeOverlayCard next to an anchor", () => {
+  test("even an anchored card has no negative height in a window smaller than its margins", () => {
+    assert.equal(
+      placeOverlayCard({
+        ...phone,
+        window: { width: 412, height: 64 },
+        cardHeight: 300,
+        anchor: near(0),
+      }).maxHeight,
+      0,
+    );
+  });
+
   test("a menu opens just below the long-pressed row when it fits there", () => {
     assert.deepEqual(placeOverlayCard({ ...phone, cardHeight: 400, anchor: near(200) }), {
       left: 24,
