@@ -1,5 +1,6 @@
 import {
   lookUpReleaseDates,
+  releaseBackgroundAllowed,
   releaseAnswerKey,
   releaseNextDue,
   releaseTagDate,
@@ -8,18 +9,22 @@ import {
   type ReleaseProgress,
 } from "@wave/core";
 
+import { onMobileData } from "@/native/waveNative";
+import { searchOnline } from "@/settings/searchOnline";
+import { ytMusicEnabled } from "@/settings/ytMusic";
+
 import { persistedSetting } from "@/lib/persistedSetting";
 import { currentLocalisation } from "@/localisation/localisation";
 import { showMessage } from "@/overlay/alert";
 
 import { onLibraryChange } from "./libraryChanges";
-import { LibraryStore, type PlaylistEntryRow } from "./LibraryStore";
+import { LibraryStore, type SongRow } from "./LibraryStore";
 import { onPlaylistSongSortChanged, playlistSongSetting } from "./playlistSongSetting";
 import { onPlaylistsEdited } from "./playlists";
 import { releaseAnswers } from "./releaseAnswers";
 import { writeReleaseDateTag } from "./releaseDateTag";
 import { releaseLookupClient } from "./releaseLookupClient";
-import { entryReleaseSong, heldReleaseDate } from "./releaseSong";
+import { entryReleaseSong, libraryReleaseSong, heldReleaseDate } from "./releaseSong";
 import { appRuntime } from "./runtime";
 import { onTypedReleaseDatesChanged } from "./typedReleaseDates";
 
@@ -53,20 +58,20 @@ export const releaseStatus = persistedSetting<Readonly<Record<number, ReleasePro
  * Keeps a found first-release date in the index for a Library song without one and, that once,
  * in its file (Core's `releaseTagDate`). A file that can't take it keeps it in the index only.
  */
-const keepReleaseDate = async (entry: PlaylistEntryRow, answer: ReleaseAnswer): Promise<void> => {
-  if (entry.source !== "library" || answer.source !== "first-release" || !answer.date) return;
+const keepReleaseDate = async (track: SongRow, answer: ReleaseAnswer): Promise<void> => {
+  if (answer.source !== "first-release" || !answer.date) return;
   const { date } = answer;
-  const held = heldReleaseDate(entryReleaseSong(entry));
+  const held = heldReleaseDate(libraryReleaseSong(track));
   const saved = await appRuntime.runPromise(
     // oxlint-disable-next-line react-hooks/rules-of-hooks -- Effect Service.use resolves a service.
-    LibraryStore.use((store) => store.saveReleaseDate(entry.track.id, date)),
+    LibraryStore.use((store) => store.saveReleaseDate(track.id, date)),
   );
   const path = saved?.path ?? null;
   const tagged = releaseTagDate({ answer, held, hasFile: path !== null });
   if (path !== null && tagged !== null) await writeReleaseDateTag(path, tagged, false);
 };
 
-/** The playlist whose songs are being looked up now, which the client checks before each request. */
+/** Eligibility of the current lookup, checked by the client before each service request. */
 let looking: (() => boolean) | null = null;
 const client = releaseLookupClient(
   async (url, headers) => {
@@ -88,11 +93,25 @@ const MAX_WAIT_MS = 2 ** 31 - 1;
 let running = false;
 let again = false;
 let wake: ReturnType<typeof setTimeout> | undefined;
+// A playlist edit invalidates the general run immediately, before its next service request.
+let playlistRequested = false;
+const backgroundAllowed = (): boolean =>
+  releaseBackgroundAllowed(searchOnline.get(), {
+    onMobileData: onMobileData(),
+    ytMusic: ytMusicEnabled(),
+  });
+
+/** General lookup progress, kept separately so Settings can follow it without playlist ids. */
+export const backgroundReleaseStatus = persistedSetting<ReleaseProgress | null>({
+  key: "releaseDates.backgroundProgress",
+  read: () => null,
+  write: () => null,
+});
 
 /**
- * Looks up the songs due in every playlist on Release date (Core's `lookUpReleaseDates`), one
- * playlist at a time, then sleeps until the next retry is due. A failure stops the run until
- * its retry; a change while it runs runs it again once it ends.
+ * Looks up sorted playlists first, then Library and playlist YT Music songs when permitted.
+ * A playlist request interrupts the general lookup; failures wait for their retry. With no
+ * changes it sleeps until the next retry, without reading songs or polling.
  */
 const run = async (): Promise<void> => {
   if (running) {
@@ -100,6 +119,8 @@ const run = async (): Promise<void> => {
     return;
   }
   running = true;
+  clearTimeout(soon);
+  playlistRequested = false;
   clearTimeout(wake);
   let next: number | null = null;
   try {
@@ -108,25 +129,50 @@ const run = async (): Promise<void> => {
       LibraryStore.use((store) => store.listPlaylists),
     );
     const statuses: Record<number, ReleaseProgress> = {};
-    for (const playlist of playlists) {
-      const setting = playlistSongSetting(playlist.syncId ?? String(playlist.id));
-      const selected = () => setting.get().key === "releaseDate";
+    // The null group is the general lookup; sorted playlists always precede it.
+    for (const playlist of [...playlists, null]) {
+      const general = playlist === null;
+      const setting =
+        playlist === null ? null : playlistSongSetting(playlist.syncId ?? String(playlist.id));
+      const selected = () =>
+        general ? backgroundAllowed() && !playlistRequested : setting?.get().key === "releaseDate";
       if (!selected()) continue;
-      const detail = await appRuntime.runPromise(
-        // oxlint-disable-next-line react-hooks/rules-of-hooks -- Effect Service.use resolves a service.
-        LibraryStore.use((store) => store.getPlaylist(playlist.id)),
-      );
-      if (!detail) continue;
-      const entries = new Map<string, PlaylistEntryRow>();
+      const entries = new Map<string, SongRow[]>();
+      const input: ReturnType<typeof libraryReleaseSong>[] = [];
+      const addTrack = (track: SongRow) => {
+        const song = libraryReleaseSong(track);
+        const key = releaseAnswerKey(song);
+        const held = entries.get(key) ?? [];
+        if (!held.some((entry) => entry.id === track.id)) held.push(track);
+        entries.set(key, held);
+        return song;
+      };
+      if (general) {
+        const tracks = await appRuntime.runPromise(
+          // oxlint-disable-next-line react-hooks/rules-of-hooks -- Effect Service.use resolves a service.
+          LibraryStore.use((store) => store.listSongs),
+        );
+        for (const track of tracks) input.push(addTrack(track));
+      }
+      for (const candidate of general ? playlists : [playlist!]) {
+        const detail = await appRuntime.runPromise(
+          // oxlint-disable-next-line react-hooks/rules-of-hooks -- Effect Service.use resolves a service.
+          LibraryStore.use((store) => store.getPlaylist(candidate.id)),
+        );
+        for (const entry of detail?.items ?? []) {
+          if (entry.source === "library") {
+            if (!general) input.push(addTrack(entry.track));
+          } else if (!general || entry.source === "stream") input.push(entryReleaseSong(entry));
+        }
+      }
       const songs: ReleaseLookupSong[] = [];
-      for (const entry of detail.items) {
-        const song = entryReleaseSong(entry);
+      for (const song of input) {
         const key = releaseAnswerKey(song);
         const answer = releaseAnswers.get()[key] ?? null;
         const held = heldReleaseDate(song);
         // A song answered before it was in the Library (or before its file came) takes its date now.
-        if (answer !== null && held === null) await keepReleaseDate(entry, answer);
-        if (!entries.has(key)) entries.set(key, entry);
+        if (answer !== null && held === null)
+          for (const track of entries.get(key) ?? []) await keepReleaseDate(track, answer);
         songs.push({ ...song, key, held, answer });
       }
       const at = releaseNextDue(songs, Date.now());
@@ -144,13 +190,15 @@ const run = async (): Promise<void> => {
         going: selected,
         answered: async (song, answer) => {
           releaseAnswers.put(song.key, answer);
-          const entry = entries.get(song.key);
-          if (entry !== undefined) await keepReleaseDate(entry, answer);
+          for (const track of entries.get(song.key) ?? []) await keepReleaseDate(track, answer);
         },
         progress: (progress) => {
-          if (progress === null) delete statuses[playlist.id];
-          else statuses[playlist.id] = progress;
-          releaseStatus.set({ ...statuses });
+          if (playlist === null) backgroundReleaseStatus.set(progress);
+          else {
+            if (progress === null) delete statuses[playlist.id];
+            else statuses[playlist.id] = progress;
+            releaseStatus.set({ ...statuses });
+          }
         },
       });
       looking = null;
@@ -159,6 +207,7 @@ const run = async (): Promise<void> => {
         next = Date.now() + 60_000;
         break;
       }
+      if (end === "stopped") continue;
       const after = releaseNextDue(
         songs.map((song) => ({ ...song, answer: releaseAnswers.get()[song.key] ?? null })),
         Date.now(),
@@ -189,19 +238,26 @@ const runSoon = (): void => {
 };
 
 /**
- * Starts the playlists' release-date lookups: now, whenever a playlist's sort, songs or typed
- * dates change (here or from another phone), and when the next retry is due. With nothing
- * due, it waits without a timer of its own reading the playlists.
+ * Starts process-lifetime release lookups, following playlist edits, scans, typed dates and
+ * automatic Search online choices. Retry timers are the only wake-ups without a change.
  */
 export const startReleaseDates = (): void => {
   if (started) return;
   started = true;
-  onPlaylistSongSortChanged(runSoon);
-  onPlaylistsEdited(runSoon);
+  const playlistChanged = () => {
+    playlistRequested = true;
+    again = running;
+    runSoon();
+  };
+  onPlaylistSongSortChanged(playlistChanged);
+  onPlaylistsEdited(playlistChanged);
+  searchOnline.subscribe(() => {
+    if (backgroundAllowed()) void run().catch(() => {});
+  });
   onTypedReleaseDatesChanged(runSoon);
   onLibraryChange((change) => {
-    if (change.kind === "playlists" || (change.kind === "tracks" && change.scanned !== true))
-      runSoon();
+    if (change.kind === "playlists") playlistChanged();
+    else if (change.kind === "tracks") runSoon();
   });
   void run().catch(() => {});
 };

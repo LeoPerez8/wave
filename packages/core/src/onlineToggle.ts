@@ -39,3 +39,9 @@ export const searchOnlineAlways = (
   preference: SearchOnline,
   { onMobileData }: { readonly onMobileData: boolean },
 ): boolean => preference === "always" || (preference === "wifi" && !onMobileData);
+
+/** Whether the process may look up Library and playlist release dates automatically. */
+export const releaseBackgroundAllowed = (
+  preference: SearchOnline,
+  network: { readonly onMobileData: boolean; readonly ytMusic: boolean },
+): boolean => network.ytMusic && searchOnlineAlways(preference, network);

@@ -1904,7 +1904,12 @@ export type {
   GenreTagged,
 } from "./genreAffinity.ts";
 export type { SearchOnline, YtPick } from "./onlineToggle.ts";
-export { readSearchOnline, searchOnlineAlways, writeSearchOnline } from "./onlineToggle.ts";
+export {
+  releaseBackgroundAllowed,
+  readSearchOnline,
+  searchOnlineAlways,
+  writeSearchOnline,
+} from "./onlineToggle.ts";
 export {
   BEST_QUALITY_KBPS,
   LOW_QUALITY_BELOW_KBPS,
