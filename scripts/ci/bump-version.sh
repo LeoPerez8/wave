@@ -1,32 +1,29 @@
 #!/usr/bin/env bash
-# Pushes to main and ti: releases the next version (docs/spec.md, Releases; ti's end in -ti).
-# next-version.ts picks it from the repo's v* tags, one counter for both branches, what changed
-# since the branch's previous release (previous-tag.sh) and the PRs merged since then
+# Pushes to main: releases the next -ti version to the ti channel (docs/spec.md, Releases).
+# next-version.ts picks it from the repo's v* tags, what changed since the previous -ti release
+# (previous-tag.sh) and the PRs merged since then
 # (merged-prs.sh; one from a feat/ branch that no release shipped yet makes it a minor bump).
 # When the push releases, this writes the version into apps/mobile/package.json, commits that
 # alone as "Release Wave <version>" and pushes it to the branch together with its v<version>
 # tag, in one atomic push with the workflow's token, which doesn't start another run. The tag
-# takes the number as soon as it's picked, so the next bump on either branch counts past it
-# even before this run publishes the release (the workflow's Version job lets one bump run at
-# a time across main and ti). If the branch moved on or the tag was taken meanwhile, it starts
+# takes the number as soon as it's picked, so the next bump counts past it even before this run
+# publishes the release. If the branch moved on or the tag was taken meanwhile, it starts
 # over from the new tip; any other rejected push fails. A tip already tagged for its channel
 # (a re-run after its bump was pushed) is released as it is, with nothing pushed.
 # Writes `tag=v<version>` (empty when nothing is released) and `sha=<commit>` (the commit the
 # rest of the run checks and builds, which the tag is on) to $GITHUB_OUTPUT.
-#   scripts/ci/bump-version.sh main|ti
-# Run from a checkout of that branch (HEAD on its tip). Env: GITHUB_OUTPUT, GH_TOKEN,
+#   scripts/ci/bump-version.sh main
+# Run from a checkout of main (HEAD on its tip). Env: GITHUB_OUTPUT, GH_TOKEN,
 # GITHUB_REPOSITORY.
 set -euo pipefail
 
 here="$(cd "$(dirname "$0")" && pwd)"
 cd "$here/../.."
 branch="${1:-}"
-channel=()
-case "$branch" in
-  main) ;;
-  ti) channel=(--ti) ;;
-  *) echo "::error::Only main and ti release a version, not \"$branch\"." >&2; exit 1 ;;
-esac
+if [ "$branch" != main ]; then
+  echo "::error::Only main releases a version, not \"$branch\"." >&2
+  exit 1
+fi
 package=apps/mobile/package.json
 out="${GITHUB_OUTPUT:-/dev/null}"
 tmp="$(mktemp -d)"
@@ -44,17 +41,17 @@ fetch "${unshallow[@]}"
 for attempt in 1 2 3 4 5; do
   git tag --list 'v*' > "$tmp/tags.txt"
   git tag --points-at HEAD --list 'v*' > "$tmp/own.txt"
-  # The branch's previous release, as patch-notes.sh picks it.
-  since="$("$here/previous-tag.sh" HEAD "$branch")"
+  # The ti channel's previous release, as patch-notes.sh picks it.
+  since="$("$here/previous-tag.sh" HEAD ti)"
   inputs=()
   if [ -n "$since" ]; then
     # Both names of a moved file, as in changes.sh.
     git diff --name-only --no-renames "$since" HEAD > "$tmp/changed.txt"
-    # So a version bump merged from the other branch doesn't count as a change.
+    # So a change of the version alone doesn't count.
     git show "$since:$package" > "$tmp/previous-package.json" 2> /dev/null \
       || : > "$tmp/previous-package.json"
     # The PRs merged since then that the patch notes list decide the bump's size, less the
-    # ones a v* tag of either channel already contains.
+    # ones a v* tag already contains.
     git rev-list "$since..HEAD" > "$tmp/commits.txt"
     git rev-list HEAD --not --tags='v*' > "$tmp/unreleased.txt"
     "$here/merged-prs.sh" "$since" HEAD > "$tmp/prs.jsonl"
@@ -69,7 +66,7 @@ for attempt in 1 2 3 4 5; do
 
   current="$(node -e 'console.log(JSON.parse(require("fs").readFileSync(process.argv[1], "utf8")).version)' "$package")"
   echo "The app's version is $current ($package)."
-  version="$(node "$here/next-version.ts" ${channel[@]+"${channel[@]}"} --package "$package" \
+  version="$(node "$here/next-version.ts" --ti --package "$package" \
     --tags "$tmp/tags.txt" --own "$tmp/own.txt" ${inputs[@]+"${inputs[@]}"} \
     | sed -n 's/^version=//p')"
 

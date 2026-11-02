@@ -1,5 +1,5 @@
-// Tag caches cannot read a non-default branch's cache. Find a compatible full APK
-// uploaded by a successful CI push on ti; download-artifact restores it in ci.yml.
+// A cache entry can be evicted or out of a run's scope. Find a compatible full APK
+// uploaded by a successful CI push on main; download-artifact restores it in ci.yml.
 //   node scripts/ci/kept-apk.ts <native key>   prints runId=<id>, or an empty runId
 import { execFileSync } from "node:child_process";
 import { fileURLToPath } from "node:url";
@@ -18,7 +18,7 @@ export const keptApkRunIds = (value: unknown, key: string): number[] => {
     const run = artifact.workflow_run;
     if (
       !record(run) ||
-      run.head_branch !== "ti" ||
+      run.head_branch !== "main" ||
       typeof run.id !== "number" ||
       !Number.isSafeInteger(run.id) ||
       run.id <= 0 ||
@@ -31,11 +31,11 @@ export const keptApkRunIds = (value: unknown, key: string): number[] => {
   return [...runs].toSorted((a, b) => b - a);
 };
 
-/** Only this repository's successful CI pushes on ti may provide the native APK. */
-export const isTrustedTiBuild = (value: unknown, repository: string): boolean =>
+/** Only this repository's successful CI pushes on main may provide the native APK. */
+export const isTrustedMainBuild = (value: unknown, repository: string): boolean =>
   record(value) &&
   value.event === "push" &&
-  value.head_branch === "ti" &&
+  value.head_branch === "main" &&
   value.path === ".github/workflows/ci.yml" &&
   value.status === "completed" &&
   value.conclusion === "success" &&
@@ -55,14 +55,14 @@ if (process.argv[1] === fileURLToPath(import.meta.url)) {
       throw new Error("Expected a native APK key and GITHUB_REPOSITORY.");
     const listing = api(`repos/${repository}/actions/artifacts?name=kept-${key}&per_page=100`);
     for (const id of keptApkRunIds(listing, key).slice(0, 5)) {
-      if (isTrustedTiBuild(api(`repos/${repository}/actions/runs/${id}`), repository)) {
+      if (isTrustedMainBuild(api(`repos/${repository}/actions/runs/${id}`), repository)) {
         runId = id;
         break;
       }
     }
   } catch (cause) {
     // This is a cache: an unavailable API or expired artifact falls back to Gradle.
-    console.error(`Could not find a kept ti APK; using the normal build plan. ${String(cause)}`);
+    console.error(`Could not find a kept APK; using the normal build plan. ${String(cause)}`);
   }
   console.log(`runId=${runId ?? ""}`);
 }

@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Checks that a release tag names the app's version and sits on its release branch, so a wrong tag fails
+# Checks that a release tag names the app's version and sits on main, so a wrong tag fails
 # before the APK is built. The version lives in apps/mobile/package.json and is read through the
 # app config the way prebuild reads it.
 # Run from the tag's checkout (HEAD is the tagged commit).
@@ -9,12 +9,20 @@ set -euo pipefail
 tag="$1"
 cd "$(dirname "$0")/../../apps/mobile"
 version="$(pnpm exec expo config --type public --json | jq -r .version)"
-branch="$(node --disable-warning=MODULE_TYPELESS_PACKAGE_JSON scripts/check-release-tag.ts "$tag" "$version" --branch)"
-echo "Releasing Wave $version (apps/mobile/package.json) from $branch ($tag)."
+node --disable-warning=MODULE_TYPELESS_PACKAGE_JSON scripts/check-release-tag.ts "$tag" "$version"
 
-# Stable releases ship main; -ti prereleases ship the separate test branch.
-git fetch --quiet --no-tags origin "$branch"
+# A stable tag over a -ti version is a promotion, which must be that release's own commit.
+if [ "$tag" != "v$version" ]; then
+  git fetch --quiet --no-tags origin "refs/tags/v$version:refs/tags/v$version"
+  if [ "$(git rev-parse HEAD)" != "$(git rev-parse "v$version^{commit}")" ]; then
+    echo "$tag is on $(git rev-parse --short HEAD), which isn't the commit of v$version. Promote it with the Promote to main workflow." >&2
+    exit 1
+  fi
+fi
+
+# Every release ships main.
+git fetch --quiet --no-tags origin main
 if ! git merge-base --is-ancestor HEAD FETCH_HEAD; then
-  echo "$tag is on $(git rev-parse --short HEAD), which isn't on $branch. Tag the version bump's merge commit on $branch." >&2
+  echo "$tag is on $(git rev-parse --short HEAD), which isn't on main. Tag the version bump's commit on main." >&2
   exit 1
 fi
