@@ -27,11 +27,8 @@ import { CELL } from "@/catalog/grid";
 import { followStreamedArtistLink } from "@/library/ArtistChoice";
 import { useYtSongStarred, ytSongStarredNow } from "@/library/favorites";
 import { starSongs } from "@/library/starSongs";
-import {
-  openReleaseDate,
-  releaseDateMenuLabel,
-  streamedReleaseSong,
-} from "@/library/ReleaseDateSheet";
+import { openReleaseDate, releaseDateMenuLabel } from "@/library/ReleaseDateSheet";
+import { streamedReleaseSong } from "@/library/releaseSong";
 import type { ArtistRow } from "@/library/LibraryStore";
 import { openAddToPlaylist } from "@/library/PlaylistSheets";
 import { removePlaylistItems } from "@/library/playlists";

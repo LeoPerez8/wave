@@ -70,12 +70,12 @@ const upsert = (
   }
   columns.push(...fields);
   args.push(...(row.values ?? fields.map(() => null)));
+  // A field a Wave from before it left out keeps what's stored (`keptWhenOmitted`).
+  const kept = new Set((row.omitted ?? []).map(column));
   const updates = columns
     .filter((name) => name !== "account_id" && name !== "id")
     .map((name) =>
-      name === "release_date"
-        ? `${name} = coalesce(excluded.${name}, ${table.sqlName}.${name})`
-        : `${name} = excluded.${name}`,
+      kept.has(name) ? `${name} = ${table.sqlName}.${name}` : `${name} = excluded.${name}`,
     );
   return {
     sql: `INSERT INTO ${table.sqlName} (${columns.join(", ")})

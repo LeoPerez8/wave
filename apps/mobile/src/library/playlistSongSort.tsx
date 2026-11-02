@@ -10,12 +10,19 @@ import { IconButton } from "@/components/IconButton";
 import { EntryRow } from "@/catalog/EntryRow";
 import { CardEntries } from "@/overlay/CardEntries";
 import { openOverlay } from "@/overlay/overlay";
+import { showToast } from "@/overlay/toast";
 import { pressedRect } from "@/motion/pressedRect";
 import { useLocalisation } from "@/localisation/localisation";
 import type { PlaylistEntryRow } from "./LibraryStore";
-export { playlistSongSetting } from "./playlistSongSetting";
-import { playlistSongSetting } from "./playlistSongSetting";
-import { releaseEntryDate, ensureReleaseNotice } from "./releaseDates";
+import { playlistSongSetting, usePlaylistSongSort } from "./playlistSongSetting";
+import { ensureReleaseNotice } from "./releaseDates";
+import { entryReleaseSong, releaseSongDate } from "./releaseSong";
+
+/**
+ * [entries] in [sort]'s order (Core's `sortPlaylistSongs`), each read as release dates read it
+ * (`entryReleaseSong`). [answers] and [typed] default to the stored ones; a memo passes the
+ * values it re-renders on.
+ */
 export const orderPlaylistEntries = (
   entries: readonly PlaylistEntryRow[],
   sort: PlaylistSongSort,
@@ -23,26 +30,21 @@ export const orderPlaylistEntries = (
   typed?: Readonly<Record<string, string>>,
 ) =>
   sortPlaylistSongs(
-    entries.map((entry) => ({
-      entry,
-      title: entry.source === "library" ? entry.track.title : entry.song.title,
-      artist: entry.source === "library" ? entry.track.artist : entry.song.artists.join(", "),
-      album: entry.source === "library" ? entry.track.album : (entry.song.album ?? ""),
-      addedAt: entry.addedAt ?? 0,
-      releaseDate: releaseEntryDate(entry, answers, typed),
-      ...(entry.source === "library"
-        ? {
-            year: entry.track.year,
-            discNumber: entry.track.discNumber,
-            trackNumber: entry.track.trackNumber,
-          }
-        : {}),
-    })),
+    entries.map((entry) => {
+      const song = entryReleaseSong(entry);
+      return {
+        ...song,
+        entry,
+        album: song.album ?? "",
+        addedAt: entry.addedAt ?? 0,
+        releaseDate: sort.key === "releaseDate" ? releaseSongDate(song, answers, typed) : null,
+      };
+    }),
     sort,
   ).map(({ entry }) => entry);
 export function PlaylistSongSortButton({ id }: { id: string }) {
   const setting = playlistSongSetting(id);
-  const current = setting.useValue();
+  const current = usePlaylistSongSort(id);
   const { strings, language } = useLocalisation();
   const choices: readonly PlaylistSongSort[] = [
     { key: "custom", descending: false },
@@ -77,7 +79,7 @@ export function PlaylistSongSortButton({ id }: { id: string }) {
                   onPress={async () => {
                     close();
                     if (sort.key === "releaseDate") await ensureReleaseNotice();
-                    setting.set(sort);
+                    if (!setting.set(sort)) void showToast(strings.playlists.sortsFull);
                   }}
                 />
               ))}

@@ -1,6 +1,15 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { readPlaylistSongSort, sortPlaylistSongs } from "./index.ts";
+import {
+  CUSTOM_SONG_SORT,
+  PLAYLIST_SONG_SORT_BUCKETS,
+  readPlaylistSongSort,
+  readPlaylistSongSorts,
+  sortPlaylistSongs,
+  storedPlaylistSongSort,
+  syncedBucket,
+  withSyncedBucketEntry,
+} from "./index.ts";
 test("sorts mixed entries without changing custom order and survives additions/removals", () => {
   const entries = ["library", "stream", "unsearched", "unavailable"].map((source, i) => ({
     source,
@@ -24,12 +33,43 @@ test("sorts mixed entries without changing custom order and survives additions/r
   assert.equal(entries[0]!.title, "Z");
 });
 test("unreadable and older choices default to Custom", () => {
-  for (const value of [null, "bad", "{}", '{"key":"release"}'])
-    assert.deepEqual(readPlaylistSongSort(value), { key: "custom", descending: false });
-  assert.deepEqual(readPlaylistSongSort('{"key":"artist","descending":true}'), {
-    key: "artist",
-    descending: true,
-  });
+  for (const value of [null, 5, "bad", "-", "-custom", "release", { key: "title" }])
+    assert.deepEqual(readPlaylistSongSort(value), CUSTOM_SONG_SORT);
+  assert.deepEqual(readPlaylistSongSort("-artist"), { key: "artist", descending: true });
+  assert.deepEqual(readPlaylistSongSort("releaseDate"), { key: "releaseDate", descending: false });
+});
+test("a sort is stored as its key, descending with a minus; Custom stores nothing", () => {
+  assert.equal(storedPlaylistSongSort({ key: "title", descending: false }), "title");
+  assert.equal(storedPlaylistSongSort({ key: "releaseDate", descending: true }), "-releaseDate");
+  assert.equal(storedPlaylistSongSort(CUSTOM_SONG_SORT), null);
+  assert.deepEqual(
+    readPlaylistSongSorts(JSON.stringify({ a: "-album", b: "custom", c: 3, d: "added" })),
+    { a: "-album", d: "added" },
+  );
+});
+test("the account's every playlist keeps a sort in the same few preferences", () => {
+  // As many playlists as the Wave account keeps (`maxPlaylists`), each with the longest sort,
+  // under sync ids like the app's (32 hex digits), drawn from a fixed seed.
+  let seed = 926;
+  const hex = () => {
+    // xorshift32
+    seed ^= seed << 13;
+    seed ^= seed >>> 17;
+    seed ^= seed << 5;
+    return (seed >>> 0).toString(16).padStart(8, "0");
+  };
+  const buckets: Record<string, string>[] = Array.from(
+    { length: PLAYLIST_SONG_SORT_BUCKETS },
+    () => ({}),
+  );
+  for (let i = 0; i < 5000; i++) {
+    const id = `${hex()}${hex()}${hex()}${hex()}`;
+    const bucket = syncedBucket(id, PLAYLIST_SONG_SORT_BUCKETS);
+    const next = withSyncedBucketEntry(buckets[bucket]!, id, "-releaseDate");
+    assert.notEqual(next, null, `playlist ${i}`);
+    buckets[bucket] = next!;
+  }
+  assert.ok(PLAYLIST_SONG_SORT_BUCKETS + 8 < 200);
 });
 test("artist and album sort both ways, keeping equal entries in Custom order", () => {
   const a = { title: "A", artist: "Z", album: "B", addedAt: 1 };
@@ -38,7 +78,7 @@ test("artist and album sort both ways, keeping equal entries in Custom order", (
   for (const key of ["artist", "album"] as const) {
     for (const descending of [false, true]) {
       const sort = { key, descending };
-      assert.deepEqual(readPlaylistSongSort(JSON.stringify(sort)), sort);
+      assert.deepEqual(readPlaylistSongSort(storedPlaylistSongSort(sort)), sort);
       assert.deepEqual(sortPlaylistSongs([a, b, c], sort), descending ? [a, b, c] : [b, c, a]);
     }
   }
@@ -55,7 +95,7 @@ test("release dates retain precision, use Year and leave missing dates last", ()
   }));
   for (const descending of [false, true]) {
     const sort = { key: "releaseDate", descending } as const;
-    assert.deepEqual(readPlaylistSongSort(JSON.stringify(sort)), sort);
+    assert.deepEqual(readPlaylistSongSort(storedPlaylistSongSort(sort)), sort);
     assert.deepEqual(
       sortPlaylistSongs(entries, sort).map((x) => x.id),
       descending ? [1, 3, 2, 4, 0] : [4, 2, 3, 1, 0],

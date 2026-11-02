@@ -1,16 +1,20 @@
 import { describe, test } from "node:test";
 import assert from "node:assert/strict";
 import {
+  SYNCED_VALUE_MAX,
   TYPED_RELEASE_BUCKETS,
   formatReleaseDate,
   readTypedReleaseDate,
   readTypedReleaseDates,
+  releaseAnswerKey,
   releaseDue,
   releaseShownDate,
-  releaseTagDate,
-  typedReleaseBucket,
-  typedReleaseTag,
-  withTypedReleaseDate,
+  storedSyncedBucket,
+  syncedBucket,
+  typedReleaseDateOf,
+  typedReleaseEntry,
+  typedReleaseKey,
+  withSyncedBucketEntry,
 } from "./index.ts";
 
 const TODAY = "2026-11-02";
@@ -105,13 +109,14 @@ describe("which date a song shows and sorts by", () => {
 });
 
 describe("the typed dates the Wave account keeps", () => {
-  const key = '["hey jude","beatles"]';
+  const key = '["hey jude","beatles",""]';
 
   test("a song's date is kept, replaced and cleared under its key", () => {
-    const kept = withTypedReleaseDate({}, key, "1968-08-26");
+    const kept = withSyncedBucketEntry({}, key, "1968-08-26");
     assert.deepEqual(kept, { [key]: "1968-08-26" });
-    assert.deepEqual(withTypedReleaseDate(kept ?? {}, key, "1968"), { [key]: "1968" });
-    assert.deepEqual(withTypedReleaseDate(kept ?? {}, key, null), {});
+    assert.deepEqual(withSyncedBucketEntry(kept ?? {}, key, "1968"), { [key]: "1968" });
+    assert.deepEqual(withSyncedBucketEntry(kept ?? {}, key, null), {});
+    assert.equal(storedSyncedBucket({}), null);
   });
 
   test("reads back what it stored, and skips what isn't a date", () => {
@@ -121,56 +126,92 @@ describe("the typed dates the Wave account keeps", () => {
     });
     assert.deepEqual(readTypedReleaseDates(null), {});
     assert.deepEqual(readTypedReleaseDates("not json"), {});
+    assert.deepEqual(readTypedReleaseDates("[1]"), {});
   });
 
   test("songs spread over a few preferences, each song always in the same one", () => {
     const buckets = new Set<number>();
     for (let i = 0; i < 200; i++) {
-      const bucket = typedReleaseBucket(`["song ${i}","artist"]`);
+      const bucket = syncedBucket(`["song ${i}","artist",""]`, TYPED_RELEASE_BUCKETS);
       assert.ok(Number.isInteger(bucket) && bucket >= 0 && bucket < TYPED_RELEASE_BUCKETS);
       buckets.add(bucket);
     }
     assert.equal(buckets.size, TYPED_RELEASE_BUCKETS);
-    assert.equal(typedReleaseBucket(key), typedReleaseBucket(key));
+    assert.equal(
+      syncedBucket(key, TYPED_RELEASE_BUCKETS),
+      syncedBucket(key, TYPED_RELEASE_BUCKETS),
+    );
   });
 
   test("a preference that would be too long for the account refuses one more song", () => {
-    let dates: Record<string, string> | null = {};
+    let dates: Record<string, string> = {};
     let i = 0;
-    while (dates !== null) {
-      const next = withTypedReleaseDate(
+    while (true) {
+      const next = withSyncedBucketEntry(
         dates,
-        `["a song with a long title ${i}","artist"]`,
+        `["a song with a long title ${i}","artist",""]`,
         "1985-06-21",
       );
       if (next === null) break;
-      assert.ok(JSON.stringify(next).length <= 16_384);
+      assert.ok(JSON.stringify(next).length <= SYNCED_VALUE_MAX);
       dates = next;
       i++;
     }
     assert.ok(i > 100);
     // Changing or clearing a song it holds still works.
     assert.notEqual(
-      withTypedReleaseDate(dates ?? {}, '["a song with a long title 0","artist"]', null),
+      withSyncedBucketEntry(dates, '["a song with a long title 0","artist",""]', null),
       null,
     );
   });
 });
 
-describe("what a typed date does to the song's file", () => {
-  const found = { date: "1968", source: "first-release", retryAt: null } as const;
+describe("which song a typed date is for", () => {
+  const intro = (album: string | null) => ({ title: "Intro", artist: "The xx", album });
+  const typed = (...songs: [ReturnType<typeof intro>, string][]) =>
+    Object.fromEntries(songs.map(([song, date]) => [typedReleaseKey(song), date]));
 
-  test("it replaces the original date the file has, where a found one leaves it", () => {
-    assert.equal(releaseTagDate({ answer: found, held: "1985", hasFile: true }), null);
-    assert.deepEqual(typedReleaseTag({ date: "1970", hasFile: true }), { date: "1970" });
+  test("two songs with one title and artist on two albums keep two dates", () => {
+    const dates = typed([intro("xx"), "2009"], [intro("Coexist"), "2012"]);
+    assert.equal(typedReleaseDateOf(dates, intro("xx")), "2009");
+    assert.equal(typedReleaseDateOf(dates, intro("Coexist")), "2012");
+    assert.equal(typedReleaseDateOf(dates, intro("I See You")), null);
   });
 
-  test("clearing it takes the date out of the file, so the lookup can find one", () => {
-    assert.deepEqual(typedReleaseTag({ date: null, hasFile: true }), { date: null });
+  test("a song finds its date whatever its album's case, accents or version notes", () => {
+    const dates = typed([intro("xx"), "2009"]);
+    assert.equal(typedReleaseDateOf(dates, intro("XX (Deluxe Edition)")), "2009");
+    assert.equal(typedReleaseDateOf(dates, { title: "intro", artist: "xx", album: "xx" }), "2009");
   });
 
-  test("a song without a file keeps it in the index alone", () => {
-    assert.equal(typedReleaseTag({ date: "1970", hasFile: false }), null);
+  test("a song with no album finds the date typed for its title and artist on one", () => {
+    assert.equal(typedReleaseDateOf(typed([intro("xx"), "2009"]), intro(null)), "2009");
+    assert.equal(typedReleaseDateOf(typed([intro("xx"), "2009"]), intro("Unknown Album")), "2009");
+    // Two albums have one: the song can't tell which it is.
+    assert.equal(
+      typedReleaseDateOf(typed([intro("xx"), "2009"], [intro("Coexist"), "2012"]), intro(null)),
+      null,
+    );
+  });
+
+  test("a date typed for a song with no album holds for that song on any album", () => {
+    const dates = typed([intro(null), "2009"]);
+    assert.equal(typedReleaseDateOf(dates, intro("xx")), "2009");
+    assert.equal(typedReleaseDateOf(dates, intro(null)), "2009");
+  });
+
+  test("names the key that holds the date, for clearing it", () => {
+    const dates = typed([intro(null), "2009"]);
+    assert.deepEqual(typedReleaseEntry(dates, intro("xx")), {
+      key: typedReleaseKey(intro(null)),
+      date: "2009",
+    });
+    assert.equal(typedReleaseEntry(dates, { ...intro(null), title: "Outro" }), null);
+  });
+
+  test("the lookup's answers are kept by title and artist alone", () => {
+    assert.equal(releaseAnswerKey(intro("xx")), releaseAnswerKey(intro("Coexist")));
+    assert.notEqual(typedReleaseKey(intro("xx")), typedReleaseKey(intro("Coexist")));
   });
 });
 

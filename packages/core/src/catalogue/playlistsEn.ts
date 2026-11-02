@@ -48,6 +48,7 @@ export const playlistsEn = {
   releaseDateSave: "Save",
   releaseDateClear: "Clear",
   releaseDateFull: "Wave can't keep more typed release dates.",
+  sortsFull: "Wave can't keep this playlist's sort on your Wave account.",
   releaseDateCouldntSave: "Couldn't save the release date.",
   releaseDateNotInFile: "Saved in Wave, but the song's file couldn't take the date.",
   /** A new playlist's name, saved as written: New Playlist, then New Playlist 2, 3… */

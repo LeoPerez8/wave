@@ -1,9 +1,15 @@
-import { catalogueOf, type AppLanguage } from "./localisation.ts";
-
 /**
  * A release date the owner typed for a song (docs/spec.md, "Release date"): their own
  * correction, which wins over every date Wave reads or looks up.
  */
+
+import { artistPhotoName } from "./artistPhoto.ts";
+import { UNKNOWN_ALBUM } from "./library.ts";
+import { catalogueOf, type AppLanguage } from "./localisation.ts";
+import { titleName } from "./lyricsAndGenre.ts";
+import { readReleaseDate, type ReleaseDate } from "./releaseDate.ts";
+import type { ReleaseAnswer } from "./releaseLookup.ts";
+import { readSyncedBucket } from "./syncedBuckets.ts";
 
 /** What the Release date screen's three fields hold, as typed. */
 export interface TypedReleaseDateFields {
@@ -13,7 +19,7 @@ export interface TypedReleaseDateFields {
 }
 
 export type TypedReleaseDateRead =
-  | { readonly ok: true; readonly date: string }
+  | { readonly ok: true; readonly date: ReleaseDate }
   /** `empty`: no year yet, nothing to say. `impossible`: no such day, or a day still to come. */
   | { readonly ok: false; readonly problem: "empty" | "impossible" };
 
@@ -48,11 +54,11 @@ export const readTypedReleaseDate = (
 /** What a song's release date can come from; each is optional. */
 export interface ReleaseDateSources {
   /** The owner's own, typed on the Release date screen. */
-  readonly typed?: string | null | undefined;
+  readonly typed?: ReleaseDate | null | undefined;
   /** The file's original-date tag, as the index keeps it. */
-  readonly original?: string | null | undefined;
+  readonly original?: ReleaseDate | null | undefined;
   /** The lookup's answer (`releaseAnswer`). */
-  readonly answer?: { readonly date: string | null; readonly source: string } | null | undefined;
+  readonly answer?: ReleaseAnswer | null | undefined;
   /** The file's Year. */
   readonly year?: number | null | undefined;
 }
@@ -61,7 +67,12 @@ export interface ReleaseDateSources {
  * The date a song shows and sorts by: a typed date, then the original-date tag, then a first
  * release the lookup found, then the Year, then the lookup's fallback (the Deezer album's).
  */
-export const releaseShownDate = ({ typed, original, answer, year }: ReleaseDateSources) =>
+export const releaseShownDate = ({
+  typed,
+  original,
+  answer,
+  year,
+}: ReleaseDateSources): ReleaseDate | null =>
   typed ||
   original ||
   (answer?.source === "first-release" ? answer.date : null) ||
@@ -69,64 +80,98 @@ export const releaseShownDate = ({ typed, original, answer, year }: ReleaseDateS
   answer?.date ||
   null;
 
-const DATE = /^(?!0000)\d{4}(?:-(?:0[1-9]|1[0-2])(?:-(?:0[1-9]|[12]\d|3[01]))?)?$/;
-
 /**
- * How many synced preferences hold typed dates. Each is one value the Wave account caps at
- * 16,384 characters, and the account keeps 200 preferences, so a few share the songs.
+ * How many synced preferences hold typed dates (Core's `syncedBucket`): each is one value the
+ * Wave account caps at 16,384 characters, and the account keeps 200 preferences.
  */
 export const TYPED_RELEASE_BUCKETS = 8;
 
-/** The longest value a synced preference may have (the sync service's `MAX_TEXT_LENGTH`). */
-const MAX_STORED = 16_384;
-
-/** Which of the preferences holds the typed date of the song with key [key], always the same. */
-export const typedReleaseBucket = (key: string): number => {
-  let hash = 0;
-  for (let i = 0; i < key.length; i++) hash = (hash * 31 + key.charCodeAt(i)) >>> 0;
-  return hash % TYPED_RELEASE_BUCKETS;
-};
-
 /** One preference's typed dates, by song key, from what it stores; what isn't a date is left out. */
-export const readTypedReleaseDates = (stored: string | null): Record<string, string> => {
-  let value: unknown;
-  try {
-    value = stored === null ? null : JSON.parse(stored);
-  } catch {
-    return {};
+export const readTypedReleaseDates = (stored: string | null): Record<string, ReleaseDate> =>
+  readSyncedBucket(stored, readReleaseDate);
+
+/** A song as its release date is kept: its title, its artist credit and its album, when known. */
+export interface ReleaseKeySong {
+  readonly title: string;
+  readonly artist: string;
+  readonly album?: string | null | undefined;
+}
+
+/**
+ * The key the lookup's answer for [song] is kept under: its title and artist, loosely matched
+ * (`artistPhotoName`). The lookup searches by them alone, so it answers once for every song
+ * that has them.
+ */
+export const releaseAnswerKey = (song: ReleaseKeySong): string =>
+  JSON.stringify([artistPhotoName(song.title), artistPhotoName(song.artist)]);
+
+/** [song]'s album as typed dates tell songs apart by it: loosely matched, "" when unknown. */
+const albumName = (album: string | null | undefined): string =>
+  album === null || album === undefined || album === UNKNOWN_ALBUM ? "" : titleName(album);
+
+/**
+ * The key the date the owner typed for [song] is kept under: its title, artist and album,
+ * loosely matched (an album's version notes, such as "(Deluxe)", ignored), so "Intro" on two
+ * albums keeps two dates. A song whose album isn't known keys it with none.
+ */
+export const typedReleaseKey = (song: ReleaseKeySong): string =>
+  JSON.stringify([
+    artistPhotoName(song.title),
+    artistPhotoName(song.artist),
+    albumName(song.album),
+  ]);
+
+/** A typed date, and the key it's kept under. */
+export interface TypedReleaseEntry {
+  readonly key: string;
+  readonly date: ReleaseDate;
+}
+
+const findersByDates = new WeakMap<
+  Readonly<Record<string, string>>,
+  (song: ReleaseKeySong) => TypedReleaseEntry | null
+>();
+
+/**
+ * The typed date [song] has among [typed] (by `typedReleaseKey`), and the key that holds it:
+ * the one typed for its title, artist and album; else, for a song with an album, the one typed
+ * for a song with none of the same title and artist; else, for a song with no album, the one
+ * date typed for its title and artist on any album, when only one album has one.
+ */
+export const typedReleaseEntry = (
+  typed: Readonly<Record<string, string>>,
+  song: ReleaseKeySong,
+): TypedReleaseEntry | null => {
+  let find = findersByDates.get(typed);
+  if (find === undefined) {
+    const byTitleAndArtist = new Map<string, string[]>();
+    for (const key of Object.keys(typed)) {
+      const parsed: unknown = JSON.parse(key);
+      if (!Array.isArray(parsed) || parsed.length !== 3) continue;
+      const loose = JSON.stringify(parsed.slice(0, 2));
+      byTitleAndArtist.set(loose, [...(byTitleAndArtist.get(loose) ?? []), key]);
+    }
+    const entry = (key: string): TypedReleaseEntry | null => {
+      const date = typed[key];
+      return date === undefined ? null : { key, date };
+    };
+    find = (wanted) => {
+      const exact = entry(typedReleaseKey(wanted));
+      if (exact !== null) return exact;
+      if (albumName(wanted.album) !== "") return entry(typedReleaseKey({ ...wanted, album: null }));
+      const keys = byTitleAndArtist.get(releaseAnswerKey(wanted)) ?? [];
+      return keys.length === 1 && keys[0] !== undefined ? entry(keys[0]) : null;
+    };
+    findersByDates.set(typed, find);
   }
-  if (value === null || typeof value !== "object" || Array.isArray(value)) return {};
-  return Object.fromEntries(
-    Object.entries(value).filter(
-      (entry): entry is [string, string] => typeof entry[1] === "string" && DATE.test(entry[1]),
-    ),
-  );
+  return find(song);
 };
 
-/**
- * [dates] with the song [key]'s typed date set to [date], or taken out (null). Null when the
- * preference would grow too long for the Wave account to keep.
- */
-export const withTypedReleaseDate = (
-  dates: Readonly<Record<string, string>>,
-  key: string,
-  date: string | null,
-): Record<string, string> | null => {
-  const { [key]: _old, ...rest } = dates;
-  const next = date === null ? rest : { ...rest, [key]: date };
-  return date !== null && JSON.stringify(next).length > MAX_STORED ? null : next;
-};
-
-/**
- * What a typed date writes into the song's file, or null for none (a song without a file keeps
- * it in the index alone). Unlike a found date (`releaseTagDate`), which never replaces an
- * original date the file has, a typed date is the owner's own correction: it replaces the
- * file's, and clearing it ([date] null) takes the file's out, so the lookup can find one again.
- */
-export const typedReleaseTag = (song: {
-  readonly date: string | null;
-  readonly hasFile: boolean;
-}): { readonly date: string | null } | null => (song.hasFile ? { date: song.date } : null);
+/** The typed date [song] has among [typed] (`typedReleaseEntry`), null for none. */
+export const typedReleaseDateOf = (
+  typed: Readonly<Record<string, string>>,
+  song: ReleaseKeySong,
+): ReleaseDate | null => typedReleaseEntry(typed, song)?.date ?? null;
 
 /** [date] (`1985`, `1985-06` or `1985-06-21`) as [language] says it, as precise as it's known. */
 export const formatReleaseDate = (date: string, language: AppLanguage): string => {

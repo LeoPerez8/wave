@@ -1,11 +1,8 @@
 import {
   formatReleaseDate,
   readTypedReleaseDate,
-  releaseShownDate,
-  tagWriteFailureLine,
-  typedReleaseTag,
-  type TagWriteFile,
-  type TagWriteStep,
+  releaseAnswerKey,
+  typedReleaseDateOf,
   type TypedReleaseDateFields,
 } from "@wave/core";
 import { useState } from "react";
@@ -16,43 +13,22 @@ import { CELL, grid } from "@/catalog/grid";
 import { Hairline } from "@/catalog/Hairline";
 import { TextButton } from "@/components/TextButton";
 import { currentLocalisation, useLocalisation } from "@/localisation/localisation";
-import { WaveNative } from "@/native/waveNative";
 import { presentOverlay } from "@/overlay/overlay";
 import { showToast } from "@/overlay/toast";
 import { useThemeColor } from "@/theme/useThemeColor";
 
 import { publishLibraryChange } from "./libraryChanges";
-import { LibraryStore, type SongRow } from "./LibraryStore";
-import { releaseDates, releaseSongKey } from "./releaseAnswers";
+import { LibraryStore } from "./LibraryStore";
+import { releaseAnswers } from "./releaseAnswers";
+import { writeReleaseDateTag } from "./releaseDateTag";
+import { releaseSongDate, type ReleaseDateSong } from "./releaseSong";
 import { appRuntime } from "./runtime";
 import { setTypedReleaseDate, typedReleaseDates } from "./typedReleaseDates";
-
-/** A song Release date is about: a Library song ([trackId]), or a YT Music or unsearched one. */
-export interface ReleaseDateSong {
-  readonly title: string;
-  readonly artist: string;
-  /** The Library song, whose index and file take the date too; null for a streamed song. */
-  readonly trackId: number | null;
-  /** The original-date tag, as the index has it. */
-  readonly original?: string | null | undefined;
-  readonly year?: number | null | undefined;
-}
-
-/** The date [song] shows and sorts by (Core's `releaseShownDate`), null when none is known. */
-const shownDate = (song: ReleaseDateSong): string | null => {
-  const key = releaseSongKey(song);
-  return releaseShownDate({
-    typed: typedReleaseDates.get()[key],
-    original: song.original,
-    answer: releaseDates.get()[key],
-    year: song.year,
-  });
-};
 
 /** Release Date's menu entry for [song]: with the date it has, when it has one. */
 export const releaseDateMenuLabel = (song: ReleaseDateSong): string => {
   const { language, strings } = currentLocalisation();
-  const date = shownDate(song);
+  const date = releaseSongDate(song);
   return date === null
     ? strings.itemActions.labels.releaseDate
     : strings.itemActions.releaseDateIs(formatReleaseDate(date, language));
@@ -143,35 +119,6 @@ function ReleaseDateCard({
   );
 }
 
-/**
- * Writes the typed [date] into [path]'s original-date tag, replacing the file's (null takes
- * it out): Core's `typedReleaseTag`, unlike a found date, which never replaces one. False
- * when the file didn't take it; the app log says why.
- */
-const writeTypedTag = async (path: string, date: string | null): Promise<boolean> => {
-  const failed = (
-    cause: unknown,
-    step: TagWriteStep | null = null,
-    file: TagWriteFile | null = null,
-  ) => {
-    console.warn(
-      `[wave] ${tagWriteFailureLine({ path, origin: "typedReleaseDate", step, file, cause })}`,
-    );
-    return false;
-  };
-  try {
-    const written = await WaveNative.replaceOriginalDate(path, date);
-    if (!("failed" in written)) return written.originalDate !== "notWritten";
-    const { step, exception, message, fileExists, fileBytes } = written.failed;
-    return failed(Object.assign(new Error(message), { name: exception }), step, {
-      exists: fileExists,
-      bytes: fileBytes,
-    });
-  } catch (cause) {
-    return failed(cause);
-  }
-};
-
 /** The playlists text in the language Wave reads in now. */
 const text = () => currentLocalisation().strings.playlists;
 
@@ -182,15 +129,14 @@ const text = () => currentLocalisation().strings.playlists;
  * song is looked up again. A file that can't take the date says so; the index keeps it.
  */
 const saveTypedDate = async (song: ReleaseDateSong, date: string | null): Promise<void> => {
-  const key = releaseSongKey(song);
-  const before = typedReleaseDates.get()[key] ?? null;
-  if (!setTypedReleaseDate(key, date)) {
+  const before = typedReleaseDateOf(typedReleaseDates.get(), song);
+  if (!setTypedReleaseDate(song, date)) {
     void showToast(text().releaseDateFull);
     return;
   }
   if (date === null) {
-    const { [key]: _forgotten, ...answers } = releaseDates.get();
-    releaseDates.set(answers);
+    const { [releaseAnswerKey(song)]: _forgotten, ...answers } = releaseAnswers.get();
+    releaseAnswers.set(answers);
   }
   const { trackId } = song;
   if (trackId === null) return;
@@ -201,14 +147,14 @@ const saveTypedDate = async (song: ReleaseDateSong, date: string | null): Promis
       LibraryStore.use((store) => store.saveTypedReleaseDate(trackId, date)),
     );
   } catch {
-    setTypedReleaseDate(key, before);
+    setTypedReleaseDate(song, before);
     void showToast(text().releaseDateCouldntSave);
     return;
   }
   publishLibraryChange({ kind: "tracks", ids: [trackId] });
+  // The owner's own correction replaces the file's date, and clearing it takes it out.
   const path = saved?.path ?? null;
-  const tag = typedReleaseTag({ date, hasFile: path !== null });
-  if (path !== null && tag !== null && !(await writeTypedTag(path, tag.date)))
+  if (path !== null && !(await writeReleaseDateTag(path, date, true)))
     void showToast(text().releaseDateNotInFile);
 };
 
@@ -217,39 +163,15 @@ const saveTypedDate = async (song: ReleaseDateSong, date: string | null): Promis
  * (Core's `readTypedReleaseDate`), filled with the date it shows, or to clear a typed one.
  */
 export const openReleaseDate = (song: ReleaseDateSong): void => {
-  const typed = typedReleaseDates.get()[releaseSongKey(song)] ?? null;
+  const typed = typedReleaseDateOf(typedReleaseDates.get(), song);
   void presentOverlay<ReleaseDateChoice>({
     label: currentLocalisation().strings.playlists.releaseDateTitle,
     align: "top",
     dismissed: null,
     render: (finish) => (
-      <ReleaseDateCard initial={shownDate(song)} typed={typed !== null} finish={finish} />
+      <ReleaseDateCard initial={releaseSongDate(song)} typed={typed !== null} finish={finish} />
     ),
   }).then((choice) => {
     if (choice !== null) void saveTypedDate(song, choice.date);
   });
 };
-
-/** A Library song as Release date takes it. */
-export const libraryReleaseSong = (song: SongRow): ReleaseDateSong => ({
-  title: song.title,
-  artist: song.artist,
-  trackId: song.id,
-  original: song.releaseDate,
-  year: song.year,
-});
-
-/**
- * A YT Music or unsearched song as Release date takes it, by its own title and first artist, as
- * its playlist entry is dated; [track], the Library's song it is by now, takes the date too.
- */
-export const streamedReleaseSong = (
-  song: { readonly title: string; readonly artists: readonly string[] },
-  track: SongRow | null = null,
-): ReleaseDateSong => ({
-  title: song.title,
-  artist: song.artists[0] ?? "",
-  trackId: track?.id ?? null,
-  original: track?.releaseDate,
-  year: track?.year,
-});

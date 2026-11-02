@@ -58,7 +58,7 @@ const BRACKETED = /\s*(?:\([^)]*\)|\[[^\]]*\])/g;
  * featured artists and version notes ("(Live)", "- Remastered 2011"), which
  * the length check tells apart instead.
  */
-const titleName = (title: string): string => {
+export const titleName = (title: string): string => {
   const bare = title.replace(FEATURING, "").replace(VERSION_NOTE, "").replace(BRACKETED, "");
   return artistPhotoName(artistPhotoName(bare) === "" ? title : bare);
 };

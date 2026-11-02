@@ -54,6 +54,7 @@ export const playlistsPtBr: typeof playlistsEn = {
   releaseDateSave: "Salvar",
   releaseDateClear: "Limpar",
   releaseDateFull: "O Wave não consegue guardar mais datas de lançamento digitadas.",
+  sortsFull: "O Wave não consegue guardar a ordem desta playlist na sua conta Wave.",
   releaseDateCouldntSave: "Não foi possível salvar a data de lançamento.",
   releaseDateNotInFile: "Salva no Wave, mas o arquivo da música não aceitou a data.",
   defaultName: "Nova Playlist",

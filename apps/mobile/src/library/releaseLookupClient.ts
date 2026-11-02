@@ -1,4 +1,10 @@
-import { releaseBatches, releaseBatchSplit, releaseRequestDelay } from "@wave/core";
+import {
+  deezerRefused,
+  releaseBatchSplit,
+  releaseBatches,
+  releaseRequestDelay,
+  type ReleaseServices,
+} from "@wave/core";
 
 export interface ReleaseHttp {
   (
@@ -6,46 +12,60 @@ export interface ReleaseHttp {
     headers: Record<string, string>,
   ): Promise<{ status: number; json: () => Promise<unknown> }>;
 }
-/** One queue for both hosts; the clock advances when a request actually starts. */
+
+type Host = "deezer" | "musicbrainz";
+
+const BASE: Record<Host, string> = {
+  deezer: "https://api.deezer.com",
+  musicbrainz: "https://musicbrainz.org/ws/2",
+};
+
+/**
+ * Deezer's and MusicBrainz's requests for the release-date lookup (Core's `ReleaseServices`):
+ * one queue per host, so one host's wait never holds the other's requests, each paced by Core's
+ * `releaseRequestDelay` from when its last request started. Once [active] is false, a queued
+ * request throws instead of going out. Deezer's not-found answers (its error object, any code
+ * but a refusal's, Core's `deezerRefused`) come back as they are, holding no data.
+ */
 export const releaseLookupClient = (
   http: ReleaseHttp,
   wait: (ms: number) => Promise<void>,
   now = Date.now,
   active = () => true,
-) => {
-  const last = { deezer: -Infinity, musicbrainz: -Infinity };
-  const perform = async (host: "deezer" | "musicbrainz", path: string): Promise<unknown> => {
+): ReleaseServices => {
+  const last: Record<Host, number> = { deezer: -Infinity, musicbrainz: -Infinity };
+  const queues: Record<Host, Promise<unknown>> = {
+    deezer: Promise.resolve(),
+    musicbrainz: Promise.resolve(),
+  };
+  const perform = async (host: Host, path: string): Promise<unknown> => {
     await wait(releaseRequestDelay(host, last[host], now()));
     if (!active()) throw new Error("Lookup paused");
     last[host] = now();
-    const response = await http(
-      `${host === "deezer" ? "https://api.deezer.com" : "https://musicbrainz.org/ws/2"}${path}`,
-      {
-        "User-Agent": "Wave/1.0 (https://github.com/LeoPerez8/wave)",
-        Accept: "application/json",
-      },
-    );
+    const response = await http(`${BASE[host]}${path}`, {
+      "User-Agent": "Wave/1.0 (https://github.com/LeoPerez8/wave)",
+      Accept: "application/json",
+    });
     if (response.status === 414) throw new RangeError("Query too long");
     if (response.status !== 200) throw new Error(`Release lookup HTTP ${response.status}`);
     const body = await response.json();
-    if (body && typeof body === "object" && "error" in body)
-      throw new Error("Release lookup refused");
+    if (host === "deezer" && deezerRefused(body)) throw new Error("Release lookup refused");
     return body;
   };
-  let queue: Promise<unknown> = Promise.resolve();
-  const request = (host: "deezer" | "musicbrainz", path: string): Promise<unknown> => {
-    const result = queue.then(() => perform(host, path));
-    queue = result.catch(() => {});
+  const request = (host: Host, path: string): Promise<unknown> => {
+    const result = queues[host].then(() => perform(host, path));
+    queues[host] = result.catch(() => {});
     return result;
   };
   const recordings = async (codes: readonly string[]): Promise<unknown[]> => {
     const responses: unknown[] = [];
     const read = async (batch: readonly string[], offset = 0): Promise<void> => {
+      const query = encodeURIComponent(batch.map((code) => `isrc:${code}`).join(" OR "));
       let body: unknown;
       try {
         body = await request(
           "musicbrainz",
-          `/recording/?query=${encodeURIComponent(batch.map((c) => `isrc:${c}`).join(" OR "))}&fmt=json&limit=100&offset=${offset}`,
+          `/recording/?query=${query}&fmt=json&limit=100&offset=${offset}`,
         );
       } catch (error) {
         if (!(error instanceof RangeError) || batch.length === 1) throw error;
@@ -68,9 +88,9 @@ export const releaseLookupClient = (
     return responses;
   };
   return {
-    search: (title: string, artist: string) =>
+    search: (title, artist) =>
       request("deezer", `/search?q=${encodeURIComponent(`${title} ${artist}`)}&limit=10`),
-    album: (id: number) => request("deezer", `/album/${id}`),
+    album: (id) => request("deezer", `/album/${id}`),
     recordings,
   };
 };

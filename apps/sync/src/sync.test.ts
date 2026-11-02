@@ -599,14 +599,16 @@ describe("POST /v1/push and GET /v1/pull", () => {
   });
 });
 
-test("release dates survive stale writes and clients omitting the new field", async () => {
+test("a release date survives stale writes and clients omitting it, and a sent null clears it", async () => {
   const service = await harness();
   const session = await service.signIn();
   await push(service, session, { songs: [song("dated", 20, { releaseDate: "1985-06-21" })] });
   await push(service, session, { songs: [song("dated", 10, { releaseDate: "2005" })] });
-  const old = song("dated", 30);
-  const { releaseDate: _date, ...legacy } = old;
+  // A Wave from before release dates sends none at all.
+  const { releaseDate: _date, ...legacy } = song("dated", 30);
   await push(service, session, { songs: [legacy] });
-  const rows = await pullAll(service, session);
-  assert.equal(rows.songs[0]?.releaseDate, "1985-06-21");
+  assert.equal((await pullAll(service, session)).songs[0]?.releaseDate, "1985-06-21");
+  // The owner cleared the date they typed: the phone sends null, and every phone loses it.
+  await push(service, session, { songs: [song("dated", 40, { releaseDate: null })] });
+  assert.equal((await pullAll(service, session)).songs[0]?.releaseDate, null);
 });

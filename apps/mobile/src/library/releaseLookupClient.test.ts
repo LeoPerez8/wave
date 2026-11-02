@@ -70,3 +70,38 @@ test("oversized queries split, refusals fail without poisoning the queue, paused
   refused = false;
   assert.deepEqual(await retry.search("Song", "Artist"), { data: [] });
 });
+
+test("a Deezer search doesn't wait behind MusicBrainz's second", async () => {
+  const waiting: (() => void)[] = [];
+  const urls: string[] = [];
+  const client = releaseLookupClient(
+    async (url) => {
+      urls.push(new URL(url).host);
+      return { status: 200, json: async () => ({ count: 0, recordings: [], data: [] }) };
+    },
+    (ms) => (ms > 0 ? new Promise<void>((resolve) => waiting.push(resolve)) : Promise.resolve()),
+    () => 0,
+  );
+  await client.recordings(["USABC0000001"]);
+  const second = client.recordings(["USABC0000002"]);
+  assert.deepEqual(await client.search("Song", "Artist"), { count: 0, recordings: [], data: [] });
+  assert.deepEqual(urls, ["musicbrainz.org", "api.deezer.com"]);
+  for (const resolve of waiting) resolve();
+  await second;
+  assert.deepEqual(urls, ["musicbrainz.org", "api.deezer.com", "musicbrainz.org"]);
+});
+
+test("Deezer's not-found answers hold no data; its quota and busy errors are refusals", async () => {
+  let code = 800;
+  const client = releaseLookupClient(
+    async () => ({
+      status: 200,
+      json: async () => ({ error: { type: "DataException", message: "no data", code } }),
+    }),
+    async () => {},
+  );
+  assert.deepEqual(await client.album(1), {
+    error: { type: "DataException", message: "no data", code: 800 },
+  });
+  for (code of [4, 700]) await assert.rejects(client.album(1), /refused/);
+});

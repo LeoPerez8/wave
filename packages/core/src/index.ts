@@ -2498,8 +2498,68 @@ export {
   stepPlaylistPickerSearch,
 } from "./playlistPickerSearch.ts";
 
-export { readPlaylistSongSort, sortPlaylistSongs } from "./playlistSongSort.ts";
+export {
+  CUSTOM_SONG_SORT,
+  PLAYLIST_SONG_SORT_BUCKETS,
+  readPlaylistSongSort,
+  readPlaylistSongSorts,
+  sortPlaylistSongs,
+  storedPlaylistSongSort,
+} from "./playlistSongSort.ts";
 export type { PlaylistSongSort, PlaylistSortableSong } from "./playlistSongSort.ts";
 
-export * from "./releaseLookup.ts";
-export * from "./typedReleaseDate.ts";
+export {
+  SYNCED_VALUE_MAX,
+  readSyncedBucket,
+  storedSyncedBucket,
+  syncedBucket,
+  withSyncedBucketEntry,
+} from "./syncedBuckets.ts";
+
+export { readReleaseDate } from "./releaseDate.ts";
+export type { ReleaseDate } from "./releaseDate.ts";
+
+export {
+  RELEASE_BATCH_CODES,
+  RELEASE_CODES_PER_SONG,
+  deezerAlbumDate,
+  deezerRefused,
+  lookUpReleaseDates,
+  readReleaseAnswers,
+  releaseAnswer,
+  releaseBatchSplit,
+  releaseBatches,
+  releaseCandidates,
+  releaseDue,
+  releaseNextDue,
+  releaseRequestDelay,
+  releaseTagDate,
+} from "./releaseLookup.ts";
+export type {
+  ReleaseAnswer,
+  ReleaseCandidate,
+  ReleaseLookupEnd,
+  ReleaseLookupSong,
+  ReleaseProgress,
+  ReleaseServices,
+  ReleaseSong,
+} from "./releaseLookup.ts";
+
+export {
+  TYPED_RELEASE_BUCKETS,
+  formatReleaseDate,
+  readTypedReleaseDate,
+  readTypedReleaseDates,
+  releaseAnswerKey,
+  releaseShownDate,
+  typedReleaseDateOf,
+  typedReleaseEntry,
+  typedReleaseKey,
+} from "./typedReleaseDate.ts";
+export type {
+  ReleaseDateSources,
+  ReleaseKeySong,
+  TypedReleaseDateFields,
+  TypedReleaseDateRead,
+  TypedReleaseEntry,
+} from "./typedReleaseDate.ts";

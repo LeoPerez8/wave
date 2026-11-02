@@ -68,7 +68,7 @@ for (const [title, artist] of songs) {
     });
   }
 }
-let recordings: unknown[] = [];
+let recordings: readonly unknown[] = [];
 let mbError: string | undefined;
 try {
   recordings = await client.recordings(rows.flatMap((r) => r.candidates.map((c) => c.isrc)));
