@@ -143,7 +143,7 @@ const run = async (): Promise<void> => {
         now: Date.now,
         going: selected,
         answered: async (song, answer) => {
-          releaseAnswers.set({ ...releaseAnswers.get(), [song.key]: answer });
+          releaseAnswers.put(song.key, answer);
           const entry = entries.get(song.key);
           if (entry !== undefined) await keepReleaseDate(entry, answer);
         },
