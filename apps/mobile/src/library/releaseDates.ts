@@ -207,7 +207,8 @@ const run = async (): Promise<void> => {
                 const album = (await client.album(id)) as { release_date?: string };
                 if (album.release_date) albumDates.push(album.release_date);
               }
-              answer = releaseAnswer([], [], year, albumDates.toSorted()[0] ?? null, Date.now());
+              // oxlint-disable-next-line unicorn/no-array-sort -- sorts a fresh array; Hermes lacks toSorted
+              answer = releaseAnswer([], [], year, albumDates.sort()[0] ?? null, Date.now());
             }
             releaseDates.set({ ...releaseDates.get(), [releaseEntryKey(entry)]: answer });
             await keepReleaseDate(entry, answer);
