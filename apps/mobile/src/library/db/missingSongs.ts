@@ -61,6 +61,7 @@ export const syncMissingSongs = (
       album: albums.title,
       albumArtist: albums.albumArtistCredit,
       genre: genres.name,
+      releaseDate: tracks.releaseDate,
       year: tracks.year,
       trackNumber: tracks.trackNumber,
       discNumber: tracks.discNumber,

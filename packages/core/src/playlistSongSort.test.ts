@@ -77,3 +77,18 @@ test("equal release dates use disc and track order while undated songs keep Cust
       [4, 2, 1, 0, 3],
     );
 });
+
+test("equal release dates follow album order when disc or track tags are absent", () => {
+  const base = { title: "Song", artist: "Artist", album: "Album", addedAt: 0, releaseDate: "1985" };
+  const songs = [
+    { ...base, id: 0, discNumber: null, trackNumber: null },
+    { ...base, id: 1, discNumber: 2, trackNumber: 1 },
+    { ...base, id: 2, discNumber: 1, trackNumber: 2 },
+    { ...base, id: 3, discNumber: null, trackNumber: 1 },
+  ];
+  for (const descending of [false, true])
+    assert.deepEqual(
+      sortPlaylistSongs(songs, { key: "releaseDate", descending }).map((song) => song.id),
+      [3, 2, 0, 1],
+    );
+});

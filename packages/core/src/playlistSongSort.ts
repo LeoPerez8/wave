@@ -41,8 +41,8 @@ export const sortPlaylistSongs = <T extends PlaylistSortableSong>(
       if (left === null || right === null) return left === right ? 0 : left === null ? 1 : -1;
       return (
         (sort.descending ? -1 : 1) * compareStrings(left, right) ||
-        (a.discNumber ?? 0) - (b.discNumber ?? 0) ||
-        (a.trackNumber ?? 0) - (b.trackNumber ?? 0)
+        (a.discNumber ?? 1) - (b.discNumber ?? 1) ||
+        (a.trackNumber ?? Number.MAX_SAFE_INTEGER) - (b.trackNumber ?? Number.MAX_SAFE_INTEGER)
       );
     });
   return [...entries].sort(

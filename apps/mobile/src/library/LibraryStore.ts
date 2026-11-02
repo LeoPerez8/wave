@@ -433,8 +433,9 @@ export interface SongRow {
   /** Orders the album's tracks, and so sorts by artist and by album. */
   readonly discNumber: number | null;
   readonly trackNumber: number | null;
-  /** Fix Song fills it in when it's missing, as the track number, genre and lyrics. */
+  /** Original-date tag, separate from the album Year fallback. */
   readonly releaseDate?: string | null | undefined;
+  /** Fix Song fills it in when it's missing, as the track number, genre and lyrics. */
   readonly year: number | null;
   /** Null for a song without a genre tag. */
   readonly genre: string | null;

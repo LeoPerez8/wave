@@ -42,8 +42,9 @@ export interface RawTrack {
    * the reader has them, where [genre] holds the first.
    */
   readonly genres?: readonly string[] | null | undefined;
-  /** Year or date as tagged, e.g. `1997` or `1997-05-21`. */
+  /** Original-date tag; never replaces the album Year. */
   readonly releaseDate?: string | null | undefined;
+  /** Year or date as tagged, e.g. `1997` or `1997-05-21`. */
   readonly year?: string | null | undefined;
   /** Track number as tagged, e.g. `3` or `3/12`. */
   readonly trackNumber?: string | null | undefined;

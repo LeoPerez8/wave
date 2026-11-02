@@ -1,6 +1,3 @@
-const m0052 = `ALTER TABLE tracks ADD COLUMN release_date text;
---> statement-breakpoint
-UPDATE tracks SET modified_at = 0 WHERE path IS NOT NULL;`;
 /**
  * Hand-written migrations in the shape drizzle-kit generates for Expo
  * (`{ journal, migrations: { m0000 } }`), consumed by
@@ -1317,6 +1314,10 @@ const m0050 = `CREATE INDEX playlist_items_video_idx ON playlist_items ((CASE WH
   THEN json_extract(yt_song, '$.videoId') END), deleted, playlist_id) WHERE yt_song IS NOT NULL;`;
 // Voice notes and recordings a scan left out (\`schema.ts\`'s \`skippedFiles\`, #836).
 const m0051 = `CREATE TABLE skipped_files (path text PRIMARY KEY NOT NULL, size_bytes integer NOT NULL, modified_at integer NOT NULL);`;
+
+const m0052 = `ALTER TABLE tracks ADD COLUMN release_date text;
+--> statement-breakpoint
+UPDATE tracks SET modified_at = 0 WHERE path IS NOT NULL;`;
 
 export default {
   journal: {

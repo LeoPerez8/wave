@@ -15,7 +15,11 @@ class AudioTagReader(
 ) : TagReader {
   override fun read(file: File): RawTags {
     val reader = if (isOpusFile(file)) opus else primary
-    return attempt(reader, file) ?: fallback?.let { attempt(it, file) } ?: RawTags()
+    val tags = attempt(reader, file) ?: fallback?.let { attempt(it, file) } ?: RawTags()
+    // Raw ADTS AAC uses Android's reader, which exposes no original-date key.
+    return if (file.extension.equals("aac", ignoreCase = true) && tags.releaseDate == null) {
+      tags.copy(releaseDate = JAudioTaggerReader.leadingOriginalDate(file))
+    } else tags
   }
 
   private fun isOpusFile(file: File): Boolean =
