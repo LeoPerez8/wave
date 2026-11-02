@@ -87,7 +87,7 @@ export type OverlayFlow = "down" | "up";
 
 /** Whether the measured entries need to scroll in their laid-out viewport. */
 export const cardListOverflows = (contentHeight: number, viewportHeight: number): boolean =>
-  viewportHeight > 0 && contentHeight > viewportHeight;
+  viewportHeight > 0 && contentHeight > viewportHeight + 1;
 
 export interface CardKeyboard {
   /** Close the open keyboard as the card opens. */
@@ -119,12 +119,12 @@ export const cardKeyboard = (input: {
  * next to it instead (`placeNextTo`).
  */
 export const placeOverlayCard = (input: OverlayCardInput): OverlayCardFrame => {
-  if (input.anchor !== undefined && !input.searching) return placeNextTo(input, input.anchor);
+  if (input.anchor !== undefined) return placeNextTo(input, input.anchor);
   const { window, insets, margin, maxWidth, cardHeight, align = "center", keyboard = 0 } = input;
   const areaWidth = window.width - insets.left - insets.right;
   const areaHeight = window.height - insets.top - insets.bottom - keyboard;
   const width = Math.min(areaWidth - margin * 2, maxWidth);
-  const maxHeight = areaHeight - margin * 2;
+  const maxHeight = Math.max(0, areaHeight - margin * 2);
   const height = Math.min(cardHeight, maxHeight);
   return {
     left: Math.round(insets.left + (areaWidth - width) / 2),
@@ -168,7 +168,7 @@ const placeNextTo = (
       : "above";
   const room = side === "below" ? roomBelow : roomAbove;
   // Where even the roomier side is cramped, the card may use the whole height and cover the anchor.
-  const maxHeight = cardHeight <= room || room >= minHeight ? room : lowest - highest;
+  const maxHeight = Math.max(0, cardHeight <= room || room >= minHeight ? room : lowest - highest);
   const height = Math.min(cardHeight, maxHeight);
   const top = Math.min(
     Math.max(side === "below" ? below : above - height, highest),

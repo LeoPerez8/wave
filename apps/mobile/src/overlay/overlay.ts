@@ -40,7 +40,13 @@ export interface OverlayEntry {
   /** Fading out; the host removes it once the animation ends. */
   readonly closing: boolean;
   /** A temporary search takes Back before its card does. */
-  readonly search?: { readonly close: () => void } | undefined;
+  readonly search?:
+    | {
+        readonly close: () => void;
+        /** Hide the IME without changing the search's frame or results during fade-out. */
+        readonly dismissKeyboard: () => void;
+      }
+    | undefined;
   /**
    * The row, tile or button whose press opened it (or the card it follows up
    * on), highlighted while it is open; undefined when no press opened it.
@@ -57,6 +63,9 @@ let interactionRevision = 0;
 
 /** Identifies the card consuming a held touch, including while it fades out. */
 export const OverlayId = createContext<number | undefined>(undefined);
+
+/** Height available to card content after the host's vertical padding, in dp. */
+export const OverlayContentHeight = createContext(Infinity);
 
 /** Async measurements must not run choices on dismissed or covered cards. */
 const isOverlayInteractive = (id: number): boolean =>
@@ -75,7 +84,6 @@ const originNow = (): PressedElement | undefined =>
 /** Fades a card out (the host passes this to `render`). */
 export const closeOverlay = (id: number): void => {
   const closingEntry = entries.get().find((entry) => entry.id === id);
-  if (closingEntry?.closing === false) closingEntry.search?.close();
   if (isOverlayInteractive(id)) {
     interactionRevision += 1;
     cancelHeldTouch();
@@ -85,6 +93,7 @@ export const closeOverlay = (id: number): void => {
       ? list.map((entry) => (entry.id === id ? { ...entry, closing: true } : entry))
       : list,
   );
+  if (closingEntry?.closing === false) closingEntry.search?.dismissKeyboard();
 };
 
 /** Shows a card over everything; it stays until closed or dismissed. */

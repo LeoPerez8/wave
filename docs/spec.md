@@ -250,9 +250,11 @@ A song can be found inside a playlist (#477): a local playlist, a YT Music playl
 
 The Add to Playlist card (#920) offers a magnifying glass on the right of its title only when its playlist entries overflow their measured viewport. This follows the actual layout, including landscape and larger system text; a short list keeps its existing heading.
 
-Tapping the button replaces the title line with a focused field. The subject's name stays below it. Matching uses Find in Playlists' name-only rules and keeps the card's supplied order (`createPlaylistPickerSearch`); the placeholder and empty result reuse "Find in Playlists" and "No playlists match" from the catalogue. New Playlist is hidden whenever the field contains text and returns when cleared.
+Tapping the button replaces the title line with a focused field. The subject's name stays below it. If keeping the subject fixed would leave less than one result row above the keyboard, the subject moves into the scrolling entries while the field stays fixed (`playlistPickerSubjectScrolls`). The field disables Android's fullscreen landscape editor. Matching uses Find in Playlists' name-only rules and keeps the card's supplied order (`createPlaylistPickerSearch`); the placeholder and empty result reuse "Find in Playlists" and "No playlists match" from the catalogue. New Playlist is hidden whenever the field contains text and returns when cleared.
 
 While search is open the card sits near the top, fits above the keyboard, and holds its height as results narrow; its results scroll and a first tap adds the songs, closes the card and shows the usual toast. The × clears text while keeping the field open; on an empty field it closes search and restores the full, centred card. Back closes search first, including when Android consumes it to hide the keyboard; the next Back closes the card. Other cards still dismiss the keyboard when opening. Core owns overflow, search transitions, keyboard placement and height retention (`cardListOverflows`, `stepPlaylistPickerSearch`, `cardKeyboard`, `placeOverlayCard`, `cardContentHeight`).
+
+Choosing a result or tapping the veil dismisses the keyboard and fades the card out with its search frame, height and results intact. A keyboard hide already in progress when search opens is ignored until that search session has seen the keyboard show.
 
 ### Compact title
 

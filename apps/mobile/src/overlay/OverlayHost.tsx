@@ -3,7 +3,6 @@ import {
   cardContentHeight,
   cardKeyboard,
   cardShowsHeading,
-  placeOverlayCard,
   veilPath,
   visibleHighlight,
   withOpacity,
@@ -39,6 +38,7 @@ import { useThemeColor } from "@/theme/useThemeColor";
 import {
   closeOverlay,
   OverlayId,
+  OverlayContentHeight,
   dismissOverlay,
   dismissTopOverlay,
   removeOverlay,
@@ -48,6 +48,7 @@ import {
 import { CardHeadingContext } from "./CardHeading";
 import { OverlayFlowContext } from "./flow";
 import { useKeyboardHeight } from "./keyboard";
+import { useOverlayCardFrame } from "./useOverlayCardFrame";
 import { ToastHost } from "./ToastHost";
 import { useEnterAndLeave } from "./useEnterAndLeave";
 
@@ -162,22 +163,25 @@ function OverlayCard({ entry, frontmost }: { entry: OverlayEntry; frontmost: boo
   // The window and origin as the card opens, which settle the heading.
   const [opening] = useState(() => ({ window, origin }));
 
-  const frame = placeOverlayCard({
-    window,
-    insets,
-    margin: grid.margin,
-    maxWidth: MAX_WIDTH,
-    cardHeight: cardHeight ?? 0,
-    // Anchored or centred, the card may draw over the floating chrome: only the system bars bound it.
-    ...(anchor === undefined
-      ? {}
-      : { anchor: { rect: anchor, gap: CELL, minHeight: MIN_ANCHORED_HEIGHT } }),
-    align: entry.request.align,
-    searching,
-    keyboard: keyboard.keyboard,
-    // Large system text draws a menu's heading and entries taller: it needs more room by its row.
-    textScale: window.fontScale,
-  });
+  const frame = useOverlayCardFrame(
+    {
+      window,
+      insets,
+      margin: grid.margin,
+      maxWidth: MAX_WIDTH,
+      cardHeight: cardHeight ?? 0,
+      // Anchored or centred, the card may draw over the floating chrome: only the system bars bound it.
+      ...(anchor === undefined
+        ? {}
+        : { anchor: { rect: anchor, gap: CELL, minHeight: MIN_ANCHORED_HEIGHT } }),
+      align: entry.request.align,
+      searching,
+      keyboard: keyboard.keyboard,
+      // Large system text draws a menu's heading and entries taller: it needs more room by its row.
+      textScale: window.fontScale,
+    },
+    entry.closing,
+  );
 
   // Only as the card opens: a card someone types into above it may bring the keyboard back.
   const [closeKeyboard] = useState(keyboard.closeKeyboard);
@@ -315,7 +319,11 @@ function OverlayCard({ entry, frontmost }: { entry: OverlayEntry; frontmost: boo
           <OverlayFlowContext value={frame.flow}>
             <CardHeadingContext value={showsHeading}>
               <OverlayId value={entry.id}>
-                {entry.request.render(() => closeOverlay(entry.id))}
+                <OverlayContentHeight
+                  value={Math.max(0, frame.maxHeight - OVERLAY_PADDING.vertical * 2)}
+                >
+                  {entry.request.render(() => closeOverlay(entry.id))}
+                </OverlayContentHeight>
               </OverlayId>
             </CardHeadingContext>
           </OverlayFlowContext>

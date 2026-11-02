@@ -1,61 +1,19 @@
 import { IconSearch, IconX } from "@tabler/icons-react-native";
-import { createPlaylistPickerSearch, stepPlaylistPickerSearch } from "@wave/core";
-import { useCallback, useContext, useEffect, useLayoutEffect, useMemo, useState } from "react";
-import { Keyboard, TextInput, View } from "react-native";
+import { TextInput, View } from "react-native";
 
 import { CatalogLine } from "@/catalog/CatalogLine";
 import { CELL } from "@/catalog/grid";
 import { IconButton } from "@/components/IconButton";
 import { useLocalisation } from "@/localisation/localisation";
-import { OverlayId, setOverlaySearch } from "@/overlay/overlay";
 import { useThemeColor } from "@/theme/useThemeColor";
 
-/** The picker only measures overflow while it shows its full, centred list. */
-export function usePlaylistPickerSearch<T extends { readonly name: string }>(
-  playlists: readonly T[],
-) {
-  const id = useContext(OverlayId);
-  const [query, setQuery] = useState<string | null>(null);
-  const [overflows, setOverflow] = useState(false);
-  const finder = useMemo(() => createPlaylistPickerSearch(playlists), [playlists]);
-  const searching = query !== null;
-  const closeSearch = useCallback(() => {
-    setQuery((current) => stepPlaylistPickerSearch(current, "back").query);
-    Keyboard.dismiss();
-  }, []);
+import { usePlaylistPickerSearch } from "./usePlaylistPickerSearch";
 
-  useLayoutEffect(() => {
-    if (id === undefined || !searching) return;
-    setOverlaySearch(id, { close: closeSearch });
-    return () => setOverlaySearch(id, undefined);
-  }, [id, searching, closeSearch]);
-
-  useEffect(() => {
-    if (!searching) return;
-    // Android can consume Back to hide the IME before BackHandler hears it.
-    const hidden = Keyboard.addListener("keyboardDidHide", closeSearch);
-    return () => hidden.remove();
-  }, [searching, closeSearch]);
-
-  return {
-    ...finder.show(query),
-    query,
-    searching,
-    overflows,
-    setQuery,
-    onOverflowChange: searching ? undefined : setOverflow,
-    open: () => setQuery(stepPlaylistPickerSearch(query, "open").query),
-    clear: () => {
-      const next = stepPlaylistPickerSearch(query, "clear");
-      setQuery(next.query);
-      if (next.query === null) Keyboard.dismiss();
-    },
-  };
-}
+export { usePlaylistPickerSearch };
 
 type Search = ReturnType<typeof usePlaylistPickerSearch>;
 
-/** Search replaces the heading in the same line; the subject stays below it. */
+/** Search replaces the heading in the same line. */
 export function PlaylistPickerHeading({ search }: { search: Search }) {
   const { strings } = useLocalisation();
   const [accent, secondary] = useThemeColor(["accent", "secondary"]);
@@ -64,6 +22,7 @@ export function PlaylistPickerHeading({ search }: { search: Search }) {
       {search.searching ? (
         <TextInput
           autoFocus
+          disableFullscreenUI
           value={search.query ?? ""}
           onChangeText={search.setQuery}
           placeholder={strings.library.find.playlists}
