@@ -1,6 +1,7 @@
 import {
   IconArrowForwardUp,
   IconArrowsShuffle,
+  IconCalendarEvent,
   IconCircleCheck,
   IconCrop,
   IconDeviceFloppy,
@@ -78,6 +79,7 @@ export const ACTION_ICONS: { readonly [A in MenuAction]: ActionIcon } = {
   magicQueue: IconSparkles,
   addToPlaylist: IconPlaylistAdd,
   addToShazam: IconPlaylistAdd,
+  releaseDate: IconCalendarEvent,
   favorite: IconStar,
   unfavorite: IconStarOff,
   removeFromPlaylist: IconPlaylistX,

@@ -1,4 +1,4 @@
-import { saveReleaseDate } from "./db/releaseDates";
+import { saveReleaseDate, saveTypedReleaseDate } from "./db/releaseDates";
 import { pendingStreamedGenres, keepStreamedGenre } from "./db/streamedGenres";
 import {
   readFollowShows,
@@ -936,6 +936,15 @@ export class LibraryStore extends Context.Service<
     readonly saveReleaseDate: (
       id: number,
       date: string,
+    ) => Effect.Effect<{ readonly path: string | null } | null, LibraryStoreError>;
+    /**
+     * Keeps a release date the owner typed as the song's, whatever it had (null clears it, so
+     * the lookup can find one again); the song's file (null for a missing song), for the date
+     * to replace the file's too (`typedReleaseTag`). Null when the song is gone.
+     */
+    readonly saveTypedReleaseDate: (
+      id: number,
+      date: string | null,
     ) => Effect.Effect<{ readonly path: string | null } | null, LibraryStoreError>;
     /** Every playlist by name, with its mosaic. */
     readonly listPlaylists: Effect.Effect<readonly PlaylistRow[], LibraryStoreError>;
@@ -1938,6 +1947,8 @@ const make = Effect.gen(function* () {
 
     saveReleaseDate: (id, date) =>
       attempt("save release date", () => saveReleaseDate(db, id, date)),
+    saveTypedReleaseDate: (id, date) =>
+      attempt("save typed release date", () => saveTypedReleaseDate(db, id, date)),
     listPlaylists: attempt("list playlists", () => selectPlaylists(db)),
 
     playlistsLastPlayed: attempt("read when playlists last played", () =>

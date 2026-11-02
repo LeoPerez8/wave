@@ -40,6 +40,22 @@ internal object OriginalDate {
   }
 
   /**
+   * Takes every original date out of [tag], under each name [read] knows, so a [write] after it
+   * leaves no other date behind (an ID3v2.3 `TXXX` day beside a new `TORY` year).
+   */
+  fun remove(tag: Tag) {
+    if (tag is WavTag) return tag.iD3Tag?.let(::remove) ?: Unit
+    for (key in listOf(FieldKey.ORIGINALRELEASEDATE, FieldKey.ORIGINAL_YEAR)) runCatching { tag.deleteField(key) }
+    val raw = when (tag) {
+      is FlacTag -> return remove(tag.vorbisCommentTag)
+      is VorbisCommentTag -> listOf(VORBIS, "ORIGINALYEAR")
+      is Mp4Tag -> listOf(MP4)
+      else -> emptyList()
+    }
+    for (id in raw) runCatching { tag.deleteField(id) }
+  }
+
+  /**
    * Sets [date] (`1985`, `1985-06` or `1985-06-21`) as [tag]'s original date, as far as its
    * format holds it; false for a tag with no field for it.
    */

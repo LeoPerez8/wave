@@ -20,6 +20,7 @@ export const orderPlaylistEntries = (
   entries: readonly PlaylistEntryRow[],
   sort: PlaylistSongSort,
   answers?: Readonly<Record<string, ReleaseAnswer>>,
+  typed?: Readonly<Record<string, string>>,
 ) =>
   sortPlaylistSongs(
     entries.map((entry) => ({
@@ -28,7 +29,7 @@ export const orderPlaylistEntries = (
       artist: entry.source === "library" ? entry.track.artist : entry.song.artists.join(", "),
       album: entry.source === "library" ? entry.track.album : (entry.song.album ?? ""),
       addedAt: entry.addedAt ?? 0,
-      releaseDate: releaseEntryDate(entry, answers),
+      releaseDate: releaseEntryDate(entry, answers, typed),
       ...(entry.source === "library"
         ? {
             year: entry.track.year,

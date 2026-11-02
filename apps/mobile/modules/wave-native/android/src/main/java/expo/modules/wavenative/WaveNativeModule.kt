@@ -487,6 +487,27 @@ class WaveNativeModule : Module() {
       }
     }
 
+    /**
+     * Puts a release [date] the owner typed into a song's original-date tag, replacing the one
+     * the file has, or takes it out ([date] null), with [SongTagWriter.replaceOriginalDate]:
+     * unlike `writeOriginalDate`, which keeps a date the file has, this is the owner's own
+     * correction. Resolves `{ originalDate }`: `tags`, `notWritten` (a format Wave doesn't write
+     * tags to) or `none` (nothing to take out). A failure resolves `{ failed }`.
+     */
+    AsyncFunction("replaceOriginalDate") { path: String, date: String? ->
+      val file = File(path)
+      val before = TagWriteFile.of(file)
+      try {
+        BackgroundThreads.during {
+          val report = SongTagWriter().replaceOriginalDate(file, date)
+          if (report.originalDate == TagDestination.TAGS) AndroidMediaScans.get(context).add(listOf(path))
+          mapOf("originalDate" to report.originalDate.id)
+        }
+      } catch (e: TagWriteStepException) {
+        mapOf("failed" to TagWriteFailure.of(e, before).toMap())
+      }
+    }
+
     /** Whether a launch theme was ever saved: Wave ran before on this phone's data. */
     Function("hasLaunchTheme") { LaunchThemeStore.isSaved(context) }
 
