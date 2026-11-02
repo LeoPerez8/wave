@@ -1,0 +1,6222 @@
+{
+  "at": "2026-11-02T19:59:44.107Z",
+  "recordings": [
+    {
+      "count": 21,
+      "recordings": [
+        {
+          "isrcs": [
+            "USWB10903606",
+            "USWB10002775"
+          ],
+          "first-release-date": "1989-03-20"
+        },
+        {
+          "isrcs": [
+            "USWB12403672"
+          ],
+          "first-release-date": "2024-08-09"
+        },
+        {
+          "isrcs": [
+            "USWB12100596"
+          ],
+          "first-release-date": "1989"
+        },
+        {
+          "isrcs": [
+            "GBQCP2500142"
+          ],
+          "first-release-date": "2025-09-04"
+        },
+        {
+          "isrcs": [
+            "USWB10700168"
+          ],
+          "first-release-date": "1989-03"
+        },
+        {
+          "isrcs": [
+            "USRH12102969",
+            "USWB11104119"
+          ],
+          "first-release-date": "1989-08-25"
+        },
+        {
+          "isrcs": [
+            "USWB11104117"
+          ],
+          "first-release-date": "1989-08-25"
+        },
+        {
+          "isrcs": [
+            "GBV951700756",
+            "GBSMU4059862"
+          ],
+          "first-release-date": "2017-08-16"
+        },
+        {
+          "isrcs": [
+            "GBCBR1700029"
+          ],
+          "first-release-date": "2017-09-15"
+        },
+        {
+          "isrcs": [
+            "USSM10107865"
+          ],
+          "first-release-date": "2001-10-15"
+        },
+        {
+          "isrcs": [
+            "GBUM71505902"
+          ],
+          "first-release-date": "2015-11-06"
+        },
+        {
+          "isrcs": [
+            "GBBQY0002025"
+          ],
+          "first-release-date": "1995"
+        },
+        {
+          "isrcs": [
+            "USWB19903843"
+          ],
+          "first-release-date": "1990-11-12"
+        },
+        {
+          "isrcs": [
+            "GBUM71802773"
+          ],
+          "first-release-date": "2018-11-09"
+        },
+        {
+          "isrcs": [
+            "GBAYE0601566"
+          ],
+          "first-release-date": "2006-11-17"
+        },
+        {
+          "isrcs": [
+            "USSM18200001",
+            "USSM19902991",
+            "USSM18200612"
+          ],
+          "first-release-date": "1982-11-30"
+        },
+        {
+          "isrcs": [
+            "USSM10800117"
+          ],
+          "first-release-date": "2008-02-08"
+        },
+        {
+          "isrcs": [
+            "GBUM72502649",
+            "GBAYE9600592",
+            "GBAYE1100522"
+          ],
+          "first-release-date": "1996-10-28"
+        },
+        {
+          "isrcs": [
+            "GBAYE0900596",
+            "GBAYE0000940",
+            "GBAYE6800011"
+          ],
+          "first-release-date": "1970-02-26"
+        },
+        {
+          "isrcs": [
+            "USSM10506999",
+            "USSM10800026"
+          ],
+          "first-release-date": "1982"
+        },
+        {
+          "isrcs": [
+            "USGF19942501"
+          ],
+          "first-release-date": "1991-09-10"
+        }
+      ]
+    },
+    {
+      "count": 24,
+      "recordings": [
+        {
+          "isrcs": [
+            "GBUM72004114"
+          ],
+          "first-release-date": "2020-09-20"
+        },
+        {
+          "isrcs": [
+            "USUG12001115"
+          ],
+          "first-release-date": "2019-11-29"
+        },
+        {
+          "isrcs": [
+            "USUG12004507"
+          ],
+          "first-release-date": "2020-12-04"
+        },
+        {
+          "isrcs": [
+            "GBUM71205813"
+          ],
+          "first-release-date": "2012-09-20"
+        },
+        {
+          "isrcs": [
+            "USUM70920999"
+          ],
+          "first-release-date": "2009-12-21"
+        },
+        {
+          "isrcs": [
+            "USUM70921009"
+          ],
+          "first-release-date": "2009-12-21"
+        },
+        {
+          "isrcs": [
+            "GBCEE0700025"
+          ],
+          "first-release-date": "2007-10-26"
+        },
+        {
+          "isrcs": [
+            "GBUM71504419"
+          ],
+          "first-release-date": "2015-11-13"
+        },
+        {
+          "isrcs": [
+            "GBCEE0300050",
+            "GBCEE9200029"
+          ],
+          "first-release-date": "1992-05-26"
+        },
+        {
+          "isrcs": [
+            "USUM70920998"
+          ],
+          "first-release-date": "2009-11-19"
+        },
+        {
+          "isrcs": [
+            "USUM70913713"
+          ],
+          "first-release-date": "2009-12-21"
+        },
+        {
+          "isrcs": [
+            "GBUM71805979"
+          ],
+          "first-release-date": "2018-10-19"
+        },
+        {
+          "isrcs": [
+            "USUM70995906"
+          ],
+          "first-release-date": "2009-10-30"
+        },
+        {
+          "isrcs": [
+            "GBCEG7900018",
+            "GBCEG0100046"
+          ],
+          "first-release-date": "1979-06-22"
+        },
+        {
+          "isrcs": [
+            "USUG12301431",
+            "USUG12301675"
+          ],
+          "first-release-date": "2023-03-03"
+        },
+        {
+          "isrcs": [
+            "USHR10421348",
+            "GBCEE0400076"
+          ],
+          "first-release-date": "2004-10-24"
+        },
+        {
+          "isrcs": [
+            "USUM71113789"
+          ],
+          "first-release-date": "2011-09-26"
+        },
+        {
+          "isrcs": [
+            "USUG12104002"
+          ],
+          "first-release-date": "1991-09-24"
+        },
+        {
+          "isrcs": [
+            "USGF19610505"
+          ],
+          "first-release-date": "1991-09-24"
+        },
+        {
+          "isrcs": [
+            "USUM70918596",
+            "USUM70904367",
+            "USUM70903859"
+          ],
+          "first-release-date": "2009-10-26"
+        },
+        {
+          "isrcs": [
+            "USUM70911081"
+          ],
+          "first-release-date": "2009-11-18"
+        },
+        {
+          "isrcs": [
+            "USIR10400870"
+          ],
+          "first-release-date": "2004-11-23"
+        },
+        {
+          "isrcs": [
+            "GBCEE7500015",
+            "GBCEE0100112",
+            "GBCEE0900148",
+            "GBCEE9300005",
+            "GBCEE9800022",
+            "GBCEE0500364",
+            "GBUM71029604"
+          ],
+          "first-release-date": "1975-11-21"
+        },
+        {
+          "isrcs": [
+            "USUG11904206"
+          ],
+          "first-release-date": "2019-11-29"
+        }
+      ]
+    },
+    {
+      "count": 31,
+      "recordings": [
+        {
+          "isrcs": [
+            "USSM11004441"
+          ],
+          "first-release-date": "2010-11-26"
+        },
+        {
+          "isrcs": [
+            "GBAYE1800780"
+          ],
+          "first-release-date": "2018-12-07"
+        },
+        {
+          "isrcs": [
+            "SEUM71400841"
+          ],
+          "first-release-date": "2014-09-26"
+        },
+        {
+          "isrcs": [
+            "USUG12001402"
+          ],
+          "first-release-date": "2019-11-29"
+        },
+        {
+          "isrcs": [
+            "GBAYE1202183"
+          ],
+          "first-release-date": "2012-11-19"
+        },
+        {
+          "isrcs": [
+            "USCJY1831958"
+          ],
+          "first-release-date": "2018-12-13"
+        },
+        {
+          "isrcs": [
+            "USSM10804556"
+          ],
+          "first-release-date": "2008-11-12"
+        },
+        {
+          "isrcs": [
+            "GBAYE0301688"
+          ],
+          "first-release-date": "2003-11-01"
+        },
+        {
+          "isrcs": [
+            "USUG12306677"
+          ],
+          "first-release-date": "2023-10-27"
+        },
+        {
+          "isrcs": [
+            "SEAYD7601020"
+          ],
+          "first-release-date": "2023-12-01"
+        },
+        {
+          "isrcs": [
+            "USWB11001110",
+            "USWB11506532"
+          ],
+          "first-release-date": "2011-08-12"
+        },
+        {
+          "isrcs": [
+            "USWB11001082",
+            "USWB11506528"
+          ],
+          "first-release-date": "1999"
+        },
+        {
+          "isrcs": [
+            "SEA017600030",
+            "SEAYD7601020",
+            "USAT20302166",
+            "SEUV71000390",
+            "USAT20903514"
+          ],
+          "first-release-date": "1976-08-15"
+        },
+        {
+          "isrcs": [
+            "GBAYE9300465"
+          ],
+          "first-release-date": "1994-06-01"
+        },
+        {
+          "isrcs": [
+            "USWB11506531",
+            "USWB10303001"
+          ],
+          "first-release-date": "1985"
+        },
+        {
+          "isrcs": [
+            "DEUM71724939"
+          ],
+          "first-release-date": "2019-05-17"
+        },
+        {
+          "isrcs": [
+            "DEUM71723164"
+          ],
+          "first-release-date": "2017-09-29"
+        },
+        {
+          "isrcs": [
+            "USWB11802010"
+          ],
+          "first-release-date": "2018-10-18"
+        },
+        {
+          "isrcs": [
+            "DEUM71721371"
+          ],
+          "first-release-date": "2019-05-17"
+        },
+        {
+          "isrcs": [
+            "DEUM71724939"
+          ],
+          "first-release-date": "2017-12-01"
+        },
+        {
+          "isrcs": [
+            "DEUM71721371"
+          ],
+          "first-release-date": "2018-05-18"
+        },
+        {
+          "isrcs": [
+            "DEUM71721371"
+          ],
+          "first-release-date": "2017-10-06"
+        },
+        {
+          "isrcs": [
+            "USRH11600711",
+            "USRH11502698"
+          ],
+          "first-release-date": "2015-08-26"
+        },
+        {
+          "isrcs": [
+            "USCJY1431349"
+          ],
+          "first-release-date": "2014-08-18"
+        },
+        {
+          "isrcs": [
+            "GBAYE9200070"
+          ],
+          "first-release-date": "1992-09-21"
+        },
+        {
+          "isrcs": [
+            "GBAYE9200070"
+          ],
+          "first-release-date": "2017"
+        },
+        {
+          "isrcs": [
+            "GBAYE0000267"
+          ],
+          "first-release-date": "2017"
+        },
+        {
+          "isrcs": [
+            "USLIC0600482",
+            "GBAYE1600170",
+            "GBAYE0000267",
+            "USNO11400531"
+          ],
+          "first-release-date": "2000-06-26"
+        },
+        {
+          "isrcs": [
+            "USWB19901214"
+          ],
+          "first-release-date": "2003-02-26"
+        },
+        {
+          "isrcs": [
+            "USWB19901214"
+          ],
+          "first-release-date": "2020"
+        },
+        {
+          "isrcs": [
+            "USWB11506571",
+            "USWB11001072",
+            "USWB19901214",
+            "USWB10808467",
+            "USWB10403931",
+            "USRH11600696",
+            "USWB11001328",
+            "USWB11202727",
+            "USWB11506474"
+          ],
+          "first-release-date": "1984"
+        }
+      ]
+    },
+    {
+      "count": 21,
+      "recordings": [
+        {
+          "isrcs": [
+            "USJI10500609"
+          ],
+          "first-release-date": "2005-11-22"
+        },
+        {
+          "isrcs": [
+            "USRE10400528"
+          ],
+          "first-release-date": "2004-06-08"
+        },
+        {
+          "isrcs": [
+            "USWB22400031"
+          ],
+          "first-release-date": "2024-09-20"
+        },
+        {
+          "isrcs": [
+            "USRC12000459"
+          ],
+          "first-release-date": "2020-01-31"
+        },
+        {
+          "isrcs": [
+            "USRH12000102"
+          ],
+          "first-release-date": "2020-10-16"
+        },
+        {
+          "isrcs": [
+            "USRH11801916",
+            "USEE19900349"
+          ],
+          "first-release-date": "1980-11-07"
+        },
+        {
+          "isrcs": [
+            "USRH11801904",
+            "USEE19900349"
+          ],
+          "first-release-date": "2000-11-14"
+        },
+        {
+          "isrcs": [
+            "USWB10101072"
+          ],
+          "first-release-date": "1980-12-08"
+        },
+        {
+          "isrcs": [
+            "USJI10400036"
+          ],
+          "first-release-date": "2004-01-01"
+        },
+        {
+          "isrcs": [
+            "USRH11800053"
+          ],
+          "first-release-date": "2023-07-20"
+        },
+        {
+          "isrcs": [
+            "USRH11703166",
+            "USRH11703356"
+          ],
+          "first-release-date": "2017-11-24"
+        },
+        {
+          "isrcs": [
+            "USWB11301123",
+            "USWB10400059"
+          ],
+          "first-release-date": "2004-03-22"
+        },
+        {
+          "isrcs": [
+            "USRE19700406"
+          ],
+          "first-release-date": "1997-08-19"
+        },
+        {
+          "isrcs": [
+            "USRE11000847"
+          ],
+          "first-release-date": "2013-01-25"
+        },
+        {
+          "isrcs": [
+            "USWB11203112"
+          ],
+          "first-release-date": "2013-01-25"
+        },
+        {
+          "isrcs": [
+            "USRH11800053"
+          ],
+          "first-release-date": "2023-09-08"
+        },
+        {
+          "isrcs": [
+            "USWWW0202466"
+          ],
+          "first-release-date": "1976-12-08"
+        },
+        {
+          "isrcs": [
+            "USWWW0202466"
+          ],
+          "first-release-date": "2020-07-15"
+        },
+        {
+          "isrcs": [
+            "USEE11300353",
+            "USEE11300195",
+            "USEE19900323"
+          ],
+          "first-release-date": "1976-12-08"
+        },
+        {
+          "isrcs": [
+            "USJ110301005",
+            "USJI10301005",
+            "USJI10900633"
+          ],
+          "first-release-date": "2003-11-13"
+        },
+        {
+          "isrcs": [
+            "USWB22600016",
+            "USRH11802580",
+            "USWB10101368",
+            "USWB11301111",
+            "USWB10400046",
+            "USWB10202603",
+            "USWB19900178"
+          ],
+          "first-release-date": "1977-02-04"
+        }
+      ]
+    },
+    {
+      "count": 20,
+      "recordings": [
+        {
+          "isrcs": [
+            "USQX91902782"
+          ],
+          "first-release-date": "2019-11-13"
+        },
+        {
+          "isrcs": [
+            "USQX92505612"
+          ],
+          "first-release-date": "2025-10-22"
+        },
+        {
+          "isrcs": [
+            "BREMI8900064"
+          ],
+          "first-release-date": "1989-10-26"
+        },
+        {
+          "isrcs": [
+            "USSM19916781"
+          ],
+          "first-release-date": "1990-06-19"
+        },
+        {
+          "isrcs": [
+            "USUM71416305"
+          ],
+          "first-release-date": "2014-11-24"
+        },
+        {
+          "isrcs": [
+            "USSD11100358"
+          ],
+          "first-release-date": "2011-12-05"
+        },
+        {
+          "isrcs": [
+            "BRUM71800220"
+          ],
+          "first-release-date": "2021-03-17"
+        },
+        {
+          "isrcs": [
+            "BRSME2102549",
+            "USRE10500090"
+          ],
+          "first-release-date": "2004-12-07"
+        },
+        {
+          "isrcs": [
+            "BRWMB1100599"
+          ],
+          "first-release-date": "2012-01-24"
+        },
+        {
+          "isrcs": [
+            "BRSME8900064"
+          ],
+          "first-release-date": "1998"
+        },
+        {
+          "isrcs": [
+            "US83Z2568940"
+          ],
+          "first-release-date": "2026-05-23"
+        },
+        {
+          "isrcs": [
+            "BRSME8900064"
+          ],
+          "first-release-date": "1989"
+        },
+        {
+          "isrcs": [
+            "BRPGD9800678"
+          ],
+          "first-release-date": "1998"
+        },
+        {
+          "isrcs": [
+            "BRPAD7200003",
+            "BRMCA7200186"
+          ],
+          "first-release-date": "1972"
+        },
+        {
+          "isrcs": [
+            "BRPGD7100036"
+          ],
+          "first-release-date": "1984"
+        },
+        {
+          "isrcs": [
+            "BRUM70801491",
+            "BRPGD7100036"
+          ],
+          "first-release-date": "1971"
+        },
+        {
+          "isrcs": [
+            "BRPGD9800678"
+          ],
+          "first-release-date": "2006-05-22"
+        },
+        {
+          "isrcs": [
+            "USIR10211559"
+          ],
+          "first-release-date": "2002-10-22"
+        },
+        {
+          "isrcs": [
+            "BRJ9B0500021",
+            "USPR39400714",
+            "USPR37400056",
+            "BRPGD7400001"
+          ],
+          "first-release-date": "1974"
+        },
+        {
+          "isrcs": [
+            "USSM10600677"
+          ],
+          "first-release-date": "2005-11-28"
+        }
+      ]
+    },
+    {
+      "count": 8,
+      "recordings": [
+        {
+          "isrcs": [
+            "BRWMB9705419"
+          ],
+          "first-release-date": "2006"
+        },
+        {
+          "isrcs": [
+            "BRWMB2000923"
+          ],
+          "first-release-date": "1986"
+        },
+        {
+          "isrcs": [
+            "BRRGE1912249"
+          ],
+          "first-release-date": "2019-12-18"
+        },
+        {
+          "isrcs": [
+            "BRDEP2200081"
+          ],
+          "first-release-date": "2022-04-08"
+        },
+        {
+          "isrcs": [
+            "BRDEP2300056"
+          ],
+          "first-release-date": "2023-06-02"
+        },
+        {
+          "isrcs": [
+            "BRUM71601506"
+          ],
+          "first-release-date": "2016-11-11"
+        },
+        {
+          "isrcs": [
+            "BREMI8600025"
+          ],
+          "first-release-date": "1986"
+        },
+        {
+          "isrcs": [
+            "BREMI8600025"
+          ],
+          "first-release-date": "1986-07"
+        }
+      ]
+    },
+    {
+      "count": 4,
+      "recordings": [
+        {
+          "isrcs": [
+            "BRMCA6300083"
+          ],
+          "first-release-date": "1963"
+        },
+        {
+          "isrcs": [
+            "BRBMG4700002"
+          ],
+          "first-release-date": "2010"
+        },
+        {
+          "isrcs": [
+            "BX8IM1900002"
+          ],
+          "first-release-date": "2019-05-31"
+        },
+        {
+          "isrcs": [
+            "BRWMB0000913"
+          ],
+          "first-release-date": "1977"
+        }
+      ]
+    },
+    {
+      "count": 4,
+      "recordings": [
+        {
+          "isrcs": [
+            "BRBMG9402164"
+          ],
+          "first-release-date": "1994"
+        },
+        {
+          "isrcs": [
+            "BRWNV2200185"
+          ],
+          "first-release-date": "2022-12-09"
+        },
+        {
+          "isrcs": [
+            "USWL12200105"
+          ],
+          "first-release-date": "2022-02-17"
+        },
+        {
+          "isrcs": [
+            "USWL12100576"
+          ],
+          "first-release-date": "2021-11-11"
+        }
+      ]
+    }
+  ],
+  "results": [
+    {
+      "title": "Wonderwall",
+      "artist": "Oasis",
+      "brazilian": false,
+      "response": {
+        "data": [
+          {
+            "title": "Wonderwall (Live from Dublin, 16 August '25)",
+            "artist": {
+              "name": "Oasis"
+            },
+            "isrc": "GBQCP2500142",
+            "album": {
+              "id": 814983821
+            }
+          },
+          {
+            "title": "Wonderwall (Live at Wembley Stadium, 2000)",
+            "artist": {
+              "name": "Oasis"
+            },
+            "isrc": "GBBQY0002025",
+            "album": {
+              "id": 1444261
+            }
+          },
+          {
+            "title": "Wonderwall (Oasis)",
+            "artist": {
+              "name": "The Fourth Floor"
+            },
+            "isrc": "QZZ7P2442575",
+            "album": {
+              "id": 677118431
+            }
+          },
+          {
+            "title": "Wonderwall (in the style of Oasis)",
+            "artist": {
+              "name": "Pop Music Workshop"
+            },
+            "isrc": "BGA261636518",
+            "album": {
+              "id": 14052486
+            }
+          },
+          {
+            "title": "Wonderwall (Karaoke Version Originally Performed by Oasis)",
+            "artist": {
+              "name": "Singer's Best"
+            },
+            "isrc": "AUXN22475189",
+            "album": {
+              "id": 610593542
+            }
+          },
+          {
+            "title": "Wonderwall (Oasis Acoustic Cover)",
+            "artist": {
+              "name": "Last Day Of Summer"
+            },
+            "isrc": "QM6N21848000",
+            "album": {
+              "id": 73188232
+            }
+          },
+          {
+            "title": "Wonderwall (Originally Performed By Oasis)",
+            "artist": {
+              "name": "The Piano Man"
+            },
+            "isrc": "DEHK91373215",
+            "album": {
+              "id": 6800255
+            }
+          },
+          {
+            "title": "Oasis by Wonderwall",
+            "artist": {
+              "name": "Sledding With Tigers"
+            },
+            "isrc": "TCABW1428407",
+            "album": {
+              "id": 551413852
+            }
+          },
+          {
+            "title": "Wonderwall (Backing Track with No Guitars) [In the Style of Oasis]",
+            "artist": {
+              "name": "Zoom Entertainments Limited"
+            },
+            "isrc": "GBG7W1473727",
+            "album": {
+              "id": 8745045
+            }
+          },
+          {
+            "title": "Wonderwall",
+            "artist": {
+              "name": "Osis"
+            },
+            "isrc": "NL4NL2165296",
+            "album": {
+              "id": 271198702
+            }
+          }
+        ]
+      },
+      "candidates": [
+        {
+          "isrc": "GBQCP2500142",
+          "albumId": 814983821
+        },
+        {
+          "isrc": "GBBQY0002025",
+          "albumId": 1444261
+        }
+      ],
+      "answer": {
+        "date": "1995",
+        "source": "first-release",
+        "retryAt": null
+      }
+    },
+    {
+      "title": "Hey Jude",
+      "artist": "The Beatles",
+      "brazilian": false,
+      "response": {
+        "data": [
+          {
+            "title": "Hey Jude",
+            "artist": {
+              "name": "The Beatles"
+            },
+            "isrc": "GBAYE0601566",
+            "album": {
+              "id": 13367057
+            }
+          },
+          {
+            "title": "Hey Jude (Remastered 2015)",
+            "artist": {
+              "name": "The Beatles"
+            },
+            "isrc": "GBUM71505902",
+            "album": {
+              "id": 12047956
+            }
+          },
+          {
+            "title": "Hey Jude (Remastered 2009)",
+            "artist": {
+              "name": "The Beatles"
+            },
+            "isrc": "GBAYE0900596",
+            "album": {
+              "id": 12047930
+            }
+          },
+          {
+            "title": "Hey Jude (live)",
+            "artist": {
+              "name": "The Beatles Revival Band"
+            },
+            "isrc": "DELM41903898",
+            "album": {
+              "id": 342241607
+            }
+          },
+          {
+            "title": "Hey Jude",
+            "artist": {
+              "name": "London Symphony Orchestra"
+            },
+            "isrc": "ES7930903593",
+            "album": {
+              "id": 737924
+            }
+          },
+          {
+            "title": "Hey Jude (Take 2)",
+            "artist": {
+              "name": "The Beatles"
+            },
+            "isrc": "GBAYE1100522",
+            "album": {
+              "id": 12779758
+            }
+          },
+          {
+            "title": "Hey Jude (Take 1)",
+            "artist": {
+              "name": "The Beatles"
+            },
+            "isrc": "GBUM71802773",
+            "album": {
+              "id": 77649352
+            }
+          },
+          {
+            "title": "Hey Jude (Take 2 - Remastered)",
+            "artist": {
+              "name": "The Beatles"
+            },
+            "isrc": "GBUM72502649",
+            "album": {
+              "id": 860363782
+            }
+          },
+          {
+            "title": "Hey Jude",
+            "artist": {
+              "name": "The Beatles Complete On Ukulele"
+            },
+            "isrc": "UKXN22073074",
+            "album": {
+              "id": 162424992
+            }
+          },
+          {
+            "title": "Hey Jude (Live)",
+            "artist": {
+              "name": "The Beatles Revival Band"
+            },
+            "isrc": "DEHI90800143",
+            "album": {
+              "id": 910741351
+            }
+          }
+        ]
+      },
+      "candidates": [
+        {
+          "isrc": "GBAYE0601566",
+          "albumId": 13367057
+        },
+        {
+          "isrc": "GBUM71505902",
+          "albumId": 12047956
+        },
+        {
+          "isrc": "GBAYE0900596",
+          "albumId": 12047930
+        },
+        {
+          "isrc": "GBAYE1100522",
+          "albumId": 12779758
+        },
+        {
+          "isrc": "GBUM71802773",
+          "albumId": 77649352
+        }
+      ],
+      "answer": {
+        "date": "1970-02-26",
+        "source": "first-release",
+        "retryAt": null
+      }
+    },
+    {
+      "title": "Billie Jean",
+      "artist": "Michael Jackson",
+      "brazilian": false,
+      "response": {
+        "data": [
+          {
+            "title": "Billie Jean",
+            "artist": {
+              "name": "Michael Jackson"
+            },
+            "isrc": "USSM19902991",
+            "album": {
+              "id": 423368
+            }
+          },
+          {
+            "title": "Billie Jean (Long Version)",
+            "artist": {
+              "name": "Michael Jackson"
+            },
+            "isrc": "USSM10800026",
+            "album": {
+              "id": 375513297
+            }
+          },
+          {
+            "title": "Billie Jean (1981 Home Demo)",
+            "artist": {
+              "name": "Michael Jackson"
+            },
+            "isrc": "USSM10107865",
+            "album": {
+              "id": 72819
+            }
+          },
+          {
+            "title": "Billie Jean (Live 1987 FM Broadcast)",
+            "artist": {
+              "name": "Michael Jackson"
+            },
+            "isrc": "GBSMU3962896",
+            "album": {
+              "id": 46375822
+            }
+          },
+          {
+            "title": "Billie Jean (Underground Mix)",
+            "artist": {
+              "name": "Michael Jackson"
+            },
+            "isrc": "USSM10800117",
+            "album": {
+              "id": 72819
+            }
+          },
+          {
+            "title": "Billie Jean (live)",
+            "artist": {
+              "name": "Michael Jackson"
+            },
+            "isrc": "FXR022502468",
+            "album": {
+              "id": 797404671
+            }
+          },
+          {
+            "title": "Billie Jean (Michael Jackson Cover)",
+            "artist": {
+              "name": "Calum Graham"
+            },
+            "isrc": "CAC9I1601008",
+            "album": {
+              "id": 12435268
+            }
+          },
+          {
+            "title": "Billie Jean (Live)",
+            "artist": {
+              "name": "Michael Jackson"
+            },
+            "isrc": "GXFHP2599451",
+            "album": {
+              "id": 830686201
+            }
+          },
+          {
+            "title": "Billie Jean (Michael Jackson Cover)",
+            "artist": {
+              "name": "Pop & Rock Covers Club"
+            },
+            "isrc": "QM4TW2487381",
+            "album": {
+              "id": 650316581
+            }
+          },
+          {
+            "title": "Immortal Megamix: Can You Feel It / Don't Stop 'Til You Get Enough / Billie Jean/Black or White (Immortal Version)",
+            "artist": {
+              "name": "Michael Jackson"
+            },
+            "isrc": "USSM11105976",
+            "album": {
+              "id": 1338085
+            }
+          }
+        ]
+      },
+      "candidates": [
+        {
+          "isrc": "USSM19902991",
+          "albumId": 423368
+        },
+        {
+          "isrc": "USSM10800026",
+          "albumId": 375513297
+        },
+        {
+          "isrc": "USSM10107865",
+          "albumId": 72819
+        },
+        {
+          "isrc": "GBSMU3962896",
+          "albumId": 46375822
+        },
+        {
+          "isrc": "USSM10800117",
+          "albumId": 72819
+        },
+        {
+          "isrc": "FXR022502468",
+          "albumId": 797404671
+        },
+        {
+          "isrc": "GXFHP2599451",
+          "albumId": 830686201
+        }
+      ],
+      "answer": {
+        "date": "1982",
+        "source": "first-release",
+        "retryAt": null
+      }
+    },
+    {
+      "title": "Like a Prayer",
+      "artist": "Madonna",
+      "brazilian": false,
+      "response": {
+        "data": [
+          {
+            "title": "Like a Prayer",
+            "artist": {
+              "name": "Madonna"
+            },
+            "isrc": "USWB10903606",
+            "album": {
+              "id": 912174791
+            }
+          },
+          {
+            "title": "Like a Prayer",
+            "artist": {
+              "name": "Madonna"
+            },
+            "isrc": "USWB10002775",
+            "album": {
+              "id": 80554
+            }
+          },
+          {
+            "title": "Like a Prayer (Battle Royale Mix from “Deadpool & Wolverine”)",
+            "artist": {
+              "name": "Madonna"
+            },
+            "isrc": "USWB12403672",
+            "album": {
+              "id": 627412381
+            }
+          },
+          {
+            "title": "Like a Prayer",
+            "artist": {
+              "name": "Madonna"
+            },
+            "isrc": "USWB19903843",
+            "album": {
+              "id": 86371
+            }
+          },
+          {
+            "title": "Like A Prayer (7\" Remix Edit) (2022 Remaster)",
+            "artist": {
+              "name": "Madonna"
+            },
+            "isrc": "USRH12102969",
+            "album": {
+              "id": 343865387
+            }
+          },
+          {
+            "title": "Like a Prayer (7\" Version)",
+            "artist": {
+              "name": "Madonna"
+            },
+            "isrc": "USWB12100596",
+            "album": {
+              "id": 211542032
+            }
+          },
+          {
+            "title": "Like a Prayer (12\" Dance Mix)",
+            "artist": {
+              "name": "Madonna"
+            },
+            "isrc": "USWB11104117",
+            "album": {
+              "id": 90679962
+            }
+          },
+          {
+            "title": "Like A Prayer (Live) (Bonus Track)",
+            "artist": {
+              "name": "Madonna"
+            },
+            "isrc": "GBCBR1700029",
+            "album": {
+              "id": 1060151932
+            }
+          },
+          {
+            "title": "Like A Prayer (Live 1990 FM Broadcast)",
+            "artist": {
+              "name": "Madonna"
+            },
+            "isrc": "GBSMU4059862",
+            "album": {
+              "id": 48025682
+            }
+          },
+          {
+            "title": "Like a Prayer (12\" Extended Remix)",
+            "artist": {
+              "name": "Madonna"
+            },
+            "isrc": "USWB10700168",
+            "album": {
+              "id": 211542032
+            }
+          }
+        ]
+      },
+      "candidates": [
+        {
+          "isrc": "USWB10903606",
+          "albumId": 912174791
+        },
+        {
+          "isrc": "USWB10002775",
+          "albumId": 80554
+        },
+        {
+          "isrc": "USWB12403672",
+          "albumId": 627412381
+        },
+        {
+          "isrc": "USWB19903843",
+          "albumId": 86371
+        },
+        {
+          "isrc": "USRH12102969",
+          "albumId": 343865387
+        },
+        {
+          "isrc": "USWB12100596",
+          "albumId": 211542032
+        },
+        {
+          "isrc": "USWB11104117",
+          "albumId": 90679962
+        },
+        {
+          "isrc": "GBCBR1700029",
+          "albumId": 1060151932
+        },
+        {
+          "isrc": "GBSMU4059862",
+          "albumId": 48025682
+        },
+        {
+          "isrc": "USWB10700168",
+          "albumId": 211542032
+        }
+      ],
+      "answer": {
+        "date": "1989",
+        "source": "first-release",
+        "retryAt": null
+      }
+    },
+    {
+      "title": "Smells Like Teen Spirit",
+      "artist": "Nirvana",
+      "brazilian": false,
+      "response": {
+        "data": [
+          {
+            "title": "Smells Like Teen Spirit",
+            "artist": {
+              "name": "Nirvana"
+            },
+            "isrc": "USGF19942501",
+            "album": {
+              "id": 1262014
+            }
+          },
+          {
+            "title": "Smells Like Teen Spirit (Live In Del Mar, California/1991)",
+            "artist": {
+              "name": "Nirvana"
+            },
+            "isrc": "USGF19610505",
+            "album": {
+              "id": 270615252
+            }
+          },
+          {
+            "title": "Smells Like Teen Spirit (1992/Live at Reading)",
+            "artist": {
+              "name": "Nirvana"
+            },
+            "isrc": "USUM70995906",
+            "album": {
+              "id": 423223
+            }
+          },
+          {
+            "title": "Smells Like Teen Spirit (Live At The Paramount/1991)",
+            "artist": {
+              "name": "Nirvana"
+            },
+            "isrc": "USUM71113789",
+            "album": {
+              "id": 92820412
+            }
+          },
+          {
+            "title": "Smells Like Teen Spirit (Live In Del Mar, California/1991)",
+            "artist": {
+              "name": "Nirvana"
+            },
+            "isrc": "USGF19610505",
+            "album": {
+              "id": 119284
+            }
+          },
+          {
+            "title": "Smells Like Teen Spirit (Rehearsal Demo)",
+            "artist": {
+              "name": "Nirvana"
+            },
+            "isrc": "USIR10400870",
+            "album": {
+              "id": 124899
+            }
+          },
+          {
+            "title": "Smells Like Teen Spirit (Live In Los Angeles, Great Western Forum - December 30, 1993)",
+            "artist": {
+              "name": "Nirvana"
+            },
+            "isrc": "USUM72303634",
+            "album": {
+              "id": 502510791
+            }
+          },
+          {
+            "title": "Smells Like Teen Spirit (Live In Amsterdam, Netherlands/1991)",
+            "artist": {
+              "name": "Nirvana"
+            },
+            "isrc": "USUG12104002",
+            "album": {
+              "id": 270615252
+            }
+          },
+          {
+            "title": "Smells Like Teen Spirit (Live)",
+            "artist": {
+              "name": "Nirvana"
+            },
+            "isrc": "GBKYA2203404",
+            "album": {
+              "id": 364325307
+            }
+          },
+          {
+            "title": "Smells Like Teen Spirit (nirvana)",
+            "artist": {
+              "name": "Scott D. Davis"
+            },
+            "isrc": "USCGH0613853",
+            "album": {
+              "id": 793652
+            }
+          }
+        ]
+      },
+      "candidates": [
+        {
+          "isrc": "USGF19942501",
+          "albumId": 1262014
+        },
+        {
+          "isrc": "USGF19610505",
+          "albumId": 270615252
+        },
+        {
+          "isrc": "USUM70995906",
+          "albumId": 423223
+        },
+        {
+          "isrc": "USUM71113789",
+          "albumId": 92820412
+        },
+        {
+          "isrc": "USGF19610505",
+          "albumId": 119284
+        },
+        {
+          "isrc": "USIR10400870",
+          "albumId": 124899
+        },
+        {
+          "isrc": "USUG12104002",
+          "albumId": 270615252
+        },
+        {
+          "isrc": "GBKYA2203404",
+          "albumId": 364325307
+        }
+      ],
+      "answer": {
+        "date": "1991-09-10",
+        "source": "first-release",
+        "retryAt": null
+      }
+    },
+    {
+      "title": "Bohemian Rhapsody",
+      "artist": "Queen",
+      "brazilian": false,
+      "response": {
+        "data": [
+          {
+            "title": "Bohemian Rhapsody",
+            "artist": {
+              "name": "Queen"
+            },
+            "isrc": "GBUM71029604",
+            "album": {
+              "id": 1007321681
+            }
+          },
+          {
+            "title": "Bohemian Rhapsody - Queen",
+            "artist": {
+              "name": "Viva Vox"
+            },
+            "isrc": "RSA131500404",
+            "album": {
+              "id": 9918552
+            }
+          },
+          {
+            "title": "Bohemian Rhapsody (Live At Wembley Stadium / July 1986)",
+            "artist": {
+              "name": "Queen"
+            },
+            "isrc": "GBCEE0300050",
+            "album": {
+              "id": 1007460301
+            }
+          },
+          {
+            "title": "Bohemian Rhapsody (Live Aid)",
+            "artist": {
+              "name": "Queen"
+            },
+            "isrc": "GBUM71805979",
+            "album": {
+              "id": 1007321401
+            }
+          },
+          {
+            "title": "Bohemian Rhapsody (Live At Milton Keynes Bowl / June 1982)",
+            "artist": {
+              "name": "Queen"
+            },
+            "isrc": "GBCEE0400076",
+            "album": {
+              "id": 1007451941
+            }
+          },
+          {
+            "title": "Bohemian Rhapsody (Live)",
+            "artist": {
+              "name": "Queen"
+            },
+            "isrc": "GBCEE0700025",
+            "album": {
+              "id": 1007458461
+            }
+          },
+          {
+            "title": "Bohemian Rhapsody (Live)",
+            "artist": {
+              "name": "Queen"
+            },
+            "isrc": "GBUM71205813",
+            "album": {
+              "id": 1007461201
+            }
+          },
+          {
+            "title": "Bohemian Rhapsody (Live At Fire Fight Australia, ANZ Stadium, Sydney, Australia, 2020)",
+            "artist": {
+              "name": "Queen"
+            },
+            "isrc": "GBUM72004114",
+            "album": {
+              "id": 186080352
+            }
+          },
+          {
+            "title": "Bohemian Rhapsody (Live At The Hammersmith Odeon, London / 1975)",
+            "artist": {
+              "name": "Queen"
+            },
+            "isrc": "GBUM71504419",
+            "album": {
+              "id": 1007322181
+            }
+          },
+          {
+            "title": "Bohemian Rhapsody (Live, European Tour / 1979)",
+            "artist": {
+              "name": "Queen"
+            },
+            "isrc": "GBCEG0100046",
+            "album": {
+              "id": 1007459621
+            }
+          }
+        ]
+      },
+      "candidates": [
+        {
+          "isrc": "GBUM71029604",
+          "albumId": 1007321681
+        },
+        {
+          "isrc": "GBCEE0300050",
+          "albumId": 1007460301
+        },
+        {
+          "isrc": "GBUM71805979",
+          "albumId": 1007321401
+        },
+        {
+          "isrc": "GBCEE0400076",
+          "albumId": 1007451941
+        },
+        {
+          "isrc": "GBCEE0700025",
+          "albumId": 1007458461
+        },
+        {
+          "isrc": "GBUM71205813",
+          "albumId": 1007461201
+        },
+        {
+          "isrc": "GBUM72004114",
+          "albumId": 186080352
+        },
+        {
+          "isrc": "GBUM71504419",
+          "albumId": 1007322181
+        },
+        {
+          "isrc": "GBCEG0100046",
+          "albumId": 1007459621
+        }
+      ],
+      "answer": {
+        "date": "1975-11-21",
+        "source": "first-release",
+        "retryAt": null
+      }
+    },
+    {
+      "title": "Rolling in the Deep",
+      "artist": "Adele",
+      "brazilian": false,
+      "response": {
+        "data": [
+          {
+            "title": "Rolling In The Deep (Adele Drum & Bass Re-Mix Party Tribute)",
+            "artist": {
+              "name": "The Drum & Bass Remixers"
+            },
+            "isrc": "US6VQ1100138",
+            "album": {
+              "id": 927734
+            }
+          },
+          {
+            "title": "Rolling In The Deep",
+            "artist": {
+              "name": "Adele Pop Hits"
+            },
+            "isrc": "UKG8V1600025",
+            "album": {
+              "id": 56452342
+            }
+          },
+          {
+            "title": "Rolling In The Deep (Adele 808 Re-Mix Party Tribute)",
+            "artist": {
+              "name": "The 808 Remixers"
+            },
+            "isrc": "US6VQ1100114",
+            "album": {
+              "id": 926462
+            }
+          },
+          {
+            "title": "Adele Medley (Someone Like You / Hello / Set Fire to the Rain / Rolling in the Deep)",
+            "artist": {
+              "name": "Kevin Olusola"
+            },
+            "isrc": "USCGJ1608616",
+            "album": {
+              "id": 12598234
+            }
+          },
+          {
+            "title": "Rolling in the Deep (Originally performed by Adele)",
+            "artist": {
+              "name": "Liz Luna"
+            },
+            "isrc": "UKTUP2100026",
+            "album": {
+              "id": 265043682
+            }
+          },
+          {
+            "title": "Rolling In the Deep (Acoustic Tribute to Adele)",
+            "artist": {
+              "name": "Corey Gray"
+            },
+            "isrc": "TCABB1137734",
+            "album": {
+              "id": 124151142
+            }
+          },
+          {
+            "title": "Rolling in the deep (Karaoke)",
+            "artist": {
+              "name": "Adele's Karaoke Band"
+            },
+            "isrc": "ARG991011073",
+            "album": {
+              "id": 931108
+            }
+          },
+          {
+            "title": "Rolling in the Deep (Originally Performed By Adele)",
+            "artist": {
+              "name": "The Piano Man"
+            },
+            "isrc": "DEHK91373212",
+            "album": {
+              "id": 6800255
+            }
+          },
+          {
+            "title": "Rolling In The Deep (A Tribute To Adele)",
+            "artist": {
+              "name": "Hitmakers Unlimited"
+            },
+            "isrc": "USA371348257",
+            "album": {
+              "id": 1156189
+            }
+          },
+          {
+            "title": "Rolling in the Deep (Originally By Adele Karaoke / Instrumental)",
+            "artist": {
+              "name": "HOT 100"
+            },
+            "isrc": "USI4R1118862",
+            "album": {
+              "id": 6187045
+            }
+          }
+        ]
+      },
+      "candidates": [],
+      "answer": {
+        "date": null,
+        "source": "unknown",
+        "retryAt": 1796241584104
+      }
+    },
+    {
+      "title": "Bad Romance",
+      "artist": "Lady Gaga",
+      "brazilian": false,
+      "response": {
+        "data": [
+          {
+            "title": "Bad Romance",
+            "artist": {
+              "name": "Lady Gaga"
+            },
+            "isrc": "USUM70903859",
+            "album": {
+              "id": 423235
+            }
+          },
+          {
+            "title": "Bad Romance (Skrillex Remix)",
+            "artist": {
+              "name": "Lady Gaga"
+            },
+            "isrc": "USUM70921009",
+            "album": {
+              "id": 480420
+            }
+          },
+          {
+            "title": "Bad Romance (Bimbo Jones Radio Remix)",
+            "artist": {
+              "name": "Lady Gaga"
+            },
+            "isrc": "USUM70913713",
+            "album": {
+              "id": 480420
+            }
+          },
+          {
+            "title": "Bad Romance (Chew Fu H1N1 Fix)",
+            "artist": {
+              "name": "Lady Gaga"
+            },
+            "isrc": "USUM70920998",
+            "album": {
+              "id": 480420
+            }
+          },
+          {
+            "title": "Bad Romance (Kaskade Remix)",
+            "artist": {
+              "name": "Lady Gaga"
+            },
+            "isrc": "USUM70920999",
+            "album": {
+              "id": 480420
+            }
+          },
+          {
+            "title": "Bad Romance (Starsmith Remix)",
+            "artist": {
+              "name": "Lady Gaga"
+            },
+            "isrc": "USUM70911081",
+            "album": {
+              "id": 529209
+            }
+          },
+          {
+            "title": "Bad Romance (Lady Gaga)",
+            "artist": {
+              "name": "Dancetronix"
+            },
+            "isrc": "USQY50976566",
+            "album": {
+              "id": 561375
+            }
+          },
+          {
+            "title": "Bad Romance (Cover of Lady Gaga)",
+            "artist": {
+              "name": "Glee Cast"
+            },
+            "isrc": "USQX91000313",
+            "album": {
+              "id": 666563
+            }
+          },
+          {
+            "title": "Bad Romance (Cover of Lady Gaga)",
+            "artist": {
+              "name": "Glee Cast"
+            },
+            "isrc": "USQX91000313",
+            "album": {
+              "id": 666555
+            }
+          },
+          {
+            "title": "Lady Gaga Medley: Poker Face / Bad Romance / Monster / Just Dance / Paparazzi",
+            "artist": {
+              "name": "Beyond Unison"
+            },
+            "isrc": "USX9P1126860",
+            "album": {
+              "id": 7787583
+            }
+          }
+        ]
+      },
+      "candidates": [
+        {
+          "isrc": "USUM70903859",
+          "albumId": 423235
+        },
+        {
+          "isrc": "USUM70921009",
+          "albumId": 480420
+        },
+        {
+          "isrc": "USUM70913713",
+          "albumId": 480420
+        },
+        {
+          "isrc": "USUM70920998",
+          "albumId": 480420
+        },
+        {
+          "isrc": "USUM70920999",
+          "albumId": 480420
+        },
+        {
+          "isrc": "USUM70911081",
+          "albumId": 529209
+        }
+      ],
+      "answer": {
+        "date": "2009-10-26",
+        "source": "first-release",
+        "retryAt": null
+      }
+    },
+    {
+      "title": "Blinding Lights",
+      "artist": "The Weeknd",
+      "brazilian": false,
+      "response": {
+        "data": [
+          {
+            "title": "Blinding Lights",
+            "artist": {
+              "name": "The Weeknd"
+            },
+            "isrc": "USUG11904206",
+            "album": {
+              "id": 137217782
+            }
+          },
+          {
+            "title": "Blinding Lights The Weeknd",
+            "artist": {
+              "name": "Pancadão GD Som"
+            },
+            "isrc": "QM3DF2209090",
+            "album": {
+              "id": 441197957
+            }
+          },
+          {
+            "title": "Blinding lights The Weeknd (Piano arrangement)",
+            "artist": {
+              "name": "Piano Off"
+            },
+            "isrc": "QZES72407203",
+            "album": {
+              "id": 551576892
+            }
+          },
+          {
+            "title": "Blinding Lights (Remix)",
+            "artist": {
+              "name": "The Weeknd"
+            },
+            "isrc": "USUG12004507",
+            "album": {
+              "id": 190172832
+            }
+          },
+          {
+            "title": "Blinding Lights (Live)",
+            "artist": {
+              "name": "The Weeknd"
+            },
+            "isrc": "USUG12301431",
+            "album": {
+              "id": 411519667
+            }
+          },
+          {
+            "title": "Blinding Lights (Chromatics Remix)",
+            "artist": {
+              "name": "The Weeknd"
+            },
+            "isrc": "USUG12001115",
+            "album": {
+              "id": 172920142
+            }
+          },
+          {
+            "title": "Blinding Lights (Major Lazer Remix)",
+            "artist": {
+              "name": "The Weeknd"
+            },
+            "isrc": "USUG12001402",
+            "album": {
+              "id": 172920142
+            }
+          },
+          {
+            "title": "Blinding Lights (Original by The Weeknd)",
+            "artist": {
+              "name": "Piano Cover by Lily Morgan"
+            },
+            "isrc": "CH7812071410",
+            "album": {
+              "id": 187268082
+            }
+          },
+          {
+            "title": "Blinding Lights (The Weeknd Cover Mix)",
+            "artist": {
+              "name": "Alba"
+            },
+            "isrc": "FRX281966069",
+            "album": {
+              "id": 128964352
+            }
+          },
+          {
+            "title": "Blinding Lights (8-Bit The Weeknd Emulation)",
+            "artist": {
+              "name": "8-Bit Arcade"
+            },
+            "isrc": "AUXN22119845",
+            "album": {
+              "id": 199862662
+            }
+          }
+        ]
+      },
+      "candidates": [
+        {
+          "isrc": "USUG11904206",
+          "albumId": 137217782
+        },
+        {
+          "isrc": "USUG12004507",
+          "albumId": 190172832
+        },
+        {
+          "isrc": "USUG12301431",
+          "albumId": 411519667
+        },
+        {
+          "isrc": "USUG12001115",
+          "albumId": 172920142
+        },
+        {
+          "isrc": "USUG12001402",
+          "albumId": 172920142
+        }
+      ],
+      "answer": {
+        "date": "2019-11-29",
+        "source": "first-release",
+        "retryAt": null
+      }
+    },
+    {
+      "title": "Shake It Off",
+      "artist": "Taylor Swift",
+      "brazilian": false,
+      "response": {
+        "data": [
+          {
+            "title": "Shake It Off",
+            "artist": {
+              "name": "Taylor Swift"
+            },
+            "isrc": "USCJY1431349",
+            "album": {
+              "id": 9007781
+            }
+          },
+          {
+            "title": "Shake It Off (Taylor's Version)",
+            "artist": {
+              "name": "Taylor Swift"
+            },
+            "isrc": "USUG12306677",
+            "album": {
+              "id": 504180521
+            }
+          },
+          {
+            "title": "Shake It Off (Commentary)",
+            "artist": {
+              "name": "Taylor Swift"
+            },
+            "isrc": "USCJY1831958",
+            "album": {
+              "id": 81389512
+            }
+          },
+          {
+            "title": "Shake It Off",
+            "artist": {
+              "name": "We Love Taylor Swift"
+            },
+            "isrc": "UKG8V1600013",
+            "album": {
+              "id": 14093584
+            }
+          },
+          {
+            "title": "Shake It Off",
+            "artist": {
+              "name": "Tonight i'm Taylor Swift"
+            },
+            "isrc": "UKG8V1600020",
+            "album": {
+              "id": 14115808
+            }
+          },
+          {
+            "title": "Shake It Off (Karaoke Version Originally Performed by Taylor Swift)",
+            "artist": {
+              "name": "Singer's Best"
+            },
+            "isrc": "AUXN22475715",
+            "album": {
+              "id": 610595282
+            }
+          },
+          {
+            "title": "Shake It Off (Originally Performed by Taylor Swift)",
+            "artist": {
+              "name": "Sean Redmond"
+            },
+            "isrc": "QZGWW1944231",
+            "album": {
+              "id": 105489172
+            }
+          },
+          {
+            "title": "Taylor Swift - Shake It Off (DJ Wrekk Trap Mashup)",
+            "artist": {
+              "name": "DJ Wrekk"
+            },
+            "isrc": "GBLPF0048613",
+            "album": {
+              "id": 9810972
+            }
+          },
+          {
+            "title": "Shake It Off (Originally Performed by Taylor Swift) (Instrumental Version)",
+            "artist": {
+              "name": "Remix DJ"
+            },
+            "isrc": "USQY51769366",
+            "album": {
+              "id": 46668982
+            }
+          },
+          {
+            "title": "Shake It Off (Instrumental - originally by Taylor Swift)",
+            "artist": {
+              "name": "Music Legends"
+            },
+            "isrc": "USE830948794",
+            "album": {
+              "id": 9285936
+            }
+          }
+        ]
+      },
+      "candidates": [
+        {
+          "isrc": "USCJY1431349",
+          "albumId": 9007781
+        },
+        {
+          "isrc": "USUG12306677",
+          "albumId": 504180521
+        },
+        {
+          "isrc": "USCJY1831958",
+          "albumId": 81389512
+        }
+      ],
+      "answer": {
+        "date": "2014-08-18",
+        "source": "first-release",
+        "retryAt": null
+      }
+    },
+    {
+      "title": "Halo",
+      "artist": "Beyoncé",
+      "brazilian": false,
+      "response": {
+        "data": [
+          {
+            "title": "Halo",
+            "artist": {
+              "name": "Beyoncé"
+            },
+            "isrc": "USSM10804556",
+            "album": {
+              "id": 250046
+            }
+          },
+          {
+            "title": "Halo - Beyoncé (I Am... Sasha Fierce)(Instrumental)",
+            "artist": {
+              "name": "DJ ReDo"
+            },
+            "isrc": "USA371300917",
+            "album": {
+              "id": 1128944
+            }
+          },
+          {
+            "title": "Halo (Live)",
+            "artist": {
+              "name": "Beyoncé"
+            },
+            "isrc": "USSM11004441",
+            "album": {
+              "id": 692698
+            }
+          },
+          {
+            "title": "Halo (Acoustic)",
+            "artist": {
+              "name": "Madilyn"
+            },
+            "isrc": "GBDMT1600160",
+            "album": {
+              "id": 13389345
+            }
+          },
+          {
+            "title": "Halo (Beyoncé Cover)",
+            "artist": {
+              "name": "Nitrokill"
+            },
+            "isrc": "US7VG1211807",
+            "album": {
+              "id": 6529815
+            }
+          },
+          {
+            "title": "Young Forever",
+            "artist": {
+              "name": "JAY Z"
+            },
+            "isrc": "USJZ10900041",
+            "album": {
+              "id": 9178393
+            }
+          },
+          {
+            "title": "Save The Hero",
+            "artist": {
+              "name": "Beyoncé"
+            },
+            "isrc": "USSM10804761",
+            "album": {
+              "id": 9166079
+            }
+          },
+          {
+            "title": "Beyoncé - Halo",
+            "artist": {
+              "name": "Deborah Gonçalves"
+            },
+            "isrc": "PTUM71200042",
+            "album": {
+              "id": 1582252
+            }
+          },
+          {
+            "title": "Halo (Piano Version) [Originally Performed by Beyoncé]",
+            "artist": {
+              "name": "Piano Learning Tracks"
+            },
+            "isrc": "USE831560515",
+            "album": {
+              "id": 13051746
+            }
+          },
+          {
+            "title": "Halo (In the Style of Beyonce) [Karaoke Instrumental Version]",
+            "artist": {
+              "name": "All Hits Gold"
+            },
+            "isrc": "QMFME1338342",
+            "album": {
+              "id": 6751847
+            }
+          }
+        ]
+      },
+      "candidates": [
+        {
+          "isrc": "USSM10804556",
+          "albumId": 250046
+        },
+        {
+          "isrc": "USSM11004441",
+          "albumId": 692698
+        }
+      ],
+      "answer": {
+        "date": "2008-11-12",
+        "source": "first-release",
+        "retryAt": null
+      }
+    },
+    {
+      "title": "Yellow",
+      "artist": "Coldplay",
+      "brazilian": false,
+      "response": {
+        "data": [
+          {
+            "title": "Yellow",
+            "artist": {
+              "name": "Coldplay"
+            },
+            "isrc": "GBAYE0000267",
+            "album": {
+              "id": 301663
+            }
+          },
+          {
+            "title": "Yellow (Live in Buenos Aires)",
+            "artist": {
+              "name": "Coldplay"
+            },
+            "isrc": "GBAYE1800780",
+            "album": {
+              "id": 80900852
+            }
+          },
+          {
+            "title": "Yellow (Live)",
+            "artist": {
+              "name": "Coldplay"
+            },
+            "isrc": "GBAYE1202183",
+            "album": {
+              "id": 6082458
+            }
+          },
+          {
+            "title": "Yellow (Live in Sydney)",
+            "artist": {
+              "name": "Coldplay"
+            },
+            "isrc": "GBAYE0301688",
+            "album": {
+              "id": 299223
+            }
+          },
+          {
+            "title": "Yellow (Coldplay) [Fingerstyle]",
+            "artist": {
+              "name": "Daniel Padim"
+            },
+            "isrc": "QZFYZ1910333",
+            "album": {
+              "id": 101276912
+            }
+          },
+          {
+            "title": "Yellow (Coldplay)",
+            "artist": {
+              "name": "MelodiousTones"
+            },
+            "isrc": "QZFZ42137397",
+            "album": {
+              "id": 204827392
+            }
+          },
+          {
+            "title": "Yellow (Coldplay Cover)",
+            "artist": {
+              "name": "Dangee"
+            },
+            "isrc": "QZWFW2437776",
+            "album": {
+              "id": 774117041
+            }
+          },
+          {
+            "title": "Help Is Round the Corner",
+            "artist": {
+              "name": "Coldplay"
+            },
+            "isrc": "GBAYE0000412",
+            "album": {
+              "id": 303586
+            }
+          },
+          {
+            "title": "No More Keeping My Feet on the Ground",
+            "artist": {
+              "name": "Coldplay"
+            },
+            "isrc": "GBAYE9802297",
+            "album": {
+              "id": 303586
+            }
+          },
+          {
+            "title": "Yellow (Instrumental)",
+            "artist": {
+              "name": "Magical Piano Player"
+            },
+            "isrc": "TCACN1657487",
+            "album": {
+              "id": 12873312
+            }
+          }
+        ]
+      },
+      "candidates": [
+        {
+          "isrc": "GBAYE0000267",
+          "albumId": 301663
+        },
+        {
+          "isrc": "GBAYE1800780",
+          "albumId": 80900852
+        },
+        {
+          "isrc": "GBAYE1202183",
+          "albumId": 6082458
+        },
+        {
+          "isrc": "GBAYE0301688",
+          "albumId": 299223
+        }
+      ],
+      "answer": {
+        "date": "2000-06-26",
+        "source": "first-release",
+        "retryAt": null
+      }
+    },
+    {
+      "title": "Creep",
+      "artist": "Radiohead",
+      "brazilian": false,
+      "response": {
+        "data": [
+          {
+            "title": "Creep",
+            "artist": {
+              "name": "Radiohead"
+            },
+            "isrc": "GBAYE9200070",
+            "album": {
+              "id": 14880711
+            }
+          },
+          {
+            "title": "Creep (Acoustic)",
+            "artist": {
+              "name": "Radiohead"
+            },
+            "isrc": "GBAYE9300465",
+            "album": {
+              "id": 423524437
+            }
+          },
+          {
+            "title": "Creep Radiohead (slow version) cover",
+            "artist": {
+              "name": "Ikram Raouadi"
+            },
+            "isrc": "QZDFP2018848",
+            "album": {
+              "id": 347890867
+            }
+          },
+          {
+            "title": "Creep (Live)",
+            "artist": {
+              "name": "Radiohead"
+            },
+            "isrc": "QZMZ92094589",
+            "album": {
+              "id": 173855812
+            }
+          },
+          {
+            "title": "Blow Out (Remix)",
+            "artist": {
+              "name": "Radiohead"
+            },
+            "isrc": "GBAYE9300436",
+            "album": {
+              "id": 14880783
+            }
+          },
+          {
+            "title": "2 + 2 = 5 (Live)",
+            "artist": {
+              "name": "Radiohead"
+            },
+            "isrc": "GBBKS2500285",
+            "album": {
+              "id": 792320571
+            }
+          },
+          {
+            "title": "Inside My Head",
+            "artist": {
+              "name": "Radiohead"
+            },
+            "isrc": "GBAYE9200468",
+            "album": {
+              "id": 423524437
+            }
+          },
+          {
+            "title": "Myxomatosis (Live)",
+            "artist": {
+              "name": "Radiohead"
+            },
+            "isrc": "GBBKS2500294",
+            "album": {
+              "id": 792320571
+            }
+          },
+          {
+            "title": "Million Dollar Question",
+            "artist": {
+              "name": "Radiohead"
+            },
+            "isrc": "GBAYE9200469",
+            "album": {
+              "id": 14880783
+            }
+          },
+          {
+            "title": "Scatterbrain (Live)",
+            "artist": {
+              "name": "Radiohead"
+            },
+            "isrc": "GBBKS2500295",
+            "album": {
+              "id": 792320571
+            }
+          }
+        ]
+      },
+      "candidates": [
+        {
+          "isrc": "GBAYE9200070",
+          "albumId": 14880711
+        },
+        {
+          "isrc": "GBAYE9300465",
+          "albumId": 423524437
+        },
+        {
+          "isrc": "QZMZ92094589",
+          "albumId": 173855812
+        }
+      ],
+      "answer": {
+        "date": "1992-09-21",
+        "source": "first-release",
+        "retryAt": null
+      }
+    },
+    {
+      "title": "Take On Me",
+      "artist": "a-ha",
+      "brazilian": false,
+      "response": {
+        "data": [
+          {
+            "title": "Take on Me",
+            "artist": {
+              "name": "a-ha"
+            },
+            "isrc": "USWB19901214",
+            "album": {
+              "id": 80521
+            }
+          },
+          {
+            "title": "Take On Me (2017 Acoustic)",
+            "artist": {
+              "name": "a-ha"
+            },
+            "isrc": "DEUM71724939",
+            "album": {
+              "id": 52254772
+            }
+          },
+          {
+            "title": "Take On Me (MTV Unplugged)",
+            "artist": {
+              "name": "a-ha"
+            },
+            "isrc": "DEUM71721371",
+            "album": {
+              "id": 49096902
+            }
+          },
+          {
+            "title": "Take On Me (MTV Unplugged / Edit)",
+            "artist": {
+              "name": "a-ha"
+            },
+            "isrc": "DEUM71723164",
+            "album": {
+              "id": 48731372
+            }
+          },
+          {
+            "title": "Take on Me (Kygo Remix)",
+            "artist": {
+              "name": "a-ha"
+            },
+            "isrc": "USRH11502698",
+            "album": {
+              "id": 11195078
+            }
+          },
+          {
+            "title": "Take on Me (Symphonic Version)",
+            "artist": {
+              "name": "a-ha"
+            },
+            "isrc": "USWB11802010",
+            "album": {
+              "id": 75080402
+            }
+          },
+          {
+            "title": "Take on Me (1985 Single Mix; 2015 Remaster)",
+            "artist": {
+              "name": "a-ha"
+            },
+            "isrc": "USWB11506531",
+            "album": {
+              "id": 128357072
+            }
+          },
+          {
+            "title": "Take on Me (Single Version)",
+            "artist": {
+              "name": "a-ha"
+            },
+            "isrc": "USWB11001082",
+            "album": {
+              "id": 609566
+            }
+          },
+          {
+            "title": "Take On Me (Live at Oslo Spektrum, Oslo, Norway, 12/4/2010)",
+            "artist": {
+              "name": "a-ha"
+            },
+            "isrc": "GBV7Z1100020",
+            "album": {
+              "id": 985901181
+            }
+          },
+          {
+            "title": "Take on Me (Instrumental)",
+            "artist": {
+              "name": "a-ha"
+            },
+            "isrc": "USWB11001110",
+            "album": {
+              "id": 609566
+            }
+          }
+        ]
+      },
+      "candidates": [
+        {
+          "isrc": "USWB19901214",
+          "albumId": 80521
+        },
+        {
+          "isrc": "DEUM71724939",
+          "albumId": 52254772
+        },
+        {
+          "isrc": "DEUM71721371",
+          "albumId": 49096902
+        },
+        {
+          "isrc": "DEUM71723164",
+          "albumId": 48731372
+        },
+        {
+          "isrc": "USRH11502698",
+          "albumId": 11195078
+        },
+        {
+          "isrc": "USWB11802010",
+          "albumId": 75080402
+        },
+        {
+          "isrc": "USWB11506531",
+          "albumId": 128357072
+        },
+        {
+          "isrc": "USWB11001082",
+          "albumId": 609566
+        },
+        {
+          "isrc": "GBV7Z1100020",
+          "albumId": 985901181
+        },
+        {
+          "isrc": "USWB11001110",
+          "albumId": 609566
+        }
+      ],
+      "answer": {
+        "date": "1984",
+        "source": "first-release",
+        "retryAt": null
+      }
+    },
+    {
+      "title": "Dancing Queen",
+      "artist": "ABBA",
+      "brazilian": false,
+      "response": {
+        "data": [
+          {
+            "title": "Dancing Queen",
+            "artist": {
+              "name": "ABBA"
+            },
+            "isrc": "SEAYD7601020",
+            "album": {
+              "id": 100323
+            }
+          },
+          {
+            "title": "Dancing Queen (Live)",
+            "artist": {
+              "name": "ABBA"
+            },
+            "isrc": "SEUM71400841",
+            "album": {
+              "id": 8548981
+            }
+          },
+          {
+            "title": "Dancing Queen (Almighty Anthem Radio Edit)",
+            "artist": {
+              "name": "Abbacadabra"
+            },
+            "isrc": "GBEFP0602017",
+            "album": {
+              "id": 690653
+            }
+          },
+          {
+            "title": "Dancing Queen (Almighty Radio Edit)",
+            "artist": {
+              "name": "Abbacadabra"
+            },
+            "isrc": "GBEFP0602016",
+            "album": {
+              "id": 690653
+            }
+          },
+          {
+            "title": "Dancing Queen (Pwl Back to Your Roots Mix)",
+            "artist": {
+              "name": "Abbacadabra"
+            },
+            "isrc": "GBEFP9507901",
+            "album": {
+              "id": 7284279
+            }
+          },
+          {
+            "title": "Dancing Queen",
+            "artist": {
+              "name": "Abbamania"
+            },
+            "isrc": "DEA310801581",
+            "album": {
+              "id": 13531211
+            }
+          },
+          {
+            "title": "Dancing Queen",
+            "artist": {
+              "name": "Abbamania"
+            },
+            "isrc": "DEA310801580",
+            "album": {
+              "id": 13531211
+            }
+          },
+          {
+            "title": "Dancing Queen (PWL Back To Your Roots 12\" Mix)",
+            "artist": {
+              "name": "Abbacadabra"
+            },
+            "isrc": "GBEFP0806321",
+            "album": {
+              "id": 953076
+            }
+          },
+          {
+            "title": "Dancing Queen",
+            "artist": {
+              "name": "Abbamania"
+            },
+            "isrc": "ARG991013865",
+            "album": {
+              "id": 1682376
+            }
+          },
+          {
+            "title": "Dancing Queen (ABBA DJ Remix)",
+            "artist": {
+              "name": "Mixologia"
+            },
+            "isrc": "USCSG0593310",
+            "album": {
+              "id": 6126808
+            }
+          }
+        ]
+      },
+      "candidates": [
+        {
+          "isrc": "SEAYD7601020",
+          "albumId": 100323
+        },
+        {
+          "isrc": "SEUM71400841",
+          "albumId": 8548981
+        }
+      ],
+      "answer": {
+        "date": "1976-08-15",
+        "source": "first-release",
+        "retryAt": null
+      }
+    },
+    {
+      "title": "Hotel California",
+      "artist": "Eagles",
+      "brazilian": false,
+      "response": {
+        "data": [
+          {
+            "title": "Hotel California (2013 Remaster)",
+            "artist": {
+              "name": "Eagles"
+            },
+            "isrc": "USEE11300353",
+            "album": {
+              "id": 51350192
+            }
+          },
+          {
+            "title": "Hotel California (Live On MTV, 1994)",
+            "artist": {
+              "name": "Eagles"
+            },
+            "isrc": "USWWW0202466",
+            "album": {
+              "id": 89201332
+            }
+          },
+          {
+            "title": "Hotel California (Live)",
+            "artist": {
+              "name": "Eagles"
+            },
+            "isrc": "GBKYA2303154",
+            "album": {
+              "id": 479136805
+            }
+          },
+          {
+            "title": "Hotel California (Live at The Forum, Los Angeles, CA, 10/20-22/1976)",
+            "artist": {
+              "name": "Eagles"
+            },
+            "isrc": "USRH11703166",
+            "album": {
+              "id": 51350192
+            }
+          },
+          {
+            "title": "Hotel California (Live; 1999 Remaster)",
+            "artist": {
+              "name": "Eagles"
+            },
+            "isrc": "USEE19900349",
+            "album": {
+              "id": 1344836
+            }
+          },
+          {
+            "title": "Hotel California (Live From The Forum, Inglewood, CA, 9/12, 14, 15/2018)",
+            "artist": {
+              "name": "Eagles"
+            },
+            "isrc": "USRH12000102",
+            "album": {
+              "id": 179229222
+            }
+          },
+          {
+            "title": "Hotel California",
+            "artist": {
+              "name": "Eagles"
+            },
+            "isrc": "GBHFE0611362",
+            "album": {
+              "id": 1086614
+            }
+          },
+          {
+            "title": "Hotel California (eagles)",
+            "artist": {
+              "name": "Scott D. Davis"
+            },
+            "isrc": "USCGH0613850",
+            "album": {
+              "id": 793652
+            }
+          },
+          {
+            "title": "Hotel California (Live at the Millennium Concert, Staples Center, Los Angeles, CA, 12/31/1999; 2013 Remaster)",
+            "artist": {
+              "name": "Eagles"
+            },
+            "isrc": "USEE11300799",
+            "album": {
+              "id": 7237095
+            }
+          },
+          {
+            "title": "Hotel California (Eagles - Instrumental)",
+            "artist": {
+              "name": "Michael Marc"
+            },
+            "isrc": "TCAAS1035201",
+            "album": {
+              "id": 6205733
+            }
+          }
+        ]
+      },
+      "candidates": [
+        {
+          "isrc": "USEE11300353",
+          "albumId": 51350192
+        },
+        {
+          "isrc": "USWWW0202466",
+          "albumId": 89201332
+        },
+        {
+          "isrc": "GBKYA2303154",
+          "albumId": 479136805
+        },
+        {
+          "isrc": "USRH11703166",
+          "albumId": 51350192
+        },
+        {
+          "isrc": "USEE19900349",
+          "albumId": 1344836
+        },
+        {
+          "isrc": "USRH12000102",
+          "albumId": 179229222
+        },
+        {
+          "isrc": "GBHFE0611362",
+          "albumId": 1086614
+        },
+        {
+          "isrc": "USEE11300799",
+          "albumId": 7237095
+        }
+      ],
+      "answer": {
+        "date": "1976-12-08",
+        "source": "first-release",
+        "retryAt": null
+      }
+    },
+    {
+      "title": "Dreams",
+      "artist": "Fleetwood Mac",
+      "brazilian": false,
+      "response": {
+        "data": [
+          {
+            "title": "Dreams (2004 Remaster)",
+            "artist": {
+              "name": "Fleetwood Mac"
+            },
+            "isrc": "USWB10400046",
+            "album": {
+              "id": 6237061
+            }
+          },
+          {
+            "title": "Dreams (Sessions, Roughs & Outtakes)",
+            "artist": {
+              "name": "Fleetwood Mac"
+            },
+            "isrc": "USWB11301123",
+            "album": {
+              "id": 6612817
+            }
+          },
+          {
+            "title": "Dreams (Live at Warner Brothers Studios in Burbank, CA 5/23/97)",
+            "artist": {
+              "name": "Fleetwood Mac"
+            },
+            "isrc": "USRE19700406",
+            "album": {
+              "id": 273229
+            }
+          },
+          {
+            "title": "Dreams (Live 1980, Paris, France)",
+            "artist": {
+              "name": "Fleetwood Mac"
+            },
+            "isrc": "USWB10101072",
+            "album": {
+              "id": 1345672
+            }
+          },
+          {
+            "title": "Dreams (Live 1977)",
+            "artist": {
+              "name": "Fleetwood Mac"
+            },
+            "isrc": "USRE11000847",
+            "album": {
+              "id": 6612817
+            }
+          },
+          {
+            "title": "Dreams (Take 2)",
+            "artist": {
+              "name": "Fleetwood Mac"
+            },
+            "isrc": "USWB11203112",
+            "album": {
+              "id": 6612817
+            }
+          },
+          {
+            "title": "Dreams (Live at the Fabulous Forum, Inglewood, CA, 08/29/77)",
+            "artist": {
+              "name": "Fleetwood Mac"
+            },
+            "isrc": "USRH11800053",
+            "album": {
+              "id": 480700305
+            }
+          },
+          {
+            "title": "Dreams (Live at The Forum, Inglewood, CA, 10/21/82)",
+            "artist": {
+              "name": "Fleetwood Mac"
+            },
+            "isrc": "USWB22400031",
+            "album": {
+              "id": 639797901
+            }
+          },
+          {
+            "title": "Dreams",
+            "artist": {
+              "name": "Fleetwood Mac Experience"
+            },
+            "isrc": "BXCPT2100040",
+            "album": {
+              "id": 211144732
+            }
+          },
+          {
+            "title": "Dreams (Live on PBS in Boston 2004)",
+            "artist": {
+              "name": "Fleetwood Mac"
+            },
+            "isrc": "USRE10400528",
+            "album": {
+              "id": 345026
+            }
+          }
+        ]
+      },
+      "candidates": [
+        {
+          "isrc": "USWB10400046",
+          "albumId": 6237061
+        },
+        {
+          "isrc": "USWB11301123",
+          "albumId": 6612817
+        },
+        {
+          "isrc": "USRE19700406",
+          "albumId": 273229
+        },
+        {
+          "isrc": "USWB10101072",
+          "albumId": 1345672
+        },
+        {
+          "isrc": "USRE11000847",
+          "albumId": 6612817
+        },
+        {
+          "isrc": "USWB11203112",
+          "albumId": 6612817
+        },
+        {
+          "isrc": "USRH11800053",
+          "albumId": 480700305
+        },
+        {
+          "isrc": "USWB22400031",
+          "albumId": 639797901
+        },
+        {
+          "isrc": "USRE10400528",
+          "albumId": 345026
+        }
+      ],
+      "answer": {
+        "date": "1977-02-04",
+        "source": "first-release",
+        "retryAt": null
+      }
+    },
+    {
+      "title": "Toxic",
+      "artist": "Britney Spears",
+      "brazilian": false,
+      "response": {
+        "data": [
+          {
+            "title": "Toxic",
+            "artist": {
+              "name": "Britney Spears"
+            },
+            "isrc": "USJI10301005",
+            "album": {
+              "id": 1421245
+            }
+          },
+          {
+            "title": "Toxic (Y2K & Alexander Lewis Remix)",
+            "artist": {
+              "name": "Britney Spears"
+            },
+            "isrc": "USRC12000459",
+            "album": {
+              "id": 129295112
+            }
+          },
+          {
+            "title": "Toxic (Peter Rauhofer Reconstruction Mix Radio Edit)",
+            "artist": {
+              "name": "Britney Spears"
+            },
+            "isrc": "USJI10500781",
+            "album": {
+              "id": 1423937
+            }
+          },
+          {
+            "title": "Toxic (Bloodshy & Avant's Intoxicated Remix - 2009 Remaster)",
+            "artist": {
+              "name": "Britney Spears"
+            },
+            "isrc": "USJI10900664",
+            "album": {
+              "id": 438506
+            }
+          },
+          {
+            "title": "Toxic (Peter Rauhofer Reconstruction Mix Edit)",
+            "artist": {
+              "name": "Britney Spears"
+            },
+            "isrc": "USJI10500609",
+            "album": {
+              "id": 1423937
+            }
+          },
+          {
+            "title": "Toxic (Armand Van Helden Remix)",
+            "artist": {
+              "name": "Britney Spears"
+            },
+            "isrc": "USJI10400036",
+            "album": {
+              "id": 1422881
+            }
+          },
+          {
+            "title": "Toxic (Lenny Bertoldo Radio Edit)",
+            "artist": {
+              "name": "Britney Spears"
+            },
+            "isrc": "USJI10400040",
+            "album": {
+              "id": 1422557
+            }
+          },
+          {
+            "title": "Toxic (Lenny Bertoldo Mix Show Edit)",
+            "artist": {
+              "name": "Britney Spears"
+            },
+            "isrc": "USJI10400038",
+            "album": {
+              "id": 1422881
+            }
+          },
+          {
+            "title": "Toxic (Felix Da Housecat's Club Mix)",
+            "artist": {
+              "name": "Britney Spears"
+            },
+            "isrc": "USJI10400037",
+            "album": {
+              "id": 1422881
+            }
+          },
+          {
+            "title": "Toxic Pony",
+            "artist": {
+              "name": "Altégo"
+            },
+            "isrc": "USRC12200203",
+            "album": {
+              "id": 289273602
+            }
+          }
+        ]
+      },
+      "candidates": [
+        {
+          "isrc": "USJI10301005",
+          "albumId": 1421245
+        },
+        {
+          "isrc": "USRC12000459",
+          "albumId": 129295112
+        },
+        {
+          "isrc": "USJI10500781",
+          "albumId": 1423937
+        },
+        {
+          "isrc": "USJI10500609",
+          "albumId": 1423937
+        },
+        {
+          "isrc": "USJI10400036",
+          "albumId": 1422881
+        },
+        {
+          "isrc": "USJI10400040",
+          "albumId": 1422557
+        },
+        {
+          "isrc": "USJI10400038",
+          "albumId": 1422881
+        },
+        {
+          "isrc": "USJI10400037",
+          "albumId": 1422881
+        }
+      ],
+      "answer": {
+        "date": "2003-11-13",
+        "source": "first-release",
+        "retryAt": null
+      }
+    },
+    {
+      "title": "Lose Yourself",
+      "artist": "Eminem",
+      "brazilian": false,
+      "response": {
+        "data": [
+          {
+            "title": "Lose Yourself",
+            "artist": {
+              "name": "Eminem"
+            },
+            "isrc": "USIR10211559",
+            "album": {
+              "id": 119606
+            }
+          },
+          {
+            "title": "Lose Yourself - Eminem (8 Mile Soundtrack from the Motion Picture)(Instrumental)",
+            "artist": {
+              "name": "DJ ReDo"
+            },
+            "isrc": "USA371300388",
+            "album": {
+              "id": 1128657
+            }
+          },
+          {
+            "title": "Lose yourself- Eminem (Sohtech rework)",
+            "artist": {
+              "name": "Sohtech"
+            },
+            "isrc": "QZK6F2699691",
+            "album": {
+              "id": 923177811
+            }
+          },
+          {
+            "title": "Lose Yourself (Original Demo Version)",
+            "artist": {
+              "name": "Eminem"
+            },
+            "isrc": "USUM71416305",
+            "album": {
+              "id": 368443007
+            }
+          },
+          {
+            "title": "Lose Yourself (From \"8 Mile\")",
+            "artist": {
+              "name": "Eminem"
+            },
+            "isrc": "GBPS81525674",
+            "album": {
+              "id": 10719388
+            }
+          },
+          {
+            "title": "Lose Yourself",
+            "artist": {
+              "name": "Maria Fiselier"
+            },
+            "isrc": "NLSU31800030",
+            "album": {
+              "id": 73548932
+            }
+          },
+          {
+            "title": "Lose Yourself (Tabata)",
+            "artist": {
+              "name": "Tabata Songs"
+            },
+            "isrc": "TCADY1823998",
+            "album": {
+              "id": 157342982
+            }
+          },
+          {
+            "title": "Eminem (Lose Yourself)[Epic Version]",
+            "artist": {
+              "name": "TM."
+            },
+            "isrc": "TCAJB2432776",
+            "album": {
+              "id": 680776751
+            }
+          },
+          {
+            "title": "Lose Yourself (Αs performed by Eminem)",
+            "artist": {
+              "name": "Pop Music Workshop"
+            },
+            "isrc": "BGA671963715",
+            "album": {
+              "id": 96621092
+            }
+          },
+          {
+            "title": "Lose Yourself (cover Eminem)",
+            "artist": {
+              "name": "Art'Skull"
+            },
+            "isrc": "FRDCX2020190",
+            "album": {
+              "id": 143199522
+            }
+          }
+        ]
+      },
+      "candidates": [
+        {
+          "isrc": "USIR10211559",
+          "albumId": 119606
+        },
+        {
+          "isrc": "USUM71416305",
+          "albumId": 368443007
+        },
+        {
+          "isrc": "GBPS81525674",
+          "albumId": 10719388
+        }
+      ],
+      "answer": {
+        "date": "2002-10-22",
+        "source": "first-release",
+        "retryAt": null
+      }
+    },
+    {
+      "title": "Hips Don’t Lie",
+      "artist": "Shakira",
+      "brazilian": false,
+      "response": {
+        "data": [
+          {
+            "title": "Hips Don't Lie",
+            "artist": {
+              "name": "Shakira"
+            },
+            "isrc": "USQX92505612",
+            "album": {
+              "id": 859209172
+            }
+          },
+          {
+            "title": "Hips Don't Lie (feat. Wyclef Jean)",
+            "artist": {
+              "name": "Shakira"
+            },
+            "isrc": "USSM10600677",
+            "album": {
+              "id": 8985885
+            }
+          },
+          {
+            "title": "Hips Don't Lie (El Dorado World Tour Live)",
+            "artist": {
+              "name": "Shakira"
+            },
+            "isrc": "USQX91902782",
+            "album": {
+              "id": 118190592
+            }
+          },
+          {
+            "title": "Hips Don't Lie (Live Version)",
+            "artist": {
+              "name": "Shakira"
+            },
+            "isrc": "USSD11100358",
+            "album": {
+              "id": 1373817
+            }
+          },
+          {
+            "title": "Hips Don't Lie (feat. Wyclef Jean) (Live - December 2006)",
+            "artist": {
+              "name": "Shakira"
+            },
+            "isrc": "USSM10704599",
+            "album": {
+              "id": 7517432
+            }
+          },
+          {
+            "title": "Hips Don't Lie - Bamboo (feat. Wyclef Jean)",
+            "artist": {
+              "name": "Shakira"
+            },
+            "isrc": "USSM10601466",
+            "album": {
+              "id": 1444564
+            }
+          },
+          {
+            "title": "Hips Don't Lie (Medieval Style Bardcore)",
+            "artist": {
+              "name": "Courseval"
+            },
+            "isrc": "QZHNC2509792",
+            "album": {
+              "id": 726034761
+            }
+          },
+          {
+            "title": "Hips Don't Lie (Piano Version) [Original Performed by Shakira Ft. Wyclef Jean]",
+            "artist": {
+              "name": "Piano Gaga"
+            },
+            "isrc": "ES7931700286",
+            "album": {
+              "id": 44454821
+            }
+          },
+          {
+            "title": "Hips Don’t Lie (DJ Remixed) (As Made Famous by Shakira feat. Wyclef Jean)",
+            "artist": {
+              "name": "My Workout Hits"
+            },
+            "isrc": "USA370954387",
+            "album": {
+              "id": 422451
+            }
+          },
+          {
+            "title": "Hips Don't Lie",
+            "artist": {
+              "name": "sakira"
+            },
+            "isrc": "SE57V2625750",
+            "album": {
+              "id": 1105863152
+            }
+          }
+        ]
+      },
+      "candidates": [
+        {
+          "isrc": "USQX92505612",
+          "albumId": 859209172
+        },
+        {
+          "isrc": "USSM10600677",
+          "albumId": 8985885
+        },
+        {
+          "isrc": "USQX91902782",
+          "albumId": 118190592
+        },
+        {
+          "isrc": "USSD11100358",
+          "albumId": 1373817
+        },
+        {
+          "isrc": "USSM10704599",
+          "albumId": 7517432
+        }
+      ],
+      "answer": {
+        "date": "2005-11-28",
+        "source": "first-release",
+        "retryAt": null
+      }
+    },
+    {
+      "title": "Águas de Março",
+      "artist": "Elis Regina",
+      "brazilian": true,
+      "response": {
+        "data": [
+          {
+            "title": "Águas De Março",
+            "artist": {
+              "name": "Elis Regina"
+            },
+            "isrc": "BRPGD7400001",
+            "album": {
+              "id": 75106252
+            }
+          },
+          {
+            "title": "Águas De Março",
+            "artist": {
+              "name": "Elis Regina"
+            },
+            "isrc": "USWWW0137139",
+            "album": {
+              "id": 70479202
+            }
+          },
+          {
+            "title": "Águas De Marco",
+            "artist": {
+              "name": "Elis Regina"
+            },
+            "isrc": "BRPAD7200003",
+            "album": {
+              "id": 431210
+            }
+          },
+          {
+            "title": "Águas De Março",
+            "artist": {
+              "name": "Elis Regina"
+            },
+            "isrc": "BRUM71301402",
+            "album": {
+              "id": 7148944
+            }
+          },
+          {
+            "title": "Águas De Março (Remastered 2021)",
+            "artist": {
+              "name": "Elis Regina"
+            },
+            "isrc": "BRUM71800220",
+            "album": {
+              "id": 213603832
+            }
+          },
+          {
+            "title": "Águas De Março (Sashet DnB Remix)",
+            "artist": {
+              "name": "Elis Regina"
+            },
+            "isrc": "US83Z2568940",
+            "album": {
+              "id": 985053981
+            }
+          },
+          {
+            "title": "Águas de março (Ao vivo)",
+            "artist": {
+              "name": "Elis Regina"
+            },
+            "isrc": "BRWMB0102306",
+            "album": {
+              "id": 270637722
+            }
+          },
+          {
+            "title": "Águas De Marco",
+            "artist": {
+              "name": "Elis Regina"
+            },
+            "isrc": "BRPAD7200003",
+            "album": {
+              "id": 70484092
+            }
+          },
+          {
+            "title": "Águas de março (Ao vivo)",
+            "artist": {
+              "name": "Elis Regina"
+            },
+            "isrc": "BRWMB1600057",
+            "album": {
+              "id": 12509490
+            }
+          },
+          {
+            "title": "Águas de março (Alternative Version)",
+            "artist": {
+              "name": "Elis Regina"
+            },
+            "isrc": "BRWMB1100599",
+            "album": {
+              "id": 1543311
+            }
+          }
+        ]
+      },
+      "candidates": [
+        {
+          "isrc": "BRPGD7400001",
+          "albumId": 75106252
+        },
+        {
+          "isrc": "USWWW0137139",
+          "albumId": 70479202
+        },
+        {
+          "isrc": "BRPAD7200003",
+          "albumId": 431210
+        },
+        {
+          "isrc": "BRUM71301402",
+          "albumId": 7148944
+        },
+        {
+          "isrc": "BRUM71800220",
+          "albumId": 213603832
+        },
+        {
+          "isrc": "US83Z2568940",
+          "albumId": 985053981
+        },
+        {
+          "isrc": "BRWMB0102306",
+          "albumId": 270637722
+        },
+        {
+          "isrc": "BRPAD7200003",
+          "albumId": 70484092
+        },
+        {
+          "isrc": "BRWMB1600057",
+          "albumId": 12509490
+        },
+        {
+          "isrc": "BRWMB1100599",
+          "albumId": 1543311
+        }
+      ],
+      "answer": {
+        "date": "1972",
+        "source": "first-release",
+        "retryAt": null
+      }
+    },
+    {
+      "title": "Construção",
+      "artist": "Chico Buarque",
+      "brazilian": true,
+      "response": {
+        "data": [
+          {
+            "title": "Construção",
+            "artist": {
+              "name": "Chico Buarque"
+            },
+            "isrc": "BRPGD7100036",
+            "album": {
+              "id": 223741
+            }
+          },
+          {
+            "title": "Desalento",
+            "artist": {
+              "name": "Chico Buarque"
+            },
+            "isrc": "BRPGD7100035",
+            "album": {
+              "id": 223741
+            }
+          },
+          {
+            "title": "Olha Maria",
+            "artist": {
+              "name": "Chico Buarque"
+            },
+            "isrc": "BRPGD7100038",
+            "album": {
+              "id": 223741
+            }
+          },
+          {
+            "title": "Deus Lhe Pague",
+            "artist": {
+              "name": "Chico Buarque"
+            },
+            "isrc": "BRPGD7100033",
+            "album": {
+              "id": 223741
+            }
+          },
+          {
+            "title": "Minha Historia (Gesubambino)",
+            "artist": {
+              "name": "Chico Buarque"
+            },
+            "isrc": "BRPGD7100041",
+            "album": {
+              "id": 223741
+            }
+          },
+          {
+            "title": "Cordao",
+            "artist": {
+              "name": "Chico Buarque"
+            },
+            "isrc": "BRPGD7100037",
+            "album": {
+              "id": 223741
+            }
+          },
+          {
+            "title": "Acalanto",
+            "artist": {
+              "name": "Chico Buarque"
+            },
+            "isrc": "BRPGD7100042",
+            "album": {
+              "id": 223741
+            }
+          },
+          {
+            "title": "Valsinha",
+            "artist": {
+              "name": "Chico Buarque"
+            },
+            "isrc": "BRPGD7100040",
+            "album": {
+              "id": 223741
+            }
+          },
+          {
+            "title": "Samba De Orly",
+            "artist": {
+              "name": "Chico Buarque"
+            },
+            "isrc": "BRPGD7100039",
+            "album": {
+              "id": 223741
+            }
+          },
+          {
+            "title": "Cotidiano",
+            "artist": {
+              "name": "Chico Buarque"
+            },
+            "isrc": "BRPGD7100034",
+            "album": {
+              "id": 223741
+            }
+          }
+        ]
+      },
+      "candidates": [
+        {
+          "isrc": "BRPGD7100036",
+          "albumId": 223741
+        }
+      ],
+      "answer": {
+        "date": "1971",
+        "source": "first-release",
+        "retryAt": null
+      }
+    },
+    {
+      "title": "Garota de Ipanema",
+      "artist": "Tom Jobim",
+      "brazilian": true,
+      "response": {
+        "data": [
+          {
+            "title": "Garota de Ipanema",
+            "artist": {
+              "name": "Antônio Carlos Jobim"
+            },
+            "isrc": "BRJ9B0500005",
+            "album": {
+              "id": 1003827
+            }
+          },
+          {
+            "title": "Garota De Ipanema",
+            "artist": {
+              "name": "Vinicius"
+            },
+            "isrc": "ARG990900583",
+            "album": {
+              "id": 445127
+            }
+          },
+          {
+            "title": "Garota De Ipanema",
+            "artist": {
+              "name": "Antônio Carlos Jobim"
+            },
+            "isrc": "BRPAD6700005",
+            "album": {
+              "id": 92094082
+            }
+          },
+          {
+            "title": "Água de Beber / Garota de Ipanema / Sei Lá (A Vida Tem Sempre Razão) (Ao Vivo)",
+            "artist": {
+              "name": "Antônio Carlos Jobim"
+            },
+            "isrc": "BRRGE7700138",
+            "album": {
+              "id": 12447794
+            }
+          },
+          {
+            "title": "Medley Tom: Se Todos Fossem Iguais a Você. Samba do Avião. Garota de Ipanema. Samba de Uma Nota y Só.",
+            "artist": {
+              "name": "Antônio Carlos Jobim"
+            },
+            "isrc": "ESAAI0203341",
+            "album": {
+              "id": 714415541
+            }
+          },
+          {
+            "title": "The Girl From Ipanema",
+            "artist": {
+              "name": "Stan Getz"
+            },
+            "isrc": "USUMG0000425",
+            "album": {
+              "id": 184476372
+            }
+          },
+          {
+            "title": "The Girl From Ipanema (2008 Remastered)",
+            "artist": {
+              "name": "Frank Sinatra"
+            },
+            "isrc": "USRH10723028",
+            "album": {
+              "id": 7021224
+            }
+          },
+          {
+            "title": "Garota de Ipanema",
+            "artist": {
+              "name": "Antônio Carlos Jobim"
+            },
+            "isrc": "QMFMG1444764",
+            "album": {
+              "id": 7971480
+            }
+          },
+          {
+            "title": "Garota de Ipanema (Ao Vivo)",
+            "artist": {
+              "name": "Antônio Carlos Jobim"
+            },
+            "isrc": "BRJ9B0600018",
+            "album": {
+              "id": 10811324
+            }
+          },
+          {
+            "title": "Garota de Ipanema (Ao Vivo)",
+            "artist": {
+              "name": "Antônio Carlos Jobim"
+            },
+            "isrc": "BRJ9B0900016",
+            "album": {
+              "id": 1011089
+            }
+          }
+        ]
+      },
+      "candidates": [],
+      "answer": {
+        "date": null,
+        "source": "unknown",
+        "retryAt": 1796241584106
+      }
+    },
+    {
+      "title": "Oceano",
+      "artist": "Djavan",
+      "brazilian": true,
+      "response": {
+        "data": [
+          {
+            "title": "Oceano",
+            "artist": {
+              "name": "Djavan"
+            },
+            "isrc": "BRSME8900064",
+            "album": {
+              "id": 7371939
+            }
+          },
+          {
+            "title": "Oceano Ao Vivo",
+            "artist": {
+              "name": "Djavan"
+            },
+            "isrc": "BRSME9900356",
+            "album": {
+              "id": 7374196
+            }
+          },
+          {
+            "title": "Oceano (Ao Vivo)",
+            "artist": {
+              "name": "Djavan"
+            },
+            "isrc": "BRLRO1400031",
+            "album": {
+              "id": 251541542
+            }
+          },
+          {
+            "title": "Oceano Ao Vivo",
+            "artist": {
+              "name": "Djavan"
+            },
+            "isrc": "BRLRO2400013",
+            "album": {
+              "id": 566258701
+            }
+          },
+          {
+            "title": "Oceano (Ao Vivo no Montreux Jazz Festival 1997)",
+            "artist": {
+              "name": "Djavan"
+            },
+            "isrc": "BRSME2102549",
+            "album": {
+              "id": 298711242
+            }
+          },
+          {
+            "title": "Oceano (Album Version)",
+            "artist": {
+              "name": "Djavan"
+            },
+            "isrc": "USSM19916781",
+            "album": {
+              "id": 1400001
+            }
+          },
+          {
+            "title": "Oceano",
+            "artist": {
+              "name": "Leny Andrade"
+            },
+            "isrc": "BRLUM9700104",
+            "album": {
+              "id": 12977622
+            }
+          },
+          {
+            "title": "Oceana",
+            "artist": {
+              "name": "OUTROEU"
+            },
+            "isrc": "BRUM72001913",
+            "album": {
+              "id": 168884442
+            }
+          },
+          {
+            "title": "Oceano",
+            "artist": {
+              "name": "Hamilton De Holanda"
+            },
+            "isrc": "BRSME2301483",
+            "album": {
+              "id": 484055505
+            }
+          },
+          {
+            "title": "Oceano",
+            "artist": {
+              "name": "Melim"
+            },
+            "isrc": "BRUM72100845",
+            "album": {
+              "id": 235052732
+            }
+          }
+        ]
+      },
+      "candidates": [
+        {
+          "isrc": "BRSME8900064",
+          "albumId": 7371939
+        },
+        {
+          "isrc": "BRLRO1400031",
+          "albumId": 251541542
+        },
+        {
+          "isrc": "BRSME2102549",
+          "albumId": 298711242
+        },
+        {
+          "isrc": "USSM19916781",
+          "albumId": 1400001
+        }
+      ],
+      "answer": {
+        "date": "1989",
+        "source": "first-release",
+        "retryAt": null
+      }
+    },
+    {
+      "title": "Sozinho",
+      "artist": "Caetano Veloso",
+      "brazilian": true,
+      "response": {
+        "data": [
+          {
+            "title": "Sozinho (Ao Vivo)",
+            "artist": {
+              "name": "Caetano Veloso"
+            },
+            "isrc": "BRPGD9800678",
+            "album": {
+              "id": 103763
+            }
+          },
+          {
+            "title": "Sozinho (Live)",
+            "artist": {
+              "name": "Caetano Veloso"
+            },
+            "isrc": "BRUM71100258",
+            "album": {
+              "id": 1133602
+            }
+          },
+          {
+            "title": "Sozinho Ao Vivo",
+            "artist": {
+              "name": "Caetano Veloso"
+            },
+            "isrc": "BR3UN2400039",
+            "album": {
+              "id": 757553331
+            }
+          },
+          {
+            "title": "Sozinho (Ao Vivo)",
+            "artist": {
+              "name": "Caetano Veloso"
+            },
+            "isrc": "BRPGD9800678",
+            "album": {
+              "id": 72690542
+            }
+          },
+          {
+            "title": "Domingo",
+            "artist": {
+              "name": "Mart'nália"
+            },
+            "isrc": "BRSME2401301",
+            "album": {
+              "id": 662604491
+            }
+          },
+          {
+            "title": "Domingo",
+            "artist": {
+              "name": "Gal Costa"
+            },
+            "isrc": "BRMCA6700226",
+            "album": {
+              "id": 99731
+            }
+          },
+          {
+            "title": "Sozinha (Live)",
+            "artist": {
+              "name": "Sandra De Sá"
+            },
+            "isrc": "BRLT51100044",
+            "album": {
+              "id": 1156084
+            }
+          },
+          {
+            "title": "Sozinho (Live)",
+            "artist": {
+              "name": "Silvina Garre"
+            },
+            "isrc": "CH6541788461",
+            "album": {
+              "id": 120598002
+            }
+          },
+          {
+            "title": "Sozinho (No Estilo de Caetano Veloso) [Karaoke Version]",
+            "artist": {
+              "name": "Ameritz Karaoke Português"
+            },
+            "isrc": "QMFMG1305420",
+            "album": {
+              "id": 6836262
+            }
+          },
+          {
+            "title": "Sozinho (Originally Performed by Caetano Veloso) [Karaoke Version]",
+            "artist": {
+              "name": "The Karaoke Channel"
+            },
+            "isrc": "USK4W0003156",
+            "album": {
+              "id": 13763212
+            }
+          }
+        ]
+      },
+      "candidates": [
+        {
+          "isrc": "BRPGD9800678",
+          "albumId": 103763
+        },
+        {
+          "isrc": "BRUM71100258",
+          "albumId": 1133602
+        },
+        {
+          "isrc": "BRPGD9800678",
+          "albumId": 72690542
+        }
+      ],
+      "answer": {
+        "date": "1998",
+        "source": "first-release",
+        "retryAt": null
+      }
+    },
+    {
+      "title": "Pais e Filhos",
+      "artist": "Legião Urbana",
+      "brazilian": true,
+      "response": {
+        "data": [
+          {
+            "title": "Pais E Filhos",
+            "artist": {
+              "name": "Legião Urbana"
+            },
+            "isrc": "BREMI8900064",
+            "album": {
+              "id": 334226
+            }
+          },
+          {
+            "title": "Pais e Filhos (Ao Vivo)",
+            "artist": {
+              "name": "Legião Urbana"
+            },
+            "isrc": "BREMI0100023",
+            "album": {
+              "id": 50618902
+            }
+          },
+          {
+            "title": "Pais E Filhos (Ao Vivo Em São Paulo / 1999)",
+            "artist": {
+              "name": "Legião Urbana"
+            },
+            "isrc": "BREMI9900366",
+            "album": {
+              "id": 10668696
+            }
+          },
+          {
+            "title": "Pais E Filhos / Stand By Me (Live)",
+            "artist": {
+              "name": "Legião Urbana"
+            },
+            "isrc": "BREMI0400197",
+            "album": {
+              "id": 8052072
+            }
+          },
+          {
+            "title": "Pais E Filhos/Stand By Me (Live From Brazil/1992)",
+            "artist": {
+              "name": "Legião Urbana"
+            },
+            "isrc": "BREMI9200029",
+            "album": {
+              "id": 304532
+            }
+          },
+          {
+            "title": "Pais e Filhos",
+            "artist": {
+              "name": "Judson Mancebo"
+            },
+            "isrc": "BRITK1000002",
+            "album": {
+              "id": 10148806
+            }
+          },
+          {
+            "title": "Pais e Filhos Ao Vivo",
+            "artist": {
+              "name": "Orquestra Sinfônica Brasileira"
+            },
+            "isrc": "BRMZA1200222",
+            "album": {
+              "id": 6041114
+            }
+          },
+          {
+            "title": "Pais e Filhos",
+            "artist": {
+              "name": "Rock Your Babies"
+            },
+            "isrc": "BRBQN1300050",
+            "album": {
+              "id": 236435462
+            }
+          },
+          {
+            "title": "Pais e Filhos",
+            "artist": {
+              "name": "Célia Porto"
+            },
+            "isrc": "BRPSG0900031",
+            "album": {
+              "id": 9097447
+            }
+          },
+          {
+            "title": "Pais e Filhos",
+            "artist": {
+              "name": "Banda Praça7"
+            },
+            "isrc": "QZHZ52016734",
+            "album": {
+              "id": 164724012
+            }
+          }
+        ]
+      },
+      "candidates": [
+        {
+          "isrc": "BREMI8900064",
+          "albumId": 334226
+        },
+        {
+          "isrc": "BREMI0100023",
+          "albumId": 50618902
+        },
+        {
+          "isrc": "BREMI9900366",
+          "albumId": 10668696
+        }
+      ],
+      "answer": {
+        "date": "1989-10-26",
+        "source": "first-release",
+        "retryAt": null
+      }
+    },
+    {
+      "title": "Tempo Perdido",
+      "artist": "Legião Urbana",
+      "brazilian": true,
+      "response": {
+        "data": [
+          {
+            "title": "Tempo Perdido",
+            "artist": {
+              "name": "Legião Urbana"
+            },
+            "isrc": "BREMI8600025",
+            "album": {
+              "id": 334284
+            }
+          },
+          {
+            "title": "Tempo Perdido (Ao Vivo)",
+            "artist": {
+              "name": "Legião Urbana"
+            },
+            "isrc": "BREMI0100024",
+            "album": {
+              "id": 50761552
+            }
+          },
+          {
+            "title": "Tempo Perdido (Live)",
+            "artist": {
+              "name": "Legião Urbana"
+            },
+            "isrc": "BREMI0400210",
+            "album": {
+              "id": 8052072
+            }
+          },
+          {
+            "title": "Tempo Perdido (Legião Urbana Cover)",
+            "artist": {
+              "name": "Bike"
+            },
+            "isrc": "QMFMF2349560",
+            "album": {
+              "id": 515933402
+            }
+          },
+          {
+            "title": "Quero Ser Feliz Também / Será / Tempo Perdido (Ao Vivo)",
+            "artist": {
+              "name": "Grupo Menos É Mais"
+            },
+            "isrc": "BRRGE2507101",
+            "album": {
+              "id": 869542502
+            }
+          },
+          {
+            "title": "A Via Láctea",
+            "artist": {
+              "name": "Legião Urbana"
+            },
+            "isrc": "BREMI9600432",
+            "album": {
+              "id": 334249
+            }
+          },
+          {
+            "title": "Tempo Perdido Ao Vivo",
+            "artist": {
+              "name": "Orquestra Sinfônica Brasileira"
+            },
+            "isrc": "BRMZA1200215",
+            "album": {
+              "id": 6041114
+            }
+          },
+          {
+            "title": "Eduardo E Mônica",
+            "artist": {
+              "name": "Legião Urbana"
+            },
+            "isrc": "BREMI8600023",
+            "album": {
+              "id": 334284
+            }
+          },
+          {
+            "title": "Índios",
+            "artist": {
+              "name": "Legião Urbana"
+            },
+            "isrc": "BREMI8600026",
+            "album": {
+              "id": 334284
+            }
+          },
+          {
+            "title": "Quase Sem Querer",
+            "artist": {
+              "name": "Legião Urbana"
+            },
+            "isrc": "BREMI8600038",
+            "album": {
+              "id": 334284
+            }
+          }
+        ]
+      },
+      "candidates": [
+        {
+          "isrc": "BREMI8600025",
+          "albumId": 334284
+        },
+        {
+          "isrc": "BREMI0100024",
+          "albumId": 50761552
+        },
+        {
+          "isrc": "BREMI0400210",
+          "albumId": 8052072
+        }
+      ],
+      "answer": {
+        "date": "1986",
+        "source": "first-release",
+        "retryAt": null
+      }
+    },
+    {
+      "title": "Evidências",
+      "artist": "Chitãozinho & Xororó",
+      "brazilian": true,
+      "response": {
+        "data": [
+          {
+            "title": "Evidências",
+            "artist": {
+              "name": "Chitãozinho & Xororó"
+            },
+            "isrc": "BRMCA9000007",
+            "album": {
+              "id": 39285741
+            }
+          },
+          {
+            "title": "Evidências",
+            "artist": {
+              "name": "Chitãozinho & Xororó"
+            },
+            "isrc": "BRCHX1300019",
+            "album": {
+              "id": 176253462
+            }
+          },
+          {
+            "title": "Evidências (Ao Vivo)",
+            "artist": {
+              "name": "Chitãozinho & Xororó"
+            },
+            "isrc": "BRUM71707006",
+            "album": {
+              "id": 52957442
+            }
+          },
+          {
+            "title": "Evidências (Ao Vivo)",
+            "artist": {
+              "name": "Chitãozinho & Xororó"
+            },
+            "isrc": "BRRGE1912249",
+            "album": {
+              "id": 122025122
+            }
+          },
+          {
+            "title": "Evidencias (Ao Vivo)",
+            "artist": {
+              "name": "Chitãozinho & Xororó"
+            },
+            "isrc": "BRMCA0000515",
+            "album": {
+              "id": 431295
+            }
+          },
+          {
+            "title": "Evidencias (Ao Vivo)",
+            "artist": {
+              "name": "José Augusto"
+            },
+            "isrc": "BRUM70800386",
+            "album": {
+              "id": 337829707
+            }
+          },
+          {
+            "title": "Evidências (Ao Vivo)",
+            "artist": {
+              "name": "Chitãozinho & Xororó"
+            },
+            "isrc": "BRUM71601506",
+            "album": {
+              "id": 14520310
+            }
+          },
+          {
+            "title": "Evidências (Ao Vivo)",
+            "artist": {
+              "name": "Chitãozinho & Xororó"
+            },
+            "isrc": "BRCHX1100035",
+            "album": {
+              "id": 251127372
+            }
+          },
+          {
+            "title": "EVIDÊNCIAS (Ao Vivo)",
+            "artist": {
+              "name": "Chitãozinho & Xororó"
+            },
+            "isrc": "BXLVT2300015",
+            "album": {
+              "id": 434476387
+            }
+          },
+          {
+            "title": "Evidências",
+            "artist": {
+              "name": "Chitãozinho & Xororó"
+            },
+            "isrc": "BRCHX2300001",
+            "album": {
+              "id": 510343401
+            }
+          }
+        ]
+      },
+      "candidates": [
+        {
+          "isrc": "BRMCA9000007",
+          "albumId": 39285741
+        },
+        {
+          "isrc": "BRCHX1300019",
+          "albumId": 176253462
+        },
+        {
+          "isrc": "BRUM71707006",
+          "albumId": 52957442
+        },
+        {
+          "isrc": "BRRGE1912249",
+          "albumId": 122025122
+        },
+        {
+          "isrc": "BRMCA0000515",
+          "albumId": 431295
+        },
+        {
+          "isrc": "BRUM71601506",
+          "albumId": 14520310
+        },
+        {
+          "isrc": "BRCHX1100035",
+          "albumId": 251127372
+        },
+        {
+          "isrc": "BXLVT2300015",
+          "albumId": 434476387
+        },
+        {
+          "isrc": "BRCHX2300001",
+          "albumId": 510343401
+        }
+      ],
+      "answer": {
+        "date": "2016-11-11",
+        "source": "first-release",
+        "retryAt": null
+      }
+    },
+    {
+      "title": "Como Nossos Pais",
+      "artist": "Belchior",
+      "brazilian": true,
+      "response": {
+        "data": [
+          {
+            "title": "Como Nossos Pais",
+            "artist": {
+              "name": "Belchior"
+            },
+            "isrc": "BRMCA7600025",
+            "album": {
+              "id": 431259
+            }
+          },
+          {
+            "title": "Como nossos pais",
+            "artist": {
+              "name": "Belchior"
+            },
+            "isrc": "BRWMB9705419",
+            "album": {
+              "id": 382636
+            }
+          },
+          {
+            "title": "Como Nossos Pais",
+            "artist": {
+              "name": "Belchior"
+            },
+            "isrc": "BRMVP0300270",
+            "album": {
+              "id": 426206047
+            }
+          },
+          {
+            "title": "Como Nossos Pais",
+            "artist": {
+              "name": "Belchior"
+            },
+            "isrc": "BRMCA7600025",
+            "album": {
+              "id": 47483432
+            }
+          },
+          {
+            "title": "Como nossos pais",
+            "artist": {
+              "name": "Belchior"
+            },
+            "isrc": "BRWMB2000923",
+            "album": {
+              "id": 190073972
+            }
+          },
+          {
+            "title": "Como Nossos Pais (Ao Vivo No Rio De Janeiro / 1995)",
+            "artist": {
+              "name": "Belchior"
+            },
+            "isrc": "BRUM70600609",
+            "album": {
+              "id": 1492194
+            }
+          },
+          {
+            "title": "Como Nossos Pais",
+            "artist": {
+              "name": "Belchior"
+            },
+            "isrc": "BRBMG9900308",
+            "album": {
+              "id": 503161
+            }
+          },
+          {
+            "title": "Como Nossos Pais",
+            "artist": {
+              "name": "João Marcello Bôscoli"
+            },
+            "isrc": "BRTPA0300227",
+            "album": {
+              "id": 14725580
+            }
+          },
+          {
+            "title": "Como nossos pais",
+            "artist": {
+              "name": "Ednardo"
+            },
+            "isrc": "BRWMB0103378",
+            "album": {
+              "id": 61920242
+            }
+          },
+          {
+            "title": "Como Nossos Pais",
+            "artist": {
+              "name": "Ana Cañas"
+            },
+            "isrc": "BR8AH2100014",
+            "album": {
+              "id": 868052392
+            }
+          }
+        ]
+      },
+      "candidates": [
+        {
+          "isrc": "BRMCA7600025",
+          "albumId": 431259
+        },
+        {
+          "isrc": "BRWMB9705419",
+          "albumId": 382636
+        },
+        {
+          "isrc": "BRMVP0300270",
+          "albumId": 426206047
+        },
+        {
+          "isrc": "BRMCA7600025",
+          "albumId": 47483432
+        },
+        {
+          "isrc": "BRWMB2000923",
+          "albumId": 190073972
+        },
+        {
+          "isrc": "BRUM70600609",
+          "albumId": 1492194
+        },
+        {
+          "isrc": "BRBMG9900308",
+          "albumId": 503161
+        }
+      ],
+      "answer": {
+        "date": "1986",
+        "source": "first-release",
+        "retryAt": null
+      }
+    },
+    {
+      "title": "Anunciação",
+      "artist": "Alceu Valença",
+      "brazilian": true,
+      "response": {
+        "data": [
+          {
+            "title": "Anunciação (Jopin Remix)",
+            "artist": {
+              "name": "Jopin"
+            },
+            "isrc": "BRMAZ1800212",
+            "album": {
+              "id": 91988492
+            }
+          },
+          {
+            "title": "Anunciação",
+            "artist": {
+              "name": "Alceu Valença"
+            },
+            "isrc": "BRPGD8400020",
+            "album": {
+              "id": 162138
+            }
+          },
+          {
+            "title": "Pot-Pourri: Anunciação/ Tomara",
+            "artist": {
+              "name": "Alceu Valença"
+            },
+            "isrc": "BRSGL9700097",
+            "album": {
+              "id": 12715870
+            }
+          },
+          {
+            "title": "Anunciação (Ao Vivo)",
+            "artist": {
+              "name": "Alceu Valença"
+            },
+            "isrc": "BRDEP1400148",
+            "album": {
+              "id": 9758070
+            }
+          },
+          {
+            "title": "Anunciação Ao Vivo",
+            "artist": {
+              "name": "Alceu Valença"
+            },
+            "isrc": "BRSME1600875",
+            "album": {
+              "id": 14780949
+            }
+          },
+          {
+            "title": "Anunciação (Ao Vivo)",
+            "artist": {
+              "name": "Alceu Valença"
+            },
+            "isrc": "BRDEP2300056",
+            "album": {
+              "id": 444720405
+            }
+          },
+          {
+            "title": "Anunciação",
+            "artist": {
+              "name": "Alceu Valença"
+            },
+            "isrc": "BRLKP2000053",
+            "album": {
+              "id": 151529762
+            }
+          },
+          {
+            "title": "Anunciação",
+            "artist": {
+              "name": "Alceu Valença"
+            },
+            "isrc": "BRDEP2200081",
+            "album": {
+              "id": 305641517
+            }
+          },
+          {
+            "title": "Anunciação",
+            "artist": {
+              "name": "Alceu Valença"
+            },
+            "isrc": "BRZ9C1700028",
+            "album": {
+              "id": 56519712
+            }
+          },
+          {
+            "title": "Anunciação (Ruxell Remix) (feat. Rodrigo Sha)",
+            "artist": {
+              "name": "DJ Mam"
+            },
+            "isrc": "BR4PS1900006",
+            "album": {
+              "id": 103949612
+            }
+          }
+        ]
+      },
+      "candidates": [
+        {
+          "isrc": "BRPGD8400020",
+          "albumId": 162138
+        },
+        {
+          "isrc": "BRDEP1400148",
+          "albumId": 9758070
+        },
+        {
+          "isrc": "BRDEP2300056",
+          "albumId": 444720405
+        },
+        {
+          "isrc": "BRLKP2000053",
+          "albumId": 151529762
+        },
+        {
+          "isrc": "BRDEP2200081",
+          "albumId": 305641517
+        },
+        {
+          "isrc": "BRZ9C1700028",
+          "albumId": 56519712
+        }
+      ],
+      "answer": {
+        "date": "2022-04-08",
+        "source": "first-release",
+        "retryAt": null
+      }
+    },
+    {
+      "title": "Asa Branca",
+      "artist": "Luiz Gonzaga",
+      "brazilian": true,
+      "response": {
+        "data": [
+          {
+            "title": "Asa Branca",
+            "artist": {
+              "name": "Luiz Gonzaga"
+            },
+            "isrc": "BRBMG4700002",
+            "album": {
+              "id": 1217651
+            }
+          },
+          {
+            "title": "Asa Branca (feat. Fagner)",
+            "artist": {
+              "name": "Luiz Gonzaga"
+            },
+            "isrc": "BRSME1200942",
+            "album": {
+              "id": 6082238
+            }
+          },
+          {
+            "title": "Asa Branca (feat. Fagner, Sivuca & Guadalupe)",
+            "artist": {
+              "name": "Luiz Gonzaga"
+            },
+            "isrc": "BRBMG8400226",
+            "album": {
+              "id": 1377232
+            }
+          },
+          {
+            "title": "Asa Branca",
+            "artist": {
+              "name": "Luiz Gonzaga"
+            },
+            "isrc": "FRDKW2107632",
+            "album": {
+              "id": 286571312
+            }
+          },
+          {
+            "title": "Asa Branca Ao Vivo",
+            "artist": {
+              "name": "Luiz Gonzaga"
+            },
+            "isrc": "BRVWD2000180",
+            "album": {
+              "id": 162625192
+            }
+          },
+          {
+            "title": "Asa Branca",
+            "artist": {
+              "name": "Luiz Gonzaga"
+            },
+            "isrc": "BRVWD1800192",
+            "album": {
+              "id": 74675242
+            }
+          },
+          {
+            "title": "Asa Branca",
+            "artist": {
+              "name": "Luiz Gonzaga"
+            },
+            "isrc": "BRBMG0100363",
+            "album": {
+              "id": 1219070
+            }
+          },
+          {
+            "title": "Asa Branca",
+            "artist": {
+              "name": "Luiz Gonzaga"
+            },
+            "isrc": "BRBMG4700002",
+            "album": {
+              "id": 402667417
+            }
+          },
+          {
+            "title": "Asa Branca",
+            "artist": {
+              "name": "Luiz Gonzaga"
+            },
+            "isrc": "BRBMG1200042",
+            "album": {
+              "id": 41776011
+            }
+          },
+          {
+            "title": "Asa Branca/A Volta Da Asa Branca Ao Vivo",
+            "artist": {
+              "name": "Luiz Gonzaga"
+            },
+            "isrc": "BRBMG7200057",
+            "album": {
+              "id": 1219091
+            }
+          }
+        ]
+      },
+      "candidates": [
+        {
+          "isrc": "BRBMG4700002",
+          "albumId": 1217651
+        },
+        {
+          "isrc": "BRSME1200942",
+          "albumId": 6082238
+        },
+        {
+          "isrc": "BRBMG8400226",
+          "albumId": 1377232
+        },
+        {
+          "isrc": "FRDKW2107632",
+          "albumId": 286571312
+        },
+        {
+          "isrc": "BRVWD1800192",
+          "albumId": 74675242
+        },
+        {
+          "isrc": "BRBMG0100363",
+          "albumId": 1219070
+        },
+        {
+          "isrc": "BRBMG4700002",
+          "albumId": 402667417
+        },
+        {
+          "isrc": "BRBMG1200042",
+          "albumId": 41776011
+        }
+      ],
+      "answer": {
+        "date": "2010",
+        "source": "first-release",
+        "retryAt": null
+      }
+    },
+    {
+      "title": "O Que É, O Que É?",
+      "artist": "Gonzaguinha",
+      "brazilian": true,
+      "response": {
+        "data": [
+          {
+            "title": "Nosso Amor",
+            "artist": {
+              "name": "Gonzaguinha"
+            },
+            "isrc": "QM4TW1838915",
+            "album": {
+              "id": 62239502
+            }
+          },
+          {
+            "title": "João Do Amor Divino",
+            "artist": {
+              "name": "Gonzaguinha"
+            },
+            "isrc": "BREMI7800542",
+            "album": {
+              "id": 172697902
+            }
+          },
+          {
+            "title": "Artistas Da Vida",
+            "artist": {
+              "name": "Gonzaguinha"
+            },
+            "isrc": "BREMI7800191",
+            "album": {
+              "id": 172697902
+            }
+          },
+          {
+            "title": "Recado",
+            "artist": {
+              "name": "Gonzaguinha"
+            },
+            "isrc": "BREMI7800149",
+            "album": {
+              "id": 97398992
+            }
+          },
+          {
+            "title": "O Que Foi Feito Devera",
+            "artist": {
+              "name": "Gonzaguinha"
+            },
+            "isrc": "BREMI7800150",
+            "album": {
+              "id": 97398992
+            }
+          },
+          {
+            "title": "Guerreiro São João",
+            "artist": {
+              "name": "Gonzaguinha"
+            },
+            "isrc": "BREMI7800626",
+            "album": {
+              "id": 97398992
+            }
+          },
+          {
+            "title": "Pessoa",
+            "artist": {
+              "name": "Gonzaguinha"
+            },
+            "isrc": "BREMI7800272",
+            "album": {
+              "id": 97398992
+            }
+          },
+          {
+            "title": "Paixão",
+            "artist": {
+              "name": "Gonzaguinha"
+            },
+            "isrc": "BREMI8000377",
+            "album": {
+              "id": 178510752
+            }
+          },
+          {
+            "title": "Meninos Eu Vi (Gravidez)",
+            "artist": {
+              "name": "Gonzaguinha"
+            },
+            "isrc": "BREMI8400767",
+            "album": {
+              "id": 173758912
+            }
+          },
+          {
+            "title": "Grávido",
+            "artist": {
+              "name": "Gonzaguinha"
+            },
+            "isrc": "BREMI8400185",
+            "album": {
+              "id": 173758912
+            }
+          }
+        ]
+      },
+      "candidates": [],
+      "answer": {
+        "date": null,
+        "source": "unknown",
+        "retryAt": 1796241584106
+      }
+    },
+    {
+      "title": "Mas Que Nada",
+      "artist": "Jorge Ben Jor",
+      "brazilian": true,
+      "response": {
+        "data": [
+          {
+            "title": "Mas, Que Nada!",
+            "artist": {
+              "name": "Jorge Ben Jor"
+            },
+            "isrc": "BRMCA6300083",
+            "album": {
+              "id": 433091
+            }
+          },
+          {
+            "title": "Mas Que Nada (Ao Vivo)",
+            "artist": {
+              "name": "Jorge Ben Jor"
+            },
+            "isrc": "BRUM71200101",
+            "album": {
+              "id": 1584570
+            }
+          },
+          {
+            "title": "Mas que nada",
+            "artist": {
+              "name": "Jorge Ben Jor"
+            },
+            "isrc": "BRWMB0000913",
+            "album": {
+              "id": 3802401
+            }
+          },
+          {
+            "title": "Mas Que Nada (Ao Vivo)",
+            "artist": {
+              "name": "Jorge Ben Jor"
+            },
+            "isrc": "BRMCA0200103",
+            "album": {
+              "id": 94376872
+            }
+          },
+          {
+            "title": "Mas Que Nada (Com mais Swing 2)",
+            "artist": {
+              "name": "Jorge Ben Jor"
+            },
+            "isrc": "BRUM70900617",
+            "album": {
+              "id": 6378213
+            }
+          },
+          {
+            "title": "Mas Que Nada (Com mais Swing)",
+            "artist": {
+              "name": "Jorge Ben Jor"
+            },
+            "isrc": "BRUM70900488",
+            "album": {
+              "id": 6378213
+            }
+          },
+          {
+            "title": "Ben: Mas que nada",
+            "artist": {
+              "name": "Milos Karadaglic"
+            },
+            "isrc": "DEN961300020",
+            "album": {
+              "id": 6410202
+            }
+          },
+          {
+            "title": "Medley: Por Causa De Você, Menina / Chove Chuva / Mas Que Nada",
+            "artist": {
+              "name": "Jorge Ben Jor"
+            },
+            "isrc": "BRPGD7300009",
+            "album": {
+              "id": 1247201
+            }
+          },
+          {
+            "title": "Menina sarará / Mas que nada (Ao vivo)",
+            "artist": {
+              "name": "Jorge Ben Jor"
+            },
+            "isrc": "BRWMB0300655",
+            "album": {
+              "id": 55528412
+            }
+          },
+          {
+            "title": "Rosa mas que nada",
+            "artist": {
+              "name": "Jorge Ben Jor"
+            },
+            "isrc": "ES5831500616",
+            "album": {
+              "id": 10818501
+            }
+          }
+        ]
+      },
+      "candidates": [
+        {
+          "isrc": "BRMCA6300083",
+          "albumId": 433091
+        },
+        {
+          "isrc": "BRUM71200101",
+          "albumId": 1584570
+        },
+        {
+          "isrc": "BRWMB0000913",
+          "albumId": 3802401
+        },
+        {
+          "isrc": "BRMCA0200103",
+          "albumId": 94376872
+        },
+        {
+          "isrc": "BRUM70900617",
+          "albumId": 6378213
+        },
+        {
+          "isrc": "BRUM70900488",
+          "albumId": 6378213
+        }
+      ],
+      "answer": {
+        "date": "1963",
+        "source": "first-release",
+        "retryAt": null
+      }
+    },
+    {
+      "title": "Descobridor dos Sete Mares",
+      "artist": "Tim Maia",
+      "brazilian": true,
+      "response": {
+        "data": [
+          {
+            "title": "O Descobridor Dos Sete Mares",
+            "artist": {
+              "name": "Tim Maia"
+            },
+            "isrc": "BRMCA8300131",
+            "album": {
+              "id": 71057352
+            }
+          },
+          {
+            "title": "Descobridor Dos Sete Mares",
+            "artist": {
+              "name": "Jota Quest"
+            },
+            "isrc": "BRTQJ2600044",
+            "album": {
+              "id": 1062871881
+            }
+          },
+          {
+            "title": "O Descobridor dos Sete Mares",
+            "artist": {
+              "name": "Tim Maia"
+            },
+            "isrc": "BRVRD0700002",
+            "album": {
+              "id": 719668231
+            }
+          },
+          {
+            "title": "O Descobridor dos Sete Mares",
+            "artist": {
+              "name": "Tim Maia"
+            },
+            "isrc": "BRVRD9000006",
+            "album": {
+              "id": 719789751
+            }
+          },
+          {
+            "title": "O Descobridor dos Sete Mares (Loroza Mix)",
+            "artist": {
+              "name": "André Werneck"
+            },
+            "isrc": "BRAZF2000014",
+            "album": {
+              "id": 150036612
+            }
+          },
+          {
+            "title": "Me Dê Motivo",
+            "artist": {
+              "name": "Tim Maia"
+            },
+            "isrc": "BRMCA8300166",
+            "album": {
+              "id": 71057352
+            }
+          },
+          {
+            "title": "Mal De Amor",
+            "artist": {
+              "name": "Tim Maia"
+            },
+            "isrc": "BRUM70600418",
+            "album": {
+              "id": 71057352
+            }
+          },
+          {
+            "title": "Pecado Capital",
+            "artist": {
+              "name": "Tim Maia"
+            },
+            "isrc": "BRUM70600417",
+            "album": {
+              "id": 71057352
+            }
+          },
+          {
+            "title": "Rio Mon Amour",
+            "artist": {
+              "name": "Tim Maia"
+            },
+            "isrc": "BRUM70600421",
+            "album": {
+              "id": 71057352
+            }
+          },
+          {
+            "title": "Olá (Emoções)",
+            "artist": {
+              "name": "Tim Maia"
+            },
+            "isrc": "BRUM70600028",
+            "album": {
+              "id": 71057352
+            }
+          }
+        ]
+      },
+      "candidates": [],
+      "answer": {
+        "date": null,
+        "source": "unknown",
+        "retryAt": 1796241584106
+      }
+    },
+    {
+      "title": "Trem das Onze",
+      "artist": "Adoniran Barbosa",
+      "brazilian": true,
+      "response": {
+        "data": [
+          {
+            "title": "Trem Das Onze",
+            "artist": {
+              "name": "Adoniran Barbosa"
+            },
+            "isrc": "BREMI7400232",
+            "album": {
+              "id": 4074871
+            }
+          },
+          {
+            "title": "Trem das Onze",
+            "artist": {
+              "name": "Adoniran Barbosa"
+            },
+            "isrc": "BRKUA0015501",
+            "album": {
+              "id": 6964488
+            }
+          },
+          {
+            "title": "Trem das Onze (Ao Vivo no Sesc)",
+            "artist": {
+              "name": "Adoniran Barbosa"
+            },
+            "isrc": "BXSVC2200130",
+            "album": {
+              "id": 518042802
+            }
+          },
+          {
+            "title": "Trem das onze",
+            "artist": {
+              "name": "Demonios Da Garoa"
+            },
+            "isrc": "BRWMB9702462",
+            "album": {
+              "id": 8239432
+            }
+          },
+          {
+            "title": "Trem das Onze",
+            "artist": {
+              "name": "Regional do Nenê"
+            },
+            "isrc": "BRVWD1500078",
+            "album": {
+              "id": 10677110
+            }
+          },
+          {
+            "title": "Trem das Onze",
+            "artist": {
+              "name": "Quarteto Paraíso"
+            },
+            "isrc": "QZ5AB1829481",
+            "album": {
+              "id": 54338542
+            }
+          },
+          {
+            "title": "Trem Das Onze",
+            "artist": {
+              "name": "Grupo Peteleco"
+            },
+            "isrc": "BRMVP0401001",
+            "album": {
+              "id": 281805992
+            }
+          },
+          {
+            "title": "Trem Das Onze (Made Popular By Adoniran Barbosa) [Karaoke Version]",
+            "artist": {
+              "name": "Party Tyme Karaoke"
+            },
+            "isrc": "USSYS1060036",
+            "album": {
+              "id": 291129702
+            }
+          },
+          {
+            "title": "Brilho no Olhar / Só Depois / Mal Acostumado / Trem das Onze (Ao Vivo)",
+            "artist": {
+              "name": "Priscila Gouvea"
+            },
+            "isrc": "QZW9K2522832",
+            "album": {
+              "id": 851859902
+            }
+          }
+        ]
+      },
+      "candidates": [
+        {
+          "isrc": "BREMI7400232",
+          "albumId": 4074871
+        },
+        {
+          "isrc": "BRKUA0015501",
+          "albumId": 6964488
+        },
+        {
+          "isrc": "BXSVC2200130",
+          "albumId": 518042802
+        }
+      ],
+      "answer": {
+        "date": null,
+        "source": "unknown",
+        "retryAt": 1796241584106
+      }
+    },
+    {
+      "title": "Cheia de Manias",
+      "artist": "Raça Negra",
+      "brazilian": true,
+      "response": {
+        "data": [
+          {
+            "title": "Cheia de Manias",
+            "artist": {
+              "name": "Raça Negra"
+            },
+            "isrc": "BRRGE1905224",
+            "album": {
+              "id": 102138532
+            }
+          },
+          {
+            "title": "Cheia de Manias",
+            "artist": {
+              "name": "Raça Negra"
+            },
+            "isrc": "BX8IM1900002",
+            "album": {
+              "id": 97697562
+            }
+          },
+          {
+            "title": "Cheia de Manias",
+            "artist": {
+              "name": "Raça Negra"
+            },
+            "isrc": "BRSGL9200048",
+            "album": {
+              "id": 11793284
+            }
+          },
+          {
+            "title": "Cheia de Manias Ao Vivo",
+            "artist": {
+              "name": "Gigantes do Samba"
+            },
+            "isrc": "BRRGE1403679",
+            "album": {
+              "id": 8882645
+            }
+          },
+          {
+            "title": "Cheia de Manias (Ao Vivo)",
+            "artist": {
+              "name": "Raça Negra"
+            },
+            "isrc": "BRK1I1700045",
+            "album": {
+              "id": 46484422
+            }
+          },
+          {
+            "title": "Cheia De Manias (Ao Vivo)",
+            "artist": {
+              "name": "Raça Negra"
+            },
+            "isrc": "BRRGE1200134",
+            "album": {
+              "id": 3599581
+            }
+          },
+          {
+            "title": "Cheia De Manias (Ao Vivo)",
+            "artist": {
+              "name": "Raça Negra"
+            },
+            "isrc": "BRMCA0500063",
+            "album": {
+              "id": 2383671
+            }
+          },
+          {
+            "title": "Cheia de Manias Ao Vivo",
+            "artist": {
+              "name": "Sorriso Maroto"
+            },
+            "isrc": "BXS8V2500044",
+            "album": {
+              "id": 863384122
+            }
+          },
+          {
+            "title": "Cheia de Manias (Ao Vivo)",
+            "artist": {
+              "name": "Raça Negra"
+            },
+            "isrc": "BRRGE2200483",
+            "album": {
+              "id": 330418277
+            }
+          },
+          {
+            "title": "Cheia de Manias (Ao Vivo)",
+            "artist": {
+              "name": "Raça Negra"
+            },
+            "isrc": "BRMDM0800324",
+            "album": {
+              "id": 6541287
+            }
+          }
+        ]
+      },
+      "candidates": [
+        {
+          "isrc": "BRRGE1905224",
+          "albumId": 102138532
+        },
+        {
+          "isrc": "BX8IM1900002",
+          "albumId": 97697562
+        },
+        {
+          "isrc": "BRSGL9200048",
+          "albumId": 11793284
+        },
+        {
+          "isrc": "BRK1I1700045",
+          "albumId": 46484422
+        },
+        {
+          "isrc": "BRRGE1200134",
+          "albumId": 3599581
+        },
+        {
+          "isrc": "BRMCA0500063",
+          "albumId": 2383671
+        },
+        {
+          "isrc": "BRRGE2200483",
+          "albumId": 330418277
+        },
+        {
+          "isrc": "BRMDM0800324",
+          "albumId": 6541287
+        }
+      ],
+      "answer": {
+        "date": "2019-05-31",
+        "source": "first-release",
+        "retryAt": null
+      }
+    },
+    {
+      "title": "Meu Abrigo",
+      "artist": "Melim",
+      "brazilian": true,
+      "response": {
+        "data": [
+          {
+            "title": "Meu Abrigo",
+            "artist": {
+              "name": "Melim"
+            },
+            "isrc": "BRUM71706702",
+            "album": {
+              "id": 53126742
+            }
+          },
+          {
+            "title": "Meu Abrigo",
+            "artist": {
+              "name": "Melim"
+            },
+            "isrc": "BRBVX1500006",
+            "album": {
+              "id": 12218096
+            }
+          },
+          {
+            "title": "Meu Abrigo (Ao Vivo)",
+            "artist": {
+              "name": "Melim"
+            },
+            "isrc": "BRUM71900579",
+            "album": {
+              "id": 89852882
+            }
+          },
+          {
+            "title": "Meu Abrigo (Ao Vivo)",
+            "artist": {
+              "name": "Melim"
+            },
+            "isrc": "BRUM72301753",
+            "album": {
+              "id": 508229051
+            }
+          },
+          {
+            "title": "Meu Abrigo (Tribute to Melim) (Flute Version)",
+            "artist": {
+              "name": "Meu Abrigo"
+            },
+            "isrc": "DETL61401930",
+            "album": {
+              "id": 69976642
+            }
+          },
+          {
+            "title": "Meu Abrigo (Tribute to Melim) (Piano Version)",
+            "artist": {
+              "name": "Meu Abrigo"
+            },
+            "isrc": "DETL61401934",
+            "album": {
+              "id": 69976642
+            }
+          },
+          {
+            "title": "Dois Corações",
+            "artist": {
+              "name": "Melim"
+            },
+            "isrc": "BRUM71801611",
+            "album": {
+              "id": 65277552
+            }
+          },
+          {
+            "title": "Meu Abrigo",
+            "artist": {
+              "name": "Jota B"
+            },
+            "isrc": "GBSMU5351744",
+            "album": {
+              "id": 66990842
+            }
+          },
+          {
+            "title": "Meu Abrigo (Made Popular By Melim) [Karaoke Version]",
+            "artist": {
+              "name": "Party Tyme Karaoke"
+            },
+            "isrc": "USSYS1067378",
+            "album": {
+              "id": 427050127
+            }
+          },
+          {
+            "title": "Meu Abrigo (Cover - Melim)",
+            "artist": {
+              "name": "Vicente Franco de Melo"
+            },
+            "isrc": "US7VG2386936",
+            "album": {
+              "id": 401700217
+            }
+          }
+        ]
+      },
+      "candidates": [
+        {
+          "isrc": "BRUM71706702",
+          "albumId": 53126742
+        },
+        {
+          "isrc": "BRBVX1500006",
+          "albumId": 12218096
+        },
+        {
+          "isrc": "BRUM71900579",
+          "albumId": 89852882
+        },
+        {
+          "isrc": "BRUM72301753",
+          "albumId": 508229051
+        }
+      ],
+      "answer": {
+        "date": null,
+        "source": "unknown",
+        "retryAt": 1796241584106
+      }
+    },
+    {
+      "title": "Envolver",
+      "artist": "Anitta",
+      "brazilian": true,
+      "response": {
+        "data": [
+          {
+            "title": "Envolver",
+            "artist": {
+              "name": "Anitta"
+            },
+            "isrc": "USWL12100576",
+            "album": {
+              "id": 269735002
+            }
+          },
+          {
+            "title": "Envolver (Remix)",
+            "artist": {
+              "name": "Anitta"
+            },
+            "isrc": "USWL12200105",
+            "album": {
+              "id": 572201371
+            }
+          },
+          {
+            "title": "Envolver (Anitta Freestyle)",
+            "artist": {
+              "name": "Mesh Kiviu Msanii"
+            },
+            "isrc": "GX8LD2327400",
+            "album": {
+              "id": 433934397
+            }
+          },
+          {
+            "title": "Envolver (8-Bit Anitta Emulation)",
+            "artist": {
+              "name": "8-Bit Arcade"
+            },
+            "isrc": "AUXN22239830",
+            "album": {
+              "id": 309111957
+            }
+          },
+          {
+            "title": "Envolver (Originally Performed by Anitta) (Instrumental Version)",
+            "artist": {
+              "name": "Backing Business"
+            },
+            "isrc": "AUXN22240025",
+            "album": {
+              "id": 309112867
+            }
+          },
+          {
+            "title": "Envolver (Made Popular By Anitta) [Karaoke Version]",
+            "artist": {
+              "name": "Party Tyme Karaoke"
+            },
+            "isrc": "USSYS1045937",
+            "album": {
+              "id": 369833707
+            }
+          },
+          {
+            "title": "Envolver (Originally Performed by Anitta) (Karaoke Instrumental Version)",
+            "artist": {
+              "name": "Hit The Button Karaoke"
+            },
+            "isrc": "GBRBE0721493",
+            "album": {
+              "id": 321968447
+            }
+          },
+          {
+            "title": "Envolver",
+            "artist": {
+              "name": "The Cat and Owl"
+            },
+            "isrc": "UK54A2200865",
+            "album": {
+              "id": 620864701
+            }
+          }
+        ]
+      },
+      "candidates": [
+        {
+          "isrc": "USWL12100576",
+          "albumId": 269735002
+        },
+        {
+          "isrc": "USWL12200105",
+          "albumId": 572201371
+        }
+      ],
+      "answer": {
+        "date": "2021-11-11",
+        "source": "first-release",
+        "retryAt": null
+      }
+    },
+    {
+      "title": "Leão",
+      "artist": "Marília Mendonça",
+      "brazilian": true,
+      "response": {
+        "data": [
+          {
+            "title": "Leão",
+            "artist": {
+              "name": "Marília Mendonça"
+            },
+            "isrc": "BRWNV2200185",
+            "album": {
+              "id": 383846627
+            }
+          },
+          {
+            "title": "Matriz & Filial",
+            "artist": {
+              "name": "Fatima Leão"
+            },
+            "isrc": "US7VG1794452",
+            "album": {
+              "id": 44132601
+            }
+          },
+          {
+            "title": "Música do Léo",
+            "artist": {
+              "name": "Marília Mendonça"
+            },
+            "isrc": "BRWNV2600072",
+            "album": {
+              "id": 1112394392
+            }
+          },
+          {
+            "title": "Leão",
+            "artist": {
+              "name": "Xamã"
+            },
+            "isrc": "BRKGM2000013",
+            "album": {
+              "id": 192764272
+            }
+          },
+          {
+            "title": "Matriz Ou Filial (Made Popular By Fátima Leão & Marília Mendonça ) [Karaoke Version]",
+            "artist": {
+              "name": "Party Tyme Karaoke"
+            },
+            "isrc": "USSYS1069292",
+            "album": {
+              "id": 429203617
+            }
+          }
+        ]
+      },
+      "candidates": [
+        {
+          "isrc": "BRWNV2200185",
+          "albumId": 383846627
+        }
+      ],
+      "answer": {
+        "date": "2022-12-09",
+        "source": "first-release",
+        "retryAt": null
+      }
+    },
+    {
+      "title": "Aquarela",
+      "artist": "Toquinho",
+      "brazilian": true,
+      "response": {
+        "data": [
+          {
+            "title": "Aquarela",
+            "artist": {
+              "name": "Toquinho"
+            },
+            "isrc": "BRPGD8300010",
+            "album": {
+              "id": 7030981
+            }
+          },
+          {
+            "title": "Aquarela Do Brasil",
+            "artist": {
+              "name": "Toquinho"
+            },
+            "isrc": "BRMVP0300119",
+            "album": {
+              "id": 281746462
+            }
+          },
+          {
+            "title": "Aquarela (Acquarello)",
+            "artist": {
+              "name": "Toquinho"
+            },
+            "isrc": "BRBMG9402164",
+            "album": {
+              "id": 1214543
+            }
+          },
+          {
+            "title": "Acquarello (Aquarela) (Instrumental Version)",
+            "artist": {
+              "name": "Toquinho"
+            },
+            "isrc": "ITD541200854",
+            "album": {
+              "id": 7500945
+            }
+          },
+          {
+            "title": "Acquarello",
+            "artist": {
+              "name": "Toquinho"
+            },
+            "isrc": "ITD541200775",
+            "album": {
+              "id": 4261331
+            }
+          },
+          {
+            "title": "Conversando",
+            "artist": {
+              "name": "Toquinho"
+            },
+            "isrc": "BRUM70600541",
+            "album": {
+              "id": 950604
+            }
+          },
+          {
+            "title": "Esse Menino",
+            "artist": {
+              "name": "Toquinho"
+            },
+            "isrc": "BRUM70600539",
+            "album": {
+              "id": 950604
+            }
+          },
+          {
+            "title": "Doce Lembrança",
+            "artist": {
+              "name": "Toquinho"
+            },
+            "isrc": "BRUM70500147",
+            "album": {
+              "id": 950604
+            }
+          },
+          {
+            "title": "Outra História",
+            "artist": {
+              "name": "Toquinho"
+            },
+            "isrc": "BRMCA8300057",
+            "album": {
+              "id": 950604
+            }
+          },
+          {
+            "title": "Aquarela",
+            "artist": {
+              "name": "Toquinho"
+            },
+            "isrc": "ARF411200369",
+            "album": {
+              "id": 2451061
+            }
+          }
+        ]
+      },
+      "candidates": [
+        {
+          "isrc": "BRPGD8300010",
+          "albumId": 7030981
+        },
+        {
+          "isrc": "BRBMG9402164",
+          "albumId": 1214543
+        },
+        {
+          "isrc": "ARF411200369",
+          "albumId": 2451061
+        }
+      ],
+      "answer": {
+        "date": "1994",
+        "source": "first-release",
+        "retryAt": null
+      }
+    }
+  ]
+}

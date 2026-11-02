@@ -210,6 +210,8 @@ The current-playing row follows the recording across a completed streamed-to-Lib
 
 ### Network
 
+- **Playlist release dates.** Choosing Release date sends song titles and artists to Deezer (up to ten matching recordings per song), then ISRCs to MusicBrainz in batches. A notice names both services before the first request. MusicBrainz receives an identifying Wave User-Agent, at most one request per second; Deezer requests wait at least 350 ms. Neither receives audio or playlist names. First-release dates take precedence over the file Year and Deezer album dates, whose fallback origin is retained. Answers and retry deadlines persist: unknown songs wait 30 days, network failures one minute. Only playlists on this sort are searched while Wave runs.
+
 Wave uses the network for five features, each behind its own Settings switch (on by default) that stops every request it makes, for the Wave and Spotify accounts, whose switch is signing in, and for lyrics translation, whose switch is the Lyrics view's Translate button (off by default).
 
 - **Wave account** (Wave's sync service, see Wave account and sync): while signed in, sends the Library's song list (each song's tags and, for a downloaded one, its YouTube video id, never the file or its path), playlists, favorites, play history, preferences, followed artists (with the releases hidden and the shows notified), and the Google ID token once at sign-in. Signed out, Wave sends it nothing, and the Library, play history and stats never leave the phone.

@@ -8,6 +8,12 @@ const songs = (count: number): string =>
 
 /** Playlists: their list, pages, sheets, editing, sort and layout, and recommendations. */
 export const playlistsEn = {
+  releaseNoticeTitle: "Find release dates",
+  releaseNotice:
+    "Wave sends song titles and artists to Deezer, then recording ISRCs to MusicBrainz to find first release dates.",
+  releaseProgress: (done: number, total: number): string =>
+    `Finding release dates: ${n(done)} of ${n(total)}`,
+  releaseOffline: "Release date lookup paused: offline or service unavailable",
   releaseOldest: "Release date · Oldest first",
   releaseNewest: "Release date · Newest first",
   /** A new playlist's name, saved as written: New Playlist, then New Playlist 2, 3… */

@@ -1,11 +1,4 @@
-import {
-  readPlaylistSongSort,
-  sortPlaylistSongs,
-  SONG_SORTS,
-  songSortLabelFor,
-  type PlaylistSongSort,
-} from "@wave/core";
-import { persistedSetting } from "@/lib/persistedSetting";
+import { sortPlaylistSongs, SONG_SORTS, songSortLabelFor, type PlaylistSongSort } from "@wave/core";
 import { IconArrowsSort } from "@tabler/icons-react-native";
 import { IconButton } from "@/components/IconButton";
 import { EntryRow } from "@/catalog/EntryRow";
@@ -14,22 +7,9 @@ import { openOverlay } from "@/overlay/overlay";
 import { pressedRect } from "@/motion/pressedRect";
 import { useLocalisation } from "@/localisation/localisation";
 import type { PlaylistEntryRow } from "./LibraryStore";
-const settings = new Map<string, ReturnType<typeof makeSetting>>();
-const makeSetting = (id: string) =>
-  persistedSetting<PlaylistSongSort>({
-    key: `settings.playlistSongs.${id}`,
-    synced: true,
-    read: readPlaylistSongSort,
-    write: JSON.stringify,
-  });
-export const playlistSongSetting = (id: string) => {
-  let setting = settings.get(id);
-  if (!setting) {
-    setting = makeSetting(id);
-    settings.set(id, setting);
-  }
-  return setting;
-};
+export { playlistSongSetting } from "./playlistSongSetting";
+import { playlistSongSetting } from "./playlistSongSetting";
+import { releaseEntryDate, ensureReleaseNotice } from "./releaseDates";
 export const orderPlaylistEntries = (
   entries: readonly PlaylistEntryRow[],
   sort: PlaylistSongSort,
@@ -41,9 +21,9 @@ export const orderPlaylistEntries = (
       artist: entry.source === "library" ? entry.track.artist : entry.song.artists.join(", "),
       album: entry.source === "library" ? entry.track.album : (entry.song.album ?? ""),
       addedAt: entry.addedAt ?? 0,
+      releaseDate: releaseEntryDate(entry),
       ...(entry.source === "library"
         ? {
-            releaseDate: entry.track.releaseDate,
             year: entry.track.year,
             discNumber: entry.track.discNumber,
             trackNumber: entry.track.trackNumber,
@@ -86,9 +66,10 @@ export function PlaylistSongSortButton({ id }: { id: string }) {
                   key={label(sort)}
                   label={label(sort)}
                   selected={sort.key === current.key && sort.descending === current.descending}
-                  onPress={() => {
-                    setting.set(sort);
+                  onPress={async () => {
                     close();
+                    if (sort.key === "releaseDate") await ensureReleaseNotice();
+                    setting.set(sort);
                   }}
                 />
               ))}
