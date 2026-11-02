@@ -61,8 +61,7 @@ export type Bump =
 /**
  * The bump the PRs merged in a release's commits make, counted as its patch notes list them,
  * less those whose merge commit a `v*` tag of either channel already contains: the shared
- * counter bumped for them then (a feat/ PR released on ti doesn't bump the minor again when
- * ti reaches main).
+ * counter bumped for them then (a feat/ PR already released doesn't bump the minor again).
  */
 export const bumpFor = (
   release: Pick<PatchNotesInput, "commits" | "pullRequests"> & {
@@ -81,7 +80,7 @@ export const bumpFor = (
 
 /** What the next-version rule reads about a push. */
 export type NextVersionInput = {
-  /** The branch it releases from: ti's versions end in -ti. main when unset. */
+  /** The channel it releases to: ti's versions end in -ti. main when unset. */
   channel?: "main" | "ti";
   /** The version in apps/mobile/package.json. */
   version: string;
@@ -129,7 +128,7 @@ export const nextVersion = (push: NextVersionInput): NextVersion => {
     if (!reachesUsers(others))
       return {
         reason:
-          "Only CI, docs, specs or the app's version changed since the previous release (a promotion or an old branch's bump), so nothing is bumped or released.",
+          "Only CI, docs, specs or the app's version changed since the previous release so nothing is bumped or released.",
       };
   }
   const current = parse(push.version);

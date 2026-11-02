@@ -19,7 +19,7 @@ export type UpdateChannel = "ti" | "main";
 
 /**
  * The channel a run's APK follows: main's pushes and -ti tags follow ti, and stable tags, which
- * only a promotion makes, follow main. PR builds and any other branch have none: they never update.
+ * a promotion makes, follow main. PR builds and any other branch have none: they never update.
  */
 export const updateChannel = (run: { event: string; ref: string }): UpdateChannel | null => {
   if (run.event !== "push" && run.event !== "workflow_dispatch") return null;

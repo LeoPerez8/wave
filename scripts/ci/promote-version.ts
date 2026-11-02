@@ -44,7 +44,7 @@ export const promotion = (input: {
   if (input.tags.includes(to))
     throw new Error(
       `${to} already exists, so ${from} is already promoted. If its publishing failed, re-run ` +
-        "that CI run's failed jobs.",
+        `that CI run's failed jobs, or start it if it has none: gh workflow run ci.yml --ref ${to}`,
     );
   const stable = newest(false);
   if (stable && compare(base, stable) < 0)

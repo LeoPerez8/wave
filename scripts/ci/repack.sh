@@ -7,7 +7,7 @@
 # The kept dir holds app-release.apk and debug.keystore. Run it after prebuild, from the repo
 # root. The kept APK's key covers Metro's assets (Android resources only Gradle can build in),
 # so they match this bundle's and only the bundle is swapped. It leaves the app version out
-# (ti bumps it on every release), so apk-version.ts writes this run's into the manifest and
+# (main bumps it on every release), so apk-version.ts writes this run's into the manifest and
 # Expo's embedded app config. The build label the app log shows (build-label.ts) is in the
 # bundle, so swapping it in already gives the APK this run's. Env: ANDROID_HOME, RUNNER_TEMP.
 set -euo pipefail

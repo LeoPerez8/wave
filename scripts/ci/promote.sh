@@ -23,12 +23,15 @@ if ! git merge-base --is-ancestor "$commit" FETCH_HEAD; then
   exit 1
 fi
 # The run uses the workflow as the tag has it, so the tag must be able to start one.
-if ! git show "$commit:.github/workflows/ci.yml" | grep -q '^  workflow_dispatch:'; then
+if ! git show "$commit:.github/workflows/ci.yml" | grep -q 'workflow_dispatch:'; then
   echo "::error::$from predates promotions: its CI can't be started on a tag. Promote a newer version." >&2
   exit 1
 fi
 
 git tag "$to" "$commit"
 git push --quiet origin "refs/tags/$to"
-gh workflow run ci.yml --repo "${GITHUB_REPOSITORY:?}" --ref "$to"
+if ! gh workflow run ci.yml --repo "${GITHUB_REPOSITORY:?}" --ref "$to"; then
+  echo "::error::$to is tagged but its CI run didn't start. Start it with: gh workflow run ci.yml --ref $to" >&2
+  exit 1
+fi
 echo "Promoting $from to $to (${commit:0:7}). The CI run on $to publishes it." | tee -a "${GITHUB_STEP_SUMMARY:-/dev/null}"

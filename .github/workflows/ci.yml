@@ -590,17 +590,16 @@ jobs:
           retention-days: 14
 
       # A prerelease per PR, and a rolling one per channel, gives a stable link that installs
-      # straight from the phone's browser: ti-latest moves on every push to main, latest only on
-      # a promotion. A -ti tag by hand or a manual run off a tag moves neither.
+      # straight from the phone's browser: ti-latest moves on every push to main. The release
+      # job moves latest, once a promotion has passed its native tests.
       - name: Publish APK to a prerelease
         id: publish
-        if: env.PR_NUMBER != '' || (github.event_name == 'push' && github.ref == 'refs/heads/main') || (env.IS_RELEASE == 'true' && env.IS_TI != 'true')
+        if: env.PR_NUMBER != '' || (github.event_name == 'push' && github.ref == 'refs/heads/main')
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
           if [ -n "$PR_NUMBER" ]; then tag="pr-$PR_NUMBER"; asset="wave-pr-$PR_NUMBER.apk"; title="PR #$PR_NUMBER build";
-          elif [ "$GITHUB_REF" = "refs/heads/main" ]; then tag="ti-latest"; asset="wave-ti.apk"; title="Latest ti test build";
-          else tag="latest"; asset="wave-latest.apk"; title="Latest promoted build"; fi
+          else tag="ti-latest"; asset="wave-ti.apk"; title="Latest ti test build"; fi
           cp "${{ steps.apk.outputs.path }}" "$RUNNER_TEMP/$asset"
           gh release view "$tag" > /dev/null 2>&1 || \
             gh release create "$tag" --prerelease --latest=false --target "$HEAD_SHA" --title "$title" \
@@ -670,6 +669,17 @@ jobs:
             printf '%s\n' "$PATCH_NOTES" > "$RELEASE_NOTES_FILE"
           fi
           scripts/ci/publish-release.sh "$RUNNER_TEMP/release/$APK_NAME"
+
+      # The rolling link to what's on the main channel.
+      - name: Move the latest build
+        if: steps.published.outputs.url != '' && !endsWith(needs.checks.outputs.release_tag, '-ti')
+        continue-on-error: true
+        env:
+          GH_TOKEN: ${{ github.token }}
+          APK_NAME: ${{ needs.android.outputs.artifact }}
+        run: |
+          cp "$RUNNER_TEMP/release/$APK_NAME" "$RUNNER_TEMP/wave-latest.apk"
+          gh release upload latest "$RUNNER_TEMP/wave-latest.apk" --clobber
 
       # After the release, so phones never get a version that has none: publish-release.sh answers
       # no url when it published nothing (a moved tag). None of these can fail the release: without
