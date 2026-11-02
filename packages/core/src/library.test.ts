@@ -445,3 +445,14 @@ describe("A song's stored genre values", () => {
     assert.deepEqual(readStoredGenres('["Rock", 2]'), []);
   });
 });
+
+test("original release precision stays separate from the album Year", () => {
+  for (const releaseDate of ["1985", "1985-06", "1985-06-21"])
+    assert.equal(
+      normalizeTrack({ path: "/song.mp3", year: "2005", releaseDate }).releaseDate,
+      releaseDate,
+    );
+  const track = normalizeTrack({ path: "/song.mp3", year: "2005", releaseDate: "1985-06-21" });
+  assert.equal(track.year, 2005);
+  assert.equal(normalizeTrack({ path: "/song.mp3", releaseDate: "unknown" }).releaseDate, null);
+});

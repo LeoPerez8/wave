@@ -8,6 +8,8 @@ const songs = (count: number): string =>
 
 /** Playlists: their list, pages, sheets, editing, sort and layout, and recommendations. */
 export const playlistsEn = {
+  releaseOldest: "Release date · Oldest first",
+  releaseNewest: "Release date · Newest first",
   /** A new playlist's name, saved as written: New Playlist, then New Playlist 2, 3… */
   defaultName: "New Playlist",
   newPlaylist: "New Playlist",

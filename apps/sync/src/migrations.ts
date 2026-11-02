@@ -203,6 +203,7 @@ const MIGRATIONS: readonly Migration[] = [
       `CREATE INDEX notified_shows_change_idx ON notified_shows (account_id, change_no)`,
     ],
   },
+  { id: "0007_release_date", statements: ["ALTER TABLE songs ADD COLUMN release_date TEXT"] },
 ];
 
 /** Runs the migrations [db] hasn't run yet, each in its own transaction. Gives the ids it ran. */

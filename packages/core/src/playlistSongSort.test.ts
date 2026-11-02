@@ -43,3 +43,52 @@ test("artist and album sort both ways, keeping equal entries in Custom order", (
     }
   }
 });
+test("release dates retain precision, use Year and leave missing dates last", () => {
+  const entries = [null, "1985-06-21", "1985", "1985-06", null].map((releaseDate, id) => ({
+    id,
+    title: "Song",
+    artist: "Artist",
+    album: "Album",
+    addedAt: 0,
+    releaseDate,
+    year: id === 4 ? 1984 : null,
+  }));
+  for (const descending of [false, true]) {
+    const sort = { key: "releaseDate", descending } as const;
+    assert.deepEqual(readPlaylistSongSort(JSON.stringify(sort)), sort);
+    assert.deepEqual(
+      sortPlaylistSongs(entries, sort).map((x) => x.id),
+      descending ? [1, 3, 2, 4, 0] : [4, 2, 3, 1, 0],
+    );
+  }
+});
+test("equal release dates use disc and track order while undated songs keep Custom", () => {
+  const base = { title: "Song", artist: "Artist", album: "Album", addedAt: 0 };
+  const songs = [
+    { ...base, id: 0, releaseDate: null, trackNumber: 5 },
+    { ...base, id: 1, releaseDate: "1985", discNumber: 2, trackNumber: 1 },
+    { ...base, id: 2, releaseDate: "1985", discNumber: 1, trackNumber: 2 },
+    { ...base, id: 3, releaseDate: null, trackNumber: 1 },
+    { ...base, id: 4, releaseDate: "1985", discNumber: 1, trackNumber: 1 },
+  ];
+  for (const descending of [false, true])
+    assert.deepEqual(
+      sortPlaylistSongs(songs, { key: "releaseDate", descending }).map((x) => x.id),
+      [4, 2, 1, 0, 3],
+    );
+});
+
+test("equal release dates follow album order when disc or track tags are absent", () => {
+  const base = { title: "Song", artist: "Artist", album: "Album", addedAt: 0, releaseDate: "1985" };
+  const songs = [
+    { ...base, id: 0, discNumber: null, trackNumber: null },
+    { ...base, id: 1, discNumber: 2, trackNumber: 1 },
+    { ...base, id: 2, discNumber: 1, trackNumber: 2 },
+    { ...base, id: 3, discNumber: null, trackNumber: 1 },
+  ];
+  for (const descending of [false, true])
+    assert.deepEqual(
+      sortPlaylistSongs(songs, { key: "releaseDate", descending }).map((song) => song.id),
+      [3, 2, 0, 1],
+    );
+});

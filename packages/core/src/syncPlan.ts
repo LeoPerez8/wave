@@ -86,6 +86,7 @@ const songText = (fields: SyncSongFields): string =>
     fields.trackNumber,
     fields.durationMs,
     fields.year,
+    fields.releaseDate ?? null,
     fields.genre,
     fields.videoId,
     fields.addedAt,
@@ -171,6 +172,7 @@ export const missingSongTrack = (song: SyncSongFields): MissingSongTrack => {
     album: song.album,
     albumArtist: song.albumArtist,
     genre: song.genre,
+    releaseDate: song.releaseDate,
     year: song.year === null ? null : String(song.year),
     trackNumber: song.trackNumber === null ? null : String(song.trackNumber),
     discNumber: song.discNumber === null ? null : String(song.discNumber),
@@ -201,6 +203,7 @@ export interface ShownMissingSong {
   readonly album: string;
   readonly albumArtist: string;
   readonly genre: string | null;
+  readonly releaseDate?: string | null | undefined;
   readonly year: number | null;
   readonly trackNumber: number | null;
   readonly discNumber: number | null;
@@ -217,6 +220,7 @@ const shownTags = (song: Omit<ShownMissingSong, "id" | "recordingKey">): string 
     song.albumArtist,
     song.genre,
     song.year,
+    song.releaseDate ?? null,
     song.trackNumber,
     song.discNumber,
     song.durationMs,

@@ -64,6 +64,39 @@ class TagReadingTest {
     assertDuration("tagged.wav", tags)
   }
 
+  @Test
+  fun originalReleaseDatesKeepPrecisionWithoutChangingYear() {
+    for (name in listOf("tagged.mp3", "tagged.flac", "tagged-aac.m4a", "tagged-alac.m4a", "tagged.ogg", "tagged.wav")) {
+      val file = Fixtures.tempDir().resolve(name)
+      Fixtures.file(name).copyTo(file)
+      val audio = AudioFileIO.read(file)
+      val container = audio.tagOrCreateAndSetDefault
+      val tag = if (container is org.jaudiotagger.tag.wav.WavTag) {
+        container.setID3Tag(org.jaudiotagger.tag.id3.ID3v24Tag())
+        container.iD3Tag
+      } else container
+      tag.setField(FieldKey.ORIGINALRELEASEDATE, "1985-06-21")
+      AudioFileIO.write(audio)
+      val tags = reader.read(file)
+      assertEquals("$name original date", "1985-06-21", tags.releaseDate)
+      assertEquals("$name album Year", "2024", tags.year)
+    }
+  }
+
+  @Test
+  fun aacFallbackRetainsALeadingId3OriginalDate() {
+    val tag = org.jaudiotagger.tag.id3.ID3v24Tag().apply {
+      setField(FieldKey.ORIGINALRELEASEDATE, "1985-06-21")
+    }
+    val file = Fixtures.tempDir().resolve("tagged.aac")
+    file.outputStream().use { tag.write(it, 0) }
+    file.appendBytes(byteArrayOf(0xff.toByte(), 0xf1.toByte(), 0, 0))
+    val fallback = AudioTagReader(primary = JAudioTaggerReader(), fallback = { RawTags(year = "2005") })
+    val tags = fallback.read(file)
+    assertEquals("1985-06-21", tags.releaseDate)
+    assertEquals("2005", tags.year)
+  }
+
   /** A copy of the fixture [name] with a second genre added to its tag. */
   private fun withSecondGenre(name: String): java.io.File {
     val file = Fixtures.tempDir().resolve(name)

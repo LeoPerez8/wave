@@ -40,8 +40,14 @@ export const selectNowPlayingSong = (
     .orderBy(...BY_TITLE)
     .all();
   const candidates = rows.filter(
-    (row): row is SongRow & { artistIds: number[]; favorite: boolean; pendingFavorite: boolean } =>
-      row.id !== null,
+    (
+      row,
+    ): row is SongRow & {
+      releaseDate: string | null;
+      artistIds: number[];
+      favorite: boolean;
+      pendingFavorite: boolean;
+    } => row.id !== null,
   );
   const match =
     ref?.kind === "library"

@@ -291,3 +291,37 @@ describe("selectVideoIds", () => {
     assert.deepEqual(selectVideoIds(db, [lucky, local, 999]), new Map([[lucky, "abc"]]));
   });
 });
+
+test("release date migration keeps library rows and requests a tag reread", async () => {
+  const before = await openTestDatabase({ through: "0051_skipped_files" });
+  addTrack(before, { title: "Saved song", year: 2005 });
+  await migrateTestDatabase(before);
+  const db = before;
+  const rows = db.select().from(schema.tracks).all();
+  assert.equal(rows.length, 1);
+  assert.equal(rows[0]?.title, "Saved song");
+  assert.equal(rows[0]?.year, 2005);
+  assert.equal(rows[0]?.releaseDate, null);
+  assert.equal(rows[0]?.modifiedAt, 0);
+});
+
+test("scanning and rescanning preserves an original date separately from album Year", async () => {
+  const db = await openTestDatabase();
+  const file = {
+    ...scanned("Original", "unknown"),
+    ...normalizeTrack({
+      path: "/Music/Original.m4a",
+      title: "Original",
+      album: "Compilation",
+      year: "2005",
+      releaseDate: "1985-06-21",
+    }),
+  };
+  for (const now of [10, 20]) {
+    saveBatch(db, creditSplits(), [file], [], [], now);
+    const row = trackQuery(db).get();
+    assert.equal(row?.releaseDate, "1985-06-21");
+    assert.equal(row?.year, 2005);
+    assert.equal(db.select().from(schema.albums).get()?.year, 2005);
+  }
+});

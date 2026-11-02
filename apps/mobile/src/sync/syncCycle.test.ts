@@ -72,13 +72,15 @@ const OK_COMPUTER: readonly FixtureTrack[] = [
 ];
 
 /** A song on a phone; [videoId] for one downloaded from YouTube Music. */
-type Song = FixtureTrack & { readonly videoId?: string };
+type Song = FixtureTrack & { readonly videoId?: string; readonly releaseDate?: string };
 
 /** The file of [song] as a scan reads it. */
 const scanned = (song: Song): IndexedTrack => ({
   ...normalizeTrack({
     path: `/Music/${song.album}/${song.title}.mp3`,
     title: song.title,
+    releaseDate: song.releaseDate,
+    year: song.year === undefined ? null : String(song.year),
     artist: song.artist,
     album: song.album,
     trackNumber: song.trackNumber === undefined ? null : String(song.trackNumber),
@@ -1155,4 +1157,25 @@ test("playlist removal and Undo sync the same entries and order to another phone
   await a.sync();
   await b.sync();
   assert.deepEqual(selectPlaylist(b.db, onB)!.items, original);
+});
+
+test("a scanned original release date reaches another phone independently of Year", async () => {
+  const service = testSyncService();
+  const first = await phone(service, []);
+  const second = await phone(service, []);
+  first.addFile({
+    title: "Original",
+    artist: "Artist",
+    album: "Compilation",
+    year: 2005,
+    releaseDate: "1985-06-21",
+  });
+  await first.sync({ songsChanged: true });
+  await second.sync();
+  const albums = selectAlbums(second.db, undefined);
+  const album = selectAlbumDetail(second.db, albums[0]!.id);
+  assert.equal(album?.album.year, 2005);
+  assert.equal(album?.tracks[0]?.releaseDate, "1985-06-21");
+  assert.equal(album?.tracks[0]?.year, 2005);
+  assert.equal((await second.sync()).pulled.library, false);
 });

@@ -188,6 +188,7 @@ const DraggableEntry = memo(function DraggableEntry({
 
 type Props = {
   customOrder?: boolean;
+  showReleaseYear?: boolean;
   playlistId: number;
   /** In playlist order; undefined until they are read (only the header shows). */
   items: readonly PlaylistEntryRow[] | undefined;
@@ -233,7 +234,14 @@ export const playPlaylistEntries = (
  * get Move up / Move down and the swipes' actions. While selecting, an
  * unavailable entry can't be checked and does nothing.
  */
-export function PlaylistItems({ playlistId, items, header, empty, customOrder = true }: Props) {
+export function PlaylistItems({
+  playlistId,
+  items,
+  header,
+  empty,
+  customOrder = true,
+  showReleaseYear = false,
+}: Props) {
   const { strings } = useLocalisation();
   const scrollable = useListScrollable();
   const read = items ?? NO_ITEMS;
@@ -463,6 +471,13 @@ export function PlaylistItems({ playlistId, items, header, empty, customOrder = 
   const decorateRow = useCallback(
     (row: ReactElement, item: Item, index: number) => {
       const key = itemKey(item);
+      const entry = entryOf(item);
+      if (showReleaseYear && entry?.source === "library") {
+        const year = entry.track.releaseDate?.slice(0, 4) ?? entry.track.year;
+        row = cloneElement(row as ReactElement<{ secondLine: string }>, {
+          secondLine: year ? `${entry.track.artist} · ${year}` : entry.track.artist,
+        });
+      }
       return (
         <DraggableEntry
           row={row as ReactElement<SongRowActions>}
@@ -474,7 +489,7 @@ export function PlaylistItems({ playlistId, items, header, empty, customOrder = 
         />
       );
     },
-    [rowDrag, drag, selecting, reorderable],
+    [rowDrag, drag, selecting, reorderable, showReleaseYear],
   );
   const renderSlot = ({ item }: { item: Item }) =>
     "kind" in item ? (

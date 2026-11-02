@@ -72,7 +72,11 @@ const upsert = (
   args.push(...(row.values ?? fields.map(() => null)));
   const updates = columns
     .filter((name) => name !== "account_id" && name !== "id")
-    .map((name) => `${name} = excluded.${name}`);
+    .map((name) =>
+      name === "release_date"
+        ? `${name} = coalesce(excluded.${name}, ${table.sqlName}.${name})`
+        : `${name} = excluded.${name}`,
+    );
   return {
     sql: `INSERT INTO ${table.sqlName} (${columns.join(", ")})
           VALUES (${columns.map(() => "?").join(", ")})
