@@ -482,6 +482,8 @@ export type {
 } from "./settingsPages.ts";
 export { PLAYLIST_LAYOUTS, parsePlaylistLayout, storedPlaylistLayout } from "./playlistLayout.ts";
 export type { PlaylistLayout } from "./playlistLayout.ts";
+export { sortPlaylistsForAdd } from "./addToPlaylistOrder.ts";
+export type { AddToPlaylistChoice } from "./addToPlaylistOrder.ts";
 export {
   PLAYLIST_SORTS,
   choosePlaylistSort,

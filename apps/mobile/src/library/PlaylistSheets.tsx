@@ -4,11 +4,12 @@ import {
   confirmPlaylistDeletion,
   describePlaylistAdd,
   nextPlaylistName,
+  sortPlaylistsForAdd,
   type Catalogue,
   type PlaylistNameCheck,
   type PlaylistSong,
 } from "@wave/core";
-import { Fragment, useState } from "react";
+import { Fragment, useMemo, useState } from "react";
 import { Text, TextInput, View } from "react-native";
 
 import { CatalogLine } from "@/catalog/CatalogLine";
@@ -197,7 +198,8 @@ const addSongs = (playlistId: number, songs: () => Promise<readonly PlaylistSong
 };
 
 function AddCard({ subject, close }: { subject: AddSubject; close: () => void }) {
-  const playlists = usePlaylists();
+  const allPlaylists = usePlaylists();
+  const playlists = useMemo(() => sortPlaylistsForAdd(allPlaylists), [allPlaylists]);
   const search = usePlaylistPickerSearch(playlists);
   const { strings } = useLocalisation();
 
