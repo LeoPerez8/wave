@@ -549,7 +549,7 @@ export interface PlaylistRow {
   readonly sort: string;
   /** When it was made, in ms since the epoch (Recently Added). */
   readonly createdAt: number;
-  /** Newest live entry's added date, or null when empty (Add to Playlist). */
+  /** Newest readable live entry's added date, or null when empty (Add to Playlist). */
   readonly lastEntryAddedAt: number | null;
   readonly trackCount: number;
   readonly durationMs: number;

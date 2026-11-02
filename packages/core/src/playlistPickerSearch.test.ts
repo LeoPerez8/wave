@@ -35,3 +35,12 @@ test("text hides New Playlist, clearing restores it, and a missing name has a no
   assert.equal(search.show(null).showNewPlaylist, true);
   assert.deepEqual(search.show("").playlists, [{ name: "Morning" }]);
 });
+
+test("creation stays pinned when search is closed and can scroll only in an empty field", () => {
+  const search = createPlaylistPickerSearch([{ name: "Morning" }]);
+  assert.equal(search.show(null).newPlaylistPlacement, "pinned");
+  assert.equal(search.show("").newPlaylistPlacement, "scroll");
+  assert.equal(search.show("mor").newPlaylistPlacement, "hidden");
+  assert.equal(search.show("missing").newPlaylistPlacement, "hidden");
+  assert.equal(search.show("!!!").newPlaylistPlacement, "hidden");
+});
