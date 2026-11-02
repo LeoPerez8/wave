@@ -18,6 +18,7 @@ export function usePlaylistPickerSearch<T extends { readonly name: string }>(
   const [query, setQuery] = useState<string | null>(null);
   const [overflows, setOverflow] = useState(false);
   const finder = useMemo(() => createPlaylistPickerSearch(playlists), [playlists]);
+  const shown = useMemo(() => finder.show(query), [finder, query]);
   const searching = query !== null;
   const closeSearch = useCallback(() => {
     setQuery((current) => stepPlaylistPickerSearch(current, "back").query);
@@ -38,7 +39,7 @@ export function usePlaylistPickerSearch<T extends { readonly name: string }>(
   }, [searching, closeSearch]);
 
   return {
-    ...finder.show(query),
+    ...shown,
     query,
     searching,
     overflows,

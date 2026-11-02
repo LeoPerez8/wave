@@ -1148,6 +1148,11 @@ const READABLE_UNSEARCHED_SONG = sql`CASE
     0)
 END`;
 
+/** Live entries the playlist can read; a Library entry with no track is left out. Uses aliases pi/t. */
+const READABLE_PLAYLIST_ENTRY = sql`NOT pi.deleted
+  AND CASE WHEN pi.track_id IS NOT NULL THEN t.id IS NOT NULL
+    ELSE ${READABLE_YT_SONG} OR ${READABLE_UNSEARCHED_SONG} OR ${READABLE_UNAVAILABLE_SONG} END`;
+
 /**
  * Each playlist's song count and length (only [playlists]' when given: one id
  * or several), YT Music, unsearched and unavailable entries included (one of
@@ -1172,10 +1177,7 @@ export const selectPlaylistTotals = (
         AS unavailableCount
     FROM playlist_items pi
     LEFT JOIN tracks t ON t.id = pi.track_id
-    WHERE NOT pi.deleted AND ${entriesOf(playlists)}
-      -- A Library entry whose track is gone is on its way out (the cascade), never counted.
-      AND CASE WHEN pi.track_id IS NOT NULL THEN t.id IS NOT NULL
-        ELSE ${READABLE_YT_SONG} OR ${READABLE_UNSEARCHED_SONG} OR ${READABLE_UNAVAILABLE_SONG} END
+    WHERE ${READABLE_PLAYLIST_ENTRY} AND ${entriesOf(playlists)}
     GROUP BY pi.playlist_id`);
   return new Map(rows.map(({ playlistId, ...total }) => [playlistId, total]));
 };
@@ -1235,17 +1237,16 @@ const playlistSummaries = (
   const stale = playlistIds.filter((id) => cache.get(id)?.at !== at(id));
   if (stale.length > 0) {
     const covers = selectPlaylistCovers(db, stale);
-    const { playlistItems } = schema;
     const latest = new Map(
       db
-        .select({
-          playlistId: playlistItems.playlistId,
-          addedAt: sql<number>`max(${playlistItems.addedAt})`,
-        })
-        .from(playlistItems)
-        .where(and(live, sql`${playlistItems.playlistId} IN ${jsonList(stale)}`))
-        .groupBy(playlistItems.playlistId)
-        .all()
+        .all<{ playlistId: number; addedAt: number }>(
+          sql`
+        SELECT pi.playlist_id AS playlistId, max(pi.added_at) AS addedAt
+        FROM playlist_items pi
+        LEFT JOIN tracks t ON t.id = pi.track_id
+        WHERE ${READABLE_PLAYLIST_ENTRY} AND ${entriesOf(stale)}
+        GROUP BY pi.playlist_id`,
+        )
         .map((row) => [row.playlistId, row.addedAt]),
     );
     const uncounted = stale.filter((id) => counted?.get(id) === undefined);

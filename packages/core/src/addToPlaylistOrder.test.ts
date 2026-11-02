@@ -1,7 +1,14 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 
-import { sortKey, sortPlaylists, sortPlaylistsForAdd, type PlaylistSort } from "./index.ts";
+import {
+  createPlaylistPickerSearch,
+  keepAddToPlaylistOrder,
+  sortKey,
+  sortPlaylists,
+  sortPlaylistsForAdd,
+  type PlaylistSort,
+} from "./index.ts";
 
 const playlist = (
   id: number,
@@ -14,6 +21,67 @@ const playlist = (
   sort: sortKey(name),
   createdAt,
   lastEntryAddedAt,
+});
+
+test("an open card keeps its ranks through additions and renames, with live names and counts", () => {
+  const rows = [
+    { ...playlist(1, "Ambient", 10, 20), trackCount: 1 },
+    { ...playlist(2, "Road Trip", 5, 30), trackCount: 2 },
+  ];
+  const opened = keepAddToPlaylistOrder(rows, []);
+  assert.deepEqual(
+    opened.map((row) => row.id),
+    [2, 1],
+  );
+  const updated = [
+    { ...rows[0]!, name: "Z Ambient", lastEntryAddedAt: 100, trackCount: 3 },
+    rows[1]!,
+  ];
+  const shown = keepAddToPlaylistOrder(updated, opened);
+  assert.deepEqual(
+    shown.map((row) => [row.id, row.name, row.trackCount]),
+    [
+      [2, "Road Trip", 2],
+      [1, "Z Ambient", 3],
+    ],
+  );
+  assert.equal(shown[1], updated[0]);
+  assert.deepEqual(
+    keepAddToPlaylistOrder(updated, []).map((row) => row.id),
+    [1, 2],
+  );
+});
+
+test("new playlists go first, deleted ones leave, and search keeps the card's ranks", () => {
+  const rows = [playlist(1, "Morning", 0, 10), playlist(2, "Morning drive", 0, 20)];
+  const opened = keepAddToPlaylistOrder(rows, []);
+  const withNew = keepAddToPlaylistOrder(
+    [...rows, playlist(3, "Morning synced", 0, 1), playlist(4, "Morning new", 30, null)],
+    opened,
+  );
+  assert.deepEqual(
+    withNew.map((row) => row.id),
+    [4, 3, 2, 1],
+  );
+  const afterRemoval = keepAddToPlaylistOrder(
+    withNew.filter((row) => row.id !== 2),
+    withNew,
+  );
+  assert.deepEqual(
+    afterRemoval.map((row) => row.id),
+    [4, 3, 1],
+  );
+  assert.deepEqual(
+    createPlaylistPickerSearch(afterRemoval)
+      .show("morning")
+      .playlists.map((row) => row.id),
+    [4, 3, 1],
+  );
+  const returned = keepAddToPlaylistOrder(rows, afterRemoval);
+  assert.deepEqual(
+    returned.map((row) => row.id),
+    [2, 1],
+  );
 });
 
 test("Add to Playlist puts the playlist with the newest remaining addition first", () => {
