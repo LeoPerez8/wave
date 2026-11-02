@@ -20,7 +20,7 @@ import type { ChoiceSetting } from "./ChoiceRow";
  * so off mobile data; Only on demand (the default) asks nothing until Online
  * is tapped, except in integrated views.
  */
-const searchOnline = persistedSetting<SearchOnline>({
+export const searchOnline = persistedSetting<SearchOnline>({
   key: "settings.searchOnline",
   read: readSearchOnline,
   write: writeSearchOnline,
