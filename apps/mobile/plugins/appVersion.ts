@@ -21,16 +21,15 @@ export const versionCode = (version: string): number => {
   return major * 10000 + minor * 100 + patch;
 };
 
-/** The branch a validated app version is released from. */
-export const releaseBranch = (version: string): "main" | "ti" =>
-  version.endsWith("-ti") ? "ti" : "main";
-
-/** Why `tag` can't release the app at `version`, or undefined when it names it. */
+/**
+ * Why `tag` can't release the app at `version`, or undefined when it names it. A stable tag can
+ * name a commit at the same number's -ti version: a promotion, which builds it without the suffix.
+ */
 export const releaseTagProblem = (tag: string, version: string): string | undefined => {
-  if (tag === `v${version}`) return undefined;
+  if (tag === `v${version}` || `${tag}-ti` === `v${version}`) return undefined;
   return (
     `The tag ${tag} doesn't match the app's version, ${version} (apps/mobile/package.json). ` +
-    "Pushes to main and ti release their next version on their own; a tag by hand must " +
+    "Pushes to main release their next version on their own; a tag by hand must " +
     `name the version of the commit it tags: tag this one v${version}, or tag the "Release Wave <version>" commit you want.`
   );
 };

@@ -1,4 +1,4 @@
-// The version a push to main or ti releases, if any (docs/spec.md, Releases).
+// The version a push to main releases, if any (docs/spec.md, Releases).
 //   node scripts/ci/next-version.ts [--ti] --package <apps/mobile/package.json> --tags <file>
 //     [--own <file>] [--changed <file> --previous-package <file>
 //      --commits <file> --unreleased <file> --prs <file>]
@@ -129,7 +129,7 @@ export const nextVersion = (push: NextVersionInput): NextVersion => {
     if (!reachesUsers(others))
       return {
         reason:
-          "Only CI, docs, specs or the app's version changed since the previous release (a version bump merged from the other branch), so nothing is bumped or released.",
+          "Only CI, docs, specs or the app's version changed since the previous release (a promotion or an old branch's bump), so nothing is bumped or released.",
       };
   }
   const current = parse(push.version);

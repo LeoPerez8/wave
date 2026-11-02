@@ -1,5 +1,5 @@
 // Every CI build names itself in the app log next to its version (docs/spec.md, "Build and
-// CI"): a PR build as `PR #438 @ 90970e3`, a push to ti or main as `ti @ 1a2b3c4`. bundle.sh's
+// CI"): a PR build as `PR #438 @ 90970e3`, a push to main as `main @ 1a2b3c4`, a promotion as `v0.5.0 @ 1a2b3c4`. bundle.sh's
 // Metro run inlines it as EXPO_PUBLIC_WAVE_BUILD_LABEL, so a full build and a repack both
 // carry the label of the run that made them.
 //   node scripts/ci/build-label.ts     `EXPO_PUBLIC_WAVE_BUILD_LABEL=…`, for $GITHUB_ENV
