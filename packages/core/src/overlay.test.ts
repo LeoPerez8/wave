@@ -1,7 +1,13 @@
 import assert from "node:assert/strict";
 import { describe, test } from "node:test";
 
-import { cardContentHeight, cardKeyboard, entryDivider, placeOverlayCard } from "./index.ts";
+import {
+  cardContentHeight,
+  cardKeyboard,
+  cardListOverflows,
+  entryDivider,
+  placeOverlayCard,
+} from "./index.ts";
 
 // A phone in portrait, in dp: status bar on top, gesture bar below.
 const phone = {
@@ -10,6 +16,14 @@ const phone = {
   margin: 24,
   maxWidth: 480,
 };
+
+test("search is offered from measured overflow, including a smaller landscape viewport", () => {
+  assert.equal(cardListOverflows(280, 280), false);
+  assert.equal(cardListOverflows(280, 281), false);
+  assert.equal(cardListOverflows(280, 200), true);
+  assert.equal(cardListOverflows(560, 280), true);
+  assert.equal(cardListOverflows(280, 0), false);
+});
 
 describe("placeOverlayCard", () => {
   test("a short card floats in the middle of the screen, a margin in from each side", () => {
@@ -200,6 +214,26 @@ describe("entryDivider", () => {
 });
 
 describe("cardKeyboard", () => {
+  test("a centred card entering search keeps the keyboard and moves above it, then recentres", () => {
+    const keyboard = cardKeyboard({ searching: true, keyboard: 320 });
+    assert.deepEqual(keyboard, { closeKeyboard: false, keyboard: 320 });
+    assert.deepEqual(
+      placeOverlayCard({
+        ...phone,
+        cardHeight: 1200,
+        searching: true,
+        keyboard: keyboard.keyboard,
+      }),
+      {
+        left: 24,
+        top: 56,
+        width: 364,
+        maxHeight: 491,
+        flow: "down",
+      },
+    );
+    assert.equal(placeOverlayCard({ ...phone, cardHeight: 300, searching: false }).top, 312);
+  });
   test("a card nobody types into closes an open keyboard and lays out as if it were gone", () => {
     assert.deepEqual(cardKeyboard({ keyboard: 320 }), { closeKeyboard: true, keyboard: 0 });
   });
@@ -217,6 +251,11 @@ describe("cardKeyboard", () => {
 });
 
 describe("cardContentHeight", () => {
+  test("search keeps the full card's height while results and New Playlist step aside", () => {
+    const known = cardContentHeight({ known: 1200, laidOut: 250, maxHeight: 491, searching: true });
+    assert.equal(known, 1200);
+    assert.equal(cardContentHeight({ known, laidOut: 250, maxHeight: 811, searching: false }), 250);
+  });
   test("a layout shorter than the card's limit is its content's height", () => {
     assert.equal(cardContentHeight({ known: 300, laidOut: 250, maxHeight: 800 }), 250);
   });

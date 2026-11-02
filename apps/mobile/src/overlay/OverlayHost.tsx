@@ -128,8 +128,13 @@ function OverlayCard({ entry, frontmost }: { entry: OverlayEntry; frontmost: boo
   const window = useWindowDimensions();
   const insets = useSafeAreaInsets();
   const keyboardHeight = useKeyboardHeight();
+  const searching = entry.search !== undefined;
   // A card without a text field closes the keyboard (one tap then runs an entry).
-  const keyboard = cardKeyboard({ align: entry.request.align, keyboard: keyboardHeight });
+  const keyboard = cardKeyboard({
+    align: entry.request.align,
+    keyboard: keyboardHeight,
+    searching,
+  });
   const scrim = useThemeColor("scrim");
   const accent = useThemeColor("accent");
   const reduceMotion = useReducedMotion();
@@ -168,6 +173,7 @@ function OverlayCard({ entry, frontmost }: { entry: OverlayEntry; frontmost: boo
       ? {}
       : { anchor: { rect: anchor, gap: CELL, minHeight: MIN_ANCHORED_HEIGHT } }),
     align: entry.request.align,
+    searching,
     keyboard: keyboard.keyboard,
     // Large system text draws a menu's heading and entries taller: it needs more room by its row.
     textScale: window.fontScale,
@@ -280,7 +286,7 @@ function OverlayCard({ entry, frontmost }: { entry: OverlayEntry; frontmost: boo
           setCardHeight((known) =>
             known === null
               ? laidOut
-              : cardContentHeight({ known, laidOut, maxHeight: frame.maxHeight }),
+              : cardContentHeight({ known, laidOut, maxHeight: frame.maxHeight, searching }),
           );
         }}
         style={[
@@ -291,6 +297,7 @@ function OverlayCard({ entry, frontmost }: { entry: OverlayEntry; frontmost: boo
             width: frame.width,
             // The first, hidden layout is unbounded so the card shows its full height.
             ...(measured ? { maxHeight: frame.maxHeight } : {}),
+            ...(measured && searching ? { height: Math.min(cardHeight, frame.maxHeight) } : {}),
             borderRadius: OVERLAY_RADIUS,
             overflow: "hidden",
             paddingHorizontal: OVERLAY_PADDING.horizontal,

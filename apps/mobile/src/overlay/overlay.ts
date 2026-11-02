@@ -39,6 +39,8 @@ export interface OverlayEntry {
   readonly request: OverlayRequest;
   /** Fading out; the host removes it once the animation ends. */
   readonly closing: boolean;
+  /** A temporary search takes Back before its card does. */
+  readonly search?: { readonly close: () => void } | undefined;
   /**
    * The row, tile or button whose press opened it (or the card it follows up
    * on), highlighted while it is open; undefined when no press opened it.
@@ -72,6 +74,8 @@ const originNow = (): PressedElement | undefined =>
 
 /** Fades a card out (the host passes this to `render`). */
 export const closeOverlay = (id: number): void => {
+  const closingEntry = entries.get().find((entry) => entry.id === id);
+  if (closingEntry?.closing === false) closingEntry.search?.close();
   if (isOverlayInteractive(id)) {
     interactionRevision += 1;
     cancelHeldTouch();
@@ -151,9 +155,18 @@ export const useIsOverlayOrigin = (key: number): boolean =>
 export const dismissTopOverlay = (): boolean => {
   const list = entries.get();
   const top = list.findLast((entry) => !entry.closing);
-  if (top !== undefined) dismissOverlay(top);
+  if (top?.search !== undefined) top.search.close();
+  else if (top !== undefined) dismissOverlay(top);
   return list.length > 0;
 };
+
+/** The card's search field reports whether it is open. */
+export const setOverlaySearch = (id: number, search: OverlayEntry["search"]): void =>
+  entries.update((list) =>
+    list.some((entry) => entry.id === id && entry.search !== search)
+      ? list.map((entry) => (entry.id === id ? { ...entry, search } : entry))
+      : list,
+  );
 
 /** Whether a card is open now (one fading out doesn't count). */
 export const isOverlayOpen = (): boolean => entries.get().some((entry) => !entry.closing);

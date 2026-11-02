@@ -26,6 +26,7 @@ import { useThemeColor } from "@/theme/useThemeColor";
 import { usePlaylists } from "./hooks";
 import type { PlaylistRow } from "./LibraryStore";
 import { cancelPlaylistImport } from "./playlistImports";
+import { PlaylistPickerHeading, usePlaylistPickerSearch } from "./PlaylistPickerSearch";
 import { framePhoto } from "./PhotoCropperHost";
 import {
   addToPlaylist,
@@ -197,43 +198,55 @@ const addSongs = (playlistId: number, songs: () => Promise<readonly PlaylistSong
 
 function AddCard({ subject, close }: { subject: AddSubject; close: () => void }) {
   const playlists = usePlaylists();
+  const search = usePlaylistPickerSearch(playlists);
   const { strings } = useLocalisation();
 
   return (
     <>
       <View style={{ paddingBottom: CELL * 2, gap: CELL / 2 }}>
-        <CatalogLine>{strings.playlists.addToPlaylist}</CatalogLine>
+        <PlaylistPickerHeading search={search} />
         <Text numberOfLines={1} className="font-sans text-body font-medium text-foreground">
           {subject.title}
         </Text>
       </View>
       <Hairline />
-      <TextButton
-        label={strings.playlists.newPlaylist}
-        accessibilityRole="button"
-        accessibilityLabel={strings.playlists.newPlaylist}
-        onPress={() => {
-          close();
-          void newPlaylist(subject.songs);
-        }}
-        className="flex-row items-center"
-        style={{ height: grid.row, gap: CELL * 1.5, justifyContent: "flex-start" }}
-      >
-        {(accent) => (
-          <>
-            <View className="items-center justify-center" style={{ width: CELL * 5 }}>
-              <IconPlus size={24} color={accent} strokeWidth={1.5} />
-            </View>
-            <Text className="font-sans text-body font-medium text-accent">
-              {strings.playlists.newPlaylist}
-            </Text>
-          </>
-        )}
-      </TextButton>
+      {search.showNewPlaylist && (
+        <TextButton
+          label={strings.playlists.newPlaylist}
+          accessibilityRole="button"
+          accessibilityLabel={strings.playlists.newPlaylist}
+          onPress={() => {
+            close();
+            void newPlaylist(subject.songs);
+          }}
+          className="flex-row items-center"
+          style={{ height: grid.row, gap: CELL * 1.5, justifyContent: "flex-start" }}
+        >
+          {(accent) => (
+            <>
+              <View className="items-center justify-center" style={{ width: CELL * 5 }}>
+                <IconPlus size={24} color={accent} strokeWidth={1.5} />
+              </View>
+              <Text className="font-sans text-body font-medium text-accent">
+                {strings.playlists.newPlaylist}
+              </Text>
+            </>
+          )}
+        </TextButton>
+      )}
       {/* The card stops short of the screen edges; a long list scrolls inside it.
           Each playlist follows a divider, so none trails the last. */}
-      <CardEntries>
-        {playlists.map((playlist) => (
+      <CardEntries onOverflowChange={search.onOverflowChange}>
+        {search.noMatch && (
+          <Text
+            accessibilityLiveRegion="polite"
+            className="font-sans text-body text-secondary"
+            style={{ paddingVertical: CELL * 2 }}
+          >
+            {strings.library.noMatch.playlists}
+          </Text>
+        )}
+        {search.playlists.map((playlist) => (
           <Fragment key={playlist.id}>
             <Hairline />
             <PlaylistEntry
