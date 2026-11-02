@@ -158,6 +158,7 @@ export type ItemAction =
   | "deletePlaylists"
   | "fixSong"
   | "fixSongs"
+  | "releaseDate"
   | "select"
   | "delete"
   | "removeFromLibrary"
@@ -408,9 +409,10 @@ export const itemActions = <A extends LibraryArtistRef = LibraryArtistRef>(
     entries.push({ action: "fixSongs" });
   if (kind === "playlist")
     entries.push({ action: items.length === 1 ? "deletePlaylist" : "deletePlaylists" });
-  // One song's menu shares it as a card (the song share sheet), whatever kind of song it is.
+  // One song's menu shares it as a card (the song share sheet), whatever kind of song it is,
+  // after Release Date, where the owner types the date the song first came out.
   if (surface === "menu" && kind === "track" && items.length === 1)
-    entries.push({ action: "share" });
+    entries.push({ action: "releaseDate" }, { action: "share" });
   if (surface === "menu" && subject.selectable === true) entries.push({ action: "select" });
   // Last, and destructive (after asking): deletes the songs' files from the
   // phone, or takes missing songs out of the Library.
@@ -430,6 +432,7 @@ export type YtSongActionEntry<A> =
         | "favorite"
         | "unfavorite"
         | "removeFromPlaylist"
+        | "releaseDate"
         | "share"
         | "select";
     }
@@ -474,7 +477,8 @@ export interface YtSongActionOptions {
  * its YT Music [album] page (none on that page, or for a song without an
  * album); and, given where its [artists] link leads (Core's
  * `streamedArtistLink`), Go to Artist opens them integrated (none when its
- * only artist is the page you're on); last, Select, opened from a list that
+ * only artist is the page you're on); Release Date, where the owner types
+ * when it first came out; Share; last, Select, opened from a list that
  * can select ([selectable]). Playing ([playing]), it's the song already on,
  * so it has no Play Next or Add to Queue. With YT Music on, it starts a
  * Magic Queue from its radio, as a Library song's menu does. The Library's
@@ -504,6 +508,7 @@ export const ytSongActions = <A>(
   ...(artists === undefined || artists.kind === "here"
     ? []
     : [{ action: "goToArtist", artists } as const]),
+  { action: "releaseDate" },
   { action: "share" },
   ...(selectable ? [{ action: "select" } as const] : []),
 ];

@@ -6,6 +6,7 @@
 import { applySyncedSetting, syncedSettingValue } from "@/lib/persistedSetting";
 // Each setting registers itself when its module loads; these are every synced one.
 /* oxlint-disable import/no-unassigned-import */
+import "@/library/typedReleaseDates";
 import "@/settings/artistPhotos";
 import "@/settings/bestQuality";
 import "@/settings/bounceAmount";

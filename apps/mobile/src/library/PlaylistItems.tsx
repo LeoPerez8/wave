@@ -1,4 +1,5 @@
 import { releaseDates, releaseEntryDate } from "./releaseDates";
+import { typedReleaseDates } from "./typedReleaseDates";
 import {
   GoToSuggestions,
   PlaylistRecommendations,
@@ -470,13 +471,14 @@ export function PlaylistItems({
     [selecting, reorderable, count, moves],
   );
   const dates = releaseDates.useValue();
+  const typed = typedReleaseDates.useValue();
   const decorateRow = useCallback(
     (row: ReactElement, item: Item, index: number) => {
       const key = itemKey(item);
       const entry = entryOf(item);
       if (showReleaseYear && entry) {
         const year =
-          releaseEntryDate(entry, dates)?.slice(0, 4) ??
+          releaseEntryDate(entry, dates, typed)?.slice(0, 4) ??
           (entry.source === "library" ? entry.track.year : null);
         const artist =
           entry.source === "library" ? entry.track.artist : entry.song.artists.join(", ");
@@ -495,7 +497,7 @@ export function PlaylistItems({
         />
       );
     },
-    [rowDrag, drag, selecting, reorderable, showReleaseYear, dates],
+    [rowDrag, drag, selecting, reorderable, showReleaseYear, dates, typed],
   );
   const renderSlot = ({ item }: { item: Item }) =>
     "kind" in item ? (

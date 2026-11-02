@@ -603,6 +603,101 @@ class SongTagWriterTest {
     assertEquals(TagWriteStep.READ, failure.step)
   }
 
+  /** Each fixture with an original date of 1984 set under one of the names taggers give it. */
+  private val datedFixtures = listOf<Pair<String, (org.jaudiotagger.tag.Tag) -> Unit>>(
+    "tagged.mp3" to { it.setField(FieldKey.ORIGINAL_YEAR, "1984") },
+    "tagged.mp3" to { it.setField(FieldKey.ORIGINALRELEASEDATE, "1984") },
+    "tagged.flac" to { (it as org.jaudiotagger.tag.flac.FlacTag).setField("ORIGINALYEAR", "1984") },
+    "tagged.flac" to { (it as org.jaudiotagger.tag.flac.FlacTag).setField("ORIGINALDATE", "1984") },
+    "tagged.ogg" to { it.setField(FieldKey.ORIGINAL_YEAR, "1984") },
+    "tagged-aac.m4a" to { it.setField(FieldKey.ORIGINAL_YEAR, "1984") },
+  )
+
+  private fun datedCopy(fixture: String, set: (org.jaudiotagger.tag.Tag) -> Unit): File {
+    val file = copyOf(fixture)
+    val audio = AudioFileIO.read(file)
+    set(audio.tag)
+    AudioFileIO.write(audio)
+    assertEquals("$fixture dated", "1984", reader.read(file).releaseDate)
+    return file
+  }
+
+  /**
+   * A typed date is the owner's correction: unlike [SongTagWriter.write], which keeps an
+   * original date the file has, it replaces it, under whatever name it was, and nothing else.
+   */
+  @Test
+  fun aTypedDateReplacesTheOriginalDateTheFileHas() {
+    for ((fixture, set) in datedFixtures) {
+      val file = datedCopy(fixture, set)
+      val tagsBefore = reader.read(file)
+      val audioBefore = AudioPayload.of(file)
+      val report = writer.replaceOriginalDate(file, "1985-06-21")
+      assertEquals("$fixture report", TagWriteReport(LyricsDestination.NONE, TagDestination.NONE, originalDate = TagDestination.TAGS), report)
+      val tagsAfter = reader.read(file)
+      assertEquals("$fixture date", "1985-06-21", tagsAfter.releaseDate)
+      assertEquals("$fixture other tags", tagsBefore.copy(releaseDate = null, artwork = null), tagsAfter.copy(releaseDate = null, artwork = null))
+      assertArrayEquals("$fixture audio", audioBefore, AudioPayload.of(file))
+    }
+  }
+
+  /** An ID3v2.3 date with a day lives in TORY and TXXX: a typed year leaves neither behind. */
+  @Test
+  fun aTypedYearReplacesAnId3v23FullDate() {
+    val file = copyOf("lyrics.mp3")
+    writer.write(file, lyrics = null, genre = null, originalDate = "1985-06-21")
+    writer.replaceOriginalDate(file, "1990")
+    assertEquals("1990", reader.read(file).releaseDate)
+  }
+
+  @Test fun aTypedDateGoesIntoAFileWithoutOne() {
+    val file = copyOf("tagged.flac")
+    assertEquals(TagDestination.TAGS, writer.replaceOriginalDate(file, "1985-06").originalDate)
+    assertEquals("1985-06", reader.read(file).releaseDate)
+  }
+
+  /** Clearing a typed date takes the file's original date out, so the lookup can find one again. */
+  @Test
+  fun clearingATypedDateTakesTheOriginalDateOut() {
+    for ((fixture, set) in datedFixtures + ("tagged.wav" to { it: org.jaudiotagger.tag.Tag -> (it as WavTag).iD3Tag.setField(FieldKey.ORIGINAL_YEAR, "1984") })) {
+      val file = datedCopy(fixture, set)
+      val tagsBefore = reader.read(file)
+      val report = writer.replaceOriginalDate(file, null)
+      assertEquals("$fixture report", TagDestination.TAGS, report.originalDate)
+      val tagsAfter = reader.read(file)
+      assertNull("$fixture date", tagsAfter.releaseDate)
+      assertEquals("$fixture other tags", tagsBefore.copy(releaseDate = null, artwork = null), tagsAfter.copy(artwork = null))
+    }
+  }
+
+  @Test
+  fun clearingAFileWithoutAnOriginalDateLeavesItUntouched() {
+    val file = copyOf("tagged.mp3")
+    val before = file.readBytes()
+    assertEquals(TagWriteReport(LyricsDestination.NONE, TagDestination.NONE), writer.replaceOriginalDate(file, null))
+    assertArrayEquals(before, file.readBytes())
+  }
+
+  @Test
+  fun opusTakesNoTypedDate() {
+    val file = copyOf("tagged.opus")
+    val before = file.readBytes()
+    assertEquals(TagDestination.NOT_WRITTEN, writer.replaceOriginalDate(file, "1985").originalDate)
+    assertArrayEquals(before, file.readBytes())
+  }
+
+  @Test
+  fun aTypedDateForAReadOnlyFileFailsAtTheWriteStep() {
+    val file = copyOf("tagged.flac")
+    assertTrue(file.setReadOnly())
+    try {
+      val failure = assertThrows(TagWriteStepException::class.java) { writer.replaceOriginalDate(file, "1985") }
+      assertEquals(TagWriteStep.WRITE, failure.step)
+    } finally {
+      file.setWritable(true)
+    }
+  }
+
   @Test
   fun reportsWhereTheOriginalDateWentToJs() {
     val report = TagWriteReport(LyricsDestination.NONE, TagDestination.NONE, originalDate = TagDestination.NOT_WRITTEN)

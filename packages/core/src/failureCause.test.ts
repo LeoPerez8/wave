@@ -214,6 +214,20 @@ describe("a first-release date kept out of a file", () => {
     );
   });
 
+  test("a typed date names the owner's edit as its origin", () => {
+    assert.equal(
+      tagWriteFailureLine({
+        path: "/Music/Song.mp3",
+        origin: "typedReleaseDate",
+        step: "read",
+        file: { exists: false, bytes: null },
+        cause: new Error("gone"),
+      }),
+      "couldn't fill in /Music/Song.mp3: reading the file failed" +
+        " (a release date typed by the owner; file missing, .mp3): Error: gone",
+    );
+  });
+
   test("a format Wave doesn't write tags to keeps the date in the Library and says why", () => {
     assert.equal(
       releaseTagNotWrittenLine("/Music/Song.opus", "1985-06-21"),

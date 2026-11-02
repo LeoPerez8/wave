@@ -129,6 +129,26 @@ class SongTagWriter {
     )
   }
 
+  /**
+   * Replaces the file's original date ([OriginalDate]) with one the owner typed, or takes it out
+   * ([date] null), changing nothing else. Unlike [write], which keeps an original date the file
+   * has, this is the owner's own correction, so it goes over whatever date is there, under any
+   * name. Clearing a file without one doesn't touch it; a format Wave doesn't write tags to
+   * (Opus, raw AAC) reports `NOT_WRITTEN`.
+   */
+  fun replaceOriginalDate(file: File, date: String?): TagWriteReport {
+    val audio = TagWriteStep.READ.attempt { if (takesTags(file)) readForWriting(file) else null }
+      ?: return TagWriteReport(LyricsDestination.NONE, TagDestination.NONE, originalDate = TagDestination.NOT_WRITTEN)
+    if (date == null && !audio.hasOriginalDate()) return TagWriteReport(LyricsDestination.NONE, TagDestination.NONE)
+    TagWriteStep.WRITE.attempt {
+      val tag = tagToWrite(audio)
+      OriginalDate.remove(tag)
+      date?.let { OriginalDate.write(tag, it) }
+      FragmentedMp4.writeTag(audio, file)
+    }
+    return TagWriteReport(LyricsDestination.NONE, TagDestination.NONE, originalDate = TagDestination.TAGS)
+  }
+
   private fun writeInto(
     audio: AudioFile,
     file: File,
