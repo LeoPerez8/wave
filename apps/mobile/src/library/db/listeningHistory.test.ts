@@ -12,6 +12,7 @@ import {
   migrateTestDatabase,
   openTestDatabase,
   traceQueries,
+  type TestDatabase,
 } from "./testDatabase.ts";
 import { playedRecordingKeys } from "./playHistory.ts";
 import { listeningSums, playTotalsDrift, rebuildPlayTotals } from "./playTotals.ts";
@@ -349,8 +350,8 @@ test("totals stay correct when an event changes between Library and video identi
   assert.deepEqual(playTotalsDrift(db), []);
 });
 
-test("the snapshot-sync upgrade preserves Library and streamed history and their pushed flags", async () => {
-  const db = await openTestDatabase({ through: "0040_streamed_plays" });
+/** A Library play and a streamed one, both ended and pushed. */
+const seedPushedPlays = (db: TestDatabase): void => {
   const track = addTrack(db, { title: "Library song" });
   const library = play(track, 1000);
   endPlay(db, recordPlay(db, library), library);
@@ -358,9 +359,17 @@ test("the snapshot-sync upgrade preserves Library and streamed history and their
   endPlay(db, recordPlay(db, stream, false, streamedSong), stream);
   // Pushed as that Wave did: today's sync reads tables a 0040 database doesn't have yet.
   db.run(sql`UPDATE play_events SET pushed = 1`);
-  const before = listeningHistory(db);
+};
+
+test("the snapshot-sync upgrade preserves Library and streamed history and their pushed flags", async () => {
+  const db = await openTestDatabase({ through: "0040_streamed_plays" });
+  seedPushedPlays(db);
+  // Today's history reads columns a 0040 database doesn't have yet, so the upgraded
+  // history is compared with the same plays recorded on an up-to-date database.
+  const current = await openTestDatabase();
+  seedPushedPlays(current);
   await migrateTestDatabase(db);
-  assert.deepEqual(listeningHistory(db), before);
+  assert.deepEqual(listeningHistory(db), listeningHistory(current));
   assert.deepEqual(selectUnpushed(db, 100, () => null).rows.plays, []);
   assert.deepEqual(playTotalsDrift(db), []);
 });
