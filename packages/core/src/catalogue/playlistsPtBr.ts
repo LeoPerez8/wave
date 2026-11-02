@@ -16,6 +16,8 @@ const counted = (count: number): string =>
   plural("pt-BR", count, { one: `${n(count)} música`, other: `${n(count)} músicas` });
 
 export const playlistsPtBr: typeof playlistsEn = {
+  releaseOldest: "Data de lançamento · Mais antigas primeiro",
+  releaseNewest: "Data de lançamento · Mais recentes primeiro",
   defaultName: "Nova Playlist",
   newPlaylist: "Nova Playlist",
   newPlaylistTitle: "Nova playlist",

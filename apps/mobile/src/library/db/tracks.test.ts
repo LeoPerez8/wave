@@ -291,3 +291,16 @@ describe("selectVideoIds", () => {
     assert.deepEqual(selectVideoIds(db, [lucky, local, 999]), new Map([[lucky, "abc"]]));
   });
 });
+
+test("release date migration keeps library rows and requests a tag reread", async () => {
+  const before = await openTestDatabase({ through: "0051_skipped_files" });
+  addTrack(before, { title: "Saved song", year: 2005 });
+  await migrateTestDatabase(before);
+  const db = before;
+  const rows = db.select().from(schema.tracks).all();
+  assert.equal(rows.length, 1);
+  assert.equal(rows[0]?.title, "Saved song");
+  assert.equal(rows[0]?.year, 2005);
+  assert.equal(rows[0]?.releaseDate, null);
+  assert.equal(rows[0]?.modifiedAt, 0);
+});

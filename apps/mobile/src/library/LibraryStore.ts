@@ -434,6 +434,7 @@ export interface SongRow {
   readonly discNumber: number | null;
   readonly trackNumber: number | null;
   /** Fix Song fills it in when it's missing, as the track number, genre and lyrics. */
+  readonly releaseDate?: string | null | undefined;
   readonly year: number | null;
   /** Null for a song without a genre tag. */
   readonly genre: string | null;

@@ -99,6 +99,7 @@ describe("readPullPage", () => {
       discNumber: 1,
       trackNumber: 2,
       durationMs: 182_000,
+      releaseDate: null,
       year: 1969,
       genre: "Rock",
       videoId: null,

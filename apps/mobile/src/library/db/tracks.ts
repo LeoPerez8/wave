@@ -77,6 +77,7 @@ export const songColumns = {
   artistIds: trackArtistIds,
   discNumber: schema.tracks.discNumber,
   trackNumber: schema.tracks.trackNumber,
+  releaseDate: schema.tracks.releaseDate,
   year: schema.tracks.year,
   genre: trackGenre,
   hasLyrics: schema.tracks.hasLyrics,

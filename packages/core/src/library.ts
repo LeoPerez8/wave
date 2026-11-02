@@ -43,6 +43,7 @@ export interface RawTrack {
    */
   readonly genres?: readonly string[] | null | undefined;
   /** Year or date as tagged, e.g. `1997` or `1997-05-21`. */
+  readonly releaseDate?: string | null | undefined;
   readonly year?: string | null | undefined;
   /** Track number as tagged, e.g. `3` or `3/12`. */
   readonly trackNumber?: string | null | undefined;
@@ -94,6 +95,7 @@ export interface LibraryTrack {
    */
   readonly genres: readonly string[];
 
+  readonly releaseDate?: string | null | undefined;
   readonly year: number | null;
   readonly trackNumber: number | null;
   readonly trackTotal: number | null;
@@ -308,6 +310,11 @@ export const normalizeTrack = (raw: RawTrack): LibraryTrack => {
     genreSort: genre === null ? null : sortKey(genre),
     genreKey: genre === null ? null : identityKey(genre),
     genres: genreValues.length > 0 ? genreValues : genre === null ? [] : [genre],
+    releaseDate: /^\d{4}(?:-(?:0[1-9]|1[0-2])(?:-(?:0[1-9]|[12]\d|3[01]))?)?$/.test(
+      raw.releaseDate ?? "",
+    )
+      ? raw.releaseDate
+      : null,
     year: parseYear(raw.year),
     trackNumber: track.number,
     trackTotal: track.total,

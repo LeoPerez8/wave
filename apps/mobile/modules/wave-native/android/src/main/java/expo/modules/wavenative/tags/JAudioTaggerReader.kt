@@ -48,6 +48,7 @@ class JAudioTaggerReader : TagReader {
       album = field(FieldKey.ALBUM),
       albumArtist = field(FieldKey.ALBUM_ARTIST),
       genre = field(FieldKey.GENRE),
+      releaseDate = field(FieldKey.ORIGINAL_YEAR),
       year = field(FieldKey.YEAR),
       trackNumber = numberOf(field(FieldKey.TRACK), field(FieldKey.TRACK_TOTAL)),
       discNumber = numberOf(field(FieldKey.DISC_NO), field(FieldKey.DISC_TOTAL)),

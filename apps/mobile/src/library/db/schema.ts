@@ -152,6 +152,7 @@ export const tracks = sqliteTable(
      * mixes read them.
      */
     genres: text("genres"),
+    releaseDate: text("release_date"),
     year: integer("year"),
     trackNumber: integer("track_number"),
     trackTotal: integer("track_total"),

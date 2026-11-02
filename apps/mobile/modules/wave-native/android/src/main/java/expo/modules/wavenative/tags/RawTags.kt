@@ -13,6 +13,7 @@ data class RawTags(
   val albumArtist: String? = null,
   val genre: String? = null,
   /** Year or date as tagged, e.g. `2024` or `2024-05-01`. */
+  val releaseDate: String? = null,
   val year: String? = null,
   /** Track number as tagged, e.g. `3` or `3/12`. */
   val trackNumber: String? = null,

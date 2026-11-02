@@ -1,3 +1,6 @@
+const m0052 = `ALTER TABLE tracks ADD COLUMN release_date text;
+--> statement-breakpoint
+UPDATE tracks SET modified_at = 0 WHERE path IS NOT NULL;`;
 /**
  * Hand-written migrations in the shape drizzle-kit generates for Expo
  * (`{ journal, migrations: { m0000 } }`), consumed by
@@ -1380,6 +1383,7 @@ export default {
       { idx: 49, when: 1_796_040_000_000, tag: "0049_streamed_genres", breakpoints: true },
       { idx: 50, when: 1_796_126_400_000, tag: "0050_playlist_video_ids", breakpoints: true },
       { idx: 51, when: 1_796_212_800_000, tag: "0051_skipped_files", breakpoints: true },
+      { idx: 52, when: 1_796_299_200_000, tag: "0052_release_date", breakpoints: true },
     ],
   },
   migrations: {
@@ -1435,5 +1439,6 @@ export default {
     m0049,
     m0050,
     m0051,
+    m0052,
   },
 };

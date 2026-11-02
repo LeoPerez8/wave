@@ -20,6 +20,7 @@ const song = (
   discNumber: null,
   trackNumber: 3,
   durationMs: 330_000,
+  releaseDate: null,
   year: 1998,
   genre: "Trip-Hop",
   videoId: null,
@@ -596,4 +597,16 @@ describe("POST /v1/push and GET /v1/pull", () => {
       assert.equal(response.status, 400, since);
     }
   });
+});
+
+test("release dates survive stale writes and clients omitting the new field", async () => {
+  const service = await harness();
+  const session = await service.signIn();
+  await push(service, session, { songs: [song("dated", 20, { releaseDate: "1985-06-21" })] });
+  await push(service, session, { songs: [song("dated", 10, { releaseDate: "2005" })] });
+  const old = song("dated", 30);
+  const { releaseDate: _date, ...legacy } = old;
+  await push(service, session, { songs: [legacy] });
+  const rows = await pullAll(service, session);
+  assert.equal(rows.songs[0]?.releaseDate, "1985-06-21");
 });

@@ -41,6 +41,14 @@ export const orderPlaylistEntries = (
       artist: entry.source === "library" ? entry.track.artist : entry.song.artists.join(", "),
       album: entry.source === "library" ? entry.track.album : (entry.song.album ?? ""),
       addedAt: entry.addedAt ?? 0,
+      ...(entry.source === "library"
+        ? {
+            releaseDate: entry.track.releaseDate,
+            year: entry.track.year,
+            discNumber: entry.track.discNumber,
+            trackNumber: entry.track.trackNumber,
+          }
+        : {}),
     })),
     sort,
   ).map(({ entry }) => entry);
@@ -51,11 +59,17 @@ export function PlaylistSongSortButton({ id }: { id: string }) {
   const choices: readonly PlaylistSongSort[] = [
     { key: "custom", descending: false },
     ...SONG_SORTS,
+    { key: "releaseDate", descending: false },
+    { key: "releaseDate", descending: true },
   ];
   const label = (sort: PlaylistSongSort) =>
     sort.key === "custom"
       ? strings.playlists.sorts.custom
-      : songSortLabelFor(language)({ ...sort, key: sort.key });
+      : sort.key === "releaseDate"
+        ? sort.descending
+          ? strings.playlists.releaseNewest
+          : strings.playlists.releaseOldest
+        : songSortLabelFor(language)({ ...sort, key: sort.key });
   return (
     <IconButton
       icon={IconArrowsSort}

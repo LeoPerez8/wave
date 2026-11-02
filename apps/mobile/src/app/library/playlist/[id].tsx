@@ -202,6 +202,7 @@ export default function PlaylistScreen() {
           key={playlist.id}
           playlistId={playlist.id}
           customOrder={sort.key === "custom"}
+          showReleaseYear={sort.key === "releaseDate"}
           items={items}
           header={<PlaylistHead shown={{ playlist, items }} />}
           empty={<NoSongs />}
