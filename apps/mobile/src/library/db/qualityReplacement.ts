@@ -86,6 +86,7 @@ export const selectReplacedTrack = (db: LibraryDatabase, trackId: number): Repla
       videoId: tracks.videoId,
       explicit: tracks.explicit,
       artworkPath: artwork.path,
+      releaseDate: tracks.releaseDate,
     })
     .from(tracks)
     .innerJoin(albums, eq(tracks.albumId, albums.id))

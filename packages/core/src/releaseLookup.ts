@@ -98,3 +98,16 @@ export const releaseDue = (
   song.artist.trim() !== "" &&
   !originalDate &&
   (!answer || (answer.retryAt !== null && answer.retryAt <= now));
+
+/**
+ * The first-release date to write into a song's original-date tag, or null for none: only a
+ * date the lookup found ([answer]'s `first-release`), only for a song with a file, and never
+ * over a date it already [held] (its tag's or one the owner typed). Fallback dates (Year, the
+ * Deezer album's) never reach a file.
+ */
+export const releaseTagDate = (song: {
+  readonly answer: ReleaseAnswer | null | undefined;
+  readonly held: string | null | undefined;
+  readonly hasFile: boolean;
+}): string | null =>
+  song.hasFile && !song.held && song.answer?.source === "first-release" ? song.answer.date : null;

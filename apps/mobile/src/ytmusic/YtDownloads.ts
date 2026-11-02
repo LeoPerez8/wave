@@ -131,6 +131,7 @@ import { refreshDownloadPolicy } from "@/library/downloadPolicy";
 import { finishFileDeletions } from "@/library/fileDeletions";
 import { replacementJournalRead } from "@/library/replacementDuplicates";
 import { fillInLyricsAndGenre, lookUpLyricsAndGenre } from "@/library/lyricsAndGenre";
+import { downloadReleaseDate } from "@/library/releaseAnswers";
 import { appRuntime } from "@/library/runtime";
 import { settleUnsearchedSong } from "@/library/unsearchedEntries";
 import { makeExternalStore } from "@/lib/externalStore";
@@ -202,6 +203,10 @@ const optional = <A>(effect: Effect.Effect<A, unknown>): Effect.Effect<A | null>
     Effect.orElseSucceed(() => null),
   );
 
+/** The first-release date a playlist's lookup found for [song], for its file's tags. */
+const releaseDateOf = (song: YtSong): string | null =>
+  downloadReleaseDate({ title: song.title, artist: song.artists[0] ?? "" });
+
 /**
  * Optional metadata cannot fail or indefinitely hold up valid audio acquisition. The watch page
  * is asked for at most once (for the album, then YT Music's lyrics), and YT Music's lyrics only
@@ -234,7 +239,10 @@ const metadata = (song: NativeYtSong) =>
                 : yield* native(() => WaveYtDownloads.lyrics(lyricsBrowseId));
             }),
           );
-    return ytDownloadTags(song, album, found, lyrics, saved);
+    return {
+      ...ytDownloadTags(song, album, found, lyrics, saved),
+      releaseDate: releaseDateOf(song),
+    };
   });
 
 /**
@@ -588,7 +596,7 @@ const listingTags = (song: YtSong) =>
   Effect.gen(function* () {
     const lookup = ytDownloadLookup(song, null);
     const found = lookup === null ? null : yield* optional(lookUpLyricsAndGenre(lookup));
-    return listedSongTags(song, found);
+    return { ...listedSongTags(song, found), releaseDate: releaseDateOf(song) };
   });
 
 /**

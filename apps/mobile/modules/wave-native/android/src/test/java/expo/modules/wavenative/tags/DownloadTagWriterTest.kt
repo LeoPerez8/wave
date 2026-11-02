@@ -253,6 +253,58 @@ class DownloadTagWriterTest {
   }
 
   @Test
+  fun aDownloadWritesTheFirstReleaseDateItWasGiven() {
+    for (file in listOf(
+      youtubeDownload(),
+      Fixtures.libraryOf("soulseek-320.mp3" to ".dated.part.mp3").resolve(".dated.part.mp3"),
+    )) {
+      val fields = DownloadTags.fromJs(
+        mapOf("title" to "Get Lucky", "artist" to "Daft Punk", "year" to 2013, "releaseDate" to "1985-06-21"),
+      )!!
+      DownloadTagWriter().write(file, fields, null)
+      val read = reader.read(file)
+      assertEquals("${file.name} original date", "1985-06-21", read.releaseDate)
+      assertEquals("${file.name} Year", "2013", read.year)
+    }
+  }
+
+  @Test
+  fun aDownloadWithoutADateWritesNone() {
+    val file = youtubeDownload()
+    DownloadTagWriter().write(file, tags, null)
+    assertNull(reader.read(file).releaseDate)
+  }
+
+  /** A replacement keeps the replaced file's own original date over the Library's, whatever the formats. */
+  @Test
+  fun aReplacementKeepsTheReplacedFilesOriginalDate() {
+    for ((fixture, name, target) in listOf(
+      Triple("tagged-aac.m4a", "Dated.m4a", Fixtures.libraryOf("soulseek-320.mp3" to ".up.part.mp3").resolve(".up.part.mp3")),
+      Triple("tagged.flac", "Dated.flac", youtubeDownload()),
+      Triple("tagged.mp3", "Dated.mp3", youtubeDownload()),
+    )) {
+      val replaced = Fixtures.libraryOf(fixture to name).resolve(name)
+      SongTagWriter().write(replaced, lyrics = null, genre = null, originalDate = "1985-06-21")
+      val fields = DownloadTags.fromJs(mapOf(
+        "title" to "Get Lucky", "artist" to "Daft Punk", "releaseDate" to "1999", "keepTagsOf" to replaced.path,
+      ))!!
+      DownloadTagWriter().write(target, fields, null)
+      assertEquals("$fixture → ${target.extension}", "1985-06-21", reader.read(target).releaseDate)
+    }
+  }
+
+  @Test
+  fun aReplacementOfAFileWithoutADateTakesTheLibrarysDate() {
+    val replaced = replacedFile("tagged.mp3", "Get Lucky.mp3")
+    val file = youtubeDownload()
+    val fields = DownloadTags.fromJs(mapOf(
+      "title" to "Get Lucky", "artist" to "Daft Punk", "releaseDate" to "1985-06-21", "keepTagsOf" to replaced.path,
+    ))!!
+    DownloadTagWriter().write(file, fields, null)
+    assertEquals("1985-06-21", reader.read(file).releaseDate)
+  }
+
+  @Test
   fun retagsAFragmentedM4aItAlreadyTagged() {
     val file = youtubeDownload()
     val audioBefore = AudioPayload.of(file)

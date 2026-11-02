@@ -1,32 +1,26 @@
 import {
-  artistPhotoName,
   releaseCandidates,
   releaseAnswer,
   releaseDue,
+  releaseTagDate,
+  releaseTagNotWrittenLine,
+  tagWriteFailureLine,
   type ReleaseAnswer,
+  type TagWriteFile,
+  type TagWriteStep,
 } from "@wave/core";
 import { persistedSetting } from "@/lib/persistedSetting";
 import { currentLocalisation } from "@/localisation/localisation";
+import { WaveNative } from "@/native/waveNative";
 import { showMessage } from "@/overlay/alert";
 import { LibraryStore, type PlaylistEntryRow } from "./LibraryStore";
 import { appRuntime } from "./runtime";
 import { onPlaylistSongSortChanged, playlistSongSetting } from "./playlistSongSetting";
 import { onPlaylistsEdited } from "./playlists";
+import { releaseDates, releaseSongKey } from "./releaseAnswers";
 import { releaseLookupClient } from "./releaseLookupClient";
 
-const readObject = <T>(stored: string | null, fallback: T): T => {
-  try {
-    return stored ? (JSON.parse(stored) as T) : fallback;
-  } catch {
-    return fallback;
-  }
-};
-/** Answers include provenance and durable retry deadlines. No file tags are written here. */
-export const releaseDates = persistedSetting<Record<string, ReleaseAnswer>>({
-  key: "releaseDates.answers",
-  read: (s) => readObject(s, {}),
-  write: JSON.stringify,
-});
+export { releaseDates };
 const notice = persistedSetting<boolean>({
   key: "releaseDates.notice",
   read: (s) => s === "true",
@@ -47,10 +41,8 @@ export const releaseEntrySong = (entry: PlaylistEntryRow) =>
   entry.source === "library"
     ? { title: entry.track.title, artist: entry.track.artist }
     : { title: entry.song.title, artist: entry.song.artists[0] ?? "" };
-export const releaseEntryKey = (entry: PlaylistEntryRow): string => {
-  const song = releaseEntrySong(entry);
-  return JSON.stringify([artistPhotoName(song.title), artistPhotoName(song.artist)]);
-};
+export const releaseEntryKey = (entry: PlaylistEntryRow): string =>
+  releaseSongKey(releaseEntrySong(entry));
 export const releaseEntryDate = (entry: PlaylistEntryRow): string | null => {
   const answer = releaseDates.get()[releaseEntryKey(entry)];
   if (entry.source === "library") {
@@ -59,6 +51,47 @@ export const releaseEntryDate = (entry: PlaylistEntryRow): string | null => {
     if (entry.track.year) return String(entry.track.year);
   }
   return answer?.date ?? null;
+};
+
+/** Logs why [date] isn't in [path]'s tags; the index keeps it whatever happened. */
+const writeReleaseTag = async (path: string, date: string): Promise<void> => {
+  const failed = (
+    cause: unknown,
+    step: TagWriteStep | null = null,
+    file: TagWriteFile | null = null,
+  ) =>
+    console.warn(
+      `[wave] ${tagWriteFailureLine({ path, origin: "releaseDate", step, file, cause })}`,
+    );
+  try {
+    const written = await WaveNative.writeOriginalDate(path, date);
+    if ("failed" in written) {
+      const { step, exception, message, fileExists, fileBytes } = written.failed;
+      failed(Object.assign(new Error(message), { name: exception }), step, {
+        exists: fileExists,
+        bytes: fileBytes,
+      });
+    } else if (written.originalDate === "notWritten")
+      console.warn(`[wave] ${releaseTagNotWrittenLine(path, date)}`);
+  } catch (cause) {
+    failed(cause);
+  }
+};
+
+/**
+ * Keeps a found first-release date in the index for a Library song without one and, that once,
+ * in its file (Core's `releaseTagDate`). A file that can't take it keeps it in the index only.
+ */
+const keepReleaseDate = async (entry: PlaylistEntryRow, answer: ReleaseAnswer): Promise<void> => {
+  if (entry.source !== "library" || answer.source !== "first-release" || !answer.date) return;
+  const { date } = answer;
+  const saved = await appRuntime.runPromise(
+    // oxlint-disable-next-line react-hooks/rules-of-hooks -- Effect Service.use resolves a service.
+    LibraryStore.use((store) => store.saveReleaseDate(entry.track.id, date)),
+  );
+  const path = saved?.path ?? null;
+  const tagged = releaseTagDate({ answer, held: entry.track.releaseDate, hasFile: path !== null });
+  if (path !== null && tagged !== null) await writeReleaseTag(path, tagged);
 };
 
 export const releaseStatus = persistedSetting<
@@ -104,17 +137,8 @@ const run = async (): Promise<void> => {
       const unique = [...new Map(detail.items.map((e) => [releaseEntryKey(e), e])).values()];
       for (const entry of unique) {
         const answer = releaseDates.get()[releaseEntryKey(entry)];
-        if (
-          entry.source === "library" &&
-          !entry.track.releaseDate &&
-          answer?.source === "first-release" &&
-          answer.date
-        ) {
-          await appRuntime.runPromise(
-            // oxlint-disable-next-line react-hooks/rules-of-hooks -- Effect Service.use resolves a service.
-            LibraryStore.use((store) => store.saveReleaseDate(entry.track.id, answer.date!)),
-          );
-        }
+        if (entry.source === "library" && !entry.track.releaseDate && answer)
+          await keepReleaseDate(entry, answer);
       }
       const due = unique.filter((e) =>
         releaseDue(
@@ -170,12 +194,7 @@ const run = async (): Promise<void> => {
               answer = releaseAnswer([], [], year, albumDates.toSorted()[0] ?? null, Date.now());
             }
             releaseDates.set({ ...releaseDates.get(), [releaseEntryKey(entry)]: answer });
-            if (entry.source === "library" && answer.source === "first-release" && answer.date) {
-              await appRuntime.runPromise(
-                // oxlint-disable-next-line react-hooks/rules-of-hooks -- Effect Service.use resolves a service.
-                LibraryStore.use((store) => store.saveReleaseDate(entry.track.id, answer.date!)),
-              );
-            }
+            await keepReleaseDate(entry, answer);
           }
         } catch {
           failed = true;

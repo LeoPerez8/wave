@@ -8,6 +8,7 @@ import {
   formatLogEntry,
   lookupFailureLine,
   tagWriteFailureLine,
+  releaseTagNotWrittenLine,
 } from "./index.ts";
 
 /** An error shaped as Effect's `Data.TaggedError` / `Cause.UnknownError` are: a `_tag`, a `cause`. */
@@ -195,5 +196,28 @@ describe("downloadTagWriteOrigin", () => {
     assert.equal(downloadTagWriteOrigin("downgrade:3"), "downgrade");
     assert.equal(downloadTagWriteOrigin("missing:4"), "download");
     assert.equal(downloadTagWriteOrigin("videoId123"), "download");
+  });
+});
+
+describe("a first-release date kept out of a file", () => {
+  test("a failed write names the lookup as its origin", () => {
+    assert.equal(
+      tagWriteFailureLine({
+        path: "/Music/Song.flac",
+        origin: "releaseDate",
+        step: "write",
+        file: { exists: true, bytes: 10 },
+        cause: new Error("Permission denied"),
+      }),
+      "couldn't fill in /Music/Song.flac: writing the tags failed" +
+        " (a release date lookup; file present, 10 bytes, .flac): Error: Permission denied",
+    );
+  });
+
+  test("a format Wave doesn't write tags to keeps the date in the Library and says why", () => {
+    assert.equal(
+      releaseTagNotWrittenLine("/Music/Song.opus", "1985-06-21"),
+      "kept 1985-06-21 as /Music/Song.opus's release date in the Library only: Wave doesn't write tags to .opus files",
+    );
   });
 });

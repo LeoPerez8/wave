@@ -1991,6 +1991,7 @@ export {
   failureCause,
   lookupFailureLine,
   tagWriteFailureLine,
+  releaseTagNotWrittenLine,
 } from "./failureCause.ts";
 export type {
   FailureCause,

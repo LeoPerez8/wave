@@ -313,3 +313,17 @@ describe("missingSongsDownload", () => {
     assert.equal(view.line, "Downloading · 0 of 1");
   });
 });
+
+describe("a missing song's first-release date", () => {
+  test("goes into the downloaded file's tags", () => {
+    const job = missingSongJob(track({ releaseDate: "1985-06-21" }));
+    assert.equal(missingSongTags(job, null, null).releaseDate, "1985-06-21");
+  });
+
+  test("a song without one, or a job journalled before there were dates, writes none", () => {
+    assert.equal(missingSongTags(missingSongJob(track()), null, null).releaseDate, null);
+    const old = missingSongJob(track({ releaseDate: "1985" }));
+    const { releaseDate: _, ...missing } = old.missing;
+    assert.equal(missingSongTags({ ...old, missing }, null, null).releaseDate, null);
+  });
+});

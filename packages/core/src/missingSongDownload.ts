@@ -44,6 +44,8 @@ export interface MissingTrack {
   readonly durationMs: number;
   /** The YouTube Music video it was downloaded from, when it was. */
   readonly videoId: string | null;
+  /** Its first-release date as the Library keeps it, for the file's original-date tag. */
+  readonly releaseDate?: string | null;
 }
 
 /** What a missing song's job keeps of its Track besides what a YT Music song has. */
@@ -58,6 +60,8 @@ export interface MissingSongJobTags {
   readonly discNumber: number | null;
   readonly genre: string | null;
   readonly videoId: string | null;
+  /** Absent in a job journalled before Wave kept first-release dates. */
+  readonly releaseDate?: string | null;
 }
 
 /**
@@ -124,6 +128,7 @@ export const missingSongJob = (track: MissingTrack): MissingSongJob => ({
     discNumber: track.discNumber,
     genre: track.genre,
     videoId: track.videoId,
+    releaseDate: track.releaseDate ?? null,
   },
 });
 
@@ -200,6 +205,7 @@ export const missingSongTags = (
     artworkUrl: artworkUrl === null ? null : largeCover(artworkUrl),
     // A Track doesn't say whether it's explicit: Deezer's match does, when there is one.
     advisory: advisoryTag(found?.explicit ?? "unknown"),
+    releaseDate: missing.releaseDate ?? null,
   };
 };
 

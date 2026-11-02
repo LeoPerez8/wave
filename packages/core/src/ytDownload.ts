@@ -52,6 +52,11 @@ export interface YtDownloadTags {
    */
   readonly advisory: 0 | 1 | null;
   /**
+   * The song's first-release date for its original-date tag (`releaseTagDate`); null or
+   * absent writes none. A quality replacement keeps the old file's own tag over it.
+   */
+  readonly releaseDate?: string | null;
+  /**
    * A quality replacement's old file: the new one keeps every other tag it
    * has (composer, comments, BPM, every genre value…) under the ones above.
    */

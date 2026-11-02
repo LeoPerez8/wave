@@ -20,6 +20,8 @@ data class DownloadTags(
   val discNumber: Int? = null,
   /** The advisory tag ([Advisory]): 1 explicit, 0 checked and clean; null writes none. */
   val advisory: Int? = null,
+  /** The first-release date for the original-date tag ([OriginalDate]); null writes none. */
+  val releaseDate: String? = null,
   /**
    * A quality replacement's old file (Core's `keepTagsOf`): the new one keeps its other tags
    * ([DownloadTagWriter.KEPT_FIELDS]) and every genre value it has.
@@ -27,7 +29,7 @@ data class DownloadTags(
   val keepTagsOf: String? = null,
 ) {
   companion object {
-    /** From JS: `{ title, artist, album, albumArtist, year, trackNumber, genre, lyrics, advisory, keepTagsOf }`. */
+    /** From JS: `{ title, artist, album, albumArtist, year, trackNumber, genre, lyrics, advisory, releaseDate, keepTagsOf }`. */
     fun fromJs(map: Map<String, Any?>): DownloadTags? {
       fun text(key: String): String? = (map[key] as? String)?.takeIf(String::isNotBlank)
       fun number(key: String): Int? = (map[key] as? Number)?.toInt()?.takeIf { it > 0 }
@@ -42,6 +44,7 @@ data class DownloadTags(
         lyrics = text("lyrics"),
         discNumber = number("discNumber"),
         advisory = (map["advisory"] as? Number)?.toInt()?.takeIf { it == 0 || it == 1 },
+        releaseDate = text("releaseDate"),
         keepTagsOf = text("keepTagsOf"),
       )
     }
@@ -80,6 +83,8 @@ class DownloadTagWriter {
       if (index == 0) tag.setField(FieldKey.GENRE, genre) else tag.addField(FieldKey.GENRE, genre)
     }
     if (kept != null) keep(kept, tag)
+    // The replaced file's own date wins: the Library's may be one a scan never saw in it.
+    (kept?.let(OriginalDate::read) ?: tags.releaseDate)?.let { OriginalDate.write(tag, it) }
     tags.lyrics?.let { tag.setField(FieldKey.LYRICS, it) }
     tags.advisory?.let { Advisory.write(tag, it) }
     if (artwork != null && artwork.isNotEmpty()) {
@@ -125,13 +130,14 @@ class DownloadTagWriter {
     /**
      * What a quality replacement keeps of the old file besides the tags the Library has (Core's
      * `qualityReplacementTags`): the owner's and the release's own. ReplayGain, encoder and
-     * gapless fields measure the old file's audio, so the new file doesn't take them.
+     * gapless fields measure the old file's audio, so the new file doesn't take them. The original
+     * date goes through [OriginalDate], whose field names differ from jaudiotagger's.
      */
     val KEPT_FIELDS = listOf(
       FieldKey.COMPOSER, FieldKey.COMPOSER_SORT, FieldKey.LYRICIST, FieldKey.CONDUCTOR,
       FieldKey.COMMENT, FieldKey.BPM, FieldKey.GROUPING, FieldKey.MOOD, FieldKey.KEY,
       FieldKey.ISRC, FieldKey.RECORD_LABEL, FieldKey.COPYRIGHT, FieldKey.SUBTITLE,
-      FieldKey.TRACK_TOTAL, FieldKey.DISC_TOTAL, FieldKey.IS_COMPILATION, FieldKey.ORIGINAL_YEAR,
+      FieldKey.TRACK_TOTAL, FieldKey.DISC_TOTAL, FieldKey.IS_COMPILATION,
       FieldKey.LANGUAGE, FieldKey.ARTIST_SORT, FieldKey.ALBUM_ARTIST_SORT, FieldKey.ALBUM_SORT,
       FieldKey.TITLE_SORT, FieldKey.MUSICBRAINZ_TRACK_ID, FieldKey.MUSICBRAINZ_RELEASEID,
       FieldKey.MUSICBRAINZ_ARTISTID, FieldKey.MUSICBRAINZ_RELEASEARTISTID,

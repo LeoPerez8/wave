@@ -148,7 +148,10 @@ describe("what plays, and Android Auto, leave missing songs out", () => {
 
 describe("what downloading missing songs reads", () => {
   test("the missing songs, as a download takes them: their Track's tags, in title order", () => {
-    db.update(schema.tracks).set({ videoId: "abc" }).where(eq(schema.tracks.id, lucky)).run();
+    db.update(schema.tracks)
+      .set({ videoId: "abc", releaseDate: "1997-05-21" })
+      .where(eq(schema.tracks.id, lucky))
+      .run();
     assert.deepEqual(selectMissingSongs(db), [
       {
         id: everything,
@@ -163,6 +166,7 @@ describe("what downloading missing songs reads", () => {
         genre: null,
         durationMs: 180_000,
         videoId: null,
+        releaseDate: null,
       },
       {
         id: lucky,
@@ -177,6 +181,7 @@ describe("what downloading missing songs reads", () => {
         genre: "Rock",
         durationMs: 180_000,
         videoId: "abc",
+        releaseDate: "1997-05-21",
       },
     ]);
   });

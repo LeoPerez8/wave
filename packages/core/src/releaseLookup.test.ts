@@ -102,3 +102,20 @@ test("serialized retry deadlines survive a restart and answered songs remain set
     false,
   );
 });
+
+import { releaseTagDate } from "./releaseLookup.ts";
+test("only a found first-release date goes to a file, and only to one without a date", () => {
+  const found = { date: "1985-06-21", source: "first-release", retryAt: null } as const;
+  assert.equal(releaseTagDate({ answer: found, held: null, hasFile: true }), "1985-06-21");
+  // A YT Music entry has no file: the date stays in the index until it's downloaded.
+  assert.equal(releaseTagDate({ answer: found, held: null, hasFile: false }), null);
+  // An original-date tag or a typed date is never replaced.
+  assert.equal(releaseTagDate({ answer: found, held: "1984", hasFile: true }), null);
+  for (const source of ["year", "album", "unknown", "failed"] as const)
+    assert.equal(
+      releaseTagDate({ answer: { date: "2005", source, retryAt: 1 }, held: null, hasFile: true }),
+      null,
+      source,
+    );
+  assert.equal(releaseTagDate({ answer: undefined, held: null, hasFile: true }), null);
+});

@@ -496,6 +496,119 @@ class SongTagWriterTest {
     assertEquals(listOf("Dance", "6", "1997", "1"), listOf(tags.genre, tags.trackNumber, tags.year, tags.advisory))
   }
 
+  /**
+   * Writes a first-release date into a copy of [fixture] as [fields] (as [OtherTagFields] names
+   * them) and checks it reads back, and that nothing else changed: Year, every other tag field and
+   * the audio.
+   */
+  private fun assertWritesOriginalDate(fixture: String, vararg fields: String) {
+    val file = copyOf(fixture)
+    val tagsBefore = reader.read(file)
+    val audioBefore = AudioPayload.of(file)
+    val fieldsBefore = OtherTagFields.of(file)
+    assertNull("$fixture has no original date yet", tagsBefore.releaseDate)
+
+    val report = writer.write(file, lyrics = null, genre = null, originalDate = "1985-06-21")
+
+    assertEquals("$fixture report", TagWriteReport(LyricsDestination.NONE, TagDestination.NONE, originalDate = TagDestination.TAGS), report)
+    val tagsAfter = reader.read(file)
+    assertEquals("$fixture original date", "1985-06-21", tagsAfter.releaseDate)
+    assertEquals("$fixture other tags", tagsBefore.copy(artwork = null), tagsAfter.copy(releaseDate = null, artwork = null))
+    assertArrayEquals("$fixture artwork", tagsBefore.artwork, tagsAfter.artwork)
+    val fieldsAfter = OtherTagFields.of(file)
+    assertEquals("$fixture new fields", fields.toSet(), fieldsAfter.keys - fieldsBefore.keys)
+    assertEquals("$fixture every other tag field", fieldsBefore, fieldsAfter - fields.toSet())
+    assertArrayEquals("$fixture audio", audioBefore, AudioPayload.of(file))
+  }
+
+  @Test fun writesAnMp3sOriginalDateAsTdor() = assertWritesOriginalDate("tagged.mp3", "ID3:TDOR")
+
+  @Test fun writesAnUntaggedMp3sOriginalDateAsTdor() = assertWritesOriginalDate("untagged.mp3", "ID3:TDOR")
+
+  /** ID3v2.3 has no TDOR, and its TORY holds a year alone: the whole date goes in a TXXX frame beside it. */
+  @Test fun writesAnId3v23OriginalDateAsToryAndTxxx() = assertWritesOriginalDate("lyrics.mp3", "ID3:TORY", "ID3:TXXX")
+
+  @Test
+  fun anId3v23OriginalYearIsToryAlone() {
+    val file = copyOf("lyrics.mp3")
+    val before = OtherTagFields.of(file).keys
+    writer.write(file, lyrics = null, genre = null, originalDate = "1985")
+    assertEquals(setOf("ID3:TORY"), OtherTagFields.of(file).keys - before)
+    assertEquals("1985", reader.read(file).releaseDate)
+  }
+
+  @Test fun writesAFlacsOriginalDate() = assertWritesOriginalDate("tagged.flac", "ORIGINALDATE")
+
+  @Test fun writesAnOggVorbisOriginalDate() = assertWritesOriginalDate("tagged.ogg", "ORIGINALDATE")
+
+  @Test fun writesAnM4asOriginalDate() = assertWritesOriginalDate("tagged-aac.m4a", "----:com.apple.iTunes:ORIGINALDATE")
+
+  @Test fun writesAnAlacM4asOriginalDate() = assertWritesOriginalDate("tagged-alac.m4a", "----:com.apple.iTunes:ORIGINALDATE")
+
+  @Test fun writesAWavsOriginalDateInItsId3Chunk() = assertWritesOriginalDate("tagged.wav", "ID3:TDOR")
+
+  /** An original date the file has, under any tagger's name, stays, and the file isn't touched. */
+  @Test
+  fun keepsAnOriginalDateTheFileHas() {
+    for ((fixture, set) in listOf<Pair<String, (org.jaudiotagger.tag.Tag) -> Unit>>(
+      "tagged.mp3" to { it.setField(FieldKey.ORIGINAL_YEAR, "1984") },
+      "tagged.mp3" to { it.setField(FieldKey.ORIGINALRELEASEDATE, "1984") },
+      "tagged.flac" to { (it as org.jaudiotagger.tag.flac.FlacTag).setField("ORIGINALYEAR", "1984") },
+      "tagged.ogg" to { it.setField(FieldKey.ORIGINAL_YEAR, "1984") },
+      "tagged-aac.m4a" to { it.setField(FieldKey.ORIGINAL_YEAR, "1984") },
+    )) {
+      val file = copyOf(fixture)
+      val audio = AudioFileIO.read(file)
+      set(audio.tag)
+      AudioFileIO.write(audio)
+      val before = file.readBytes()
+      val report = writer.write(file, lyrics = null, genre = null, originalDate = "1985-06-21")
+      assertEquals("$fixture report", TagWriteReport(LyricsDestination.NONE, TagDestination.NONE), report)
+      assertArrayEquals("$fixture untouched", before, file.readBytes())
+      assertEquals("$fixture date", "1984", reader.read(file).releaseDate)
+    }
+  }
+
+  @Test
+  fun opusGetsNoOriginalDate() {
+    val file = copyOf("tagged.opus")
+    val before = file.readBytes()
+    val report = writer.write(file, lyrics = null, genre = null, originalDate = "1985-06-21")
+    assertEquals(TagDestination.NOT_WRITTEN, report.originalDate)
+    assertArrayEquals(before, file.readBytes())
+  }
+
+  @Test
+  fun anOriginalDateForAReadOnlyFileFailsAtTheWriteStepAndLeavesIt() {
+    val file = copyOf("tagged.flac")
+    val before = file.readBytes()
+    assertTrue(file.setReadOnly())
+    try {
+      val failure = assertThrows(TagWriteStepException::class.java) {
+        writer.write(file, lyrics = null, genre = null, originalDate = "1985-06-21")
+      }
+      assertEquals(TagWriteStep.WRITE, failure.step)
+      assertArrayEquals(before, file.readBytes())
+    } finally {
+      file.setWritable(true)
+    }
+  }
+
+  @Test
+  fun anOriginalDateForAFileGoneFailsAtTheReadStep() {
+    val file = File(copyOf("tagged.mp3").parentFile, "gone.mp3")
+    val failure = assertThrows(TagWriteStepException::class.java) {
+      writer.write(file, lyrics = null, genre = null, originalDate = "1985")
+    }
+    assertEquals(TagWriteStep.READ, failure.step)
+  }
+
+  @Test
+  fun reportsWhereTheOriginalDateWentToJs() {
+    val report = TagWriteReport(LyricsDestination.NONE, TagDestination.NONE, originalDate = TagDestination.NOT_WRITTEN)
+    assertEquals("notWritten", report.toMap()["originalDate"])
+  }
+
   @Test
   fun reportsWhereTheAdvisoryWentToJs() {
     val report = TagWriteReport(LyricsDestination.NONE, TagDestination.NONE, explicit = TagDestination.TAGS)
