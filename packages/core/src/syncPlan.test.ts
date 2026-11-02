@@ -18,6 +18,7 @@ const fields = (title: string, more: Partial<SyncSongFields> = {}): SyncSongFiel
   discNumber: null,
   trackNumber: null,
   durationMs: 180_000,
+  releaseDate: null,
   year: 1997,
   genre: null,
   videoId: null,
@@ -107,6 +108,33 @@ describe("planSongSync", () => {
       phoneId: "me",
     });
     assert.deepEqual(again, { push: [], local: [] });
+  });
+
+  test("a retag keeps the release date another phone gave, and a date cleared here goes", () => {
+    const synced = (song: SyncSongFields) =>
+      planSongSync({
+        phone: [{ recordingKey: "airbag", fields: song }],
+        account: [],
+        now: 100,
+        phoneId: "me",
+      }).local[0]?.local ?? null;
+    const retag = (before: SyncSongFields, after: SyncSongFields, account: SyncSongFields) => {
+      const [pushed] = planSongSync({
+        phone: [{ recordingKey: "airbag", fields: after }],
+        account: [{ row: accountRow("airbag", account, 500), local: synced(before) }],
+        now: 300,
+        phoneId: "me",
+      }).push;
+      return pushed !== undefined && !pushed.deleted ? pushed.releaseDate : undefined;
+    };
+
+    // This phone's file has no date; another phone's lookup or its owner gave the song one.
+    const dated = fields("Airbag", { releaseDate: "1997-05-21" });
+    assert.equal(retag(fields("Airbag"), fields("Airbag", { year: 1998 }), dated), "1997-05-21");
+    // The owner cleared the date this phone had: the account loses it too.
+    assert.equal(retag(dated, fields("Airbag", { releaseDate: null }), dated), null);
+    // A date of the phone's own wins.
+    assert.equal(retag(fields("Airbag"), fields("Airbag", { releaseDate: "1997" }), dated), "1997");
   });
 
   test("a song retagged on the phone goes up again, after the account's last change", () => {

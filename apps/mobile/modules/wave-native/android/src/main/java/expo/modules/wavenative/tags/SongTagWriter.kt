@@ -45,6 +45,8 @@ data class TagWriteReport(
   val year: TagDestination = TagDestination.NONE,
   /** The advisory tag ([Advisory]), whether the song is explicit. */
   val explicit: TagDestination = TagDestination.NONE,
+  /** The first-release date ([OriginalDate]). */
+  val originalDate: TagDestination = TagDestination.NONE,
 ) {
   fun toMap(): Map<String, String> =
     mapOf(
@@ -53,21 +55,22 @@ data class TagWriteReport(
       "trackNumber" to trackNumber.id,
       "year" to year.id,
       "explicit" to explicit.id,
+      "originalDate" to originalDate.id,
     )
 }
 
 /**
  * Writes a song's lyrics and genre into its file, replacing what is there, and
- * fills in its track number, disc number, year and advisory tag ([Advisory]:
- * 1 explicit, 0 clean), keeping any the file already has, with jaudiotagger
+ * fills in its track number, disc number, year, advisory tag ([Advisory]:
+ * 1 explicit, 0 clean) and first-release date ([OriginalDate]), keeping any the file already has, with jaudiotagger
  * (MP3, FLAC, M4A, Ogg Vorbis and WAV; a fragmented M4A, what YouTube serves,
  * through [FragmentedMp4]). Only those fields change: the audio
  * and every other tag are left as they were. The disc number is written only
  * with the track number it belongs to.
  *
  * A format it can't write tags to (Opus, raw AAC) gets the lyrics in a
- * sidecar `.lrc` beside it instead, and its genre, track number, year and
- * advisory aren't written. A sidecar that is already there is replaced too, since the
+ * sidecar `.lrc` beside it instead, and its genre, track number, year,
+ * advisory and original date aren't written. A sidecar that is already there is replaced too, since the
  * Lyrics view would show it over the tags. With nothing to write the file
  * isn't touched at all.
  *
@@ -87,8 +90,9 @@ class SongTagWriter {
     genre: String?,
     place: AlbumPlace = AlbumPlace(),
     advisory: Int? = null,
+    originalDate: String? = null,
   ): TagWriteReport {
-    if (lyrics == null && genre == null && place.trackNumber == null && place.year == null && advisory == null) {
+    if (lyrics == null && genre == null && place.trackNumber == null && place.year == null && advisory == null && originalDate == null) {
       return TagWriteReport(LyricsDestination.NONE, TagDestination.NONE)
     }
     val audio = TagWriteStep.READ.attempt { if (takesTags(file)) readForWriting(file) else null }
@@ -100,6 +104,7 @@ class SongTagWriter {
         trackNumber = notWritten(place.trackNumber),
         year = notWritten(place.year),
         explicit = notWritten(advisory),
+        originalDate = notWritten(originalDate),
       )
     }
     // What the file has, as a scan reads it, is kept.
@@ -107,17 +112,41 @@ class SongTagWriter {
     val discNumber = place.discNumber?.takeIf { trackNumber != null && !audio.has(FieldKey.DISC_NO) }
     val year = place.year?.takeUnless { audio.has(FieldKey.YEAR) }
     val newAdvisory = advisory?.takeUnless { audio.hasAdvisory() }
-    if (lyrics == null && genre == null && trackNumber == null && year == null && newAdvisory == null) {
+    val newOriginalDate = originalDate?.takeUnless { audio.hasOriginalDate() }
+    if (lyrics == null && genre == null && trackNumber == null && year == null && newAdvisory == null && newOriginalDate == null) {
       return TagWriteReport(LyricsDestination.NONE, TagDestination.NONE)
     }
-    TagWriteStep.WRITE.attempt { writeInto(audio, file, lyrics, genre, trackNumber, discNumber, year, newAdvisory) }
+    TagWriteStep.WRITE.attempt {
+      writeInto(audio, file, lyrics, genre, trackNumber, discNumber, year, newAdvisory, newOriginalDate)
+    }
     return TagWriteReport(
       lyrics = if (lyrics != null) LyricsDestination.TAGS else LyricsDestination.NONE,
       genre = writtenIf(genre),
       trackNumber = writtenIf(trackNumber),
       year = writtenIf(year),
       explicit = writtenIf(newAdvisory),
+      originalDate = writtenIf(newOriginalDate),
     )
+  }
+
+  /**
+   * Replaces the file's original date ([OriginalDate]) with one the owner typed, or takes it out
+   * ([date] null), changing nothing else. Unlike [write], which keeps an original date the file
+   * has, this is the owner's own correction, so it goes over whatever date is there, under any
+   * name. Clearing a file without one doesn't touch it; a format Wave doesn't write tags to
+   * (Opus, raw AAC) reports `NOT_WRITTEN`.
+   */
+  fun replaceOriginalDate(file: File, date: String?): TagWriteReport {
+    val audio = TagWriteStep.READ.attempt { if (takesTags(file)) readForWriting(file) else null }
+      ?: return TagWriteReport(LyricsDestination.NONE, TagDestination.NONE, originalDate = TagDestination.NOT_WRITTEN)
+    if (date == null && !audio.hasOriginalDate()) return TagWriteReport(LyricsDestination.NONE, TagDestination.NONE)
+    TagWriteStep.WRITE.attempt {
+      val tag = tagToWrite(audio)
+      OriginalDate.remove(tag)
+      date?.let { OriginalDate.write(tag, it) }
+      FragmentedMp4.writeTag(audio, file)
+    }
+    return TagWriteReport(LyricsDestination.NONE, TagDestination.NONE, originalDate = TagDestination.TAGS)
   }
 
   private fun writeInto(
@@ -129,6 +158,7 @@ class SongTagWriter {
     discNumber: Int?,
     year: Int?,
     newAdvisory: Int?,
+    newOriginalDate: String?,
   ) {
     val tag = tagToWrite(audio)
     // A WAV file's RIFF INFO chunk, when it has one, gets what it has a field for (no lyrics, no disc).
@@ -148,6 +178,7 @@ class SongTagWriter {
       info?.setField(FieldKey.YEAR, it.toString())
     }
     newAdvisory?.let { Advisory.write(tag, it) }
+    newOriginalDate?.let { OriginalDate.write(tag, it) }
     // A YouTube download or a quality replacement's copy is a fragmented M4A (#454).
     FragmentedMp4.writeTag(audio, file)
     if (lyrics != null) Sidecars.find(file)?.let { writeSidecar(file, lyrics, it) }
@@ -171,6 +202,12 @@ class SongTagWriter {
   private fun AudioFile.hasAdvisory(): Boolean {
     val id3 = (tag as? AbstractID3v2Tag) ?: (this as? MP3File)?.iD3v2Tag ?: (tag as? WavTag)?.iD3Tag
     return Advisory.read(tag, id3) != null
+  }
+
+  /** Whether the file has an original date where a scan reads it (`JAudioTaggerReader`). */
+  private fun AudioFile.hasOriginalDate(): Boolean {
+    val tags = (tag as? WavTag)?.let { listOfNotNull(it.iD3Tag, it.infoTag) } ?: listOfNotNull(tag)
+    return tags.any { OriginalDate.read(it) != null }
   }
 
   /** The file read for writing, or null when jaudiotagger can't parse it (a sidecar does instead). */

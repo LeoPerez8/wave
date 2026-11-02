@@ -1,3 +1,6 @@
+import { releaseAnswers } from "./releaseAnswers";
+import { entryReleaseSong, releaseSongDate } from "./releaseSong";
+import { typedReleaseDates } from "./typedReleaseDates";
 import {
   GoToSuggestions,
   PlaylistRecommendations,
@@ -187,6 +190,8 @@ const DraggableEntry = memo(function DraggableEntry({
 });
 
 type Props = {
+  customOrder?: boolean;
+  showReleaseYear?: boolean;
   playlistId: number;
   /** In playlist order; undefined until they are read (only the header shows). */
   items: readonly PlaylistEntryRow[] | undefined;
@@ -232,7 +237,14 @@ export const playPlaylistEntries = (
  * get Move up / Move down and the swipes' actions. While selecting, an
  * unavailable entry can't be checked and does nothing.
  */
-export function PlaylistItems({ playlistId, items, header, empty }: Props) {
+export function PlaylistItems({
+  playlistId,
+  items,
+  header,
+  empty,
+  customOrder = true,
+  showReleaseYear = false,
+}: Props) {
   const { strings } = useLocalisation();
   const scrollable = useListScrollable();
   const read = items ?? NO_ITEMS;
@@ -280,7 +292,7 @@ export function PlaylistItems({ playlistId, items, header, empty }: Props) {
   const find = useFindInLegendList(list, order, entryText, true);
   // The rows shown: the whole playlist, or the songs the query finds, in playlist order.
   const { found, shown } = find;
-  const reorderable = found === null;
+  const reorderable = found === null && customOrder;
   const selecting = listSelection.selecting;
   const orderRef = useRef(order);
   useLayoutEffect(() => {
@@ -290,7 +302,7 @@ export function PlaylistItems({ playlistId, items, header, empty }: Props) {
 
   const reorder = (fromIndex: number, toIndex: number): boolean => {
     // A narrowed list has no places to move to.
-    if (found !== null) return false;
+    if (!reorderable) return false;
     const current = orderRef.current;
     const item = current[fromIndex];
     if (item === undefined || toIndex === fromIndex || toIndex < 0 || toIndex >= current.length)
@@ -459,9 +471,19 @@ export function PlaylistItems({ playlistId, items, header, empty }: Props) {
         : [...(index > 0 ? [moves.up] : []), ...(index < count - 1 ? [moves.down] : [])],
     [selecting, reorderable, count, moves],
   );
+  const dates = releaseAnswers.useValue();
+  const typed = typedReleaseDates.useValue();
   const decorateRow = useCallback(
     (row: ReactElement, item: Item, index: number) => {
       const key = itemKey(item);
+      const entry = entryOf(item);
+      if (showReleaseYear && entry) {
+        const dated = entryReleaseSong(entry);
+        const year = releaseSongDate(dated, dates, typed)?.slice(0, 4);
+        row = cloneElement(row as ReactElement<{ secondLine: string }>, {
+          secondLine: year ? `${dated.artist} · ${year}` : dated.artist,
+        });
+      }
       return (
         <DraggableEntry
           row={row as ReactElement<SongRowActions>}
@@ -473,7 +495,7 @@ export function PlaylistItems({ playlistId, items, header, empty }: Props) {
         />
       );
     },
-    [rowDrag, drag, selecting, reorderable],
+    [rowDrag, drag, selecting, reorderable, showReleaseYear, dates, typed],
   );
   const renderSlot = ({ item }: { item: Item }) =>
     "kind" in item ? (
@@ -556,7 +578,9 @@ export function PlaylistItems({ playlistId, items, header, empty }: Props) {
           maintainVisibleContentPosition={
             anchored && recommending
               ? { data: true, shouldRestorePosition: (item) => item === RECOMMENDATIONS }
-              : undefined
+              : showReleaseYear
+                ? { data: true }
+                : undefined
           }
           lifted={
             drag === null

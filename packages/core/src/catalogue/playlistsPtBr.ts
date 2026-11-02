@@ -4,6 +4,21 @@ import type { playlistsEn } from "./playlistsEn.ts";
 
 const n = (count: number): string => formatNumber("pt-BR", count);
 
+const MONTHS = [
+  "janeiro",
+  "fevereiro",
+  "março",
+  "abril",
+  "maio",
+  "junho",
+  "julho",
+  "agosto",
+  "setembro",
+  "outubro",
+  "novembro",
+  "dezembro",
+];
+
 const songs = (count: number): string =>
   plural("pt-BR", count, {
     zero: "Nenhuma música",
@@ -16,6 +31,32 @@ const counted = (count: number): string =>
   plural("pt-BR", count, { one: `${n(count)} música`, other: `${n(count)} músicas` });
 
 export const playlistsPtBr: typeof playlistsEn = {
+  releaseNoticeTitle: "Buscar datas de lançamento",
+  releaseNotice:
+    "O Wave envia títulos e artistas ao Deezer e depois os ISRCs das gravações ao MusicBrainz para buscar as primeiras datas de lançamento.",
+  releaseProgress: (done: number, total: number): string =>
+    `Buscando datas de lançamento: ${n(done)} de ${n(total)}`,
+  releaseOffline: "Busca de datas pausada: sem conexão ou serviço indisponível",
+  releaseOldest: "Data de lançamento · Mais antigas primeiro",
+  releaseNewest: "Data de lançamento · Mais recentes primeiro",
+  releaseDate: (year, month, day) =>
+    month === null
+      ? String(year)
+      : day === null
+        ? `${MONTHS[month - 1]} de ${year}`
+        : `${day === 1 ? "1º" : day} de ${MONTHS[month - 1]} de ${year}`,
+  releaseDateTitle: "Data de lançamento",
+  releaseDateYear: "Ano",
+  releaseDateMonth: "Mês",
+  releaseDateDay: "Dia",
+  releaseDateHint: "Só o ano, ou com o mês, ou a data completa.",
+  releaseDateImpossible: "Essa data não existe, ou ainda não chegou.",
+  releaseDateSave: "Salvar",
+  releaseDateClear: "Limpar",
+  releaseDateFull: "O Wave não consegue guardar mais datas de lançamento digitadas.",
+  sortsFull: "O Wave não consegue guardar a ordem desta playlist na sua conta Wave.",
+  releaseDateCouldntSave: "Não foi possível salvar a data de lançamento.",
+  releaseDateNotInFile: "Salva no Wave, mas o arquivo da música não aceitou a data.",
   defaultName: "Nova Playlist",
   newPlaylist: "Nova Playlist",
   newPlaylistTitle: "Nova playlist",

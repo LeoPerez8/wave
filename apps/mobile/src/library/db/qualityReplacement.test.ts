@@ -112,8 +112,9 @@ describe("the files a quality replacement looks at", () => {
     db.insert(schema.artwork)
       .values({ hash: "cover", path: "/art/cover.jpg", thumbPath: "/art/cover_t.jpg", palette: {} })
       .run();
-    save([file(OLD, { artworkHash: "cover", explicit: "explicit" })]);
+    save([file(OLD, { artworkHash: "cover", explicit: "explicit", releaseDate: "1985-06-21" })]);
     const track = selectReplacedTrack(db, idOf(OLD));
+    assert.equal(track?.releaseDate, "1985-06-21");
     assert.equal(track?.path, OLD);
     assert.equal(track?.title, "Get Lucky");
     assert.deepEqual(track?.artists, ["Daft Punk"]);

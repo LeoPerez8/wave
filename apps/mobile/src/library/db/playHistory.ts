@@ -87,10 +87,23 @@ export const recordPlay = (
     const videoId = ref?.kind === "yt" ? ref.videoId : null;
     if (videoId !== null && streamedSong?.videoId !== videoId)
       throw new Error("Streamed play needs its queued song");
+    // Only what the snapshot keeps, not every `songColumns` one.
+    const { tracks, artists, albums, artwork } = schema;
     const song =
       videoId === null
-        ? trackQuery(tx)
-            .where(eq(schema.tracks.id, Number(play.trackId)))
+        ? tx
+            .select({
+              title: tracks.title,
+              artist: tracks.artistCredit,
+              album: albums.title,
+              artworkPath: artwork.path,
+              thumbPath: artwork.thumbPath,
+            })
+            .from(tracks)
+            .innerJoin(artists, eq(tracks.artistId, artists.id))
+            .innerJoin(albums, eq(tracks.albumId, albums.id))
+            .leftJoin(artwork, eq(tracks.artworkHash, artwork.hash))
+            .where(eq(tracks.id, Number(play.trackId)))
             .get()
         : undefined;
     return tx

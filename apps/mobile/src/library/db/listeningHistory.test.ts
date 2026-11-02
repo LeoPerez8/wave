@@ -12,6 +12,7 @@ import {
   migrateTestDatabase,
   openTestDatabase,
   traceQueries,
+  type TestDatabase,
 } from "./testDatabase.ts";
 import { playedRecordingKeys } from "./playHistory.ts";
 import { listeningSums, playTotalsDrift, rebuildPlayTotals } from "./playTotals.ts";
@@ -349,8 +350,8 @@ test("totals stay correct when an event changes between Library and video identi
   assert.deepEqual(playTotalsDrift(db), []);
 });
 
-test("the snapshot-sync upgrade preserves Library and streamed history and their pushed flags", async () => {
-  const db = await openTestDatabase({ through: "0040_streamed_plays" });
+/** A Library play and a streamed one, both ended and pushed. */
+const seedPushedPlays = (db: TestDatabase): void => {
   const track = addTrack(db, { title: "Library song" });
   const library = play(track, 1000);
   endPlay(db, recordPlay(db, library), library);
@@ -358,9 +359,46 @@ test("the snapshot-sync upgrade preserves Library and streamed history and their
   endPlay(db, recordPlay(db, stream, false, streamedSong), stream);
   // Pushed as that Wave did: today's sync reads tables a 0040 database doesn't have yet.
   db.run(sql`UPDATE play_events SET pushed = 1`);
-  const before = listeningHistory(db);
+};
+
+/**
+ * [table]'s rows as stored, in id order, with only [columns] (every one, when not given): what
+ * any schema can read, so a database before and after an upgrade can be compared.
+ */
+const rawRows = (
+  db: TestDatabase,
+  table: string,
+  columns?: readonly string[],
+): Record<string, unknown>[] =>
+  db
+    .all<Record<string, unknown>>(sql.raw(`SELECT * FROM ${table} ORDER BY id`))
+    .map((row) =>
+      columns === undefined ? row : Object.fromEntries(columns.map((name) => [name, row[name]])),
+    );
+
+test("the snapshot-sync upgrade preserves Library and streamed history and their pushed flags", async () => {
+  const db = await openTestDatabase({ through: "0040_streamed_plays" });
+  seedPushedPlays(db);
+  // The rows as the 0040 database holds them: the upgrade leaves every one of them alone.
+  const before = Object.fromEntries(
+    ["play_events", "tracks"].map((table) => [table, rawRows(db, table)]),
+  );
   await migrateTestDatabase(db);
-  assert.deepEqual(listeningHistory(db), before);
+  for (const [table, rows] of Object.entries(before)) {
+    const columns = Object.keys(rows[0] ?? {}).filter(
+      // 0052 asks the next scan to read every file again.
+      (name) => !(table === "tracks" && name === "modified_at"),
+    );
+    assert.deepEqual(
+      rawRows(db, table, columns),
+      rows.map((row) => Object.fromEntries(columns.map((name) => [name, row[name]]))),
+      table,
+    );
+  }
+  // And today's history reads them as it reads the same plays recorded today.
+  const current = await openTestDatabase();
+  seedPushedPlays(current);
+  assert.deepEqual(listeningHistory(db), listeningHistory(current));
   assert.deepEqual(selectUnpushed(db, 100, () => null).rows.plays, []);
   assert.deepEqual(playTotalsDrift(db), []);
 });

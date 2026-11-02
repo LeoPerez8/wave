@@ -16,6 +16,7 @@ internal fun trackToMap(track: ScannedTrack): Map<String, Any?> =
     "albumArtists" to track.tags.albumArtists,
     "genre" to track.tags.genre,
     "genres" to track.tags.genres,
+    "releaseDate" to track.tags.releaseDate,
     "year" to track.tags.year,
     "trackNumber" to track.tags.trackNumber,
     "discNumber" to track.tags.discNumber,

@@ -24,6 +24,7 @@ export interface SyncSongFields {
   readonly discNumber: number | null;
   readonly trackNumber: number | null;
   readonly durationMs: number;
+  readonly releaseDate?: string | null | undefined;
   readonly year: number | null;
   readonly genre: string | null;
   /** The YouTube video id of a song downloaded from YouTube Music. */
@@ -159,6 +160,7 @@ export const SYNC_FIELDS: {
     discNumber: "int?",
     trackNumber: "int?",
     durationMs: "int",
+    releaseDate: "text?",
     year: "int?",
     genre: "text?",
     videoId: "text?",

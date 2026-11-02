@@ -1,3 +1,4 @@
+import { saveReleaseDate, saveTypedReleaseDate } from "./db/releaseDates";
 import { pendingStreamedGenres, keepStreamedGenre } from "./db/streamedGenres";
 import {
   readFollowShows,
@@ -433,6 +434,8 @@ export interface SongRow {
   /** Orders the album's tracks, and so sorts by artist and by album. */
   readonly discNumber: number | null;
   readonly trackNumber: number | null;
+  /** Original-date tag, separate from the album Year fallback. */
+  readonly releaseDate?: string | null | undefined;
   /** Fix Song fills it in when it's missing, as the track number, genre and lyrics. */
   readonly year: number | null;
   /** Null for a song without a genre tag. */
@@ -543,6 +546,7 @@ export interface TrackDetails {
 
 /** One playlist of Library › Playlists. */
 export interface PlaylistRow {
+  readonly syncId?: string;
   readonly id: number;
   readonly name: string;
   /** Core sort key of the name. */
@@ -925,6 +929,23 @@ export class LibraryStore extends Context.Service<
     /** Adds a search to the recent ones (see Core's `rememberSearch`); returns them, newest first. */
     readonly rememberSearch: (query: string) => Effect.Effect<readonly string[], LibraryStoreError>;
     readonly clearRecentSearches: Effect.Effect<void, LibraryStoreError>;
+    /**
+     * Keeps a found first-release date for a song without one; the song's file (null for a
+     * missing song) when it went in, so the date is written there once (`releaseTagDate`).
+     */
+    readonly saveReleaseDate: (
+      id: number,
+      date: string,
+    ) => Effect.Effect<{ readonly path: string | null } | null, LibraryStoreError>;
+    /**
+     * Keeps a release date the owner typed as the song's, whatever it had (null clears it, so
+     * the lookup can find one again); the song's file (null for a missing song), for the date
+     * to replace the file's too (`writeReleaseDateTag`). Null when the song is gone.
+     */
+    readonly saveTypedReleaseDate: (
+      id: number,
+      date: string | null,
+    ) => Effect.Effect<{ readonly path: string | null } | null, LibraryStoreError>;
     /** Every playlist by name, with its mosaic. */
     readonly listPlaylists: Effect.Effect<readonly PlaylistRow[], LibraryStoreError>;
     /** When a song last played from each playlist, by playlist id (never played: absent). */
@@ -1924,6 +1945,10 @@ const make = Effect.gen(function* () {
       db.delete(schema.recentSearches).run();
     }),
 
+    saveReleaseDate: (id, date) =>
+      attempt("save release date", () => saveReleaseDate(db, id, date)),
+    saveTypedReleaseDate: (id, date) =>
+      attempt("save typed release date", () => saveTypedReleaseDate(db, id, date)),
     listPlaylists: attempt("list playlists", () => selectPlaylists(db)),
 
     playlistsLastPlayed: attempt("read when playlists last played", () =>

@@ -356,6 +356,8 @@ export interface ReplacedTrack extends MissingTrack {
   readonly explicit: ExplicitFlag;
   /** The Library's copy of its cover (the image as the file holds it); null without one. */
   readonly artworkPath: string | null;
+  /** Its first-release date as the Library keeps it (the tag's, or one the lookup found). */
+  readonly releaseDate?: string | null;
 }
 
 const albumOf = (track: ReplacedTrack): string | null =>
@@ -454,6 +456,7 @@ export const qualityReplacementTags = (
     lyrics: synced ? sidecar : (embedded ?? sidecar),
     artworkUrl: track.artworkPath,
     advisory: advisoryTag(track.explicit),
+    releaseDate: track.releaseDate ?? null,
     keepTagsOf: track.path,
   };
 };

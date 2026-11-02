@@ -72,6 +72,20 @@ class OggOpusReaderTest {
     assertEquals(listOf("Metalcore", "Electronic"), tags.genres)
   }
 
+  @Test
+  fun originalDateKeepsPrecisionAndFallsBackToOriginalYear() {
+    for ((comments, expected) in listOf(
+      listOf("ORIGINALDATE=1985-06-21", "ORIGINALYEAR=1984") to "1985-06-21",
+      listOf("ORIGINALDATE=1985-06") to "1985-06",
+      listOf("ORIGINALYEAR=1985") to "1985",
+    )) {
+      val block = vorbisComments("DATE=2005", *comments.toTypedArray())
+      val tags = with(OggOpusReader) { parseComments(block, 0).toRawTags(durationMs = 0, sampleRate = null) }
+      assertEquals(expected, tags.releaseDate)
+      assertEquals("2005", tags.year)
+    }
+  }
+
   private fun vorbisComments(vararg entries: String): ByteArray {
     val out = java.io.ByteArrayOutputStream()
     fun writeInt(value: Int) {

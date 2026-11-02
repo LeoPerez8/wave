@@ -1,3 +1,8 @@
+import { playlistSongSetting, usePlaylistSongSort } from "@/library/playlistSongSetting";
+import { orderPlaylistEntries, PlaylistSongSortButton } from "@/library/playlistSongSort";
+import { releaseAnswers } from "@/library/releaseAnswers";
+import { releaseStatus } from "@/library/releaseDates";
+import { typedReleaseDates } from "@/library/typedReleaseDates";
 import { useScreenContent } from "@/lib/screenTiming";
 import { useLocalisation } from "@/localisation/localisation";
 import { IconDots } from "@tabler/icons-react-native";
@@ -27,7 +32,7 @@ import { appRuntime } from "@/library/runtime";
 import { songCount } from "@/library/TrackList";
 import { UnavailableTryAgain } from "@/library/UnavailableEntry";
 import { YtLibraryReadLine } from "@/library/YtLibraryReadLine";
-import { listDownloadAction, useYtPlaylistDownloadButton } from "@/ytmusic/YtSongList";
+import { useYtPlaylistDownloadButton } from "@/ytmusic/YtSongList";
 
 const NO_ENTRIES: readonly PlaylistEntryRow[] = [];
 
@@ -45,6 +50,7 @@ function PlaylistHead({ shown }: { shown: Shown }) {
   const { language, strings } = useLocalisation();
   const { width } = useWindowDimensions();
   const { playlist, items } = shown;
+  const sortId = playlist.syncId ?? String(playlist.id);
   const cover = width - grid.margin * 2;
   const context = { kind: "playlist", id: String(playlist.id) } as const;
   // The whole list, its YT Music entries streamed, while YT Music is on (`playPlaylistEntries`).
@@ -56,15 +62,24 @@ function PlaylistHead({ shown }: { shown: Shown }) {
     // Tapped before the songs were read: read them now.
     void appRuntime.runPromise(readPlaylist(playlist.id)).then((detail) => {
       if (detail !== null && detail.items.length > 0)
-        playPlaylistEntries(detail.items, undefined, context, { shuffle });
+        playPlaylistEntries(
+          orderPlaylistEntries(detail.items, playlistSongSetting(sortId).get()),
+          undefined,
+          context,
+          { shuffle },
+        );
     });
   };
-  // Its YT Music entries download into the Library (Core's `ytPlaylistDownload`).
+  // Its YT Music entries download into the Library (Core's `ytPlaylistDownload`), from the
+  // three-dots menu; the page shows the progress line.
   const origin = useMemo(
     () => playlistDownloadOrigin({ id: playlist.id, name: playlist.name }),
     [playlist.id, playlist.name],
   );
   const download = useYtPlaylistDownloadButton(items ?? NO_ENTRIES, origin);
+  const status = releaseStatus.useValue()[playlist.id];
+  const releaseSort = usePlaylistSongSort(sortId);
+  const release = releaseSort.key === "releaseDate" ? status : undefined;
   const count = items?.length ?? playlist.trackCount;
   // Every entry counts, and the line says how many can't play (Core's `playlistSongsLine`).
   const furniture =
@@ -104,6 +119,13 @@ function PlaylistHead({ shown }: { shown: Shown }) {
         >
           {furniture}
         </Text>
+        {release && (
+          <Text className="font-sans text-footnote text-secondary">
+            {release.offline
+              ? strings.playlists.releaseOffline
+              : strings.playlists.releaseProgress(release.done, release.total)}
+          </Text>
+        )}
         <UnavailableTryAgain playlistId={playlist.id} items={items} />
         {download.progress !== null && (
           <Text
@@ -121,8 +143,12 @@ function PlaylistHead({ shown }: { shown: Shown }) {
         <PlayShuffle
           onPlay={() => play(false)}
           onShuffle={() => play(true)}
-          last={listDownloadAction(download.button)}
-          menu={menu}
+          menu={
+            <View className="flex-row">
+              <PlaylistSongSortButton id={sortId} />
+              {menu}
+            </View>
+          }
         />
       ) : (
         <View className="flex-row justify-end">{menu}</View>
@@ -156,7 +182,17 @@ export default function PlaylistScreen() {
   const { strings } = useLocalisation();
   const { id } = useLocalSearchParams<{ id: string }>();
   const playlistId = parseId(id);
-  const detail = usePlaylist(playlistId);
+  const dates = releaseAnswers.useValue();
+  const typed = typedReleaseDates.useValue();
+  const rawDetail = usePlaylist(playlistId);
+  const sort = usePlaylistSongSort(rawDetail?.playlist.syncId ?? String(playlistId));
+  const detail = useMemo(
+    () =>
+      rawDetail == null
+        ? rawDetail
+        : { ...rawDetail, items: orderPlaylistEntries(rawDetail.items, sort, dates, typed) },
+    [rawDetail, sort, dates, typed],
+  );
   useScreenContent(detail !== undefined);
   const known = useKnownRow("playlist", playlistId);
   const settled = useScreenSettled();
@@ -177,6 +213,8 @@ export default function PlaylistScreen() {
         <PlaylistItems
           key={playlist.id}
           playlistId={playlist.id}
+          customOrder={sort.key === "custom"}
+          showReleaseYear={sort.key === "releaseDate"}
           items={items}
           header={<PlaylistHead shown={{ playlist, items }} />}
           empty={<NoSongs />}

@@ -56,6 +56,7 @@ const ROW_FIELDS: { readonly [Field in keyof SongRow]-?: Check } = {
   artistIds: (value) => Array.isArray(value) && value.every(isNumber),
   discNumber: orNull(isNumber),
   trackNumber: orNull(isNumber),
+  releaseDate: (value) => value === undefined || value === null || isString(value),
   year: orNull(isNumber),
   genre: orNull(isString),
   hasLyrics: (value) => typeof value === "boolean",

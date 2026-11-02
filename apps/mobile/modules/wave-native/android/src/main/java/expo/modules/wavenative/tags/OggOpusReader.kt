@@ -123,6 +123,7 @@ class OggOpusReader : TagReader {
         album = first("ALBUM"),
         albumArtist = first("ALBUMARTIST", "ALBUM ARTIST", "ALBUM_ARTIST"),
         genre = first("GENRE"),
+        releaseDate = first("ORIGINALDATE", "ORIGINALYEAR"),
         year = first("DATE", "YEAR", "ORIGINALDATE"),
         trackNumber = numberOf(first("TRACKNUMBER"), first("TRACKTOTAL", "TOTALTRACKS")),
         discNumber = numberOf(first("DISCNUMBER"), first("DISCTOTAL", "TOTALDISCS")),

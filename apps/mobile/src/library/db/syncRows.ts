@@ -610,6 +610,7 @@ const selectPhoneSongs = (db: LibraryDatabase): PhoneSong[] => {
       discNumber: tracks.discNumber,
       trackNumber: tracks.trackNumber,
       durationMs: tracks.durationMs,
+      releaseDate: tracks.releaseDate,
       year: tracks.year,
       genre: genres.name,
       videoId: tracks.videoId,
