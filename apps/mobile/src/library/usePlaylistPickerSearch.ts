@@ -20,6 +20,7 @@ export function usePlaylistPickerSearch<T extends { readonly name: string }>(
   const [query, setQuery] = useState<string | null>(null);
   const [overflows, setOverflow] = useState(false);
   const finder = useMemo(() => createPlaylistPickerSearch(playlists), [playlists]);
+  const shown = useMemo(() => finder.show(query), [finder, query]);
   const searching = query !== null;
   const closing = useRef(false);
   const dismissKeyboard = useCallback(() => {
@@ -40,14 +41,14 @@ export function usePlaylistPickerSearch<T extends { readonly name: string }>(
 
   useEffect(() => {
     if (!searching) return;
-    let shown = false;
+    let keyboardShown = false;
     const show = Keyboard.addListener("keyboardDidShow", () => {
-      shown = true;
+      keyboardShown = true;
     });
     // Android can consume Back to hide the IME before BackHandler hears it.
     // A hide already in progress when search opened belongs to the previous field.
     const hidden = Keyboard.addListener("keyboardDidHide", () => {
-      if (shown) closeSearch();
+      if (keyboardShown) closeSearch();
     });
     return () => {
       show.remove();
@@ -56,7 +57,7 @@ export function usePlaylistPickerSearch<T extends { readonly name: string }>(
   }, [searching, closeSearch]);
 
   return {
-    ...finder.show(query),
+    ...shown,
     query,
     searching,
     overflows,

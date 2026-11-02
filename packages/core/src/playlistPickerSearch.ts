@@ -28,10 +28,12 @@ export const createPlaylistPickerSearch = <T extends { readonly name: string }>(
   return {
     show: (query: string | null) => {
       const found = finder.show(query ?? "");
+      const newPlaylistPlacement = query === null ? "pinned" : query === "" ? "scroll" : "hidden";
       return {
         playlists: found.songs,
         noMatch: found.found !== null && found.found.length === 0,
         showNewPlaylist: query === null || query.length === 0,
+        newPlaylistPlacement,
       };
     },
   };
