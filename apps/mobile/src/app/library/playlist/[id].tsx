@@ -190,7 +190,7 @@ export default function PlaylistScreen() {
     () =>
       rawDetail == null
         ? rawDetail
-        : { ...rawDetail, items: orderPlaylistEntries(rawDetail.items, sort) },
+        : { ...rawDetail, items: orderPlaylistEntries(rawDetail.items, sort, dates) },
     [rawDetail, sort, dates],
   );
   useScreenContent(detail !== undefined);

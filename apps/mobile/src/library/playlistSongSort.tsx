@@ -1,4 +1,10 @@
-import { sortPlaylistSongs, SONG_SORTS, songSortLabelFor, type PlaylistSongSort } from "@wave/core";
+import {
+  sortPlaylistSongs,
+  SONG_SORTS,
+  songSortLabelFor,
+  type PlaylistSongSort,
+  type ReleaseAnswer,
+} from "@wave/core";
 import { IconArrowsSort } from "@tabler/icons-react-native";
 import { IconButton } from "@/components/IconButton";
 import { EntryRow } from "@/catalog/EntryRow";
@@ -13,6 +19,7 @@ import { releaseEntryDate, ensureReleaseNotice } from "./releaseDates";
 export const orderPlaylistEntries = (
   entries: readonly PlaylistEntryRow[],
   sort: PlaylistSongSort,
+  answers?: Readonly<Record<string, ReleaseAnswer>>,
 ) =>
   sortPlaylistSongs(
     entries.map((entry) => ({
@@ -21,7 +28,7 @@ export const orderPlaylistEntries = (
       artist: entry.source === "library" ? entry.track.artist : entry.song.artists.join(", "),
       album: entry.source === "library" ? entry.track.album : (entry.song.album ?? ""),
       addedAt: entry.addedAt ?? 0,
-      releaseDate: releaseEntryDate(entry),
+      releaseDate: releaseEntryDate(entry, answers),
       ...(entry.source === "library"
         ? {
             year: entry.track.year,

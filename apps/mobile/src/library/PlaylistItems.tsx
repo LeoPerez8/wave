@@ -476,7 +476,7 @@ export function PlaylistItems({
       const entry = entryOf(item);
       if (showReleaseYear && entry) {
         const year =
-          releaseEntryDate(entry)?.slice(0, 4) ??
+          releaseEntryDate(entry, dates)?.slice(0, 4) ??
           (entry.source === "library" ? entry.track.year : null);
         const artist =
           entry.source === "library" ? entry.track.artist : entry.song.artists.join(", ");

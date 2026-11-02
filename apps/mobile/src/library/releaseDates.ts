@@ -43,8 +43,12 @@ export const releaseEntrySong = (entry: PlaylistEntryRow) =>
     : { title: entry.song.title, artist: entry.song.artists[0] ?? "" };
 export const releaseEntryKey = (entry: PlaylistEntryRow): string =>
   releaseSongKey(releaseEntrySong(entry));
-export const releaseEntryDate = (entry: PlaylistEntryRow): string | null => {
-  const answer = releaseDates.get()[releaseEntryKey(entry)];
+/** [answers] defaults to the stored ones; a memo passes the value it re-renders on. */
+export const releaseEntryDate = (
+  entry: PlaylistEntryRow,
+  answers: Readonly<Record<string, ReleaseAnswer>> = releaseDates.get(),
+): string | null => {
+  const answer = answers[releaseEntryKey(entry)];
   if (entry.source === "library") {
     if (entry.track.releaseDate) return entry.track.releaseDate;
     if (answer?.source === "first-release") return answer.date;
