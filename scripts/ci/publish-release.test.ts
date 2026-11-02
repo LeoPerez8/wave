@@ -71,6 +71,7 @@ describe("the release job", () => {
     const steps = afterRelease.split(/\n(?= {6}- )/).slice(1);
     const names = steps.map((step) => /name: (.*)/.exec(step)?.[1] ?? "setup-node");
     assert.deepEqual(names, [
+      "Move the latest build",
       "setup-node",
       "Publish the release notes",
       "Publish the latest APK",
