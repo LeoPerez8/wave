@@ -940,7 +940,7 @@ export class LibraryStore extends Context.Service<
     /**
      * Keeps a release date the owner typed as the song's, whatever it had (null clears it, so
      * the lookup can find one again); the song's file (null for a missing song), for the date
-     * to replace the file's too (`typedReleaseTag`). Null when the song is gone.
+     * to replace the file's too (`writeReleaseDateTag`). Null when the song is gone.
      */
     readonly saveTypedReleaseDate: (
       id: number,

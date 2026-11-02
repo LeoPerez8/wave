@@ -1,10 +1,8 @@
-import { releaseDates, releaseStatus } from "@/library/releaseDates";
+import { playlistSongSetting, usePlaylistSongSort } from "@/library/playlistSongSetting";
+import { orderPlaylistEntries, PlaylistSongSortButton } from "@/library/playlistSongSort";
+import { releaseAnswers } from "@/library/releaseAnswers";
+import { releaseStatus } from "@/library/releaseDates";
 import { typedReleaseDates } from "@/library/typedReleaseDates";
-import {
-  playlistSongSetting,
-  orderPlaylistEntries,
-  PlaylistSongSortButton,
-} from "@/library/playlistSongSort";
 import { useScreenContent } from "@/lib/screenTiming";
 import { useLocalisation } from "@/localisation/localisation";
 import { IconDots } from "@tabler/icons-react-native";
@@ -80,7 +78,7 @@ function PlaylistHead({ shown }: { shown: Shown }) {
   );
   const download = useYtPlaylistDownloadButton(items ?? NO_ENTRIES, origin);
   const status = releaseStatus.useValue()[playlist.id];
-  const releaseSort = playlistSongSetting(playlist.syncId ?? String(playlist.id)).useValue();
+  const releaseSort = usePlaylistSongSort(sortId);
   const release = releaseSort.key === "releaseDate" ? status : undefined;
   const count = items?.length ?? playlist.trackCount;
   // Every entry counts, and the line says how many can't play (Core's `playlistSongsLine`).
@@ -184,10 +182,10 @@ export default function PlaylistScreen() {
   const { strings } = useLocalisation();
   const { id } = useLocalSearchParams<{ id: string }>();
   const playlistId = parseId(id);
-  const dates = releaseDates.useValue();
+  const dates = releaseAnswers.useValue();
   const typed = typedReleaseDates.useValue();
   const rawDetail = usePlaylist(playlistId);
-  const sort = playlistSongSetting(rawDetail?.playlist.syncId ?? String(playlistId)).useValue();
+  const sort = usePlaylistSongSort(rawDetail?.playlist.syncId ?? String(playlistId));
   const detail = useMemo(
     () =>
       rawDetail == null

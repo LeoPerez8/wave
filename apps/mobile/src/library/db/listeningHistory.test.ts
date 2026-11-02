@@ -361,14 +361,43 @@ const seedPushedPlays = (db: TestDatabase): void => {
   db.run(sql`UPDATE play_events SET pushed = 1`);
 };
 
+/**
+ * [table]'s rows as stored, in id order, with only [columns] (every one, when not given): what
+ * any schema can read, so a database before and after an upgrade can be compared.
+ */
+const rawRows = (
+  db: TestDatabase,
+  table: string,
+  columns?: readonly string[],
+): Record<string, unknown>[] =>
+  db
+    .all<Record<string, unknown>>(sql.raw(`SELECT * FROM ${table} ORDER BY id`))
+    .map((row) =>
+      columns === undefined ? row : Object.fromEntries(columns.map((name) => [name, row[name]])),
+    );
+
 test("the snapshot-sync upgrade preserves Library and streamed history and their pushed flags", async () => {
   const db = await openTestDatabase({ through: "0040_streamed_plays" });
   seedPushedPlays(db);
-  // Today's history reads columns a 0040 database doesn't have yet, so the upgraded
-  // history is compared with the same plays recorded on an up-to-date database.
+  // The rows as the 0040 database holds them: the upgrade leaves every one of them alone.
+  const before = Object.fromEntries(
+    ["play_events", "tracks"].map((table) => [table, rawRows(db, table)]),
+  );
+  await migrateTestDatabase(db);
+  for (const [table, rows] of Object.entries(before)) {
+    const columns = Object.keys(rows[0] ?? {}).filter(
+      // 0052 asks the next scan to read every file again.
+      (name) => !(table === "tracks" && name === "modified_at"),
+    );
+    assert.deepEqual(
+      rawRows(db, table, columns),
+      rows.map((row) => Object.fromEntries(columns.map((name) => [name, row[name]]))),
+      table,
+    );
+  }
+  // And today's history reads them as it reads the same plays recorded today.
   const current = await openTestDatabase();
   seedPushedPlays(current);
-  await migrateTestDatabase(db);
   assert.deepEqual(listeningHistory(db), listeningHistory(current));
   assert.deepEqual(selectUnpushed(db, 100, () => null).rows.plays, []);
   assert.deepEqual(playTotalsDrift(db), []);

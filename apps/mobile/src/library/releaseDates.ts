@@ -1,34 +1,36 @@
 import {
-  releaseCandidates,
-  releaseAnswer,
-  releaseDue,
-  releaseShownDate,
+  lookUpReleaseDates,
+  releaseAnswerKey,
+  releaseNextDue,
   releaseTagDate,
-  releaseTagNotWrittenLine,
-  tagWriteFailureLine,
   type ReleaseAnswer,
-  type TagWriteFile,
-  type TagWriteStep,
+  type ReleaseLookupSong,
+  type ReleaseProgress,
 } from "@wave/core";
+
 import { persistedSetting } from "@/lib/persistedSetting";
 import { currentLocalisation } from "@/localisation/localisation";
-import { WaveNative } from "@/native/waveNative";
 import { showMessage } from "@/overlay/alert";
+
+import { onLibraryChange } from "./libraryChanges";
 import { LibraryStore, type PlaylistEntryRow } from "./LibraryStore";
-import { appRuntime } from "./runtime";
 import { onPlaylistSongSortChanged, playlistSongSetting } from "./playlistSongSetting";
 import { onPlaylistsEdited } from "./playlists";
-import { releaseDates, releaseSongKey } from "./releaseAnswers";
+import { releaseAnswers } from "./releaseAnswers";
+import { writeReleaseDateTag } from "./releaseDateTag";
 import { releaseLookupClient } from "./releaseLookupClient";
-import { typedReleaseDates } from "./typedReleaseDates";
+import { entryReleaseSong, heldReleaseDate } from "./releaseSong";
+import { appRuntime } from "./runtime";
+import { onTypedReleaseDatesChanged } from "./typedReleaseDates";
 
-export { releaseDates };
 const notice = persistedSetting<boolean>({
   key: "releaseDates.notice",
-  read: (s) => s === "true",
+  read: (stored) => stored === "true",
   write: JSON.stringify,
 });
 let showing: Promise<void> | null = null;
+
+/** Shows the notice naming Deezer and MusicBrainz, the first time a lookup is about to start. */
 export const ensureReleaseNotice = (): Promise<void> => {
   if (notice.get()) return Promise.resolve();
   return (showing ??= (async () => {
@@ -39,60 +41,13 @@ export const ensureReleaseNotice = (): Promise<void> => {
     showing = null;
   }));
 };
-export const releaseEntrySong = (entry: PlaylistEntryRow) =>
-  entry.source === "library"
-    ? { title: entry.track.title, artist: entry.track.artist }
-    : { title: entry.song.title, artist: entry.song.artists[0] ?? "" };
-export const releaseEntryKey = (entry: PlaylistEntryRow): string =>
-  releaseSongKey(releaseEntrySong(entry));
-/**
- * The date [entry] shows and sorts by (Core's `releaseShownDate`). [answers] and [typed] default
- * to the stored ones; a memo passes the values it re-renders on.
- */
-export const releaseEntryDate = (
-  entry: PlaylistEntryRow,
-  answers: Readonly<Record<string, ReleaseAnswer>> = releaseDates.get(),
-  typed: Readonly<Record<string, string>> = typedReleaseDates.get(),
-): string | null => {
-  const key = releaseEntryKey(entry);
-  const library = entry.source === "library" ? entry.track : null;
-  return releaseShownDate({
-    typed: typed[key],
-    original: library?.releaseDate,
-    answer: answers[key],
-    year: library?.year,
-  });
-};
 
-/** The date [entry] holds that no lookup replaces: one the owner typed, or its original-date tag. */
-const heldDate = (entry: PlaylistEntryRow): string | null =>
-  typedReleaseDates.get()[releaseEntryKey(entry)] ??
-  (entry.source === "library" ? (entry.track.releaseDate ?? null) : null);
-
-/** Logs why [date] isn't in [path]'s tags; the index keeps it whatever happened. */
-const writeReleaseTag = async (path: string, date: string): Promise<void> => {
-  const failed = (
-    cause: unknown,
-    step: TagWriteStep | null = null,
-    file: TagWriteFile | null = null,
-  ) =>
-    console.warn(
-      `[wave] ${tagWriteFailureLine({ path, origin: "releaseDate", step, file, cause })}`,
-    );
-  try {
-    const written = await WaveNative.writeOriginalDate(path, date);
-    if ("failed" in written) {
-      const { step, exception, message, fileExists, fileBytes } = written.failed;
-      failed(Object.assign(new Error(message), { name: exception }), step, {
-        exists: fileExists,
-        bytes: fileBytes,
-      });
-    } else if (written.originalDate === "notWritten")
-      console.warn(`[wave] ${releaseTagNotWrittenLine(path, date)}`);
-  } catch (cause) {
-    failed(cause);
-  }
-};
+/** Each Release date playlist's lookup progress while it runs, by playlist id; never stored. */
+export const releaseStatus = persistedSetting<Readonly<Record<number, ReleaseProgress>>>({
+  key: "releaseDates.progress",
+  read: () => ({}),
+  write: () => null,
+});
 
 /**
  * Keeps a found first-release date in the index for a Library song without one and, that once,
@@ -101,22 +56,18 @@ const writeReleaseTag = async (path: string, date: string): Promise<void> => {
 const keepReleaseDate = async (entry: PlaylistEntryRow, answer: ReleaseAnswer): Promise<void> => {
   if (entry.source !== "library" || answer.source !== "first-release" || !answer.date) return;
   const { date } = answer;
+  const held = heldReleaseDate(entryReleaseSong(entry));
   const saved = await appRuntime.runPromise(
     // oxlint-disable-next-line react-hooks/rules-of-hooks -- Effect Service.use resolves a service.
     LibraryStore.use((store) => store.saveReleaseDate(entry.track.id, date)),
   );
   const path = saved?.path ?? null;
-  const tagged = releaseTagDate({ answer, held: heldDate(entry), hasFile: path !== null });
-  if (path !== null && tagged !== null) await writeReleaseTag(path, tagged);
+  const tagged = releaseTagDate({ answer, held, hasFile: path !== null });
+  if (path !== null && tagged !== null) await writeReleaseDateTag(path, tagged, false);
 };
 
-export const releaseStatus = persistedSetting<
-  Record<number, { done: number; total: number; offline: boolean }>
->({ key: "releaseDates.progress", read: () => ({}), write: () => null });
-let busy = false;
-let started = false;
-const sleep = (ms: number) => new Promise<void>((resolve) => setTimeout(resolve, ms));
-let allowed = () => false;
+/** The playlist whose songs are being looked up now, which the client checks before each request. */
+let looking: (() => boolean) | null = null;
 const client = releaseLookupClient(
   async (url, headers) => {
     const controller = new AbortController();
@@ -127,136 +78,130 @@ const client = releaseLookupClient(
       clearTimeout(timeout);
     }
   },
-  sleep,
+  (ms) => new Promise<void>((resolve) => setTimeout(resolve, ms)),
   Date.now,
-  () => allowed(),
+  () => looking?.() ?? false,
 );
 
+/** The longest a timer may wait (setTimeout's limit is about 24.8 days). */
+const MAX_WAIT_MS = 2 ** 31 - 1;
+let running = false;
+let again = false;
+let wake: ReturnType<typeof setTimeout> | undefined;
+
+/**
+ * Looks up the songs due in every playlist on Release date (Core's `lookUpReleaseDates`), one
+ * playlist at a time, then sleeps until the next retry is due. A failure stops the run until
+ * its retry; a change while it runs runs it again once it ends.
+ */
 const run = async (): Promise<void> => {
-  if (busy) return;
-  busy = true;
+  if (running) {
+    again = true;
+    return;
+  }
+  running = true;
+  clearTimeout(wake);
+  let next: number | null = null;
   try {
     const playlists = await appRuntime.runPromise(
       // oxlint-disable-next-line react-hooks/rules-of-hooks -- Effect Service.use resolves a service.
       LibraryStore.use((store) => store.listPlaylists),
     );
-    const statuses: Record<number, { done: number; total: number; offline: boolean }> = {};
+    const statuses: Record<number, ReleaseProgress> = {};
     for (const playlist of playlists) {
-      const selected = () =>
-        playlistSongSetting(playlist.syncId ?? String(playlist.id)).get().key === "releaseDate";
+      const setting = playlistSongSetting(playlist.syncId ?? String(playlist.id));
+      const selected = () => setting.get().key === "releaseDate";
       if (!selected()) continue;
       const detail = await appRuntime.runPromise(
         // oxlint-disable-next-line react-hooks/rules-of-hooks -- Effect Service.use resolves a service.
         LibraryStore.use((store) => store.getPlaylist(playlist.id)),
       );
       if (!detail) continue;
-      const unique = [...new Map(detail.items.map((e) => [releaseEntryKey(e), e])).values()];
-      for (const entry of unique) {
-        const answer = releaseDates.get()[releaseEntryKey(entry)];
-        if (entry.source === "library" && !heldDate(entry) && answer)
-          await keepReleaseDate(entry, answer);
+      const entries = new Map<string, PlaylistEntryRow>();
+      const songs: ReleaseLookupSong[] = [];
+      for (const entry of detail.items) {
+        const song = entryReleaseSong(entry);
+        const key = releaseAnswerKey(song);
+        const answer = releaseAnswers.get()[key] ?? null;
+        const held = heldReleaseDate(song);
+        // A song answered before it was in the Library (or before its file came) takes its date now.
+        if (answer !== null && held === null) await keepReleaseDate(entry, answer);
+        if (!entries.has(key)) entries.set(key, entry);
+        songs.push({ ...song, key, held, answer });
       }
-      const due = unique.filter((e) =>
-        releaseDue(
-          releaseEntrySong(e),
-          heldDate(e),
-          releaseDates.get()[releaseEntryKey(e)],
-          Date.now(),
-        ),
-      );
-      if (!due.length) continue;
-      statuses[playlist.id] = {
-        done: unique.length - due.length,
-        total: unique.length,
-        offline: false,
-      };
-      releaseStatus.set({ ...statuses });
+      const at = releaseNextDue(songs, Date.now());
+      if (at === null) continue;
+      if (at > Date.now()) {
+        next = next === null ? at : Math.min(next, at);
+        continue;
+      }
       await ensureReleaseNotice();
-      allowed = selected;
-      for (let i = 0; i < due.length && selected(); i += 25) {
-        const group = due.slice(i, i + 25);
-        const found: {
-          entry: PlaylistEntryRow;
-          candidates: ReturnType<typeof releaseCandidates>;
-        }[] = [];
-        let failed = false;
-        try {
-          for (const entry of group) {
-            const song = releaseEntrySong(entry);
-            found.push({
-              entry,
-              candidates: releaseCandidates(song, await client.search(song.title, song.artist)),
-            });
-          }
-          const responses = await client.recordings(
-            found.flatMap((r) => r.candidates.map((c) => c.isrc)),
-          );
-          for (const { entry, candidates } of found) {
-            const year = entry.source === "library" ? entry.track.year : null;
-            let answer = releaseAnswer(
-              candidates.map((c) => c.isrc),
-              responses,
-              year,
-              null,
-              Date.now(),
-            );
-            if (!answer.date) {
-              const albumDates: string[] = [];
-              for (const id of new Set(candidates.map((c) => c.albumId))) {
-                if (id === null) continue;
-                const album = (await client.album(id)) as { release_date?: string };
-                if (album.release_date) albumDates.push(album.release_date);
-              }
-              // oxlint-disable-next-line unicorn/no-array-sort -- sorts a fresh array; Hermes lacks toSorted
-              answer = releaseAnswer([], [], year, albumDates.sort()[0] ?? null, Date.now());
-            }
-            releaseDates.set({ ...releaseDates.get(), [releaseEntryKey(entry)]: answer });
-            await keepReleaseDate(entry, answer);
-          }
-        } catch {
-          failed = true;
-          for (const entry of group) {
-            const key = releaseEntryKey(entry);
-            const before = releaseDates.get()[key];
-            if (before?.source === "first-release") continue;
-            const answer = releaseAnswer(
-              [],
-              [],
-              entry.source === "library" ? entry.track.year : null,
-              before?.date ?? null,
-              Date.now(),
-              true,
-            );
-            releaseDates.set({ ...releaseDates.get(), [key]: answer });
-          }
-        }
-        statuses[playlist.id] = {
-          done: Math.min(unique.length, unique.length - due.length + i + group.length),
-          total: unique.length,
-          offline: failed,
-        };
-        releaseStatus.set({ ...statuses });
-        if (failed) return;
+      looking = selected;
+      const end = await lookUpReleaseDates({
+        songs,
+        services: client,
+        now: Date.now,
+        going: selected,
+        answered: async (song, answer) => {
+          releaseAnswers.set({ ...releaseAnswers.get(), [song.key]: answer });
+          const entry = entries.get(song.key);
+          if (entry !== undefined) await keepReleaseDate(entry, answer);
+        },
+        progress: (progress) => {
+          if (progress === null) delete statuses[playlist.id];
+          else statuses[playlist.id] = progress;
+          releaseStatus.set({ ...statuses });
+        },
+      });
+      looking = null;
+      if (end === "failed") {
+        // Every failed song retries in a minute: so does the run.
+        next = Date.now() + 60_000;
+        break;
       }
-      delete statuses[playlist.id];
-      releaseStatus.set({ ...statuses });
+      const after = releaseNextDue(
+        songs.map((song) => ({ ...song, answer: releaseAnswers.get()[song.key] ?? null })),
+        Date.now(),
+      );
+      if (after !== null) next = next === null ? after : Math.min(next, after);
     }
   } finally {
-    busy = false;
+    looking = null;
+    running = false;
   }
+  if (again) {
+    again = false;
+    void run().catch(() => {});
+  } else if (next !== null)
+    wake = setTimeout(
+      () => void run().catch(() => {}),
+      Math.min(MAX_WAIT_MS, Math.max(0, next - Date.now())),
+    );
 };
+
+let started = false;
+let soon: ReturnType<typeof setTimeout> | undefined;
+
+/** Runs the lookup a moment after a burst of changes settles. */
+const runSoon = (): void => {
+  clearTimeout(soon);
+  soon = setTimeout(() => void run().catch(() => {}), 2_000);
+};
+
+/**
+ * Starts the playlists' release-date lookups: now, whenever a playlist's sort, songs or typed
+ * dates change (here or from another phone), and when the next retry is due. With nothing
+ * due, it waits without a timer of its own reading the playlists.
+ */
 export const startReleaseDates = (): void => {
   if (started) return;
   started = true;
-  onPlaylistSongSortChanged(() => {
-    void run().catch(() => {});
+  onPlaylistSongSortChanged(runSoon);
+  onPlaylistsEdited(runSoon);
+  onTypedReleaseDatesChanged(runSoon);
+  onLibraryChange((change) => {
+    if (change.kind === "playlists" || (change.kind === "tracks" && change.scanned !== true))
+      runSoon();
   });
-  onPlaylistsEdited(() => {
-    void run().catch(() => {});
-  });
-  // Poll also discovers synced sort choices and retry deadlines without a screen mounted.
-  setInterval(() => {
-    void run().catch(() => {});
-  }, 15_000);
   void run().catch(() => {});
 };

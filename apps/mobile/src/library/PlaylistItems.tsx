@@ -1,4 +1,5 @@
-import { releaseDates, releaseEntryDate } from "./releaseDates";
+import { releaseAnswers } from "./releaseAnswers";
+import { entryReleaseSong, releaseSongDate } from "./releaseSong";
 import { typedReleaseDates } from "./typedReleaseDates";
 import {
   GoToSuggestions,
@@ -470,20 +471,17 @@ export function PlaylistItems({
         : [...(index > 0 ? [moves.up] : []), ...(index < count - 1 ? [moves.down] : [])],
     [selecting, reorderable, count, moves],
   );
-  const dates = releaseDates.useValue();
+  const dates = releaseAnswers.useValue();
   const typed = typedReleaseDates.useValue();
   const decorateRow = useCallback(
     (row: ReactElement, item: Item, index: number) => {
       const key = itemKey(item);
       const entry = entryOf(item);
       if (showReleaseYear && entry) {
-        const year =
-          releaseEntryDate(entry, dates, typed)?.slice(0, 4) ??
-          (entry.source === "library" ? entry.track.year : null);
-        const artist =
-          entry.source === "library" ? entry.track.artist : entry.song.artists.join(", ");
+        const dated = entryReleaseSong(entry);
+        const year = releaseSongDate(dated, dates, typed)?.slice(0, 4);
         row = cloneElement(row as ReactElement<{ secondLine: string }>, {
-          secondLine: year ? `${artist} · ${year}` : artist,
+          secondLine: year ? `${dated.artist} · ${year}` : dated.artist,
         });
       }
       return (

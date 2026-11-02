@@ -33,6 +33,11 @@ interface TableStorage {
   readonly check?: (row: Readonly<Record<string, unknown>>) => string | null;
   /** Fields whose column holds their value JSON-encoded. */
   readonly json?: readonly string[];
+  /**
+   * Fields added after the table, which a Wave from before them leaves out of a row it pushes:
+   * such a row keeps the value stored. A null sent clears it, as for any field.
+   */
+  readonly keptWhenOmitted?: readonly string[];
 }
 
 export interface SyncTable extends TableStorage {
@@ -48,7 +53,7 @@ export interface SyncTable extends TableStorage {
 
 const STORAGE: { readonly [K in TableName]: TableStorage } = {
   // The id is the song's recording key (Core's `recordingKey`).
-  songs: { limit: "maxSongs" },
+  songs: { limit: "maxSongs", keptWhenOmitted: ["releaseDate"] },
   playlists: { limit: "maxPlaylists" },
   // An entry holds a Library song (by recording key) or a YT Music song (as the app stores it), never both.
   playlistEntries: {
@@ -92,6 +97,8 @@ export interface IncomingRow {
   readonly phoneId: string;
   readonly deleted: boolean;
   readonly values: readonly InValue[] | null;
+  /** Its fields that a Wave from before them left out (`keptWhenOmitted`), which keep their value. */
+  readonly omitted?: readonly string[];
 }
 
 /** Why a pushed row was refused, naming where it is (`songs[3].durationMs`). */
@@ -167,6 +174,7 @@ export const parseRow = (table: SyncTable, row: unknown, where: string): Incomin
     phoneId: row.phoneId,
     deleted: row.deleted,
     values: row.deleted ? null : rowValues(table, row, where),
+    omitted: table.keptWhenOmitted?.filter((name) => !(name in row)) ?? [],
   };
 };
 

@@ -132,6 +132,7 @@ import { finishFileDeletions } from "@/library/fileDeletions";
 import { replacementJournalRead } from "@/library/replacementDuplicates";
 import { fillInLyricsAndGenre, lookUpLyricsAndGenre } from "@/library/lyricsAndGenre";
 import { downloadReleaseDate } from "@/library/releaseAnswers";
+import { streamedReleaseSong } from "@/library/releaseSong";
 import { appRuntime } from "@/library/runtime";
 import { settleUnsearchedSong } from "@/library/unsearchedEntries";
 import { makeExternalStore } from "@/lib/externalStore";
@@ -205,7 +206,7 @@ const optional = <A>(effect: Effect.Effect<A, unknown>): Effect.Effect<A | null>
 
 /** The first-release date a playlist's lookup found for [song], for its file's tags. */
 const releaseDateOf = (song: YtSong): string | null =>
-  downloadReleaseDate({ title: song.title, artist: song.artists[0] ?? "" });
+  downloadReleaseDate(streamedReleaseSong(song));
 
 /**
  * Optional metadata cannot fail or indefinitely hold up valid audio acquisition. The watch page
