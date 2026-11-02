@@ -440,7 +440,13 @@ export type {
   LibrarySectionSource,
   SectionCollection,
 } from "./librarySections.ts";
-export { cardContentHeight, cardKeyboard, entryDivider, placeOverlayCard } from "./overlay.ts";
+export {
+  cardContentHeight,
+  cardKeyboard,
+  cardListOverflows,
+  entryDivider,
+  placeOverlayCard,
+} from "./overlay.ts";
 export type { OverlayCardFrame, OverlayCardInput, OverlayInsets } from "./overlay.ts";
 export type { OverlayAnchor, OverlayRect } from "./overlay.ts";
 export type { CardKeyboard, OverlayAlign, OverlayFlow } from "./overlay.ts";
@@ -476,6 +482,8 @@ export type {
 } from "./settingsPages.ts";
 export { PLAYLIST_LAYOUTS, parsePlaylistLayout, storedPlaylistLayout } from "./playlistLayout.ts";
 export type { PlaylistLayout } from "./playlistLayout.ts";
+export { keepAddToPlaylistOrder, sortPlaylistsForAdd } from "./addToPlaylistOrder.ts";
+export type { AddToPlaylistChoice } from "./addToPlaylistOrder.ts";
 export {
   PLAYLIST_SORTS,
   choosePlaylistSort,
@@ -2482,3 +2490,8 @@ export { genrePlayShares } from "./recap.ts";
 export { statsGenrePodium, countedGenreSongIds } from "./statsGenres.ts";
 export { isVoiceNoteOrRecording } from "./voiceNotes.ts";
 export type { AudioFileFacts } from "./voiceNotes.ts";
+export {
+  createPlaylistPickerSearch,
+  playlistPickerSubjectScrolls,
+  stepPlaylistPickerSearch,
+} from "./playlistPickerSearch.ts";

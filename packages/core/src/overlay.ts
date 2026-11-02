@@ -30,6 +30,8 @@ export interface OverlayCardInput {
    * someone types into, so it stays put as the keyboard comes and goes.
    */
   readonly align?: OverlayAlign;
+  /** A centred card temporarily has a focused search field. */
+  readonly searching?: boolean;
   /**
    * Height of an open on-screen keyboard, in dp, measured above the bottom
    * inset (Android reports it without the navigation bar). 0 or absent when closed.
@@ -83,6 +85,10 @@ export interface OverlayCardFrame {
 /** Which way a card's entries run, first to last. */
 export type OverlayFlow = "down" | "up";
 
+/** Whether the measured entries need to scroll in their laid-out viewport. */
+export const cardListOverflows = (contentHeight: number, viewportHeight: number): boolean =>
+  viewportHeight > 0 && contentHeight > viewportHeight + 1;
+
 export interface CardKeyboard {
   /** Close the open keyboard as the card opens. */
   readonly closeKeyboard: boolean;
@@ -98,10 +104,11 @@ export interface CardKeyboard {
  */
 export const cardKeyboard = (input: {
   readonly align?: OverlayAlign | undefined;
+  readonly searching?: boolean;
   /** Height of the open keyboard, in dp; 0 when closed. */
   readonly keyboard: number;
 }): CardKeyboard =>
-  input.align === "top"
+  input.align === "top" || input.searching === true
     ? { closeKeyboard: false, keyboard: input.keyboard }
     : { closeKeyboard: input.keyboard > 0, keyboard: 0 };
 
@@ -117,11 +124,13 @@ export const placeOverlayCard = (input: OverlayCardInput): OverlayCardFrame => {
   const areaWidth = window.width - insets.left - insets.right;
   const areaHeight = window.height - insets.top - insets.bottom - keyboard;
   const width = Math.min(areaWidth - margin * 2, maxWidth);
-  const maxHeight = areaHeight - margin * 2;
+  const maxHeight = Math.max(0, areaHeight - margin * 2);
   const height = Math.min(cardHeight, maxHeight);
   return {
     left: Math.round(insets.left + (areaWidth - width) / 2),
-    top: Math.round(insets.top + (align === "top" ? margin : (areaHeight - height) / 2)),
+    top: Math.round(
+      insets.top + (align === "top" || input.searching ? margin : (areaHeight - height) / 2),
+    ),
     width,
     maxHeight,
     flow: "down",
@@ -159,7 +168,7 @@ const placeNextTo = (
       : "above";
   const room = side === "below" ? roomBelow : roomAbove;
   // Where even the roomier side is cramped, the card may use the whole height and cover the anchor.
-  const maxHeight = cardHeight <= room || room >= minHeight ? room : lowest - highest;
+  const maxHeight = Math.max(0, cardHeight <= room || room >= minHeight ? room : lowest - highest);
   const height = Math.min(cardHeight, maxHeight);
   const top = Math.min(
     Math.max(side === "below" ? below : above - height, highest),
@@ -201,5 +210,11 @@ export const cardContentHeight = (input: {
   readonly laidOut: number;
   /** The tallest the card was allowed to be in that layout, in dp. */
   readonly maxHeight: number;
+  /** Filtering keeps the full card's height until search closes. */
+  readonly searching?: boolean;
 }): number =>
-  input.laidOut < input.maxHeight - 1 ? input.laidOut : Math.max(input.known, input.laidOut);
+  input.searching
+    ? input.known
+    : input.laidOut < input.maxHeight - 1
+      ? input.laidOut
+      : Math.max(input.known, input.laidOut);
