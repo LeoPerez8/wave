@@ -1,3 +1,4 @@
+import { startReleaseDates } from "@/library/releaseDates";
 import * as Effect from "effect/Effect";
 
 import { Auto } from "@/auto/Auto";
@@ -84,6 +85,7 @@ export const startServices = (by: ServicesStarter): void => {
   // It reads every playlist's unsearched songs: in the app, after the first screen.
   if (by === "app") afterFirstSettled("backgroundFill", startBackgroundFill);
   else startBackgroundFill();
+  startReleaseDates();
   applyCrossfade();
   applyStreamBuffer();
   onSyncedSettingChange(stampPreference);

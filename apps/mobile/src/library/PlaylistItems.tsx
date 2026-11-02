@@ -1,3 +1,4 @@
+import { releaseDates, releaseEntryDate } from "./releaseDates";
 import {
   GoToSuggestions,
   PlaylistRecommendations,
@@ -468,14 +469,19 @@ export function PlaylistItems({
         : [...(index > 0 ? [moves.up] : []), ...(index < count - 1 ? [moves.down] : [])],
     [selecting, reorderable, count, moves],
   );
+  const dates = releaseDates.useValue();
   const decorateRow = useCallback(
     (row: ReactElement, item: Item, index: number) => {
       const key = itemKey(item);
       const entry = entryOf(item);
-      if (showReleaseYear && entry?.source === "library") {
-        const year = entry.track.releaseDate?.slice(0, 4) ?? entry.track.year;
+      if (showReleaseYear && entry) {
+        const year =
+          releaseEntryDate(entry)?.slice(0, 4) ??
+          (entry.source === "library" ? entry.track.year : null);
+        const artist =
+          entry.source === "library" ? entry.track.artist : entry.song.artists.join(", ");
         row = cloneElement(row as ReactElement<{ secondLine: string }>, {
-          secondLine: year ? `${entry.track.artist} · ${year}` : entry.track.artist,
+          secondLine: year ? `${artist} · ${year}` : artist,
         });
       }
       return (
@@ -489,7 +495,7 @@ export function PlaylistItems({
         />
       );
     },
-    [rowDrag, drag, selecting, reorderable, showReleaseYear],
+    [rowDrag, drag, selecting, reorderable, showReleaseYear, dates],
   );
   const renderSlot = ({ item }: { item: Item }) =>
     "kind" in item ? (
@@ -572,7 +578,9 @@ export function PlaylistItems({
           maintainVisibleContentPosition={
             anchored && recommending
               ? { data: true, shouldRestorePosition: (item) => item === RECOMMENDATIONS }
-              : undefined
+              : showReleaseYear
+                ? { data: true }
+                : undefined
           }
           lifted={
             drag === null

@@ -16,6 +16,12 @@ const counted = (count: number): string =>
   plural("pt-BR", count, { one: `${n(count)} música`, other: `${n(count)} músicas` });
 
 export const playlistsPtBr: typeof playlistsEn = {
+  releaseNoticeTitle: "Buscar datas de lançamento",
+  releaseNotice:
+    "O Wave envia títulos e artistas ao Deezer e depois os ISRCs das gravações ao MusicBrainz para buscar as primeiras datas de lançamento.",
+  releaseProgress: (done: number, total: number): string =>
+    `Buscando datas de lançamento: ${n(done)} de ${n(total)}`,
+  releaseOffline: "Busca de datas pausada: sem conexão ou serviço indisponível",
   releaseOldest: "Data de lançamento · Mais antigas primeiro",
   releaseNewest: "Data de lançamento · Mais recentes primeiro",
   defaultName: "Nova Playlist",

@@ -395,7 +395,7 @@ export const saveBatch = (
             albumId: excluded(t.albumId),
             genreId: excluded(t.genreId),
             genres: excluded(t.genres),
-            releaseDate: excluded(t.releaseDate),
+            releaseDate: sql`coalesce(${excluded(t.releaseDate)}, ${t.releaseDate})`,
             year: excluded(t.year),
             trackNumber: excluded(t.trackNumber),
             trackTotal: excluded(t.trackTotal),

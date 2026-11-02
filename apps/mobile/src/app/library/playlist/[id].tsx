@@ -1,3 +1,4 @@
+import { releaseDates, releaseStatus } from "@/library/releaseDates";
 import {
   playlistSongSetting,
   orderPlaylistEntries,
@@ -77,6 +78,9 @@ function PlaylistHead({ shown }: { shown: Shown }) {
     [playlist.id, playlist.name],
   );
   const download = useYtPlaylistDownloadButton(items ?? NO_ENTRIES, origin);
+  const status = releaseStatus.useValue()[playlist.id];
+  const releaseSort = playlistSongSetting(playlist.syncId ?? String(playlist.id)).useValue();
+  const release = releaseSort.key === "releaseDate" ? status : undefined;
   const count = items?.length ?? playlist.trackCount;
   // Every entry counts, and the line says how many can't play (Core's `playlistSongsLine`).
   const furniture =
@@ -116,6 +120,13 @@ function PlaylistHead({ shown }: { shown: Shown }) {
         >
           {furniture}
         </Text>
+        {release && (
+          <Text className="font-sans text-footnote text-secondary">
+            {release.offline
+              ? strings.playlists.releaseOffline
+              : strings.playlists.releaseProgress(release.done, release.total)}
+          </Text>
+        )}
         <UnavailableTryAgain playlistId={playlist.id} items={items} />
         {download.progress !== null && (
           <Text
@@ -172,6 +183,7 @@ export default function PlaylistScreen() {
   const { strings } = useLocalisation();
   const { id } = useLocalSearchParams<{ id: string }>();
   const playlistId = parseId(id);
+  const dates = releaseDates.useValue();
   const rawDetail = usePlaylist(playlistId);
   const sort = playlistSongSetting(rawDetail?.playlist.syncId ?? String(playlistId)).useValue();
   const detail = useMemo(
@@ -179,7 +191,7 @@ export default function PlaylistScreen() {
       rawDetail == null
         ? rawDetail
         : { ...rawDetail, items: orderPlaylistEntries(rawDetail.items, sort) },
-    [rawDetail, sort],
+    [rawDetail, sort, dates],
   );
   useScreenContent(detail !== undefined);
   const known = useKnownRow("playlist", playlistId);

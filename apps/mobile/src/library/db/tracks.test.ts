@@ -325,3 +325,13 @@ test("scanning and rescanning preserves an original date separately from album Y
     assert.equal(db.select().from(schema.albums).get()?.year, 2005);
   }
 });
+
+test("a scan without original-date tags retains a looked-up first release date", async () => {
+  const db = await openTestDatabase();
+  const file = scanned("Looked up", "unknown");
+  saveBatch(db, creditSplits(), [{ ...file, releaseDate: "1985" }], [], [], 10);
+  saveBatch(db, creditSplits(), [{ ...file, releaseDate: null }], [], [], 20);
+  assert.equal(trackQuery(db).get()?.releaseDate, "1985");
+  saveBatch(db, creditSplits(), [{ ...file, releaseDate: "1984" }], [], [], 30);
+  assert.equal(trackQuery(db).get()?.releaseDate, "1984");
+});

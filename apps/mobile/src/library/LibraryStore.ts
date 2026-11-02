@@ -1,3 +1,4 @@
+import { saveReleaseDate } from "./db/releaseDates";
 import { pendingStreamedGenres, keepStreamedGenre } from "./db/streamedGenres";
 import {
   readFollowShows,
@@ -929,6 +930,7 @@ export class LibraryStore extends Context.Service<
     readonly rememberSearch: (query: string) => Effect.Effect<readonly string[], LibraryStoreError>;
     readonly clearRecentSearches: Effect.Effect<void, LibraryStoreError>;
     /** Every playlist by name, with its mosaic. */
+    readonly saveReleaseDate: (id: number, date: string) => Effect.Effect<void, LibraryStoreError>;
     readonly listPlaylists: Effect.Effect<readonly PlaylistRow[], LibraryStoreError>;
     /** When a song last played from each playlist, by playlist id (never played: absent). */
     readonly playlistsLastPlayed: Effect.Effect<ReadonlyMap<number, number>, LibraryStoreError>;
@@ -1927,6 +1929,8 @@ const make = Effect.gen(function* () {
       db.delete(schema.recentSearches).run();
     }),
 
+    saveReleaseDate: (id, date) =>
+      attempt("save release date", () => saveReleaseDate(db, id, date)),
     listPlaylists: attempt("list playlists", () => selectPlaylists(db)),
 
     playlistsLastPlayed: attempt("read when playlists last played", () =>
