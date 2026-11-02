@@ -187,6 +187,7 @@ const DraggableEntry = memo(function DraggableEntry({
 });
 
 type Props = {
+  customOrder?: boolean;
   playlistId: number;
   /** In playlist order; undefined until they are read (only the header shows). */
   items: readonly PlaylistEntryRow[] | undefined;
@@ -232,7 +233,7 @@ export const playPlaylistEntries = (
  * get Move up / Move down and the swipes' actions. While selecting, an
  * unavailable entry can't be checked and does nothing.
  */
-export function PlaylistItems({ playlistId, items, header, empty }: Props) {
+export function PlaylistItems({ playlistId, items, header, empty, customOrder = true }: Props) {
   const { strings } = useLocalisation();
   const scrollable = useListScrollable();
   const read = items ?? NO_ITEMS;
@@ -280,7 +281,7 @@ export function PlaylistItems({ playlistId, items, header, empty }: Props) {
   const find = useFindInLegendList(list, order, entryText, true);
   // The rows shown: the whole playlist, or the songs the query finds, in playlist order.
   const { found, shown } = find;
-  const reorderable = found === null;
+  const reorderable = found === null && customOrder;
   const selecting = listSelection.selecting;
   const orderRef = useRef(order);
   useLayoutEffect(() => {
@@ -290,7 +291,7 @@ export function PlaylistItems({ playlistId, items, header, empty }: Props) {
 
   const reorder = (fromIndex: number, toIndex: number): boolean => {
     // A narrowed list has no places to move to.
-    if (found !== null) return false;
+    if (!reorderable) return false;
     const current = orderRef.current;
     const item = current[fromIndex];
     if (item === undefined || toIndex === fromIndex || toIndex < 0 || toIndex >= current.length)

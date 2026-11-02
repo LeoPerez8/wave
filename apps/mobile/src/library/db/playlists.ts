@@ -98,6 +98,7 @@ export type PlaylistTrack = Omit<ReturnType<typeof playlistTracks>[number], "ite
  */
 export type PlaylistEntry<T = PlaylistTrack> = PlaylistItem<YtAlbumSong, T> & {
   readonly itemId: number;
+  readonly addedAt?: number;
 };
 
 /** A stored song as decoded, and the entry's stamp when it was. */
@@ -183,6 +184,7 @@ export const selectPlaylistEntries = (
   const query = db
     .select({
       id: playlistItems.id,
+      addedAt: playlistItems.addedAt,
       changedAt: playlistItems.changedAt,
       streamed: sql<number>`${playlistItems.ytSong} IS NOT NULL`,
     })
@@ -224,10 +226,12 @@ export const selectPlaylistEntries = (
   return items.flatMap((item): PlaylistEntry[] => {
     if (item.streamed) {
       const stored = songs.get(item.id)?.song ?? null;
-      return stored === null ? [] : [{ itemId: item.id, ...stored }];
+      return stored === null ? [] : [{ itemId: item.id, addedAt: item.addedAt, ...stored }];
     }
     const track = tracks.get(item.id);
-    return track === undefined ? [] : [{ itemId: item.id, source: "library", track }];
+    return track === undefined
+      ? []
+      : [{ itemId: item.id, addedAt: item.addedAt, source: "library", track }];
   });
 };
 
@@ -1352,6 +1356,7 @@ export const selectPlaylists = (db: LibraryDatabase): PlaylistRow[] => {
   const rows = db
     .select({
       id: playlists.id,
+      syncId: playlists.syncId,
       name: playlists.name,
       createdAt: playlists.createdAt,
       ...imageColumns,
@@ -1388,6 +1393,7 @@ export const selectPlaylist = (
   const row = db
     .select({
       id: playlists.id,
+      syncId: playlists.syncId,
       name: playlists.name,
       createdAt: playlists.createdAt,
       ...imageColumns,

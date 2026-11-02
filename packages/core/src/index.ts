@@ -2495,3 +2495,6 @@ export {
   playlistPickerSubjectScrolls,
   stepPlaylistPickerSearch,
 } from "./playlistPickerSearch.ts";
+
+export { readPlaylistSongSort, sortPlaylistSongs } from "./playlistSongSort.ts";
+export type { PlaylistSongSort, PlaylistSortableSong } from "./playlistSongSort.ts";

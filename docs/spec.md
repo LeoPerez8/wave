@@ -1144,3 +1144,7 @@ The mechanical checks are `apps/mobile/src/perf/performanceGuards.test.ts` (#729
 - **Track identity** on the phone is the file path, with moved/renamed files matched by Core's reconciliation so history survives. Between phones it's the recording key (see Wave account and sync).
 - **Development environment constraint:** the agent session working on this repository cannot reach the npm registry or the Android/Gradle repositories. GitHub Actions is the build and test environment of record; Core's zero-dependency design keeps its tests runnable inside the agent session as well.
 - Library sizes in the tens of thousands of tracks are the design target for scan batching, list virtualisation and query indexes.
+
+### Playlist song sorting
+
+Each playlist offers Custom (the default), Title, Artist, Album and Date added through the song sort button. Text sorts offer both alphabetical directions; Date added uses the entry’s addition date and offers newest or oldest first. Equal keys keep Custom order. Library, YT Music, unsearched and unavailable entries sort together using their saved metadata. The choice belongs to the playlist and syncs with the Wave account; unknown or unreadable choices use Custom. Sorting only changes the displayed list. Custom restores the stored arrangement, including additions and removals made while sorted. Only Custom permits dragging or accessibility moves; swipes keep working. Play, Shuffle, row taps and Find use the displayed order without changing a queue already playing.

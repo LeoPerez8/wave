@@ -543,6 +543,7 @@ export interface TrackDetails {
 
 /** One playlist of Library › Playlists. */
 export interface PlaylistRow {
+  readonly syncId?: string;
   readonly id: number;
   readonly name: string;
   /** Core sort key of the name. */

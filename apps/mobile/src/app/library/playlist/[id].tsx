@@ -1,3 +1,8 @@
+import {
+  playlistSongSetting,
+  orderPlaylistEntries,
+  PlaylistSongSortButton,
+} from "@/library/playlistSongSort";
 import { useScreenContent } from "@/lib/screenTiming";
 import { useLocalisation } from "@/localisation/localisation";
 import { IconDots } from "@tabler/icons-react-native";
@@ -45,6 +50,7 @@ function PlaylistHead({ shown }: { shown: Shown }) {
   const { language, strings } = useLocalisation();
   const { width } = useWindowDimensions();
   const { playlist, items } = shown;
+  const sortId = playlist.syncId ?? String(playlist.id);
   const cover = width - grid.margin * 2;
   const context = { kind: "playlist", id: String(playlist.id) } as const;
   // The whole list, its YT Music entries streamed, while YT Music is on (`playPlaylistEntries`).
@@ -56,7 +62,12 @@ function PlaylistHead({ shown }: { shown: Shown }) {
     // Tapped before the songs were read: read them now.
     void appRuntime.runPromise(readPlaylist(playlist.id)).then((detail) => {
       if (detail !== null && detail.items.length > 0)
-        playPlaylistEntries(detail.items, undefined, context, { shuffle });
+        playPlaylistEntries(
+          orderPlaylistEntries(detail.items, playlistSongSetting(sortId).get()),
+          undefined,
+          context,
+          { shuffle },
+        );
     });
   };
   // Its YT Music entries download into the Library (Core's `ytPlaylistDownload`).
@@ -122,7 +133,12 @@ function PlaylistHead({ shown }: { shown: Shown }) {
           onPlay={() => play(false)}
           onShuffle={() => play(true)}
           last={listDownloadAction(download.button)}
-          menu={menu}
+          menu={
+            <View className="flex-row">
+              <PlaylistSongSortButton id={sortId} />
+              {menu}
+            </View>
+          }
         />
       ) : (
         <View className="flex-row justify-end">{menu}</View>
@@ -156,7 +172,15 @@ export default function PlaylistScreen() {
   const { strings } = useLocalisation();
   const { id } = useLocalSearchParams<{ id: string }>();
   const playlistId = parseId(id);
-  const detail = usePlaylist(playlistId);
+  const rawDetail = usePlaylist(playlistId);
+  const sort = playlistSongSetting(rawDetail?.playlist.syncId ?? String(playlistId)).useValue();
+  const detail = useMemo(
+    () =>
+      rawDetail == null
+        ? rawDetail
+        : { ...rawDetail, items: orderPlaylistEntries(rawDetail.items, sort) },
+    [rawDetail, sort],
+  );
   useScreenContent(detail !== undefined);
   const known = useKnownRow("playlist", playlistId);
   const settled = useScreenSettled();
@@ -177,6 +201,7 @@ export default function PlaylistScreen() {
         <PlaylistItems
           key={playlist.id}
           playlistId={playlist.id}
+          customOrder={sort.key === "custom"}
           items={items}
           header={<PlaylistHead shown={{ playlist, items }} />}
           empty={<NoSongs />}

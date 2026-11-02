@@ -160,6 +160,7 @@ describe("selectPlaylistEntries", () => {
     const entries = selectPlaylistEntries(db, playlistId);
     assert.deepEqual(entries.at(-1), {
       itemId: entries.at(-1)?.itemId,
+      addedAt: 0,
       source: "stream",
       song: yt("a", { title: "Lucky" }),
     });
@@ -532,7 +533,7 @@ describe("unavailable entries", () => {
     appendPlaylistSongs(db, playlistId, [within, library("Bloom"), unavailable("Untitled")], 0);
     assert.deepEqual(titles().slice(4), ["unavailable:Within", "Bloom", "unavailable:Untitled"]);
     const entry = selectPlaylistEntries(db, playlistId)[4];
-    assert.deepEqual(entry, { itemId: entry?.itemId, ...within });
+    assert.deepEqual(entry, { itemId: entry?.itemId, addedAt: 0, ...within });
   });
 
   test("an unavailable song the playlist holds isn't put in again, as an import going on after a restart gives it", () => {
@@ -650,7 +651,7 @@ describe("unsearched entries", () => {
     appendPlaylistSongs(db, playlistId, [lucky, library("Bloom")], 0);
     assert.deepEqual(titles().slice(4), ["unsearched:Lucky", "Bloom"]);
     const entry = selectPlaylistEntries(db, playlistId)[4];
-    assert.deepEqual(entry, { itemId: entry?.itemId, ...lucky });
+    assert.deepEqual(entry, { itemId: entry?.itemId, addedAt: 0, ...lucky });
   });
 
   test("one the playlist holds isn't put in again, so a copy goes in once", () => {
