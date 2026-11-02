@@ -2,6 +2,7 @@ import {
   releaseCandidates,
   releaseAnswer,
   releaseDue,
+  releaseShownDate,
   releaseTagDate,
   releaseTagNotWrittenLine,
   tagWriteFailureLine,
@@ -19,6 +20,7 @@ import { onPlaylistSongSortChanged, playlistSongSetting } from "./playlistSongSe
 import { onPlaylistsEdited } from "./playlists";
 import { releaseDates, releaseSongKey } from "./releaseAnswers";
 import { releaseLookupClient } from "./releaseLookupClient";
+import { typedReleaseDates } from "./typedReleaseDates";
 
 export { releaseDates };
 const notice = persistedSetting<boolean>({
@@ -43,19 +45,29 @@ export const releaseEntrySong = (entry: PlaylistEntryRow) =>
     : { title: entry.song.title, artist: entry.song.artists[0] ?? "" };
 export const releaseEntryKey = (entry: PlaylistEntryRow): string =>
   releaseSongKey(releaseEntrySong(entry));
-/** [answers] defaults to the stored ones; a memo passes the value it re-renders on. */
+/**
+ * The date [entry] shows and sorts by (Core's `releaseShownDate`). [answers] and [typed] default
+ * to the stored ones; a memo passes the values it re-renders on.
+ */
 export const releaseEntryDate = (
   entry: PlaylistEntryRow,
   answers: Readonly<Record<string, ReleaseAnswer>> = releaseDates.get(),
+  typed: Readonly<Record<string, string>> = typedReleaseDates.get(),
 ): string | null => {
-  const answer = answers[releaseEntryKey(entry)];
-  if (entry.source === "library") {
-    if (entry.track.releaseDate) return entry.track.releaseDate;
-    if (answer?.source === "first-release") return answer.date;
-    if (entry.track.year) return String(entry.track.year);
-  }
-  return answer?.date ?? null;
+  const key = releaseEntryKey(entry);
+  const library = entry.source === "library" ? entry.track : null;
+  return releaseShownDate({
+    typed: typed[key],
+    original: library?.releaseDate,
+    answer: answers[key],
+    year: library?.year,
+  });
 };
+
+/** The date [entry] holds that no lookup replaces: one the owner typed, or its original-date tag. */
+const heldDate = (entry: PlaylistEntryRow): string | null =>
+  typedReleaseDates.get()[releaseEntryKey(entry)] ??
+  (entry.source === "library" ? (entry.track.releaseDate ?? null) : null);
 
 /** Logs why [date] isn't in [path]'s tags; the index keeps it whatever happened. */
 const writeReleaseTag = async (path: string, date: string): Promise<void> => {
@@ -94,7 +106,7 @@ const keepReleaseDate = async (entry: PlaylistEntryRow, answer: ReleaseAnswer): 
     LibraryStore.use((store) => store.saveReleaseDate(entry.track.id, date)),
   );
   const path = saved?.path ?? null;
-  const tagged = releaseTagDate({ answer, held: entry.track.releaseDate, hasFile: path !== null });
+  const tagged = releaseTagDate({ answer, held: heldDate(entry), hasFile: path !== null });
   if (path !== null && tagged !== null) await writeReleaseTag(path, tagged);
 };
 
@@ -141,13 +153,13 @@ const run = async (): Promise<void> => {
       const unique = [...new Map(detail.items.map((e) => [releaseEntryKey(e), e])).values()];
       for (const entry of unique) {
         const answer = releaseDates.get()[releaseEntryKey(entry)];
-        if (entry.source === "library" && !entry.track.releaseDate && answer)
+        if (entry.source === "library" && !heldDate(entry) && answer)
           await keepReleaseDate(entry, answer);
       }
       const due = unique.filter((e) =>
         releaseDue(
           releaseEntrySong(e),
-          e.source === "library" ? e.track.releaseDate : null,
+          heldDate(e),
           releaseDates.get()[releaseEntryKey(e)],
           Date.now(),
         ),

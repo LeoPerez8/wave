@@ -1,4 +1,5 @@
 import { releaseDates, releaseStatus } from "@/library/releaseDates";
+import { typedReleaseDates } from "@/library/typedReleaseDates";
 import {
   playlistSongSetting,
   orderPlaylistEntries,
@@ -184,14 +185,15 @@ export default function PlaylistScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
   const playlistId = parseId(id);
   const dates = releaseDates.useValue();
+  const typed = typedReleaseDates.useValue();
   const rawDetail = usePlaylist(playlistId);
   const sort = playlistSongSetting(rawDetail?.playlist.syncId ?? String(playlistId)).useValue();
   const detail = useMemo(
     () =>
       rawDetail == null
         ? rawDetail
-        : { ...rawDetail, items: orderPlaylistEntries(rawDetail.items, sort, dates) },
-    [rawDetail, sort, dates],
+        : { ...rawDetail, items: orderPlaylistEntries(rawDetail.items, sort, dates, typed) },
+    [rawDetail, sort, dates, typed],
   );
   useScreenContent(detail !== undefined);
   const known = useKnownRow("playlist", playlistId);

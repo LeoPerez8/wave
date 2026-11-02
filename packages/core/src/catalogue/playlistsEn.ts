@@ -3,6 +3,21 @@ import { plural } from "../plural.ts";
 
 const n = (count: number): string => formatNumber("en", count);
 
+const MONTHS = [
+  "January",
+  "February",
+  "March",
+  "April",
+  "May",
+  "June",
+  "July",
+  "August",
+  "September",
+  "October",
+  "November",
+  "December",
+];
+
 const songs = (count: number): string =>
   plural("en", count, { one: `${n(count)} song`, other: `${n(count)} songs` });
 
@@ -16,6 +31,25 @@ export const playlistsEn = {
   releaseOffline: "Release date lookup paused: offline or service unavailable",
   releaseOldest: "Release date · Oldest first",
   releaseNewest: "Release date · Newest first",
+  /** A release date as precise as it's known (Core's `formatReleaseDate`): 1985, June 1985, June 21, 1985. */
+  releaseDate: (year: number, month: number | null, day: number | null): string =>
+    month === null
+      ? String(year)
+      : day === null
+        ? `${MONTHS[month - 1]} ${year}`
+        : `${MONTHS[month - 1]} ${day}, ${year}`,
+  /** The Release date screen, where the owner types when a song first came out. */
+  releaseDateTitle: "Release date",
+  releaseDateYear: "Year",
+  releaseDateMonth: "Month",
+  releaseDateDay: "Day",
+  releaseDateHint: "The year alone, or with the month, or the full date.",
+  releaseDateImpossible: "That date doesn't exist, or hasn't come yet.",
+  releaseDateSave: "Save",
+  releaseDateClear: "Clear",
+  releaseDateFull: "Wave can't keep more typed release dates.",
+  releaseDateCouldntSave: "Couldn't save the release date.",
+  releaseDateNotInFile: "Saved in Wave, but the song's file couldn't take the date.",
   /** A new playlist's name, saved as written: New Playlist, then New Playlist 2, 3… */
   defaultName: "New Playlist",
   newPlaylist: "New Playlist",

@@ -2502,3 +2502,4 @@ export { readPlaylistSongSort, sortPlaylistSongs } from "./playlistSongSort.ts";
 export type { PlaylistSongSort, PlaylistSortableSong } from "./playlistSongSort.ts";
 
 export * from "./releaseLookup.ts";
+export * from "./typedReleaseDate.ts";

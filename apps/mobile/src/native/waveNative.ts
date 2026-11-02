@@ -290,6 +290,16 @@ declare class WaveNativeModule extends NativeModule<WaveNativeEvents> {
     path: string,
     date: string,
   ): Promise<{ readonly originalDate: TagDestination } | NativeTagWriteFailed>;
+  /**
+   * Puts a date the owner typed into the song's original-date tag, replacing the file's, or
+   * takes it out ([date] null), changing that field alone: `tags`, `notWritten` (a format Wave
+   * doesn't write tags to) or `none` (nothing to take out). Unlike `writeOriginalDate`, it goes
+   * over a date the file has. A file that can't be written resolves `{ failed }`.
+   */
+  replaceOriginalDate(
+    path: string,
+    date: string | null,
+  ): Promise<{ readonly originalDate: TagDestination } | NativeTagWriteFailed>;
 }
 
 /**
