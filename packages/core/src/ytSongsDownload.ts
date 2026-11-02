@@ -358,3 +358,17 @@ export const ytPlaylistDownloadButton = (
   view: YtPlaylistDownload,
   language: AppLanguage = "en",
 ): YtListDownloadButtonState<YtPlaylistDownloadAction> | null => button(view, language);
+
+/**
+ * A playlist's download entries in its long-press menu, the page's three-dots
+ * menu among them: [view]'s entries, else Downloaded once every song is and
+ * the Library has had its first read ([libraryRead]; before it, every song
+ * counts as in it); none when there is nothing to download.
+ */
+export const ytPlaylistMenuDownloads = (
+  view: YtPlaylistDownload,
+  libraryRead: boolean,
+): readonly (YtPlaylistDownloadAction | "downloaded")[] => {
+  if (view.actions.length > 0) return view.actions;
+  return view.downloaded && libraryRead ? ["downloaded"] : [];
+};

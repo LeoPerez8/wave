@@ -236,8 +236,12 @@ export const WHOLE_LIBRARY: Record<string, WholeLibraryException> = {
 
   "playback/ActionsMenu.tsx#usePlaylistDownloadEntries": {
     howOften: FOLLOWED_FINDER,
-    reason: "Visible playlist menu checks which entries are downloaded; created for a user action.",
-    capabilities: ["ytmusic/libraryFinder.ts#useLoadedInLibrary"],
+    reason:
+      "Visible playlist menu checks which entries are downloaded, and offers Downloaded only once the Library is read; created for a user action.",
+    capabilities: [
+      "ytmusic/libraryFinder.ts#useLoadedInLibrary",
+      "ytmusic/libraryFinder.ts#useLoadedLibraryFinder",
+    ],
   },
   "playback/itemActions.ts#useStreamedSongFinder": {
     howOften: FOLLOWED_FINDER,

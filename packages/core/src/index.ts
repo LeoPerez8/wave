@@ -1066,6 +1066,7 @@ export {
   playlistInLibrarySteps,
   ytPlaylistDownload,
   ytPlaylistDownloadButton,
+  ytPlaylistMenuDownloads,
   ytSongsDownload,
 } from "./ytSongsDownload.ts";
 export type {
