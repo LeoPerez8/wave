@@ -30,7 +30,7 @@ export const playlistSuggestionsPlace = ({
 };
 
 /** How long the pill stays after the list stops. */
-export const GO_TO_SUGGESTIONS_WAIT_MS = 2000;
+export const GO_TO_SUGGESTIONS_WAIT_MS = 1000;
 
 /**
  * The pill's life around the owner's scrolling: "dragging" with a finger on the list,

@@ -3,13 +3,15 @@ import {
   checkPlaylistName,
   confirmPlaylistDeletion,
   describePlaylistAdd,
+  keepAddToPlaylistOrder,
   nextPlaylistName,
+  playlistPickerSubjectScrolls,
   type Catalogue,
   type PlaylistNameCheck,
   type PlaylistSong,
 } from "@wave/core";
-import { Fragment, useState } from "react";
-import { Text, TextInput, View } from "react-native";
+import { Fragment, useContext, useState } from "react";
+import { StyleSheet, Text, TextInput, View, useWindowDimensions } from "react-native";
 
 import { CatalogLine } from "@/catalog/CatalogLine";
 import { CELL, grid } from "@/catalog/grid";
@@ -19,13 +21,14 @@ import { TextButton } from "@/components/TextButton";
 import { currentLocalisation, useLocalisation } from "@/localisation/localisation";
 import { confirmAction } from "@/overlay/alert";
 import { CardEntries } from "@/overlay/CardEntries";
-import { followUp, openOverlay, presentOverlay } from "@/overlay/overlay";
+import { followUp, openOverlay, OverlayContentHeight, presentOverlay } from "@/overlay/overlay";
 import { showToast } from "@/overlay/toast";
 import { useThemeColor } from "@/theme/useThemeColor";
 
 import { usePlaylists } from "./hooks";
 import type { PlaylistRow } from "./LibraryStore";
 import { cancelPlaylistImport } from "./playlistImports";
+import { PlaylistPickerHeading, usePlaylistPickerSearch } from "./PlaylistPickerSearch";
 import { framePhoto } from "./PhotoCropperHost";
 import {
   addToPlaylist,
@@ -196,46 +199,86 @@ const addSongs = (playlistId: number, songs: () => Promise<readonly PlaylistSong
 };
 
 function AddCard({ subject, close }: { subject: AddSubject; close: () => void }) {
-  const playlists = usePlaylists();
+  const allPlaylists = usePlaylists();
+  const [choices, setChoices] = useState(() => ({
+    source: allPlaylists,
+    rows: keepAddToPlaylistOrder(allPlaylists, []),
+  }));
+  if (choices.source !== allPlaylists) {
+    setChoices({ source: allPlaylists, rows: keepAddToPlaylistOrder(allPlaylists, choices.rows) });
+  }
+  const search = usePlaylistPickerSearch(choices.rows);
   const { strings } = useLocalisation();
+  const maxHeight = useContext(OverlayContentHeight);
+  const { fontScale } = useWindowDimensions();
+  const [headingHeight, setHeadingHeight] = useState(0);
+  const [subjectHeight, setSubjectHeight] = useState(0);
+  const subjectScrolls = playlistPickerSubjectScrolls({
+    searching: search.searching,
+    maxHeight,
+    fixedHeight: headingHeight + subjectHeight + CELL / 2 + CELL * 2 + StyleSheet.hairlineWidth,
+    entryHeight: grid.row * Math.max(1, fontScale),
+  });
+  const subjectLine = (
+    <Text
+      onLayout={({ nativeEvent: { layout } }) => setSubjectHeight(layout.height)}
+      numberOfLines={1}
+      className="font-sans text-body font-medium text-foreground"
+    >
+      {subject.title}
+    </Text>
+  );
+  const creationRow = (
+    <TextButton
+      label={strings.playlists.newPlaylist}
+      accessibilityRole="button"
+      accessibilityLabel={strings.playlists.newPlaylist}
+      onPress={() => {
+        close();
+        void newPlaylist(subject.songs);
+      }}
+      className="flex-row items-center"
+      style={{ height: grid.row, gap: CELL * 1.5, justifyContent: "flex-start" }}
+    >
+      {(accent) => (
+        <>
+          <View className="items-center justify-center" style={{ width: CELL * 5 }}>
+            <IconPlus size={24} color={accent} strokeWidth={1.5} />
+          </View>
+          <Text className="font-sans text-body font-medium text-accent">
+            {strings.playlists.newPlaylist}
+          </Text>
+        </>
+      )}
+    </TextButton>
+  );
 
   return (
     <>
       <View style={{ paddingBottom: CELL * 2, gap: CELL / 2 }}>
-        <CatalogLine>{strings.playlists.addToPlaylist}</CatalogLine>
-        <Text numberOfLines={1} className="font-sans text-body font-medium text-foreground">
-          {subject.title}
-        </Text>
+        <View onLayout={({ nativeEvent: { layout } }) => setHeadingHeight(layout.height)}>
+          <PlaylistPickerHeading search={search} />
+        </View>
+        {!subjectScrolls && subjectLine}
       </View>
       <Hairline />
-      <TextButton
-        label={strings.playlists.newPlaylist}
-        accessibilityRole="button"
-        accessibilityLabel={strings.playlists.newPlaylist}
-        onPress={() => {
-          close();
-          void newPlaylist(subject.songs);
-        }}
-        className="flex-row items-center"
-        style={{ height: grid.row, gap: CELL * 1.5, justifyContent: "flex-start" }}
-      >
-        {(accent) => (
-          <>
-            <View className="items-center justify-center" style={{ width: CELL * 5 }}>
-              <IconPlus size={24} color={accent} strokeWidth={1.5} />
-            </View>
-            <Text className="font-sans text-body font-medium text-accent">
-              {strings.playlists.newPlaylist}
-            </Text>
-          </>
+      {search.newPlaylistPlacement === "pinned" && creationRow}
+      {/* Searching lets every choice scroll above a landscape keyboard. */}
+      <CardEntries onOverflowChange={search.onOverflowChange}>
+        {subjectScrolls && <View style={{ paddingTop: CELL / 2 }}>{subjectLine}</View>}
+        {search.newPlaylistPlacement === "scroll" && creationRow}
+        {search.noMatch && (
+          <Text
+            accessibilityLiveRegion="polite"
+            className="font-sans text-body text-secondary"
+            style={{ paddingVertical: CELL * 2 }}
+          >
+            {strings.library.noMatch.playlists}
+          </Text>
         )}
-      </TextButton>
-      {/* The card stops short of the screen edges; a long list scrolls inside it.
-          Each playlist follows a divider, so none trails the last. */}
-      <CardEntries>
-        {playlists.map((playlist) => (
+        {search.playlists.map((playlist, index) => (
           <Fragment key={playlist.id}>
-            <Hairline />
+            {(index > 0 || search.showNewPlaylist) && <Hairline />}
             <PlaylistEntry
               name={playlist.name}
               detail={strings.playlists.songs(playlist.trackCount)}

@@ -1,7 +1,13 @@
 import assert from "node:assert/strict";
 import { describe, test } from "node:test";
 
-import { cardContentHeight, cardKeyboard, entryDivider, placeOverlayCard } from "./index.ts";
+import {
+  cardContentHeight,
+  cardKeyboard,
+  cardListOverflows,
+  entryDivider,
+  placeOverlayCard,
+} from "./index.ts";
 
 // A phone in portrait, in dp: status bar on top, gesture bar below.
 const phone = {
@@ -11,7 +17,34 @@ const phone = {
   maxWidth: 480,
 };
 
+test("search is offered from measured overflow, including a smaller landscape viewport", () => {
+  assert.equal(cardListOverflows(280, 280), false);
+  assert.equal(cardListOverflows(280, 281), false);
+  assert.equal(cardListOverflows(280, 200), true);
+  assert.equal(cardListOverflows(560, 280), true);
+  assert.equal(cardListOverflows(280, 0), false);
+});
+
+test("sub-dp rounding does not offer search on a list that fits", () => {
+  assert.equal(cardListOverflows(280.4, 280), false);
+  assert.equal(cardListOverflows(281, 280), false);
+  assert.equal(cardListOverflows(281.1, 280), true);
+});
+
 describe("placeOverlayCard", () => {
+  test("a keyboard taller than the available window leaves a zero-height card", () => {
+    assert.equal(
+      placeOverlayCard({
+        ...phone,
+        window: { width: 800, height: 260 },
+        cardHeight: 600,
+        searching: true,
+        keyboard: 190,
+      }).maxHeight,
+      0,
+    );
+  });
+
   test("a short card floats in the middle of the screen, a margin in from each side", () => {
     assert.deepEqual(placeOverlayCard({ ...phone, cardHeight: 300 }), {
       left: 24,
@@ -71,6 +104,18 @@ const tile = (left: number, right: number) => ({
 });
 
 describe("placeOverlayCard next to an anchor", () => {
+  test("even an anchored card has no negative height in a window smaller than its margins", () => {
+    assert.equal(
+      placeOverlayCard({
+        ...phone,
+        window: { width: 412, height: 64 },
+        cardHeight: 300,
+        anchor: near(0),
+      }).maxHeight,
+      0,
+    );
+  });
+
   test("a menu opens just below the long-pressed row when it fits there", () => {
     assert.deepEqual(placeOverlayCard({ ...phone, cardHeight: 400, anchor: near(200) }), {
       left: 24,
@@ -200,6 +245,26 @@ describe("entryDivider", () => {
 });
 
 describe("cardKeyboard", () => {
+  test("a centred card entering search keeps the keyboard and moves above it, then recentres", () => {
+    const keyboard = cardKeyboard({ searching: true, keyboard: 320 });
+    assert.deepEqual(keyboard, { closeKeyboard: false, keyboard: 320 });
+    assert.deepEqual(
+      placeOverlayCard({
+        ...phone,
+        cardHeight: 1200,
+        searching: true,
+        keyboard: keyboard.keyboard,
+      }),
+      {
+        left: 24,
+        top: 56,
+        width: 364,
+        maxHeight: 491,
+        flow: "down",
+      },
+    );
+    assert.equal(placeOverlayCard({ ...phone, cardHeight: 300, searching: false }).top, 312);
+  });
   test("a card nobody types into closes an open keyboard and lays out as if it were gone", () => {
     assert.deepEqual(cardKeyboard({ keyboard: 320 }), { closeKeyboard: true, keyboard: 0 });
   });
@@ -217,6 +282,11 @@ describe("cardKeyboard", () => {
 });
 
 describe("cardContentHeight", () => {
+  test("search keeps the full card's height while results and New Playlist step aside", () => {
+    const known = cardContentHeight({ known: 1200, laidOut: 250, maxHeight: 491, searching: true });
+    assert.equal(known, 1200);
+    assert.equal(cardContentHeight({ known, laidOut: 250, maxHeight: 811, searching: false }), 250);
+  });
   test("a layout shorter than the card's limit is its content's height", () => {
     assert.equal(cardContentHeight({ known: 300, laidOut: 250, maxHeight: 800 }), 250);
   });

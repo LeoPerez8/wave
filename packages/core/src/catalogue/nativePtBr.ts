@@ -31,4 +31,7 @@ export const nativePtBr: typeof nativeEn = {
   savingCount: "%s salvando",
   leftOne: "%s restante",
   leftCount: "%s restantes",
+  appUpdates: "Atualizações do app",
+  waveUpdated: "Wave atualizado",
+  tapToOpen: "Toque para abrir",
 };

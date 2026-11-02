@@ -7,13 +7,21 @@
 import assert from "node:assert/strict";
 import { beforeEach, describe, test } from "node:test";
 
-import type { PlaylistSong, YtAlbumSong } from "@wave/core";
+import {
+  EMPTY_SYNC_TABLES,
+  sortPlaylistsForAdd,
+  type PlaylistSong,
+  type YtAlbumSong,
+} from "@wave/core";
 import { eq, sql } from "drizzle-orm";
 
 import {
   addToPlaylist,
+  createPlaylist,
   linkPlaylistEntries,
   removePlaylistItems,
+  replacePlaylistSongs,
+  restorePlaylistItems,
   selectPlaylist,
   selectPlaylistCovers,
   selectPlaylistEntries,
@@ -22,11 +30,12 @@ import {
 } from "./playlists.ts";
 import { playlistWork, resetPlaylistWork } from "./playlistWork.ts";
 import * as schema from "./schema.ts";
-import { joinAccount } from "./syncRows.ts";
+import { applyPulledPage, joinAccount } from "./syncRows.ts";
 import {
   addTrack,
   migrateTestDatabase,
   openTestDatabase,
+  traceQueries,
   type TestDatabase,
 } from "./testDatabase.ts";
 
@@ -62,6 +71,13 @@ const listed = () =>
 
 const summarized = (): Record<number, number> => Object.fromEntries(playlistWork().summarized);
 
+const pulledEntries = (playlistEntries: typeof EMPTY_SYNC_TABLES.playlistEntries) => ({
+  ...EMPTY_SYNC_TABLES,
+  playlistEntries,
+  cursor: "c1",
+  more: false,
+});
+
 beforeEach(async () => {
   db = await openTestDatabase();
   ids.Airbag = addTrack(db, { title: "Airbag", durationMs: 200_000, artworkHash: "ok" });
@@ -75,6 +91,180 @@ beforeEach(async () => {
 });
 
 describe("Library › Playlists while one playlist fills", () => {
+  test("newest dates ignore unreadable entries and refresh only the stale playlist", () => {
+    addToPlaylist(db, filling, [stream(yt("readable"))], 10);
+    selectPlaylists(db);
+    resetPlaylistWork();
+    const unreadable = ["not json", JSON.stringify({ ...yt("broken"), artists: [2] })];
+    unreadable.forEach((ytSong, i) => {
+      db.insert(schema.playlistItems)
+        .values({
+          playlistId: filling,
+          ytSong,
+          orderKey: `b${i}`,
+          addedAt: 100 + i,
+          changedAt: 100,
+        })
+        .run();
+    });
+    const changed = traceQueries(db, () => selectPlaylists(db));
+    assert.equal(changed.result.find((row) => row.id === filling)?.lastEntryAddedAt, 10);
+    assert.deepEqual(summarized(), { [filling]: 1 });
+    const latest = changed.queries.find((query) => /max\(.*added_at/i.test(query.sql));
+    assert.ok(latest);
+    assert.equal(latest.rows, 1, "only the stale playlist contributes a newest date");
+    assert.ok(
+      latest.plan.some((step) => /SEARCH.*(?:playlist_items|pi).*playlist_order_idx/i.test(step)),
+    );
+    const unchanged = traceQueries(db, () => selectPlaylists(db));
+    assert.equal(
+      unchanged.queries.some((query) => /playlist_items/i.test(query.sql)),
+      false,
+    );
+
+    const readable = selectPlaylistEntries(db, filling);
+    removePlaylistItems(
+      db,
+      filling,
+      readable.map((entry) => entry.itemId),
+      200,
+    );
+    const empty = selectPlaylists(db).find((row) => row.id === filling);
+    assert.equal(empty?.trackCount, 0);
+    assert.equal(empty?.lastEntryAddedAt, null);
+    const made = createPlaylist(db, "Created later", [], 5);
+    assert.equal(sortPlaylistsForAdd(selectPlaylists(db))[0]?.id, made.playlistId);
+  });
+
+  test("the list remembers the newest entry's added date after an addition", () => {
+    addToPlaylist(db, filling, [stream(yt("newest"))], 30);
+    assert.equal(selectPlaylists(db).find((row) => row.id === filling)?.lastEntryAddedAt, 30);
+  });
+
+  test("a Library entry whose track is gone contributes no newest date", () => {
+    const made = createPlaylist(db, "Missing track", [library("Bloom")], 15);
+    // Model an orphan left by a database written without foreign-key enforcement.
+    db.run(sql`PRAGMA foreign_keys = OFF`);
+    try {
+      db.insert(schema.playlistItems)
+        .values({
+          playlistId: made.playlistId,
+          trackId: -1,
+          orderKey: "b0",
+          addedAt: 100,
+          changedAt: 100,
+        })
+        .run();
+    } finally {
+      db.run(sql`PRAGMA foreign_keys = ON`);
+    }
+    assert.equal(
+      selectPlaylists(db).find((row) => row.id === made.playlistId)?.lastEntryAddedAt,
+      15,
+    );
+    const readable = selectPlaylistEntries(db, made.playlistId);
+    assert.equal(readable.length, 1);
+    removePlaylistItems(
+      db,
+      made.playlistId,
+      readable.map((entry) => entry.itemId),
+      200,
+    );
+    assert.equal(selectPlaylistTotals(db, made.playlistId).has(made.playlistId), false);
+    const rows = selectPlaylists(db);
+    const empty = rows.find((row) => row.id === made.playlistId);
+    assert.equal(empty?.trackCount, 0);
+    assert.equal(empty?.lastEntryAddedAt, null);
+    assert.equal(sortPlaylistsForAdd(rows)[0]?.id, made.playlistId);
+  });
+
+  test("removing the newest entry moves the card back, and Undo restores its added date", () => {
+    addToPlaylist(db, filling, [stream(yt("older"))], 10);
+    addToPlaylist(db, other, [library("Bloom")], 20);
+    addToPlaylist(db, filling, [stream(yt("newest"))], 30);
+    const order = () => sortPlaylistsForAdd(selectPlaylists(db)).map((row) => row.id);
+    assert.deepEqual(order(), [filling, other]);
+    const newest = selectPlaylistEntries(db, filling).at(-1)!;
+    const removal = removePlaylistItems(db, filling, [newest.itemId], 40);
+    assert.deepEqual(order(), [other, filling]);
+    assert.equal(selectPlaylist(db, filling)?.playlist.lastEntryAddedAt, 10);
+    restorePlaylistItems(db, removal, 50);
+    assert.deepEqual(order(), [filling, other]);
+    assert.equal(selectPlaylist(db, filling)?.playlist.lastEntryAddedAt, 30);
+  });
+
+  test("an empty playlist uses creation again after its last entry is removed", () => {
+    const made = createPlaylist(db, "New", [], 15);
+    const entryDate = () =>
+      selectPlaylists(db).find((row) => row.id === made.playlistId)?.lastEntryAddedAt;
+    assert.equal(entryDate(), null);
+    addToPlaylist(db, made.playlistId, [library("Bloom")], 25);
+    assert.equal(entryDate(), 25);
+    const entries = selectPlaylistEntries(db, made.playlistId);
+    removePlaylistItems(
+      db,
+      made.playlistId,
+      entries.map((entry) => entry.itemId),
+      35,
+    );
+    assert.equal(entryDate(), null);
+    assert.equal(sortPlaylistsForAdd(selectPlaylists(db))[0]?.id, made.playlistId);
+  });
+
+  test("an import's Replace counts as additions, including unsearched and unavailable songs", () => {
+    replacePlaylistSongs(
+      db,
+      other,
+      [
+        {
+          source: "unsearched",
+          song: {
+            title: "Unsearched",
+            artists: [],
+            album: null,
+            durationMs: null,
+            artworkUrl: null,
+          },
+        },
+        {
+          source: "unavailable",
+          song: {
+            reason: "notFound",
+            title: "Unavailable",
+            artists: [],
+            album: null,
+            durationMs: null,
+            artworkUrl: null,
+          },
+        },
+      ],
+      60,
+    );
+    const rows = selectPlaylists(db);
+    assert.equal(rows.find((row) => row.id === other)?.lastEntryAddedAt, 60);
+    assert.equal(sortPlaylistsForAdd(rows)[0]?.id, other);
+    replacePlaylistSongs(db, other, [], 70);
+    assert.equal(selectPlaylists(db).find((row) => row.id === other)?.lastEntryAddedAt, null);
+  });
+
+  test("opening the remembered list again reads no entries, and an edit recomputes only its playlist", () => {
+    const unchanged = traceQueries(db, () => sortPlaylistsForAdd(selectPlaylists(db)));
+    assert.equal(
+      unchanged.queries.some((query) => /playlist_items/i.test(query.sql)),
+      false,
+    );
+    addToPlaylist(db, filling, [stream(yt("newest"))], 30);
+    const changed = traceQueries(db, () => sortPlaylistsForAdd(selectPlaylists(db)));
+    assert.deepEqual(summarized(), { [filling]: 1 });
+    const latest = changed.queries.find((query) => /max\(.*added_at/i.test(query.sql));
+    assert.ok(latest);
+    assert.ok(
+      latest.plan.some((step) => /SEARCH.*(?:playlist_items|pi).*playlist_order_idx/i.test(step)),
+      latest.plan.join("\n"),
+    );
+    assert.equal(changed.result[0]?.id, filling);
+  });
+
   test("an addition works out that playlist's mosaic and totals again, not the others'", () => {
     addToPlaylist(db, filling, [stream(yt("f2")), library("Bloom")], 1);
     assert.deepEqual(listed(), [
@@ -162,6 +352,43 @@ describe("Library › Playlists while one playlist fills", () => {
       VALUES (${other}, 'pulled', ${JSON.stringify(yt("p1", { durationMs: 5_000 }))}, 'a9', 0, 7,
         'another phone', 1)`);
     assert.deepEqual(listed()[1], ["Other", 3, 305_000, "https://yt/o1"]);
+  });
+
+  test("a synced addition uses its original added date, and a synced removal falls back", () => {
+    addToPlaylist(db, filling, [library("Bloom")], 20);
+    const playlistId = db
+      .select()
+      .from(schema.playlists)
+      .where(eq(schema.playlists.id, other))
+      .get()!.syncId;
+    const stamp = { id: "remote-entry", changedAt: 90, phoneId: "another phone" };
+    applyPulledPage(
+      db,
+      pulledEntries([
+        {
+          ...stamp,
+          deleted: false,
+          playlistId,
+          songId: null,
+          ytSong: JSON.stringify(yt("remote")),
+          orderKey: "a9",
+          addedAt: 30,
+        },
+      ]),
+      new Map(),
+      100,
+    );
+    const order = () => sortPlaylistsForAdd(selectPlaylists(db)).map((row) => row.id);
+    assert.deepEqual(order(), [other, filling]);
+    assert.equal(selectPlaylist(db, other)?.playlist.lastEntryAddedAt, 30);
+    applyPulledPage(
+      db,
+      pulledEntries([{ ...stamp, changedAt: 110, deleted: true }]),
+      new Map(),
+      120,
+    );
+    assert.deepEqual(order(), [filling, other]);
+    assert.equal(selectPlaylist(db, other)?.playlist.lastEntryAddedAt, 0);
   });
 
   test("marking every row to go up again (joining an account) works nothing out again", () => {
