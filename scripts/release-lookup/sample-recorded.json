@@ -5,139 +5,87 @@
       "count": 21,
       "recordings": [
         {
-          "isrcs": [
-            "USWB10903606",
-            "USWB10002775"
-          ],
+          "isrcs": ["USWB10903606", "USWB10002775"],
           "first-release-date": "1989-03-20"
         },
         {
-          "isrcs": [
-            "USWB12403672"
-          ],
+          "isrcs": ["USWB12403672"],
           "first-release-date": "2024-08-09"
         },
         {
-          "isrcs": [
-            "USWB12100596"
-          ],
+          "isrcs": ["USWB12100596"],
           "first-release-date": "1989"
         },
         {
-          "isrcs": [
-            "GBQCP2500142"
-          ],
+          "isrcs": ["GBQCP2500142"],
           "first-release-date": "2025-09-04"
         },
         {
-          "isrcs": [
-            "USWB10700168"
-          ],
+          "isrcs": ["USWB10700168"],
           "first-release-date": "1989-03"
         },
         {
-          "isrcs": [
-            "USRH12102969",
-            "USWB11104119"
-          ],
+          "isrcs": ["USRH12102969", "USWB11104119"],
           "first-release-date": "1989-08-25"
         },
         {
-          "isrcs": [
-            "USWB11104117"
-          ],
+          "isrcs": ["USWB11104117"],
           "first-release-date": "1989-08-25"
         },
         {
-          "isrcs": [
-            "GBV951700756",
-            "GBSMU4059862"
-          ],
+          "isrcs": ["GBV951700756", "GBSMU4059862"],
           "first-release-date": "2017-08-16"
         },
         {
-          "isrcs": [
-            "GBCBR1700029"
-          ],
+          "isrcs": ["GBCBR1700029"],
           "first-release-date": "2017-09-15"
         },
         {
-          "isrcs": [
-            "USSM10107865"
-          ],
+          "isrcs": ["USSM10107865"],
           "first-release-date": "2001-10-15"
         },
         {
-          "isrcs": [
-            "GBUM71505902"
-          ],
+          "isrcs": ["GBUM71505902"],
           "first-release-date": "2015-11-06"
         },
         {
-          "isrcs": [
-            "GBBQY0002025"
-          ],
+          "isrcs": ["GBBQY0002025"],
           "first-release-date": "1995"
         },
         {
-          "isrcs": [
-            "USWB19903843"
-          ],
+          "isrcs": ["USWB19903843"],
           "first-release-date": "1990-11-12"
         },
         {
-          "isrcs": [
-            "GBUM71802773"
-          ],
+          "isrcs": ["GBUM71802773"],
           "first-release-date": "2018-11-09"
         },
         {
-          "isrcs": [
-            "GBAYE0601566"
-          ],
+          "isrcs": ["GBAYE0601566"],
           "first-release-date": "2006-11-17"
         },
         {
-          "isrcs": [
-            "USSM18200001",
-            "USSM19902991",
-            "USSM18200612"
-          ],
+          "isrcs": ["USSM18200001", "USSM19902991", "USSM18200612"],
           "first-release-date": "1982-11-30"
         },
         {
-          "isrcs": [
-            "USSM10800117"
-          ],
+          "isrcs": ["USSM10800117"],
           "first-release-date": "2008-02-08"
         },
         {
-          "isrcs": [
-            "GBUM72502649",
-            "GBAYE9600592",
-            "GBAYE1100522"
-          ],
+          "isrcs": ["GBUM72502649", "GBAYE9600592", "GBAYE1100522"],
           "first-release-date": "1996-10-28"
         },
         {
-          "isrcs": [
-            "GBAYE0900596",
-            "GBAYE0000940",
-            "GBAYE6800011"
-          ],
+          "isrcs": ["GBAYE0900596", "GBAYE0000940", "GBAYE6800011"],
           "first-release-date": "1970-02-26"
         },
         {
-          "isrcs": [
-            "USSM10506999",
-            "USSM10800026"
-          ],
+          "isrcs": ["USSM10506999", "USSM10800026"],
           "first-release-date": "1982"
         },
         {
-          "isrcs": [
-            "USGF19942501"
-          ],
+          "isrcs": ["USGF19942501"],
           "first-release-date": "1991-09-10"
         }
       ]
@@ -146,141 +94,91 @@
       "count": 24,
       "recordings": [
         {
-          "isrcs": [
-            "GBUM72004114"
-          ],
+          "isrcs": ["GBUM72004114"],
           "first-release-date": "2020-09-20"
         },
         {
-          "isrcs": [
-            "USUG12001115"
-          ],
+          "isrcs": ["USUG12001115"],
           "first-release-date": "2019-11-29"
         },
         {
-          "isrcs": [
-            "USUG12004507"
-          ],
+          "isrcs": ["USUG12004507"],
           "first-release-date": "2020-12-04"
         },
         {
-          "isrcs": [
-            "GBUM71205813"
-          ],
+          "isrcs": ["GBUM71205813"],
           "first-release-date": "2012-09-20"
         },
         {
-          "isrcs": [
-            "USUM70920999"
-          ],
+          "isrcs": ["USUM70920999"],
           "first-release-date": "2009-12-21"
         },
         {
-          "isrcs": [
-            "USUM70921009"
-          ],
+          "isrcs": ["USUM70921009"],
           "first-release-date": "2009-12-21"
         },
         {
-          "isrcs": [
-            "GBCEE0700025"
-          ],
+          "isrcs": ["GBCEE0700025"],
           "first-release-date": "2007-10-26"
         },
         {
-          "isrcs": [
-            "GBUM71504419"
-          ],
+          "isrcs": ["GBUM71504419"],
           "first-release-date": "2015-11-13"
         },
         {
-          "isrcs": [
-            "GBCEE0300050",
-            "GBCEE9200029"
-          ],
+          "isrcs": ["GBCEE0300050", "GBCEE9200029"],
           "first-release-date": "1992-05-26"
         },
         {
-          "isrcs": [
-            "USUM70920998"
-          ],
+          "isrcs": ["USUM70920998"],
           "first-release-date": "2009-11-19"
         },
         {
-          "isrcs": [
-            "USUM70913713"
-          ],
+          "isrcs": ["USUM70913713"],
           "first-release-date": "2009-12-21"
         },
         {
-          "isrcs": [
-            "GBUM71805979"
-          ],
+          "isrcs": ["GBUM71805979"],
           "first-release-date": "2018-10-19"
         },
         {
-          "isrcs": [
-            "USUM70995906"
-          ],
+          "isrcs": ["USUM70995906"],
           "first-release-date": "2009-10-30"
         },
         {
-          "isrcs": [
-            "GBCEG7900018",
-            "GBCEG0100046"
-          ],
+          "isrcs": ["GBCEG7900018", "GBCEG0100046"],
           "first-release-date": "1979-06-22"
         },
         {
-          "isrcs": [
-            "USUG12301431",
-            "USUG12301675"
-          ],
+          "isrcs": ["USUG12301431", "USUG12301675"],
           "first-release-date": "2023-03-03"
         },
         {
-          "isrcs": [
-            "USHR10421348",
-            "GBCEE0400076"
-          ],
+          "isrcs": ["USHR10421348", "GBCEE0400076"],
           "first-release-date": "2004-10-24"
         },
         {
-          "isrcs": [
-            "USUM71113789"
-          ],
+          "isrcs": ["USUM71113789"],
           "first-release-date": "2011-09-26"
         },
         {
-          "isrcs": [
-            "USUG12104002"
-          ],
+          "isrcs": ["USUG12104002"],
           "first-release-date": "1991-09-24"
         },
         {
-          "isrcs": [
-            "USGF19610505"
-          ],
+          "isrcs": ["USGF19610505"],
           "first-release-date": "1991-09-24"
         },
         {
-          "isrcs": [
-            "USUM70918596",
-            "USUM70904367",
-            "USUM70903859"
-          ],
+          "isrcs": ["USUM70918596", "USUM70904367", "USUM70903859"],
           "first-release-date": "2009-10-26"
         },
         {
-          "isrcs": [
-            "USUM70911081"
-          ],
+          "isrcs": ["USUM70911081"],
           "first-release-date": "2009-11-18"
         },
         {
-          "isrcs": [
-            "USIR10400870"
-          ],
+          "isrcs": ["USIR10400870"],
           "first-release-date": "2004-11-23"
         },
         {
@@ -296,9 +194,7 @@
           "first-release-date": "1975-11-21"
         },
         {
-          "isrcs": [
-            "USUG11904206"
-          ],
+          "isrcs": ["USUG11904206"],
           "first-release-date": "2019-11-29"
         }
       ]
@@ -307,194 +203,123 @@
       "count": 31,
       "recordings": [
         {
-          "isrcs": [
-            "USSM11004441"
-          ],
+          "isrcs": ["USSM11004441"],
           "first-release-date": "2010-11-26"
         },
         {
-          "isrcs": [
-            "GBAYE1800780"
-          ],
+          "isrcs": ["GBAYE1800780"],
           "first-release-date": "2018-12-07"
         },
         {
-          "isrcs": [
-            "SEUM71400841"
-          ],
+          "isrcs": ["SEUM71400841"],
           "first-release-date": "2014-09-26"
         },
         {
-          "isrcs": [
-            "USUG12001402"
-          ],
+          "isrcs": ["USUG12001402"],
           "first-release-date": "2019-11-29"
         },
         {
-          "isrcs": [
-            "GBAYE1202183"
-          ],
+          "isrcs": ["GBAYE1202183"],
           "first-release-date": "2012-11-19"
         },
         {
-          "isrcs": [
-            "USCJY1831958"
-          ],
+          "isrcs": ["USCJY1831958"],
           "first-release-date": "2018-12-13"
         },
         {
-          "isrcs": [
-            "USSM10804556"
-          ],
+          "isrcs": ["USSM10804556"],
           "first-release-date": "2008-11-12"
         },
         {
-          "isrcs": [
-            "GBAYE0301688"
-          ],
+          "isrcs": ["GBAYE0301688"],
           "first-release-date": "2003-11-01"
         },
         {
-          "isrcs": [
-            "USUG12306677"
-          ],
+          "isrcs": ["USUG12306677"],
           "first-release-date": "2023-10-27"
         },
         {
-          "isrcs": [
-            "SEAYD7601020"
-          ],
+          "isrcs": ["SEAYD7601020"],
           "first-release-date": "2023-12-01"
         },
         {
-          "isrcs": [
-            "USWB11001110",
-            "USWB11506532"
-          ],
+          "isrcs": ["USWB11001110", "USWB11506532"],
           "first-release-date": "2011-08-12"
         },
         {
-          "isrcs": [
-            "USWB11001082",
-            "USWB11506528"
-          ],
+          "isrcs": ["USWB11001082", "USWB11506528"],
           "first-release-date": "1999"
         },
         {
-          "isrcs": [
-            "SEA017600030",
-            "SEAYD7601020",
-            "USAT20302166",
-            "SEUV71000390",
-            "USAT20903514"
-          ],
+          "isrcs": ["SEA017600030", "SEAYD7601020", "USAT20302166", "SEUV71000390", "USAT20903514"],
           "first-release-date": "1976-08-15"
         },
         {
-          "isrcs": [
-            "GBAYE9300465"
-          ],
+          "isrcs": ["GBAYE9300465"],
           "first-release-date": "1994-06-01"
         },
         {
-          "isrcs": [
-            "USWB11506531",
-            "USWB10303001"
-          ],
+          "isrcs": ["USWB11506531", "USWB10303001"],
           "first-release-date": "1985"
         },
         {
-          "isrcs": [
-            "DEUM71724939"
-          ],
+          "isrcs": ["DEUM71724939"],
           "first-release-date": "2019-05-17"
         },
         {
-          "isrcs": [
-            "DEUM71723164"
-          ],
+          "isrcs": ["DEUM71723164"],
           "first-release-date": "2017-09-29"
         },
         {
-          "isrcs": [
-            "USWB11802010"
-          ],
+          "isrcs": ["USWB11802010"],
           "first-release-date": "2018-10-18"
         },
         {
-          "isrcs": [
-            "DEUM71721371"
-          ],
+          "isrcs": ["DEUM71721371"],
           "first-release-date": "2019-05-17"
         },
         {
-          "isrcs": [
-            "DEUM71724939"
-          ],
+          "isrcs": ["DEUM71724939"],
           "first-release-date": "2017-12-01"
         },
         {
-          "isrcs": [
-            "DEUM71721371"
-          ],
+          "isrcs": ["DEUM71721371"],
           "first-release-date": "2018-05-18"
         },
         {
-          "isrcs": [
-            "DEUM71721371"
-          ],
+          "isrcs": ["DEUM71721371"],
           "first-release-date": "2017-10-06"
         },
         {
-          "isrcs": [
-            "USRH11600711",
-            "USRH11502698"
-          ],
+          "isrcs": ["USRH11600711", "USRH11502698"],
           "first-release-date": "2015-08-26"
         },
         {
-          "isrcs": [
-            "USCJY1431349"
-          ],
+          "isrcs": ["USCJY1431349"],
           "first-release-date": "2014-08-18"
         },
         {
-          "isrcs": [
-            "GBAYE9200070"
-          ],
+          "isrcs": ["GBAYE9200070"],
           "first-release-date": "1992-09-21"
         },
         {
-          "isrcs": [
-            "GBAYE9200070"
-          ],
+          "isrcs": ["GBAYE9200070"],
           "first-release-date": "2017"
         },
         {
-          "isrcs": [
-            "GBAYE0000267"
-          ],
+          "isrcs": ["GBAYE0000267"],
           "first-release-date": "2017"
         },
         {
-          "isrcs": [
-            "USLIC0600482",
-            "GBAYE1600170",
-            "GBAYE0000267",
-            "USNO11400531"
-          ],
+          "isrcs": ["USLIC0600482", "GBAYE1600170", "GBAYE0000267", "USNO11400531"],
           "first-release-date": "2000-06-26"
         },
         {
-          "isrcs": [
-            "USWB19901214"
-          ],
+          "isrcs": ["USWB19901214"],
           "first-release-date": "2003-02-26"
         },
         {
-          "isrcs": [
-            "USWB19901214"
-          ],
+          "isrcs": ["USWB19901214"],
           "first-release-date": "2020"
         },
         {
@@ -517,131 +342,83 @@
       "count": 21,
       "recordings": [
         {
-          "isrcs": [
-            "USJI10500609"
-          ],
+          "isrcs": ["USJI10500609"],
           "first-release-date": "2005-11-22"
         },
         {
-          "isrcs": [
-            "USRE10400528"
-          ],
+          "isrcs": ["USRE10400528"],
           "first-release-date": "2004-06-08"
         },
         {
-          "isrcs": [
-            "USWB22400031"
-          ],
+          "isrcs": ["USWB22400031"],
           "first-release-date": "2024-09-20"
         },
         {
-          "isrcs": [
-            "USRC12000459"
-          ],
+          "isrcs": ["USRC12000459"],
           "first-release-date": "2020-01-31"
         },
         {
-          "isrcs": [
-            "USRH12000102"
-          ],
+          "isrcs": ["USRH12000102"],
           "first-release-date": "2020-10-16"
         },
         {
-          "isrcs": [
-            "USRH11801916",
-            "USEE19900349"
-          ],
+          "isrcs": ["USRH11801916", "USEE19900349"],
           "first-release-date": "1980-11-07"
         },
         {
-          "isrcs": [
-            "USRH11801904",
-            "USEE19900349"
-          ],
+          "isrcs": ["USRH11801904", "USEE19900349"],
           "first-release-date": "2000-11-14"
         },
         {
-          "isrcs": [
-            "USWB10101072"
-          ],
+          "isrcs": ["USWB10101072"],
           "first-release-date": "1980-12-08"
         },
         {
-          "isrcs": [
-            "USJI10400036"
-          ],
+          "isrcs": ["USJI10400036"],
           "first-release-date": "2004-01-01"
         },
         {
-          "isrcs": [
-            "USRH11800053"
-          ],
+          "isrcs": ["USRH11800053"],
           "first-release-date": "2023-07-20"
         },
         {
-          "isrcs": [
-            "USRH11703166",
-            "USRH11703356"
-          ],
+          "isrcs": ["USRH11703166", "USRH11703356"],
           "first-release-date": "2017-11-24"
         },
         {
-          "isrcs": [
-            "USWB11301123",
-            "USWB10400059"
-          ],
+          "isrcs": ["USWB11301123", "USWB10400059"],
           "first-release-date": "2004-03-22"
         },
         {
-          "isrcs": [
-            "USRE19700406"
-          ],
+          "isrcs": ["USRE19700406"],
           "first-release-date": "1997-08-19"
         },
         {
-          "isrcs": [
-            "USRE11000847"
-          ],
+          "isrcs": ["USRE11000847"],
           "first-release-date": "2013-01-25"
         },
         {
-          "isrcs": [
-            "USWB11203112"
-          ],
+          "isrcs": ["USWB11203112"],
           "first-release-date": "2013-01-25"
         },
         {
-          "isrcs": [
-            "USRH11800053"
-          ],
+          "isrcs": ["USRH11800053"],
           "first-release-date": "2023-09-08"
         },
         {
-          "isrcs": [
-            "USWWW0202466"
-          ],
+          "isrcs": ["USWWW0202466"],
           "first-release-date": "1976-12-08"
         },
         {
-          "isrcs": [
-            "USWWW0202466"
-          ],
+          "isrcs": ["USWWW0202466"],
           "first-release-date": "2020-07-15"
         },
         {
-          "isrcs": [
-            "USEE11300353",
-            "USEE11300195",
-            "USEE19900323"
-          ],
+          "isrcs": ["USEE11300353", "USEE11300195", "USEE19900323"],
           "first-release-date": "1976-12-08"
         },
         {
-          "isrcs": [
-            "USJ110301005",
-            "USJI10301005",
-            "USJI10900633"
-          ],
+          "isrcs": ["USJ110301005", "USJI10301005", "USJI10900633"],
           "first-release-date": "2003-11-13"
         },
         {
@@ -662,129 +439,83 @@
       "count": 20,
       "recordings": [
         {
-          "isrcs": [
-            "USQX91902782"
-          ],
+          "isrcs": ["USQX91902782"],
           "first-release-date": "2019-11-13"
         },
         {
-          "isrcs": [
-            "USQX92505612"
-          ],
+          "isrcs": ["USQX92505612"],
           "first-release-date": "2025-10-22"
         },
         {
-          "isrcs": [
-            "BREMI8900064"
-          ],
+          "isrcs": ["BREMI8900064"],
           "first-release-date": "1989-10-26"
         },
         {
-          "isrcs": [
-            "USSM19916781"
-          ],
+          "isrcs": ["USSM19916781"],
           "first-release-date": "1990-06-19"
         },
         {
-          "isrcs": [
-            "USUM71416305"
-          ],
+          "isrcs": ["USUM71416305"],
           "first-release-date": "2014-11-24"
         },
         {
-          "isrcs": [
-            "USSD11100358"
-          ],
+          "isrcs": ["USSD11100358"],
           "first-release-date": "2011-12-05"
         },
         {
-          "isrcs": [
-            "BRUM71800220"
-          ],
+          "isrcs": ["BRUM71800220"],
           "first-release-date": "2021-03-17"
         },
         {
-          "isrcs": [
-            "BRSME2102549",
-            "USRE10500090"
-          ],
+          "isrcs": ["BRSME2102549", "USRE10500090"],
           "first-release-date": "2004-12-07"
         },
         {
-          "isrcs": [
-            "BRWMB1100599"
-          ],
+          "isrcs": ["BRWMB1100599"],
           "first-release-date": "2012-01-24"
         },
         {
-          "isrcs": [
-            "BRSME8900064"
-          ],
+          "isrcs": ["BRSME8900064"],
           "first-release-date": "1998"
         },
         {
-          "isrcs": [
-            "US83Z2568940"
-          ],
+          "isrcs": ["US83Z2568940"],
           "first-release-date": "2026-05-23"
         },
         {
-          "isrcs": [
-            "BRSME8900064"
-          ],
+          "isrcs": ["BRSME8900064"],
           "first-release-date": "1989"
         },
         {
-          "isrcs": [
-            "BRPGD9800678"
-          ],
+          "isrcs": ["BRPGD9800678"],
           "first-release-date": "1998"
         },
         {
-          "isrcs": [
-            "BRPAD7200003",
-            "BRMCA7200186"
-          ],
+          "isrcs": ["BRPAD7200003", "BRMCA7200186"],
           "first-release-date": "1972"
         },
         {
-          "isrcs": [
-            "BRPGD7100036"
-          ],
+          "isrcs": ["BRPGD7100036"],
           "first-release-date": "1984"
         },
         {
-          "isrcs": [
-            "BRUM70801491",
-            "BRPGD7100036"
-          ],
+          "isrcs": ["BRUM70801491", "BRPGD7100036"],
           "first-release-date": "1971"
         },
         {
-          "isrcs": [
-            "BRPGD9800678"
-          ],
+          "isrcs": ["BRPGD9800678"],
           "first-release-date": "2006-05-22"
         },
         {
-          "isrcs": [
-            "USIR10211559"
-          ],
+          "isrcs": ["USIR10211559"],
           "first-release-date": "2002-10-22"
         },
         {
-          "isrcs": [
-            "BRJ9B0500021",
-            "USPR39400714",
-            "USPR37400056",
-            "BRPGD7400001"
-          ],
+          "isrcs": ["BRJ9B0500021", "USPR39400714", "USPR37400056", "BRPGD7400001"],
           "first-release-date": "1974"
         },
         {
-          "isrcs": [
-            "USSM10600677"
-          ],
+          "isrcs": ["USSM10600677"],
           "first-release-date": "2005-11-28"
         }
       ]
@@ -793,51 +524,35 @@
       "count": 8,
       "recordings": [
         {
-          "isrcs": [
-            "BRWMB9705419"
-          ],
+          "isrcs": ["BRWMB9705419"],
           "first-release-date": "2006"
         },
         {
-          "isrcs": [
-            "BRWMB2000923"
-          ],
+          "isrcs": ["BRWMB2000923"],
           "first-release-date": "1986"
         },
         {
-          "isrcs": [
-            "BRRGE1912249"
-          ],
+          "isrcs": ["BRRGE1912249"],
           "first-release-date": "2019-12-18"
         },
         {
-          "isrcs": [
-            "BRDEP2200081"
-          ],
+          "isrcs": ["BRDEP2200081"],
           "first-release-date": "2022-04-08"
         },
         {
-          "isrcs": [
-            "BRDEP2300056"
-          ],
+          "isrcs": ["BRDEP2300056"],
           "first-release-date": "2023-06-02"
         },
         {
-          "isrcs": [
-            "BRUM71601506"
-          ],
+          "isrcs": ["BRUM71601506"],
           "first-release-date": "2016-11-11"
         },
         {
-          "isrcs": [
-            "BREMI8600025"
-          ],
+          "isrcs": ["BREMI8600025"],
           "first-release-date": "1986"
         },
         {
-          "isrcs": [
-            "BREMI8600025"
-          ],
+          "isrcs": ["BREMI8600025"],
           "first-release-date": "1986-07"
         }
       ]
@@ -846,27 +561,19 @@
       "count": 4,
       "recordings": [
         {
-          "isrcs": [
-            "BRMCA6300083"
-          ],
+          "isrcs": ["BRMCA6300083"],
           "first-release-date": "1963"
         },
         {
-          "isrcs": [
-            "BRBMG4700002"
-          ],
+          "isrcs": ["BRBMG4700002"],
           "first-release-date": "2010"
         },
         {
-          "isrcs": [
-            "BX8IM1900002"
-          ],
+          "isrcs": ["BX8IM1900002"],
           "first-release-date": "2019-05-31"
         },
         {
-          "isrcs": [
-            "BRWMB0000913"
-          ],
+          "isrcs": ["BRWMB0000913"],
           "first-release-date": "1977"
         }
       ]
@@ -875,27 +582,19 @@
       "count": 4,
       "recordings": [
         {
-          "isrcs": [
-            "BRBMG9402164"
-          ],
+          "isrcs": ["BRBMG9402164"],
           "first-release-date": "1994"
         },
         {
-          "isrcs": [
-            "BRWNV2200185"
-          ],
+          "isrcs": ["BRWNV2200185"],
           "first-release-date": "2022-12-09"
         },
         {
-          "isrcs": [
-            "USWL12200105"
-          ],
+          "isrcs": ["USWL12200105"],
           "first-release-date": "2022-02-17"
         },
         {
-          "isrcs": [
-            "USWL12100576"
-          ],
+          "isrcs": ["USWL12100576"],
           "first-release-date": "2021-11-11"
         }
       ]
