@@ -1,0 +1,6 @@
+#!/usr/bin/env bash
+# Enable once per clone: git config core.hooksPath .githooks
+# A worktree that hasn't installed dependencies yet has nothing to run the checks with.
+root="$(git rev-parse --show-toplevel)"
+[ -d "$root/node_modules" ] || exit 0
+exec "$root/scripts/check-guards.sh"

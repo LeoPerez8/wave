@@ -46,6 +46,15 @@ Pick tickets whose blockers are closed.
 - The app uses Effect for services, uniwind classes for styling (colour tokens in
   `apps/mobile/global.css`), and `useThemeColor` for native props that can't take a class.
 
+## Agent runs
+
+- `scripts/check-guards.sh` runs the fast repo-wide checks; tests near a change miss what they catch.
+  Enable its pre-commit hook once per clone with `git config core.hooksPath .githooks`.
+- `scripts/merge-ticket.sh` merges a ticket into an integration branch; an agent only resolves its
+  conflicts. Keep the integration branch out of every checkout so worktrees can use it.
+- `docs/agents/emulator-checks.md` is how to check a ticket without a phone.
+- `scripts/clean-worktrees.sh` removes merged, idle worktrees when the disk runs low.
+
 ## Skills
 
 The `mattpocock-skills` and `impeccable` plugins are enabled in `.claude/settings.json`.
