@@ -6,6 +6,7 @@ import {
   YT_PLAYLIST_DOWNLOAD_ACTION_LABELS,
   ytPlaylistDownload,
   ytPlaylistDownloadButton,
+  ytPlaylistMenuDownloads,
   ytSongsDownload,
   ytDownloadButtonLabels,
 } from "./index.ts";
@@ -244,6 +245,40 @@ describe("downloading a playlist's YT Music entries", () => {
         }),
       ),
       { action: "downloaded", label: "Downloaded" },
+    );
+  });
+
+  test("a playlist's menu offers what its button did: its entries, then Downloaded", () => {
+    const playlist = [file("/Music/x.mp3"), stream("a"), stream("b")];
+    const menu = (jobs: YtDownloadJournalJob[], inLibrary = nothingInLibrary, libraryRead = true) =>
+      ytPlaylistMenuDownloads(ytPlaylistDownload(playlist, { inLibrary, jobs }), libraryRead);
+    assert.deepEqual(menu([]), ["downloadPlaylist"]);
+    assert.deepEqual(menu([job("a"), job("b")]), ["cancelPlaylistDownload"]);
+    assert.deepEqual(
+      menu([job("a", { phase: "failed", reason: "account" }), job("b", { phase: "failed" })]),
+      ["retryFailed"],
+    );
+    assert.deepEqual(
+      menu([], () => true),
+      ["downloaded"],
+    );
+    // Before the Library's first read every song counts as in it: no Downloaded yet.
+    assert.deepEqual(
+      menu([], () => true, false),
+      [],
+    );
+  });
+
+  test("a playlist with nothing to download offers no download entry in its menu", () => {
+    assert.deepEqual(
+      ytPlaylistMenuDownloads(
+        ytPlaylistDownload([file("/Music/x.mp3"), file("/Music/a.mp3")], {
+          inLibrary: nothingInLibrary,
+          jobs: [],
+        }),
+        true,
+      ),
+      [],
     );
   });
 

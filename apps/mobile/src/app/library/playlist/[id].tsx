@@ -32,7 +32,7 @@ import { appRuntime } from "@/library/runtime";
 import { songCount } from "@/library/TrackList";
 import { UnavailableTryAgain } from "@/library/UnavailableEntry";
 import { YtLibraryReadLine } from "@/library/YtLibraryReadLine";
-import { listDownloadAction, useYtPlaylistDownloadButton } from "@/ytmusic/YtSongList";
+import { useYtPlaylistDownloadButton } from "@/ytmusic/YtSongList";
 
 const NO_ENTRIES: readonly PlaylistEntryRow[] = [];
 
@@ -70,7 +70,8 @@ function PlaylistHead({ shown }: { shown: Shown }) {
         );
     });
   };
-  // Its YT Music entries download into the Library (Core's `ytPlaylistDownload`).
+  // Its YT Music entries download into the Library (Core's `ytPlaylistDownload`), from the
+  // three-dots menu; the page shows the progress line.
   const origin = useMemo(
     () => playlistDownloadOrigin({ id: playlist.id, name: playlist.name }),
     [playlist.id, playlist.name],
@@ -132,7 +133,6 @@ function PlaylistHead({ shown }: { shown: Shown }) {
         <PlayShuffle
           onPlay={() => play(false)}
           onShuffle={() => play(true)}
-          last={listDownloadAction(download.button)}
           menu={
             <View className="flex-row">
               <PlaylistSongSortButton id={sortId} />

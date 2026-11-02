@@ -29,7 +29,7 @@ export const downloadsEn = {
     retryFailed: "Retry Failed",
     cancel: "Cancel",
   },
-  /** The page's button once every song of the list is downloaded, and its toast. */
+  /** The page's button once every song of the list is downloaded, a playlist's menu entry then, and its toast. */
   downloaded: "Downloaded",
   /** The page head's progress line. */
   progress: (saved: number, total: number): string => `Downloading · ${saved} of ${total}`,

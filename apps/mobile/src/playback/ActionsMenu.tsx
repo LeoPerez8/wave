@@ -8,6 +8,7 @@ import {
   type UnsearchedSong,
   isUnsearchedTrackId,
   playlistDownloadOrigin,
+  ytPlaylistMenuDownloads,
 } from "@wave/core";
 import type { ReactNode } from "react";
 import { Text, View } from "react-native";
@@ -32,7 +33,8 @@ import { CardHeading } from "@/overlay/CardHeading";
 import { MenuChoices, type MenuChoice, type PlayCardChoice } from "@/overlay/MenuChoices";
 import { followUp, openOverlay } from "@/overlay/overlay";
 import { openYtSongActions } from "@/ytmusic/YtSongActions";
-import { useLoadedInLibrary } from "@/ytmusic/libraryFinder";
+import { showToast } from "@/overlay/toast";
+import { useLoadedInLibrary, useLoadedLibraryFinder } from "@/ytmusic/libraryFinder";
 import { runYtPlaylistDownloadAction, useYtPlaylistDownload } from "@/ytmusic/YtDownloads";
 
 import { targetHeading, type ActionItems, type Heading, type PlaylistPlace } from "./actionTargets";
@@ -233,10 +235,11 @@ function SectionActionsMenu({ target, close }: { target: ActionItems; close: () 
 }
 
 /**
- * A playlist's download entries (Core's `ytPlaylistDownload`): Download
+ * A playlist's download entries (Core's `ytPlaylistMenuDownloads`): Download
  * Playlist, or Cancel Playlist Download while its songs are on their way,
- * then Retry Failed; none without YT Music or unsearched entries. The songs
- * they queue remember [origin], the playlist.
+ * then Retry Failed, else Downloaded (a tap only says so); none without YT
+ * Music or unsearched entries. The songs they queue remember [origin], the
+ * playlist.
  */
 function usePlaylistDownloadEntries(
   entries: readonly PlaylistEntryRow[],
@@ -245,16 +248,28 @@ function usePlaylistDownloadEntries(
 ): MenuChoice[] {
   const { strings } = useLocalisation();
   const inLibrary = useLoadedInLibrary();
+  const libraryRead = useLoadedLibraryFinder() !== null;
   const download = useYtPlaylistDownload(entries, inLibrary);
-  return download.actions.map((action) => ({
-    action,
-    label: strings.downloads.playlistActions[action],
-    onPress: () => {
-      close();
-      runYtPlaylistDownloadAction(action, entries, inLibrary, origin);
-    },
-    destructive: false,
-  }));
+  return ytPlaylistMenuDownloads(download, libraryRead).map((action) =>
+    action === "downloaded"
+      ? {
+          action,
+          label: strings.downloads.downloaded,
+          onPress: () => {
+            close();
+            void showToast(strings.downloads.downloaded);
+          },
+        }
+      : {
+          action,
+          label: strings.downloads.playlistActions[action],
+          onPress: () => {
+            close();
+            runYtPlaylistDownloadAction(action, entries, inLibrary, origin);
+          },
+          destructive: false,
+        },
+  );
 }
 
 /**
