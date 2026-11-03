@@ -26,6 +26,8 @@ export interface ReleaseDateSong extends ReleaseKeySong {
   readonly year: number | null;
   readonly discNumber: number | null;
   readonly trackNumber: number | null;
+  /** Its length, which a recording the lookup finds by title must be near; null when unknown. */
+  readonly durationMs: number | null;
 }
 
 /** A Library song as release dates take it. */
@@ -38,6 +40,7 @@ export const libraryReleaseSong = (song: SongRow): ReleaseDateSong => ({
   year: song.year,
   discNumber: song.discNumber,
   trackNumber: song.trackNumber,
+  durationMs: song.durationMs || null,
 });
 
 /**
@@ -50,6 +53,7 @@ export const streamedReleaseSong = (
     readonly title: string;
     readonly artists: readonly string[];
     readonly album?: string | null;
+    readonly durationMs?: number | null;
   },
   track: SongRow | null = null,
 ): ReleaseDateSong => ({
@@ -61,6 +65,7 @@ export const streamedReleaseSong = (
   year: track?.year ?? null,
   discNumber: track?.discNumber ?? null,
   trackNumber: track?.trackNumber ?? null,
+  durationMs: song.durationMs || track?.durationMs || null,
 });
 
 /** A playlist entry's song as release dates and the playlist's sorts take it. */

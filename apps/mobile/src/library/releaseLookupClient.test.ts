@@ -105,3 +105,28 @@ test("Deezer's not-found answers hold no data; its quota and busy errors are ref
   });
   for (code of [4, 700]) await assert.rejects(client.album(1), /refused/);
 });
+
+test("a search by title and artist asks MusicBrainz for its recordings, on its own pace", async () => {
+  let now = 0;
+  const calls: { url: string; at: number }[] = [];
+  const client = releaseLookupClient(
+    async (url) => {
+      calls.push({ url, at: now });
+      return { status: 200, json: async () => ({ count: 0, recordings: [] }) };
+    },
+    async (ms) => {
+      now += ms;
+    },
+    () => now,
+  );
+  await client.recordings(["USABC0000001"]);
+  assert.deepEqual(await client.titled("Dinner & Diatribes", "Hozier"), {
+    count: 0,
+    recordings: [],
+  });
+  const url = new URL(calls[1]!.url);
+  assert.equal(url.pathname, "/ws/2/recording/");
+  assert.equal(url.searchParams.get("query"), 'recording:"Dinner & Diatribes" AND artist:"Hozier"');
+  assert.equal(url.searchParams.get("fmt"), "json");
+  assert.ok(calls[1]!.at - calls[0]!.at >= 1000);
+});
