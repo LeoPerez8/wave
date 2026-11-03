@@ -71,6 +71,7 @@ export class YtMusic extends Context.Service<
   YtMusic,
   {
     /** Songs on YT Music for [query]. */
+    readonly searchVideos: (query: string) => Effect.Effect<NativeYtSearchPage, YtMusicError>;
     readonly searchSongs: (query: string) => Effect.Effect<NativeYtSearchPage, YtMusicError>;
     /** Artists on YT Music named like [query]. */
     readonly searchArtists: (
@@ -165,6 +166,8 @@ const metered = <A>(
 // Reading, checking or forgetting the session doesn't fail (no answer leaves it
 // as it was), so a rejection there is a defect.
 export const layer = Layer.succeed(YtMusic, {
+  searchVideos: (query) =>
+    Effect.tryPromise({ try: () => WaveYtMusic.searchVideos(query), catch: fromNative }),
   searchSongs: (query) =>
     Effect.tryPromise({ try: () => WaveYtMusic.searchSongs(query), catch: fromNative }),
   searchArtists: (query) => metered((meter) => WaveYtMusic.searchArtists(query, meter)),

@@ -321,14 +321,27 @@ test("playlist dismissals upgrade, persist across database restart, and stay wit
   const seed = addTrack(db, { title: "Green Light", artist: "Lorde", genre: "Pop" });
   const favorite = addTrack(db, { title: "Style", artist: "Taylor Swift", genre: "Pop" });
   setFavorites(db, [favorite], true, 1);
-  const first = createPlaylist(
-    db,
-    "Alternative pop",
-    [{ source: "library", trackId: seed }],
-    1,
-  ).playlistId;
-  const other = createPlaylist(db, "Other", [{ source: "library", trackId: seed }], 1).playlistId;
+  // Seed what 0035 could write; today's writer also names Graveyard's removed_at.
+  const first = 1;
+  const other = 2;
+  for (const [id, name] of [
+    [first, "Alternative pop"],
+    [other, "Other"],
+  ] as const) {
+    db.run(sql`INSERT INTO playlists
+      (id, sync_id, name, created_at, updated_at, changed_at, phone_id)
+      VALUES (${id}, ${String(id)}, ${name}, 1, 1, 1, 'old-phone')`);
+    db.run(sql`INSERT INTO playlist_items
+      (sync_id, playlist_id, track_id, order_key, added_at, changed_at, phone_id)
+      VALUES (${String(id)}, ${id}, ${seed}, 'a0', 1, 1, 'old-phone')`);
+  }
   await migrateTestDatabase(db);
+  assert.deepEqual(
+    selectPlaylistEntries(db, first).map((entry) =>
+      entry.source === "library" ? entry.track.id : null,
+    ),
+    [seed],
+  );
   const input = selectPlaylistRecommendationInput(db, first);
   const song = input.library.find((t) => t.id === String(favorite))!;
   const offer = { key: "dismiss-1", track: song };

@@ -911,6 +911,7 @@ export {
   YT_SEARCH_DEBOUNCE_MS,
   YT_SECTION_HIDDEN,
   stepYtSection,
+  ytSearchAsksVideos,
   ytSearchQuery,
   ytSectionToggle,
   ytSectionView,
@@ -1333,7 +1334,7 @@ export type {
   PlaylistLinkProblem,
   SharedTextImport,
 } from "./playlistLinks.ts";
-export { spotifySearchQuery, spotifyYtMatch } from "./spotifyImport.ts";
+export { spotifySearchQuery, spotifyYtMatch, searchRecording } from "./spotifyImport.ts";
 export { settleUnsearched, unsearchedSearchQuery, unsearchedSettles } from "./unsearchedEntries.ts";
 export {
   PLAYING_SEARCHES,
@@ -1450,6 +1451,8 @@ export type {
 } from "./spotifyLibrary.ts";
 export { compareOrderKeys, orderKeyBetween, placeEntries } from "./orderKey.ts";
 export type { EntryPlacement, OrderedEntry } from "./orderKey.ts";
+export { graveyardRemovalsOf, graveyardRestoreIndex, graveyardSongs } from "./playlistGraveyard.ts";
+export type { GraveyardItem, GraveyardSlot } from "./playlistGraveyard.ts";
 export {
   RECORDING_LENGTH_TOLERANCE_MS,
   fillMissingSongs,
@@ -2339,6 +2342,7 @@ export { rankedDiscoverMixRead } from "./radioMixes.ts";
 export { RADIO_CACHE_FRESH_MS, radioCacheFresh } from "./radioCache.ts";
 export {
   listeningHistoryDays,
+  findListeningHistory,
   type ListeningHistoryDay,
   type PlaySnapshot,
 } from "./listeningHistory.ts";
@@ -2527,6 +2531,7 @@ export type { ReleaseDate } from "./releaseDate.ts";
 export {
   RELEASE_BATCH_CODES,
   RELEASE_CODES_PER_SONG,
+  RELEASE_LOOKUP_VERSION,
   deezerAlbumDate,
   deezerRefused,
   lookUpReleaseDates,
@@ -2539,7 +2544,10 @@ export {
   releaseDue,
   releaseNextDue,
   releaseRequestDelay,
+  releaseSortChosen,
   releaseTagDate,
+  releaseTitleDate,
+  releaseTitleQuery,
 } from "./releaseLookup.ts";
 export type {
   ReleaseAnswer,

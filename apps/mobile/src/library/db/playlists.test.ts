@@ -4,6 +4,7 @@ import { beforeEach, describe, test } from "node:test";
 
 import {
   normalizeTrack,
+  writePlaylistEntrySong,
   orderKeyBetween,
   tryAgainSearches,
   type PlayContext,
@@ -32,6 +33,7 @@ import {
   selectPlaylist,
   selectPlaylistCovers,
   selectPlaylistEntries,
+  selectPlaylistGraveyard,
   selectPlaylistEntriesRevision,
   selectPlaylists,
   selectPlaylistsLastPlayed,
@@ -1131,12 +1133,13 @@ describe("migration 0025", () => {
     old.run(sql`INSERT INTO playlists (sync_id, name, created_at, updated_at, changed_at, phone_id)
       VALUES ('imported', 'Imported', 0, 0, 0, (SELECT phone_id FROM phone))`);
     const id = old.select({ id: schema.playlists.id }).from(schema.playlists).get()?.id ?? -1;
-    appendPlaylistSongs(
-      old,
-      id,
-      [unsearched, { ...unsearched, song: { ...lucky, album: "Live" } }],
-      0,
-    );
+    for (const [at, song] of [
+      unsearched,
+      { ...unsearched, song: { ...lucky, album: "Live" } },
+    ].entries()) {
+      old.run(sql`INSERT INTO playlist_items (sync_id, playlist_id, yt_song, order_key, added_at, changed_at, phone_id)
+        VALUES (${`old-${at}`}, ${id}, ${writePlaylistEntrySong(song)}, ${at === 0 ? "a0" : "a1"}, 0, 0, (SELECT phone_id FROM phone))`);
+    }
 
     await migrateTestDatabase(old);
 
@@ -1279,4 +1282,44 @@ test("Undo persists streamed and unsearched entries with their original entry id
   assert.equal(selectPlaylist(db, playlistId)?.items.length, 4);
   restorePlaylistItems(db, removal, 1001);
   assert.deepEqual(selectPlaylist(db, playlistId)?.items.slice(-2), original);
+});
+
+test("Graveyard keeps the latest manual removal per absent song, and undo clears it", () => {
+  replacePlaylistSongs(
+    db,
+    playlistId,
+    [library("Airbag"), stream(yt("x")), unavailable("Lost")],
+    100,
+  );
+  assert.deepEqual(selectPlaylistGraveyard(db, playlistId), []);
+  const [airbag, online, lost] = selectPlaylistEntries(db, playlistId);
+  const removal = removePlaylistItems(db, playlistId, [airbag!.itemId], 200);
+  removePlaylistItems(db, playlistId, [online!.itemId, lost!.itemId], 300);
+  assert.deepEqual(
+    selectPlaylistGraveyard(db, playlistId).map((e) => [e.source, e.removedAt]),
+    [
+      ["stream", 300],
+      ["unavailable", 300],
+      ["library", 200],
+    ],
+  );
+  restorePlaylistItems(db, removal, 400);
+  assert.equal(selectPlaylistGraveyard(db, playlistId).length, 2);
+  appendPlaylistSongs(db, playlistId, [stream(yt("x"))], 500);
+  assert.equal(selectPlaylistGraveyard(db, playlistId).length, 1);
+  const added = selectPlaylistEntries(db, playlistId).find((e) => e.source === "stream")!;
+  removePlaylistItems(db, playlistId, [added.itemId], 600);
+  assert.deepEqual(
+    selectPlaylistGraveyard(db, playlistId).map((e) => e.removedAt),
+    [600, 300],
+  );
+});
+
+test("a removed YT Music song leaves the Graveyard when its Library recording is added", () => {
+  replacePlaylistSongs(db, playlistId, [stream(yt("airbag", { title: "Airbag" }))], 100);
+  const item = selectPlaylistEntries(db, playlistId)[0]!;
+  removePlaylistItems(db, playlistId, [item.itemId], 200);
+  assert.equal(selectPlaylistGraveyard(db, playlistId).length, 1);
+  appendPlaylistSongs(db, playlistId, [library("Airbag")], 300);
+  assert.deepEqual(selectPlaylistGraveyard(db, playlistId), []);
 });

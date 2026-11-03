@@ -298,12 +298,16 @@ test("real-store opening keeps local order offline, then saves one fake-YT answe
           Effect.runPromise(
             artistOpeningRequest(
               canSend,
-              fetchArtistAnswer(name, saved, {
-                search: fakeYT.search,
-                page: fakeYT.page,
-                saved: store.ytArtist(key).pipe(Effect.orElseSucceed(() => null)),
-                save: (answer) => store.saveYtArtist(key, answer).pipe(Effect.ignore),
-              }),
+              fetchArtistAnswer<import("../native/waveYtMusic.ts").NativeYtSong, never, never>(
+                name,
+                saved,
+                {
+                  search: fakeYT.search,
+                  page: fakeYT.page,
+                  saved: store.ytArtist(key).pipe(Effect.orElseSucceed(() => null)),
+                  save: (answer) => store.saveYtArtist(key, answer).pipe(Effect.ignore),
+                },
+              ),
             ),
             { signal },
           ),

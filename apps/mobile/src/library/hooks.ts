@@ -448,3 +448,17 @@ export const useStatsFacts = (): StatsFacts | undefined => {
     [counts, sums, language],
   );
 };
+
+export const usePlaylistGraveyard = (id: number) => {
+  const query = useMemo(
+    () =>
+      libraryQuery(
+        `playlist-graveyard:${id}`,
+        { playlists: [id], tracks: true },
+        // oxlint-disable-next-line react/rules-of-hooks -- Effect Service.use resolves a service; it is not a React Hook.
+        LibraryStore.use((store) => store.playlistGraveyard(id)),
+      ),
+    [id],
+  );
+  return useLibraryQuery(query, undefined);
+};

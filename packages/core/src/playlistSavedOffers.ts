@@ -230,6 +230,7 @@ const TRACK_FIELDS: { readonly [Field in keyof YtAlbumSong]-?: Check } & {
   id: isString,
   source: (value) => value === "library" || value === "stream",
   videoId: isString,
+  videoType: (value) => value === undefined || value === null || isString(value),
   title: isString,
   artists: (value) => Array.isArray(value) && value.every(isString),
   album: orNull(isString),

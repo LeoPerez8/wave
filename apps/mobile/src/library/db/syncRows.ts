@@ -287,6 +287,7 @@ export const selectUnpushed = (
       orderKey: playlistItems.orderKey,
       songId: tracks.recordingKey,
       ytSong: playlistItems.ytSong,
+      removedAt: playlistItems.removedAt,
       addedAt: playlistItems.addedAt,
       changedAt: playlistItems.changedAt,
       phoneId: playlistItems.phoneId,
@@ -311,18 +312,19 @@ export const selectUnpushed = (
         id: row.id,
         changedAt: row.changedAt,
       });
-      return row.deleted
+      const fields = {
+        id: row.syncId,
+        ...stamp(row),
+        playlistId: row.playlistId,
+        orderKey: row.orderKey,
+        songId: row.songId,
+        ytSong: row.songId === null ? row.ytSong : null,
+        addedAt: row.addedAt,
+      };
+      if (!row.deleted) return { ...fields, deleted: false, removedAt: null };
+      return row.removedAt === null
         ? { id: row.syncId, ...stamp(row), deleted: true }
-        : {
-            id: row.syncId,
-            ...stamp(row),
-            deleted: false,
-            playlistId: row.playlistId,
-            orderKey: row.orderKey,
-            songId: row.songId,
-            ytSong: row.songId === null ? row.ytSong : null,
-            addedAt: row.addedAt,
-          };
+        : { ...fields, deleted: true, removedAt: row.removedAt };
     });
 
   const stars = db
@@ -919,14 +921,15 @@ const applyEntry = (
   if (!beatsPending(tx, "playlistEntries", row)) return false;
   const held = tx.select().from(playlistItems).where(eq(playlistItems.syncId, row.id)).get();
   if (held !== undefined && !wins(row, held)) return false;
-  if (row.deleted) {
+  if (row.deleted && !("removedAt" in row && typeof row.removedAt === "number")) {
     if (held === undefined) return false;
     tx.update(playlistItems)
-      .set({ ...stamp(row), pushed: true })
+      .set({ ...stamp(row), removedAt: null, pushed: true })
       .where(eq(playlistItems.id, held.id))
       .run();
     return true;
   }
+  if (!("playlistId" in row)) return false;
   const playlist = tx
     .select({ id: playlists.id })
     .from(playlists)
@@ -944,6 +947,7 @@ const applyEntry = (
     playlistId: playlist.id,
     trackId,
     ytSong: trackId === null ? row.ytSong : null,
+    removedAt: row.removedAt ?? null,
     orderKey: row.orderKey,
     addedAt: row.addedAt,
     ...stamp(row),

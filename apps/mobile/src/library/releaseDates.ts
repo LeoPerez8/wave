@@ -3,6 +3,7 @@ import {
   releaseBackgroundAllowed,
   releaseAnswerKey,
   releaseNextDue,
+  releaseSortChosen,
   releaseTagDate,
   type ReleaseAnswer,
   type ReleaseLookupSong,
@@ -115,6 +116,8 @@ type LookupInput = {
   stream?: boolean;
 };
 type LookupJob = {
+  /** The sorted playlist's id; null for the general lookup. */
+  playlistId: number | null;
   selected: () => boolean;
   input: () => Promise<LookupInput[]>;
   progress: (progress: ReleaseProgress | null) => void;
@@ -131,6 +134,10 @@ const readPlaylists = async () => cachedPlaylists ?? (cachedPlaylists = await re
 let generalInput: LookupInput[] | null = null;
 let inputVersion = 0;
 let sortedIds = new Set<number>();
+/** The playlists on Release date as sort changes last saw them; null until the first look. */
+let chosenSorts: Set<number> | null = null;
+/** Playlists put on Release date since, whose undated songs are asked about again once. */
+const sortChosen = new Set<number>();
 const playlistInputs = new Map<number, LookupInput[]>();
 const playlistInput = async (id: number): Promise<LookupInput[]> => {
   const cached = playlistInputs.get(id);
@@ -174,6 +181,7 @@ const run = async (): Promise<void> => {
       if (!selected()) continue;
       sortedIds.add(playlist.id);
       jobs.push({
+        playlistId: playlist.id,
         selected,
         input: () => playlistInput(playlist.id),
         progress: (progress) => {
@@ -184,8 +192,11 @@ const run = async (): Promise<void> => {
         },
       });
     }
+    // A playlist already on Release date at launch waits for its retries.
+    chosenSorts ??= new Set(sortedIds);
     if (backgroundAllowed())
       jobs.push({
+        playlistId: null,
         selected: () => backgroundAllowed() && !playlistRequested,
         input: async () => {
           if (generalInput !== null) return generalInput;
@@ -219,14 +230,21 @@ const run = async (): Promise<void> => {
         tracksByReleaseKey.set(key, matchingTracks);
       }
       const songs: ReleaseLookupSong[] = [];
+      const chosen = job.playlistId !== null && sortChosen.delete(job.playlistId);
       for (const { song } of input) {
         const key = releaseAnswerKey(song);
-        const answer = releaseAnswers.get()[key] ?? null;
+        let answer = releaseAnswers.get()[key] ?? null;
         const held = heldReleaseDate(song);
         // A song answered before it was in the Library (or before its file came) takes its date now.
         if (answer !== null && held === null)
           for (const track of tracksByReleaseKey.get(key) ?? [])
             await keepReleaseDate(track, answer);
+        // Kept, so a failed run's retry or a restart still asks about it.
+        const asked = chosen && held === null ? releaseSortChosen(answer, Date.now()) : null;
+        if (asked !== null) {
+          releaseAnswers.put(key, asked);
+          answer = asked;
+        }
         songs.push({ ...song, key, held, answer });
       }
       const at = releaseNextDue(songs, Date.now());
@@ -330,6 +348,11 @@ export const startReleaseDates = (): void => {
     );
     if ([...selected].some((id) => !sortedIds.has(id))) playlistRequested = true;
     sortedIds = selected;
+    // Without the playlists read, a choice can't be told from a sort kept since launch.
+    if (cachedPlaylists === null) return;
+    if (chosenSorts !== null)
+      for (const id of selected) if (!chosenSorts.has(id)) sortChosen.add(id);
+    chosenSorts = selected;
   };
   onPlaylistSongSortChanged(() => {
     rememberSorts();
