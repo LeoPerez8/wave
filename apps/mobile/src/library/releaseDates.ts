@@ -9,9 +9,9 @@ import {
   type ReleaseProgress,
 } from "@wave/core";
 
-import { onMobileData } from "@/native/waveNative";
+import { onMobileData, subscribeConnectivity } from "@/native/waveNative";
 import { searchOnline } from "@/settings/searchOnline";
-import { ytMusicEnabled } from "@/settings/ytMusic";
+import { subscribeYtMusicEnabled, ytMusicEnabled } from "@/settings/ytMusic";
 
 import { persistedSetting } from "@/lib/persistedSetting";
 import { currentLocalisation } from "@/localisation/localisation";
@@ -23,6 +23,7 @@ import { onPlaylistSongSortChanged, playlistSongSetting } from "./playlistSongSe
 import { onPlaylistsEdited } from "./playlists";
 import { releaseAnswers } from "./releaseAnswers";
 import { writeReleaseDateTag } from "./releaseDateTag";
+import { followReleaseEligibility } from "./releaseEligibility";
 import { releaseLookupClient } from "./releaseLookupClient";
 import { entryReleaseSong, libraryReleaseSong, heldReleaseDate } from "./releaseSong";
 import { appRuntime } from "./runtime";
@@ -251,9 +252,11 @@ export const startReleaseDates = (): void => {
   };
   onPlaylistSongSortChanged(playlistChanged);
   onPlaylistsEdited(playlistChanged);
-  searchOnline.subscribe(() => {
-    if (backgroundAllowed()) void run().catch(() => {});
-  });
+  followReleaseEligibility(backgroundAllowed, () => void run().catch(() => {}), [
+    searchOnline.subscribe,
+    subscribeConnectivity,
+    subscribeYtMusicEnabled,
+  ]);
   onTypedReleaseDatesChanged(runSoon);
   onLibraryChange((change) => {
     if (change.kind === "playlists") playlistChanged();
