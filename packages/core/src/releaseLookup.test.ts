@@ -54,6 +54,26 @@ describe("Deezer's matching recordings", () => {
     );
   });
 
+  test("match any artist in a song's credit against Deezer's main artist", () => {
+    const response = {
+      data: [{ title: "Song", artist: { name: "Hozier" }, isrc: "IEABC1900001" }],
+    };
+    for (const artist of [
+      "Hozier, Mavis Staples",
+      "Hozier & Mavis Staples",
+      "Hozier; X",
+      "Hozier / X",
+      "X x Hozier",
+      ["Mavis Staples", "Hozier"].join(", "),
+      " X ;  HÓZIER  ",
+    ])
+      assert.deepEqual(
+        releaseCandidates({ title: "Song", artist }, response),
+        [{ isrc: "IEABC1900001", albumId: null }],
+        artist,
+      );
+  });
+
   test("ask about six ISRCs at most, each once", () => {
     // Ten matches, the second a copy of the first's recording.
     const data = Array.from({ length: 10 }, (_, index) => ({
@@ -91,6 +111,45 @@ describe("Deezer's matching recordings", () => {
     }
     assert.equal(withCandidates, 36);
     assert.equal(withDates, 34);
+  });
+});
+
+describe("release date artist matching", () => {
+  test("preserves whole names and rejects partial artists and different titles", () => {
+    const cases = [
+      { artist: "Charli xcx", source: "Charli xcx", title: "Song", matches: true },
+      { artist: "Charli xcx", source: "Charli", title: "Song", matches: false },
+      { artist: "Charli xcx", source: "cx", title: "Song", matches: false },
+      { artist: "AC/DC", source: "AC/DC", title: "Song", matches: true },
+      { artist: "Hozier, Mavis Staples", source: "Other", title: "Song", matches: false },
+      { artist: "Hozier, Mavis Staples", source: "Hoz", title: "Song", matches: false },
+      { artist: "Hozier, Mavis Staples", source: "Hozier", title: "Other", matches: false },
+      { artist: "Hozier, Mavis Staples", source: "Hozier", title: "Song (Live)", matches: true },
+    ];
+    for (const { artist, source, title, matches } of cases) {
+      const song = { title: "Song", artist };
+      const description = `${artist} / ${source} / ${title}`;
+      assert.deepEqual(
+        releaseCandidates(song, {
+          data: [{ title, artist: { name: source }, isrc: "IEABC1900001" }],
+        }),
+        matches ? [{ isrc: "IEABC1900001", albumId: null }] : [],
+        description,
+      );
+      assert.equal(
+        releaseTitleDate(song, {
+          recordings: [
+            {
+              title,
+              "artist-credit": [{ name: source }],
+              "first-release-date": "2019",
+            },
+          ],
+        }),
+        matches ? "2019" : null,
+        description,
+      );
+    }
   });
 });
 
@@ -176,6 +235,24 @@ describe("MusicBrainz's recordings by title and artist", () => {
     assert.equal(releaseTitleDate(song, { error: "busy" }), null);
   });
 
+  test("match a collaborative song to a recording credited to one of its artists", () => {
+    const response = {
+      recordings: [
+        {
+          title: "Song (Remastered)",
+          "artist-credit": [{ name: "Mavis Staples" }],
+          "first-release-date": "2019-03-01",
+        },
+      ],
+    };
+    for (const separator of [",", "&", ";", "/", " x "])
+      assert.equal(
+        releaseTitleDate({ title: "Song", artist: `Hozier${separator} MÁVIS STAPLES` }, response),
+        "2019-03-01",
+        separator,
+      );
+  });
+
   test("a recording credited to several artists matches any of them", () => {
     const response = {
       recordings: [
@@ -198,6 +275,50 @@ describe("MusicBrainz's recordings by title and artist", () => {
 });
 
 describe("a song's answer", () => {
+  test("version 2 fallback answers are due once after the artist matching upgrade", () => {
+    const song = { title: "Song", artist: "Hozier, Mavis Staples" };
+    for (const source of ["unknown", "year", "album"] as const) {
+      const answer: ReleaseAnswer = {
+        date: source === "unknown" ? null : "2019",
+        source,
+        retryAt: 30 * DAY,
+        version: 2,
+      };
+      const [stored] = Object.values(readReleaseAnswers(JSON.stringify({ song: answer })));
+      assert.equal(releaseDue(song, null, stored, 1), true, source);
+      assert.equal(
+        releaseNextDue(
+          [
+            {
+              ...song,
+              key: "song",
+              year: null,
+              held: null,
+              answer: stored!,
+            },
+          ],
+          1,
+        ),
+        1,
+      );
+    }
+    assert.equal(releaseDue(song, null, releaseAnswer([], [], null, null, 1), 2), false);
+    assert.equal(
+      releaseDue(
+        song,
+        null,
+        {
+          date: "2019",
+          source: "first-release",
+          retryAt: null,
+          version: 2,
+        },
+        1,
+      ),
+      false,
+    );
+  });
+
   test("the earliest first release wins; Year and album dates stay marked as fallbacks", () => {
     const response = {
       recordings: [

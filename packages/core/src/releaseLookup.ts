@@ -44,9 +44,18 @@ const ISRC = /^[A-Z]{2}[A-Z0-9]{3}\d{7}$/i;
 const recordOf = (value: unknown): Readonly<Record<string, unknown>> =>
   isRecord(value) ? value : {};
 
+/** Match the whole credit or any of the song's artists, using the existing normalisation. */
+const matchesReleaseSong = (song: ReleaseSong, title: string, artist: string): boolean =>
+  [song.artist, ...song.artist.split(/[,&;/]|\s+x\s+/i)].some(
+    (name) =>
+      name.trim() !== "" &&
+      isSameSong({ ...song, artist: name, album: null, durationMs: 0 }, title, artist),
+  );
+
 /**
  * The recordings in Deezer's search [response] whose title and artist match [song] (Core's
- * `isSameSong`), among its first ten results: up to `RELEASE_CODES_PER_SONG`, one per ISRC.
+ * `isSameSong` titles, whole credit or any of its artists), among its first ten results:
+ * up to `RELEASE_CODES_PER_SONG`, one per ISRC.
  */
 export const releaseCandidates = (song: ReleaseSong, response: unknown): ReleaseCandidate[] => {
   const data = recordOf(response).data;
@@ -61,7 +70,7 @@ export const releaseCandidates = (song: ReleaseSong, response: unknown): Release
       typeof artist.name !== "string" ||
       typeof row.isrc !== "string" ||
       !ISRC.test(row.isrc) ||
-      !isSameSong({ ...song, album: null, durationMs: 0 }, row.title, artist.name)
+      !matchesReleaseSong(song, row.title, artist.name)
     )
       continue;
     const isrc = row.isrc.toUpperCase();
@@ -118,10 +127,10 @@ export const releaseRequestDelay = (
 
 /**
  * The lookup's version, kept with each answer. A version that finds more dates makes the
- * answers of older ones without a first release due again, once (`releaseDue`). 2: MusicBrainz's
- * search by title and artist.
+ * answers of older ones without a first release due again, once (`releaseDue`). 3: matching
+ * any artist in the song's credit (2 added MusicBrainz's search by title and artist).
  */
-export const RELEASE_LOOKUP_VERSION = 2;
+export const RELEASE_LOOKUP_VERSION = 3;
 
 /** What the lookup found for a song, and when to ask again. */
 export interface ReleaseAnswer {
@@ -194,13 +203,13 @@ const TITLE_LENGTH_TOLERANCE_MS = 10_000;
 /**
  * The earliest first release among the recordings of MusicBrainz's search by title and artist
  * ([response], `releaseTitleQuery`) that are [song]: the title matches as Deezer's must
- * (`isSameSong`), the artist is the whole credit or one artist in it, and, when both lengths
- * are known, it's within 10 s of the song's. Null when none is.
+ * (`isSameSong`), the song's whole credit or any of its artists matches the recording's whole
+ * credit or one artist in it, and, when both lengths are known, it's within 10 s of the song's.
+ * Null when none is.
  */
 export const releaseTitleDate = (song: ReleaseSong, response: unknown): ReleaseDate | null => {
   const recordings = recordOf(response).recordings;
   if (!Array.isArray(recordings)) return null;
-  const lookup = { ...song, album: null, durationMs: 0 };
   const length = song.durationMs ?? 0;
   const dates: ReleaseDate[] = [];
   for (const value of recordings) {
@@ -223,7 +232,7 @@ export const releaseTitleDate = (song: ReleaseSong, response: unknown): ReleaseD
     if (
       date !== null &&
       typeof recording.title === "string" &&
-      [whole, ...names].some((name) => isSameSong(lookup, String(recording.title), name)) &&
+      [whole, ...names].some((name) => matchesReleaseSong(song, String(recording.title), name)) &&
       gap <= TITLE_LENGTH_TOLERANCE_MS
     )
       dates.push(date);
