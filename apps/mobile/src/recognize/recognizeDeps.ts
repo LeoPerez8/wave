@@ -8,7 +8,7 @@ import { online } from "@/native/waveNative";
 import type { NativeYtSong } from "@/native/waveYtMusic";
 import { holdPlayback } from "@/playback/holdPlayback";
 import { ytMusicEnabled } from "@/settings/ytMusic";
-import { searchSongsInTurn } from "@/ytmusic/askYtMusic";
+import { searchRecordingInTurn } from "@/ytmusic/askYtMusic";
 
 import { microphonePermission } from "./microphone";
 import type { RecognizeDeps, RecognizeNative } from "./recognizeSession";
@@ -31,7 +31,7 @@ export const recognizeDeps = (native: RecognizeNative): RecognizeDeps<SongRow, N
       {
         library: () => appRuntime.runPromise(libraryListQueries.songs.read),
         ytMusic: ytMusicEnabled,
-        search: searchSongsInTurn,
+        search: (asker, _query, signal, song) => searchRecordingInTurn(asker, song, signal, true),
       },
       song,
       signal,

@@ -292,6 +292,7 @@ export const writePlaylistYtSong = (song: YtSong & { readonly albumId?: string |
     durationMs: song.durationMs,
     artworkUrl: song.artworkUrl,
     explicit: song.explicit,
+    ...(song.videoType ? { videoType: song.videoType } : {}),
   } satisfies YtAlbumSong);
 
 const stringOrNull = (value: unknown): value is string | null =>
@@ -340,6 +341,7 @@ export const readPlaylistYtSong = (stored: string): YtAlbumSong | null => {
     ...listed,
     albumId: typeof albumId === "string" ? albumId : null,
     explicit: explicit === true,
+    ...(typeof value.videoType === "string" ? { videoType: value.videoType } : {}),
   };
 };
 

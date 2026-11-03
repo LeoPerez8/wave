@@ -1333,7 +1333,7 @@ export type {
   PlaylistLinkProblem,
   SharedTextImport,
 } from "./playlistLinks.ts";
-export { spotifySearchQuery, spotifyYtMatch } from "./spotifyImport.ts";
+export { spotifySearchQuery, spotifyYtMatch, searchRecording } from "./spotifyImport.ts";
 export { settleUnsearched, unsearchedSearchQuery, unsearchedSettles } from "./unsearchedEntries.ts";
 export {
   PLAYING_SEARCHES,

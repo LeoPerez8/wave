@@ -20,6 +20,7 @@ data class YtSong(
   /** The largest cover YT Music lists for the row. */
   val artworkUrl: String?,
   val explicit: Boolean,
+  val videoType: String? = null,
 ) {
   fun toMap(): Map<String, Any?> =
     mapOf(
@@ -31,6 +32,7 @@ data class YtSong(
       "durationMs" to durationMs?.toDouble(),
       "artworkUrl" to artworkUrl,
       "explicit" to explicit,
+      "videoType" to videoType,
     )
 }
 
@@ -163,6 +165,8 @@ object YtSearchParser {
           .path("text").string?.let(::durationMs),
       artworkUrl = row.path("thumbnail", "musicThumbnailRenderer", "thumbnail", "thumbnails").arr
         ?.lastOrNull()?.path("url").string,
+      videoType = titleRun.path("navigationEndpoint", "watchEndpoint", "watchEndpointMusicSupportedConfigs", "watchEndpointMusicConfig", "musicVideoType").string
+        ?: row.path("overlay", "musicItemThumbnailOverlayRenderer", "content", "musicPlayButtonRenderer", "playNavigationEndpoint", "watchEndpoint", "watchEndpointMusicSupportedConfigs", "watchEndpointMusicConfig", "musicVideoType").string,
       explicit = row["badges"].arr.orEmpty().any {
         it.path("musicInlineBadgeRenderer", "icon", "iconType").string == "MUSIC_EXPLICIT_BADGE"
       },

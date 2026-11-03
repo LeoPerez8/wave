@@ -10,7 +10,6 @@
  */
 import {
   settleUnsearched,
-  unsearchedSearchQuery,
   type SearchAsker,
   type UnsearchedSettlement,
   type UnsearchedSong,
@@ -18,7 +17,7 @@ import {
   type YtSongSearch,
 } from "@wave/core";
 
-import { searchSongsInTurn } from "@/ytmusic/askYtMusic";
+import { searchRecordingInTurn } from "@/ytmusic/askYtMusic";
 
 import { LibraryStore } from "./LibraryStore";
 import { playlistsChanged } from "./playlists";
@@ -58,7 +57,7 @@ export const searchUnsearchedSong = async (
   asker: SearchAsker,
   signal?: AbortSignal,
 ): Promise<UnsearchedSettlement<YtAlbumSong> | null> => {
-  const answer = await searchSongsInTurn(asker, unsearchedSearchQuery(song), signal);
+  const answer = await searchRecordingInTurn(asker, song, signal);
   if (answer === null) return null;
   return settleUnsearchedSong(song, answer, { burst: asker === "fill" });
 };

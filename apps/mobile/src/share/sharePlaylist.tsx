@@ -62,7 +62,7 @@ import { ytMusicEnabled } from "@/settings/ytMusic";
 import { askSpotifyOrFail } from "@/spotify/askSpotify";
 import type { Spotify } from "@/spotify/Spotify";
 import { SpotifyError } from "@/spotify/SpotifyError";
-import { askYtMusic, searchSongsInTurn } from "@/ytmusic/askYtMusic";
+import { askYtMusic, searchRecordingInTurn } from "@/ytmusic/askYtMusic";
 import { YtLibraryError, YtMusic } from "@/ytmusic/YtMusic";
 
 /** A search that got no answer: sharing stops rather than leave songs out for it. */
@@ -116,7 +116,7 @@ const readYtShareItems = (id: number) =>
  * playing it would.
  */
 const searchVideoId = async (song: SpotifySong, unsearched: boolean): Promise<string | null> => {
-  const answer = await searchSongsInTurn("share", spotifySearchQuery(song));
+  const answer = await searchRecordingInTurn("share", song);
   if (answer === null || !answer.ok) throw new SearchFailed();
   if (unsearched) {
     const settled = await settleUnsearchedSong(
