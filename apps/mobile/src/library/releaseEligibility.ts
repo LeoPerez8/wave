@@ -6,9 +6,12 @@ export const followReleaseEligibility = (
   resume: () => void,
   sources: readonly Subscribe[],
 ): void => {
+  let previous = allowed();
   for (const subscribe of sources)
     subscribe(() => {
       // Running requests check the same current eligibility before sending the next one.
-      if (allowed()) resume();
+      const eligible = allowed();
+      if (eligible && !previous) resume();
+      previous = eligible;
     });
 };
