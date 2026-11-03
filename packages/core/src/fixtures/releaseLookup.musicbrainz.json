@@ -1,0 +1,742 @@
+{
+  "created": "2026-11-03T12:13:59.353Z",
+  "count": 2,
+  "offset": 0,
+  "recordings": [
+    {
+      "id": "2a68bee0-dbd0-4573-b87d-153d93485e7d",
+      "score": 100,
+      "artist-credit-id": "a8a55fb0-8e97-3b0b-bb06-9c66136894c1",
+      "title": "Dinner & Diatribes",
+      "length": 224000,
+      "disambiguation": "Dolby Atmos mix",
+      "video": null,
+      "artist-credit": [
+        {
+          "name": "Hozier",
+          "artist": {
+            "id": "b4691384-50c3-4afd-9988-51d3ec5db65d",
+            "name": "Hozier",
+            "sort-name": "Hozier",
+            "disambiguation": "Irish singer/songwriter",
+            "aliases": [
+              {
+                "sort-name": "Hozier‐Byrne, Andrew",
+                "type-id": "894afba6-2816-3c24-8072-eadb66bd04bc",
+                "name": "Andrew Hozier‐Byrne",
+                "locale": null,
+                "type": "Artist name",
+                "primary": null,
+                "begin-date": null,
+                "end-date": null
+              },
+              {
+                "sort-name": "Hozier‐Byrne, Andrew John",
+                "type-id": "d4dcd0c0-b341-3612-a332-c0ce797b25cf",
+                "name": "Andrew John Hozier‐Byrne",
+                "locale": null,
+                "type": "Legal name",
+                "primary": null,
+                "begin-date": null,
+                "end-date": null
+              }
+            ]
+          }
+        }
+      ],
+      "first-release-date": "2023-07",
+      "releases": [
+        {
+          "id": "bb169ede-8713-4cc9-b531-1874712bc419",
+          "status-id": "4e304316-386d-3409-af2e-78857eec5cfe",
+          "artist-credit-id": "a8a55fb0-8e97-3b0b-bb06-9c66136894c1",
+          "count": 1,
+          "title": "Wasteland, Baby!",
+          "status": "Official",
+          "disambiguation": "Dolby Atmos mix",
+          "artist-credit": [
+            {
+              "name": "Hozier",
+              "artist": {
+                "id": "b4691384-50c3-4afd-9988-51d3ec5db65d",
+                "name": "Hozier",
+                "sort-name": "Hozier",
+                "disambiguation": "Irish singer/songwriter"
+              }
+            }
+          ],
+          "release-group": {
+            "id": "29cffbed-9ae1-4e75-be82-6058c7e9e9b4",
+            "type-id": "f529b476-6e62-324f-b0aa-1f3e33d313fc",
+            "primary-type-id": "f529b476-6e62-324f-b0aa-1f3e33d313fc",
+            "title": "Wasteland, Baby!",
+            "primary-type": "Album"
+          },
+          "date": "2023-07",
+          "country": "AU",
+          "release-events": [
+            {
+              "date": "2023-07",
+              "area": {
+                "id": "106e0bec-b638-3b37-b731-f53d507dc00e",
+                "name": "Australia",
+                "sort-name": "Australia",
+                "iso-3166-1-codes": ["AU"]
+              }
+            },
+            {
+              "date": "2023-07",
+              "area": {
+                "id": "71bbafaa-e825-3e15-8ca9-017dcad1748b",
+                "name": "Canada",
+                "sort-name": "Canada",
+                "iso-3166-1-codes": ["CA"]
+              }
+            },
+            {
+              "date": "2023-07",
+              "area": {
+                "id": "489ce91b-6658-3307-9877-795b68554c98",
+                "name": "United States",
+                "sort-name": "United States",
+                "iso-3166-1-codes": ["US"]
+              }
+            }
+          ],
+          "track-count": 14,
+          "media": [
+            {
+              "id": "d0b5c4e4-23f8-3c56-acd3-16df5615876a",
+              "position": 1,
+              "format": "Digital Media",
+              "track": [
+                {
+                  "id": "b79851ad-39ab-493b-b90e-b3d0dd84abcc",
+                  "number": "11",
+                  "title": "Dinner & Diatribes",
+                  "length": 224000
+                }
+              ],
+              "track-count": 14,
+              "track-offset": 10
+            }
+          ]
+        }
+      ],
+      "isrcs": ["USSM12304327"],
+      "tags": [
+        {
+          "count": 1,
+          "name": "rock"
+        },
+        {
+          "count": 1,
+          "name": "folk"
+        },
+        {
+          "count": 1,
+          "name": "blues"
+        },
+        {
+          "count": 1,
+          "name": "indie rock"
+        },
+        {
+          "count": 1,
+          "name": "soul"
+        },
+        {
+          "count": 1,
+          "name": "blues rock"
+        },
+        {
+          "count": 1,
+          "name": "rhythm and blues"
+        },
+        {
+          "count": 1,
+          "name": "unknown"
+        },
+        {
+          "count": 1,
+          "name": "traditional folk music"
+        }
+      ]
+    },
+    {
+      "id": "7713ab76-ea28-47fe-91d9-3032f55ef799",
+      "score": 100,
+      "artist-credit-id": "a8a55fb0-8e97-3b0b-bb06-9c66136894c1",
+      "title": "Dinner & Diatribes",
+      "length": 224146,
+      "video": null,
+      "artist-credit": [
+        {
+          "name": "Hozier",
+          "artist": {
+            "id": "b4691384-50c3-4afd-9988-51d3ec5db65d",
+            "name": "Hozier",
+            "sort-name": "Hozier",
+            "disambiguation": "Irish singer/songwriter",
+            "aliases": [
+              {
+                "sort-name": "Hozier‐Byrne, Andrew",
+                "type-id": "894afba6-2816-3c24-8072-eadb66bd04bc",
+                "name": "Andrew Hozier‐Byrne",
+                "locale": null,
+                "type": "Artist name",
+                "primary": null,
+                "begin-date": null,
+                "end-date": null
+              },
+              {
+                "sort-name": "Hozier‐Byrne, Andrew John",
+                "type-id": "d4dcd0c0-b341-3612-a332-c0ce797b25cf",
+                "name": "Andrew John Hozier‐Byrne",
+                "locale": null,
+                "type": "Legal name",
+                "primary": null,
+                "begin-date": null,
+                "end-date": null
+              }
+            ]
+          }
+        }
+      ],
+      "first-release-date": "2019-03-01",
+      "releases": [
+        {
+          "id": "f6be59a0-d406-491f-8142-0b1ea81bbd6a",
+          "status-id": "6a3772de-4605-4132-993d-aa315cd19b4b",
+          "artist-credit-id": "a8a55fb0-8e97-3b0b-bb06-9c66136894c1",
+          "count": 1,
+          "title": "Wasteland, Baby!",
+          "status": "Withdrawn",
+          "artist-credit": [
+            {
+              "name": "Hozier",
+              "artist": {
+                "id": "b4691384-50c3-4afd-9988-51d3ec5db65d",
+                "name": "Hozier",
+                "sort-name": "Hozier",
+                "disambiguation": "Irish singer/songwriter"
+              }
+            }
+          ],
+          "release-group": {
+            "id": "29cffbed-9ae1-4e75-be82-6058c7e9e9b4",
+            "type-id": "f529b476-6e62-324f-b0aa-1f3e33d313fc",
+            "primary-type-id": "f529b476-6e62-324f-b0aa-1f3e33d313fc",
+            "title": "Wasteland, Baby!",
+            "primary-type": "Album"
+          },
+          "date": "2019-03-01",
+          "country": "XW",
+          "release-events": [
+            {
+              "date": "2019-03-01",
+              "area": {
+                "id": "525d4e18-3d00-31b9-a58b-a146a916de8f",
+                "name": "[Worldwide]",
+                "sort-name": "[Worldwide]",
+                "iso-3166-1-codes": ["XW"]
+              }
+            }
+          ],
+          "track-count": 14,
+          "media": [
+            {
+              "id": "00491b3d-a069-3e73-8fce-6aa096f637cc",
+              "position": 1,
+              "format": "Digital Media",
+              "track": [
+                {
+                  "id": "eefb5fc7-12d3-4adc-839e-d9c399f274f4",
+                  "number": "11",
+                  "title": "Dinner & Diatribes",
+                  "length": 224158
+                }
+              ],
+              "track-count": 14,
+              "track-offset": 10
+            }
+          ]
+        },
+        {
+          "id": "f3901166-1c94-4d82-b863-4bd9404bd228",
+          "status-id": "4e304316-386d-3409-af2e-78857eec5cfe",
+          "artist-credit-id": "a8a55fb0-8e97-3b0b-bb06-9c66136894c1",
+          "count": 1,
+          "title": "Wasteland, Baby!",
+          "status": "Official",
+          "disambiguation": "special edition",
+          "artist-credit": [
+            {
+              "name": "Hozier",
+              "artist": {
+                "id": "b4691384-50c3-4afd-9988-51d3ec5db65d",
+                "name": "Hozier",
+                "sort-name": "Hozier",
+                "disambiguation": "Irish singer/songwriter"
+              }
+            }
+          ],
+          "release-group": {
+            "id": "29cffbed-9ae1-4e75-be82-6058c7e9e9b4",
+            "type-id": "f529b476-6e62-324f-b0aa-1f3e33d313fc",
+            "primary-type-id": "f529b476-6e62-324f-b0aa-1f3e33d313fc",
+            "title": "Wasteland, Baby!",
+            "primary-type": "Album"
+          },
+          "date": "2024-04-19",
+          "country": "AU",
+          "release-events": [
+            {
+              "date": "2024-04-19",
+              "area": {
+                "id": "106e0bec-b638-3b37-b731-f53d507dc00e",
+                "name": "Australia",
+                "sort-name": "Australia",
+                "iso-3166-1-codes": ["AU"]
+              }
+            },
+            {
+              "date": "2024-04-19",
+              "area": {
+                "id": "71bbafaa-e825-3e15-8ca9-017dcad1748b",
+                "name": "Canada",
+                "sort-name": "Canada",
+                "iso-3166-1-codes": ["CA"]
+              }
+            },
+            {
+              "date": "2024-04-19",
+              "area": {
+                "id": "3906cf32-00a7-32df-93cc-4710c5f5a542",
+                "name": "Puerto Rico",
+                "sort-name": "Puerto Rico",
+                "iso-3166-1-codes": ["PR"]
+              }
+            },
+            {
+              "date": "2024-04-19",
+              "area": {
+                "id": "489ce91b-6658-3307-9877-795b68554c98",
+                "name": "United States",
+                "sort-name": "United States",
+                "iso-3166-1-codes": ["US"]
+              }
+            }
+          ],
+          "track-count": 19,
+          "media": [
+            {
+              "id": "85c54264-953f-3aa3-81d8-e32637c9ebfb",
+              "position": 1,
+              "format": "Digital Media",
+              "track": [
+                {
+                  "id": "d9541136-cea5-45c6-8767-b97efff21de4",
+                  "number": "11",
+                  "title": "Dinner & Diatribes",
+                  "length": 224146
+                }
+              ],
+              "track-count": 19,
+              "track-offset": 10
+            }
+          ]
+        },
+        {
+          "id": "fd1cfda7-2119-40a9-89f6-64b12a3ca371",
+          "status-id": "4e304316-386d-3409-af2e-78857eec5cfe",
+          "artist-credit-id": "a8a55fb0-8e97-3b0b-bb06-9c66136894c1",
+          "count": 1,
+          "title": "Wasteland, Baby!",
+          "status": "Official",
+          "disambiguation": "special edition",
+          "artist-credit": [
+            {
+              "name": "Hozier",
+              "artist": {
+                "id": "b4691384-50c3-4afd-9988-51d3ec5db65d",
+                "name": "Hozier",
+                "sort-name": "Hozier",
+                "disambiguation": "Irish singer/songwriter"
+              }
+            }
+          ],
+          "release-group": {
+            "id": "29cffbed-9ae1-4e75-be82-6058c7e9e9b4",
+            "type-id": "f529b476-6e62-324f-b0aa-1f3e33d313fc",
+            "primary-type-id": "f529b476-6e62-324f-b0aa-1f3e33d313fc",
+            "title": "Wasteland, Baby!",
+            "primary-type": "Album"
+          },
+          "track-count": 19,
+          "media": [
+            {
+              "id": "459b53b6-50a1-3455-9466-d7ef8f08a9e5",
+              "position": 1,
+              "format": "Digital Media",
+              "track": [
+                {
+                  "id": "22fef795-b31a-4c06-93f6-221abf05e6ec",
+                  "number": "11",
+                  "title": "Dinner & Diatribes",
+                  "length": 224146
+                }
+              ],
+              "track-count": 19,
+              "track-offset": 10
+            }
+          ]
+        },
+        {
+          "id": "7da0cd0e-65bc-40c7-ba79-73a6564da95f",
+          "status-id": "4e304316-386d-3409-af2e-78857eec5cfe",
+          "artist-credit-id": "a8a55fb0-8e97-3b0b-bb06-9c66136894c1",
+          "count": 1,
+          "title": "Wasteland, Baby!",
+          "status": "Official",
+          "disambiguation": "special edition",
+          "artist-credit": [
+            {
+              "name": "Hozier",
+              "artist": {
+                "id": "b4691384-50c3-4afd-9988-51d3ec5db65d",
+                "name": "Hozier",
+                "sort-name": "Hozier",
+                "disambiguation": "Irish singer/songwriter"
+              }
+            }
+          ],
+          "release-group": {
+            "id": "29cffbed-9ae1-4e75-be82-6058c7e9e9b4",
+            "type-id": "f529b476-6e62-324f-b0aa-1f3e33d313fc",
+            "primary-type-id": "f529b476-6e62-324f-b0aa-1f3e33d313fc",
+            "title": "Wasteland, Baby!",
+            "primary-type": "Album"
+          },
+          "track-count": 19,
+          "media": [
+            {
+              "id": "c03a1ed3-1f7d-3e81-8b2c-b5a5afeb7d0b",
+              "position": 1,
+              "format": "Digital Media",
+              "track": [
+                {
+                  "id": "594bd0fe-b33c-4b8f-8d46-1aa726d523e3",
+                  "number": "11",
+                  "title": "Dinner & Diatribes",
+                  "length": 224146
+                }
+              ],
+              "track-count": 19,
+              "track-offset": 10
+            }
+          ]
+        },
+        {
+          "id": "0835ab6c-da1b-46bc-af75-cf71cbef7e68",
+          "status-id": "4e304316-386d-3409-af2e-78857eec5cfe",
+          "artist-credit-id": "a8a55fb0-8e97-3b0b-bb06-9c66136894c1",
+          "count": 1,
+          "title": "Wasteland, Baby!",
+          "status": "Official",
+          "disambiguation": "mastered for iTunes",
+          "artist-credit": [
+            {
+              "name": "Hozier",
+              "artist": {
+                "id": "b4691384-50c3-4afd-9988-51d3ec5db65d",
+                "name": "Hozier",
+                "sort-name": "Hozier",
+                "disambiguation": "Irish singer/songwriter"
+              }
+            }
+          ],
+          "release-group": {
+            "id": "29cffbed-9ae1-4e75-be82-6058c7e9e9b4",
+            "type-id": "f529b476-6e62-324f-b0aa-1f3e33d313fc",
+            "primary-type-id": "f529b476-6e62-324f-b0aa-1f3e33d313fc",
+            "title": "Wasteland, Baby!",
+            "primary-type": "Album"
+          },
+          "track-count": 14,
+          "media": [
+            {
+              "id": "beb171a6-185f-34da-9312-233cecd9b262",
+              "position": 1,
+              "format": "Digital Media",
+              "track": [
+                {
+                  "id": "5c058407-a149-4eac-844a-2db466fc5fb3",
+                  "number": "11",
+                  "title": "Dinner & Diatribes",
+                  "length": 224147
+                }
+              ],
+              "track-count": 14,
+              "track-offset": 10
+            }
+          ]
+        },
+        {
+          "id": "922f22ce-1171-4d42-b831-c4fe15f02dda",
+          "status-id": "4e304316-386d-3409-af2e-78857eec5cfe",
+          "artist-credit-id": "a8a55fb0-8e97-3b0b-bb06-9c66136894c1",
+          "count": 1,
+          "title": "Wasteland, Baby!",
+          "status": "Official",
+          "artist-credit": [
+            {
+              "name": "Hozier",
+              "artist": {
+                "id": "b4691384-50c3-4afd-9988-51d3ec5db65d",
+                "name": "Hozier",
+                "sort-name": "Hozier",
+                "disambiguation": "Irish singer/songwriter"
+              }
+            }
+          ],
+          "release-group": {
+            "id": "29cffbed-9ae1-4e75-be82-6058c7e9e9b4",
+            "type-id": "f529b476-6e62-324f-b0aa-1f3e33d313fc",
+            "primary-type-id": "f529b476-6e62-324f-b0aa-1f3e33d313fc",
+            "title": "Wasteland, Baby!",
+            "primary-type": "Album"
+          },
+          "date": "2019-03-01",
+          "country": "XE",
+          "release-events": [
+            {
+              "date": "2019-03-01",
+              "area": {
+                "id": "89a675c2-3e37-3518-b83c-418bad59a85a",
+                "name": "Europe",
+                "sort-name": "Europe",
+                "iso-3166-1-codes": ["XE"]
+              }
+            }
+          ],
+          "track-count": 14,
+          "media": [
+            {
+              "id": "abf83835-73c2-3807-b35b-bd2aa711e6fe",
+              "position": 1,
+              "format": "CD",
+              "track": [
+                {
+                  "id": "4a98cc53-95ee-4de7-a983-19b3e1f6807c",
+                  "number": "11",
+                  "title": "Dinner & Diatribes",
+                  "length": 224146
+                }
+              ],
+              "track-count": 14,
+              "track-offset": 10
+            }
+          ]
+        },
+        {
+          "id": "54b6d592-ebbe-4a69-8d9b-864476ded1a4",
+          "status-id": "4e304316-386d-3409-af2e-78857eec5cfe",
+          "artist-credit-id": "a8a55fb0-8e97-3b0b-bb06-9c66136894c1",
+          "count": 1,
+          "title": "Wasteland, Baby!",
+          "status": "Official",
+          "artist-credit": [
+            {
+              "name": "Hozier",
+              "artist": {
+                "id": "b4691384-50c3-4afd-9988-51d3ec5db65d",
+                "name": "Hozier",
+                "sort-name": "Hozier",
+                "disambiguation": "Irish singer/songwriter"
+              }
+            }
+          ],
+          "release-group": {
+            "id": "29cffbed-9ae1-4e75-be82-6058c7e9e9b4",
+            "type-id": "f529b476-6e62-324f-b0aa-1f3e33d313fc",
+            "primary-type-id": "f529b476-6e62-324f-b0aa-1f3e33d313fc",
+            "title": "Wasteland, Baby!",
+            "primary-type": "Album"
+          },
+          "date": "2019-03-01",
+          "country": "US",
+          "release-events": [
+            {
+              "date": "2019-03-01",
+              "area": {
+                "id": "489ce91b-6658-3307-9877-795b68554c98",
+                "name": "United States",
+                "sort-name": "United States",
+                "iso-3166-1-codes": ["US"]
+              }
+            }
+          ],
+          "track-count": 14,
+          "media": [
+            {
+              "id": "44e5d774-0929-3b47-bed6-76e5b7a1d9e9",
+              "position": 1,
+              "format": "CD",
+              "track": [
+                {
+                  "id": "11dde981-e838-4b9e-ac9e-e5bc647f0a54",
+                  "number": "11",
+                  "title": "Dinner & Diatribes",
+                  "length": 224146
+                }
+              ],
+              "track-count": 14,
+              "track-offset": 10
+            }
+          ]
+        },
+        {
+          "id": "c6145276-9187-438c-9ea7-f2da6de60f36",
+          "status-id": "4e304316-386d-3409-af2e-78857eec5cfe",
+          "artist-credit-id": "a8a55fb0-8e97-3b0b-bb06-9c66136894c1",
+          "count": 1,
+          "title": "Wasteland, Baby!",
+          "status": "Official",
+          "artist-credit": [
+            {
+              "name": "Hozier",
+              "artist": {
+                "id": "b4691384-50c3-4afd-9988-51d3ec5db65d",
+                "name": "Hozier",
+                "sort-name": "Hozier",
+                "disambiguation": "Irish singer/songwriter"
+              }
+            }
+          ],
+          "release-group": {
+            "id": "29cffbed-9ae1-4e75-be82-6058c7e9e9b4",
+            "type-id": "f529b476-6e62-324f-b0aa-1f3e33d313fc",
+            "primary-type-id": "f529b476-6e62-324f-b0aa-1f3e33d313fc",
+            "title": "Wasteland, Baby!",
+            "primary-type": "Album"
+          },
+          "track-count": 14,
+          "media": [
+            {
+              "id": "2f64e44b-e4fd-37d5-9d9c-2b1fd3cd6231",
+              "position": 1,
+              "format": "Digital Media",
+              "track": [
+                {
+                  "id": "b3447a79-be68-405e-90a2-5ee558cb6f69",
+                  "number": "11",
+                  "title": "Dinner & Diatribes",
+                  "length": 224147
+                }
+              ],
+              "track-count": 14,
+              "track-offset": 10
+            }
+          ]
+        },
+        {
+          "id": "db1b54db-1db4-4334-9977-471935a7f95c",
+          "status-id": "4e304316-386d-3409-af2e-78857eec5cfe",
+          "artist-credit-id": "a8a55fb0-8e97-3b0b-bb06-9c66136894c1",
+          "count": 1,
+          "title": "Wasteland, Baby!",
+          "status": "Official",
+          "disambiguation": "mastered for iTunes",
+          "artist-credit": [
+            {
+              "name": "Hozier",
+              "artist": {
+                "id": "b4691384-50c3-4afd-9988-51d3ec5db65d",
+                "name": "Hozier",
+                "sort-name": "Hozier",
+                "disambiguation": "Irish singer/songwriter"
+              }
+            }
+          ],
+          "release-group": {
+            "id": "29cffbed-9ae1-4e75-be82-6058c7e9e9b4",
+            "type-id": "f529b476-6e62-324f-b0aa-1f3e33d313fc",
+            "primary-type-id": "f529b476-6e62-324f-b0aa-1f3e33d313fc",
+            "title": "Wasteland, Baby!",
+            "primary-type": "Album"
+          },
+          "date": "2019-03-01",
+          "country": "AU",
+          "release-events": [
+            {
+              "date": "2019-03-01",
+              "area": {
+                "id": "106e0bec-b638-3b37-b731-f53d507dc00e",
+                "name": "Australia",
+                "sort-name": "Australia",
+                "iso-3166-1-codes": ["AU"]
+              }
+            },
+            {
+              "date": "2019-03-01",
+              "area": {
+                "id": "71bbafaa-e825-3e15-8ca9-017dcad1748b",
+                "name": "Canada",
+                "sort-name": "Canada",
+                "iso-3166-1-codes": ["CA"]
+              }
+            },
+            {
+              "date": "2019-03-01",
+              "area": {
+                "id": "3906cf32-00a7-32df-93cc-4710c5f5a542",
+                "name": "Puerto Rico",
+                "sort-name": "Puerto Rico",
+                "iso-3166-1-codes": ["PR"]
+              }
+            },
+            {
+              "date": "2019-03-01",
+              "area": {
+                "id": "489ce91b-6658-3307-9877-795b68554c98",
+                "name": "United States",
+                "sort-name": "United States",
+                "iso-3166-1-codes": ["US"]
+              }
+            }
+          ],
+          "track-count": 14,
+          "media": [
+            {
+              "id": "3bed9bba-14ca-3f6e-8cfa-75914d65314c",
+              "position": 1,
+              "format": "Digital Media",
+              "track": [
+                {
+                  "id": "ab608306-e152-4730-b11b-0e8fd1f72d9e",
+                  "number": "11",
+                  "title": "Dinner & Diatribes",
+                  "length": 224147
+                }
+              ],
+              "track-count": 14,
+              "track-offset": 10
+            }
+          ]
+        }
+      ],
+      "isrcs": ["USSM11809034", "IEACJ1800130"],
+      "tags": [
+        {
+          "count": 1,
+          "name": "rock"
+        },
+        {
+          "count": 1,
+          "name": "pop"
+        }
+      ]
+    }
+  ]
+}

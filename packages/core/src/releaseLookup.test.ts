@@ -4,6 +4,7 @@ import { describe, test } from "node:test";
 
 import {
   RELEASE_BATCH_CODES,
+  RELEASE_LOOKUP_VERSION,
   deezerRefused,
   lookUpReleaseDates,
   releaseAnswer,
@@ -15,6 +16,8 @@ import {
   releaseNextDue,
   releaseRequestDelay,
   releaseTagDate,
+  releaseTitleDate,
+  releaseTitleQuery,
   type ReleaseAnswer,
   type ReleaseLookupSong,
   type ReleaseProgress,
@@ -22,6 +25,13 @@ import {
 } from "./releaseLookup.ts";
 
 const DAY = 86_400_000;
+const version = RELEASE_LOOKUP_VERSION;
+
+/** A recorded answer from each service, 2026-11-03. */
+const recorded = (service: "deezer" | "musicbrainz"): unknown =>
+  JSON.parse(
+    readFileSync(new URL(`./fixtures/releaseLookup.${service}.json`, import.meta.url), "utf8"),
+  );
 
 describe("Deezer's matching recordings", () => {
   test("keep matches across accents and version notes", () => {
@@ -120,6 +130,73 @@ describe("MusicBrainz queries", () => {
   });
 });
 
+describe("MusicBrainz's recordings by title and artist", () => {
+  test("search the recording and the artist as phrases", () => {
+    assert.equal(
+      releaseTitleQuery({ title: "Dinner & Diatribes", artist: "Hozier" }),
+      'recording:"Dinner & Diatribes" AND artist:"Hozier"',
+    );
+    assert.equal(
+      releaseTitleQuery({ title: 'Say "Hi" \\o/', artist: "AC/DC" }),
+      'recording:"Say \\"Hi\\" \\\\o/" AND artist:"AC/DC"',
+    );
+  });
+
+  test("find Hozier's Dinner & Diatribes, first released 2019-03-01", () => {
+    // Deezer's search had only covers: no recording of Hozier's to ask MusicBrainz about.
+    const hozier = { title: "Dinner & Diatribes", artist: "Hozier", durationMs: 224_146 };
+    assert.deepEqual(releaseCandidates(hozier, recorded("deezer")), []);
+    assert.equal(releaseTitleDate(hozier, recorded("musicbrainz")), "2019-03-01");
+  });
+
+  test("the earliest matching recording wins; one 10 s off the song's length doesn't count", () => {
+    const recording = (title: string, artist: string, length: number | null, date: string) => ({
+      title,
+      length,
+      "artist-credit": [{ name: artist, joinphrase: "" }],
+      "first-release-date": date,
+    });
+    const response = {
+      recordings: [
+        recording("Song (Remastered)", "Artist", 200_000, "1999"),
+        recording("Song", "Artist", 211_000, "1970"),
+        recording("Song", "Artist", 189_000, "1971"),
+        recording("Song", "Artist", null, "1990"),
+        recording("Song", "Other", 200_000, "1960"),
+        recording("Other Song", "Artist", 200_000, "1960"),
+        recording("Song", "Artist", 210_000, "not a date"),
+      ],
+    };
+    const song = { title: "Song", artist: "Artist" };
+    assert.equal(releaseTitleDate({ ...song, durationMs: 200_000 }, response), "1990");
+    assert.equal(releaseTitleDate({ ...song, durationMs: 210_000 }, response), "1970");
+    // Without a length, every matching recording counts.
+    assert.equal(releaseTitleDate(song, response), "1970");
+    assert.equal(releaseTitleDate({ ...song, durationMs: 0 }, response), "1970");
+    assert.equal(releaseTitleDate(song, { error: "busy" }), null);
+  });
+
+  test("a recording credited to several artists matches any of them", () => {
+    const response = {
+      recordings: [
+        {
+          title: "Song",
+          "artist-credit": [
+            { name: "Artist", joinphrase: " & " },
+            { name: "Guest", joinphrase: "" },
+          ],
+          "first-release-date": "2001-02-03",
+        },
+      ],
+    };
+    assert.equal(releaseTitleDate({ title: "Song", artist: "Artist" }, response), "2001-02-03");
+    assert.equal(
+      releaseTitleDate({ title: "Song", artist: "Artist & Guest" }, response),
+      "2001-02-03",
+    );
+  });
+});
+
 describe("a song's answer", () => {
   test("the earliest first release wins; Year and album dates stay marked as fallbacks", () => {
     const response = {
@@ -131,12 +208,13 @@ describe("a song's answer", () => {
     };
     assert.deepEqual(
       releaseAnswer(["GBABC9500001", "GBABC9500002"], [response], 2005, "2015-01-01", 1000),
-      { date: "1985", source: "first-release", retryAt: null },
+      { date: "1985", source: "first-release", retryAt: null, version },
     );
     assert.deepEqual(releaseAnswer([], [], 2005, "2015-01-01", 1000), {
       date: "2005",
       source: "year",
       retryAt: 2592001000,
+      version,
     });
     assert.equal(releaseAnswer([], [], null, "2015-01-01", 1000).source, "album");
     assert.equal(releaseAnswer([], [], null, null, 1000, true).retryAt, 61000);
@@ -165,18 +243,46 @@ describe("a song's answer", () => {
     );
   });
 
+  test("a fallback or no date from an older lookup is due again once, a first release never", () => {
+    const song = { title: "Song", artist: "Artist" };
+    const later = 30 * DAY;
+    // Answers stored before versions are the first version's.
+    for (const source of ["unknown", "year", "album"] as const) {
+      const date = source === "unknown" ? null : "2005";
+      assert.equal(releaseDue(song, null, { date, source, retryAt: later }, 0), true, source);
+      assert.equal(
+        releaseDue(song, null, { date, source, retryAt: later, version: version - 1 }, 0),
+        true,
+        source,
+      );
+      assert.equal(releaseDue(song, null, { date, source, retryAt: later, version }, 0), false);
+    }
+    // Asked again, the new answer is this version's and waits its 30 days.
+    assert.equal(releaseDue(song, null, releaseAnswer([], [], null, null, 0), 1), false);
+    const found = { date: "1985", source: "first-release", retryAt: null } as const;
+    assert.equal(releaseDue(song, null, found, 0), false);
+    // A failed answer keeps its minute's retry.
+    assert.equal(
+      releaseDue(song, null, { date: null, source: "failed", retryAt: 60_000 }, 0),
+      false,
+    );
+  });
+
   test("stored answers read back, and what isn't one is asked again", () => {
     const found = { date: "1985", source: "first-release", retryAt: null };
     const unknown = { date: null, source: "unknown", retryAt: 30 * DAY };
+    const current = { date: "2005", source: "year", retryAt: 30 * DAY, version };
     const stored = JSON.stringify({
       found,
       unknown,
+      current,
+      badVersion: { date: null, source: "unknown", retryAt: 1, version: "2" },
       noSource: { date: "1985", source: "guess", retryAt: null },
       badDate: { date: "0000", source: "year", retryAt: 1 },
       badRetry: { date: null, source: "failed", retryAt: "soon" },
       notAnAnswer: 5,
     });
-    assert.deepEqual(readReleaseAnswers(stored), { found, unknown });
+    assert.deepEqual(readReleaseAnswers(stored), { found, unknown, current });
     assert.deepEqual(readReleaseAnswers(null), {});
     assert.deepEqual(readReleaseAnswers("[]"), {});
   });
@@ -257,6 +363,10 @@ const run = async (
         log.push(`album ${id}`);
         return (services.album ?? (async () => ({ release_date: "2005-01-01" })))(id);
       },
+      titled: async (title, artist) => {
+        log.push(`titled ${title}`);
+        return (services.titled ?? (async () => ({ count: 0, recordings: [] })))(title, artist);
+      },
     },
     now: () => 0,
     going,
@@ -295,7 +405,7 @@ describe("a playlist's lookup run", () => {
       song(1, { title: "Song 1 again" }),
       song(2, { held: "1984" }),
       song(3, { answer: found }),
-      song(4, { answer: { date: null, source: "unknown", retryAt: 30 * DAY } }),
+      song(4, { answer: { date: null, source: "unknown", retryAt: 30 * DAY, version } }),
     ]);
     assert.deepEqual(
       log.filter((line) => line.startsWith("search")),
@@ -311,8 +421,18 @@ describe("a playlist's lookup run", () => {
       album: async () => ({ error: { type: "DataException", message: "no data", code: 800 } }),
     });
     assert.equal(end, "done");
-    assert.deepEqual(answers.get("song 1"), { date: "2005", source: "year", retryAt: 30 * DAY });
-    assert.deepEqual(answers.get("song 2"), { date: null, source: "unknown", retryAt: 30 * DAY });
+    assert.deepEqual(answers.get("song 1"), {
+      date: "2005",
+      source: "year",
+      retryAt: 30 * DAY,
+      version,
+    });
+    assert.deepEqual(answers.get("song 2"), {
+      date: null,
+      source: "unknown",
+      retryAt: 30 * DAY,
+      version,
+    });
   });
 
   test("without a first release, the earliest of the song's Deezer albums is its date", async () => {
@@ -336,6 +456,77 @@ describe("a playlist's lookup run", () => {
       date: "1999-03-01",
       source: "album",
       retryAt: 30 * DAY,
+      version,
+    });
+  });
+
+  test("with no Deezer match, MusicBrainz's search by title and artist finds the date", async () => {
+    const hozier = song(1, { title: "Dinner & Diatribes", artist: "Hozier", durationMs: 224_146 });
+    const { end, log, answers } = await run([hozier], {
+      search: async () => recorded("deezer"),
+      titled: async (title, artist) =>
+        title === "Dinner & Diatribes" && artist === "Hozier" ? recorded("musicbrainz") : {},
+    });
+    assert.equal(end, "done");
+    assert.deepEqual(log, ["search Dinner & Diatribes", "titled Dinner & Diatribes"]);
+    assert.deepEqual(answers.get("song 1"), {
+      date: "2019-03-01",
+      source: "first-release",
+      retryAt: null,
+      version,
+    });
+  });
+
+  test("ISRCs MusicBrainz links to no date ask by title and artist before the albums", async () => {
+    const titledResponse = (date: string) => ({
+      recordings: [
+        { title: "Song 1", "artist-credit": [{ name: "Artist" }], "first-release-date": date },
+      ],
+    });
+    const found = await run([song(1)], {
+      recordings: async () => [{ count: 0, recordings: [] }],
+      titled: async () => titledResponse("1977-05-01"),
+    });
+    assert.deepEqual(
+      found.log.filter((line) => !line.startsWith("search")),
+      ["recordings 3", "titled Song 1"],
+    );
+    assert.equal(found.answers.get("song 1")?.date, "1977-05-01");
+    assert.equal(found.answers.get("song 1")?.source, "first-release");
+    // Nothing found by title either: the Year, then the albums, as before.
+    const none = await run([song(1)], { recordings: async () => [{ count: 0, recordings: [] }] });
+    assert.deepEqual(
+      none.log.filter((line) => !line.startsWith("search")),
+      ["recordings 3", "titled Song 1", "album 1"],
+    );
+    assert.equal(none.answers.get("song 1")?.source, "album");
+    // A song with a Year needs no album.
+    const year = await run([song(1, { year: 1999 })], {
+      recordings: async () => [{ count: 0, recordings: [] }],
+    });
+    assert.ok(!year.log.some((line) => line.startsWith("album")));
+    assert.equal(year.answers.get("song 1")?.source, "year");
+  });
+
+  test("a song with a first release by ISRC isn't searched by title", async () => {
+    const { log } = await run([song(1)]);
+    assert.ok(!log.some((line) => line.startsWith("titled")));
+  });
+
+  test("a failed search by title fails that song, keeping its fallback date", async () => {
+    const { end, log, answers } = await run([song(1, { year: 1999 })], {
+      recordings: async () => [{ count: 0, recordings: [] }],
+      titled: async () => {
+        throw new Error("Release lookup HTTP 503");
+      },
+    });
+    assert.equal(end, "failed");
+    assert.ok(!log.some((line) => line.startsWith("album")));
+    assert.deepEqual(answers.get("song 1"), {
+      date: "1999",
+      source: "year",
+      retryAt: 60_000,
+      version,
     });
   });
 
@@ -349,7 +540,12 @@ describe("a playlist's lookup run", () => {
     assert.equal(end, "failed");
     assert.ok(!log.includes("search Song 3"));
     assert.equal(answers.get("song 1")?.source, "first-release");
-    assert.deepEqual(answers.get("song 2"), { date: null, source: "failed", retryAt: 60_000 });
+    assert.deepEqual(answers.get("song 2"), {
+      date: null,
+      source: "failed",
+      retryAt: 60_000,
+      version,
+    });
     assert.equal(answers.has("song 3"), false);
     assert.deepEqual(shown.at(-1), { done: 2, total: 3, offline: true });
   });
@@ -362,8 +558,18 @@ describe("a playlist's lookup run", () => {
       },
     });
     assert.equal(end, "failed");
-    assert.deepEqual(answers.get("song 1"), { date: "2001", source: "album", retryAt: 60_000 });
-    assert.deepEqual(answers.get("song 2"), { date: "1999", source: "year", retryAt: 60_000 });
+    assert.deepEqual(answers.get("song 1"), {
+      date: "2001",
+      source: "album",
+      retryAt: 60_000,
+      version,
+    });
+    assert.deepEqual(answers.get("song 2"), {
+      date: "1999",
+      source: "year",
+      retryAt: 60_000,
+      version,
+    });
   });
 
   test("one album Deezer refuses fails that song, not the others in its query", async () => {
@@ -410,7 +616,12 @@ describe("a playlist's lookup run", () => {
 describe("when a playlist's lookup is next due", () => {
   test("now for a song never asked, else the earliest retry; never for held or found songs", () => {
     const found: ReleaseAnswer = { date: "1990", source: "first-release", retryAt: null };
-    const later = (retryAt: number): ReleaseAnswer => ({ date: null, source: "unknown", retryAt });
+    const later = (retryAt: number): ReleaseAnswer => ({
+      date: null,
+      source: "unknown",
+      retryAt,
+      version,
+    });
     assert.equal(releaseNextDue([song(1, { answer: found }), song(2, { held: "1985" })], 5), null);
     assert.equal(
       releaseNextDue([song(1, { answer: later(90) }), song(2, { answer: later(40) })], 5),
@@ -419,5 +630,9 @@ describe("when a playlist's lookup is next due", () => {
     assert.equal(releaseNextDue([song(1, { answer: later(90) }), song(2)], 5), 5);
     assert.equal(releaseNextDue([song(1, { answer: later(2) })], 5), 5);
     assert.equal(releaseNextDue([], 5), null);
+    // An older lookup's fallback is due now, once.
+    const older: ReleaseAnswer = { date: "2005", source: "year", retryAt: 90 };
+    assert.equal(releaseNextDue([song(1, { answer: older })], 5), 5);
+    assert.equal(releaseNextDue([song(1, { answer: { ...older, version } })], 5), 90);
   });
 });

@@ -2527,6 +2527,7 @@ export type { ReleaseDate } from "./releaseDate.ts";
 export {
   RELEASE_BATCH_CODES,
   RELEASE_CODES_PER_SONG,
+  RELEASE_LOOKUP_VERSION,
   deezerAlbumDate,
   deezerRefused,
   lookUpReleaseDates,
@@ -2540,6 +2541,8 @@ export {
   releaseNextDue,
   releaseRequestDelay,
   releaseTagDate,
+  releaseTitleDate,
+  releaseTitleQuery,
 } from "./releaseLookup.ts";
 export type {
   ReleaseAnswer,

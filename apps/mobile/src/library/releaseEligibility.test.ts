@@ -30,7 +30,8 @@ test("network, preference and YT Music changes resume only eligible background w
 });
 
 test("stopping during a host wait keeps answers and resumes only songs still due; playlists keep going", async () => {
-  const { lookUpReleaseDates, releaseBackgroundAllowed } = await import("@wave/core");
+  const { RELEASE_LOOKUP_VERSION, lookUpReleaseDates, releaseBackgroundAllowed } =
+    await import("@wave/core");
   const { releaseLookupClient } = await import("./releaseLookupClient.ts");
   for (const stop of ["mobile", "onDemand", "ytOff"] as const) {
     for (const playlist of [false, true]) {
@@ -64,7 +65,14 @@ test("stopping during a host wait keeps answers and resumes only songs still due
         year: null,
         held: null,
         answer:
-          title === "Saved" ? { date: null, source: "unknown" as const, retryAt: 1000 } : null,
+          title === "Saved"
+            ? {
+                date: null,
+                source: "unknown" as const,
+                retryAt: 1000,
+                version: RELEASE_LOOKUP_VERSION,
+              }
+            : null,
       }));
       const run = () =>
         lookUpReleaseDates({
@@ -78,7 +86,8 @@ test("stopping during a host wait keeps answers and resumes only songs still due
           progress: () => {},
         });
       assert.equal(await run(), playlist ? "done" : "stopped");
-      assert.equal(calls.length, playlist ? 2 : 1);
+      // A playlist goes on: two Deezer searches with no match, then MusicBrainz's by title.
+      assert.equal(calls.length, playlist ? 4 : 1);
       mobile = false;
       preference = "wifi";
       ytMusic = true;
