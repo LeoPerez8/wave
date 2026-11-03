@@ -215,6 +215,13 @@ export const WHOLE_LIBRARY: Record<string, WholeLibraryException> = {
       "library/db/stats.ts#countedListeningPage",
     ],
   },
+  "library/releaseDates.ts#run": {
+    howOften:
+      "At most once per Library or playlist change while the automatic release lookup may run, kept in memory until the next such change; never under Only on demand or with YT Music off.",
+    reason:
+      "The background release lookup (#939) covers every Library song, so it needs the whole list to find the songs due; a network or preference change reuses the kept list. Actual coverage: releaseDates.test.ts.",
+    capabilities: ["library/LibraryStore.ts#listSongs"],
+  },
   "library/playlistImports.ts#listLibrary": {
     howOften: "Once per explicit playlist import or resumed import preparation.",
     reason: "An explicit playlist import matches entries against the Library before saving.",
