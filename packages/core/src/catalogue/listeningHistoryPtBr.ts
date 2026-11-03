@@ -7,4 +7,5 @@ export const listeningHistoryPtBr: typeof listeningHistoryEn = {
   failed: "Não foi possível carregar o histórico de ouvidas.",
   tryAgain: "Tentar novamente",
   unknownSong: "Música desconhecida",
+  goToMoment: "Ir para este momento",
 };
