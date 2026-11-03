@@ -1,3 +1,4 @@
+import { createPlaylistFinder } from "./findInPlaylist.ts";
 import { formatDate } from "./formatting.ts";
 import { catalogueOf, type AppLanguage } from "./localisation.ts";
 
@@ -62,4 +63,13 @@ export const listeningHistoryDays = <T extends { readonly startedAt: number }>(
     group.plays.push(play);
   }
   return [...groups.values()];
+};
+
+/** Search matching over saved metadata; plays retain their supplied chronological order. */
+export const findListeningHistory = <T extends { readonly snapshot: PlaySnapshot }>(
+  plays: readonly T[],
+  query: string,
+): readonly T[] => {
+  const found = createPlaylistFinder(plays, (play) => play.snapshot).find(query);
+  return found === null ? plays : found.map((index) => plays[index]!);
 };

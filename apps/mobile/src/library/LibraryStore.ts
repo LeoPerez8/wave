@@ -228,6 +228,7 @@ import {
   replacePlaylistSongs,
   selectPlaylist,
   selectPlaylistEntries,
+  selectPlaylistGraveyard,
   selectPlaylistEntriesRevision,
   selectPlaylistEntrySongs,
   selectPlaylistEntryVideoIdsPage,
@@ -953,6 +954,12 @@ export class LibraryStore extends Context.Service<
     /** Every playlist's unsearched songs, top to bottom, for the background fill. */
     readonly unsearchedEntries: Effect.Effect<readonly PlaylistUnsearched[], LibraryStoreError>;
     /** A playlist with its YT Music entries and its Library songs in [scope]. */
+    readonly playlistGraveyard: (
+      id: number,
+    ) => Effect.Effect<
+      readonly (PlaylistEntryRow & { readonly removedAt: number })[],
+      LibraryStoreError
+    >;
     readonly getPlaylist: (
       id: number,
       scope?: TrackScope,
@@ -1150,6 +1157,7 @@ export class LibraryStore extends Context.Service<
     /** Counted plays with saved display metadata, newest first, 50 per page. */
     readonly listeningHistory: (
       before?: ListeningHistoryCursor,
+      query?: string,
     ) => Effect.Effect<ListeningHistoryPage, LibraryStoreError>;
     /**
      * Each track's counted plays within [window] (tracks still in the library),
@@ -1959,6 +1967,9 @@ const make = Effect.gen(function* () {
       selectUnsearchedEntries(db),
     ),
 
+    playlistGraveyard: (id) =>
+      attempt("read the playlist graveyard", () => selectPlaylistGraveyard(db, id)),
+
     getPlaylist: (id, scope) =>
       attempt(
         "open the playlist",
@@ -2121,8 +2132,8 @@ const make = Effect.gen(function* () {
     ),
 
     latestPlay: attempt("read the latest play", () => latestPlay(db)),
-    listeningHistory: (before) =>
-      attempt("read listening history", () => listeningHistory(db, before)),
+    listeningHistory: (before, query) =>
+      attempt("read listening history", () => listeningHistory(db, before, query)),
 
     trackPlayTotals: (window, trackIds) =>
       attempt("sum up song plays", () => trackPlayTotals(db, window, trackIds)),
