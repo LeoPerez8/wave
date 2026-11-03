@@ -15,6 +15,7 @@ import {
   readReleaseAnswers,
   releaseNextDue,
   releaseRequestDelay,
+  releaseSortChosen,
   releaseTagDate,
   releaseTitleDate,
   releaseTitleQuery,
@@ -349,6 +350,38 @@ describe("a song's answer", () => {
     const unknown = releaseAnswer([], [], null, null, 1000);
     assert.equal(releaseDue(song, null, unknown, 2000), false);
     assert.equal(releaseDue(song, null, unknown, 2592001000), true);
+  });
+
+  test("choosing Release date makes a song no lookup dated due at once, keeping its date", () => {
+    const song = { title: "Song", artist: "Artist" };
+    const unknown = releaseAnswer([], [], null, null, 1000);
+    const year = releaseAnswer([], [], 1985, null, 1000);
+    const failed = releaseAnswer([], [], null, null, 1000, true);
+    const chosenAt = 2000;
+    assert.deepEqual(releaseSortChosen(unknown, chosenAt), {
+      date: null,
+      source: "unknown",
+      retryAt: 2000,
+      version: RELEASE_LOOKUP_VERSION,
+    });
+    assert.deepEqual(releaseSortChosen(year, chosenAt), {
+      date: "1985",
+      source: "year",
+      retryAt: 2000,
+      version: RELEASE_LOOKUP_VERSION,
+    });
+    assert.equal(releaseDue(song, null, releaseSortChosen(unknown, chosenAt), chosenAt), true);
+    assert.equal(releaseSortChosen(failed, chosenAt)?.retryAt, 2000);
+    // A first release is never asked again, nor a song never asked or already due.
+    const found = { date: "1985", source: "first-release", retryAt: null } as const;
+    assert.equal(releaseSortChosen(found, chosenAt), null);
+    assert.equal(releaseSortChosen(null, chosenAt), null);
+    assert.equal(releaseSortChosen(unknown, 2592001000), null);
+    // An older lookup's answer is due already (`RELEASE_LOOKUP_VERSION`).
+    assert.equal(
+      releaseSortChosen({ date: null, source: "unknown", retryAt: 9e12 }, chosenAt),
+      null,
+    );
   });
 
   test("serialized retry deadlines survive a restart and answered songs remain settled", () => {

@@ -2542,6 +2542,7 @@ export {
   releaseDue,
   releaseNextDue,
   releaseRequestDelay,
+  releaseSortChosen,
   releaseTagDate,
   releaseTitleDate,
   releaseTitleQuery,
