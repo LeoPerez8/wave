@@ -159,7 +159,9 @@ export const settingsPtBr: typeof settingsEn = {
   searchAlsoFindsSongsOnYouTubeMusic:
     "Buscar também encontra músicas no YouTube Music e envia o que você digita ao YouTube. Nada da sua biblioteca é enviado. Desativado, o Wave não faz solicitações ao YT Music.",
   alwaysSearchOnlineOpensAlbumsAndArtists:
-    "Buscar sempre online abre álbuns e artistas com Online selecionado e busca online enquanto você digita. Buscar sempre no Wi-Fi faz isso apenas fora dos dados móveis. Só quando solicitado espera um toque em Online. Mantenha Biblioteca | Online pressionado para alterar essa opção ali.",
+    "Buscar sempre online abre álbuns e artistas com Online selecionado e busca online enquanto você digita. Buscar sempre no Wi-Fi faz isso apenas fora dos dados móveis. Só quando solicitado espera um toque em Online. As duas primeiras também buscam datas de lançamento para músicas da Biblioteca e músicas do YT Music em playlists. Mantenha Biblioteca | Online pressionado para alterar essa opção ali.",
+  findingReleaseDates: (done: number, total: number): string =>
+    `Buscando datas de lançamento: ${formatNumber("pt-BR", done)} de ${formatNumber("pt-BR", total)}`,
   clearArtistPhotos: "Limpar fotos de artistas?",
   couldntClearArtistPhotos: "Não foi possível limpar as fotos de artistas",
   clear: "Limpar",

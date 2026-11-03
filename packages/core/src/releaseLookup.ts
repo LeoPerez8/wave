@@ -255,6 +255,15 @@ export interface ReleaseProgress {
 }
 
 /**
+ * The line Settings shows beside Search online for the background lookup: songs done of all
+ * while it runs, null when nothing runs (no lookup, or a failure waiting for its retry).
+ */
+export const releaseBackgroundLine = (
+  progress: ReleaseProgress | null,
+): { readonly done: number; readonly total: number } | null =>
+  progress === null || progress.offline ? null : { done: progress.done, total: progress.total };
+
+/**
  * How a lookup run ended: every due song answered, a request failed (the rest waits for its
  * retry), or [going] turned false.
  */

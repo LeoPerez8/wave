@@ -1,4 +1,10 @@
-import { ytAccountView, type Catalogue, type YtAccount, type YtAccountNote } from "@wave/core";
+import {
+  releaseBackgroundLine,
+  ytAccountView,
+  type Catalogue,
+  type YtAccount,
+  type YtAccountNote,
+} from "@wave/core";
 import { Text, View } from "react-native";
 
 import { CatalogLine } from "@/catalog/CatalogLine";
@@ -6,6 +12,7 @@ import { CELL, grid } from "@/catalog/grid";
 import { Hairline } from "@/catalog/Hairline";
 import { SettingsSwitch } from "@/components/SettingsSwitch";
 import { TextButton } from "@/components/TextButton";
+import { backgroundReleaseStatus } from "@/library/releaseDates";
 import { useLocalisation } from "@/localisation/localisation";
 
 import { AccountPhoto } from "./AccountPhoto";
@@ -61,6 +68,7 @@ export function YtMusicSettingsSection() {
   const { strings } = useLocalisation();
   const enabled = useYtMusicEnabled();
   const searchOnline = searchOnlineChoice.setting.useValue();
+  const releaseLine = releaseBackgroundLine(backgroundReleaseStatus.useValue());
   const account = useYtAccount();
   const view = ytAccountView(account.state, enabled);
 
@@ -85,6 +93,11 @@ export function YtMusicSettingsSection() {
             current={searchOnline}
             note={strings.settings.alwaysSearchOnlineOpensAlbumsAndArtists}
           />
+          {releaseLine !== null && (
+            <Text className="mt-2 font-sans text-footnote text-secondary">
+              {strings.settings.findingReleaseDates(releaseLine.done, releaseLine.total)}
+            </Text>
+          )}
         </View>
       )}
 

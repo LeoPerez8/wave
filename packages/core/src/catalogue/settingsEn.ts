@@ -173,7 +173,9 @@ export const settingsEn = {
   searchAlsoFindsSongsOnYouTubeMusic:
     "Search also finds songs on YouTube Music, which means sending what you type to YouTube. Nothing from your library is sent. Off, Wave makes no YT Music requests.",
   alwaysSearchOnlineOpensAlbumsAndArtists:
-    "Always search online opens albums and artists with Online selected and has Search look online as you type. Always search on Wi-Fi does so only off mobile data. Only on demand waits for Online to be tapped. Long-press the Library | Online toggle to change it there.",
+    "Always search online opens albums and artists with Online selected and has Search look online as you type. Always search on Wi-Fi does so only off mobile data. Only on demand waits for Online to be tapped. The first two also find release dates for Library songs and YT Music songs in playlists. Long-press the Library | Online toggle to change it there.",
+  findingReleaseDates: (done: number, total: number): string =>
+    `Finding release dates: ${formatNumber("en", done)} of ${formatNumber("en", total)}`,
   clearArtistPhotos: "Clear artist photos?",
   couldntClearArtistPhotos: "Couldn't clear artist photos",
   clear: "Clear",
