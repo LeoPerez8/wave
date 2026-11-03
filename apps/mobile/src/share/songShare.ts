@@ -5,7 +5,6 @@ import {
   lookUpSpotifyTrack,
   parseTrackId,
   SONG_LINKS_LOADING,
-  spotifySearchQuery,
   type ArtworkPalette,
   type SongLinkLookup,
   type SongLinkSearch,
@@ -25,7 +24,7 @@ import { cacheStreamedCover } from "@/playback/queueTracks";
 import { spotifySignedIn } from "@/settings/spotifyAccount";
 import { ytMusicEnabled } from "@/settings/ytMusic";
 import { askSpotifyAccount } from "@/spotify/askSpotify";
-import { searchSongsInTurn } from "@/ytmusic/askYtMusic";
+import { searchRecordingInTurn } from "@/ytmusic/askYtMusic";
 import { YtMusic } from "@/ytmusic/YtMusic";
 
 const LOG_TAG = "SongShare";
@@ -53,7 +52,7 @@ let opened = 0;
 
 /** One YouTube Music Songs search for a song without a video id, in the search allowance (as Share). */
 const searchForLinks: SongLinkSearch = async (song) =>
-  (await searchSongsInTurn("share", spotifySearchQuery(song))) ?? { ok: false, reason: "failed" };
+  (await searchRecordingInTurn("share", song)) ?? { ok: false, reason: "failed" };
 
 /** The signed-in Spotify account: its saved session, and its own search (as sharing a playlist). */
 const spotifyForLinks: SongLinkSpotify = {

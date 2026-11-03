@@ -12,6 +12,8 @@ import { normalizeSearchText } from "./search.ts";
 
 /** A song found on YouTube Music. */
 export interface YtSong {
+  /** YouTube's musicVideoType; absent on older saved entries. */
+  readonly videoType?: string | null;
   readonly videoId: string;
   readonly title: string;
   /** Its artists, as YouTube Music credits them (at least one). */
