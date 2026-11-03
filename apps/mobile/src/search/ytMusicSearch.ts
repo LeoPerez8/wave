@@ -1,4 +1,10 @@
-import { YT_SECTION_HIDDEN, stepYtSection, type YtPick, type YtSection } from "@wave/core";
+import {
+  YT_SECTION_HIDDEN,
+  stepYtSection,
+  ytSearchAsksVideos,
+  type YtPick,
+  type YtSection,
+} from "@wave/core";
 import * as Effect from "effect/Effect";
 import * as Result from "effect/Result";
 import { useCallback, useEffect, useReducer } from "react";
@@ -31,8 +37,10 @@ const inTurn = <A, R>(
  * dropped (Core's `stepYtSection`). With Search online set to Always, Online
  * is selected until Library is tapped (and again once the field is cleared),
  * so every query is asked once typing pauses, each search taking its turn in
- * the shared search allowance (`withSearchTurn`). Off in Settings, it stays
- * hidden and nothing is asked.
+ * the shared search allowance (`withSearchTurn`). When no song result matches
+ * the query (Core's `ytSearchAsksVideos`), one Videos search follows, and its
+ * matching official music videos show among the songs; a failed one shows none.
+ * Off in Settings, it stays hidden and nothing is asked.
  */
 export const useYtMusicSection = (
   query: string,
@@ -56,19 +64,28 @@ export const useYtMusicSection = (
     const timer = setTimeout(() => {
       // Only the query is sent. One that fails fails them all: one quiet line.
       const search = askYtMusic((ytMusic) =>
-        Effect.all(
-          {
-            songs: inTurn(always, loading, ytMusic.searchSongs(loading)),
-            artists: inTurn(always, loading, ytMusic.searchArtists(loading)),
-            albums: inTurn(always, loading, ytMusic.searchAlbums(loading)),
-          },
-          { concurrency: "unbounded" },
-        ),
+        Effect.gen(function* () {
+          const found = yield* Effect.all(
+            {
+              songs: inTurn(always, loading, ytMusic.searchSongs(loading)),
+              artists: inTurn(always, loading, ytMusic.searchArtists(loading)),
+              albums: inTurn(always, loading, ytMusic.searchAlbums(loading)),
+            },
+            { concurrency: "unbounded" },
+          );
+          const videos = ytSearchAsksVideos(loading, found.songs.songs)
+            ? yield* inTurn(always, loading, ytMusic.searchVideos(loading)).pipe(
+                Effect.map((page) => page.songs),
+                Effect.orElseSucceed(() => []),
+              )
+            : undefined;
+          return { ...found, videos };
+        }),
       );
       void search.then((result) => {
         if (Result.isSuccess(result)) {
-          const { songs, artists, albums } = result.success;
-          dispatch({ type: "found", query: loading, songs: songs.songs, artists, albums });
+          const { songs, artists, albums, videos } = result.success;
+          dispatch({ type: "found", query: loading, songs: songs.songs, artists, albums, videos });
         }
         // Turned off meanwhile: the section is already hidden.
         else if (result.failure.reason !== "disabled")
