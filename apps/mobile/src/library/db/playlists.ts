@@ -31,7 +31,20 @@ import {
   type UnsearchedSong,
   type YtAlbumSong,
 } from "@wave/core";
-import { and, asc, desc, eq, inArray, isNotNull, isNull, ne, or, sql, type SQL } from "drizzle-orm";
+import {
+  and,
+  asc,
+  desc,
+  eq,
+  inArray,
+  isNotNull,
+  isNull,
+  lte,
+  ne,
+  or,
+  sql,
+  type SQL,
+} from "drizzle-orm";
 
 import type { PlaylistAddResult, PlaylistDetail, PlaylistRow } from "../LibraryStore.ts";
 import type { LibraryDatabase, RowPage } from "./database.ts";
@@ -1645,16 +1658,24 @@ export const restoreGraveyardItem = (
     const { playlistItems } = schema;
     const row = tx.select().from(playlistItems).where(eq(playlistItems.id, itemId)).get();
     if (row === undefined) return;
-    const survivors = tx
+    // Tombstones still describe the old slot even when its neighbours were removed later.
+    const original = tx
       .select()
       .from(playlistItems)
-      .where(and(eq(playlistItems.playlistId, playlistId), live))
+      .where(
+        and(
+          eq(playlistItems.playlistId, playlistId),
+          lte(playlistItems.addedAt, row.removedAt ?? 0),
+        ),
+      )
+      .orderBy(...IN_ORDER)
       .all();
+    const index = original.findIndex((entry) => entry.id === itemId);
+    const neighbours = [original[index - 1], original[index + 1]].flatMap((entry) =>
+      entry === undefined || entry.deleted ? [] : [entry],
+    );
     const oldPlaceRemains =
-      survivors.some((entry) => entry.addedAt <= (row.removedAt ?? 0)) &&
-      !survivors.some(
-        (entry) => entry.addedAt <= (row.removedAt ?? 0) && entry.changedAt > (row.removedAt ?? 0),
-      );
+      neighbours.length > 0 && neighbours.every((entry) => entry.changedAt <= (row.removedAt ?? 0));
     if (!oldPlaceRemains) {
       const entries = orderedEntries(tx, playlistId);
       const { keys, rekeyed } = placeEntries(entries, entries.length, 1);

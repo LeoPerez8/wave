@@ -179,3 +179,21 @@ test("forgetting a later imported removal also forgets its earlier Library recor
   forgetGraveyardItems(db, playlistId, entry.itemId, 500);
   assert.deepEqual(selectPlaylistGraveyard(db, playlistId), []);
 });
+
+test("Restore appends when both old neighbours are removed even if other songs survive", async () => {
+  const db = await openTestDatabase();
+  const { playlistId } = createPlaylist(
+    db,
+    "Drive",
+    [listed("A"), listed("B"), listed("C"), listed("D")],
+    100,
+  );
+  const [a, b, c] = selectPlaylistEntries(db, playlistId);
+  removePlaylistItems(db, playlistId, [b!.itemId], 200);
+  removePlaylistItems(db, playlistId, [a!.itemId, c!.itemId], 300);
+  restoreGraveyardItem(db, playlistId, b!.itemId, 400);
+  assert.deepEqual(
+    selectPlaylistEntries(db, playlistId).map((e) => e.source === "unavailable" && e.song.title),
+    ["D", "B"],
+  );
+});
