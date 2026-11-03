@@ -460,12 +460,12 @@ test("a moment opens centred on its play and pages newer and older plays from th
     all.slice(all.indexOf(150) - 25, all.indexOf(150) + 25),
   );
   const ids = moment.rows.map(({ id }) => id);
-  for (let older = moment.next; older !== null; ) {
+  for (let older = moment.next; older !== null;) {
     const page = listeningHistory(db, older);
     ids.push(...page.rows.map(({ id }) => id));
     older = page.next;
   }
-  for (let newer = moment.newer; newer !== null; ) {
+  for (let newer = moment.newer; newer !== null;) {
     const page = newerListeningHistory(db, newer);
     assert.equal(page.rows.length <= 50, true);
     ids.unshift(...page.rows.map(({ id }) => id));
