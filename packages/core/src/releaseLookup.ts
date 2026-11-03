@@ -214,6 +214,18 @@ export const releaseDue = (
   (!answer || (answer.retryAt !== null && answer.retryAt <= now));
 
 /**
+ * [answer] once the owner chose Release date, at [now], for a playlist holding its song: one
+ * without a first release (unknown, a fallback date, a failure) is due at once, keeping its
+ * date, so the choice asks about every song no lookup dated, even one the general lookup asked
+ * about days before. Null when it stays as it is: no answer, a first release, or already due.
+ */
+export const releaseSortChosen = (
+  answer: ReleaseAnswer | null | undefined,
+  now: number,
+): ReleaseAnswer | null =>
+  !answer || answer.retryAt === null || answer.retryAt <= now ? null : { ...answer, retryAt: now };
+
+/**
  * The first-release date to write into a song's original-date tag, or null for none: only a
  * date the lookup found ([answer]'s `first-release`), only for a song with a file, and never
  * over a date it already [held] (its tag's or one the owner typed). Fallback dates (Year, the

@@ -17,6 +17,8 @@ const harness = () => {
   let stopped = false;
   const answers: Record<string, core.ReleaseAnswer> = {};
   const playlists = [{ id: 1 }, { id: 2 }];
+  // Each playlist's sort, by sync id (here its id); Custom when absent.
+  const sorts: Record<string, string> = { "1": "releaseDate" };
   const songs = [{ id: 1, title: "Song", artist: "Artist", year: null, original: null }];
   const store = {
     saveReleaseDate: () => {
@@ -59,7 +61,7 @@ const harness = () => {
     onTypedReleaseDatesChanged: subscribe("typed"),
     followReleaseEligibility,
     playlistSongSetting: (id: string) => ({
-      get: () => ({ key: id === "1" ? "releaseDate" : "title" }),
+      get: () => ({ key: sorts[id] ?? "custom" }),
     }),
     LibraryStore: { use: (fn: (value: typeof store) => unknown) => fn(store) },
     appRuntime: { runPromise: async (value: unknown) => value },
@@ -105,6 +107,8 @@ const harness = () => {
   return {
     start,
     settle,
+    sorts,
+    answers,
     listeners,
     timers,
     deps,
@@ -216,4 +220,49 @@ test("a read exception retries without another external trigger", async () => {
   await h.settle();
   assert.ok(Object.keys(h.deps.releaseAnswers.get()).length > 0);
   assert.equal(h.status, null);
+});
+
+test("choosing Release date asks again about songs the general lookup didn't date", async () => {
+  const h = harness();
+  const asked: string[][] = [];
+  h.deps.lookUpReleaseDates = async ({
+    songs,
+    answered,
+  }: Parameters<typeof core.lookUpReleaseDates>[0]) => {
+    const now = Date.now();
+    const due = songs.filter((song) => core.releaseDue(song, song.held, song.answer, now));
+    asked.push(due.map((song) => song.title));
+    for (const song of due)
+      await answered(song, { date: null, source: "unknown", retryAt: now + 30 * 86_400_000 });
+    return "done";
+  };
+  h.start();
+  await h.settle();
+  // The general lookup found nothing for the Library song, also playlist 2's YT Music entry.
+  assert.deepEqual(asked, [["Song", "Song"]]);
+  h.sorts["2"] = "releaseDate";
+  h.listeners.sort!();
+  h.timers.get(2000)?.();
+  await h.settle();
+  assert.deepEqual(asked, [["Song", "Song"], ["Song"]]);
+  // Only the choice asks: the next run waits for the retry again.
+  h.listeners.typed!();
+  h.timers.get(2000)?.();
+  await h.settle();
+  assert.equal(asked.length, 2);
+});
+
+test("a playlist already on Release date at launch waits for its songs' retries", async () => {
+  const h = harness();
+  h.sorts["2"] = "releaseDate";
+  const key = core.releaseAnswerKey(h.songs[0]!);
+  h.answers[key] = { date: null, source: "unknown", retryAt: Date.now() + 86_400_000 };
+  let calls = 0;
+  h.deps.lookUpReleaseDates = async () => {
+    calls++;
+    return "done";
+  };
+  h.start();
+  await h.settle();
+  assert.equal(calls, 0);
 });

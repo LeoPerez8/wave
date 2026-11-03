@@ -2539,6 +2539,7 @@ export {
   releaseDue,
   releaseNextDue,
   releaseRequestDelay,
+  releaseSortChosen,
   releaseTagDate,
 } from "./releaseLookup.ts";
 export type {
