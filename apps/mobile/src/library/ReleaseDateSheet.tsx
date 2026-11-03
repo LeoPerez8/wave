@@ -135,8 +135,7 @@ const saveTypedDate = async (song: ReleaseDateSong, date: string | null): Promis
     return;
   }
   if (date === null) {
-    const { [releaseAnswerKey(song)]: _forgotten, ...answers } = releaseAnswers.get();
-    releaseAnswers.set(answers);
+    releaseAnswers.remove(releaseAnswerKey(song));
   }
   const { trackId } = song;
   if (trackId === null) return;
