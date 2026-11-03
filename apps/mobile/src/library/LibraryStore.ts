@@ -1157,6 +1157,7 @@ export class LibraryStore extends Context.Service<
     /** Counted plays with saved display metadata, newest first, 50 per page. */
     readonly listeningHistory: (
       before?: ListeningHistoryCursor,
+      query?: string,
     ) => Effect.Effect<ListeningHistoryPage, LibraryStoreError>;
     /**
      * Each track's counted plays within [window] (tracks still in the library),
@@ -2131,8 +2132,8 @@ const make = Effect.gen(function* () {
     ),
 
     latestPlay: attempt("read the latest play", () => latestPlay(db)),
-    listeningHistory: (before) =>
-      attempt("read listening history", () => listeningHistory(db, before)),
+    listeningHistory: (before, query) =>
+      attempt("read listening history", () => listeningHistory(db, before, query)),
 
     trackPlayTotals: (window, trackIds) =>
       attempt("sum up song plays", () => trackPlayTotals(db, window, trackIds)),
