@@ -324,3 +324,11 @@ export const removePlaylistItems = (
     },
   );
 };
+
+/** Restore a Graveyard song, notifying playlist readers and account sync. */
+export const restoreGraveyardItem = (playlistId: number, itemId: number): Promise<void> =>
+  edit((store) => store.restoreGraveyardItem(playlistId, itemId), playlistId);
+
+/** Forget one Graveyard song, or every removal in the playlist. */
+export const forgetGraveyardItems = (playlistId: number, itemId?: number): Promise<void> =>
+  edit((store) => store.forgetGraveyardItems(playlistId, itemId), playlistId);

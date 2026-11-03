@@ -156,6 +156,8 @@ The current-playing row follows the recording across a completed streamed-to-Lib
 55. As a user, I want a Favorites list of all starred tracks, so that I can play my favorites.
 56. As a user, I want to import `.m3u` / `.m3u8` playlist files (several at once) from Library › Playlists (Import Playlists › From Files), each becoming a playlist named after its file with its songs in file order, so that playlists I made in another player come with me. Entries not in my library are skipped and listed in a summary, and a name I already use asks whether to replace that playlist or keep both.
 
+Each playlist has a **Graveyard** (pt-BR **Cemitério**) for songs removed by hand through a swipe or Remove from Playlist. Its menu item appears only while it has songs. Automatic replacements and deduplication never enter it; Undo clears the removal. The screen shows one row per absent song, newest removal first, with "Removed on 3 Nov", playback and the song's full menu. **Restore** returns the song to its retained position when the old ordering still allows it, otherwise to the end, and removes it from the Graveyard. **Remove from Graveyard** forgets that song's removals without changing the playlist. The screen's menu offers **Empty Graveyard**, which asks for confirmation before forgetting every removal. Restoring and forgetting sync with the Wave account through playlist entries; forgotten entries remain sync tombstones. Nothing expires.
+
 ### Home tab and play history
 
 57. As a user, I want every play recorded with start time, listened time, how it ended (completed, skipped, stopped, interrupted) and its play context, so that statistics can be computed later over my full history.
