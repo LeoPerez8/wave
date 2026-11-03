@@ -26,7 +26,7 @@ test("network, preference and YT Music changes resume only eligible background w
     allowed = true;
     changed();
   }
-  assert.equal(runs, 3);
+  assert.equal(runs, 1);
 });
 
 test("stopping during a host wait keeps answers and resumes only songs still due; playlists keep going", async () => {

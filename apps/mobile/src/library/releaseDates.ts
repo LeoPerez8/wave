@@ -94,7 +94,7 @@ const MAX_WAIT_MS = 2 ** 31 - 1;
 let running = false;
 let again = false;
 let wake: ReturnType<typeof setTimeout> | undefined;
-// A playlist edit invalidates the general run immediately, before its next service request.
+// Only a sorted playlist request interrupts the general run.
 let playlistRequested = false;
 const backgroundAllowed = (): boolean =>
   releaseBackgroundAllowed(searchOnline.get(), {
@@ -108,6 +108,46 @@ export const backgroundReleaseStatus = persistedSetting<ReleaseProgress | null>(
   read: () => null,
   write: () => null,
 });
+
+type LookupInput = {
+  song: ReturnType<typeof libraryReleaseSong>;
+  track: SongRow | null;
+  stream?: boolean;
+};
+type LookupJob = {
+  selected: () => boolean;
+  input: () => Promise<LookupInput[]>;
+  progress: (progress: ReleaseProgress | null) => void;
+};
+const earlier = (next: number | null, at: number): number =>
+  next === null ? at : Math.min(next, at);
+let cachedPlaylists: Awaited<ReturnType<typeof readPlaylistRows>> | null = null;
+const readPlaylistRows = () =>
+  appRuntime.runPromise(
+    // oxlint-disable-next-line react-hooks/rules-of-hooks -- Effect Service.use resolves a service.
+    LibraryStore.use((store) => store.listPlaylists),
+  );
+const readPlaylists = async () => cachedPlaylists ?? (cachedPlaylists = await readPlaylistRows());
+let generalInput: LookupInput[] | null = null;
+let inputVersion = 0;
+let sortedIds = new Set<number>();
+const playlistInputs = new Map<number, LookupInput[]>();
+const playlistInput = async (id: number): Promise<LookupInput[]> => {
+  const cached = playlistInputs.get(id);
+  if (cached) return cached;
+  const version = inputVersion;
+  const detail = await appRuntime.runPromise(
+    // oxlint-disable-next-line react-hooks/rules-of-hooks -- Effect Service.use resolves a service.
+    LibraryStore.use((store) => store.getPlaylist(id)),
+  );
+  const input = (detail?.items ?? []).map((entry) => ({
+    song: entryReleaseSong(entry),
+    track: entry.source === "library" ? entry.track : null,
+    stream: entry.source === "stream",
+  }));
+  if (version === inputVersion) playlistInputs.set(id, input);
+  return input;
+};
 
 /**
  * Looks up sorted playlists first, then Library and playlist YT Music songs when permitted.
@@ -125,55 +165,68 @@ const run = async (): Promise<void> => {
   clearTimeout(wake);
   let next: number | null = null;
   try {
-    const playlists = await appRuntime.runPromise(
-      // oxlint-disable-next-line react-hooks/rules-of-hooks -- Effect Service.use resolves a service.
-      LibraryStore.use((store) => store.listPlaylists),
-    );
-    const statuses: Record<number, ReleaseProgress> = {};
-    // The null group is the general lookup; sorted playlists always precede it.
-    for (const playlist of [...playlists, null]) {
-      const general = playlist === null;
-      const setting =
-        playlist === null ? null : playlistSongSetting(playlist.syncId ?? String(playlist.id));
+    const playlists = await readPlaylists();
+    const jobs: LookupJob[] = [];
+    sortedIds = new Set();
+    for (const playlist of playlists) {
       const selected = () =>
-        general ? backgroundAllowed() && !playlistRequested : setting?.get().key === "releaseDate";
+        playlistSongSetting(playlist.syncId ?? String(playlist.id)).get().key === "releaseDate";
       if (!selected()) continue;
-      const entries = new Map<string, SongRow[]>();
-      const input: ReturnType<typeof libraryReleaseSong>[] = [];
-      const addTrack = (track: SongRow) => {
-        const song = libraryReleaseSong(track);
+      sortedIds.add(playlist.id);
+      jobs.push({
+        selected,
+        input: () => playlistInput(playlist.id),
+        progress: (progress) => {
+          const statuses = { ...releaseStatus.get() };
+          if (progress === null) delete statuses[playlist.id];
+          else statuses[playlist.id] = progress;
+          releaseStatus.set(statuses);
+        },
+      });
+    }
+    if (backgroundAllowed())
+      jobs.push({
+        selected: () => backgroundAllowed() && !playlistRequested,
+        input: async () => {
+          if (generalInput !== null) return generalInput;
+          const version = inputVersion;
+          const tracks = await appRuntime.runPromise(
+            // oxlint-disable-next-line react-hooks/rules-of-hooks -- Effect Service.use resolves a service.
+            LibraryStore.use((store) => store.listSongs),
+          );
+          const input: LookupInput[] = tracks.map((track) => ({
+            song: libraryReleaseSong(track),
+            track,
+          }));
+          for (const playlist of playlists) {
+            const detail = await playlistInput(playlist.id);
+            for (const item of detail) if (item.track === null && item.stream) input.push(item);
+          }
+          if (version === inputVersion) generalInput = input;
+          return input;
+        },
+        progress: backgroundReleaseStatus.set,
+      });
+    for (const job of jobs) {
+      if (!job.selected()) continue;
+      const tracksByReleaseKey = new Map<string, SongRow[]>();
+      const input = await job.input();
+      for (const { song, track } of input) {
+        if (track === null) continue;
         const key = releaseAnswerKey(song);
-        const held = entries.get(key) ?? [];
-        if (!held.some((entry) => entry.id === track.id)) held.push(track);
-        entries.set(key, held);
-        return song;
-      };
-      if (general) {
-        const tracks = await appRuntime.runPromise(
-          // oxlint-disable-next-line react-hooks/rules-of-hooks -- Effect Service.use resolves a service.
-          LibraryStore.use((store) => store.listSongs),
-        );
-        for (const track of tracks) input.push(addTrack(track));
-      }
-      for (const candidate of general ? playlists : [playlist!]) {
-        const detail = await appRuntime.runPromise(
-          // oxlint-disable-next-line react-hooks/rules-of-hooks -- Effect Service.use resolves a service.
-          LibraryStore.use((store) => store.getPlaylist(candidate.id)),
-        );
-        for (const entry of detail?.items ?? []) {
-          if (entry.source === "library") {
-            if (!general) input.push(addTrack(entry.track));
-          } else if (!general || entry.source === "stream") input.push(entryReleaseSong(entry));
-        }
+        const matchingTracks = tracksByReleaseKey.get(key) ?? [];
+        if (!matchingTracks.some((entry) => entry.id === track.id)) matchingTracks.push(track);
+        tracksByReleaseKey.set(key, matchingTracks);
       }
       const songs: ReleaseLookupSong[] = [];
-      for (const song of input) {
+      for (const { song } of input) {
         const key = releaseAnswerKey(song);
         const answer = releaseAnswers.get()[key] ?? null;
         const held = heldReleaseDate(song);
         // A song answered before it was in the Library (or before its file came) takes its date now.
         if (answer !== null && held === null)
-          for (const track of entries.get(key) ?? []) await keepReleaseDate(track, answer);
+          for (const track of tracksByReleaseKey.get(key) ?? [])
+            await keepReleaseDate(track, answer);
         songs.push({ ...song, key, held, answer });
       }
       const at = releaseNextDue(songs, Date.now());
@@ -183,29 +236,23 @@ const run = async (): Promise<void> => {
         continue;
       }
       await ensureReleaseNotice();
-      looking = selected;
+      looking = job.selected;
       const end = await lookUpReleaseDates({
         songs,
         services: client,
         now: Date.now,
-        going: selected,
+        going: job.selected,
         answered: async (song, answer) => {
           releaseAnswers.put(song.key, answer);
-          for (const track of entries.get(song.key) ?? []) await keepReleaseDate(track, answer);
+          for (const track of tracksByReleaseKey.get(song.key) ?? [])
+            await keepReleaseDate(track, answer);
         },
-        progress: (progress) => {
-          if (playlist === null) backgroundReleaseStatus.set(progress);
-          else {
-            if (progress === null) delete statuses[playlist.id];
-            else statuses[playlist.id] = progress;
-            releaseStatus.set({ ...statuses });
-          }
-        },
+        progress: job.progress,
       });
       looking = null;
       if (end === "failed") {
         // Every failed song retries in a minute: so does the run.
-        next = Date.now() + 60_000;
+        next = earlier(next, Date.now() + 60_000);
         break;
       }
       if (end === "stopped") continue;
@@ -215,7 +262,11 @@ const run = async (): Promise<void> => {
       );
       if (after !== null) next = next === null ? after : Math.min(next, after);
     }
+  } catch {
+    next = earlier(next, Date.now() + 60_000);
   } finally {
+    backgroundReleaseStatus.set(null);
+    releaseStatus.set({});
     looking = null;
     running = false;
   }
@@ -245,13 +296,46 @@ const runSoon = (): void => {
 export const startReleaseDates = (): void => {
   if (started) return;
   started = true;
-  const playlistChanged = () => {
-    playlistRequested = true;
+  const playlistChanged = async (ids?: readonly number[]) => {
+    const previous = new Map(playlistInputs);
+    cachedPlaylists = null;
+    generalInput = null;
+    inputVersion++;
+    if (ids === undefined) playlistInputs.clear();
+    else for (const id of ids) playlistInputs.delete(id);
+    const playlists = await readPlaylists();
+    for (const playlist of playlists) {
+      if (ids !== undefined && !ids.includes(playlist.id)) continue;
+      if (playlistSongSetting(playlist.syncId ?? String(playlist.id)).get().key !== "releaseDate")
+        continue;
+      const input = await playlistInput(playlist.id);
+      if (JSON.stringify(previous.get(playlist.id)) !== JSON.stringify(input))
+        playlistRequested = true;
+    }
     again = running;
     runSoon();
   };
-  onPlaylistSongSortChanged(playlistChanged);
-  onPlaylistsEdited(playlistChanged);
+  const changed = (ids?: readonly number[]) => {
+    if (ids?.some((id) => sortedIds.has(id))) playlistRequested = true;
+    void playlistChanged(ids).catch(() => runSoon());
+  };
+  const rememberSorts = () => {
+    const selected = new Set(
+      (cachedPlaylists ?? [])
+        .filter(
+          (playlist) =>
+            playlistSongSetting(playlist.syncId ?? String(playlist.id)).get().key === "releaseDate",
+        )
+        .map((playlist) => playlist.id),
+    );
+    if ([...selected].some((id) => !sortedIds.has(id))) playlistRequested = true;
+    sortedIds = selected;
+  };
+  onPlaylistSongSortChanged(() => {
+    rememberSorts();
+    runSoon();
+  });
+  onPlaylistsEdited(() => changed());
   followReleaseEligibility(backgroundAllowed, () => void run().catch(() => {}), [
     searchOnline.subscribe,
     subscribeConnectivity,
@@ -259,8 +343,15 @@ export const startReleaseDates = (): void => {
   ]);
   onTypedReleaseDatesChanged(runSoon);
   onLibraryChange((change) => {
-    if (change.kind === "playlists") playlistChanged();
-    else if (change.kind === "tracks") runSoon();
+    if (change.kind === "playlists") changed(change.ids);
+    else if (change.kind === "tracks") {
+      generalInput = null;
+      playlistInputs.clear();
+      inputVersion++;
+      runSoon();
+    }
   });
-  void run().catch(() => {});
+  void run()
+    .then(rememberSorts)
+    .catch(() => {});
 };
