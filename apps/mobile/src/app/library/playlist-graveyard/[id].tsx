@@ -14,47 +14,21 @@ import { View } from "react-native";
 import { usePlaylistGraveyard } from "@/library/hooks";
 import { parseId } from "@/library/routes";
 import type { PlaylistEntryRow } from "@/library/LibraryStore";
-import { playPlaylistEntries } from "@/library/PlaylistItems";
-import { explainUnavailable, openUnavailableEntryActions } from "@/library/UnavailableEntry";
+import {
+  openPlaylistEntryActions,
+  playPlaylistEntries,
+  playlistEntrySong,
+} from "@/library/PlaylistItems";
+import { explainUnavailable } from "@/library/UnavailableEntry";
 import { ScreenHeader } from "@/components/ScreenHeader";
 import { useLocalisation } from "@/localisation/localisation";
-import { openTrackActions, openUnsearchedActions, type MenuOptions } from "@/playback/ActionsMenu";
-import { openYtSongActions } from "@/ytmusic/YtSongActions";
 import { SongList } from "@/songs/SongList";
-import { librarySongEntry, type SongListEntry } from "@/songs/songListSources";
 import type { SongRowPresentation } from "@/songs/songListModel";
 
 type Entry = PlaylistEntryRow & { readonly removedAt: number };
 const EMPTY: readonly Entry[] = [];
 const key = (entry: Entry) => String(entry.itemId);
-const song = (entry: Entry): SongListEntry => {
-  switch (entry.source) {
-    case "library":
-      return librarySongEntry(entry.track);
-    case "stream":
-      return { source: { kind: "ytMusic", song: entry.song } };
-    case "unsearched":
-      return { source: { kind: "unsearched", song: entry.song } };
-    case "unavailable":
-      return { source: { kind: "unavailable", song: entry.song } };
-  }
-};
-const menu = (entry: Entry, options: MenuOptions) => {
-  switch (entry.source) {
-    case "library":
-      openTrackActions(entry.track, options);
-      break;
-    case "stream":
-      openYtSongActions(entry.song, options);
-      break;
-    case "unsearched":
-      openUnsearchedActions(entry.song, options);
-      break;
-    case "unavailable":
-      openUnavailableEntryActions(entry.song, undefined, options.extraEntries);
-      break;
-  }
-};
+const song = (entry: Entry) => playlistEntrySong(entry, false);
 
 const run = (operation: Promise<void>, title: string) => {
   void operation.catch((error: unknown) => showError(title, error));
@@ -155,7 +129,7 @@ export default function GraveyardScreen() {
                 run(forgetGraveyardItems(playlistId, entry.itemId), text.couldntForget),
             },
           ];
-          menu(entry, {
+          openPlaylistEntryActions(entry, {
             ...options,
             extraEntries: [...(options.extraEntries ?? []), ...extraEntries],
           });

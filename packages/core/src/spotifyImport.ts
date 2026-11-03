@@ -64,6 +64,13 @@ interface Reading {
 }
 
 /**
+ * A music video's own presentation note ("Official Music Video", "Official Video", "Official
+ * HD Video", "Music Video"). A lyric video, a visualizer or audio isn't the music video, so their
+ * notes stay in the title and keep it from matching.
+ */
+const MUSIC_VIDEO_NOTE = /^(?:official )?(?:(?:hd|4k) )?(?:music )?video(?: (?:hd|4k))?$/iu;
+
+/**
  * [song] as matching compares it. A note naming only artists either side
  * credits ("(Lil Baby & Gunna)") is a credit too, so [otherArtists] are
  * those of the song it's compared with.
@@ -80,13 +87,7 @@ const reading = (
   /** Whether [note] stays part of the title; otherwise it's noted as what it is. */
   const stays = (note: string): boolean => {
     const trimmed = note.trim();
-    if (
-      video &&
-      /^(?:official(?: music| lyric| lyrics)? video|music video|lyric video|lyrics video)$/iu.test(
-        trimmed,
-      )
-    )
-      return false;
+    if (video && MUSIC_VIDEO_NOTE.test(trimmed)) return false;
     const guest = GUESTS.exec(trimmed)?.[1];
     if (guest !== undefined) {
       guests.push(...artistNames([guest]));
@@ -122,12 +123,19 @@ const reading = (
   };
 };
 
+/** How `sameRecording` bounds the found recording's length. */
+interface RecordingBounds {
+  /** An official music video: up to 3 seconds shorter or 60 seconds longer. */
+  readonly video?: boolean;
+  /** A wanted song without a length (Recognize's) matches whatever the found one's. */
+  readonly unknownLength?: boolean;
+}
+
 /** Whether two readings are one recording. */
 const sameRecording = (
   wanted: Reading,
   found: Reading,
-  video = false,
-  unknownLength = false,
+  { video = false, unknownLength = false }: RecordingBounds = {},
 ): boolean =>
   ((unknownLength && wanted.durationMs === null) ||
     (wanted.durationMs !== null &&
@@ -154,8 +162,8 @@ const sameRecording = (
  * "From …" doesn't count), no guest either side doesn't credit, and both
  * lengths known and within 3 seconds. Sharing on Spotify matches Spotify's
  * results by the same rules. When no audio result matches, an OMV may be
- * up to 3 seconds shorter or 60 seconds longer; its video presentation notes
- * are ignored. UGC never matches. `unknownLength` is only for Recognize.
+ * up to 3 seconds shorter or 60 seconds longer; its music video note is set
+ * aside (`MUSIC_VIDEO_NOTE`), a lyric, visualizer or audio note isn't. UGC never matches. `unknownLength` is only for Recognize.
  */
 export const spotifyYtMatch = <
   S extends Pick<YtSong, "title" | "artists" | "album" | "durationMs"> & {
@@ -172,22 +180,17 @@ export const spotifyYtMatch = <
       (result) =>
         result.videoType !== "MUSIC_VIDEO_TYPE_OMV" &&
         result.videoType !== "MUSIC_VIDEO_TYPE_UGC" &&
-        sameRecording(
-          reading(song, result.artists),
-          reading(result, song.artists),
-          false,
+        sameRecording(reading(song, result.artists), reading(result, song.artists), {
           unknownLength,
-        ),
+        }),
     ) ??
     results.find(
       (result) =>
         result.videoType === "MUSIC_VIDEO_TYPE_OMV" &&
-        sameRecording(
-          reading(song, result.artists),
-          reading(result, song.artists, true),
-          true,
+        sameRecording(reading(song, result.artists), reading(result, song.artists, true), {
+          video: true,
           unknownLength,
-        ),
+        }),
     ) ??
     null
   );

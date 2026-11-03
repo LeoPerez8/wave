@@ -10,6 +10,7 @@ import {
   restoreGraveyardItem,
   selectPlaylistEntries,
   selectPlaylistGraveyard,
+  settleUnsearchedEntries,
 } from "./playlists.ts";
 import { applyPulledPage, selectUnpushed } from "./syncRows.ts";
 import { addTrack, openTestDatabase } from "./testDatabase.ts";
@@ -195,5 +196,47 @@ test("Restore appends when both old neighbours are removed even if other songs s
   assert.deepEqual(
     selectPlaylistEntries(db, playlistId).map((e) => e.source === "unavailable" && e.song.title),
     ["D", "B"],
+  );
+});
+
+const unsearched = (title: string) => ({
+  source: "unsearched" as const,
+  song: { title, artists: ["Radiohead"], album: null, durationMs: 200_000, artworkUrl: null },
+});
+
+test("Restore keeps the old place when a neighbour changed since but is still beside it", async () => {
+  const db = await openTestDatabase();
+  const { playlistId } = createPlaylist(
+    db,
+    "Drive",
+    [unsearched("A"), listed("B"), unsearched("C")],
+    100,
+  );
+  const b = selectPlaylistEntries(db, playlistId)[1]!;
+  removePlaylistItems(db, playlistId, [b.itemId], 200);
+  // The background fill resolving both neighbours stamps them after the removal.
+  settleUnsearchedEntries(db, unsearched("A").song, listed("A"), 300);
+  settleUnsearchedEntries(db, unsearched("C").song, listed("C"), 300);
+  restoreGraveyardItem(db, playlistId, b.itemId, 400);
+  assert.deepEqual(
+    selectPlaylistEntries(db, playlistId).map((e) => e.source === "unavailable" && e.song.title),
+    ["A", "B", "C"],
+  );
+});
+
+test("Restore keeps the old place when only one old neighbour remains", async () => {
+  const db = await openTestDatabase();
+  const { playlistId } = createPlaylist(
+    db,
+    "Drive",
+    [listed("A"), listed("B"), listed("C"), listed("D")],
+    100,
+  );
+  const [a, b] = selectPlaylistEntries(db, playlistId);
+  removePlaylistItems(db, playlistId, [a!.itemId, b!.itemId], 200);
+  restoreGraveyardItem(db, playlistId, b!.itemId, 300);
+  assert.deepEqual(
+    selectPlaylistEntries(db, playlistId).map((e) => e.source === "unavailable" && e.song.title),
+    ["B", "C", "D"],
   );
 });

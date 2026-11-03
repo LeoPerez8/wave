@@ -44,7 +44,10 @@ const ISRC = /^[A-Z]{2}[A-Z0-9]{3}\d{7}$/i;
 const recordOf = (value: unknown): Readonly<Record<string, unknown>> =>
   isRecord(value) ? value : {};
 
-/** Match the whole credit or any of the song's artists, using the existing normalisation. */
+/**
+ * Whether [title] by [artist], a source's main artist, is [song]: its whole credit or one of its
+ * artists is that artist, using the existing normalisation.
+ */
 const matchesReleaseSong = (song: ReleaseSong, title: string, artist: string): boolean =>
   [song.artist, ...song.artist.split(/[,&;/]|\s+x\s+/i)].some(
     (name) =>
@@ -53,8 +56,8 @@ const matchesReleaseSong = (song: ReleaseSong, title: string, artist: string): b
   );
 
 /**
- * The recordings in Deezer's search [response] whose title and artist match [song] (Core's
- * `isSameSong` titles, whole credit or any of its artists), among its first ten results:
+ * The recordings in Deezer's search [response] whose title and main artist match [song] (Core's
+ * `isSameSong` titles; the song's whole credit or one of its artists), among its first ten results:
  * up to `RELEASE_CODES_PER_SONG`, one per ISRC.
  */
 export const releaseCandidates = (song: ReleaseSong, response: unknown): ReleaseCandidate[] => {
@@ -203,9 +206,9 @@ const TITLE_LENGTH_TOLERANCE_MS = 10_000;
 /**
  * The earliest first release among the recordings of MusicBrainz's search by title and artist
  * ([response], `releaseTitleQuery`) that are [song]: the title matches as Deezer's must
- * (`isSameSong`), the song's whole credit or any of its artists matches the recording's whole
- * credit or one artist in it, and, when both lengths are known, it's within 10 s of the song's.
- * Null when none is.
+ * (`isSameSong`), the song's whole credit or one of its artists is the recording's main (first
+ * credited) artist, and, when the song's length is known, the recording's is too, within 10 s
+ * of it. Null when none is.
  */
 export const releaseTitleDate = (song: ReleaseSong, response: unknown): ReleaseDate | null => {
   const recordings = recordOf(response).recordings;
@@ -215,25 +218,15 @@ export const releaseTitleDate = (song: ReleaseSong, response: unknown): ReleaseD
   for (const value of recordings) {
     const recording = recordOf(value);
     const credit = Array.isArray(recording["artist-credit"]) ? recording["artist-credit"] : [];
-    const names = credit
-      .map((part) => recordOf(part).name)
-      .filter((name) => typeof name === "string");
-    const whole = credit
-      .map((part) => {
-        const { name, joinphrase } = recordOf(part);
-        return `${typeof name === "string" ? name : ""}${typeof joinphrase === "string" ? joinphrase : ""}`;
-      })
-      .join("");
+    const main = recordOf(credit[0]).name;
     const date = readReleaseDate(recording["first-release-date"]);
-    const gap =
-      length > 0 && typeof recording.length === "number" && recording.length > 0
-        ? Math.abs(recording.length - length)
-        : 0;
+    const recorded = typeof recording.length === "number" ? recording.length : 0;
     if (
       date !== null &&
       typeof recording.title === "string" &&
-      [whole, ...names].some((name) => matchesReleaseSong(song, String(recording.title), name)) &&
-      gap <= TITLE_LENGTH_TOLERANCE_MS
+      typeof main === "string" &&
+      matchesReleaseSong(song, recording.title, main) &&
+      (length <= 0 || (recorded > 0 && Math.abs(recorded - length) <= TITLE_LENGTH_TOLERANCE_MS))
     )
       dates.push(date);
   }
