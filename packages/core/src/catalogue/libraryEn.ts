@@ -169,6 +169,7 @@ export const libraryEn = {
   sortLabel: (name: string, direction: string): string => `${name}, ${direction}`,
   /** Find's field, and what it says when nothing matches. */
   find: {
+    history: "Find in Listening History",
     playlist: "Find in Playlist",
     songs: "Find in Songs",
     artists: "Find in Artists",
@@ -178,6 +179,7 @@ export const libraryEn = {
     artist: "Find in artist",
   },
   noMatch: {
+    history: "No plays match",
     playlist: "No songs match",
     songs: "No songs match",
     artists: "No artists match",

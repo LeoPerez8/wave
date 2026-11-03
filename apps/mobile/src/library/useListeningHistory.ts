@@ -11,26 +11,29 @@ import { appRuntime } from "./runtime";
 const EMPTY: ListeningHistoryPage = { rows: [], next: null };
 
 /** Pages history only while shown. Play progress refreshes its head; Library edits refresh loaded rows. */
-export const useListeningHistory = () => {
-  const [page, setPage] = useState(EMPTY);
+export const useListeningHistory = (query = "") => {
+  const [result, setResult] = useState({ query, page: EMPTY });
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(false);
-  const shown = useRef(EMPTY);
+  const whole = useRef(EMPTY);
+  const shown = useRef({ query, page: EMPTY });
   const request = useRef<(read: ListeningHistoryRead) => void>(() => {});
 
   useFocusEffect(
     useCallback(() => {
       let active = true;
       const reads = listeningHistoryReads({
-        initial: shown.current,
+        initial:
+          shown.current.query === query ? shown.current.page : query === "" ? whole.current : EMPTY,
         readPage: (before) =>
           appRuntime.runPromise(
             // oxlint-disable-next-line react/rules-of-hooks -- Effect resolves the store service.
-            LibraryStore.use((store) => store.listeningHistory(before)),
+            LibraryStore.use((store) => store.listeningHistory(before, query)),
           ),
         onPage: (result) => {
-          shown.current = result;
-          setPage(result);
+          shown.current = { query, page: result };
+          if (query === "") whole.current = result;
+          setResult({ query, page: result });
         },
         onLoading: setLoading,
         onError: setError,
@@ -64,12 +67,13 @@ export const useListeningHistory = () => {
         reads.stop();
         request.current = () => {};
       };
-    }, []),
+    }, [query]),
   );
 
   return {
-    rows: page.rows,
-    loading,
+    rows:
+      result.query === query ? result.page.rows : query === "" ? whole.current.rows : EMPTY.rows,
+    loading: result.query !== query || loading,
     error,
     loadMore: useCallback(() => request.current("more"), []),
     refresh: useCallback(() => request.current("refresh"), []),

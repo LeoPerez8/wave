@@ -402,3 +402,38 @@ test("the snapshot-sync upgrade preserves Library and streamed history and their
   assert.deepEqual(selectUnpushed(db, 100, () => null).rows.plays, []);
   assert.deepEqual(playTotalsDrift(db), []);
 });
+
+test("history search pages all saved snapshots, including removed songs beyond loaded pages", async () => {
+  const db = await openTestDatabase();
+  const track = addTrack(db, { title: "Déjà Vu", artist: "Beyoncé", album: "Live" });
+  const ids: number[] = [];
+  for (let i = 0; i < 63; i++) ids.unshift(recordPlay(db, play(track, Math.floor(i / 3))));
+  db.update(schema.tracks).set({ title: "New title", artistCredit: "Changed" }).run();
+  deleteTracksById(db, [track]);
+  const other = addTrack(db, { title: "Unrelated" });
+  for (let i = 0; i < 130; i++) recordPlay(db, play(other, 1000 + i));
+  recordPlay(db, play(other, 9999, false));
+  const imported = recordPlay(db, play(other, 9999));
+  db.update(schema.playEvents)
+    .set({ importedFrom: "blackplayer" })
+    .where(eq(schema.playEvents.id, imported))
+    .run();
+  const first = listeningHistory(db, undefined, "beyo deja");
+  assert.deepEqual(
+    first.rows.map((row) => row.id),
+    ids.slice(0, 50),
+  );
+  assert.ok(first.rows.every((row) => row.song === null));
+  assert.ok(first.next);
+  const second = listeningHistory(db, first.next, "beyo deja");
+  assert.deepEqual(
+    second.rows.map((row) => row.id),
+    ids.slice(50),
+  );
+  assert.equal(second.next, null);
+  assert.equal(listeningHistory(db, undefined, "live").rows.length, 50);
+  assert.equal(listeningHistory(db, undefined, "New title").rows.length, 0);
+  assert.equal(listeningHistory(db, undefined, "zzz").next, null);
+  assert.deepEqual(listeningHistory(db, undefined, ""), listeningHistory(db));
+  assert.deepEqual(listeningHistory(db, undefined, "---"), listeningHistory(db));
+});

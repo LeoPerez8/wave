@@ -1,4 +1,10 @@
-import { UNKNOWN_SONG_TITLE, type PlaySnapshot, type YtAlbumSong } from "@wave/core";
+import {
+  findListeningHistory,
+  hasFindQuery,
+  UNKNOWN_SONG_TITLE,
+  type PlaySnapshot,
+  type YtAlbumSong,
+} from "@wave/core";
 import { and, asc, desc, eq, inArray, isNull, min, sql } from "drizzle-orm";
 
 import type { SongRow } from "../LibraryStore.ts";
@@ -39,30 +45,49 @@ const UNKNOWN: PlaySnapshot = {
 export const listeningHistory = (
   db: LibraryDatabase,
   before?: ListeningHistoryCursor,
+  query = "",
 ): ListeningHistoryPage => {
-  const plays = db
-    .select({
-      id: playEvents.id,
-      trackId: playEvents.trackId,
-      videoId: playEvents.videoId,
-      recordingKey: playEvents.recordingKey,
-      streamedSong: playEvents.streamedSong,
-      startedAt: playEvents.startedAt,
-      snapshot: playEvents.snapshot,
-    })
-    .from(playEvents)
-    .where(
-      and(
-        eq(playEvents.counted, true),
-        isNull(playEvents.importedFrom),
-        before === undefined
-          ? undefined
-          : sql`(${playEvents.startedAt}, ${playEvents.id}) < (${before.startedAt}, ${before.id})`,
-      ),
-    )
-    .orderBy(desc(playEvents.startedAt), desc(playEvents.id))
-    .limit(51)
-    .all();
+  const read = (cursor: ListeningHistoryCursor | undefined) =>
+    db
+      .select({
+        id: playEvents.id,
+        trackId: playEvents.trackId,
+        videoId: playEvents.videoId,
+        recordingKey: playEvents.recordingKey,
+        streamedSong: playEvents.streamedSong,
+        startedAt: playEvents.startedAt,
+        snapshot: playEvents.snapshot,
+      })
+      .from(playEvents)
+      .where(
+        and(
+          eq(playEvents.counted, true),
+          isNull(playEvents.importedFrom),
+          cursor === undefined
+            ? undefined
+            : sql`(${playEvents.startedAt}, ${playEvents.id}) < (${cursor.startedAt}, ${cursor.id})`,
+        ),
+      )
+      .orderBy(desc(playEvents.startedAt), desc(playEvents.id))
+      .limit(51)
+      .all();
+  // Scan saved snapshots in bounded pages, hydrating only the 50 displayed matches.
+  // Filtering a loaded screen page would miss older plays and removed Library songs.
+  let batch = read(before);
+  const plays = [] as typeof batch;
+  const searching = hasFindQuery(query);
+  for (;;) {
+    const matches = searching
+      ? findListeningHistory(
+          batch.map((play) => ({ ...play, snapshot: play.snapshot ?? UNKNOWN })),
+          query,
+        )
+      : batch;
+    plays.push(...matches.slice(0, 51 - plays.length));
+    const lastScanned = batch.at(-1);
+    if (plays.length >= 51 || batch.length < 51 || lastScanned === undefined) break;
+    batch = read(lastScanned);
+  }
   const shown = plays.slice(0, 50);
   const last = shown.at(-1);
   const videoIds = [
