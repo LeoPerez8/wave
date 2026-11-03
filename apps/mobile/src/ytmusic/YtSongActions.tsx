@@ -90,6 +90,7 @@ export const openYtSongActions = (song: NativeYtSong, options: YtSongMenuOptions
             playlistItem={options.playlistItem}
             onSelect={options.onSelect}
             playing={options.playing}
+            extraEntries={options.extraEntries}
             close={close}
           />
         ),
@@ -234,8 +235,10 @@ function YtSongActionsMenu({
   playlistItem,
   onSelect,
   playing,
+  extraEntries = [],
   close,
 }: {
+  extraEntries?: readonly MenuChoice[] | undefined;
   song: NativeYtSong;
   playlistItem: PlaylistPlace | undefined;
   onSelect: (() => void) | undefined;
@@ -303,7 +306,19 @@ function YtSongActionsMenu({
           </Text>
         </View>
       </CardHeading>
-      <MenuChoices cards={cards} entries={list} />
+      <MenuChoices
+        cards={cards}
+        entries={[
+          ...list,
+          ...extraEntries.map((entry) => ({
+            ...entry,
+            onPress: () => {
+              close();
+              entry.onPress();
+            },
+          })),
+        ]}
+      />
     </>
   );
 }

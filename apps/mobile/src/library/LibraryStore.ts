@@ -223,6 +223,8 @@ import {
   movePlaylistItem,
   removePlaylistItems,
   restorePlaylistItems,
+  restoreGraveyardItem,
+  forgetGraveyardItems,
   type PlaylistRemoval,
   renamePlaylist,
   replacePlaylistSongs,
@@ -1016,6 +1018,14 @@ export class LibraryStore extends Context.Service<
       playlistId: number,
       itemIds: readonly number[],
     ) => Effect.Effect<PlaylistRemoval, LibraryStoreError>;
+    readonly restoreGraveyardItem: (
+      playlistId: number,
+      itemId: number,
+    ) => Effect.Effect<void, LibraryStoreError>;
+    readonly forgetGraveyardItems: (
+      playlistId: number,
+      itemId?: number,
+    ) => Effect.Effect<void, LibraryStoreError>;
     /** Undo a removal, keeping the original entries and their order. */
     readonly restorePlaylistItems: (
       removal: PlaylistRemoval,
@@ -2017,6 +2027,14 @@ const make = Effect.gen(function* () {
         removePlaylistItems(db, playlistId, itemIds, Date.now()),
       ),
 
+    restoreGraveyardItem: (playlistId, itemId) =>
+      writeAttempt("restore a Graveyard song", () =>
+        restoreGraveyardItem(db, playlistId, itemId, Date.now()),
+      ),
+    forgetGraveyardItems: (playlistId, itemId) =>
+      writeAttempt("forget Graveyard songs", () =>
+        forgetGraveyardItems(db, playlistId, itemId, Date.now()),
+      ),
     restorePlaylistItems: (removal) =>
       writeAttempt("restore the playlist entries", () =>
         restorePlaylistItems(db, removal, Date.now()),

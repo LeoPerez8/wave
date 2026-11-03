@@ -22,6 +22,7 @@ import { CardEntries } from "@/overlay/CardEntries";
 import { CardHeading } from "@/overlay/CardHeading";
 import { showError } from "@/overlay/alert";
 import { useOverlayFlow } from "@/overlay/flow";
+import { MenuChoices, type MenuChoice } from "@/overlay/MenuChoices";
 import { MenuRow } from "@/overlay/MenuRow";
 import { openOverlay } from "@/overlay/overlay";
 import { showToast } from "@/overlay/toast";
@@ -48,12 +49,18 @@ export const explainUnavailable = (song: UnavailableSong): void => {
 export const openUnavailableEntryActions = (
   song: UnavailableSong,
   playlistItem?: PlaylistPlace,
+  extraEntries: readonly MenuChoice[] = [],
 ): void => {
   openOverlay({
     label: song.title,
     anchor: pressedRect(),
     render: (close) => (
-      <UnavailableEntryMenu song={song} playlistItem={playlistItem} close={close} />
+      <UnavailableEntryMenu
+        song={song}
+        playlistItem={playlistItem}
+        extraEntries={extraEntries}
+        close={close}
+      />
     ),
   });
 };
@@ -80,8 +87,10 @@ const run = (
 function UnavailableEntryMenu({
   song,
   playlistItem,
+  extraEntries,
   close,
 }: {
+  extraEntries: readonly MenuChoice[];
   song: UnavailableSong;
   playlistItem: PlaylistPlace | undefined;
   close: () => void;
@@ -128,6 +137,18 @@ function UnavailableEntryMenu({
           </View>
         ))}
       </CardEntries>
+      {extraEntries.length > 0 && (
+        <MenuChoices
+          cards={[]}
+          entries={extraEntries.map((entry) => ({
+            ...entry,
+            onPress: () => {
+              close();
+              entry.onPress();
+            },
+          }))}
+        />
+      )}
     </>
   );
 }

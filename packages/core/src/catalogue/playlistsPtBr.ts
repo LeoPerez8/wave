@@ -31,6 +31,12 @@ const counted = (count: number): string =>
   plural("pt-BR", count, { one: `${n(count)} música`, other: `${n(count)} músicas` });
 
 export const playlistsPtBr: typeof playlistsEn = {
+  restore: "Restaurar",
+  removeFromGraveyard: "Remover do Cemitério",
+  emptyGraveyard: "Esvaziar Cemitério",
+  emptyGraveyardQuestion: "Esvaziar Cemitério?",
+  emptyGraveyardMessage: "Esquecer todas as músicas removidas? Sua playlist fica como está.",
+  couldntForget: "Não foi possível remover as músicas do Cemitério",
   graveyard: "Cemitério",
   removedOn: (date: string): string => `Removida em ${date}`,
 
