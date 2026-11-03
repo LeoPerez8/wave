@@ -41,6 +41,9 @@ test("a playlist request interrupts a general lookup without creating a failed r
       album: async () => {
         throw new Error("Unexpected request");
       },
+      titled: async () => {
+        throw new Error("Unexpected request");
+      },
     },
     answered: async (song) => {
       answers.push(song.key);

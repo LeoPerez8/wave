@@ -8,7 +8,7 @@ import { splitCredit } from "./credits.ts";
 import { UNKNOWN_ARTIST } from "./library.ts";
 import { normalizeSearchText } from "./search.ts";
 import type { SpotifySong } from "./spotifyPlaylist.ts";
-import type { YtSong } from "./ytMusic.ts";
+import { recordingMatches, joinArtists, type YtSong } from "./ytMusic.ts";
 import type { YtQuietReason } from "./ytSearch.ts";
 
 /** A YouTube Music Songs search's answer, or why there wasn't one. */
@@ -71,6 +71,7 @@ interface Reading {
 const reading = (
   song: Pick<YtSong, "title" | "artists" | "album" | "durationMs">,
   otherArtists: readonly string[],
+  video = false,
 ): Reading => {
   const artists = artistNames(song.artists);
   const known = new Set([...artists, ...artistNames(otherArtists)]);
@@ -79,6 +80,13 @@ const reading = (
   /** Whether [note] stays part of the title; otherwise it's noted as what it is. */
   const stays = (note: string): boolean => {
     const trimmed = note.trim();
+    if (
+      video &&
+      /^(?:official(?: music| lyric| lyrics)? video|music video|lyric video|lyrics video)$/iu.test(
+        trimmed,
+      )
+    )
+      return false;
     const guest = GUESTS.exec(trimmed)?.[1];
     if (guest !== undefined) {
       guests.push(...artistNames([guest]));
@@ -115,10 +123,19 @@ const reading = (
 };
 
 /** Whether two readings are one recording. */
-const sameRecording = (wanted: Reading, found: Reading): boolean =>
-  wanted.durationMs !== null &&
-  found.durationMs !== null &&
-  Math.abs(wanted.durationMs - found.durationMs) <= SAME_LENGTH_MS &&
+const sameRecording = (
+  wanted: Reading,
+  found: Reading,
+  video = false,
+  unknownLength = false,
+): boolean =>
+  ((unknownLength && wanted.durationMs === null) ||
+    (wanted.durationMs !== null &&
+      found.durationMs !== null &&
+      (video
+        ? found.durationMs - wanted.durationMs >= -SAME_LENGTH_MS &&
+          found.durationMs - wanted.durationMs <= 60_000
+        : Math.abs(wanted.durationMs - found.durationMs) <= SAME_LENGTH_MS))) &&
   wanted.title !== "" &&
   wanted.title === found.title &&
   found.credited.has(wanted.main) &&
@@ -136,18 +153,78 @@ const sameRecording = (wanted: Reading, found: Reading): boolean =>
  * edit isn't the song; a remaster note, an album's edition, a soundtrack's
  * "From …" doesn't count), no guest either side doesn't credit, and both
  * lengths known and within 3 seconds. Sharing on Spotify matches Spotify's
- * results by the same rules.
+ * results by the same rules. When no audio result matches, an OMV may be
+ * up to 3 seconds shorter or 60 seconds longer; its video presentation notes
+ * are ignored. UGC never matches. `unknownLength` is only for Recognize.
  */
 export const spotifyYtMatch = <
-  S extends Pick<YtSong, "title" | "artists" | "album" | "durationMs">,
+  S extends Pick<YtSong, "title" | "artists" | "album" | "durationMs"> & {
+    readonly videoType?: string | null;
+  },
 >(
   song: SpotifySong,
   results: readonly S[],
+  unknownLength = false,
 ): S | null => {
   if (artistNames(song.artists).length === 0) return null;
   return (
-    results.find((result) =>
-      sameRecording(reading(song, result.artists), reading(result, song.artists)),
-    ) ?? null
+    results.find(
+      (result) =>
+        result.videoType !== "MUSIC_VIDEO_TYPE_OMV" &&
+        result.videoType !== "MUSIC_VIDEO_TYPE_UGC" &&
+        sameRecording(
+          reading(song, result.artists),
+          reading(result, song.artists),
+          false,
+          unknownLength,
+        ),
+    ) ??
+    results.find(
+      (result) =>
+        result.videoType === "MUSIC_VIDEO_TYPE_OMV" &&
+        sameRecording(
+          reading(song, result.artists),
+          reading(result, song.artists, true),
+          true,
+          unknownLength,
+        ),
+    ) ??
+    null
   );
+};
+
+/** Songs first, then one Videos search. Failed searches never settle an entry as not found.
+ * Recognize has no length; it uses the same identity checks without a duration bound.
+ */
+export const searchRecording = async <S extends YtSong>(
+  song: SpotifySong,
+  search: (kind: "songs" | "videos") => Promise<YtSongSearch<S> | null>,
+  unknownLength = false,
+): Promise<YtSongSearch<S> | null> => {
+  const songs = await search("songs");
+  if (songs === null || !songs.ok) return songs;
+  const audio = unknownLength
+    ? (songs.songs.find(
+        (candidate) =>
+          candidate.videoType !== "MUSIC_VIDEO_TYPE_UGC" &&
+          candidate.videoType !== "MUSIC_VIDEO_TYPE_OMV" &&
+          recordingMatches(
+            {
+              title: candidate.title,
+              artist: joinArtists(candidate.artists),
+              durationMs: candidate.durationMs ?? 0,
+            },
+            song,
+          ),
+      ) ?? spotifyYtMatch(song, songs.songs, true))
+    : spotifyYtMatch(song, songs.songs);
+  if (audio !== null) return { ok: true, songs: [audio] };
+  const videos = await search("videos");
+  if (videos === null || !videos.ok) return videos;
+  const video = spotifyYtMatch(
+    song,
+    videos.songs.filter((s) => s.videoType === "MUSIC_VIDEO_TYPE_OMV"),
+    unknownLength,
+  );
+  return { ok: true, songs: video === null ? [] : [video] };
 };

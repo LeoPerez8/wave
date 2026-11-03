@@ -1333,7 +1333,7 @@ export type {
   PlaylistLinkProblem,
   SharedTextImport,
 } from "./playlistLinks.ts";
-export { spotifySearchQuery, spotifyYtMatch } from "./spotifyImport.ts";
+export { spotifySearchQuery, spotifyYtMatch, searchRecording } from "./spotifyImport.ts";
 export { settleUnsearched, unsearchedSearchQuery, unsearchedSettles } from "./unsearchedEntries.ts";
 export {
   PLAYING_SEARCHES,
@@ -2528,6 +2528,7 @@ export type { ReleaseDate } from "./releaseDate.ts";
 export {
   RELEASE_BATCH_CODES,
   RELEASE_CODES_PER_SONG,
+  RELEASE_LOOKUP_VERSION,
   deezerAlbumDate,
   deezerRefused,
   lookUpReleaseDates,
@@ -2541,6 +2542,8 @@ export {
   releaseNextDue,
   releaseRequestDelay,
   releaseTagDate,
+  releaseTitleDate,
+  releaseTitleQuery,
 } from "./releaseLookup.ts";
 export type {
   ReleaseAnswer,

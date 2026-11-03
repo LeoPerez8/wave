@@ -112,6 +112,13 @@ class YtClient private constructor(private val context: Context) {
     }
   }
 
+  suspend fun searchVideos(query: String): YtSearchPage = logged("Videos search \"$query\"") {
+    request {
+      val response = innerTube.search(YouTubeClient.WEB_REMIX, query, params = FILTER_VIDEOS)
+      YtSearchParser.songs(response.bodyAsText())
+    }
+  }
+
   /** Artists on YT Music named like [query]: YouTube Music's "Artists" search, the first page. A failure is logged. */
   suspend fun searchArtists(query: String): List<YtArtistCandidate> = logged("Artists search \"$query\"") {
     request {
@@ -236,6 +243,7 @@ class YtClient private constructor(private val context: Context) {
     private const val SESSION_FILE = "yt-session.json"
 
     /** YouTube Music's "Songs" search filter (as Metrolist's `SearchFilter.FILTER_SONG`). */
+    const val FILTER_VIDEOS = "EgWKAQIQAWoKEAkQChAFEAMQBA%3D%3D"
     const val FILTER_SONGS = "EgWKAQIIAWoKEAkQBRAKEAMQBA%3D%3D"
 
     /** YouTube Music's "Artists" search filter (as Metrolist's `SearchFilter.FILTER_ARTIST`). */
