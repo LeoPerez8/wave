@@ -204,6 +204,10 @@ const MIGRATIONS: readonly Migration[] = [
     ],
   },
   { id: "0007_release_date", statements: ["ALTER TABLE songs ADD COLUMN release_date TEXT"] },
+  {
+    id: "0008_playlist_graveyard",
+    statements: ["ALTER TABLE playlist_entries ADD COLUMN removed_at INTEGER"],
+  },
 ];
 
 /** Runs the migrations [db] hasn't run yet, each in its own transaction. Gives the ids it ran. */

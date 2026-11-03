@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 
-import { listeningHistoryDays } from "./index.ts";
+import { listeningHistoryDays, findListeningHistory } from "./index.ts";
 
 const at = (year: number, month: number, day: number, hour = 12) =>
   new Date(year, month - 1, day, hour).getTime();
@@ -78,4 +78,30 @@ test("Portuguese history formats calendar headings without changing grouping", (
     days.map((day) => day.title),
     ["Segunda-feira", "18 de outubro", "31 de dezembro de 2025"],
   );
+});
+
+test("history finds snapshot words across fields with Search folding and keeps each play in order", () => {
+  const snapshot = (title: string, artist: string, album: string | null) => ({
+    title,
+    artist,
+    album,
+    artworkPath: null,
+    thumbPath: null,
+  });
+  const plays = [
+    { id: 3, snapshot: snapshot("Déjà Vu", "Beyoncé", "Live") },
+    { id: 2, snapshot: snapshot("Other", "Beyoncé", "Déjà Vu") },
+    { id: 1, snapshot: snapshot("Déjà Vu", "Beyoncé", "Live") },
+  ];
+  assert.deepEqual(
+    findListeningHistory(plays, "BEYO deja").map((p) => p.id),
+    [3, 2, 1],
+  );
+  assert.deepEqual(
+    findListeningHistory(plays, "vu live").map((p) => p.id),
+    [3, 1],
+  );
+  assert.deepEqual(findListeningHistory(plays, "eja"), []);
+  assert.deepEqual(findListeningHistory(plays, "missing"), []);
+  assert.deepEqual(findListeningHistory(plays, " -- "), plays);
 });

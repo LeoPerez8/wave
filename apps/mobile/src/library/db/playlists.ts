@@ -10,6 +10,8 @@ import {
   compareStrings,
   placeEntries,
   planPlaylistSongs,
+  playlistSongKey,
+  libraryFinder,
   planShazamAdd,
   playlistArtwork,
   playlistEntryLinks,
@@ -69,6 +71,7 @@ const playlistTracks = (
   playlistId: number,
   itemIds: readonly number[] | undefined,
   scope: TrackScope,
+  removed = false,
 ) => {
   const { playlistItems, tracks, artists, albums, artwork } = schema;
   return db
@@ -81,7 +84,7 @@ const playlistTracks = (
     .where(
       and(
         eq(playlistItems.playlistId, playlistId),
-        live,
+        eq(playlistItems.deleted, removed),
         itemIds === undefined ? undefined : inArray(playlistItems.id, [...itemIds]),
       ),
     )
@@ -506,7 +509,7 @@ export const removePlaylistItems = (
       entries.push(
         ...tx
           .update(playlistItems)
-          .set({ deleted: true, ...stamped(playlistItems, now) })
+          .set({ deleted: true, removedAt: now, ...stamped(playlistItems, now) })
           .where(
             and(
               eq(playlistItems.playlistId, playlistId),
@@ -572,7 +575,7 @@ export const restorePlaylistItems = (
             : decode(playlistId, row.ytSong);
       if (song === null || planPlaylistSongs(held, [song]).add.length === 0) continue;
       tx.update(playlistItems)
-        .set({ deleted: false, ...stamped(playlistItems, now) })
+        .set({ deleted: false, removedAt: null, ...stamped(playlistItems, now) })
         .where(eq(playlistItems.id, itemId))
         .run();
     }
@@ -1573,3 +1576,59 @@ export const addToShazam = (
     }
     return { playlistId: remembered.localId, syncId: remembered.id, toast: plan.toast };
   });
+
+/** Manually removed songs still absent from this playlist, newest removal first. */
+export const selectPlaylistGraveyard = (
+  db: LibraryDatabase,
+  playlistId: number,
+): (PlaylistEntry & { readonly removedAt: number })[] => {
+  const { playlistItems } = schema;
+  const rows = db
+    .select()
+    .from(playlistItems)
+    .where(
+      and(
+        eq(playlistItems.playlistId, playlistId),
+        eq(playlistItems.deleted, true),
+        isNotNull(playlistItems.removedAt),
+      ),
+    )
+    .orderBy(desc(playlistItems.removedAt), desc(playlistItems.changedAt), asc(playlistItems.id))
+    .all();
+  if (rows.length === 0) return [];
+  const held = selectPlaylistEntries(db, playlistId);
+  const tracks = new Map(
+    playlistTracks(
+      db,
+      playlistId,
+      rows.map((r) => r.id),
+      "library",
+      true,
+    ).map(({ itemId, ...track }) => [itemId, track]),
+  );
+  const find = libraryFinder([
+    ...held.flatMap((entry) => (entry.source === "library" ? [entry.track] : [])),
+    ...tracks.values(),
+  ]);
+  const key = (entry: PlaylistEntry) => {
+    if (entry.source === "library") return String(entry.track.id);
+    const match = find(entry.song);
+    return match === null ? playlistSongKey(entry) : String(match.id);
+  };
+  const seen = new Set(held.map(key));
+  return rows.flatMap((row) => {
+    const track = tracks.get(row.id);
+    const entry: PlaylistEntry | null =
+      row.ytSong !== null
+        ? (() => {
+            const song = readPlaylistEntrySong(row.ytSong);
+            return song === null ? null : { ...song, itemId: row.id };
+          })()
+        : track === undefined
+          ? null
+          : { source: "library", track, itemId: row.id };
+    if (entry === null || row.removedAt === null || seen.has(key(entry))) return [];
+    seen.add(key(entry));
+    return [{ ...entry, removedAt: row.removedAt }];
+  });
+};

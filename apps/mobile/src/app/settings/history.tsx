@@ -3,16 +3,19 @@ import {
   UNKNOWN_SONG_TITLE,
   catalogueOf,
   formatTime,
+  hasFindQuery,
   listeningHistoryDays,
   type AppLanguage,
 } from "@wave/core";
-import { useMemo } from "react";
+import type { LegendListRef } from "@legendapp/list/react-native";
+import { useMemo, useRef } from "react";
 import { ActivityIndicator, Text, View } from "react-native";
 
 import { grid, CELL } from "@/catalog/grid";
 import { useChromeInset } from "@/chrome/chrome";
 import { TextButton } from "@/components/TextButton";
 import type { ListeningHistoryRow } from "@/library/db/listeningHistory";
+import { FindFrame, FindHead, useFindInLegendList } from "@/library/FindInPlaylist";
 import { historyArtwork } from "@/library/historyArtwork";
 import { useListeningHistory } from "@/library/useListeningHistory";
 import { useSightedStore } from "@/lib/screenSight";
@@ -25,6 +28,10 @@ import { playYtSongs, playSongs } from "@/playback/actions";
 import { SettingsEditorScreen } from "@/settings/SettingsPage";
 import { SongList } from "@/songs/SongList";
 import type { SongListEntry } from "@/songs/songListSources";
+
+// The database filters history; this empty list reuses Find's field placement and scroll restoration.
+const NO_LOCAL_ROWS: readonly never[] = [];
+const noLocalText = () => null;
 
 const HISTORY_CONTEXT = { kind: "history", id: null } as const;
 
@@ -84,7 +91,9 @@ const historyEntry = (
 /** Counted plays, including streamed songs and saved rows for songs that have since left. */
 export default function ListeningHistoryScreen() {
   const { language, strings } = useLocalisation();
-  const { rows: plays, loading, error, loadMore, refresh } = useListeningHistory();
+  const list = useRef<LegendListRef>(null);
+  const find = useFindInLegendList(list, NO_LOCAL_ROWS, noLocalText, true);
+  const { rows: plays, loading, error, loadMore, refresh } = useListeningHistory(find.query);
   useScreenContent(!loading || plays.length > 0);
   const bottom = useChromeInset();
   // Followed once for the list: whether each removed song's stream can still play.
@@ -105,68 +114,81 @@ export default function ListeningHistoryScreen() {
 
   return (
     <SettingsEditorScreen page="history">
-      <SongList
-        className="flex-1"
-        data={rows}
-        keyExtractor={rowKey}
-        song={(row) =>
-          row.kind === "play" ? historyEntry(row.play, streamable(row.play), language) : null
-        }
-        context={HISTORY_CONTEXT}
-        renderSlot={({ item }) =>
-          item.kind === "day" ? (
-            <Text
-              accessibilityRole="header"
-              className="font-sans text-title3 font-semibold text-foreground"
-              style={{ paddingTop: CELL * 3, paddingBottom: CELL }}
-            >
-              {item.title}
-            </Text>
-          ) : null
-        }
-        slotType={slotType}
-        slotSize={slotSize}
-        onPlay={(row) => {
-          if (row.kind !== "play") return;
-          const { song, streamedSong } = row.play;
-          if (song !== null) void playSongs([song], 0, HISTORY_CONTEXT);
-          else if (streamedSong !== null && streamable(row.play))
-            void playYtSongs([streamedSong], 0, HISTORY_CONTEXT);
-        }}
-        onMenu={(row) => {
-          if (row.kind !== "play") return;
-          const { song, streamedSong } = row.play;
-          if (song !== null) openTrackActions(song);
-          else if (streamedSong !== null) openYtSongActions(streamedSong);
-        }}
-        contentContainerStyle={{ paddingHorizontal: grid.margin, paddingBottom: bottom }}
-        onEndReached={loadMore}
-        onEndReachedThreshold={0.5}
-        ListEmptyComponent={
-          !loading && !error ? (
-            <Text className="font-sans text-body text-secondary" style={{ paddingTop: CELL * 3 }}>
-              {strings.listeningHistory.empty}
-            </Text>
-          ) : null
-        }
-        ListFooterComponent={
-          <View style={{ paddingVertical: CELL * 2 }}>
-            {loading && <ActivityIndicator />}
-            {error && (
-              <>
-                <Text className="font-sans text-body text-secondary">
-                  {strings.listeningHistory.failed}
-                </Text>
-                <TextButton
-                  variant="plain"
-                  label={strings.listeningHistory.tryAgain}
-                  onPress={refresh}
-                />
-              </>
-            )}
-          </View>
-        }
-      />
+      <FindFrame find={find} of="history">
+        <SongList
+          ref={list}
+          initialScrollOffset={find.initialOffset}
+          ListHeaderComponent={<FindHead find={find} of="history" header={null} allRead={false} />}
+          keyboardShouldPersistTaps="handled"
+          keyboardDismissMode="on-drag"
+          className="flex-1"
+          data={rows}
+          keyExtractor={rowKey}
+          song={(row) =>
+            row.kind === "play" ? historyEntry(row.play, streamable(row.play), language) : null
+          }
+          context={HISTORY_CONTEXT}
+          renderSlot={({ item }) =>
+            item.kind === "day" ? (
+              <Text
+                accessibilityRole="header"
+                className="font-sans text-title3 font-semibold text-foreground"
+                style={{ paddingTop: CELL * 3, paddingBottom: CELL }}
+              >
+                {item.title}
+              </Text>
+            ) : null
+          }
+          slotType={slotType}
+          slotSize={slotSize}
+          onPlay={(row) => {
+            if (row.kind !== "play") return;
+            const { song, streamedSong } = row.play;
+            if (song !== null) void playSongs([song], 0, HISTORY_CONTEXT);
+            else if (streamedSong !== null && streamable(row.play))
+              void playYtSongs([streamedSong], 0, HISTORY_CONTEXT);
+          }}
+          onMenu={(row) => {
+            if (row.kind !== "play") return;
+            const { song, streamedSong } = row.play;
+            if (song !== null) openTrackActions(song);
+            else if (streamedSong !== null) openYtSongActions(streamedSong);
+          }}
+          contentContainerStyle={{
+            paddingHorizontal: grid.margin,
+            paddingBottom: bottom,
+            minHeight: find.minHeight,
+          }}
+          onEndReached={loadMore}
+          onEndReachedThreshold={0.5}
+          ListEmptyComponent={
+            !loading && !error ? (
+              <Text className="font-sans text-body text-secondary" style={{ paddingTop: CELL * 3 }}>
+                {hasFindQuery(find.query)
+                  ? strings.library.noMatch.history
+                  : strings.listeningHistory.empty}
+              </Text>
+            ) : null
+          }
+          ListFooterComponent={
+            <View style={{ paddingVertical: CELL * 2 }}>
+              {loading && <ActivityIndicator />}
+              {error && (
+                <>
+                  <Text className="font-sans text-body text-secondary">
+                    {strings.listeningHistory.failed}
+                  </Text>
+                  <TextButton
+                    variant="plain"
+                    label={strings.listeningHistory.tryAgain}
+                    onPress={refresh}
+                  />
+                </>
+              )}
+            </View>
+          }
+        />
+      </FindFrame>
     </SettingsEditorScreen>
   );
 }
