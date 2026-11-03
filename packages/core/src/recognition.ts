@@ -3,11 +3,11 @@ import { ytDownloadActions, type YtDownloadAction, type YtDownloadStatus } from 
 import { splitCredit } from "./credits.ts";
 import type { PlaylistSong, UnavailableSong, UnsearchedSong } from "./playlistEntries.ts";
 import type { RecognizedSong } from "./recognize.ts";
-import type { YtSongSearch } from "./spotifyImport.ts";
+import { spotifyYtMatch, type YtSongSearch } from "./spotifyImport.ts";
 import {
-  joinArtists,
-  recordingMatches,
   libraryFinder,
+  recordingMatches,
+  joinArtists,
   type YtSong,
   type LibrarySongKey,
 } from "./ytMusic.ts";
@@ -61,14 +61,17 @@ export const resolveRecognizedSong = <L extends RecognizeTrack, S extends YtSong
   if (track === null) {
     if (answer !== undefined && answer !== "disabled" && answer.ok) {
       const found = answer.songs.find((candidate) =>
-        recordingMatches(
-          {
-            title: candidate.title,
-            artist: joinArtists(candidate.artists),
-            durationMs: candidate.durationMs ?? 0,
-          },
-          song,
-        ),
+        candidate.videoType === "MUSIC_VIDEO_TYPE_OMV"
+          ? spotifyYtMatch(song, [candidate], true) !== null
+          : candidate.videoType !== "MUSIC_VIDEO_TYPE_UGC" &&
+            recordingMatches(
+              {
+                title: candidate.title,
+                artist: joinArtists(candidate.artists),
+                durationMs: candidate.durationMs ?? 0,
+              },
+              song,
+            ),
       );
       if (found)
         return { kind: "resolved", lookup: "match", result: { kind: "stream", song: found } };

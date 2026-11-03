@@ -48,7 +48,14 @@ test("recognition searches Songs once through Search's shared allowance when the
     abort.signal,
   );
   assert.equal(libraryReads, 1);
-  assert.deepEqual(asked, [["search", "Halo Beyonce", abort.signal]]);
+  assert.deepEqual(asked, [
+    [
+      "search",
+      "Halo Beyonce",
+      abort.signal,
+      { title: "Halo", artists: ["Beyonce"], album: null, durationMs: null },
+    ],
+  ]);
   assert.deepEqual(answer, { kind: "resolved", lookup: "match", result: { kind: "stream", song } });
 });
 

@@ -85,6 +85,9 @@ class YtMusicModule : Module() {
     }
 
     /** `{ songs, continuation }` for [query], or a rejection with an `ERR_YT_*` code. */
+    AsyncFunction("searchVideos") Coroutine { query: String ->
+      coded { client.searchVideos(query).toMap() }
+    }
     AsyncFunction("searchSongs") Coroutine { query: String ->
       coded { client.searchSongs(query).toMap() }
     }

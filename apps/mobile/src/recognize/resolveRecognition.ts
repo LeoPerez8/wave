@@ -6,6 +6,8 @@ import {
   type SearchAsker,
   type YtSong,
   type YtSongSearch,
+  type SpotifySong,
+  splitCredit,
 } from "@wave/core";
 
 /** Library and network boundaries; the Songs search is the shared allowance's adapter. */
@@ -16,6 +18,7 @@ export interface RecognitionLookup<L extends RecognizeTrack, S extends YtSong> {
     asker: SearchAsker,
     query: string,
     signal: AbortSignal,
+    song: SpotifySong,
   ) => Promise<YtSongSearch<S> | null>;
 }
 
@@ -33,7 +36,12 @@ export const resolveRecognition = async <L extends RecognizeTrack, S extends YtS
   );
   if (first.kind === "resolved") return first;
   const answer = await ports
-    .search("search", first.query, signal)
+    .search("search", first.query, signal, {
+      title: song.title,
+      artists: splitCredit(song.artist),
+      album: song.album,
+      durationMs: null,
+    })
     .catch(() => ({ ok: false, reason: "failed" }) as const);
   if (signal.aborted) throw new Error("Recognition closed");
   const result = resolveRecognizedSong(song, library, answer ?? { ok: false, reason: "failed" });

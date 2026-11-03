@@ -3,6 +3,7 @@ import {
   releaseBatchSplit,
   releaseBatches,
   releaseRequestDelay,
+  releaseTitleQuery,
   type ReleaseServices,
 } from "@wave/core";
 
@@ -92,5 +93,10 @@ export const releaseLookupClient = (
       request("deezer", `/search?q=${encodeURIComponent(`${title} ${artist}`)}&limit=10`),
     album: (id) => request("deezer", `/album/${id}`),
     recordings,
+    titled: (title, artist) =>
+      request(
+        "musicbrainz",
+        `/recording/?query=${encodeURIComponent(releaseTitleQuery({ title, artist }))}&fmt=json&limit=25`,
+      ),
   };
 };
