@@ -110,7 +110,15 @@ export type YtSectionEvent<S extends YtSong = YtSong> =
     }
   /** A segment of the Library | Online toggle was tapped. */
   | { readonly type: "picked"; readonly pick: YtPick }
-  | ({ readonly type: "found"; readonly query: string } & YtSearchAnswer<S>)
+  /**
+   * YT Music answered [query]. [videos] is its Videos search, asked only when
+   * `ytSearchAsksVideos` says so; its matching official music videos join the songs.
+   */
+  | ({
+      readonly type: "found";
+      readonly query: string;
+      readonly videos?: readonly S[] | undefined;
+    } & YtSearchAnswer<S>)
   | { readonly type: "failed"; readonly query: string; readonly reason: YtQuietReason };
 
 export const YT_SECTION_HIDDEN: { readonly status: "hidden" } = { status: "hidden" };
@@ -125,6 +133,47 @@ const MIN_QUERY_LENGTH = 2;
 export const ytSearchQuery = (text: string): string | null => {
   const query = text.replace(/\s+/g, " ").trim();
   return query.length < MIN_QUERY_LENGTH ? null : query;
+};
+
+/** A YT Music song found by [query] as Search finds the Library's: by title, artists or album. */
+const matchesQuery = (query: string, songs: readonly YtSong[]): readonly YtSong[] => {
+  const index = createSearchIndex(
+    songs.map((song) => ({
+      kind: "song" as const,
+      name: song.title,
+      also: song.album === null ? song.artists : [...song.artists, song.album],
+      song,
+    })),
+  );
+  return index.search(query).groups.flatMap((group) => group.items.map((item) => item.song));
+};
+
+/**
+ * Whether Online also asks YT Music's Videos search for [query]: only when no
+ * song result is found by it, so an official music video can stand in.
+ */
+export const ytSearchAsksVideos = (query: string, songs: readonly YtSong[]): boolean =>
+  matchesQuery(query, songs).length === 0;
+
+/**
+ * [songs], with the official music videos (`MUSIC_VIDEO_TYPE_OMV`) of [videos]
+ * the query finds first when none of [songs] is found by it. User uploads and
+ * other videos never show.
+ */
+const withVideos = <S extends YtSong>(
+  query: string,
+  songs: readonly S[],
+  videos: readonly S[] | undefined,
+): readonly S[] => {
+  if (videos === undefined || !ytSearchAsksVideos(query, songs)) return songs;
+  const found = new Set(
+    matchesQuery(
+      query,
+      videos.filter((video) => video.videoType === "MUSIC_VIDEO_TYPE_OMV"),
+    ),
+  );
+  const shown = videos.filter((video) => found.has(video));
+  return shown.length === 0 ? songs : [...shown, ...songs];
 };
 
 /** A line the section shows instead of results: an outcome (while loading, a skeleton shows). */
@@ -366,7 +415,7 @@ export const stepYtSection = <S extends YtSong>(
       return {
         status: "results",
         query: event.query,
-        songs: event.songs,
+        songs: withVideos(event.query, event.songs, event.videos),
         artists: event.artists,
         albums: event.albums,
         by: state.by,

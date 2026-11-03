@@ -911,6 +911,7 @@ export {
   YT_SEARCH_DEBOUNCE_MS,
   YT_SECTION_HIDDEN,
   stepYtSection,
+  ytSearchAsksVideos,
   ytSearchQuery,
   ytSectionToggle,
   ytSectionView,
