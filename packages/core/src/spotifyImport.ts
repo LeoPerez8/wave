@@ -63,12 +63,9 @@ interface Reading {
   readonly durationMs: number | null;
 }
 
-/**
- * A music video's own presentation note ("Official Music Video", "Official Video", "Official
- * HD Video", "Music Video"). A lyric video, a visualizer or audio isn't the music video, so their
- * notes stay in the title and keep it from matching.
- */
-const MUSIC_VIDEO_NOTE = /^(?:official )?(?:(?:hd|4k) )?(?:music )?video(?: (?:hd|4k))?$/iu;
+/** Presentation notes on an OMV do not change the recording. */
+const MUSIC_VIDEO_NOTE =
+  /^(?:official )?(?:(?:hd|4k) )?(?:(?:music |lyric )?video|lyrics?|visualizer|audio)(?: (?:hd|4k))?$/iu;
 
 /**
  * [song] as matching compares it. A note naming only artists either side
@@ -163,7 +160,7 @@ const sameRecording = (
  * lengths known and within 3 seconds. Sharing on Spotify matches Spotify's
  * results by the same rules. When no audio result matches, an OMV may be
  * up to 3 seconds shorter or 60 seconds longer; its music video note is set
- * aside (`MUSIC_VIDEO_NOTE`), a lyric, visualizer or audio note isn't. UGC never matches. `unknownLength` is only for Recognize.
+ * aside (`MUSIC_VIDEO_NOTE`), including lyric, visualizer and audio notes. UGC never matches. `unknownLength` is only for Recognize.
  */
 export const spotifyYtMatch = <
   S extends Pick<YtSong, "title" | "artists" | "album" | "durationMs"> & {

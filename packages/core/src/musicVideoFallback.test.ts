@@ -42,16 +42,14 @@ test("recording lookup falls back once and preserves a failed video search", asy
   assert.equal(result, failure);
 });
 
-test("an official music video's note is set aside; a lyric, visualizer or audio note isn't", () => {
+test("an OMV's presentation notes are set aside, including lyric, visualizer and audio notes", () => {
   for (const title of [
     "Skyfall (Official Music Video)",
     "Skyfall (Official Video)",
     "Skyfall [Official HD Video]",
     "Skyfall (Music Video)",
     "Skyfall - Official Music Video",
-  ])
-    assert.equal(spotifyYtMatch(wanted, [{ ...video, title }])?.title, title, title);
-  for (const title of [
+
     "Skyfall (Official Lyric Video)",
     "Skyfall (Lyric Video)",
     "Skyfall (Lyrics)",
@@ -59,16 +57,16 @@ test("an official music video's note is set aside; a lyric, visualizer or audio 
     "Skyfall (Official Visualizer)",
     "Skyfall (Official Audio)",
   ])
-    assert.equal(spotifyYtMatch(wanted, [{ ...video, title }]), null, title);
+    assert.equal(spotifyYtMatch(wanted, [{ ...video, title }])?.title, title, title);
 });
 
-test("the recorded Skyfall Videos response, a lyric video, isn't the song's music video", async () => {
+test("the recorded Skyfall official lyric video matches the song", async () => {
   const { readFile } = await import("node:fs/promises");
   const recorded = JSON.parse(
     await readFile(new URL("./fixtures/skyfall-video.json", import.meta.url), "utf8"),
   );
   assert.equal(recorded.title, "Skyfall (Official Lyric Video)");
-  assert.equal(spotifyYtMatch(wanted, [recorded]), null);
+  assert.equal(spotifyYtMatch(wanted, [recorded]), recorded);
 });
 
 test("Songs success spends no video request; fallback takes the first OMV and never UGC", async () => {
