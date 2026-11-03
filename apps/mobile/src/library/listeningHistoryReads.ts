@@ -1,7 +1,20 @@
-import type { ListeningHistoryCursor, ListeningHistoryPage } from "./db/listeningHistory.ts";
+import {
+  startingAt,
+  type ListeningHistoryCursor,
+  type ListeningHistoryPage,
+} from "./db/listeningHistory.ts";
 
-/** The next page (`more`), the newest one again (`head`), or every page shown (`refresh`). */
-export type ListeningHistoryRead = "more" | "head" | "refresh";
+/**
+ * The next page (`more`), the one above a moment's (`newer`), the newest one
+ * again (`head`), or every page shown (`refresh`).
+ */
+export type ListeningHistoryRead = "more" | "newer" | "head" | "refresh";
+
+/** A page older than a cursor (the newest without one), newer than one, or around a play. */
+export type ListeningHistoryFrom =
+  | { readonly before: ListeningHistoryCursor | undefined }
+  | { readonly after: ListeningHistoryCursor }
+  | { readonly around: number };
 
 export interface ListeningHistoryReads {
   /** Reads now, or once the read going on ends. */
@@ -15,17 +28,22 @@ export interface ListeningHistoryReads {
 /**
  * History's page reads, one at a time, starting from the [initial] pages
  * shown: a head read merges the newest page into them, `more` appends the
- * next one, `refresh` reads again as many rows as are shown.
+ * next one, `refresh` reads again as many rows as are shown. Opened at the
+ * play [around] (Go to This Moment), the first refresh reads the plays around
+ * it; until `newer` pages reach the newest play, a head read has nothing to
+ * join and a refresh reads from the top row shown.
  */
 export const listeningHistoryReads = ({
   initial,
+  around,
   readPage,
   onPage,
   onLoading,
   onError,
 }: {
   readonly initial: ListeningHistoryPage;
-  readonly readPage: (before: ListeningHistoryCursor | undefined) => Promise<ListeningHistoryPage>;
+  readonly around?: number | undefined;
+  readonly readPage: (from: ListeningHistoryFrom) => Promise<ListeningHistoryPage>;
   readonly onPage: (page: ListeningHistoryPage) => void;
   readonly onLoading: (loading: boolean) => void;
   readonly onError: (error: boolean) => void;
@@ -36,31 +54,52 @@ export const listeningHistoryReads = ({
   let pending: ListeningHistoryRead | null = null;
   /** A page asked for during another read: the list's end won't ask again. */
   let more = false;
+  /** The same for the page above a moment's, which the list's start asks for. */
+  let newer = false;
   let timer: ReturnType<typeof setTimeout> | undefined;
   const run = async (read: ListeningHistoryRead): Promise<void> => {
     if (!active) return;
     if (busy) {
       if (read === "more") more = true;
+      else if (read === "newer") newer = true;
       else pending = pending === "refresh" ? pending : read;
       return;
     }
-    if (read === "more" && shown.next === null) return;
+    const previous = shown;
+    const top = previous.rows[0];
+    let from: ListeningHistoryFrom;
+    if (read === "more") {
+      if (previous.next === null) return;
+      from = { before: previous.next };
+    } else if (read === "newer") {
+      if (previous.newer === null) return;
+      from = { after: previous.newer };
+    } else if (previous.newer !== null) {
+      // Below the newest play: no head to join, and a refresh keeps the rows from the top one.
+      if (read === "head" || top === undefined) return;
+      from = { before: startingAt(top) };
+    } else
+      from =
+        read === "refresh" && top === undefined && around !== undefined
+          ? { around }
+          : { before: undefined };
     busy = true;
     onLoading(true);
     onError(false);
     try {
-      const previous = shown;
-      let result = await readPage(read === "more" ? (previous.next ?? undefined) : undefined);
-      if (read === "refresh") {
+      let result = await readPage(from);
+      if (read === "refresh" && top !== undefined) {
         // Yield between pages when a Library edit revalidates a long, already opened list.
         while (result.next !== null && result.rows.length < previous.rows.length) {
           await new Promise((resolve) => setTimeout(resolve, 0));
           if (!active) return;
-          const next = await readPage(result.next);
-          result = { rows: [...result.rows, ...next.rows], next: next.next };
+          const next = await readPage({ before: result.next });
+          result = { rows: [...result.rows, ...next.rows], next: next.next, newer: result.newer };
         }
+        result = { ...result, newer: previous.newer };
       } else if (
         read === "more" ||
+        read === "newer" ||
         result.rows.some((row) => previous.rows.some((old) => old.id === row.id))
       ) {
         // Keep the previous boundary and overlapping head rows: inserting a new play cannot leave a gap.
@@ -70,6 +109,7 @@ export const listeningHistoryReads = ({
           // oxlint-disable-next-line unicorn/no-array-sort -- sorts a fresh copy; Hermes lacks toSorted
           rows: [...byId.values()].sort((a, b) => b.startedAt - a.startedAt || b.id - a.id),
           next: read === "more" ? result.next : previous.next,
+          newer: read === "newer" ? result.newer : previous.newer,
         };
       }
       if (active) {
@@ -85,6 +125,9 @@ export const listeningHistoryReads = ({
         if (more) {
           more = false;
           void run("more");
+        } else if (newer) {
+          newer = false;
+          void run("newer");
         } else if (pending !== null) {
           const next = pending;
           pending = null;

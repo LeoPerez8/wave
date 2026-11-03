@@ -3,7 +3,11 @@ import { test } from "node:test";
 import { eq, sql } from "drizzle-orm";
 import type { PlayEvent } from "@wave/core";
 
-import { listeningHistory } from "./listeningHistory.ts";
+import {
+  listeningHistory,
+  listeningHistoryAround,
+  newerListeningHistory,
+} from "./listeningHistory.ts";
 import { endPlay, latestPlay, recordPlay, updatePlay } from "./playHistory.ts";
 import * as schema from "./schema.ts";
 import {
@@ -436,4 +440,48 @@ test("history search pages all saved snapshots, including removed songs beyond l
   assert.equal(listeningHistory(db, undefined, "zzz").next, null);
   assert.deepEqual(listeningHistory(db, undefined, ""), listeningHistory(db));
   assert.deepEqual(listeningHistory(db, undefined, "---"), listeningHistory(db));
+});
+
+test("a moment opens centred on its play and pages newer and older plays from there", async () => {
+  const db = await openTestDatabase();
+  const track = addTrack(db, { title: "Airbag" });
+  // Three plays share each start time, so the window and its pages must keep tied ids in order.
+  db.run(sql`WITH RECURSIVE n(x) AS (VALUES(1) UNION ALL SELECT x + 1 FROM n WHERE x < 300)
+    INSERT INTO play_events (track_id, started_at, listened_ms, counted, end_reason)
+    SELECT ${track}, x / 3, 20000, 1, 'stopped' FROM n`);
+  const skipped = recordPlay(db, play(track, 50, false));
+  const all = Array.from({ length: 300 }, (_, i) => 300 - i);
+  const { result: moment, queries } = traceQueries(db, () => listeningHistoryAround(db, 150));
+  assert.ok(queries.every(({ rows }) => rows <= 51));
+  const at = moment.rows.findIndex((row) => row.id === 150);
+  assert.equal(at, 25);
+  assert.deepEqual(
+    moment.rows.map(({ id }) => id),
+    all.slice(all.indexOf(150) - 25, all.indexOf(150) + 25),
+  );
+  const ids = moment.rows.map(({ id }) => id);
+  for (let older = moment.next; older !== null; ) {
+    const page = listeningHistory(db, older);
+    ids.push(...page.rows.map(({ id }) => id));
+    older = page.next;
+  }
+  for (let newer = moment.newer; newer !== null; ) {
+    const page = newerListeningHistory(db, newer);
+    assert.equal(page.rows.length <= 50, true);
+    ids.unshift(...page.rows.map(({ id }) => id));
+    newer = page.newer;
+  }
+  assert.deepEqual(ids, all);
+  // The newest page and older pages start at the head: nothing newer to read.
+  assert.equal(listeningHistory(db).newer, null);
+  // Near the newest play the window starts at the head.
+  const top = listeningHistoryAround(db, 299);
+  assert.equal(top.newer, null);
+  assert.deepEqual(
+    top.rows.slice(0, 3).map(({ id }) => id),
+    [300, 299, 298],
+  );
+  // A play that isn't in history opens the newest page.
+  assert.deepEqual(listeningHistoryAround(db, skipped), listeningHistory(db));
+  assert.deepEqual(listeningHistoryAround(db, 9999), listeningHistory(db));
 });

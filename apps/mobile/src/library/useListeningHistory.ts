@@ -8,10 +8,14 @@ import { listeningHistoryReads, type ListeningHistoryRead } from "./listeningHis
 import { LibraryStore } from "./LibraryStore";
 import { appRuntime } from "./runtime";
 
-const EMPTY: ListeningHistoryPage = { rows: [], next: null };
+const EMPTY: ListeningHistoryPage = { rows: [], next: null, newer: null };
 
-/** Pages history only while shown. Play progress refreshes its head; Library edits refresh loaded rows. */
-export const useListeningHistory = (query = "") => {
+/**
+ * Pages history only while shown. Play progress refreshes its head; Library
+ * edits refresh loaded rows. Opened at the play [around] (Go to This Moment),
+ * the full history starts with the plays around it; a search starts at the newest.
+ */
+export const useListeningHistory = (query = "", around?: number) => {
   const [result, setResult] = useState({ query, page: EMPTY });
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(false);
@@ -25,10 +29,17 @@ export const useListeningHistory = (query = "") => {
       const reads = listeningHistoryReads({
         initial:
           shown.current.query === query ? shown.current.page : query === "" ? whole.current : EMPTY,
-        readPage: (before) =>
+        around: query === "" ? around : undefined,
+        readPage: (from) =>
           appRuntime.runPromise(
             // oxlint-disable-next-line react/rules-of-hooks -- Effect resolves the store service.
-            LibraryStore.use((store) => store.listeningHistory(before, query)),
+            LibraryStore.use((store) =>
+              "around" in from
+                ? store.listeningHistoryAround(from.around)
+                : "after" in from
+                  ? store.newerListeningHistory(from.after)
+                  : store.listeningHistory(from.before, query),
+            ),
           ),
         onPage: (result) => {
           shown.current = { query, page: result };
@@ -67,15 +78,18 @@ export const useListeningHistory = (query = "") => {
         reads.stop();
         request.current = () => {};
       };
-    }, [query]),
+    }, [query, around]),
   );
 
+  const page = result.query === query ? result.page : query === "" ? whole.current : EMPTY;
   return {
-    rows:
-      result.query === query ? result.page.rows : query === "" ? whole.current.rows : EMPTY.rows,
+    rows: page.rows,
+    /** Plays newer than those shown are still to read, above them. */
+    newer: page.newer !== null,
     loading: result.query !== query || loading,
     error,
     loadMore: useCallback(() => request.current("more"), []),
+    loadNewer: useCallback(() => request.current("newer"), []),
     refresh: useCallback(() => request.current("refresh"), []),
   };
 };

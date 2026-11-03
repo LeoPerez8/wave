@@ -202,6 +202,8 @@ import { loadPlayback, savePlayback, type SavedPlayback } from "./db/playback";
 import { shuffleSongs } from "./db/shuffleSongs";
 import {
   listeningHistory,
+  listeningHistoryAround,
+  newerListeningHistory,
   type ListeningHistoryCursor,
   type ListeningHistoryPage,
 } from "./db/listeningHistory";
@@ -1168,6 +1170,14 @@ export class LibraryStore extends Context.Service<
     readonly listeningHistory: (
       before?: ListeningHistoryCursor,
       query?: string,
+    ) => Effect.Effect<ListeningHistoryPage, LibraryStoreError>;
+    /** The 50 plays newer than [after], for history opened at a moment. */
+    readonly newerListeningHistory: (
+      after: ListeningHistoryCursor,
+    ) => Effect.Effect<ListeningHistoryPage, LibraryStoreError>;
+    /** History opened at a moment: the 50 plays around [playId], it in the middle. */
+    readonly listeningHistoryAround: (
+      playId: number,
     ) => Effect.Effect<ListeningHistoryPage, LibraryStoreError>;
     /**
      * Each track's counted plays within [window] (tracks still in the library),
@@ -2152,6 +2162,10 @@ const make = Effect.gen(function* () {
     latestPlay: attempt("read the latest play", () => latestPlay(db)),
     listeningHistory: (before, query) =>
       attempt("read listening history", () => listeningHistory(db, before, query)),
+    newerListeningHistory: (after) =>
+      attempt("read newer listening history", () => newerListeningHistory(db, after)),
+    listeningHistoryAround: (playId) =>
+      attempt("read listening history around a play", () => listeningHistoryAround(db, playId)),
 
     trackPlayTotals: (window, trackIds) =>
       attempt("sum up song plays", () => trackPlayTotals(db, window, trackIds)),
