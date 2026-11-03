@@ -31,7 +31,20 @@ import {
   type UnsearchedSong,
   type YtAlbumSong,
 } from "@wave/core";
-import { and, asc, desc, eq, inArray, isNotNull, isNull, ne, or, sql, type SQL } from "drizzle-orm";
+import {
+  and,
+  asc,
+  desc,
+  eq,
+  inArray,
+  isNotNull,
+  isNull,
+  lte,
+  ne,
+  or,
+  sql,
+  type SQL,
+} from "drizzle-orm";
 
 import type { PlaylistAddResult, PlaylistDetail, PlaylistRow } from "../LibraryStore.ts";
 import type { LibraryDatabase, RowPage } from "./database.ts";
@@ -1632,3 +1645,112 @@ export const selectPlaylistGraveyard = (
     return [{ ...entry, removedAt: row.removedAt }];
   });
 };
+
+/** Brings back a visible Graveyard song using the order retained by its tombstone. */
+export const restoreGraveyardItem = (
+  db: LibraryDatabase,
+  playlistId: number,
+  itemId: number,
+  now: number,
+): void =>
+  db.transaction((tx) => {
+    if (!selectPlaylistGraveyard(tx, playlistId).some((entry) => entry.itemId === itemId)) return;
+    const { playlistItems } = schema;
+    const row = tx.select().from(playlistItems).where(eq(playlistItems.id, itemId)).get();
+    if (row === undefined) return;
+    // Tombstones still describe the old slot even when its neighbours were removed later.
+    const original = tx
+      .select()
+      .from(playlistItems)
+      .where(
+        and(
+          eq(playlistItems.playlistId, playlistId),
+          lte(playlistItems.addedAt, row.removedAt ?? 0),
+        ),
+      )
+      .orderBy(...IN_ORDER)
+      .all();
+    const index = original.findIndex((entry) => entry.id === itemId);
+    const neighbours = [original[index - 1], original[index + 1]].flatMap((entry) =>
+      entry === undefined || entry.deleted ? [] : [entry],
+    );
+    const oldPlaceRemains =
+      neighbours.length > 0 && neighbours.every((entry) => entry.changedAt <= (row.removedAt ?? 0));
+    if (!oldPlaceRemains) {
+      const entries = orderedEntries(tx, playlistId);
+      const { keys, rekeyed } = placeEntries(entries, entries.length, 1);
+      rekey(tx, rekeyed, now);
+      tx.update(playlistItems)
+        .set({ orderKey: keys[0] ?? "" })
+        .where(eq(playlistItems.id, itemId))
+        .run();
+    }
+    restorePlaylistItems(
+      tx,
+      { playlistId, retainedItemIds: [], entries: [{ itemId, changedAt: row.changedAt }] },
+      now,
+    );
+  });
+
+/** Forgets a song's removal history (all of it when itemId is omitted), keeping tombstones for sync. */
+export const forgetGraveyardItems = (
+  db: LibraryDatabase,
+  playlistId: number,
+  itemId: number | undefined,
+  now: number,
+): void =>
+  db.transaction((tx) => {
+    const { playlistItems } = schema;
+    const entry =
+      itemId === undefined
+        ? undefined
+        : selectPlaylistGraveyard(tx, playlistId).find((e) => e.itemId === itemId);
+    if (itemId !== undefined && entry === undefined) return;
+    const rows = tx
+      .select()
+      .from(playlistItems)
+      .where(
+        and(
+          eq(playlistItems.playlistId, playlistId),
+          eq(playlistItems.deleted, true),
+          isNotNull(playlistItems.removedAt),
+        ),
+      )
+      .all();
+    const find = libraryFinder(
+      playlistTracks(
+        tx,
+        playlistId,
+        rows.map((row) => row.id),
+        "library",
+        true,
+      ),
+    );
+    const matchingTrack =
+      entry === undefined || entry.source === "library" ? null : find(entry.song);
+    const target =
+      entry === undefined
+        ? null
+        : entry.source === "library"
+          ? String(entry.track.id)
+          : matchingTrack === null
+            ? playlistSongKey(entry)
+            : String(matchingTrack.id);
+    for (const row of rows) {
+      const song = row.ytSong === null ? null : readPlaylistEntrySong(row.ytSong);
+      const match = song === null ? null : find(song.song);
+      const key =
+        row.trackId !== null
+          ? String(row.trackId)
+          : match !== null
+            ? String(match.id)
+            : song === null
+              ? null
+              : playlistSongKey(song);
+      if (target !== null && key !== target) continue;
+      tx.update(playlistItems)
+        .set({ removedAt: null, ...stamped(playlistItems, now) })
+        .where(eq(playlistItems.id, row.id))
+        .run();
+    }
+  });

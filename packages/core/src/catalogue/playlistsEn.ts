@@ -23,6 +23,12 @@ const songs = (count: number): string =>
 
 /** Playlists: their list, pages, sheets, editing, sort and layout, and recommendations. */
 export const playlistsEn = {
+  restore: "Restore",
+  removeFromGraveyard: "Remove from Graveyard",
+  emptyGraveyard: "Empty Graveyard",
+  emptyGraveyardQuestion: "Empty Graveyard?",
+  emptyGraveyardMessage: "Forget all removed songs? Your playlist stays as it is.",
+  couldntForget: "Couldn't remove songs from the Graveyard",
   graveyard: "Graveyard",
   removedOn: (date: string): string => `Removed on ${date}`,
 

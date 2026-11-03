@@ -202,6 +202,8 @@ import { loadPlayback, savePlayback, type SavedPlayback } from "./db/playback";
 import { shuffleSongs } from "./db/shuffleSongs";
 import {
   listeningHistory,
+  listeningHistoryAround,
+  newerListeningHistory,
   type ListeningHistoryCursor,
   type ListeningHistoryPage,
 } from "./db/listeningHistory";
@@ -223,6 +225,8 @@ import {
   movePlaylistItem,
   removePlaylistItems,
   restorePlaylistItems,
+  restoreGraveyardItem,
+  forgetGraveyardItems,
   type PlaylistRemoval,
   renamePlaylist,
   replacePlaylistSongs,
@@ -1016,6 +1020,14 @@ export class LibraryStore extends Context.Service<
       playlistId: number,
       itemIds: readonly number[],
     ) => Effect.Effect<PlaylistRemoval, LibraryStoreError>;
+    readonly restoreGraveyardItem: (
+      playlistId: number,
+      itemId: number,
+    ) => Effect.Effect<void, LibraryStoreError>;
+    readonly forgetGraveyardItems: (
+      playlistId: number,
+      itemId?: number,
+    ) => Effect.Effect<void, LibraryStoreError>;
     /** Undo a removal, keeping the original entries and their order. */
     readonly restorePlaylistItems: (
       removal: PlaylistRemoval,
@@ -1158,6 +1170,14 @@ export class LibraryStore extends Context.Service<
     readonly listeningHistory: (
       before?: ListeningHistoryCursor,
       query?: string,
+    ) => Effect.Effect<ListeningHistoryPage, LibraryStoreError>;
+    /** The 50 plays newer than [after], for history opened at a moment. */
+    readonly newerListeningHistory: (
+      after: ListeningHistoryCursor,
+    ) => Effect.Effect<ListeningHistoryPage, LibraryStoreError>;
+    /** History opened at a moment: the 50 plays around [playId], it in the middle. */
+    readonly listeningHistoryAround: (
+      playId: number,
     ) => Effect.Effect<ListeningHistoryPage, LibraryStoreError>;
     /**
      * Each track's counted plays within [window] (tracks still in the library),
@@ -2017,6 +2037,14 @@ const make = Effect.gen(function* () {
         removePlaylistItems(db, playlistId, itemIds, Date.now()),
       ),
 
+    restoreGraveyardItem: (playlistId, itemId) =>
+      writeAttempt("restore a Graveyard song", () =>
+        restoreGraveyardItem(db, playlistId, itemId, Date.now()),
+      ),
+    forgetGraveyardItems: (playlistId, itemId) =>
+      writeAttempt("forget Graveyard songs", () =>
+        forgetGraveyardItems(db, playlistId, itemId, Date.now()),
+      ),
     restorePlaylistItems: (removal) =>
       writeAttempt("restore the playlist entries", () =>
         restorePlaylistItems(db, removal, Date.now()),
@@ -2134,6 +2162,10 @@ const make = Effect.gen(function* () {
     latestPlay: attempt("read the latest play", () => latestPlay(db)),
     listeningHistory: (before, query) =>
       attempt("read listening history", () => listeningHistory(db, before, query)),
+    newerListeningHistory: (after) =>
+      attempt("read newer listening history", () => newerListeningHistory(db, after)),
+    listeningHistoryAround: (playId) =>
+      attempt("read listening history around a play", () => listeningHistoryAround(db, playId)),
 
     trackPlayTotals: (window, trackIds) =>
       attempt("sum up song plays", () => trackPlayTotals(db, window, trackIds)),
