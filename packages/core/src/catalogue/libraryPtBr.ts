@@ -182,6 +182,7 @@ export const libraryPtBr: typeof libraryEn = {
   },
   sortLabel: (name: string, direction: string): string => `${name}, ${direction}`,
   find: {
+    history: "Buscar no Histórico de Ouvidas",
     playlist: "Buscar na Playlist",
     songs: "Buscar em Músicas",
     artists: "Buscar em Artistas",
@@ -191,6 +192,7 @@ export const libraryPtBr: typeof libraryEn = {
     artist: "Buscar em artista",
   },
   noMatch: {
+    history: "Nenhuma ouvida encontrada",
     playlist: "Nenhuma música encontrada",
     songs: "Nenhuma música encontrada",
     artists: "Nenhum artista encontrado",

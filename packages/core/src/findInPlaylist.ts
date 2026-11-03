@@ -58,7 +58,7 @@ export const FIND_IN_PLAYLIST_NO_MATCH = en.library.noMatch.playlist;
  * Artists, Albums, Genres or Playlists, or an artist page's songs.
  */
 export type FindableListKind =
-  "playlist" | "songs" | "artists" | "albums" | "genres" | "playlists" | "artist";
+  "playlist" | "songs" | "artists" | "albums" | "genres" | "playlists" | "artist" | "history";
 
 /** What [list]'s field says before anything is typed ("Find in Songs"). */
 export const findPlaceholder = (list: FindableListKind, language: AppLanguage = "en"): string =>
