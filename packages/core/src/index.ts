@@ -2532,6 +2532,7 @@ export {
   lookUpReleaseDates,
   readReleaseAnswers,
   releaseAnswer,
+  releaseBackgroundLine,
   releaseBatchSplit,
   releaseBatches,
   releaseCandidates,
