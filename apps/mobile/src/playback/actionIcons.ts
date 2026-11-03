@@ -62,6 +62,7 @@ export type MenuAction =
   | "removeColour"
   | "follow"
   | "openTickets"
+  | "graveyard"
   | "downloaded";
 
 /**
@@ -70,6 +71,7 @@ export type MenuAction =
  * album's, a playlist's or a mix's, a cancel the X, a retry the circling arrows.
  */
 export const ACTION_ICONS: { readonly [A in MenuAction]: ActionIcon } = {
+  graveyard: IconTrash,
   follow: IconUserPlus,
   openTickets: IconTicket,
   play: IconPlayerPlay,

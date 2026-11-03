@@ -31,6 +31,9 @@ const counted = (count: number): string =>
   plural("pt-BR", count, { one: `${n(count)} música`, other: `${n(count)} músicas` });
 
 export const playlistsPtBr: typeof playlistsEn = {
+  graveyard: "Cemitério",
+  removedOn: (date: string): string => `Removida em ${date}`,
+
   releaseNoticeTitle: "Buscar datas de lançamento",
   releaseNotice:
     "O Wave envia títulos e artistas ao Deezer e depois os ISRCs das gravações ao MusicBrainz para buscar as primeiras datas de lançamento. A busca segue a opção Buscar online enquanto o YT Music está ativado, para músicas da Biblioteca e músicas do YT Music em playlists. Ordenar uma playlist por data de lançamento também busca as datas de suas músicas. As primeiras datas encontradas são salvas na Biblioteca e nos arquivos sem data original.",

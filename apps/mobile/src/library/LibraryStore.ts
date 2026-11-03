@@ -228,6 +228,7 @@ import {
   replacePlaylistSongs,
   selectPlaylist,
   selectPlaylistEntries,
+  selectPlaylistGraveyard,
   selectPlaylistEntriesRevision,
   selectPlaylistEntrySongs,
   selectPlaylistEntryVideoIdsPage,
@@ -953,6 +954,12 @@ export class LibraryStore extends Context.Service<
     /** Every playlist's unsearched songs, top to bottom, for the background fill. */
     readonly unsearchedEntries: Effect.Effect<readonly PlaylistUnsearched[], LibraryStoreError>;
     /** A playlist with its YT Music entries and its Library songs in [scope]. */
+    readonly playlistGraveyard: (
+      id: number,
+    ) => Effect.Effect<
+      readonly (PlaylistEntryRow & { readonly removedAt: number })[],
+      LibraryStoreError
+    >;
     readonly getPlaylist: (
       id: number,
       scope?: TrackScope,
@@ -1958,6 +1965,9 @@ const make = Effect.gen(function* () {
     unsearchedEntries: attempt("read the playlists' unsearched songs", () =>
       selectUnsearchedEntries(db),
     ),
+
+    playlistGraveyard: (id) =>
+      attempt("read the playlist graveyard", () => selectPlaylistGraveyard(db, id)),
 
     getPlaylist: (id, scope) =>
       attempt(
