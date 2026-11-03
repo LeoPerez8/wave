@@ -373,6 +373,9 @@ const connectivity = connectivityStore({
 /** The phone's connectivity now. */
 export const connectivityNow = (): Connectivity => connectivity.get();
 
+/** Follows changes to the cached default network. */
+export const subscribeConnectivity = connectivity.subscribe;
+
 /** Whether the phone is on mobile data now; Wi-Fi when the module can't tell. */
 export const onMobileData = (): boolean => connectivity.get().onMobileData;
 
