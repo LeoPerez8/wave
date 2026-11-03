@@ -173,12 +173,15 @@ export const parseRow = (table: SyncTable, row: unknown, where: string): Incomin
     changedAt: row.changedAt as number,
     phoneId: row.phoneId,
     deleted: row.deleted,
-    values: row.deleted ? null : rowValues(table, row, where),
+    values:
+      row.deleted && !(table.name === "playlistEntries" && Number.isSafeInteger(row.removedAt))
+        ? null
+        : rowValues(table, row, where),
     omitted: table.keptWhenOmitted?.filter((name) => !(name in row)) ?? [],
   };
 };
 
-/** A stored row as a pull answers it: a tombstone carries no fields. */
+/** A stored row on the wire; Graveyard tombstones keep their song fields. */
 export const wireRow = (
   table: SyncTable,
   row: Readonly<Record<string, unknown>>,
@@ -188,7 +191,11 @@ export const wireRow = (
     out.changedAt = Number(row.changed_at);
     out.phoneId = row.phone_id;
     out.deleted = Number(row.deleted) === 1;
-    if (out.deleted) return out;
+    if (
+      out.deleted &&
+      !(table.name === "playlistEntries" && row.removed_at !== null && row.removed_at !== undefined)
+    )
+      return out;
   }
   for (const [name, kind] of Object.entries(table.fields)) {
     const value = row[column(name)] ?? null;

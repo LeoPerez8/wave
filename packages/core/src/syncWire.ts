@@ -38,8 +38,15 @@ export type SyncSong = SyncedRow<SyncSongFields>;
 /** A playlist; its id is made on the phone that created it. */
 export type SyncPlaylist = SyncedRow<{ readonly name: string; readonly createdAt: number }>;
 
-/** A playlist entry: a Library song by recording key, or a YT Music song as the app stores it. */
-export type SyncPlaylistEntry = SyncedRow<{
+/**
+ * A playlist entry: a Library song by recording key, or a stored song.
+ * A manual removal keeps its fields on the tombstone for the Graveyard.
+ */
+export type SyncPlaylistEntry =
+  | SyncedRow<SyncPlaylistEntryFields>
+  | (SyncRow & { readonly deleted: true; readonly removedAt: number } & SyncPlaylistEntryFields);
+
+interface SyncPlaylistEntryFields {
   /** The playlist's id. */
   readonly playlistId: string;
   /** Core's `orderKeyBetween`. */
@@ -49,7 +56,8 @@ export type SyncPlaylistEntry = SyncedRow<{
   /** A YT Music entry's song (`writePlaylistYtSong`). */
   readonly ytSong: string | null;
   readonly addedAt: number;
-}>;
+  readonly removedAt?: number | null;
+}
 
 /** A star; its id is the song's recording key. */
 export type SyncFavorite = SyncedRow<{ readonly addedAt: number }>;
@@ -172,6 +180,7 @@ export const SYNC_FIELDS: {
     orderKey: "text",
     songId: "text?",
     ytSong: "text?",
+    removedAt: "int?",
     addedAt: "int",
   },
   favorites: { addedAt: "int" },
@@ -239,7 +248,8 @@ const readRow = (table: keyof SyncTables, raw: unknown): object | null => {
     row.changedAt = raw.changedAt;
     row.phoneId = raw.phoneId;
     row.deleted = raw.deleted;
-    if (raw.deleted) return row;
+    if (raw.deleted && !(table === "playlistEntries" && Number.isSafeInteger(raw.removedAt)))
+      return row;
   }
   for (const [name, kind] of Object.entries(SYNC_FIELDS[table])) {
     const value = raw[name] ?? null;

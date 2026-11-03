@@ -848,6 +848,7 @@ Every translation ticket follows it, so one English term always gets the same Po
 | **Spec glossary**                                                               |                                                                                 |
 | Track                                                                           | Faixa (in the UI a track is a "song": Música)                                   |
 | Song / Songs                                                                    | Música / Músicas                                                                |
+| Graveyard                                                                       | Cemitério                                                                       |
 | Wave account                                                                    | Conta Wave                                                                      |
 | Recording key                                                                   | Chave de gravação                                                               |
 | Missing song                                                                    | Música ausente                                                                  |

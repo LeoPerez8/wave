@@ -47,7 +47,7 @@ export const explainUnavailable = (song: UnavailableSong): void => {
  */
 export const openUnavailableEntryActions = (
   song: UnavailableSong,
-  playlistItem: PlaylistPlace,
+  playlistItem?: PlaylistPlace,
 ): void => {
   openOverlay({
     label: song.title,
@@ -61,10 +61,11 @@ export const openUnavailableEntryActions = (
 const run = (
   action: UnavailableEntryAction,
   song: UnavailableSong,
-  playlistItem: PlaylistPlace,
+  playlistItem?: PlaylistPlace,
 ): void => {
   switch (action) {
     case "removeFromPlaylist":
+      if (playlistItem === undefined) return;
       removePlaylistItems(playlistItem.playlistId, [playlistItem.itemId]).catch((error: unknown) =>
         showError(currentLocalisation().strings.library.couldntRemoveSong, error),
       );
@@ -82,13 +83,15 @@ function UnavailableEntryMenu({
   close,
 }: {
   song: UnavailableSong;
-  playlistItem: PlaylistPlace;
+  playlistItem: PlaylistPlace | undefined;
   close: () => void;
 }) {
   const ytMusic = useYtMusicEnabled();
   const { language } = useLocalisation();
   const search = useTabBar().includes("search");
-  const entries = unavailableEntryActions({ search });
+  const entries = unavailableEntryActions({ search }).filter(
+    (action) => playlistItem !== undefined || action !== "removeFromPlaylist",
+  );
   const choose = (index: number) => {
     const action = entries[index];
     if (action === undefined) return;

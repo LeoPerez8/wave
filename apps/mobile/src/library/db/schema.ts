@@ -455,6 +455,7 @@ export const playlistItems = sqliteTable(
       .references(() => playlists.id, { onDelete: "cascade" }),
     trackId: integer("track_id").references(() => tracks.id, { onDelete: "cascade" }),
     ytSong: text("yt_song"),
+    removedAt: integer("removed_at"),
     orderKey: text("order_key").notNull(),
     addedAt: integer("added_at").notNull(),
     ...changeStamp(),
