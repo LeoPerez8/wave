@@ -62,6 +62,10 @@ export type MenuAction =
   | "removeColour"
   | "follow"
   | "openTickets"
+  | "restoreGraveyard"
+  | "forgetGraveyard"
+  | "emptyGraveyard"
+  | "graveyard"
   | "downloaded";
 
 /**
@@ -70,6 +74,10 @@ export type MenuAction =
  * album's, a playlist's or a mix's, a cancel the X, a retry the circling arrows.
  */
 export const ACTION_ICONS: { readonly [A in MenuAction]: ActionIcon } = {
+  restoreGraveyard: IconArrowForwardUp,
+  forgetGraveyard: IconTrashX,
+  emptyGraveyard: IconTrash,
+  graveyard: IconTrash,
   follow: IconUserPlus,
   openTickets: IconTicket,
   play: IconPlayerPlay,

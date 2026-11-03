@@ -22,6 +22,7 @@ import { CardEntries } from "@/overlay/CardEntries";
 import { CardHeading } from "@/overlay/CardHeading";
 import { showError } from "@/overlay/alert";
 import { useOverlayFlow } from "@/overlay/flow";
+import { MenuChoices, type MenuChoice } from "@/overlay/MenuChoices";
 import { MenuRow } from "@/overlay/MenuRow";
 import { openOverlay } from "@/overlay/overlay";
 import { showToast } from "@/overlay/toast";
@@ -47,13 +48,19 @@ export const explainUnavailable = (song: UnavailableSong): void => {
  */
 export const openUnavailableEntryActions = (
   song: UnavailableSong,
-  playlistItem: PlaylistPlace,
+  playlistItem?: PlaylistPlace,
+  extraEntries: readonly MenuChoice[] = [],
 ): void => {
   openOverlay({
     label: song.title,
     anchor: pressedRect(),
     render: (close) => (
-      <UnavailableEntryMenu song={song} playlistItem={playlistItem} close={close} />
+      <UnavailableEntryMenu
+        song={song}
+        playlistItem={playlistItem}
+        extraEntries={extraEntries}
+        close={close}
+      />
     ),
   });
 };
@@ -61,10 +68,11 @@ export const openUnavailableEntryActions = (
 const run = (
   action: UnavailableEntryAction,
   song: UnavailableSong,
-  playlistItem: PlaylistPlace,
+  playlistItem?: PlaylistPlace,
 ): void => {
   switch (action) {
     case "removeFromPlaylist":
+      if (playlistItem === undefined) return;
       removePlaylistItems(playlistItem.playlistId, [playlistItem.itemId]).catch((error: unknown) =>
         showError(currentLocalisation().strings.library.couldntRemoveSong, error),
       );
@@ -79,16 +87,20 @@ const run = (
 function UnavailableEntryMenu({
   song,
   playlistItem,
+  extraEntries,
   close,
 }: {
+  extraEntries: readonly MenuChoice[];
   song: UnavailableSong;
-  playlistItem: PlaylistPlace;
+  playlistItem: PlaylistPlace | undefined;
   close: () => void;
 }) {
   const ytMusic = useYtMusicEnabled();
   const { language } = useLocalisation();
   const search = useTabBar().includes("search");
-  const entries = unavailableEntryActions({ search });
+  const entries = unavailableEntryActions({ search }).filter(
+    (action) => playlistItem !== undefined || action !== "removeFromPlaylist",
+  );
   const choose = (index: number) => {
     const action = entries[index];
     if (action === undefined) return;
@@ -125,6 +137,18 @@ function UnavailableEntryMenu({
           </View>
         ))}
       </CardEntries>
+      {extraEntries.length > 0 && (
+        <MenuChoices
+          cards={[]}
+          entries={extraEntries.map((entry) => ({
+            ...entry,
+            onPress: () => {
+              close();
+              entry.onPress();
+            },
+          }))}
+        />
+      )}
     </>
   );
 }

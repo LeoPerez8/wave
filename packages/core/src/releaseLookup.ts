@@ -2,7 +2,8 @@
  * Finding the first release dates a playlist's songs lack (docs/spec.md, "Playlist song
  * sorting"): Deezer's track search gives each song's matching recordings and their ISRCs,
  * MusicBrainz's recording search gives each ISRC's first release, and the earliest wins. With
- * none, the song falls back to its Year, then the Deezer album's date.
+ * none, MusicBrainz's recordings found by the song's title and artist give it. With none still,
+ * the song falls back to its Year, then the Deezer album's date.
  */
 
 import { isSameSong } from "./lyricsAndGenre.ts";
@@ -13,6 +14,8 @@ import { isRecord, readStoredRecord } from "./storedJson.ts";
 export interface ReleaseSong {
   readonly title: string;
   readonly artist: string;
+  /** Its length, which a recording found by title must be near; 0, null or absent when unknown. */
+  readonly durationMs?: number | null;
 }
 
 /** A Deezer recording that matches the song: its ISRC, and its album for the fallback date. */
@@ -41,9 +44,18 @@ const ISRC = /^[A-Z]{2}[A-Z0-9]{3}\d{7}$/i;
 const recordOf = (value: unknown): Readonly<Record<string, unknown>> =>
   isRecord(value) ? value : {};
 
+/** Match the whole credit or any of the song's artists, using the existing normalisation. */
+const matchesReleaseSong = (song: ReleaseSong, title: string, artist: string): boolean =>
+  [song.artist, ...song.artist.split(/[,&;/]|\s+x\s+/i)].some(
+    (name) =>
+      name.trim() !== "" &&
+      isSameSong({ ...song, artist: name, album: null, durationMs: 0 }, title, artist),
+  );
+
 /**
  * The recordings in Deezer's search [response] whose title and artist match [song] (Core's
- * `isSameSong`), among its first ten results: up to `RELEASE_CODES_PER_SONG`, one per ISRC.
+ * `isSameSong` titles, whole credit or any of its artists), among its first ten results:
+ * up to `RELEASE_CODES_PER_SONG`, one per ISRC.
  */
 export const releaseCandidates = (song: ReleaseSong, response: unknown): ReleaseCandidate[] => {
   const data = recordOf(response).data;
@@ -58,7 +70,7 @@ export const releaseCandidates = (song: ReleaseSong, response: unknown): Release
       typeof artist.name !== "string" ||
       typeof row.isrc !== "string" ||
       !ISRC.test(row.isrc) ||
-      !isSameSong({ ...song, album: null, durationMs: 0 }, row.title, artist.name)
+      !matchesReleaseSong(song, row.title, artist.name)
     )
       continue;
     const isrc = row.isrc.toUpperCase();
@@ -113,6 +125,13 @@ export const releaseRequestDelay = (
   now: number,
 ): number => Math.max(0, last + (service === "musicbrainz" ? 1000 : 350) - now);
 
+/**
+ * The lookup's version, kept with each answer. A version that finds more dates makes the
+ * answers of older ones without a first release due again, once (`releaseDue`). 3: matching
+ * any artist in the song's credit (2 added MusicBrainz's search by title and artist).
+ */
+export const RELEASE_LOOKUP_VERSION = 3;
+
 /** What the lookup found for a song, and when to ask again. */
 export interface ReleaseAnswer {
   readonly date: ReleaseDate | null;
@@ -123,6 +142,8 @@ export interface ReleaseAnswer {
   readonly source: "first-release" | "year" | "album" | "unknown" | "failed";
   /** When the song is due again; null for a first release, which is never asked again. */
   readonly retryAt: number | null;
+  /** The lookup's version that gave it (`RELEASE_LOOKUP_VERSION`); absent before versions, 1. */
+  readonly version?: number;
 }
 
 const RETRY_FAILED_MS = 60_000;
@@ -158,13 +179,66 @@ export const releaseAnswer = (
   }
   // oxlint-disable-next-line unicorn/no-array-sort -- sorts a fresh array; Hermes lacks toSorted
   const earliest = dates.sort()[0];
-  if (earliest !== undefined) return { date: earliest, source: "first-release", retryAt: null };
+  const version = RELEASE_LOOKUP_VERSION;
+  if (earliest !== undefined)
+    return { date: earliest, source: "first-release", retryAt: null, version };
   const retryAt = now + (failed ? RETRY_FAILED_MS : RETRY_UNKNOWN_MS);
   const yearDate = year === null ? null : readReleaseDate(String(year));
-  if (yearDate !== null) return { date: yearDate, source: "year", retryAt };
+  if (yearDate !== null) return { date: yearDate, source: "year", retryAt, version };
   const album = readReleaseDate(albumDate);
-  if (album !== null) return { date: album, source: "album", retryAt };
-  return { date: null, source: failed ? "failed" : "unknown", retryAt };
+  if (album !== null) return { date: album, source: "album", retryAt, version };
+  return { date: null, source: failed ? "failed" : "unknown", retryAt, version };
+};
+
+/** [text] as a phrase in a MusicBrainz (Lucene) query. */
+const phrase = (text: string): string => `"${text.replaceAll(/["\\]/g, String.raw`\$&`)}"`;
+
+/** MusicBrainz's recording search for [song]: its title and its artist, each as a phrase. */
+export const releaseTitleQuery = (song: ReleaseSong): string =>
+  `recording:${phrase(song.title)} AND artist:${phrase(song.artist)}`;
+
+/** How far a recording found by title may be from the song's length. */
+const TITLE_LENGTH_TOLERANCE_MS = 10_000;
+
+/**
+ * The earliest first release among the recordings of MusicBrainz's search by title and artist
+ * ([response], `releaseTitleQuery`) that are [song]: the title matches as Deezer's must
+ * (`isSameSong`), the song's whole credit or any of its artists matches the recording's whole
+ * credit or one artist in it, and, when both lengths are known, it's within 10 s of the song's.
+ * Null when none is.
+ */
+export const releaseTitleDate = (song: ReleaseSong, response: unknown): ReleaseDate | null => {
+  const recordings = recordOf(response).recordings;
+  if (!Array.isArray(recordings)) return null;
+  const length = song.durationMs ?? 0;
+  const dates: ReleaseDate[] = [];
+  for (const value of recordings) {
+    const recording = recordOf(value);
+    const credit = Array.isArray(recording["artist-credit"]) ? recording["artist-credit"] : [];
+    const names = credit
+      .map((part) => recordOf(part).name)
+      .filter((name) => typeof name === "string");
+    const whole = credit
+      .map((part) => {
+        const { name, joinphrase } = recordOf(part);
+        return `${typeof name === "string" ? name : ""}${typeof joinphrase === "string" ? joinphrase : ""}`;
+      })
+      .join("");
+    const date = readReleaseDate(recording["first-release-date"]);
+    const gap =
+      length > 0 && typeof recording.length === "number" && recording.length > 0
+        ? Math.abs(recording.length - length)
+        : 0;
+    if (
+      date !== null &&
+      typeof recording.title === "string" &&
+      [whole, ...names].some((name) => matchesReleaseSong(song, String(recording.title), name)) &&
+      gap <= TITLE_LENGTH_TOLERANCE_MS
+    )
+      dates.push(date);
+  }
+  // oxlint-disable-next-line unicorn/no-array-sort -- sorts a fresh array; Hermes lacks toSorted
+  return dates.sort()[0] ?? null;
 };
 
 const SOURCES: readonly ReleaseAnswer["source"][] = [
@@ -185,10 +259,16 @@ export const readReleaseAnswers = (stored: string | null): Record<string, Releas
     const entry = recordOf(value);
     const source = SOURCES.find((known) => known === entry.source);
     const date = entry.date === null ? null : readReleaseDate(entry.date);
-    const { retryAt } = entry;
+    const { retryAt, version } = entry;
     if (source === undefined || (date === null && entry.date !== null)) continue;
     if (retryAt !== null && !Number.isSafeInteger(retryAt)) continue;
-    answers[key] = { date, source, retryAt: retryAt as number | null };
+    if (version !== undefined && !Number.isSafeInteger(version)) continue;
+    answers[key] = {
+      date,
+      source,
+      retryAt: retryAt as number | null,
+      ...(version === undefined ? {} : { version: version as number }),
+    };
   }
   return answers;
 };
@@ -198,20 +278,33 @@ export const deezerAlbumDate = (body: unknown): ReleaseDate | null =>
   readReleaseDate(recordOf(body).release_date);
 
 /**
+ * When [answer]'s song is due again: its retry, or at once for an older lookup's answer without
+ * a first release (its Year, its album's date or none), whose song this version may find; null
+ * for a first release.
+ */
+const retryOf = (answer: ReleaseAnswer): number | null =>
+  answer.retryAt !== null &&
+  answer.source !== "failed" &&
+  (answer.version ?? 1) < RELEASE_LOOKUP_VERSION
+    ? 0
+    : answer.retryAt;
+
+/**
  * Whether [song] is looked up at [now]: it has a title and an artist, no date that no lookup
  * replaces ([held]: its original-date tag, or one the owner typed), and no answer yet, or one
- * whose retry is due.
+ * whose retry is due (`retryOf`).
  */
 export const releaseDue = (
   song: ReleaseSong,
   held: string | null | undefined,
   answer: ReleaseAnswer | null | undefined,
   now: number,
-): boolean =>
-  song.title.trim() !== "" &&
-  song.artist.trim() !== "" &&
-  !held &&
-  (!answer || (answer.retryAt !== null && answer.retryAt <= now));
+): boolean => {
+  if (song.title.trim() === "" || song.artist.trim() === "" || held) return false;
+  if (!answer) return true;
+  const retry = retryOf(answer);
+  return retry !== null && retry <= now;
+};
 
 /**
  * [answer] once the owner chose Release date, at [now], for a playlist holding its song: one
@@ -222,8 +315,11 @@ export const releaseDue = (
 export const releaseSortChosen = (
   answer: ReleaseAnswer | null | undefined,
   now: number,
-): ReleaseAnswer | null =>
-  !answer || answer.retryAt === null || answer.retryAt <= now ? null : { ...answer, retryAt: now };
+): ReleaseAnswer | null => {
+  if (!answer) return null;
+  const retry = retryOf(answer);
+  return retry === null || retry <= now ? null : { ...answer, retryAt: now };
+};
 
 /**
  * The first-release date to write into a song's original-date tag, or null for none: only a
@@ -257,6 +353,11 @@ export interface ReleaseServices {
   readonly recordings: (codes: readonly string[]) => Promise<readonly unknown[]>;
   /** Deezer's album [id]; throws when Deezer refused or failed. */
   readonly album: (id: number) => Promise<unknown>;
+  /**
+   * MusicBrainz's recordings titled [title] by [artist] (`releaseTitleQuery`), its first page;
+   * throws when it refused or failed.
+   */
+  readonly titled: (title: string, artist: string) => Promise<unknown>;
 }
 
 /** What a playlist's lookup shows while it runs: songs answered of all, and whether it failed. */
@@ -285,7 +386,9 @@ export type ReleaseLookupEnd = "done" | "failed" | "stopped";
  * Looks up the due songs of a playlist's [songs] (`releaseDue`), each key once. Each song is
  * searched on Deezer, and as soon as the songs searched hold `RELEASE_BATCH_CODES` ISRCs
  * (never splitting a song's) MusicBrainz is asked about them, while the next songs are searched.
- * A song MusicBrainz has no date for asks Deezer for its albums' dates. Each answer goes to
+ * A song none of its ISRCs dates is searched on MusicBrainz by title and artist
+ * (`releaseTitleDate`); one that finds nothing either, and has no Year, asks Deezer for its
+ * albums' dates. Each answer goes to
  * [answered] as it's known, and [progress] follows them (null once nothing is left to show).
  *
  * A request that fails stops the run: that song, or the songs of a MusicBrainz query, get a
@@ -357,18 +460,26 @@ export const lookUpReleaseDates = async ({
     for (const { song, candidates } of batch) {
       const isrcs = candidates.map((candidate) => candidate.isrc);
       const found = releaseAnswer(isrcs, responses, song.year, null, now());
-      if (found.date !== null) {
+      if (found.source === "first-release") {
         await answer(song, found);
         continue;
       }
-      let albumDate: ReleaseDate | null;
+      let titled: ReleaseDate | null;
+      let albumDate: ReleaseDate | null = null;
       try {
-        albumDate = await earliestAlbumDate(candidates);
+        titled = releaseTitleDate(song, await services.titled(song.title, song.artist));
+        // A song with a Year needs no album.
+        if (titled === null && found.date === null) albumDate = await earliestAlbumDate(candidates);
       } catch {
         if (going()) await fail(song);
         continue;
       }
-      await answer(song, releaseAnswer([], [], song.year, albumDate, now()));
+      await answer(
+        song,
+        titled === null
+          ? releaseAnswer([], [], song.year, albumDate, now())
+          : { ...found, date: titled, source: "first-release", retryAt: null },
+      );
     }
   };
 
@@ -407,7 +518,7 @@ export const releaseNextDue = (songs: readonly ReleaseLookupSong[], now: number)
   let next: number | null = null;
   for (const song of songs) {
     if (!releaseDue(song, song.held, null, now)) continue;
-    const at = song.answer === null ? now : song.answer.retryAt;
+    const at = song.answer === null ? now : retryOf(song.answer);
     if (at !== null && (next === null || at < next)) next = Math.max(at, now);
   }
   return next;

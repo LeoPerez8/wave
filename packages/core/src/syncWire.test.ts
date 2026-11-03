@@ -118,6 +118,7 @@ describe("readPullPage", () => {
           orderKey: "a0",
           songId: KEY,
           ytSong: null,
+          removedAt: null,
           addedAt: 12,
         },
       ],

@@ -49,6 +49,7 @@ export const NETWORK_SEEDS = [
   "global#fetch",
   ...[
     "searchSongs",
+    "searchVideos",
     "searchArtists",
     "searchAlbums",
     "artist",
@@ -67,6 +68,7 @@ export const NETWORK_SEEDS = [
   ].map((name) => `ytmusic/YtMusic.ts#${name}`),
   ...[
     "searchSongs",
+    "searchVideos",
     "searchArtists",
     "searchAlbums",
     "artist",

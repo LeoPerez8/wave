@@ -1,3 +1,6 @@
+import { LibraryStore } from "@/library/LibraryStore";
+import { appRuntime } from "@/library/runtime";
+import { router } from "@/lib/timingRouter";
 import { useFollow } from "@/library/follows";
 import { currentLocalisation, useLocalisation } from "@/localisation/localisation";
 import { followMenuPress } from "@/library/FollowButton";
@@ -195,12 +198,38 @@ export const openPlaylistActions = (playlist: PlaylistRow, options?: MenuOptions
   const allowed = pressedMenuAllowed();
   const target: ActionItems = { kind: "playlist", items: [playlist] };
   void followUp(async () => {
-    const [entries, songs] = await Promise.all([
+    const [entries, songs, graveyard] = await Promise.all([
       playlistEntries(playlist.id).catch(() => NO_ENTRIES),
       readMenuSongs(target),
+      // oxlint-disable-next-line react/rules-of-hooks -- Effect Service.use resolves a service; it is not a React Hook.
+      appRuntime.runPromise(LibraryStore.use((store) => store.playlistGraveyard(playlist.id))),
     ]);
     if (!allowed()) return;
-    openActions(target, options, anchor, entries, songs);
+    openActions(
+      target,
+      {
+        ...options,
+        extraEntries: [
+          ...(options?.extraEntries ?? []),
+          ...(graveyard.length === 0
+            ? []
+            : [
+                {
+                  action: "graveyard" as const,
+                  label: currentLocalisation().strings.playlists.graveyard,
+                  onPress: () =>
+                    router.push({
+                      pathname: "/library/playlist-graveyard/[id]",
+                      params: { id: String(playlist.id) },
+                    }),
+                },
+              ]),
+        ],
+      },
+      anchor,
+      entries,
+      songs,
+    );
   });
 };
 

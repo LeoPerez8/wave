@@ -13,6 +13,19 @@ class YtSearchParserTest {
   private fun page(name: String) = YtSearchParser.songs(Fixtures.file("yt/$name").readText())
 
   @Test
+  fun readsOfficialAndUserVideoTypesFromRecordedSkyfallSearch() {
+    val songs = page("search-videos-skyfall.json").songs
+    val skyfall = songs.first()
+    assertEquals("DeumyOzKqgI", skyfall.videoId)
+    assertEquals("Skyfall (Official Lyric Video)", skyfall.title)
+    assertEquals(listOf("Adele"), skyfall.artists)
+    assertEquals(290_000L, skyfall.durationMs)
+    assertEquals("MUSIC_VIDEO_TYPE_OMV", skyfall.videoType)
+    assertEquals("MUSIC_VIDEO_TYPE_OMV", skyfall.toMap()["videoType"])
+    assertEquals("MUSIC_VIDEO_TYPE_UGC", songs[1].videoType)
+  }
+
+  @Test
   fun readsEverySongOfTheShelf() {
     val page = page("search-songs.json")
     assertEquals(20, page.songs.size)

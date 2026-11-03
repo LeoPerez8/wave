@@ -198,6 +198,7 @@ describe("POST /v1/push and GET /v1/pull", () => {
           phoneId: "phone-a",
           deleted: false,
           playlistId: "list-1",
+          removedAt: null,
           orderKey: "a0",
           songId: "song-1",
           ytSong: null,
@@ -547,6 +548,7 @@ describe("POST /v1/push and GET /v1/pull", () => {
           phoneId: "phone-a",
           deleted: false,
           playlistId: "list-1",
+          removedAt: null,
           orderKey: "a0",
           songId: null,
           ytSong: '{"videoId":"u7K72X4eo_s"}',
@@ -611,4 +613,24 @@ test("a release date survives stale writes and clients omitting it, and a sent n
   // The owner cleared the date they typed: the phone sends null, and every phone loses it.
   await push(service, session, { songs: [song("dated", 40, { releaseDate: null })] });
   assert.equal((await pullAll(service, session)).songs[0]?.releaseDate, null);
+});
+
+test("Graveyard tombstones keep their song and manual removal date through push and pull", async () => {
+  const service = await harness();
+  const session = await service.signIn();
+  const entry = {
+    id: "removed-entry",
+    changedAt: 300,
+    phoneId: "phone-a",
+    deleted: true,
+    playlistId: "drive",
+    orderKey: "a0",
+    songId: null,
+    ytSong: JSON.stringify({ videoId: "x" }),
+    addedAt: 100,
+    removedAt: 300,
+  };
+  await push(service, session, { playlistEntries: [entry] });
+  const page = await pullAll(service, session);
+  assert.deepEqual(readPullPage(JSON.stringify(page))?.playlistEntries, [entry]);
 });

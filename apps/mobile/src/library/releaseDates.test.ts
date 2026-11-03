@@ -233,7 +233,12 @@ test("choosing Release date asks again about songs the general lookup didn't dat
     const due = songs.filter((song) => core.releaseDue(song, song.held, song.answer, now));
     asked.push(due.map((song) => song.title));
     for (const song of due)
-      await answered(song, { date: null, source: "unknown", retryAt: now + 30 * 86_400_000 });
+      await answered(song, {
+        date: null,
+        source: "unknown",
+        retryAt: now + 30 * 86_400_000,
+        version: core.RELEASE_LOOKUP_VERSION,
+      });
     return "done";
   };
   h.start();
@@ -256,7 +261,12 @@ test("a playlist already on Release date at launch waits for its songs' retries"
   const h = harness();
   h.sorts["2"] = "releaseDate";
   const key = core.releaseAnswerKey(h.songs[0]!);
-  h.answers[key] = { date: null, source: "unknown", retryAt: Date.now() + 86_400_000 };
+  h.answers[key] = {
+    date: null,
+    source: "unknown",
+    retryAt: Date.now() + 86_400_000,
+    version: core.RELEASE_LOOKUP_VERSION,
+  };
   let calls = 0;
   h.deps.lookUpReleaseDates = async () => {
     calls++;
