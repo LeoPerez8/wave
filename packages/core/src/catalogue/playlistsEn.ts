@@ -34,7 +34,7 @@ export const playlistsEn = {
 
   releaseNoticeTitle: "Find release dates",
   releaseNotice:
-    "Wave sends song titles and artists to Deezer, then recording ISRCs to MusicBrainz to find first release dates. This runs automatically according to Search online while YT Music is on, for Library songs and YT Music songs in playlists. Sorting a playlist by Release date also looks up its songs. Found first release dates are saved to the Library and to files without an original date.",
+    "Wave sends song titles and artists to Deezer and MusicBrainz, and recording ISRCs to MusicBrainz, to find first release dates. This runs automatically according to Search online while YT Music is on, for Library songs and YT Music songs in playlists. Sorting a playlist by Release date also looks up its songs. Found first release dates are saved to the Library and to files without an original date.",
   releaseProgress: (done: number, total: number): string =>
     `Finding release dates: ${n(done)} of ${n(total)}`,
   releaseOffline: "Release date lookup paused: offline or service unavailable",

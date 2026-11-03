@@ -85,3 +85,19 @@ test("no video answer leaves the songs as they were", () => {
     ["other"],
   );
 });
+
+test("Skyfall Adele asks for and shows the OMV despite karaoke, cover and tribute Songs", () => {
+  for (const title of [
+    "Skyfall (In the Style of Adele) [Karaoke Version]",
+    "Skyfall (In the Style of Adele)",
+    "Skyfall Adele Cover",
+    "Skyfall (Tribute to Adele)",
+  ]) {
+    const imitation = song("imitation", title, ["Studio Singers"], "MUSIC_VIDEO_TYPE_ATV");
+    assert.equal(ytSearchAsksVideos("Skyfall Adele", [imitation]), true, title);
+    assert.deepEqual(shown("Skyfall Adele", [imitation], [upload, official])?.songs, [
+      official,
+      imitation,
+    ]);
+  }
+});

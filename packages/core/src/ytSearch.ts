@@ -151,9 +151,13 @@ const matchesQuery = (query: string, songs: readonly YtSong[]): readonly YtSong[
 /**
  * Whether Online also asks YT Music's Videos search for [query]: only when no
  * song result is found by it, so an official music video can stand in.
+ * Karaoke, in-the-style-of, cover and tribute titles do not count as that recording.
  */
 export const ytSearchAsksVideos = (query: string, songs: readonly YtSong[]): boolean =>
-  matchesQuery(query, songs).length === 0;
+  matchesQuery(
+    query,
+    songs.filter((song) => !/\b(?:karaoke|in the style of|cover|tribute)\b/iu.test(song.title)),
+  ).length === 0;
 
 /**
  * [songs], with the official music videos (`MUSIC_VIDEO_TYPE_OMV`) of [videos]

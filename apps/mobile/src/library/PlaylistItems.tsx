@@ -89,17 +89,18 @@ const checkable = (item: PlaylistEntryRow): boolean => item.source !== "unavaila
 /**
  * A playlist entry's row: a Library song as the Library shows it, a YT Music
  * entry streamed with the YT Music song's menu, an unsearched entry as any
- * song (it plays, searched as it's about to), an unavailable one dimmed. Its
+ * song (it plays, searched as it's about to), an unavailable one dimmed.
+ * [inPlaylist] when it's in the playlist shown (a Graveyard song isn't): its
  * menu and swipes remove it from this playlist.
  */
-const playlistEntry = (item: PlaylistEntryRow): SongListEntry => {
+export const playlistEntrySong = (item: PlaylistEntryRow, inPlaylist = true): SongListEntry => {
   switch (item.source) {
     case "library": {
       const entry = librarySongEntry(item.track);
-      return { ...entry, facts: { ...entry.facts, inPlaylist: true } };
+      return { ...entry, facts: { ...entry.facts, inPlaylist } };
     }
     case "stream":
-      return { source: { kind: "ytMusic", song: item.song }, facts: { inPlaylist: true } };
+      return { source: { kind: "ytMusic", song: item.song }, facts: { inPlaylist } };
     case "unsearched":
       return {
         source: { kind: "unsearched", song: item.song },
@@ -107,12 +108,23 @@ const playlistEntry = (item: PlaylistEntryRow): SongListEntry => {
           streamed: true,
           unsearched: true,
           artistNames: item.song.artists,
-          inPlaylist: true,
+          inPlaylist,
         },
       };
     case "unavailable":
       return { source: { kind: "unavailable", song: item.song } };
   }
+};
+
+/** A playlist entry's menu, as its kind of song has it; [options]' `playlistItem` is its place. */
+export const openPlaylistEntryActions = (
+  entry: PlaylistEntryRow,
+  options: MenuOptions & { readonly playlistItem?: PlaylistPlace | undefined },
+): void => {
+  if (entry.source === "library") openTrackActions(entry.track, options);
+  else if (entry.source === "stream") openYtSongActions(entry.song, options);
+  else if (entry.source === "unsearched") openUnsearchedActions(entry.song, options);
+  else openUnavailableEntryActions(entry.song, options.playlistItem, options.extraEntries);
 };
 
 const shownEntries = new WeakMap<PlaylistEntryRow, SongListEntry>();
@@ -124,7 +136,7 @@ const shownEntries = new WeakMap<PlaylistEntryRow, SongListEntry>();
 const shownEntry = (item: PlaylistEntryRow): SongListEntry => {
   let shown = shownEntries.get(item);
   if (shown === undefined) {
-    shown = playlistEntry(item);
+    shown = playlistEntrySong(item);
     shownEntries.set(item, shown);
   }
   return shown;
@@ -522,12 +534,7 @@ export function PlaylistItems({
   const menu = (item: Item, options: MenuOptions) => {
     const entry = entryOf(item);
     if (entry === null) return;
-    const place = placeOf(entry);
-    const withPlace = { ...options, playlistItem: place };
-    if (entry.source === "library") openTrackActions(entry.track, withPlace);
-    else if (entry.source === "stream") openYtSongActions(entry.song, withPlace);
-    else if (entry.source === "unsearched") openUnsearchedActions(entry.song, withPlace);
-    else openUnavailableEntryActions(entry.song, place);
+    openPlaylistEntryActions(entry, { ...options, playlistItem: placeOf(entry) });
   };
 
   return (

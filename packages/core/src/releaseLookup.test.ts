@@ -209,7 +209,7 @@ describe("MusicBrainz's recordings by title and artist", () => {
     assert.equal(releaseTitleDate(hozier, recorded("musicbrainz")), "2019-03-01");
   });
 
-  test("the earliest matching recording wins; one 10 s off the song's length doesn't count", () => {
+  test("the earliest matching recording wins; one 10 s off the song's length, or of no known length, doesn't count", () => {
     const recording = (title: string, artist: string, length: number | null, date: string) => ({
       title,
       length,
@@ -228,7 +228,8 @@ describe("MusicBrainz's recordings by title and artist", () => {
       ],
     };
     const song = { title: "Song", artist: "Artist" };
-    assert.equal(releaseTitleDate({ ...song, durationMs: 200_000 }, response), "1990");
+    // A song with a length isn't dated by a recording without one.
+    assert.equal(releaseTitleDate({ ...song, durationMs: 200_000 }, response), "1999");
     assert.equal(releaseTitleDate({ ...song, durationMs: 210_000 }, response), "1970");
     // Without a length, every matching recording counts.
     assert.equal(releaseTitleDate(song, response), "1970");
@@ -254,7 +255,7 @@ describe("MusicBrainz's recordings by title and artist", () => {
       );
   });
 
-  test("a recording credited to several artists matches any of them", () => {
+  test("a recording credited to several artists matches its main artist alone", () => {
     const response = {
       recordings: [
         {
@@ -271,6 +272,11 @@ describe("MusicBrainz's recordings by title and artist", () => {
     assert.equal(
       releaseTitleDate({ title: "Song", artist: "Artist & Guest" }, response),
       "2001-02-03",
+    );
+    assert.equal(
+      releaseTitleDate({ title: "Song", artist: "Guest, Other" }, response),
+      null,
+      "Guest is credited, but isn't the recording's main artist",
     );
   });
 });

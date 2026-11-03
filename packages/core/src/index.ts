@@ -1451,6 +1451,8 @@ export type {
 } from "./spotifyLibrary.ts";
 export { compareOrderKeys, orderKeyBetween, placeEntries } from "./orderKey.ts";
 export type { EntryPlacement, OrderedEntry } from "./orderKey.ts";
+export { graveyardRemovalsOf, graveyardRestoreIndex, graveyardSongs } from "./playlistGraveyard.ts";
+export type { GraveyardItem, GraveyardSlot } from "./playlistGraveyard.ts";
 export {
   RECORDING_LENGTH_TOLERANCE_MS,
   fillMissingSongs,

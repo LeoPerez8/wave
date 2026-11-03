@@ -8,10 +8,11 @@
 import {
   checkPlaylistName,
   compareStrings,
+  graveyardRemovalsOf,
+  graveyardRestoreIndex,
+  graveyardSongs,
   placeEntries,
   planPlaylistSongs,
-  playlistSongKey,
-  libraryFinder,
   planShazamAdd,
   playlistArtwork,
   playlistEntryLinks,
@@ -31,20 +32,7 @@ import {
   type UnsearchedSong,
   type YtAlbumSong,
 } from "@wave/core";
-import {
-  and,
-  asc,
-  desc,
-  eq,
-  inArray,
-  isNotNull,
-  isNull,
-  lte,
-  ne,
-  or,
-  sql,
-  type SQL,
-} from "drizzle-orm";
+import { and, asc, desc, eq, inArray, isNotNull, isNull, ne, or, sql, type SQL } from "drizzle-orm";
 
 import type { PlaylistAddResult, PlaylistDetail, PlaylistRow } from "../LibraryStore.ts";
 import type { LibraryDatabase, RowPage } from "./database.ts";
@@ -1590,8 +1578,8 @@ export const addToShazam = (
     return { playlistId: remembered.localId, syncId: remembered.id, toast: plan.toast };
   });
 
-/** Manually removed songs still absent from this playlist, newest removal first. */
-export const selectPlaylistGraveyard = (
+/** The playlist's songs removed by hand, newest removal first, those that no longer read left out. */
+const removedEntries = (
   db: LibraryDatabase,
   playlistId: number,
 ): (PlaylistEntry & { readonly removedAt: number })[] => {
@@ -1609,7 +1597,6 @@ export const selectPlaylistGraveyard = (
     .orderBy(desc(playlistItems.removedAt), desc(playlistItems.changedAt), asc(playlistItems.id))
     .all();
   if (rows.length === 0) return [];
-  const held = selectPlaylistEntries(db, playlistId);
   const tracks = new Map(
     playlistTracks(
       db,
@@ -1619,31 +1606,25 @@ export const selectPlaylistGraveyard = (
       true,
     ).map(({ itemId, ...track }) => [itemId, track]),
   );
-  const find = libraryFinder([
-    ...held.flatMap((entry) => (entry.source === "library" ? [entry.track] : [])),
-    ...tracks.values(),
-  ]);
-  const key = (entry: PlaylistEntry) => {
-    if (entry.source === "library") return String(entry.track.id);
-    const match = find(entry.song);
-    return match === null ? playlistSongKey(entry) : String(match.id);
-  };
-  const seen = new Set(held.map(key));
-  return rows.flatMap((row) => {
+  return rows.flatMap((row): (PlaylistEntry & { readonly removedAt: number })[] => {
+    if (row.removedAt === null) return [];
+    const { removedAt } = row;
+    if (row.ytSong !== null) {
+      const song = readPlaylistEntrySong(row.ytSong);
+      return song === null ? [] : [{ ...song, itemId: row.id, removedAt }];
+    }
     const track = tracks.get(row.id);
-    const entry: PlaylistEntry | null =
-      row.ytSong !== null
-        ? (() => {
-            const song = readPlaylistEntrySong(row.ytSong);
-            return song === null ? null : { ...song, itemId: row.id };
-          })()
-        : track === undefined
-          ? null
-          : { source: "library", track, itemId: row.id };
-    if (entry === null || row.removedAt === null || seen.has(key(entry))) return [];
-    seen.add(key(entry));
-    return [{ ...entry, removedAt: row.removedAt }];
+    return track === undefined ? [] : [{ source: "library", track, itemId: row.id, removedAt }];
   });
+};
+
+/** Manually removed songs still absent from this playlist, newest removal first (Core's `graveyardSongs`). */
+export const selectPlaylistGraveyard = (
+  db: LibraryDatabase,
+  playlistId: number,
+): (PlaylistEntry & { readonly removedAt: number })[] => {
+  const removed = removedEntries(db, playlistId);
+  return removed.length === 0 ? [] : graveyardSongs(selectPlaylistEntries(db, playlistId), removed);
 };
 
 /** Brings back a visible Graveyard song using the order retained by its tombstone. */
@@ -1658,27 +1639,33 @@ export const restoreGraveyardItem = (
     const { playlistItems } = schema;
     const row = tx.select().from(playlistItems).where(eq(playlistItems.id, itemId)).get();
     if (row === undefined) return;
-    // Tombstones still describe the old slot even when its neighbours were removed later.
-    const original = tx
-      .select()
+    // Removed rows keep their order keys, so they still show who was beside the song.
+    const rows = tx
+      .select({
+        itemId: playlistItems.id,
+        orderKey: playlistItems.orderKey,
+        addedAt: playlistItems.addedAt,
+        deleted: playlistItems.deleted,
+        removedAt: playlistItems.removedAt,
+        changedAt: playlistItems.changedAt,
+      })
       .from(playlistItems)
-      .where(
-        and(
-          eq(playlistItems.playlistId, playlistId),
-          lte(playlistItems.addedAt, row.removedAt ?? 0),
-        ),
-      )
+      .where(eq(playlistItems.playlistId, playlistId))
       .orderBy(...IN_ORDER)
       .all();
-    const index = original.findIndex((entry) => entry.id === itemId);
-    const neighbours = [original[index - 1], original[index + 1]].flatMap((entry) =>
-      entry === undefined || entry.deleted ? [] : [entry],
+    const index = graveyardRestoreIndex(
+      rows.map((entry) => ({
+        itemId: entry.itemId,
+        addedAt: entry.addedAt,
+        goneAt: entry.deleted ? (entry.removedAt ?? entry.changedAt) : null,
+      })),
+      itemId,
+      row.removedAt ?? 0,
     );
-    const oldPlaceRemains =
-      neighbours.length > 0 && neighbours.every((entry) => entry.changedAt <= (row.removedAt ?? 0));
-    if (!oldPlaceRemains) {
-      const entries = orderedEntries(tx, playlistId);
-      const { keys, rekeyed } = placeEntries(entries, entries.length, 1);
+    const entries = orderedEntries(tx, playlistId);
+    // A song since keyed alike would share its place; it takes a key of its own then.
+    if (index === null || entries.some((entry) => entry.orderKey === row.orderKey)) {
+      const { keys, rekeyed } = placeEntries(entries, index ?? entries.length, 1);
       rekey(tx, rekeyed, now);
       tx.update(playlistItems)
         .set({ orderKey: keys[0] ?? "" })
@@ -1692,7 +1679,10 @@ export const restoreGraveyardItem = (
     );
   });
 
-/** Forgets a song's removal history (all of it when itemId is omitted), keeping tombstones for sync. */
+/**
+ * Forgets a song's removal history (all of it when itemId is omitted; Core's
+ * `graveyardRemovalsOf`), keeping tombstones for sync.
+ */
 export const forgetGraveyardItems = (
   db: LibraryDatabase,
   playlistId: number,
@@ -1701,56 +1691,24 @@ export const forgetGraveyardItems = (
 ): void =>
   db.transaction((tx) => {
     const { playlistItems } = schema;
-    const entry =
-      itemId === undefined
-        ? undefined
-        : selectPlaylistGraveyard(tx, playlistId).find((e) => e.itemId === itemId);
-    if (itemId !== undefined && entry === undefined) return;
-    const rows = tx
-      .select()
-      .from(playlistItems)
-      .where(
-        and(
-          eq(playlistItems.playlistId, playlistId),
-          eq(playlistItems.deleted, true),
-          isNotNull(playlistItems.removedAt),
-        ),
-      )
-      .all();
-    const find = libraryFinder(
-      playlistTracks(
-        tx,
-        playlistId,
-        rows.map((row) => row.id),
-        "library",
-        true,
-      ),
+    const removed = and(
+      eq(playlistItems.playlistId, playlistId),
+      eq(playlistItems.deleted, true),
+      isNotNull(playlistItems.removedAt),
     );
-    const matchingTrack =
-      entry === undefined || entry.source === "library" ? null : find(entry.song);
-    const target =
-      entry === undefined
-        ? null
-        : entry.source === "library"
-          ? String(entry.track.id)
-          : matchingTrack === null
-            ? playlistSongKey(entry)
-            : String(matchingTrack.id);
-    for (const row of rows) {
-      const song = row.ytSong === null ? null : readPlaylistEntrySong(row.ytSong);
-      const match = song === null ? null : find(song.song);
-      const key =
-        row.trackId !== null
-          ? String(row.trackId)
-          : match !== null
-            ? String(match.id)
-            : song === null
-              ? null
-              : playlistSongKey(song);
-      if (target !== null && key !== target) continue;
-      tx.update(playlistItems)
+    const forget = (which: typeof removed) =>
+      tx
+        .update(playlistItems)
         .set({ removedAt: null, ...stamped(playlistItems, now) })
-        .where(eq(playlistItems.id, row.id))
+        .where(which)
         .run();
+    if (itemId === undefined) {
+      forget(removed);
+      return;
     }
+    const target = selectPlaylistGraveyard(tx, playlistId).find((e) => e.itemId === itemId);
+    if (target === undefined) return;
+    const ids = graveyardRemovalsOf(removedEntries(tx, playlistId), target).map((e) => e.itemId);
+    for (let i = 0; i < ids.length; i += INSERT_CHUNK)
+      forget(and(removed, inArray(playlistItems.id, ids.slice(i, i + INSERT_CHUNK))));
   });

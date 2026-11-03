@@ -42,12 +42,31 @@ test("recording lookup falls back once and preserves a failed video search", asy
   assert.equal(result, failure);
 });
 
-test("the recorded Skyfall Videos response matches despite its presentation note", async () => {
+test("an OMV's presentation notes are set aside, including lyric, visualizer and audio notes", () => {
+  for (const title of [
+    "Skyfall (Official Music Video)",
+    "Skyfall (Official Video)",
+    "Skyfall [Official HD Video]",
+    "Skyfall (Music Video)",
+    "Skyfall - Official Music Video",
+
+    "Skyfall (Official Lyric Video)",
+    "Skyfall (Lyric Video)",
+    "Skyfall (Lyrics)",
+    "Skyfall - Lyric video",
+    "Skyfall (Official Visualizer)",
+    "Skyfall (Official Audio)",
+  ])
+    assert.equal(spotifyYtMatch(wanted, [{ ...video, title }])?.title, title, title);
+});
+
+test("the recorded Skyfall official lyric video matches the song", async () => {
   const { readFile } = await import("node:fs/promises");
   const recorded = JSON.parse(
     await readFile(new URL("./fixtures/skyfall-video.json", import.meta.url), "utf8"),
   );
-  assert.equal(spotifyYtMatch(wanted, [recorded])?.videoId, "DeumyOzKqgI");
+  assert.equal(recorded.title, "Skyfall (Official Lyric Video)");
+  assert.equal(spotifyYtMatch(wanted, [recorded]), recorded);
 });
 
 test("Songs success spends no video request; fallback takes the first OMV and never UGC", async () => {
@@ -93,7 +112,7 @@ test("a failed fallback keeps an unsearched entry; Recognize accepts the same of
   const { searchRecording, settleUnsearched, resolveRecognizedSong } = await import("./index.ts");
   const official = {
     ...video,
-    title: "Skyfall (Official Lyric Video)",
+    title: "Skyfall (Official Music Video)",
     artworkUrl: null,
     explicit: false,
   };
