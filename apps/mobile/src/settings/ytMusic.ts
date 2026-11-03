@@ -20,3 +20,6 @@ export const setYtMusicEnabled = ytMusic.set;
 
 /** Whether YT Music is on; re-renders when Settings changes it. */
 export const useYtMusicEnabled = ytMusic.useValue;
+
+/** Follows local and synced changes to YT Music consent. */
+export const subscribeYtMusicEnabled = ytMusic.subscribe;
