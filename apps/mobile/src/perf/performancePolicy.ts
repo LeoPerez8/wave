@@ -277,6 +277,14 @@ export const WHOLE_LIBRARY: Record<string, WholeLibraryException> = {
     capabilities: ["ytmusic/libraryFinder.ts#currentLibraryFinder"],
   },
 
+  "search/playSearchSong.ts#playSearchSong": {
+    howOften:
+      "Once per streamed song tapped in Search; finder reads are shared per Library version.",
+    reason:
+      "A tap on a streamed result asks whether the Library has it as a file, so its Magic Queue starts from the file (#958). Nothing follows the finder while rows render.",
+    capabilities: ["ytmusic/libraryFinder.ts#currentLibraryFinder"],
+  },
+
   "search/searchIndex.ts#releasesOf": {
     howOften: "Once per artist/album snapshot version used to rebuild the background search index.",
     reason:
