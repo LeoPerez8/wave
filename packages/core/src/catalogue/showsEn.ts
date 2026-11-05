@@ -22,6 +22,9 @@ export const showsEn = {
   /** Settings › Followed Artists' Suggested section, its button and why each artist is there. */
   suggested: "Suggested",
   showMore: "Show More",
+  /** A suggestion's × for TalkBack, and the toast after it (with Undo). */
+  dismissSuggestion: (artist: string) => `Dismiss ${artist} suggestion`,
+  suggestionDismissed: "Suggestion dismissed",
   playsInLast90Days: (count: number) =>
     plural("en", count, {
       one: `${formatNumber("en", count)} play in the last 90 days`,

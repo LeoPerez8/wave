@@ -18,6 +18,8 @@ export const showsPtBr: typeof showsEn = {
   undo: "Desfazer",
   suggested: "Sugestões",
   showMore: "Mostrar Mais",
+  dismissSuggestion: (artist) => `Dispensar a sugestão ${artist}`,
+  suggestionDismissed: "Sugestão dispensada",
   playsInLast90Days: (count) =>
     plural("pt-BR", count, {
       one: `${formatNumber("pt-BR", count)} reprodução nos últimos 90 dias`,

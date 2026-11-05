@@ -130,6 +130,46 @@ test("a followed suggestion leaves and the next one takes its place", () => {
   assert.equal(more, false);
 });
 
+test("a dismissed artist is never suggested, by any spelling, and the next one takes its place", () => {
+  const names = (dismissed: readonly string[]) =>
+    followSuggestions({
+      recent: [played("Beyoncé", 9)],
+      allTime: [played("BEYONCE", 40), ...twelve.slice(0, 5)],
+      excluded: [],
+      dismissed,
+      shown: 5,
+    }).suggestions.map((suggestion) => suggestion.name);
+  assert.deepEqual(names([]), ["Beyoncé", "Artist A", "Artist B", "Artist C", "Artist D"]);
+  assert.deepEqual(names([followArtistKey("The Beyoncé")]), [
+    "Artist A",
+    "Artist B",
+    "Artist C",
+    "Artist D",
+    "Artist E",
+  ]);
+});
+
+test("a dismissed artist stays out after being followed and unfollowed", () => {
+  const { suggestions } = followSuggestions({
+    recent: [played("Aurora", 3), played("Björk", 2)],
+    allTime: [],
+    excluded: [followArtistKey("Aurora")],
+    dismissed: [followArtistKey("Aurora")],
+    shown: 5,
+  });
+  const afterUnfollow = followSuggestions({
+    recent: [played("Aurora", 3), played("Björk", 2)],
+    allTime: [],
+    excluded: [],
+    dismissed: [followArtistKey("Aurora")],
+    shown: 5,
+  });
+  assert.deepEqual(
+    [suggestions, afterUnfollow.suggestions].map((list) => list.map((s) => s.name)),
+    [["Björk"], ["Björk"]],
+  );
+});
+
 test("the reason line reads in English and Brazilian Portuguese, one play or many", () => {
   const lines = (strings?: ReturnType<typeof catalogueOf>) =>
     followSuggestions({
