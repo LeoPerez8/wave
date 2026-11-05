@@ -21,6 +21,7 @@ import {
   countFollows,
   saveFollow,
   removeFollow,
+  restoreFollow,
   type FollowTarget,
 } from "./db/follows";
 import { selectDownloadsToForget } from "./db/downloadRecovery";
@@ -628,6 +629,8 @@ export class LibraryStore extends Context.Service<
       level: FollowLevel,
     ) => Effect.Effect<void, LibraryStoreError>;
     readonly unfollow: (name: string) => Effect.Effect<void, LibraryStoreError>;
+    /** Puts back a follow as it was before an unfollow (its level and date). */
+    readonly restoreFollow: (follow: FollowedArtist) => Effect.Effect<void, LibraryStoreError>;
     /** Every scan root in the order it was added, with its track count. */
     readonly listRoots: Effect.Effect<readonly ScanRootSummary[], LibraryStoreError>;
     /**
@@ -1623,6 +1626,10 @@ const make = Effect.gen(function* () {
       ),
     unfollow: (name) =>
       writeAttempt("unfollow artist", () => removeFollow(db, name, Date.now())).pipe(
+        Effect.tap(() => Effect.sync(followSaved)),
+      ),
+    restoreFollow: (follow) =>
+      writeAttempt("restore follow", () => restoreFollow(db, follow, Date.now())).pipe(
         Effect.tap(() => Effect.sync(followSaved)),
       ),
     listeningHistoryVersion,

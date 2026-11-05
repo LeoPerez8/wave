@@ -10,7 +10,14 @@ import {
 import { selectPhoneId } from "./sync.ts";
 import { hideFollowRelease } from "./followReleases.ts";
 import { selectUnpushed } from "./syncRows.ts";
-import { saveFollow, selectFollow, selectFollows, countFollows, removeFollow } from "./follows.ts";
+import {
+  saveFollow,
+  selectFollow,
+  selectFollows,
+  countFollows,
+  removeFollow,
+  restoreFollow,
+} from "./follows.ts";
 
 test("a follow survives re-reading and merges online ids without changing its start date", async () => {
   const db = await openTestDatabase();
@@ -82,4 +89,19 @@ test("follows, hidden releases and notified shows from before syncing go up at t
   const stamp = rows.hiddenReleases[0]?.changedAt;
   hideFollowRelease(db, "deezer:12", (stamp ?? 0) + 1_000);
   assert.equal(selectUnpushed(db, 100, () => null).rows.hiddenReleases[0]?.changedAt, stamp);
+});
+
+test("restoring an unfollow brings back the same level and date, and goes up at the next sync", async () => {
+  const db = await openTestDatabase();
+  saveFollow(db, { name: "Aurora", deezerId: 7, ytBrowseId: "UC7" }, "shows", 100);
+  const before = selectFollow(db, "Aurora")!;
+  removeFollow(db, "Aurora", 200);
+  restoreFollow(db, before, 300);
+  assert.deepEqual(selectFollow(db, "aurora"), before);
+  const { rows } = selectUnpushed(db, 100, () => null);
+  assert.deepEqual(
+    rows.follows.map((row) => [row.id, row.deleted, row.level, row.followedAt, row.changedAt]),
+    [["aurora", false, "shows", 100, 300]],
+  );
+  closeTestDatabase(db);
 });
