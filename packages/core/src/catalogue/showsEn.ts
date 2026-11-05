@@ -1,3 +1,6 @@
+import { plural } from "../plural.ts";
+import { formatNumber } from "../formatting.ts";
+
 export const showsEn = {
   country: "Country",
   phoneRegion: "Phone's region",
@@ -16,4 +19,15 @@ export const showsEn = {
   /** The toast after Unfollow on Settings › Followed Artists, and its action. */
   unfollowed: (artist: string) => `Unfollowed ${artist}`,
   undo: "Undo",
+  /** Settings › Followed Artists' Suggested section: why each artist is there. */
+  playsInLast90Days: (count: number) =>
+    plural("en", count, {
+      one: `${formatNumber("en", count)} play in the last 90 days`,
+      other: `${formatNumber("en", count)} plays in the last 90 days`,
+    }),
+  allTimePlays: (count: number) =>
+    plural("en", count, {
+      one: `${formatNumber("en", count)} play`,
+      other: `${formatNumber("en", count)} plays`,
+    }),
 };
