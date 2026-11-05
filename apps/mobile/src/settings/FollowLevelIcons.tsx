@@ -21,8 +21,13 @@ import { IconButton } from "@/components/IconButton";
 import { TextButton } from "@/components/TextButton";
 import type { FollowTarget } from "@/library/db/follows";
 import { restoreArtistFollow, setArtistFollow } from "@/library/follows";
-import { askShowNotifications, ticketmasterKey } from "@/library/showNotifications";
+import {
+  askShowNotifications,
+  showsNotificationsEnabled,
+  ticketmasterKey,
+} from "@/library/showNotifications";
 import { currentLocalisation, useLocalisation } from "@/localisation/localisation";
+import { WaveNative } from "@/native/waveNative";
 import { showError } from "@/overlay/alert";
 import { showToast } from "@/overlay/toast";
 import { useThemeColor } from "@/theme/useThemeColor";
@@ -48,11 +53,22 @@ const useIconOptions = () => {
   return { showsAvailable: ticketmasterKey !== "", country, strings };
 };
 
-/** Follows at [level], asking for notifications before the first shows-level follow. */
+/**
+ * Follows at [level], asking for notifications before the first shows-level
+ * follow. With show notifications off, a toast says so and opens Android's
+ * notification settings, as the level card's line and button do.
+ */
 const pickLevel = (artist: FollowTarget, level: FollowLevel): void => {
   void (async () => {
     if (level === "shows") await askShowNotifications();
     await setArtistFollow(artist, level);
+    if (level === "shows" && !showsNotificationsEnabled()) {
+      const { strings } = currentLocalisation();
+      void showToast(strings.shows.notificationsOff, {
+        label: strings.shows.notificationSettings,
+        run: () => WaveNative.openShowNotificationSettings?.(),
+      });
+    }
   })().catch((error) => showError(currentLocalisation().strings.library.couldntFollow, error));
 };
 
