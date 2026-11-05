@@ -96,8 +96,6 @@ export const en = {
   },
   followArtistSearch: {
     placeholder: "Find artists to follow",
-    follow: "Follow",
-    following: "Following",
     searching: "Searching Deezer…",
     unavailable: "Couldn't reach Deezer. Library results are still available.",
     empty: "No artists found.",

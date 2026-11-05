@@ -2,12 +2,8 @@ import { FollowCountryRow } from "@/settings/FollowCountryRow";
 import { useLocalisation } from "@/localisation/localisation";
 import { useState } from "react";
 import { Text, View } from "react-native";
-import { ArtistImage } from "@/catalog/ArtistImage";
-import { CELL, grid } from "@/catalog/grid";
 import { Hairline } from "@/catalog/Hairline";
-import { TextButton } from "@/components/TextButton";
 import { SettingsSwitch } from "@/components/SettingsSwitch";
-import { openFollowCard } from "@/library/FollowButton";
 import { SearchField } from "@/search/SearchField";
 import { useFollowArtistSearch } from "@/library/followArtistSearch";
 import { useFollows } from "@/library/follows";
@@ -15,6 +11,7 @@ import { openFollowedArtist } from "@/library/openFollowedArtist";
 import { useScreenContent } from "@/lib/screenTiming";
 import { showError } from "@/overlay/alert";
 import { SettingsPageScreen } from "@/settings/SettingsPage";
+import { FollowArtistRow, FollowIconLegend } from "@/settings/FollowLevelIcons";
 import { setFollowedArtistsEnabled, useFollowedArtistsEnabled } from "@/settings/followedArtists";
 
 export default function FollowedArtistsSettingsScreen() {
@@ -26,6 +23,10 @@ export default function FollowedArtistsSettingsScreen() {
   const { results, failed, pending } = useFollowArtistSearch(query, enabled);
   const searching = query.trim() !== "";
   useScreenContent(true);
+  const open = (artist: Parameters<typeof openFollowedArtist>[0]) => () =>
+    void openFollowedArtist(artist).catch((error) =>
+      showError(strings.library.couldntOpenArtist, error),
+    );
   return (
     <SettingsPageScreen page="followedArtists">
       <View>
@@ -38,6 +39,7 @@ export default function FollowedArtistsSettingsScreen() {
         <Hairline />
         <FollowCountryRow />
       </View>
+      <FollowIconLegend />
       <View>
         <SearchField
           value={query}
@@ -46,37 +48,22 @@ export default function FollowedArtistsSettingsScreen() {
           accessibilityLabel={searchStrings.placeholder}
         />
         {searching &&
-          results.map((artist) => {
-            const following = follows.some((follow) => follow.key === artist.key);
-            const label = following ? searchStrings.following : searchStrings.follow;
-            return (
-              <View
-                key={artist.key}
-                className="flex-row items-center"
-                style={{ gap: CELL * 1.5, minHeight: grid.row }}
-              >
-                <ArtistImage
-                  artist={
-                    artist.library ?? {
-                      name: artist.name,
-                      thumbPath: null,
-                      artworkPath: null,
-                      imageUrl: artist.imageUrl,
-                    }
-                  }
-                  size={CELL * 5}
-                />
-                <Text numberOfLines={1} className="flex-1 font-sans text-body text-foreground">
-                  {artist.name}
-                </Text>
-                <TextButton
-                  label={label}
-                  accessibilityLabel={`${artist.name}, ${label}`}
-                  onPress={() => openFollowCard({ name: artist.name, deezerId: artist.deezerId })}
-                />
-              </View>
-            );
-          })}
+          results.map((artist) => (
+            <FollowArtistRow
+              key={artist.key}
+              artist={{ name: artist.name, deezerId: artist.deezerId }}
+              image={
+                artist.library ?? {
+                  name: artist.name,
+                  thumbPath: null,
+                  artworkPath: null,
+                  imageUrl: artist.imageUrl,
+                }
+              }
+              follow={follows.find((follow) => follow.key === artist.key) ?? null}
+              onOpen={open(artist)}
+            />
+          ))}
         {searching && pending && (
           <Text className="py-3 font-sans text-footnote text-secondary">
             {searchStrings.searching}
@@ -97,45 +84,13 @@ export default function FollowedArtistsSettingsScreen() {
         )}
         {!searching &&
           follows.map((artist) => (
-            <View key={artist.key} className="flex-row items-center">
-              <TextButton
-                label={artist.name}
-                tone="primary"
-                className="flex-1"
-                onPress={() =>
-                  void openFollowedArtist(artist).catch((error) =>
-                    showError(strings.library.couldntOpenArtist, error),
-                  )
-                }
-              >
-                <View className="flex-row items-center" style={{ gap: CELL * 1.5 }}>
-                  <ArtistImage
-                    artist={{ name: artist.name, thumbPath: null, artworkPath: null }}
-                    size={CELL * 5}
-                  />
-                  <Text numberOfLines={1} className="flex-1 font-sans text-body text-foreground">
-                    {artist.name}
-                  </Text>
-                </View>
-              </TextButton>
-              <TextButton
-                label={strings.settings.following}
-                accessibilityLabel={strings.settings.manageFollow(
-                  artist.name,
-                  artist.level === "shows" ? strings.shows.level : strings.shows.releases,
-                )}
-                onPress={() => openFollowCard(artist)}
-              >
-                <View className="py-2 pl-3">
-                  <Text className="font-sans text-body text-accent">
-                    {strings.settings.following}
-                  </Text>
-                  <Text className="font-sans text-footnote text-secondary">
-                    {artist.level === "releases" ? strings.shows.releases : strings.shows.level}
-                  </Text>
-                </View>
-              </TextButton>
-            </View>
+            <FollowArtistRow
+              key={artist.key}
+              artist={artist}
+              image={{ name: artist.name, thumbPath: null, artworkPath: null }}
+              follow={artist}
+              onOpen={open(artist)}
+            />
           ))}
       </View>
     </SettingsPageScreen>

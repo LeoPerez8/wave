@@ -73,7 +73,20 @@ export const setArtistFollow = async (
       return yield* s.getFollow(target.name);
     }),
   );
-  artistStore(target.name).set(value);
+  await followChanged(target.name, value);
+};
+/** Undo after an unfollow: the same follow comes back, at its level and date. */
+export const restoreArtistFollow = async (follow: FollowedArtist): Promise<void> => {
+  const value = await run((s) =>
+    Effect.gen(function* () {
+      yield* s.restoreFollow(follow);
+      return yield* s.getFollow(follow.name);
+    }),
+  );
+  await followChanged(follow.name, value);
+};
+const followChanged = async (name: string, value: FollowedArtist | null): Promise<void> => {
+  artistStore(name).set(value);
   count.set(await run((s) => s.countFollows));
   if (list.listenerCount() > 0) list.set(await run((s) => s.listFollows));
 };

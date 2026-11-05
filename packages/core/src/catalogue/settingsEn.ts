@@ -339,7 +339,6 @@ export const settingsEn = {
     "Songs in excluded folders, and the folders inside them, leave your library. The files stay on your phone.",
   followedArtists: "Followed artists",
   youArentFollowingAnyArtistsYet: "You aren't following any artists yet.",
-  following: "Following",
   developerIsOn: "Developer is on",
   developerHidden: "Developer hidden",
   settings: "Settings",
@@ -381,7 +380,6 @@ export const settingsEn = {
     `Hold the sample song to feel the delay. The default is ${formatNumber("en", ms)} ms.`,
   bounceFootnote: (percent: number) =>
     `Swipe the sample song to feel the bounce. The default is ${formatNumber("en", percent)}%.`,
-  manageFollow: (name: string, level: string) => `Manage ${name}, Following, ${level}`,
   signedIn: (name: string, email: string | null) =>
     `Signed in as ${name}${email === null ? "" : `, ${email}`}`,
   spotifySignedIn: (name: string) => `Signed in to Spotify as ${name}`,

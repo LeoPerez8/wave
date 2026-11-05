@@ -94,8 +94,6 @@ export const ptBR: Catalogue = {
   },
   followArtistSearch: {
     placeholder: "Buscar artistas para seguir",
-    follow: "Seguir",
-    following: "Seguindo",
     searching: "Buscando no Deezer…",
     unavailable:
       "Não foi possível acessar o Deezer. Os resultados da Biblioteca continuam disponíveis.",
