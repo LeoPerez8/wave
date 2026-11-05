@@ -463,6 +463,7 @@ describe("syncCycle", () => {
     const pulled = await b.sync();
 
     assert.equal(pulled.pulled.follows, true);
+    assert.equal(pulled.pulled.dismissedSuggestions, false);
     assert.deepEqual(
       [selectFollow(b.db, "massive attack")?.name, selectFollow(b.db, "Massive Attack")?.level],
       ["Massive Attack", "releases"],
@@ -529,7 +530,9 @@ describe("syncCycle", () => {
     await a.sync();
     const pulled = await b.sync();
 
-    assert.equal(pulled.pulled.follows, true);
+    // Only the dismissals read again; the follows didn't change.
+    assert.equal(pulled.pulled.dismissedSuggestions, true);
+    assert.equal(pulled.pulled.follows, false);
     assert.deepEqual(selectDismissedFollowSuggestions(b.db), ["massive attack"]);
     // Applied, not changed on b: nothing goes back up, nor when it's dismissed again.
     dismissFollowSuggestion(b.db, "massive attack", b.now());

@@ -823,8 +823,10 @@ export interface PulledChanges {
   readonly playlists: boolean;
   readonly favorites: boolean;
   readonly plays: boolean;
-  /** Follows, hidden releases, notified shows or dismissed follow suggestions changed. */
+  /** Follows, hidden releases or notified shows changed. */
   readonly follows: boolean;
+  /** Dismissed follow suggestions changed (a dismissal or its Undo). */
+  readonly dismissedSuggestions: boolean;
   /** The synced preferences whose value changed, with the value (null: none, its default). */
   readonly preferences: readonly { readonly key: string; readonly value: string | null }[];
 }
@@ -835,6 +837,7 @@ interface Changed {
   favorites: boolean;
   plays: boolean;
   follows: boolean;
+  dismissedSuggestions: boolean;
   preferences: { key: string; value: string | null }[];
 }
 
@@ -844,6 +847,7 @@ const nothingChanged = (): Changed => ({
   favorites: false,
   plays: false,
   follows: false,
+  dismissedSuggestions: false,
   preferences: [],
 });
 
@@ -1259,7 +1263,7 @@ export const applyPulledPage = (
       }
     }
     for (const row of page.dismissedSuggestions) {
-      if (applyDismissal(tx, row)) changed.follows = true;
+      if (applyDismissal(tx, row)) changed.dismissedSuggestions = true;
     }
     tx.update(schema.syncState)
       .set({ cursor: page.cursor })
