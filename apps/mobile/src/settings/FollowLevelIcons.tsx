@@ -56,7 +56,7 @@ const pickLevel = (artist: FollowTarget, level: FollowLevel): void => {
   })().catch((error) => showError(currentLocalisation().strings.library.couldntFollow, error));
 };
 
-/** Unfollows at once; the toast's Undo brings back the same follow. */
+/** Unfollows at once; the toast's Undo brings the follow back unless a newer one replaced it. */
 const unfollowWithUndo = (follow: FollowedArtist): void => {
   const { strings } = currentLocalisation();
   void setArtistFollow(follow, null).then(

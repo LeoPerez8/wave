@@ -634,7 +634,10 @@ export class LibraryStore extends Context.Service<
       level: FollowLevel,
     ) => Effect.Effect<void, LibraryStoreError>;
     readonly unfollow: (name: string) => Effect.Effect<void, LibraryStoreError>;
-    /** Puts back a follow as it was before an unfollow (its level and date). */
+    /**
+     * Puts back a follow as it was before an unfollow (its level and date),
+     * unless the artist was followed again since.
+     */
     readonly restoreFollow: (follow: FollowedArtist) => Effect.Effect<void, LibraryStoreError>;
     /** The follow keys of the follow suggestions the owner dismissed. */
     readonly dismissedFollowSuggestions: Effect.Effect<readonly string[], LibraryStoreError>;
@@ -1641,7 +1644,8 @@ const make = Effect.gen(function* () {
       ),
     restoreFollow: (follow) =>
       writeAttempt("restore follow", () => restoreFollow(db, follow, Date.now())).pipe(
-        Effect.tap(() => Effect.sync(followSaved)),
+        Effect.tap((changed) => Effect.sync(() => changed && followSaved())),
+        Effect.asVoid,
       ),
     dismissedFollowSuggestions: attempt("read dismissed suggestions", () =>
       selectDismissedFollowSuggestions(db),

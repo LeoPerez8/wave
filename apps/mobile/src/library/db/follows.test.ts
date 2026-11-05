@@ -114,3 +114,18 @@ test("restoring an unfollow brings back the same level and date, and goes up at 
   ]);
   closeTestDatabase(db);
 });
+
+test("Undo after an unfollow leaves alone a follow made since", async () => {
+  const db = await openTestDatabase();
+  saveFollow(db, { name: "Aurora" }, "shows", 100);
+  const before = selectFollow(db, "Aurora")!;
+  removeFollow(db, "Aurora", 200);
+  saveFollow(db, { name: "Aurora" }, "releases", 300);
+  assert.equal(restoreFollow(db, before, 400), false);
+  assert.deepEqual(
+    [selectFollow(db, "Aurora")?.level, selectFollow(db, "Aurora")?.followedAt],
+    ["releases", 300],
+  );
+  assert.equal(selectUnpushed(db, 100, () => null).rows.follows[0]?.changedAt, 300);
+  closeTestDatabase(db);
+});
