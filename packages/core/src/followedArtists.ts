@@ -24,14 +24,29 @@ export interface FollowLevelEntry {
   readonly checked: boolean;
   readonly line?: string;
 }
+/** What decides whether the shows level is offered: Ticketmaster's key and a country. */
+interface ShowsOptions {
+  readonly showsAvailable?: boolean;
+  readonly country?: string;
+}
+/**
+ * The one rule for the shows level, shared by the level card, the row icons
+ * and their legend: offered with Ticketmaster's key and a country, and kept
+ * for a follow already at shows (say, synced from a phone that has the key)
+ * so its level never goes unseen or gets dropped by a tap.
+ */
+const offersShows = (level: FollowLevel | null, options: ShowsOptions): boolean =>
+  level === "shows" || Boolean(options.showsAvailable && options.country);
+/** The shows level's icon label, with the country when there is one. */
+const showsIconLabel = (strings: Catalogue, country: string | undefined): string =>
+  country ? strings.shows.newReleasesAndShowsIn(country) : strings.shows.newReleasesAndShows;
+
 /** UI renders these choices without deciding which levels are available. */
 export const followLevelEntries = (
   level: FollowLevel | null,
-  options: {
-    showsAvailable?: boolean;
-    country?: string;
-    notificationsDenied?: boolean;
-    strings?: Catalogue;
+  options: ShowsOptions & {
+    readonly notificationsDenied?: boolean;
+    readonly strings?: Catalogue;
   } = {},
 ): readonly FollowLevelEntry[] => [
   {
@@ -39,7 +54,7 @@ export const followLevelEntries = (
     label: (options.strings ?? en).shows.releases,
     checked: level === "releases",
   },
-  ...(options.showsAvailable && options.country
+  ...(offersShows(level, options)
     ? [
         {
           action: "shows" as const,
@@ -71,47 +86,59 @@ export interface FollowLevelIcon {
 }
 /**
  * A row's level icons on Settings › Followed Artists: the disc (releases), the
- * ticket (shows) when shows can be checked, and Unfollow once [level] isn't null.
+ * ticket (shows) when the level card would offer shows, and Unfollow once
+ * [level] isn't null.
  */
 export const followLevelIcons = (
   level: FollowLevel | null,
-  options: {
+  options: ShowsOptions & {
     readonly artist: string;
-    readonly showsAvailable?: boolean;
-    readonly country?: string;
     readonly strings?: Catalogue;
   },
 ): readonly FollowLevelIcon[] => {
   const strings = options.strings ?? en;
-  return followIconLegend(options)
-    .filter((line) => line.action !== "unfollow" || level !== null)
-    .map((line) => ({
-      action: line.action,
-      filled: line.action === level,
-      accessibilityLabel: strings.shows.iconFor(line.label, options.artist),
-    }));
+  return followLevelEntries(level, options).map((entry) => ({
+    action: entry.action,
+    filled: entry.action === level,
+    accessibilityLabel: strings.shows.iconFor(
+      iconLabel(entry.action, strings, options.country),
+      options.artist,
+    ),
+  }));
 };
+const iconLabel = (
+  action: FollowLevelIcon["action"],
+  strings: Catalogue,
+  country: string | undefined,
+): string =>
+  action === "releases"
+    ? strings.shows.newReleases
+    : action === "shows"
+      ? showsIconLabel(strings, country)
+      : strings.library.unfollow;
 /** One line of the legend above Settings › Followed Artists' search. */
 export interface FollowIconLegendLine {
   readonly action: FollowLevel | "unfollow";
   readonly label: string;
 }
-/** What each level icon does; the ticket's line only when shows can be checked. */
+/**
+ * What each level icon does: the ticket's line whenever a row can show the
+ * ticket, that is when shows can be chosen or [followsAtShows] (some listed
+ * follow is at shows).
+ */
 export const followIconLegend = (
-  options: {
-    readonly showsAvailable?: boolean;
-    readonly country?: string;
+  options: ShowsOptions & {
+    readonly followsAtShows?: boolean;
     readonly strings?: Catalogue;
   } = {},
 ): readonly FollowIconLegendLine[] => {
   const strings = options.strings ?? en;
-  return [
-    { action: "releases", label: strings.shows.newReleases },
-    ...(options.showsAvailable && options.country
-      ? [{ action: "shows" as const, label: strings.shows.newReleasesAndShowsIn(options.country) }]
-      : []),
-    { action: "unfollow", label: strings.library.unfollow },
+  const actions: readonly FollowIconLegendLine["action"][] = [
+    "releases",
+    ...(offersShows(options.followsAtShows ? "shows" : null, options) ? ["shows" as const] : []),
+    "unfollow",
   ];
+  return actions.map((action) => ({ action, label: iconLabel(action, strings, options.country) }));
 };
 
 export type ReleaseType = "single" | "ep" | "album";

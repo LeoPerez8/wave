@@ -13,6 +13,7 @@ export const showsEn = {
   tickets: "Tickets",
   /** Settings › Followed Artists' level icons and their legend. */
   newReleases: "New releases",
+  newReleasesAndShows: "New releases and shows",
   newReleasesAndShowsIn: (country: string) => `New releases and shows in ${country}`,
   /** A level icon for TalkBack: what it does, then whose it is. */
   iconFor: (option: string, artist: string) => `${option}, ${artist}`,

@@ -81,7 +81,10 @@ export const setArtistFollow = async (
   );
   await followChanged(target.name, value);
 };
-/** Undo after an unfollow: the same follow comes back, at its level and date. */
+/**
+ * Undo after an unfollow: the same follow comes back, at its level and date,
+ * unless the artist was followed again since; the stores show what's saved.
+ */
 export const restoreArtistFollow = async (follow: FollowedArtist): Promise<void> => {
   const value = await run((s) =>
     Effect.gen(function* () {

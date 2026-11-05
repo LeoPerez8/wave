@@ -21,8 +21,13 @@ import { IconButton } from "@/components/IconButton";
 import { TextButton } from "@/components/TextButton";
 import type { FollowTarget } from "@/library/db/follows";
 import { restoreArtistFollow, setArtistFollow } from "@/library/follows";
-import { askShowNotifications, ticketmasterKey } from "@/library/showNotifications";
+import {
+  askShowNotifications,
+  showsNotificationsEnabled,
+  ticketmasterKey,
+} from "@/library/showNotifications";
 import { currentLocalisation, useLocalisation } from "@/localisation/localisation";
+import { WaveNative } from "@/native/waveNative";
 import { showError } from "@/overlay/alert";
 import { showToast } from "@/overlay/toast";
 import { useThemeColor } from "@/theme/useThemeColor";
@@ -48,15 +53,26 @@ const useIconOptions = () => {
   return { showsAvailable: ticketmasterKey !== "", country, strings };
 };
 
-/** Follows at [level], asking for notifications before the first shows-level follow. */
+/**
+ * Follows at [level], asking for notifications before the first shows-level
+ * follow. With show notifications off, a toast says so and opens Android's
+ * notification settings, as the level card's line and button do.
+ */
 const pickLevel = (artist: FollowTarget, level: FollowLevel): void => {
   void (async () => {
     if (level === "shows") await askShowNotifications();
     await setArtistFollow(artist, level);
+    if (level === "shows" && !showsNotificationsEnabled()) {
+      const { strings } = currentLocalisation();
+      void showToast(strings.shows.notificationsOff, {
+        label: strings.shows.notificationSettings,
+        run: () => WaveNative.openShowNotificationSettings?.(),
+      });
+    }
   })().catch((error) => showError(currentLocalisation().strings.library.couldntFollow, error));
 };
 
-/** Unfollows at once; the toast's Undo brings back the same follow. */
+/** Unfollows at once; the toast's Undo brings the follow back unless a newer one replaced it. */
 const unfollowWithUndo = (follow: FollowedArtist): void => {
   const { strings } = currentLocalisation();
   void setArtistFollow(follow, null).then(
@@ -149,9 +165,12 @@ export function FollowArtistRow({
   );
 }
 
-/** The fixed legend above the search: each icon and what it does. */
-export function FollowIconLegend() {
-  const options = useIconOptions();
+/**
+ * The fixed legend above the search: each icon and what it does.
+ * [followsAtShows] keeps the ticket's line while a listed follow is at shows.
+ */
+export function FollowIconLegend({ followsAtShows }: { followsAtShows: boolean }) {
+  const options = { ...useIconOptions(), followsAtShows };
   const secondary = useThemeColor("secondary");
   const destructive = useThemeColor("destructive");
   return (
