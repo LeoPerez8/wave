@@ -24,6 +24,11 @@ import {
   restoreFollow,
   type FollowTarget,
 } from "./db/follows";
+import {
+  dismissFollowSuggestion,
+  selectDismissedFollowSuggestions,
+  undoFollowSuggestionDismissal,
+} from "./db/followSuggestionDismissals";
 import { selectDownloadsToForget } from "./db/downloadRecovery";
 import {
   playedEntityTotals,
@@ -631,6 +636,12 @@ export class LibraryStore extends Context.Service<
     readonly unfollow: (name: string) => Effect.Effect<void, LibraryStoreError>;
     /** Puts back a follow as it was before an unfollow (its level and date). */
     readonly restoreFollow: (follow: FollowedArtist) => Effect.Effect<void, LibraryStoreError>;
+    /** The follow keys of the follow suggestions the owner dismissed. */
+    readonly dismissedFollowSuggestions: Effect.Effect<readonly string[], LibraryStoreError>;
+    /** Dismisses the follow suggestion with follow key [key], for good. */
+    readonly dismissFollowSuggestion: (key: string) => Effect.Effect<void, LibraryStoreError>;
+    /** Undo after a dismissal: the artist can be suggested again. */
+    readonly undoFollowSuggestionDismissal: (key: string) => Effect.Effect<void, LibraryStoreError>;
     /** Every scan root in the order it was added, with its track count. */
     readonly listRoots: Effect.Effect<readonly ScanRootSummary[], LibraryStoreError>;
     /**
@@ -1631,6 +1642,15 @@ const make = Effect.gen(function* () {
     restoreFollow: (follow) =>
       writeAttempt("restore follow", () => restoreFollow(db, follow, Date.now())).pipe(
         Effect.tap(() => Effect.sync(followSaved)),
+      ),
+    dismissedFollowSuggestions: attempt("read dismissed suggestions", () =>
+      selectDismissedFollowSuggestions(db),
+    ),
+    dismissFollowSuggestion: (key) =>
+      writeAttempt("dismiss suggestion", () => dismissFollowSuggestion(db, key, Date.now())),
+    undoFollowSuggestionDismissal: (key) =>
+      writeAttempt("undo suggestion dismissal", () =>
+        undoFollowSuggestionDismissal(db, key, Date.now()),
       ),
     listeningHistoryVersion,
     optimize: (when) => writeAttempt("optimize the database", () => optimizeDatabase(db, when)),

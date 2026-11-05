@@ -1,17 +1,41 @@
+import { IconX } from "@tabler/icons-react-native";
 import { FOLLOW_SUGGESTIONS_PAGE, followSuggestions, type FollowSuggestion } from "@wave/core";
 import { useState } from "react";
 import { Text, View } from "react-native";
 
 import type { PlayedArtist } from "@/library/db/playedEntities";
+import {
+  dismissFollowSuggestion,
+  undoFollowSuggestionDismissal,
+  useDismissedFollowSuggestions,
+} from "@/library/followSuggestionDismissals";
 import { useFollowSuggestionPlayed } from "@/library/followSuggestions";
 import { useFollows, useFollowsRead } from "@/library/follows";
 import { openFollowedArtist } from "@/library/openFollowedArtist";
-import { useLocalisation } from "@/localisation/localisation";
+import { currentLocalisation, useLocalisation } from "@/localisation/localisation";
 import { showError } from "@/overlay/alert";
+import { showToast } from "@/overlay/toast";
+import { IconButton } from "@/components/IconButton";
 import { TextButton } from "@/components/TextButton";
 import { usePlayedArtist } from "@/stats/PlayedEntityViews";
 
 import { FollowArtistRow } from "./FollowLevelIcons";
+
+/** Dismisses at once; the toast's Undo puts the artist back in their place. */
+const dismissWithUndo = (key: string): void => {
+  const { strings } = currentLocalisation();
+  void dismissFollowSuggestion(key).then(
+    () =>
+      void showToast(strings.shows.suggestionDismissed, {
+        label: strings.shows.undo,
+        run: () =>
+          void undoFollowSuggestionDismissal(key).catch((error) =>
+            showError(strings.library.couldntRestoreSuggestion, error),
+          ),
+      }),
+    (error) => showError(strings.library.couldntDismissSuggestion, error),
+  );
+};
 
 function SuggestedArtistRow({ suggestion }: { suggestion: FollowSuggestion<PlayedArtist> }) {
   const { strings } = useLocalisation();
@@ -27,6 +51,15 @@ function SuggestedArtistRow({ suggestion }: { suggestion: FollowSuggestion<Playe
           showError(strings.library.couldntOpenArtist, error),
         )
       }
+      trailing={
+        <IconButton
+          icon={IconX}
+          iconSize={24}
+          tone="secondary"
+          label={strings.shows.dismissSuggestion(suggestion.name)}
+          onPress={() => dismissWithUndo(suggestion.key)}
+        />
+      }
     />
   );
 }
@@ -34,7 +67,8 @@ function SuggestedArtistRow({ suggestion }: { suggestion: FollowSuggestion<Playe
 /**
  * Settings › Followed Artists' Suggested section: the artists the owner plays
  * and doesn't follow (Core's `followSuggestions`), 5 at first and 5 more per
- * Show More. Following one takes it out and the next one fills its place.
+ * Show More. Following or dismissing (×, with Undo) one takes it out and the
+ * next one fills its place; dismissed artists are never suggested again.
  * Nothing shows while [visible] is false or there's nothing to suggest; the
  * count starts over at 5 each time the page opens.
  */
@@ -44,10 +78,12 @@ export function FollowSuggestions({ visible }: { visible: boolean }) {
   const played = useFollowSuggestionPlayed(visible);
   const follows = useFollows();
   const followsRead = useFollowsRead();
-  if (!visible || played === undefined || !followsRead) return null;
+  const dismissed = useDismissedFollowSuggestions();
+  if (!visible || played === undefined || !followsRead || dismissed === undefined) return null;
   const { suggestions, more } = followSuggestions({
     ...played,
     excluded: follows.map((follow) => follow.key),
+    dismissed,
     shown,
     strings,
   });
