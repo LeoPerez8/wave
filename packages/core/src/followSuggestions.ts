@@ -45,18 +45,23 @@ const suggestible = (name: string): boolean =>
  * The first [shown] suggestions, and whether more are left for Show More:
  * artists with counted plays in the last 90 days ([recent]) by those plays,
  * then the other played artists by all-time counted plays ([allTime]). Ties
- * go by name. Artists whose follow key is in [excluded] (followed ones) are
- * left out, so the next one takes a followed suggestion's place.
+ * go by name. Artists whose follow key is in [excluded] (followed ones) or
+ * [dismissed] (suggestions the owner dismissed, for good, whether or not they
+ * follow the artist later) are left out, so the next one takes the place of
+ * a followed or dismissed suggestion; taking a key out of [dismissed] (Undo)
+ * puts the artist back in their place.
  */
 export const followSuggestions = <A>(input: {
   readonly recent: readonly FollowSuggestionPlays<A>[];
   readonly allTime: readonly FollowSuggestionPlays<A>[];
   readonly excluded: Iterable<string>;
+  readonly dismissed?: Iterable<string>;
   readonly shown: number;
   readonly strings?: Catalogue;
 }): { readonly suggestions: readonly FollowSuggestion<A>[]; readonly more: boolean } => {
   const strings = input.strings ?? en;
   const taken = new Set(input.excluded);
+  for (const key of input.dismissed ?? []) taken.add(key);
   const ranked = (
     artists: readonly FollowSuggestionPlays<A>[],
     line: (count: number) => string,

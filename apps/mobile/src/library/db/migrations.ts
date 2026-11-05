@@ -1333,6 +1333,17 @@ WHERE deleted = false AND track_id IS NULL
   AND playlist_id IN (SELECT id FROM playlists WHERE deleted = false)
   AND CASE WHEN json_valid(yt_song) THEN json_extract(yt_song, '$.unavailable') = 'notFound' ELSE false END;`;
 
+// Follow suggestions dismissed on Settings › Followed Artists (#963), by follow
+// key, stamped like the follows they sit beside so they can sync.
+const m0055 = `CREATE TABLE dismissed_follow_suggestions (
+  key text PRIMARY KEY NOT NULL,
+  dismissed_at integer NOT NULL,
+  changed_at integer NOT NULL,
+  phone_id text NOT NULL,
+  deleted integer DEFAULT false NOT NULL,
+  pushed integer DEFAULT false NOT NULL
+);`;
+
 export default {
   journal: {
     entries: [
@@ -1401,6 +1412,12 @@ export default {
       { idx: 52, when: 1_796_299_200_000, tag: "0052_release_date", breakpoints: true },
       { idx: 53, when: 1_796_385_600_000, tag: "0053_playlist_graveyard", breakpoints: true },
       { idx: 54, when: 1_796_472_000_000, tag: "0054_research_not_found", breakpoints: true },
+      {
+        idx: 55,
+        when: 1_796_558_400_000,
+        tag: "0055_dismissed_follow_suggestions",
+        breakpoints: true,
+      },
     ],
   },
   migrations: {
@@ -1459,5 +1476,6 @@ export default {
     m0052,
     m0053,
     m0054,
+    m0055,
   },
 };

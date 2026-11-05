@@ -212,6 +212,8 @@ export const libraryPtBr: typeof libraryEn = {
   unfollow: "Deixar de Seguir",
   couldntFollow: "Não foi possível seguir o artista",
   couldntUnfollow: "Não foi possível deixar de seguir o artista",
+  couldntDismissSuggestion: "Não foi possível dispensar a sugestão",
+  couldntRestoreSuggestion: "Não foi possível trazer a sugestão de volta",
   couldntOpenArtist: "Não foi possível abrir o artista",
   ytMusicTurnedOff: "O YouTube Music está desativado.",
   ytMusicOffInSettings: "O YT Music está desativado em Ajustes",

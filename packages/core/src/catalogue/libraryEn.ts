@@ -202,6 +202,8 @@ export const libraryEn = {
   unfollow: "Unfollow",
   couldntFollow: "Couldn't follow artist",
   couldntUnfollow: "Couldn't unfollow artist",
+  couldntDismissSuggestion: "Couldn't dismiss suggestion",
+  couldntRestoreSuggestion: "Couldn't bring back the suggestion",
   couldntOpenArtist: "Couldn't open the artist",
   ytMusicTurnedOff: "YouTube Music is turned off.",
   ytMusicOffInSettings: "YT Music is off in Settings",
