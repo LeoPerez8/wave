@@ -11,7 +11,6 @@ import {
 } from "@/library/followSuggestionDismissals";
 import { useFollowSuggestionPlayed } from "@/library/followSuggestions";
 import { useFollows, useFollowsRead } from "@/library/follows";
-import { openFollowedArtist } from "@/library/openFollowedArtist";
 import { currentLocalisation, useLocalisation } from "@/localisation/localisation";
 import { showError } from "@/overlay/alert";
 import { showToast } from "@/overlay/toast";
@@ -39,18 +38,14 @@ const dismissWithUndo = (key: string): void => {
 
 function SuggestedArtistRow({ suggestion }: { suggestion: FollowSuggestion<PlayedArtist> }) {
   const { strings } = useLocalisation();
-  const { image } = usePlayedArtist(suggestion.item);
+  const { image, open } = usePlayedArtist(suggestion.item);
   return (
     <FollowArtistRow
       artist={{ name: suggestion.name }}
       image={image}
       follow={null}
       line={suggestion.line}
-      onOpen={() =>
-        void openFollowedArtist({ key: suggestion.key, name: suggestion.name }).catch((error) =>
-          showError(strings.library.couldntOpenArtist, error),
-        )
-      }
+      onOpen={open}
       trailing={
         <IconButton
           icon={IconX}
