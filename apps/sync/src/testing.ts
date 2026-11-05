@@ -220,6 +220,7 @@ export interface Pulled {
   readonly follows: readonly PulledRow[];
   readonly hiddenReleases: readonly PulledRow[];
   readonly notifiedShows: readonly PulledRow[];
+  readonly dismissedSuggestions: readonly PulledRow[];
   readonly cursor: string;
   readonly more: boolean;
 }
