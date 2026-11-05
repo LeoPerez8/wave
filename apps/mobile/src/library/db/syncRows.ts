@@ -823,8 +823,10 @@ export interface PulledChanges {
   readonly playlists: boolean;
   readonly favorites: boolean;
   readonly plays: boolean;
-  /** Follows, hidden releases, notified shows or dismissed follow suggestions changed. */
+  /** Follows, hidden releases or notified shows changed. */
   readonly follows: boolean;
+  /** Dismissed follow suggestions changed (a dismissal or its Undo). */
+  readonly dismissedSuggestions: boolean;
   /** The synced preferences whose value changed, with the value (null: none, its default). */
   readonly preferences: readonly { readonly key: string; readonly value: string | null }[];
 }
@@ -835,6 +837,7 @@ interface Changed {
   favorites: boolean;
   plays: boolean;
   follows: boolean;
+  dismissedSuggestions: boolean;
   preferences: { key: string; value: string | null }[];
 }
 
@@ -844,6 +847,7 @@ const nothingChanged = (): Changed => ({
   favorites: false,
   plays: false,
   follows: false,
+  dismissedSuggestions: false,
   preferences: [],
 });
 
@@ -1022,13 +1026,43 @@ const applyFavorite = (
   return true;
 };
 
-const applyFollow = (tx: LibraryDatabase, row: SyncFollow): boolean => {
-  const { follows } = schema;
-  const held = tx.select().from(follows).where(eq(follows.key, row.id)).get();
+/** The tables whose synced rows are kept by their id alone, and that id's column. */
+type IdTable =
+  | { readonly table: typeof schema.follows; readonly field: "key" }
+  | { readonly table: typeof schema.hiddenFollowReleases; readonly field: "key" }
+  | { readonly table: typeof schema.notifiedFollowShows; readonly field: "id" }
+  | { readonly table: typeof schema.dismissedFollowSuggestions; readonly field: "key" };
+
+/**
+ * A follow, hidden release, notified show or dismissed follow suggestion:
+ * a row kept by its id, with [fields] its own columns (none for a
+ * tombstone, which keeps the ones the phone has).
+ */
+const applyIdRow = (
+  tx: LibraryDatabase,
+  row: SyncRow,
+  into: IdTable,
+  fields: Readonly<Record<string, unknown>> = {},
+): boolean => {
+  const id = into.field === "key" ? into.table.key : into.table.id;
+  const held = tx.select().from(into.table).where(eq(id, row.id)).get();
   if (held !== undefined && !wins(row, held)) return false;
-  // A removal of a follow this phone never had has nothing to remove.
+  // A removal of a row this phone never had has nothing to remove.
   if (row.deleted && held === undefined) return false;
-  const live = row.deleted
+  const values = { ...fields, ...stamp(row), pushed: true };
+  if (held !== undefined) {
+    tx.update(into.table).set(values).where(eq(id, row.id)).run();
+  } else {
+    tx.insert(into.table)
+      .values({ [into.field]: row.id, ...values } as typeof into.table.$inferInsert)
+      .run();
+  }
+  return true;
+};
+
+/** A follow's columns besides its key; none for an unfollow. */
+const followFields = (row: SyncFollow) =>
+  row.deleted
     ? {}
     : {
         name: row.name,
@@ -1037,60 +1071,10 @@ const applyFollow = (tx: LibraryDatabase, row: SyncFollow): boolean => {
         deezerId: row.deezerId,
         ytBrowseId: row.ytBrowseId,
       };
-  if (held !== undefined) {
-    tx.update(follows)
-      .set({ ...live, ...stamp(row), pushed: true })
-      .where(eq(follows.key, row.id))
-      .run();
-  } else if (!row.deleted) {
-    tx.insert(follows)
-      .values({ key: row.id, ...live, ...stamp(row), pushed: true } as typeof follows.$inferInsert)
-      .run();
-  }
-  return true;
-};
 
-/** A hidden release (by its `key`) or a notified show (by its `id`): a row that carries only its id. */
-const applyIdRow = (
-  tx: LibraryDatabase,
-  row: SyncRow,
-  into:
-    | { readonly table: typeof schema.hiddenFollowReleases; readonly field: "key" }
-    | { readonly table: typeof schema.notifiedFollowShows; readonly field: "id" },
-): boolean => {
-  const id = into.field === "key" ? into.table.key : into.table.id;
-  const held = tx.select().from(into.table).where(eq(id, row.id)).get();
-  if (held !== undefined && !wins(row, held)) return false;
-  if (row.deleted && held === undefined) return false;
-  const values = { ...stamp(row), pushed: true };
-  tx.insert(into.table)
-    .values({ [into.field]: row.id, ...values } as typeof into.table.$inferInsert)
-    .onConflictDoUpdate({ target: id, set: values })
-    .run();
-  return true;
-};
-
-/** A dismissed follow suggestion, or its Undo (a tombstone). */
-const applyDismissal = (tx: LibraryDatabase, row: SyncDismissedSuggestion): boolean => {
-  const { dismissedFollowSuggestions: dismissals } = schema;
-  const held = tx.select().from(dismissals).where(eq(dismissals.key, row.id)).get();
-  if (held !== undefined && !wins(row, held)) return false;
-  // An Undo of a dismissal this phone never had has nothing to undo.
-  if (row.deleted && held === undefined) return false;
-  const values = {
-    ...(row.deleted ? {} : { dismissedAt: row.dismissedAt }),
-    ...stamp(row),
-    pushed: true,
-  };
-  if (held !== undefined) {
-    tx.update(dismissals).set(values).where(eq(dismissals.key, row.id)).run();
-  } else if (!row.deleted) {
-    tx.insert(dismissals)
-      .values({ key: row.id, dismissedAt: row.dismissedAt, ...values })
-      .run();
-  }
-  return true;
-};
+/** A dismissed follow suggestion's columns besides its key; none for its Undo. */
+const dismissalFields = (row: SyncDismissedSuggestion) =>
+  row.deleted ? {} : { dismissedAt: row.dismissedAt };
 
 const applyPreference = (
   tx: LibraryDatabase,
@@ -1246,7 +1230,9 @@ export const applyPulledPage = (
       if (applied !== null) changed.preferences.push(applied);
     }
     for (const row of page.follows) {
-      if (applyFollow(tx, row)) changed.follows = true;
+      if (applyIdRow(tx, row, { table: schema.follows, field: "key" }, followFields(row))) {
+        changed.follows = true;
+      }
     }
     for (const row of page.hiddenReleases) {
       if (applyIdRow(tx, row, { table: schema.hiddenFollowReleases, field: "key" })) {
@@ -1259,7 +1245,8 @@ export const applyPulledPage = (
       }
     }
     for (const row of page.dismissedSuggestions) {
-      if (applyDismissal(tx, row)) changed.follows = true;
+      const into = { table: schema.dismissedFollowSuggestions, field: "key" } as const;
+      if (applyIdRow(tx, row, into, dismissalFields(row))) changed.dismissedSuggestions = true;
     }
     tx.update(schema.syncState)
       .set({ cursor: page.cursor })

@@ -146,6 +146,7 @@ interface Seen {
   favorites: boolean;
   plays: boolean;
   follows: boolean;
+  dismissedSuggestions: boolean;
   preferences: { key: string; value: string | null }[];
 }
 
@@ -155,6 +156,7 @@ const take = (seen: Seen, changes: PulledChanges): void => {
   seen.favorites ||= changes.favorites;
   seen.plays ||= changes.plays;
   seen.follows ||= changes.follows;
+  seen.dismissedSuggestions ||= changes.dismissedSuggestions;
   seen.preferences.push(...changes.preferences);
 };
 
@@ -247,6 +249,7 @@ export const syncCycle = async (input: SyncCycleInput): Promise<SyncCycleResult>
     favorites: false,
     plays: false,
     follows: false,
+    dismissedSuggestions: false,
     preferences: [],
   };
   const pulled = await pullAll(input, seen);

@@ -41,14 +41,26 @@ export const reloadFollowSuggestionDismissals = async (): Promise<void> => {
   if (dismissed.get() !== undefined) await read();
 };
 
+/**
+ * Shows a saved dismissal ([on]) or its Undo in the list read, without
+ * reading it again: once the write is saved, nothing can fail. Not read
+ * yet, the next focus reads it.
+ */
+const show = (key: string, on: boolean): void => {
+  const keys = dismissed.get();
+  if (keys === undefined) return;
+  const others = keys.filter((other) => other !== key);
+  dismissed.set(on ? [...others, key].sort() : others);
+};
+
 /** Dismisses the suggestion of the artist with follow key [key]; resolves once saved. */
 export const dismissFollowSuggestion = async (key: string): Promise<void> => {
   await run((s) => s.dismissFollowSuggestion(key));
-  await read();
+  show(key, true);
 };
 
 /** Undo after a dismissal: the artist goes back to their place among the suggestions. */
 export const undoFollowSuggestionDismissal = async (key: string): Promise<void> => {
   await run((s) => s.undoFollowSuggestionDismissal(key));
-  await read();
+  show(key, false);
 };

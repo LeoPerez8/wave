@@ -47,10 +47,8 @@ const showPulled = (changes: SyncedChanges): void => {
   if (changes.playlists) playlistsChanged();
   if (changes.favorites) reloadFavorites();
   if (changes.plays) playHistoryChanged();
-  if (changes.follows) {
-    reloadFollows().catch(() => {});
-    reloadFollowSuggestionDismissals().catch(() => {});
-  }
+  if (changes.follows) reloadFollows().catch(() => {});
+  if (changes.dismissedSuggestions) reloadFollowSuggestionDismissals().catch(() => {});
   if (changes.favorites || changes.library) void downloadSyncedStars();
 };
 
