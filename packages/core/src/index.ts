@@ -1514,6 +1514,7 @@ export {
   syncFieldFits,
 } from "./syncWire.ts";
 export type {
+  SyncDismissedSuggestion,
   SyncFavorite,
   SyncFieldKind,
   SyncFollow,

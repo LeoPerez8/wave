@@ -74,6 +74,8 @@ const STORAGE: { readonly [K in TableName]: TableStorage } = {
   hiddenReleases: { limit: "maxHiddenReleases" },
   // The id is the Ticketmaster event id; the row carries nothing else.
   notifiedShows: { limit: "maxNotifiedShows" },
+  // The id is the artist's normalised name (Core's `followArtistKey`); Undo leaves a tombstone.
+  dismissedSuggestions: { limit: "maxDismissedSuggestions" },
 };
 
 export const column = (field: string): string =>

@@ -19,6 +19,7 @@ export const SYNC_LIMITS = {
   maxFollows: 5_000,
   maxHiddenReleases: 50_000,
   maxNotifiedShows: 50_000,
+  maxDismissedSuggestions: 50_000,
   /** Requests one session may make per minute. */
   maxRequestsPerMinute: 120,
   /**

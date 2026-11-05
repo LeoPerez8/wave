@@ -1647,11 +1647,13 @@ const make = Effect.gen(function* () {
       selectDismissedFollowSuggestions(db),
     ),
     dismissFollowSuggestion: (key) =>
-      writeAttempt("dismiss suggestion", () => dismissFollowSuggestion(db, key, Date.now())),
+      writeAttempt("dismiss suggestion", () => dismissFollowSuggestion(db, key, Date.now())).pipe(
+        Effect.tap(() => Effect.sync(followSaved)),
+      ),
     undoFollowSuggestionDismissal: (key) =>
       writeAttempt("undo suggestion dismissal", () =>
         undoFollowSuggestionDismissal(db, key, Date.now()),
-      ),
+      ).pipe(Effect.tap(() => Effect.sync(followSaved))),
     listeningHistoryVersion,
     optimize: (when) => writeAttempt("optimize the database", () => optimizeDatabase(db, when)),
     ensureDefaultRoot: (path) =>

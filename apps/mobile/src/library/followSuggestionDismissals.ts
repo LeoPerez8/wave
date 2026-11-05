@@ -32,6 +32,15 @@ export const useDismissedFollowSuggestions = (): readonly string[] | undefined =
   return useSightedStore(dismissed.subscribe, dismissed.get);
 };
 
+/**
+ * Reads the dismissals again after the Wave account changed them (another
+ * phone dismissed a suggestion or undid one); not read yet, the next focus
+ * reads them.
+ */
+export const reloadFollowSuggestionDismissals = async (): Promise<void> => {
+  if (dismissed.get() !== undefined) await read();
+};
+
 /** Dismisses the suggestion of the artist with follow key [key]; resolves once saved. */
 export const dismissFollowSuggestion = async (key: string): Promise<void> => {
   await run((s) => s.dismissFollowSuggestion(key));
