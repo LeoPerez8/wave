@@ -12,6 +12,7 @@ import { useScreenContent } from "@/lib/screenTiming";
 import { showError } from "@/overlay/alert";
 import { SettingsPageScreen } from "@/settings/SettingsPage";
 import { FollowArtistRow, FollowIconLegend } from "@/settings/FollowLevelIcons";
+import { FollowSuggestions } from "@/settings/FollowSuggestions";
 import { setFollowedArtistsEnabled, useFollowedArtistsEnabled } from "@/settings/followedArtists";
 
 export default function FollowedArtistsSettingsScreen() {
@@ -77,6 +78,7 @@ export default function FollowedArtistsSettingsScreen() {
         {searching && results.length === 0 && !failed && !pending && (
           <Text className="py-3 font-sans text-footnote text-secondary">{searchStrings.empty}</Text>
         )}
+        <FollowSuggestions visible={enabled && !searching} />
         {!searching && follows.length === 0 && (
           <Text className="py-3 font-sans text-body text-secondary">
             {strings.settings.youArentFollowingAnyArtistsYet}

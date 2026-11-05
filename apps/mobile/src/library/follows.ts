@@ -12,6 +12,8 @@ import type { FollowTarget } from "./db/follows";
 
 const count = makeExternalStore(0);
 const list = makeExternalStore<readonly FollowedArtist[]>([]);
+/** Whether the list has been read once: until then an empty list means nothing yet. */
+const listRead = makeExternalStore(false);
 const artists = new Map<string, ReturnType<typeof makeExternalStore<FollowedArtist | null>>>();
 const run = <A>(read: (store: LibraryStore["Service"]) => Effect.Effect<A, unknown>) =>
   appRuntime.runPromise(Effect.flatMap(LibraryStore, read));
@@ -52,7 +54,9 @@ export const useFollows = (): readonly FollowedArtist[] => {
     useCallback(() => {
       let current = true;
       void run((s) => s.listFollows).then((value) => {
-        if (current) list.set(value);
+        if (!current) return;
+        list.set(value);
+        listRead.set(true);
       }, failed);
       return () => {
         current = false;
@@ -61,6 +65,8 @@ export const useFollows = (): readonly FollowedArtist[] => {
   );
   return useSightedStore(list.subscribe, list.get);
 };
+/** Whether `useFollows` has read the follows once, so its list can be trusted to be complete. */
+export const useFollowsRead = (): boolean => useSightedStore(listRead.subscribe, listRead.get);
 /** Resolves after the database write; only this artist's subscribers change state. */
 export const setArtistFollow = async (
   target: FollowTarget,
@@ -101,4 +107,5 @@ export const reloadFollows = async (): Promise<void> => {
   for (const [key, store] of artists) store.set(byKey.get(key) ?? null);
   count.set(follows.length);
   list.set(follows);
+  listRead.set(true);
 };
