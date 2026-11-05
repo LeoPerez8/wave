@@ -86,10 +86,32 @@ const songText = (fields: SyncSongFields): string =>
     fields.trackNumber,
     fields.durationMs,
     fields.year,
+    fields.releaseDate ?? null,
     fields.genre,
     fields.videoId,
     fields.addedAt,
   ]);
+
+/** The release date [text] (`songText`) holds. */
+const textReleaseDate = (text: string): string | null => {
+  const date: unknown = (JSON.parse(text) as unknown[])[8];
+  return typeof date === "string" ? date : null;
+};
+
+/**
+ * The release date a song the phone pushes carries: its own; else, when the phone had one when
+ * it last synced, none (the owner cleared it, and every phone loses it); else the account's, so
+ * a phone whose file has none never takes away a date another phone gave the song.
+ */
+const pushedReleaseDate = (
+  fields: SyncSongFields,
+  state: AccountSongState | null,
+): string | null => {
+  if (fields.releaseDate) return fields.releaseDate;
+  if (state === null || state.row.deleted) return null;
+  if (state.local !== null && textReleaseDate(state.local) !== null) return null;
+  return state.row.releaseDate ?? null;
+};
 
 /**
  * Which of the phone's [phone] songs go up to the account, given what it
@@ -119,16 +141,17 @@ export const planSongSync = (input: {
   });
   const push: SyncSong[] = [];
   const local: { recordingKey: string; local: string | null }[] = [];
-  const stamp = (song: PhoneSong, after: number): SyncSong => ({
+  const stamp = (song: PhoneSong, state: AccountSongState | null): SyncSong => ({
     id: song.recordingKey,
-    changedAt: Math.max(input.now, after + 1),
+    changedAt: Math.max(input.now, (state?.row.changedAt ?? 0) + 1),
     phoneId: input.phoneId,
     deleted: false,
     ...song.fields,
+    releaseDate: pushedReleaseDate(song.fields, state),
   });
 
   for (const song of join.up) {
-    push.push(stamp(song, 0));
+    push.push(stamp(song, null));
     local.push({ recordingKey: song.recordingKey, local: songText(song.fields) });
   }
   for (const { account, phone } of join.tracks) {
@@ -138,7 +161,7 @@ export const planSongSync = (input: {
     const text = songText(song.fields);
     if (state.local === text) continue;
     const changedHere = state.local !== null;
-    if (changedHere || state.row.deleted) push.push(stamp(song, state.row.changedAt));
+    if (changedHere || state.row.deleted) push.push(stamp(song, state));
     local.push({ recordingKey: song.recordingKey, local: text });
   }
   const onPhone = new Set(input.phone.map((song) => song.recordingKey));
@@ -171,6 +194,7 @@ export const missingSongTrack = (song: SyncSongFields): MissingSongTrack => {
     album: song.album,
     albumArtist: song.albumArtist,
     genre: song.genre,
+    releaseDate: song.releaseDate,
     year: song.year === null ? null : String(song.year),
     trackNumber: song.trackNumber === null ? null : String(song.trackNumber),
     discNumber: song.discNumber === null ? null : String(song.discNumber),
@@ -201,6 +225,7 @@ export interface ShownMissingSong {
   readonly album: string;
   readonly albumArtist: string;
   readonly genre: string | null;
+  readonly releaseDate?: string | null | undefined;
   readonly year: number | null;
   readonly trackNumber: number | null;
   readonly discNumber: number | null;
@@ -217,6 +242,7 @@ const shownTags = (song: Omit<ShownMissingSong, "id" | "recordingKey">): string 
     song.albumArtist,
     song.genre,
     song.year,
+    song.releaseDate ?? null,
     song.trackNumber,
     song.discNumber,
     song.durationMs,

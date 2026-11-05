@@ -1,0 +1,42 @@
+name: Promote to main
+
+# Publishes a -ti release to the main channel under the same number without the suffix, from the
+# same commit (docs/spec.md, Releases). scripts/ci/promote.sh tags it and starts CI on the tag.
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: The version to promote, such as 0.51.0-ti. Empty takes the newest -ti release.
+        required: false
+        type: string
+
+permissions:
+  actions: write
+  contents: write
+
+concurrency:
+  group: promote
+  cancel-in-progress: false
+
+jobs:
+  promote:
+    name: Promote ${{ inputs.version || 'the newest -ti release' }}
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          ref: main
+          # The -ti tags and the commits they're on; file contents on demand.
+          fetch-depth: 0
+          filter: blob:none
+
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 22
+          package-manager-cache: false
+
+      - name: Tag the version and start its run
+        env:
+          GH_TOKEN: ${{ github.token }}
+          VERSION: ${{ inputs.version }}
+        run: scripts/ci/promote.sh "$VERSION"

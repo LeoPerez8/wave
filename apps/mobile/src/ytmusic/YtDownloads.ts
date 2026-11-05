@@ -1,3 +1,4 @@
+import { recordingSearch } from "./recordingSearch";
 /**
  * The Download menu and rows of YT Music songs, backed by the native journal: Core picks the
  * source (`downloadSource`), Soulseek's automatic recording selection or YouTube Music's M4A,
@@ -37,7 +38,6 @@ import {
   NO_BETTER_COPY_FOUND,
   noBetterCopies,
   QUALITY_ORIGINS,
-  qualityDowngradeSearch,
   qualityDowngradeVideo,
   qualityJobId,
   qualityJobsToCancel,
@@ -53,10 +53,8 @@ import {
   soulseekReceivedMatches,
   soulseekRecording,
   settleUnsearched,
-  spotifySearchQuery,
   unsearchedDownload,
   unsearchedJobSong,
-  unsearchedSearchQuery,
   ytAlbumDownload,
   ytAudioRejection,
   ytAudioTrack,
@@ -131,6 +129,8 @@ import { refreshDownloadPolicy } from "@/library/downloadPolicy";
 import { finishFileDeletions } from "@/library/fileDeletions";
 import { replacementJournalRead } from "@/library/replacementDuplicates";
 import { fillInLyricsAndGenre, lookUpLyricsAndGenre } from "@/library/lyricsAndGenre";
+import { downloadReleaseDate } from "@/library/releaseAnswers";
+import { streamedReleaseSong } from "@/library/releaseSong";
 import { appRuntime } from "@/library/runtime";
 import { settleUnsearchedSong } from "@/library/unsearchedEntries";
 import { makeExternalStore } from "@/lib/externalStore";
@@ -161,8 +161,7 @@ import { followDownloadRuns } from "./downloadRun";
 import { createDownloadRecovery } from "./downloadRecovery";
 import { currentLibraryFinder, useLoadedLibraryFinder } from "./libraryFinder";
 import { followYoutubeThrottle } from "./youtubeThrottle";
-import { withSearchTurn } from "./searchAllowance";
-import { YtMusic, type YtMusicError } from "./YtMusic";
+import type { YtMusicError } from "./YtMusic";
 
 export class DownloadFailed extends Data.TaggedError("DownloadFailed")<{
   readonly reason: YtDownloadFailure;
@@ -202,6 +201,10 @@ const optional = <A>(effect: Effect.Effect<A, unknown>): Effect.Effect<A | null>
     Effect.orElseSucceed(() => null),
   );
 
+/** The first-release date a playlist's lookup found for [song], for its file's tags. */
+const releaseDateOf = (song: YtSong): string | null =>
+  downloadReleaseDate(streamedReleaseSong(song));
+
 /**
  * Optional metadata cannot fail or indefinitely hold up valid audio acquisition. The watch page
  * is asked for at most once (for the album, then YT Music's lyrics), and YT Music's lyrics only
@@ -234,7 +237,10 @@ const metadata = (song: NativeYtSong) =>
                 : yield* native(() => WaveYtDownloads.lyrics(lyricsBrowseId));
             }),
           );
-    return ytDownloadTags(song, album, found, lyrics, saved);
+    return {
+      ...ytDownloadTags(song, album, found, lyrics, saved),
+      releaseDate: releaseDateOf(song),
+    };
   });
 
 /**
@@ -400,14 +406,14 @@ const prepareUnsearchedFallback = (
  * video, as a search that fails does: the length check still judges what it serves.
  */
 const audioTrack = (song: YtSong) =>
-  Effect.gen(function* () {
-    const ytMusic = yield* YtMusic;
-    const query = spotifySearchQuery(song);
-    const page = yield* withSearchTurn("download", query, ytMusic.searchSongs(query)).pipe(
-      Effect.orElseSucceed(() => null),
-    );
-    return ytAudioTrack(song, page?.songs ?? null) ?? undefined;
-  });
+  song.videoType === "MUSIC_VIDEO_TYPE_OMV"
+    ? Effect.succeed(undefined)
+    : Effect.gen(function* () {
+        const page = yield* recordingSearch("download", song).pipe(
+          Effect.orElseSucceed(() => null),
+        );
+        return ytAudioTrack(song, page?.songs ?? null) ?? undefined;
+      });
 
 /** The Library's folders, where a download's file goes. */
 interface DownloadFolders {
@@ -530,13 +536,12 @@ const prepareMissingSong = (trackId: number) =>
       job.missing.videoId !== null,
     );
     if (source === null) return yield* new DownloadFailed({ reason: "noSource" });
-    const ytMusic = yield* YtMusic;
     const search = missingSongSearch(job);
     const findVideo = !ytMusicOn
       ? Effect.succeed(null)
       : search === null
         ? withCover(missingSongVideo(job, null))
-        : withSearchTurn("download", search, ytMusic.searchSongs(search)).pipe(
+        : recordingSearch("download", job).pipe(
             Effect.map((page) => missingSongVideo(job, page.songs)),
             Effect.mapError(searchFailure),
           );
@@ -588,7 +593,7 @@ const listingTags = (song: YtSong) =>
   Effect.gen(function* () {
     const lookup = ytDownloadLookup(song, null);
     const found = lookup === null ? null : yield* optional(lookUpLyricsAndGenre(lookup));
-    return listedSongTags(song, found);
+    return { ...listedSongTags(song, found), releaseDate: releaseDateOf(song) };
   });
 
 /**
@@ -616,9 +621,7 @@ const shareUnsearchedJob = async (jobId: string, found: NativeYtSong): Promise<v
  */
 const unsearchedVideo = (jobId: string, song: UnsearchedSong) =>
   Effect.gen(function* () {
-    const ytMusic = yield* YtMusic;
-    const query = unsearchedSearchQuery(song);
-    const answer = yield* withSearchTurn("download", query, ytMusic.searchSongs(query)).pipe(
+    const answer = yield* recordingSearch("download", song).pipe(
       Effect.map((page): YtSongSearch<YtAlbumSong> => ({ ok: true, songs: page.songs })),
       Effect.catch((error) =>
         Effect.succeed<YtSongSearch<YtAlbumSong>>({ ok: false, reason: error.reason }),
@@ -732,14 +735,10 @@ const prepareQualityReplacement = (direction: QualityDirection, trackId: number)
 const prepareQualityDowngrade = (track: ReplacedTrack) =>
   Effect.gen(function* () {
     if (!ytMusicEnabled()) return yield* new DownloadFailed({ reason: "noSource" });
-    const ytMusic = yield* YtMusic;
     const job = qualityReplacementJob("downgrade", track);
-    const query = qualityDowngradeSearch(job);
     const [page, lyrics] = yield* Effect.all(
       [
-        withSearchTurn("download", query, ytMusic.searchSongs(query)).pipe(
-          Effect.mapError(searchFailure),
-        ),
+        recordingSearch("download", job).pipe(Effect.mapError(searchFailure)),
         fileLyrics(track.path),
       ],
       { concurrency: "unbounded" },

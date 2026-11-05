@@ -5,7 +5,7 @@ import { test } from "node:test";
 
 import { creditSplits, relinkCredits } from "./credits.ts";
 import { homePlays, recordPlay } from "./playHistory.ts";
-import { playedArtistSongs, playedEntityTotals } from "./playedEntities.ts";
+import { playedArtistSongs, playedArtistTotals, playedEntityTotals } from "./playedEntities.ts";
 import { sql } from "drizzle-orm";
 import { addTrack, openTestDatabase, traceQueries } from "./testDatabase.ts";
 
@@ -74,6 +74,38 @@ test("Stats and Home combine streamed credits with Library artists and albums", 
       ["A", 1],
       ["B", 1],
     ],
+  );
+});
+
+test("artist totals alone count as Stats does, without reading albums", async () => {
+  const db = await openTestDatabase();
+  const id = addTrack(db, { title: "Local", artist: "A", album: "Album" });
+  relinkCredits(db, creditSplits());
+  recordPlay(db, play(String(id), 1_000));
+  recordPlay(db, play("yt:collaboration", 2_000), false, song);
+  recordPlay(db, play("yt:collaboration", 3_000, false), false, song);
+  const artists = playedArtistTotals(db, { from: null, to: 10_000 });
+  assert.deepEqual(
+    artists.map(({ item, countedPlays }) => [item.name, "online" in item, countedPlays]),
+    [
+      ["A", false, 2],
+      ["B", true, 1],
+    ],
+  );
+  assert.deepEqual(
+    playedArtistTotals(db, { from: 2_000, to: 2_000 }).map(({ item, countedPlays }) => [
+      item.name,
+      countedPlays,
+    ]),
+    [
+      ["A", 1],
+      ["B", 1],
+    ],
+  );
+  const reads = (run: () => unknown) => traceQueries(db, run).queries.length;
+  assert.ok(
+    reads(() => playedArtistTotals(db, { from: null, to: 10_000 })) <
+      reads(() => playedEntityTotals(db, { from: null, to: 10_000 })),
   );
 });
 

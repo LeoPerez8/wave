@@ -1,12 +1,12 @@
+import { recordingSearch } from "./recordingSearch";
+import type { SpotifySong } from "@wave/core";
 import type { SearchAsker, YtAlbumSong, YtSongSearch } from "@wave/core";
 import * as Effect from "effect/Effect";
 import * as Result from "effect/Result";
 
 import { online } from "@/native/waveNative";
-import { artistOpeningRequest } from "./artistOpeningRequest";
 import { appRuntime } from "@/library/runtime";
 
-import { logSearchFailure, searchTurn } from "./searchAllowance";
 import { YtMusic } from "./YtMusic";
 
 /**
@@ -30,32 +30,25 @@ export const askYtMusic = <A, E>(
     { signal },
   );
 
-/**
- * One YouTube Music Songs search for [query] once [asker]'s turn in the shared
- * search allowance comes (`searchTurn`); a failure is an answer too, and is
- * logged. Null when [signal] gave the turn up first. Never rejects.
- */
-export const searchSongsInTurn = async (
+/** A recording lookup, including the official-video fallback, in the shared allowance. */
+export const searchRecordingInTurn = async (
   asker: SearchAsker,
-  query: string,
+  song: SpotifySong,
   signal?: AbortSignal,
+  unknownLength = false,
 ): Promise<YtSongSearch<YtAlbumSong> | null> => {
   if (signal?.aborted) return null;
   if (!online()) return { ok: false, reason: "offline" };
-  if (!(await searchTurn(asker, signal))) return null;
-  let answer: YtSongSearch<YtAlbumSong>;
   try {
     const result = await askYtMusic(
-      (ytMusic) => artistOpeningRequest(online, ytMusic.searchSongs(query)),
+      (ytMusic) =>
+        Effect.provideService(recordingSearch(asker, song, unknownLength), YtMusic, ytMusic),
       signal,
     );
-    answer = Result.isFailure(result)
+    return Result.isFailure(result)
       ? { ok: false, reason: result.failure.reason }
       : { ok: true, songs: result.success.songs };
   } catch {
-    if (signal?.aborted) return null;
-    answer = { ok: false, reason: "failed" };
+    return signal?.aborted ? null : { ok: false, reason: "failed" };
   }
-  if (!answer.ok) logSearchFailure(asker, query, answer.reason);
-  return answer;
 };

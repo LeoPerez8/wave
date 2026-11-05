@@ -40,8 +40,6 @@ export type ResultRow =
       readonly hit: SearchHit;
       /** The top result says what type it is. */
       readonly top: boolean;
-      /** For songs: the song results, which tapping plays from this one. */
-      readonly songs: readonly ResultSong[];
       /**
        * For the top-hit Library artist with Online: their song count with the
        * online songs the Library lacks (`useTopArtistSongs`); null: the Library's.
@@ -64,9 +62,6 @@ export type ResultRow =
       readonly type: "ytSong";
       readonly key: string;
       readonly song: NativeYtSong;
-      /** The song results, which tapping plays from this one ([index]). */
-      readonly songs: readonly ResultSong[];
-      readonly index: number;
       readonly top: boolean;
     }
   /** An artist YT Music found that the Library lacks: opens their YouTube Music artist page. */
@@ -88,7 +83,7 @@ export type ResultRow =
   /** Skeleton rows where online results will go, while they load. */
   | { readonly type: "skeleton"; readonly key: string };
 
-/** The most results of one type the search returns (and a song tap queues). */
+/** The most results of one type the search returns. */
 export const RESULT_LIMIT = 200;
 
 /** Rows a group shows before "Show all". */
@@ -144,7 +139,6 @@ const ytArtistRow = (artist: YtArtistCandidate, top: boolean): ResultRow => ({
   artist,
   top,
 });
-const streamed = (song: NativeYtSong): PlacedYtSong => ({ source: "stream", song });
 
 const ytAlbumRow = (album: YtArtistAlbum, top: boolean): ResultRow => ({
   type: "ytAlbum",
@@ -177,17 +171,10 @@ export const resultRows = (
   const rows: ResultRow[] = [];
   const ytArtists = yt?.artists ?? NO_YT_ARTISTS;
   const ytAlbums = yt?.albums ?? NO_YT_ALBUMS;
-  const library = songResults(results);
-  const songs: ResultSong[] = [
-    ...library.map((track) => ({ source: "library" as const, track })),
-    ...placed,
-  ];
-  const ytSongRow = (song: NativeYtSong, index: number, top: boolean): ResultRow => ({
+  const ytSongRow = (song: NativeYtSong, top: boolean): ResultRow => ({
     type: "ytSong",
     key: `${top ? "top:" : ""}yt:${song.videoId}`,
     song,
-    songs,
-    index: library.length + index,
     top,
   });
   const hitRow = (hit: SearchHit, top: boolean): ResultRow => ({
@@ -195,12 +182,11 @@ export const resultRows = (
     key: `${top ? "top:" : ""}${hitKey(hit)}`,
     hit,
     top,
-    songs,
     artistSongs:
       hit.kind === "artist" && topArtist?.artistId === hit.artist.id ? topArtist.songs : null,
   });
-  const placedRow = (row: PlacedYtSong, index: number, top: boolean): ResultRow =>
-    row.source === "library" ? hitRow(songHit(row.track), top) : ytSongRow(row.song, index, top);
+  const placedRow = (row: PlacedYtSong, top: boolean): ResultRow =>
+    row.source === "library" ? hitRow(songHit(row.track), top) : ytSongRow(row.song, top);
   const ytTopRow = (top: YtSearchTop<NativeYtSong>): ResultRow => {
     switch (top.kind) {
       case "artist":
@@ -208,19 +194,9 @@ export const resultRows = (
       case "album":
         return ytAlbumRow(top.album, true);
       case "song": {
-        const index = rowOf.get(top.song.videoId) ?? -1;
-        const row = placed[index];
-        if (row !== undefined) return placedRow(row, index, true);
-        // YT Music's best is one of the songs shown, so it has a row; if not, it plays alone.
-        const song = top.song;
-        return {
-          type: "ytSong",
-          key: `top:yt:${song.videoId}`,
-          song,
-          songs: [streamed(song)],
-          index: 0,
-          top: true,
-        };
+        const row = placed[rowOf.get(top.song.videoId) ?? -1];
+        // YT Music's best is one of the songs shown, so it has a row; if not, its own.
+        return row === undefined ? ytSongRow(top.song, true) : placedRow(row, true);
       }
     }
   };
@@ -231,7 +207,7 @@ export const resultRows = (
       case "album":
         return ytAlbums.map((album) => ytAlbumRow(album, false));
       case "song":
-        return placed.map((row, index) => placedRow(row, index, false));
+        return placed.map((row) => placedRow(row, false));
       default:
         return [];
     }

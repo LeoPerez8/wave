@@ -1,3 +1,6 @@
+import { LibraryStore } from "@/library/LibraryStore";
+import { appRuntime } from "@/library/runtime";
+import { router } from "@/lib/timingRouter";
 import { useFollow } from "@/library/follows";
 import { currentLocalisation, useLocalisation } from "@/localisation/localisation";
 import { followMenuPress } from "@/library/FollowButton";
@@ -8,6 +11,7 @@ import {
   type UnsearchedSong,
   isUnsearchedTrackId,
   playlistDownloadOrigin,
+  ytPlaylistMenuDownloads,
 } from "@wave/core";
 import type { ReactNode } from "react";
 import { Text, View } from "react-native";
@@ -32,7 +36,8 @@ import { CardHeading } from "@/overlay/CardHeading";
 import { MenuChoices, type MenuChoice, type PlayCardChoice } from "@/overlay/MenuChoices";
 import { followUp, openOverlay } from "@/overlay/overlay";
 import { openYtSongActions } from "@/ytmusic/YtSongActions";
-import { useLoadedInLibrary } from "@/ytmusic/libraryFinder";
+import { showToast } from "@/overlay/toast";
+import { useLoadedInLibrary, useLoadedLibraryFinder } from "@/ytmusic/libraryFinder";
 import { runYtPlaylistDownloadAction, useYtPlaylistDownload } from "@/ytmusic/YtDownloads";
 
 import { targetHeading, type ActionItems, type Heading, type PlaylistPlace } from "./actionTargets";
@@ -193,12 +198,38 @@ export const openPlaylistActions = (playlist: PlaylistRow, options?: MenuOptions
   const allowed = pressedMenuAllowed();
   const target: ActionItems = { kind: "playlist", items: [playlist] };
   void followUp(async () => {
-    const [entries, songs] = await Promise.all([
+    const [entries, songs, graveyard] = await Promise.all([
       playlistEntries(playlist.id).catch(() => NO_ENTRIES),
       readMenuSongs(target),
+      // oxlint-disable-next-line react/rules-of-hooks -- Effect Service.use resolves a service; it is not a React Hook.
+      appRuntime.runPromise(LibraryStore.use((store) => store.playlistGraveyard(playlist.id))),
     ]);
     if (!allowed()) return;
-    openActions(target, options, anchor, entries, songs);
+    openActions(
+      target,
+      {
+        ...options,
+        extraEntries: [
+          ...(options?.extraEntries ?? []),
+          ...(graveyard.length === 0
+            ? []
+            : [
+                {
+                  action: "graveyard" as const,
+                  label: currentLocalisation().strings.playlists.graveyard,
+                  onPress: () =>
+                    router.push({
+                      pathname: "/library/playlist-graveyard/[id]",
+                      params: { id: String(playlist.id) },
+                    }),
+                },
+              ]),
+        ],
+      },
+      anchor,
+      entries,
+      songs,
+    );
   });
 };
 
@@ -233,10 +264,11 @@ function SectionActionsMenu({ target, close }: { target: ActionItems; close: () 
 }
 
 /**
- * A playlist's download entries (Core's `ytPlaylistDownload`): Download
+ * A playlist's download entries (Core's `ytPlaylistMenuDownloads`): Download
  * Playlist, or Cancel Playlist Download while its songs are on their way,
- * then Retry Failed; none without YT Music or unsearched entries. The songs
- * they queue remember [origin], the playlist.
+ * then Retry Failed, else Downloaded (a tap only says so); none without YT
+ * Music or unsearched entries. The songs they queue remember [origin], the
+ * playlist.
  */
 function usePlaylistDownloadEntries(
   entries: readonly PlaylistEntryRow[],
@@ -245,16 +277,28 @@ function usePlaylistDownloadEntries(
 ): MenuChoice[] {
   const { strings } = useLocalisation();
   const inLibrary = useLoadedInLibrary();
+  const libraryRead = useLoadedLibraryFinder() !== null;
   const download = useYtPlaylistDownload(entries, inLibrary);
-  return download.actions.map((action) => ({
-    action,
-    label: strings.downloads.playlistActions[action],
-    onPress: () => {
-      close();
-      runYtPlaylistDownloadAction(action, entries, inLibrary, origin);
-    },
-    destructive: false,
-  }));
+  return ytPlaylistMenuDownloads(download, libraryRead).map((action) =>
+    action === "downloaded"
+      ? {
+          action,
+          label: strings.downloads.downloaded,
+          onPress: () => {
+            close();
+            void showToast(strings.downloads.downloaded);
+          },
+        }
+      : {
+          action,
+          label: strings.downloads.playlistActions[action],
+          onPress: () => {
+            close();
+            runYtPlaylistDownloadAction(action, entries, inLibrary, origin);
+          },
+          destructive: false,
+        },
+  );
 }
 
 /**

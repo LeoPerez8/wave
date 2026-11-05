@@ -21,7 +21,6 @@ import { useChromeInset } from "@/chrome/chrome";
 import { TextButton } from "@/components/TextButton";
 import { listedTrackItem, type TrackItem } from "@/playback/actionTargets";
 import { openAlbum, openArtist, openGenre, openPlaylist } from "@/library/routes";
-import { playPage } from "@/playback/actions";
 import {
   openAlbumActions,
   openArtistActions,
@@ -29,6 +28,7 @@ import {
   openPlaylistActions,
 } from "@/playback/ActionsMenu";
 
+import { playSearchSong } from "./playSearchSong";
 import type { ResultRow, ResultSong } from "./rows";
 import type { SearchHit } from "./searchIndex";
 import { useListScrollable } from "@/motion/heldTouch";
@@ -45,7 +45,7 @@ import {
 import { SongList } from "@/songs/SongList";
 import type { SongListEntry } from "@/songs/songListSources";
 
-/** Tapping a song plays the song results from it. */
+/** The list's songs' context (a tap plays what `playSearchSong` decides). */
 const SEARCH_CONTEXT: QueueContext = { kind: "search", id: null };
 
 const HEIGHT: Readonly<Record<ResultRow["type"], number>> = {
@@ -62,13 +62,6 @@ const HEIGHT: Readonly<Record<ResultRow["type"], number>> = {
 
 /** Non-song results stay in place while selecting. */
 const ignore = (): void => undefined;
-
-/**
- * Plays the song results from [index] (`playPage`): the Library's files and,
- * when YT Music found songs the Library lacks, those streamed after them.
- */
-const playResults = (songs: readonly ResultSong[], index: number): void =>
-  void playPage(songs, index, SEARCH_CONTEXT);
 
 /** What a YT Music album's page and menu know of it from its row. */
 const ytAlbumHead = (album: YtArtistAlbum) => ({
@@ -326,17 +319,7 @@ export function SearchResultsList({ rows, onOpen, onShowAll, integrated, selecti
           const song = songOf(row);
           if (song === null) return;
           onOpen();
-          if (row.type === "ytSong") playResults(row.songs, row.index);
-          else if (row.type === "hit" && row.hit.kind === "song") {
-            const track = row.hit.song;
-            playResults(
-              row.songs,
-              Math.max(
-                0,
-                row.songs.findIndex((entry) => entry.source === "library" && entry.track === track),
-              ),
-            );
-          }
+          void playSearchSong(song);
         }}
         onMenu={(row, options) => {
           const song = songOf(row);

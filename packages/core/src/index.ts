@@ -805,6 +805,7 @@ export {
   parseMagicSession,
   startMagicQueue,
   startStreamedMagicQueue,
+  searchSongTap,
   streamedSongMagicStart,
   wantsMagicBatch,
 } from "./magicQueue.ts";
@@ -815,6 +816,7 @@ export type {
   MagicRadioSeed,
   MagicSeed,
   StreamedSongMagicStart,
+  SearchSongTap,
   MagicSeedSong,
   MagicSession,
   MagicSongRadioSeed,
@@ -911,6 +913,7 @@ export {
   YT_SEARCH_DEBOUNCE_MS,
   YT_SECTION_HIDDEN,
   stepYtSection,
+  ytSearchAsksVideos,
   ytSearchQuery,
   ytSectionToggle,
   ytSectionView,
@@ -1066,6 +1069,7 @@ export {
   playlistInLibrarySteps,
   ytPlaylistDownload,
   ytPlaylistDownloadButton,
+  ytPlaylistMenuDownloads,
   ytSongsDownload,
 } from "./ytSongsDownload.ts";
 export type {
@@ -1332,7 +1336,7 @@ export type {
   PlaylistLinkProblem,
   SharedTextImport,
 } from "./playlistLinks.ts";
-export { spotifySearchQuery, spotifyYtMatch } from "./spotifyImport.ts";
+export { spotifySearchQuery, spotifyYtMatch, searchRecording } from "./spotifyImport.ts";
 export { settleUnsearched, unsearchedSearchQuery, unsearchedSettles } from "./unsearchedEntries.ts";
 export {
   PLAYING_SEARCHES,
@@ -1449,6 +1453,8 @@ export type {
 } from "./spotifyLibrary.ts";
 export { compareOrderKeys, orderKeyBetween, placeEntries } from "./orderKey.ts";
 export type { EntryPlacement, OrderedEntry } from "./orderKey.ts";
+export { graveyardRemovalsOf, graveyardRestoreIndex, graveyardSongs } from "./playlistGraveyard.ts";
+export type { GraveyardItem, GraveyardSlot } from "./playlistGraveyard.ts";
 export {
   RECORDING_LENGTH_TOLERANCE_MS,
   fillMissingSongs,
@@ -1508,6 +1514,7 @@ export {
   syncFieldFits,
 } from "./syncWire.ts";
 export type {
+  SyncDismissedSuggestion,
   SyncFavorite,
   SyncFieldKind,
   SyncFollow,
@@ -1903,7 +1910,12 @@ export type {
   GenreTagged,
 } from "./genreAffinity.ts";
 export type { SearchOnline, YtPick } from "./onlineToggle.ts";
-export { readSearchOnline, searchOnlineAlways, writeSearchOnline } from "./onlineToggle.ts";
+export {
+  releaseBackgroundAllowed,
+  readSearchOnline,
+  searchOnlineAlways,
+  writeSearchOnline,
+} from "./onlineToggle.ts";
 export {
   BEST_QUALITY_KBPS,
   LOW_QUALITY_BELOW_KBPS,
@@ -1990,6 +2002,7 @@ export {
   failureCause,
   lookupFailureLine,
   tagWriteFailureLine,
+  releaseTagNotWrittenLine,
 } from "./failureCause.ts";
 export type {
   FailureCause,
@@ -2332,6 +2345,7 @@ export { rankedDiscoverMixRead } from "./radioMixes.ts";
 export { RADIO_CACHE_FRESH_MS, radioCacheFresh } from "./radioCache.ts";
 export {
   listeningHistoryDays,
+  findListeningHistory,
   type ListeningHistoryDay,
   type PlaySnapshot,
 } from "./listeningHistory.ts";
@@ -2480,6 +2494,7 @@ export type {
 
 export * from "./followedArtists.ts";
 export * from "./followArtistSearch.ts";
+export * from "./followSuggestions.ts";
 
 export { releaseTitle } from "./ytArtist.ts";
 export { formatNumber, formatTime, formatDate } from "./formatting.ts";
@@ -2495,3 +2510,74 @@ export {
   playlistPickerSubjectScrolls,
   stepPlaylistPickerSearch,
 } from "./playlistPickerSearch.ts";
+
+export {
+  CUSTOM_SONG_SORT,
+  PLAYLIST_SONG_SORT_BUCKETS,
+  readPlaylistSongSort,
+  readPlaylistSongSorts,
+  sortPlaylistSongs,
+  storedPlaylistSongSort,
+} from "./playlistSongSort.ts";
+export type { PlaylistSongSort, PlaylistSortableSong } from "./playlistSongSort.ts";
+
+export {
+  SYNCED_VALUE_MAX,
+  readSyncedBucket,
+  storedSyncedBucket,
+  syncedBucket,
+  withSyncedBucketEntry,
+} from "./syncedBuckets.ts";
+
+export { readReleaseDate } from "./releaseDate.ts";
+export type { ReleaseDate } from "./releaseDate.ts";
+
+export {
+  RELEASE_BATCH_CODES,
+  RELEASE_CODES_PER_SONG,
+  RELEASE_LOOKUP_VERSION,
+  deezerAlbumDate,
+  deezerRefused,
+  lookUpReleaseDates,
+  readReleaseAnswers,
+  releaseAnswer,
+  releaseBackgroundLine,
+  releaseBatchSplit,
+  releaseBatches,
+  releaseCandidates,
+  releaseDue,
+  releaseNextDue,
+  releaseRequestDelay,
+  releaseSortChosen,
+  releaseTagDate,
+  releaseTitleDate,
+  releaseTitleQuery,
+} from "./releaseLookup.ts";
+export type {
+  ReleaseAnswer,
+  ReleaseCandidate,
+  ReleaseLookupEnd,
+  ReleaseLookupSong,
+  ReleaseProgress,
+  ReleaseServices,
+  ReleaseSong,
+} from "./releaseLookup.ts";
+
+export {
+  TYPED_RELEASE_BUCKETS,
+  formatReleaseDate,
+  readTypedReleaseDate,
+  readTypedReleaseDates,
+  releaseAnswerKey,
+  releaseShownDate,
+  typedReleaseDateOf,
+  typedReleaseEntry,
+  typedReleaseKey,
+} from "./typedReleaseDate.ts";
+export type {
+  ReleaseDateSources,
+  ReleaseKeySong,
+  TypedReleaseDateFields,
+  TypedReleaseDateRead,
+  TypedReleaseEntry,
+} from "./typedReleaseDate.ts";

@@ -152,6 +152,7 @@ export const tracks = sqliteTable(
      * mixes read them.
      */
     genres: text("genres"),
+    releaseDate: text("release_date"),
     year: integer("year"),
     trackNumber: integer("track_number"),
     trackTotal: integer("track_total"),
@@ -454,6 +455,7 @@ export const playlistItems = sqliteTable(
       .references(() => playlists.id, { onDelete: "cascade" }),
     trackId: integer("track_id").references(() => tracks.id, { onDelete: "cascade" }),
     ytSong: text("yt_song"),
+    removedAt: integer("removed_at"),
     orderKey: text("order_key").notNull(),
     addedAt: integer("added_at").notNull(),
     ...changeStamp(),
@@ -1023,6 +1025,16 @@ export const followReleaseCache = sqliteTable("follow_release_cache", {
 /** Releases hidden from New from Artists You Follow, synced with the Wave account. */
 export const hiddenFollowReleases = sqliteTable("hidden_follow_releases", {
   key: text("key").primaryKey(),
+  ...changeStamp(),
+});
+/**
+ * Follow suggestions the owner dismissed, by follow key (`followArtistKey`):
+ * never suggested again. Undo leaves a tombstone (`deleted`), so the row has
+ * the shape synced rows have.
+ */
+export const dismissedFollowSuggestions = sqliteTable("dismissed_follow_suggestions", {
+  key: text("key").primaryKey(),
+  dismissedAt: integer("dismissed_at").notNull(),
   ...changeStamp(),
 });
 

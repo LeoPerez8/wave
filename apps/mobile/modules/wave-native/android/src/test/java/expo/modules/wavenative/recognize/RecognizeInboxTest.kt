@@ -14,7 +14,24 @@ class RecognizeInboxTest {
     assertNull(RecognizeInbox.takeMatch())
   }
 
-  @Before fun clear() { RecognizeInbox.take(); RecognizeInbox.onReceived = null }
+  @Before fun clear() {
+    RecognizeInbox.take()
+    RecognizeInbox.takeMatch()
+    RecognizeInbox.onReceived = null
+    RecognizeInbox.onMatchReceived = null
+  }
+
+  @Test fun `of a tile tap and a notification tap before JS is ready, only the later one opens`() {
+    RecognizeInbox.receive(RecognizeInbox.ACTION)
+    RecognizeInbox.receive(RecognizeInbox.MATCH_ACTION, match = "new answer")
+    assertFalse(RecognizeInbox.take())
+    assertEquals("new answer", RecognizeInbox.takeMatch())
+
+    RecognizeInbox.receive(RecognizeInbox.MATCH_ACTION, match = "old answer")
+    RecognizeInbox.receive(RecognizeInbox.ACTION)
+    assertNull(RecognizeInbox.takeMatch())
+    assertTrue(RecognizeInbox.take())
+  }
 
   @Test fun `a cold launch stays pending until JS takes it once`() {
     RecognizeInbox.receive("dev.leoperez.wave.action.RECOGNIZE")

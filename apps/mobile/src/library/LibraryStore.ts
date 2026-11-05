@@ -1,3 +1,4 @@
+import { saveReleaseDate, saveTypedReleaseDate } from "./db/releaseDates";
 import { pendingStreamedGenres, keepStreamedGenre } from "./db/streamedGenres";
 import {
   readFollowShows,
@@ -20,11 +21,18 @@ import {
   countFollows,
   saveFollow,
   removeFollow,
+  restoreFollow,
   type FollowTarget,
 } from "./db/follows";
+import {
+  dismissFollowSuggestion,
+  selectDismissedFollowSuggestions,
+  undoFollowSuggestionDismissal,
+} from "./db/followSuggestionDismissals";
 import { selectDownloadsToForget } from "./db/downloadRecovery";
 import {
   playedEntityTotals,
+  playedArtistTotals,
   playedArtistSongs,
   streamedLibraryPlays,
   recapPlays,
@@ -201,6 +209,8 @@ import { loadPlayback, savePlayback, type SavedPlayback } from "./db/playback";
 import { shuffleSongs } from "./db/shuffleSongs";
 import {
   listeningHistory,
+  listeningHistoryAround,
+  newerListeningHistory,
   type ListeningHistoryCursor,
   type ListeningHistoryPage,
 } from "./db/listeningHistory";
@@ -222,11 +232,14 @@ import {
   movePlaylistItem,
   removePlaylistItems,
   restorePlaylistItems,
+  restoreGraveyardItem,
+  forgetGraveyardItems,
   type PlaylistRemoval,
   renamePlaylist,
   replacePlaylistSongs,
   selectPlaylist,
   selectPlaylistEntries,
+  selectPlaylistGraveyard,
   selectPlaylistEntriesRevision,
   selectPlaylistEntrySongs,
   selectPlaylistEntryVideoIdsPage,
@@ -433,6 +446,8 @@ export interface SongRow {
   /** Orders the album's tracks, and so sorts by artist and by album. */
   readonly discNumber: number | null;
   readonly trackNumber: number | null;
+  /** Original-date tag, separate from the album Year fallback. */
+  readonly releaseDate?: string | null | undefined;
   /** Fix Song fills it in when it's missing, as the track number, genre and lyrics. */
   readonly year: number | null;
   /** Null for a song without a genre tag. */
@@ -543,6 +558,7 @@ export interface TrackDetails {
 
 /** One playlist of Library › Playlists. */
 export interface PlaylistRow {
+  readonly syncId?: string;
   readonly id: number;
   readonly name: string;
   /** Core sort key of the name. */
@@ -619,6 +635,17 @@ export class LibraryStore extends Context.Service<
       level: FollowLevel,
     ) => Effect.Effect<void, LibraryStoreError>;
     readonly unfollow: (name: string) => Effect.Effect<void, LibraryStoreError>;
+    /**
+     * Puts back a follow as it was before an unfollow (its level and date),
+     * unless the artist was followed again since.
+     */
+    readonly restoreFollow: (follow: FollowedArtist) => Effect.Effect<void, LibraryStoreError>;
+    /** The follow keys of the follow suggestions the owner dismissed. */
+    readonly dismissedFollowSuggestions: Effect.Effect<readonly string[], LibraryStoreError>;
+    /** Dismisses the follow suggestion with follow key [key], for good. */
+    readonly dismissFollowSuggestion: (key: string) => Effect.Effect<void, LibraryStoreError>;
+    /** Undo after a dismissal: the artist can be suggested again. */
+    readonly undoFollowSuggestionDismissal: (key: string) => Effect.Effect<void, LibraryStoreError>;
     /** Every scan root in the order it was added, with its track count. */
     readonly listRoots: Effect.Effect<readonly ScanRootSummary[], LibraryStoreError>;
     /**
@@ -925,6 +952,23 @@ export class LibraryStore extends Context.Service<
     /** Adds a search to the recent ones (see Core's `rememberSearch`); returns them, newest first. */
     readonly rememberSearch: (query: string) => Effect.Effect<readonly string[], LibraryStoreError>;
     readonly clearRecentSearches: Effect.Effect<void, LibraryStoreError>;
+    /**
+     * Keeps a found first-release date for a song without one; the song's file (null for a
+     * missing song) when it went in, so the date is written there once (`releaseTagDate`).
+     */
+    readonly saveReleaseDate: (
+      id: number,
+      date: string,
+    ) => Effect.Effect<{ readonly path: string | null } | null, LibraryStoreError>;
+    /**
+     * Keeps a release date the owner typed as the song's, whatever it had (null clears it, so
+     * the lookup can find one again); the song's file (null for a missing song), for the date
+     * to replace the file's too (`writeReleaseDateTag`). Null when the song is gone.
+     */
+    readonly saveTypedReleaseDate: (
+      id: number,
+      date: string | null,
+    ) => Effect.Effect<{ readonly path: string | null } | null, LibraryStoreError>;
     /** Every playlist by name, with its mosaic. */
     readonly listPlaylists: Effect.Effect<readonly PlaylistRow[], LibraryStoreError>;
     /** When a song last played from each playlist, by playlist id (never played: absent). */
@@ -932,6 +976,12 @@ export class LibraryStore extends Context.Service<
     /** Every playlist's unsearched songs, top to bottom, for the background fill. */
     readonly unsearchedEntries: Effect.Effect<readonly PlaylistUnsearched[], LibraryStoreError>;
     /** A playlist with its YT Music entries and its Library songs in [scope]. */
+    readonly playlistGraveyard: (
+      id: number,
+    ) => Effect.Effect<
+      readonly (PlaylistEntryRow & { readonly removedAt: number })[],
+      LibraryStoreError
+    >;
     readonly getPlaylist: (
       id: number,
       scope?: TrackScope,
@@ -988,6 +1038,14 @@ export class LibraryStore extends Context.Service<
       playlistId: number,
       itemIds: readonly number[],
     ) => Effect.Effect<PlaylistRemoval, LibraryStoreError>;
+    readonly restoreGraveyardItem: (
+      playlistId: number,
+      itemId: number,
+    ) => Effect.Effect<void, LibraryStoreError>;
+    readonly forgetGraveyardItems: (
+      playlistId: number,
+      itemId?: number,
+    ) => Effect.Effect<void, LibraryStoreError>;
     /** Undo a removal, keeping the original entries and their order. */
     readonly restorePlaylistItems: (
       removal: PlaylistRemoval,
@@ -1129,6 +1187,15 @@ export class LibraryStore extends Context.Service<
     /** Counted plays with saved display metadata, newest first, 50 per page. */
     readonly listeningHistory: (
       before?: ListeningHistoryCursor,
+      query?: string,
+    ) => Effect.Effect<ListeningHistoryPage, LibraryStoreError>;
+    /** The 50 plays newer than [after], for history opened at a moment. */
+    readonly newerListeningHistory: (
+      after: ListeningHistoryCursor,
+    ) => Effect.Effect<ListeningHistoryPage, LibraryStoreError>;
+    /** History opened at a moment: the 50 plays around [playId], it in the middle. */
+    readonly listeningHistoryAround: (
+      playId: number,
     ) => Effect.Effect<ListeningHistoryPage, LibraryStoreError>;
     /**
      * Each track's counted plays within [window] (tracks still in the library),
@@ -1158,6 +1225,10 @@ export class LibraryStore extends Context.Service<
     readonly playedEntityTotals: (
       window: StatsWindow,
     ) => Effect.Effect<PlayedEntityTotals, LibraryStoreError>;
+    /** `playedEntityTotals`' artists alone, without reading albums. */
+    readonly playedArtistTotals: (
+      window: StatsWindow,
+    ) => Effect.Effect<PlayedEntityTotals["artists"], LibraryStoreError>;
     /**
      * The all-time counted plays streamed of each Library song they are now
      * (a download of the video, or the same recording), by its id.
@@ -1576,6 +1647,22 @@ const make = Effect.gen(function* () {
       writeAttempt("unfollow artist", () => removeFollow(db, name, Date.now())).pipe(
         Effect.tap(() => Effect.sync(followSaved)),
       ),
+    restoreFollow: (follow) =>
+      writeAttempt("restore follow", () => restoreFollow(db, follow, Date.now())).pipe(
+        Effect.tap((changed) => Effect.sync(() => changed && followSaved())),
+        Effect.asVoid,
+      ),
+    dismissedFollowSuggestions: attempt("read dismissed suggestions", () =>
+      selectDismissedFollowSuggestions(db),
+    ),
+    dismissFollowSuggestion: (key) =>
+      writeAttempt("dismiss suggestion", () => dismissFollowSuggestion(db, key, Date.now())).pipe(
+        Effect.tap(() => Effect.sync(followSaved)),
+      ),
+    undoFollowSuggestionDismissal: (key) =>
+      writeAttempt("undo suggestion dismissal", () =>
+        undoFollowSuggestionDismissal(db, key, Date.now()),
+      ).pipe(Effect.tap(() => Effect.sync(followSaved))),
     listeningHistoryVersion,
     optimize: (when) => writeAttempt("optimize the database", () => optimizeDatabase(db, when)),
     ensureDefaultRoot: (path) =>
@@ -1924,6 +2011,10 @@ const make = Effect.gen(function* () {
       db.delete(schema.recentSearches).run();
     }),
 
+    saveReleaseDate: (id, date) =>
+      attempt("save release date", () => saveReleaseDate(db, id, date)),
+    saveTypedReleaseDate: (id, date) =>
+      attempt("save typed release date", () => saveTypedReleaseDate(db, id, date)),
     listPlaylists: attempt("list playlists", () => selectPlaylists(db)),
 
     playlistsLastPlayed: attempt("read when playlists last played", () =>
@@ -1933,6 +2024,9 @@ const make = Effect.gen(function* () {
     unsearchedEntries: attempt("read the playlists' unsearched songs", () =>
       selectUnsearchedEntries(db),
     ),
+
+    playlistGraveyard: (id) =>
+      attempt("read the playlist graveyard", () => selectPlaylistGraveyard(db, id)),
 
     getPlaylist: (id, scope) =>
       attempt(
@@ -1981,6 +2075,14 @@ const make = Effect.gen(function* () {
         removePlaylistItems(db, playlistId, itemIds, Date.now()),
       ),
 
+    restoreGraveyardItem: (playlistId, itemId) =>
+      writeAttempt("restore a Graveyard song", () =>
+        restoreGraveyardItem(db, playlistId, itemId, Date.now()),
+      ),
+    forgetGraveyardItems: (playlistId, itemId) =>
+      writeAttempt("forget Graveyard songs", () =>
+        forgetGraveyardItems(db, playlistId, itemId, Date.now()),
+      ),
     restorePlaylistItems: (removal) =>
       writeAttempt("restore the playlist entries", () =>
         restorePlaylistItems(db, removal, Date.now()),
@@ -2096,8 +2198,12 @@ const make = Effect.gen(function* () {
     ),
 
     latestPlay: attempt("read the latest play", () => latestPlay(db)),
-    listeningHistory: (before) =>
-      attempt("read listening history", () => listeningHistory(db, before)),
+    listeningHistory: (before, query) =>
+      attempt("read listening history", () => listeningHistory(db, before, query)),
+    newerListeningHistory: (after) =>
+      attempt("read newer listening history", () => newerListeningHistory(db, after)),
+    listeningHistoryAround: (playId) =>
+      attempt("read listening history around a play", () => listeningHistoryAround(db, playId)),
 
     trackPlayTotals: (window, trackIds) =>
       attempt("sum up song plays", () => trackPlayTotals(db, window, trackIds)),
@@ -2109,6 +2215,8 @@ const make = Effect.gen(function* () {
 
     playedEntityTotals: (window) =>
       attempt("sum up played albums and artists", () => playedEntityTotals(db, window)),
+    playedArtistTotals: (window) =>
+      attempt("sum up played artists", () => playedArtistTotals(db, window)),
     streamedLibraryPlays: attempt("sum up the Library songs' streamed plays", () =>
       streamedLibraryPlays(db),
     ),

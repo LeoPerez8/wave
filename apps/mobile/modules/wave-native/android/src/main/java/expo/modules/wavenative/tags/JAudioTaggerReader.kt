@@ -48,6 +48,7 @@ class JAudioTaggerReader : TagReader {
       album = field(FieldKey.ALBUM),
       albumArtist = field(FieldKey.ALBUM_ARTIST),
       genre = field(FieldKey.GENRE),
+      releaseDate = tags.firstNotNullOfOrNull(OriginalDate::read),
       year = field(FieldKey.YEAR),
       trackNumber = numberOf(field(FieldKey.TRACK), field(FieldKey.TRACK_TOTAL)),
       discNumber = numberOf(field(FieldKey.DISC_NO), field(FieldKey.DISC_TOTAL)),
@@ -122,6 +123,29 @@ class JAudioTaggerReader : TagReader {
   }
 
   internal companion object {
+    /** ADTS AAC can carry an ID3v2 tag before its audio frames. Never read the audio here. */
+    fun leadingOriginalDate(file: File): String? = runCatching {
+      configure()
+      java.io.RandomAccessFile(file, "r").use { input ->
+        val header = ByteArray(10).also { input.readFully(it) }
+        if (header[0] != 'I'.code.toByte() || header[1] != 'D'.code.toByte() || header[2] != '3'.code.toByte()) return@use null
+        if ((6..9).any { header[it].toInt() < 0 }) return@use null
+        val size = (6..9).fold(0) { size, index -> (size shl 7) or header[index].toInt() }
+        // Bound allocations for corrupt or hostile tags.
+        if (size > 4 * 1024 * 1024 || size > file.length() - 10) return@use null
+        val body = ByteArray(size).also { input.readFully(it) }
+        val buffer = java.nio.ByteBuffer.wrap(header + body)
+        val tag = when (header[3].toInt()) {
+          2 -> org.jaudiotagger.tag.id3.ID3v22Tag(buffer)
+          3 -> org.jaudiotagger.tag.id3.ID3v23Tag(buffer)
+          4 -> org.jaudiotagger.tag.id3.ID3v24Tag(buffer)
+          else -> return@use null
+        }
+        runCatching { tag.getFirst(FieldKey.ORIGINALRELEASEDATE) }.getOrNull().cleanTag()
+          ?: runCatching { tag.getFirst(FieldKey.ORIGINAL_YEAR) }.getOrNull().cleanTag()
+      }
+    }.getOrNull()
+
     val USER_COMPILATION_KEYS = listOf("TCMP", "COMPILATION")
 
     /**

@@ -63,31 +63,35 @@ describe("planApkBuild", () => {
     });
   });
 
-  it("always builds a push to main in full", () => {
-    const main = { event: "push", ref: "refs/heads/main", release: false, kept: true };
-    assert.deepEqual(planApkBuild(main), {
-      build: "full",
-      reason: "Pushes to main always build in full.",
-    });
+  it("always builds a promotion in full", () => {
+    const tag = { event: "workflow_dispatch", ref: "refs/tags/v0.5.0", release: true, kept: true };
+    assert.equal(planApkBuild(tag).build, "full");
   });
 
-  for (const ref of ["refs/heads/ti", "refs/tags/v0.5.1-ti"]) {
-    it(`repacks a compatible ti build on ${ref}`, () => {
+  for (const ref of ["refs/heads/main", "refs/tags/v0.5.1-ti"]) {
+    it(`repacks a compatible test build on ${ref}`, () => {
       const run = { event: "push", ref, release: ref.startsWith("refs/tags/"), kept: true };
       assert.equal(planApkBuild(run).build, "repack");
       assert.equal(planApkBuild({ ...run, kept: false }).build, "full");
     });
   }
 
-  it("doesn't let an unrelated tag or branch use ti's fast path", () => {
-    for (const ref of ["refs/heads/experiment", "refs/tags/v0.5.1-beta", "refs/tags/ti"]) {
+  it("doesn't let an unrelated tag or branch use the fast path", () => {
+    for (const ref of [
+      "refs/heads/ti",
+      "refs/heads/experiment",
+      "refs/tags/v0.5.1-beta",
+      "refs/tags/ti",
+    ]) {
       assert.equal(planApkBuild({ ...pr, event: "push", ref }).build, "full");
     }
   });
 
   it("doesn't repack unrelated manual runs", () => {
-    const other = { event: "workflow_dispatch", ref: "refs/heads/x", release: false, kept: true };
-    assert.equal(planApkBuild(other).build, "full");
+    for (const ref of ["refs/heads/x", "refs/heads/main"]) {
+      const other = { event: "workflow_dispatch", ref, release: false, kept: true };
+      assert.equal(planApkBuild(other).build, "full");
+    }
   });
 });
 

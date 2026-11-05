@@ -24,6 +24,7 @@ export interface SyncSongFields {
   readonly discNumber: number | null;
   readonly trackNumber: number | null;
   readonly durationMs: number;
+  readonly releaseDate?: string | null | undefined;
   readonly year: number | null;
   readonly genre: string | null;
   /** The YouTube video id of a song downloaded from YouTube Music. */
@@ -37,8 +38,15 @@ export type SyncSong = SyncedRow<SyncSongFields>;
 /** A playlist; its id is made on the phone that created it. */
 export type SyncPlaylist = SyncedRow<{ readonly name: string; readonly createdAt: number }>;
 
-/** A playlist entry: a Library song by recording key, or a YT Music song as the app stores it. */
-export type SyncPlaylistEntry = SyncedRow<{
+/**
+ * A playlist entry: a Library song by recording key, or a stored song.
+ * A manual removal keeps its fields on the tombstone for the Graveyard.
+ */
+export type SyncPlaylistEntry =
+  | SyncedRow<SyncPlaylistEntryFields>
+  | (SyncRow & { readonly deleted: true; readonly removedAt: number } & SyncPlaylistEntryFields);
+
+interface SyncPlaylistEntryFields {
   /** The playlist's id. */
   readonly playlistId: string;
   /** Core's `orderKeyBetween`. */
@@ -48,7 +56,8 @@ export type SyncPlaylistEntry = SyncedRow<{
   /** A YT Music entry's song (`writePlaylistYtSong`). */
   readonly ytSong: string | null;
   readonly addedAt: number;
-}>;
+  readonly removedAt?: number | null;
+}
 
 /** A star; its id is the song's recording key. */
 export type SyncFavorite = SyncedRow<{ readonly addedAt: number }>;
@@ -74,6 +83,12 @@ export type SyncHiddenRelease = SyncedRow<Readonly<Record<never, never>>>;
 
 /** A Show that already notified on some phone; its id is the Ticketmaster event id. */
 export type SyncNotifiedShow = SyncedRow<Readonly<Record<never, never>>>;
+
+/**
+ * A follow suggestion the owner dismissed; its id is the artist's
+ * `followArtistKey`. Undo leaves a tombstone.
+ */
+export type SyncDismissedSuggestion = SyncedRow<{ readonly dismissedAt: number }>;
 
 /** How a play ended (Core's `PlayEndReason`). */
 export type SyncPlayEnd = "completed" | "skipped" | "stopped" | "interrupted";
@@ -109,6 +124,7 @@ export interface SyncTables {
   readonly follows: readonly SyncFollow[];
   readonly hiddenReleases: readonly SyncHiddenRelease[];
   readonly notifiedShows: readonly SyncNotifiedShow[];
+  readonly dismissedSuggestions: readonly SyncDismissedSuggestion[];
 }
 
 export const EMPTY_SYNC_TABLES: SyncTables = {
@@ -121,6 +137,7 @@ export const EMPTY_SYNC_TABLES: SyncTables = {
   follows: [],
   hiddenReleases: [],
   notifiedShows: [],
+  dismissedSuggestions: [],
 };
 
 /**
@@ -137,6 +154,7 @@ export const SYNC_TABLE_NAMES = [
   "follows",
   "hiddenReleases",
   "notifiedShows",
+  "dismissedSuggestions",
 ] as const satisfies readonly (keyof SyncTables)[];
 
 /** What one field holds: text, a whole number, a boolean, or one of a few values; `?` allows null. */
@@ -159,6 +177,7 @@ export const SYNC_FIELDS: {
     discNumber: "int?",
     trackNumber: "int?",
     durationMs: "int",
+    releaseDate: "text?",
     year: "int?",
     genre: "text?",
     videoId: "text?",
@@ -170,6 +189,7 @@ export const SYNC_FIELDS: {
     orderKey: "text",
     songId: "text?",
     ytSong: "text?",
+    removedAt: "int?",
     addedAt: "int",
   },
   favorites: { addedAt: "int" },
@@ -197,6 +217,7 @@ export const SYNC_FIELDS: {
   },
   hiddenReleases: {},
   notifiedShows: {},
+  dismissedSuggestions: { dismissedAt: "int" },
 };
 
 const isRecord = (value: unknown): value is Readonly<Record<string, unknown>> =>
@@ -237,7 +258,8 @@ const readRow = (table: keyof SyncTables, raw: unknown): object | null => {
     row.changedAt = raw.changedAt;
     row.phoneId = raw.phoneId;
     row.deleted = raw.deleted;
-    if (raw.deleted) return row;
+    if (raw.deleted && !(table === "playlistEntries" && Number.isSafeInteger(raw.removedAt)))
+      return row;
   }
   for (const [name, kind] of Object.entries(SYNC_FIELDS[table])) {
     const value = raw[name] ?? null;

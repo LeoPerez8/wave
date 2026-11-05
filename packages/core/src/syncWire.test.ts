@@ -99,6 +99,7 @@ describe("readPullPage", () => {
       discNumber: 1,
       trackNumber: 2,
       durationMs: 182_000,
+      releaseDate: null,
       year: 1969,
       genre: "Rock",
       videoId: null,
@@ -117,6 +118,7 @@ describe("readPullPage", () => {
           orderKey: "a0",
           songId: KEY,
           ytSong: null,
+          removedAt: null,
           addedAt: 12,
         },
       ],
@@ -140,6 +142,9 @@ describe("readPullPage", () => {
       ],
       hiddenReleases: [{ id: "deezer:1", changedAt: 16, phoneId: "b", deleted: false }],
       notifiedShows: [{ id: "event-1", changedAt: 17, phoneId: "b", deleted: true }],
+      dismissedSuggestions: [
+        { id: "massive attack", changedAt: 18, phoneId: "b", deleted: false, dismissedAt: 18 },
+      ],
       cursor: "42",
       more: true,
     };
@@ -185,6 +190,36 @@ describe("readPullPage", () => {
       hiddenReleases: body.hiddenReleases,
       notifiedShows: body.notifiedShows,
       cursor: "23",
+      more: false,
+    });
+  });
+
+  test("reads dismissed follow suggestions with when they were dismissed, and their tombstones", () => {
+    const dismissal = {
+      id: "massive attack",
+      changedAt: 30,
+      phoneId: "b",
+      deleted: false,
+      dismissedAt: 29,
+    };
+    const body = {
+      dismissedSuggestions: [
+        dismissal,
+        { id: "portishead", changedAt: 31, phoneId: "b", deleted: true },
+        { id: "tricky", changedAt: 32, phoneId: "b", deleted: false },
+        { id: "bjork", changedAt: 33, phoneId: "b", deleted: false, dismissedAt: "today" },
+      ],
+      cursor: "33",
+      more: false,
+    };
+
+    assert.deepEqual(readPullPage(JSON.stringify(body)), {
+      ...EMPTY_SYNC_TABLES,
+      dismissedSuggestions: [
+        dismissal,
+        { id: "portishead", changedAt: 31, phoneId: "b", deleted: true },
+      ],
+      cursor: "33",
       more: false,
     });
   });
@@ -252,6 +287,17 @@ describe("pushBatches", () => {
 
     assert.ok(batch !== undefined);
     assert.deepEqual(JSON.parse(pushBody(batch)), { favorites });
+  });
+
+  test("a dismissal and its Undo go up in a push body", () => {
+    const dismissedSuggestions = [
+      { id: "massive attack", changedAt: 5, phoneId: "a", deleted: false as const, dismissedAt: 5 },
+      { id: "portishead", changedAt: 6, phoneId: "a", deleted: true as const },
+    ];
+    const [batch] = pushBatches({ ...EMPTY_SYNC_TABLES, dismissedSuggestions });
+
+    assert.ok(batch !== undefined);
+    assert.deepEqual(JSON.parse(pushBody(batch)), { dismissedSuggestions });
   });
 
   test("the limit counts bytes, not characters", () => {

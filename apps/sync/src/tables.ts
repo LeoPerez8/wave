@@ -33,6 +33,11 @@ interface TableStorage {
   readonly check?: (row: Readonly<Record<string, unknown>>) => string | null;
   /** Fields whose column holds their value JSON-encoded. */
   readonly json?: readonly string[];
+  /**
+   * Fields added after the table, which a Wave from before them leaves out of a row it pushes:
+   * such a row keeps the value stored. A null sent clears it, as for any field.
+   */
+  readonly keptWhenOmitted?: readonly string[];
 }
 
 export interface SyncTable extends TableStorage {
@@ -48,7 +53,7 @@ export interface SyncTable extends TableStorage {
 
 const STORAGE: { readonly [K in TableName]: TableStorage } = {
   // The id is the song's recording key (Core's `recordingKey`).
-  songs: { limit: "maxSongs" },
+  songs: { limit: "maxSongs", keptWhenOmitted: ["releaseDate"] },
   playlists: { limit: "maxPlaylists" },
   // An entry holds a Library song (by recording key) or a YT Music song (as the app stores it), never both.
   playlistEntries: {
@@ -69,6 +74,8 @@ const STORAGE: { readonly [K in TableName]: TableStorage } = {
   hiddenReleases: { limit: "maxHiddenReleases" },
   // The id is the Ticketmaster event id; the row carries nothing else.
   notifiedShows: { limit: "maxNotifiedShows" },
+  // The id is the artist's normalised name (Core's `followArtistKey`); Undo leaves a tombstone.
+  dismissedSuggestions: { limit: "maxDismissedSuggestions" },
 };
 
 export const column = (field: string): string =>
@@ -92,6 +99,8 @@ export interface IncomingRow {
   readonly phoneId: string;
   readonly deleted: boolean;
   readonly values: readonly InValue[] | null;
+  /** Its fields that a Wave from before them left out (`keptWhenOmitted`), which keep their value. */
+  readonly omitted?: readonly string[];
 }
 
 /** Why a pushed row was refused, naming where it is (`songs[3].durationMs`). */
@@ -166,11 +175,15 @@ export const parseRow = (table: SyncTable, row: unknown, where: string): Incomin
     changedAt: row.changedAt as number,
     phoneId: row.phoneId,
     deleted: row.deleted,
-    values: row.deleted ? null : rowValues(table, row, where),
+    values:
+      row.deleted && !(table.name === "playlistEntries" && Number.isSafeInteger(row.removedAt))
+        ? null
+        : rowValues(table, row, where),
+    omitted: table.keptWhenOmitted?.filter((name) => !(name in row)) ?? [],
   };
 };
 
-/** A stored row as a pull answers it: a tombstone carries no fields. */
+/** A stored row on the wire; Graveyard tombstones keep their song fields. */
 export const wireRow = (
   table: SyncTable,
   row: Readonly<Record<string, unknown>>,
@@ -180,7 +193,11 @@ export const wireRow = (
     out.changedAt = Number(row.changed_at);
     out.phoneId = row.phone_id;
     out.deleted = Number(row.deleted) === 1;
-    if (out.deleted) return out;
+    if (
+      out.deleted &&
+      !(table.name === "playlistEntries" && row.removed_at !== null && row.removed_at !== undefined)
+    )
+      return out;
   }
   for (const [name, kind] of Object.entries(table.fields)) {
     const value = row[column(name)] ?? null;

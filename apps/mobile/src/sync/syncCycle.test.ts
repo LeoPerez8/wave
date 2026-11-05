@@ -24,6 +24,11 @@ import { countFollows, removeFollow, saveFollow, selectFollow } from "../library
 import { hideFollowRelease, readFollowReleases } from "../library/db/followReleases.ts";
 import { markShowNotified, readFollowShows } from "../library/db/followShows.ts";
 import {
+  dismissFollowSuggestion,
+  selectDismissedFollowSuggestions,
+  undoFollowSuggestionDismissal,
+} from "../library/db/followSuggestionDismissals.ts";
+import {
   addToPlaylist,
   addToShazam,
   createPlaylist,
@@ -72,13 +77,15 @@ const OK_COMPUTER: readonly FixtureTrack[] = [
 ];
 
 /** A song on a phone; [videoId] for one downloaded from YouTube Music. */
-type Song = FixtureTrack & { readonly videoId?: string };
+type Song = FixtureTrack & { readonly videoId?: string; readonly releaseDate?: string };
 
 /** The file of [song] as a scan reads it. */
 const scanned = (song: Song): IndexedTrack => ({
   ...normalizeTrack({
     path: `/Music/${song.album}/${song.title}.mp3`,
     title: song.title,
+    releaseDate: song.releaseDate,
+    year: song.year === undefined ? null : String(song.year),
     artist: song.artist,
     album: song.album,
     trackNumber: song.trackNumber === undefined ? null : String(song.trackNumber),
@@ -456,6 +463,7 @@ describe("syncCycle", () => {
     const pulled = await b.sync();
 
     assert.equal(pulled.pulled.follows, true);
+    assert.equal(pulled.pulled.dismissedSuggestions, false);
     assert.deepEqual(
       [selectFollow(b.db, "massive attack")?.name, selectFollow(b.db, "Massive Attack")?.level],
       ["Massive Attack", "releases"],
@@ -512,6 +520,54 @@ describe("syncCycle", () => {
       ["Portishead", "Tricky", "Björk"].map((name) => selectFollow(b.db, name)?.level),
       ["releases", "shows", "releases"],
     );
+  });
+
+  test("a suggestion dismissed on one phone is dismissed on the other, and Undo brings it back there", async () => {
+    const service = testSyncService();
+    const a = await phone(service);
+    const b = await phone(service);
+    dismissFollowSuggestion(a.db, "massive attack", a.now());
+    await a.sync();
+    const pulled = await b.sync();
+
+    // Only the dismissals read again; the follows didn't change.
+    assert.equal(pulled.pulled.dismissedSuggestions, true);
+    assert.equal(pulled.pulled.follows, false);
+    assert.deepEqual(selectDismissedFollowSuggestions(b.db), ["massive attack"]);
+    // Applied, not changed on b: nothing goes back up, nor when it's dismissed again.
+    dismissFollowSuggestion(b.db, "massive attack", b.now());
+    assert.equal((await b.sync()).pushed, 0);
+
+    undoFollowSuggestionDismissal(a.db, "massive attack", a.now());
+    await a.sync();
+    await b.sync();
+    assert.deepEqual(selectDismissedFollowSuggestions(b.db), []);
+
+    // Dismissed again on b after the Undo: a hides it once more.
+    dismissFollowSuggestion(b.db, "massive attack", b.now());
+    await b.sync();
+    await a.sync();
+    assert.deepEqual(selectDismissedFollowSuggestions(a.db), ["massive attack"]);
+  });
+
+  test("signing out keeps dismissed suggestions on the phone, and signing in again merges them", async () => {
+    const service = testSyncService();
+    const a = await phone(service);
+    const b = await phone(service);
+    dismissFollowSuggestion(a.db, "portishead", a.now());
+    await a.sync();
+    a.signOut();
+    assert.deepEqual(selectDismissedFollowSuggestions(a.db), ["portishead"]);
+
+    // Signed out, a dismissal stays here, and goes up with the rest at the next sign-in.
+    dismissFollowSuggestion(a.db, "tricky", a.now());
+    dismissFollowSuggestion(b.db, "bjork", b.now());
+    assert.equal(service.rows().dismissedSuggestions.length, 1);
+    await a.sync();
+    await b.sync();
+    await a.sync();
+    assert.deepEqual(selectDismissedFollowSuggestions(b.db), ["bjork", "portishead", "tricky"]);
+    assert.deepEqual(selectDismissedFollowSuggestions(a.db), ["bjork", "portishead", "tricky"]);
   });
 
   test("the synced Shazam id fills the same playlist on a second phone with different local ids", async () => {
@@ -1155,4 +1211,25 @@ test("playlist removal and Undo sync the same entries and order to another phone
   await a.sync();
   await b.sync();
   assert.deepEqual(selectPlaylist(b.db, onB)!.items, original);
+});
+
+test("a scanned original release date reaches another phone independently of Year", async () => {
+  const service = testSyncService();
+  const first = await phone(service, []);
+  const second = await phone(service, []);
+  first.addFile({
+    title: "Original",
+    artist: "Artist",
+    album: "Compilation",
+    year: 2005,
+    releaseDate: "1985-06-21",
+  });
+  await first.sync({ songsChanged: true });
+  await second.sync();
+  const albums = selectAlbums(second.db, undefined);
+  const album = selectAlbumDetail(second.db, albums[0]!.id);
+  assert.equal(album?.album.year, 2005);
+  assert.equal(album?.tracks[0]?.releaseDate, "1985-06-21");
+  assert.equal(album?.tracks[0]?.year, 2005);
+  assert.equal((await second.sync()).pulled.library, false);
 });

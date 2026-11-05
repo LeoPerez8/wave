@@ -20,6 +20,7 @@ const song = (
   discNumber: null,
   trackNumber: 3,
   durationMs: 330_000,
+  releaseDate: null,
   year: 1998,
   genre: "Trip-Hop",
   videoId: null,
@@ -197,6 +198,7 @@ describe("POST /v1/push and GET /v1/pull", () => {
           phoneId: "phone-a",
           deleted: false,
           playlistId: "list-1",
+          removedAt: null,
           orderKey: "a0",
           songId: "song-1",
           ytSong: null,
@@ -225,6 +227,7 @@ describe("POST /v1/push and GET /v1/pull", () => {
         follows: 0,
         hiddenReleases: 0,
         notifiedShows: 0,
+        dismissedSuggestions: 0,
       },
     });
 
@@ -533,6 +536,43 @@ describe("POST /v1/push and GET /v1/pull", () => {
     assert.deepEqual(pulled.notifiedShows, [marked("G5vYZ9Ma1Jb5U")]);
   });
 
+  test("a dismissed follow suggestion reaches the other phone, and so does its Undo", async () => {
+    const service = await harness();
+    const phoneA = await service.signIn();
+    const phoneB = await service.signIn();
+    const dismissal = {
+      id: "massive attack",
+      changedAt: 10,
+      phoneId: "phone-a",
+      deleted: false,
+      dismissedAt: 10,
+    };
+    await push(service, phoneA, { dismissedSuggestions: [dismissal] });
+    const first = await pull(service, phoneB);
+    assert.deepEqual(first.dismissedSuggestions, [dismissal]);
+
+    const undo = { id: "massive attack", changedAt: 11, phoneId: "phone-a", deleted: true };
+    await push(service, phoneA, { dismissedSuggestions: [undo] });
+    const second = await pull(service, phoneB, first.cursor);
+    assert.deepEqual(second.dismissedSuggestions, [undo]);
+  });
+
+  test("a dismissal without when it was dismissed is refused", async () => {
+    const service = await harness();
+    const session = await service.signIn();
+    const response = await service.request("POST", "/v1/push", {
+      session,
+      json: {
+        dismissedSuggestions: [{ id: "tricky", changedAt: 1, phoneId: "phone-a", deleted: false }],
+      },
+    });
+    assert.equal(response.status, 400);
+    assert.deepEqual(await response.json(), {
+      error: "bad_request",
+      detail: "dismissedSuggestions[0].dismissedAt is missing",
+    });
+  });
+
   test("a pull reads with Core's readPullPage as every table's rows were pushed", async () => {
     const service = await harness();
     const session = await service.signIn();
@@ -546,6 +586,7 @@ describe("POST /v1/push and GET /v1/pull", () => {
           phoneId: "phone-a",
           deleted: false,
           playlistId: "list-1",
+          removedAt: null,
           orderKey: "a0",
           songId: null,
           ytSong: '{"videoId":"u7K72X4eo_s"}',
@@ -581,6 +622,10 @@ describe("POST /v1/push and GET /v1/pull", () => {
       ],
       hiddenReleases: [{ id: "deezer:302127", changedAt: 10, phoneId: "phone-a", deleted: false }],
       notifiedShows: [{ id: "G5vYZ9Ma1Jb5U", changedAt: 10, phoneId: "phone-a", deleted: false }],
+      dismissedSuggestions: [
+        { id: "bjork", changedAt: 11, phoneId: "phone-a", deleted: true },
+        { id: "tricky", changedAt: 10, phoneId: "phone-a", deleted: false, dismissedAt: 10 },
+      ],
     };
     await push(service, session, rows);
     const response = await service.request("GET", "/v1/pull", { session });
@@ -596,4 +641,38 @@ describe("POST /v1/push and GET /v1/pull", () => {
       assert.equal(response.status, 400, since);
     }
   });
+});
+
+test("a release date survives stale writes and clients omitting it, and a sent null clears it", async () => {
+  const service = await harness();
+  const session = await service.signIn();
+  await push(service, session, { songs: [song("dated", 20, { releaseDate: "1985-06-21" })] });
+  await push(service, session, { songs: [song("dated", 10, { releaseDate: "2005" })] });
+  // A Wave from before release dates sends none at all.
+  const { releaseDate: _date, ...legacy } = song("dated", 30);
+  await push(service, session, { songs: [legacy] });
+  assert.equal((await pullAll(service, session)).songs[0]?.releaseDate, "1985-06-21");
+  // The owner cleared the date they typed: the phone sends null, and every phone loses it.
+  await push(service, session, { songs: [song("dated", 40, { releaseDate: null })] });
+  assert.equal((await pullAll(service, session)).songs[0]?.releaseDate, null);
+});
+
+test("Graveyard tombstones keep their song and manual removal date through push and pull", async () => {
+  const service = await harness();
+  const session = await service.signIn();
+  const entry = {
+    id: "removed-entry",
+    changedAt: 300,
+    phoneId: "phone-a",
+    deleted: true,
+    playlistId: "drive",
+    orderKey: "a0",
+    songId: null,
+    ytSong: JSON.stringify({ videoId: "x" }),
+    addedAt: 100,
+    removedAt: 300,
+  };
+  await push(service, session, { playlistEntries: [entry] });
+  const page = await pullAll(service, session);
+  assert.deepEqual(readPullPage(JSON.stringify(page))?.playlistEntries, [entry]);
 });

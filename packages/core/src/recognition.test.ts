@@ -223,7 +223,9 @@ test("each recognized kind saves as its existing playlist entry and round-trips 
       const saved = readPlaylistEntrySong(writePlaylistEntrySong(entry));
       assert.deepEqual(
         saved,
-        entry.source === "stream" ? { ...entry, song: { ...entry.song, albumId: null } } : entry,
+        expected.source === "stream"
+          ? { ...expected, song: { ...expected.song, albumId: null } }
+          : expected,
       );
     }
   }

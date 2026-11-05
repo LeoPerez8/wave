@@ -2,7 +2,7 @@
 import assert from "node:assert/strict";
 import { describe, test } from "node:test";
 
-import { releaseBranch, releaseTagProblem, versionCode } from "./appVersion.ts";
+import { releaseTagProblem, versionCode } from "./appVersion.ts";
 
 describe("versionCode", () => {
   test("is major × 10000 + minor × 100 + patch", () => {
@@ -28,8 +28,12 @@ describe("releaseTagProblem", () => {
   test("a tag naming the app's version is fine", () => {
     assert.equal(releaseTagProblem("v0.5.0", "0.5.0"), undefined);
     assert.equal(releaseTagProblem("v0.5.1-ti", "0.5.1-ti"), undefined);
-    assert.ok(releaseTagProblem("v0.5.1", "0.5.1-ti"));
     assert.ok(releaseTagProblem("v0.5.1-ti", "0.5.1"));
+  });
+
+  test("a stable tag can promote the -ti version of the same number", () => {
+    assert.equal(releaseTagProblem("v0.5.1", "0.5.1-ti"), undefined);
+    assert.ok(releaseTagProblem("v0.5.2", "0.5.1-ti"));
   });
 
   test("a tag naming another version says which version the app is at", () => {
@@ -37,15 +41,10 @@ describe("releaseTagProblem", () => {
       assert.equal(
         releaseTagProblem(tag, "0.5.0"),
         `The tag ${tag} doesn't match the app's version, 0.5.0 (apps/mobile/package.json). ` +
-          "Pushes to main and ti release their next version on their own; a tag by hand must " +
+          "Pushes to main release their next version on their own; a tag by hand must " +
           'name the version of the commit it tags: tag this one v0.5.0, or tag the "Release Wave <version>" commit you want.',
         tag,
       );
     }
   });
-});
-
-test("stable releases belong to main and ti prereleases belong to ti", () => {
-  assert.equal(releaseBranch("0.5.1"), "main");
-  assert.equal(releaseBranch("0.5.1-ti"), "ti");
 });

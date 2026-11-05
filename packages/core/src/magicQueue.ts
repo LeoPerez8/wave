@@ -356,6 +356,53 @@ export const streamedSongMagicStart = <
         track: found,
       };
 
+/** What tapping a song in Search plays (`searchSongTap`). */
+export type SearchSongTap<S, T> =
+  /** A Library song with no file on this phone: it downloads instead. */
+  | { readonly play: "download"; readonly track: T }
+  /** YouTube Music off: the Library's file alone, in a queue of one. */
+  | { readonly play: "alone"; readonly track: T }
+  /** Its Magic Queue, from the Library's file, as that song's own menu starts it. */
+  | {
+      readonly play: "magicQueue";
+      readonly from: "library";
+      readonly seed: MagicSeed;
+      readonly track: T;
+    }
+  /** Its Magic Queue, from the stream's own radio (`startStreamedMagicQueue`). */
+  | { readonly play: "magicQueue"; readonly from: "stream"; readonly song: S }
+  /** YouTube Music off and a streamed song the Library has no file of: nothing plays. */
+  | { readonly play: "nothing" };
+
+/**
+ * What tapping [song] in Search plays, never the other results: with
+ * YouTube Music on, its Magic Queue, as its menu's "Magic Queue" starts it
+ * (a streamed song the Library has as a file starts from the file:
+ * [found], `libraryFinder`, `streamedSongMagicStart`); with it off, the
+ * song alone. A Library song with no file on this phone downloads instead.
+ */
+export const searchSongTap = <
+  S extends YtSong,
+  T extends { readonly id: number; readonly title: string; readonly path: string | null },
+>(
+  song: MixedSong<S, T>,
+  { ytMusic, found = null }: { readonly ytMusic: boolean; readonly found?: T | null },
+): SearchSongTap<S, T> => {
+  if (song.source === "library" && song.track.path === null)
+    return { play: "download", track: song.track };
+  const file = song.source === "library" ? song.track : found;
+  if (!ytMusic)
+    return file === null || file.path === null
+      ? { play: "nothing" }
+      : { play: "alone", track: file };
+  const start = streamedSongMagicStart(file);
+  if (start.from === "library") return { play: "magicQueue", ...start };
+  // Only a streamed song lacks a file here: a Library song without one downloads above.
+  return song.source === "stream"
+    ? { play: "magicQueue", from: "stream", song: song.song }
+    : { play: "nothing" };
+};
+
 /**
  * Starts a Magic Queue from a streamed YT Music [song] (Search, a YT Music
  * list, a Discover mix, the queue): it plays that song first, and its

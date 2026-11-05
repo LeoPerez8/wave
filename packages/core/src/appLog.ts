@@ -312,7 +312,7 @@ export interface LogDevice {
   /** Android's versionCode. */
   readonly appBuild: string;
   /**
-   * What CI built: `PR #438 @ 90970e3` for a PR build, `ti @ 1a2b3c4` for a push to ti.
+   * What CI built: `PR #438 @ 90970e3` for a PR build, `main @ 1a2b3c4` for a push to main.
    * Absent, or empty, in a build made off CI (a local or debug build).
    */
   readonly buildLabel?: string | undefined;

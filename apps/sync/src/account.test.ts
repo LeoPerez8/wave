@@ -59,9 +59,14 @@ describe("limits", () => {
     assert.deepEqual(await plays.json(), { error: "limit", limit: "maxPlays" });
   });
 
-  test("follows, hidden releases and notified shows each have a limit", async () => {
+  test("follows, hidden releases, notified shows and dismissed suggestions each have a limit", async () => {
     const service = await harness({
-      limits: { maxFollows: 1, maxHiddenReleases: 1, maxNotifiedShows: 1 },
+      limits: {
+        maxFollows: 1,
+        maxHiddenReleases: 1,
+        maxNotifiedShows: 1,
+        maxDismissedSuggestions: 1,
+      },
     });
     const session = await service.signIn();
     const follow = (id: string) => ({
@@ -80,6 +85,14 @@ describe("limits", () => {
       ["follows", [follow("a"), follow("b")], "maxFollows"],
       ["hiddenReleases", [marked("deezer:1"), marked("deezer:2")], "maxHiddenReleases"],
       ["notifiedShows", [marked("e1"), marked("e2")], "maxNotifiedShows"],
+      [
+        "dismissedSuggestions",
+        [
+          { ...marked("tricky"), dismissedAt: 1 },
+          { ...marked("bjork"), dismissedAt: 1 },
+        ],
+        "maxDismissedSuggestions",
+      ],
     ] as const) {
       const response = await service.request("POST", "/v1/push", {
         session,
@@ -192,6 +205,9 @@ describe("DELETE /v1/account", () => {
       ],
       hiddenReleases: [{ id: "deezer:1", changedAt: 1, phoneId: "phone-a", deleted: false }],
       notifiedShows: [{ id: "event-1", changedAt: 1, phoneId: "phone-a", deleted: false }],
+      dismissedSuggestions: [
+        { id: "tricky", changedAt: 1, phoneId: "phone-a", deleted: false, dismissedAt: 1 },
+      ],
     };
     await push(service, ana, everything);
     await push(service, bo, everything);

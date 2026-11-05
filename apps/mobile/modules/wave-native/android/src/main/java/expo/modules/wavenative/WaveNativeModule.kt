@@ -466,6 +466,48 @@ class WaveNativeModule : Module() {
       }
     }
 
+    /**
+     * Writes a first-release [date] into a song's original-date tag ([OriginalDate]) with
+     * [SongTagWriter], which changes that field alone and keeps one the file already has.
+     * Resolves `{ originalDate }`: `tags`, `notWritten` (a format Wave doesn't write tags to)
+     * or `none` (the file had one). A failure resolves `{ failed }`, as `writeLyricsAndGenre`'s.
+     * The index already has the date: the next scan reads the file again, and finds it.
+     */
+    AsyncFunction("writeOriginalDate") { path: String, date: String ->
+      val file = File(path)
+      val before = TagWriteFile.of(file)
+      try {
+        BackgroundThreads.during {
+          val report = SongTagWriter().write(file, lyrics = null, genre = null, originalDate = date)
+          if (report.originalDate == TagDestination.TAGS) AndroidMediaScans.get(context).add(listOf(path))
+          mapOf("originalDate" to report.originalDate.id)
+        }
+      } catch (e: TagWriteStepException) {
+        mapOf("failed" to TagWriteFailure.of(e, before).toMap())
+      }
+    }
+
+    /**
+     * Puts a release [date] the owner typed into a song's original-date tag, replacing the one
+     * the file has, or takes it out ([date] null), with [SongTagWriter.replaceOriginalDate]:
+     * unlike `writeOriginalDate`, which keeps a date the file has, this is the owner's own
+     * correction. Resolves `{ originalDate }`: `tags`, `notWritten` (a format Wave doesn't write
+     * tags to) or `none` (nothing to take out). A failure resolves `{ failed }`.
+     */
+    AsyncFunction("replaceOriginalDate") { path: String, date: String? ->
+      val file = File(path)
+      val before = TagWriteFile.of(file)
+      try {
+        BackgroundThreads.during {
+          val report = SongTagWriter().replaceOriginalDate(file, date)
+          if (report.originalDate == TagDestination.TAGS) AndroidMediaScans.get(context).add(listOf(path))
+          mapOf("originalDate" to report.originalDate.id)
+        }
+      } catch (e: TagWriteStepException) {
+        mapOf("failed" to TagWriteFailure.of(e, before).toMap())
+      }
+    }
+
     /** Whether a launch theme was ever saved: Wave ran before on this phone's data. */
     Function("hasLaunchTheme") { LaunchThemeStore.isSaved(context) }
 

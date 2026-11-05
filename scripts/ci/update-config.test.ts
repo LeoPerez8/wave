@@ -9,13 +9,16 @@ import {
 
 describe("updateChannel", () => {
   const cases: [string, string, string | null][] = [
-    ["push", "refs/heads/ti", "ti"],
-    ["push", "refs/heads/main", "main"],
+    ["push", "refs/heads/main", "ti"],
+    ["push", "refs/heads/ti", null],
     ["push", "refs/tags/v0.5.6-ti", "ti"],
     ["push", "refs/tags/v0.5.6", "main"],
     ["pull_request", "refs/pull/12/merge", null],
     ["push", "refs/heads/feat/887-js-ota-updates", null],
-    ["workflow_dispatch", "refs/heads/ti", null],
+    // A promotion starts the tag's run by hand, since its token's tag push starts none.
+    ["workflow_dispatch", "refs/tags/v0.5.6", "main"],
+    ["workflow_dispatch", "refs/tags/v0.5.6-ti", "ti"],
+    ["workflow_dispatch", "refs/heads/main", null],
   ];
   for (const [event, ref, channel] of cases) {
     it(`gives ${event} of ${ref} the channel ${channel}`, () => {

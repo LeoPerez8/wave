@@ -20,7 +20,7 @@ import { makeExternalStore } from "@/lib/externalStore";
 import { currentLocalisation } from "@/localisation/localisation";
 import { showError } from "@/overlay/alert";
 import { showToast } from "@/overlay/toast";
-import { searchSongsInTurn } from "@/ytmusic/askYtMusic";
+import { searchRecordingInTurn } from "@/ytmusic/askYtMusic";
 
 import { LibraryStore } from "./LibraryStore";
 import { playlistsChanged } from "./playlists";
@@ -81,7 +81,7 @@ export const tryAgainUnavailable = (
             const search = batch[at];
             // Never null: Try Again doesn't give its turns up.
             if (search !== undefined)
-              answers[at] = (await searchSongsInTurn("tryAgain", search.query)) ?? undefined;
+              answers[at] = (await searchRecordingInTurn("tryAgain", search.song)) ?? undefined;
           }
         };
         await Promise.all(Array.from({ length: Math.min(AT_ONCE, batch.length) }, worker));

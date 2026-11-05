@@ -148,7 +148,10 @@ describe("what plays, and Android Auto, leave missing songs out", () => {
 
 describe("what downloading missing songs reads", () => {
   test("the missing songs, as a download takes them: their Track's tags, in title order", () => {
-    db.update(schema.tracks).set({ videoId: "abc" }).where(eq(schema.tracks.id, lucky)).run();
+    db.update(schema.tracks)
+      .set({ videoId: "abc", releaseDate: "1997-05-21" })
+      .where(eq(schema.tracks.id, lucky))
+      .run();
     assert.deepEqual(selectMissingSongs(db), [
       {
         id: everything,
@@ -163,6 +166,7 @@ describe("what downloading missing songs reads", () => {
         genre: null,
         durationMs: 180_000,
         videoId: null,
+        releaseDate: null,
       },
       {
         id: lucky,
@@ -177,6 +181,7 @@ describe("what downloading missing songs reads", () => {
         genre: "Rock",
         durationMs: 180_000,
         videoId: "abc",
+        releaseDate: "1997-05-21",
       },
     ]);
   });
@@ -205,4 +210,40 @@ describe("what downloading missing songs reads", () => {
       [[paranoid, lucky], [], [everything]],
     );
   });
+});
+
+test("a synced original date keeps precision and settles after one save", async () => {
+  const { EMPTY_SYNC_TABLES } = await import("@wave/core");
+  const { applyPulledPage } = await import("./syncRows.ts");
+  const { syncMissingSongs } = await import("./missingSongs.ts");
+  const { creditSplits } = await import("./credits.ts");
+  const { trackQuery } = await import("./tracks.ts");
+  const songs = [
+    {
+      id: "dated",
+      changedAt: 20,
+      phoneId: "other",
+      deleted: false as const,
+      title: "Original",
+      credit: "Artist",
+      album: "Compilation",
+      albumArtist: "Artist",
+      discNumber: null,
+      trackNumber: 1,
+      durationMs: 180000,
+      year: 2005,
+      releaseDate: "1985-06-21",
+      genre: null,
+      videoId: null,
+      addedAt: 1,
+    },
+  ];
+  applyPulledPage(db, { ...EMPTY_SYNC_TABLES, songs, cursor: "c", more: false }, new Map(), 30);
+  assert.equal(syncMissingSongs(db, creditSplits(), 30), true);
+  const dated = trackQuery(db)
+    .all()
+    .find((song) => song.title === "Original");
+  assert.equal(dated?.releaseDate, "1985-06-21");
+  assert.equal(dated?.year, 2005);
+  assert.equal(syncMissingSongs(db, creditSplits(), 40), false);
 });

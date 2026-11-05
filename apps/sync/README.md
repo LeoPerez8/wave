@@ -66,7 +66,8 @@ Changed rows in, by table. Every table is optional.
   "plays": [Play],
   "follows": [Follow],
   "hiddenReleases": [HiddenRelease],
-  "notifiedShows": [NotifiedShow]
+  "notifiedShows": [NotifiedShow],
+  "dismissedSuggestions": [DismissedSuggestion]
 }
 ```
 
@@ -81,17 +82,18 @@ Each pushed row is merged with the stored one by `mergeRows`: the later `changed
 the greater `phoneId` breaks a tie. Plays are merged by `mergePlays`: a play whose `id` is
 already held is ignored.
 
-| Table             | `id`                        | Fields (`?` may be `null`)                                                                                                                                                                                                                         |
-| ----------------- | --------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `songs`           | recording key               | `title`, `credit`, `album?`, `albumArtist`, `discNumber?`, `trackNumber?`, `durationMs`, `year?`, `genre?`, `videoId?`, `addedAt`                                                                                                                  |
-| `playlists`       | playlist id                 | `name`, `createdAt`                                                                                                                                                                                                                                |
-| `playlistEntries` | entry id                    | `playlistId`, `orderKey` (Core's `orderKeyBetween`), `songId?` (recording key), `ytSong?` (the YT Music song as the app stores it, text), `addedAt`. Exactly one of `songId` and `ytSong` is set.                                                  |
-| `favorites`       | recording key               | `addedAt`                                                                                                                                                                                                                                          |
-| `preferences`     | preference key              | `value?` (text: what the app's key-value store holds, `null` for nothing)                                                                                                                                                                          |
-| `plays`           | play id (made on the phone) | `songId` (recording key), `startedAt`, `listenedMs`, `durationMs?`, `endReason` (`completed`, `skipped`, `stopped`, `interrupted`), `counted` (boolean), `contextType?`, `contextId?`, `source` (`phone`, `auto`), `importedFrom?` (`blackplayer`) |
-| `follows`         | artist name key             | `name`, `level` (`releases`, `shows`), `followedAt`, `deezerId?`, `ytBrowseId?`                                                                                                                                                                    |
-| `hiddenReleases`  | release key                 | none                                                                                                                                                                                                                                               |
-| `notifiedShows`   | Ticketmaster event id       | none                                                                                                                                                                                                                                               |
+| Table                  | `id`                        | Fields (`?` may be `null`)                                                                                                                                                                                                                         |
+| ---------------------- | --------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `songs`                | recording key               | `title`, `credit`, `album?`, `albumArtist`, `discNumber?`, `trackNumber?`, `durationMs`, `year?`, `genre?`, `videoId?`, `addedAt`                                                                                                                  |
+| `playlists`            | playlist id                 | `name`, `createdAt`                                                                                                                                                                                                                                |
+| `playlistEntries`      | entry id                    | `playlistId`, `orderKey` (Core's `orderKeyBetween`), `songId?` (recording key), `ytSong?` (the YT Music song as the app stores it, text), `addedAt`. Exactly one of `songId` and `ytSong` is set.                                                  |
+| `favorites`            | recording key               | `addedAt`                                                                                                                                                                                                                                          |
+| `preferences`          | preference key              | `value?` (text: what the app's key-value store holds, `null` for nothing)                                                                                                                                                                          |
+| `plays`                | play id (made on the phone) | `songId` (recording key), `startedAt`, `listenedMs`, `durationMs?`, `endReason` (`completed`, `skipped`, `stopped`, `interrupted`), `counted` (boolean), `contextType?`, `contextId?`, `source` (`phone`, `auto`), `importedFrom?` (`blackplayer`) |
+| `follows`              | artist name key             | `name`, `level` (`releases`, `shows`), `followedAt`, `deezerId?`, `ytBrowseId?`                                                                                                                                                                    |
+| `hiddenReleases`       | release key                 | none                                                                                                                                                                                                                                               |
+| `notifiedShows`        | Ticketmaster event id       | none                                                                                                                                                                                                                                               |
+| `dismissedSuggestions` | artist name key             | `dismissedAt` (when the follow suggestion was dismissed; Undo is a tombstone)                                                                                                                                                                      |
 
 Times are ms since the epoch; numbers are integers. Ids and text are at most 16,384
 characters. The tables and their fields are Core's wire (`SYNC_TABLE_NAMES`, `SYNC_FIELDS` in
@@ -111,6 +113,10 @@ from before it refuses a push naming them, so deploy it before an app that sends
 app leaves empty tables out of a push (Core's `pushBody`), so only a phone with follows
 would be refused.
 
+Migration `0009_dismissed_suggestions` adds `dismissed_suggestions`, the follow suggestions
+the owner dismissed. Deploy it before an app that sends them; as with follows, only a phone
+with a dismissal would be refused by an older service.
+
 `200`, how many rows of each table won (and were stored):
 
 ```json
@@ -124,7 +130,8 @@ would be refused.
     "plays": 1,
     "follows": 0,
     "hiddenReleases": 0,
-    "notifiedShows": 0
+    "notifiedShows": 0,
+    "dismissedSuggestions": 0
   }
 }
 ```
@@ -148,6 +155,7 @@ The rows changed after `since`, oldest change first, at most 1,000 a page. Leave
   "follows": [Follow],
   "hiddenReleases": [HiddenRelease],
   "notifiedShows": [NotifiedShow],
+  "dismissedSuggestions": [DismissedSuggestion],
   "cursor": "1234",
   "more": false
 }
@@ -214,20 +222,21 @@ Deletes every row and every session of the account, its Soulseek account, and th
 `SYNC_LIMITS` in `src/limits.ts`. Past one, the service answers `413` (or `429` for a
 rate) and names it. Starting values, so a 50,000-song Library with 200,000 plays fits:
 
-| Limit                  | Value     |                                                 |
-| ---------------------- | --------- | ----------------------------------------------- |
-| `maxBodyBytes`         | 2 MiB     | per request; a large first push goes in batches |
-| `maxSongs`             | 100,000   | rows per account, tombstones aside              |
-| `maxPlaylists`         | 5,000     |                                                 |
-| `maxPlaylistEntries`   | 250,000   |                                                 |
-| `maxFavorites`         | 100,000   |                                                 |
-| `maxPreferences`       | 200       |                                                 |
-| `maxPlays`             | 1,000,000 |                                                 |
-| `maxFollows`           | 5,000     |                                                 |
-| `maxHiddenReleases`    | 50,000    |                                                 |
-| `maxNotifiedShows`     | 50,000    |                                                 |
-| `maxRequestsPerMinute` | 120       | per session                                     |
-| `maxSignInsPerMinute`  | 10        | `POST /v1/session`, per address and per account |
+| Limit                     | Value     |                                                 |
+| ------------------------- | --------- | ----------------------------------------------- |
+| `maxBodyBytes`            | 2 MiB     | per request; a large first push goes in batches |
+| `maxSongs`                | 100,000   | rows per account, tombstones aside              |
+| `maxPlaylists`            | 5,000     |                                                 |
+| `maxPlaylistEntries`      | 250,000   |                                                 |
+| `maxFavorites`            | 100,000   |                                                 |
+| `maxPreferences`          | 200       |                                                 |
+| `maxPlays`                | 1,000,000 |                                                 |
+| `maxFollows`              | 5,000     |                                                 |
+| `maxHiddenReleases`       | 50,000    |                                                 |
+| `maxNotifiedShows`        | 50,000    |                                                 |
+| `maxDismissedSuggestions` | 50,000    |                                                 |
+| `maxRequestsPerMinute`    | 120       | per session                                     |
+| `maxSignInsPerMinute`     | 10        | `POST /v1/session`, per address and per account |
 
 A push that would take a table past its limit is refused whole.
 

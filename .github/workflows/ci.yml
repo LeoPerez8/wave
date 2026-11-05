@@ -3,34 +3,38 @@ name: CI
 on:
   pull_request:
   push:
-    # A push to main or ti that changes the app releases the next version (a -ti prerelease
-    # on ti): the Version job commits and tags it on the branch, and the release job publishes
-    # it (docs/spec.md, Releases). Pushing v<version> by hand publishes it too.
-    branches: [main, ti]
+    # A push to main that changes the app releases the next -ti prerelease to the ti channel:
+    # the Version job commits and tags it on main, and the release job publishes it
+    # (docs/spec.md, Releases). Pushing v<version> by hand publishes it too.
+    branches: [main]
     tags: ["v*"]
+  # The promotion's way in (promote.yml): its token's tag push starts no run, so it starts this
+  # one on the tag. Off a v* tag, this run releases nothing and has no update channel.
+  workflow_dispatch:
 
 permissions:
   actions: read
   contents: write
   pull-requests: write
 
-# Runs on main or ti queue up instead of cancelling each other: a run that has pushed its
-# version bump must get to release it. A newer push still replaces a run that's only waiting,
-# and the next run releases what that one would have, counting from the previous release.
-# Across main and ti, the Version job takes turns too.
+# Runs on main queue up instead of cancelling each other: a run that has pushed its version
+# bump must get to release it. A newer push still replaces a run that's only waiting, and the
+# next run releases what that one would have, counting from the previous release.
 concurrency:
   group: ci-${{ github.event.pull_request.number || github.ref }}
-  cancel-in-progress: ${{ github.ref != 'refs/heads/main' && github.ref != 'refs/heads/ti' }}
+  cancel-in-progress: ${{ github.ref != 'refs/heads/main' }}
 
 env:
   PR_NUMBER: ${{ github.event.pull_request.number }}
   IS_SAME_REPO_PR: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == github.repository }}
-  # A hand-pushed release tag's run. Stable releases build fully; ti prereleases may reuse
-  # a compatible native APK. Branch pushes release through the Checks job's release_tag.
-  IS_RELEASE: ${{ github.event_name == 'push' && startsWith(github.ref, 'refs/tags/v') }}
-  IS_TI: ${{ github.ref == 'refs/heads/ti' || (startsWith(github.ref, 'refs/tags/v') && endsWith(github.ref, '-ti')) || github.event.pull_request.base.ref == 'ti' }}
-  # A push to main or ti, which may release the next version (the Version job).
-  IS_BUMP: ${{ github.event_name == 'push' && (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/ti') }}
+  # A release tag's run, a promotion's or a hand-pushed one's. Stable releases build fully; -ti
+  # prereleases may reuse a compatible native APK. Pushes to main release through the Checks
+  # job's release_tag.
+  IS_RELEASE: ${{ (github.event_name == 'push' || github.event_name == 'workflow_dispatch') && startsWith(github.ref, 'refs/tags/v') }}
+  # A run for the ti channel: a push to main, a -ti tag, or a PR into main, which may repack.
+  IS_TI: ${{ github.ref == 'refs/heads/main' || (startsWith(github.ref, 'refs/tags/v') && endsWith(github.ref, '-ti')) || github.event.pull_request.base.ref == 'main' }}
+  # A push to main, which may release the next version (the Version job).
+  IS_BUMP: ${{ github.event_name == 'push' && github.ref == 'refs/heads/main' }}
 
 jobs:
   # What the change touches, by the rule in scripts/ci/changes.ts. Jobs that only
@@ -80,23 +84,15 @@ jobs:
           scripts/ci/report.sh skipped "Native unit tests" \
             "Nothing they test changed (wave-native, wave-glass, the app config, config plugins, the lockfile or CI), so they didn't run."
 
-  # A push to main or ti that changes the app releases the next version (ti's end in -ti):
-  # this commits it to the branch's package.json as "Release Wave <version>", on top of the
-  # branch's latest tip, and tags it v<version> in the same push (scripts/ci/bump-version.sh).
+  # A push to main that changes the app releases the next -ti version: this commits it to
+  # package.json as "Release Wave <version>", on top of main's latest tip, and tags it v<version> in the same push (scripts/ci/bump-version.sh).
   # The rest of the run checks, builds and publishes that commit. CI, docs and spec-only pushes
   # don't release, and the log says why. Anywhere else the job does nothing.
   version:
     name: Version
     runs-on: ubuntu-latest
-    # main and ti count from the same v* tags, so their bumps take turns: the next one reads
-    # the tag this one pushed. The run-level group already lets only one run per branch in,
-    # so this group never holds more than one waiting job, which GitHub would cancel.
-    concurrency:
-      group: ${{ (github.event_name == 'push' && (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/ti')) && 'version-bump' || format('version-{0}', github.run_id) }}
-      cancel-in-progress: false
     outputs:
-      # The version bump's commit, or the branch's tip when nothing is released; empty off
-      # main and ti.
+      # The version bump's commit, or main's tip when nothing is released; empty off main.
       sha: ${{ steps.bump.outputs.sha }}
       # v<version>, already on that commit, or empty.
       tag: ${{ steps.bump.outputs.tag }}
@@ -121,7 +117,7 @@ jobs:
 
   # The patch notes a release cut from this run's commit gets (scripts/ci/patch-notes.sh),
   # shown in the run's summary. A run that releases publishes them. They wait for the Version
-  # job, whose bump may sit on a newer tip of main or ti than the pushed commit.
+  # job, whose bump may sit on a newer tip of main than the pushed commit.
   notes:
     name: Patch notes
     needs: [version]
@@ -166,10 +162,11 @@ jobs:
     runs-on: ubuntu-latest
     outputs:
       # The commit the rest of the run checks out: the autofix commit on PRs, the version
-      # bump on main and ti.
+      # bump on main.
       sha: ${{ steps.autofix.outputs.sha || needs.version.outputs.sha || github.event.pull_request.head.sha || github.sha }}
-      # The versioned release this run publishes, or empty: the version bump's on main and ti
-      # (scripts/ci/next-version.ts), or a hand-pushed tag, which "Check release tag" checked.
+      # The versioned release this run publishes, or empty: the version bump's on main
+      # (scripts/ci/next-version.ts), or a promoted or hand-pushed tag, which "Check release tag"
+      # checked.
       release_tag: ${{ needs.version.outputs.tag || (startsWith(github.ref, 'refs/tags/v') && github.ref_name) || '' }}
     steps:
       - uses: actions/checkout@v5
@@ -291,11 +288,11 @@ jobs:
       runtime_version: ${{ steps.updates.outputs.WAVE_RUNTIME_VERSION }}
     # Only PRs can skip: on main and release tags every area counts as changed.
     # Only a release needs the patch notes, so elsewhere a failed notes job doesn't stop the
-    # APK. A job-level `if` can't read `env`, so the release test is IS_RELEASE spelled out.
+    # APK. A job-level `if` can't read `env`, so the release test is the tag half of IS_RELEASE.
     if: >-
       ${{ !cancelled() && needs.changes.outputs.apk == 'true' && needs.checks.result == 'success' &&
       (needs.notes.result == 'success' ||
-      !(github.event_name == 'push' && startsWith(github.ref, 'refs/tags/v'))) }}
+      !startsWith(github.ref, 'refs/tags/v')) }}
     runs-on: ubuntu-latest
     env:
       # Genius's read-only client token (docs/spec.md, "Genius About"). Metro inlines it into the
@@ -337,13 +334,21 @@ jobs:
       - name: Install
         run: scripts/ci/step.sh "Install" pnpm install --frozen-lockfile
 
+      # A promotion's commit says x.y.z-ti in package.json, and its APK and bundle are x.y.z.
+      # Before prebuild and the bundle, which read it. Nothing commits this.
+      - name: Take the promoted version
+        if: env.IS_RELEASE == 'true' && env.IS_TI != 'true'
+        run: |
+          sed -i -E 's/^(\s*"version":\s*)"[^"]*"/\1"'"${GITHUB_REF_NAME#v}"'"/' apps/mobile/package.json
+          grep -F "\"version\": \"${GITHUB_REF_NAME#v}\"" apps/mobile/package.json
+
       - name: Prebuild native project
         working-directory: apps/mobile
         env:
           EXPO_NO_GIT_STATUS: "1"
         run: ../../scripts/ci/step.sh "Prebuild" pnpm exec expo prebuild --platform android --no-install
 
-      # Main and ti save Metro's cache; PRs and tags only read it. The key starts
+      # Main saves Metro's cache; PRs and tags only read it. The key starts
       # over when dependencies change. The path is uniwind's cache store (os.tmpdir()), which
       # replaces Expo's in metro.config.js.
       - name: Restore Metro's cache
@@ -410,9 +415,9 @@ jobs:
           key: ${{ steps.key.outputs.key }}
           lookup-only: ${{ github.event_name != 'pull_request' && env.IS_TI != 'true' }}
 
-      # A tag cannot read ti's branch-scoped cache. Restore an exact-key full build
-      # from a successful push on ti, validated by kept-apk.ts before downloading it.
-      - name: Find a kept ti APK artifact
+      # When the cache has no entry, restore an exact-key full build from a successful
+      # push on main, validated by kept-apk.ts before downloading it.
+      - name: Find a kept APK artifact
         id: kept_artifact
         if: env.IS_TI == 'true' && steps.kept.outputs.cache-hit != 'true'
         env:
@@ -420,7 +425,7 @@ jobs:
           NATIVE_KEY: ${{ steps.key.outputs.key }}
         run: node scripts/ci/kept-apk.ts "$NATIVE_KEY" | tee -a "$GITHUB_OUTPUT"
 
-      - name: Restore the kept ti APK artifact
+      - name: Restore the kept APK artifact
         id: kept_download
         if: steps.kept_artifact.outputs.runId != ''
         continue-on-error: true
@@ -431,7 +436,7 @@ jobs:
           name: kept-${{ steps.key.outputs.key }}
           path: ${{ env.KEPT_APK }}
 
-      # Main and stable tags stay full builds. TI pushes and tags may repack.
+      # Stable tags stay full builds. Pushes to main, -ti tags and PRs may repack.
       - name: Plan the APK build
         env:
           KEPT: ${{ steps.kept.outputs.cache-hit == 'true' || steps.kept_download.outcome == 'success' }}
@@ -452,9 +457,9 @@ jobs:
       - uses: gradle/actions/setup-gradle@v5
         if: env.APK_BUILD == 'full'
         with:
-          cache-read-only: ${{ github.ref != 'refs/heads/main' && github.ref != 'refs/heads/ti' }}
+          cache-read-only: ${{ github.ref != 'refs/heads/main' }}
 
-      # Main and ti save their compiled objects; PRs and tags only restore them. Prefer
+      # Main saves its compiled objects; PRs and tags only restore them. Prefer
       # the same lockfile's latest entry, then seed new dependencies from an older one.
       - name: Restore ccache
         id: ccache
@@ -472,7 +477,7 @@ jobs:
         run: scripts/ci/ccache.sh setup
 
       - name: Save Metro's cache
-        if: github.ref == 'refs/heads/main' || github.ref == 'refs/heads/ti'
+        if: github.ref == 'refs/heads/main'
         uses: actions/cache/save@v4
         with:
           path: /tmp/metro-cache
@@ -507,7 +512,7 @@ jobs:
         run: scripts/ci/ccache.sh stats
 
       - name: Save ccache
-        if: (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/ti') && steps.ccache.outputs.cache-hit != 'true'
+        if: github.ref == 'refs/heads/main' && steps.ccache.outputs.cache-hit != 'true'
         uses: actions/cache/save@v4
         with:
           path: ~/.cache/ccache
@@ -515,7 +520,7 @@ jobs:
 
       # Full PR builds may keep their own native APK too. GitHub scopes these cache entries
       # to that PR, so another PR can only read builds saved on its base or the default branch.
-      # Gradle and Metro cache writes above stay limited to main and ti.
+      # Gradle and Metro cache writes above stay limited to main.
       - name: Keep the full build for JS-only PRs
         if: env.APK_BUILD == 'full' && steps.kept.outputs.cache-hit != 'true'
         run: |
@@ -530,8 +535,8 @@ jobs:
           path: ${{ env.KEPT_APK }}
           key: ${{ steps.key.outputs.key }}
 
-      - name: Keep ti's full APK for version tags
-        if: github.ref == 'refs/heads/ti' && env.APK_BUILD == 'full'
+      - name: Keep main's full APK for when the cache misses
+        if: github.ref == 'refs/heads/main' && env.APK_BUILD == 'full'
         uses: actions/upload-artifact@v4
         with:
           name: kept-${{ steps.key.outputs.key }}
@@ -584,17 +589,17 @@ jobs:
           path: ${{ steps.apk.outputs.path }}
           retention-days: 14
 
-      # A prerelease per PR (and a rolling one for main) gives a stable link
-      # that installs straight from the phone's browser.
+      # A prerelease per PR, and a rolling one per channel, gives a stable link that installs
+      # straight from the phone's browser: ti-latest moves on every push to main. The release
+      # job moves latest, once a promotion has passed its native tests.
       - name: Publish APK to a prerelease
         id: publish
-        if: env.IS_RELEASE != 'true'
+        if: env.PR_NUMBER != '' || (github.event_name == 'push' && github.ref == 'refs/heads/main')
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
           if [ -n "$PR_NUMBER" ]; then tag="pr-$PR_NUMBER"; asset="wave-pr-$PR_NUMBER.apk"; title="PR #$PR_NUMBER build";
-          elif [ "$GITHUB_REF" = "refs/heads/ti" ]; then tag="ti-latest"; asset="wave-ti.apk"; title="Latest ti test build";
-          else tag="latest"; asset="wave-latest.apk"; title="Latest main build"; fi
+          else tag="ti-latest"; asset="wave-ti.apk"; title="Latest ti test build"; fi
           cp "${{ steps.apk.outputs.path }}" "$RUNNER_TEMP/$asset"
           gh release view "$tag" > /dev/null 2>&1 || \
             gh release create "$tag" --prerelease --latest=false --target "$HEAD_SHA" --title "$title" \
@@ -664,6 +669,17 @@ jobs:
             printf '%s\n' "$PATCH_NOTES" > "$RELEASE_NOTES_FILE"
           fi
           scripts/ci/publish-release.sh "$RUNNER_TEMP/release/$APK_NAME"
+
+      # The rolling link to what's on the main channel.
+      - name: Move the latest build
+        if: steps.published.outputs.url != '' && !endsWith(needs.checks.outputs.release_tag, '-ti')
+        continue-on-error: true
+        env:
+          GH_TOKEN: ${{ github.token }}
+          APK_NAME: ${{ needs.android.outputs.artifact }}
+        run: |
+          cp "$RUNNER_TEMP/release/$APK_NAME" "$RUNNER_TEMP/wave-latest.apk"
+          gh release upload latest "$RUNNER_TEMP/wave-latest.apk" --clobber
 
       # After the release, so phones never get a version that has none: publish-release.sh answers
       # no url when it published nothing (a moved tag). None of these can fail the release: without

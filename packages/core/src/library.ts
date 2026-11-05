@@ -12,6 +12,8 @@
  *   don't start with a letter (digits, symbols) sort after Z.
  */
 
+import { readReleaseDate, type ReleaseDate } from "./releaseDate.ts";
+
 export const UNKNOWN_ARTIST = "Unknown Artist";
 export const UNKNOWN_ALBUM = "Unknown Album";
 export const VARIOUS_ARTISTS = "Various Artists";
@@ -42,6 +44,8 @@ export interface RawTrack {
    * the reader has them, where [genre] holds the first.
    */
   readonly genres?: readonly string[] | null | undefined;
+  /** Original-date tag; never replaces the album Year. */
+  readonly releaseDate?: string | null | undefined;
   /** Year or date as tagged, e.g. `1997` or `1997-05-21`. */
   readonly year?: string | null | undefined;
   /** Track number as tagged, e.g. `3` or `3/12`. */
@@ -94,6 +98,8 @@ export interface LibraryTrack {
    */
   readonly genres: readonly string[];
 
+  /** The original-date tag, when it holds a date; never the album Year. */
+  readonly releaseDate?: ReleaseDate | null | undefined;
   readonly year: number | null;
   readonly trackNumber: number | null;
   readonly trackTotal: number | null;
@@ -308,6 +314,7 @@ export const normalizeTrack = (raw: RawTrack): LibraryTrack => {
     genreSort: genre === null ? null : sortKey(genre),
     genreKey: genre === null ? null : identityKey(genre),
     genres: genreValues.length > 0 ? genreValues : genre === null ? [] : [genre],
+    releaseDate: readReleaseDate(raw.releaseDate),
     year: parseYear(raw.year),
     trackNumber: track.number,
     trackTotal: track.total,

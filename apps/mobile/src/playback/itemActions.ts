@@ -44,6 +44,12 @@ import {
   renamePlaylistFlow,
 } from "@/library/PlaylistSheets";
 import { removePlaylistItems } from "@/library/playlists";
+import { openReleaseDate, releaseDateMenuLabel } from "@/library/ReleaseDateSheet";
+import {
+  libraryReleaseSong,
+  streamedReleaseSong,
+  type ReleaseDateSong,
+} from "@/library/releaseSong";
 import { openAlbum } from "@/library/routes";
 import { showError } from "@/overlay/alert";
 import {
@@ -82,6 +88,7 @@ import {
   tracksTarget,
   type ActionItems,
   type TargetEntry,
+  type TrackItem,
 } from "./actionTargets";
 import { addToQueue, playNext, queueDiscoverSongs } from "./actions";
 import { goToArtistPress } from "./goToArtistPress";
@@ -346,6 +353,7 @@ export function useItemActions(
     collectionSongs,
   };
   const press = itemActionPress(context);
+  const [only] = target.kind === "track" ? target.items : [];
   return actionEntries(planned, (entry) => {
     if (!deferred || !SONG_ACTIONS.has(entry.action)) return press(entry);
     return () => {
@@ -360,8 +368,20 @@ export function useItemActions(
           showError(currentLocalisation().strings.playbackText.couldntLoadTheSongs, error),
         );
     };
-  });
+  }).map((entry) =>
+    // Release Date says the date the song has.
+    entry.action === "releaseDate" && only !== undefined
+      ? { ...entry, label: releaseDateMenuLabel(releaseSongOf(only, find)) }
+      : entry,
+  );
 }
+
+/** A song's menu item as Release date takes it (a YT Music song the Library has by now too). */
+const releaseSongOf = (item: TrackItem, find: FindInLibrary): ReleaseDateSong => {
+  if (isLibraryTrack(item)) return libraryReleaseSong(item.song);
+  if (isUnsearchedTrack(item)) return streamedReleaseSong(item.unsearched);
+  return streamedReleaseSong(item.ytSong, find(item.ytSong));
+};
 
 const noMatch: FindInLibrary = () => null;
 const SONG_ACTIONS: ReadonlySet<ItemAction> = new Set([
@@ -582,6 +602,11 @@ export const itemActionPress = ({
               target.kind === "track" ? withFiles : collectionSongs.filter(songHasFile),
             ),
         );
+      case "releaseDate":
+        return run(() => {
+          const [only] = allTracks;
+          if (only !== undefined) openReleaseDate(releaseSongOf(only, find));
+        });
       case "share":
         // A playlist goes out as a playlist on another service (#483); one song, as a card on
         // the song share sheet: a Library song, a YT Music one or an unsearched entry (#481).

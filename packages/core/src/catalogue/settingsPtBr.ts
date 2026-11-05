@@ -159,7 +159,9 @@ export const settingsPtBr: typeof settingsEn = {
   searchAlsoFindsSongsOnYouTubeMusic:
     "Buscar também encontra músicas no YouTube Music e envia o que você digita ao YouTube. Nada da sua biblioteca é enviado. Desativado, o Wave não faz solicitações ao YT Music.",
   alwaysSearchOnlineOpensAlbumsAndArtists:
-    "Buscar sempre online abre álbuns e artistas com Online selecionado e busca online enquanto você digita. Buscar sempre no Wi-Fi faz isso apenas fora dos dados móveis. Só quando solicitado espera um toque em Online. Mantenha Biblioteca | Online pressionado para alterar essa opção ali.",
+    "Buscar sempre online abre álbuns e artistas com Online selecionado e busca online enquanto você digita. Buscar sempre no Wi-Fi faz isso apenas fora dos dados móveis. Só quando solicitado espera um toque em Online. As duas primeiras também buscam datas de lançamento para músicas da Biblioteca e músicas do YT Music em playlists. Mantenha Biblioteca | Online pressionado para alterar essa opção ali.",
+  findingReleaseDates: (done: number, total: number): string =>
+    `Buscando datas de lançamento: ${formatNumber("pt-BR", done)} de ${formatNumber("pt-BR", total)}`,
   clearArtistPhotos: "Limpar fotos de artistas?",
   couldntClearArtistPhotos: "Não foi possível limpar as fotos de artistas",
   clear: "Limpar",
@@ -329,7 +331,6 @@ export const settingsPtBr: typeof settingsEn = {
     "As músicas das pastas excluídas e de suas subpastas saem da biblioteca. Os arquivos ficam no telefone.",
   followedArtists: "Artistas seguidos",
   youArentFollowingAnyArtistsYet: "Você ainda não segue nenhum artista.",
-  following: "Seguindo",
   developerIsOn: "Developer is on",
   developerHidden: "Developer hidden",
   settings: "Ajustes",
@@ -372,7 +373,6 @@ export const settingsPtBr: typeof settingsEn = {
     `Mantenha a música de exemplo pressionada para sentir a duração. O padrão é ${formatNumber("pt-BR", ms)} ms.`,
   bounceFootnote: (percent) =>
     `Deslize a música de exemplo para sentir a elasticidade. O padrão é ${formatNumber("pt-BR", percent)}%.`,
-  manageFollow: (name, level) => `Gerenciar ${name}, Seguindo, ${level}`,
   signedIn: (name, email) => `Sessão iniciada como ${name}${email === null ? "" : `, ${email}`}`,
   spotifySignedIn: (name) => `Sessão iniciada no Spotify como ${name}`,
   retryLine: (line) => `Tentar novamente ${line}`,

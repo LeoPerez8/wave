@@ -74,13 +74,14 @@ describe("menuLayout", () => {
       "favorite",
       "goToAlbum",
       "goToArtist",
+      "releaseDate",
       "share",
       "delete",
     ]);
 
     const streamed = menuLayout("ytSong", ytSongActions());
     assert.deepEqual(streamed.cards, ["playNext", "addToQueue"]);
-    assert.deepEqual(names(streamed.list), ["addToPlaylist", "share"]);
+    assert.deepEqual(names(streamed.list), ["addToPlaylist", "releaseDate", "share"]);
 
     const unsearched = menuLayout(
       "track",

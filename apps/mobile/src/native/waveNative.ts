@@ -25,6 +25,7 @@ export interface NativeScannedTrack {
   readonly genre: string | null;
   /** Every value of a multi-value genre tag, as [artists]; [genre] is the first. */
   readonly genres?: readonly string[] | null;
+  readonly releaseDate?: string | null;
   readonly year: string | null;
   readonly trackNumber: string | null;
   readonly discNumber: string | null;
@@ -280,6 +281,25 @@ declare class WaveNativeModule extends NativeModule<WaveNativeEvents> {
     year: number | null,
     advisory: 0 | 1 | null,
   ): Promise<NativeTagWrite | NativeTagWriteFailed>;
+  /**
+   * Writes a first-release date into the song's original-date tag, changing that field alone and
+   * keeping one the file has: `tags`, `notWritten` (a format Wave doesn't write tags to) or `none`
+   * (the file had one). A file that can't be written resolves `{ failed }`.
+   */
+  writeOriginalDate(
+    path: string,
+    date: string,
+  ): Promise<{ readonly originalDate: TagDestination } | NativeTagWriteFailed>;
+  /**
+   * Puts a date the owner typed into the song's original-date tag, replacing the file's, or
+   * takes it out ([date] null), changing that field alone: `tags`, `notWritten` (a format Wave
+   * doesn't write tags to) or `none` (nothing to take out). Unlike `writeOriginalDate`, it goes
+   * over a date the file has. A file that can't be written resolves `{ failed }`.
+   */
+  replaceOriginalDate(
+    path: string,
+    date: string | null,
+  ): Promise<{ readonly originalDate: TagDestination } | NativeTagWriteFailed>;
 }
 
 /**
@@ -352,6 +372,9 @@ const connectivity = connectivityStore({
 
 /** The phone's connectivity now. */
 export const connectivityNow = (): Connectivity => connectivity.get();
+
+/** Follows changes to the cached default network. */
+export const subscribeConnectivity = connectivity.subscribe;
 
 /** Whether the phone is on mobile data now; Wi-Fi when the module can't tell. */
 export const onMobileData = (): boolean => connectivity.get().onMobileData;

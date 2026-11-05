@@ -1,6 +1,8 @@
 import {
   IconArrowForwardUp,
   IconArrowsShuffle,
+  IconCalendarEvent,
+  IconCircleCheck,
   IconCrop,
   IconDeviceFloppy,
   IconDisc,
@@ -59,7 +61,12 @@ export type MenuAction =
   | "addToShazam"
   | "removeColour"
   | "follow"
-  | "openTickets";
+  | "openTickets"
+  | "restoreGraveyard"
+  | "forgetGraveyard"
+  | "emptyGraveyard"
+  | "graveyard"
+  | "downloaded";
 
 /**
  * Each action's one icon, the same in every menu that offers it and on the
@@ -67,6 +74,10 @@ export type MenuAction =
  * album's, a playlist's or a mix's, a cancel the X, a retry the circling arrows.
  */
 export const ACTION_ICONS: { readonly [A in MenuAction]: ActionIcon } = {
+  restoreGraveyard: IconArrowForwardUp,
+  forgetGraveyard: IconTrashX,
+  emptyGraveyard: IconTrash,
+  graveyard: IconTrash,
   follow: IconUserPlus,
   openTickets: IconTicket,
   play: IconPlayerPlay,
@@ -76,6 +87,7 @@ export const ACTION_ICONS: { readonly [A in MenuAction]: ActionIcon } = {
   magicQueue: IconSparkles,
   addToPlaylist: IconPlaylistAdd,
   addToShazam: IconPlaylistAdd,
+  releaseDate: IconCalendarEvent,
   favorite: IconStar,
   unfavorite: IconStarOff,
   removeFromPlaylist: IconPlaylistX,
@@ -101,6 +113,7 @@ export const ACTION_ICONS: { readonly [A in MenuAction]: ActionIcon } = {
   downloadAlbum: IconDownload,
   cancelAlbumDownload: IconX,
   downloadPlaylist: IconDownload,
+  downloaded: IconCircleCheck,
   cancelPlaylistDownload: IconX,
   saveAsPlaylist: IconDeviceFloppy,
   search: IconSearch,

@@ -19,7 +19,8 @@ own, inspired by Apple Music. Personal project, sideloaded — see the
 Every PR and every push to `main` builds a release APK (arm64, signed with the debug key):
 
 - **PR builds** — the PR gets a comment with a _Download APK_ link.
-- **Latest `main`** — <https://github.com/LeoPerez8/wave/releases/download/latest/wave-latest.apk>
+- **Latest on the `main` channel** — <https://github.com/LeoPerez8/wave/releases/download/latest/wave-latest.apk>, moved by each promotion
+- **Latest on the `ti` channel** — <https://github.com/LeoPerez8/wave/releases/download/ti-latest/wave-ti.apk>, moved by each push to `main`
 
 Open the link on the phone and install (allow installs from the browser once). Builds
 share a signing key, so each one updates the previous install in place.

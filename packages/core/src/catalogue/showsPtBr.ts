@@ -1,3 +1,5 @@
+import { plural } from "../plural.ts";
+import { formatNumber } from "../formatting.ts";
 import type { showsEn } from "./showsEn.ts";
 export const showsPtBr: typeof showsEn = {
   country: "País",
@@ -9,4 +11,24 @@ export const showsPtBr: typeof showsEn = {
   notificationSettings: "Abrir configurações de notificações",
   channel: "Shows",
   tickets: "Ingressos",
+  newReleases: "Novos lançamentos",
+  newReleasesAndShows: "Novos lançamentos e shows",
+  newReleasesAndShowsIn: (country) => `Novos lançamentos e shows em ${country}`,
+  iconFor: (option, artist) => `${option}, ${artist}`,
+  unfollowed: (artist) => `Você deixou de seguir ${artist}`,
+  undo: "Desfazer",
+  suggested: "Sugestões",
+  showMore: "Mostrar Mais",
+  dismissSuggestion: (artist) => `Dispensar a sugestão ${artist}`,
+  suggestionDismissed: "Sugestão dispensada",
+  playsInLast90Days: (count) =>
+    plural("pt-BR", count, {
+      one: `${formatNumber("pt-BR", count)} reprodução nos últimos 90 dias`,
+      other: `${formatNumber("pt-BR", count)} reproduções nos últimos 90 dias`,
+    }),
+  allTimePlays: (count) =>
+    plural("pt-BR", count, {
+      one: `${formatNumber("pt-BR", count)} reprodução`,
+      other: `${formatNumber("pt-BR", count)} reproduções`,
+    }),
 };

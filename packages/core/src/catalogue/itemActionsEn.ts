@@ -19,6 +19,7 @@ export const itemActionsEn = {
     adjustImage: "Adjust Image",
     removeImage: "Remove Image",
     share: "Share",
+    releaseDate: "Release Date",
     deletePlaylist: "Delete Playlist",
     deletePlaylists: "Delete Playlists",
     fixSong: "Fix Song",
@@ -50,6 +51,8 @@ export const itemActionsEn = {
   } satisfies Record<PlayAction, string>,
   /** Settings › Swipe actions' name for a row's way out (Remove from Playlist, Delete…). */
   remove: "Remove",
+  /** Release Date's menu entry for a song with a date ([date], `formatReleaseDate`'s). */
+  releaseDateIs: (date: string): string => `Release Date · ${date}`,
   /** A song's star toggled from a swipe, a menu or the selection bar. */
   addedToFavorites: "Added to Favorites",
   addedSongsToFavorites: (count: number): string => `Added ${count} songs to Favorites`,

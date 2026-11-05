@@ -7,4 +7,6 @@ export const listeningHistoryEn = {
   tryAgain: "Try again",
   /** A play whose song left no title. */
   unknownSong: "Unknown song",
+  /** A search result's icon, opening the full history at that play. */
+  goToMoment: "Go to this moment",
 };

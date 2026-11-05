@@ -3,7 +3,11 @@ import { test } from "node:test";
 import { eq, sql } from "drizzle-orm";
 import type { PlayEvent } from "@wave/core";
 
-import { listeningHistory } from "./listeningHistory.ts";
+import {
+  listeningHistory,
+  listeningHistoryAround,
+  newerListeningHistory,
+} from "./listeningHistory.ts";
 import { endPlay, latestPlay, recordPlay, updatePlay } from "./playHistory.ts";
 import * as schema from "./schema.ts";
 import {
@@ -12,6 +16,7 @@ import {
   migrateTestDatabase,
   openTestDatabase,
   traceQueries,
+  type TestDatabase,
 } from "./testDatabase.ts";
 import { playedRecordingKeys } from "./playHistory.ts";
 import { listeningSums, playTotalsDrift, rebuildPlayTotals } from "./playTotals.ts";
@@ -349,8 +354,8 @@ test("totals stay correct when an event changes between Library and video identi
   assert.deepEqual(playTotalsDrift(db), []);
 });
 
-test("the snapshot-sync upgrade preserves Library and streamed history and their pushed flags", async () => {
-  const db = await openTestDatabase({ through: "0040_streamed_plays" });
+/** A Library play and a streamed one, both ended and pushed. */
+const seedPushedPlays = (db: TestDatabase): void => {
   const track = addTrack(db, { title: "Library song" });
   const library = play(track, 1000);
   endPlay(db, recordPlay(db, library), library);
@@ -358,9 +363,125 @@ test("the snapshot-sync upgrade preserves Library and streamed history and their
   endPlay(db, recordPlay(db, stream, false, streamedSong), stream);
   // Pushed as that Wave did: today's sync reads tables a 0040 database doesn't have yet.
   db.run(sql`UPDATE play_events SET pushed = 1`);
-  const before = listeningHistory(db);
+};
+
+/**
+ * [table]'s rows as stored, in id order, with only [columns] (every one, when not given): what
+ * any schema can read, so a database before and after an upgrade can be compared.
+ */
+const rawRows = (
+  db: TestDatabase,
+  table: string,
+  columns?: readonly string[],
+): Record<string, unknown>[] =>
+  db
+    .all<Record<string, unknown>>(sql.raw(`SELECT * FROM ${table} ORDER BY id`))
+    .map((row) =>
+      columns === undefined ? row : Object.fromEntries(columns.map((name) => [name, row[name]])),
+    );
+
+test("the snapshot-sync upgrade preserves Library and streamed history and their pushed flags", async () => {
+  const db = await openTestDatabase({ through: "0040_streamed_plays" });
+  seedPushedPlays(db);
+  // The rows as the 0040 database holds them: the upgrade leaves every one of them alone.
+  const before = Object.fromEntries(
+    ["play_events", "tracks"].map((table) => [table, rawRows(db, table)]),
+  );
   await migrateTestDatabase(db);
-  assert.deepEqual(listeningHistory(db), before);
+  for (const [table, rows] of Object.entries(before)) {
+    const columns = Object.keys(rows[0] ?? {}).filter(
+      // 0052 asks the next scan to read every file again.
+      (name) => !(table === "tracks" && name === "modified_at"),
+    );
+    assert.deepEqual(
+      rawRows(db, table, columns),
+      rows.map((row) => Object.fromEntries(columns.map((name) => [name, row[name]]))),
+      table,
+    );
+  }
+  // And today's history reads them as it reads the same plays recorded today.
+  const current = await openTestDatabase();
+  seedPushedPlays(current);
+  assert.deepEqual(listeningHistory(db), listeningHistory(current));
   assert.deepEqual(selectUnpushed(db, 100, () => null).rows.plays, []);
   assert.deepEqual(playTotalsDrift(db), []);
+});
+
+test("history search pages all saved snapshots, including removed songs beyond loaded pages", async () => {
+  const db = await openTestDatabase();
+  const track = addTrack(db, { title: "Déjà Vu", artist: "Beyoncé", album: "Live" });
+  const ids: number[] = [];
+  for (let i = 0; i < 63; i++) ids.unshift(recordPlay(db, play(track, Math.floor(i / 3))));
+  db.update(schema.tracks).set({ title: "New title", artistCredit: "Changed" }).run();
+  deleteTracksById(db, [track]);
+  const other = addTrack(db, { title: "Unrelated" });
+  for (let i = 0; i < 130; i++) recordPlay(db, play(other, 1000 + i));
+  recordPlay(db, play(other, 9999, false));
+  const imported = recordPlay(db, play(other, 9999));
+  db.update(schema.playEvents)
+    .set({ importedFrom: "blackplayer" })
+    .where(eq(schema.playEvents.id, imported))
+    .run();
+  const first = listeningHistory(db, undefined, "beyo deja");
+  assert.deepEqual(
+    first.rows.map((row) => row.id),
+    ids.slice(0, 50),
+  );
+  assert.ok(first.rows.every((row) => row.song === null));
+  assert.ok(first.next);
+  const second = listeningHistory(db, first.next, "beyo deja");
+  assert.deepEqual(
+    second.rows.map((row) => row.id),
+    ids.slice(50),
+  );
+  assert.equal(second.next, null);
+  assert.equal(listeningHistory(db, undefined, "live").rows.length, 50);
+  assert.equal(listeningHistory(db, undefined, "New title").rows.length, 0);
+  assert.equal(listeningHistory(db, undefined, "zzz").next, null);
+  assert.deepEqual(listeningHistory(db, undefined, ""), listeningHistory(db));
+  assert.deepEqual(listeningHistory(db, undefined, "---"), listeningHistory(db));
+});
+
+test("a moment opens centred on its play and pages newer and older plays from there", async () => {
+  const db = await openTestDatabase();
+  const track = addTrack(db, { title: "Airbag" });
+  // Three plays share each start time, so the window and its pages must keep tied ids in order.
+  db.run(sql`WITH RECURSIVE n(x) AS (VALUES(1) UNION ALL SELECT x + 1 FROM n WHERE x < 300)
+    INSERT INTO play_events (track_id, started_at, listened_ms, counted, end_reason)
+    SELECT ${track}, x / 3, 20000, 1, 'stopped' FROM n`);
+  const skipped = recordPlay(db, play(track, 50, false));
+  const all = Array.from({ length: 300 }, (_, i) => 300 - i);
+  const { result: moment, queries } = traceQueries(db, () => listeningHistoryAround(db, 150));
+  assert.ok(queries.every(({ rows }) => rows <= 51));
+  const at = moment.rows.findIndex((row) => row.id === 150);
+  assert.equal(at, 25);
+  assert.deepEqual(
+    moment.rows.map(({ id }) => id),
+    all.slice(all.indexOf(150) - 25, all.indexOf(150) + 25),
+  );
+  const ids = moment.rows.map(({ id }) => id);
+  for (let older = moment.next; older !== null;) {
+    const page = listeningHistory(db, older);
+    ids.push(...page.rows.map(({ id }) => id));
+    older = page.next;
+  }
+  for (let newer = moment.newer; newer !== null;) {
+    const page = newerListeningHistory(db, newer);
+    assert.equal(page.rows.length <= 50, true);
+    ids.unshift(...page.rows.map(({ id }) => id));
+    newer = page.newer;
+  }
+  assert.deepEqual(ids, all);
+  // The newest page and older pages start at the head: nothing newer to read.
+  assert.equal(listeningHistory(db).newer, null);
+  // Near the newest play the window starts at the head.
+  const top = listeningHistoryAround(db, 299);
+  assert.equal(top.newer, null);
+  assert.deepEqual(
+    top.rows.slice(0, 3).map(({ id }) => id),
+    [300, 299, 298],
+  );
+  // A play that isn't in history opens the newest page.
+  assert.deepEqual(listeningHistoryAround(db, skipped), listeningHistory(db));
+  assert.deepEqual(listeningHistoryAround(db, 9999), listeningHistory(db));
 });

@@ -27,6 +27,8 @@ import { CELL } from "@/catalog/grid";
 import { followStreamedArtistLink } from "@/library/ArtistChoice";
 import { useYtSongStarred, ytSongStarredNow } from "@/library/favorites";
 import { starSongs } from "@/library/starSongs";
+import { openReleaseDate, releaseDateMenuLabel } from "@/library/ReleaseDateSheet";
+import { streamedReleaseSong } from "@/library/releaseSong";
 import type { ArtistRow } from "@/library/LibraryStore";
 import { openAddToPlaylist } from "@/library/PlaylistSheets";
 import { removePlaylistItems } from "@/library/playlists";
@@ -88,6 +90,7 @@ export const openYtSongActions = (song: NativeYtSong, options: YtSongMenuOptions
             playlistItem={options.playlistItem}
             onSelect={options.onSelect}
             playing={options.playing}
+            extraEntries={options.extraEntries}
             close={close}
           />
         ),
@@ -106,6 +109,7 @@ type Entry =
         | "magicQueue"
         | "addToPlaylist"
         | "removeFromPlaylist"
+        | "releaseDate"
         | "share"
         | "select";
     }
@@ -136,9 +140,14 @@ const songEntries = (
     }
   });
 
-/** The entry's label in the app's language (the menu is built as it opens). */
-const label = (entry: Entry): string =>
-  currentLocalisation().strings.itemActions.labels[entry.action];
+/**
+ * The entry's label in the app's language (the menu is built as it opens); Release Date says
+ * the date [song] has.
+ */
+const label = (entry: Entry, song: NativeYtSong, find: FindInLibrary): string =>
+  entry.action === "releaseDate"
+    ? releaseDateMenuLabel(streamedReleaseSong(song, find(song)))
+    : currentLocalisation().strings.itemActions.labels[entry.action];
 
 /** What [song] joins a playlist as: the Library's song when it has it, else the stream. */
 const playlistSong = (song: NativeYtSong, find: FindInLibrary): PlaylistSong => {
@@ -204,6 +213,9 @@ const run = (
     case "cancelDownload":
       cancelYtDownload(song.videoId);
       return;
+    case "releaseDate":
+      openReleaseDate(streamedReleaseSong(song, find(song)));
+      return;
     case "share":
       // The song share sheet, with YouTube's cover cached on the phone.
       shareStreamedSong(song);
@@ -223,8 +235,10 @@ function YtSongActionsMenu({
   playlistItem,
   onSelect,
   playing,
+  extraEntries = [],
   close,
 }: {
+  extraEntries?: readonly MenuChoice[] | undefined;
   song: NativeYtSong;
   playlistItem: PlaylistPlace | undefined;
   onSelect: (() => void) | undefined;
@@ -274,7 +288,9 @@ function YtSongActionsMenu({
     return entry === undefined ? [] : [{ action: card, onPress: choose(entry) }];
   });
   const list = layout.list.flatMap((entry): MenuChoice[] =>
-    "kind" in entry ? [{ action: entry.action, label: label(entry), onPress: choose(entry) }] : [],
+    "kind" in entry
+      ? [{ action: entry.action, label: label(entry, song, find), onPress: choose(entry) }]
+      : [],
   );
 
   return (
@@ -290,7 +306,19 @@ function YtSongActionsMenu({
           </Text>
         </View>
       </CardHeading>
-      <MenuChoices cards={cards} entries={list} />
+      <MenuChoices
+        cards={cards}
+        entries={[
+          ...list,
+          ...extraEntries.map((entry) => ({
+            ...entry,
+            onPress: () => {
+              close();
+              entry.onPress();
+            },
+          })),
+        ]}
+      />
     </>
   );
 }

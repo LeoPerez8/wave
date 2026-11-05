@@ -1,3 +1,6 @@
+import { releaseAnswers } from "./releaseAnswers";
+import { entryReleaseSong, releaseSongDate } from "./releaseSong";
+import { typedReleaseDates } from "./typedReleaseDates";
 import {
   GoToSuggestions,
   PlaylistRecommendations,
@@ -86,17 +89,18 @@ const checkable = (item: PlaylistEntryRow): boolean => item.source !== "unavaila
 /**
  * A playlist entry's row: a Library song as the Library shows it, a YT Music
  * entry streamed with the YT Music song's menu, an unsearched entry as any
- * song (it plays, searched as it's about to), an unavailable one dimmed. Its
+ * song (it plays, searched as it's about to), an unavailable one dimmed.
+ * [inPlaylist] when it's in the playlist shown (a Graveyard song isn't): its
  * menu and swipes remove it from this playlist.
  */
-const playlistEntry = (item: PlaylistEntryRow): SongListEntry => {
+export const playlistEntrySong = (item: PlaylistEntryRow, inPlaylist = true): SongListEntry => {
   switch (item.source) {
     case "library": {
       const entry = librarySongEntry(item.track);
-      return { ...entry, facts: { ...entry.facts, inPlaylist: true } };
+      return { ...entry, facts: { ...entry.facts, inPlaylist } };
     }
     case "stream":
-      return { source: { kind: "ytMusic", song: item.song }, facts: { inPlaylist: true } };
+      return { source: { kind: "ytMusic", song: item.song }, facts: { inPlaylist } };
     case "unsearched":
       return {
         source: { kind: "unsearched", song: item.song },
@@ -104,12 +108,23 @@ const playlistEntry = (item: PlaylistEntryRow): SongListEntry => {
           streamed: true,
           unsearched: true,
           artistNames: item.song.artists,
-          inPlaylist: true,
+          inPlaylist,
         },
       };
     case "unavailable":
       return { source: { kind: "unavailable", song: item.song } };
   }
+};
+
+/** A playlist entry's menu, as its kind of song has it; [options]' `playlistItem` is its place. */
+export const openPlaylistEntryActions = (
+  entry: PlaylistEntryRow,
+  options: MenuOptions & { readonly playlistItem?: PlaylistPlace | undefined },
+): void => {
+  if (entry.source === "library") openTrackActions(entry.track, options);
+  else if (entry.source === "stream") openYtSongActions(entry.song, options);
+  else if (entry.source === "unsearched") openUnsearchedActions(entry.song, options);
+  else openUnavailableEntryActions(entry.song, options.playlistItem, options.extraEntries);
 };
 
 const shownEntries = new WeakMap<PlaylistEntryRow, SongListEntry>();
@@ -121,7 +136,7 @@ const shownEntries = new WeakMap<PlaylistEntryRow, SongListEntry>();
 const shownEntry = (item: PlaylistEntryRow): SongListEntry => {
   let shown = shownEntries.get(item);
   if (shown === undefined) {
-    shown = playlistEntry(item);
+    shown = playlistEntrySong(item);
     shownEntries.set(item, shown);
   }
   return shown;
@@ -187,6 +202,8 @@ const DraggableEntry = memo(function DraggableEntry({
 });
 
 type Props = {
+  customOrder?: boolean;
+  showReleaseYear?: boolean;
   playlistId: number;
   /** In playlist order; undefined until they are read (only the header shows). */
   items: readonly PlaylistEntryRow[] | undefined;
@@ -232,7 +249,14 @@ export const playPlaylistEntries = (
  * get Move up / Move down and the swipes' actions. While selecting, an
  * unavailable entry can't be checked and does nothing.
  */
-export function PlaylistItems({ playlistId, items, header, empty }: Props) {
+export function PlaylistItems({
+  playlistId,
+  items,
+  header,
+  empty,
+  customOrder = true,
+  showReleaseYear = false,
+}: Props) {
   const { strings } = useLocalisation();
   const scrollable = useListScrollable();
   const read = items ?? NO_ITEMS;
@@ -280,7 +304,7 @@ export function PlaylistItems({ playlistId, items, header, empty }: Props) {
   const find = useFindInLegendList(list, order, entryText, true);
   // The rows shown: the whole playlist, or the songs the query finds, in playlist order.
   const { found, shown } = find;
-  const reorderable = found === null;
+  const reorderable = found === null && customOrder;
   const selecting = listSelection.selecting;
   const orderRef = useRef(order);
   useLayoutEffect(() => {
@@ -290,7 +314,7 @@ export function PlaylistItems({ playlistId, items, header, empty }: Props) {
 
   const reorder = (fromIndex: number, toIndex: number): boolean => {
     // A narrowed list has no places to move to.
-    if (found !== null) return false;
+    if (!reorderable) return false;
     const current = orderRef.current;
     const item = current[fromIndex];
     if (item === undefined || toIndex === fromIndex || toIndex < 0 || toIndex >= current.length)
@@ -459,9 +483,19 @@ export function PlaylistItems({ playlistId, items, header, empty }: Props) {
         : [...(index > 0 ? [moves.up] : []), ...(index < count - 1 ? [moves.down] : [])],
     [selecting, reorderable, count, moves],
   );
+  const dates = releaseAnswers.useValue();
+  const typed = typedReleaseDates.useValue();
   const decorateRow = useCallback(
     (row: ReactElement, item: Item, index: number) => {
       const key = itemKey(item);
+      const entry = entryOf(item);
+      if (showReleaseYear && entry) {
+        const dated = entryReleaseSong(entry);
+        const year = releaseSongDate(dated, dates, typed)?.slice(0, 4);
+        row = cloneElement(row as ReactElement<{ secondLine: string }>, {
+          secondLine: year ? `${dated.artist} · ${year}` : dated.artist,
+        });
+      }
       return (
         <DraggableEntry
           row={row as ReactElement<SongRowActions>}
@@ -473,7 +507,7 @@ export function PlaylistItems({ playlistId, items, header, empty }: Props) {
         />
       );
     },
-    [rowDrag, drag, selecting, reorderable],
+    [rowDrag, drag, selecting, reorderable, showReleaseYear, dates, typed],
   );
   const renderSlot = ({ item }: { item: Item }) =>
     "kind" in item ? (
@@ -500,12 +534,7 @@ export function PlaylistItems({ playlistId, items, header, empty }: Props) {
   const menu = (item: Item, options: MenuOptions) => {
     const entry = entryOf(item);
     if (entry === null) return;
-    const place = placeOf(entry);
-    const withPlace = { ...options, playlistItem: place };
-    if (entry.source === "library") openTrackActions(entry.track, withPlace);
-    else if (entry.source === "stream") openYtSongActions(entry.song, withPlace);
-    else if (entry.source === "unsearched") openUnsearchedActions(entry.song, withPlace);
-    else openUnavailableEntryActions(entry.song, place);
+    openPlaylistEntryActions(entry, { ...options, playlistItem: placeOf(entry) });
   };
 
   return (
@@ -556,7 +585,9 @@ export function PlaylistItems({ playlistId, items, header, empty }: Props) {
           maintainVisibleContentPosition={
             anchored && recommending
               ? { data: true, shouldRestorePosition: (item) => item === RECOMMENDATIONS }
-              : undefined
+              : showReleaseYear
+                ? { data: true }
+                : undefined
           }
           lifted={
             drag === null

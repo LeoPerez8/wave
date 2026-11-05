@@ -25,6 +25,7 @@ import {
   reduceQueue,
   startMagicQueue,
   startStreamedMagicQueue,
+  searchSongTap,
   streamedSongMagicStart,
   wantsMagicBatch,
   type DiscoverMixLevel,
@@ -493,5 +494,74 @@ describe("a Magic Queue from a streamed song", () => {
     assert.deepEqual(streamedSongMagicStart({ id: 12, title: "Midnight City", path: null }), {
       from: "stream",
     });
+  });
+});
+
+describe("searchSongTap", () => {
+  const file = { id: 12, title: "Midnight City", path: "/music/m83.flac" };
+  const missing = { id: 13, title: "Wait", path: null };
+  const stream = {
+    title: "Midnight City",
+    artists: ["M83"],
+    album: null,
+    durationMs: 244_000,
+    videoId: "vid1",
+    artworkUrl: null,
+    explicit: false,
+  };
+
+  test("with YouTube Music on, a Library song with a file starts its own Magic Queue", () => {
+    assert.deepEqual(searchSongTap({ source: "library", track: file }, { ytMusic: true }), {
+      play: "magicQueue",
+      from: "library",
+      seed: { kind: "track", id: "12", title: "Midnight City" },
+      track: file,
+    });
+  });
+
+  test("with YouTube Music on, a streamed song starts its Magic Queue from the stream", () => {
+    assert.deepEqual(searchSongTap({ source: "stream", song: stream }, { ytMusic: true }), {
+      play: "magicQueue",
+      from: "stream",
+      song: stream,
+    });
+    assert.deepEqual(
+      searchSongTap({ source: "stream", song: stream }, { ytMusic: true, found: missing }),
+      { play: "magicQueue", from: "stream", song: stream },
+    );
+  });
+
+  test("with YouTube Music on, a streamed song the Library has as a file starts from the file", () => {
+    assert.deepEqual(
+      searchSongTap({ source: "stream", song: stream }, { ytMusic: true, found: file }),
+      {
+        play: "magicQueue",
+        from: "library",
+        seed: { kind: "track", id: "12", title: "Midnight City" },
+        track: file,
+      },
+    );
+  });
+
+  test("with YouTube Music off, a song plays alone", () => {
+    assert.deepEqual(searchSongTap({ source: "library", track: file }, { ytMusic: false }), {
+      play: "alone",
+      track: file,
+    });
+    assert.deepEqual(
+      searchSongTap({ source: "stream", song: stream }, { ytMusic: false, found: file }),
+      { play: "alone", track: file },
+    );
+    assert.deepEqual(searchSongTap({ source: "stream", song: stream }, { ytMusic: false }), {
+      play: "nothing",
+    });
+  });
+
+  test("a Library song with no file on this phone downloads, YouTube Music on or off", () => {
+    for (const ytMusic of [true, false])
+      assert.deepEqual(searchSongTap({ source: "library", track: missing }, { ytMusic }), {
+        play: "download",
+        track: missing,
+      });
   });
 });

@@ -1,6 +1,6 @@
 package expo.modules.wavenative.recognize
 
-/** A tile or shortcut request, kept in memory until the foreground UI takes it. */
+/** A tile, shortcut or notification request, kept in memory until the foreground UI takes it. A newer one replaces it. */
 object RecognizeInbox {
   const val ACTION = "dev.leoperez.wave.action.RECOGNIZE"
   const val MATCH_ACTION = "dev.leoperez.wave.action.RECOGNIZE_MATCH"
@@ -13,12 +13,12 @@ object RecognizeInbox {
   fun receive(action: String?, fromHistory: Boolean = false, match: String? = null) {
     if (fromHistory) return
     if (action == MATCH_ACTION && match != null) {
-      synchronized(this) { this.match = match }
+      synchronized(this) { this.match = match; pending = false }
       onMatchReceived?.invoke()
       return
     }
     if (action != ACTION) return
-    synchronized(this) { pending = true }
+    synchronized(this) { pending = true; this.match = null }
     onReceived?.invoke()
   }
 

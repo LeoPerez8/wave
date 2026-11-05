@@ -17,6 +17,7 @@ export const itemActionsPtBr: typeof itemActionsEn = {
     adjustImage: "Ajustar Imagem",
     removeImage: "Remover Imagem",
     share: "Compartilhar",
+    releaseDate: "Data de Lançamento",
     deletePlaylist: "Apagar Playlist",
     deletePlaylists: "Apagar Playlists",
     fixSong: "Corrigir Música",
@@ -42,6 +43,7 @@ export const itemActionsPtBr: typeof itemActionsEn = {
     shuffle: "Aleatório",
   },
   remove: "Remover",
+  releaseDateIs: (date) => `Data de Lançamento · ${date}`,
   addedToFavorites: "Adicionada às Favoritas",
   addedSongsToFavorites: (count) =>
     `${formatNumber("pt-BR", count)} músicas adicionadas às Favoritas`,

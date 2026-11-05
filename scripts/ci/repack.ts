@@ -40,7 +40,7 @@ const digest = (
       .join(""),
   );
 
-// The app's version leaves the key: ti releases a new one on every app push, and a repack
+// The app's version leaves the key: main releases a new one on every app push, and a repack
 // writes it into the APK (apk-version.ts). package.json holds it, and prebuild writes it into
 // app/build.gradle.
 const withoutVersion =
@@ -156,7 +156,7 @@ export type ApkPlan = { build: "full" | "repack"; reason: string };
 
 /**
  * Whether this run builds the APK in full or swaps a new JS bundle into a kept full build.
- * Pull requests, ti pushes and ti tags may repack; main and stable tags never do.
+ * Pull requests, pushes to main and -ti tags may repack; stable tags never do.
  * `kept` is whether a full build with this run's key was found.
  */
 export const planApkBuild = (run: {
@@ -166,12 +166,11 @@ export const planApkBuild = (run: {
   kept: boolean;
 }): ApkPlan => {
   const full = (reason: string): ApkPlan => ({ build: "full", reason });
-  const tiTag = run.event === "push" && /^refs\/tags\/v\d+\.\d+\.\d+-ti$/.test(run.ref);
-  const tiPush = run.event === "push" && run.ref === "refs/heads/ti";
+  const tiTag = run.release && /^refs\/tags\/v\d+\.\d+\.\d+-ti$/.test(run.ref);
+  const mainPush = run.event === "push" && run.ref === "refs/heads/main";
   if (run.release && !tiTag) return full("Stable release tags always build in full.");
-  if (run.ref === "refs/heads/main") return full("Pushes to main always build in full.");
-  if (run.event !== "pull_request" && !tiPush && !tiTag)
-    return full("Only pull requests and ti builds repack.");
+  if (run.event !== "pull_request" && !mainPush && !tiTag)
+    return full("Only pull requests, pushes to main and -ti tags repack.");
   if (!run.kept) return full("No full build is kept for this native side yet.");
   return { build: "repack", reason: "Only JS changed since a kept full build." };
 };

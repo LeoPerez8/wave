@@ -203,6 +203,28 @@ const MIGRATIONS: readonly Migration[] = [
       `CREATE INDEX notified_shows_change_idx ON notified_shows (account_id, change_no)`,
     ],
   },
+  { id: "0007_release_date", statements: ["ALTER TABLE songs ADD COLUMN release_date TEXT"] },
+  {
+    id: "0008_playlist_graveyard",
+    statements: ["ALTER TABLE playlist_entries ADD COLUMN removed_at INTEGER"],
+  },
+  {
+    // Follow suggestions the owner dismissed, by the artist's name key, with when.
+    id: "0009_dismissed_suggestions",
+    statements: [
+      `CREATE TABLE dismissed_suggestions (
+        account_id TEXT NOT NULL,
+        id TEXT NOT NULL,
+        change_no INTEGER NOT NULL,
+        changed_at INTEGER NOT NULL,
+        phone_id TEXT NOT NULL,
+        deleted INTEGER NOT NULL,
+        dismissed_at INTEGER,
+        PRIMARY KEY (account_id, id)
+      )`,
+      `CREATE INDEX dismissed_suggestions_change_idx ON dismissed_suggestions (account_id, change_no)`,
+    ],
+  },
 ];
 
 /** Runs the migrations [db] hasn't run yet, each in its own transaction. Gives the ids it ran. */

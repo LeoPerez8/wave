@@ -49,6 +49,7 @@ export const NETWORK_SEEDS = [
   "global#fetch",
   ...[
     "searchSongs",
+    "searchVideos",
     "searchArtists",
     "searchAlbums",
     "artist",
@@ -67,6 +68,7 @@ export const NETWORK_SEEDS = [
   ].map((name) => `ytmusic/YtMusic.ts#${name}`),
   ...[
     "searchSongs",
+    "searchVideos",
     "searchArtists",
     "searchAlbums",
     "artist",
@@ -215,6 +217,13 @@ export const WHOLE_LIBRARY: Record<string, WholeLibraryException> = {
       "library/db/stats.ts#countedListeningPage",
     ],
   },
+  "library/releaseDates.ts#run": {
+    howOften:
+      "At most once per Library or playlist change while the automatic release lookup may run, kept in memory until the next such change; never under Only on demand or with YT Music off.",
+    reason:
+      "The background release lookup (#939) covers every Library song, so it needs the whole list to find the songs due; a network or preference change reuses the kept list. Actual coverage: releaseDates.test.ts.",
+    capabilities: ["library/LibraryStore.ts#listSongs"],
+  },
   "library/playlistImports.ts#listLibrary": {
     howOften: "Once per explicit playlist import or resumed import preparation.",
     reason: "An explicit playlist import matches entries against the Library before saving.",
@@ -236,8 +245,12 @@ export const WHOLE_LIBRARY: Record<string, WholeLibraryException> = {
 
   "playback/ActionsMenu.tsx#usePlaylistDownloadEntries": {
     howOften: FOLLOWED_FINDER,
-    reason: "Visible playlist menu checks which entries are downloaded; created for a user action.",
-    capabilities: ["ytmusic/libraryFinder.ts#useLoadedInLibrary"],
+    reason:
+      "Visible playlist menu checks which entries are downloaded, and offers Downloaded only once the Library is read; created for a user action.",
+    capabilities: [
+      "ytmusic/libraryFinder.ts#useLoadedInLibrary",
+      "ytmusic/libraryFinder.ts#useLoadedLibraryFinder",
+    ],
   },
   "playback/itemActions.ts#useStreamedSongFinder": {
     howOften: FOLLOWED_FINDER,
@@ -261,6 +274,14 @@ export const WHOLE_LIBRARY: Record<string, WholeLibraryException> = {
     howOften: "Once per completed swipe action; finder reads are shared per Library version.",
     reason:
       "A completed swipe resolves its one requested action; it does not subscribe while rows render.",
+    capabilities: ["ytmusic/libraryFinder.ts#currentLibraryFinder"],
+  },
+
+  "search/playSearchSong.ts#playSearchSong": {
+    howOften:
+      "Once per streamed song tapped in Search; finder reads are shared per Library version.",
+    reason:
+      "A tap on a streamed result asks whether the Library has it as a file, so its Magic Queue starts from the file (#958). Nothing follows the finder while rows render.",
     capabilities: ["ytmusic/libraryFinder.ts#currentLibraryFinder"],
   },
 
