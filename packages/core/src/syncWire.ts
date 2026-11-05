@@ -84,6 +84,12 @@ export type SyncHiddenRelease = SyncedRow<Readonly<Record<never, never>>>;
 /** A Show that already notified on some phone; its id is the Ticketmaster event id. */
 export type SyncNotifiedShow = SyncedRow<Readonly<Record<never, never>>>;
 
+/**
+ * A follow suggestion the owner dismissed; its id is the artist's
+ * `followArtistKey`. Undo leaves a tombstone.
+ */
+export type SyncDismissedSuggestion = SyncedRow<{ readonly dismissedAt: number }>;
+
 /** How a play ended (Core's `PlayEndReason`). */
 export type SyncPlayEnd = "completed" | "skipped" | "stopped" | "interrupted";
 
@@ -118,6 +124,7 @@ export interface SyncTables {
   readonly follows: readonly SyncFollow[];
   readonly hiddenReleases: readonly SyncHiddenRelease[];
   readonly notifiedShows: readonly SyncNotifiedShow[];
+  readonly dismissedSuggestions: readonly SyncDismissedSuggestion[];
 }
 
 export const EMPTY_SYNC_TABLES: SyncTables = {
@@ -130,6 +137,7 @@ export const EMPTY_SYNC_TABLES: SyncTables = {
   follows: [],
   hiddenReleases: [],
   notifiedShows: [],
+  dismissedSuggestions: [],
 };
 
 /**
@@ -146,6 +154,7 @@ export const SYNC_TABLE_NAMES = [
   "follows",
   "hiddenReleases",
   "notifiedShows",
+  "dismissedSuggestions",
 ] as const satisfies readonly (keyof SyncTables)[];
 
 /** What one field holds: text, a whole number, a boolean, or one of a few values; `?` allows null. */
@@ -208,6 +217,7 @@ export const SYNC_FIELDS: {
   },
   hiddenReleases: {},
   notifiedShows: {},
+  dismissedSuggestions: { dismissedAt: "int" },
 };
 
 const isRecord = (value: unknown): value is Readonly<Record<string, unknown>> =>
