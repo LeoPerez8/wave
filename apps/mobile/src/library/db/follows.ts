@@ -82,3 +82,37 @@ export const removeFollow = (db: LibraryDatabase, name: string, now: number): vo
     .where(and(eq(follows.key, followArtistKey(name)), live))
     .run();
 };
+/**
+ * Puts [follow] back as it was, level, date and ids included (Undo after an
+ * unfollow); the change waits to sync like any follow change. A follow made
+ * since the unfollow (here or synced from another phone) is newer and stays
+ * (false: nothing changed).
+ */
+export const restoreFollow = (
+  db: LibraryDatabase,
+  follow: FollowedArtist,
+  now: number,
+): boolean => {
+  const current = db
+    .select({ key: follows.key })
+    .from(follows)
+    .where(and(eq(follows.key, follow.key), live))
+    .get();
+  if (current !== undefined) return false;
+  const row: FollowedArtist = {
+    key: follow.key,
+    name: follow.name,
+    level: follow.level,
+    followedAt: follow.followedAt,
+    deezerId: follow.deezerId,
+    ytBrowseId: follow.ytBrowseId,
+  };
+  db.insert(follows)
+    .values({ ...row, changedAt: now })
+    .onConflictDoUpdate({
+      target: follows.key,
+      set: { ...row, deleted: false, ...stamped(follows, now) },
+    })
+    .run();
+  return true;
+};

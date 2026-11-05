@@ -10,7 +10,14 @@ import {
 import { selectPhoneId } from "./sync.ts";
 import { hideFollowRelease } from "./followReleases.ts";
 import { selectUnpushed } from "./syncRows.ts";
-import { saveFollow, selectFollow, selectFollows, countFollows, removeFollow } from "./follows.ts";
+import {
+  saveFollow,
+  selectFollow,
+  selectFollows,
+  countFollows,
+  removeFollow,
+  restoreFollow,
+} from "./follows.ts";
 
 test("a follow survives re-reading and merges online ids without changing its start date", async () => {
   const db = await openTestDatabase();
@@ -82,4 +89,43 @@ test("follows, hidden releases and notified shows from before syncing go up at t
   const stamp = rows.hiddenReleases[0]?.changedAt;
   hideFollowRelease(db, "deezer:12", (stamp ?? 0) + 1_000);
   assert.equal(selectUnpushed(db, 100, () => null).rows.hiddenReleases[0]?.changedAt, stamp);
+});
+
+test("restoring an unfollow brings back the same level and date, and goes up at the next sync", async () => {
+  const db = await openTestDatabase();
+  saveFollow(db, { name: "Aurora", deezerId: 7, ytBrowseId: "UC7" }, "shows", 100);
+  const before = selectFollow(db, "Aurora")!;
+  removeFollow(db, "Aurora", 200);
+  restoreFollow(db, before, 300);
+  assert.deepEqual(selectFollow(db, "aurora"), before);
+  const { rows } = selectUnpushed(db, 100, () => null);
+  assert.deepEqual(rows.follows, [
+    {
+      id: "aurora",
+      changedAt: 300,
+      phoneId: selectPhoneId(db),
+      deleted: false,
+      name: "Aurora",
+      level: "shows",
+      followedAt: 100,
+      deezerId: 7,
+      ytBrowseId: "UC7",
+    },
+  ]);
+  closeTestDatabase(db);
+});
+
+test("Undo after an unfollow leaves alone a follow made since", async () => {
+  const db = await openTestDatabase();
+  saveFollow(db, { name: "Aurora" }, "shows", 100);
+  const before = selectFollow(db, "Aurora")!;
+  removeFollow(db, "Aurora", 200);
+  saveFollow(db, { name: "Aurora" }, "releases", 300);
+  assert.equal(restoreFollow(db, before, 400), false);
+  assert.deepEqual(
+    [selectFollow(db, "Aurora")?.level, selectFollow(db, "Aurora")?.followedAt],
+    ["releases", 300],
+  );
+  assert.equal(selectUnpushed(db, 100, () => null).rows.follows[0]?.changedAt, 300);
+  closeTestDatabase(db);
 });

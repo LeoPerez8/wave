@@ -1027,6 +1027,16 @@ export const hiddenFollowReleases = sqliteTable("hidden_follow_releases", {
   key: text("key").primaryKey(),
   ...changeStamp(),
 });
+/**
+ * Follow suggestions the owner dismissed, by follow key (`followArtistKey`):
+ * never suggested again. Undo leaves a tombstone (`deleted`), so the row has
+ * the shape synced rows have.
+ */
+export const dismissedFollowSuggestions = sqliteTable("dismissed_follow_suggestions", {
+  key: text("key").primaryKey(),
+  dismissedAt: integer("dismissed_at").notNull(),
+  ...changeStamp(),
+});
 
 export const followShowCache = sqliteTable("follow_show_cache", {
   key: text("key").primaryKey(),

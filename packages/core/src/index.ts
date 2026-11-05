@@ -1514,6 +1514,7 @@ export {
   syncFieldFits,
 } from "./syncWire.ts";
 export type {
+  SyncDismissedSuggestion,
   SyncFavorite,
   SyncFieldKind,
   SyncFollow,
@@ -2493,6 +2494,7 @@ export type {
 
 export * from "./followedArtists.ts";
 export * from "./followArtistSearch.ts";
+export * from "./followSuggestions.ts";
 
 export { releaseTitle } from "./ytArtist.ts";
 export { formatNumber, formatTime, formatDate } from "./formatting.ts";

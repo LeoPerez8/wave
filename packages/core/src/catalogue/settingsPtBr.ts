@@ -331,7 +331,6 @@ export const settingsPtBr: typeof settingsEn = {
     "As músicas das pastas excluídas e de suas subpastas saem da biblioteca. Os arquivos ficam no telefone.",
   followedArtists: "Artistas seguidos",
   youArentFollowingAnyArtistsYet: "Você ainda não segue nenhum artista.",
-  following: "Seguindo",
   developerIsOn: "Developer is on",
   developerHidden: "Developer hidden",
   settings: "Ajustes",
@@ -374,7 +373,6 @@ export const settingsPtBr: typeof settingsEn = {
     `Mantenha a música de exemplo pressionada para sentir a duração. O padrão é ${formatNumber("pt-BR", ms)} ms.`,
   bounceFootnote: (percent) =>
     `Deslize a música de exemplo para sentir a elasticidade. O padrão é ${formatNumber("pt-BR", percent)}%.`,
-  manageFollow: (name, level) => `Gerenciar ${name}, Seguindo, ${level}`,
   signedIn: (name, email) => `Sessão iniciada como ${name}${email === null ? "" : `, ${email}`}`,
   spotifySignedIn: (name) => `Sessão iniciada no Spotify como ${name}`,
   retryLine: (line) => `Tentar novamente ${line}`,
