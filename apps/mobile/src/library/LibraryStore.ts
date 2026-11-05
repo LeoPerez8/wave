@@ -32,6 +32,7 @@ import {
 import { selectDownloadsToForget } from "./db/downloadRecovery";
 import {
   playedEntityTotals,
+  playedArtistTotals,
   playedArtistSongs,
   streamedLibraryPlays,
   recapPlays,
@@ -1221,6 +1222,10 @@ export class LibraryStore extends Context.Service<
     readonly playedEntityTotals: (
       window: StatsWindow,
     ) => Effect.Effect<PlayedEntityTotals, LibraryStoreError>;
+    /** `playedEntityTotals`' artists alone, without reading albums. */
+    readonly playedArtistTotals: (
+      window: StatsWindow,
+    ) => Effect.Effect<PlayedEntityTotals["artists"], LibraryStoreError>;
     /**
      * The all-time counted plays streamed of each Library song they are now
      * (a download of the video, or the same recording), by its id.
@@ -2206,6 +2211,8 @@ const make = Effect.gen(function* () {
 
     playedEntityTotals: (window) =>
       attempt("sum up played albums and artists", () => playedEntityTotals(db, window)),
+    playedArtistTotals: (window) =>
+      attempt("sum up played artists", () => playedArtistTotals(db, window)),
     streamedLibraryPlays: attempt("sum up the Library songs' streamed plays", () =>
       streamedLibraryPlays(db),
     ),

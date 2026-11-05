@@ -28,13 +28,13 @@ const readPlayed = libraryQuery(
     Effect.suspend(() => {
       const now = Date.now();
       return Effect.all({
-        recent: store.playedEntityTotals(followSuggestionsWindow(now)),
-        allTime: store.playedEntityTotals({ from: null, to: now }),
+        recent: store.playedArtistTotals(followSuggestionsWindow(now)),
+        allTime: store.playedArtistTotals({ from: null, to: now }),
       });
     }).pipe(
       Effect.map(({ recent, allTime }) => ({
-        recent: played(recent.artists),
-        allTime: played(allTime.artists),
+        recent: played(recent),
+        allTime: played(allTime),
       })),
     ),
   ),

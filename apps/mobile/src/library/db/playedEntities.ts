@@ -125,10 +125,18 @@ const countedSums = (entry: StreamedListeningTotal) => ({
   latestPlayAt: entry.latestPlayAt,
 });
 
-/** Metadata needed by Core's credit resolver, without reading play history. */
-const playedLibrary = (db: LibraryDatabase, releases: Iterable<YtAlbumSong> = []) => {
+/**
+ * Metadata needed by Core's credit resolver, without reading play history.
+ * Without [withAlbums] the Library's albums aren't read: a streamed song's
+ * artists resolve the same, only its album goes unmatched.
+ */
+const playedLibrary = (
+  db: LibraryDatabase,
+  releases: Iterable<YtAlbumSong> = [],
+  withAlbums = true,
+) => {
   const artists = selectArtists(db, {});
-  const albums = selectAlbums(db, undefined);
+  const albums = withAlbums ? selectAlbums(db, undefined) : [];
   const credits = db
     .all<{ credit: string; stored: string | null }>(
       sql`
@@ -140,9 +148,22 @@ const playedLibrary = (db: LibraryDatabase, releases: Iterable<YtAlbumSong> = []
 };
 
 /** Stats and Home's album/artist totals share one resolution of every streamed song. */
-export const playedEntityTotals = (
+export const playedEntityTotals = (db: LibraryDatabase, window: StatsWindow): PlayedEntityTotals =>
+  playedTotals(db, window, true);
+
+/**
+ * Each played artist's totals as `playedEntityTotals` counts them, without
+ * reading or summing albums: for a reader that needs artists alone.
+ */
+export const playedArtistTotals = (
   db: LibraryDatabase,
   window: StatsWindow,
+): readonly PlayedEntityTotal<PlayedArtist>[] => playedTotals(db, window, false).artists;
+
+const playedTotals = (
+  db: LibraryDatabase,
+  window: StatsWindow,
+  withAlbums: boolean,
 ): PlayedEntityTotals => {
   const credits = creditedPlayTotals(db, window);
   const streams = streamedListeningTotals(db, window).filter((entry) => entry.countedPlays > 0);
@@ -150,7 +171,7 @@ export const playedEntityTotals = (
     db,
     streams.map((entry) => entry.videoId),
   );
-  const library = playedLibrary(db, songs.values());
+  const library = playedLibrary(db, songs.values(), withAlbums);
   const artists = new Map<number | string, PlayedEntityTotal<PlayedArtist>>();
   const albums = new Map<number | string, PlayedEntityTotal<PlayedAlbum>>();
   const artistRows = new Map(library.artists.map((row) => [row.id, row]));
@@ -173,8 +194,9 @@ export const playedEntityTotals = (
       latestPlayAt: Math.max(previous?.latestPlayAt ?? 0, totals.latestPlayAt),
     });
   };
-  for (const totals of albumPlayTotals(credits))
-    add(albums, albumRows.get(totals.id), totals.sortKey, totals);
+  if (withAlbums)
+    for (const totals of albumPlayTotals(credits))
+      add(albums, albumRows.get(totals.id), totals.sortKey, totals);
   for (const totals of artistPlayTotals(credits))
     add(artists, artistRows.get(totals.id), totals.sortKey, totals);
   // Each song's streamed plays: a Library song's credit its artists and album, the rest as resolved.
@@ -197,7 +219,7 @@ export const playedEntityTotals = (
       add(artists, artist, artist?.sort ?? "", totals);
     }
     const album = links[0] === undefined ? undefined : albumRows.get(links[0].albumId);
-    add(albums, album, album?.titleSort ?? "", totals);
+    if (withAlbums) add(albums, album, album?.titleSort ?? "", totals);
   }
   for (const [videoId, totals] of merged.online) {
     const song = songs.get(videoId);
@@ -211,7 +233,7 @@ export const playedEntityTotals = (
       add(artists, item, sortKey(artist.name), totals);
     }
     const album = resolved.album;
-    if (album !== null)
+    if (withAlbums && album !== null)
       add(
         albums,
         typeof album.id === "number"
