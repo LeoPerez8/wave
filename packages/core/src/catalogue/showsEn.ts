@@ -19,7 +19,9 @@ export const showsEn = {
   /** The toast after Unfollow on Settings › Followed Artists, and its action. */
   unfollowed: (artist: string) => `Unfollowed ${artist}`,
   undo: "Undo",
-  /** Settings › Followed Artists' Suggested section: why each artist is there. */
+  /** Settings › Followed Artists' Suggested section, its button and why each artist is there. */
+  suggested: "Suggested",
+  showMore: "Show More",
   playsInLast90Days: (count: number) =>
     plural("en", count, {
       one: `${formatNumber("en", count)} play in the last 90 days`,

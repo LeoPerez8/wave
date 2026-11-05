@@ -16,6 +16,8 @@ export const showsPtBr: typeof showsEn = {
   iconFor: (option, artist) => `${option}, ${artist}`,
   unfollowed: (artist) => `Você deixou de seguir ${artist}`,
   undo: "Desfazer",
+  suggested: "Sugestões",
+  showMore: "Mostrar Mais",
   playsInLast90Days: (count) =>
     plural("pt-BR", count, {
       one: `${formatNumber("pt-BR", count)} reprodução nos últimos 90 dias`,

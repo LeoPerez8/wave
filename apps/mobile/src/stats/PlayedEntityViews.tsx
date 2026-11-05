@@ -50,7 +50,7 @@ const openOnlineAlbum = async (album: OnlineAlbum): Promise<void> => {
 const artistImages = new Map<string, Promise<string | null>>();
 
 /** Artist photos are requested only while online entries are visible and YT Music is enabled. */
-const usePlayedArtist = (artist: PlayedArtist) => {
+export const usePlayedArtist = (artist: PlayedArtist) => {
   const enabled = useYtMusicEnabled();
   const isOnlineArtist = "online" in artist;
   const settled = useScreenSettled();
