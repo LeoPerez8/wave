@@ -1,5 +1,10 @@
 import { IconX } from "@tabler/icons-react-native";
-import { FOLLOW_SUGGESTIONS_PAGE, followSuggestions, type FollowSuggestion } from "@wave/core";
+import {
+  FOLLOW_SUGGESTIONS_PAGE,
+  followSuggestions,
+  type FollowedArtist,
+  type FollowSuggestion,
+} from "@wave/core";
 import { useState } from "react";
 import { Text, View } from "react-native";
 
@@ -10,8 +15,7 @@ import {
   useDismissedFollowSuggestions,
 } from "@/library/followSuggestionDismissals";
 import { useFollowSuggestionPlayed } from "@/library/followSuggestions";
-import { useFollows, useFollowsRead } from "@/library/follows";
-import { openFollowedArtist } from "@/library/openFollowedArtist";
+import { useFollowsRead } from "@/library/follows";
 import { currentLocalisation, useLocalisation } from "@/localisation/localisation";
 import { showError } from "@/overlay/alert";
 import { showToast } from "@/overlay/toast";
@@ -39,18 +43,14 @@ const dismissWithUndo = (key: string): void => {
 
 function SuggestedArtistRow({ suggestion }: { suggestion: FollowSuggestion<PlayedArtist> }) {
   const { strings } = useLocalisation();
-  const { image } = usePlayedArtist(suggestion.item);
+  const { image, open } = usePlayedArtist(suggestion.item);
   return (
     <FollowArtistRow
       artist={{ name: suggestion.name }}
       image={image}
       follow={null}
       line={suggestion.line}
-      onOpen={() =>
-        void openFollowedArtist({ key: suggestion.key, name: suggestion.name }).catch((error) =>
-          showError(strings.library.couldntOpenArtist, error),
-        )
-      }
+      onOpen={open}
       trailing={
         <IconButton
           icon={IconX}
@@ -69,17 +69,27 @@ function SuggestedArtistRow({ suggestion }: { suggestion: FollowSuggestion<Playe
  * and doesn't follow (Core's `followSuggestions`), 5 at first and 5 more per
  * Show More. Following or dismissing (×, with Undo) one takes it out and the
  * next one fills its place; dismissed artists are never suggested again.
- * Nothing shows while [visible] is false or there's nothing to suggest; the
- * count starts over at 5 each time the page opens.
+ * [follows] are the screen's followed artists. Plays are read while [enabled];
+ * nothing shows while it's false, while [hidden] (a search on the page, which
+ * keeps the read and the count) or when there's nothing to suggest. The count
+ * starts over at 5 each time the page opens.
  */
-export function FollowSuggestions({ visible }: { visible: boolean }) {
+export function FollowSuggestions({
+  enabled,
+  hidden,
+  follows,
+}: {
+  enabled: boolean;
+  hidden: boolean;
+  follows: readonly FollowedArtist[];
+}) {
   const { strings } = useLocalisation();
   const [shown, setShown] = useState(FOLLOW_SUGGESTIONS_PAGE);
-  const played = useFollowSuggestionPlayed(visible);
-  const follows = useFollows();
+  const played = useFollowSuggestionPlayed(enabled);
   const followsRead = useFollowsRead();
   const dismissed = useDismissedFollowSuggestions();
-  if (!visible || played === undefined || !followsRead || dismissed === undefined) return null;
+  if (!enabled || hidden || played === undefined || !followsRead || dismissed === undefined)
+    return null;
   const { suggestions, more } = followSuggestions({
     ...played,
     excluded: follows.map((follow) => follow.key),
