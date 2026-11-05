@@ -78,7 +78,7 @@ export default function FollowedArtistsSettingsScreen() {
         {searching && results.length === 0 && !failed && !pending && (
           <Text className="py-3 font-sans text-footnote text-secondary">{searchStrings.empty}</Text>
         )}
-        <FollowSuggestions visible={enabled && !searching} />
+        <FollowSuggestions enabled={enabled} hidden={searching} follows={follows} />
         {!searching && follows.length === 0 && (
           <Text className="py-3 font-sans text-body text-secondary">
             {strings.settings.youArentFollowingAnyArtistsYet}
