@@ -99,9 +99,18 @@ test("restoring an unfollow brings back the same level and date, and goes up at 
   restoreFollow(db, before, 300);
   assert.deepEqual(selectFollow(db, "aurora"), before);
   const { rows } = selectUnpushed(db, 100, () => null);
-  assert.deepEqual(
-    rows.follows.map((row) => [row.id, row.deleted, row.level, row.followedAt, row.changedAt]),
-    [["aurora", false, "shows", 100, 300]],
-  );
+  assert.deepEqual(rows.follows, [
+    {
+      id: "aurora",
+      changedAt: 300,
+      phoneId: selectPhoneId(db),
+      deleted: false,
+      name: "Aurora",
+      level: "shows",
+      followedAt: 100,
+      deezerId: 7,
+      ytBrowseId: "UC7",
+    },
+  ]);
   closeTestDatabase(db);
 });

@@ -13,4 +13,7 @@ export const showsEn = {
   newReleasesAndShowsIn: (country: string) => `New releases and shows in ${country}`,
   /** A level icon for TalkBack: what it does, then whose it is. */
   iconFor: (option: string, artist: string) => `${option}, ${artist}`,
+  /** The toast after Unfollow on Settings › Followed Artists, and its action. */
+  unfollowed: (artist: string) => `Unfollowed ${artist}`,
+  undo: "Undo",
 };

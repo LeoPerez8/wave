@@ -12,4 +12,6 @@ export const showsPtBr: typeof showsEn = {
   newReleases: "Novos lançamentos",
   newReleasesAndShowsIn: (country) => `Novos lançamentos e shows em ${country}`,
   iconFor: (option, artist) => `${option}, ${artist}`,
+  unfollowed: (artist) => `Você deixou de seguir ${artist}`,
+  undo: "Desfazer",
 };
