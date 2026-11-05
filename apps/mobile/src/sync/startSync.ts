@@ -2,6 +2,7 @@ import type { WaveSession } from "@wave/core";
 
 import { libraryEdited, libraryVersion } from "@/library/LibraryScan";
 import { onFavoritesSaved, reloadFavorites } from "@/library/favorites";
+import { reloadFollowSuggestionDismissals } from "@/library/followSuggestionDismissals";
 import { reloadFollows } from "@/library/follows";
 import { followsSaved } from "@/library/followsSaved";
 import { downloadSyncedStars } from "@/library/starSongs";
@@ -36,16 +37,20 @@ const recorded = (what: PlaysRecorded): void => {
 };
 
 /**
- * Shows what the Wave account changed: lists over playlists, stars, plays and
- * follows re-read, and every list once missing songs came in or left. Missing songs
- * with a star download (`downloadSyncedStars`).
+ * Shows what the Wave account changed: lists over playlists, stars, plays,
+ * follows and dismissed follow suggestions re-read, and every list once
+ * missing songs came in or left. Missing songs with a star download
+ * (`downloadSyncedStars`).
  */
 const showPulled = (changes: SyncedChanges): void => {
   if (changes.library) libraryEdited();
   if (changes.playlists) playlistsChanged();
   if (changes.favorites) reloadFavorites();
   if (changes.plays) playHistoryChanged();
-  if (changes.follows) reloadFollows().catch(() => {});
+  if (changes.follows) {
+    reloadFollows().catch(() => {});
+    reloadFollowSuggestionDismissals().catch(() => {});
+  }
   if (changes.favorites || changes.library) void downloadSyncedStars();
 };
 

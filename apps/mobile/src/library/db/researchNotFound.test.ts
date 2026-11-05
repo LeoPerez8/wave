@@ -6,6 +6,7 @@ import {
   type UnsearchedSong,
   type YtAlbumSong,
 } from "@wave/core";
+import { sql } from "drizzle-orm";
 
 import {
   createPlaylist,
@@ -17,7 +18,7 @@ import {
   selectUnsearchedEntries,
   settleUnsearchedEntries,
 } from "./playlists.ts";
-import { markPushed, selectUnpushed } from "./syncRows.ts";
+import { selectUnpushed } from "./syncRows.ts";
 import {
   closeTestDatabase,
   migrateTestDatabase,
@@ -112,18 +113,21 @@ test("the reset syncs as a new change while removed entries and deleted playlist
     removePlaylistItems(db, removed.playlistId, [itemId], 200);
     deletePlaylist(db, gone.playlistId, 200);
     const graveyard = selectPlaylistGraveyard(db, removed.playlistId);
-    const before = selectUnpushed(db, 100, () => null);
-    markPushed(db, [...before.marks.values()].flat());
-    assert.deepEqual(selectUnpushed(db, 100, () => null).rows.playlistEntries, []);
+    // Read with SQL: `selectUnpushed` reads tables later migrations add.
+    db.run(sql`UPDATE playlist_items SET pushed = true`);
+    const before = db.all<{ id: string; changedAt: number; deleted: number; orderKey: string }>(
+      sql`SELECT sync_id AS id, changed_at AS changedAt, deleted, order_key AS orderKey
+        FROM playlist_items`,
+    );
 
     await migrateTestDatabase(db);
 
     const changes = selectUnpushed(db, 100, () => null).rows.playlistEntries;
     assert.equal(changes.length, 1);
     const changed = changes[0]!;
-    const previous = before.rows.playlistEntries.find((entry) => entry.id === changed.id)!;
+    const previous = before.find((entry) => entry.id === changed.id)!;
     assert.equal(changed.deleted, false);
-    assert.equal(previous.deleted, false);
+    assert.equal(previous.deleted, 0);
     assert.ok(changed.changedAt > previous.changedAt);
     assert.equal(changed.addedAt, 100);
     assert.equal(changed.orderKey, previous.orderKey);

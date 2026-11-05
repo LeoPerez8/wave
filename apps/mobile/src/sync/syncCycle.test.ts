@@ -24,6 +24,11 @@ import { countFollows, removeFollow, saveFollow, selectFollow } from "../library
 import { hideFollowRelease, readFollowReleases } from "../library/db/followReleases.ts";
 import { markShowNotified, readFollowShows } from "../library/db/followShows.ts";
 import {
+  dismissFollowSuggestion,
+  selectDismissedFollowSuggestions,
+  undoFollowSuggestionDismissal,
+} from "../library/db/followSuggestionDismissals.ts";
+import {
   addToPlaylist,
   addToShazam,
   createPlaylist,
@@ -514,6 +519,52 @@ describe("syncCycle", () => {
       ["Portishead", "Tricky", "Björk"].map((name) => selectFollow(b.db, name)?.level),
       ["releases", "shows", "releases"],
     );
+  });
+
+  test("a suggestion dismissed on one phone is dismissed on the other, and Undo brings it back there", async () => {
+    const service = testSyncService();
+    const a = await phone(service);
+    const b = await phone(service);
+    dismissFollowSuggestion(a.db, "massive attack", a.now());
+    await a.sync();
+    const pulled = await b.sync();
+
+    assert.equal(pulled.pulled.follows, true);
+    assert.deepEqual(selectDismissedFollowSuggestions(b.db), ["massive attack"]);
+    // Applied, not changed on b: nothing goes back up, nor when it's dismissed again.
+    dismissFollowSuggestion(b.db, "massive attack", b.now());
+    assert.equal((await b.sync()).pushed, 0);
+
+    undoFollowSuggestionDismissal(a.db, "massive attack", a.now());
+    await a.sync();
+    await b.sync();
+    assert.deepEqual(selectDismissedFollowSuggestions(b.db), []);
+
+    // Dismissed again on b after the Undo: a hides it once more.
+    dismissFollowSuggestion(b.db, "massive attack", b.now());
+    await b.sync();
+    await a.sync();
+    assert.deepEqual(selectDismissedFollowSuggestions(a.db), ["massive attack"]);
+  });
+
+  test("signing out keeps dismissed suggestions on the phone, and signing in again merges them", async () => {
+    const service = testSyncService();
+    const a = await phone(service);
+    const b = await phone(service);
+    dismissFollowSuggestion(a.db, "portishead", a.now());
+    await a.sync();
+    a.signOut();
+    assert.deepEqual(selectDismissedFollowSuggestions(a.db), ["portishead"]);
+
+    // Signed out, a dismissal stays here, and goes up with the rest at the next sign-in.
+    dismissFollowSuggestion(a.db, "tricky", a.now());
+    dismissFollowSuggestion(b.db, "bjork", b.now());
+    assert.equal(service.rows().dismissedSuggestions.length, 1);
+    await a.sync();
+    await b.sync();
+    await a.sync();
+    assert.deepEqual(selectDismissedFollowSuggestions(b.db), ["bjork", "portishead", "tricky"]);
+    assert.deepEqual(selectDismissedFollowSuggestions(a.db), ["bjork", "portishead", "tricky"]);
   });
 
   test("the synced Shazam id fills the same playlist on a second phone with different local ids", async () => {

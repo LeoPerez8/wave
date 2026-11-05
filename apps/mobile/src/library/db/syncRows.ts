@@ -17,6 +17,7 @@ import {
   syncsPreference,
   type AccountSongState,
   type PhoneSong,
+  type SyncDismissedSuggestion,
   type SyncFavorite,
   type SyncFollow,
   type SyncPlayRow,
@@ -53,13 +54,13 @@ const state = (db: LibraryDatabase) =>
  * or another account). Joining starts from nothing on the account's side
  * (the whole account is pulled again, what the phone knew of another
  * account's songs goes) and sends every playlist, entry, star, preference
- * play, follow, hidden release and notified show up again: the two
- * Libraries are joined, never replaced.
+ * play, follow, hidden release, notified show and dismissed follow
+ * suggestion up again: the two Libraries are joined, never replaced.
  */
 export const joinAccount = (db: LibraryDatabase, account: string): boolean => {
   if (state(db).account === account) return false;
   const { syncState, playlists, playlistItems, favorites, preferenceChanges, playEvents } = schema;
-  const { follows, hiddenFollowReleases, notifiedFollowShows } = schema;
+  const { follows, hiddenFollowReleases, notifiedFollowShows, dismissedFollowSuggestions } = schema;
   db.transaction((tx) => {
     tx.insert(syncState)
       .values({ id: 1, account, cursor: null })
@@ -74,6 +75,7 @@ export const joinAccount = (db: LibraryDatabase, account: string): boolean => {
       follows,
       hiddenFollowReleases,
       notifiedFollowShows,
+      dismissedFollowSuggestions,
     ]) {
       tx.update(table).set({ pushed: false }).where(eq(table.pushed, true)).run();
     }
@@ -148,7 +150,8 @@ type PushMark =
   | { readonly table: "playlists" | "entries"; readonly id: number; readonly changedAt: number }
   | { readonly table: "favorites"; readonly trackId: number; readonly changedAt: number }
   | {
-      readonly table: "preferences" | "follows" | "hiddenReleases" | "notifiedShows";
+      readonly table:
+        "preferences" | "follows" | "hiddenReleases" | "notifiedShows" | "dismissedSuggestions";
       readonly key: string;
       readonly changedAt: number;
     }
@@ -428,7 +431,7 @@ export const selectUnpushed = (
       ];
     });
 
-  const { follows, hiddenFollowReleases, notifiedFollowShows } = schema;
+  const { follows, hiddenFollowReleases, notifiedFollowShows, dismissedFollowSuggestions } = schema;
   const followRows = db
     .select()
     .from(follows)
@@ -486,6 +489,23 @@ export const selectUnpushed = (
       .limit(limit)
       .all(),
   );
+  const dismissedSuggestions = db
+    .select()
+    .from(dismissedFollowSuggestions)
+    .where(eq(dismissedFollowSuggestions.pushed, false))
+    .orderBy(asc(dismissedFollowSuggestions.key))
+    .limit(limit)
+    .all()
+    .map((row): SyncDismissedSuggestion => {
+      mark("dismissedSuggestions", row.key, {
+        table: "dismissedSuggestions",
+        key: row.key,
+        changedAt: row.changedAt,
+      });
+      return row.deleted
+        ? { id: row.key, ...stamp(row), deleted: true }
+        : { id: row.key, ...stamp(row), deleted: false, dismissedAt: row.dismissedAt };
+    });
 
   return {
     rows: {
@@ -499,6 +519,7 @@ export const selectUnpushed = (
       follows: followRows,
       hiddenReleases,
       notifiedShows,
+      dismissedSuggestions,
     },
     marks,
   };
@@ -509,6 +530,10 @@ const followRows = {
   follows: { table: schema.follows, key: schema.follows.key },
   hiddenReleases: { table: schema.hiddenFollowReleases, key: schema.hiddenFollowReleases.key },
   notifiedShows: { table: schema.notifiedFollowShows, key: schema.notifiedFollowShows.id },
+  dismissedSuggestions: {
+    table: schema.dismissedFollowSuggestions,
+    key: schema.dismissedFollowSuggestions.key,
+  },
 } as const;
 
 /**
@@ -567,7 +592,8 @@ export const markPushed = (db: LibraryDatabase, marks: readonly PushMark[]): voi
           break;
         case "follows":
         case "hiddenReleases":
-        case "notifiedShows": {
+        case "notifiedShows":
+        case "dismissedSuggestions": {
           const { table, key } = followRows[from.table];
           tx.update(table)
             .set({ pushed: true })
@@ -797,7 +823,7 @@ export interface PulledChanges {
   readonly playlists: boolean;
   readonly favorites: boolean;
   readonly plays: boolean;
-  /** Follows, hidden releases or notified shows changed. */
+  /** Follows, hidden releases, notified shows or dismissed follow suggestions changed. */
   readonly follows: boolean;
   /** The synced preferences whose value changed, with the value (null: none, its default). */
   readonly preferences: readonly { readonly key: string; readonly value: string | null }[];
@@ -1044,6 +1070,28 @@ const applyIdRow = (
   return true;
 };
 
+/** A dismissed follow suggestion, or its Undo (a tombstone). */
+const applyDismissal = (tx: LibraryDatabase, row: SyncDismissedSuggestion): boolean => {
+  const { dismissedFollowSuggestions: dismissals } = schema;
+  const held = tx.select().from(dismissals).where(eq(dismissals.key, row.id)).get();
+  if (held !== undefined && !wins(row, held)) return false;
+  // An Undo of a dismissal this phone never had has nothing to undo.
+  if (row.deleted && held === undefined) return false;
+  const values = {
+    ...(row.deleted ? {} : { dismissedAt: row.dismissedAt }),
+    ...stamp(row),
+    pushed: true,
+  };
+  if (held !== undefined) {
+    tx.update(dismissals).set(values).where(eq(dismissals.key, row.id)).run();
+  } else if (!row.deleted) {
+    tx.insert(dismissals)
+      .values({ key: row.id, dismissedAt: row.dismissedAt, ...values })
+      .run();
+  }
+  return true;
+};
+
 const applyPreference = (
   tx: LibraryDatabase,
   row: SyncPreference,
@@ -1209,6 +1257,9 @@ export const applyPulledPage = (
       if (applyIdRow(tx, row, { table: schema.notifiedFollowShows, field: "id" })) {
         changed.follows = true;
       }
+    }
+    for (const row of page.dismissedSuggestions) {
+      if (applyDismissal(tx, row)) changed.follows = true;
     }
     tx.update(schema.syncState)
       .set({ cursor: page.cursor })
