@@ -149,9 +149,12 @@ export function FollowArtistRow({
   );
 }
 
-/** The fixed legend above the search: each icon and what it does. */
-export function FollowIconLegend() {
-  const options = useIconOptions();
+/**
+ * The fixed legend above the search: each icon and what it does.
+ * [followsAtShows] keeps the ticket's line while a listed follow is at shows.
+ */
+export function FollowIconLegend({ followsAtShows }: { followsAtShows: boolean }) {
+  const options = { ...useIconOptions(), followsAtShows };
   const secondary = useThemeColor("secondary");
   const destructive = useThemeColor("destructive");
   return (

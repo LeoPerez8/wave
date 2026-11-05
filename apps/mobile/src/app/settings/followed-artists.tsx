@@ -40,7 +40,7 @@ export default function FollowedArtistsSettingsScreen() {
         <Hairline />
         <FollowCountryRow />
       </View>
-      <FollowIconLegend />
+      <FollowIconLegend followsAtShows={follows.some((follow) => follow.level === "shows")} />
       <View>
         <SearchField
           value={query}

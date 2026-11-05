@@ -12,6 +12,7 @@ export const showsPtBr: typeof showsEn = {
   channel: "Shows",
   tickets: "Ingressos",
   newReleases: "Novos lançamentos",
+  newReleasesAndShows: "Novos lançamentos e shows",
   newReleasesAndShowsIn: (country) => `Novos lançamentos e shows em ${country}`,
   iconFor: (option, artist) => `${option}, ${artist}`,
   unfollowed: (artist) => `Você deixou de seguir ${artist}`,
