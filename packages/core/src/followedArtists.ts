@@ -62,6 +62,58 @@ export const followLevelEntries = (
       ]),
 ];
 
+/** One of Settings › Followed Artists' level icons on a row. */
+export interface FollowLevelIcon {
+  readonly action: FollowLevel | "unfollow";
+  /** The active level's icon is filled; the others and Unfollow are outlined. */
+  readonly filled: boolean;
+  readonly accessibilityLabel: string;
+}
+/**
+ * A row's level icons on Settings › Followed Artists: the disc (releases), the
+ * ticket (shows) when shows can be checked, and Unfollow once [level] isn't null.
+ */
+export const followLevelIcons = (
+  level: FollowLevel | null,
+  options: {
+    readonly artist: string;
+    readonly showsAvailable?: boolean;
+    readonly country?: string;
+    readonly strings?: Catalogue;
+  },
+): readonly FollowLevelIcon[] => {
+  const strings = options.strings ?? en;
+  return followIconLegend(options)
+    .filter((line) => line.action !== "unfollow" || level !== null)
+    .map((line) => ({
+      action: line.action,
+      filled: line.action === level,
+      accessibilityLabel: strings.shows.iconFor(line.label, options.artist),
+    }));
+};
+/** One line of the legend above Settings › Followed Artists' search. */
+export interface FollowIconLegendLine {
+  readonly action: FollowLevel | "unfollow";
+  readonly label: string;
+}
+/** What each level icon does; the ticket's line only when shows can be checked. */
+export const followIconLegend = (
+  options: {
+    readonly showsAvailable?: boolean;
+    readonly country?: string;
+    readonly strings?: Catalogue;
+  } = {},
+): readonly FollowIconLegendLine[] => {
+  const strings = options.strings ?? en;
+  return [
+    { action: "releases", label: strings.shows.newReleases },
+    ...(options.showsAvailable && options.country
+      ? [{ action: "shows" as const, label: strings.shows.newReleasesAndShowsIn(options.country) }]
+      : []),
+    { action: "unfollow", label: strings.library.unfollow },
+  ];
+};
+
 export type ReleaseType = "single" | "ep" | "album";
 export interface FollowRelease {
   readonly key: string;

@@ -9,4 +9,7 @@ export const showsPtBr: typeof showsEn = {
   notificationSettings: "Abrir configurações de notificações",
   channel: "Shows",
   tickets: "Ingressos",
+  newReleases: "Novos lançamentos",
+  newReleasesAndShowsIn: (country) => `Novos lançamentos e shows em ${country}`,
+  iconFor: (option, artist) => `${option}, ${artist}`,
 };
