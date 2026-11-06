@@ -213,11 +213,12 @@ export const selectKnownFiles = (db: LibraryDatabase, roots: readonly string[]) 
 };
 
 /**
- * Deletes the tracks at `paths` (their playlist items and stars go with them).
- * Their play history stays, and keeps each track's album and every artist its
- * credit names, so Stats still credits them (see `play_events.album_id` and
- * `deleted_track_artists`). Run it in the transaction that prunes what the
- * tracks leave empty.
+ * Deletes the tracks at `paths`; their stars go with them, and so do the
+ * playlist entries still holding them (keep those first where they stay,
+ * `keepPlaylistEntries`). Their play history stays, and keeps each track's
+ * album and every artist its credit names, so Stats still credits them (see
+ * `play_events.album_id` and `deleted_track_artists`). Run it in the
+ * transaction that prunes what the tracks leave empty.
  */
 export const deleteTracks = (db: LibraryDatabase, paths: readonly string[]): void => {
   for (const some of chunks(paths)) deleteTracksWhere(db, inArray(schema.tracks.path, some));
@@ -256,6 +257,8 @@ const deleteTracksWhere = (db: LibraryDatabase, which: SQL): void => {
     )
     .onConflictDoNothing()
     .run();
+  // An entry no longer goes with its track by itself (migration 0056).
+  db.delete(schema.playlistItems).where(inArray(schema.playlistItems.trackId, leaving)).run();
   db.delete(tracks).where(which).run();
 };
 

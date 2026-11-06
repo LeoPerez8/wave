@@ -12,6 +12,10 @@ export const songDeletionPtBr: typeof songDeletionEn = {
     oneSignedIn: "O arquivo é removido do seu celular, e a música, da sua Conta Wave.",
     severalSignedIn: "Os arquivos são removidos do seu celular, e as músicas, da sua Conta Wave.",
   },
+  staysInPlaylists: {
+    one: "Ela continua nas suas playlists.",
+    several: "Elas continuam nas suas playlists.",
+  },
   delete: "Apagar",
   removeSongs: (count) => `Remover ${n(count)} músicas da sua Biblioteca?`,
   removeSong: (title) => `Remover “${title}” da sua Biblioteca?`,
