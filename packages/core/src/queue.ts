@@ -64,6 +64,12 @@ export type QueueCommand =
   | { readonly type: "playNext"; readonly trackIds: readonly string[] }
   | { readonly type: "addToQueue"; readonly trackIds: readonly string[] }
   /**
+   * Plays [trackIds]' first song now, as the current one (a related song
+   * tapped): the song that was playing goes to History, and Up Next and the
+   * songs lined up stay as they were. Any others go right after it.
+   */
+  | { readonly type: "playNow"; readonly trackIds: readonly string[] }
+  /**
    * More of the playing context: a Magic Queue's batch. The songs join the
    * end of the queue as context entries, after everything lined up, so they
    * aren't taken for songs lined up by hand. Nothing joins an empty queue.
@@ -759,6 +765,13 @@ const enqueue = (
   return result({ ...state, entries, nextKey });
 };
 
+/** Plays [trackIds] right after the current entry, the first of them now (`playNow`). */
+const playNow = (state: QueueState, trackIds: readonly string[]): QueueResult => {
+  if (trackIds.length === 0) return result(state);
+  const lined = enqueue(state, trackIds, "next").state;
+  return result(state.index < 0 ? lined : { ...lined, index: state.index + 1 }, "play");
+};
+
 /** Adds [trackIds] at the end of the queue as context entries, after the context's last. */
 const append = (state: QueueState, trackIds: readonly string[]): QueueResult => {
   if (state.index < 0 || trackIds.length === 0) return result(state);
@@ -942,6 +955,8 @@ export const reduceQueue = (
       return enqueue(state, playing(command.trackIds, passOver), "next");
     case "addToQueue":
       return enqueue(state, playing(command.trackIds, passOver), "last");
+    case "playNow":
+      return playNow(state, playing(command.trackIds, passOver));
     case "append":
       return append(state, playing(command.trackIds, passOver));
     case "moreFromArtist":

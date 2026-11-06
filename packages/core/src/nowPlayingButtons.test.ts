@@ -4,6 +4,7 @@ import { describe, test } from "node:test";
 import {
   NOW_PLAYING_ACTIONS,
   editNowPlayingButtons,
+  nowPlayingSlotChoices,
   nowPlayingSlotShow,
   readNowPlayingButtons,
   readNowPlayingSlotRoute,
@@ -56,6 +57,38 @@ describe("the saved Now Playing buttons", () => {
     ]) {
       assert.deepEqual(readNowPlayingButtons(stored), today, stored);
     }
+  });
+
+  test("a row holding Related comes back as saved", () => {
+    assert.deepEqual(
+      readNowPlayingButtons(storedNowPlayingButtons(["related", "sleepTimer", null, "download"])),
+      ["related", "sleepTimer", null, "download"],
+    );
+  });
+});
+
+describe("the choices a Now Playing slot offers", () => {
+  test("with YouTube Music on, every action, Related included", () => {
+    assert.deepEqual(nowPlayingSlotChoices(true), [
+      "lyrics",
+      "related",
+      "sleepTimer",
+      "addToPlaylist",
+      "download",
+      "shuffle",
+      "repeat",
+      "share",
+      "songMenu",
+    ]);
+  });
+
+  test("with YouTube Music off, Related isn't offered", () => {
+    assert.equal(nowPlayingSlotChoices(false).includes("related"), false);
+    assert.equal(nowPlayingSlotChoices(false).length, nowPlayingSlotChoices(true).length - 1);
+  });
+
+  test("the default row doesn't hold Related", () => {
+    assert.equal(readNowPlayingButtons(null).includes("related"), false);
   });
 });
 
@@ -110,21 +143,33 @@ describe("setting the Now Playing buttons", () => {
 describe("how a Now Playing slot shows", () => {
   test("with a song on, every action's button shows and runs", () => {
     for (const action of NOW_PLAYING_ACTIONS)
-      assert.equal(nowPlayingSlotShow(action, "song"), "on");
+      assert.equal(nowPlayingSlotShow(action, "song", true), "on");
   });
 
   test("with nothing playing, the slots that need a song stay empty and the others show", () => {
     const shown = NOW_PLAYING_ACTIONS.filter(
-      (action) => nowPlayingSlotShow(action, "nothing") !== "hidden",
+      (action) => nowPlayingSlotShow(action, "nothing", true) !== "hidden",
     );
     assert.deepEqual(shown, ["lyrics", "sleepTimer", "shuffle", "repeat"]);
-    assert.equal(nowPlayingSlotShow("lyrics", "nothing"), "on");
+    assert.equal(nowPlayingSlotShow("lyrics", "nothing", true), "on");
   });
 
   test("while an unsearched entry's search runs, Song menu shows off and the rest run", () => {
-    assert.equal(nowPlayingSlotShow("songMenu", "unsearched"), "off");
+    assert.equal(nowPlayingSlotShow("songMenu", "unsearched", true), "off");
     for (const action of NOW_PLAYING_ACTIONS.filter((other) => other !== "songMenu"))
-      assert.equal(nowPlayingSlotShow(action, "unsearched"), "on");
+      assert.equal(nowPlayingSlotShow(action, "unsearched", true), "on");
+  });
+
+  test("with YouTube Music off, a slot holding Related is empty and the others show as before", () => {
+    for (const song of ["nothing", "unsearched", "song"] as const) {
+      assert.equal(nowPlayingSlotShow("related", song, false), "hidden", song);
+      for (const action of NOW_PLAYING_ACTIONS.filter((other) => other !== "related"))
+        assert.equal(
+          nowPlayingSlotShow(action, song, false),
+          nowPlayingSlotShow(action, song, true),
+          `${action} ${song}`,
+        );
+    }
   });
 });
 

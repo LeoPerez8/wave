@@ -11,7 +11,7 @@ export type SongChangeCause =
   | "previous"
   /** A tap on an Up Next row (`jumpTo`). */
   | "queueTap"
-  /** A new queue from a list. */
+  /** A new queue from a list, or a song played now (Play Now). */
   | "play"
   /** The queue following a move the player made on its own (a song ending, the notification). */
   | "player"
@@ -48,6 +48,8 @@ export const songChangeCause = (command: QueueCommand): SongChangeCause => {
     case "play":
     case "trackEnded":
       return command.type;
+    case "playNow":
+      return "play";
     case "jumpTo":
       return "queueTap";
     case "playerMoved":

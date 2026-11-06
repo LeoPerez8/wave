@@ -1,11 +1,13 @@
 /**
  * Now Playing's bottom row: four slots the owner fills (Settings › Layout ›
- * Now Playing), then Queue, fixed on the right.
+ * Now Playing), then Queue, fixed on the right. Related is only offered,
+ * and only shows, with YouTube Music on.
  */
 
 /** What a slot can hold. */
 export type NowPlayingAction =
   | "lyrics"
+  | "related"
   | "sleepTimer"
   | "addToPlaylist"
   | "download"
@@ -28,6 +30,7 @@ export type NowPlayingButtons = readonly [
 /** Every action, in the order a slot's choices list them. */
 export const NOW_PLAYING_ACTIONS: readonly NowPlayingAction[] = [
   "lyrics",
+  "related",
   "sleepTimer",
   "addToPlaylist",
   "download",
@@ -46,6 +49,16 @@ const isButtons = (value: unknown): value is NowPlayingButtons => {
   const actions = value.filter((slot) => slot !== null);
   return new Set(actions).size === actions.length;
 };
+
+/** The actions that read YouTube Music, offered and shown only with it on. */
+const NEEDS_YT_MUSIC: ReadonlySet<NowPlayingAction> = new Set(["related"]);
+
+/**
+ * The actions a slot's choices list (its picker in Settings, its long-press
+ * card), in order: every one, but Related only with YouTube Music on.
+ */
+export const nowPlayingSlotChoices = (ytMusic: boolean): readonly NowPlayingAction[] =>
+  ytMusic ? NOW_PLAYING_ACTIONS : NOW_PLAYING_ACTIONS.filter((action) => !NEEDS_YT_MUSIC.has(action));
 
 /** The row before it could be changed: Lyrics, Sleep timer, Add to Playlist, Download. */
 const DEFAULT_BUTTONS: NowPlayingButtons = ["lyrics", "sleepTimer", "addToPlaylist", "download"];
@@ -107,6 +120,7 @@ export type NowPlayingSlotSong = "nothing" | "unsearched" | "song";
 
 /** The actions that need a song on to show: with nothing playing their slots stay empty. */
 const NEEDS_SONG: ReadonlySet<NowPlayingAction> = new Set([
+  "related",
   "addToPlaylist",
   "download",
   "share",
@@ -114,14 +128,18 @@ const NEEDS_SONG: ReadonlySet<NowPlayingAction> = new Set([
 ]);
 
 /**
- * How slot [action]'s button shows with [song] on: hidden, off (it shows
- * disabled and only long-presses to change the slot), or on. Song menu is off
- * while an unsearched entry's search runs, since the song has no menu yet.
+ * How slot [action]'s button shows with [song] on and YouTube Music on or
+ * off ([ytMusic]): hidden, off (it shows disabled and only long-presses to
+ * change the slot), or on. Song menu is off while an unsearched entry's
+ * search runs, since the song has no menu yet. Related is hidden with
+ * YouTube Music off, so its slot stays empty.
  */
 export const nowPlayingSlotShow = (
   action: NowPlayingAction,
   song: NowPlayingSlotSong,
+  ytMusic: boolean,
 ): "hidden" | "off" | "on" => {
+  if (!ytMusic && NEEDS_YT_MUSIC.has(action)) return "hidden";
   if (song === "nothing") return NEEDS_SONG.has(action) ? "hidden" : "on";
   return song === "unsearched" && action === "songMenu" ? "off" : "on";
 };

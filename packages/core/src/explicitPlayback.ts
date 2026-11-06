@@ -43,8 +43,8 @@ export const explicitSkipNotice = (title: string, catalogue: Catalogue = en): st
 
 /**
  * What [command] says once the queue passed over its songs ([passOver]),
- * by their titles ([titleOf]): a tapped explicit song was skipped (or, with
- * no clean song to play instead, didn't play), or a play, Play Next or Add to
+ * by their titles ([titleOf]): a tapped explicit song (or Play Now's) was
+ * skipped (or, with no clean song to play instead, didn't play), or a play, Play Next or Add to
  * Queue of explicit songs alone did nothing. Null when it played or queued
  * something, or passed nothing over: a list's explicit songs go quietly.
  */
@@ -54,14 +54,20 @@ export const explicitPlayNotice = (
   titleOf: (trackId: string) => string,
   catalogue: Catalogue = en,
 ): string | null => {
-  if (command.type !== "play" && command.type !== "playNext" && command.type !== "addToQueue") {
+  if (
+    command.type !== "play" &&
+    command.type !== "playNow" &&
+    command.type !== "playNext" &&
+    command.type !== "addToQueue"
+  ) {
     return null;
   }
   const { trackIds } = command;
   const clean = trackIds.some((trackId) => !passOver(trackId));
   const text = catalogue.playbackText;
-  const play = command.type === "play";
-  const tapped = play ? command.startIndex : undefined;
+  const play = command.type === "play" || command.type === "playNow";
+  // Play Now plays its first song, as a play plays the tapped one.
+  const tapped = command.type === "play" ? command.startIndex : play ? 0 : undefined;
   const chosen = tapped === undefined ? undefined : trackIds[tapped];
   if (chosen !== undefined && passOver(chosen)) {
     return clean
