@@ -237,6 +237,7 @@ import {
   type PlaylistRemoval,
   renamePlaylist,
   replacePlaylistSongs,
+  selectInPlaylists,
   selectPlaylist,
   selectPlaylistEntries,
   selectPlaylistGraveyard,
@@ -870,8 +871,11 @@ export class LibraryStore extends Context.Service<
     /**
      * Takes these songs out of the Library and, signed in, out of the Wave
      * account (Remove from Library; Delete once their files are gone).
+     * Their playlist entries stay, as songs without a file.
      */
     readonly removeSongs: (trackIds: readonly number[]) => Effect.Effect<void, LibraryStoreError>;
+    /** Whether any of these songs is in a playlist (the Delete confirmation says they stay there). */
+    readonly inPlaylists: (trackIds: readonly number[]) => Effect.Effect<boolean, LibraryStoreError>;
     /**
      * The missing songs as downloading them takes them, in title order; with
      * [trackIds], only those still missing of them.
@@ -1495,7 +1499,7 @@ const removeRootSync = (db: Database, splits: CreditSplits, path: string): void 
       .all()
       .map((row) => row.path);
     const leaving = filesLeavingWithRoot(under, path, remaining);
-    leaveFiles(tx, leaving);
+    leaveFiles(tx, leaving, Date.now());
     tx.delete(scanRoots).where(eq(scanRoots.path, path)).run();
 
     // Exclusions only mean something inside a root.
@@ -1938,7 +1942,7 @@ const make = Effect.gen(function* () {
     filesGone: (paths) =>
       writeAttempt("update songs whose files are gone", () => {
         if (paths.length === 0 && prunedAt === writes()) return;
-        filesGone(db, splits, paths);
+        filesGone(db, splits, paths, Date.now());
         prunedAt = writes();
       }),
 
@@ -1946,6 +1950,8 @@ const make = Effect.gen(function* () {
       writeAttempt("remove songs from the library", () =>
         removeSongs(db, splits, trackIds, Date.now()),
       ),
+    inPlaylists: (trackIds) =>
+      attempt("read whether songs are in playlists", () => selectInPlaylists(db, trackIds)),
     missingSongs: (trackIds) =>
       attempt("read missing songs", () => selectMissingSongs(db, trackIds)),
     albumsMissingSongs: (albumIds) =>

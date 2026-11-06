@@ -24,26 +24,33 @@ export interface SongDeleteFailure {
 
 /**
  * The alert that asks first, `Delete "Song"?`, with a destructive Delete.
- * [signedIn] to a Wave account, the songs leave the account too.
+ * [signedIn] to a Wave account, the songs leave the account too. When a song
+ * is [inPlaylists], a line under it says the songs stay there: their entries
+ * are kept as songs without a file (Core's `leavingSongEntry`).
  */
 export const confirmSongDeletion = (
   songs: readonly { readonly title: string }[],
-  { signedIn = false }: { readonly signedIn?: boolean } = {},
+  {
+    signedIn = false,
+    inPlaylists = false,
+  }: { readonly signedIn?: boolean; readonly inPlaylists?: boolean } = {},
   strings: Catalogue = en,
 ): AlertSpec & { readonly action: NonNullable<AlertSpec["action"]> } => {
   const text = strings.songDeletion;
   const only = songs.length === 1 ? songs[0] : undefined;
   const message = text.deleteMessage;
+  const leaves =
+    only === undefined
+      ? signedIn
+        ? message.severalSignedIn
+        : message.several
+      : signedIn
+        ? message.oneSignedIn
+        : message.one;
+  const stays = only === undefined ? text.staysInPlaylists.several : text.staysInPlaylists.one;
   return {
     title: only === undefined ? text.deleteSongs(songs.length) : text.deleteSong(only.title),
-    message:
-      only === undefined
-        ? signedIn
-          ? message.severalSignedIn
-          : message.several
-        : signedIn
-          ? message.oneSignedIn
-          : message.one,
+    message: inPlaylists ? `${leaves}\n${stays}` : leaves,
     action: { label: text.delete, destructive: true },
   };
 };

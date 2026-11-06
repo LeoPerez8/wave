@@ -6,8 +6,11 @@
  * and entries at their next pull.
  */
 
+import { UNKNOWN_ALBUM } from "./library.ts";
+import type { UnsearchedEntry } from "./playlistEntries.ts";
 import type { SyncRow } from "./sync.ts";
 import type { SyncFavorite, SyncPlaylistEntry, SyncSong } from "./syncWire.ts";
+import type { YtSong } from "./ytMusic.ts";
 
 /** One Track leaving its recording key. */
 export interface LeavingTrack {
@@ -81,4 +84,40 @@ export const songsLeaving = (input: {
     for (const entry of track.entries) playlistEntries.push(tombstone(entry.id, entry.changedAt));
   }
   return { songs: [...songs.values()], favorites: [...favorites.values()], playlistEntries };
+};
+
+/** A Library song leaving the Library, as its playlist entries are kept (`leavingSongEntry`). */
+export interface LeavingSong {
+  /** The YouTube video id of a song downloaded from YouTube Music, else `null`. */
+  readonly videoId: string | null;
+  readonly title: string;
+  /** Its artist credit, for a song whose credit wasn't split into artists. */
+  readonly artist: string;
+  readonly artists: readonly string[];
+  readonly album: string;
+  readonly durationMs: number;
+  readonly explicit: boolean;
+}
+
+/**
+ * What a playlist entry of [song] becomes when the song leaves the Library
+ * (Delete, Remove from Library, a signed-out scan that no longer finds its
+ * file): the entry a song without a file is, in the same place. A song
+ * downloaded from YouTube Music becomes a YT Music entry of its video, which
+ * streams; any other an unsearched entry, which Wave searches on YouTube
+ * Music as it does a Spotify import's. Neither knows a cover.
+ */
+export const leavingSongEntry = (
+  song: LeavingSong,
+): { readonly source: "stream"; readonly song: YtSong } | UnsearchedEntry => {
+  const listed = {
+    title: song.title,
+    artists: song.artists.length > 0 ? song.artists : [song.artist],
+    album: song.album === UNKNOWN_ALBUM || song.album === "" ? null : song.album,
+    durationMs: song.durationMs > 0 ? song.durationMs : null,
+    artworkUrl: null,
+  };
+  return song.videoId === null
+    ? { source: "unsearched", song: listed }
+    : { source: "stream", song: { videoId: song.videoId, ...listed, explicit: song.explicit } };
 };

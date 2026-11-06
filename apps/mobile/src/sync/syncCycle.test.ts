@@ -33,6 +33,7 @@ import {
   addToShazam,
   createPlaylist,
   deletePlaylist,
+  linkPlaylistEntries,
   movePlaylistItem,
   removePlaylistItems,
   restorePlaylistItems,
@@ -179,7 +180,7 @@ const phone = async (service: TestSyncService, songs: readonly Song[] = OK_COMPU
         .where(inArray(schema.tracks.title, [...titles]))
         .all()
         .flatMap((row) => row.path ?? []);
-      filesGone(db, splits, paths);
+      filesGone(db, splits, paths, now());
     },
     /** Remove from Library (a missing song), or Delete once the file is gone (a song with one). */
     remove: (title: string) => {
@@ -197,6 +198,8 @@ const phone = async (service: TestSyncService, songs: readonly Song[] = OK_COMPU
       skipFiles(db, splits, [{ path: row.path, sizeBytes: 1_000, modifiedAt: 0 }], now());
       tracks.delete(title);
     },
+    /** A scan ends: playlists' entries become the songs the Library has (`linkPlaylistEntries`). */
+    scanEnds: () => linkPlaylistEntries(db, now()),
     /** Signs out of the Wave account. */
     signOut: () => signOut(db, splits),
     /** Changes a synced preference here, as Settings does. */
@@ -890,7 +893,7 @@ describe("syncCycle", () => {
     );
   });
 
-  test("a removed song's star and playlist entries leave the account with it, even on a phone that keeps its file", async () => {
+  test("a removed song's star leaves the account with it, and its entries stay as the song without a file, or the file's song on a phone that has it", async () => {
     const service = testSyncService();
     const a = await phone(service, [...OK_COMPUTER, EXIT_MUSIC]);
     const exit = a.track("Exit Music");
@@ -920,20 +923,39 @@ describe("syncCycle", () => {
 
     assert.deepEqual(favoriteTitles(a.db), []);
     assert.deepEqual(favoriteTitles(b.db), []);
-    assert.deepEqual(playlistTitles(a.db), [{ name: "Night", songs: ["Airbag"] }]);
-    assert.deepEqual(playlistTitles(b.db), [{ name: "Night", songs: ["Airbag"] }]);
+    assert.ok(service.rows().favorites.every((star) => star.deleted));
+    // Each entry stays in its place, as the song without a file.
+    for (const db of [a.db, b.db]) {
+      assert.deepEqual(playlistTitles(db), [
+        { name: "Night", songs: ["Airbag", "yt:Lucky", "yt:Exit Music"] },
+      ]);
+    }
     assert.deepEqual(
       files(b.db).map(([title]) => title),
       ["Airbag", "Paranoid Android", "Lucky"],
     );
-    // The removals went up once.
+    // A phone with the file shows its song there once its scan ends.
+    a.scanEnds();
+    b.scanEnds();
+    await a.sync();
+    await b.sync();
+    await a.sync();
+    assert.deepEqual(playlistTitles(a.db), [
+      { name: "Night", songs: ["Airbag", "yt:Lucky", "Exit Music"] },
+    ]);
+    assert.deepEqual(playlistTitles(b.db), [
+      { name: "Night", songs: ["Airbag", "Lucky", "yt:Exit Music"] },
+    ]);
+    // The changes went up once.
     assert.equal((await a.sync()).pushed, 0);
     assert.equal((await b.sync()).pushed, 0);
-    // A phone signing in later gets none of them back.
-    const c = await phone(service);
+    // A phone signing in later gets the entries, not the star.
+    const c = await phone(service, []);
     await c.sync();
     assert.deepEqual(favoriteTitles(c.db), []);
-    assert.deepEqual(playlistTitles(c.db), [{ name: "Night", songs: ["Airbag"] }]);
+    assert.deepEqual(playlistTitles(c.db), [
+      { name: "Night", songs: ["Airbag", "yt:Lucky", "yt:Exit Music"] },
+    ]);
   });
 
   test("a file retagged to another recording key takes its star and entries along, and its old version leaves the account", async () => {

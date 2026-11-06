@@ -35,6 +35,7 @@ import {
 import { and, asc, desc, eq, inArray, isNotNull, isNull, ne, or, sql, type SQL } from "drizzle-orm";
 
 import type { PlaylistAddResult, PlaylistDetail, PlaylistRow } from "../LibraryStore.ts";
+import { chunks } from "./chunks.ts";
 import type { LibraryDatabase, RowPage } from "./database.ts";
 import {
   countAppend,
@@ -629,6 +630,25 @@ export const selectPlaylistEntriesRevision = (db: LibraryDatabase): number =>
     .from(schema.playlistRevisions)
     .where(ne(schema.playlistRevisions.playlistId, LIBRARY_REVISION))
     .get()?.sum ?? 0;
+
+/**
+ * Whether any of the Library songs [trackIds] is in a playlist (an entry not
+ * removed, in a playlist not deleted): the Delete confirmation then says
+ * they stay there (Core's `confirmSongDeletion`).
+ */
+export const selectInPlaylists = (db: LibraryDatabase, trackIds: readonly number[]): boolean => {
+  const { playlists, playlistItems } = schema;
+  return chunks(trackIds).some(
+    (some) =>
+      db
+        .select({ id: playlistItems.id })
+        .from(playlistItems)
+        .innerJoin(playlists, eq(playlists.id, playlistItems.playlistId))
+        .where(and(inArray(playlistItems.trackId, some), live, eq(playlists.deleted, false)))
+        .limit(1)
+        .get() !== undefined,
+  );
+};
 
 /**
  * Turns the YT Music and unavailable entries of every playlist that the
