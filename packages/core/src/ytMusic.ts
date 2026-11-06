@@ -155,6 +155,34 @@ export const recordingMatches = (
   );
 };
 
+/** A song looked for on YouTube Music by its title and artists (a Magic Queue seed, Related's playing song). */
+export interface SongSearchKey {
+  readonly title: string;
+  readonly artists: readonly string[];
+  /** Null or 0 when it isn't known. */
+  readonly durationMs: number | null;
+}
+
+/** The Songs search Magic Queue and Related make for a song without a video id: its title and artists. */
+export const songSearchQuery = (song: SongSearchKey): string =>
+  `${song.title} ${song.artists.join(" ")}`;
+
+/**
+ * The video id of the first of [results] that is [song]'s recording
+ * (`recordingMatches`: title, a shared artist and, when both are known, its
+ * length), or null when none is.
+ */
+export const songSearchMatch = (
+  song: SongSearchKey,
+  results: readonly Pick<YtSong, "videoId" | "title" | "artists" | "durationMs">[],
+): string | null =>
+  results.find((result) =>
+    recordingMatches(
+      { title: song.title, artist: song.artists.join(", "), durationMs: song.durationMs ?? 0 },
+      result,
+    ),
+  )?.videoId ?? null;
+
 /**
  * The Library song a YT Music song already is, or null: one with its title
  * (case, accents, punctuation, featured credits and remaster notes aside) that shares an

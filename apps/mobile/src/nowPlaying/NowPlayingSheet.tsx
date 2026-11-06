@@ -194,7 +194,7 @@ export function NowPlayingSheet() {
   const ytMusic = useYtMusicEnabled();
   // Related needs YouTube Music: turned off, the player shows in its place.
   const view = chosenView === "related" && !ytMusic ? "player" : chosenView;
-  const videoId = usePlayingVideoId(view === "related" ? trackId : null, ytSong);
+  const { videoId, findAgain } = usePlayingVideoId(view === "related" ? trackId : null, ytSong);
   const showPlayer = useCallback(() => setView("player"), []);
   // The Queue, once shown, stays mounted while another view shows (`QueuePane`).
   const [queueWarm, setQueueWarm] = useState(false);
@@ -350,7 +350,12 @@ export function NowPlayingSheet() {
               />
             )}
             {view === "related" && (
-              <RelatedView item={item} videoId={videoId} onShowPlayer={showPlayer} />
+              <RelatedView
+                item={item}
+                videoId={videoId}
+                findAgain={findAgain}
+                onShowPlayer={showPlayer}
+              />
             )}
             <Activity mode={view === "player" ? "visible" : "hidden"} name="Player">
               <PlayerPane item={item} details={details} playing={playing} />

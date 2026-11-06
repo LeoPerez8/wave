@@ -60,7 +60,8 @@ const titleOf = (song: ListedSong): string =>
  * Now Playing's Related view, in place of the cover: the playing song's
  * header (a tap returns to the player), then the songs YouTube Music's
  * Related tab gives for it ([videoId]; null for a song without one, undefined
- * while it isn't known). A song the Library has lists and plays as the
+ * while it isn't known; [findAgain] is Try Again's search for a Library song
+ * none was found for, `usePlayingVideoId`). A song the Library has lists and plays as the
  * Library's. A tap plays it now and keeps Up Next; rows swipe and long-press
  * as anywhere. A + on each row's right adds the song to the end of the queue
  * as its menu's Add to Queue does; the row and its + stay, so a second tap
@@ -71,14 +72,16 @@ const titleOf = (song: ListedSong): string =>
 export function RelatedView({
   item,
   videoId,
+  findAgain,
   onShowPlayer,
 }: {
   item: NonNullable<PlaybackState["item"]>;
   videoId: string | null | undefined;
+  findAgain: () => void;
   onShowPlayer: () => void;
 }) {
   const { strings } = useLocalisation();
-  const { shown, retry } = useRelatedSongs(videoId);
+  const { shown, retry } = useRelatedSongs(videoId, findAgain);
   const find = useLibraryFinder(shown.status === "loaded");
   const read = shown.status === "loaded" ? shown.answer.songs : NO_SONGS;
   const artists = shown.status === "loaded" ? shown.answer.artists : NO_ARTISTS;

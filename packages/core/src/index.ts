@@ -866,13 +866,15 @@ export {
   libraryImportFinderSteps,
   recordingMatches,
   recordingMatchTitle,
+  songSearchMatch,
+  songSearchQuery,
   libraryMatcher,
   parseTrackId,
   ytSongArtist,
   ytSongCredit,
   ytTrackId,
 } from "./ytMusic.ts";
-export type { LibrarySongKey, TrackRef, YtSong } from "./ytMusic.ts";
+export type { LibrarySongKey, SongSearchKey, TrackRef, YtSong } from "./ytMusic.ts";
 export {
   CONFIRM_WAVE_ACCOUNT_DELETION,
   confirmWaveAccountDeletion,
@@ -2493,8 +2495,13 @@ export {
   type SampleTouchEvent,
 } from "./touchSample.ts";
 export type { LongPressFill, SampleMenuEntry } from "./touchSample.ts";
-export { createRelatedSongsSession } from "./relatedSongs.ts";
-export type { RelatedSongsSession, RelatedSongsShown } from "./relatedSongs.ts";
+export { createRelatedSearches, createRelatedSongsSession } from "./relatedSongs.ts";
+export type {
+  RelatedSearches,
+  RelatedSearchSong,
+  RelatedSongsSession,
+  RelatedSongsShown,
+} from "./relatedSongs.ts";
 export {
   NOW_PLAYING_ACTIONS,
   NOW_PLAYING_BUTTONS_KEY,
