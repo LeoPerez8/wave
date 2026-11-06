@@ -1,7 +1,9 @@
 /**
  * Now Playing's Related view: what YouTube Music's watch-next Related tab
- * gives for the playing song, read once per song per session.
+ * gives for the playing song, read once per song per session, and the
+ * search that finds a Library song without a video id first.
  */
+import { songSearchMatch, songSearchQuery, type SongSearchKey, type YtSong } from "./ytMusic.ts";
 
 /** What Related shows for a song: loading, its answer, or "Couldn't load the related songs". */
 export type RelatedSongsShown<A> =
@@ -56,6 +58,84 @@ export const createRelatedSongsSession = <A>(
         (answer) => set(videoId, { status: "loaded", answer }),
         () => set(videoId, FAILED),
       );
+    },
+    subscribe: (listener) => {
+      listeners.add(listener);
+      return () => listeners.delete(listener);
+    },
+  };
+};
+
+/** A Library song Related looks for on YouTube Music: it has no video id of its own. */
+export interface RelatedSearchSong extends SongSearchKey {
+  /** Its Library id. */
+  readonly id: number;
+}
+
+/** The session's searches for Library songs without a video id, by Library id. */
+export interface RelatedSearches {
+  /**
+   * The video id the search found for the Library song [id]: undefined
+   * while it searches (or before it does), null when nothing matched or the
+   * search failed. The same answer until it changes.
+   */
+  readonly videoId: (id: number) => string | null | undefined;
+  /**
+   * Searches for [song] unless the session holds what an earlier search
+   * found (a match, or no match), or a search is on its way. A failure
+   * isn't kept, so coming back to the song searches again.
+   */
+  readonly find: (song: RelatedSearchSong) => void;
+  /** Try Again: searches for [song] again after no match or a failure. */
+  readonly findAgain: (song: RelatedSearchSong) => void;
+  /** Calls [listener] whenever a song's answer changes; returns the unsubscribe. */
+  readonly subscribe: (listener: () => void) => () => void;
+}
+
+type Found =
+  | { readonly status: "searching" }
+  | { readonly status: "found"; readonly videoId: string | null }
+  | { readonly status: "failed" };
+
+/**
+ * A session's searches for Library songs without a video id, as Magic Queue
+ * searches a seed: one YouTube Music Songs search of the title and artists
+ * ([search], which rejects offline or on a failure), taking the first result
+ * that is the same recording (`songSearchQuery`, `songSearchMatch`). What it
+ * finds is kept for the session, so the song isn't searched again.
+ */
+export const createRelatedSearches = (
+  search: (
+    query: string,
+  ) => Promise<readonly Pick<YtSong, "videoId" | "title" | "artists" | "durationMs">[]>,
+): RelatedSearches => {
+  const songs = new Map<number, Found>();
+  const listeners = new Set<() => void>();
+  const set = (id: number, found: Found): void => {
+    songs.set(id, found);
+    for (const listener of listeners) listener();
+  };
+  const start = (song: RelatedSearchSong): void => {
+    set(song.id, { status: "searching" });
+    search(songSearchQuery(song)).then(
+      (results) => set(song.id, { status: "found", videoId: songSearchMatch(song, results) }),
+      () => set(song.id, { status: "failed" }),
+    );
+  };
+  return {
+    videoId: (id) => {
+      const found = songs.get(id);
+      if (found === undefined || found.status === "searching") return undefined;
+      return found.status === "found" ? found.videoId : null;
+    },
+    find: (song) => {
+      const held = songs.get(song.id);
+      if (held === undefined || held.status === "failed") start(song);
+    },
+    findAgain: (song) => {
+      const held = songs.get(song.id);
+      if (held?.status !== "searching" && !(held?.status === "found" && held.videoId !== null))
+        start(song);
     },
     subscribe: (listener) => {
       listeners.add(listener);

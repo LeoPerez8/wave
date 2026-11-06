@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { describe, test } from "node:test";
 
-import { createRelatedSongsSession } from "./index.ts";
+import { createRelatedSearches, createRelatedSongsSession } from "./index.ts";
 
 /** A read held open until the test answers or fails it, counting the reads asked for. */
 const reads = () => {
@@ -100,6 +100,152 @@ describe("the related songs a session keeps", () => {
     assert.equal(heard, 2);
     stop();
     session.read("song-b");
+    assert.equal(heard, 2);
+  });
+});
+
+/** A YouTube Music Songs search held open until the test answers or fails it. */
+const searches = () => {
+  const asked: string[] = [];
+  const pending: { answer: (songs: unknown[]) => void; fail: () => void }[] = [];
+  const search = (query: string) => {
+    asked.push(query);
+    return new Promise<readonly SearchHit[]>((resolve, reject) => {
+      pending.push({
+        answer: (songs) => resolve(songs as SearchHit[]),
+        fail: () => reject(new Error("offline")),
+      });
+    });
+  };
+  const settle = () => new Promise((resolve) => setTimeout(resolve, 0));
+  return {
+    search,
+    asked,
+    answer: async (songs: readonly SearchHit[]) => {
+      pending.shift()!.answer([...songs]);
+      await settle();
+    },
+    fail: async () => {
+      pending.shift()!.fail();
+      await settle();
+    },
+  };
+};
+
+interface SearchHit {
+  readonly videoId: string;
+  readonly title: string;
+  readonly artists: readonly string[];
+  readonly durationMs: number | null;
+}
+
+/** A Library song with no YouTube video id: Daft Punk's "Get Lucky", 4:08. */
+const lucky = {
+  id: 7,
+  title: "Get Lucky",
+  artists: ["Daft Punk", "Pharrell Williams"],
+  durationMs: 248_000,
+};
+const hit = (videoId: string, title: string, artists: string[], durationMs: number): SearchHit => ({
+  videoId,
+  title,
+  artists,
+  durationMs,
+});
+
+describe("a Library song without a video id, searched for Related", () => {
+  test("is searched by its title and artists, and takes the first result that is the same recording", async () => {
+    const youtube = searches();
+    const related = createRelatedSearches(youtube.search);
+    related.find(lucky);
+    assert.equal(related.videoId(lucky.id), undefined, "searching shows loading");
+    await youtube.answer([
+      hit("cover", "Get Lucky", ["Daft Punk Tribute Band"], 248_000),
+      hit("live", "Get Lucky (Live)", ["Daft Punk"], 410_000),
+      hit("song", "Get Lucky (feat. Pharrell Williams)", ["Daft Punk"], 249_000),
+      hit("video", "Get Lucky", ["Daft Punk"], 248_000),
+    ]);
+    assert.deepEqual(youtube.asked, ["Get Lucky Daft Punk Pharrell Williams"]);
+    assert.equal(related.videoId(lucky.id), "song");
+  });
+
+  test("the video id found is kept for the session, so coming back to the song doesn't search again", async () => {
+    const youtube = searches();
+    const related = createRelatedSearches(youtube.search);
+    related.find(lucky);
+    await youtube.answer([hit("song", "Get Lucky", ["Daft Punk"], 248_000)]);
+    related.find(lucky);
+    related.findAgain(lucky);
+    assert.equal(youtube.asked.length, 1);
+    assert.equal(related.videoId(lucky.id), "song");
+  });
+
+  test("no match gives no video id (the error), kept until Try Again searches again", async () => {
+    const youtube = searches();
+    const related = createRelatedSearches(youtube.search);
+    related.find(lucky);
+    await youtube.answer([hit("other", "Instant Crush", ["Daft Punk"], 337_000)]);
+    assert.equal(related.videoId(lucky.id), null);
+    related.find(lucky);
+    assert.equal(youtube.asked.length, 1, "coming back keeps the miss");
+    related.findAgain(lucky);
+    assert.equal(related.videoId(lucky.id), undefined, "Try Again shows loading");
+    await youtube.answer([hit("song", "Get Lucky", ["Daft Punk"], 248_000)]);
+    assert.equal(youtube.asked.length, 2);
+    assert.equal(related.videoId(lucky.id), "song");
+  });
+
+  test("a failed search (offline, or YouTube failing) gives the error and isn't kept", async () => {
+    const youtube = searches();
+    const related = createRelatedSearches(youtube.search);
+    related.find(lucky);
+    await youtube.fail();
+    assert.equal(related.videoId(lucky.id), null);
+    related.find(lucky);
+    assert.equal(youtube.asked.length, 2, "coming back searches again");
+    await youtube.fail();
+    related.findAgain(lucky);
+    assert.equal(youtube.asked.length, 3, "so does Try Again");
+  });
+
+  test("a search on its way isn't asked for twice", () => {
+    const youtube = searches();
+    const related = createRelatedSearches(youtube.search);
+    related.find(lucky);
+    related.find(lucky);
+    related.findAgain(lucky);
+    assert.equal(youtube.asked.length, 1);
+  });
+
+  test("a song not searched yet shows loading, and each song keeps its own answer", async () => {
+    const youtube = searches();
+    const related = createRelatedSearches(youtube.search);
+    assert.equal(related.videoId(lucky.id), undefined);
+    const crush = { id: 8, title: "Instant Crush", artists: ["Daft Punk"], durationMs: null };
+    related.find(lucky);
+    related.find(crush);
+    assert.deepEqual(youtube.asked, [
+      "Get Lucky Daft Punk Pharrell Williams",
+      "Instant Crush Daft Punk",
+    ]);
+    await youtube.answer([hit("song", "Get Lucky", ["Daft Punk"], 248_000)]);
+    await youtube.answer([
+      hit("crush", "Instant Crush", ["Daft Punk", "Julian Casablancas"], 337_000),
+    ]);
+    assert.equal(related.videoId(lucky.id), "song");
+    assert.equal(related.videoId(crush.id), "crush", "an unknown length still matches");
+  });
+
+  test("listeners hear each change of a song's answer", async () => {
+    const youtube = searches();
+    const related = createRelatedSearches(youtube.search);
+    let heard = 0;
+    const stop = related.subscribe(() => (heard += 1));
+    related.find(lucky);
+    await youtube.answer([]);
+    assert.equal(heard, 2);
+    stop();
+    related.findAgain(lucky);
     assert.equal(heard, 2);
   });
 });

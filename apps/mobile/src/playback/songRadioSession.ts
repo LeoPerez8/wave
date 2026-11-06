@@ -1,5 +1,10 @@
 /** A live first page per session, cached starts, and continuation reads only when low. */
-import { recordingMatches, type MagicSongRadioSeed, type YtAlbumSong } from "@wave/core";
+import {
+  songSearchMatch,
+  songSearchQuery,
+  type MagicSongRadioSeed,
+  type YtAlbumSong,
+} from "@wave/core";
 import * as Effect from "effect/Effect";
 
 export type SongRadioSeed = MagicSongRadioSeed;
@@ -49,13 +54,8 @@ export const createSongRadioSession = <E, R>(
     if (seed.kind === "artist") return yield* deps.artist(seed.artists[0] ?? seed.title);
     let videoId = seed.videoId;
     if (videoId === undefined) {
-      const songs = yield* deps.search(`${seed.title} ${seed.artists.join(" ")}`);
-      videoId = songs.find((song) =>
-        recordingMatches(
-          { title: seed.title, artist: seed.artists.join(", "), durationMs: seed.durationMs ?? 0 },
-          song,
-        ),
-      )?.videoId;
+      const songs = yield* deps.search(songSearchQuery(seed));
+      videoId = songSearchMatch(seed, songs) ?? undefined;
     }
     if (videoId !== undefined) return yield* deps.radio(videoId);
     const artist = seed.artists[0];
