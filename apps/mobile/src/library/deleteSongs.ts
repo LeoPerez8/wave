@@ -31,13 +31,21 @@ export interface SongsDeleted<S extends DeletableSong> {
 }
 
 /**
+ * Runs with the songs whose files are gone, and is awaited, before they leave
+ * the Library and the queue (Now Playing's Download streams the playing one
+ * on there). Its failure doesn't stop them leaving.
+ */
+export type FilesGone<S> = (deleted: readonly S[]) => Promise<void>;
+
+/**
  * Deletes the songs' audio files (and sidecar `.lrc` files) from the phone,
  * without asking. The songs whose files are gone leave the library and,
- * signed in, the Wave account (`leaveLibrary`). Songs whose files couldn't be
- * deleted stay as they were.
+ * signed in, the Wave account (`leaveLibrary`), once [filesGone] is done.
+ * Songs whose files couldn't be deleted stay as they were.
  */
 export const deleteSongs = <S extends DeletableSong>(
   songs: readonly S[],
+  { filesGone }: { readonly filesGone?: FilesGone<S> | undefined } = {},
 ): Promise<SongsDeleted<S>> =>
   appRuntime.runPromise(
     Effect.gen(function* () {
@@ -54,6 +62,9 @@ export const deleteSongs = <S extends DeletableSong>(
       });
       if (deleted.length === 0) return { deleted, failed };
 
+      if (filesGone !== undefined) {
+        yield* Effect.ignore(Effect.tryPromise(() => filesGone(deleted)));
+      }
       yield* leaveLibrary(deleted.map((song) => song.id));
       return { deleted, failed };
     }),
@@ -115,12 +126,19 @@ export const confirmRemoveSongs = async (
  * playlists when one is in a playlist), then deletes the songs
  * (`deleteSongs`) and says how many couldn't be deleted, in one error.
  * [onConfirm] runs once the user confirms, before the files go (the selection
- * bar ends selection mode there, so Cancel keeps it). Resolves with the songs
- * deleted: none when cancelled.
+ * bar ends selection mode there, so Cancel keeps it); [filesGone] once the
+ * files are gone, before the songs leave the Library (`deleteSongs`).
+ * Resolves with the songs deleted: none when cancelled.
  */
 export const confirmDeleteSongs = async <S extends DeletableSong>(
   songs: readonly S[],
-  { onConfirm }: { readonly onConfirm?: (() => void) | undefined } = {},
+  {
+    onConfirm,
+    filesGone,
+  }: {
+    readonly onConfirm?: (() => void) | undefined;
+    readonly filesGone?: FilesGone<S> | undefined;
+  } = {},
 ): Promise<readonly S[]> => {
   if (songs.length === 0) return [];
   const [signedInNow, inPlaylistsNow] = await Promise.all([
@@ -136,7 +154,7 @@ export const confirmDeleteSongs = async <S extends DeletableSong>(
   if (!(await confirmAction(confirmation))) return [];
   onConfirm?.();
   try {
-    const { deleted, failed } = await deleteSongs(songs);
+    const { deleted, failed } = await deleteSongs(songs, { filesGone });
     const error = songDeletionFailure(
       failed.map(({ song, reason }) => ({ title: song.title, reason })),
       songs.length,

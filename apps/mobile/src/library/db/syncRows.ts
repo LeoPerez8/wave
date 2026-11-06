@@ -37,8 +37,8 @@ import {
 import { and, asc, eq, getTableColumns, inArray, isNotNull, isNull, or, sql } from "drizzle-orm";
 
 import { chunks } from "./chunks.ts";
-import { readCredits } from "./credits.ts";
 import type { LibraryDatabase } from "./database.ts";
+import { leavingSong, leavingSongColumns } from "./leavingSong.ts";
 import * as schema from "./schema.ts";
 import { selectPhoneId, selectTrackIdentities, stamped } from "./sync.ts";
 import { hasFile, trackQuery } from "./tracks.ts";
@@ -230,15 +230,7 @@ const leftSong = (row: {
   if (row.songId === null || row.songGone !== true || row.title === null || row.artist === null)
     return null;
   return writePlaylistEntrySong(
-    leavingSongEntry({
-      videoId: row.videoId,
-      title: row.title,
-      artist: row.artist,
-      artists: readCredits(row.artist, row.artists),
-      album: row.album ?? "",
-      durationMs: row.durationMs ?? 0,
-      explicit: row.explicit === "explicit",
-    }),
+    leavingSongEntry(leavingSong({ ...row, title: row.title, artist: row.artist })),
   );
 };
 
@@ -335,13 +327,7 @@ export const selectUnpushed = (
       deleted: playlistItems.deleted,
       // The account removed the Track's song: what it goes up as instead (`leftSong`).
       songGone: accountSongs.deleted,
-      videoId: tracks.videoId,
-      title: tracks.title,
-      artist: tracks.artistCredit,
-      artists: tracks.artistCredits,
-      album: albums.title,
-      durationMs: tracks.durationMs,
-      explicit: tracks.explicit,
+      ...leavingSongColumns,
     })
     .from(playlistItems)
     .innerJoin(playlists, eq(playlistItems.playlistId, playlists.id))

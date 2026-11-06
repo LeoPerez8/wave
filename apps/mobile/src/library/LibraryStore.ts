@@ -13,7 +13,7 @@ import {
   followReleaseListening,
   type FollowReleaseCache,
 } from "./db/followReleases";
-import type { FollowRelease } from "@wave/core";
+import type { FollowRelease, LeavingSong } from "@wave/core";
 import type { FollowedArtist, FollowLevel } from "@wave/core";
 import {
   selectFollow,
@@ -87,6 +87,7 @@ import {
   type GraphPlay,
   type GraphPlayCursor,
 } from "./db/artistGraph";
+import { selectLeavingSong } from "./db/leavingSong";
 import { selectNowPlayingSong } from "./db/nowPlayingSong";
 import type { PlayingSongAnswer, PlayingSongTarget } from "../nowPlaying/songLookup";
 import {
@@ -920,6 +921,11 @@ export class LibraryStore extends Context.Service<
     readonly hasPlayableSongOutside: (
       ids: readonly number[],
     ) => Effect.Effect<boolean, LibraryStoreError>;
+    /**
+     * The Library song [id] as it would leave the Library (Core's
+     * `LeavingSong`: its video id, its credits split); null when it isn't there.
+     */
+    readonly leavingSong: (id: number) => Effect.Effect<LeavingSong | null, LibraryStoreError>;
     /** The YouTube video id each of the songs [ids] was downloaded from, by song id (those with one). */
     readonly videoIds: (
       ids: readonly number[],
@@ -1993,6 +1999,7 @@ const make = Effect.gen(function* () {
     songsByIds: (ids) =>
       attempt("read queued songs", () => selectPlayableSongs(db, ids).filter(songHasFile)),
 
+    leavingSong: (id) => attempt("read the song leaving", () => selectLeavingSong(db, id)),
     videoIds: (ids) => attempt("read the songs' video ids", () => selectVideoIds(db, ids)),
     countedPlays: (ids) =>
       attempt("read the songs' counted plays", () => selectCountedPlays(db, ids)),
