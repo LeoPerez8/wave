@@ -62,6 +62,15 @@ export interface NativeYtArtistRadio extends NativeYtRadioPage {
 }
 
 /**
+ * A song's Related tab (YouTube Music's watch page): its songs ("You might
+ * also like") and similar artists, in the tab's order.
+ */
+export interface NativeYtRelated {
+  readonly songs: readonly NativeYtSong[];
+  readonly artists: readonly YtArtistCandidate[];
+}
+
+/**
  * The codes a YT Music request rejects with: no network, YouTube answered
  * with an error or something unreadable, YT Music is off in Settings, or a
  * request that needs the account's session (the library) has none YouTube
@@ -166,6 +175,11 @@ declare class WaveYtMusicModule extends NativeModule<WaveYtMusicEvents> {
   ): Promise<NativeYtRadioPage>;
   /** The radio page a radio page's [continuation] leads to. */
   radioMore(continuation: string, meter?: string): Promise<NativeYtRadioPage>;
+  /**
+   * The songs and similar artists of the Related tab of the song
+   * [videoId]'s watch page (both empty for a song without one). Needs no sign-in.
+   */
+  related(videoId: string, meter?: string): Promise<NativeYtRelated>;
   /**
    * Caches a YT Music song's cover from [url] beside the Library's artwork, so
    * the player, the notification and Auto show it as they do a Library

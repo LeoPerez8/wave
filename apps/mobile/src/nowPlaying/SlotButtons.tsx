@@ -1,5 +1,6 @@
 import { useLocalisation } from "@/localisation/localisation";
 import {
+  IconCirclesRelation,
   IconDots,
   IconQuote,
   IconRepeat,
@@ -53,7 +54,7 @@ export function ViewToggle({
   );
 }
 
-/** What the slots' buttons act on: the song playing and the sheet's Lyrics view. */
+/** What the slots' buttons act on: the song playing and the sheet's Lyrics and Related views. */
 export interface SlotContext {
   readonly trackId: string | null;
   readonly ytSong: NativeYtSong | null;
@@ -61,6 +62,8 @@ export interface SlotContext {
   readonly title: string;
   readonly lyricsShown: boolean;
   readonly toggleLyrics: () => void;
+  readonly relatedShown: boolean;
+  readonly toggleRelated: () => void;
   /** Shares the song playing, as its menu's Share does. */
   readonly share: () => void;
 }
@@ -121,6 +124,16 @@ export function SlotButton({
           label={strings.playbackText.lyrics}
           on={context.lyricsShown}
           onPress={context.toggleLyrics}
+          change={change}
+        />
+      );
+    case "related":
+      return (
+        <ViewToggle
+          icon={IconCirclesRelation}
+          label={strings.playbackText.related}
+          on={context.relatedShown}
+          onPress={context.toggleRelated}
           change={change}
         />
       );

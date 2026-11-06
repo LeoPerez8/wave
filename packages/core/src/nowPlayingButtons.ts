@@ -58,7 +58,9 @@ const NEEDS_YT_MUSIC: ReadonlySet<NowPlayingAction> = new Set(["related"]);
  * card), in order: every one, but Related only with YouTube Music on.
  */
 export const nowPlayingSlotChoices = (ytMusic: boolean): readonly NowPlayingAction[] =>
-  ytMusic ? NOW_PLAYING_ACTIONS : NOW_PLAYING_ACTIONS.filter((action) => !NEEDS_YT_MUSIC.has(action));
+  ytMusic
+    ? NOW_PLAYING_ACTIONS
+    : NOW_PLAYING_ACTIONS.filter((action) => !NEEDS_YT_MUSIC.has(action));
 
 /** The row before it could be changed: Lyrics, Sleep timer, Add to Playlist, Download. */
 const DEFAULT_BUTTONS: NowPlayingButtons = ["lyrics", "sleepTimer", "addToPlaylist", "download"];
