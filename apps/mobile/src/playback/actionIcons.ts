@@ -28,6 +28,7 @@ import {
   IconTrashX,
   IconX,
   IconUserPlus,
+  IconZzz,
 } from "@tabler/icons-react-native";
 import type {
   DiscoverMixAction,
@@ -110,6 +111,7 @@ export const ACTION_ICONS: { readonly [A in MenuAction]: ActionIcon } = {
   retryDownload: IconRefresh,
   downloadMissingSongs: IconDownload,
   retryFailed: IconRefresh,
+  sleepTimer: IconZzz,
   downloadAlbum: IconDownload,
   cancelAlbumDownload: IconX,
   downloadPlaylist: IconDownload,

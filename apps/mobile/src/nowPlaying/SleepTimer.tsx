@@ -6,13 +6,15 @@ import {
   entryDivider,
   formatSleepMinutes,
   formatSleepRemaining,
+  sleepTimerEntryLabel,
+  sleepTimerLabelChangesIn,
   sleepTimerRemaining,
   sleepTimerLabelSeconds,
   stepSleepMinutes,
   type SleepTimer,
   type SleepTimerChoice,
 } from "@wave/core";
-import { useCallback, useState, useSyncExternalStore } from "react";
+import { useCallback, useEffect, useState, useSyncExternalStore } from "react";
 import { StyleSheet, Text, TextInput, View, type TextInputProps } from "react-native";
 import {
   createAnimatedComponent,
@@ -266,8 +268,11 @@ function SleepTimerMenu({ close }: { close: () => void }) {
   );
 }
 
-/** Opens the timer menu over everything, Now Playing included, next to its button. */
-const openSleepTimer = (): void => {
+/**
+ * Opens the timer menu over everything, Now Playing included: next to the
+ * Sleep timer slot's button, or centred from the playing song's card.
+ */
+export const openSleepTimer = (): void => {
   openOverlay({
     label: currentLocalisation().strings.playbackText.sleepTimer2,
     anchor: pressedRect(),
@@ -312,3 +317,30 @@ export function SleepTimerButton({ change }: { change?: SlotChange | undefined }
     </Press>
   );
 }
+
+/**
+ * The playing song's card's Sleep Timer entry (Core's `sleepTimerEntryLabel`):
+ * the time left while a timer runs, which changes at each whole second while
+ * the card shows (Core's `sleepTimerLabelChangesIn`), or End of track. A
+ * menu that isn't the playing song's card passes [ticking] false and never
+ * re-renders for the clock.
+ */
+export const useSleepTimerEntryLabel = (ticking: boolean): string => {
+  const { strings } = useLocalisation();
+  const timer = useSleepTimer();
+  const [now, setNow] = useState(Date.now);
+  useEffect(() => {
+    if (!ticking || timer === null) return;
+    let timeout: ReturnType<typeof setTimeout> | undefined;
+    // Read the clock at once (a timer set while the card shows), then at each whole second.
+    const update = () => {
+      const at = Date.now();
+      setNow(at);
+      const delay = sleepTimerLabelChangesIn(timer, at);
+      if (delay !== null) timeout = setTimeout(update, delay);
+    };
+    timeout = setTimeout(update, 0);
+    return () => clearTimeout(timeout);
+  }, [ticking, timer]);
+  return sleepTimerEntryLabel(timer, now, strings);
+};
