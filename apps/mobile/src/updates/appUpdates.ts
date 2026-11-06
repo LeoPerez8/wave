@@ -238,9 +238,9 @@ export const installAppUpdate = (): void => {
 };
 
 /**
- * The update button in Settings: Install Now with a bundle ready, which reloads Wave on it at once;
- * what "Update the app" does when an APK is ready; and otherwise a check now, whose APK it downloads
- * and installs.
+ * The update button in Settings: Install Now with an update ready, which reloads Wave on a bundle at
+ * once or does what the "Update the app" pill does for an APK; and otherwise a check now, whose APK
+ * it downloads and installs.
  */
 export const tapUpdateButton = (): void => {
   runner.tapUpdateButton();

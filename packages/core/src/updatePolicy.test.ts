@@ -332,10 +332,9 @@ describe("what becomes of a request from the update button", () => {
       updateRequestAfter("installBundle", { ...front, bundleDownloaded: false }),
       "none",
     );
-    assert.equal(
-      updateRequestAfter("installBundle", { ...front, nativeUpdate: "available" }),
-      "none",
-    );
+    for (const nativeUpdate of ["available", "downloaded"] as const) {
+      assert.equal(updateRequestAfter("installBundle", { ...front, nativeUpdate }), "none");
+    }
   });
 });
 
@@ -912,15 +911,27 @@ describe("the update button in Settings", () => {
     });
 
     it("offers no bundle while an APK is pending, which holds bundles back", () => {
-      for (const nativeUpdate of ["available", "downloaded"] as const) {
+      assert.equal(
+        updateButtonLook({
+          ...readyFace,
+          nativeUpdate: "available",
+          updateRequest: "none",
+          downloadPercent: null,
+        }),
+        "idle",
+      );
+    });
+
+    it("offers Install Now with a downloaded APK, even one swiped off the pill", () => {
+      for (const bundleDownloaded of [false, true]) {
         assert.equal(
           updateButtonLook({
-            ...readyFace,
-            nativeUpdate,
+            nativeUpdate: "downloaded",
+            bundleDownloaded,
             updateRequest: "none",
             downloadPercent: null,
           }),
-          "idle",
+          "installNow",
         );
       }
     });
