@@ -1,5 +1,6 @@
 import { currentLocalisation } from "@/localisation/localisation";
 import {
+  NOW_PLAYING_BUTTONS_KEY,
   editNowPlayingButtons,
   readNowPlayingButtons,
   storedNowPlayingButtons,
@@ -13,10 +14,12 @@ import { persistedSetting, sameFields } from "@/lib/persistedSetting";
 
 /**
  * Now Playing's four button slots, left of Queue (Settings › Layout › Now
- * Playing). Synced with the Wave account, as the tab bar is.
+ * Playing). Synced with the Wave account, as the tab bar is. Core's key
+ * replaced the one rows were kept under before the default changed, which
+ * stays stored but is never read.
  */
 const nowPlayingButtons = persistedSetting<NowPlayingButtons>({
-  key: "settings.nowPlayingButtons",
+  key: NOW_PLAYING_BUTTONS_KEY,
   synced: true,
   read: readNowPlayingButtons,
   write: storedNowPlayingButtons,

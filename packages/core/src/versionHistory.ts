@@ -32,6 +32,30 @@ export const readVersionHistory = (answer: unknown): readonly DatedRelease[] | n
 };
 
 /**
+ * The list to keep on the phone (docs/spec.md, Build and CI, Version History), in the service's
+ * own answer form, so `readKeptVersionHistory` reads it back as the service's answer is read.
+ */
+export const keptVersionHistory = (releases: readonly DatedRelease[]): string =>
+  JSON.stringify({
+    releases: releases.map(({ version, date, notes }) => ({
+      version,
+      date: date === null ? null : new Date(date).toISOString(),
+      notes,
+    })),
+  });
+
+/** The list `keptVersionHistory` kept, or null when nothing is or it can't be read. */
+export const readKeptVersionHistory = (stored: string | null): readonly DatedRelease[] | null => {
+  if (stored === null) return null;
+  try {
+    return readVersionHistory(JSON.parse(stored));
+  } catch {
+    // Unreadable: as if nothing were kept.
+    return null;
+  }
+};
+
+/**
  * Where the channel's whole history is: on the service the manifest comes from. Null with no
  * channel the service knows (a PR or local build's "none") or no address to go by.
  */
