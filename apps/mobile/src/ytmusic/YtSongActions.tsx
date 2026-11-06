@@ -43,6 +43,7 @@ import { startMagicQueueFromStream } from "@/playback/magicQueueStart";
 import type { MenuOptions } from "@/playback/ActionsMenu";
 import type { RowSwipeOptions } from "@/playback/rowSwipe";
 import { showError } from "@/overlay/alert";
+import { openSleepTimer } from "@/nowPlaying/SleepTimer";
 import { swipeSettingsNow } from "@/settings/swipeActions";
 import { ytMusicEnabled, useYtMusicEnabled } from "@/settings/ytMusic";
 import { shareStreamedSong } from "@/share/songShare";
@@ -111,7 +112,8 @@ type Entry =
         | "removeFromPlaylist"
         | "releaseDate"
         | "share"
-        | "select";
+        | "select"
+        | "sleepTimer";
     }
   | { readonly kind: "album"; readonly action: "goToAlbum"; readonly album: string }
   | {
@@ -223,6 +225,10 @@ const run = (
     case "select":
       onSelect?.();
       return;
+    // The playing song's card: the timer menu, as the Sleep timer slot's button opens it.
+    case "sleepTimer":
+      openSleepTimer();
+      return;
   }
 };
 
@@ -242,7 +248,7 @@ function YtSongActionsMenu({
   song: NativeYtSong;
   playlistItem: PlaylistPlace | undefined;
   onSelect: (() => void) | undefined;
-  /** The song is the one playing: no Play Next or Add to Queue. */
+  /** The song is the one playing: Sleep Timer instead of Play Next and Add to Queue. */
   playing: boolean | undefined;
   close: () => void;
 }) {
@@ -289,7 +295,13 @@ function YtSongActionsMenu({
   });
   const list = layout.list.flatMap((entry): MenuChoice[] =>
     "kind" in entry
-      ? [{ action: entry.action, label: label(entry, song, find), onPress: choose(entry) }]
+      ? [
+          {
+            action: entry.action,
+            label: label(entry, song, find),
+            onPress: choose(entry),
+          },
+        ]
       : [],
   );
 

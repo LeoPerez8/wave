@@ -32,6 +32,7 @@ export const itemActionsEn = {
     retryDownload: "Retry Download",
     downloadMissingSongs: "Download Missing Songs",
     retryFailed: "Retry Failed",
+    sleepTimer: "Sleep Timer",
   } satisfies Record<ItemAction, string>,
   /**
    * Shorter captions for a bar button. "Unfavorite" is wider than a button of
@@ -53,6 +54,8 @@ export const itemActionsEn = {
   remove: "Remove",
   /** Release Date's menu entry for a song with a date ([date], `formatReleaseDate`'s). */
   releaseDateIs: (date: string): string => `Release Date · ${date}`,
+  /** The playing song's card's Sleep Timer entry while a timer runs ([left]: `14:59`, End of track). */
+  sleepTimerIs: (left: string): string => `Sleep Timer · ${left}`,
   /** A song's star toggled from a swipe, a menu or the selection bar. */
   addedToFavorites: "Added to Favorites",
   addedSongsToFavorites: (count: number): string => `Added ${count} songs to Favorites`,

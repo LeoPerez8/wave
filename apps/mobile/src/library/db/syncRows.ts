@@ -11,6 +11,7 @@ import {
   UNKNOWN_ALBUM,
   accountTrackIds,
   creditSplitter,
+  leavingSongEntry,
   mergeRows,
   planSongSync,
   songsLeaving,
@@ -31,11 +32,13 @@ import {
   type SyncSongFields,
   type SyncTables,
   UNKNOWN_SONG_TITLE,
+  writePlaylistEntrySong,
 } from "@wave/core";
 import { and, asc, eq, getTableColumns, inArray, isNotNull, isNull, or, sql } from "drizzle-orm";
 
 import { chunks } from "./chunks.ts";
 import type { LibraryDatabase } from "./database.ts";
+import { leavingSong, leavingSongColumns } from "./leavingSong.ts";
 import * as schema from "./schema.ts";
 import { selectPhoneId, selectTrackIdentities, stamped } from "./sync.ts";
 import { hasFile, trackQuery } from "./tracks.ts";
@@ -206,6 +209,32 @@ const songRow = (row: {
       };
 
 /**
+ * What an entry of a Track whose song the account removed (Remove from
+ * Library, Delete on another phone) goes up as: the entry a song leaving the
+ * Library becomes (Core's `leavingSongEntry`), as `yt_song` stores it, so
+ * the other phones keep it in place instead of waiting for a song that
+ * won't come. This phone keeps its file's song there. Null for any other
+ * entry, which goes up as it is.
+ */
+const leftSong = (row: {
+  readonly songId: string | null;
+  readonly songGone: boolean | null;
+  readonly videoId: string | null;
+  readonly title: string | null;
+  readonly artist: string | null;
+  readonly artists: string | null;
+  readonly album: string | null;
+  readonly durationMs: number | null;
+  readonly explicit: string | null;
+}): string | null => {
+  if (row.songId === null || row.songGone !== true || row.title === null || row.artist === null)
+    return null;
+  return writePlaylistEntrySong(
+    leavingSongEntry(leavingSong({ ...row, title: row.title, artist: row.artist })),
+  );
+};
+
+/**
  * Up to [limit] rows of each table that changed here and aren't on the
  * account yet, as the service's rows: songs by recording key, entries,
  * stars and plays pointing at recording keys, preferences with the value
@@ -217,7 +246,8 @@ export const selectUnpushed = (
   limit: number,
   preferenceValue: (key: string) => string | null,
 ): UnpushedRows => {
-  const { accountSongs, playlists, playlistItems, favorites, tracks, preferenceChanges } = schema;
+  const { accountSongs, albums, playlists, playlistItems, favorites, tracks } = schema;
+  const { preferenceChanges } = schema;
   const { playEvents, syncRemovals } = schema;
   const marks = new Map<string, PushMark[]>();
   const mark = (table: keyof SyncTables, id: string, from: PushMark) => {
@@ -295,10 +325,15 @@ export const selectUnpushed = (
       changedAt: playlistItems.changedAt,
       phoneId: playlistItems.phoneId,
       deleted: playlistItems.deleted,
+      // The account removed the Track's song: what it goes up as instead (`leftSong`).
+      songGone: accountSongs.deleted,
+      ...leavingSongColumns,
     })
     .from(playlistItems)
     .innerJoin(playlists, eq(playlistItems.playlistId, playlists.id))
     .leftJoin(tracks, eq(playlistItems.trackId, tracks.id))
+    .leftJoin(albums, eq(tracks.albumId, albums.id))
+    .leftJoin(accountSongs, eq(accountSongs.recordingKey, tracks.recordingKey))
     .where(
       and(
         eq(playlistItems.pushed, false),
@@ -315,13 +350,14 @@ export const selectUnpushed = (
         id: row.id,
         changedAt: row.changedAt,
       });
+      const left = leftSong(row);
       const fields = {
         id: row.syncId,
         ...stamp(row),
         playlistId: row.playlistId,
         orderKey: row.orderKey,
-        songId: row.songId,
-        ytSong: row.songId === null ? row.ytSong : null,
+        songId: left === null ? row.songId : null,
+        ytSong: left ?? (row.songId === null ? row.ytSong : null),
         addedAt: row.addedAt,
       };
       if (!row.deleted) return { ...fields, deleted: false, removedAt: null };
@@ -703,9 +739,10 @@ export const planSongs = (db: LibraryDatabase, now: number): void => {
  * Tracks [leaving] their recording keys while the Library is joined with an
  * account (Core's `songsLeaving`): a song no Track keeps leaves the account,
  * its star with it, as tombstones the next push sends. [removed] Tracks
- * leave the Library, and their playlist entries leave the account with
- * them; retagged ones keep theirs. Run it in the transaction that removes
- * the Tracks, before it deletes them, or that retags them, after.
+ * leave the Library, with the playlist entries still holding them (kept
+ * ones, `keepPlaylistEntries`, hold none by then); retagged ones keep
+ * theirs. Run it in the transaction that removes the Tracks, after it keeps
+ * their entries and before it deletes them, or that retags them, after.
  */
 export const leaveKeys = (
   tx: LibraryDatabase,

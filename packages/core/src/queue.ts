@@ -64,6 +64,12 @@ export type QueueCommand =
   | { readonly type: "playNext"; readonly trackIds: readonly string[] }
   | { readonly type: "addToQueue"; readonly trackIds: readonly string[] }
   /**
+   * Plays [trackIds]' first song now, as the current one (a related song
+   * tapped): the song that was playing goes to History, and Up Next and the
+   * songs lined up stay as they were. Any others go right after it.
+   */
+  | { readonly type: "playNow"; readonly trackIds: readonly string[] }
+  /**
    * More of the playing context: a Magic Queue's batch. The songs join the
    * end of the queue as context entries, after everything lined up, so they
    * aren't taken for songs lined up by hand. Nothing joins an empty queue.
@@ -79,6 +85,13 @@ export type QueueCommand =
   | { readonly type: "remove"; readonly key: string }
   /** These tracks left the library (their files were deleted): every entry of theirs goes. */
   | { readonly type: "removeTracks"; readonly trackIds: readonly string[] }
+  /**
+   * The playing song's file was deleted and it goes on streamed: the current
+   * entry, when it's [trackId]'s, becomes [becomes] (the YT Music song's id)
+   * under a new key, so the player loads it again. The file's other entries
+   * stay for `removeTracks` to take.
+   */
+  | { readonly type: "streamPlaying"; readonly trackId: string; readonly becomes: string }
   /**
    * An unsearched song (by its id) was searched: found, every entry of it
    * becomes [becomes] (the YT Music song's id) in its place, keeping its key;
@@ -759,6 +772,13 @@ const enqueue = (
   return result({ ...state, entries, nextKey });
 };
 
+/** Plays [trackIds] right after the current entry, the first of them now (`playNow`). */
+const playNow = (state: QueueState, trackIds: readonly string[]): QueueResult => {
+  if (trackIds.length === 0) return result(state);
+  const lined = enqueue(state, trackIds, "next").state;
+  return result(state.index < 0 ? lined : { ...lined, index: state.index + 1 }, "play");
+};
+
 /** Adds [trackIds] at the end of the queue as context entries, after the context's last. */
 const append = (state: QueueState, trackIds: readonly string[]): QueueResult => {
   if (state.index < 0 || trackIds.length === 0) return result(state);
@@ -889,6 +909,16 @@ const removeTracks = (
   return result({ ...state, entries, index: entries.length - 1 }, "stop");
 };
 
+/** The current entry, when it's [trackId]'s, as [becomes] under a new key (`streamPlaying`). */
+const streamPlaying = (state: QueueState, trackId: string, becomes: string): QueueResult => {
+  const current = currentEntry(state);
+  if (current === null || current.trackId !== trackId) return result(state);
+  const entries = state.entries.map((entry) =>
+    entry === current ? { ...entry, key: String(state.nextKey), trackId: becomes } : entry,
+  );
+  return result({ ...state, entries, nextKey: state.nextKey + 1 });
+};
+
 /**
  * An unsearched song's entries once searched: each becomes [becomes], or
  * they go when it wasn't found (null) or was found as a song passed over.
@@ -942,6 +972,8 @@ export const reduceQueue = (
       return enqueue(state, playing(command.trackIds, passOver), "next");
     case "addToQueue":
       return enqueue(state, playing(command.trackIds, passOver), "last");
+    case "playNow":
+      return playNow(state, playing(command.trackIds, passOver));
     case "append":
       return append(state, playing(command.trackIds, passOver));
     case "moreFromArtist":
@@ -956,6 +988,8 @@ export const reduceQueue = (
       return remove(state, command.key);
     case "removeTracks":
       return removeTracks(state, command.trackIds, random, shuffle);
+    case "streamPlaying":
+      return streamPlaying(state, command.trackId, command.becomes);
     case "settled":
       return settled(state, command.trackId, command.becomes, passOver, random, shuffle);
   }

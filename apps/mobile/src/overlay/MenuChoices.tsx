@@ -5,11 +5,12 @@ import { CELL, grid } from "@/catalog/grid";
 import { useLocalisation } from "@/localisation/localisation";
 import { IconButton } from "@/components/IconButton";
 import { useShuffleControl } from "@/nowPlaying/ShuffleMenu";
+import { useSleepTimerEntryLabel } from "@/nowPlaying/SleepTimer";
 import { ACTION_ICONS, type MenuAction } from "@/playback/actionIcons";
 
 import { CardEntries } from "./CardEntries";
 import { useOverlayFlow } from "./flow";
-import { MenuRow } from "./MenuRow";
+import { MenuRow, type MenuRowProps } from "./MenuRow";
 import { useSlideToChoose } from "./useSlideToChoose";
 
 /** One row of a menu's list. */
@@ -78,7 +79,8 @@ function PlayCardButton({
 /**
  * What a long-press menu offers under its heading: its play [cards] in one
  * row of equal-width cards, then its [entries] as list rows (Shuffle drawn as
- * the shuffle kind chosen names it), all run from the edge nearest the finger
+ * the shuffle kind chosen names it, Sleep Timer with the time a running timer
+ * has left), all run from the edge nearest the finger
  * that opened the card: the cards on top and the entries down from them, or,
  * when the card opened above the finger, the cards at its bottom edge and the
  * entries up from them. The finger that long-pressed the row can slide onto a
@@ -127,19 +129,38 @@ export function MenuChoices({
       <CardEntries>
         {entries.map((entry, index) => (
           <View key={entry.action} ref={trackEntry(cards.length + index)} collapsable={false}>
-            <MenuRow
-              action={entry.action}
-              icon={entry.action === "shuffle" ? shuffle.icon : undefined}
-              label={entry.action === "shuffle" ? shuffle.label : entry.label}
-              onPress={entry.onPress}
-              divider={entryDivider(index, entries.length, flow)}
-              highlighted={cards.length + index === underFinger}
-              destructive={entry.destructive === true}
-              accessibilityHint={accessibilityHint}
-            />
+            {entry.action === "sleepTimer" ? (
+              <SleepTimerRow
+                action={entry.action}
+                onPress={entry.onPress}
+                divider={entryDivider(index, entries.length, flow)}
+                highlighted={cards.length + index === underFinger}
+                accessibilityHint={accessibilityHint}
+              />
+            ) : (
+              <MenuRow
+                action={entry.action}
+                icon={entry.action === "shuffle" ? shuffle.icon : undefined}
+                label={entry.action === "shuffle" ? shuffle.label : entry.label}
+                onPress={entry.onPress}
+                divider={entryDivider(index, entries.length, flow)}
+                highlighted={cards.length + index === underFinger}
+                destructive={entry.destructive === true}
+                accessibilityHint={accessibilityHint}
+              />
+            )}
           </View>
         ))}
       </CardEntries>
     </View>
   );
+}
+
+/**
+ * The playing song's card's Sleep Timer entry: its label says how long a
+ * running timer has left (`useSleepTimerEntryLabel`). The clock ticks in this
+ * row alone, so the rest of the card isn't drawn again each second.
+ */
+function SleepTimerRow(props: Omit<MenuRowProps, "label">) {
+  return <MenuRow {...props} label={useSleepTimerEntryLabel()} />;
 }

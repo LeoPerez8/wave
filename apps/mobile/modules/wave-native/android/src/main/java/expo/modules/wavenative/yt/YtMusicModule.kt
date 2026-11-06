@@ -177,6 +177,16 @@ class YtMusicModule : Module() {
       coded(meter) { YtPages(client).startedRadio(YtRadioStart(playlistId, params)).toMap() }
     }
 
+    /**
+     * The songs and similar artists of the Related tab of the song
+     * [videoId]'s watch page (Now Playing's Related view): `{ songs,
+     * artists }`, songs as search's, artists as [chartArtists]'; both empty
+     * for a song without the tab. An `ERR_YT_*` rejection otherwise. Needs no sign-in.
+     */
+    AsyncFunction("related") Coroutine { videoId: String, meter: String? ->
+      coded(meter) { YtPages(client).related(videoId).toMap() }
+    }
+
     /** The radio page a `continuation` leads to, as [songRadio]. */
     AsyncFunction("radioMore") Coroutine { continuation: String, meter: String? ->
       coded(meter) { YtPages(client).radioMore(continuation).toMap() }

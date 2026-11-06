@@ -31,6 +31,7 @@ data class CrossfadeCause(val phrase: String) {
       "lyric" to "a lyric tap",
       "previousRestart" to "Previous restarting the song",
       "queueEnd" to "the queue ending",
+      "streamed" to "the song going on streamed",
     )
 
     fun fromApp(id: String) = CrossfadeCause(APP_PHRASES[id] ?: "the app ($id)")

@@ -25,6 +25,7 @@ import {
   type NativeYtPlaylist,
   type NativeYtPlaylistEdit,
   type NativeYtRadioPage,
+  type NativeYtRelated,
   type NativeYtSearchPage,
   type NativeYtSong,
 } from "@/native/waveYtMusic";
@@ -136,6 +137,11 @@ export class YtMusic extends Context.Service<
     readonly artistRadio: (browseId: string) => Effect.Effect<NativeYtArtistRadio, YtMusicError>;
     /** The radio page a radio page's [continuation] leads to. */
     readonly radioMore: (continuation: string) => Effect.Effect<NativeYtRadioPage, YtMusicError>;
+    /**
+     * The songs and similar artists of the song [videoId]'s Related tab
+     * (Now Playing's Related view). Needs no sign-in.
+     */
+    readonly related: (videoId: string) => Effect.Effect<NativeYtRelated, YtMusicError>;
     /** Caches a song's cover from [url] beside the Library's artwork, with its palette. */
     readonly cacheArtwork: (url: string) => Effect.Effect<IndexedArtwork, YtMusicError>;
     /** The saved YouTube session (whose account, never its cookie), without asking YouTube. */
@@ -211,6 +217,7 @@ export const layer = Layer.succeed(YtMusic, {
     ),
   artistRadio: (browseId) => metered((meter) => WaveYtMusic.artistRadio(browseId, meter)),
   radioMore: (continuation) => metered((meter) => WaveYtMusic.radioMore(continuation, meter)),
+  related: (videoId) => metered((meter) => WaveYtMusic.related(videoId, meter)),
   cacheArtwork: (url) =>
     Effect.tryPromise({ try: () => WaveYtMusic.cacheArtwork(url), catch: fromNative }).pipe(
       Effect.map(toIndexedArtwork),

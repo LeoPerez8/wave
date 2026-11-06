@@ -13,7 +13,7 @@ import {
   followReleaseListening,
   type FollowReleaseCache,
 } from "./db/followReleases";
-import type { FollowRelease } from "@wave/core";
+import type { FollowRelease, LeavingSong } from "@wave/core";
 import type { FollowedArtist, FollowLevel } from "@wave/core";
 import {
   selectFollow,
@@ -87,6 +87,7 @@ import {
   type GraphPlay,
   type GraphPlayCursor,
 } from "./db/artistGraph";
+import { selectLeavingSong } from "./db/leavingSong";
 import { selectNowPlayingSong } from "./db/nowPlayingSong";
 import type { PlayingSongAnswer, PlayingSongTarget } from "../nowPlaying/songLookup";
 import {
@@ -237,6 +238,7 @@ import {
   type PlaylistRemoval,
   renamePlaylist,
   replacePlaylistSongs,
+  selectInPlaylists,
   selectPlaylist,
   selectPlaylistEntries,
   selectPlaylistGraveyard,
@@ -870,8 +872,13 @@ export class LibraryStore extends Context.Service<
     /**
      * Takes these songs out of the Library and, signed in, out of the Wave
      * account (Remove from Library; Delete once their files are gone).
+     * Their playlist entries stay, as songs without a file.
      */
     readonly removeSongs: (trackIds: readonly number[]) => Effect.Effect<void, LibraryStoreError>;
+    /** Whether any of these songs is in a playlist (the Delete confirmation says they stay there). */
+    readonly inPlaylists: (
+      trackIds: readonly number[],
+    ) => Effect.Effect<boolean, LibraryStoreError>;
     /**
      * The missing songs as downloading them takes them, in title order; with
      * [trackIds], only those still missing of them.
@@ -914,6 +921,11 @@ export class LibraryStore extends Context.Service<
     readonly hasPlayableSongOutside: (
       ids: readonly number[],
     ) => Effect.Effect<boolean, LibraryStoreError>;
+    /**
+     * The Library song [id] as it would leave the Library (Core's
+     * `LeavingSong`: its video id, its credits split); null when it isn't there.
+     */
+    readonly leavingSong: (id: number) => Effect.Effect<LeavingSong | null, LibraryStoreError>;
     /** The YouTube video id each of the songs [ids] was downloaded from, by song id (those with one). */
     readonly videoIds: (
       ids: readonly number[],
@@ -1495,7 +1507,7 @@ const removeRootSync = (db: Database, splits: CreditSplits, path: string): void 
       .all()
       .map((row) => row.path);
     const leaving = filesLeavingWithRoot(under, path, remaining);
-    leaveFiles(tx, leaving);
+    leaveFiles(tx, leaving, Date.now());
     tx.delete(scanRoots).where(eq(scanRoots.path, path)).run();
 
     // Exclusions only mean something inside a root.
@@ -1938,7 +1950,7 @@ const make = Effect.gen(function* () {
     filesGone: (paths) =>
       writeAttempt("update songs whose files are gone", () => {
         if (paths.length === 0 && prunedAt === writes()) return;
-        filesGone(db, splits, paths);
+        filesGone(db, splits, paths, Date.now());
         prunedAt = writes();
       }),
 
@@ -1946,6 +1958,8 @@ const make = Effect.gen(function* () {
       writeAttempt("remove songs from the library", () =>
         removeSongs(db, splits, trackIds, Date.now()),
       ),
+    inPlaylists: (trackIds) =>
+      attempt("read whether songs are in playlists", () => selectInPlaylists(db, trackIds)),
     missingSongs: (trackIds) =>
       attempt("read missing songs", () => selectMissingSongs(db, trackIds)),
     albumsMissingSongs: (albumIds) =>
@@ -1985,6 +1999,7 @@ const make = Effect.gen(function* () {
     songsByIds: (ids) =>
       attempt("read queued songs", () => selectPlayableSongs(db, ids).filter(songHasFile)),
 
+    leavingSong: (id) => attempt("read the song leaving", () => selectLeavingSong(db, id)),
     videoIds: (ids) => attempt("read the songs' video ids", () => selectVideoIds(db, ids)),
     countedPlays: (ids) =>
       attempt("read the songs' counted plays", () => selectCountedPlays(db, ids)),

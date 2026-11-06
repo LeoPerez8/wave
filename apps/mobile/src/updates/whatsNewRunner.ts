@@ -25,12 +25,21 @@ export interface WhatsNewRunnerOptions {
     to: string,
   ) => Effect.Effect<readonly PublishedRelease[], unknown>;
   readonly surroundings: () => WhatsNewSurroundings;
-  /** Opens the card; `dismissed` says the user is done with it. Gives what takes it down unseen. */
-  readonly show: (releases: readonly PublishedRelease[], dismissed: () => void) => () => void;
+  /**
+   * Opens the card; `dismissed` says the user is done with it, and `seeAll` that they're done with
+   * it and want Version History. Gives what takes it down unseen.
+   */
+  readonly show: (
+    releases: readonly PublishedRelease[],
+    dismissed: () => void,
+    seeAll: () => void,
+  ) => () => void;
   readonly now: () => number;
   readonly log: (level: LogLevel, message: string) => void;
   /** Nothing more can happen in this launch, so what follows the phone can stop. */
   readonly onFinished: () => void;
+  /** Opens Settings › Version History. */
+  readonly openVersionHistory: () => void;
 }
 
 const reason = (error: unknown): string => (error instanceof Error ? error.message : String(error));
@@ -48,6 +57,7 @@ export const createWhatsNewRunner = ({
   now,
   log,
   onFinished,
+  openVersionHistory,
 }: WhatsNewRunnerOptions) => {
   let fetching = false;
   let notes: readonly PublishedRelease[] | null = null;
@@ -64,6 +74,11 @@ export const createWhatsNewRunner = ({
   const markSeen = (): void => {
     if (runningVersion !== null) seenVersion.set(runningVersion);
     finish();
+  };
+
+  const dismissed = (): void => {
+    hide = null;
+    markSeen();
   };
 
   const fetchNotesBetween = (from: string, to: string): void => {
@@ -116,9 +131,9 @@ export const createWhatsNewRunner = ({
         return;
       case "show":
         if (notes === null) return;
-        hide = show(notes, () => {
-          hide = null;
-          markSeen();
+        hide = show(notes, dismissed, () => {
+          dismissed();
+          openVersionHistory();
         });
         return;
       case "hide": {

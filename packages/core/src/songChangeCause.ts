@@ -11,7 +11,7 @@ export type SongChangeCause =
   | "previous"
   /** A tap on an Up Next row (`jumpTo`). */
   | "queueTap"
-  /** A new queue from a list. */
+  /** A new queue from a list, or a song played now (Play Now). */
   | "play"
   /** The queue following a move the player made on its own (a song ending, the notification). */
   | "player"
@@ -38,7 +38,9 @@ export type SeekSource =
   | "undo"
   | "restore"
   /** The queue ran out: paused back at the start of its last song. */
-  | "queueEnd";
+  | "queueEnd"
+  /** The playing song going on streamed once its file was deleted, back where it was (`streamPlaying`). */
+  | "streamed";
 
 /** What [command] is as the cause of the song change it makes, if it makes one. */
 export const songChangeCause = (command: QueueCommand): SongChangeCause => {
@@ -48,6 +50,8 @@ export const songChangeCause = (command: QueueCommand): SongChangeCause => {
     case "play":
     case "trackEnded":
       return command.type;
+    case "playNow":
+      return "play";
     case "jumpTo":
       return "queueTap";
     case "playerMoved":

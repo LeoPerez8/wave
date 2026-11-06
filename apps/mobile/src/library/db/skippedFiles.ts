@@ -64,7 +64,7 @@ export const skipFiles = (
         .all()
         .map((row) => row.id),
     );
-    removeTracks(tx, splits, ids, now);
+    removeTracks(tx, splits, ids, now, "leave");
     for (const some of chunks(files)) {
       tx.insert(skippedFiles)
         .values([...some])

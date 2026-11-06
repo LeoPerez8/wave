@@ -1,21 +1,25 @@
-import { parseTrackId, type PlaylistSong, type YtSong } from "@wave/core";
+import {
+  nowPlayingDownloadTap,
+  parseTrackId,
+  type NowPlayingDownloadTap,
+  type PlaylistSong,
+  type YtSong,
+} from "@wave/core";
+import type { SongRow } from "../library/LibraryStore.ts";
 import type {
   PlayingSongAnswer,
   PlayingSongTarget,
   createNowPlayingSongLookup,
 } from "./songLookup.ts";
 
-export type PlayingSongDownload =
-  | { readonly kind: "downloaded" }
-  | { readonly kind: "missing"; readonly id: number }
-  | { readonly kind: "stream"; readonly song: YtSong }
-  | { readonly kind: "gone" };
+/** What a tap on Now Playing's Download button does (Core's `nowPlayingDownloadTap`). */
+export type PlayingSongDownload = NowPlayingDownloadTap<SongRow, YtSong>;
 
 /** Gesture decisions use the acquired song, never a render's unread placeholder. */
 export const createNowPlayingSongActions = (
   lookup: Pick<ReturnType<typeof createNowPlayingSongLookup>, "acquire">,
   ports: {
-    readonly download: (command: PlayingSongDownload) => void;
+    readonly download: (command: PlayingSongDownload, target: PlayingSongTarget) => void;
     readonly starred: (target: PlayingSongTarget, answer: PlayingSongAnswer) => boolean;
     readonly star: (target: PlayingSongTarget, answer: PlayingSongAnswer, on: boolean) => void;
   },
@@ -30,15 +34,7 @@ export const createNowPlayingSongActions = (
     },
     async download(target: PlayingSongTarget): Promise<void> {
       const { track } = await lookup.acquire(target);
-      ports.download(
-        track !== null
-          ? track.path !== null
-            ? { kind: "downloaded" }
-            : { kind: "missing", id: track.id }
-          : target.song !== null
-            ? { kind: "stream", song: target.song }
-            : { kind: "gone" },
-      );
+      ports.download(nowPlayingDownloadTap(track, target.song), target);
     },
     star(target: PlayingSongTarget, addOnly = false): Promise<void> {
       const previous = stars.get(target.trackId) ?? Promise.resolve();

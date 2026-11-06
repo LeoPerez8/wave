@@ -1,11 +1,13 @@
 /**
  * Now Playing's bottom row: four slots the owner fills (Settings › Layout ›
- * Now Playing), then Queue, fixed on the right.
+ * Now Playing), then Queue, fixed on the right. Related is only offered,
+ * and only shows, with YouTube Music on.
  */
 
 /** What a slot can hold. */
 export type NowPlayingAction =
   | "lyrics"
+  | "related"
   | "sleepTimer"
   | "addToPlaylist"
   | "download"
@@ -25,9 +27,19 @@ export type NowPlayingButtons = readonly [
   NowPlayingSlot,
 ];
 
+/**
+ * The synced preference the slots are stored under. The default row changed
+ * with this key, and the key the slots were kept under before
+ * (`settings.nowPlayingButtons`) is no longer read, locally or from the Wave
+ * account, so every phone moved to the new default once, edited rows
+ * included.
+ */
+export const NOW_PLAYING_BUTTONS_KEY = "settings.nowPlayingRow";
+
 /** Every action, in the order a slot's choices list them. */
 export const NOW_PLAYING_ACTIONS: readonly NowPlayingAction[] = [
   "lyrics",
+  "related",
   "sleepTimer",
   "addToPlaylist",
   "download",
@@ -47,13 +59,29 @@ const isButtons = (value: unknown): value is NowPlayingButtons => {
   return new Set(actions).size === actions.length;
 };
 
-/** The row before it could be changed: Lyrics, Sleep timer, Add to Playlist, Download. */
-const DEFAULT_BUTTONS: NowPlayingButtons = ["lyrics", "sleepTimer", "addToPlaylist", "download"];
+/** The actions that read YouTube Music, offered and shown only with it on. */
+const NEEDS_YT_MUSIC: ReadonlySet<NowPlayingAction> = new Set(["related"]);
+
+/**
+ * The actions a slot's choices list (its picker in Settings, its long-press
+ * card), in order: every one, but Related only with YouTube Music on.
+ */
+export const nowPlayingSlotChoices = (ytMusic: boolean): readonly NowPlayingAction[] =>
+  ytMusic
+    ? NOW_PLAYING_ACTIONS
+    : NOW_PLAYING_ACTIONS.filter((action) => !NEEDS_YT_MUSIC.has(action));
+
+/**
+ * The default row: Lyrics, Add to Playlist, Download, Song menu. It replaced
+ * Lyrics, Sleep timer, Add to Playlist, Download, Sleep timer moving into the
+ * playing song's card (docs/spec.md, story 46b).
+ */
+const DEFAULT_BUTTONS: NowPlayingButtons = ["lyrics", "addToPlaylist", "download", "songMenu"];
 
 /**
  * The slots a stored value holds. Nothing stored, unreadable JSON or anything
  * but four slots of known actions, each once (a newer Wave's action
- * included), reads as today's row.
+ * included), reads as the default row.
  */
 export const readNowPlayingButtons = (stored: string | null): NowPlayingButtons => {
   if (stored === null) return DEFAULT_BUTTONS;
@@ -68,7 +96,7 @@ export const readNowPlayingButtons = (stored: string | null): NowPlayingButtons 
 
 /**
  * What to store for [buttons]; `readNowPlayingButtons` reads it back as those
- * slots. Today's row stores as nothing (null).
+ * slots. The default row stores as nothing (null).
  */
 export const storedNowPlayingButtons = (buttons: NowPlayingButtons): string | null =>
   buttons.every((slot, index) => slot === DEFAULT_BUTTONS[index]) ? null : JSON.stringify(buttons);
@@ -83,7 +111,7 @@ export type NowPlayingButtonsEdit =
 /**
  * [buttons] after [edit]. An action another slot holds swaps places with what
  * the edited slot held (None included), so no action shows twice. Reset
- * brings back today's row.
+ * brings back the default row.
  */
 export const editNowPlayingButtons = (
   buttons: NowPlayingButtons,
@@ -107,6 +135,7 @@ export type NowPlayingSlotSong = "nothing" | "unsearched" | "song";
 
 /** The actions that need a song on to show: with nothing playing their slots stay empty. */
 const NEEDS_SONG: ReadonlySet<NowPlayingAction> = new Set([
+  "related",
   "addToPlaylist",
   "download",
   "share",
@@ -114,14 +143,18 @@ const NEEDS_SONG: ReadonlySet<NowPlayingAction> = new Set([
 ]);
 
 /**
- * How slot [action]'s button shows with [song] on: hidden, off (it shows
- * disabled and only long-presses to change the slot), or on. Song menu is off
- * while an unsearched entry's search runs, since the song has no menu yet.
+ * How slot [action]'s button shows with [song] on and YouTube Music on or
+ * off ([ytMusic]): hidden, off (it shows disabled and only long-presses to
+ * change the slot), or on. Song menu is off while an unsearched entry's
+ * search runs, since the song has no menu yet. Related is hidden with
+ * YouTube Music off, so its slot stays empty.
  */
 export const nowPlayingSlotShow = (
   action: NowPlayingAction,
   song: NowPlayingSlotSong,
+  ytMusic: boolean,
 ): "hidden" | "off" | "on" => {
+  if (!ytMusic && NEEDS_YT_MUSIC.has(action)) return "hidden";
   if (song === "nothing") return NEEDS_SONG.has(action) ? "hidden" : "on";
   return song === "unsearched" && action === "songMenu" ? "off" : "on";
 };

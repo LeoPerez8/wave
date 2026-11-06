@@ -208,6 +208,20 @@ describe("the app log of the search allowance", () => {
     assert.deepEqual(one.go, [2], "the one search free goes to Search");
   });
 
+  test("Related's search for the playing song goes before downloads, and its wait names it", () => {
+    const searchesAt = [ONE_PM - 60_000, ...spent(SEARCH_ALLOWANCE - 1, ONE_PM).searchesAt];
+    let allowance: SearchAllowance = { ...NO_SEARCHES, searchesAt };
+    allowance = searchTurnWanted(allowance, { id: 1, asker: "download" }, ONE_PM);
+    allowance = searchTurnWanted(allowance, { id: 2, asker: "related" }, ONE_PM + 1);
+    const full = searchTurns(allowance, ONE_PM + 1);
+    assert.equal(
+      full.waits.map(searchWaitLine)[0],
+      "Related waits for the YouTube Music search allowance: 1,000 searches in the last 15 min, the most it allows; the next is free at 13:14:00 UTC",
+    );
+    const one = searchTurns(full.allowance, ONE_PM - 60_000 + SEARCH_WINDOW_MS);
+    assert.deepEqual(one.go, [2], "the one search free goes to Related");
+  });
+
   test("Try Again's wait names it", () => {
     let allowance = spent(SEARCH_ALLOWANCE, ONE_PM - 60_000);
     allowance = searchTurnWanted(allowance, { id: 1, asker: "tryAgain" }, ONE_PM);

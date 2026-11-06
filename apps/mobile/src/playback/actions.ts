@@ -1,4 +1,5 @@
 import {
+  currentEntry,
   queueSongTrackId,
   type MixedSong,
   nextRepeatMode,
@@ -390,6 +391,26 @@ export const queueDiscoverSongs = (
   );
 };
 
+/**
+ * Plays a listed [song] now as the current song (a related song tapped),
+ * keeping Up Next and the songs lined up as they were (Core's `playNow`):
+ * the Library's file when it has the song, else streamed. A missing song
+ * downloads instead.
+ */
+export const playListedNow = (song: ListedSong): Promise<void> => {
+  if (!playable(song)) {
+    const missing = libraryTrack(song);
+    if (missing !== null) downloadMissingSongs([missing.id]);
+    return Promise.resolve();
+  }
+  return dispatchWithYt(
+    { type: "playNow", trackIds: [queueSongTrackId(song)] },
+    streamedSongs([song]),
+    song.source === "stream" ? song.song : undefined,
+    libraryQueueTracks([song]),
+  );
+};
+
 export const togglePlayPause = (): Promise<void> =>
   run(
     Effect.gen(function* () {
@@ -459,6 +480,29 @@ export const seekTo = (positionMs: number, source: SeekSource): void => {
     Effect.gen(function* () {
       const player = yield* Player;
       yield* player.seekTo(positionMs, source);
+    }),
+  );
+};
+
+/**
+ * The playing song [trackId] goes on as YT Music song [song] once its file
+ * was deleted (Core's `streamPlaying`), from where it was. Nothing changes
+ * once another song plays.
+ */
+export const streamPlayingInstead = (trackId: string, song: YtSong): Promise<void> => {
+  const positionMs = currentPositionMs();
+  return run(
+    Effect.gen(function* () {
+      const queue = yield* Queue;
+      const player = yield* Player;
+      const becomes = ytTrackId(song.videoId);
+      yield* queue.dispatch({ type: "streamPlaying", trackId, becomes }, [
+        toYtQueueTrack(song, null),
+      ]);
+      if (currentEntry(queueState.get())?.trackId !== becomes) return;
+      positionState.update((state) => ({ ...state, positionMs, at: Date.now() }));
+      yield* player.seekTo(positionMs, "streamed");
+      yield* cacheYtCoversInBackground([song]);
     }),
   );
 };

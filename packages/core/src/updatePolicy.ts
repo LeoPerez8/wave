@@ -33,10 +33,11 @@ export type InstallTap =
 
 /**
  * What a tap on the update button in Settings still wants done: `check` now, whatever the wait,
- * `askMobileData` before a download on a metered network, or `download` the version found. Whatever
- * these lead to installs as a tap on the pill does.
+ * `askMobileData` before a download on a metered network, `download` the version found, or
+ * `installBundle`, Install Now's reload on the downloaded bundle. An APK these lead to installs as a
+ * tap on the pill does.
  */
-export type UpdateRequest = "none" | "check" | "askMobileData" | "download";
+export type UpdateRequest = "none" | "check" | "askMobileData" | "download" | "installBundle";
 
 /** What a toast tells the person. Only what they asked for, or an install, gets one. */
 export type UpdateNotice =
@@ -82,6 +83,23 @@ export type UpdateStep =
   | "openInstallPermission"
   | "installApk"
   | "wait";
+
+/**
+ * The update an "Install Now" tap takes, or null: a downloaded APK, verified as `offeredApk` says,
+ * even one swiped off the pill, once this launch's check has offered its version (a tap installs
+ * nothing before); else a downloaded bundle, whether a tap's check or Wave's own fetched it. A
+ * pending APK holds bundles back, so it never offers one then.
+ */
+export type ReadyUpdate = "apk" | "bundle" | null;
+
+export const readyUpdate = ({
+  nativeUpdate,
+  bundleDownloaded,
+  offeredApkVersion,
+}: Pick<UpdateState, "nativeUpdate" | "bundleDownloaded" | "offeredApkVersion">): ReadyUpdate => {
+  if (nativeUpdate === "downloaded") return offeredApkVersion === null ? null : "apk";
+  return nativeUpdate === "none" && bundleDownloaded ? "bundle" : null;
+};
 
 const isDue = (now: number, last: number | null, interval: number): boolean =>
   last === null ||
@@ -133,12 +151,19 @@ export const installTapWhenHandoverEnds = (tap: InstallTap): InstallTap =>
 
 /**
  * A request from the update button, given what's become of Wave since. Like a tap, it ends when Wave
- * leaves. A download already running keeps going, and what it brings waits to be offered.
+ * leaves. A download already running keeps going, and what it brings waits to be offered. Install
+ * Now's ends too once its bundle isn't offered any more (an APK turned up).
  */
 export const updateRequestAfter = (
   request: UpdateRequest,
-  { visible }: Pick<UpdateState, "visible">,
-): UpdateRequest => (visible ? request : "none");
+  {
+    visible,
+    ...ready
+  }: Pick<UpdateState, "visible" | "nativeUpdate" | "bundleDownloaded" | "offeredApkVersion">,
+): UpdateRequest => {
+  if (!visible) return "none";
+  return request === "installBundle" && readyUpdate(ready) !== "bundle" ? "none" : request;
+};
 
 /**
  * The version a tap would install: the file exists under its final name only once its SHA-256
@@ -185,6 +210,10 @@ const apkDownloadIsDue = ({ now, offeredApkVersion, lastApkAttempt }: UpdateStat
 /** What to do now. Nothing here ticks: the app asks when something it follows changes. */
 export const nextUpdateStep = (state: UpdateState): UpdateStep => {
   if (state.working) return "wait";
+  // Install Now: the tap is the request, so it reloads at once, music or not, with nothing to fetch.
+  if (state.updateRequest === "installBundle" && readyUpdate(state) === "bundle") {
+    return "applyBundle";
+  }
   const online = state.network !== "none";
   if (state.updateRequest === "check" && online) return "check";
   if (state.nativeUpdate === "available") {
@@ -216,25 +245,35 @@ export const nextUpdateStep = (state: UpdateState): UpdateStep => {
   return "wait";
 };
 
-/** What a tap on the update button does, given what's already under way. */
+/**
+ * What a tap on the update button does, given what's already under way. Install Now takes the ready
+ * update at once, music or not: an APK as a tap on the pill does (`install`), a bundle by asking
+ * for its reload (`installBundle`).
+ */
 export const updateButtonAction = ({
-  nativeUpdate,
   installTap,
   updateRequest,
   downloadingApk,
-}: Pick<UpdateState, "nativeUpdate" | "installTap" | "updateRequest"> & {
+  ...state
+}: Pick<
+  UpdateState,
+  "nativeUpdate" | "bundleDownloaded" | "offeredApkVersion" | "installTap" | "updateRequest"
+> & {
   /** The automatic path is fetching the APK right now. */
   readonly downloadingApk: boolean;
-}): "install" | "check" | "followDownload" | "none" => {
+}): "install" | "installBundle" | "check" | "followDownload" | "none" => {
   if (updateRequest !== "none" || installTap !== "none") return "none";
-  if (nativeUpdate === "downloaded") return "install";
+  const ready = readyUpdate(state);
+  if (ready === "apk") return "install";
+  if (ready === "bundle") return "installBundle";
   return downloadingApk ? "followDownload" : "check";
 };
 
 /**
  * Where a tap's check leads. An APK comes first, as a pending one holds bundles back. A bundle only
- * gets a toast: it follows its silent path and doesn't close Wave. A check that failed and found
- * nothing can't say Wave is up to date. With Wave behind it leads nowhere: the tap is over.
+ * gets a toast: it downloads on its silent path, and the button offers Install Now once it's down.
+ * A check that failed and found nothing can't say Wave is up to date. With Wave behind it leads
+ * nowhere: the tap is over.
  */
 export const afterRequestedCheck = ({
   visible,
@@ -282,7 +321,10 @@ export const afterApkDownload = ({
   };
 };
 
-/** What to tell the person of a step that stopped on a throw; null when nobody asked for it. */
+/**
+ * What to tell the person of a step that failed or stopped on a throw; null when nobody asked for
+ * it. Install Now's reload is an install: when it fails, the bundle running now goes on.
+ */
 export const stoppedStepNotice = ({
   step,
   updateRequest,
@@ -291,6 +333,7 @@ export const stoppedStepNotice = ({
 }): UpdateNotice | null => {
   if (step === "installApk" || step === "openInstallPermission") return "installFailed";
   if (updateRequest === "none") return null;
+  if (step === "applyBundle") return "installFailed";
   return step === "check" ? "checkFailed" : "downloadFailed";
 };
 
@@ -299,23 +342,36 @@ export const strandedUpdateRequest = (
   request: UpdateRequest,
   network: UpdateNetwork,
 ): UpdateNotice | null => {
-  if (request === "none" || network !== "none") return null;
+  if (request === "none" || request === "installBundle" || network !== "none") return null;
   return request === "check" ? "checkFailed" : "downloadFailed";
 };
 
-/** The button's face: at rest, spinning, or a download's percentage, whoever started it. */
-export type UpdateButtonLook = "idle" | "checking" | { readonly downloading: number };
+/**
+ * The button's face: the refresh glyph at rest, spinning, a download's percentage, whoever started
+ * it, or "Install Now" while an update is ready, a bundle or an APK (`readyUpdate`). While a tap's
+ * install is under way (handed to Android, or at the permission screen) it's "installing": Install
+ * Now held disabled, as a tap couldn't add to it, rather than falling back to the refresh glyph.
+ */
+export type UpdateButtonLook =
+  "idle" | "checking" | "installNow" | "installing" | { readonly downloading: number };
 
 export const updateButtonLook = ({
   updateRequest,
   downloadPercent,
-}: {
-  readonly updateRequest: UpdateRequest;
+  installTap,
+  ...ready
+}: Pick<
+  UpdateState,
+  "updateRequest" | "nativeUpdate" | "bundleDownloaded" | "offeredApkVersion" | "installTap"
+> & {
   /** How far the APK download is, while one runs. */
   readonly downloadPercent: number | null;
 }): UpdateButtonLook => {
   if (downloadPercent !== null) return { downloading: downloadPercent };
-  return updateRequest === "check" ? "checking" : "idle";
+  if (updateRequest === "check") return "checking";
+  const update = readyUpdate(ready);
+  if (update === null) return "idle";
+  return update === "apk" && installTap !== "none" ? "installing" : "installNow";
 };
 
 /** The channel's newest APK, as CI signed it. The channel stops one reaching the other's phones. */
@@ -413,6 +469,37 @@ export const nativeUpdateIsNew = ({
   const offered = versionOrder(latest.version);
   return installed !== null && offered !== null && offered > installed;
 };
+
+/**
+ * How long after Install Now's reload began its launch still counts as that reload's. A reload
+ * that failed or never came leaves its mark behind, and a later launch mustn't start music for it.
+ */
+export const RELOAD_RESUME_WINDOW_MS = 60_000;
+
+/**
+ * Whether Wave starts the queue once Install Now's reload is over. Playback lives in the native
+ * service, so the player may well have played through the reload; if it stopped, the queue the
+ * restore brought back (same song, same place) plays again, but only if music was playing before.
+ */
+export const resumesAfterReload = ({
+  playingAtReload,
+  now,
+  playing,
+  queueLoaded,
+}: {
+  /** When a reload began with music playing, or about to (`playerKeepsPlaying`); null if none. */
+  readonly playingAtReload: number | null;
+  readonly now: number;
+  /** It is playing now. */
+  readonly playing: boolean;
+  /** The queue is back, from the player or the saved one. */
+  readonly queueLoaded: boolean;
+}): boolean =>
+  playingAtReload !== null &&
+  now >= playingAtReload &&
+  now - playingAtReload <= RELOAD_RESUME_WINDOW_MS &&
+  !playing &&
+  queueLoaded;
 
 /** Whether the player is playing, or means to as soon as it has buffered. */
 export const playerKeepsPlaying = (player: {

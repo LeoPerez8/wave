@@ -3,13 +3,13 @@ import { type Catalogue, type LayoutPage, type SettingsIcon, type SettingsPage }
 import type { ReactNode } from "react";
 import { ScrollView, Text, View } from "react-native";
 
-import { CELL, grid } from "@/catalog/grid";
+import { grid } from "@/catalog/grid";
 import { Hairline } from "@/catalog/Hairline";
 import { ScreenHeader } from "@/components/ScreenHeader";
 import { useListScrollable } from "@/motion/heldTouch";
 import { Press } from "@/motion/Press";
 
-import { SettingsGlyph } from "./SettingsGlyph";
+import { SETTINGS_GLYPH_GAP, SettingsGlyph } from "./SettingsGlyph";
 
 /** Room between a page's sections. */
 export const SECTION_GAP = 48;
@@ -93,7 +93,10 @@ export function SettingsPageRow({
       onPress={onPress}
       haptic="selection"
     >
-      <View className="flex-row items-center py-2" style={{ minHeight: grid.row, gap: CELL * 2 }}>
+      <View
+        className="flex-row items-center py-2"
+        style={{ minHeight: grid.row, gap: SETTINGS_GLYPH_GAP }}
+      >
         {icon !== undefined && <SettingsGlyph icon={icon} />}
         <View className="flex-1 justify-center">
           <Text className="font-sans text-title3 font-normal text-foreground">{title}</Text>

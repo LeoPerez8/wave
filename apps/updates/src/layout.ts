@@ -5,6 +5,7 @@
  *   updates/<channel>/<runtime>/<id>.json       a published update (StoredUpdate)
  *   updates/<channel>/<runtime>/latest.json     { updateId }: what that channel's phones get
  *   notes/<channel>/<version>.json              a release's notes (ReleaseNotes)
+ *   notes/<channel>.json                        NotesHistory: all of the channel's notes at once
  *   updates/<channel>/history.json              HistoryEntry[], newest first: what R2 still keeps
  *   apks/<channel>/latest.json                  SignedApk: the channel's newest APK
  *
@@ -68,6 +69,32 @@ export interface SignedApk {
 export const notesPrefix = (channel: Channel): string => `notes/${channel}/`;
 export const notesKey = (channel: Channel, version: string): string =>
   `${notesPrefix(channel)}${version}.json`;
+
+/**
+ * The channel's notes in one file, which `GET /v1/notes` answers from in one read. Publishing notes
+ * keeps it current; the service builds it from the notes files when it's absent (README.md).
+ */
+export const notesHistoryKey = (channel: Channel): string => `notes/${channel}.json`;
+
+/** One release in the notes history, as `GET /v1/notes` answers it. */
+export interface NotedRelease {
+  readonly version: string;
+  /** When its notes were published, in ISO 8601 UTC. */
+  readonly date: string;
+  readonly notes: ReleaseNotes;
+}
+
+/**
+ * In no particular order: the service sorts what it answers. The scripts that write it run with no
+ * install, so they can't count versions (`@wave/core`).
+ */
+export type NotesHistory = readonly NotedRelease[];
+
+/** [history] with [release] in it, in place of any earlier notes of its version. */
+export const withRelease = (history: NotesHistory, release: NotedRelease): NotesHistory => [
+  ...history.filter(({ version }) => version !== release.version),
+  release,
+];
 
 /** A release's notes in one language, one line per PR. */
 export interface NoteSections {

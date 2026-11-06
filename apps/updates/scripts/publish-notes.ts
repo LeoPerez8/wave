@@ -26,12 +26,8 @@ if (!token || !account) {
 } else if (notes === "") {
   console.log(`Skipping the release notes: ${version} has none in each language.`);
 } else {
-  const published = await publishNotes({
-    channel,
-    version,
-    notes: JSON.parse(notes),
-    put: wranglerBucket().put,
-  });
+  const { put, read } = wranglerBucket();
+  const published = await publishNotes({ channel, version, notes: JSON.parse(notes), put, read });
   console.log(
     published
       ? `Published the notes of ${version} to ${channel}.`

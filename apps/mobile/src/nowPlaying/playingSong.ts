@@ -3,13 +3,16 @@ import { parseTrackId } from "@wave/core";
 import { useEffect, useMemo, useSyncExternalStore } from "react";
 import { scopedSongStarredNow, rememberSongFavorite } from "@/library/favorites";
 import { onDownloadedRecording, onLibraryChange } from "@/library/libraryChanges";
-import { LibraryStore } from "@/library/LibraryStore";
+import { confirmDeleteSongs } from "@/library/deleteSongs";
+import { LibraryStore, type SongRow } from "@/library/LibraryStore";
 import { appRuntime } from "@/library/runtime";
 import { starSongs } from "@/library/starSongs";
 import { showError } from "@/overlay/alert";
-import { showToast } from "@/overlay/toast";
 import type { NativeYtSong } from "@/native/waveYtMusic";
+import { streamPlayingInstead } from "@/playback/actions";
+import { ytMusicEnabled } from "@/settings/ytMusic";
 import { downloadMissingSongs, downloadYtSong } from "@/ytmusic/YtDownloads";
+import { createDeletePlayingSong } from "./deletePlayingSong";
 import { createNowPlayingSongLookup, type PlayingSongTarget } from "./songLookup";
 import { createNowPlayingSongActions } from "./songActions";
 
@@ -26,11 +29,23 @@ export const nowPlayingSongLookup = createNowPlayingSongLookup({
 onLibraryChange(nowPlayingSongLookup.change);
 onDownloadedRecording(nowPlayingSongLookup.downloaded);
 
+/** Now Playing's Download on a song with a file (`createDeletePlayingSong`). */
+const deletePlayingSong = createDeletePlayingSong<SongRow & { readonly path: string }>({
+  leaving: (track) =>
+    appRuntime
+      // oxlint-disable-next-line react/rules-of-hooks -- Effect service access.
+      .runPromise(LibraryStore.use((store) => store.leavingSong(track.id)))
+      .catch(() => null),
+  ytMusicOn: ytMusicEnabled,
+  confirmDelete: confirmDeleteSongs,
+  streamInstead: streamPlayingInstead,
+});
+
 export const nowPlayingSongActions = createNowPlayingSongActions(nowPlayingSongLookup, {
-  download: (command) => {
+  download: (command, target) => {
     switch (command.kind) {
-      case "downloaded":
-        void showToast(currentLocalisation().strings.playbackText.downloaded);
+      case "delete":
+        void deletePlayingSong(target, command.track).catch(songActionFailed);
         break;
       case "missing":
         downloadMissingSongs([command.id]);

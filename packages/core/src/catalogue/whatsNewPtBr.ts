@@ -5,4 +5,5 @@ export const whatsNewPtBr: typeof whatsNewEn = {
   new: "Novo",
   fixes: "Correções",
   done: "OK",
+  seeAll: "Ver Tudo",
 };

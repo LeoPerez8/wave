@@ -30,6 +30,7 @@ import { useLyricCardShown } from "@/share/lyricCard";
 import { useSongShareShown } from "@/share/songShare";
 import { shareNowPlaying } from "@/share/songShare";
 import { useNowPlayingButtons } from "@/settings/nowPlayingButtons";
+import { useYtMusicEnabled } from "@/settings/ytMusic";
 
 import { Background, useBackgroundColors, type GroundColors } from "./Background";
 import { DismissArea } from "./DismissArea";
@@ -44,6 +45,8 @@ import {
 import { LyricsView } from "./LyricsView";
 import { PlayerView } from "./PlayerView";
 import { QueueHeader, UpNextList } from "./QueueView";
+import { usePlayingVideoId } from "./relatedSongs";
+import { RelatedView } from "./RelatedView";
 import { Scrubber } from "./Scrubber";
 import { usePlayheadSource } from "./playhead";
 import {
@@ -65,7 +68,7 @@ import {
 } from "./playingSong";
 
 /** What fills the space above the controls. */
-export type NowPlayingView = "player" | "queue" | "lyrics";
+export type NowPlayingView = "player" | "queue" | "lyrics" | "related";
 
 const close = (): void => closeNowPlaying(undefined, "chevron");
 
@@ -155,7 +158,8 @@ export function UnderNowPlaying({ children }: { children: ReactNode }) {
 
 /**
  * Now Playing: a sheet over the app, tinted by the artwork. The player view
- * (artwork, title, artist and album), the Queue view or the Lyrics view sits
+ * (artwork, title, artist and album), the Queue view, the Lyrics view or the
+ * Related view sits
  * above the scrubber and transport. Drag it down, tap the chevron or press Back to
  * dismiss it.
  *
@@ -186,7 +190,11 @@ export function NowPlayingSheet() {
   const palette = useNowPlayingPalette(trackId, details);
   const gradient = useNowPlayingGradient(palette);
   const ground = useBackgroundColors(gradient, shown);
-  const [view, setView] = useState<NowPlayingView>("player");
+  const [chosenView, setView] = useState<NowPlayingView>("player");
+  const ytMusic = useYtMusicEnabled();
+  // Related needs YouTube Music: turned off, the player shows in its place.
+  const view = chosenView === "related" && !ytMusic ? "player" : chosenView;
+  const { videoId, findAgain } = usePlayingVideoId(view === "related" ? trackId : null, ytSong);
   const showPlayer = useCallback(() => setView("player"), []);
   // The Queue, once shown, stays mounted while another view shows (`QueuePane`).
   const [queueWarm, setQueueWarm] = useState(false);
@@ -233,6 +241,7 @@ export function NowPlayingSheet() {
       void nowPlayingSongLookup.acquire(songTarget).catch(songActionFailed);
     setView((current) => (current === "lyrics" ? "player" : "lyrics"));
   };
+  const toggleRelated = () => setView(view === "related" ? "player" : "related");
   const share = () => {
     if (item === null) return;
     shareNowPlaying(
@@ -252,6 +261,8 @@ export function NowPlayingSheet() {
     title: item?.title ?? strings.playbackText.unknownTitle,
     lyricsShown: view === "lyrics",
     toggleLyrics,
+    relatedShown: view === "related",
+    toggleRelated,
     share,
   };
   const slotSong: NowPlayingSlotSong =
@@ -263,7 +274,7 @@ export function NowPlayingSheet() {
   // The slots that aren't None and show for what's on, spread evenly left of Queue.
   const slots = useNowPlayingButtons().flatMap((action, slot) => {
     if (action === null) return [];
-    const show = nowPlayingSlotShow(action, slotSong);
+    const show = nowPlayingSlotShow(action, slotSong, ytMusic);
     return show === "hidden" ? [] : [{ action, slot, off: show === "off" }];
   });
 
@@ -335,6 +346,14 @@ export function NowPlayingSheet() {
                 nonDTrackId={nonDTrackId}
                 item={item}
                 palette={palette}
+                onShowPlayer={showPlayer}
+              />
+            )}
+            {view === "related" && (
+              <RelatedView
+                item={item}
+                videoId={videoId}
+                findAgain={findAgain}
                 onShowPlayer={showPlayer}
               />
             )}

@@ -23,7 +23,8 @@ export type SettingsPage =
   | "lyricsAndTags"
   | "downloads"
   | "accounts"
-  | "developer";
+  | "developer"
+  | "versionHistory";
 
 /**
  * A Settings row's glyph, by name; the app draws each with a Tabler line icon
@@ -40,7 +41,8 @@ export type SettingsIcon =
   | "quote"
   | "download"
   | "user"
-  | "code";
+  | "code"
+  | "versions";
 
 export interface SettingsPageEntry {
   readonly page: SettingsPage;
@@ -109,6 +111,13 @@ export const SETTINGS_PAGES = [
     title: en.settings.pages.developer,
     route: "/settings/developer",
     icon: "code",
+  },
+  // Last, just above the version line.
+  {
+    page: "versionHistory",
+    title: en.settings.pages.versionHistory,
+    route: "/settings/version-history",
+    icon: "versions",
   },
 ] as const satisfies readonly SettingsPageEntry[];
 
