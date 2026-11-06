@@ -3,6 +3,7 @@ import { describe, test } from "node:test";
 
 import {
   NOW_PLAYING_ACTIONS,
+  NOW_PLAYING_BUTTONS_KEY,
   editNowPlayingButtons,
   nowPlayingSlotShow,
   readNowPlayingButtons,
@@ -11,12 +12,12 @@ import {
 } from "./index.ts";
 
 describe("the saved Now Playing buttons", () => {
-  test("with nothing stored, the slots hold today's row: Lyrics, Sleep timer, Add to Playlist, Download", () => {
+  test("with nothing stored, the slots hold the default row: Lyrics, Add to Playlist, Download, Song menu", () => {
     assert.deepEqual(readNowPlayingButtons(null), [
       "lyrics",
-      "sleepTimer",
       "addToPlaylist",
       "download",
+      "songMenu",
     ]);
   });
 
@@ -33,15 +34,20 @@ describe("the saved Now Playing buttons", () => {
     ]);
   });
 
-  test("today's row is stored as nothing, so a reset row reads as the defaults of any later Wave", () => {
+  test("the default row is stored as nothing, so a reset row reads as the defaults of any later Wave", () => {
     assert.equal(
-      storedNowPlayingButtons(["lyrics", "sleepTimer", "addToPlaylist", "download"]),
+      storedNowPlayingButtons(["lyrics", "addToPlaylist", "download", "songMenu"]),
       null,
     );
   });
 
-  test("a stored value that isn't four known slots falls back to today's row", () => {
-    const today = ["lyrics", "sleepTimer", "addToPlaylist", "download"];
+  test("the row from before, with Sleep timer, is an edit like any other and is stored", () => {
+    const before = ["lyrics", "sleepTimer", "addToPlaylist", "download"] as const;
+    assert.deepEqual(readNowPlayingButtons(storedNowPlayingButtons(before)), before);
+  });
+
+  test("a stored value that isn't four known slots falls back to the default row", () => {
+    const defaultRow = ["lyrics", "addToPlaylist", "download", "songMenu"];
     for (const stored of [
       "",
       "not json",
@@ -54,16 +60,25 @@ describe("the saved Now Playing buttons", () => {
       '["shuffle",1,"share","songMenu"]',
       '["shuffle","shuffle","share","songMenu"]',
     ]) {
-      assert.deepEqual(readNowPlayingButtons(stored), today, stored);
+      assert.deepEqual(readNowPlayingButtons(stored), defaultRow, stored);
     }
   });
 });
 
+describe("where the Now Playing buttons are stored", () => {
+  test("under a key of their own, never the one rows were kept under before the default changed", () => {
+    // Every phone moves to the new default once: a row stored under the old key is never read.
+    assert.notEqual(NOW_PLAYING_BUTTONS_KEY, "settings.nowPlayingButtons");
+    // Renaming it again would reset every edited row, so it stays as it is.
+    assert.equal(NOW_PLAYING_BUTTONS_KEY, "settings.nowPlayingRow");
+  });
+});
+
 describe("setting the Now Playing buttons", () => {
-  const today = ["lyrics", "sleepTimer", "addToPlaylist", "download"] as const;
+  const row = ["lyrics", "sleepTimer", "addToPlaylist", "download"] as const;
 
   test("a slot set to an action no other slot holds takes it, the rest unchanged", () => {
-    assert.deepEqual(editNowPlayingButtons(today, { slot: 1, action: "shuffle" }), [
+    assert.deepEqual(editNowPlayingButtons(row, { slot: 1, action: "shuffle" }), [
       "lyrics",
       "shuffle",
       "addToPlaylist",
@@ -72,7 +87,7 @@ describe("setting the Now Playing buttons", () => {
   });
 
   test("a slot set to an action another slot holds swaps the two, so none shows twice", () => {
-    assert.deepEqual(editNowPlayingButtons(today, { slot: 0, action: "download" }), [
+    assert.deepEqual(editNowPlayingButtons(row, { slot: 0, action: "download" }), [
       "download",
       "sleepTimer",
       "addToPlaylist",
@@ -88,11 +103,11 @@ describe("setting the Now Playing buttons", () => {
   });
 
   test("a slot set to the action it holds stays as it is", () => {
-    assert.deepEqual(editNowPlayingButtons(today, { slot: 2, action: "addToPlaylist" }), today);
+    assert.deepEqual(editNowPlayingButtons(row, { slot: 2, action: "addToPlaylist" }), row);
   });
 
   test("a slot set to None loses its button, and several slots can be None", () => {
-    const one = editNowPlayingButtons(today, { slot: 1, action: null });
+    const one = editNowPlayingButtons(row, { slot: 1, action: null });
     assert.deepEqual(one, ["lyrics", null, "addToPlaylist", "download"]);
     assert.deepEqual(editNowPlayingButtons(one, { slot: 3, action: null }), [
       "lyrics",
@@ -102,8 +117,24 @@ describe("setting the Now Playing buttons", () => {
     ]);
   });
 
-  test("Reset to Default brings back today's row", () => {
-    assert.deepEqual(editNowPlayingButtons(["share", null, "repeat", "shuffle"], "reset"), today);
+  test("Reset to Default brings back the default row: Lyrics, Add to Playlist, Download, Song menu", () => {
+    assert.deepEqual(editNowPlayingButtons(["share", null, "repeat", "shuffle"], "reset"), [
+      "lyrics",
+      "addToPlaylist",
+      "download",
+      "songMenu",
+    ]);
+    assert.deepEqual(editNowPlayingButtons(row, "reset"), [
+      "lyrics",
+      "addToPlaylist",
+      "download",
+      "songMenu",
+    ]);
+  });
+
+  test("a reset row stores as nothing, which is what turns Reset to Default off", () => {
+    assert.equal(storedNowPlayingButtons(editNowPlayingButtons(row, "reset")), null);
+    assert.notEqual(storedNowPlayingButtons(row), null);
   });
 });
 

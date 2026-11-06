@@ -24,7 +24,7 @@ const pickerRoute = (slot: number) => `/settings/layout/now-playing/${slot + 1}`
 /**
  * Settings › Layout › Now Playing's buttons: a row per slot saying what it
  * holds, each opening its picker, then Reset to Default (off while the row is
- * today's).
+ * the default).
  */
 export function NowPlayingSlotsSection() {
   const { strings } = useLocalisation();

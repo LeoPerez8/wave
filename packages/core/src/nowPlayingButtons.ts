@@ -25,6 +25,15 @@ export type NowPlayingButtons = readonly [
   NowPlayingSlot,
 ];
 
+/**
+ * The synced preference the slots are stored under. The default row changed
+ * with this key, and the key the slots were kept under before
+ * (`settings.nowPlayingButtons`) is no longer read, locally or from the Wave
+ * account, so every phone moved to the new default once, edited rows
+ * included.
+ */
+export const NOW_PLAYING_BUTTONS_KEY = "settings.nowPlayingRow";
+
 /** Every action, in the order a slot's choices list them. */
 export const NOW_PLAYING_ACTIONS: readonly NowPlayingAction[] = [
   "lyrics",
@@ -47,13 +56,17 @@ const isButtons = (value: unknown): value is NowPlayingButtons => {
   return new Set(actions).size === actions.length;
 };
 
-/** The row before it could be changed: Lyrics, Sleep timer, Add to Playlist, Download. */
-const DEFAULT_BUTTONS: NowPlayingButtons = ["lyrics", "sleepTimer", "addToPlaylist", "download"];
+/**
+ * The default row: Lyrics, Add to Playlist, Download, Song menu. It replaced
+ * Lyrics, Sleep timer, Add to Playlist, Download, Sleep timer moving into the
+ * playing song's card (docs/spec.md, story 46b).
+ */
+const DEFAULT_BUTTONS: NowPlayingButtons = ["lyrics", "addToPlaylist", "download", "songMenu"];
 
 /**
  * The slots a stored value holds. Nothing stored, unreadable JSON or anything
  * but four slots of known actions, each once (a newer Wave's action
- * included), reads as today's row.
+ * included), reads as the default row.
  */
 export const readNowPlayingButtons = (stored: string | null): NowPlayingButtons => {
   if (stored === null) return DEFAULT_BUTTONS;
@@ -68,7 +81,7 @@ export const readNowPlayingButtons = (stored: string | null): NowPlayingButtons 
 
 /**
  * What to store for [buttons]; `readNowPlayingButtons` reads it back as those
- * slots. Today's row stores as nothing (null).
+ * slots. The default row stores as nothing (null).
  */
 export const storedNowPlayingButtons = (buttons: NowPlayingButtons): string | null =>
   buttons.every((slot, index) => slot === DEFAULT_BUTTONS[index]) ? null : JSON.stringify(buttons);
@@ -83,7 +96,7 @@ export type NowPlayingButtonsEdit =
 /**
  * [buttons] after [edit]. An action another slot holds swaps places with what
  * the edited slot held (None included), so no action shows twice. Reset
- * brings back today's row.
+ * brings back the default row.
  */
 export const editNowPlayingButtons = (
   buttons: NowPlayingButtons,
