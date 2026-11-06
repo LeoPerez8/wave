@@ -111,8 +111,17 @@ describe("versionHistoryUrl", () => {
   it("asks the service the manifest comes from for the channel's whole history", () => {
     assert.equal(
       versionHistoryUrl({ manifestUrl: "https://updates.example/v1/manifest", channel: "ti" }),
-      "https://updates.example/v1/notes?channel=ti",
+      "https://updates.example/v1/notes?channel=ti&from=0.0.0",
     );
+  });
+
+  it("counts from a version before any release, which a Worker that requires `from` accepts", () => {
+    const url = new URL(
+      versionHistoryUrl({ manifestUrl: "https://updates.example/v1/manifest", channel: "main" }) ??
+        "",
+    );
+    assert.equal(url.searchParams.get("from"), "0.0.0");
+    assert.equal(url.searchParams.get("to"), null);
   });
 
   it("has no address in a build with updates off or no manifest address", () => {

@@ -60,6 +60,12 @@ export const readKeptVersionHistory = (stored: string | null): readonly DatedRel
 };
 
 /**
+ * Counted from, the whole history comes back: every release is newer. A Worker deployed before
+ * Version History refuses an ask with no `from`, and this works on it and on today's alike.
+ */
+const BEFORE_EVERY_RELEASE = "0.0.0";
+
+/**
  * Where the channel's whole history is: on the service the manifest comes from. Null with no
  * channel the service knows (a PR or local build's "none") or no address to go by.
  */
@@ -74,7 +80,7 @@ export const versionHistoryUrl = ({
   if (channel !== "ti" && channel !== "main") return null;
   if (!manifestUrl?.endsWith(manifestPath)) return null;
   // not UI text: an address
-  return `${manifestUrl.slice(0, -manifestPath.length)}/v1/notes?channel=${channel}`;
+  return `${manifestUrl.slice(0, -manifestPath.length)}/v1/notes?channel=${channel}&from=${BEFORE_EVERY_RELEASE}`;
 };
 
 /** A release as the Version History page shows it. */
