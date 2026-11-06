@@ -104,8 +104,9 @@ function ProgressRing({ fraction }: { fraction: number }) {
  * Library lists it as missing), then shows it waiting and a progress ring
  * while it downloads. A failed one shows so, and a tap retries. Once the song
  * is in the Library (and for a Library song playing) it stays, tinted with
- * the primary colour, and a tap only says "Downloaded" (Core's
- * `nowPlayingDownload`).
+ * the primary colour, named "Downloaded", and a tap deletes the song as its
+ * menu's Delete does, after the same confirmation (Core's
+ * `nowPlayingDownload` and `nowPlayingDownloadTap`).
  */
 export function DownloadButton({
   trackId,
@@ -137,7 +138,7 @@ export function DownloadButton({
       <IconButton
         {...change}
         icon={IconDownload}
-        label={strings.playbackText.downloaded}
+        label={strings.playbackText.downloadedTapToDelete}
         onPress={download}
       />
     );

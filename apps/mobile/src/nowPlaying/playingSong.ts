@@ -1,14 +1,16 @@
 import { currentLocalisation } from "@/localisation/localisation";
-import { parseTrackId } from "@wave/core";
+import { parseTrackId, streamedAfterDelete } from "@wave/core";
 import { useEffect, useMemo, useSyncExternalStore } from "react";
 import { scopedSongStarredNow, rememberSongFavorite } from "@/library/favorites";
 import { onDownloadedRecording, onLibraryChange } from "@/library/libraryChanges";
-import { LibraryStore } from "@/library/LibraryStore";
+import { confirmDeleteSongs } from "@/library/deleteSongs";
+import { LibraryStore, type SongRow } from "@/library/LibraryStore";
 import { appRuntime } from "@/library/runtime";
 import { starSongs } from "@/library/starSongs";
 import { showError } from "@/overlay/alert";
-import { showToast } from "@/overlay/toast";
 import type { NativeYtSong } from "@/native/waveYtMusic";
+import { streamPlayingInstead } from "@/playback/actions";
+import { ytMusicEnabled } from "@/settings/ytMusic";
 import { downloadMissingSongs, downloadYtSong } from "@/ytmusic/YtDownloads";
 import { createNowPlayingSongLookup, type PlayingSongTarget } from "./songLookup";
 import { createNowPlayingSongActions } from "./songActions";
@@ -26,11 +28,45 @@ export const nowPlayingSongLookup = createNowPlayingSongLookup({
 onLibraryChange(nowPlayingSongLookup.change);
 onDownloadedRecording(nowPlayingSongLookup.downloaded);
 
+/** The YouTube video [track] was downloaded from, if any (none when it can't be read). */
+const videoIdOf = (track: SongRow): Promise<string | null> =>
+  appRuntime
+    // oxlint-disable-next-line react/rules-of-hooks -- Effect service access.
+    .runPromise(LibraryStore.use((store) => store.videoIds([track.id])))
+    .then(
+      (ids) => ids.get(track.id) ?? null,
+      () => null,
+    );
+
+/**
+ * Download on a song with a file: the song menu's Delete, its confirmation
+ * first. Playing from the file, the song goes on streamed from where it was
+ * when it came from YouTube Music and YouTube Music is on (Core's
+ * `streamedAfterDelete`); otherwise the delete moves the queue on to the
+ * next song, as the menu's Delete does.
+ */
+const deletePlayingSong = async (
+  target: PlayingSongTarget,
+  track: SongRow & { readonly path: string },
+): Promise<void> => {
+  // Read before asking, so the queue streams it before the delete takes the file's entries out.
+  const videoId = await videoIdOf(track);
+  await confirmDeleteSongs([track], {
+    onConfirm: () => {
+      const song = streamedAfterDelete(target.trackId, track, {
+        videoId,
+        ytMusicOn: ytMusicEnabled(),
+      });
+      if (song !== null) void streamPlayingInstead(target.trackId, song);
+    },
+  });
+};
+
 export const nowPlayingSongActions = createNowPlayingSongActions(nowPlayingSongLookup, {
-  download: (command) => {
+  download: (command, target) => {
     switch (command.kind) {
-      case "downloaded":
-        void showToast(currentLocalisation().strings.playbackText.downloaded);
+      case "delete":
+        void deletePlayingSong(target, command.track).catch(songActionFailed);
         break;
       case "missing":
         downloadMissingSongs([command.id]);
