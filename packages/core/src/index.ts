@@ -300,6 +300,8 @@ export {
 } from "./whatsNew.ts";
 export type { MergedReleaseNotes, PublishedRelease, WhatsNewState } from "./whatsNew.ts";
 export {
+  keptVersionHistory,
+  readKeptVersionHistory,
   readVersionHistory,
   versionHistoryEntries,
   versionHistorySummary,
