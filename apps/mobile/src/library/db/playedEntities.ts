@@ -1,4 +1,4 @@
-import { countedGenreSongIds } from "@wave/core";
+import { countedGenreSongIds, readPlaylistYtSong } from "@wave/core";
 import {
   albumPlayTotals,
   artistPlayTotals,
@@ -10,6 +10,8 @@ import {
   type ArtistFirstPlay,
   type ArtistStatsInput,
   type EntityPlayTotals,
+  type KeptSong,
+  type KeptSongs,
   type PlayedAlbumKey,
   type PlayedArtistKey,
   type PlaySums,
@@ -246,6 +248,78 @@ const playedTotals = (
   return {
     albums: rankEntityPlays([...albums.values()], Infinity),
     artists: rankEntityPlays([...artists.values()], Infinity),
+  };
+};
+
+/**
+ * What the owner keeps, for Core's `followSuggestions` to rank a light
+ * listener's suggestions by: every Library song with the artists its credit
+ * names, then each playlist's songs (`t:<track id>`, or `yt:<video id>` for a
+ * YT Music entry, credited as a streamed song is), and Favorites as one more
+ * playlist. Deleted playlists and entries are left out.
+ */
+export const keptArtistSongs = (db: LibraryDatabase): KeptSongs<PlayedArtist> => {
+  const library = playedLibrary(db, [], false);
+  const artistRows = new Map(library.artists.map((row) => [row.id, row]));
+  const trackArtists = new Map<number, KeptSong<PlayedArtist>["artists"][number][]>();
+  for (const link of db.all<{ trackId: number; artistId: number }>(
+    sql`SELECT track_id AS "trackId", artist_id AS "artistId" FROM track_artists
+      ORDER BY track_id, position`,
+  )) {
+    const artist = artistRows.get(link.artistId);
+    if (artist === undefined) continue;
+    const artists = trackArtists.get(link.trackId) ?? [];
+    artists.push({ name: artist.name, item: artist });
+    trackArtists.set(link.trackId, artists);
+  }
+  const track = (trackId: number): KeptSong<PlayedArtist> => ({
+    id: `t:${trackId}`,
+    artists: trackArtists.get(trackId) ?? [],
+  });
+  const streamed = (stored: string): KeptSong<PlayedArtist> | null => {
+    const song = readPlaylistYtSong(stored);
+    if (song === null) return null;
+    return {
+      id: `yt:${song.videoId}`,
+      artists: library.resolve(song).artists.flatMap((artist) => {
+        const item =
+          typeof artist.id === "number"
+            ? artistRows.get(artist.id)
+            : {
+                ...artist,
+                id: artist.id,
+                online: true as const,
+                thumbPath: null,
+                artworkPath: null,
+              };
+        return item === undefined ? [] : [{ name: artist.name, item }];
+      }),
+    };
+  };
+  const playlists = new Map<number, KeptSong<PlayedArtist>[]>();
+  for (const entry of db.all<{ playlistId: number; trackId: number | null; ytSong: string | null }>(
+    sql`SELECT playlist_items.playlist_id AS "playlistId", playlist_items.track_id AS "trackId",
+      playlist_items.yt_song AS "ytSong"
+    FROM playlist_items JOIN playlists ON playlists.id = playlist_items.playlist_id
+    WHERE NOT playlist_items.deleted AND NOT playlists.deleted`,
+  )) {
+    const song =
+      entry.trackId !== null
+        ? track(entry.trackId)
+        : entry.ytSong === null
+          ? null
+          : streamed(entry.ytSong);
+    if (song === null) continue;
+    const songs = playlists.get(entry.playlistId) ?? [];
+    songs.push(song);
+    playlists.set(entry.playlistId, songs);
+  }
+  const favorites = db
+    .all<{ trackId: number }>(sql`SELECT track_id AS "trackId" FROM favorites WHERE NOT deleted`)
+    .map((row) => track(row.trackId));
+  return {
+    library: [...trackArtists.keys()].map(track),
+    playlists: [...playlists.values(), favorites],
   };
 };
 
