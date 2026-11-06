@@ -63,14 +63,13 @@ const titleOf = (song: ListedSong): string =>
  * header (a tap returns to the player), then the songs YouTube Music's
  * Related tab gives for it ([videoId]; null for a song without one, undefined
  * while it isn't known; [findAgain] is Try Again's search for a Library song
- * none was found for, `usePlayingVideoId`), without the playing song in any
- * version (Core's `relatedWithoutPlaying`). A song the Library has lists and plays as the
- * Library's. The rows sit clear over Now Playing's colours (`ClearRows`). A tap plays it now and keeps Up Next; rows swipe and long-press
- * as anywhere. A + on each row's right adds the song to the end of the queue
- * as its menu's Add to Queue does; the row and its + stay, so a second tap
- * adds it again. Offline or on a failure it says "Couldn't load the related
- * songs" with Try Again. Each song's answer is kept for the session. Below
- * the songs, a row of the tab's similar artists (left out with none).
+ * none was found for, `usePlayingVideoId`), without the playing song in any version (Core's
+ * `relatedWithoutPlaying`). A song the Library has lists and plays as the Library's. The list sits
+ * clear over Now Playing's colours (`ClearRowsContext`). A tap plays it now and keeps Up Next; rows
+ * swipe and long-press as anywhere. A + on each row's right adds the song to the end of the queue
+ * as its menu's Add to Queue does; the row and its + stay, so a second tap adds it again. Offline
+ * or on a failure it says "Couldn't load the related songs" with Try Again. Each song's answer is
+ * kept for the session. Below the songs, a row of the tab's similar artists (left out with none).
  */
 export function RelatedView({
   item,
@@ -89,7 +88,11 @@ export function RelatedView({
   const answered = shown.status === "loaded" ? shown.answer.songs : NO_SONGS;
   // The playing song in any version (another album's, a live one) isn't related to itself.
   const read = useMemo(
-    () => relatedWithoutPlaying({ title: item.title ?? "", artist: item.artist ?? "" }, answered),
+    () =>
+      relatedWithoutPlaying(
+        item.title === null ? null : { title: item.title, artist: item.artist ?? "" },
+        answered,
+      ),
     [item.title, item.artist, answered],
   );
   const artists = shown.status === "loaded" ? shown.answer.artists : NO_ARTISTS;
@@ -150,7 +153,7 @@ export function RelatedView({
         </View>
       ) : (
         <SongList
-          className="flex-1 bg-transparent"
+          className="flex-1"
           clearRows
           data={songs}
           keyExtractor={keyOf}

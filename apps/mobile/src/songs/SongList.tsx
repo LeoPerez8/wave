@@ -11,7 +11,7 @@ import { View } from "react-native";
 import Animated from "react-native-reanimated";
 
 import { AlphabetSpine } from "@/catalog/AlphabetSpine";
-import { ClearRows } from "@/catalog/SwipeableRow";
+import { ClearRowsContext } from "@/catalog/SwipeableRow";
 import { CatalogLine } from "@/catalog/CatalogLine";
 import { CELL, grid } from "@/catalog/grid";
 import type { Spine } from "@/library/useSpine";
@@ -48,7 +48,7 @@ export type SongListProps<T> = Omit<
     } | null;
     /**
      * The list sits over Now Playing's colours (its Related view): its rows,
-     * its background and what a swipe uncovers are clear (`ClearRows`).
+     * its background and what a swipe uncovers are clear (`ClearRowsContext`).
      */
     readonly clearRows?: boolean;
   };
@@ -119,9 +119,10 @@ export function SongList<T>({
   // Same props: the Reanimated list only drives its scroll view from the UI thread.
   const List = (animated ? AnimatedLegendList : LegendList) as typeof LegendList;
   return (
-    <ClearRows value={clearRows}>
+    <ClearRowsContext value={clearRows}>
       <List
         {...list}
+        className={clearRows ? `${list.className ?? ""} bg-transparent` : list.className}
         data={data}
         keyExtractor={keyExtractor}
         renderItem={row}
@@ -159,7 +160,7 @@ export function SongList<T>({
           {still(lifted.key, lifted.accessory)}
         </Animated.View>
       )}
-    </ClearRows>
+    </ClearRowsContext>
   );
 }
 

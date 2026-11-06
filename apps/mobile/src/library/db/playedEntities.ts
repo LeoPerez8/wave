@@ -149,6 +149,15 @@ const playedLibrary = (
   return { artists, albums, resolve: streamedCredits({ artists, albums, credits, releases }) };
 };
 
+/** A streamed song's credited [artist] as Stats lists them: their Library row, or an online artist. */
+const playedArtist = (
+  artist: PlayedArtistKey,
+  artistRows: ReadonlyMap<number, ArtistRow>,
+): PlayedArtist | undefined =>
+  typeof artist.id === "number"
+    ? artistRows.get(artist.id)
+    : { ...artist, id: artist.id, online: true, thumbPath: null, artworkPath: null };
+
 /** Stats and Home's album/artist totals share one resolution of every streamed song. */
 export const playedEntityTotals = (db: LibraryDatabase, window: StatsWindow): PlayedEntityTotals =>
   playedTotals(db, window, true);
@@ -227,13 +236,8 @@ const playedTotals = (
     const song = songs.get(videoId);
     if (song === undefined) continue;
     const resolved = library.resolve(song);
-    for (const artist of resolved.artists) {
-      const item =
-        typeof artist.id === "number"
-          ? artistRows.get(artist.id)
-          : { ...artist, id: artist.id, online: true as const, thumbPath: null, artworkPath: null };
-      add(artists, item, sortKey(artist.name), totals);
-    }
+    for (const artist of resolved.artists)
+      add(artists, playedArtist(artist, artistRows), sortKey(artist.name), totals);
     const album = resolved.album;
     if (withAlbums && album !== null)
       add(
@@ -255,8 +259,10 @@ const playedTotals = (
  * What the owner keeps, for Core's `followSuggestions` to rank a light
  * listener's suggestions by: every Library song with the artists its credit
  * names, then each playlist's songs (`t:<track id>`, or `yt:<video id>` for a
- * YT Music entry, credited as a streamed song is), and Favorites as one more
- * playlist. Deleted playlists and entries are left out.
+ * YT Music entry the Library has no song of, credited as a streamed song is),
+ * and Favorites as one more playlist. A YT Music entry is the Library song its
+ * video id is now (`streamedTrack`), so a playlist holding both counts it once.
+ * Deleted playlists and entries are left out.
  */
 export const keptArtistSongs = (db: LibraryDatabase): KeptSongs<PlayedArtist> => {
   const library = playedLibrary(db, [], false);
@@ -282,23 +288,16 @@ export const keptArtistSongs = (db: LibraryDatabase): KeptSongs<PlayedArtist> =>
     return {
       id: `yt:${song.videoId}`,
       artists: library.resolve(song).artists.flatMap((artist) => {
-        const item =
-          typeof artist.id === "number"
-            ? artistRows.get(artist.id)
-            : {
-                ...artist,
-                id: artist.id,
-                online: true as const,
-                thumbPath: null,
-                artworkPath: null,
-              };
+        const item = playedArtist(artist, artistRows);
         return item === undefined ? [] : [{ name: artist.name, item }];
       }),
     };
   };
   const playlists = new Map<number, KeptSong<PlayedArtist>[]>();
   for (const entry of db.all<{ playlistId: number; trackId: number | null; ytSong: string | null }>(
-    sql`SELECT playlist_items.playlist_id AS "playlistId", playlist_items.track_id AS "trackId",
+    sql`SELECT playlist_items.playlist_id AS "playlistId",
+      coalesce(playlist_items.track_id,
+        ${streamedTrack(schema.videoIdIn(schema.playlistItems.ytSong), sql`NULL`)}) AS "trackId",
       playlist_items.yt_song AS "ytSong"
     FROM playlist_items JOIN playlists ON playlists.id = playlist_items.playlist_id
     WHERE NOT playlist_items.deleted AND NOT playlists.deleted`,
