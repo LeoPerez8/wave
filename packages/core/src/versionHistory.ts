@@ -6,7 +6,7 @@
 import { formatDate } from "./formatting.ts";
 import { catalogueOf, type AppLanguage } from "./localisation.ts";
 import { versionOrder } from "./updatePolicy.ts";
-import { readPublishedNotes, type PublishedRelease } from "./whatsNew.ts";
+import { answerReleases, readPublishedRelease, type PublishedRelease } from "./whatsNew.ts";
 
 /** One release from `GET /v1/notes`, with when its notes were published. */
 export interface DatedRelease extends PublishedRelease {
@@ -22,13 +22,17 @@ const dateOf = (release: unknown): number | null => {
   return Number.isNaN(parsed) ? null : parsed;
 };
 
-/** The service's answer with each release's date, or null when it isn't one. */
+/**
+ * The service's answer with each release's date, or null when it isn't one. A release it can't read
+ * is left out, so one bad notes file costs that release alone, not the whole page.
+ */
 export const readVersionHistory = (answer: unknown): readonly DatedRelease[] | null => {
-  const releases = readPublishedNotes(answer);
+  const releases = answerReleases(answer);
   if (releases === null) return null;
-  // readPublishedNotes read every release of the answer, in its order.
-  const raw = (answer as { readonly releases: readonly unknown[] }).releases;
-  return releases.map((release, index) => ({ ...release, date: dateOf(raw[index]) }));
+  return releases.flatMap((candidate) => {
+    const release = readPublishedRelease(candidate);
+    return release === null ? [] : [{ ...release, date: dateOf(candidate) }];
+  });
 };
 
 /**
