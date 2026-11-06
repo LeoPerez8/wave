@@ -10,6 +10,7 @@ import {
   IconSwipe,
   IconUser,
   IconUserCheck,
+  IconVersions,
   type Icon,
 } from "@tabler/icons-react-native";
 import type { SettingsIcon } from "@wave/core";
@@ -34,6 +35,7 @@ const GLYPHS: Readonly<Record<SettingsIcon, Icon>> = {
   download: IconDownload,
   user: IconUser,
   code: IconCode,
+  versions: IconVersions,
 };
 
 /** A Settings page's row leads with a plain glyph in the secondary text tone. */
