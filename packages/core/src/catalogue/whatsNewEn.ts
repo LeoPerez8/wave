@@ -4,4 +4,6 @@ export const whatsNewEn = {
   new: "New",
   fixes: "Fixes",
   done: "Done",
+  /** Opens Version History. */
+  seeAll: "See All",
 };
