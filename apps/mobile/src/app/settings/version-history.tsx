@@ -61,8 +61,9 @@ function Release({ entry }: { entry: VersionHistoryEntry }) {
 
 /**
  * Settings › Version History: the channel's releases newest first, as Core's
- * `versionHistoryEntries` lays them out. Opening it reads the history again;
- * the last list read stays while it does.
+ * `versionHistoryEntries` lays them out. It opens with the last list read,
+ * kept on the phone, and reads the history again; that list stays while it
+ * does and when the read fails, so "Couldn't load" shows only with nothing kept.
  */
 export default function VersionHistoryScreen() {
   const { language, strings } = useLocalisation();
