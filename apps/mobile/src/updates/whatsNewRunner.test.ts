@@ -26,7 +26,8 @@ const launch = ({
 }) => {
   const asked: string[] = [];
   const logged: string[] = [];
-  const cards: { dismiss: () => void; hidden: boolean }[] = [];
+  const cards: { dismiss: () => void; seeAll: () => void; hidden: boolean }[] = [];
+  let versionHistoryOpened = 0;
   const surroundings: { -readonly [K in keyof WhatsNewSurroundings]: WhatsNewSurroundings[K] } = {
     visible: true,
     nowPlayingShown: false,
@@ -47,8 +48,8 @@ const launch = ({
       return answer;
     },
     surroundings: () => surroundings,
-    show: (_, dismissed) => {
-      const card = { dismiss: dismissed, hidden: false };
+    show: (_, dismissed, seeAll) => {
+      const card = { dismiss: dismissed, seeAll, hidden: false };
       cards.push(card);
       surroundings.cardOpen = true;
       return () => {
@@ -61,6 +62,7 @@ const launch = ({
     now: () => now,
     log: (_, message) => logged.push(message),
     onFinished: () => finished++,
+    openVersionHistory: () => versionHistoryOpened++,
   });
   return {
     runner,
@@ -69,6 +71,7 @@ const launch = ({
     cards,
     surroundings,
     finishedCount: () => finished,
+    versionHistoryOpened: () => versionHistoryOpened,
     later: (ms: number) => {
       now += ms;
     },
@@ -114,6 +117,22 @@ describe("What's New", () => {
     await settle();
     assert.deepEqual(next.asked, []);
     assert.equal(next.cards.length, 0);
+  });
+
+  it("See All counts as dismissing the card and opens Version History", async () => {
+    const seen = { value: "0.46.2" };
+    const app = launch({ seen });
+    app.runner.reconsider();
+    await settle();
+    app.cards[0]?.seeAll();
+    assert.equal(seen.value, "0.47.0");
+    assert.equal(app.versionHistoryOpened(), 1);
+    assert.equal(app.finishedCount(), 1);
+    // Back from Version History: the card was dealt with, so it doesn't come back.
+    app.runner.reconsider();
+    await settle();
+    assert.equal(app.cards.length, 1);
+    assert.equal(app.versionHistoryOpened(), 1);
   });
 
   it("comes back after a JS reload that came before the dismissal", async () => {

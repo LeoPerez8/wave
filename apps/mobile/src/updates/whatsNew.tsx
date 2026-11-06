@@ -16,6 +16,7 @@ import { AppState, Text, View } from "react-native";
 import { CELL } from "@/catalog/grid";
 import { TextButton } from "@/components/TextButton";
 import { persistedSetting } from "@/lib/persistedSetting";
+import { router } from "@/lib/timingRouter";
 import { currentLocalisation, useLocalisation } from "@/localisation/localisation";
 import { appLog } from "@/log/appLog";
 import { isNowPlayingShown, onNowPlayingShownChange } from "@/nowPlaying/sheet";
@@ -80,9 +81,11 @@ function NoteSection({ title, lines }: { title: string; lines: readonly string[]
 function WhatsNewCard({
   releases,
   onDone,
+  onSeeAll,
 }: {
   releases: readonly PublishedRelease[];
   onDone: () => void;
+  onSeeAll: () => void;
 }) {
   const { language, strings } = useLocalisation();
   const notes = mergeReleaseNotes(releases, language);
@@ -103,7 +106,8 @@ function WhatsNewCard({
           <NoteSection title={strings.whatsNew.fixes} lines={notes.fixes} />
         </View>
       </CardEntries>
-      <View className="flex-row items-center justify-end">
+      <View className="flex-row flex-wrap items-center justify-end" style={{ columnGap: CELL * 3 }}>
+        <TextButton label={strings.whatsNew.seeAll} onPress={onSeeAll} />
         <TextButton label={strings.whatsNew.done} onPress={onDone} />
       </View>
     </>
@@ -129,7 +133,7 @@ export const startWhatsNew = (): void => {
       nowPlayingShown: isNowPlayingShown(),
       cardOpen: isOverlayOpen(),
     }),
-    show: (releases, dismissed) => {
+    show: (releases, dismissed, seeAll) => {
       const handle = openOverlay({
         label: currentLocalisation().strings.whatsNew.title,
         onDismiss: dismissed,
@@ -139,6 +143,10 @@ export const startWhatsNew = (): void => {
             onDone={() => {
               close();
               dismissed();
+            }}
+            onSeeAll={() => {
+              close();
+              seeAll();
             }}
           />
         ),
@@ -150,6 +158,7 @@ export const startWhatsNew = (): void => {
     onFinished: () => {
       for (const stop of stops.splice(0)) stop();
     },
+    openVersionHistory: () => router.push("/settings/version-history"),
   });
   const appState = AppState.addEventListener("change", runner.reconsider);
   stops.push(
