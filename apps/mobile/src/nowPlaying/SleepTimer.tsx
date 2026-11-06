@@ -321,16 +321,16 @@ export function SleepTimerButton({ change }: { change?: SlotChange | undefined }
 /**
  * The playing song's card's Sleep Timer entry (Core's `sleepTimerEntryLabel`):
  * the time left while a timer runs, which changes at each whole second while
- * the card shows (Core's `sleepTimerLabelChangesIn`), or End of track. A
- * menu that isn't the playing song's card passes [ticking] false and never
- * re-renders for the clock.
+ * the card shows (Core's `sleepTimerLabelChangesIn`), or End of track. Only
+ * the entry's own row reads it (`MenuChoices`), so the clock re-renders that
+ * row and not the card.
  */
-export const useSleepTimerEntryLabel = (ticking: boolean): string => {
+export const useSleepTimerEntryLabel = (): string => {
   const { strings } = useLocalisation();
   const timer = useSleepTimer();
   const [now, setNow] = useState(Date.now);
   useEffect(() => {
-    if (!ticking || timer === null) return;
+    if (timer === null) return;
     let timeout: ReturnType<typeof setTimeout> | undefined;
     // Read the clock at once (a timer set while the card shows), then at each whole second.
     const update = () => {
@@ -341,6 +341,6 @@ export const useSleepTimerEntryLabel = (ticking: boolean): string => {
     };
     timeout = setTimeout(update, 0);
     return () => clearTimeout(timeout);
-  }, [ticking, timer]);
+  }, [timer]);
   return sleepTimerEntryLabel(timer, now, strings);
 };

@@ -9,7 +9,7 @@ import { ACTION_ICONS, type ActionIcon, type MenuAction } from "@/playback/actio
 const ICON_SIZE = 22;
 const ICON_STROKE = 1.75;
 
-type Props = {
+export type MenuRowProps = {
   /** What the row does: it picks the row's icon (`ACTION_ICONS`), the same in every menu. */
   action: MenuAction;
   /** Draws another icon than the action's (Shuffle's follows the shuffle kind chosen). */
@@ -41,7 +41,7 @@ export function MenuRow({
   highlighted = false,
   destructive = false,
   accessibilityHint,
-}: Props) {
+}: MenuRowProps) {
   const Icon = icon ?? ACTION_ICONS[action];
   return (
     <TextButton
