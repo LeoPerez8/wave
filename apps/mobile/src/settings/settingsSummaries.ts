@@ -20,6 +20,7 @@ import { WaveSpotify } from "@/native/waveSpotify";
 import { WaveYtMusic } from "@/native/waveYtMusic";
 import { askSpotify } from "@/spotify/askSpotify";
 import { askYtMusic } from "@/ytmusic/askYtMusic";
+import { useVersionHistorySummary } from "@/updates/versionHistory";
 import { useDownloadCounts } from "@/ytmusic/YtDownloads";
 
 import { useSwipeSettings } from "./swipeActions";
@@ -74,7 +75,8 @@ const useAccountsSummary = (): string | null => {
  * Each Settings row's line on its page, live: a rescan or the whole-Library
  * lookup while it runs, how many music folders there are, how many songs are
  * downloading and waiting and how many songs' downloads failed, the accounts
- * signed into. Null leaves a row with its title alone.
+ * signed into, the running version's date. Null leaves a row with its title
+ * alone.
  */
 export const useSettingsSummaries = (): Record<SettingsPage, string | null> => {
   const { strings } = useLocalisation();
@@ -86,6 +88,7 @@ export const useSettingsSummaries = (): Record<SettingsPage, string | null> => {
   // Counts only: building the failed or queued lists here froze Settings with hundreds of songs.
   const downloads = useDownloadCounts();
   const swipes = useSwipeSettings().enabled;
+  const versionHistory = useVersionHistorySummary();
   return {
     library: scanning
       ? strings.settings.scanning
@@ -105,5 +108,6 @@ export const useSettingsSummaries = (): Record<SettingsPage, string | null> => {
     downloads: downloadsSummary(downloads.failed, downloads.queued, strings),
     accounts,
     developer: null,
+    versionHistory,
   };
 };

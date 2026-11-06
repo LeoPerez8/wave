@@ -442,7 +442,9 @@ export const videoIdIn = (ytSong: AnySQLiteColumn): SQL =>
  * `compareOrderKeys`): each a Library track (`track_id`) or a YT Music song
  * the Library doesn't have (`yt_song`, Core's `writePlaylistYtSong`), never
  * both. A removed entry is a tombstone (`deleted`). Entries go with their
- * playlist, and a track's with it when the track leaves the library.
+ * playlist. A track leaving the Library doesn't take its entries: they become
+ * the entry a song without a file is (Core's `leavingSongEntry`), or the store
+ * deletes them where they leave with it (`deleteTracks`).
  */
 export const playlistItems = sqliteTable(
   "playlist_items",
@@ -453,7 +455,7 @@ export const playlistItems = sqliteTable(
     playlistId: integer("playlist_id")
       .notNull()
       .references(() => playlists.id, { onDelete: "cascade" }),
-    trackId: integer("track_id").references(() => tracks.id, { onDelete: "cascade" }),
+    trackId: integer("track_id").references(() => tracks.id),
     ytSong: text("yt_song"),
     removedAt: integer("removed_at"),
     orderKey: text("order_key").notNull(),

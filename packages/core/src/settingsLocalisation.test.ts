@@ -43,9 +43,10 @@ test("Settings' pages and Layout's pages read in Portuguese; Developer stays Eng
       "Downloads",
       "Contas",
       "Developer",
+      "Histórico de Versões",
     ],
   );
-  assert.equal(visibleSettingsPages(false).at(-1)?.title, "Accounts");
+  assert.equal(visibleSettingsPages(false).at(-1)?.title, "Version History");
   assert.deepEqual(Object.values(pt.settings.layoutPages), [
     "Início",
     "Biblioteca",

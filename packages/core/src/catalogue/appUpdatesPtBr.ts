@@ -5,6 +5,7 @@ export const appUpdatesPtBr: typeof appUpdatesEn = {
   ignoreThisUpdate: "Ignorar Esta Atualização",
   version: (version) => `Versão ${version}`,
   checkForUpdates: "Verificar atualizações",
+  installNow: "Instalar Agora",
   percent: (percent) => `${percent}%`,
   downloading: (percent) => `Baixando a atualização, ${percent}%`,
   upToDate: "O Wave está atualizado",
