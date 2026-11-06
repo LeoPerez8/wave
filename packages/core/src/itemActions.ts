@@ -126,8 +126,9 @@ export interface ActionSubject<A extends LibraryArtistRef = LibraryArtistRef> {
   /** Settings allows looking songs up online: songs missing something offer Fix Song. */
   readonly onlineLookups?: boolean | undefined;
   /**
-   * The song is the one playing (the mini player's long press): Play Next and
-   * Add to Queue don't apply to it, so its menu leaves them out.
+   * The song is the one playing (its card from the mini player's long press
+   * or Now Playing's Song menu): Play Next and Add to Queue don't apply to
+   * it, so its menu leaves them out and offers Sleep Timer in their place.
    */
   readonly playing?: boolean | undefined;
   /** The current route, so Go to doesn't lead to the page you're on. */
@@ -166,7 +167,8 @@ export type ItemAction =
   | "cancelDownload"
   | "retryDownload"
   | "downloadMissingSongs"
-  | "retryFailed";
+  | "retryFailed"
+  | "sleepTimer";
 
 /**
  * Where a link to an item's artists leads (Go to Artist, Now Playing's artist
@@ -345,6 +347,10 @@ export const itemActions = <A extends LibraryArtistRef = LibraryArtistRef>(
       : [];
   const entries: ItemActionEntry<A>[] = [
     ...download.map((action) => ({ action })),
+    // The playing song's card is the one that sets the sleep timer, where the queue entries were.
+    ...(subject.playing === true && surface === "menu" && kind === "track" && items.length === 1
+      ? [{ action: "sleepTimer" } as const]
+      : []),
     ...(missing < items.length && subject.playing !== true
       ? [{ action: "playNext" } as const, { action: "addToQueue" } as const]
       : []),
@@ -434,7 +440,8 @@ export type YtSongActionEntry<A> =
         | "removeFromPlaylist"
         | "releaseDate"
         | "share"
-        | "select";
+        | "select"
+        | "sleepTimer";
     }
   /** The song's YT Music album page, by its browse id (`MPREb_…`). */
   | { readonly action: "goToAlbum"; readonly album: string }
@@ -465,7 +472,7 @@ export interface YtSongActionOptions {
   readonly ytMusic?: boolean | undefined;
   /** The menu was opened from a list that can select: it offers Select. */
   readonly selectable?: boolean | undefined;
-  /** The song is the one playing (the mini player's long press): no Play Next or Add to Queue. */
+  /** The song is the one playing (its card): Sleep Timer instead of Play Next and Add to Queue. */
   readonly playing?: boolean | undefined;
 }
 
@@ -480,7 +487,7 @@ export interface YtSongActionOptions {
  * only artist is the page you're on); Release Date, where the owner types
  * when it first came out; Share; last, Select, opened from a list that
  * can select ([selectable]). Playing ([playing]), it's the song already on,
- * so it has no Play Next or Add to Queue. With YT Music on, it starts a
+ * so it has no Play Next or Add to Queue, and Sleep Timer leads instead. With YT Music on, it starts a
  * Magic Queue from its radio, as a Library song's menu does. The Library's
  * other entries (Fix Song, Delete) are about its files, which a streamed
  * song isn't.
@@ -497,7 +504,9 @@ export const ytSongActions = <A>(
     playing = false,
   }: YtSongActionOptions = {},
 ): YtSongActionEntry<A>[] => [
-  ...(playing ? [] : [{ action: "playNext" } as const, { action: "addToQueue" } as const]),
+  ...(playing
+    ? [{ action: "sleepTimer" } as const]
+    : [{ action: "playNext" } as const, { action: "addToQueue" } as const]),
   ...(ytMusic ? [{ action: "magicQueue" } as const] : []),
   { action: "addToPlaylist" },
   ...(favorite === undefined ? [] : [{ action: favorite ? "unfavorite" : "favorite" } as const]),

@@ -34,6 +34,16 @@ export const sleepTimerLabelSeconds = (timer: SleepTimer, now: number): number |
   return timer.type === "deadline" ? Math.max(0, Math.ceil((timer.endsAt - now) / 1000)) : null;
 };
 
+/**
+ * How long after [now] a deadline's label next shows one second less, in ms;
+ * null once it's due, or for End of track, whose label never ticks.
+ */
+export const sleepTimerLabelChangesIn = (timer: SleepTimer, now: number): number | null => {
+  if (timer.type !== "deadline") return null;
+  const left = timer.endsAt - now;
+  return left <= 0 ? null : left % MS_PER_SECOND || MS_PER_SECOND;
+};
+
 /** The timer a choice starts at `now`. */
 export const startSleepTimer = (choice: SleepTimerChoice, now: number): SleepTimer | null => {
   if (choice.type === "endOfTrack") return { type: "endOfTrack" };
@@ -60,6 +70,24 @@ export const stepSleepMinutes = (minutes: number, direction: 1 | -1): number => 
 export const formatSleepRemaining = (ms: number): string => {
   "worklet";
   return formatDuration(Math.ceil(ms / MS_PER_SECOND) * MS_PER_SECOND);
+};
+
+/**
+ * The Sleep Timer entry of the playing song's card: its name, then, while a
+ * timer runs, the time left (`14:59`) or End of track.
+ */
+export const sleepTimerEntryLabel = (
+  timer: SleepTimer | null,
+  now: number,
+  catalogue: Catalogue = en,
+): string => {
+  const name = catalogue.itemActions.labels.sleepTimer;
+  if (timer === null) return name;
+  const left =
+    timer.type === "endOfTrack"
+      ? catalogue.playbackText.endOfTrack2
+      : formatSleepRemaining(Math.max(0, timer.endsAt - now));
+  return catalogue.itemActions.sleepTimerIs(left);
 };
 
 /** A duration in whole minutes as the stepper shows it, e.g. `45 min` or `1 h 30 min`. */

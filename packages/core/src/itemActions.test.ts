@@ -1055,6 +1055,7 @@ describe("ytSongActions", () => {
     ]);
     // Playing, it still does, as the playing Library song's menu does.
     assert.deepEqual(actions({ ytMusic: true, playing: true }), [
+      "sleepTimer",
       "magicQueue",
       "addToPlaylist",
       "releaseDate",
@@ -1189,24 +1190,26 @@ describe("ytSongActions", () => {
 });
 
 describe("the playing song's menu", () => {
-  test("a Library song that's playing has no Play Next or Add to Queue, and keeps the rest", () => {
+  test("a Library song that's playing has Sleep Timer instead of Play Next and Add to Queue, and keeps the rest", () => {
     const menu = names(itemActions(tracks([song({ favorite: false })])));
     assert.ok(menu.includes("playNext") && menu.includes("addToQueue"));
+    assert.ok(!menu.includes("sleepTimer"));
     const playing = names(itemActions(tracks([song({ favorite: false })], { playing: true })));
-    assert.deepEqual(
-      playing,
-      menu.filter((action) => action !== "playNext" && action !== "addToQueue"),
-    );
+    assert.deepEqual(playing, [
+      "sleepTimer",
+      ...menu.filter((action) => action !== "playNext" && action !== "addToQueue"),
+    ]);
     for (const action of ["addToPlaylist", "favorite", "goToAlbum", "goToArtist", "share"])
       assert.ok(playing.includes(action), action);
   });
 
-  test("a YT Music song that's playing has no Play Next or Add to Queue, and keeps the rest", () => {
+  test("a YT Music song that's playing has Sleep Timer instead of Play Next and Add to Queue, and keeps the rest", () => {
     const artists = { kind: "open", target: { kind: "yt", name: "Justice" } } as const;
     const options = { album: "MPREb_cross", ytMusic: true, favorite: false } as const;
     assert.deepEqual(
       ytSongActions(artists, { ...options, playing: true }).map((entry) => entry.action),
       [
+        "sleepTimer",
         "magicQueue",
         "addToPlaylist",
         "favorite",
@@ -1230,6 +1233,21 @@ describe("the playing song's menu", () => {
         "share",
       ],
     );
+  });
+});
+
+const offersSleepTimer = (entries: readonly { readonly action: string }[]) =>
+  entries.some((entry) => entry.action === "sleepTimer");
+
+describe("Sleep Timer", () => {
+  test("only the playing song's card offers it: no list's song menu, selection or other item does", () => {
+    assert.ok(offersSleepTimer(itemActions(tracks([song()], { playing: true }))));
+    assert.ok(offersSleepTimer(ytSongActions(undefined, { playing: true })));
+    assert.ok(!offersSleepTimer(itemActions(tracks([song()]))));
+    assert.ok(!offersSleepTimer(itemActions(tracks([song()], { selectable: true }))));
+    assert.ok(!offersSleepTimer(itemActions(tracks([song(), song()], { surface: "selection" }))));
+    assert.ok(!offersSleepTimer(itemActions({ ...albums([10]), surface: "menu" })));
+    assert.ok(!offersSleepTimer(ytSongActions(undefined, { selectable: true, ytMusic: true })));
   });
 });
 
