@@ -15,7 +15,7 @@ import { IconButton } from "@/components/IconButton";
 import { TextButton } from "@/components/TextButton";
 import { useLocalisation } from "@/localisation/localisation";
 
-import { tapUpdateButton, useOfferedAppUpdate, useUpdateButtonLook } from "./appUpdates";
+import { tapUpdateButton, useUpdateButtonLook } from "./appUpdates";
 
 const SPIN_MS = 1000;
 const ICON_SIZE = 18;
@@ -42,14 +42,13 @@ function Spinner({ spinning, color }: { spinning: boolean; color: string }) {
 }
 
 /**
- * Beside the version in Settings: "Install Now" while a downloaded bundle is ready, which reloads
- * Wave on it; otherwise installs a downloaded APK, even one swiped off the pill, or looks for an
- * update now. Core's update policy says which shows and what a tap does.
+ * Beside the version in Settings: "Install Now" while a downloaded update is ready, which reloads
+ * Wave on a bundle or installs an APK as the pill does, even one swiped off the pill; otherwise
+ * looks for an update now. Core's update policy says which shows and what a tap does.
  */
 export function UpdateButton() {
   const { strings } = useLocalisation();
   const text = strings.appUpdates;
-  const offered = useOfferedAppUpdate();
   const look = useUpdateButtonLook();
   if (look === "installNow") {
     return (
@@ -61,11 +60,7 @@ export function UpdateButton() {
     );
   }
   const downloading = typeof look === "object";
-  const label = downloading
-    ? text.downloading(look.downloading)
-    : offered !== null
-      ? text.updateTheApp
-      : text.checkForUpdates;
+  const label = downloading ? text.downloading(look.downloading) : text.checkForUpdates;
   return (
     <IconButton label={label} busy={look !== "idle"} onPress={tapUpdateButton}>
       {(color) =>

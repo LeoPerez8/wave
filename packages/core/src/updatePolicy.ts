@@ -85,16 +85,19 @@ export type UpdateStep =
   | "wait";
 
 /**
- * The update an "Install Now" tap takes, or null: a downloaded bundle, whether a tap's check or
- * Wave's own fetched it. A pending APK holds bundles back, so it never offers one then.
+ * The update an "Install Now" tap takes, or null: a downloaded APK, verified as `offeredApk` says,
+ * even one swiped off the pill; else a downloaded bundle, whether a tap's check or Wave's own fetched
+ * it. A pending APK holds bundles back, so it never offers one then.
  */
-export type ReadyUpdate = "bundle" | null;
+export type ReadyUpdate = "apk" | "bundle" | null;
 
 export const readyUpdate = ({
   nativeUpdate,
   bundleDownloaded,
-}: Pick<UpdateState, "nativeUpdate" | "bundleDownloaded">): ReadyUpdate =>
-  nativeUpdate === "none" && bundleDownloaded ? "bundle" : null;
+}: Pick<UpdateState, "nativeUpdate" | "bundleDownloaded">): ReadyUpdate => {
+  if (nativeUpdate === "downloaded") return "apk";
+  return nativeUpdate === "none" && bundleDownloaded ? "bundle" : null;
+};
 
 const isDue = (now: number, last: number | null, interval: number): boolean =>
   last === null ||
@@ -154,7 +157,7 @@ export const updateRequestAfter = (
   { visible, ...ready }: Pick<UpdateState, "visible" | "nativeUpdate" | "bundleDownloaded">,
 ): UpdateRequest => {
   if (!visible) return "none";
-  return request === "installBundle" && readyUpdate(ready) === null ? "none" : request;
+  return request === "installBundle" && readyUpdate(ready) !== "bundle" ? "none" : request;
 };
 
 /**
@@ -238,8 +241,9 @@ export const nextUpdateStep = (state: UpdateState): UpdateStep => {
 };
 
 /**
- * What a tap on the update button does, given what's already under way. Install Now with a bundle
- * ready asks for it at once (`installBundle`), music or not.
+ * What a tap on the update button does, given what's already under way. Install Now takes the ready
+ * update at once, music or not: an APK as a tap on the pill does (`install`), a bundle by asking
+ * for its reload (`installBundle`).
  */
 export const updateButtonAction = ({
   nativeUpdate,
@@ -252,8 +256,9 @@ export const updateButtonAction = ({
   readonly downloadingApk: boolean;
 }): "install" | "installBundle" | "check" | "followDownload" | "none" => {
   if (updateRequest !== "none" || installTap !== "none") return "none";
-  if (nativeUpdate === "downloaded") return "install";
-  if (readyUpdate({ nativeUpdate, bundleDownloaded }) === "bundle") return "installBundle";
+  const ready = readyUpdate({ nativeUpdate, bundleDownloaded });
+  if (ready === "apk") return "install";
+  if (ready === "bundle") return "installBundle";
   return downloadingApk ? "followDownload" : "check";
 };
 
@@ -336,7 +341,7 @@ export const strandedUpdateRequest = (
 
 /**
  * The button's face: the refresh glyph at rest, spinning, a download's percentage, whoever started
- * it, or "Install Now" while an update is ready.
+ * it, or "Install Now" while an update is ready, a bundle or an APK (`readyUpdate`).
  */
 export type UpdateButtonLook =
   "idle" | "checking" | "installNow" | { readonly downloading: number };

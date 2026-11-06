@@ -739,6 +739,48 @@ describe("the update runner", () => {
       assert.deepEqual(run.notices, []);
     });
 
+    it("offers Install Now for a downloaded APK, which installs as the pill's tap does", async () => {
+      const run = await opened({ checkNative: apkDownloaded });
+      assert.equal(run.runner.buttonLook(), "installNow");
+      run.surroundings.playing = true;
+      await tap(run);
+      assert.deepEqual(run.did, ["install"]);
+    });
+
+    it("takes the pill's permission path from Install Now", async () => {
+      const run = await opened({ checkNative: apkDownloaded });
+      run.surroundings.installAccess = "needsPermission";
+      assert.equal(run.runner.buttonLook(), "installNow");
+      await tap(run);
+      assert.deepEqual(run.did, ["permission"]);
+      // Android's screen takes Wave's place, and Wave comes back with the permission.
+      run.surroundings.visible = false;
+      run.runner.reconsider();
+      run.surroundings.visible = true;
+      run.surroundings.installAccess = "silent";
+      run.runner.reconsider();
+      await run.settle();
+      assert.deepEqual(run.did, ["permission", "install"]);
+    });
+
+    it("says when Install Now's install fails, and is the refresh button once the APK is gone", async () => {
+      const run = await opened({ checkNative: apkDownloaded, installApk: failing });
+      assert.equal(run.runner.buttonLook(), "installNow");
+      await tap(run);
+      assert.deepEqual(run.notices, ["installFailed"]);
+      assert.equal(run.runner.buttonLook(), "idle");
+    });
+
+    it("keeps Install Now after Android's confirmation is declined, for another tap", async () => {
+      const run = await opened({ checkNative: apkDownloaded });
+      await tap(run);
+      run.runner.installAbandoned(false);
+      assert.equal(run.runner.buttonLook(), "installNow");
+      run.did.length = 0;
+      await tap(run);
+      assert.deepEqual(run.did, ["install"]);
+    });
+
     it("downloads and installs what the check finds", async () => {
       let answer: NativeUpdate = "none";
       const run = await opened({ checkNative: Effect.sync(() => answer) });
@@ -913,7 +955,7 @@ describe("the update runner", () => {
       assert.equal(run.runner.buttonLook(), "idle");
     });
 
-    it("shows the percentage of a download, then rests", async () => {
+    it("shows the percentage of a download, then Install Now once the APK is in", async () => {
       let finish: (result: Effect.Effect<boolean>) => void = () => {};
       let answer: NativeUpdate = "none";
       const run = await opened({
@@ -930,7 +972,7 @@ describe("the update runner", () => {
       assert.equal(run.runner.buttonLook(), run.runner.buttonLook(), "a stable snapshot");
       finish(Effect.succeed(true));
       await run.settle();
-      assert.equal(run.runner.buttonLook(), "idle");
+      assert.equal(run.runner.buttonLook(), "installNow");
       assert.deepEqual(run.did, ["check", "install"]);
     });
 
