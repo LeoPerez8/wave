@@ -64,6 +64,17 @@ class YtWatchParserTest {
   }
 
   @Test
+  fun readsEachSimilarArtistsPhoto() {
+    // Related's artists row shows each artist's photo over their name.
+    val artists = YtWatchParser.related(fixture("related-song.json")).artists
+    assertEquals(
+      "https://yt3.googleusercontent.com/55PSu47gaRpDqL6mWN69tNb8bl7mFUsM_XZLoi9XxJXssZX_CnNdTgDlZjVK2zgoUegtOkAqgSXrTcI=w544-h544-p-l90-rj",
+      artists.first().artworkUrl,
+    )
+    assertTrue(artists.all { it.artworkUrl?.startsWith("https://") == true })
+  }
+
+  @Test
   fun aRelatedTabWithNothingReadableHasNoSongsOrArtists() {
     val related = YtWatchParser.related("""{"contents":{"sectionListRenderer":{"contents":[{"musicDescriptionShelfRenderer":{}}]}}}""")
     assertTrue(related.songs.isEmpty())
