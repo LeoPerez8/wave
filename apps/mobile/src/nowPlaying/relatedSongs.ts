@@ -3,7 +3,8 @@ import {
   createRelatedSongsSession,
   isUnsearchedTrackId,
   parseTrackId,
-  type RelatedSearchSong,
+  relatedLibraryVideoId,
+  type RelatedLibraryRead,
   type RelatedSongsShown,
 } from "@wave/core";
 import * as Effect from "effect/Effect";
@@ -70,31 +71,29 @@ const relatedSearches = createRelatedSearches(async (query) => {
   return result.success;
 });
 
-/** What the Library has for the song playing: the video id it was downloaded from, or what to search. */
-type LibraryRead =
-  | { readonly id: number; readonly videoId: string | null }
-  | { readonly id: number; readonly song: RelatedSearchSong };
+/** What the Library gave for the Library song [id] playing (Core's `RelatedLibraryRead`). */
+type LibraryRead = { readonly id: number; readonly read: RelatedLibraryRead };
 
-/** The Library's video id for song [id], else the song to search for (null when it can't be read). */
+/** The Library's video id for song [id], else the song to search for, else that it lacks the song. */
 const readLibrarySong = (id: number) =>
   // oxlint-disable-next-line react/rules-of-hooks -- Effect Service.use resolves a service; it is not a React Hook.
   LibraryStore.use((store) =>
     Effect.gen(function* () {
       const stored = (yield* store.videoIds([id])).get(id);
-      if (stored !== undefined) return { id, videoId: stored };
+      if (stored !== undefined) return { status: "videoId", videoId: stored } as const;
       const [song] = yield* store.songsByIds([id]);
-      if (song === undefined) return { id, videoId: null };
+      if (song === undefined) return { status: "unread" } as const;
       const artists = yield* store.artistsByIds(song.artistIds);
       const names = new Map(artists.map((artist) => [artist.id, artist.name]));
       return {
-        id,
+        status: "search",
         song: {
           id,
           title: song.title,
           artists: song.artistIds.flatMap((artist) => names.get(artist) ?? []),
           durationMs: song.durationMs,
         },
-      };
+      } as const;
     }),
   );
 
@@ -104,9 +103,11 @@ const NO_SEARCH = (): void => {};
  * The video id of the song [trackId] playing: a streamed song's own, the one
  * a Library song was downloaded from, or for a Library song without one, what
  * a search of its title and artists found (`createRelatedSearches`; null when
- * nothing matched or the search failed), undefined while it isn't known yet
- * (the Library is read, the song searched, or an unsearched entry searched).
- * [findAgain] is Try Again's search for a Library song that had no match.
+ * nothing matched or the search failed, or the Library couldn't give the
+ * song), undefined while it isn't known yet (the Library is read, the song
+ * searched, or an unsearched entry searched). [findAgain] is Try Again for a
+ * Library song with none: it searches again, or reads the Library again
+ * (Core's `relatedLibraryVideoId`).
  */
 export const usePlayingVideoId = (
   trackId: string | null,
@@ -114,40 +115,43 @@ export const usePlayingVideoId = (
 ): { readonly videoId: string | null | undefined; readonly findAgain: () => void } => {
   const track = trackId === null ? null : parseTrackId(trackId);
   const libraryId = track?.kind === "library" ? track.id : null;
-  const [read, setRead] = useState<LibraryRead>();
+  const [library, setLibrary] = useState<LibraryRead>();
+  // Try Again's count of reads of a Library that couldn't give the song.
+  const [readAgain, setReadAgain] = useState(0);
   useEffect(() => {
     if (libraryId === null) return undefined;
     let current = true;
     appRuntime.runPromise(readLibrarySong(libraryId)).then(
-      (found) => {
-        if (current) setRead(found);
+      (read) => {
+        if (current) setLibrary({ id: libraryId, read });
       },
       () => {
-        if (current) setRead({ id: libraryId, videoId: null });
+        if (current) setLibrary({ id: libraryId, read: { status: "unread" } });
       },
     );
     return () => {
       current = false;
     };
-  }, [libraryId]);
-  const search = read !== undefined && read.id === libraryId && "song" in read ? read.song : null;
+  }, [libraryId, readAgain]);
+  const read = library !== undefined && library.id === libraryId ? library.read : undefined;
+  const search = read?.status === "search" ? read.song : null;
   useEffect(() => {
     if (search !== null) relatedSearches.find(search);
   }, [search]);
   const found = useSyncExternalStore(relatedSearches.subscribe, () =>
     search === null ? undefined : relatedSearches.videoId(search.id),
   );
+  const { videoId, tryAgain } = relatedLibraryVideoId(read, found);
   const findAgain = useCallback(() => {
-    if (search !== null) relatedSearches.findAgain(search);
-  }, [search]);
+    if (tryAgain === "search" && search !== null) relatedSearches.findAgain(search);
+    if (tryAgain === "readLibrary") {
+      setLibrary(undefined);
+      setReadAgain((count) => count + 1);
+    }
+  }, [tryAgain, search]);
   if (trackId === null) return { videoId: null, findAgain: NO_SEARCH };
   if (track?.kind === "yt")
     return { videoId: ytSong?.videoId ?? track.videoId, findAgain: NO_SEARCH };
-  if (libraryId !== null) {
-    if (read?.id !== libraryId) return { videoId: undefined, findAgain: NO_SEARCH };
-    return "song" in read
-      ? { videoId: found, findAgain }
-      : { videoId: read.videoId, findAgain: NO_SEARCH };
-  }
+  if (libraryId !== null) return { videoId, findAgain };
   return { videoId: isUnsearchedTrackId(trackId) ? undefined : null, findAgain: NO_SEARCH };
 };
