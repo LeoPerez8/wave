@@ -48,7 +48,7 @@ export const playbackTextPtBr: typeof playbackTextEn = {
   done: "OK",
   download: "Baixar",
   downloadFailed: "Falha no download",
-  downloaded: "Baixada",
+  downloadedTapToDelete: "Baixada, toque para apagar",
   downloading: "Baixando",
   endOfTrack: "Fim da Música",
   endOfTrack2: "Fim da música",
