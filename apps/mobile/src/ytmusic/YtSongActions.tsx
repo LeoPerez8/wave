@@ -43,6 +43,7 @@ import { startMagicQueueFromStream } from "@/playback/magicQueueStart";
 import type { MenuOptions } from "@/playback/ActionsMenu";
 import type { RowSwipeOptions } from "@/playback/rowSwipe";
 import { showError } from "@/overlay/alert";
+import { openRelated } from "@/nowPlaying/openRelated";
 import { openSleepTimer } from "@/nowPlaying/SleepTimer";
 import { swipeSettingsNow } from "@/settings/swipeActions";
 import { ytMusicEnabled, useYtMusicEnabled } from "@/settings/ytMusic";
@@ -113,7 +114,8 @@ type Entry =
         | "releaseDate"
         | "share"
         | "select"
-        | "sleepTimer";
+        | "sleepTimer"
+        | "related";
     }
   | { readonly kind: "album"; readonly action: "goToAlbum"; readonly album: string }
   | {
@@ -228,6 +230,10 @@ const run = (
     // The playing song's card: the timer menu, as the Sleep timer slot's button opens it.
     case "sleepTimer":
       openSleepTimer();
+      return;
+    // The playing song's card: Now Playing on the Related view, as its slot shows it.
+    case "related":
+      openRelated();
       return;
   }
 };
