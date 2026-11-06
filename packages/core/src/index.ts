@@ -2255,6 +2255,7 @@ export {
 export type { RowMenuAction, RowSwipeActions, SwipeChoice, SwipeSettings } from "./swipeActions.ts";
 export { BACK_EXIT_WINDOW_MS, createBackExitConfirmation } from "./backExit.ts";
 export { favoriteToast } from "./favoriteToast.ts";
+export { queuedToast } from "./queuedToast.ts";
 export type { FavoriteSource } from "./favoriteToast.ts";
 
 export {
