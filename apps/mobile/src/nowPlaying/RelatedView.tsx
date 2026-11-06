@@ -29,6 +29,7 @@ import {
 } from "@/songs/mixedSongs";
 import type { SongRowActions } from "@/songs/SongRow";
 import { SongList } from "@/songs/SongList";
+import { occurrenceKeys } from "@/songs/songRowState";
 import { activeTiming, beginTiming, timingLinkNavigated } from "@/lib/timing";
 import { openFollowedArtist } from "@/library/openFollowedArtist";
 import { showError } from "@/overlay/alert";
@@ -88,12 +89,15 @@ export function RelatedView({
   const artistsRow = artists.length === 0 ? null : <RelatedArtists artists={artists} />;
   const songs = useMemo((): readonly ListedSong[] => discoverSongs(read, find), [read, find]);
   const entry = useCallback((song: ListedSong) => mixedSongEntry(song), []);
+  // Rows key by song, a second related video of the same Library song by its occurrence.
+  const keys = useMemo(() => occurrenceKeys(songs, discoverTrackId), [songs]);
+  const keyOf = useCallback((song: ListedSong) => keys.get(song) ?? discoverTrackId(song), [keys]);
   // Each row's +, kept while the songs and the language stay, so the rows aren't drawn again.
   const pluses = useMemo(
     () =>
       new Map(
-        songs.map((song): [string, ReactNode] => [
-          discoverTrackId(song),
+        songs.map((song): [ListedSong, ReactNode] => [
+          song,
           <IconButton
             key="plus"
             icon={IconPlus}
@@ -107,7 +111,7 @@ export function RelatedView({
   const withPlus = useCallback(
     (row: ReactElement, song: ListedSong): ReactNode =>
       cloneElement(row as ReactElement<SongRowActions>, {
-        accessory: pluses.get(discoverTrackId(song)),
+        accessory: pluses.get(song),
       }),
     [pluses],
   );
@@ -141,7 +145,7 @@ export function RelatedView({
         <SongList
           className="flex-1"
           data={songs}
-          keyExtractor={discoverTrackId}
+          keyExtractor={keyOf}
           song={entry}
           context={RELATED}
           onPlay={playNow}

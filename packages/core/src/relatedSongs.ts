@@ -143,3 +143,37 @@ export const createRelatedSearches = (
     },
   };
 };
+
+/**
+ * What the Library gave Related for the playing Library song: the video id
+ * it was downloaded from, the song to search for without one, or nothing
+ * (the read failed, or the Library no longer has the song).
+ */
+export type RelatedLibraryRead =
+  | { readonly status: "videoId"; readonly videoId: string }
+  | { readonly status: "search"; readonly song: RelatedSearchSong }
+  | { readonly status: "unread" };
+
+/**
+ * What Try Again does for a Library song with no video id to read: search
+ * for it again, or read the Library again. Null when it has nothing to
+ * find (a song with a video id reads its related songs again itself).
+ */
+export type RelatedTryAgain = "search" | "readLibrary" | null;
+
+/**
+ * The video id Related reads for a playing Library song, from what the
+ * Library gave ([read]; undefined while it's read) and, for a song without
+ * one, what the search found ([found], `RelatedSearches.videoId`): undefined
+ * while either is on its way, null for the error. With it, what its Try
+ * Again does: a song the Library couldn't give reads it again.
+ */
+export const relatedLibraryVideoId = (
+  read: RelatedLibraryRead | undefined,
+  found: string | null | undefined,
+): { readonly videoId: string | null | undefined; readonly tryAgain: RelatedTryAgain } => {
+  if (read === undefined) return { videoId: undefined, tryAgain: null };
+  if (read.status === "videoId") return { videoId: read.videoId, tryAgain: null };
+  if (read.status === "search") return { videoId: found, tryAgain: "search" };
+  return { videoId: null, tryAgain: "readLibrary" };
+};

@@ -43,7 +43,7 @@ import { startMagicQueueFromStream } from "@/playback/magicQueueStart";
 import type { MenuOptions } from "@/playback/ActionsMenu";
 import type { RowSwipeOptions } from "@/playback/rowSwipe";
 import { showError } from "@/overlay/alert";
-import { openSleepTimer, useSleepTimerEntryLabel } from "@/nowPlaying/SleepTimer";
+import { openSleepTimer } from "@/nowPlaying/SleepTimer";
 import { swipeSettingsNow } from "@/settings/swipeActions";
 import { ytMusicEnabled, useYtMusicEnabled } from "@/settings/ytMusic";
 import { shareStreamedSong } from "@/share/songShare";
@@ -268,8 +268,6 @@ function YtSongActionsMenu({
   const ytMusic = useYtMusicEnabled();
   // Go to Album leaves out the YT Music album page you're on.
   const ytAlbumHere = ytAlbumPageHere(usePathname());
-  // The playing song's Sleep Timer says how long the running timer has left.
-  const sleepTimerLabel = useSleepTimerEntryLabel(playing === true);
   const entries: Entry[] = [
     ...songEntries(artists, {
       inPlaylist: playlistItem !== undefined,
@@ -300,7 +298,7 @@ function YtSongActionsMenu({
       ? [
           {
             action: entry.action,
-            label: entry.action === "sleepTimer" ? sleepTimerLabel : label(entry, song, find),
+            label: label(entry, song, find),
             onPress: choose(entry),
           },
         ]

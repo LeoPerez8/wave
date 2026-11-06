@@ -2495,12 +2495,18 @@ export {
   type SampleTouchEvent,
 } from "./touchSample.ts";
 export type { LongPressFill, SampleMenuEntry } from "./touchSample.ts";
-export { createRelatedSearches, createRelatedSongsSession } from "./relatedSongs.ts";
+export {
+  createRelatedSearches,
+  createRelatedSongsSession,
+  relatedLibraryVideoId,
+} from "./relatedSongs.ts";
 export type {
+  RelatedLibraryRead,
   RelatedSearches,
   RelatedSearchSong,
   RelatedSongsSession,
   RelatedSongsShown,
+  RelatedTryAgain,
 } from "./relatedSongs.ts";
 export {
   NOW_PLAYING_ACTIONS,

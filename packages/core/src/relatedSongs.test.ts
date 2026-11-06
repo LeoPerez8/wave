@@ -1,7 +1,12 @@
 import assert from "node:assert/strict";
 import { describe, test } from "node:test";
 
-import { catalogueOf, createRelatedSearches, createRelatedSongsSession } from "./index.ts";
+import {
+  catalogueOf,
+  createRelatedSearches,
+  createRelatedSongsSession,
+  relatedLibraryVideoId,
+} from "./index.ts";
 
 /** A read held open until the test answers or fails it, counting the reads asked for. */
 const reads = () => {
@@ -247,6 +252,39 @@ describe("a Library song without a video id, searched for Related", () => {
     stop();
     related.findAgain(lucky);
     assert.equal(heard, 2);
+  });
+});
+
+describe("the video id Related reads for a playing Library song", () => {
+  test("is unknown (loading) until the Library is read", () => {
+    assert.deepEqual(relatedLibraryVideoId(undefined, undefined), {
+      videoId: undefined,
+      tryAgain: null,
+    });
+  });
+
+  test("is the one it was downloaded from, with nothing for Try Again to find", () => {
+    assert.deepEqual(relatedLibraryVideoId({ status: "videoId", videoId: "abc" }, undefined), {
+      videoId: "abc",
+      tryAgain: null,
+    });
+  });
+
+  test("for a song without one, is what the search found, and Try Again searches again", () => {
+    const read = { status: "search", song: lucky } as const;
+    assert.deepEqual(relatedLibraryVideoId(read, undefined), {
+      videoId: undefined,
+      tryAgain: "search",
+    });
+    assert.deepEqual(relatedLibraryVideoId(read, null), { videoId: null, tryAgain: "search" });
+    assert.deepEqual(relatedLibraryVideoId(read, "song"), { videoId: "song", tryAgain: "search" });
+  });
+
+  test("when the Library couldn't be read or lacks the song, shows the error and Try Again reads it again", () => {
+    assert.deepEqual(relatedLibraryVideoId({ status: "unread" }, undefined), {
+      videoId: null,
+      tryAgain: "readLibrary",
+    });
   });
 });
 
