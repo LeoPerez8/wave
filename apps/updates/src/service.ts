@@ -25,16 +25,11 @@ export interface UpdateStorage {
     text(): Promise<string>;
     readonly httpMetadata?: { readonly contentType?: string };
   } | null>;
-  list(options: {
-    prefix: string;
-    cursor?: string;
-  }): Promise<
+  list(options: { prefix: string; cursor?: string }): Promise<
     {
       /** `uploaded` is when the object was written, which R2's listing carries. */
       readonly objects: readonly { readonly key: string; readonly uploaded: Date }[];
-    } & (
-      { readonly truncated: true; readonly cursor: string } | { readonly truncated: false }
-    )
+    } & ({ readonly truncated: true; readonly cursor: string } | { readonly truncated: false })
   >;
 }
 

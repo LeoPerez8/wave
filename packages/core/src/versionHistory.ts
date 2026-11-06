@@ -15,7 +15,8 @@ export interface DatedRelease extends PublishedRelease {
 }
 
 const dateOf = (release: unknown): number | null => {
-  const date = typeof release === "object" && release !== null ? (release as { date?: unknown }).date : null;
+  const date =
+    typeof release === "object" && release !== null ? (release as { date?: unknown }).date : null;
   if (typeof date !== "string") return null;
   const parsed = Date.parse(date);
   return Number.isNaN(parsed) ? null : parsed;
@@ -90,24 +91,26 @@ export const versionHistoryEntries = ({
   readonly language: AppLanguage;
 }): readonly VersionHistoryEntry[] => {
   const strings = catalogueOf(language).whatsNew;
-  return releases
-    .filter((release) => channelOf(release.version) === channel)
-    .map((release) => ({ release, order: versionOrder(release.version) }))
-    .filter((it): it is { release: DatedRelease; order: number } => it.order !== null)
-    // oxlint-disable-next-line unicorn/no-array-sort -- sorts a fresh array; Hermes lacks toSorted
-    .sort((a, b) => b.order - a.order)
-    .map(({ release }) => {
-      const notes = release.notes[language];
-      return {
-        version: release.version,
-        date: dateLabel(release.date, language),
-        current: release.version === runningVersion,
-        sections: [
-          { title: strings.new, lines: notes.new },
-          { title: strings.fixes, lines: notes.fixes },
-        ].filter(({ lines }) => lines.length > 0),
-      };
-    });
+  return (
+    releases
+      .filter((release) => channelOf(release.version) === channel)
+      .map((release) => ({ release, order: versionOrder(release.version) }))
+      .filter((it): it is { release: DatedRelease; order: number } => it.order !== null)
+      // oxlint-disable-next-line unicorn/no-array-sort -- sorts a fresh array; Hermes lacks toSorted
+      .sort((a, b) => b.order - a.order)
+      .map(({ release }) => {
+        const notes = release.notes[language];
+        return {
+          version: release.version,
+          date: dateLabel(release.date, language),
+          current: release.version === runningVersion,
+          sections: [
+            { title: strings.new, lines: notes.new },
+            { title: strings.fixes, lines: notes.fixes },
+          ].filter(({ lines }) => lines.length > 0),
+        };
+      })
+  );
 };
 
 /**

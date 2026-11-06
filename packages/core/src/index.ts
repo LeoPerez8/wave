@@ -301,11 +301,7 @@ export {
   versionHistorySummary,
   versionHistoryUrl,
 } from "./versionHistory.ts";
-export type {
-  DatedRelease,
-  VersionHistoryEntry,
-  VersionHistorySection,
-} from "./versionHistory.ts";
+export type { DatedRelease, VersionHistoryEntry, VersionHistorySection } from "./versionHistory.ts";
 export {
   COUNTED_PLAY_MS,
   EMPTY_PLAY_TRACKER,

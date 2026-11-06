@@ -119,7 +119,12 @@ describe("versionHistoryEntries", () => {
   it("marks none Current when the running version has no notes, or can't be told", () => {
     const releases = ["0.47.0-ti", "0.49.0-ti"].map((v) => dated(v));
     for (const runningVersion of ["0.48.0-ti", null]) {
-      const entries = versionHistoryEntries({ releases, runningVersion, channel: "ti", language: "en" });
+      const entries = versionHistoryEntries({
+        releases,
+        runningVersion,
+        channel: "ti",
+        language: "en",
+      });
       assert.deepEqual(
         entries.map(({ current }) => current),
         [false, false],
@@ -179,6 +184,9 @@ describe("versionHistorySummary", () => {
       versionHistorySummary({ ...asked, releases: undated, runningVersion: "0.48.0-ti" }),
       null,
     );
-    assert.equal(versionHistorySummary({ ...asked, releases: null, runningVersion: "0.48.0-ti" }), null);
+    assert.equal(
+      versionHistorySummary({ ...asked, releases: null, runningVersion: "0.48.0-ti" }),
+      null,
+    );
   });
 });
