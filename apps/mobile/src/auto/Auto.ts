@@ -363,7 +363,9 @@ export const layer = Layer.effect(
           trackIds.push(...added);
           tracks.push(...songs.map(toAutoQueueTrack));
         }
-        if (trackIds.length > 0) yield* queue.dispatch({ type: "addToQueue", trackIds }, tracks);
+        // No toast: whoever is driving isn't looking at the phone.
+        if (trackIds.length > 0)
+          yield* queue.dispatch({ type: "addToQueue", trackIds }, tracks, { quiet: true });
         return null;
       });
 

@@ -62,4 +62,9 @@ export const itemActionsEn = {
   /** A song's star toggled from a swipe, a menu or the selection bar. */
   addedToFavorites: "Added to Favorites",
   addedSongsToFavorites: (count: number): string => `Added ${count} songs to Favorites`,
+  /** An Add to Queue or a Play Next started on the phone ([count]: the songs that went in). */
+  addedToQueue: "Added to Queue",
+  addedSongsToQueue: (count: number): string => `Added ${count} songs to Queue`,
+  playingNext: "Playing Next",
+  playingSongsNext: (count: number): string => `Playing ${count} songs next`,
 };

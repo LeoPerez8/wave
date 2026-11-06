@@ -51,4 +51,9 @@ export const itemActionsPtBr: typeof itemActionsEn = {
   addedToFavorites: "Adicionada às Favoritas",
   addedSongsToFavorites: (count) =>
     `${formatNumber("pt-BR", count)} músicas adicionadas às Favoritas`,
+  addedToQueue: "Adicionada à Fila",
+  addedSongsToQueue: (count) => `${formatNumber("pt-BR", count)} músicas adicionadas à Fila`,
+  playingNext: "Será reproduzida a seguir",
+  playingSongsNext: (count) =>
+    `${formatNumber("pt-BR", count)} músicas serão reproduzidas a seguir`,
 };

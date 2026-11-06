@@ -20,6 +20,7 @@ import {
   queueSourceAfter,
   playReplacesQueue,
   queuedPassedOver,
+  queuedToast,
   queueUndo,
   queueWrite,
   reduceQueue,
@@ -60,6 +61,7 @@ import { makeExternalStore } from "@/lib/externalStore";
 import { LibraryStore } from "@/library/LibraryStore";
 import { currentLocalisation } from "@/localisation/localisation";
 import type { NativeSyncStep, PlayerItem } from "@/native/wavePlayer";
+import { showQueuedToast } from "@/overlay/queuedToast";
 import { currentToast, dismissToast, showToast } from "@/overlay/toast";
 import { perfMark } from "@/perf/perf";
 import { dontPlayExplicit, onDontPlayExplicit } from "@/settings/dontPlayExplicit";
@@ -119,10 +121,13 @@ export class Queue extends Context.Service<
     /**
      * Runs a queue command and brings the native player in line. `tracks` must
      * describe every track id the command adds (play, Play Next, Add to Queue).
+     * An Add to Queue or a Play Next confirms itself with a toast unless
+     * [quiet] (one from Android Auto, whose driver isn't looking at the phone).
      */
     readonly dispatch: (
       command: QueueCommand,
       tracks?: readonly QueueTrack[],
+      options?: { readonly quiet?: boolean },
     ) => Effect.Effect<void, PlayerError>;
     /**
      * Loads a queue saved before Wave's process ended, paused at [positionMs]
@@ -497,12 +502,14 @@ export const layer = Layer.effect(
      * Runs [command] in the lane, up to its end or its wait for a search.
      * [source] is where the queue's playback was started from before the
      * command, which Undo puts back; null when a play offers no Undo (one
-     * from Android Auto).
+     * from Android Auto). [confirm] says an Add to Queue or a Play Next
+     * started on the phone, which confirms itself with a toast.
      */
     const start = (
       command: QueueCommand,
       added: readonly QueueTrack[],
       source: PlaySource | null = null,
+      confirm = false,
     ) =>
       Effect.gen(function* () {
         const pending = waiting;
@@ -535,6 +542,11 @@ export const layer = Layer.effect(
         }
         // A play offering Undo says its notice on the new queue's toast.
         if (passed !== null && takeBack?.notice !== passed) void showToast(passed);
+        // Songs queued: say so, with how many went in (none, and `passed` said why).
+        if (confirm && (command.type === "addToQueue" || command.type === "playNext")) {
+          const queued = queuedToast(command, passOver, currentLocalisation().strings);
+          if (queued !== null) showQueuedToast(queued, command.type);
+        }
         const reduced = yield* reduce(before, command, passOver);
         const step = startPlayingWalk(before, command, reduced, pending?.walk ?? null);
         // The player went on past songs still unsearched: they're skipped, as a failed search skips them.
@@ -704,12 +716,16 @@ export const layer = Layer.effect(
       }),
     );
 
-    const dispatch = (command: QueueCommand, added: readonly QueueTrack[] = []) =>
+    const dispatch = (
+      command: QueueCommand,
+      added: readonly QueueTrack[] = [],
+      options: { readonly quiet?: boolean } = {},
+    ) =>
       walkOut(
         Effect.suspend(() => {
           const source = queueSource.get();
           queueSource.set(queueSourceAfter(source, command, "phone"));
-          return start(command, added, source);
+          return start(command, added, source, options.quiet !== true);
         }),
         apply(songChangeCause(command), command),
       );
