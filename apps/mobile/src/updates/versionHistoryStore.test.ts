@@ -24,19 +24,32 @@ const later = <A>() => {
   return { answer, arrive: (value: A) => arrive(value) };
 };
 
-/** A store over a scripted service: each read takes the next answer. */
-const store = (answers: Effect.Effect<readonly DatedRelease[], unknown>[]) => {
+/**
+ * A store over a scripted service: each read takes the next answer. [kept] is what the phone holds
+ * when it starts.
+ */
+const store = (
+  answers: Effect.Effect<readonly DatedRelease[], unknown>[],
+  kept: readonly DatedRelease[] | null = null,
+) => {
   let reads = 0;
   const logged: string[] = [];
+  const phone = { kept };
   const history = createVersionHistoryStore({
     fetchHistory: () => {
       reads++;
       return answers.shift() ?? Effect.fail(new Error("no more answers"));
     },
+    kept: {
+      read: () => phone.kept,
+      write: (releases) => (phone.kept = releases),
+    },
     log: (_, message) => logged.push(message),
   });
-  return { history, logged, reads: () => reads };
+  return { history, logged, reads: () => reads, phone };
 };
+
+const older: DatedRelease = { ...release, version: "0.47.0-ti" };
 
 describe("Version History's store", () => {
   it("reads the channel's history and tells whoever listens", async () => {
@@ -96,5 +109,31 @@ describe("Version History's store", () => {
     history.load();
     await settle();
     assert.deepEqual(history.get(), { status: "failed", releases: [] });
+  });
+
+  it("opens with the list the phone kept, before any read answers", () => {
+    const { history, reads } = store([later<readonly DatedRelease[]>().answer], [older]);
+    assert.deepEqual(history.get(), { status: "idle", releases: [older] });
+
+    history.load();
+    assert.equal(reads(), 1);
+    assert.deepEqual(history.get(), { status: "loading", releases: [older] });
+  });
+
+  it("keeps each answer on the phone in place of the one before", async () => {
+    const { history, phone } = store([Effect.succeed([release, older])], [older]);
+    history.load();
+    await settle();
+    assert.deepEqual(history.get(), { status: "loaded", releases: [release, older] });
+    assert.deepEqual(phone.kept, [release, older]);
+  });
+
+  it("keeps the kept list on screen and on the phone when the read fails", async () => {
+    const { history, phone, logged } = store([Effect.fail(new Error("offline"))], [older]);
+    history.load();
+    await settle();
+    assert.deepEqual(history.get(), { status: "failed", releases: [older] });
+    assert.deepEqual(phone.kept, [older]);
+    assert.deepEqual(logged, ["The version history fetch failed: offline"]);
   });
 });

@@ -2,6 +2,8 @@ import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 
 import {
+  keptVersionHistory,
+  readKeptVersionHistory,
   readVersionHistory,
   versionHistoryEntries,
   versionHistorySummary,
@@ -58,6 +60,26 @@ describe("readVersionHistory", () => {
   it("refuses an answer it can't read", () => {
     for (const answer of [null, "x", {}, { releases: "x" }, { releases: [{ version: 1 }] }]) {
       assert.equal(readVersionHistory(answer), null);
+    }
+  });
+});
+
+describe("keptVersionHistory", () => {
+  it("keeps a list on the phone that reads back as it was, dates and all", () => {
+    const releases = [
+      dated("0.49.0-ti", "2026-11-05T09:30:00.000Z", {
+        en: sections("A"),
+        "pt-BR": sections("B"),
+      }),
+      dated("0.48.0-ti", null),
+    ];
+    assert.deepEqual(readKeptVersionHistory(keptVersionHistory(releases)), releases);
+    assert.deepEqual(readKeptVersionHistory(keptVersionHistory([])), []);
+  });
+
+  it("has nothing kept when nothing is stored or what is stored can't be read", () => {
+    for (const stored of [null, "", "not json", "{}", '{"releases":[{"version":1}]}']) {
+      assert.equal(readKeptVersionHistory(stored), null);
     }
   });
 });
