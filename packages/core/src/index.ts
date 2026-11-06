@@ -300,6 +300,8 @@ export {
 } from "./whatsNew.ts";
 export type { MergedReleaseNotes, PublishedRelease, WhatsNewState } from "./whatsNew.ts";
 export {
+  keptVersionHistory,
+  readKeptVersionHistory,
   readVersionHistory,
   versionHistoryEntries,
   versionHistorySummary,
@@ -2495,6 +2497,7 @@ export { createRelatedSongsSession } from "./relatedSongs.ts";
 export type { RelatedSongsSession, RelatedSongsShown } from "./relatedSongs.ts";
 export {
   NOW_PLAYING_ACTIONS,
+  NOW_PLAYING_BUTTONS_KEY,
   editNowPlayingButtons,
   nowPlayingSlotChoices,
   nowPlayingSlotShow,
