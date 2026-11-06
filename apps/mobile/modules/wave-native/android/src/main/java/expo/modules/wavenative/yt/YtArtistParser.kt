@@ -168,8 +168,12 @@ object YtArtistParser {
     )
   }
 
-  /** A "Fans might also like" tile: the artist's name over "23.1M monthly audience". */
-  private fun artistTile(tile: JsonObject): YtArtistCandidate? {
+  /**
+   * A "Fans might also like" tile (a song's Related tab's "Similar artists"
+   * too): the artist's name over "23.1M monthly audience"; null when it
+   * isn't an artist's.
+   */
+  fun artistTile(tile: JsonObject): YtArtistCandidate? {
     val endpoint = tile.path("navigationEndpoint", "browseEndpoint")
     val pageType = endpoint.path(
       "browseEndpointContextSupportedConfigs", "browseEndpointContextMusicConfig", "pageType",

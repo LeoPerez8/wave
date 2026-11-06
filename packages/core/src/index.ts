@@ -2491,9 +2491,12 @@ export {
   type SampleTouchEvent,
 } from "./touchSample.ts";
 export type { LongPressFill, SampleMenuEntry } from "./touchSample.ts";
+export { createRelatedSongsSession } from "./relatedSongs.ts";
+export type { RelatedSongsSession, RelatedSongsShown } from "./relatedSongs.ts";
 export {
   NOW_PLAYING_ACTIONS,
   editNowPlayingButtons,
+  nowPlayingSlotChoices,
   nowPlayingSlotShow,
   readNowPlayingButtons,
   readNowPlayingSlotRoute,

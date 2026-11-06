@@ -391,6 +391,26 @@ export const queueDiscoverSongs = (
   );
 };
 
+/**
+ * Plays a listed [song] now as the current song (a related song tapped),
+ * keeping Up Next and the songs lined up as they were (Core's `playNow`):
+ * the Library's file when it has the song, else streamed. A missing song
+ * downloads instead.
+ */
+export const playListedNow = (song: ListedSong): Promise<void> => {
+  if (!playable(song)) {
+    const missing = libraryTrack(song);
+    if (missing !== null) downloadMissingSongs([missing.id]);
+    return Promise.resolve();
+  }
+  return dispatchWithYt(
+    { type: "playNow", trackIds: [queueSongTrackId(song)] },
+    streamedSongs([song]),
+    song.source === "stream" ? song.song : undefined,
+    libraryQueueTracks([song]),
+  );
+};
+
 export const togglePlayPause = (): Promise<void> =>
   run(
     Effect.gen(function* () {

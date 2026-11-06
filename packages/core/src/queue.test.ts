@@ -169,6 +169,49 @@ describe("Play Next and Add to Queue", () => {
   });
 });
 
+describe("Play Now (a related song tapped)", () => {
+  test("plays the song as the current one, keeping Up Next and the lined-up songs as they were", () => {
+    const lined = apply(
+      start("a b c", 1),
+      { type: "playNext", trackIds: ["p"] },
+      { type: "addToQueue", trackIds: ["x"] },
+    );
+    const { state, playback } = reduceQueue(lined, { type: "playNow", trackIds: ["r"] });
+    assert.equal(show(state), "a b [r] p x c");
+    assert.equal(playback, "play");
+    assert.deepEqual(upNext(state), upNext(lined));
+    assert.deepEqual(state.context, lined.context);
+  });
+
+  test("the song that was playing goes to History, and Next goes on with Up Next", () => {
+    const now = apply(start("a b c", 1), { type: "playNow", trackIds: ["r"] });
+    assert.deepEqual(
+      queueHistory(now).map((entry) => entry.trackId),
+      ["a", "b"],
+    );
+    assert.equal(show(apply(now, { type: "next" })), "a b r [c]");
+  });
+
+  test("on an empty queue it starts playing the song", () => {
+    const { state, playback } = reduceQueue(EMPTY_QUEUE, { type: "playNow", trackIds: ["r"] });
+    assert.equal(show(state), "[r]");
+    assert.equal(playback, "play");
+  });
+
+  test("a song the queue passes over leaves it as it was", () => {
+    const playing = start("a b c", 1);
+    const { state, playback } = reduceQueue(
+      playing,
+      { type: "playNow", trackIds: ["r"] },
+      () => 0,
+      undefined,
+      (trackId) => trackId === "r",
+    );
+    assert.equal(state, playing);
+    assert.equal(playback, "keep");
+  });
+});
+
 /** The key of the first entry for `trackId`. */
 const keyOf = (state: QueueState, trackId: string): string =>
   state.entries.find((entry) => entry.trackId === trackId)!.key;

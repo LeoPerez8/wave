@@ -243,6 +243,11 @@ describe("what a play says when Don't play explicit passed over its songs", () =
     );
   });
 
+  test("Play Now on an explicit song says it didn't play", () => {
+    assert.equal(notice({ type: "playNow", trackIds: ["b"] }), `Didn't play "Bad": it's explicit.`);
+    assert.equal(notice({ type: "playNow", trackIds: ["a"] }), null);
+  });
+
   test("says it in Portuguese for an app in pt-BR", () => {
     const pt = catalogueOf("pt-BR");
     const said = (command: QueueCommand) =>

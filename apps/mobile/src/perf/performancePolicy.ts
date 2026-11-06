@@ -62,6 +62,7 @@ export const NETWORK_SEEDS = [
     "radio",
     "artistRadio",
     "radioMore",
+    "related",
     "cacheArtwork",
     "checkSession",
     "signIn",
@@ -82,6 +83,7 @@ export const NETWORK_SEEDS = [
     "artistRadio",
     "startedRadio",
     "radioMore",
+    "related",
     "cacheArtwork",
     "checkSession",
     "signIn",
@@ -154,6 +156,12 @@ export const WHOLE_LIBRARY: Record<string, WholeLibraryException> = {
   "app/library/discover-mix/[id].tsx#DiscoverMixScreen": {
     howOften: FOLLOWED_FINDER,
     reason: "Visible mix page resolves streamed entries against Library files.",
+    capabilities: ["ytmusic/libraryFinder.ts#useLibraryFinder"],
+  },
+  "nowPlaying/RelatedView.tsx#RelatedView": {
+    howOften: FOLLOWED_FINDER,
+    reason:
+      "Now Playing's Related view, opened by its slot's tap, lists a related song the Library has as the Library song (#971); it follows the finder only while the view shows its answer.",
     capabilities: ["ytmusic/libraryFinder.ts#useLibraryFinder"],
   },
   "home/DiscoverMixActions.tsx#DiscoverMixActionsMenu": {

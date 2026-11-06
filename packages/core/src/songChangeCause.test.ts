@@ -20,6 +20,10 @@ describe("songChangeCause", () => {
     assert.equal(songChangeCause(play), "play");
   });
 
+  test("a song played now (a related song tapped) is a play", () => {
+    assert.equal(songChangeCause({ type: "playNow", trackIds: ["yt:abc"] }), "play");
+  });
+
   test("the queue following the player's own move, or running out, isn't the owner's", () => {
     assert.equal(songChangeCause({ type: "playerMoved", key: "k2" }), "player");
     assert.equal(songChangeCause({ type: "trackEnded" }), "trackEnded");
