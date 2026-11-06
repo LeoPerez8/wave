@@ -40,18 +40,23 @@ exact bytes from any host. Changing the Worker's address takes a new publish as 
 
 A bundle or asset, named by its content and cached for good. `404` when there's none.
 
-### `GET /v1/notes?channel=<ti|main>&from=<version>[&to=<version>]`
+### `GET /v1/notes?channel=<ti|main>[&from=<version>][&to=<version>]`
 
 The notes of a channel's releases after `from` and up to `to` (the newest with no `to`), newest
-first. Versions count on the sequence both channels share, so `from` may be the other channel's.
+first. With no `from` it's the channel's whole history, which Settings › Version History asks
+for. Versions count on the sequence both channels share, so `from` may be the other channel's.
 `400` for any other channel, or a `from` or `to` that isn't a version. A release that listed no
 PR isn't there.
+
+Each release's `date` is when its notes file was written to R2 (the object's upload time, in ISO
+8601 UTC), so notes published before the field existed have one without being rewritten.
 
 ```json
 {
   "releases": [
     {
       "version": "1.2.4-ti",
+      "date": "2026-11-04T18:05:00.000Z",
       "notes": {
         "en": { "new": ["Artist pages"], "fixes": ["Lyrics show again"] },
         "pt-BR": { "new": ["Páginas de artista"], "fixes": ["As letras voltaram"] }

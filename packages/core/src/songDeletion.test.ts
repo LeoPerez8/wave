@@ -42,6 +42,22 @@ describe("confirmSongDeletion", () => {
       "The files are removed from your phone, and the songs from your Wave account.",
     );
   });
+
+  test("a song in a playlist is said to stay there, on a line of its own", () => {
+    assert.equal(
+      confirmSongDeletion([{ title: "Hey Jude" }], { inPlaylists: true }).message,
+      "The file is removed from your phone.\nIt stays in your playlists.",
+    );
+    assert.equal(
+      confirmSongDeletion([{ title: "A" }, { title: "B" }], { signedIn: true, inPlaylists: true })
+        .message,
+      "The files are removed from your phone, and the songs from your Wave account.\nThey stay in your playlists.",
+    );
+    assert.equal(
+      confirmSongDeletion([{ title: "Hey Jude" }], { inPlaylists: false }).message,
+      "The file is removed from your phone.",
+    );
+  });
 });
 
 describe("confirmSongRemoval", () => {
@@ -133,6 +149,17 @@ describe("in Portuguese", () => {
         "Ela também sai da sua Conta Wave. Seus outros celulares a perdem na próxima sincronização, a menos que tenham o arquivo dela.",
       action: { label: "Remover", destructive: true },
     });
+  });
+
+  test("a song in a playlist stays there, in Portuguese", () => {
+    assert.equal(
+      confirmSongDeletion([{ title: "Hey Jude" }], { inPlaylists: true }, pt).message,
+      "O arquivo é removido do seu celular.\nEla continua nas suas playlists.",
+    );
+    assert.equal(
+      confirmSongDeletion([{ title: "A" }, { title: "B" }], { inPlaylists: true }, pt).message,
+      "Os arquivos são removidos do seu celular.\nElas continuam nas suas playlists.",
+    );
   });
 
   test("a failed delete says why in Portuguese", () => {

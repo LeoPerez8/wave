@@ -1344,6 +1344,68 @@ const m0055 = `CREATE TABLE dismissed_follow_suggestions (
   pushed integer DEFAULT false NOT NULL
 );`;
 
+// #982: a playlist entry no longer goes with its Library song (no ON DELETE
+// CASCADE on \`track_id\`): a song leaving the Library keeps its entries as
+// the entries a song without a file is (Core's \`leavingSongEntry\`), and the
+// store deletes the entries of a song whose entries do leave. SQLite can't
+// change a foreign key in place, so the table is made again, with its rows
+// (ids and the id sequence too), indexes and triggers as they were.
+const m0056 = `CREATE TABLE __new_playlist_items (
+  id integer PRIMARY KEY AUTOINCREMENT NOT NULL,
+  sync_id text NOT NULL,
+  playlist_id integer NOT NULL,
+  track_id integer,
+  yt_song text,
+  order_key text NOT NULL,
+  added_at integer NOT NULL,
+  changed_at integer NOT NULL,
+  phone_id text NOT NULL,
+  deleted integer DEFAULT false NOT NULL,
+  pushed integer DEFAULT false NOT NULL,
+  removed_at integer,
+  FOREIGN KEY (playlist_id) REFERENCES playlists(id) ON UPDATE no action ON DELETE cascade,
+  FOREIGN KEY (track_id) REFERENCES tracks(id) ON UPDATE no action ON DELETE no action,
+  CONSTRAINT "playlist_items_one_song" CHECK((track_id IS NULL) <> (yt_song IS NULL))
+);
+--> statement-breakpoint
+INSERT INTO __new_playlist_items (id, sync_id, playlist_id, track_id, yt_song, order_key, added_at,
+    changed_at, phone_id, deleted, pushed, removed_at)
+  SELECT id, sync_id, playlist_id, track_id, yt_song, order_key, added_at,
+    changed_at, phone_id, deleted, pushed, removed_at
+  FROM playlist_items
+  WHERE playlist_id IN (SELECT id FROM playlists)
+    AND (track_id IS NULL OR track_id IN (SELECT id FROM tracks));
+--> statement-breakpoint
+DELETE FROM sqlite_sequence WHERE name = '__new_playlist_items';
+--> statement-breakpoint
+INSERT INTO sqlite_sequence (name, seq)
+  SELECT '__new_playlist_items', seq FROM sqlite_sequence WHERE name = 'playlist_items';
+--> statement-breakpoint
+DROP TABLE playlist_items;
+--> statement-breakpoint
+ALTER TABLE __new_playlist_items RENAME TO playlist_items;
+--> statement-breakpoint
+CREATE UNIQUE INDEX playlist_items_sync_id_unique ON playlist_items (sync_id);
+--> statement-breakpoint
+CREATE INDEX playlist_items_playlist_order_idx ON playlist_items (playlist_id, order_key, sync_id);
+--> statement-breakpoint
+CREATE INDEX playlist_items_track_idx ON playlist_items (track_id);
+--> statement-breakpoint
+CREATE INDEX playlist_items_changed_at_idx ON playlist_items (changed_at);
+--> statement-breakpoint
+CREATE INDEX playlist_items_pushed_idx ON playlist_items (pushed);
+--> statement-breakpoint
+${mUnsearchedTitles.trim()}
+--> statement-breakpoint
+${m0050}
+--> statement-breakpoint
+${mPlaylistRevisions
+  .slice(
+    mPlaylistRevisions.indexOf("CREATE TRIGGER `playlist_items_revise_insert`"),
+    mPlaylistRevisions.indexOf("CREATE TRIGGER `tracks_revise_playlists`"),
+  )
+  .replace(/\s*--> statement-breakpoint\s*$/, "")}`;
+
 export default {
   journal: {
     entries: [
@@ -1418,6 +1480,12 @@ export default {
         tag: "0055_dismissed_follow_suggestions",
         breakpoints: true,
       },
+      {
+        idx: 56,
+        when: 1_796_644_800_000,
+        tag: "0056_playlist_entries_outlive_songs",
+        breakpoints: true,
+      },
     ],
   },
   migrations: {
@@ -1477,5 +1545,6 @@ export default {
     m0053,
     m0054,
     m0055,
+    m0056,
   },
 };

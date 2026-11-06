@@ -300,6 +300,13 @@ export {
 } from "./whatsNew.ts";
 export type { MergedReleaseNotes, PublishedRelease, WhatsNewState } from "./whatsNew.ts";
 export {
+  readVersionHistory,
+  versionHistoryEntries,
+  versionHistorySummary,
+  versionHistoryUrl,
+} from "./versionHistory.ts";
+export type { DatedRelease, VersionHistoryEntry, VersionHistorySection } from "./versionHistory.ts";
+export {
   COUNTED_PLAY_MS,
   EMPTY_PLAY_TRACKER,
   fadingPlaySoFar,
@@ -721,8 +728,8 @@ export {
 export type { HighlightInput, NewCardInput, OriginCard } from "./overlayOrigin.ts";
 export { confirmSongDeletion, confirmSongRemoval, songDeletionFailure } from "./songDeletion.ts";
 export type { SongDeleteFailure, SongDeleteFailureReason } from "./songDeletion.ts";
-export { songsLeaving } from "./songsLeaving.ts";
-export type { LeavingTrack, SongsLeaving } from "./songsLeaving.ts";
+export { leavingSongEntry, songsLeaving } from "./songsLeaving.ts";
+export type { LeavingSong, LeavingTrack, SongsLeaving } from "./songsLeaving.ts";
 export { artistArtwork, artistInitial } from "./artistImage.ts";
 export type { ArtistAlbumLink } from "./artistImage.ts";
 export { rowWindow, windowRows } from "./rowWindow.ts";
