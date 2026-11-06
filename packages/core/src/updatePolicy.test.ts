@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 
 import {
+  RELOAD_RESUME_WINDOW_MS,
   UPDATE_APK_RETRY_INTERVAL_MS,
   UPDATE_CHECK_INTERVAL_MS,
   afterApkDownload,
@@ -15,6 +16,7 @@ import {
   playerKeepsPlaying,
   readLatestApk,
   readSignedApk,
+  resumesAfterReload,
   strandedUpdateRequest,
   stoppedStepNotice,
   updateButtonAction,
@@ -305,16 +307,35 @@ describe("what becomes of a tap", () => {
 });
 
 describe("what becomes of a request from the update button", () => {
+  const front = { visible: true, nativeUpdate: "none", bundleDownloaded: true } as const;
+
   it("ends when Wave leaves, whatever it wanted", () => {
-    for (const request of ["check", "askMobileData", "download"] as const) {
-      assert.equal(updateRequestAfter(request, { visible: false }), "none");
+    for (const request of ["check", "askMobileData", "download", "installBundle"] as const) {
+      assert.equal(updateRequestAfter(request, { ...front, visible: false }), "none");
     }
   });
 
   it("stands while Wave is in front", () => {
-    for (const request of ["none", "check", "askMobileData", "download"] as const) {
-      assert.equal(updateRequestAfter(request, { visible: true }), request);
+    for (const request of [
+      "none",
+      "check",
+      "askMobileData",
+      "download",
+      "installBundle",
+    ] as const) {
+      assert.equal(updateRequestAfter(request, front), request);
     }
+  });
+
+  it("ends Install Now's once no bundle is ready, so it can't hold the button", () => {
+    assert.equal(
+      updateRequestAfter("installBundle", { ...front, bundleDownloaded: false }),
+      "none",
+    );
+    assert.equal(
+      updateRequestAfter("installBundle", { ...front, nativeUpdate: "available" }),
+      "none",
+    );
   });
 });
 
@@ -359,7 +380,7 @@ describe("what an APK download ends in", () => {
   });
 });
 
-describe("what a step stopped by a throw tells the person", () => {
+describe("what a failed or stopped step tells the person", () => {
   it("always says an install or the permission screen failed", () => {
     for (const step of ["installApk", "openInstallPermission"] as const) {
       assert.equal(stoppedStepNotice({ step, updateRequest: "none" }), "installFailed");
@@ -374,8 +395,16 @@ describe("what a step stopped by a throw tells the person", () => {
     );
   });
 
+  it("says Install Now's reload failed, as the current bundle goes on running", () => {
+    assert.equal(
+      stoppedStepNotice({ step: "applyBundle", updateRequest: "installBundle" }),
+      "installFailed",
+    );
+  });
+
   it("says nothing of a step nobody asked for", () => {
     assert.equal(stoppedStepNotice({ step: "check", updateRequest: "none" }), null);
+    assert.equal(stoppedStepNotice({ step: "applyBundle", updateRequest: "none" }), null);
   });
 });
 
@@ -658,6 +687,7 @@ describe("a version's place in the sequence", () => {
 describe("the update button in Settings", () => {
   const idle = {
     nativeUpdate: "none",
+    bundleDownloaded: false,
     installTap: "none",
     updateRequest: "none",
     downloadingApk: false,
@@ -671,6 +701,21 @@ describe("the update button in Settings", () => {
     it("checks when no APK is ready", () => {
       assert.equal(updateButtonAction(idle), "check");
       assert.equal(updateButtonAction({ ...idle, nativeUpdate: "available" }), "check");
+    });
+
+    it("installs a downloaded bundle, whoever downloaded it", () => {
+      assert.equal(updateButtonAction({ ...idle, bundleDownloaded: true }), "installBundle");
+    });
+
+    it("never installs a bundle while an APK is pending", () => {
+      assert.equal(
+        updateButtonAction({ ...idle, nativeUpdate: "available", bundleDownloaded: true }),
+        "check",
+      );
+      assert.equal(
+        updateButtonAction({ ...idle, nativeUpdate: "downloaded", bundleDownloaded: true }),
+        "install",
+      );
     });
 
     it("joins a download already running, to install what it brings", () => {
@@ -714,6 +759,18 @@ describe("the update button in Settings", () => {
       const onMobileData = state({ network: "metered", nativeUpdate: "available" });
       assert.equal(nextUpdateStep(onMobileData), "wait");
       assert.equal(nextUpdateStep({ ...onMobileData, updateRequest: "download" }), "downloadApk");
+    });
+
+    it("reloads on a ready bundle at once for Install Now, in front and while music plays", () => {
+      const ready = state({ bundleDownloaded: true, updateRequest: "installBundle" });
+      assert.equal(nextUpdateStep(ready), "applyBundle");
+      assert.equal(nextUpdateStep({ ...ready, playing: true }), "applyBundle");
+      assert.equal(nextUpdateStep({ ...ready, network: "none" }), "applyBundle");
+    });
+
+    it("waits for a step under way before reloading", () => {
+      const ready = state({ bundleDownloaded: true, updateRequest: "installBundle" });
+      assert.equal(nextUpdateStep({ ...ready, working: true }), "wait");
     });
 
     it("downloads a version the automatic path holds off for a day", () => {
@@ -798,6 +855,10 @@ describe("the update button in Settings", () => {
       assert.equal(strandedUpdateRequest("askMobileData", "none"), "downloadFailed");
     });
 
+    it("doesn't end Install Now's, which has nothing to fetch", () => {
+      assert.equal(strandedUpdateRequest("installBundle", "none"), null);
+    });
+
     it("carries on with one, and with no request there's nothing to end", () => {
       assert.equal(strandedUpdateRequest("check", "metered"), null);
       assert.equal(strandedUpdateRequest("none", "none"), null);
@@ -805,18 +866,96 @@ describe("the update button in Settings", () => {
   });
 
   describe("its face", () => {
+    const nothingReady = { nativeUpdate: "none", bundleDownloaded: false } as const;
+    const readyFace = { nativeUpdate: "none", bundleDownloaded: true } as const;
+
     it("spins while a tap's check is under way", () => {
-      assert.equal(updateButtonLook({ updateRequest: "check", downloadPercent: null }), "checking");
+      assert.equal(
+        updateButtonLook({ ...nothingReady, updateRequest: "check", downloadPercent: null }),
+        "checking",
+      );
     });
 
     it("shows the percentage of any download", () => {
-      assert.deepEqual(updateButtonLook({ updateRequest: "none", downloadPercent: 42 }), {
-        downloading: 42,
-      });
+      assert.deepEqual(
+        updateButtonLook({ ...nothingReady, updateRequest: "none", downloadPercent: 42 }),
+        {
+          downloading: 42,
+        },
+      );
     });
 
     it("rests otherwise", () => {
-      assert.equal(updateButtonLook({ updateRequest: "none", downloadPercent: null }), "idle");
+      assert.equal(
+        updateButtonLook({ ...nothingReady, updateRequest: "none", downloadPercent: null }),
+        "idle",
+      );
     });
+
+    it("offers Install Now with a downloaded bundle, whoever downloaded it", () => {
+      assert.equal(
+        updateButtonLook({ ...readyFace, updateRequest: "none", downloadPercent: null }),
+        "installNow",
+      );
+    });
+
+    it("is the refresh button again once no bundle is ready", () => {
+      assert.equal(
+        updateButtonLook({
+          ...readyFace,
+          bundleDownloaded: false,
+          updateRequest: "none",
+          downloadPercent: null,
+        }),
+        "idle",
+      );
+    });
+
+    it("offers no bundle while an APK is pending, which holds bundles back", () => {
+      for (const nativeUpdate of ["available", "downloaded"] as const) {
+        assert.equal(
+          updateButtonLook({
+            ...readyFace,
+            nativeUpdate,
+            updateRequest: "none",
+            downloadPercent: null,
+          }),
+          "idle",
+        );
+      }
+    });
+  });
+});
+
+describe("music after Install Now's reload", () => {
+  const stopped = {
+    playingAtReload: NOW - 2_000,
+    now: NOW,
+    playing: false,
+    queueLoaded: true,
+  } as const;
+
+  it("picks the saved queue back up where it was when the reload stopped it", () => {
+    assert.equal(resumesAfterReload(stopped), true);
+  });
+
+  it("leaves music the player kept playing through the reload", () => {
+    assert.equal(resumesAfterReload({ ...stopped, playing: true }), false);
+  });
+
+  it("doesn't start music that wasn't playing at the reload", () => {
+    assert.equal(resumesAfterReload({ ...stopped, playingAtReload: null }), false);
+  });
+
+  it("has nothing to play with no queue back", () => {
+    assert.equal(resumesAfterReload({ ...stopped, queueLoaded: false }), false);
+  });
+
+  it("doesn't start music at a launch long after a reload that never came", () => {
+    assert.equal(
+      resumesAfterReload({ ...stopped, playingAtReload: NOW - RELOAD_RESUME_WINDOW_MS - 1 }),
+      false,
+    );
+    assert.equal(resumesAfterReload({ ...stopped, playingAtReload: NOW + MINUTE }), false);
   });
 });

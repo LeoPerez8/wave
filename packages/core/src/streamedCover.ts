@@ -28,6 +28,13 @@ const videoThumbnail = (videoId: string | undefined, name: string): string =>
   `https://i.ytimg.com/vi/${videoId}/${name}.jpg`;
 
 /**
+ * The cover of video [videoId] as a streamed song's `artworkUrl`: the
+ * thumbnail every video has, which playback asks for at its largest
+ * (`streamedCoverUrls`).
+ */
+export const videoCoverUrl = (videoId: string): string => videoThumbnail(videoId, "hqdefault");
+
+/**
  * The addresses to ask for [url]'s cover at for playback, best first. YouTube
  * Music's image server takes the size in the address (`=w120-h120`, or
  * `=s120` for one side), so its covers are asked for at the size downloads

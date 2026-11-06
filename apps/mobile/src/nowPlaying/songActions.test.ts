@@ -81,7 +81,7 @@ test("rapid early toggles stay ordered and a separate artwork double tap only ad
   assert.deepEqual(shown, [false, true, true]);
 });
 
-test("downloaded and absent streamed songs keep their own action identities", async () => {
+test("a downloaded song asks to be deleted, and an absent streamed one downloads", async () => {
   const file = { ...missing, path: "/Music/one.m4a" };
   const lookup = createNowPlayingSongLookup({
     read: async (captured) => ({
@@ -107,5 +107,8 @@ test("downloaded and absent streamed songs keep their own action identities", as
   lookup.update(absent, true, false);
   assert.deepEqual(await actions.playlist(absent), [{ source: "stream", song: absent.song }]);
   await actions.download(absent);
-  assert.deepEqual(downloads, [{ kind: "downloaded" }, { kind: "stream", song: absent.song }]);
+  assert.deepEqual(downloads, [
+    { kind: "delete", track: file },
+    { kind: "stream", song: absent.song },
+  ]);
 });

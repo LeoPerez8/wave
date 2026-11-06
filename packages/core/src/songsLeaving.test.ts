@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { describe, test } from "node:test";
 
-import { songsLeaving } from "./index.ts";
+import { leavingSongEntry, songsLeaving } from "./index.ts";
 
 describe("songsLeaving", () => {
   test("a removed song leaves the account with its star and its playlist entries, each a tombstone", () => {
@@ -84,5 +84,65 @@ describe("songsLeaving", () => {
     assert.deepEqual(removal.favorites, [
       { id: "intro", changedAt: 301, phoneId: "me", deleted: true },
     ]);
+  });
+});
+
+describe("leavingSongEntry", () => {
+  const lucky = {
+    title: "Lucky",
+    artist: "Radiohead",
+    artists: ["Radiohead"],
+    album: "OK Computer",
+    durationMs: 259_000,
+    explicit: false,
+  };
+
+  test("a song downloaded from YouTube Music becomes a YT Music entry of its video, which streams", () => {
+    assert.deepEqual(leavingSongEntry({ ...lucky, videoId: "lucky-video", explicit: true }), {
+      source: "stream",
+      song: {
+        videoId: "lucky-video",
+        title: "Lucky",
+        artists: ["Radiohead"],
+        album: "OK Computer",
+        durationMs: 259_000,
+        artworkUrl: null,
+        explicit: true,
+      },
+    });
+  });
+
+  test("the owner's own file becomes an unsearched entry with its title, artists, album and length", () => {
+    assert.deepEqual(
+      leavingSongEntry({
+        ...lucky,
+        videoId: null,
+        artist: "Jay-Z & Linkin Park",
+        artists: ["Jay-Z", "Linkin Park"],
+      }),
+      {
+        source: "unsearched",
+        song: {
+          title: "Lucky",
+          artists: ["Jay-Z", "Linkin Park"],
+          album: "OK Computer",
+          durationMs: 259_000,
+          artworkUrl: null,
+        },
+      },
+    );
+  });
+
+  test("what the Library didn't know stays unknown: no album, no length, the credit as its artist", () => {
+    assert.deepEqual(
+      leavingSongEntry({
+        ...lucky,
+        videoId: null,
+        artists: [],
+        album: "Unknown Album",
+        durationMs: 0,
+      }).song,
+      { title: "Lucky", artists: ["Radiohead"], album: null, durationMs: null, artworkUrl: null },
+    );
   });
 });

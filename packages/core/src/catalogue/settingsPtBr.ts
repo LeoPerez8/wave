@@ -15,6 +15,7 @@ export const settingsPtBr: typeof settingsEn = {
     downloads: "Downloads",
     accounts: "Contas",
     developer: "Developer",
+    versionHistory: "Histórico de Versões",
   },
   layoutPages: {
     home: "Início",

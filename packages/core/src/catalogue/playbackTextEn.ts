@@ -48,7 +48,7 @@ export const playbackTextEn = {
   done: "Done",
   download: "Download",
   downloadFailed: "Download failed",
-  downloaded: "Downloaded",
+  downloadedTapToDelete: "Downloaded, tap to delete",
   downloading: "Downloading",
   endOfTrack: "End of Track",
   endOfTrack2: "End of track",

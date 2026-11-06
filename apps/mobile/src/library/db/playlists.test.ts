@@ -54,6 +54,7 @@ import {
   traceQueries,
   type TestDatabase,
 } from "./testDatabase.ts";
+import { deleteTracksById } from "./tracks.ts";
 
 let db: TestDatabase;
 let playlistId: number;
@@ -151,9 +152,7 @@ describe("selectPlaylistEntries", () => {
   });
 
   test("songs that left the library drop out", () => {
-    db.delete(schema.tracks)
-      .where(eq(schema.tracks.id, ids.Creep ?? -1))
-      .run();
+    deleteTracksById(db, [ids.Creep ?? -1]);
     assert.deepEqual(titles(), ["Daydreaming", "Airbag", "Airbag"]);
   });
 
@@ -405,17 +404,15 @@ describe("linkPlaylistEntries", () => {
     appendPlaylistSongs(db, playlistId, [stream(yt("a", { title: "Lucky" }))], 0);
     const luckyId = addTrack(db, { title: "Lucky", artist: "Radiohead" });
     linkPlaylistEntries(db, 0, [luckyId]);
-    db.delete(schema.tracks).where(eq(schema.tracks.id, luckyId)).run();
+    deleteTracksById(db, [luckyId]);
     assert.deepEqual(titles(), ["Daydreaming", "Airbag", "Creep", "Airbag"]);
   });
 });
 
 describe("a Library file leaving", () => {
-  test("takes its entries out of playlists; YT Music entries stay", () => {
+  test("with its entries (a voice note a scan skips) takes them out of playlists; YT Music entries stay", () => {
     appendPlaylistSongs(db, playlistId, [stream(yt("a", { title: "Lucky" }))], 0);
-    db.delete(schema.tracks)
-      .where(eq(schema.tracks.id, ids.Airbag ?? -1))
-      .run();
+    deleteTracksById(db, [ids.Airbag ?? -1]);
     assert.deepEqual(titles(), ["Daydreaming", "Creep", "yt:Lucky"]);
   });
 });

@@ -776,3 +776,34 @@ describe("reshuffledUpNext", () => {
     assert.equal(says(step(playing, play)), false);
   });
 });
+
+describe("streamPlaying", () => {
+  test("the playing entry goes on as the streamed song, as a new item, and the file's other entries leave with it", () => {
+    const before = start("1 2 1 3", 2);
+    const { state, playback } = reduceQueue(before, {
+      type: "streamPlaying",
+      trackId: "1",
+      becomes: "yt:abc",
+    });
+    assert.equal(show(state), "1 2 [yt:abc] 3");
+    assert.equal(playback, "keep");
+    const was = currentEntry(before)!;
+    const now = currentEntry(state)!;
+    assert.notEqual(now.key, was.key);
+    assert.equal(now.contextIndex, was.contextIndex);
+    const deleted = reduceQueue(state, { type: "removeTracks", trackIds: ["1"] });
+    assert.equal(show(deleted.state), "2 [yt:abc] 3");
+    assert.equal(deleted.playback, "keep");
+  });
+
+  test("a song that isn't the one playing leaves the queue as it was", () => {
+    const before = start("1 2 3", 1);
+    const { state, playback } = reduceQueue(before, {
+      type: "streamPlaying",
+      trackId: "1",
+      becomes: "yt:abc",
+    });
+    assert.equal(state, before);
+    assert.equal(playback, "keep");
+  });
+});

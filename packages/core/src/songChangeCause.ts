@@ -38,7 +38,9 @@ export type SeekSource =
   | "undo"
   | "restore"
   /** The queue ran out: paused back at the start of its last song. */
-  | "queueEnd";
+  | "queueEnd"
+  /** The playing song going on streamed once its file was deleted, back where it was (`streamPlaying`). */
+  | "streamed";
 
 /** What [command] is as the cause of the song change it makes, if it makes one. */
 export const songChangeCause = (command: QueueCommand): SongChangeCause => {

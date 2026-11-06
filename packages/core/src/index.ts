@@ -245,6 +245,8 @@ export {
   SLEEP_TIMER_PRESETS,
   formatSleepMinutes,
   formatSleepRemaining,
+  sleepTimerEntryLabel,
+  sleepTimerLabelChangesIn,
   sleepTimerLabelSeconds,
   sleepTimerRemaining,
   startSleepTimer,
@@ -252,6 +254,7 @@ export {
 } from "./sleepTimer.ts";
 export type { SleepTimer, SleepTimerChoice, SleepTimerClock } from "./sleepTimer.ts";
 export {
+  RELOAD_RESUME_WINDOW_MS,
   UPDATE_APK_RETRY_INTERVAL_MS,
   UPDATE_CHECK_INTERVAL_MS,
   afterRequestedCheck,
@@ -263,6 +266,7 @@ export {
   playerKeepsPlaying,
   readLatestApk,
   readSignedApk,
+  resumesAfterReload,
   strandedUpdateRequest,
   updateButtonAction,
   updateButtonLook,
@@ -295,6 +299,13 @@ export {
   whatsNewNotesUrl,
 } from "./whatsNew.ts";
 export type { MergedReleaseNotes, PublishedRelease, WhatsNewState } from "./whatsNew.ts";
+export {
+  readVersionHistory,
+  versionHistoryEntries,
+  versionHistorySummary,
+  versionHistoryUrl,
+} from "./versionHistory.ts";
+export type { DatedRelease, VersionHistoryEntry, VersionHistorySection } from "./versionHistory.ts";
 export {
   COUNTED_PLAY_MS,
   EMPTY_PLAY_TRACKER,
@@ -717,8 +728,8 @@ export {
 export type { HighlightInput, NewCardInput, OriginCard } from "./overlayOrigin.ts";
 export { confirmSongDeletion, confirmSongRemoval, songDeletionFailure } from "./songDeletion.ts";
 export type { SongDeleteFailure, SongDeleteFailureReason } from "./songDeletion.ts";
-export { songsLeaving } from "./songsLeaving.ts";
-export type { LeavingTrack, SongsLeaving } from "./songsLeaving.ts";
+export { leavingSongEntry, songsLeaving } from "./songsLeaving.ts";
+export type { LeavingSong, LeavingTrack, SongsLeaving } from "./songsLeaving.ts";
 export { artistArtwork, artistInitial } from "./artistImage.ts";
 export type { ArtistAlbumLink } from "./artistImage.ts";
 export { rowWindow, windowRows } from "./rowWindow.ts";
@@ -1831,8 +1842,12 @@ export type { ExplicitPlayback } from "./explicitPlayback.ts";
 export type { PassOver } from "./queue.ts";
 export { discoverMixKeep } from "./discoverMixLevels.ts";
 export type { DiscoverMixKeep } from "./discoverMixLevels.ts";
-export { nowPlayingDownload } from "./nowPlayingDownload.ts";
-export type { NowPlayingDownload } from "./nowPlayingDownload.ts";
+export {
+  nowPlayingDownload,
+  nowPlayingDownloadTap,
+  streamedAfterDelete,
+} from "./nowPlayingDownload.ts";
+export type { NowPlayingDownload, NowPlayingDownloadTap } from "./nowPlayingDownload.ts";
 export {
   LYRICS_MISS_RETRY_MS,
   nonDLyrics,

@@ -12,6 +12,7 @@ import Animated, {
 } from "react-native-reanimated";
 
 import { IconButton } from "@/components/IconButton";
+import { TextButton } from "@/components/TextButton";
 import { useLocalisation } from "@/localisation/localisation";
 
 import { tapUpdateButton, useOfferedAppUpdate, useUpdateButtonLook } from "./appUpdates";
@@ -41,14 +42,24 @@ function Spinner({ spinning, color }: { spinning: boolean; color: string }) {
 }
 
 /**
- * Beside the version in Settings: installs a downloaded APK, even one swiped off the pill, and
- * otherwise looks for an update now. Core's update policy says what a tap does.
+ * Beside the version in Settings: "Install Now" while a downloaded bundle is ready, which reloads
+ * Wave on it; otherwise installs a downloaded APK, even one swiped off the pill, or looks for an
+ * update now. Core's update policy says which shows and what a tap does.
  */
 export function UpdateButton() {
   const { strings } = useLocalisation();
   const text = strings.appUpdates;
   const offered = useOfferedAppUpdate();
   const look = useUpdateButtonLook();
+  if (look === "installNow") {
+    return (
+      <TextButton
+        label={text.installNow}
+        accessibilityLabel={text.installNow}
+        onPress={tapUpdateButton}
+      />
+    );
+  }
   const downloading = typeof look === "object";
   const label = downloading
     ? text.downloading(look.downloading)

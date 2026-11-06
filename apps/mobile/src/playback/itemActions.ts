@@ -51,6 +51,7 @@ import {
   type ReleaseDateSong,
 } from "@/library/releaseSong";
 import { openAlbum } from "@/library/routes";
+import { openSleepTimer } from "@/nowPlaying/SleepTimer";
 import { showError } from "@/overlay/alert";
 import {
   lyricsAndGenreLookupsEnabled,
@@ -119,7 +120,7 @@ export interface ActionOptions {
   readonly onSelect?: (() => void) | undefined;
   /** The songs of the collection the menu is about, read before it opened (`readMenuSongs`). */
   readonly collectionSongs?: readonly SongRow[] | undefined;
-  /** The song is the one playing: Core's `itemActions` leaves out Play Next and Add to Queue. */
+  /** The song is the one playing: Core's `itemActions` offers Sleep Timer instead of Play Next and Add to Queue. */
   readonly playing?: boolean | undefined;
 }
 
@@ -661,6 +662,9 @@ export const itemActionPress = ({
             runMissingSongsDownloadAction(action, trackIds, albumDownloadOrigin(album));
           });
         });
+      // The playing song's card: the timer menu, as the Sleep timer slot's button opens it.
+      case "sleepTimer":
+        return run(openSleepTimer);
       case "removeFromLibrary": {
         const songs = tracks.map(({ song }) => song);
         return asking(entry.action, (onConfirm) => {

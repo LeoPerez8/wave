@@ -68,7 +68,7 @@ const leaveLibrary = (ids: readonly number[]) =>
   Effect.gen(function* () {
     const store = yield* LibraryStore;
     const queue = yield* Queue;
-    // Playlist items and stars go with the tracks (foreign keys); history doesn't.
+    // Stars go with the tracks; playlist entries stay, as songs without a file; history stays.
     yield* store.removeSongs(ids).pipe(Effect.ensuring(Effect.sync(() => libraryEdited(ids))));
     forgetFavorites(ids);
     yield* queue.dispatch({ type: "removeTracks", trackIds: ids.map(String) });
@@ -80,6 +80,12 @@ const signedIn = (): Promise<boolean> =>
     (session) => session.status === "signedIn",
     () => false,
   );
+
+/** Whether any of the songs [ids] is in a playlist, where deleting it leaves an entry; false when that can't be read. */
+const inPlaylists = (ids: readonly number[]): Promise<boolean> =>
+  appRuntime
+    .runPromise(Effect.flatMap(LibraryStore, (store) => store.inPlaylists(ids)))
+    .catch(() => false);
 
 /**
  * Asks first ("Remove "Song" from your Library?"), then takes missing songs
@@ -105,7 +111,8 @@ export const confirmRemoveSongs = async (
 };
 
 /**
- * Asks first ("Delete "Song"?", "Delete 12 songs?"), then deletes the songs
+ * Asks first ("Delete "Song"?", "Delete 12 songs?", saying they stay in their
+ * playlists when one is in a playlist), then deletes the songs
  * (`deleteSongs`) and says how many couldn't be deleted, in one error.
  * [onConfirm] runs once the user confirms, before the files go (the selection
  * bar ends selection mode there, so Cancel keeps it). Resolves with the songs
@@ -116,10 +123,17 @@ export const confirmDeleteSongs = async <S extends DeletableSong>(
   { onConfirm }: { readonly onConfirm?: (() => void) | undefined } = {},
 ): Promise<readonly S[]> => {
   if (songs.length === 0) return [];
-  const signedInNow = await signedIn();
+  const [signedInNow, inPlaylistsNow] = await Promise.all([
+    signedIn(),
+    inPlaylists(songs.map((song) => song.id)),
+  ]);
   const { strings } = currentLocalisation();
-  if (!(await confirmAction(confirmSongDeletion(songs, { signedIn: signedInNow }, strings))))
-    return [];
+  const confirmation = confirmSongDeletion(
+    songs,
+    { signedIn: signedInNow, inPlaylists: inPlaylistsNow },
+    strings,
+  );
+  if (!(await confirmAction(confirmation))) return [];
   onConfirm?.();
   try {
     const { deleted, failed } = await deleteSongs(songs);

@@ -20,6 +20,7 @@ export const settingsEn = {
     downloads: "Downloads",
     accounts: "Accounts",
     developer: "Developer",
+    versionHistory: "Version History",
   },
   /** Settings › Layout's pages, by `LayoutPage` id. */
   layoutPages: {
