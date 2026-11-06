@@ -50,11 +50,13 @@ export function UpdateButton() {
   const { strings } = useLocalisation();
   const text = strings.appUpdates;
   const look = useUpdateButtonLook();
-  if (look === "installNow") {
+  if (look === "installNow" || look === "installing") {
+    // Held disabled while Android has the APK: a tap couldn't add to that install.
     return (
       <TextButton
         label={text.installNow}
         accessibilityLabel={text.installNow}
+        disabled={look === "installing"}
         onPress={tapUpdateButton}
       />
     );

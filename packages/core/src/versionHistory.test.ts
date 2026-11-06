@@ -58,9 +58,32 @@ describe("readVersionHistory", () => {
   });
 
   it("refuses an answer it can't read", () => {
-    for (const answer of [null, "x", {}, { releases: "x" }, { releases: [{ version: 1 }] }]) {
+    for (const answer of [null, "x", {}, { releases: "x" }]) {
       assert.equal(readVersionHistory(answer), null);
     }
+  });
+
+  it("leaves out a release it can't read and keeps the others", () => {
+    const readable = (version: string) => ({
+      version,
+      date: "2026-11-04T12:00:00.000Z",
+      notes: { en: sections(version) },
+    });
+    assert.deepEqual(
+      versions(
+        readVersionHistory({
+          releases: [
+            readable("0.49.0-ti"),
+            { version: 1, notes: { en: sections("A") } },
+            { version: "0.48.1-ti" },
+            "x",
+            null,
+            readable("0.48.0-ti"),
+          ],
+        }) ?? [],
+      ),
+      ["0.49.0-ti", "0.48.0-ti"],
+    );
   });
 });
 
@@ -78,7 +101,7 @@ describe("keptVersionHistory", () => {
   });
 
   it("has nothing kept when nothing is stored or what is stored can't be read", () => {
-    for (const stored of [null, "", "not json", "{}", '{"releases":[{"version":1}]}']) {
+    for (const stored of [null, "", "not json", "{}", '{"releases":"x"}']) {
       assert.equal(readKeptVersionHistory(stored), null);
     }
   });
@@ -88,8 +111,17 @@ describe("versionHistoryUrl", () => {
   it("asks the service the manifest comes from for the channel's whole history", () => {
     assert.equal(
       versionHistoryUrl({ manifestUrl: "https://updates.example/v1/manifest", channel: "ti" }),
-      "https://updates.example/v1/notes?channel=ti",
+      "https://updates.example/v1/notes?channel=ti&from=0.0.0",
     );
+  });
+
+  it("counts from a version before any release, which a Worker that requires `from` accepts", () => {
+    const url = new URL(
+      versionHistoryUrl({ manifestUrl: "https://updates.example/v1/manifest", channel: "main" }) ??
+        "",
+    );
+    assert.equal(url.searchParams.get("from"), "0.0.0");
+    assert.equal(url.searchParams.get("to"), null);
   });
 
   it("has no address in a build with updates off or no manifest address", () => {

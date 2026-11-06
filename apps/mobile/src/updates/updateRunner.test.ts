@@ -771,6 +771,31 @@ describe("the update runner", () => {
       assert.equal(run.runner.buttonLook(), "idle");
     });
 
+    it("holds Install Now disabled while Android has the APK, then offers it again", async () => {
+      const run = await opened({ checkNative: apkDownloaded });
+      await tap(run);
+      assert.deepEqual(run.did, ["install"]);
+      assert.equal(run.runner.buttonLook(), "installing");
+      run.runner.installAbandoned(false);
+      assert.equal(run.runner.buttonLook(), "installNow");
+    });
+
+    it("is the refresh button, whose tap checks, for an APK no check has offered yet", async () => {
+      let offering = false;
+      let offered: string | null = null;
+      const run = await opened({
+        checkNative: Effect.sync(() => {
+          if (offering) offered = "1.3.0";
+          return "downloaded" as const;
+        }),
+        offeredApkVersion: () => offered,
+      });
+      assert.equal(run.runner.buttonLook(), "idle");
+      offering = true;
+      await tap(run);
+      assert.deepEqual(run.did, ["check", "install"]);
+    });
+
     it("keeps Install Now after Android's confirmation is declined, for another tap", async () => {
       const run = await opened({ checkNative: apkDownloaded });
       await tap(run);
@@ -972,7 +997,8 @@ describe("the update runner", () => {
       assert.equal(run.runner.buttonLook(), run.runner.buttonLook(), "a stable snapshot");
       finish(Effect.succeed(true));
       await run.settle();
-      assert.equal(run.runner.buttonLook(), "installNow");
+      // The tap's download goes on to install: Install Now, held while Android has the APK.
+      assert.equal(run.runner.buttonLook(), "installing");
       assert.deepEqual(run.did, ["check", "install"]);
     });
 

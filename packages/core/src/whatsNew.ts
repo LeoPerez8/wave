@@ -36,20 +36,30 @@ const sections = (value: unknown): ReleaseNoteSections | null => {
   return read && { new: lines(read.new), fixes: lines(read.fixes) };
 };
 
+/** The answer's `releases` as they came, or null when the answer has none. */
+export const answerReleases = (answer: unknown): readonly unknown[] | null => {
+  const releases = record(answer)?.releases;
+  return Array.isArray(releases) ? releases : null;
+};
+
+/** One release of the service's answer, or null when it isn't one. */
+export const readPublishedRelease = (candidate: unknown): PublishedRelease | null => {
+  const release = record(candidate);
+  const notes = record(release?.notes);
+  const en = sections(notes?.en);
+  if (typeof release?.version !== "string" || en === null) return null;
+  return { version: release.version, notes: { en, "pt-BR": sections(notes?.["pt-BR"]) ?? en } };
+};
+
 /** The service's answer, or null when it isn't one, which counts as a failed fetch. */
 export const readPublishedNotes = (answer: unknown): readonly PublishedRelease[] | null => {
-  const releases = record(answer)?.releases;
-  if (!Array.isArray(releases)) return null;
+  const releases = answerReleases(answer);
+  if (releases === null) return null;
   const read: PublishedRelease[] = [];
   for (const candidate of releases) {
-    const release = record(candidate);
-    const notes = record(release?.notes);
-    const en = sections(notes?.en);
-    if (typeof release?.version !== "string" || en === null) return null;
-    read.push({
-      version: release.version,
-      notes: { en, "pt-BR": sections(notes?.["pt-BR"]) ?? en },
-    });
+    const release = readPublishedRelease(candidate);
+    if (release === null) return null;
+    read.push(release);
   }
   return read;
 };

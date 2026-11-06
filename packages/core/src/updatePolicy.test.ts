@@ -307,7 +307,12 @@ describe("what becomes of a tap", () => {
 });
 
 describe("what becomes of a request from the update button", () => {
-  const front = { visible: true, nativeUpdate: "none", bundleDownloaded: true } as const;
+  const front = {
+    visible: true,
+    nativeUpdate: "none",
+    bundleDownloaded: true,
+    offeredApkVersion: null,
+  } as const;
 
   it("ends when Wave leaves, whatever it wanted", () => {
     for (const request of ["check", "askMobileData", "download", "installBundle"] as const) {
@@ -688,6 +693,7 @@ describe("the update button in Settings", () => {
     nativeUpdate: "none",
     bundleDownloaded: false,
     installTap: "none",
+    offeredApkVersion: "1.3.0-ti",
     updateRequest: "none",
     downloadingApk: false,
   } as const;
@@ -695,6 +701,13 @@ describe("the update button in Settings", () => {
   describe("a tap", () => {
     it("installs a downloaded APK", () => {
       assert.equal(updateButtonAction({ ...idle, nativeUpdate: "downloaded" }), "install");
+    });
+
+    it("checks when the downloaded APK isn't one on offer, which an install tap couldn't take", () => {
+      assert.equal(
+        updateButtonAction({ ...idle, nativeUpdate: "downloaded", offeredApkVersion: null }),
+        "check",
+      );
     });
 
     it("checks when no APK is ready", () => {
@@ -865,8 +878,20 @@ describe("the update button in Settings", () => {
   });
 
   describe("its face", () => {
-    const nothingReady = { nativeUpdate: "none", bundleDownloaded: false } as const;
-    const readyFace = { nativeUpdate: "none", bundleDownloaded: true } as const;
+    const nothingReady = {
+      nativeUpdate: "none",
+      bundleDownloaded: false,
+      installTap: "none",
+      offeredApkVersion: null,
+    } as const;
+    const readyFace = { ...nothingReady, bundleDownloaded: true } as const;
+    const apkReady = {
+      ...nothingReady,
+      nativeUpdate: "downloaded",
+      offeredApkVersion: "1.3.0-ti",
+      updateRequest: "none",
+      downloadPercent: null,
+    } as const;
 
     it("spins while a tap's check is under way", () => {
       assert.equal(
@@ -924,14 +949,25 @@ describe("the update button in Settings", () => {
 
     it("offers Install Now with a downloaded APK, even one swiped off the pill", () => {
       for (const bundleDownloaded of [false, true]) {
+        assert.equal(updateButtonLook({ ...apkReady, bundleDownloaded }), "installNow");
+      }
+    });
+
+    it("doesn't offer an APK no check has offered since launch, which a tap couldn't install", () => {
+      assert.equal(updateButtonLook({ ...apkReady, offeredApkVersion: null }), "idle");
+    });
+
+    it("shows Install Now held while an install tap is under way, as a tap can't add to it", () => {
+      for (const installTap of [
+        "tapped",
+        "handedOver",
+        "atPermissionScreen",
+        "awayAtPermissionScreen",
+      ] as const) {
+        assert.equal(updateButtonLook({ ...apkReady, installTap }), "installing");
         assert.equal(
-          updateButtonLook({
-            nativeUpdate: "downloaded",
-            bundleDownloaded,
-            updateRequest: "none",
-            downloadPercent: null,
-          }),
-          "installNow",
+          updateButtonAction({ ...apkReady, installTap, downloadingApk: false }),
+          "none",
         );
       }
     });

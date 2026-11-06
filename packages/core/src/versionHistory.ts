@@ -6,7 +6,7 @@
 import { formatDate } from "./formatting.ts";
 import { catalogueOf, type AppLanguage } from "./localisation.ts";
 import { versionOrder } from "./updatePolicy.ts";
-import { readPublishedNotes, type PublishedRelease } from "./whatsNew.ts";
+import { answerReleases, readPublishedRelease, type PublishedRelease } from "./whatsNew.ts";
 
 /** One release from `GET /v1/notes`, with when its notes were published. */
 export interface DatedRelease extends PublishedRelease {
@@ -22,13 +22,17 @@ const dateOf = (release: unknown): number | null => {
   return Number.isNaN(parsed) ? null : parsed;
 };
 
-/** The service's answer with each release's date, or null when it isn't one. */
+/**
+ * The service's answer with each release's date, or null when it isn't one. A release it can't read
+ * is left out, so one bad notes file costs that release alone, not the whole page.
+ */
 export const readVersionHistory = (answer: unknown): readonly DatedRelease[] | null => {
-  const releases = readPublishedNotes(answer);
+  const releases = answerReleases(answer);
   if (releases === null) return null;
-  // readPublishedNotes read every release of the answer, in its order.
-  const raw = (answer as { readonly releases: readonly unknown[] }).releases;
-  return releases.map((release, index) => ({ ...release, date: dateOf(raw[index]) }));
+  return releases.flatMap((candidate) => {
+    const release = readPublishedRelease(candidate);
+    return release === null ? [] : [{ ...release, date: dateOf(candidate) }];
+  });
 };
 
 /**
@@ -56,6 +60,12 @@ export const readKeptVersionHistory = (stored: string | null): readonly DatedRel
 };
 
 /**
+ * Counted from, the whole history comes back: every release is newer. A Worker deployed before
+ * Version History refuses an ask with no `from`, and this works on it and on today's alike.
+ */
+const BEFORE_EVERY_RELEASE = "0.0.0";
+
+/**
  * Where the channel's whole history is: on the service the manifest comes from. Null with no
  * channel the service knows (a PR or local build's "none") or no address to go by.
  */
@@ -70,7 +80,7 @@ export const versionHistoryUrl = ({
   if (channel !== "ti" && channel !== "main") return null;
   if (!manifestUrl?.endsWith(manifestPath)) return null;
   // not UI text: an address
-  return `${manifestUrl.slice(0, -manifestPath.length)}/v1/notes?channel=${channel}`;
+  return `${manifestUrl.slice(0, -manifestPath.length)}/v1/notes?channel=${channel}&from=${BEFORE_EVERY_RELEASE}`;
 };
 
 /** A release as the Version History page shows it. */

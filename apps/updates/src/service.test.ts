@@ -320,7 +320,16 @@ describe("GET /v1/notes", () => {
     storage: ReturnType<typeof memoryStorage>,
     version: string,
     channel: "ti" | "main" = "ti",
-  ) => publishNotes({ channel, version, notes: notes(version), put: storage.put });
+    now?: Date,
+  ) =>
+    publishNotes({
+      channel,
+      version,
+      notes: notes(version),
+      put: storage.put,
+      read: storage.read,
+      ...(now === undefined ? {} : { now: () => now }),
+    });
 
   const askForNotes = (storage: ReturnType<typeof memoryStorage>, query: string) =>
     createUpdateService(storage).fetch(new Request(`${ORIGIN}/v1/notes?${query}`));
@@ -416,6 +425,89 @@ describe("GET /v1/notes", () => {
     assert.deepEqual(await versions(main), ["1.2.4"]);
   });
 
+  /** The storage, counting what the service asks of it. */
+  const counted = (storage: ReturnType<typeof memoryStorage>) => {
+    const asked = { gets: 0, lists: 0 };
+    const service = createUpdateService({
+      ...storage,
+      get: (key) => {
+        asked.gets += 1;
+        return storage.get(key);
+      },
+      list: (options) => {
+        asked.lists += 1;
+        return storage.list(options);
+      },
+    });
+    const ask = async (query: string) => {
+      asked.gets = 0;
+      asked.lists = 0;
+      return service.fetch(new Request(`${ORIGIN}/v1/notes?${query}`));
+    };
+    return { ask, asked };
+  };
+
+  it("answers from one stored history once it has built it, however many releases", async () => {
+    const storage = memoryStorage();
+    for (let patch = 0; patch < 30; patch += 1) await release(storage, `0.47.${patch}-ti`);
+    const { ask, asked } = counted(storage);
+
+    assert.equal((await versions(await ask("channel=ti"))).length, 30);
+    const again = await ask("channel=ti");
+    assert.equal((await versions(again)).length, 30);
+    assert.deepEqual(asked, { gets: 1, lists: 0 });
+    assert.deepEqual(await versions(await ask("channel=ti&from=0.47.27-ti&to=0.47.28-ti")), [
+      "0.47.28-ti",
+    ]);
+    assert.deepEqual(asked, { gets: 1, lists: 0 });
+  });
+
+  it("keeps the stored history up to date as notes are published, dates and all", async () => {
+    const storage = memoryStorage({ clock: () => new Date("2026-11-01T09:30:00.000Z") });
+    await release(storage, "0.47.0-ti");
+    const { ask, asked } = counted(storage);
+    await ask("channel=ti");
+
+    await release(storage, "0.48.0-ti", "ti", new Date("2026-11-04T18:05:00.000Z"));
+    await release(storage, "0.47.0-ti", "ti", new Date("2026-11-05T07:00:00.000Z"));
+    await release(storage, "0.48.0", "main", new Date("2026-11-05T08:00:00.000Z"));
+
+    const answer = (await (await ask("channel=ti")).json()) as {
+      releases: { version: string; date: string }[];
+    };
+    assert.deepEqual(
+      answer.releases.map(({ version, date }) => ({ version, date })),
+      [
+        { version: "0.48.0-ti", date: "2026-11-04T18:05:00.000Z" },
+        { version: "0.47.0-ti", date: "2026-11-05T07:00:00.000Z" },
+      ],
+    );
+    assert.deepEqual(asked, { gets: 1, lists: 0 });
+    assert.deepEqual(await versions(await ask("channel=main")), ["0.48.0"]);
+  });
+
+  it("builds the history again from the notes files when the stored one can't be read", async () => {
+    const storage = memoryStorage();
+    await release(storage, "0.47.0-ti");
+    await release(storage, "0.48.0-ti");
+    await askForNotes(storage, "channel=ti");
+    await storage.put("notes/ti.json", new TextEncoder().encode("not json"), "application/json");
+
+    assert.deepEqual(await versions(await askForNotes(storage, "channel=ti")), [
+      "0.48.0-ti",
+      "0.47.0-ti",
+    ]);
+  });
+
+  it("answers the whole history counted from 0.0.0, as Version History asks", async () => {
+    const storage = memoryStorage();
+    for (const version of ["0.47.0-ti", "0.48.0-ti"]) await release(storage, version);
+    assert.deepEqual(await versions(await askForNotes(storage, "channel=ti&from=0.0.0")), [
+      "0.48.0-ti",
+      "0.47.0-ti",
+    ]);
+  });
+
   it("answers no releases when none falls between the versions", async () => {
     const answer = await askForNotes(memoryStorage(), "channel=ti&from=1.2.3-ti");
     assert.equal(answer.status, 200);
@@ -459,6 +551,7 @@ describe("publishNotes", () => {
       version: "1.2.3-ti",
       notes: { en: { new: [], fixes: [] }, "pt-BR": { new: [], fixes: [] } },
       put: storage.put,
+      read: storage.read,
     });
     const answer = await createUpdateService(storage).fetch(
       new Request(`${ORIGIN}/v1/notes?channel=ti&from=1.0.0`),

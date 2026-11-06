@@ -11,7 +11,20 @@ export const memoryStorage = ({
   clock?: () => Date;
 } = {}) => {
   const objects = new Map<string, { data: Uint8Array; contentType: string; uploaded: Date }>();
+  /** Takes the scripts' bucket's arguments and R2's binding's alike. */
+  const put = async (
+    key: string,
+    data: Uint8Array | string,
+    type: string | { readonly httpMetadata: { readonly contentType: string } },
+  ) => {
+    objects.set(key, {
+      data: typeof data === "string" ? new TextEncoder().encode(data) : data,
+      contentType: typeof type === "string" ? type : type.httpMetadata.contentType,
+      uploaded: clock(),
+    });
+  };
   const storage: UpdateStorage = {
+    put,
     list: async ({ prefix, cursor }) => {
       const keys = [...objects.keys()].filter((key) => key.startsWith(prefix)).toSorted();
       const start = Number(cursor ?? 0);
@@ -36,9 +49,7 @@ export const memoryStorage = ({
   };
   return {
     ...storage,
-    put: async (key: string, data: Uint8Array, contentType: string) => {
-      objects.set(key, { data, contentType, uploaded: clock() });
-    },
+    put,
     read: async (key: string) => {
       const object = objects.get(key);
       return object ? new TextDecoder().decode(object.data) : null;
