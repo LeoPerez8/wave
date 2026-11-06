@@ -1,6 +1,8 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import {
+  discoverSongs,
+  discoverTrackId,
   missingSongJobId,
   unsearchedTrackId,
   type UnsearchedSong,
@@ -184,4 +186,16 @@ test("songs key by id, with an occurrence counter only for real duplicates", () 
     songs.map((song) => keys.get(song)),
   );
   assert.equal(grown.get(more[5]!), "b:occurrence:1");
+});
+
+test("two YT Music videos the Library has as one song (official audio, lyric video) key apart", () => {
+  const library = { id: 7 };
+  const songs = discoverSongs([yt("audio"), yt("lyrics"), yt("other")], (song) =>
+    song.videoId === "other" ? null : library,
+  );
+  const keys = occurrenceKeys(songs, discoverTrackId);
+  assert.deepEqual(
+    songs.map((song) => keys.get(song)),
+    ["7", "7:occurrence:1", "yt:other"],
+  );
 });
