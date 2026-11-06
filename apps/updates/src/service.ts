@@ -25,13 +25,11 @@ export interface UpdateStorage {
     text(): Promise<string>;
     readonly httpMetadata?: { readonly contentType?: string };
   } | null>;
-  list(options: {
-    prefix: string;
-    cursor?: string;
-  }): Promise<
-    { readonly objects: readonly { readonly key: string }[] } & (
-      { readonly truncated: true; readonly cursor: string } | { readonly truncated: false }
-    )
+  list(options: { prefix: string; cursor?: string }): Promise<
+    {
+      /** `uploaded` is when the object was written, which R2's listing carries. */
+      readonly objects: readonly { readonly key: string; readonly uploaded: Date }[];
+    } & ({ readonly truncated: true; readonly cursor: string } | { readonly truncated: false })
   >;
 }
 
@@ -107,12 +105,17 @@ const assetRoute = async (key: string, storage: UpdateStorage): Promise<Response
   });
 };
 
-const publishedVersions = async (storage: UpdateStorage, prefix: string): Promise<string[]> => {
-  const versions: string[] = [];
+/** Each release with notes on the channel, and when its notes file was written. */
+const publishedVersions = async (
+  storage: UpdateStorage,
+  prefix: string,
+): Promise<{ version: string; uploaded: Date }[]> => {
+  const versions: { version: string; uploaded: Date }[] = [];
   let cursor: string | undefined;
   do {
     const page = await storage.list(cursor === undefined ? { prefix } : { prefix, cursor });
-    for (const { key } of page.objects) versions.push(key.slice(prefix.length, -".json".length));
+    for (const { key, uploaded } of page.objects)
+      versions.push({ version: key.slice(prefix.length, -".json".length), uploaded });
     cursor = page.truncated ? page.cursor : undefined;
   } while (cursor !== undefined);
   return versions;
@@ -121,21 +124,25 @@ const publishedVersions = async (storage: UpdateStorage, prefix: string): Promis
 const notesRoute = async (url: URL, storage: UpdateStorage): Promise<Response> => {
   const channel = url.searchParams.get("channel") ?? "";
   if (!isChannel(channel)) return refuse("Unknown channel");
-  const from = versionOrder(url.searchParams.get("from") ?? "");
-  if (from === null) return refuse("No version to count from");
+  // No `from` asks for the channel's whole history.
+  const fromParam = url.searchParams.get("from");
+  const from = fromParam === null ? Number.NEGATIVE_INFINITY : versionOrder(fromParam);
+  if (from === null) return refuse("Not a version to count from");
   const toParam = url.searchParams.get("to");
   const to = toParam === null ? Number.POSITIVE_INFINITY : versionOrder(toParam);
   if (to === null) return refuse("Not a version to count up to");
 
   const prefix = notesPrefix(channel);
   const between = (await publishedVersions(storage, prefix))
-    .map((version) => ({ version, order: versionOrder(version) ?? -1 }))
-    .filter(({ order }) => order > from && order <= to)
+    .map(({ version, uploaded }) => ({ version, uploaded, order: versionOrder(version) ?? -1 }))
+    .filter(({ order }) => order >= 0 && order > from && order <= to)
     .toSorted((a, b) => b.order - a.order);
   const releases = await Promise.all(
-    between.map(async ({ version }) => {
+    between.map(async ({ version, uploaded }) => {
       const object = await storage.get(`${prefix}${version}.json`);
-      return object ? [{ version, notes: JSON.parse(await object.text()) as ReleaseNotes }] : [];
+      if (!object) return [];
+      const notes = JSON.parse(await object.text()) as ReleaseNotes;
+      return [{ version, date: uploaded.toISOString(), notes }];
     }),
   );
   return Response.json(

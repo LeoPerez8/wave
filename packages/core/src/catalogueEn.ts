@@ -24,6 +24,7 @@ import { itemActionsEn } from "./catalogue/itemActionsEn.ts";
 import { songDeletionEn } from "./catalogue/songDeletionEn.ts";
 import { appUpdatesEn } from "./catalogue/appUpdatesEn.ts";
 import { whatsNewEn } from "./catalogue/whatsNewEn.ts";
+import { versionHistoryEn } from "./catalogue/versionHistoryEn.ts";
 /**
  * Wave's interface text in English: the shape every other catalogue must fill
  * (`Catalogue`), so a phrase missing from one fails the type check. Group
@@ -63,6 +64,7 @@ export const en = {
   itemActions: itemActionsEn,
   songDeletion: songDeletionEn,
   whatsNew: whatsNewEn,
+  versionHistory: versionHistoryEn,
   appUpdates: appUpdatesEn,
   /** Each tab's name, in the tab bar, its editor and TalkBack. */
   tabs: {

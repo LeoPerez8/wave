@@ -331,7 +331,7 @@ describe("GET /v1/notes", () => {
     );
 
   it("answers each release's notes per language, newest first", async () => {
-    const storage = memoryStorage();
+    const storage = memoryStorage({ clock: () => new Date("2026-11-01T09:30:00.000Z") });
     await release(storage, "1.2.3-ti");
     await release(storage, "1.2.4-ti");
 
@@ -341,10 +341,30 @@ describe("GET /v1/notes", () => {
     assert.match(response.headers.get("content-type") ?? "", /application\/json/);
     assert.deepEqual(await response.json(), {
       releases: [
-        { version: "1.2.4-ti", notes: notes("1.2.4-ti") },
-        { version: "1.2.3-ti", notes: notes("1.2.3-ti") },
+        { version: "1.2.4-ti", date: "2026-11-01T09:30:00.000Z", notes: notes("1.2.4-ti") },
+        { version: "1.2.3-ti", date: "2026-11-01T09:30:00.000Z", notes: notes("1.2.3-ti") },
       ],
     });
+  });
+
+  it("dates each release by when its notes were written", async () => {
+    let now = new Date("2026-11-01T09:30:00.000Z");
+    const storage = memoryStorage({ clock: () => now });
+    await release(storage, "1.2.3-ti");
+    now = new Date("2026-11-04T18:05:00.000Z");
+    await release(storage, "1.2.4-ti");
+
+    const answer = (await (await askForNotes(storage, "channel=ti&from=1.2.2-ti")).json()) as {
+      releases: { version: string; date: string }[];
+    };
+
+    assert.deepEqual(
+      answer.releases.map(({ version, date }) => ({ version, date })),
+      [
+        { version: "1.2.4-ti", date: "2026-11-04T18:05:00.000Z" },
+        { version: "1.2.3-ti", date: "2026-11-01T09:30:00.000Z" },
+      ],
+    );
   });
 
   it("leaves out the version the phone had and keeps the one it's on", async () => {
@@ -368,6 +388,21 @@ describe("GET /v1/notes", () => {
     await release(storage, "1.2.4-ti");
     const answer = await askForNotes(storage, "channel=ti&from=1.2.3-ti");
     assert.deepEqual(await versions(answer), ["1.2.4-ti"]);
+  });
+
+  it("answers the channel's whole history with no `from`", async () => {
+    const storage = memoryStorage();
+    for (const version of ["0.47.0-ti", "0.48.0-ti", "0.49.0-ti"]) await release(storage, version);
+    await release(storage, "0.48.0", "main");
+    assert.deepEqual(await versions(await askForNotes(storage, "channel=ti")), [
+      "0.49.0-ti",
+      "0.48.0-ti",
+      "0.47.0-ti",
+    ]);
+    assert.deepEqual(await versions(await askForNotes(storage, "channel=ti&to=0.48.0-ti")), [
+      "0.48.0-ti",
+      "0.47.0-ti",
+    ]);
   });
 
   it("counts both channels' versions on one sequence, keeping each channel's notes apart", async () => {
@@ -398,7 +433,6 @@ describe("GET /v1/notes", () => {
   for (const query of [
     "from=1.2.3",
     "channel=none&from=1.2.3",
-    "channel=ti",
     "channel=ti&from=latest",
     "channel=ti&from=1.2.3&to=1.2",
   ]) {
