@@ -3,7 +3,14 @@
  * gives for the playing song, read once per song per session, and the
  * search that finds a Library song without a video id first.
  */
-import { songSearchMatch, songSearchQuery, type SongSearchKey, type YtSong } from "./ytMusic.ts";
+import {
+  sameSongAnyVersion,
+  songSearchMatch,
+  songSearchQuery,
+  type LibrarySongKey,
+  type SongSearchKey,
+  type YtSong,
+} from "./ytMusic.ts";
 
 /** What Related shows for a song: loading, its answer, or "Couldn't load the related songs". */
 export type RelatedSongsShown<A> =
@@ -65,6 +72,17 @@ export const createRelatedSongsSession = <A>(
     },
   };
 };
+
+/**
+ * The related [songs] without the song [playing] (its title and artist
+ * credit; null with nothing playing) in any version: another album's, a live
+ * or remastered one (`sameSongAnyVersion`).
+ */
+export const relatedWithoutPlaying = <S extends Pick<YtSong, "title" | "artists">>(
+  playing: Pick<LibrarySongKey, "title" | "artist"> | null,
+  songs: readonly S[],
+): readonly S[] =>
+  playing === null ? songs : songs.filter((song) => !sameSongAnyVersion(playing, song));
 
 /** A Library song Related looks for on YouTube Music: it has no video id of its own. */
 export interface RelatedSearchSong extends SongSearchKey {

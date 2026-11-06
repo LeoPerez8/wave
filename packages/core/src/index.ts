@@ -2499,6 +2499,7 @@ export {
   createRelatedSearches,
   createRelatedSongsSession,
   relatedLibraryVideoId,
+  relatedWithoutPlaying,
 } from "./relatedSongs.ts";
 export type {
   RelatedLibraryRead,
