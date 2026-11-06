@@ -1279,7 +1279,9 @@ describe("Related", () => {
   test("songs that aren't playing don't offer it, in a menu or in selection", () => {
     assert.ok(!offersRelated(itemActions(tracks([song()], { ytMusic: true }))));
     assert.ok(
-      !offersRelated(itemActions(tracks([song(), song()], { surface: "selection", ytMusic: true }))),
+      !offersRelated(
+        itemActions(tracks([song(), song()], { surface: "selection", ytMusic: true })),
+      ),
     );
     assert.ok(!offersRelated(ytSongActions(undefined, { ytMusic: true, selectable: true })));
     assert.ok(!offersRelated(itemActions({ ...albums([10]), surface: "menu", ytMusic: true })));
