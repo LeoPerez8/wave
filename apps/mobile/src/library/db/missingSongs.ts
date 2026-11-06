@@ -265,7 +265,11 @@ export const keepPlaylistEntries = (
         explicit: song.explicit === "explicit",
       });
       tx.update(playlistItems)
-        .set({ trackId: null, ytSong: writePlaylistEntrySong(entry), ...stamped(playlistItems, now) })
+        .set({
+          trackId: null,
+          ytSong: writePlaylistEntrySong(entry),
+          ...stamped(playlistItems, now),
+        })
         .where(eq(playlistItems.trackId, song.id))
         .run();
     }

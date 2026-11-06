@@ -95,7 +95,13 @@ const entriesOf = (db: TestDatabase, playlistId: number) =>
       : { source: entry.source, song: entry.song, addedAt: entry.addedAt },
   );
 
-const luckyEntry = { title: "Lucky", artists: ["Radiohead"], album: "OK Computer", durationMs: 259_000, artworkUrl: null };
+const luckyEntry = {
+  title: "Lucky",
+  artists: ["Radiohead"],
+  album: "OK Computer",
+  durationMs: 259_000,
+  artworkUrl: null,
+};
 
 describe("a song leaving the Library", () => {
   test("Delete keeps its entries in every playlist, in place, as an unsearched entry of what the Library knew", async () => {
@@ -219,8 +225,9 @@ describe("every way a song leaves the Library keeps its entries", () => {
       );
       // No entry points at a song the Library no longer has.
       assert.equal(
-        db.get<{ n: number }>(sql`SELECT count(*) AS n FROM playlist_items WHERE track_id IS NOT NULL`)
-          ?.n,
+        db.get<{ n: number }>(
+          sql`SELECT count(*) AS n FROM playlist_items WHERE track_id IS NOT NULL`,
+        )?.n,
         0,
       );
     } finally {

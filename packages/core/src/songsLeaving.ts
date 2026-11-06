@@ -2,8 +2,9 @@
  * What leaves the Wave account when Tracks leave a recording key here
  * (docs/spec.md, "Wave account and sync" › Missing songs): removed from the
  * Library (Remove from Library, Delete), or retagged to another key. A
- * removal travels as tombstones, so other phones drop the same song, star
- * and entries at their next pull.
+ * removal travels as tombstones, so other phones drop the same song and star
+ * at their next pull. A removed song's playlist entries mostly stay, as the
+ * entry a song without a file is (`leavingSongEntry`).
  */
 
 import { UNKNOWN_ALBUM } from "./library.ts";
@@ -18,9 +19,11 @@ export interface LeavingTrack {
   /** Its star, when the account may hold one (starred, or unstarred since the last push). */
   readonly star: { readonly changedAt: number } | null;
   /**
-   * The playlist entries that leave with it, by sync id: a removed Track's
-   * (those the account may hold). A retagged Track keeps its entries, which
-   * go up again under its new key, so it passes none.
+   * The playlist entries that leave with it, by sync id: those the account
+   * may hold of a removed Track whose entries leave too (a voice note a scan
+   * skips, the Track a duplicate fix drops). A Track removed by Delete or
+   * Remove from Library keeps its entries as songs without a file, and a
+   * retagged one keeps them under its new key, so either passes none.
    */
   readonly entries: readonly { readonly id: string; readonly changedAt: number }[];
 }

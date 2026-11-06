@@ -875,7 +875,9 @@ export class LibraryStore extends Context.Service<
      */
     readonly removeSongs: (trackIds: readonly number[]) => Effect.Effect<void, LibraryStoreError>;
     /** Whether any of these songs is in a playlist (the Delete confirmation says they stay there). */
-    readonly inPlaylists: (trackIds: readonly number[]) => Effect.Effect<boolean, LibraryStoreError>;
+    readonly inPlaylists: (
+      trackIds: readonly number[],
+    ) => Effect.Effect<boolean, LibraryStoreError>;
     /**
      * The missing songs as downloading them takes them, in title order; with
      * [trackIds], only those still missing of them.

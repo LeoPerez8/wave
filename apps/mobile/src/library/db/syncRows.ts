@@ -753,9 +753,10 @@ export const planSongs = (db: LibraryDatabase, now: number): void => {
  * Tracks [leaving] their recording keys while the Library is joined with an
  * account (Core's `songsLeaving`): a song no Track keeps leaves the account,
  * its star with it, as tombstones the next push sends. [removed] Tracks
- * leave the Library, and their playlist entries leave the account with
- * them; retagged ones keep theirs. Run it in the transaction that removes
- * the Tracks, before it deletes them, or that retags them, after.
+ * leave the Library, with the playlist entries still holding them (kept
+ * ones, `keepPlaylistEntries`, hold none by then); retagged ones keep
+ * theirs. Run it in the transaction that removes the Tracks, after it keeps
+ * their entries and before it deletes them, or that retags them, after.
  */
 export const leaveKeys = (
   tx: LibraryDatabase,
