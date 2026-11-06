@@ -25,7 +25,7 @@ const YT_SIGNED_OUT: YtSession = { status: "signedOut" };
 const WAVE_SIGNED_OUT: WaveSession = { status: "signedOut" };
 
 describe("Settings pages", () => {
-  test("a fresh install hides Developer and revealing it adds only its row at the end", () => {
+  test("a fresh install hides Developer and revealing it adds only its row, above Version History", () => {
     assert.deepEqual(
       visibleSettingsPages().map(({ page }) => page),
       [
@@ -39,6 +39,7 @@ describe("Settings pages", () => {
         "lyricsAndTags",
         "downloads",
         "accounts",
+        "versionHistory",
       ],
     );
     assert.deepEqual(visibleSettingsPages(true), SETTINGS_PAGES);
@@ -73,6 +74,12 @@ describe("Settings pages", () => {
       { page: "downloads", title: "Downloads", route: "/settings/downloads", icon: "download" },
       { page: "accounts", title: "Accounts", route: "/settings/accounts", icon: "user" },
       { page: "developer", title: "Developer", route: "/settings/developer", icon: "code" },
+      {
+        page: "versionHistory",
+        title: "Version History",
+        route: "/settings/version-history",
+        icon: "versions",
+      },
     ]);
   });
 });
