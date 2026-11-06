@@ -68,7 +68,7 @@ export const NO_SWIPE: RowSwipe = { right: null, left: null };
  * its swipe uncovers have no background of their own. Elsewhere a row stays
  * on the screen's background.
  */
-export const ClearRows = createContext(false);
+export const ClearRowsContext = createContext(false);
 
 const DRAG_SLOP = 12;
 
@@ -140,7 +140,7 @@ function Uncovered({
 }
 
 /**
- * What a clear row's swipe uncovers on [edge] (`ClearRows`), with no
+ * What a clear row's swipe uncovers on [edge] (`ClearRowsContext`), with no
  * background: cut to the width the row has moved off, so it doesn't show
  * through the row.
  */
@@ -187,7 +187,7 @@ function ClearUncovered({
  * of [demo] after the first render plays one short swipe and spring by
  * itself (Core's `bounceDemoSwipe`; none under reduce motion).
  *
- * Under `ClearRows` the row and what it uncovers have no background.
+ * Under `ClearRowsContext` the row and what it uncovers have no background.
  */
 export function SwipeableRow({
   swipe,
@@ -205,7 +205,7 @@ export function SwipeableRow({
   children: ReactNode;
 }) {
   const scrollable = useListScrollable();
-  const clear = useContext(ClearRows);
+  const clear = useContext(ClearRowsContext);
   const reduceMotion = useReducedMotion();
   const spring = useBounceSpring(RETURN_SPRINGS.swipeRow);
   const canRight = swipe.right !== null;

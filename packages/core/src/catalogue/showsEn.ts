@@ -41,15 +41,15 @@ export const showsEn = {
    * the playlist entries counted for them, a part that is zero left out.
    */
   keptSongs: (library: number, playlists: number) => {
-    const inPlaylists = plural("en", playlists, {
-      one: `${formatNumber("en", playlists)} in a playlist`,
-      other: `${formatNumber("en", playlists)} in playlists`,
-    });
     if (library === 0)
       return plural("en", playlists, {
         one: `${formatNumber("en", playlists)} song in a playlist`,
         other: `${formatNumber("en", playlists)} songs in playlists`,
       });
+    const inPlaylists = plural("en", playlists, {
+      one: `${formatNumber("en", playlists)} in a playlist`,
+      other: `${formatNumber("en", playlists)} in playlists`,
+    });
     const inLibrary = plural("en", library, {
       one: `${formatNumber("en", library)} song in your Library`,
       other: `${formatNumber("en", library)} songs in your Library`,

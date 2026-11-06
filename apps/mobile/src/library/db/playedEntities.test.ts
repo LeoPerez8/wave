@@ -1,12 +1,24 @@
 /// <reference types="node" />
-import { artistStats, type PlayEvent, type YtAlbumSong } from "@wave/core";
+import {
+  artistStats,
+  followSuggestions,
+  writePlaylistYtSong,
+  type PlayEvent,
+  type YtAlbumSong,
+} from "@wave/core";
 import assert from "node:assert/strict";
 import { test } from "node:test";
 
 import { creditSplits, relinkCredits } from "./credits.ts";
 import { homePlays, recordPlay } from "./playHistory.ts";
-import { playedArtistSongs, playedArtistTotals, playedEntityTotals } from "./playedEntities.ts";
+import {
+  keptArtistSongs,
+  playedArtistSongs,
+  playedArtistTotals,
+  playedEntityTotals,
+} from "./playedEntities.ts";
 import { sql } from "drizzle-orm";
+import * as schema from "./schema.ts";
 import { addTrack, openTestDatabase, traceQueries } from "./testDatabase.ts";
 
 const song: YtAlbumSong = {
@@ -242,4 +254,46 @@ test("snapshot-only streamed metadata ranks with its cover and credits after syn
   assert.equal(album.artworkUrl, "https://cover");
   assert.equal(album.albumId, null);
   assert.equal(totals.albums[0]!.countedPlays, 1);
+});
+
+test("a playlist holding a song as a stream and as its downloaded copy counts it once", async () => {
+  const db = await openTestDatabase();
+  const lucky = addTrack(db, { title: "Lucky", artist: "Radiohead" });
+  db.run(sql`UPDATE tracks SET video_id = 'lucky' WHERE id = ${lucky}`);
+  const playlist = db
+    .insert(schema.playlists)
+    .values({ name: "Drive", createdAt: 0, updatedAt: 0, changedAt: 0 })
+    .returning()
+    .get().id;
+  db.insert(schema.playlistItems)
+    .values({ playlistId: playlist, trackId: lucky, orderKey: "a0", addedAt: 0, changedAt: 0 })
+    .run();
+  db.insert(schema.playlistItems)
+    .values({
+      playlistId: playlist,
+      ytSong: writePlaylistYtSong({
+        videoId: "lucky",
+        title: "Lucky",
+        artists: ["Radiohead"],
+        album: null,
+        durationMs: 260_000,
+        artworkUrl: null,
+        explicit: false,
+      }),
+      orderKey: "a1",
+      addedAt: 0,
+      changedAt: 0,
+    })
+    .run();
+  const { suggestions } = followSuggestions({
+    recent: [],
+    allTime: [],
+    excluded: [],
+    kept: keptArtistSongs(db),
+    shown: 5,
+  });
+  assert.deepEqual(
+    suggestions.map(({ name, line }) => [name, line]),
+    [["Radiohead", "1 song in your Library · 1 in a playlist"]],
+  );
 });
