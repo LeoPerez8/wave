@@ -58,6 +58,7 @@ import {
   useNowPlayingShown,
   useNowPlayingSettled,
 } from "./sheet";
+import { onRelatedOpened } from "./openRelated";
 import { SlotButton, ViewToggle, type SlotContext } from "./SlotButtons";
 import { Transport } from "./Transport";
 import {
@@ -215,8 +216,9 @@ export function NowPlayingSheet() {
 
   useEffect(() => resizeNowPlaying(height), [height]);
 
-  // Every open starts on the player.
+  // Every open starts on the player, unless the playing song's card asked for Related.
   useEffect(() => onNowPlayingHidden(() => setView("player")), []);
+  useEffect(() => onRelatedOpened(() => setView("related")), []);
 
   // Back slides the sheet away instead of leaving the screen under it.
   useEffect(() => {

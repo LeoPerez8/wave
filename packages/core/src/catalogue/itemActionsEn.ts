@@ -1,5 +1,6 @@
 import type { ItemAction } from "../itemActions.ts";
 import type { PlayAction } from "../menuLayout.ts";
+import { playbackTextEn } from "./playbackTextEn.ts";
 
 /** Long-press menus, selection bars and swipe actions (`itemActions`, `menuLayout`, `swipeActions`). */
 export const itemActionsEn = {
@@ -33,6 +34,8 @@ export const itemActionsEn = {
     downloadMissingSongs: "Download Missing Songs",
     retryFailed: "Retry Failed",
     sleepTimer: "Sleep Timer",
+    // The playing song's card opens Now Playing's Related view, named as its slot is.
+    related: playbackTextEn.related,
   } satisfies Record<ItemAction, string>,
   /**
    * Shorter captions for a bar button. "Unfavorite" is wider than a button of
