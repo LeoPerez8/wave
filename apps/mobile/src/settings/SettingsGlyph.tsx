@@ -21,6 +21,10 @@ import { useThemeColor } from "@/theme/useThemeColor";
 /** Keep the former tile's column so row titles and separators stay in place. */
 const GLYPH_COLUMN = CELL * 4;
 const GLYPH = 20;
+/** Between a row's glyph and its title. */
+export const SETTINGS_GLYPH_GAP = CELL * 2;
+/** Where a Settings row's title starts, after its glyph: the version line lines up with it. */
+export const SETTINGS_TITLE_INSET = GLYPH_COLUMN + SETTINGS_GLYPH_GAP;
 
 const GLYPHS: Readonly<Record<SettingsIcon, Icon>> = {
   books: IconBooks,

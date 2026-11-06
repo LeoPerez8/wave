@@ -6,7 +6,7 @@ import { useCallback, useState } from "react";
 import { router } from "@/lib/timingRouter";
 import { ScrollView, Text, View } from "react-native";
 
-import { grid } from "@/catalog/grid";
+import { CELL, grid } from "@/catalog/grid";
 import { Hairline } from "@/catalog/Hairline";
 import { ScreenHeader } from "@/components/ScreenHeader";
 import { useRenderCount } from "@/perf/perf";
@@ -16,6 +16,7 @@ import {
   setDeveloperSettingsVisible,
   useDeveloperSettingsVisible,
 } from "@/settings/developer";
+import { SETTINGS_TITLE_INSET } from "@/settings/SettingsGlyph";
 import { SettingsPageRow } from "@/settings/SettingsPage";
 import { useSettingsSummaries } from "@/settings/settingsSummaries";
 import { RUNNING_VERSION } from "@/updates/runningVersion";
@@ -65,8 +66,12 @@ export default function SettingsScreen() {
         <Hairline />
         <SettingsPageRows summaries={summaries} developerVisible={developerVisible} />
         {RUNNING_VERSION !== null && (
-          <View className="flex-row items-center justify-center pt-6">
-            <Text className="text-center font-sans text-footnote text-secondary" selectable>
+          // At the rows' title inset, its button on the right edge of the same line.
+          <View
+            className="flex-row items-center pt-6"
+            style={{ paddingLeft: SETTINGS_TITLE_INSET, gap: CELL }}
+          >
+            <Text className="flex-1 font-sans text-footnote text-secondary" selectable>
               {strings.appUpdates.version(RUNNING_VERSION)}
             </Text>
             <UpdateButton />

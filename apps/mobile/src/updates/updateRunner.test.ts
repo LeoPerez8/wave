@@ -788,6 +788,57 @@ describe("the update runner", () => {
       assert.deepEqual(run.notices, ["bundleOnItsWay"]);
     });
 
+    it("turns into Install Now once the bundle a tap found is down, and reloads at a tap", async () => {
+      let available = false;
+      const run = await opened({ check: Effect.sync(() => available) });
+      available = true;
+      await tap(run);
+      assert.equal(run.runner.buttonLook(), "installNow");
+      run.did.length = 0;
+      await tap(run);
+      assert.deepEqual(run.did, ["apply"]);
+      assert.deepEqual(run.notices, ["bundleOnItsWay"]);
+    });
+
+    it("offers Install Now for a bundle Wave downloaded by itself, and reloads while music plays", async () => {
+      const run = setup({ check: found });
+      run.runner.reconsider();
+      await run.settle();
+      assert.deepEqual(run.did, ["download"]);
+      assert.equal(run.runner.buttonLook(), "installNow");
+      run.surroundings.playing = true;
+      run.surroundings.network = "none";
+      await tap(run);
+      assert.deepEqual(run.did, ["download", "apply"]);
+      assert.deepEqual(run.notices, []);
+    });
+
+    it("says when the reload fails, and leaves Install Now for another try", async () => {
+      const run = setup({ check: found, apply: failing });
+      run.runner.reconsider();
+      await run.settle();
+      await tap(run);
+      assert.deepEqual(run.notices, ["installFailed"]);
+      assert.equal(run.runner.buttonLook(), "installNow");
+      run.notices.length = 0;
+      await tap(run);
+      assert.deepEqual(run.notices, ["installFailed"]);
+    });
+
+    it("is the refresh button again when an APK turns up, as it holds the bundle back", async () => {
+      let answer: NativeUpdate = "none";
+      const run = setup({ check: found, checkNative: Effect.sync(() => answer) });
+      run.runner.reconsider();
+      await run.settle();
+      assert.equal(run.runner.buttonLook(), "installNow");
+      answer = "available";
+      run.surroundings.network = "metered";
+      run.passMinutes(15);
+      run.runner.reconsider();
+      await run.settle();
+      assert.equal(run.runner.buttonLook(), "idle");
+    });
+
     it("says when the check fails", async () => {
       const run = await opened({ checkNative: failing });
       await tap(run);

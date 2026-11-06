@@ -254,6 +254,7 @@ export {
 } from "./sleepTimer.ts";
 export type { SleepTimer, SleepTimerChoice, SleepTimerClock } from "./sleepTimer.ts";
 export {
+  RELOAD_RESUME_WINDOW_MS,
   UPDATE_APK_RETRY_INTERVAL_MS,
   UPDATE_CHECK_INTERVAL_MS,
   afterRequestedCheck,
@@ -265,6 +266,7 @@ export {
   playerKeepsPlaying,
   readLatestApk,
   readSignedApk,
+  resumesAfterReload,
   strandedUpdateRequest,
   updateButtonAction,
   updateButtonLook,

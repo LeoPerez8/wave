@@ -4,6 +4,7 @@ export const appUpdatesEn = {
   ignoreThisUpdate: "Ignore This Update",
   version: (version: string): string => `Version ${version}`,
   checkForUpdates: "Check for updates",
+  installNow: "Install Now",
   percent: (percent: number): string => `${percent}%`,
   downloading: (percent: number): string => `Downloading the update, ${percent}%`,
   upToDate: "Wave is up to date",
