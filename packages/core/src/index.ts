@@ -245,6 +245,8 @@ export {
   SLEEP_TIMER_PRESETS,
   formatSleepMinutes,
   formatSleepRemaining,
+  sleepTimerEntryLabel,
+  sleepTimerLabelChangesIn,
   sleepTimerLabelSeconds,
   sleepTimerRemaining,
   startSleepTimer,

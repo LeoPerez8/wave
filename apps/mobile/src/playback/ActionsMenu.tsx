@@ -32,6 +32,7 @@ import type {
 } from "@/library/LibraryStore";
 import { playlistEntries, songsWithIds } from "@/library/sectionSongs";
 import { pressedMenuAllowed, pressedRect } from "@/motion/pressedRect";
+import { useSleepTimerEntryLabel } from "@/nowPlaying/SleepTimer";
 import { CardHeading } from "@/overlay/CardHeading";
 import { MenuChoices, type MenuChoice, type PlayCardChoice } from "@/overlay/MenuChoices";
 import { followUp, openOverlay } from "@/overlay/overlay";
@@ -56,7 +57,10 @@ export interface MenuOptions {
   readonly extraEntries?: readonly MenuChoice[] | undefined;
   /** The list it was opened from can select: the menu offers Select, which calls this. */
   readonly onSelect?: (() => void) | undefined;
-  /** The song is the one playing (the mini player's long press): no Play Next or Add to Queue. */
+  /**
+   * The song is the one playing (its card, from the mini player's long press
+   * or Now Playing's Song menu): Sleep Timer instead of Play Next and Add to Queue.
+   */
   readonly playing?: boolean | undefined;
 }
 
@@ -178,8 +182,9 @@ export const openQueuedSongActions = (trackId: string, options: MenuOptions = {}
 
 /**
  * Opens the long-press menu for the song playing (the mini player's long
- * press): its own menu as a song's row offers it, without Play Next and Add to
- * Queue (Core's `itemActions`, `ytSongActions`). Nothing opens with no song on,
+ * press, Now Playing's Song menu): its own menu as a song's row offers it,
+ * with Sleep Timer instead of Play Next and Add to Queue (Core's
+ * `itemActions`, `ytSongActions`). Nothing opens with no song on,
  * nor for an unsearched song while its search runs.
  */
 export const openPlayingActions = (): void => {
@@ -323,7 +328,7 @@ function ActionsMenu({
   extraEntries?: readonly MenuChoice[] | undefined;
   close: () => void;
   onSelect: (() => void) | undefined;
-  /** The song is the one playing: no Play Next or Add to Queue. */
+  /** The song is the one playing: Sleep Timer instead of Play Next and Add to Queue. */
   playing?: boolean | undefined;
   /** Each Library entry's song count, for a Library entry's heading (`SectionActionsMenu`). */
   sectionSongs?: LibraryCounts | undefined;
@@ -332,13 +337,18 @@ function ActionsMenu({
   /** A collection's songs, read before it opened; none for other targets. */
   collectionSongs?: readonly SongRow[] | undefined;
 }) {
-  const actions = useItemActions(target, {
+  const planned = useItemActions(target, {
     surface: "menu",
     finish: close,
     onSelect,
     collectionSongs,
     playing,
   });
+  // The playing song's Sleep Timer says how long the running timer has left.
+  const sleepTimerLabel = useSleepTimerEntryLabel(playing === true);
+  const actions = planned.map((entry) =>
+    entry.action === "sleepTimer" ? { ...entry, label: sleepTimerLabel } : entry,
+  );
   const { strings } = useLocalisation();
   const artist = target.kind === "artist" ? target.items[0] : undefined;
   const follow = useFollow(artist?.name ?? "");
