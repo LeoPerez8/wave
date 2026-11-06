@@ -202,6 +202,7 @@ export const playbackTextPtBr: typeof playbackTextEn = {
   removeValueFromFavorites: (value0: string | number) => `Remover ${value0} das Favoritas`,
   favoriteValue: (value0: string | number) => `Favoritar ${value0}`,
   removeValueFromUpNext: (value0: string | number) => `Remover ${value0} de A Seguir`,
+  addValueToQueue: (value0: string | number) => `Adicionar à Fila, ${value0}`,
   noSongsFoundLikeValue: (value0: string | number) =>
     `Nenhuma música parecida com ${value0} foi encontrada.`,
   valueMinutes: (value0: string | number) => `${value0} Minutos`,

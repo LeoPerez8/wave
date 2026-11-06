@@ -196,6 +196,8 @@ export const playbackTextEn = {
   removeValueFromFavorites: (value0: string | number) => `Remove ${value0} from Favorites`,
   favoriteValue: (value0: string | number) => `Favorite ${value0}`,
   removeValueFromUpNext: (value0: string | number) => `Remove ${value0} from Up Next`,
+  /** A related song's + button, as TalkBack reads it. */
+  addValueToQueue: (value0: string | number) => `Add to Queue, ${value0}`,
   noSongsFoundLikeValue: (value0: string | number) => `No songs found like ${value0}.`,
   valueMinutes: (value0: string | number) => `${value0} Minutes`,
   pausesInValue: (value0: string | number) => `Pauses in ${value0}`,

@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { describe, test } from "node:test";
 
-import { createRelatedSongsSession } from "./index.ts";
+import { catalogueOf, createRelatedSongsSession } from "./index.ts";
 
 /** A read held open until the test answers or fails it, counting the reads asked for. */
 const reads = () => {
@@ -101,5 +101,15 @@ describe("the related songs a session keeps", () => {
     stop();
     session.read("song-b");
     assert.equal(heard, 2);
+  });
+});
+
+describe("a related song's + button", () => {
+  test("TalkBack reads it as Add to Queue with the song's name, in either language", () => {
+    assert.equal(catalogueOf("en").playbackText.addValueToQueue("Get Lucky"), "Add to Queue, Get Lucky");
+    assert.equal(
+      catalogueOf("pt-BR").playbackText.addValueToQueue("Get Lucky"),
+      "Adicionar à Fila, Get Lucky",
+    );
   });
 });
