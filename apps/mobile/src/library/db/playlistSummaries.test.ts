@@ -38,6 +38,7 @@ import {
   traceQueries,
   type TestDatabase,
 } from "./testDatabase.ts";
+import { deleteTracksById } from "./tracks.ts";
 
 let db: TestDatabase;
 const ids: Record<string, number> = {};
@@ -339,10 +340,8 @@ describe("Library › Playlists while one playlist fills", () => {
     assert.deepEqual(listed()[2], ["Solo", 1, 210_000, "/n2.thumb"]);
   });
 
-  test("a Library song that leaves takes its entries with it", () => {
-    db.delete(schema.tracks)
-      .where(eq(schema.tracks.id, ids.Airbag ?? -1))
-      .run();
+  test("a Library song that leaves with its entries takes them along", () => {
+    deleteTracksById(db, [ids.Airbag ?? -1]);
     assert.deepEqual(listed()[1], ["Other", 1, 100_000, "https://yt/o1"]);
   });
 

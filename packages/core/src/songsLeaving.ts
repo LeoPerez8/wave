@@ -2,12 +2,16 @@
  * What leaves the Wave account when Tracks leave a recording key here
  * (docs/spec.md, "Wave account and sync" › Missing songs): removed from the
  * Library (Remove from Library, Delete), or retagged to another key. A
- * removal travels as tombstones, so other phones drop the same song, star
- * and entries at their next pull.
+ * removal travels as tombstones, so other phones drop the same song and star
+ * at their next pull. A removed song's playlist entries mostly stay, as the
+ * entry a song without a file is (`leavingSongEntry`).
  */
 
+import { UNKNOWN_ALBUM } from "./library.ts";
+import type { UnsearchedEntry } from "./playlistEntries.ts";
 import type { SyncRow } from "./sync.ts";
 import type { SyncFavorite, SyncPlaylistEntry, SyncSong } from "./syncWire.ts";
+import type { YtSong } from "./ytMusic.ts";
 
 /** One Track leaving its recording key. */
 export interface LeavingTrack {
@@ -15,9 +19,11 @@ export interface LeavingTrack {
   /** Its star, when the account may hold one (starred, or unstarred since the last push). */
   readonly star: { readonly changedAt: number } | null;
   /**
-   * The playlist entries that leave with it, by sync id: a removed Track's
-   * (those the account may hold). A retagged Track keeps its entries, which
-   * go up again under its new key, so it passes none.
+   * The playlist entries that leave with it, by sync id: those the account
+   * may hold of a removed Track whose entries leave too (a voice note a scan
+   * skips, the Track a duplicate fix drops). A Track removed by Delete or
+   * Remove from Library keeps its entries as songs without a file, and a
+   * retagged one keeps them under its new key, so either passes none.
    */
   readonly entries: readonly { readonly id: string; readonly changedAt: number }[];
 }
@@ -81,4 +87,40 @@ export const songsLeaving = (input: {
     for (const entry of track.entries) playlistEntries.push(tombstone(entry.id, entry.changedAt));
   }
   return { songs: [...songs.values()], favorites: [...favorites.values()], playlistEntries };
+};
+
+/** A Library song leaving the Library, as its playlist entries are kept (`leavingSongEntry`). */
+export interface LeavingSong {
+  /** The YouTube video id of a song downloaded from YouTube Music, else `null`. */
+  readonly videoId: string | null;
+  readonly title: string;
+  /** Its artist credit, for a song whose credit wasn't split into artists. */
+  readonly artist: string;
+  readonly artists: readonly string[];
+  readonly album: string;
+  readonly durationMs: number;
+  readonly explicit: boolean;
+}
+
+/**
+ * What a playlist entry of [song] becomes when the song leaves the Library
+ * (Delete, Remove from Library, a signed-out scan that no longer finds its
+ * file): the entry a song without a file is, in the same place. A song
+ * downloaded from YouTube Music becomes a YT Music entry of its video, which
+ * streams; any other an unsearched entry, which Wave searches on YouTube
+ * Music as it does a Spotify import's. Neither knows a cover.
+ */
+export const leavingSongEntry = (
+  song: LeavingSong,
+): { readonly source: "stream"; readonly song: YtSong } | UnsearchedEntry => {
+  const listed = {
+    title: song.title,
+    artists: song.artists.length > 0 ? song.artists : [song.artist],
+    album: song.album === UNKNOWN_ALBUM || song.album === "" ? null : song.album,
+    durationMs: song.durationMs > 0 ? song.durationMs : null,
+    artworkUrl: null,
+  };
+  return song.videoId === null
+    ? { source: "unsearched", song: listed }
+    : { source: "stream", song: { videoId: song.videoId, ...listed, explicit: song.explicit } };
 };

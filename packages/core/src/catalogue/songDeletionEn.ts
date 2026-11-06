@@ -13,6 +13,11 @@ export const songDeletionEn = {
     oneSignedIn: "The file is removed from your phone, and the song from your Wave account.",
     severalSignedIn: "The files are removed from your phone, and the songs from your Wave account.",
   },
+  /** Said under it when a song is in a playlist: its entries stay there. */
+  staysInPlaylists: {
+    one: "It stays in your playlists.",
+    several: "They stay in your playlists.",
+  },
   delete: "Delete",
   removeSongs: (count: number): string => `Remove ${n(count)} songs from your Library?`,
   removeSong: (title: string): string => `Remove “${title}” from your Library?`,
