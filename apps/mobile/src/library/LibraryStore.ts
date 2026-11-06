@@ -34,8 +34,10 @@ import {
   playedEntityTotals,
   playedArtistTotals,
   playedArtistSongs,
+  keptArtistSongs,
   streamedLibraryPlays,
   recapPlays,
+  type PlayedArtist,
   type PlayedEntityTotals,
   type PlayedArtistSongs,
   type RecapPlays,
@@ -49,6 +51,7 @@ import {
 } from "./db/recommendationPages";
 import type {
   AppLanguage,
+  KeptSongs,
   QueueWrite,
   ShuffleSong,
   YtSong,
@@ -1241,6 +1244,8 @@ export class LibraryStore extends Context.Service<
     readonly playedArtistTotals: (
       window: StatsWindow,
     ) => Effect.Effect<PlayedEntityTotals["artists"], LibraryStoreError>;
+    /** What the owner keeps (Library songs and playlists), for a light listener's follow suggestions. */
+    readonly keptArtistSongs: Effect.Effect<KeptSongs<PlayedArtist>, LibraryStoreError>;
     /**
      * The all-time counted plays streamed of each Library song they are now
      * (a download of the video, or the same recording), by its id.
@@ -2232,6 +2237,7 @@ const make = Effect.gen(function* () {
       attempt("sum up played albums and artists", () => playedEntityTotals(db, window)),
     playedArtistTotals: (window) =>
       attempt("sum up played artists", () => playedArtistTotals(db, window)),
+    keptArtistSongs: attempt("read the artists of kept songs", () => keptArtistSongs(db)),
     streamedLibraryPlays: attempt("sum up the Library songs' streamed plays", () =>
       streamedLibraryPlays(db),
     ),
