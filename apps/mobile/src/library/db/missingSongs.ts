@@ -23,6 +23,7 @@ import { and, eq, inArray, isNotNull, isNull, sql, type SQL } from "drizzle-orm"
 import { chunks } from "./chunks.ts";
 import { readCredits, type CreditSplits } from "./credits.ts";
 import type { LibraryDatabase } from "./database.ts";
+import { leavingSong, leavingSongColumns } from "./leavingSong.ts";
 import { pruneOrphans, saveMissingSongs } from "./save.ts";
 import * as schema from "./schema.ts";
 import { stamped } from "./sync.ts";
@@ -239,16 +240,7 @@ export const keepPlaylistEntries = (
   const { tracks, albums, playlistItems } = schema;
   for (const ids of chunks(trackIds)) {
     const songs = tx
-      .select({
-        id: tracks.id,
-        videoId: tracks.videoId,
-        title: tracks.title,
-        artist: tracks.artistCredit,
-        artists: tracks.artistCredits,
-        album: albums.title,
-        durationMs: tracks.durationMs,
-        explicit: tracks.explicit,
-      })
+      .select({ id: tracks.id, ...leavingSongColumns })
       .from(tracks)
       .innerJoin(albums, eq(tracks.albumId, albums.id))
       .where(
@@ -259,11 +251,7 @@ export const keepPlaylistEntries = (
       )
       .all();
     for (const song of songs) {
-      const entry = leavingSongEntry({
-        ...song,
-        artists: readCredits(song.artist, song.artists),
-        explicit: song.explicit === "explicit",
-      });
+      const entry = leavingSongEntry(leavingSong(song));
       tx.update(playlistItems)
         .set({
           trackId: null,

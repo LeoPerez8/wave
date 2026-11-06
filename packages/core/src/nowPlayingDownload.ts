@@ -1,5 +1,4 @@
-import { isExplicit, type ExplicitFlag } from "./explicit.ts";
-import { UNKNOWN_ALBUM } from "./library.ts";
+import { leavingSongEntry, type LeavingSong } from "./songsLeaving.ts";
 import { videoCoverUrl } from "./streamedCover.ts";
 import { ytDownloadProgress, type YtDownloadStatus } from "./ytDownloads.ts";
 import { parseTrackId, type YtSong } from "./ytMusic.ts";
@@ -80,34 +79,22 @@ export const nowPlayingDownloadTap = <
 /**
  * What the song playing goes on as once Now Playing's Download deleted its
  * file, [playing] being its queue entry's track id and [track] the Library
- * song deleted: the YT Music song of the video it was downloaded from
- * ([videoId]), streamed from about where it was, when it played from the
- * file and YouTube Music is on. Null when the delete moves the queue on to
+ * song deleted (its id, and what it is as it leaves the Library): the YT
+ * Music song of the video it was downloaded from, streamed from about where
+ * it was, when it played from the file and YouTube Music is on. That is the
+ * song its playlist entries become (`leavingSongEntry`), with the video's
+ * cover so Now Playing keeps one. Null when the delete moves the queue on to
  * the next song (no YouTube id, or YouTube Music off), as the menu's Delete
  * does, or when it was streamed already and plays on as it was.
  */
 export const streamedAfterDelete = (
   playing: string,
-  track: {
-    readonly id: number;
-    readonly title: string;
-    readonly artist: string;
-    readonly album: string | null;
-    readonly durationMs: number;
-    readonly explicit: ExplicitFlag;
-  },
-  { videoId, ytMusicOn }: { readonly videoId: string | null; readonly ytMusicOn: boolean },
+  track: LeavingSong & { readonly id: number },
+  { ytMusicOn }: { readonly ytMusicOn: boolean },
 ): YtSong | null => {
   const ref = parseTrackId(playing);
-  if (ref?.kind !== "library" || ref.id !== track.id) return null;
-  if (videoId === null || !ytMusicOn) return null;
-  return {
-    videoId,
-    title: track.title,
-    artists: [track.artist],
-    album: track.album === null || track.album === UNKNOWN_ALBUM ? null : track.album,
-    durationMs: track.durationMs > 0 ? track.durationMs : null,
-    artworkUrl: videoCoverUrl(videoId),
-    explicit: isExplicit(track.explicit),
-  };
+  if (ref?.kind !== "library" || ref.id !== track.id || !ytMusicOn) return null;
+  const entry = leavingSongEntry(track);
+  if (entry.source !== "stream") return null;
+  return { ...entry.song, artworkUrl: videoCoverUrl(entry.song.videoId) };
 };

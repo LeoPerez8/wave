@@ -1,7 +1,12 @@
 import assert from "node:assert/strict";
 import { describe, test } from "node:test";
 
-import { nowPlayingDownload, nowPlayingDownloadTap, streamedAfterDelete } from "./index.ts";
+import {
+  leavingSongEntry,
+  nowPlayingDownload,
+  nowPlayingDownloadTap,
+  streamedAfterDelete,
+} from "./index.ts";
 
 describe("Now Playing's Download button", () => {
   test("a song with a file in the Library shows it's downloaded", () => {
@@ -78,19 +83,21 @@ describe("A tap on Now Playing's Download button", () => {
 describe("The song playing once Now Playing's Download deleted its file", () => {
   const track = {
     id: 7,
+    videoId: "abc",
     title: "Song",
     artist: "Artist & Other",
+    artists: ["Artist", "Other"],
     album: "Album",
     durationMs: 200_000,
-    explicit: "explicit",
-  } as const;
-  const on = { videoId: "abc", ytMusicOn: true };
+    explicit: true,
+  };
+  const on = { ytMusicOn: true };
 
-  test("playing from its file, it goes on as the YT Music song of the video it came from", () => {
+  test("playing from its file, it goes on as the YT Music song of the video it came from, each credited artist its own", () => {
     assert.deepEqual(streamedAfterDelete("7", track, on), {
       videoId: "abc",
       title: "Song",
-      artists: ["Artist & Other"],
+      artists: ["Artist", "Other"],
       album: "Album",
       durationMs: 200_000,
       artworkUrl: "https://i.ytimg.com/vi/abc/hqdefault.jpg",
@@ -98,10 +105,24 @@ describe("The song playing once Now Playing's Download deleted its file", () => 
     });
   });
 
+  test("it is the song its playlist entries become, with the video's cover", () => {
+    const entry = leavingSongEntry(track);
+    assert.equal(entry.source, "stream");
+    assert.deepEqual(streamedAfterDelete("7", track, on), {
+      ...(entry.source === "stream" ? entry.song : null),
+      artworkUrl: "https://i.ytimg.com/vi/abc/hqdefault.jpg",
+    });
+  });
+
+  test("a credit the file didn't split stays its one artist", () => {
+    const song = streamedAfterDelete("7", { ...track, artists: [] }, on);
+    assert.deepEqual(song?.artists, ["Artist & Other"]);
+  });
+
   test("an album or a length the file didn't know stays unknown", () => {
     const song = streamedAfterDelete(
       "7",
-      { ...track, album: "Unknown Album", durationMs: 0, explicit: "unknown" },
+      { ...track, album: "Unknown Album", durationMs: 0, explicit: false },
       on,
     );
     assert.equal(song?.album, null);
@@ -110,11 +131,11 @@ describe("The song playing once Now Playing's Download deleted its file", () => 
   });
 
   test("with YouTube Music off, the queue moves on to the next song", () => {
-    assert.equal(streamedAfterDelete("7", track, { ...on, ytMusicOn: false }), null);
+    assert.equal(streamedAfterDelete("7", track, { ytMusicOn: false }), null);
   });
 
   test("without a YouTube id, the queue moves on to the next song", () => {
-    assert.equal(streamedAfterDelete("7", track, { ...on, videoId: null }), null);
+    assert.equal(streamedAfterDelete("7", { ...track, videoId: null }, on), null);
   });
 
   test("a song already streamed goes on as it was", () => {
