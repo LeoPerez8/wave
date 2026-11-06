@@ -155,6 +155,37 @@ export const recordingMatches = (
   );
 };
 
+/** Words that make a dashed note a version of the song ("- Live", "- 2011 Remaster") rather than its title's. */
+const VERSION_NOTE =
+  /\b(?:remaster(?:ed)?|live|edit|mix|remix|demo|acoustic|instrumental|session|take|karaoke|version|mono|stereo|unplugged|single|radio|recorded)\b/iu;
+
+/** A title without its featured credit and every version note, compared as matching compares text. */
+const songTitle = (title: string): string => {
+  const bare = title
+    .replace(BRACKETED_FEATURE, "")
+    .replace(TRAILING_FEATURE, "")
+    .replace(BRACKETED_NOTE, "")
+    .replace(DASHED_NOTE, (whole, note: string) => (VERSION_NOTE.test(note) ? "" : whole))
+    .trim();
+  return normalizeSearchText(bare === "" ? title : bare);
+};
+
+/**
+ * Whether [song] is [other] in any version: its title as recordings match it
+ * (`recordingMatches`), with any version note ("(Live)", "- Remastered",
+ * "[Demo]") also aside, and an artist they share. Length doesn't count, so a
+ * live take or another album's copy is the same song.
+ */
+export const sameSongAnyVersion = (
+  song: Pick<LibrarySongKey, "title" | "artist">,
+  other: Pick<YtSong, "title" | "artists">,
+): boolean => {
+  const title = songTitle(song.title);
+  if (title === "" || title !== songTitle(other.title)) return false;
+  const artists = new Set(artistNames(song.artist));
+  return other.artists.flatMap(artistNames).some((artist) => artists.has(artist));
+};
+
 /** A song looked for on YouTube Music by its title and artists (a Magic Queue seed, Related's playing song). */
 export interface SongSearchKey {
   readonly title: string;
