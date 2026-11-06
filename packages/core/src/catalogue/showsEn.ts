@@ -36,4 +36,24 @@ export const showsEn = {
       one: `${formatNumber("en", count)} play`,
       other: `${formatNumber("en", count)} plays`,
     }),
+  /**
+   * Why a light listener is offered an artist: their songs in the Library and
+   * the playlist entries counted for them, a part that is zero left out.
+   */
+  keptSongs: (library: number, playlists: number) => {
+    if (library === 0)
+      return plural("en", playlists, {
+        one: `${formatNumber("en", playlists)} song in a playlist`,
+        other: `${formatNumber("en", playlists)} songs in playlists`,
+      });
+    const inPlaylists = plural("en", playlists, {
+      one: `${formatNumber("en", playlists)} in a playlist`,
+      other: `${formatNumber("en", playlists)} in playlists`,
+    });
+    const inLibrary = plural("en", library, {
+      one: `${formatNumber("en", library)} song in your Library`,
+      other: `${formatNumber("en", library)} songs in your Library`,
+    });
+    return playlists === 0 ? inLibrary : `${inLibrary} · ${inPlaylists}`;
+  },
 };

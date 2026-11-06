@@ -6,6 +6,7 @@ import {
   createRelatedSearches,
   createRelatedSongsSession,
   relatedLibraryVideoId,
+  relatedWithoutPlaying,
 } from "./index.ts";
 
 /** A read held open until the test answers or fails it, counting the reads asked for. */
@@ -298,5 +299,55 @@ describe("a related song's + button", () => {
       catalogueOf("pt-BR").playbackText.addValueToQueue("Get Lucky"),
       "Adicionar à Fila, Get Lucky",
     );
+  });
+});
+
+describe("relatedWithoutPlaying", () => {
+  const yt = (title: string, artists: string[], album: string | null = null) => ({
+    videoId: `${title}-${artists.join()}-${album ?? ""}`,
+    title,
+    artists,
+    album,
+    durationMs: 200_000,
+    artworkUrl: null,
+    explicit: false,
+  });
+  const playing = { title: "Brain Stew", artist: "Green Day" };
+  const titles = (songs: readonly { readonly title: string }[]) => songs.map((song) => song.title);
+
+  test("leaves out the playing song from another album", () => {
+    const songs = [
+      yt("Brain Stew", ["Green Day"], "Greatest Hits"),
+      yt("Basket Case", ["Green Day"]),
+    ];
+    assert.deepEqual(titles(relatedWithoutPlaying(playing, songs)), ["Basket Case"]);
+  });
+
+  test("leaves out its live, remastered and featured versions, whatever their length", () => {
+    const songs = [
+      { ...yt("Brain Stew (Live)", ["Green Day"]), durationMs: 400_000 },
+      yt("Brain Stew - Remastered 2015", ["Green Day"]),
+      yt("brain stew [Live at Woodstock 1994]", ["Green Day"]),
+      yt("Brain Stew - Live", ["Green Day"]),
+      yt("Brain Stew (feat. Someone)", ["Green Day", "Someone"]),
+      yt("Longview", ["Green Day"]),
+    ];
+    assert.deepEqual(titles(relatedWithoutPlaying(playing, songs)), ["Longview"]);
+  });
+
+  test("matches the playing song's own notes away too, and any credited artist", () => {
+    const live = { title: "Brain Stew (Live)", artist: "Green Day feat. Someone" };
+    const songs = [yt("Brain Stew", ["Someone"]), yt("Jaded", ["Green Day"])];
+    assert.deepEqual(titles(relatedWithoutPlaying(live, songs)), ["Jaded"]);
+  });
+
+  test("keeps a song of the same title by another artist", () => {
+    const songs = [yt("Brain Stew", ["A Cover Band"])];
+    assert.deepEqual(titles(relatedWithoutPlaying(playing, songs)), ["Brain Stew"]);
+  });
+
+  test("keeps every song with nothing playing", () => {
+    const songs = [yt("Brain Stew", ["Green Day"])];
+    assert.deepEqual(titles(relatedWithoutPlaying(null, songs)), ["Brain Stew"]);
   });
 });

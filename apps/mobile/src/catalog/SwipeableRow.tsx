@@ -8,7 +8,14 @@ import {
   type RowSwipeSide,
 } from "@wave/core";
 import * as Haptics from "expo-haptics";
-import { useEffect, useLayoutEffect, useRef, type ReactNode } from "react";
+import {
+  createContext,
+  useContext,
+  useEffect,
+  useLayoutEffect,
+  useRef,
+  type ReactNode,
+} from "react";
 import {
   Text,
   View,
@@ -17,6 +24,7 @@ import {
 } from "react-native";
 import { GestureDetector, usePanGesture } from "react-native-gesture-handler";
 import Animated, {
+  type SharedValue,
   useAnimatedStyle,
   useReducedMotion,
   useSharedValue,
@@ -54,6 +62,13 @@ export interface RowSwipe {
 }
 
 export const NO_SWIPE: RowSwipe = { right: null, left: null };
+
+/**
+ * Rows drawn over Now Playing's colours (its Related view): a row and what
+ * its swipe uncovers have no background of their own. Elsewhere a row stays
+ * on the screen's background.
+ */
+export const ClearRowsContext = createContext(false);
 
 const DRAG_SLOP = 12;
 
@@ -94,7 +109,15 @@ export const swipeAccessibility = (
  * What a swipe uncovers on [side]'s edge: the action's icon and short label,
  * Primary, Secondary for a star, or red for a removal; full strength once armed.
  */
-function Uncovered({ action, edge }: { action: SwipeSide; edge: "start" | "end" }) {
+function Uncovered({
+  action,
+  edge,
+  clear = false,
+}: {
+  action: SwipeSide;
+  edge: "start" | "end";
+  clear?: boolean;
+}) {
   const tone = swipeActionTone(action.action);
   const colour = useThemeColor(tone);
   const Icon = ACTION_ICONS[action.action];
@@ -105,7 +128,7 @@ function Uncovered({ action, edge }: { action: SwipeSide; edge: "start" | "end" 
   }[tone];
   return (
     <View
-      className={`absolute inset-0 flex-row items-center bg-fill ${edge === "start" ? "justify-start" : "justify-end"}`}
+      className={`absolute inset-0 flex-row items-center ${clear ? "" : "bg-fill"} ${edge === "start" ? "justify-start" : "justify-end"}`}
       style={{ gap: CELL, paddingHorizontal: CELL * 2 }}
     >
       <Icon size={20} color={colour} strokeWidth={1.5} />
@@ -113,6 +136,37 @@ function Uncovered({ action, edge }: { action: SwipeSide; edge: "start" | "end" 
         {action.label}
       </Text>
     </View>
+  );
+}
+
+/**
+ * What a clear row's swipe uncovers on [edge] (`ClearRowsContext`), with no
+ * background: cut to the width the row has moved off, so it doesn't show
+ * through the row.
+ */
+function ClearUncovered({
+  action,
+  edge,
+  offsetX,
+  width,
+}: {
+  action: SwipeSide;
+  edge: "start" | "end";
+  offsetX: SharedValue<number>;
+  width: SharedValue<number>;
+}) {
+  const uncovered = useAnimatedStyle(() => ({
+    width: Math.max(0, edge === "start" ? offsetX.get() : -offsetX.get()),
+  }));
+  // The action keeps its place on the whole row's width as more of it shows.
+  const row = useAnimatedStyle(() => ({ width: width.get() }));
+  const side = edge === "start" ? "left-0" : "right-0";
+  return (
+    <Animated.View className={`absolute bottom-0 top-0 overflow-hidden ${side}`} style={uncovered}>
+      <Animated.View className={`absolute bottom-0 top-0 ${side}`} style={row}>
+        <Uncovered action={action} edge={edge} clear />
+      </Animated.View>
+    </Animated.View>
   );
 }
 
@@ -132,6 +186,8 @@ function Uncovered({ action, edge }: { action: SwipeSide; edge: "start" | "end" 
  * side with an action, and letting go always springs it back. Each change
  * of [demo] after the first render plays one short swipe and spring by
  * itself (Core's `bounceDemoSwipe`; none under reduce motion).
+ *
+ * Under `ClearRowsContext` the row and what it uncovers have no background.
  */
 export function SwipeableRow({
   swipe,
@@ -149,6 +205,7 @@ export function SwipeableRow({
   children: ReactNode;
 }) {
   const scrollable = useListScrollable();
+  const clear = useContext(ClearRowsContext);
   const reduceMotion = useReducedMotion();
   const spring = useBounceSpring(RETURN_SPRINGS.swipeRow);
   const canRight = swipe.right !== null;
@@ -266,16 +323,24 @@ export function SwipeableRow({
     >
       {swipe.right !== null && (
         <Animated.View pointerEvents="none" className="absolute inset-0" style={rightStyle}>
-          <Uncovered action={swipe.right} edge="start" />
+          {clear ? (
+            <ClearUncovered action={swipe.right} edge="start" offsetX={offsetX} width={width} />
+          ) : (
+            <Uncovered action={swipe.right} edge="start" />
+          )}
         </Animated.View>
       )}
       {swipe.left !== null && (
         <Animated.View pointerEvents="none" className="absolute inset-0" style={leftStyle}>
-          <Uncovered action={swipe.left} edge="end" />
+          {clear ? (
+            <ClearUncovered action={swipe.left} edge="end" offsetX={offsetX} width={width} />
+          ) : (
+            <Uncovered action={swipe.left} edge="end" />
+          )}
         </Animated.View>
       )}
       <GestureDetector gesture={pan}>
-        <Animated.View className="bg-background" style={contentStyle}>
+        <Animated.View className={clear ? undefined : "bg-background"} style={contentStyle}>
           {children}
         </Animated.View>
       </GestureDetector>

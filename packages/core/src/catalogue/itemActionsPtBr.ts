@@ -1,5 +1,6 @@
 import { formatNumber } from "../formatting.ts";
 import type { itemActionsEn } from "./itemActionsEn.ts";
+import { playbackTextPtBr } from "./playbackTextPtBr.ts";
 
 export const itemActionsPtBr: typeof itemActionsEn = {
   labels: {
@@ -31,6 +32,7 @@ export const itemActionsPtBr: typeof itemActionsEn = {
     downloadMissingSongs: "Baixar Músicas Ausentes",
     retryFailed: "Tentar Falhas Novamente",
     sleepTimer: "Timer para Dormir",
+    related: playbackTextPtBr.related,
   },
   barLabels: {
     unfavorite: "Des­favoritar",

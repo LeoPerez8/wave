@@ -31,4 +31,20 @@ export const showsPtBr: typeof showsEn = {
       one: `${formatNumber("pt-BR", count)} reprodução`,
       other: `${formatNumber("pt-BR", count)} reproduções`,
     }),
+  keptSongs: (library, playlists) => {
+    if (library === 0)
+      return plural("pt-BR", playlists, {
+        one: `${formatNumber("pt-BR", playlists)} música em uma playlist`,
+        other: `${formatNumber("pt-BR", playlists)} músicas em playlists`,
+      });
+    const inPlaylists = plural("pt-BR", playlists, {
+      one: `${formatNumber("pt-BR", playlists)} em uma playlist`,
+      other: `${formatNumber("pt-BR", playlists)} em playlists`,
+    });
+    const inLibrary = plural("pt-BR", library, {
+      one: `${formatNumber("pt-BR", library)} música na biblioteca`,
+      other: `${formatNumber("pt-BR", library)} músicas na biblioteca`,
+    });
+    return playlists === 0 ? inLibrary : `${inLibrary} · ${inPlaylists}`;
+  },
 };
