@@ -5,7 +5,7 @@
 
 import { formatDate } from "./formatting.ts";
 import { catalogueOf, type AppLanguage } from "./localisation.ts";
-import { versionOrder } from "./updatePolicy.ts";
+import { channelServiceUrl, versionOrder } from "./updatePolicy.ts";
 import { answerReleases, readPublishedRelease, type PublishedRelease } from "./whatsNew.ts";
 
 /** One release from `GET /v1/notes`, with when its notes were published. */
@@ -69,18 +69,13 @@ const BEFORE_EVERY_RELEASE = "0.0.0";
  * Where the channel's whole history is: on the service the manifest comes from. Null with no
  * channel the service knows (a PR or local build's "none") or no address to go by.
  */
-export const versionHistoryUrl = ({
-  manifestUrl,
-  channel,
-}: {
+export const versionHistoryUrl = (where: {
   readonly manifestUrl: string | undefined;
   readonly channel: string | null;
 }): string | null => {
-  const manifestPath = "/v1/manifest";
-  if (channel !== "ti" && channel !== "main") return null;
-  if (!manifestUrl?.endsWith(manifestPath)) return null;
+  const url = channelServiceUrl(where, "/v1/notes");
   // not UI text: an address
-  return `${manifestUrl.slice(0, -manifestPath.length)}/v1/notes?channel=${channel}&from=${BEFORE_EVERY_RELEASE}`;
+  return url === null ? null : `${url}&from=${BEFORE_EVERY_RELEASE}`;
 };
 
 /** A release as the Version History page shows it. */

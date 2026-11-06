@@ -232,7 +232,7 @@ export const leaveFiles = (tx: LibraryDatabase, paths: readonly string[], now: n
  * the other phones. Run it in the transaction that removes the Tracks,
  * before they go.
  */
-export const keepPlaylistEntries = (
+const keepPlaylistEntries = (
   tx: LibraryDatabase,
   trackIds: readonly number[],
   now: number,

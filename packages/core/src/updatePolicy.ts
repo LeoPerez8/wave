@@ -92,7 +92,7 @@ export type UpdateStep =
  */
 export type ReadyUpdate = "apk" | "bundle" | null;
 
-export const readyUpdate = ({
+const readyUpdate = ({
   nativeUpdate,
   bundleDownloaded,
   offeredApkVersion,
@@ -427,20 +427,29 @@ export const readLatestApk = (metadata: string, channel: string | null): LatestA
   return { version, runtimeVersion, url, size, channel: signedFor, sha256 };
 };
 
-/** Where the channel's APK is told: on the service the manifest comes from. */
-export const latestApkUrl = ({
-  manifestUrl,
-  channel,
-}: {
-  readonly manifestUrl: string | undefined;
-  readonly channel: string | null;
-}): string | null => {
+/**
+ * [route] for the channel on the service the manifest comes from, its query started with the
+ * channel. Null with no channel the service knows or no manifest address to go by.
+ */
+export const channelServiceUrl = (
+  {
+    manifestUrl,
+    channel,
+  }: { readonly manifestUrl: string | undefined; readonly channel: string | null },
+  route: string,
+): string | null => {
   const manifestPath = "/v1/manifest";
   if (channel !== "ti" && channel !== "main") return null;
   if (!manifestUrl?.endsWith(manifestPath)) return null;
   // not UI text: an address
-  return `${manifestUrl.slice(0, -manifestPath.length)}/v1/apk?channel=${channel}`;
+  return `${manifestUrl.slice(0, -manifestPath.length)}${route}?channel=${channel}`;
 };
+
+/** Where the channel's APK is told: on the service the manifest comes from. */
+export const latestApkUrl = (where: {
+  readonly manifestUrl: string | undefined;
+  readonly channel: string | null;
+}): string | null => channelServiceUrl(where, "/v1/apk");
 
 /**
  * A version's place in the sequence both channels share, or null if it isn't a version. Android's
