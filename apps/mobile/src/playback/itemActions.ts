@@ -51,6 +51,7 @@ import {
   type ReleaseDateSong,
 } from "@/library/releaseSong";
 import { openAlbum } from "@/library/routes";
+import { openRelated } from "@/nowPlaying/openRelated";
 import { openSleepTimer } from "@/nowPlaying/SleepTimer";
 import { showError } from "@/overlay/alert";
 import {
@@ -665,6 +666,9 @@ export const itemActionPress = ({
       // The playing song's card: the timer menu, as the Sleep timer slot's button opens it.
       case "sleepTimer":
         return run(openSleepTimer);
+      // The playing song's card: Now Playing on the Related view, as its slot shows it.
+      case "related":
+        return run(openRelated);
       case "removeFromLibrary": {
         const songs = tracks.map(({ song }) => song);
         return asking(entry.action, (onConfirm) => {

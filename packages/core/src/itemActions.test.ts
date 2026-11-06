@@ -1056,6 +1056,7 @@ describe("ytSongActions", () => {
     // Playing, it still does, as the playing Library song's menu does.
     assert.deepEqual(actions({ ytMusic: true, playing: true }), [
       "sleepTimer",
+      "related",
       "magicQueue",
       "addToPlaylist",
       "releaseDate",
@@ -1210,6 +1211,7 @@ describe("the playing song's menu", () => {
       ytSongActions(artists, { ...options, playing: true }).map((entry) => entry.action),
       [
         "sleepTimer",
+        "related",
         "magicQueue",
         "addToPlaylist",
         "favorite",
@@ -1248,6 +1250,49 @@ describe("Sleep Timer", () => {
     assert.ok(!offersSleepTimer(itemActions(tracks([song(), song()], { surface: "selection" }))));
     assert.ok(!offersSleepTimer(itemActions({ ...albums([10]), surface: "menu" })));
     assert.ok(!offersSleepTimer(ytSongActions(undefined, { selectable: true, ytMusic: true })));
+  });
+});
+
+const offersRelated = (entries: readonly { readonly action: string }[]) =>
+  entries.some((entry) => entry.action === "related");
+
+describe("Related", () => {
+  test("the playing song's card opens it right after Sleep Timer, with YouTube Music on", () => {
+    const playing = names(itemActions(tracks([song()], { playing: true, ytMusic: true })));
+    assert.deepEqual(playing.slice(0, 2), ["sleepTimer", "related"]);
+    const artists = { kind: "open", target: { kind: "yt", name: "Justice" } } as const;
+    assert.deepEqual(
+      ytSongActions(artists, { ytMusic: true, playing: true })
+        .map((entry) => entry.action)
+        .slice(0, 2),
+      ["sleepTimer", "related"],
+    );
+  });
+
+  test("with YouTube Music off the playing song's card doesn't offer it", () => {
+    assert.ok(!offersRelated(itemActions(tracks([song()], { playing: true, ytMusic: false }))));
+    assert.ok(!offersRelated(itemActions(tracks([song()], { playing: true }))));
+    assert.ok(!offersRelated(ytSongActions(undefined, { playing: true, ytMusic: false })));
+    assert.ok(!offersRelated(ytSongActions(undefined, { playing: true })));
+  });
+
+  test("songs that aren't playing don't offer it, in a menu or in selection", () => {
+    assert.ok(!offersRelated(itemActions(tracks([song()], { ytMusic: true }))));
+    assert.ok(
+      !offersRelated(
+        itemActions(tracks([song(), song()], { surface: "selection", ytMusic: true })),
+      ),
+    );
+    assert.ok(!offersRelated(ytSongActions(undefined, { ytMusic: true, selectable: true })));
+    assert.ok(!offersRelated(itemActions({ ...albums([10]), surface: "menu", ytMusic: true })));
+  });
+
+  test("its label is the catalogue's Related text", () => {
+    assert.equal(ITEM_ACTION_LABELS.related, catalogueOf("en").playbackText.related);
+    assert.equal(
+      catalogueOf("pt-BR").itemActions.labels.related,
+      catalogueOf("pt-BR").playbackText.related,
+    );
   });
 });
 
