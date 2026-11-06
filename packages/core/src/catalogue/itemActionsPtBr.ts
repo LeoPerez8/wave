@@ -30,6 +30,7 @@ export const itemActionsPtBr: typeof itemActionsEn = {
     retryDownload: "Tentar Baixar Novamente",
     downloadMissingSongs: "Baixar Músicas Ausentes",
     retryFailed: "Tentar Falhas Novamente",
+    sleepTimer: "Timer para Dormir",
   },
   barLabels: {
     unfavorite: "Des­favoritar",
@@ -44,6 +45,7 @@ export const itemActionsPtBr: typeof itemActionsEn = {
   },
   remove: "Remover",
   releaseDateIs: (date) => `Data de Lançamento · ${date}`,
+  sleepTimerIs: (left) => `Timer para Dormir · ${left}`,
   addedToFavorites: "Adicionada às Favoritas",
   addedSongsToFavorites: (count) =>
     `${formatNumber("pt-BR", count)} músicas adicionadas às Favoritas`,
