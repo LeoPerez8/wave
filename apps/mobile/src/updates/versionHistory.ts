@@ -1,17 +1,22 @@
 /**
  * Settings › Version History's source (docs/spec.md, Build and CI): the channel's whole history from
  * the update service the manifest comes from, read once per JS runtime for Settings' row and again
- * each time the page opens. A build with updates off has no address, so its page says it couldn't
- * load.
+ * each time the page opens. The last answer is kept on the phone (`updates.versionHistory`), so the
+ * row and the page start from it and keep it when the service doesn't answer. A build with updates
+ * off has no address, so with nothing kept its page says it couldn't load.
  */
 import {
+  keptVersionHistory,
+  readKeptVersionHistory,
   readVersionHistory,
   versionHistorySummary,
   versionHistoryUrl,
   type DatedRelease,
+  type LogLevel,
 } from "@wave/core";
 import * as Effect from "effect/Effect";
 import Constants from "expo-constants";
+import { Storage } from "expo-sqlite/kv-store";
 import * as Updates from "expo-updates";
 import { useEffect, useSyncExternalStore } from "react";
 
@@ -44,9 +49,31 @@ const fetchHistory = (): Effect.Effect<readonly DatedRelease[], unknown> =>
     return releases;
   }).pipe(Effect.timeout(FETCH_TIMEOUT));
 
+/** Where the last answer is kept on this phone, never synced. */
+const KEPT_KEY = "updates.versionHistory";
+
+const log = (level: LogLevel, message: string): void => appLog(level, "WaveUpdates", message);
+
+/** What the phone holds under `KEPT_KEY`, so an answer that changed nothing isn't written again. */
+let keptText: string | null = null;
+
 export const versionHistory = createVersionHistoryStore({
   fetchHistory,
-  log: (level, message) => appLog(level, "WaveUpdates", message),
+  kept: {
+    read: () => {
+      keptText = Storage.getItemSync(KEPT_KEY);
+      return readKeptVersionHistory(keptText);
+    },
+    write: (releases) => {
+      const text = keptVersionHistory(releases);
+      if (text === keptText) return;
+      keptText = text;
+      Storage.setItemAsync(KEPT_KEY, text).catch((error: unknown) =>
+        log("warn", `Keeping the version history failed: ${String(error)}`),
+      );
+    },
+  },
+  log,
 });
 
 export const useVersionHistory = (): VersionHistoryState =>
