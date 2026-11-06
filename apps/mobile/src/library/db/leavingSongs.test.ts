@@ -5,6 +5,7 @@ import { describe, test } from "node:test";
 import { sql } from "drizzle-orm";
 
 import { creditSplits } from "./credits.ts";
+import { selectLeavingSong } from "./leavingSong.ts";
 import { filesGone, removeSongs } from "./missingSongs.ts";
 import { selectFavoriteTrackIds, setFavorites } from "./playHistory.ts";
 import {
@@ -274,6 +275,55 @@ describe("selectInPlaylists", () => {
       const drive = createPlaylist(db, "Drive", [{ source: "library", trackId: airbag }], 300);
       deletePlaylist(db, drive.playlistId, 400);
       assert.equal(selectInPlaylists(db, [airbag]), false);
+    } finally {
+      closeTestDatabase(db);
+    }
+  });
+});
+
+describe("selectLeavingSong", () => {
+  test("a song downloaded from YouTube Music, as it leaves the Library: each credit its own artist", async () => {
+    const db = await openTestDatabase();
+    try {
+      const lucky = addTrack(db, {
+        ...LUCKY,
+        artist: "Radiohead & Friends",
+        explicit: "explicit",
+      });
+      db.run(
+        sql`UPDATE tracks SET video_id = 'lucky-video',
+          artist_credits = '["Radiohead","Friends"]' WHERE id = ${lucky}`,
+      );
+
+      assert.deepEqual(selectLeavingSong(db, lucky), {
+        videoId: "lucky-video",
+        title: "Lucky",
+        artist: "Radiohead & Friends",
+        artists: ["Radiohead", "Friends"],
+        album: "OK Computer",
+        durationMs: 259_000,
+        explicit: true,
+      });
+    } finally {
+      closeTestDatabase(db);
+    }
+  });
+
+  test("a song with one credit and no YouTube id; none for a song not in the Library", async () => {
+    const db = await openTestDatabase();
+    try {
+      const lucky = addTrack(db, LUCKY);
+
+      assert.deepEqual(selectLeavingSong(db, lucky), {
+        videoId: null,
+        title: "Lucky",
+        artist: "Radiohead",
+        artists: ["Radiohead"],
+        album: "OK Computer",
+        durationMs: 259_000,
+        explicit: false,
+      });
+      assert.equal(selectLeavingSong(db, lucky + 1), null);
     } finally {
       closeTestDatabase(db);
     }
