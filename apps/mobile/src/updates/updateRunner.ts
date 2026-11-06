@@ -341,6 +341,7 @@ export const createUpdateRunner = ({
       ...around,
       nativeUpdate,
       bundleDownloaded,
+      offeredApkVersion: client.offeredApkVersion(),
     });
     if (tap !== installTap || request !== updateRequest) {
       installTap = tap;
@@ -411,6 +412,7 @@ export const createUpdateRunner = ({
       const action = updateButtonAction({
         nativeUpdate,
         bundleDownloaded,
+        offeredApkVersion: client.offeredApkVersion(),
         installTap,
         updateRequest,
         downloadingApk: running === "downloadApk",
@@ -437,6 +439,8 @@ export const createUpdateRunner = ({
         downloadPercent,
         nativeUpdate,
         bundleDownloaded,
+        offeredApkVersion: client.offeredApkVersion(),
+        installTap,
       });
       const unchanged =
         typeof next === "object" && typeof look === "object"

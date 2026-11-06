@@ -86,16 +86,18 @@ export type UpdateStep =
 
 /**
  * The update an "Install Now" tap takes, or null: a downloaded APK, verified as `offeredApk` says,
- * even one swiped off the pill; else a downloaded bundle, whether a tap's check or Wave's own fetched
- * it. A pending APK holds bundles back, so it never offers one then.
+ * even one swiped off the pill, once this launch's check has offered its version (a tap installs
+ * nothing before); else a downloaded bundle, whether a tap's check or Wave's own fetched it. A
+ * pending APK holds bundles back, so it never offers one then.
  */
 export type ReadyUpdate = "apk" | "bundle" | null;
 
 export const readyUpdate = ({
   nativeUpdate,
   bundleDownloaded,
-}: Pick<UpdateState, "nativeUpdate" | "bundleDownloaded">): ReadyUpdate => {
-  if (nativeUpdate === "downloaded") return "apk";
+  offeredApkVersion,
+}: Pick<UpdateState, "nativeUpdate" | "bundleDownloaded" | "offeredApkVersion">): ReadyUpdate => {
+  if (nativeUpdate === "downloaded") return offeredApkVersion === null ? null : "apk";
   return nativeUpdate === "none" && bundleDownloaded ? "bundle" : null;
 };
 
@@ -154,7 +156,10 @@ export const installTapWhenHandoverEnds = (tap: InstallTap): InstallTap =>
  */
 export const updateRequestAfter = (
   request: UpdateRequest,
-  { visible, ...ready }: Pick<UpdateState, "visible" | "nativeUpdate" | "bundleDownloaded">,
+  {
+    visible,
+    ...ready
+  }: Pick<UpdateState, "visible" | "nativeUpdate" | "bundleDownloaded" | "offeredApkVersion">,
 ): UpdateRequest => {
   if (!visible) return "none";
   return request === "installBundle" && readyUpdate(ready) !== "bundle" ? "none" : request;
@@ -246,17 +251,19 @@ export const nextUpdateStep = (state: UpdateState): UpdateStep => {
  * for its reload (`installBundle`).
  */
 export const updateButtonAction = ({
-  nativeUpdate,
-  bundleDownloaded,
   installTap,
   updateRequest,
   downloadingApk,
-}: Pick<UpdateState, "nativeUpdate" | "bundleDownloaded" | "installTap" | "updateRequest"> & {
+  ...state
+}: Pick<
+  UpdateState,
+  "nativeUpdate" | "bundleDownloaded" | "offeredApkVersion" | "installTap" | "updateRequest"
+> & {
   /** The automatic path is fetching the APK right now. */
   readonly downloadingApk: boolean;
 }): "install" | "installBundle" | "check" | "followDownload" | "none" => {
   if (updateRequest !== "none" || installTap !== "none") return "none";
-  const ready = readyUpdate({ nativeUpdate, bundleDownloaded });
+  const ready = readyUpdate(state);
   if (ready === "apk") return "install";
   if (ready === "bundle") return "installBundle";
   return downloadingApk ? "followDownload" : "check";
@@ -341,22 +348,30 @@ export const strandedUpdateRequest = (
 
 /**
  * The button's face: the refresh glyph at rest, spinning, a download's percentage, whoever started
- * it, or "Install Now" while an update is ready, a bundle or an APK (`readyUpdate`).
+ * it, or "Install Now" while an update is ready, a bundle or an APK (`readyUpdate`). While a tap's
+ * install is under way (handed to Android, or at the permission screen) it's "installing": Install
+ * Now held disabled, as a tap couldn't add to it, rather than falling back to the refresh glyph.
  */
 export type UpdateButtonLook =
-  "idle" | "checking" | "installNow" | { readonly downloading: number };
+  "idle" | "checking" | "installNow" | "installing" | { readonly downloading: number };
 
 export const updateButtonLook = ({
   updateRequest,
   downloadPercent,
+  installTap,
   ...ready
-}: Pick<UpdateState, "updateRequest" | "nativeUpdate" | "bundleDownloaded"> & {
+}: Pick<
+  UpdateState,
+  "updateRequest" | "nativeUpdate" | "bundleDownloaded" | "offeredApkVersion" | "installTap"
+> & {
   /** How far the APK download is, while one runs. */
   readonly downloadPercent: number | null;
 }): UpdateButtonLook => {
   if (downloadPercent !== null) return { downloading: downloadPercent };
   if (updateRequest === "check") return "checking";
-  return readyUpdate(ready) === null ? "idle" : "installNow";
+  const update = readyUpdate(ready);
+  if (update === null) return "idle";
+  return update === "apk" && installTap !== "none" ? "installing" : "installNow";
 };
 
 /** The channel's newest APK, as CI signed it. The channel stops one reaching the other's phones. */
