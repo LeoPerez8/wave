@@ -236,18 +236,26 @@ export const createUpdateRunner = ({
       Effect.ensuring(Effect.sync(() => (bundleAvailable = false))),
     ),
     applyBundle: Effect.suspend(() => {
-      log("info", "Applying the downloaded update");
+      log(
+        "info",
+        updateRequest === "installBundle"
+          ? "Applying the downloaded update at Install Now"
+          : "Applying the downloaded update",
+      );
       return client.apply;
     }).pipe(
       Effect.map(() => {
         // The restart is on its way, and a change before it mustn't ask twice.
         bundleDownloaded = false;
+        endRequest(null);
         return false;
       }),
-      // Not right away: it would only fail again, so it waits for the next change.
+      // Not right away: it would only fail again, so it waits for the next change. The bundle stays
+      // downloaded, so Install Now stays for another try, and this one goes on running.
       Effect.catch((error) =>
         Effect.sync(() => {
           log("warn", `The update apply failed: ${reason(error)}`);
+          endRequest(stoppedStepNotice({ step: "applyBundle", updateRequest }));
           return false;
         }),
       ),
@@ -329,7 +337,11 @@ export const createUpdateRunner = ({
   const reconsider = (): void => {
     const around = surroundings();
     const tap = installTapAfter(installTap, around);
-    const request = updateRequestAfter(updateRequest, around);
+    const request = updateRequestAfter(updateRequest, {
+      ...around,
+      nativeUpdate,
+      bundleDownloaded,
+    });
     if (tap !== installTap || request !== updateRequest) {
       installTap = tap;
       if (request === "none") endRequest(null);
@@ -396,19 +408,20 @@ export const createUpdateRunner = ({
     requestInstall,
     /** A tap on the update button in Settings. Call `reconsider` after it. */
     tapUpdateButton: (): void => {
-      switch (
-        updateButtonAction({
-          nativeUpdate,
-          installTap,
-          updateRequest,
-          downloadingApk: running === "downloadApk",
-        })
-      ) {
+      const action = updateButtonAction({
+        nativeUpdate,
+        bundleDownloaded,
+        installTap,
+        updateRequest,
+        downloadingApk: running === "downloadApk",
+      });
+      switch (action) {
         case "install":
           requestInstall();
           return;
         case "check":
-          updateRequest = "check";
+        case "installBundle":
+          updateRequest = action;
           notify();
           return;
         case "followDownload":
@@ -419,7 +432,12 @@ export const createUpdateRunner = ({
     },
     /** The same object while it says the same, as `useSyncExternalStore` needs. */
     buttonLook: (): UpdateButtonLook => {
-      const next = updateButtonLook({ updateRequest, downloadPercent });
+      const next = updateButtonLook({
+        updateRequest,
+        downloadPercent,
+        nativeUpdate,
+        bundleDownloaded,
+      });
       const unchanged =
         typeof next === "object" && typeof look === "object"
           ? next.downloading === look.downloading

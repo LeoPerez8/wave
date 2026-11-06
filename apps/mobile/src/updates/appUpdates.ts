@@ -31,6 +31,7 @@ import { WaveSelfInstall } from "@/native/waveSelfInstall";
 import { confirmAction } from "@/overlay/alert";
 import { showToast } from "@/overlay/toast";
 import { playbackState } from "@/playback/Player";
+import { prepareReload, reloadFailed } from "@/playback/reloadResume";
 
 import { createUpdateRunner } from "./updateRunner";
 
@@ -176,10 +177,18 @@ const runner = createUpdateRunner({
     download: Effect.tryPromise(() => Updates.fetchUpdateAsync()).pipe(
       Effect.map((result) => result.isNew || result.isRollBackToEmbedded),
     ),
-    apply: Effect.tryPromise(() => {
+    apply: Effect.tryPromise(async () => {
+      // Install Now reloads with music playing: in case the player stops, its place is written and
+      // the next launch plays the queue again.
+      await prepareReload({ playing: playerKeepsPlaying(playbackState.get()), now: Date.now() });
       // The restart takes the waiting lines with it.
       flushAppLogNow();
-      return Updates.reloadAsync();
+      try {
+        await Updates.reloadAsync();
+      } catch (error) {
+        reloadFailed();
+        throw error;
+      }
     }),
     checkNative,
     downloadApk: downloadLatestApk,
@@ -229,8 +238,9 @@ export const installAppUpdate = (): void => {
 };
 
 /**
- * The update button in Settings: what "Update the app" does when an APK is ready, and otherwise a
- * check now, whose finding it downloads and installs.
+ * The update button in Settings: Install Now with a bundle ready, which reloads Wave on it at once;
+ * what "Update the app" does when an APK is ready; and otherwise a check now, whose APK it downloads
+ * and installs.
  */
 export const tapUpdateButton = (): void => {
   runner.tapUpdateButton();
