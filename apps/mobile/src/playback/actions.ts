@@ -1,4 +1,5 @@
 import {
+  currentEntry,
   queueSongTrackId,
   type MixedSong,
   nextRepeatMode,
@@ -459,6 +460,29 @@ export const seekTo = (positionMs: number, source: SeekSource): void => {
     Effect.gen(function* () {
       const player = yield* Player;
       yield* player.seekTo(positionMs, source);
+    }),
+  );
+};
+
+/**
+ * The playing song [trackId] goes on as YT Music song [song] once its file
+ * was deleted (Core's `streamPlaying`), from where it was. Nothing changes
+ * once another song plays.
+ */
+export const streamPlayingInstead = (trackId: string, song: YtSong): Promise<void> => {
+  const positionMs = currentPositionMs();
+  return run(
+    Effect.gen(function* () {
+      const queue = yield* Queue;
+      const player = yield* Player;
+      const becomes = ytTrackId(song.videoId);
+      yield* queue.dispatch({ type: "streamPlaying", trackId, becomes }, [
+        toYtQueueTrack(song, null),
+      ]);
+      if (currentEntry(queueState.get())?.trackId !== becomes) return;
+      positionState.update((state) => ({ ...state, positionMs, at: Date.now() }));
+      yield* player.seekTo(positionMs, "streamed");
+      yield* cacheYtCoversInBackground([song]);
     }),
   );
 };
