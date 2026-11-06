@@ -5,7 +5,7 @@ import io.ktor.client.statement.bodyAsText
 
 /**
  * YT Music pages beyond search: an album, an artist, a playlist, a song's
- * watch page and its lyrics. Requests go through [YtClient] (refused while YT
+ * watch page, its lyrics and its Related tab. Requests go through [YtClient] (refused while YT
  * Music is off, failures as a [YtException]); the parsers read the answers.
  */
 class YtPages(private val client: YtClient) {
@@ -23,6 +23,17 @@ class YtPages(private val client: YtClient) {
   /** The lyrics at [browseId] (a watch page's lyrics tab), plain text; null when there are none. */
   suspend fun lyrics(browseId: String): String? = client.request {
     YtWatchParser.lyrics(client.innerTube.browse(YouTubeClient.WEB_REMIX, browseId).bodyAsText())
+  }
+
+  /**
+   * The songs and similar artists of [videoId]'s Related tab ([YtWatchParser.related]):
+   * its watch page says where the tab is, then the tab is browsed. A song
+   * whose watch page has no Related tab has none.
+   */
+  suspend fun related(videoId: String): YtRelated = client.request {
+    val tab = YtWatchParser.song(client.innerTube.next(YouTubeClient.WEB_REMIX, videoId).bodyAsText())
+      .relatedBrowseId ?: return@request YtRelated(emptyList(), emptyList())
+    YtWatchParser.related(client.innerTube.browse(YouTubeClient.WEB_REMIX, tab).bodyAsText())
   }
 
   /** The artist page [browseId] (`UC…`): their top songs, albums and singles. */
