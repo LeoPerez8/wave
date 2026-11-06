@@ -43,13 +43,22 @@ A bundle or asset, named by its content and cached for good. `404` when there's 
 ### `GET /v1/notes?channel=<ti|main>[&from=<version>][&to=<version>]`
 
 The notes of a channel's releases after `from` and up to `to` (the newest with no `to`), newest
-first. With no `from` it's the channel's whole history, which Settings › Version History asks
-for. Versions count on the sequence both channels share, so `from` may be the other channel's.
-`400` for any other channel, or a `from` or `to` that isn't a version. A release that listed no
-PR isn't there.
+first. With no `from` it's the channel's whole history. Settings › Version History asks for that
+with `from=0.0.0`, which counts from before every release, so a Worker deployed before the history
+existed (one that refuses an ask with no `from`) answers it too, without dates. Versions count on
+the sequence both channels share, so `from` may be the other channel's. `400` for any other
+channel, or a `from` or `to` that isn't a version. A release that listed no PR isn't there.
 
-Each release's `date` is when its notes file was written to R2 (the object's upload time, in ISO
-8601 UTC), so notes published before the field existed have one without being rewritten.
+Each release's `date` is when its notes were published (in ISO 8601 UTC), so notes published
+before the field existed have one without being rewritten.
+
+Every ask is answered from the channel's notes history, `notes/<channel>.json`, in one R2 read
+however many releases there are. `publish-notes.ts` adds each release to it, dated at publish
+time. When it's absent (the first ask after this Worker is deployed) or can't be read, the Worker
+builds it once from the notes files, dated by their upload time, with a read per release, and
+stores it. While there's none, `publish-notes.ts` writes none either: one holding a single release
+would hide the rest. To rebuild it, delete it
+(`npx wrangler r2 object delete wave-updates/notes/<channel>.json --remote`).
 
 ```json
 {
@@ -105,6 +114,7 @@ assets/<sha256 hex>                       a bundle or asset
 updates/<channel>/<runtime>/<id>.json     a published update, with its signed manifest
 updates/<channel>/<runtime>/latest.json   { "updateId": ... }: what that channel's phones get
 notes/<channel>/<version>.json            a release's notes, as `notes` above
+notes/<channel>.json                      every release's notes on the channel, with its date
 updates/<channel>/history.json            what the channel keeps, newest first
 apks/<channel>/latest.json                the channel's newest APK, as `apk` above
 ```

@@ -14,7 +14,10 @@ import {
   type StoredAsset,
   assetKey,
   latestApkKey,
+  notesHistoryKey,
   notesKey,
+  withRelease,
+  type NotesHistory,
 } from "./layout.ts";
 import { type UpdateBucket, releaseUpdate } from "./release.ts";
 
@@ -54,21 +57,37 @@ export interface PublishOptions extends UpdateBucket {
   readonly newId?: () => string;
 }
 
-/** Publishes a release's notes, unless the release lists no PR. Answers whether it did. */
+/**
+ * Publishes a release's notes, unless the release lists no PR, and adds them to the channel's
+ * notes history. Answers whether it did. With no history yet it writes none: one with this
+ * release alone would hide the others, so the service builds it from every notes file instead.
+ */
 export const publishNotes = async ({
   channel,
   version,
   notes,
   put,
+  read,
+  now = () => new Date(),
 }: {
   readonly channel: Channel;
   readonly version: string;
   readonly notes: ReleaseNotes;
   readonly put: PublishOptions["put"];
+  readonly read: PublishOptions["read"];
+  readonly now?: () => Date;
 }): Promise<boolean> => {
   if (notes.en.new.length === 0 && notes.en.fixes.length === 0) return false;
-  const data = new TextEncoder().encode(JSON.stringify(notes));
-  await put(notesKey(channel, version), data, "application/json");
+  const encode = (value: unknown) => new TextEncoder().encode(JSON.stringify(value));
+  await put(notesKey(channel, version), encode(notes), "application/json");
+  const stored = await read(notesHistoryKey(channel));
+  if (stored === null) return true;
+  const history = withRelease(JSON.parse(stored) as NotesHistory, {
+    version,
+    date: now().toISOString(),
+    notes,
+  });
+  await put(notesHistoryKey(channel), encode(history), "application/json");
   return true;
 };
 

@@ -8,6 +8,7 @@ import { versionOrder } from "@wave/core";
 import {
   type Channel,
   type LatestUpdate,
+  type NotesHistory,
   type ReleaseNotes,
   type SignedManifest,
   type StoredUpdate,
@@ -15,6 +16,7 @@ import {
   isChannel,
   latestApkKey,
   latestKey,
+  notesHistoryKey,
   notesPrefix,
   updateKey,
 } from "./layout.ts";
@@ -31,6 +33,12 @@ export interface UpdateStorage {
       readonly objects: readonly { readonly key: string; readonly uploaded: Date }[];
     } & ({ readonly truncated: true; readonly cursor: string } | { readonly truncated: false })
   >;
+  /** Only the notes history is written here, when it's absent (`notesHistory`). */
+  put(
+    key: string,
+    value: string,
+    options: { readonly httpMetadata: { readonly contentType: string } },
+  ): Promise<unknown>;
 }
 
 // The headers every answer to expo-updates' check carries; max-age=0 so a phone always asks.
@@ -121,6 +129,44 @@ const publishedVersions = async (
   return versions;
 };
 
+/** The channel's notes history built from each notes file: a read per release, so done once. */
+const builtNotesHistory = async (
+  storage: UpdateStorage,
+  channel: Channel,
+): Promise<NotesHistory> => {
+  const prefix = notesPrefix(channel);
+  const releases = await Promise.all(
+    (await publishedVersions(storage, prefix)).map(async ({ version, uploaded }) => {
+      const object = await storage.get(`${prefix}${version}.json`);
+      if (!object) return [];
+      const notes = JSON.parse(await object.text()) as ReleaseNotes;
+      return [{ version, date: uploaded.toISOString(), notes }];
+    }),
+  );
+  return releases.flat();
+};
+
+/**
+ * The channel's notes history: the stored one, which publishing notes keeps current, in one read.
+ * When it's absent or unreadable it's built from the notes files and stored for the next ask.
+ */
+const notesHistory = async (storage: UpdateStorage, channel: Channel): Promise<NotesHistory> => {
+  const key = notesHistoryKey(channel);
+  const stored = await storage.get(key);
+  if (stored) {
+    try {
+      return JSON.parse(await stored.text()) as NotesHistory;
+    } catch {
+      console.error(`update service: ${key} can't be read, so it's built again`);
+    }
+  }
+  const history = await builtNotesHistory(storage, channel);
+  await storage.put(key, JSON.stringify(history), {
+    httpMetadata: { contentType: "application/json" },
+  });
+  return history;
+};
+
 const notesRoute = async (url: URL, storage: UpdateStorage): Promise<Response> => {
   const channel = url.searchParams.get("channel") ?? "";
   if (!isChannel(channel)) return refuse("Unknown channel");
@@ -132,23 +178,12 @@ const notesRoute = async (url: URL, storage: UpdateStorage): Promise<Response> =
   const to = toParam === null ? Number.POSITIVE_INFINITY : versionOrder(toParam);
   if (to === null) return refuse("Not a version to count up to");
 
-  const prefix = notesPrefix(channel);
-  const between = (await publishedVersions(storage, prefix))
-    .map(({ version, uploaded }) => ({ version, uploaded, order: versionOrder(version) ?? -1 }))
+  const releases = (await notesHistory(storage, channel))
+    .map((release) => ({ release, order: versionOrder(release.version) ?? -1 }))
     .filter(({ order }) => order >= 0 && order > from && order <= to)
-    .toSorted((a, b) => b.order - a.order);
-  const releases = await Promise.all(
-    between.map(async ({ version, uploaded }) => {
-      const object = await storage.get(`${prefix}${version}.json`);
-      if (!object) return [];
-      const notes = JSON.parse(await object.text()) as ReleaseNotes;
-      return [{ version, date: uploaded.toISOString(), notes }];
-    }),
-  );
-  return Response.json(
-    { releases: releases.flat() },
-    { headers: { "cache-control": "private, max-age=0" } },
-  );
+    .toSorted((a, b) => b.order - a.order)
+    .map(({ release: { version, date, notes } }) => ({ version, date, notes }));
+  return Response.json({ releases }, { headers: { "cache-control": "private, max-age=0" } });
 };
 
 const apkRoute = async (url: URL, storage: UpdateStorage): Promise<Response> => {
