@@ -1,0 +1,13 @@
+# Keeps the workflows' action SHAs current. Each pin carries its version as a comment, which
+# Dependabot updates with the SHA; scripts/ci/action-pins.ts fails CI on an unpinned action.
+version: 2
+updates:
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: weekly
+    groups:
+      actions:
+        patterns: ["*"]
+    commit-message:
+      prefix: chore
