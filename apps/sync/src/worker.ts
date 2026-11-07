@@ -28,10 +28,13 @@ export interface Env {
   readonly [soulseekKey: `SOULSEEK_KEY_${string}`]: string | undefined;
   /** Genius's client access token, which only the Worker holds (the Genius routes). */
   readonly GENIUS_ACCESS_TOKEN?: string;
+  /** Ticketmaster Discovery's API key, which only the Worker holds (the Ticketmaster routes). */
+  readonly TICKETMASTER_API_KEY?: string;
   /** The `[[ratelimits]]` bindings in `wrangler.toml`. */
   readonly ADDRESS_LIMITER?: RateLimiter;
   readonly FAILED_LOOKUP_LIMITER?: RateLimiter;
   readonly GENIUS_LIMITER?: RateLimiter;
+  readonly TICKETMASTER_LIMITER?: RateLimiter;
 }
 
 /** The Worker's Soulseek keys, by secret name. */
@@ -62,11 +65,14 @@ const upstream: Upstream = {
   },
 };
 
-/** Genius, when the Worker has its token and its limiter; the Genius routes answer 503 otherwise. */
-const genius = (env: Env): ProviderAccess | undefined => {
-  const token = env.GENIUS_ACCESS_TOKEN?.trim();
-  if (token === undefined || token === "" || env.GENIUS_LIMITER === undefined) return undefined;
-  return { token, limiter: env.GENIUS_LIMITER };
+/** A provider, when the Worker has its secret and its limiter; its routes answer 503 otherwise. */
+const provider = (
+  secret: string | undefined,
+  limiter: RateLimiter | undefined,
+): ProviderAccess | undefined => {
+  const token = secret?.trim();
+  if (token === undefined || token === "" || limiter === undefined) return undefined;
+  return { token, limiter };
 };
 
 export default {
@@ -81,7 +87,8 @@ export default {
       console.error("sync service: the ratelimits bindings in wrangler.toml are missing");
       return Response.json({ error: "internal" }, { status: 500 });
     }
-    const geniusAccess = genius(env);
+    const geniusAccess = provider(env.GENIUS_ACCESS_TOKEN, env.GENIUS_LIMITER);
+    const ticketmasterAccess = provider(env.TICKETMASTER_API_KEY, env.TICKETMASTER_LIMITER);
     const service = createSyncService({
       db: createClient({ url, ...(authToken === undefined ? {} : { authToken }) }),
       addressLimiter,
@@ -91,6 +98,7 @@ export default {
       memory,
       upstream,
       ...(geniusAccess === undefined ? {} : { genius: geniusAccess }),
+      ...(ticketmasterAccess === undefined ? {} : { ticketmaster: ticketmasterAccess }),
       ...(env.ALLOWED_EMAILS === undefined ? {} : { allowedEmails: env.ALLOWED_EMAILS }),
       soulseekKeys: soulseekKeys(env),
     });

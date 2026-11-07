@@ -8,7 +8,7 @@
  */
 
 import type { Client } from "@libsql/client";
-import { geniusUpstreamUrl } from "@wave/core";
+import { geniusUpstreamUrl, ticketmasterUpstreamUrl } from "@wave/core";
 import { type GoogleKeys, googleKeys, verifyGoogleIdToken } from "./google.ts";
 import { type SyncLimitName, type SyncLimits, SYNC_LIMITS } from "./limits.ts";
 import {
@@ -78,23 +78,34 @@ export interface SyncServiceOptions {
   readonly upstream?: Upstream;
   /** Genius (`GENIUS_ACCESS_TOKEN`, `maxGeniusRequestsPerMinute`); without it the Genius routes answer 503. */
   readonly genius?: ProviderAccess;
+  /**
+   * Ticketmaster (`TICKETMASTER_API_KEY`, `maxTicketmasterRequestsPerMinute`);
+   * without it the Ticketmaster routes answer 503.
+   */
+  readonly ticketmaster?: ProviderAccess;
+  /** Waits [ms] for a provider's turn (`setTimeout` by default). */
+  readonly wait?: (ms: number) => Promise<void>;
 }
 
 /**
  * What the service keeps between requests: the addresses held back after
- * failed session lookups, and the refusals not yet logged.
+ * failed session lookups, the refusals not yet logged, and when each paced
+ * provider may next be asked.
  */
 export interface ServiceMemory {
   /** By address key, when it may look up sessions again. */
   readonly heldAddresses: Map<string, number>;
   readonly refusals: Map<Refusal, number>;
   loggedAt: number;
+  /** By provider name, the earliest moment its next request may start. */
+  readonly upstreamTurns: Map<string, number>;
 }
 
 export const serviceMemory = (): ServiceMemory => ({
   heldAddresses: new Map(),
   refusals: new Map(),
   loggedAt: -Infinity,
+  upstreamTurns: new Map(),
 });
 
 /** How long ago Google may have issued the ID token that confirms deleting an account. */
@@ -108,6 +119,22 @@ const PULL_PAGE_SIZE = 1_000;
 
 /** How long a Genius answer is kept for other phones. */
 const GENIUS_TTL_SECONDS = 24 * 60 * 60;
+
+/**
+ * How long a Ticketmaster answer is kept for other phones: Home's show check
+ * runs every 12 hours, and Ticketmaster's terms want event content gone
+ * within 24 hours of a removal.
+ */
+const TICKETMASTER_TTL_SECONDS = 12 * 60 * 60;
+
+/**
+ * How far apart Ticketmaster's requests start, from one isolate: its key
+ * takes about 5 a second, from every phone together.
+ */
+const TICKETMASTER_SPACING_MS = 250;
+
+/** How long a request may wait for its turn with a paced provider before it answers 503 `busy`. */
+const MAX_TURN_WAIT_MS = 5_000;
 
 /** How long a session lasts unused: any authenticated request starts it again. */
 const SESSION_UNUSED_MS = 90 * 24 * 60 * 60 * 1000;
@@ -550,14 +577,33 @@ export const createSyncService = (options: SyncServiceOptions): SyncService => {
     readonly perDay: SyncLimitName;
     /** The provider request a phone's [url] stands for, with the Worker's [key]; null for none. */
     readonly request: (url: URL, key: string) => UpstreamRequest | null;
+    /** How far apart its requests start, when it takes only so many a second. */
+    readonly spacingMs?: number;
   }
+
+  const wait =
+    options.wait ?? ((ms: number) => new Promise<void>((resolve) => setTimeout(resolve, ms)));
+
+  /**
+   * Takes [provider]'s next turn: how long to wait before asking it, or null
+   * when the turns already taken reach past `MAX_TURN_WAIT_MS`.
+   */
+  const takeTurn = (provider: Provider): number | null => {
+    if (provider.spacingMs === undefined) return 0;
+    const at = now();
+    const start = Math.max(at, memory.upstreamTurns.get(provider.name) ?? -Infinity);
+    if (start - at > MAX_TURN_WAIT_MS) return null;
+    memory.upstreamTurns.set(provider.name, start + provider.spacingMs);
+    return start - at;
+  };
 
   /**
    * A route answering [provider]'s fixed requests: it needs a session and
    * counts the account's requests per minute; one the cache can't answer
-   * counts toward the account's day too. Answers the provider's JSON, or
-   * `{ "error": "upstream_failed" }` (502) when the provider fails, with
-   * nothing of the provider's error.
+   * counts toward the account's day too, and waits its turn with a paced
+   * provider. Answers the provider's JSON, or `{ "error": "upstream_failed" }`
+   * (502) when the provider fails, with nothing of the provider's error, and
+   * `{ "error": "busy" }` (503) when too many requests wait their turn.
    */
   const proxied = (provider: Provider): Route =>
     withSession(async ({ url }, session) => {
@@ -570,7 +616,10 @@ export const createSyncService = (options: SyncServiceOptions): SyncService => {
       if (request === null) throw failure(400, "bad_request");
       const cached = await cachedAnswer(upstream, url.origin, request);
       if (cached !== null) return proxiedAnswer(cached);
+      const turn = takeTurn(provider);
+      if (turn === null) throw failure(503, "busy");
       await countUpstream(session.accountId, provider.name, provider.perDay);
+      if (turn > 0) await wait(turn);
       const answer = await askUpstream(upstream, request);
       if (!answer.ok) {
         // The status alone: the request names a song or an artist.
@@ -601,6 +650,31 @@ export const createSyncService = (options: SyncServiceOptions): SyncService => {
     },
   });
 
+  /**
+   * Ticketmaster Discovery's attraction search and events, as a show check
+   * asks them (`@wave/core`'s `ticketmasterProxy.ts`). Its key goes in the
+   * URL, so the cache key is the URL without it.
+   */
+  const ticketmaster = proxied({
+    name: "ticketmaster",
+    access: options.ticketmaster,
+    perMinute: "maxTicketmasterRequestsPerMinute",
+    perDay: "maxTicketmasterRequestsPerDay",
+    spacingMs: TICKETMASTER_SPACING_MS,
+    request: (url, key) => {
+      const target = ticketmasterUpstreamUrl(url.pathname, url.searchParams);
+      return target === null
+        ? null
+        : {
+            url: `${target}&apikey=${encodeURIComponent(key)}`,
+            cacheKey: target,
+            headers: { accept: "application/json" },
+            ttlSeconds: TICKETMASTER_TTL_SECONDS,
+            secrets: [key],
+          };
+    },
+  });
+
   /** Each route by method and path. */
   const routes: Readonly<Record<string, Route>> = {
     "POST /v1/session": createSession,
@@ -614,6 +688,8 @@ export const createSyncService = (options: SyncServiceOptions): SyncService => {
     "GET /v1/genius/search": genius,
     "GET /v1/genius/song": genius,
     "GET /v1/genius/referents": genius,
+    "GET /v1/ticketmaster/attractions": ticketmaster,
+    "GET /v1/ticketmaster/events": ticketmaster,
   };
 
   return async (request) => {

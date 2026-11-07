@@ -174,14 +174,19 @@ const minuteLimiter = (limit: number, now: () => number): RateLimiter => {
 /** Genius's token as the tests' Worker holds it. */
 export const GENIUS_TOKEN = "genius-test-token-3f9a";
 
+/** Ticketmaster's key as the tests' Worker holds it. */
+export const TICKETMASTER_KEY = "tm-test-key-8c1d";
+
 /** One request the fake upstream got. */
 export interface UpstreamCall {
   readonly url: string;
   readonly headers: Headers;
+  /** When it was sent, on the harness's clock. */
+  readonly at: number;
 }
 
 /**
- * A stand-in for Genius (and any later provider) and for Cloudflare's cache:
+ * A stand-in for Genius, Ticketmaster and Cloudflare's cache:
  * it records each request and answers with [answer], 200 and an empty
  * Genius reply by default. The cache keeps an answer for its `max-age` on
  * the harness's clock.
@@ -218,7 +223,7 @@ const fakeUpstream = (now: () => number): FakeUpstream => {
     cache,
     // Follows a redirect unless told not to, as the Worker's fetch does.
     fetch: async function follow(url, init): Promise<Response> {
-      upstream.calls.push({ url, headers: new Headers(init.headers) });
+      upstream.calls.push({ url, headers: new Headers(init.headers), at: now() });
       const response = await upstream.answer(url);
       const location = response.headers.get("location");
       if (init.redirect === "manual" || location === null || response.status < 300) return response;
@@ -237,8 +242,13 @@ export interface Harness {
   /** What the service has logged. */
   readonly logs: readonly string[];
   readonly google: FakeGoogle;
-  /** What stands for Genius and Cloudflare's cache. */
+  /** What stands for Genius, Ticketmaster and Cloudflare's cache. */
   readonly upstream: FakeUpstream;
+  /**
+   * What the service's waits for a provider's turn do: by default they move
+   * the clock on by the time waited, as a real wait would.
+   */
+  wait: (ms: number) => Promise<void>;
   /** The service's clock, in ms since the epoch. */
   now: number;
   /** Calls the service. */
@@ -266,6 +276,8 @@ export interface HarnessOptions {
   readonly memory?: ServiceMemory;
   /** Genius's token; `GENIUS_TOKEN` by default, null for a Worker without it. */
   readonly geniusToken?: string | null;
+  /** Ticketmaster's key; `TICKETMASTER_KEY` by default, null for a Worker without it. */
+  readonly ticketmasterKey?: string | null;
 }
 
 export const harness = async (options: HarnessOptions = {}, db?: Client): Promise<Harness> => {
@@ -278,6 +290,15 @@ export const harness = async (options: HarnessOptions = {}, db?: Client): Promis
   const limits = { ...SYNC_LIMITS, ...options.limits };
   const upstream = fakeUpstream(clock);
   const geniusToken = options.geniusToken === undefined ? GENIUS_TOKEN : options.geniusToken;
+  const ticketmasterKey =
+    options.ticketmasterKey === undefined ? TICKETMASTER_KEY : options.ticketmasterKey;
+  const pace = {
+    wait: async (ms: number): Promise<void> => {
+      const until = state.now + ms;
+      await Promise.resolve();
+      state.now = Math.max(state.now, until);
+    },
+  };
   const serviceOptions: SyncServiceOptions = {
     db: countingQueries(db, () => queries++),
     addressLimiter: minuteLimiter(limits.maxRequestsPerAddressPerMinute, clock),
@@ -288,6 +309,15 @@ export const harness = async (options: HarnessOptions = {}, db?: Client): Promis
     limits,
     log: (message) => logs.push(message),
     upstream,
+    wait: (ms) => pace.wait(ms),
+    ...(ticketmasterKey === null
+      ? {}
+      : {
+          ticketmaster: {
+            token: ticketmasterKey,
+            limiter: minuteLimiter(limits.maxTicketmasterRequestsPerMinute, clock),
+          },
+        }),
     ...(geniusToken === null
       ? {}
       : {
@@ -339,6 +369,12 @@ export const harness = async (options: HarnessOptions = {}, db?: Client): Promis
     logs,
     google,
     upstream,
+    get wait() {
+      return pace.wait;
+    },
+    set wait(value: (ms: number) => Promise<void>) {
+      pace.wait = value;
+    },
     get now(): number {
       return state.now;
     },

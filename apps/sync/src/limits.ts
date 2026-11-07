@@ -60,6 +60,21 @@ export const SYNC_LIMITS = {
    * day, shared by every account.
    */
   maxGeniusRequestsPerDay: 1_000,
+  /**
+   * Requests one account may send the Ticketmaster routes per minute, counted
+   * before the cache. A show check starts its calls at least 250 ms apart, so
+   * at most 240 a minute. `TICKETMASTER_LIMITER` in `wrangler.toml` holds the
+   * same number.
+   */
+  maxTicketmasterRequestsPerMinute: 300,
+  /**
+   * Requests one account may make Ticketmaster answer in a UTC day: only
+   * those the cache doesn't answer count. A shows-level follow costs an
+   * attraction search once and an events call every 12 hours, so this fits
+   * `maxFollows` of them. Ticketmaster allows the Worker's key 5,000 a day in
+   * all, shared by every account.
+   */
+  maxTicketmasterRequestsPerDay: 15_000,
 } as const;
 
 export type SyncLimits = { readonly [K in keyof typeof SYNC_LIMITS]: number };
