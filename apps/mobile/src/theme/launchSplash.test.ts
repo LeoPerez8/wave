@@ -7,7 +7,7 @@
 import assert from "node:assert/strict";
 import { describe, test } from "node:test";
 
-import { DEFAULT_THEME_CHOICE, LAUNCH_SPLASH_THEMES, launchTheme } from "@wave/core";
+import { DEFAULT_THEME_CHOICE, launchSplashThemes, launchTheme } from "@wave/core";
 
 import {
   addLaunchSplashColors,
@@ -16,6 +16,7 @@ import {
 } from "../../plugins/launchSplashResources.ts";
 
 const SHIPPED_SPLASH = "Theme.App.SplashScreen";
+const LAUNCH_SPLASH_THEMES = launchSplashThemes();
 
 /** Resources prebuild already wrote (expo-splash-screen's splash among them), which the plugin must keep. */
 const existing = (): ResourcesXml => ({

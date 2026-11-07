@@ -55,7 +55,7 @@ const catalogId = (catalog: readonly { readonly id: string }[], name: string): s
     catalog.findIndex((entry) => entry.id === name),
   ).toString(36);
 
-/** Base-36 catalog positions keep the 20,735 style names short and unique. */
+/** Base-36 catalog positions keep the style names short and unique. */
 // not UI text: an Android style name
 const splashThemeName = (choice: ThemeChoice): string =>
   `Wl.${catalogId(THEME_SWATCHES.light, choice.light)}.${catalogId(THEME_SWATCHES.dark, choice.dark)}.${catalogId(INK_PALETTE, choice.primary)}.${catalogId(INK_PALETTE, choice.secondary)}`;
@@ -147,13 +147,16 @@ const ids = (group: ThemeGroup): string[] => THEME_SWATCHES[group].map((swatch) 
 
 /**
  * One splash style per background pair and palette ink pair, bar the shipped
- * one (the manifest's splash). A style serves both modes.
+ * one (the manifest's splash). A style serves both modes. Only the build's
+ * splash plugin needs the whole list, so it's built when asked for, never as
+ * the app loads: at runtime `launchTheme` names a style without it.
  */
-export const LAUNCH_SPLASH_THEMES: readonly LaunchSplashTheme[] = ids("light").flatMap((light) =>
-  ids("dark").flatMap((dark) =>
-    INK_PAIRS.flatMap((pair) => {
-      const theme = paletteSplashThemeFor({ ...DEFAULT_THEME_CHOICE, light, dark }, pair);
-      return theme === null ? [] : [theme];
-    }),
-  ),
-);
+export const launchSplashThemes = (): LaunchSplashTheme[] =>
+  ids("light").flatMap((light) =>
+    ids("dark").flatMap((dark) =>
+      INK_PAIRS.flatMap((pair) => {
+        const theme = paletteSplashThemeFor({ ...DEFAULT_THEME_CHOICE, light, dark }, pair);
+        return theme === null ? [] : [theme];
+      }),
+    ),
+  );

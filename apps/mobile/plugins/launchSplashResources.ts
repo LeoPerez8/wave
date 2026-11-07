@@ -1,5 +1,5 @@
 // The Android resources behind the launch splash: the moving logo on every
-// splash, and the splash themes Core picks (`LAUNCH_SPLASH_THEMES`), one style
+// splash, and the splash themes Core picks (`launchSplashThemes`, built here at prebuild), one style
 // per background pair and palette ink pair. Its ground and logo colours use
 // resources with the light value in `values/` and the dark one in
 // `values-night/`; the logo (`launchLogoDrawable.ts`) reads its colours from
@@ -8,7 +8,7 @@
 import {
   DEFAULT_THEME_CHOICE,
   LAUNCH_LOGO,
-  LAUNCH_SPLASH_THEMES,
+  launchSplashThemes,
   launchTheme,
   type LaunchTheme,
 } from "@wave/core";
@@ -62,7 +62,8 @@ const splashPalette = (themes: readonly SplashTones[]) => {
   return [...colors.values()];
 };
 
-const SPLASH_COLORS = splashPalette([launchTheme(DEFAULT_THEME_CHOICE), ...LAUNCH_SPLASH_THEMES]);
+const SPLASH_THEMES = launchSplashThemes();
+const SPLASH_COLORS = splashPalette([launchTheme(DEFAULT_THEME_CHOICE), ...SPLASH_THEMES]);
 const COLOR_NAMES = new Map(
   SPLASH_COLORS.map(({ name, light, dark }) => [`${light}/${dark}`, name]),
 );
@@ -78,7 +79,7 @@ const SHIPPED_COLORS = colorNames(launchTheme(DEFAULT_THEME_CHOICE));
 
 const value = (name: string, text: string): ResourceValue => ({ $: { name }, _: text });
 
-const splashStyles: readonly ResourceStyle[] = LAUNCH_SPLASH_THEMES.map((theme) => {
+const splashStyles: readonly ResourceStyle[] = SPLASH_THEMES.map((theme) => {
   const names = colorNames(theme);
   return {
     $: { name: theme.name, parent: SHIPPED_SPLASH },

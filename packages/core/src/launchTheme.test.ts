@@ -4,7 +4,7 @@ import { describe, test } from "node:test";
 import {
   DEFAULT_THEME_CHOICE,
   INK_PAIRS,
-  LAUNCH_SPLASH_THEMES,
+  launchSplashThemes,
   THEME_SWATCHES,
   contrastRatio,
   chooseCustomInk,
@@ -14,6 +14,10 @@ import {
   themeFor,
   type ThemeChoice,
 } from "./index.ts";
+import * as core from "./index.ts";
+
+/** The splash styles the build ships, built as the build plugin builds them. */
+const LAUNCH_SPLASH_THEMES = launchSplashThemes();
 
 /** A choice; a former preset id (#794) reads as Wave reads it now, custom and saved. */
 const choose = (change: Partial<ThemeChoice>): ThemeChoice =>
@@ -43,6 +47,30 @@ const everyChoice = (): ThemeChoice[] =>
       ),
     ),
   );
+
+describe("launch splash list", () => {
+  test("loading Core builds no splash list; only the build asks for it (#1004)", () => {
+    for (const [name, value] of Object.entries(core))
+      if (Array.isArray(value))
+        assert.ok(value.length < LAUNCH_SPLASH_THEMES.length / 10, `${name} holds ${value.length}`);
+    assert.equal(typeof core.launchSplashThemes, "function");
+  });
+
+  test("the build gets every style it shipped before, by name", () => {
+    assert.equal(LAUNCH_SPLASH_THEMES.length, 36 * 625 - 1);
+    const names = new Set(LAUNCH_SPLASH_THEMES.map((theme) => theme.name));
+    for (const name of [
+      "Wl.0.0.0.6",
+      "Wl.0.0.4.7",
+      "Wl.1.3.0.6",
+      "Wl.0.1.o.o",
+      "Wl.0.0.i.c",
+      "Wl.5.5.o.o",
+    ])
+      assert.ok(names.has(name), name);
+    assert.equal(names.has("Wl.0.0.o.o"), false, "the manifest's splash isn't a style of its own");
+  });
+});
 
 describe("launchTheme", () => {
   test("uses the stored icon's waves with the app's current grounds after No (#792)", () => {

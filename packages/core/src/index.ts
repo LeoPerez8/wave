@@ -595,7 +595,7 @@ export type {
   StartingIconState,
   ThemeState,
 } from "./launcherIcon.ts";
-export { LAUNCH_SPLASH_THEMES, launchTheme, paletteSplashThemeFor } from "./launchTheme.ts";
+export { launchSplashThemes, launchTheme, paletteSplashThemeFor } from "./launchTheme.ts";
 export type { LaunchColors, LaunchSplashTheme, LaunchTheme } from "./launchTheme.ts";
 export { LAUNCH_LOGO, launchLogoExit, launchLogoWaves } from "./launchLogo.ts";
 export type { LaunchLogoExit, LaunchLogoTrim, LaunchLogoWave } from "./launchLogo.ts";
