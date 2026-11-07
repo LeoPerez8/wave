@@ -876,7 +876,9 @@ export {
 } from "./ytMusic.ts";
 export type { LibrarySongKey, SongSearchKey, TrackRef, YtSong } from "./ytMusic.ts";
 export {
+  CONFIRM_SIGN_OUT_EVERYWHERE,
   CONFIRM_WAVE_ACCOUNT_DELETION,
+  confirmSignOutEverywhere,
   confirmWaveAccountDeletion,
   waveAccountCard,
   WAVE_ACCOUNT_CARD,
@@ -888,8 +890,10 @@ export {
 export type {
   WaveAccount,
   WaveAccountConfig,
+  WaveAccountActionNote,
   WaveDeleteFailure,
   WaveSignInFailure,
+  WaveSignOutEverywhereFailure,
   WaveAccountEvent,
   WaveAccountNote,
   WaveAccountState,

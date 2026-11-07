@@ -75,8 +75,17 @@ export const settingsEn = {
     title: "Delete your Wave account?",
     message:
       "Wave's server deletes everything it has of the account, and this phone signs out. " +
-      "Nothing on this phone is deleted.",
+      "Nothing on this phone is deleted. Google then asks you to pick the account, to confirm " +
+      "it's you.",
     action: "Delete Account",
+  },
+  /** Sign Out on All Phones' confirmation (`confirmSignOutEverywhere`). */
+  signOutEverywhere: {
+    title: "Sign out on all phones?",
+    message:
+      "Every phone signed in to this Wave account signs out, this one too. Nothing on the " +
+      "phones is deleted. Sign in again on the phones you use.",
+    action: "Sign Out on All Phones",
   },
   /** Asked before new colours change the app icon (`launcherIconSwitch`). */
   launcherIcon: {
@@ -273,6 +282,14 @@ export const settingsEn = {
   signingOut: "Signing Out…",
   deleting: "Deleting…",
   deleteAccount: "Delete Account",
+  signOutOnAllPhones: "Sign Out on All Phones",
+  everyPhoneOnThisWaveAccountSignedOut:
+    "Every phone on this Wave account is signed out. Sign in again to keep your backup.",
+  couldntSignOutOnAllPhonesWithoutAConnection:
+    "Couldn't sign out on all phones without a connection.",
+  wavesServerDidntSignOutThePhonesTry: "Wave's server didn't sign out the phones. Try again.",
+  googleDidntConfirmThisAccountPick:
+    "Google didn't confirm this account. Pick the Google account you signed in to Wave with, then try again.",
   waveAccount: "Wave Account",
   waveAccountsArentSetUpOnThis:
     "Wave accounts aren't set up on this build, so there's nothing to sign in to.",
