@@ -43,7 +43,23 @@ class WaveAccountModule : Module() {
 
     AsyncFunction("signOut") Coroutine { -> coded { withContext(Dispatchers.IO) { owner.client.signOut().toMap() } } }
 
-    AsyncFunction("deleteAccount") Coroutine { -> coded { withContext(Dispatchers.IO) { owner.client.deleteAccount().toMap() } } }
+    AsyncFunction("signOutEverywhere") Coroutine { -> coded { withContext(Dispatchers.IO) { owner.client.signOutEverywhere().toMap() } } }
+
+    /**
+     * Opens Google's account picker for a fresh ID token for [webClientId], then deletes the
+     * account with it. Null when the owner backs out: nothing was sent. Signed out or offline, it
+     * says so before the picker opens.
+     */
+    AsyncFunction("deleteAccount") Coroutine { webClientId: String ->
+      coded {
+        val session = withContext(Dispatchers.IO) { owner.client.session() }
+        if (session !is WaveSessionState.SignedIn) throw WaveAccountException(WaveAccountFailure.SIGNED_OUT)
+        if (!owner.connectivity.online()) throw WaveAccountException(WaveAccountFailure.OFFLINE)
+        val activity = appContext.currentActivity ?: throw Exceptions.MissingActivity()
+        val identity = GoogleSignIn.pick(activity, webClientId) ?: return@coded null
+        withContext(Dispatchers.IO) { owner.client.deleteAccount(identity).toMap() }
+      }
+    }
 
     /** `POST /v1/push` or `GET /v1/pull?since=…` with the session; `{ status, body }`. */
     AsyncFunction("request") Coroutine { method: String, path: String, body: String? ->

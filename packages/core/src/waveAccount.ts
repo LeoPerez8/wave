@@ -34,6 +34,21 @@ export const confirmWaveAccountDeletion = ({
 
 export const CONFIRM_WAVE_ACCOUNT_DELETION = confirmWaveAccountDeletion();
 
+/**
+ * Sign Out on All Phones asks first: every session of the account ends, this
+ * phone's too, for when one may have been stolen.
+ */
+export const confirmSignOutEverywhere = ({
+  settings: { signOutEverywhere: text },
+}: Catalogue = en) =>
+  ({
+    title: text.title,
+    message: text.message,
+    action: { label: text.action, destructive: true },
+  }) satisfies AlertSpec;
+
+export const CONFIRM_SIGN_OUT_EVERYWHERE = confirmSignOutEverywhere();
+
 /** Where this build's sync service is and the Google client its ID tokens are for. */
 export interface WaveAccountConfig {
   /** The service's origin, without a trailing slash. */
@@ -79,8 +94,18 @@ export type WaveSession =
  */
 export type WaveSignInFailure = "offline" | "noGoogleAccount" | "notAllowed" | "failed";
 
-/** Why deleting the account didn't work: no network, or the service didn't answer. */
-export type WaveDeleteFailure = "offline" | "failed";
+/**
+ * Why deleting the account didn't work: no network, the service didn't
+ * answer, or Google's fresh sign-in wasn't the account's own Google account.
+ */
+export type WaveDeleteFailure = "offline" | "failed" | "wrongGoogleAccount";
+
+/** Why Sign Out on All Phones didn't work: no network, or the service didn't answer. */
+export type WaveSignOutEverywhereFailure = "offline" | "failed";
+
+/** Why something the signed-in account section started didn't work. */
+export type WaveAccountActionNote =
+  WaveDeleteFailure | "signOutEverywhereOffline" | "signOutEverywhereFailed";
 
 /** Settings › Wave Account, with what's going on right now. */
 export interface WaveAccountState {
@@ -89,18 +114,21 @@ export interface WaveAccountState {
    * Waiting on Google's picker or the service: signing in (the picker is
    * open, or the service is checking its answer), signing out or deleting.
    */
-  readonly busy: "signingIn" | "signingOut" | "deleting" | null;
-  /** Why the last sign-in or deletion didn't work, until the next one starts. */
-  readonly failure: WaveSignInFailure | null;
-  /** The account was just deleted (until the next sign-in or session change). */
-  readonly deleted: boolean;
+  readonly busy: "signingIn" | "signingOut" | "signingOutEverywhere" | "deleting" | null;
+  /** Why the last sign-in, deletion or Sign Out on All Phones didn't work, until the next one starts. */
+  readonly failure: WaveSignInFailure | WaveAccountActionNote | null;
+  /**
+   * The account was just deleted, or every phone just signed out (until the
+   * next sign-in or session change).
+   */
+  readonly left: "deleted" | "signedOutEverywhere" | null;
 }
 
 export const WAVE_ACCOUNT_SIGNED_OUT: WaveAccountState = {
   session: { status: "signedOut" },
   busy: null,
   failure: null,
-  deleted: false,
+  left: null,
 };
 
 export type WaveAccountEvent =
@@ -118,6 +146,13 @@ export type WaveAccountEvent =
   /** The service deleted the account; the app is signed out. */
   | { readonly type: "accountDeleted" }
   | { readonly type: "deleteFailed"; readonly reason: WaveDeleteFailure }
+  /** The owner backed out of the Google picker Delete Account opens: nothing was sent. */
+  | { readonly type: "deleteCancelled" }
+  /** Sign Out on All Phones, once confirmed. */
+  | { readonly type: "signOutEverywhereStarted" }
+  /** The service ended every session of the account; the app is signed out. */
+  | { readonly type: "signedOutEverywhere" }
+  | { readonly type: "signOutEverywhereFailed"; readonly reason: WaveSignOutEverywhereFailure }
   /**
    * The native module's session now: read when Settings opens, forgotten by
    * Sign Out, or ended by the service during a request.
@@ -130,9 +165,9 @@ export const stepWaveAccount = (
 ): WaveAccountState => {
   switch (event.type) {
     case "signInStarted":
-      return { ...state, busy: "signingIn", failure: null, deleted: false };
+      return { ...state, busy: "signingIn", failure: null, left: null };
     case "signInEnded":
-      return { session: event.session, busy: null, failure: null, deleted: false };
+      return { session: event.session, busy: null, failure: null, left: null };
     case "signInFailed":
       return { ...state, busy: null, failure: event.reason };
     case "signInCancelled":
@@ -142,15 +177,33 @@ export const stepWaveAccount = (
     case "deleteStarted":
       return { ...state, busy: "deleting", failure: null };
     case "accountDeleted":
-      return { session: { status: "signedOut" }, busy: null, failure: null, deleted: true };
+      return { session: { status: "signedOut" }, busy: null, failure: null, left: "deleted" };
     case "deleteFailed":
       return { ...state, busy: null, failure: event.reason };
+    case "deleteCancelled":
+      return { ...state, busy: null };
+    case "signOutEverywhereStarted":
+      return { ...state, busy: "signingOutEverywhere", failure: null };
+    case "signedOutEverywhere":
+      return {
+        session: { status: "signedOut" },
+        busy: null,
+        failure: null,
+        left: "signedOutEverywhere",
+      };
+    case "signOutEverywhereFailed":
+      return {
+        ...state,
+        busy: null,
+        failure:
+          event.reason === "offline" ? "signOutEverywhereOffline" : "signOutEverywhereFailed",
+      };
     case "sessionChanged":
       return {
         session: event.session,
         busy: null,
         failure: null,
-        deleted: state.deleted && event.session.status === "signedOut",
+        left: event.session.status === "signedOut" ? state.left : null,
       };
   }
 };
@@ -160,7 +213,8 @@ export const stepWaveAccount = (
  * service ended the session, that the account was deleted, or why signing in
  * didn't work.
  */
-export type WaveAccountNote = "about" | "ended" | "deleted" | WaveSignInFailure;
+export type WaveAccountNote =
+  "about" | "ended" | "deleted" | "signedOutEverywhere" | WaveSignInFailure;
 
 export type WaveAccountView =
   /** This build has no sync service set up (app.config.ts extra is empty). */
@@ -174,11 +228,34 @@ export type WaveAccountView =
   | {
       readonly kind: "account";
       readonly account: WaveAccount;
-      /** Sign Out or Delete Account is waiting on the service: both buttons wait. */
-      readonly busy: "signingOut" | "deleting" | null;
-      /** Why deleting didn't work. */
-      readonly note: WaveDeleteFailure | null;
+      /** Sign Out, Sign Out on All Phones or Delete Account is waiting: every button waits. */
+      readonly busy: "signingOut" | "signingOutEverywhere" | "deleting" | null;
+      /** Why deleting or Sign Out on All Phones didn't work. */
+      readonly note: WaveAccountActionNote | null;
     };
+
+const ACTION_NOTES: ReadonlySet<string> = new Set<WaveAccountActionNote>([
+  "offline",
+  "failed",
+  "wrongGoogleAccount",
+  "signOutEverywhereOffline",
+  "signOutEverywhereFailed",
+]);
+
+const isActionNote = (
+  failure: WaveSignInFailure | WaveAccountActionNote,
+): failure is WaveAccountActionNote => ACTION_NOTES.has(failure);
+
+const SIGN_IN_FAILURES: ReadonlySet<string> = new Set<WaveSignInFailure>([
+  "offline",
+  "noGoogleAccount",
+  "notAllowed",
+  "failed",
+]);
+
+const isSignInFailure = (
+  failure: WaveSignInFailure | WaveAccountActionNote,
+): failure is WaveSignInFailure => SIGN_IN_FAILURES.has(failure);
 
 /**
  * What Settings › Wave Account shows, given whether this build has the
@@ -191,14 +268,19 @@ export const waveAccountView = (state: WaveAccountState, configured: boolean): W
     return {
       kind: "account",
       account: session.account,
-      busy: busy === "signingOut" || busy === "deleting" ? busy : null,
-      note: failure === "offline" || failure === "failed" ? failure : null,
+      busy: busy === "signingIn" ? null : busy,
+      note: failure !== null && isActionNote(failure) ? failure : null,
     };
   if (!configured) return { kind: "unavailable" };
   const ended = session.status === "ended";
   return {
     kind: "signedOut",
     action: busy === "signingIn" ? "signingIn" : ended ? "signInAgain" : "signIn",
-    note: failure ?? (ended ? "ended" : state.deleted ? "deleted" : "about"),
+    note:
+      failure !== null && isSignInFailure(failure)
+        ? failure
+        : ended
+          ? "ended"
+          : (state.left ?? "about"),
   };
 };

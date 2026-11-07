@@ -1,10 +1,12 @@
 import {
+  confirmSignOutEverywhere,
   confirmWaveAccountDeletion,
   waveAccountCard,
   WAVE_ACCOUNT_SIGNED_OUT,
   stepWaveAccount,
   waveAccountConfig,
   type WaveAccountState,
+  type WaveDeleteFailure,
   type WaveSession,
   type WaveSignInFailure,
 } from "@wave/core";
@@ -42,16 +44,30 @@ const signInFailure = (error: unknown): WaveSignInFailure => {
   }
 };
 
+const deleteFailure = (error: unknown): WaveDeleteFailure => {
+  switch (waveAccountErrorCode(error)) {
+    case "ERR_WAVE_OFFLINE":
+      return "offline";
+    case "ERR_WAVE_GOOGLE_NOT_CONFIRMED":
+      return "wrongGoogleAccount";
+    default:
+      return "failed";
+  }
+};
+
 /**
  * Settings › Wave Account (Core's `stepWaveAccount`): the native module's
  * session, and any change it hears of while Settings is open (a 401 ends it).
  * Sign In shows the card about what goes up the first time, then Google's
- * account picker; cancelling either sends nothing. Delete Account asks first.
+ * account picker; cancelling either sends nothing. Sign Out on All Phones
+ * asks first. Delete Account asks first, then opens Google's account picker
+ * for a fresh sign-in, which the service needs to delete.
  */
 export const useWaveAccount = (): {
   readonly state: WaveAccountState;
   readonly signIn: () => void;
   readonly signOut: () => void;
+  readonly signOutEverywhere: () => void;
   readonly deleteAccount: () => void;
 } => {
   const [state, dispatch] = useReducer(stepWaveAccount, WAVE_ACCOUNT_SIGNED_OUT);
@@ -96,25 +112,52 @@ export const useWaveAccount = (): {
     );
   }, []);
 
-  const deleteAccount = useCallback(() => {
+  const signOutEverywhere = useCallback(() => {
     void (async () => {
-      if (!(await confirmAction(confirmWaveAccountDeletion(currentLocalisation().strings)))) return;
-      dispatch({ type: "deleteStarted" });
+      if (!(await confirmAction(confirmSignOutEverywhere(currentLocalisation().strings)))) return;
+      dispatch({ type: "signOutEverywhereStarted" });
       try {
-        const session = await WaveAccount.deleteAccount();
+        const session = await WaveAccount.signOutEverywhere();
         dispatch(
           session.status === "signedOut"
-            ? { type: "accountDeleted" }
+            ? { type: "signedOutEverywhere" }
             : { type: "sessionChanged", session },
         );
       } catch (error) {
         dispatch({
-          type: "deleteFailed",
+          type: "signOutEverywhereFailed",
           reason: waveAccountErrorCode(error) === "ERR_WAVE_OFFLINE" ? "offline" : "failed",
         });
       }
     })();
   }, []);
 
-  return { state, signIn, signOut, deleteAccount };
+  const deleteAccount = useCallback(() => {
+    const config = WAVE_ACCOUNT_CONFIG;
+    void (async () => {
+      if (!(await confirmAction(confirmWaveAccountDeletion(currentLocalisation().strings)))) return;
+      // The fresh Google sign-in the service needs is for Wave's web client.
+      if (config === null) {
+        dispatch({ type: "deleteFailed", reason: "failed" });
+        return;
+      }
+      dispatch({ type: "deleteStarted" });
+      try {
+        const session = await WaveAccount.deleteAccount(config.googleWebClientId);
+        if (session === null) {
+          dispatch({ type: "deleteCancelled" });
+          return;
+        }
+        dispatch(
+          session.status === "signedOut"
+            ? { type: "accountDeleted" }
+            : { type: "sessionChanged", session },
+        );
+      } catch (error) {
+        dispatch({ type: "deleteFailed", reason: deleteFailure(error) });
+      }
+    })();
+  }, []);
+
+  return { state, signIn, signOut, signOutEverywhere, deleteAccount };
 };
