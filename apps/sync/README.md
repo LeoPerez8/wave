@@ -1,7 +1,7 @@
 # Wave sync service
 
-`apps/sync` is Wave's only backend: a Cloudflare Worker in front of one Turso (libSQL)
-database. It checks Google ID tokens, holds sessions, merges pushed rows by Core's rules
+`apps/sync` is the backend behind the Wave account: a Cloudflare Worker in front of one Turso
+(libSQL) database. Wave's other backend, the update service, is `apps/updates`. It checks Google ID tokens, holds sessions, merges pushed rows by Core's rules
 (`mergeRows`, `mergePlays` from `@wave/core`), serves pulls, keeps each account's Soulseek
 account, asks Genius and Ticketmaster for signed-in phones and deletes accounts. See "Wave
 account and sync", "Genius About" and "Followed artists" in `docs/spec.md`.
@@ -43,8 +43,7 @@ names in `CF-Connecting-IP` (kept only as a SHA-256):
   count toward it, and other addresses aren't affected.
 
 Both counts come from Cloudflare's rate limiting binding (`[[ratelimits]]` in
-`wrangler.toml`), which counts per Cloudflare location and approximately. The held addresses
-are kept in the Worker's isolate. At most once a minute, the Worker logs how many requests it
+`wrangler.toml`). At most once a minute, the Worker logs how many requests it
 refused and why (`sync service refused requests: unknown_session=20, held_address=140`), with
 no token and no address.
 
@@ -481,9 +480,9 @@ bash apps/sync/setup.sh
 
 [`setup.sh`](setup.sh) walks through the steps below and checks each one before going on:
 the Turso database and a token for it, Google's consent screen and OAuth clients (the web
-client the service checks ID tokens against, and an Android client for `dev.leoperez.wave`
-with the SHA-1 of Expo's template debug keystore, which signs both the release and the debug
-builds), signing in to Cloudflare, the migrations, `wrangler deploy`, the Worker's secrets,
+client the service checks ID tokens against, an Android client for `dev.leoperez.wave` with
+the SHA-1 of Expo's template debug keystore, which signs local builds and the releases before
+the release key, and one with the release key's SHA-1, which signs every release since), signing in to Cloudflare, the migrations, `wrangler deploy`, the Worker's secrets,
 `SOULSEEK_KEY` (made once, and kept on the Worker on later runs), and a check that the live
 service answers `401` to requests without a valid sign-in. Last,
 it writes `syncUrl` and `googleWebClientId` into `extra` in `apps/mobile/app.config.ts`, for
