@@ -64,6 +64,34 @@ describe("mergeReleaseNotes", () => {
     assert.deepEqual(merged?.fixes, ["Covers load"]);
   });
 
+  describe("a release with several security PRs", () => {
+    const security = (version: string, count: number, fixes: string[] = []) =>
+      release(
+        version,
+        { fixes: [...fixes, ...Array<string>(count).fill("Security patch")] },
+        { fixes: [...fixes, ...Array<string>(count).fill("Patch de segurança")] },
+      );
+
+    for (const [language, line] of [
+      ["en", "Security patch"],
+      ["pt-BR", "Patch de segurança"],
+    ] as const) {
+      it(`shows one security line in ${language}`, () => {
+        const merged = mergeReleaseNotes([security("0.58.1-ti", 4, ["Covers load"])], language);
+        assert.deepEqual(merged?.fixes, ["Covers load", line]);
+        assert.deepEqual(merged?.new, []);
+      });
+
+      it(`shows one security line in ${language} across several releases`, () => {
+        const merged = mergeReleaseNotes(
+          [security("0.58.2-ti", 2), security("0.58.1-ti", 3), security("0.58.0-ti", 1)],
+          language,
+        );
+        assert.deepEqual(merged, { version: "0.58.2-ti", new: [], fixes: [line] });
+      });
+    }
+  });
+
   it("has nothing to say when no release has a line", () => {
     assert.equal(mergeReleaseNotes([], "en"), null);
     assert.equal(mergeReleaseNotes([release("0.47.0", {})], "pt-BR"), null);
