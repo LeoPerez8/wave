@@ -90,6 +90,8 @@ export const NETWORK_SEEDS = [
     "schedulePreDownload",
   ].map((name) => `native/waveYtMusic.ts#${name}`),
   ...["album", "watchSong", "lyrics"].map((name) => `native/waveYtDownloads.ts#${name}`),
+  // The sync service's routes, Genius's and Ticketmaster's among them, sent with the session.
+  "native/waveAccount.ts#request",
 ];
 
 /** Whole-Library reads must state their actual trigger and frequency, beyond why they exist. */
