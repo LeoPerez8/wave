@@ -14,7 +14,9 @@ const song: YtSong = {
   explicit: false,
 };
 
-const setup = (starred: (target: PlayingSongTarget, answer?: PlayingSongAnswer) => boolean) => {
+const setup = (
+  starred: (target: PlayingSongTarget, answer?: PlayingSongAnswer) => boolean | null,
+) => {
   const shown: boolean[] = [];
   const settled: (PlayingSongTarget | null)[] = [];
   const starredTargets: PlayingSongTarget[] = [];
@@ -85,5 +87,20 @@ test("a tap stars the song showing; with no song, the outlined star ignores it",
   const target = { trackId: "yt:one", song };
   star.follow(target);
   await star.tap();
+  assert.deepEqual(starredTargets, [target]);
+});
+
+test("while the song's star isn't known yet, it shows an outline and a tap does nothing", async () => {
+  let known = false;
+  const { star, shown, starredTargets } = setup(() => (known ? true : null));
+  const target = { trackId: "7", song: null };
+  star.follow(target);
+  await star.tap();
+  assert.deepEqual(shown, [false]);
+  assert.deepEqual(starredTargets, []);
+  known = true;
+  star.refresh();
+  await star.tap();
+  assert.deepEqual(shown, [false, true]);
   assert.deepEqual(starredTargets, [target]);
 });

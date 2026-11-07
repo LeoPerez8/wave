@@ -68,7 +68,6 @@ export class Player extends Context.Service<
       cause: SongChangeCause,
     ) => Effect.Effect<void, PlayerError>;
     readonly setRepeatMode: (mode: RepeatMode) => Effect.Effect<void, PlayerError>;
-    /** Shows the queue's shuffle and repeat on Android Auto's player screen. */
     /**
      * The queue's shuffle and repeat (saved for a resume), and whether the playing song is a
      * favorite: the notification's (and Auto's) shuffle and Favorite buttons show them.

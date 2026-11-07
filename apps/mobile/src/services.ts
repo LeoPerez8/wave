@@ -11,10 +11,10 @@ import { startBackgroundFill } from "@/library/backgroundFill";
 import { LibraryStore } from "@/library/LibraryStore";
 import { appRuntime } from "@/library/runtime";
 import type { AutoRequest } from "@/native/wavePlayer";
+import { startNotificationStar } from "@/nowPlaying/startNotificationStar";
 import { connectPlayer } from "@/playback/actions";
 import { startPlayingSearches } from "@/playback/playingSearches";
 import { startRecognizeTile } from "@/recognize/startRecognizeTile";
-import { startNotificationStar } from "@/nowPlaying/startNotificationStar";
 import { applyCrossfade } from "@/settings/crossfade";
 import { applyStreamBuffer } from "@/settings/streamBuffer";
 import { WaveSync } from "@/sync/WaveSync";
@@ -59,10 +59,10 @@ const stampPreference = (key: string): void => {
 /**
  * Starts the app services that work without UI: the library store, the queue
  * and player sync, playback persistence and play history (one `appRuntime`),
- * the Android Auto responder, Auto's lyrics, the notification's star, the Recognize tile, the searches of
- * unsearched songs about to play, the background fill of the others and the stamps of
- * synced preference changes. The
- * Activity's root layout and the headless `WaveService` task (index.ts) both call it;
+ * the Android Auto responder, Auto's lyrics, the notification's star, the
+ * Recognize tile, the searches of unsearched songs about to play, the
+ * background fill of the others and the stamps of synced preference changes.
+ * The Activity's root layout and the headless `WaveService` task (index.ts) both call it;
  * whichever comes first starts them, and later calls change nothing, so one
  * JS runtime never initialises them twice. The library scan stays with the UI.
  */

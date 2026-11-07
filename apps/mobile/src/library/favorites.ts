@@ -273,7 +273,10 @@ const loadPendingFavorites = (): void => {
   if (!pendingFavorites.get().loaded) readPendingFavorites();
 };
 
-/** Reads the stars and pending favorites once, outside any screen (the notification's star). */
+/**
+ * Reads the stars and pending favorites, outside any screen (the notification's star); once
+ * read, a call changes nothing, and after a failed read it tries again.
+ */
 export const loadStars = (): void => {
   loadFavorites();
   loadPendingFavorites();
@@ -394,6 +397,11 @@ export const useScopedSongStarred = (
   saved: { readonly favorite: boolean; readonly pendingFavorite: boolean },
 ): boolean =>
   useSyncExternalStore(subscribeSongStars, () => scopedSongStarredNow(id, video, saved));
+
+/** Library track [id]'s star as this phone knows it now, or null before the stars are read. */
+export const knownStarNow = (id: number): boolean | null =>
+  writing.get(id)?.shown ??
+  (favorites.get().loaded ? favorites.get().ids.has(id) : (knownStars.get(id) ?? null));
 
 /** Seed just this track before a cold gesture, so a failed write restores its true star. */
 export const rememberSongFavorite = (id: number, favorite: boolean): void => {

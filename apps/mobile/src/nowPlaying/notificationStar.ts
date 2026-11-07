@@ -14,13 +14,16 @@ const sameTarget = (a: PlayingSongTarget | null, b: PlayingSongTarget | null): b
  * the playing song's star, filled for a favorite, and a tap that toggles it as Now Playing's
  * star does. A Library song's star comes from the stars in memory; a YT Music song's needs
  * its answer (the Library song it is by now), so only a YT Music song is read. With no song
- * to star, the star is an outline and a tap does nothing.
+ * to star, or while its star isn't known yet, the star is an outline and a tap does nothing.
  */
 export const createNotificationStar = (ports: {
   /** A lookup of its own, so following the playing song leaves Now Playing's alone. */
   readonly lookup: Pick<ReturnType<typeof createNowPlayingSongLookup>, "update" | "get">;
-  /** Whether [target] shows starred, its answer read or not. */
-  readonly starred: (target: PlayingSongTarget, answer: PlayingSongAnswer | undefined) => boolean;
+  /** Whether [target] shows starred, its answer read or not; null while that isn't known yet. */
+  readonly starred: (
+    target: PlayingSongTarget,
+    answer: PlayingSongAnswer | undefined,
+  ) => boolean | null;
   /** Shows the star on the notification's button. */
   readonly show: (starred: boolean) => void;
   /** Toggles [target]'s star. */
@@ -29,8 +32,10 @@ export const createNotificationStar = (ports: {
   let target: PlayingSongTarget | null = null;
   let followed = false;
   let shown: boolean | null = null;
+  const starred = (): boolean | null =>
+    target === null ? null : ports.starred(target, ports.lookup.get(target));
   const refresh = (): void => {
-    const on = target !== null && ports.starred(target, ports.lookup.get(target));
+    const on = starred() === true;
     if (on === shown) return;
     shown = on;
     ports.show(on);
@@ -51,6 +56,7 @@ export const createNotificationStar = (ports: {
     /** Shows the star again, after the stars or the song's answer changed. */
     refresh,
     /** A tap on the button. */
-    tap: (): Promise<void> => (target === null ? Promise.resolve() : ports.star(target)),
+    tap: (): Promise<void> =>
+      target === null || starred() === null ? Promise.resolve() : ports.star(target),
   };
 };

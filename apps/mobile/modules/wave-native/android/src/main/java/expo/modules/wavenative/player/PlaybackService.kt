@@ -523,9 +523,10 @@ class PlaybackService : MediaLibraryService() {
     }
   }
 
-  /** Stops following JS's shuffle, repeat and star ([AutoModes.state]). */
   private val languageParents = mutableSetOf("root", "tab/home", "tab/playlists", "tab/albums", "tab/artists")
   private var stopLanguage: (() -> Unit)? = null
+
+  /** Stops following JS's shuffle, repeat and star ([AutoModes.state]). */
   private var stopModes: (() -> Unit)? = null
 
   /** Stops following the Lyrics toggle and text ([AutoLyrics.state]). */

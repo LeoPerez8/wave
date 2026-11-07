@@ -1,18 +1,18 @@
 import { currentEntry, parseTrackId } from "@wave/core";
 
-import { loadStars, scopedSongStarredNow, subscribeSongStars } from "@/library/favorites";
-import { onDownloadedRecording, onLibraryChange } from "@/library/libraryChanges";
-import { LibraryStore } from "@/library/LibraryStore";
-import { appRuntime } from "@/library/runtime";
+import {
+  knownStarNow,
+  loadStars,
+  scopedSongStarredNow,
+  subscribeSongStars,
+} from "@/library/favorites";
 import { handleNotificationStarTap, notificationStarred } from "@/playback/notificationStarState";
 import { queueState } from "@/playback/Queue";
 import { queuedYtSong, queueTracks } from "@/playback/queueTracks";
 
 import { createNotificationStar } from "./notificationStar";
-import { nowPlayingSongActions, songActionFailed } from "./playingSong";
-import { createNowPlayingSongLookup, playingSongTarget } from "./songLookup";
-
-const NOT_STARRED = { favorite: false, pendingFavorite: false };
+import { createPlayingSongLookup, nowPlayingSongActions, songActionFailed } from "./playingSong";
+import { playingSongTarget } from "./songLookup";
 
 /**
  * Keeps the media notification's Favorite button on the playing song's star, and makes its
@@ -20,34 +20,23 @@ const NOT_STARRED = { favorite: false, pendingFavorite: false };
  * (`createNotificationStar`). Call it once per JS runtime (`startServices` does).
  */
 export const startNotificationStar = (): void => {
-  const lookup = createNowPlayingSongLookup({
-    read: (target, signal) => {
-      signal.throwIfAborted();
-      return appRuntime.runPromise(
-        // oxlint-disable-next-line react/rules-of-hooks -- Effect service access.
-        LibraryStore.use((store) => store.nowPlayingSong(target)),
-        { signal },
-      );
-    },
-  });
-  onLibraryChange(lookup.change);
-  onDownloadedRecording(lookup.downloaded);
-
+  const lookup = createPlayingSongLookup();
   const star = createNotificationStar({
     lookup,
     starred: (target, answer) => {
       const ref = parseTrackId(target.trackId);
-      return scopedSongStarredNow(
-        ref?.kind === "library" ? ref.id : (answer?.track?.id ?? null),
-        target.song?.videoId ?? null,
-        answer ?? NOT_STARRED,
-      );
+      if (ref?.kind === "library") return knownStarNow(ref.id);
+      // A YT Music song's star needs its answer; an unsearched entry has none to take.
+      if (ref?.kind !== "yt" || answer === undefined) return null;
+      return scopedSongStarredNow(answer.track?.id ?? null, ref.videoId, answer);
     },
     show: notificationStarred.set,
     star: (target) => nowPlayingSongActions.star(target).catch(songActionFailed),
   });
 
   const follow = (): void => {
+    // A read that failed is tried again as the song changes.
+    loadStars();
     const trackId = currentEntry(queueState.get())?.trackId ?? null;
     const track = trackId === null ? undefined : queueTracks.get().get(trackId);
     star.follow(playingSongTarget(trackId, track === undefined ? null : queuedYtSong(track)));
@@ -57,6 +46,5 @@ export const startNotificationStar = (): void => {
   lookup.subscribe(star.refresh);
   subscribeSongStars(star.refresh);
   handleNotificationStarTap(star.tap);
-  loadStars();
   follow();
 };

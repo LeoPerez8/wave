@@ -19,18 +19,24 @@ import {
 } from "./songLookup";
 import { createNowPlayingSongActions } from "./songActions";
 
-export const nowPlayingSongLookup = createNowPlayingSongLookup({
-  read: (target, signal) => {
-    signal.throwIfAborted();
-    return appRuntime.runPromise(
-      // oxlint-disable-next-line react/rules-of-hooks -- Effect service access.
-      LibraryStore.use((store) => store.nowPlayingSong(target)),
-      { signal },
-    );
-  },
-});
-onLibraryChange(nowPlayingSongLookup.change);
-onDownloadedRecording(nowPlayingSongLookup.downloaded);
+/** A playing-song lookup reading the Library store, following its changes and downloads. */
+export const createPlayingSongLookup = (): ReturnType<typeof createNowPlayingSongLookup> => {
+  const lookup = createNowPlayingSongLookup({
+    read: (target, signal) => {
+      signal.throwIfAborted();
+      return appRuntime.runPromise(
+        // oxlint-disable-next-line react/rules-of-hooks -- Effect service access.
+        LibraryStore.use((store) => store.nowPlayingSong(target)),
+        { signal },
+      );
+    },
+  });
+  onLibraryChange(lookup.change);
+  onDownloadedRecording(lookup.downloaded);
+  return lookup;
+};
+
+export const nowPlayingSongLookup = createPlayingSongLookup();
 
 /** Now Playing's Download on a song with a file (`createDeletePlayingSong`). */
 const deletePlayingSong = createDeletePlayingSong<SongRow & { readonly path: string }>({
