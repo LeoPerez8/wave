@@ -16,7 +16,8 @@ and "Genius About" in `docs/spec.md`.
 | `src/proxy.ts`       | A provider's fixed requests: the cache, the provider call, its failures |
 | `src/tables.ts`      | The synced tables: wire fields, checks and columns                      |
 | `src/migrations.ts`  | The schema, as ordered migrations                                       |
-| `src/limits.ts`      | `SYNC_LIMITS`                                                           |
+| `src/limits.ts`      | `SYNC_LIMITS` and `USAGE_WARNINGS`                                      |
+| `src/usage.ts`       | The hourly usage watch (the Cron Trigger)                               |
 | `scripts/migrate.ts` | Runs pending migrations against `TURSO_DATABASE_URL`                    |
 
 ## API
@@ -339,21 +340,46 @@ fails when they differ. Change both, then deploy.
 
 A push that would take a table past its limit is refused whole.
 
+## Usage watch
+
+Every hour (`[triggers]` in `wrangler.toml`) the Worker reads today's requests to every Worker
+on the Cloudflare account (Workers Free stops all of them at 100,000 a day, from midnight UTC)
+and this billing cycle's Turso usage, and compares them with `USAGE_WARNINGS` in
+`src/limits.ts`:
+
+| Threshold                  | Value       |                                 |
+| -------------------------- | ----------- | ------------------------------- |
+| `workerRequestsPerDay`     | 70,000      | of Workers Free's 100,000 a day |
+| `tursoRowsReadPerMonth`    | 250 million | 50% of Turso Free's 500 million |
+| `tursoRowsWrittenPerMonth` | 5 million   | 50% of Turso Free's 10 million  |
+| `tursoStorageBytes`        | 2.5 GB      | 50% of Turso Free's 5 GB        |
+
+Past one, it logs a line starting `wave usage warning:` with `console.error`, once a UTC day
+for Worker requests and once a UTC month for Turso (the `usage_warnings` table remembers
+which went out). A source it can't read logs the same kind of line, once a day. Search the
+Worker's logs for `wave usage warning` to see them; a Cloudflare notification on that line
+emails the owner. A source whose secrets aren't set is skipped. Change a threshold in
+`src/limits.ts` and deploy.
+
 ## Configuration
 
 Set on the Worker, never in the repo (`wrangler.toml` holds none of them; it holds only the
 rate limiting bindings, which `wrangler deploy` creates and which need Wrangler 4.36 or
-later):
+later, the usage watch's Cron Trigger and the Workers Logs and Issues settings):
 
-| Name                  | Kind   |                                                                     |
-| --------------------- | ------ | ------------------------------------------------------------------- |
-| `TURSO_DATABASE_URL`  | secret | `libsql://<db>-<org>.turso.io`                                      |
-| `TURSO_AUTH_TOKEN`    | secret | a Turso token for that database                                     |
-| `GOOGLE_CLIENT_ID`    | secret | Wave's **web** OAuth client id, the audience of the app's ID tokens |
-| `SOULSEEK_KEY`        | secret | base64 of 32 random bytes: version 1 of the Soulseek key            |
-| `SOULSEEK_KEY_<n>`    | secret | optional: version n (2 or more) of the Soulseek key, the same way   |
-| `ALLOWED_EMAILS`      | secret | optional: emails that may sign in, separated by commas              |
-| `GENIUS_ACCESS_TOKEN` | secret | Genius's client access token, for the Genius routes                 |
+| Name                         | Kind   |                                                                                     |
+| ---------------------------- | ------ | ----------------------------------------------------------------------------------- |
+| `TURSO_DATABASE_URL`         | secret | `libsql://<db>-<org>.turso.io`                                                      |
+| `TURSO_AUTH_TOKEN`           | secret | a Turso token for that database                                                     |
+| `GOOGLE_CLIENT_ID`           | secret | Wave's **web** OAuth client id, the audience of the app's ID tokens                 |
+| `SOULSEEK_KEY`               | secret | base64 of 32 random bytes: version 1 of the Soulseek key                            |
+| `SOULSEEK_KEY_<n>`           | secret | optional: version n (2 or more) of the Soulseek key, the same way                   |
+| `ALLOWED_EMAILS`             | secret | optional: emails that may sign in, separated by commas                              |
+| `GENIUS_ACCESS_TOKEN`        | secret | Genius's client access token, for the Genius routes                                 |
+| `CLOUDFLARE_ACCOUNT_ID`      | secret | optional, for the usage watch: the Cloudflare account id                            |
+| `CLOUDFLARE_ANALYTICS_TOKEN` | secret | optional, for the usage watch: a token with only Account Analytics Read             |
+| `TURSO_ORG`                  | secret | optional, for the usage watch: the Turso organization's slug                        |
+| `TURSO_PLATFORM_TOKEN`       | secret | optional, for the usage watch: a read-only Platform API token for that organization |
 
 ### Soulseek keys
 
