@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import { describe, test } from "node:test";
 
 import {
+  CONFIRM_SIGN_OUT_EVERYWHERE,
   CONFIRM_WAVE_ACCOUNT_DELETION,
   WAVE_ACCOUNT_CARD,
   WAVE_ACCOUNT_SIGNED_OUT,
@@ -91,6 +92,20 @@ describe("confirming Delete Account", () => {
       ],
     );
     assert.match(CONFIRM_WAVE_ACCOUNT_DELETION.message, /Nothing on this phone is deleted/);
+  });
+});
+
+describe("confirming Sign Out on All Phones", () => {
+  test("is destructive, says every phone signs out and nothing on them is deleted", () => {
+    assert.deepEqual(
+      planAlert(CONFIRM_SIGN_OUT_EVERYWHERE).buttons.map(({ label, tone }) => [label, tone]),
+      [
+        ["Cancel", "accent"],
+        ["Sign Out on All Phones", "destructive"],
+      ],
+    );
+    assert.match(CONFIRM_SIGN_OUT_EVERYWHERE.message, /this one too/);
+    assert.match(CONFIRM_SIGN_OUT_EVERYWHERE.message, /Nothing on the phones is deleted/);
   });
 });
 
@@ -302,5 +317,68 @@ describe("stepWaveAccount", () => {
       action: "signingIn",
       note: "ended",
     });
+  });
+
+  test("a delete Google didn't confirm for this account says to pick its Google account, and keeps it", () => {
+    const deleting = stepWaveAccount(signedIn, { type: "deleteStarted" });
+    const refused = stepWaveAccount(deleting, {
+      type: "deleteFailed",
+      reason: "wrongGoogleAccount",
+    });
+    assert.deepEqual(waveAccountView(refused, true), {
+      kind: "account",
+      account: ana,
+      busy: null,
+      note: "wrongGoogleAccount",
+    });
+  });
+
+  test("backing out of Google's picker while deleting changes nothing", () => {
+    const deleting = stepWaveAccount(signedIn, { type: "deleteStarted" });
+    const cancelled = stepWaveAccount(deleting, { type: "deleteCancelled" });
+    assert.deepEqual(waveAccountView(cancelled, true), waveAccountView(signedIn, true));
+  });
+
+  test("Sign Out on All Phones waits for the service, then the section says every phone is out", () => {
+    const signingOut = stepWaveAccount(signedIn, { type: "signOutEverywhereStarted" });
+    assert.deepEqual(waveAccountView(signingOut, true), {
+      kind: "account",
+      account: ana,
+      busy: "signingOutEverywhere",
+      note: null,
+    });
+    const out = stepWaveAccount(signingOut, { type: "signedOutEverywhere" });
+    assert.deepEqual(waveAccountView(out, true), {
+      kind: "signedOut",
+      action: "signIn",
+      note: "signedOutEverywhere",
+    });
+    const reported = stepWaveAccount(out, {
+      type: "sessionChanged",
+      session: { status: "signedOut" },
+    });
+    assert.deepEqual(waveAccountView(reported, true), waveAccountView(out, true));
+    const again = stepWaveAccount(reported, { type: "signInStarted" });
+    assert.deepEqual(waveAccountView(again, true), {
+      kind: "signedOut",
+      action: "signingIn",
+      note: "about",
+    });
+  });
+
+  test("Sign Out on All Phones offline or refused says so and keeps the session", () => {
+    for (const [reason, note] of [
+      ["offline", "signOutEverywhereOffline"],
+      ["failed", "signOutEverywhereFailed"],
+    ] as const) {
+      const signingOut = stepWaveAccount(signedIn, { type: "signOutEverywhereStarted" });
+      const failed = stepWaveAccount(signingOut, { type: "signOutEverywhereFailed", reason });
+      assert.deepEqual(waveAccountView(failed, true), {
+        kind: "account",
+        account: ana,
+        busy: null,
+        note,
+      });
+    }
   });
 });

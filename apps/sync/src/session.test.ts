@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import { describe, test } from "node:test";
-import { favorite, harness, pull, push, sessionCount } from "./testing.ts";
+import { migrate } from "./migrations.ts";
+import { favorite, freshDatabase, harness, pull, push, sessionCount } from "./testing.ts";
 
 describe("POST /v1/session", () => {
   test("a valid Google ID token signs in and gives a session token", async () => {
@@ -193,3 +194,76 @@ describe("session tokens", () => {
     }
   });
 });
+
+describe("a session unused for 90 days", () => {
+  const DAY = 24 * 60 * 60 * 1000;
+
+  test("answers 401 and is deleted", async () => {
+    const service = await harness();
+    const session = await service.signIn();
+    service.now += 90 * DAY + 1;
+    const pulled = await service.request("GET", "/v1/pull", { session });
+    assert.equal(pulled.status, 401);
+    assert.deepEqual(await pulled.json(), { error: "unauthorized" });
+    assert.equal(await sessionCount(service), 0);
+  });
+
+  test("any authenticated request starts the 90 days again", async () => {
+    const service = await harness();
+    const session = await service.signIn();
+    const uses: [string, string][] = [
+      ["GET", "/v1/pull"],
+      ["POST", "/v1/push"],
+      ["GET", "/v1/soulseek"],
+      ["GET", "/v1/pull"],
+    ];
+    for (const [method, path] of uses) {
+      service.now += 89 * DAY;
+      const response = await service.request(method, path, {
+        session,
+        ...(method === "POST" ? { json: {} } : {}),
+      });
+      assert.equal(response.status, 200, `${method} ${path}`);
+    }
+  });
+
+  test("a refused request doesn't keep another session alive, and other sessions stay", async () => {
+    const service = await harness();
+    const old = await service.signIn();
+    service.now += 60 * DAY;
+    const recent = await service.signIn();
+    service.now += 31 * DAY;
+    assert.equal((await service.request("GET", "/v1/pull", { session: old })).status, 401);
+    assert.equal((await service.request("GET", "/v1/pull", { session: recent })).status, 200);
+    assert.equal((await service.request("GET", "/v1/pull", { session: old })).status, 401);
+    assert.equal(await sessionCount(service), 1);
+  });
+
+  test("a session made before the migration starts its 90 days when the migration runs", async () => {
+    const db = await freshDatabase({ until: "0009_dismissed_suggestions" });
+    const madeLongAgo = Date.UTC(2025, 0, 1);
+    await db.execute({
+      sql: "INSERT INTO accounts (id, google_sub, email, created_at) VALUES (?, ?, ?, ?)",
+      args: ["account-1", "google-sub-1", "ana@example.com", madeLongAgo],
+    });
+    const session = "s".repeat(43);
+    await db.execute({
+      sql: "INSERT INTO sessions (token_hash, account_id, created_at) VALUES (?, ?, ?)",
+      args: [await sha256Hex(session), "account-1", madeLongAgo],
+    });
+    const migratedAt = Date.now();
+    assert.ok((await migrate(db)).includes("0010_session_last_used"));
+
+    const service = await harness({}, db);
+    service.now = migratedAt + 89 * DAY;
+    assert.equal((await service.request("GET", "/v1/pull", { session })).status, 200);
+
+    service.now += 90 * DAY;
+    assert.equal((await service.request("GET", "/v1/pull", { session })).status, 401);
+  });
+});
+
+const sha256Hex = async (text: string): Promise<string> =>
+  Buffer.from(await crypto.subtle.digest("SHA-256", new TextEncoder().encode(text))).toString(
+    "hex",
+  );

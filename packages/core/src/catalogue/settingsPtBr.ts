@@ -64,8 +64,16 @@ export const settingsPtBr: typeof settingsEn = {
     title: "Apagar sua Conta Wave?",
     message:
       "O servidor do Wave apaga tudo o que tem da conta, e a sessão deste telefone é finalizada. " +
-      "Nada neste telefone é apagado.",
+      "Nada neste telefone é apagado. Depois, o Google pede que você escolha a conta, para " +
+      "confirmar que é você.",
     action: "Apagar Conta",
+  },
+  signOutEverywhere: {
+    title: "Finalizar sessão em todos os telefones?",
+    message:
+      "Todos os telefones com sessão iniciada nesta Conta Wave têm a sessão finalizada, inclusive " +
+      "este. Nada nos telefones é apagado. Inicie sessão novamente nos telefones que você usa.",
+    action: "Finalizar Sessão em Todos os Telefones",
   },
   launcherIcon: {
     title: "Alterar também o ícone do app?",
@@ -264,6 +272,15 @@ export const settingsPtBr: typeof settingsEn = {
   signingOut: "Finalizando Sessão…",
   deleting: "Apagando…",
   deleteAccount: "Apagar Conta",
+  signOutOnAllPhones: "Finalizar Sessão em Todos os Telefones",
+  everyPhoneOnThisWaveAccountSignedOut:
+    "A sessão de todos os telefones nesta Conta Wave foi finalizada. Inicie sessão novamente para manter seu backup.",
+  couldntSignOutOnAllPhonesWithoutAConnection:
+    "Não foi possível finalizar a sessão em todos os telefones sem conexão.",
+  wavesServerDidntSignOutThePhonesTry:
+    "O servidor do Wave não finalizou a sessão dos telefones. Tente novamente.",
+  googleDidntConfirmThisAccountPick:
+    "O Google não confirmou esta conta. Escolha a conta do Google com que você iniciou sessão no Wave e tente novamente.",
   waveAccount: "Conta Wave",
   waveAccountsArentSetUpOnThis: "As Contas Wave não estão configuradas nesta versão.",
   touch: "Toque",

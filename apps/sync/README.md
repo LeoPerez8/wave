@@ -45,12 +45,19 @@ its Wave account (keyed by Google's `sub`).
 `429` past `maxSignInsPerMinute`: attempts from one address (Cloudflare's `CF-Connecting-IP`,
 counted before the ID token is checked) or sign-ins to one Google account.
 
-The service keeps only a SHA-256 of the session token. A session lasts until it is ended
-or the account is deleted.
+The service keeps only a SHA-256 of the session token. A session lasts until it is ended,
+the account is deleted, or it goes 90 days without a request: then it answers
+`401 { "error": "unauthorized" }` and is deleted. Every request made with it starts the 90
+days again.
 
 ### `DELETE /v1/session`
 
 Signs this session out. `204`, no body. The account's other sessions stay signed in.
+
+### `DELETE /v1/sessions`
+
+Signs out everywhere: ends every session of the account, this one included. `204`, no body.
+Other accounts' sessions stay.
 
 ### `POST /v1/push`
 
@@ -201,7 +208,19 @@ phone's account goes up in its place. Without `SOULSEEK_KEY`, both Soulseek rout
 ### `DELETE /v1/account`
 
 Deletes every row and every session of the account, its Soulseek account, and the account.
-`204`, no body.
+The session isn't enough: the body holds a Google ID token from a fresh sign-in.
+
+```json
+{ "idToken": "<Google ID token>" }
+```
+
+The token must pass the `POST /v1/session` checks, have been issued (`iat`) within the last
+5 minutes and name the session account's Google `sub`. `204`, no body.
+
+`401 { "error": "id_token_required" }` when the body has no ID token (an app from before this
+check), `401 { "error": "invalid_id_token" }` when it doesn't check out. Either way nothing is
+deleted and the session stays; the app tells these apart from `unauthorized`, which means the
+session itself ended.
 
 ### Errors
 
@@ -210,6 +229,7 @@ Deletes every row and every session of the account, its Soulseek account, and th
 | 400    | `{ "error": "bad_request", "detail"?: "…" }`                                |
 | 401    | `{ "error": "unauthorized" }` (no session, or it ended)                     |
 | 401    | `{ "error": "invalid_id_token" }`                                           |
+| 401    | `{ "error": "id_token_required" }`                                          |
 | 403    | `{ "error": "not_allowed" }`                                                |
 | 404    | `{ "error": "not_found" }`                                                  |
 | 413    | `{ "error": "limit", "limit": "<name>" }`                                   |

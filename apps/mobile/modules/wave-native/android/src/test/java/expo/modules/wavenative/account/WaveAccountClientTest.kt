@@ -88,7 +88,7 @@ class WaveAccountClientTest {
       assertEquals(WaveAccountFailure.SIGNED_OUT, failure { client().request("GET", "/v1/pull", null) })
       WaveAccountStore(file, TestCipher.sameKey).save(WaveSessionState.Ended(anaAccount))
       assertEquals(WaveAccountFailure.SIGNED_OUT, failure { client().request("GET", "/v1/pull", null) })
-      assertEquals(WaveAccountFailure.SIGNED_OUT, failure { client().deleteAccount() })
+      assertEquals(WaveAccountFailure.SIGNED_OUT, failure { client().deleteAccount(ana) })
       assertTrue(service.received.isEmpty())
     }
   }
@@ -115,7 +115,7 @@ class WaveAccountClientTest {
   @Test fun `JS can't ask for the Soulseek account, a session or anything but push and pull`() {
     FakeWaveService().use { service ->
       val client = signedIn(service)
-      for ((method, path) in listOf("GET" to "/v1/soulseek", "POST" to "/v1/session", "DELETE" to "/v1/account", "GET" to "https://elsewhere.example/v1/pull", "GET" to "/v1/pull/../soulseek", "PUT" to "/v1/push"))
+      for ((method, path) in listOf("GET" to "/v1/soulseek", "POST" to "/v1/session", "DELETE" to "/v1/account", "DELETE" to "/v1/sessions", "GET" to "https://elsewhere.example/v1/pull", "GET" to "/v1/pull/../soulseek", "PUT" to "/v1/push"))
         assertEquals("$method $path", WaveAccountFailure.FORBIDDEN_REQUEST, failure { client.request(method, path, null) })
       assertTrue(service.received.isEmpty())
     }
@@ -191,24 +191,69 @@ class WaveAccountClientTest {
 
   @Test fun `deleting the account asks the service and signs out`() {
     FakeWaveService { Reply(204) }.use { service ->
-      assertEquals(WaveSessionState.SignedOut, signedIn(service).deleteAccount())
+      assertEquals(WaveSessionState.SignedOut, signedIn(service).deleteAccount(ana))
       val request = service.received.single()
       assertEquals("DELETE" to "/v1/account", request.method to request.path)
       assertEquals("Bearer fixture-session-token", request.headers["authorization"])
+      assertEquals("""{"idToken":"fixture-id-token"}""", request.body)
       assertEquals(WaveSessionState.SignedOut, client().session())
+    }
+  }
+
+  @Test fun `a delete Google's sign-in didn't confirm keeps the account and the session`() {
+    for (error in listOf("invalid_id_token", "id_token_required"))
+      FakeWaveService { Reply(401, """{"error":"$error"}""") }.use { service ->
+        val client = signedIn(service)
+        val heard = mutableListOf<WaveSessionState>()
+        client.subscribe { heard.add(it) }
+        assertEquals(error, WaveAccountFailure.GOOGLE_NOT_CONFIRMED, failure { client.deleteAccount(ana) })
+        assertTrue(error, client().session() is WaveSessionState.SignedIn)
+        assertTrue(error, heard.isEmpty())
+      }
+  }
+
+  @Test fun `signing out on all phones asks the service and signs this one out`() {
+    FakeWaveService { Reply(204) }.use { service ->
+      val client = signedIn(service)
+      val heard = mutableListOf<WaveSessionState>()
+      client.subscribe { heard.add(it) }
+      assertEquals(WaveSessionState.SignedOut, client.signOutEverywhere())
+      val request = service.received.single()
+      assertEquals("DELETE" to "/v1/sessions", request.method to request.path)
+      assertEquals("Bearer fixture-session-token", request.headers["authorization"])
+      assertEquals(WaveSessionState.SignedOut, client().session())
+      assertEquals(listOf<WaveSessionState>(WaveSessionState.SignedOut), heard)
+    }
+  }
+
+  @Test fun `signing out on all phones offline or refused keeps the session`() {
+    WaveAccountStore(file, TestCipher.sameKey).save(WaveSessionState.SignedIn(FakeWaveService.closedUrl(), "fixture-session-token", anaAccount))
+    online = false
+    assertEquals(WaveAccountFailure.OFFLINE, failure { client().signOutEverywhere() })
+    assertTrue(client().session() is WaveSessionState.SignedIn)
+    online = true
+    FakeWaveService { Reply(500, """{"error":"internal"}""") }.use { service ->
+      assertEquals(WaveAccountFailure.UNREACHABLE, failure { signedIn(service).signOutEverywhere() })
+      assertTrue(client().session() is WaveSessionState.SignedIn)
+    }
+  }
+
+  @Test fun `signing out on all phones with a session the service already ended shows it ended`() {
+    FakeWaveService { Reply(401, """{"error":"unauthorized"}""") }.use { service ->
+      assertEquals(WaveSessionState.Ended(anaAccount), signedIn(service).signOutEverywhere())
     }
   }
 
   @Test fun `deleting offline keeps the account and the session`() {
     WaveAccountStore(file, TestCipher.sameKey).save(WaveSessionState.SignedIn(FakeWaveService.closedUrl(), "fixture-session-token", anaAccount))
     online = false
-    assertEquals(WaveAccountFailure.OFFLINE, failure { client().deleteAccount() })
+    assertEquals(WaveAccountFailure.OFFLINE, failure { client().deleteAccount(ana) })
     assertTrue(client().session() is WaveSessionState.SignedIn)
   }
 
   @Test fun `deleting with a session the service already ended shows it ended`() {
     FakeWaveService { Reply(401, """{"error":"unauthorized"}""") }.use { service ->
-      assertEquals(WaveSessionState.Ended(anaAccount), signedIn(service).deleteAccount())
+      assertEquals(WaveSessionState.Ended(anaAccount), signedIn(service).deleteAccount(ana))
     }
   }
 
