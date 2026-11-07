@@ -22,7 +22,7 @@ import { confirmAction } from "@/overlay/alert";
  * The sync service's URL and Wave's web client id, from app.config.ts extra;
  * null on a build made before the service was set up.
  */
-export const WAVE_ACCOUNT_CONFIG = waveAccountConfig(Constants.expoConfig?.extra);
+const WAVE_ACCOUNT_CONFIG = waveAccountConfig(Constants.expoConfig?.extra);
 
 /** Whether this build has a sync service, so a Wave account can sign in at all. */
 export const waveAccountAvailable = WAVE_ACCOUNT_CONFIG !== null;
