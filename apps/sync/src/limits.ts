@@ -27,6 +27,19 @@ export const SYNC_LIMITS = {
    * token is checked), and sign-ins per minute to one Google account.
    */
   maxSignInsPerMinute: 10,
+  /**
+   * Requests per minute from one address to any route, counted before the
+   * database. Sized for a carrier that puts many phones behind one address.
+   * `ADDRESS_LIMITER` in `wrangler.toml` holds the same number.
+   */
+  maxRequestsPerAddressPerMinute: 600,
+  /**
+   * Failed session lookups per minute from one address. Past it, the address
+   * runs no session lookup for `failedLookupBlockSeconds`.
+   * `FAILED_LOOKUP_LIMITER` in `wrangler.toml` holds the same number.
+   */
+  maxFailedLookupsPerAddressPerMinute: 20,
+  failedLookupBlockSeconds: 300,
 } as const;
 
 export type SyncLimits = { readonly [K in keyof typeof SYNC_LIMITS]: number };

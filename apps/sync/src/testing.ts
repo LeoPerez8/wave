@@ -12,7 +12,12 @@ import { type Client, createClient } from "@libsql/client";
 import { GOOGLE_CERTS_URL } from "./google.ts";
 import { type SyncLimits, SYNC_LIMITS } from "./limits.ts";
 import { migrate } from "./migrations.ts";
-import { type SyncServiceOptions, createSyncService } from "./service.ts";
+import {
+  type RateLimiter,
+  type ServiceMemory,
+  type SyncServiceOptions,
+  createSyncService,
+} from "./service.ts";
 
 const CLIENT_ID = "wave-web-client.apps.googleusercontent.com";
 
@@ -122,9 +127,53 @@ const freshDatabase = async (): Promise<Client> => {
   return db;
 };
 
+/** The calls on a libSQL client that reach the database. */
+const QUERY_METHODS: ReadonlySet<PropertyKey> = new Set([
+  "execute",
+  "batch",
+  "executeMultiple",
+  "transaction",
+  "migrate",
+]);
+
+/** [db] as the service sees it, calling [counted] at each query it sends. */
+const countingQueries = (db: Client, counted: () => void): Client =>
+  new Proxy(db, {
+    get: (target, property) => {
+      const value: unknown = Reflect.get(target, property, target);
+      if (typeof value !== "function") return value;
+      return (...args: unknown[]): unknown => {
+        if (QUERY_METHODS.has(property)) counted();
+        return (value as (...args: unknown[]) => unknown).apply(target, args);
+      };
+    },
+  });
+
+/** A stand-in for Cloudflare's rate limiting binding: [limit] calls per key in each minute of [now]. */
+const minuteLimiter = (limit: number, now: () => number): RateLimiter => {
+  const counts = new Map<string, number>();
+  let minute = -1;
+  return {
+    limit: async ({ key }) => {
+      const current = Math.floor(now() / 60_000);
+      if (current !== minute) {
+        counts.clear();
+        minute = current;
+      }
+      const count = (counts.get(key) ?? 0) + 1;
+      counts.set(key, count);
+      return { success: count <= limit };
+    },
+  };
+};
+
 /** A running service over a fresh database, with a clock the test moves. */
 export interface Harness {
   readonly db: Client;
+  /** How many queries the service has sent the database (the test's own, through `db`, aren't counted). */
+  readonly queries: () => number;
+  /** What the service has logged. */
+  readonly logs: readonly string[];
   readonly google: FakeGoogle;
   /** The service's clock, in ms since the epoch. */
   now: number;
@@ -147,6 +196,8 @@ export interface HarnessOptions {
   readonly pullPageSize?: number;
   /** `SOULSEEK_KEY`; `SOULSEEK_KEY` above by default, null for none. */
   readonly soulseekKey?: string | null;
+  /** What the service keeps between requests; a fresh one by default. */
+  readonly memory?: ServiceMemory;
 }
 
 export const harness = async (options: HarnessOptions = {}, db?: Client): Promise<Harness> => {
@@ -154,12 +205,19 @@ export const harness = async (options: HarnessOptions = {}, db?: Client): Promis
   const state = { now: Date.UTC(2026, 9, 14, 12) };
   const clock = (): number => state.now;
   const google = await fakeGoogle(clock);
+  let queries = 0;
+  const logs: string[] = [];
+  const limits = { ...SYNC_LIMITS, ...options.limits };
   const serviceOptions: SyncServiceOptions = {
-    db,
+    db: countingQueries(db, () => queries++),
+    addressLimiter: minuteLimiter(limits.maxRequestsPerAddressPerMinute, clock),
+    failedLookupLimiter: minuteLimiter(limits.maxFailedLookupsPerAddressPerMinute, clock),
     googleClientId: CLIENT_ID,
     fetch: google.fetch,
     now: clock,
-    limits: { ...SYNC_LIMITS, ...options.limits },
+    limits,
+    log: (message) => logs.push(message),
+    ...(options.memory === undefined ? {} : { memory: options.memory }),
     ...(options.allowedEmails === undefined ? {} : { allowedEmails: options.allowedEmails }),
     ...(options.pullPageSize === undefined ? {} : { pullPageSize: options.pullPageSize }),
     ...(options.soulseekKey === null ? {} : { soulseekKey: options.soulseekKey ?? SOULSEEK_KEY }),
@@ -194,6 +252,8 @@ export const harness = async (options: HarnessOptions = {}, db?: Client): Promis
 
   return {
     db,
+    queries: () => queries,
+    logs,
     google,
     get now(): number {
       return state.now;
