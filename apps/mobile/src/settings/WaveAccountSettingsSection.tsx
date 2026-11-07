@@ -4,7 +4,9 @@ import {
   type Catalogue,
   ytSongArtist,
   type WaveAccount,
+  type WaveAccountActionNote,
   type WaveAccountNote,
+  type WaveAccountView,
 } from "@wave/core";
 import { Text, View } from "react-native";
 
@@ -22,6 +24,7 @@ const notes = ({ settings }: Catalogue): Record<WaveAccountNote, string> => ({
   about: settings.waveAccountNote,
   ended: settings.yourWaveSessionEndedSoThisPhone,
   deleted: settings.yourWaveAccountWasDeletedEverythingOn,
+  signedOutEverywhere: settings.everyPhoneOnThisWaveAccountSignedOut,
   offline: settings.couldntSignInWithoutAConnection,
   noGoogleAccount: settings.addAGoogleAccountToThisPhone,
   notAllowed: settings.thisGoogleAccountCantUseWavesServer,
@@ -34,25 +37,33 @@ const signInLabels = ({ settings }: Catalogue) => ({
   signingIn: settings.signingIn,
 });
 
-type DeleteNote = "offline" | "failed";
-
-const deleteNotes = ({ settings }: Catalogue): Record<DeleteNote, string> => ({
+const actionNotes = ({ settings }: Catalogue): Record<WaveAccountActionNote, string> => ({
   offline: settings.couldntDeleteTheAccountWithoutAConnection,
   failed: settings.wavesServerDidntDeleteTheAccountTry,
+  wrongGoogleAccount: settings.googleDidntConfirmThisAccountPick,
+  signOutEverywhereOffline: settings.couldntSignOutOnAllPhonesWithoutAConnection,
+  signOutEverywhereFailed: settings.wavesServerDidntSignOutThePhonesTry,
 });
 
-/** The signed-in account: its picture, name and email, Sign Out and Delete Account. */
+type AccountView = Extract<WaveAccountView, { kind: "account" }>;
+
+/**
+ * The signed-in account: its picture, name and email, Sign Out, Sign Out on
+ * All Phones and Delete Account.
+ */
 function AccountRow({
   account,
   busy,
   note,
   onSignOut,
+  onSignOutEverywhere,
   onDelete,
 }: {
   account: WaveAccount;
-  busy: "signingOut" | "deleting" | null;
-  note: DeleteNote | null;
+  busy: AccountView["busy"];
+  note: AccountView["note"];
   onSignOut: () => void;
+  onSignOutEverywhere: () => void;
   onDelete: () => void;
 }) {
   const { strings } = useLocalisation();
@@ -88,6 +99,15 @@ function AccountRow({
           onPress={onSignOut}
         />
         <TextButton
+          label={
+            busy === "signingOutEverywhere"
+              ? strings.settings.signingOut
+              : strings.settings.signOutOnAllPhones
+          }
+          disabled={busy !== null}
+          onPress={onSignOutEverywhere}
+        />
+        <TextButton
           label={busy === "deleting" ? strings.settings.deleting : strings.settings.deleteAccount}
           tone="destructive"
           disabled={busy !== null}
@@ -95,7 +115,7 @@ function AccountRow({
         />
       </View>
       <Text accessibilityLiveRegion="polite" className="font-sans text-footnote text-secondary">
-        {note === null ? strings.settings.waveAccountSignOutNote : deleteNotes(strings)[note]}
+        {note === null ? strings.settings.waveAccountSignOutNote : actionNotes(strings)[note]}
       </Text>
     </>
   );
@@ -167,6 +187,7 @@ export function WaveAccountSettingsSection() {
             busy={view.busy}
             note={view.note}
             onSignOut={account.signOut}
+            onSignOutEverywhere={account.signOutEverywhere}
             onDelete={account.deleteAccount}
           />
           <MissingSongsDownloadRows />

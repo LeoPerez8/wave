@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { describe, test } from "node:test";
-import { harness } from "./testing.ts";
+import { harness, requestAccountDeletion } from "./testing.ts";
 
 const ana = { username: "quietfern42", password: "fixture-soulseek-password-1" };
 
@@ -133,7 +133,7 @@ describe("PUT and GET /v1/soulseek", () => {
       });
       const keyless = await harness({ soulseekKey: null });
       await keyless.request("PUT", "/v1/soulseek", { session: await keyless.signIn(), json: ana });
-      await service.request("DELETE", "/v1/account", { session });
+      await requestAccountDeletion(service, session);
     });
     assert.ok(!log.includes(ana.password), log);
   });
@@ -148,7 +148,7 @@ describe("DELETE /v1/account and the Soulseek account", () => {
     const bos = { username: "amberkite7", password: "fixture-soulseek-password-2" };
     await service.request("PUT", "/v1/soulseek", { session: bo, json: bos });
 
-    assert.equal((await service.request("DELETE", "/v1/account", { session })).status, 204);
+    assert.equal((await requestAccountDeletion(service, session)).status, 204);
     const rows = (await service.db.execute("SELECT username FROM soulseek_accounts")).rows;
     assert.deepEqual(
       rows.map((row) => row.username),

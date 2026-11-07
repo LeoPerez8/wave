@@ -267,6 +267,20 @@ export const pullAll = async (
   }
 };
 
+/**
+ * `DELETE /v1/account` with [session], confirmed by a just-issued ID token for
+ * [claims] (Ana's Google account by default), as the app sends it.
+ */
+export const requestAccountDeletion = async (
+  service: Harness,
+  session: string,
+  claims?: TokenClaims,
+): Promise<Response> =>
+  service.request("DELETE", "/v1/account", {
+    session,
+    json: { idToken: await service.google.idToken(claims) },
+  });
+
 /** How many sessions the database holds. */
 export const sessionCount = async (service: Harness): Promise<number> =>
   Number((await service.db.execute("SELECT count(*) AS n FROM sessions")).rows[0]?.n);

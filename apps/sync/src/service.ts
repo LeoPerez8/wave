@@ -40,6 +40,9 @@ export interface SyncServiceOptions {
   readonly soulseekKey?: string;
 }
 
+/** How long ago Google may have issued the ID token that confirms deleting an account. */
+const REAUTHENTICATION_MAX_AGE_MS = 5 * 60_000;
+
 /** How many rows a pull answers at most, by default. */
 const PULL_PAGE_SIZE = 1_000;
 
@@ -254,6 +257,15 @@ export const createSyncService = (options: SyncServiceOptions): SyncService => {
     return new Response(null, { status: 204 });
   });
 
+  /** Sign out everywhere: every session of the account ends, this one too. */
+  const endAllSessions = withSession(async (_context, session) => {
+    await db.execute({
+      sql: "DELETE FROM sessions WHERE account_id = ?",
+      args: [session.accountId],
+    });
+    return new Response(null, { status: 204 });
+  });
+
   const pushChanges = withSession(async ({ request }, session) => {
     const result = await pushRows(
       db,
@@ -272,7 +284,37 @@ export const createSyncService = (options: SyncServiceOptions): SyncService => {
     return json({ ...page.rows, cursor: String(page.cursor), more: page.more });
   });
 
-  const removeAccount = withSession(async (_context, session) => {
+  /**
+   * Deleting the account needs, besides the session, a Google ID token issued
+   * in the last 5 minutes for the account's own Google subject.
+   */
+  const removeAccount = withSession(async ({ request }, session) => {
+    let body: unknown = null;
+    try {
+      body = await readJson(request);
+    } catch (error) {
+      if (!(error instanceof Answer) || error.response.status !== 400) throw error;
+    }
+    const idToken =
+      typeof body === "object" && body !== null && "idToken" in body ? body.idToken : undefined;
+    if (typeof idToken !== "string") throw failure(401, "id_token_required");
+    const identity = await verifyGoogleIdToken(idToken, {
+      clientId: options.googleClientId,
+      keys,
+      now,
+    });
+    const account = await db.execute({
+      sql: "SELECT google_sub FROM accounts WHERE id = ?",
+      args: [session.accountId],
+    });
+    if (
+      identity === null ||
+      identity.issuedAt === null ||
+      now() - identity.issuedAt > REAUTHENTICATION_MAX_AGE_MS ||
+      identity.sub !== account.rows[0]?.google_sub
+    ) {
+      throw failure(401, "invalid_id_token");
+    }
     await deleteAccount(db, session.accountId);
     return new Response(null, { status: 204 });
   });
@@ -302,6 +344,7 @@ export const createSyncService = (options: SyncServiceOptions): SyncService => {
   const routes: Readonly<Record<string, Route>> = {
     "POST /v1/session": createSession,
     "DELETE /v1/session": endSession,
+    "DELETE /v1/sessions": endAllSessions,
     "POST /v1/push": pushChanges,
     "GET /v1/pull": pullChanges,
     "DELETE /v1/account": removeAccount,
