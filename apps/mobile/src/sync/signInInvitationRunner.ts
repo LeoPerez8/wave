@@ -1,16 +1,15 @@
-import { nextFirstRunStep, signInInvitationAtLaunch, type SignInInvitation } from "@wave/core";
+import {
+  nextFirstRunStep,
+  signInInvitationAtLaunch,
+  type FirstRunState,
+  type SignInInvitation,
+} from "@wave/core";
 
-/** What Core's first-run step reads from the phone, as it stands when asked. */
-export interface SignInInvitationSurroundings {
-  readonly accessGranted: boolean;
-  /** This build has the sync service set up. */
-  readonly accountAvailable: boolean;
-  /** Null until the native module has said. */
-  readonly signedIn: boolean | null;
-  readonly visible: boolean;
-  readonly nowPlayingShown: boolean;
-  readonly cardOpen: boolean;
-}
+/**
+ * What Core's first-run step reads from the phone, as it stands when asked: its whole state but
+ * the invitation and whether it shows, which the runner keeps.
+ */
+export type SignInInvitationSurroundings = Omit<FirstRunState, "invitation" | "showing">;
 
 export interface SignInInvitationRunnerOptions {
   /** The invitation as kept across launches; null before the first launch that had it. */

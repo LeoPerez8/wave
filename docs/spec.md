@@ -1026,7 +1026,7 @@ Every translation ticket follows it, so one English term always gets the same Po
 | Show all                                                                        | Ver tudo                                                                        |
 | Show Songs / Hide Songs                                                         | Mostrar Músicas / Ocultar Músicas                                               |
 | Sign In / Sign Out                                                              | Iniciar Sessão / Finalizar Sessão                                               |
-| Sign Out on All Phones                                                          | Finalizar Sessão em Todos os Telefones                                          |
+| Sign Out on All Phones                                                          | Finalizar Sessão em Todos os Celulares                                          |
 | Sign In with Google                                                             | Iniciar Sessão com o Google                                                     |
 | Send to Leo / Save Logs (render-error screen)                                   | Enviar para o Leo / Salvar Logs                                                 |
 | Install Now (Settings' version line)                                            | Instalar Agora                                                                  |

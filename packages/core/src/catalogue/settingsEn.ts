@@ -230,6 +230,8 @@ export const settingsEn = {
   resetToDefault: "Reset to Default",
   aButtonAnotherSlotHoldsSwapsPlaces: "A button another slot holds swaps places with this slot's.",
   signIn: "Sign In",
+  /** The hint of a signed-out invitation's button (Genius About, shows): it opens Settings › Accounts. */
+  opensTheWaveAccountInSettings: "Opens the Wave Account in Settings",
   signInAgain: "Sign In Again",
   signingIn: "Signing In…",
   lightBackground: "Light background",

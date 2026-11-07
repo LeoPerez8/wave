@@ -5,7 +5,6 @@ import {
   ytSongArtist,
   type WaveAccount,
   type WaveAccountActionNote,
-  type WaveAccountNote,
   type WaveAccountView,
 } from "@wave/core";
 import { Text, View } from "react-native";
@@ -19,27 +18,7 @@ import { runMissingSongsDownloadAction, useMissingSongsDownload } from "@/ytmusi
 
 import { AccountPhoto } from "./AccountPhoto";
 import { useWaveAccount, waveAccountAvailable } from "./waveAccount";
-
-/** The line under Sign In: what the account is for, or why signing in didn't work. */
-export const waveAccountNotes = ({ settings }: Catalogue): Record<WaveAccountNote, string> => ({
-  about: settings.waveAccountNote,
-  ended: settings.yourWaveSessionEndedSoThisPhone,
-  deleted: settings.yourWaveAccountWasDeletedEverythingOn,
-  signedOutEverywhere: settings.everyPhoneOnThisWaveAccountSignedOut,
-  offline: settings.couldntSignInWithoutAConnection,
-  noGoogleAccount: settings.addAGoogleAccountToThisPhone,
-  notAllowed: settings.thisGoogleAccountCantUseWavesServer,
-  accountsFull: settings.wavesServerHasNoRoomForNewAccounts,
-  newAccountsPaused: settings.wavesServerMadeAllTheNewAccountsItCanToday,
-  failed: settings.couldntSignInTryAgain,
-});
-
-/** Sign In's label, as it waits for Google's picker or after the service ended the session. */
-export const waveSignInLabels = ({ settings }: Catalogue) => ({
-  signIn: settings.signInWithGoogle,
-  signInAgain: settings.signInAgain,
-  signingIn: settings.signingIn,
-});
+import { waveAccountNotes, waveSignInLabels } from "./waveAccountText";
 
 const actionNotes = ({ settings }: Catalogue): Record<WaveAccountActionNote, string> => ({
   offline: settings.couldntDeleteTheAccountWithoutAConnection,

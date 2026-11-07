@@ -18,7 +18,7 @@ import { isNowPlayingShown, onNowPlayingShownChange } from "@/nowPlaying/sheet";
 import { CardEntries } from "@/overlay/CardEntries";
 import { isOverlayOpen, onOverlaysChange, openOverlay } from "@/overlay/overlay";
 import { useWaveAccount, waveAccountAvailable } from "@/settings/waveAccount";
-import { waveAccountNotes, waveSignInLabels } from "@/settings/WaveAccountSettingsSection";
+import { waveAccountNotes, waveSignInLabels } from "@/settings/waveAccountText";
 import { useThemeColor } from "@/theme/useThemeColor";
 
 import { createSignInInvitationRunner } from "./signInInvitationRunner";

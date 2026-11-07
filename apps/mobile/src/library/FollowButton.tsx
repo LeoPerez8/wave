@@ -7,8 +7,7 @@ import {
   showsNotificationsEnabled,
   useShowsAvailability,
 } from "./showNotifications";
-import { CELL } from "@/catalog/grid";
-import { openWaveAccount } from "@/sync/openWaveAccount";
+import { WaveSignInButton } from "@/sync/WaveSignInButton";
 import { WaveNative } from "@/native/waveNative";
 import { MenuChoices } from "@/overlay/MenuChoices";
 import { CardHeading } from "@/overlay/CardHeading";
@@ -29,38 +28,6 @@ export const openFollowCard = (artist: FollowTarget): void => {
     render: (close) => <FollowCard artist={artist} close={close} />,
   });
 };
-/**
- * The level card's place for shows while no Wave account is signed in (shows
- * are asked through it): what an account brings, and Sign In, which opens
- * Settings › Accounts.
- */
-function ShowsSignIn({ close }: { close: () => void }) {
-  const { strings } = useLocalisation();
-  return (
-    <TextButton
-      label={strings.shows.signInForShows}
-      tone="primary"
-      accessibilityHint={strings.playbackText.opensTheWaveAccountInSettings}
-      onPress={() => {
-        close();
-        openWaveAccount();
-      }}
-      style={{ paddingVertical: CELL }}
-    >
-      <View>
-        <Text className="font-sans text-footnote text-secondary">
-          {strings.shows.signInForShows}
-        </Text>
-        <Text
-          className="font-sans text-footnote font-medium text-accent"
-          style={{ marginTop: CELL / 2 }}
-        >
-          {strings.settings.signIn}
-        </Text>
-      </View>
-    </TextButton>
-  );
-}
 /**
  * An artist's follow levels: New music, and New music and shows while a Wave
  * account is signed in (with the invitation to sign in otherwise).
@@ -118,7 +85,9 @@ function FollowCard({ artist, close }: { artist: FollowTarget; close: () => void
           onPress={() => WaveNative.openShowNotificationSettings?.()}
         />
       )}
-      {shows === "signIn" && <ShowsSignIn close={close} />}
+      {shows === "signIn" && (
+        <WaveSignInButton look="row" message={strings.shows.signInForShows} beforeOpen={close} />
+      )}
     </View>
   );
 }

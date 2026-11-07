@@ -4,45 +4,12 @@ import { Text, View } from "react-native";
 
 import { CELL } from "@/catalog/grid";
 import { TextButton } from "@/components/TextButton";
-import { openWaveAccount } from "@/sync/openWaveAccount";
+import { WaveSignInButton } from "@/sync/WaveSignInButton";
 
 import type { GeniusAboutCard } from "./useGenius";
 
 /** How many lines of the description show until the card is tapped. */
 const FOLDED_LINES = 3;
-
-/**
- * The About card's place while no Wave account is signed in: what an
- * account brings here, and Sign In, which opens Settings › Accounts.
- */
-function GeniusSignIn() {
-  const { strings } = useLocalisation();
-  return (
-    <TextButton
-      label={strings.playbackText.signInToSeeWhatGeniusSaysAboutThisSong}
-      tone="primary"
-      accessibilityHint={strings.playbackText.opensTheWaveAccountInSettings}
-      onPress={openWaveAccount}
-      className="rounded-2xl bg-surface"
-      style={{ padding: CELL * 2, marginBottom: CELL * 2 }}
-    >
-      <View>
-        <Text className="font-sans text-footnote font-semibold text-secondary">
-          {strings.playbackText.aboutGenius}
-        </Text>
-        <Text className="font-sans text-body text-foreground" style={{ marginTop: CELL / 2 }}>
-          {strings.playbackText.signInToSeeWhatGeniusSaysAboutThisSong}
-        </Text>
-        <Text
-          className="font-sans text-footnote font-medium text-accent"
-          style={{ marginTop: CELL }}
-        >
-          {strings.settings.signIn}
-        </Text>
-      </View>
-    </TextButton>
-  );
-}
 
 /**
  * The About card at the top of the lyrics (docs/spec.md, "Genius About"):
@@ -55,7 +22,14 @@ export function GeniusAbout({ about }: { about: GeniusAboutCard | null }) {
   const { strings } = useLocalisation();
   const [expanded, setExpanded] = useState(false);
   if (about === null) return null;
-  if (about === "signIn") return <GeniusSignIn />;
+  if (about === "signIn")
+    return (
+      <WaveSignInButton
+        look="card"
+        heading={strings.playbackText.aboutGenius}
+        message={strings.playbackText.signInToSeeWhatGeniusSaysAboutThisSong}
+      />
+    );
   const description = about.shown;
   return (
     <TextButton

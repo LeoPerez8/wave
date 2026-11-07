@@ -62,6 +62,42 @@ const deleteFailure = (error: unknown): WaveDeleteFailure => {
   }
 };
 
+const signOutEverywhereFailure = (error: unknown): "offline" | "failed" =>
+  waveAccountErrorCode(error) === "ERR_WAVE_OFFLINE" ? "offline" : "failed";
+
+type WaveAccountAction = Parameters<typeof stepWaveAccount>[1];
+
+/**
+ * An account action that asks first: once [confirmation] is confirmed it
+ * dispatches [started], then what [call] ends with: [done] when it signs
+ * out, the session when the service had ended it already, [cancelled] when
+ * the owner backed out (a null session), or [failed] with its error.
+ */
+const confirmedAccountAction = async (
+  dispatch: (action: WaveAccountAction) => void,
+  steps: {
+    readonly confirmation: () => Parameters<typeof confirmAction>[0];
+    readonly started: WaveAccountAction;
+    readonly call: () => Promise<WaveSession | null>;
+    readonly done: WaveAccountAction;
+    readonly cancelled?: WaveAccountAction;
+    readonly failed: (error: unknown) => WaveAccountAction;
+  },
+): Promise<void> => {
+  if (!(await confirmAction(steps.confirmation()))) return;
+  dispatch(steps.started);
+  try {
+    const session = await steps.call();
+    if (session === null) {
+      if (steps.cancelled !== undefined) dispatch(steps.cancelled);
+      return;
+    }
+    dispatch(session.status === "signedOut" ? steps.done : { type: "sessionChanged", session });
+  } catch (error) {
+    dispatch(steps.failed(error));
+  }
+};
+
 /**
  * Settings › Wave Account (Core's `stepWaveAccount`): the native module's
  * session, and any change it hears of while Settings is open (a 401 ends it).
@@ -120,50 +156,32 @@ export const useWaveAccount = (): {
   }, []);
 
   const signOutEverywhere = useCallback(() => {
-    void (async () => {
-      if (!(await confirmAction(confirmSignOutEverywhere(currentLocalisation().strings)))) return;
-      dispatch({ type: "signOutEverywhereStarted" });
-      try {
-        const session = await WaveAccount.signOutEverywhere();
-        dispatch(
-          session.status === "signedOut"
-            ? { type: "signedOutEverywhere" }
-            : { type: "sessionChanged", session },
-        );
-      } catch (error) {
-        dispatch({
-          type: "signOutEverywhereFailed",
-          reason: waveAccountErrorCode(error) === "ERR_WAVE_OFFLINE" ? "offline" : "failed",
-        });
-      }
-    })();
+    void confirmedAccountAction(dispatch, {
+      confirmation: () => confirmSignOutEverywhere(currentLocalisation().strings),
+      started: { type: "signOutEverywhereStarted" },
+      call: () => WaveAccount.signOutEverywhere(),
+      done: { type: "signedOutEverywhere" },
+      failed: (error) => ({
+        type: "signOutEverywhereFailed",
+        reason: signOutEverywhereFailure(error),
+      }),
+    });
   }, []);
 
   const deleteAccount = useCallback(() => {
     const config = WAVE_ACCOUNT_CONFIG;
-    void (async () => {
-      if (!(await confirmAction(confirmWaveAccountDeletion(currentLocalisation().strings)))) return;
+    void confirmedAccountAction(dispatch, {
+      confirmation: () => confirmWaveAccountDeletion(currentLocalisation().strings),
+      started: { type: "deleteStarted" },
       // The fresh Google sign-in the service needs is for Wave's web client.
-      if (config === null) {
-        dispatch({ type: "deleteFailed", reason: "failed" });
-        return;
-      }
-      dispatch({ type: "deleteStarted" });
-      try {
-        const session = await WaveAccount.deleteAccount(config.googleWebClientId);
-        if (session === null) {
-          dispatch({ type: "deleteCancelled" });
-          return;
-        }
-        dispatch(
-          session.status === "signedOut"
-            ? { type: "accountDeleted" }
-            : { type: "sessionChanged", session },
-        );
-      } catch (error) {
-        dispatch({ type: "deleteFailed", reason: deleteFailure(error) });
-      }
-    })();
+      call: () =>
+        config === null
+          ? Promise.reject(new Error("This build has no sync service"))
+          : WaveAccount.deleteAccount(config.googleWebClientId),
+      done: { type: "accountDeleted" },
+      cancelled: { type: "deleteCancelled" },
+      failed: (error) => ({ type: "deleteFailed", reason: deleteFailure(error) }),
+    });
   }, []);
 
   return { state, signIn, signOut, signOutEverywhere, deleteAccount };
