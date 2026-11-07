@@ -40,6 +40,9 @@ export interface SyncServiceOptions {
   readonly soulseekKey?: string;
 }
 
+/** The window `maxNewAccountsPerDay` counts in. */
+const DAY_MS = 86_400_000;
+
 /** How many rows a pull answers at most, by default. */
 const PULL_PAGE_SIZE = 1_000;
 
@@ -195,21 +198,56 @@ export const createSyncService = (options: SyncServiceOptions): SyncService => {
     await countSignIn(`sub:${identity.sub}`);
     const sessionToken = base64url(crypto.getRandomValues(new Uint8Array(32)));
     const at = now();
-    await db.batch(
+    // One transaction: the account limits are checked where the account is
+    // made, so two sign-ins can't both take the last place.
+    const [, , , held] = await db.batch(
       [
         {
-          sql: `INSERT INTO accounts (id, google_sub, email, created_at) VALUES (?, ?, ?, ?)
-                ON CONFLICT (google_sub) DO UPDATE SET email = excluded.email`,
-          args: [crypto.randomUUID(), identity.sub, identity.email, at],
+          sql: "UPDATE accounts SET email = ? WHERE google_sub = ?",
+          args: [identity.email, identity.sub],
+        },
+        {
+          sql: `INSERT INTO accounts (id, google_sub, email, created_at)
+                SELECT ?, ?, ?, ?
+                WHERE NOT EXISTS (SELECT 1 FROM accounts WHERE google_sub = ?)
+                  AND (SELECT count(*) FROM accounts) < ?
+                  AND (SELECT count(*) FROM accounts WHERE created_at > ?) < ?`,
+          args: [
+            crypto.randomUUID(),
+            identity.sub,
+            identity.email,
+            at,
+            identity.sub,
+            limits.maxAccounts,
+            at - DAY_MS,
+            limits.maxNewAccountsPerDay,
+          ],
         },
         {
           sql: `INSERT INTO sessions (token_hash, account_id, created_at)
                 SELECT ?, id, ? FROM accounts WHERE google_sub = ?`,
           args: [await sha256Hex(sessionToken), at, identity.sub],
         },
+        {
+          sql: `SELECT EXISTS (SELECT 1 FROM accounts WHERE google_sub = ?) AS present,
+                       (SELECT count(*) FROM accounts) AS total,
+                       (SELECT min(created_at) FROM accounts WHERE created_at > ?) AS oldest`,
+          args: [identity.sub, at - DAY_MS],
+        },
       ],
       "write",
     );
+    const account = held?.rows[0];
+    if (Number(account?.present) !== 1) {
+      if (Number(account?.total) >= limits.maxAccounts) throw overLimit("maxAccounts", 403);
+      // The day's places come back as the oldest of them turns a day old.
+      const wait = Number(account?.oldest ?? at) + DAY_MS - at;
+      throw new Answer(
+        json({ error: "limit", limit: "maxNewAccountsPerDay" }, 429, {
+          "retry-after": String(Math.max(1, Math.ceil(wait / 1000))),
+        }),
+      );
+    }
     return json({ sessionToken, email: identity.email });
   };
 

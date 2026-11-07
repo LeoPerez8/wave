@@ -25,6 +25,8 @@ const notes = ({ settings }: Catalogue): Record<WaveAccountNote, string> => ({
   offline: settings.couldntSignInWithoutAConnection,
   noGoogleAccount: settings.addAGoogleAccountToThisPhone,
   notAllowed: settings.thisGoogleAccountCantUseWavesServer,
+  accountsFull: settings.wavesServerHasNoRoomForNewAccounts,
+  newAccountsPaused: settings.wavesServerMadeAllTheNewAccountsItCanToday,
   failed: settings.couldntSignInTryAgain,
 });
 

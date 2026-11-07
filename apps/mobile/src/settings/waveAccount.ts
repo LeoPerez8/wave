@@ -37,6 +37,10 @@ const signInFailure = (error: unknown): WaveSignInFailure => {
       return "noGoogleAccount";
     case "ERR_WAVE_NOT_ALLOWED":
       return "notAllowed";
+    case "ERR_WAVE_ACCOUNTS_FULL":
+      return "accountsFull";
+    case "ERR_WAVE_NEW_ACCOUNTS_PAUSED":
+      return "newAccountsPaused";
     default:
       return "failed";
   }

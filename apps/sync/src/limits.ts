@@ -1,8 +1,8 @@
 /**
  * What one Wave account may hold and send (docs/spec.md, "Wave account and
  * sync": anyone with a Google account can sign in, so each account is
- * limited instead). Going past one answers 413 (or 429 for the rate) with
- * `{ "error": "limit", "limit": "<name>" }`.
+ * limited instead). Going past one answers 413 (429 for a rate, 403 for
+ * `maxAccounts`) with `{ "error": "limit", "limit": "<name>" }`.
  *
  * Starting values, chosen so a 50,000-song Library with 200,000 plays fits
  * with room to grow. Row counts leave tombstones out.
@@ -27,6 +27,13 @@ export const SYNC_LIMITS = {
    * token is checked), and sign-ins per minute to one Google account.
    */
   maxSignInsPerMinute: 10,
+  /**
+   * Wave accounts the service holds, and new ones it makes in any 24 hours.
+   * Checked only when a sign-in would make an account: existing accounts
+   * always sign in.
+   */
+  maxAccounts: 100,
+  maxNewAccountsPerDay: 10,
 } as const;
 
 export type SyncLimits = { readonly [K in keyof typeof SYNC_LIMITS]: number };

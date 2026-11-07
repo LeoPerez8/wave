@@ -257,6 +257,10 @@ export const settingsPtBr: typeof settingsEn = {
   addAGoogleAccountToThisPhone:
     "Adicione uma conta do Google nos ajustes do Android e inicie sessão.",
   thisGoogleAccountCantUseWavesServer: "Esta conta do Google não pode usar o servidor do Wave.",
+  wavesServerHasNoRoomForNewAccounts:
+    "O servidor do Wave não tem espaço para novas Contas Wave. Tudo neste telefone continua funcionando.",
+  wavesServerMadeAllTheNewAccountsItCanToday:
+    "O servidor do Wave já criou hoje todas as novas Contas Wave que podia. Tente novamente amanhã. Tudo neste telefone continua funcionando.",
   couldntSignInTryAgain: "Não foi possível iniciar sessão. Tente novamente.",
   signInWithGoogle: "Iniciar Sessão com o Google",
   couldntDeleteTheAccountWithoutAConnection: "Não foi possível apagar a conta sem conexão.",

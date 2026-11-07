@@ -19,6 +19,10 @@ enum class WaveAccountFailure(val code: String, val notice: String) {
   REJECTED("ERR_WAVE_REJECTED", "Wave's server didn't accept the Google sign-in"),
   /** The service's allowlist leaves this Google account out. */
   NOT_ALLOWED("ERR_WAVE_NOT_ALLOWED", "This Google account can't use Wave's server"),
+  /** The service holds all the accounts it may, and this Google account has none yet. */
+  ACCOUNTS_FULL("ERR_WAVE_ACCOUNTS_FULL", "Wave's server has no room for new accounts"),
+  /** The service has made all the new accounts it may for now, and this Google account has none yet. */
+  NEW_ACCOUNTS_PAUSED("ERR_WAVE_NEW_ACCOUNTS_PAUSED", "Wave's server isn't making new accounts today"),
   /** There's no session to send the request with; nothing was sent. */
   SIGNED_OUT("ERR_WAVE_SIGNED_OUT", "Not signed in to a Wave account"),
   /** The service stopped accepting the session (a 401): the app is signed out. */
@@ -68,6 +72,10 @@ class WaveAccountClient(
     val body = buildJsonObject { put("idToken", identity.idToken) }.toString()
     val response = exchange("POST", serviceUrl.trimEnd('/') + "/v1/session", null, body)
     when {
+      response.status in 400..499 && response.limit() == "maxAccounts" ->
+        throw WaveAccountException(WaveAccountFailure.ACCOUNTS_FULL)
+      response.status in 400..499 && response.limit() == "maxNewAccountsPerDay" ->
+        throw WaveAccountException(WaveAccountFailure.NEW_ACCOUNTS_PAUSED)
       response.status == 403 -> throw WaveAccountException(WaveAccountFailure.NOT_ALLOWED)
       response.status in 400..499 -> throw WaveAccountException(WaveAccountFailure.REJECTED)
       response.status !in 200..299 -> throw WaveAccountException(WaveAccountFailure.UNREACHABLE)
@@ -166,6 +174,12 @@ class WaveAccountClient(
     } catch (e: IOException) {
       throw WaveAccountException(if (online()) WaveAccountFailure.UNREACHABLE else WaveAccountFailure.OFFLINE, e)
     } finally { connection.disconnect() }
+  }
+
+  /** The limit a `{ "error": "limit", "limit": "<name>" }` answer names. */
+  private fun WaveResponse.limit(): String? {
+    val answer = runCatching { Json.parseToJsonElement(body) as? JsonObject }.getOrNull() ?: return null
+    return if (answer.text("error") == "limit") answer.text("limit") else null
   }
 
   private fun JsonObject.text(key: String): String? = (this[key] as? JsonPrimitive)?.takeIf { it.isString }?.content
