@@ -27,6 +27,8 @@ concurrency:
 jobs:
   rollback:
     name: Roll ${{ inputs.channel }} back to ${{ inputs.version }}
+    # The channel's Environment holds the release secrets; main's waits for the owner.
+    environment: ${{ inputs.channel }}
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v5

@@ -29,8 +29,8 @@ Pick tickets whose blockers are closed.
   a full build.
 - The `main` channel gets a version only when the owner says so: run the **Promote to main**
   workflow (`gh workflow run promote.yml`, with `-f version=0.5.6-ti` for one that isn't the
-  newest). It publishes that release's commit as `0.5.6`, in a full build. See `docs/spec.md`,
-  Build and CI.
+  newest). It publishes that release's commit as `0.5.6`, in a full build, once the owner approves its
+  run in the `main` Environment. See `docs/spec.md`, Build and CI.
 - Releases also reach phones over the air (`docs/spec.md`, Build and CI). Channels are `ti` and
   `main`, fixed in the APK by the run that built it (a push to `main` follows `ti`, a promotion follows `main`); PR and local builds have updates off. A JS
   change arrives as a bundle, and a change to the runtime version (the kept APK's key) as an APK
