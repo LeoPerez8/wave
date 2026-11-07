@@ -42,6 +42,7 @@ import expo.modules.wavenative.files.TrackFileDeleter
 import expo.modules.wavenative.folders.TreeUris
 import expo.modules.wavenative.launcher.LauncherIconRecord
 import expo.modules.wavenative.launcher.LauncherIconSwitcher
+import expo.modules.wavenative.launcher.TaskIcon
 import expo.modules.wavenative.launch.LaunchTheme
 import expo.modules.wavenative.launch.LaunchThemeStore
 import expo.modules.wavenative.locale.PreferredLanguages
@@ -399,6 +400,14 @@ class WaveNativeModule : Module() {
     }.runOnQueue(Queues.MAIN)
 
     /**
+     * Shows [alias]'s icon (null: the manifest's) on Wave's task in Recents, now
+     * and whenever Wave's screen starts; see [TaskIcon].
+     */
+    AsyncFunction("setRecentsIcon") { alias: String? ->
+      taskIcon.show(alias, appContext.currentActivity)
+    }
+
+    /**
      * The launcher alias an earlier Wave last left on, whichever build it was;
      * null when none did. JS keeps that icon on the update (see [LauncherIconRecord]).
      */
@@ -538,7 +547,11 @@ class WaveNativeModule : Module() {
     // JS may have saved the launch theme without an activity (Android Auto starts it headless).
     OnActivityEntersForeground {
       preferredLanguages?.refresh()
-      appContext.currentActivity?.let { LaunchThemeStore.applySplash(it, LaunchThemeStore.load(context)) }
+      appContext.currentActivity?.let {
+        LaunchThemeStore.applySplash(it, LaunchThemeStore.load(context))
+        // A new activity (a restart, a configuration change) starts without it.
+        taskIcon.apply(it)
+      }
     }
 
     OnDestroy {
@@ -555,6 +568,8 @@ class WaveNativeModule : Module() {
       launcherIconSwitcher = null
     }
   }
+
+  private val taskIcon by lazy { TaskIcon(context.applicationContext) }
 
   /** Created on first use (on the main thread) and told when Wave's activities stop. */
   private var launcherIconSwitcher: LauncherIconSwitcher? = null
