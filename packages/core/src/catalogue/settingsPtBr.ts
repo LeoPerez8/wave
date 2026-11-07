@@ -337,6 +337,18 @@ export const settingsPtBr: typeof settingsEn = {
   couldntOpenAndroidSettingsTryAgainOr:
     "Não foi possível abrir os ajustes do Android. Tente novamente ou procure o Wave em Acesso a todos os arquivos nos ajustes do Android.",
   openSettings: "Abrir ajustes",
+  signInInvitation: {
+    title: "Faça mais com uma Conta Wave",
+    libraryTitle: "Sua Biblioteca em todo celular",
+    library:
+      "Playlists, favoritas, histórico de ouvidas e preferências acompanham você, e um celular novo recebe sua Biblioteca inteira de volta.",
+    geniusTitle: "O que o Genius diz",
+    genius: "As notas do Genius sobre a música tocando, acima da letra.",
+    showsTitle: "Shows perto de você",
+    shows: "Próximos shows dos artistas que você segue, no seu país.",
+    note: "Opcional. Todo o resto do Wave funciona sem ela.",
+    notNow: "Agora Não",
+  },
   itsSongsLeaveYourLibraryTheFiles:
     "Suas músicas saem da biblioteca. Os arquivos ficam no telefone.",
   couldntRemoveTheFolder: "Não foi possível remover a pasta",

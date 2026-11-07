@@ -346,6 +346,22 @@ export const settingsEn = {
   couldntOpenAndroidSettingsTryAgainOr:
     "Couldn't open Android settings. Try again, or find Wave under “All files access” in Android settings.",
   openSettings: "Open settings",
+  /**
+   * First run's invitation to sign in, after the access screen, on a new install only: what a
+   * Wave account unlocks (sync, Genius About, shows), then Not Now and Sign In with Google.
+   */
+  signInInvitation: {
+    title: "Do more with a Wave account",
+    libraryTitle: "Your Library on every phone",
+    library:
+      "Playlists, favorites, play history and preferences follow you, and a new phone gets your whole Library back.",
+    geniusTitle: "What Genius says",
+    genius: "Genius's notes on the song playing, above its lyrics.",
+    showsTitle: "Shows near you",
+    shows: "Upcoming shows from the artists you follow, in your country.",
+    note: "Optional. Everything else in Wave works without one.",
+    notNow: "Not Now",
+  },
   itsSongsLeaveYourLibraryTheFiles: "Its songs leave your library. The files stay on your phone.",
   couldntRemoveTheFolder: "Couldn't remove the folder",
   loadingMusicFolders: "Loading music folders",

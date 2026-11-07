@@ -20,7 +20,8 @@ import { runMissingSongsDownloadAction, useMissingSongsDownload } from "@/ytmusi
 import { AccountPhoto } from "./AccountPhoto";
 import { WAVE_ACCOUNT_CONFIG, useWaveAccount } from "./waveAccount";
 
-const notes = ({ settings }: Catalogue): Record<WaveAccountNote, string> => ({
+/** The line under Sign In: what the account is for, or why signing in didn't work. */
+export const waveAccountNotes = ({ settings }: Catalogue): Record<WaveAccountNote, string> => ({
   about: settings.waveAccountNote,
   ended: settings.yourWaveSessionEndedSoThisPhone,
   deleted: settings.yourWaveAccountWasDeletedEverythingOn,
@@ -33,7 +34,8 @@ const notes = ({ settings }: Catalogue): Record<WaveAccountNote, string> => ({
   failed: settings.couldntSignInTryAgain,
 });
 
-const signInLabels = ({ settings }: Catalogue) => ({
+/** Sign In's label, as it waits for Google's picker or after the service ended the session. */
+export const waveSignInLabels = ({ settings }: Catalogue) => ({
   signIn: settings.signInWithGoogle,
   signInAgain: settings.signInAgain,
   signingIn: settings.signingIn,
@@ -198,7 +200,7 @@ export function WaveAccountSettingsSection() {
         <>
           <View className="items-start justify-center" style={{ minHeight: grid.row }}>
             <TextButton
-              label={signInLabels(strings)[view.action]}
+              label={waveSignInLabels(strings)[view.action]}
               disabled={view.action === "signingIn"}
               onPress={account.signIn}
             />
@@ -208,7 +210,7 @@ export function WaveAccountSettingsSection() {
             accessibilityLiveRegion="polite"
             className="mt-2 font-sans text-footnote text-secondary"
           >
-            {notes(strings)[view.note]}
+            {waveAccountNotes(strings)[view.note]}
           </Text>
         </>
       ) : (
