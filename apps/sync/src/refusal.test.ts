@@ -170,24 +170,31 @@ describe("the refusal log", () => {
 
 describe("the Worker's rate limiting bindings", () => {
   const wrangler = readFileSync(new URL("../wrangler.toml", import.meta.url), "utf8");
-  /** The `simple` limit and period of the `[[ratelimits]]` binding named [name]. */
-  const binding = (name: string): { limit: number; period: number } | undefined => {
-    const block = wrangler
-      .split("[[ratelimits]]")
-      .slice(1)
-      .find((candidate) => candidate.includes(`name = "${name}"`));
-    const simple = /simple = \{ limit = (\d+), period = (\d+) \}/.exec(block ?? "");
-    return simple === null ? undefined : { limit: Number(simple[1]), period: Number(simple[2]) };
-  };
+  /** Every `[[ratelimits]]` binding: its name, namespace and `simple` limit and period. */
+  const bindings = wrangler
+    .split("[[ratelimits]]")
+    .slice(1)
+    .map((block) => ({
+      name: /name = "([A-Z_]+)"/.exec(block)?.[1],
+      namespace: /namespace_id = "(\d+)"/.exec(block)?.[1],
+      simple: /simple = \{ limit = (\d+), period = (\d+) \}/.exec(block)?.slice(1).map(Number),
+    }));
 
-  test("count per minute what SYNC_LIMITS says", () => {
-    assert.deepEqual(binding("ADDRESS_LIMITER"), {
-      limit: SYNC_LIMITS.maxRequestsPerAddressPerMinute,
-      period: 60,
-    });
-    assert.deepEqual(binding("FAILED_LOOKUP_LIMITER"), {
-      limit: SYNC_LIMITS.maxFailedLookupsPerAddressPerMinute,
-      period: 60,
-    });
+  test("count per minute what SYNC_LIMITS says, every one of them", () => {
+    assert.deepEqual(
+      Object.fromEntries(bindings.map((binding) => [binding.name, binding.simple])),
+      {
+        ADDRESS_LIMITER: [SYNC_LIMITS.maxRequestsPerAddressPerMinute, 60],
+        FAILED_LOOKUP_LIMITER: [SYNC_LIMITS.maxFailedLookupsPerAddressPerMinute, 60],
+        GENIUS_LIMITER: [SYNC_LIMITS.maxGeniusRequestsPerMinute, 60],
+        TICKETMASTER_LIMITER: [SYNC_LIMITS.maxTicketmasterRequestsPerMinute, 60],
+      },
+    );
+  });
+
+  test("each has its own namespace", () => {
+    const namespaces = bindings.map((binding) => binding.namespace);
+    assert.ok(namespaces.every((namespace) => namespace !== undefined));
+    assert.equal(new Set(namespaces).size, namespaces.length);
   });
 });

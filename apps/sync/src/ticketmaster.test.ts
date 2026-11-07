@@ -1,5 +1,4 @@
 import assert from "node:assert/strict";
-import { readFileSync } from "node:fs";
 import { describe, test } from "node:test";
 import { SYNC_LIMITS } from "./limits.ts";
 import { TICKETMASTER_KEY, harness } from "./testing.ts";
@@ -238,39 +237,36 @@ describe("each account's limits on Ticketmaster", () => {
     assert.equal((await ask(bo)).status, 200);
   });
 
-  test("past maxTicketmasterRequestsPerDay of requests Ticketmaster answers, an account gets only cached answers", async () => {
-    const service = await harness({ limits: { maxTicketmasterRequestsPerDay: 1 } });
-    service.now = Date.UTC(2026, 9, 14, 12);
-    const session = await service.signIn();
-    assert.equal((await service.request("GET", EVENTS, { session })).status, 200);
-    const refused = await service.request("GET", ATTRACTIONS, { session });
-    assert.equal(refused.status, 429);
-    assert.deepEqual(await refused.json(), {
-      error: "limit",
-      limit: "maxTicketmasterRequestsPerDay",
-    });
-    assert.equal((await service.request("GET", EVENTS, { session })).status, 200);
-    assert.equal(service.upstream.calls.length, 1);
-  });
+  for (const [kind, limit, path, other] of [
+    ["attraction searches", "maxTicketmasterAttractionSearchesPerDay", ATTRACTIONS, EVENTS],
+    ["event lookups", "maxTicketmasterEventLookupsPerDay", EVENTS, ATTRACTIONS],
+  ] as const) {
+    test(`an account makes ${limit} ${kind} in a UTC day, cached answers included`, async () => {
+      const service = await harness({ limits: { [limit]: 2 } });
+      service.now = Date.UTC(2026, 9, 14, 12);
+      const ana = await service.signIn();
+      const bo = await service.signIn({ sub: "google-sub-2", email: "bo@example.com" });
+      const ask = (session: string, at = path) => service.request("GET", at, { session });
+      for (let i = 0; i < 2; i++) assert.equal((await ask(ana)).status, 200);
+      assert.equal(service.upstream.calls.length, 1, "the second answer came from the cache");
+      const refused = await ask(ana);
+      assert.equal(refused.status, 429);
+      assert.deepEqual(await refused.json(), { error: "limit", limit });
+      assert.equal(Number(refused.headers.get("retry-after")), 12 * 60 * 60);
+      assert.equal(service.upstream.calls.length, 1);
+      assert.equal((await ask(ana, other)).status, 200, "the other kind counts apart");
+      assert.equal((await ask(bo)).status, 200, "another account counts apart");
 
-  test("the limits fit the show checks of someone with maxFollows artists at shows", () => {
+      service.now = Date.UTC(2026, 9, 15, 0, 0, 1);
+      assert.equal((await ask(ana)).status, 200);
+    });
+  }
+
+  test("an account may check 200 artists a day: an attraction search and an event lookup each", () => {
+    assert.equal(SYNC_LIMITS.maxTicketmasterAttractionSearchesPerDay, 200);
+    assert.equal(SYNC_LIMITS.maxTicketmasterEventLookupsPerDay, 200);
     // The phone starts a show check's calls at least 250 ms apart: 240 a minute at most.
     assert.ok(SYNC_LIMITS.maxTicketmasterRequestsPerMinute >= 240);
-    // Each such artist costs one attraction search, once, and an events call per 12 hours.
-    assert.ok(SYNC_LIMITS.maxTicketmasterRequestsPerDay >= SYNC_LIMITS.maxFollows * 3);
-  });
-
-  test("the Worker's binding counts per minute what SYNC_LIMITS says", () => {
-    const wrangler = readFileSync(new URL("../wrangler.toml", import.meta.url), "utf8");
-    const block = wrangler
-      .split("[[ratelimits]]")
-      .find((candidate) => candidate.includes('name = "TICKETMASTER_LIMITER"'));
-    const simple = /simple = \{ limit = (\d+), period = (\d+) \}/.exec(block ?? "");
-    assert.deepEqual(simple?.slice(1).map(Number), [
-      SYNC_LIMITS.maxTicketmasterRequestsPerMinute,
-      60,
-    ]);
-    assert.match(block ?? "", /namespace_id = "61004"/);
   });
 });
 

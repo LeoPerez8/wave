@@ -5,8 +5,6 @@ export const playbackTextEn = {
   /** The About card's place while no Wave account is signed in (Genius is asked through it). */
   signInToSeeWhatGeniusSaysAboutThisSong:
     "Sign in to a Wave account to see what Genius says about this song.",
-  /** Its button's hint: it opens Settings › Accounts. */
-  opensTheWaveAccountInSettings: "Opens the Wave Account in Settings",
   addLyricsToThisSongsTagsOrPutAnLrcFileWithTheSameNameBesideIt:
     "Add lyrics to this song's tags, or put an .lrc file with the same name beside it.",
   addToPlaylist: "Add to Playlist",

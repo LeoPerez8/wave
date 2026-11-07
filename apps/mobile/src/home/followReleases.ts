@@ -1,5 +1,5 @@
 import { readHomeFollow } from "./knownHomeFollow";
-import { checkFollowShows, showsSignedIn } from "./followShows";
+import { checkFollowShows } from "./followShows";
 import {
   checkDue,
   followCheckDue,
@@ -16,6 +16,7 @@ import {
   type FollowRelease,
 } from "@wave/core";
 import * as Effect from "effect/Effect";
+import { waveSignedIn } from "@/sync/waveSignedIn";
 import { LibraryStore } from "@/library/LibraryStore";
 import { appRuntime } from "@/library/runtime";
 import { settledTurnEffect } from "@/lib/backgroundWork";
@@ -67,7 +68,7 @@ export const checkFollowReleases = (
     const cache = yield* store.followReleaseCache;
     const shows = yield* store.followShowCache;
     // Signed out, shows aren't due: they can't be checked.
-    const showsCheckable = showsConfigured && (yield* showsSignedIn);
+    const showsCheckable = showsConfigured && (yield* Effect.promise(waveSignedIn));
     if (
       !followCheckDue({
         enabled: allowed(),

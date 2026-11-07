@@ -43,7 +43,8 @@ names in `CF-Connecting-IP` (kept only as a SHA-256):
   count toward it, and other addresses aren't affected.
 
 Both counts come from Cloudflare's rate limiting binding (`[[ratelimits]]` in
-`wrangler.toml`). At most once a minute, the Worker logs how many requests it
+`wrangler.toml`), which counts locally and approximately: they're a best-effort brake on
+heavy traffic, not an exact count per address. At most once a minute, the Worker logs how many requests it
 refused and why (`sync service refused requests: unknown_session=20, held_address=140`), with
 no token and no address.
 
@@ -302,8 +303,11 @@ Answers are kept in Cloudflare's cache for 12 hours, keyed by the request withou
 hash of it), never by the account. Ticketmaster takes about 5 requests a second for the key,
 from every phone together, so the requests an isolate sends it start at least 250 ms apart; a
 request that would wait more than 5 s for its turn answers `503 { "error": "busy" }` and asks
-nothing. Each account may send these routes `maxTicketmasterRequestsPerMinute` requests and
-make Ticketmaster answer `maxTicketmasterRequestsPerDay` in a UTC day, counted as for Genius.
+nothing. Each account may send these routes `maxTicketmasterRequestsPerMinute` requests, and
+make `maxTicketmasterAttractionSearchesPerDay` attraction searches and
+`maxTicketmasterEventLookupsPerDay` event lookups in a UTC day, cached answers included (the
+counts are in `upstream_usage`, one row for each). A show check costs at most one of each per
+artist, so that's 200 artists a day; the phone stops its own check there without asking.
 Failures are Genius's too: `502 { "error": "upstream_failed" }` with nothing of Ticketmaster's
 answer (its over-quota error names the key), nothing cached, and a log line that says only
 `ticketmaster answered <status>`. A Worker without `TICKETMASTER_API_KEY` or
@@ -311,68 +315,69 @@ answer (its over-quota error names the key), nothing cached, and a log line that
 
 ### Errors
 
-| Status | Body                                                                                       |
-| ------ | ------------------------------------------------------------------------------------------ |
-| 400    | `{ "error": "bad_request", "detail"?: "…" }`                                               |
-| 401    | `{ "error": "unauthorized" }` (no session, or it ended)                                    |
-| 401    | `{ "error": "invalid_id_token" }`                                                          |
-| 401    | `{ "error": "id_token_required" }`                                                         |
-| 403    | `{ "error": "not_allowed" }`                                                               |
-| 403    | `{ "error": "limit", "limit": "maxAccounts" }`                                             |
-| 404    | `{ "error": "not_found" }`                                                                 |
-| 413    | `{ "error": "limit", "limit": "<name>" }`                                                  |
-| 429    | `{ "error": "limit", "limit": "maxRequestsPerMinute" }`, with `Retry-After`                |
-| 429    | `{ "error": "limit", "limit": "maxSignInsPerMinute" }`, with `Retry-After`                 |
-| 429    | `{ "error": "limit", "limit": "maxNewAccountsPerDay" }`, with `Retry-After`                |
-| 429    | `{ "error": "limit", "limit": "maxRequestsPerAddressPerMinute" }`, with `Retry-After`      |
-| 429    | `{ "error": "limit", "limit": "maxFailedLookupsPerAddressPerMinute" }`, with `Retry-After` |
-| 429    | `{ "error": "limit", "limit": "maxGeniusRequestsPerMinute" }`, with `Retry-After`          |
-| 429    | `{ "error": "limit", "limit": "maxGeniusRequestsPerDay" }`, with `Retry-After`             |
-| 429    | `{ "error": "limit", "limit": "maxTicketmasterRequestsPerMinute" }`, with `Retry-After`    |
-| 429    | `{ "error": "limit", "limit": "maxTicketmasterRequestsPerDay" }`, with `Retry-After`       |
-| 500    | `{ "error": "internal" }`                                                                  |
-| 502    | `{ "error": "upstream_failed" }`                                                           |
-| 503    | `{ "error": "unavailable" }`                                                               |
-| 503    | `{ "error": "busy" }`                                                                      |
+| Status | Body                                                                                           |
+| ------ | ---------------------------------------------------------------------------------------------- |
+| 400    | `{ "error": "bad_request", "detail"?: "…" }`                                                   |
+| 401    | `{ "error": "unauthorized" }` (no session, or it ended)                                        |
+| 401    | `{ "error": "invalid_id_token" }`                                                              |
+| 401    | `{ "error": "id_token_required" }`                                                             |
+| 403    | `{ "error": "not_allowed" }`                                                                   |
+| 403    | `{ "error": "limit", "limit": "maxAccounts" }`                                                 |
+| 404    | `{ "error": "not_found" }`                                                                     |
+| 413    | `{ "error": "limit", "limit": "<name>" }`                                                      |
+| 429    | `{ "error": "limit", "limit": "maxRequestsPerMinute" }`, with `Retry-After`                    |
+| 429    | `{ "error": "limit", "limit": "maxSignInsPerMinute" }`, with `Retry-After`                     |
+| 429    | `{ "error": "limit", "limit": "maxNewAccountsPerDay" }`, with `Retry-After`                    |
+| 429    | `{ "error": "limit", "limit": "maxRequestsPerAddressPerMinute" }`, with `Retry-After`          |
+| 429    | `{ "error": "limit", "limit": "maxFailedLookupsPerAddressPerMinute" }`, with `Retry-After`     |
+| 429    | `{ "error": "limit", "limit": "maxGeniusRequestsPerMinute" }`, with `Retry-After`              |
+| 429    | `{ "error": "limit", "limit": "maxGeniusRequestsPerDay" }`, with `Retry-After`                 |
+| 429    | `{ "error": "limit", "limit": "maxTicketmasterRequestsPerMinute" }`, with `Retry-After`        |
+| 429    | `{ "error": "limit", "limit": "maxTicketmasterAttractionSearchesPerDay" }`, with `Retry-After` |
+| 429    | `{ "error": "limit", "limit": "maxTicketmasterEventLookupsPerDay" }`, with `Retry-After`       |
+| 500    | `{ "error": "internal" }`                                                                      |
+| 502    | `{ "error": "upstream_failed" }`                                                               |
+| 503    | `{ "error": "unavailable" }`                                                                   |
+| 503    | `{ "error": "busy" }`                                                                          |
 
 ## Limits
 
 `SYNC_LIMITS` in `src/limits.ts`. Past one, the service answers `413` (`429` for a rate,
 `403` for `maxAccounts`) and names it. Starting values, so a 50,000-song Library with 200,000 plays fits:
 
-| Limit                                 | Value     |                                                      |
-| ------------------------------------- | --------- | ---------------------------------------------------- |
-| `maxBodyBytes`                        | 2 MiB     | per request; a large first push goes in batches      |
-| `maxSongs`                            | 100,000   | rows per account, tombstones aside                   |
-| `maxPlaylists`                        | 5,000     |                                                      |
-| `maxPlaylistEntries`                  | 250,000   |                                                      |
-| `maxFavorites`                        | 100,000   |                                                      |
-| `maxPreferences`                      | 200       |                                                      |
-| `maxPlays`                            | 1,000,000 |                                                      |
-| `maxFollows`                          | 5,000     |                                                      |
-| `maxHiddenReleases`                   | 50,000    |                                                      |
-| `maxNotifiedShows`                    | 50,000    |                                                      |
-| `maxDismissedSuggestions`             | 50,000    |                                                      |
-| `maxRequestsPerMinute`                | 120       | per session                                          |
-| `maxSignInsPerMinute`                 | 10        | `POST /v1/session`, per address and per account      |
-| `maxAccounts`                         | 100       | accounts the service holds                           |
-| `maxNewAccountsPerDay`                | 10        | new accounts in any 24 hours                         |
-| `maxRequestsPerAddressPerMinute`      | 600       | every route, per address                             |
-| `maxFailedLookupsPerAddressPerMinute` | 20        | lookups that find no session, per address            |
-| `failedLookupBlockSeconds`            | 300       | how long an address past the line above is held back |
-| `maxGeniusRequestsPerMinute`          | 30        | the Genius routes, per account                       |
-| `maxGeniusRequestsPerDay`             | 1,000     | Genius requests the cache didn't answer, per account |
-| `maxTicketmasterRequestsPerMinute`    | 300       | the Ticketmaster routes, per account                 |
-| `maxTicketmasterRequestsPerDay`       | 15,000    | Ticketmaster requests the cache didn't answer        |
+| Limit                                     | Value     |                                                      |
+| ----------------------------------------- | --------- | ---------------------------------------------------- |
+| `maxBodyBytes`                            | 2 MiB     | per request; a large first push goes in batches      |
+| `maxSongs`                                | 100,000   | rows per account, tombstones aside                   |
+| `maxPlaylists`                            | 5,000     |                                                      |
+| `maxPlaylistEntries`                      | 250,000   |                                                      |
+| `maxFavorites`                            | 100,000   |                                                      |
+| `maxPreferences`                          | 200       |                                                      |
+| `maxPlays`                                | 1,000,000 |                                                      |
+| `maxFollows`                              | 5,000     |                                                      |
+| `maxHiddenReleases`                       | 50,000    |                                                      |
+| `maxNotifiedShows`                        | 50,000    |                                                      |
+| `maxDismissedSuggestions`                 | 50,000    |                                                      |
+| `maxRequestsPerMinute`                    | 120       | per session                                          |
+| `maxSignInsPerMinute`                     | 10        | `POST /v1/session`, per address and per account      |
+| `maxAccounts`                             | 100       | accounts the service holds                           |
+| `maxNewAccountsPerDay`                    | 10        | new accounts in any 24 hours                         |
+| `maxRequestsPerAddressPerMinute`          | 600       | every route, per address                             |
+| `maxFailedLookupsPerAddressPerMinute`     | 20        | lookups that find no session, per address            |
+| `failedLookupBlockSeconds`                | 300       | how long an address past the line above is held back |
+| `maxGeniusRequestsPerMinute`              | 30        | the Genius routes, per account                       |
+| `maxGeniusRequestsPerDay`                 | 1,000     | Genius requests the cache didn't answer, per account |
+| `maxTicketmasterRequestsPerMinute`        | 300       | the Ticketmaster routes, per account                 |
+| `maxTicketmasterAttractionSearchesPerDay` | 200       | attraction searches, cached or not, per account      |
+| `maxTicketmasterEventLookupsPerDay`       | 200       | event lookups, cached or not, per account            |
 
 The two per-address rates, `maxGeniusRequestsPerMinute` and `maxTicketmasterRequestsPerMinute`
 are also the `simple.limit` of `ADDRESS_LIMITER`, `FAILED_LOOKUP_LIMITER`, `GENIUS_LIMITER` and
 `TICKETMASTER_LIMITER` in `wrangler.toml`; a test fails when they differ. Change both, then
-deploy. The Ticketmaster limits fit the show checks of an account with `maxFollows` artists
-followed at shows (a show check starts its calls at least 250 ms apart, and each artist costs
-an attraction search once and an events call every 12 hours). Ticketmaster allows the key
-5,000 requests a day in all, so that key, not these limits, is what a very large account
-would run out.
+deploy. The two per-address rates are best effort (Refused before the database). The phone stops a show check at 200 artists a UTC day, Core's
+`TICKETMASTER_ARTISTS_PER_DAY`, checking artists it never checked first and then the oldest
+checks, so a longer list is covered over the following days. Ticketmaster allows the key 5,000
+requests a day in all, shared by every account.
 
 A push that would take a table past its limit is refused whole.
 
@@ -380,43 +385,41 @@ A push that would take a table past its limit is refused whole.
 
 Every hour (`[triggers]` in `wrangler.toml`) the Worker reads today's requests to every Worker
 on the Cloudflare account (Workers Free stops all of them at 100,000 a day, from midnight UTC)
-and this billing cycle's Turso usage, and compares them with `USAGE_WARNINGS` in
-`src/limits.ts`:
+and compares them with `USAGE_WARNINGS` in `src/limits.ts`:
 
-| Threshold                  | Value       |                                 |
-| -------------------------- | ----------- | ------------------------------- |
-| `workerRequestsPerDay`     | 70,000      | of Workers Free's 100,000 a day |
-| `tursoRowsReadPerMonth`    | 250 million | 50% of Turso Free's 500 million |
-| `tursoRowsWrittenPerMonth` | 5 million   | 50% of Turso Free's 10 million  |
-| `tursoStorageBytes`        | 2.5 GB      | 50% of Turso Free's 5 GB        |
+| Threshold              | Value  |                                 |
+| ---------------------- | ------ | ------------------------------- |
+| `workerRequestsPerDay` | 70,000 | of Workers Free's 100,000 a day |
 
-Past one, it logs a line starting `wave usage warning:` with `console.error`, once a UTC day
-for Worker requests and once a UTC month for Turso (the `usage_warnings` table remembers
-which went out). A source it can't read logs the same kind of line, once a day. Search the
-Worker's logs for `wave usage warning` to see them; a Cloudflare notification on that line
-emails the owner. A source whose secrets aren't set is skipped. Change a threshold in
-`src/limits.ts` and deploy.
+Past it, it logs a line starting `wave usage warning:` with `console.error`, once a UTC day
+(the `usage_warnings` table remembers which went out). When it can't read the figures it logs
+the same kind of line, once a day. Search the Worker's logs for `wave usage warning` to see
+them; a Cloudflare notification on that line emails the owner. Without its secrets the watch
+is skipped. Change the threshold in `src/limits.ts` and deploy.
+
+Turso's usage (rows read and written, storage) is checked by hand once a month, in Turso's
+dashboard. The Worker holds no Turso Platform token: one can do far more than read usage, and
+the Worker already holds the database.
 
 ## Configuration
 
 Set on the Worker, never in the repo (`wrangler.toml` holds none of them; it holds only the
 rate limiting bindings, which `wrangler deploy` creates and which need Wrangler 4.36 or
-later, the usage watch's Cron Trigger and the Workers Logs and Issues settings):
+later, the usage watch's Cron Trigger and the Workers Logs and Issues settings, with
+invocation logs off):
 
-| Name                         | Kind   |                                                                                     |
-| ---------------------------- | ------ | ----------------------------------------------------------------------------------- |
-| `TURSO_DATABASE_URL`         | secret | `libsql://<db>-<org>.turso.io`                                                      |
-| `TURSO_AUTH_TOKEN`           | secret | a Turso token for that database                                                     |
-| `GOOGLE_CLIENT_ID`           | secret | Wave's **web** OAuth client id, the audience of the app's ID tokens                 |
-| `SOULSEEK_KEY`               | secret | base64 of 32 random bytes: version 1 of the Soulseek key                            |
-| `SOULSEEK_KEY_<n>`           | secret | optional: version n (2 or more) of the Soulseek key, the same way                   |
-| `ALLOWED_EMAILS`             | secret | optional: emails that may sign in, separated by commas                              |
-| `GENIUS_ACCESS_TOKEN`        | secret | Genius's client access token, for the Genius routes                                 |
-| `TICKETMASTER_API_KEY`       | secret | Ticketmaster Discovery's API key, for the Ticketmaster routes                       |
-| `CLOUDFLARE_ACCOUNT_ID`      | secret | optional, for the usage watch: the Cloudflare account id                            |
-| `CLOUDFLARE_ANALYTICS_TOKEN` | secret | optional, for the usage watch: a token with only Account Analytics Read             |
-| `TURSO_ORG`                  | secret | optional, for the usage watch: the Turso organization's slug                        |
-| `TURSO_PLATFORM_TOKEN`       | secret | optional, for the usage watch: a read-only Platform API token for that organization |
+| Name                         | Kind   |                                                                         |
+| ---------------------------- | ------ | ----------------------------------------------------------------------- |
+| `TURSO_DATABASE_URL`         | secret | `libsql://<db>-<org>.turso.io`                                          |
+| `TURSO_AUTH_TOKEN`           | secret | a Turso token for that database                                         |
+| `GOOGLE_CLIENT_ID`           | secret | Wave's **web** OAuth client id, the audience of the app's ID tokens     |
+| `SOULSEEK_KEY`               | secret | base64 of 32 random bytes: version 1 of the Soulseek key                |
+| `SOULSEEK_KEY_<n>`           | secret | optional: version n (2 or more) of the Soulseek key, the same way       |
+| `ALLOWED_EMAILS`             | secret | optional: emails that may sign in, separated by commas                  |
+| `GENIUS_ACCESS_TOKEN`        | secret | Genius's client access token, for the Genius routes                     |
+| `TICKETMASTER_API_KEY`       | secret | Ticketmaster Discovery's API key, for the Ticketmaster routes           |
+| `CLOUDFLARE_ACCOUNT_ID`      | secret | optional, for the usage watch: the Cloudflare account id                |
+| `CLOUDFLARE_ANALYTICS_TOKEN` | secret | optional, for the usage watch: a token with only Account Analytics Read |
 
 ### Soulseek keys
 

@@ -110,7 +110,7 @@ test("account dialogs, sign-in failures and missing songs read in Portuguese", (
   assert.equal(confirmWaveAccountDeletion(pt).action.destructive, true);
   assert.deepEqual(
     planAlert(confirmSignOutEverywhere(pt), pt).buttons.map(({ label }) => label),
-    ["Cancelar", "Finalizar Sessão em Todos os Telefones"],
+    ["Cancelar", "Finalizar Sessão em Todos os Celulares"],
   );
   assert.equal(
     spotifySignInFailureLines(pt).failed,

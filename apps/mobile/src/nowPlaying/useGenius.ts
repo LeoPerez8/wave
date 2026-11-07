@@ -10,8 +10,7 @@ import { Storage } from "expo-sqlite/kv-store";
 import { useEffect, useMemo, useState, useSyncExternalStore } from "react";
 
 import { useLocalisation } from "@/localisation/localisation";
-import { WaveAccount } from "@/native/waveAccount";
-import { WAVE_ACCOUNT_CONFIG } from "@/settings/waveAccount";
+import { waveAccountAvailable } from "@/settings/waveAccount";
 import {
   geniusInsightsEnabled,
   subscribeGeniusInsights,
@@ -21,6 +20,7 @@ import {
 import { loadGenius, translateGenius, type GeniusAsk, type GeniusService } from "./geniusSource";
 import { keepGenius } from "./geniusStorage";
 import { isPlayheadLive, playheadVisibility } from "./playhead";
+import { askWaveService } from "@/sync/askWaveService";
 import { useWaveSignedIn } from "@/sync/waveSignedIn";
 
 /** A request that takes longer than this has failed. */
@@ -48,62 +48,36 @@ export interface GeniusShown {
   readonly referents: readonly GeniusReferent[] | null;
 }
 
-/** A request that takes longer than this has failed; aborted through [controller]. */
-const withTimeout = async <T>(
-  controller: AbortController,
-  request: () => Promise<T>,
-): Promise<T> => {
-  const timeout = setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS);
-  try {
-    return await request();
-  } finally {
-    clearTimeout(timeout);
-  }
-};
-
 /**
- * The JSON the sync service's Genius route [path] answers with, sent by the
- * native module with the session JS never sees. Rejects for an answer that
- * isn't OK (an older service that has no such route, a limit, Genius
- * failing), a signed-out phone, a timeout and [controller] aborting: the
- * native request itself can't be stopped, so its answer is then dropped.
+ * [request]'s answer, or a failure once it takes longer than
+ * `REQUEST_TIMEOUT_MS` or [controller] aborts: a request that can't be
+ * stopped (the native module's) then has its answer dropped. [request] gets
+ * a signal that aborts with it.
  */
-const askGenius = (controller: AbortController, path: string): Promise<unknown> =>
+const withTimeout = <T>(
+  controller: AbortController,
+  request: (signal: AbortSignal) => Promise<T>,
+): Promise<T> =>
   new Promise((resolve, reject) => {
+    const own = new AbortController();
+    const stop = (reason: Error): void => {
+      own.abort();
+      reject(reason);
+    };
     const { signal } = controller;
     if (signal.aborted) {
-      reject(new Error("Genius was no longer wanted"));
+      stop(new Error("The request was no longer wanted"));
       return;
     }
-    const stopped = (): void => {
-      clearTimeout(timeout);
-      reject(new Error("Genius was no longer wanted"));
-    };
-    const timeout = setTimeout(() => {
-      signal.removeEventListener("abort", stopped);
-      reject(new Error("Genius didn't answer in time"));
-    }, REQUEST_TIMEOUT_MS);
+    const stopped = (): void => stop(new Error("The request was no longer wanted"));
+    const timeout = setTimeout(() => stop(new Error("No answer in time")), REQUEST_TIMEOUT_MS);
     signal.addEventListener("abort", stopped, { once: true });
-    WaveAccount.request("GET", path, null).then(
-      (response) => {
+    request(own.signal)
+      .then(resolve, reject)
+      .finally(() => {
         clearTimeout(timeout);
         signal.removeEventListener("abort", stopped);
-        if (response.status !== 200) {
-          reject(new Error(`HTTP ${response.status} from Wave's Genius route`));
-          return;
-        }
-        try {
-          resolve(JSON.parse(response.body) as unknown);
-        } catch (cause) {
-          reject(cause);
-        }
-      },
-      (cause: unknown) => {
-        clearTimeout(timeout);
-        signal.removeEventListener("abort", stopped);
-        reject(cause);
-      },
-    );
+      });
   });
 
 /** The JSON [url] answers with, from [source] (named in the error of an answer that isn't OK). */
@@ -113,8 +87,8 @@ const askJson = (
   url: string,
   init: RequestInit,
 ): Promise<unknown> =>
-  withTimeout(controller, async () => {
-    const response = await fetch(url, { ...init, signal: controller.signal });
+  withTimeout(controller, async (signal) => {
+    const response = await fetch(url, { ...init, signal });
     if (!response.ok) throw new Error(`HTTP ${response.status} from ${source}`);
     return (await response.json()) as unknown;
   });
@@ -142,7 +116,7 @@ export const useGenius = (
   const visible = useSyncExternalStore(playheadVisibility.subscribe, playheadVisibility.get);
   const signedIn = useWaveSignedIn();
   // Until the session is known nothing is read, so a signed-in phone never flashes the invitation.
-  const asking = on && hasLyrics && signedIn !== null && WAVE_ACCOUNT_CONFIG !== null;
+  const asking = on && hasLyrics && signedIn !== null && waveAccountAvailable;
   // Kept while the song, its title and artist stay: a re-render with the same song doesn't ask again.
   const ask = useMemo((): GeniusAsk | null => {
     if (!asking || song === null) return null;
@@ -166,7 +140,7 @@ export const useGenius = (
       keep: keepGenius,
       enabled: () =>
         current && !controller.signal.aborted && geniusInsightsEnabled() && isPlayheadLive(),
-      get: (path) => askGenius(controller, path),
+      get: (path) => withTimeout(controller, () => askWaveService(path)),
       post: (url, body) =>
         askJson(controller, "Google Translate", url, {
           method: "POST",

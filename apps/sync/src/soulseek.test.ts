@@ -62,6 +62,20 @@ describe("PUT and GET /v1/soulseek", () => {
     assert.deepEqual(await soulseekOf(service, bo), { account: null });
   });
 
+  test("an account's Soulseek account never replaces another account's", async () => {
+    const service = await harness();
+    const anasSession = await service.signIn();
+    await service.request("PUT", "/v1/soulseek", { session: anasSession, json: ana });
+    const bo = await service.signIn({ sub: "google-sub-2", email: "bo@example.com" });
+    const bos = { username: "bo-on-soulseek", password: "fixture-soulseek-password-3" };
+    assert.equal(
+      (await service.request("PUT", "/v1/soulseek", { session: bo, json: bos })).status,
+      204,
+    );
+    assert.deepEqual(await soulseekOf(service, anasSession), { account: ana });
+    assert.deepEqual(await soulseekOf(service, bo), { account: bos });
+  });
+
   test("the password is kept encrypted, and only SOULSEEK_KEY reads it", async () => {
     const service = await harness();
     const session = await service.signIn();

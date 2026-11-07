@@ -1,25 +1,21 @@
 /**
  * The hourly usage watch (the Worker's Cron Trigger). It reads today's requests to every Worker
- * on the account from Cloudflare's GraphQL Analytics API, and this billing cycle's Turso usage
- * from Turso's Platform API, and compares them with `USAGE_WARNINGS`. Past a threshold it writes
- * one line starting `wave usage warning:`, at most once a period (a UTC day for Worker requests,
- * a UTC month for Turso); a source it can't read gets the same kind of line, once a day. A
+ * on the account from Cloudflare's GraphQL Analytics API and compares them with
+ * `USAGE_WARNINGS`. Past the threshold it writes one line starting `wave usage warning:`, at most
+ * once a UTC day; when it can't read them it writes the same kind of line, once a day. A
  * Cloudflare notification turns those lines into an email (see README.md). No line carries a
- * token, the account or the organization.
+ * token or the account. Turso's usage is checked by hand (README.md): a Turso Platform token
+ * could do far more than read it, so the Worker that holds the database holds none.
  */
 
 import type { Client } from "@libsql/client";
 import { type UsageWarnings, USAGE_WARNINGS } from "./limits.ts";
 
-/** The Worker secrets the watch reads; a source whose secrets aren't all set is skipped. */
+/** The Worker secrets the watch reads; without both it is skipped. */
 export interface UsageSecrets {
   readonly CLOUDFLARE_ACCOUNT_ID?: string | undefined;
   /** A Cloudflare API token with only Account › Account Analytics › Read. */
   readonly CLOUDFLARE_ANALYTICS_TOKEN?: string | undefined;
-  /** The Turso organization's slug. */
-  readonly TURSO_ORG?: string | undefined;
-  /** A Turso Platform API token for that organization. */
-  readonly TURSO_PLATFORM_TOKEN?: string | undefined;
 }
 
 export interface UsageWatchOptions {
@@ -35,14 +31,7 @@ export interface UsageWatchOptions {
   readonly note?: (message: string) => void;
 }
 
-/** One figure read from a source, with the threshold it's held to and the period it counts. */
-interface Reading {
-  readonly name: keyof UsageWarnings;
-  readonly value: number;
-  readonly period: string;
-}
-
-/** Why a source couldn't be read, safe to log: an HTTP status or a short reason. */
+/** Why the figures couldn't be read, safe to log: an HTTP status or a short reason. */
 class Unreadable extends Error {}
 
 const GRAPHQL_URL = "https://api.cloudflare.com/client/v4/graphql";
@@ -71,17 +60,7 @@ interface RequestsAnswer {
   readonly errors?: readonly unknown[] | null;
 }
 
-interface TursoAnswer {
-  readonly organization?: {
-    readonly usage?: {
-      readonly rows_read?: unknown;
-      readonly rows_written?: unknown;
-      readonly storage_bytes?: unknown;
-    };
-  };
-}
-
-/** Upstreams get this long to answer, so a hung one can't hold the cron run. */
+/** Cloudflare gets this long to answer, so a hung request can't hold the cron run. */
 const TIMEOUT_MS = 15_000;
 
 /** `2026-11-06T15:00:00.000Z` → `2026-11-06T15:00:00Z`, the form the GraphQL API takes. */
@@ -110,13 +89,14 @@ const fetchJson = async (
   }
 };
 
+/** Today's requests to every Worker on the account, or throws `Unreadable`. */
 const workerRequests = async (
   fetcher: typeof fetch,
   accountTag: string,
   token: string,
   at: number,
   day: string,
-): Promise<Reading[]> => {
+): Promise<number> => {
   const answer = (await fetchJson(fetcher, GRAPHQL_URL, {
     method: "POST",
     headers: { authorization: `Bearer ${token}`, "content-type": "application/json" },
@@ -136,28 +116,7 @@ const workerRequests = async (
     if (!isCount(requests)) throw new Unreadable("no figures");
     total += requests;
   }
-  return [{ name: "workerRequestsPerDay", value: total, period: day }];
-};
-
-const tursoUsage = async (
-  fetcher: typeof fetch,
-  organization: string,
-  token: string,
-  month: string,
-): Promise<Reading[]> => {
-  const url = `https://api.turso.tech/v1/organizations/${encodeURIComponent(organization)}/usage`;
-  const answer = (await fetchJson(fetcher, url, {
-    headers: { authorization: `Bearer ${token}` },
-  })) as TursoAnswer;
-  const usage = answer.organization?.usage;
-  const figures = [usage?.rows_read, usage?.rows_written, usage?.storage_bytes];
-  if (!figures.every(isCount)) throw new Unreadable("no figures");
-  const [rowsRead, rowsWritten, storageBytes] = figures as [number, number, number];
-  return [
-    { name: "tursoRowsReadPerMonth", value: rowsRead, period: month },
-    { name: "tursoRowsWrittenPerMonth", value: rowsWritten, period: month },
-    { name: "tursoStorageBytes", value: storageBytes, period: month },
-  ];
+  return total;
 };
 
 export const watchUsage = async (options: UsageWatchOptions): Promise<void> => {
@@ -168,7 +127,6 @@ export const watchUsage = async (options: UsageWatchOptions): Promise<void> => {
   const note = options.note ?? ((message: string) => console.log(message));
   const at = (options.now ?? Date.now)();
   const day = new Date(at).toISOString().slice(0, 10);
-  const month = day.slice(0, 7);
 
   /** Writes [message] unless the warning [name] for [period] was written already. */
   const warnOnce = async (name: string, period: string, message: string): Promise<void> => {
@@ -184,52 +142,31 @@ export const watchUsage = async (options: UsageWatchOptions): Promise<void> => {
     warn(`wave usage warning: ${message}`);
   };
 
-  const sources: {
-    readonly label: string;
-    readonly key: string;
-    readonly secretNames: string;
-    readonly read: (() => Promise<Reading[]>) | undefined;
-  }[] = [
-    {
-      label: "Cloudflare's Worker requests",
-      key: "cloudflareUnreadable",
-      secretNames: "CLOUDFLARE_ACCOUNT_ID or CLOUDFLARE_ANALYTICS_TOKEN",
-      read: (() => {
-        const { CLOUDFLARE_ACCOUNT_ID: account, CLOUDFLARE_ANALYTICS_TOKEN: token } = secrets;
-        if (!account || !token) return undefined;
-        return () => workerRequests(fetcher, account, token, at, day);
-      })(),
-    },
-    {
-      label: "Turso's usage",
-      key: "tursoUnreadable",
-      secretNames: "TURSO_ORG or TURSO_PLATFORM_TOKEN",
-      read: (() => {
-        const { TURSO_ORG: organization, TURSO_PLATFORM_TOKEN: token } = secrets;
-        if (!organization || !token) return undefined;
-        return () => tursoUsage(fetcher, organization, token, month);
-      })(),
-    },
-  ];
-
-  for (const source of sources) {
-    if (source.read === undefined) {
-      note(`usage watch: ${source.label} skipped, ${source.secretNames} isn't set`);
-      continue;
-    }
-    let readings: Reading[];
-    try {
-      readings = await source.read();
-    } catch (error) {
-      const reason = error instanceof Unreadable ? error.message : "an error";
-      await warnOnce(source.key, day, `couldn't read ${source.label} (${reason}) on ${day}`);
-      continue;
-    }
-    for (const { name, value, period } of readings) {
-      const threshold = thresholds[name];
-      if (value >= threshold) {
-        await warnOnce(name, period, `${name} at ${value}, past ${threshold} (${period} UTC)`);
-      }
-    }
+  const { CLOUDFLARE_ACCOUNT_ID: account, CLOUDFLARE_ANALYTICS_TOKEN: token } = secrets;
+  if (!account || !token) {
+    note(
+      "usage watch: Cloudflare's Worker requests skipped, CLOUDFLARE_ACCOUNT_ID or CLOUDFLARE_ANALYTICS_TOKEN isn't set",
+    );
+    return;
+  }
+  let requests: number;
+  try {
+    requests = await workerRequests(fetcher, account, token, at, day);
+  } catch (error) {
+    const reason = error instanceof Unreadable ? error.message : "an error";
+    await warnOnce(
+      "cloudflareUnreadable",
+      day,
+      `couldn't read Cloudflare's Worker requests (${reason}) on ${day}`,
+    );
+    return;
+  }
+  const threshold = thresholds.workerRequestsPerDay;
+  if (requests >= threshold) {
+    await warnOnce(
+      "workerRequestsPerDay",
+      day,
+      `workerRequestsPerDay at ${requests}, past ${threshold} (${day} UTC)`,
+    );
   }
 };

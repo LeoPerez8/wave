@@ -63,17 +63,17 @@ export const settingsPtBr: typeof settingsEn = {
   deleteWaveAccount: {
     title: "Apagar sua Conta Wave?",
     message:
-      "O servidor do Wave apaga tudo o que tem da conta, e a sessão deste telefone é finalizada. " +
-      "Nada neste telefone é apagado. Depois, o Google pede que você escolha a conta, para " +
+      "O servidor do Wave apaga tudo o que tem da conta, e a sessão deste celular é finalizada. " +
+      "Nada neste celular é apagado. Depois, o Google pede que você escolha a conta, para " +
       "confirmar que é você.",
     action: "Apagar Conta",
   },
   signOutEverywhere: {
-    title: "Finalizar sessão em todos os telefones?",
+    title: "Finalizar sessão em todos os celulares?",
     message:
-      "Todos os telefones com sessão iniciada nesta Conta Wave têm a sessão finalizada, inclusive " +
-      "este. Nada nos telefones é apagado. Inicie sessão novamente nos telefones que você usa.",
-    action: "Finalizar Sessão em Todos os Telefones",
+      "Todos os celulares com sessão iniciada nesta Conta Wave têm a sessão finalizada, inclusive " +
+      "este. Nada nos celulares é apagado. Inicie sessão novamente nos celulares que você usa.",
+    action: "Finalizar Sessão em Todos os Celulares",
   },
   launcherIcon: {
     title: "Alterar também o ícone do app?",
@@ -219,6 +219,7 @@ export const settingsPtBr: typeof settingsEn = {
   aButtonAnotherSlotHoldsSwapsPlaces:
     "Um botão que já ocupa outra posição troca de lugar com o desta posição.",
   signIn: "Iniciar Sessão",
+  opensTheWaveAccountInSettings: "Abre a Conta Wave nos Ajustes",
   signInAgain: "Iniciar Sessão Novamente",
   signingIn: "Iniciando Sessão…",
   lightBackground: "Fundo claro",
@@ -266,9 +267,9 @@ export const settingsPtBr: typeof settingsEn = {
     "Adicione uma conta do Google nos ajustes do Android e inicie sessão.",
   thisGoogleAccountCantUseWavesServer: "Esta conta do Google não pode usar o servidor do Wave.",
   wavesServerHasNoRoomForNewAccounts:
-    "O servidor do Wave não tem espaço para novas Contas Wave. Tudo neste telefone continua funcionando.",
+    "O servidor do Wave não tem espaço para novas Contas Wave. Tudo neste celular continua funcionando.",
   wavesServerMadeAllTheNewAccountsItCanToday:
-    "O servidor do Wave já criou hoje todas as novas Contas Wave que podia. Tente novamente amanhã. Tudo neste telefone continua funcionando.",
+    "O servidor do Wave já criou hoje todas as novas Contas Wave que podia. Tente novamente amanhã. Tudo neste celular continua funcionando.",
   couldntSignInTryAgain: "Não foi possível iniciar sessão. Tente novamente.",
   signInWithGoogle: "Iniciar Sessão com o Google",
   couldntDeleteTheAccountWithoutAConnection: "Não foi possível apagar a conta sem conexão.",
@@ -276,13 +277,13 @@ export const settingsPtBr: typeof settingsEn = {
   signingOut: "Finalizando Sessão…",
   deleting: "Apagando…",
   deleteAccount: "Apagar Conta",
-  signOutOnAllPhones: "Finalizar Sessão em Todos os Telefones",
+  signOutOnAllPhones: "Finalizar Sessão em Todos os Celulares",
   everyPhoneOnThisWaveAccountSignedOut:
-    "A sessão de todos os telefones nesta Conta Wave foi finalizada. Inicie sessão novamente para manter seu backup.",
+    "A sessão de todos os celulares nesta Conta Wave foi finalizada. Inicie sessão novamente para manter seu backup.",
   couldntSignOutOnAllPhonesWithoutAConnection:
-    "Não foi possível finalizar a sessão em todos os telefones sem conexão.",
+    "Não foi possível finalizar a sessão em todos os celulares sem conexão.",
   wavesServerDidntSignOutThePhonesTry:
-    "O servidor do Wave não finalizou a sessão dos telefones. Tente novamente.",
+    "O servidor do Wave não finalizou a sessão dos celulares. Tente novamente.",
   googleDidntConfirmThisAccountPick:
     "O Google não confirmou esta conta. Escolha a conta do Google com que você iniciou sessão no Wave e tente novamente.",
   waveAccount: "Conta Wave",

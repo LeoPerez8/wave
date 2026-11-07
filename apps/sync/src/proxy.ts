@@ -1,5 +1,5 @@
 /**
- * What the service's provider routes share (Genius now): one fixed request to
+ * What the service's provider routes (Genius and Ticketmaster) share: one fixed request to
  * a provider, answered from Cloudflare's cache when another phone asked it
  * lately, and otherwise from the provider, with the Worker's own key. An
  * answer is cached by the provider request alone, never by the account that

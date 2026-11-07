@@ -1,7 +1,7 @@
 import { PermissionsAndroid, Platform } from "react-native";
 import { persistedSetting } from "@/lib/persistedSetting";
 import { WaveNative } from "@/native/waveNative";
-import { WAVE_ACCOUNT_CONFIG } from "@/settings/waveAccount";
+import { waveAccountAvailable } from "@/settings/waveAccount";
 import { useWaveSignedIn } from "@/sync/waveSignedIn";
 
 /**
@@ -9,7 +9,7 @@ import { useWaveSignedIn } from "@/sync/waveSignedIn";
  * the sync service's routes with the Wave account's session, so a build with
  * no service (made before it was set up) never can.
  */
-export const showsConfigured = WAVE_ACCOUNT_CONFIG !== null;
+export const showsConfigured = waveAccountAvailable;
 
 /**
  * Whether shows can be followed now: `"available"` while a Wave account is

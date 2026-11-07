@@ -541,12 +541,12 @@ export const createSyncService = (options: SyncServiceOptions): SyncService => {
   };
 
   /**
-   * Counts a request [accountId] makes [provider] answer today (UTC),
-   * refusing with 429 past [limit] until the next day.
+   * Counts one of [accountId]'s requests on its `upstream_usage` [row] today
+   * (UTC), refusing with 429 past [limit] until the next day.
    */
   const countUpstream = async (
     accountId: string,
-    provider: string,
+    row: string,
     limit: SyncLimitName,
   ): Promise<void> => {
     const at = now();
@@ -557,7 +557,7 @@ export const createSyncService = (options: SyncServiceOptions): SyncService => {
               count = CASE WHEN day = excluded.day THEN count + 1 ELSE 1 END,
               day = excluded.day
             RETURNING count`,
-      args: [accountId, provider, day],
+      args: [accountId, row, day],
     });
     if (Number(result.rows[0]?.count) > limits[limit]) {
       throw new Answer(
@@ -570,11 +570,20 @@ export const createSyncService = (options: SyncServiceOptions): SyncService => {
 
   /** A provider the service answers fixed requests to. */
   interface Provider {
-    /** Its name in `upstream_usage` and the log. */
+    /** Its name in the log. */
     readonly name: string;
     readonly access: ProviderAccess | undefined;
     readonly perMinute: SyncLimitName;
-    readonly perDay: SyncLimitName;
+    /**
+     * What a request to [url] counts toward in a UTC day: its `upstream_usage`
+     * row and limit, and whether answers from the cache count too (else only
+     * those the provider makes).
+     */
+    readonly perDay: (url: URL) => {
+      readonly row: string;
+      readonly limit: SyncLimitName;
+      readonly cachedAnswersCount: boolean;
+    };
     /** The provider request a phone's [url] stands for, with the Worker's [key]; null for none. */
     readonly request: (url: URL, key: string) => UpstreamRequest | null;
     /** How far apart its requests start, when it takes only so many a second. */
@@ -599,9 +608,9 @@ export const createSyncService = (options: SyncServiceOptions): SyncService => {
 
   /**
    * A route answering [provider]'s fixed requests: it needs a session and
-   * counts the account's requests per minute; one the cache can't answer
-   * counts toward the account's day too, and waits its turn with a paced
-   * provider. Answers the provider's JSON, or `{ "error": "upstream_failed" }`
+   * counts the account's requests per minute and per day (`perDay` says
+   * whether a cached answer counts toward the day); one the cache can't
+   * answer waits its turn with a paced provider. Answers the provider's JSON, or `{ "error": "upstream_failed" }`
    * (502) when the provider fails, with nothing of the provider's error, and
    * `{ "error": "busy" }` (503) when too many requests wait their turn.
    */
@@ -614,11 +623,13 @@ export const createSyncService = (options: SyncServiceOptions): SyncService => {
       }
       const request = provider.request(url, access.token);
       if (request === null) throw failure(400, "bad_request");
+      const day = provider.perDay(url);
+      if (day.cachedAnswersCount) await countUpstream(session.accountId, day.row, day.limit);
       const cached = await cachedAnswer(upstream, url.origin, request);
       if (cached !== null) return proxiedAnswer(cached);
       const turn = takeTurn(provider);
       if (turn === null) throw failure(503, "busy");
-      await countUpstream(session.accountId, provider.name, provider.perDay);
+      if (!day.cachedAnswersCount) await countUpstream(session.accountId, day.row, day.limit);
       if (turn > 0) await wait(turn);
       const answer = await askUpstream(upstream, request);
       if (!answer.ok) {
@@ -635,7 +646,7 @@ export const createSyncService = (options: SyncServiceOptions): SyncService => {
     name: "genius",
     access: options.genius,
     perMinute: "maxGeniusRequestsPerMinute",
-    perDay: "maxGeniusRequestsPerDay",
+    perDay: () => ({ row: "genius", limit: "maxGeniusRequestsPerDay", cachedAnswersCount: false }),
     request: (url, token) => {
       const target = geniusUpstreamUrl(url.pathname, url.searchParams);
       return target === null
@@ -659,7 +670,18 @@ export const createSyncService = (options: SyncServiceOptions): SyncService => {
     name: "ticketmaster",
     access: options.ticketmaster,
     perMinute: "maxTicketmasterRequestsPerMinute",
-    perDay: "maxTicketmasterRequestsPerDay",
+    perDay: (url) =>
+      url.pathname === "/v1/ticketmaster/attractions"
+        ? {
+            row: "ticketmaster:attractions",
+            limit: "maxTicketmasterAttractionSearchesPerDay",
+            cachedAnswersCount: true,
+          }
+        : {
+            row: "ticketmaster:events",
+            limit: "maxTicketmasterEventLookupsPerDay",
+            cachedAnswersCount: true,
+          },
     spacingMs: TICKETMASTER_SPACING_MS,
     request: (url, key) => {
       const target = ticketmasterUpstreamUrl(url.pathname, url.searchParams);
