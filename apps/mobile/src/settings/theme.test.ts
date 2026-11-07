@@ -79,7 +79,13 @@ const loadTheme = async (
       `../lib/persistedSetting.ts?fixture=${id}`
     )) as typeof import("../lib/persistedSetting.ts");
     const { device, Storage } = (await import(boundary)) as {
-      device: { alias: string; launch: LaunchTheme; css: Record<string, Record<string, string>> };
+      device: {
+        alias: string;
+        /** The alias Recents was last given; null for the manifest's icon, undefined before any. */
+        recents: string | null | undefined;
+        launch: LaunchTheme;
+        css: Record<string, Record<string, string>>;
+      };
       Storage: { getItemSync: (key: string) => string | null };
     };
     return { theme, settings, device, Storage };

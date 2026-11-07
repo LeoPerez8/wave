@@ -550,7 +550,7 @@ class WaveNativeModule : Module() {
       appContext.currentActivity?.let {
         LaunchThemeStore.applySplash(it, LaunchThemeStore.load(context))
         // A new activity (a restart, a configuration change) starts without it.
-        taskIcon.apply(it)
+        taskIcon.applyTo(it)
       }
     }
 
@@ -566,10 +566,12 @@ class WaveNativeModule : Module() {
         appContext.reactContext?.let { (it.applicationContext as Application).unregisterActivityLifecycleCallbacks(switcher) }
       }
       launcherIconSwitcher = null
+      if (taskIconLazy.isInitialized()) taskIcon.close()
     }
   }
 
-  private val taskIcon by lazy { TaskIcon(context.applicationContext) }
+  private val taskIconLazy = lazy { TaskIcon(context.applicationContext) }
+  private val taskIcon by taskIconLazy
 
   /** Created on first use (on the main thread) and told when Wave's activities stop. */
   private var launcherIconSwitcher: LauncherIconSwitcher? = null

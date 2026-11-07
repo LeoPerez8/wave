@@ -5,6 +5,12 @@ it slowed the build and weighed on the phone; find a cheap way to bring the colo
 during the research: the owner's orange, `#ff5500`, comes out red on the icon. The real question is
 how to get an icon that matches that orange without the build and phone costs going up.
 
+**Outcome (#1003):** the owner kept the splash's moving waves in the icon's inks, so option 5 was
+not taken. The palette was to get a vivid ink every 15° (37 inks), but its 49,283 splash styles
+failed the build: Android's generated `R$style` class holds about 32,700 styles. Wave shipped
+option 1 (#1004) and option 4 (#1005, `vivid39` and `vivid49`, 27 inks), and Recents now shows the
+stored icon (#1006).
+
 Research only. No app code was changed. The scratch scripts behind the numbers are listed under
 [Method](#method).
 

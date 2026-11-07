@@ -82,8 +82,9 @@ describe("launch splash list", () => {
   test("the splash styles fit in Android's generated style class (#1005)", () => {
     // R$style gets a field per style, two constant-pool entries each, and a
     // class holds 65,535: about 32,700 styles, some 1,300 of them the app's
-    // and libraries' own. 37 inks (49,283 splash styles) failed the build.
-    assert.ok(LAUNCH_SPLASH_THEMES.length <= 30_000, `${LAUNCH_SPLASH_THEMES.length} styles`);
+    // and libraries' own. 29 inks (30,275 splash styles) fit; 37 inks
+    // (49,283) failed the build.
+    assert.ok(LAUNCH_SPLASH_THEMES.length <= 31_000, `${LAUNCH_SPLASH_THEMES.length} styles`);
   });
 
   test("an orange opens on its orange ink's style, after the earlier names (#1005)", () => {

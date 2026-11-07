@@ -30,9 +30,10 @@ class TaskIcon(private val context: Context) {
   private val packageManager: PackageManager = context.packageManager
   private val worker = Executors.newSingleThreadExecutor()
 
-  /** The alias whose icon Recents shows; null for the activity's own (the manifest's). */
-  @Volatile private var alias: String? = null
-  @Volatile private var wanted = false
+  /** What JS last asked Recents to show; null before it first asked. */
+  private class Request(val alias: String?)
+
+  @Volatile private var request: Request? = null
 
   /** The activity and alias last handed to Android, so a resume that changes nothing does nothing. */
   private var shown: Pair<WeakReference<Activity>, String?>? = null
@@ -42,20 +43,19 @@ class TaskIcon(private val context: Context) {
 
   /** Shows [alias]'s icon in Recents (null: the manifest's) on [activity] and every later one. */
   fun show(alias: String?, activity: Activity?) {
-    this.alias = alias
-    wanted = true
-    activity?.let(::apply)
+    request = Request(alias)
+    activity?.let(::applyTo)
   }
 
   /** Gives [activity]'s task the icon last asked for; nothing before the first [show]. */
-  fun apply(activity: Activity) {
-    if (!wanted) return
-    val alias = alias
+  fun applyTo(activity: Activity) {
+    val asked = request ?: return
+    val alias = asked.alias
     worker.execute {
       val bitmap = alias?.let(::bitmap)
       if (alias != null && bitmap == null) return@execute
       activity.runOnUiThread {
-        if (this.alias != alias || activity.isDestroyed) return@runOnUiThread
+        if (request !== asked || activity.isDestroyed) return@runOnUiThread
         val last = shown
         if (last != null && last.first.get() === activity && last.second == alias) return@runOnUiThread
         @Suppress("DEPRECATION")
@@ -69,6 +69,11 @@ class TaskIcon(private val context: Context) {
         shown = WeakReference(activity) to alias
       }
     }
+  }
+
+  /** Stops the drawing thread; the module calls it when it goes away. */
+  fun close() {
+    worker.shutdownNow()
   }
 
   private fun bitmap(alias: String): Bitmap? {
