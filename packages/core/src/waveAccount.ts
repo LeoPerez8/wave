@@ -89,10 +89,13 @@ export type WaveSession =
 
 /**
  * Why signing in didn't work: no network, the phone has no Google account to
- * pick, the service turned this Google account away (its allowlist), or
- * Google or the service didn't answer or accept it.
+ * pick, the service turned this Google account away (its allowlist), it
+ * holds all the accounts it may (`accountsFull`) or has made all the new ones
+ * it may today (`newAccountsPaused`), or Google or the service didn't answer
+ * or accept it.
  */
-export type WaveSignInFailure = "offline" | "noGoogleAccount" | "notAllowed" | "failed";
+export type WaveSignInFailure =
+  "offline" | "noGoogleAccount" | "notAllowed" | "accountsFull" | "newAccountsPaused" | "failed";
 
 /**
  * Why deleting the account didn't work: no network, the service didn't
@@ -250,6 +253,8 @@ const SIGN_IN_FAILURES: ReadonlySet<string> = new Set<WaveSignInFailure>([
   "offline",
   "noGoogleAccount",
   "notAllowed",
+  "accountsFull",
+  "newAccountsPaused",
   "failed",
 ]);
 

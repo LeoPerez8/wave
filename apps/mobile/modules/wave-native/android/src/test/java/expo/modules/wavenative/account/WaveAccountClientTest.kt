@@ -68,6 +68,20 @@ class WaveAccountClientTest {
     }
   }
 
+  @Test fun `the service's account limits each say which, and leave the phone as it was`() {
+    val limits = listOf(
+      Reply(403, """{"error":"limit","limit":"maxAccounts"}""") to WaveAccountFailure.ACCOUNTS_FULL,
+      Reply(429, """{"error":"limit","limit":"maxNewAccountsPerDay"}""") to WaveAccountFailure.NEW_ACCOUNTS_PAUSED,
+      Reply(429, """{"error":"limit","limit":"maxSignInsPerMinute"}""") to WaveAccountFailure.REJECTED,
+    )
+    for ((reply, expected) in limits) {
+      FakeWaveService { reply }.use { service ->
+        assertEquals(expected, failure { client().signIn(service.url, ana) })
+        assertEquals(WaveSessionState.SignedOut, client().session())
+      }
+    }
+  }
+
   @Test fun `signing in offline says so, and a service that doesn't answer online says that`() {
     val nowhere = FakeWaveService.closedUrl()
     online = false

@@ -67,6 +67,12 @@ its Wave account (keyed by Google's `sub`).
 `429` past `maxSignInsPerMinute`: attempts from one address (Cloudflare's `CF-Connecting-IP`,
 counted before the ID token is checked) or sign-ins to one Google account.
 
+A sign-in that would make a new account is refused, and makes nothing, when the service holds
+`maxAccounts` accounts (`403 { "error": "limit", "limit": "maxAccounts" }`) or has made
+`maxNewAccountsPerDay` in the last 24 hours (`429 { "error": "limit", "limit":
+"maxNewAccountsPerDay" }`, with `Retry-After` until the oldest of them is a day old). Existing
+accounts sign in either way.
+
 The service keeps only a SHA-256 of the session token. A session lasts until it is ended,
 the account is deleted, or it goes 90 days without a request: then it answers
 `401 { "error": "unauthorized" }` and is deleted. Every request made with it starts the 90
@@ -256,18 +262,20 @@ session itself ended.
 | 401    | `{ "error": "invalid_id_token" }`                                                          |
 | 401    | `{ "error": "id_token_required" }`                                                         |
 | 403    | `{ "error": "not_allowed" }`                                                               |
+| 403    | `{ "error": "limit", "limit": "maxAccounts" }`                                             |
 | 404    | `{ "error": "not_found" }`                                                                 |
 | 413    | `{ "error": "limit", "limit": "<name>" }`                                                  |
 | 429    | `{ "error": "limit", "limit": "maxRequestsPerMinute" }`, with `Retry-After`                |
 | 429    | `{ "error": "limit", "limit": "maxSignInsPerMinute" }`, with `Retry-After`                 |
+| 429    | `{ "error": "limit", "limit": "maxNewAccountsPerDay" }`, with `Retry-After`                |
 | 429    | `{ "error": "limit", "limit": "maxRequestsPerAddressPerMinute" }`, with `Retry-After`      |
 | 429    | `{ "error": "limit", "limit": "maxFailedLookupsPerAddressPerMinute" }`, with `Retry-After` |
 | 500    | `{ "error": "internal" }`                                                                  |
 
 ## Limits
 
-`SYNC_LIMITS` in `src/limits.ts`. Past one, the service answers `413` (or `429` for a
-rate) and names it. Starting values, so a 50,000-song Library with 200,000 plays fits:
+`SYNC_LIMITS` in `src/limits.ts`. Past one, the service answers `413` (`429` for a rate,
+`403` for `maxAccounts`) and names it. Starting values, so a 50,000-song Library with 200,000 plays fits:
 
 | Limit                                 | Value     |                                                      |
 | ------------------------------------- | --------- | ---------------------------------------------------- |
@@ -284,6 +292,8 @@ rate) and names it. Starting values, so a 50,000-song Library with 200,000 plays
 | `maxDismissedSuggestions`             | 50,000    |                                                      |
 | `maxRequestsPerMinute`                | 120       | per session                                          |
 | `maxSignInsPerMinute`                 | 10        | `POST /v1/session`, per address and per account      |
+| `maxAccounts`                         | 100       | accounts the service holds                           |
+| `maxNewAccountsPerDay`                | 10        | new accounts in any 24 hours                         |
 | `maxRequestsPerAddressPerMinute`      | 600       | every route, per address                             |
 | `maxFailedLookupsPerAddressPerMinute` | 20        | lookups that find no session, per address            |
 | `failedLookupBlockSeconds`            | 300       | how long an address past the line above is held back |

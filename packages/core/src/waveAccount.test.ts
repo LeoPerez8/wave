@@ -200,6 +200,17 @@ describe("stepWaveAccount", () => {
     });
   });
 
+  test("the service's account limits each say why, with Sign In still offered", () => {
+    for (const reason of ["accountsFull", "newAccountsPaused"] as const) {
+      const refused = stepWaveAccount(WAVE_ACCOUNT_SIGNED_OUT, { type: "signInFailed", reason });
+      assert.deepEqual(waveAccountView(refused, true), {
+        kind: "signedOut",
+        action: "signIn",
+        note: reason,
+      });
+    }
+  });
+
   test("the next sign-in clears why the last one didn't work", () => {
     const refused = stepWaveAccount(WAVE_ACCOUNT_SIGNED_OUT, {
       type: "signInFailed",
