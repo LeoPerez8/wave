@@ -1,25 +1,23 @@
 #!/usr/bin/env bash
-# PR-only: brings the lockfile up to date and applies formatting, then commits
-# the result back to the PR branch. Agent sessions working on this repo can't
-# reach the npm registry, so CI is where the lockfile gets resolved.
-#   HEAD_REF must name the PR branch.
+# PR-only, the half of the autofix that runs the PR's code: brings the lockfile up to date and
+# applies formatting, then writes the result as a patch. Its job has a read-only token; the
+# Apply autofix job (scripts/ci/apply-autofix.sh) commits the patch only if it holds nothing but
+# a lockfile update and formatting. Agent sessions working on this repo can't reach the npm
+# registry, so CI is where the lockfile gets resolved.
+#   scripts/ci/autofix.sh <patch file>
+# Writes `patch=true` to $GITHUB_OUTPUT when there's something to commit.
 set -euo pipefail
 
-if [ ! -f pnpm-lock.yaml ]; then
-  scripts/ci/bootstrap-deps.sh
-fi
+patch="${1:?Usage: scripts/ci/autofix.sh <patch file>}"
 
 pnpm install --no-frozen-lockfile
 pnpm fmt
 
-if [ -n "$(git status --porcelain)" ]; then
-  git add -A
-  git -c user.name="github-actions[bot]" \
-    -c user.email="41898282+github-actions[bot]@users.noreply.github.com" \
-    commit -q -m "chore: update lockfile and formatting"
-  git push -q origin "HEAD:${HEAD_REF:?}"
-  echo "Committed lockfile/formatting changes:"
-  git show --stat --oneline HEAD
+mkdir -p "$(dirname "$patch")"
+git add -A
+git diff --cached --binary HEAD > "$patch"
+if [ -s "$patch" ]; then
+  echo "Lockfile/formatting changes for the Apply autofix job:"
+  git diff --cached --stat HEAD
+  echo "patch=true" >> "${GITHUB_OUTPUT:-/dev/null}"
 fi
-
-echo "sha=$(git rev-parse HEAD)" >> "${GITHUB_OUTPUT:-/dev/null}"
