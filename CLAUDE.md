@@ -31,8 +31,13 @@ Pick tickets whose blockers are closed.
   workflow (`gh workflow run promote.yml`, with `-f version=0.5.6-ti` for one that isn't the
   newest). It publishes that release's commit as `0.5.6`, in a full build. See `docs/spec.md`,
   Build and CI.
+- PR runs check, test and compile native code but build no APK, so they get no secret and no
+  signing key. Test on a phone after the merge, with the `ti` release the push to `main` makes.
+  To try a change before merging, build it locally (`pnpm android`, or `scripts/emulator-apk.sh`
+  for the emulator); a local debug build is signed with the debug key and needs an uninstall to
+  replace a release build, which deletes Wave's data on that phone.
 - Releases also reach phones over the air (`docs/spec.md`, Build and CI). Channels are `ti` and
-  `main`, fixed in the APK by the run that built it (a push to `main` follows `ti`, a promotion follows `main`); PR and local builds have updates off. A JS
+  `main`, fixed in the APK by the run that built it (a push to `main` follows `ti`, a promotion follows `main`); local builds have updates off. A JS
   change arrives as a bundle, and a change to the runtime version (the kept APK's key) as an APK
   Wave installs itself. Phones run only updates, and install only APKs, that CI signed with
   `UPDATES_SIGNING_KEY`, checked against the certificate in their own APK. Never publish around

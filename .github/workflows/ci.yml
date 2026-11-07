@@ -31,8 +31,8 @@ env:
   # prereleases may reuse a compatible native APK. Pushes to main release through the Checks
   # job's release_tag.
   IS_RELEASE: ${{ (github.event_name == 'push' || github.event_name == 'workflow_dispatch') && startsWith(github.ref, 'refs/tags/v') }}
-  # A run for the ti channel: a push to main, a -ti tag, or a PR into main, which may repack.
-  IS_TI: ${{ github.ref == 'refs/heads/main' || (startsWith(github.ref, 'refs/tags/v') && endsWith(github.ref, '-ti')) || github.event.pull_request.base.ref == 'main' }}
+  # A run for the ti channel: a push to main or a -ti tag, which may repack.
+  IS_TI: ${{ github.ref == 'refs/heads/main' || (startsWith(github.ref, 'refs/tags/v') && endsWith(github.ref, '-ti')) }}
   # A push to main, which may release the next version (the Version job).
   IS_BUMP: ${{ github.event_name == 'push' && github.ref == 'refs/heads/main' }}
 
@@ -48,7 +48,6 @@ jobs:
       workspace: ${{ steps.rule.outputs.workspace }}
       ci: ${{ steps.rule.outputs.ci }}
       native: ${{ steps.rule.outputs.native }}
-      apk: ${{ steps.rule.outputs.apk }}
       nativeTests: ${{ steps.rule.outputs.nativeTests }}
     steps:
       - uses: actions/checkout@v5
@@ -68,13 +67,6 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: scripts/ci/changes.sh
 
-      - name: Report the skipped APK build
-        if: steps.rule.outputs.apk == 'false' && env.IS_SAME_REPO_PR == 'true'
-        env:
-          GH_TOKEN: ${{ github.token }}
-          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
-        run: scripts/ci/report-apk-skipped.sh
-
       - name: Report the skipped native unit tests
         if: steps.rule.outputs.nativeTests == 'false' && env.IS_SAME_REPO_PR == 'true'
         env:
@@ -82,7 +74,7 @@ jobs:
           HEAD_SHA: ${{ github.event.pull_request.head.sha }}
         run: |
           scripts/ci/report.sh skipped "Native unit tests" \
-            "Nothing they test changed (wave-native, wave-glass, the app config, config plugins, the lockfile or CI), so they didn't run."
+            "Nothing they test or compile changed (wave-native, wave-glass, the app config, config plugins, the lockfile or CI), so they didn't run."
 
   # A push to main that changes the app releases the next -ti version: this commits it to
   # package.json as "Release Wave <version>", on top of main's latest tip, and tags it v<version> in the same push (scripts/ci/bump-version.sh).
@@ -273,6 +265,13 @@ jobs:
         working-directory: apps/mobile/android
         run: ../../../scripts/ci/step.sh "Native unit tests" ./gradlew :wave-native:testDebugUnitTest :wave-glass:testDebugUnitTest --no-daemon --console=plain
 
+      # PRs build no APK, so this is where their native code compiles: the app's Kotlin and Java
+      # and every native module's. The debug variant needs no JS bundle and no signing key.
+      - name: Compile the app's native code
+        if: github.event_name == 'pull_request'
+        working-directory: apps/mobile/android
+        run: ../../../scripts/ci/step.sh "Compile the app's native code" ./gradlew :app:compileDebugJavaWithJavac --no-daemon --console=plain
+
       - name: Report
         if: always() && env.IS_SAME_REPO_PR == 'true' && job.status != 'cancelled'
         env:
@@ -286,11 +285,12 @@ jobs:
       artifact: ${{ steps.apk.outputs.name }}
       update_channel: ${{ steps.updates.outputs.WAVE_UPDATE_CHANNEL }}
       runtime_version: ${{ steps.updates.outputs.WAVE_RUNTIME_VERSION }}
-    # Only PRs can skip: on main and release tags every area counts as changed.
+    # Only release runs (pushes to main and tags) build an APK: a PR run gets no secret and no
+    # signing key, and its native code compiles in the Native unit tests job.
     # Only a release needs the patch notes, so elsewhere a failed notes job doesn't stop the
     # APK. A job-level `if` can't read `env`, so the release test is the tag half of IS_RELEASE.
     if: >-
-      ${{ !cancelled() && needs.changes.outputs.apk == 'true' && needs.checks.result == 'success' &&
+      ${{ !cancelled() && github.event_name != 'pull_request' && needs.checks.result == 'success' &&
       (needs.notes.result == 'success' ||
       !startsWith(github.ref, 'refs/tags/v')) }}
     runs-on: ubuntu-latest
@@ -348,7 +348,7 @@ jobs:
           EXPO_NO_GIT_STATUS: "1"
         run: ../../scripts/ci/step.sh "Prebuild" pnpm exec expo prebuild --platform android --no-install
 
-      # Main saves Metro's cache; PRs and tags only read it. The key starts
+      # Main saves Metro's cache; tags only read it. The key starts
       # over when dependencies change. The path is uniwind's cache store (os.tmpdir()), which
       # replaces Expo's in metro.config.js.
       - name: Restore Metro's cache
@@ -372,14 +372,14 @@ jobs:
         run: scripts/ci/step.sh "Bundle JavaScript" scripts/ci/bundle.sh
 
       # Each full build keeps its APK under a key for its native side and Metro's assets
-      # (scripts/ci/repack.ts). A PR whose key finds one swaps its JS bundle into it instead
-      # of running Gradle.
+      # (scripts/ci/repack.ts). A push to main or a -ti tag whose key finds one swaps its JS
+      # bundle into it instead of running Gradle.
       - name: Key the native side
         id: key
         run: node scripts/ci/repack.ts key apps/mobile apps/mobile/android/app/build/generated/res/react/release | tee -a "$GITHUB_OUTPUT"
 
       # The key is the runtime version: one rule for "same native side". The channel follows
-      # the run, and a PR has none, so its APK never updates (scripts/ci/update-config.ts).
+      # the run (scripts/ci/update-config.ts).
       - name: Pick the update channel
         id: updates
         env:
@@ -413,7 +413,7 @@ jobs:
         with:
           path: ${{ env.KEPT_APK }}
           key: ${{ steps.key.outputs.key }}
-          lookup-only: ${{ github.event_name != 'pull_request' && env.IS_TI != 'true' }}
+          lookup-only: ${{ env.IS_TI != 'true' }}
 
       # When the cache has no entry, restore an exact-key full build from a successful
       # push on main, validated by kept-apk.ts before downloading it.
@@ -436,7 +436,7 @@ jobs:
           name: kept-${{ steps.key.outputs.key }}
           path: ${{ env.KEPT_APK }}
 
-      # Stable tags stay full builds. Pushes to main, -ti tags and PRs may repack.
+      # Stable tags stay full builds. Pushes to main and -ti tags may repack.
       - name: Plan the APK build
         env:
           KEPT: ${{ steps.kept.outputs.cache-hit == 'true' || steps.kept_download.outcome == 'success' }}
@@ -459,7 +459,7 @@ jobs:
         with:
           cache-read-only: ${{ github.ref != 'refs/heads/main' }}
 
-      # Main saves its compiled objects; PRs and tags only restore them. Prefer
+      # Main saves its compiled objects; tags only restore them. Prefer
       # the same lockfile's latest entry, then seed new dependencies from an older one.
       - name: Restore ccache
         id: ccache
@@ -518,10 +518,9 @@ jobs:
           path: ~/.cache/ccache
           key: ${{ steps.ccache.outputs.cache-primary-key }}
 
-      # Full PR builds may keep their own native APK too. GitHub scopes these cache entries
-      # to that PR, so another PR can only read builds saved on its base or the default branch.
+      # A full build keeps its APK for later runs with the same native side to repack.
       # Gradle and Metro cache writes above stay limited to main.
-      - name: Keep the full build for JS-only PRs
+      - name: Keep the full build for repacks
         if: env.APK_BUILD == 'full' && steps.kept.outputs.cache-hit != 'true'
         run: |
           mkdir -p "$KEPT_APK"
@@ -555,7 +554,7 @@ jobs:
           # Hermes keeps the inlined label as a plain string.
           grep -qaF -- "${EXPO_PUBLIC_WAVE_BUILD_LABEL:?}" "$bundle"
           echo "Labelled: $EXPO_PUBLIC_WAVE_BUILD_LABEL"
-          # Genius's token, inlined the same way; a run without the secret (a fork's PR) never asks Genius.
+          # Genius's token, inlined the same way; a run without the secret never asks Genius.
           if [ -n "${EXPO_PUBLIC_GENIUS_ACCESS_TOKEN:-}" ]; then
             grep -qaF -- "$EXPO_PUBLIC_GENIUS_ACCESS_TOKEN" "$bundle"
             echo "Carries Genius's token"
@@ -589,37 +588,20 @@ jobs:
           path: ${{ steps.apk.outputs.path }}
           retention-days: 14
 
-      # A prerelease per PR, and a rolling one per channel, gives a stable link that installs
-      # straight from the phone's browser: ti-latest moves on every push to main. The release
-      # job moves latest, once a promotion has passed its native tests.
+      # A rolling prerelease per channel gives a stable link that installs straight from the
+      # phone's browser: ti-latest moves on every push to main. The release job moves latest,
+      # once a promotion has passed its native tests.
       - name: Publish APK to a prerelease
-        id: publish
-        if: env.PR_NUMBER != '' || (github.event_name == 'push' && github.ref == 'refs/heads/main')
+        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          if [ -n "$PR_NUMBER" ]; then tag="pr-$PR_NUMBER"; asset="wave-pr-$PR_NUMBER.apk"; title="PR #$PR_NUMBER build";
-          else tag="ti-latest"; asset="wave-ti.apk"; title="Latest ti test build"; fi
+          tag="ti-latest"; asset="wave-ti.apk"
           cp "${{ steps.apk.outputs.path }}" "$RUNNER_TEMP/$asset"
           gh release view "$tag" > /dev/null 2>&1 || \
-            gh release create "$tag" --prerelease --latest=false --target "$HEAD_SHA" --title "$title" \
+            gh release create "$tag" --prerelease --latest=false --target "$HEAD_SHA" --title "Latest ti test build" \
               --notes "Sideloadable APK, rebuilt on every push. Not for distribution."
           gh release upload "$tag" "$RUNNER_TEMP/$asset" --clobber
-          echo "url=${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/releases/download/${tag}/${asset}" >> "$GITHUB_OUTPUT"
-
-      - name: Report
-        if: always() && env.IS_SAME_REPO_PR == 'true' && job.status != 'cancelled'
-        env:
-          GH_TOKEN: ${{ github.token }}
-        run: |
-          # A job that fails before "Plan the APK build" has no build mode to report.
-          extra=""
-          if [ -n "${APK_BUILD:-}" ]; then extra="APK build: **$APK_BUILD**. ${APK_BUILD_REASON:-}"; fi
-          if [ -n "${{ steps.publish.outputs.url }}" ]; then
-            extra="$extra"$'\n\n'"📱 **[Download APK](${{ steps.publish.outputs.url }})** (built from \`${HEAD_SHA:0:7}\`)"
-          fi
-          if [ -f "$RUNNER_TEMP/app-size.md" ]; then extra="$extra"$'\n\n'"$(cat "$RUNNER_TEMP/app-size.md")"; fi
-          scripts/ci/report.sh "${{ job.status }}" "Android APK" "$extra"
 
   # Publishes the release the Checks job decided on: a hand-pushed tag, or a branch push's
   # version bump, whose v<version> tag the Version job pushed with it. A tag pushed with the

@@ -1,7 +1,7 @@
 // What a build's APK says about over-the-air updates (docs/spec.md, Build and CI). Prebuild
 // writes placeholders from app.config.ts, so the generated project, and with it the kept APK's
 // key (repack.ts), is the same on every channel. That key is the runtime version, which can't
-// be known until the project exists, and a PR may repack a build kept on main. So each run stamps
+// be known until the project exists, and a -ti tag may repack a build kept on main. So each run stamps
 // its own channel and runtime version afterwards:
 //   node scripts/ci/update-config.ts channel                `WAVE_UPDATE_CHANNEL=` for $GITHUB_ENV
 //   node scripts/ci/update-config.ts stamp-source <AndroidManifest.xml>   before Gradle
@@ -19,7 +19,7 @@ export type UpdateChannel = "ti" | "main";
 
 /**
  * The channel a run's APK follows: main's pushes and -ti tags follow ti, and stable tags, which
- * a promotion makes, follow main. PR builds and any other branch have none: they never update.
+ * a promotion makes, follow main. Pull requests and any other branch have none.
  */
 export const updateChannel = (run: { event: string; ref: string }): UpdateChannel | null => {
   if (run.event !== "push" && run.event !== "workflow_dispatch") return null;

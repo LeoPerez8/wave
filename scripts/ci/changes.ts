@@ -1,9 +1,9 @@
-// Which parts of the repo a change touches, whether it can change the APK, and
-// whether it can change the result of the native modules' JVM tests.
+// Which parts of the repo a change touches, and whether it can change the result of the
+// native modules' JVM tests.
 // The CI workflow runs it on a PR's changed files and turns jobs off by it:
 //   <paths, one per line> | node scripts/ci/changes.ts   # PRs
 //   node scripts/ci/changes.ts --all                      # everything else
-// It prints `<area>=true|false` lines, then the decisions `apk`, `allPackages` and
+// It prints `<area>=true|false` lines, then the decisions `allPackages` and
 // `nativeTests`, ready for $GITHUB_OUTPUT. Checks also runs it, through affected-packages.sh.
 import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
@@ -37,9 +37,6 @@ const AREAS = {
 
 type Area = keyof typeof AREAS;
 
-// The APK is built from these areas: a change outside them can't alter it.
-const APK_AREAS: readonly Area[] = ["app", "core", "workspace", "ci"];
-
 // A change to these areas can break any package, so Checks then typechecks and tests
 // all of them. Otherwise it checks only the packages a PR changed and their dependents.
 const ALL_PACKAGES_AREAS: readonly Area[] = ["workspace", "ci", "tsconfig", "perf"];
@@ -47,7 +44,7 @@ const ALL_PACKAGES_AREAS: readonly Area[] = ["workspace", "ci", "tsconfig", "per
 // The native modules' JVM tests can only change result when one of these does.
 const NATIVE_TEST_AREAS: readonly Area[] = ["native", "workspace", "ci"];
 
-export type Changes = Record<Area | "apk" | "allPackages" | "nativeTests", boolean>;
+export type Changes = Record<Area | "allPackages" | "nativeTests", boolean>;
 
 const covers = (entry: string, path: string) =>
   entry.endsWith("/") ? path.startsWith(entry) : path === entry;
@@ -58,7 +55,6 @@ const decide = (touched: (area: Area) => boolean): Changes => {
   ) as Record<Area, boolean>;
   return {
     ...areas,
-    apk: APK_AREAS.some((area) => areas[area]),
     allPackages: ALL_PACKAGES_AREAS.some((area) => areas[area]),
     nativeTests: NATIVE_TEST_AREAS.some((area) => areas[area]),
   };
