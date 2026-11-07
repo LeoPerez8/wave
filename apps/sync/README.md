@@ -8,7 +8,7 @@ account and deletes accounts. See "Wave account and sync" in `docs/spec.md`.
 | File                 | What it holds                                                           |
 | -------------------- | ----------------------------------------------------------------------- |
 | `src/worker.ts`      | The Worker entry: builds the service from the Worker's secrets and vars |
-| `src/service.ts`     | The routes, sessions, the rate limit and the allowlist                  |
+| `src/service.ts`     | The routes, sessions, the rate limits and the allowlist                 |
 | `src/google.ts`      | Checking a Google ID token (RS256 against Google's JWKS)                |
 | `src/store.ts`       | Push (merge and number changes), pull (pages) and account deletion      |
 | `src/soulseek.ts`    | The account's Soulseek account, its password encrypted (`SOULSEEK_KEY`) |
@@ -21,7 +21,29 @@ account and deletes accounts. See "Wave account and sync" in `docs/spec.md`.
 
 Every body is JSON. Every route but `POST /v1/session` needs the session token as
 `Authorization: Bearer <sessionToken>`. Only `POST /v1/session` ever answers a session token,
-and nothing logs a session token, an ID token or a Soulseek password.
+and nothing logs a session token, an ID token, an address or a Soulseek password.
+
+### Refused before the database
+
+Some requests are refused before they cost a database query, by the address Cloudflare
+names in `CF-Connecting-IP` (kept only as a SHA-256):
+
+- Past `maxRequestsPerAddressPerMinute`, any route answers `429` with
+  `{ "error": "limit", "limit": "maxRequestsPerAddressPerMinute" }`. It's sized for a carrier
+  that puts many phones behind one address.
+- A token that isn't the shape `POST /v1/session` gives (43 base64url characters) answers
+  `401 { "error": "unauthorized" }` without a lookup.
+- Past `maxFailedLookupsPerAddressPerMinute` lookups that find no session, the address's
+  session routes answer `429` with
+  `{ "error": "limit", "limit": "maxFailedLookupsPerAddressPerMinute" }` for
+  `failedLookupBlockSeconds`, valid sessions included. Requests that find their session never
+  count toward it, and other addresses aren't affected.
+
+Both counts come from Cloudflare's rate limiting binding (`[[ratelimits]]` in
+`wrangler.toml`), which counts per Cloudflare location and approximately. The held addresses
+are kept in the Worker's isolate. At most once a minute, the Worker logs how many requests it
+refused and why (`sync service refused requests: unknown_session=20, held_address=140`), with
+no token and no address.
 
 ### `POST /v1/session`
 
@@ -45,12 +67,25 @@ its Wave account (keyed by Google's `sub`).
 `429` past `maxSignInsPerMinute`: attempts from one address (Cloudflare's `CF-Connecting-IP`,
 counted before the ID token is checked) or sign-ins to one Google account.
 
-The service keeps only a SHA-256 of the session token. A session lasts until it is ended
-or the account is deleted.
+A sign-in that would make a new account is refused, and makes nothing, when the service holds
+`maxAccounts` accounts (`403 { "error": "limit", "limit": "maxAccounts" }`) or has made
+`maxNewAccountsPerDay` in the last 24 hours (`429 { "error": "limit", "limit":
+"maxNewAccountsPerDay" }`, with `Retry-After` until the oldest of them is a day old). Existing
+accounts sign in either way.
+
+The service keeps only a SHA-256 of the session token. A session lasts until it is ended,
+the account is deleted, or it goes 90 days without a request: then it answers
+`401 { "error": "unauthorized" }` and is deleted. Every request made with it starts the 90
+days again.
 
 ### `DELETE /v1/session`
 
 Signs this session out. `204`, no body. The account's other sessions stay signed in.
+
+### `DELETE /v1/sessions`
+
+Signs out everywhere: ends every session of the account, this one included. `204`, no body.
+Other accounts' sessions stay.
 
 ### `POST /v1/push`
 
@@ -183,8 +218,9 @@ never pass through the app's JS.
 can't log in with (1 to 30 printable ASCII characters, no space at either end) or an empty
 password (at most 1,024 characters).
 
-The password is kept encrypted with AES-GCM under `SOULSEEK_KEY`, with the account's id as
-additional data; the database never holds it in the clear.
+The password is kept encrypted with AES-GCM under the current Soulseek key, with the
+account's id as additional data; the database never holds it in the clear. Each row records
+the version of the key it was kept under (see [Soulseek keys](#soulseek-keys)).
 
 ### `GET /v1/soulseek`
 
@@ -194,63 +230,110 @@ The account's Soulseek account, or `null` when it has none:
 { "account": { "username": "quietfern42", "password": "…" } }
 ```
 
-A password that doesn't decrypt (`SOULSEEK_KEY` was replaced) answers `null` too, so the next
-phone's account goes up in its place. Without `SOULSEEK_KEY`, both Soulseek routes answer
-`500` and the log says so; the other routes still work.
+A password kept under an older key is read with that key and kept again under the current
+one. A password that doesn't decrypt (its version's key was replaced or removed) answers
+`null` too, so the next phone's account goes up in its place. Without any Soulseek key, or
+with one that isn't 32 bytes of base64 under a key name, both Soulseek routes answer `500`
+and the log names the secret; the other routes still work.
 
 ### `DELETE /v1/account`
 
 Deletes every row and every session of the account, its Soulseek account, and the account.
-`204`, no body.
+The session isn't enough: the body holds a Google ID token from a fresh sign-in.
+
+```json
+{ "idToken": "<Google ID token>" }
+```
+
+The token must pass the `POST /v1/session` checks, have been issued (`iat`) within the last
+5 minutes and name the session account's Google `sub`. `204`, no body.
+
+`401 { "error": "id_token_required" }` when the body has no ID token (an app from before this
+check), `401 { "error": "invalid_id_token" }` when it doesn't check out. Either way nothing is
+deleted and the session stays; the app tells these apart from `unauthorized`, which means the
+session itself ended.
 
 ### Errors
 
-| Status | Body                                                                        |
-| ------ | --------------------------------------------------------------------------- |
-| 400    | `{ "error": "bad_request", "detail"?: "…" }`                                |
-| 401    | `{ "error": "unauthorized" }` (no session, or it ended)                     |
-| 401    | `{ "error": "invalid_id_token" }`                                           |
-| 403    | `{ "error": "not_allowed" }`                                                |
-| 404    | `{ "error": "not_found" }`                                                  |
-| 413    | `{ "error": "limit", "limit": "<name>" }`                                   |
-| 429    | `{ "error": "limit", "limit": "maxRequestsPerMinute" }`, with `Retry-After` |
-| 429    | `{ "error": "limit", "limit": "maxSignInsPerMinute" }`, with `Retry-After`  |
-| 500    | `{ "error": "internal" }`                                                   |
+| Status | Body                                                                                       |
+| ------ | ------------------------------------------------------------------------------------------ |
+| 400    | `{ "error": "bad_request", "detail"?: "…" }`                                               |
+| 401    | `{ "error": "unauthorized" }` (no session, or it ended)                                    |
+| 401    | `{ "error": "invalid_id_token" }`                                                          |
+| 401    | `{ "error": "id_token_required" }`                                                         |
+| 403    | `{ "error": "not_allowed" }`                                                               |
+| 403    | `{ "error": "limit", "limit": "maxAccounts" }`                                             |
+| 404    | `{ "error": "not_found" }`                                                                 |
+| 413    | `{ "error": "limit", "limit": "<name>" }`                                                  |
+| 429    | `{ "error": "limit", "limit": "maxRequestsPerMinute" }`, with `Retry-After`                |
+| 429    | `{ "error": "limit", "limit": "maxSignInsPerMinute" }`, with `Retry-After`                 |
+| 429    | `{ "error": "limit", "limit": "maxNewAccountsPerDay" }`, with `Retry-After`                |
+| 429    | `{ "error": "limit", "limit": "maxRequestsPerAddressPerMinute" }`, with `Retry-After`      |
+| 429    | `{ "error": "limit", "limit": "maxFailedLookupsPerAddressPerMinute" }`, with `Retry-After` |
+| 500    | `{ "error": "internal" }`                                                                  |
 
 ## Limits
 
-`SYNC_LIMITS` in `src/limits.ts`. Past one, the service answers `413` (or `429` for a
-rate) and names it. Starting values, so a 50,000-song Library with 200,000 plays fits:
+`SYNC_LIMITS` in `src/limits.ts`. Past one, the service answers `413` (`429` for a rate,
+`403` for `maxAccounts`) and names it. Starting values, so a 50,000-song Library with 200,000 plays fits:
 
-| Limit                     | Value     |                                                 |
-| ------------------------- | --------- | ----------------------------------------------- |
-| `maxBodyBytes`            | 2 MiB     | per request; a large first push goes in batches |
-| `maxSongs`                | 100,000   | rows per account, tombstones aside              |
-| `maxPlaylists`            | 5,000     |                                                 |
-| `maxPlaylistEntries`      | 250,000   |                                                 |
-| `maxFavorites`            | 100,000   |                                                 |
-| `maxPreferences`          | 200       |                                                 |
-| `maxPlays`                | 1,000,000 |                                                 |
-| `maxFollows`              | 5,000     |                                                 |
-| `maxHiddenReleases`       | 50,000    |                                                 |
-| `maxNotifiedShows`        | 50,000    |                                                 |
-| `maxDismissedSuggestions` | 50,000    |                                                 |
-| `maxRequestsPerMinute`    | 120       | per session                                     |
-| `maxSignInsPerMinute`     | 10        | `POST /v1/session`, per address and per account |
+| Limit                                 | Value     |                                                      |
+| ------------------------------------- | --------- | ---------------------------------------------------- |
+| `maxBodyBytes`                        | 2 MiB     | per request; a large first push goes in batches      |
+| `maxSongs`                            | 100,000   | rows per account, tombstones aside                   |
+| `maxPlaylists`                        | 5,000     |                                                      |
+| `maxPlaylistEntries`                  | 250,000   |                                                      |
+| `maxFavorites`                        | 100,000   |                                                      |
+| `maxPreferences`                      | 200       |                                                      |
+| `maxPlays`                            | 1,000,000 |                                                      |
+| `maxFollows`                          | 5,000     |                                                      |
+| `maxHiddenReleases`                   | 50,000    |                                                      |
+| `maxNotifiedShows`                    | 50,000    |                                                      |
+| `maxDismissedSuggestions`             | 50,000    |                                                      |
+| `maxRequestsPerMinute`                | 120       | per session                                          |
+| `maxSignInsPerMinute`                 | 10        | `POST /v1/session`, per address and per account      |
+| `maxAccounts`                         | 100       | accounts the service holds                           |
+| `maxNewAccountsPerDay`                | 10        | new accounts in any 24 hours                         |
+| `maxRequestsPerAddressPerMinute`      | 600       | every route, per address                             |
+| `maxFailedLookupsPerAddressPerMinute` | 20        | lookups that find no session, per address            |
+| `failedLookupBlockSeconds`            | 300       | how long an address past the line above is held back |
+
+The two per-address rates are also the `simple.limit` of `ADDRESS_LIMITER` and
+`FAILED_LOOKUP_LIMITER` in `wrangler.toml`; a test fails when they differ. Change both, then
+deploy.
 
 A push that would take a table past its limit is refused whole.
 
 ## Configuration
 
-Set on the Worker, never in the repo (`wrangler.toml` holds none of them):
+Set on the Worker, never in the repo (`wrangler.toml` holds none of them; it holds only the
+two rate limiting bindings, which `wrangler deploy` creates and which need Wrangler 4.36 or
+later):
 
-| Name                 | Kind   |                                                                      |
-| -------------------- | ------ | -------------------------------------------------------------------- |
-| `TURSO_DATABASE_URL` | secret | `libsql://<db>-<org>.turso.io`                                       |
-| `TURSO_AUTH_TOKEN`   | secret | a Turso token for that database                                      |
-| `GOOGLE_CLIENT_ID`   | secret | Wave's **web** OAuth client id, the audience of the app's ID tokens  |
-| `SOULSEEK_KEY`       | secret | base64 of 32 random bytes: the key Soulseek passwords are kept under |
-| `ALLOWED_EMAILS`     | secret | optional: emails that may sign in, separated by commas               |
+| Name                 | Kind   |                                                                     |
+| -------------------- | ------ | ------------------------------------------------------------------- |
+| `TURSO_DATABASE_URL` | secret | `libsql://<db>-<org>.turso.io`                                      |
+| `TURSO_AUTH_TOKEN`   | secret | a Turso token for that database                                     |
+| `GOOGLE_CLIENT_ID`   | secret | Wave's **web** OAuth client id, the audience of the app's ID tokens |
+| `SOULSEEK_KEY`       | secret | base64 of 32 random bytes: version 1 of the Soulseek key            |
+| `SOULSEEK_KEY_<n>`   | secret | optional: version n (2 or more) of the Soulseek key, the same way   |
+| `ALLOWED_EMAILS`     | secret | optional: emails that may sign in, separated by commas              |
+
+### Soulseek keys
+
+Soulseek passwords are kept under the highest key version the Worker has: `SOULSEEK_KEY` is
+version 1 and `SOULSEEK_KEY_2`, `SOULSEEK_KEY_3`, … the next ones. Each row records its
+version and is read with that version's key, then kept again under the current key, so the
+app sees no change. To replace the key, set the next version and leave the older ones:
+
+```sh
+cd apps/sync
+openssl rand -base64 32 | pnpm exec wrangler secret put SOULSEEK_KEY_2
+```
+
+An older version can go once no row uses it
+(`SELECT count(*) FROM soulseek_accounts WHERE key_version < 2`); a row still under a
+removed version reads as none, and the account's next phone puts its account up again.
 
 ## Running it locally
 
@@ -325,8 +408,9 @@ By hand, the steps are:
    openssl rand -base64 32 | pnpm exec wrangler secret put SOULSEEK_KEY
    ```
 
-   Make `SOULSEEK_KEY` once and never replace it: the Soulseek accounts kept under the old
-   one can't be read again (each Wave account's goes up anew from the next phone that syncs).
+   Make `SOULSEEK_KEY` once and never overwrite it: the Soulseek accounts kept under it
+   couldn't be read again. To replace the key, add the next version instead
+   ([Soulseek keys](#soulseek-keys)).
 
 4. Migrate and deploy. The `deploy` script runs the pending migrations against the database
    in your shell's environment, then `wrangler deploy` (it needs `run`: `pnpm deploy` is a

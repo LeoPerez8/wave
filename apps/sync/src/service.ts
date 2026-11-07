@@ -11,7 +11,8 @@ import type { Client } from "@libsql/client";
 import { type GoogleKeys, googleKeys, verifyGoogleIdToken } from "./google.ts";
 import { type SyncLimitName, type SyncLimits, SYNC_LIMITS } from "./limits.ts";
 import {
-  importSoulseekKey,
+  type SoulseekKeys,
+  importSoulseekKeys,
   keepSoulseekAccount,
   parseSoulseekAccount,
   readSoulseekAccount,
@@ -19,8 +20,20 @@ import {
 import { type PushBatch, deleteAccount, pullRows, pushRows } from "./store.ts";
 import { type IncomingRow, type SyncTable, InvalidRow, SYNC_TABLES, parseRow } from "./tables.ts";
 
+/**
+ * Counts a call against a key and says whether it's within the limit: the
+ * Worker's rate limiting binding, or a stand-in in the tests.
+ */
+export interface RateLimiter {
+  readonly limit: (options: { readonly key: string }) => Promise<{ readonly success: boolean }>;
+}
+
 export interface SyncServiceOptions {
   readonly db: Client;
+  /** Counts every request by address (`maxRequestsPerAddressPerMinute`). */
+  readonly addressLimiter: RateLimiter;
+  /** Counts failed session lookups by address (`maxFailedLookupsPerAddressPerMinute`). */
+  readonly failedLookupLimiter: RateLimiter;
   /** Wave's web OAuth client id: an ID token's audience must be it. */
   readonly googleClientId: string;
   /** Emails that may sign in, separated by commas; unset or empty lets anyone in. */
@@ -34,14 +47,46 @@ export interface SyncServiceOptions {
   /** How many rows a pull answers at most. */
   readonly pullPageSize?: number;
   /**
-   * `SOULSEEK_KEY`: base64 of the 32-byte AES-GCM key Soulseek passwords are
-   * kept under. Without it, the Soulseek routes answer 500 and the rest work.
+   * The Soulseek keys by secret name (`SOULSEEK_KEY`, `SOULSEEK_KEY_2`, …),
+   * each base64 of a 32-byte AES-GCM key; the highest version is current
+   * (src/soulseek.ts). Without any, the Soulseek routes answer 500 and the
+   * rest work.
    */
-  readonly soulseekKey?: string;
+  readonly soulseekKeys?: Readonly<Record<string, string>>;
+  /** Where the counts of refused requests go (`console.warn` by default). */
+  readonly log?: (message: string) => void;
+  /** What's kept across requests (the Worker keeps it per isolate); a fresh one by default. */
+  readonly memory?: ServiceMemory;
 }
+
+/**
+ * What the service keeps between requests: the addresses held back after
+ * failed session lookups, and the refusals not yet logged.
+ */
+export interface ServiceMemory {
+  /** By address key, when it may look up sessions again. */
+  readonly heldAddresses: Map<string, number>;
+  readonly refusals: Map<Refusal, number>;
+  loggedAt: number;
+}
+
+export const serviceMemory = (): ServiceMemory => ({
+  heldAddresses: new Map(),
+  refusals: new Map(),
+  loggedAt: -Infinity,
+});
+
+/** How long ago Google may have issued the ID token that confirms deleting an account. */
+const REAUTHENTICATION_MAX_AGE_MS = 5 * 60_000;
+
+/** The window `maxNewAccountsPerDay` counts in. */
+const DAY_MS = 86_400_000;
 
 /** How many rows a pull answers at most, by default. */
 const PULL_PAGE_SIZE = 1_000;
+
+/** How long a session lasts unused: any authenticated request starts it again. */
+const SESSION_UNUSED_MS = 90 * 24 * 60 * 60 * 1000;
 
 export type SyncService = (request: Request) => Promise<Response>;
 
@@ -49,6 +94,8 @@ export type SyncService = (request: Request) => Promise<Response>;
 interface RouteContext {
   readonly request: Request;
   readonly url: URL;
+  /** A SHA-256 of the address the request came from, when Cloudflare names it. */
+  readonly addressKey: string | null;
 }
 
 /** The session a request was made with. */
@@ -109,6 +156,14 @@ const tooMany = (limit: SyncLimitName, at: number): Answer =>
     }),
   );
 
+/** Why a request was refused before reaching a route, in the order the log lists them. */
+const REFUSALS = ["malformed_token", "unknown_session", "held_address", "address_limit"] as const;
+
+type Refusal = (typeof REFUSALS)[number];
+
+/** What `POST /v1/session` gives: base64url of 32 random bytes. */
+const SESSION_TOKEN = /^[A-Za-z0-9_-]{43}$/;
+
 const base64url = (bytes: Uint8Array): string =>
   btoa(String.fromCharCode(...bytes))
     .replaceAll("+", "-")
@@ -137,6 +192,25 @@ export const createSyncService = (options: SyncServiceOptions): SyncService => {
   const pullPageSize = options.pullPageSize ?? PULL_PAGE_SIZE;
   const keys = options.googleKeys ?? googleKeys(options.fetch ?? fetch, now);
   const allowlist = parseAllowlist(options.allowedEmails);
+  const log = options.log ?? ((message: string) => console.warn(message));
+  const memory = options.memory ?? serviceMemory();
+  const { heldAddresses, refusals } = memory;
+
+  /**
+   * Counts a refusal, logging the counts when a minute has passed since the
+   * last line, so a flood doesn't flood the log.
+   */
+  const refused = (refusal: Refusal): void => {
+    refusals.set(refusal, (refusals.get(refusal) ?? 0) + 1);
+    const at = now();
+    if (at - memory.loggedAt < 60_000) return;
+    memory.loggedAt = at;
+    const counts = REFUSALS.filter((name) => refusals.has(name)).map(
+      (name) => `${name}=${refusals.get(name)}`,
+    );
+    refusals.clear();
+    log(`sync service refused requests: ${counts.join(", ")}`);
+  };
 
   /** The request's JSON body, refusing one past `maxBodyBytes`. */
   const readJson = async (request: Request): Promise<unknown> => {
@@ -195,45 +269,125 @@ export const createSyncService = (options: SyncServiceOptions): SyncService => {
     await countSignIn(`sub:${identity.sub}`);
     const sessionToken = base64url(crypto.getRandomValues(new Uint8Array(32)));
     const at = now();
-    await db.batch(
+    // One transaction: the account limits are checked where the account is
+    // made, so two sign-ins can't both take the last place.
+    const [, , , held] = await db.batch(
       [
         {
-          sql: `INSERT INTO accounts (id, google_sub, email, created_at) VALUES (?, ?, ?, ?)
-                ON CONFLICT (google_sub) DO UPDATE SET email = excluded.email`,
-          args: [crypto.randomUUID(), identity.sub, identity.email, at],
+          sql: "UPDATE accounts SET email = ? WHERE google_sub = ?",
+          args: [identity.email, identity.sub],
         },
         {
-          sql: `INSERT INTO sessions (token_hash, account_id, created_at)
-                SELECT ?, id, ? FROM accounts WHERE google_sub = ?`,
-          args: [await sha256Hex(sessionToken), at, identity.sub],
+          sql: `INSERT INTO accounts (id, google_sub, email, created_at)
+                SELECT ?, ?, ?, ?
+                WHERE NOT EXISTS (SELECT 1 FROM accounts WHERE google_sub = ?)
+                  AND (SELECT count(*) FROM accounts) < ?
+                  AND (SELECT count(*) FROM accounts WHERE created_at > ?) < ?`,
+          args: [
+            crypto.randomUUID(),
+            identity.sub,
+            identity.email,
+            at,
+            identity.sub,
+            limits.maxAccounts,
+            at - DAY_MS,
+            limits.maxNewAccountsPerDay,
+          ],
+        },
+        {
+          sql: `INSERT INTO sessions (token_hash, account_id, created_at, last_used_at)
+                SELECT ?, id, ?, ? FROM accounts WHERE google_sub = ?`,
+          args: [await sha256Hex(sessionToken), at, at, identity.sub],
+        },
+        {
+          sql: `SELECT EXISTS (SELECT 1 FROM accounts WHERE google_sub = ?) AS present,
+                       (SELECT count(*) FROM accounts) AS total,
+                       (SELECT min(created_at) FROM accounts WHERE created_at > ?) AS oldest`,
+          args: [identity.sub, at - DAY_MS],
         },
       ],
       "write",
     );
+    const account = held?.rows[0];
+    if (Number(account?.present) !== 1) {
+      if (Number(account?.total) >= limits.maxAccounts) throw overLimit("maxAccounts", 403);
+      // The day's places come back as the oldest of them turns a day old.
+      const wait = Number(account?.oldest ?? at) + DAY_MS - at;
+      throw new Answer(
+        json({ error: "limit", limit: "maxNewAccountsPerDay" }, 429, {
+          "retry-after": String(Math.max(1, Math.ceil(wait / 1000))),
+        }),
+      );
+    }
     return json({ sessionToken, email: identity.email });
   };
 
   /**
-   * The session a request's `Authorization: Bearer <token>` names, counting
-   * the request against its rate. Refuses with 401 when there's none, and
-   * with 429 past `maxRequestsPerMinute`.
+   * Refuses with 429 while [addressKey] is held back: past
+   * `maxFailedLookupsPerAddressPerMinute`, checked with no query.
    */
-  const authenticate = async (request: Request): Promise<Session> => {
+  const refuseIfHeld = (addressKey: string): void => {
+    const until = heldAddresses.get(addressKey);
+    if (until === undefined) return;
+    const at = now();
+    if (at >= until) {
+      heldAddresses.delete(addressKey);
+      return;
+    }
+    refused("held_address");
+    throw new Answer(
+      json({ error: "limit", limit: "maxFailedLookupsPerAddressPerMinute" }, 429, {
+        "retry-after": String(Math.ceil((until - at) / 1000)),
+      }),
+    );
+  };
+
+  /** Counts a lookup that found no session, holding [addressKey] back once past the limit. */
+  const countFailedLookup = async (addressKey: string): Promise<void> => {
+    if ((await options.failedLookupLimiter.limit({ key: addressKey })).success) return;
+    const at = now();
+    for (const [key, until] of heldAddresses) if (at >= until) heldAddresses.delete(key);
+    heldAddresses.set(addressKey, at + limits.failedLookupBlockSeconds * 1000);
+  };
+
+  /**
+   * The session a request's `Authorization: Bearer <token>` names, counting
+   * the request against its rate and marking it used. Refuses with 401 when
+   * there's none or it went unused for `SESSION_UNUSED_MS` (and deletes it),
+   * and with 429 past `maxRequestsPerMinute`.
+   */
+  const authenticate = async ({ request, addressKey }: RouteContext): Promise<Session> => {
     const match = /^Bearer (\S+)$/.exec(request.headers.get("authorization") ?? "");
-    if (match?.[1] === undefined) throw failure(401, "unauthorized");
+    if (match?.[1] === undefined || !SESSION_TOKEN.test(match[1])) {
+      refused("malformed_token");
+      throw failure(401, "unauthorized");
+    }
+    if (addressKey !== null) refuseIfHeld(addressKey);
     const tokenHash = await sha256Hex(match[1]);
     const at = now();
     const window = Math.floor(at / 60_000);
+    const unusedSince = at - SESSION_UNUSED_MS;
+    // One query for a live session. An expired one keeps its last use, so the
+    // answer tells it apart, and is deleted below.
     const result = await db.execute({
       sql: `UPDATE sessions
             SET window_count = CASE WHEN window_start = ? THEN window_count + 1 ELSE 1 END,
-                window_start = ?
+                window_start = ?,
+                last_used_at = CASE WHEN last_used_at > ? THEN ? ELSE last_used_at END
             WHERE token_hash = ?
-            RETURNING account_id, window_count`,
-      args: [window, window, tokenHash],
+            RETURNING account_id, window_count, last_used_at`,
+      args: [window, window, unusedSince, at, tokenHash],
     });
     const row = result.rows[0];
-    if (row === undefined) throw failure(401, "unauthorized");
+    if (row === undefined) {
+      refused("unknown_session");
+      if (addressKey !== null) await countFailedLookup(addressKey);
+      throw failure(401, "unauthorized");
+    }
+    if (Number(row.last_used_at) <= unusedSince) {
+      await db.execute({ sql: "DELETE FROM sessions WHERE token_hash = ?", args: [tokenHash] });
+      throw failure(401, "unauthorized");
+    }
     if (Number(row.window_count) > limits.maxRequestsPerMinute) {
       throw tooMany("maxRequestsPerMinute", at);
     }
@@ -244,12 +398,21 @@ export const createSyncService = (options: SyncServiceOptions): SyncService => {
   const withSession =
     (route: (context: RouteContext, session: Session) => Promise<Response>): Route =>
     async (context) =>
-      route(context, await authenticate(context.request));
+      route(context, await authenticate(context));
 
   const endSession = withSession(async (_context, session) => {
     await db.execute({
       sql: "DELETE FROM sessions WHERE token_hash = ?",
       args: [session.tokenHash],
+    });
+    return new Response(null, { status: 204 });
+  });
+
+  /** Sign out everywhere: every session of the account ends, this one too. */
+  const endAllSessions = withSession(async (_context, session) => {
+    await db.execute({
+      sql: "DELETE FROM sessions WHERE account_id = ?",
+      args: [session.accountId],
     });
     return new Response(null, { status: 204 });
   });
@@ -272,36 +435,67 @@ export const createSyncService = (options: SyncServiceOptions): SyncService => {
     return json({ ...page.rows, cursor: String(page.cursor), more: page.more });
   });
 
-  const removeAccount = withSession(async (_context, session) => {
+  /**
+   * Deleting the account needs, besides the session, a Google ID token issued
+   * in the last 5 minutes for the account's own Google subject.
+   */
+  const removeAccount = withSession(async ({ request }, session) => {
+    let body: unknown = null;
+    try {
+      body = await readJson(request);
+    } catch (error) {
+      if (!(error instanceof Answer) || error.response.status !== 400) throw error;
+    }
+    const idToken =
+      typeof body === "object" && body !== null && "idToken" in body ? body.idToken : undefined;
+    if (typeof idToken !== "string") throw failure(401, "id_token_required");
+    const identity = await verifyGoogleIdToken(idToken, {
+      clientId: options.googleClientId,
+      keys,
+      now,
+    });
+    const account = await db.execute({
+      sql: "SELECT google_sub FROM accounts WHERE id = ?",
+      args: [session.accountId],
+    });
+    if (
+      identity === null ||
+      identity.issuedAt === null ||
+      now() - identity.issuedAt > REAUTHENTICATION_MAX_AGE_MS ||
+      identity.sub !== account.rows[0]?.google_sub
+    ) {
+      throw failure(401, "invalid_id_token");
+    }
     await deleteAccount(db, session.accountId);
     return new Response(null, { status: 204 });
   });
 
   // Imported at the first Soulseek request, and again after a failed import.
-  let soulseekKey: Promise<CryptoKey> | null = null;
-  const soulseekCipherKey = (): Promise<CryptoKey> => {
-    soulseekKey ??= importSoulseekKey(options.soulseekKey).catch((error: unknown) => {
-      soulseekKey = null;
+  let soulseekKeys: Promise<SoulseekKeys> | null = null;
+  const soulseekCipherKeys = (): Promise<SoulseekKeys> => {
+    soulseekKeys ??= importSoulseekKeys(options.soulseekKeys).catch((error: unknown) => {
+      soulseekKeys = null;
       throw error;
     });
-    return soulseekKey;
+    return soulseekKeys;
   };
 
   const putSoulseek = withSession(async ({ request }, session) => {
     const account = parseSoulseekAccount(await readJson(request));
     if (account === null) throw invalid("a Soulseek username and password are needed");
-    await keepSoulseekAccount(db, await soulseekCipherKey(), session.accountId, account, now());
+    await keepSoulseekAccount(db, await soulseekCipherKeys(), session.accountId, account, now());
     return new Response(null, { status: 204 });
   });
 
   const getSoulseek = withSession(async (_context, session) =>
-    json({ account: await readSoulseekAccount(db, await soulseekCipherKey(), session.accountId) }),
+    json({ account: await readSoulseekAccount(db, await soulseekCipherKeys(), session.accountId) }),
   );
 
   /** Each route by method and path. */
   const routes: Readonly<Record<string, Route>> = {
     "POST /v1/session": createSession,
     "DELETE /v1/session": endSession,
+    "DELETE /v1/sessions": endAllSessions,
     "POST /v1/push": pushChanges,
     "GET /v1/pull": pullChanges,
     "DELETE /v1/account": removeAccount,
@@ -310,11 +504,22 @@ export const createSyncService = (options: SyncServiceOptions): SyncService => {
   };
 
   return async (request) => {
-    const url = new URL(request.url);
-    const route = routes[`${request.method} ${url.pathname}`];
-    if (route === undefined) return json({ error: "not_found" }, 404);
+    // Cloudflare sets it on every request that reaches the Worker; only the
+    // tests leave it out. Kept only as a hash, and never logged.
+    const address = request.headers.get("cf-connecting-ip");
+    const addressKey = address === null ? null : await sha256Hex(address);
     try {
-      return await route({ request, url });
+      if (
+        addressKey !== null &&
+        !(await options.addressLimiter.limit({ key: addressKey })).success
+      ) {
+        refused("address_limit");
+        throw tooMany("maxRequestsPerAddressPerMinute", now());
+      }
+      const url = new URL(request.url);
+      const route = routes[`${request.method} ${url.pathname}`];
+      if (route === undefined) return json({ error: "not_found" }, 404);
+      return await route({ request, url, addressKey });
     } catch (error) {
       if (error instanceof Answer) return error.response;
       // The message only: a request, and so a token, never reaches the log.

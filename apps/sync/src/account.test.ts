@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { describe, test } from "node:test";
-import { favorite, harness, pull, push } from "./testing.ts";
+import { favorite, harness, pull, push, requestAccountDeletion } from "./testing.ts";
 
 const play = (id: string) => ({
   id,
@@ -216,7 +216,7 @@ describe("DELETE /v1/account", () => {
       await service.request("PUT", "/v1/soulseek", { session, json: soulseek });
     }
 
-    const deleted = await service.request("DELETE", "/v1/account", { session: ana });
+    const deleted = await requestAccountDeletion(service, ana);
     assert.equal(deleted.status, 204);
 
     for (const session of [ana, anaOtherPhone]) {

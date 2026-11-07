@@ -16,6 +16,15 @@ out/
 *.pem
 # The update signing certificate is public (docs/spec.md, Build and CI). Its key is never here.
 !apps/mobile/certs/certificate.pem
+*.key
+*.jks
+*.p12
+# Local MCP servers carry their own tokens.
+.mcp.json
+
+# Local work that never ships: notes and agent worktrees
+.scratch/
+.claude/worktrees/
 
 # Logs
 logs/

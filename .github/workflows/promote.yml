@@ -10,9 +10,7 @@ on:
         required: false
         type: string
 
-permissions:
-  actions: write
-  contents: write
+permissions: {}
 
 concurrency:
   group: promote
@@ -22,15 +20,19 @@ jobs:
   promote:
     name: Promote ${{ inputs.version || 'the newest -ti release' }}
     runs-on: ubuntu-latest
+    permissions:
+      # Pushes the stable tag and starts CI on it.
+      actions: write
+      contents: write
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.1.0
         with:
           ref: main
           # The -ti tags and the commits they're on; file contents on demand.
           fetch-depth: 0
           filter: blob:none
 
-      - uses: actions/setup-node@v5
+      - uses: actions/setup-node@a0853c24544627f65ddf259abe73b1d18a591444 # v5.0.0
         with:
           node-version: 22
           package-manager-cache: false

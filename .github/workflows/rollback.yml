@@ -16,8 +16,7 @@ on:
         required: true
         type: string
 
-permissions:
-  contents: read
+permissions: {}
 
 # Two runs on a channel would each read its history and lose the other's line.
 concurrency:
@@ -30,12 +29,15 @@ jobs:
     # The channel's Environment holds the release secrets; main's waits for the owner.
     environment: ${{ inputs.channel }}
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.1.0
         with:
           sparse-checkout: apps/updates
+          persist-credentials: false
 
-      - uses: actions/setup-node@v5
+      - uses: actions/setup-node@a0853c24544627f65ddf259abe73b1d18a591444 # v5.0.0
         with:
           node-version: 22
           package-manager-cache: false

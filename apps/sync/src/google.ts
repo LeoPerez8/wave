@@ -22,6 +22,8 @@ export interface GoogleIdentity {
   /** Google's stable id for the account. */
   readonly sub: string;
   readonly email: string;
+  /** When Google issued the token (`iat`), in ms since the epoch; null when it doesn't say. */
+  readonly issuedAt: number | null;
 }
 
 /** Google's signing keys, by key id. */
@@ -128,5 +130,6 @@ export const verifyGoogleIdToken = async (
   }
   if (typeof payload.sub !== "string" || payload.sub === "") return null;
   if (typeof payload.email !== "string" || payload.email_verified !== true) return null;
-  return { sub: payload.sub, email: payload.email };
+  const issuedAt = typeof payload.iat === "number" ? payload.iat * 1000 : null;
+  return { sub: payload.sub, email: payload.email, issuedAt };
 };

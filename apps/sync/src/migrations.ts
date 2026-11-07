@@ -225,28 +225,51 @@ const MIGRATIONS: readonly Migration[] = [
       `CREATE INDEX dismissed_suggestions_change_idx ON dismissed_suggestions (account_id, change_no)`,
     ],
   },
+  {
+    // When each session last authenticated a request (ms since the epoch); a session unused
+    // for 90 days ends. Sessions made before this start their 90 days when it runs.
+    id: "0010_session_last_used",
+    statements: [
+      "ALTER TABLE sessions ADD COLUMN last_used_at INTEGER NOT NULL DEFAULT 0",
+      "UPDATE sessions SET last_used_at = CAST(strftime('%s', 'now') AS INTEGER) * 1000",
+    ],
+  },
+  {
+    // Which Soulseek key a password is kept under (src/soulseek.ts). Every password kept so far
+    // is under SOULSEEK_KEY, version 1.
+    id: "0011_soulseek_key_version",
+    statements: ["ALTER TABLE soulseek_accounts ADD COLUMN key_version INTEGER NOT NULL DEFAULT 1"],
+  },
 ];
 
-/** Runs the migrations [db] hasn't run yet, each in its own transaction. Gives the ids it ran. */
-export const migrate = async (db: Client): Promise<string[]> => {
+/**
+ * Runs the migrations [db] hasn't run yet, each in its own transaction. Gives
+ * the ids it ran. With [until], it stops after that one (the tests use it).
+ */
+export const migrate = async (
+  db: Client,
+  { until }: { readonly until?: string } = {},
+): Promise<string[]> => {
   await db.execute(
     "CREATE TABLE IF NOT EXISTS migrations (id TEXT PRIMARY KEY, applied_at INTEGER NOT NULL)",
   );
   const done = new Set((await db.execute("SELECT id FROM migrations")).rows.map((row) => row.id));
   const ran: string[] = [];
   for (const migration of MIGRATIONS) {
-    if (done.has(migration.id)) continue;
-    await db.batch(
-      [
-        ...migration.statements,
-        {
-          sql: "INSERT INTO migrations (id, applied_at) VALUES (?, ?)",
-          args: [migration.id, Date.now()],
-        },
-      ],
-      "write",
-    );
-    ran.push(migration.id);
+    if (!done.has(migration.id)) {
+      await db.batch(
+        [
+          ...migration.statements,
+          {
+            sql: "INSERT INTO migrations (id, applied_at) VALUES (?, ?)",
+            args: [migration.id, Date.now()],
+          },
+        ],
+        "write",
+      );
+      ran.push(migration.id);
+    }
+    if (migration.id === until) break;
   }
   return ran;
 };

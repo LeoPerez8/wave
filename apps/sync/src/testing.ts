@@ -12,7 +12,12 @@ import { type Client, createClient } from "@libsql/client";
 import { GOOGLE_CERTS_URL } from "./google.ts";
 import { type SyncLimits, SYNC_LIMITS } from "./limits.ts";
 import { migrate } from "./migrations.ts";
-import { type SyncServiceOptions, createSyncService } from "./service.ts";
+import {
+  type RateLimiter,
+  type ServiceMemory,
+  type SyncServiceOptions,
+  createSyncService,
+} from "./service.ts";
 
 const CLIENT_ID = "wave-web-client.apps.googleusercontent.com";
 
@@ -106,8 +111,11 @@ const fakeGoogle = async (now: () => number): Promise<FakeGoogle> => {
   };
 };
 
-/** A fresh database file, deleted when the test file ends. */
-const freshDatabase = async (): Promise<Client> => {
+/**
+ * A fresh database file, deleted when the test file ends. With [until], only
+ * the migrations up to that one have run, to stand for an older database.
+ */
+export const freshDatabase = async (options: { readonly until?: string } = {}): Promise<Client> => {
   const dir = mkdtempSync(join(tmpdir(), "wave-sync-"));
   const db = createClient({ url: `file:${join(dir, "sync.db").replaceAll("\\", "/")}` });
   after(() => {
@@ -118,13 +126,57 @@ const freshDatabase = async (): Promise<Client> => {
       // Windows can hold the file a moment after closing; it's a temp dir.
     }
   });
-  await migrate(db);
+  await migrate(db, options);
   return db;
+};
+
+/** The calls on a libSQL client that reach the database. */
+const QUERY_METHODS: ReadonlySet<PropertyKey> = new Set([
+  "execute",
+  "batch",
+  "executeMultiple",
+  "transaction",
+  "migrate",
+]);
+
+/** [db] as the service sees it, calling [counted] at each query it sends. */
+const countingQueries = (db: Client, counted: () => void): Client =>
+  new Proxy(db, {
+    get: (target, property) => {
+      const value: unknown = Reflect.get(target, property, target);
+      if (typeof value !== "function") return value;
+      return (...args: unknown[]): unknown => {
+        if (QUERY_METHODS.has(property)) counted();
+        return (value as (...args: unknown[]) => unknown).apply(target, args);
+      };
+    },
+  });
+
+/** A stand-in for Cloudflare's rate limiting binding: [limit] calls per key in each minute of [now]. */
+const minuteLimiter = (limit: number, now: () => number): RateLimiter => {
+  const counts = new Map<string, number>();
+  let minute = -1;
+  return {
+    limit: async ({ key }) => {
+      const current = Math.floor(now() / 60_000);
+      if (current !== minute) {
+        counts.clear();
+        minute = current;
+      }
+      const count = (counts.get(key) ?? 0) + 1;
+      counts.set(key, count);
+      return { success: count <= limit };
+    },
+  };
 };
 
 /** A running service over a fresh database, with a clock the test moves. */
 export interface Harness {
   readonly db: Client;
+  /** How many queries the service has sent the database (the test's own, through `db`, aren't counted). */
+  readonly queries: () => number;
+  /** What the service has logged. */
+  readonly logs: readonly string[];
   readonly google: FakeGoogle;
   /** The service's clock, in ms since the epoch. */
   now: number;
@@ -147,6 +199,10 @@ export interface HarnessOptions {
   readonly pullPageSize?: number;
   /** `SOULSEEK_KEY`; `SOULSEEK_KEY` above by default, null for none. */
   readonly soulseekKey?: string | null;
+  /** The Soulseek keys by secret name, as the Worker has them; when given, `soulseekKey` is ignored. */
+  readonly soulseekKeys?: Readonly<Record<string, string>>;
+  /** What the service keeps between requests; a fresh one by default. */
+  readonly memory?: ServiceMemory;
 }
 
 export const harness = async (options: HarnessOptions = {}, db?: Client): Promise<Harness> => {
@@ -154,15 +210,26 @@ export const harness = async (options: HarnessOptions = {}, db?: Client): Promis
   const state = { now: Date.UTC(2026, 9, 14, 12) };
   const clock = (): number => state.now;
   const google = await fakeGoogle(clock);
+  let queries = 0;
+  const logs: string[] = [];
+  const limits = { ...SYNC_LIMITS, ...options.limits };
   const serviceOptions: SyncServiceOptions = {
-    db,
+    db: countingQueries(db, () => queries++),
+    addressLimiter: minuteLimiter(limits.maxRequestsPerAddressPerMinute, clock),
+    failedLookupLimiter: minuteLimiter(limits.maxFailedLookupsPerAddressPerMinute, clock),
     googleClientId: CLIENT_ID,
     fetch: google.fetch,
     now: clock,
-    limits: { ...SYNC_LIMITS, ...options.limits },
+    limits,
+    log: (message) => logs.push(message),
+    ...(options.memory === undefined ? {} : { memory: options.memory }),
     ...(options.allowedEmails === undefined ? {} : { allowedEmails: options.allowedEmails }),
     ...(options.pullPageSize === undefined ? {} : { pullPageSize: options.pullPageSize }),
-    ...(options.soulseekKey === null ? {} : { soulseekKey: options.soulseekKey ?? SOULSEEK_KEY }),
+    ...(options.soulseekKeys !== undefined
+      ? { soulseekKeys: options.soulseekKeys }
+      : options.soulseekKey === null
+        ? {}
+        : { soulseekKeys: { SOULSEEK_KEY: options.soulseekKey ?? SOULSEEK_KEY } }),
   };
   const service = createSyncService(serviceOptions);
 
@@ -194,6 +261,8 @@ export const harness = async (options: HarnessOptions = {}, db?: Client): Promis
 
   return {
     db,
+    queries: () => queries,
+    logs,
     google,
     get now(): number {
       return state.now;
@@ -266,6 +335,20 @@ export const pullAll = async (
     if (!page.more) return { ...(joined as unknown as Pulled), cursor, more: false, pages };
   }
 };
+
+/**
+ * `DELETE /v1/account` with [session], confirmed by a just-issued ID token for
+ * [claims] (Ana's Google account by default), as the app sends it.
+ */
+export const requestAccountDeletion = async (
+  service: Harness,
+  session: string,
+  claims?: TokenClaims,
+): Promise<Response> =>
+  service.request("DELETE", "/v1/account", {
+    session,
+    json: { idToken: await service.google.idToken(claims) },
+  });
 
 /** How many sessions the database holds. */
 export const sessionCount = async (service: Harness): Promise<number> =>

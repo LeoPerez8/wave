@@ -19,6 +19,10 @@ enum class WaveAccountFailure(val code: String, val notice: String) {
   REJECTED("ERR_WAVE_REJECTED", "Wave's server didn't accept the Google sign-in"),
   /** The service's allowlist leaves this Google account out. */
   NOT_ALLOWED("ERR_WAVE_NOT_ALLOWED", "This Google account can't use Wave's server"),
+  /** The service holds all the accounts it may, and this Google account has none yet. */
+  ACCOUNTS_FULL("ERR_WAVE_ACCOUNTS_FULL", "Wave's server has no room for new accounts"),
+  /** The service has made all the new accounts it may for now, and this Google account has none yet. */
+  NEW_ACCOUNTS_PAUSED("ERR_WAVE_NEW_ACCOUNTS_PAUSED", "Wave's server isn't making new accounts today"),
   /** There's no session to send the request with; nothing was sent. */
   SIGNED_OUT("ERR_WAVE_SIGNED_OUT", "Not signed in to a Wave account"),
   /** The service stopped accepting the session (a 401): the app is signed out. */
@@ -29,6 +33,8 @@ enum class WaveAccountFailure(val code: String, val notice: String) {
   NO_GOOGLE_ACCOUNT("ERR_WAVE_NO_GOOGLE_ACCOUNT", "Add a Google account to this phone to sign in"),
   /** Google's sign-in failed. */
   GOOGLE("ERR_WAVE_GOOGLE", "Google's sign-in didn't work. Try again"),
+  /** The service didn't take Google's fresh sign-in as this account's (another Google account): nothing was deleted. */
+  GOOGLE_NOT_CONFIRMED("ERR_WAVE_GOOGLE_NOT_CONFIRMED", "Google didn't confirm this Wave account"),
 }
 
 class WaveAccountException(val failure: WaveAccountFailure, cause: Throwable? = null) : IOException(failure.notice, cause)
@@ -68,6 +74,10 @@ class WaveAccountClient(
     val body = buildJsonObject { put("idToken", identity.idToken) }.toString()
     val response = exchange("POST", serviceUrl.trimEnd('/') + "/v1/session", null, body)
     when {
+      response.status in 400..499 && response.limit() == "maxAccounts" ->
+        throw WaveAccountException(WaveAccountFailure.ACCOUNTS_FULL)
+      response.status in 400..499 && response.limit() == "maxNewAccountsPerDay" ->
+        throw WaveAccountException(WaveAccountFailure.NEW_ACCOUNTS_PAUSED)
       response.status == 403 -> throw WaveAccountException(WaveAccountFailure.NOT_ALLOWED)
       response.status in 400..499 -> throw WaveAccountException(WaveAccountFailure.REJECTED)
       response.status !in 200..299 -> throw WaveAccountException(WaveAccountFailure.UNREACHABLE)
@@ -90,17 +100,34 @@ class WaveAccountClient(
     return WaveSessionState.SignedOut
   }
 
-  /** Deletes the account and everything the service has of it, then signs out; the phone keeps its own. */
-  fun deleteAccount(): WaveSessionState {
-    val response = try { send("DELETE", "/v1/account", null) }
-    catch (e: WaveAccountException) {
-      if (e.failure == WaveAccountFailure.SESSION_ENDED) return store.load()
-      throw e
-    }
+  /**
+   * Deletes the account and everything the service has of it, then signs out; the phone keeps its
+   * own. The service needs [identity], a fresh Google sign-in to the account's own Google account,
+   * besides the session; one it doesn't take keeps the account and the session.
+   */
+  fun deleteAccount(identity: GoogleIdentity): WaveSessionState {
+    val body = buildJsonObject { put("idToken", identity.idToken) }.toString()
+    val response = sendEndingOnly("DELETE", "/v1/account", body) ?: return store.load()
+    if (response.status == 401) throw WaveAccountException(WaveAccountFailure.GOOGLE_NOT_CONFIRMED)
     if (response.status !in 200..299) throw WaveAccountException(WaveAccountFailure.UNREACHABLE)
     change(WaveSessionState.SignedOut)
     return WaveSessionState.SignedOut
   }
+
+  /** Ends every session of the account on the service, this phone's too, then signs out. */
+  fun signOutEverywhere(): WaveSessionState {
+    val response = sendEndingOnly("DELETE", "/v1/sessions", null) ?: return store.load()
+    if (response.status !in 200..299) throw WaveAccountException(WaveAccountFailure.UNREACHABLE)
+    change(WaveSessionState.SignedOut)
+    return WaveSessionState.SignedOut
+  }
+
+  /** [send], but null when the service had already ended the session (the app now shows it ended). */
+  private fun sendEndingOnly(method: String, path: String, body: String?): WaveResponse? =
+    try { send(method, path, body) }
+    catch (e: WaveAccountException) {
+      if (e.failure == WaveAccountFailure.SESSION_ENDED) null else throw e
+    }
 
   /**
    * A request JS sends with the session it can't see: only a push (`POST /v1/push`) or a pull
@@ -114,13 +141,14 @@ class WaveAccountClient(
 
   /**
    * Sends [body] (JSON) to [path] on the service with the session. Answers whatever the service
-   * did, but a 401, which ends the session.
+   * did, but a 401 for the session, which ends it. A 401 for an ID token (Delete Account's fresh
+   * Google sign-in) is the token's refusal and comes back like any other answer.
    */
   fun send(method: String, path: String, body: String?): WaveResponse {
     if (!path.startsWith("/v1/") || ".." in path || "//" in path) throw WaveAccountException(WaveAccountFailure.FORBIDDEN_REQUEST)
     val session = store.load() as? WaveSessionState.SignedIn ?: throw WaveAccountException(WaveAccountFailure.SIGNED_OUT)
     val response = exchange(method, session.serviceUrl + path, session.token, body)
-    if (response.status == 401) {
+    if (response.status == 401 && !refusesIdToken(response)) {
       end(session)
       throw WaveAccountException(WaveAccountFailure.SESSION_ENDED)
     }
@@ -168,9 +196,21 @@ class WaveAccountClient(
     } finally { connection.disconnect() }
   }
 
+  private fun refusesIdToken(response: WaveResponse): Boolean {
+    val answer = runCatching { Json.parseToJsonElement(response.body) as JsonObject }.getOrNull()
+    return answer?.text("error") in ID_TOKEN_REFUSALS
+  }
+
+  /** The limit a `{ "error": "limit", "limit": "<name>" }` answer names. */
+  private fun WaveResponse.limit(): String? {
+    val answer = runCatching { Json.parseToJsonElement(body) as? JsonObject }.getOrNull() ?: return null
+    return if (answer.text("error") == "limit") answer.text("limit") else null
+  }
+
   private fun JsonObject.text(key: String): String? = (this[key] as? JsonPrimitive)?.takeIf { it.isString }?.content
 
   private companion object {
+    val ID_TOKEN_REFUSALS = setOf("invalid_id_token", "id_token_required")
     val PULL = Regex("""^/v1/pull(\?since=[0-9A-Za-z_-]*)?$""")
   }
 }

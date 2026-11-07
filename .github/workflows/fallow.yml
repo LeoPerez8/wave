@@ -5,9 +5,9 @@ on:
   push:
     branches: [main]
 
-permissions:
-  contents: read
-  pull-requests: write
+# Each job asks for what it needs: the one that runs the PR's code gets a read-only token and
+# leaves its PR comment to the Report job.
+permissions: {}
 
 concurrency:
   group: fallow-${{ github.event.pull_request.number || github.ref }}
@@ -21,15 +21,19 @@ jobs:
   fallow:
     name: Dead code and duplication
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      actions: read
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.1.0
         with:
           ref: ${{ github.event.pull_request.head.sha || github.sha }}
           fetch-depth: 0
+          persist-credentials: false
 
-      - uses: pnpm/action-setup@v4
+      - uses: pnpm/action-setup@b906affcce14559ad1aafd4ab0e942779e9f58b1 # v4.3.0
 
-      - uses: actions/setup-node@v5
+      - uses: actions/setup-node@a0853c24544627f65ddf259abe73b1d18a591444 # v5.0.0
         with:
           node-version: 22
           cache: pnpm
@@ -55,7 +59,7 @@ jobs:
 
       - name: Upload full diagnostic report
         if: always() && steps.full.outcome != 'skipped'
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:
           name: fallow-full-report
           path: ${{ runner.temp }}/fallow-full.json
@@ -67,3 +71,47 @@ jobs:
           GH_TOKEN: ${{ github.token }}
           HEAD_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
         run: scripts/ci/report.sh "${{ job.status }}" "Fallow"
+
+      - name: Keep the report
+        if: always() && env.IS_SAME_REPO_PR == 'true' && job.status != 'cancelled'
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: ci-report-fallow
+          path: ${{ runner.temp }}/ci-report
+          if-no-files-found: ignore
+          retention-days: 1
+
+  # Posts the comment the job above left in its ci-report-* artifact. That job runs the PR's
+  # code with a read-only token; this one runs none of it, using the base branch's scripts.
+  report:
+    name: Report
+    needs: [fallow]
+    if: ${{ !cancelled() && github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == github.repository }}
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      pull-requests: write
+    steps:
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.1.0
+        with:
+          ref: ${{ github.event.pull_request.base.sha }}
+          sparse-checkout: scripts/ci
+          persist-credentials: false
+
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
+        continue-on-error: true
+        with:
+          pattern: ci-report-*
+          merge-multiple: true
+          path: ${{ runner.temp }}/ci-report
+
+      - name: Post the comment
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          # A base from before the split has no poster.
+          if [ ! -f scripts/ci/post-reports.sh ]; then
+            echo "::warning::The base branch can't post this comment yet."
+            exit 0
+          fi
+          scripts/ci/post-reports.sh "$RUNNER_TEMP/ci-report"
