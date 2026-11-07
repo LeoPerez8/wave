@@ -59,4 +59,4 @@ if [ -z "$range" ]; then
 fi
 
 echo "Scanning $range"
-scan "$root" --log-opts="$range" --exit-code 1
+scan "$root" --log-opts="$range" --exit-code 1 --verbose
