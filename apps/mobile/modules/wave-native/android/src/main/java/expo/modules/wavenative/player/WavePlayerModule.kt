@@ -306,10 +306,12 @@ class WavePlayerModule : Module() {
 
     /**
      * The queue's shuffle and repeat (`off`, `all` or `one`), after every change
-     * made in the app or in the car: the service shows them on Auto's buttons.
+     * made in the app or in the car, and whether the playing song is a favorite:
+     * the service shows shuffle and the star on the notification's (and Auto's)
+     * buttons, and saves repeat for a resume.
      */
-    AsyncFunction("setModes") { shuffle: Boolean, repeat: String, promise: Promise ->
-      val modes = AutoModes.fromJs(shuffle, repeat)
+    AsyncFunction("setModes") { shuffle: Boolean, repeat: String, starred: Boolean, promise: Promise ->
+      val modes = AutoModes.fromJs(shuffle, repeat, starred)
         ?: return@AsyncFunction promise.reject("ERR_PLAYER_MODES", "Unknown repeat mode: $repeat", null)
       AutoModes.state.publish(modes)
       promise.resolve(null)

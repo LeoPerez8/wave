@@ -16,7 +16,7 @@ object MoreFromArtistSession {
   fun withCommand(commands: SessionCommands): SessionCommands =
     commands.buildUpon().add(COMMAND).build()
 
-  /** The button, after shuffle and repeat in the overflow menu. */
+  /** The button, after shuffle and Favorite in the overflow menu. */
   val button: CommandButton
     get() = CommandButton.Builder(CommandButton.ICON_ARTIST)
       .setSessionCommand(COMMAND)

@@ -129,14 +129,14 @@ export type AutoRequest =
    */
   | { readonly type: "add"; readonly mediaIds: readonly string[] }
   /**
-   * A tap on Auto's shuffle or repeat button: change the queue's mode as the
-   * app's buttons do, then answer `null` (the new modes go out with `setModes`).
-   * `moreFromArtist` adds the current artist's next most played songs after
-   * the current track.
+   * A tap on the shuffle or Favorite button (the media notification's, which Auto shares):
+   * toggle shuffle, or the playing song's star, as the app's buttons do, then answer `null`
+   * (the new state goes out with `setModes`). `moreFromArtist` adds the current artist's
+   * next most played songs after the current track.
    */
   | {
       readonly type: "command";
-      readonly command: "toggleShuffle" | "cycleRepeat" | "moreFromArtist";
+      readonly command: "toggleShuffle" | "toggleFavorite" | "moreFromArtist";
     };
 
 /** The answer to a `play` request: the new player list and the item to start at. */
@@ -197,8 +197,12 @@ declare class WavePlayerModule extends NativeModule<WavePlayerEvents> {
     cause: SongChangeCause,
   ): Promise<void>;
   setRepeatMode(mode: RepeatMode): Promise<void>;
-  /** The queue's shuffle and repeat, for the toggles on Auto's player screen. */
-  setModes(shuffle: boolean, repeat: RepeatMode): Promise<void>;
+  /**
+   * The queue's shuffle and whether the playing song is a favorite, for the shuffle and
+   * Favorite buttons on the media notification (and Auto's player screen, which shares them),
+   * and its repeat, which the playback service saves for a resume.
+   */
+  setModes(shuffle: boolean, repeat: RepeatMode, starred: boolean): Promise<void>;
   /**
    * The chosen primary (`#rrggbb`) in each scheme, kept on disk for the media
    * notification wherever the system colours it from the app.

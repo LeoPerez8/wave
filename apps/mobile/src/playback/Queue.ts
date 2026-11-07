@@ -57,7 +57,7 @@ import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import * as Semaphore from "effect/Semaphore";
 
-import { makeExternalStore } from "@/lib/externalStore";
+import { makeExternalStore, subscribeAll } from "@/lib/externalStore";
 import { LibraryStore } from "@/library/LibraryStore";
 import { currentLocalisation } from "@/localisation/localisation";
 import type { NativeSyncStep, PlayerItem } from "@/native/wavePlayer";
@@ -67,6 +67,7 @@ import { perfMark } from "@/perf/perf";
 import { dontPlayExplicit, onDontPlayExplicit } from "@/settings/dontPlayExplicit";
 import { shuffleKind } from "@/settings/shuffleKind";
 
+import { notificationStarred } from "./notificationStarState";
 import { Player, PlayerError, playbackState, positionState } from "./Player";
 import { searchPlaying } from "./playingSearch";
 import {
@@ -783,15 +784,18 @@ export const layer = Layer.effect(
       yield* applyRepeat(queueState.get());
     }).pipe(Effect.catch(() => Effect.void));
 
-    // Auto's shuffle and repeat toggles follow the queue, whether the app or the car changed it.
+    // The notification's (and Auto's) shuffle follows the queue, whether the app or the car
+    // changed it, and its Favorite button the playing song's star. Repeat goes too: the
+    // playback service saves it for a resume.
     let shownModes: string | null = null;
     const showModes = (): void => {
       const { shuffle, repeat } = queueState.get();
-      const modes = `${shuffle}/${repeat}`;
+      const starred = notificationStarred.get();
+      const modes = `${shuffle}/${repeat}/${starred}`;
       if (modes === shownModes) return;
       shownModes = modes;
       Effect.runFork(
-        player.setModes(shuffle, repeat).pipe(
+        player.setModes(shuffle, repeat, starred).pipe(
           Effect.catch(() =>
             Effect.sync(() => {
               shownModes = null;
@@ -802,7 +806,7 @@ export const layer = Layer.effect(
     };
     showModes();
     yield* Effect.acquireRelease(
-      Effect.sync(() => queueState.subscribe(showModes)),
+      Effect.sync(() => subscribeAll(queueState, notificationStarred)(showModes)),
       (stop) => Effect.sync(stop),
     );
 

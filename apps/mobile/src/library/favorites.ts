@@ -273,6 +273,12 @@ const loadPendingFavorites = (): void => {
   if (!pendingFavorites.get().loaded) readPendingFavorites();
 };
 
+/** Reads the stars and pending favorites once, outside any screen (the notification's star). */
+export const loadStars = (): void => {
+  loadFavorites();
+  loadPendingFavorites();
+};
+
 /**
  * Stars ([on]) YT Music [songs] as pending favorites, or unstars them: their
  * stars flip at once, and the store keeps them until their files arrive.
@@ -362,7 +368,7 @@ export const onFavoritesSaved = (listener: () => void): (() => void) => {
 };
 
 /** The scoped Now Playing star follows optimistic edits without loading global lists. */
-const subscribeSongStars = subscribeAll(favorites, pendingFavorites);
+export const subscribeSongStars = subscribeAll(favorites, pendingFavorites);
 export const scopedSongStarredNow = (
   id: number | null,
   video: string | null,

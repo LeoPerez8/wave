@@ -17,6 +17,19 @@ export interface PlayingSongAnswer {
   readonly favorite: boolean;
   readonly pendingFavorite: boolean;
 }
+
+/**
+ * The song a star or button acts on for queue track [trackId]: none while nothing plays, or
+ * for a YT Music song whose details the queue doesn't hold yet.
+ */
+export const playingSongTarget = (
+  trackId: string | null,
+  song: YtSong | null,
+): PlayingSongTarget | null =>
+  trackId === null || (parseTrackId(trackId)?.kind === "yt" && song === null)
+    ? null
+    : { trackId, song };
+
 const playingSongKey = (target: PlayingSongTarget): string => JSON.stringify(target);
 
 interface Entry {

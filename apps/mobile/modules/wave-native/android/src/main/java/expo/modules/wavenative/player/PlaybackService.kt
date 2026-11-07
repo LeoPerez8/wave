@@ -503,10 +503,14 @@ class PlaybackService : MediaLibraryService() {
       for (parent in languageParents.toList()) session?.notifyChildrenChanged(parent, Int.MAX_VALUE, null)
     }
     showModes(AutoModes.state.current)
+    var savedModes = AutoModes.state.current
     stopModes = AutoModes.state.listen { modes ->
       showModes(modes)
       // Repeat All on a long queue leaves the player's repeat off, so no player event saves it.
-      exoPlayer?.let { ResumeStore.savePlayer(it, withItems = false) }
+      if (modes.shuffle != savedModes.shuffle || modes.repeat != savedModes.repeat) {
+        exoPlayer?.let { ResumeStore.savePlayer(it, withItems = false) }
+      }
+      savedModes = modes
     }
     stopLyrics = AutoLyrics.state.listen {
       shown?.refresh()
@@ -519,7 +523,7 @@ class PlaybackService : MediaLibraryService() {
     }
   }
 
-  /** Stops following JS's shuffle and repeat ([AutoModes.state]). */
+  /** Stops following JS's shuffle, repeat and star ([AutoModes.state]). */
   private val languageParents = mutableSetOf("root", "tab/home", "tab/playlists", "tab/albums", "tab/artists")
   private var stopLanguage: (() -> Unit)? = null
   private var stopModes: (() -> Unit)? = null
@@ -544,8 +548,9 @@ class PlaybackService : MediaLibraryService() {
   }
 
   /**
-   * Shows the queue's shuffle and repeat on the mode buttons (Auto's player
-   * screen), with More from this artist and the Lyrics toggle after them.
+   * Shows the queue's shuffle and the playing song's star on the mode buttons
+   * (the media notification shows these two beside the transport; Auto's player
+   * screen shares them), with More from this artist and the Lyrics toggle after them.
    */
   private fun showModes(modes: PlaybackModes) {
     session?.setMediaButtonPreferences(
@@ -555,7 +560,7 @@ class PlaybackService : MediaLibraryService() {
   }
 
   /**
-   * The controllers that show the shuffle and repeat buttons: Auto, and the
+   * The controllers that show the shuffle and Favorite buttons: Auto, and the
    * media notification, whose buttons legacy controllers (Auto on a phone) share.
    */
   private fun showsModeButtons(session: MediaSession, controller: MediaSession.ControllerInfo) =
@@ -876,7 +881,8 @@ class PlaybackService : MediaLibraryService() {
             mediaSession.player.shuffleModeEnabled = false
             // Auto's buttons show the resumed modes before JS is up to publish them.
             snapshot?.let { saved ->
-              AutoModes.fromJs(saved.shuffle, saved.repeat)?.let(AutoModes.state::publish)
+              AutoModes.fromJs(saved.shuffle, saved.repeat, AutoModes.state.current.starred)
+                ?.let(AutoModes.state::publish)
             }
             QueueSnapshot.json = snapshot?.queueJson
             QueueSnapshot.index = snapshot?.queueIndex
