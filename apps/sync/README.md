@@ -8,7 +8,7 @@ account and deletes accounts. See "Wave account and sync" in `docs/spec.md`.
 | File                 | What it holds                                                           |
 | -------------------- | ----------------------------------------------------------------------- |
 | `src/worker.ts`      | The Worker entry: builds the service from the Worker's secrets and vars |
-| `src/service.ts`     | The routes, sessions, the rate limit and the allowlist                  |
+| `src/service.ts`     | The routes, sessions, the rate limits and the allowlist                 |
 | `src/google.ts`      | Checking a Google ID token (RS256 against Google's JWKS)                |
 | `src/store.ts`       | Push (merge and number changes), pull (pages) and account deletion      |
 | `src/soulseek.ts`    | The account's Soulseek account, its password encrypted (`SOULSEEK_KEY`) |
@@ -21,7 +21,29 @@ account and deletes accounts. See "Wave account and sync" in `docs/spec.md`.
 
 Every body is JSON. Every route but `POST /v1/session` needs the session token as
 `Authorization: Bearer <sessionToken>`. Only `POST /v1/session` ever answers a session token,
-and nothing logs a session token, an ID token or a Soulseek password.
+and nothing logs a session token, an ID token, an address or a Soulseek password.
+
+### Refused before the database
+
+Some requests are refused before they cost a database query, by the address Cloudflare
+names in `CF-Connecting-IP` (kept only as a SHA-256):
+
+- Past `maxRequestsPerAddressPerMinute`, any route answers `429` with
+  `{ "error": "limit", "limit": "maxRequestsPerAddressPerMinute" }`. It's sized for a carrier
+  that puts many phones behind one address.
+- A token that isn't the shape `POST /v1/session` gives (43 base64url characters) answers
+  `401 { "error": "unauthorized" }` without a lookup.
+- Past `maxFailedLookupsPerAddressPerMinute` lookups that find no session, the address's
+  session routes answer `429` with
+  `{ "error": "limit", "limit": "maxFailedLookupsPerAddressPerMinute" }` for
+  `failedLookupBlockSeconds`, valid sessions included. Requests that find their session never
+  count toward it, and other addresses aren't affected.
+
+Both counts come from Cloudflare's rate limiting binding (`[[ratelimits]]` in
+`wrangler.toml`), which counts per Cloudflare location and approximately. The held addresses
+are kept in the Worker's isolate. At most once a minute, the Worker logs how many requests it
+refused and why (`sync service refused requests: unknown_session=20, held_address=140`), with
+no token and no address.
 
 ### `POST /v1/session`
 
@@ -227,45 +249,56 @@ session itself ended.
 
 ### Errors
 
-| Status | Body                                                                        |
-| ------ | --------------------------------------------------------------------------- |
-| 400    | `{ "error": "bad_request", "detail"?: "…" }`                                |
-| 401    | `{ "error": "unauthorized" }` (no session, or it ended)                     |
-| 401    | `{ "error": "invalid_id_token" }`                                           |
-| 401    | `{ "error": "id_token_required" }`                                          |
-| 403    | `{ "error": "not_allowed" }`                                                |
-| 404    | `{ "error": "not_found" }`                                                  |
-| 413    | `{ "error": "limit", "limit": "<name>" }`                                   |
-| 429    | `{ "error": "limit", "limit": "maxRequestsPerMinute" }`, with `Retry-After` |
-| 429    | `{ "error": "limit", "limit": "maxSignInsPerMinute" }`, with `Retry-After`  |
-| 500    | `{ "error": "internal" }`                                                   |
+| Status | Body                                                                                       |
+| ------ | ------------------------------------------------------------------------------------------ |
+| 400    | `{ "error": "bad_request", "detail"?: "…" }`                                               |
+| 401    | `{ "error": "unauthorized" }` (no session, or it ended)                                    |
+| 401    | `{ "error": "invalid_id_token" }`                                                          |
+| 401    | `{ "error": "id_token_required" }`                                                         |
+| 403    | `{ "error": "not_allowed" }`                                                               |
+| 404    | `{ "error": "not_found" }`                                                                 |
+| 413    | `{ "error": "limit", "limit": "<name>" }`                                                  |
+| 429    | `{ "error": "limit", "limit": "maxRequestsPerMinute" }`, with `Retry-After`                |
+| 429    | `{ "error": "limit", "limit": "maxSignInsPerMinute" }`, with `Retry-After`                 |
+| 429    | `{ "error": "limit", "limit": "maxRequestsPerAddressPerMinute" }`, with `Retry-After`      |
+| 429    | `{ "error": "limit", "limit": "maxFailedLookupsPerAddressPerMinute" }`, with `Retry-After` |
+| 500    | `{ "error": "internal" }`                                                                  |
 
 ## Limits
 
 `SYNC_LIMITS` in `src/limits.ts`. Past one, the service answers `413` (or `429` for a
 rate) and names it. Starting values, so a 50,000-song Library with 200,000 plays fits:
 
-| Limit                     | Value     |                                                 |
-| ------------------------- | --------- | ----------------------------------------------- |
-| `maxBodyBytes`            | 2 MiB     | per request; a large first push goes in batches |
-| `maxSongs`                | 100,000   | rows per account, tombstones aside              |
-| `maxPlaylists`            | 5,000     |                                                 |
-| `maxPlaylistEntries`      | 250,000   |                                                 |
-| `maxFavorites`            | 100,000   |                                                 |
-| `maxPreferences`          | 200       |                                                 |
-| `maxPlays`                | 1,000,000 |                                                 |
-| `maxFollows`              | 5,000     |                                                 |
-| `maxHiddenReleases`       | 50,000    |                                                 |
-| `maxNotifiedShows`        | 50,000    |                                                 |
-| `maxDismissedSuggestions` | 50,000    |                                                 |
-| `maxRequestsPerMinute`    | 120       | per session                                     |
-| `maxSignInsPerMinute`     | 10        | `POST /v1/session`, per address and per account |
+| Limit                                 | Value     |                                                      |
+| ------------------------------------- | --------- | ---------------------------------------------------- |
+| `maxBodyBytes`                        | 2 MiB     | per request; a large first push goes in batches      |
+| `maxSongs`                            | 100,000   | rows per account, tombstones aside                   |
+| `maxPlaylists`                        | 5,000     |                                                      |
+| `maxPlaylistEntries`                  | 250,000   |                                                      |
+| `maxFavorites`                        | 100,000   |                                                      |
+| `maxPreferences`                      | 200       |                                                      |
+| `maxPlays`                            | 1,000,000 |                                                      |
+| `maxFollows`                          | 5,000     |                                                      |
+| `maxHiddenReleases`                   | 50,000    |                                                      |
+| `maxNotifiedShows`                    | 50,000    |                                                      |
+| `maxDismissedSuggestions`             | 50,000    |                                                      |
+| `maxRequestsPerMinute`                | 120       | per session                                          |
+| `maxSignInsPerMinute`                 | 10        | `POST /v1/session`, per address and per account      |
+| `maxRequestsPerAddressPerMinute`      | 600       | every route, per address                             |
+| `maxFailedLookupsPerAddressPerMinute` | 20        | lookups that find no session, per address            |
+| `failedLookupBlockSeconds`            | 300       | how long an address past the line above is held back |
+
+The two per-address rates are also the `simple.limit` of `ADDRESS_LIMITER` and
+`FAILED_LOOKUP_LIMITER` in `wrangler.toml`; a test fails when they differ. Change both, then
+deploy.
 
 A push that would take a table past its limit is refused whole.
 
 ## Configuration
 
-Set on the Worker, never in the repo (`wrangler.toml` holds none of them):
+Set on the Worker, never in the repo (`wrangler.toml` holds none of them; it holds only the
+two rate limiting bindings, which `wrangler deploy` creates and which need Wrangler 4.36 or
+later):
 
 | Name                 | Kind   |                                                                     |
 | -------------------- | ------ | ------------------------------------------------------------------- |

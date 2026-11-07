@@ -5,7 +5,7 @@
 
 import { createClient } from "@libsql/client/web";
 import { googleKeys } from "./google.ts";
-import { createSyncService } from "./service.ts";
+import { type RateLimiter, createSyncService, serviceMemory } from "./service.ts";
 
 export interface Env {
   readonly TURSO_DATABASE_URL?: string;
@@ -20,6 +20,9 @@ export interface Env {
    */
   readonly SOULSEEK_KEY?: string;
   readonly [soulseekKey: `SOULSEEK_KEY_${string}`]: string | undefined;
+  /** The `[[ratelimits]]` bindings in `wrangler.toml`. */
+  readonly ADDRESS_LIMITER?: RateLimiter;
+  readonly FAILED_LOOKUP_LIMITER?: RateLimiter;
 }
 
 /** The Worker's Soulseek keys, by secret name. */
@@ -34,6 +37,8 @@ const soulseekKeys = (env: Env): Record<string, string> =>
 
 // Kept for the isolate's life, so a sign-in doesn't fetch Google's keys each time.
 const keys = googleKeys((input, init) => fetch(input, init), Date.now);
+// Kept for the isolate's life too: the addresses held back and the refusal counts.
+const memory = serviceMemory();
 
 export default {
   async fetch(request: Request, env: Env): Promise<Response> {
@@ -42,10 +47,18 @@ export default {
       console.error("sync service: TURSO_DATABASE_URL or GOOGLE_CLIENT_ID isn't set");
       return Response.json({ error: "internal" }, { status: 500 });
     }
+    const { ADDRESS_LIMITER: addressLimiter, FAILED_LOOKUP_LIMITER: failedLookupLimiter } = env;
+    if (addressLimiter === undefined || failedLookupLimiter === undefined) {
+      console.error("sync service: the ratelimits bindings in wrangler.toml are missing");
+      return Response.json({ error: "internal" }, { status: 500 });
+    }
     const service = createSyncService({
       db: createClient({ url, ...(authToken === undefined ? {} : { authToken }) }),
+      addressLimiter,
+      failedLookupLimiter,
       googleClientId: GOOGLE_CLIENT_ID,
       googleKeys: keys,
+      memory,
       ...(env.ALLOWED_EMAILS === undefined ? {} : { allowedEmails: env.ALLOWED_EMAILS }),
       soulseekKeys: soulseekKeys(env),
     });

@@ -20,8 +20,20 @@ import {
 import { type PushBatch, deleteAccount, pullRows, pushRows } from "./store.ts";
 import { type IncomingRow, type SyncTable, InvalidRow, SYNC_TABLES, parseRow } from "./tables.ts";
 
+/**
+ * Counts a call against a key and says whether it's within the limit: the
+ * Worker's rate limiting binding, or a stand-in in the tests.
+ */
+export interface RateLimiter {
+  readonly limit: (options: { readonly key: string }) => Promise<{ readonly success: boolean }>;
+}
+
 export interface SyncServiceOptions {
   readonly db: Client;
+  /** Counts every request by address (`maxRequestsPerAddressPerMinute`). */
+  readonly addressLimiter: RateLimiter;
+  /** Counts failed session lookups by address (`maxFailedLookupsPerAddressPerMinute`). */
+  readonly failedLookupLimiter: RateLimiter;
   /** Wave's web OAuth client id: an ID token's audience must be it. */
   readonly googleClientId: string;
   /** Emails that may sign in, separated by commas; unset or empty lets anyone in. */
@@ -41,7 +53,28 @@ export interface SyncServiceOptions {
    * rest work.
    */
   readonly soulseekKeys?: Readonly<Record<string, string>>;
+  /** Where the counts of refused requests go (`console.warn` by default). */
+  readonly log?: (message: string) => void;
+  /** What's kept across requests (the Worker keeps it per isolate); a fresh one by default. */
+  readonly memory?: ServiceMemory;
 }
+
+/**
+ * What the service keeps between requests: the addresses held back after
+ * failed session lookups, and the refusals not yet logged.
+ */
+export interface ServiceMemory {
+  /** By address key, when it may look up sessions again. */
+  readonly heldAddresses: Map<string, number>;
+  readonly refusals: Map<Refusal, number>;
+  loggedAt: number;
+}
+
+export const serviceMemory = (): ServiceMemory => ({
+  heldAddresses: new Map(),
+  refusals: new Map(),
+  loggedAt: -Infinity,
+});
 
 /** How long ago Google may have issued the ID token that confirms deleting an account. */
 const REAUTHENTICATION_MAX_AGE_MS = 5 * 60_000;
@@ -58,6 +91,8 @@ export type SyncService = (request: Request) => Promise<Response>;
 interface RouteContext {
   readonly request: Request;
   readonly url: URL;
+  /** A SHA-256 of the address the request came from, when Cloudflare names it. */
+  readonly addressKey: string | null;
 }
 
 /** The session a request was made with. */
@@ -118,6 +153,14 @@ const tooMany = (limit: SyncLimitName, at: number): Answer =>
     }),
   );
 
+/** Why a request was refused before reaching a route, in the order the log lists them. */
+const REFUSALS = ["malformed_token", "unknown_session", "held_address", "address_limit"] as const;
+
+type Refusal = (typeof REFUSALS)[number];
+
+/** What `POST /v1/session` gives: base64url of 32 random bytes. */
+const SESSION_TOKEN = /^[A-Za-z0-9_-]{43}$/;
+
 const base64url = (bytes: Uint8Array): string =>
   btoa(String.fromCharCode(...bytes))
     .replaceAll("+", "-")
@@ -146,6 +189,25 @@ export const createSyncService = (options: SyncServiceOptions): SyncService => {
   const pullPageSize = options.pullPageSize ?? PULL_PAGE_SIZE;
   const keys = options.googleKeys ?? googleKeys(options.fetch ?? fetch, now);
   const allowlist = parseAllowlist(options.allowedEmails);
+  const log = options.log ?? ((message: string) => console.warn(message));
+  const memory = options.memory ?? serviceMemory();
+  const { heldAddresses, refusals } = memory;
+
+  /**
+   * Counts a refusal, logging the counts when a minute has passed since the
+   * last line, so a flood doesn't flood the log.
+   */
+  const refused = (refusal: Refusal): void => {
+    refusals.set(refusal, (refusals.get(refusal) ?? 0) + 1);
+    const at = now();
+    if (at - memory.loggedAt < 60_000) return;
+    memory.loggedAt = at;
+    const counts = REFUSALS.filter((name) => refusals.has(name)).map(
+      (name) => `${name}=${refusals.get(name)}`,
+    );
+    refusals.clear();
+    log(`sync service refused requests: ${counts.join(", ")}`);
+  };
 
   /** The request's JSON body, refusing one past `maxBodyBytes`. */
   const readJson = async (request: Request): Promise<unknown> => {
@@ -223,14 +285,46 @@ export const createSyncService = (options: SyncServiceOptions): SyncService => {
   };
 
   /**
+   * Refuses with 429 while [addressKey] is held back: past
+   * `maxFailedLookupsPerAddressPerMinute`, checked with no query.
+   */
+  const refuseIfHeld = (addressKey: string): void => {
+    const until = heldAddresses.get(addressKey);
+    if (until === undefined) return;
+    const at = now();
+    if (at >= until) {
+      heldAddresses.delete(addressKey);
+      return;
+    }
+    refused("held_address");
+    throw new Answer(
+      json({ error: "limit", limit: "maxFailedLookupsPerAddressPerMinute" }, 429, {
+        "retry-after": String(Math.ceil((until - at) / 1000)),
+      }),
+    );
+  };
+
+  /** Counts a lookup that found no session, holding [addressKey] back once past the limit. */
+  const countFailedLookup = async (addressKey: string): Promise<void> => {
+    if ((await options.failedLookupLimiter.limit({ key: addressKey })).success) return;
+    const at = now();
+    for (const [key, until] of heldAddresses) if (at >= until) heldAddresses.delete(key);
+    heldAddresses.set(addressKey, at + limits.failedLookupBlockSeconds * 1000);
+  };
+
+  /**
    * The session a request's `Authorization: Bearer <token>` names, counting
    * the request against its rate and marking it used. Refuses with 401 when
    * there's none or it went unused for `SESSION_UNUSED_MS` (and deletes it),
    * and with 429 past `maxRequestsPerMinute`.
    */
-  const authenticate = async (request: Request): Promise<Session> => {
+  const authenticate = async ({ request, addressKey }: RouteContext): Promise<Session> => {
     const match = /^Bearer (\S+)$/.exec(request.headers.get("authorization") ?? "");
-    if (match?.[1] === undefined) throw failure(401, "unauthorized");
+    if (match?.[1] === undefined || !SESSION_TOKEN.test(match[1])) {
+      refused("malformed_token");
+      throw failure(401, "unauthorized");
+    }
+    if (addressKey !== null) refuseIfHeld(addressKey);
     const tokenHash = await sha256Hex(match[1]);
     const at = now();
     const window = Math.floor(at / 60_000);
@@ -247,7 +341,11 @@ export const createSyncService = (options: SyncServiceOptions): SyncService => {
       args: [window, window, unusedSince, at, tokenHash],
     });
     const row = result.rows[0];
-    if (row === undefined) throw failure(401, "unauthorized");
+    if (row === undefined) {
+      refused("unknown_session");
+      if (addressKey !== null) await countFailedLookup(addressKey);
+      throw failure(401, "unauthorized");
+    }
     if (Number(row.last_used_at) <= unusedSince) {
       await db.execute({ sql: "DELETE FROM sessions WHERE token_hash = ?", args: [tokenHash] });
       throw failure(401, "unauthorized");
@@ -262,7 +360,7 @@ export const createSyncService = (options: SyncServiceOptions): SyncService => {
   const withSession =
     (route: (context: RouteContext, session: Session) => Promise<Response>): Route =>
     async (context) =>
-      route(context, await authenticate(context.request));
+      route(context, await authenticate(context));
 
   const endSession = withSession(async (_context, session) => {
     await db.execute({
@@ -368,11 +466,22 @@ export const createSyncService = (options: SyncServiceOptions): SyncService => {
   };
 
   return async (request) => {
-    const url = new URL(request.url);
-    const route = routes[`${request.method} ${url.pathname}`];
-    if (route === undefined) return json({ error: "not_found" }, 404);
+    // Cloudflare sets it on every request that reaches the Worker; only the
+    // tests leave it out. Kept only as a hash, and never logged.
+    const address = request.headers.get("cf-connecting-ip");
+    const addressKey = address === null ? null : await sha256Hex(address);
     try {
-      return await route({ request, url });
+      if (
+        addressKey !== null &&
+        !(await options.addressLimiter.limit({ key: addressKey })).success
+      ) {
+        refused("address_limit");
+        throw tooMany("maxRequestsPerAddressPerMinute", now());
+      }
+      const url = new URL(request.url);
+      const route = routes[`${request.method} ${url.pathname}`];
+      if (route === undefined) return json({ error: "not_found" }, 404);
+      return await route({ request, url, addressKey });
     } catch (error) {
       if (error instanceof Answer) return error.response;
       // The message only: a request, and so a token, never reaches the log.

@@ -5,3 +5,16 @@
 name = "wave-sync"
 main = "src/worker.ts"
 compatibility_date = "2026-10-01"
+
+# Per-address limits, counted before the database (src/limits.ts holds the same
+# numbers, and a test checks they match). Counts are per Cloudflare location and
+# approximate. Each namespace_id must be unique in the Cloudflare account.
+[[ratelimits]]
+name = "ADDRESS_LIMITER"
+namespace_id = "61001"
+simple = { limit = 600, period = 60 }
+
+[[ratelimits]]
+name = "FAILED_LOOKUP_LIMITER"
+namespace_id = "61002"
+simple = { limit = 20, period = 60 }
