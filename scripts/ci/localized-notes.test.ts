@@ -6,7 +6,7 @@ import { join } from "node:path";
 import { describe, it } from "node:test";
 import { fileURLToPath } from "node:url";
 import { localizedNotes, needsPortugueseNote, portugueseNote } from "./localized-notes.ts";
-import type { MergedPr } from "./patch-notes.ts";
+import { patchNotes, type MergedPr } from "./patch-notes.ts";
 
 const pr = (number: number, fields: Partial<MergedPr> = {}): MergedPr => ({
   number,
@@ -84,6 +84,28 @@ describe("localizedNotes", () => {
     });
     assert.deepEqual(notes.en, { new: ["Listed"], fixes: [] });
     assert.deepEqual(notes["pt-BR"], { new: ["Listed"], fixes: [] });
+  });
+
+  it("puts a security PR from a fix/ branch under Fixes, with its Portuguese line", () => {
+    const security = (number: number) =>
+      pr(number, {
+        title: "Security patch",
+        branch: `fix/security-${number}`,
+        body: "Details\n\npt-BR: Patch de segurança",
+      });
+    const input = {
+      commits: ["commit-1", "commit-2", "commit-3"],
+      bugIssues: [],
+      pullRequests: [pr(1, { title: "Artist pages" }), security(2), security(3)],
+    };
+    assert.deepEqual(localizedNotes(input), {
+      en: { new: ["Artist pages"], fixes: ["Security patch", "Security patch"] },
+      "pt-BR": { new: ["Artist pages"], fixes: ["Patch de segurança", "Patch de segurança"] },
+    });
+    assert.match(
+      patchNotes(input),
+      /## Fixes\n\n- \[Security patch\]\(.*\/pull\/2\)\n- \[Security patch\]\(.*\/pull\/3\)\n$/,
+    );
   });
 });
 
