@@ -15,7 +15,6 @@ import {
   decodeAutoMediaId,
   joinArtists,
   libraryTrackIds,
-  nextRepeatMode,
   statsWindow,
   unsearchedTrackId,
   ytSongArtist,
@@ -49,6 +48,7 @@ import {
 import { sortedPlaylists } from "@/library/playlistOrder";
 import type { AutoPlayback, AutoRequest } from "@/native/wavePlayer";
 import type { PlayerError } from "@/playback/Player";
+import { tapNotificationStar } from "@/playback/notificationStarState";
 import { Queue, queueState, toQueueTrack, type QueueTrack } from "@/playback/Queue";
 import { toUnsearchedQueueTrack, toYtQueueTrack } from "@/playback/queueTracks";
 import { ytMusicEnabled } from "@/settings/ytMusic";
@@ -395,18 +395,18 @@ export const layer = Layer.effect(
     });
 
     /**
-     * Auto's shuffle and repeat buttons, through the queue engine like the
-     * app's: shuffle keeps the current track, repeat goes off → all → one.
+     * The shuffle and Favorite buttons (the notification's, which Auto shares): shuffle goes
+     * through the queue engine like the app's and keeps the current track; Favorite toggles
+     * the playing song's star as Now Playing's does.
      */
     const command = (name: Extract<AutoRequest, { type: "command" }>["command"]) =>
       Effect.gen(function* () {
         if (name === "moreFromArtist") return yield* moreFromArtist;
-        const { shuffle, repeat } = queueState.get();
-        yield* queue.dispatch(
-          name === "toggleShuffle"
-            ? { type: "setShuffle", on: !shuffle }
-            : { type: "setRepeat", mode: nextRepeatMode(repeat) },
-        );
+        if (name === "toggleFavorite") {
+          yield* Effect.promise(tapNotificationStar);
+          return null;
+        }
+        yield* queue.dispatch({ type: "setShuffle", on: !queueState.get().shuffle });
         return null;
       });
 

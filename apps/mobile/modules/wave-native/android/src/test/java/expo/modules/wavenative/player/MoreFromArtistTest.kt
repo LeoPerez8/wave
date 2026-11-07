@@ -16,6 +16,6 @@ class MoreFromArtistTest {
   @Test
   fun `the mode buttons' actions are not this button's`() {
     assertNull(MoreFromArtist.request(AutoModes.SHUFFLE_ACTION))
-    assertNull(MoreFromArtist.request(AutoModes.REPEAT_ACTION))
+    assertNull(MoreFromArtist.request(AutoModes.FAVORITE_ACTION))
   }
 }

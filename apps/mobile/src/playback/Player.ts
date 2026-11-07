@@ -68,8 +68,15 @@ export class Player extends Context.Service<
       cause: SongChangeCause,
     ) => Effect.Effect<void, PlayerError>;
     readonly setRepeatMode: (mode: RepeatMode) => Effect.Effect<void, PlayerError>;
-    /** Shows the queue's shuffle and repeat on Android Auto's player screen. */
-    readonly setModes: (shuffle: boolean, repeat: RepeatMode) => Effect.Effect<void, PlayerError>;
+    /**
+     * The queue's shuffle and repeat (saved for a resume), and whether the playing song is a
+     * favorite: the notification's (and Auto's) shuffle and Favorite buttons show them.
+     */
+    readonly setModes: (
+      shuffle: boolean,
+      repeat: RepeatMode,
+      starred: boolean,
+    ) => Effect.Effect<void, PlayerError>;
     readonly getItemIds: Effect.Effect<NativeItemIds, PlayerError>;
     /** Gives loaded items their cached cover (Core's `playerCoverUpdates`); playback goes on. */
     readonly setItemArtwork: (
@@ -153,8 +160,8 @@ export const layer = Layer.effect(
       applySync: (steps, items, cause) =>
         call("update the queue", () => WavePlayer.applySync(steps, items, cause)),
       setRepeatMode: (mode) => call("set repeat", () => WavePlayer.setRepeatMode(mode)),
-      setModes: (shuffle, repeat) =>
-        call("show shuffle and repeat", () => WavePlayer.setModes(shuffle, repeat)),
+      setModes: (shuffle, repeat, starred) =>
+        call("show shuffle and the star", () => WavePlayer.setModes(shuffle, repeat, starred)),
       getItemIds: call("read the queue", () => WavePlayer.getItemIds()),
       setItemArtwork: (updates) =>
         updates.length === 0

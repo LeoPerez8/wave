@@ -1,5 +1,4 @@
 import { currentLocalisation } from "@/localisation/localisation";
-import { parseTrackId } from "@wave/core";
 import { useEffect, useMemo, useSyncExternalStore } from "react";
 import { scopedSongStarredNow, rememberSongFavorite } from "@/library/favorites";
 import { onDownloadedRecording, onLibraryChange } from "@/library/libraryChanges";
@@ -13,21 +12,31 @@ import { streamPlayingInstead } from "@/playback/actions";
 import { ytMusicEnabled } from "@/settings/ytMusic";
 import { downloadMissingSongs, downloadYtSong } from "@/ytmusic/YtDownloads";
 import { createDeletePlayingSong } from "./deletePlayingSong";
-import { createNowPlayingSongLookup, type PlayingSongTarget } from "./songLookup";
+import {
+  createNowPlayingSongLookup,
+  playingSongTarget,
+  type PlayingSongTarget,
+} from "./songLookup";
 import { createNowPlayingSongActions } from "./songActions";
 
-export const nowPlayingSongLookup = createNowPlayingSongLookup({
-  read: (target, signal) => {
-    signal.throwIfAborted();
-    return appRuntime.runPromise(
-      // oxlint-disable-next-line react/rules-of-hooks -- Effect service access.
-      LibraryStore.use((store) => store.nowPlayingSong(target)),
-      { signal },
-    );
-  },
-});
-onLibraryChange(nowPlayingSongLookup.change);
-onDownloadedRecording(nowPlayingSongLookup.downloaded);
+/** A playing-song lookup reading the Library store, following its changes and downloads. */
+export const createPlayingSongLookup = (): ReturnType<typeof createNowPlayingSongLookup> => {
+  const lookup = createNowPlayingSongLookup({
+    read: (target, signal) => {
+      signal.throwIfAborted();
+      return appRuntime.runPromise(
+        // oxlint-disable-next-line react/rules-of-hooks -- Effect service access.
+        LibraryStore.use((store) => store.nowPlayingSong(target)),
+        { signal },
+      );
+    },
+  });
+  onLibraryChange(lookup.change);
+  onDownloadedRecording(lookup.downloaded);
+  return lookup;
+};
+
+export const nowPlayingSongLookup = createPlayingSongLookup();
 
 /** Now Playing's Download on a song with a file (`createDeletePlayingSong`). */
 const deletePlayingSong = createDeletePlayingSong<SongRow & { readonly path: string }>({
@@ -85,14 +94,7 @@ export const songActionFailed = (error: unknown): void => {
 export const usePlayingSongTarget = (
   trackId: string | null,
   song: NativeYtSong | null,
-): PlayingSongTarget | null =>
-  useMemo(
-    () =>
-      trackId === null || (parseTrackId(trackId)?.kind === "yt" && song === null)
-        ? null
-        : { trackId, song },
-    [trackId, song],
-  );
+): PlayingSongTarget | null => useMemo(() => playingSongTarget(trackId, song), [trackId, song]);
 
 /** One owner drives settlement; the controls only observe its shared answer. */
 export const usePreparePlayingSong = (

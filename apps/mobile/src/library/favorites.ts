@@ -274,6 +274,15 @@ const loadPendingFavorites = (): void => {
 };
 
 /**
+ * Reads the stars and pending favorites, outside any screen (the notification's star); once
+ * read, a call changes nothing, and after a failed read it tries again.
+ */
+export const loadStars = (): void => {
+  loadFavorites();
+  loadPendingFavorites();
+};
+
+/**
  * Stars ([on]) YT Music [songs] as pending favorites, or unstars them: their
  * stars flip at once, and the store keeps them until their files arrive.
  * Should the write fail, the stars go back to what the store holds. Their
@@ -362,7 +371,7 @@ export const onFavoritesSaved = (listener: () => void): (() => void) => {
 };
 
 /** The scoped Now Playing star follows optimistic edits without loading global lists. */
-const subscribeSongStars = subscribeAll(favorites, pendingFavorites);
+export const subscribeSongStars = subscribeAll(favorites, pendingFavorites);
 export const scopedSongStarredNow = (
   id: number | null,
   video: string | null,
@@ -388,6 +397,11 @@ export const useScopedSongStarred = (
   saved: { readonly favorite: boolean; readonly pendingFavorite: boolean },
 ): boolean =>
   useSyncExternalStore(subscribeSongStars, () => scopedSongStarredNow(id, video, saved));
+
+/** Library track [id]'s star as this phone knows it now, or null before the stars are read. */
+export const knownStarNow = (id: number): boolean | null =>
+  writing.get(id)?.shown ??
+  (favorites.get().loaded ? favorites.get().ids.has(id) : (knownStars.get(id) ?? null));
 
 /** Seed just this track before a cold gesture, so a failed write restores its true star. */
 export const rememberSongFavorite = (id: number, favorite: boolean): void => {

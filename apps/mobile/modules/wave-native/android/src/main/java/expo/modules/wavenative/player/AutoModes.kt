@@ -8,11 +8,19 @@ enum class RepeatSetting(val wire: String) {
   ONE("one"),
 }
 
-/** The queue's shuffle and repeat, as JS's queue engine last reported them. */
-data class PlaybackModes(val shuffle: Boolean = false, val repeat: RepeatSetting = RepeatSetting.OFF)
+/**
+ * The queue's shuffle and repeat, and whether the playing song is a favorite ([starred]), as
+ * JS last reported them. The buttons show shuffle and the star; repeat is kept for a resume
+ * ([ResumeStore]).
+ */
+data class PlaybackModes(
+  val shuffle: Boolean = false,
+  val repeat: RepeatSetting = RepeatSetting.OFF,
+  val starred: Boolean = false,
+)
 
 /** Media3's command-button icons the mode buttons use. */
-enum class ModeIcon { SHUFFLE_ON, SHUFFLE_OFF, REPEAT_OFF, REPEAT_ALL, REPEAT_ONE }
+enum class ModeIcon { SHUFFLE_ON, SHUFFLE_OFF, STAR_FILLED, STAR_OUTLINE }
 
 /** One button on Auto's player screen: the custom action it sends, its icon and label. */
 data class ModeButton(val action: String, val icon: ModeIcon, val label: String)
@@ -21,16 +29,17 @@ data class ModeButton(val action: String, val icon: ModeIcon, val label: String)
 data class AutoCommandRequest(val type: String, val payload: String)
 
 /**
- * Shuffle and repeat on Auto's player screen. The buttons are custom session
+ * Shuffle and Favorite on the media notification and Auto's player screen
+ * (which shares the notification's buttons). The buttons are custom session
  * commands (the player's own shuffle stays off): a tap is forwarded to JS,
- * whose queue engine toggles shuffle or cycles repeat exactly as the app's
- * buttons do, and JS reports the resulting [PlaybackModes] back, which the
- * buttons then show. Plain Kotlin, so it is JVM-testable; [PlaybackService]
- * turns it into Media3 commands and buttons.
+ * whose queue engine toggles shuffle, or which toggles the playing song's star,
+ * exactly as the app's buttons do, and JS reports the resulting
+ * [PlaybackModes] back, which the buttons then show. Plain Kotlin, so it is
+ * JVM-testable; [PlaybackService] turns it into Media3 commands and buttons.
  */
 object AutoModes {
   const val SHUFFLE_ACTION = "expo.modules.wavenative.AUTO_SHUFFLE"
-  const val REPEAT_ACTION = "expo.modules.wavenative.AUTO_REPEAT"
+  const val FAVORITE_ACTION = "expo.modules.wavenative.AUTO_FAVORITE"
 
   const val ACTIONS_TYPE = "command"
 
@@ -38,11 +47,11 @@ object AutoModes {
   fun request(action: String): AutoCommandRequest? =
     when (action) {
       SHUFFLE_ACTION -> AutoCommandRequest(ACTIONS_TYPE, """{"command":"toggleShuffle"}""")
-      REPEAT_ACTION -> AutoCommandRequest(ACTIONS_TYPE, """{"command":"cycleRepeat"}""")
+      FAVORITE_ACTION -> AutoCommandRequest(ACTIONS_TYPE, """{"command":"toggleFavorite"}""")
       else -> null
     }
 
-  /** The buttons showing [modes]: shuffle, then repeat. */
+  /** The buttons showing [modes]: shuffle, then the playing song's star. */
   fun buttons(modes: PlaybackModes): List<ModeButton> =
     listOf(
       if (modes.shuffle) {
@@ -50,16 +59,16 @@ object AutoModes {
       } else {
         ModeButton(SHUFFLE_ACTION, ModeIcon.SHUFFLE_OFF, NativeText.get("shuffleOff"))
       },
-      when (modes.repeat) {
-        RepeatSetting.OFF -> ModeButton(REPEAT_ACTION, ModeIcon.REPEAT_OFF, NativeText.get("repeatOff"))
-        RepeatSetting.ALL -> ModeButton(REPEAT_ACTION, ModeIcon.REPEAT_ALL, NativeText.get("repeatAll"))
-        RepeatSetting.ONE -> ModeButton(REPEAT_ACTION, ModeIcon.REPEAT_ONE, NativeText.get("repeatOne"))
+      if (modes.starred) {
+        ModeButton(FAVORITE_ACTION, ModeIcon.STAR_FILLED, NativeText.get("unfavorite"))
+      } else {
+        ModeButton(FAVORITE_ACTION, ModeIcon.STAR_OUTLINE, NativeText.get("favorite"))
       },
     )
 
   /** JS's `setModes` arguments, or null for an unknown repeat mode. */
-  fun fromJs(shuffle: Boolean, repeat: String): PlaybackModes? =
-    RepeatSetting.entries.firstOrNull { it.wire == repeat }?.let { PlaybackModes(shuffle, it) }
+  fun fromJs(shuffle: Boolean, repeat: String, starred: Boolean): PlaybackModes? =
+    RepeatSetting.entries.firstOrNull { it.wire == repeat }?.let { PlaybackModes(shuffle, it, starred) }
 
   /** The process-wide modes: [WavePlayerModule] publishes, [PlaybackService] listens. */
   val state = PlaybackModesState()

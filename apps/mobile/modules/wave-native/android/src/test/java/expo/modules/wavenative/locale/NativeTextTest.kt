@@ -12,6 +12,8 @@ class NativeTextTest {
     try {
       NativeText.publish("pt-BR")
       assertEquals("Aleatório desativado", AutoModes.buttons(PlaybackModes()).first().label)
+      assertEquals("Favoritar", AutoModes.buttons(PlaybackModes()).last().label)
+      assertEquals("Desfavoritar", AutoModes.buttons(PlaybackModes(starred = true)).last().label)
       assertEquals("Letra ativada", AutoLyrics.label(true))
       assertEquals("Mais deste artista", MoreFromArtist.LABEL)
       assertEquals("Salvando na Biblioteca", NativeText.get("saving"))
