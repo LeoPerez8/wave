@@ -80,3 +80,20 @@ export const SYNC_LIMITS = {
 export type SyncLimits = { readonly [K in keyof typeof SYNC_LIMITS]: number };
 
 export type SyncLimitName = keyof SyncLimits;
+
+/**
+ * Where the hourly usage watch (src/usage.ts) warns, set below the free plans' limits so the
+ * owner hears before a limit stops the sync. Each warns at most once a period.
+ */
+export const USAGE_WARNINGS = {
+  /** Requests to every Worker on the account since midnight UTC. Workers Free stops at 100,000. */
+  workerRequestsPerDay: 70_000,
+  /** Turso rows read this billing cycle, 50% of the Free plan's 500 million. */
+  tursoRowsReadPerMonth: 250_000_000,
+  /** Turso rows written this billing cycle, 50% of the Free plan's 10 million. */
+  tursoRowsWrittenPerMonth: 5_000_000,
+  /** Turso storage in bytes, 50% of the Free plan's 5 GB. */
+  tursoStorageBytes: 2_500_000_000,
+} as const;
+
+export type UsageWarnings = { readonly [K in keyof typeof USAGE_WARNINGS]: number };

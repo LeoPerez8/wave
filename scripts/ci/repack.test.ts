@@ -94,6 +94,11 @@ describe("planApkBuild", () => {
 });
 
 describe("apkCacheKey", () => {
+  // Builds kept before then are signed with the public debug key and keep it beside them.
+  it("starts over from the release key's first build, so no older kept build repacks", () => {
+    assert.match(key(app()), /^apk-v2-[a-f0-9]{64}$/);
+  });
+
   it("changes when CI builds another native architecture", () => {
     const dir = app();
     const previous = key(dir);

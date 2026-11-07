@@ -254,6 +254,19 @@ const MIGRATIONS: readonly Migration[] = [
       )`,
     ],
   },
+  {
+    // The usage warnings already written (src/usage.ts), by threshold and period (a UTC day
+    // or month), so each is written once.
+    id: "0013_usage_warnings",
+    statements: [
+      `CREATE TABLE usage_warnings (
+        name TEXT NOT NULL,
+        period TEXT NOT NULL,
+        warned_at INTEGER NOT NULL,
+        PRIMARY KEY (name, period)
+      )`,
+    ],
+  },
 ];
 
 /**
