@@ -228,7 +228,7 @@ const MIGRATIONS: readonly Migration[] = [
   {
     // Which Soulseek key a password is kept under (src/soulseek.ts). Every password kept so far
     // is under SOULSEEK_KEY, version 1.
-    id: "0010_soulseek_key_version",
+    id: "0011_soulseek_key_version",
     statements: ["ALTER TABLE soulseek_accounts ADD COLUMN key_version INTEGER NOT NULL DEFAULT 1"],
   },
 ];

@@ -195,16 +195,16 @@ describe("Soulseek key versions", () => {
     const before = await harness({ soulseekKeys: { SOULSEEK_KEY: first } });
     const session = await before.signIn();
     await before.request("PUT", "/v1/soulseek", { session, json: ana });
-    // Recreate the deployed schema with a kept password, before migration 0010.
+    // Recreate the deployed schema with a kept password, before migration 0011.
     await before.db.batch(
       [
         "ALTER TABLE soulseek_accounts DROP COLUMN key_version",
-        "DELETE FROM migrations WHERE id = '0010_soulseek_key_version'",
+        "DELETE FROM migrations WHERE id = '0011_soulseek_key_version'",
       ],
       "write",
     );
 
-    assert.deepEqual(await migrate(before.db), ["0010_soulseek_key_version"]);
+    assert.deepEqual(await migrate(before.db), ["0011_soulseek_key_version"]);
     const rotated = await harness(
       { soulseekKeys: { SOULSEEK_KEY: first, SOULSEEK_KEY_2: second } },
       before.db,
