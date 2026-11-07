@@ -185,7 +185,8 @@ class WaveAccountClient(
         val bytes = body.encodeToByteArray()
         connection.doOutput = true
         connection.setRequestProperty("Content-Type", "application/json")
-        connection.setFixedLengthStreamingMode(bytes.size)
+        // No streaming mode: with it, a 401 comes back without its body, and the body is what
+        // tells an ID token's refusal from the session's (see refusesIdToken).
         connection.outputStream.use { it.write(bytes) }
       }
       val status = connection.responseCode
