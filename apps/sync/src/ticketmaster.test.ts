@@ -188,11 +188,17 @@ describe("Ticketmaster's failures", () => {
       overQuota,
       () =>
         Response.json(
-          { fault: { faultstring: "Spike arrest violation", detail: { errorcode: "policies.ratelimit.SpikeArrestViolation" } } },
+          {
+            fault: {
+              faultstring: "Spike arrest violation",
+              detail: { errorcode: "policies.ratelimit.SpikeArrestViolation" },
+            },
+          },
           { status: 429, headers: { "rate-limit": "5" } },
         ),
       () => new Response(`Unauthorized ${encodeURIComponent(TICKETMASTER_KEY)}`, { status: 401 }),
-      () => Response.json({ _links: { self: { href: `/events.json?apikey=${TICKETMASTER_KEY}` } } }),
+      () =>
+        Response.json({ _links: { self: { href: `/events.json?apikey=${TICKETMASTER_KEY}` } } }),
       () => Promise.reject(new Error(`network down for ${TICKETMASTER_KEY}`)),
     ]) {
       service.upstream.answer = answer;

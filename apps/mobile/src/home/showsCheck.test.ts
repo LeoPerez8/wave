@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 import * as Effect from "effect/Effect";
 
-import { checkArtistShows, type TicketmasterPath } from "./showsCheck.ts";
+import { checkArtistShows } from "./showsCheck.ts";
 
 const attraction = {
   _embedded: {
@@ -17,17 +17,19 @@ const event = (id: string) => ({
     venues: [{ name: "Hall", city: { name: "São Paulo" }, country: { countryCode: "BR" } }],
   },
 });
-/** Ticketmaster as the check sees it: every call it makes, in order. */
+const ATTRACTIONS = "/v1/ticketmaster/attractions?keyword=Aurora";
+const EVENTS = "/v1/ticketmaster/events?attractionId=K1&countryCode=BR";
+/** The sync service's Ticketmaster routes as the check sees them: every call it makes, in order. */
 const ticketmaster = (events: unknown) => {
-  const calls: TicketmasterPath[] = [];
+  const calls: string[] = [];
   const kept: string[] = [];
   return {
     calls,
     kept,
-    request: (path: TicketmasterPath) =>
+    request: (path: string) =>
       Effect.sync(() => {
         calls.push(path);
-        return path === "attractions" ? attraction : events;
+        return path.startsWith("/v1/ticketmaster/attractions?") ? attraction : events;
       }),
     keepAttraction: (id: string) => Effect.sync(() => void kept.push(id)),
   };
@@ -40,7 +42,7 @@ test("a first check costs two calls and keeps the attraction id before reading s
   const found = await Effect.runPromise(
     checkArtistShows({ ...aurora, attractionId: null }, "BR", tm),
   );
-  assert.deepEqual(tm.calls, ["attractions", "events"]);
+  assert.deepEqual(tm.calls, [ATTRACTIONS, EVENTS]);
   assert.deepEqual(tm.kept, ["K1"]);
   assert.equal(found?.attractionId, "K1");
   assert.deepEqual(
@@ -54,7 +56,7 @@ test("a kept attraction id costs one call, even when Ticketmaster has more pages
   const found = await Effect.runPromise(
     checkArtistShows({ ...aurora, attractionId: "K1" }, "BR", tm),
   );
-  assert.deepEqual(tm.calls, ["events"]);
+  assert.deepEqual(tm.calls, [EVENTS]);
   assert.deepEqual(tm.kept, []);
   assert.equal(found?.shows.length, 1);
 });
@@ -62,8 +64,8 @@ test("a kept attraction id costs one call, even when Ticketmaster has more pages
 test("no matching attraction or an unreadable answer saves nothing", async () => {
   const missing = {
     ...ticketmaster(manyPages),
-    request: (path: TicketmasterPath) =>
-      Effect.succeed(path === "attractions" ? { page: { totalElements: 0 } } : manyPages),
+    request: (path: string) =>
+      Effect.succeed(path === ATTRACTIONS ? { page: { totalElements: 0 } } : manyPages),
   };
   assert.equal(
     await Effect.runPromise(checkArtistShows({ ...aurora, attractionId: null }, "BR", missing)),
@@ -77,9 +79,9 @@ test("no matching attraction or an unreadable answer saves nothing", async () =>
 });
 
 test("a refused request (offline, switched off) stops the check without asking again", async () => {
-  const calls: TicketmasterPath[] = [];
+  const calls: string[] = [];
   const offline = {
-    request: (path: TicketmasterPath) =>
+    request: (path: string) =>
       Effect.suspend(() => {
         calls.push(path);
         return Effect.fail(new Error("Offline"));
@@ -90,5 +92,5 @@ test("a refused request (offline, switched off) stops the check without asking a
     checkArtistShows({ ...aurora, attractionId: null }, "BR", offline),
   );
   assert.equal(exit._tag, "Failure");
-  assert.deepEqual(calls, ["attractions"]);
+  assert.deepEqual(calls, [ATTRACTIONS]);
 });

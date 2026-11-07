@@ -37,9 +37,7 @@ describe("Ticketmaster through the sync service", () => {
   });
 
   test("an artist's name is only ever the keyword: nothing in it adds a parameter", () => {
-    const asked = new URL(
-      upstream(ticketmasterAttractionsPath("AC/DC?apikey=x&size=1#y")) ?? "",
-    );
+    const asked = new URL(upstream(ticketmasterAttractionsPath("AC/DC?apikey=x&size=1#y")) ?? "");
     assert.equal(
       asked.origin + asked.pathname,
       "https://app.ticketmaster.com/discovery/v2/attractions.json",

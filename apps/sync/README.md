@@ -3,8 +3,8 @@
 `apps/sync` is Wave's only backend: a Cloudflare Worker in front of one Turso (libSQL)
 database. It checks Google ID tokens, holds sessions, merges pushed rows by Core's rules
 (`mergeRows`, `mergePlays` from `@wave/core`), serves pulls, keeps each account's Soulseek
-account, asks Genius for signed-in phones and deletes accounts. See "Wave account and sync"
-and "Genius About" in `docs/spec.md`.
+account, asks Genius and Ticketmaster for signed-in phones and deletes accounts. See "Wave
+account and sync", "Genius About" and "Followed artists" in `docs/spec.md`.
 
 | File                 | What it holds                                                           |
 | -------------------- | ----------------------------------------------------------------------- |
@@ -282,6 +282,33 @@ JSON, an answer holding the token, or no answer in 10 s gives
 The log line says only `genius answered <status>`. A Worker without `GENIUS_ACCESS_TOKEN` or
 `GENIUS_LIMITER` answers `503 { "error": "unavailable" }`.
 
+### `GET /v1/ticketmaster/attractions?keyword=<name>`, `GET /v1/ticketmaster/events?attractionId=<id>&countryCode=<cc>`
+
+A show check's attraction search and events, answered with Ticketmaster Discovery's JSON as it
+came. The service asks Ticketmaster with its own `TICKETMASTER_API_KEY`; a phone never holds
+it. Each route stands for exactly one request, built by Core's `ticketmasterUpstreamUrl`
+(`packages/core/src/ticketmasterProxy.ts`), and the service adds `&apikey=<key>`:
+
+| Route                                       | Ticketmaster request (`app.ticketmaster.com/discovery/v2/…`)            |
+| ------------------------------------------- | ----------------------------------------------------------------------- |
+| `attractions?keyword=<name>`                | `attractions.json?keyword=<name>&classificationName=music&size=200`     |
+| `events?attractionId=<id>&countryCode=<cc>` | `events.json?attractionId=<id>&countryCode=<cc>&sort=date,asc&size=200` |
+
+Any other parameter, a repeated one, an empty name or one over 500 characters, an id that
+isn't letters, digits, `_` or `-` (64 at most), or a country that isn't two capital letters
+answers `400 { "error": "bad_request" }` and asks Ticketmaster nothing.
+
+Answers are kept in Cloudflare's cache for 12 hours, keyed by the request without the key (a
+hash of it), never by the account. Ticketmaster takes about 5 requests a second for the key,
+from every phone together, so the requests an isolate sends it start at least 250 ms apart; a
+request that would wait more than 5 s for its turn answers `503 { "error": "busy" }` and asks
+nothing. Each account may send these routes `maxTicketmasterRequestsPerMinute` requests and
+make Ticketmaster answer `maxTicketmasterRequestsPerDay` in a UTC day, counted as for Genius.
+Failures are Genius's too: `502 { "error": "upstream_failed" }` with nothing of Ticketmaster's
+answer (its over-quota error names the key), nothing cached, and a log line that says only
+`ticketmaster answered <status>`. A Worker without `TICKETMASTER_API_KEY` or
+`TICKETMASTER_LIMITER` answers `503 { "error": "unavailable" }`.
+
 ### Errors
 
 | Status | Body                                                                                       |
@@ -301,9 +328,12 @@ The log line says only `genius answered <status>`. A Worker without `GENIUS_ACCE
 | 429    | `{ "error": "limit", "limit": "maxFailedLookupsPerAddressPerMinute" }`, with `Retry-After` |
 | 429    | `{ "error": "limit", "limit": "maxGeniusRequestsPerMinute" }`, with `Retry-After`          |
 | 429    | `{ "error": "limit", "limit": "maxGeniusRequestsPerDay" }`, with `Retry-After`             |
+| 429    | `{ "error": "limit", "limit": "maxTicketmasterRequestsPerMinute" }`, with `Retry-After`    |
+| 429    | `{ "error": "limit", "limit": "maxTicketmasterRequestsPerDay" }`, with `Retry-After`       |
 | 500    | `{ "error": "internal" }`                                                                  |
 | 502    | `{ "error": "upstream_failed" }`                                                           |
 | 503    | `{ "error": "unavailable" }`                                                               |
+| 503    | `{ "error": "busy" }`                                                                      |
 
 ## Limits
 
@@ -332,10 +362,17 @@ The log line says only `genius answered <status>`. A Worker without `GENIUS_ACCE
 | `failedLookupBlockSeconds`            | 300       | how long an address past the line above is held back |
 | `maxGeniusRequestsPerMinute`          | 30        | the Genius routes, per account                       |
 | `maxGeniusRequestsPerDay`             | 1,000     | Genius requests the cache didn't answer, per account |
+| `maxTicketmasterRequestsPerMinute`    | 300       | the Ticketmaster routes, per account                 |
+| `maxTicketmasterRequestsPerDay`       | 15,000    | Ticketmaster requests the cache didn't answer        |
 
-The two per-address rates and `maxGeniusRequestsPerMinute` are also the `simple.limit` of
-`ADDRESS_LIMITER`, `FAILED_LOOKUP_LIMITER` and `GENIUS_LIMITER` in `wrangler.toml`; a test
-fails when they differ. Change both, then deploy.
+The two per-address rates, `maxGeniusRequestsPerMinute` and `maxTicketmasterRequestsPerMinute`
+are also the `simple.limit` of `ADDRESS_LIMITER`, `FAILED_LOOKUP_LIMITER`, `GENIUS_LIMITER` and
+`TICKETMASTER_LIMITER` in `wrangler.toml`; a test fails when they differ. Change both, then
+deploy. The Ticketmaster limits fit the show checks of an account with `maxFollows` artists
+followed at shows (a show check starts its calls at least 250 ms apart, and each artist costs
+an attraction search once and an events call every 12 hours). Ticketmaster allows the key
+5,000 requests a day in all, so that key, not these limits, is what a very large account
+would run out.
 
 A push that would take a table past its limit is refused whole.
 
@@ -345,15 +382,16 @@ Set on the Worker, never in the repo (`wrangler.toml` holds none of them; it hol
 rate limiting bindings, which `wrangler deploy` creates and which need Wrangler 4.36 or
 later):
 
-| Name                  | Kind   |                                                                     |
-| --------------------- | ------ | ------------------------------------------------------------------- |
-| `TURSO_DATABASE_URL`  | secret | `libsql://<db>-<org>.turso.io`                                      |
-| `TURSO_AUTH_TOKEN`    | secret | a Turso token for that database                                     |
-| `GOOGLE_CLIENT_ID`    | secret | Wave's **web** OAuth client id, the audience of the app's ID tokens |
-| `SOULSEEK_KEY`        | secret | base64 of 32 random bytes: version 1 of the Soulseek key            |
-| `SOULSEEK_KEY_<n>`    | secret | optional: version n (2 or more) of the Soulseek key, the same way   |
-| `ALLOWED_EMAILS`      | secret | optional: emails that may sign in, separated by commas              |
-| `GENIUS_ACCESS_TOKEN` | secret | Genius's client access token, for the Genius routes                 |
+| Name                   | Kind   |                                                                     |
+| ---------------------- | ------ | ------------------------------------------------------------------- |
+| `TURSO_DATABASE_URL`   | secret | `libsql://<db>-<org>.turso.io`                                      |
+| `TURSO_AUTH_TOKEN`     | secret | a Turso token for that database                                     |
+| `GOOGLE_CLIENT_ID`     | secret | Wave's **web** OAuth client id, the audience of the app's ID tokens |
+| `SOULSEEK_KEY`         | secret | base64 of 32 random bytes: version 1 of the Soulseek key            |
+| `SOULSEEK_KEY_<n>`     | secret | optional: version n (2 or more) of the Soulseek key, the same way   |
+| `ALLOWED_EMAILS`       | secret | optional: emails that may sign in, separated by commas              |
+| `GENIUS_ACCESS_TOKEN`  | secret | Genius's client access token, for the Genius routes                 |
+| `TICKETMASTER_API_KEY` | secret | Ticketmaster Discovery's API key, for the Ticketmaster routes       |
 
 ### Soulseek keys
 
@@ -443,6 +481,7 @@ By hand, the steps are:
    pnpm exec wrangler secret put GOOGLE_CLIENT_ID
    openssl rand -base64 32 | pnpm exec wrangler secret put SOULSEEK_KEY
    pnpm exec wrangler secret put GENIUS_ACCESS_TOKEN
+   pnpm exec wrangler secret put TICKETMASTER_API_KEY
    ```
 
    Make `SOULSEEK_KEY` once and never overwrite it: the Soulseek accounts kept under it

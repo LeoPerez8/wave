@@ -9,6 +9,7 @@ export const showsPtBr: typeof showsEn = {
   shelf: (country: string) => `Shows em ${country}`,
   notificationsOff: "As notificações estão desativadas",
   notificationSettings: "Abrir configurações de notificações",
+  signInForShows: "Inicie sessão em uma Conta Wave para acompanhar shows também.",
   channel: "Shows",
   tickets: "Ingressos",
   newReleases: "Novos lançamentos",

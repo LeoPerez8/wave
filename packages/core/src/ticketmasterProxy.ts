@@ -9,8 +9,6 @@
 /** The longest artist name the service searches, in characters. */
 export const TICKETMASTER_KEYWORD_MAX_LENGTH = 500;
 
-const DISCOVERY = "https://app.ticketmaster.com/discovery/v2";
-
 /** The service's attraction search for the artist [name]. */
 export const ticketmasterAttractionsPath = (name: string): string =>
   `/v1/ticketmaster/attractions?keyword=${encodeURIComponent(name)}`;
@@ -52,7 +50,7 @@ export const ticketmasterUpstreamUrl = (
         keyword.length > TICKETMASTER_KEYWORD_MAX_LENGTH
       )
         return null;
-      return `${DISCOVERY}/attractions.json?${query([
+      return `https://app.ticketmaster.com/discovery/v2/attractions.json?${query([
         ["keyword", keyword],
         ["classificationName", "music"],
         ["size", "200"],
@@ -62,7 +60,7 @@ export const ticketmasterUpstreamUrl = (
       const [attractionId, country] = exactly(params, ["attractionId", "countryCode"]) ?? [];
       if (attractionId === undefined || !/^[A-Za-z0-9_-]{1,64}$/.test(attractionId)) return null;
       if (country === undefined || !/^[A-Z]{2}$/.test(country)) return null;
-      return `${DISCOVERY}/events.json?${query([
+      return `https://app.ticketmaster.com/discovery/v2/events.json?${query([
         ["attractionId", attractionId],
         ["countryCode", country],
         ["sort", "date,asc"],
