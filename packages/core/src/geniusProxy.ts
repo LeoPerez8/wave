@@ -9,6 +9,7 @@
 import { geniusQueryUrl, geniusSearchQuery, geniusSongUrl } from "./genius.ts";
 import { GENIUS_REFERENTS_MAX_PAGES, geniusReferentsUrl } from "./geniusAnnotations.ts";
 import type { SongLookup } from "./lyricsAndGenre.ts";
+import { exactParams } from "./proxyParams.ts";
 
 /** The longest search the service takes (title and artist), in characters. */
 export const GENIUS_SEARCH_MAX_LENGTH = 1_000;
@@ -23,14 +24,6 @@ export const geniusSongPath = (id: number): string => `/v1/genius/song?id=${id}`
 /** The service's page [page] of song [id]'s referents: `geniusReferentsUrl`'s. */
 export const geniusReferentsPath = (id: number, page: number): string =>
   `/v1/genius/referents?song=${id}&page=${page}`;
-
-/** [params]' values when it holds exactly [names], each once; null otherwise. */
-const exactly = (params: URLSearchParams, names: readonly string[]): string[] | null => {
-  const keys = [...params.keys()];
-  if (keys.length !== names.length || names.some((name) => params.getAll(name).length !== 1))
-    return null;
-  return names.map((name) => params.get(name) ?? "");
-};
 
 /** A positive whole number written plainly ("12", never "012", "1e3" or "+1"); null otherwise. */
 const wholeNumber = (text: string): number | null => {
@@ -50,17 +43,17 @@ const wholeNumber = (text: string): number | null => {
 export const geniusUpstreamUrl = (pathname: string, params: URLSearchParams): string | null => {
   switch (pathname) {
     case "/v1/genius/search": {
-      const [q] = exactly(params, ["q"]) ?? [];
+      const [q] = exactParams(params, ["q"]) ?? [];
       if (q === undefined || q.trim() === "" || q.length > GENIUS_SEARCH_MAX_LENGTH) return null;
       return geniusQueryUrl(q);
     }
     case "/v1/genius/song": {
-      const [id] = exactly(params, ["id"]) ?? [];
+      const [id] = exactParams(params, ["id"]) ?? [];
       const song = id === undefined ? null : wholeNumber(id);
       return song === null ? null : geniusSongUrl(song);
     }
     case "/v1/genius/referents": {
-      const values = exactly(params, ["song", "page"]);
+      const values = exactParams(params, ["song", "page"]);
       if (values === null) return null;
       const song = wholeNumber(values[0] ?? "");
       const page = wholeNumber(values[1] ?? "");

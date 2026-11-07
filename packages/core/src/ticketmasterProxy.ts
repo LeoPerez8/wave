@@ -6,6 +6,8 @@
  * events in one country, each as the show check used to ask Ticketmaster.
  */
 
+import { exactParams } from "./proxyParams.ts";
+
 /** The longest artist name the service searches, in characters. */
 export const TICKETMASTER_KEYWORD_MAX_LENGTH = 500;
 
@@ -16,14 +18,6 @@ export const ticketmasterAttractionsPath = (name: string): string =>
 /** The service's events of attraction [attractionId] in [country] (an ISO 3166 code). */
 export const ticketmasterEventsPath = (attractionId: string, country: string): string =>
   `/v1/ticketmaster/events?attractionId=${encodeURIComponent(attractionId)}&countryCode=${encodeURIComponent(country)}`;
-
-/** [params]' values when it holds exactly [names], each once; null otherwise. */
-const exactly = (params: URLSearchParams, names: readonly string[]): string[] | null => {
-  const keys = [...params.keys()];
-  if (keys.length !== names.length || names.some((name) => params.getAll(name).length !== 1))
-    return null;
-  return names.map((name) => params.get(name) ?? "");
-};
 
 /** [params] as a query, each value as `encodeURIComponent` writes it. */
 const query = (params: readonly (readonly [string, string])[]): string =>
@@ -43,7 +37,7 @@ export const ticketmasterUpstreamUrl = (
 ): string | null => {
   switch (pathname) {
     case "/v1/ticketmaster/attractions": {
-      const [keyword] = exactly(params, ["keyword"]) ?? [];
+      const [keyword] = exactParams(params, ["keyword"]) ?? [];
       if (
         keyword === undefined ||
         keyword.trim() === "" ||
@@ -57,7 +51,7 @@ export const ticketmasterUpstreamUrl = (
       ])}`;
     }
     case "/v1/ticketmaster/events": {
-      const [attractionId, country] = exactly(params, ["attractionId", "countryCode"]) ?? [];
+      const [attractionId, country] = exactParams(params, ["attractionId", "countryCode"]) ?? [];
       if (attractionId === undefined || !/^[A-Za-z0-9_-]{1,64}$/.test(attractionId)) return null;
       if (country === undefined || !/^[A-Z]{2}$/.test(country)) return null;
       return `https://app.ticketmaster.com/discovery/v2/events.json?${query([
