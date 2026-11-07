@@ -28,7 +28,8 @@ const listen = (): void => {
   );
 };
 
-const subscribe = (listener: () => void): (() => void) => {
+/** Calls [listener] whenever whether a Wave account is signed in changes; gives the function that stops it. */
+export const subscribeWaveSignedIn = (listener: () => void): (() => void) => {
   listen();
   return signedIn.subscribe(listener);
 };
@@ -38,7 +39,7 @@ const subscribe = (listener: () => void): (() => void) => {
  * service ending the session all change it. Null until the native module has
  * answered. The session token itself stays in the native module.
  */
-export const useWaveSignedIn = (): boolean | null => useSyncExternalStore(subscribe, signedIn.get);
+export const useWaveSignedIn = (): boolean | null => useSyncExternalStore(subscribeWaveSignedIn, signedIn.get);
 
 /** Whether a Wave account is signed in now, outside React; null until the native module has said. */
 export const waveSignedInNow = (): boolean | null => {
@@ -46,5 +47,15 @@ export const waveSignedInNow = (): boolean | null => {
   return signedIn.get();
 };
 
-/** Calls [listener] whenever `waveSignedInNow` changes; gives the function that stops it. */
-export const onWaveSignedInChange = (listener: () => void): (() => void) => subscribe(listener);
+/**
+ * Whether a Wave account is signed in, once the native module has said
+ * (outside React, for work that can wait for it); false when it can't say.
+ */
+export const waveSignedIn = async (): Promise<boolean> => {
+  const known = waveSignedInNow();
+  if (known !== null) return known;
+  return WaveAccount.session().then(
+    (session) => session.status === "signedIn",
+    () => false,
+  );
+};

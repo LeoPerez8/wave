@@ -68,13 +68,15 @@ export const SYNC_LIMITS = {
    */
   maxTicketmasterRequestsPerMinute: 300,
   /**
-   * Requests one account may make Ticketmaster answer in a UTC day: only
-   * those the cache doesn't answer count. A shows-level follow costs an
-   * attraction search once and an events call every 12 hours, so this fits
-   * `maxFollows` of them. Ticketmaster allows the Worker's key 5,000 a day in
-   * all, shared by every account.
+   * Ticketmaster attraction searches and event lookups one account may make
+   * in a UTC day, each counted before the cache: a show check costs at most
+   * one of each per artist, so this is 200 artists a day. The phone stops its
+   * own check at that many artists (`@wave/core`'s
+   * `TICKETMASTER_ARTISTS_PER_DAY`). Ticketmaster allows the Worker's key
+   * 5,000 a day in all, shared by every account.
    */
-  maxTicketmasterRequestsPerDay: 15_000,
+  maxTicketmasterAttractionSearchesPerDay: 200,
+  maxTicketmasterEventLookupsPerDay: 200,
 } as const;
 
 export type SyncLimits = { readonly [K in keyof typeof SYNC_LIMITS]: number };

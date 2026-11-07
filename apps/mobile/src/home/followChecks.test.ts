@@ -13,6 +13,12 @@ const boundary = `data:text/javascript,${encodeURIComponent(`
     refreshes = 0;
     WaveAccount.status = "signedIn";
     WaveAccount.calls.length = 0;
+    showChecksToday.value = null;
+  };
+  export const showChecksToday = {
+    value: null,
+    get: () => showChecksToday.value,
+    set: (value) => { showChecksToday.value = value; },
   };
   export const readHomeFollow = async () => { refreshes++; throw new Error("cache unavailable"); };
   export const followedArtistsEnabled = () => true;
@@ -35,6 +41,7 @@ const boundary = `data:text/javascript,${encodeURIComponent(`
       return WaveAccount.answer(path);
     },
   };
+  export const waveSignedIn = async () => (await WaveAccount.session()).status === "signedIn";
   export const waveAccountErrorCode = (error) =>
     typeof error?.code === "string" && error.code.startsWith("ERR_WAVE_") ? error.code : null;
   export const showsNotificationsEnabled = () => false;
@@ -48,6 +55,9 @@ const boundary = `data:text/javascript,${encodeURIComponent(`
 `)}`;
 const hooks = registerHooks({
   resolve(specifier, context, next) {
+    // The real request helper, over the fake native module.
+    if (specifier === "@/sync/askWaveService")
+      return next(new URL("../sync/askWaveService.ts", import.meta.url).href, context);
     if (specifier.startsWith("@/") || specifier === "./knownHomeFollow")
       return { url: boundary, shortCircuit: true };
     if (specifier.startsWith("./") && !specifier.endsWith(".ts"))
@@ -124,8 +134,15 @@ test("cache read failures leave checks successful; nothing due performs no feed 
 });
 
 /** A store of [follows] at shows, recording the shows each check saves. */
-const showsStore = (follows: readonly { key: string; name: string; attractionId?: string }[]) => {
+const showsStore = (
+  follows: readonly { key: string; name: string; attractionId?: string; checkedAt?: number }[],
+) => {
   const saved: string[] = [];
+  const rows = follows.flatMap((f) =>
+    f.attractionId === undefined
+      ? []
+      : [{ key: f.key, attractionId: f.attractionId, country: "BR", checkedAt: f.checkedAt ?? 0 }],
+  );
   const store = {
     listFollows: Effect.succeed(
       follows.map((f) => ({
@@ -138,11 +155,7 @@ const showsStore = (follows: readonly { key: string; name: string; attractionId?
       })),
     ),
     followShowCache: Effect.sync(() => ({
-      artists: follows.flatMap((f) =>
-        f.attractionId === undefined
-          ? []
-          : [{ key: f.key, attractionId: f.attractionId, country: "BR", checkedAt: 0, shows: [] }],
-      ),
+      artists: rows.map((row) => ({ ...row, shows: [] })),
       notified: [],
     })),
     getFollow: (name: string) =>
@@ -154,9 +167,18 @@ const showsStore = (follows: readonly { key: string; name: string; attractionId?
         deezerId: 1,
         ytBrowseId: null,
       }),
-    saveFollowShows: (row: { key: string; checkedAt: number }) =>
+    saveFollowShows: (row: {
+      key: string;
+      attractionId: string;
+      country: string;
+      checkedAt: number;
+    }) =>
       Effect.sync(() => {
         if (row.checkedAt > 0) saved.push(row.key);
+        const kept = { key: row.key, attractionId: row.attractionId, country: row.country };
+        const index = rows.findIndex((r) => r.key === row.key);
+        if (index === -1) rows.push({ ...kept, checkedAt: row.checkedAt });
+        else rows[index] = { ...kept, checkedAt: row.checkedAt };
       }),
     markShowNotified: () => Effect.succeed(false),
   };
@@ -223,4 +245,58 @@ test("a refused or failed answer from the service leaves that artist for the nex
   } finally {
     io.WaveAccount.answer = answer;
   }
+});
+
+test("a show check asks never-checked artists first, then the oldest check first", async () => {
+  io.reset();
+  const hour = 3_600_000;
+  const { saved, run } = showsStore([
+    { key: "abba", name: "ABBA", attractionId: "K1", checkedAt: Date.now() - 30 * hour },
+    { key: "aurora", name: "Aurora", attractionId: "K2", checkedAt: Date.now() - 48 * hour },
+    { key: "cher", name: "Cher", attractionId: "K3" },
+  ]);
+  assert.equal(await run(checkFollowShows("background", false)), true);
+  assert.deepEqual(saved, ["cher", "aurora", "abba"]);
+});
+
+test("a limit refusal from the service stops the whole check: no other artist is asked", async () => {
+  io.reset();
+  const answer = io.WaveAccount.answer;
+  io.WaveAccount.answer = () => ({
+    status: 429,
+    body: '{"error":"limit","limit":"maxTicketmasterEventLookupsPerDay"}',
+  });
+  try {
+    const { saved, run } = showsStore([
+      { key: "abba", name: "ABBA", attractionId: "K1" },
+      { key: "aurora", name: "Aurora", attractionId: "K2" },
+    ]);
+    assert.equal(await run(checkFollowShows("background", false)), false);
+    assert.deepEqual(io.WaveAccount.calls, [
+      "GET /v1/ticketmaster/events?attractionId=K1&countryCode=BR",
+    ]);
+    assert.deepEqual(saved, []);
+  } finally {
+    io.WaveAccount.answer = answer;
+  }
+});
+
+test("a show check asks 200 artists a UTC day at most, then stops without asking", async () => {
+  io.reset();
+  const day = Math.floor(Date.now() / (24 * 3_600_000));
+  io.showChecksToday.value = { day, count: 199 };
+  const { saved, run } = showsStore([
+    { key: "abba", name: "ABBA", attractionId: "K1" },
+    { key: "aurora", name: "Aurora", attractionId: "K2" },
+  ]);
+  assert.equal(await run(checkFollowShows("background", false)), true);
+  assert.deepEqual(saved, ["abba"]);
+  assert.deepEqual(io.showChecksToday.value, { day, count: 200 });
+  assert.equal(await run(checkFollowShows("background", false)), false);
+  assert.equal(io.WaveAccount.calls.length, 1);
+
+  io.showChecksToday.value = { day: day - 1, count: 200 };
+  assert.equal(await run(checkFollowShows("background", false)), true);
+  assert.deepEqual(saved, ["abba", "aurora"]);
+  assert.deepEqual(io.showChecksToday.value, { day, count: 1 });
 });

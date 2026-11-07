@@ -18,7 +18,7 @@ import { useLocalisation } from "@/localisation/localisation";
 import { runMissingSongsDownloadAction, useMissingSongsDownload } from "@/ytmusic/YtDownloads";
 
 import { AccountPhoto } from "./AccountPhoto";
-import { WAVE_ACCOUNT_CONFIG, useWaveAccount } from "./waveAccount";
+import { useWaveAccount, waveAccountAvailable } from "./waveAccount";
 
 /** The line under Sign In: what the account is for, or why signing in didn't work. */
 export const waveAccountNotes = ({ settings }: Catalogue): Record<WaveAccountNote, string> => ({
@@ -178,7 +178,7 @@ function MissingSongsDownloadRows() {
 export function WaveAccountSettingsSection() {
   const { strings } = useLocalisation();
   const account = useWaveAccount();
-  const view = waveAccountView(account.state, WAVE_ACCOUNT_CONFIG !== null);
+  const view = waveAccountView(account.state, waveAccountAvailable);
 
   return (
     <View>

@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { followCheckDue } from "./index.ts";
+import { dueShowChecks, followCheckDue, showChecksLeftToday } from "./index.ts";
 
 const HOUR = 3_600_000;
 const now = Date.parse("2026-11-01T12:00:00Z");
@@ -61,4 +61,44 @@ test("shows-level follows are also due on their shows check and a changed countr
   assert.equal(followCheckDue({ ...shows, showChecks: [], country: "" }), false);
   // A releases-level follow never waits on shows.
   assert.equal(followCheckDue({ ...shows, follows: [follow("abba")], showChecks: [] }), false);
+});
+
+test("a show check asks never-checked artists first, then the oldest check first", () => {
+  const due = dueShowChecks({
+    follows: [
+      follow("abba", "shows"),
+      follow("aurora", "shows"),
+      follow("bjork"),
+      follow("cher", "shows"),
+      follow("dido", "shows"),
+      follow("enya", "shows"),
+      follow("fka", "shows"),
+    ],
+    showChecks: [
+      { key: "abba", country: "BR", checkedAt: now - 30 * HOUR },
+      { key: "aurora", country: "BR", checkedAt: now - 48 * HOUR },
+      { key: "dido", country: "BR", checkedAt: 0 },
+      { key: "enya", country: "PT", checkedAt: now - HOUR },
+      { key: "fka", country: "BR", checkedAt: now - HOUR },
+    ],
+    country: "BR",
+    now,
+    context: "background",
+  });
+  // cher was never checked, dido only had its attraction kept, enya was checked in another
+  // country; fka was checked an hour ago, so it isn't due.
+  assert.deepEqual(
+    due.map((f) => f.key),
+    ["cher", "dido", "enya", "aurora", "abba"],
+  );
+});
+
+test("a show check asks 200 artists a UTC day at most, the service's limit", () => {
+  const day = Math.floor(now / (24 * HOUR));
+  assert.equal(showChecksLeftToday(null, now), 200);
+  assert.equal(showChecksLeftToday({ day, count: 150 }, now), 50);
+  assert.equal(showChecksLeftToday({ day, count: 200 }, now), 0);
+  assert.equal(showChecksLeftToday({ day, count: 250 }, now), 0);
+  // Yesterday's count is spent: a new UTC day starts at 200.
+  assert.equal(showChecksLeftToday({ day: day - 1, count: 200 }, now), 200);
 });

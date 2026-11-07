@@ -17,12 +17,12 @@ import { WaveNative } from "@/native/waveNative";
 import { isNowPlayingShown, onNowPlayingShownChange } from "@/nowPlaying/sheet";
 import { CardEntries } from "@/overlay/CardEntries";
 import { isOverlayOpen, onOverlaysChange, openOverlay } from "@/overlay/overlay";
-import { WAVE_ACCOUNT_CONFIG, useWaveAccount } from "@/settings/waveAccount";
+import { useWaveAccount, waveAccountAvailable } from "@/settings/waveAccount";
 import { waveAccountNotes, waveSignInLabels } from "@/settings/WaveAccountSettingsSection";
 import { useThemeColor } from "@/theme/useThemeColor";
 
 import { createSignInInvitationRunner } from "./signInInvitationRunner";
-import { onWaveSignedInChange, waveSignedInNow } from "./waveSignedIn";
+import { subscribeWaveSignedIn, waveSignedInNow } from "./waveSignedIn";
 
 /** "due" or "done"; nothing until the first launch that had the invitation. */
 const INVITATION_KEY = "firstRun.signInInvitation";
@@ -58,7 +58,7 @@ function SignInInvitationCard({ close, answered }: { close: () => void; answered
   const { strings } = useLocalisation();
   const text = strings.settings.signInInvitation;
   const account = useWaveAccount();
-  const view = waveAccountView(account.state, WAVE_ACCOUNT_CONFIG !== null);
+  const view = waveAccountView(account.state, waveAccountAvailable);
   const signedIn = view.kind === "account";
 
   useEffect(() => {
@@ -136,7 +136,7 @@ export const settleSignInInvitation = (): void => {
     usedBefore: USED_BEFORE_KEYS.some((key) => Storage.getItemSync(key) !== null),
     surroundings: () => ({
       accessGranted: WaveNative.hasAllFilesAccess(),
-      accountAvailable: WAVE_ACCOUNT_CONFIG !== null,
+      accountAvailable: waveAccountAvailable,
       signedIn: waveSignedInNow(),
       visible: AppState.currentState === "active",
       nowPlayingShown: isNowPlayingShown(),
@@ -173,7 +173,7 @@ export const startSignInInvitation = (): void => {
     () => appState.remove(),
     onNowPlayingShownChange(runner.reconsider),
     onOverlaysChange(runner.reconsider),
-    onWaveSignedInChange(runner.reconsider),
+    subscribeWaveSignedIn(runner.reconsider),
   );
   runner.reconsider();
 };

@@ -24,6 +24,9 @@ import { confirmAction } from "@/overlay/alert";
  */
 export const WAVE_ACCOUNT_CONFIG = waveAccountConfig(Constants.expoConfig?.extra);
 
+/** Whether this build has a sync service, so a Wave account can sign in at all. */
+export const waveAccountAvailable = WAVE_ACCOUNT_CONFIG !== null;
+
 /** Whether the card about what goes up has led to a sign-in on this phone (it shows until then). */
 const cardSeen = persistedSetting<boolean>({
   key: "waveAccount.cardSeen",
