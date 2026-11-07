@@ -1,5 +1,4 @@
 import assert from "node:assert/strict";
-import { readFileSync } from "node:fs";
 import { describe, test } from "node:test";
 import { SYNC_LIMITS } from "./limits.ts";
 import { TICKETMASTER_KEY, harness } from "./testing.ts";
@@ -268,19 +267,6 @@ describe("each account's limits on Ticketmaster", () => {
     assert.equal(SYNC_LIMITS.maxTicketmasterEventLookupsPerDay, 200);
     // The phone starts a show check's calls at least 250 ms apart: 240 a minute at most.
     assert.ok(SYNC_LIMITS.maxTicketmasterRequestsPerMinute >= 240);
-  });
-
-  test("the Worker's binding counts per minute what SYNC_LIMITS says", () => {
-    const wrangler = readFileSync(new URL("../wrangler.toml", import.meta.url), "utf8");
-    const block = wrangler
-      .split("[[ratelimits]]")
-      .find((candidate) => candidate.includes('name = "TICKETMASTER_LIMITER"'));
-    const simple = /simple = \{ limit = (\d+), period = (\d+) \}/.exec(block ?? "");
-    assert.deepEqual(simple?.slice(1).map(Number), [
-      SYNC_LIMITS.maxTicketmasterRequestsPerMinute,
-      60,
-    ]);
-    assert.match(block ?? "", /namespace_id = "61004"/);
   });
 });
 

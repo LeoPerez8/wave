@@ -39,7 +39,8 @@ export const subscribeWaveSignedIn = (listener: () => void): (() => void) => {
  * service ending the session all change it. Null until the native module has
  * answered. The session token itself stays in the native module.
  */
-export const useWaveSignedIn = (): boolean | null => useSyncExternalStore(subscribeWaveSignedIn, signedIn.get);
+export const useWaveSignedIn = (): boolean | null =>
+  useSyncExternalStore(subscribeWaveSignedIn, signedIn.get);
 
 /** Whether a Wave account is signed in now, outside React; null until the native module has said. */
 export const waveSignedInNow = (): boolean | null => {

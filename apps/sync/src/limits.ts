@@ -30,12 +30,15 @@ export const SYNC_LIMITS = {
   /**
    * Requests per minute from one address to any route, counted before the
    * database. Sized for a carrier that puts many phones behind one address.
-   * `ADDRESS_LIMITER` in `wrangler.toml` holds the same number.
+   * `ADDRESS_LIMITER` in `wrangler.toml` holds the same number. Cloudflare's
+   * rate limiting counts locally and approximately, so this limit and
+   * `maxFailedLookupsPerAddressPerMinute` are a best-effort brake on heavy
+   * traffic, not an exact count per address.
    */
   maxRequestsPerAddressPerMinute: 600,
   /**
-   * Failed session lookups per minute from one address. Past it, the address
-   * runs no session lookup for `failedLookupBlockSeconds`.
+   * Failed session lookups per minute from one address, best effort. Past it,
+   * the address runs no session lookup for `failedLookupBlockSeconds`.
    * `FAILED_LOOKUP_LIMITER` in `wrangler.toml` holds the same number.
    */
   maxFailedLookupsPerAddressPerMinute: 20,
@@ -84,18 +87,12 @@ export type SyncLimits = { readonly [K in keyof typeof SYNC_LIMITS]: number };
 export type SyncLimitName = keyof SyncLimits;
 
 /**
- * Where the hourly usage watch (src/usage.ts) warns, set below the free plans' limits so the
- * owner hears before a limit stops the sync. Each warns at most once a period.
+ * Where the hourly usage watch (src/usage.ts) warns, set below the free plan's limit so the
+ * owner hears before it stops the sync. It warns at most once a UTC day.
  */
 export const USAGE_WARNINGS = {
   /** Requests to every Worker on the account since midnight UTC. Workers Free stops at 100,000. */
   workerRequestsPerDay: 70_000,
-  /** Turso rows read this billing cycle, 50% of the Free plan's 500 million. */
-  tursoRowsReadPerMonth: 250_000_000,
-  /** Turso rows written this billing cycle, 50% of the Free plan's 10 million. */
-  tursoRowsWrittenPerMonth: 5_000_000,
-  /** Turso storage in bytes, 50% of the Free plan's 5 GB. */
-  tursoStorageBytes: 2_500_000_000,
 } as const;
 
 export type UsageWarnings = { readonly [K in keyof typeof USAGE_WARNINGS]: number };

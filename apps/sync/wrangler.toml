@@ -1,15 +1,16 @@
 # Wave's sync service. No secret or account-specific value lives here:
 # TURSO_DATABASE_URL, TURSO_AUTH_TOKEN, GOOGLE_CLIENT_ID, SOULSEEK_KEY (and any later
 # SOULSEEK_KEY_<n>), GENIUS_ACCESS_TOKEN, TICKETMASTER_API_KEY, the optional ALLOWED_EMAILS and
-# the usage watch's optional CLOUDFLARE_ACCOUNT_ID, CLOUDFLARE_ANALYTICS_TOKEN, TURSO_ORG and
-# TURSO_PLATFORM_TOKEN (src/usage.ts) are set with `wrangler secret put` (or `.dev.vars` locally).
+# the usage watch's optional CLOUDFLARE_ACCOUNT_ID and CLOUDFLARE_ANALYTICS_TOKEN (src/usage.ts)
+# are set with `wrangler secret put` (or `.dev.vars` locally).
 name = "wave-sync"
 main = "src/worker.ts"
 compatibility_date = "2026-10-01"
 
 # Per-address limits, counted before the database (src/limits.ts holds the same
-# numbers, and a test checks they match). Counts are per Cloudflare location and
-# approximate. Each namespace_id must be unique in the Cloudflare account.
+# numbers, and a test checks they match). Counts are local and approximate: a
+# best-effort brake on heavy traffic, not an exact limit. Each namespace_id must be unique in
+# the Cloudflare account.
 [[ratelimits]]
 name = "ADDRESS_LIMITER"
 namespace_id = "61001"
@@ -38,11 +39,16 @@ simple = { limit = 300, period = 60 }
 [triggers]
 crons = ["0 * * * *"]
 
-# Workers Logs keep the usage warnings and the refusal counts; Issues turns logged errors into
-# notifications. A deploy without these keys turns them off.
+# Workers Logs keep the Worker's own lines (the usage warnings and the refusal counts) and no
+# invocation logs, which would name each request's route and query; Issues turns logged errors
+# into notifications. A deploy without these keys turns them off.
 [observability]
 enabled = true
 head_sampling_rate = 1
+
+[observability.logs]
+enabled = true
+invocation_logs = false
 
 [observability.issues]
 enabled = true

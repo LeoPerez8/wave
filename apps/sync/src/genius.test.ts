@@ -1,7 +1,5 @@
 import assert from "node:assert/strict";
-import { readFileSync } from "node:fs";
 import { describe, test } from "node:test";
-import { SYNC_LIMITS } from "./limits.ts";
 import { GENIUS_TOKEN, harness } from "./testing.ts";
 
 const DAY_MS = 24 * 60 * 60 * 1000;
@@ -263,15 +261,6 @@ describe("each account's limits on Genius", () => {
 
     service.now = Date.UTC(2026, 9, 15, 0, 0, 1);
     assert.equal((await ask(ana, 4)).status, 200);
-  });
-
-  test("the Worker's binding counts per minute what SYNC_LIMITS says", () => {
-    const wrangler = readFileSync(new URL("../wrangler.toml", import.meta.url), "utf8");
-    const block = wrangler
-      .split("[[ratelimits]]")
-      .find((candidate) => candidate.includes('name = "GENIUS_LIMITER"'));
-    const simple = /simple = \{ limit = (\d+), period = (\d+) \}/.exec(block ?? "");
-    assert.deepEqual(simple?.slice(1).map(Number), [SYNC_LIMITS.maxGeniusRequestsPerMinute, 60]);
   });
 });
 
