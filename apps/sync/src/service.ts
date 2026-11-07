@@ -11,7 +11,8 @@ import type { Client } from "@libsql/client";
 import { type GoogleKeys, googleKeys, verifyGoogleIdToken } from "./google.ts";
 import { type SyncLimitName, type SyncLimits, SYNC_LIMITS } from "./limits.ts";
 import {
-  importSoulseekKey,
+  type SoulseekKeys,
+  importSoulseekKeys,
   keepSoulseekAccount,
   parseSoulseekAccount,
   readSoulseekAccount,
@@ -34,10 +35,12 @@ export interface SyncServiceOptions {
   /** How many rows a pull answers at most. */
   readonly pullPageSize?: number;
   /**
-   * `SOULSEEK_KEY`: base64 of the 32-byte AES-GCM key Soulseek passwords are
-   * kept under. Without it, the Soulseek routes answer 500 and the rest work.
+   * The Soulseek keys by secret name (`SOULSEEK_KEY`, `SOULSEEK_KEY_2`, …),
+   * each base64 of a 32-byte AES-GCM key; the highest version is current
+   * (src/soulseek.ts). Without any, the Soulseek routes answer 500 and the
+   * rest work.
    */
-  readonly soulseekKey?: string;
+  readonly soulseekKeys?: Readonly<Record<string, string>>;
 }
 
 /** How long ago Google may have issued the ID token that confirms deleting an account. */
@@ -332,24 +335,24 @@ export const createSyncService = (options: SyncServiceOptions): SyncService => {
   });
 
   // Imported at the first Soulseek request, and again after a failed import.
-  let soulseekKey: Promise<CryptoKey> | null = null;
-  const soulseekCipherKey = (): Promise<CryptoKey> => {
-    soulseekKey ??= importSoulseekKey(options.soulseekKey).catch((error: unknown) => {
-      soulseekKey = null;
+  let soulseekKeys: Promise<SoulseekKeys> | null = null;
+  const soulseekCipherKeys = (): Promise<SoulseekKeys> => {
+    soulseekKeys ??= importSoulseekKeys(options.soulseekKeys).catch((error: unknown) => {
+      soulseekKeys = null;
       throw error;
     });
-    return soulseekKey;
+    return soulseekKeys;
   };
 
   const putSoulseek = withSession(async ({ request }, session) => {
     const account = parseSoulseekAccount(await readJson(request));
     if (account === null) throw invalid("a Soulseek username and password are needed");
-    await keepSoulseekAccount(db, await soulseekCipherKey(), session.accountId, account, now());
+    await keepSoulseekAccount(db, await soulseekCipherKeys(), session.accountId, account, now());
     return new Response(null, { status: 204 });
   });
 
   const getSoulseek = withSession(async (_context, session) =>
-    json({ account: await readSoulseekAccount(db, await soulseekCipherKey(), session.accountId) }),
+    json({ account: await readSoulseekAccount(db, await soulseekCipherKeys(), session.accountId) }),
   );
 
   /** Each route by method and path. */
