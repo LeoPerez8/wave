@@ -25,6 +25,7 @@ import {
   cachedAnswer,
   keepAnswer,
   proxiedAnswer,
+  sha256Hex,
 } from "./proxy.ts";
 import { type PushBatch, deleteAccount, pullRows, pushRows } from "./store.ts";
 import { type IncomingRow, type SyncTable, InvalidRow, SYNC_TABLES, parseRow } from "./tables.ts";
@@ -192,13 +193,6 @@ const base64url = (bytes: Uint8Array): string =>
     .replaceAll("+", "-")
     .replaceAll("/", "_")
     .replace(/=+$/, "");
-
-const sha256Hex = async (text: string): Promise<string> => {
-  const digest = new Uint8Array(
-    await crypto.subtle.digest("SHA-256", new TextEncoder().encode(text)),
-  );
-  return Array.from(digest, (byte) => byte.toString(16).padStart(2, "0")).join("");
-};
 
 const parseAllowlist = (value: string | undefined): ReadonlySet<string> | null => {
   const emails = (value ?? "")

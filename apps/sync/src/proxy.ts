@@ -40,12 +40,13 @@ export type UpstreamResult =
   | { readonly ok: false; readonly status: number | null };
 
 /** What the proxy names itself to providers. */
-export const PROXY_USER_AGENT = "Wave (https://github.com/LeoPerez8/wave)";
+const PROXY_USER_AGENT = "Wave (https://github.com/LeoPerez8/wave)";
 
 /** A provider request that takes longer than this has failed. */
 const UPSTREAM_TIMEOUT_MS = 10_000;
 
-const sha256Hex = async (text: string): Promise<string> => {
+/** [text]'s SHA-256, in hex (the service keys addresses and session tokens with it too). */
+export const sha256Hex = async (text: string): Promise<string> => {
   const digest = new Uint8Array(
     await crypto.subtle.digest("SHA-256", new TextEncoder().encode(text)),
   );
