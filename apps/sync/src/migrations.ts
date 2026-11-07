@@ -240,6 +240,20 @@ const MIGRATIONS: readonly Migration[] = [
     id: "0011_soulseek_key_version",
     statements: ["ALTER TABLE soulseek_accounts ADD COLUMN key_version INTEGER NOT NULL DEFAULT 1"],
   },
+  {
+    // How many requests each account made a provider answer (the cache's answers don't count)
+    // on one UTC day, by provider ("genius"). Only the day's count is kept.
+    id: "0012_upstream_usage",
+    statements: [
+      `CREATE TABLE upstream_usage (
+        account_id TEXT NOT NULL,
+        upstream TEXT NOT NULL,
+        day INTEGER NOT NULL,
+        count INTEGER NOT NULL,
+        PRIMARY KEY (account_id, upstream)
+      )`,
+    ],
+  },
 ];
 
 /**

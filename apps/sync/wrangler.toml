@@ -1,7 +1,7 @@
 # Wave's sync service. No secret or account-specific value lives here:
 # TURSO_DATABASE_URL, TURSO_AUTH_TOKEN, GOOGLE_CLIENT_ID, SOULSEEK_KEY (and any later
-# SOULSEEK_KEY_<n>) and the optional ALLOWED_EMAILS are set with `wrangler secret put`
-# (or `.dev.vars` locally).
+# SOULSEEK_KEY_<n>), GENIUS_ACCESS_TOKEN and the optional ALLOWED_EMAILS are set with
+# `wrangler secret put` (or `.dev.vars` locally).
 name = "wave-sync"
 main = "src/worker.ts"
 compatibility_date = "2026-10-01"
@@ -18,3 +18,10 @@ simple = { limit = 600, period = 60 }
 name = "FAILED_LOOKUP_LIMITER"
 namespace_id = "61002"
 simple = { limit = 20, period = 60 }
+
+# Requests per minute one account may send the Genius routes (keyed by the account,
+# counted before the cache): `maxGeniusRequestsPerMinute` in src/limits.ts.
+[[ratelimits]]
+name = "GENIUS_LIMITER"
+namespace_id = "61003"
+simple = { limit = 30, period = 60 }

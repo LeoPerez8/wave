@@ -3,6 +3,9 @@ import { formatNumber } from "../formatting.ts";
 import type { playbackTextEn } from "./playbackTextEn.ts";
 export const playbackTextPtBr: typeof playbackTextEn = {
   aboutGenius: "Sobre · Genius",
+  signInToSeeWhatGeniusSaysAboutThisSong:
+    "Inicie sessão em uma Conta Wave para ver o que o Genius diz sobre esta música.",
+  opensTheWaveAccountInSettings: "Abre a Conta Wave nos Ajustes",
   addLyricsToThisSongsTagsOrPutAnLrcFileWithTheSameNameBesideIt:
     "Adicione a letra às tags da música ou coloque um arquivo .lrc com o mesmo nome ao lado dela.",
   addToPlaylist: "Adicionar à Playlist",

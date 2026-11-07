@@ -539,11 +539,9 @@ jobs:
       contents: write
       actions: read
     env:
-      # Genius's read-only client token (docs/spec.md, "Genius About"). Metro inlines it into the
-      # JS bundle, which "Bundle JavaScript" builds once for full builds and repacks alike.
-      EXPO_PUBLIC_GENIUS_ACCESS_TOKEN: ${{ secrets.GENIUS_ACCESS_TOKEN }}
-      # Ticketmaster Discovery's client key, inlined the same way; without it the APK never asks
-      # for shows (docs/spec.md, "Followed artists").
+      # Ticketmaster Discovery's client key (docs/spec.md, "Followed artists"). Metro inlines it into
+      # the JS bundle, which "Bundle JavaScript" builds once for full builds and repacks alike;
+      # without it the APK never asks for shows. Genius's token is the sync Worker's alone.
       EXPO_PUBLIC_TICKETMASTER_API_KEY: ${{ secrets.TICKETMASTER_API_KEY }}
       HEAD_SHA: ${{ needs.checks.outputs.sha }}
       # ccache (scripts/ci/ccache.sh) keeps its cache in ~/.cache/ccache.
@@ -799,13 +797,6 @@ jobs:
           # Hermes keeps the inlined label as a plain string.
           grep -qaF -- "${EXPO_PUBLIC_WAVE_BUILD_LABEL:?}" "$bundle"
           echo "Labelled: $EXPO_PUBLIC_WAVE_BUILD_LABEL"
-          # Genius's token, inlined the same way; a run without the secret never asks Genius.
-          if [ -n "${EXPO_PUBLIC_GENIUS_ACCESS_TOKEN:-}" ]; then
-            grep -qaF -- "$EXPO_PUBLIC_GENIUS_ACCESS_TOKEN" "$bundle"
-            echo "Carries Genius's token"
-          else
-            echo "::warning::No GENIUS_ACCESS_TOKEN secret: this APK never asks Genius."
-          fi
           if [ -n "${EXPO_PUBLIC_TICKETMASTER_API_KEY:-}" ]; then
             grep -qaF -- "$EXPO_PUBLIC_TICKETMASTER_API_KEY" "$bundle"
             echo "Carries Ticketmaster's key"

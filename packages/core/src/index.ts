@@ -2401,6 +2401,8 @@ export {
   GENIUS_MISS_MS,
   geniusCandidates,
   geniusDescription,
+  geniusQueryUrl,
+  geniusSearchQuery,
   geniusSearchUrl,
   geniusSongUrl,
   pickGeniusSong,
@@ -2408,6 +2410,13 @@ export {
   storedGenius,
 } from "./genius.ts";
 export type { GeniusHit, GeniusMatch, SavedGenius } from "./genius.ts";
+export {
+  GENIUS_SEARCH_MAX_LENGTH,
+  geniusReferentsPath,
+  geniusSearchPath,
+  geniusSongPath,
+  geniusUpstreamUrl,
+} from "./geniusProxy.ts";
 export {
   geniusAbout,
   geniusReferents,

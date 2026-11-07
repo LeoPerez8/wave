@@ -5,7 +5,13 @@
 
 import { createClient } from "@libsql/client/web";
 import { googleKeys } from "./google.ts";
-import { type RateLimiter, createSyncService, serviceMemory } from "./service.ts";
+import type { Upstream } from "./proxy.ts";
+import {
+  type ProviderAccess,
+  type RateLimiter,
+  createSyncService,
+  serviceMemory,
+} from "./service.ts";
 
 export interface Env {
   readonly TURSO_DATABASE_URL?: string;
@@ -20,9 +26,12 @@ export interface Env {
    */
   readonly SOULSEEK_KEY?: string;
   readonly [soulseekKey: `SOULSEEK_KEY_${string}`]: string | undefined;
+  /** Genius's client access token, which only the Worker holds (the Genius routes). */
+  readonly GENIUS_ACCESS_TOKEN?: string;
   /** The `[[ratelimits]]` bindings in `wrangler.toml`. */
   readonly ADDRESS_LIMITER?: RateLimiter;
   readonly FAILED_LOOKUP_LIMITER?: RateLimiter;
+  readonly GENIUS_LIMITER?: RateLimiter;
 }
 
 /** The Worker's Soulseek keys, by secret name. */
@@ -40,6 +49,26 @@ const keys = googleKeys((input, init) => fetch(input, init), Date.now);
 // Kept for the isolate's life too: the addresses held back and the refusal counts.
 const memory = serviceMemory();
 
+/** Cloudflare's cache for this Worker (`caches.default`, which the DOM's types don't know). */
+const cloudflareCache = (): Cache =>
+  (globalThis as unknown as { readonly caches: { readonly default: Cache } }).caches.default;
+
+/** The providers' requests go out with the Worker's `fetch`, their answers into Cloudflare's cache. */
+const upstream: Upstream = {
+  fetch: (url, init) => fetch(url, init),
+  cache: {
+    match: (key) => cloudflareCache().match(key),
+    put: (key, response) => cloudflareCache().put(key, response),
+  },
+};
+
+/** Genius, when the Worker has its token and its limiter; the Genius routes answer 503 otherwise. */
+const genius = (env: Env): ProviderAccess | undefined => {
+  const token = env.GENIUS_ACCESS_TOKEN?.trim();
+  if (token === undefined || token === "" || env.GENIUS_LIMITER === undefined) return undefined;
+  return { token, limiter: env.GENIUS_LIMITER };
+};
+
 export default {
   async fetch(request: Request, env: Env): Promise<Response> {
     const { TURSO_DATABASE_URL: url, TURSO_AUTH_TOKEN: authToken, GOOGLE_CLIENT_ID } = env;
@@ -52,6 +81,7 @@ export default {
       console.error("sync service: the ratelimits bindings in wrangler.toml are missing");
       return Response.json({ error: "internal" }, { status: 500 });
     }
+    const geniusAccess = genius(env);
     const service = createSyncService({
       db: createClient({ url, ...(authToken === undefined ? {} : { authToken }) }),
       addressLimiter,
@@ -59,6 +89,8 @@ export default {
       googleClientId: GOOGLE_CLIENT_ID,
       googleKeys: keys,
       memory,
+      upstream,
+      ...(geniusAccess === undefined ? {} : { genius: geniusAccess }),
       ...(env.ALLOWED_EMAILS === undefined ? {} : { allowedEmails: env.ALLOWED_EMAILS }),
       soulseekKeys: soulseekKeys(env),
     });

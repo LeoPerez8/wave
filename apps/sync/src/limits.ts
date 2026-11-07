@@ -47,6 +47,19 @@ export const SYNC_LIMITS = {
    */
   maxAccounts: 100,
   maxNewAccountsPerDay: 10,
+  /**
+   * Requests one account may send the Genius routes per minute, counted
+   * before the cache. A song the Lyrics view hasn't seen costs a search, the
+   * song and a page of referents per 50 annotated fragments (up to 20).
+   * `GENIUS_LIMITER` in `wrangler.toml` holds the same number.
+   */
+  maxGeniusRequestsPerMinute: 30,
+  /**
+   * Requests one account may make Genius answer in a UTC day: only those the
+   * cache doesn't answer count. Genius allows the Worker's token 10,000 a
+   * day, shared by every account.
+   */
+  maxGeniusRequestsPerDay: 1_000,
 } as const;
 
 export type SyncLimits = { readonly [K in keyof typeof SYNC_LIMITS]: number };

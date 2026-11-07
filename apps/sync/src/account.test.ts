@@ -214,8 +214,13 @@ describe("DELETE /v1/account", () => {
     for (const session of [ana, bo]) {
       const soulseek = { username: "quietfern42", password: "fixture-soulseek-password" };
       await service.request("PUT", "/v1/soulseek", { session, json: soulseek });
+      await service.request("GET", "/v1/genius/search?q=Teardrop%20Massive%20Attack", { session });
+      service.now += 24 * 60 * 60 * 1000;
     }
 
+    const anaId = (
+      await service.db.execute("SELECT id FROM accounts WHERE google_sub = 'google-sub-1'")
+    ).rows[0]?.id;
     const deleted = await requestAccountDeletion(service, ana);
     assert.equal(deleted.status, 204);
 
@@ -235,7 +240,10 @@ describe("DELETE /v1/account", () => {
       const rows = await service.db.execute(`SELECT ${owner} AS owner FROM ${String(name)}`);
       assert.ok(rows.rows.length > 0, `${String(name)} kept Bo's rows`);
       for (const row of rows.rows) {
-        assert.ok(row.owner !== "google-sub-1", `${String(name)} kept Ana's account`);
+        assert.ok(
+          row.owner !== "google-sub-1" && row.owner !== anaId,
+          `${String(name)} kept Ana's account`,
+        );
       }
     }
 
