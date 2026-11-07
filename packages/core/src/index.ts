@@ -2636,3 +2636,5 @@ export type {
   TypedReleaseDateRead,
   TypedReleaseEntry,
 } from "./typedReleaseDate.ts";
+export { nextFirstRunStep, signInInvitationAtLaunch } from "./firstRun.ts";
+export type { FirstRunState, FirstRunStep, SignInInvitation } from "./firstRun.ts";
