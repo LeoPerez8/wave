@@ -6,7 +6,15 @@ import { fileURLToPath } from "node:url";
 const workflowsDir = fileURLToPath(new URL("../../.github/workflows/", import.meta.url));
 
 /** The secrets that publish to phones; they live only in the `ti` and `main` Environments. */
-const RELEASE_SECRETS = ["UPDATES_SIGNING_KEY", "CLOUDFLARE_API_TOKEN", "CLOUDFLARE_ACCOUNT_ID"];
+const RELEASE_SECRETS = [
+  "UPDATES_SIGNING_KEY",
+  "CLOUDFLARE_API_TOKEN",
+  "CLOUDFLARE_ACCOUNT_ID",
+  // The APK's release key and its rotation proof (scripts/ci/sign-apk.sh).
+  "WAVE_RELEASE_KEYSTORE",
+  "WAVE_RELEASE_KEYSTORE_PASSWORD",
+  "WAVE_SIGNING_LINEAGE",
+];
 
 /** Each job of a workflow file, by name, as the text under its `  <name>:` line. */
 const jobsOf = (workflow: string): Map<string, string> => {
@@ -59,5 +67,17 @@ describe("release secrets", () => {
     );
     const rollback = jobsOf(workflows.find(({ file }) => file === "rollback.yml")!.text);
     assert.equal(environmentOf(rollback.get("rollback")!), "${{ inputs.channel }}");
+  });
+
+  it("sign APKs only in the release job, and no job keeps or hands on a keystore", () => {
+    const signers = workflows.flatMap(({ file, text }) =>
+      [...jobsOf(text)]
+        .filter(([, job]) => job.includes("sign-apk.sh"))
+        .map(([name]) => `${file} › ${name}`),
+    );
+    assert.deepEqual(signers, ["ci.yml › release"]);
+    for (const { file, text } of workflows) {
+      assert.ok(!/debug\.keystore|\.jks\b|\.p12\b/.test(text), `${file} names a keystore file`);
+    }
   });
 });
