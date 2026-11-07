@@ -4,8 +4,9 @@ import { Text, View } from "react-native";
 
 import { CELL } from "@/catalog/grid";
 import { TextButton } from "@/components/TextButton";
+import { WaveSignInButton } from "@/sync/WaveSignInButton";
 
-import type { GeniusAboutText } from "./useGenius";
+import type { GeniusAboutCard } from "./useGenius";
 
 /** How many lines of the description show until the card is tapped. */
 const FOLDED_LINES = 3;
@@ -13,14 +14,22 @@ const FOLDED_LINES = 3;
 /**
  * The About card at the top of the lyrics (docs/spec.md, "Genius About"):
  * the first lines of Genius's description of the song, and all of it after
- * a tap (another tap folds it again). Nothing without a description. Keyed
- * by its original, a translation arriving replaces the text and keeps the
- * card as it is.
+ * a tap (another tap folds it again). Nothing without a description, and the
+ * invitation to sign in for `"signIn"`. Keyed by its original, a translation
+ * arriving replaces the text and keeps the card as it is.
  */
-export function GeniusAbout({ about }: { about: GeniusAboutText | null }) {
+export function GeniusAbout({ about }: { about: GeniusAboutCard | null }) {
   const { strings } = useLocalisation();
   const [expanded, setExpanded] = useState(false);
   if (about === null) return null;
+  if (about === "signIn")
+    return (
+      <WaveSignInButton
+        look="card"
+        heading={strings.playbackText.aboutGenius}
+        message={strings.playbackText.signInToSeeWhatGeniusSaysAboutThisSong}
+      />
+    );
   const description = about.shown;
   return (
     <TextButton

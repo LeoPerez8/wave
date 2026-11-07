@@ -75,8 +75,17 @@ export const settingsEn = {
     title: "Delete your Wave account?",
     message:
       "Wave's server deletes everything it has of the account, and this phone signs out. " +
-      "Nothing on this phone is deleted.",
+      "Nothing on this phone is deleted. Google then asks you to pick the account, to confirm " +
+      "it's you.",
     action: "Delete Account",
+  },
+  /** Sign Out on All Phones' confirmation (`confirmSignOutEverywhere`). */
+  signOutEverywhere: {
+    title: "Sign out on all phones?",
+    message:
+      "Every phone signed in to this Wave account signs out, this one too. Nothing on the " +
+      "phones is deleted. Sign in again on the phones you use.",
+    action: "Sign Out on All Phones",
   },
   /** Asked before new colours change the app icon (`launcherIconSwitch`). */
   launcherIcon: {
@@ -221,6 +230,8 @@ export const settingsEn = {
   resetToDefault: "Reset to Default",
   aButtonAnotherSlotHoldsSwapsPlaces: "A button another slot holds swaps places with this slot's.",
   signIn: "Sign In",
+  /** The hint of a signed-out invitation's button (Genius About, shows): it opens Settings › Accounts. */
+  opensTheWaveAccountInSettings: "Opens the Wave Account in Settings",
   signInAgain: "Sign In Again",
   signingIn: "Signing In…",
   lightBackground: "Light background",
@@ -266,6 +277,10 @@ export const settingsEn = {
   addAGoogleAccountToThisPhone:
     "Add a Google account to this phone in Android's settings, then sign in.",
   thisGoogleAccountCantUseWavesServer: "This Google account can't use Wave's server.",
+  wavesServerHasNoRoomForNewAccounts:
+    "Wave's server has no room for new Wave accounts. Everything on this phone keeps working.",
+  wavesServerMadeAllTheNewAccountsItCanToday:
+    "Wave's server has made all the new Wave accounts it can today. Try again tomorrow. Everything on this phone keeps working.",
   couldntSignInTryAgain: "Couldn't sign in. Try again.",
   signInWithGoogle: "Sign In with Google",
   couldntDeleteTheAccountWithoutAConnection: "Couldn't delete the account without a connection.",
@@ -273,6 +288,14 @@ export const settingsEn = {
   signingOut: "Signing Out…",
   deleting: "Deleting…",
   deleteAccount: "Delete Account",
+  signOutOnAllPhones: "Sign Out on All Phones",
+  everyPhoneOnThisWaveAccountSignedOut:
+    "Every phone on this Wave account is signed out. Sign in again to keep your backup.",
+  couldntSignOutOnAllPhonesWithoutAConnection:
+    "Couldn't sign out on all phones without a connection.",
+  wavesServerDidntSignOutThePhonesTry: "Wave's server didn't sign out the phones. Try again.",
+  googleDidntConfirmThisAccountPick:
+    "Google didn't confirm this account. Pick the Google account you signed in to Wave with, then try again.",
   waveAccount: "Wave Account",
   waveAccountsArentSetUpOnThis:
     "Wave accounts aren't set up on this build, so there's nothing to sign in to.",
@@ -325,6 +348,21 @@ export const settingsEn = {
   couldntOpenAndroidSettingsTryAgainOr:
     "Couldn't open Android settings. Try again, or find Wave under “All files access” in Android settings.",
   openSettings: "Open settings",
+  /**
+   * First run's invitation to sign in, after the access screen, on a new install only: what a
+   * Wave account unlocks (sync, Genius About, shows), then Not Now and Sign In with Google.
+   */
+  signInInvitation: {
+    title: "Do more with a Wave account",
+    libraryTitle: "Your Library on every phone",
+    library: "Playlists, favorites, play history and preferences on every phone you sign in on.",
+    geniusTitle: "What Genius says",
+    genius: "Genius's notes on the song playing, above its lyrics.",
+    showsTitle: "Shows near you",
+    shows: "Upcoming shows from the artists you follow, in your country.",
+    note: "Optional. Everything else in Wave works without one.",
+    notNow: "Not Now",
+  },
   itsSongsLeaveYourLibraryTheFiles: "Its songs leave your library. The files stay on your phone.",
   couldntRemoveTheFolder: "Couldn't remove the folder",
   loadingMusicFolders: "Loading music folders",

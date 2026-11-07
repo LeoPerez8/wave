@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { describe, test } from "node:test";
-import { favorite, harness, pull, push } from "./testing.ts";
+import { favorite, harness, pull, push, requestAccountDeletion } from "./testing.ts";
 
 const play = (id: string) => ({
   id,
@@ -214,16 +214,22 @@ describe("DELETE /v1/account", () => {
     for (const session of [ana, bo]) {
       const soulseek = { username: "quietfern42", password: "fixture-soulseek-password" };
       await service.request("PUT", "/v1/soulseek", { session, json: soulseek });
+      await service.request("GET", "/v1/genius/search?q=Teardrop%20Massive%20Attack", { session });
+      service.now += 24 * 60 * 60 * 1000;
     }
 
-    const deleted = await service.request("DELETE", "/v1/account", { session: ana });
+    const anaId = (
+      await service.db.execute("SELECT id FROM accounts WHERE google_sub = 'google-sub-1'")
+    ).rows[0]?.id;
+    const deleted = await requestAccountDeletion(service, ana);
     assert.equal(deleted.status, 204);
 
     for (const session of [ana, anaOtherPhone]) {
       assert.equal((await service.request("GET", "/v1/pull", { session })).status, 401);
     }
+    // `usage_warnings` holds no account's data, only which usage warnings went out.
     const left = await service.db.execute(
-      "SELECT name FROM sqlite_master WHERE type = 'table' AND name NOT IN ('migrations', 'sqlite_sequence')",
+      "SELECT name FROM sqlite_master WHERE type = 'table' AND name NOT IN ('migrations', 'sqlite_sequence', 'usage_warnings')",
     );
     // Whose each table's rows are: a sign-in window's key is `sub:` and the Google subject.
     const owners: Readonly<Record<string, string>> = {
@@ -235,7 +241,10 @@ describe("DELETE /v1/account", () => {
       const rows = await service.db.execute(`SELECT ${owner} AS owner FROM ${String(name)}`);
       assert.ok(rows.rows.length > 0, `${String(name)} kept Bo's rows`);
       for (const row of rows.rows) {
-        assert.ok(row.owner !== "google-sub-1", `${String(name)} kept Ana's account`);
+        assert.ok(
+          row.owner !== "google-sub-1" && row.owner !== anaId,
+          `${String(name)} kept Ana's account`,
+        );
       }
     }
 

@@ -9,6 +9,8 @@ export const showsEn = {
   shelf: (country: string) => `Shows in ${country}`,
   notificationsOff: "Notifications are off",
   notificationSettings: "Open notification settings",
+  /** The level card's place for shows while no Wave account is signed in (shows are asked through it). */
+  signInForShows: "Sign in to a Wave account to follow shows too.",
   channel: "Shows",
   tickets: "Tickets",
   /** Settings › Followed Artists' level icons and their legend. */

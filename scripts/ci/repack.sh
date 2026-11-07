@@ -1,12 +1,12 @@
 #!/usr/bin/env bash
 # Builds the APK without Gradle, from a kept full build whose native side matches this one
 # (repack.ts decides when). bundle.sh has already produced the JS/Hermes bundle once.
-# This swaps it into the kept APK, gives the APK this run's app version, then aligns and signs
-# with that build's debug keystore.
+# This swaps it into the kept APK, gives the APK this run's app version, then aligns it,
+# unsigned: the release job signs it (sign-apk.sh), as it signs a full build.
 #   scripts/ci/repack.sh <kept dir> <output apk>
-# The kept dir holds app-release.apk and debug.keystore. Run it after prebuild, from the repo
-# root. The kept APK's key covers Metro's assets (Android resources only Gradle can build in),
-# so they match this bundle's and only the bundle is swapped. It leaves the app version out
+# The kept dir holds app-release.apk, the full build's APK without a signature, and no key.
+# Run it after prebuild, from the repo root. The kept APK's key covers Metro's assets (Android
+# resources only Gradle can build in), so they match this bundle's and only the bundle is swapped. It leaves the app version out
 # (main bumps it on every release), so apk-version.ts writes this run's into the manifest and
 # Expo's embedded app config. The build label the app log shows (build-label.ts) is in the
 # bundle, so swapping it in already gives the APK this run's. Env: ANDROID_HOME, RUNNER_TEMP.
@@ -39,20 +39,14 @@ node "$here/update-config.ts" stamp-apk "$work/version"
 (cd "$work/version" && zip -q -X "$work/unsigned.apk" AndroidManifest.xml assets/app.config assets/app.manifest)
 
 tools="$(ls -d "${ANDROID_HOME:?}"/build-tools/* | sort -V | tail -n 1)"
-# -P 16: native libraries stay aligned to 16 KB pages, as AGP aligns them.
-"$tools/zipalign" -P 16 -f 4 "$work/unsigned.apk" "$work/aligned.apk"
-"$tools/apksigner" sign --ks "$kept/debug.keystore" --ks-pass pass:android \
-  --ks-key-alias androiddebugkey --key-pass pass:android --out "$output" "$work/aligned.apk"
+"$here/unsigned-apk.sh" "$work/unsigned.apk" "$output"
 
-# It must install over the kept build: same signer and package, at this run's version.
-signer() { "$tools/apksigner" verify --print-certs "$1" | grep 'certificate SHA-256 digest:' | sed 's/.*digest: //' | sort -u; }
+# Once signed, it must install over the kept build: same package, at this run's version.
 badging() { "$tools/aapt2" dump badging "$1" | grep '^package:'; }
 package() { badging "$1" | sed "s/ versionCode='[^']*' versionName='[^']*'//"; }
-signer "$output"
 badging "$output"
-if [ "$(signer "$output")" != "$(signer "$kept/app-release.apk")" ] ||
-  [ "$(package "$output")" != "$(package "$kept/app-release.apk")" ]; then
-  echo "The repacked APK's signer or package differs from the kept build's." >&2
+if [ "$(package "$output")" != "$(package "$kept/app-release.apk")" ]; then
+  echo "The repacked APK's package differs from the kept build's." >&2
   exit 1
 fi
 if [[ "$(badging "$output")" != *" $version "* ]]; then

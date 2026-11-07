@@ -876,7 +876,9 @@ export {
 } from "./ytMusic.ts";
 export type { LibrarySongKey, SongSearchKey, TrackRef, YtSong } from "./ytMusic.ts";
 export {
+  CONFIRM_SIGN_OUT_EVERYWHERE,
   CONFIRM_WAVE_ACCOUNT_DELETION,
+  confirmSignOutEverywhere,
   confirmWaveAccountDeletion,
   waveAccountCard,
   WAVE_ACCOUNT_CARD,
@@ -888,8 +890,10 @@ export {
 export type {
   WaveAccount,
   WaveAccountConfig,
+  WaveAccountActionNote,
   WaveDeleteFailure,
   WaveSignInFailure,
+  WaveSignOutEverywhereFailure,
   WaveAccountEvent,
   WaveAccountNote,
   WaveAccountState,
@@ -2397,6 +2401,8 @@ export {
   GENIUS_MISS_MS,
   geniusCandidates,
   geniusDescription,
+  geniusQueryUrl,
+  geniusSearchQuery,
   geniusSearchUrl,
   geniusSongUrl,
   pickGeniusSong,
@@ -2404,6 +2410,19 @@ export {
   storedGenius,
 } from "./genius.ts";
 export type { GeniusHit, GeniusMatch, SavedGenius } from "./genius.ts";
+export {
+  GENIUS_SEARCH_MAX_LENGTH,
+  geniusReferentsPath,
+  geniusSearchPath,
+  geniusSongPath,
+  geniusUpstreamUrl,
+} from "./geniusProxy.ts";
+export {
+  TICKETMASTER_KEYWORD_MAX_LENGTH,
+  ticketmasterAttractionsPath,
+  ticketmasterEventsPath,
+  ticketmasterUpstreamUrl,
+} from "./ticketmasterProxy.ts";
 export {
   geniusAbout,
   geniusReferents,
@@ -2617,3 +2636,5 @@ export type {
   TypedReleaseDateRead,
   TypedReleaseEntry,
 } from "./typedReleaseDate.ts";
+export { nextFirstRunStep, signInInvitationAtLaunch } from "./firstRun.ts";
+export type { FirstRunState, FirstRunStep, SignInInvitation } from "./firstRun.ts";

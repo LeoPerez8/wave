@@ -1,27 +1,52 @@
 # Wave sync service
 
-`apps/sync` is Wave's only backend: a Cloudflare Worker in front of one Turso (libSQL)
-database. It checks Google ID tokens, holds sessions, merges pushed rows by Core's rules
+`apps/sync` is the backend behind the Wave account: a Cloudflare Worker in front of one Turso
+(libSQL) database. Wave's other backend, the update service, is `apps/updates`. It checks Google ID tokens, holds sessions, merges pushed rows by Core's rules
 (`mergeRows`, `mergePlays` from `@wave/core`), serves pulls, keeps each account's Soulseek
-account and deletes accounts. See "Wave account and sync" in `docs/spec.md`.
+account, asks Genius and Ticketmaster for signed-in phones and deletes accounts. See "Wave
+account and sync", "Genius About" and "Followed artists" in `docs/spec.md`.
 
 | File                 | What it holds                                                           |
 | -------------------- | ----------------------------------------------------------------------- |
 | `src/worker.ts`      | The Worker entry: builds the service from the Worker's secrets and vars |
-| `src/service.ts`     | The routes, sessions, the rate limit and the allowlist                  |
+| `src/service.ts`     | The routes, sessions, the rate limits and the allowlist                 |
 | `src/google.ts`      | Checking a Google ID token (RS256 against Google's JWKS)                |
 | `src/store.ts`       | Push (merge and number changes), pull (pages) and account deletion      |
 | `src/soulseek.ts`    | The account's Soulseek account, its password encrypted (`SOULSEEK_KEY`) |
+| `src/proxy.ts`       | A provider's fixed requests: the cache, the provider call, its failures |
 | `src/tables.ts`      | The synced tables: wire fields, checks and columns                      |
 | `src/migrations.ts`  | The schema, as ordered migrations                                       |
-| `src/limits.ts`      | `SYNC_LIMITS`                                                           |
+| `src/limits.ts`      | `SYNC_LIMITS` and `USAGE_WARNINGS`                                      |
+| `src/usage.ts`       | The hourly usage watch (the Cron Trigger)                               |
 | `scripts/migrate.ts` | Runs pending migrations against `TURSO_DATABASE_URL`                    |
 
 ## API
 
 Every body is JSON. Every route but `POST /v1/session` needs the session token as
 `Authorization: Bearer <sessionToken>`. Only `POST /v1/session` ever answers a session token,
-and nothing logs a session token, an ID token or a Soulseek password.
+and nothing logs a session token, an ID token, an address or a Soulseek password.
+
+### Refused before the database
+
+Some requests are refused before they cost a database query, by the address Cloudflare
+names in `CF-Connecting-IP` (kept only as a SHA-256):
+
+- Past `maxRequestsPerAddressPerMinute`, any route answers `429` with
+  `{ "error": "limit", "limit": "maxRequestsPerAddressPerMinute" }`. It's sized for a carrier
+  that puts many phones behind one address.
+- A token that isn't the shape `POST /v1/session` gives (43 base64url characters) answers
+  `401 { "error": "unauthorized" }` without a lookup.
+- Past `maxFailedLookupsPerAddressPerMinute` lookups that find no session, the address's
+  session routes answer `429` with
+  `{ "error": "limit", "limit": "maxFailedLookupsPerAddressPerMinute" }` for
+  `failedLookupBlockSeconds`, valid sessions included. Requests that find their session never
+  count toward it, and other addresses aren't affected.
+
+Both counts come from Cloudflare's rate limiting binding (`[[ratelimits]]` in
+`wrangler.toml`), which counts locally and approximately: they're a best-effort brake on
+heavy traffic, not an exact count per address. At most once a minute, the Worker logs how many requests it
+refused and why (`sync service refused requests: unknown_session=20, held_address=140`), with
+no token and no address.
 
 ### `POST /v1/session`
 
@@ -45,12 +70,25 @@ its Wave account (keyed by Google's `sub`).
 `429` past `maxSignInsPerMinute`: attempts from one address (Cloudflare's `CF-Connecting-IP`,
 counted before the ID token is checked) or sign-ins to one Google account.
 
-The service keeps only a SHA-256 of the session token. A session lasts until it is ended
-or the account is deleted.
+A sign-in that would make a new account is refused, and makes nothing, when the service holds
+`maxAccounts` accounts (`403 { "error": "limit", "limit": "maxAccounts" }`) or has made
+`maxNewAccountsPerDay` in the last 24 hours (`429 { "error": "limit", "limit":
+"maxNewAccountsPerDay" }`, with `Retry-After` until the oldest of them is a day old). Existing
+accounts sign in either way.
+
+The service keeps only a SHA-256 of the session token. A session lasts until it is ended,
+the account is deleted, or it goes 90 days without a request: then it answers
+`401 { "error": "unauthorized" }` and is deleted. Every request made with it starts the 90
+days again.
 
 ### `DELETE /v1/session`
 
 Signs this session out. `204`, no body. The account's other sessions stay signed in.
+
+### `DELETE /v1/sessions`
+
+Signs out everywhere: ends every session of the account, this one included. `204`, no body.
+Other accounts' sessions stay.
 
 ### `POST /v1/push`
 
@@ -183,8 +221,9 @@ never pass through the app's JS.
 can't log in with (1 to 30 printable ASCII characters, no space at either end) or an empty
 password (at most 1,024 characters).
 
-The password is kept encrypted with AES-GCM under `SOULSEEK_KEY`, with the account's id as
-additional data; the database never holds it in the clear.
+The password is kept encrypted with AES-GCM under the current Soulseek key, with the
+account's id as additional data; the database never holds it in the clear. Each row records
+the version of the key it was kept under (see [Soulseek keys](#soulseek-keys)).
 
 ### `GET /v1/soulseek`
 
@@ -194,63 +233,209 @@ The account's Soulseek account, or `null` when it has none:
 { "account": { "username": "quietfern42", "password": "…" } }
 ```
 
-A password that doesn't decrypt (`SOULSEEK_KEY` was replaced) answers `null` too, so the next
-phone's account goes up in its place. Without `SOULSEEK_KEY`, both Soulseek routes answer
-`500` and the log says so; the other routes still work.
+A password kept under an older key is read with that key and kept again under the current
+one. A password that doesn't decrypt (its version's key was replaced or removed) answers
+`null` too, so the next phone's account goes up in its place. Without any Soulseek key, or
+with one that isn't 32 bytes of base64 under a key name, both Soulseek routes answer `500`
+and the log names the secret; the other routes still work.
 
 ### `DELETE /v1/account`
 
 Deletes every row and every session of the account, its Soulseek account, and the account.
-`204`, no body.
+The session isn't enough: the body holds a Google ID token from a fresh sign-in.
+
+```json
+{ "idToken": "<Google ID token>" }
+```
+
+The token must pass the `POST /v1/session` checks, have been issued (`iat`) within the last
+5 minutes and name the session account's Google `sub`. `204`, no body.
+
+`401 { "error": "id_token_required" }` when the body has no ID token (an app from before this
+check), `401 { "error": "invalid_id_token" }` when it doesn't check out. Either way nothing is
+deleted and the session stays; the app tells these apart from `unauthorized`, which means the
+session itself ended.
+
+### `GET /v1/genius/search?q=<text>`, `GET /v1/genius/song?id=<id>`, `GET /v1/genius/referents?song=<id>&page=<n>`
+
+Genius's search, song and referents as the Lyrics view asks them, answered with Genius's JSON
+as it came. The service asks Genius with its own `GENIUS_ACCESS_TOKEN`; a phone never holds
+it. Each route stands for exactly one Genius request, built by Core's `geniusUpstreamUrl`
+(`packages/core/src/geniusProxy.ts`) from the functions the phone used to call Genius with:
+
+| Route                          | Genius request                                                                 |
+| ------------------------------ | ------------------------------------------------------------------------------ |
+| `search?q=<text>`              | `api.genius.com/search?q=<text>`                                               |
+| `song?id=<id>`                 | `api.genius.com/songs/<id>?text_format=plain`                                  |
+| `referents?song=<id>&page=<n>` | `api.genius.com/referents?song_id=<id>&text_format=plain&per_page=50&page=<n>` |
+
+Any other parameter, a repeated one, an id that isn't a positive whole number, a page past 20
+or an empty search, or one over 1,000 characters, answers `400 { "error": "bad_request" }`
+and asks Genius nothing. Redirects aren't followed.
+
+Answers are kept in Cloudflare's cache for a day, keyed by the Genius request alone (a hash
+of it), never by the account, so another phone asking the same thing gets it with no Genius
+request. Each account may send these routes `maxGeniusRequestsPerMinute` requests, cached
+answers included, and make Genius answer `maxGeniusRequestsPerDay` in a UTC day (cached
+answers don't count; the counts are in `upstream_usage`). Genius answering anything but `200`
+JSON, an answer holding the token, or no answer in 10 s gives
+`502 { "error": "upstream_failed" }` with nothing of Genius's answer, and nothing is cached.
+The log line says only `genius answered <status>`. A Worker without `GENIUS_ACCESS_TOKEN` or
+`GENIUS_LIMITER` answers `503 { "error": "unavailable" }`.
+
+### `GET /v1/ticketmaster/attractions?keyword=<name>`, `GET /v1/ticketmaster/events?attractionId=<id>&countryCode=<cc>`
+
+A show check's attraction search and events, answered with Ticketmaster Discovery's JSON as it
+came. The service asks Ticketmaster with its own `TICKETMASTER_API_KEY`; a phone never holds
+it. Each route stands for exactly one request, built by Core's `ticketmasterUpstreamUrl`
+(`packages/core/src/ticketmasterProxy.ts`), and the service adds `&apikey=<key>`:
+
+| Route                                       | Ticketmaster request (`app.ticketmaster.com/discovery/v2/…`)            |
+| ------------------------------------------- | ----------------------------------------------------------------------- |
+| `attractions?keyword=<name>`                | `attractions.json?keyword=<name>&classificationName=music&size=200`     |
+| `events?attractionId=<id>&countryCode=<cc>` | `events.json?attractionId=<id>&countryCode=<cc>&sort=date,asc&size=200` |
+
+Any other parameter, a repeated one, an empty name or one over 500 characters, an id that
+isn't letters, digits, `_` or `-` (64 at most), or a country that isn't two capital letters
+answers `400 { "error": "bad_request" }` and asks Ticketmaster nothing.
+
+Answers are kept in Cloudflare's cache for 12 hours, keyed by the request without the key (a
+hash of it), never by the account. Ticketmaster takes about 5 requests a second for the key,
+from every phone together, so the requests an isolate sends it start at least 250 ms apart; a
+request that would wait more than 5 s for its turn answers `503 { "error": "busy" }` and asks
+nothing. Each account may send these routes `maxTicketmasterRequestsPerMinute` requests, and
+make `maxTicketmasterAttractionSearchesPerDay` attraction searches and
+`maxTicketmasterEventLookupsPerDay` event lookups in a UTC day, cached answers included (the
+counts are in `upstream_usage`, one row for each). A show check costs at most one of each per
+artist, so that's 200 artists a day; the phone stops its own check there without asking.
+Failures are Genius's too: `502 { "error": "upstream_failed" }` with nothing of Ticketmaster's
+answer (its over-quota error names the key), nothing cached, and a log line that says only
+`ticketmaster answered <status>`. A Worker without `TICKETMASTER_API_KEY` or
+`TICKETMASTER_LIMITER` answers `503 { "error": "unavailable" }`.
 
 ### Errors
 
-| Status | Body                                                                        |
-| ------ | --------------------------------------------------------------------------- |
-| 400    | `{ "error": "bad_request", "detail"?: "…" }`                                |
-| 401    | `{ "error": "unauthorized" }` (no session, or it ended)                     |
-| 401    | `{ "error": "invalid_id_token" }`                                           |
-| 403    | `{ "error": "not_allowed" }`                                                |
-| 404    | `{ "error": "not_found" }`                                                  |
-| 413    | `{ "error": "limit", "limit": "<name>" }`                                   |
-| 429    | `{ "error": "limit", "limit": "maxRequestsPerMinute" }`, with `Retry-After` |
-| 429    | `{ "error": "limit", "limit": "maxSignInsPerMinute" }`, with `Retry-After`  |
-| 500    | `{ "error": "internal" }`                                                   |
+| Status | Body                                                                                           |
+| ------ | ---------------------------------------------------------------------------------------------- |
+| 400    | `{ "error": "bad_request", "detail"?: "…" }`                                                   |
+| 401    | `{ "error": "unauthorized" }` (no session, or it ended)                                        |
+| 401    | `{ "error": "invalid_id_token" }`                                                              |
+| 401    | `{ "error": "id_token_required" }`                                                             |
+| 403    | `{ "error": "not_allowed" }`                                                                   |
+| 403    | `{ "error": "limit", "limit": "maxAccounts" }`                                                 |
+| 404    | `{ "error": "not_found" }`                                                                     |
+| 413    | `{ "error": "limit", "limit": "<name>" }`                                                      |
+| 429    | `{ "error": "limit", "limit": "maxRequestsPerMinute" }`, with `Retry-After`                    |
+| 429    | `{ "error": "limit", "limit": "maxSignInsPerMinute" }`, with `Retry-After`                     |
+| 429    | `{ "error": "limit", "limit": "maxNewAccountsPerDay" }`, with `Retry-After`                    |
+| 429    | `{ "error": "limit", "limit": "maxRequestsPerAddressPerMinute" }`, with `Retry-After`          |
+| 429    | `{ "error": "limit", "limit": "maxFailedLookupsPerAddressPerMinute" }`, with `Retry-After`     |
+| 429    | `{ "error": "limit", "limit": "maxGeniusRequestsPerMinute" }`, with `Retry-After`              |
+| 429    | `{ "error": "limit", "limit": "maxGeniusRequestsPerDay" }`, with `Retry-After`                 |
+| 429    | `{ "error": "limit", "limit": "maxTicketmasterRequestsPerMinute" }`, with `Retry-After`        |
+| 429    | `{ "error": "limit", "limit": "maxTicketmasterAttractionSearchesPerDay" }`, with `Retry-After` |
+| 429    | `{ "error": "limit", "limit": "maxTicketmasterEventLookupsPerDay" }`, with `Retry-After`       |
+| 500    | `{ "error": "internal" }`                                                                      |
+| 502    | `{ "error": "upstream_failed" }`                                                               |
+| 503    | `{ "error": "unavailable" }`                                                                   |
+| 503    | `{ "error": "busy" }`                                                                          |
 
 ## Limits
 
-`SYNC_LIMITS` in `src/limits.ts`. Past one, the service answers `413` (or `429` for a
-rate) and names it. Starting values, so a 50,000-song Library with 200,000 plays fits:
+`SYNC_LIMITS` in `src/limits.ts`. Past one, the service answers `413` (`429` for a rate,
+`403` for `maxAccounts`) and names it. Starting values, so a 50,000-song Library with 200,000 plays fits:
 
-| Limit                     | Value     |                                                 |
-| ------------------------- | --------- | ----------------------------------------------- |
-| `maxBodyBytes`            | 2 MiB     | per request; a large first push goes in batches |
-| `maxSongs`                | 100,000   | rows per account, tombstones aside              |
-| `maxPlaylists`            | 5,000     |                                                 |
-| `maxPlaylistEntries`      | 250,000   |                                                 |
-| `maxFavorites`            | 100,000   |                                                 |
-| `maxPreferences`          | 200       |                                                 |
-| `maxPlays`                | 1,000,000 |                                                 |
-| `maxFollows`              | 5,000     |                                                 |
-| `maxHiddenReleases`       | 50,000    |                                                 |
-| `maxNotifiedShows`        | 50,000    |                                                 |
-| `maxDismissedSuggestions` | 50,000    |                                                 |
-| `maxRequestsPerMinute`    | 120       | per session                                     |
-| `maxSignInsPerMinute`     | 10        | `POST /v1/session`, per address and per account |
+| Limit                                     | Value     |                                                      |
+| ----------------------------------------- | --------- | ---------------------------------------------------- |
+| `maxBodyBytes`                            | 2 MiB     | per request; a large first push goes in batches      |
+| `maxSongs`                                | 100,000   | rows per account, tombstones aside                   |
+| `maxPlaylists`                            | 5,000     |                                                      |
+| `maxPlaylistEntries`                      | 250,000   |                                                      |
+| `maxFavorites`                            | 100,000   |                                                      |
+| `maxPreferences`                          | 200       |                                                      |
+| `maxPlays`                                | 1,000,000 |                                                      |
+| `maxFollows`                              | 5,000     |                                                      |
+| `maxHiddenReleases`                       | 50,000    |                                                      |
+| `maxNotifiedShows`                        | 50,000    |                                                      |
+| `maxDismissedSuggestions`                 | 50,000    |                                                      |
+| `maxRequestsPerMinute`                    | 120       | per session                                          |
+| `maxSignInsPerMinute`                     | 10        | `POST /v1/session`, per address and per account      |
+| `maxAccounts`                             | 100       | accounts the service holds                           |
+| `maxNewAccountsPerDay`                    | 10        | new accounts in any 24 hours                         |
+| `maxRequestsPerAddressPerMinute`          | 600       | every route, per address                             |
+| `maxFailedLookupsPerAddressPerMinute`     | 20        | lookups that find no session, per address            |
+| `failedLookupBlockSeconds`                | 300       | how long an address past the line above is held back |
+| `maxGeniusRequestsPerMinute`              | 30        | the Genius routes, per account                       |
+| `maxGeniusRequestsPerDay`                 | 1,000     | Genius requests the cache didn't answer, per account |
+| `maxTicketmasterRequestsPerMinute`        | 300       | the Ticketmaster routes, per account                 |
+| `maxTicketmasterAttractionSearchesPerDay` | 200       | attraction searches, cached or not, per account      |
+| `maxTicketmasterEventLookupsPerDay`       | 200       | event lookups, cached or not, per account            |
+
+The two per-address rates, `maxGeniusRequestsPerMinute` and `maxTicketmasterRequestsPerMinute`
+are also the `simple.limit` of `ADDRESS_LIMITER`, `FAILED_LOOKUP_LIMITER`, `GENIUS_LIMITER` and
+`TICKETMASTER_LIMITER` in `wrangler.toml`; a test fails when they differ. Change both, then
+deploy. The two per-address rates are best effort (Refused before the database). The phone stops a show check at 200 artists a UTC day, Core's
+`TICKETMASTER_ARTISTS_PER_DAY`, checking artists it never checked first and then the oldest
+checks, so a longer list is covered over the following days. Ticketmaster allows the key 5,000
+requests a day in all, shared by every account.
 
 A push that would take a table past its limit is refused whole.
 
+## Usage watch
+
+Every hour (`[triggers]` in `wrangler.toml`) the Worker reads today's requests to every Worker
+on the Cloudflare account (Workers Free stops all of them at 100,000 a day, from midnight UTC)
+and compares them with `USAGE_WARNINGS` in `src/limits.ts`:
+
+| Threshold              | Value  |                                 |
+| ---------------------- | ------ | ------------------------------- |
+| `workerRequestsPerDay` | 70,000 | of Workers Free's 100,000 a day |
+
+Past it, it logs a line starting `wave usage warning:` with `console.error`, once a UTC day
+(the `usage_warnings` table remembers which went out). When it can't read the figures it logs
+the same kind of line, once a day. Search the Worker's logs for `wave usage warning` to see
+them; a Cloudflare notification on that line emails the owner. Without its secrets the watch
+is skipped. Change the threshold in `src/limits.ts` and deploy.
+
+Turso's usage (rows read and written, storage) is checked by hand once a month, in Turso's
+dashboard. The Worker holds no Turso Platform token: one can do far more than read usage, and
+the Worker already holds the database.
+
 ## Configuration
 
-Set on the Worker, never in the repo (`wrangler.toml` holds none of them):
+Set on the Worker, never in the repo (`wrangler.toml` holds none of them; it holds only the
+rate limiting bindings, which `wrangler deploy` creates and which need Wrangler 4.36 or
+later, the usage watch's Cron Trigger and the Workers Logs and Issues settings, with
+invocation logs off):
 
-| Name                 | Kind   |                                                                      |
-| -------------------- | ------ | -------------------------------------------------------------------- |
-| `TURSO_DATABASE_URL` | secret | `libsql://<db>-<org>.turso.io`                                       |
-| `TURSO_AUTH_TOKEN`   | secret | a Turso token for that database                                      |
-| `GOOGLE_CLIENT_ID`   | secret | Wave's **web** OAuth client id, the audience of the app's ID tokens  |
-| `SOULSEEK_KEY`       | secret | base64 of 32 random bytes: the key Soulseek passwords are kept under |
-| `ALLOWED_EMAILS`     | secret | optional: emails that may sign in, separated by commas               |
+| Name                         | Kind   |                                                                         |
+| ---------------------------- | ------ | ----------------------------------------------------------------------- |
+| `TURSO_DATABASE_URL`         | secret | `libsql://<db>-<org>.turso.io`                                          |
+| `TURSO_AUTH_TOKEN`           | secret | a Turso token for that database                                         |
+| `GOOGLE_CLIENT_ID`           | secret | Wave's **web** OAuth client id, the audience of the app's ID tokens     |
+| `SOULSEEK_KEY`               | secret | base64 of 32 random bytes: version 1 of the Soulseek key                |
+| `SOULSEEK_KEY_<n>`           | secret | optional: version n (2 or more) of the Soulseek key, the same way       |
+| `ALLOWED_EMAILS`             | secret | optional: emails that may sign in, separated by commas                  |
+| `GENIUS_ACCESS_TOKEN`        | secret | Genius's client access token, for the Genius routes                     |
+| `TICKETMASTER_API_KEY`       | secret | Ticketmaster Discovery's API key, for the Ticketmaster routes           |
+| `CLOUDFLARE_ACCOUNT_ID`      | secret | optional, for the usage watch: the Cloudflare account id                |
+| `CLOUDFLARE_ANALYTICS_TOKEN` | secret | optional, for the usage watch: a token with only Account Analytics Read |
+
+### Soulseek keys
+
+Soulseek passwords are kept under the highest key version the Worker has: `SOULSEEK_KEY` is
+version 1 and `SOULSEEK_KEY_2`, `SOULSEEK_KEY_3`, … the next ones. Each row records its
+version and is read with that version's key, then kept again under the current key, so the
+app sees no change. To replace the key, set the next version and leave the older ones:
+
+```sh
+cd apps/sync
+openssl rand -base64 32 | pnpm exec wrangler secret put SOULSEEK_KEY_2
+```
+
+An older version can go once no row uses it
+(`SELECT count(*) FROM soulseek_accounts WHERE key_version < 2`); a row still under a
+removed version reads as none, and the account's next phone puts its account up again.
 
 ## Running it locally
 
@@ -298,9 +483,9 @@ bash apps/sync/setup.sh
 
 [`setup.sh`](setup.sh) walks through the steps below and checks each one before going on:
 the Turso database and a token for it, Google's consent screen and OAuth clients (the web
-client the service checks ID tokens against, and an Android client for `dev.leoperez.wave`
-with the SHA-1 of Expo's template debug keystore, which signs both the release and the debug
-builds), signing in to Cloudflare, the migrations, `wrangler deploy`, the Worker's secrets,
+client the service checks ID tokens against, an Android client for `dev.leoperez.wave` with
+the SHA-1 of Expo's template debug keystore, which signs local builds and the releases before
+the release key, and one with the release key's SHA-1, which signs every release since), signing in to Cloudflare, the migrations, `wrangler deploy`, the Worker's secrets,
 `SOULSEEK_KEY` (made once, and kept on the Worker on later runs), and a check that the live
 service answers `401` to requests without a valid sign-in. Last,
 it writes `syncUrl` and `googleWebClientId` into `extra` in `apps/mobile/app.config.ts`, for
@@ -323,10 +508,13 @@ By hand, the steps are:
    pnpm exec wrangler secret put TURSO_AUTH_TOKEN
    pnpm exec wrangler secret put GOOGLE_CLIENT_ID
    openssl rand -base64 32 | pnpm exec wrangler secret put SOULSEEK_KEY
+   pnpm exec wrangler secret put GENIUS_ACCESS_TOKEN
+   pnpm exec wrangler secret put TICKETMASTER_API_KEY
    ```
 
-   Make `SOULSEEK_KEY` once and never replace it: the Soulseek accounts kept under the old
-   one can't be read again (each Wave account's goes up anew from the next phone that syncs).
+   Make `SOULSEEK_KEY` once and never overwrite it: the Soulseek accounts kept under it
+   couldn't be read again. To replace the key, add the next version instead
+   ([Soulseek keys](#soulseek-keys)).
 
 4. Migrate and deploy. The `deploy` script runs the pending migrations against the database
    in your shell's environment, then `wrangler deploy` (it needs `run`: `pnpm deploy` is a

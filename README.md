@@ -16,9 +16,9 @@ own, inspired by Apple Music. Personal project, sideloaded — see the
 
 ## Getting the app on a phone
 
-Every PR and every push to `main` builds a release APK (arm64, signed with the debug key):
+Every push to `main` and every promotion builds a release APK (arm64). PRs build none: test a
+change on the `ti` channel once it's merged, or build it locally (below).
 
-- **PR builds** — the PR gets a comment with a _Download APK_ link.
 - **Latest on the `main` channel** — <https://github.com/LeoPerez8/wave/releases/download/latest/wave-latest.apk>, moved by each promotion
 - **Latest on the `ti` channel** — <https://github.com/LeoPerez8/wave/releases/download/ti-latest/wave-ti.apk>, moved by each push to `main`
 
@@ -34,6 +34,9 @@ pnpm install
 pnpm android        # prebuild + build + install on a connected device
 pnpm dev            # Metro, for an already-installed dev build
 ```
+
+A local debug build is signed with the debug key, so on a phone that has a release installed,
+uninstall Wave first, which deletes its data there.
 
 Checks (the same ones CI runs):
 

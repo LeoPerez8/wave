@@ -408,6 +408,45 @@ describe("POST /v1/push and GET /v1/pull", () => {
     assert.deepEqual((await pull(service, bo)).favorites, []);
   });
 
+  test("an account's push never changes or deletes another account's rows of the same id", async () => {
+    const service = await harness();
+    const ana = await service.signIn();
+    const bo = await service.signIn({ sub: "google-sub-2", email: "bo@example.com" });
+    await push(service, ana, {
+      songs: [song("song-1", 1)],
+      favorites: [favorite("song-1", 1)],
+      playlists: [playlist("list-1", 1, "phone-a", "Ana's")],
+    });
+    // Bo's phone sends rows with Ana's ids, later: a change and two deletions.
+    await push(service, bo, {
+      songs: [song("song-1", 2, { phoneId: "phone-b", title: "Bo's title" })],
+      favorites: [favorite("song-1", 2, { phoneId: "phone-b", deleted: true })],
+      playlists: [{ ...playlist("list-1", 2, "phone-b", "Ana's"), deleted: true }],
+    });
+    const anas = await pull(service, ana);
+    assert.deepEqual(
+      anas.songs.map((row) => [row.id, row.title, row.deleted]),
+      [["song-1", "Teardrop", false]],
+    );
+    assert.deepEqual(
+      anas.favorites.map((row) => [row.id, row.deleted]),
+      [["song-1", false]],
+    );
+    assert.deepEqual(
+      anas.playlists.map((row) => [row.id, row.name, row.deleted]),
+      [["list-1", "Ana's", false]],
+    );
+    const bos = await pull(service, bo);
+    assert.deepEqual(
+      bos.songs.map((row) => [row.id, row.title]),
+      [["song-1", "Bo's title"]],
+    );
+    assert.deepEqual(
+      bos.favorites.map((row) => [row.id, row.deleted]),
+      [["song-1", true]],
+    );
+  });
+
   test("a row that isn't valid is refused, saying where, and nothing of the push is kept", async () => {
     const service = await harness();
     const session = await service.signIn();

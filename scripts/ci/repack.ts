@@ -1,4 +1,4 @@
-// A PR whose native side matches a kept full build gets its APK by swapping a new JS bundle
+// A push to main or a -ti tag whose native side matches a kept full build gets its APK by swapping a new JS bundle
 // into that build (repack.sh), without Gradle. This module holds the decisions:
 //   node scripts/ci/repack.ts key <app dir> <Metro's assets dir>   `key=` for the kept APK
 //                                                    (after prebuild and bundle.sh)
@@ -125,7 +125,10 @@ export const apkCacheKey = ({
     ).map((path) => `scripts/ci/${path}`),
   ]);
   const metro = sha256(JSON.stringify(Object.entries(metroAssets).sort()));
-  return `apk-v1-${sha256(`${fingerprint}\n${project}\n${images}\n${config}\n${recipe}\n${metro}\n`)}`;
+  // v2: kept from the first build the release key signs. A v1 build is signed with the public
+  // debug key and kept beside it, so it never repacks, and the new runtime version sends phones
+  // the first signed release as an APK.
+  return `apk-v2-${sha256(`${fingerprint}\n${project}\n${images}\n${config}\n${recipe}\n${metro}\n`)}`;
 };
 
 /** The files Metro wrote to its assets folder (Android resources), by path, with their hashes. */
@@ -156,7 +159,7 @@ export type ApkPlan = { build: "full" | "repack"; reason: string };
 
 /**
  * Whether this run builds the APK in full or swaps a new JS bundle into a kept full build.
- * Pull requests, pushes to main and -ti tags may repack; stable tags never do.
+ * Pushes to main and -ti tags may repack; stable tags never do. Pull requests build no APK.
  * `kept` is whether a full build with this run's key was found.
  */
 export const planApkBuild = (run: {
@@ -169,8 +172,7 @@ export const planApkBuild = (run: {
   const tiTag = run.release && /^refs\/tags\/v\d+\.\d+\.\d+-ti$/.test(run.ref);
   const mainPush = run.event === "push" && run.ref === "refs/heads/main";
   if (run.release && !tiTag) return full("Stable release tags always build in full.");
-  if (run.event !== "pull_request" && !mainPush && !tiTag)
-    return full("Only pull requests, pushes to main and -ti tags repack.");
+  if (!mainPush && !tiTag) return full("Only pushes to main and -ti tags repack.");
   if (!run.kept) return full("No full build is kept for this native side yet.");
   return { build: "repack", reason: "Only JS changed since a kept full build." };
 };

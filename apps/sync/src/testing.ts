@@ -12,7 +12,13 @@ import { type Client, createClient } from "@libsql/client";
 import { GOOGLE_CERTS_URL } from "./google.ts";
 import { type SyncLimits, SYNC_LIMITS } from "./limits.ts";
 import { migrate } from "./migrations.ts";
-import { type SyncServiceOptions, createSyncService } from "./service.ts";
+import type { ProxyCache, Upstream } from "./proxy.ts";
+import {
+  type RateLimiter,
+  type ServiceMemory,
+  type SyncServiceOptions,
+  createSyncService,
+} from "./service.ts";
 
 const CLIENT_ID = "wave-web-client.apps.googleusercontent.com";
 
@@ -106,8 +112,11 @@ const fakeGoogle = async (now: () => number): Promise<FakeGoogle> => {
   };
 };
 
-/** A fresh database file, deleted when the test file ends. */
-const freshDatabase = async (): Promise<Client> => {
+/**
+ * A fresh database file, deleted when the test file ends. With [until], only
+ * the migrations up to that one have run, to stand for an older database.
+ */
+export const freshDatabase = async (options: { readonly until?: string } = {}): Promise<Client> => {
   const dir = mkdtempSync(join(tmpdir(), "wave-sync-"));
   const db = createClient({ url: `file:${join(dir, "sync.db").replaceAll("\\", "/")}` });
   after(() => {
@@ -118,14 +127,128 @@ const freshDatabase = async (): Promise<Client> => {
       // Windows can hold the file a moment after closing; it's a temp dir.
     }
   });
-  await migrate(db);
+  await migrate(db, options);
   return db;
+};
+
+/** The calls on a libSQL client that reach the database. */
+const QUERY_METHODS: ReadonlySet<PropertyKey> = new Set([
+  "execute",
+  "batch",
+  "executeMultiple",
+  "transaction",
+  "migrate",
+]);
+
+/** [db] as the service sees it, calling [counted] at each query it sends. */
+const countingQueries = (db: Client, counted: () => void): Client =>
+  new Proxy(db, {
+    get: (target, property) => {
+      const value: unknown = Reflect.get(target, property, target);
+      if (typeof value !== "function") return value;
+      return (...args: unknown[]): unknown => {
+        if (QUERY_METHODS.has(property)) counted();
+        return (value as (...args: unknown[]) => unknown).apply(target, args);
+      };
+    },
+  });
+
+/** A stand-in for Cloudflare's rate limiting binding: [limit] calls per key in each minute of [now]. */
+const minuteLimiter = (limit: number, now: () => number): RateLimiter => {
+  const counts = new Map<string, number>();
+  let minute = -1;
+  return {
+    limit: async ({ key }) => {
+      const current = Math.floor(now() / 60_000);
+      if (current !== minute) {
+        counts.clear();
+        minute = current;
+      }
+      const count = (counts.get(key) ?? 0) + 1;
+      counts.set(key, count);
+      return { success: count <= limit };
+    },
+  };
+};
+
+/** Genius's token as the tests' Worker holds it. */
+export const GENIUS_TOKEN = "genius-test-token-3f9a";
+
+/** Ticketmaster's key as the tests' Worker holds it. */
+export const TICKETMASTER_KEY = "tm-test-key-8c1d";
+
+/** One request the fake upstream got. */
+export interface UpstreamCall {
+  readonly url: string;
+  readonly headers: Headers;
+  /** When it was sent, on the harness's clock. */
+  readonly at: number;
+}
+
+/**
+ * A stand-in for Genius, Ticketmaster and Cloudflare's cache:
+ * it records each request and answers with [answer], 200 and an empty
+ * Genius reply by default. The cache keeps an answer for its `max-age` on
+ * the harness's clock.
+ */
+export interface FakeUpstream extends Upstream {
+  readonly calls: UpstreamCall[];
+  answer: (url: string) => Response | Promise<Response>;
+  /** How many answers the cache holds. */
+  readonly cached: () => number;
+}
+
+const fakeUpstream = (now: () => number): FakeUpstream => {
+  const kept = new Map<string, { body: string; headers: Headers; until: number }>();
+  const cache: ProxyCache = {
+    match: async (key) => {
+      const entry = kept.get(key);
+      if (entry === undefined || now() >= entry.until) return undefined;
+      return new Response(entry.body, { headers: entry.headers });
+    },
+    put: async (key, response) => {
+      const maxAge = /max-age=(\d+)/.exec(response.headers.get("cache-control") ?? "");
+      if (maxAge === null) return;
+      kept.set(key, {
+        body: await response.text(),
+        headers: response.headers,
+        until: now() + Number(maxAge[1]) * 1000,
+      });
+    },
+  };
+  const upstream: FakeUpstream = {
+    calls: [],
+    answer: () => Response.json({ meta: { status: 200 }, response: { hits: [] } }),
+    cached: () => [...kept.values()].filter((entry) => now() < entry.until).length,
+    cache,
+    // Follows a redirect unless told not to, as the Worker's fetch does.
+    fetch: async function follow(url, init): Promise<Response> {
+      upstream.calls.push({ url, headers: new Headers(init.headers), at: now() });
+      const response = await upstream.answer(url);
+      const location = response.headers.get("location");
+      if (init.redirect === "manual" || location === null || response.status < 300) return response;
+      if (response.status >= 400) return response;
+      return follow(location, init);
+    },
+  };
+  return upstream;
 };
 
 /** A running service over a fresh database, with a clock the test moves. */
 export interface Harness {
   readonly db: Client;
+  /** How many queries the service has sent the database (the test's own, through `db`, aren't counted). */
+  readonly queries: () => number;
+  /** What the service has logged. */
+  readonly logs: readonly string[];
   readonly google: FakeGoogle;
+  /** What stands for Genius, Ticketmaster and Cloudflare's cache. */
+  readonly upstream: FakeUpstream;
+  /**
+   * What the service's waits for a provider's turn do: by default they move
+   * the clock on by the time waited, as a real wait would.
+   */
+  wait: (ms: number) => Promise<void>;
   /** The service's clock, in ms since the epoch. */
   now: number;
   /** Calls the service. */
@@ -147,6 +270,14 @@ export interface HarnessOptions {
   readonly pullPageSize?: number;
   /** `SOULSEEK_KEY`; `SOULSEEK_KEY` above by default, null for none. */
   readonly soulseekKey?: string | null;
+  /** The Soulseek keys by secret name, as the Worker has them; when given, `soulseekKey` is ignored. */
+  readonly soulseekKeys?: Readonly<Record<string, string>>;
+  /** What the service keeps between requests; a fresh one by default. */
+  readonly memory?: ServiceMemory;
+  /** Genius's token; `GENIUS_TOKEN` by default, null for a Worker without it. */
+  readonly geniusToken?: string | null;
+  /** Ticketmaster's key; `TICKETMASTER_KEY` by default, null for a Worker without it. */
+  readonly ticketmasterKey?: string | null;
 }
 
 export const harness = async (options: HarnessOptions = {}, db?: Client): Promise<Harness> => {
@@ -154,15 +285,55 @@ export const harness = async (options: HarnessOptions = {}, db?: Client): Promis
   const state = { now: Date.UTC(2026, 9, 14, 12) };
   const clock = (): number => state.now;
   const google = await fakeGoogle(clock);
+  let queries = 0;
+  const logs: string[] = [];
+  const limits = { ...SYNC_LIMITS, ...options.limits };
+  const upstream = fakeUpstream(clock);
+  const geniusToken = options.geniusToken === undefined ? GENIUS_TOKEN : options.geniusToken;
+  const ticketmasterKey =
+    options.ticketmasterKey === undefined ? TICKETMASTER_KEY : options.ticketmasterKey;
+  const pace = {
+    wait: async (ms: number): Promise<void> => {
+      const until = state.now + ms;
+      await Promise.resolve();
+      state.now = Math.max(state.now, until);
+    },
+  };
   const serviceOptions: SyncServiceOptions = {
-    db,
+    db: countingQueries(db, () => queries++),
+    addressLimiter: minuteLimiter(limits.maxRequestsPerAddressPerMinute, clock),
+    failedLookupLimiter: minuteLimiter(limits.maxFailedLookupsPerAddressPerMinute, clock),
     googleClientId: CLIENT_ID,
     fetch: google.fetch,
     now: clock,
-    limits: { ...SYNC_LIMITS, ...options.limits },
+    limits,
+    log: (message) => logs.push(message),
+    upstream,
+    wait: (ms) => pace.wait(ms),
+    ...(ticketmasterKey === null
+      ? {}
+      : {
+          ticketmaster: {
+            token: ticketmasterKey,
+            limiter: minuteLimiter(limits.maxTicketmasterRequestsPerMinute, clock),
+          },
+        }),
+    ...(geniusToken === null
+      ? {}
+      : {
+          genius: {
+            token: geniusToken,
+            limiter: minuteLimiter(limits.maxGeniusRequestsPerMinute, clock),
+          },
+        }),
+    ...(options.memory === undefined ? {} : { memory: options.memory }),
     ...(options.allowedEmails === undefined ? {} : { allowedEmails: options.allowedEmails }),
     ...(options.pullPageSize === undefined ? {} : { pullPageSize: options.pullPageSize }),
-    ...(options.soulseekKey === null ? {} : { soulseekKey: options.soulseekKey ?? SOULSEEK_KEY }),
+    ...(options.soulseekKeys !== undefined
+      ? { soulseekKeys: options.soulseekKeys }
+      : options.soulseekKey === null
+        ? {}
+        : { soulseekKeys: { SOULSEEK_KEY: options.soulseekKey ?? SOULSEEK_KEY } }),
   };
   const service = createSyncService(serviceOptions);
 
@@ -194,7 +365,16 @@ export const harness = async (options: HarnessOptions = {}, db?: Client): Promis
 
   return {
     db,
+    queries: () => queries,
+    logs,
     google,
+    upstream,
+    get wait() {
+      return pace.wait;
+    },
+    set wait(value: (ms: number) => Promise<void>) {
+      pace.wait = value;
+    },
     get now(): number {
       return state.now;
     },
@@ -266,6 +446,20 @@ export const pullAll = async (
     if (!page.more) return { ...(joined as unknown as Pulled), cursor, more: false, pages };
   }
 };
+
+/**
+ * `DELETE /v1/account` with [session], confirmed by a just-issued ID token for
+ * [claims] (Ana's Google account by default), as the app sends it.
+ */
+export const requestAccountDeletion = async (
+  service: Harness,
+  session: string,
+  claims?: TokenClaims,
+): Promise<Response> =>
+  service.request("DELETE", "/v1/account", {
+    session,
+    json: { idToken: await service.google.idToken(claims) },
+  });
 
 /** How many sessions the database holds. */
 export const sessionCount = async (service: Harness): Promise<number> =>

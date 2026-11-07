@@ -202,9 +202,10 @@ DB_NAME="wave-sync"
 ANDROID_PACKAGE="dev.leoperez.wave"
 # SHA-1 of the debug keystore in Expo's Android template. `expo prebuild`
 # copies it to apps/mobile/android/app/debug.keystore, and the generated
-# build.gradle signs both debug and release builds with it, CI's APK included.
-# A release build signed with a keystore of its own needs a second Android
-# client with that key's SHA-1: stage 6 offers it.
+# build.gradle signs local builds with it, as it signed CI's releases before the
+# release key. CI's releases are now signed with the release key
+# (docs/spec.md, APK signing), which needs a second Android client with its
+# SHA-1: stage 6 offers it.
 EXPO_DEBUG_SHA1="5E:8F:16:06:2E:A3:CD:2C:4A:0D:54:78:76:BA:A6:F3:8C:AB:F6:25"
 
 cd "$SYNC_DIR"
@@ -384,9 +385,9 @@ if [[ -n "$KEYTOOL" && -f "$KEYSTORE" ]]; then
     note "Add a second Android client with it, so your local builds can sign in too."
   fi
 fi
-say "CI's release APK, release builds and debug builds are all signed with the debug"
-say "keystore from Expo's template (unless you gave a release build a keystore of its"
-say "own: that comes next), so this one SHA-1 covers them all:"
+say "Local builds, and CI's releases before the release key, are signed with the debug"
+say "keystore from Expo's template, so this SHA-1 covers them (the release key's client"
+say "comes next):"
 printf '\n    %s%s%s\n\n' "$BOLD" "$EXPO_DEBUG_SHA1" "$RESET"
 open_url "https://console.cloud.google.com/auth/clients/create"
 step "Application type: Android. Name: Wave Android."
@@ -398,7 +399,7 @@ confirm "Is the Android client created?" || die "Signing in from the phone needs
 # Optional: a release build signed with a keystore of its own (not Expo's debug one)
 # signs in only through a second Android client with that key's SHA-1.
 printf '\n'
-if confirm "Is a release build of Wave signed with a keystore of its own, not the debug one?"; then
+if confirm "Is a release build of Wave signed with a keystore of its own, not the debug one (CI's releases are)?"; then
   RELEASE_SHA1=""
   if [[ -n "$KEYTOOL" ]]; then
     ask RELEASE_KEYSTORE "Path to the release keystore (Enter to paste its SHA-1 instead):"
@@ -510,7 +511,7 @@ put_secret TURSO_AUTH_TOKEN "$TURSO_AUTH_TOKEN"
 put_secret GOOGLE_CLIENT_ID "$GOOGLE_CLIENT_ID"
 # SOULSEEK_KEY encrypts the Soulseek accounts the service keeps. It's made
 # once, straight into the Worker (no shell variable, no file, never printed),
-# and never replaced: accounts kept under an old key can't be read again.
+# and never overwritten: a new key is a new version (README.md, "Soulseek keys").
 SECRETS=$(wrangler secret list --format json 2>/dev/null) || die "wrangler secret list failed."
 if grep -q '"SOULSEEK_KEY"' <<<"$SECRETS"; then
   ok "SOULSEEK_KEY is already set: kept as it is"

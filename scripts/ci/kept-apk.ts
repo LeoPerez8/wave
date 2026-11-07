@@ -51,7 +51,7 @@ if (process.argv[1] === fileURLToPath(import.meta.url)) {
   const repository = process.env.GITHUB_REPOSITORY ?? "";
   let runId: number | undefined;
   try {
-    if (!/^apk-v1-[a-f0-9]{64}$/.test(key) || !/^[\w.-]+\/[\w.-]+$/.test(repository))
+    if (!/^apk-v2-[a-f0-9]{64}$/.test(key) || !/^[\w.-]+\/[\w.-]+$/.test(repository))
       throw new Error("Expected a native APK key and GITHUB_REPOSITORY.");
     const listing = api(`repos/${repository}/actions/artifacts?name=kept-${key}&per_page=100`);
     for (const id of keptApkRunIds(listing, key).slice(0, 5)) {

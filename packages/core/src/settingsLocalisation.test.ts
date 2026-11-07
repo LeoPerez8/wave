@@ -5,6 +5,7 @@ import {
   DEFAULT_THEME_CHOICE,
   LAUNCHER_ICONS,
   catalogueOf,
+  confirmSignOutEverywhere,
   confirmWaveAccountDeletion,
   describeFolder,
   describeTagLookups,
@@ -107,6 +108,10 @@ test("account dialogs, sign-in failures and missing songs read in Portuguese", (
   );
   assert.equal(confirmWaveAccountDeletion(pt).title, "Apagar sua Conta Wave?");
   assert.equal(confirmWaveAccountDeletion(pt).action.destructive, true);
+  assert.deepEqual(
+    planAlert(confirmSignOutEverywhere(pt), pt).buttons.map(({ label }) => label),
+    ["Cancelar", "Finalizar Sessão em Todos os Celulares"],
+  );
   assert.equal(
     spotifySignInFailureLines(pt).failed,
     "O Spotify não confirmou o início de sessão. Tente novamente.",

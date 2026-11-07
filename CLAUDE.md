@@ -29,16 +29,32 @@ Pick tickets whose blockers are closed.
   a full build.
 - The `main` channel gets a version only when the owner says so: run the **Promote to main**
   workflow (`gh workflow run promote.yml`, with `-f version=0.5.6-ti` for one that isn't the
-  newest). It publishes that release's commit as `0.5.6`, in a full build. See `docs/spec.md`,
-  Build and CI.
+  newest). It publishes that release's commit as `0.5.6`, in a full build, once the owner
+  approves its run in the `main` Environment. See `docs/spec.md`, Build and CI.
+- PR runs check, test and compile native code but build no APK, so they get no secret and no
+  signing key. Test on a phone after the merge, with the `ti` release the push to `main` makes.
+  To try a change before merging, build it locally (`pnpm android`, or `scripts/emulator-apk.sh`
+  for the emulator); a local debug build is signed with the debug key and needs an uninstall to
+  replace a release build, which deletes Wave's data on that phone.
 - Releases also reach phones over the air (`docs/spec.md`, Build and CI). Channels are `ti` and
-  `main`, fixed in the APK by the run that built it (a push to `main` follows `ti`, a promotion follows `main`); PR and local builds have updates off. A JS
+  `main`, fixed in the APK by the run that built it (a push to `main` follows `ti`, a promotion follows `main`); local builds have updates off. A JS
   change arrives as a bundle, and a change to the runtime version (the kept APK's key) as an APK
   Wave installs itself. Phones run only updates, and install only APKs, that CI signed with
   `UPDATES_SIGNING_KEY`, checked against the certificate in their own APK. Never publish around
-  that: the APK keystore is public, so it's all that keeps a stranger's code off phones. A change to `apps/updates` doesn't release: the Worker is deployed by
-  hand (`pnpm --filter @wave/updates run deploy`). Undo a bad update that doesn't crash with the
-  **Roll back an update** workflow (channel and version); it can't cross a runtime version.
+  that. Released APKs are signed only by the release job, with the release key and its rotation
+  proof from Expo's public debug key, all three in the release Environments (`docs/spec.md`, APK
+  signing); the Android job and its artifacts hold no keystore. Undo a bad update that doesn't
+  crash with the **Roll back an update** workflow (channel and version); it can't cross a runtime
+  version.
+- Both Workers are deployed by hand from the owner's machine, never by CI, and a change to them
+  doesn't release: `pnpm --filter @wave/updates run deploy` for `apps/updates`, and
+  `pnpm --filter @wave/sync run deploy` for `apps/sync`, which goes out before any app release
+  that needs it. A provider key a feature needs is a secret of the sync Worker, and the phone
+  reaches the provider through it: an `EXPO_PUBLIC_*` variable is readable in every APK and
+  bundle, so it holds no credential. The threat model is in `docs/spec.md` › Security.
+- The repo is public. A PR that fixes a weakness uses a `fix/` branch, the title
+  `Security patch` and the body line `pt-BR: Patch de segurança`; its commits, body and code
+  comments say what changed and leave out how it could be abused.
 - Decision-heavy logic (queue, counted plays, search, sorting, scan reconciliation, LRC,
   sleep timer) goes in `packages/core`, which must keep **zero runtime dependencies** and
   use only erasable TypeScript syntax with `.ts` import extensions. Test it through its

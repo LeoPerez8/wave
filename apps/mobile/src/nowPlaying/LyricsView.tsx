@@ -67,7 +67,7 @@ import {
 import type { LibraryFile } from "./hooks";
 import { isPlayheadLive, playhead, playheadVisibility } from "./playhead";
 import { TrackHeader } from "./TrackHeader";
-import { useGenius, type GeniusAboutText } from "./useGenius";
+import { geniusAboutKey, useGenius, type GeniusAboutCard } from "./useGenius";
 import { useLibraryLyrics, type LibraryLyricsShown } from "./useLibraryLyrics";
 import { useLyricsTranslation, type TranslationShown } from "./useLyricsTranslation";
 import { useNonDLyrics, type NonDLyricsShown } from "./useNonDLyrics";
@@ -346,7 +346,7 @@ function SyncedLyrics({
   picking: Picking | null;
   translation: TranslationShown | null;
   retryTranslation: () => void;
-  about: GeniusAboutText | null;
+  about: GeniusAboutCard | null;
   annotations: GeniusPlacement | null;
 }) {
   useRenderCount("SyncedLyrics");
@@ -502,7 +502,7 @@ function SyncedLyrics({
       contentContainerStyle={{ paddingTop: CELL * 2, paddingBottom: height * (1 - ANCHOR) }}
     >
       {/* Above the lines, so their offsets (where they rest) count them in. */}
-      <GeniusAbout key={about?.original} about={about} />
+      <GeniusAbout key={geniusAboutKey(about)} about={about} />
       <TranslationNote shown={translation} retry={retryTranslation} />
       {lines.map((line, at) => (
         <SyncedLine
@@ -545,7 +545,7 @@ function UnsyncedLyrics({
   picking: Picking | null;
   translation: TranslationShown | null;
   retryTranslation: () => void;
-  about: GeniusAboutText | null;
+  about: GeniusAboutCard | null;
   annotations: GeniusPlacement | null;
 }) {
   const { strings } = useLocalisation();
@@ -556,7 +556,7 @@ function UnsyncedLyrics({
       showsVerticalScrollIndicator={false}
       contentContainerStyle={{ paddingTop: CELL * 2, paddingBottom: CELL * 6 }}
     >
-      <GeniusAbout key={about?.original} about={about} />
+      <GeniusAbout key={geniusAboutKey(about)} about={about} />
       <TranslationNote shown={translation} retry={retryTranslation} />
       {lines.map((line, at) => {
         if (line === "") {
@@ -715,7 +715,7 @@ function LyricsBody({
   retry: () => void;
   translation: TranslationShown | null;
   retryTranslation: () => void;
-  about: GeniusAboutText | null;
+  about: GeniusAboutCard | null;
   annotations: GeniusPlacement | null;
 }) {
   const { strings } = useLocalisation();

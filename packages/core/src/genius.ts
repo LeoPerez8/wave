@@ -21,9 +21,17 @@ export interface GeniusMatch {
 const positiveId = (value: unknown): value is number =>
   typeof value === "number" && Number.isSafeInteger(value) && value > 0;
 
-/** Genius's search for [song]: its title and artist, nothing else. */
+/** What Wave searches Genius for, for [song]: its title and artist, nothing else. */
+export const geniusSearchQuery = (song: Pick<SongLookup, "title" | "artist">): string =>
+  `${song.title} ${song.artist}`;
+
+/** Genius's search for [query]. */
+export const geniusQueryUrl = (query: string): string =>
+  `https://api.genius.com/search?q=${encodeURIComponent(query)}`;
+
+/** Genius's search for [song] (`geniusSearchQuery`). */
 export const geniusSearchUrl = (song: Pick<SongLookup, "title" | "artist">): string =>
-  `https://api.genius.com/search?q=${encodeURIComponent(`${song.title} ${song.artist}`)}`;
+  geniusQueryUrl(geniusSearchQuery(song));
 
 /** Genius's song [id], its description as plain text. */
 export const geniusSongUrl = (id: number): string =>

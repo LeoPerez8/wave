@@ -380,6 +380,51 @@ export const followCheckDue = (input: {
     const shows = input.showChecks.find((c) => c.key === follow.key);
     return shows?.country !== input.country || checkDue(shows.checkedAt, input.now, input.context);
   });
+/**
+ * The artists a show check may ask about in a UTC day: Wave's sync service
+ * allows each account 200 Ticketmaster attraction searches and 200 event
+ * lookups a day, and an artist costs at most one of each.
+ */
+export const TICKETMASTER_ARTISTS_PER_DAY = 200;
+/** The UTC day [now] falls in, as the sync service counts its daily limits. */
+export const showCheckDay = (now: number): number => Math.floor(now / (24 * 3_600_000));
+/**
+ * How many more artists a show check may ask about today, given the phone's
+ * count of those it asked ([asked], null before any).
+ */
+export const showChecksLeftToday = (
+  asked: { readonly day: number; readonly count: number } | null,
+  now: number,
+): number =>
+  asked === null || asked.day !== showCheckDay(now)
+    ? TICKETMASTER_ARTISTS_PER_DAY
+    : Math.max(0, TICKETMASTER_ARTISTS_PER_DAY - asked.count);
+/**
+ * The shows-level follows whose shows in [country] are due, in the order a
+ * show check asks them: never checked there first (in follow order), then the
+ * oldest check first, so a check cut short by the daily limit leaves the most
+ * recently checked artists for the next day.
+ */
+export const dueShowChecks = <F extends FollowedArtist>(input: {
+  readonly follows: readonly F[];
+  readonly showChecks: readonly {
+    readonly key: string;
+    readonly country: string;
+    readonly checkedAt: number;
+  }[];
+  readonly country: string;
+  readonly now: number;
+  readonly context: FollowCheckContext;
+}): F[] =>
+  input.follows
+    .filter((follow) => follow.level === "shows")
+    .map((follow) => {
+      const check = input.showChecks.find((c) => c.key === follow.key);
+      return { follow, checkedAt: check?.country === input.country ? check.checkedAt : 0 };
+    })
+    .filter(({ checkedAt }) => checkedAt === 0 || checkDue(checkedAt, input.now, input.context))
+    .sort((a, b) => a.checkedAt - b.checkedAt)
+    .map(({ follow }) => follow);
 export const releaseDateLine = (date: string, now: number, strings: Catalogue = en): string => {
   const [year, month, day] = date.split("-").map(Number) as [number, number, number];
   const today = new Date(now);

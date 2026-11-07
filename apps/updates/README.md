@@ -104,7 +104,8 @@ GitHub Release, and this tells phones where. `404` before the first release that
 CI signs it with `UPDATES_SIGNING_KEY`, the key updates are signed with, and the Worker serves the
 bytes as they are. A phone checks the signature against the certificate in its APK before it
 downloads anything, and the file's SHA-256 before it installs. Holding the Cloudflare token isn't
-enough to offer an APK, which matters as the APKs are signed with Expo's public debug keystore.
+enough to offer an APK, and once a phone runs a release signed with Wave's release key, Android
+itself installs only APKs signed with that key (`docs/spec.md`, APK signing).
 Without the key, `publish-apk.ts` logs that it skipped and the release goes on.
 
 ## What R2 holds
@@ -133,7 +134,8 @@ GitHub › Actions › **Roll back an update** › Run workflow, with the channe
 back to (`0.46.1-ti`, as in the release's tag). `expo-updates` only moves to a newer `createdAt`,
 so this republishes that version's bundle under a new id and time. Phones on the channel with the
 same runtime version move to it at their next check, and the next release replaces it. The new
-id and time need a new signature, so the workflow takes the `UPDATES_SIGNING_KEY` secret too.
+id and time need a new signature, so the workflow takes the `UPDATES_SIGNING_KEY` secret too,
+from the channel's Environment. Rolling back `main` waits for the owner's approval.
 
 The run fails and says why when `UPDATES_SIGNING_KEY` isn't set (phones reject an unsigned update,
 so it promotes nothing), the channel doesn't keep that version, phones are already on it, or it
@@ -155,7 +157,9 @@ update` and is published as usual, and phones find no update. The Worker's URL i
 2. Deploy the Worker: `pnpm --filter @wave/updates run deploy`. Check it answers:
    `curl -i https://wave-updates.leonardolp2424.workers.dev/v1/manifest` gives `400`.
 3. Create a Cloudflare API token with **Workers R2 Storage: Edit** on the account.
-4. Add the repository secrets (GitHub › Settings › Secrets and variables › Actions):
+4. Add these secrets to both Environments, `ti` and `main` (GitHub › Settings › Environments;
+   `gh secret set <name> --env ti`, then `--env main`), never as repository secrets. "Release
+   secrets" in `docs/spec.md` says who sees them:
    - `CLOUDFLARE_API_TOKEN`: that token.
    - `CLOUDFLARE_ACCOUNT_ID`: the account's id, from the Cloudflare dashboard.
    - `UPDATES_SIGNING_KEY`: the signing key, set up as in "Build and CI" in `docs/spec.md`. A

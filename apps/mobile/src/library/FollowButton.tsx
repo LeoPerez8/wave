@@ -5,8 +5,9 @@ import { useFollowCountryName } from "@/settings/followCountry";
 import {
   askShowNotifications,
   showsNotificationsEnabled,
-  ticketmasterKey,
+  useShowsAvailability,
 } from "./showNotifications";
+import { WaveSignInButton } from "@/sync/WaveSignInButton";
 import { WaveNative } from "@/native/waveNative";
 import { MenuChoices } from "@/overlay/MenuChoices";
 import { CardHeading } from "@/overlay/CardHeading";
@@ -27,10 +28,15 @@ export const openFollowCard = (artist: FollowTarget): void => {
     render: (close) => <FollowCard artist={artist} close={close} />,
   });
 };
+/**
+ * An artist's follow levels: New music, and New music and shows while a Wave
+ * account is signed in (with the invitation to sign in otherwise).
+ */
 function FollowCard({ artist, close }: { artist: FollowTarget; close: () => void }) {
   const follow = useFollow(artist.name);
   const { strings } = useLocalisation();
   const country = useFollowCountryName();
+  const shows = useShowsAvailability();
   const [denied, setDenied] = useState(!showsNotificationsEnabled());
   useEffect(() => {
     const sub = AppState.addEventListener("change", () => setDenied(!showsNotificationsEnabled()));
@@ -40,7 +46,7 @@ function FollowCard({ artist, close }: { artist: FollowTarget; close: () => void
     <View>
       <Text className="mb-2 font-sans text-title3 text-foreground">{artist.name}</Text>
       {followLevelEntries(follow?.level ?? null, {
-        showsAvailable: ticketmasterKey !== "",
+        showsAvailable: shows === "available",
         country,
         notificationsDenied: denied,
         strings,
@@ -73,11 +79,14 @@ function FollowCard({ artist, close }: { artist: FollowTarget; close: () => void
           />
         ),
       )}
-      {ticketmasterKey !== "" && denied && (
+      {shows === "available" && denied && (
         <TextButton
           label={strings.shows.notificationSettings}
           onPress={() => WaveNative.openShowNotificationSettings?.()}
         />
+      )}
+      {shows === "signIn" && (
+        <WaveSignInButton look="row" message={strings.shows.signInForShows} beforeOpen={close} />
       )}
     </View>
   );

@@ -27,11 +27,21 @@ declare class WaveAccountModule extends NativeModule<{
   /** Ends the session on the service when it can, and forgets it on the phone either way. */
   signOut(): Promise<WaveSession>;
   /**
-   * Deletes the account and everything the service has of it, then signs
-   * out: resolves signed out, or ended when the service had already ended
-   * the session.
+   * Ends every session of the account on the service, this phone's too,
+   * then signs out: resolves signed out, or ended when the service had
+   * already ended the session.
    */
-  deleteAccount(): Promise<WaveSession>;
+  signOutEverywhere(): Promise<WaveSession>;
+  /**
+   * Opens Google's account picker for a fresh ID token for [webClientId]
+   * (the service needs it besides the session), then deletes the account and
+   * everything the service has of it and signs out: resolves signed out, or
+   * ended when the service had already ended the session. Null when the
+   * owner backs out of the picker: nothing was sent. Signed out or offline,
+   * rejects before the picker opens; an ID token the service didn't take as
+   * this account's rejects with `ERR_WAVE_GOOGLE_NOT_CONFIRMED`.
+   */
+  deleteAccount(webClientId: string): Promise<WaveSession | null>;
   /**
    * Sends `POST /v1/push` or `GET /v1/pull?since=…` with the session; any
    * other route rejects with `ERR_WAVE_FORBIDDEN_REQUEST`. Signed out, rejects
@@ -53,11 +63,14 @@ export type WaveAccountErrorCode =
   | "ERR_WAVE_UNREACHABLE"
   | "ERR_WAVE_REJECTED"
   | "ERR_WAVE_NOT_ALLOWED"
+  | "ERR_WAVE_ACCOUNTS_FULL"
+  | "ERR_WAVE_NEW_ACCOUNTS_PAUSED"
   | "ERR_WAVE_SIGNED_OUT"
   | "ERR_WAVE_SESSION_ENDED"
   | "ERR_WAVE_FORBIDDEN_REQUEST"
   | "ERR_WAVE_NO_GOOGLE_ACCOUNT"
-  | "ERR_WAVE_GOOGLE";
+  | "ERR_WAVE_GOOGLE"
+  | "ERR_WAVE_GOOGLE_NOT_CONFIRMED";
 
 /** The `ERR_WAVE_*` code a native call rejected with, if any. */
 export const waveAccountErrorCode = (error: unknown): WaveAccountErrorCode | null => {
