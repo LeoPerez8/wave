@@ -29,8 +29,8 @@ Pick tickets whose blockers are closed.
   a full build.
 - The `main` channel gets a version only when the owner says so: run the **Promote to main**
   workflow (`gh workflow run promote.yml`, with `-f version=0.5.6-ti` for one that isn't the
-  newest). It publishes that release's commit as `0.5.6`, in a full build. See `docs/spec.md`,
-  Build and CI.
+  newest). It publishes that release's commit as `0.5.6`, in a full build, once the owner
+  approves its run in the `main` Environment. See `docs/spec.md`, Build and CI.
 - PR runs check, test and compile native code but build no APK, so they get no secret and no
   signing key. Test on a phone after the merge, with the `ti` release the push to `main` makes.
   To try a change before merging, build it locally (`pnpm android`, or `scripts/emulator-apk.sh`

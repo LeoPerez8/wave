@@ -198,13 +198,38 @@ BRANCH=$(git -C "$ROOT" symbolic-ref --quiet --short HEAD) || {
   exit 1
 }
 wrangler() { (cd "$UPDATES" && pnpm exec wrangler "$@"); }
+# The release secrets live in one Environment per channel, never at repository scope
+# (docs/spec.md, Release secrets).
+RELEASE_ENVS=(ti main)
+# set_release_secret NAME stores stdin as NAME in every release Environment.
+set_release_secret() {
+  local name="$1" value env
+  value=$(cat)
+  for env in "${RELEASE_ENVS[@]}"; do
+    printf '%s' "$value" | gh secret set "$name" --env "$env" >/dev/null || {
+      warn "Couldn't set $name in the $env Environment. Set it with: gh secret set $name --env $env"
+      exit 1
+    }
+  done
+  WRITTEN_SECRET+=("$name")
+  printf '  %s✓ set%s %s in the %s Environments\n' "$GREEN" "$RESET" "$name" "${RELEASE_ENVS[*]}"
+}
+# has_release_secret NAME succeeds when every release Environment holds NAME.
+has_release_secret() {
+  local env
+  for env in "${RELEASE_ENVS[@]}"; do
+    gh secret list --env "$env" | grep -q "^$1[[:space:]]" || return 1
+  done
+}
 
 banner "Wave update service setup"
 
 stage "Check this machine"
 say "Every install then takes one APK by hand, so run this once before sharing that APK."
 gh auth status >/dev/null 2>&1 || { warn "gh isn't signed in. Run: gh auth login"; exit 1; }
-gh secret list >/dev/null || { warn "gh can't read $GH_REPO's secrets; this needs an admin of the repo."; exit 1; }
+for env in "${RELEASE_ENVS[@]}"; do
+  gh secret list --env "$env" >/dev/null || { warn "gh can't read the $env Environment's secrets; this needs an admin of $GH_REPO and the Environment."; exit 1; }
+done
 git -C "$ROOT" pull -q --ff-only origin "$BRANCH" || { warn "This checkout can't follow $BRANCH."; exit 1; }
 [[ -d "$UPDATES/node_modules" && -d "$MOBILE/node_modules" ]] || (cd "$ROOT" && pnpm install --frozen-lockfile)
 pause "All set. Press Enter."
@@ -264,8 +289,8 @@ else
   warn "That token and id can't see wave-updates, so nothing was saved. Run this again."
   exit 1
 fi
-set_secret CLOUDFLARE_API_TOKEN "$CLOUDFLARE_API_TOKEN"
-set_secret CLOUDFLARE_ACCOUNT_ID "$CLOUDFLARE_ACCOUNT_ID"
+printf '%s' "$CLOUDFLARE_API_TOKEN" | set_release_secret CLOUDFLARE_API_TOKEN
+printf '%s' "$CLOUDFLARE_ACCOUNT_ID" | set_release_secret CLOUDFLARE_ACCOUNT_ID
 unset CLOUDFLARE_API_TOKEN
 pause "Press Enter."
 
@@ -273,10 +298,10 @@ stage "Create the signing key"
 say "CI signs each update, and an APK runs only what its certificate accepts."
 CERT="$MOBILE/certs/certificate.pem"
 generate=yes
-if [[ -f "$CERT" ]] && gh secret list | grep -q '^UPDATES_SIGNING_KEY'; then
+if [[ -f "$CERT" ]] && has_release_secret UPDATES_SIGNING_KEY; then
   printf '  %s✓ already set up%s certificate and UPDATES_SIGNING_KEY\n' "$GREEN" "$RESET"
   generate=no
-elif [[ -f "$CERT" ]] || gh secret list | grep -q '^UPDATES_SIGNING_KEY'; then
+elif [[ -f "$CERT" ]] || has_release_secret UPDATES_SIGNING_KEY; then
   warn "Only one half of the pair exists, so a new pair replaces it."
   warn "Installs built with the old certificate get no more updates until they install an APK."
   confirm "Make a new pair?" || generate=no
@@ -290,9 +315,7 @@ if [[ "$generate" == yes ]]; then
     --certificate-output-directory certs \
     --certificate-validity-duration-years 30 \
     --certificate-common-name "Wave")
-  gh secret set UPDATES_SIGNING_KEY <"$keys/private-key.pem"
-  WRITTEN_SECRET+=(UPDATES_SIGNING_KEY)
-  printf '  %s✓ set%s GitHub secret UPDATES_SIGNING_KEY\n' "$GREEN" "$RESET"
+  set_release_secret UPDATES_SIGNING_KEY <"$keys/private-key.pem"
   rm -rf "$keys"
 fi
 # Apart from making the pair, so a run that declined the commit, or stopped there, offers it again.
@@ -311,4 +334,4 @@ pause "Press Enter."
 
 finish
 note "Wave's next full APK holds the certificate. Install that one by hand."
-note "Check the secrets with: gh secret list"
+note "Check the secrets with: gh secret list --env ti, then --env main"
