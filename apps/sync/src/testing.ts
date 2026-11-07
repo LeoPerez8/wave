@@ -106,8 +106,11 @@ const fakeGoogle = async (now: () => number): Promise<FakeGoogle> => {
   };
 };
 
-/** A fresh database file, deleted when the test file ends. */
-const freshDatabase = async (): Promise<Client> => {
+/**
+ * A fresh database file, deleted when the test file ends. With [until], only
+ * the migrations up to that one have run, to stand for an older database.
+ */
+export const freshDatabase = async (options: { readonly until?: string } = {}): Promise<Client> => {
   const dir = mkdtempSync(join(tmpdir(), "wave-sync-"));
   const db = createClient({ url: `file:${join(dir, "sync.db").replaceAll("\\", "/")}` });
   after(() => {
@@ -118,7 +121,7 @@ const freshDatabase = async (): Promise<Client> => {
       // Windows can hold the file a moment after closing; it's a temp dir.
     }
   });
-  await migrate(db);
+  await migrate(db, options);
   return db;
 };
 

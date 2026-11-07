@@ -43,6 +43,9 @@ export interface SyncServiceOptions {
 /** How many rows a pull answers at most, by default. */
 const PULL_PAGE_SIZE = 1_000;
 
+/** How long a session lasts unused: any authenticated request starts it again. */
+const SESSION_UNUSED_MS = 90 * 24 * 60 * 60 * 1000;
+
 export type SyncService = (request: Request) => Promise<Response>;
 
 /** What a route gets. */
@@ -203,9 +206,9 @@ export const createSyncService = (options: SyncServiceOptions): SyncService => {
           args: [crypto.randomUUID(), identity.sub, identity.email, at],
         },
         {
-          sql: `INSERT INTO sessions (token_hash, account_id, created_at)
-                SELECT ?, id, ? FROM accounts WHERE google_sub = ?`,
-          args: [await sha256Hex(sessionToken), at, identity.sub],
+          sql: `INSERT INTO sessions (token_hash, account_id, created_at, last_used_at)
+                SELECT ?, id, ?, ? FROM accounts WHERE google_sub = ?`,
+          args: [await sha256Hex(sessionToken), at, at, identity.sub],
         },
       ],
       "write",
@@ -215,8 +218,9 @@ export const createSyncService = (options: SyncServiceOptions): SyncService => {
 
   /**
    * The session a request's `Authorization: Bearer <token>` names, counting
-   * the request against its rate. Refuses with 401 when there's none, and
-   * with 429 past `maxRequestsPerMinute`.
+   * the request against its rate and marking it used. Refuses with 401 when
+   * there's none or it went unused for `SESSION_UNUSED_MS` (and deletes it),
+   * and with 429 past `maxRequestsPerMinute`.
    */
   const authenticate = async (request: Request): Promise<Session> => {
     const match = /^Bearer (\S+)$/.exec(request.headers.get("authorization") ?? "");
@@ -224,16 +228,24 @@ export const createSyncService = (options: SyncServiceOptions): SyncService => {
     const tokenHash = await sha256Hex(match[1]);
     const at = now();
     const window = Math.floor(at / 60_000);
+    const unusedSince = at - SESSION_UNUSED_MS;
+    // One query for a live session. An expired one keeps its last use, so the
+    // answer tells it apart, and is deleted below.
     const result = await db.execute({
       sql: `UPDATE sessions
             SET window_count = CASE WHEN window_start = ? THEN window_count + 1 ELSE 1 END,
-                window_start = ?
+                window_start = ?,
+                last_used_at = CASE WHEN last_used_at > ? THEN ? ELSE last_used_at END
             WHERE token_hash = ?
-            RETURNING account_id, window_count`,
-      args: [window, window, tokenHash],
+            RETURNING account_id, window_count, last_used_at`,
+      args: [window, window, unusedSince, at, tokenHash],
     });
     const row = result.rows[0];
     if (row === undefined) throw failure(401, "unauthorized");
+    if (Number(row.last_used_at) <= unusedSince) {
+      await db.execute({ sql: "DELETE FROM sessions WHERE token_hash = ?", args: [tokenHash] });
+      throw failure(401, "unauthorized");
+    }
     if (Number(row.window_count) > limits.maxRequestsPerMinute) {
       throw tooMany("maxRequestsPerMinute", at);
     }

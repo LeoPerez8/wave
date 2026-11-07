@@ -45,8 +45,10 @@ its Wave account (keyed by Google's `sub`).
 `429` past `maxSignInsPerMinute`: attempts from one address (Cloudflare's `CF-Connecting-IP`,
 counted before the ID token is checked) or sign-ins to one Google account.
 
-The service keeps only a SHA-256 of the session token. A session lasts until it is ended
-or the account is deleted.
+The service keeps only a SHA-256 of the session token. A session lasts until it is ended,
+the account is deleted, or it goes 90 days without a request: then it answers
+`401 { "error": "unauthorized" }` and is deleted. Every request made with it starts the 90
+days again.
 
 ### `DELETE /v1/session`
 
