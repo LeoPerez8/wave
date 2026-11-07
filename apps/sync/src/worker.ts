@@ -6,8 +6,9 @@
 import { createClient } from "@libsql/client/web";
 import { googleKeys } from "./google.ts";
 import { type RateLimiter, createSyncService, serviceMemory } from "./service.ts";
+import { type UsageSecrets, watchUsage } from "./usage.ts";
 
-export interface Env {
+export interface Env extends UsageSecrets {
   readonly TURSO_DATABASE_URL?: string;
   readonly TURSO_AUTH_TOKEN?: string;
   /** Wave's web OAuth client id, which ID tokens' audience must be. */
@@ -23,6 +24,11 @@ export interface Env {
   /** The `[[ratelimits]]` bindings in `wrangler.toml`. */
   readonly ADDRESS_LIMITER?: RateLimiter;
   readonly FAILED_LOOKUP_LIMITER?: RateLimiter;
+}
+
+/** What a Cron Trigger run gets as its context (only what the Worker uses). */
+interface ScheduledContext {
+  readonly waitUntil: (promise: Promise<unknown>) => void;
 }
 
 /** The Worker's Soulseek keys, by secret name. */
@@ -63,5 +69,16 @@ export default {
       soulseekKeys: soulseekKeys(env),
     });
     return service(request);
+  },
+
+  /** The hourly usage watch (`[triggers]` in `wrangler.toml`, src/usage.ts). */
+  scheduled(_controller: unknown, env: Env, context: ScheduledContext): void {
+    const { TURSO_DATABASE_URL: url, TURSO_AUTH_TOKEN: authToken } = env;
+    if (url === undefined) {
+      console.error("usage watch: TURSO_DATABASE_URL isn't set");
+      return;
+    }
+    const db = createClient({ url, ...(authToken === undefined ? {} : { authToken }) });
+    context.waitUntil(watchUsage({ db, secrets: env }));
   },
 };

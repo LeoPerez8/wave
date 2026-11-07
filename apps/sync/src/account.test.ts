@@ -222,8 +222,9 @@ describe("DELETE /v1/account", () => {
     for (const session of [ana, anaOtherPhone]) {
       assert.equal((await service.request("GET", "/v1/pull", { session })).status, 401);
     }
+    // `usage_warnings` holds no account's data, only which usage warnings went out.
     const left = await service.db.execute(
-      "SELECT name FROM sqlite_master WHERE type = 'table' AND name NOT IN ('migrations', 'sqlite_sequence')",
+      "SELECT name FROM sqlite_master WHERE type = 'table' AND name NOT IN ('migrations', 'sqlite_sequence', 'usage_warnings')",
     );
     // Whose each table's rows are: a sign-in window's key is `sub:` and the Google subject.
     const owners: Readonly<Record<string, string>> = {

@@ -1,6 +1,8 @@
 # Wave's sync service. No secret or account-specific value lives here:
 # TURSO_DATABASE_URL, TURSO_AUTH_TOKEN, GOOGLE_CLIENT_ID, SOULSEEK_KEY (and any later
-# SOULSEEK_KEY_<n>) and the optional ALLOWED_EMAILS are set with `wrangler secret put`
+# SOULSEEK_KEY_<n>), the optional ALLOWED_EMAILS and the usage watch's optional
+# CLOUDFLARE_ACCOUNT_ID, CLOUDFLARE_ANALYTICS_TOKEN, TURSO_ORG and TURSO_PLATFORM_TOKEN
+# (src/usage.ts) are set with `wrangler secret put`
 # (or `.dev.vars` locally).
 name = "wave-sync"
 main = "src/worker.ts"
@@ -18,3 +20,16 @@ simple = { limit = 600, period = 60 }
 name = "FAILED_LOOKUP_LIMITER"
 namespace_id = "61002"
 simple = { limit = 20, period = 60 }
+
+# The hourly usage watch (src/usage.ts): warns in the logs before a free plan's limit.
+[triggers]
+crons = ["0 * * * *"]
+
+# Workers Logs keep the usage warnings and the refusal counts; Issues turns logged errors into
+# notifications. A deploy without these keys turns them off.
+[observability]
+enabled = true
+head_sampling_rate = 1
+
+[observability.issues]
+enabled = true

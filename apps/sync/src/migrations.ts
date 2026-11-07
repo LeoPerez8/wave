@@ -240,6 +240,19 @@ const MIGRATIONS: readonly Migration[] = [
     id: "0011_soulseek_key_version",
     statements: ["ALTER TABLE soulseek_accounts ADD COLUMN key_version INTEGER NOT NULL DEFAULT 1"],
   },
+  {
+    // The usage warnings already written (src/usage.ts), by threshold and period (a UTC day
+    // or month), so each is written once.
+    id: "0012_usage_warnings",
+    statements: [
+      `CREATE TABLE usage_warnings (
+        name TEXT NOT NULL,
+        period TEXT NOT NULL,
+        warned_at INTEGER NOT NULL,
+        PRIMARY KEY (name, period)
+      )`,
+    ],
+  },
 ];
 
 /**
