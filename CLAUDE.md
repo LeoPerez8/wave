@@ -41,7 +41,9 @@ Pick tickets whose blockers are closed.
   change arrives as a bundle, and a change to the runtime version (the kept APK's key) as an APK
   Wave installs itself. Phones run only updates, and install only APKs, that CI signed with
   `UPDATES_SIGNING_KEY`, checked against the certificate in their own APK. Never publish around
-  that: the APK keystore is public, so it's all that keeps a stranger's code off phones. A change to `apps/updates` doesn't release: the Worker is deployed by
+  that. Released APKs are signed only by the release job, with the release key and its rotation
+  proof from Expo's public debug key, all three in the release Environments (`docs/spec.md`, APK
+  signing); the Android job and its artifacts hold no keystore. A change to `apps/updates` doesn't release: the Worker is deployed by
   hand (`pnpm --filter @wave/updates run deploy`). Undo a bad update that doesn't crash with the
   **Roll back an update** workflow (channel and version); it can't cross a runtime version.
 - Decision-heavy logic (queue, counted plays, search, sorting, scan reconciliation, LRC,

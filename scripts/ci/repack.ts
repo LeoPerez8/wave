@@ -125,7 +125,10 @@ export const apkCacheKey = ({
     ).map((path) => `scripts/ci/${path}`),
   ]);
   const metro = sha256(JSON.stringify(Object.entries(metroAssets).sort()));
-  return `apk-v1-${sha256(`${fingerprint}\n${project}\n${images}\n${config}\n${recipe}\n${metro}\n`)}`;
+  // v2: kept from the first build the release key signs. A v1 build is signed with the public
+  // debug key and kept beside it, so it never repacks, and the new runtime version sends phones
+  // the first signed release as an APK.
+  return `apk-v2-${sha256(`${fingerprint}\n${project}\n${images}\n${config}\n${recipe}\n${metro}\n`)}`;
 };
 
 /** The files Metro wrote to its assets folder (Android resources), by path, with their hashes. */

@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import { isTrustedMainBuild, keptApkRunIds } from "./kept-apk.ts";
 
-const key = "apk-v1-key";
+const key = "apk-v2-key";
 const artifact = {
   name: `kept-${key}`,
   expired: false,

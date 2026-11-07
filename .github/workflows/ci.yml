@@ -522,11 +522,14 @@ jobs:
     name: Android APK
     needs: [changes, checks, notes]
     outputs:
-      artifact: ${{ steps.apk.outputs.name }}
+      # The APK without a signature, which only the release job signs, and the name it signs it as.
+      artifact: ${{ steps.apk.outputs.artifact }}
+      apk: ${{ steps.apk.outputs.name }}
       update_channel: ${{ steps.updates.outputs.WAVE_UPDATE_CHANNEL }}
       runtime_version: ${{ steps.updates.outputs.WAVE_RUNTIME_VERSION }}
-    # Only release runs (pushes to main and tags) build an APK: a PR run gets no secret and no
-    # signing key, and its native code compiles in the Native unit tests job.
+    # Only release runs (pushes to main and tags) build an APK: a PR run gets no secret, and its
+    # native code compiles in the Native unit tests job. This job holds no signing key either: it
+    # hands an unsigned APK to the release job, which signs it in its channel's Environment.
     # Only a release needs the patch notes, so elsewhere a failed notes job doesn't stop the
     # APK. A job-level `if` can't read `env`, so the release test is the tag half of IS_RELEASE.
     if: >-
@@ -535,8 +538,8 @@ jobs:
       !startsWith(github.ref, 'refs/tags/v')) }}
     runs-on: ubuntu-latest
     permissions:
-      # Publishes the rolling prerelease; reads main's kept APKs from other runs.
-      contents: write
+      contents: read
+      # Reads main's kept APKs from other runs.
       actions: read
     env:
       # Ticketmaster Discovery's client key (docs/spec.md, "Followed artists"). Metro inlines it into
@@ -555,7 +558,7 @@ jobs:
       # Some libraries build with precompiled headers, which ccache only caches with these.
       CCACHE_SLOPPINESS: pch_defines,time_macros,include_file_mtime,include_file_ctime
       CCACHE_MAXSIZE: 1G
-      # A full build's APK and debug keystore, kept for repacks (scripts/ci/repack.ts).
+      # A full build's APK, without its signature, kept for repacks (scripts/ci/repack.ts).
       KEPT_APK: ${{ github.workspace }}/.cache/kept-apk
       WAVE_CI_BUNDLE_MANIFEST: ${{ github.workspace }}/../wave-ci-bundle.json
     steps:
@@ -687,7 +690,7 @@ jobs:
         if: env.APK_BUILD == 'repack'
         run: |
           scripts/ci/step.sh "Repack the kept APK" scripts/ci/repack.sh "$KEPT_APK" "$RUNNER_TEMP/repacked.apk"
-          echo "REPACKED_APK=$RUNNER_TEMP/repacked.apk" >> "$GITHUB_ENV"
+          echo "BUILT_APK=$RUNNER_TEMP/repacked.apk" >> "$GITHUB_ENV"
 
       - uses: actions/setup-java@b6effb05e454b25005698d916606bdc6ffcbf961 # v5.7.0
         if: env.APK_BUILD == 'full'
@@ -729,11 +732,19 @@ jobs:
         working-directory: apps/mobile/android
         run: ../../../scripts/ci/step.sh "Gradle assembleRelease" ./gradlew assembleRelease -PreactNativeArchitectures=arm64-v8a --init-script ../../../scripts/ci/prebuilt-bundle.gradle --no-daemon --console=plain --profile --stacktrace
 
+      # Gradle signs with prebuild's public debug keystore. What leaves this job has no signature,
+      # and only the release job signs it, with the release key.
+      - name: Drop the build's signature
+        if: env.APK_BUILD == 'full'
+        run: |
+          scripts/ci/unsigned-apk.sh apps/mobile/android/app/build/outputs/apk/release/app-release.apk "$RUNNER_TEMP/unsigned.apk"
+          echo "BUILT_APK=$RUNNER_TEMP/unsigned.apk" >> "$GITHUB_ENV"
+
       # Room creates WorkManager's database reflectively before JS starts. Check the
       # minified artifact on full builds and repacks; a debug/unit test misses this.
       - name: Check WorkManager's startup constructor
         run: |
-          built="${REPACKED_APK:-apps/mobile/android/app/build/outputs/apk/release/app-release.apk}"
+          built="${BUILT_APK:?}"
           dexdump="$(find "$ANDROID_HOME/build-tools" -name dexdump -type f | sort -V | tail -n 1)"
           test -n "$dexdump"
           "$dexdump" -l xml "$built" | node scripts/ci/work-database.ts
@@ -759,14 +770,14 @@ jobs:
           path: ~/.cache/ccache
           key: ${{ steps.ccache.outputs.cache-primary-key }}
 
-      # A full build keeps its APK for later runs with the same native side to repack.
-      # Gradle and Metro cache writes above stay limited to main.
+      # A full build keeps its APK for later runs with the same native side to repack: unsigned,
+      # and with no key beside it. Gradle and Metro cache writes above stay limited to main.
       - name: Keep the full build for repacks
         if: env.APK_BUILD == 'full' && steps.kept.outputs.cache-hit != 'true'
         run: |
-          mkdir -p "$KEPT_APK"
-          cp apps/mobile/android/app/build/outputs/apk/release/app-release.apk "$KEPT_APK/"
-          cp apps/mobile/android/app/debug.keystore "$KEPT_APK/"
+          rm -rf "$KEPT_APK" && mkdir -p "$KEPT_APK"
+          cp "$BUILT_APK" "$KEPT_APK/app-release.apk"
+          test "$(ls -A "$KEPT_APK")" = app-release.apk
 
       - name: Save the kept APK
         if: env.APK_BUILD == 'full' && steps.kept.outputs.cache-hit != 'true'
@@ -788,7 +799,7 @@ jobs:
         id: apk
         run: |
           name="wave-${HEAD_SHA:0:7}.apk"
-          built="${REPACKED_APK:-apps/mobile/android/app/build/outputs/apk/release/app-release.apk}"
+          built="${BUILT_APK:?}"
           bundle="apps/mobile/android/app/build/generated/assets/react/release/index.android.bundle"
           unzip -p "$built" assets/index.android.bundle | cmp - "$bundle"
           echo "Packaged this run's bundle: $(sha256sum "$bundle")"
@@ -801,8 +812,9 @@ jobs:
           else
             echo "::warning::No TICKETMASTER_API_KEY secret: this APK never asks for shows."
           fi
-          cp "$built" "$RUNNER_TEMP/$name"
-          echo "path=$RUNNER_TEMP/$name" >> "$GITHUB_OUTPUT"
+          cp "$built" "$RUNNER_TEMP/unsigned-$name"
+          echo "path=$RUNNER_TEMP/unsigned-$name" >> "$GITHUB_OUTPUT"
+          echo "artifact=unsigned-$name" >> "$GITHUB_OUTPUT"
           echo "name=$name" >> "$GITHUB_OUTPUT"
 
       # The APK's and the Hermes bundle's size against their budget (scripts/ci/size-budget.json),
@@ -816,26 +828,12 @@ jobs:
             "$RUNNER_TEMP/app-size.md"
           cat "$RUNNER_TEMP/app-size.md" >> "$GITHUB_STEP_SUMMARY"
 
+      # For the release job to sign. No phone installs it as it is.
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:
-          name: ${{ steps.apk.outputs.name }}
+          name: ${{ steps.apk.outputs.artifact }}
           path: ${{ steps.apk.outputs.path }}
-          retention-days: 14
-
-      # A rolling prerelease per channel gives a stable link that installs straight from the
-      # phone's browser: ti-latest moves on every push to main. The release job moves latest,
-      # once a promotion has passed its native tests.
-      - name: Publish APK to a prerelease
-        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
-        env:
-          GH_TOKEN: ${{ github.token }}
-        run: |
-          tag="ti-latest"; asset="wave-ti.apk"
-          cp "${{ steps.apk.outputs.path }}" "$RUNNER_TEMP/$asset"
-          gh release view "$tag" > /dev/null 2>&1 || \
-            gh release create "$tag" --prerelease --latest=false --target "$HEAD_SHA" --title "Latest ti test build" \
-              --notes "Sideloadable APK, rebuilt on every push. Not for distribution."
-          gh release upload "$tag" "$RUNNER_TEMP/$asset" --clobber
+          retention-days: 1
 
       - name: Keep the report
         if: always() && env.IS_SAME_REPO_PR == 'true' && job.status != 'cancelled'
@@ -881,17 +879,20 @@ jobs:
           fi
           scripts/ci/post-reports.sh "$RUNNER_TEMP/ci-report"
 
-  # Publishes the release the Checks job decided on: a hand-pushed tag, or a branch push's
-  # version bump, whose v<version> tag the Version job pushed with it. A tag pushed with the
-  # workflow's token doesn't start another run.
+  # Signs the APK and publishes the release the Checks job decided on: a hand-pushed tag, or a
+  # branch push's version bump, whose v<version> tag the Version job pushed with it. A tag pushed
+  # with the workflow's token doesn't start another run. A push to main that releases nothing
+  # still signs its APK here, for the rolling ti-latest build.
   release:
     name: Publish versioned release
     needs: [checks, android, native-tests, notes]
     # Test releases can repack without Gradle, but neither channel publishes before
     # the native tests pass. The stable path keeps its full APK build policy.
-    if: needs.checks.outputs.release_tag != ''
-    # The release secrets live only in the release Environments (docs/spec.md, Release
-    # secrets). ti opens to pushes to main with no approval; every tag run, a promotion's or a
+    if: >-
+      ${{ needs.checks.outputs.release_tag != '' ||
+      (github.event_name == 'push' && github.ref == 'refs/heads/main') }}
+    # The release secrets, the APK's release key among them, live only in the release
+    # Environments (docs/spec.md, Release secrets). ti opens to pushes to main with no approval; every tag run, a promotion's or a
     # hand-pushed -ti tag's, takes main and waits for the owner. The channel stays the run's.
     environment: ${{ github.ref == 'refs/heads/main' && 'ti' || 'main' }}
     runs-on: ubuntu-latest
@@ -901,6 +902,7 @@ jobs:
       UPDATES_CONFIGURED: ${{ secrets.CLOUDFLARE_API_TOKEN != '' && secrets.CLOUDFLARE_ACCOUNT_ID != '' && secrets.UPDATES_SIGNING_KEY != '' }}
     steps:
       - name: Check the patch notes
+        if: needs.checks.outputs.release_tag != ''
         env:
           NOTES_OUTCOME: ${{ needs.notes.outputs.outcome }}
         run: |
@@ -920,16 +922,52 @@ jobs:
       - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
         with:
           name: ${{ needs.android.outputs.artifact }}
-          path: ${{ runner.temp }}/release
+          path: ${{ runner.temp }}/unsigned
+
+      # Every APK a phone installs carries the release key and its rotation proof from the old
+      # key, full builds and repacks alike, on both channels (docs/spec.md, APK signing).
+      - name: Sign the APK
+        env:
+          WAVE_RELEASE_KEYSTORE: ${{ secrets.WAVE_RELEASE_KEYSTORE }}
+          WAVE_RELEASE_KEYSTORE_PASSWORD: ${{ secrets.WAVE_RELEASE_KEYSTORE_PASSWORD }}
+          WAVE_SIGNING_LINEAGE: ${{ secrets.WAVE_SIGNING_LINEAGE }}
+          UNSIGNED: ${{ needs.android.outputs.artifact }}
+          APK_NAME: ${{ needs.android.outputs.apk }}
+        run: scripts/ci/sign-apk.sh "$RUNNER_TEMP/unsigned/$UNSIGNED" "$RUNNER_TEMP/release/$APK_NAME"
+
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: ${{ needs.android.outputs.apk }}
+          path: ${{ runner.temp }}/release/${{ needs.android.outputs.apk }}
+          retention-days: 14
+
+      # A rolling prerelease per channel gives a stable link that installs straight from the
+      # phone's browser: ti-latest moves on every push to main, latest with every promotion.
+      - name: Move the ti test build
+        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+        # When this push releases, the release goes on without it.
+        continue-on-error: ${{ needs.checks.outputs.release_tag != '' }}
+        env:
+          GH_TOKEN: ${{ github.token }}
+          HEAD_SHA: ${{ needs.checks.outputs.sha }}
+          APK_NAME: ${{ needs.android.outputs.apk }}
+        run: |
+          tag="ti-latest"; asset="wave-ti.apk"
+          cp "$RUNNER_TEMP/release/$APK_NAME" "$RUNNER_TEMP/$asset"
+          gh release view "$tag" > /dev/null 2>&1 || \
+            gh release create "$tag" --prerelease --latest=false --target "$HEAD_SHA" --title "Latest ti test build" \
+              --notes "Sideloadable APK, rebuilt on every push. Not for distribution."
+          gh release upload "$tag" "$RUNNER_TEMP/$asset" --clobber
 
       - name: Publish the release
         id: published
+        if: needs.checks.outputs.release_tag != ''
         env:
           GH_TOKEN: ${{ github.token }}
           RELEASE_TAG: ${{ needs.checks.outputs.release_tag }}
           RELEASE_SHA: ${{ needs.checks.outputs.sha }}
           PATCH_NOTES: ${{ needs.notes.outputs.notes }}
-          APK_NAME: ${{ needs.android.outputs.artifact }}
+          APK_NAME: ${{ needs.android.outputs.apk }}
         run: |
           if [ -n "$PATCH_NOTES" ]; then
             export RELEASE_NOTES_FILE="$RUNNER_TEMP/patch-notes.md"
@@ -943,7 +981,7 @@ jobs:
         continue-on-error: true
         env:
           GH_TOKEN: ${{ github.token }}
-          APK_NAME: ${{ needs.android.outputs.artifact }}
+          APK_NAME: ${{ needs.android.outputs.apk }}
         run: |
           cp "$RUNNER_TEMP/release/$APK_NAME" "$RUNNER_TEMP/wave-latest.apk"
           gh release upload latest "$RUNNER_TEMP/wave-latest.apk" --clobber
@@ -982,7 +1020,7 @@ jobs:
           WAVE_RUNTIME_VERSION: ${{ needs.android.outputs.runtime_version }}
           WAVE_RELEASE_TAG: ${{ needs.checks.outputs.release_tag }}
           WAVE_APK_URL: ${{ steps.published.outputs.url }}
-          APK_NAME: ${{ needs.android.outputs.artifact }}
+          APK_NAME: ${{ needs.android.outputs.apk }}
         run: WAVE_APK_PATH="$RUNNER_TEMP/release/$APK_NAME" node apps/updates/scripts/publish-apk.ts
 
       - name: Fetch the over-the-air update
