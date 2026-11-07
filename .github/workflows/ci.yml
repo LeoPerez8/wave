@@ -84,6 +84,42 @@ jobs:
           scripts/ci/report.sh skipped "Native unit tests" \
             "Nothing they test changed (wave-native, wave-glass, the app config, config plugins, the lockfile or CI), so they didn't run."
 
+  # Fails when the commits this run brings in carry a secret (scripts/ci/secret-scan.sh, with
+  # .gitleaks.toml). It reads the code and nothing else, so it gets no write token.
+  secret-scan:
+    name: Secret scan
+    runs-on: ubuntu-latest
+    permissions:
+      actions: read
+      contents: read
+      pull-requests: write
+    steps:
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+          fetch-depth: 0
+          persist-credentials: false
+
+      # For the report's step timings; the scan itself needs no Node.
+      - uses: actions/setup-node@a0853c24544627f65ddf259abe73b1d18a591444 # v5
+        with:
+          node-version: 22
+          package-manager-cache: false
+
+      - name: Scan for secrets
+        env:
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+          BEFORE: ${{ github.event.before }}
+        run: scripts/ci/step.sh "Scan for secrets" scripts/ci/secret-scan.sh
+
+      - name: Report
+        if: always() && env.IS_SAME_REPO_PR == 'true' && job.status != 'cancelled'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+        run: scripts/ci/report.sh "${{ job.status }}" "Secret scan"
+
   # A push to main that changes the app releases the next -ti version: this commits it to
   # package.json as "Release Wave <version>", on top of main's latest tip, and tags it v<version> in the same push (scripts/ci/bump-version.sh).
   # The rest of the run checks, builds and publishes that commit. CI, docs and spec-only pushes

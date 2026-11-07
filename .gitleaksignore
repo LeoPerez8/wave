@@ -1,0 +1,8 @@
+# Findings checked one by one and found not to be secrets, by gitleaks fingerprint
+# (commit:file:rule:line). A later change to the same line is a new finding and gets checked again.
+# The web key and request key YouTube's own web player sends to BotGuard; every visitor's browser
+# downloads them (YtPoTokenWebView.kt, 2026-10-13).
+a3f085e986bd8f285cfd3acaa7b20504a0a1c93f:apps/mobile/modules/wave-native/android/src/main/java/expo/modules/wavenative/yt/potoken/YtPoTokenWebView.kt:gcp-api-key:295
+a3f085e986bd8f285cfd3acaa7b20504a0a1c93f:apps/mobile/modules/wave-native/android/src/main/java/expo/modules/wavenative/yt/potoken/YtPoTokenWebView.kt:generic-api-key:296
+b85f2ca300f2bd196fc09178f2e717633a6d77c7:apps/mobile/modules/wave-native/android/src/main/java/expo/modules/wavenative/yt/potoken/YtPoTokenWebView.kt:gcp-api-key:295
+b85f2ca300f2bd196fc09178f2e717633a6d77c7:apps/mobile/modules/wave-native/android/src/main/java/expo/modules/wavenative/yt/potoken/YtPoTokenWebView.kt:generic-api-key:296

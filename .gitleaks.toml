@@ -1,0 +1,23 @@
+# gitleaks settings for scripts/ci/secret-scan.sh: the default rules, and an allowlist that
+# holds only findings someone checked and found not to be secrets. Each entry is narrowed to the
+# files and value shapes that were checked; a new kind of finding gets checked before it is added.
+# A single checked finding goes in .gitleaksignore instead.
+[extend]
+useDefault = true
+
+# Benchmark results: SHA-256 digests of each run's output, under keys like resultKey.
+[[allowlists]]
+description = "Performance result digests"
+targetRules = ["generic-api-key"]
+condition = "AND"
+paths = ['''^docs/performance/results/[^/]+\.jsonl$''']
+regexes = ['''^[0-9a-f]{64}$''']
+
+# Recorded YouTube Music responses: entity keys and continuation tokens of public pages.
+[[allowlists]]
+description = "YouTube Music response fixtures"
+targetRules = ["generic-api-key"]
+condition = "AND"
+paths = ['''^apps/mobile/modules/wave-native/android/src/test/resources/fixtures/yt/[^/]+\.json$''']
+regexTarget = "match"
+regexes = ['''^(\w*EntityKey|token)"\s*:\s*"''']
