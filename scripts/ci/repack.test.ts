@@ -44,15 +44,13 @@ const metro = (files: Record<string, string> = { "drawable-mdpi/src_assets_cover
 const key = (appDir: string, fingerprint = "f1", metroAssets = metro()) =>
   apkCacheKey({ fingerprint, appDir, metroAssets });
 
-const pr = { event: "pull_request", ref: "refs/pull/7/merge", release: false, kept: true };
-
 describe("planApkBuild", () => {
-  it("repacks a PR whose native side matches a kept full build", () => {
-    assert.equal(planApkBuild(pr).build, "repack");
-  });
-
-  it("builds in full when no full build is kept for the PR's native side", () => {
-    assert.equal(planApkBuild({ ...pr, kept: false }).build, "full");
+  it("never repacks for a pull request, which builds no APK", () => {
+    const pr = { event: "pull_request", ref: "refs/pull/7/merge", release: false, kept: true };
+    assert.deepEqual(planApkBuild(pr), {
+      build: "full",
+      reason: "Only pushes to main and -ti tags repack.",
+    });
   });
 
   it("always builds a stable release tag in full", () => {
@@ -83,7 +81,7 @@ describe("planApkBuild", () => {
       "refs/tags/v0.5.1-beta",
       "refs/tags/ti",
     ]) {
-      assert.equal(planApkBuild({ ...pr, event: "push", ref }).build, "full");
+      assert.equal(planApkBuild({ event: "push", ref, release: false, kept: true }).build, "full");
     }
   });
 

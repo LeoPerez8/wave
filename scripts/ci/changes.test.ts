@@ -9,58 +9,25 @@ const run = (args: string[], stdin: string) =>
   execFileSync(process.execPath, [script, ...args], { input: stdin, encoding: "utf8" });
 
 describe("changes", () => {
-  it("doesn't build the APK for a docs-only change", () => {
-    assert.equal(changes(["docs/spec.md", "docs/spotify-samples/track-metadata.json"]).apk, false);
+  it("touches no area for a docs-only change", () => {
+    const result = changes(["docs/spec.md", "docs/spotify-samples/track-metadata.json"]);
+    assert.ok(Object.values(result).every((value) => value === false));
   });
 
-  it("builds the APK when the app changes", () => {
-    assert.equal(changes(["docs/spec.md", "apps/mobile/src/app/_layout.tsx"]).apk, true);
-  });
-
-  it("checks a sync-service change without building the APK or running native tests", () => {
+  it("checks a sync-service change without running native tests", () => {
     const result = changes(["apps/sync/src/worker.ts", "apps/sync/package.json"]);
-    assert.equal(result.apk, false);
     assert.equal(result.nativeTests, false);
     assert.equal(result.allPackages, false);
   });
 
-  it("checks an update-service change without building the APK or releasing", () => {
+  it("checks an update-service change without releasing", () => {
     const paths = ["apps/updates/src/service.ts", "apps/updates/package.json"];
     const result = changes(paths);
     assert.equal(result.updates, true);
-    assert.equal(result.apk, false);
     assert.equal(result.nativeTests, false);
     assert.equal(result.allPackages, false);
     assert.equal(reachesUsers(paths), false);
   });
-
-  for (const path of [
-    "packages/core/src/queue.ts",
-    "package.json",
-    "pnpm-workspace.yaml",
-    "pnpm-lock.yaml",
-    ".github/workflows/ci.yml",
-    "scripts/ci/report.sh",
-  ]) {
-    it(`builds the APK when ${path} changes`, () => {
-      assert.equal(changes([path]).apk, true);
-    });
-  }
-
-  for (const path of [
-    "README.md",
-    "CLAUDE.md",
-    "tsconfig.base.json",
-    ".oxlintrc.json",
-    "scripts/music-folder/plan.ts",
-    "scripts/perf/runner.ts",
-    "apps/mobile/DESIGN.md",
-    "packages/core/README.md",
-  ]) {
-    it(`doesn't build the APK when only ${path} changes`, () => {
-      assert.equal(changes([path]).apk, false);
-    });
-  }
 
   it("runs the native tests when wave-native changes", () => {
     assert.equal(
@@ -93,7 +60,7 @@ describe("changes", () => {
     });
   }
 
-  it("doesn't run the native tests for a JS-only change, though it builds the APK", () => {
+  it("doesn't run the native tests for a JS-only change", () => {
     const result = changes([
       "apps/mobile/src/app/_layout.tsx",
       "apps/mobile/global.css",
@@ -102,7 +69,6 @@ describe("changes", () => {
       "apps/mobile/modules/wave-native/NOTES.md",
     ]);
     assert.equal(result.nativeTests, false);
-    assert.equal(result.apk, true);
   });
 
   for (const path of ["apps/mobile/src/app/_layout.tsx", "packages/core/src/queue.ts"]) {
@@ -136,7 +102,6 @@ describe("changes", () => {
       perf: false,
       tsconfig: false,
       native: false,
-      apk: true,
       allPackages: true,
       nativeTests: true,
     });
@@ -150,7 +115,6 @@ describe("changes", () => {
       perf: false,
       tsconfig: false,
       native: true,
-      apk: true,
       allPackages: true,
       nativeTests: true,
     });
@@ -161,14 +125,14 @@ describe("changes.ts as a command", () => {
   it("prints one GitHub output line per area for the paths on stdin", () => {
     assert.equal(
       run([], "docs/spec.md\npackages/core/src/queue.ts\n"),
-      "app=false\ncore=true\nsync=false\nupdates=false\nworkspace=false\nci=false\nperf=false\ntsconfig=false\nnative=false\napk=true\nallPackages=false\nnativeTests=false\n",
+      "app=false\ncore=true\nsync=false\nupdates=false\nworkspace=false\nci=false\nperf=false\ntsconfig=false\nnative=false\nallPackages=false\nnativeTests=false\n",
     );
   });
 
   it("counts every area as changed with --all, as on pushes to main", () => {
     assert.equal(
       run(["--all"], ""),
-      "app=true\ncore=true\nsync=true\nupdates=true\nworkspace=true\nci=true\nperf=true\ntsconfig=true\nnative=true\napk=true\nallPackages=true\nnativeTests=true\n",
+      "app=true\ncore=true\nsync=true\nupdates=true\nworkspace=true\nci=true\nperf=true\ntsconfig=true\nnative=true\nallPackages=true\nnativeTests=true\n",
     );
   });
 });
