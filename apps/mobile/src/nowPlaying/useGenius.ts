@@ -65,18 +65,29 @@ const withTimeout = async <T>(
  * The JSON the sync service's Genius route [path] answers with, sent by the
  * native module with the session JS never sees. Rejects for an answer that
  * isn't OK (an older service that has no such route, a limit, Genius
- * failing), a signed-out phone and a timeout; the request itself can't be
- * stopped, so the caller checks it's still wanted before using the answer.
+ * failing), a signed-out phone, a timeout and [controller] aborting: the
+ * native request itself can't be stopped, so its answer is then dropped.
  */
-const askGenius = (path: string): Promise<unknown> =>
+const askGenius = (controller: AbortController, path: string): Promise<unknown> =>
   new Promise((resolve, reject) => {
-    const timeout = setTimeout(
-      () => reject(new Error("Genius didn't answer in time")),
-      REQUEST_TIMEOUT_MS,
-    );
+    const { signal } = controller;
+    if (signal.aborted) {
+      reject(new Error("Genius was no longer wanted"));
+      return;
+    }
+    const stopped = (): void => {
+      clearTimeout(timeout);
+      reject(new Error("Genius was no longer wanted"));
+    };
+    const timeout = setTimeout(() => {
+      signal.removeEventListener("abort", stopped);
+      reject(new Error("Genius didn't answer in time"));
+    }, REQUEST_TIMEOUT_MS);
+    signal.addEventListener("abort", stopped, { once: true });
     WaveAccount.request("GET", path, null).then(
       (response) => {
         clearTimeout(timeout);
+        signal.removeEventListener("abort", stopped);
         if (response.status !== 200) {
           reject(new Error(`HTTP ${response.status} from Wave's Genius route`));
           return;
@@ -89,6 +100,7 @@ const askGenius = (path: string): Promise<unknown> =>
       },
       (cause: unknown) => {
         clearTimeout(timeout);
+        signal.removeEventListener("abort", stopped);
         reject(cause);
       },
     );
@@ -154,7 +166,7 @@ export const useGenius = (
       keep: keepGenius,
       enabled: () =>
         current && !controller.signal.aborted && geniusInsightsEnabled() && isPlayheadLive(),
-      get: askGenius,
+      get: (path) => askGenius(controller, path),
       post: (url, body) =>
         askJson(controller, "Google Translate", url, {
           method: "POST",
