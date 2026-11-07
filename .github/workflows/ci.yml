@@ -560,9 +560,6 @@ jobs:
       # A full build's APK and debug keystore, kept for repacks (scripts/ci/repack.ts).
       KEPT_APK: ${{ github.workspace }}/.cache/kept-apk
       WAVE_CI_BUNDLE_MANIFEST: ${{ github.workspace }}/../wave-ci-bundle.json
-      # Over-the-air updates need these (apps/updates/README.md). Without them a release skips
-      # its update and is otherwise the same.
-      UPDATES_CONFIGURED: ${{ secrets.CLOUDFLARE_API_TOKEN != '' && secrets.CLOUDFLARE_ACCOUNT_ID != '' && secrets.UPDATES_SIGNING_KEY != '' }}
     steps:
       - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.1.0
         with:
@@ -636,10 +633,11 @@ jobs:
       - name: Stamp the update channel and runtime version
         run: node scripts/ci/update-config.ts stamp-source apps/mobile/android/app/src/main/AndroidManifest.xml
 
-      # What the release job publishes over the air. Never holds up the release.
+      # What the release job publishes over the air. Never holds up the release. It needs no
+      # secret: only the release job, in its channel's Environment, can publish it.
       - name: Export the over-the-air update
         id: export_update
-        if: needs.checks.outputs.release_tag != '' && env.UPDATES_CONFIGURED == 'true' && env.WAVE_UPDATE_CHANNEL != ''
+        if: needs.checks.outputs.release_tag != '' && env.WAVE_UPDATE_CHANNEL != ''
         continue-on-error: true
         run: scripts/ci/step.sh "Export the over-the-air update" scripts/ci/export-update.sh "$RUNNER_TEMP/update"
 
@@ -901,6 +899,10 @@ jobs:
     # Test releases can repack without Gradle, but neither channel publishes before
     # the native tests pass. The stable path keeps its full APK build policy.
     if: needs.checks.outputs.release_tag != ''
+    # The release secrets live only in the release Environments (docs/spec.md, Release
+    # secrets). ti opens to pushes to main with no approval; every tag run, a promotion's or a
+    # hand-pushed -ti tag's, takes main and waits for the owner. The channel stays the run's.
+    environment: ${{ github.ref == 'refs/heads/main' && 'ti' || 'main' }}
     runs-on: ubuntu-latest
     permissions:
       contents: write
