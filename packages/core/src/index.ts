@@ -2418,6 +2418,12 @@ export {
   geniusUpstreamUrl,
 } from "./geniusProxy.ts";
 export {
+  TICKETMASTER_KEYWORD_MAX_LENGTH,
+  ticketmasterAttractionsPath,
+  ticketmasterEventsPath,
+  ticketmasterUpstreamUrl,
+} from "./ticketmasterProxy.ts";
+export {
   geniusAbout,
   geniusReferents,
   geniusTranslationRequests,

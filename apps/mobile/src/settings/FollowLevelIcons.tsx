@@ -24,7 +24,7 @@ import { restoreArtistFollow, setArtistFollow } from "@/library/follows";
 import {
   askShowNotifications,
   showsNotificationsEnabled,
-  ticketmasterKey,
+  useShowsAvailability,
 } from "@/library/showNotifications";
 import { currentLocalisation, useLocalisation } from "@/localisation/localisation";
 import { WaveNative } from "@/native/waveNative";
@@ -46,11 +46,12 @@ const glyph = (action: FollowLevelIcon["action"], filled: boolean) =>
         : IconTicket
       : IconUserMinus;
 
-/** What the level icons depend on: Ticketmaster's key and the Country row. */
+/** What the level icons depend on: a signed-in Wave account (shows go through it) and the Country row. */
 const useIconOptions = () => {
   const { strings } = useLocalisation();
   const country = useFollowCountryName();
-  return { showsAvailable: ticketmasterKey !== "", country, strings };
+  const showsAvailable = useShowsAvailability() === "available";
+  return { showsAvailable, country, strings };
 };
 
 /**

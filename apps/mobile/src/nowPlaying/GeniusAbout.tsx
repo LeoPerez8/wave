@@ -1,19 +1,15 @@
 import { useLocalisation } from "@/localisation/localisation";
-import { router } from "expo-router";
 import { useState } from "react";
 import { Text, View } from "react-native";
 
 import { CELL } from "@/catalog/grid";
 import { TextButton } from "@/components/TextButton";
+import { openWaveAccount } from "@/sync/openWaveAccount";
 
-import { closeNowPlaying } from "./sheet";
 import type { GeniusAboutCard } from "./useGenius";
 
 /** How many lines of the description show until the card is tapped. */
 const FOLDED_LINES = 3;
-
-/** Settings › Accounts, where the Wave account signs in, once Now Playing has slid away. */
-const openWaveAccount = (): void => closeNowPlaying(() => router.push("/settings/accounts"));
 
 /**
  * The About card's place while no Wave account is signed in: what an

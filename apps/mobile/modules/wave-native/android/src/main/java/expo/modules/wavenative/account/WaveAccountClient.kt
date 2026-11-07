@@ -131,13 +131,14 @@ class WaveAccountClient(
 
   /**
    * A request JS sends with the session it can't see: only a push (`POST /v1/push`), a pull
-   * (`GET /v1/pull`), or one of the Genius requests the Lyrics view makes (`GET /v1/genius/…`,
-   * Core's `geniusProxy.ts`). The Soulseek account and sessions go between native code and the
-   * service.
+   * (`GET /v1/pull`), one of the Genius requests the Lyrics view makes (`GET /v1/genius/…`,
+   * Core's `geniusProxy.ts`), or one of a show check's Ticketmaster requests
+   * (`GET /v1/ticketmaster/…`, Core's `ticketmasterProxy.ts`). The Soulseek account and sessions
+   * go between native code and the service.
    */
   fun request(method: String, path: String, body: String?): WaveResponse {
     val allowed = (method == "POST" && path == "/v1/push") ||
-      (method == "GET" && (PULL.matches(path) || GENIUS.any { it.matches(path) }))
+      (method == "GET" && (PULL.matches(path) || (GENIUS + TICKETMASTER).any { it.matches(path) }))
     if (!allowed) throw WaveAccountException(WaveAccountFailure.FORBIDDEN_REQUEST)
     return send(method, path, body)
   }
@@ -221,6 +222,11 @@ class WaveAccountClient(
       Regex("""^/v1/genius/search\?q=[A-Za-z0-9%._~!*'()-]{1,6000}$"""),
       Regex("""^/v1/genius/song\?id=[1-9][0-9]{0,15}$"""),
       Regex("""^/v1/genius/referents\?song=[1-9][0-9]{0,15}&page=([1-9]|1[0-9]|20)$"""),
+    )
+    /** Core's `ticketmasterAttractionsPath` (the name as `encodeURIComponent` writes it) and `ticketmasterEventsPath`. */
+    val TICKETMASTER = listOf(
+      Regex("""^/v1/ticketmaster/attractions\?keyword=[A-Za-z0-9%._~!*'()-]{1,4500}$"""),
+      Regex("""^/v1/ticketmaster/events\?attractionId=[A-Za-z0-9_-]{1,64}&countryCode=[A-Z]{2}$"""),
     )
   }
 }

@@ -90,6 +90,8 @@ export const NETWORK_SEEDS = [
     "schedulePreDownload",
   ].map((name) => `native/waveYtMusic.ts#${name}`),
   ...["album", "watchSong", "lyrics"].map((name) => `native/waveYtDownloads.ts#${name}`),
+  // The sync service's routes, Genius's and Ticketmaster's among them, sent with the session.
+  "native/waveAccount.ts#request",
 ];
 
 /** Whole-Library reads must state their actual trigger and frequency, beyond why they exist. */
@@ -482,7 +484,7 @@ export const OPENING_REQUESTS: Record<string, Exception> = {
   "home/followShows.ts#request": {
     kind: "opening",
     reason:
-      "Home and a followed artist's page start the Ticketmaster shows check only when one is due (checkDue). Each call waits for a settled turn, re-checks the switch, key and country, and fails without asking when Android says the phone is offline. A check costs at most two calls per artist (showsCheck.ts).",
+      "Home and a followed artist's page start the Ticketmaster shows check only when one is due (checkDue). Each call waits for a settled turn, re-checks the switch and country, goes to the sync service's Ticketmaster routes only with a Wave account signed in, and fails without asking when Android says the phone is offline. A check costs at most two calls per artist (showsCheck.ts).",
     deferred: {
       settlement: "screen",
       connectivity: "android",

@@ -166,6 +166,36 @@ class WaveAccountClientTest {
     }
   }
 
+  @Test fun `JS can ask the Ticketmaster routes a show check uses, and nothing else of them`() {
+    FakeWaveService { Reply(200, """{"page":{"totalElements":0}}""") }.use { service ->
+      val client = signedIn(service)
+      val allowed = listOf(
+        "/v1/ticketmaster/attractions?keyword=Coldplay",
+        "/v1/ticketmaster/attractions?keyword=Simon%20%26%20Garfunkel",
+        "/v1/ticketmaster/attractions?keyword=Bj%C3%B6rk%20AC%2FDC!'()*",
+        "/v1/ticketmaster/events?attractionId=K8vZ917_XCf&countryCode=BR",
+        "/v1/ticketmaster/events?attractionId=K8vZ9171o-7&countryCode=PT",
+      )
+      for (path in allowed) assertEquals(path, 200, client.request("GET", path, null).status)
+      assertEquals(allowed, service.received.map { it.path })
+      for ((method, path) in listOf(
+        "POST" to "/v1/ticketmaster/events?attractionId=K1&countryCode=BR",
+        "GET" to "/v1/ticketmaster/attractions?keyword=",
+        "GET" to "/v1/ticketmaster/attractions?keyword=a&size=1",
+        "GET" to "/v1/ticketmaster/attractions?keyword=a&apikey=x",
+        "GET" to "/v1/ticketmaster/attractions?keyword=a b",
+        "GET" to "/v1/ticketmaster/events?attractionId=K1",
+        "GET" to "/v1/ticketmaster/events?attractionId=K1&countryCode=br",
+        "GET" to "/v1/ticketmaster/events?attractionId=K1/../../soulseek&countryCode=BR",
+        "GET" to "/v1/ticketmaster/events?attractionId=K1%2F..&countryCode=BR",
+        "GET" to "/v1/ticketmaster/events?countryCode=BR&attractionId=K1",
+        "GET" to "/v1/ticketmaster/venues?id=1",
+      ))
+        assertEquals("$method $path", WaveAccountFailure.FORBIDDEN_REQUEST, failure { client.request(method, path, null) })
+      assertEquals(allowed.size, service.received.size)
+    }
+  }
+
   @Test fun `native callers can reach the Soulseek route with the session`() {
     FakeWaveService { Reply(200, """{"username":"fixture"}""") }.use { service ->
       assertEquals(200, signedIn(service).send("GET", "/v1/soulseek", null).status)
