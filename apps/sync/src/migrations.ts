@@ -225,6 +225,12 @@ const MIGRATIONS: readonly Migration[] = [
       `CREATE INDEX dismissed_suggestions_change_idx ON dismissed_suggestions (account_id, change_no)`,
     ],
   },
+  {
+    // Which Soulseek key a password is kept under (src/soulseek.ts). Every password kept so far
+    // is under SOULSEEK_KEY, version 1.
+    id: "0010_soulseek_key_version",
+    statements: ["ALTER TABLE soulseek_accounts ADD COLUMN key_version INTEGER NOT NULL DEFAULT 1"],
+  },
 ];
 
 /** Runs the migrations [db] hasn't run yet, each in its own transaction. Gives the ids it ran. */

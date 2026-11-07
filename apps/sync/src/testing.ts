@@ -147,6 +147,8 @@ export interface HarnessOptions {
   readonly pullPageSize?: number;
   /** `SOULSEEK_KEY`; `SOULSEEK_KEY` above by default, null for none. */
   readonly soulseekKey?: string | null;
+  /** The Soulseek keys by secret name, as the Worker has them; when given, `soulseekKey` is ignored. */
+  readonly soulseekKeys?: Readonly<Record<string, string>>;
 }
 
 export const harness = async (options: HarnessOptions = {}, db?: Client): Promise<Harness> => {
@@ -162,7 +164,11 @@ export const harness = async (options: HarnessOptions = {}, db?: Client): Promis
     limits: { ...SYNC_LIMITS, ...options.limits },
     ...(options.allowedEmails === undefined ? {} : { allowedEmails: options.allowedEmails }),
     ...(options.pullPageSize === undefined ? {} : { pullPageSize: options.pullPageSize }),
-    ...(options.soulseekKey === null ? {} : { soulseekKey: options.soulseekKey ?? SOULSEEK_KEY }),
+    ...(options.soulseekKeys !== undefined
+      ? { soulseekKeys: options.soulseekKeys }
+      : options.soulseekKey === null
+        ? {}
+        : { soulseekKeys: { SOULSEEK_KEY: options.soulseekKey ?? SOULSEEK_KEY } }),
   };
   const service = createSyncService(serviceOptions);
 

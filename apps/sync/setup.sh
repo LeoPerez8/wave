@@ -510,7 +510,7 @@ put_secret TURSO_AUTH_TOKEN "$TURSO_AUTH_TOKEN"
 put_secret GOOGLE_CLIENT_ID "$GOOGLE_CLIENT_ID"
 # SOULSEEK_KEY encrypts the Soulseek accounts the service keeps. It's made
 # once, straight into the Worker (no shell variable, no file, never printed),
-# and never replaced: accounts kept under an old key can't be read again.
+# and never overwritten: a new key is a new version (README.md, "Soulseek keys").
 SECRETS=$(wrangler secret list --format json 2>/dev/null) || die "wrangler secret list failed."
 if grep -q '"SOULSEEK_KEY"' <<<"$SECRETS"; then
   ok "SOULSEEK_KEY is already set: kept as it is"

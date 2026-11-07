@@ -183,8 +183,9 @@ never pass through the app's JS.
 can't log in with (1 to 30 printable ASCII characters, no space at either end) or an empty
 password (at most 1,024 characters).
 
-The password is kept encrypted with AES-GCM under `SOULSEEK_KEY`, with the account's id as
-additional data; the database never holds it in the clear.
+The password is kept encrypted with AES-GCM under the current Soulseek key, with the
+account's id as additional data; the database never holds it in the clear. Each row records
+the version of the key it was kept under (see [Soulseek keys](#soulseek-keys)).
 
 ### `GET /v1/soulseek`
 
@@ -194,9 +195,11 @@ The account's Soulseek account, or `null` when it has none:
 { "account": { "username": "quietfern42", "password": "…" } }
 ```
 
-A password that doesn't decrypt (`SOULSEEK_KEY` was replaced) answers `null` too, so the next
-phone's account goes up in its place. Without `SOULSEEK_KEY`, both Soulseek routes answer
-`500` and the log says so; the other routes still work.
+A password kept under an older key is read with that key and kept again under the current
+one. A password that doesn't decrypt (its version's key was replaced or removed) answers
+`null` too, so the next phone's account goes up in its place. Without any Soulseek key, or
+with one that isn't 32 bytes of base64 under a key name, both Soulseek routes answer `500`
+and the log names the secret; the other routes still work.
 
 ### `DELETE /v1/account`
 
@@ -244,13 +247,30 @@ A push that would take a table past its limit is refused whole.
 
 Set on the Worker, never in the repo (`wrangler.toml` holds none of them):
 
-| Name                 | Kind   |                                                                      |
-| -------------------- | ------ | -------------------------------------------------------------------- |
-| `TURSO_DATABASE_URL` | secret | `libsql://<db>-<org>.turso.io`                                       |
-| `TURSO_AUTH_TOKEN`   | secret | a Turso token for that database                                      |
-| `GOOGLE_CLIENT_ID`   | secret | Wave's **web** OAuth client id, the audience of the app's ID tokens  |
-| `SOULSEEK_KEY`       | secret | base64 of 32 random bytes: the key Soulseek passwords are kept under |
-| `ALLOWED_EMAILS`     | secret | optional: emails that may sign in, separated by commas               |
+| Name                 | Kind   |                                                                     |
+| -------------------- | ------ | ------------------------------------------------------------------- |
+| `TURSO_DATABASE_URL` | secret | `libsql://<db>-<org>.turso.io`                                      |
+| `TURSO_AUTH_TOKEN`   | secret | a Turso token for that database                                     |
+| `GOOGLE_CLIENT_ID`   | secret | Wave's **web** OAuth client id, the audience of the app's ID tokens |
+| `SOULSEEK_KEY`       | secret | base64 of 32 random bytes: version 1 of the Soulseek key            |
+| `SOULSEEK_KEY_<n>`   | secret | optional: version n (2 or more) of the Soulseek key, the same way   |
+| `ALLOWED_EMAILS`     | secret | optional: emails that may sign in, separated by commas              |
+
+### Soulseek keys
+
+Soulseek passwords are kept under the highest key version the Worker has: `SOULSEEK_KEY` is
+version 1 and `SOULSEEK_KEY_2`, `SOULSEEK_KEY_3`, … the next ones. Each row records its
+version and is read with that version's key, then kept again under the current key, so the
+app sees no change. To replace the key, set the next version and leave the older ones:
+
+```sh
+cd apps/sync
+openssl rand -base64 32 | pnpm exec wrangler secret put SOULSEEK_KEY_2
+```
+
+An older version can go once no row uses it
+(`SELECT count(*) FROM soulseek_accounts WHERE key_version < 2`); a row still under a
+removed version reads as none, and the account's next phone puts its account up again.
 
 ## Running it locally
 
@@ -325,8 +345,9 @@ By hand, the steps are:
    openssl rand -base64 32 | pnpm exec wrangler secret put SOULSEEK_KEY
    ```
 
-   Make `SOULSEEK_KEY` once and never replace it: the Soulseek accounts kept under the old
-   one can't be read again (each Wave account's goes up anew from the next phone that syncs).
+   Make `SOULSEEK_KEY` once and never overwrite it: the Soulseek accounts kept under it
+   couldn't be read again. To replace the key, add the next version instead
+   ([Soulseek keys](#soulseek-keys)).
 
 4. Migrate and deploy. The `deploy` script runs the pending migrations against the database
    in your shell's environment, then `wrangler deploy` (it needs `run`: `pnpm deploy` is a
