@@ -43,9 +43,18 @@ Pick tickets whose blockers are closed.
   `UPDATES_SIGNING_KEY`, checked against the certificate in their own APK. Never publish around
   that. Released APKs are signed only by the release job, with the release key and its rotation
   proof from Expo's public debug key, all three in the release Environments (`docs/spec.md`, APK
-  signing); the Android job and its artifacts hold no keystore. A change to `apps/updates` doesn't release: the Worker is deployed by
-  hand (`pnpm --filter @wave/updates run deploy`). Undo a bad update that doesn't crash with the
-  **Roll back an update** workflow (channel and version); it can't cross a runtime version.
+  signing); the Android job and its artifacts hold no keystore. Undo a bad update that doesn't
+  crash with the **Roll back an update** workflow (channel and version); it can't cross a runtime
+  version.
+- Both Workers are deployed by hand from the owner's machine, never by CI, and a change to them
+  doesn't release: `pnpm --filter @wave/updates run deploy` for `apps/updates`, and
+  `pnpm --filter @wave/sync run deploy` for `apps/sync`, which goes out before any app release
+  that needs it. A provider key a feature needs is a secret of the sync Worker, and the phone
+  reaches the provider through it: an `EXPO_PUBLIC_*` variable is readable in every APK and
+  bundle, so it holds no credential. The threat model is in `docs/spec.md` › Security.
+- The repo is public. A PR that fixes a weakness uses a `fix/` branch, the title
+  `Security patch` and the body line `pt-BR: Patch de segurança`; its commits, body and code
+  comments say what changed and leave out how it could be abused.
 - Decision-heavy logic (queue, counted plays, search, sorting, scan reconciliation, LRC,
   sleep timer) goes in `packages/core`, which must keep **zero runtime dependencies** and
   use only erasable TypeScript syntax with `.ts` import extensions. Test it through its

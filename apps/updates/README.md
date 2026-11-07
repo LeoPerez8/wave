@@ -104,8 +104,8 @@ GitHub Release, and this tells phones where. `404` before the first release that
 CI signs it with `UPDATES_SIGNING_KEY`, the key updates are signed with, and the Worker serves the
 bytes as they are. A phone checks the signature against the certificate in its APK before it
 downloads anything, and the file's SHA-256 before it installs. Holding the Cloudflare token isn't
-enough to offer an APK, and a phone on a release from before the release key (`docs/spec.md`, APK
-signing) would still install one signed with Expo's public debug keystore.
+enough to offer an APK, and once a phone runs a release signed with Wave's release key, Android
+itself installs only APKs signed with that key (`docs/spec.md`, APK signing).
 Without the key, `publish-apk.ts` logs that it skipped and the release goes on.
 
 ## What R2 holds
