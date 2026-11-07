@@ -28,7 +28,7 @@ const fixture = (name: string) =>
 const ask = {
   key: "library:1",
   song: { title: "Imagine", artist: "John Lennon", album: null, durationMs: 0 },
-  token: "test-token",
+  signedIn: true,
   target: null,
 };
 
@@ -45,8 +45,7 @@ const phone = () => {
       storage.set(key, value);
     },
     enabled: () => true,
-    get: async (url, token) => {
-      assert.equal(token, "test-token");
+    get: async (url) => {
       requests.push(url);
       return fixture(
         url.includes("/search?") ? "search" : url.includes("/referents?") ? "referents-1" : "song",
@@ -76,9 +75,29 @@ test("a Genius match and About reopen offline for the same song only", async () 
   assert.equal(requests.length, 3);
 });
 
-test("missing token or disabled insights cannot send any Genius request", async () => {
+test("Genius is asked through the Wave account's fixed routes, never directly", async () => {
   const { service, requests } = phone();
-  assert.equal(await loadGenius({ ...ask, token: "" }, service), null);
+  await loadGenius(ask, service, 100);
+  assert.deepEqual(requests, [
+    "/v1/genius/search?q=Imagine%20John%20Lennon",
+    "/v1/genius/song?id=10356",
+    "/v1/genius/referents?song=10356&page=1",
+  ]);
+});
+
+test("signed out, a song's saved answer still shows with no request, and one never asked asks nothing", async () => {
+  const { service, requests } = phone();
+  const saved = await loadGenius(ask, service, 100);
+  assert.ok(saved?.match);
+  requests.length = 0;
+  assert.deepEqual(await loadGenius({ ...ask, signedIn: false }, service, 200), saved);
+  assert.equal(await loadGenius({ ...ask, key: "library:2", signedIn: false }, service, 200), null);
+  assert.deepEqual(requests, []);
+});
+
+test("signed out or with insights off, no Genius request is sent", async () => {
+  const { service, requests } = phone();
+  assert.equal(await loadGenius({ ...ask, signedIn: false }, service), null);
   service.enabled = () => false;
   assert.equal(await loadGenius(ask, service), null);
   assert.equal(requests.length, 0);
@@ -142,7 +161,7 @@ test("the song's annotations come with its About and reopen offline", async () =
   const first = await loadGenius(ask, service, 100);
   assert.deepEqual(referentIds(first), [2001, 2002, 2003, 2004]);
   assert.ok(
-    requests.some((url) => url.includes("/referents?song_id=10356&") && url.endsWith("page=1")),
+    requests.some((url) => url.includes("/referents?song=10356&") && url.endsWith("page=1")),
   );
   service.get = async () => {
     throw Error("offline");
@@ -153,8 +172,8 @@ test("the song's annotations come with its About and reopen offline", async () =
 test("every page of Genius's referents is asked until one isn't full", async () => {
   const { service, requests } = phone();
   const get = service.get;
-  service.get = async (url, token) => {
-    if (!url.includes("/referents?")) return get(url, token);
+  service.get = async (url) => {
+    if (!url.includes("/referents?")) return get(url);
     requests.push(url);
     if (url.endsWith("page=2")) return fixture("referents-2");
     const page = fixture("referents-1");
@@ -194,9 +213,9 @@ test("an answer saved before annotations asks only for them, once", async () => 
 test("failed annotations keep the About and are asked again next time", async () => {
   const { service, requests } = phone();
   const get = service.get;
-  service.get = async (url, token) => {
+  service.get = async (url) => {
     if (url.includes("/referents?")) throw Error("offline");
-    return get(url, token);
+    return get(url);
   };
   const first = await loadGenius(ask, service, 100);
   assert.equal(first?.match?.id, 10356);
@@ -218,9 +237,9 @@ test("no match asks for no annotations, and insights turned off stop them", asyn
   assert.equal(requests.length, 1);
   const other = phone();
   const get = other.service.get;
-  other.service.get = async (url, token) => {
-    const reply = await get(url, token);
-    if (url.includes("/songs/")) other.service.enabled = () => false;
+  other.service.get = async (url) => {
+    const reply = await get(url);
+    if (url.includes("/song?")) other.service.enabled = () => false;
     return reply;
   };
   assert.equal(await loadGenius(ask, other.service), null);
@@ -268,11 +287,10 @@ test("an app in English sends Google nothing", async () => {
   assert.equal(posts.length, 0);
 });
 
-test("no token or insights off sends Google nothing", async () => {
+test("insights off sends Google nothing", async () => {
   const { service, posts } = phone();
   const saved = await loadGenius(inPortuguese, service, 100);
   assert.ok(saved);
-  assert.equal(await translateGenius({ ...inPortuguese, token: "" }, saved, service), saved);
   service.enabled = () => false;
   assert.equal(await translateGenius(inPortuguese, saved, service), saved);
   assert.equal(posts.length, 0);

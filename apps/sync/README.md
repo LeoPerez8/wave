@@ -3,7 +3,8 @@
 `apps/sync` is Wave's only backend: a Cloudflare Worker in front of one Turso (libSQL)
 database. It checks Google ID tokens, holds sessions, merges pushed rows by Core's rules
 (`mergeRows`, `mergePlays` from `@wave/core`), serves pulls, keeps each account's Soulseek
-account and deletes accounts. See "Wave account and sync" in `docs/spec.md`.
+account, asks Genius for signed-in phones and deletes accounts. See "Wave account and sync"
+and "Genius About" in `docs/spec.md`.
 
 | File                 | What it holds                                                           |
 | -------------------- | ----------------------------------------------------------------------- |
@@ -12,6 +13,7 @@ account and deletes accounts. See "Wave account and sync" in `docs/spec.md`.
 | `src/google.ts`      | Checking a Google ID token (RS256 against Google's JWKS)                |
 | `src/store.ts`       | Push (merge and number changes), pull (pages) and account deletion      |
 | `src/soulseek.ts`    | The account's Soulseek account, its password encrypted (`SOULSEEK_KEY`) |
+| `src/proxy.ts`       | A provider's fixed requests: the cache, the provider call, its failures |
 | `src/tables.ts`      | The synced tables: wire fields, checks and columns                      |
 | `src/migrations.ts`  | The schema, as ordered migrations                                       |
 | `src/limits.ts`      | `SYNC_LIMITS`                                                           |
@@ -253,6 +255,33 @@ check), `401 { "error": "invalid_id_token" }` when it doesn't check out. Either 
 deleted and the session stays; the app tells these apart from `unauthorized`, which means the
 session itself ended.
 
+### `GET /v1/genius/search?q=<text>`, `GET /v1/genius/song?id=<id>`, `GET /v1/genius/referents?song=<id>&page=<n>`
+
+Genius's search, song and referents as the Lyrics view asks them, answered with Genius's JSON
+as it came. The service asks Genius with its own `GENIUS_ACCESS_TOKEN`; a phone never holds
+it. Each route stands for exactly one Genius request, built by Core's `geniusUpstreamUrl`
+(`packages/core/src/geniusProxy.ts`) from the functions the phone used to call Genius with:
+
+| Route                          | Genius request                                                                 |
+| ------------------------------ | ------------------------------------------------------------------------------ |
+| `search?q=<text>`              | `api.genius.com/search?q=<text>`                                               |
+| `song?id=<id>`                 | `api.genius.com/songs/<id>?text_format=plain`                                  |
+| `referents?song=<id>&page=<n>` | `api.genius.com/referents?song_id=<id>&text_format=plain&per_page=50&page=<n>` |
+
+Any other parameter, a repeated one, an id that isn't a positive whole number, a page past 20
+or an empty search, or one over 1,000 characters, answers `400 { "error": "bad_request" }`
+and asks Genius nothing. Redirects aren't followed.
+
+Answers are kept in Cloudflare's cache for a day, keyed by the Genius request alone (a hash
+of it), never by the account, so another phone asking the same thing gets it with no Genius
+request. Each account may send these routes `maxGeniusRequestsPerMinute` requests, cached
+answers included, and make Genius answer `maxGeniusRequestsPerDay` in a UTC day (cached
+answers don't count; the counts are in `upstream_usage`). Genius answering anything but `200`
+JSON, an answer holding the token, or no answer in 10 s gives
+`502 { "error": "upstream_failed" }` with nothing of Genius's answer, and nothing is cached.
+The log line says only `genius answered <status>`. A Worker without `GENIUS_ACCESS_TOKEN` or
+`GENIUS_LIMITER` answers `503 { "error": "unavailable" }`.
+
 ### Errors
 
 | Status | Body                                                                                       |
@@ -270,7 +299,11 @@ session itself ended.
 | 429    | `{ "error": "limit", "limit": "maxNewAccountsPerDay" }`, with `Retry-After`                |
 | 429    | `{ "error": "limit", "limit": "maxRequestsPerAddressPerMinute" }`, with `Retry-After`      |
 | 429    | `{ "error": "limit", "limit": "maxFailedLookupsPerAddressPerMinute" }`, with `Retry-After` |
+| 429    | `{ "error": "limit", "limit": "maxGeniusRequestsPerMinute" }`, with `Retry-After`          |
+| 429    | `{ "error": "limit", "limit": "maxGeniusRequestsPerDay" }`, with `Retry-After`             |
 | 500    | `{ "error": "internal" }`                                                                  |
+| 502    | `{ "error": "upstream_failed" }`                                                           |
+| 503    | `{ "error": "unavailable" }`                                                               |
 
 ## Limits
 
@@ -297,27 +330,30 @@ session itself ended.
 | `maxRequestsPerAddressPerMinute`      | 600       | every route, per address                             |
 | `maxFailedLookupsPerAddressPerMinute` | 20        | lookups that find no session, per address            |
 | `failedLookupBlockSeconds`            | 300       | how long an address past the line above is held back |
+| `maxGeniusRequestsPerMinute`          | 30        | the Genius routes, per account                       |
+| `maxGeniusRequestsPerDay`             | 1,000     | Genius requests the cache didn't answer, per account |
 
-The two per-address rates are also the `simple.limit` of `ADDRESS_LIMITER` and
-`FAILED_LOOKUP_LIMITER` in `wrangler.toml`; a test fails when they differ. Change both, then
-deploy.
+The two per-address rates and `maxGeniusRequestsPerMinute` are also the `simple.limit` of
+`ADDRESS_LIMITER`, `FAILED_LOOKUP_LIMITER` and `GENIUS_LIMITER` in `wrangler.toml`; a test
+fails when they differ. Change both, then deploy.
 
 A push that would take a table past its limit is refused whole.
 
 ## Configuration
 
 Set on the Worker, never in the repo (`wrangler.toml` holds none of them; it holds only the
-two rate limiting bindings, which `wrangler deploy` creates and which need Wrangler 4.36 or
+rate limiting bindings, which `wrangler deploy` creates and which need Wrangler 4.36 or
 later):
 
-| Name                 | Kind   |                                                                     |
-| -------------------- | ------ | ------------------------------------------------------------------- |
-| `TURSO_DATABASE_URL` | secret | `libsql://<db>-<org>.turso.io`                                      |
-| `TURSO_AUTH_TOKEN`   | secret | a Turso token for that database                                     |
-| `GOOGLE_CLIENT_ID`   | secret | Wave's **web** OAuth client id, the audience of the app's ID tokens |
-| `SOULSEEK_KEY`       | secret | base64 of 32 random bytes: version 1 of the Soulseek key            |
-| `SOULSEEK_KEY_<n>`   | secret | optional: version n (2 or more) of the Soulseek key, the same way   |
-| `ALLOWED_EMAILS`     | secret | optional: emails that may sign in, separated by commas              |
+| Name                  | Kind   |                                                                     |
+| --------------------- | ------ | ------------------------------------------------------------------- |
+| `TURSO_DATABASE_URL`  | secret | `libsql://<db>-<org>.turso.io`                                      |
+| `TURSO_AUTH_TOKEN`    | secret | a Turso token for that database                                     |
+| `GOOGLE_CLIENT_ID`    | secret | Wave's **web** OAuth client id, the audience of the app's ID tokens |
+| `SOULSEEK_KEY`        | secret | base64 of 32 random bytes: version 1 of the Soulseek key            |
+| `SOULSEEK_KEY_<n>`    | secret | optional: version n (2 or more) of the Soulseek key, the same way   |
+| `ALLOWED_EMAILS`      | secret | optional: emails that may sign in, separated by commas              |
+| `GENIUS_ACCESS_TOKEN` | secret | Genius's client access token, for the Genius routes                 |
 
 ### Soulseek keys
 
@@ -406,6 +442,7 @@ By hand, the steps are:
    pnpm exec wrangler secret put TURSO_AUTH_TOKEN
    pnpm exec wrangler secret put GOOGLE_CLIENT_ID
    openssl rand -base64 32 | pnpm exec wrangler secret put SOULSEEK_KEY
+   pnpm exec wrangler secret put GENIUS_ACCESS_TOKEN
    ```
 
    Make `SOULSEEK_KEY` once and never overwrite it: the Soulseek accounts kept under it

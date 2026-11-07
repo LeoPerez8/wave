@@ -8,6 +8,7 @@
  */
 
 import type { Client } from "@libsql/client";
+import { geniusUpstreamUrl } from "@wave/core";
 import { type GoogleKeys, googleKeys, verifyGoogleIdToken } from "./google.ts";
 import { type SyncLimitName, type SyncLimits, SYNC_LIMITS } from "./limits.ts";
 import {
@@ -17,6 +18,15 @@ import {
   parseSoulseekAccount,
   readSoulseekAccount,
 } from "./soulseek.ts";
+import {
+  type Upstream,
+  type UpstreamRequest,
+  askUpstream,
+  cachedAnswer,
+  keepAnswer,
+  proxiedAnswer,
+  sha256Hex,
+} from "./proxy.ts";
 import { type PushBatch, deleteAccount, pullRows, pushRows } from "./store.ts";
 import { type IncomingRow, type SyncTable, InvalidRow, SYNC_TABLES, parseRow } from "./tables.ts";
 
@@ -26,6 +36,13 @@ import { type IncomingRow, type SyncTable, InvalidRow, SYNC_TABLES, parseRow } f
  */
 export interface RateLimiter {
   readonly limit: (options: { readonly key: string }) => Promise<{ readonly success: boolean }>;
+}
+
+/** A provider the service asks for phones: the Worker's key for it and its per-account limiter. */
+export interface ProviderAccess {
+  readonly token: string;
+  /** Counts each account's requests to the provider's routes per minute. */
+  readonly limiter: RateLimiter;
 }
 
 export interface SyncServiceOptions {
@@ -57,6 +74,10 @@ export interface SyncServiceOptions {
   readonly log?: (message: string) => void;
   /** What's kept across requests (the Worker keeps it per isolate); a fresh one by default. */
   readonly memory?: ServiceMemory;
+  /** How the provider routes reach providers and the cache; the Worker's `fetch` with no cache by default. */
+  readonly upstream?: Upstream;
+  /** Genius (`GENIUS_ACCESS_TOKEN`, `maxGeniusRequestsPerMinute`); without it the Genius routes answer 503. */
+  readonly genius?: ProviderAccess;
 }
 
 /**
@@ -84,6 +105,9 @@ const DAY_MS = 86_400_000;
 
 /** How many rows a pull answers at most, by default. */
 const PULL_PAGE_SIZE = 1_000;
+
+/** How long a Genius answer is kept for other phones. */
+const GENIUS_TTL_SECONDS = 24 * 60 * 60;
 
 /** How long a session lasts unused: any authenticated request starts it again. */
 const SESSION_UNUSED_MS = 90 * 24 * 60 * 60 * 1000;
@@ -169,13 +193,6 @@ const base64url = (bytes: Uint8Array): string =>
     .replaceAll("+", "-")
     .replaceAll("/", "_")
     .replace(/=+$/, "");
-
-const sha256Hex = async (text: string): Promise<string> => {
-  const digest = new Uint8Array(
-    await crypto.subtle.digest("SHA-256", new TextEncoder().encode(text)),
-  );
-  return Array.from(digest, (byte) => byte.toString(16).padStart(2, "0")).join("");
-};
 
 const parseAllowlist = (value: string | undefined): ReadonlySet<string> | null => {
   const emails = (value ?? "")
@@ -491,6 +508,99 @@ export const createSyncService = (options: SyncServiceOptions): SyncService => {
     json({ account: await readSoulseekAccount(db, await soulseekCipherKeys(), session.accountId) }),
   );
 
+  const upstream: Upstream = options.upstream ?? {
+    fetch: (url, init) => fetch(url, init),
+    cache: null,
+  };
+
+  /**
+   * Counts a request [accountId] makes [provider] answer today (UTC),
+   * refusing with 429 past [limit] until the next day.
+   */
+  const countUpstream = async (
+    accountId: string,
+    provider: string,
+    limit: SyncLimitName,
+  ): Promise<void> => {
+    const at = now();
+    const day = Math.floor(at / DAY_MS);
+    const result = await db.execute({
+      sql: `INSERT INTO upstream_usage (account_id, upstream, day, count) VALUES (?, ?, ?, 1)
+            ON CONFLICT (account_id, upstream) DO UPDATE SET
+              count = CASE WHEN day = excluded.day THEN count + 1 ELSE 1 END,
+              day = excluded.day
+            RETURNING count`,
+      args: [accountId, provider, day],
+    });
+    if (Number(result.rows[0]?.count) > limits[limit]) {
+      throw new Answer(
+        json({ error: "limit", limit }, 429, {
+          "retry-after": String(Math.ceil(((day + 1) * DAY_MS - at) / 1000)),
+        }),
+      );
+    }
+  };
+
+  /** A provider the service answers fixed requests to. */
+  interface Provider {
+    /** Its name in `upstream_usage` and the log. */
+    readonly name: string;
+    readonly access: ProviderAccess | undefined;
+    readonly perMinute: SyncLimitName;
+    readonly perDay: SyncLimitName;
+    /** The provider request a phone's [url] stands for, with the Worker's [key]; null for none. */
+    readonly request: (url: URL, key: string) => UpstreamRequest | null;
+  }
+
+  /**
+   * A route answering [provider]'s fixed requests: it needs a session and
+   * counts the account's requests per minute; one the cache can't answer
+   * counts toward the account's day too. Answers the provider's JSON, or
+   * `{ "error": "upstream_failed" }` (502) when the provider fails, with
+   * nothing of the provider's error.
+   */
+  const proxied = (provider: Provider): Route =>
+    withSession(async ({ url }, session) => {
+      const { access } = provider;
+      if (access === undefined) throw failure(503, "unavailable");
+      if (!(await access.limiter.limit({ key: session.accountId })).success) {
+        throw tooMany(provider.perMinute, now());
+      }
+      const request = provider.request(url, access.token);
+      if (request === null) throw failure(400, "bad_request");
+      const cached = await cachedAnswer(upstream, url.origin, request);
+      if (cached !== null) return proxiedAnswer(cached);
+      await countUpstream(session.accountId, provider.name, provider.perDay);
+      const answer = await askUpstream(upstream, request);
+      if (!answer.ok) {
+        // The status alone: the request names a song or an artist.
+        log(`sync service: ${provider.name} answered ${answer.status ?? "nothing"}`);
+        throw failure(502, "upstream_failed");
+      }
+      await keepAnswer(upstream, url.origin, request, answer.body);
+      return proxiedAnswer(answer.body);
+    });
+
+  /** Genius's search, song and referents, as the Lyrics view asks them (`@wave/core`'s `geniusProxy.ts`). */
+  const genius = proxied({
+    name: "genius",
+    access: options.genius,
+    perMinute: "maxGeniusRequestsPerMinute",
+    perDay: "maxGeniusRequestsPerDay",
+    request: (url, token) => {
+      const target = geniusUpstreamUrl(url.pathname, url.searchParams);
+      return target === null
+        ? null
+        : {
+            url: target,
+            cacheKey: target,
+            headers: { authorization: `Bearer ${token}`, accept: "application/json" },
+            ttlSeconds: GENIUS_TTL_SECONDS,
+            secrets: [token],
+          };
+    },
+  });
+
   /** Each route by method and path. */
   const routes: Readonly<Record<string, Route>> = {
     "POST /v1/session": createSession,
@@ -501,6 +611,9 @@ export const createSyncService = (options: SyncServiceOptions): SyncService => {
     "DELETE /v1/account": removeAccount,
     "PUT /v1/soulseek": putSoulseek,
     "GET /v1/soulseek": getSoulseek,
+    "GET /v1/genius/search": genius,
+    "GET /v1/genius/song": genius,
+    "GET /v1/genius/referents": genius,
   };
 
   return async (request) => {

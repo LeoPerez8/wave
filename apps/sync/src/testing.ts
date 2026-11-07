@@ -12,6 +12,7 @@ import { type Client, createClient } from "@libsql/client";
 import { GOOGLE_CERTS_URL } from "./google.ts";
 import { type SyncLimits, SYNC_LIMITS } from "./limits.ts";
 import { migrate } from "./migrations.ts";
+import type { ProxyCache, Upstream } from "./proxy.ts";
 import {
   type RateLimiter,
   type ServiceMemory,
@@ -170,6 +171,64 @@ const minuteLimiter = (limit: number, now: () => number): RateLimiter => {
   };
 };
 
+/** Genius's token as the tests' Worker holds it. */
+export const GENIUS_TOKEN = "genius-test-token-3f9a";
+
+/** One request the fake upstream got. */
+export interface UpstreamCall {
+  readonly url: string;
+  readonly headers: Headers;
+}
+
+/**
+ * A stand-in for Genius (and any later provider) and for Cloudflare's cache:
+ * it records each request and answers with [answer], 200 and an empty
+ * Genius reply by default. The cache keeps an answer for its `max-age` on
+ * the harness's clock.
+ */
+export interface FakeUpstream extends Upstream {
+  readonly calls: UpstreamCall[];
+  answer: (url: string) => Response | Promise<Response>;
+  /** How many answers the cache holds. */
+  readonly cached: () => number;
+}
+
+const fakeUpstream = (now: () => number): FakeUpstream => {
+  const kept = new Map<string, { body: string; headers: Headers; until: number }>();
+  const cache: ProxyCache = {
+    match: async (key) => {
+      const entry = kept.get(key);
+      if (entry === undefined || now() >= entry.until) return undefined;
+      return new Response(entry.body, { headers: entry.headers });
+    },
+    put: async (key, response) => {
+      const maxAge = /max-age=(\d+)/.exec(response.headers.get("cache-control") ?? "");
+      if (maxAge === null) return;
+      kept.set(key, {
+        body: await response.text(),
+        headers: response.headers,
+        until: now() + Number(maxAge[1]) * 1000,
+      });
+    },
+  };
+  const upstream: FakeUpstream = {
+    calls: [],
+    answer: () => Response.json({ meta: { status: 200 }, response: { hits: [] } }),
+    cached: () => [...kept.values()].filter((entry) => now() < entry.until).length,
+    cache,
+    // Follows a redirect unless told not to, as the Worker's fetch does.
+    fetch: async function follow(url, init): Promise<Response> {
+      upstream.calls.push({ url, headers: new Headers(init.headers) });
+      const response = await upstream.answer(url);
+      const location = response.headers.get("location");
+      if (init.redirect === "manual" || location === null || response.status < 300) return response;
+      if (response.status >= 400) return response;
+      return follow(location, init);
+    },
+  };
+  return upstream;
+};
+
 /** A running service over a fresh database, with a clock the test moves. */
 export interface Harness {
   readonly db: Client;
@@ -178,6 +237,8 @@ export interface Harness {
   /** What the service has logged. */
   readonly logs: readonly string[];
   readonly google: FakeGoogle;
+  /** What stands for Genius and Cloudflare's cache. */
+  readonly upstream: FakeUpstream;
   /** The service's clock, in ms since the epoch. */
   now: number;
   /** Calls the service. */
@@ -203,6 +264,8 @@ export interface HarnessOptions {
   readonly soulseekKeys?: Readonly<Record<string, string>>;
   /** What the service keeps between requests; a fresh one by default. */
   readonly memory?: ServiceMemory;
+  /** Genius's token; `GENIUS_TOKEN` by default, null for a Worker without it. */
+  readonly geniusToken?: string | null;
 }
 
 export const harness = async (options: HarnessOptions = {}, db?: Client): Promise<Harness> => {
@@ -213,6 +276,8 @@ export const harness = async (options: HarnessOptions = {}, db?: Client): Promis
   let queries = 0;
   const logs: string[] = [];
   const limits = { ...SYNC_LIMITS, ...options.limits };
+  const upstream = fakeUpstream(clock);
+  const geniusToken = options.geniusToken === undefined ? GENIUS_TOKEN : options.geniusToken;
   const serviceOptions: SyncServiceOptions = {
     db: countingQueries(db, () => queries++),
     addressLimiter: minuteLimiter(limits.maxRequestsPerAddressPerMinute, clock),
@@ -222,6 +287,15 @@ export const harness = async (options: HarnessOptions = {}, db?: Client): Promis
     now: clock,
     limits,
     log: (message) => logs.push(message),
+    upstream,
+    ...(geniusToken === null
+      ? {}
+      : {
+          genius: {
+            token: geniusToken,
+            limiter: minuteLimiter(limits.maxGeniusRequestsPerMinute, clock),
+          },
+        }),
     ...(options.memory === undefined ? {} : { memory: options.memory }),
     ...(options.allowedEmails === undefined ? {} : { allowedEmails: options.allowedEmails }),
     ...(options.pullPageSize === undefined ? {} : { pullPageSize: options.pullPageSize }),
@@ -264,6 +338,7 @@ export const harness = async (options: HarnessOptions = {}, db?: Client): Promis
     queries: () => queries,
     logs,
     google,
+    upstream,
     get now(): number {
       return state.now;
     },

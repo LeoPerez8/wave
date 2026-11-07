@@ -3,9 +3,9 @@ import {
   geniusCandidates,
   geniusDescription,
   geniusReferentsPage,
-  geniusReferentsUrl,
-  geniusSearchUrl,
-  geniusSongUrl,
+  geniusReferentsPath,
+  geniusSearchPath,
+  geniusSongPath,
   geniusTranslationRequests,
   pickGeniusSong,
   savedGenius,
@@ -18,14 +18,16 @@ import {
 
 /**
  * What Genius insights need from the phone: its key-value store, a GET to
- * Genius with the bearer token, a POST to Google Translate, and whether
- * asking is still allowed (the switch on, the Lyrics view still showing).
+ * the Wave account's Genius routes (Core's `geniusProxy.ts`), which the
+ * native module sends with the session, a POST to Google Translate, and
+ * whether asking is still allowed (the switch on, the Lyrics view still
+ * showing).
  */
 export interface GeniusService {
   readonly read: (key: string) => Promise<string | null>;
   readonly keep: (key: string, value: string) => Promise<void>;
-  /** GETs [url] with [token] as its bearer token and gives its JSON; rejects when it can't. */
-  readonly get: (url: string, token: string) => Promise<unknown>;
+  /** GETs the sync service's [path] with the session and gives Genius's JSON; rejects when it can't. */
+  readonly get: (path: string) => Promise<unknown>;
   /** POSTs the form [body] to [url] and gives its JSON; rejects when it can't. */
   readonly post: (url: string, body: string) => Promise<unknown>;
   readonly enabled: () => boolean;
@@ -33,13 +35,14 @@ export interface GeniusService {
 
 /**
  * Which song to ask about: its saved answer's [key] (a Library track by its
- * id, a non-D song by its track id), and what its text is translated into
+ * id, a non-D song by its track id), whether a Wave account is signed in
+ * (Genius is asked only then), and what its text is translated into
  * ([target], `geniusTranslationTarget`; null for none).
  */
 export interface GeniusAsk {
   readonly key: string;
   readonly song: SongLookup;
-  readonly token: string;
+  readonly signedIn: boolean;
   readonly target: string | null;
 }
 
@@ -59,7 +62,6 @@ const saveGenius = (ask: GeniusAsk, answer: SavedGenius, service: GeniusService)
  */
 const loadReferents = async (
   id: number,
-  token: string,
   service: GeniusService,
 ): Promise<readonly GeniusReferent[] | null> => {
   const referents: GeniusReferent[] = [];
@@ -67,7 +69,7 @@ const loadReferents = async (
     if (!service.enabled()) return null;
     let reply: unknown;
     try {
-      reply = await service.get(geniusReferentsUrl(id, page), token);
+      reply = await service.get(geniusReferentsPath(id, page));
     } catch (cause) {
       console.warn("[wave] couldn't ask Genius for annotations", cause);
       return null;
@@ -85,7 +87,8 @@ const loadReferents = async (
  * annotations"): the answer saved on the phone, with no request, or Genius's
  * search and then its song and annotations, saved for next time (a miss
  * too, for a week). A saved match whose annotations were never had asks for
- * them alone. Null with no token, with insights off (checked again before
+ * them alone. Signed out, only what's saved shows, with no request. Null
+ * signed out with nothing saved, with insights off (checked again before
  * each request and before saving), and when Genius can't be reached or
  * answers something unreadable, which saves nothing; annotations that fail
  * alone leave the rest and are asked again next time. Never rejects.
@@ -101,24 +104,24 @@ export const loadGenius = async (
     const saved = savedGenius(await service.read(key), now, ask.song);
     if (!service.enabled()) return null;
     if (saved !== null) {
-      if (saved.match === null || saved.referents !== null || ask.token.trim() === "") return saved;
-      const referents = await loadReferents(saved.match.id, ask.token, service);
+      if (saved.match === null || saved.referents !== null || !ask.signedIn) return saved;
+      const referents = await loadReferents(saved.match.id, service);
       if (!service.enabled()) return null;
       if (referents === null) return saved;
       const result: SavedGenius = { ...saved, referents };
       await saveGenius(ask, result, service);
       return result;
     }
-    if (ask.token.trim() === "") return null;
-    const hits = geniusCandidates(await service.get(geniusSearchUrl(ask.song), ask.token));
+    if (!ask.signedIn) return null;
+    const hits = geniusCandidates(await service.get(geniusSearchPath(ask.song)));
     if (hits === null || !service.enabled()) return null;
     const match = pickGeniusSong(ask.song, hits);
     let description: string | null = null;
     let referents: readonly GeniusReferent[] | null = null;
     if (match !== null) {
       const [song, annotated] = await Promise.all([
-        service.get(geniusSongUrl(match.id), ask.token),
-        loadReferents(match.id, ask.token, service),
+        service.get(geniusSongPath(match.id)),
+        loadReferents(match.id, service),
       ]);
       const about = geniusDescription(song, match.id);
       if (about === null || !service.enabled()) return null;
@@ -137,7 +140,7 @@ export const loadGenius = async (
 /**
  * [saved] with its text translated into [ask]'s target (docs/spec.md, "Genius
  * About" and "Genius annotations"), saved with the answer. [saved] as it is
- * when there's nothing to ask (no target, no token, insights off, already
+ * when there's nothing to ask (no target, insights off, already
  * translated) and when Google can't be reached or answers something
  * unreadable, or asking stops being allowed, on any of a long song's
  * requests: nothing is saved, so the next opening asks again. Never rejects.
@@ -147,7 +150,7 @@ export const translateGenius = async (
   saved: SavedGenius,
   service: GeniusService,
 ): Promise<SavedGenius> => {
-  if (ask.target === null || ask.token.trim() === "" || !service.enabled()) return saved;
+  if (ask.target === null || !service.enabled()) return saved;
   const replies: unknown[] = [];
   try {
     for (const request of geniusTranslationRequests(saved, ask.target)) {

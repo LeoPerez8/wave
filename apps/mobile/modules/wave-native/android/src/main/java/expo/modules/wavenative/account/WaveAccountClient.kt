@@ -130,11 +130,14 @@ class WaveAccountClient(
     }
 
   /**
-   * A request JS sends with the session it can't see: only a push (`POST /v1/push`) or a pull
-   * (`GET /v1/pull`). The Soulseek account and sessions go between native code and the service.
+   * A request JS sends with the session it can't see: only a push (`POST /v1/push`), a pull
+   * (`GET /v1/pull`), or one of the Genius requests the Lyrics view makes (`GET /v1/genius/…`,
+   * Core's `geniusProxy.ts`). The Soulseek account and sessions go between native code and the
+   * service.
    */
   fun request(method: String, path: String, body: String?): WaveResponse {
-    val allowed = (method == "POST" && path == "/v1/push") || (method == "GET" && PULL.matches(path))
+    val allowed = (method == "POST" && path == "/v1/push") ||
+      (method == "GET" && (PULL.matches(path) || GENIUS.any { it.matches(path) }))
     if (!allowed) throw WaveAccountException(WaveAccountFailure.FORBIDDEN_REQUEST)
     return send(method, path, body)
   }
@@ -213,5 +216,11 @@ class WaveAccountClient(
   private companion object {
     val ID_TOKEN_REFUSALS = setOf("invalid_id_token", "id_token_required")
     val PULL = Regex("""^/v1/pull(\?since=[0-9A-Za-z_-]*)?$""")
+    /** Core's `geniusSearchPath` (its text as `encodeURIComponent` writes it), `geniusSongPath` and `geniusReferentsPath`. */
+    val GENIUS = listOf(
+      Regex("""^/v1/genius/search\?q=[A-Za-z0-9%._~!*'()-]{1,6000}$"""),
+      Regex("""^/v1/genius/song\?id=[1-9][0-9]{0,15}$"""),
+      Regex("""^/v1/genius/referents\?song=[1-9][0-9]{0,15}&page=([1-9]|1[0-9]|20)$"""),
+    )
   }
 }

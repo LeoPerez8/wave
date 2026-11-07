@@ -135,6 +135,37 @@ class WaveAccountClientTest {
     }
   }
 
+  @Test fun `JS can ask the Genius routes the Lyrics view uses, and nothing else of them`() {
+    FakeWaveService { Reply(200, """{"meta":{"status":200}}""") }.use { service ->
+      val client = signedIn(service)
+      val allowed = listOf(
+        "/v1/genius/search?q=Bohemian%20Rhapsody%20Queen",
+        "/v1/genius/search?q=%C3%81guas%20de%20Mar%C3%A7o%20Elis%20%26%20Tom",
+        "/v1/genius/search?q=What%3F%2F%231%20%2B%20AC%2FDC!'()*",
+        "/v1/genius/song?id=1063",
+        "/v1/genius/referents?song=1063&page=1",
+        "/v1/genius/referents?song=1063&page=20",
+      )
+      for (path in allowed) assertEquals(path, 200, client.request("GET", path, null).status)
+      assertEquals(allowed, service.received.map { it.path })
+      for ((method, path) in listOf(
+        "POST" to "/v1/genius/search?q=a",
+        "GET" to "/v1/genius/search?q=",
+        "GET" to "/v1/genius/search?q=a&page=2",
+        "GET" to "/v1/genius/search?q=a b",
+        "GET" to "/v1/genius/search?q=a#x",
+        "GET" to "/v1/genius/song?id=0",
+        "GET" to "/v1/genius/song?id=1&text_format=html",
+        "GET" to "/v1/genius/song?id=1/../../soulseek",
+        "GET" to "/v1/genius/referents?song=1&page=21",
+        "GET" to "/v1/genius/referents?song=1",
+        "GET" to "/v1/genius/artists?id=1",
+      ))
+        assertEquals("$method $path", WaveAccountFailure.FORBIDDEN_REQUEST, failure { client.request(method, path, null) })
+      assertEquals(allowed.size, service.received.size)
+    }
+  }
+
   @Test fun `native callers can reach the Soulseek route with the session`() {
     FakeWaveService { Reply(200, """{"username":"fixture"}""") }.use { service ->
       assertEquals(200, signedIn(service).send("GET", "/v1/soulseek", null).status)
