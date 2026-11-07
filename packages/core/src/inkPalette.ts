@@ -55,6 +55,17 @@ const VIVID_SOURCES = [
   [359, "#ff008b"],
 ] as const;
 
+/**
+ * The same for hues 39° and 49°, between red and amber (#1005): without them a
+ * strong orange such as `#ff5500` took red. Only two, since every ink pair
+ * ships a splash style per background pair, and Android's generated style
+ * class holds about 32,700 styles: 29 inks at most.
+ */
+const ORANGE_SOURCES = [
+  [39, "#ff5600"],
+  [49, "#ff7600"],
+] as const;
+
 const presetInk = (swatch: InkSwatch): PaletteInk => ({
   id: swatch.id,
   kind: "preset",
@@ -64,27 +75,32 @@ const presetInk = (swatch: InkSwatch): PaletteInk => ({
 
 const whiteSwatch = THEME_SWATCHES.primary.find((swatch) => swatch.id === WHITE_INK)!;
 
+/** A vivid tone: its source hex with the app's custom-ink correction for each mode. */
+const vividInk = ([hue, hex]: readonly [number, string]): PaletteInk => {
+  const theme = themeFor(chooseCustomInk(DEFAULT_THEME_CHOICE, "primary", hex));
+  return {
+    id: `vivid${hue}`,
+    kind: "vivid",
+    light: theme.light.accent,
+    dark: theme.dark.accent,
+  };
+};
+
 /**
- * All 25 inks; both waves can use either group's former presets, any vivid
- * tone or the Default swatch's white. The presets left Settings (#794) but
- * keep their places, and white comes last, so the inks keep the positions
- * splash style names count and the ids alias names use.
+ * All 27 inks; both waves can use either group's former presets, any vivid
+ * tone or the Default swatch's white. Splash style names count these places
+ * and alias names use these ids, so an ink never moves: the presets left
+ * Settings (#794) but keep their places, white came after the first vivid
+ * tones (#793), and the oranges come after white (#1005).
  */
 export const INK_PALETTE: readonly PaletteInk[] = [
   ...[...FORMER_INK_SWATCHES.primary, ...FORMER_INK_SWATCHES.secondary].map(presetInk),
-  ...VIVID_SOURCES.map(([hue, hex]) => {
-    const theme = themeFor(chooseCustomInk(DEFAULT_THEME_CHOICE, "primary", hex));
-    return {
-      id: `vivid${hue}`,
-      kind: "vivid" as const,
-      light: theme.light.accent,
-      dark: theme.dark.accent,
-    };
-  }),
+  ...VIVID_SOURCES.map(vividInk),
   presetInk(whiteSwatch),
+  ...ORANGE_SOURCES.map(vividInk),
 ];
 
-/** Both waves choose independently: 25 × 25 stable pairs. */
+/** Both waves choose independently: 27 × 27 stable pairs. */
 export const INK_PAIRS: readonly InkPair[] = INK_PALETTE.flatMap((primary) =>
   INK_PALETTE.map((secondary) => ({
     id: `${primary.id}_${secondary.id}`,
@@ -103,7 +119,7 @@ export const PASTEL_CHROMA_THRESHOLD = 0.12;
  */
 const NEAR_WHITE = { lightness: 0.9, chroma: 0.06 } as const;
 
-const white = INK_PALETTE.at(-1)!;
+const white = INK_PALETTE.find((ink) => ink.id === WHITE_INK)!;
 
 /** A former preset's ink, by the preset's dark tone (the colour it reads as now). */
 const FORMER_INK: ReadonlyMap<string, PaletteInk> = new Map(

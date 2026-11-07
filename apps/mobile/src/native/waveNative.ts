@@ -245,6 +245,12 @@ declare class WaveNativeModule extends NativeModule<WaveNativeEvents> {
    */
   setLauncherIcon(alias: string, aliases: readonly string[]): Promise<void>;
   /**
+   * Shows `alias`'s icon (an activity-alias name without the package) on
+   * Wave's task in Recents, from now and whenever Wave's screen starts; null
+   * shows the manifest's icon.
+   */
+  setRecentsIcon(alias: string | null): Promise<void>;
+  /**
    * The launcher alias an earlier Wave last left on, whichever build it was:
    * the icon the phone shows on an update. Null when none was recorded.
    */

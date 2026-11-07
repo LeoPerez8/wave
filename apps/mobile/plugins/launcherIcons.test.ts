@@ -84,13 +84,14 @@ describe("addLauncherAliases", () => {
     }
   });
 
-  test("one alias per pair of the 25 inks, each with its own name", () => {
+  test("one alias per pair of the 27 inks, each with its own name", () => {
     const names = (application(addLauncherAliases(prebuildManifest()))["activity-alias"] ?? []).map(
       (alias) => alias.$?.["android:name"],
     );
-    assert.equal(names.length, 625);
-    assert.equal(new Set(names).size, 625);
+    assert.equal(names.length, 729);
+    assert.equal(new Set(names).size, 729);
     assert.ok(names.includes(".LauncherIcon_vivid209_vivid29"));
+    assert.ok(names.includes(".LauncherIcon_vivid39_white"));
   });
 
   test("white pairs with itself and with every other ink, in both waves (#793)", () => {
@@ -106,14 +107,14 @@ describe("addLauncherAliases", () => {
     }
   });
 
-  test("every alias of the 24 earlier inks keeps its name, so nobody's icon goes missing", () => {
+  test("every alias of the 25 inks before the oranges keeps its name, so nobody's icon goes missing (#1005)", () => {
     const names = new Set(
       (application(addLauncherAliases(prebuildManifest()))["activity-alias"] ?? []).map(
         (alias) => alias.$?.["android:name"],
       ),
     );
-    for (const primary of EARLIER_INKS)
-      for (const secondary of EARLIER_INKS)
+    for (const primary of [...EARLIER_INKS, "white"])
+      for (const secondary of [...EARLIER_INKS, "white"])
         assert.ok(names.has(`.LauncherIcon_${primary}_${secondary}`), `${primary}_${secondary}`);
   });
 
@@ -229,8 +230,8 @@ describe("launcherIconFiles", () => {
 
   test("the wave drawables grow with the inks, not the pairs", () => {
     const vectors = Object.entries(files).filter(([, xml]) => xml.includes("<vector"));
-    // A top and a bottom wave per ink of the 25, plus the monochrome waves.
-    assert.equal(vectors.length, 25 * 2 + 1);
+    // A top and a bottom wave per ink of the 27, plus the monochrome waves.
+    assert.equal(vectors.length, 27 * 2 + 1);
     for (const [path, xml] of vectors) assert.match(xml, /android:viewportWidth="108"/, path);
   });
 

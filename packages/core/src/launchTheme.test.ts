@@ -4,7 +4,7 @@ import { describe, test } from "node:test";
 import {
   DEFAULT_THEME_CHOICE,
   INK_PAIRS,
-  LAUNCH_SPLASH_THEMES,
+  launchSplashThemes,
   THEME_SWATCHES,
   contrastRatio,
   chooseCustomInk,
@@ -14,6 +14,10 @@ import {
   themeFor,
   type ThemeChoice,
 } from "./index.ts";
+import * as core from "./index.ts";
+
+/** The splash styles the build ships, built as the build plugin builds them. */
+const LAUNCH_SPLASH_THEMES = launchSplashThemes();
 
 /** A choice; a former preset id (#794) reads as Wave reads it now, custom and saved. */
 const choose = (change: Partial<ThemeChoice>): ThemeChoice =>
@@ -43,6 +47,53 @@ const everyChoice = (): ThemeChoice[] =>
       ),
     ),
   );
+
+describe("launch splash list", () => {
+  test("loading Core builds no splash list; only the build asks for it (#1004)", () => {
+    for (const [name, value] of Object.entries(core))
+      if (Array.isArray(value))
+        assert.ok(value.length < LAUNCH_SPLASH_THEMES.length / 10, `${name} holds ${value.length}`);
+    assert.equal(typeof core.launchSplashThemes, "function");
+  });
+
+  test("the build gets every style it shipped before, by name", () => {
+    assert.equal(LAUNCH_SPLASH_THEMES.length, 36 * 729 - 1);
+    const names = new Set(LAUNCH_SPLASH_THEMES.map((theme) => theme.name));
+    for (const name of [
+      "Wl.0.0.0.6",
+      "Wl.0.0.4.7",
+      "Wl.1.3.0.6",
+      "Wl.0.1.o.o",
+      "Wl.0.0.i.c",
+      "Wl.5.5.o.o",
+    ])
+      assert.ok(names.has(name), name);
+    assert.equal(names.has("Wl.0.0.o.o"), false, "the manifest's splash isn't a style of its own");
+    // Every name from before the oranges (#1005): the first 25 inks, places 0–o.
+    for (let light = 0; light < 6; light++)
+      for (let dark = 0; dark < 6; dark++)
+        for (let primary = 0; primary < 25; primary++)
+          for (let secondary = 0; secondary < 25; secondary++) {
+            const name = `Wl.${light}.${dark}.${primary.toString(36)}.${secondary.toString(36)}`;
+            if (name !== "Wl.0.0.o.o") assert.ok(names.has(name), name);
+          }
+  });
+
+  test("the splash styles fit in Android's generated style class (#1005)", () => {
+    // R$style gets a field per style, two constant-pool entries each, and a
+    // class holds 65,535: about 32,700 styles, some 1,300 of them the app's
+    // and libraries' own. 29 inks (30,275 splash styles) fit; 37 inks
+    // (49,283) failed the build.
+    assert.ok(LAUNCH_SPLASH_THEMES.length <= 31_000, `${LAUNCH_SPLASH_THEMES.length} styles`);
+  });
+
+  test("an orange opens on its orange ink's style, after the earlier names (#1005)", () => {
+    const orange = chooseCustomInk(DEFAULT_THEME_CHOICE, "primary", "#ff5500");
+    assert.equal(launchTheme(orange).splashTheme, "Wl.0.0.p.o");
+    assert.equal(launchTheme(orange).dark.primary, "#ff5600");
+    assert.ok(LAUNCH_SPLASH_THEMES.some((theme) => theme.name === "Wl.5.5.q.q"));
+  });
+});
 
 describe("launchTheme", () => {
   test("uses the stored icon's waves with the app's current grounds after No (#792)", () => {
@@ -141,8 +192,8 @@ describe("launchTheme", () => {
       const name = launchTheme(choice).splashTheme;
       if (name !== null) assert.ok(names.has(name), `${JSON.stringify(choice)}: ${name}`);
     }
-    assert.equal(LAUNCH_SPLASH_THEMES.length, 36 * 625 - 1);
-    assert.equal(names.size, 36 * 625 - 1);
+    assert.equal(LAUNCH_SPLASH_THEMES.length, 36 * 729 - 1);
+    assert.equal(names.size, 36 * 729 - 1);
     for (const name of names) {
       assert.match(name, /^[A-Za-z][A-Za-z0-9_.]*$/);
       assert.ok(name.length <= 10, `compact Android style name: ${name}`);
@@ -151,7 +202,7 @@ describe("launchTheme", () => {
 
   test("every background pair and palette ink pair ships exactly once, except the manifest default", () => {
     const choices = new Set(LAUNCH_SPLASH_THEMES.map((theme) => choiceKey(theme.choice)));
-    assert.equal(choices.size, 36 * 625 - 1);
+    assert.equal(choices.size, 36 * 729 - 1);
     for (const light of THEME_SWATCHES.light) {
       for (const dark of THEME_SWATCHES.dark) {
         for (const pair of INK_PAIRS) {

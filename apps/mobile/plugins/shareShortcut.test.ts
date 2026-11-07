@@ -54,7 +54,7 @@ describe("addShareShortcuts", () => {
     const manifest = addShareShortcuts(addLauncherAliases(prebuildManifest()));
     const aliases = application(manifest)["activity-alias"] ?? [];
     assert.equal(aliases.length, LAUNCHER_ICONS.length);
-    assert.equal(aliases.length, 625);
+    assert.equal(aliases.length, 729);
     for (const alias of aliases) {
       assert.deepEqual(shortcutsResources(alias), ["@xml/shortcuts"], alias.$?.["android:name"]);
     }

@@ -28,7 +28,7 @@ const loadTheme = async (
       setItemSync: (key, value) => kept.set(key, value),
       removeItemSync: key => kept.delete(key),
     };
-    export const device = { alias: null, launch: null, css: {} };
+    export const device = { alias: null, recents: undefined, launch: null, css: {} };
     export const Uniwind = {
       setTheme: () => {},
       updateCSSVariables: (mode, values) => { device.css[mode] = values; },
@@ -36,6 +36,7 @@ const loadTheme = async (
     export const WaveNative = {
       setAppearance: async () => {},
       setLauncherIcon: async alias => { device.alias = alias; },
+      setRecentsIcon: async alias => { device.recents = alias; },
       setLaunchTheme: async theme => { device.launch = theme; },
       hasLaunchTheme: () => ${launchThemeSaved},
       appliedLauncherAlias: () => ${JSON.stringify(appliedAlias)},
@@ -78,7 +79,13 @@ const loadTheme = async (
       `../lib/persistedSetting.ts?fixture=${id}`
     )) as typeof import("../lib/persistedSetting.ts");
     const { device, Storage } = (await import(boundary)) as {
-      device: { alias: string; launch: LaunchTheme; css: Record<string, Record<string, string>> };
+      device: {
+        alias: string;
+        /** The alias Recents was last given; null for the manifest's icon, undefined before any. */
+        recents: string | null | undefined;
+        launch: LaunchTheme;
+        css: Record<string, Record<string, string>>;
+      };
       Storage: { getItemSync: (key: string) => string | null };
     };
     return { theme, settings, device, Storage };
@@ -150,6 +157,17 @@ test("a pulled theme recolours the app but cannot change or sync this phone's ic
   assert.equal(Storage.getItemSync("settings.launcherIcon"), "violet_white");
   assert.equal(JSON.parse(settings.syncedSettingValue("settings.theme")!).icon, undefined);
   assert.deepEqual(changed, []);
+});
+
+test("Recents shows the stored icon, and the manifest's for the white default (#1006)", async () => {
+  const white = await loadTheme();
+  assert.equal(white.device.recents, null);
+  const coloured = await loadTheme({ "settings.launcherIcon": "teal_ember" });
+  assert.equal(coloured.device.recents, "LauncherIcon_teal_ember");
+  await coloured.theme.setCustomInk("primary", "#ff5500", async () => "action");
+  assert.equal(coloured.device.recents, "LauncherIcon_vivid39_white");
+  await coloured.theme.setCustomInk("secondary", "#7cc4ea", async () => "alternative");
+  assert.equal(coloured.device.recents, "LauncherIcon_vivid39_white", "No keeps the icon");
 });
 
 test("Yes saves the selected icon, No asks again on the next colour, and dismissal cancels", async () => {

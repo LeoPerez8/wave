@@ -1,5 +1,7 @@
 import {
+  DEFAULT_THEME_CHOICE,
   LAUNCHER_ICONS,
+  launcherIconFor,
   launcherIconOnStart,
   type LauncherBehaviour,
   type LauncherIcon,
@@ -20,6 +22,9 @@ import { launcherAlias } from "./launcherAlias";
 export const LAUNCHER: LauncherBehaviour = { dropsHomeScreenIcon: true };
 
 const ALIASES = LAUNCHER_ICONS.map(launcherAlias);
+
+/** The white default, whose waves Recents already shows: the manifest's own icon. */
+const DEFAULT_ICON = launcherIconFor(DEFAULT_THEME_CHOICE);
 
 // This phone's icon is separate from the synced theme choice.
 const storedIcon = persistedSetting<LauncherIcon | null>({
@@ -56,11 +61,16 @@ export const storedLauncherIcon = (): LauncherIcon | null => storedIcon.get();
 export const useStoredLauncherIcon = storedIcon.useValue;
 
 /**
- * Shows the stored icon in the launcher. The native side switches it once
- * Wave leaves the screen, and does nothing when it already shows.
+ * Shows the stored icon in the launcher and in Recents. The native side
+ * switches the launcher's once Wave leaves the screen, and does nothing when
+ * it already shows; Recents takes it at once.
  */
 export const showLauncherIcon = (icon: LauncherIcon): void => {
   WaveNative.setLauncherIcon(launcherAlias(icon), ALIASES).catch((error: unknown) =>
     console.warn("[wave] Couldn't switch the launcher icon", error),
+  );
+  // Recents shows the manifest's icon unless Wave gives its task another (#1006).
+  WaveNative.setRecentsIcon(icon.id === DEFAULT_ICON.id ? null : launcherAlias(icon)).catch(
+    (error: unknown) => console.warn("[wave] Couldn't show the icon in Recents", error),
   );
 };
