@@ -1,6 +1,6 @@
 /**
  * Wave's launcher icons on Android: one activity alias of MainActivity per
- * pair of palette inks (Core's `LAUNCHER_ICONS`, 25 × 25), each with an
+ * pair of palette inks (Core's `LAUNCHER_ICONS`, 27 × 27), each with an
  * adaptive icon of vector waves on black. `withLauncherIcons.ts` applies these at prebuild.
  */
 import {

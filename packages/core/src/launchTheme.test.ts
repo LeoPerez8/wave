@@ -57,7 +57,7 @@ describe("launch splash list", () => {
   });
 
   test("the build gets every style it shipped before, by name", () => {
-    assert.equal(LAUNCH_SPLASH_THEMES.length, 36 * 625 - 1);
+    assert.equal(LAUNCH_SPLASH_THEMES.length, 36 * 729 - 1);
     const names = new Set(LAUNCH_SPLASH_THEMES.map((theme) => theme.name));
     for (const name of [
       "Wl.0.0.0.6",
@@ -69,6 +69,28 @@ describe("launch splash list", () => {
     ])
       assert.ok(names.has(name), name);
     assert.equal(names.has("Wl.0.0.o.o"), false, "the manifest's splash isn't a style of its own");
+    // Every name from before the oranges (#1005): the first 25 inks, places 0–o.
+    for (let light = 0; light < 6; light++)
+      for (let dark = 0; dark < 6; dark++)
+        for (let primary = 0; primary < 25; primary++)
+          for (let secondary = 0; secondary < 25; secondary++) {
+            const name = `Wl.${light}.${dark}.${primary.toString(36)}.${secondary.toString(36)}`;
+            if (name !== "Wl.0.0.o.o") assert.ok(names.has(name), name);
+          }
+  });
+
+  test("the splash styles fit in Android's generated style class (#1005)", () => {
+    // R$style gets a field per style, two constant-pool entries each, and a
+    // class holds 65,535: about 32,700 styles, some 1,300 of them the app's
+    // and libraries' own. 37 inks (49,283 splash styles) failed the build.
+    assert.ok(LAUNCH_SPLASH_THEMES.length <= 30_000, `${LAUNCH_SPLASH_THEMES.length} styles`);
+  });
+
+  test("an orange opens on its orange ink's style, after the earlier names (#1005)", () => {
+    const orange = chooseCustomInk(DEFAULT_THEME_CHOICE, "primary", "#ff5500");
+    assert.equal(launchTheme(orange).splashTheme, "Wl.0.0.p.o");
+    assert.equal(launchTheme(orange).dark.primary, "#ff5600");
+    assert.ok(LAUNCH_SPLASH_THEMES.some((theme) => theme.name === "Wl.5.5.q.q"));
   });
 });
 
@@ -169,8 +191,8 @@ describe("launchTheme", () => {
       const name = launchTheme(choice).splashTheme;
       if (name !== null) assert.ok(names.has(name), `${JSON.stringify(choice)}: ${name}`);
     }
-    assert.equal(LAUNCH_SPLASH_THEMES.length, 36 * 625 - 1);
-    assert.equal(names.size, 36 * 625 - 1);
+    assert.equal(LAUNCH_SPLASH_THEMES.length, 36 * 729 - 1);
+    assert.equal(names.size, 36 * 729 - 1);
     for (const name of names) {
       assert.match(name, /^[A-Za-z][A-Za-z0-9_.]*$/);
       assert.ok(name.length <= 10, `compact Android style name: ${name}`);
@@ -179,7 +201,7 @@ describe("launchTheme", () => {
 
   test("every background pair and palette ink pair ships exactly once, except the manifest default", () => {
     const choices = new Set(LAUNCH_SPLASH_THEMES.map((theme) => choiceKey(theme.choice)));
-    assert.equal(choices.size, 36 * 625 - 1);
+    assert.equal(choices.size, 36 * 729 - 1);
     for (const light of THEME_SWATCHES.light) {
       for (const dark of THEME_SWATCHES.dark) {
         for (const pair of INK_PAIRS) {

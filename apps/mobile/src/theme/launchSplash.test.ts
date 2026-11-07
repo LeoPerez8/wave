@@ -142,16 +142,17 @@ describe("launch splash styles", () => {
     assert.equal(style("Wl.0.0.o.o"), undefined);
   });
 
-  test("every style of the 24 earlier inks keeps its name; white adds the rest", () => {
+  test("every style of the 25 earlier inks keeps its name; the oranges add the rest (#1005)", () => {
     const names = [...stylesByName.keys()].filter((name) => name.startsWith("Wl."));
-    assert.equal(names.length, 36 * 25 * 25 - 1);
+    assert.equal(names.length, 36 * 27 * 27 - 1);
     for (let light = 0; light < 6; light++)
       for (let dark = 0; dark < 6; dark++)
-        for (let primary = 0; primary < 24; primary++)
-          for (let secondary = 0; secondary < 24; secondary++) {
+        for (let primary = 0; primary < 25; primary++)
+          for (let secondary = 0; secondary < 25; secondary++) {
             const name = `Wl.${light}.${dark}.${primary.toString(36)}.${secondary.toString(36)}`;
-            assert.ok(stylesByName.has(name), name);
+            if (name !== "Wl.0.0.o.o") assert.ok(stylesByName.has(name), name);
           }
+    assert.ok(stylesByName.has("Wl.0.0.p.o"), "vivid39 over white");
   });
 
   test("every splash draws the moving logo and hands over to the app theme", () => {
