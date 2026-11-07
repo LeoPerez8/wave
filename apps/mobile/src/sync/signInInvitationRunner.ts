@@ -86,5 +86,9 @@ export const createSignInInvitationRunner = ({
     }
   };
 
-  return { reconsider };
+  return {
+    reconsider,
+    /** Whether the invitation may still show on this phone (it isn't answered or remembered). */
+    isDue: (): boolean => invitation === "due",
+  };
 };

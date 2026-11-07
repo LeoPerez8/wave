@@ -142,8 +142,10 @@ export default function RootLayout() {
   }, [granted]);
 
   // On a new install, the invitation to sign in to a Wave account, once, after the access screen.
+  // Not startup work: it waits for nothing heavy, and the first run's trip to Android's settings
+  // can leave startup work waiting (the activity is recreated in the same runtime).
   useEffect(() => {
-    if (granted) return afterFirstSettled("signInInvitation", startSignInInvitation);
+    if (granted) startSignInInvitation();
   }, [granted]);
 
   // A whole-Library lyrics and genre run that ended in the background says how it went.

@@ -165,7 +165,8 @@ export const settleSignInInvitation = (): void => {
  */
 export const startSignInInvitation = (): void => {
   settleSignInInvitation();
-  if (following || runner === null) return;
+  // A phone that answered it, or used Wave before it, follows nothing.
+  if (following || runner === null || !runner.isDue()) return;
   following = true;
   const appState = AppState.addEventListener("change", runner.reconsider);
   stops.push(

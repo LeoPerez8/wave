@@ -68,7 +68,9 @@ describe("the sign-in invitation", () => {
     assert.equal(first.cards.length, 1);
     first.runner.reconsider();
     assert.equal(first.cards.length, 1, "opened once");
+    assert.equal(first.runner.isDue(), true);
     first.cards[0]!.answer();
+    assert.equal(first.runner.isDue(), false);
     first.runner.reconsider();
     assert.equal(first.cards.length, 1);
     assert.equal(first.finished(), 1, "stops following the phone once answered");
@@ -92,6 +94,7 @@ describe("the sign-in invitation", () => {
   it("never shows on a phone that used Wave before the update", () => {
     const stored = { value: null as string | null };
     const updated = launch({ stored, accessGranted: true });
+    assert.equal(updated.runner.isDue(), false, "nothing to follow at startup");
     updated.runner.reconsider();
     assert.equal(updated.cards.length, 0);
 
