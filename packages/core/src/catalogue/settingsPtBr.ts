@@ -341,7 +341,7 @@ export const settingsPtBr: typeof settingsEn = {
     title: "Faça mais com uma Conta Wave",
     libraryTitle: "Sua Biblioteca em todo celular",
     library:
-      "Playlists, favoritas, histórico de ouvidas e preferências acompanham você, e um celular novo recebe sua Biblioteca inteira de volta.",
+      "Playlists, favoritas, histórico de ouvidas e preferências em todo celular em que você iniciar sessão.",
     geniusTitle: "O que o Genius diz",
     genius: "As notas do Genius sobre a música tocando, acima da letra.",
     showsTitle: "Shows perto de você",

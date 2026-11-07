@@ -353,8 +353,7 @@ export const settingsEn = {
   signInInvitation: {
     title: "Do more with a Wave account",
     libraryTitle: "Your Library on every phone",
-    library:
-      "Playlists, favorites, play history and preferences follow you, and a new phone gets your whole Library back.",
+    library: "Playlists, favorites, play history and preferences on every phone you sign in on.",
     geniusTitle: "What Genius says",
     genius: "Genius's notes on the song playing, above its lyrics.",
     showsTitle: "Shows near you",
