@@ -375,6 +375,9 @@ export const settingsPtBr: typeof settingsEn = {
   dontPlayExplicit: "Não reproduzir conteúdo explícito",
   skipsSongsMarkedExplicitByYouTubeMusic:
     "Pula músicas marcadas como explícitas pelo YouTube Music ou Deezer.",
+  normalizeVolume: "Normalizar volume",
+  playsEverySongAtAboutTheSame:
+    "Toca todas as músicas com um volume parecido, para você não precisar ajustar o volume entre elas. Seus arquivos de música não são alterados.",
   howMuchOfAStreamedSongWave:
     "Quanto de uma música online o Wave carrega com antecedência, incluindo as próximas músicas em A Seguir, para continuar tocando sem sinal. Períodos maiores usam mais memória: cerca de 50 MB para 30 minutos. Músicas baixadas tocam do telefone.",
   swipeActions: "Ações de deslizar",

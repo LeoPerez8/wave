@@ -183,6 +183,12 @@ declare class WavePlayerModule extends NativeModule<WavePlayerEvents> {
    */
   setStreamBuffer(aheadMs: number): Promise<void>;
   /**
+   * Normalize Volume: whether songs play at their leveled gain (Core's
+   * `songGain`). Kept natively, so it holds without JS too; it applies at
+   * once, to the song playing too.
+   */
+  setNormalizeVolume(on: boolean): Promise<void>;
+  /**
    * The player entry whose next song is an unsearched one still being searched (Core's
    * `searchingAfter`), or null: a crossfade from it waits for the search at full volume.
    */

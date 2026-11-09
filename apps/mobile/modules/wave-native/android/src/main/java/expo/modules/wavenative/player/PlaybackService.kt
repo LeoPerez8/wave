@@ -45,6 +45,7 @@ import expo.modules.wavenative.log.WaveLog
 import expo.modules.wavenative.yt.YtAudioCache
 import expo.modules.wavenative.yt.YtClient
 import expo.modules.wavenative.yt.YtDataSource
+import expo.modules.wavenative.yt.YtLoudness
 import expo.modules.wavenative.yt.YtMedia
 import expo.modules.wavenative.yt.YtStreamFailure
 
@@ -193,7 +194,12 @@ class PlaybackService : MediaLibraryService() {
       DefaultDataSource.Factory(this, DefaultHttpDataSource.Factory().setAllowCrossProtocolRedirects(true)),
       audioCache = { YtAudioCache.get(this) },
     ) { YtClient.get(this) }
-    return ExoPlayer.Builder(this, WaveRenderersFactory(this))
+    // Normalize Volume scales each song's samples in the sink, under the crossfade's volume.
+    val gain = GainStage(
+      loudnessOf = ::loudnessOf,
+      onSongStart = { WaveLog.i(NormalizeVolume.LOG_TAG, NormalizeVolume.logLine(it)) },
+    )
+    return ExoPlayer.Builder(this, WaveRenderersFactory(this, listOf(gain)))
       // Keeps the Buffer setting's streamed audio ahead (StreamBuffer).
       .setLoadControl(StreamLoadControl())
       .setMediaSourceFactory(DefaultMediaSourceFactory(dataSources))
@@ -224,6 +230,12 @@ class PlaybackService : MediaLibraryService() {
     player.setWakeMode(if (streams(player.currentMediaItem)) C.WAKE_MODE_NETWORK else C.WAKE_MODE_LOCAL)
     sessionListeners.forEach(player::addListener)
     exoPlayer = player
+  }
+
+  /** What's known of [item]'s loudness: YouTube's value for a streamed song it was opened with. */
+  private fun loudnessOf(item: MediaItem?): SongLoudness {
+    val videoId = YtMedia.videoIdOf(item?.localConfiguration?.uri?.toString() ?: item?.mediaId ?: "")
+    return SongLoudness(youtubeLoudnessDb = videoId?.let(YtLoudness::of))
   }
 
   /** Whether [item] is a streamed YT Music song. */
@@ -476,8 +488,9 @@ class PlaybackService : MediaLibraryService() {
     super.onCreate()
     ActiveWaveAudio.count = { listOf(exoPlayer, secondPlayer).count { it?.isPlaying == true } }
     ResumeStore.init(this)
-    // The stored Buffer setting, before JS (if any) sends it again.
+    // The stored Buffer setting and Normalize Volume switch, before JS (if any) sends them again.
     StreamBuffer.init(this)
+    NormalizeVolume.init(this)
     val player = buildPlayer()
     takeSession(player, from = null)
     CrossfadeLink.init(this)

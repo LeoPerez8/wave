@@ -1610,6 +1610,13 @@ export {
 } from "./streamBuffer.ts";
 export type { StreamBufferMinutes } from "./streamBuffer.ts";
 export {
+  readNormalizeVolume,
+  songGain,
+  TYPICAL_GAIN_START_DB,
+  writeNormalizeVolume,
+} from "./normalizeVolume.ts";
+export type { GainSource, SongGain, SongLoudness } from "./normalizeVolume.ts";
+export {
   discoverMix,
   discoverMixCaption,
   discoverMixSongs,

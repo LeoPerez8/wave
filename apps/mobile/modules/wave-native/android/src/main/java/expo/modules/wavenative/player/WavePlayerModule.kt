@@ -235,6 +235,17 @@ class WavePlayerModule : Module() {
     }.runOnQueue(Queues.MAIN)
 
     /**
+     * Normalize Volume (Core's `songGain`): kept on disk so the service follows
+     * it without JS too; each player's gain stage reads it at its next buffer,
+     * so the playing song changes level at once.
+     */
+    AsyncFunction("setNormalizeVolume") { on: Boolean, promise: Promise ->
+      NormalizeVolume.init(context)
+      NormalizeVolume.setOn(on)
+      promise.resolve(null)
+    }.runOnQueue(Queues.MAIN)
+
+    /**
      * The entry whose next song is an unsearched one still being searched (Core's
      * `searchingAfter`), or null: a crossfade from it waits for the search.
      */

@@ -17,6 +17,7 @@ import androidx.media3.datasource.cache.ContentMetadataMutations
 import androidx.media3.datasource.cache.SimpleCache
 import expo.modules.wavenative.log.WaveLog
 import java.io.File
+import java.io.IOException
 import java.util.Locale
 
 /**
@@ -87,6 +88,22 @@ class YtAudioCache(val cache: Cache) {
    */
   fun aheadOnly(videoId: String): Boolean = keysOf(videoId).all(::fetchedAhead)
 
+  /**
+   * Keeps YouTube's loudness ([YtStream.loudnessDb]) with [key]'s audio, so a
+   * song cached whole, which plays without asking YouTube, still has it.
+   */
+  fun keepLoudness(key: String, loudnessDb: Double?) {
+    if (loudnessDb == null || !loudnessDb.isFinite() || loudnessOf(key) == loudnessDb) return
+    try {
+      cache.applyContentMetadataMutations(key, ContentMetadataMutations().set(LOUDNESS_DB, loudnessDb.toString()))
+    } catch (_: IOException) {
+      // This run still knows it ([YtLoudness]); the song is asked again once it's no longer whole.
+    }
+  }
+
+  /** YouTube's loudness kept with [key]'s audio ([keepLoudness]), or null. */
+  fun loudnessOf(key: String): Double? = cache.getContentMetadata(key).get(LOUDNESS_DB, null as String?)?.toDoubleOrNull()
+
   /** Drops [key]'s bytes. */
   fun forget(key: String) {
     try {
@@ -128,6 +145,9 @@ class YtAudioCache(val cache: Cache) {
 
     /** Content metadata on a key fetched ahead and not played since. */
     private const val FETCHED_AHEAD = "wave.fetchedAhead"
+
+    /** Content metadata on a key: YouTube's loudness for its song ([keepLoudness]). */
+    private const val LOUDNESS_DB = "wave.loudnessDb"
 
     private fun isFetchedAhead(cache: Cache, key: String): Boolean =
       cache.getContentMetadata(key).get(FETCHED_AHEAD, 0L) != 0L

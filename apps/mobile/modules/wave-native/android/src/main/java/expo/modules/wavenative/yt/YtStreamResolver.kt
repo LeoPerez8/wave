@@ -29,6 +29,8 @@ data class YtStream(
   val expiresAtMs: Long,
   /** What YouTube's answer said about the video; logged with each download. */
   val source: YtStreamSource = YtStreamSource.UNKNOWN,
+  /** YouTube's `loudnessDb`: dB above its -14 LUFS reference; null when it gave none ([YtLoudness]). */
+  val loudnessDb: Double? = null,
 ) {
   override fun toString(): String = "YtStream(itag=$itag, mimeType=$mimeType, bitrate=$bitrate, source=$source)"
 }
@@ -170,6 +172,7 @@ class YtStreamResolver(context: Context) {
         videoType = extracted.mediaMetadata?.musicVideoType,
         lengthMs = extracted.mediaMetadata?.durationSeconds?.let { it * 1000 },
       ),
+      loudnessDb = extracted.loudnessDb,
     )
     cache.put(videoId, preferM4a, stream, extracted.clientName)
     return stream
