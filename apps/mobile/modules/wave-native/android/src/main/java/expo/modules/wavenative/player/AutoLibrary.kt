@@ -277,6 +277,12 @@ object AutoLibrary {
     val array = json.getJSONArray("items")
     val items = (0 until array.length()).map { index ->
       val entry = array.getJSONObject(index)
+      // Normalize Volume: the entry's gain, there before the session can start its song.
+      SongGains.set(
+        entry.getString("id"),
+        if (entry.isNull("gainDb")) null else entry.optDouble("gainDb"),
+        entry.stringOrNull("gainSource"),
+      )
       PlayerMediaItems.build(
         id = entry.getString("id"),
         path = entry.getString("path"),

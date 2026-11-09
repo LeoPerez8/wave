@@ -8,8 +8,9 @@ import androidx.media3.exoplayer.audio.AudioSink
 import androidx.media3.exoplayer.audio.DefaultAudioSink
 
 /**
- * The audio pipeline's hook for custom processing: equalizer, crossfade and
- * ReplayGain (v2) become [audioProcessors] without restructuring the player.
+ * The audio pipeline's hook for custom processing: Normalize Volume's
+ * [GainStage] is one of [audioProcessors], and an equalizer (v2) would join it
+ * without restructuring the player. Each player gets its own processors.
  */
 @UnstableApi
 class WaveRenderersFactory(

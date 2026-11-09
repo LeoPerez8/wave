@@ -386,6 +386,9 @@ export const settingsEn = {
     "As a song ends on its own, the next one fades in over it for this long. Skipping or picking a song switches at once. Off plays songs back to back, without a gap.",
   dontPlayExplicit: "Don't play explicit",
   skipsSongsMarkedExplicitByYouTubeMusic: "Skips songs marked explicit by YouTube Music or Deezer.",
+  normalizeVolume: "Normalize Volume",
+  playsEverySongAtAboutTheSame:
+    "Plays every song at about the same loudness, so you don't reach for the volume between songs. Your music files stay as they are.",
   howMuchOfAStreamedSongWave:
     "How much of a streamed song Wave loads ahead, carrying on into the next songs in Up Next, so playback keeps going through a dead zone. Longer uses more memory: about 50 MB at 30 minutes. Downloaded songs play from the phone either way.",
   swipeActions: "Swipe actions",

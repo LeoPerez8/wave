@@ -91,6 +91,18 @@ import {
   type GraphPlayCursor,
 } from "./db/artistGraph";
 import { selectLeavingSong } from "./db/leavingSong";
+import {
+  saveMeasurement,
+  saveMeasurements,
+  selectLibraryGains,
+  selectLibraryToMeasure,
+  selectSongLoudness,
+  selectAlbumLoudness,
+  selectSongsToMeasure,
+  type MeasuredSong,
+  type SongMeasurement,
+  type SongToMeasure,
+} from "./db/loudness";
 import { selectNowPlayingSong } from "./db/nowPlayingSong";
 import type { PlayingSongAnswer, PlayingSongTarget } from "../nowPlaying/songLookup";
 import {
@@ -127,6 +139,9 @@ import {
   type YtArtistSaved,
   type ExplicitFlag,
   type SavedLyrics,
+  type SongLoudness,
+  type AlbumLoudness,
+  type TagGains,
   type NoBetterCopy,
   type QualityDirection,
   type QualityFile,
@@ -376,6 +391,11 @@ export interface IndexedTrack extends LibraryTrack {
   readonly hasLyrics: boolean;
   /** What its advisory tag says (Core's `explicitFromAdvisory`). */
   readonly explicit: ExplicitFlag;
+  /**
+   * What its ReplayGain or R128 tags say, for Normalize Volume (Core's
+   * `gainTags`); absent or null values: nothing.
+   */
+  readonly loudness?: TagGains;
   /**
    * The YouTube video id of a song just downloaded from YouTube Music. Saving
    * the file again without one (a rescan) keeps the one it has.
@@ -906,6 +926,41 @@ export class LibraryStore extends Context.Service<
     readonly songsByIds: (
       ids: readonly number[],
     ) => Effect.Effect<readonly PlayableSongRow[], LibraryStoreError>;
+    /**
+     * What's known of the loudness of the songs [ids] (Normalize Volume), by
+     * Track id: those with a file and a value; the others are left out.
+     */
+    /** Every Library song of a local album, for Normalize Volume completeness and priority. */
+    readonly albumLoudness: (id: number) => Effect.Effect<AlbumLoudness | null, LibraryStoreError>;
+    readonly songLoudness: (
+      ids: readonly number[],
+    ) => Effect.Effect<ReadonlyMap<number, SongLoudness>, LibraryStoreError>;
+    /**
+     * The songs among [ids], in their order, Normalize Volume should measure:
+     * Library files without tags not measured, or tried, as they are now.
+     */
+    readonly songsToMeasure: (
+      ids: readonly number[],
+    ) => Effect.Effect<readonly SongToMeasure[], LibraryStoreError>;
+    /**
+     * Keeps what measuring [song] gave (null: it couldn't be measured); false
+     * when its file changed meanwhile or it has tags now, and nothing was kept.
+     */
+    readonly saveMeasurement: (
+      song: SongToMeasure,
+      measurement: SongMeasurement,
+    ) => Effect.Effect<boolean, LibraryStoreError>;
+    /** The gain every Library song with a value plays at, for the typical gain (Core's `typicalGain`). */
+    readonly libraryGains: Effect.Effect<readonly number[], LibraryStoreError>;
+    /** Every Library file Normalize Volume should measure, oldest first, for the charging job. */
+    readonly libraryToMeasure: Effect.Effect<readonly SongToMeasure[], LibraryStoreError>;
+    /**
+     * Keeps what the charging job measured, in one go; the Track ids kept,
+     * leaving out files that changed since or have tags now.
+     */
+    readonly saveMeasurements: (
+      measured: readonly MeasuredSong[],
+    ) => Effect.Effect<readonly number[], LibraryStoreError>;
     /** All playable ids, without metadata or history, for Home's random Magic Queue grid. */
     readonly playableSongIds: Effect.Effect<readonly number[], LibraryStoreError>;
     /**
@@ -2003,6 +2058,18 @@ const make = Effect.gen(function* () {
 
     songsByIds: (ids) =>
       attempt("read queued songs", () => selectPlayableSongs(db, ids).filter(songHasFile)),
+    albumLoudness: (id) => attempt("read the album loudness", () => selectAlbumLoudness(db, id)),
+    songLoudness: (ids) => attempt("read the songs' loudness", () => selectSongLoudness(db, ids)),
+    songsToMeasure: (ids) =>
+      attempt("read the songs to measure", () => selectSongsToMeasure(db, ids)),
+    saveMeasurement: (song, measurement) =>
+      writeAttempt("save a song's measurement", () => saveMeasurement(db, song, measurement)),
+    libraryGains: attempt("read the Library's gains", () => selectLibraryGains(db)),
+    libraryToMeasure: attempt("read the Library's songs to measure", () =>
+      selectLibraryToMeasure(db),
+    ),
+    saveMeasurements: (measured) =>
+      writeAttempt("save the songs' measurements", () => saveMeasurements(db, measured)),
 
     leavingSong: (id) => attempt("read the song leaving", () => selectLeavingSong(db, id)),
     videoIds: (ids) => attempt("read the songs' video ids", () => selectVideoIds(db, ids)),

@@ -1610,6 +1610,30 @@ export {
 } from "./streamBuffer.ts";
 export type { StreamBufferMinutes } from "./streamBuffer.ts";
 export {
+  gainTags,
+  knownGain,
+  MEASURE_AHEAD,
+  measureCandidates,
+  albumGain,
+  entryGain,
+  readNormalizeVolume,
+  songGain,
+  songsToMeasure,
+  TYPICAL_GAIN_MIN_SONGS,
+  TYPICAL_GAIN_START_DB,
+  typicalGain,
+  writeNormalizeVolume,
+} from "./normalizeVolume.ts";
+export type {
+  AlbumSongLoudness,
+  AlbumLoudness,
+  GainSource,
+  GainTagText,
+  SongGain,
+  SongLoudness,
+  TagGains,
+} from "./normalizeVolume.ts";
+export {
   discoverMix,
   discoverMixCaption,
   discoverMixSongs,

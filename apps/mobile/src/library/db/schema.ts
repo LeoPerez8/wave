@@ -6,6 +6,7 @@ import {
   index,
   integer,
   primaryKey,
+  real,
   sqliteTable,
   text,
 } from "drizzle-orm/sqlite-core";
@@ -174,6 +175,28 @@ export const tracks = sqliteTable(
     explicit: text("explicit", { enum: ["explicit", "clean", "unknown"] })
       .notNull()
       .default("unknown"),
+    /**
+     * What the file's ReplayGain or R128 tags say, for Normalize Volume (Core's
+     * `gainTags`): gains at -14 LUFS, peaks on a 0–1 full-scale range; null
+     * where it says nothing. Read again with the rest of its tags; never
+     * written to the file, never synced.
+     */
+    tagTrackGain: real("tag_track_gain"),
+    tagTrackPeak: real("tag_track_peak"),
+    tagAlbumGain: real("tag_album_gain"),
+    tagAlbumPeak: real("tag_album_peak"),
+    /**
+     * Normalize Volume: Wave's measurement of a file without tags, its
+     * integrated loudness (ITU-R BS.1770, LUFS) and sample peak (0–1), with
+     * the size and modified time of the file it was made of. The size and time
+     * without a loudness: the file couldn't be measured. A save that sees the
+     * file change clears all four (`saveBatch`); the scan's re-read sentinel
+     * (`modified_at = 0`) leaves them. Local only, never synced.
+     */
+    measuredLoudness: real("measured_loudness"),
+    measuredPeak: real("measured_peak"),
+    measuredSizeBytes: integer("measured_size_bytes"),
+    measuredModifiedAt: integer("measured_modified_at"),
     /** When the file first entered the library (drives Recently Added). */
     addedAt: integer("added_at").notNull(),
     /** When a scan last saw the file. */

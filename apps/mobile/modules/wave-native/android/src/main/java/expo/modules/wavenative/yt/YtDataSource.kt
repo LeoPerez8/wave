@@ -108,6 +108,9 @@ class YtDataSource(
     val stream = if (whole == null) resolve(videoId) else null
     val aheadOnly = ahead && audio.aheadOnly(videoId)
     val key = whole ?: audio.keyFor(videoId, checkNotNull(stream))
+    // Normalize Volume reads it as the song's first sample comes in, after this open.
+    if (stream != null) audio.keepLoudness(key, stream.loudnessDb)
+    YtLoudness.note(videoId, stream?.loudnessDb ?: audio.loudnessOf(key))
     if (!ahead) audio.notePlayed(key) else if (aheadOnly) audio.markFetchedAhead(key)
     network.prepare(videoId, stream, key)
     current = cached
@@ -184,7 +187,10 @@ class YtDataSource(
     override fun open(dataSpec: DataSpec): Long {
       var attempt = 0
       while (true) {
-        val stream = this.stream ?: resolve(videoId).also { this.stream = it }
+        val stream = this.stream ?: resolve(videoId).also {
+          this.stream = it
+          YtLoudness.note(videoId, it.loudnessDb)
+        }
         val key = key
         if (key != null && audio?.keyFor(videoId, stream) != key) {
           this.key = null

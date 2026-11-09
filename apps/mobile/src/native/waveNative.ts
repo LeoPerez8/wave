@@ -1,12 +1,14 @@
 import type {
   Appearance,
   FramingSquare,
+  GainTagText,
   LaunchTheme,
   TagDestination,
   TagWriteStep,
 } from "@wave/core";
 import { NativeModule, requireNativeModule } from "expo";
 
+import type { AudioMeasurement, LibraryMeasurement } from "./audioMeasurement";
 import { connectivityStore, type Connectivity } from "./connectivityStore";
 
 /** One audio file as read by the native scanner (`modules/wave-native`). Tag values are raw. */
@@ -38,6 +40,8 @@ export interface NativeScannedTrack {
   readonly hasLyrics: boolean;
   /** The advisory tag as tagged (`ITUNESADVISORY`, MP4 `rtng`); null without one. */
   readonly advisory?: string | null;
+  /** Its ReplayGain and R128 tags as tagged (Core's `gainTags` reads them); null without any. */
+  readonly loudnessTags?: GainTagText | null;
 }
 
 /** Colours picked from an artwork, as signed ARGB ints. */
@@ -128,9 +132,34 @@ type WaveNativeEvents = {
   onConnectivityChanged: (event: Connectivity) => void;
   /** Android changed Wave's per-app or system language. */
   onPreferredLanguagesChanged: () => void;
+  /** Normalize Volume's charging job kept a result; `libraryMeasurements` has it. */
+  onLibraryMeasured: () => void;
 };
 
 declare class WaveNativeModule extends NativeModule<WaveNativeEvents> {
+  /**
+   * Normalize Volume: decodes the Library file at [path] as the player would
+   * and measures its integrated loudness (ITU-R BS.1770) and sample peak, one
+   * file at a time, on a background-priority thread of its own.
+   */
+  measureAudioLoudness(path: string): Promise<AudioMeasurement>;
+  /** Stops the measurement running, which answers `cancelled` (Normalize Volume turned off). */
+  cancelAudioMeasurement(): void;
+  /**
+   * Normalize Volume: the Library files the charging job measures while the
+   * phone charges (the Library store's `libraryToMeasure`), as parallel lists,
+   * in place of its list. None leaves it idle.
+   */
+  setLibraryToMeasure(
+    ids: readonly number[],
+    paths: readonly string[],
+    sizes: readonly number[],
+    modifiedAt: readonly number[],
+  ): Promise<void>;
+  /** The first [limit] results the charging job keeps until the app takes them in. */
+  libraryMeasurements(limit: number): Promise<LibraryMeasurement[]>;
+  /** The Library store kept the charging job's results through [seq]: the job forgets them. */
+  forgetLibraryMeasurements(seq: number): Promise<void>;
   /** Makes at most one medium cover from cached artwork; true when this launch's pass is done. */
   backfillMediumCover(): Promise<boolean>;
   /** Whether Wave holds "All files access" (MANAGE_EXTERNAL_STORAGE). */

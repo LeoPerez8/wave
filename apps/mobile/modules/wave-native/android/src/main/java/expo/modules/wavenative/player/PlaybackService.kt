@@ -193,7 +193,12 @@ class PlaybackService : MediaLibraryService() {
       DefaultDataSource.Factory(this, DefaultHttpDataSource.Factory().setAllowCrossProtocolRedirects(true)),
       audioCache = { YtAudioCache.get(this) },
     ) { YtClient.get(this) }
-    return ExoPlayer.Builder(this, WaveRenderersFactory(this))
+    // Normalize Volume scales each song's samples in the sink, under the crossfade's volume.
+    val gain = GainStage(
+      loudnessOf = SongGains::loudnessOf,
+      onSongStart = { WaveLog.i(NormalizeVolume.LOG_TAG, NormalizeVolume.logLine(it)) },
+    )
+    return ExoPlayer.Builder(this, WaveRenderersFactory(this, listOf(gain)))
       // Keeps the Buffer setting's streamed audio ahead (StreamBuffer).
       .setLoadControl(StreamLoadControl())
       .setMediaSourceFactory(DefaultMediaSourceFactory(dataSources))
@@ -476,8 +481,9 @@ class PlaybackService : MediaLibraryService() {
     super.onCreate()
     ActiveWaveAudio.count = { listOf(exoPlayer, secondPlayer).count { it?.isPlaying == true } }
     ResumeStore.init(this)
-    // The stored Buffer setting, before JS (if any) sends it again.
+    // The stored Buffer setting and Normalize Volume switch, before JS (if any) sends them again.
     StreamBuffer.init(this)
+    NormalizeVolume.init(this)
     val player = buildPlayer()
     takeSession(player, from = null)
     CrossfadeLink.init(this)

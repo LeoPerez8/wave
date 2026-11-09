@@ -86,6 +86,26 @@ class OggOpusReaderTest {
     }
   }
 
+  @Test
+  fun r128AndReplayGainCommentsAreKeptAsTagged() {
+    val block = vorbisComments(
+      "R128_TRACK_GAIN=-1536",
+      "r128_album_gain=256",
+      "REPLAYGAIN_TRACK_GAIN=-6.54 dB",
+      "replaygain_track_peak=0.988553",
+    )
+    val tags = with(OggOpusReader) { parseComments(block, 0).toRawTags(durationMs = 0, sampleRate = null) }
+    assertEquals(
+      LoudnessTags(
+        replayGainTrackGain = "-6.54 dB",
+        replayGainTrackPeak = "0.988553",
+        r128TrackGain = "-1536",
+        r128AlbumGain = "256",
+      ),
+      tags.loudness,
+    )
+  }
+
   private fun vorbisComments(vararg entries: String): ByteArray {
     val out = java.io.ByteArrayOutputStream()
     fun writeInt(value: Int) {

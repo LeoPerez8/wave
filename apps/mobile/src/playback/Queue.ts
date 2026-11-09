@@ -10,6 +10,7 @@ import {
   keptPlayingEntry,
   keptQueue,
   keysToLoad,
+  libraryTrackIds,
   newQueueToast,
   noticeLine,
   passedOverNotice,
@@ -30,8 +31,10 @@ import {
   shufflesQueue,
   songChangeCause,
   startPlayingWalk,
+  typicalGain,
   undoneQueue,
   withHeldCurrent,
+  type LibraryChange,
   type PassOver,
   type PlayerList,
   type PlayingStep,
@@ -48,6 +51,7 @@ import {
   type Shuffle,
   type ShuffleSong,
   type SongChangeCause,
+  type SongLoudness,
   type SyncStep,
   type UnsearchedSettlement,
   type YtAlbumSong,
@@ -57,16 +61,21 @@ import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import * as Semaphore from "effect/Semaphore";
 
+import { afterFirstSettled } from "@/lib/backgroundWork";
 import { makeExternalStore, subscribeAll } from "@/lib/externalStore";
+import { onLibraryChange, onScanFinished } from "@/library/libraryChanges";
 import { LibraryStore } from "@/library/LibraryStore";
 import { currentLocalisation } from "@/localisation/localisation";
+import { WaveNative } from "@/native/waveNative";
 import type { NativeSyncStep, PlayerItem } from "@/native/wavePlayer";
 import { showQueuedToast } from "@/overlay/queuedToast";
 import { currentToast, dismissToast, showToast } from "@/overlay/toast";
 import { perfMark } from "@/perf/perf";
 import { dontPlayExplicit, onDontPlayExplicit } from "@/settings/dontPlayExplicit";
+import { normalizeVolumeOn, onNormalizeVolume } from "@/settings/normalizeVolume";
 import { shuffleKind } from "@/settings/shuffleKind";
 
+import { createLibraryMeasurements } from "./libraryMeasurements";
 import { notificationStarred } from "./notificationStarState";
 import { Player, PlayerError, playbackState, positionState } from "./Player";
 import { searchPlaying } from "./playingSearch";
@@ -78,6 +87,8 @@ import {
   type QueueTrack,
 } from "./queueTracks";
 import { savedYtQueueTracks } from "./savedYtTracks";
+import { createEntryGains, type PlayerGain } from "./songGains";
+import { createSongMeasurements } from "./songMeasurements";
 
 export { toQueueTrack, type QueueTrack } from "./queueTracks";
 
@@ -108,6 +119,11 @@ export const upNextReshuffles = makeExternalStore(0);
 
 /** Queue changes come in bursts (skips, reorders); the queue is saved once they settle. */
 const QUEUE_SETTLE_MS = 500;
+
+/** Library changes come in bursts (a scan's batches): the songs' gains are read once they settle. */
+const GAINS_SETTLE_MS = 1_000;
+
+const NO_LOUDNESS: ReadonlyMap<number, SongLoudness> = new Map();
 
 /**
  * The parts of the queue each settled change touched (Core's `queueWrite`),
@@ -243,8 +259,8 @@ type Outcome =
 
 type Done = Exclude<Outcome, { readonly kind: "wait" }>;
 
-/** The player item for [entry], from the tracks the queue learned. */
-const itemFor = (entry: QueueEntry): Effect.Effect<PlayerItem, PlayerError> => {
+/** The player item for [entry], from the tracks the queue learned, with its song's [gain]. */
+const itemFor = (entry: QueueEntry, gain: PlayerGain): Effect.Effect<PlayerItem, PlayerError> => {
   const track = queueTracks.get().get(entry.trackId);
   if (track === undefined) {
     return Effect.fail(
@@ -255,7 +271,7 @@ const itemFor = (entry: QueueEntry): Effect.Effect<PlayerItem, PlayerError> => {
     );
   }
   const { path, title, artist, album, artworkPath } = track;
-  return Effect.succeed({ id: entry.key, path, title, artist, album, artworkPath });
+  return Effect.succeed({ id: entry.key, path, title, artist, album, artworkPath, ...gain });
 };
 
 /**
@@ -317,6 +333,51 @@ export const layer = Layer.effect(
     let nativeKnown = true;
     let appliedRepeat: RepeatMode | null = null;
     let settleTimer: ReturnType<typeof setTimeout> | null = null;
+    // Normalize Volume: the gains the player was given for the entries it holds.
+    const gains = createEntryGains();
+
+    /** What's known of the loudness of [entries]' Library songs; nothing when it can't be read. */
+    const loudnessOf = (entries: readonly QueueEntry[]) => {
+      const ids = libraryTrackIds(entries.map((entry) => entry.trackId));
+      return ids.length === 0
+        ? Effect.succeed(NO_LOUDNESS)
+        : store.songLoudness(ids).pipe(Effect.orElseSucceed(() => NO_LOUDNESS));
+    };
+
+    /** Resolves only local album ids; a YouTube album context never opts in. */
+    const albumOf = (state: QueueState) => {
+      const id = state.context?.kind === "album" ? Number(state.context.id) : NaN;
+      return Number.isSafeInteger(id) && id > 0
+        ? store.albumLoudness(id).pipe(Effect.orElseSucceed(() => null))
+        : Effect.succeed(null);
+    };
+
+    /** The items for [entries], each with the track or album gain for its next start. */
+    const itemsFor = (entries: readonly QueueEntry[], state: QueueState) =>
+      Effect.gen(function* () {
+        const loudness = yield* loudnessOf(entries);
+        const album = yield* albumOf(state);
+        return yield* Effect.forEach(entries, (entry) =>
+          itemFor(entry, gains.withItem(entry, loudness, { state, album })),
+        );
+      });
+
+    /** Refreshes held entries before a skip or mode change can start their next song. */
+    const refreshGains = (state: QueueState, trackIds: ReadonlySet<string> | null = null) =>
+      Effect.gen(function* () {
+        const held = new Set(native.keys);
+        // A value for any album song can complete the whole album, including a song outside
+        // the native window. Refresh every held entry in an album context.
+        const entries = state.entries.filter(
+          (entry) =>
+            held.has(entry.key) &&
+            (state.context?.kind === "album" || trackIds === null || trackIds.has(entry.trackId)),
+        );
+        if (entries.length === 0) return;
+        const loudness = yield* loudnessOf(entries);
+        const album = yield* albumOf(state);
+        yield* player.setSongGains(gains.changes(entries, loudness, { state, album }));
+      }).pipe(Effect.ignore);
 
     // The queue as last saved, which the next save writes only the changed parts of.
     let lastSaved: QueuePersistenceState | null = null;
@@ -354,6 +415,7 @@ export const layer = Layer.effect(
         const list = playerQueueWindow(state);
         if (list === null) return;
         const steps = planPlayerSync(native, list);
+        if (state.context?.kind === "album") yield* refreshGains(state);
         if (steps.length === 0) return;
         // A skip sends no items, so it doesn't look through the whole queue.
         const toLoad = new Set(keysToLoad(native, steps));
@@ -364,9 +426,10 @@ export const layer = Layer.effect(
           store.songsByIds,
           savedYtQueueTracks,
         );
-        const items = yield* Effect.forEach(entries, itemFor);
+        const items = yield* itemsFor(entries, state);
         yield* player.applySync(steps.map(toNative), items, cause);
         native = applyPlayerSync(native, steps);
+        if (items.length > 0) gains.retain(native.keys);
         // The `skip` perf scenario's response: what the plan did, on how long a queue.
         perfMark(
           "queue.synced",
@@ -743,7 +806,9 @@ export const layer = Layer.effect(
           }
           const { state } = done;
           const list = playerQueueWindow(state) ?? { keys: [], index: -1 };
-          const items = yield* Effect.forEach(playerListEntries(state, list), itemFor);
+          // The session builds these items itself, their gains included (`AutoLibrary`).
+          const items = yield* itemsFor(playerListEntries(state, list), state);
+          gains.retain(list.keys);
           queueSource.update((source) => queueSourceAfter(source, command, "auto"));
           queueState.set(state);
           queueChanged();
@@ -822,8 +887,126 @@ export const layer = Layer.effect(
       (stop) => Effect.sync(stop),
     );
 
+    /**
+     * Normalize Volume: gives the entries the player holds the gains learned
+     * since their items were pushed, those of [trackIds]' songs (every song's
+     * with null); each applies when its song next starts. Run it in the lane.
+     */
+    const sendLearnedGains = (trackIds: ReadonlySet<string> | null) =>
+      refreshGains(queueState.get(), trackIds);
+
+    // The Library's typical gain (Core's `typicalGain`) as the player last got it.
+    let sentTypical: number | null = null;
+    const sendTypicalGain = Effect.gen(function* () {
+      const typical = typicalGain(yield* store.libraryGains);
+      if (typical === sentTypical) return;
+      yield* player.setTypicalGain(typical);
+      sentTypical = typical;
+    }).pipe(Effect.ignore);
+
+    // The songs a Library change since the last gains read reached; null: any.
+    let changedTracks: Set<string> | null = new Set();
+    let gainsTimer: ReturnType<typeof setTimeout> | null = null;
+    const followGains = (change: LibraryChange): void => {
+      if (change.kind !== "tracks") return;
+      if (change.ids === undefined) changedTracks = null;
+      else for (const id of change.ids) changedTracks?.add(String(id));
+      gainsTimer ??= setTimeout(() => {
+        gainsTimer = null;
+        const trackIds = changedTracks;
+        changedTracks = new Set();
+        Effect.runFork(
+          Effect.andThen(lane.withPermit(sendLearnedGains(trackIds)), sendTypicalGain),
+        );
+      }, GAINS_SETTLE_MS);
+    };
+    yield* Effect.acquireRelease(
+      Effect.sync(() => onLibraryChange(followGains)),
+      (stop) =>
+        Effect.sync(() => {
+          stop();
+          if (gainsTimer !== null) clearTimeout(gainsTimer);
+        }),
+    );
+    yield* Effect.forkScoped(sendTypicalGain);
+
+    // Normalize Volume measures the songs about to play that have no value (`songMeasurements`):
+    // a value reaches the entries the player holds at once, so a song measured before it starts
+    // plays at it, and the typical gain follows with the Library's other changes. No Library
+    // change is published: a measurement changes nothing a screen shows.
+    const measurements = createSongMeasurements({
+      on: normalizeVolumeOn,
+      queue: () => {
+        const state = queueState.get();
+        return Effect.map(albumOf(state), (album) => ({ state, album }));
+      },
+      songsToMeasure: store.songsToMeasure,
+      measure: (path) => WaveNative.measureAudioLoudness(path),
+      cancel: () => WaveNative.cancelAudioMeasurement(),
+      save: store.saveMeasurement,
+      learned: (id) => {
+        Effect.runFork(lane.withPermit(sendLearnedGains(new Set([String(id)]))));
+        followGains({ kind: "tracks", ids: [id] });
+      },
+    });
+    yield* Effect.acquireRelease(
+      Effect.sync(() => {
+        const stopQueue = queueState.subscribe(() => void measurements.wake());
+        const stopSwitch = onNormalizeVolume(measurements.switched);
+        const stopScans = onScanFinished(measurements.scanned);
+        void measurements.wake();
+        return () => {
+          stopQueue();
+          stopSwitch();
+          stopScans();
+        };
+      }),
+      (stop) => Effect.sync(stop),
+    );
+
+    // The rest of the Library is measured by a native job while the phone charges, with Wave
+    // closed too (`libraryMeasurements`): what it measured is taken in here, and it's handed the
+    // files left to measure as the Library changes.
+    const library = createLibraryMeasurements({
+      toMeasure: store.libraryToMeasure,
+      hand: (songs) =>
+        WaveNative.setLibraryToMeasure(
+          songs.map((song) => song.id),
+          songs.map((song) => song.path),
+          songs.map((song) => song.sizeBytes),
+          songs.map((song) => song.modifiedAt),
+        ),
+      results: (limit) => WaveNative.libraryMeasurements(limit),
+      save: store.saveMeasurements,
+      forget: (seq) => WaveNative.forgetLibraryMeasurements(seq),
+      learned: (ids) => followGains({ kind: "tracks", ids }),
+    });
+    yield* Effect.acquireRelease(
+      Effect.sync(() => {
+        const measured = WaveNative.addListener("onLibraryMeasured", library.measured);
+        const stopChanges = onLibraryChange(library.changed);
+        const stopScans = onScanFinished(() => void library.scanned());
+        // It reads the whole Library's files to measure: after the first screen.
+        const stopStart = afterFirstSettled("libraryMeasurements", () => {
+          void library.take();
+          void library.refresh();
+        });
+        return () => {
+          measured.remove();
+          stopChanges();
+          stopScans();
+          stopStart();
+          library.stop();
+        };
+      }),
+      (stop) => Effect.sync(stop),
+    );
+
     yield* lane.take(1);
-    yield* Effect.forkScoped(restore.pipe(Effect.ensuring(lane.release(1))));
+    yield* Effect.forkScoped(
+      // The player may hold items this run of JS never gave gains (it kept playing while JS restarted).
+      Effect.andThen(restore, sendLearnedGains(null)).pipe(Effect.ensuring(lane.release(1))),
+    );
 
     // Notification, lock screen and Bluetooth skips, and gapless auto-advance.
     yield* player.onItemTransition((event) => {
