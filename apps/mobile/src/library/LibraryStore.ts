@@ -93,9 +93,12 @@ import {
 import { selectLeavingSong } from "./db/leavingSong";
 import {
   saveMeasurement,
+  saveMeasurements,
   selectLibraryGains,
+  selectLibraryToMeasure,
   selectSongLoudness,
   selectSongsToMeasure,
+  type MeasuredSong,
   type SongMeasurement,
   type SongToMeasure,
 } from "./db/loudness";
@@ -945,6 +948,15 @@ export class LibraryStore extends Context.Service<
     ) => Effect.Effect<boolean, LibraryStoreError>;
     /** The gain every Library song with a value plays at, for the typical gain (Core's `typicalGain`). */
     readonly libraryGains: Effect.Effect<readonly number[], LibraryStoreError>;
+    /** Every Library file Normalize Volume should measure, oldest first, for the charging job. */
+    readonly libraryToMeasure: Effect.Effect<readonly SongToMeasure[], LibraryStoreError>;
+    /**
+     * Keeps what the charging job measured, in one go; the Track ids kept,
+     * leaving out files that changed since or have tags now.
+     */
+    readonly saveMeasurements: (
+      measured: readonly MeasuredSong[],
+    ) => Effect.Effect<readonly number[], LibraryStoreError>;
     /** All playable ids, without metadata or history, for Home's random Magic Queue grid. */
     readonly playableSongIds: Effect.Effect<readonly number[], LibraryStoreError>;
     /**
@@ -2048,6 +2060,11 @@ const make = Effect.gen(function* () {
     saveMeasurement: (song, measurement) =>
       writeAttempt("save a song's measurement", () => saveMeasurement(db, song, measurement)),
     libraryGains: attempt("read the Library's gains", () => selectLibraryGains(db)),
+    libraryToMeasure: attempt("read the Library's songs to measure", () =>
+      selectLibraryToMeasure(db),
+    ),
+    saveMeasurements: (measured) =>
+      writeAttempt("save the songs' measurements", () => saveMeasurements(db, measured)),
 
     leavingSong: (id) => attempt("read the song leaving", () => selectLeavingSong(db, id)),
     videoIds: (ids) => attempt("read the songs' video ids", () => selectVideoIds(db, ids)),
