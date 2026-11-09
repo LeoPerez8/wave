@@ -17,6 +17,7 @@ import "@/settings/genius";
 import "@/settings/glass";
 import "@/settings/keepFindVisible";
 import "@/settings/longPressDelay";
+import "@/settings/normalizeVolume";
 import "@/settings/lyricsAndGenre";
 import "@/settings/nowPlayingButtons";
 import "@/settings/shuffleKind";

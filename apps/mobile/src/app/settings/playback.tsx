@@ -8,15 +8,20 @@ import { SettingsSwitch } from "@/components/SettingsSwitch";
 import { ChoiceSection } from "@/settings/ChoiceRow";
 import { CROSSFADE, setCrossfadeSeconds, useCrossfadeSeconds } from "@/settings/crossfade";
 import { setDontPlayExplicit, useDontPlayExplicit } from "@/settings/dontPlayExplicit";
+import { setNormalizeVolume, useNormalizeVolume } from "@/settings/normalizeVolume";
 import { SettingsPageScreen } from "@/settings/SettingsPage";
 import { streamBufferChoice } from "@/settings/streamBuffer";
 
-/** Settings › Playback: how one song gives way to the next, which songs play, and how much streamed audio is loaded ahead. */
+/**
+ * Settings › Playback: how one song gives way to the next, which songs play,
+ * how loud each plays, and how much streamed audio is loaded ahead.
+ */
 export default function PlaybackSettingsScreen() {
   const { strings } = useLocalisation();
   useScreenContent(true);
   const seconds = useCrossfadeSeconds();
   const skipExplicit = useDontPlayExplicit();
+  const normalize = useNormalizeVolume();
   const bufferMinutes = streamBufferChoice.setting.useValue();
   return (
     <SettingsPageScreen page="playback">
@@ -44,6 +49,18 @@ export default function PlaybackSettingsScreen() {
         <Hairline />
         <Text className="mt-2 font-sans text-footnote text-secondary">
           {strings.settings.skipsSongsMarkedExplicitByYouTubeMusic}
+        </Text>
+      </View>
+      <View>
+        <Hairline />
+        <SettingsSwitch
+          label={strings.settings.normalizeVolume}
+          value={normalize}
+          onValueChange={setNormalizeVolume}
+        />
+        <Hairline />
+        <Text className="mt-2 font-sans text-footnote text-secondary">
+          {strings.settings.playsEverySongAtAboutTheSame}
         </Text>
       </View>
       <ChoiceSection

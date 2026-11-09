@@ -16,6 +16,7 @@ import { connectPlayer } from "@/playback/actions";
 import { startPlayingSearches } from "@/playback/playingSearches";
 import { startRecognizeTile } from "@/recognize/startRecognizeTile";
 import { applyCrossfade } from "@/settings/crossfade";
+import { applyNormalizeVolume } from "@/settings/normalizeVolume";
 import { applyStreamBuffer } from "@/settings/streamBuffer";
 import { WaveSync } from "@/sync/WaveSync";
 import { startAppUpdates } from "@/updates/appUpdates";
@@ -92,6 +93,7 @@ export const startServices = (by: ServicesStarter): void => {
   else startNotificationStar();
   applyCrossfade();
   applyStreamBuffer();
+  applyNormalizeVolume();
   onSyncedSettingChange(stampPreference);
   startAutoResponder(answerAuto);
   startAutoLyrics();
