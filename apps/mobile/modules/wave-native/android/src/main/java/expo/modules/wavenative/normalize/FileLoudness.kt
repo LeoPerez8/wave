@@ -1,33 +1,32 @@
 package expo.modules.wavenative.normalize
 
-import android.content.Context
 import android.media.AudioFormat
 import android.media.MediaCodec
+import android.media.MediaExtractor
 import android.media.MediaFormat
-import android.net.Uri
-import androidx.annotation.OptIn
-import androidx.media3.common.MimeTypes
-import androidx.media3.common.util.UnstableApi
-import androidx.media3.inspector.MediaExtractorCompat
+import android.util.Log
+import expo.modules.wavenative.log.WaveLog
+import expo.modules.wavenative.player.NormalizeVolume
 import java.io.File
 import java.nio.ByteBuffer
+import java.util.Locale
+import kotlin.math.log10
 
 /**
- * Normalize Volume's measurement of a Library file: decodes it as the player does and runs its
- * PCM through [LoudnessMeter]. The file is read by Media3's own extractors
- * ([MediaExtractorCompat], the player's), and decoded by the platform decoder the player's
- * renderer picks for its format, so every file the player plays (MP3, FLAC, Ogg Vorbis, Opus,
- * M4A, WAV) is measured; raw PCM skips the decoder, as the player's does. Runs on the caller's
- * thread, which should be a background one ([WaveNativeModule]'s meter thread).
+ * Normalize Volume's measurement of a Library file: decodes it and runs its PCM through
+ * [LoudnessMeter]. Android's [MediaExtractor] reads every container the player plays from the
+ * Library on Wave's minimum Android (MP3, FLAC, Ogg Vorbis, Ogg Opus, M4A, WAV), and the file is
+ * decoded by the same platform decoder the player's renderer uses for its format; raw PCM skips
+ * the decoder, as the player's does. Runs on the caller's thread, which should be a background
+ * one ([expo.modules.wavenative.WaveNativeModule]'s meter thread).
  */
-@OptIn(UnstableApi::class)
 object FileLoudness {
   /** What measuring a file gave (`AudioMeasurement` in JS). */
   sealed interface Outcome {
     data class Measured(val loudness: Double, val peak: Double) : Outcome
 
-    /** It couldn't be decoded, or holds nothing above the absolute gate (silence). */
-    data object Unmeasurable : Outcome
+    /** It couldn't be decoded, or holds nothing above the absolute gate (silence); [reason] names why, never the file. */
+    data class Unmeasurable(val reason: String) : Outcome
 
     /** It couldn't be opened now: gone, or on storage that isn't mounted. */
     data object Unreadable : Outcome
@@ -42,57 +41,84 @@ object FileLoudness {
   /** Room for the largest compressed frame the formats played here have (a 24-bit FLAC frame). */
   private const val MIN_INPUT_BYTES = 256 * 1024
 
-  /** Where Media3's `MediaFormatUtil` keeps a raw track's encoding (`C.ENCODING_*`). */
-  private const val MEDIA3_PCM_ENCODING = "exo-pcm-encoding-int"
+  /**
+   * More decoded audio than twice the file's length, and a minute, means the decode is going
+   * round in circles (a broken file, or an extractor that repeats itself): undecodable.
+   */
+  private const val SLACK_US = 60_000_000L
 
   private class Stop : Exception()
 
-  fun measure(context: Context, path: String, isCancelled: () -> Boolean): Outcome {
+  fun measure(path: String, isCancelled: () -> Boolean): Outcome {
     val file = File(path)
     if (!file.isFile || !file.canRead()) return Outcome.Unreadable
-    val extractor = MediaExtractorCompat(context)
+    val extractor = MediaExtractor()
     return try {
-      extractor.setDataSource(Uri.fromFile(file), 0)
+      extractor.setDataSource(file.path)
       val track = (0 until extractor.trackCount).firstOrNull {
         extractor.getTrackFormat(it).getString(MediaFormat.KEY_MIME)?.startsWith("audio/") == true
-      } ?: return Outcome.Unmeasurable
+      } ?: return Outcome.Unmeasurable("no audio track")
       extractor.selectTrack(track)
       val format = extractor.getTrackFormat(track)
-      val result = if (format.getString(MediaFormat.KEY_MIME) == MimeTypes.AUDIO_RAW) {
+      val result = if (format.getString(MediaFormat.KEY_MIME) == RAW) {
         readRaw(extractor, format, isCancelled)
       } else {
         decode(extractor, format, isCancelled)
       }
-      result?.let { Outcome.Measured(it.integratedLufs, it.samplePeak) } ?: Outcome.Unmeasurable
+      result?.let { Outcome.Measured(it.integratedLufs, it.samplePeak) } ?: Outcome.Unmeasurable("silent or unsupported PCM")
     } catch (_: Stop) {
       Outcome.Cancelled
-    } catch (_: Exception) {
-      Outcome.Unmeasurable
+    } catch (failure: Exception) {
+      Outcome.Unmeasurable(failure.javaClass.simpleName)
     } finally {
       extractor.release()
     }
   }
 
+  private const val RAW = "audio/raw"
+
+  /**
+   * How a measurement went, in one line that never names the song: in logcat, and in the app log
+   * as well when the file couldn't be measured.
+   */
+  fun report(outcome: Outcome) {
+    val line = describe(outcome)
+    runCatching {
+      if (outcome is Outcome.Unmeasurable) WaveLog.w(NormalizeVolume.LOG_TAG, line) else Log.i(NormalizeVolume.LOG_TAG, line)
+    }
+  }
+
+  internal fun describe(outcome: Outcome): String = when (outcome) {
+    is Outcome.Measured ->
+      String.format(Locale.ROOT, "Measured a song: %.1f LUFS, peak %.1f dBFS", outcome.loudness, 20 * log10(outcome.peak))
+    is Outcome.Unmeasurable -> "Couldn't measure a song (${outcome.reason})"
+    Outcome.Unreadable -> "Couldn't open a song to measure it"
+    Outcome.Cancelled -> "Stopped measuring: Normalize Volume is off"
+  }
+
   /** PCM a WAV holds, straight from the file. */
-  private fun readRaw(extractor: MediaExtractorCompat, format: MediaFormat, isCancelled: () -> Boolean): LoudnessMeter.Result? {
-    val encoding = encodingOf(format, raw = true) ?: return null
-    val meter = LoudnessMeter(format.getInteger(MediaFormat.KEY_SAMPLE_RATE), format.getInteger(MediaFormat.KEY_CHANNEL_COUNT))
+  private fun readRaw(extractor: MediaExtractor, format: MediaFormat, isCancelled: () -> Boolean): LoudnessMeter.Result? {
+    val encoding = encodingOf(format) ?: return null
+    val rate = format.getInteger(MediaFormat.KEY_SAMPLE_RATE)
+    val channels = format.getInteger(MediaFormat.KEY_CHANNEL_COUNT)
+    val meter = LoudnessMeter(rate, channels)
+    val budget = FrameBudget(format, rate)
     val buffer = ByteBuffer.allocateDirect(maxOf(MIN_INPUT_BYTES, inputSize(format)))
     while (true) {
       if (isCancelled()) throw Stop()
-      buffer.clear()
       val size = extractor.readSampleData(buffer, 0)
       if (size < 0) break
       buffer.position(0)
       buffer.limit(size)
       meter.add(buffer, encoding)
+      budget.spend(size / (encoding.bytes * channels))
       extractor.advance()
     }
     return meter.result()
   }
 
   /** A compressed file through the platform decoder for its format. */
-  private fun decode(extractor: MediaExtractorCompat, format: MediaFormat, isCancelled: () -> Boolean): LoudnessMeter.Result? {
+  private fun decode(extractor: MediaExtractor, format: MediaFormat, isCancelled: () -> Boolean): LoudnessMeter.Result? {
     val mime = format.getString(MediaFormat.KEY_MIME) ?: return null
     format.setInteger(MediaFormat.KEY_MAX_INPUT_SIZE, maxOf(MIN_INPUT_BYTES, inputSize(format)))
     val codec = MediaCodec.createDecoderByType(mime)
@@ -101,7 +127,9 @@ object FileLoudness {
       codec.start()
       val info = MediaCodec.BufferInfo()
       var meter: LoudnessMeter? = null
+      var budget: FrameBudget? = null
       var encoding = PcmEncoding.PCM_16BIT
+      var channels = 0
       var inputEnded = false
       var lastProgress = System.nanoTime()
       while (true) {
@@ -119,13 +147,12 @@ object FileLoudness {
               codec.queueInputBuffer(input, 0, size, extractor.sampleTime, 0)
               extractor.advance()
             }
-            lastProgress = System.nanoTime()
           }
         }
         val output = codec.dequeueOutputBuffer(info, DEQUEUE_US)
         if (output == MediaCodec.INFO_OUTPUT_FORMAT_CHANGED) {
           check(meter == null) { "The decoder changed its output mid-file" }
-          encoding = encodingOf(codec.outputFormat, raw = false) ?: return null
+          encoding = encodingOf(codec.outputFormat) ?: return null
         } else if (output >= 0) {
           lastProgress = System.nanoTime()
           if (info.size > 0) {
@@ -133,10 +160,14 @@ object FileLoudness {
             pcm.position(info.offset)
             pcm.limit(info.offset + info.size)
             val active = meter ?: codec.outputFormat.let {
-              LoudnessMeter(it.getInteger(MediaFormat.KEY_SAMPLE_RATE), it.getInteger(MediaFormat.KEY_CHANNEL_COUNT))
+              val rate = it.getInteger(MediaFormat.KEY_SAMPLE_RATE)
+              channels = it.getInteger(MediaFormat.KEY_CHANNEL_COUNT)
+              budget = FrameBudget(format, rate)
+              LoudnessMeter(rate, channels)
             }
             meter = active
             active.add(pcm, encoding)
+            budget?.spend(info.size / (encoding.bytes * channels))
           }
           codec.releaseOutputBuffer(output, false)
           if (info.flags and MediaCodec.BUFFER_FLAG_END_OF_STREAM != 0) break
@@ -149,21 +180,30 @@ object FileLoudness {
     }
   }
 
+  /** The frames a file's PCM may run to ([SLACK_US]); no limit when it doesn't say how long it is. */
+  private class FrameBudget(format: MediaFormat, rate: Int) {
+    private var left = if (format.containsKey(MediaFormat.KEY_DURATION)) {
+      (2 * format.getLong(MediaFormat.KEY_DURATION) + SLACK_US) * rate / 1_000_000
+    } else {
+      Long.MAX_VALUE
+    }
+
+    fun spend(frames: Int) {
+      left -= frames
+      check(left >= 0) { "Decoded more audio than the file holds" }
+    }
+  }
+
   private fun inputSize(format: MediaFormat): Int =
     if (format.containsKey(MediaFormat.KEY_MAX_INPUT_SIZE)) format.getInteger(MediaFormat.KEY_MAX_INPUT_SIZE) else 0
 
-  /**
-   * The layout of a format's PCM; null for one the meter doesn't read (big-endian). Media3 gives
-   * a [raw] track's own encoding under [MEDIA3_PCM_ENCODING] (Android's key can't name every
-   * one); a decoder that names none gives 16-bit.
-   */
-  private fun encodingOf(format: MediaFormat, raw: Boolean): PcmEncoding? {
-    val encoding = when {
-      raw && format.containsKey(MEDIA3_PCM_ENCODING) -> format.getInteger(MEDIA3_PCM_ENCODING)
-      format.containsKey(MediaFormat.KEY_PCM_ENCODING) -> format.getInteger(MediaFormat.KEY_PCM_ENCODING)
-      else -> AudioFormat.ENCODING_PCM_16BIT
+  /** The layout of a format's PCM; null for one the meter doesn't read. Without a word, 16-bit. */
+  private fun encodingOf(format: MediaFormat): PcmEncoding? {
+    val encoding = if (format.containsKey(MediaFormat.KEY_PCM_ENCODING)) {
+      format.getInteger(MediaFormat.KEY_PCM_ENCODING)
+    } else {
+      AudioFormat.ENCODING_PCM_16BIT
     }
-    // Media3's encodings are Android's for the little-endian layouts.
     return when (encoding) {
       AudioFormat.ENCODING_PCM_8BIT -> PcmEncoding.PCM_8BIT
       AudioFormat.ENCODING_PCM_16BIT -> PcmEncoding.PCM_16BIT

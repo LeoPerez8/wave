@@ -149,27 +149,27 @@ class WaveNativeModule : Module() {
     Function("hasAllFilesAccess") { Environment.isExternalStorageManager() }
 
     /**
-     * Normalize Volume: decodes the Library file at [path] as the player would and measures its
+     * Normalize Volume: decodes the Library file at [path] as the player does and measures its
      * integrated loudness (BS.1770) and sample peak (`FileLoudness`), on the meter thread. Answers
      * `{ kind: "measured", loudness, peak }`, or `unmeasurable`, `unreadable` or `cancelled`.
      */
     AsyncFunction("measureAudioLoudness") { path: String, promise: Promise ->
       val cancelled = AtomicBoolean(false)
-      val context = appContext.reactContext?.applicationContext
       // Set before it starts, so a cancel while it waits for the thread stops it too.
       runningMeasurement.set(cancelled)
       meterExecutor.execute {
         val outcome = try {
-          if (context == null) FileLoudness.Outcome.Unreadable else FileLoudness.measure(context, path) { cancelled.get() }
+          FileLoudness.measure(path) { cancelled.get() }
         } catch (_: Throwable) {
           FileLoudness.Outcome.Unreadable
         } finally {
           runningMeasurement.compareAndSet(cancelled, null)
         }
+        FileLoudness.report(outcome)
         promise.resolve(
           when (outcome) {
             is FileLoudness.Outcome.Measured -> mapOf("kind" to "measured", "loudness" to outcome.loudness, "peak" to outcome.peak)
-            FileLoudness.Outcome.Unmeasurable -> mapOf("kind" to "unmeasurable")
+            is FileLoudness.Outcome.Unmeasurable -> mapOf("kind" to "unmeasurable")
             FileLoudness.Outcome.Unreadable -> mapOf("kind" to "unreadable")
             FileLoudness.Outcome.Cancelled -> mapOf("kind" to "cancelled")
           },
