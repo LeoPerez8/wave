@@ -28,7 +28,7 @@ import Animated, {
   useSharedValue,
   type SharedValue,
 } from "react-native-reanimated";
-import Svg, { Path, type PathProps } from "react-native-svg";
+import Svg, { Circle, G, Path, type CircleProps, type PathProps } from "react-native-svg";
 import { scheduleOnRN, scheduleOnUI } from "react-native-worklets";
 import { withUniwind } from "uniwind";
 
@@ -54,14 +54,20 @@ const BAR_SCRUBBING = CELL / 2;
 /** The playing-song underline's wave, scaled up (same wavelength : amplitude). */
 const WAVELENGTH = CELL * 2;
 const AMPLITUDE = (WAVELENGTH * UNDERLINE_WAVE.amplitude) / UNDERLINE_WAVE.wavelength;
-/** Box tall enough for crest, trough and the boldest stroke around them. */
-const HEIGHT = AMPLITUDE * 2 + BAR_SCRUBBING;
+/** The dot on the playhead's radius, at rest and under a finger (12 and 16 dp across). */
+const DOT = CELL * 0.75;
+const DOT_SCRUBBING = CELL;
+/** Box tall enough for crest, trough and the boldest stroke around them, and for the biggest dot. */
+const HEIGHT = Math.max(AMPLITUDE * 2 + BAR_SCRUBBING, DOT_SCRUBBING * 2);
 const CENTRE = HEIGHT / 2;
+/** The drawing reaches past the bar's ends by the biggest dot's radius, so a dot at 0:00 or the end is whole. */
+const OVERHANG = DOT_SCRUBBING;
 
 /** No finger on the bar, or no release waiting for JavaScript. */
 const NONE = -1;
 
 const AnimatedPath = createAnimatedComponent(Path);
+const AnimatedCircle = createAnimatedComponent(Circle);
 const AnimatedTextInput = withUniwind(createAnimatedComponent(TextInput));
 
 const TABULAR = { fontVariant: ["tabular-nums" as const] };
@@ -77,10 +83,10 @@ const playingKey = (): string | null => currentEntry(queueState.get())?.key ?? n
 
 /**
  * The playhead: the elapsed part is a still teal wave, the shape of the
- * playing song's underline, that meets a flat graphite line at the playhead;
- * then elapsed and remaining time. Touch anywhere on it, or a little above or
+ * playing song's underline, that meets a flat graphite line at the playhead,
+ * where a teal dot sits; then elapsed and remaining time. Touch anywhere on it, or a little above or
  * below its box (Core's `scrubHitSlop`), and drag to scrub;
- * the bar gets bolder and the track seeks when the finger lifts.
+ * the bar gets bolder, the dot grows, and the track seeks when the finger lifts.
  *
  * The finger is followed on the UI thread: the bar and the times move with it
  * while JavaScript is busy, and JavaScript hears only the release, which it
@@ -195,6 +201,11 @@ export function Scrubber() {
       strokeWidth: scrub.get() === NONE ? BAR : BAR_SCRUBBING,
     };
   });
+  const dotProps = useAnimatedProps<CircleProps>(() => ({
+    cx: join.get(),
+    // No length, no playhead to mark.
+    r: bar.get().durationMs > 0 ? (scrub.get() === NONE ? DOT : DOT_SCRUBBING) : 0,
+  }));
 
   // Native text props follow the same UI-thread position, including during a drag.
   const elapsedProps = useAnimatedProps(() => {
@@ -234,17 +245,25 @@ export function Scrubber() {
           onLayout={(event) => setWidth(event.nativeEvent.layout.width)}
         >
           {width > 0 && (
-            <Svg width={width} height={HEIGHT} pointerEvents="none">
-              <AnimatedPath animatedProps={lineProps} stroke={tertiary} fill="none" />
-              <AnimatedPath
-                animatedProps={waveProps}
-                transform={`translate(0 ${CENTRE - AMPLITUDE})`}
-                stroke={accent}
-                // Round ends cover the angle where the wave meets the line.
-                strokeLinecap="round"
-                strokeLinejoin="round"
-                fill="none"
-              />
+            <Svg
+              width={width + OVERHANG * 2}
+              height={HEIGHT}
+              pointerEvents="none"
+              style={{ marginHorizontal: -OVERHANG }}
+            >
+              <G transform={`translate(${OVERHANG} 0)`}>
+                <AnimatedPath animatedProps={lineProps} stroke={tertiary} fill="none" />
+                <AnimatedPath
+                  animatedProps={waveProps}
+                  transform={`translate(0 ${CENTRE - AMPLITUDE})`}
+                  stroke={accent}
+                  // Round ends cover the angle where the wave meets the line.
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  fill="none"
+                />
+                <AnimatedCircle animatedProps={dotProps} cy={CENTRE} fill={accent} />
+              </G>
             </Svg>
           )}
         </Animated.View>
