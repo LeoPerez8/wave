@@ -1417,6 +1417,17 @@ ALTER TABLE tracks ADD COLUMN tag_album_peak real;
 --> statement-breakpoint
 UPDATE tracks SET modified_at = 0 WHERE path IS NOT NULL;`;
 
+// Wave measurements have their own file fingerprint; modified_at=0 remains the scan re-read sentinel.
+const m0058 = `ALTER TABLE tracks ADD COLUMN measured_track_gain real;
+--> statement-breakpoint
+ALTER TABLE tracks ADD COLUMN measured_track_peak real;
+--> statement-breakpoint
+ALTER TABLE tracks ADD COLUMN measurement_size_bytes integer;
+--> statement-breakpoint
+ALTER TABLE tracks ADD COLUMN measurement_modified_at integer;
+--> statement-breakpoint
+ALTER TABLE tracks ADD COLUMN measurement_failed integer NOT NULL DEFAULT 0;`;
+
 export default {
   journal: {
     entries: [
@@ -1498,6 +1509,7 @@ export default {
         breakpoints: true,
       },
       { idx: 57, when: 1_796_731_200_000, tag: "0057_loudness_tags", breakpoints: true },
+      { idx: 58, when: 1_796_817_600_000, tag: "0058_loudness_measurements", breakpoints: true },
     ],
   },
   migrations: {
@@ -1559,5 +1571,6 @@ export default {
     m0055,
     m0056,
     m0057,
+    m0058,
   },
 };

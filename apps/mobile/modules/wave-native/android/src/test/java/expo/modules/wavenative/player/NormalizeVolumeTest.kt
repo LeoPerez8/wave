@@ -57,6 +57,14 @@ class NormalizeVolumeTest {
   }
 
   @Test
+  fun aMeasuredSongUsesItsPeakCappedGainAndNamesItsSource() {
+    assertEquals(GainSource.MEASURED, GainSource.of("measured"))
+    assertEquals("measured", GainSource.MEASURED.logName)
+    val measured = SongLoudness(known = SongGain(6.02, GainSource.MEASURED))
+    assertEquals(SongGain(6.02, GainSource.MEASURED), NormalizeVolume.gain(true, measured))
+  }
+
+  @Test
   fun aSongWithNoValuePlaysAtTheTypicalGainItsGiven() {
     assertEquals(SongGain(-7.25, GainSource.TYPICAL), NormalizeVolume.gain(true, SongLoudness(), typicalDb = -7.25))
   }
@@ -78,6 +86,7 @@ class NormalizeVolumeTest {
   @Test
   fun theAppLogLineGivesTheGainAndItsSourceWithoutTheSong() {
     assertEquals("Song gain -2.5 dB (tag)", NormalizeVolume.logLine(SongGain(-2.54, GainSource.TAG)))
+    assertEquals("Song gain -6.0 dB (measured)", NormalizeVolume.logLine(SongGain(-6.0, GainSource.MEASURED)))
     assertEquals("Song gain -6.2 dB (YouTube)", NormalizeVolume.logLine(SongGain(-6.23, GainSource.YOUTUBE)))
     assertEquals("Song gain -5.0 dB (typical)", NormalizeVolume.logLine(SongGain(-5.0, GainSource.TYPICAL)))
     assertEquals("Song gain 0.0 dB (off)", NormalizeVolume.logLine(SongGain(0.0, GainSource.OFF)))

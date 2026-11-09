@@ -6,7 +6,7 @@ import { gainTags, normalizeTrack, typicalGain, type GainTagText } from "@wave/c
 
 import type { IndexedTrack } from "../LibraryStore.ts";
 import { creditSplits } from "./credits.ts";
-import { selectLibraryGains, selectSongLoudness } from "./loudness.ts";
+import { saveMeasurement, selectLibraryGains, selectMeasurementCandidates, selectSongLoudness } from "./loudness.ts";
 import { saveBatch } from "./save.ts";
 import * as schema from "./schema.ts";
 import { addTrack, migrateTestDatabase, openTestDatabase } from "./testDatabase.ts";
@@ -44,6 +44,49 @@ const idOf = (db: Db, title: string): number => {
 };
 
 describe("selectSongLoudness", () => {
+  test("measured values feed gain and typical gain, and keep their own file fingerprint", async () => {
+    const db = await openTestDatabase();
+    save(db, [scanned("Measured")]);
+    const id = idOf(db, "Measured");
+    const [candidate] = selectMeasurementCandidates(db, [id]);
+    assert.deepEqual(candidate, {
+      id,
+      path: "/Music/Measured.flac",
+      sizeBytes: 1_000,
+      modifiedAt: 1,
+    });
+    assert.equal(saveMeasurement(db, candidate!, { gainDb: 8, peak: 0.5 }), true);
+    assert.deepEqual(selectSongLoudness(db, [id]).get(id), {
+      trackGainDb: null,
+      trackPeak: null,
+      measuredTrackGainDb: 8,
+      measuredTrackPeak: 0.5,
+    });
+    assert.deepEqual(selectLibraryGains(db), [8]);
+    assert.deepEqual(selectMeasurementCandidates(db, [id]), []);
+
+    // A metadata migration's modified_at=0 sentinel must not erase a valid measurement.
+    db.update(schema.tracks).set({ modifiedAt: 0 }).run();
+    assert.equal(selectSongLoudness(db, [id]).get(id)?.measuredTrackGainDb, 8);
+    save(db, [scanned("Measured")]);
+    assert.equal(selectSongLoudness(db, [id]).get(id)?.measuredTrackGainDb, 8);
+
+    save(db, [{ ...scanned("Measured"), sizeBytes: 2_000, modifiedAt: 2 }]);
+    assert.deepEqual(selectSongLoudness(db, [id]), new Map());
+    assert.equal(selectMeasurementCandidates(db, [id])[0]?.sizeBytes, 2_000);
+  });
+
+  test("an unmeasurable file is recorded once until its fingerprint changes", async () => {
+    const db = await openTestDatabase();
+    save(db, [scanned("Broken")]);
+    const id = idOf(db, "Broken");
+    const candidate = selectMeasurementCandidates(db, [id])[0]!;
+    assert.equal(saveMeasurement(db, candidate, { gainDb: null, peak: null }), true);
+    assert.deepEqual(selectMeasurementCandidates(db, [id]), []);
+    save(db, [{ ...scanned("Broken"), modifiedAt: 2 }]);
+    assert.equal(selectMeasurementCandidates(db, [id])[0]?.modifiedAt, 2);
+  });
+
   test("keeps what a song's ReplayGain tags say, gain at -14 LUFS and peak", async () => {
     const db = await openTestDatabase();
     save(db, [

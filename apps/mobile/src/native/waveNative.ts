@@ -134,6 +134,10 @@ type WaveNativeEvents = {
 };
 
 declare class WaveNativeModule extends NativeModule<WaveNativeEvents> {
+  /** Measures decoded local PCM using ITU-R BS.1770 on Wave's low-priority worker. */
+  measureAudioLoudness(path: string): Promise<{ readonly integratedLufs: number; readonly samplePeak: number }>;
+  /** Stops the active metering decode when Normalize Volume is turned off. */
+  cancelAudioMeasurement(): void;
   /** Makes at most one medium cover from cached artwork; true when this launch's pass is done. */
   backfillMediumCover(): Promise<boolean>;
   /** Whether Wave holds "All files access" (MANAGE_EXTERNAL_STORAGE). */

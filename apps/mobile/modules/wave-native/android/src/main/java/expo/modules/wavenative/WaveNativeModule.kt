@@ -79,6 +79,8 @@ import java.io.File
 import java.util.concurrent.ExecutorService
 import java.util.concurrent.Executors
 import java.util.concurrent.atomic.AtomicBoolean
+import java.util.concurrent.atomic.AtomicReference
+import java.util.concurrent.atomic.AtomicBoolean
 
 /** A square of a playlist image's original as JS passes it (Core's `FramingSquare`), in px. */
 class FramingSquareRecord : Record {
@@ -98,6 +100,10 @@ class FramingSquareRecord : Record {
  * `onScanError`, each carrying the `scanId` returned by `startScan`.
  */
 class WaveNativeModule : Module() {
+  private val measurementExecutor: ExecutorService = Executors.newSingleThreadExecutor(
+    expo.modules.wavenative.download.BackgroundThreads("wave-meter"),
+  )
+  private val activeMeasurement = AtomicReference<AtomicBoolean?>(null)
   private val scanExecutor: ExecutorService = Executors.newSingleThreadExecutor { runnable ->
     Thread(runnable, "wave-scanner").apply { priority = Thread.NORM_PRIORITY - 1 }
   }
@@ -141,6 +147,23 @@ class WaveNativeModule : Module() {
     }
 
     Function("hasAllFilesAccess") { Environment.isExternalStorageManager() }
+
+    /** Decodes one local file and measures BS.1770 loudness off the playback/UI threads. */
+    AsyncFunction("measureAudioLoudness") { path: String, promise: Promise ->
+      val cancelled = AtomicBoolean(false)
+      activeMeasurement.set(cancelled)
+      measurementExecutor.execute {
+        try {
+          val result = expo.modules.wavenative.normalize.AudioLoudnessMeter.measure(path) { cancelled.get() }
+          promise.resolve(mapOf("integratedLufs" to result.integratedLufs, "samplePeak" to result.samplePeak))
+        } catch (failure: Exception) {
+          promise.reject("E_AUDIO_MEASUREMENT", failure.message ?: "Could not measure audio", failure)
+        } finally {
+          activeMeasurement.compareAndSet(cancelled, null)
+        }
+      }
+    }
+    Function("cancelAudioMeasurement") { activeMeasurement.get()?.set(true) }
 
     /** Opens the system "All files access" screen for Wave. Re-check access when the app is active again. */
     AsyncFunction("requestAllFilesAccess") {

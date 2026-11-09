@@ -31,7 +31,7 @@ export const TYPICAL_GAIN_MIN_SONGS = 20;
  * ReplayGain or R128 tags, YouTube's value for a streamed song, the typical
  * gain for a song with none, or the switch off.
  */
-export type GainSource = "tag" | "youtube" | "typical" | "off";
+export type GainSource = "tag" | "measured" | "youtube" | "typical" | "off";
 
 export interface SongGain {
   /** dB the song's samples are scaled by; 0 plays it as it is. */
@@ -51,6 +51,9 @@ export interface SongLoudness {
   readonly trackGainDb?: number | null;
   /** The song's sample peak from its tags, on a 0–1 full-scale range; null when unknown. */
   readonly trackPeak?: number | null;
+  /** Wave's measured gain at -14 LUFS and decoded sample peak. */
+  readonly measuredTrackGainDb?: number | null;
+  readonly measuredTrackPeak?: number | null;
 }
 
 /**
@@ -157,6 +160,10 @@ export const knownGain = (song: SongLoudness): SongGain | null => {
   const tag = song.trackGainDb;
   if (tag != null && Number.isFinite(tag)) {
     return { gainDb: capped(tag, song.trackPeak), source: "tag" };
+  }
+  const measured = song.measuredTrackGainDb;
+  if (measured != null && Number.isFinite(measured)) {
+    return { gainDb: capped(measured, song.measuredTrackPeak), source: "measured" };
   }
   const youtube = song.youtubeLoudnessDb;
   if (youtube != null && Number.isFinite(youtube)) {

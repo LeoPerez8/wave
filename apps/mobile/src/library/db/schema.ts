@@ -185,6 +185,12 @@ export const tracks = sqliteTable(
     tagTrackPeak: real("tag_track_peak"),
     tagAlbumGain: real("tag_album_gain"),
     tagAlbumPeak: real("tag_album_peak"),
+    /** Wave's decoded BS.1770 result. Its own fingerprint is independent of modified_at's scan sentinel. */
+    measuredTrackGain: real("measured_track_gain"),
+    measuredTrackPeak: real("measured_track_peak"),
+    measurementSizeBytes: integer("measurement_size_bytes"),
+    measurementModifiedAt: integer("measurement_modified_at"),
+    measurementFailed: integer("measurement_failed", { mode: "boolean" }).notNull().default(false),
     /** When the file first entered the library (drives Recently Added). */
     addedAt: integer("added_at").notNull(),
     /** When a scan last saw the file. */

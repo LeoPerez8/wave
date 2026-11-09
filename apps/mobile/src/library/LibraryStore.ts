@@ -91,7 +91,7 @@ import {
   type GraphPlayCursor,
 } from "./db/artistGraph";
 import { selectLeavingSong } from "./db/leavingSong";
-import { selectLibraryGains, selectSongLoudness } from "./db/loudness";
+import { saveMeasurement, selectLibraryGains, selectMeasurementCandidates, selectSongLoudness, type MeasurementCandidate } from "./db/loudness";
 import { selectNowPlayingSong } from "./db/nowPlayingSong";
 import type { PlayingSongAnswer, PlayingSongTarget } from "../nowPlaying/songLookup";
 import {
@@ -921,6 +921,10 @@ export class LibraryStore extends Context.Service<
     readonly songLoudness: (
       ids: readonly number[],
     ) => Effect.Effect<ReadonlyMap<number, SongLoudness>, LibraryStoreError>;
+    /** Untagged local songs among [ids] whose current file fingerprint has no result. */
+    readonly measurementCandidates: (ids: readonly number[]) => Effect.Effect<readonly MeasurementCandidate[], LibraryStoreError>;
+    /** Stores a decoded measurement or an unmeasurable result if the file still matches. */
+    readonly saveMeasurement: (candidate: MeasurementCandidate, result: { readonly gainDb: number | null; readonly peak: number | null }) => Effect.Effect<boolean, LibraryStoreError>;
     /** The gain every Library song with a value plays at, for the typical gain (Core's `typicalGain`). */
     readonly libraryGains: Effect.Effect<readonly number[], LibraryStoreError>;
     /** All playable ids, without metadata or history, for Home's random Magic Queue grid. */
@@ -2021,6 +2025,8 @@ const make = Effect.gen(function* () {
     songsByIds: (ids) =>
       attempt("read queued songs", () => selectPlayableSongs(db, ids).filter(songHasFile)),
     songLoudness: (ids) => attempt("read the songs' loudness", () => selectSongLoudness(db, ids)),
+    measurementCandidates: (ids) => attempt("read songs to measure", () => selectMeasurementCandidates(db, ids)),
+    saveMeasurement: (candidate, result) => writeAttempt("save a song measurement", () => saveMeasurement(db, candidate, result)),
     libraryGains: attempt("read the Library's gains", () => selectLibraryGains(db)),
 
     leavingSong: (id) => attempt("read the song leaving", () => selectLeavingSong(db, id)),

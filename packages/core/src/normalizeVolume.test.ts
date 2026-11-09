@@ -158,6 +158,24 @@ describe("gainTags", () => {
 });
 
 describe("knownGain", () => {
+  test("uses a measurement after tags and caps its boost by its measured peak", () => {
+    assertGain(knownGain({ measuredTrackGainDb: 9, measuredTrackPeak: 0.5 }), {
+      gainDb: 6.0206,
+      source: "measured",
+    });
+    assertGain(knownGain({ measuredTrackGainDb: 7, measuredTrackPeak: null }), {
+      gainDb: 0,
+      source: "measured",
+    });
+    assertGain(knownGain({ measuredTrackGainDb: -4, measuredTrackPeak: 1, youtubeLoudnessDb: 3 }), {
+      gainDb: -4,
+      source: "measured",
+    });
+    assertGain(knownGain({ trackGainDb: -2, measuredTrackGainDb: -8 }), {
+      gainDb: -2,
+      source: "tag",
+    });
+  });
   test("a tagged song plays at its tag's gain when its peak allows it", () => {
     assertGain(knownGain({ trackGainDb: 3, trackPeak: 0.5 }), { gainDb: 3, source: "tag" });
     assertGain(knownGain({ trackGainDb: -8.2, trackPeak: 1 }), { gainDb: -8.2, source: "tag" });

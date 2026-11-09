@@ -420,6 +420,11 @@ export const saveBatch = (
             tagTrackPeak: excluded(t.tagTrackPeak),
             tagAlbumGain: excluded(t.tagAlbumGain),
             tagAlbumPeak: excluded(t.tagAlbumPeak),
+            measuredTrackGain: sql`CASE WHEN ${t.measurementSizeBytes} = ${excluded(t.sizeBytes)} AND ${t.measurementModifiedAt} = ${excluded(t.modifiedAt)} THEN ${t.measuredTrackGain} ELSE NULL END`,
+            measuredTrackPeak: sql`CASE WHEN ${t.measurementSizeBytes} = ${excluded(t.sizeBytes)} AND ${t.measurementModifiedAt} = ${excluded(t.modifiedAt)} THEN ${t.measuredTrackPeak} ELSE NULL END`,
+            measurementSizeBytes: sql`CASE WHEN ${t.measurementSizeBytes} = ${excluded(t.sizeBytes)} AND ${t.measurementModifiedAt} = ${excluded(t.modifiedAt)} THEN ${t.measurementSizeBytes} ELSE NULL END`,
+            measurementModifiedAt: sql`CASE WHEN ${t.measurementSizeBytes} = ${excluded(t.sizeBytes)} AND ${t.measurementModifiedAt} = ${excluded(t.modifiedAt)} THEN ${t.measurementModifiedAt} ELSE NULL END`,
+            measurementFailed: sql`CASE WHEN ${t.measurementSizeBytes} = ${excluded(t.sizeBytes)} AND ${t.measurementModifiedAt} = ${excluded(t.modifiedAt)} THEN ${t.measurementFailed} ELSE 0 END`,
             scannedAt: excluded(t.scannedAt),
           },
         })
