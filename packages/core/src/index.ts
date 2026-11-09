@@ -1612,8 +1612,10 @@ export type { StreamBufferMinutes } from "./streamBuffer.ts";
 export {
   gainTags,
   knownGain,
+  MEASURE_AHEAD,
   readNormalizeVolume,
   songGain,
+  songsToMeasure,
   TYPICAL_GAIN_MIN_SONGS,
   TYPICAL_GAIN_START_DB,
   typicalGain,

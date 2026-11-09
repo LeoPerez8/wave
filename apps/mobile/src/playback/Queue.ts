@@ -30,6 +30,7 @@ import {
   shuffledTrackIds,
   shufflesQueue,
   songChangeCause,
+  songsToMeasure,
   startPlayingWalk,
   typicalGain,
   undoneQueue,
@@ -65,11 +66,13 @@ import { makeExternalStore, subscribeAll } from "@/lib/externalStore";
 import { onLibraryChange } from "@/library/libraryChanges";
 import { LibraryStore } from "@/library/LibraryStore";
 import { currentLocalisation } from "@/localisation/localisation";
+import { WaveNative } from "@/native/waveNative";
 import type { NativeSyncStep, PlayerItem } from "@/native/wavePlayer";
 import { showQueuedToast } from "@/overlay/queuedToast";
 import { currentToast, dismissToast, showToast } from "@/overlay/toast";
 import { perfMark } from "@/perf/perf";
 import { dontPlayExplicit, onDontPlayExplicit } from "@/settings/dontPlayExplicit";
+import { normalizeVolumeOn, onNormalizeVolume } from "@/settings/normalizeVolume";
 import { shuffleKind } from "@/settings/shuffleKind";
 
 import { notificationStarred } from "./notificationStarState";
@@ -84,6 +87,7 @@ import {
 } from "./queueTracks";
 import { savedYtQueueTracks } from "./savedYtTracks";
 import { createEntryGains, type PlayerGain } from "./songGains";
+import { createSongMeasurements } from "./songMeasurements";
 
 export { toQueueTrack, type QueueTrack } from "./queueTracks";
 
@@ -904,6 +908,35 @@ export const layer = Layer.effect(
         }),
     );
     yield* Effect.forkScoped(sendTypicalGain);
+
+    // Normalize Volume measures the songs about to play that have no value (`songMeasurements`):
+    // a value reaches the entries the player holds at once, so a song measured before it starts
+    // plays at it, and the typical gain follows with the Library's other changes. No Library
+    // change is published: a measurement changes nothing a screen shows.
+    const measurements = createSongMeasurements({
+      on: normalizeVolumeOn,
+      wanted: () => songsToMeasure(queueState.get()),
+      songsToMeasure: store.songsToMeasure,
+      measure: (path) => WaveNative.measureAudioLoudness(path),
+      cancel: () => WaveNative.cancelAudioMeasurement(),
+      save: store.saveMeasurement,
+      learned: (id) => {
+        Effect.runFork(lane.withPermit(sendLearnedGains(new Set([String(id)]))));
+        followGains({ kind: "tracks", ids: [id] });
+      },
+    });
+    yield* Effect.acquireRelease(
+      Effect.sync(() => {
+        const stopQueue = queueState.subscribe(() => void measurements.wake());
+        const stopSwitch = onNormalizeVolume(measurements.switched);
+        void measurements.wake();
+        return () => {
+          stopQueue();
+          stopSwitch();
+        };
+      }),
+      (stop) => Effect.sync(stop),
+    );
 
     yield* lane.take(1);
     yield* Effect.forkScoped(

@@ -2,12 +2,17 @@ import assert from "node:assert/strict";
 import { describe, test } from "node:test";
 
 import {
+  EMPTY_QUEUE,
   gainTags,
   knownGain,
   readNormalizeVolume,
+  reduceQueue,
   songGain,
+  songsToMeasure,
   typicalGain,
   writeNormalizeVolume,
+  ytTrackId,
+  type QueueState,
   type SongGain,
 } from "./index.ts";
 
@@ -158,6 +163,41 @@ describe("gainTags", () => {
 });
 
 describe("knownGain", () => {
+  test("a measured song plays at -14 LUFS minus its loudness, boosted only as far as its peak allows", () => {
+    assertGain(knownGain({ measuredLoudness: -8, measuredPeak: 1 }), {
+      gainDb: -6,
+      source: "measured",
+    });
+    // -23 LUFS wants +9 dB; a 0.5 peak allows 6.02 dB.
+    assertGain(knownGain({ measuredLoudness: -23, measuredPeak: 0.5 }), {
+      gainDb: 6.0206,
+      source: "measured",
+    });
+  });
+
+  test("a measurement without a peak only turns a song down", () => {
+    assertGain(knownGain({ measuredLoudness: -20, measuredPeak: null }), {
+      gainDb: 0,
+      source: "measured",
+    });
+  });
+
+  test("tags win over a measurement, and a measurement over YouTube's value", () => {
+    assertGain(knownGain({ trackGainDb: -2, measuredLoudness: -6, measuredPeak: 1 }), {
+      gainDb: -2,
+      source: "tag",
+    });
+    assertGain(knownGain({ measuredLoudness: -10, measuredPeak: 1, youtubeLoudnessDb: 3 }), {
+      gainDb: -4,
+      source: "measured",
+    });
+  });
+
+  test("a file Wave couldn't measure has no value of its own", () => {
+    assert.equal(knownGain({ measuredLoudness: null, measuredPeak: null }), null);
+    assert.equal(knownGain({ measuredLoudness: Number.NaN, measuredPeak: 1 }), null);
+  });
+
   test("a tagged song plays at its tag's gain when its peak allows it", () => {
     assertGain(knownGain({ trackGainDb: 3, trackPeak: 0.5 }), { gainDb: 3, source: "tag" });
     assertGain(knownGain({ trackGainDb: -8.2, trackPeak: 1 }), { gainDb: -8.2, source: "tag" });
@@ -242,5 +282,35 @@ describe("typicalGain", () => {
 
   test("leaves out values that aren't numbers", () => {
     assert.equal(typicalGain([...gains(19, () => -8), Number.NaN]), -5);
+  });
+});
+
+describe("songsToMeasure", () => {
+  /** A queue of [trackIds] from the Songs list, playing the one at [startIndex]. */
+  const queue = (trackIds: readonly string[], startIndex: number): QueueState =>
+    reduceQueue(EMPTY_QUEUE, {
+      type: "play",
+      trackIds,
+      startIndex,
+      context: { kind: "songs", id: null },
+    }).state;
+
+  test("the current song and the next five in Up Next, in play order", () => {
+    const state = queue(["1", "2", "3", "4", "5", "6", "7", "8", "9"], 1);
+    assert.deepEqual(songsToMeasure(state), [2, 3, 4, 5, 6, 7]);
+  });
+
+  test("a streamed song keeps its place among the five and isn't measured", () => {
+    const state = queue(["1", ytTrackId("dQw4w9WgXcQ"), "3", "4", "5", "6", "7"], 0);
+    assert.deepEqual(songsToMeasure(state), [1, 3, 4, 5, 6]);
+  });
+
+  test("a song queued twice in the window is measured once", () => {
+    const state = queue(["1", "2", "1", "3"], 0);
+    assert.deepEqual(songsToMeasure(state), [1, 2, 3]);
+  });
+
+  test("an empty queue measures nothing", () => {
+    assert.deepEqual(songsToMeasure(EMPTY_QUEUE), []);
   });
 });

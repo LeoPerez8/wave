@@ -217,6 +217,16 @@ const loudnessColumns = ({ loudness }: IndexedTrack) => ({
 });
 
 /**
+ * [column] of Wave's measurement as a file's save keeps it: as it was while
+ * the file has the size and modified time it was measured at, else null, so
+ * a file that changed (a rescan, a quality replacement) is measured again.
+ */
+const keptMeasurement = (column: SQLiteColumn) => {
+  const t = schema.tracks;
+  return sql`CASE WHEN ${t.measuredSizeBytes} = ${excluded(t.sizeBytes)} AND ${t.measuredModifiedAt} = ${excluded(t.modifiedAt)} THEN ${column} END`;
+};
+
+/**
  * Gives the files among [tracks] the Library doesn't index yet to the
  * missing songs they are (Core's `fillMissingSongs`: by recording key,
  * length breaking a tie), so the save that follows fills each song in: it
@@ -420,6 +430,11 @@ export const saveBatch = (
             tagTrackPeak: excluded(t.tagTrackPeak),
             tagAlbumGain: excluded(t.tagAlbumGain),
             tagAlbumPeak: excluded(t.tagAlbumPeak),
+            // Wave's measurement stays only while the file is the one it was made of.
+            measuredLoudness: keptMeasurement(t.measuredLoudness),
+            measuredPeak: keptMeasurement(t.measuredPeak),
+            measuredSizeBytes: keptMeasurement(t.measuredSizeBytes),
+            measuredModifiedAt: keptMeasurement(t.measuredModifiedAt),
             scannedAt: excluded(t.scannedAt),
           },
         })

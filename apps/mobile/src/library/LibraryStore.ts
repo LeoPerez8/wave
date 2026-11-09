@@ -91,7 +91,14 @@ import {
   type GraphPlayCursor,
 } from "./db/artistGraph";
 import { selectLeavingSong } from "./db/leavingSong";
-import { selectLibraryGains, selectSongLoudness } from "./db/loudness";
+import {
+  saveMeasurement,
+  selectLibraryGains,
+  selectSongLoudness,
+  selectSongsToMeasure,
+  type SongMeasurement,
+  type SongToMeasure,
+} from "./db/loudness";
 import { selectNowPlayingSong } from "./db/nowPlayingSong";
 import type { PlayingSongAnswer, PlayingSongTarget } from "../nowPlaying/songLookup";
 import {
@@ -921,6 +928,21 @@ export class LibraryStore extends Context.Service<
     readonly songLoudness: (
       ids: readonly number[],
     ) => Effect.Effect<ReadonlyMap<number, SongLoudness>, LibraryStoreError>;
+    /**
+     * The songs among [ids], in their order, Normalize Volume should measure:
+     * Library files without tags not measured, or tried, as they are now.
+     */
+    readonly songsToMeasure: (
+      ids: readonly number[],
+    ) => Effect.Effect<readonly SongToMeasure[], LibraryStoreError>;
+    /**
+     * Keeps what measuring [song] gave (null: it couldn't be measured); false
+     * when its file changed meanwhile or it has tags now, and nothing was kept.
+     */
+    readonly saveMeasurement: (
+      song: SongToMeasure,
+      measurement: SongMeasurement,
+    ) => Effect.Effect<boolean, LibraryStoreError>;
     /** The gain every Library song with a value plays at, for the typical gain (Core's `typicalGain`). */
     readonly libraryGains: Effect.Effect<readonly number[], LibraryStoreError>;
     /** All playable ids, without metadata or history, for Home's random Magic Queue grid. */
@@ -2021,6 +2043,10 @@ const make = Effect.gen(function* () {
     songsByIds: (ids) =>
       attempt("read queued songs", () => selectPlayableSongs(db, ids).filter(songHasFile)),
     songLoudness: (ids) => attempt("read the songs' loudness", () => selectSongLoudness(db, ids)),
+    songsToMeasure: (ids) =>
+      attempt("read the songs to measure", () => selectSongsToMeasure(db, ids)),
+    saveMeasurement: (song, measurement) =>
+      writeAttempt("save a song's measurement", () => saveMeasurement(db, song, measurement)),
     libraryGains: attempt("read the Library's gains", () => selectLibraryGains(db)),
 
     leavingSong: (id) => attempt("read the song leaving", () => selectLeavingSong(db, id)),

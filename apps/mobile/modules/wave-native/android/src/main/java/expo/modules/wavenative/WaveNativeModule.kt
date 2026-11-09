@@ -50,6 +50,7 @@ import expo.modules.wavenative.locale.PreferredLanguageObserver
 import expo.modules.wavenative.lyrics.LyricsReader
 import expo.modules.wavenative.net.AndroidConnectivity
 import expo.modules.wavenative.net.ConnectivityState
+import expo.modules.wavenative.normalize.FileLoudness
 import expo.modules.wavenative.playlists.AndroidPlaylistImages
 import expo.modules.wavenative.playlists.PlaylistFiles
 import expo.modules.wavenative.playlists.PlaylistImageStore
@@ -79,6 +80,7 @@ import java.io.File
 import java.util.concurrent.ExecutorService
 import java.util.concurrent.Executors
 import java.util.concurrent.atomic.AtomicBoolean
+import java.util.concurrent.atomic.AtomicReference
 
 /** A square of a playlist image's original as JS passes it (Core's `FramingSquare`), in px. */
 class FramingSquareRecord : Record {
@@ -98,6 +100,10 @@ class FramingSquareRecord : Record {
  * `onScanError`, each carrying the `scanId` returned by `startScan`.
  */
 class WaveNativeModule : Module() {
+  // Normalize Volume's meter: one file at a time, at background priority, so playback and the UI
+  // never wait on it. The flag is the running measurement's, for `cancelAudioMeasurement`.
+  private val meterExecutor: ExecutorService = Executors.newSingleThreadExecutor(BackgroundThreads("wave-meter", daemon = true))
+  private val runningMeasurement = AtomicReference<AtomicBoolean?>(null)
   private val scanExecutor: ExecutorService = Executors.newSingleThreadExecutor { runnable ->
     Thread(runnable, "wave-scanner").apply { priority = Thread.NORM_PRIORITY - 1 }
   }
@@ -141,6 +147,38 @@ class WaveNativeModule : Module() {
     }
 
     Function("hasAllFilesAccess") { Environment.isExternalStorageManager() }
+
+    /**
+     * Normalize Volume: decodes the Library file at [path] as the player does and measures its
+     * integrated loudness (BS.1770) and sample peak (`FileLoudness`), on the meter thread. Answers
+     * `{ kind: "measured", loudness, peak }`, or `unmeasurable`, `unreadable` or `cancelled`.
+     */
+    AsyncFunction("measureAudioLoudness") { path: String, promise: Promise ->
+      val cancelled = AtomicBoolean(false)
+      // Set before it starts, so a cancel while it waits for the thread stops it too.
+      runningMeasurement.set(cancelled)
+      meterExecutor.execute {
+        val outcome = try {
+          FileLoudness.measure(path) { cancelled.get() }
+        } catch (_: Throwable) {
+          FileLoudness.Outcome.Unreadable
+        } finally {
+          runningMeasurement.compareAndSet(cancelled, null)
+        }
+        FileLoudness.report(outcome)
+        promise.resolve(
+          when (outcome) {
+            is FileLoudness.Outcome.Measured -> mapOf("kind" to "measured", "loudness" to outcome.loudness, "peak" to outcome.peak)
+            is FileLoudness.Outcome.Unmeasurable -> mapOf("kind" to "unmeasurable")
+            FileLoudness.Outcome.Unreadable -> mapOf("kind" to "unreadable")
+            FileLoudness.Outcome.Cancelled -> mapOf("kind" to "cancelled")
+          },
+        )
+      }
+    }
+
+    /** Stops the measurement running, which answers `cancelled` (Normalize Volume turned off). */
+    Function("cancelAudioMeasurement") { runningMeasurement.get()?.set(true) }
 
     /** Opens the system "All files access" screen for Wave. Re-check access when the app is active again. */
     AsyncFunction("requestAllFilesAccess") {

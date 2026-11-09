@@ -30,5 +30,11 @@ export const applyNormalizeVolume = (): void => {
 
 export const setNormalizeVolume = normalizeVolumeSetting.set;
 
+/** Whether background measurement and playback normalization may run. */
+export const normalizeVolumeOn = normalizeVolumeSetting.get;
+
+/** Follows the synced Normalize Volume switch outside React. */
+export const onNormalizeVolume = normalizeVolumeSetting.subscribe;
+
 /** Whether Normalize Volume is on; re-renders when Settings changes it. */
 export const useNormalizeVolume = normalizeVolumeSetting.useValue;
