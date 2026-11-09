@@ -122,17 +122,52 @@ class GainStageTest {
     assertTrue(!stage.isActive)
   }
 
-  /** The sink starting [index]'s samples at [positionUs] into it. */
-  private fun startSong(index: Int, positionUs: Long = 0) {
-    stage.configure(STEREO_16_BIT)
-    stage.flush(metadata(index, positionUs))
+  @Test
+  fun aGainLearnedAfterTheQueueWasPushedAppliesWhenThatSongStartsNeverMidSong() {
+    // Two Library files, by their queue entries' keys, as the playback service reads them.
+    val first = MediaItem.Builder().setMediaId("entry-1").setUri("file:///music/quiet.flac").build()
+    val second = MediaItem.Builder().setMediaId("entry-2").setUri("file:///music/loud.flac").build()
+    val queue = Songs(listOf(first, second))
+    val library = GainStage(loudnessOf = SongGains::loudnessOf, isOn = { true })
+    try {
+      SongGains.set("entry-1", null)
+      SongGains.set("entry-2", null)
+      start(library, queue, 0)
+      // Nothing known yet: the typical gain, 5 dB down.
+      assertEquals(5623, play(library, frames = 100).last().toInt())
+
+      // Values learned while the first song plays (a scan reading its tags).
+      SongGains.set("entry-1", SongGain(-10.0, GainSource.TAG))
+      SongGains.set("entry-2", SongGain(-2.0, GainSource.TAG))
+      assertTrue(play(library, frames = 1_000).all { it.toInt() == 5623 })
+
+      library.queueEndOfStream()
+      start(library, queue, 1)
+      assertEquals(7943, play(library, frames = 100).first().toInt())
+      // The first song again, from its start: its gain now.
+      library.queueEndOfStream()
+      start(library, queue, 0)
+      assertEquals(3162, play(library, frames = 100).first().toInt())
+    } finally {
+      SongGains.retain(emptySet())
+    }
   }
 
-  private fun metadata(index: Int, positionUs: Long = 0): StreamMetadata =
-    StreamMetadata.Builder().setTimeline(timeline).setPeriodUid(index).setPositionOffsetUs(positionUs).build()
+  /** The sink starting [index]'s samples at [positionUs] into it. */
+  private fun startSong(index: Int, positionUs: Long = 0) = start(stage, timeline, index, positionUs)
+
+  private fun start(stage: GainStage, songs: Timeline, index: Int, positionUs: Long = 0) {
+    stage.configure(STEREO_16_BIT)
+    stage.flush(metadata(index, positionUs, songs))
+  }
+
+  private fun metadata(index: Int, positionUs: Long = 0, songs: Timeline = timeline): StreamMetadata =
+    StreamMetadata.Builder().setTimeline(songs).setPeriodUid(index).setPositionOffsetUs(positionUs).build()
 
   /** Queues [frames] stereo frames at 10000 and gives back what comes out. */
-  private fun play(frames: Int): ShortArray {
+  private fun play(frames: Int): ShortArray = play(stage, frames)
+
+  private fun play(stage: GainStage, frames: Int): ShortArray {
     val input = ByteBuffer.allocateDirect(frames * 4).order(ByteOrder.nativeOrder())
     repeat(frames * 2) { input.putShort(10_000) }
     input.flip()

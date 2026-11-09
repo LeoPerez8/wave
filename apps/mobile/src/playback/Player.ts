@@ -18,6 +18,7 @@ import { askForNotifications } from "@/lib/askForNotifications";
 import { makeExternalStore } from "@/lib/externalStore";
 import { perfCount } from "@/perf/perf";
 import { makePlaybackStores } from "./playbackStores";
+import type { SongGainUpdate } from "./songGains";
 import {
   WavePlayer,
   type CrossfadeEndedEvent,
@@ -82,6 +83,13 @@ export class Player extends Context.Service<
     readonly setItemArtwork: (
       updates: readonly PlayerCoverUpdate[],
     ) => Effect.Effect<void, PlayerError>;
+    /**
+     * Normalize Volume gains learned after their entries' items were pushed
+     * (`songGains`); each applies when its song next starts.
+     */
+    readonly setSongGains: (updates: readonly SongGainUpdate[]) => Effect.Effect<void, PlayerError>;
+    /** The Library's typical gain (Core's `typicalGain`), for songs with no value. */
+    readonly setTypicalGain: (gainDb: number) => Effect.Effect<void, PlayerError>;
     /** Keeps the queue parts [write] changed for a JS restart and a cold start; skips its position. */
     readonly saveQueue: (write: QueueWrite, source: PlaySource) => Effect.Effect<void, PlayerError>;
     readonly savedQueue: Effect.Effect<SavedQueueParts | null, PlayerError>;
@@ -167,6 +175,12 @@ export const layer = Layer.effect(
         updates.length === 0
           ? Effect.void
           : call("show the cached covers", () => WavePlayer.setItemArtwork(updates)),
+      setSongGains: (updates) =>
+        updates.length === 0
+          ? Effect.void
+          : call("give songs their gains", () => WavePlayer.setSongGains(updates)),
+      setTypicalGain: (gainDb) =>
+        call("set the typical gain", () => WavePlayer.setTypicalGain(gainDb)),
       saveQueue: (write, source) =>
         call("save the queue", () =>
           WavePlayer.saveQueue(

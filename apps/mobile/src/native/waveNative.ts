@@ -1,6 +1,7 @@
 import type {
   Appearance,
   FramingSquare,
+  GainTagText,
   LaunchTheme,
   TagDestination,
   TagWriteStep,
@@ -38,6 +39,8 @@ export interface NativeScannedTrack {
   readonly hasLyrics: boolean;
   /** The advisory tag as tagged (`ITUNESADVISORY`, MP4 `rtng`); null without one. */
   readonly advisory?: string | null;
+  /** Its ReplayGain and R128 tags as tagged (Core's `gainTags` reads them); null without any. */
+  readonly loudnessTags?: GainTagText | null;
 }
 
 /** Colours picked from an artwork, as signed ARGB ints. */

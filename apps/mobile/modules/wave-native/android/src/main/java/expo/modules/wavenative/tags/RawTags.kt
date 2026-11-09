@@ -43,6 +43,8 @@ data class RawTags(
   val genres: List<String> = listOfNotNull(genre),
   /** The advisory tag as tagged ([Advisory]): Core's `explicitFromAdvisory` reads it. */
   val advisory: String? = null,
+  /** ReplayGain and R128 tags as tagged: Core's `gainTags` reads them. */
+  val loudness: LoudnessTags = LoudnessTags(),
 )
 
 /** Reads tags from an audio file. Implementations throw when the file can't be parsed. */

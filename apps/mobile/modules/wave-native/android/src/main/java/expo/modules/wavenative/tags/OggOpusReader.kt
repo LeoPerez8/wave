@@ -136,6 +136,8 @@ class OggOpusReader : TagReader {
         albumArtists = all("ALBUMARTIST", "ALBUM ARTIST", "ALBUM_ARTIST"),
         genres = all("GENRE"),
         advisory = first(Advisory.KEY),
+        // R128 gains are on top of the header's output gain, which Android's decoder applies.
+        loudness = LoudnessTags.of { first(it) },
       )
     }
 

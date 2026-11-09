@@ -91,6 +91,7 @@ import {
   type GraphPlayCursor,
 } from "./db/artistGraph";
 import { selectLeavingSong } from "./db/leavingSong";
+import { selectLibraryGains, selectSongLoudness } from "./db/loudness";
 import { selectNowPlayingSong } from "./db/nowPlayingSong";
 import type { PlayingSongAnswer, PlayingSongTarget } from "../nowPlaying/songLookup";
 import {
@@ -127,6 +128,8 @@ import {
   type YtArtistSaved,
   type ExplicitFlag,
   type SavedLyrics,
+  type SongLoudness,
+  type TagGains,
   type NoBetterCopy,
   type QualityDirection,
   type QualityFile,
@@ -376,6 +379,11 @@ export interface IndexedTrack extends LibraryTrack {
   readonly hasLyrics: boolean;
   /** What its advisory tag says (Core's `explicitFromAdvisory`). */
   readonly explicit: ExplicitFlag;
+  /**
+   * What its ReplayGain or R128 tags say, for Normalize Volume (Core's
+   * `gainTags`); absent or null values: nothing.
+   */
+  readonly loudness?: TagGains;
   /**
    * The YouTube video id of a song just downloaded from YouTube Music. Saving
    * the file again without one (a rescan) keeps the one it has.
@@ -906,6 +914,15 @@ export class LibraryStore extends Context.Service<
     readonly songsByIds: (
       ids: readonly number[],
     ) => Effect.Effect<readonly PlayableSongRow[], LibraryStoreError>;
+    /**
+     * What's known of the loudness of the songs [ids] (Normalize Volume), by
+     * Track id: those with a file and a value; the others are left out.
+     */
+    readonly songLoudness: (
+      ids: readonly number[],
+    ) => Effect.Effect<ReadonlyMap<number, SongLoudness>, LibraryStoreError>;
+    /** The gain every Library song with a value plays at, for the typical gain (Core's `typicalGain`). */
+    readonly libraryGains: Effect.Effect<readonly number[], LibraryStoreError>;
     /** All playable ids, without metadata or history, for Home's random Magic Queue grid. */
     readonly playableSongIds: Effect.Effect<readonly number[], LibraryStoreError>;
     /**
@@ -2003,6 +2020,8 @@ const make = Effect.gen(function* () {
 
     songsByIds: (ids) =>
       attempt("read queued songs", () => selectPlayableSongs(db, ids).filter(songHasFile)),
+    songLoudness: (ids) => attempt("read the songs' loudness", () => selectSongLoudness(db, ids)),
+    libraryGains: attempt("read the Library's gains", () => selectLibraryGains(db)),
 
     leavingSong: (id) => attempt("read the song leaving", () => selectLeavingSong(db, id)),
     videoIds: (ids) => attempt("read the songs' video ids", () => selectVideoIds(db, ids)),

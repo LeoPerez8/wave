@@ -2,6 +2,7 @@ import { registerTimingBackground, timingBackgroundChanged } from "@/lib/timing"
 import {
   createLandings,
   explicitFromAdvisory,
+  gainTags,
   isVoiceNoteOrRecording,
   normalizeTrack,
   planAddRoot,
@@ -137,6 +138,7 @@ export const toIndexedTrack = (native: NativeScannedTrack): IndexedTrack => ({
   artworkHash: native.artworkHash,
   hasLyrics: native.hasLyrics,
   explicit: explicitFromAdvisory(native.advisory),
+  loudness: gainTags(native.loudnessTags ?? {}),
 });
 
 export const toIndexedArtwork = (native: NativeArtwork): IndexedArtwork => {
