@@ -1417,16 +1417,15 @@ ALTER TABLE tracks ADD COLUMN tag_album_peak real;
 --> statement-breakpoint
 UPDATE tracks SET modified_at = 0 WHERE path IS NOT NULL;`;
 
-// Wave measurements have their own file fingerprint; modified_at=0 remains the scan re-read sentinel.
-const m0058 = `ALTER TABLE tracks ADD COLUMN measured_track_gain real;
+// Normalize Volume's measurements of files without tags, each with the size and modified time of
+// the file it was made of. modified_at = 0 stays the scan's re-read sentinel and clears none of it.
+const m0058 = `ALTER TABLE tracks ADD COLUMN measured_loudness real;
 --> statement-breakpoint
-ALTER TABLE tracks ADD COLUMN measured_track_peak real;
+ALTER TABLE tracks ADD COLUMN measured_peak real;
 --> statement-breakpoint
-ALTER TABLE tracks ADD COLUMN measurement_size_bytes integer;
+ALTER TABLE tracks ADD COLUMN measured_size_bytes integer;
 --> statement-breakpoint
-ALTER TABLE tracks ADD COLUMN measurement_modified_at integer;
---> statement-breakpoint
-ALTER TABLE tracks ADD COLUMN measurement_failed integer NOT NULL DEFAULT 0;`;
+ALTER TABLE tracks ADD COLUMN measured_modified_at integer;`;
 
 export default {
   journal: {

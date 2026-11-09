@@ -30,6 +30,7 @@ import {
   shuffledTrackIds,
   shufflesQueue,
   songChangeCause,
+  songsToMeasure,
   startPlayingWalk,
   typicalGain,
   undoneQueue,
@@ -62,7 +63,7 @@ import * as Layer from "effect/Layer";
 import * as Semaphore from "effect/Semaphore";
 
 import { makeExternalStore, subscribeAll } from "@/lib/externalStore";
-import { onLibraryChange, publishLibraryChange } from "@/library/libraryChanges";
+import { onLibraryChange } from "@/library/libraryChanges";
 import { LibraryStore } from "@/library/LibraryStore";
 import { currentLocalisation } from "@/localisation/localisation";
 import { WaveNative } from "@/native/waveNative";
@@ -71,8 +72,8 @@ import { showQueuedToast } from "@/overlay/queuedToast";
 import { currentToast, dismissToast, showToast } from "@/overlay/toast";
 import { perfMark } from "@/perf/perf";
 import { dontPlayExplicit, onDontPlayExplicit } from "@/settings/dontPlayExplicit";
-import { shuffleKind } from "@/settings/shuffleKind";
 import { normalizeVolumeOn, onNormalizeVolume } from "@/settings/normalizeVolume";
+import { shuffleKind } from "@/settings/shuffleKind";
 
 import { notificationStarred } from "./notificationStarState";
 import { Player, PlayerError, playbackState, positionState } from "./Player";
@@ -86,6 +87,7 @@ import {
 } from "./queueTracks";
 import { savedYtQueueTracks } from "./savedYtTracks";
 import { createEntryGains, type PlayerGain } from "./songGains";
+import { createSongMeasurements } from "./songMeasurements";
 
 export { toQueueTrack, type QueueTrack } from "./queueTracks";
 
@@ -340,65 +342,6 @@ export const layer = Layer.effect(
         ? Effect.succeed(NO_LOUDNESS)
         : store.songLoudness(ids).pipe(Effect.orElseSucceed(() => NO_LOUDNESS));
     };
-
-    // Measure at most the current song and five visible Up Next entries. The native worker is
-    // single-threaded; this loop also re-reads the window when the queue changes mid-measurement.
-    let measurementRunning = false;
-    let measurementDirty = false;
-    let measurementGeneration = 0;
-    let deliverMeasuredGain: (id: number) => Effect.Effect<void> = () => Effect.void;
-    const measureQueueWindow = Effect.gen(function* () {
-      const state = queueState.get();
-      if (!normalizeVolumeOn() || state.index < 0) return;
-      const ids = libraryTrackIds(state.entries.slice(state.index, state.index + 6).map((e) => e.trackId));
-      const candidates = yield* store.measurementCandidates(ids);
-      for (const candidate of candidates) {
-        if (!normalizeVolumeOn()) break;
-        const generation = measurementGeneration;
-        const measured = yield* Effect.tryPromise({
-          try: () => WaveNative.measureAudioLoudness(candidate.path),
-          catch: () => ({ integratedLufs: Number.NaN, samplePeak: Number.NaN }),
-        });
-        if (!normalizeVolumeOn() || generation !== measurementGeneration) break;
-        const valid = Number.isFinite(measured.integratedLufs) && Number.isFinite(measured.samplePeak) && measured.samplePeak > 0;
-        const saved = yield* store.saveMeasurement(candidate, {
-          gainDb: valid ? -14 - measured.integratedLufs : null,
-          peak: valid ? measured.samplePeak : null,
-        });
-        if (saved && valid) {
-          publishLibraryChange({ kind: "tracks", ids: [candidate.id] });
-          yield* deliverMeasuredGain(candidate.id);
-        }
-      }
-    }).pipe(Effect.catchAll(() => Effect.void));
-    const kickMeasurements = (): void => {
-      if (!normalizeVolumeOn()) return;
-      measurementDirty = true;
-      if (measurementRunning) return;
-      measurementRunning = true;
-      Effect.runFork(
-        Effect.gen(function* () {
-          while (measurementDirty && normalizeVolumeOn()) {
-            measurementDirty = false;
-            yield* measureQueueWindow;
-          }
-        }).pipe(Effect.ensuring(Effect.sync(() => { measurementRunning = false; }))),
-      );
-    };
-    yield* Effect.acquireRelease(
-      Effect.sync(() => {
-        const stopQueue = queueState.subscribe(kickMeasurements);
-        const settingChanged = (): void => {
-          measurementGeneration++;
-          if (normalizeVolumeOn()) kickMeasurements();
-          else WaveNative.cancelAudioMeasurement();
-        };
-        const stopSetting = onNormalizeVolume(settingChanged);
-        kickMeasurements();
-        return () => { stopQueue(); stopSetting(); };
-      }),
-      (stop) => Effect.sync(stop),
-    );
 
     /** The items for [entries], each with its song's gain (`songGains`). */
     const itemsFor = (entries: readonly QueueEntry[]) =>
@@ -940,14 +883,6 @@ export const layer = Layer.effect(
       sentTypical = typical;
     }).pipe(Effect.ignore);
 
-    // A result should reach held queue entries immediately, including one about to start;
-    // the Library publication still wakes the other Library readers and typical-gain path.
-    deliverMeasuredGain = (id) =>
-      Effect.andThen(
-        lane.withPermit(sendLearnedGains(new Set([String(id)]))),
-        sendTypicalGain,
-      );
-
     // The songs a Library change since the last gains read reached; null: any.
     let changedTracks: Set<string> | null = new Set();
     let gainsTimer: ReturnType<typeof setTimeout> | null = null;
@@ -973,6 +908,35 @@ export const layer = Layer.effect(
         }),
     );
     yield* Effect.forkScoped(sendTypicalGain);
+
+    // Normalize Volume measures the songs about to play that have no value (`songMeasurements`):
+    // a value reaches the entries the player holds at once, so a song measured before it starts
+    // plays at it, and the typical gain follows with the Library's other changes. No Library
+    // change is published: a measurement changes nothing a screen shows.
+    const measurements = createSongMeasurements({
+      on: normalizeVolumeOn,
+      wanted: () => songsToMeasure(queueState.get()),
+      songsToMeasure: store.songsToMeasure,
+      measure: (path) => WaveNative.measureAudioLoudness(path),
+      cancel: () => WaveNative.cancelAudioMeasurement(),
+      save: store.saveMeasurement,
+      learned: (id) => {
+        Effect.runFork(lane.withPermit(sendLearnedGains(new Set([String(id)]))));
+        followGains({ kind: "tracks", ids: [id] });
+      },
+    });
+    yield* Effect.acquireRelease(
+      Effect.sync(() => {
+        const stopQueue = queueState.subscribe(() => void measurements.wake());
+        const stopSwitch = onNormalizeVolume(measurements.switched);
+        void measurements.wake();
+        return () => {
+          stopQueue();
+          stopSwitch();
+        };
+      }),
+      (stop) => Effect.sync(stop),
+    );
 
     yield* lane.take(1);
     yield* Effect.forkScoped(

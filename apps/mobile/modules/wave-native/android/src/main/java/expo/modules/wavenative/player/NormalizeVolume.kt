@@ -26,8 +26,8 @@ data class SongGain(val gainDb: Double, val source: GainSource)
  * What Wave knows of a song's loudness (Core's `SongLoudness`): YouTube's
  * `loudnessDb` for a streamed YT Music song, dB above YouTube's -14 LUFS
  * reference ([expo.modules.wavenative.yt.YtLoudness]); and [known], a Library
- * song's gain as Core's `knownGain` worked it out from its tags, which comes
- * with the queue ([SongGains]). Null when there's none.
+ * song's gain as Core's `knownGain` worked it out from its tags or Wave's
+ * measurement, which comes with the queue ([SongGains]). Null when there's none.
  */
 data class SongLoudness(val youtubeLoudnessDb: Double? = null, val known: SongGain? = null)
 

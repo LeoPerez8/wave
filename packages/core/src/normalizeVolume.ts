@@ -10,6 +10,9 @@
  * `NormalizeVolumeTest` runs these cases. Change both together.
  */
 
+import { currentEntry, upNext, type QueueState } from "./queue.ts";
+import { libraryTrackIds } from "./ytQueue.ts";
+
 /** The switch is on unless the owner turned it off. */
 export const readNormalizeVolume = (stored: string | null): boolean => stored !== "off";
 
@@ -26,10 +29,17 @@ export const TYPICAL_GAIN_START_DB = -5;
 /** How many Library songs need a value before the typical gain is their median. */
 export const TYPICAL_GAIN_MIN_SONGS = 20;
 
+/** The loudness every song aims at, in LUFS: a song's gain is this minus its loudness. */
+const TARGET_LUFS = -14;
+
+/** How many Up Next songs after the current one Wave measures right away. */
+export const MEASURE_AHEAD = 5;
+
 /**
  * Where a song's gain came from, as the app log names it: its file's
- * ReplayGain or R128 tags, YouTube's value for a streamed song, the typical
- * gain for a song with none, or the switch off.
+ * ReplayGain or R128 tags, Wave's own measurement of a file without them,
+ * YouTube's value for a streamed song, the typical gain for a song with none,
+ * or the switch off.
  */
 export type GainSource = "tag" | "measured" | "youtube" | "typical" | "off";
 
@@ -51,9 +61,14 @@ export interface SongLoudness {
   readonly trackGainDb?: number | null;
   /** The song's sample peak from its tags, on a 0–1 full-scale range; null when unknown. */
   readonly trackPeak?: number | null;
-  /** Wave's measured gain at -14 LUFS and decoded sample peak. */
-  readonly measuredTrackGainDb?: number | null;
-  readonly measuredTrackPeak?: number | null;
+  /**
+   * Wave's measurement of a Library file without tags: its integrated
+   * loudness (ITU-R BS.1770), in LUFS. Null without one, or when the file
+   * couldn't be measured.
+   */
+  readonly measuredLoudness?: number | null;
+  /** The measured file's sample peak, on a 0–1 full-scale range. */
+  readonly measuredPeak?: number | null;
 }
 
 /**
@@ -153,7 +168,8 @@ const capped = (gainDb: number, peak: number | null | undefined): number => {
  * The gain [song] plays at from what's known of it, or null when nothing is
  * (it plays at the typical gain). A tagged song plays at its tag's gain,
  * boosted only as far as its peak allows, and only turned down without a
- * peak. A streamed song louder than YouTube's reference is turned down by
+ * peak. A song without tags that Wave measured plays at -14 LUFS minus its
+ * loudness, capped by its peak the same way. A streamed song louder than YouTube's reference is turned down by
  * YouTube's value and never turned up, as YouTube gives no peak.
  */
 export const knownGain = (song: SongLoudness): SongGain | null => {
@@ -161,9 +177,9 @@ export const knownGain = (song: SongLoudness): SongGain | null => {
   if (tag != null && Number.isFinite(tag)) {
     return { gainDb: capped(tag, song.trackPeak), source: "tag" };
   }
-  const measured = song.measuredTrackGainDb;
+  const measured = song.measuredLoudness;
   if (measured != null && Number.isFinite(measured)) {
-    return { gainDb: capped(measured, song.measuredTrackPeak), source: "measured" };
+    return { gainDb: capped(TARGET_LUFS - measured, song.measuredPeak), source: "measured" };
   }
   const youtube = song.youtubeLoudnessDb;
   if (youtube != null && Number.isFinite(youtube)) {
@@ -198,4 +214,17 @@ export const songGain = (
 ): SongGain => {
   if (!on) return { gainDb: 0, source: "off" };
   return knownGain(song) ?? { gainDb: typicalGainDb, source: "typical" };
+};
+
+/**
+ * The Library songs Wave measures right away while Normalize Volume is on:
+ * the current song and the next `MEASURE_AHEAD` Up Next entries, in play
+ * order, each once. A streamed song keeps its place among them and is never
+ * measured. Which of them have no value yet is the Library's to say.
+ */
+export const songsToMeasure = (state: QueueState): number[] => {
+  const current = currentEntry(state);
+  if (current === null) return [];
+  const window = [current, ...upNext(state).slice(0, MEASURE_AHEAD)];
+  return libraryTrackIds(window.map((entry) => entry.trackId));
 };

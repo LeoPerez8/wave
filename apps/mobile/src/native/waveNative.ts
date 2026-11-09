@@ -8,6 +8,7 @@ import type {
 } from "@wave/core";
 import { NativeModule, requireNativeModule } from "expo";
 
+import type { AudioMeasurement } from "./audioMeasurement";
 import { connectivityStore, type Connectivity } from "./connectivityStore";
 
 /** One audio file as read by the native scanner (`modules/wave-native`). Tag values are raw. */
@@ -134,9 +135,13 @@ type WaveNativeEvents = {
 };
 
 declare class WaveNativeModule extends NativeModule<WaveNativeEvents> {
-  /** Measures decoded local PCM using ITU-R BS.1770 on Wave's low-priority worker. */
-  measureAudioLoudness(path: string): Promise<{ readonly integratedLufs: number; readonly samplePeak: number }>;
-  /** Stops the active metering decode when Normalize Volume is turned off. */
+  /**
+   * Normalize Volume: decodes the Library file at [path] as the player would
+   * and measures its integrated loudness (ITU-R BS.1770) and sample peak, one
+   * file at a time, on a background-priority thread of its own.
+   */
+  measureAudioLoudness(path: string): Promise<AudioMeasurement>;
+  /** Stops the measurement running, which answers `cancelled` (Normalize Volume turned off). */
   cancelAudioMeasurement(): void;
   /** Makes at most one medium cover from cached artwork; true when this launch's pass is done. */
   backfillMediumCover(): Promise<boolean>;

@@ -1,10 +1,17 @@
 /**
  * Normalize Volume's values in the Library: what each song's loudness tags
- * say (Core's `gainTags`, kept by the scan), for the gains the player gets
- * with the queue and for the Library's typical gain.
+ * say (Core's `gainTags`, kept by the scan) and, for a file without tags,
+ * Wave's own measurement of it, for the gains the player gets with the queue
+ * and for the Library's typical gain.
+ *
+ * A measurement is kept with the size and modified time of the file it was
+ * made of (`measuredSizeBytes`, `measuredModifiedAt`); a file Wave couldn't
+ * measure has them without a loudness. The scan's save drops all of it when
+ * it sees the file change (`saveBatch`), so what's here describes the file
+ * the Track has now. Measurements stay on this phone and never sync.
  */
 import { knownGain, type SongLoudness } from "@wave/core";
-import { and, eq, inArray, isNotNull, isNull, or, sql } from "drizzle-orm";
+import { and, eq, inArray, isNotNull, isNull, ne, or } from "drizzle-orm";
 
 import { chunks } from "./chunks.ts";
 import type { LibraryDatabase } from "./database.ts";
@@ -12,13 +19,31 @@ import * as schema from "./schema.ts";
 
 const t = schema.tracks;
 
-/** A song with a file and a value of its own. */
-const currentMeasurement = and(
-  isNotNull(t.measuredTrackGain),
-  eq(t.measurementSizeBytes, t.sizeBytes),
-  or(eq(t.modifiedAt, 0), eq(t.measurementModifiedAt, t.modifiedAt)),
+/** A song with a file and a value of its own: its tags', or else Wave's measurement. */
+const hasValue = and(
+  isNotNull(t.path),
+  or(isNotNull(t.tagTrackGain), isNotNull(t.measuredLoudness)),
 );
-const hasValue = and(isNotNull(t.path), or(isNotNull(t.tagTrackGain), currentMeasurement));
+
+const loudnessColumns = {
+  trackGainDb: t.tagTrackGain,
+  trackPeak: t.tagTrackPeak,
+  measuredLoudness: t.measuredLoudness,
+  measuredPeak: t.measuredPeak,
+};
+
+interface LoudnessRow {
+  readonly trackGainDb: number | null;
+  readonly trackPeak: number | null;
+  readonly measuredLoudness: number | null;
+  readonly measuredPeak: number | null;
+}
+
+/** A row's value: its tags' when it has them (they win), else its measurement. */
+const songLoudness = (row: LoudnessRow): SongLoudness =>
+  row.trackGainDb !== null
+    ? { trackGainDb: row.trackGainDb, trackPeak: row.trackPeak }
+    : { measuredLoudness: row.measuredLoudness, measuredPeak: row.measuredPeak };
 
 /**
  * What's known of the loudness of the songs [ids] (Core's `SongLoudness`), by
@@ -31,17 +56,11 @@ export const selectSongLoudness = (
   new Map(
     chunks([...new Set(ids)]).flatMap((some) =>
       db
-        .select({
-          id: t.id,
-          trackGainDb: t.tagTrackGain,
-          trackPeak: t.tagTrackPeak,
-          measuredTrackGainDb: sql<number | null>`CASE WHEN ${t.tagTrackGain} IS NULL AND ${t.measurementSizeBytes} = ${t.sizeBytes} AND (${t.modifiedAt} = 0 OR ${t.measurementModifiedAt} = ${t.modifiedAt}) THEN ${t.measuredTrackGain} END`,
-          measuredTrackPeak: sql<number | null>`CASE WHEN ${t.tagTrackGain} IS NULL AND ${t.measurementSizeBytes} = ${t.sizeBytes} AND (${t.modifiedAt} = 0 OR ${t.measurementModifiedAt} = ${t.modifiedAt}) THEN ${t.measuredTrackPeak} END`,
-        })
+        .select({ id: t.id, ...loudnessColumns })
         .from(t)
         .where(and(hasValue, inArray(t.id, some)))
         .all()
-        .map(({ id, ...loudness }) => [id, loudness] as const),
+        .map(({ id, ...row }) => [id, songLoudness(row)] as const),
     ),
   );
 
@@ -52,70 +71,89 @@ export const selectSongLoudness = (
  */
 export const selectLibraryGains = (db: LibraryDatabase): number[] =>
   db
-    .select({
-      trackGainDb: t.tagTrackGain,
-      trackPeak: t.tagTrackPeak,
-      measuredTrackGainDb: sql<number | null>`CASE WHEN ${t.measurementSizeBytes} = ${t.sizeBytes} AND (${t.modifiedAt} = 0 OR ${t.measurementModifiedAt} = ${t.modifiedAt}) THEN ${t.measuredTrackGain} END`,
-      measuredTrackPeak: sql<number | null>`CASE WHEN ${t.measurementSizeBytes} = ${t.sizeBytes} AND (${t.modifiedAt} = 0 OR ${t.measurementModifiedAt} = ${t.modifiedAt}) THEN ${t.measuredTrackPeak} END`,
-    })
+    .select(loudnessColumns)
     .from(t)
     .where(hasValue)
     .all()
-    .flatMap((song) => {
-      const gain = knownGain(song)?.gainDb;
+    .flatMap((row) => {
+      const gain = knownGain(songLoudness(row))?.gainDb;
       return gain === undefined ? [] : [gain];
     });
 
-export interface MeasurementCandidate {
+/** A Library file to measure, as the scan last saw it. */
+export interface SongToMeasure {
   readonly id: number;
   readonly path: string;
   readonly sizeBytes: number;
   readonly modifiedAt: number;
 }
 
-/** Untagged queue songs needing work, skipping a failed result until its file fingerprint changes. */
-export const selectMeasurementCandidates = (
+/**
+ * What measuring a file gave: its integrated loudness in LUFS and its sample
+ * peak (0–1 full scale), or null when it couldn't be decoded.
+ */
+export type SongMeasurement = { readonly loudness: number; readonly peak: number } | null;
+
+/**
+ * The songs among [ids], in their order, that Wave should measure: Library
+ * files without tags that haven't been measured, or tried, as they are now. A
+ * file the scan was asked to read again (a migration's `modified_at = 0`)
+ * waits until it has, as its tags may give it a value.
+ */
+export const selectSongsToMeasure = (
   db: LibraryDatabase,
   ids: readonly number[],
-): MeasurementCandidate[] => {
-  if (ids.length === 0) return [];
-  const found = db.select({ id: t.id, path: t.path, sizeBytes: t.sizeBytes, modifiedAt: t.modifiedAt })
-    .from(t)
-    .where(and(
-      inArray(t.id, [...new Set(ids)]),
-      isNotNull(t.path),
-      sql`${t.modifiedAt} != 0`,
-      isNull(t.tagTrackGain),
-      isNull(t.tagAlbumGain),
-      sql`(${t.measurementSizeBytes} IS NULL OR ${t.measurementSizeBytes} != ${t.sizeBytes} OR (${t.modifiedAt} != 0 AND ${t.measurementModifiedAt} != ${t.modifiedAt}))`,
-    ))
-    .all() as MeasurementCandidate[];
-  const byId = new Map(found.map((row) => [row.id, row]));
-  return [...new Set(ids)].flatMap((id) => {
-    const candidate = byId.get(id);
-    return candidate === undefined ? [] : [candidate];
+): SongToMeasure[] => {
+  const wanted = [...new Set(ids)];
+  const found = new Map<number, SongToMeasure>();
+  for (const some of chunks(wanted)) {
+    const rows = db
+      .select({ id: t.id, path: t.path, sizeBytes: t.sizeBytes, modifiedAt: t.modifiedAt })
+      .from(t)
+      .where(
+        and(
+          inArray(t.id, some),
+          isNotNull(t.path),
+          ne(t.modifiedAt, 0),
+          isNull(t.tagTrackGain),
+          isNull(t.measuredSizeBytes),
+        ),
+      )
+      .all();
+    for (const { path, ...row } of rows) if (path !== null) found.set(row.id, { ...row, path });
+  }
+  return wanted.flatMap((id) => {
+    const song = found.get(id);
+    return song === undefined ? [] : [song];
   });
 };
 
-/** Commits a result only while the Track still names the file that was decoded. */
+/**
+ * Keeps what measuring [song] gave ([measurement]; null: it couldn't be
+ * measured) with the file's size and modified time. False, keeping nothing,
+ * when the Track no longer has that file as it was, or has tags now.
+ */
 export const saveMeasurement = (
   db: LibraryDatabase,
-  candidate: MeasurementCandidate,
-  result: { readonly gainDb: number | null; readonly peak: number | null },
-): boolean => {
-  const update = db.update(t).set({
-    measuredTrackGain: result.gainDb,
-    measuredTrackPeak: result.peak,
-    measurementSizeBytes: candidate.sizeBytes,
-    measurementModifiedAt: candidate.modifiedAt,
-    measurementFailed: result.gainDb === null ? true : false,
-  }).where(and(
-    eq(t.id, candidate.id),
-    eq(t.path, candidate.path),
-    eq(t.sizeBytes, candidate.sizeBytes),
-    eq(t.modifiedAt, candidate.modifiedAt),
-    isNull(t.tagTrackGain),
-    isNull(t.tagAlbumGain),
-  )).returning({ id: t.id }).all();
-  return update.length > 0;
-};
+  song: SongToMeasure,
+  measurement: SongMeasurement,
+): boolean =>
+  db
+    .update(t)
+    .set({
+      measuredLoudness: measurement?.loudness ?? null,
+      measuredPeak: measurement?.peak ?? null,
+      measuredSizeBytes: song.sizeBytes,
+      measuredModifiedAt: song.modifiedAt,
+    })
+    .where(
+      and(
+        eq(t.id, song.id),
+        eq(t.path, song.path),
+        eq(t.sizeBytes, song.sizeBytes),
+        eq(t.modifiedAt, song.modifiedAt),
+        isNull(t.tagTrackGain),
+      ),
+    )
+    .returning({ id: t.id })
+    .all().length > 0;
