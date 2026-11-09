@@ -208,6 +208,14 @@ const tagColumns = (filing: Filing, track: FiledTrack) => ({
   durationMs: track.durationMs,
 });
 
+/** What a file's loudness tags say (`IndexedTrack.loudness`), as its columns: a file without any clears them. */
+const loudnessColumns = ({ loudness }: IndexedTrack) => ({
+  tagTrackGain: loudness?.trackGainDb ?? null,
+  tagTrackPeak: loudness?.trackPeak ?? null,
+  tagAlbumGain: loudness?.albumGainDb ?? null,
+  tagAlbumPeak: loudness?.albumPeak ?? null,
+});
+
 /**
  * Gives the files among [tracks] the Library doesn't index yet to the
  * missing songs they are (Core's `fillMissingSongs`: by recording key,
@@ -371,6 +379,7 @@ export const saveBatch = (
             artworkHash: track.artworkHash,
             hasLyrics: track.hasLyrics,
             explicit: track.explicit,
+            ...loudnessColumns(track),
             addedAt: now,
             scannedAt: now,
           })),
@@ -407,6 +416,10 @@ export const saveBatch = (
             artworkHash: excluded(t.artworkHash),
             hasLyrics: excluded(t.hasLyrics),
             explicit: excluded(t.explicit),
+            tagTrackGain: excluded(t.tagTrackGain),
+            tagTrackPeak: excluded(t.tagTrackPeak),
+            tagAlbumGain: excluded(t.tagAlbumGain),
+            tagAlbumPeak: excluded(t.tagAlbumPeak),
             scannedAt: excluded(t.scannedAt),
           },
         })

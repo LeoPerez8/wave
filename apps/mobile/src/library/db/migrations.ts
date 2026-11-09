@@ -1406,6 +1406,17 @@ ${mPlaylistRevisions
   )
   .replace(/\s*--> statement-breakpoint\s*$/, "")}`;
 
+// Normalize Volume reads ReplayGain and R128 tags: songs indexed before are read again by the next scan.
+const m0057 = `ALTER TABLE tracks ADD COLUMN tag_track_gain real;
+--> statement-breakpoint
+ALTER TABLE tracks ADD COLUMN tag_track_peak real;
+--> statement-breakpoint
+ALTER TABLE tracks ADD COLUMN tag_album_gain real;
+--> statement-breakpoint
+ALTER TABLE tracks ADD COLUMN tag_album_peak real;
+--> statement-breakpoint
+UPDATE tracks SET modified_at = 0 WHERE path IS NOT NULL;`;
+
 export default {
   journal: {
     entries: [
@@ -1486,6 +1497,7 @@ export default {
         tag: "0056_playlist_entries_outlive_songs",
         breakpoints: true,
       },
+      { idx: 57, when: 1_796_731_200_000, tag: "0057_loudness_tags", breakpoints: true },
     ],
   },
   migrations: {
@@ -1546,5 +1558,6 @@ export default {
     m0054,
     m0055,
     m0056,
+    m0057,
   },
 };

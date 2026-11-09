@@ -27,6 +27,7 @@ internal fun trackToMap(track: ScannedTrack): Map<String, Any?> =
     "artworkHash" to track.artworkHash,
     "hasLyrics" to track.hasLyrics,
     "advisory" to track.tags.advisory,
+    "loudnessTags" to track.tags.loudness.takeUnless { it.isEmpty() }?.toMap(),
   )
 
 /** Stored artwork as JS receives it (`NativeArtwork`). */

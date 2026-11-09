@@ -6,6 +6,7 @@ import {
   index,
   integer,
   primaryKey,
+  real,
   sqliteTable,
   text,
 } from "drizzle-orm/sqlite-core";
@@ -174,6 +175,16 @@ export const tracks = sqliteTable(
     explicit: text("explicit", { enum: ["explicit", "clean", "unknown"] })
       .notNull()
       .default("unknown"),
+    /**
+     * What the file's ReplayGain or R128 tags say, for Normalize Volume (Core's
+     * `gainTags`): gains at -14 LUFS, peaks on a 0–1 full-scale range; null
+     * where it says nothing. Read again with the rest of its tags; never
+     * written to the file, never synced.
+     */
+    tagTrackGain: real("tag_track_gain"),
+    tagTrackPeak: real("tag_track_peak"),
+    tagAlbumGain: real("tag_album_gain"),
+    tagAlbumPeak: real("tag_album_peak"),
     /** When the file first entered the library (drives Recently Added). */
     addedAt: integer("added_at").notNull(),
     /** When a scan last saw the file. */

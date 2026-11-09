@@ -191,6 +191,67 @@ class TagReadingTest {
     }
   }
 
+  /** A copy of the fixture [name] with ReplayGain tags, written as taggers do for its format. */
+  private fun withReplayGain(name: String, key: (String) -> String = { it }): java.io.File {
+    val file = Fixtures.tempDir().resolve(name)
+    Fixtures.file(name).copyTo(file)
+    val audio = AudioFileIO.read(file)
+    val tag = audio.tagOrCreateAndSetDefault
+    val values = mapOf(
+      "REPLAYGAIN_TRACK_GAIN" to "-6.54 dB",
+      "REPLAYGAIN_TRACK_PEAK" to "0.988553",
+      "REPLAYGAIN_ALBUM_GAIN" to "-7.10 dB",
+      "REPLAYGAIN_ALBUM_PEAK" to "1.023000",
+    )
+    for ((name, value) in values) {
+      when (tag) {
+        is org.jaudiotagger.tag.mp4.Mp4Tag ->
+          tag.addField(org.jaudiotagger.tag.mp4.field.Mp4TagReverseDnsField("----", "com.apple.iTunes", key(name), value))
+        is org.jaudiotagger.tag.id3.AbstractID3v2Tag -> {
+          val frame = tag.createFrame("TXXX")
+          frame.body = org.jaudiotagger.tag.id3.framebody.FrameBodyTXXX(
+            org.jaudiotagger.tag.id3.valuepair.TextEncoding.ISO_8859_1,
+            key(name),
+            value,
+          )
+          tag.addField(frame)
+        }
+        // FLAC and Ogg Vorbis: a Vorbis comment.
+        else -> tag.addField(org.jaudiotagger.tag.vorbiscomment.VorbisCommentTagField(key(name), value))
+      }
+    }
+    AudioFileIO.write(audio)
+    return file
+  }
+
+  @Test
+  fun replayGainTagsInEveryFormat() {
+    for (name in listOf("tagged.mp3", "tagged.flac", "tagged.ogg", "tagged-aac.m4a")) {
+      val tags = reader.read(withReplayGain(name)).loudness
+      assertEquals("$name track gain", "-6.54 dB", tags.replayGainTrackGain)
+      assertEquals("$name track peak", "0.988553", tags.replayGainTrackPeak)
+      assertEquals("$name album gain", "-7.10 dB", tags.replayGainAlbumGain)
+      assertEquals("$name album peak", "1.023000", tags.replayGainAlbumPeak)
+    }
+  }
+
+  @Test
+  fun replayGainTagNamesInLowerCase() {
+    // foobar2000 and iTunes-style taggers write the names in lower case.
+    for (name in listOf("tagged.mp3", "tagged.flac", "tagged-aac.m4a")) {
+      val tags = reader.read(withReplayGain(name) { it.lowercase() }).loudness
+      assertEquals("$name track gain", "-6.54 dB", tags.replayGainTrackGain)
+      assertEquals("$name album peak", "1.023000", tags.replayGainAlbumPeak)
+    }
+  }
+
+  @Test
+  fun noLoudnessTagsWhenNoneAreTagged() {
+    for (name in listOf("tagged.mp3", "tagged.flac", "tagged.ogg", "tagged-aac.m4a", "tagged.opus", "untagged.mp3")) {
+      assertEquals(name, LoudnessTags(), reader.read(Fixtures.file(name)).loudness)
+    }
+  }
+
   private companion object {
     /** What every `lyrics.*` fixture carries (see `generate.sh`). */
     const val FIXTURE_LYRICS = "[00:00.50]Olá, onda\n[00:01.00]Second line"

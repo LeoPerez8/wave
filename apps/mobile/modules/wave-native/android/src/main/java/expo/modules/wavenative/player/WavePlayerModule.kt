@@ -32,7 +32,21 @@ class PlayerItem : Record {
   @Field val artist: String = ""
   @Field val album: String? = null
   @Field val artworkPath: String? = null
+
+  /** A Library song's Normalize Volume gain (Core's `knownGain`); null without a value. */
+  @Field val gainDb: Double? = null
+
+  /** Its source, as Core names it (`tag`). */
+  @Field val gainSource: String? = null
 }
+
+/** A queue entry's gain learned after its item was pushed, as JS sends it (`SongGainUpdate`). */
+class SongGainRecord : Record {
+  @Field val key: String = ""
+  @Field val gainDb: Double? = null
+  @Field val gainSource: String? = null
+}
+
 
 /** A loaded item's new artwork, as JS sends it (Core's `PlayerCoverUpdate`). */
 class ItemArtworkRecord : Record {
@@ -246,6 +260,26 @@ class WavePlayerModule : Module() {
     }.runOnQueue(Queues.MAIN)
 
     /**
+     * The Library's typical gain (Core's `typicalGain`): songs with no value
+     * play at it from their next start. Kept on disk for a cold start.
+     */
+    AsyncFunction("setTypicalGain") { gainDb: Double, promise: Promise ->
+      NormalizeVolume.init(context)
+      NormalizeVolume.setTypical(gainDb)
+      promise.resolve(null)
+    }
+
+    /**
+     * Gains learned after their entries' items were pushed (a scan read the
+     * song's tags): each applies when its song next starts ([SongGains]),
+     * without pushing the queue again or touching the song playing.
+     */
+    AsyncFunction("setSongGains") { updates: List<SongGainRecord>, promise: Promise ->
+      for (update in updates) SongGains.set(update.key, update.gainDb, update.gainSource)
+      promise.resolve(null)
+    }
+
+    /**
      * The entry whose next song is an unsearched one still being searched (Core's
      * `searchingAfter`), or null: a crossfade from it waits for the search.
      */
@@ -265,6 +299,8 @@ class WavePlayerModule : Module() {
     AsyncFunction("applySync") { steps: List<SyncStepRecord>, items: List<PlayerItem>, cause: String?, promise: Promise ->
       withController(promise) { player ->
         val incoming = items.associate { it.id to toMediaItem(it) }
+        // Normalize Volume: each new entry's gain, there before its song can start.
+        for (item in items) SongGains.set(item.id, item.gainDb, item.gainSource)
         val playlist = ControllerPlaylist(player)
         syncing = true
         QueueSnapshot.resumed = false
@@ -274,6 +310,8 @@ class WavePlayerModule : Module() {
             QueueSync.apply(plan, playlist, incoming)
           }
           if (player.playbackState == Player.STATE_IDLE && player.mediaItemCount > 0) player.prepare()
+          // A sync that loads items can also have dropped some: their gains go with them.
+          if (items.isNotEmpty()) SongGains.retain((0 until player.mediaItemCount).mapTo(HashSet()) { player.getMediaItemAt(it).mediaId })
           promise.resolve(null)
         } catch (error: IllegalArgumentException) {
           promise.reject("ERR_PLAYER_SYNC", error.message, error)

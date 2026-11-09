@@ -1,5 +1,6 @@
 import type {
   AutoLyricsText,
+  GainSource,
   PlayerCoverUpdate,
   PlaySource,
   RepeatMode,
@@ -24,6 +25,19 @@ export interface PlayerItem {
    * Music song whose cover isn't cached, its address.
    */
   readonly artworkPath: string | null;
+  /**
+   * A Library song's Normalize Volume gain and its source (Core's
+   * `knownGain`); null without a value, so it plays at the typical gain.
+   */
+  readonly gainDb?: number | null;
+  readonly gainSource?: GainSource | null;
+}
+
+/** A gain for an entry the player already holds, learned after its item was pushed. */
+export interface NativeSongGain {
+  readonly key: string;
+  readonly gainDb: number | null;
+  readonly gainSource: GainSource | null;
 }
 
 export interface PlayerPosition {
@@ -188,6 +202,16 @@ declare class WavePlayerModule extends NativeModule<WavePlayerEvents> {
    * once, to the song playing too.
    */
   setNormalizeVolume(on: boolean): Promise<void>;
+  /**
+   * The Library's typical gain (Core's `typicalGain`), which songs with no
+   * value play at from their next start. Kept natively for a cold start.
+   */
+  setTypicalGain(gainDb: number): Promise<void>;
+  /**
+   * Gains learned after their entries' items were pushed: each applies when
+   * its song next starts, never mid-song, without pushing the queue again.
+   */
+  setSongGains(updates: readonly NativeSongGain[]): Promise<void>;
   /**
    * The player entry whose next song is an unsearched one still being searched (Core's
    * `searchingAfter`), or null: a crossfade from it waits for the search at full volume.
