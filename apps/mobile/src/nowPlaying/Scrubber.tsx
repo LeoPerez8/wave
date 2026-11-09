@@ -54,14 +54,19 @@ const BAR_SCRUBBING = CELL / 2;
 /** The playing-song underline's wave, scaled up (same wavelength : amplitude). */
 const WAVELENGTH = CELL * 2;
 const AMPLITUDE = (WAVELENGTH * UNDERLINE_WAVE.amplitude) / UNDERLINE_WAVE.wavelength;
-/** The dot on the playhead's radius, at rest and under a finger (12 and 16 dp across). */
-const DOT = CELL * 0.75;
-const DOT_SCRUBBING = CELL;
+/** Radius of the playhead's dot, at rest and under a finger (12 and 16 dp across). */
+const DOT_RADIUS = CELL * 0.75;
+const DOT_RADIUS_SCRUBBING = CELL;
+/** Room past the biggest dot, so its anti-aliased edge isn't cut. */
+const DOT_SLACK = 1;
 /** Box tall enough for crest, trough and the boldest stroke around them, and for the biggest dot. */
-const HEIGHT = Math.max(AMPLITUDE * 2 + BAR_SCRUBBING, DOT_SCRUBBING * 2);
+const HEIGHT = Math.max(AMPLITUDE * 2 + BAR_SCRUBBING, (DOT_RADIUS_SCRUBBING + DOT_SLACK) * 2);
 const CENTRE = HEIGHT / 2;
-/** The drawing reaches past the bar's ends by the biggest dot's radius, so a dot at 0:00 or the end is whole. */
-const OVERHANG = DOT_SCRUBBING;
+/**
+ * How far the drawing reaches past each end of the bar, so a dot at 0:00 or
+ * at the end is drawn whole.
+ */
+const OVERHANG = DOT_RADIUS_SCRUBBING + DOT_SLACK;
 
 /** No finger on the bar, or no release waiting for JavaScript. */
 const NONE = -1;
@@ -83,7 +88,7 @@ const playingKey = (): string | null => currentEntry(queueState.get())?.key ?? n
 
 /**
  * The playhead: the elapsed part is a still teal wave, the shape of the
- * playing song's underline, that meets a flat graphite line at the playhead,
+ * playing song's underline, that meets a flat pewter line at the playhead,
  * where a teal dot sits; then elapsed and remaining time. Touch anywhere on it, or a little above or
  * below its box (Core's `scrubHitSlop`), and drag to scrub;
  * the bar gets bolder, the dot grows, and the track seeks when the finger lifts.
@@ -180,6 +185,7 @@ export function Scrubber() {
     const ms = finger !== NONE ? finger : release !== NONE ? release : playhead.positionMs.get();
     return Math.min(ms, bar.get().durationMs);
   });
+  const scrubbing = useDerivedValue(() => scrub.get() !== NONE);
   // Where the wave meets the line, in dp from the bar's left end.
   const join = useDerivedValue(() => {
     const { width: barWidth, durationMs: barDuration } = bar.get();
@@ -190,7 +196,7 @@ export function Scrubber() {
     const x = join.get();
     return {
       d: x < barWidth ? `M${x} ${CENTRE}H${barWidth}` : "",
-      strokeWidth: scrub.get() === NONE ? BAR : BAR_SCRUBBING,
+      strokeWidth: scrubbing.get() ? BAR_SCRUBBING : BAR,
     };
   });
   const waveProps = useAnimatedProps<PathProps>(() => {
@@ -198,13 +204,13 @@ export function Scrubber() {
     return {
       d:
         length > 0 ? elapsedWavePath({ length, wavelength: WAVELENGTH, amplitude: AMPLITUDE }) : "",
-      strokeWidth: scrub.get() === NONE ? BAR : BAR_SCRUBBING,
+      strokeWidth: scrubbing.get() ? BAR_SCRUBBING : BAR,
     };
   });
   const dotProps = useAnimatedProps<CircleProps>(() => ({
     cx: join.get(),
     // No length, no playhead to mark.
-    r: bar.get().durationMs > 0 ? (scrub.get() === NONE ? DOT : DOT_SCRUBBING) : 0,
+    r: bar.get().durationMs > 0 ? (scrubbing.get() ? DOT_RADIUS_SCRUBBING : DOT_RADIUS) : 0,
   }));
 
   // Native text props follow the same UI-thread position, including during a drag.
