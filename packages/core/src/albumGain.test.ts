@@ -142,3 +142,11 @@ test("combined album gain can boost only up to the loudest song's peak", () => {
   ])!;
   assert.ok(Math.abs(gain.gainDb - 6.0206) < 0.00001);
 });
+
+test("a shared album tag cannot boost beyond a known higher song peak", () => {
+  const gain = albumGain([
+    { id: 1, durationMs: 1_000, trackGainDb: 10, trackPeak: 0.8, albumGainDb: 8, albumPeak: 0.1 },
+    { id: 2, durationMs: 1_000, trackGainDb: 10, trackPeak: 0.2, albumGainDb: 8, albumPeak: 0.1 },
+  ])!;
+  assert.ok(Math.abs(gain.gainDb - 1.9382) < 0.00001);
+});

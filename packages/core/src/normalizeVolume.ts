@@ -278,13 +278,16 @@ export const albumGain = (songs: readonly AlbumSongLoudness[]): SongGain | null 
     }
     gainDb = TARGET_LUFS - 10 * Math.log10(energy / duration);
   }
-  const peaks = songs.map((song) =>
-    sharedTag
-      ? (song.albumPeak ?? song.trackPeak ?? song.measuredPeak)
-      : song.trackGainDb != null
-        ? song.trackPeak
-        : song.measuredPeak,
-  );
+  const peaks = songs.map((song) => {
+    const track = song.trackGainDb != null ? song.trackPeak : song.measuredPeak;
+    if (!sharedTag) return track;
+    // An album peak describes the whole album, but a higher known track peak
+    // must still prevent clipping if those tags disagree.
+    const known = [song.albumPeak, track].filter(
+      (peak): peak is number => peak != null && Number.isFinite(peak) && peak > 0,
+    );
+    return known.length === 0 ? null : Math.max(...known);
+  });
   const peak = peaks.every((p) => p != null && Number.isFinite(p) && p > 0)
     ? Math.max(...(peaks as number[]))
     : null;
