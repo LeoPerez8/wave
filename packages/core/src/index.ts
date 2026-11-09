@@ -1613,6 +1613,8 @@ export {
   gainTags,
   knownGain,
   MEASURE_AHEAD,
+  albumGain,
+  entryGain,
   readNormalizeVolume,
   songGain,
   songsToMeasure,
@@ -1622,6 +1624,8 @@ export {
   writeNormalizeVolume,
 } from "./normalizeVolume.ts";
 export type {
+  AlbumSongLoudness,
+  AlbumLoudness,
   GainSource,
   GainTagText,
   SongGain,

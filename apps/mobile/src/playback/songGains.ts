@@ -9,6 +9,9 @@
  */
 import {
   knownGain,
+  entryGain,
+  type AlbumLoudness,
+  type QueueState,
   parseTrackId,
   type GainSource,
   type QueueEntry,
@@ -26,6 +29,13 @@ export interface SongGainUpdate extends PlayerGain {
   readonly key: string;
 }
 
+export interface GainContext {
+  readonly state: QueueState;
+  readonly album: AlbumLoudness | null;
+}
+
+type GainEntry = Pick<QueueEntry, "trackId"> & Partial<Pick<QueueEntry, "contextIndex">>;
+
 const NONE: PlayerGain = { gainDb: null, gainSource: null };
 
 /**
@@ -34,12 +44,23 @@ const NONE: PlayerGain = { gainDb: null, gainSource: null };
  * whose YouTube value the player learns itself).
  */
 export const playerGain = (
-  entry: Pick<QueueEntry, "trackId">,
+  entry: GainEntry,
   loudness: ReadonlyMap<number, SongLoudness>,
+  context?: GainContext,
 ): PlayerGain => {
   const track = parseTrackId(entry.trackId);
   const song = track?.kind === "library" ? loudness.get(track.id) : undefined;
-  const gain = song === undefined ? null : knownGain(song);
+  const gain =
+    context === undefined
+      ? song === undefined
+        ? null
+        : knownGain(song)
+      : entryGain(
+          context.state,
+          { ...entry, contextIndex: entry.contextIndex ?? null },
+          song ?? {},
+          context.album,
+        );
   return gain === null ? NONE : { gainDb: gain.gainDb, gainSource: gain.source };
 };
 
@@ -55,10 +76,11 @@ export const createEntryGains = () => {
   return {
     /** The gain [entry]'s item carries to the player, from [loudness]. */
     withItem: (
-      entry: Pick<QueueEntry, "key" | "trackId">,
+      entry: GainEntry & Pick<QueueEntry, "key">,
       loudness: ReadonlyMap<number, SongLoudness>,
+      context?: GainContext,
     ): PlayerGain => {
-      const gain = playerGain(entry, loudness);
+      const gain = playerGain(entry, loudness, context);
       given.set(entry.key, gain);
       return gain;
     },
@@ -69,12 +91,13 @@ export const createEntryGains = () => {
      * JS restarted) gets its gain.
      */
     changes: (
-      entries: readonly Pick<QueueEntry, "key" | "trackId">[],
+      entries: readonly (GainEntry & Pick<QueueEntry, "key">)[],
       loudness: ReadonlyMap<number, SongLoudness>,
+      context?: GainContext,
     ): SongGainUpdate[] =>
       entries.flatMap((entry) => {
         if (parseTrackId(entry.trackId)?.kind !== "library") return [];
-        const gain = playerGain(entry, loudness);
+        const gain = playerGain(entry, loudness, context);
         const before = given.get(entry.key);
         if (before !== undefined && sameGain(before, gain)) return [];
         given.set(entry.key, gain);

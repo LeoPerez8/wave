@@ -2,7 +2,7 @@
 import assert from "node:assert/strict";
 import { describe, test } from "node:test";
 
-import type { SongLoudness } from "@wave/core";
+import { reduceQueue, EMPTY_QUEUE, type SongLoudness } from "@wave/core";
 
 import { createEntryGains, playerGain } from "./songGains.ts";
 
@@ -83,4 +83,39 @@ describe("createEntryGains", () => {
       { key: "a", gainDb: -6, gainSource: "tag" },
     ]);
   });
+});
+
+test("album completion refreshes every held context entry, while manual occurrences keep track gain", () => {
+  const state = reduceQueue(EMPTY_QUEUE, {
+    type: "play",
+    trackIds: ["7", "8"],
+    startIndex: 0,
+    context: { kind: "album", id: "42" },
+  }).state;
+  const entries = [...state.entries, { key: "manual", trackId: "7", contextIndex: null }];
+  const gains = createEntryGains();
+  const loudness = new Map([
+    [7, tagged(3)],
+    [8, tagged(-8)],
+  ]);
+  const album = {
+    id: "42",
+    songs: [
+      { id: 7, durationMs: 1_000, trackGainDb: 3, albumGainDb: -4, albumPeak: 1 },
+      { id: 8, durationMs: 9_000, trackGainDb: -8, albumGainDb: -4, albumPeak: 1 },
+    ],
+  };
+  for (const entry of entries) gains.withItem(entry, loudness, { state, album: null });
+  assert.deepEqual(gains.changes(entries, loudness, { state, album }), [
+    { key: entries[0]!.key, gainDb: -4, gainSource: "album" },
+    { key: entries[1]!.key, gainDb: -4, gainSource: "album" },
+  ]);
+  // The native stage keeps the currently playing decision; all future starts get track gain.
+  assert.deepEqual(
+    gains.changes(entries, loudness, { state: { ...state, shuffle: true }, album }),
+    [
+      { key: entries[0]!.key, gainDb: -0, gainSource: "tag" },
+      { key: entries[1]!.key, gainDb: -8, gainSource: "tag" },
+    ],
+  );
 });

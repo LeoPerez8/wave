@@ -343,11 +343,40 @@ export const layer = Layer.effect(
         : store.songLoudness(ids).pipe(Effect.orElseSucceed(() => NO_LOUDNESS));
     };
 
-    /** The items for [entries], each with its song's gain (`songGains`). */
-    const itemsFor = (entries: readonly QueueEntry[]) =>
-      Effect.flatMap(loudnessOf(entries), (loudness) =>
-        Effect.forEach(entries, (entry) => itemFor(entry, gains.withItem(entry, loudness))),
-      );
+    /** Resolves only local album ids; a YouTube album context never opts in. */
+    const albumOf = (state: QueueState) => {
+      const id = state.context?.kind === "album" ? Number(state.context.id) : NaN;
+      return Number.isSafeInteger(id) && id > 0
+        ? store.albumLoudness(id).pipe(Effect.orElseSucceed(() => null))
+        : Effect.succeed(null);
+    };
+
+    /** The items for [entries], each with the track or album gain for its next start. */
+    const itemsFor = (entries: readonly QueueEntry[], state: QueueState) =>
+      Effect.gen(function* () {
+        const loudness = yield* loudnessOf(entries);
+        const album = yield* albumOf(state);
+        return yield* Effect.forEach(entries, (entry) =>
+          itemFor(entry, gains.withItem(entry, loudness, { state, album })),
+        );
+      });
+
+    /** Refreshes held entries before a skip or mode change can start their next song. */
+    const refreshGains = (state: QueueState, trackIds: ReadonlySet<string> | null = null) =>
+      Effect.gen(function* () {
+        const held = new Set(native.keys);
+        // A value for any album song can complete the whole album, including a song outside
+        // the native window. Refresh every held entry in an album context.
+        const entries = state.entries.filter(
+          (entry) =>
+            held.has(entry.key) &&
+            (state.context?.kind === "album" || trackIds === null || trackIds.has(entry.trackId)),
+        );
+        if (entries.length === 0) return;
+        const loudness = yield* loudnessOf(entries);
+        const album = yield* albumOf(state);
+        yield* player.setSongGains(gains.changes(entries, loudness, { state, album }));
+      }).pipe(Effect.ignore);
 
     // The queue as last saved, which the next save writes only the changed parts of.
     let lastSaved: QueuePersistenceState | null = null;
@@ -385,6 +414,7 @@ export const layer = Layer.effect(
         const list = playerQueueWindow(state);
         if (list === null) return;
         const steps = planPlayerSync(native, list);
+        if (state.context?.kind === "album") yield* refreshGains(state);
         if (steps.length === 0) return;
         // A skip sends no items, so it doesn't look through the whole queue.
         const toLoad = new Set(keysToLoad(native, steps));
@@ -395,7 +425,7 @@ export const layer = Layer.effect(
           store.songsByIds,
           savedYtQueueTracks,
         );
-        const items = yield* itemsFor(entries);
+        const items = yield* itemsFor(entries, state);
         yield* player.applySync(steps.map(toNative), items, cause);
         native = applyPlayerSync(native, steps);
         if (items.length > 0) gains.retain(native.keys);
@@ -776,7 +806,7 @@ export const layer = Layer.effect(
           const { state } = done;
           const list = playerQueueWindow(state) ?? { keys: [], index: -1 };
           // The session builds these items itself, their gains included (`AutoLibrary`).
-          const items = yield* itemsFor(playerListEntries(state, list));
+          const items = yield* itemsFor(playerListEntries(state, list), state);
           gains.retain(list.keys);
           queueSource.update((source) => queueSourceAfter(source, command, "auto"));
           queueState.set(state);
@@ -862,17 +892,7 @@ export const layer = Layer.effect(
      * with null); each applies when its song next starts. Run it in the lane.
      */
     const sendLearnedGains = (trackIds: ReadonlySet<string> | null) =>
-      Effect.gen(function* () {
-        const held = new Set(native.keys);
-        const entries = queueState
-          .get()
-          .entries.filter(
-            (entry) => held.has(entry.key) && (trackIds === null || trackIds.has(entry.trackId)),
-          );
-        if (entries.length === 0) return;
-        const loudness = yield* loudnessOf(entries);
-        yield* player.setSongGains(gains.changes(entries, loudness));
-      }).pipe(Effect.ignore);
+      refreshGains(queueState.get(), trackIds);
 
     // The Library's typical gain (Core's `typicalGain`) as the player last got it.
     let sentTypical: number | null = null;
@@ -916,7 +936,12 @@ export const layer = Layer.effect(
     const measurements = createSongMeasurements({
       on: normalizeVolumeOn,
       wanted: () => songsToMeasure(queueState.get()),
-      songsToMeasure: store.songsToMeasure,
+      songsToMeasure: () =>
+        Effect.gen(function* () {
+          const state = queueState.get();
+          const album = yield* albumOf(state);
+          return yield* store.songsToMeasure(songsToMeasure(state, album));
+        }),
       measure: (path) => WaveNative.measureAudioLoudness(path),
       cancel: () => WaveNative.cancelAudioMeasurement(),
       save: store.saveMeasurement,

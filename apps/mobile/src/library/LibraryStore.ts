@@ -95,6 +95,7 @@ import {
   saveMeasurement,
   selectLibraryGains,
   selectSongLoudness,
+  selectAlbumLoudness,
   selectSongsToMeasure,
   type SongMeasurement,
   type SongToMeasure,
@@ -136,6 +137,7 @@ import {
   type ExplicitFlag,
   type SavedLyrics,
   type SongLoudness,
+  type AlbumLoudness,
   type TagGains,
   type NoBetterCopy,
   type QualityDirection,
@@ -925,6 +927,8 @@ export class LibraryStore extends Context.Service<
      * What's known of the loudness of the songs [ids] (Normalize Volume), by
      * Track id: those with a file and a value; the others are left out.
      */
+    /** Every Library song of a local album, for Normalize Volume completeness and priority. */
+    readonly albumLoudness: (id: number) => Effect.Effect<AlbumLoudness | null, LibraryStoreError>;
     readonly songLoudness: (
       ids: readonly number[],
     ) => Effect.Effect<ReadonlyMap<number, SongLoudness>, LibraryStoreError>;
@@ -2042,6 +2046,7 @@ const make = Effect.gen(function* () {
 
     songsByIds: (ids) =>
       attempt("read queued songs", () => selectPlayableSongs(db, ids).filter(songHasFile)),
+    albumLoudness: (id) => attempt("read the album loudness", () => selectAlbumLoudness(db, id)),
     songLoudness: (ids) => attempt("read the songs' loudness", () => selectSongLoudness(db, ids)),
     songsToMeasure: (ids) =>
       attempt("read the songs to measure", () => selectSongsToMeasure(db, ids)),
