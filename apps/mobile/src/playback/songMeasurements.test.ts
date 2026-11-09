@@ -2,6 +2,7 @@
 import assert from "node:assert/strict";
 import { describe, test } from "node:test";
 
+import { EMPTY_QUEUE, reduceQueue, ytTrackId } from "@wave/core";
 import * as Effect from "effect/Effect";
 
 import type { SongMeasurement, SongToMeasure } from "../library/db/loudness.ts";
@@ -15,13 +16,22 @@ interface Pending {
   readonly fail: (error: unknown) => void;
 }
 
+/** A queue playing [trackIds] from the Songs list, the first one current. */
+const queueOf = (trackIds: readonly (number | string)[]) =>
+  reduceQueue(EMPTY_QUEUE, {
+    type: "play",
+    trackIds: trackIds.map(String),
+    startIndex: 0,
+    context: { kind: "songs", id: null },
+  }).state;
+
 /**
  * A Library with the files [paths] (Track id = index + 1), none measured,
- * the queue window over all of them, and a meter that answers when told.
+ * a queue playing all of them in order, and a meter that answers when told.
  */
 const harness = (paths: readonly string[]) => {
   let on = true;
-  let window = paths.map((_, index) => index + 1);
+  let queue = queueOf(paths.map((_, index) => index + 1));
   const kept = new Map<number, SongMeasurement>();
   const changed = new Set<number>();
   const pending: Pending[] = [];
@@ -35,7 +45,7 @@ const harness = (paths: readonly string[]) => {
     });
   const measurements = createSongMeasurements({
     on: () => on,
-    wanted: () => window,
+    queue: () => Effect.sync(() => ({ state: queue, album: null })),
     songsToMeasure: (ids) => Effect.sync(() => songs(ids)),
     measure: (path) =>
       new Promise<AudioMeasurement>((resolve, reject) => {
@@ -71,9 +81,12 @@ const harness = (paths: readonly string[]) => {
       on = value;
       measurements.switched();
     },
-    show: (ids: readonly number[]) => {
-      window = [...ids];
+    /** The queue now plays [trackIds], the first one current. */
+    show: (trackIds: readonly (number | string)[]) => {
+      queue = queueOf(trackIds);
     },
+    /** Song [id] got a value elsewhere (its tags, the charging job). */
+    value: (id: number) => kept.set(id, { loudness: -14, peak: 1 }),
     /** The file at [id] changes before its measurement lands. */
     change: (id: number) => changed.add(id),
     /** Answers the measurement running, which must be of [path]. */
@@ -153,7 +166,7 @@ describe("createSongMeasurements", () => {
     assert.deepEqual(h.measured, ["/broken.m4a", "/b.flac"]);
   });
 
-  test("a file that can't be read now is left for the next launch, not kept as unmeasurable", async () => {
+  test("a file that can't be read now is left for the next scan or launch, not kept as unmeasurable", async () => {
     const h = harness(["/sd/gone.mp3", "/b.flac", "/c.ogg"]);
     void h.measurements.wake();
     await h.answer("/sd/gone.mp3", { kind: "unreadable" });
@@ -162,7 +175,50 @@ describe("createSongMeasurements", () => {
     await h.idle();
     assert.deepEqual([...h.kept], [[2, { loudness: -8, peak: 1 }]]);
     await h.measurements.wake();
+    await h.idle();
     assert.deepEqual(h.measured, ["/sd/gone.mp3", "/b.flac", "/c.ogg"]);
+    // A scan may have found the storage back: both are tried again.
+    h.measurements.scanned();
+    await h.answer("/sd/gone.mp3", loud);
+    await h.answer("/c.ogg", loud);
+    await h.idle();
+    assert.deepEqual([...h.kept.keys()], [2, 1, 3]);
+  });
+
+  test("the five ahead are songs to measure: streams, songs with a value and unreadable files take no place", async () => {
+    const paths = Array.from({ length: 10 }, (_, index) => `/${index + 1}.flac`);
+    const h = harness(paths);
+    h.value(3);
+    h.value(5);
+    h.show([1, ytTrackId("dQw4w9WgXcQ"), 2, 3, 4, 5, 6, 7, 8, 9, 10]);
+    void h.measurements.wake();
+    await h.answer("/1.flac", loud);
+    await h.answer("/2.flac", { kind: "unreadable" });
+    for (const id of [4, 6, 7, 8, 9]) await h.answer(`/${id}.flac`, loud);
+    await h.idle();
+    assert.deepEqual(h.measured, [
+      "/1.flac",
+      "/2.flac",
+      "/4.flac",
+      "/6.flac",
+      "/7.flac",
+      "/8.flac",
+      "/9.flac",
+    ]);
+  });
+
+  test("songs it measured keep their place, so the line moves on with the queue, not through it", async () => {
+    const paths = Array.from({ length: 9 }, (_, index) => `/${index + 1}.flac`);
+    const h = harness(paths);
+    void h.measurements.wake();
+    for (const id of [1, 2, 3, 4, 5, 6]) await h.answer(`/${id}.flac`, loud);
+    await h.idle();
+    // The next song starts: one more comes into the five.
+    h.show([2, 3, 4, 5, 6, 7, 8, 9]);
+    void h.measurements.wake();
+    await h.answer("/7.flac", loud);
+    await h.idle();
+    assert.deepEqual(h.measured, paths.slice(0, 7));
   });
 
   test("a result for a file that changed while it was measured isn't learned, and the file is measured again", async () => {

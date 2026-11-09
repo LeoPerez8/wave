@@ -166,9 +166,11 @@ export const saveMeasurement = (
     .all().length > 0;
 
 /**
- * All Library songs filed under this local album id. Missing songs stay in
- * the result without values, so they prevent premature album completion.
- * Reads fresh values after measurements without publishing a Library change.
+ * All Library songs filed under the local album [id] (the Library's album:
+ * its title together with its album artist), in disc and track order. A
+ * missing song (no file) and a file Wave couldn't measure are marked, so they
+ * neither hold album gain back nor count in it (Core's `albumGain`). Reads
+ * fresh values after measurements without publishing a Library change.
  */
 export const selectAlbumLoudness = (db: LibraryDatabase, id: number): AlbumLoudness | null => {
   const rows = db
@@ -177,6 +179,7 @@ export const selectAlbumLoudness = (db: LibraryDatabase, id: number): AlbumLoudn
       path: t.path,
       durationMs: t.durationMs,
       ...loudnessColumns,
+      measuredSizeBytes: t.measuredSizeBytes,
       albumGainDb: t.tagAlbumGain,
       albumPeak: t.tagAlbumPeak,
     })
@@ -187,11 +190,22 @@ export const selectAlbumLoudness = (db: LibraryDatabase, id: number): AlbumLoudn
   if (rows.length === 0) return null;
   return {
     id: String(id),
-    songs: rows.map(({ path, id, durationMs, albumGainDb, albumPeak, ...row }) => ({
-      id,
-      durationMs,
-      ...(path === null ? {} : { ...songLoudness(row), albumGainDb, albumPeak }),
-    })),
+    songs: rows.map(
+      ({ path, id, durationMs, measuredSizeBytes, albumGainDb, albumPeak, ...row }) => {
+        if (path === null) return { id, durationMs, missing: true };
+        // Tried as the file is now (a fingerprint), without a loudness: unmeasurable.
+        const unmeasurable =
+          row.trackGainDb === null && measuredSizeBytes !== null && row.measuredLoudness === null;
+        return {
+          id,
+          durationMs,
+          ...songLoudness(row),
+          albumGainDb,
+          albumPeak,
+          ...(unmeasurable ? { unmeasurable } : {}),
+        };
+      },
+    ),
   };
 };
 

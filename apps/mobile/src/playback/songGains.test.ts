@@ -107,8 +107,8 @@ test("album completion refreshes every held context entry, while manual occurren
   };
   for (const entry of entries) gains.withItem(entry, loudness, { state, album: null });
   assert.deepEqual(gains.changes(entries, loudness, { state, album }), [
-    { key: entries[0]!.key, gainDb: -4, gainSource: "album" },
-    { key: entries[1]!.key, gainDb: -4, gainSource: "album" },
+    { key: entries[0]!.key, gainDb: -4, gainSource: "albumTag" },
+    { key: entries[1]!.key, gainDb: -4, gainSource: "albumTag" },
   ]);
   // The native stage keeps the currently playing decision; all future starts get track gain.
   assert.deepEqual(

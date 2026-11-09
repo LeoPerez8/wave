@@ -33,7 +33,7 @@ import { skipVoiceNotes } from "@/settings/skipVoiceNotes";
 
 import type { ArtworkPalette } from "./db/schema";
 import type { SkippedFile } from "./db/skippedFiles";
-import { publishLibraryChange, publishSavedStars } from "./libraryChanges";
+import { publishLibraryChange, publishSavedStars, publishScanFinished } from "./libraryChanges";
 import { LibraryStore, type IndexedArtwork, type IndexedTrack } from "./LibraryStore";
 import { NativeScanner, type ScanEvent } from "./NativeScanner";
 import { scanBatchChange } from "./scanChanges";
@@ -415,6 +415,7 @@ const scanFolders = (roots: readonly string[]) =>
       );
     }
     scanState.set({ status: "done", filesFound: completed.filesFound });
+    publishScanFinished();
   });
 
 /** Scans every scan root: in full the first time, incrementally afterwards. */

@@ -30,7 +30,6 @@ import {
   shuffledTrackIds,
   shufflesQueue,
   songChangeCause,
-  songsToMeasure,
   startPlayingWalk,
   typicalGain,
   undoneQueue,
@@ -64,7 +63,7 @@ import * as Semaphore from "effect/Semaphore";
 
 import { afterFirstSettled } from "@/lib/backgroundWork";
 import { makeExternalStore, subscribeAll } from "@/lib/externalStore";
-import { onLibraryChange } from "@/library/libraryChanges";
+import { onLibraryChange, onScanFinished } from "@/library/libraryChanges";
 import { LibraryStore } from "@/library/LibraryStore";
 import { currentLocalisation } from "@/localisation/localisation";
 import { WaveNative } from "@/native/waveNative";
@@ -937,13 +936,11 @@ export const layer = Layer.effect(
     // change is published: a measurement changes nothing a screen shows.
     const measurements = createSongMeasurements({
       on: normalizeVolumeOn,
-      wanted: () => songsToMeasure(queueState.get()),
-      songsToMeasure: () =>
-        Effect.gen(function* () {
-          const state = queueState.get();
-          const album = yield* albumOf(state);
-          return yield* store.songsToMeasure(songsToMeasure(state, album));
-        }),
+      queue: () => {
+        const state = queueState.get();
+        return Effect.map(albumOf(state), (album) => ({ state, album }));
+      },
+      songsToMeasure: store.songsToMeasure,
       measure: (path) => WaveNative.measureAudioLoudness(path),
       cancel: () => WaveNative.cancelAudioMeasurement(),
       save: store.saveMeasurement,
@@ -956,10 +953,12 @@ export const layer = Layer.effect(
       Effect.sync(() => {
         const stopQueue = queueState.subscribe(() => void measurements.wake());
         const stopSwitch = onNormalizeVolume(measurements.switched);
+        const stopScans = onScanFinished(measurements.scanned);
         void measurements.wake();
         return () => {
           stopQueue();
           stopSwitch();
+          stopScans();
         };
       }),
       (stop) => Effect.sync(stop),
@@ -986,6 +985,7 @@ export const layer = Layer.effect(
       Effect.sync(() => {
         const measured = WaveNative.addListener("onLibraryMeasured", library.measured);
         const stopChanges = onLibraryChange(library.changed);
+        const stopScans = onScanFinished(() => void library.scanned());
         // It reads the whole Library's files to measure: after the first screen.
         const stopStart = afterFirstSettled("libraryMeasurements", () => {
           void library.take();
@@ -994,6 +994,7 @@ export const layer = Layer.effect(
         return () => {
           measured.remove();
           stopChanges();
+          stopScans();
           stopStart();
           library.stop();
         };

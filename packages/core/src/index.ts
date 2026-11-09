@@ -1613,6 +1613,7 @@ export {
   gainTags,
   knownGain,
   MEASURE_AHEAD,
+  measureCandidates,
   albumGain,
   entryGain,
   readNormalizeVolume,

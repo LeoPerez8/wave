@@ -166,13 +166,13 @@ class GainStageTest {
       start(album, queue, 0)
       assertEquals(7943, play(album, 100).first().toInt())
       // The last album measurement lands while the intro is playing.
-      SongGains.set("album-intro", -4.0, "album")
-      SongGains.set("album-song", -4.0, "album")
+      SongGains.set("album-intro", -4.0, "albumMeasured")
+      SongGains.set("album-song", -4.0, "albumMeasured")
       assertEquals(7943, play(album, 100).last().toInt())
       album.queueEndOfStream()
       start(album, queue, 1)
       assertEquals(6310, play(album, 100).first().toInt())
-      assertEquals("Song gain -4.0 dB (album)", NormalizeVolume.logLine(starts.last()))
+      assertEquals("Song gain -4.0 dB (measured, album)", NormalizeVolume.logLine(starts.last()))
       // Turning shuffle on publishes track gains without touching the playing samples.
       SongGains.set("album-intro", -2.0, "measured")
       SongGains.set("album-song", -8.0, "measured")

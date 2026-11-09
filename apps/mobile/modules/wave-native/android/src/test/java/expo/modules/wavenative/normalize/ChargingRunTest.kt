@@ -100,6 +100,25 @@ class ChargingRunTest {
   }
 
   @Test
+  fun withOnlyFilesItCantOpenLeftItGoesIdleUntilTheAppHandsThemOverAgain() {
+    val phone = Phone(listOf(1, 2))
+    phone.outcomeOf = { FileLoudness.Outcome.Unreadable }
+    val first = phone.run()
+    assertEquals(ChargingRun.Summary(measured = 0, unmeasurable = 0, unreadable = 2, left = 0, ended = ChargingRun.Ended.DONE), first)
+    assertFalse(first.again)
+    // Nothing to schedule a job for, before and after the app takes the results in.
+    assertEquals(null, phone.list.next())
+    phone.list.forget(2)
+    assertEquals(null, phone.list.next())
+    assertEquals(ChargingRun.Summary(0, 0, 0, 0, ChargingRun.Ended.DONE), phone.run())
+    assertEquals(listOf("/Music/1.flac", "/Music/2.flac"), phone.measured)
+    // After the next scan or launch the app hands them over again, and they're tried again.
+    phone.list.replace(listOf(song(1), song(2)))
+    phone.outcomeOf = { FileLoudness.Outcome.Measured(-10.0, 0.9) }
+    assertEquals(2, phone.run().measured)
+  }
+
+  @Test
   fun aRunWritesOneLineSayingHowManySongsItMeasuredAndNoneOfThem() {
     assertEquals(
       "Charging run measured 12 songs, 1 unmeasurable; 340 left (time's up, going on in the next run)",

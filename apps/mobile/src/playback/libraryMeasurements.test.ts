@@ -159,6 +159,25 @@ describe("libraryMeasurements", () => {
     assert.deepEqual(state.handed.at(-1), []);
   });
 
+  test("a file the job couldn't open is handed to it again after the next scan, even if nothing changed", async () => {
+    const c = song(3);
+    const { state, measurements } = harness([c]);
+    await measurements.refresh();
+    // The job couldn't open it: the result is taken in and forgotten, and the job drops the file.
+    state.results = [{ seq: 1, ...c, kind: "unreadable" }];
+    await measurements.take();
+    assert.deepEqual(state.library, [c]);
+    // A Library change that leaves the list as it was hands nothing over.
+    await measurements.refresh();
+    assert.deepEqual(state.handed, [[c]]);
+    // A scan finished: the job gets the list again, and tries the file again.
+    await measurements.scanned();
+    assert.deepEqual(state.handed, [[c], [c]]);
+    // With no file it couldn't open since, a scan hands nothing over.
+    await measurements.scanned();
+    assert.deepEqual(state.handed, [[c], [c]]);
+  });
+
   test("what's taken in is kept before the list is read, so the job isn't handed it again", async () => {
     const [a, b] = [song(1), song(2)];
     const { state, measurements } = harness([a!, b!], [measured(1, a!)]);

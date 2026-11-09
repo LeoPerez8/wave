@@ -25,6 +25,24 @@ export const onLibraryChange = (listener: (change: LibraryChange) => void): (() 
   };
 };
 
+const scanFinishedListeners = new Set<() => void>();
+
+/** Tells what follows scans that one ran to its end, finding changes or not. */
+export const publishScanFinished = (): void => {
+  for (const listener of scanFinishedListeners) listener();
+};
+
+/**
+ * Calls [listener] after each scan that ran to its end (`publishScanFinished`;
+ * Normalize Volume tries again the files it couldn't open); returns how to stop.
+ */
+export const onScanFinished = (listener: () => void): (() => void) => {
+  scanFinishedListeners.add(listener);
+  return () => {
+    scanFinishedListeners.delete(listener);
+  };
+};
+
 const starredListeners = new Set<(trackIds: readonly number[]) => void>();
 
 /** Tells what follows stars (the Magic Queue) that the owner starred [trackIds]. */
