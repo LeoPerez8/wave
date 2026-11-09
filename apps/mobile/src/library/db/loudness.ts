@@ -10,7 +10,7 @@
  * it sees the file change (`saveBatch`), so what's here describes the file
  * the Track has now. Measurements stay on this phone and never sync.
  */
-import { knownGain, type SongLoudness } from "@wave/core";
+import { knownGain, type AlbumLoudness, type SongLoudness } from "@wave/core";
 import { and, eq, inArray, isNotNull, isNull, ne, or } from "drizzle-orm";
 
 import { chunks } from "./chunks.ts";
@@ -164,6 +164,36 @@ export const saveMeasurement = (
     )
     .returning({ id: t.id })
     .all().length > 0;
+
+/**
+ * All Library songs filed under this local album id. Missing songs stay in
+ * the result without values, so they prevent premature album completion.
+ * Reads fresh values after measurements without publishing a Library change.
+ */
+export const selectAlbumLoudness = (db: LibraryDatabase, id: number): AlbumLoudness | null => {
+  const rows = db
+    .select({
+      id: t.id,
+      path: t.path,
+      durationMs: t.durationMs,
+      ...loudnessColumns,
+      albumGainDb: t.tagAlbumGain,
+      albumPeak: t.tagAlbumPeak,
+    })
+    .from(t)
+    .where(eq(t.albumId, id))
+    .orderBy(t.discNumber, t.trackNumber, t.id)
+    .all();
+  if (rows.length === 0) return null;
+  return {
+    id: String(id),
+    songs: rows.map(({ path, id, durationMs, albumGainDb, albumPeak, ...row }) => ({
+      id,
+      durationMs,
+      ...(path === null ? {} : { ...songLoudness(row), albumGainDb, albumPeak }),
+    })),
+  };
+};
 
 /**
  * Every Library file Wave should measure, oldest first: what the charging job

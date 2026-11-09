@@ -10,7 +10,7 @@
  * `NormalizeVolumeTest` runs these cases. Change both together.
  */
 
-import { currentEntry, upNext, type QueueState } from "./queue.ts";
+import { currentEntry, upNext, type QueueEntry, type QueueState } from "./queue.ts";
 import { libraryTrackIds } from "./ytQueue.ts";
 
 /** The switch is on unless the owner turned it off. */
@@ -41,7 +41,7 @@ export const MEASURE_AHEAD = 5;
  * YouTube's value for a streamed song, the typical gain for a song with none,
  * or the switch off.
  */
-export type GainSource = "tag" | "measured" | "youtube" | "typical" | "off";
+export type GainSource = "tag" | "measured" | "youtube" | "typical" | "off" | "album";
 
 export interface SongGain {
   /** dB the song's samples are scaled by; 0 plays it as it is. */
@@ -222,9 +222,103 @@ export const songGain = (
  * order, each once. A streamed song keeps its place among them and is never
  * measured. Which of them have no value yet is the Library's to say.
  */
-export const songsToMeasure = (state: QueueState): number[] => {
+export const songsToMeasure = (state: QueueState, album?: AlbumLoudness | null): number[] => {
   const current = currentEntry(state);
   if (current === null) return [];
   const window = [current, ...upNext(state).slice(0, MEASURE_AHEAD)];
-  return libraryTrackIds(window.map((entry) => entry.trackId));
+  const priority = isQueueAlbum(state, album) ? album.songs.map((song) => song.id) : [];
+  return [...new Set([...priority, ...libraryTrackIds(window.map((entry) => entry.trackId))])];
+};
+
+/** One Library song of an album, including songs with no file or value yet. */
+export interface AlbumSongLoudness extends SongLoudness {
+  readonly id: number;
+  readonly durationMs: number;
+  /** Album tag gain already converted to the -14 LUFS target by `gainTags`. */
+  readonly albumGainDb?: number | null;
+  readonly albumPeak?: number | null;
+}
+
+/** The complete Library membership of the queue's local album identity. */
+export interface AlbumLoudness {
+  readonly id: string;
+  readonly songs: readonly AlbumSongLoudness[];
+}
+
+/**
+ * One gain for a complete album. A shared album tag wins; otherwise combine
+ * uncapped track loudness by duration (not the average of track gains).
+ * Stored tag gains are already at -14, so loudness is -14 minus that gain.
+ * A missing peak on any song rules out a boost for the whole album.
+ */
+export const albumGain = (songs: readonly AlbumSongLoudness[]): SongGain | null => {
+  if (songs.length === 0) return null;
+  const tag = songs[0]!.albumGainDb;
+  const sharedTag =
+    tag != null && Number.isFinite(tag) && songs.every((song) => song.albumGainDb === tag);
+  let gainDb: number;
+  if (sharedTag) gainDb = tag;
+  else {
+    let energy = 0;
+    let duration = 0;
+    for (const song of songs) {
+      const loudness =
+        song.trackGainDb != null && Number.isFinite(song.trackGainDb)
+          ? TARGET_LUFS - song.trackGainDb
+          : song.measuredLoudness;
+      if (
+        loudness == null ||
+        !Number.isFinite(loudness) ||
+        !Number.isFinite(song.durationMs) ||
+        song.durationMs <= 0
+      )
+        return null;
+      energy += song.durationMs * 10 ** (loudness / 10);
+      duration += song.durationMs;
+    }
+    gainDb = TARGET_LUFS - 10 * Math.log10(energy / duration);
+  }
+  const peaks = songs.map((song) => {
+    const track = song.trackGainDb != null ? song.trackPeak : song.measuredPeak;
+    if (!sharedTag) return track;
+    // An album peak describes the whole album, but a higher known track peak
+    // must still prevent clipping if those tags disagree.
+    const known = [song.albumPeak, track].filter(
+      (peak): peak is number => peak != null && Number.isFinite(peak) && peak > 0,
+    );
+    return known.length === 0 ? null : Math.max(...known);
+  });
+  const peak = peaks.every((p) => p != null && Number.isFinite(p) && p > 0)
+    ? Math.max(...(peaks as number[]))
+    : null;
+  return { gainDb: capped(gainDb, peak), source: "album" };
+};
+
+const isQueueAlbum = (
+  state: QueueState,
+  album: AlbumLoudness | null | undefined,
+): album is AlbumLoudness =>
+  album != null && state.context?.kind === "album" && state.context.id === album.id;
+
+/**
+ * A queue entry's known gain for its next start, or null for typical gain.
+ * Hand-lined entries always use track gain, even for a song of this album.
+ * The native gain stage freezes this decision at the first sample of a song.
+ */
+export const entryGain = (
+  state: QueueState,
+  entry: Pick<QueueEntry, "trackId" | "contextIndex">,
+  song: SongLoudness,
+  album?: AlbumLoudness | null,
+): SongGain | null => {
+  if (
+    !state.shuffle &&
+    entry.contextIndex !== null &&
+    isQueueAlbum(state, album) &&
+    album.songs.some((song) => String(song.id) === entry.trackId)
+  ) {
+    const gain = albumGain(album.songs);
+    if (gain !== null) return gain;
+  }
+  return knownGain(song);
 };

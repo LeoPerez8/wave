@@ -2,12 +2,13 @@
 import assert from "node:assert/strict";
 import { describe, test } from "node:test";
 
-import { gainTags, normalizeTrack, typicalGain, type GainTagText } from "@wave/core";
 import { eq } from "drizzle-orm";
+import { albumGain, gainTags, normalizeTrack, typicalGain, type GainTagText } from "@wave/core";
 
 import type { IndexedTrack } from "../LibraryStore.ts";
 import { creditSplits } from "./credits.ts";
 import {
+  selectAlbumLoudness,
   saveMeasurement,
   saveMeasurements,
   selectLibraryGains,
@@ -291,6 +292,35 @@ describe("selectLibraryGains", () => {
     assert.equal(typicalGain(selectLibraryGains(db)), -5);
     save(db, tagged(1, 19));
     assert.equal(typicalGain(selectLibraryGains(db)), -8);
+  });
+});
+
+describe("album loudness", () => {
+  test("reads every song of the local album identity, including missing and unmeasured songs", async () => {
+    const db = await openTestDatabase();
+    const a = addTrack(db, { title: "Intro", album: "Live", artist: "A", durationMs: 10_000 });
+    const b = addMissingSong(db, { title: "Missing", album: "Live", artist: "A" });
+    addTrack(db, { title: "Other artist", album: "Live", artist: "B" });
+    db.update(schema.tracks)
+      .set({ tagTrackGain: 4, tagTrackPeak: 0.2, tagAlbumGain: -3, tagAlbumPeak: 1 })
+      .where(eq(schema.tracks.id, a))
+      .run();
+    const albumId = db
+      .select({ id: schema.tracks.albumId })
+      .from(schema.tracks)
+      .where(eq(schema.tracks.id, a))
+      .get()!.id!;
+    const album = selectAlbumLoudness(db, albumId)!;
+    assert.equal(album.id, String(albumId));
+    assert.deepEqual(
+      album.songs.map((song) => song.id),
+      [a, b],
+    );
+    assert.equal(album.songs[0]!.trackGainDb, 4);
+    assert.equal(album.songs[0]!.albumGainDb, -3);
+    assert.equal(album.songs[0]!.durationMs, 10_000);
+    assert.equal(albumGain(album.songs), null);
+    assert.equal(selectAlbumLoudness(db, 9999), null);
   });
 });
 

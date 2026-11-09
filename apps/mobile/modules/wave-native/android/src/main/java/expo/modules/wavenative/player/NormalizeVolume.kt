@@ -7,6 +7,7 @@ import java.util.Locale
 /** Where a song's gain came from (Core's `GainSource`), as the app log names it. */
 enum class GainSource(val logName: String) {
   TAG("tag"),
+  ALBUM("album"),
   MEASURED("measured"),
   YOUTUBE("YouTube"),
   TYPICAL("typical"),
