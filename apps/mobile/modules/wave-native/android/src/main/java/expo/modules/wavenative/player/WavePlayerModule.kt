@@ -22,6 +22,7 @@ import expo.modules.kotlin.modules.Module
 import expo.modules.kotlin.modules.ModuleDefinition
 import expo.modules.kotlin.records.Field
 import expo.modules.kotlin.records.Record
+import expo.modules.wavenative.normalize.LibraryMeasurements
 import expo.modules.wavenative.yt.YtStreamFailure
 
 /** One track handed to the player. */
@@ -256,6 +257,8 @@ class WavePlayerModule : Module() {
     AsyncFunction("setNormalizeVolume") { on: Boolean, promise: Promise ->
       NormalizeVolume.init(context)
       NormalizeVolume.setOn(on)
+      // Off stops the charging job; on picks it up where it stopped.
+      LibraryMeasurements.switched(context, on)
       promise.resolve(null)
     }.runOnQueue(Queues.MAIN)
 

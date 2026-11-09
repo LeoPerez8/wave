@@ -51,6 +51,9 @@ import expo.modules.wavenative.lyrics.LyricsReader
 import expo.modules.wavenative.net.AndroidConnectivity
 import expo.modules.wavenative.net.ConnectivityState
 import expo.modules.wavenative.normalize.FileLoudness
+import expo.modules.wavenative.normalize.LibraryMeasurements
+import expo.modules.wavenative.normalize.LibraryResult
+import expo.modules.wavenative.normalize.LibrarySong
 import expo.modules.wavenative.playlists.AndroidPlaylistImages
 import expo.modules.wavenative.playlists.PlaylistFiles
 import expo.modules.wavenative.playlists.PlaylistImageStore
@@ -80,7 +83,6 @@ import java.io.File
 import java.util.concurrent.ExecutorService
 import java.util.concurrent.Executors
 import java.util.concurrent.atomic.AtomicBoolean
-import java.util.concurrent.atomic.AtomicReference
 
 /** A square of a playlist image's original as JS passes it (Core's `FramingSquare`), in px. */
 class FramingSquareRecord : Record {
@@ -100,10 +102,7 @@ class FramingSquareRecord : Record {
  * `onScanError`, each carrying the `scanId` returned by `startScan`.
  */
 class WaveNativeModule : Module() {
-  // Normalize Volume's meter: one file at a time, at background priority, so playback and the UI
-  // never wait on it. The flag is the running measurement's, for `cancelAudioMeasurement`.
-  private val meterExecutor: ExecutorService = Executors.newSingleThreadExecutor(BackgroundThreads("wave-meter", daemon = true))
-  private val runningMeasurement = AtomicReference<AtomicBoolean?>(null)
+  private val libraryMeasured: () -> Unit = { sendEvent("onLibraryMeasured") }
   private val scanExecutor: ExecutorService = Executors.newSingleThreadExecutor { runnable ->
     Thread(runnable, "wave-scanner").apply { priority = Thread.NORM_PRIORITY - 1 }
   }
@@ -133,6 +132,7 @@ class WaveNativeModule : Module() {
       "onShareReceived",
       "onConnectivityChanged",
       "onPreferredLanguagesChanged",
+      "onLibraryMeasured",
     )
 
     // A share can arrive before JS listens: it stays in the inbox until `takeSharedText`.
@@ -140,6 +140,8 @@ class WaveNativeModule : Module() {
       expo.modules.wavenative.locale.NativeLanguage.init(context)
       preferredLanguages = PreferredLanguageObserver(context) { sendEvent("onPreferredLanguagesChanged") }
       SharedTextInbox.onReceived = { sendEvent("onShareReceived") }
+      // The charging job kept a result: JS takes it into the Library store.
+      LibraryMeasurements.onKept = libraryMeasured
       // JS keeps its own copy of the cache (`connectivityStore`), pushed on each change.
       stopConnectivity = appContext.reactContext?.let { react ->
         AndroidConnectivity.cache(react).listen { sendEvent("onConnectivityChanged", connectivityToMap(it)) }
@@ -154,17 +156,8 @@ class WaveNativeModule : Module() {
      * `{ kind: "measured", loudness, peak }`, or `unmeasurable`, `unreadable` or `cancelled`.
      */
     AsyncFunction("measureAudioLoudness") { path: String, promise: Promise ->
-      val cancelled = AtomicBoolean(false)
-      // Set before it starts, so a cancel while it waits for the thread stops it too.
-      runningMeasurement.set(cancelled)
-      meterExecutor.execute {
-        val outcome = try {
-          FileLoudness.measure(path) { cancelled.get() }
-        } catch (_: Throwable) {
-          FileLoudness.Outcome.Unreadable
-        } finally {
-          runningMeasurement.compareAndSet(cancelled, null)
-        }
+      // The meter thread is the charging job's too: the queue's measurement goes first.
+      LibraryMeasurements.meter.forQueue(path) { outcome ->
         FileLoudness.report(outcome)
         promise.resolve(
           when (outcome) {
@@ -178,7 +171,35 @@ class WaveNativeModule : Module() {
     }
 
     /** Stops the measurement running, which answers `cancelled` (Normalize Volume turned off). */
-    Function("cancelAudioMeasurement") { runningMeasurement.get()?.set(true) }
+    Function("cancelAudioMeasurement") { LibraryMeasurements.meter.cancelQueue() }
+
+    /**
+     * Normalize Volume: the Library files the charging job measures (the Library store's
+     * `libraryToMeasure`), as parallel lists, in place of its list. None leaves it idle.
+     */
+    AsyncFunction("setLibraryToMeasure") { ids: List<Double>, paths: List<String>, sizes: List<Double>, modifiedAt: List<Double> ->
+      require(ids.size == paths.size && ids.size == sizes.size && ids.size == modifiedAt.size) { "Song lists differ in length" }
+      LibraryMeasurements.hand(
+        context,
+        ids.indices.map { LibrarySong(ids[it].toLong(), paths[it], sizes[it].toLong(), modifiedAt[it].toLong()) },
+      )
+    }
+
+    /** The first [limit] results the charging job keeps until the app takes them in (`LibraryMeasurement`). */
+    AsyncFunction("libraryMeasurements") { limit: Int ->
+      LibraryMeasurements.results(context, limit).map { result ->
+        val song = result.song
+        val file = mapOf("seq" to result.seq.toDouble(), "id" to song.id.toDouble(), "path" to song.path, "sizeBytes" to song.sizeBytes.toDouble(), "modifiedAt" to song.modifiedAt.toDouble())
+        file + when (result.kind) {
+          LibraryResult.Kind.MEASURED -> mapOf("kind" to "measured", "loudness" to result.loudness, "peak" to result.peak)
+          LibraryResult.Kind.UNMEASURABLE -> mapOf("kind" to "unmeasurable")
+          LibraryResult.Kind.UNREADABLE -> mapOf("kind" to "unreadable")
+        }
+      }
+    }
+
+    /** The Library store kept the charging job's results through [seq]: the job forgets them. */
+    AsyncFunction("forgetLibraryMeasurements") { seq: Double -> LibraryMeasurements.forget(context, seq.toLong()) }
 
     /** Opens the system "All files access" screen for Wave. Re-check access when the app is active again. */
     AsyncFunction("requestAllFilesAccess") {
@@ -596,6 +617,7 @@ class WaveNativeModule : Module() {
       preferredLanguages?.close()
       preferredLanguages = null
       SharedTextInbox.onReceived = null
+      if (LibraryMeasurements.onKept === libraryMeasured) LibraryMeasurements.onKept = null
       stopConnectivity?.invoke()
       stopConnectivity = null
       scans.cancelAll()

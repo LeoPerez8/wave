@@ -10,7 +10,9 @@ import { creditSplits } from "./credits.ts";
 import {
   selectAlbumLoudness,
   saveMeasurement,
+  saveMeasurements,
   selectLibraryGains,
+  selectLibraryToMeasure,
   selectSongLoudness,
   selectSongsToMeasure,
   type SongToMeasure,
@@ -319,5 +321,49 @@ describe("album loudness", () => {
     assert.equal(album.songs[0]!.durationMs, 10_000);
     assert.equal(albumGain(album.songs), null);
     assert.equal(selectAlbumLoudness(db, 9999), null);
+  });
+});
+
+describe("the charging job's songs", () => {
+  test("lists every Library file to measure, oldest first, leaving out tagged, measured, missing and unread ones", async () => {
+    const db = await openTestDatabase();
+    save(db, [
+      scanned("A"),
+      scanned("Tagged", { replayGainTrackGain: "-3 dB" }),
+      scanned("Done"),
+      scanned("B"),
+    ]);
+    const [a, done, b] = ["A", "Done", "B"].map((title) => idOf(db, title));
+    saveMeasurement(db, toMeasure(db, done!), { loudness: -10, peak: 1 });
+    addMissingSong(db, { title: "Missing" });
+    save(db, [scanned("Unread")]);
+    db.update(schema.tracks)
+      .set({ modifiedAt: 0 })
+      .where(eq(schema.tracks.id, idOf(db, "Unread")))
+      .run();
+    assert.deepEqual(selectLibraryToMeasure(db), [
+      { id: a, path: "/Music/A.flac", sizeBytes: 1_000, modifiedAt: 1 },
+      { id: b, path: "/Music/B.flac", sizeBytes: 1_000, modifiedAt: 1 },
+    ]);
+  });
+
+  test("keeps what the job measured in one go, and drops what it measured of a file that changed since", async () => {
+    const db = await openTestDatabase();
+    save(db, [scanned("A"), scanned("Changed"), scanned("Broken")]);
+    const [a, changed, broken] = selectLibraryToMeasure(db);
+    save(db, [{ ...scanned("Changed"), sizeBytes: 2_000 }]);
+    assert.deepEqual(
+      saveMeasurements(db, [
+        { song: a!, measurement: { loudness: -8, peak: 0.9 } },
+        { song: changed!, measurement: { loudness: -9, peak: 1 } },
+        { song: broken!, measurement: null },
+      ]),
+      [a!.id, broken!.id],
+    );
+    assert.deepEqual(
+      selectSongLoudness(db, [a!.id, changed!.id, broken!.id]),
+      new Map([[a!.id, { measuredLoudness: -8, measuredPeak: 0.9 }]]),
+    );
+    assert.deepEqual(selectLibraryToMeasure(db), [{ ...changed!, sizeBytes: 2_000 }]);
   });
 });

@@ -62,6 +62,7 @@ import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import * as Semaphore from "effect/Semaphore";
 
+import { afterFirstSettled } from "@/lib/backgroundWork";
 import { makeExternalStore, subscribeAll } from "@/lib/externalStore";
 import { onLibraryChange } from "@/library/libraryChanges";
 import { LibraryStore } from "@/library/LibraryStore";
@@ -75,6 +76,7 @@ import { dontPlayExplicit, onDontPlayExplicit } from "@/settings/dontPlayExplici
 import { normalizeVolumeOn, onNormalizeVolume } from "@/settings/normalizeVolume";
 import { shuffleKind } from "@/settings/shuffleKind";
 
+import { createLibraryMeasurements } from "./libraryMeasurements";
 import { notificationStarred } from "./notificationStarState";
 import { Player, PlayerError, playbackState, positionState } from "./Player";
 import { searchPlaying } from "./playingSearch";
@@ -958,6 +960,42 @@ export const layer = Layer.effect(
         return () => {
           stopQueue();
           stopSwitch();
+        };
+      }),
+      (stop) => Effect.sync(stop),
+    );
+
+    // The rest of the Library is measured by a native job while the phone charges, with Wave
+    // closed too (`libraryMeasurements`): what it measured is taken in here, and it's handed the
+    // files left to measure as the Library changes.
+    const library = createLibraryMeasurements({
+      toMeasure: store.libraryToMeasure,
+      hand: (songs) =>
+        WaveNative.setLibraryToMeasure(
+          songs.map((song) => song.id),
+          songs.map((song) => song.path),
+          songs.map((song) => song.sizeBytes),
+          songs.map((song) => song.modifiedAt),
+        ),
+      results: (limit) => WaveNative.libraryMeasurements(limit),
+      save: store.saveMeasurements,
+      forget: (seq) => WaveNative.forgetLibraryMeasurements(seq),
+      learned: (ids) => followGains({ kind: "tracks", ids }),
+    });
+    yield* Effect.acquireRelease(
+      Effect.sync(() => {
+        const measured = WaveNative.addListener("onLibraryMeasured", library.measured);
+        const stopChanges = onLibraryChange(library.changed);
+        // It reads the whole Library's files to measure: after the first screen.
+        const stopStart = afterFirstSettled("libraryMeasurements", () => {
+          void library.take();
+          void library.refresh();
+        });
+        return () => {
+          measured.remove();
+          stopChanges();
+          stopStart();
+          library.stop();
         };
       }),
       (stop) => Effect.sync(stop),
