@@ -4,19 +4,25 @@ import android.content.Context
 import android.content.SharedPreferences
 import java.util.Locale
 
-/** Where a song's gain came from (Core's `GainSource`), as the app log names it. */
-enum class GainSource(val logName: String) {
-  TAG("tag"),
-  ALBUM("album"),
-  MEASURED("measured"),
-  YOUTUBE("YouTube"),
-  TYPICAL("typical"),
-  OFF("off"),
+/**
+ * Where a song's gain came from (Core's `GainSource`, which calls it [coreName]), as the app log
+ * names it ([logName]): what the value was made of, and for a Library song whether it's the
+ * song's own (track) or its album's.
+ */
+enum class GainSource(val coreName: String, val logName: String) {
+  TAG("tag", "tag, track"),
+  MEASURED("measured", "measured, track"),
+  ALBUM_TAG("albumTag", "tag, album"),
+  ALBUM_MEASURED("albumMeasured", "measured, album"),
+  ALBUM_TAG_AND_MEASURED("albumTagAndMeasured", "tag and measured, album"),
+  YOUTUBE("youtube", "YouTube"),
+  TYPICAL("typical", "typical"),
+  OFF("off", "off"),
   ;
 
   companion object {
-    /** The source Core calls [name] (`"tag"`), or null for one this side doesn't know. */
-    fun of(name: String?): GainSource? = entries.firstOrNull { it.name.equals(name, ignoreCase = true) }
+    /** The source Core calls [name] (`"albumTag"`), or null for one this side doesn't know. */
+    fun of(name: String?): GainSource? = entries.firstOrNull { it.coreName == name }
   }
 }
 
@@ -27,8 +33,9 @@ data class SongGain(val gainDb: Double, val source: GainSource)
  * What Wave knows of a song's loudness (Core's `SongLoudness`): YouTube's
  * `loudnessDb` for a streamed YT Music song, dB above YouTube's -14 LUFS
  * reference ([expo.modules.wavenative.yt.YtLoudness]); and [known], a Library
- * song's gain as Core's `knownGain` worked it out from its tags or Wave's
- * measurement, which comes with the queue ([SongGains]). Null when there's none.
+ * song's gain as Core's `entryGain` worked it out (track or album gain, from its
+ * tags or Wave's measurement), which comes with the queue ([SongGains]). Null
+ * when there's none.
  */
 data class SongLoudness(val youtubeLoudnessDb: Double? = null, val known: SongGain? = null)
 

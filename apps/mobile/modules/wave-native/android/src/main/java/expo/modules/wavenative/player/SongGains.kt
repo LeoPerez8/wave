@@ -7,8 +7,8 @@ import java.util.concurrent.ConcurrentHashMap
 
 /**
  * Normalize Volume's gains for the Library songs in the player's list, by
- * queue entry key (the item's media ID), as Core's `knownGain` worked them out
- * in JS: they come with the queue ([WavePlayerModule]'s `applySync`, or
+ * queue entry key (the item's media ID), as Core's `entryGain` worked them out
+ * in JS (track or album gain): they come with the queue ([WavePlayerModule]'s `applySync`, or
  * Auto's play request, [AutoLibrary]), and a
  * value learned after that (a scan reading a song's tags) comes on its own
  * (`setSongGains`). The gain stage reads an entry's gain when its song starts

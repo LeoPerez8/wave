@@ -7,8 +7,11 @@
  * and after the Library changes) and takes in what it measured ([take]: at
  * start and as it measures): kept in the store, it's forgotten by the job,
  * and each song plays at its value from its next start ([learned]). A result
- * the store can't keep now stays with the job for the next time. Kept free of
- * Expo so it runs under plain Node tests.
+ * the store can't keep now stays with the job for the next time. A file the
+ * job couldn't open (a missing file, storage not mounted) is kept nowhere: the
+ * job drops it and goes idle when only such files are left, and it's handed
+ * over again after the next scan ([scanned]) or launch. Kept free of Expo so
+ * it runs under plain Node tests.
  */
 import type { LibraryChange } from "@wave/core";
 import * as Effect from "effect/Effect";
@@ -70,6 +73,8 @@ const toMeasured = (result: LibraryMeasurement): MeasuredSong | null => {
 export const createLibraryMeasurements = (deps: LibraryMeasurementsDeps) => {
   // The list the job was last handed in this run of JS.
   let handed: readonly SongToMeasure[] | null = null;
+  // The job dropped a file it couldn't open since: the next scan hands the list over again.
+  let unreadable = false;
   let wantTake = false;
   let wantRefresh = false;
   let running: Promise<void> | null = null;
@@ -79,6 +84,7 @@ export const createLibraryMeasurements = (deps: LibraryMeasurementsDeps) => {
       const results = yield* Effect.tryPromise(() => deps.results(TAKE_AT_ONCE));
       if (results.length === 0) return;
       const measured = results.flatMap((result) => toMeasured(result) ?? []);
+      if (measured.length < results.length) unreadable = true;
       const kept = new Set(measured.length === 0 ? [] : yield* deps.save(measured));
       const valued = measured.flatMap(({ song, measurement }) =>
         measurement !== null && kept.has(song.id) ? [song.id] : [],
@@ -153,6 +159,13 @@ export const createLibraryMeasurements = (deps: LibraryMeasurementsDeps) => {
         refreshTimer = null;
         void refreshNow();
       }, CHANGES_SETTLE_MS);
+    },
+    /** A scan finished: files the job couldn't open are handed to it again, to be tried again. */
+    scanned: (): Promise<void> => {
+      if (!unreadable) return running ?? Promise.resolve();
+      unreadable = false;
+      handed = null;
+      return refreshNow();
     },
     /** Drops what was due (the queue's scope closed). */
     stop: (): void => {

@@ -5,6 +5,7 @@ import {
   EMPTY_QUEUE,
   gainTags,
   knownGain,
+  measureCandidates,
   readNormalizeVolume,
   reduceQueue,
   songGain,
@@ -294,23 +295,42 @@ describe("songsToMeasure", () => {
       startIndex,
       context: { kind: "songs", id: null },
     }).state;
+  const all = () => true;
 
   test("the current song and the next five in Up Next, in play order", () => {
     const state = queue(["1", "2", "3", "4", "5", "6", "7", "8", "9"], 1);
-    assert.deepEqual(songsToMeasure(state), [2, 3, 4, 5, 6, 7]);
+    assert.deepEqual(songsToMeasure(state, all), [2, 3, 4, 5, 6, 7]);
   });
 
-  test("a streamed song keeps its place among the five and isn't measured", () => {
-    const state = queue(["1", ytTrackId("dQw4w9WgXcQ"), "3", "4", "5", "6", "7"], 0);
-    assert.deepEqual(songsToMeasure(state), [1, 3, 4, 5, 6]);
+  test("the five are songs to measure: streamed songs and songs with a value take no place", () => {
+    const state = queue(["1", ytTrackId("dQw4w9WgXcQ"), "3", "4", "5", "6", "7", "8", "9"], 0);
+    const measured = new Set([3, 5]);
+    assert.deepEqual(
+      songsToMeasure(state, (id) => !measured.has(id)),
+      [1, 4, 6, 7, 8, 9],
+    );
+  });
+
+  test("a current song with a value isn't measured, and the next five still are", () => {
+    const state = queue(["1", "2", "3", "4", "5", "6", "7"], 0);
+    assert.deepEqual(
+      songsToMeasure(state, (id) => id !== 1),
+      [2, 3, 4, 5, 6],
+    );
   });
 
   test("a song queued twice in the window is measured once", () => {
     const state = queue(["1", "2", "1", "3"], 0);
-    assert.deepEqual(songsToMeasure(state), [1, 2, 3]);
+    assert.deepEqual(songsToMeasure(state, all), [1, 2, 3]);
   });
 
   test("an empty queue measures nothing", () => {
-    assert.deepEqual(songsToMeasure(EMPTY_QUEUE), []);
+    assert.deepEqual(songsToMeasure(EMPTY_QUEUE, all), []);
+    assert.deepEqual(measureCandidates(EMPTY_QUEUE), []);
+  });
+
+  test("the candidates are every Library song it may pick, beyond the next five too", () => {
+    const state = queue(["1", ytTrackId("dQw4w9WgXcQ"), "3", "4", "5", "6", "7", "8", "3"], 0);
+    assert.deepEqual(measureCandidates(state), [1, 3, 4, 5, 6, 7, 8]);
   });
 });

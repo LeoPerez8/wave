@@ -296,15 +296,18 @@ describe("selectLibraryGains", () => {
 });
 
 describe("album loudness", () => {
-  test("reads every song of the local album identity, including missing and unmeasured songs", async () => {
+  test("reads every song of the local album identity, marking missing and unmeasurable ones", async () => {
     const db = await openTestDatabase();
     const a = addTrack(db, { title: "Intro", album: "Live", artist: "A", durationMs: 10_000 });
     const b = addMissingSong(db, { title: "Missing", album: "Live", artist: "A" });
+    const c = addTrack(db, { title: "Broken", album: "Live", artist: "A" });
     addTrack(db, { title: "Other artist", album: "Live", artist: "B" });
+    db.update(schema.tracks).set({ modifiedAt: 1 }).run();
     db.update(schema.tracks)
       .set({ tagTrackGain: 4, tagTrackPeak: 0.2, tagAlbumGain: -3, tagAlbumPeak: 1 })
       .where(eq(schema.tracks.id, a))
       .run();
+    assert.equal(saveMeasurement(db, toMeasure(db, c), null), true);
     const albumId = db
       .select({ id: schema.tracks.albumId })
       .from(schema.tracks)
@@ -313,14 +316,35 @@ describe("album loudness", () => {
     const album = selectAlbumLoudness(db, albumId)!;
     assert.equal(album.id, String(albumId));
     assert.deepEqual(
-      album.songs.map((song) => song.id),
-      [a, b],
+      album.songs.map((song) => [song.id, song.missing === true, song.unmeasurable === true]),
+      [
+        [a, false, false],
+        [b, true, false],
+        [c, false, true],
+      ],
     );
     assert.equal(album.songs[0]!.trackGainDb, 4);
     assert.equal(album.songs[0]!.albumGainDb, -3);
     assert.equal(album.songs[0]!.durationMs, 10_000);
-    assert.equal(albumGain(album.songs), null);
+    // Neither the missing song nor the unmeasurable one holds the album back.
+    assert.deepEqual(albumGain(album.songs), { gainDb: -3, source: "albumTag" });
     assert.equal(selectAlbumLoudness(db, 9999), null);
+  });
+
+  test("a song of the album not measured yet holds album gain back until it is", async () => {
+    const db = await openTestDatabase();
+    const a = addTrack(db, { title: "Intro", album: "Live", artist: "A", durationMs: 10_000 });
+    const b = addTrack(db, { title: "Main", album: "Live", artist: "A", durationMs: 10_000 });
+    db.update(schema.tracks).set({ modifiedAt: 1 }).run();
+    assert.equal(saveMeasurement(db, toMeasure(db, a), { loudness: -20, peak: 0.5 }), true);
+    const albumId = db
+      .select({ id: schema.tracks.albumId })
+      .from(schema.tracks)
+      .where(eq(schema.tracks.id, a))
+      .get()!.id!;
+    assert.equal(albumGain(selectAlbumLoudness(db, albumId)!.songs), null);
+    assert.equal(saveMeasurement(db, toMeasure(db, b), { loudness: -20, peak: 0.5 }), true);
+    assert.equal(albumGain(selectAlbumLoudness(db, albumId)!.songs)?.source, "albumMeasured");
   });
 });
 

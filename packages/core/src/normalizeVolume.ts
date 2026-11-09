@@ -36,12 +36,23 @@ const TARGET_LUFS = -14;
 export const MEASURE_AHEAD = 5;
 
 /**
- * Where a song's gain came from, as the app log names it: its file's
- * ReplayGain or R128 tags, Wave's own measurement of a file without them,
- * YouTube's value for a streamed song, the typical gain for a song with none,
- * or the switch off.
+ * Where a song's gain came from, as the app log names it: track gain from its
+ * file's ReplayGain or R128 tags (`tag`) or from Wave's own measurement of a
+ * file without them (`measured`); album gain from tags (`albumTag`), from
+ * measurements (`albumMeasured`) or from songs with tags and songs Wave
+ * measured (`albumTagAndMeasured`); YouTube's value for a streamed song; the
+ * typical gain for a song with none; or the switch off. The player's log line
+ * names both parts ("measured, album").
  */
-export type GainSource = "tag" | "measured" | "youtube" | "typical" | "off" | "album";
+export type GainSource =
+  | "tag"
+  | "measured"
+  | "albumTag"
+  | "albumMeasured"
+  | "albumTagAndMeasured"
+  | "youtube"
+  | "typical"
+  | "off";
 
 export interface SongGain {
   /** dB the song's samples are scaled by; 0 plays it as it is. */
@@ -217,17 +228,53 @@ export const songGain = (
 };
 
 /**
- * The Library songs Wave measures right away while Normalize Volume is on:
- * the current song and the next `MEASURE_AHEAD` Up Next entries, in play
- * order, each once. A streamed song keeps its place among them and is never
- * measured. Which of them have no value yet is the Library's to say.
+ * The Library songs Wave measures right away while Normalize Volume is on, in
+ * the order it measures them: the current song; then, when album gain could
+ * apply (the queue plays [album] with shuffle off), the album's songs; then the
+ * rest of the next `MEASURE_AHEAD` Up Next songs to measure. [needsMeasuring]
+ * says which Library songs are files without a value, which is the Library's
+ * to know (the queue's runner counts the songs it measured too, so the five
+ * move on with the queue, not as songs get measured); only those are given,
+ * each once, so a streamed song or one with a value takes no place among the
+ * five.
  */
-export const songsToMeasure = (state: QueueState, album?: AlbumLoudness | null): number[] => {
+export const songsToMeasure = (
+  state: QueueState,
+  needsMeasuring: (id: number) => boolean,
+  album?: AlbumLoudness | null,
+): number[] => {
   const current = currentEntry(state);
   if (current === null) return [];
-  const window = [current, ...upNext(state).slice(0, MEASURE_AHEAD)];
-  const priority = isQueueAlbum(state, album) ? album.songs.map((song) => song.id) : [];
-  return [...new Set([...priority, ...libraryTrackIds(window.map((entry) => entry.trackId))])];
+  const first = libraryTrackIds([current.trackId]).filter(needsMeasuring);
+  const ahead: number[] = [];
+  for (const entry of upNext(state)) {
+    if (ahead.length === MEASURE_AHEAD) break;
+    const [id] = libraryTrackIds([entry.trackId]);
+    if (id !== undefined && !first.includes(id) && !ahead.includes(id) && needsMeasuring(id)) {
+      ahead.push(id);
+    }
+  }
+  const albumIds = albumGainApplies(state, album)
+    ? album.songs.map((song) => song.id).filter(needsMeasuring)
+    : [];
+  return [...new Set([...first, ...albumIds, ...ahead])];
+};
+
+/**
+ * Every Library song `songsToMeasure` may give for [state] and [album], in
+ * its order: the ones the Library is asked about (which need measuring).
+ */
+export const measureCandidates = (state: QueueState, album?: AlbumLoudness | null): number[] => {
+  const current = currentEntry(state);
+  if (current === null) return [];
+  const albumIds = albumGainApplies(state, album) ? album.songs.map((song) => song.id) : [];
+  return [
+    ...new Set([
+      ...libraryTrackIds([current.trackId]),
+      ...albumIds,
+      ...libraryTrackIds(upNext(state).map((entry) => entry.trackId)),
+    ]),
+  ];
 };
 
 /** One Library song of an album, including songs with no file or value yet. */
@@ -237,6 +284,14 @@ export interface AlbumSongLoudness extends SongLoudness {
   /** Album tag gain already converted to the -14 LUFS target by `gainTags`. */
   readonly albumGainDb?: number | null;
   readonly albumPeak?: number | null;
+  /** The song has no file: it's left out of the album's loudness and peak, and doesn't hold album gain back. */
+  readonly missing?: boolean;
+  /**
+   * Wave couldn't measure the song's file (it has no tags): left out like a
+   * missing song, and it plays at the album gain capped at 0 dB, as its peak
+   * is unknown.
+   */
+  readonly unmeasurable?: boolean;
 }
 
 /** The complete Library membership of the queue's local album identity. */
@@ -246,26 +301,32 @@ export interface AlbumLoudness {
 }
 
 /**
- * One gain for a complete album. A shared album tag wins; otherwise combine
+ * One gain for a complete album: every song with a file Wave could measure
+ * has a value (a missing or unmeasurable song neither counts nor holds it
+ * back), else null. A tag shared by those songs wins; otherwise combine their
  * uncapped track loudness by duration (not the average of track gains).
  * Stored tag gains are already at -14, so loudness is -14 minus that gain.
- * A missing peak on any song rules out a boost for the whole album.
+ * The highest of their peaks caps it, and a missing peak on any of them rules
+ * out a boost. Its source says what the gain was made of.
  */
 export const albumGain = (songs: readonly AlbumSongLoudness[]): SongGain | null => {
-  if (songs.length === 0) return null;
-  const tag = songs[0]!.albumGainDb;
+  const counted = songs.filter((song) => song.missing !== true && song.unmeasurable !== true);
+  if (counted.length === 0) return null;
+  const tag = counted[0]!.albumGainDb;
   const sharedTag =
-    tag != null && Number.isFinite(tag) && songs.every((song) => song.albumGainDb === tag);
+    tag != null && Number.isFinite(tag) && counted.every((song) => song.albumGainDb === tag);
   let gainDb: number;
-  if (sharedTag) gainDb = tag;
-  else {
+  let source: GainSource;
+  if (sharedTag) {
+    gainDb = tag;
+    source = "albumTag";
+  } else {
     let energy = 0;
     let duration = 0;
-    for (const song of songs) {
-      const loudness =
-        song.trackGainDb != null && Number.isFinite(song.trackGainDb)
-          ? TARGET_LUFS - song.trackGainDb
-          : song.measuredLoudness;
+    let tagged = 0;
+    for (const song of counted) {
+      const fromTag = song.trackGainDb != null && Number.isFinite(song.trackGainDb);
+      const loudness = fromTag ? TARGET_LUFS - song.trackGainDb! : song.measuredLoudness;
       if (
         loudness == null ||
         !Number.isFinite(loudness) ||
@@ -273,12 +334,19 @@ export const albumGain = (songs: readonly AlbumSongLoudness[]): SongGain | null 
         song.durationMs <= 0
       )
         return null;
+      if (fromTag) tagged++;
       energy += song.durationMs * 10 ** (loudness / 10);
       duration += song.durationMs;
     }
     gainDb = TARGET_LUFS - 10 * Math.log10(energy / duration);
+    source =
+      tagged === counted.length
+        ? "albumTag"
+        : tagged === 0
+          ? "albumMeasured"
+          : "albumTagAndMeasured";
   }
-  const peaks = songs.map((song) => {
+  const peaks = counted.map((song) => {
     const track = song.trackGainDb != null ? song.trackPeak : song.measuredPeak;
     if (!sharedTag) return track;
     // An album peak describes the whole album, but a higher known track peak
@@ -291,19 +359,25 @@ export const albumGain = (songs: readonly AlbumSongLoudness[]): SongGain | null 
   const peak = peaks.every((p) => p != null && Number.isFinite(p) && p > 0)
     ? Math.max(...(peaks as number[]))
     : null;
-  return { gainDb: capped(gainDb, peak), source: "album" };
+  return { gainDb: capped(gainDb, peak), source };
 };
 
-const isQueueAlbum = (
+/** Whether album gain could apply to [state]: it plays [album] (the Library's), shuffle off. */
+const albumGainApplies = (
   state: QueueState,
   album: AlbumLoudness | null | undefined,
 ): album is AlbumLoudness =>
-  album != null && state.context?.kind === "album" && state.context.id === album.id;
+  album != null &&
+  !state.shuffle &&
+  state.context?.kind === "album" &&
+  state.context.id === album.id;
 
 /**
  * A queue entry's known gain for its next start, or null for typical gain.
- * Hand-lined entries always use track gain, even for a song of this album.
- * The native gain stage freezes this decision at the first sample of a song.
+ * Album gain goes to the album's own songs in its queue, shuffle off; an
+ * unmeasurable one plays at it capped at 0 dB. Hand-lined entries always use
+ * track gain, even for a song of this album. The native gain stage freezes
+ * this decision at the first sample of a song.
  */
 export const entryGain = (
   state: QueueState,
@@ -311,14 +385,12 @@ export const entryGain = (
   song: SongLoudness,
   album?: AlbumLoudness | null,
 ): SongGain | null => {
-  if (
-    !state.shuffle &&
-    entry.contextIndex !== null &&
-    isQueueAlbum(state, album) &&
-    album.songs.some((song) => String(song.id) === entry.trackId)
-  ) {
-    const gain = albumGain(album.songs);
-    if (gain !== null) return gain;
+  if (entry.contextIndex !== null && albumGainApplies(state, album)) {
+    const own = album.songs.find((albumSong) => String(albumSong.id) === entry.trackId);
+    const gain = own === undefined || own.missing === true ? null : albumGain(album.songs);
+    if (gain !== null) {
+      return own?.unmeasurable === true ? { ...gain, gainDb: Math.min(gain.gainDb, 0) } : gain;
+    }
   }
   return knownGain(song);
 };

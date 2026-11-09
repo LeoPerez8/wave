@@ -59,7 +59,7 @@ class NormalizeVolumeTest {
   @Test
   fun aMeasuredSongUsesItsPeakCappedGainAndNamesItsSource() {
     assertEquals(GainSource.MEASURED, GainSource.of("measured"))
-    assertEquals("measured", GainSource.MEASURED.logName)
+    assertEquals("measured, track", GainSource.MEASURED.logName)
     val measured = SongLoudness(known = SongGain(6.02, GainSource.MEASURED))
     assertEquals(SongGain(6.02, GainSource.MEASURED), NormalizeVolume.gain(true, measured))
   }
@@ -78,15 +78,28 @@ class NormalizeVolumeTest {
   @Test
   fun aSourceIsReadByCoresName() {
     assertEquals(GainSource.TAG, GainSource.of("tag"))
+    assertEquals(GainSource.MEASURED, GainSource.of("measured"))
+    assertEquals(GainSource.ALBUM_TAG, GainSource.of("albumTag"))
+    assertEquals(GainSource.ALBUM_MEASURED, GainSource.of("albumMeasured"))
+    assertEquals(GainSource.ALBUM_TAG_AND_MEASURED, GainSource.of("albumTagAndMeasured"))
     assertEquals(GainSource.YOUTUBE, GainSource.of("youtube"))
+    assertEquals(GainSource.TYPICAL, GainSource.of("typical"))
+    assertEquals(GainSource.OFF, GainSource.of("off"))
+    assertEquals(null, GainSource.of("album"))
     assertEquals(null, GainSource.of("loud"))
     assertEquals(null, GainSource.of(null))
   }
 
   @Test
-  fun theAppLogLineGivesTheGainAndItsSourceWithoutTheSong() {
-    assertEquals("Song gain -2.5 dB (tag)", NormalizeVolume.logLine(SongGain(-2.54, GainSource.TAG)))
-    assertEquals("Song gain -6.0 dB (measured)", NormalizeVolume.logLine(SongGain(-6.0, GainSource.MEASURED)))
+  fun theAppLogLineGivesTheGainAndBothPartsOfItsSourceWithoutTheSong() {
+    assertEquals("Song gain -2.5 dB (tag, track)", NormalizeVolume.logLine(SongGain(-2.54, GainSource.TAG)))
+    assertEquals("Song gain -6.0 dB (measured, track)", NormalizeVolume.logLine(SongGain(-6.0, GainSource.MEASURED)))
+    assertEquals("Song gain -4.0 dB (tag, album)", NormalizeVolume.logLine(SongGain(-4.0, GainSource.ALBUM_TAG)))
+    assertEquals("Song gain -4.0 dB (measured, album)", NormalizeVolume.logLine(SongGain(-4.0, GainSource.ALBUM_MEASURED)))
+    assertEquals(
+      "Song gain 2.1 dB (tag and measured, album)",
+      NormalizeVolume.logLine(SongGain(2.06, GainSource.ALBUM_TAG_AND_MEASURED)),
+    )
     assertEquals("Song gain -6.2 dB (YouTube)", NormalizeVolume.logLine(SongGain(-6.23, GainSource.YOUTUBE)))
     assertEquals("Song gain -5.0 dB (typical)", NormalizeVolume.logLine(SongGain(-5.0, GainSource.TYPICAL)))
     assertEquals("Song gain 0.0 dB (off)", NormalizeVolume.logLine(SongGain(0.0, GainSource.OFF)))
