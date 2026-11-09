@@ -94,6 +94,21 @@ export interface SongToMeasure {
  */
 export type SongMeasurement = { readonly loudness: number; readonly peak: number } | null;
 
+/** A Library file without tags not measured, or tried, as it is now, that the scan has read. */
+const toMeasure = and(
+  isNotNull(t.path),
+  ne(t.modifiedAt, 0),
+  isNull(t.tagTrackGain),
+  isNull(t.measuredSizeBytes),
+);
+
+const toMeasureColumns = {
+  id: t.id,
+  path: t.path,
+  sizeBytes: t.sizeBytes,
+  modifiedAt: t.modifiedAt,
+};
+
 /**
  * The songs among [ids], in their order, that Wave should measure: Library
  * files without tags that haven't been measured, or tried, as they are now. A
@@ -108,17 +123,9 @@ export const selectSongsToMeasure = (
   const found = new Map<number, SongToMeasure>();
   for (const some of chunks(wanted)) {
     const rows = db
-      .select({ id: t.id, path: t.path, sizeBytes: t.sizeBytes, modifiedAt: t.modifiedAt })
+      .select(toMeasureColumns)
       .from(t)
-      .where(
-        and(
-          inArray(t.id, some),
-          isNotNull(t.path),
-          ne(t.modifiedAt, 0),
-          isNull(t.tagTrackGain),
-          isNull(t.measuredSizeBytes),
-        ),
-      )
+      .where(and(inArray(t.id, some), toMeasure))
       .all();
     for (const { path, ...row } of rows) if (path !== null) found.set(row.id, { ...row, path });
   }
@@ -157,3 +164,36 @@ export const saveMeasurement = (
     )
     .returning({ id: t.id })
     .all().length > 0;
+
+/**
+ * Every Library file Wave should measure, oldest first: what the charging job
+ * works through (`selectSongsToMeasure` reads the same for the queue's songs).
+ */
+export const selectLibraryToMeasure = (db: LibraryDatabase): SongToMeasure[] =>
+  db
+    .select(toMeasureColumns)
+    .from(t)
+    .where(toMeasure)
+    .orderBy(t.id)
+    .all()
+    .flatMap(({ path, ...row }) => (path === null ? [] : [{ ...row, path }]));
+
+/** A file the charging job measured, and what that gave. */
+export interface MeasuredSong {
+  readonly song: SongToMeasure;
+  readonly measurement: SongMeasurement;
+}
+
+/**
+ * Keeps what the charging job measured, in one transaction (`saveMeasurement`
+ * for each); the Track ids kept, leaving out files that changed since.
+ */
+export const saveMeasurements = (
+  db: LibraryDatabase,
+  measured: readonly MeasuredSong[],
+): number[] =>
+  db.transaction((tx) =>
+    measured.flatMap(({ song, measurement }) =>
+      saveMeasurement(tx, song, measurement) ? [song.id] : [],
+    ),
+  );
