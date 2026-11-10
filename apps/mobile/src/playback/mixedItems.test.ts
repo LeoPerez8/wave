@@ -82,7 +82,7 @@ test("an action uses a Library release's songs and matches a streamed release on
     },
     finder: async () => {
       calls.push("finder");
-      return (song) => (song.videoId === "downloaded" ? track : null);
+      return (song) => (song.title === "downloaded" ? track : null);
     },
   });
   assert.deepEqual(calls, ["library:7", "release:single", "finder"]);

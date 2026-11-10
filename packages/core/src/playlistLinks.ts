@@ -5,7 +5,15 @@
  */
 
 import type { Catalogue } from "./catalogueEn.ts";
-import { addressIn, linkInText, linkParts, queryValue } from "./linkText.ts";
+import {
+  addressIn,
+  isSpotifyId,
+  linkInText,
+  linkParts,
+  queryValue,
+  spotifyAddress,
+  type SpotifyAddress,
+} from "./linkText.ts";
 import { recogniseSongLink, type SongLink } from "./songLinkOpening.ts";
 import { catalogueOf, type AppLanguage } from "./localisation.ts";
 import type { ImportService, LinkImportPlan } from "./playlistImport.ts";
@@ -105,35 +113,17 @@ const ytPlaylist = (playlistId: string): PlaylistLinkCheck => ({
   link: { service: "ytMusic", playlistId },
 });
 
-const SPOTIFY_HOST = "open.spotify.com";
-/** Spotify's short share links (Branch.io), which only Spotify can follow. */
-const SPOTIFY_SHORT_HOSTS = new Set(["spotify.link", "spotify.app.link"]);
-/** What every Spotify id is: 22 base-62 characters. */
-const SPOTIFY_ID = /^[0-9A-Za-z]{22}$/u;
-/** `spotify:playlist:<id>`, also as an old URI with its owner (`spotify:user:<user>:playlist:<id>`). */
-const SPOTIFY_URI = /^spotify:(?:user:[^:\s]+:)?([a-z]+):([^:\s]*)$/iu;
-/**
- * A path on open.spotify.com: `/<kind>/<id>`, after a locale (`/intl-pt`),
- * the embed player's `/embed` or an old link's `/user/<user>`.
- */
-const SPOTIFY_PATH = /^(?:\/intl-[\w-]+)?(?:\/embed)?(?:\/user\/[^/]+)?\/([a-z]+)\/([^/]+)\/?$/iu;
 /** The kinds of Spotify page that are one song. */
 const SPOTIFY_SONGS = new Set(["track", "episode"]);
-/** A short link's code, from its path. */
-const SHORT_CODE = /^\/([\w-]+)\/?$/u;
 
-/** What a Spotify `<kind>` and id name. */
-const spotifyEntity = (kind: string, id: string): PlaylistLinkCheck => {
-  const lower = kind.toLowerCase();
-  if (SPOTIFY_SONGS.has(lower)) return rejected("song");
-  if (lower !== "playlist" || !SPOTIFY_ID.test(id)) return rejected("notPlaylist");
-  return { ok: true, link: { service: "spotify", playlistId: id } };
-};
-
-/** A Spotify page's path: its playlist, or why it isn't one. */
-const spotifyPath = (path: string): PlaylistLinkCheck => {
-  const parts = SPOTIFY_PATH.exec(path);
-  return parts === null ? rejected("notPlaylist") : spotifyEntity(parts[1] ?? "", parts[2] ?? "");
+/** What a Spotify link names: its playlist, a short link to follow, or why it isn't one. */
+const spotifyPlaylist = (address: SpotifyAddress): PlaylistLinkCheck => {
+  if (address.at === "short")
+    return { ok: true, link: { service: "spotifyShort", url: address.url } };
+  if (address.at === "spotify") return rejected("notPlaylist");
+  if (SPOTIFY_SONGS.has(address.kind)) return rejected("song");
+  if (address.kind !== "playlist" || !isSpotifyId(address.id)) return rejected("notPlaylist");
+  return { ok: true, link: { service: "spotify", playlistId: address.id } };
 };
 
 /**
@@ -150,18 +140,11 @@ export const recognisePlaylistLink = (text: string): PlaylistLinkCheck => {
   const trimmed = linkInText(text);
   const bare = BARE_ID.exec(trimmed)?.[1];
   if (bare !== undefined) return ytPlaylist(bare);
-  const uri = SPOTIFY_URI.exec(trimmed);
-  if (uri !== null) return spotifyEntity(uri[1] ?? "", uri[2] ?? "");
+  const spotify = spotifyAddress(trimmed);
+  if (spotify !== null) return spotifyPlaylist(spotify);
   const parts = linkParts(trimmed);
   if (parts === null) return rejected("notLink");
   const { host, path, query } = parts;
-  if (host === SPOTIFY_HOST) return spotifyPath(path);
-  if (SPOTIFY_SHORT_HOSTS.has(host)) {
-    const code = SHORT_CODE.exec(path)?.[1];
-    return code === undefined
-      ? rejected("notPlaylist")
-      : { ok: true, link: { service: "spotifyShort", url: `https://${host}/${code}` } };
-  }
   if (host === SHORT_HOST) return rejected("song");
   if (!YOUTUBE_HOSTS.has(host)) return rejected("otherSite");
   if (path === "/watch") return rejected("song");
@@ -187,6 +170,32 @@ export const spotifyShortLinkTarget = (url: string, body: string): PlaylistLinkC
   if (named === undefined) return rejected("notPlaylist");
   const check = recognisePlaylistLink(named);
   return check.ok && check.link.service !== "spotify" ? rejected("notPlaylist") : check;
+};
+
+/**
+ * What a Spotify short link shared to Wave names once followed: where
+ * following it landed ([url]) when that's Spotify's own page, otherwise the
+ * first Spotify page in what it answered ([body]; Branch's page for apps
+ * names it in its script). A track plays, a playlist opens the import card,
+ * and anything else (a profile, an album, no page) is null.
+ */
+export const spotifyShortLinkLanding = (
+  url: string,
+  body: string,
+):
+  | { readonly kind: "song"; readonly link: Extract<SongLink, { readonly service: "spotify" }> }
+  | {
+      readonly kind: "import";
+      readonly link: Extract<PlaylistLink, { readonly service: "spotify" }>;
+    }
+  | null => {
+  const page = spotifyAddress(url)?.at === "page" ? url : SPOTIFY_PAGE.exec(body)?.[0];
+  if (page === undefined) return null;
+  const song = recogniseSongLink(page);
+  if (song?.service === "spotify") return { kind: "song", link: song };
+  const playlist = recognisePlaylistLink(page);
+  if (!playlist.ok || playlist.link.service !== "spotify") return null;
+  return { kind: "import", link: playlist.link };
 };
 
 /**

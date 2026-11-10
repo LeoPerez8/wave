@@ -49,3 +49,58 @@ export const linkInText = (text: string): string => {
   const whole = text.trim();
   return /\s/u.test(whole) ? (addressIn(whole) ?? whole) : whole;
 };
+
+const SPOTIFY_HOST = "open.spotify.com";
+/** Spotify's short share links (Branch.io), which only Spotify can follow. */
+const SPOTIFY_SHORT_HOSTS = new Set(["spotify.link", "spotify.app.link"]);
+/** What every Spotify id is: 22 base-62 characters. */
+const SPOTIFY_ID = /^[0-9A-Za-z]{22}$/u;
+/** `spotify:<kind>:<id>`, also as an old URI with its owner (`spotify:user:<user>:playlist:<id>`). */
+const SPOTIFY_URI = /^spotify:(?:user:[^:\s]+:)?([a-z]+):([^:\s]*)$/iu;
+/**
+ * A path on open.spotify.com: `/<kind>/<id>`, after a locale (`/intl-pt`),
+ * the embed player's `/embed` or an old link's `/user/<user>`.
+ */
+const SPOTIFY_PATH = /^(?:\/intl-[\w-]+)?(?:\/embed)?(?:\/user\/[^/]+)?\/([a-z]+)\/([^/]+)\/?$/iu;
+/** A short link's code, from its path. */
+const SHORT_CODE = /^\/([\w-]+)\/?$/u;
+
+/** Whether [id] is shaped like a Spotify id. */
+export const isSpotifyId = (id: string): boolean => SPOTIFY_ID.test(id);
+
+/**
+ * What a Spotify link names: a page (its kind, lower case, and its id, as
+ * written), a short link to follow (its address, parameters dropped), or
+ * nothing Wave reads on Spotify's own host.
+ */
+export type SpotifyAddress =
+  | { readonly at: "page"; readonly kind: string; readonly id: string }
+  | { readonly at: "short"; readonly url: string }
+  | { readonly at: "spotify" };
+
+const spotifyPage = (kind: string, id: string): SpotifyAddress => ({
+  at: "page",
+  kind: kind.toLowerCase(),
+  id,
+});
+
+/**
+ * What [link] (one link, as `linkInText` or `addressIn` gives it) names on
+ * Spotify: a `spotify:` URI or an `open.spotify.com` page, or a
+ * `spotify.link` short link. Null when it isn't Spotify's.
+ */
+export const spotifyAddress = (link: string): SpotifyAddress | null => {
+  const uri = SPOTIFY_URI.exec(link);
+  if (uri !== null) return spotifyPage(uri[1] ?? "", uri[2] ?? "");
+  const parts = linkParts(link);
+  if (parts === null) return null;
+  if (parts.host === SPOTIFY_HOST) {
+    const page = SPOTIFY_PATH.exec(parts.path);
+    return page === null ? { at: "spotify" } : spotifyPage(page[1] ?? "", page[2] ?? "");
+  }
+  if (!SPOTIFY_SHORT_HOSTS.has(parts.host)) return null;
+  const code = SHORT_CODE.exec(parts.path)?.[1];
+  return code === undefined
+    ? { at: "spotify" }
+    : { at: "short", url: `https://${parts.host}/${code}` };
+};

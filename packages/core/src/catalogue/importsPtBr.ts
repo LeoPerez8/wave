@@ -55,6 +55,13 @@ export const importsPtBr: typeof importsEn = {
   songLinkDoesntOpen: "Este link não abre",
   songLinkDoesntOpenMessage: "O YouTube Music não conseguiu tocar a música deste link.",
   songNotFound: "Não foi possível encontrar esta música online",
+  songUnreadMissing: (service: string): string => `O ${service} não tem a música deste link.`,
+  songUnreadUnreachable: (service: string): string =>
+    `Não foi possível acessar o ${service}. Verifique sua conexão e tente novamente.`,
+  songUnreadFailed: (service: string): string => `O ${service} não respondeu como esperado.`,
+  songSearchFailedMessage: "O YouTube Music não respondeu. Tente novamente mais tarde.",
+  search: "Buscar",
+  close: "Fechar",
   offline: "Você está offline. Tente novamente quando estiver online.",
   playlistFailed:
     "Não foi possível ler esta playlist. Ela pode ser privada ou ter sido apagada, ou não houve resposta online.",

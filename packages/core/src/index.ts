@@ -1340,6 +1340,7 @@ export {
   recognisePlaylistLink,
   sharedTextImport,
   spotifyShortLinkTarget,
+  spotifyShortLinkLanding,
   YT_MUSIC_OFF_NOTICE,
   ytMusicOffNotice,
   playlistLinkReason,
@@ -1362,9 +1363,19 @@ export {
   recogniseSongLink,
   songLinkLibraryCopy,
   songLinkNotice,
+  songLinkNotFound,
   songLinkPlay,
+  trackLinkPlay,
 } from "./songLinkOpening.ts";
-export type { LinkedSong, SongLink, SongLinkFailure, SongLinkPlay } from "./songLinkOpening.ts";
+export type {
+  LinkedSong,
+  SongLink,
+  SongLinkFailure,
+  SongLinkNotFound,
+  SongLinkPlay,
+  TrackLinkPlay,
+  TrackService,
+} from "./songLinkOpening.ts";
 export { spotifySearchQuery, spotifyYtMatch, searchRecording } from "./spotifyImport.ts";
 export { settleUnsearched, unsearchedSearchQuery, unsearchedSettles } from "./unsearchedEntries.ts";
 export {
@@ -1453,6 +1464,7 @@ export type {
   PlaylistImports,
 } from "./playlistImport.ts";
 export { readSpotifyPlaylist, spotifyEmbed, spotifyPlaylistPage } from "./spotifyPlaylist.ts";
+export { readSpotifyTrack, type SpotifyTrackRead } from "./spotifyTrack.ts";
 export type {
   SpotifyAnswer,
   SpotifyEmbed,

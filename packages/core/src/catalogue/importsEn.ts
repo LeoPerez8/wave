@@ -51,6 +51,14 @@ export const importsEn = {
   songLinkDoesntOpen: "This link doesn't open",
   songLinkDoesntOpenMessage: "YouTube Music couldn't play the song it links to.",
   songNotFound: "Couldn't find this song online",
+  songUnreadMissing: (service: string): string => `${service} doesn't have the song it links to.`,
+  songUnreadUnreachable: (service: string): string =>
+    `Couldn't reach ${service}. Check your connection and try again.`,
+  songUnreadFailed: (service: string): string => `${service} didn't answer as expected.`,
+  songSearchFailedMessage: "YouTube Music didn't answer. Try again later.",
+  /** The Couldn't find card's buttons. */
+  search: "Search",
+  close: "Close",
   offline: "You're offline. Try again when you're back online.",
   playlistFailed:
     "Couldn't read this playlist. It may be private or deleted, or there was no answer online.",

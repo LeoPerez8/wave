@@ -17,8 +17,14 @@ import { useLibraryQuery } from "@/library/sharedQueries";
 
 import { makeFinderCache } from "./finderCache";
 
-/** The Library song a YT Music song already is (Core's `libraryFinder`), or null. */
-export type FindInLibrary = (song: YtSong) => SongRow | null;
+/**
+ * The Library song a YT Music song already is (Core's `libraryFinder`), or
+ * null. It reads only the title, artists and length, so another service's
+ * song (a song link's) is looked for too.
+ */
+export type FindInLibrary = (
+  song: Pick<YtSong, "title" | "artists" | "durationMs">,
+) => SongRow | null;
 
 const nothing: FindInLibrary = () => null;
 
