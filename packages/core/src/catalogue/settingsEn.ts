@@ -315,6 +315,13 @@ export const settingsEn = {
   theFoldersOnYourPhoneThatWave:
     "The folders on your phone that Wave shows songs from, and the folders inside them it ignores.",
   rescanLibrary: "Rescan library",
+  /** Settings › Accounts: the links Android lets Wave open (docs/spec.md, "Opening a song link"). */
+  songLinks: "Song links",
+  openSongLinksInWave: "Open song links in Wave",
+  songLinksAll: "On: YouTube Music, Spotify and Deezer links open in Wave.",
+  songLinksSome: "On for some links. Tap to turn on the rest in Android's Open by default page.",
+  songLinksNone:
+    "Off: links open in their own app or the browser. Tap to turn them on in Android's Open by default page.",
   wavePicksUpNewChangedAndRemoved:
     "Wave picks up new, changed and removed files each time you open it, and when you pull down in the Library.",
   skipVoiceNotesAndRecordings: "Skip voice notes and recordings",

@@ -305,6 +305,13 @@ export const settingsPtBr: typeof settingsEn = {
   theFoldersOnYourPhoneThatWave:
     "As pastas do telefone cujas músicas o Wave mostra, e as pastas dentro delas que ele ignora.",
   rescanLibrary: "Verificar Biblioteca de Novo",
+  songLinks: "Links de música",
+  openSongLinksInWave: "Abrir links de música no Wave",
+  songLinksAll: "Ativado: links do YouTube Music, Spotify e Deezer abrem no Wave.",
+  songLinksSome:
+    "Ativado para alguns links. Toque para ativar os outros na página Abrir por padrão do Android.",
+  songLinksNone:
+    "Desativado: os links abrem no próprio app ou no navegador. Toque para ativá-los na página Abrir por padrão do Android.",
   wavePicksUpNewChangedAndRemoved:
     "O Wave detecta arquivos novos, alterados e removidos sempre que você o abre e quando você puxa a Biblioteca para baixo.",
   skipVoiceNotesAndRecordings: "Ignorar mensagens de voz e gravações",

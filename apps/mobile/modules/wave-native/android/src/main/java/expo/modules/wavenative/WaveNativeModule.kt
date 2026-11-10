@@ -9,6 +9,8 @@ import android.content.ClipboardManager
 import android.content.ContentUris
 import android.content.Context
 import android.content.Intent
+import android.content.pm.PackageManager
+import android.content.pm.verify.domain.DomainVerificationManager
 import android.net.Uri
 import android.os.Build
 import android.os.Environment
@@ -203,19 +205,40 @@ class WaveNativeModule : Module() {
 
     /** Opens the system "All files access" screen for Wave. Re-check access when the app is active again. */
     AsyncFunction("requestAllFilesAccess") {
-      val packageUri = Uri.parse("package:${context.packageName}")
-      val activity = appContext.currentActivity
-      val launcher: Context = activity ?: context
-      fun launch(intent: Intent) {
-        if (activity == null) intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
-        launcher.startActivity(intent)
-      }
-      try {
-        launch(Intent(Settings.ACTION_MANAGE_APP_ALL_FILES_ACCESS_PERMISSION, packageUri))
-      } catch (e: ActivityNotFoundException) {
+      openSystemSettings(
+        Intent(Settings.ACTION_MANAGE_APP_ALL_FILES_ACCESS_PERMISSION, packageUri()),
         // Some OEM builds only have the list screen.
-        launch(Intent(Settings.ACTION_MANAGE_ALL_FILES_ACCESS_PERMISSION))
-      }
+        Intent(Settings.ACTION_MANAGE_ALL_FILES_ACCESS_PERMISSION),
+      )
+    }
+
+    /**
+     * Whether Android lets Wave open the song links its VIEW filter declares (docs/spec.md, "Opening
+     * a song link"): Android's domain verification user state for Wave, with "Open supported links"
+     * as `allowed` and each declared web host's state (0 none, 1 selected, 2 verified). Core's
+     * `songLinkHandling` reads it. minSdk is 31, so every Wave has the API.
+     */
+    Function("songLinkHandling") {
+      val state =
+        try {
+          context.getSystemService(DomainVerificationManager::class.java)
+            ?.getDomainVerificationUserState(context.packageName)
+        } catch (e: PackageManager.NameNotFoundException) {
+          null
+        }
+      mapOf(
+        "allowed" to (state?.isLinkHandlingAllowed ?: false),
+        "hosts" to (state?.hostToStateMap ?: emptyMap<String, Int>()),
+      )
+    }
+
+    /** Opens Android's Open by default page for Wave. Re-read `songLinkHandling` when the app is active again. */
+    AsyncFunction("openLinkSettings") {
+      openSystemSettings(
+        Intent(Settings.ACTION_APP_OPEN_BY_DEFAULT_SETTINGS, packageUri()),
+        // Some OEM builds lack it: App info leads there.
+        Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS, packageUri()),
+      )
     }
 
     /**
@@ -635,6 +658,23 @@ class WaveNativeModule : Module() {
 
   /** Created on first use (on the main thread) and told when Wave's activities stop. */
   private var launcherIconSwitcher: LauncherIconSwitcher? = null
+
+  private fun packageUri(): Uri = Uri.parse("package:${context.packageName}")
+
+  /** Starts a system settings page for Wave, or [fallback] where the phone lacks it. */
+  private fun openSystemSettings(page: Intent, fallback: Intent) {
+    val activity = appContext.currentActivity
+    val launcher: Context = activity ?: context
+    fun launch(intent: Intent) {
+      if (activity == null) intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+      launcher.startActivity(intent)
+    }
+    try {
+      launch(page)
+    } catch (e: ActivityNotFoundException) {
+      launch(fallback)
+    }
+  }
 
   private fun launcherIcons(): LauncherIconSwitcher =
     launcherIconSwitcher ?: context.applicationContext.let { app ->
