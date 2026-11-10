@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { describe, test } from "node:test";
 
-import { contrastRatio, paletteGradient } from "./index.ts";
+import { contrastRatio, lyricsDimOpacity, paletteGradient } from "./index.ts";
 
 // Wave's own tokens (apps/mobile/global.css): the ground, then the text and
 // control colours Now Playing sets on the gradient (ink, graphite, teal).
@@ -71,5 +71,41 @@ describe("paletteGradient", () => {
   test("a swatch that isn't a #rrggbb colour is skipped", () => {
     const gradient = paletteGradient({ darkVibrant: "blue", darkMuted: "#2a2f3a" }, dark);
     assert.deepEqual(gradient, { top: "#2a2f3a", bottom: "#121b1d" });
+  });
+});
+
+// Composite the returned alpha as an 8-bit sRGB renderer does.
+const over = (ink: string, ground: string, alpha: number): string =>
+  "#" +
+  [1, 3, 5]
+    .map((at) =>
+      Math.round(
+        parseInt(ink.slice(at, at + 2), 16) * alpha +
+          parseInt(ground.slice(at, at + 2), 16) * (1 - alpha),
+      )
+        .toString(16)
+        .padStart(2, "0"),
+    )
+    .join("");
+
+describe("lyricsDimOpacity", () => {
+  test("chooses the faintest readable ink on either stop in both themes", () => {
+    for (const theme of [light, dark]) {
+      for (const palette of [
+        null,
+        { dominant: "#ffffff" },
+        { dominant: "#000000" },
+        { vibrant: "#ff0088", muted: "#528983" },
+      ]) {
+        const gradient = paletteGradient(palette, theme);
+        const ink = theme.ink[0];
+        const alpha = lyricsDimOpacity(gradient, ink);
+        const stops = [gradient.top, gradient.bottom];
+        assert.ok(alpha > 0 && alpha < 1);
+        assert.ok(stops.every((stop) => contrastRatio(over(ink, stop, alpha), stop) >= 3));
+        assert.ok(stops.some((stop) => contrastRatio(over(ink, stop, alpha - 1 / 255), stop) < 3));
+        assert.equal(lyricsDimOpacity({ top: gradient.bottom, bottom: gradient.top }, ink), alpha);
+      }
+    }
   });
 });

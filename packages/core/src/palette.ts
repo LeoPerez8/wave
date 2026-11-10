@@ -152,3 +152,18 @@ export const crossfadeGround = (
     incoming: target,
   };
 };
+
+/**
+ * Faintest 8-bit ink alpha that keeps synced lyrics at 3:1 on both stops.
+ * Pass the current theme's foreground ink and its toned Now Playing gradient.
+ * Full ink is the fallback for an unready theme or a ground that cannot reach 3:1.
+ */
+export const lyricsDimOpacity = (gradient: Gradient, ink: string): number => {
+  const stops = [gradient.top, gradient.bottom];
+  if (!HEX.test(ink) || !stops.every((stop) => HEX.test(stop))) return 1;
+  for (let alpha = 1; alpha < 255; alpha++) {
+    const opacity = alpha / 255;
+    if (stops.every((stop) => contrastRatio(mix(stop, ink, opacity), stop) >= 3)) return opacity;
+  }
+  return 1;
+};
