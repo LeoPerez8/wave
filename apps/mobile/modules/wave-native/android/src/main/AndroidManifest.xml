@@ -40,6 +40,34 @@
     <package android:name="com.whatsapp" />
   </queries>
 
+  <!--
+    Card 2 and Settings › Accounts › Song links name the app that still opens a service's song
+    links (songLinkOpeners, Core's SONG_LINK_SAMPLES): the apps verified for these hosts, and the
+    browser a plain web link opens in.
+  -->
+  <queries>
+    <intent>
+      <action android:name="android.intent.action.VIEW" />
+      <category android:name="android.intent.category.BROWSABLE" />
+      <data android:scheme="https" android:host="music.youtube.com" />
+    </intent>
+    <intent>
+      <action android:name="android.intent.action.VIEW" />
+      <category android:name="android.intent.category.BROWSABLE" />
+      <data android:scheme="https" android:host="open.spotify.com" />
+    </intent>
+    <intent>
+      <action android:name="android.intent.action.VIEW" />
+      <category android:name="android.intent.category.BROWSABLE" />
+      <data android:scheme="https" android:host="www.deezer.com" />
+    </intent>
+    <intent>
+      <action android:name="android.intent.action.VIEW" />
+      <category android:name="android.intent.category.BROWSABLE" />
+      <data android:scheme="https" />
+    </intent>
+  </queries>
+
   <application>
     <service
       android:name="expo.modules.wavenative.recognize.PlaybackCaptureService"

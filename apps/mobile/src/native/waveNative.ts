@@ -4,6 +4,7 @@ import type {
   GainTagText,
   LaunchTheme,
   SongLinkHandlingState,
+  SongLinkOpeners,
   TagDestination,
   TagWriteStep,
 } from "@wave/core";
@@ -175,6 +176,13 @@ declare class WaveNativeModule extends NativeModule<WaveNativeEvents> {
   songLinkHandling?(): SongLinkHandlingState;
   /** Opens Android's Open by default page for Wave. Absent from an APK built before it. */
   openLinkSettings?(): Promise<void>;
+  /**
+   * The app Android would open each link in now (Core's `SONG_LINK_SAMPLES`), null when it would
+   * ask, open Wave or has nothing. Absent from an APK built before it (a JS-only repack).
+   */
+  songLinkOpeners?(links: Readonly<Record<string, string>>): SongLinkOpeners;
+  /** Opens another app's Open by default page, else its App info. Absent from an APK built before it. */
+  openAppLinkSettings?(packageName: string): Promise<void>;
   /** Absolute path of the shared `Music` folder. */
   getDefaultMusicFolder(): string;
   /**
