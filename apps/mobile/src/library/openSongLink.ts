@@ -3,11 +3,13 @@
  * the song plays at once as a Magic Queue seeded by it, from the Library's
  * copy when there is one, else streamed, and Now Playing opens. Core decides
  * which links name a song, which copy plays (`songLinkLibraryCopy`,
- * `songLinkPlay`, `trackLinkPlay` for another service's track) and what a
+ * `songLinkPlay`, `trackLinkPlay` for a Spotify or Deezer track) and what a
  * link that plays nothing says (`songLinkNotice`, `songLinkNotFound`).
  */
 import {
+  deezerShortLinkLanding,
   linkedYtSong,
+  readDeezerTrack,
   readSpotifyTrack,
   songLinkLibraryCopy,
   songLinkNotice,
@@ -18,6 +20,7 @@ import {
   type SongLink,
   type SongLinkFailure,
   type SongLinkPlay,
+  type SpotifySong,
   type YtSong,
 } from "@wave/core";
 import * as Effect from "effect/Effect";
@@ -37,8 +40,11 @@ import { appRuntime } from "./runtime";
 import { openSongNotFound } from "./SongNotFoundCard";
 import { spotifyTransport } from "./spotifyTransport";
 
-/** How long Spotify gets to answer: a malformed id has kept a request open for minutes. */
-const SPOTIFY_TIMEOUT_MS = 20_000;
+/**
+ * How long Spotify or Deezer gets to answer, short link and all: a malformed
+ * Spotify id has kept a request open for minutes.
+ */
+const TRACK_SERVICE_TIMEOUT_MS = 20_000;
 
 const say = (failure: SongLinkFailure): void => {
   const notice = songLinkNotice(failure, currentLocalisation().language);
@@ -107,25 +113,93 @@ const followShortLink = async (
 };
 
 /**
+ * What a track read from another service plays: the Library's same
+ * recording, else YouTube Music's, searched for once in the search allowance
+ * (`trackLinkPlay`).
+ */
+const readTrackEnding = async (song: SpotifySong): Promise<Ending> =>
+  trackLinkPlay(song, {
+    find: await libraryFind(),
+    search: (read) => searchRecordingInTurn("songLink", read),
+  });
+
+/**
  * What a Spotify track plays: its title, artists, length and cover read from
- * its embed page (`readSpotifyTrack`, sending Spotify the track id), then the
- * Library's same recording, else YouTube Music's, searched for once in the
- * search allowance (`trackLinkPlay`).
+ * its embed page (`readSpotifyTrack`, sending Spotify the track id), then as
+ * any read track (`readTrackEnding`).
  */
 const spotifyEnding = async (trackId: string, signal: AbortSignal): Promise<Ending> => {
   const read = await readSpotifyTrack(trackId, spotifyTransport(signal));
   if (!read.ok) return { play: "failed", failure: { unread: read.reason, service: "spotify" } };
-  return trackLinkPlay(read.song, {
-    find: await libraryFind(),
-    search: (song) => searchRecordingInTurn("songLink", song),
+  return readTrackEnding(read.song);
+};
+
+/**
+ * Where a Deezer short link lands once followed (`deezerShortLinkLanding`):
+ * Deezer's redirects end on a track's page, whose id is all Wave keeps, or
+ * elsewhere (an album, a playlist, Deezer's page for a dead link), which
+ * opens nothing.
+ */
+const followDeezerShortLink = async (
+  url: string,
+  signal: AbortSignal,
+): Promise<{ readonly trackId: string } | { readonly failure: SongLinkFailure }> => {
+  try {
+    const response = await fetch(url, { signal });
+    const landing = deezerShortLinkLanding(response.url);
+    return landing === null ? { failure: "cantOpen" } : { trackId: landing.trackId };
+  } catch {
+    return { failure: { unread: "unreachable", service: "deezer" } };
+  }
+};
+
+/**
+ * What a Deezer track plays: its title, artists, album, length and cover
+ * read from Deezer's public API (`readDeezerTrack`, sending Deezer the track
+ * id), then as any read track (`readTrackEnding`).
+ */
+const deezerEnding = async (trackId: string, signal: AbortSignal): Promise<Ending> => {
+  const read = await readDeezerTrack(trackId, async (url) => {
+    const response = await fetch(url, { signal });
+    return { status: response.status, body: await response.text() };
   });
+  if (!read.ok) return { play: "failed", failure: { unread: read.reason, service: "deezer" } };
+  return readTrackEnding(read.song);
+};
+
+/**
+ * What [link] ends in, a short link followed first: a play, what to say, or
+ * the playlist a Spotify short link landed on.
+ */
+const linkEnding = async (
+  link: SongLink,
+  signal: AbortSignal,
+): Promise<Ending | { readonly playlist: PlaylistLink }> => {
+  switch (link.service) {
+    case "ytMusic":
+      return ytMusicEnding(link.videoId);
+    case "spotify":
+      return spotifyEnding(link.trackId, signal);
+    case "deezer":
+      return deezerEnding(link.trackId, signal);
+    case "spotifyShort": {
+      const landing = await followShortLink(link.url, signal);
+      if ("trackId" in landing) return spotifyEnding(landing.trackId, signal);
+      return "playlist" in landing ? landing : { play: "failed", failure: landing.failure };
+    }
+    case "deezerShort": {
+      const landing = await followDeezerShortLink(link.url, signal);
+      if ("trackId" in landing) return deezerEnding(landing.trackId, signal);
+      return { play: "failed", failure: landing.failure };
+    }
+  }
 };
 
 /**
  * Plays the song [link] names. Offline it says so and asks nothing. Else a
- * toast says "Finding song…" while the song is found: a Spotify short link is
- * followed first, and one that lands on a playlist opens its import card
- * ([openPlaylist]) instead. The Library's copy plays when it has one, else
+ * toast says "Finding song…" while the song is found: a Spotify or Deezer
+ * short link is followed first, and a Spotify one that lands on a playlist
+ * opens its import card ([openPlaylist]) instead. The Library's copy plays when it has one, else
  * the YT Music song streams, each as its Magic Queue (the previous queue
  * goes), and Now Playing opens. A song found nowhere opens the Couldn't find
  * card; anything else that plays nothing says why. YT Music off was said
@@ -143,28 +217,18 @@ export const openSongLink = async (
   void showToast(strings.imports.findingSong);
   const finding = currentToast.get()?.id;
   const controller = new AbortController();
-  const timeout = setTimeout(() => controller.abort(), SPOTIFY_TIMEOUT_MS);
-  let ending: Ending;
+  const timeout = setTimeout(() => controller.abort(), TRACK_SERVICE_TIMEOUT_MS);
+  let ending: Ending | { readonly playlist: PlaylistLink };
   try {
-    if (link.service === "ytMusic") ending = await ytMusicEnding(link.videoId);
-    else if (link.service === "spotify")
-      ending = await spotifyEnding(link.trackId, controller.signal);
-    else {
-      const landing = await followShortLink(link.url, controller.signal);
-      if ("playlist" in landing) {
-        endFinding(finding);
-        openPlaylist(landing.playlist);
-        return;
-      }
-      ending =
-        "failure" in landing
-          ? { play: "failed", failure: landing.failure }
-          : await spotifyEnding(landing.trackId, controller.signal);
-    }
+    ending = await linkEnding(link, controller.signal);
   } finally {
     clearTimeout(timeout);
   }
   endFinding(finding);
+  if ("playlist" in ending) {
+    openPlaylist(ending.playlist);
+    return;
+  }
   if (ending.play === "failed") {
     say(ending.failure);
     return;

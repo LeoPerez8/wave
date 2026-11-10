@@ -90,7 +90,8 @@ describe("importing from a link, in Portuguese", () => {
     assert.deepEqual(sharedTextImport("hello", { ytMusic: true }, PT), {
       kind: "notice",
       title: "Não é possível abrir isto",
-      message: "O Wave abre músicas e playlists de links do YouTube Music e do Spotify.",
+      message:
+        "O Wave abre músicas de links do YouTube Music, do Spotify e do Deezer, e playlists de links do YouTube Music e do Spotify.",
     });
   });
 });

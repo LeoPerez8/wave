@@ -43,7 +43,8 @@ export const importsEn = {
   cantImport: "Can't import this",
   /** Sharing something to Wave that isn't a song or playlist link. */
   cantOpen: "Can't open this",
-  sharedLinks: "Wave opens songs and playlists from YouTube Music and Spotify links.",
+  sharedLinks:
+    "Wave opens songs from YouTube Music, Spotify and Deezer links, and playlists from YouTube Music and Spotify links.",
   /** Opening a song link. */
   findingSong: "Finding song…",
   songOffline: "You're offline",

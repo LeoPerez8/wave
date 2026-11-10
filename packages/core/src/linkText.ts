@@ -104,3 +104,58 @@ export const spotifyAddress = (link: string): SpotifyAddress | null => {
     ? { at: "spotify" }
     : { at: "short", url: `https://${parts.host}/${code}` };
 };
+
+/** deezer.com's hosts for its pages. */
+const DEEZER_HOSTS = new Set(["deezer.com", "www.deezer.com"]);
+/**
+ * Deezer's short share links, which only Deezer can follow, each with how its
+ * path holds the code: `link.deezer.com/s/<code>` (the apps' share format) and
+ * Firebase's `deezer.page.link/<code>` (also `dzr.page.link`).
+ */
+const DEEZER_SHORT_PATHS: ReadonlyMap<string, RegExp> = new Map([
+  ["link.deezer.com", /^\/s\/([\w-]+)\/?$/u],
+  ["deezer.page.link", SHORT_CODE],
+  ["dzr.page.link", SHORT_CODE],
+]);
+/** A path on deezer.com: `/<kind>/<id>`, after a locale (`/br`, `/en`, `/pt-br`). */
+const DEEZER_PATH = /^(?:\/[a-z]{2}(?:-[a-z]{2})?)?\/([a-z]+)\/([^/]+)\/?$/iu;
+/**
+ * What every Deezer id is: digits. Deezer reads the number at the start of an
+ * id and ignores what follows (`302127x` is 302127), so nothing else is one.
+ */
+const DEEZER_ID = /^\d{1,20}$/u;
+
+/** Whether [id] is shaped like a Deezer id. */
+export const isDeezerId = (id: string): boolean => DEEZER_ID.test(id);
+
+/**
+ * What a Deezer link names: a page (its kind, lower case, and its id, as
+ * written), a short link to follow (its address, parameters dropped), or
+ * nothing Wave reads on Deezer's own hosts.
+ */
+export type DeezerAddress =
+  | { readonly at: "page"; readonly kind: string; readonly id: string }
+  | { readonly at: "short"; readonly url: string }
+  | { readonly at: "deezer" };
+
+/**
+ * What [link] (one link, as `linkInText` or `addressIn` gives it) names on
+ * Deezer: a `deezer.com` page or a short link (`link.deezer.com/s/<code>`,
+ * `deezer.page.link/<code>`). Null when it isn't Deezer's.
+ */
+export const deezerAddress = (link: string): DeezerAddress | null => {
+  const parts = linkParts(link);
+  if (parts === null) return null;
+  if (DEEZER_HOSTS.has(parts.host)) {
+    const page = DEEZER_PATH.exec(parts.path);
+    return page === null
+      ? { at: "deezer" }
+      : { at: "page", kind: (page[1] ?? "").toLowerCase(), id: page[2] ?? "" };
+  }
+  const shortPath = DEEZER_SHORT_PATHS.get(parts.host);
+  if (shortPath === undefined) return null;
+  const code = shortPath.exec(parts.path)?.[1];
+  return code === undefined
+    ? { at: "deezer" }
+    : { at: "short", url: `https://${parts.host}${parts.path.replace(/\/$/u, "")}` };
+};

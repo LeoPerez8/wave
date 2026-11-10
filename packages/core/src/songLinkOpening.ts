@@ -5,7 +5,15 @@
  */
 
 import { splitCredit } from "./credits.ts";
-import { linkParts, addressIn, isSpotifyId, queryValue, spotifyAddress } from "./linkText.ts";
+import {
+  addressIn,
+  deezerAddress,
+  isDeezerId,
+  isSpotifyId,
+  linkParts,
+  queryValue,
+  spotifyAddress,
+} from "./linkText.ts";
 import { catalogueOf, type AppLanguage } from "./localisation.ts";
 import { streamedSongMagicStart, type MagicSeed } from "./magicQueue.ts";
 import type { ImportNotice } from "./playlistLinks.ts";
@@ -29,7 +37,17 @@ export type SongLink =
    * A Spotify short link (`spotify.link/<code>`), which names a song or a
    * playlist only once followed (`spotifyShortLinkLanding`).
    */
-  | { readonly service: "spotifyShort"; readonly url: string };
+  | { readonly service: "spotifyShort"; readonly url: string }
+  | {
+      readonly service: "deezer";
+      /** Deezer's track id (digits): all that is sent to Deezer. */
+      readonly trackId: string;
+    }
+  /**
+   * A Deezer short link (`link.deezer.com/s/<code>`, `deezer.page.link/<code>`),
+   * which names a song only once followed (`deezerShortLinkLanding`).
+   */
+  | { readonly service: "deezerShort"; readonly url: string };
 
 const YT_MUSIC_HOST = "music.youtube.com";
 /** What a YouTube video id is: 11 letters, digits, `-` and `_`. */
@@ -45,6 +63,29 @@ const spotifySong = (link: string): SongLink | null => {
 };
 
 /**
+ * The track a Deezer short link (`deezerShort`) names once followed: where
+ * following it landed ([url]), a track's page on deezer.com (its locale and
+ * parameters ignored). Null anywhere else: an album, a playlist, an artist, an
+ * episode, or Deezer's page for a dead link (`deezer-links-404`).
+ */
+export const deezerShortLinkLanding = (
+  url: string,
+): Extract<SongLink, { readonly service: "deezer" }> | null => {
+  const page = deezerAddress(url);
+  return page?.at === "page" && page.kind === "track" && isDeezerId(page.id)
+    ? { service: "deezer", trackId: page.id }
+    : null;
+};
+
+/** The song a Deezer link names: a track's page, or a short link to follow. */
+const deezerSong = (link: string): SongLink | null => {
+  const deezer = deezerAddress(link);
+  return deezer?.at === "short"
+    ? { service: "deezerShort", url: deezer.url }
+    : deezerShortLinkLanding(link);
+};
+
+/**
  * The song [text] names: the first web address or Spotify URI in it
  * (punctuation after it dropped), else the whole text as a link without its
  * scheme. A YouTube Music song link is `music.youtube.com/watch?v=<id>`, its
@@ -52,12 +93,15 @@ const spotifySong = (link: string): SongLink | null => {
  * track's page (`open.spotify.com/track/<id>`, after a locale or `/embed`,
  * parameters ignored), its URI (`spotify:track:<id>`), or a short link
  * (`spotify.link/<code>`), which is followed before Wave knows it's a song.
- * Null for anything else, plain YouTube links included.
+ * A Deezer one is a track's page (`deezer.com/track/<id>`, after a locale,
+ * parameters ignored, the id digits) or a short link (`link.deezer.com/s/<code>`,
+ * `deezer.page.link/<code>`), followed first too. Null for anything else,
+ * plain YouTube links included.
  */
 export const recogniseSongLink = (text: string): SongLink | null => {
   const link = addressIn(text) ?? text.trim();
-  const spotify = spotifySong(link);
-  if (spotify !== null) return spotify;
+  const song = spotifySong(link) ?? deezerSong(link);
+  if (song !== null) return song;
   const parts = linkParts(link);
   if (parts === null || parts.host !== YT_MUSIC_HOST || parts.path !== "/watch") return null;
   const videoId = queryValue(parts.query, "v");
@@ -144,7 +188,7 @@ export const songLinkPlay = <S extends YtSong, L extends LibraryCopy>(
 };
 
 /** A service whose song links Wave reads the track from (its page or API). */
-export type TrackService = "spotify";
+export type TrackService = "spotify" | "deezer";
 
 /**
  * Why a song link plays nothing: no network, a video YouTube Music can't play
@@ -170,7 +214,7 @@ export type TrackLinkPlay<S, L> =
 
 /**
  * What a track another service's link names ([song], as read from Spotify's
- * embed page or Deezer's API) plays: the Library's same recording ([find],
+ * embed page or Deezer's API, `readDeezerTrack`) plays: the Library's same recording ([find],
  * `libraryFinder` over its title, artists and length), else YouTube Music's
  * same recording, searched for once ([search]: Songs, then the official
  * video, as imports match, `searchRecording`), as its Magic Queue. When
@@ -204,7 +248,10 @@ export const trackLinkPlay = async <S extends YtSong, L extends LibraryCopy>(
 };
 
 /** How a track service is named in messages: a brand, the same in every language. */
-const TRACK_SERVICE_NAMES: Readonly<Record<TrackService, string>> = { spotify: "Spotify" };
+const TRACK_SERVICE_NAMES: Readonly<Record<TrackService, string>> = {
+  spotify: "Spotify",
+  deezer: "Deezer",
+};
 
 /** The short message a song link that plays nothing shows, in [language]. */
 export const songLinkNotice = (
