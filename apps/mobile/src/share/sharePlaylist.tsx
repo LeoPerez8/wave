@@ -4,7 +4,8 @@ import { useLocalisation, currentLocalisation } from "@/localisation/localisatio
  * playlists"): its menu's Share opens a card of services; each makes a
  * playlist anyone with its link can open on the signed-in account (unlisted
  * on YT Music, public on Spotify) with the songs it matches (Core's
- * `matchSharedSongs`, `ytShareSong`, `spotifyShareSong`), or brings the one
+ * `matchSharedSongs`, `ytShareSong`, `spotifyShareSong`; YT Music's searches
+ * remembered by `ytMatchMemory`), or brings the one
  * it made before up to date (`syncSharedPlaylist`, through each service's
  * `SharedPlaylistService`), then opens Android's share sheet with its link
  * and says how many songs were found.
@@ -63,6 +64,7 @@ import { askSpotifyOrFail } from "@/spotify/askSpotify";
 import type { Spotify } from "@/spotify/Spotify";
 import { SpotifyError } from "@/spotify/SpotifyError";
 import { askYtMusic, searchRecordingInTurn } from "@/ytmusic/askYtMusic";
+import { ytMatchMemory } from "@/ytmusic/ytMatchMemory";
 import { YtLibraryError, YtMusic } from "@/ytmusic/YtMusic";
 
 /** A search that got no answer: sharing stops rather than leave songs out for it. */
@@ -86,18 +88,30 @@ const remembered = (
 // ---------------------------------------------------------------------------
 // YT Music
 
-/** [item] as sharing on YT Music sees it, with the video ids the Library's songs were downloaded from. */
-const ytShareItem = (item: PlaylistEntryRow, videoIds: ReadonlyMap<number, string>): YtShareItem =>
+/** The YT Music matches this phone remembers for Library songs. */
+const ytMatches = ytMatchMemory(Storage);
+
+/**
+ * [item] as sharing on YT Music sees it, with the video ids the Library's
+ * songs were downloaded from and the matches remembered for them.
+ */
+const ytShareItem = (
+  item: PlaylistEntryRow,
+  videoIds: ReadonlyMap<number, string>,
+  matches: ReadonlyMap<number, string>,
+): YtShareItem =>
   item.source === "library"
     ? {
         source: "library",
+        trackId: item.track.id,
         videoId: videoIds.get(item.track.id) ?? null,
+        matched: matches.get(item.track.id) ?? null,
         song: librarySearchSong(item.track),
       }
     : item;
 
 /** The playlist [id]'s entries and the video ids of its Library songs. */
-const readYtShareItems = (id: number) =>
+const readPlaylistVideoIds = (id: number) =>
   // oxlint-disable-next-line react/rules-of-hooks -- Effect Service.use resolves a service; it is not a React Hook.
   LibraryStore.use((store) =>
     Effect.gen(function* () {
@@ -105,9 +119,16 @@ const readYtShareItems = (id: number) =>
       const items = detail?.items ?? [];
       const trackIds = items.flatMap((item) => (item.source === "library" ? [item.track.id] : []));
       const videoIds = yield* store.videoIds(trackIds);
-      return items.map((item) => ytShareItem(item, videoIds));
+      return { items, trackIds, videoIds };
     }),
   );
+
+/** The playlist [id]'s entries as sharing on YT Music sees them. */
+const readYtShareItems = async (id: number): Promise<YtShareItem[]> => {
+  const { items, trackIds, videoIds } = await appRuntime.runPromise(readPlaylistVideoIds(id));
+  const matches = await ytMatches.recall(trackIds.filter((trackId) => !videoIds.has(trackId)));
+  return items.map((item) => ytShareItem(item, videoIds, matches));
+};
 
 /**
  * One YouTube Music Songs search for [song] in the shared allowance (as
@@ -128,15 +149,20 @@ const searchVideoId = async (song: SpotifySong, unsearched: boolean): Promise<st
   return ytShareMatch(song, answer.songs);
 };
 
-/** The playlist [id]'s songs matched on YT Music. */
+/**
+ * The playlist [id]'s songs matched on YT Music, remembering what a search
+ * finds for a Library song so sharing again doesn't search it.
+ */
 const matchOnYtMusic = async (id: number): Promise<SharedSongs> => {
-  const items = await appRuntime.runPromise(readYtShareItems(id));
+  const items = await readYtShareItems(id);
   // An unsearched entry is searched by its own song (`ytShareSong`), so it's told apart by identity.
   const unsearched = new Set<SpotifySong>(
     items.flatMap((item) => (item.source === "unsearched" ? [item.song] : [])),
   );
-  return matchSharedSongs(items.map(ytShareSong), (song) =>
-    searchVideoId(song, unsearched.has(song)),
+  return matchSharedSongs(
+    items.map(ytShareSong),
+    (song) => searchVideoId(song, unsearched.has(song)),
+    ytMatches.remember,
   );
 };
 
