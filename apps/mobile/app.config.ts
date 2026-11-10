@@ -21,6 +21,17 @@ const inter = (file: string): string => `./node_modules/@expo-google-fonts/inter
 // app (they end in -ti) and releases it (docs/spec.md, Releases).
 const { version } = packageJson;
 
+/** The web hosts whose links open Wave (the VIEW filter below). */
+const SONG_LINK_HOSTS = [
+  "music.youtube.com",
+  "open.spotify.com",
+  "spotify.link",
+  "deezer.com",
+  "www.deezer.com",
+  "link.deezer.com",
+  "deezer.page.link",
+];
+
 const config: ExpoConfig = {
   name: "Wave",
   slug: "wave",
@@ -47,7 +58,24 @@ const config: ExpoConfig = {
     // Lists Wave in the share sheet for shared text and links, and only those: a playlist
     // link shared from YT Music or a browser opens its import card (docs/spec.md). The
     // "Import to Wave" sharing shortcut (withShareShortcut) sends its shares here too.
-    intentFilters: [{ action: "SEND", category: ["DEFAULT"], data: [{ mimeType: "text/plain" }] }],
+    intentFilters: [
+      { action: "SEND", category: ["DEFAULT"], data: [{ mimeType: "text/plain" }] },
+      // A song or playlist link tapped in another app opens Wave, as sharing it does
+      // (docs/spec.md, "Opening a song link"). Android crosses each scheme with each host, and
+      // no path means every path: albums and artists reach Wave too and get its "Can't open
+      // this". Wave doesn't own these domains, so nothing to verify: the owner turns them on in
+      // Android's Open by default page, which Settings › Accounts opens.
+      {
+        action: "VIEW",
+        autoVerify: false,
+        category: ["BROWSABLE", "DEFAULT"],
+        data: [
+          { scheme: "https" },
+          { scheme: "http" },
+          ...SONG_LINK_HOSTS.map((host) => ({ host })),
+        ],
+      },
+    ],
   },
   experiments: {
     typedRoutes: true,
