@@ -175,8 +175,8 @@ const edit = async (playlistId: string, edits: readonly NativeYtPlaylistEdit[]):
  * The account's YT Music playlists, as sharing ([purpose] `share`) or
  * exporting (`export`) the Wave playlist [id] changes them: a new one is
  * unlisted when shared and private when exported (Core's
- * `ytNewPlaylistPrivacy`); sharing one that's private makes it unlisted,
- * and exporting leaves who sees it alone (`ytPrivacyChange`).
+ * `ytNewPlaylistPrivacy`); sharing one that reads as private makes it
+ * unlisted, and exporting leaves who sees it alone (`ytPrivacyChange`).
  */
 export const ytMusicPlaylists = (id: number, purpose: YtPlaylistPurpose): SharedPlaylistService => {
   // Who sees the playlist as last read: Core's sync reads it before each change.

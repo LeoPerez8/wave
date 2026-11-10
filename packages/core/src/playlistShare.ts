@@ -102,15 +102,15 @@ export const ytNewPlaylistPrivacy = (purpose: YtPlaylistPurpose): YtPlaylistPriv
 /**
  * The visibility the account's playlist takes as Wave updates it for
  * [purpose], from its [privacy] as read (null when the page didn't say):
- * Share makes a private one unlisted (one Export made), so its link opens,
- * and one it can't tell too; it leaves an unlisted or public one as it is.
- * Export never changes it. Null for no change.
+ * Share makes a private one unlisted (one Export made), so its link opens.
+ * Anything else stays as it is, an unknown one too, so a page Wave can't
+ * read never narrows a public playlist. Export never changes it. Null for no
+ * change.
  */
 export const ytPrivacyChange = (
   purpose: YtPlaylistPurpose,
   privacy: string | null,
-): YtPlaylistPrivacy | null =>
-  purpose === "share" && privacy !== "UNLISTED" && privacy !== "PUBLIC" ? "UNLISTED" : null;
+): YtPlaylistPrivacy | null => (purpose === "share" && privacy === "PRIVATE" ? "UNLISTED" : null);
 
 /** The id a search finds for [song], remembered when it's a song to remember: null for none. */
 const searchShareSong = async <Q>(

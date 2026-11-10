@@ -10,10 +10,11 @@
  * end (Core's `ytExportSummaryLine`). An expired session or a search without
  * an answer stops it with Share's message; the playlists sent so far stay.
  * Nothing is kept for resuming: exporting again updates the same playlists.
- * An Export pressed while another runs goes after it.
+ * An Export pressed while another runs goes after it; a playlist queued in
+ * any export keeps a line until the last one sends it.
  */
 import {
-  addYtExported,
+  addExportedPlaylist,
   addYtLikes,
   EXPORT_WAITING_PROGRESS,
   exportingProgress,
@@ -40,56 +41,80 @@ import { FAVORITES_EXPORT_ID, endExportProgress, showExportProgress } from "./im
 
 const LOG_TAG = "WaveExport";
 
+/** Where [item]'s line is kept on the export board. */
+const progressId = (item: YtExportItem): number =>
+  item.kind === "favorites" ? FAVORITES_EXPORT_ID : item.playlistId;
+
+/** How many exports, pending or running, still have to send each item, by its progress id. */
+const queued = new Map<number, number>();
+
+/** The item being sent now, by its progress id; its line counts its songs. */
+let sending: number | null = null;
+
 /**
- * Sends the Wave playlist [item] to YT Music: its songs matched, then its
- * playlist there made private or updated. Its songs; null when it was
- * deleted meanwhile. Rejects when a request or a search does.
+ * One export no longer has to send [id]: its line goes once no export
+ * still has it queued, else it says Waiting to export again.
  */
-const sendPlaylist = async ({
-  playlistId,
-}: Extract<YtExportItem, { kind: "playlist" }>): Promise<SharedSongs | null> => {
+const dequeue = (id: number): void => {
+  const left = (queued.get(id) ?? 1) - 1;
+  if (left > 0) {
+    queued.set(id, left);
+    showExportProgress(id, EXPORT_WAITING_PROGRESS);
+  } else {
+    queued.delete(id);
+    endExportProgress(id);
+  }
+};
+
+/**
+ * Sends [item], its line counting its songs, then takes it off this
+ * export's queue. Favorites are liked; a playlist's songs are matched, then
+ * its playlist there made private or updated, unless no song was found, as
+ * Share makes nothing then. Its songs; null for a playlist deleted
+ * meanwhile. Rejects when a request or a search does.
+ */
+const send = async (item: YtExportItem): Promise<SharedSongs | null> => {
+  const id = progressId(item);
+  const progress = (done: number, total: number) =>
+    showExportProgress(id, exportingProgress(done, total));
+  sending = id;
   try {
-    const matched = await matchOnYtMusic(playlistId, (done, total) =>
-      showExportProgress(playlistId, exportingProgress(done, total)),
-    );
+    if (item.kind === "favorites") return await likeFavoritesOnYtMusic(progress);
+    const matched = await matchOnYtMusic(item.playlistId, progress);
     if (matched === null) return null;
-    await syncSharedPlaylist(
-      ytMusicPlaylists(playlistId, "export"),
-      matched.name,
-      matched.songs.ids,
-    );
+    if (matched.songs.ids.length > 0)
+      await syncSharedPlaylist(
+        ytMusicPlaylists(item.playlistId, "export"),
+        matched.name,
+        matched.songs.ids,
+      );
     return matched.songs;
   } finally {
-    endExportProgress(playlistId);
+    sending = null;
+    dequeue(id);
   }
 };
 
 /** The app log's line for an export that sent [summary], without names. */
-const logLine = ({ playlists, found, total }: YtExportSummary, stopped: boolean): string =>
-  `${stopped ? "Export to YT Music stopped after" : "Exported"} ${playlists} playlists, ${found} of ${total} songs found`;
+const logLine = ({ playlists, found, total, liked }: YtExportSummary, stopped: boolean): string =>
+  `${stopped ? "Export to YT Music stopped after" : "Exported"} ${playlists} playlists, ${found} of ${total} songs found${liked === null ? "" : `, ${liked} liked`}`;
 
 /** Sends [items] one after another, then says how it went. */
 const sendAll = async (items: readonly YtExportItem[]): Promise<void> => {
   let summary = NO_YT_EXPORT;
+  let started = 0;
   try {
     for (const item of items) {
-      if (item.kind === "favorites") {
-        try {
-          const songs = await likeFavoritesOnYtMusic((done, total) =>
-            showExportProgress(FAVORITES_EXPORT_ID, exportingProgress(done, total)),
-          );
-          summary = addYtLikes(summary, songs);
-        } finally {
-          endExportProgress(FAVORITES_EXPORT_ID);
-        }
-      } else {
-        const songs = await sendPlaylist(item);
-        if (songs !== null) summary = addYtExported(summary, songs);
-      }
+      started += 1;
+      const songs = await send(item);
+      if (songs === null) continue;
+      summary =
+        item.kind === "favorites"
+          ? addYtLikes(summary, songs)
+          : addExportedPlaylist(summary, songs);
     }
   } catch (error) {
-    for (const item of items)
-      endExportProgress(item.kind === "favorites" ? FAVORITES_EXPORT_ID : item.playlistId);
+    for (const item of items.slice(started)) dequeue(progressId(item));
     appLog("warn", LOG_TAG, logLine(summary, true));
     const { strings } = currentLocalisation();
     await showError(strings.imports.couldntExport, new Error(ytMusicFailureMessage(error)));
@@ -104,15 +129,16 @@ let running: Promise<void> = Promise.resolve();
 
 /**
  * Exports [items] (Core's `planYtExport`) to the signed-in YouTube Music
- * account in the background: each says Waiting to export at once, and they
- * go after any export still running.
+ * account in the background: each says Waiting to export at once (one being
+ * sent keeps counting its songs, and waits again once sent), and they go
+ * after any export still running.
  */
 export const exportToYtMusic = (items: readonly YtExportItem[]): Promise<void> => {
-  for (const item of items)
-    showExportProgress(
-      item.kind === "favorites" ? FAVORITES_EXPORT_ID : item.playlistId,
-      EXPORT_WAITING_PROGRESS,
-    );
+  for (const item of items) {
+    const id = progressId(item);
+    queued.set(id, (queued.get(id) ?? 0) + 1);
+    if (sending !== id) showExportProgress(id, EXPORT_WAITING_PROGRESS);
+  }
   const run = running.then(() => sendAll(items));
   running = run.catch(() => {});
   return run;

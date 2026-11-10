@@ -122,7 +122,9 @@ export const importsEn = {
   export: "Export",
   exportWaiting: "Waiting to export",
   exportingOf: (done: string, total: string): string => `Exporting ${done} of ${total}`,
-  liked: (count: number): string => `${count.toLocaleString("en-US")} liked`,
+  liked: (count: number): string => `${n(count)} liked`,
+  exportSignInMessage:
+    "Exporting makes private copies of your playlists on your YouTube Music account and likes your favorites there.",
   exportedPlaylists: (count: number): string =>
     plural("en", count, {
       one: `${n(count)} playlist exported`,

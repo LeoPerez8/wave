@@ -2132,7 +2132,7 @@ export {
   ytShareSong,
 } from "./playlistShare.ts";
 export {
-  addYtExported,
+  addExportedPlaylist,
   NO_YT_EXPORT,
   planYtExport,
   pressYtExportSelectAll,
@@ -2141,6 +2141,7 @@ export {
   addYtLikes,
   ytExportPicker,
   ytExportPickerView,
+  ytExportSignInAlert,
   ytExportSummaryLine,
 } from "./ytExport.ts";
 export type {

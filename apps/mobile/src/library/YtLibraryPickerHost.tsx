@@ -2,9 +2,12 @@
  * Opening Library › Playlists › Import Playlists › From YT Music's and From
  * Spotify's picker, and Export to YT Music's, and their host at the root.
  */
+import { ytExportSignInAlert } from "@wave/core";
 import { useCallback, useSyncExternalStore } from "react";
 
 import { makeExternalStore } from "@/lib/externalStore";
+import { currentLocalisation } from "@/localisation/localisation";
+import { confirmAction } from "@/overlay/alert";
 import { signInToSpotify, spotifySignedIn } from "@/settings/spotifyAccount";
 import { signInToYtMusic, ytMusicSignedIn } from "@/settings/ytAccount";
 
@@ -35,11 +38,17 @@ export const openSpotifyLibraryImport = async (): Promise<void> => {
 
 /**
  * Export to YT Music: its picker, once signed in to YouTube Music. Signed
- * out (or the session expired), the sign-in opens first; leaving it opens
+ * out (or the session expired), it asks first as Share does (Core's
+ * `ytExportSignInAlert`), then the sign-in opens; declining either opens
  * nothing.
  */
 export const openYtExport = async (): Promise<void> => {
-  if ((await ytMusicSignedIn()) || (await signInToYtMusic())) shown.set("export");
+  if (
+    (await ytMusicSignedIn()) ||
+    ((await confirmAction(ytExportSignInAlert(currentLocalisation().strings))) &&
+      (await signInToYtMusic()))
+  )
+    shown.set("export");
 };
 
 /** Draws the picker while it's up; mounted once at the root. */
