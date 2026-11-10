@@ -6,6 +6,7 @@ import {
   type FirstRunState,
   type SignInInvitation,
   type FirstRunAnswer,
+  type FirstRunCardState,
   type FirstRunTourCard,
 } from "@wave/core";
 
@@ -23,7 +24,7 @@ export interface FirstRunRunnerOptions {
   };
   readonly tourStored: {
     readonly get: (card: FirstRunTourCard) => string | null;
-    readonly set: (card: FirstRunTourCard, value: FirstRunAnswer) => void;
+    readonly set: (card: FirstRunTourCard, value: FirstRunCardState) => void;
   };
   /** Wave held all-files access as this launch began. */
   readonly accessGrantedAtLaunch: boolean;
@@ -61,10 +62,11 @@ export const createFirstRunRunner = ({
     accessGranted: accessGrantedAtLaunch,
     usedBefore,
   });
-  const tour: Partial<Record<FirstRunTourCard, FirstRunAnswer>> = {};
+  const tour: Partial<Record<FirstRunTourCard, FirstRunCardState>> = {};
   for (const card of FIRST_RUN_TOUR_CARDS) {
     const answer = tourStored.get(card);
     tour[card] = firstRunCardAtLaunch({
+      card,
       stored: answer,
       accessGranted: accessGrantedAtLaunch,
       // An invitation kept by an older version also proves this isn't a new install.
@@ -126,6 +128,6 @@ export const createFirstRunRunner = ({
     reconsider,
     /** Whether this launch still needs to follow first run. */
     isDue: (): boolean =>
-      !finished && (invitation === "due" || FIRST_RUN_TOUR_CARDS.some((id) => tour[id] === "due")),
+      !finished && (invitation === "due" || FIRST_RUN_TOUR_CARDS.some((id) => tour[id] !== "done")),
   };
 };

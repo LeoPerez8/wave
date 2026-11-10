@@ -21,6 +21,7 @@ import { useWaveAccount, waveAccountAvailable } from "@/settings/waveAccount";
 import { waveAccountNotes, waveSignInLabels } from "@/settings/waveAccountText";
 import { readSongLinkHandling } from "@/settings/songLinkHandling";
 import { useThemeColor } from "@/theme/useThemeColor";
+import { isWhatsNewPending, onWhatsNewPendingChange } from "@/updates/whatsNewPending";
 
 import { createFirstRunRunner } from "./firstRunRunner";
 import { showBringYourMusic } from "./bringYourMusic";
@@ -153,6 +154,7 @@ export const settleFirstRun = (): void => {
       visible: AppState.currentState === "active",
       nowPlayingShown: isNowPlayingShown(),
       cardOpen: isOverlayOpen(),
+      whatsNewPending: isWhatsNewPending(),
       songLinks: readSongLinkHandling() ?? "none",
     }),
     show: (answered) => {
@@ -175,7 +177,8 @@ export const settleFirstRun = (): void => {
 
 /**
  * Once Wave holds access, follows the phone until the invitation and tour finish:
- * they wait for Now Playing, another card or the background.
+ * they wait for Now Playing, another card or the background, and an update's
+ * song-links card for What's New.
  */
 export const startFirstRun = (): void => {
   settleFirstRun();
@@ -188,6 +191,7 @@ export const startFirstRun = (): void => {
     onNowPlayingShownChange(runner.reconsider),
     onOverlaysChange(runner.reconsider),
     subscribeWaveSignedIn(runner.reconsider),
+    onWhatsNewPendingChange(runner.reconsider),
   );
   runner.reconsider();
 };
