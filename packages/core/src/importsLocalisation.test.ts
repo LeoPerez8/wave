@@ -84,8 +84,7 @@ describe("importing from a link, in Portuguese", () => {
     assert.deepEqual(sharedTextImport("hello", { ytMusic: false }, PT), {
       kind: "notice",
       title: "O YT Music está desativado",
-      message:
-        "Ative o YT Music em Ajustes para abrir músicas e playlists de links do YouTube Music e do Spotify.",
+      message: "Ative o YT Music em Ajustes para abrir links de músicas e playlists.",
     });
     assert.deepEqual(sharedTextImport("hello", { ytMusic: true }, PT), {
       kind: "notice",

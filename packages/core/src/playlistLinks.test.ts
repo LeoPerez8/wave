@@ -458,8 +458,7 @@ https://music.youtube.com/playlist?list=${ID}`,
         {
           kind: "notice",
           title: "YT Music is off",
-          message:
-            "Turn on YT Music in Settings to open songs and playlists from YouTube Music and Spotify links.",
+          message: "Turn on YT Music in Settings to open song and playlist links.",
         },
         text,
       );

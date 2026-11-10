@@ -11,7 +11,8 @@ import {
   spotifyShortLinkLanding,
   songLinkNotFound,
   trackLinkPlay,
-  type SpotifySong,
+  ytMusicLinkPlay,
+  type ServiceTrack,
   type YtSong,
   type YtSongSearch,
 } from "./index.ts";
@@ -93,16 +94,23 @@ describe("a shared YouTube Music song link", () => {
     }
   });
 
-  test("with YT Music off, a song link says to turn it on, and nothing is read", () => {
-    assert.deepEqual(
-      sharedTextImport(`https://music.youtube.com/watch?v=${VIDEO}`, { ytMusic: false }),
-      {
-        kind: "notice",
-        title: "YT Music is off",
-        message:
-          "Turn on YT Music in Settings to open songs and playlists from YouTube Music and Spotify links.",
-      },
-    );
+  test("with YT Music off, any song link says to turn it on, and nothing is read", () => {
+    for (const text of [
+      `https://music.youtube.com/watch?v=${VIDEO}`,
+      "https://open.spotify.com/track/4uLU6hMCjMI75M1A2tKUQC",
+      "https://www.deezer.com/br/track/3135556",
+      "https://link.deezer.com/s/32B48GkNdtNqNtV9RmXDe",
+    ]) {
+      assert.deepEqual(
+        sharedTextImport(text, { ytMusic: false }),
+        {
+          kind: "notice",
+          title: "YT Music is off",
+          message: "Turn on YT Music in Settings to open song and playlist links.",
+        },
+        text,
+      );
+    }
   });
 });
 
@@ -336,6 +344,99 @@ describe("which copy of a linked song plays", () => {
   });
 });
 
+/** A radio answering [answer], counting how often it is asked. */
+const radioOf = (answer: YtSongSearch<YtSong> | null) => {
+  let asked = 0;
+  const radio = async () => {
+    asked += 1;
+    return answer;
+  };
+  return { radio, asked: () => asked };
+};
+
+describe("what a YouTube Music song link plays", () => {
+  const genesis = yt(VIDEO);
+
+  test("the Library's song downloaded from that video plays, with no YouTube Music request", async () => {
+    const stored = track(7, { title: "Genesis (Remastered)" });
+    for (const answer of [
+      null,
+      { ok: false, reason: "failed" },
+      { ok: true, songs: [yt("Phantom1234")] },
+    ] as const) {
+      const { radio, asked } = radioOf(answer);
+      assert.deepEqual(await ytMusicLinkPlay(VIDEO, { stored, radio, find: () => null }), {
+        play: "magicQueue",
+        from: "library",
+        seed: { kind: "track", id: "7", title: "Genesis (Remastered)" },
+        track: stored,
+      });
+      assert.equal(asked(), 0);
+    }
+  });
+
+  test("else YouTube Music names the song, and the Library's same recording plays", async () => {
+    const same = track(8);
+    const { radio, asked } = radioOf({ ok: true, songs: [genesis] });
+    assert.deepEqual(
+      await ytMusicLinkPlay(VIDEO, {
+        stored: track(7, { path: null }),
+        radio,
+        find: libraryFinder([track(9, { title: "Genesis (Live)" }), same]),
+      }),
+      {
+        play: "magicQueue",
+        from: "library",
+        seed: { kind: "track", id: "8", title: "Genesis" },
+        track: same,
+      },
+    );
+    assert.equal(asked(), 1);
+  });
+
+  test("with no Library copy, the YT Music song streams", async () => {
+    assert.deepEqual(
+      await ytMusicLinkPlay(VIDEO, {
+        stored: null,
+        radio: radioOf({ ok: true, songs: [genesis, yt("Phantom1234")] }).radio,
+        find: libraryFinder([]),
+      }),
+      { play: "magicQueue", from: "stream", song: genesis },
+    );
+  });
+
+  test("a radio that doesn't start with the song means YouTube Music can't play it", async () => {
+    for (const songs of [[yt("Phantom1234")], []]) {
+      assert.deepEqual(
+        await ytMusicLinkPlay(VIDEO, {
+          stored: null,
+          radio: radioOf({ ok: true, songs }).radio,
+          find: libraryFinder([track(8)]),
+        }),
+        { play: "failed", failure: "unplayable" },
+      );
+    }
+  });
+
+  test("no answer from YouTube Music says why, and nothing plays", async () => {
+    for (const [answer, failure] of [
+      [{ ok: false, reason: "offline" }, "offline"],
+      [{ ok: false, reason: "failed" }, "failed"],
+      [{ ok: false, reason: "disabled" }, "disabled"],
+      [null, "failed"],
+    ] as const) {
+      assert.deepEqual(
+        await ytMusicLinkPlay(VIDEO, {
+          stored: null,
+          radio: radioOf(answer).radio,
+          find: libraryFinder([track(8)]),
+        }),
+        { play: "failed", failure },
+      );
+    }
+  });
+});
+
 describe("what a song link that doesn't play says", () => {
   test("offline, a short message says so", () => {
     assert.deepEqual(songLinkNotice("offline"), {
@@ -344,20 +445,24 @@ describe("what a song link that doesn't play says", () => {
     });
   });
 
-  test("a video YouTube Music can't play, or no answer, says the link doesn't open", () => {
-    const doesntOpen = {
+  test("a video YouTube Music can't play says the link doesn't open", () => {
+    assert.deepEqual(songLinkNotice("unplayable"), {
       title: "This link doesn't open",
       message: "YouTube Music couldn't play the song it links to.",
-    };
-    assert.deepEqual(songLinkNotice("unplayable"), doesntOpen);
-    assert.deepEqual(songLinkNotice("failed"), doesntOpen);
+    });
+  });
+
+  test("no answer from YouTube Music says it didn't answer", () => {
+    assert.deepEqual(songLinkNotice("failed"), {
+      title: "This link doesn't open",
+      message: "YouTube Music didn't answer. Try again later.",
+    });
   });
 
   test("YT Music turned off meanwhile says to turn it on", () => {
     assert.deepEqual(songLinkNotice("disabled"), {
       title: "YT Music is off",
-      message:
-        "Turn on YT Music in Settings to open songs and playlists from YouTube Music and Spotify links.",
+      message: "Turn on YT Music in Settings to open song and playlist links.",
     });
   });
 
@@ -377,20 +482,21 @@ describe("what a song link that doesn't play says", () => {
       title: "Este link não abre",
       message: "O YouTube Music não conseguiu tocar a música deste link.",
     });
+    assert.deepEqual(songLinkNotice("failed", "pt-BR"), {
+      title: "Este link não abre",
+      message: "O YouTube Music não respondeu. Tente novamente mais tarde.",
+    });
     assert.deepEqual(
       songLinkNotice({ notFound: { title: "Genesis", artists: ["Justice"] } }, "pt-BR"),
-      {
-        title: "Não foi possível encontrar esta música online",
-        message: "Genesis · Justice",
-      },
+      { title: "Não achei essa música online", message: "Genesis · Justice" },
     );
   });
 });
 
 /** A search answering [answer], counting how often it is asked and for what. */
 const searching = (answer: YtSongSearch<YtSong> | null) => {
-  const asked: SpotifySong[] = [];
-  const search = async (wanted: SpotifySong) => {
+  const asked: ServiceTrack[] = [];
+  const search = async (wanted: ServiceTrack) => {
     asked.push(wanted);
     return answer;
   };
@@ -398,7 +504,7 @@ const searching = (answer: YtSongSearch<YtSong> | null) => {
 };
 
 describe("what a song another service's link names plays", () => {
-  const read: SpotifySong = {
+  const read: ServiceTrack = {
     title: "Genesis",
     artists: ["Justice"],
     album: null,
@@ -453,9 +559,9 @@ describe("what a song another service's link names plays", () => {
   test("a search that fails says why, and nothing plays", async () => {
     for (const [answer, failure] of [
       [{ ok: false, reason: "offline" }, "offline"],
-      [{ ok: false, reason: "failed" }, "searchFailed"],
+      [{ ok: false, reason: "failed" }, "failed"],
       [{ ok: false, reason: "disabled" }, "disabled"],
-      [null, "searchFailed"],
+      [null, "failed"],
     ] as const) {
       assert.deepEqual(
         await trackLinkPlay(read, { find: libraryFinder([]), search: searching(answer).search }),
@@ -481,13 +587,6 @@ describe("what a Spotify song link that doesn't play says", () => {
     });
   });
 
-  test("no answer to YouTube Music's search says so", () => {
-    assert.deepEqual(songLinkNotice("searchFailed"), {
-      title: "This link doesn't open",
-      message: "YouTube Music didn't answer. Try again later.",
-    });
-  });
-
   test("a short link to neither a song nor a playlist says what Wave opens", () => {
     assert.deepEqual(songLinkNotice("cantOpen"), {
       title: "Can't open this",
@@ -508,10 +607,6 @@ describe("what a Spotify song link that doesn't play says", () => {
     assert.deepEqual(songLinkNotice({ unread: "failed", service: "spotify" }, "pt-BR"), {
       title: "Este link não abre",
       message: "O Spotify não respondeu como esperado.",
-    });
-    assert.deepEqual(songLinkNotice("searchFailed", "pt-BR"), {
-      title: "Este link não abre",
-      message: "O YouTube Music não respondeu. Tente novamente mais tarde.",
     });
   });
 });
@@ -552,7 +647,7 @@ describe("the Couldn't find card", () => {
   test("in Portuguese", () => {
     assert.equal(
       songLinkNotFound(senorita, { search: true }, "pt-BR").heading,
-      "Não foi possível encontrar esta música online",
+      "Não achei essa música online",
     );
   });
 });

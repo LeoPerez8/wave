@@ -30,6 +30,7 @@ const SONG_LINK_HOSTS = [
   "www.deezer.com",
   "link.deezer.com",
   "deezer.page.link",
+  "dzr.page.link",
 ];
 
 const config: ExpoConfig = {

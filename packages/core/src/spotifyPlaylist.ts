@@ -7,18 +7,13 @@
  */
 
 import { array, at, positive, text } from "./json.ts";
+import type { ServiceTrack, TrackReadFailure } from "./serviceTrack.ts";
 
-/** A song as Spotify lists it in a playlist. */
-export interface SpotifySong {
-  readonly title: string;
-  /** Every credited artist, in Spotify's order; none for a local file without one. */
-  readonly artists: readonly string[];
-  /** Its album, when Spotify gives it (`fetchPlaylist` does, the embed page doesn't). */
-  readonly album: string | null;
-  readonly durationMs: number | null;
-  /** Its album's cover, when Spotify gives one (`fetchPlaylist` does for a song on Spotify). */
-  readonly artworkUrl?: string | null;
-}
+/**
+ * A song as Spotify lists it in a playlist: its album when `fetchPlaylist`
+ * gives it (the embed page doesn't), its cover for a song on Spotify.
+ */
+export type SpotifySong = ServiceTrack;
 
 /** One page of `fetchPlaylist`'s answer. */
 export interface SpotifyPlaylistPage {
@@ -182,7 +177,7 @@ export interface SpotifyPlaylist {
  * Why a playlist wasn't read: Spotify has no such public playlist, Spotify
  * couldn't be reached, or it answered with something else (cancelled too).
  */
-export type SpotifyReadFailure = "missing" | "unreachable" | "failed";
+export type SpotifyReadFailure = TrackReadFailure;
 
 export type SpotifyRead =
   | { readonly ok: true; readonly playlist: SpotifyPlaylist }

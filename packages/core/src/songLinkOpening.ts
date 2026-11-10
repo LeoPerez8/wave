@@ -14,11 +14,11 @@ import {
   queryValue,
   spotifyAddress,
 } from "./linkText.ts";
+import { cantOpenNotice, ytMusicOffNotice, type ImportNotice } from "./linkNotices.ts";
 import { catalogueOf, type AppLanguage } from "./localisation.ts";
 import { streamedSongMagicStart, type MagicSeed } from "./magicQueue.ts";
-import type { ImportNotice } from "./playlistLinks.ts";
+import type { ServiceTrack, TrackReadFailure } from "./serviceTrack.ts";
 import type { YtSongSearch } from "./spotifyImport.ts";
-import type { SpotifyReadFailure, SpotifySong } from "./spotifyPlaylist.ts";
 import { joinArtists, type YtSong } from "./ytMusic.ts";
 
 /** A song a link names, as Wave reads it from the link alone. */
@@ -187,30 +187,67 @@ export const songLinkPlay = <S extends YtSong, L extends LibraryCopy>(
     : { play: "magicQueue", from: "stream", song: stream };
 };
 
+/** What a YouTube Music song link plays, or why nothing does (`ytMusicLinkPlay`). */
+export type YtMusicLinkPlay<S, L> =
+  | SongLinkPlay<S, L>
+  | { readonly play: "failed"; readonly failure: "offline" | "disabled" | "failed" | "unplayable" };
+
+/**
+ * What the YouTube Music song link to [videoId] plays. The Library's song
+ * downloaded from that video ([stored]) plays first, with nothing asked of
+ * YouTube Music. Otherwise YouTube Music is asked for the song's radio
+ * ([radio], its first page; null when it threw), whose first song is the
+ * song itself (`linkedYtSong`): the Library's same recording ([find],
+ * `libraryFinder` over its title, artists and length) plays, else the YT
+ * Music song streams, each as its Magic Queue. A radio that doesn't start
+ * with the song is a video YouTube Music can't play (`unplayable`); no answer
+ * says why (`offline`, `disabled`, `failed`).
+ */
+export const ytMusicLinkPlay = async <S extends YtSong, L extends LibraryCopy>(
+  videoId: string,
+  {
+    stored,
+    radio,
+    find,
+  }: {
+    readonly stored: L | null;
+    readonly radio: () => Promise<YtSongSearch<S> | null>;
+    readonly find: (song: S) => L | null;
+  },
+): Promise<YtMusicLinkPlay<S, L>> => {
+  const start = streamedSongMagicStart(stored);
+  if (start.from === "library") return { play: "magicQueue", ...start };
+  const answer = await radio();
+  if (answer === null) return { play: "failed", failure: "failed" };
+  if (!answer.ok) return { play: "failed", failure: answer.reason };
+  const song = linkedYtSong(videoId, answer.songs);
+  if (song === null) return { play: "failed", failure: "unplayable" };
+  return songLinkPlay(song, songLinkLibraryCopy(song, { stored: null, find }), song);
+};
+
 /** A service whose song links Wave reads the track from (its page or API). */
 export type TrackService = "spotify" | "deezer";
 
 /**
- * Why a song link plays nothing: no network, a video YouTube Music can't play
- * or no answer from it, YT Music turned off, a song that isn't found, no
- * answer to YouTube Music's search for another service's track, the track
- * not read from its service (`unread`), or a short link that names no song
- * or playlist (`cantOpen`).
+ * Why a song link plays nothing: no network, no answer from YouTube Music
+ * (to a link's radio or to the search for another service's track,
+ * `failed`), a video YouTube Music can't play (`unplayable`), YT Music turned
+ * off, a song that isn't found, the track not read from its service
+ * (`unread`), or a short link that names no song or playlist (`cantOpen`).
  */
 export type SongLinkFailure =
   | "offline"
   | "failed"
   | "unplayable"
   | "disabled"
-  | "searchFailed"
   | "cantOpen"
   | { readonly notFound: Pick<LinkedSong, "title" | "artists"> }
-  | { readonly unread: SpotifyReadFailure; readonly service: TrackService };
+  | { readonly unread: TrackReadFailure; readonly service: TrackService };
 
 /** A song another service's link named, as YouTube Music's search would play it, or why nothing plays. */
 export type TrackLinkPlay<S, L> =
   | SongLinkPlay<S, L>
-  | { readonly play: "failed"; readonly failure: "offline" | "disabled" | "searchFailed" };
+  | { readonly play: "failed"; readonly failure: "offline" | "disabled" | "failed" };
 
 /**
  * What a track another service's link names ([song], as read from Spotify's
@@ -222,13 +259,13 @@ export type TrackLinkPlay<S, L> =
  * answer (offline, YT Music off meanwhile, or failed) plays nothing either.
  */
 export const trackLinkPlay = async <S extends YtSong, L extends LibraryCopy>(
-  song: SpotifySong,
+  song: ServiceTrack,
   {
     find,
     search,
   }: {
     readonly find: (song: LinkedSong) => L | null;
-    readonly search: (song: SpotifySong) => Promise<YtSongSearch<S> | null>;
+    readonly search: (song: ServiceTrack) => Promise<YtSongSearch<S> | null>;
   },
 ): Promise<TrackLinkPlay<S, L>> => {
   const linked: LinkedSong = {
@@ -241,9 +278,8 @@ export const trackLinkPlay = async <S extends YtSong, L extends LibraryCopy>(
   const copy = songLinkLibraryCopy(linked, { stored: null, find });
   if (copy !== null) return songLinkPlay<S, L>(linked, copy, null);
   const found = await search(song);
-  if (found === null) return { play: "failed", failure: "searchFailed" };
-  if (!found.ok)
-    return { play: "failed", failure: found.reason === "failed" ? "searchFailed" : found.reason };
+  if (found === null) return { play: "failed", failure: "failed" };
+  if (!found.ok) return { play: "failed", failure: found.reason };
   return songLinkPlay<S, L>(linked, null, found.songs[0] ?? null);
 };
 
@@ -277,14 +313,13 @@ export const songLinkNotice = (
     case "offline":
       return { title: text.songOffline, message: text.songOfflineMessage };
     case "disabled":
-      return { title: text.ytMusicOff, message: text.ytMusicOffMessage };
-    case "failed":
+      return ytMusicOffNotice(language);
     case "unplayable":
       return { title: text.songLinkDoesntOpen, message: text.songLinkDoesntOpenMessage };
-    case "searchFailed":
-      return { title: text.songLinkDoesntOpen, message: text.songSearchFailedMessage };
+    case "failed":
+      return { title: text.songLinkDoesntOpen, message: text.ytMusicNoAnswerMessage };
     case "cantOpen":
-      return { title: text.cantOpen, message: text.sharedLinks };
+      return cantOpenNotice(language);
   }
 };
 

@@ -12,10 +12,11 @@ import {
   linkParts,
   queryValue,
   spotifyAddress,
-  type SpotifyAddress,
+  type ServiceAddress,
 } from "./linkText.ts";
-import { recogniseSongLink, type SongLink } from "./songLinkOpening.ts";
+import { cantOpenNotice, ytMusicOffNotice, type ImportNotice } from "./linkNotices.ts";
 import { catalogueOf, type AppLanguage } from "./localisation.ts";
+import { recogniseSongLink, type SongLink } from "./songLinkOpening.ts";
 import type { ImportService, LinkImportPlan } from "./playlistImport.ts";
 import type { YtSong } from "./ytMusic.ts";
 import type { YtQuietReason } from "./ytSearch.ts";
@@ -117,10 +118,10 @@ const ytPlaylist = (playlistId: string): PlaylistLinkCheck => ({
 const SPOTIFY_SONGS = new Set(["track", "episode"]);
 
 /** What a Spotify link names: its playlist, a short link to follow, or why it isn't one. */
-const spotifyPlaylist = (address: SpotifyAddress): PlaylistLinkCheck => {
+const spotifyPlaylist = (address: ServiceAddress): PlaylistLinkCheck => {
   if (address.at === "short")
     return { ok: true, link: { service: "spotifyShort", url: address.url } };
-  if (address.at === "spotify") return rejected("notPlaylist");
+  if (address.at === "other") return rejected("notPlaylist");
   if (SPOTIFY_SONGS.has(address.kind)) return rejected("song");
   if (address.kind !== "playlist" || !isSpotifyId(address.id)) return rejected("notPlaylist");
   return { ok: true, link: { service: "spotify", playlistId: address.id } };
@@ -206,26 +207,6 @@ export type SharedTextImport =
   | { readonly kind: "import"; readonly link: PlaylistLink }
   | { readonly kind: "song"; readonly link: SongLink }
   | ({ readonly kind: "notice" } & ImportNotice);
-
-/** A short message shown instead of the import card. */
-export interface ImportNotice {
-  readonly title: string;
-  readonly message: string;
-}
-
-/** Why a link isn't read with YT Music off, wherever it came from, in [language]. */
-export const ytMusicOffNotice = (language: AppLanguage = "en"): ImportNotice => {
-  const text = catalogueOf(language).imports;
-  return { title: text.ytMusicOff, message: text.ytMusicOffMessage };
-};
-
-/** Why a link isn't read with YT Music off, in English. */
-export const YT_MUSIC_OFF_NOTICE: ImportNotice = ytMusicOffNotice();
-
-const cantOpenNotice = (language: AppLanguage): ImportNotice => {
-  const text = catalogueOf(language).imports;
-  return { title: text.cantOpen, message: text.sharedLinks };
-};
 
 /**
  * What text shared to Wave from another app (Android's share sheet) opens:

@@ -7,7 +7,7 @@
 import { splitCredit } from "./credits.ts";
 import { UNKNOWN_ARTIST } from "./library.ts";
 import { normalizeSearchText } from "./search.ts";
-import type { SpotifySong } from "./spotifyPlaylist.ts";
+import type { ServiceTrack } from "./serviceTrack.ts";
 import { recordingMatches, joinArtists, type YtSong } from "./ytMusic.ts";
 import type { YtQuietReason } from "./ytSearch.ts";
 
@@ -17,7 +17,7 @@ export type YtSongSearch<S extends YtSong> =
   | { readonly ok: false; readonly reason: YtQuietReason | "disabled" };
 
 /** What a song is looked up on YouTube Music by: its title and artists, all that is sent. */
-export const spotifySearchQuery = (song: SpotifySong): string =>
+export const spotifySearchQuery = (song: ServiceTrack): string =>
   [song.title, ...song.artists].join(" ");
 
 /** Lengths this close are one recording (as downloads decide). */
@@ -167,7 +167,7 @@ export const spotifyYtMatch = <
     readonly videoType?: string | null;
   },
 >(
-  song: SpotifySong,
+  song: ServiceTrack,
   results: readonly S[],
   unknownLength = false,
 ): S | null => {
@@ -197,7 +197,7 @@ export const spotifyYtMatch = <
  * Recognize has no length; it uses the same identity checks without a duration bound.
  */
 export const searchRecording = async <S extends YtSong>(
-  song: SpotifySong,
+  song: ServiceTrack,
   search: (kind: "songs" | "videos") => Promise<YtSongSearch<S> | null>,
   unknownLength = false,
 ): Promise<YtSongSearch<S> | null> => {

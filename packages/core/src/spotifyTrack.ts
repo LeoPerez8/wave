@@ -6,18 +6,8 @@
  */
 
 import { array, at, positive, text } from "./json.ts";
-import {
-  embedPageProps,
-  embedRequest,
-  type SpotifyReadFailure,
-  type SpotifySong,
-  type SpotifyTransport,
-} from "./spotifyPlaylist.ts";
-
-/** A Spotify track as read, or why it wasn't. */
-export type SpotifyTrackRead =
-  | { readonly ok: true; readonly song: SpotifySong }
-  | { readonly ok: false; readonly reason: SpotifyReadFailure };
+import type { ServiceTrack, TrackRead } from "./serviceTrack.ts";
+import { embedPageProps, embedRequest, type SpotifyTransport } from "./spotifyPlaylist.ts";
 
 /** The largest image in a list of `{ url, maxWidth }`, which Spotify doesn't order by size. */
 const largestImage = (images: unknown): string | null => {
@@ -31,7 +21,7 @@ const largestImage = (images: unknown): string | null => {
 };
 
 /** The track a track embed page shows, "notFound", or null when it shows none. */
-const embedTrack = (html: string): SpotifySong | "notFound" | null => {
+const embedTrack = (html: string): ServiceTrack | "notFound" | null => {
   const props = embedPageProps(html);
   if (props === null || props === "notFound") return props;
   const entity = at(props, "state", "data", "entity");
@@ -59,7 +49,7 @@ const embedTrack = (html: string): SpotifySong | "notFound" | null => {
 export const readSpotifyTrack = async (
   trackId: string,
   send: SpotifyTransport,
-): Promise<SpotifyTrackRead> => {
+): Promise<TrackRead> => {
   let answer;
   try {
     answer = await send(embedRequest("track", trackId));
