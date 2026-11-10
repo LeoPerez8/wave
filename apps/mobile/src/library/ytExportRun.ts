@@ -14,6 +14,7 @@
  */
 import {
   addYtExported,
+  addYtLikes,
   EXPORT_WAITING_PROGRESS,
   exportingProgress,
   NO_YT_EXPORT,
@@ -28,9 +29,14 @@ import { currentLocalisation } from "@/localisation/localisation";
 import { appLog } from "@/log/appLog";
 import { showError } from "@/overlay/alert";
 import { showToast } from "@/overlay/toast";
-import { matchOnYtMusic, ytMusicFailureMessage, ytMusicPlaylists } from "@/share/ytSharedPlaylists";
+import {
+  likeFavoritesOnYtMusic,
+  matchOnYtMusic,
+  ytMusicFailureMessage,
+  ytMusicPlaylists,
+} from "@/share/ytSharedPlaylists";
 
-import { endExportProgress, showExportProgress } from "./importProgress";
+import { FAVORITES_EXPORT_ID, endExportProgress, showExportProgress } from "./importProgress";
 
 const LOG_TAG = "WaveExport";
 
@@ -39,7 +45,9 @@ const LOG_TAG = "WaveExport";
  * playlist there made private or updated. Its songs; null when it was
  * deleted meanwhile. Rejects when a request or a search does.
  */
-const sendPlaylist = async ({ playlistId }: YtExportItem): Promise<SharedSongs | null> => {
+const sendPlaylist = async ({
+  playlistId,
+}: Extract<YtExportItem, { kind: "playlist" }>): Promise<SharedSongs | null> => {
   try {
     const matched = await matchOnYtMusic(playlistId, (done, total) =>
       showExportProgress(playlistId, exportingProgress(done, total)),
@@ -65,11 +73,23 @@ const sendAll = async (items: readonly YtExportItem[]): Promise<void> => {
   let summary = NO_YT_EXPORT;
   try {
     for (const item of items) {
-      const songs = await sendPlaylist(item);
-      if (songs !== null) summary = addYtExported(summary, songs);
+      if (item.kind === "favorites") {
+        try {
+          const songs = await likeFavoritesOnYtMusic((done, total) =>
+            showExportProgress(FAVORITES_EXPORT_ID, exportingProgress(done, total)),
+          );
+          summary = addYtLikes(summary, songs);
+        } finally {
+          endExportProgress(FAVORITES_EXPORT_ID);
+        }
+      } else {
+        const songs = await sendPlaylist(item);
+        if (songs !== null) summary = addYtExported(summary, songs);
+      }
     }
   } catch (error) {
-    for (const item of items) endExportProgress(item.playlistId);
+    for (const item of items)
+      endExportProgress(item.kind === "favorites" ? FAVORITES_EXPORT_ID : item.playlistId);
     appLog("warn", LOG_TAG, logLine(summary, true));
     const { strings } = currentLocalisation();
     await showError(strings.imports.couldntExport, new Error(ytMusicFailureMessage(error)));
@@ -88,7 +108,11 @@ let running: Promise<void> = Promise.resolve();
  * go after any export still running.
  */
 export const exportToYtMusic = (items: readonly YtExportItem[]): Promise<void> => {
-  for (const item of items) showExportProgress(item.playlistId, EXPORT_WAITING_PROGRESS);
+  for (const item of items)
+    showExportProgress(
+      item.kind === "favorites" ? FAVORITES_EXPORT_ID : item.playlistId,
+      EXPORT_WAITING_PROGRESS,
+    );
   const run = running.then(() => sendAll(items));
   running = run.catch(() => {});
   return run;

@@ -47,6 +47,13 @@ const stubs: Record<string, string> = {
       const ids = Array.from({ length: playlist.found }, (_, i) => id + "-" + i);
       return { name: playlist.name, songs: { ids, found: playlist.found, total: playlist.total } };
     };
+    export const likeFavoritesOnYtMusic = async (progress) => {
+      t.calls.push("favorites");
+      if (t.failing === -1) throw new Error("signed out");
+      progress(0, 3);
+      progress(3, 3);
+      return { ids: ["old", "new"], found: 2, total: 3 };
+    };
     export const ytMusicPlaylists = (id, purpose) => ({
       recall: async () => null,
       remember: async (playlistId) => t.calls.push("remember " + id + " " + playlistId),
@@ -62,6 +69,7 @@ const stubs: Record<string, string> = {
   `),
   "./importProgress": stubModule(`
     const t = globalThis.exportTest;
+    export const FAVORITES_EXPORT_ID = -1;
     export const showExportProgress = (id, progress) =>
       t.calls.push("progress " + id + " " + progress.phase + ("done" in progress ? " " + progress.done + "/" + progress.total : ""));
     export const endExportProgress = (id) => t.calls.push("end " + id);
@@ -107,7 +115,7 @@ test("exports each playlist in order as a private copy, then sums it up", async 
     "remember 2 PL2",
     "end 2",
     "log Exported 2 playlists, 3 of 4 songs found",
-    "toast 2 playlists exported · 3 of 4 songs found",
+    "toast 2 playlists exported · 3 of 4 songs found · 0 liked",
   ]);
 });
 
@@ -117,7 +125,7 @@ test("names each playlist as it's called when its turn comes, and skips one dele
   await exportToYtMusic([playlist(1, "Road trip"), playlist(2, "Gym")]);
   assert.ok(shared.calls.includes("create export Gym 2026 1"));
   assert.ok(!shared.calls.some((call) => call.startsWith("create export Road trip")));
-  assert.equal(shared.calls.at(-1), "toast 1 playlist exported · 1 of 1 song found");
+  assert.equal(shared.calls.at(-1), "toast 1 playlist exported · 1 of 1 song found · 0 liked");
 });
 
 test("stops at a failure with Share's message, keeping what was sent and clearing every line", async () => {
@@ -143,8 +151,26 @@ test("an Export pressed while another runs goes after it", async () => {
   const order = shared.calls.filter((call) => call.startsWith("match") || call.startsWith("toast"));
   assert.deepEqual(order, [
     "match 1",
-    "toast 1 playlist exported · 2 of 3 songs found",
+    "toast 1 playlist exported · 2 of 3 songs found · 0 liked",
     "match 2",
-    "toast 1 playlist exported · 1 of 1 song found",
+    "toast 1 playlist exported · 1 of 1 song found · 0 liked",
   ]);
+});
+
+test("exports Favorites before playlists, clears its progress and counts likes", async () => {
+  await exportToYtMusic([{ kind: "favorites" }, playlist(1, "Road trip")]);
+  assert.ok(shared.calls.indexOf("favorites") < shared.calls.indexOf("match 1"));
+  assert.ok(shared.calls.includes("progress -1 exportWaiting"));
+  assert.ok(shared.calls.includes("progress -1 exporting 3/3"));
+  assert.ok(shared.calls.includes("end -1"));
+  assert.equal(shared.calls.at(-1), "toast 1 playlist exported · 4 of 6 songs found · 2 liked");
+});
+
+test("a refused favorite stops the export and clears queued playlist progress", async () => {
+  shared.failing = -1;
+  await exportToYtMusic([{ kind: "favorites" }, playlist(1, "Road trip")]);
+  assert.ok(!shared.calls.includes("match 1"));
+  assert.ok(shared.calls.includes("end -1"));
+  assert.ok(shared.calls.includes("end 1"));
+  assert.ok(shared.calls.at(-1)?.includes("signed out"));
 });

@@ -8,6 +8,7 @@
  * (`share.<service>.<playlist id>`), whichever of the two made it.
  */
 import {
+  exportYtFavorites,
   librarySearchSong,
   matchSharedSongs,
   sharePlaylistFailureLine,
@@ -28,7 +29,7 @@ import * as Effect from "effect/Effect";
 import * as Result from "effect/Result";
 import { Storage } from "expo-sqlite/kv-store";
 
-import { LibraryStore, type PlaylistEntryRow } from "@/library/LibraryStore";
+import { LibraryStore, type SongRow, type PlaylistEntryRow } from "@/library/LibraryStore";
 import { appRuntime } from "@/library/runtime";
 import { settleUnsearchedSong } from "@/library/unsearchedEntries";
 import { currentLocalisation } from "@/localisation/localisation";
@@ -63,7 +64,7 @@ const ytMatches = ytMatchMemory(Storage);
  * downloaded from and the matches remembered for them.
  */
 const ytShareItem = (
-  item: PlaylistEntryRow,
+  item: PlaylistEntryRow | { readonly source: "library"; readonly track: SongRow },
   videoIds: ReadonlyMap<number, string>,
   matches: ReadonlyMap<number, string>,
 ): YtShareItem =>
@@ -242,4 +243,33 @@ export const ytMusicFailureMessage = (error: unknown): string => {
     return sharePlaylistFailureLine("ytMusic", failure, currentLocalisation().strings);
   }
   return error instanceof Error ? error.message : String(error);
+};
+
+/** Favorites use the same stored ids, match memory and Songs search as playlists. */
+export const likeFavoritesOnYtMusic = async (
+  progress: (done: number, total: number) => void,
+): Promise<SharedSongs> => {
+  const read = await appRuntime.runPromise(
+    // oxlint-disable-next-line react/rules-of-hooks -- Effect service lookup, not a React Hook.
+    LibraryStore.use((store) =>
+      Effect.gen(function* () {
+        const favorites = yield* store.listFavorites;
+        const videoIds = yield* store.videoIds(favorites.map((track) => track.id));
+        return { favorites, videoIds };
+      }),
+    ),
+  );
+  const matches = await ytMatches.recall(
+    read.favorites.filter((track) => !read.videoIds.has(track.id)).map((track) => track.id),
+  );
+  return exportYtFavorites(
+    read.favorites.map((track) => ({
+      starredAt: track.starredAt,
+      song: ytShareSong(ytShareItem({ source: "library", track }, read.videoIds, matches)),
+    })),
+    (song) => searchVideoId(song, false),
+    (videoId) => ask((ytMusic) => ytMusic.like(videoId)),
+    ytMatches.remember,
+    progress,
+  );
 };

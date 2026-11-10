@@ -1,14 +1,15 @@
 /**
  * Export to YT Music (docs/spec.md, "Exporting to YT Music"): Wave's
- * playlists go to the signed-in YouTube Music account, the way Share sends
+ * playlists and favorites go to the signed-in YouTube Music account, the way Share sends
  * one (`matchSharedSongs`, `syncSharedPlaylist`), each as a private playlist
  * that exporting again updates. What's here is the picker (its rows, ticks
  * and Select All), the playlists an Export sends and in what order, and the
- * line that sums it up. The app reads the playlists and sends them.
+ * line that sums it up. Favorites are liked oldest first; the app supplies
+ * the songs and the authenticated requests.
  */
 
 import { catalogueOf, type AppLanguage } from "./localisation.ts";
-import type { SharedSongs } from "./playlistShare.ts";
+import { matchSharedSongs, type ShareSong, type SharedSongs } from "./playlistShare.ts";
 import { isSpotifyLibrarySource } from "./spotifyLibrary.ts";
 import type { YtLibraryOrigins } from "./ytLibrary.ts";
 
@@ -19,8 +20,12 @@ export interface YtExportPlaylist {
   readonly trackCount: number;
 }
 
-/** One of the export picker's rows: a Wave playlist to send, ticked or not. */
-export interface YtExportRow<P extends YtExportPlaylist = YtExportPlaylist> {
+/** One export row: Favorites or a Wave playlist, ticked or not. */
+export type YtExportRow<P extends YtExportPlaylist = YtExportPlaylist> =
+  | { readonly kind: "favorites"; readonly key: "favorites"; readonly ticked: boolean }
+  | YtExportPlaylistRow<P>;
+
+export interface YtExportPlaylistRow<P extends YtExportPlaylist = YtExportPlaylist> {
   readonly kind: "playlist";
   /** What a tap toggles it by. */
   readonly key: string;
@@ -54,17 +59,20 @@ export const ytExportPicker = <P extends YtExportPlaylist>(
   );
   const { imports } = catalogueOf(language);
   return {
-    rows: playlists.map((playlist) => {
-      const imported = fromYtMusic.has(playlist.id);
-      return {
-        kind: "playlist",
-        key: `playlist:${playlist.id}`,
-        playlist,
-        line: imports.songs(playlist.trackCount),
-        fromYtMusic: imported,
-        ticked: !imported,
-      };
-    }),
+    rows: [
+      { kind: "favorites", key: "favorites", ticked: true },
+      ...playlists.map((playlist): YtExportPlaylistRow<P> => {
+        const imported = fromYtMusic.has(playlist.id);
+        return {
+          kind: "playlist",
+          key: `playlist:${playlist.id}`,
+          playlist,
+          line: imports.songs(playlist.trackCount),
+          fromYtMusic: imported,
+          ticked: !imported,
+        };
+      }),
+    ],
   };
 };
 
@@ -99,44 +107,86 @@ export const ytExportPickerView = ({ rows }: YtExportPicker): YtExportPickerView
   canExport: rows.some((row) => row.ticked),
 });
 
-/** One playlist an Export sends: the Wave playlist, and its name as the picker showed it. */
-export interface YtExportItem {
+/** One export item: Favorites or a playlist named as the picker showed it. */
+export type YtExportItem = { readonly kind: "favorites" } | YtExportPlaylistItem;
+
+export interface YtExportPlaylistItem {
   readonly kind: "playlist";
   readonly playlistId: number;
   readonly name: string;
 }
 
-/** What Export sends for [picker]: its ticked playlists, one at a time in the picker's order. */
+/** What Export sends for [picker]: its ticked rows, one at a time in the picker's order. */
 export const planYtExport = (picker: YtExportPicker): YtExportItem[] =>
-  picker.rows.flatMap((row) =>
-    row.ticked ? [{ kind: "playlist", playlistId: row.playlist.id, name: row.playlist.name }] : [],
+  picker.rows.flatMap((row): YtExportItem[] =>
+    !row.ticked
+      ? []
+      : row.kind === "favorites"
+        ? [{ kind: "favorites" }]
+        : [{ kind: "playlist", playlistId: row.playlist.id, name: row.playlist.name }],
   );
 
 /** What an Export did: the playlists it sent, and how many of their songs were found on YT Music. */
 export interface YtExportSummary {
   readonly playlists: number;
+  readonly liked: number;
   readonly found: number;
   readonly total: number;
 }
 
 /** Nothing exported yet. */
-export const NO_YT_EXPORT: YtExportSummary = { playlists: 0, found: 0, total: 0 };
+export const NO_YT_EXPORT: YtExportSummary = { playlists: 0, found: 0, total: 0, liked: 0 };
 
 /** [summary] with one more playlist sent, whose songs were [shared] (`matchSharedSongs`). */
 export const addYtExported = (
   summary: YtExportSummary,
   shared: Pick<SharedSongs, "found" | "total">,
 ): YtExportSummary => ({
+  ...summary,
   playlists: summary.playlists + 1,
   found: summary.found + shared.found,
   total: summary.total + shared.total,
 });
 
-/** The toast that ends an Export: "8 playlists exported · 412 of 430 songs found". */
+/** The toast that ends an Export: "8 playlists exported · 412 of 430 songs found · 23 liked". */
 export const ytExportSummaryLine = (
-  { playlists, found, total }: YtExportSummary,
+  { playlists, found, total, liked }: YtExportSummary,
   language: AppLanguage = "en",
 ): string => {
   const strings = catalogueOf(language);
-  return `${strings.imports.exportedPlaylists(playlists)} · ${strings.share.found(found, total)}`;
+  return `${strings.imports.exportedPlaylists(playlists)} · ${strings.share.found(found, total)} · ${strings.imports.liked(liked)}`;
 };
+
+/** Matches and likes in star order; a failed request stops before later favorites. */
+export const exportYtFavorites = async <Q>(
+  favorites: readonly { readonly starredAt: number; readonly song: ShareSong<Q> }[],
+  search: (query: Q) => Promise<string | null>,
+  like: (videoId: string) => Promise<void>,
+  remember?: (trackId: number, videoId: string) => Promise<void>,
+  progress?: (done: number, total: number) => void,
+): Promise<SharedSongs> => {
+  const ids = new Set<string>();
+  let found = 0;
+  let done = 0;
+  progress?.(0, favorites.length);
+  for (const favorite of [...favorites].sort((a, b) => a.starredAt - b.starredAt)) {
+    const matched = await matchSharedSongs([favorite.song], search, remember);
+    for (const id of matched.ids) {
+      if (!ids.has(id)) {
+        await like(id);
+        ids.add(id);
+      }
+    }
+    found += matched.found;
+    progress?.(++done, favorites.length);
+  }
+  return { ids: [...ids], found, total: favorites.length };
+};
+
+/** Adds favorites' matches and successful, distinct likes to the export's totals. */
+export const addYtLikes = (summary: YtExportSummary, songs: SharedSongs): YtExportSummary => ({
+  ...summary,
+  found: summary.found + songs.found,
+  total: summary.total + songs.total,
+  liked: summary.liked + songs.ids.length,
+});

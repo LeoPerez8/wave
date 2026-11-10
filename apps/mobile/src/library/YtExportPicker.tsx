@@ -7,6 +7,7 @@
  * dragging the sheet down sends nothing.
  */
 import {
+  importProgressLine,
   planYtExport,
   pressYtExportSelectAll,
   toggleYtExportRow,
@@ -15,6 +16,7 @@ import {
   type YtExportPicker as Picker,
   type YtExportRow,
 } from "@wave/core";
+import { IconStar } from "@tabler/icons-react-native";
 import { useEffect, useState } from "react";
 import { ActivityIndicator, FlatList, Text, View } from "react-native";
 
@@ -25,6 +27,7 @@ import { useLocalisation } from "@/localisation/localisation";
 import { Press } from "@/motion/Press";
 import { useThemeColor } from "@/theme/useThemeColor";
 
+import { FAVORITES_EXPORT_ID, useImportProgress } from "./importProgress";
 import type { PlaylistRow } from "./LibraryStore";
 import { PickerSheetFrame } from "./PickerSheetFrame";
 import { useSortedPlaylists } from "./playlistSort";
@@ -109,8 +112,20 @@ export function ExportSheet({ onClosed }: { onClosed: () => void }) {
  * when it came From YT Music, From YT Music. A tap ticks or unticks it.
  */
 function ExportRow({ row, toggle }: { row: YtExportRow<PlaylistRow>; toggle: () => void }) {
-  const { strings } = useLocalisation();
-  const label = [row.playlist.name, row.line, row.fromYtMusic ? strings.imports.fromYtMusic : null]
+  const { strings, language } = useLocalisation();
+  const accent = useThemeColor("accent");
+  const progress = useImportProgress(
+    row.kind === "favorites" ? FAVORITES_EXPORT_ID : row.playlist.id,
+  );
+  const name = row.kind === "favorites" ? strings.home.sections.favorites : row.playlist.name;
+  const line =
+    progress === null
+      ? row.kind === "playlist"
+        ? row.line
+        : null
+      : importProgressLine(progress, language);
+  const fromYtMusic = row.kind === "playlist" && row.fromYtMusic;
+  const label = [name, line, fromYtMusic ? strings.imports.fromYtMusic : null]
     .filter((part) => part !== null)
     .join(", ");
   return (
@@ -131,16 +146,25 @@ function ExportRow({ row, toggle }: { row: YtExportRow<PlaylistRow>; toggle: () 
         }}
       >
         <CheckCell checked={row.ticked} />
-        <Mosaic paths={row.playlist.thumbPaths} size={COVER} radius={CELL / 2} />
+        {row.kind === "playlist" ? (
+          <Mosaic paths={row.playlist.thumbPaths} size={COVER} radius={CELL / 2} />
+        ) : (
+          <View
+            className="items-center justify-center bg-surface"
+            style={{ width: COVER, height: COVER, borderRadius: CELL / 2 }}
+          >
+            <IconStar size={CELL * 3} color={accent} />
+          </View>
+        )}
         <View className="flex-1" style={{ gap: CELL / 4 }}>
           <Text numberOfLines={1} className="font-sans text-body text-foreground">
-            {row.playlist.name}
+            {name}
           </Text>
           <Text numberOfLines={1} className="font-sans text-subheadline text-secondary">
-            {row.line}
+            {line}
           </Text>
         </View>
-        {row.fromYtMusic && (
+        {fromYtMusic && (
           <Text className="font-sans text-subheadline text-secondary">
             {strings.imports.fromYtMusic}
           </Text>

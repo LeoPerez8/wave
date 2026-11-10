@@ -174,6 +174,8 @@ declare class WaveYtMusicModule extends NativeModule<WaveYtMusicEvents> {
     privacy: YtPlaylistPrivacy,
   ): Promise<string>;
   /** Applies [edits] to the account's playlist [playlistId], in order, in one request. */
+  /** Adds a like on the signed-in account. Never unlikes. */
+  like(videoId: string): Promise<void>;
   editPlaylist(playlistId: string, edits: readonly NativeYtPlaylistEdit[]): Promise<void>;
   /** The first page of the radio YouTube Music plays after the song [videoId] (it first). */
   songRadio(videoId: string, meter?: string): Promise<NativeYtRadioPage>;

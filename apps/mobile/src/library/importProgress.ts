@@ -41,6 +41,9 @@ const board = makeExternalStore<ImportProgressBoard>(NO_IMPORT_PROGRESS);
 /** The playlists Export to YT Music is sending or will send, by playlist id. */
 const exportBoard = makeExternalStore<ImportProgressBoard>(NO_IMPORT_PROGRESS);
 
+/** Favorites has no playlist id; database playlist ids are positive. */
+export const FAVORITES_EXPORT_ID = -1;
+
 /** [playlistId] is queued for Export to YT Music, or this far through it. */
 export const showExportProgress = (playlistId: number, progress: ImportProgress): void =>
   exportBoard.update((current) => setImportProgress(current, playlistId, progress));
@@ -113,3 +116,10 @@ export const useImportBatchLine = (): ImportBatchLine | null => {
   useLocalisation();
   return useSyncExternalStore(subscribeImportBatch, importBatchLineNow);
 };
+
+/** Favorites' export progress, also visible after the picker closes. */
+export const useFavoritesExportProgress = (): ImportProgress | null =>
+  useSyncExternalStore(
+    exportBoard.subscribe,
+    () => exportBoard.get().get(FAVORITES_EXPORT_ID) ?? null,
+  );
