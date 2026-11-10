@@ -8,13 +8,19 @@ import { WaveNative } from "@/native/waveNative";
 import { CardEntries } from "@/overlay/CardEntries";
 import { openOverlay } from "@/overlay/overlay";
 import { showToast } from "@/overlay/toast";
-import { readSongLinkHandling } from "@/settings/songLinkHandling";
+import {
+  openAppLinkSettings,
+  readSongLinkSetup,
+  useSongLinkSetup,
+} from "@/settings/songLinkHandling";
 
 import { createSongLinksRunner } from "./songLinksRunner";
 
 function SongLinksCard({ answer, turnOn }: { answer: () => void; turnOn: () => void }) {
   const { strings } = useLocalisation();
   const text = strings.settings.songLinksCard;
+  // Re-read on return from another app's Open by default page, so its step goes once it's off.
+  const turnOff = useSongLinkSetup()?.turnOff ?? [];
   return (
     <>
       <CardEntries>
@@ -26,6 +32,15 @@ function SongLinksCard({ answer, turnOn }: { answer: () => void; turnOn: () => v
           >
             {strings.settings.openSongLinksInWave}
           </Text>
+          {turnOff.map((step) => (
+            <View key={step.service} className="items-start" style={{ gap: CELL }}>
+              <Text className="font-sans text-subheadline text-secondary">{step.step}</Text>
+              <TextButton
+                label={step.button}
+                onPress={() => openAppLinkSettings(step.packageName)}
+              />
+            </View>
+          ))}
           <Text className="font-sans text-subheadline text-secondary">{text.line}</Text>
           <View style={{ gap: CELL * 2 }}>
             {text.steps.map((step, index) => (
@@ -62,9 +77,12 @@ export const showSongLinks = (finished: (answer: FirstRunAnswer) => void): void 
     },
     close: () => handle.close(),
     answered: () => finished("done"),
-    readHandling: () => readSongLinkHandling() ?? "none",
-    report: (handling) => {
-      void showToast(songLinkHandlingLine(handling, currentLocalisation().language));
+    readHandling: () => {
+      const { language } = currentLocalisation();
+      return readSongLinkSetup(language)?.line ?? songLinkHandlingLine("none", language);
+    },
+    report: (line) => {
+      void showToast(line);
     },
   });
   const handle = openOverlay({

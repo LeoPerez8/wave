@@ -369,6 +369,10 @@ export const settingsPtBr: typeof settingsEn = {
     steps: ["Toque em Adicionar link.", "Marque todos os links.", "Toque em Adicionar."],
     turnOn: "Ativar",
   },
+  songLinkServices: { youtubeMusic: "YouTube Music", spotify: "Spotify", deezer: "Deezer" },
+  songLinksHeldBy: (app: string, service: string) => `O ${app} ainda abre os links do ${service}.`,
+  songLinksTurnOffFirst: "Desative Abrir links compatíveis nele primeiro.",
+  turnOffIn: (app: string) => `Desativar no ${app}`,
   itsSongsLeaveYourLibraryTheFiles:
     "Suas músicas saem da biblioteca. Os arquivos ficam no telefone.",
   couldntRemoveTheFolder: "Não foi possível remover a pasta",

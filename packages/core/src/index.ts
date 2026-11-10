@@ -493,8 +493,21 @@ export type {
   SettingsPageEntry,
   SettingsIcon,
 } from "./settingsPages.ts";
-export { songLinkHandling, songLinkHandlingLine } from "./songLinkHandling.ts";
-export type { SongLinkHandling, SongLinkHandlingState } from "./songLinkHandling.ts";
+export {
+  SONG_LINK_SAMPLES,
+  songLinkHandling,
+  songLinkHandlingLine,
+  songLinkSetup,
+} from "./songLinkHandling.ts";
+export type {
+  SongLinkHandling,
+  SongLinkHandlingState,
+  SongLinkOpener,
+  SongLinkOpeners,
+  SongLinkService,
+  SongLinkSetup,
+  SongLinkTurnOff,
+} from "./songLinkHandling.ts";
 export { PLAYLIST_LAYOUTS, parsePlaylistLayout, storedPlaylistLayout } from "./playlistLayout.ts";
 export type { PlaylistLayout } from "./playlistLayout.ts";
 export { keepAddToPlaylistOrder, sortPlaylistsForAdd } from "./addToPlaylistOrder.ts";
