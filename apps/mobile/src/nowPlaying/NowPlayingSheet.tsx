@@ -348,6 +348,7 @@ export function NowPlayingSheet() {
                 nonDTrackId={nonDTrackId}
                 item={item}
                 palette={palette}
+                gradient={gradient}
                 onShowPlayer={showPlayer}
               />
             )}
