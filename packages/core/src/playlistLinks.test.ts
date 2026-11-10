@@ -52,16 +52,17 @@ const read = (songs: readonly YtAlbumSong[], fields = {}) => {
 };
 
 describe("playlistImportSources", () => {
-  test("Import asks: From a Link, From Files, From YT Music or From Spotify", () => {
+  test("Import asks: From a Link, From Files, From YT Music or From Spotify, or Export to YT Music", () => {
     assert.deepEqual(playlistImportSources({ ytMusic: true }), [
       "link",
       "files",
       "ytMusic",
       "spotify",
+      "exportYtMusic",
     ]);
   });
 
-  test("with YT Music off, Import goes straight to files", () => {
+  test("with YT Music off, Import goes straight to files, offering no export", () => {
     assert.deepEqual(playlistImportSources({ ytMusic: false }), ["files"]);
   });
 });

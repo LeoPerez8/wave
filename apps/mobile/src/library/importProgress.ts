@@ -9,6 +9,11 @@
  * (`playlistImports.ts`). Rows and pages read one playlist's entry, which
  * keeps its identity while it doesn't change, so a long list draws again
  * only the rows whose line moved.
+ *
+ * Export to YT Music shows its own lines the same way (Waiting to export,
+ * Exporting 120 of 430), from a board of its own that lives while it runs
+ * (`ytExportRun.ts`); an import's line comes first on a playlist that has
+ * both.
  */
 import {
   clearImportProgress,
@@ -32,6 +37,17 @@ import { ytLibraryBatch, ytLibraryBatchPause } from "./ytLibraryBatchStore";
 
 /** The live phases past waiting, by playlist id. */
 const board = makeExternalStore<ImportProgressBoard>(NO_IMPORT_PROGRESS);
+
+/** The playlists Export to YT Music is sending or will send, by playlist id. */
+const exportBoard = makeExternalStore<ImportProgressBoard>(NO_IMPORT_PROGRESS);
+
+/** [playlistId] is queued for Export to YT Music, or this far through it. */
+export const showExportProgress = (playlistId: number, progress: ImportProgress): void =>
+  exportBoard.update((current) => setImportProgress(current, playlistId, progress));
+
+/** [playlistId]'s export is done or stopped. */
+export const endExportProgress = (playlistId: number): void =>
+  exportBoard.update((current) => clearImportProgress(current, playlistId));
 
 /** [playlistId]'s import is at [progress] now (never backwards: Core's `setImportProgress`). */
 export const showImportProgress = (playlistId: number, progress: ImportProgress): void =>
@@ -58,11 +74,17 @@ const importProgressNow = (): ReadonlyMap<number, ImportProgress> => {
 };
 
 /** Calls [listener] whenever any playlist's progress may have changed; gives the function that stops it. */
-const subscribeImportProgress = subscribeAll(board, ytLibraryBatch);
+const subscribeImportProgress = subscribeAll(board, ytLibraryBatch, exportBoard);
 
-/** [playlistId]'s import progress; null when it isn't importing, so its live count shows. */
+/**
+ * [playlistId]'s import progress, else its export's; null when it's doing
+ * neither, so its live count shows.
+ */
 export const useImportProgress = (playlistId: number): ImportProgress | null =>
-  useSyncExternalStore(subscribeImportProgress, () => importProgressNow().get(playlistId) ?? null);
+  useSyncExternalStore(
+    subscribeImportProgress,
+    () => importProgressNow().get(playlistId) ?? exportBoard.get().get(playlistId) ?? null,
+  );
 
 let batchLine: ImportBatchLine | null = null;
 

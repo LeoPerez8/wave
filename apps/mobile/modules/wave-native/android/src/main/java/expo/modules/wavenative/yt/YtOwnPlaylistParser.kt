@@ -12,15 +12,30 @@ data class YtOwnEntry(val videoId: String, val setVideoId: String) {
   fun toMap(): Map<String, Any?> = mapOf("videoId" to videoId, "setVideoId" to setVideoId)
 }
 
-/** One page of a playlist as its owner sees it: whether they can edit it, its entries, and the next page's token. */
-data class YtOwnPage(val editable: Boolean, val entries: List<YtOwnEntry>, val continuation: String?)
+/** A playlist the account made: who sees it (null when its page didn't say) and its entries. */
+data class YtOwnPlaylist(val privacy: String?, val entries: List<YtOwnEntry>) {
+  fun toMap(): Map<String, Any?> = mapOf("privacy" to privacy, "entries" to entries.map(YtOwnEntry::toMap))
+}
+
+/**
+ * One page of a playlist as its owner sees it: whether they can edit it, who
+ * sees it (`PRIVATE`, `UNLISTED` or `PUBLIC`, from the first page's editable
+ * header; null when it doesn't say), its entries, and the next page's token.
+ */
+data class YtOwnPage(
+  val editable: Boolean,
+  val entries: List<YtOwnEntry>,
+  val continuation: String?,
+  val privacy: String? = null,
+)
 
 /**
  * Reads a playlist page (`browse` with `VL<playlistId>`, and its
  * continuations) for what editing it needs, as ytmusicapi's
  * `get_playlist` does (MIT): every row's `playlistItemData` (greyed-out rows
- * too, as they still hold a place), and whether the header is the editable
- * one YouTube Music only shows the playlist's owner.
+ * too, as they still hold a place), whether the header is the editable
+ * one YouTube Music only shows the playlist's owner, and the privacy that
+ * header holds.
  */
 object YtOwnPlaylistParser {
   private val json = Json { ignoreUnknownKeys = true }
@@ -31,11 +46,13 @@ object YtOwnPlaylistParser {
     val page = root.path("contents", "twoColumnBrowseResultsRenderer").obj ?: return null
     val top = page["tabs"].arr?.firstOrNull()
       ?.path("tabRenderer", "content", "sectionListRenderer", "contents").arr?.firstOrNull()
-    val editable = top.path("musicEditablePlaylistDetailHeaderRenderer").obj != null
+    val header = top.path("musicEditablePlaylistDetailHeaderRenderer").obj
+    val editable = header != null
+    val privacy = header.path("editHeader", "musicPlaylistEditHeaderRenderer", "privacy").string
     val items = page.path("secondaryContents", "sectionListRenderer", "contents").arr
       ?.firstNotNullOfOrNull { it.path("musicPlaylistShelfRenderer", "contents").arr }
       .orEmpty()
-    return YtOwnPage(editable, entries(items), continuationOf(items))
+    return YtOwnPage(editable, entries(items), continuationOf(items), privacy)
   }
 
   /** A continuation page [body]: its entries and the next token; null when it isn't one. */

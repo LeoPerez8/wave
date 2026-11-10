@@ -44,8 +44,29 @@ export interface AddingProgress {
   readonly total: number;
 }
 
-/** Where an importing playlist is. A playlist that's done has none. */
-export type ImportProgress = WaitingProgress | ReadingProgress | MatchingProgress | AddingProgress;
+/** Queued to go to YT Music by Export to YT Music, not started yet (`ytExport.ts`). */
+export interface ExportWaitingProgress {
+  readonly phase: "exportWaiting";
+}
+
+/** Going to YT Music: [done] of its [total] songs matched there, then sent. */
+export interface ExportingProgress {
+  readonly phase: "exporting";
+  readonly done: number;
+  readonly total: number;
+}
+
+/**
+ * Where an importing playlist is, or one Export to YT Music is sending
+ * (whose line and ring an import's stand for). A playlist that's done has none.
+ */
+export type ImportProgress =
+  | WaitingProgress
+  | ReadingProgress
+  | MatchingProgress
+  | AddingProgress
+  | ExportWaitingProgress
+  | ExportingProgress;
 
 /** The live phases (past waiting) of the playlists importing while Wave runs, by playlist id. */
 export type ImportProgressBoard = ReadonlyMap<number, ImportProgress>;
@@ -79,6 +100,16 @@ export const addingProgress = (done: number, total: number): AddingProgress => (
   total,
 });
 
+/** Queued by Export to YT Music. */
+export const EXPORT_WAITING_PROGRESS: ExportWaitingProgress = { phase: "exportWaiting" };
+
+/** [done] of [total] songs matched on YT Music by Export to YT Music. */
+export const exportingProgress = (done: number, total: number): ExportingProgress => ({
+  phase: "exporting",
+  done,
+  total,
+});
+
 /** Waiting for [read], with the count its picker showed. */
 const waitingProgress = (read: YtLibraryRead): WaitingProgress => ({
   phase: "waiting",
@@ -88,7 +119,8 @@ const waitingProgress = (read: YtLibraryRead): WaitingProgress => ({
 /**
  * The whole import as a fraction from 0 to 1: reading fills the first half
  * (none while nothing gives a total), matching holds at half, adding fills
- * the second half. Waiting is empty.
+ * the second half. Waiting is empty. An export fills it as its songs are
+ * matched.
  */
 export const importProgressFraction = (progress: ImportProgress): number => {
   switch (progress.phase) {
@@ -102,6 +134,10 @@ export const importProgressFraction = (progress: ImportProgress): number => {
       return 0.5;
     case "adding":
       return progress.total === 0 ? 1 : 0.5 + Math.min(progress.done / progress.total, 1) / 2;
+    case "exportWaiting":
+      return 0;
+    case "exporting":
+      return progress.total === 0 ? 1 : Math.min(progress.done / progress.total, 1);
   }
 };
 
@@ -132,7 +168,8 @@ export const importCount = (count: number, language: AppLanguage = "en"): string
  * The line under an importing playlist's name (its Library row) and under
  * its length (its page): "Waiting · 1,234 songs" (or "Waiting"), "Reading
  * 2,300 of 10,000" (or "Reading 2,300"), "Matching with Library…", "Adding
- * 340 of 10,000".
+ * 340 of 10,000"; for an export, "Waiting to export" and "Exporting 120 of
+ * 430".
  */
 export const importProgressLine = (
   progress: ImportProgress,
@@ -151,6 +188,10 @@ export const importProgressLine = (
       return text.matching;
     case "adding":
       return text.addingOf(count(progress.done), count(progress.total));
+    case "exportWaiting":
+      return text.exportWaiting;
+    case "exporting":
+      return text.exportingOf(count(progress.done), count(progress.total));
   }
 };
 

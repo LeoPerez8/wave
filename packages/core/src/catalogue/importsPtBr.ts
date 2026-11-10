@@ -127,6 +127,17 @@ export const importsPtBr: typeof importsEn = {
   pausedYtMusicOff: "YT Music desativado",
   pausedSignedOut: "sessão do Spotify finalizada",
   couldntReadOnline: "Não foi possível lê-la online",
+  exportToYtMusic: "Exportar para o YT Music",
+  export: "Exportar",
+  exportWaiting: "Aguardando exportação",
+  exportingOf: (done: string, total: string): string => `Exportando ${done} de ${total}`,
+  exportedPlaylists: (count: number): string =>
+    plural("pt-BR", count, {
+      zero: "Nenhuma playlist exportada",
+      one: `${n(count)} playlist exportada`,
+      other: `${n(count)} playlists exportadas`,
+    }),
+  couldntExport: "Não foi possível exportar as playlists",
   readingYtMusicLibrary: "Lendo sua biblioteca do YouTube Music",
   readingSpotifyLibrary: "Lendo sua biblioteca do Spotify",
   likedSongs: "Músicas Curtidas",

@@ -44,7 +44,7 @@ import { importPlaylists, saveImportedPlaylist, type ImportedPlaylist } from "./
 import { openSongLink } from "./openSongLink";
 import { spotifyTransport } from "./serviceTransport";
 import { listLibrary, startLinkImport } from "./playlistImports";
-import { openSpotifyLibraryImport, openYtLibraryImport } from "./YtLibraryPickerHost";
+import { openSpotifyLibraryImport, openYtExport, openYtLibraryImport } from "./YtLibraryPickerHost";
 import { openPlaylist } from "./routes";
 
 // ---------------------------------------------------------------------------
@@ -180,8 +180,8 @@ export const openSharedText = (text: string): void => {
 
 /**
  * Library › Playlists › Import: From a Link, From Files, From YT Music or
- * From Spotify (Core's `playlistImportSources`). With YT Music off it opens the file
- * picker at once.
+ * From Spotify, then Export to YT Music (Core's `playlistImportSources`).
+ * With YT Music off it opens the file picker at once.
  */
 export const openPlaylistImport = (): void => {
   const sources = playlistImportSources({ ytMusic: ytMusicEnabled() });
@@ -193,6 +193,7 @@ export const openPlaylistImport = (): void => {
     if (source === "files") void importPlaylists();
     else if (source === "ytMusic") void openYtLibraryImport();
     else if (source === "spotify") void openSpotifyLibraryImport();
+    else if (source === "exportYtMusic") void openYtExport();
     else void followUp(fromClipboard).then(askForLink);
   });
 };
@@ -231,6 +232,8 @@ const sourceLabel = (source: PlaylistImportSource, { imports }: Catalogue): stri
       return imports.fromYtMusic;
     case "spotify":
       return imports.fromSpotify;
+    case "exportYtMusic":
+      return imports.exportToYtMusic;
   }
 };
 

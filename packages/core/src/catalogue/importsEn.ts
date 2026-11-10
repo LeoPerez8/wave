@@ -117,6 +117,17 @@ export const importsEn = {
   pausedYtMusicOff: "YT Music off",
   pausedSignedOut: "signed out of Spotify",
   couldntReadOnline: "Couldn't read it online",
+  /** Export to YT Music: its entry and picker, an exporting playlist's progress, and its summary. */
+  exportToYtMusic: "Export to YT Music",
+  export: "Export",
+  exportWaiting: "Waiting to export",
+  exportingOf: (done: string, total: string): string => `Exporting ${done} of ${total}`,
+  exportedPlaylists: (count: number): string =>
+    plural("en", count, {
+      one: `${n(count)} playlist exported`,
+      other: `${n(count)} playlists exported`,
+    }),
+  couldntExport: "Couldn't export the playlists",
   /** From YT Music and From Spotify. */
   readingYtMusicLibrary: "Reading your YouTube Music library",
   readingSpotifyLibrary: "Reading your Spotify library",

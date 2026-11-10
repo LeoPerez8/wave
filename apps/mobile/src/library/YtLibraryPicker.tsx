@@ -13,7 +13,6 @@
 import {
   pressYtLibrarySelectAll,
   readSpotifyLibrary,
-  settleSheet,
   spotifyLibraryFailure,
   spotifyLibraryPicker,
   toggleYtLibraryFavorites,
@@ -28,30 +27,13 @@ import {
   type YtLibraryRow,
 } from "@wave/core";
 import * as Result from "effect/Result";
-import { useCallback, useEffect, useRef, useState } from "react";
-import {
-  ActivityIndicator,
-  FlatList,
-  Modal,
-  Switch,
-  Text,
-  useWindowDimensions,
-  View,
-} from "react-native";
-import {
-  GestureDetector,
-  GestureHandlerRootView,
-  usePanGesture,
-} from "react-native-gesture-handler";
-import Animated, { useAnimatedStyle, useSharedValue, withSpring } from "react-native-reanimated";
-import { useSafeAreaInsets } from "react-native-safe-area-context";
-import { scheduleOnRN } from "react-native-worklets";
+import { useEffect, useState } from "react";
+import { ActivityIndicator, FlatList, Switch, Text, View } from "react-native";
 
 import { Artwork } from "@/catalog/Artwork";
 import { CheckCell } from "@/catalog/CheckCell";
 import { CELL, grid } from "@/catalog/grid";
 import { currentLocalisation, useLocalisation } from "@/localisation/localisation";
-import { Hairline } from "@/catalog/Hairline";
 import { TextButton } from "@/components/TextButton";
 import { Press } from "@/motion/Press";
 import { showError } from "@/overlay/alert";
@@ -61,6 +43,7 @@ import { askSpotifyAccount } from "@/spotify/askSpotify";
 import { useThemeColor } from "@/theme/useThemeColor";
 import { askYtMusic } from "@/ytmusic/askYtMusic";
 
+import { PickerSheetFrame } from "./PickerSheetFrame";
 import type { LibraryService } from "./YtLibraryPickerHost";
 import { currentYtLibraryOrigins, importYtLibrary } from "./ytLibraryImport";
 
@@ -127,19 +110,13 @@ const SERVICES: Record<
 // ---------------------------------------------------------------------------
 // The sheet
 
-/** Quick, with a little give and no wobble (as Now Playing's). */
-const SPRING = { damping: 30, stiffness: 300, mass: 1 } as const;
-
-/** Downward travel before a drag on the header takes over from a tap, in dp. */
-const DRAG_SLOP = CELL * 1.5;
-
 const COVER = CELL * 6;
 
 /**
- * The picker: rises from the bottom as it opens, reads the library (again on
- * Try Again), and goes back down on Cancel, Back, a drag down or Import.
+ * The picker sheet for [service]'s library (`YtLibraryPickerHost` mounts it
+ * while it's up): it reads the library (again on Try Again), and goes back
+ * down on Cancel, Back, a drag down or Import.
  */
-/** The picker sheet for [service]'s library (`YtLibraryPickerHost` mounts it while it's up). */
 export function PickerSheet({
   service,
   onClosed,
@@ -149,22 +126,11 @@ export function PickerSheet({
 }) {
   const config = SERVICES[service];
   const { strings } = useLocalisation();
-  const { height } = useWindowDimensions();
-  const insets = useSafeAreaInsets();
   const accent = useThemeColor("accent");
-  const offset = useSharedValue(height);
-  const start = useSharedValue(0);
-  const leaving = useRef(false);
-  /** [leaving] for the drag's worklets: once the sheet is closing, a drag no longer moves it. */
-  const closing = useSharedValue(false);
 
   const [attempt, setAttempt] = useState(0);
   const [answer, setAnswer] = useState<{ readonly attempt: number; readonly read: LibraryRead }>();
   const read: LibraryRead = answer?.attempt === attempt ? answer.read : READING;
-
-  useEffect(() => {
-    offset.set(withSpring(0, SPRING));
-  }, [offset]);
 
   useEffect(() => {
     let current = true;
@@ -176,59 +142,6 @@ export function PickerSheet({
     };
   }, [attempt, config]);
 
-  /**
-   * Slides the sheet away, then runs [then] (Import or Import & Download) once it has gone. A drag
-   * can't take the sheet back while it closes, and a spring cut short all the
-   * same still closes it, so the sheet never stays part-open.
-   */
-  const leave = useCallback(
-    (then?: () => void) => {
-      if (leaving.current) return;
-      leaving.current = true;
-      closing.set(true);
-      const gone = () => {
-        onClosed();
-        then?.();
-      };
-      offset.set(
-        withSpring(height, SPRING, () => {
-          scheduleOnRN(gone);
-        }),
-      );
-    },
-    [closing, height, offset, onClosed],
-  );
-
-  /** A drag down let go [at] dp below open: dismiss the sheet, importing nothing, or spring back. */
-  const release = useCallback(
-    (at: number, velocity: number) => {
-      if (leaving.current) return;
-      if (settleSheet({ from: "open", offset: at, velocity, height }) === "closed") leave();
-      else offset.set(withSpring(0, { ...SPRING, velocity }));
-    },
-    [height, leave, offset],
-  );
-
-  const pan = usePanGesture({
-    activeOffsetY: [-1_000_000, DRAG_SLOP],
-    failOffsetX: [-DRAG_SLOP * 2, DRAG_SLOP * 2],
-    onActivate: () => {
-      "worklet";
-      start.set(offset.get());
-    },
-    onUpdate: (event) => {
-      "worklet";
-      if (closing.get()) return;
-      offset.set(Math.max(0, start.get() + event.translationY));
-    },
-    onDeactivate: (event) => {
-      "worklet";
-      scheduleOnRN(release, Math.max(0, start.get() + event.translationY), event.velocityY);
-    },
-  });
-
-  const sheetStyle = useAnimatedStyle(() => ({ transform: [{ translateY: offset.get() }] }));
-
   const setPicker = (change: (picker: Picker) => Picker) =>
     setAnswer((last) =>
       last?.read.status === "read"
@@ -238,16 +151,15 @@ export function PickerSheet({
 
   const view = read.status === "read" ? ytLibraryPickerView(read.picker) : null;
 
-  /** Import, or Import & Download with [download]; nothing while no row is ticked. */
-  const importTicked = (download: boolean) => {
-    if (read.status !== "read" || view?.canImport !== true) return;
-    const picker = read.picker;
-    leave(() => {
-      void importYtLibrary(picker, { download }).catch((error: unknown) =>
-        showError(strings.imports.couldntImportPlaylists, error),
-      );
-    });
+  /** Import, or Import & Download with [download], once the sheet has gone. */
+  const importTicked = (download: boolean) => () => {
+    if (read.status !== "read") return;
+    void importYtLibrary(read.picker, { download }).catch((error: unknown) =>
+      showError(strings.imports.couldntImportPlaylists, error),
+    );
   };
+  // Import and Import & Download do nothing while no row is ticked.
+  const disabled = view?.canImport !== true;
 
   const signInAgain = () => {
     void config.signIn().then((signedIn) => {
@@ -256,115 +168,62 @@ export function PickerSheet({
   };
 
   return (
-    <Modal
-      visible
-      transparent
-      animationType="none"
-      statusBarTranslucent
-      navigationBarTranslucent
-      onRequestClose={() => leave()}
+    <PickerSheetFrame
+      title={strings.imports[config.titleKey]}
+      selectAll={
+        view?.selectAll == null
+          ? null
+          : view.selectAll === "Select All"
+            ? strings.imports.selectAll
+            : strings.imports.deselectAll
+      }
+      onSelectAll={() => setPicker(pressYtLibrarySelectAll)}
+      onClosed={onClosed}
+      actions={[
+        { label: strings.imports.import, disabled, afterwards: importTicked(false) },
+        { label: strings.imports.importDownload, disabled, afterwards: importTicked(true) },
+      ]}
     >
-      <GestureHandlerRootView style={{ flex: 1 }}>
-        <Animated.View
-          accessibilityViewIsModal
-          className="flex-1 bg-background"
-          style={[{ paddingTop: insets.top, paddingBottom: insets.bottom }, sheetStyle]}
-        >
-          <GestureDetector gesture={pan}>
-            <View style={{ paddingHorizontal: grid.margin }}>
-              <View className="items-center" style={{ paddingVertical: CELL }}>
-                <View className="rounded-full bg-fill" style={{ width: CELL * 5, height: 5 }} />
-              </View>
-              <View className="flex-row items-center justify-between">
-                <TextButton label={strings.imports.cancel} onPress={() => leave()} />
-                <Text
-                  accessibilityRole="header"
-                  className="font-sans text-body font-medium text-foreground"
-                >
-                  {strings.imports[config.titleKey]}
-                </Text>
-                {/* Balances Cancel, so the title sits in the middle. */}
-                <View style={{ width: CELL * 7 }} />
-              </View>
-              {view?.selectAll != null && (
-                <View className="flex-row justify-end">
-                  <TextButton
-                    label={
-                      view.selectAll === "Select All"
-                        ? strings.imports.selectAll
-                        : strings.imports.deselectAll
-                    }
-                    onPress={() => setPicker(pressYtLibrarySelectAll)}
-                  />
-                </View>
-              )}
-            </View>
-          </GestureDetector>
-          <Hairline />
-
-          <View className="flex-1">
-            {read.status === "reading" && (
-              <View className="flex-1 items-center justify-center">
-                <ActivityIndicator
-                  size="large"
-                  color={accent}
-                  accessibilityLabel={strings.imports[config.readingKey]}
+      {read.status === "reading" && (
+        <View className="flex-1 items-center justify-center">
+          <ActivityIndicator
+            size="large"
+            color={accent}
+            accessibilityLabel={strings.imports[config.readingKey]}
+          />
+        </View>
+      )}
+      {read.status === "failed" && (
+        <Failure
+          failure={read.failure}
+          tryAgain={() => setAttempt((n) => n + 1)}
+          signIn={signInAgain}
+        />
+      )}
+      {read.status === "read" && (
+        // Never empty: Liked Songs is always listed.
+        <FlatList
+          data={read.picker.rows}
+          extraData={read.picker}
+          keyExtractor={(row) => row.playlistId}
+          renderItem={({ item }) => (
+            <>
+              <PickerRow
+                row={item}
+                toggle={() => setPicker((picker) => toggleYtLibraryRow(picker, item.playlistId))}
+              />
+              {item.playlistId === YT_LIKED_SONGS_ID && view !== null && (
+                <FavoritesSwitch
+                  favorites={view.favorites}
+                  toggle={() => setPicker(toggleYtLibraryFavorites)}
                 />
-              </View>
-            )}
-            {read.status === "failed" && (
-              <Failure
-                failure={read.failure}
-                tryAgain={() => setAttempt((n) => n + 1)}
-                signIn={signInAgain}
-              />
-            )}
-            {read.status === "read" && (
-              // Never empty: Liked Songs is always listed.
-              <FlatList
-                data={read.picker.rows}
-                extraData={read.picker}
-                keyExtractor={(row) => row.playlistId}
-                renderItem={({ item }) => (
-                  <>
-                    <PickerRow
-                      row={item}
-                      toggle={() =>
-                        setPicker((picker) => toggleYtLibraryRow(picker, item.playlistId))
-                      }
-                    />
-                    {item.playlistId === YT_LIKED_SONGS_ID && view !== null && (
-                      <FavoritesSwitch
-                        favorites={view.favorites}
-                        toggle={() => setPicker(toggleYtLibraryFavorites)}
-                      />
-                    )}
-                  </>
-                )}
-                contentContainerStyle={{ paddingVertical: CELL }}
-              />
-            )}
-          </View>
-
-          <Hairline />
-          <View
-            className="flex-row items-center justify-center"
-            style={{ paddingVertical: CELL, paddingHorizontal: grid.margin, gap: CELL * 4 }}
-          >
-            <TextButton
-              label={strings.imports.import}
-              onPress={() => importTicked(false)}
-              disabled={view?.canImport !== true}
-            />
-            <TextButton
-              label={strings.imports.importDownload}
-              onPress={() => importTicked(true)}
-              disabled={view?.canImport !== true}
-            />
-          </View>
-        </Animated.View>
-      </GestureHandlerRootView>
-    </Modal>
+              )}
+            </>
+          )}
+          contentContainerStyle={{ paddingVertical: CELL }}
+        />
+      )}
+    </PickerSheetFrame>
   );
 }
 
