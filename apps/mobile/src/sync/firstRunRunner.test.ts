@@ -24,6 +24,7 @@ const launch = ({
     visible: true,
     nowPlayingShown: false,
     cardOpen: false,
+    whatsNewPending: false,
     songLinks: "none",
   };
   const cards: { answer: () => void }[] = [];
@@ -142,7 +143,7 @@ describe("the first-run tour", () => {
     }
   });
 
-  it("never starts the new-install tour on an update, including a phone with access revoked", () => {
+  it("brings an update only song links, including a phone with access revoked", () => {
     for (const prior of [
       { accessGranted: true, usedBefore: false, invitation: null },
       { accessGranted: false, usedBefore: true, invitation: null },
@@ -153,9 +154,61 @@ describe("the first-run tour", () => {
       const updated = launch({ stored: { value: prior.invitation }, tourStored, ...prior });
       updated.grant();
       updated.cards[0]?.answer();
-      assert.equal(updated.tourCards.length, 0);
+      assert.deepEqual(
+        updated.tourCards.map(({ card }) => card),
+        ["songLinks"],
+      );
       assert.equal(tourStored.value, "done");
+    }
+  });
+
+  it("offers song links to an updated phone once, after What's New closes", () => {
+    const stored = { value: null as string | null };
+    const tourStored = { value: null as string | null, songLinks: null as string | null };
+    const first = launch({ stored, tourStored, accessGranted: true });
+    assert.equal(first.runner.isDue(), true);
+    first.surroundings.whatsNewPending = true;
+    first.runner.reconsider();
+    assert.equal(first.tourCards.length, 0, "not before What's New");
+    first.surroundings.whatsNewPending = false;
+    first.runner.reconsider();
+    assert.deepEqual(
+      first.tourCards.map(({ card }) => card),
+      ["songLinks"],
+    );
+    first.tourCards[0]!.finish("done");
+    assert.equal(tourStored.songLinks, "done");
+    assert.equal(first.finished(), 1);
+    const next = launch({ stored, tourStored, accessGranted: true });
+    assert.equal(next.runner.isDue(), false);
+    next.runner.reconsider();
+    assert.equal(next.tourCards.length, 0);
+  });
+
+  it("shows an updated phone's song links again next launch when it wasn't answered", () => {
+    const stored = { value: null as string | null };
+    const tourStored = { value: null as string | null, songLinks: null as string | null };
+    const first = launch({ stored, tourStored, accessGranted: true });
+    first.runner.reconsider();
+    assert.equal(first.tourCards.length, 1);
+    const next = launch({ stored, tourStored, accessGranted: true });
+    next.runner.reconsider();
+    assert.deepEqual(
+      next.tourCards.map(({ card }) => card),
+      ["songLinks"],
+    );
+  });
+
+  it("answers an updated phone's song links unseen when some or all links are on", () => {
+    for (const songLinks of ["some", "all"] as const) {
+      const stored = { value: null as string | null };
+      const tourStored = { value: null as string | null, songLinks: null as string | null };
+      const updated = launch({ stored, tourStored, accessGranted: true });
+      updated.surroundings.songLinks = songLinks;
+      updated.runner.reconsider();
+      assert.equal(updated.tourCards.length, 0);
       assert.equal(tourStored.songLinks, "done");
+      assert.equal(updated.finished(), 1);
     }
   });
 

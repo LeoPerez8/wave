@@ -8,7 +8,13 @@ import {
   type FirstRunState,
 } from "./index.ts";
 
-for (const [name, atLaunch] of Object.entries({ signInInvitationAtLaunch, firstRunCardAtLaunch }))
+const bringYourMusicAtLaunch = (launch: Parameters<typeof signInInvitationAtLaunch>[0]) =>
+  firstRunCardAtLaunch({ ...launch, card: "bringYourMusic" });
+
+for (const [name, atLaunch] of Object.entries({
+  signInInvitationAtLaunch,
+  firstRunCardAtLaunch: bringYourMusicAtLaunch,
+}))
   describe(name, () => {
     it("makes the card due on a new install, which opens without all-files access", () => {
       assert.equal(atLaunch({ stored: null, accessGranted: false, usedBefore: false }), "due");
@@ -31,6 +37,34 @@ for (const [name, atLaunch] of Object.entries({ signInInvitationAtLaunch, firstR
     });
   });
 
+describe("firstRunCardAtLaunch on a phone that used Wave before", () => {
+  const updated = { stored: null, accessGranted: true, usedBefore: true } as const;
+
+  it("makes song links due once, as an update's card, and never Bring your music", () => {
+    assert.equal(firstRunCardAtLaunch({ ...updated, card: "songLinks" }), "dueOnUpdate");
+    assert.equal(
+      firstRunCardAtLaunch({ ...updated, accessGranted: false, card: "songLinks" }),
+      "dueOnUpdate",
+    );
+    assert.equal(firstRunCardAtLaunch({ ...updated, card: "bringYourMusic" }), "done");
+  });
+
+  it("keeps an update's card due until it's answered, then done for good", () => {
+    assert.equal(
+      firstRunCardAtLaunch({ ...updated, stored: "dueOnUpdate", card: "songLinks" }),
+      "dueOnUpdate",
+    );
+    assert.equal(firstRunCardAtLaunch({ ...updated, stored: "done", card: "songLinks" }), "done");
+  });
+
+  it("makes song links an ordinary tour card on a new install", () => {
+    assert.equal(
+      firstRunCardAtLaunch({ stored: null, accessGranted: false, usedBefore: false, card: "songLinks" }),
+      "due",
+    );
+  });
+});
+
 /** A new install that has just been given access, with nothing in the way. */
 const ready: FirstRunState = {
   accessGranted: true,
@@ -42,6 +76,7 @@ const ready: FirstRunState = {
   visible: true,
   nowPlayingShown: false,
   cardOpen: false,
+  whatsNewPending: false,
   showing: false,
 };
 
@@ -65,6 +100,27 @@ describe("nextFirstRunStep", () => {
       nextFirstRunStep({ ...linksReady, songLinks: "all", tour: { songLinks: "done" } }),
       "done",
     );
+  });
+
+  it("offers an update's song-links card only while no host is on", () => {
+    const updated = { ...ready, invitation: "done", tour: { songLinks: "dueOnUpdate" } } as const;
+    assert.equal(nextFirstRunStep({ ...updated, songLinks: "none" }), "songLinks");
+    assert.equal(nextFirstRunStep({ ...updated, songLinks: "some" }), "rememberSongLinks");
+    assert.equal(nextFirstRunStep({ ...updated, songLinks: "all" }), "rememberSongLinks");
+  });
+
+  it("holds an update's song-links card until What's New, Now Playing and other cards are gone", () => {
+    const updated = { ...ready, invitation: "done", tour: { songLinks: "dueOnUpdate" } } as const;
+    assert.equal(nextFirstRunStep({ ...updated, whatsNewPending: true }), "wait");
+    assert.equal(
+      nextFirstRunStep({ ...updated, whatsNewPending: true, songLinks: "some" }),
+      "wait",
+      "answers nothing while What's New may still come",
+    );
+    assert.equal(nextFirstRunStep({ ...updated, nowPlayingShown: true }), "wait");
+    assert.equal(nextFirstRunStep({ ...updated, cardOpen: true }), "wait");
+    assert.equal(nextFirstRunStep({ ...updated, visible: false }), "wait");
+    assert.equal(nextFirstRunStep(updated), "songLinks");
   });
 
   it("offers Bring your music after the invitation, including builds without accounts", () => {

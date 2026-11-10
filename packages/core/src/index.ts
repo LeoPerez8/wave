@@ -2722,6 +2722,7 @@ export {
 } from "./firstRun.ts";
 export type {
   FirstRunAnswer,
+  FirstRunCardState,
   FirstRunState,
   FirstRunStep,
   FirstRunTourAnswers,
