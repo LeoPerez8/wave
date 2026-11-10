@@ -38,6 +38,11 @@ export interface WhatsNewRunnerOptions {
   readonly log: (level: LogLevel, message: string) => void;
   /** Nothing more can happen in this launch, so what follows the phone can stop. */
   readonly onFinished: () => void;
+  /**
+   * Once per launch: nothing need wait for the card any more, because it finished or a notes fetch
+   * failed. After a failure a retry may still show it, over nothing else (it waits for other cards).
+   */
+  readonly onReleased?: () => void;
   /** Opens Settings › Version History. */
   readonly openVersionHistory: () => void;
 }
@@ -57,6 +62,7 @@ export const createWhatsNewRunner = ({
   now,
   log,
   onFinished,
+  onReleased,
   openVersionHistory,
 }: WhatsNewRunnerOptions) => {
   let fetching = false;
@@ -64,10 +70,18 @@ export const createWhatsNewRunner = ({
   let hide: (() => void) | null = null;
   let lastFailureAt: number | null = null;
   let finished = false;
+  let released = false;
+
+  const release = (): void => {
+    if (released) return;
+    released = true;
+    onReleased?.();
+  };
 
   const finish = (): void => {
     if (finished) return;
     finished = true;
+    release();
     onFinished();
   };
 
@@ -97,6 +111,8 @@ export const createWhatsNewRunner = ({
           Effect.sync(() => {
             lastFailureAt = now();
             log("warn", `The release notes fetch failed: ${reason(error)}`);
+            // An offline launch, or the service down, doesn't hold up what waits for the card.
+            release();
           }),
         ),
       ),

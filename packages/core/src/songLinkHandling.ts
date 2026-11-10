@@ -101,6 +101,26 @@ export type SongLinkSetup = {
   readonly turnOff: readonly SongLinkTurnOff[];
 };
 
+/** The services whose link opens in an app other than the browser, which holds their links. */
+const heldServices = (openers: SongLinkOpeners | null) =>
+  SERVICES.flatMap((service) => {
+    const opener = openers?.[service];
+    if (!opener || opener.packageName === openers?.web?.packageName) return [];
+    return [{ service, opener }];
+  });
+
+/** A host Wave has on still doesn't open in Wave while another app holds it. */
+const handlingWithHeld = (state: SongLinkHandlingState, held: number): SongLinkHandling => {
+  const own = songLinkHandling(state);
+  return own === "all" && held > 0 ? "some" : own;
+};
+
+/** `songLinkSetup`'s handling alone, for a caller that shows none of its lines. */
+export const songLinkSetupHandling = (
+  state: SongLinkHandlingState,
+  openers: SongLinkOpeners | null,
+): SongLinkHandling => handlingWithHeld(state, heldServices(openers).length);
+
 /**
  * Wave's own host state plus the app each service's link opens in: a service
  * whose link opens in an app other than the browser has its links held there.
@@ -111,22 +131,18 @@ export const songLinkSetup = (
   language: AppLanguage = "en",
 ): SongLinkSetup => {
   const text = catalogueOf(language).settings;
-  const held = SERVICES.flatMap((service) => {
-    const opener = openers?.[service];
-    if (!opener || opener.packageName === openers?.web?.packageName) return [];
-    return [
-      { service, opener, line: text.songLinksHeldBy(opener.label, text.songLinkServices[service]) },
-    ];
-  });
+  const held = heldServices(openers).map(({ service, opener }) => ({
+    service,
+    opener,
+    line: text.songLinksHeldBy(opener.label, text.songLinkServices[service]),
+  }));
   const turnOff = held.map(({ service, opener, line }) => ({
     service,
     packageName: opener.packageName,
     step: `${line} ${text.songLinksTurnOffFirst}`,
     button: text.turnOffIn(opener.label),
   }));
-  // A host Wave has on still doesn't open in Wave while another app holds it.
-  const own = songLinkHandling(state);
-  const handling = own === "all" && held.length > 0 ? "some" : own;
+  const handling = handlingWithHeld(state, held.length);
   const line = [...held.map((entry) => entry.line), songLinkHandlingLine(handling, language)].join(
     " ",
   );

@@ -162,8 +162,8 @@ export const startWhatsNew = (): void => {
     log: (level, message) => appLog(level, "WaveUpdates", message),
     onFinished: () => {
       for (const stop of stops.splice(0)) stop();
-      settleWhatsNew();
     },
+    onReleased: settleWhatsNew,
     openVersionHistory: () => router.push("/settings/version-history"),
   });
   const appState = AppState.addEventListener("change", runner.reconsider);

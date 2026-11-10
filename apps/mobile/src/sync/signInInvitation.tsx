@@ -155,7 +155,8 @@ export const settleFirstRun = (): void => {
       nowPlayingShown: isNowPlayingShown(),
       cardOpen: isOverlayOpen(),
       whatsNewPending: isWhatsNewPending(),
-      songLinks: readSongLinkHandling() ?? "none",
+      // Core reads it only when card 2 is next; null on a kept APK without the read leaves it due.
+      readSongLinks: readSongLinkHandling,
     }),
     show: (answered) => {
       let open = true;

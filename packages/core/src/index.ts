@@ -498,6 +498,7 @@ export {
   songLinkHandling,
   songLinkHandlingLine,
   songLinkSetup,
+  songLinkSetupHandling,
 } from "./songLinkHandling.ts";
 export type {
   SongLinkHandling,

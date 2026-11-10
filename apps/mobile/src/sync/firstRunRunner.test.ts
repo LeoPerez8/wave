@@ -25,7 +25,7 @@ const launch = ({
     nowPlayingShown: false,
     cardOpen: false,
     whatsNewPending: false,
-    songLinks: "none",
+    readSongLinks: () => "none",
   };
   const cards: { answer: () => void }[] = [];
   const tourCards: { card: string; finish: (answer: "due" | "done") => void }[] = [];
@@ -116,7 +116,7 @@ describe("the first-run tour", () => {
     const first = launch({ stored, tourStored, accessGranted: false });
     first.grant();
     first.cards[0]!.answer();
-    first.surroundings.songLinks = "all";
+    first.surroundings.readSongLinks = () => "all";
     first.tourCards[0]!.finish("done");
     assert.deepEqual(
       first.tourCards.map(({ card }) => card),
@@ -204,11 +204,36 @@ describe("the first-run tour", () => {
       const stored = { value: null as string | null };
       const tourStored = { value: null as string | null, songLinks: null as string | null };
       const updated = launch({ stored, tourStored, accessGranted: true });
-      updated.surroundings.songLinks = songLinks;
+      updated.surroundings.readSongLinks = () => songLinks;
       updated.runner.reconsider();
       assert.equal(updated.tourCards.length, 0);
       assert.equal(tourStored.songLinks, "done");
       assert.equal(updated.finished(), 1);
+    }
+  });
+
+  it("leaves song links due on an APK that can't read them, for a later build to offer", () => {
+    for (const prior of [
+      { stored: null, songLinks: null, accessGranted: true },
+      { stored: "done", songLinks: "due", accessGranted: true },
+    ]) {
+      const stored = { value: prior.stored as string | null };
+      const tourStored = {
+        value: "done" as string | null,
+        songLinks: prior.songLinks as string | null,
+      };
+      const kept = launch({ stored, tourStored, accessGranted: prior.accessGranted });
+      kept.surroundings.readSongLinks = () => null;
+      kept.runner.reconsider();
+      assert.equal(kept.tourCards.length, 0);
+      assert.equal(kept.finished(), 1);
+      assert.notEqual(tourStored.songLinks, "done");
+      const rebuilt = launch({ stored, tourStored, accessGranted: true });
+      rebuilt.runner.reconsider();
+      assert.deepEqual(
+        rebuilt.tourCards.map(({ card }) => card),
+        ["songLinks"],
+      );
     }
   });
 

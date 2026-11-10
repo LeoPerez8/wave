@@ -6,7 +6,10 @@
 let pending = true;
 const listeners = new Set<() => void>();
 
-/** True until What's New has nothing more to show in this launch, or the build has updates off. */
+/**
+ * True until What's New has nothing more to show in this launch, the build has updates off, or a
+ * notes fetch failed: a later retry may still show it, but nothing waits for that.
+ */
 export const isWhatsNewPending = (): boolean => pending;
 
 export const onWhatsNewPendingChange = (listener: () => void): (() => void) => {
@@ -14,7 +17,7 @@ export const onWhatsNewPendingChange = (listener: () => void): (() => void) => {
   return () => listeners.delete(listener);
 };
 
-/** What's New has closed, or had nothing to show. */
+/** What's New has closed, had nothing to show, or couldn't fetch its notes. */
 export const settleWhatsNew = (): void => {
   if (!pending) return;
   pending = false;
