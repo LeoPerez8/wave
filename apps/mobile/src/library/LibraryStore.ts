@@ -316,6 +316,7 @@ import {
   selectPlayableSongIds,
   hasPlayableSongOutside,
   selectSongGenres,
+  selectSongWithVideo,
   selectVideoIds,
   trackQuery,
   type SongGenres,
@@ -988,6 +989,11 @@ export class LibraryStore extends Context.Service<
     readonly videoIds: (
       ids: readonly number[],
     ) => Effect.Effect<ReadonlyMap<number, string>, LibraryStoreError>;
+    /**
+     * The song with a file here downloaded from the YouTube video [videoId]
+     * (a song link's Library copy), or null.
+     */
+    readonly songWithVideo: (videoId: string) => Effect.Effect<SongRow | null, LibraryStoreError>;
     /** Each of the songs [ids]' counted plays, by song id (those with any). */
     readonly countedPlays: (
       ids: readonly number[],
@@ -2073,6 +2079,11 @@ const make = Effect.gen(function* () {
 
     leavingSong: (id) => attempt("read the song leaving", () => selectLeavingSong(db, id)),
     videoIds: (ids) => attempt("read the songs' video ids", () => selectVideoIds(db, ids)),
+    songWithVideo: (videoId) =>
+      attempt("read the song of a video", () => {
+        const id = selectSongWithVideo(db, videoId);
+        return id === null ? null : (selectSongsWithIds(db, [id])[0] ?? null);
+      }),
     countedPlays: (ids) =>
       attempt("read the songs' counted plays", () => selectCountedPlays(db, ids)),
     songCountedPlays: (trackIds) =>

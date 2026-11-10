@@ -42,6 +42,7 @@ import { useThemeColor } from "@/theme/useThemeColor";
 import { askYtMusic } from "@/ytmusic/askYtMusic";
 
 import { importPlaylists, saveImportedPlaylist, type ImportedPlaylist } from "./importPlaylists";
+import { openSongLink } from "./openSongLink";
 import { listLibrary, startLinkImport } from "./playlistImports";
 import { openSpotifyLibraryImport, openYtLibraryImport } from "./YtLibraryPickerHost";
 import { openPlaylist } from "./routes";
@@ -171,8 +172,9 @@ export const openLinkImport = (text: string): void => {
 
 /**
  * Opens what [text] shared to Wave from another app names (Core's
- * `sharedTextImport`): the import card for its playlist, as From a Link opens
- * it, or a short message saying what Wave imports (or that YT Music is off).
+ * `sharedTextImport`): the song a song link names, playing (`openSongLink`),
+ * the import card for its playlist, as From a Link opens it, or a short
+ * message saying what Wave opens (or that YT Music is off).
  * Nothing is read for a message. The cards open before the share (a link
  * card left open while the link was fetched from Spotify) are dismissed.
  */
@@ -184,6 +186,7 @@ export const openSharedText = (text: string): void => {
     currentLocalisation().language,
   );
   if (shared.kind === "import") openImportCard(shared.link);
+  else if (shared.kind === "song") void openSongLink(shared.link);
   else void showMessage(shared.title, shared.message);
 };
 

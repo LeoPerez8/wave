@@ -85,12 +85,12 @@ describe("importing from a link, in Portuguese", () => {
       kind: "notice",
       title: "O YT Music está desativado",
       message:
-        "Ative o YT Music em Ajustes para importar playlists de links do YouTube Music e do Spotify.",
+        "Ative o YT Music em Ajustes para abrir músicas e playlists de links do YouTube Music e do Spotify.",
     });
     assert.deepEqual(sharedTextImport("hello", { ytMusic: true }, PT), {
       kind: "notice",
-      title: "Não é possível importar isto",
-      message: "O Wave importa playlists de links do YouTube Music e do Spotify.",
+      title: "Não é possível abrir isto",
+      message: "O Wave abre músicas e playlists de links do YouTube Music e do Spotify.",
     });
   });
 });

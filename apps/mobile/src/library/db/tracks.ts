@@ -123,6 +123,18 @@ export const selectVideoIds = (db: LibraryDatabase, ids: readonly number[]): Map
     ),
   );
 
+/**
+ * The song with a file on this phone that was downloaded from the YouTube
+ * video [videoId] (an opened song link's Library copy), or null.
+ */
+export const selectSongWithVideo = (db: LibraryDatabase, videoId: string): number | null =>
+  db
+    .select({ id: schema.tracks.id })
+    .from(schema.tracks)
+    .where(and(eq(schema.tracks.videoId, videoId), isNotNull(schema.tracks.path)))
+    .limit(1)
+    .get()?.id ?? null;
+
 /** A song whose genre tag has several values, with each of them. */
 export interface SongGenres {
   readonly id: number;

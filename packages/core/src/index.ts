@@ -1355,6 +1355,14 @@ export type {
   PlaylistLinkProblem,
   SharedTextImport,
 } from "./playlistLinks.ts";
+export {
+  linkedYtSong,
+  recogniseSongLink,
+  songLinkLibraryCopy,
+  songLinkNotice,
+  songLinkPlay,
+} from "./songLinkOpening.ts";
+export type { LinkedSong, SongLink, SongLinkFailure, SongLinkPlay } from "./songLinkOpening.ts";
 export { spotifySearchQuery, spotifyYtMatch, searchRecording } from "./spotifyImport.ts";
 export { settleUnsearched, unsearchedSearchQuery, unsearchedSettles } from "./unsearchedEntries.ts";
 export {
