@@ -122,7 +122,7 @@ export function PickerSheet({
   onClosed,
 }: {
   service: LibraryService;
-  onClosed: () => void;
+  onClosed: (imported: boolean) => void;
 }) {
   const config = SERVICES[service];
   const { strings } = useLocalisation();

@@ -43,8 +43,8 @@ const stubs: Record<string, string> = {
     };
   `),
   "@/settings/spotifyAccount": stubModule(`
-    export const spotifySignedIn = async () => false;
-    export const signInToSpotify = async () => false;
+    export const spotifySignedIn = async () => globalThis.openTest.signedIn;
+    export const signInToSpotify = async () => globalThis.openTest.signsIn;
   `),
   "./YtExportPicker": stubModule('export const ExportSheet = "export-sheet";'),
   "./YtLibraryPicker": stubModule('export const PickerSheet = "picker-sheet";'),
@@ -96,13 +96,13 @@ const picker = (): string | null => {
 };
 
 /** Closes whatever picker is up, as its sheet going down does. */
-const closePicker = () => {
+const closePicker = (imported = false) => {
   let renderer: ReturnType<typeof create> | undefined;
   act(() => {
     renderer = create(createElement(host.YtLibraryPickerHost));
   });
   const sheet = renderer?.root.findAll((node) => typeof node.props.onClosed === "function")[0];
-  act(() => sheet?.props.onClosed());
+  act(() => sheet?.props.onClosed(imported));
   act(() => renderer?.unmount());
 };
 
@@ -140,4 +140,36 @@ test("leaving the sign-in opens nothing", async () => {
   await host.openYtExport();
   assert.deepEqual(shared.calls, ["alert Sign In to YT Music / Sign In", "sign in"]);
   assert.equal(picker(), null);
+});
+
+test("both library imports report Import or cancellation only after their picker closes", async () => {
+  shared.signedIn = true;
+  for (const open of [host.openSpotifyLibraryImport, host.openYtLibraryImport]) {
+    for (const imported of [true, false]) {
+      const answers: boolean[] = [];
+      await open((answer) => answers.push(answer));
+      assert.equal(picker(), "picker-sheet");
+      assert.deepEqual(answers, [], "opening the picker isn't an import");
+      closePicker(imported);
+      assert.deepEqual(answers, [imported]);
+    }
+  }
+});
+
+test("both library imports return after sign-in cancellation, or wait for the signed-in picker", async () => {
+  for (const open of [host.openSpotifyLibraryImport, host.openYtLibraryImport]) {
+    const answers: boolean[] = [];
+    shared.signsIn = false;
+    await open((answer) => answers.push(answer));
+    assert.equal(picker(), null);
+    assert.deepEqual(answers, [false]);
+
+    shared.signsIn = true;
+    answers.length = 0;
+    await open((answer) => answers.push(answer));
+    assert.equal(picker(), "picker-sheet");
+    assert.deepEqual(answers, []);
+    closePicker(true);
+    assert.deepEqual(answers, [true]);
+  }
 });

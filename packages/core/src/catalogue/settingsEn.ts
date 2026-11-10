@@ -370,6 +370,12 @@ export const settingsEn = {
     note: "Optional. Everything else in Wave works without one.",
     notNow: "Not Now",
   },
+  bringYourMusic: {
+    title: "Bring your music",
+    line: "Bring your playlists and liked songs from Spotify or YouTube Music.",
+    needsYtMusic: "Importing from either app needs YT Music. Turn it on to bring your music.",
+    turnOnYtMusic: "Turn On YT Music",
+  },
   itsSongsLeaveYourLibraryTheFiles: "Its songs leave your library. The files stay on your phone.",
   couldntRemoveTheFolder: "Couldn't remove the folder",
   loadingMusicFolders: "Loading music folders",

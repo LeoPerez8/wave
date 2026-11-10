@@ -1,10 +1,10 @@
 /**
- * First run's invitation to sign in to a Wave account (docs/spec.md, Wave account and sync, "The
+ * First run's host and invitation to sign in to a Wave account (docs/spec.md, Wave account and sync, "The
  * invitation"): once, on a new install, after the all-files access screen. Core's
  * `nextFirstRunStep` decides when; Not Now, a tap outside, Back and Sign In with Google each answer
  * it for good. Wave works fully without it.
  */
-import { waveAccountView } from "@wave/core";
+import { waveAccountView, type FirstRunAnswer, type FirstRunTourCard } from "@wave/core";
 import { IconDevices, IconMessageCircle, IconTicket, type Icon } from "@tabler/icons-react-native";
 import { Storage } from "expo-sqlite/kv-store";
 import { useEffect } from "react";
@@ -21,7 +21,8 @@ import { useWaveAccount, waveAccountAvailable } from "@/settings/waveAccount";
 import { waveAccountNotes, waveSignInLabels } from "@/settings/waveAccountText";
 import { useThemeColor } from "@/theme/useThemeColor";
 
-import { createSignInInvitationRunner } from "./signInInvitationRunner";
+import { createFirstRunRunner } from "./firstRunRunner";
+import { showBringYourMusic } from "./bringYourMusic";
 import { subscribeWaveSignedIn, waveSignedInNow } from "./waveSignedIn";
 
 /** "due" or "done"; nothing until the first launch that had the invitation. */
@@ -114,7 +115,11 @@ function SignInInvitationCard({ close, answered }: { close: () => void; answered
   );
 }
 
-let runner: ReturnType<typeof createSignInInvitationRunner> | null = null;
+const TOUR_CARDS: Record<FirstRunTourCard, (finish: (answer: FirstRunAnswer) => void) => void> = {
+  bringYourMusic: showBringYourMusic,
+};
+
+let runner: ReturnType<typeof createFirstRunRunner> | null = null;
 let following = false;
 const stops: (() => void)[] = [];
 
@@ -126,11 +131,15 @@ const stopFollowing = (): void => {
  * Settles, once per JS runtime, whether this phone is a new install. Call it as the app opens,
  * before the access screen can be passed: only a new install opens without access.
  */
-export const settleSignInInvitation = (): void => {
-  runner ??= createSignInInvitationRunner({
+export const settleFirstRun = (): void => {
+  runner ??= createFirstRunRunner({
     stored: {
       get: () => Storage.getItemSync(INVITATION_KEY),
       set: (value) => Storage.setItemSync(INVITATION_KEY, value),
+    },
+    tourStored: {
+      get: (card) => Storage.getItemSync(`firstRun.${card}`),
+      set: (card, value) => Storage.setItemSync(`firstRun.${card}`, value),
     },
     accessGrantedAtLaunch: WaveNative.hasAllFilesAccess(),
     usedBefore: USED_BEFORE_KEYS.some((key) => Storage.getItemSync(key) !== null),
@@ -155,17 +164,18 @@ export const settleSignInInvitation = (): void => {
         render: (close) => <SignInInvitationCard close={close} answered={answer} />,
       });
     },
+    showTourCard: (card, finish) => TOUR_CARDS[card](finish),
     onFinished: stopFollowing,
   });
 };
 
 /**
- * Once Wave holds access, follows the phone until the invitation shows and is answered, or
- * isn't due: it waits for Now Playing, another card or the background.
+ * Once Wave holds access, follows the phone until the invitation and tour finish:
+ * they wait for Now Playing, another card or the background.
  */
-export const startSignInInvitation = (): void => {
-  settleSignInInvitation();
-  // A phone that answered it, or used Wave before it, follows nothing.
+export const startFirstRun = (): void => {
+  settleFirstRun();
+  // A phone that answered every card, or used Wave before them, follows nothing.
   if (following || runner === null || !runner.isDue()) return;
   following = true;
   const appState = AppState.addEventListener("change", runner.reconsider);

@@ -48,8 +48,8 @@ export function PickerSheetFrame({
   /** Select All's label (or Deselect All's); none hides it. */
   selectAll: string | null;
   onSelectAll: () => void;
-  /** The sheet has gone: its host takes it down. */
-  onClosed: () => void;
+  /** The sheet has gone; true when an action was chosen, false for dismissal. */
+  onClosed: (actionTaken: boolean) => void;
   /** The picker's buttons, side by side at the bottom. */
   actions: readonly PickerSheetAction[];
   children: ReactNode;
@@ -78,7 +78,7 @@ export function PickerSheetFrame({
       leaving.current = true;
       closing.set(true);
       const gone = () => {
-        onClosed();
+        onClosed(then !== undefined);
         then?.();
       };
       offset.set(

@@ -2714,5 +2714,17 @@ export type {
   TypedReleaseDateRead,
   TypedReleaseEntry,
 } from "./typedReleaseDate.ts";
-export { nextFirstRunStep, signInInvitationAtLaunch } from "./firstRun.ts";
-export type { FirstRunState, FirstRunStep, SignInInvitation } from "./firstRun.ts";
+export {
+  FIRST_RUN_TOUR_CARDS,
+  firstRunCardAtLaunch,
+  nextFirstRunStep,
+  signInInvitationAtLaunch,
+} from "./firstRun.ts";
+export type {
+  FirstRunAnswer,
+  FirstRunState,
+  FirstRunStep,
+  FirstRunTourAnswers,
+  FirstRunTourCard,
+  SignInInvitation,
+} from "./firstRun.ts";
