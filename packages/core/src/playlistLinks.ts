@@ -5,6 +5,8 @@
  */
 
 import type { Catalogue } from "./catalogueEn.ts";
+import { addressIn, linkInText, linkParts, queryValue } from "./linkText.ts";
+import { recogniseSongLink, type SongLink } from "./songLinkOpening.ts";
 import { catalogueOf, type AppLanguage } from "./localisation.ts";
 import type { ImportService, LinkImportPlan } from "./playlistImport.ts";
 import type { YtSong } from "./ytMusic.ts";
@@ -79,9 +81,6 @@ const rejected = (problem: PlaylistLinkProblem): PlaylistLinkCheck => ({
   reason: playlistLinkReason(problem),
 });
 
-/** `scheme://host/path?query#fragment`, the scheme optional; the host has a dot. */
-const LINK = /^(?:https?:\/\/)?([^/?#\s.]+(?:\.[^/?#\s.]+)+)([^?#\s]*)(?:\?([^#\s]*))?(?:#\S*)?$/iu;
-
 /** What a playlist id is made of. */
 const ID = /^[\w-]+$/u;
 
@@ -93,15 +92,6 @@ const YOUTUBE_HOSTS = new Set([
 ]);
 /** YouTube's short links, which only ever name a video. */
 const SHORT_HOST = "youtu.be";
-
-/** The value of [name] in a query string, decoded; null when it has none. */
-const queryValue = (query: string, name: string): string | null => {
-  for (const pair of query.split("&")) {
-    const at = pair.indexOf("=");
-    if (at >= 0 && pair.slice(0, at) === name) return pair.slice(at + 1);
-  }
-  return null;
-};
 
 /**
  * A playlist id on its own (`list=` before it, or `VL` as in a browse id,
@@ -146,17 +136,6 @@ const spotifyPath = (path: string): PlaylistLinkCheck => {
   return parts === null ? rejected("notPlaylist") : spotifyEntity(parts[1] ?? "", parts[2] ?? "");
 };
 
-/** A web address or a Spotify URI among words, as an app shares a link with its title. */
-const ADDRESS = /\bhttps?:\/\/\S+|\bspotify:[\w:]+/iu;
-/** Punctuation that ends a sentence or closes a bracket or quote, not the address before it. */
-const AFTER_ADDRESS = /[.,!?;:'")\]}>»”’]+$/u;
-
-/** The first web address in [text], without the punctuation after it; null when it has none. */
-const addressIn = (text: string): string | null => {
-  const address = ADDRESS.exec(text)?.[0];
-  return address === undefined ? null : address.replace(AFTER_ADDRESS, "");
-};
-
 /**
  * The playlist a pasted or shared link names: a YouTube Music or YouTube
  * playlist link (any of YouTube's hosts, extra parameters ignored), a
@@ -167,17 +146,15 @@ const addressIn = (text: string): string | null => {
  * else is rejected with the reason to show.
  */
 export const recognisePlaylistLink = (text: string): PlaylistLinkCheck => {
-  const whole = text.trim();
-  if (whole === "") return rejected("empty");
-  const trimmed = /\s/u.test(whole) ? (addressIn(whole) ?? whole) : whole;
+  if (text.trim() === "") return rejected("empty");
+  const trimmed = linkInText(text);
   const bare = BARE_ID.exec(trimmed)?.[1];
   if (bare !== undefined) return ytPlaylist(bare);
   const uri = SPOTIFY_URI.exec(trimmed);
   if (uri !== null) return spotifyEntity(uri[1] ?? "", uri[2] ?? "");
-  const parts = LINK.exec(trimmed);
+  const parts = linkParts(trimmed);
   if (parts === null) return rejected("notLink");
-  const host = (parts[1] ?? "").toLowerCase();
-  const path = parts[2] ?? "";
+  const { host, path, query } = parts;
   if (host === SPOTIFY_HOST) return spotifyPath(path);
   if (SPOTIFY_SHORT_HOSTS.has(host)) {
     const code = SHORT_CODE.exec(path)?.[1];
@@ -188,7 +165,7 @@ export const recognisePlaylistLink = (text: string): PlaylistLinkCheck => {
   if (host === SHORT_HOST) return rejected("song");
   if (!YOUTUBE_HOSTS.has(host)) return rejected("otherSite");
   if (path === "/watch") return rejected("song");
-  const list = queryValue(parts[3] ?? "", "list");
+  const list = queryValue(query, "list");
   if (path !== "/playlist" || list === null || !ID.test(list)) return rejected("notPlaylist");
   return ytPlaylist(list);
 };
@@ -212,9 +189,13 @@ export const spotifyShortLinkTarget = (url: string, body: string): PlaylistLinkC
   return check.ok && check.link.service !== "spotify" ? rejected("notPlaylist") : check;
 };
 
-/** What sharing text to Wave does: open the import card for its playlist, or say why not. */
+/**
+ * What sharing text to Wave does: open the import card for its playlist,
+ * play the song it names (`openSongLink`), or say why not.
+ */
 export type SharedTextImport =
   | { readonly kind: "import"; readonly link: PlaylistLink }
+  | { readonly kind: "song"; readonly link: SongLink }
   | ({ readonly kind: "notice" } & ImportNotice);
 
 /** A short message shown instead of the import card. */
@@ -232,19 +213,20 @@ export const ytMusicOffNotice = (language: AppLanguage = "en"): ImportNotice => 
 /** Why a link isn't read with YT Music off, in English. */
 export const YT_MUSIC_OFF_NOTICE: ImportNotice = ytMusicOffNotice();
 
-const cantImportNotice = (language: AppLanguage): ImportNotice => {
+const cantOpenNotice = (language: AppLanguage): ImportNotice => {
   const text = catalogueOf(language).imports;
-  return { title: text.cantImport, message: text.otherSite };
+  return { title: text.cantOpen, message: text.sharedLinks };
 };
 
 /**
  * What text shared to Wave from another app (Android's share sheet) opens:
- * the import card for the playlist named by the first web address or Spotify
- * URI in it (the bare link YouTube Music's app shares, Spotify's link or short
- * link, or a link among words, punctuation after it dropped), as
- * `recognisePlaylistLink` reads it. Anything else, a
- * bare playlist id included, gets a notice saying what Wave imports, and with
- * YT Music off everything gets one saying to turn it on.
+ * the song a song link in it names (`recogniseSongLink`), else the import
+ * card for the playlist named by the first web address or Spotify URI in it
+ * (the bare link YouTube Music's app shares, Spotify's link or short link, or
+ * a link among words, punctuation after it dropped), as
+ * `recognisePlaylistLink` reads it. Anything else, a bare playlist id
+ * included, gets a notice saying what Wave opens, and with YT Music off
+ * everything gets one saying to turn it on.
  */
 export const sharedTextImport = (
   text: string,
@@ -252,10 +234,12 @@ export const sharedTextImport = (
   language: AppLanguage = "en",
 ): SharedTextImport => {
   if (!ytMusic) return { kind: "notice", ...ytMusicOffNotice(language) };
+  const song = recogniseSongLink(text);
+  if (song !== null) return { kind: "song", link: song };
   const address = addressIn(text);
   const check = address === null ? null : recognisePlaylistLink(address);
   if (check?.ok === true) return { kind: "import", link: check.link };
-  return { kind: "notice", ...cantImportNotice(language) };
+  return { kind: "notice", ...cantOpenNotice(language) };
 };
 
 /** A playlist as read from its service: its name, cover and songs in its order. */

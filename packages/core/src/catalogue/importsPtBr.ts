@@ -45,8 +45,16 @@ export const importsPtBr: typeof importsEn = {
   notPlaylistLink: "Este link não é de uma playlist.",
   ytMusicOff: "O YT Music está desativado",
   ytMusicOffMessage:
-    "Ative o YT Music em Ajustes para importar playlists de links do YouTube Music e do Spotify.",
+    "Ative o YT Music em Ajustes para abrir músicas e playlists de links do YouTube Music e do Spotify.",
   cantImport: "Não é possível importar isto",
+  cantOpen: "Não é possível abrir isto",
+  sharedLinks: "O Wave abre músicas e playlists de links do YouTube Music e do Spotify.",
+  findingSong: "Procurando música…",
+  songOffline: "Você está offline",
+  songOfflineMessage: "Conecte-se à internet para abrir esta música.",
+  songLinkDoesntOpen: "Este link não abre",
+  songLinkDoesntOpenMessage: "O YouTube Music não conseguiu tocar a música deste link.",
+  songNotFound: "Não foi possível encontrar esta música online",
   offline: "Você está offline. Tente novamente quando estiver online.",
   playlistFailed:
     "Não foi possível ler esta playlist. Ela pode ser privada ou ter sido apagada, ou não houve resposta online.",

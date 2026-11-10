@@ -426,9 +426,8 @@ https://music.youtube.com/playlist?list=${ID}`,
     });
   });
 
-  test("anything else shared says what Wave imports", () => {
+  test("anything else shared says what Wave opens", () => {
     for (const text of [
-      "https://music.youtube.com/watch?v=dQw4w9WgXcQ&si=Ab12_cd-EF",
       "https://music.youtube.com/browse/MPREb_ABC123def45",
       "https://music.youtube.com/channel/UCiMhD4jzUqG-IgPzUmmytRQ",
       `https://example.com/playlist?list=${ID}`,
@@ -442,8 +441,8 @@ https://music.youtube.com/playlist?list=${ID}`,
         sharedTextImport(text, on),
         {
           kind: "notice",
-          title: "Can't import this",
-          message: "Wave imports playlists from YouTube Music and Spotify links.",
+          title: "Can't open this",
+          message: "Wave opens songs and playlists from YouTube Music and Spotify links.",
         },
         text,
       );
@@ -458,7 +457,7 @@ https://music.youtube.com/playlist?list=${ID}`,
           kind: "notice",
           title: "YT Music is off",
           message:
-            "Turn on YT Music in Settings to import playlists from YouTube Music and Spotify links.",
+            "Turn on YT Music in Settings to open songs and playlists from YouTube Music and Spotify links.",
         },
         text,
       );
