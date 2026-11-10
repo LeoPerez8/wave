@@ -38,7 +38,13 @@ sealed interface YtPlaylistEdit {
   /** Renames the playlist. */
   data class Rename(val title: String) : YtPlaylistEdit
 
+  /** Sets who sees the playlist: one of [PRIVACIES]. */
+  data class Privacy(val privacy: String) : YtPlaylistEdit
+
   companion object {
+    /** Who can see a playlist, as YouTube Music's requests name it. */
+    val PRIVACIES = setOf("PRIVATE", "UNLISTED", "PUBLIC")
+
     /** The edit JS describes as [map] (`{ kind, … }`); null for one Wave doesn't know. */
     fun of(map: Map<String, Any?>): YtPlaylistEdit? {
       fun text(key: String) = map[key] as? String
@@ -50,6 +56,7 @@ sealed interface YtPlaylistEdit {
         }
         "move" -> text("setVideoId")?.let { Move(it, text("before")) }
         "rename" -> text("title")?.let(::Rename)
+        "privacy" -> text("privacy")?.takeIf { it in PRIVACIES }?.let(::Privacy)
         else -> null
       }
     }
@@ -76,6 +83,10 @@ sealed interface YtPlaylistEdit {
           put("action", "ACTION_SET_PLAYLIST_NAME")
           put("playlistName", edit.title)
         }
+        is Privacy -> {
+          put("action", "ACTION_SET_PLAYLIST_PRIVACY")
+          put("playlistPrivacy", edit.privacy)
+        }
       }
     }
   }
@@ -83,10 +94,11 @@ sealed interface YtPlaylistEdit {
 
 /**
  * Making and editing playlists on the signed-in account, for sharing a
- * Wave playlist on YT Music. innertubex's own `createPlaylist` always makes a
- * private one and adds songs one request each, so these requests are sent
- * here, as innertubex sends its own (the same headers, the account's
- * `SAPISIDHASH`): `playlist/create` with the songs and `UNLISTED`, and
+ * Wave playlist on YT Music (unlisted) and exporting it (private).
+ * innertubex's own `createPlaylist` always makes a private one and adds songs
+ * one request each, so these requests are sent here, as innertubex sends its
+ * own (the same headers, the account's `SAPISIDHASH`): `playlist/create`
+ * with the songs and the privacy, and
  * `browse/edit_playlist` with many actions at once. Reading a playlist back
  * goes through innertubex's `browse`. Every call needs the session: signed
  * out, or with one YouTube refuses, it fails with [YtFailure.SIGNED_OUT].
@@ -95,11 +107,11 @@ class YtPlaylistWrites(private val client: YtClient) {
   private val json = Json { ignoreUnknownKeys = true; explicitNulls = false; encodeDefaults = true }
 
   /**
-   * The entries of the account's playlist [playlistId], every page; null
-   * when there's no such playlist any more (deleted on YouTube Music) or it
-   * isn't the account's to edit.
+   * The account's playlist [playlistId]: who sees it and its entries, every
+   * page; null when there's no such playlist any more (deleted on YouTube
+   * Music) or it isn't the account's to edit.
    */
-  suspend fun ownPlaylist(playlistId: String): List<YtOwnEntry>? = client.request {
+  suspend fun ownPlaylist(playlistId: String): YtOwnPlaylist? = client.request {
     signedIn()
     val first = try {
       val response = client.innerTube.browse(YouTubeClient.WEB_REMIX, "VL$playlistId")
@@ -118,14 +130,15 @@ class YtPlaylistWrites(private val client: YtClient) {
       entries += page.entries
       token = page.continuation
     }
-    entries
+    YtOwnPlaylist(first.privacy, entries)
   }
 
-  /** Makes an unlisted playlist [title] holding [videoIds], in order, and returns its id. */
-  suspend fun create(title: String, videoIds: List<String>): String = client.request {
+  /** Makes a playlist [title] holding [videoIds], in order, seen by [privacy]; returns its id. */
+  suspend fun create(title: String, videoIds: List<String>, privacy: String): String = client.request {
+    require(privacy in YtPlaylistEdit.PRIVACIES) { "Unknown playlist privacy: $privacy" }
     val answer = send("playlist/create") {
       put("title", title)
-      put("privacyStatus", "UNLISTED")
+      put("privacyStatus", privacy)
       put("videoIds", JsonArray(videoIds.map(::JsonPrimitive)))
     }
     (answer["playlistId"] as? JsonPrimitive)?.contentOrNull

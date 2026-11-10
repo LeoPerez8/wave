@@ -4,11 +4,12 @@ import { useLocalisation, currentLocalisation } from "@/localisation/localisatio
  * playlists"): its menu's Share opens a card of services; each makes a
  * playlist anyone with its link can open on the signed-in account (unlisted
  * on YT Music, public on Spotify) with the songs it matches (Core's
- * `matchSharedSongs`, `ytShareSong`, `spotifyShareSong`; YT Music's searches
- * remembered by `ytMatchMemory`), or brings the one
- * it made before up to date (`syncSharedPlaylist`, through each service's
- * `SharedPlaylistService`), then opens Android's share sheet with its link
- * and says how many songs were found.
+ * `matchSharedSongs`, `spotifyShareSong`; YT Music's side, which Export to
+ * YT Music shares, is `ytSharedPlaylists.ts`), or brings the one it made
+ * before up to date (`syncSharedPlaylist`, through each service's
+ * `SharedPlaylistService`; a private one Export made turns unlisted), then
+ * opens Android's share sheet with its link and says how many songs were
+ * found.
  */
 import {
   entryDivider,
@@ -28,30 +29,23 @@ import {
   spotifyShareSong,
   syncSharedPlaylist,
   ytMusicPlaylistUrl,
-  ytShareMatch,
-  ytShareSong,
   type PlaylistShareService,
   type SharedPlaylistService,
   type SharedSongs,
   type SharePlaylistFailure,
   type SpotifyShareItem,
   type SpotifySong,
-  type YtShareItem,
 } from "@wave/core";
 import * as Effect from "effect/Effect";
-import * as Result from "effect/Result";
-import { Storage } from "expo-sqlite/kv-store";
 import { Share, Text } from "react-native";
 
 import { EntryRow } from "@/catalog/EntryRow";
 import { CELL } from "@/catalog/grid";
 import { Hairline } from "@/catalog/Hairline";
-import { LibraryStore, type PlaylistEntryRow } from "@/library/LibraryStore";
+import { LibraryStore } from "@/library/LibraryStore";
 import type { NamedPlaylist } from "@/library/PlaylistSheets";
 import { appRuntime } from "@/library/runtime";
-import { settleUnsearchedSong } from "@/library/unsearchedEntries";
 import { pressedRect } from "@/motion/pressedRect";
-import type { NativeYtPlaylistEdit } from "@/native/waveYtMusic";
 import { confirmAction, showError, showMessage } from "@/overlay/alert";
 import { CardEntries } from "@/overlay/CardEntries";
 import { useOverlayFlow } from "@/overlay/flow";
@@ -63,165 +57,18 @@ import { ytMusicEnabled } from "@/settings/ytMusic";
 import { askSpotifyOrFail } from "@/spotify/askSpotify";
 import type { Spotify } from "@/spotify/Spotify";
 import { SpotifyError } from "@/spotify/SpotifyError";
-import { askYtMusic, searchRecordingInTurn } from "@/ytmusic/askYtMusic";
-import { ytMatchMemory } from "@/ytmusic/ytMatchMemory";
-import { YtLibraryError, YtMusic } from "@/ytmusic/YtMusic";
 
-/** A search that got no answer: sharing stops rather than leave songs out for it. */
-class SearchFailed extends Error {}
+import {
+  matchOnYtMusic,
+  rememberedSharedPlaylist,
+  SearchFailed,
+  ytMusicFailure,
+  ytMusicPlaylists,
+} from "./ytSharedPlaylists";
 
-/**
- * Where the [service] playlist made for the Wave playlist [id] is remembered
- * (this phone only), read and written as Core's `syncSharedPlaylist` asks.
- */
-const remembered = (
-  service: PlaylistShareService,
-  id: number,
-): Pick<SharedPlaylistService, "recall" | "remember"> => {
-  const key = `share.${service}.${id}`;
-  return {
-    recall: () => Storage.getItem(key),
-    remember: (playlistId) => Storage.setItem(key, playlistId),
-  };
-};
-
-// ---------------------------------------------------------------------------
-// YT Music
-
-/** The YT Music matches this phone remembers for Library songs. */
-const ytMatches = ytMatchMemory(Storage);
-
-/**
- * [item] as sharing on YT Music sees it, with the video ids the Library's
- * songs were downloaded from and the matches remembered for them.
- */
-const ytShareItem = (
-  item: PlaylistEntryRow,
-  videoIds: ReadonlyMap<number, string>,
-  matches: ReadonlyMap<number, string>,
-): YtShareItem =>
-  item.source === "library"
-    ? {
-        source: "library",
-        trackId: item.track.id,
-        videoId: videoIds.get(item.track.id) ?? null,
-        matched: matches.get(item.track.id) ?? null,
-        song: librarySearchSong(item.track),
-      }
-    : item;
-
-/** The playlist [id]'s entries and the video ids of its Library songs. */
-const readPlaylistVideoIds = (id: number) =>
-  // oxlint-disable-next-line react/rules-of-hooks -- Effect Service.use resolves a service; it is not a React Hook.
-  LibraryStore.use((store) =>
-    Effect.gen(function* () {
-      const detail = yield* store.getPlaylist(id, "library");
-      const items = detail?.items ?? [];
-      const trackIds = items.flatMap((item) => (item.source === "library" ? [item.track.id] : []));
-      const videoIds = yield* store.videoIds(trackIds);
-      return { items, trackIds, videoIds };
-    }),
-  );
-
-/** The playlist [id]'s entries as sharing on YT Music sees them. */
-const readYtShareItems = async (id: number): Promise<YtShareItem[]> => {
-  const { items, trackIds, videoIds } = await appRuntime.runPromise(readPlaylistVideoIds(id));
-  const matches = await ytMatches.recall(trackIds.filter((trackId) => !videoIds.has(trackId)));
-  return items.map((item) => ytShareItem(item, videoIds, matches));
-};
-
-/**
- * One YouTube Music Songs search for [song] in the shared allowance (as
- * Share), and the video id of the result that is the same recording. An
- * unsearched entry searched this way is settled in its playlists too, as
- * playing it would.
- */
-const searchVideoId = async (song: SpotifySong, unsearched: boolean): Promise<string | null> => {
-  const answer = await searchRecordingInTurn("share", song);
-  if (answer === null || !answer.ok) throw new SearchFailed();
-  if (unsearched) {
-    const settled = await settleUnsearchedSong(
-      { ...song, artworkUrl: song.artworkUrl ?? null },
-      answer,
-    );
-    return settled.kind === "found" ? settled.becomes.song.videoId : null;
-  }
-  return ytShareMatch(song, answer.songs);
-};
-
-/**
- * The playlist [id]'s songs matched on YT Music, remembering what a search
- * finds for a Library song so sharing again doesn't search it.
- */
-const matchOnYtMusic = async (id: number): Promise<SharedSongs> => {
-  const items = await readYtShareItems(id);
-  // An unsearched entry is searched by its own song (`ytShareSong`), so it's told apart by identity.
-  const unsearched = new Set<SpotifySong>(
-    items.flatMap((item) => (item.source === "unsearched" ? [item.song] : [])),
-  );
-  return matchSharedSongs(
-    items.map(ytShareSong),
-    (song) => searchVideoId(song, unsearched.has(song)),
-    ytMatches.remember,
-  );
-};
-
-/** Runs [use] on YT Music, failing with its reason. */
-const ask = async <A,>(
-  use: (ytMusic: YtMusic["Service"]) => Effect.Effect<A, YtLibraryError>,
-): Promise<A> => {
-  const result = await askYtMusic(use);
-  if (Result.isFailure(result)) throw result.failure;
-  return result.success;
-};
-
-/** Applies [edits] to the account's playlist [playlistId], a request's worth at a time. */
-const edit = async (playlistId: string, edits: readonly NativeYtPlaylistEdit[]): Promise<void> => {
-  for (const batch of sharedEditBatches(edits))
-    await ask((ytMusic) => ytMusic.editPlaylist(playlistId, batch));
-};
-
-/** The account's YT Music playlists, as sharing the Wave playlist [id] changes them. */
-const ytMusicPlaylists = (id: number): SharedPlaylistService => ({
-  ...remembered("ytMusic", id),
-  read: async (playlistId) => {
-    const entries = await ask((ytMusic) => ytMusic.ownPlaylist(playlistId));
-    return (
-      entries?.map(({ videoId, setVideoId }) => ({ id: videoId, entryId: setVideoId })) ?? null
-    );
-  },
-  change: (playlistId, { name, removes, adds }) =>
-    edit(playlistId, [
-      { kind: "rename", title: name },
-      ...removes.map(
-        ({ id: videoId, entryId }) => ({ kind: "remove", videoId, setVideoId: entryId }) as const,
-      ),
-      ...adds.map((videoId) => ({ kind: "add", videoId }) as const),
-    ]),
-  move: (playlistId, moves) =>
-    edit(
-      playlistId,
-      moves.map(({ entryId, before }) => ({ kind: "move", setVideoId: entryId, before }) as const),
-    ),
-  // An unlisted playlist, made with its first request's worth and filled with the rest.
-  create: async (name, ids) => {
-    const [first = [], ...rest] = sharedEditBatches(ids);
-    const playlistId = await ask((ytMusic) => ytMusic.createPlaylist(name, first));
-    await edit(
-      playlistId,
-      rest.flat().map((videoId) => ({ kind: "add", videoId }) as const),
-    );
-    return playlistId;
-  },
-});
-
-/** Why sharing on YT Music stopped, from its reason. */
-const ytMusicFailure = (error: unknown): SharePlaylistFailure | null =>
-  error instanceof YtLibraryError
-    ? error.reason === "offline" || error.reason === "signedOut"
-      ? error.reason
-      : "failed"
-    : null;
+/** The Wave playlist [id]'s songs matched on YT Music (none once it's deleted). */
+const matchOnYt = async (id: number): Promise<SharedSongs> =>
+  (await matchOnYtMusic(id))?.songs ?? { ids: [], found: 0, total: 0 };
 
 // ---------------------------------------------------------------------------
 // Spotify
@@ -275,7 +122,7 @@ const inBatches = async <T,>(
  * with its link again.
  */
 const spotifyPlaylists = (id: number): SharedPlaylistService => ({
-  ...remembered("spotify", id),
+  ...rememberedSharedPlaylist("spotify", id),
   holds: (uri) =>
     readSpotify(() =>
       spotifyLibraryHas(uri, (offset) => askSpotifyOrFail((spotify) => spotify.library(offset))),
@@ -335,8 +182,8 @@ const TARGETS: Record<PlaylistShareService, ShareTarget> = {
   ytMusic: {
     signedIn: ytMusicSignedIn,
     signIn: signInToYtMusic,
-    match: matchOnYtMusic,
-    playlists: ytMusicPlaylists,
+    match: matchOnYt,
+    playlists: (id) => ytMusicPlaylists(id, "share"),
     url: ytMusicPlaylistUrl,
     failure: ytMusicFailure,
   },
