@@ -136,6 +136,8 @@ export const playlistsEn = {
   loadingRecommended: "Loading recommended songs",
   loadingAnother: "Loading another recommendation",
   tryAgain: "Try Again",
+  /** Swaps every recommended song showing for others. */
+  refreshRecommendations: "Refresh",
   addRecommendation: (title: string): string => `Add ${title} to playlist`,
   dismissRecommendation: (title: string): string => `Dismiss ${title} recommendation`,
   adding: (title: string): string => `Adding ${title}`,
