@@ -357,6 +357,22 @@ export const settingsPtBr: typeof settingsEn = {
     note: "Opcional. Todo o resto do Wave funciona sem ela.",
     notNow: "Agora Não",
   },
+  bringYourMusic: {
+    title: "Traga suas músicas",
+    line: "Traga suas playlists e músicas curtidas do Spotify ou YouTube Music.",
+    needsYtMusic:
+      "Importar de qualquer um dos apps precisa do YT Music. Ative para trazer suas músicas.",
+    turnOnYtMusic: "Ativar YT Music",
+  },
+  songLinksCard: {
+    line: "Na página Abrir por padrão do Android, ative Abrir links compatíveis e depois:",
+    steps: ["Toque em Adicionar link.", "Marque todos os links.", "Toque em Adicionar."],
+    turnOn: "Ativar",
+  },
+  songLinkServices: { youtubeMusic: "YouTube Music", spotify: "Spotify", deezer: "Deezer" },
+  songLinksHeldBy: (app: string, service: string) => `O ${app} ainda abre os links do ${service}.`,
+  songLinksTurnOffFirst: "Desative Abrir links compatíveis nele primeiro.",
+  turnOffIn: (app: string) => `Desativar no ${app}`,
   itsSongsLeaveYourLibraryTheFiles:
     "Suas músicas saem da biblioteca. Os arquivos ficam no telefone.",
   couldntRemoveTheFolder: "Não foi possível remover a pasta",

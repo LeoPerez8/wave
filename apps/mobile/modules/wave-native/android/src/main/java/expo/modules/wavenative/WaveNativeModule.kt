@@ -242,6 +242,26 @@ class WaveNativeModule : Module() {
     }
 
     /**
+     * The app Android would open each link in now ([links]: a name to an `https` link, Core's
+     * `SONG_LINK_SAMPLES`), as its package and label, or null when Android would ask, would open
+     * Wave itself, or has nothing. Another app's domain verification state can't be read, so this
+     * goes by what Android would open. The hosts must be in the manifest's `<queries>`, or Android
+     * hides the apps that open them.
+     */
+    Function("songLinkOpeners") { links: Map<String, String> ->
+      links.mapValues { (_, link) -> linkOpener(link) }
+    }
+
+    /** Opens another app's Open by default page, else its App info. */
+    AsyncFunction("openAppLinkSettings") { packageName: String ->
+      val uri = Uri.parse("package:$packageName")
+      openSystemSettings(
+        Intent(Settings.ACTION_APP_OPEN_BY_DEFAULT_SETTINGS, uri),
+        Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS, uri),
+      )
+    }
+
+    /**
      * Whether the phone is online (Android checked its default network reaches the internet) and
      * on mobile data rather than Wi-Fi: the cached answer, read once by JS, which then follows
      * `onConnectivityChanged`.
@@ -661,7 +681,26 @@ class WaveNativeModule : Module() {
 
   private fun packageUri(): Uri = Uri.parse("package:${context.packageName}")
 
-  /** Starts a system settings page for Wave, or [fallback] where the phone lacks it. */
+  /**
+   * The app Android would open [link] in now, as its package and label; null when Android would
+   * ask, would open Wave itself, or has nothing.
+   */
+  @Suppress("DEPRECATION") // resolveActivity(Intent, ResolveInfoFlags) is API 33+; minSdk is 31.
+  private fun linkOpener(link: String): Map<String, String>? {
+    val packageManager = context.packageManager
+    val intent = Intent(Intent.ACTION_VIEW, Uri.parse(link)).addCategory(Intent.CATEGORY_BROWSABLE)
+    val activity = packageManager.resolveActivity(intent, PackageManager.MATCH_DEFAULT_ONLY)?.activityInfo
+      ?: return null
+    // The chooser ("android"'s ResolverActivity) means Android would ask.
+    if (activity.packageName == "android" || activity.name.endsWith("ResolverActivity")) return null
+    if (activity.packageName == context.packageName) return null
+    return mapOf(
+      "packageName" to activity.packageName,
+      "label" to activity.applicationInfo.loadLabel(packageManager).toString(),
+    )
+  }
+
+  /** Starts a system settings page, Wave's or another app's, or [fallback] where the phone lacks it. */
   private fun openSystemSettings(page: Intent, fallback: Intent) {
     val activity = appContext.currentActivity
     val launcher: Context = activity ?: context

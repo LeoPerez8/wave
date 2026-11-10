@@ -25,6 +25,7 @@ import { isOverlayOpen, onOverlaysChange, openOverlay } from "@/overlay/overlay"
 
 import { RUNNING_VERSION } from "./runningVersion";
 import { createWhatsNewRunner } from "./whatsNewRunner";
+import { settleWhatsNew } from "./whatsNewPending";
 
 /** How long the service gets to answer before it counts as a failure. */
 const FETCH_TIMEOUT = "15 seconds";
@@ -118,8 +119,12 @@ let started = false;
 
 /** Starts following the phone, once per JS runtime, until there's nothing more to say. */
 export const startWhatsNew = (): void => {
-  if (started || !Updates.isEnabled) return;
+  if (started) return;
   started = true;
+  if (!Updates.isEnabled) {
+    settleWhatsNew();
+    return;
+  }
   const stops: (() => void)[] = [];
   const runner = createWhatsNewRunner({
     runningVersion: RUNNING_VERSION,
@@ -158,6 +163,7 @@ export const startWhatsNew = (): void => {
     onFinished: () => {
       for (const stop of stops.splice(0)) stop();
     },
+    onReleased: settleWhatsNew,
     openVersionHistory: () => router.push("/settings/version-history"),
   });
   const appState = AppState.addEventListener("change", runner.reconsider);

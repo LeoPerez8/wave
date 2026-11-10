@@ -55,3 +55,96 @@ export const songLinkHandlingLine = (
       return text.songLinksNone;
   }
 };
+
+/** The song-link services whose own apps may hold their links. */
+export type SongLinkService = "youtubeMusic" | "spotify" | "deezer";
+
+const SERVICES: readonly SongLinkService[] = ["youtubeMusic", "spotify", "deezer"];
+
+/**
+ * The links Wave asks Android about (`WaveNative.songLinkOpeners`): a song on
+ * each service, and a plain web page, which opens in the browser. Their hosts
+ * are in wave-native's manifest `<queries>`, so Android lets Wave see the apps
+ * that open them.
+ */
+export const SONG_LINK_SAMPLES: Readonly<Record<SongLinkService | "web", string>> = {
+  youtubeMusic: "https://music.youtube.com/watch?v=dQw4w9WgXcQ",
+  spotify: "https://open.spotify.com/track/4PTG3Z6ehGkBFwjybzWkR8",
+  deezer: "https://www.deezer.com/track/3135556",
+  web: "https://example.com/",
+};
+
+/** The app Android would open a link in now. */
+export type SongLinkOpener = { readonly packageName: string; readonly label: string };
+
+/**
+ * What Android would open each sample link in (`SONG_LINK_SAMPLES`), null when
+ * it would ask, open Wave itself, or has nothing: `web` is a plain web page's,
+ * the browser.
+ */
+export type SongLinkOpeners = Readonly<
+  Partial<Record<SongLinkService | "web", SongLinkOpener | null>>
+>;
+
+/** A step before Wave's own Turn On: turn the links off in the app that holds them. */
+export type SongLinkTurnOff = {
+  readonly service: SongLinkService;
+  readonly packageName: string;
+  readonly step: string;
+  readonly button: string;
+};
+
+/** Card 2's and the Settings row's steps and result line. */
+export type SongLinkSetup = {
+  readonly handling: SongLinkHandling;
+  readonly line: string;
+  readonly turnOff: readonly SongLinkTurnOff[];
+};
+
+/** The services whose link opens in an app other than the browser, which holds their links. */
+const heldServices = (openers: SongLinkOpeners | null) =>
+  SERVICES.flatMap((service) => {
+    const opener = openers?.[service];
+    if (!opener || opener.packageName === openers?.web?.packageName) return [];
+    return [{ service, opener }];
+  });
+
+/** A host Wave has on still doesn't open in Wave while another app holds it. */
+const handlingWithHeld = (state: SongLinkHandlingState, held: number): SongLinkHandling => {
+  const own = songLinkHandling(state);
+  return own === "all" && held > 0 ? "some" : own;
+};
+
+/** `songLinkSetup`'s handling alone, for a caller that shows none of its lines. */
+export const songLinkSetupHandling = (
+  state: SongLinkHandlingState,
+  openers: SongLinkOpeners | null,
+): SongLinkHandling => handlingWithHeld(state, heldServices(openers).length);
+
+/**
+ * Wave's own host state plus the app each service's link opens in: a service
+ * whose link opens in an app other than the browser has its links held there.
+ */
+export const songLinkSetup = (
+  state: SongLinkHandlingState,
+  openers: SongLinkOpeners | null,
+  language: AppLanguage = "en",
+): SongLinkSetup => {
+  const text = catalogueOf(language).settings;
+  const held = heldServices(openers).map(({ service, opener }) => ({
+    service,
+    opener,
+    line: text.songLinksHeldBy(opener.label, text.songLinkServices[service]),
+  }));
+  const turnOff = held.map(({ service, opener, line }) => ({
+    service,
+    packageName: opener.packageName,
+    step: `${line} ${text.songLinksTurnOffFirst}`,
+    button: text.turnOffIn(opener.label),
+  }));
+  const handling = handlingWithHeld(state, held.length);
+  const line = [...held.map((entry) => entry.line), songLinkHandlingLine(handling, language)].join(
+    " ",
+  );
+  return { handling, line, turnOff };
+};

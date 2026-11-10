@@ -1,12 +1,29 @@
 /**
  * Wave's first run (docs/spec.md, "First run and library" and "The invitation"):
- * the all-files access screen, then, on a new install only, the invitation to
- * sign in to a Wave account. An update never brings the invitation to a phone
- * that used Wave before it.
+ * the all-files access screen, then the Wave account invitation and the tour.
+ * An update never brings the invitation or Bring your music to a phone that used Wave before;
+ * it brings Open song links in Wave once, since tapping links is new.
  */
+
+import type { SongLinkHandling } from "./songLinkHandling.ts";
 
 /** Whether the sign-in invitation is still to show on this phone, kept across launches. */
 export type SignInInvitation = "due" | "done";
+
+/** What a tour card's answer leaves it: still to show, or answered for good. */
+export type FirstRunAnswer = SignInInvitation;
+
+/**
+ * Each tour card keeps its own state, independently of the account invitation:
+ * `dueOnUpdate` is card 2 offered to a phone that used Wave before the tour,
+ * which shows only while no song-link host is on.
+ */
+export type FirstRunCardState = FirstRunAnswer | "dueOnUpdate";
+
+/** Tour order on a new install. */
+export const FIRST_RUN_TOUR_CARDS = ["bringYourMusic", "songLinks"] as const;
+export type FirstRunTourCard = (typeof FIRST_RUN_TOUR_CARDS)[number];
+export type FirstRunTourAnswers = Readonly<Partial<Record<FirstRunTourCard, FirstRunCardState>>>;
 
 /**
  * The invitation as this launch finds it. Nothing [stored] means the first
@@ -27,10 +44,38 @@ export const signInInvitationAtLaunch = ({
   return accessGranted || usedBefore ? "done" : "due";
 };
 
+/**
+ * A tour card as this launch finds it, settled before access can change. A new
+ * install gets the tour by the invitation's rule; a phone that used Wave
+ * before gets only Open song links in Wave, once.
+ */
+export const firstRunCardAtLaunch = ({
+  card,
+  stored,
+  accessGranted,
+  usedBefore,
+}: {
+  readonly card: FirstRunTourCard;
+  readonly stored: string | null;
+  readonly accessGranted: boolean;
+  readonly usedBefore: boolean;
+}): FirstRunCardState => {
+  if (stored === "dueOnUpdate") return card === "songLinks" ? stored : "done";
+  const answer = signInInvitationAtLaunch({ stored, accessGranted, usedBefore });
+  if (stored === null && answer === "done" && card === "songLinks") return "dueOnUpdate";
+  return answer;
+};
+
 export interface FirstRunState {
   /** Wave holds all-files access. */
   readonly accessGranted: boolean;
   readonly invitation: SignInInvitation;
+  readonly tour: FirstRunTourAnswers;
+  /**
+   * Reads Android's song-link state, called only when card 2 is next with nothing in front; null
+   * on an APK without the native read, which can't turn the links on either.
+   */
+  readonly readSongLinks: () => SongLinkHandling | null;
   /** This build has the sync service set up, so it can sign in to a Wave account. */
   readonly accountAvailable: boolean;
   /** Whether a Wave account is signed in; null until the native module has said. */
@@ -41,28 +86,52 @@ export interface FirstRunState {
   readonly nowPlayingShown: boolean;
   /** A card is open, the invitation included. */
   readonly cardOpen: boolean;
-  /** The invitation is open. */
+  /** What's New may still show in this launch, or shows now. */
+  readonly whatsNewPending: boolean;
+  /** A first-run card is open, or temporarily away for its sign-in or picker. */
   readonly showing: boolean;
 }
 
 /**
  * `access` is the all-files access screen, which comes first; `signInInvitation`
  * opens the invitation over Wave; `remember` keeps it done without showing it
- * (an account is already signed in); `done` means the first run has nothing
- * more to show in this launch.
+ * (an account is already signed in); `rememberSongLinks` keeps card 2 answered
+ * without showing it when every host is on. A tour card's id opens that card;
+ * `done` means the first run has nothing more to show in this launch.
  */
-export type FirstRunStep = "access" | "signInInvitation" | "remember" | "wait" | "done";
+export type FirstRunStep =
+  | "access"
+  | "signInInvitation"
+  | "remember"
+  | "rememberSongLinks"
+  | "wait"
+  | "done"
+  | FirstRunTourCard;
 
 /**
  * What the first run shows now. The invitation comes after the access screen,
  * once, over Wave with nothing else in front: it waits for Now Playing or
- * another card to go. A build that can't sign in shows nothing and leaves it due.
+ * another card to go. A build that can't sign in leaves the invitation due
+ * and goes on to the tour. An update's song-links card also waits for What's
+ * New, and is answered unseen when any host is already on. An APK that can't read the song links
+ * leaves card 2 due, unseen, for a build that can.
  */
 export const nextFirstRunStep = (state: FirstRunState): FirstRunStep => {
   if (!state.accessGranted) return "access";
-  if (state.invitation === "done" || !state.accountAvailable) return "done";
-  if (state.signedIn === null) return "wait";
-  if (state.signedIn) return "remember";
+  if (state.invitation === "due" && state.accountAvailable) {
+    if (state.signedIn === null) return "wait";
+    if (state.signedIn) return "remember";
+    if (state.showing || !state.visible || state.nowPlayingShown || state.cardOpen) return "wait";
+    return "signInInvitation";
+  }
+  const card = FIRST_RUN_TOUR_CARDS.find((id) => (state.tour[id] ?? "done") !== "done");
+  if (card === undefined) return "done";
   if (state.showing || !state.visible || state.nowPlayingShown || state.cardOpen) return "wait";
-  return "signInInvitation";
+  if (card !== "songLinks") return card;
+  const onUpdate = state.tour[card] === "dueOnUpdate";
+  if (onUpdate && state.whatsNewPending) return "wait";
+  const songLinks = state.readSongLinks();
+  if (songLinks === null) return "done";
+  if (onUpdate) return songLinks === "none" ? card : "rememberSongLinks";
+  return songLinks === "all" ? "rememberSongLinks" : card;
 };

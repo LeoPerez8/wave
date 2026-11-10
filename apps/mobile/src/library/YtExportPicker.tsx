@@ -75,8 +75,10 @@ export function ExportSheet({ onClosed }: { onClosed: () => void }) {
           label: strings.imports.export,
           // Export does nothing while no row is ticked.
           disabled: view?.canExport !== true,
-          afterwards: () => {
-            if (picker !== null) void exportToYtMusic(planYtExport(picker));
+          afterwards: async () => {
+            if (picker === null) return false;
+            void exportToYtMusic(planYtExport(picker));
+            return true;
           },
         },
       ]}

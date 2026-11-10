@@ -35,6 +35,8 @@ const launch = ({
   };
   let now = 1_000_000_000;
   let finished = 0;
+  let released = 0;
+  let current = answer;
   const runner = createWhatsNewRunner({
     runningVersion: "0.47.0",
     seenVersion: {
@@ -45,7 +47,7 @@ const launch = ({
     },
     fetchNotes: (from, to) => {
       asked.push(`${from}..${to}`);
-      return answer;
+      return current;
     },
     surroundings: () => surroundings,
     show: (_, dismissed, seeAll) => {
@@ -62,6 +64,7 @@ const launch = ({
     now: () => now,
     log: (_, message) => logged.push(message),
     onFinished: () => finished++,
+    onReleased: () => released++,
     openVersionHistory: () => versionHistoryOpened++,
   });
   return {
@@ -71,6 +74,10 @@ const launch = ({
     cards,
     surroundings,
     finishedCount: () => finished,
+    releasedCount: () => released,
+    answerWith: (next: Effect.Effect<readonly PublishedRelease[], unknown>) => {
+      current = next;
+    },
     versionHistoryOpened: () => versionHistoryOpened,
     later: (ms: number) => {
       now += ms;
@@ -202,6 +209,33 @@ describe("What's New", () => {
     app.runner.reconsider();
     await settle();
     assert.equal(app.asked.length, 2);
+  });
+
+  it("stops holding back what waits for it once a fetch fails, and still shows a later retry's notes", async () => {
+    const seen = { value: "0.46.2" };
+    const app = launch({ seen, answer: Effect.fail(new Error("offline")) });
+    app.runner.reconsider();
+    await settle();
+    assert.equal(app.releasedCount(), 1);
+    assert.equal(app.finishedCount(), 0);
+    app.answerWith(Effect.succeed([release]));
+    app.later(15 * 60_000);
+    app.runner.reconsider();
+    await settle();
+    assert.equal(app.cards.length, 1);
+    app.cards[0]!.dismiss();
+    assert.equal(app.releasedCount(), 1, "released once");
+    assert.equal(seen.value, "0.47.0");
+  });
+
+  it("releases what waits for it when it finishes", async () => {
+    const seen = { value: "0.46.2" };
+    const app = launch({ seen });
+    app.runner.reconsider();
+    await settle();
+    assert.equal(app.releasedCount(), 0, "not while the card is still to come");
+    app.cards[0]!.dismiss();
+    assert.equal(app.releasedCount(), 1);
   });
 
   it("moves on with nothing to show when the notes have nothing to say", async () => {

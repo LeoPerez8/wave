@@ -42,7 +42,7 @@ import { startServices } from "@/services";
 import { useRecognizeRequests } from "@/recognize/recognizeRequests";
 import { SongShareLayer } from "@/share/SongShareLayer";
 import { useNavigationBarScheme } from "@/settings/appearance";
-import { settleSignInInvitation, startSignInInvitation } from "@/sync/signInInvitation";
+import { settleFirstRun, startFirstRun } from "@/sync/signInInvitation";
 import { startSync } from "@/sync/startSync";
 import { startWhatsNew } from "@/updates/whatsNew";
 import { useThemeColor } from "@/theme/useThemeColor";
@@ -73,7 +73,7 @@ export default function RootLayout() {
   useNavigationBarScheme();
   const { granted } = useAllFilesAccess();
   // Whether this is a new install, settled before the access screen can be passed.
-  useEffect(settleSignInInvitation, []);
+  useEffect(settleFirstRun, []);
   // A playlist link shared from YT Music or a browser opens its import card, once Wave can
   // read the Library (the import matches against it).
   useOpenSharedText(granted);
@@ -141,11 +141,11 @@ export default function RootLayout() {
     if (granted) return afterFirstSettled("whatsNew", () => startWhatsNew());
   }, [granted]);
 
-  // On a new install, the invitation to sign in to a Wave account, once, after the access screen.
+  // On a new install, the Wave account invitation and tour follow the access screen.
   // Not startup work: it waits for nothing heavy, and the first run's trip to Android's settings
   // can leave startup work waiting (the activity is recreated in the same runtime).
   useEffect(() => {
-    if (granted) startSignInInvitation();
+    if (granted) startFirstRun();
   }, [granted]);
 
   // A whole-Library lyrics and genre run that ended in the background says how it went.
