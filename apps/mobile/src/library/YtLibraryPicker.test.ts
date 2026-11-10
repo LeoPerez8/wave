@@ -100,9 +100,7 @@ interface Frame {
 const readPicker = async (): Promise<Frame> => {
   let renderer: ReturnType<typeof create> | undefined;
   await act(async () => {
-    renderer = create(
-      createElement(sheet.PickerSheet, { service: "ytMusic", onClosed: () => {} }),
-    );
+    renderer = create(createElement(sheet.PickerSheet, { service: "ytMusic", onClosed: () => {} }));
   });
   const frame = renderer?.root.findByType("frame" as never).props as Frame;
   act(() => renderer?.unmount());
@@ -137,5 +135,8 @@ test("an Import that fails shows why and says it didn't start", async () => {
   };
   const { actions } = await readPicker();
   for (const action of actions) assert.equal(await action.afterwards(), false, action.label);
-  assert.deepEqual(shared.errors, ["Couldn't import the playlists", "Couldn't import the playlists"]);
+  assert.deepEqual(shared.errors, [
+    "Couldn't import the playlists",
+    "Couldn't import the playlists",
+  ]);
 });
