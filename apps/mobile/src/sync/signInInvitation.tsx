@@ -15,7 +15,6 @@ import { TextButton } from "@/components/TextButton";
 import { currentLocalisation, useLocalisation } from "@/localisation/localisation";
 import { WaveNative } from "@/native/waveNative";
 import { isNowPlayingShown, onNowPlayingShownChange } from "@/nowPlaying/sheet";
-import { CardEntries } from "@/overlay/CardEntries";
 import { isOverlayOpen, onOverlaysChange, openOverlay } from "@/overlay/overlay";
 import { useWaveAccount, waveAccountAvailable } from "@/settings/waveAccount";
 import { waveAccountNotes, waveSignInLabels } from "@/settings/waveAccountText";
@@ -23,6 +22,7 @@ import { readSongLinkHandling } from "@/settings/songLinkHandling";
 import { useThemeColor } from "@/theme/useThemeColor";
 import { isWhatsNewPending, onWhatsNewPendingChange } from "@/updates/whatsNewPending";
 
+import { FirstRunCard } from "./FirstRunCard";
 import { createFirstRunRunner } from "./firstRunRunner";
 import { showBringYourMusic } from "./bringYourMusic";
 import { showSongLinks } from "./songLinks";
@@ -75,46 +75,39 @@ function SignInInvitationCard({ close, answered }: { close: () => void; answered
       : text.note;
 
   return (
-    <>
-      <CardEntries>
-        <View style={{ gap: CELL * 3, paddingTop: CELL, paddingBottom: CELL * 3 }}>
-          <Text
-            accessibilityRole="header"
-            className="font-sans text-title2 font-light text-foreground"
-            style={{ letterSpacing: -0.3 }}
-          >
-            {text.title}
-          </Text>
-          <Unlock icon={IconDevices} title={text.libraryTitle} line={text.library} />
-          <Unlock icon={IconMessageCircle} title={text.geniusTitle} line={text.genius} />
-          <Unlock icon={IconTicket} title={text.showsTitle} line={text.shows} />
-          <Text accessibilityLiveRegion="polite" className="font-sans text-footnote text-secondary">
-            {note}
-          </Text>
-        </View>
-      </CardEntries>
-      <View className="flex-row flex-wrap items-center justify-end" style={{ columnGap: CELL * 3 }}>
-        <TextButton
-          label={text.notNow}
-          onPress={() => {
-            close();
-            answered();
-          }}
-        />
-        <TextButton
-          label={
-            view.kind === "signedOut"
-              ? waveSignInLabels(strings)[view.action]
-              : strings.settings.signInWithGoogle
-          }
-          disabled={view.kind === "signedOut" && view.action === "signingIn"}
-          onPress={() => {
-            answered();
-            account.signIn();
-          }}
-        />
-      </View>
-    </>
+    <FirstRunCard
+      title={text.title}
+      actions={
+        <>
+          <TextButton
+            label={text.notNow}
+            onPress={() => {
+              close();
+              answered();
+            }}
+          />
+          <TextButton
+            label={
+              view.kind === "signedOut"
+                ? waveSignInLabels(strings)[view.action]
+                : strings.settings.signInWithGoogle
+            }
+            disabled={view.kind === "signedOut" && view.action === "signingIn"}
+            onPress={() => {
+              answered();
+              account.signIn();
+            }}
+          />
+        </>
+      }
+    >
+      <Unlock icon={IconDevices} title={text.libraryTitle} line={text.library} />
+      <Unlock icon={IconMessageCircle} title={text.geniusTitle} line={text.genius} />
+      <Unlock icon={IconTicket} title={text.showsTitle} line={text.shows} />
+      <Text accessibilityLiveRegion="polite" className="font-sans text-footnote text-secondary">
+        {note}
+      </Text>
+    </FirstRunCard>
   );
 }
 

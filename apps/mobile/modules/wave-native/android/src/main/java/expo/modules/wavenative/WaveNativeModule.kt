@@ -681,7 +681,10 @@ class WaveNativeModule : Module() {
 
   private fun packageUri(): Uri = Uri.parse("package:${context.packageName}")
 
-  /** Starts a system settings page for Wave, or [fallback] where the phone lacks it. */
+  /**
+   * The app Android would open [link] in now, as its package and label; null when Android would
+   * ask, would open Wave itself, or has nothing.
+   */
   @Suppress("DEPRECATION") // resolveActivity(Intent, ResolveInfoFlags) is API 33+; minSdk is 31.
   private fun linkOpener(link: String): Map<String, String>? {
     val packageManager = context.packageManager
@@ -697,6 +700,7 @@ class WaveNativeModule : Module() {
     )
   }
 
+  /** Starts a system settings page, Wave's or another app's, or [fallback] where the phone lacks it. */
   private fun openSystemSettings(page: Intent, fallback: Intent) {
     val activity = appContext.currentActivity
     val launcher: Context = activity ?: context
