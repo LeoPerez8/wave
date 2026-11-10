@@ -21,6 +21,7 @@ import {
   type SharedEntry,
   type SharedMove,
   type SharedPlaylistService,
+  type YtShareItem,
   type YtSong,
 } from "./index.ts";
 
@@ -39,24 +40,79 @@ const ytSong = (videoId: string, over: Partial<YtSong> = {}): YtSong => ({
 
 describe("ytShareSong", () => {
   test("shares a song by its YouTube video id when Wave knows it", () => {
-    assert.deepEqual(ytShareSong({ source: "library", videoId: "v1", song: lucky }), { id: "v1" });
+    assert.deepEqual(
+      ytShareSong({ source: "library", trackId: 1, videoId: "v1", matched: null, song: lucky }),
+      { id: "v1" },
+    );
     assert.deepEqual(ytShareSong({ source: "stream", song: ytSong("v2") }), { id: "v2" });
   });
 
   test("searches a Library song without one, and an unsearched entry, by title and artists", () => {
-    assert.deepEqual(ytShareSong({ source: "library", videoId: null, song: lucky }), {
-      id: null,
-      search: lucky,
-    });
+    assert.deepEqual(
+      ytShareSong({ source: "library", trackId: 1, videoId: null, matched: null, song: lucky }),
+      { id: null, search: lucky, rememberAs: 1 },
+    );
     assert.deepEqual(ytShareSong({ source: "unsearched", song: { ...lucky, artworkUrl: null } }), {
       id: null,
       search: { ...lucky, artworkUrl: null },
     });
   });
 
+  test("takes a Library song's remembered match instead of searching it", () => {
+    assert.deepEqual(
+      ytShareSong({ source: "library", trackId: 1, videoId: null, matched: "m1", song: lucky }),
+      { id: "m1" },
+    );
+  });
+
+  test("prefers the video id a Library song was downloaded from to a remembered match", () => {
+    assert.deepEqual(
+      ytShareSong({ source: "library", trackId: 1, videoId: "v1", matched: "m1", song: lucky }),
+      { id: "v1" },
+    );
+  });
+
   test("leaves out an unavailable entry: YouTube Music already didn't have it", () => {
     const song = { ...lucky, artworkUrl: null, reason: "notFound" as const };
     assert.deepEqual(ytShareSong({ source: "unavailable", song }), { id: null });
+  });
+});
+
+/** Shares two Library songs on YT Music with [memory], [found] answering the searches. */
+const shareTwoSongs = async (memory: Map<number, string>, found: Record<string, string>) => {
+  const searched: string[] = [];
+  const items: YtShareItem[] = [
+    { trackId: 1, title: "Get Lucky" },
+    { trackId: 2, title: "Nowhere" },
+  ].map(({ trackId, title }) => ({
+    source: "library",
+    trackId,
+    videoId: null,
+    matched: memory.get(trackId) ?? null,
+    song: { ...lucky, title },
+  }));
+  const shared = await matchSharedSongs(
+    items.map(ytShareSong),
+    (song) => {
+      searched.push(song.title);
+      return Promise.resolve(found[song.title] ?? null);
+    },
+    (trackId, id) => {
+      memory.set(trackId, id);
+      return Promise.resolve();
+    },
+  );
+  return { searched, shared };
+};
+
+describe("sharing on YT Music twice", () => {
+  test("searches again only the Library songs it didn't find", async () => {
+    const memory = new Map<number, string>();
+    const first = await shareTwoSongs(memory, { "Get Lucky": "yt-lucky" });
+    assert.deepEqual(first.searched, ["Get Lucky", "Nowhere"]);
+    const second = await shareTwoSongs(memory, { "Get Lucky": "yt-other", Nowhere: "yt-nowhere" });
+    assert.deepEqual(second.searched, ["Nowhere"]);
+    assert.deepEqual(second.shared.ids, ["yt-lucky", "yt-nowhere"]);
   });
 });
 
@@ -97,6 +153,24 @@ describe("matchSharedSongs", () => {
       Promise.resolve(null),
     );
     assert.deepEqual(shared, { ids: ["a", "b"], found: 3, total: 3 });
+  });
+
+  test("remembers what a search found for a song to remember, and nothing it didn't find", async () => {
+    const remembered: [number, string][] = [];
+    await matchSharedSongs(
+      [
+        { id: null, search: "Get Lucky", rememberAs: 1 },
+        { id: null, search: "Nothing", rememberAs: 2 },
+        { id: null, search: "Unsearched" },
+        { id: "known", rememberAs: 3 },
+      ],
+      (query: string) => Promise.resolve(query === "Nothing" ? null : `yt-${query}`),
+      (trackId, id) => {
+        remembered.push([trackId, id]);
+        return Promise.resolve();
+      },
+    );
+    assert.deepEqual(remembered, [[1, "yt-Get Lucky"]]);
   });
 
   test("stops when a search fails", async () => {

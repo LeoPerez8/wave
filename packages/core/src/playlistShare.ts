@@ -70,11 +70,13 @@ export const sharedEditBatches = <E>(edits: readonly E[]): E[][] => {
 /**
  * A playlist's song as the service sees it: its id there when Wave knows it
  * (a YouTube video id), otherwise what to search it by, or nothing when
- * it can't be searched.
+ * it can't be searched. A searched Library song whose match this phone
+ * remembers (YT Music's) names its track in [rememberAs].
  */
 export interface ShareSong<Q> {
   readonly id: string | null;
   readonly search?: Q | undefined;
+  readonly rememberAs?: number | undefined;
 }
 
 /** The songs a shared playlist gets: their ids in the playlist's order, and how many of its songs were found. */
@@ -84,21 +86,36 @@ export interface SharedSongs {
   readonly total: number;
 }
 
+/** The id a search finds for [song], remembered when it's a song to remember: null for none. */
+const searchShareSong = async <Q>(
+  song: ShareSong<Q>,
+  search: (query: Q) => Promise<string | null>,
+  remember: ((trackId: number, id: string) => Promise<void>) | undefined,
+): Promise<string | null> => {
+  if (song.search === undefined) return null;
+  const id = await search(song.search);
+  if (id !== null && song.rememberAs !== undefined) await remember?.(song.rememberAs, id);
+  return id;
+};
+
 /**
  * Matches [songs] on the service: a known id as it is, a song without one
  * searched once with [search] (in order, one at a time, so a shared search
  * allowance paces them), and a song with neither left out. A song listed
- * twice goes in once, where it first comes. Rejects when [search] does.
+ * twice goes in once, where it first comes. What a search finds for a song
+ * to remember goes to [remember] with its track; a song not found isn't
+ * remembered, so it's searched again next time. Rejects when [search] does.
  */
 export const matchSharedSongs = async <Q>(
   songs: readonly ShareSong<Q>[],
   search: (query: Q) => Promise<string | null>,
+  remember?: (trackId: number, id: string) => Promise<void>,
 ): Promise<SharedSongs> => {
   const ids: string[] = [];
   const seen = new Set<string>();
   let found = 0;
   for (const song of songs) {
-    const id = song.id ?? (song.search === undefined ? null : await search(song.search));
+    const id = song.id ?? (await searchShareSong(song, search, remember));
     if (id === null) continue;
     found += 1;
     if (seen.has(id)) continue;
@@ -317,26 +334,36 @@ export const librarySearchSong = ({
 }: LibrarySearchTrack): SpotifySong => ({ title, artists: [artist], album, durationMs });
 
 /**
- * A playlist's song as sharing it on YT Music sees it: a Library song with
- * the YouTube video id it was downloaded from (or null), a YT Music entry,
- * or an import's unsearched or unavailable entry.
+ * A playlist's song as sharing it on YT Music sees it: a Library song (its
+ * track id, the YouTube video id it was downloaded from or null, and the
+ * video id a search found for it before, as this phone remembers it, or
+ * null), a YT Music entry, or an import's unsearched or unavailable entry.
  */
 export type YtShareItem =
-  | { readonly source: "library"; readonly videoId: string | null; readonly song: SpotifySong }
+  | {
+      readonly source: "library";
+      readonly trackId: number;
+      readonly videoId: string | null;
+      readonly matched: string | null;
+      readonly song: SpotifySong;
+    }
   | { readonly source: "stream"; readonly song: Pick<YtSong, "videoId"> }
   | UnsearchedEntry
   | UnavailableEntry;
 
 /**
- * How [item] is shared on YT Music: by its video id when it has one, else
- * searched by its title and artists (a Library song, an unsearched entry).
- * An unavailable entry is left out: YouTube Music didn't have it when it was
- * searched, or it can't be searched.
+ * How [item] is shared on YT Music: by its video id when it has one, a
+ * Library song next by the match this phone remembers for it, else searched
+ * by its title and artists (a Library song, whose match is then remembered,
+ * and an unsearched entry). An unavailable entry is left out: YouTube Music
+ * didn't have it when it was searched, or it can't be searched.
  */
 export const ytShareSong = (item: YtShareItem): ShareSong<SpotifySong> => {
   switch (item.source) {
-    case "library":
-      return item.videoId === null ? { id: null, search: item.song } : { id: item.videoId };
+    case "library": {
+      const id = item.videoId ?? item.matched;
+      return id === null ? { id: null, search: item.song, rememberAs: item.trackId } : { id };
+    }
     case "stream":
       return { id: item.song.videoId };
     case "unsearched":
