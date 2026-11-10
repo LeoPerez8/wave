@@ -364,6 +364,11 @@ export const settingsPtBr: typeof settingsEn = {
       "Importar de qualquer um dos apps precisa do YT Music. Ative para trazer suas músicas.",
     turnOnYtMusic: "Ativar YT Music",
   },
+  songLinksCard: {
+    line: "Na página Abrir por padrão do Android, ative Abrir links compatíveis e depois:",
+    steps: ["Toque em Adicionar link.", "Marque todos os links.", "Toque em Adicionar."],
+    turnOn: "Ativar",
+  },
   itsSongsLeaveYourLibraryTheFiles:
     "Suas músicas saem da biblioteca. Os arquivos ficam no telefone.",
   couldntRemoveTheFolder: "Não foi possível remover a pasta",

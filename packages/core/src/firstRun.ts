@@ -4,14 +4,16 @@
  * An update never brings these new-install cards to a phone that used Wave before.
  */
 
+import type { SongLinkHandling } from "./songLinkHandling.ts";
+
 /** Whether the sign-in invitation is still to show on this phone, kept across launches. */
 export type SignInInvitation = "due" | "done";
 
 /** Each tour card keeps its own answer, independently of the account invitation. */
 export type FirstRunAnswer = SignInInvitation;
 
-/** Tour order. The next ticket adds the song-links card after Bring your music. */
-export const FIRST_RUN_TOUR_CARDS = ["bringYourMusic"] as const;
+/** Tour order on a new install. */
+export const FIRST_RUN_TOUR_CARDS = ["bringYourMusic", "songLinks"] as const;
 export type FirstRunTourCard = (typeof FIRST_RUN_TOUR_CARDS)[number];
 export type FirstRunTourAnswers = Readonly<Partial<Record<FirstRunTourCard, FirstRunAnswer>>>;
 
@@ -42,6 +44,8 @@ export interface FirstRunState {
   readonly accessGranted: boolean;
   readonly invitation: SignInInvitation;
   readonly tour: FirstRunTourAnswers;
+  /** Android's current song-link state, read again before offering card 2. */
+  readonly songLinks: SongLinkHandling;
   /** This build has the sync service set up, so it can sign in to a Wave account. */
   readonly accountAvailable: boolean;
   /** Whether a Wave account is signed in; null until the native module has said. */
@@ -59,11 +63,18 @@ export interface FirstRunState {
 /**
  * `access` is the all-files access screen, which comes first; `signInInvitation`
  * opens the invitation over Wave; `remember` keeps it done without showing it
- * (an account is already signed in). A tour card's id opens that card;
+ * (an account is already signed in); `rememberSongLinks` keeps card 2 answered
+ * without showing it when every host is on. A tour card's id opens that card;
  * `done` means the first run has nothing more to show in this launch.
  */
 export type FirstRunStep =
-  "access" | "signInInvitation" | "remember" | "wait" | "done" | FirstRunTourCard;
+  | "access"
+  | "signInInvitation"
+  | "remember"
+  | "rememberSongLinks"
+  | "wait"
+  | "done"
+  | FirstRunTourCard;
 
 /**
  * What the first run shows now. The invitation comes after the access screen,
@@ -82,5 +93,6 @@ export const nextFirstRunStep = (state: FirstRunState): FirstRunStep => {
   const card = FIRST_RUN_TOUR_CARDS.find((id) => state.tour[id] === "due");
   if (card === undefined) return "done";
   if (state.showing || !state.visible || state.nowPlayingShown || state.cardOpen) return "wait";
+  if (card === "songLinks" && state.songLinks === "all") return "rememberSongLinks";
   return card;
 };

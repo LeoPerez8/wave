@@ -13,7 +13,7 @@ const launch = ({
   stored: { value: string | null };
   accessGranted: boolean;
   usedBefore?: boolean;
-  tourStored?: { value: string | null };
+  tourStored?: { value: string | null; songLinks?: string | null };
 }) => {
   const surroundings: {
     -readonly [K in keyof FirstRunSurroundings]: FirstRunSurroundings[K];
@@ -24,9 +24,10 @@ const launch = ({
     visible: true,
     nowPlayingShown: false,
     cardOpen: false,
+    songLinks: "none",
   };
   const cards: { answer: () => void }[] = [];
-  const tourCards: { finish: (answer: "due" | "done") => void }[] = [];
+  const tourCards: { card: string; finish: (answer: "due" | "done") => void }[] = [];
   let finished = 0;
   const runner = createFirstRunRunner({
     stored: {
@@ -36,9 +37,15 @@ const launch = ({
       },
     },
     tourStored: {
-      get: () => tourStored.value,
-      set: (_card, value) => {
-        tourStored.value = value;
+      get: (card) =>
+        card === "songLinks"
+          ? "songLinks" in tourStored
+            ? tourStored.songLinks!
+            : "done"
+          : tourStored.value,
+      set: (card, value) => {
+        if (card === "songLinks") tourStored.songLinks = value;
+        else tourStored.value = value;
       },
     },
     accessGrantedAtLaunch: accessGranted,
@@ -53,9 +60,10 @@ const launch = ({
         },
       });
     },
-    showTourCard: (_card, finish) => {
+    showTourCard: (card, finish) => {
       surroundings.cardOpen = true;
       tourCards.push({
+        card,
         finish: (answer) => {
           surroundings.cardOpen = false;
           finish(answer);
@@ -74,6 +82,51 @@ const launch = ({
 };
 
 describe("the first-run tour", () => {
+  it("settles both cards before access, resumes an unanswered card 2, and keeps its answer", () => {
+    const stored = { value: null as string | null };
+    const tourStored = { value: null as string | null, songLinks: null as string | null };
+    const first = launch({ stored, tourStored, accessGranted: false });
+    assert.equal(tourStored.songLinks, "due");
+    first.grant();
+    first.cards[0]!.answer();
+    first.tourCards[0]!.finish("done");
+    assert.deepEqual(
+      first.tourCards.map(({ card }) => card),
+      ["bringYourMusic", "songLinks"],
+    );
+    assert.equal(tourStored.songLinks, "due", "showing isn't an answer");
+    const next = launch({ stored, tourStored, accessGranted: true });
+    next.runner.reconsider();
+    assert.deepEqual(
+      next.tourCards.map(({ card }) => card),
+      ["songLinks"],
+    );
+    next.tourCards[0]!.finish("done");
+    assert.equal(tourStored.songLinks, "done");
+    assert.equal(next.finished(), 1);
+    const answered = launch({ stored, tourStored, accessGranted: true });
+    answered.runner.reconsider();
+    assert.equal(answered.tourCards.length, 0);
+  });
+
+  it("counts an all-on song-links card as answered without showing it, across launches", () => {
+    const stored = { value: null as string | null };
+    const tourStored = { value: null as string | null, songLinks: "due" as string | null };
+    const first = launch({ stored, tourStored, accessGranted: false });
+    first.grant();
+    first.cards[0]!.answer();
+    first.surroundings.songLinks = "all";
+    first.tourCards[0]!.finish("done");
+    assert.deepEqual(
+      first.tourCards.map(({ card }) => card),
+      ["bringYourMusic"],
+    );
+    assert.equal(tourStored.songLinks, "done");
+    const next = launch({ stored, tourStored, accessGranted: true });
+    next.runner.reconsider();
+    assert.equal(next.tourCards.length, 0, "stays answered even if links are later turned off");
+  });
+
   it("still runs without the sync service or when the invitation remembers an account", () => {
     for (const accountAvailable of [true, false]) {
       const first = launch({
@@ -89,19 +142,20 @@ describe("the first-run tour", () => {
     }
   });
 
-  it("never starts card 1 on an update, including a phone with access revoked", () => {
+  it("never starts the new-install tour on an update, including a phone with access revoked", () => {
     for (const prior of [
       { accessGranted: true, usedBefore: false, invitation: null },
       { accessGranted: false, usedBefore: true, invitation: null },
       { accessGranted: false, usedBefore: false, invitation: "due" },
       { accessGranted: false, usedBefore: false, invitation: "done" },
     ]) {
-      const tourStored = { value: null as string | null };
+      const tourStored = { value: null as string | null, songLinks: null as string | null };
       const updated = launch({ stored: { value: prior.invitation }, tourStored, ...prior });
       updated.grant();
       updated.cards[0]?.answer();
       assert.equal(updated.tourCards.length, 0);
       assert.equal(tourStored.value, "done");
+      assert.equal(tourStored.songLinks, "done");
     }
   });
 

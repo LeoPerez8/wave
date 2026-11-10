@@ -36,6 +36,7 @@ const ready: FirstRunState = {
   accessGranted: true,
   invitation: "due",
   tour: {},
+  songLinks: "none",
   accountAvailable: true,
   signedIn: false,
   visible: true,
@@ -45,6 +46,27 @@ const ready: FirstRunState = {
 };
 
 describe("nextFirstRunStep", () => {
+  it("offers song links only after Bring your music is answered", () => {
+    const tour = { bringYourMusic: "due", songLinks: "due" } as const;
+    assert.equal(nextFirstRunStep({ ...ready, tour }), "signInInvitation");
+    assert.equal(nextFirstRunStep({ ...ready, tour, invitation: "done" }), "bringYourMusic");
+    assert.equal(
+      nextFirstRunStep({ ...ready, invitation: "done", tour: { ...tour, bringYourMusic: "done" } }),
+      "songLinks",
+    );
+  });
+
+  it("remembers song links unseen when all hosts are on, but offers it for some or none", () => {
+    const linksReady = { ...ready, invitation: "done", tour: { songLinks: "due" } } as const;
+    assert.equal(nextFirstRunStep({ ...linksReady, songLinks: "all" }), "rememberSongLinks");
+    assert.equal(nextFirstRunStep({ ...linksReady, songLinks: "some" }), "songLinks");
+    assert.equal(nextFirstRunStep({ ...linksReady, songLinks: "none" }), "songLinks");
+    assert.equal(
+      nextFirstRunStep({ ...linksReady, songLinks: "all", tour: { songLinks: "done" } }),
+      "done",
+    );
+  });
+
   it("offers Bring your music after the invitation, including builds without accounts", () => {
     const tour = { bringYourMusic: "due" } as const;
     assert.equal(nextFirstRunStep({ ...ready, tour }), "signInInvitation");

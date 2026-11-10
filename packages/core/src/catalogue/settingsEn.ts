@@ -376,6 +376,11 @@ export const settingsEn = {
     needsYtMusic: "Importing from either app needs YT Music. Turn it on to bring your music.",
     turnOnYtMusic: "Turn On YT Music",
   },
+  songLinksCard: {
+    line: "In Android's Open by default page, turn on Open supported links, then:",
+    steps: ["Tap Add link.", "Tick every link.", "Tap Add."],
+    turnOn: "Turn On",
+  },
   itsSongsLeaveYourLibraryTheFiles: "Its songs leave your library. The files stay on your phone.",
   couldntRemoveTheFolder: "Couldn't remove the folder",
   loadingMusicFolders: "Loading music folders",
