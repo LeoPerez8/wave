@@ -493,6 +493,8 @@ export type {
   SettingsPageEntry,
   SettingsIcon,
 } from "./settingsPages.ts";
+export { songLinkHandling, songLinkHandlingLine } from "./songLinkHandling.ts";
+export type { SongLinkHandling, SongLinkHandlingState } from "./songLinkHandling.ts";
 export { PLAYLIST_LAYOUTS, parsePlaylistLayout, storedPlaylistLayout } from "./playlistLayout.ts";
 export type { PlaylistLayout } from "./playlistLayout.ts";
 export { keepAddToPlaylistOrder, sortPlaylistsForAdd } from "./addToPlaylistOrder.ts";
@@ -1338,12 +1340,11 @@ export {
   recognisePlaylistLink,
   sharedTextImport,
   spotifyShortLinkTarget,
-  YT_MUSIC_OFF_NOTICE,
-  ytMusicOffNotice,
+  spotifyShortLinkLanding,
   playlistLinkReason,
 } from "./playlistLinks.ts";
+export { YT_MUSIC_OFF_NOTICE, ytMusicOffNotice, type ImportNotice } from "./linkNotices.ts";
 export type {
-  ImportNotice,
   LinkImportRead,
   LinkImportView,
   LinkReadFailure,
@@ -1355,6 +1356,27 @@ export type {
   PlaylistLinkProblem,
   SharedTextImport,
 } from "./playlistLinks.ts";
+export {
+  deezerShortLinkLanding,
+  linkedYtSong,
+  recogniseSongLink,
+  songLinkLibraryCopy,
+  songLinkNotice,
+  songLinkNotFound,
+  songLinkPlay,
+  trackLinkPlay,
+  ytMusicLinkPlay,
+} from "./songLinkOpening.ts";
+export type {
+  LinkedSong,
+  SongLink,
+  SongLinkFailure,
+  SongLinkNotFound,
+  SongLinkPlay,
+  TrackLinkPlay,
+  TrackService,
+  YtMusicLinkPlay,
+} from "./songLinkOpening.ts";
 export { spotifySearchQuery, spotifyYtMatch, searchRecording } from "./spotifyImport.ts";
 export { settleUnsearched, unsearchedSearchQuery, unsearchedSettles } from "./unsearchedEntries.ts";
 export {
@@ -1443,6 +1465,9 @@ export type {
   PlaylistImports,
 } from "./playlistImport.ts";
 export { readSpotifyPlaylist, spotifyEmbed, spotifyPlaylistPage } from "./spotifyPlaylist.ts";
+export type { ServiceTrack, TrackRead, TrackReadFailure } from "./serviceTrack.ts";
+export { readSpotifyTrack } from "./spotifyTrack.ts";
+export { readDeezerTrack, type DeezerAnswer, type DeezerTransport } from "./deezerTrack.ts";
 export type {
   SpotifyAnswer,
   SpotifyEmbed,

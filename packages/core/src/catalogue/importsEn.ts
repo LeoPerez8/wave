@@ -38,9 +38,24 @@ export const importsEn = {
   songLink: "This is a link to a song, not a playlist.",
   notPlaylistLink: "This link isn't to a playlist.",
   ytMusicOff: "YT Music is off",
-  ytMusicOffMessage:
-    "Turn on YT Music in Settings to import playlists from YouTube Music and Spotify links.",
+  ytMusicOffMessage: "Turn on YT Music in Settings to open song and playlist links.",
   cantImport: "Can't import this",
+  /** Sharing something to Wave that isn't a song or playlist link. */
+  cantOpen: "Can't open this",
+  sharedLinks:
+    "Wave opens songs from YouTube Music, Spotify and Deezer links, and playlists from YouTube Music and Spotify links.",
+  /** Opening a song link. */
+  findingSong: "Finding song…",
+  songOffline: "You're offline",
+  songOfflineMessage: "Connect to the internet to open this song.",
+  songLinkDoesntOpen: "This link doesn't open",
+  songLinkDoesntOpenMessage: "YouTube Music couldn't play the song it links to.",
+  songNotFound: "Couldn't find this song online",
+  songUnreadMissing: (service: string): string => `${service} doesn't have the song it links to.`,
+  songUnreadUnreachable: (service: string): string =>
+    `Couldn't reach ${service}. Check your connection and try again.`,
+  songUnreadFailed: (service: string): string => `${service} didn't answer as expected.`,
+  ytMusicNoAnswerMessage: "YouTube Music didn't answer. Try again later.",
   offline: "You're offline. Try again when you're back online.",
   playlistFailed:
     "Couldn't read this playlist. It may be private or deleted, or there was no answer online.",

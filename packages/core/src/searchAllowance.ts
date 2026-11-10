@@ -10,7 +10,15 @@
 
 /** Who asks an automatic YouTube Music search. */
 export type SearchAsker =
-  "playing" | "search" | "related" | "download" | "tryAgain" | "share" | "discover" | "fill";
+  | "playing"
+  | "search"
+  | "related"
+  | "songLink"
+  | "download"
+  | "tryAgain"
+  | "share"
+  | "discover"
+  | "fill";
 
 /**
  * At most this many searches in any `SEARCH_WINDOW_MS`. YouTube Music began
@@ -37,6 +45,8 @@ const ASKERS: Readonly<Record<SearchAsker, AskerTurn>> = {
   search: { rank: 0, most: SEARCH_ALLOWANCE, name: "Search" },
   // Related finding the playing Library song with no video id: the view waits on it, as for playing.
   related: { rank: 0, most: SEARCH_ALLOWANCE, name: "Related" },
+  // A song link from another service searched for its recording: someone is waiting on it, as for playing.
+  songLink: { rank: 0, most: SEARCH_ALLOWANCE, name: "a song link" },
   download: { rank: 1, most: SEARCH_ALLOWANCE, name: "a download" },
   // A playlist's unavailable entries searched again: downloads' priority, named apart in the log.
   tryAgain: { rank: 1, most: SEARCH_ALLOWANCE, name: "Try Again" },

@@ -420,15 +420,15 @@ https://music.youtube.com/playlist?list=${ID}`,
     ]) {
       assert.deepEqual(sharedTextImport(text, on), spotify, text);
     }
+    // A short link may name a song, so a shared one is followed before Wave decides (songLinkOpening.test.ts).
     assert.deepEqual(sharedTextImport("Today's Top Hits https://spotify.link/uszhQI5hT3b", on), {
-      kind: "import",
+      kind: "song",
       link: { service: "spotifyShort", url: "https://spotify.link/uszhQI5hT3b" },
     });
   });
 
-  test("anything else shared says what Wave imports", () => {
+  test("anything else shared says what Wave opens", () => {
     for (const text of [
-      "https://music.youtube.com/watch?v=dQw4w9WgXcQ&si=Ab12_cd-EF",
       "https://music.youtube.com/browse/MPREb_ABC123def45",
       "https://music.youtube.com/channel/UCiMhD4jzUqG-IgPzUmmytRQ",
       `https://example.com/playlist?list=${ID}`,
@@ -442,8 +442,9 @@ https://music.youtube.com/playlist?list=${ID}`,
         sharedTextImport(text, on),
         {
           kind: "notice",
-          title: "Can't import this",
-          message: "Wave imports playlists from YouTube Music and Spotify links.",
+          title: "Can't open this",
+          message:
+            "Wave opens songs from YouTube Music, Spotify and Deezer links, and playlists from YouTube Music and Spotify links.",
         },
         text,
       );
@@ -457,8 +458,7 @@ https://music.youtube.com/playlist?list=${ID}`,
         {
           kind: "notice",
           title: "YT Music is off",
-          message:
-            "Turn on YT Music in Settings to import playlists from YouTube Music and Spotify links.",
+          message: "Turn on YT Music in Settings to open song and playlist links.",
         },
         text,
       );

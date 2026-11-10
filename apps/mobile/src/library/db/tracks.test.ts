@@ -14,10 +14,11 @@ import {
   selectKnownFiles,
   selectLibraryLookupSongs,
   selectSongGenres,
+  selectSongWithVideo,
   selectVideoIds,
   trackQuery,
 } from "./tracks.ts";
-import { addTrack, migrateTestDatabase, openTestDatabase } from "./testDatabase.ts";
+import { addMissingSong, addTrack, migrateTestDatabase, openTestDatabase } from "./testDatabase.ts";
 
 /** A file as the scanner reads it, with the flag its advisory tag gives. */
 const scanned = (title: string, explicit: ExplicitFlag): IndexedTrack => ({
@@ -289,6 +290,20 @@ describe("selectVideoIds", () => {
     const local = addTrack(db, { title: "Ripped" });
     db.update(schema.tracks).set({ videoId: "abc" }).where(eq(schema.tracks.id, lucky)).run();
     assert.deepEqual(selectVideoIds(db, [lucky, local, 999]), new Map([[lucky, "abc"]]));
+  });
+});
+
+describe("selectSongWithVideo", () => {
+  test("gives the song with a file here that was downloaded from the video, or null", async () => {
+    const db = await openTestDatabase();
+    const lucky = addTrack(db, { title: "Get Lucky" });
+    const gone = addMissingSong(db, { title: "Around the World" });
+    addTrack(db, { title: "Ripped" });
+    db.update(schema.tracks).set({ videoId: "abc" }).where(eq(schema.tracks.id, lucky)).run();
+    db.update(schema.tracks).set({ videoId: "def" }).where(eq(schema.tracks.id, gone)).run();
+    assert.equal(selectSongWithVideo(db, "abc"), lucky);
+    assert.equal(selectSongWithVideo(db, "def"), null);
+    assert.equal(selectSongWithVideo(db, "xyz"), null);
   });
 });
 

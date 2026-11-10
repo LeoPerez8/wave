@@ -2,14 +2,14 @@ import {
   searchRecording,
   spotifySearchQuery,
   type SearchAsker,
-  type SpotifySong,
+  type ServiceTrack,
 } from "@wave/core";
 import * as Effect from "effect/Effect";
 import { YtMusic, YtMusicError } from "./YtMusic";
 import { withSearchTurn } from "./searchAllowance";
 
 /** Each request takes its own turn; Core owns the fallback and recording checks. */
-export const recordingSearch = (asker: SearchAsker, song: SpotifySong, unknownLength = false) =>
+export const recordingSearch = (asker: SearchAsker, song: ServiceTrack, unknownLength = false) =>
   Effect.gen(function* () {
     const yt = yield* YtMusic;
     const query = spotifySearchQuery(song);
