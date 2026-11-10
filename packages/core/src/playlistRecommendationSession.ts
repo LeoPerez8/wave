@@ -76,6 +76,12 @@ export interface PlaylistRecommendationFreshRead {
  */
 export type PlaylistRecommendationTurn = "paint" | "free";
 
+/**
+ * What a Refresh came to, once the slots it emptied have offers or have given up: "updated",
+ * an offer shows; "none", nothing could; "failed", a read failed for a slot it emptied.
+ */
+export type PlaylistRefreshOutcome = "updated" | "none" | "failed";
+
 /** How long one full renewal took (ms), as the owner waited for it. */
 export interface PlaylistRecommendationTiming {
   /** From the renewal's start until its offers (or its failure) showed. */
@@ -652,8 +658,8 @@ export const playlistRecommendationSession = (options: {
     reserveWanted = true;
     void refill("free").then(settle);
   };
-  /** Refills [holes] (their choices saved), then runs a renewal asked for meanwhile. */
-  const replace = async (holes: readonly number[], turn: PlaylistRecommendationTurn) => {
+  /** Refills [holes] (their choices saved); ends once each has an offer or has given up. */
+  const refillHoles = async (holes: readonly number[], turn: PlaylistRecommendationTurn) => {
     waiting.push(...holes);
     const replaced = Promise.all(
       holes.map(
@@ -665,6 +671,10 @@ export const playlistRecommendationSession = (options: {
     );
     void refill(turn);
     await replaced;
+  };
+  /** Refills [holes], then runs a renewal asked for meanwhile. */
+  const replace = async (holes: readonly number[], turn: PlaylistRecommendationTurn) => {
+    await refillHoles(holes, turn);
     await settle();
   };
   /** A renewal asked for while offers were being saved or replaced runs once they're done. */
@@ -1028,51 +1038,80 @@ export const playlistRecommendationSession = (options: {
       }
     },
     /**
-     * Refresh: every offer showing, but those whose choice is saving, steps aside for others.
-     * The skipped offers leave what's saved and, as an added or dismissed one does, stay out
-     * of every ranking and slot for the rest of the visit; nothing is recorded about them.
-     * Their slots take spares at once, those with none their placeholder for one refill, and
-     * slots whose replacement failed go with them. A renewal behind the offers stops, to run
-     * again after. With nothing showing, it's a full renewal. False if it did nothing.
+     * Refresh: every slot not working on a choice takes another offer. The offers it skips
+     * leave what's saved and, as an added or dismissed one does, stay out of every ranking and
+     * slot for the rest of the visit; nothing is recorded about them. The slots take spares at
+     * once, those with none their placeholder for one refill. A renewal behind the offers
+     * stops, to run again after. With nothing showing, it's a full renewal. Resolves when the
+     * owner's wait ends, without the renewal held meanwhile or a fresh one's later radios;
+     * null when it did nothing, was put off, or was hidden or closed before then.
      */
-    refresh: async (): Promise<boolean> => {
-      if (disposed || paused || renewing) return false;
+    refresh: async (): Promise<PlaylistRefreshOutcome | null> => {
+      if (disposed || paused || renewing) return null;
+      const outcome = (holes: readonly number[]): PlaylistRefreshOutcome | null => {
+        if (disposed || paused) return null;
+        if (state.error === "load" || holes.some((hole) => state.unfilled.includes(hole)))
+          return "failed";
+        return state.slots.some((offer) => offer !== null) ? "updated" : "none";
+      };
       if (!state.slots.some((offer) => offer !== null)) {
-        await session.renew({ turn: "paint" });
-        return !disposed;
+        if (busy()) {
+          void session.renew({ turn: "paint" });
+          return null;
+        }
+        let stopListening = () => {};
+        const loaded = new Promise<void>((resolve) => {
+          stopListening = session.subscribe(() => {
+            if (!state.loading) resolve();
+          });
+        });
+        await Promise.race([session.renew({ turn: "paint" }), loaded]);
+        stopListening();
+        return outcome([]);
       }
-      const slots = [...state.slots];
+      const slots = Array.from(
+        { length: PLAYLIST_SHOWN_OFFERS },
+        (_, index): PlaylistRecommendationSlot | null => state.slots[index] ?? null,
+      );
       const skipped: PlaylistRecommendationTrack[] = [];
       const holes: number[] = [];
       for (const [index, offer] of slots.entries()) {
-        if (offer === null || state.pending.includes(offer.key)) continue;
-        skipped.push(offer.track);
-        slots[index] = null;
+        if (state.pendingSlots.includes(index)) continue;
+        if (offer !== null) {
+          if (state.pending.includes(offer.key)) continue;
+          skipped.push(offer.track);
+          slots[index] = null;
+        }
+        // A slot left empty, or whose replacement failed, asks again with the others.
         holes.push(index);
       }
-      if (holes.length === 0) return false;
+      if (skipped.length === 0) return null;
       holdRenewal();
       consumed.push(...skipped);
-      saveOffers(playlistOffersWithout(savedOffers, skipped));
-      holes.push(...state.unfilled);
+      if (savedOffers.length > 0) {
+        keepOffers(playlistOffersWithout(savedOffers, skipped));
+        writeOffersSoon();
+      }
       const unspared = fillFromSpares(slots, holes);
       publish({
         slots,
         pendingSlots: [...state.pendingSlots, ...unspared],
-        unfilled: [],
+        unfilled: state.unfilled.filter((hole) => !holes.includes(hole)),
         error: state.error === "refill" ? null : state.error,
       });
       if (unspared.length === 0) {
         void settle();
         reserveLowPoint();
-        return true;
+        return outcome(holes);
       }
       if (!settled()) {
+        // The opening's renewal fills them.
         waiting.push(...unspared);
-        return true;
+        return null;
       }
-      await replace(unspared, "paint");
-      return !disposed;
+      await refillHoles(unspared, "paint");
+      void settle();
+      return outcome(unspared);
     },
     dismiss: (key: string) => act("dismiss", key, options.dismiss),
     accept: (key: string) => act("add", key, options.accept),

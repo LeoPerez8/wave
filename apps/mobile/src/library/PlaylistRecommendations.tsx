@@ -209,15 +209,14 @@ export function PlaylistRecommendations({
     });
   };
   const refresh = () => {
-    void session.refresh().then((refreshed) => {
-      if (!refreshed) return;
-      const after = session.get();
+    void session.refresh().then((outcome) => {
+      if (outcome === null) return;
       announce(
-        after.error === "load"
-          ? text.couldntLoadRecommendations
-          : after.slots.some((offer) => offer !== null)
-            ? text.recommendationsUpdated
-            : text.noMoreMatching,
+        outcome === "updated"
+          ? text.recommendationsUpdated
+          : outcome === "none"
+            ? text.noMoreMatching
+            : text.couldntLoadAnother,
       );
     });
   };
@@ -300,7 +299,7 @@ export function PlaylistRecommendations({
                 void session.renew({ turn: "paint" });
               },
             }
-          : state.loading
+          : state.loading || items.length === 0
             ? undefined
             : { label: text.refreshRecommendations, onPress: refresh }
       }

@@ -1418,7 +1418,7 @@ test("with no spares, Refresh holds every slot's placeholder for one read that l
 test("Refresh with nothing new to offer leaves an honest empty section, not the skipped offers", async () => {
   const { session, gate, shown } = savedSession(lettered("vwxyz"));
   gate.radio = lettered("vwxyz");
-  await session.refresh();
+  assert.equal(await session.refresh(), "none");
   assert.deepEqual(shown(), [null, null, null, null, null]);
   assert.equal(session.get().error, null);
   assert.deepEqual(session.get().pendingSlots, []);
@@ -1426,7 +1426,7 @@ test("Refresh with nothing new to offer leaves an honest empty section, not the 
   gate.radio = lettered("vwxyzabcde");
   const refreshing = session.refresh();
   assert.equal(session.get().loading, true);
-  await refreshing;
+  assert.equal(await refreshing, "updated");
   assert.equal(session.get().loading, false);
   assert.deepEqual(shown(), ["a", "b", "c", "d", "e"]);
 });
@@ -1469,8 +1469,35 @@ test("Refresh with every offer's choice saving does nothing, and says so", async
   gate.holdSave = Promise.withResolvers<void>();
   const held = gate.holdSave;
   const dismissing = session.get().slots.map((offer) => session.dismiss(offer!.key));
-  assert.equal(await session.refresh(), false);
+  assert.equal(await session.refresh(), null);
   held.resolve();
   await Promise.all(dismissing);
   assert.deepEqual(shown(), ["a", "b", "c", "d", "e"]);
+});
+
+test("Refresh on a short list asks for its empty slots too, so the list can grow back", async () => {
+  const { session, gate, shown } = savedSession(lettered("vwx"));
+  gate.radio = lettered("vwxabcde");
+  assert.deepEqual(shown(), ["v", "w", "x"]);
+  assert.equal(await session.refresh(), "updated");
+  assert.deepEqual(shown(), ["a", "b", "c", "d", "e"]);
+});
+
+test("Refresh whose refill fails says so, and its slots offer Try again", async () => {
+  const { session, gate, shown } = savedSession(lettered("vwxyz"));
+  gate.fail = true;
+  assert.equal(await session.refresh(), "failed");
+  assert.deepEqual(shown(), [null, null, null, null, null]);
+  assert.deepEqual(session.get().unfilled, [0, 1, 2, 3, 4]);
+  assert.equal(session.get().error, "refill");
+});
+
+test("Refresh hidden before its refill ends reports nothing", async () => {
+  const { session, gate } = savedSession(lettered("vwxyz"));
+  const held = Promise.withResolvers<void>();
+  gate.hold = held;
+  const refreshing = session.refresh();
+  session.pause();
+  held.resolve();
+  assert.equal(await refreshing, null);
 });
