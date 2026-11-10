@@ -208,6 +208,18 @@ export function PlaylistRecommendations({
       );
     });
   };
+  const refresh = () => {
+    void session.refresh().then((outcome) => {
+      if (outcome === null) return;
+      announce(
+        outcome === "updated"
+          ? text.recommendationsUpdated
+          : outcome === "none"
+            ? text.noMoreMatching
+            : text.couldntLoadAnother,
+      );
+    });
+  };
   const offerRow = (song: PlaylistRecommendationSlot) => {
     return (
       <View className="flex-row items-center" style={{ minHeight: grid.row }}>
@@ -287,7 +299,9 @@ export function PlaylistRecommendations({
                 void session.renew({ turn: "paint" });
               },
             }
-          : undefined
+          : state.loading || items.length === 0
+            ? undefined
+            : { label: text.refreshRecommendations, onPress: refresh }
       }
     >
       {state.loading && songs.length === 0 ? (

@@ -148,6 +148,7 @@ export const playlistsPtBr: typeof playlistsEn = {
   loadingRecommended: "Carregando músicas recomendadas",
   loadingAnother: "Carregando outra recomendação",
   tryAgain: "Tentar Novamente",
+  refreshRecommendations: "Atualizar",
   addRecommendation: (title: string): string => `Adicionar ${title} à playlist`,
   dismissRecommendation: (title: string): string => `Dispensar a recomendação ${title}`,
   adding: (title: string): string => `Adicionando ${title}`,
