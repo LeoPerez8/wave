@@ -1359,3 +1359,118 @@ test("a failed save restores its offer and writes nothing", async () => {
   await paintAll();
   assert.equal(gate.written.length, 0);
 });
+
+const ids = (offers: readonly (PlaylistRecommendationTrack | null)[] | undefined) =>
+  (offers ?? []).flatMap((offer) => (offer === null ? [] : [offer.id]));
+
+test("Refresh shows five other saved offers at once, and the skipped ones leave what's saved", async () => {
+  const { session, gate, shown, written } = savedSession(lettered("abcdefghij"));
+  const held = Promise.withResolvers<void>();
+  gate.hold = held;
+  const refreshing = session.refresh();
+  // The spares step in on the tap itself; the reserve's refill reads behind them.
+  assert.deepEqual(shown(), ["f", "g", "h", "i", "j"]);
+  assert.deepEqual(session.get().pendingSlots, []);
+  held.resolve();
+  await refreshing;
+  await nextTurn();
+  assert.deepEqual(shown(), ["f", "g", "h", "i", "j"]);
+  for (const skipped of "abcde") assert.equal(written()?.includes(skipped), false);
+  assert.deepEqual(gate.choices, []);
+});
+
+test("Refresh's offers stay out of every reading and slot for the rest of the visit", async () => {
+  const { session, gate, shown, written } = savedSession([]);
+  await session.renew();
+  assert.deepEqual(shown(), ["a", "b", "c", "d", "e"]);
+  await session.refresh();
+  assert.deepEqual(shown(), ["f", "g", "h", "i", "j"]);
+  await session.refresh();
+  assert.deepEqual(shown(), ["k", "l", "m", "n", "o"]);
+  // An edit's renewal, and the slot a Dismiss frees, still leave them out.
+  await session.renew();
+  assert.equal(await session.dismiss(session.get().slots[0]!.key), true);
+  const skipped = "abcdefghij".split("");
+  for (const offer of [...shown(), ...(written() ?? [])])
+    assert.equal(skipped.includes(offer ?? ""), false, `${offer} came back`);
+  for (const input of gate.ranked.slice(1))
+    for (const id of skipped)
+      assert.equal(
+        ids(input.sources.exclude).includes(id),
+        true,
+        `${id} wasn't kept out of a ranking`,
+      );
+  assert.deepEqual(gate.choices, ["k"]);
+});
+
+test("with no spares, Refresh holds every slot's placeholder for one read that leaves the skipped offers out", async () => {
+  const { session, gate, shown } = savedSession(lettered("vwxyz"));
+  gate.radio = lettered("vwxyzabcde");
+  const refreshing = session.refresh();
+  assert.deepEqual(session.get().pendingSlots, [0, 1, 2, 3, 4]);
+  assert.equal(session.get().loading, false);
+  await refreshing;
+  assert.equal(gate.reads, 1);
+  assert.deepEqual(shown(), ["a", "b", "c", "d", "e"]);
+  assert.deepEqual(session.get().pendingSlots, []);
+});
+
+test("Refresh with nothing new to offer leaves an honest empty section, not the skipped offers", async () => {
+  const { session, gate, shown } = savedSession(lettered("vwxyz"));
+  gate.radio = lettered("vwxyz");
+  await session.refresh();
+  assert.deepEqual(shown(), [null, null, null, null, null]);
+  assert.equal(session.get().error, null);
+  assert.deepEqual(session.get().pendingSlots, []);
+  // With nothing showing, the next Refresh is a full renewal, which still leaves them out.
+  gate.radio = lettered("vwxyzabcde");
+  const refreshing = session.refresh();
+  assert.equal(session.get().loading, true);
+  await refreshing;
+  assert.equal(session.get().loading, false);
+  assert.deepEqual(shown(), ["a", "b", "c", "d", "e"]);
+});
+
+test("Refresh while a choice saves replaces the other offers, and the saving one fills its own slot", async () => {
+  const { session, gate, shown, written } = savedSession(lettered("abcdefghijklmno"));
+  gate.holdSave = Promise.withResolvers<void>();
+  const held = gate.holdSave;
+  const tapped = session.get().slots[1]!;
+  const dismissing = session.dismiss(tapped.key);
+  const refreshing = session.refresh();
+  assert.deepEqual(shown(), ["f", "b", "g", "h", "i"]);
+  assert.deepEqual(session.get().pendingSlots, [1]);
+  held.resolve();
+  assert.equal(await dismissing, true);
+  await refreshing;
+  assert.deepEqual(shown(), ["f", "j", "g", "h", "i"]);
+  assert.deepEqual(gate.choices, ["b"]);
+  for (const skipped of "abcde") assert.equal(written()?.includes(skipped), false);
+});
+
+test("Refresh stops a renewal running behind the offers, which runs again without the skipped ones", async () => {
+  const { session, gate, shown, written } = savedSession(lettered("abcdefghij"));
+  const held = Promise.withResolvers<void>();
+  gate.hold = held;
+  const renewing = session.renew();
+  const refreshing = session.refresh();
+  assert.deepEqual(shown(), ["f", "g", "h", "i", "j"]);
+  assert.equal(gate.signals[0]?.aborted, true);
+  held.resolve();
+  await renewing;
+  await refreshing;
+  await nextTurn();
+  assert.deepEqual(shown(), ["f", "g", "h", "i", "j"]);
+  for (const skipped of "abcde") assert.equal(written()?.includes(skipped), false);
+});
+
+test("Refresh with every offer's choice saving does nothing, and says so", async () => {
+  const { session, gate, shown } = savedSession(lettered("vwxyzabcde"));
+  gate.holdSave = Promise.withResolvers<void>();
+  const held = gate.holdSave;
+  const dismissing = session.get().slots.map((offer) => session.dismiss(offer!.key));
+  assert.equal(await session.refresh(), false);
+  held.resolve();
+  await Promise.all(dismissing);
+  assert.deepEqual(shown(), ["a", "b", "c", "d", "e"]);
+});

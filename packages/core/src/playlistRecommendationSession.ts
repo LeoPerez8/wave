@@ -1027,6 +1027,53 @@ export const playlistRecommendationSession = (options: {
         else if (ended && lowPointOwed) reserveLowPoint();
       }
     },
+    /**
+     * Refresh: every offer showing, but those whose choice is saving, steps aside for others.
+     * The skipped offers leave what's saved and, as an added or dismissed one does, stay out
+     * of every ranking and slot for the rest of the visit; nothing is recorded about them.
+     * Their slots take spares at once, those with none their placeholder for one refill, and
+     * slots whose replacement failed go with them. A renewal behind the offers stops, to run
+     * again after. With nothing showing, it's a full renewal. False if it did nothing.
+     */
+    refresh: async (): Promise<boolean> => {
+      if (disposed || paused || renewing) return false;
+      if (!state.slots.some((offer) => offer !== null)) {
+        await session.renew({ turn: "paint" });
+        return !disposed;
+      }
+      const slots = [...state.slots];
+      const skipped: PlaylistRecommendationTrack[] = [];
+      const holes: number[] = [];
+      for (const [index, offer] of slots.entries()) {
+        if (offer === null || state.pending.includes(offer.key)) continue;
+        skipped.push(offer.track);
+        slots[index] = null;
+        holes.push(index);
+      }
+      if (holes.length === 0) return false;
+      holdRenewal();
+      consumed.push(...skipped);
+      saveOffers(playlistOffersWithout(savedOffers, skipped));
+      holes.push(...state.unfilled);
+      const unspared = fillFromSpares(slots, holes);
+      publish({
+        slots,
+        pendingSlots: [...state.pendingSlots, ...unspared],
+        unfilled: [],
+        error: state.error === "refill" ? null : state.error,
+      });
+      if (unspared.length === 0) {
+        void settle();
+        reserveLowPoint();
+        return true;
+      }
+      if (!settled()) {
+        waiting.push(...unspared);
+        return true;
+      }
+      await replace(unspared, "paint");
+      return !disposed;
+    },
     dismiss: (key: string) => act("dismiss", key, options.dismiss),
     accept: (key: string) => act("add", key, options.accept),
   };
