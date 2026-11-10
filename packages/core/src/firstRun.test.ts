@@ -59,7 +59,12 @@ describe("firstRunCardAtLaunch on a phone that used Wave before", () => {
 
   it("makes song links an ordinary tour card on a new install", () => {
     assert.equal(
-      firstRunCardAtLaunch({ stored: null, accessGranted: false, usedBefore: false, card: "songLinks" }),
+      firstRunCardAtLaunch({
+        stored: null,
+        accessGranted: false,
+        usedBefore: false,
+        card: "songLinks",
+      }),
       "due",
     );
   });
@@ -70,7 +75,7 @@ const ready: FirstRunState = {
   accessGranted: true,
   invitation: "due",
   tour: {},
-  songLinks: "none",
+  readSongLinks: () => "none",
   accountAvailable: true,
   signedIn: false,
   visible: true,
@@ -93,27 +98,76 @@ describe("nextFirstRunStep", () => {
 
   it("remembers song links unseen when all hosts are on, but offers it for some or none", () => {
     const linksReady = { ...ready, invitation: "done", tour: { songLinks: "due" } } as const;
-    assert.equal(nextFirstRunStep({ ...linksReady, songLinks: "all" }), "rememberSongLinks");
-    assert.equal(nextFirstRunStep({ ...linksReady, songLinks: "some" }), "songLinks");
-    assert.equal(nextFirstRunStep({ ...linksReady, songLinks: "none" }), "songLinks");
     assert.equal(
-      nextFirstRunStep({ ...linksReady, songLinks: "all", tour: { songLinks: "done" } }),
+      nextFirstRunStep({ ...linksReady, readSongLinks: () => "all" }),
+      "rememberSongLinks",
+    );
+    assert.equal(nextFirstRunStep({ ...linksReady, readSongLinks: () => "some" }), "songLinks");
+    assert.equal(nextFirstRunStep({ ...linksReady, readSongLinks: () => "none" }), "songLinks");
+    assert.equal(
+      nextFirstRunStep({ ...linksReady, readSongLinks: () => "all", tour: { songLinks: "done" } }),
       "done",
     );
   });
 
   it("offers an update's song-links card only while no host is on", () => {
     const updated = { ...ready, invitation: "done", tour: { songLinks: "dueOnUpdate" } } as const;
-    assert.equal(nextFirstRunStep({ ...updated, songLinks: "none" }), "songLinks");
-    assert.equal(nextFirstRunStep({ ...updated, songLinks: "some" }), "rememberSongLinks");
-    assert.equal(nextFirstRunStep({ ...updated, songLinks: "all" }), "rememberSongLinks");
+    assert.equal(nextFirstRunStep({ ...updated, readSongLinks: () => "none" }), "songLinks");
+    assert.equal(
+      nextFirstRunStep({ ...updated, readSongLinks: () => "some" }),
+      "rememberSongLinks",
+    );
+    assert.equal(nextFirstRunStep({ ...updated, readSongLinks: () => "all" }), "rememberSongLinks");
+  });
+
+  it("leaves song links due, unseen, on an APK that can't read them", () => {
+    for (const songLinks of ["due", "dueOnUpdate"] as const) {
+      const linksReady = { ...ready, invitation: "done", tour: { songLinks } } as const;
+      assert.equal(
+        nextFirstRunStep({ ...linksReady, readSongLinks: () => null }),
+        "done",
+        "nothing more this launch, and nothing recorded",
+      );
+    }
+    assert.equal(
+      nextFirstRunStep({
+        ...ready,
+        invitation: "done",
+        tour: { bringYourMusic: "due", songLinks: "due" },
+        readSongLinks: () => null,
+      }),
+      "bringYourMusic",
+    );
+  });
+
+  it("reads the song links only when their card is next and nothing is in front", () => {
+    let reads = 0;
+    const counted = { ...ready, readSongLinks: () => (reads++, "none" as const) };
+    const tour = { bringYourMusic: "due", songLinks: "due" } as const;
+    nextFirstRunStep({ ...counted, tour });
+    nextFirstRunStep({ ...counted, tour, invitation: "done" });
+    nextFirstRunStep({
+      ...counted,
+      invitation: "done",
+      tour: { songLinks: "due" },
+      cardOpen: true,
+    });
+    nextFirstRunStep({
+      ...counted,
+      invitation: "done",
+      tour: { songLinks: "dueOnUpdate" },
+      whatsNewPending: true,
+    });
+    assert.equal(reads, 0);
+    nextFirstRunStep({ ...counted, invitation: "done", tour: { songLinks: "due" } });
+    assert.equal(reads, 1);
   });
 
   it("holds an update's song-links card until What's New, Now Playing and other cards are gone", () => {
     const updated = { ...ready, invitation: "done", tour: { songLinks: "dueOnUpdate" } } as const;
     assert.equal(nextFirstRunStep({ ...updated, whatsNewPending: true }), "wait");
     assert.equal(
-      nextFirstRunStep({ ...updated, whatsNewPending: true, songLinks: "some" }),
+      nextFirstRunStep({ ...updated, whatsNewPending: true, readSongLinks: () => "some" }),
       "wait",
       "answers nothing while What's New may still come",
     );

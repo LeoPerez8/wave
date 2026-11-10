@@ -7,6 +7,7 @@ import {
   songLinkHandling,
   songLinkHandlingLine,
   songLinkSetup,
+  songLinkSetupHandling,
 } from "./index.ts";
 
 // Android's DomainVerificationUserState host states.
@@ -190,6 +191,17 @@ describe("apps that still open their own song links", () => {
       "O YT Music ainda abre os links do YouTube Music. O Deezer ainda abre os links do Deezer. Desativado: os links abrem no próprio app ou no navegador. Toque para ativá-los na página Abrir por padrão do Android.",
     );
   });
+});
+
+test("the setup's handling comes alone, an app holding its links making all some", () => {
+  const allOn = { allowed: true, hosts: hosts([SELECTED, SELECTED, SELECTED, SELECTED]) };
+  assert.equal(songLinkSetupHandling(allOn, { web: CHROME, spotify: SPOTIFY }), "some");
+  assert.equal(songLinkSetupHandling(allOn, { web: CHROME, spotify: CHROME }), "all");
+  assert.equal(songLinkSetupHandling(allOn, null), "all");
+  assert.equal(
+    songLinkSetupHandling({ allowed: true, hosts: hosts([]) }, { web: CHROME, spotify: SPOTIFY }),
+    "none",
+  );
 });
 
 test("each service's sample link, which Android is asked about, is a song link of that service", () => {

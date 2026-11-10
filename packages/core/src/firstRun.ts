@@ -71,8 +71,11 @@ export interface FirstRunState {
   readonly accessGranted: boolean;
   readonly invitation: SignInInvitation;
   readonly tour: FirstRunTourAnswers;
-  /** Android's current song-link state, read again before offering card 2. */
-  readonly songLinks: SongLinkHandling;
+  /**
+   * Reads Android's song-link state, called only when card 2 is next with nothing in front; null
+   * on an APK without the native read, which can't turn the links on either.
+   */
+  readonly readSongLinks: () => SongLinkHandling | null;
   /** This build has the sync service set up, so it can sign in to a Wave account. */
   readonly accountAvailable: boolean;
   /** Whether a Wave account is signed in; null until the native module has said. */
@@ -110,7 +113,8 @@ export type FirstRunStep =
  * once, over Wave with nothing else in front: it waits for Now Playing or
  * another card to go. A build that can't sign in leaves the invitation due
  * and goes on to the tour. An update's song-links card also waits for What's
- * New, and is answered unseen when any host is already on.
+ * New, and is answered unseen when any host is already on. An APK that can't read the song links
+ * leaves card 2 due, unseen, for a build that can.
  */
 export const nextFirstRunStep = (state: FirstRunState): FirstRunStep => {
   if (!state.accessGranted) return "access";
@@ -123,10 +127,11 @@ export const nextFirstRunStep = (state: FirstRunState): FirstRunStep => {
   const card = FIRST_RUN_TOUR_CARDS.find((id) => (state.tour[id] ?? "done") !== "done");
   if (card === undefined) return "done";
   if (state.showing || !state.visible || state.nowPlayingShown || state.cardOpen) return "wait";
-  if (state.tour[card] === "dueOnUpdate") {
-    if (state.whatsNewPending) return "wait";
-    return state.songLinks === "none" ? card : "rememberSongLinks";
-  }
-  if (card === "songLinks" && state.songLinks === "all") return "rememberSongLinks";
-  return card;
+  if (card !== "songLinks") return card;
+  const onUpdate = state.tour[card] === "dueOnUpdate";
+  if (onUpdate && state.whatsNewPending) return "wait";
+  const songLinks = state.readSongLinks();
+  if (songLinks === null) return "done";
+  if (onUpdate) return songLinks === "none" ? card : "rememberSongLinks";
+  return songLinks === "all" ? "rememberSongLinks" : card;
 };

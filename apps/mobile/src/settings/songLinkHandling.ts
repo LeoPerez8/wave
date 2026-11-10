@@ -1,6 +1,7 @@
 import {
   SONG_LINK_SAMPLES,
   songLinkSetup,
+  songLinkSetupHandling,
   type AppLanguage,
   type SongLinkHandling,
   type SongLinkSetup,
@@ -21,9 +22,12 @@ export const readSongLinkSetup = (language: AppLanguage): SongLinkSetup | null =
   return songLinkSetup(state, WaveNative.songLinkOpeners?.(SONG_LINK_SAMPLES) ?? null, language);
 };
 
-/** Which song links open in Wave; null on an APK without the native read. */
-export const readSongLinkHandling = (): SongLinkHandling | null =>
-  readSongLinkSetup("en")?.handling ?? null;
+/** Which song links open in Wave, without the setup's lines; null on an APK without the native read. */
+export const readSongLinkHandling = (): SongLinkHandling | null => {
+  const state = WaveNative.songLinkHandling?.();
+  if (!state) return null;
+  return songLinkSetupHandling(state, WaveNative.songLinkOpeners?.(SONG_LINK_SAMPLES) ?? null);
+};
 
 /**
  * Read on mount and again whenever Wave comes back to the foreground: only
