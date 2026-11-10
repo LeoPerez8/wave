@@ -3,6 +3,7 @@ import type {
   FramingSquare,
   GainTagText,
   LaunchTheme,
+  SongLinkHandlingState,
   TagDestination,
   TagWriteStep,
 } from "@wave/core";
@@ -166,6 +167,14 @@ declare class WaveNativeModule extends NativeModule<WaveNativeEvents> {
   hasAllFilesAccess(): boolean;
   /** Opens the system settings screen where the user grants all-files access. */
   requestAllFilesAccess(): Promise<void>;
+  /**
+   * Android's domain verification user state for Wave: whether "Open supported links" is on, and
+   * each web host its song-link filter declares with its state (Core's `songLinkHandling`).
+   * Absent from an APK built before it (a JS-only repack).
+   */
+  songLinkHandling?(): SongLinkHandlingState;
+  /** Opens Android's Open by default page for Wave. Absent from an APK built before it. */
+  openLinkSettings?(): Promise<void>;
   /** Absolute path of the shared `Music` folder. */
   getDefaultMusicFolder(): string;
   /**
