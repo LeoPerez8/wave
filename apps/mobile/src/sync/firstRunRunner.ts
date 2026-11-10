@@ -97,6 +97,11 @@ export const createFirstRunRunner = ({
         done();
         reconsider();
         return;
+      case "rememberSongLinks":
+        tour.songLinks = "done";
+        tourStored.set("songLinks", "done");
+        reconsider();
+        return;
       case "done":
         finished = true;
         onFinished?.();

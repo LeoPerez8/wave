@@ -19,10 +19,12 @@ import { CardEntries } from "@/overlay/CardEntries";
 import { isOverlayOpen, onOverlaysChange, openOverlay } from "@/overlay/overlay";
 import { useWaveAccount, waveAccountAvailable } from "@/settings/waveAccount";
 import { waveAccountNotes, waveSignInLabels } from "@/settings/waveAccountText";
+import { readSongLinkHandling } from "@/settings/songLinkHandling";
 import { useThemeColor } from "@/theme/useThemeColor";
 
 import { createFirstRunRunner } from "./firstRunRunner";
 import { showBringYourMusic } from "./bringYourMusic";
+import { showSongLinks } from "./songLinks";
 import { subscribeWaveSignedIn, waveSignedInNow } from "./waveSignedIn";
 
 /** "due" or "done"; nothing until the first launch that had the invitation. */
@@ -117,6 +119,7 @@ function SignInInvitationCard({ close, answered }: { close: () => void; answered
 
 const TOUR_CARDS: Record<FirstRunTourCard, (finish: (answer: FirstRunAnswer) => void) => void> = {
   bringYourMusic: showBringYourMusic,
+  songLinks: showSongLinks,
 };
 
 let runner: ReturnType<typeof createFirstRunRunner> | null = null;
@@ -150,6 +153,7 @@ export const settleFirstRun = (): void => {
       visible: AppState.currentState === "active",
       nowPlayingShown: isNowPlayingShown(),
       cardOpen: isOverlayOpen(),
+      songLinks: readSongLinkHandling() ?? "none",
     }),
     show: (answered) => {
       let open = true;

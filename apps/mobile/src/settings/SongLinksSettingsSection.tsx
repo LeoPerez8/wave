@@ -1,4 +1,4 @@
-import { songLinkHandling, songLinkHandlingLine, type SongLinkHandling } from "@wave/core";
+import { songLinkHandlingLine, type SongLinkHandling } from "@wave/core";
 import { useLocalisation } from "@/localisation/localisation";
 import { useEffect, useState } from "react";
 import { AppState, Text, View } from "react-native";
@@ -7,12 +7,7 @@ import { CatalogLine } from "@/catalog/CatalogLine";
 import { EntryRow } from "@/catalog/EntryRow";
 import { Hairline } from "@/catalog/Hairline";
 import { WaveNative } from "@/native/waveNative";
-
-/** Which song links Android lets Wave open; null on an APK without the native read. */
-const readHandling = (): SongLinkHandling | null => {
-  const state = WaveNative.songLinkHandling?.();
-  return state ? songLinkHandling(state) : null;
-};
+import { readSongLinkHandling } from "./songLinkHandling";
 
 /**
  * Read on mount and again whenever Wave comes back to the foreground: only
@@ -20,10 +15,10 @@ const readHandling = (): SongLinkHandling | null => {
  * never loses focus to it.
  */
 const useSongLinkHandling = (): SongLinkHandling | null => {
-  const [handling, setHandling] = useState(readHandling);
+  const [handling, setHandling] = useState(readSongLinkHandling);
   useEffect(() => {
     const subscription = AppState.addEventListener("change", (appState) => {
-      if (appState === "active") setHandling(readHandling());
+      if (appState === "active") setHandling(readSongLinkHandling());
     });
     return () => subscription.remove();
   }, []);
