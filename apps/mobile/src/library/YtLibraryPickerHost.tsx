@@ -18,22 +18,34 @@ import { PickerSheet } from "./YtLibraryPicker";
 export type LibraryService = "ytMusic" | "spotify";
 
 /** The picker that is up, if any (`YtLibraryPickerHost` draws it): an import's, or Export's. */
-const shown = makeExternalStore<LibraryService | "export" | null>(null);
+const shown = makeExternalStore<
+  | { readonly service: LibraryService; readonly onClosed?: (imported: boolean) => void }
+  | "export"
+  | null
+>(null);
 
 /**
  * From YT Music: the picker, once signed in. Signed out (or the session
  * expired), the sign-in opens first; leaving it opens nothing.
  */
-export const openYtLibraryImport = async (): Promise<void> => {
-  if ((await ytMusicSignedIn()) || (await signInToYtMusic())) shown.set("ytMusic");
+export const openYtLibraryImport = async (
+  onClosed?: (imported: boolean) => void,
+): Promise<void> => {
+  if ((await ytMusicSignedIn()) || (await signInToYtMusic()))
+    shown.set({ service: "ytMusic", onClosed });
+  else onClosed?.(false);
 };
 
 /**
  * From Spotify: the picker, once signed in to Spotify. Signed out (or the
  * session expired), Spotify's sign-in opens first; leaving it opens nothing.
  */
-export const openSpotifyLibraryImport = async (): Promise<void> => {
-  if ((await spotifySignedIn()) || (await signInToSpotify())) shown.set("spotify");
+export const openSpotifyLibraryImport = async (
+  onClosed?: (imported: boolean) => void,
+): Promise<void> => {
+  if ((await spotifySignedIn()) || (await signInToSpotify()))
+    shown.set({ service: "spotify", onClosed });
+  else onClosed?.(false);
 };
 
 /**
@@ -54,8 +66,14 @@ export const openYtExport = async (): Promise<void> => {
 /** Draws the picker while it's up; mounted once at the root. */
 export function YtLibraryPickerHost() {
   const open = useSyncExternalStore(shown.subscribe, shown.get);
-  const close = useCallback(() => shown.set(null), []);
+  const close = useCallback(
+    (imported = false) => {
+      shown.set(null);
+      if (open !== null && open !== "export") open.onClosed?.(imported);
+    },
+    [open],
+  );
   if (open === null) return null;
   if (open === "export") return <ExportSheet onClosed={close} />;
-  return <PickerSheet key={open} service={open} onClosed={close} />;
+  return <PickerSheet key={open.service} service={open.service} onClosed={close} />;
 }

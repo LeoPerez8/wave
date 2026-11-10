@@ -357,6 +357,13 @@ export const settingsPtBr: typeof settingsEn = {
     note: "Opcional. Todo o resto do Wave funciona sem ela.",
     notNow: "Agora Não",
   },
+  bringYourMusic: {
+    title: "Traga suas músicas",
+    line: "Traga suas playlists e músicas curtidas do Spotify ou YouTube Music.",
+    needsYtMusic:
+      "Importar de qualquer um dos apps precisa do YT Music. Ative para trazer suas músicas.",
+    turnOnYtMusic: "Ativar YT Music",
+  },
   itsSongsLeaveYourLibraryTheFiles:
     "Suas músicas saem da biblioteca. Os arquivos ficam no telefone.",
   couldntRemoveTheFolder: "Não foi possível remover a pasta",
