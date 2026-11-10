@@ -160,10 +160,7 @@ describe("an exporting playlist's progress", () => {
   test("waits, then counts its songs as they're matched", () => {
     assert.equal(importProgressLine(EXPORT_WAITING_PROGRESS), "Waiting to export");
     assert.equal(importProgressLine(exportingProgress(120, 1_430)), "Exporting 120 of 1,430");
-    assert.equal(
-      importProgressLine(EXPORT_WAITING_PROGRESS, "pt-BR"),
-      "Aguardando exportação",
-    );
+    assert.equal(importProgressLine(EXPORT_WAITING_PROGRESS, "pt-BR"), "Aguardando exportação");
     assert.equal(
       importProgressLine(exportingProgress(120, 1_430), "pt-BR"),
       "Exportando 120 de 1.430",
