@@ -443,7 +443,8 @@ https://music.youtube.com/playlist?list=${ID}`,
         {
           kind: "notice",
           title: "Can't open this",
-          message: "Wave opens songs and playlists from YouTube Music and Spotify links.",
+          message:
+            "Wave opens songs from YouTube Music, Spotify and Deezer links, and playlists from YouTube Music and Spotify links.",
         },
         text,
       );

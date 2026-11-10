@@ -48,7 +48,8 @@ export const importsPtBr: typeof importsEn = {
     "Ative o YT Music em Ajustes para abrir músicas e playlists de links do YouTube Music e do Spotify.",
   cantImport: "Não é possível importar isto",
   cantOpen: "Não é possível abrir isto",
-  sharedLinks: "O Wave abre músicas e playlists de links do YouTube Music e do Spotify.",
+  sharedLinks:
+    "O Wave abre músicas de links do YouTube Music, do Spotify e do Deezer, e playlists de links do YouTube Music e do Spotify.",
   findingSong: "Procurando música…",
   songOffline: "Você está offline",
   songOfflineMessage: "Conecte-se à internet para abrir esta música.",

@@ -1359,6 +1359,7 @@ export type {
   SharedTextImport,
 } from "./playlistLinks.ts";
 export {
+  deezerShortLinkLanding,
   linkedYtSong,
   recogniseSongLink,
   songLinkLibraryCopy,
@@ -1465,6 +1466,12 @@ export type {
 } from "./playlistImport.ts";
 export { readSpotifyPlaylist, spotifyEmbed, spotifyPlaylistPage } from "./spotifyPlaylist.ts";
 export { readSpotifyTrack, type SpotifyTrackRead } from "./spotifyTrack.ts";
+export {
+  readDeezerTrack,
+  type DeezerAnswer,
+  type DeezerTrackRead,
+  type DeezerTransport,
+} from "./deezerTrack.ts";
 export type {
   SpotifyAnswer,
   SpotifyEmbed,

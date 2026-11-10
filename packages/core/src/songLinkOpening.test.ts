@@ -85,7 +85,8 @@ describe("a shared YouTube Music song link", () => {
         {
           kind: "notice",
           title: "Can't open this",
-          message: "Wave opens songs and playlists from YouTube Music and Spotify links.",
+          message:
+            "Wave opens songs from YouTube Music, Spotify and Deezer links, and playlists from YouTube Music and Spotify links.",
         },
         text,
       );
@@ -171,7 +172,8 @@ describe("a shared Spotify song link", () => {
         {
           kind: "notice",
           title: "Can't open this",
-          message: "Wave opens songs and playlists from YouTube Music and Spotify links.",
+          message:
+            "Wave opens songs from YouTube Music, Spotify and Deezer links, and playlists from YouTube Music and Spotify links.",
         },
         text,
       );
@@ -489,7 +491,8 @@ describe("what a Spotify song link that doesn't play says", () => {
   test("a short link to neither a song nor a playlist says what Wave opens", () => {
     assert.deepEqual(songLinkNotice("cantOpen"), {
       title: "Can't open this",
-      message: "Wave opens songs and playlists from YouTube Music and Spotify links.",
+      message:
+        "Wave opens songs from YouTube Music, Spotify and Deezer links, and playlists from YouTube Music and Spotify links.",
     });
   });
 
