@@ -2,7 +2,8 @@ import assert from "node:assert/strict";
 import { describe, test } from "node:test";
 
 import {
-  addYtExported,
+  addExportedPlaylist,
+  catalogueOf,
   EXPORT_WAITING_PROGRESS,
   exportingProgress,
   importProgressFraction,
@@ -17,6 +18,7 @@ import {
   writeYtLibraryOrigins,
   ytExportPicker,
   ytExportPickerView,
+  ytExportSignInAlert,
   ytExportSummaryLine,
   ytNewPlaylistPrivacy,
   ytPrivacyChange,
@@ -143,31 +145,76 @@ describe("planYtExport", () => {
 });
 
 describe("the export's summary", () => {
-  test("adds up the playlists exported and their songs found · 0 liked", () => {
+  test("adds up the playlists exported and their songs found", () => {
     const summary = [
-      { found: 12, total: 12 },
-      { found: 400, total: 418 },
-    ].reduce(addYtExported, NO_YT_EXPORT);
-    assert.deepEqual(summary, { playlists: 2, found: 412, total: 430, liked: 0 });
+      { ids: ["a"], found: 12, total: 12 },
+      { ids: ["b"], found: 400, total: 418 },
+    ].reduce(addExportedPlaylist, NO_YT_EXPORT);
+    assert.deepEqual(summary, { playlists: 2, found: 412, total: 430, liked: null });
   });
 
-  test("says it in one line", () => {
+  test("a playlist with no song found isn't exported, as Share makes nothing, but its songs count", () => {
+    const summary = [
+      { ids: ["a"], found: 2, total: 3 },
+      { ids: [], found: 0, total: 5 },
+    ].reduce(addExportedPlaylist, NO_YT_EXPORT);
+    assert.deepEqual(summary, { playlists: 1, found: 2, total: 8, liked: null });
+    assert.equal(ytExportSummaryLine(summary), "1 playlist exported · 2 of 8 songs found");
+  });
+
+  test("says it in one line, without likes when Favorites wasn't exported", () => {
     assert.equal(
-      ytExportSummaryLine({ playlists: 8, found: 412, total: 430, liked: 0 }),
-      "8 playlists exported · 412 of 430 songs found · 0 liked",
+      ytExportSummaryLine({ playlists: 8, found: 412, total: 430, liked: null }),
+      "8 playlists exported · 412 of 430 songs found",
     );
     assert.equal(
-      ytExportSummaryLine({ playlists: 1, found: 1, total: 1, liked: 0 }),
-      "1 playlist exported · 1 of 1 song found · 0 liked",
+      ytExportSummaryLine({ playlists: 1, found: 1, total: 1, liked: null }),
+      "1 playlist exported · 1 of 1 song found",
     );
     assert.equal(
-      ytExportSummaryLine({ playlists: 1, found: 1_200, total: 1_234, liked: 0 }, "pt-BR"),
-      "1 playlist exportada · 1.200 de 1.234 músicas encontradas · 0 curtidas",
+      ytExportSummaryLine({ playlists: 1, found: 1_200, total: 1_234, liked: null }, "pt-BR"),
+      "1 playlist exportada · 1.200 de 1.234 músicas encontradas",
+    );
+  });
+
+  test("counts likes once Favorites was exported, none liked included", () => {
+    assert.equal(
+      ytExportSummaryLine({ playlists: 8, found: 412, total: 430, liked: 1_023 }),
+      "8 playlists exported · 412 of 430 songs found · 1,023 liked",
+    );
+    assert.equal(
+      ytExportSummaryLine({ playlists: 1, found: 1, total: 1, liked: 1 }),
+      "1 playlist exported · 1 of 1 song found · 1 liked",
+    );
+    assert.equal(
+      ytExportSummaryLine({ playlists: 0, found: 0, total: 2, liked: 0 }),
+      "0 playlists exported · 0 of 2 songs found · 0 liked",
+    );
+    assert.equal(
+      ytExportSummaryLine({ playlists: 3, found: 1, total: 2, liked: 1 }, "pt-BR"),
+      "3 playlists exportadas · 1 de 2 músicas encontradas · 1 curtida",
     );
     assert.equal(
       ytExportSummaryLine({ playlists: 3, found: 0, total: 2, liked: 0 }, "pt-BR"),
       "3 playlists exportadas · 0 de 2 músicas encontradas · 0 curtidas",
     );
+    assert.equal(
+      ytExportSummaryLine({ playlists: 1, found: 1_200, total: 1_234, liked: 1_200 }, "pt-BR"),
+      "1 playlist exportada · 1.200 de 1.234 músicas encontradas · 1.200 curtidas",
+    );
+  });
+});
+
+describe("Export's sign-in", () => {
+  test("asks as Share does, under the same title and button, saying what Export makes", () => {
+    const alert = ytExportSignInAlert();
+    assert.equal(alert.title, "Sign In to YT Music");
+    assert.equal(alert.action.label, "Sign In");
+    assert.match(alert.message ?? "", /private/);
+    const ptBr = ytExportSignInAlert(catalogueOf("pt-BR"));
+    assert.equal(ptBr.title, "Iniciar Sessão no YT Music");
+    assert.equal(ptBr.action.label, "Iniciar Sessão");
+    assert.match(ptBr.message ?? "", /privad/);
   });
 });
 
@@ -212,8 +259,9 @@ describe("a YT Music playlist's visibility", () => {
     assert.equal(ytPrivacyChange("share", "PUBLIC"), null);
   });
 
-  test("Share makes one it can't tell unlisted, so its link opens", () => {
-    assert.equal(ytPrivacyChange("share", null), "UNLISTED");
+  test("Share leaves one whose page it can't read alone, so a public one is never narrowed", () => {
+    assert.equal(ytPrivacyChange("share", null), null);
+    assert.equal(ytPrivacyChange("share", "SOMETHING_NEW"), null);
   });
 
   test("Export never changes a playlist's visibility", () => {

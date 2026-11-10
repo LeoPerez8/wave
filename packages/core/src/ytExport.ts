@@ -8,8 +8,15 @@
  * the songs and the authenticated requests.
  */
 
+import type { AlertSpec } from "./alert.ts";
+import { en, type Catalogue } from "./catalogueEn.ts";
 import { catalogueOf, type AppLanguage } from "./localisation.ts";
-import { matchSharedSongs, type ShareSong, type SharedSongs } from "./playlistShare.ts";
+import {
+  matchSharedSongs,
+  PLAYLIST_SHARE_LABELS,
+  type ShareSong,
+  type SharedSongs,
+} from "./playlistShare.ts";
 import { isSpotifyLibrarySource } from "./spotifyLibrary.ts";
 import type { YtLibraryOrigins } from "./ytLibrary.ts";
 
@@ -126,36 +133,62 @@ export const planYtExport = (picker: YtExportPicker): YtExportItem[] =>
         : [{ kind: "playlist", playlistId: row.playlist.id, name: row.playlist.name }],
   );
 
-/** What an Export did: the playlists it sent, and how many of their songs were found on YT Music. */
+/**
+ * What an Export did: the playlists it made or updated on YT Music, how many
+ * of the songs it looked for there were found, and how many favorites it
+ * liked (null when Favorites wasn't exported).
+ */
 export interface YtExportSummary {
   readonly playlists: number;
-  readonly liked: number;
+  readonly liked: number | null;
   readonly found: number;
   readonly total: number;
 }
 
 /** Nothing exported yet. */
-export const NO_YT_EXPORT: YtExportSummary = { playlists: 0, found: 0, total: 0, liked: 0 };
+export const NO_YT_EXPORT: YtExportSummary = { playlists: 0, found: 0, total: 0, liked: null };
 
-/** [summary] with one more playlist sent, whose songs were [shared] (`matchSharedSongs`). */
-export const addYtExported = (
+/**
+ * [summary] with one playlist's songs added, as matching found them
+ * (`matchSharedSongs`). A playlist with no song found isn't made on YT
+ * Music, as Share makes nothing then, so it doesn't count as exported; its
+ * songs still count among those looked for, so the toast says why.
+ */
+export const addExportedPlaylist = (
   summary: YtExportSummary,
-  shared: Pick<SharedSongs, "found" | "total">,
+  shared: SharedSongs,
 ): YtExportSummary => ({
   ...summary,
-  playlists: summary.playlists + 1,
+  playlists: summary.playlists + (shared.ids.length === 0 ? 0 : 1),
   found: summary.found + shared.found,
   total: summary.total + shared.total,
 });
 
-/** The toast that ends an Export: "8 playlists exported · 412 of 430 songs found · 23 liked". */
+/**
+ * The toast that ends an Export: "8 playlists exported · 412 of 430 songs
+ * found · 23 liked", the likes only when Favorites was exported.
+ */
 export const ytExportSummaryLine = (
   { playlists, found, total, liked }: YtExportSummary,
   language: AppLanguage = "en",
 ): string => {
   const strings = catalogueOf(language);
-  return `${strings.imports.exportedPlaylists(playlists)} · ${strings.share.found(found, total)} · ${strings.imports.liked(liked)}`;
+  const parts = [strings.imports.exportedPlaylists(playlists), strings.share.found(found, total)];
+  if (liked !== null) parts.push(strings.imports.liked(liked));
+  return parts.join(" · ");
 };
+
+/**
+ * Export's sign-in prompt, signed out: Share's (`shareSignInAlert`), under
+ * the same title and button, saying what Export makes on the account.
+ */
+export const ytExportSignInAlert = (
+  strings: Catalogue = en,
+): AlertSpec & { readonly action: NonNullable<AlertSpec["action"]> } => ({
+  title: strings.share.signInTitle(PLAYLIST_SHARE_LABELS.ytMusic),
+  message: strings.imports.exportSignInMessage,
+  action: { label: strings.share.signIn },
+});
 
 /** Matches and likes in star order; a failed request stops before later favorites. */
 export const exportYtFavorites = async <Q>(
@@ -188,5 +221,5 @@ export const addYtLikes = (summary: YtExportSummary, songs: SharedSongs): YtExpo
   ...summary,
   found: summary.found + songs.found,
   total: summary.total + songs.total,
-  liked: summary.liked + songs.ids.length,
+  liked: (summary.liked ?? 0) + songs.ids.length,
 });

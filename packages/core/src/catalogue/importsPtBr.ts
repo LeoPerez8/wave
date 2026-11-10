@@ -131,7 +131,14 @@ export const importsPtBr: typeof importsEn = {
   export: "Exportar",
   exportWaiting: "Aguardando exportação",
   exportingOf: (done: string, total: string): string => `Exportando ${done} de ${total}`,
-  liked: (count: number): string => `${count.toLocaleString("pt-BR")} curtidas`,
+  liked: (count: number): string =>
+    plural("pt-BR", count, {
+      zero: `${n(count)} curtidas`,
+      one: `${n(count)} curtida`,
+      other: `${n(count)} curtidas`,
+    }),
+  exportSignInMessage:
+    "Exportar cria cópias privadas das suas playlists na sua conta do YouTube Music e curte seus favoritos lá.",
   exportedPlaylists: (count: number): string =>
     plural("pt-BR", count, {
       zero: "Nenhuma playlist exportada",

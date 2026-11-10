@@ -15,8 +15,10 @@ interface ExportTest {
   playlists: Map<number, { name: string; found: number; total: number }>;
   /** A playlist whose matching fails, as an unanswered search does. */
   failing: number | null;
+  /** Runs once while a playlist is being matched, as a tap during the export would. */
+  duringMatch: ((id: number) => void) | null;
 }
-const shared: ExportTest = { calls: [], playlists: new Map(), failing: null };
+const shared: ExportTest = { calls: [], playlists: new Map(), failing: null, duringMatch: null };
 Object.assign(globalThis, { exportTest: shared });
 
 const core = JSON.stringify(import.meta.resolve("@wave/core"));
@@ -39,6 +41,9 @@ const stubs: Record<string, string> = {
     const t = globalThis.exportTest;
     export const matchOnYtMusic = async (id, progress) => {
       t.calls.push("match " + id);
+      const during = t.duringMatch;
+      t.duringMatch = null;
+      during?.(id);
       if (t.failing === id) throw new Error("no answer");
       const playlist = t.playlists.get(id);
       if (playlist === undefined) return null;
@@ -95,6 +100,7 @@ beforeEach(() => {
     [2, { name: "Gym", found: 1, total: 1 }],
   ]);
   shared.failing = null;
+  shared.duringMatch = null;
 });
 
 test("exports each playlist in order as a private copy, then sums it up", async () => {
@@ -115,7 +121,7 @@ test("exports each playlist in order as a private copy, then sums it up", async 
     "remember 2 PL2",
     "end 2",
     "log Exported 2 playlists, 3 of 4 songs found",
-    "toast 2 playlists exported · 3 of 4 songs found · 0 liked",
+    "toast 2 playlists exported · 3 of 4 songs found",
   ]);
 });
 
@@ -125,7 +131,7 @@ test("names each playlist as it's called when its turn comes, and skips one dele
   await exportToYtMusic([playlist(1, "Road trip"), playlist(2, "Gym")]);
   assert.ok(shared.calls.includes("create export Gym 2026 1"));
   assert.ok(!shared.calls.some((call) => call.startsWith("create export Road trip")));
-  assert.equal(shared.calls.at(-1), "toast 1 playlist exported · 1 of 1 song found · 0 liked");
+  assert.equal(shared.calls.at(-1), "toast 1 playlist exported · 1 of 1 song found");
 });
 
 test("stops at a failure with Share's message, keeping what was sent and clearing every line", async () => {
@@ -133,9 +139,7 @@ test("stops at a failure with Share's message, keeping what was sent and clearin
   await exportToYtMusic([playlist(1, "Road trip"), playlist(2, "Gym"), playlist(3, "Later")]);
   assert.ok(shared.calls.includes("remember 1 PL1"));
   assert.ok(!shared.calls.includes("match 3"));
-  assert.deepEqual(shared.calls.slice(-6), [
-    "end 2",
-    "end 1",
+  assert.deepEqual(shared.calls.slice(-4), [
     "end 2",
     "end 3",
     "log Export to YT Music stopped after 1 playlists, 2 of 3 songs found",
@@ -151,9 +155,9 @@ test("an Export pressed while another runs goes after it", async () => {
   const order = shared.calls.filter((call) => call.startsWith("match") || call.startsWith("toast"));
   assert.deepEqual(order, [
     "match 1",
-    "toast 1 playlist exported · 2 of 3 songs found · 0 liked",
+    "toast 1 playlist exported · 2 of 3 songs found",
     "match 2",
-    "toast 1 playlist exported · 1 of 1 song found · 0 liked",
+    "toast 1 playlist exported · 1 of 1 song found",
   ]);
 });
 
@@ -163,7 +167,10 @@ test("exports Favorites before playlists, clears its progress and counts likes",
   assert.ok(shared.calls.includes("progress -1 exportWaiting"));
   assert.ok(shared.calls.includes("progress -1 exporting 3/3"));
   assert.ok(shared.calls.includes("end -1"));
-  assert.equal(shared.calls.at(-1), "toast 1 playlist exported · 4 of 6 songs found · 2 liked");
+  assert.deepEqual(shared.calls.slice(-2), [
+    "log Exported 1 playlists, 4 of 6 songs found, 2 liked",
+    "toast 1 playlist exported · 4 of 6 songs found · 2 liked",
+  ]);
 });
 
 test("a refused favorite stops the export and clears queued playlist progress", async () => {
@@ -173,4 +180,67 @@ test("a refused favorite stops the export and clears queued playlist progress", 
   assert.ok(shared.calls.includes("end -1"));
   assert.ok(shared.calls.includes("end 1"));
   assert.ok(shared.calls.at(-1)?.includes("signed out"));
+});
+
+test("a playlist with no song found isn't made on YT Music, as Share makes nothing", async () => {
+  shared.playlists.set(3, { name: "Obscure", found: 0, total: 2 });
+  await exportToYtMusic([playlist(1, "Road trip"), playlist(3, "Obscure")]);
+  assert.ok(!shared.calls.some((call) => call.startsWith("create export Obscure")));
+  assert.ok(!shared.calls.includes("remember 3 PL3"));
+  assert.ok(shared.calls.includes("end 3"));
+  assert.deepEqual(shared.calls.slice(-2), [
+    "log Exported 1 playlists, 2 of 5 songs found",
+    "toast 1 playlist exported · 2 of 5 songs found",
+  ]);
+});
+
+test("a playlist queued in a second Export goes back to Waiting when the first sends it", async () => {
+  const first = exportToYtMusic([playlist(1, "Road trip")]);
+  const second = exportToYtMusic([playlist(1, "Road trip")]);
+  await Promise.all([first, second]);
+  const lines = shared.calls.filter((call) => /^(progress|end) 1\b/.test(call));
+  assert.deepEqual(lines, [
+    "progress 1 exportWaiting",
+    "progress 1 exportWaiting",
+    "progress 1 exporting 0/3",
+    "progress 1 exporting 3/3",
+    "progress 1 exportWaiting",
+    "progress 1 exporting 0/3",
+    "progress 1 exporting 3/3",
+    "end 1",
+  ]);
+});
+
+test("an Export pressed while a playlist is being sent keeps its line, then shows it waiting", async () => {
+  let second: Promise<void> = Promise.resolve();
+  shared.duringMatch = () => {
+    second = exportToYtMusic([playlist(1, "Road trip")]);
+  };
+  await exportToYtMusic([playlist(1, "Road trip"), playlist(2, "Gym")]);
+  await second;
+  const lines = shared.calls.filter((call) => /^(progress|end|match) 1\b/.test(call));
+  assert.deepEqual(lines, [
+    "progress 1 exportWaiting",
+    "match 1",
+    "progress 1 exporting 0/3",
+    "progress 1 exporting 3/3",
+    "progress 1 exportWaiting",
+    "match 1",
+    "progress 1 exporting 0/3",
+    "progress 1 exporting 3/3",
+    "end 1",
+  ]);
+});
+
+test("a failure keeps the line of a playlist another Export still has queued", async () => {
+  shared.failing = 1;
+  const first = exportToYtMusic([playlist(1, "Road trip"), playlist(2, "Gym")]);
+  const second = exportToYtMusic([playlist(2, "Gym")]);
+  await first;
+  const afterFailure = shared.calls.slice(shared.calls.indexOf("match 1"));
+  assert.ok(afterFailure.includes("end 1"));
+  assert.ok(!afterFailure.includes("end 2"));
+  await second;
+  assert.equal(shared.calls.filter((call) => call === "match 2").length, 1);
+  assert.ok(shared.calls.at(-3) === "end 2");
 });
