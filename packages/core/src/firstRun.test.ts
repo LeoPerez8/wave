@@ -1,52 +1,41 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 
-import { nextFirstRunStep, signInInvitationAtLaunch, type FirstRunState } from "./index.ts";
+import {
+  firstRunCardAtLaunch,
+  nextFirstRunStep,
+  signInInvitationAtLaunch,
+  type FirstRunState,
+} from "./index.ts";
 
-describe("signInInvitationAtLaunch", () => {
-  it("makes the invitation due on a new install, which opens without all-files access", () => {
-    assert.equal(
-      signInInvitationAtLaunch({ stored: null, accessGranted: false, usedBefore: false }),
-      "due",
-    );
-  });
+for (const [name, atLaunch] of Object.entries({ signInInvitationAtLaunch, firstRunCardAtLaunch }))
+  describe(name, () => {
+    it("makes the card due on a new install, which opens without all-files access", () => {
+      assert.equal(atLaunch({ stored: null, accessGranted: false, usedBefore: false }), "due");
+    });
 
-  it("never makes it due on a phone updated from a version without it", () => {
-    // Wave can't be used without access, so a phone that has it has used Wave.
-    assert.equal(
-      signInInvitationAtLaunch({ stored: null, accessGranted: true, usedBefore: false }),
-      "done",
-    );
-    // An existing user who took access away still has what Wave kept.
-    assert.equal(
-      signInInvitationAtLaunch({ stored: null, accessGranted: false, usedBefore: true }),
-      "done",
-    );
-  });
+    it("never makes it due on a phone updated from a version without it", () => {
+      // Wave can't be used without access, so a phone that has it has used Wave.
+      assert.equal(atLaunch({ stored: null, accessGranted: true, usedBefore: false }), "done");
+      // An existing user who took access away still has what Wave kept.
+      assert.equal(atLaunch({ stored: null, accessGranted: false, usedBefore: true }), "done");
+    });
 
-  it("keeps what was decided at the first launch", () => {
-    assert.equal(
-      signInInvitationAtLaunch({ stored: "due", accessGranted: true, usedBefore: true }),
-      "due",
-    );
-    assert.equal(
-      signInInvitationAtLaunch({ stored: "done", accessGranted: false, usedBefore: false }),
-      "done",
-    );
-  });
+    it("keeps what was decided at the first launch", () => {
+      assert.equal(atLaunch({ stored: "due", accessGranted: true, usedBefore: true }), "due");
+      assert.equal(atLaunch({ stored: "done", accessGranted: false, usedBefore: false }), "done");
+    });
 
-  it("reads anything else stored as done, so a bad value never brings it back", () => {
-    assert.equal(
-      signInInvitationAtLaunch({ stored: "maybe", accessGranted: false, usedBefore: false }),
-      "done",
-    );
+    it("reads anything else stored as done, so a bad value never brings it back", () => {
+      assert.equal(atLaunch({ stored: "maybe", accessGranted: false, usedBefore: false }), "done");
+    });
   });
-});
 
 /** A new install that has just been given access, with nothing in the way. */
 const ready: FirstRunState = {
   accessGranted: true,
   invitation: "due",
+  tour: {},
   accountAvailable: true,
   signedIn: false,
   visible: true,
@@ -56,6 +45,33 @@ const ready: FirstRunState = {
 };
 
 describe("nextFirstRunStep", () => {
+  it("offers Bring your music after the invitation, including builds without accounts", () => {
+    const tour = { bringYourMusic: "due" } as const;
+    assert.equal(nextFirstRunStep({ ...ready, tour }), "signInInvitation");
+    assert.equal(nextFirstRunStep({ ...ready, tour, invitation: "done" }), "bringYourMusic");
+    assert.equal(nextFirstRunStep({ ...ready, tour, accountAvailable: false }), "bringYourMusic");
+    assert.equal(nextFirstRunStep({ ...ready, tour, signedIn: true }), "remember");
+    assert.equal(
+      nextFirstRunStep({ ...ready, tour, invitation: "done", signedIn: true }),
+      "bringYourMusic",
+    );
+  });
+
+  it("waits before a tour card for access, foreground, Now Playing and other cards", () => {
+    const tourReady: FirstRunState = {
+      ...ready,
+      invitation: "done",
+      tour: { bringYourMusic: "due" },
+    };
+    assert.equal(nextFirstRunStep({ ...tourReady, accessGranted: false }), "access");
+    assert.equal(nextFirstRunStep({ ...tourReady, visible: false }), "wait");
+    assert.equal(nextFirstRunStep({ ...tourReady, nowPlayingShown: true }), "wait");
+    assert.equal(nextFirstRunStep({ ...tourReady, cardOpen: true }), "wait");
+    assert.equal(nextFirstRunStep({ ...tourReady, showing: true }), "wait");
+    assert.equal(nextFirstRunStep(tourReady), "bringYourMusic");
+    assert.equal(nextFirstRunStep({ ...tourReady, tour: { bringYourMusic: "done" } }), "done");
+  });
+
   it("shows the access screen first, before anything else", () => {
     assert.equal(nextFirstRunStep({ ...ready, accessGranted: false }), "access");
     assert.equal(nextFirstRunStep({ ...ready, accessGranted: false, signedIn: null }), "access");
