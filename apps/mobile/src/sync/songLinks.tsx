@@ -5,7 +5,6 @@ import { CELL } from "@/catalog/grid";
 import { TextButton } from "@/components/TextButton";
 import { currentLocalisation, useLocalisation } from "@/localisation/localisation";
 import { WaveNative } from "@/native/waveNative";
-import { CardEntries } from "@/overlay/CardEntries";
 import { openOverlay } from "@/overlay/overlay";
 import { showToast } from "@/overlay/toast";
 import {
@@ -14,6 +13,7 @@ import {
   useSongLinkSetup,
 } from "@/settings/songLinkHandling";
 
+import { FirstRunCard } from "./FirstRunCard";
 import { createSongLinksRunner } from "./songLinksRunner";
 
 function SongLinksCard({ answer, turnOn }: { answer: () => void; turnOn: () => void }) {
@@ -22,43 +22,31 @@ function SongLinksCard({ answer, turnOn }: { answer: () => void; turnOn: () => v
   // Re-read on return from another app's Open by default page, so its step goes once it's off.
   const turnOff = useSongLinkSetup()?.turnOff ?? [];
   return (
-    <>
-      <CardEntries>
-        <View style={{ gap: CELL * 3, paddingTop: CELL, paddingBottom: CELL * 3 }}>
-          <Text
-            accessibilityRole="header"
-            className="font-sans text-title2 font-light text-foreground"
-            style={{ letterSpacing: -0.3 }}
-          >
-            {strings.settings.openSongLinksInWave}
-          </Text>
-          {turnOff.map((step) => (
-            <View key={step.service} className="items-start" style={{ gap: CELL }}>
-              <Text className="font-sans text-subheadline text-secondary">{step.step}</Text>
-              <TextButton
-                label={step.button}
-                onPress={() => openAppLinkSettings(step.packageName)}
-              />
-            </View>
-          ))}
-          <Text className="font-sans text-subheadline text-secondary">{text.line}</Text>
-          <View style={{ gap: CELL * 2 }}>
-            {text.steps.map((step, index) => (
-              <View key={step} className="flex-row" style={{ gap: CELL * 2 }}>
-                <Text className="font-sans text-body font-medium text-foreground">
-                  {index + 1}.
-                </Text>
-                <Text className="flex-1 font-sans text-body text-foreground">{step}</Text>
-              </View>
-            ))}
-          </View>
+    <FirstRunCard
+      title={strings.settings.openSongLinksInWave}
+      actions={
+        <>
+          <TextButton label={strings.settings.signInInvitation.notNow} onPress={answer} />
+          <TextButton label={text.turnOn} onPress={turnOn} />
+        </>
+      }
+    >
+      {turnOff.map((step) => (
+        <View key={step.service} className="items-start" style={{ gap: CELL }}>
+          <Text className="font-sans text-subheadline text-secondary">{step.step}</Text>
+          <TextButton label={step.button} onPress={() => openAppLinkSettings(step.packageName)} />
         </View>
-      </CardEntries>
-      <View className="flex-row flex-wrap items-center justify-end" style={{ columnGap: CELL * 3 }}>
-        <TextButton label={strings.settings.signInInvitation.notNow} onPress={answer} />
-        <TextButton label={text.turnOn} onPress={turnOn} />
+      ))}
+      <Text className="font-sans text-subheadline text-secondary">{text.line}</Text>
+      <View style={{ gap: CELL * 2 }}>
+        {text.steps.map((step, index) => (
+          <View key={step} className="flex-row" style={{ gap: CELL * 2 }}>
+            <Text className="font-sans text-body font-medium text-foreground">{index + 1}.</Text>
+            <Text className="flex-1 font-sans text-body text-foreground">{step}</Text>
+          </View>
+        ))}
       </View>
-    </>
+    </FirstRunCard>
   );
 }
 

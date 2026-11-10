@@ -11,10 +11,11 @@ import {
 } from "@/library/YtLibraryPickerHost";
 import { currentLocalisation, useLocalisation } from "@/localisation/localisation";
 import { showError } from "@/overlay/alert";
-import { CardEntries } from "@/overlay/CardEntries";
 import { openOverlay } from "@/overlay/overlay";
 import { setYtMusicEnabled, useYtMusicEnabled } from "@/settings/ytMusic";
 import { useThemeColor } from "@/theme/useThemeColor";
+
+import { FirstRunCard } from "./FirstRunCard";
 
 /** Source marks last for this launch; only answering the card is kept across launches. */
 const importing = new Set<LibraryService>();
@@ -32,60 +33,47 @@ function BringYourMusicCard({
   const enabled = useYtMusicEnabled();
   const ink = useThemeColor("foreground");
   return (
-    <>
-      <CardEntries>
-        <View style={{ gap: CELL * 3, paddingTop: CELL, paddingBottom: CELL * 3 }}>
-          <Text
-            accessibilityRole="header"
-            className="font-sans text-title2 font-light text-foreground"
-            style={{ letterSpacing: -0.3 }}
-          >
-            {text.title}
-          </Text>
-          <View className="flex-row items-center" style={{ gap: CELL * 2 }}>
-            <IconMusic size={28} color={ink} strokeWidth={1.5} />
-            <Text className="flex-1 font-sans text-subheadline text-secondary">{text.line}</Text>
-          </View>
-          {enabled ? (
-            <View style={{ gap: CELL }}>
-              {(["spotify", "ytMusic"] as const).map((source) => (
-                <View
-                  key={source}
-                  className="flex-row flex-wrap items-center"
-                  style={{ gap: CELL }}
-                >
-                  <TextButton
-                    label={
-                      source === "spotify"
-                        ? strings.imports.fromSpotify
-                        : strings.imports.fromYtMusic
-                    }
-                    onPress={() => importFrom(source)}
-                  />
-                  {importing.has(source) && (
-                    <Text
-                      accessibilityLiveRegion="polite"
-                      className="font-sans text-footnote text-secondary"
-                    >
-                      {strings.settings.importing}
-                    </Text>
-                  )}
-                </View>
-              ))}
-            </View>
-          ) : (
-            <View style={{ gap: CELL }}>
-              <Text className="font-sans text-footnote text-secondary">{text.needsYtMusic}</Text>
-              <TextButton label={text.turnOnYtMusic} onPress={() => setYtMusicEnabled(true)} />
-            </View>
-          )}
-        </View>
-      </CardEntries>
-      <View className="flex-row flex-wrap items-center justify-end" style={{ columnGap: CELL * 3 }}>
-        <TextButton label={strings.settings.signInInvitation.notNow} onPress={answer} />
-        {importing.size > 0 && <TextButton label={strings.imports.continue} onPress={answer} />}
+    <FirstRunCard
+      title={text.title}
+      actions={
+        <>
+          <TextButton label={strings.settings.signInInvitation.notNow} onPress={answer} />
+          {importing.size > 0 && <TextButton label={strings.imports.continue} onPress={answer} />}
+        </>
+      }
+    >
+      <View className="flex-row items-center" style={{ gap: CELL * 2 }}>
+        <IconMusic size={28} color={ink} strokeWidth={1.5} />
+        <Text className="flex-1 font-sans text-subheadline text-secondary">{text.line}</Text>
       </View>
-    </>
+      {enabled ? (
+        <View style={{ gap: CELL }}>
+          {(["spotify", "ytMusic"] as const).map((source) => (
+            <View key={source} className="flex-row flex-wrap items-center" style={{ gap: CELL }}>
+              <TextButton
+                label={
+                  source === "spotify" ? strings.imports.fromSpotify : strings.imports.fromYtMusic
+                }
+                onPress={() => importFrom(source)}
+              />
+              {importing.has(source) && (
+                <Text
+                  accessibilityLiveRegion="polite"
+                  className="font-sans text-footnote text-secondary"
+                >
+                  {strings.settings.importing}
+                </Text>
+              )}
+            </View>
+          ))}
+        </View>
+      ) : (
+        <View style={{ gap: CELL }}>
+          <Text className="font-sans text-footnote text-secondary">{text.needsYtMusic}</Text>
+          <TextButton label={text.turnOnYtMusic} onPress={() => setYtMusicEnabled(true)} />
+        </View>
+      )}
+    </FirstRunCard>
   );
 }
 
