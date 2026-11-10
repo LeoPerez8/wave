@@ -1788,6 +1788,8 @@ export {
 export {
   addingProgress,
   clearImportProgress,
+  EXPORT_WAITING_PROGRESS,
+  exportingProgress,
   importProgress,
   importProgressByPlaylist,
   importProgressFraction,
@@ -1800,6 +1802,8 @@ export {
 } from "./importProgress.ts";
 export type {
   AddingProgress,
+  ExportingProgress,
+  ExportWaitingProgress,
   ImportProgress,
   ImportProgressBoard,
   ImportRing,
@@ -2122,9 +2126,29 @@ export {
   spotifyPlaylistUrl,
   syncSharedPlaylist,
   ytMusicPlaylistUrl,
+  ytNewPlaylistPrivacy,
+  ytPrivacyChange,
   ytShareMatch,
   ytShareSong,
 } from "./playlistShare.ts";
+export {
+  addYtExported,
+  NO_YT_EXPORT,
+  planYtExport,
+  pressYtExportSelectAll,
+  toggleYtExportRow,
+  ytExportPicker,
+  ytExportPickerView,
+  ytExportSummaryLine,
+} from "./ytExport.ts";
+export type {
+  YtExportItem,
+  YtExportPicker,
+  YtExportPickerView,
+  YtExportPlaylist,
+  YtExportRow,
+  YtExportSummary,
+} from "./ytExport.ts";
 export {
   readSpotifySharedPlaylist,
   spotifyLibraryHas,
@@ -2143,6 +2167,8 @@ export type {
   SharedPlaylistChanges,
   SharedPlaylistService,
   SharedSongs,
+  YtPlaylistPrivacy,
+  YtPlaylistPurpose,
   YtShareItem,
 } from "./playlistShare.ts";
 export {

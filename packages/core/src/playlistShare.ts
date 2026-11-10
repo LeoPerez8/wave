@@ -86,6 +86,32 @@ export interface SharedSongs {
   readonly total: number;
 }
 
+/**
+ * Why Wave writes a playlist on YT Music: sharing it (`share`, whose link
+ * anyone can open) or Export to YT Music (`export`, for the account alone).
+ */
+export type YtPlaylistPurpose = "share" | "export";
+
+/** Who sees a playlist on YouTube Music, as its requests name it. */
+export type YtPlaylistPrivacy = "PUBLIC" | "UNLISTED" | "PRIVATE";
+
+/** Who sees a playlist Wave makes on YouTube Music: unlisted when shared, private when exported. */
+export const ytNewPlaylistPrivacy = (purpose: YtPlaylistPurpose): YtPlaylistPrivacy =>
+  purpose === "share" ? "UNLISTED" : "PRIVATE";
+
+/**
+ * The visibility the account's playlist takes as Wave updates it for
+ * [purpose], from its [privacy] as read (null when the page didn't say):
+ * Share makes a private one unlisted (one Export made), so its link opens,
+ * and one it can't tell too; it leaves an unlisted or public one as it is.
+ * Export never changes it. Null for no change.
+ */
+export const ytPrivacyChange = (
+  purpose: YtPlaylistPurpose,
+  privacy: string | null,
+): YtPlaylistPrivacy | null =>
+  purpose === "share" && privacy !== "UNLISTED" && privacy !== "PUBLIC" ? "UNLISTED" : null;
+
 /** The id a search finds for [song], remembered when it's a song to remember: null for none. */
 const searchShareSong = async <Q>(
   song: ShareSong<Q>,
@@ -104,18 +130,23 @@ const searchShareSong = async <Q>(
  * allowance paces them), and a song with neither left out. A song listed
  * twice goes in once, where it first comes. What a search finds for a song
  * to remember goes to [remember] with its track; a song not found isn't
- * remembered, so it's searched again next time. Rejects when [search] does.
+ * remembered, so it's searched again next time. [progress] hears how many
+ * songs are done after each. Rejects when [search] does.
  */
 export const matchSharedSongs = async <Q>(
   songs: readonly ShareSong<Q>[],
   search: (query: Q) => Promise<string | null>,
   remember?: (trackId: number, id: string) => Promise<void>,
+  progress?: (done: number) => void,
 ): Promise<SharedSongs> => {
   const ids: string[] = [];
   const seen = new Set<string>();
   let found = 0;
+  let done = 0;
   for (const song of songs) {
     const id = song.id ?? (await searchShareSong(song, search, remember));
+    done += 1;
+    progress?.(done);
     if (id === null) continue;
     found += 1;
     if (seen.has(id)) continue;
