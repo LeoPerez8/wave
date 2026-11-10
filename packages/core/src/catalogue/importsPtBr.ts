@@ -44,8 +44,7 @@ export const importsPtBr: typeof importsEn = {
   songLink: "Este é o link de uma música, não de uma playlist.",
   notPlaylistLink: "Este link não é de uma playlist.",
   ytMusicOff: "O YT Music está desativado",
-  ytMusicOffMessage:
-    "Ative o YT Music em Ajustes para abrir músicas e playlists de links do YouTube Music e do Spotify.",
+  ytMusicOffMessage: "Ative o YT Music em Ajustes para abrir links de músicas e playlists.",
   cantImport: "Não é possível importar isto",
   cantOpen: "Não é possível abrir isto",
   sharedLinks:
@@ -55,14 +54,12 @@ export const importsPtBr: typeof importsEn = {
   songOfflineMessage: "Conecte-se à internet para abrir esta música.",
   songLinkDoesntOpen: "Este link não abre",
   songLinkDoesntOpenMessage: "O YouTube Music não conseguiu tocar a música deste link.",
-  songNotFound: "Não foi possível encontrar esta música online",
+  songNotFound: "Não achei essa música online",
   songUnreadMissing: (service: string): string => `O ${service} não tem a música deste link.`,
   songUnreadUnreachable: (service: string): string =>
     `Não foi possível acessar o ${service}. Verifique sua conexão e tente novamente.`,
   songUnreadFailed: (service: string): string => `O ${service} não respondeu como esperado.`,
-  songSearchFailedMessage: "O YouTube Music não respondeu. Tente novamente mais tarde.",
-  search: "Buscar",
-  close: "Fechar",
+  ytMusicNoAnswerMessage: "O YouTube Music não respondeu. Tente novamente mais tarde.",
   offline: "Você está offline. Tente novamente quando estiver online.",
   playlistFailed:
     "Não foi possível ler esta playlist. Ela pode ser privada ou ter sido apagada, ou não houve resposta online.",

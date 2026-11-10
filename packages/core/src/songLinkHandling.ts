@@ -10,9 +10,19 @@
 import { catalogueOf, type AppLanguage } from "./localisation.ts";
 
 /**
+ * A host's state in Android's `DomainVerificationUserState`
+ * (`DOMAIN_STATE_*`): not opened by Wave, selected by the owner in Open by
+ * default, or verified for Wave by Android.
+ */
+const DOMAIN_STATE = { none: 0, selected: 1, verified: 2 } as const;
+
+/** The states in which a host's links open in Wave. */
+const OPENS_IN_WAVE: ReadonlySet<number> = new Set([DOMAIN_STATE.selected, DOMAIN_STATE.verified]);
+
+/**
  * Android's domain verification user state for Wave: whether "Open supported
- * links" is on, and each web host Wave's intent filters declare with its state
- * (0 none, 1 selected by the owner, 2 verified).
+ * links" is on, and each web host Wave's intent filters declare with its
+ * state (`DOMAIN_STATE`, as Android numbers it).
  */
 export type SongLinkHandlingState = {
   readonly allowed: boolean;
@@ -25,7 +35,7 @@ export type SongLinkHandling = "all" | "some" | "none";
 /** Selected and verified hosts open in Wave; with "Open supported links" off, none does. */
 export const songLinkHandling = ({ allowed, hosts }: SongLinkHandlingState): SongLinkHandling => {
   const states = Object.values(hosts);
-  const on = allowed ? states.filter((state) => state >= 1).length : 0;
+  const on = allowed ? states.filter((state) => OPENS_IN_WAVE.has(state)).length : 0;
   if (on === 0) return "none";
   return on === states.length ? "all" : "some";
 };

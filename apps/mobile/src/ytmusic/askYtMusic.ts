@@ -1,5 +1,5 @@
 import { recordingSearch } from "./recordingSearch";
-import type { SpotifySong } from "@wave/core";
+import type { ServiceTrack } from "@wave/core";
 import type { SearchAsker, YtAlbumSong, YtSongSearch } from "@wave/core";
 import * as Effect from "effect/Effect";
 import * as Result from "effect/Result";
@@ -33,7 +33,7 @@ export const askYtMusic = <A, E>(
 /** A recording lookup, including the official-video fallback, in the shared allowance. */
 export const searchRecordingInTurn = async (
   asker: SearchAsker,
-  song: SpotifySong,
+  song: ServiceTrack,
   signal?: AbortSignal,
   unknownLength = false,
 ): Promise<YtSongSearch<YtAlbumSong> | null> => {

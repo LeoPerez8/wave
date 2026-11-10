@@ -48,10 +48,10 @@ function SongNotFoundCard({ song, close }: { song: LinkedSong; close: () => void
         </View>
       </View>
       <View className="flex-row items-center justify-end" style={{ gap: CELL * 3 }}>
-        <TextButton label={strings.imports.close} onPress={close} />
+        <TextButton label={strings.playbackText.close} onPress={close} />
         {query !== null && (
           <TextButton
-            label={strings.imports.search}
+            label={strings.playbackText.search}
             onPress={() => {
               close();
               openSearch(query);

@@ -8,8 +8,7 @@
 import { array, at, positive, text } from "./json.ts";
 import { isDeezerId } from "./linkText.ts";
 import { deezerRefused } from "./releaseLookup.ts";
-import type { SpotifySong } from "./spotifyPlaylist.ts";
-import type { SpotifyTrackRead } from "./spotifyTrack.ts";
+import type { ServiceTrack, TrackRead } from "./serviceTrack.ts";
 
 /** Deezer's answer: its HTTP status and body. */
 export interface DeezerAnswer {
@@ -19,9 +18,6 @@ export interface DeezerAnswer {
 
 /** Asks Deezer for the address it's given (a GET); rejects when Deezer can't be reached. */
 export type DeezerTransport = (url: string) => Promise<DeezerAnswer>;
-
-/** A Deezer track as read, or why it wasn't: the same reasons as a Spotify track's. */
-export type DeezerTrackRead = SpotifyTrackRead;
 
 /** Deezer's "no data" error: an id it has no track for. */
 const NO_DATA = 800;
@@ -39,7 +35,7 @@ const parsed = (body: string): unknown => {
 };
 
 /** The track an API answer describes, or null when it describes none. */
-const apiTrack = (track: unknown): SpotifySong | null => {
+const apiTrack = (track: unknown): ServiceTrack | null => {
   const title = text(at(track, "title"));
   if (text(at(track, "type")) !== "track" || title === null) return null;
   const contributors = array(at(track, "contributors"))
@@ -70,7 +66,7 @@ const apiTrack = (track: unknown): SpotifySong | null => {
 export const readDeezerTrack = async (
   trackId: string,
   send: DeezerTransport,
-): Promise<DeezerTrackRead> => {
+): Promise<TrackRead> => {
   if (!isDeezerId(trackId)) return { ok: false, reason: "missing" };
   let answer;
   try {

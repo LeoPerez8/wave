@@ -42,7 +42,7 @@ import { askYtMusic } from "@/ytmusic/askYtMusic";
 
 import { importPlaylists, saveImportedPlaylist, type ImportedPlaylist } from "./importPlaylists";
 import { openSongLink } from "./openSongLink";
-import { spotifyTransport } from "./spotifyTransport";
+import { spotifyTransport } from "./serviceTransport";
 import { listLibrary, startLinkImport } from "./playlistImports";
 import { openSpotifyLibraryImport, openYtLibraryImport } from "./YtLibraryPickerHost";
 import { openPlaylist } from "./routes";
