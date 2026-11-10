@@ -17,7 +17,6 @@ import {
   type PlaylistImportSource,
   type PlaylistLink,
   type SpotifyReadFailure,
-  type SpotifyTransport,
 } from "@wave/core";
 import * as Result from "effect/Result";
 import { useEffect, useState } from "react";
@@ -43,6 +42,7 @@ import { askYtMusic } from "@/ytmusic/askYtMusic";
 
 import { importPlaylists, saveImportedPlaylist, type ImportedPlaylist } from "./importPlaylists";
 import { openSongLink } from "./openSongLink";
+import { spotifyTransport } from "./spotifyTransport";
 import { listLibrary, startLinkImport } from "./playlistImports";
 import { openSpotifyLibraryImport, openYtLibraryImport } from "./YtLibraryPickerHost";
 import { openPlaylist } from "./routes";
@@ -52,19 +52,6 @@ import { openPlaylist } from "./routes";
 
 /** A linked playlist read, or why it wasn't. */
 export type LinkRead = LinkImportRead<NativeYtSong>;
-
-/** Spotify through `fetch`, as Core's `readSpotifyPlaylist` asks; rejects when out of reach. */
-const spotifyTransport =
-  (signal: AbortSignal): SpotifyTransport =>
-  async (request) => {
-    const response = await fetch(request.url, {
-      method: request.method,
-      headers: request.headers,
-      body: request.body ?? undefined,
-      signal,
-    });
-    return { status: response.status, body: await response.text() };
-  };
 
 /**
  * The playlist a Spotify short link names, followed over the network (Core's
@@ -172,7 +159,8 @@ export const openLinkImport = (text: string): void => {
 
 /**
  * Opens what [text] shared to Wave from another app names (Core's
- * `sharedTextImport`): the song a song link names, playing (`openSongLink`),
+ * `sharedTextImport`): the song a song link names, playing (`openSongLink`;
+ * a Spotify short link to a playlist opens its import card once followed),
  * the import card for its playlist, as From a Link opens it, or a short
  * message saying what Wave opens (or that YT Music is off).
  * Nothing is read for a message. The cards open before the share (a link
@@ -186,7 +174,7 @@ export const openSharedText = (text: string): void => {
     currentLocalisation().language,
   );
   if (shared.kind === "import") openImportCard(shared.link);
-  else if (shared.kind === "song") void openSongLink(shared.link);
+  else if (shared.kind === "song") void openSongLink(shared.link, { openPlaylist: openImportCard });
   else void showMessage(shared.title, shared.message);
 };
 

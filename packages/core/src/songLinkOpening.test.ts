@@ -8,7 +8,12 @@ import {
   songLinkLibraryCopy,
   songLinkNotice,
   songLinkPlay,
+  spotifyShortLinkLanding,
+  songLinkNotFound,
+  trackLinkPlay,
+  type SpotifySong,
   type YtSong,
+  type YtSongSearch,
 } from "./index.ts";
 
 const VIDEO = "dQw4w9WgXcQ";
@@ -97,6 +102,130 @@ describe("a shared YouTube Music song link", () => {
           "Turn on YT Music in Settings to open songs and playlists from YouTube Music and Spotify links.",
       },
     );
+  });
+});
+
+const TRACK = "4uLU6hMCjMI75M1A2tKUQC";
+const spotifySong = { kind: "song", link: { service: "spotify", trackId: TRACK } };
+
+describe("a shared Spotify song link", () => {
+  test("a track link, with a locale, the embed player or parameters, opens the song", () => {
+    for (const text of [
+      `https://open.spotify.com/track/${TRACK}`,
+      `https://open.spotify.com/track/${TRACK}?si=4f2a9c1b8e7d4c3a`,
+      `https://open.spotify.com/intl-pt/track/${TRACK}?si=4f2a&context=spotify%3Aplaylist%3Ax`,
+      `https://open.spotify.com/embed/track/${TRACK}`,
+      `open.spotify.com/track/${TRACK}/`,
+      `spotify:track:${TRACK}`,
+    ]) {
+      assert.deepEqual(sharedTextImport(text, on), spotifySong, text);
+    }
+  });
+
+  test("the text Spotify's app shares, the link among words, is found", () => {
+    for (const text of [
+      `Never Gonna Give You Up - Rick Astley https://open.spotify.com/track/${TRACK}?si=x`,
+      `Listen to this on Spotify!\nhttps://open.spotify.com/intl-de/track/${TRACK}.`,
+      `"spotify:track:${TRACK}"`,
+    ]) {
+      assert.deepEqual(sharedTextImport(text, on), spotifySong, text);
+    }
+  });
+
+  test("a short link is a song link to follow, as only Spotify knows what it names", () => {
+    for (const text of [
+      "https://spotify.link/wud9sAYDbDb",
+      "Never Gonna Give You Up https://spotify.link/wud9sAYDbDb?_branch=1",
+      "https://spotify.app.link/wud9sAYDbDb",
+    ]) {
+      const host = text.includes("app.link") ? "spotify.app.link" : "spotify.link";
+      assert.deepEqual(
+        sharedTextImport(text, on),
+        { kind: "song", link: { service: "spotifyShort", url: `https://${host}/wud9sAYDbDb` } },
+        text,
+      );
+    }
+  });
+
+  test("playlist links still open the import card", () => {
+    assert.deepEqual(
+      sharedTextImport("https://open.spotify.com/playlist/37i9dQZF1DXcBWIGoYBM5M", on),
+      {
+        kind: "import",
+        link: { service: "spotify", playlistId: "37i9dQZF1DXcBWIGoYBM5M" },
+      },
+    );
+  });
+
+  test("albums, artists, podcasts and malformed ids say what Wave opens", () => {
+    for (const text of [
+      `https://open.spotify.com/album/${TRACK}`,
+      `https://open.spotify.com/artist/${TRACK}`,
+      `https://open.spotify.com/episode/${TRACK}`,
+      "https://open.spotify.com/track/tooShort",
+      `https://open.spotify.com/track/${TRACK}/extra`,
+      "spotify:track:",
+    ]) {
+      assert.deepEqual(
+        sharedTextImport(text, on),
+        {
+          kind: "notice",
+          title: "Can't open this",
+          message: "Wave opens songs and playlists from YouTube Music and Spotify links.",
+        },
+        text,
+      );
+    }
+  });
+});
+
+describe("where a shared Spotify short link lands", () => {
+  const SONG = "3HDsUtYD9XztWhwQY2smjt";
+  const PLAYLIST = "1RTENWq73MEx1Pop40ZZ5S";
+
+  test("on a track's page, it plays that track", () => {
+    assert.deepEqual(
+      spotifyShortLinkLanding(
+        `https://open.spotify.com/track/${SONG}?si=abc&_branch_match_id=123`,
+        "",
+      ),
+      { kind: "song", link: { service: "spotify", trackId: SONG } },
+    );
+  });
+
+  test("on Branch's page for apps, the first Spotify page it names is the track", () => {
+    assert.deepEqual(
+      spotifyShortLinkLanding(
+        "https://spotify.app.link/wud9sAYDbDb?_p=c214",
+        `<script>window.location = "https://open.spotify.com/track/${SONG}?si=1";</script>`,
+      ),
+      { kind: "song", link: { service: "spotify", trackId: SONG } },
+    );
+  });
+
+  test("on a playlist, it opens the import card", () => {
+    const playlist = { kind: "import", link: { service: "spotify", playlistId: PLAYLIST } };
+    assert.deepEqual(
+      spotifyShortLinkLanding(`https://open.spotify.com/playlist/${PLAYLIST}?si=abc`, ""),
+      playlist,
+    );
+    assert.deepEqual(
+      spotifyShortLinkLanding(
+        "https://spotify.app.link/x?_p=1",
+        `<a href="https://open.spotify.com/playlist/${PLAYLIST}">Open</a>`,
+      ),
+      playlist,
+    );
+  });
+
+  test("anywhere else (a profile, an album, no Spotify page), it opens nothing", () => {
+    for (const [url, body] of [
+      ["https://spotify.app.link/uszhQI5hT3b?_p=1", '"https://open.spotify.com/user/leo"'],
+      ["https://open.spotify.com/album/4uLU6hMCjMI75M1A2tKUQC", ""],
+      ["https://spotify.link/nothing", "<html></html>"],
+    ] as const) {
+      assert.equal(spotifyShortLinkLanding(url, body), null, url);
+    }
   });
 });
 
@@ -252,6 +381,175 @@ describe("what a song link that doesn't play says", () => {
         title: "Não foi possível encontrar esta música online",
         message: "Genesis · Justice",
       },
+    );
+  });
+});
+
+/** A search answering [answer], counting how often it is asked and for what. */
+const searching = (answer: YtSongSearch<YtSong> | null) => {
+  const asked: SpotifySong[] = [];
+  const search = async (wanted: SpotifySong) => {
+    asked.push(wanted);
+    return answer;
+  };
+  return { asked, search };
+};
+
+describe("what a song another service's link names plays", () => {
+  const read: SpotifySong = {
+    title: "Genesis",
+    artists: ["Justice"],
+    album: null,
+    durationMs: 234_500,
+    artworkUrl: "https://image-cdn-ak.spotifycdn.com/image/genesis",
+  };
+  const linked = {
+    title: "Genesis",
+    artists: ["Justice"],
+    durationMs: 234_500,
+    artworkUrl: "https://image-cdn-ak.spotifycdn.com/image/genesis",
+    videoId: null,
+  };
+  test("the Library's same recording plays, with no YouTube Music search", async () => {
+    const copy = track(8);
+    const { asked, search } = searching({ ok: true, songs: [yt(VIDEO)] });
+    assert.deepEqual(
+      await trackLinkPlay(read, {
+        find: libraryFinder([track(7, { title: "Genesis (Live)" }), copy]),
+        search,
+      }),
+      {
+        play: "magicQueue",
+        from: "library",
+        seed: { kind: "track", id: "8", title: "Genesis" },
+        track: copy,
+      },
+    );
+    assert.deepEqual(asked, []);
+  });
+
+  test("else YouTube Music is searched once for it, and its same recording streams", async () => {
+    const found = yt(VIDEO);
+    const { asked, search } = searching({ ok: true, songs: [found] });
+    assert.deepEqual(
+      await trackLinkPlay(read, { find: libraryFinder([track(7, { path: null })]), search }),
+      { play: "magicQueue", from: "stream", song: found },
+    );
+    assert.deepEqual(asked, [read]);
+  });
+
+  test("no same recording online, it isn't found: its title, artists and cover are shown", async () => {
+    assert.deepEqual(
+      await trackLinkPlay(read, {
+        find: libraryFinder([]),
+        search: searching({ ok: true, songs: [] }).search,
+      }),
+      { play: "notFound", song: linked },
+    );
+  });
+
+  test("a search that fails says why, and nothing plays", async () => {
+    for (const [answer, failure] of [
+      [{ ok: false, reason: "offline" }, "offline"],
+      [{ ok: false, reason: "failed" }, "searchFailed"],
+      [{ ok: false, reason: "disabled" }, "disabled"],
+      [null, "searchFailed"],
+    ] as const) {
+      assert.deepEqual(
+        await trackLinkPlay(read, { find: libraryFinder([]), search: searching(answer).search }),
+        { play: "failed", failure },
+      );
+    }
+  });
+});
+
+describe("what a Spotify song link that doesn't play says", () => {
+  test("a track Spotify doesn't have, Spotify out of reach, or an answer Wave can't read", () => {
+    assert.deepEqual(songLinkNotice({ unread: "missing", service: "spotify" }), {
+      title: "This link doesn't open",
+      message: "Spotify doesn't have the song it links to.",
+    });
+    assert.deepEqual(songLinkNotice({ unread: "unreachable", service: "spotify" }), {
+      title: "This link doesn't open",
+      message: "Couldn't reach Spotify. Check your connection and try again.",
+    });
+    assert.deepEqual(songLinkNotice({ unread: "failed", service: "spotify" }), {
+      title: "This link doesn't open",
+      message: "Spotify didn't answer as expected.",
+    });
+  });
+
+  test("no answer to YouTube Music's search says so", () => {
+    assert.deepEqual(songLinkNotice("searchFailed"), {
+      title: "This link doesn't open",
+      message: "YouTube Music didn't answer. Try again later.",
+    });
+  });
+
+  test("a short link to neither a song nor a playlist says what Wave opens", () => {
+    assert.deepEqual(songLinkNotice("cantOpen"), {
+      title: "Can't open this",
+      message: "Wave opens songs and playlists from YouTube Music and Spotify links.",
+    });
+  });
+
+  test("in Portuguese", () => {
+    assert.deepEqual(songLinkNotice({ unread: "missing", service: "spotify" }, "pt-BR"), {
+      title: "Este link não abre",
+      message: "O Spotify não tem a música deste link.",
+    });
+    assert.deepEqual(songLinkNotice({ unread: "unreachable", service: "spotify" }, "pt-BR"), {
+      title: "Este link não abre",
+      message: "Não foi possível acessar o Spotify. Verifique sua conexão e tente novamente.",
+    });
+    assert.deepEqual(songLinkNotice({ unread: "failed", service: "spotify" }, "pt-BR"), {
+      title: "Este link não abre",
+      message: "O Spotify não respondeu como esperado.",
+    });
+    assert.deepEqual(songLinkNotice("searchFailed", "pt-BR"), {
+      title: "Este link não abre",
+      message: "O YouTube Music não respondeu. Tente novamente mais tarde.",
+    });
+  });
+});
+
+describe("the Couldn't find card", () => {
+  const senorita = {
+    title: "Señorita",
+    artists: ["Shawn Mendes", "Camila Cabello"],
+    durationMs: 190_800,
+    artworkUrl: "https://image-cdn-ak.spotifycdn.com/image/senorita",
+    videoId: null,
+  };
+
+  test("shows the song's title, artists and cover, and searches for its title and main artist", () => {
+    assert.deepEqual(songLinkNotFound(senorita, { search: true }), {
+      heading: "Couldn't find this song online",
+      title: "Señorita",
+      artists: "Shawn Mendes & Camila Cabello",
+      artworkUrl: "https://image-cdn-ak.spotifycdn.com/image/senorita",
+      searchQuery: "Señorita Shawn Mendes",
+    });
+  });
+
+  test("with no Search tab, it offers no Search", () => {
+    assert.equal(songLinkNotFound(senorita, { search: false }).searchQuery, null);
+  });
+
+  test("a credit that names two artists searches for the first", () => {
+    assert.equal(
+      songLinkNotFound(
+        { ...senorita, artists: ["Shawn Mendes & Camila Cabello"] },
+        { search: true },
+      ).searchQuery,
+      "Señorita Shawn Mendes",
+    );
+  });
+
+  test("in Portuguese", () => {
+    assert.equal(
+      songLinkNotFound(senorita, { search: true }, "pt-BR").heading,
+      "Não foi possível encontrar esta música online",
     );
   });
 });

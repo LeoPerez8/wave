@@ -202,9 +202,10 @@ const EMBED_CAP = 100;
  */
 const FETCH_PLAYLIST_HASH = "8964e8eafb21aa992a7d951d256d83285c04be2105d209262901de70cb97584a";
 
-const embedRequest = (playlistId: string): SpotifyRequest => ({
+/** The embed page for Spotify's [kind] of page and its [id]: no headers, no account. */
+export const embedRequest = (kind: "playlist" | "track", id: string): SpotifyRequest => ({
   method: "GET",
-  url: `https://open.spotify.com/embed/playlist/${playlistId}`,
+  url: `https://open.spotify.com/embed/${kind}/${id}`,
   headers: {},
   body: null,
 });
@@ -292,7 +293,7 @@ export const readSpotifyPlaylist = async (
   const cancelled = (): boolean => signal?.aborted === true;
   let answer: SpotifyAnswer;
   try {
-    answer = await send(embedRequest(playlistId));
+    answer = await send(embedRequest("playlist", playlistId));
   } catch {
     return { ok: false, reason: "unreachable" };
   }
@@ -313,6 +314,25 @@ export const readSpotifyPlaylist = async (
 
 /** The embed page's data: Next.js's JSON in its `__NEXT_DATA__` script. */
 const NEXT_DATA = /<script[^>]*\bid="__NEXT_DATA__"[^>]*>([\s\S]*?)<\/script>/u;
+
+/**
+ * An embed page's `props.pageProps`: what Next.js's JSON in its
+ * `__NEXT_DATA__` script holds. "notFound" when it's the page for an
+ * unknown or malformed id (`status` 404 or 500); null when it holds no JSON.
+ */
+export const embedPageProps = (html: string): unknown => {
+  const script = NEXT_DATA.exec(html)?.[1];
+  if (script === undefined) return null;
+  let data: unknown;
+  try {
+    data = JSON.parse(script);
+  } catch {
+    return null;
+  }
+  const props = at(data, "props", "pageProps") ?? null;
+  const status = at(props, "status");
+  return status === 404 || status === 500 ? "notFound" : props;
+};
 
 /** The artists of an embed track: its subtitle, "A, B" (a name with a comma splits, as nothing better is given). */
 const embedArtists = (subtitle: string | null): string[] =>
@@ -339,17 +359,9 @@ const embedSong = (track: unknown): SpotifySong | null => {
  * something else.
  */
 export const spotifyEmbed = (html: string): SpotifyEmbed | null => {
-  const script = NEXT_DATA.exec(html)?.[1];
-  if (script === undefined) return null;
-  let data: unknown;
-  try {
-    data = JSON.parse(script);
-  } catch {
-    return null;
-  }
-  const props = at(data, "props", "pageProps");
-  const status = at(props, "status");
-  if (status === 404 || status === 500) return { status: "notFound" };
+  const props = embedPageProps(html);
+  if (props === null) return null;
+  if (props === "notFound") return { status: "notFound" };
   const entity = at(props, "state", "data", "entity");
   const tracks = at(entity, "trackList");
   if (text(at(entity, "type")) !== "playlist" || !Array.isArray(tracks)) return null;

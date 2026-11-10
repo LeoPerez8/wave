@@ -420,8 +420,9 @@ https://music.youtube.com/playlist?list=${ID}`,
     ]) {
       assert.deepEqual(sharedTextImport(text, on), spotify, text);
     }
+    // A short link may name a song, so a shared one is followed before Wave decides (songLinkOpening.test.ts).
     assert.deepEqual(sharedTextImport("Today's Top Hits https://spotify.link/uszhQI5hT3b", on), {
-      kind: "import",
+      kind: "song",
       link: { service: "spotifyShort", url: "https://spotify.link/uszhQI5hT3b" },
     });
   });
