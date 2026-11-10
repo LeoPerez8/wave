@@ -908,6 +908,9 @@ export const OWN_PRESS: Record<string, Exception> = {
   "library/YtLibraryPicker.tsx#PickerRow": {
     reason: "The YT Music library picker's checkbox row.",
   },
+  "library/YtExportPicker.tsx#ExportRow": {
+    reason: "The Export to YT Music picker's checkbox row.",
+  },
   "home/UpcomingShows.tsx#ShowCard": {
     reason:
       "An Upcoming Shows ticket card: the whole card opens the tickets, its long press opens the show's menu.",
