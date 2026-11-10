@@ -29,11 +29,14 @@ const SPRING = { damping: 30, stiffness: 300, mass: 1 } as const;
 /** Downward travel before a drag on the header takes over from a tap, in dp. */
 const DRAG_SLOP = CELL * 1.5;
 
-/** One of the picker's buttons at the bottom: pressed while enabled, the sheet goes and [afterwards] runs. */
+/**
+ * One of the picker's buttons at the bottom: pressed while enabled, the sheet
+ * goes and [afterwards] runs, settling whether it did what the button says.
+ */
 export interface PickerSheetAction {
   readonly label: string;
   readonly disabled: boolean;
-  readonly afterwards: () => void;
+  readonly afterwards: () => Promise<boolean>;
 }
 
 export function PickerSheetFrame({
@@ -48,8 +51,11 @@ export function PickerSheetFrame({
   /** Select All's label (or Deselect All's); none hides it. */
   selectAll: string | null;
   onSelectAll: () => void;
-  /** The sheet has gone; true when an action was chosen, false for dismissal. */
-  onClosed: (actionTaken: boolean) => void;
+  /**
+   * The sheet has gone; [acted] settles true once the chosen action did what
+   * it says, false for dismissal or an action that did nothing.
+   */
+  onClosed: (acted: Promise<boolean>) => void;
   /** The picker's buttons, side by side at the bottom. */
   actions: readonly PickerSheetAction[];
   children: ReactNode;
@@ -68,19 +74,17 @@ export function PickerSheetFrame({
   }, [offset]);
 
   /**
-   * Slides the sheet away, then runs [then] once it has gone. A drag can't
+   * Slides the sheet away, then runs [then] once it has gone and reports
+   * what it settles (dismissal settles false). A drag can't
    * take the sheet back while it closes, and a spring cut short all the
    * same still closes it, so the sheet never stays part-open.
    */
   const leave = useCallback(
-    (then?: () => void) => {
+    (then?: () => Promise<boolean>) => {
       if (leaving.current) return;
       leaving.current = true;
       closing.set(true);
-      const gone = () => {
-        onClosed(then !== undefined);
-        then?.();
-      };
+      const gone = () => onClosed(then === undefined ? Promise.resolve(false) : then());
       offset.set(
         withSpring(height, SPRING, () => {
           scheduleOnRN(gone);

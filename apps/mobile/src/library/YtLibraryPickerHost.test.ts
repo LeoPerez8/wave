@@ -84,30 +84,34 @@ try {
   hooks.deregister();
 }
 
-/** The picker the host draws now, if any. */
-const picker = (): string | null => {
-  let renderer: ReturnType<typeof create> | undefined;
+/** The host, mounted at the root as the app mounts it. */
+let renderer: ReturnType<typeof create> | undefined;
+const mountHost = () => {
   act(() => {
     renderer = create(createElement(host.YtLibraryPickerHost));
   });
+};
+mountHost();
+
+/** The picker the host draws now, if any. */
+const picker = async (): Promise<string | null> => {
+  await act(async () => {});
   const json = renderer?.toJSON();
-  act(() => renderer?.unmount());
   return json === null || json === undefined || Array.isArray(json) ? null : json.type;
 };
 
-/** Closes whatever picker is up, as its sheet going down does. */
-const closePicker = (imported = false) => {
-  let renderer: ReturnType<typeof create> | undefined;
-  act(() => {
-    renderer = create(createElement(host.YtLibraryPickerHost));
-  });
+/** Closes whatever picker is up, as its sheet going down does, [imported] settling later. */
+const closePicker = async (imported: Promise<boolean> = Promise.resolve(false)) => {
+  await act(async () => {});
   const sheet = renderer?.root.findAll((node) => typeof node.props.onClosed === "function")[0];
   act(() => sheet?.props.onClosed(imported));
-  act(() => renderer?.unmount());
 };
 
-beforeEach(() => {
-  closePicker();
+/** Lets the answers settled so far arrive. */
+const settled = () => new Promise((resolve) => setImmediate(resolve));
+
+beforeEach(async () => {
+  await closePicker();
   shared.calls.length = 0;
   shared.signedIn = false;
   shared.confirms = false;
@@ -118,7 +122,7 @@ test("signed in, Export opens its picker at once", async () => {
   shared.signedIn = true;
   await host.openYtExport();
   assert.deepEqual(shared.calls, []);
-  assert.equal(picker(), "export-sheet");
+  assert.equal(await picker(), "export-sheet");
 });
 
 test("signed out, Export asks with Share's sign-in alert, then signs in and opens its picker", async () => {
@@ -126,20 +130,20 @@ test("signed out, Export asks with Share's sign-in alert, then signs in and open
   shared.signsIn = true;
   await host.openYtExport();
   assert.deepEqual(shared.calls, ["alert Sign In to YT Music / Sign In", "sign in"]);
-  assert.equal(picker(), "export-sheet");
+  assert.equal(await picker(), "export-sheet");
 });
 
 test("declining the alert opens neither the sign-in nor the picker", async () => {
   await host.openYtExport();
   assert.deepEqual(shared.calls, ["alert Sign In to YT Music / Sign In"]);
-  assert.equal(picker(), null);
+  assert.equal(await picker(), null);
 });
 
 test("leaving the sign-in opens nothing", async () => {
   shared.confirms = true;
   await host.openYtExport();
   assert.deepEqual(shared.calls, ["alert Sign In to YT Music / Sign In", "sign in"]);
-  assert.equal(picker(), null);
+  assert.equal(await picker(), null);
 });
 
 test("both library imports report Import or cancellation only after their picker closes", async () => {
@@ -148,12 +152,55 @@ test("both library imports report Import or cancellation only after their picker
     for (const imported of [true, false]) {
       const answers: boolean[] = [];
       await open((answer) => answers.push(answer));
-      assert.equal(picker(), "picker-sheet");
+      assert.equal(await picker(), "picker-sheet");
       assert.deepEqual(answers, [], "opening the picker isn't an import");
-      closePicker(imported);
+      await closePicker(Promise.resolve(imported));
+      await settled();
       assert.deepEqual(answers, [imported]);
     }
   }
+});
+
+test("an Import's answer waits for the import to start, the sheet gone at once", async () => {
+  shared.signedIn = true;
+  const answers: boolean[] = [];
+  await host.openYtLibraryImport((answer) => answers.push(answer));
+  const { promise, resolve: started } = Promise.withResolvers<boolean>();
+  await closePicker(promise);
+  assert.equal(await picker(), null);
+  await settled();
+  assert.deepEqual(answers, []);
+  started(true);
+  await settled();
+  assert.deepEqual(answers, [true]);
+});
+
+test("a library picker another picker replaces reports no import, once", async () => {
+  shared.signedIn = true;
+  for (const replace of [
+    host.openYtExport,
+    () => host.openSpotifyLibraryImport(),
+    () => host.openYtLibraryImport(),
+  ]) {
+    const answers: boolean[] = [];
+    await host.openYtLibraryImport((answer) => answers.push(answer));
+    await replace();
+    assert.notEqual(await picker(), null);
+    assert.deepEqual(answers, [false]);
+    await closePicker(Promise.resolve(true));
+    await settled();
+    assert.deepEqual(answers, [false], "the replacement's answer isn't the first picker's");
+  }
+});
+
+test("a host torn down with a library picker up reports no import, and shows nothing again", async () => {
+  shared.signedIn = true;
+  const answers: boolean[] = [];
+  await host.openSpotifyLibraryImport((answer) => answers.push(answer));
+  act(() => renderer?.unmount());
+  assert.deepEqual(answers, [false]);
+  mountHost();
+  assert.equal(await picker(), null);
 });
 
 test("both library imports return after sign-in cancellation, or wait for the signed-in picker", async () => {
@@ -161,15 +208,16 @@ test("both library imports return after sign-in cancellation, or wait for the si
     const answers: boolean[] = [];
     shared.signsIn = false;
     await open((answer) => answers.push(answer));
-    assert.equal(picker(), null);
+    assert.equal(await picker(), null);
     assert.deepEqual(answers, [false]);
 
     shared.signsIn = true;
     answers.length = 0;
     await open((answer) => answers.push(answer));
-    assert.equal(picker(), "picker-sheet");
+    assert.equal(await picker(), "picker-sheet");
     assert.deepEqual(answers, []);
-    closePicker(true);
+    await closePicker(Promise.resolve(true));
+    await settled();
     assert.deepEqual(answers, [true]);
   }
 });

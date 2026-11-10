@@ -122,7 +122,8 @@ export function PickerSheet({
   onClosed,
 }: {
   service: LibraryService;
-  onClosed: (imported: boolean) => void;
+  /** The sheet has gone; [imported] settles true once an Import started, false otherwise. */
+  onClosed: (imported: Promise<boolean>) => void;
 }) {
   const config = SERVICES[service];
   const { strings } = useLocalisation();
@@ -151,12 +152,20 @@ export function PickerSheet({
 
   const view = read.status === "read" ? ytLibraryPickerView(read.picker) : null;
 
-  /** Import, or Import & Download with [download], once the sheet has gone. */
-  const importTicked = (download: boolean) => () => {
-    if (read.status !== "read") return;
-    void importYtLibrary(read.picker, { download }).catch((error: unknown) =>
-      showError(strings.imports.couldntImportPlaylists, error),
-    );
+  /**
+   * Import, or Import & Download with [download], once the sheet has gone:
+   * true once its playlists are made and their reads queued, false when it
+   * didn't start (the library not read, or the playlists couldn't be made).
+   */
+  const importTicked = (download: boolean) => async (): Promise<boolean> => {
+    if (read.status !== "read") return false;
+    try {
+      await importYtLibrary(read.picker, { download });
+      return true;
+    } catch (error: unknown) {
+      showError(strings.imports.couldntImportPlaylists, error);
+      return false;
+    }
   };
   // Import and Import & Download do nothing while no row is ticked.
   const disabled = view?.canImport !== true;
