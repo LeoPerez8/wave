@@ -15,12 +15,14 @@ import {
   lyricsFollowStart,
   lyricsFollowStep,
   lyricCardColours,
+  lyricsDimOpacity,
   placeGeniusReferents,
   shareableLyricLines,
   sharedLyricLines,
   tapLyricLine,
   withOpacity,
   type ArtworkPalette,
+  type Gradient,
   type GeniusHighlight,
   type GeniusPlacement,
   type LyricLine,
@@ -179,6 +181,7 @@ type LineProps = {
   index: number;
   current: boolean;
   karaoke: boolean;
+  dimTone: string;
   /** Share is picking lines: a tap selects instead of seeking. */
   picking: boolean;
   selected: boolean;
@@ -201,9 +204,11 @@ type LineProps = {
  * every frame.
  */
 function KaraokeText({
+  dimTone,
   line,
   highlights,
 }: {
+  dimTone: string;
   line: LyricLine;
   highlights: readonly GeniusHighlight[];
 }) {
@@ -219,7 +224,7 @@ function KaraokeText({
   );
   const wordStarts = useMemo(() => (line.words ?? []).map((word) => word.start), [line.words]);
   return (
-    <Text className="font-sans text-title2 font-medium text-secondary">
+    <Text className="font-sans text-title2 font-medium" style={{ color: dimTone }}>
       {/* Each word carries the spaces after it, so the line wraps as the plain one does. */}
       <HighlightedLine
         text={line.text}
@@ -233,7 +238,7 @@ function KaraokeText({
 
 /**
  * One synced line: ink while it's sung (word by word with Karaoke on),
- * graphite otherwise, with its translation under it lit along with it and
+ * contrast-safe dim ink otherwise, with its translation in dim ink and
  * Genius's annotated fragments on a soft backdrop. Tap a fragment for its
  * annotation, anywhere else to play from there.
  * While Share picks lines, ink on a faint backdrop marks the selected ones,
@@ -244,6 +249,7 @@ const SyncedLine = memo(function SyncedLine({
   index,
   current,
   karaoke,
+  dimTone,
   picking,
   selected,
   translation,
@@ -256,6 +262,7 @@ const SyncedLine = memo(function SyncedLine({
   const { strings } = useLocalisation();
   const [foreground, secondary] = useThemeColor(["foreground", "secondary"]);
   const translationLit = withOpacity(foreground, 0.72);
+  const dim = picking ? secondary : dimTone;
   const selectedFill = useSelectedFill();
   const reduceMotion = useReducedMotion();
   const on = picking ? selected : current;
@@ -267,10 +274,10 @@ const SyncedLine = memo(function SyncedLine({
   }, [on, reduceMotion, lit]);
 
   const tint = useAnimatedStyle(() => ({
-    color: interpolateColor(lit.get(), [0, 1], [secondary, foreground]),
+    color: interpolateColor(lit.get(), [0, 1], [dim, foreground]),
   }));
   const translationTint = useAnimatedStyle(() => ({
-    color: interpolateColor(lit.get(), [0, 1], [secondary, translationLit]),
+    color: interpolateColor(lit.get(), [0, 1], [dim, picking ? translationLit : dimTone]),
   }));
 
   return (
@@ -304,7 +311,7 @@ const SyncedLine = memo(function SyncedLine({
         {line.text === "" ? (
           <PauseDots current={!picking && current} />
         ) : karaoke && current && !picking ? (
-          <KaraokeText line={line} highlights={highlights} />
+          <KaraokeText line={line} highlights={highlights} dimTone={dimTone} />
         ) : (
           <Animated.Text className="font-sans text-title2 font-medium" style={tint}>
             <HighlightedLine text={line.text} highlights={highlights} />
@@ -335,6 +342,7 @@ const SyncedLine = memo(function SyncedLine({
 function SyncedLyrics({
   lines: sourceLines,
   karaoke,
+  dimTone,
   picking,
   translation,
   retryTranslation,
@@ -343,6 +351,7 @@ function SyncedLyrics({
 }: {
   lines: readonly LyricLine[];
   karaoke: boolean;
+  dimTone: string;
   picking: Picking | null;
   translation: TranslationShown | null;
   retryTranslation: () => void;
@@ -512,6 +521,7 @@ function SyncedLyrics({
           index={at}
           current={at === index}
           karaoke={karaoke}
+          dimTone={dimTone}
           picking={isPicking}
           selected={picking?.isSelected(at) ?? false}
           {...translations[at]!}
@@ -701,6 +711,7 @@ function LyricsBody({
   shown,
   song,
   karaoke,
+  dimTone,
   picking,
   retry,
   translation,
@@ -711,6 +722,7 @@ function LyricsBody({
   shown: Shown | null;
   song: string | null;
   karaoke: boolean;
+  dimTone: string;
   picking: Picking | null;
   retry: () => void;
   translation: TranslationShown | null;
@@ -736,6 +748,7 @@ function LyricsBody({
           key={song}
           lines={shown.lines}
           karaoke={karaoke}
+          dimTone={dimTone}
           picking={picking}
           translation={translation}
           retryTranslation={retryTranslation}
@@ -828,15 +841,22 @@ export function LyricsView({
   nonDTrackId,
   item,
   palette,
+  gradient,
   onShowPlayer,
 }: {
   file: LibraryFile | null;
   nonDTrackId: string | null;
   item: Item;
   palette: ArtworkPalette | null;
+  gradient: Gradient;
   onShowPlayer: () => void;
 }) {
   const { strings } = useLocalisation();
+  const foreground = useThemeColor("foreground");
+  const dimTone = useMemo(
+    () => withOpacity(foreground, lyricsDimOpacity(gradient, foreground)),
+    [gradient, foreground],
+  );
   const path = file?.path ?? null;
   const library = useLibraryLyrics(file?.id ?? null, path);
   const nonD = useNonDLyrics(file === null ? nonDTrackId : null);
@@ -971,6 +991,7 @@ export function LyricsView({
       <LyricsBody
         shown={shown}
         song={song}
+        dimTone={dimTone}
         karaoke={karaokeOn}
         picking={picking}
         retry={nonD.shown === null ? library.retry : nonD.retry}

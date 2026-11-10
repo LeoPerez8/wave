@@ -127,6 +127,25 @@ export const importsPtBr: typeof importsEn = {
   pausedYtMusicOff: "YT Music desativado",
   pausedSignedOut: "sessão do Spotify finalizada",
   couldntReadOnline: "Não foi possível lê-la online",
+  exportToYtMusic: "Exportar para o YT Music",
+  export: "Exportar",
+  exportWaiting: "Aguardando exportação",
+  exportingOf: (done: string, total: string): string => `Exportando ${done} de ${total}`,
+  liked: (count: number): string =>
+    plural("pt-BR", count, {
+      zero: `${n(count)} curtidas`,
+      one: `${n(count)} curtida`,
+      other: `${n(count)} curtidas`,
+    }),
+  exportSignInMessage:
+    "Exportar cria cópias privadas das suas playlists na sua conta do YouTube Music e curte seus favoritos lá.",
+  exportedPlaylists: (count: number): string =>
+    plural("pt-BR", count, {
+      zero: "Nenhuma playlist exportada",
+      one: `${n(count)} playlist exportada`,
+      other: `${n(count)} playlists exportadas`,
+    }),
+  couldntExport: "Não foi possível exportar as playlists",
   readingYtMusicLibrary: "Lendo sua biblioteca do YouTube Music",
   readingSpotifyLibrary: "Lendo sua biblioteca do Spotify",
   likedSongs: "Músicas Curtidas",

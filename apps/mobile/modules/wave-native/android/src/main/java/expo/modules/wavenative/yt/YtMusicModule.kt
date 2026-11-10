@@ -193,23 +193,30 @@ class YtMusicModule : Module() {
     }
 
     /**
-     * The entries of the account's playlist [playlistId]: `[{ videoId,
-     * setVideoId }]`, every page; null when it's gone or isn't the account's.
+     * The account's playlist [playlistId]: `{ privacy, entries: [{ videoId,
+     * setVideoId }] }`, every page; null when it's gone or isn't the account's.
      * An `ERR_YT_*` rejection otherwise (`ERR_YT_SIGNED_OUT` without a session).
      */
     AsyncFunction("ownPlaylist") Coroutine { playlistId: String ->
-      coded { YtPlaylistWrites(client).ownPlaylist(playlistId)?.map(YtOwnEntry::toMap) }
-    }
-
-    /** Makes an unlisted playlist on the account with [videoIds] in order; resolves its id. */
-    AsyncFunction("createPlaylist") Coroutine { title: String, videoIds: List<String> ->
-      coded { YtPlaylistWrites(client).create(title, videoIds) }
+      coded { YtPlaylistWrites(client).ownPlaylist(playlistId)?.toMap() }
     }
 
     /**
-     * Applies [edits] (`{ kind: "add" | "remove" | "move" | "rename", … }`)
+     * Makes a playlist on the account with [videoIds] in order, seen by
+     * [privacy] (`UNLISTED` shared, `PRIVATE` exported); resolves its id.
+     */
+    AsyncFunction("createPlaylist") Coroutine { title: String, videoIds: List<String>, privacy: String ->
+      coded { YtPlaylistWrites(client).create(title, videoIds, privacy) }
+    }
+
+    /**
+     * Applies [edits] (`{ kind: "add" | "remove" | "move" | "rename" | "privacy", … }`)
      * to the account's playlist [playlistId], in order, in one request.
      */
+    AsyncFunction("like") Coroutine { videoId: String ->
+      coded { YtPlaylistWrites(client).like(videoId) }
+    }
+
     AsyncFunction("editPlaylist") Coroutine { playlistId: String, edits: List<Map<String, Any?>> ->
       val known = edits.map { YtPlaylistEdit.of(it) ?: throw IllegalArgumentException("Unknown playlist edit: $it") }
       coded { YtPlaylistWrites(client).edit(playlistId, known) }

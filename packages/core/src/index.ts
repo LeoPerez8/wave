@@ -146,7 +146,7 @@ export {
 export type { FramingSquare, FramingView, ImageFraming, ImageSize } from "./imageFraming.ts";
 export { elapsedWavePath } from "./elapsedWave.ts";
 export type { ElapsedWave } from "./elapsedWave.ts";
-export { contrastRatio, crossfadeGround, paletteGradient } from "./palette.ts";
+export { contrastRatio, crossfadeGround, lyricsDimOpacity, paletteGradient } from "./palette.ts";
 export type { ArtworkPalette, Gradient, GradientTheme, GroundLayers } from "./palette.ts";
 export { settleSheet } from "./sheet.ts";
 export type { SheetDrag, SheetState } from "./sheet.ts";
@@ -1788,6 +1788,8 @@ export {
 export {
   addingProgress,
   clearImportProgress,
+  EXPORT_WAITING_PROGRESS,
+  exportingProgress,
   importProgress,
   importProgressByPlaylist,
   importProgressFraction,
@@ -1800,6 +1802,8 @@ export {
 } from "./importProgress.ts";
 export type {
   AddingProgress,
+  ExportingProgress,
+  ExportWaitingProgress,
   ImportProgress,
   ImportProgressBoard,
   ImportRing,
@@ -2122,9 +2126,32 @@ export {
   spotifyPlaylistUrl,
   syncSharedPlaylist,
   ytMusicPlaylistUrl,
+  ytNewPlaylistPrivacy,
+  ytPrivacyChange,
   ytShareMatch,
   ytShareSong,
 } from "./playlistShare.ts";
+export {
+  addExportedPlaylist,
+  NO_YT_EXPORT,
+  planYtExport,
+  pressYtExportSelectAll,
+  toggleYtExportRow,
+  exportYtFavorites,
+  addYtLikes,
+  ytExportPicker,
+  ytExportPickerView,
+  ytExportSignInAlert,
+  ytExportSummaryLine,
+} from "./ytExport.ts";
+export type {
+  YtExportItem,
+  YtExportPicker,
+  YtExportPickerView,
+  YtExportPlaylist,
+  YtExportRow,
+  YtExportSummary,
+} from "./ytExport.ts";
 export {
   readSpotifySharedPlaylist,
   spotifyLibraryHas,
@@ -2143,6 +2170,8 @@ export type {
   SharedPlaylistChanges,
   SharedPlaylistService,
   SharedSongs,
+  YtPlaylistPrivacy,
+  YtPlaylistPurpose,
   YtShareItem,
 } from "./playlistShare.ts";
 export {

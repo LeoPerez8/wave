@@ -16,9 +16,9 @@ class YtPlaylistWritesTest {
   private fun row(videoId: String, setVideoId: String) =
     """{"musicResponsiveListItemRenderer":{"playlistItemData":{"videoId":"$videoId","playlistSetVideoId":"$setVideoId"}}}"""
 
-  private fun page(header: String, rows: String) =
+  private fun page(header: String, rows: String, headerBody: String = "{}") =
     """{"contents":{"twoColumnBrowseResultsRenderer":{
-      "tabs":[{"tabRenderer":{"content":{"sectionListRenderer":{"contents":[{"$header":{}}]}}}}],
+      "tabs":[{"tabRenderer":{"content":{"sectionListRenderer":{"contents":[{"$header":$headerBody}]}}}}],
       "secondaryContents":{"sectionListRenderer":{"contents":[{"musicPlaylistShelfRenderer":{"contents":[$rows]}}]}}}}}"""
 
   @Test
@@ -30,6 +30,16 @@ class YtPlaylistWritesTest {
     assertTrue(read.editable)
     assertEquals(listOf(YtOwnEntry("a", "1"), YtOwnEntry("b", "2")), read.entries)
     assertEquals("next", read.continuation)
+    assertNull(read.privacy)
+  }
+
+  @Test
+  fun readsWhoSeesAnEditablePlaylist() {
+    val header = """{"editHeader":{"musicPlaylistEditHeaderRenderer":{"privacy":"PRIVATE"}}}"""
+    val read = YtOwnPlaylistParser.page(
+      page("musicEditablePlaylistDetailHeaderRenderer", row("a", "1"), header),
+    )!!
+    assertEquals("PRIVATE", read.privacy)
   }
 
   @Test
@@ -51,6 +61,7 @@ class YtPlaylistWritesTest {
       mapOf("kind" to "move", "setVideoId" to "3", "before" to "4"),
       mapOf("kind" to "move", "setVideoId" to "3", "before" to null),
       mapOf("kind" to "rename", "title" to "Road trip"),
+      mapOf("kind" to "privacy", "privacy" to "UNLISTED"),
     ).map { YtPlaylistEdit.action(YtPlaylistEdit.of(it)!!).toString() }
     assertEquals(
       listOf(
@@ -59,10 +70,12 @@ class YtPlaylistWritesTest {
         """{"action":"ACTION_MOVE_VIDEO_BEFORE","setVideoId":"3","movedSetVideoIdSuccessor":"4"}""",
         """{"action":"ACTION_MOVE_VIDEO_BEFORE","setVideoId":"3"}""",
         """{"action":"ACTION_SET_PLAYLIST_NAME","playlistName":"Road trip"}""",
+        """{"action":"ACTION_SET_PLAYLIST_PRIVACY","playlistPrivacy":"UNLISTED"}""",
       ),
       edits,
     )
     assertNull(YtPlaylistEdit.of(mapOf("kind" to "shuffle")))
+    assertNull(YtPlaylistEdit.of(mapOf("kind" to "privacy", "privacy" to "SECRET")))
   }
 
   @Test

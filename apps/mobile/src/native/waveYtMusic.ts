@@ -7,6 +7,7 @@ import type {
   YtPlaylist,
   YtPlaylistFirstPage,
   YtPlaylistPage,
+  YtPlaylistPrivacy,
   YtLibraryPlaylist,
   YtRadioStart,
   YtSession,
@@ -90,13 +91,24 @@ export interface NativeYtOwnEntry {
   readonly setVideoId: string;
 }
 
+/**
+ * A playlist the account made: who sees it (`PRIVATE`, `UNLISTED` or
+ * `PUBLIC`; null when its page didn't say) and its entries in order.
+ */
+export interface NativeYtOwnPlaylist {
+  readonly privacy: string | null;
+  readonly entries: readonly NativeYtOwnEntry[];
+}
+
 /** One change to a playlist the account made, applied in order (`editPlaylist`). */
 export type NativeYtPlaylistEdit =
   | { readonly kind: "add"; readonly videoId: string }
   | { readonly kind: "remove"; readonly videoId: string; readonly setVideoId: string }
   /** Moves the entry right before the entry [before], or to the end for null. */
   | { readonly kind: "move"; readonly setVideoId: string; readonly before: string | null }
-  | { readonly kind: "rename"; readonly title: string };
+  | { readonly kind: "rename"; readonly title: string }
+  /** Sets who sees it. */
+  | { readonly kind: "privacy"; readonly privacy: YtPlaylistPrivacy };
 
 declare class WaveYtMusicModule extends NativeModule<WaveYtMusicEvents> {
   /**
@@ -151,10 +163,19 @@ declare class WaveYtMusicModule extends NativeModule<WaveYtMusicEvents> {
    * when it was deleted or isn't the account's. Rejects with
    * `ERR_YT_SIGNED_OUT` without a session YouTube accepts.
    */
-  ownPlaylist(playlistId: string): Promise<readonly NativeYtOwnEntry[] | null>;
-  /** Makes an unlisted playlist [title] on the account holding [videoIds] in order; resolves its id. */
-  createPlaylist(title: string, videoIds: readonly string[]): Promise<string>;
+  ownPlaylist(playlistId: string): Promise<NativeYtOwnPlaylist | null>;
+  /**
+   * Makes a playlist [title] on the account holding [videoIds] in order,
+   * seen by [privacy] (unlisted shared, private exported); resolves its id.
+   */
+  createPlaylist(
+    title: string,
+    videoIds: readonly string[],
+    privacy: YtPlaylistPrivacy,
+  ): Promise<string>;
   /** Applies [edits] to the account's playlist [playlistId], in order, in one request. */
+  /** Adds a like on the signed-in account. Never unlikes. */
+  like(videoId: string): Promise<void>;
   editPlaylist(playlistId: string, edits: readonly NativeYtPlaylistEdit[]): Promise<void>;
   /** The first page of the radio YouTube Music plays after the song [videoId] (it first). */
   songRadio(videoId: string, meter?: string): Promise<NativeYtRadioPage>;

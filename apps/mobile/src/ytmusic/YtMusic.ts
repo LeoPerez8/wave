@@ -3,6 +3,7 @@ import {
   type YtArtistCandidate,
   type YtLibraryFailure,
   type YtLibraryPlaylist,
+  type YtPlaylistPrivacy,
   type YtQuietReason,
   type YtRadioStart,
   type YtSession,
@@ -21,7 +22,7 @@ import {
   ytErrorCode,
   type NativeYtArtistPage,
   type NativeYtArtistRadio,
-  type NativeYtOwnEntry,
+  type NativeYtOwnPlaylist,
   type NativeYtPlaylist,
   type NativeYtPlaylistEdit,
   type NativeYtRadioPage,
@@ -105,19 +106,21 @@ export class YtMusic extends Context.Service<
      */
     readonly libraryPlaylists: Effect.Effect<readonly YtLibraryPlaylist[], YtLibraryError>;
     /**
-     * The entries of the account's playlist [playlistId] (a shared one),
-     * every page; null when it was deleted or isn't the account's. Fails as
+     * The account's playlist [playlistId] (a shared or exported one): who
+     * sees it and its entries, every page; null when it was deleted or isn't the account's. Fails as
      * `signedOut` without a session YouTube accepts.
      */
     readonly ownPlaylist: (
       playlistId: string,
-    ) => Effect.Effect<readonly NativeYtOwnEntry[] | null, YtLibraryError>;
-    /** Makes an unlisted playlist [title] on the account with [videoIds] in order: its id. */
+    ) => Effect.Effect<NativeYtOwnPlaylist | null, YtLibraryError>;
+    /** Makes a playlist [title] on the account with [videoIds] in order, seen by [privacy]: its id. */
     readonly createPlaylist: (
       title: string,
       videoIds: readonly string[],
+      privacy: YtPlaylistPrivacy,
     ) => Effect.Effect<string, YtLibraryError>;
     /** Applies [edits] to the account's playlist [playlistId], in order, in one request. */
+    readonly like: (videoId: string) => Effect.Effect<void, YtLibraryError>;
     readonly editPlaylist: (
       playlistId: string,
       edits: readonly NativeYtPlaylistEdit[],
@@ -199,11 +202,13 @@ export const layer = Layer.succeed(YtMusic, {
   }),
   ownPlaylist: (playlistId) =>
     Effect.tryPromise({ try: () => WaveYtMusic.ownPlaylist(playlistId), catch: libraryFailure }),
-  createPlaylist: (title, videoIds) =>
+  createPlaylist: (title, videoIds, privacy) =>
     Effect.tryPromise({
-      try: () => WaveYtMusic.createPlaylist(title, videoIds),
+      try: () => WaveYtMusic.createPlaylist(title, videoIds, privacy),
       catch: libraryFailure,
     }),
+  like: (videoId) =>
+    Effect.tryPromise({ try: () => WaveYtMusic.like(videoId), catch: libraryFailure }),
   editPlaylist: (playlistId, edits) =>
     Effect.tryPromise({
       try: () => WaveYtMusic.editPlaylist(playlistId, edits),
