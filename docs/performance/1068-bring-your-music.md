@@ -14,3 +14,14 @@ session (`adb devices` returned an empty list), and the documented T3 emulator t
 available. Phone checks do not block release. Check a fresh install through both source pickers,
 with YT Music on and off, interruption before an answer, dismissal, and the answered relaunch;
 also confirm that an updating phone skips this card.
+
+Validation on Windows with Node 24.19.0:
+
+- Core: 5,078 tests passed, including the rerun after fetching and merging the integration
+  branch (already up to date).
+- Mobile: 1,636 tests passed, one skipped. The package test script's single-quoted globs
+  selected zero tests on Windows; running its Node command from `apps/mobile` with
+  double-quoted globs ran the suite. The runner and picker tests also passed all 15 tests
+  after adding the final sign-in cancellation case.
+- Workspace typecheck, `scripts/check-guards.sh`, changed TypeScript/TSX formatting and
+  `git diff --check` passed. The guards include the untranslated-text check.
