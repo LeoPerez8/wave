@@ -39,12 +39,16 @@ const origins = new Map([
 const picker = ytExportPicker([road, liked, gym, empty], origins);
 
 const ticked = (current: YtExportPicker) =>
-  current.rows.filter((row) => row.ticked).map((row) => row.playlist.name);
+  current.rows
+    .filter((row) => row.ticked)
+    .map((row) => (row.kind === "favorites" ? "Favorites" : row.playlist.name));
 
 describe("ytExportPicker", () => {
   test("lists every playlist in the order given, with its song count", () => {
     assert.deepEqual(
-      picker.rows.map((row) => [row.playlist.name, row.line]),
+      picker.rows
+        .filter((row) => row.kind === "playlist")
+        .map((row) => [row.playlist.name, row.line]),
       [
         ["Road trip", "12 songs"],
         ["Liked Songs", "430 songs"],
@@ -55,25 +59,35 @@ describe("ytExportPicker", () => {
   });
 
   test("ticks every playlist but those that came from YT Music; Spotify imports are ticked", () => {
-    assert.deepEqual(ticked(picker), ["Road trip", "Gym", "Empty"]);
+    assert.deepEqual(ticked(picker), ["Favorites", "Road trip", "Gym", "Empty"]);
     assert.deepEqual(
-      picker.rows.map((row) => row.fromYtMusic),
+      picker.rows.filter((row) => row.kind === "playlist").map((row) => row.fromYtMusic),
       [false, true, false, false],
     );
   });
 
   test("reads the origins as the key-value store keeps them", () => {
     const kept = readYtLibraryOrigins(writeYtLibraryOrigins(origins));
-    assert.deepEqual(ticked(ytExportPicker([road, liked, gym], kept)), ["Road trip", "Gym"]);
+    assert.deepEqual(ticked(ytExportPicker([road, liked, gym], kept)), [
+      "Favorites",
+      "Road trip",
+      "Gym",
+    ]);
   });
 
   test("ticks every playlist with no origins", () => {
-    assert.deepEqual(ticked(ytExportPicker([road, liked])), ["Road trip", "Liked Songs"]);
+    assert.deepEqual(ticked(ytExportPicker([road, liked])), [
+      "Favorites",
+      "Road trip",
+      "Liked Songs",
+    ]);
   });
 
   test("says the counts in Portuguese", () => {
     assert.deepEqual(
-      ytExportPicker([road, gym, empty], new Map(), "pt-BR").rows.map((row) => row.line),
+      ytExportPicker([road, gym, empty], new Map(), "pt-BR")
+        .rows.filter((row) => row.kind === "playlist")
+        .map((row) => row.line),
       ["12 músicas", "1 música", "Nenhuma música"],
     );
   });
@@ -81,7 +95,7 @@ describe("ytExportPicker", () => {
   test("keys each row by its playlist", () => {
     assert.deepEqual(
       picker.rows.map((row) => row.key),
-      ["playlist:1", "playlist:2", "playlist:3", "playlist:4"],
+      ["favorites", "playlist:1", "playlist:2", "playlist:3", "playlist:4"],
     );
   });
 });
@@ -89,13 +103,13 @@ describe("ytExportPicker", () => {
 describe("the export picker's ticks", () => {
   test("a tap ticks an unticked row and unticks a ticked one", () => {
     const toggled = toggleYtExportRow(toggleYtExportRow(picker, "playlist:2"), "playlist:1");
-    assert.deepEqual(ticked(toggled), ["Liked Songs", "Gym", "Empty"]);
+    assert.deepEqual(ticked(toggled), ["Favorites", "Liked Songs", "Gym", "Empty"]);
   });
 
   test("Select All ticks every row, then Deselect All unticks them", () => {
     assert.equal(ytExportPickerView(picker).selectAll, "Select All");
     const all = pressYtExportSelectAll(picker);
-    assert.deepEqual(ticked(all), ["Road trip", "Liked Songs", "Gym", "Empty"]);
+    assert.deepEqual(ticked(all), ["Favorites", "Road trip", "Liked Songs", "Gym", "Empty"]);
     assert.equal(ytExportPickerView(all).selectAll, "Deselect All");
     const none = pressYtExportSelectAll(all);
     assert.deepEqual(ticked(none), []);
@@ -106,9 +120,9 @@ describe("the export picker's ticks", () => {
     assert.equal(ytExportPickerView(picker).canExport, true);
   });
 
-  test("offers no Select All without playlists", () => {
+  test("offers Favorites even without playlists", () => {
     const bare = ytExportPicker([]);
-    assert.deepEqual(ytExportPickerView(bare), { selectAll: null, canExport: false });
+    assert.deepEqual(ytExportPickerView(bare), { selectAll: "Deselect All", canExport: true });
   });
 });
 
@@ -116,6 +130,7 @@ describe("planYtExport", () => {
   test("exports the ticked playlists in the picker's order", () => {
     const chosen = toggleYtExportRow(toggleYtExportRow(picker, "playlist:4"), "playlist:2");
     assert.deepEqual(planYtExport(chosen), [
+      { kind: "favorites" },
       { kind: "playlist", playlistId: 1, name: "Road trip" },
       { kind: "playlist", playlistId: 2, name: "Liked Songs" },
       { kind: "playlist", playlistId: 3, name: "Gym" },
@@ -128,30 +143,30 @@ describe("planYtExport", () => {
 });
 
 describe("the export's summary", () => {
-  test("adds up the playlists exported and their songs found", () => {
+  test("adds up the playlists exported and their songs found · 0 liked", () => {
     const summary = [
       { found: 12, total: 12 },
       { found: 400, total: 418 },
     ].reduce(addYtExported, NO_YT_EXPORT);
-    assert.deepEqual(summary, { playlists: 2, found: 412, total: 430 });
+    assert.deepEqual(summary, { playlists: 2, found: 412, total: 430, liked: 0 });
   });
 
   test("says it in one line", () => {
     assert.equal(
-      ytExportSummaryLine({ playlists: 8, found: 412, total: 430 }),
-      "8 playlists exported · 412 of 430 songs found",
+      ytExportSummaryLine({ playlists: 8, found: 412, total: 430, liked: 0 }),
+      "8 playlists exported · 412 of 430 songs found · 0 liked",
     );
     assert.equal(
-      ytExportSummaryLine({ playlists: 1, found: 1, total: 1 }),
-      "1 playlist exported · 1 of 1 song found",
+      ytExportSummaryLine({ playlists: 1, found: 1, total: 1, liked: 0 }),
+      "1 playlist exported · 1 of 1 song found · 0 liked",
     );
     assert.equal(
-      ytExportSummaryLine({ playlists: 1, found: 1_200, total: 1_234 }, "pt-BR"),
-      "1 playlist exportada · 1.200 de 1.234 músicas encontradas",
+      ytExportSummaryLine({ playlists: 1, found: 1_200, total: 1_234, liked: 0 }, "pt-BR"),
+      "1 playlist exportada · 1.200 de 1.234 músicas encontradas · 0 curtidas",
     );
     assert.equal(
-      ytExportSummaryLine({ playlists: 3, found: 0, total: 2 }, "pt-BR"),
-      "3 playlists exportadas · 0 de 2 músicas encontradas",
+      ytExportSummaryLine({ playlists: 3, found: 0, total: 2, liked: 0 }, "pt-BR"),
+      "3 playlists exportadas · 0 de 2 músicas encontradas · 0 curtidas",
     );
   });
 });
@@ -205,4 +220,83 @@ describe("a YT Music playlist's visibility", () => {
     for (const privacy of ["PRIVATE", "UNLISTED", "PUBLIC", null])
       assert.equal(ytPrivacyChange("export", privacy), null);
   });
+});
+
+test("Favorites starts ticked before playlists and can export alone", () => {
+  const favorites = ytExportPicker([]);
+  assert.deepEqual(planYtExport(favorites), [{ kind: "favorites" }]);
+  assert.equal(favorites.rows[0]?.key, "favorites");
+  assert.deepEqual(planYtExport(toggleYtExportRow(favorites, "favorites")), []);
+});
+
+test("likes favorites oldest first, counts not found, and counts likes in both languages", async () => {
+  const { exportYtFavorites, addYtLikes } = await import("./ytExport.ts");
+  const liked: string[] = [];
+  const progress: number[] = [];
+  const songs = await exportYtFavorites(
+    [
+      { starredAt: 30, song: { id: "new" } },
+      { starredAt: 10, song: { id: null, search: "old" } },
+      { starredAt: 20, song: { id: null, search: "absent" } },
+    ],
+    async (query) => (query === "old" ? "old-id" : null),
+    async (id) => {
+      liked.push(id);
+    },
+    undefined,
+    (done) => progress.push(done),
+  );
+  assert.deepEqual(liked, ["old-id", "new"]);
+  assert.deepEqual(progress, [0, 1, 2, 3]);
+  const summary = addYtLikes(NO_YT_EXPORT, songs);
+  assert.deepEqual(summary, { playlists: 0, found: 2, total: 3, liked: 2 });
+  assert.equal(ytExportSummaryLine(summary), "0 playlists exported · 2 of 3 songs found · 2 liked");
+  assert.equal(
+    ytExportSummaryLine(summary, "pt-BR"),
+    "Nenhuma playlist exportada · 2 de 3 músicas encontradas · 2 curtidas",
+  );
+});
+
+test("favorites remember searched matches and like a repeated video only once", async () => {
+  const { exportYtFavorites } = await import("./ytExport.ts");
+  const remembered: [number, string][] = [];
+  const likes: string[] = [];
+  const result = await exportYtFavorites(
+    [
+      { starredAt: 1, song: { id: null, search: "song", rememberAs: 42 } },
+      { starredAt: 2, song: { id: "same" } },
+    ],
+    async () => "same",
+    async (id) => {
+      likes.push(id);
+    },
+    async (track, video) => {
+      remembered.push([track, video]);
+    },
+  );
+  assert.deepEqual(remembered, [[42, "same"]]);
+  assert.deepEqual(likes, ["same"]);
+  assert.deepEqual(result, { ids: ["same"], found: 2, total: 2 });
+});
+
+test("a failed like stops before searching or liking a later favorite", async () => {
+  const { exportYtFavorites } = await import("./ytExport.ts");
+  let searched = false;
+  await assert.rejects(
+    exportYtFavorites(
+      [
+        { starredAt: 1, song: { id: "known" } },
+        { starredAt: 2, song: { id: null, search: "later" } },
+      ],
+      async () => {
+        searched = true;
+        return "later";
+      },
+      async () => {
+        throw new Error("signed out");
+      },
+    ),
+    /signed out/,
+  );
+  assert.equal(searched, false);
 });

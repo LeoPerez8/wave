@@ -120,6 +120,7 @@ export class YtMusic extends Context.Service<
       privacy: YtPlaylistPrivacy,
     ) => Effect.Effect<string, YtLibraryError>;
     /** Applies [edits] to the account's playlist [playlistId], in order, in one request. */
+    readonly like: (videoId: string) => Effect.Effect<void, YtLibraryError>;
     readonly editPlaylist: (
       playlistId: string,
       edits: readonly NativeYtPlaylistEdit[],
@@ -206,6 +207,8 @@ export const layer = Layer.succeed(YtMusic, {
       try: () => WaveYtMusic.createPlaylist(title, videoIds, privacy),
       catch: libraryFailure,
     }),
+  like: (videoId) =>
+    Effect.tryPromise({ try: () => WaveYtMusic.like(videoId), catch: libraryFailure }),
   editPlaylist: (playlistId, edits) =>
     Effect.tryPromise({
       try: () => WaveYtMusic.editPlaylist(playlistId, edits),

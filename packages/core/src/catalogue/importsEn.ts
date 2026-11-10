@@ -122,6 +122,7 @@ export const importsEn = {
   export: "Export",
   exportWaiting: "Waiting to export",
   exportingOf: (done: string, total: string): string => `Exporting ${done} of ${total}`,
+  liked: (count: number): string => `${count.toLocaleString("en-US")} liked`,
   exportedPlaylists: (count: number): string =>
     plural("en", count, {
       one: `${n(count)} playlist exported`,

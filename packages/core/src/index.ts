@@ -2137,6 +2137,8 @@ export {
   planYtExport,
   pressYtExportSelectAll,
   toggleYtExportRow,
+  exportYtFavorites,
+  addYtLikes,
   ytExportPicker,
   ytExportPickerView,
   ytExportSummaryLine,

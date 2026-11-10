@@ -18,6 +18,7 @@ import { useListSelection, type ListSelection } from "@/selection/useListSelecti
 
 import { LibraryReadFeedback } from "./LibraryReadFeedback";
 import { ArrangeablePlaylists, TILE_GRIP_INSET } from "./ArrangeablePlaylists";
+import { FavoritesExportLine } from "./FavoritesExportLine";
 import { ImportBatchLine } from "./ImportBatchLine";
 import { openPlaylistImport } from "./importPlaylistLink";
 import { useImportProgress } from "./importProgress";
@@ -204,7 +205,12 @@ export function PlaylistsList({ empty }: { empty: string }) {
           icon={IconPlaylist}
           title={strings.playlists.noPlaylists}
           message={empty}
-          action={<PlaylistsActions />}
+          action={
+            <View>
+              <PlaylistsActions />
+              <FavoritesExportLine />
+            </View>
+          }
         />
       </View>
     );
@@ -221,7 +227,10 @@ export function PlaylistsList({ empty }: { empty: string }) {
       selecting={selection.selecting}
       header={
         <PlaylistsHeader count={playlists.length}>
-          <PlaylistsActions />
+          <View>
+            <PlaylistsActions />
+            <FavoritesExportLine />
+          </View>
         </PlaylistsHeader>
       }
       lead={<ImportBatchLine />}

@@ -213,6 +213,10 @@ class YtMusicModule : Module() {
      * Applies [edits] (`{ kind: "add" | "remove" | "move" | "rename" | "privacy", … }`)
      * to the account's playlist [playlistId], in order, in one request.
      */
+    AsyncFunction("like") Coroutine { videoId: String ->
+      coded { YtPlaylistWrites(client).like(videoId) }
+    }
+
     AsyncFunction("editPlaylist") Coroutine { playlistId: String, edits: List<Map<String, Any?>> ->
       val known = edits.map { YtPlaylistEdit.of(it) ?: throw IllegalArgumentException("Unknown playlist edit: $it") }
       coded { YtPlaylistWrites(client).edit(playlistId, known) }

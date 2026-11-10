@@ -158,6 +158,13 @@ class YtPlaylistWrites(private val client: YtClient) {
     }
   }
 
+  /** Uses the same signed-in headers and session refusal handling as playlist writes. */
+  suspend fun like(videoId: String) = client.request {
+    YtLikes { endpoint, body ->
+      send(endpoint) { body.forEach { (key, value) -> put(key, value) } }
+    }.like(videoId)
+  }
+
   private fun signedIn(): YtCredentials =
     (client.session.state as? YtSessionState.SignedIn)?.credentials
       ?: throw YtException(YtFailure.SIGNED_OUT)

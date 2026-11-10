@@ -6,6 +6,7 @@ import { grid } from "@/catalog/grid";
 import { EmptyState } from "@/components/EmptyState";
 import { useLocalisation } from "@/localisation/localisation";
 
+import { FavoritesExportLine } from "./FavoritesExportLine";
 import { LibraryReadFeedback } from "./LibraryReadFeedback";
 import { useFavoriteSongs } from "./hooks";
 import { SongSortButton } from "./SongSortButton";
@@ -39,12 +40,15 @@ export function FavoritesList({ empty }: { empty: string }) {
       findable
       songCards
       header={
-        <ListIntro
-          line={songCount(songs.length, strings)}
-          songs={songs}
-          context={FAVORITES_CONTEXT}
-          sortControl={<SongSortButton kind="favorites" />}
-        />
+        <>
+          <FavoritesExportLine />
+          <ListIntro
+            line={songCount(songs.length, strings)}
+            songs={songs}
+            context={FAVORITES_CONTEXT}
+            sortControl={<SongSortButton kind="favorites" />}
+          />
+        </>
       }
     />
   );
