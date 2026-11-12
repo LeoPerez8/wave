@@ -36,6 +36,7 @@ object NativeCatalogue {
     "appUpdates" to "App updates",
     "waveUpdated" to "Wave updated",
     "tapToOpen" to "Tap to open it",
+    "waitingForConnection" to "Waiting for connection",
   )
   val pt = mapOf(
     "recognize" to "Reconhecer Música",
@@ -71,5 +72,6 @@ object NativeCatalogue {
     "appUpdates" to "Atualizações do app",
     "waveUpdated" to "Wave atualizado",
     "tapToOpen" to "Toque para abrir",
+    "waitingForConnection" to "Aguardando conexão",
   )
 }

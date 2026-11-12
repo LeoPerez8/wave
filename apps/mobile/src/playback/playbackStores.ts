@@ -1,4 +1,4 @@
-import type { PositionReport } from "@wave/core";
+import type { PlayerTrouble, PositionReport } from "@wave/core";
 import type { NativePlayerState, PlayerErrorEvent, PlayerPosition } from "../native/wavePlayer.ts";
 import { makeExternalStore } from "../lib/externalStore.ts";
 
@@ -9,6 +9,14 @@ export interface PlaybackState extends Omit<NativePlayerState, "index" | keyof P
   /** The error's code, which Core's `playerErrorNotice` explains in the app's language. */
   readonly errorCode: string | null;
 }
+
+/** What Core's `playerNotice` reads of the playing song: its wait, retry and failure. */
+export const playerTrouble = (state: PlaybackState): PlayerTrouble => ({
+  waitingForConnection: state.waitingForConnection,
+  retrying: state.status === "buffering" && state.playWhenReady,
+  failed: state.error !== null,
+  errorCode: state.errorCode,
+});
 
 /** The item key keeps car lyrics paired with the report that selected it. */
 interface PositionState extends PositionReport {

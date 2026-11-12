@@ -1,4 +1,4 @@
-import { playerErrorNotice } from "@wave/core";
+import { playerNotice } from "@wave/core";
 import { useLocalisation } from "@/localisation/localisation";
 import {
   IconPlayerPauseFilled,
@@ -45,6 +45,7 @@ import {
 
 import { skipToNext, skipToPrevious, togglePlayPause } from "./actions";
 import { playbackState } from "./Player";
+import { playerTrouble } from "./playbackStores";
 import { openPlayingActions } from "./ActionsMenu";
 import { useRenderCount } from "@/perf/perf";
 
@@ -84,7 +85,7 @@ const finishOpen = (
 };
 
 // Separate selectors, so position ticks don't re-render the mini player.
-const usePlaybackField = <K extends "item" | "playWhenReady" | "error" | "errorCode">(key: K) =>
+const usePlaybackField = <K extends "item" | "playWhenReady">(key: K) =>
   useSyncExternalStore(playbackState.subscribe, () => playbackState.get()[key]);
 
 type Props = {
@@ -107,8 +108,10 @@ export const MiniPlayer = memo(function MiniPlayer({ backdropId, onOpen }: Props
   useRenderCount("MiniPlayer");
   const item = usePlaybackField("item");
   const playing = usePlaybackField("playWhenReady");
-  const error = usePlaybackField("error");
-  const code = usePlaybackField("errorCode");
+  // "Waiting for connection" or why playback stopped; null while the song plays as usual.
+  const notice = useSyncExternalStore(playbackState.subscribe, () =>
+    playerNotice(playerTrouble(playbackState.get()), strings),
+  );
   const bottom = useTabBarTop();
   const reduceMotion = useReducedMotion();
   // A swipe let go short springs back as far past rest as the Bounce amount says.
@@ -224,10 +227,7 @@ export const MiniPlayer = memo(function MiniPlayer({ backdropId, onOpen }: Props
 
   if (item === null) return null;
   const title = item.title ?? strings.playbackText.unknownTitle;
-  const subtitle =
-    error === null
-      ? (item.artist ?? strings.playbackText.unknownArtist)
-      : playerErrorNotice(code, strings);
+  const subtitle = notice ?? item.artist ?? strings.playbackText.unknownArtist;
 
   return (
     <OnFloatingChrome value>

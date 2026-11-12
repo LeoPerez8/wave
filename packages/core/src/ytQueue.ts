@@ -68,6 +68,32 @@ export const playerErrorNotice = (code: string | null, catalogue: Catalogue = en
     ? notices(catalogue)[code as PlayerErrorCode]
     : catalogue.playbackText.couldntPlayThisFile;
 
+/** What the player reports of the playing song's trouble, if any. */
+export interface PlayerTrouble {
+  /** The playback service is waiting for the network to resume a streamed song. */
+  readonly waitingForConnection: boolean;
+  /** The player is loading the song again to play it, after a failure. */
+  readonly retrying: boolean;
+  /** Playback stopped on an error. */
+  readonly failed: boolean;
+  readonly errorCode: string | null;
+}
+
+/**
+ * The line the mini player and Now Playing show about the playing song, or
+ * null when it plays as usual: "Waiting for connection" for as long as the
+ * wait lasts, then what `playerErrorNotice` says of the failure. A code alone
+ * counts as a failure, since Wave opened after the error only gets its code.
+ * A song loading again says nothing: its last failure is no longer the news.
+ */
+export const playerNotice = (trouble: PlayerTrouble, catalogue: Catalogue = en): string | null => {
+  if (trouble.waitingForConnection) return catalogue.playbackText.waitingForConnection;
+  if (trouble.retrying) return null;
+  return trouble.failed || trouble.errorCode !== null
+    ? playerErrorNotice(trouble.errorCode, catalogue)
+    : null;
+};
+
 /** What a saved queue can still play once Wave starts again. */
 export interface RestorableTracks {
   /** The Library tracks that are still there. */
