@@ -2,7 +2,6 @@ import { useWindowDimensions, View } from "react-native";
 
 import { artworkUri } from "@/catalog/artworkUri";
 import type { AlbumSummary } from "@/catalog/AlbumTile";
-import { AlbumCard } from "@/catalog/cards/AlbumCard";
 import { captionHeight } from "@/catalog/cards/CardParts";
 import { CELL, grid } from "@/catalog/grid";
 import { openAlbumActions } from "@/playback/ActionsMenu";
@@ -10,6 +9,7 @@ import type { ActionItems } from "@/playback/actionTargets";
 import { selectableRow } from "@/selection/selectableRow";
 import { useListSelection, type ListSelection } from "@/selection/useListSelection";
 
+import { LibraryAlbumCard } from "./LibraryAlbumCard";
 import type { AlbumRow } from "./LibraryStore";
 import { openAlbum } from "./routes";
 
@@ -84,8 +84,9 @@ export function AlbumPair({
       {albums.map((album) => {
         const { title, albumArtist, artworkUri: coverUri } = toAlbumSummary(album);
         return (
-          <AlbumCard
+          <LibraryAlbumCard
             key={album.id}
+            albumId={album.id}
             title={title}
             artist={albumArtist}
             artworkUri={coverUri}

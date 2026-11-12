@@ -14,6 +14,8 @@ type Props = {
   title: string;
   /** The album's artist, the line under the title. */
   artist: string;
+  /** What takes the artist's place while the album downloads: "Downloading · N of M". */
+  line?: string | null | undefined;
   /** File URI of the cached artwork; absent when there is none. */
   artworkUri?: string | undefined;
   tint?: string | undefined;
@@ -27,6 +29,7 @@ type Props = {
 export function AlbumCard({
   title,
   artist,
+  line,
   artworkUri,
   tint,
   size,
@@ -38,7 +41,7 @@ export function AlbumCard({
   return (
     <CardTile
       width={size}
-      label={strings.library.albumLabel(title, artist)}
+      label={[strings.library.albumLabel(title, artist), line].filter(Boolean).join(", ")}
       onPress={onPress}
       onLongPress={onLongPress}
       checked={checked}
@@ -49,16 +52,20 @@ export function AlbumCard({
       </View>
       <View style={{ paddingTop: CAPTION_TOP }}>
         <CardTitle>{title}</CardTitle>
-        <CardDetail size="footnote">{artist}</CardDetail>
+        <CardDetail size="footnote">{line ?? artist}</CardDetail>
       </View>
     </CardTile>
   );
 }
 
-/** An album in a list: its cover at 40dp with 4dp corners, then "Album · <artist>". */
+/**
+ * An album in a list: its cover at 40dp with 4dp corners, then "Album · <artist>",
+ * or [line] alone while the album downloads.
+ */
 export function AlbumCardRow({
   title,
   artist,
+  line,
   artworkUri,
   tint,
   onPress,
@@ -70,7 +77,7 @@ export function AlbumCardRow({
     <CardRow
       lead={<Artwork uri={artworkUri} tint={tint} size={THUMB} radius={CELL / 2} />}
       title={title}
-      detail={strings.library.albumRow(artist)}
+      detail={line ?? strings.library.albumRow(artist)}
       onPress={onPress}
       onLongPress={onLongPress}
       checked={checked}

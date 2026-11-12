@@ -1,6 +1,12 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { indexListDownloads, unsearchedSongJob, type YtDownloadJournalJob } from "@wave/core";
+import {
+  albumDownloadOrigin,
+  indexListDownloads,
+  unsearchedSongJob,
+  type YtDownloadJournalJob,
+} from "@wave/core";
+import { eq } from "drizzle-orm";
 import {
   addToPlaylist,
   createPlaylist,
@@ -8,7 +14,24 @@ import {
   selectPlaylistEntries,
 } from "./playlists.ts";
 import { selectListDownloadMembers } from "./listDownloadMembers.ts";
-import { openTestDatabase, addTrack, traceQueries, migrateTestDatabase } from "./testDatabase.ts";
+import { tracks } from "./schema.ts";
+import {
+  openTestDatabase,
+  addTrack,
+  traceQueries,
+  migrateTestDatabase,
+  type TestDatabase,
+} from "./testDatabase.ts";
+
+const albumOf = (db: TestDatabase, trackId: number): { albumId: number; path: string } => {
+  const row = db
+    .select({ albumId: tracks.albumId, path: tracks.path })
+    .from(tracks)
+    .where(eq(tracks.id, trackId))
+    .get();
+  assert.ok(row !== undefined && row.path !== null);
+  return { albumId: row.albumId, path: row.path };
+};
 
 const song = (videoId: string) => ({
   videoId,
@@ -143,5 +166,32 @@ test("upgrading an existing Library adds the membership index and preserves play
   assert.equal(
     index.line(selectListDownloadMembers(db, index).get(`playlist:${id}`) ?? []),
     "Downloading · 0 of 2",
+  );
+});
+
+test("an album downloading from YouTube Music is found once its first song is saved, beside the other albums", async () => {
+  const db = await openTestDatabase();
+  const saved = addTrack(db, { title: "Saved", album: "One" });
+  const other = addTrack(db, { title: "Other", album: "Two" });
+  const { albumId, path } = albumOf(db, saved);
+  const origin = { kind: "album", id: "MPREb_one", name: "One" } as const;
+  const index = indexListDownloads([
+    job("saved", { origin, phase: "completed", acknowledged: true, saved: { path } }),
+    job("a", { origin }),
+    job("b", { origin, phase: "failed" }),
+    job("c", { origin: albumDownloadOrigin({ id: albumOf(db, other).albumId, title: "Two" }) }),
+  ]);
+  const { result, queries } = traceQueries(db, () => selectListDownloadMembers(db, index));
+  assert.equal(index.line(result.get(`album:${albumId}`) ?? []), "Downloading · 1 of 3");
+  assert.equal(
+    index.line(result.get(`album:${albumOf(db, other).albumId}`) ?? []),
+    "Downloading · 0 of 1",
+  );
+  // One read by path for every album, whatever the Library's size.
+  const byPath = queries.filter((query) => query.sql.includes("album_id"));
+  assert.equal(byPath.length, 1, JSON.stringify(queries));
+  assert.ok(
+    byPath[0]!.plan.every((step) => !step.includes("SCAN")),
+    JSON.stringify(byPath),
   );
 });

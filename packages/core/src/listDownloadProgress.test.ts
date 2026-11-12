@@ -1,6 +1,13 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { indexListDownloads, ytPlaylistDownload, type YtDownloadJournalJob } from "./index.ts";
+import {
+  albumDownloadMembers,
+  albumDownloadOrigin,
+  indexListDownloads,
+  ytAlbumDownload,
+  ytPlaylistDownload,
+  type YtDownloadJournalJob,
+} from "./index.ts";
 
 const job = (id: string, patch: Partial<YtDownloadJournalJob> = {}): YtDownloadJournalJob => ({
   id,
@@ -93,4 +100,53 @@ test("a list counts its own saved entries and shared songs exactly as its page h
   );
   assert.equal(index.line([{ kind: "song", videoId: "other" }]), "Downloading · 0 of 1");
   assert.equal(index.line([{ kind: "file", path: "/old.flac" }]), null);
+});
+
+const albumOfPath = (path: string): number | null => (path === "/One/a.mp3" ? 7 : null);
+
+test("a Library album counts the songs its YT Music album asked for once one is saved, as the album page head does", () => {
+  const origin = { kind: "album", id: "MPREb_one", name: "One" } as const;
+  const onAlbum = (id: string) => ({ ...job(id).song, albumId: "MPREb_one" });
+  const jobs = [
+    job("a", { origin, phase: "completed", acknowledged: true, saved: { path: "/One/a.mp3" } }),
+    job("b", { origin }),
+    job("c", { origin, phase: "failed" }),
+    // Asked for on its own before the album was: it keeps its job, and the album still counts it.
+    job("d", { song: onAlbum("d") }),
+    job("e", { song: onAlbum("e"), origin, phase: "cancelled" }),
+    job("elsewhere", { origin: { kind: "album", id: "MPREb_two", name: "Two" } }),
+  ];
+  const index = indexListDownloads(jobs);
+  const members = albumDownloadMembers(index.albumSongs, albumOfPath);
+  assert.deepEqual([...members.keys()], [7]);
+  assert.equal(index.line(members.get(7) ?? []), "Downloading · 1 of 4");
+  assert.equal(
+    index.line(members.get(7) ?? []),
+    ytAlbumDownload(
+      ["a", "b", "c", "d", "e", "never asked"].map((id) => job(id).song),
+      { jobs, inLibrary: () => false },
+    ).line,
+  );
+  // Before its first song is saved the Library has no album to show it on.
+  assert.equal(
+    albumDownloadMembers(indexListDownloads(jobs.slice(1)).albumSongs, albumOfPath).size,
+    0,
+  );
+});
+
+test("a Library album's own download counts from its first request, and two albums keep their own counts", () => {
+  const first = albumDownloadOrigin({ id: 3, title: "First" });
+  const second = albumDownloadOrigin({ id: 4, title: "Second" });
+  const index = indexListDownloads([
+    job("a", { origin: first }),
+    job("b", { origin: first }),
+    job("c", { origin: second, phase: "completed", acknowledged: true, saved: { path: "/c" } }),
+    job("d", { origin: second }),
+    job("e", { origin: second }),
+    job("p", { origin: { kind: "playlist", id: "3", name: "Playlist" } }),
+  ]);
+  const members = albumDownloadMembers(index.albumSongs, () => null);
+  assert.equal(index.line(members.get(3) ?? []), "Downloading · 0 of 2");
+  assert.equal(index.line(members.get(4) ?? [], "pt-BR"), "Baixando · 1 de 3");
+  assert.deepEqual([...members.keys()].toSorted(), [3, 4]);
 });

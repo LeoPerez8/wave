@@ -17,7 +17,6 @@ import { useCallback, useMemo, useRef } from "react";
 import { Text, useWindowDimensions, View } from "react-native";
 
 import { ArtistImage } from "@/catalog/ArtistImage";
-import { AlbumCard } from "@/catalog/cards/AlbumCard";
 import { SECTION_HEAD, SectionHead } from "@/catalog/CatalogLine";
 import { COVER_ROW_TILE, CoverRow } from "@/catalog/CoverRow";
 import { CELL, grid } from "@/catalog/grid";
@@ -48,6 +47,7 @@ import { DetailFrame } from "@/library/DetailFrame";
 import { entryText, FindFrame, FindHead, useFindInLegendList } from "@/library/FindInPlaylist";
 
 import { useArtist } from "@/library/hooks";
+import { LibraryAlbumCard } from "@/library/LibraryAlbumCard";
 import type { AlbumRow, ArtistDetail, ArtistRow, SongRow } from "@/library/LibraryStore";
 import { openAlbum, parseId, useKnownRow, useOpenedIntegrated } from "@/library/routes";
 import { SongSortButton } from "@/library/SongSortButton";
@@ -210,8 +210,9 @@ function AlbumShelfRow({
             case "library": {
               const album = toAlbumSummary(cell.album);
               return (
-                <AlbumCard
+                <LibraryAlbumCard
                   key={cellKey(cell)}
+                  albumId={cell.album.id}
                   title={album.title}
                   artist={album.albumArtist}
                   artworkUri={album.artworkUri}
