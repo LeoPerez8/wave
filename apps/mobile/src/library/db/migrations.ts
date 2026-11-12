@@ -1427,6 +1427,12 @@ ALTER TABLE tracks ADD COLUMN measured_size_bytes integer;
 --> statement-breakpoint
 ALTER TABLE tracks ADD COLUMN measured_modified_at integer;`;
 
+// Download progress finds unsearched entries and failed searches by title without
+// reading the other playlists' stored songs. Matches schema.ts's listedTitleIn.
+const m0059 = `CREATE INDEX playlist_items_listed_title_idx ON playlist_items ((CASE WHEN json_valid(yt_song)
+  THEN CASE WHEN json_extract(yt_song, '$.videoId') IS NULL
+  THEN json_extract(yt_song, '$.title') END END), deleted, playlist_id);`;
+
 export default {
   journal: {
     entries: [
@@ -1509,6 +1515,7 @@ export default {
       },
       { idx: 57, when: 1_796_731_200_000, tag: "0057_loudness_tags", breakpoints: true },
       { idx: 58, when: 1_796_817_600_000, tag: "0058_loudness_measurements", breakpoints: true },
+      { idx: 59, when: 1_796_904_000_000, tag: "0059_list_download_members", breakpoints: true },
     ],
   },
   migrations: {
@@ -1571,5 +1578,6 @@ export default {
     m0056,
     m0057,
     m0058,
+    m0059,
   },
 };
