@@ -9,6 +9,7 @@
  */
 
 import { catalogueOf, type AppLanguage } from "./localisation.ts";
+import { listDownloadLine } from "./listDownloadProgress.ts";
 import type { PlaylistItem } from "./playlistEntries.ts";
 import type { YtSong } from "./ytMusic.ts";
 import { soulseekRecordingKey } from "./soulseekDownload.ts";
@@ -154,7 +155,6 @@ const songsDownload = <S extends YtSong>(
   );
   // The list's batch: its songs downloaded or asked for this session.
   const batch = statuses.filter((status) => status !== null);
-  const saved = batch.filter((status) => status.kind === "done").length + landed;
   const downloading = batch.some(onItsWay);
   const actions: YtSongsDownloadAction[] = [];
   if (toDownload.length > 0) actions.push("download");
@@ -163,9 +163,7 @@ const songsDownload = <S extends YtSong>(
   if (toCancel.length > 0) actions.push("cancel");
   return {
     actions,
-    line: downloading
-      ? catalogueOf(language).downloads.progress(saved, batch.length + landed)
-      : null,
+    line: listDownloadLine(statuses, landed, language),
     toDownload,
     toRetry,
     toCancel,

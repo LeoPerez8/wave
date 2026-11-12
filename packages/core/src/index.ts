@@ -2746,3 +2746,5 @@ export type {
 export { queueContinuation, continueMagicQueue } from "./queueContinuation.ts";
 export { availableMagicSongs } from "./magicRadioLearning.ts";
 export type { QueueContinuationSeed } from "./queueContinuation.ts";
+export { indexListDownloads } from "./listDownloadProgress.ts";
+export type { DownloadListMember, ListDownloadsIndex } from "./listDownloadProgress.ts";

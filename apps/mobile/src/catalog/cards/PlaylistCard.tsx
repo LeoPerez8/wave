@@ -146,6 +146,7 @@ export function PlaylistCard({
 export function PlaylistCardRow({
   name,
   detail,
+  plainDetail = false,
   paths,
   tints,
   onPress,
@@ -154,7 +155,7 @@ export function PlaylistCardRow({
   ring,
   accessibilityActions,
   onAccessibilityAction,
-}: Props) {
+}: Props & { plainDetail?: boolean }) {
   const { strings } = useLocalisation();
   return (
     <CardRow
@@ -169,7 +170,7 @@ export function PlaylistCardRow({
         />
       }
       title={name}
-      detail={strings.library.playlistRow(detail)}
+      detail={plainDetail ? detail : strings.library.playlistRow(detail)}
       onPress={onPress}
       onLongPress={onLongPress}
       checked={checked}
