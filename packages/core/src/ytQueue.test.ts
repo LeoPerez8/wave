@@ -142,14 +142,24 @@ describe("playerNotice", () => {
   });
 
   test("a song waiting for the network says so in place of the offline notice", () => {
-    const waiting = { waitingForConnection: true, retrying: false, failed: true, errorCode: "ytOffline" };
+    const waiting = {
+      waitingForConnection: true,
+      retrying: false,
+      failed: true,
+      errorCode: "ytOffline",
+    };
     assert.equal(playerNotice(waiting), "Waiting for connection");
     assert.equal(playerNotice(waiting, catalogueOf("pt-BR")), "Aguardando conexão");
   });
 
   test("Wave reopened during the wait shows the line though it never saw the error", () => {
     assert.equal(
-      playerNotice({ waitingForConnection: true, retrying: false, failed: false, errorCode: "ytOffline" }),
+      playerNotice({
+        waitingForConnection: true,
+        retrying: false,
+        failed: false,
+        errorCode: "ytOffline",
+      }),
       "Waiting for connection",
     );
   });
@@ -157,11 +167,21 @@ describe("playerNotice", () => {
   test("once the wait ends without resuming, the offline notice is back", () => {
     const offline = "You're offline. YT Music songs need the network.";
     assert.equal(
-      playerNotice({ waitingForConnection: false, retrying: false, failed: true, errorCode: "ytOffline" }),
+      playerNotice({
+        waitingForConnection: false,
+        retrying: false,
+        failed: true,
+        errorCode: "ytOffline",
+      }),
       offline,
     );
     assert.equal(
-      playerNotice({ waitingForConnection: false, retrying: false, failed: false, errorCode: "ytOffline" }),
+      playerNotice({
+        waitingForConnection: false,
+        retrying: false,
+        failed: false,
+        errorCode: "ytOffline",
+      }),
       offline,
     );
   });
@@ -184,7 +204,12 @@ describe("playerNotice", () => {
       "Couldn't play this file",
     );
     assert.equal(
-      playerNotice({ waitingForConnection: false, retrying: false, failed: true, errorCode: "ytDisabled" }),
+      playerNotice({
+        waitingForConnection: false,
+        retrying: false,
+        failed: true,
+        errorCode: "ytDisabled",
+      }),
       "YT Music is off in Settings.",
     );
   });

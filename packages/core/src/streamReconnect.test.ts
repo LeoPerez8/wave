@@ -46,7 +46,11 @@ test("owner commands and a changed entry cancel the wait without a later resume"
     );
   }
   assert.deepEqual(
-    streamReconnect(cancelled.waiting, { type: "connection", key: "a", online: true, otherAudio: false }, 2_000),
+    streamReconnect(
+      cancelled.waiting,
+      { type: "connection", key: "a", online: true, otherAudio: false },
+      2_000,
+    ),
     cancelled,
   );
 });
@@ -76,7 +80,11 @@ test("a retry that fails before playing keeps the first pause's deadline", () =>
 test("a disconnected network holds the wait; ten minutes ends it even without a callback", () => {
   const waiting = { key: "a", positionMs: 0, expiresAtMs: 600_000 };
   assert.deepEqual(
-    streamReconnect(waiting, { type: "connection", key: "a", online: false, otherAudio: false }, 30_000),
+    streamReconnect(
+      waiting,
+      { type: "connection", key: "a", online: false, otherAudio: false },
+      30_000,
+    ),
     { waiting, resume: null, gaveUp: false },
   );
   assert.deepEqual(streamReconnect(waiting, { type: "timeout" }, 599_999), {
@@ -86,7 +94,11 @@ test("a disconnected network holds the wait; ten minutes ends it even without a 
   });
   for (const now of [600_000, 600_001, 900_000]) {
     assert.deepEqual(
-      streamReconnect(waiting, { type: "connection", key: "a", online: true, otherAudio: false }, now),
+      streamReconnect(
+        waiting,
+        { type: "connection", key: "a", online: true, otherAudio: false },
+        now,
+      ),
       { waiting: null, resume: null, gaveUp: true },
     );
     assert.deepEqual(streamReconnect(waiting, { type: "timeout" }, now), {
