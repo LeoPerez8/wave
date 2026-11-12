@@ -30,6 +30,8 @@ import {
   undoFollowSuggestionDismissal,
 } from "./db/followSuggestionDismissals";
 import { selectDownloadsToForget } from "./db/downloadRecovery";
+import { selectListDownloadMembers, type DownloadListMembers } from "./db/listDownloadMembers";
+import type { ListDownloadsIndex } from "@wave/core";
 import {
   playedEntityTotals,
   playedArtistTotals,
@@ -903,6 +905,10 @@ export class LibraryStore extends Context.Service<
     readonly inPlaylists: (
       trackIds: readonly number[],
     ) => Effect.Effect<boolean, LibraryStoreError>;
+    /** Entries belonging to journal songs or saved files, without opening each list. */
+    readonly listDownloadMembers: (
+      scope: Pick<ListDownloadsIndex, "videoIds" | "savedPaths">,
+    ) => Effect.Effect<DownloadListMembers, LibraryStoreError>;
     /**
      * The missing songs as downloading them takes them, in title order; with
      * [trackIds], only those still missing of them.
@@ -2026,6 +2032,8 @@ const make = Effect.gen(function* () {
       ),
     inPlaylists: (trackIds) =>
       attempt("read whether songs are in playlists", () => selectInPlaylists(db, trackIds)),
+    listDownloadMembers: (scope) =>
+      attempt("read download list membership", () => selectListDownloadMembers(db, scope)),
     missingSongs: (trackIds) =>
       attempt("read missing songs", () => selectMissingSongs(db, trackIds)),
     albumsMissingSongs: (albumIds) =>
