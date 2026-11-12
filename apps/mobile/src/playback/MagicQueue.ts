@@ -14,6 +14,9 @@ import {
   magicLibrarySongs,
   magicListSeedSongs,
   completeMagicRadioBatch,
+  continueMagicQueue,
+  queueContinuation,
+  magicYtSong,
   magicPlaySignal,
   magicQueueEdits,
   magicQueueLabel,
@@ -48,14 +51,16 @@ import { onStarred, onYtSongSignal } from "@/library/libraryChanges";
 import { LibraryStore, songHasFile, type SongRow, type ArtistRow } from "@/library/LibraryStore";
 import { YtMusic } from "@/ytmusic/YtMusic";
 import { appLog } from "@/log/appLog";
-import { ytMusicEnabled } from "@/settings/ytMusic";
+import { ytMusicEnabled, subscribeYtMusicEnabled } from "@/settings/ytMusic";
+import { subscribeConnectivity } from "@/native/waveNative";
 
 import { magicQueueYtCandidates } from "./magicQueueRadio";
 import { magicSignalsOf } from "./magicSongs";
-import { Player } from "./Player";
+import { Player, playbackState, sleepTimerState, sleepTimerLoaded } from "./Player";
 import { onPlayEnded } from "./PlayHistory";
 import { Queue, queueState, toQueueTrack, type QueueTrack } from "./Queue";
-import { toYtQueueTrack } from "./queueTracks";
+import { queueTracks, toYtQueueTrack } from "./queueTracks";
+import { readQueueContinuationSeed } from "./queueContinuationSeed";
 import { latestTasteProfile, tasteProfileForRecommendation } from "./TasteProfile";
 import { cacheYtCoversInBackground, ytQueueTrack } from "./ytQueueTracks";
 
@@ -177,6 +182,16 @@ let batchStart: { readonly id: string; readonly at: number; readonly first: bool
 /** How many of the seed songs' video ids a session keeps: its song radio reads the first. */
 const SEED_VIDEO_IDS = 5;
 
+/** The player must have started this queue's current entry, including after restoration. */
+const continuationSeedNow = (state: QueueState) => {
+  const playback = playbackState.get();
+  return sleepTimerLoaded.get() &&
+    playback.isPlaying &&
+    playback.item?.id === state.entries[state.index]?.key
+    ? queueContinuation(state, { sleepTimer: sleepTimerState.get() })
+    : null;
+};
+
 /**
  * Starts a Magic Queue from [seed], whose songs are [seedSongs] (the song
  * itself for a song seed) and, for a playlist, its [streamedSongs]: it
@@ -194,9 +209,10 @@ export const startMagicQueue = (
   seed: MagicSeed,
   seedSongs: readonly SongRow[],
   streamedSongs: readonly YtSong[] = [],
+  continuation?: QueueState,
 ) =>
   Effect.gen(function* () {
-    if (!ytMusicEnabled()) return;
+    if (continuation === undefined && !ytMusicEnabled()) return;
     const startedAt = Date.now();
     const playable = seedSongs.filter(songHasFile);
     // An album's or a playlist's songs are all radio seeds, with or without a file.
@@ -210,7 +226,7 @@ export const startMagicQueue = (
     const videoIds = yield* store
       .videoIds(radioSongs.map((song) => song.id))
       .pipe(Effect.orElseSucceed((): ReadonlyMap<number, string> => new Map()));
-    const streamed = list ? streamedSongs : [];
+    const streamed = streamedSongs;
     const plays = list
       ? yield* store
           .songCountedPlays([
@@ -237,15 +253,40 @@ export const startMagicQueue = (
         ],
         plays,
       );
-    const started = startSession(seed, playable.map(magicLibrarySongs(artists)), {
+    const current =
+      continuation === undefined ? undefined : continuation.entries[continuation.index];
+    const currentTrack = current === undefined ? undefined : queueTracks.get().get(current.trackId);
+    const candidates =
+      currentTrack === undefined
+        ? playable.map(magicLibrarySongs(artists))
+        : [
+            magicYtSong(
+              { trackId: currentTrack.id, artists: currentTrack.artists ?? [currentTrack.artist] },
+              () => null,
+            ),
+          ];
+    const started = startSession(seed, candidates, {
       id: String(Date.now()),
       random: Math.random,
       radio: {
-        artists: playable.flatMap((song) => song.artistIds.flatMap((id) => names.get(id) ?? [])),
+        artists: [
+          ...playable.flatMap((song) => song.artistIds.flatMap((id) => names.get(id) ?? [])),
+          ...streamed.flatMap((song) => song.artists),
+        ],
         ...(list
           ? { songs: listSeedSongs() }
           : playable[0] === undefined
-            ? {}
+            ? streamed[0] === undefined
+              ? {}
+              : {
+                  song: {
+                    id: `song:${seed.id}`,
+                    title: seed.title,
+                    artists: streamed[0].artists,
+                    durationMs: streamed[0].durationMs,
+                    videoId: streamed[0].videoId,
+                  },
+                }
             : {
                 song: {
                   id: seed.kind === "artist" ? `artist:${seed.id}` : `song:${seed.id}`,
@@ -262,12 +303,34 @@ export const startMagicQueue = (
                 },
               }),
         profile: genreProfile(playable),
-        videoIds: playable.flatMap((song) => videoIds.get(song.id) ?? []).slice(0, SEED_VIDEO_IDS),
+        videoIds: [
+          ...playable.flatMap((song) => videoIds.get(song.id) ?? []),
+          ...streamed.map((song) => song.videoId),
+        ].slice(0, SEED_VIDEO_IDS),
       },
       ytShare: magicQueueShare(discoverLevel.get()),
     });
-    const first = playable.find((song) => String(song.id) === started?.first);
-    if (started === null || first === undefined) return;
+    if (started === null) return;
+    if (continuation !== undefined) {
+      // Reads can finish after a skip, Repeat, a timer or a new Play. None adopts a stale session.
+      if (queueState.get() !== continuation || continuationSeedNow(continuation) === null) return;
+      const session = continueMagicQueue(started.session, continuation);
+      const queue = yield* Queue;
+      yield* queue.dispatch({
+        type: "continueMagicQueue",
+        sessionId: session.id,
+        from: continuation,
+      });
+      if (queueState.get().context?.id !== session.id) return;
+      startingLibrary = { songs: playable, artists };
+      batchStart = { id: session.id, at: startedAt, first: true };
+      failedBatch.set(null);
+      emptyBatch.set(null);
+      save(session);
+      return;
+    }
+    const first = playable.find((song) => String(song.id) === started.first);
+    if (first === undefined) return;
     startingLibrary = { songs: playable, artists };
     yield* begin(started.session, startedAt, toQueueTrack(first));
   });
@@ -357,10 +420,21 @@ export const layer = Layer.effectDiscard(
     const queue = yield* Queue;
     const ytMusic = yield* YtMusic;
     const player = yield* Player;
-    const warmInputs = recommendationSnapshot.get.pipe(
-      Effect.flatMap(({ library }) => tasteProfileForRecommendation(library)),
-      Effect.provideService(LibraryStore, store),
-      Effect.asVoid,
+    let warmed = recommendationSnapshot.peek();
+    const warmInputs = oneAtATime(
+      Effect.gen(function* () {
+        const library = yield* recommendationSnapshot.library;
+        if (library !== warmed.library) {
+          warmed = { ...warmed, library };
+          if (activeMagicSession()?.continuation) askAgain();
+        }
+        yield* tasteProfileForRecommendation(library);
+        const snapshot = yield* recommendationSnapshot.get;
+        if (snapshot.graph !== warmed.graph) {
+          warmed = { ...warmed, graph: snapshot.graph };
+          if (activeMagicSession()?.continuation) askAgain();
+        }
+      }).pipe(Effect.provideService(LibraryStore, store)),
     );
 
     const pendingSignals = new Set<Promise<void>>();
@@ -430,7 +504,10 @@ export const layer = Layer.effectDiscard(
         );
         yield* waitForSignals();
         const session = activeMagicSession();
-        if (session?.id !== wanted.id || !wantsMagicBatch(session, queueState.get()))
+        if (
+          session?.id !== wanted.id ||
+          !wantsMagicBatch(session, queueState.get(), sleepTimerState.get())
+        )
           return { kind: "dropped" } satisfies MagicBatchOutcome;
         const playable = library.songs.filter(songHasFile);
         const candidates = yt.candidates;
@@ -479,7 +556,10 @@ export const layer = Layer.effectDiscard(
      */
     const pickOnce = Effect.suspend(() => {
       const wanted = activeMagicSession();
-      if (wanted === null || !magicPickDue(wanted, emptyBatch.get(), queueState.get()))
+      if (
+        wanted === null ||
+        !magicPickDue(wanted, emptyBatch.get(), queueState.get(), sleepTimerState.get())
+      )
         return Effect.succeed(false);
       picking.set(wanted.id);
       failedBatch.set(null);
@@ -555,6 +635,36 @@ export const layer = Layer.effectDiscard(
       }),
     );
 
+    const continueOrdinaryQueue = oneAtATime(
+      Effect.gen(function* () {
+        for (;;) {
+          const state = queueState.get();
+          const seed = continuationSeedNow(state);
+          if (seed === null) return;
+          const input = yield* readQueueContinuationSeed(seed, store, queueTracks.get());
+          if (queueState.get() !== state) continue;
+          if (input === null) return;
+          yield* startMagicQueue(input.seed, input.songs, input.streamed, state).pipe(
+            Effect.provideService(LibraryStore, store),
+            Effect.provideService(Queue, queue),
+            Effect.provideService(YtMusic, ytMusic),
+            Effect.provideService(Player, player),
+          );
+          if (queueState.get() === state || activeMagicSession() !== null) return;
+        }
+      }).pipe(
+        Effect.catchCause((cause) =>
+          Effect.sync(() => {
+            appLog(
+              "warn",
+              "MagicQueue",
+              `Queue continuation failed: ${String(Cause.squash(cause))}`,
+            );
+          }),
+        ),
+      ),
+    );
+
     /** Clears an empty pick's mark and asks for the batch again: a new signal or a slider move. */
     const askAgain = (): void => {
       asked += 1;
@@ -569,7 +679,10 @@ export const layer = Layer.effectDiscard(
       const before = previous;
       previous = state;
       const session = activeMagicSession(state);
-      if (session === null) return;
+      if (session === null) {
+        fork(continueOrdinaryQueue);
+        return;
+      }
       if (wantsMagicBatch(session, state) && batchStart?.id !== session.id)
         batchStart = { id: session.id, at: Date.now(), first: session.used.length <= 1 };
       const { added, removed } = magicQueueEdits(session, before, state);
@@ -582,6 +695,14 @@ export const layer = Layer.effectDiscard(
       Effect.sync(() => {
         const stops = [
           queueState.subscribe(onQueue),
+          magicSession.subscribe(onQueue),
+          sleepTimerLoaded.subscribe(onQueue),
+          playbackState.subscribe(() => {
+            if (activeMagicSession() === null && playbackState.get().isPlaying)
+              fork(continueOrdinaryQueue);
+          }),
+          subscribeConnectivity(askAgain),
+          subscribeYtMusicEnabled(askAgain),
           retryBatch.subscribe(() => fork(fill)),
           discoverSliders.subscribe(askAgain),
           onPlayEnded((end) => {

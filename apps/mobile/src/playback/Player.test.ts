@@ -7,11 +7,11 @@ import * as ManagedRuntime from "effect/ManagedRuntime";
 
 // Keep the real Player service and permission helper; replace only the phone.
 let fixtureId = 0;
-const loadPlayer = async (version = 33, os = "android") => {
+const loadPlayer = async (version = 33, os = "android", waitForTimer = false) => {
   const id = ++fixtureId;
   const boundary = `data:text/javascript,${encodeURIComponent(`
     export const fixture = ${id};
-    export const phone = { requests: [], playing: false, answer: null, appState: "active" };
+    export const phone = { requests: [], playing: false, answer: null, appState: "active", timerAnswer: null };
     export const AppState = { get currentState() { return phone.appState; } };
     export const Platform = { OS: ${JSON.stringify(os)}, Version: ${version} };
     export const PermissionsAndroid = {
@@ -27,7 +27,7 @@ const loadPlayer = async (version = 33, os = "android") => {
         status: "idle", isPlaying: false, playWhenReady: false, item: null,
         index: -1, positionMs: 0, durationMs: null, at: 0,
       }),
-      getSleepTimer: async () => null,
+      getSleepTimer: () => ${waitForTimer ? "new Promise(resolve => { phone.timerAnswer = resolve; })" : "Promise.resolve(null)"},
       play: async () => { phone.playing = true; },
       pause: async () => { phone.playing = false; },
     };
@@ -51,7 +51,7 @@ const loadPlayer = async (version = 33, os = "android") => {
     },
   });
   try {
-    const { Player, layer } = (await import(
+    const { Player, layer, sleepTimerLoaded, sleepTimerState } = (await import(
       `./Player.ts?fixture=${id}`
     )) as typeof import("./Player.ts");
     const { askForNotifications } = (await import(
@@ -63,16 +63,35 @@ const loadPlayer = async (version = 33, os = "android") => {
         playing: boolean;
         answer: null | { resolve: (result: string) => void; reject: (error: Error) => void };
         appState: string;
+        timerAnswer: null | ((timer: { type: "endOfQueue" }) => void);
       };
     };
     const runtime = ManagedRuntime.make(layer);
     const play = () => runtime.runPromise(Effect.flatMap(Player, (player) => player.play));
     const pause = () => runtime.runPromise(Effect.flatMap(Player, (player) => player.pause));
-    return { phone, runtime, play, pause, askForNotifications };
+    return { phone, runtime, play, pause, askForNotifications, sleepTimerLoaded, sleepTimerState };
   } finally {
     hooks.deregister();
   }
 };
+
+test("a restored queue can wait for the native sleep timer before deciding to continue", async () => {
+  const { phone, runtime, sleepTimerLoaded, sleepTimerState } = await loadPlayer(
+    33,
+    "android",
+    true,
+  );
+  try {
+    await runtime.runPromise(Effect.void);
+    assert.equal(sleepTimerLoaded.get(), false);
+    phone.timerAnswer!({ type: "endOfQueue" });
+    await Promise.resolve();
+    assert.equal(sleepTimerLoaded.get(), true);
+    assert.deepEqual(sleepTimerState.get(), { type: "endOfQueue" });
+  } finally {
+    await runtime.dispose();
+  }
+});
 
 test(
   "first playback asks for notifications without waiting for the permission answer",

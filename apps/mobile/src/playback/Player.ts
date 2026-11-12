@@ -50,6 +50,8 @@ export const { playbackState, positionState } = stores;
 
 /** The sleep timer the playback service is running, if any (it enforces it natively). */
 export const sleepTimerState = makeExternalStore<SleepTimer | null>(null);
+/** Continuation waits for the service's timer on a resumed queue. */
+export const sleepTimerLoaded = makeExternalStore(false);
 
 /**
  * The native player as a typed service. JS owns the order (Core's queue
@@ -130,6 +132,7 @@ const call = <A>(operation: string, run: () => Promise<A>): Effect.Effect<A, Pla
 const syncState = Effect.acquireRelease(
   Effect.sync(() => {
     let reported = false;
+    let timerReported = false;
     const subscriptions = [
       WavePlayer.addListener("onPlaybackState", (state) => {
         perfCount("player.playbackState");
@@ -141,7 +144,11 @@ const syncState = Effect.acquireRelease(
         stores.reportPosition(position);
       }),
       WavePlayer.addListener("onPlayerError", stores.reportError),
-      WavePlayer.addListener("onSleepTimer", (event) => sleepTimerState.set(event.timer)),
+      WavePlayer.addListener("onSleepTimer", (event) => {
+        timerReported = true;
+        sleepTimerState.set(event.timer);
+        sleepTimerLoaded.set(true);
+      }),
     ];
     // The service may already be playing (Wave was reopened from the notification).
     WavePlayer.getState()
@@ -150,8 +157,11 @@ const syncState = Effect.acquireRelease(
       })
       .catch(() => undefined);
     WavePlayer.getSleepTimer()
-      .then((timer) => sleepTimerState.set(timer))
-      .catch(() => undefined);
+      .then((timer) => {
+        if (!timerReported) sleepTimerState.set(timer);
+        sleepTimerLoaded.set(true);
+      })
+      .catch(() => sleepTimerLoaded.set(true));
     return subscriptions;
   }),
   (subscriptions) =>
