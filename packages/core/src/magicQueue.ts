@@ -585,7 +585,8 @@ const recommended = (entry: QueueState["entries"][number]): boolean => entry.con
  * Whether [session] should add its next batch to [state]: it's still the
  * session's queue and Up Next holds no recommendation, so the batch is
  * picked once the previous one was weighed. Songs lined up by hand don't
- * hold it back.
+ * hold it back, nor do the songs a continued queue still has to play: its
+ * first batch joins them at once.
  */
 export const wantsMagicBatch = (
   session: MagicSession,
@@ -596,7 +597,8 @@ export const wantsMagicBatch = (
   (!session.continuation || state.repeat === "off") &&
   isMagicQueue(session, state) &&
   state.index >= 0 &&
-  !state.entries.slice(state.index + 1).some(recommended);
+  ((session.continuation === true && session.batches === 0) ||
+    !state.entries.slice(state.index + 1).some(recommended));
 
 /**
  * Whether Up Next shows [session]'s next batch loading (skeleton rows where
