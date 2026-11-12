@@ -11,6 +11,8 @@ import {
   magicBatchEmpty,
   magicBatchFailed,
   magicBatchLoading,
+  magicPickDue,
+  magicPickEnded,
   magicBatchRadios,
   magicLibrarySongs,
   magicSeedProfile,
@@ -296,6 +298,24 @@ describe("A Magic Queue in the queue", () => {
       context: { kind: "album", id: "4" },
     });
     assert.equal(magicBatchEmpty(session, "m1", other), false);
+  });
+
+  test("holds its batch back while the sleep timer is End of Queue: no loading, no line, until the timer is off", () => {
+    const seedOnly = run(EMPTY_QUEUE, { type: "play", trackIds: ["s1"], startIndex: 0, context });
+    const timer = { type: "endOfQueue" } as const;
+    // A batch marked as picked when the session started is not on its way: the queue ends here.
+    assert.equal(magicBatchLoading(session, "m1", seedOnly, timer), false);
+    assert.equal(magicBatchFailed(session, "m1", seedOnly, timer), false);
+    assert.equal(magicBatchEmpty(session, "m1", seedOnly, timer), false);
+    assert.equal(magicPickEnded("m0", "m1", session, seedOnly, timer).again, false);
+    // Any other timer, or none, leaves the batch wanted.
+    for (const other of [null, { type: "endOfTrack" }, { type: "deadline", endsAt: 1 }] as const) {
+      assert.equal(magicBatchLoading(session, "m1", seedOnly, other), true);
+      assert.equal(magicBatchFailed(session, "m1", seedOnly, other), true);
+      assert.equal(magicBatchEmpty(session, "m1", seedOnly, other), true);
+      assert.equal(magicPickDue(session, null, seedOnly, other), true);
+      assert.equal(magicPickEnded("m0", "m1", session, seedOnly, other).again, true);
+    }
   });
 
   test("Up Next names the seed", () => {
