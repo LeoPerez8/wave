@@ -1,7 +1,7 @@
 import {
   indexListDownloads,
   type AppLanguage,
-  type ListDownloadsIndex,
+  type ListDownloadsScope,
   type YtDownloadJournalJob,
 } from "@wave/core";
 import type { ExternalStore } from "../lib/externalStore.ts";
@@ -10,9 +10,7 @@ import type { DownloadListKey, DownloadListMembers } from "../library/db/listDow
 interface Sources {
   readonly journal: Pick<ExternalStore<readonly YtDownloadJournalJob[]>, "get" | "subscribe">;
   readonly subscribeMembership: (changed: () => void) => () => void;
-  readonly read: (
-    scope: Pick<ListDownloadsIndex, "videoIds" | "savedPaths">,
-  ) => Promise<DownloadListMembers>;
+  readonly read: (scope: ListDownloadsScope) => Promise<DownloadListMembers>;
 }
 
 /**

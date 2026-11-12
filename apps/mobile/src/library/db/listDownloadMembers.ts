@@ -1,9 +1,10 @@
 import {
+  albumDownloadMembers,
   readPlaylistEntrySong,
   readUnsearchedTrackId,
   unsearchedTrackId,
   type DownloadListMember,
-  type ListDownloadsIndex,
+  type ListDownloadsScope,
 } from "@wave/core";
 import { and, eq, inArray, isNotNull, sql } from "drizzle-orm";
 import type { LibraryDatabase } from "./database.ts";
@@ -16,11 +17,11 @@ export type DownloadListMembers = ReadonlyMap<DownloadListKey, readonly Download
 
 /**
  * Read only entries belonging to journal songs or saved files, using the video,
- * listed-title, path and track indexes. No playlist page, totals or covers.
+ * listed-title, path and track indexes. No playlist or album page, totals or covers.
  */
 export const selectListDownloadMembers = (
   db: LibraryDatabase,
-  scope: Pick<ListDownloadsIndex, "videoIds" | "savedPaths">,
+  scope: ListDownloadsScope,
 ): DownloadListMembers => {
   const result = new Map<DownloadListKey, DownloadListMember[]>();
   const seen = new Set<number>();
@@ -94,5 +95,22 @@ export const selectListDownloadMembers = (
     for (const row of rows)
       if (row.path !== null) add(row.id, row.playlistId, { kind: "file", path: row.path });
   }
+  // Albums: one read by path says which album each saved file went to (Core's `albumDownloadMembers`).
+  const albumSongs = scope.albumSongs ?? [];
+  const albumOfPath = new Map<string, number>();
+  const saved = albumSongs.flatMap(({ savedPath }) => (savedPath === null ? [] : [savedPath]));
+  for (const paths of chunks([...new Set(saved)])) {
+    const rows = db
+      .select({ path: tracks.path, albumId: tracks.albumId })
+      .from(tracks)
+      .where(inArray(tracks.path, [...paths]))
+      .all();
+    for (const row of rows) if (row.path !== null) albumOfPath.set(row.path, row.albumId);
+  }
+  for (const [albumId, members] of albumDownloadMembers(
+    albumSongs,
+    (path) => albumOfPath.get(path) ?? null,
+  ))
+    result.set(`album:${albumId}`, members);
   return result;
 };
