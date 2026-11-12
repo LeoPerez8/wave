@@ -31,7 +31,7 @@ import {
 } from "./db/followSuggestionDismissals";
 import { selectDownloadsToForget } from "./db/downloadRecovery";
 import { selectListDownloadMembers, type DownloadListMembers } from "./db/listDownloadMembers";
-import type { ListDownloadsIndex } from "@wave/core";
+import type { ListDownloadsScope } from "@wave/core";
 import {
   playedEntityTotals,
   playedArtistTotals,
@@ -907,7 +907,7 @@ export class LibraryStore extends Context.Service<
     ) => Effect.Effect<boolean, LibraryStoreError>;
     /** Entries belonging to journal songs or saved files, without opening each list. */
     readonly listDownloadMembers: (
-      scope: Pick<ListDownloadsIndex, "videoIds" | "savedPaths">,
+      scope: ListDownloadsScope,
     ) => Effect.Effect<DownloadListMembers, LibraryStoreError>;
     /**
      * The missing songs as downloading them takes them, in title order; with

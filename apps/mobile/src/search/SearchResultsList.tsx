@@ -20,6 +20,7 @@ import { SKELETON_ROWS, TrackSkeletons } from "@/catalog/Skeletons";
 import { useChromeInset } from "@/chrome/chrome";
 import { TextButton } from "@/components/TextButton";
 import { listedTrackItem, type TrackItem } from "@/playback/actionTargets";
+import { LibraryAlbumCardRow } from "@/library/LibraryAlbumCard";
 import { openAlbum, openArtist, openGenre, openPlaylist } from "@/library/routes";
 import {
   openAlbumActions,
@@ -146,7 +147,8 @@ function Hit({
       );
     case "album":
       return (
-        <AlbumCardRow
+        <LibraryAlbumCardRow
+          albumId={hit.album.id}
           title={hit.name}
           artist={hit.album.albumArtist}
           artworkUri={artworkUri(hit.album)}

@@ -32,4 +32,5 @@ export const nativeEn = {
   appUpdates: "App updates",
   waveUpdated: "Wave updated",
   tapToOpen: "Tap to open it",
+  waitingForConnection: "Waiting for connection",
 };

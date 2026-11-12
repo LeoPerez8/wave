@@ -411,6 +411,9 @@ export const settingsEn = {
   normalizeVolume: "Normalize Volume",
   playsEverySongAtAboutTheSame:
     "Plays every song at about the same loudness, so you don't reach for the volume between songs. Your music files stay as they are.",
+  continueWithMagicQueue: "Continue with Magic Queue",
+  whenAQueueRunsOutWaveContinues:
+    "When a queue runs out, Wave keeps the music going with a Magic Queue based on what was playing. Off, the queue stops at its last song.",
   howMuchOfAStreamedSongWave:
     "How much of a streamed song Wave loads ahead, carrying on into the next songs in Up Next, so playback keeps going through a dead zone. Longer uses more memory: about 50 MB at 30 minutes. Downloaded songs play from the phone either way.",
   swipeActions: "Swipe actions",

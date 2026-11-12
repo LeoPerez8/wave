@@ -194,6 +194,7 @@ export const playbackTextPtBr: typeof playbackTextEn = {
   waveCouldntNameThisSongTryListeningAgain:
     "O Wave não reconheceu esta música. Tente ouvir novamente.",
   couldntRecognizeTheSong: "Não foi possível reconhecer a música",
+  waitingForConnection: "Aguardando conexão",
   youreOfflineYTMusicSongsNeedTheNetwork:
     "Você está offline. As músicas do YT Music precisam de conexão.",
   yTMusicIsOffInSettings: "O YT Music está desativado nos Ajustes.",

@@ -54,6 +54,7 @@ import { LibraryStore, songHasFile, type SongRow, type ArtistRow } from "@/libra
 import { YtMusic } from "@/ytmusic/YtMusic";
 import { appLog } from "@/log/appLog";
 import { currentStreamBufferMs, subscribeStreamBuffer } from "@/settings/streamBuffer";
+import { continueQueueOn, onContinueQueue } from "@/settings/continueQueue";
 import { ytMusicEnabled, subscribeYtMusicEnabled } from "@/settings/ytMusic";
 import { subscribeConnectivity } from "@/native/waveNative";
 
@@ -219,7 +220,11 @@ const timeAhead = (state: QueueState): QueueTimeAhead => {
 /** The seed [state] continues from now, if it is due to (Core's `queueContinuation`). */
 const continuationSeedNow = (state: QueueState) =>
   playingCurrentEntry(state)
-    ? queueContinuation(state, { sleepTimer: sleepTimerState.get(), ahead: timeAhead(state) })
+    ? queueContinuation(state, {
+        enabled: continueQueueOn(),
+        sleepTimer: sleepTimerState.get(),
+        ahead: timeAhead(state),
+      })
     : null;
 
 /** The timer's slack past the moment the time left equals the Buffer. */
@@ -766,6 +771,7 @@ export const layer = Layer.effectDiscard(
           playbackState.subscribe(followQueueEnd),
           sleepTimerState.subscribe(followQueueEnd),
           subscribeStreamBuffer(followQueueEnd),
+          onContinueQueue(followQueueEnd),
           () => {
             if (continuationTimer !== null) clearTimeout(continuationTimer);
           },

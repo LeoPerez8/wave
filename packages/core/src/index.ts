@@ -1046,7 +1046,14 @@ export type {
   BpstatRow,
   ImportedPlays,
 } from "./blackPlayer.ts";
-export { libraryTrackIds, playerErrorNotice, queuedYtTracks, restorableTrack } from "./ytQueue.ts";
+export {
+  libraryTrackIds,
+  playerErrorNotice,
+  playerNotice,
+  queuedYtTracks,
+  restorableTrack,
+} from "./ytQueue.ts";
+export type { PlayerTrouble } from "./ytQueue.ts";
 export type { PlayerErrorCode, RestorableTracks } from "./ytQueue.ts";
 export { settleBestQuality } from "./bestQuality.ts";
 export type { BestQualityState, BestQualityStep } from "./bestQuality.ts";
@@ -2750,9 +2757,15 @@ export type {
   SignInInvitation,
 } from "./firstRun.ts";
 export { queueContinuation, continueMagicQueue } from "./queueContinuation.ts";
+export { readContinueQueue, writeContinueQueue } from "./queueContinuationSetting.ts";
 export { availableMagicSongs } from "./magicRadioLearning.ts";
 export type { QueueContinuationSeed } from "./queueContinuation.ts";
 export { queueContinuationWaitMs } from "./queueContinuation.ts";
 export type { QueueTimeAhead } from "./queueContinuation.ts";
-export { indexListDownloads } from "./listDownloadProgress.ts";
-export type { DownloadListMember, ListDownloadsIndex } from "./listDownloadProgress.ts";
+export { albumDownloadMembers, indexListDownloads } from "./listDownloadProgress.ts";
+export type {
+  DownloadListMember,
+  ListDownloadAlbumSong,
+  ListDownloadsIndex,
+  ListDownloadsScope,
+} from "./listDownloadProgress.ts";
