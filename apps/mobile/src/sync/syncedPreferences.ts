@@ -11,6 +11,7 @@ import "@/library/typedReleaseDates";
 import "@/settings/artistPhotos";
 import "@/settings/bestQuality";
 import "@/settings/bounceAmount";
+import "@/settings/continueQueue";
 import "@/settings/dontPlayExplicit";
 import "@/settings/followedArtists";
 import "@/settings/genius";

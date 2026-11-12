@@ -6,6 +6,7 @@ import { Hairline } from "@/catalog/Hairline";
 import { SettingsSlider } from "@/components/SettingsSlider";
 import { SettingsSwitch } from "@/components/SettingsSwitch";
 import { ChoiceSection } from "@/settings/ChoiceRow";
+import { setContinueQueue, useContinueQueue } from "@/settings/continueQueue";
 import { CROSSFADE, setCrossfadeSeconds, useCrossfadeSeconds } from "@/settings/crossfade";
 import { setDontPlayExplicit, useDontPlayExplicit } from "@/settings/dontPlayExplicit";
 import { setNormalizeVolume, useNormalizeVolume } from "@/settings/normalizeVolume";
@@ -14,7 +15,8 @@ import { streamBufferChoice } from "@/settings/streamBuffer";
 
 /**
  * Settings › Playback: how one song gives way to the next, which songs play,
- * how loud each plays, and how much streamed audio is loaded ahead.
+ * how loud each plays, whether a queue that runs out continues, and how much
+ * streamed audio is loaded ahead.
  */
 export default function PlaybackSettingsScreen() {
   const { strings } = useLocalisation();
@@ -22,6 +24,7 @@ export default function PlaybackSettingsScreen() {
   const seconds = useCrossfadeSeconds();
   const skipExplicit = useDontPlayExplicit();
   const normalize = useNormalizeVolume();
+  const continueQueue = useContinueQueue();
   const bufferMinutes = streamBufferChoice.setting.useValue();
   return (
     <SettingsPageScreen page="playback">
@@ -61,6 +64,18 @@ export default function PlaybackSettingsScreen() {
         <Hairline />
         <Text className="mt-2 font-sans text-footnote text-secondary">
           {strings.settings.playsEverySongAtAboutTheSame}
+        </Text>
+      </View>
+      <View>
+        <Hairline />
+        <SettingsSwitch
+          label={strings.settings.continueWithMagicQueue}
+          value={continueQueue}
+          onValueChange={setContinueQueue}
+        />
+        <Hairline />
+        <Text className="mt-2 font-sans text-footnote text-secondary">
+          {strings.settings.whenAQueueRunsOutWaveContinues}
         </Text>
       </View>
       <ChoiceSection

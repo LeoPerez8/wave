@@ -2750,6 +2750,7 @@ export type {
   SignInInvitation,
 } from "./firstRun.ts";
 export { queueContinuation, continueMagicQueue } from "./queueContinuation.ts";
+export { readContinueQueue, writeContinueQueue } from "./queueContinuationSetting.ts";
 export { availableMagicSongs } from "./magicRadioLearning.ts";
 export type { QueueContinuationSeed } from "./queueContinuation.ts";
 export { indexListDownloads } from "./listDownloadProgress.ts";
