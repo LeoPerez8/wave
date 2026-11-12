@@ -66,7 +66,11 @@ describe("migration 0056", () => {
 
       assert.deepEqual(selectPlaylistEntries(db, playlistId), before);
       assert.deepEqual(db.all(sql`SELECT * FROM playlist_items ORDER BY id`), rows);
-      assert.deepEqual(names(db, "index"), indexes);
+      // Migration 0059 adds its own index later; 0056 keeps the ones the table had.
+      assert.deepEqual(
+        names(db, "index").filter((name) => name !== "playlist_items_listed_title_idx"),
+        indexes,
+      );
       assert.deepEqual(names(db, "trigger"), triggers);
       const keys = db.all<{ from: string; table: string; on_delete: string }>(
         sql`SELECT "from", "table", on_delete FROM pragma_foreign_key_list('playlist_items')
