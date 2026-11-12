@@ -51,6 +51,7 @@ import { onStarred, onYtSongSignal } from "@/library/libraryChanges";
 import { LibraryStore, songHasFile, type SongRow, type ArtistRow } from "@/library/LibraryStore";
 import { YtMusic } from "@/ytmusic/YtMusic";
 import { appLog } from "@/log/appLog";
+import { continueQueueOn, onContinueQueue } from "@/settings/continueQueue";
 import { ytMusicEnabled, subscribeYtMusicEnabled } from "@/settings/ytMusic";
 import { subscribeConnectivity } from "@/native/waveNative";
 
@@ -188,7 +189,7 @@ const continuationSeedNow = (state: QueueState) => {
   return sleepTimerLoaded.get() &&
     playback.isPlaying &&
     playback.item?.id === state.entries[state.index]?.key
-    ? queueContinuation(state, { sleepTimer: sleepTimerState.get() })
+    ? queueContinuation(state, { enabled: continueQueueOn(), sleepTimer: sleepTimerState.get() })
     : null;
 };
 
@@ -697,6 +698,7 @@ export const layer = Layer.effectDiscard(
           queueState.subscribe(onQueue),
           magicSession.subscribe(onQueue),
           sleepTimerLoaded.subscribe(onQueue),
+          onContinueQueue(onQueue),
           playbackState.subscribe(() => {
             if (activeMagicSession() === null && playbackState.get().isPlaying)
               fork(continueOrdinaryQueue);
