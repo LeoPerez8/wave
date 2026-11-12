@@ -1,4 +1,4 @@
-import { playerErrorNotice } from "@wave/core";
+import { playerNotice } from "@wave/core";
 import { useLocalisation } from "@/localisation/localisation";
 import { beginTiming, activeTiming, noteTimingLinkFailure } from "@/lib/timing";
 import { IconMusic, IconStar, IconStarFilled } from "@tabler/icons-react-native";
@@ -28,6 +28,7 @@ import { IconButton } from "@/components/IconButton";
 import { useRenderCount } from "@/perf/perf";
 import { useCurrentTrackId } from "@/playback/hooks";
 import { playbackState, type PlaybackState } from "@/playback/Player";
+import { playerTrouble } from "@/playback/playbackStores";
 import { queueState } from "@/playback/Queue";
 import { queueTracks, type QueueTrack } from "@/playback/queueTracks";
 import { useThemeColor } from "@/theme/useThemeColor";
@@ -321,7 +322,7 @@ export function PlayerView({ item, details, playing }: Props) {
   const artist = details?.artist ?? item.artist ?? strings.playbackText.unknownArtist;
   const album = details?.album ?? item.album ?? strings.playbackText.unknownAlbum;
   const failure = useSyncExternalStore(playbackState.subscribe, playbackState.get);
-  const notice = failure.error === null ? null : playerErrorNotice(failure.errorCode, strings);
+  const notice = playerNotice(playerTrouble(failure), strings);
   // Read ahead, so the screens open header-first; only while the sheet is
   // shown, so track changes behind a closed Now Playing don't pay for it.
   const shown = useNowPlayingShown();
@@ -415,7 +416,7 @@ export function PlayerView({ item, details, playing }: Props) {
               className="font-sans text-body text-secondary"
             />
           ) : (
-            // Why playback stopped (a YT Music song offline…), in place of the album.
+            // "Waiting for connection" or why playback stopped, in place of the album.
             <View style={{ paddingVertical: CELL / 2 }}>
               <Text
                 numberOfLines={2}

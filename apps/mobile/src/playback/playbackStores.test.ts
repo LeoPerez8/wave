@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import type { NativePlayerState } from "../native/wavePlayer.ts";
-import { makePlaybackStores } from "./playbackStores.ts";
+import { makePlaybackStores, playerTrouble } from "./playbackStores.ts";
 
 const playing: NativePlayerState = {
   status: "ready",
@@ -123,4 +123,34 @@ test("event reports and an immediate JS seek keep position fresh without waking 
   });
   assert.equal(reports.length, 5);
   assert.equal("positionMs" in stores.playbackState.get(), false);
+});
+
+test("the player's trouble follows the wait, the retry and the timeout", () => {
+  const stores = makePlaybackStores(() => {});
+  const trouble = () => playerTrouble(stores.playbackState.get());
+  stores.reportState(playing);
+  assert.deepEqual(trouble(), {
+    waitingForConnection: false,
+    retrying: false,
+    failed: false,
+    errorCode: null,
+  });
+  const stopped = { ...playing, status: "idle", isPlaying: false, playWhenReady: false } as const;
+  stores.reportError({ itemId: "a", message: "offline", code: "ytOffline" });
+  stores.reportState({ ...stopped, waitingForConnection: true, errorCode: "ytOffline" });
+  assert.deepEqual(trouble(), {
+    waitingForConnection: true,
+    retrying: false,
+    failed: true,
+    errorCode: "ytOffline",
+  });
+  stores.reportState({ ...playing, status: "buffering", isPlaying: false });
+  assert.equal(trouble().retrying, true);
+  stores.reportState({ ...stopped, errorCode: "ytOffline" });
+  assert.deepEqual(trouble(), {
+    waitingForConnection: false,
+    retrying: false,
+    failed: true,
+    errorCode: "ytOffline",
+  });
 });

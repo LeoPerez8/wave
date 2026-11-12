@@ -158,6 +158,7 @@ class PlaybackService : MediaLibraryService() {
   /** Keeps the first deadline while preparation is trying to get this same listen going. */
   private var reconnectAttempt: ReconnectWait? = null
   private var stopConnectivity: (() -> Unit)? = null
+  private var stopWaitingLine: (() -> Unit)? = null
   private val reconnectTimeout = Runnable { checkReconnectDeadline() }
 
   private fun checkReconnectDeadline() {
@@ -314,7 +315,11 @@ class PlaybackService : MediaLibraryService() {
   private var shown: LyricsTextPlayer? = null
 
   private fun showOnSession(player: ExoPlayer): LyricsTextPlayer =
-    LyricsTextPlayer(player, AutoLyrics.state::textFor).also { shown = it }
+    LyricsTextPlayer(player, AutoLyrics.state::textFor, ::waitingLine).also { shown = it }
+
+  /** "Waiting for connection" for the notification and the lock screen, while the wait lasts. */
+  private fun waitingLine(): String? =
+    if (StreamReconnectLink.waitingForConnection) NativeText.get("waitingForConnection") else null
 
   /**
    * A crossfade's handoff: the second player, already playing the next song,
@@ -567,6 +572,7 @@ class PlaybackService : MediaLibraryService() {
       cancelReconnect()
     }
     StreamReconnectLink.onCheck = ::checkReconnectDeadline
+    stopWaitingLine = StreamReconnectLink.listen { shown?.refresh() }
     stopConnectivity = AndroidConnectivity.cache(this).listen {
       main.post { reconnectIfOnline() }
     }
@@ -588,6 +594,7 @@ class PlaybackService : MediaLibraryService() {
       .build()
     expo.modules.wavenative.locale.NativeLanguage.init(this)
     stopLanguage = NativeText.listen {
+      shown?.refresh()
       showModes(AutoModes.state.current)
       triggerNotificationUpdate()
       for (parent in languageParents.toList()) session?.notifyChildrenChanged(parent, Int.MAX_VALUE, null)
@@ -693,6 +700,8 @@ class PlaybackService : MediaLibraryService() {
     stopConnectivity = null
     StreamReconnectLink.onOwnerCommand = null
     StreamReconnectLink.onCheck = null
+    stopWaitingLine?.invoke()
+    stopWaitingLine = null
     cancelReconnect()
     ActiveWaveAudio.count = { 0 }
     stopLanguage?.invoke()

@@ -64,27 +64,42 @@ fun MediaMetadata.withLyrics(text: LyricsText?): MediaMetadata {
     .build()
 }
 
+/** [this] with [line] in place of the artist, where the notification and the lock screen show it. */
+fun MediaMetadata.withStatusLine(line: String): MediaMetadata =
+  buildUpon().setArtist(line).setSubtitle(line).build()
+
+/**
+ * What the session shows for a song: [statusLine] over its own title while it
+ * has one (a song waiting for the network isn't singing), else its [lyrics].
+ */
+fun MediaMetadata.sessionMetadata(lyrics: LyricsText?, statusLine: String?): MediaMetadata =
+  if (statusLine != null) withStatusLine(statusLine) else withLyrics(lyrics)
+
 /**
  * The player the media session shows: [player] as it is, except that the
  * current item's title and artist show the lyrics [textFor] gives for it (its
- * entry key), when it gives some ([withLyrics]). Only the session's metadata
- * changes: the items, and so Auto's queue, what Wave's own controller and the
- * resume snapshot read, keep their title and artist. Call [refresh] when
- * [textFor] would answer differently.
+ * entry key), when it gives some ([withLyrics]), and its artist shows
+ * [statusLine] while there is one ("Waiting for connection"). Only the
+ * session's metadata changes: the items, and so Auto's queue, what Wave's own
+ * controller and the resume snapshot read, keep their title and artist. Call
+ * [refresh] when [textFor] or [statusLine] would answer differently.
  */
 @OptIn(UnstableApi::class)
 class LyricsTextPlayer(
   player: Player,
   private val textFor: (itemId: String?) -> LyricsText?,
+  private val statusLine: () -> String? = { null },
 ) : ForwardingSimpleBasePlayer(player) {
   override fun getState(): State {
     val state = super.getState()
     if (state.timeline.isEmpty) return state
-    val text = textFor(player.currentMediaItem?.mediaId) ?: return state
-    val metadata = state.currentMetadata.withLyrics(text)
+    val text = textFor(player.currentMediaItem?.mediaId)
+    val line = statusLine()
+    if (text == null && line == null) return state
+    val metadata = state.currentMetadata.sessionMetadata(text, line)
     return state.buildUpon().setPlaylist(state.timeline, state.currentTracks, metadata).build()
   }
 
-  /** Shows the text [textFor] gives now. */
+  /** Shows what [textFor] and [statusLine] give now. */
   fun refresh() = invalidateState()
 }
