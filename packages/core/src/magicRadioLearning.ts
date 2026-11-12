@@ -4,6 +4,28 @@ import type { MagicSession, MagicSongRadioSeed } from "./magicQueue.ts";
 import type { YtAlbumSong } from "./ytDiscover.ts";
 import { recordingMatches, recordingMatchTitle, ytTrackId } from "./ytMusic.ts";
 
+/** Automatic continuations stay with files offline or without YT Music consent. */
+export const availableMagicSongs = (
+  session: MagicSession,
+  songs: readonly RankedRadioSong[],
+  {
+    online,
+    ytMusic,
+    cachedVideos,
+  }: {
+    readonly online: boolean;
+    readonly ytMusic: boolean;
+    readonly cachedVideos: ReadonlySet<string> | null;
+  },
+): RankedRadioSong[] =>
+  songs.filter(
+    (song) =>
+      song.source === "library" ||
+      (ytMusic &&
+        (online ||
+          (!session.continuation && song.song !== null && cachedVideos?.has(song.song.videoId)))),
+  );
+
 /** Keep learned recordings out even when a Library song's video id was unknown before its radio read. */
 export const magicRadioExclusions = (
   session: MagicSession,
@@ -95,7 +117,8 @@ export const magicRadioBatch = (
   return result;
 };
 
-const batchSize = (session: MagicSession): number => (session.batches === 0 ? 9 : 10);
+const batchSize = (session: MagicSession): number =>
+  session.batches === 0 && !session.continuation ? 9 : 10;
 
 /** Whether each radio pool needs continuations to fill its batch and New music share. */
 export const magicRadioReadPlan = (

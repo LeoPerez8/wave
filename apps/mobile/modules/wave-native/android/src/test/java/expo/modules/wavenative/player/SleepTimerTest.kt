@@ -7,6 +7,21 @@ import org.junit.Assert.assertTrue
 import org.junit.Test
 
 class SleepTimerTest {
+  @Test
+  fun `end of queue lets tracks play through and pauses only when the list ends`() {
+    timer.start(SleepTimerMode.EndOfQueue)
+    assertFalse(host.pausesAtEndOfItems)
+    assertNull(host.checkAt)
+    timer.onPausedAtEndOfItem()
+    assertEquals(SleepTimerMode.EndOfQueue, timer.mode)
+    assertFalse(host.paused)
+    timer.onEnded()
+    assertTrue(host.paused)
+    assertNull(timer.mode)
+    assertEquals(mapOf("type" to "endOfQueue"), SleepTimerWire.toJs(SleepTimerMode.EndOfQueue))
+    assertEquals(SleepTimerMode.EndOfQueue, SleepTimerWire.fromJs("endOfQueue", null))
+  }
+
   /** The playback service as the timer sees it: a clock, the player and one pending check. */
   private class FakeHost(var now: Long) : SleepTimerHost {
     var paused = false

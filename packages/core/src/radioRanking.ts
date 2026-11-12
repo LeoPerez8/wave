@@ -36,6 +36,8 @@ export interface RadioRankingSources {
   readonly inLibrary?: (song: YtAlbumSong) => MagicSong | null;
 }
 export interface RadioRankingOptions {
+  /** A continued queue without online radios also weighs the rest of the Library. */
+  readonly libraryFallback?: boolean;
   readonly faithfulness?: MixSliderStep;
   readonly popularity?: MixSliderStep;
   /** Queue track ids already played, queued or explicitly excluded by the caller. */
@@ -126,8 +128,9 @@ export const rankRadioSongs = (
     for (const artist of artistNeighbourhood(sources.graph, seed.artists))
       close.add(magicArtistKey(artist.name));
   for (const song of sources.library ?? []) {
-    if (song.artists.some((artist) => close.has(artist)) && !ranked.has(song.trackId)) {
-      add({ ...song, source: "library", song: null, radio: null, score: 5 });
+    const near = song.artists.some((artist) => close.has(artist));
+    if ((near || options.libraryFallback) && !ranked.has(song.trackId)) {
+      add({ ...song, source: "library", song: null, radio: null, score: near ? 5 : 3 });
     }
   }
   // oxlint-disable-next-line unicorn/no-array-sort -- fresh array; Hermes lacks toSorted

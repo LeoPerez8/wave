@@ -34,3 +34,10 @@ test("the update notification's text comes in both languages", () => {
   assert.match(files["values/wave_text.xml"]!, />App updates</);
   assert.match(files["values-pt/wave_text.xml"]!, />Atualizações do app</);
 });
+
+test("the playback notification's waiting line comes in both languages", () => {
+  const files = nativeTextResources();
+  assert.match(files["values/wave_text.xml"]!, />Waiting for connection</);
+  assert.match(files["values-pt/wave_text.xml"]!, />Aguardando conexão</);
+  assert.match(nativeCatalogueKotlin(), /"waitingForConnection" to "Aguardando conexão"/);
+});

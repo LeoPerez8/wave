@@ -6,6 +6,7 @@ import { type GenreProfile, type GenreProfileOf, type GenreTagged } from "./genr
 import { commonStyle, songFamilies, songStyle } from "./genreMixes.ts";
 import type { PlayEnd } from "./playEvents.ts";
 import type { QueueState } from "./queue.ts";
+import type { SleepTimer } from "./sleepTimer.ts";
 import { isRecord } from "./storedJson.ts";
 import { MAGIC_SKIP_MS } from "./tasteProfile.ts";
 import { drawSeedSongs } from "./seedSongDraw.ts";
@@ -173,6 +174,8 @@ export const magicListSeedSongs = (
 
 /** A Magic Queue under way: plain JSON saved with its queue. */
 export interface MagicSession {
+  /** Continued from an ordinary queue: the first batch adds ten songs after it. */
+  readonly continuation?: boolean;
   readonly radioSeed?: MagicSongRadioSeed;
   /** Radios learned from favorites, downloads and hand-added songs, each once per recording. */
   readonly likedRadios?: readonly MagicSongRadioSeed[];
@@ -582,25 +585,37 @@ const recommended = (entry: QueueState["entries"][number]): boolean => entry.con
  * Whether [session] should add its next batch to [state]: it's still the
  * session's queue and Up Next holds no recommendation, so the batch is
  * picked once the previous one was weighed. Songs lined up by hand don't
- * hold it back.
+ * hold it back, nor do the songs a continued queue still has to play: its
+ * first batch joins them at once.
  */
-export const wantsMagicBatch = (session: MagicSession, state: QueueState): boolean =>
+export const wantsMagicBatch = (
+  session: MagicSession,
+  state: QueueState,
+  sleepTimer: SleepTimer | null = null,
+): boolean =>
+  sleepTimer?.type !== "endOfQueue" &&
+  (!session.continuation || state.repeat === "off") &&
   isMagicQueue(session, state) &&
   state.index >= 0 &&
-  !state.entries.slice(state.index + 1).some(recommended);
+  ((session.continuation === true && session.batches === 0) ||
+    !state.entries.slice(state.index + 1).some(recommended));
 
 /**
  * Whether Up Next shows [session]'s next batch loading (skeleton rows where
  * it will land): a batch is being picked for it ([picking] is the id of the
  * session one is picked for, null while none is) and [state] still wants it.
  * So the loading goes the moment the batch lands in Up Next, and the moment
- * something else plays, whenever the picking itself ends.
+ * something else plays, whenever the picking itself ends. An End of Queue
+ * [sleepTimer] holds the batch back, so nothing loads, and neither line
+ * below shows, until the timer is off.
  */
 export const magicBatchLoading = (
   session: MagicSession | null,
   picking: MagicSession["id"] | null,
   state: QueueState,
-): boolean => session !== null && picking === session.id && wantsMagicBatch(session, state);
+  sleepTimer: SleepTimer | null = null,
+): boolean =>
+  session !== null && picking === session.id && wantsMagicBatch(session, state, sleepTimer);
 
 /**
  * Whether Up Next shows that [session]'s next batch couldn't be picked (a
@@ -613,7 +628,9 @@ export const magicBatchFailed = (
   session: MagicSession | null,
   failed: MagicSession["id"] | null,
   state: QueueState,
-): boolean => session !== null && failed === session.id && wantsMagicBatch(session, state);
+  sleepTimer: SleepTimer | null = null,
+): boolean =>
+  session !== null && failed === session.id && wantsMagicBatch(session, state, sleepTimer);
 
 /**
  * Whether Up Next says that [session]'s last pick found no songs (a quiet
@@ -625,7 +642,9 @@ export const magicBatchEmpty = (
   session: MagicSession | null,
   empty: MagicSession["id"] | null,
   state: QueueState,
-): boolean => session !== null && empty === session.id && wantsMagicBatch(session, state);
+  sleepTimer: SleepTimer | null = null,
+): boolean =>
+  session !== null && empty === session.id && wantsMagicBatch(session, state, sleepTimer);
 
 /**
  * Whether [session] should pick its next batch now: it wants one
@@ -638,7 +657,8 @@ export const magicPickDue = (
   session: MagicSession,
   empty: MagicSession["id"] | null,
   state: QueueState,
-): boolean => empty !== session.id && wantsMagicBatch(session, state);
+  sleepTimer: SleepTimer | null = null,
+): boolean => empty !== session.id && wantsMagicBatch(session, state, sleepTimer);
 
 /** What follows a batch's picking once it ends (`magicPickEnded`). */
 export interface MagicPickEnd {
@@ -664,9 +684,10 @@ export const magicPickEnded = (
   picking: MagicSession["id"] | null,
   session: MagicSession | null,
   state: QueueState,
+  sleepTimer: SleepTimer | null = null,
 ): MagicPickEnd => ({
   picking: picking === ran ? null : picking,
-  again: session !== null && session.id !== ran && wantsMagicBatch(session, state),
+  again: session !== null && session.id !== ran && wantsMagicBatch(session, state, sleepTimer),
 });
 
 /** What the owner did to a Magic Queue between two states of it, by track id. */
@@ -796,6 +817,7 @@ export const parseMagicSession = (value: unknown): MagicSession | null => {
     );
   return {
     ...(validSeed ? { radioSeed: radioSeed as unknown as MagicSongRadioSeed } : {}),
+    ...(value["continuation"] === true ? { continuation: true } : {}),
     ...(Array.isArray(likedRadios) && likedRadios.every(isRadioSeed)
       ? { likedRadios: likedRadios as unknown as readonly MagicSongRadioSeed[] }
       : {}),

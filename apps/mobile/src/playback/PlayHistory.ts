@@ -207,6 +207,9 @@ export const layer = Layer.effectDiscard(
         at: position.at > 0 ? position.at : Date.now(),
         key,
         status: state.status,
+        // Keep the listen across preparation too, when waiting has ended but the controller
+        // hasn't reported buffering yet. A manual retry of this song also continues it.
+        networkInterrupted: state.waitingForConnection || state.errorCode === "ytOffline",
         playing: state.isPlaying,
         durationMs: position.durationMs,
         track: noTrackNeeded ? null : trackFor(key),

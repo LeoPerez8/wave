@@ -8,6 +8,7 @@ import {
   magicRadioReadPlan,
   magicSeedProfile,
   magicYtSong,
+  availableMagicSongs,
   rankRadioSongs,
   type ArtistGraph,
   type CatalogSong,
@@ -80,7 +81,7 @@ export const magicQueueYtCandidates = (
 ) =>
   Effect.gen(function* () {
     const yt = yield* YtMusic;
-    if (!ytMusicEnabled())
+    if (!ytMusicEnabled() && !session.continuation)
       return { candidates: [], likedCandidates: [], ranked: 0, eligible: 0, refilled: null };
     const context = yield* Effect.context<LibraryStore>();
     const seeds = drawn.length > 0 ? drawn : [legacySeed(session)];
@@ -105,13 +106,14 @@ export const magicQueueYtCandidates = (
     const popularity = new Map(
       catalog.map((entry) => [entry.song.videoId, 1 - 0.5 ** entry.radios.length]),
     );
-    const connected = online();
-    const cachedVideos = connected
-      ? null
-      : yield* Effect.tryPromise(() => WaveYtMusic.cachedVideos()).pipe(
-          Effect.map((ids) => new Set(ids)),
-          Effect.orElseSucceed(() => new Set<string>()),
-        );
+    const connected = ytMusicEnabled() && online();
+    const cachedVideos =
+      connected || session.continuation
+        ? null
+        : yield* Effect.tryPromise(() => WaveYtMusic.cachedVideos()).pipe(
+            Effect.map((ids) => new Set(ids)),
+            Effect.orElseSucceed(() => new Set<string>()),
+          );
     const rank = (group: readonly SongRadioSeed[], original: boolean) => {
       const current = sessionNow?.() ?? session;
       const read = readers.current(session.id, group);
@@ -130,31 +132,30 @@ export const magicQueueYtCandidates = (
         current,
         radios.flatMap((radio) => radio.songs),
       );
-      return rankRadioSongs(
-        { artists, profile: magicSeedProfile(session, profileOf) },
-        {
-          // Several radios interleave by position before ranking.
-          pages: radios.map((radio) => ({
-            ...radio,
-            songs: radio.songs.filter((song) => !("video" in song && song.video === true)),
-          })),
-          graph,
-          taste,
-          profileOf,
-          library: original ? playable.map(mapLibrary) : [],
-          inLibrary: (song) => {
-            const local = find(song);
-            return local === null || !songHasFile(local) ? null : mapLibrary(local);
+      return availableMagicSongs(
+        current,
+        rankRadioSongs(
+          { artists, profile: magicSeedProfile(session, profileOf) },
+          {
+            // Several radios interleave by position before ranking.
+            pages: radios.map((radio) => ({
+              ...radio,
+              songs: radio.songs.filter((song) => !("video" in song && song.video === true)),
+            })),
+            graph,
+            taste,
+            profileOf,
+            library: original ? playable.map(mapLibrary) : [],
+            inLibrary: (song) => {
+              const local = find(song);
+              return local === null || !songHasFile(local) ? null : mapLibrary(local);
+            },
+            signals: current.radioSignals ?? [],
+            popularityOf: (id) => popularity.get(id) ?? 0,
           },
-          signals: current.radioSignals ?? [],
-          popularityOf: (id) => popularity.get(id) ?? 0,
-        },
-        { ...sliders, exclude },
-      ).filter(
-        (song) =>
-          song.source === "library" ||
-          cachedVideos === null ||
-          (song.song !== null && cachedVideos.has(song.song.videoId)),
+          { ...sliders, exclude, libraryFallback: session.continuation === true && !connected },
+        ),
+        { online: online(), ytMusic: ytMusicEnabled(), cachedVideos },
       );
     };
     const originalBefore = rank(seeds, true);
@@ -170,8 +171,8 @@ export const magicQueueYtCandidates = (
       online: connected,
       low: (seed) => (originalIds.has(seed.id) ? plan.seedLow : plan.likedLow),
     });
-    const candidates = ytMusicEnabled() ? rank(seeds, true) : [];
-    const likedCandidates = ytMusicEnabled() ? rank(liked, false) : [];
+    const candidates = rank(seeds, true);
+    const likedCandidates = rank(liked, false);
     found = [...candidates, ...likedCandidates];
     const songs = read.reduce((sum, { page }) => sum + (page?.songs.length ?? 0), 0);
     return {

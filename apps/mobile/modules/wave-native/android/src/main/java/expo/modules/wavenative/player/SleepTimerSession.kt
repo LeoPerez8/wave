@@ -24,6 +24,7 @@ object SleepTimerSession {
           putLong(ENDS_AT, mode.endsAtMs)
         }
         SleepTimerMode.EndOfTrack -> putString(TYPE, SleepTimerWire.END_OF_TRACK)
+        SleepTimerMode.EndOfQueue -> putString(TYPE, SleepTimerWire.END_OF_QUEUE)
         null -> {}
       }
     }

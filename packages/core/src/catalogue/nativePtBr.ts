@@ -33,4 +33,5 @@ export const nativePtBr: typeof nativeEn = {
   appUpdates: "Atualizações do app",
   waveUpdated: "Wave atualizado",
   tapToOpen: "Toque para abrir",
+  waitingForConnection: "Aguardando conexão",
 };

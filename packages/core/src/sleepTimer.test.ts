@@ -9,9 +9,26 @@ import {
   sleepTimerRemaining,
   startSleepTimer,
   stepSleepMinutes,
+  sleepTimerEntryLabel,
 } from "./index.ts";
 
 describe("startSleepTimer", () => {
+  test("end of queue waits for the queue, with a fixed label in both languages", () => {
+    const timer = startSleepTimer({ type: "endOfQueue" }, 1_000)!;
+    assert.deepEqual(timer, { type: "endOfQueue" });
+    assert.equal(
+      sleepTimerRemaining(timer, { now: 1_000, positionMs: 0, durationMs: 180_000 }),
+      null,
+    );
+    assert.equal(
+      sleepTimerEntryLabel(timer, 1_000, catalogueOf("en")),
+      "Sleep Timer · End of queue",
+    );
+    assert.equal(
+      sleepTimerEntryLabel(timer, 1_000, catalogueOf("pt-BR")),
+      "Timer para Dormir · Fim da fila",
+    );
+  });
   test("a 30-minute timer set at 22:00 stops playback at 22:30", () => {
     const now = Date.UTC(2026, 9, 11, 22, 0);
     assert.deepEqual(startSleepTimer({ type: "minutes", minutes: 30 }, now), {

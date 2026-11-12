@@ -7,17 +7,22 @@ sealed interface SleepTimerMode {
 
   /** The end of the playing track, whichever track that is by then. */
   data object EndOfTrack : SleepTimerMode
+
+  /** The queue ends naturally; JS leaves out automatic continuation. */
+  data object EndOfQueue : SleepTimerMode
 }
 
-/** A timer as JS and Core spell it: `{ type: "deadline", endsAt }` or `{ type: "endOfTrack" }`. */
+/** A timer as JS and Core spell it: deadline, endOfTrack or endOfQueue. */
 object SleepTimerWire {
   const val DEADLINE = "deadline"
   const val END_OF_TRACK = "endOfTrack"
+  const val END_OF_QUEUE = "endOfQueue"
 
   fun fromJs(type: String, endsAt: Double?): SleepTimerMode? =
     when (type) {
       DEADLINE -> endsAt?.let { SleepTimerMode.Deadline(it.toLong()) }
       END_OF_TRACK -> SleepTimerMode.EndOfTrack
+      END_OF_QUEUE -> SleepTimerMode.EndOfQueue
       else -> null
     }
 
@@ -25,6 +30,7 @@ object SleepTimerWire {
     when (mode) {
       is SleepTimerMode.Deadline -> mapOf("type" to DEADLINE, "endsAt" to mode.endsAtMs.toDouble())
       SleepTimerMode.EndOfTrack -> mapOf("type" to END_OF_TRACK)
+      SleepTimerMode.EndOfQueue -> mapOf("type" to END_OF_QUEUE)
       null -> null
     }
 }
@@ -63,6 +69,7 @@ class SleepTimer(private val host: SleepTimerHost) {
     when (mode) {
       is SleepTimerMode.Deadline -> host.scheduleCheck(mode.endsAtMs - host.nowMs())
       SleepTimerMode.EndOfTrack -> host.setPauseAtEndOfItems(true)
+      SleepTimerMode.EndOfQueue -> {}
     }
     host.onChanged(mode)
   }
@@ -82,6 +89,7 @@ class SleepTimer(private val host: SleepTimerHost) {
     when (mode) {
       is SleepTimerMode.Deadline -> host.cancelCheck()
       SleepTimerMode.EndOfTrack -> host.setPauseAtEndOfItems(false)
+      SleepTimerMode.EndOfQueue -> {}
       null -> {}
     }
   }
@@ -100,7 +108,12 @@ class SleepTimer(private val host: SleepTimerHost) {
   fun onPausedAtEndOfItem() = trackFinished()
 
   /** Playback reached the end of the list. */
-  fun onEnded() = trackFinished()
+  fun onEnded() {
+    if (mode == SleepTimerMode.EndOfQueue) {
+      host.pause()
+      clear()
+    } else trackFinished()
+  }
 
   private fun trackFinished() {
     if (mode == SleepTimerMode.EndOfTrack) clear()

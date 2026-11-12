@@ -227,6 +227,10 @@ class WavePlayerModule : Module() {
       main.post(::followCrossfade)
     }
 
+    OnActivityEntersForeground {
+      main.post { StreamReconnectLink.onCheck?.invoke() }
+    }
+
     /**
      * The overlap for songs ending on their own, in ms (Core's
      * `crossfadeDuration`; 0 is off). Kept natively, so the service fades
@@ -302,6 +306,9 @@ class WavePlayerModule : Module() {
     AsyncFunction("applySync") { steps: List<SyncStepRecord>, items: List<PlayerItem>, cause: String?, promise: Promise ->
       withController(promise) { player ->
         val incoming = items.associate { it.id to toMediaItem(it) }
+        if (steps.any { it.type == "seek" || it.type == "replace" || it.type == "clear" }) {
+          StreamReconnectLink.onOwnerCommand?.invoke(true)
+        }
         // Normalize Volume: each new entry's gain, there before its song can start.
         for (item in items) SongGains.set(item.id, item.gainDb, item.gainSource)
         val playlist = ControllerPlaylist(player)
@@ -312,7 +319,8 @@ class WavePlayerModule : Module() {
           CrossfadeLink.causes.sync(cause, SystemClock.elapsedRealtime(), { playlist.currentKey }) {
             QueueSync.apply(plan, playlist, incoming)
           }
-          if (player.playbackState == Player.STATE_IDLE && player.mediaItemCount > 0) player.prepare()
+          if (player.playbackState == Player.STATE_IDLE && player.mediaItemCount > 0 &&
+            !StreamReconnectLink.waitingForConnection) player.prepare()
           // A sync that loads items can also have dropped some: their gains go with them.
           if (items.isNotEmpty()) SongGains.retain((0 until player.mediaItemCount).mapTo(HashSet()) { player.getMediaItemAt(it).mediaId })
           promise.resolve(null)
@@ -430,6 +438,7 @@ class WavePlayerModule : Module() {
 
     AsyncFunction("play") { promise: Promise ->
       withController(promise) { player ->
+        StreamReconnectLink.onOwnerCommand?.invoke(false)
         CrossfadeLink.pausedForSearch = false
         // A finished or failed item starts over.
         if (player.playbackState == Player.STATE_ENDED) player.seekToDefaultPosition()
@@ -442,6 +451,7 @@ class WavePlayerModule : Module() {
     /** [forSearch]: paused while the song to play is searched, as the app log's crossfade lines say. */
     AsyncFunction("pause") { forSearch: Boolean?, promise: Promise ->
       withController(promise) { player ->
+        StreamReconnectLink.onOwnerCommand?.invoke(false)
         CrossfadeLink.pausedForSearch = forSearch == true
         player.pause()
         promise.resolve(null)
@@ -451,6 +461,7 @@ class WavePlayerModule : Module() {
     /** [source] is where the seek came from (Core's `SeekSource`), for the app log's crossfade lines. */
     AsyncFunction("seekTo") { positionMs: Double, source: String?, promise: Promise ->
       withController(promise) { player ->
+        StreamReconnectLink.onOwnerCommand?.invoke(true)
         source?.let { CrossfadeLink.causes.noteApp(it, SystemClock.elapsedRealtime()) }
         player.seekTo(positionMs.toLong())
         promise.resolve(null)
@@ -459,7 +470,7 @@ class WavePlayerModule : Module() {
 
     /**
      * Starts the sleep timer in the playback service (Core's `SleepTimer`:
-     * `deadline` with `endsAt`, or `endOfTrack`), replacing a running one.
+     * `deadline` with `endsAt`, `endOfTrack` or `endOfQueue`), replacing a running one.
      */
     AsyncFunction("setSleepTimer") { type: String, endsAt: Double?, promise: Promise ->
       val mode = SleepTimerWire.fromJs(type, endsAt)
@@ -486,7 +497,10 @@ class WavePlayerModule : Module() {
 
     /** The current state, e.g. when JS starts while the service is already playing. */
     AsyncFunction("getState") { promise: Promise ->
-      withController(promise) { player -> promise.resolve(state(player)) }
+      withController(promise) { player ->
+        StreamReconnectLink.onCheck?.invoke()
+        promise.resolve(state(player))
+      }
     }.runOnQueue(Queues.MAIN)
 
     /**
@@ -522,6 +536,8 @@ class WavePlayerModule : Module() {
     OnDestroy {
       AutoLibrary.bridge.detach()
       main.post {
+        stopReconnect?.invoke()
+        stopReconnect = null
         stopAutoLyrics?.invoke()
         stopAutoLyrics = null
         if (CrossfadeLink.onFadeEnded === fadeEnded) CrossfadeLink.onFadeEnded = null
@@ -547,6 +563,7 @@ class WavePlayerModule : Module() {
 
   /** Stops reporting [AutoLyrics.state]; null while not following it. */
   private var stopAutoLyrics: (() -> Unit)? = null
+  private var stopReconnect: (() -> Unit)? = null
 
   /** The toggle and connection last reported, so new lines don't echo back to JS. */
   private var reportedAutoLyrics: Map<String, Boolean>? = null
@@ -606,6 +623,12 @@ class WavePlayerModule : Module() {
         val connected = runCatching { future.get() }.getOrNull() ?: return@addListener
         connected.addListener(listener)
         controller = connected
+        StreamReconnectLink.onCheck?.invoke()
+        stopReconnect = StreamReconnectLink.listen { resuming ->
+          // The service has just prepared the song again, but the controller still shows the
+          // failed player: its own update follows and reports the wait as over.
+          if (!resuming) sendEvent("onPlaybackState", state(connected))
+        }
         sendEvent("onPlaybackState", state(connected))
         sendSleepTimer(connected.sessionExtras)
         positionReporting.setPlaying(connected.isPlaying)
@@ -648,6 +671,8 @@ class WavePlayerModule : Module() {
       "status" to PlayerEvents.status(player.playbackState),
       "isPlaying" to player.isPlaying,
       "playWhenReady" to player.playWhenReady,
+      "waitingForConnection" to StreamReconnectLink.waitingForConnection,
+      "errorCode" to YtStreamFailure.codeOf(player.playerError?.cause?.message),
       "index" to if (item == null) null else player.currentMediaItemIndex,
       "item" to item?.let {
         mapOf(

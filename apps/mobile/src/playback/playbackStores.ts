@@ -1,4 +1,4 @@
-import type { PositionReport } from "@wave/core";
+import type { PlayerTrouble, PositionReport } from "@wave/core";
 import type { NativePlayerState, PlayerErrorEvent, PlayerPosition } from "../native/wavePlayer.ts";
 import { makeExternalStore } from "../lib/externalStore.ts";
 
@@ -10,6 +10,14 @@ export interface PlaybackState extends Omit<NativePlayerState, "index" | keyof P
   readonly errorCode: string | null;
 }
 
+/** What Core's `playerNotice` reads of the playing song: its wait, retry and failure. */
+export const playerTrouble = (state: PlaybackState): PlayerTrouble => ({
+  waitingForConnection: state.waitingForConnection,
+  retrying: state.status === "buffering" && state.playWhenReady,
+  failed: state.error !== null,
+  errorCode: state.errorCode,
+});
+
 /** The item key keeps car lyrics paired with the report that selected it. */
 interface PositionState extends PositionReport {
   readonly item: { readonly id: string } | null;
@@ -20,6 +28,7 @@ export const makePlaybackStores = (setReportingRequested: (requested: boolean) =
     status: "idle",
     isPlaying: false,
     playWhenReady: false,
+    waitingForConnection: false,
     item: null,
     error: null,
     errorCode: null,
@@ -31,6 +40,12 @@ export const makePlaybackStores = (setReportingRequested: (requested: boolean) =
     isPlaying: false,
     item: null,
   });
+  // Whether the player has reported before: its first report is Wave opening on it.
+  let reported = false;
+  // The item the last error event was for.
+  let failedItemId: string | null = null;
+  // The player's standing error is the item before's: it moved on without preparing yet.
+  let errorLeftBehind = false;
   return {
     playbackState,
     positionState: {
@@ -59,21 +74,30 @@ export const makePlaybackStores = (setReportingRequested: (requested: boolean) =
         item: state.item === null ? null : { id: state.item.id },
       });
       playbackState.update((previous) => {
-        const errorStands = previous.item?.id === state.item?.id && !state.isPlaying;
+        const itemId = state.item?.id ?? null;
+        const sameItem = (previous.item?.id ?? null) === itemId;
+        // The player keeps an item's error until it prepares again, so on a move its code
+        // is the last item's unless this one failed. Wave opening on the player has only
+        // this code to go by (the error event came before it).
+        if (state.errorCode === null) errorLeftBehind = false;
+        else if (reported && !sameItem) errorLeftBehind = failedItemId !== itemId;
+        reported = true;
+        const errorCode = errorLeftBehind ? null : state.errorCode;
+        const errorStands = sameItem && !state.isPlaying;
         return {
           ...playback,
           error: errorStands ? previous.error : null,
-          errorCode: errorStands ? previous.errorCode : null,
+          errorCode: errorStands ? (errorCode ?? previous.errorCode) : errorCode,
         };
       });
     },
     reportPosition: (position: PlayerPosition): void =>
       positions.update((previous) => ({ ...previous, ...position })),
     reportError: (event: PlayerErrorEvent): void =>
-      playbackState.update((previous) => ({
-        ...previous,
-        error: event.message,
-        errorCode: event.code,
-      })),
+      playbackState.update((previous) => {
+        failedItemId = event.itemId ?? previous.item?.id ?? null;
+        errorLeftBehind = false;
+        return { ...previous, error: event.message, errorCode: event.code };
+      }),
   };
 };

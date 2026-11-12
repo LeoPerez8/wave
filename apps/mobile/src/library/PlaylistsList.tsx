@@ -33,6 +33,7 @@ import { songCount } from "./TrackList";
 import { useLocalisation } from "@/localisation/localisation";
 import { useRenderCount } from "@/perf/perf";
 import { useYtMusicEnabled } from "@/settings/ytMusic";
+import { useListDownloadProgress } from "@/ytmusic/listDownloadProgress";
 
 /** Makes an empty playlist and opens it. */
 const createAndOpen = (): void => {
@@ -118,16 +119,19 @@ function PlaylistView({
   // An importing playlist says what its import is doing instead of its count, and shows a
   // ring over its cover (Core's `importProgressLine`, `importRing`).
   const progress = useImportProgress(playlist.id);
+  const download = useListDownloadProgress("playlist", playlist.id);
   const detail =
-    progress === null
+    download ??
+    (progress === null
       ? songCount(playlist.trackCount, strings)
-      : importProgressLine(progress, language);
+      : importProgressLine(progress, language));
   const ring = importRing(progress);
   if (layout === "list") {
     return (
       <PlaylistCardRow
         name={playlist.name}
         detail={detail}
+        plainDetail={download !== null}
         paths={playlist.thumbPaths}
         ring={ring}
         {...press}

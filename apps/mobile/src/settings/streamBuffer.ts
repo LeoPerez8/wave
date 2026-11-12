@@ -32,6 +32,12 @@ const streamBuffer = persistedSetting<StreamBufferMinutes>({
   onValue: send,
 });
 
+/** The Buffer now, in ms: what a queue's time left is compared with before it continues. */
+export const currentStreamBufferMs = (): number => streamBufferMs(streamBuffer.get());
+
+/** Runs [listener] at every change of the Buffer, here or pulled from the Wave account. */
+export const subscribeStreamBuffer = streamBuffer.subscribe;
+
 /** Hands the playback service the stored buffer at start (headless Auto too). */
 export const applyStreamBuffer = (): void => {
   streamBuffer.get();

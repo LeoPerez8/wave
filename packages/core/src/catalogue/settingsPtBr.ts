@@ -401,6 +401,9 @@ export const settingsPtBr: typeof settingsEn = {
   normalizeVolume: "Normalizar volume",
   playsEverySongAtAboutTheSame:
     "Toca todas as músicas com um volume parecido, para você não precisar ajustar o volume entre elas. Seus arquivos de música não são alterados.",
+  continueWithMagicQueue: "Continuar com a Fila Mágica",
+  whenAQueueRunsOutWaveContinues:
+    "Quando a fila acaba, o Wave continua tocando com uma Fila Mágica baseada no que estava tocando. Desativado, a fila para na última música.",
   howMuchOfAStreamedSongWave:
     "Quanto de uma música online o Wave carrega com antecedência, incluindo as próximas músicas em A Seguir, para continuar tocando sem sinal. Períodos maiores usam mais memória: cerca de 50 MB para 30 minutos. Músicas baixadas tocam do telefone.",
   swipeActions: "Ações de deslizar",

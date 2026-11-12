@@ -55,6 +55,9 @@ export const playbackTextPtBr: typeof playbackTextEn = {
   downloading: "Baixando",
   endOfTrack: "Fim da Música",
   endOfTrack2: "Fim da música",
+  endOfQueue: "Fim da Fila",
+  endOfQueue2: "Fim da fila",
+  pausesWhenThisQueueEnds: "Pausa quando esta fila terminar.",
   evenShuffle: "Aleatório Equilibrado",
   everythingFoundOnlineIsAlreadyInYourLibrary:
     "Tudo que foi encontrado online já está na sua biblioteca.",
@@ -191,6 +194,7 @@ export const playbackTextPtBr: typeof playbackTextEn = {
   waveCouldntNameThisSongTryListeningAgain:
     "O Wave não reconheceu esta música. Tente ouvir novamente.",
   couldntRecognizeTheSong: "Não foi possível reconhecer a música",
+  waitingForConnection: "Aguardando conexão",
   youreOfflineYTMusicSongsNeedTheNetwork:
     "Você está offline. As músicas do YT Music precisam de conexão.",
   yTMusicIsOffInSettings: "O YT Music está desativado nos Ajustes.",

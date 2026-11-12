@@ -55,6 +55,9 @@ export const playbackTextEn = {
   downloading: "Downloading",
   endOfTrack: "End of Track",
   endOfTrack2: "End of track",
+  endOfQueue: "End of Queue",
+  endOfQueue2: "End of queue",
+  pausesWhenThisQueueEnds: "Pauses when this queue ends.",
   evenShuffle: "Even Shuffle",
   everythingFoundOnlineIsAlreadyInYourLibrary:
     "Everything found online is already in your library.",
@@ -186,6 +189,7 @@ export const playbackTextEn = {
   noMatch: "No match",
   waveCouldntNameThisSongTryListeningAgain: "Wave couldn't name this song. Try listening again.",
   couldntRecognizeTheSong: "Couldn't recognize the song",
+  waitingForConnection: "Waiting for connection",
   youreOfflineYTMusicSongsNeedTheNetwork: "You're offline. YT Music songs need the network.",
   yTMusicIsOffInSettings: "YT Music is off in Settings.",
   yTMusicWontStreamThisSong: "YT Music won't stream this song.",
