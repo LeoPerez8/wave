@@ -81,9 +81,11 @@ function ButtonLabel({ timer }: { timer: SleepTimer }) {
       className="font-sans text-footnote text-accent"
       style={{ fontVariant: ["tabular-nums"] }}
     >
-      {timer.type === "endOfTrack"
-        ? strings.playbackText.endOfTrack2
-        : formatSleepRemaining(remaining ?? 0)}
+      {timer.type === "endOfQueue"
+        ? strings.playbackText.endOfQueue2
+        : timer.type === "endOfTrack"
+          ? strings.playbackText.endOfTrack2
+          : formatSleepRemaining(remaining ?? 0)}
     </Text>
   );
 }
@@ -92,6 +94,12 @@ function ButtonLabel({ timer }: { timer: SleepTimer }) {
 function Status({ timer }: { timer: SleepTimer }) {
   const { strings } = useLocalisation();
   const remaining = useRemaining(timer);
+  if (timer.type === "endOfQueue")
+    return (
+      <Text className="font-sans text-subheadline text-foreground">
+        {strings.playbackText.pausesWhenThisQueueEnds}
+      </Text>
+    );
   if (timer.type === "endOfTrack") return <EndOfTrackStatus />;
   const text = strings.playbackText.pausesInValue(formatSleepRemaining(remaining ?? 0));
   return (
@@ -196,6 +204,7 @@ function SleepTimerMenu({ close }: { close: () => void }) {
     })),
     { label: strings.playbackText.custom, onPress: () => setCustom(true) },
     { label: strings.playbackText.endOfTrack, onPress: () => pick({ type: "endOfTrack" }) },
+    { label: strings.playbackText.endOfQueue, onPress: () => pick({ type: "endOfQueue" }) },
     ...(timer === null ? [] : [{ label: strings.playbackText.turnOffTimer, onPress: turnOff }]),
   ];
 
@@ -297,9 +306,11 @@ export function SleepTimerButton({ change }: { change?: SlotChange | undefined }
         text:
           timer === null
             ? strings.playbackText.off
-            : timer.type === "endOfTrack"
-              ? strings.playbackText.endOfTrack2
-              : strings.playbackText.on,
+            : timer.type === "endOfQueue"
+              ? strings.playbackText.endOfQueue2
+              : timer.type === "endOfTrack"
+                ? strings.playbackText.endOfTrack2
+                : strings.playbackText.on,
       }}
       onPress={openSleepTimer}
       opensMenu

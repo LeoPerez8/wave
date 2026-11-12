@@ -55,6 +55,9 @@ export const playbackTextEn = {
   downloading: "Downloading",
   endOfTrack: "End of Track",
   endOfTrack2: "End of track",
+  endOfQueue: "End of Queue",
+  endOfQueue2: "End of queue",
+  pausesWhenThisQueueEnds: "Pauses when this queue ends.",
   evenShuffle: "Even Shuffle",
   everythingFoundOnlineIsAlreadyInYourLibrary:
     "Everything found online is already in your library.",

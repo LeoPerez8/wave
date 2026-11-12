@@ -459,7 +459,7 @@ class WavePlayerModule : Module() {
 
     /**
      * Starts the sleep timer in the playback service (Core's `SleepTimer`:
-     * `deadline` with `endsAt`, or `endOfTrack`), replacing a running one.
+     * `deadline` with `endsAt`, `endOfTrack` or `endOfQueue`), replacing a running one.
      */
     AsyncFunction("setSleepTimer") { type: String, endsAt: Double?, promise: Promise ->
       val mode = SleepTimerWire.fromJs(type, endsAt)

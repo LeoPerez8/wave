@@ -55,6 +55,9 @@ export const playbackTextPtBr: typeof playbackTextEn = {
   downloading: "Baixando",
   endOfTrack: "Fim da Música",
   endOfTrack2: "Fim da música",
+  endOfQueue: "Fim da Fila",
+  endOfQueue2: "Fim da fila",
+  pausesWhenThisQueueEnds: "Pausa quando esta fila terminar.",
   evenShuffle: "Aleatório Equilibrado",
   everythingFoundOnlineIsAlreadyInYourLibrary:
     "Tudo que foi encontrado online já está na sua biblioteca.",

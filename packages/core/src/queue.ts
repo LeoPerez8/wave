@@ -75,6 +75,8 @@ export type QueueCommand =
    * aren't taken for songs lined up by hand. Nothing joins an empty queue.
    */
   | { readonly type: "append"; readonly trackIds: readonly string[] }
+  /** Adopt a Magic Queue session without replacing playback; a changed queue refuses it. */
+  | { readonly type: "continueMagicQueue"; readonly sessionId: string; readonly from: QueueState }
   /**
    * More from this artist: the next `MORE_FROM_ARTIST` songs of the artist's
    * [ranking] (Core's `artistRanking`) go right after the current track.
@@ -976,6 +978,10 @@ export const reduceQueue = (
       return playNow(state, playing(command.trackIds, passOver));
     case "append":
       return append(state, playing(command.trackIds, passOver));
+    case "continueMagicQueue":
+      return state !== command.from
+        ? result(state)
+        : result({ ...state, context: { kind: "magic", id: command.sessionId } });
     case "moreFromArtist":
       return moreFromArtist(state, playing(command.ranking, passOver));
     case "jumpTo":

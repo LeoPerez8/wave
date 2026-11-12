@@ -3,7 +3,7 @@
  * and how much of it is left.
  *
  * A timer either runs to a wall-clock deadline (15/30/45/60 minutes or a custom
- * duration) or waits for the playing track to finish. The native player
+ * duration) or waits for the playing track or the queue to finish. The native player
  * enforces it (so it fires with Wave in the background); JS shows it.
  */
 
@@ -18,17 +18,22 @@ export const SLEEP_TIMER_PRESETS: readonly number[] = [15, 30, 45, 60];
 
 /** What the owner picks. */
 export type SleepTimerChoice =
-  { readonly type: "minutes"; readonly minutes: number } | { readonly type: "endOfTrack" };
+  | { readonly type: "minutes"; readonly minutes: number }
+  | { readonly type: "endOfTrack" }
+  | { readonly type: "endOfQueue" };
 
 /**
  * A running timer. A deadline is wall-clock milliseconds, so it keeps counting
  * while playback is paused. `endOfTrack` pauses when the playing track ends,
- * whichever track that is by then.
+ * whichever track that is by then. `endOfQueue` prevents more batches and
+ * pauses when the queue plays out.
  */
 export type SleepTimer =
-  { readonly type: "deadline"; readonly endsAt: number } | { readonly type: "endOfTrack" };
+  | { readonly type: "deadline"; readonly endsAt: number }
+  | { readonly type: "endOfTrack" }
+  | { readonly type: "endOfQueue" };
 
-/** Whole seconds shown by a deadline label; End of track has no ticking label. */
+/** Whole seconds shown by a deadline label; track and queue endings have no ticking label. */
 export const sleepTimerLabelSeconds = (timer: SleepTimer, now: number): number | null => {
   "worklet";
   return timer.type === "deadline" ? Math.max(0, Math.ceil((timer.endsAt - now) / 1000)) : null;
@@ -46,6 +51,7 @@ export const sleepTimerLabelChangesIn = (timer: SleepTimer, now: number): number
 
 /** The timer a choice starts at `now`. */
 export const startSleepTimer = (choice: SleepTimerChoice, now: number): SleepTimer | null => {
+  if (choice.type === "endOfQueue") return { type: "endOfQueue" };
   if (choice.type === "endOfTrack") return { type: "endOfTrack" };
   if (!Number.isFinite(choice.minutes) || choice.minutes <= 0) return null;
   return { type: "deadline", endsAt: now + choice.minutes * MS_PER_MINUTE };
@@ -84,9 +90,11 @@ export const sleepTimerEntryLabel = (
   const name = catalogue.itemActions.labels.sleepTimer;
   if (timer === null) return name;
   const left =
-    timer.type === "endOfTrack"
-      ? catalogue.playbackText.endOfTrack2
-      : formatSleepRemaining(Math.max(0, timer.endsAt - now));
+    timer.type === "endOfQueue"
+      ? catalogue.playbackText.endOfQueue2
+      : timer.type === "endOfTrack"
+        ? catalogue.playbackText.endOfTrack2
+        : formatSleepRemaining(Math.max(0, timer.endsAt - now));
   return catalogue.itemActions.sleepTimerIs(left);
 };
 
@@ -105,6 +113,7 @@ export interface SleepTimerClock {
 export const sleepTimerRemaining = (timer: SleepTimer, clock: SleepTimerClock): number | null => {
   "worklet";
   if (timer.type === "deadline") return Math.max(0, timer.endsAt - clock.now);
+  if (timer.type === "endOfQueue") return null;
   if (clock.durationMs === null) return null;
   return Math.max(0, clock.durationMs - clock.positionMs);
 };

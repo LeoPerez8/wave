@@ -6,6 +6,7 @@ import { type GenreProfile, type GenreProfileOf, type GenreTagged } from "./genr
 import { commonStyle, songFamilies, songStyle } from "./genreMixes.ts";
 import type { PlayEnd } from "./playEvents.ts";
 import type { QueueState } from "./queue.ts";
+import type { SleepTimer } from "./sleepTimer.ts";
 import { isRecord } from "./storedJson.ts";
 import { MAGIC_SKIP_MS } from "./tasteProfile.ts";
 import { drawSeedSongs } from "./seedSongDraw.ts";
@@ -173,6 +174,8 @@ export const magicListSeedSongs = (
 
 /** A Magic Queue under way: plain JSON saved with its queue. */
 export interface MagicSession {
+  /** Continued from an ordinary queue: the first batch adds ten songs after it. */
+  readonly continuation?: boolean;
   readonly radioSeed?: MagicSongRadioSeed;
   /** Radios learned from favorites, downloads and hand-added songs, each once per recording. */
   readonly likedRadios?: readonly MagicSongRadioSeed[];
@@ -584,7 +587,13 @@ const recommended = (entry: QueueState["entries"][number]): boolean => entry.con
  * picked once the previous one was weighed. Songs lined up by hand don't
  * hold it back.
  */
-export const wantsMagicBatch = (session: MagicSession, state: QueueState): boolean =>
+export const wantsMagicBatch = (
+  session: MagicSession,
+  state: QueueState,
+  sleepTimer: SleepTimer | null = null,
+): boolean =>
+  sleepTimer?.type !== "endOfQueue" &&
+  (!session.continuation || state.repeat === "off") &&
   isMagicQueue(session, state) &&
   state.index >= 0 &&
   !state.entries.slice(state.index + 1).some(recommended);
@@ -638,7 +647,8 @@ export const magicPickDue = (
   session: MagicSession,
   empty: MagicSession["id"] | null,
   state: QueueState,
-): boolean => empty !== session.id && wantsMagicBatch(session, state);
+  sleepTimer: SleepTimer | null = null,
+): boolean => empty !== session.id && wantsMagicBatch(session, state, sleepTimer);
 
 /** What follows a batch's picking once it ends (`magicPickEnded`). */
 export interface MagicPickEnd {
@@ -796,6 +806,7 @@ export const parseMagicSession = (value: unknown): MagicSession | null => {
     );
   return {
     ...(validSeed ? { radioSeed: radioSeed as unknown as MagicSongRadioSeed } : {}),
+    ...(value["continuation"] === true ? { continuation: true } : {}),
     ...(Array.isArray(likedRadios) && likedRadios.every(isRadioSeed)
       ? { likedRadios: likedRadios as unknown as readonly MagicSongRadioSeed[] }
       : {}),
