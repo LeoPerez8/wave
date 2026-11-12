@@ -150,6 +150,11 @@ interface OpenPlay extends PlayTrack {
   readonly listenedMs: number;
   /** When it last started or resumed playing; null while paused. */
   readonly playingSince: number | null;
+  /**
+   * The network cut it (a streamed song stopped offline) and it hasn't played
+   * since: whatever ends it now, the owner didn't hear it to judge it.
+   */
+  readonly cutByNetwork: boolean;
 }
 
 export interface PlayTrackerState {
@@ -212,14 +217,28 @@ const open = (key: string, track: PlayTrack, at: number, durationMs: number | nu
   durationMs,
   listenedMs: 0,
   playingSince: at,
+  cutByNetwork: false,
 });
 
 /**
  * How a play ends when playback goes away under it: interrupted while it was
- * playing (an error, Wave's process dying), stopped once it had been paused.
+ * playing (an error, Wave's process dying) or waiting for the network that cut
+ * it, stopped once it had been paused.
  */
 const cutShort = (play: OpenPlay): PlayEndReason =>
-  play.playingSince === null ? "stopped" : "interrupted";
+  play.playingSince === null && !play.cutByNetwork ? "stopped" : "interrupted";
+
+/**
+ * How a play ends when the player leaves it (another entry, a replay): skipped,
+ * unless the network had cut it. Then it's interrupted and never by Next, so
+ * moving on from a song that couldn't play teaches a Magic Queue nothing.
+ */
+const leftBehind = (play: OpenPlay): PlayEndReason =>
+  play.cutByNetwork ? "interrupted" : "skipped";
+
+/** Whether [signal] is the player stopped by the network on the entry it reports. */
+const networkCut = (signal: Extract<PlaybackSignal, { type: "state" }>): boolean =>
+  signal.status === "idle" && signal.networkInterrupted === true && !signal.playing;
 
 /**
  * The play going on now as it should be on record at `at`, in case it never
@@ -289,6 +308,7 @@ export const resumePlay = (
       durationMs: signal.durationMs ?? recorded.durationMs,
       listenedMs: recorded.listenedMs,
       playingSince: signal.playing ? signal.at : null,
+      cutByNetwork: networkCut(signal),
     },
     fading: null,
   };
@@ -330,11 +350,11 @@ const trackCurrentPlay = (
       const playedThrough = signal.reason === "auto" || signal.reason === "repeat";
       return playedThrough
         ? end(play, "completed")
-        : end(play, "skipped", signal.toFollowing === true);
+        : end(play, leftBehind(play), !play.cutByNetwork && signal.toFollowing === true);
     }
     case "seek":
       if (play === null || signal.key !== play.key) return unchanged;
-      return isReplay(signal.fromMs, signal.toMs) ? end(play, "skipped") : unchanged;
+      return isReplay(signal.fromMs, signal.toMs) ? end(play, leftBehind(play)) : unchanged;
     case "state": {
       if (play !== null) {
         // Playback went away (an error, the queue cleared, the player stopped).
@@ -342,12 +362,15 @@ const trackCurrentPlay = (
           return end(play, cutShort(play));
         if (signal.key !== play.key) {
           // The transition went missing; the player is on another entry all the same.
-          const ended = end(play, "skipped");
+          const ended = end(play, leftBehind(play));
           const next = trackCurrentPlay(null, signal);
           return { state: next.state, steps: [...ended.steps, ...next.steps] };
         }
         if (signal.status === "ended") return end(play, "completed");
         let next = setPlaying(play, signal.playing, signal.at);
+        // Cut until it plays again: preparing after the wait is still not listening.
+        const cutByNetwork = !signal.playing && (play.cutByNetwork || networkCut(signal));
+        if (cutByNetwork !== next.cutByNetwork) next = { ...next, cutByNetwork };
         if (signal.durationMs !== null && signal.durationMs !== next.durationMs) {
           next = { ...next, durationMs: signal.durationMs };
         }
