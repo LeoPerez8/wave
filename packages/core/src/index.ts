@@ -2749,3 +2749,5 @@ export type {
   FirstRunTourCard,
   SignInInvitation,
 } from "./firstRun.ts";
+export { indexListDownloads } from "./listDownloadProgress.ts";
+export type { DownloadListMember, ListDownloadsIndex } from "./listDownloadProgress.ts";

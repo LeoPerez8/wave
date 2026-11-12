@@ -459,6 +459,12 @@ export const videoIdIn = (ytSong: AnySQLiteColumn): SQL =>
   sql`CASE WHEN json_valid(${ytSong})
   THEN json_extract(${ytSong}, '$.videoId') END`;
 
+/** Indexed title for unsearched and unavailable entries a download job can still hold. */
+export const listedTitleIn = (ytSong: AnySQLiteColumn): SQL =>
+  sql`CASE WHEN json_valid(${ytSong})
+  THEN CASE WHEN json_extract(${ytSong}, '$.videoId') IS NULL
+  THEN json_extract(${ytSong}, '$.title') END END`;
+
 /**
  * A playlist's entries, ordered by `order_key` (Core's `orderKeyBetween`),
  * then `sync_id` for the entries two phones gave one key (Core's
@@ -491,6 +497,7 @@ export const playlistItems = sqliteTable(
     index("playlist_items_changed_at_idx").on(t.changedAt),
     index("playlist_items_pushed_idx").on(t.pushed),
     index("playlist_items_unsearched_title_idx").on(unsearchedTitleIn(t.ytSong)),
+    index("playlist_items_listed_title_idx").on(listedTitleIn(t.ytSong), t.deleted, t.playlistId),
     index("playlist_items_video_idx")
       .on(videoIdIn(t.ytSong), t.deleted, t.playlistId)
       .where(sql`${t.ytSong} IS NOT NULL`),
