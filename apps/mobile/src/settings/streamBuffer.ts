@@ -23,31 +23,20 @@ const send = (minutes: StreamBufferMinutes): void => {
   );
 };
 
-const listeners = new Set<() => void>();
-let applied = false;
-
 /** Buffer (Settings › Playback), in minutes of streamed audio; 2 by default. */
 const streamBuffer = persistedSetting<StreamBufferMinutes>({
   key: "settings.streamBufferMinutes",
   synced: true,
   read: readStreamBuffer,
   write: (minutes) => (minutes === STREAM_BUFFER_DEFAULT ? null : String(minutes)),
-  onValue: (minutes) => {
-    send(minutes);
-    // The first value is the stored one being read, not a change.
-    if (applied) for (const listener of listeners) listener();
-    applied = true;
-  },
+  onValue: send,
 });
 
 /** The Buffer now, in ms: what a queue's time left is compared with before it continues. */
 export const currentStreamBufferMs = (): number => streamBufferMs(streamBuffer.get());
 
 /** Runs [listener] at every change of the Buffer, here or pulled from the Wave account. */
-export const subscribeStreamBuffer = (listener: () => void): (() => void) => {
-  listeners.add(listener);
-  return () => listeners.delete(listener);
-};
+export const subscribeStreamBuffer = streamBuffer.subscribe;
 
 /** Hands the playback service the stored buffer at start (headless Auto too). */
 export const applyStreamBuffer = (): void => {

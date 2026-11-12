@@ -605,13 +605,17 @@ export const wantsMagicBatch = (
  * it will land): a batch is being picked for it ([picking] is the id of the
  * session one is picked for, null while none is) and [state] still wants it.
  * So the loading goes the moment the batch lands in Up Next, and the moment
- * something else plays, whenever the picking itself ends.
+ * something else plays, whenever the picking itself ends. An End of Queue
+ * [sleepTimer] holds the batch back, so nothing loads, and neither line
+ * below shows, until the timer is off.
  */
 export const magicBatchLoading = (
   session: MagicSession | null,
   picking: MagicSession["id"] | null,
   state: QueueState,
-): boolean => session !== null && picking === session.id && wantsMagicBatch(session, state);
+  sleepTimer: SleepTimer | null = null,
+): boolean =>
+  session !== null && picking === session.id && wantsMagicBatch(session, state, sleepTimer);
 
 /**
  * Whether Up Next shows that [session]'s next batch couldn't be picked (a
@@ -624,7 +628,9 @@ export const magicBatchFailed = (
   session: MagicSession | null,
   failed: MagicSession["id"] | null,
   state: QueueState,
-): boolean => session !== null && failed === session.id && wantsMagicBatch(session, state);
+  sleepTimer: SleepTimer | null = null,
+): boolean =>
+  session !== null && failed === session.id && wantsMagicBatch(session, state, sleepTimer);
 
 /**
  * Whether Up Next says that [session]'s last pick found no songs (a quiet
@@ -636,7 +642,9 @@ export const magicBatchEmpty = (
   session: MagicSession | null,
   empty: MagicSession["id"] | null,
   state: QueueState,
-): boolean => session !== null && empty === session.id && wantsMagicBatch(session, state);
+  sleepTimer: SleepTimer | null = null,
+): boolean =>
+  session !== null && empty === session.id && wantsMagicBatch(session, state, sleepTimer);
 
 /**
  * Whether [session] should pick its next batch now: it wants one
@@ -676,9 +684,10 @@ export const magicPickEnded = (
   picking: MagicSession["id"] | null,
   session: MagicSession | null,
   state: QueueState,
+  sleepTimer: SleepTimer | null = null,
 ): MagicPickEnd => ({
   picking: picking === ran ? null : picking,
-  again: session !== null && session.id !== ran && wantsMagicBatch(session, state),
+  again: session !== null && session.id !== ran && wantsMagicBatch(session, state, sleepTimer),
 });
 
 /** What the owner did to a Magic Queue between two states of it, by track id. */

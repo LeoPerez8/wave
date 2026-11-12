@@ -16,7 +16,7 @@ import {
   completeMagicRadioBatch,
   continueMagicQueue,
   queueContinuation,
-  queueContinuationWaitMs,
+  queueLengthsToRead,
   type QueueTimeAhead,
   magicYtSong,
   magicPlaySignal,
@@ -60,9 +60,9 @@ import { subscribeConnectivity } from "@/native/waveNative";
 
 import { magicQueueYtCandidates } from "./magicQueueRadio";
 import { magicSignalsOf } from "./magicSongs";
-import { Player, playbackState, positionState, sleepTimerState, sleepTimerLoaded } from "./Player";
+import { Player, playbackState, sleepTimerState, sleepTimerLoaded } from "./Player";
 import { onPlayEnded } from "./PlayHistory";
-import { Queue, currentPositionMs, queueState, toQueueTrack, type QueueTrack } from "./Queue";
+import { Queue, queueState, toQueueTrack, type QueueTrack } from "./Queue";
 import { queueTracks, toYtQueueTrack } from "./queueTracks";
 import { readQueueContinuationSeed } from "./queueContinuationSeed";
 import { makeQueueLengths } from "./queueLengths";
@@ -147,19 +147,24 @@ export const retryMagicBatch = (): void => {
 };
 
 const batchFailedNow = (): boolean =>
-  magicBatchFailed(activeMagicSession(), failedBatch.get(), queueState.get());
-const subscribeBatchFailed = subscribeAll(queueState, magicSession, failedBatch);
+  magicBatchFailed(
+    activeMagicSession(),
+    failedBatch.get(),
+    queueState.get(),
+    sleepTimerState.get(),
+  );
+const subscribeBatchFailed = subscribeAll(queueState, magicSession, failedBatch, sleepTimerState);
 
 export const useMagicBatchFailed = (): boolean =>
   useSyncExternalStore(subscribeBatchFailed, batchFailedNow);
 
 const emptySeedNow = (): string | null => {
   const session = activeMagicSession();
-  return magicBatchEmpty(session, emptyBatch.get(), queueState.get())
+  return magicBatchEmpty(session, emptyBatch.get(), queueState.get(), sleepTimerState.get())
     ? (session?.seed.title ?? null)
     : null;
 };
-const subscribeBatchEmpty = subscribeAll(queueState, magicSession, emptyBatch);
+const subscribeBatchEmpty = subscribeAll(queueState, magicSession, emptyBatch, sleepTimerState);
 
 /**
  * The seed's title while Up Next says the Magic Queue under way found no
@@ -169,14 +174,15 @@ export const useMagicBatchEmptySeed = (): string | null =>
   useSyncExternalStore(subscribeBatchEmpty, emptySeedNow);
 
 const batchLoadingNow = (): boolean =>
-  magicBatchLoading(activeMagicSession(), picking.get(), queueState.get());
+  magicBatchLoading(activeMagicSession(), picking.get(), queueState.get(), sleepTimerState.get());
 
-const subscribeBatchLoading = subscribeAll(queueState, magicSession, picking);
+const subscribeBatchLoading = subscribeAll(queueState, magicSession, picking, sleepTimerState);
 
 /**
  * Whether the Magic Queue under way is picking its next batch, which Up Next
  * still waits for (`magicBatchLoading`): false once the batch lands, the
- * picking ends, or something else plays. Re-renders on change.
+ * picking ends, or something else plays, and while an End of Queue sleep
+ * timer holds the batch back. Re-renders on change.
  */
 export const useMagicBatchLoading = (): boolean =>
   useSyncExternalStore(subscribeBatchLoading, batchLoadingNow);
@@ -201,19 +207,13 @@ const playingCurrentEntry = (state: QueueState): boolean => {
 
 /**
  * What tells how much of [state] is left to play, against the Buffer: the
- * position now and each song's length, the playing one's as the player
- * reports it.
+ * lengths of the songs after the one playing.
  */
-const timeAhead = (state: QueueState): QueueTimeAhead => {
-  const current = state.entries[state.index];
-  const position = positionState.get();
-  const playing = position.item?.id === current?.key ? position.durationMs : null;
+const timeAhead = (): QueueTimeAhead => {
   const tracks = queueTracks.get();
   return {
     bufferMs: currentStreamBufferMs(),
-    positionMs: currentPositionMs(),
-    durationMs: (trackId) =>
-      (trackId === current?.trackId ? playing : null) ?? queueLengths.of(trackId, tracks),
+    durationMs: (trackId) => queueLengths.of(trackId, tracks),
   };
 };
 
@@ -223,12 +223,9 @@ const continuationSeedNow = (state: QueueState) =>
     ? queueContinuation(state, {
         enabled: continueQueueOn(),
         sleepTimer: sleepTimerState.get(),
-        ahead: timeAhead(state),
+        ahead: timeAhead(),
       })
     : null;
-
-/** The timer's slack past the moment the time left equals the Buffer. */
-const CONTINUATION_SLACK_MS = 250;
 
 /**
  * Starts a Magic Queue from [seed], whose songs are [seedSongs] (the song
@@ -597,8 +594,11 @@ export const layer = Layer.effectDiscard(
       if (
         wanted === null ||
         !magicPickDue(wanted, emptyBatch.get(), queueState.get(), sleepTimerState.get())
-      )
+      ) {
+        // Marked as picked when the session started, and held back since (an End of Queue timer).
+        if (wanted !== null && picking.get() === wanted.id) picking.set(null);
         return Effect.succeed(false);
+      }
       picking.set(wanted.id);
       failedBatch.set(null);
       let again = false;
@@ -652,6 +652,7 @@ export const layer = Layer.effectDiscard(
               picking.get(),
               activeMagicSession(),
               queueState.get(),
+              sleepTimerState.get(),
             );
             picking.set(ended.picking);
             again = ended.again || askedMeanwhile;
@@ -704,35 +705,34 @@ export const layer = Layer.effectDiscard(
     );
 
     /**
-     * Continues the ordinary queue playing if it is due, else waits until its
-     * time left is under the Buffer (Core's `queueContinuationWaitMs`). Asked
-     * again at whatever moves that moment: the queue, play and pause, a seek,
-     * the Buffer, the sleep timer. The last song starting needs no timer.
+     * Reads the lengths the decision still needs (Core's `queueLengthsToRead`):
+     * a few Library songs at a time, only as far as the Buffer reaches, then
+     * asks whether the queue continues now.
      */
-    let continuationTimer: ReturnType<typeof setTimeout> | null = null;
-    /** Reads the lengths of the Library songs still to play, then looks at the time left again. */
     const readLengths = oneAtATime(
       Effect.gen(function* () {
-        const state = queueState.get();
-        const ids = queueLengths.missing(
-          state.entries.slice(Math.max(0, state.index)).map((entry) => entry.trackId),
-        );
-        if (ids.length === 0) return;
-        queueLengths.learn(ids, yield* store.songsByIds(ids));
-        followQueueEnd();
+        for (;;) {
+          const state = queueState.get();
+          if (activeMagicSession(state) !== null) return;
+          const ids = queueLengths.missing(queueLengthsToRead(state, timeAhead()));
+          if (ids.length === 0) return;
+          queueLengths.learn(ids, yield* store.songsByIds(ids));
+          fork(continueOrdinaryQueue);
+        }
       }),
     );
+    /**
+     * Continues the ordinary queue playing if it is due (Core's
+     * `queueContinuation`). Asked at whatever can change the answer: the queue
+     * and the song playing, play and pause, the Buffer, the switch, the sleep
+     * timer, a length just read. No timer waits for a moment within a song:
+     * one set in JS doesn't fire with Wave in the background.
+     */
     const followQueueEnd = (): void => {
-      if (continuationTimer !== null) clearTimeout(continuationTimer);
-      continuationTimer = null;
       const state = queueState.get();
       if (activeMagicSession(state) !== null || !playingCurrentEntry(state)) return;
       fork(continueOrdinaryQueue);
       fork(readLengths);
-      const wait = queueContinuationWaitMs(state, timeAhead(state));
-      // Nothing to wait for, or due already and held back (a sleep timer): the next change asks.
-      if (wait === null || wait === 0) return;
-      continuationTimer = setTimeout(followQueueEnd, wait + CONTINUATION_SLACK_MS);
     };
 
     /** Clears an empty pick's mark and asks for the batch again: a new signal or a slider move. */
@@ -767,14 +767,11 @@ export const layer = Layer.effectDiscard(
           queueState.subscribe(onQueue),
           magicSession.subscribe(onQueue),
           sleepTimerLoaded.subscribe(onQueue),
-          // A seek reports a new playback state, with its position.
           playbackState.subscribe(followQueueEnd),
-          sleepTimerState.subscribe(followQueueEnd),
+          // End of Queue turned off: a Magic Queue asks for the batch the timer held back.
+          sleepTimerState.subscribe(onQueue),
           subscribeStreamBuffer(followQueueEnd),
           onContinueQueue(followQueueEnd),
-          () => {
-            if (continuationTimer !== null) clearTimeout(continuationTimer);
-          },
           subscribeConnectivity(askAgain),
           subscribeYtMusicEnabled(askAgain),
           retryBatch.subscribe(() => fork(fill)),
