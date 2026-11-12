@@ -116,6 +116,39 @@ describe("trackPlays", () => {
     assert.equal(ended.length, 1);
     assert.equal(ended[0]!.listenedMs, 20_000);
   });
+  test("Next on a song the network cut ends its play as interrupted, not as a skip by Next", () => {
+    const { state } = run([
+      playing(1_000, "a", "yt:video"),
+      { ...paused(11_000, "a", "yt:video"), status: "idle", networkInterrupted: true },
+    ]);
+    const { steps } = trackPlays(state, moved(15_000, "b", "seek", true));
+    assert.equal(steps.length, 1);
+    const end = steps[0] as Extract<PlayStep, { type: "ended" }>;
+    assert.equal(end.type, "ended");
+    assert.equal(end.play.endReason, "interrupted");
+    assert.equal(end.play.listenedMs, 10_000);
+    assert.equal(end.byNext, false);
+  });
+  test("the player moving on from a song the network cut, its transition missing, interrupts it too", () => {
+    const { ended } = run([
+      playing(1_000, "a", "yt:video"),
+      { ...paused(11_000, "a", "yt:video"), status: "idle", networkInterrupted: true },
+      playing(15_000, "b", "2"),
+    ]);
+    assert.equal(ended.length, 1);
+    assert.equal(ended[0]!.endReason, "interrupted");
+  });
+  test("Next on a song that resumed after the network came back is a skip again", () => {
+    const { ended } = run([
+      playing(1_000, "a", "yt:video"),
+      { ...paused(11_000, "a", "yt:video"), status: "idle", networkInterrupted: true },
+      playing(60_000, "a", "yt:video"),
+      moved(65_000, "b", "seek", true),
+    ]);
+    assert.equal(ended.length, 1);
+    assert.equal(ended[0]!.endReason, "skipped");
+    assert.equal(ended[0]!.listenedMs, 15_000);
+  });
   test("a track played through ends as a completed, counted play", () => {
     const { ended } = run([
       playing(1_000, "1", "a"),
