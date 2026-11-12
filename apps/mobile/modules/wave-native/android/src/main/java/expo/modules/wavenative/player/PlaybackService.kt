@@ -42,6 +42,7 @@ import com.google.common.util.concurrent.Futures
 import com.google.common.util.concurrent.ListenableFuture
 import expo.modules.wavenative.launcher.LauncherIconSwitcher
 import expo.modules.wavenative.log.WaveLog
+import expo.modules.wavenative.net.AndroidConnectivity
 import expo.modules.wavenative.yt.YtAudioCache
 import expo.modules.wavenative.yt.YtClient
 import expo.modules.wavenative.yt.YtDataSource
@@ -92,6 +93,7 @@ class PlaybackService : MediaLibraryService() {
       override fun nowMs() = System.currentTimeMillis()
 
       override fun pause() {
+        cancelReconnect()
         exoPlayer?.pause()
       }
 
@@ -152,6 +154,57 @@ class PlaybackService : MediaLibraryService() {
   /** Whether playback paused because a YT Music song couldn't stream; moving on plays again. */
   private var pausedOnStreamFailure = false
 
+  private var reconnectWait: ReconnectWait? = null
+  /** Keeps the first deadline while preparation is trying to get this same listen going. */
+  private var reconnectAttempt: ReconnectWait? = null
+  private var stopConnectivity: (() -> Unit)? = null
+  private val reconnectTimeout = Runnable { checkReconnectDeadline() }
+
+  private fun checkReconnectDeadline() {
+    val held = reconnectWait ?: reconnectAttempt
+    if (StreamReconnectPolicy.timeout(held, SystemClock.elapsedRealtime()).waiting == null) {
+      val preparing = reconnectAttempt != null
+      cancelReconnect()
+      if (preparing) exoPlayer?.pause()
+    } else {
+      scheduleReconnectTimeout()
+    }
+  }
+
+  private fun cancelReconnect() = applyReconnect(ReconnectResult(null))
+
+  private fun scheduleReconnectTimeout() {
+    main.removeCallbacks(reconnectTimeout)
+    (reconnectWait ?: reconnectAttempt)?.let {
+      main.postDelayed(reconnectTimeout, maxOf(0L, it.expiresAtMs - SystemClock.elapsedRealtime()))
+    }
+  }
+
+  /** Resume with the queue intact, through the player's normal audio-focus path. */
+  private fun applyReconnect(result: ReconnectResult) {
+    reconnectWait = result.waiting
+    reconnectAttempt = result.resume
+    scheduleReconnectTimeout()
+    result.resume?.let { resume ->
+      val player = exoPlayer ?: return@let
+      if (player.currentMediaItem?.mediaId == resume.key) {
+        player.seekTo(player.currentMediaItemIndex, resume.positionMs)
+        player.prepare()
+        // The session player handles audio focus, just as for a manual play.
+        player.play()
+      }
+    }
+    StreamReconnectLink.setWaiting(reconnectWait != null)
+  }
+
+  private fun reconnectIfOnline() {
+    if (reconnectWait == null) return
+    applyReconnect(StreamReconnectPolicy.connection(
+      reconnectWait, exoPlayer?.currentMediaItem?.mediaId,
+      AndroidConnectivity.cache(this).current.online, SystemClock.elapsedRealtime(),
+    ))
+  }
+
   /**
    * Streaming: keeps Wi-Fi awake while a YT Music song plays, and pauses on
    * one that can't stream (offline, YT Music off, a song YouTube won't serve)
@@ -160,13 +213,27 @@ class PlaybackService : MediaLibraryService() {
    */
   private val streamListener = object : Player.Listener {
     override fun onPlayerError(error: PlaybackException) {
-      if (YtStreamFailure.codeOf(error.cause?.message) == null) return
+      val player = exoPlayer ?: return
+      val code = YtStreamFailure.codeOf(error.cause?.message)
+      if (code == null) {
+        cancelReconnect()
+        return
+      }
+      val previous = reconnectWait ?: reconnectAttempt
+      val retried = reconnectAttempt != null
+      applyReconnect(StreamReconnectPolicy.failed(
+        player.currentMediaItem?.mediaId, player.currentPosition, streams(player.currentMediaItem),
+        code, player.playWhenReady, SystemClock.elapsedRealtime(), previous,
+      ))
       pausedOnStreamFailure = true
-      exoPlayer?.pause()
+      player.pause()
+      // The network may have returned during ExoPlayer's retries, before the final error arrived.
+      if (!retried) main.post { reconnectIfOnline() }
     }
 
     override fun onMediaItemTransition(mediaItem: MediaItem?, reason: Int) {
       val player = exoPlayer ?: return
+      if ((reconnectWait ?: reconnectAttempt)?.key != mediaItem?.mediaId) cancelReconnect()
       player.setWakeMode(if (streams(mediaItem)) C.WAKE_MODE_NETWORK else C.WAKE_MODE_LOCAL)
       if (pausedOnStreamFailure && reason == Player.MEDIA_ITEM_TRANSITION_REASON_SEEK) {
         pausedOnStreamFailure = false
@@ -176,7 +243,16 @@ class PlaybackService : MediaLibraryService() {
     }
 
     override fun onIsPlayingChanged(isPlaying: Boolean) {
-      if (isPlaying) pausedOnStreamFailure = false
+      if (isPlaying) {
+        pausedOnStreamFailure = false
+        cancelReconnect()
+      }
+    }
+
+    override fun onPlayWhenReadyChanged(playWhenReady: Boolean, reason: Int) {
+      // Audio focus loss and unplugging headphones cancel a pending automatic play too.
+      // USER_REQUEST includes our own pause above; owner commands are intercepted separately.
+      if (!playWhenReady && reason != Player.PLAY_WHEN_READY_CHANGE_REASON_USER_REQUEST) cancelReconnect()
     }
   }
 
@@ -486,6 +562,14 @@ class PlaybackService : MediaLibraryService() {
     NormalizeVolume.init(this)
     val player = buildPlayer()
     takeSession(player, from = null)
+    StreamReconnectLink.onOwnerCommand = { moving ->
+      if (!moving) pausedOnStreamFailure = false
+      cancelReconnect()
+    }
+    StreamReconnectLink.onCheck = ::checkReconnectDeadline
+    stopConnectivity = AndroidConnectivity.cache(this).listen {
+      main.post { reconnectIfOnline() }
+    }
     CrossfadeLink.init(this)
     crossfade.overlapMs = CrossfadeLink.overlapMs
     CrossfadeLink.onOverlapChanged = { overlapMs ->
@@ -596,6 +680,7 @@ class PlaybackService : MediaLibraryService() {
   /** Keeps playing after Wave is swiped away; otherwise there's nothing to keep the service for. */
   override fun onTaskRemoved(rootIntent: Intent?) {
     val player = session?.player
+    if (reconnectWait != null || reconnectAttempt != null) return
     if (player == null || !player.playWhenReady || player.mediaItemCount == 0 ||
       player.playbackState == Player.STATE_ENDED
     ) {
@@ -604,6 +689,11 @@ class PlaybackService : MediaLibraryService() {
   }
 
   override fun onDestroy() {
+    stopConnectivity?.invoke()
+    stopConnectivity = null
+    StreamReconnectLink.onOwnerCommand = null
+    StreamReconnectLink.onCheck = null
+    cancelReconnect()
     ActiveWaveAudio.count = { 0 }
     stopLanguage?.invoke()
     stopLanguage = null
@@ -697,6 +787,11 @@ class PlaybackService : MediaLibraryService() {
       playerCommand: Int,
     ): Int {
       val from = describeController(session, controller)
+      if (playerCommand == Player.COMMAND_PLAY_PAUSE || playerCommand == Player.COMMAND_STOP) {
+        StreamReconnectLink.onOwnerCommand?.invoke(false)
+      } else if (playerCommand in MOVING_COMMANDS && playerCommand != Player.COMMAND_CHANGE_MEDIA_ITEMS) {
+        StreamReconnectLink.onOwnerCommand?.invoke(true)
+      }
       if (playerCommand in MOVING_COMMANDS && from != null) CrossfadeLink.causes.noteSession(from, SystemClock.elapsedRealtime())
       // Play or pause from anywhere but the app: no longer the app's pause for a search.
       if (playerCommand == Player.COMMAND_PLAY_PAUSE && from != null) CrossfadeLink.pausedForSearch = false
@@ -713,6 +808,11 @@ class PlaybackService : MediaLibraryService() {
       CrossfadeLink.causes.noteMediaButton(from, SystemClock.elapsedRealtime())
       @Suppress("DEPRECATION")
       val key = intent.getParcelableExtra<KeyEvent>(Intent.EXTRA_KEY_EVENT)?.keyCode
+      if (key in PLAY_PAUSE_KEYS || key == KeyEvent.KEYCODE_MEDIA_STOP) {
+        StreamReconnectLink.onOwnerCommand?.invoke(false)
+      } else if (key == KeyEvent.KEYCODE_MEDIA_NEXT || key == KeyEvent.KEYCODE_MEDIA_PREVIOUS) {
+        StreamReconnectLink.onOwnerCommand?.invoke(true)
+      }
       if (key in PLAY_PAUSE_KEYS) CrossfadeLink.pausedForSearch = false
       return super.onMediaButtonEvent(session, controllerInfo, intent)
     }

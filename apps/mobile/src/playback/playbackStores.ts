@@ -20,6 +20,7 @@ export const makePlaybackStores = (setReportingRequested: (requested: boolean) =
     status: "idle",
     isPlaying: false,
     playWhenReady: false,
+    waitingForConnection: false,
     item: null,
     error: null,
     errorCode: null,
@@ -63,7 +64,7 @@ export const makePlaybackStores = (setReportingRequested: (requested: boolean) =
         return {
           ...playback,
           error: errorStands ? previous.error : null,
-          errorCode: errorStands ? previous.errorCode : null,
+          errorCode: errorStands ? (state.errorCode ?? previous.errorCode) : state.errorCode,
         };
       });
     },

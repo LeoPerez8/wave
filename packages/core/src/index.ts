@@ -1648,6 +1648,12 @@ export {
   streamBufferMs,
 } from "./streamBuffer.ts";
 export type { StreamBufferMinutes } from "./streamBuffer.ts";
+export { streamReconnect } from "./streamReconnect.ts";
+export type {
+  StreamReconnectEvent,
+  StreamReconnectResult,
+  StreamReconnectWait,
+} from "./streamReconnect.ts";
 export {
   gainTags,
   knownGain,

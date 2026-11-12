@@ -7,12 +7,48 @@ const playing: NativePlayerState = {
   status: "ready",
   isPlaying: true,
   playWhenReady: true,
+  waitingForConnection: false,
+  errorCode: null,
   index: 0,
   item: { id: "a", title: "A", artist: null, album: null, artworkUri: null },
   positionMs: 1_000,
   durationMs: 180_000,
   at: 10_000,
 };
+
+test("the service's network wait reaches JS and ends on timeout while the song stays paused", () => {
+  const stores = makePlaybackStores(() => {});
+  assert.equal(stores.playbackState.get().waitingForConnection, false);
+  const paused = { ...playing, status: "idle", isPlaying: false, playWhenReady: false } as const;
+  stores.reportError({ itemId: "a", message: "offline", code: "ytOffline" });
+  stores.reportState({ ...paused, waitingForConnection: true });
+  assert.equal(stores.playbackState.get().waitingForConnection, true);
+  stores.reportState({ ...paused, waitingForConnection: false });
+  assert.equal(stores.playbackState.get().waitingForConnection, false);
+  assert.equal(stores.playbackState.get().isPlaying, false);
+});
+
+test("reopening JS during a wait reads the offline cause and retains it through preparation", () => {
+  const stores = makePlaybackStores(() => {});
+  stores.reportState({
+    ...playing,
+    status: "idle",
+    isPlaying: false,
+    playWhenReady: false,
+    waitingForConnection: true,
+    errorCode: "ytOffline",
+  });
+  assert.equal(stores.playbackState.get().errorCode, "ytOffline");
+  stores.reportState({
+    ...playing,
+    status: "buffering",
+    isPlaying: false,
+    waitingForConnection: false,
+  });
+  assert.equal(stores.playbackState.get().errorCode, "ytOffline");
+  stores.reportState(playing);
+  assert.equal(stores.playbackState.get().errorCode, null);
+});
 
 test("position reports leave every playback listener asleep and keep the latest snapshot without demand", () => {
   const stores = makePlaybackStores(() => {});
