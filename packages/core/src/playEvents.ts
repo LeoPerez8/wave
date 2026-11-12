@@ -108,6 +108,8 @@ export type PlaybackSignal =
       readonly at: number;
       readonly key: string | null;
       readonly status: "idle" | "buffering" | "ready" | "ended";
+      /** Offline is a pause in this listen, even after the automatic retry window ends. */
+      readonly networkInterrupted?: boolean;
       readonly playing: boolean;
       readonly durationMs: number | null;
       /** The track behind `key`, or null when it's unknown. */
@@ -270,7 +272,8 @@ export const resumePlay = (
 ): PlayTrackerState | null => {
   const { key, track } = signal;
   if (key === null || track === null) return null;
-  if (signal.status === "idle" || signal.status === "ended") return null;
+  if ((signal.status === "idle" && !signal.networkInterrupted) || signal.status === "ended")
+    return null;
   if (recorded.endReason !== "interrupted" && recorded.endReason !== "stopped") return null;
   if (recorded.trackId !== track.trackId || !sameContext(recorded.context, track.context)) {
     return null;
@@ -335,7 +338,8 @@ const trackCurrentPlay = (
     case "state": {
       if (play !== null) {
         // Playback went away (an error, the queue cleared, the player stopped).
-        if (signal.status === "idle") return end(play, cutShort(play));
+        if (signal.status === "idle" && !signal.networkInterrupted)
+          return end(play, cutShort(play));
         if (signal.key !== play.key) {
           // The transition went missing; the player is on another entry all the same.
           const ended = end(play, "skipped");

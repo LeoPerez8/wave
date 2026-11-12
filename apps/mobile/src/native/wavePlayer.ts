@@ -51,6 +51,10 @@ export interface NativePlayerState extends PlayerPosition {
   readonly status: "idle" | "buffering" | "ready" | "ended";
   readonly isPlaying: boolean;
   readonly playWhenReady: boolean;
+  /** Native network pause; false again on resume, cancellation or the ten-minute timeout. */
+  readonly waitingForConnection: boolean;
+  /** Current stream failure, including when JS connects after the error happened. */
+  readonly errorCode: string | null;
   readonly index: number | null;
   readonly item: {
     readonly id: string;

@@ -93,6 +93,29 @@ const run = (
 };
 
 describe("trackPlays", () => {
+  test("an offline wait keeps one counted play and excludes time waiting for connection", () => {
+    const { started, ended } = run([
+      playing(1_000, "a", "yt:video"),
+      { ...paused(21_000, "a", "yt:video"), status: "idle", networkInterrupted: true },
+      { ...paused(81_000, "a", "yt:video"), status: "buffering" },
+      playing(82_000, "a", "yt:video"),
+      { ...paused(102_000, "a", "yt:video"), status: "ended" },
+    ]);
+    assert.equal(started.length, 1);
+    assert.equal(ended.length, 1);
+    assert.equal(ended[0]!.listenedMs, 40_000);
+    assert.equal(isCountedPlay(ended[0]!), true);
+  });
+  test("stopping after a network interruption ends the play once without adding waiting time", () => {
+    const { started, ended } = run([
+      playing(1_000, "a", "yt:video"),
+      { ...paused(21_000, "a", "yt:video"), status: "idle", networkInterrupted: true },
+      { ...paused(621_000, "a", "yt:video"), status: "idle", networkInterrupted: false },
+    ]);
+    assert.equal(started.length, 1);
+    assert.equal(ended.length, 1);
+    assert.equal(ended[0]!.listenedMs, 20_000);
+  });
   test("a track played through ends as a completed, counted play", () => {
     const { ended } = run([
       playing(1_000, "1", "a"),
@@ -444,6 +467,26 @@ describe("keptPlayingEntry", () => {
 });
 
 describe("resumePlay", () => {
+  test("JS reopening during a network wait picks up the existing play", () => {
+    const { ended } = run([
+      playing(1_000, "a", "yt:video"),
+      paused(21_000, "a", "yt:video"),
+      { ...paused(22_000, "a", "yt:video"), status: "idle" },
+    ]);
+    const signal = {
+      ...paused(60_000, "a", "yt:video"),
+      status: "idle",
+      networkInterrupted: true,
+    } as const;
+    const resumed = resumePlay(ended[0]!, signal);
+    assert.notEqual(resumed, null);
+    const result = run(
+      [playing(61_000, "a", "yt:video"), { ...paused(81_000, "a", "yt:video"), status: "ended" }],
+      resumed!,
+    );
+    assert.equal(result.started.length, 0);
+    assert.equal(result.ended[0]!.listenedMs, 40_000);
+  });
   /** What was on record for a play of `a` when Wave's JS went away. */
   const recorded = (overrides: Partial<PlayEvent> = {}): PlayEvent => ({
     trackId: "a",
