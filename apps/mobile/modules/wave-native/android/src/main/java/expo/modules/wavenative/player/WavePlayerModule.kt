@@ -624,8 +624,10 @@ class WavePlayerModule : Module() {
         connected.addListener(listener)
         controller = connected
         StreamReconnectLink.onCheck?.invoke()
-        stopReconnect = StreamReconnectLink.listen {
-          sendEvent("onPlaybackState", state(connected))
+        stopReconnect = StreamReconnectLink.listen { resuming ->
+          // The service has just prepared the song again, but the controller still shows the
+          // failed player: its own update follows and reports the wait as over.
+          if (!resuming) sendEvent("onPlaybackState", state(connected))
         }
         sendEvent("onPlaybackState", state(connected))
         sendSleepTimer(connected.sessionExtras)

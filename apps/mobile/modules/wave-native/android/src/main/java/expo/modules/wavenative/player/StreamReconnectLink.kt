@@ -9,15 +9,19 @@ object StreamReconnectLink {
   var onOwnerCommand: ((moving: Boolean) -> Unit)? = null
   /** Rechecks elapsed time when the phone wakes; Handler delays do not include deep sleep. */
   var onCheck: (() -> Unit)? = null
-  private val listeners = mutableListOf<() -> Unit>()
+  private val listeners = mutableListOf<(resuming: Boolean) -> Unit>()
 
-  fun setWaiting(waiting: Boolean) {
+  /**
+   * [resuming]: the wait ended because the service is preparing the song again. The session's
+   * controllers still show the failed player then, until its next state reaches them.
+   */
+  fun setWaiting(waiting: Boolean, resuming: Boolean = false) {
     if (waitingForConnection == waiting) return
     waitingForConnection = waiting
-    listeners.toList().forEach { it() }
+    listeners.toList().forEach { it(!waiting && resuming) }
   }
 
-  fun listen(listener: () -> Unit): () -> Unit {
+  fun listen(listener: (resuming: Boolean) -> Unit): () -> Unit {
     listeners += listener
     return { listeners -= listener }
   }
