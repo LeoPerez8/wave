@@ -2760,7 +2760,7 @@ export { queueContinuation, continueMagicQueue } from "./queueContinuation.ts";
 export { readContinueQueue, writeContinueQueue } from "./queueContinuationSetting.ts";
 export { availableMagicSongs } from "./magicRadioLearning.ts";
 export type { QueueContinuationSeed } from "./queueContinuation.ts";
-export { queueContinuationWaitMs } from "./queueContinuation.ts";
+export { queueLengthsToRead } from "./queueContinuation.ts";
 export type { QueueTimeAhead } from "./queueContinuation.ts";
 export { albumDownloadMembers, indexListDownloads } from "./listDownloadProgress.ts";
 export type {
