@@ -35,11 +35,12 @@ export const useLocalLyricsSearch = (
     lyricsSearchIndexVersion.get,
   );
   const songsById = useMemo(() => new Map(songs.map((song) => [song.id, song])), [songs]);
+  // The last answer, kept for its query while the index is read again (the background fill
+  // bumps its version every few hundred ms), so the section doesn't blink out and back.
   const [answer, setAnswer] = useState<{
     query: string;
-    version: number;
     hits: readonly LocalLyricsHit[];
-  }>({ query: "", version: -1, hits: EMPTY });
+  }>({ query: "", hits: EMPTY });
 
   useEffect(() => {
     const normalized = query.trim();
@@ -76,17 +77,16 @@ export const useLocalLyricsSearch = (
       )
       .then((candidates) => {
         if (cancelled) return;
-        setAnswer({ query, version, hits: candidates });
+        setAnswer({ query, hits: candidates });
       })
       .catch(() => {
-        if (!cancelled) setAnswer({ query, version, hits: EMPTY });
+        if (!cancelled) setAnswer({ query, hits: EMPTY });
       });
     return () => {
       cancelled = true;
     };
+    // A new index version re-reads the candidates.
   }, [query, version, songsById, skipIds]);
 
-  return query.trim() !== "" && answer.query === query && answer.version === version
-    ? answer.hits
-    : EMPTY;
+  return query.trim() !== "" && answer.query === query ? answer.hits : EMPTY;
 };

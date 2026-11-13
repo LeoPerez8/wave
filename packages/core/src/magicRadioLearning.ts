@@ -145,16 +145,25 @@ export const magicRadioReadPlan = (
   };
 };
 
-/** Selects and commits a ranked batch against the latest session, including recording aliases. */
+/**
+ * Selects and commits a ranked batch against the latest session, including
+ * recording aliases. A short batch fills its missing places from [fallback]'s
+ * ranking, which is only asked for then (ranking is the slow part). The
+ * chosen songs come back in order with their track ids.
+ */
 export const completeMagicRadioBatch = (
   session: MagicSession,
   seed: readonly RankedRadioSong[],
   liked: readonly RankedRadioSong[],
-  fallback?: {
+  fallback?: () => {
     readonly seed: readonly RankedRadioSong[];
     readonly liked: readonly RankedRadioSong[];
   },
-): { readonly session: MagicSession; readonly trackIds: readonly string[] } => {
+): {
+  readonly session: MagicSession;
+  readonly trackIds: readonly string[];
+  readonly songs: readonly RankedRadioSong[];
+} => {
   const exclude = magicRadioExclusions(
     session,
     [...seed, ...liked].flatMap((s) => s.song ?? []),
@@ -184,25 +193,27 @@ export const completeMagicRadioBatch = (
         )
       );
     });
+  const fills = remaining > 0 ? fallback?.() : undefined;
+  const isFill = (song: RankedRadioSong) =>
+    eligible(song) && !primaryIds.has(song.trackId) && isNewRecording(song);
   const fill =
-    remaining > 0 && fallback !== undefined
-      ? magicRadioBatch(
-          fallback.seed.filter(
-            (song) => eligible(song) && !primaryIds.has(song.trackId) && isNewRecording(song),
-          ),
-          fallback.liked.filter(
-            (song) => eligible(song) && !primaryIds.has(song.trackId) && isNewRecording(song),
-          ),
-          { size: remaining, newMusicShare: session.ytShare },
-        )
-      : [];
+    fills === undefined
+      ? []
+      : magicRadioBatch(fills.seed.filter(isFill), fills.liked.filter(isFill), {
+          size: remaining,
+          newMusicShare: session.ytShare,
+        });
   const selected = [...primary, ...fill];
   const trackIds = selected.map((song) => song.trackId);
-  if (trackIds.length === 0) return { session, trackIds };
+  if (trackIds.length === 0) return { session, trackIds, songs: selected };
   const used = new Set(session.used);
   for (const song of selected) {
     used.add(song.trackId);
     if (song.song !== null) used.add(ytTrackId(song.song.videoId));
   }
-  return { trackIds, session: { ...session, used: [...used], batches: session.batches + 1 } };
+  return {
+    trackIds,
+    songs: selected,
+    session: { ...session, used: [...used], batches: session.batches + 1 },
+  };
 };

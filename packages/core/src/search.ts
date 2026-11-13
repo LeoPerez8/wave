@@ -72,6 +72,21 @@ export interface LyricSearchMatch {
   readonly ranges: readonly { readonly start: number; readonly end: number }[];
 }
 
+/**
+ * A lyric line's words as the lyrics index splits them (`normalizeSearchText`),
+ * each with its range in the line. Combining marks stay inside a word, so text
+ * written with decomposed accents (`n`, `a`, U+0303, `o` for `não`) reads as one word.
+ */
+const lyricWords = (line: string): { word: string; start: number; end: number }[] =>
+  [...line.matchAll(LYRIC_TOKEN)].flatMap((match) =>
+    normalizeSearchText(match[0])
+      .split(" ")
+      .filter(Boolean)
+      .map((word) => ({ word, start: match.index, end: match.index + match[0].length })),
+  );
+
+const LYRIC_TOKEN = /[\p{L}\p{N}\p{M}]+(?:['’ʼ`´][\p{L}\p{N}\p{M}]+)*/gu;
+
 /** Finds the first lyric line containing the query's words in order and next to one another. */
 export const findLyricMatch = (lyricsText: string, query: string): LyricSearchMatch | null => {
   const words = normalizeSearchText(query).split(" ").filter(Boolean);
@@ -84,19 +99,16 @@ export const findLyricMatch = (lyricsText: string, query: string): LyricSearchMa
         ? lyrics.lines
         : [];
   for (const line of lines) {
-    const tokens = [...line.matchAll(/[\p{L}\p{N}]+(?:['’ʼ`´][\p{L}\p{N}]+)*/gu)].map((match) => ({
-      word: normalizeSearchText(match[0]),
-      start: match.index,
-      end: match.index + match[0].length,
-    }));
+    const tokens = lyricWords(line);
     for (let start = 0; start <= tokens.length - words.length; start++) {
       if (words.every((word, offset) => tokens[start + offset]?.word === word)) {
-        return {
-          line,
-          ranges: tokens
-            .slice(start, start + words.length)
-            .map(({ start, end }) => ({ start, end })),
-        };
+        const ranges: { start: number; end: number }[] = [];
+        for (const token of tokens.slice(start, start + words.length)) {
+          // Words folded out of one character share its range; highlight it once.
+          if (ranges.at(-1)?.start !== token.start)
+            ranges.push({ start: token.start, end: token.end });
+        }
+        return { line, ranges };
       }
     }
   }
