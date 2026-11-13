@@ -2,6 +2,7 @@ import {
   parseTrackId,
   type MagicSeed,
   type QueueContinuationSeed,
+  type DiscoverMix,
   type YtSong,
 } from "@wave/core";
 import * as Effect from "effect/Effect";
@@ -19,6 +20,8 @@ export const readQueueContinuationSeed = (
   source: QueueContinuationSeed,
   store: Pick<LibraryStore["Service"], "getAlbum" | "getArtist" | "getPlaylist" | "songsByIds">,
   tracks: ReadonlyMap<string, QueueTrack>,
+  readDiscoverMix: (id: string) => { readonly mix: DiscoverMix; readonly title: string } | null =
+    () => null,
 ): Effect.Effect<ContinuationInput | null, LibraryStoreError> =>
   Effect.gen(function* () {
     const id = Number(source.id);
@@ -55,6 +58,38 @@ export const readQueueContinuationSeed = (
               item.source === "stream" ? [item.song] : [],
             ),
           };
+    }
+    if (source.kind === "discoverMix") {
+      const saved = readDiscoverMix(source.id);
+      if (saved === null) {
+        const lastTrackId = source.trackIds.at(-1);
+        if (lastTrackId === undefined) return null;
+        const fallback = yield* readQueueContinuationSeed(
+          { kind: "list", id: lastTrackId, trackIds: source.trackIds },
+          store,
+          tracks,
+        );
+        return fallback;
+      }
+      const { mix, title } = saved;
+      const libraryIds = [
+        ...new Set(
+          (mix.familiar ?? []).flatMap((entry) =>
+            entry.source === "library" ? [entry.track.id] : [],
+          ),
+        ),
+      ];
+      const songs = yield* store.songsByIds(libraryIds);
+      return {
+        seed: { kind: "list", id: mix.id, title },
+        songs,
+        streamed: [
+          ...mix.songs,
+          ...(mix.familiar ?? []).flatMap((entry) =>
+            entry.source === "stream" ? [entry.song] : [],
+          ),
+        ],
+      };
     }
     if (source.kind === "list") {
       const trackIds = source.trackIds;
