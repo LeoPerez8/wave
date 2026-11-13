@@ -223,7 +223,7 @@ export const trackArtists = sqliteTable(
   {
     trackId: integer("track_id")
       .notNull()
-      .references(() => lyricsSearchIndex.trackId, { onDelete: "cascade" }),
+      .references(() => tracks.id, { onDelete: "cascade" }),
     artistId: integer("artist_id")
       .notNull()
       .references(() => artists.id),
@@ -874,7 +874,7 @@ export const lyricsSearchWords = sqliteTable(
   {
     trackId: integer("track_id")
       .notNull()
-      .references(() => tracks.id, { onDelete: "cascade" }),
+      .references(() => lyricsSearchIndex.trackId, { onDelete: "cascade" }),
     position: integer("position").notNull(),
     word: text("word").notNull(),
   },
