@@ -2515,6 +2515,8 @@ export {
   storedGenius,
 } from "./genius.ts";
 export type { GeniusHit, GeniusMatch, SavedGenius } from "./genius.ts";
+export { GENIUS_LOADING_NOTE_DELAY_MS, geniusLoadingNote } from "./geniusLoading.ts";
+export type { GeniusInsightState } from "./geniusLoading.ts";
 export {
   GENIUS_SEARCH_MAX_LENGTH,
   geniusReferentsPath,
