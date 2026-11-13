@@ -16,6 +16,7 @@ import { CardHeading } from "@/overlay/CardHeading";
 import { MenuChoices, type MenuChoice } from "@/overlay/MenuChoices";
 import { followUp, openOverlay } from "@/overlay/overlay";
 import { playNext, playSongs, playYtNext, playYtSongs } from "@/playback/actions";
+import type { RecognitionLookup } from "@/recognize/resolveRecognition";
 import { resolveRecognitionSave } from "@/recognize/resolveRecognitionSave";
 import { useYtMusicEnabled, ytMusicEnabled } from "@/settings/ytMusic";
 import { searchRecordingInTurn } from "@/ytmusic/askYtMusic";
@@ -29,6 +30,16 @@ type Result = RecognizeResult<SongRow, NativeYtSong>;
 const SEARCH_CONTEXT = { kind: "search", id: null } as const;
 
 /**
+ * Where a Genius result's song is looked up, by its tap and its long press alike: the
+ * Library's songs as read now, then one Songs search with YT Music on.
+ */
+export const geniusHitLookup: RecognitionLookup<SongRow, NativeYtSong> = {
+  library: () => appRuntime.runPromise(libraryListQueries.songs.read),
+  ytMusic: ytMusicEnabled,
+  search: (asker, _query, signal, song) => searchRecordingInTurn(asker, song, signal, true),
+};
+
+/**
  * Opens a Genius result's long-press menu next to its row, once the song is
  * resolved as a tap resolves it (Recognize's resolver: the Library first, then one
  * Songs search with YT Music on), so the card opens with every entry it will have.
@@ -38,15 +49,7 @@ export const openGeniusHitActions = (hit: GeniusLyricsHit): void => {
   const allowed = pressedMenuAllowed();
   // The row stays highlighted meanwhile: the card opens inside the follow-up.
   void followUp(async () => {
-    const result = await resolveGeniusHit<SongRow, NativeYtSong>(
-      {
-        library: () => appRuntime.runPromise(libraryListQueries.songs.read),
-        ytMusic: ytMusicEnabled,
-        search: (asker, _query, signal, song) => searchRecordingInTurn(asker, song, signal, true),
-      },
-      hit,
-      new AbortController().signal,
-    );
+    const result = await resolveGeniusHit(geniusHitLookup, hit, new AbortController().signal);
     if (!allowed()) return;
     openOverlay({
       label: hit.title,

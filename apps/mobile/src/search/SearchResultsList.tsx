@@ -8,10 +8,9 @@ import {
   type YtArtistAlbum,
 } from "@wave/core";
 import { useCallback, useMemo } from "react";
-import { Pressable, Text, View } from "react-native";
+import { Text, View } from "react-native";
 
 import { artworkUri } from "@/catalog/artworkUri";
-import { Artwork } from "@/catalog/Artwork";
 import { AlbumCardRow } from "@/catalog/cards/AlbumCard";
 import { ArtistCardRow } from "@/catalog/cards/ArtistCard";
 import { PlaylistCardRow } from "@/catalog/cards/PlaylistCard";
@@ -32,7 +31,7 @@ import {
   openPlaylistActions,
 } from "@/playback/ActionsMenu";
 
-import { openGeniusHitActions } from "./GeniusHitActions";
+import { GeniusLyricResultRow, LYRIC_ROW_HEIGHT, LyricResultRow } from "./LyricResultRows";
 import { playSearchSong } from "./playSearchSong";
 import type { ResultRow, ResultSong } from "./rows";
 import type { SearchHit } from "./searchIndex";
@@ -55,8 +54,8 @@ const SEARCH_CONTEXT: QueueContext = { kind: "search", id: null };
 
 const HEIGHT: Readonly<Record<ResultRow["type"], number>> = {
   heading: CELL * 6,
-  lyric: grid.row + CELL * 2,
-  geniusLyric: grid.row + CELL * 2,
+  lyric: LYRIC_ROW_HEIGHT,
+  geniusLyric: LYRIC_ROW_HEIGHT,
   geniusState: CELL * 6,
   moreLyrics: CELL * 6,
   hit: grid.row,
@@ -115,6 +114,8 @@ type Props = {
   onShowAll: (kind: SearchKind) => void;
   onShowAllLyrics: () => void;
   onGeniusHit: (hit: GeniusLyricsHit) => void;
+  /** The Genius result whose song a tap is looking up, by id; its row shows it's busy. */
+  pendingGeniusHit: number | null;
   onRetryGenius: () => void;
   /** Search shows YouTube Music's results (an integrated view): Library albums open integrated. */
   integrated: boolean;
@@ -201,6 +202,7 @@ export function SearchResultsList({
   onShowAll,
   onShowAllLyrics,
   onGeniusHit,
+  pendingGeniusHit,
   onRetryGenius,
   integrated,
   selection,
@@ -211,8 +213,8 @@ export function SearchResultsList({
   const bottomInset = useChromeInset();
   const rowSelection = useMemo(() => songSelection(selection, songItem), [selection]);
   const rowState = useMemo(
-    () => ({ selection: selection.selection, integrated, language }),
-    [selection.selection, integrated, language],
+    () => ({ selection: selection.selection, integrated, language, pendingGeniusHit }),
+    [selection.selection, integrated, language, pendingGeniusHit],
   );
 
   const renderSlot = useCallback(
@@ -224,83 +226,18 @@ export function SearchResultsList({
               <CatalogLine>{item.label}</CatalogLine>
             </View>
           );
-        case "lyric": {
-          const { hit } = item;
-          const song =
-            hit.source === "library"
-              ? { source: "library" as const, track: hit.song }
-              : { source: "stream" as const, song: hit.song };
-          const title = hit.source === "library" ? hit.song.title : hit.song.title;
-          const artist = hit.source === "library" ? hit.song.artist : joinArtists(hit.song.artists);
-          const artwork =
-            hit.source === "library" ? artworkUri(hit.song) : (hit.song.artworkUrl ?? undefined);
-          const parts: { text: string; highlighted: boolean }[] = [];
-          let cursor = 0;
-          for (const range of hit.ranges) {
-            if (range.start > cursor)
-              parts.push({ text: hit.line.slice(cursor, range.start), highlighted: false });
-            parts.push({ text: hit.line.slice(range.start, range.end), highlighted: true });
-            cursor = range.end;
-          }
-          if (cursor < hit.line.length)
-            parts.push({ text: hit.line.slice(cursor), highlighted: false });
+        case "lyric":
+          return <LyricResultRow hit={item.hit} selecting={selection.selecting} onOpen={onOpen} />;
+        case "geniusLyric":
           return (
-            <Pressable
-              accessibilityRole="button"
-              accessibilityLabel={`${title}, ${artist}. ${hit.line}`}
-              className="flex-row items-center"
-              style={{ height: HEIGHT.lyric, gap: CELL * 1.5 }}
-              onPress={() => {
-                onOpen();
-                void playSearchSong(song);
-              }}
-              onLongPress={() => openMixedSongActions(song)}
-            >
-              <Artwork uri={artwork} size={CELL * 5} />
-              <View className="flex-1">
-                <Text numberOfLines={1} className="font-sans text-body font-medium text-foreground">
-                  {title}
-                </Text>
-                <Text numberOfLines={1} className="font-sans text-footnote text-secondary">
-                  {artist}
-                </Text>
-                <Text numberOfLines={1} className="font-sans text-footnote text-secondary">
-                  {parts.map((part, index) => (
-                    <Text key={index} className={part.highlighted ? "text-accent" : undefined}>
-                      {part.text}
-                    </Text>
-                  ))}
-                </Text>
-              </View>
-            </Pressable>
+            <GeniusLyricResultRow
+              hit={item.hit}
+              selecting={selection.selecting}
+              pending={pendingGeniusHit === item.hit.id}
+              onOpen={onOpen}
+              onGeniusHit={onGeniusHit}
+            />
           );
-        }
-        case "geniusLyric": {
-          const { hit } = item;
-          return (
-            <Pressable
-              accessibilityRole="button"
-              accessibilityLabel={strings.playbackText.geniusLyricsResult(hit.title, hit.artist)}
-              className="flex-row items-center"
-              style={{ height: HEIGHT.geniusLyric, gap: CELL * 1.5 }}
-              onPress={() => {
-                onOpen();
-                onGeniusHit(hit);
-              }}
-              onLongPress={() => openGeniusHitActions(hit)}
-            >
-              <Artwork uri={hit.artworkUrl ?? undefined} size={CELL * 5} />
-              <View className="flex-1">
-                <Text numberOfLines={1} className="font-sans text-body font-medium text-foreground">
-                  {hit.title}
-                </Text>
-                <Text numberOfLines={1} className="font-sans text-footnote text-secondary">
-                  {hit.artist}
-                </Text>
-              </View>
-            </Pressable>
-          );
-        }
         case "geniusState":
           // Why the online part of Lyrics has nothing to show; wraps, so its height varies.
           return (
@@ -442,6 +379,7 @@ export function SearchResultsList({
       onShowAll,
       onShowAllLyrics,
       onGeniusHit,
+      pendingGeniusHit,
       onRetryGenius,
       integrated,
       selection,
