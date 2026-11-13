@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import * as Effect from "effect/Effect";
+import { EMPTY_QUEUE, reduceQueue } from "@wave/core";
 import { readQueueContinuationSeed } from "./queueContinuationSeed.ts";
 import { selectAlbumDetail, selectAlbums } from "../library/db/albums.ts";
 import { selectArtistDetail, selectArtists } from "../library/db/artists.ts";
@@ -46,4 +47,42 @@ test("a continued album, artist and playlist read the same songs as their Librar
       titles,
     );
   }
+});
+
+test("a loose queue reads every restored entry, including History, as a list seed", async (t) => {
+  const db = await openTestDatabase();
+  t.after(() => closeTestDatabase(db));
+  const first = addTrack(db, { title: "History", artist: "Artist", album: "Album" });
+  const last = addTrack(db, { title: "Last", artist: "Artist", album: "Album" });
+  const historyId = String(first);
+  const lastId = String(last);
+  const store = {
+    getAlbum: () => Effect.succeed(null),
+    getArtist: () => Effect.succeed(null),
+    getPlaylist: () => Effect.succeed(null),
+    songsByIds: (ids: readonly number[]) =>
+      Effect.succeed(
+        selectPlayableSongs(db, ids).filter(
+          (song): song is typeof song & { path: string } => song.path !== null,
+        ),
+      ),
+  };
+  let queue = reduceQueue(EMPTY_QUEUE, {
+    type: "play",
+    trackIds: [historyId, lastId],
+    context: { kind: "songs", id: null },
+  }).state;
+  queue = reduceQueue(queue, { type: "next" }).state;
+  const input = await Effect.runPromise(
+    readQueueContinuationSeed(
+      { kind: "list", id: lastId, trackIds: queue.entries.map((entry) => entry.trackId) },
+      store,
+      new Map(),
+    ),
+  );
+  assert.deepEqual(input?.seed, { kind: "list", id: lastId, title: "Last" });
+  assert.deepEqual(
+    input?.songs.map((song) => song.title),
+    ["History", "Last"],
+  );
 });

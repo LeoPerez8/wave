@@ -251,8 +251,8 @@ export const startMagicQueue = (
     if (continuation === undefined && !ytMusicEnabled()) return;
     const startedAt = Date.now();
     const playable = seedSongs.filter(songHasFile);
-    // An album's or a playlist's songs are all radio seeds, with or without a file.
-    const list = seed.kind === "album" || seed.kind === "playlist";
+    // A list seed's songs are radio seeds, with or without a file.
+    const list = seed.kind === "album" || seed.kind === "playlist" || seed.kind === "list";
     const radioSongs = list ? seedSongs : playable;
     const store = yield* LibraryStore;
     const artists = yield* store.artistsByIds([

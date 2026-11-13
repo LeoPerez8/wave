@@ -116,7 +116,7 @@ export const magicYtSong = (
 
 /** What a Magic Queue was started from. */
 export interface MagicSeed {
-  readonly kind: "track" | "album" | "artist" | "playlist";
+  readonly kind: "track" | "album" | "artist" | "playlist" | "list";
   readonly id: string;
   /** Its name, as Up Next says it ("Magic Queue · from <title>"). */
   readonly title: string;
@@ -132,14 +132,14 @@ export interface MagicSongRadioSeed {
   readonly kind?: "song" | "artist";
 }
 
-/** A song of an album or playlist seed, whose radio a batch may read (`magicBatchRadios`). */
+/** A song of a list seed, whose radio a batch may read (`magicBatchRadios`). */
 export interface MagicSeedSong extends MagicSongRadioSeed {
   /** Its counted plays: the most played are drawn most often. */
   readonly plays: number;
 }
 
 /**
- * The seed songs of an album or a playlist ([songs]: its Library songs, with
+ * The seed songs of a list ([songs]: its Library songs, with
  * their artists' names and video id, and its streamed ones), in order, each
  * with its counted plays from [plays] (by queue track id; a song missing from
  * it was never counted): a streamed song is a seed as a Library one is.
@@ -468,7 +468,7 @@ export const startStreamedMagicQueue = (
   return started!;
 };
 
-/** How many of an album's or a playlist's songs a session keeps to draw its radios from. */
+/** How many songs a list seed keeps to draw its radios from. */
 const MAX_SEED_SONGS = 200;
 
 /** Up to `MAX_SEED_SONGS` of [songs], the most played, in their order. */
@@ -480,7 +480,7 @@ const mostPlayed = (songs: readonly MagicSeedSong[]): readonly MagicSeedSong[] =
 };
 
 /**
- * The radios [session]'s next batch reads: an album's or a playlist's draws
+ * The radios [session]'s next batch reads: a list seed draws
  * up to 3 of its songs by different artists, the most played most often,
  * leaving out songs drawn for earlier batches while others remain
  * (`drawSeedSongs`). The draw is made once a batch; [session] comes back
@@ -785,7 +785,7 @@ const isStrings = (value: unknown): value is string[] =>
 const isWeights = (value: unknown): value is Record<string, number> =>
   isRecord(value) && Object.values(value).every((weight) => typeof weight === "number");
 
-const SEED_KINDS: ReadonlySet<unknown> = new Set(["track", "album", "artist", "playlist"]);
+const SEED_KINDS: ReadonlySet<unknown> = new Set(["track", "album", "artist", "playlist", "list"]);
 
 /** Whether [value] is a saved `MagicSongRadioSeed`. */
 const isRadioSeed = (value: unknown): value is Record<string, unknown> =>

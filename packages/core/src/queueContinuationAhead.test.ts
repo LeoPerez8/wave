@@ -92,7 +92,7 @@ test("a larger Buffer continues the queue playing now", () => {
   assert.deepEqual(queueContinuation(state, ahead(10, durationMs)), SEED);
 });
 
-test("loose songs continued ahead are seeded from the queue's last song", () => {
+test("loose songs continued ahead are seeded from the queue as a list", () => {
   const state = reduceQueue(EMPTY_QUEUE, {
     type: "play",
     trackIds: ["1", "2", "3"],
@@ -104,8 +104,9 @@ test("loose songs continued ahead are seeded from the queue's last song", () => 
       ahead(30, () => 3 * MINUTE),
     ),
     {
-      kind: "track",
+      kind: "list",
       id: "3",
+      trackIds: ["1", "2", "3"],
     },
   );
 });

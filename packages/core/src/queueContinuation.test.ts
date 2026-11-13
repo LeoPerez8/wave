@@ -30,7 +30,7 @@ test("an album continues from its album when its last song starts", () => {
   assert.deepEqual(queueContinuation(last), { kind: "album", id: "7" });
 });
 
-test("restored playlists and artists keep their seed even with a hand-added last song; loose songs use that song", () => {
+test("restored playlists and artists keep their seed; one loose song seeds itself", () => {
   for (const kind of ["playlist", "artist", "songs", "search"] as const) {
     let state = reduceQueue(EMPTY_QUEUE, {
       type: "play",
@@ -50,9 +50,24 @@ test("restored playlists and artists keep their seed even with a hand-added last
       queueContinuation(restored),
       kind === "playlist" || kind === "artist"
         ? { kind, id: "42" }
-        : { kind: "track", id: "yt:last" },
+        : { kind: "list", id: "yt:last", trackIds: ["1", "yt:last"] },
     );
   }
+});
+
+test("loose queues continue from every song, including History, as a list", () => {
+  let state = reduceQueue(EMPTY_QUEUE, {
+    type: "play",
+    trackIds: ["first", "current", "next"],
+    startIndex: 1,
+    context: { kind: "songs", id: null },
+  }).state;
+  state = reduceQueue(state, { type: "next" }).state;
+  assert.deepEqual(queueContinuation(state), {
+    kind: "list",
+    id: "next",
+    trackIds: ["first", "current", "next"],
+  });
 });
 
 test("continuing preserves the queue and appends ten fresh songs through the ordinary Magic Queue batch", () => {
@@ -142,6 +157,7 @@ test("repeat, a sleep timer, disabled continuation and an existing Magic Queue t
     trackIds: ["1"],
     context: { kind: "songs", id: null },
   }).state;
+  assert.deepEqual(queueContinuation(last), { kind: "track", id: "1" });
   for (const repeat of ["one", "all"] as const)
     assert.equal(queueContinuation({ ...last, repeat }), null);
   assert.equal(queueContinuation(last, { enabled: false }), null);
