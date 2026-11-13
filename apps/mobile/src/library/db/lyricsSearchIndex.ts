@@ -1,9 +1,19 @@
 /** Local, on-device lyrics text and its indexed word-position candidate lookup. */
-import { normalizeSearchText } from "@wave/core";
-import { and, asc, eq, gt, isNotNull, isNull, or, sql } from "drizzle-orm";
+import { and, asc, eq, gt, isNotNull, isNull, or } from "drizzle-orm";
 
 import type { LibraryDatabase } from "./database.ts";
+import {
+  keepLyricsWords,
+  selectLyricsWordCandidates,
+  type LyricsWordIndex,
+} from "./lyricsWordIndex.ts";
 import * as schema from "./schema.ts";
+
+const LIBRARY_LYRICS: LyricsWordIndex = {
+  texts: "lyrics_search_index",
+  words: "lyrics_search_words",
+  key: "track_id",
+};
 
 export interface LyricsIndexTrack {
   readonly id: number;
@@ -39,7 +49,7 @@ export const selectLyricsTrackIdAtPath = (db: LibraryDatabase, path: string): nu
   db.select({ id: schema.tracks.id }).from(schema.tracks).where(eq(schema.tracks.path, path)).get()
     ?.id ?? null;
 
-/** A small keyset page of Library files with lyrics not yet copied into the local index. */
+/** A small keyset page of Library files with lyrics not yet read into the local index. */
 export const selectLyricsIndexPage = (
   db: LibraryDatabase,
   afterId: number,
@@ -81,69 +91,23 @@ export const selectStaleLyricsIndexPage = (
     .all();
 };
 
-/** Replaces [trackId]'s indexed lyrics. Empty text removes it from Search. */
+/**
+ * Replaces [trackId]'s indexed lyrics (`keepLyricsWords`). Lyrics read as empty
+ * keep an empty row, so the background fill reads the file once until a scan or
+ * lyrics write refreshes it; null removes the song from the index.
+ */
 export const keepLyricsSearchText = (
   db: LibraryDatabase,
   trackId: number,
-  lyrics: string,
-): void => {
-  const text = lyrics.trim();
-  const table = schema.lyricsSearchIndex;
-  if (text === "") {
-    db.delete(table).where(eq(table.trackId, trackId)).run();
-    return;
-  }
-  const words = normalizeSearchText(text).split(" ").filter(Boolean);
-  if (words.length === 0) {
-    db.delete(table).where(eq(table.trackId, trackId)).run();
-    return;
-  }
-  db.transaction((tx) => {
-    tx.insert(table)
-      .values({ trackId, lyrics: text })
-      .onConflictDoUpdate({ target: table.trackId, set: { lyrics: text } })
-      .run();
-    const tokens = schema.lyricsSearchWords;
-    tx.delete(tokens).where(eq(tokens.trackId, trackId)).run();
-    for (let start = 0; start < words.length; start += 250) {
-      tx.insert(tokens)
-        .values(
-          words.slice(start, start + 250).map((word, offset) => ({
-            trackId,
-            position: start + offset,
-            word,
-          })),
-        )
-        .run();
-    }
-  });
-};
+  lyrics: string | null,
+): void => keepLyricsWords(db, LIBRARY_LYRICS, trackId, lyrics);
 
-/** The indexed first word and adjacent positions narrow candidates before Core verifies lines. */
-export const selectLyricsCandidates = (db: LibraryDatabase, query: string): LyricsCandidate[] => {
-  const normalized = normalizeSearchText(query);
-  const words = normalized.split(" ").filter(Boolean);
-  if (words.length === 0) return [];
-  // The first eight ordered words are enough to narrow candidates; Core verifies the full phrase.
-  const candidateWords = words.slice(0, 8);
-  const joins = candidateWords
-    .slice(1)
-    .map(
-      (_, offset) =>
-        `JOIN lyrics_search_words w${offset + 1} ON w${offset + 1}.track_id = w0.track_id AND w${offset + 1}.position = w${offset}.position + 1`,
-    )
-    .join(" ");
-  const matchWords = sql.join(
-    candidateWords.map((word, offset) => sql`${sql.raw(`w${offset}`)}.word = ${word}`),
-    sql` AND `,
-  );
-  return db.all(sql<LyricsCandidate>`
-    SELECT i.track_id AS trackId, i.lyrics AS lyrics
-    FROM lyrics_search_words w0 ${sql.raw(joins)}
-    JOIN lyrics_search_index i ON i.track_id = w0.track_id
-    WHERE ${matchWords}
-    ORDER BY i.track_id`);
-};
+/** Library songs whose indexed lyrics hold [query]'s words in order (`selectLyricsWordCandidates`). */
+export const selectLyricsCandidates = (db: LibraryDatabase, query: string): LyricsCandidate[] =>
+  selectLyricsWordCandidates(db, LIBRARY_LYRICS, query).map(({ key, lyrics }) => ({
+    trackId: Number(key),
+    lyrics,
+  }));
 
 /** A stored index row, for refresh and deletion behavior tests. */
 export const selectLyricsSearchText = (db: LibraryDatabase, trackId: number): string | null =>

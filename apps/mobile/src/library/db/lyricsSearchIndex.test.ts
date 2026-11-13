@@ -63,6 +63,29 @@ describe("local lyrics search index", () => {
     assert.deepEqual(selectLyricsCandidates(db, "bala trem"), []);
   });
 
+  test("a phrase repeated in a chorus finds its song once", () => {
+    const id = saveTrack("Chorus");
+    const lyrics = "I love you\nyes I love you\nI love you";
+    keepLyricsSearchText(db, id, lyrics);
+
+    assert.deepEqual(selectLyricsCandidates(db, "i love"), [{ trackId: id, lyrics }]);
+  });
+
+  test("a common word hands Search at most 100 songs", () => {
+    saveBatch(
+      db,
+      creditSplits(),
+      Array.from({ length: 101 }, (_, n) => file(`Song ${n}`)),
+      [],
+      [],
+      1_000,
+    );
+    for (const { id } of db.select({ id: schema.tracks.id }).from(schema.tracks).all())
+      keepLyricsSearchText(db, id, "love\nlove");
+
+    assert.equal(selectLyricsCandidates(db, "love").length, 100);
+  });
+
   test("background pages include only songs with lyrics that have no index row", () => {
     const first = saveTrack("First");
     const second = saveTrack("Second");
@@ -73,13 +96,23 @@ describe("local lyrics search index", () => {
     ]);
   });
 
-  test("refresh replaces text, empty text removes it, and deleting a track cascades", () => {
+  test("a song whose lyrics read as empty is checked once and leaves the background pages", () => {
+    const id = saveTrack("Blank");
+    keepLyricsSearchText(db, id, "  ");
+
+    assert.deepEqual(selectLyricsIndexPage(db, 0, 20), []);
+    assert.deepEqual(selectLyricsCandidates(db, "blank"), []);
+    keepLyricsSearchText(db, id, "now it has words");
+    assert.equal(selectLyricsCandidates(db, "has words")[0]?.trackId, id);
+  });
+
+  test("refresh replaces text, no text removes it, and deleting a track cascades", () => {
     const id = saveTrack("First");
     keepLyricsSearchText(db, id, "old phrase");
     keepLyricsSearchText(db, id, "new phrase");
     assert.equal(selectLyricsSearchText(db, id), "new phrase");
     assert.deepEqual(selectLyricsCandidates(db, "old phrase"), []);
-    keepLyricsSearchText(db, id, "");
+    keepLyricsSearchText(db, id, null);
     assert.equal(selectLyricsSearchText(db, id), null);
     assert.deepEqual(selectLyricsCandidates(db, "new phrase"), []);
 

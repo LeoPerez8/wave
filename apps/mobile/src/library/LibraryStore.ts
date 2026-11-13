@@ -1495,10 +1495,13 @@ export class LibraryStore extends Context.Service<
     ) => Effect.Effect<readonly LyricsIndexTarget[], LibraryStoreError>;
     /** Track id currently using a file path, if any. */
     readonly lyricsTrackIdAtPath: (path: string) => Effect.Effect<number | null, LibraryStoreError>;
-    /** Stores timestamp-free lyrics and their searchable word positions, local to this phone. */
+    /**
+     * Stores timestamp-free lyrics and their searchable word positions, local to
+     * this phone. Empty lyrics mark the file checked; null removes the song.
+     */
     readonly keepLyricsSearchText: (
       trackId: number,
-      lyrics: string,
+      lyrics: string | null,
     ) => Effect.Effect<void, LibraryStoreError>;
     /** Indexed phrase candidates; Core finds their matching line and highlight ranges. */
     readonly searchLyrics: (

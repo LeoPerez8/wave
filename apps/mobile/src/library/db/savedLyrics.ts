@@ -4,10 +4,15 @@
  * or that it found none, by the song's YouTube video. Kept free of Expo for
  * the store tests.
  */
-import { normalizeSearchText, type SavedLyrics } from "@wave/core";
+import type { SavedLyrics } from "@wave/core";
 import { and, asc, eq, gt, isNotNull, isNull, sql, inArray } from "drizzle-orm";
 
 import type { LibraryDatabase } from "./database.ts";
+import {
+  keepLyricsWords,
+  selectLyricsWordCandidates,
+  type LyricsWordIndex,
+} from "./lyricsWordIndex.ts";
 import * as schema from "./schema.ts";
 
 /** SQLite caps the variables in one statement; batches stay well under it. */
@@ -18,31 +23,10 @@ export interface SavedLyricsCandidate {
   readonly lyrics: string;
 }
 
-const indexLyrics = (db: LibraryDatabase, videoId: string, lyrics: string | null): void => {
-  const index = schema.savedLyricsSearchIndex;
-  const wordsTable = schema.savedLyricsSearchWords;
-  if (lyrics === null || lyrics.trim() === "") {
-    db.delete(index).where(eq(index.videoId, videoId)).run();
-    return;
-  }
-  const words = normalizeSearchText(lyrics).split(" ").filter(Boolean);
-  db.insert(index)
-    .values({ videoId, lyrics })
-    .onConflictDoUpdate({ target: index.videoId, set: { lyrics } })
-    .run();
-  db.delete(wordsTable).where(eq(wordsTable.videoId, videoId)).run();
-  if (words.length === 0) return;
-  for (let start = 0; start < words.length; start += 250) {
-    db.insert(wordsTable)
-      .values(
-        words.slice(start, start + 250).map((word, offset) => ({
-          videoId,
-          position: start + offset,
-          word,
-        })),
-      )
-      .run();
-  }
+const SAVED_LYRICS: LyricsWordIndex = {
+  texts: "saved_lyrics_search_index",
+  words: "saved_lyrics_search_words",
+  key: "video_id",
 };
 
 /** What is saved for [videoId], or null for nothing. */
@@ -73,7 +57,7 @@ export const keepSavedLyrics = (
     .values({ videoId, ...row })
     .onConflictDoUpdate({ target: schema.savedLyrics.videoId, set: row })
     .run();
-  indexLyrics(db, videoId, saved.kind === "found" ? saved.lyrics.text : null);
+  keepLyricsWords(db, SAVED_LYRICS, videoId, saved.kind === "found" ? saved.lyrics.text : null);
 };
 
 /** Drops what is saved for [videoIds]: a download put their lyrics in a file. */
@@ -114,30 +98,14 @@ export const selectSavedLyricsSearchIndexPage = (
 
 /** Indexes found lyrics that predate the saved-lyrics Search index migration. */
 export const indexSavedLyrics = (db: LibraryDatabase, candidate: SavedLyricsCandidate): void =>
-  indexLyrics(db, candidate.videoId, candidate.lyrics);
+  keepLyricsWords(db, SAVED_LYRICS, candidate.videoId, candidate.lyrics);
 
-/** Saved non-D lyrics whose indexed words contain [query] contiguously. */
+/** Saved non-D lyrics whose indexed words hold [query]'s words in order (`selectLyricsWordCandidates`). */
 export const selectSavedLyricsCandidates = (
   db: LibraryDatabase,
   query: string,
-): SavedLyricsCandidate[] => {
-  const words = normalizeSearchText(query).split(" ").filter(Boolean).slice(0, 8);
-  if (words.length === 0) return [];
-  const joins = words
-    .slice(1)
-    .map(
-      (_, offset) =>
-        `JOIN saved_lyrics_search_words w${offset + 1} ON w${offset + 1}.video_id = w0.video_id AND w${offset + 1}.position = w${offset}.position + 1`,
-    )
-    .join(" ");
-  const matchWords = sql.join(
-    words.map((word, offset) => sql`${sql.raw(`w${offset}`)}.word = ${word}`),
-    sql` AND `,
-  );
-  return db.all(sql<SavedLyricsCandidate>`
-    SELECT i.video_id AS videoId, i.lyrics AS lyrics
-    FROM saved_lyrics_search_words w0 ${sql.raw(joins)}
-    JOIN saved_lyrics_search_index i ON i.video_id = w0.video_id
-    WHERE ${matchWords}
-    ORDER BY i.video_id`);
-};
+): SavedLyricsCandidate[] =>
+  selectLyricsWordCandidates(db, SAVED_LYRICS, query).map(({ key, lyrics }) => ({
+    videoId: String(key),
+    lyrics,
+  }));
