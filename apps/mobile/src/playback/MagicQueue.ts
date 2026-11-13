@@ -565,24 +565,19 @@ export const layer = Layer.effectDiscard(
             refill: yt.refilled,
           } satisfies MagicBatchOutcome;
         save(batch.session);
-        const allCandidates = [...candidates, ...likedCandidates];
         const tracks = new Map<string, QueueTrack>(
           playable.map((song) => [String(song.id), toQueueTrack(song)]),
         );
-        for (const candidate of allCandidates)
+        // The batch's own songs, so a stream that only the Close fill ranked has its track too.
+        for (const candidate of batch.songs)
           if (candidate.source === "stream" && candidate.song !== null)
             tracks.set(candidate.trackId, toYtQueueTrack(candidate.song, null));
         const songs = batch.trackIds.flatMap((id) => tracks.get(id) ?? []);
         yield* queue.dispatch({ type: "append", trackIds: songs.map((song) => song.id) }, songs);
-        const picked = new Set(batch.trackIds);
         appended(songs.length);
         yield* cacheYtCoversInBackground(
-          allCandidates.flatMap((candidate) =>
-            picked.has(candidate.trackId) &&
-            candidate.source === "stream" &&
-            candidate.song !== null
-              ? [candidate.song]
-              : [],
+          batch.songs.flatMap((candidate) =>
+            candidate.source === "stream" && candidate.song !== null ? [candidate.song] : [],
           ),
         ).pipe(Effect.provideService(YtMusic, ytMusic), Effect.provideService(Player, player));
         return { kind: "appended", songs: songs.length } satisfies MagicBatchOutcome;

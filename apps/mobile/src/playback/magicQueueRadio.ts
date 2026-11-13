@@ -193,8 +193,9 @@ export const magicQueueYtCandidates = (
     });
     const candidates = rank(seeds, true);
     const likedCandidates = rank(liked, false);
+    // Ranked again at Close only when the faithful batch comes up short (`completeMagicRadioBatch`).
     const fallback = session.faithful
-      ? { seed: rank(seeds, true, true), liked: rank(liked, false, true) }
+      ? () => ({ seed: rank(seeds, true, true), liked: rank(liked, false, true) })
       : undefined;
     found = [...candidates, ...likedCandidates];
     const songs = read.reduce((sum, { page }) => sum + (page?.songs.length ?? 0), 0);
