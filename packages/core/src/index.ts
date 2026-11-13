@@ -2538,6 +2538,7 @@ export {
 export {
   GENIUS_REFERENTS_MAX_PAGES,
   GENIUS_REFERENTS_PER_PAGE,
+  geniusLineReferents,
   geniusLineSegments,
   geniusReferentsPage,
   geniusReferentsUrl,

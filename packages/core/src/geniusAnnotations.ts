@@ -143,8 +143,8 @@ export const geniusSection = (fragment: string): string | null =>
 
 /**
  * Part of a lyric line a fragment covers: [start, end) in the line's text,
- * and the referents a tap there opens: the fragment placed there first, then
- * any shorter one found only inside it.
+ * and the referents placed there: the fragment placed there first, then any
+ * shorter one found only inside it.
  */
 export interface GeniusHighlight {
   readonly start: number;
@@ -294,6 +294,18 @@ export const placeGeniusReferents = (
     unplaced: referents.filter((referent) => !placed.has(referent)),
   };
 };
+
+/**
+ * What a hold on a lyric line opens: every referent on its highlights, in the
+ * order they read (a highlight's own before any found inside it), each once.
+ */
+export const geniusLineReferents = (
+  highlights: readonly GeniusHighlight[],
+): readonly GeniusReferent[] => [
+  ...new Map(
+    highlights.flatMap((highlight) => highlight.referents.map((each) => [each.id, each] as const)),
+  ).values(),
+];
 
 /** A run of a lyric line drawn alike: under one highlight (or none) and one word. */
 export interface GeniusLineSegment {

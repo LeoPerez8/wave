@@ -60,12 +60,7 @@ import { useThemeColor } from "@/theme/useThemeColor";
 
 import { DismissArea } from "./DismissArea";
 import { GeniusAbout } from "./GeniusAbout";
-import {
-  HighlightedLine,
-  MoreInsights,
-  NO_HIGHLIGHTS,
-  annotationActions,
-} from "./GeniusAnnotations";
+import { HighlightedLine, MoreInsights, NO_HIGHLIGHTS, lineAnnotations } from "./GeniusAnnotations";
 import type { LibraryFile } from "./hooks";
 import { isPlayheadLive, playhead, playheadVisibility } from "./playhead";
 import { TrackHeader } from "./TrackHeader";
@@ -294,10 +289,12 @@ const SyncedLine = memo(function SyncedLine({
         accessibilityHint={
           picking
             ? strings.playbackText.selectsThisLineToShare
-            : strings.playbackText.playsFromThisLine
+            : highlights.length > 0
+              ? strings.playbackText.playsFromThisLineLongPressForGeniussAnnotations
+              : strings.playbackText.playsFromThisLine
         }
         accessibilityState={{ selected: on }}
-        {...annotationActions(highlights)}
+        {...lineAnnotations(highlights)}
         onPress={() => (picking ? onPick(index) : onSeek(line, index))}
         // Picking gives its own haptic, another one for a tap that can't select.
         haptic={picking ? undefined : "selection"}
@@ -539,7 +536,8 @@ function SyncedLyrics({
 /**
  * Unsynced lyrics: the words as tagged, to scroll through at your own pace,
  * each line's translation under it while translation is on, and Genius's
- * annotated fragments on a soft backdrop (a tap opens the annotation). While
+ * annotated fragments on a soft backdrop (a long press on the line opens its
+ * annotations). While
  * Share picks lines each is a tap target, the selected ones in ink on a
  * faint backdrop and the rest in graphite, without highlights.
  */
@@ -575,19 +573,40 @@ function UnsyncedLyrics({
         }
         const under = lineTranslation(translation, at, line);
         if (picking === null) {
-          return (
-            <View
-              key={at}
-              style={[LINE_INSET, under.translation !== null && { paddingBottom: CELL }]}
-            >
+          const highlights = annotations?.lines[at] ?? NO_HIGHLIGHTS;
+          const style = [LINE_INSET, under.translation !== null && { paddingBottom: CELL }];
+          const shown = (
+            <>
               <Text className="font-sans text-title2 font-medium text-foreground">
-                <HighlightedLine text={line} highlights={annotations?.lines[at] ?? NO_HIGHLIGHTS} />
+                <HighlightedLine text={line} highlights={highlights} />
               </Text>
               {under.translation !== null && (
                 <Text className="font-sans text-body text-secondary">{under.translation}</Text>
               )}
               {under.translation === null && under.translating && <TranslationSkeleton at={at} />}
-            </View>
+            </>
+          );
+          // A tap can't seek here, so only a line with highlights takes a touch: a long press.
+          if (highlights.length === 0) {
+            return (
+              <View key={at} style={style}>
+                {shown}
+              </View>
+            );
+          }
+          return (
+            <Press
+              key={at}
+              accessibilityLabel={
+                under.translation === null ? line : `${line}. ${under.translation}`
+              }
+              accessibilityHint={strings.playbackText.longPressForGeniussAnnotations}
+              {...lineAnnotations(highlights)}
+              depth={0.015}
+              style={style}
+            >
+              {shown}
+            </Press>
           );
         }
         const selected = picking.isSelected(at);

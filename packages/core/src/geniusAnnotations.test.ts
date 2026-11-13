@@ -4,6 +4,7 @@ import { test } from "node:test";
 import {
   GENIUS_REFERENTS_PER_PAGE,
   geniusReferentsPage,
+  geniusLineReferents,
   geniusLineSegments,
   geniusReferentsUrl,
   geniusSection,
@@ -166,6 +167,35 @@ test("a shorter fragment found only inside a longer one's highlight joins it: a 
     marked(["We run away now"], [referent(1, "away now"), referent(2, "we run away")]),
     { lines: [[["We run away", 2]]], unplaced: [1] },
   );
+});
+
+test("a hold on a line opens every annotation on it, left to right, each once", () => {
+  const ids = (line: string, referents: readonly GeniusReferent[]) =>
+    geniusLineReferents(placeGeniusReferents([line], referents).lines[0]!).map((each) => each.id);
+  // Two highlights, then a repeat of the first: in the order they read, the repeat dropped.
+  assert.deepEqual(
+    ids("Hold the light and run, hold the light", [
+      referent(1, "and run"),
+      referent(2, "hold the light"),
+    ]),
+    [2, 1],
+  );
+  // The shorter fragment first when it reads first: order is the line's, not the fragments' length.
+  assert.deepEqual(
+    ids("Run and hold the light", [referent(1, "hold the light"), referent(2, "run")]),
+    [2, 1],
+  );
+  // The same referent given apart (not one shared object) is still once.
+  assert.deepEqual(
+    geniusLineReferents([
+      { start: 0, end: 3, referents: [referent(1, "run")] },
+      { start: 5, end: 8, referents: [referent(1, "run")] },
+    ]).map((each) => each.id),
+    [1],
+  );
+  // A shorter fragment inside a longer one's highlight comes after it, as on its card.
+  assert.deepEqual(ids("Run, run away", [referent(1, "run"), referent(2, "run run away")]), [2, 1]);
+  assert.deepEqual(ids("Nothing here", [referent(1, "run")]), []);
 });
 
 test("unsynced lyrics with section headings and blank lines take fragments too", () => {
