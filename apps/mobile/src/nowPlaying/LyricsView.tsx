@@ -31,7 +31,7 @@ import {
 } from "@wave/core";
 import * as Haptics from "expo-haptics";
 import { memo, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
-import { ScrollView, Text, View, type ScrollViewInstance } from "react-native";
+import { ActivityIndicator, ScrollView, Text, View, type ScrollViewInstance } from "react-native";
 import Animated, {
   interpolateColor,
   useAnimatedReaction,
@@ -154,6 +154,26 @@ function TranslationNote({ shown, retry }: { shown: TranslationShown | null; ret
     );
   }
   return null;
+}
+
+/** The quiet About-card placeholder while signed-in Genius insights are loading. */
+function GeniusLoadingNote({ shown }: { shown: boolean }) {
+  const { strings } = useLocalisation();
+  const secondary = useThemeColor("secondary");
+  if (!shown) return null;
+  return (
+    <View
+      className="flex-row items-center"
+      style={{ gap: CELL, paddingBottom: CELL }}
+      accessibilityElementsHidden
+      importantForAccessibility="no-hide-descendants"
+    >
+      <ActivityIndicator size="small" color={secondary} />
+      <Text className="font-sans text-footnote text-secondary">
+        {strings.playbackText.loadingGeniusInsights}
+      </Text>
+    </View>
+  );
 }
 
 /** The square dots standing in for a pause between sung lines. */
@@ -344,6 +364,7 @@ function SyncedLyrics({
   translation,
   retryTranslation,
   about,
+  loadingNote,
   annotations,
 }: {
   lines: readonly LyricLine[];
@@ -353,6 +374,7 @@ function SyncedLyrics({
   translation: TranslationShown | null;
   retryTranslation: () => void;
   about: GeniusAboutCard | null;
+  loadingNote: boolean;
   annotations: GeniusPlacement | null;
 }) {
   useRenderCount("SyncedLyrics");
@@ -509,6 +531,7 @@ function SyncedLyrics({
     >
       {/* Above the lines, so their offsets (where they rest) count them in. */}
       <GeniusAbout key={geniusAboutKey(about)} about={about} />
+      <GeniusLoadingNote shown={loadingNote} />
       <TranslationNote shown={translation} retry={retryTranslation} />
       {lines.map((line, at) => (
         <SyncedLine
@@ -547,6 +570,7 @@ function UnsyncedLyrics({
   translation,
   retryTranslation,
   about,
+  loadingNote,
   annotations,
 }: {
   lines: readonly string[];
@@ -554,6 +578,7 @@ function UnsyncedLyrics({
   translation: TranslationShown | null;
   retryTranslation: () => void;
   about: GeniusAboutCard | null;
+  loadingNote: boolean;
   annotations: GeniusPlacement | null;
 }) {
   const { strings } = useLocalisation();
@@ -565,6 +590,7 @@ function UnsyncedLyrics({
       contentContainerStyle={{ paddingTop: CELL * 2, paddingBottom: CELL * 6 }}
     >
       <GeniusAbout key={geniusAboutKey(about)} about={about} />
+      <GeniusLoadingNote shown={loadingNote} />
       <TranslationNote shown={translation} retry={retryTranslation} />
       {lines.map((line, at) => {
         if (line === "") {
@@ -736,6 +762,7 @@ function LyricsBody({
   translation,
   retryTranslation,
   about,
+  loadingNote,
   annotations,
 }: {
   shown: Shown | null;
@@ -747,6 +774,7 @@ function LyricsBody({
   translation: TranslationShown | null;
   retryTranslation: () => void;
   about: GeniusAboutCard | null;
+  loadingNote: boolean;
   annotations: GeniusPlacement | null;
 }) {
   const { strings } = useLocalisation();
@@ -772,6 +800,7 @@ function LyricsBody({
           translation={translation}
           retryTranslation={retryTranslation}
           about={about}
+          loadingNote={loadingNote}
           annotations={annotations}
         />
       );
@@ -783,6 +812,7 @@ function LyricsBody({
           translation={translation}
           retryTranslation={retryTranslation}
           about={about}
+          loadingNote={loadingNote}
           annotations={annotations}
         />
       );
@@ -896,7 +926,9 @@ export function LyricsView({
   const translationSong =
     file !== null ? `library:${file.id}` : nonDTrackId === null ? null : `track:${nonDTrackId}`;
   const genius = useGenius(translationSong, item.title ?? "", item.artist ?? "", lyrics !== null);
-  const referents = genius?.referents ?? null;
+  const about = genius?.state === "settled" ? genius.about : null;
+  const loadingNote = genius?.state === "loading" && genius.showNote;
+  const referents = genius?.state === "settled" ? genius.referents : null;
   // Where Genius's fragments sit on these lines; recomputed only when the lyrics or the answer change.
   const annotations = useMemo(
     () =>
@@ -1016,7 +1048,8 @@ export function LyricsView({
         retry={nonD.shown === null ? library.retry : nonD.retry}
         translation={translation.shown}
         retryTranslation={translation.retry}
-        about={genius?.about ?? null}
+        about={about}
+        loadingNote={loadingNote}
         annotations={annotations}
       />
     </View>
