@@ -112,6 +112,18 @@ export interface SavedGenius {
   readonly translations: Readonly<Record<string, string>>;
 }
 
+/** Whether a completed Genius lookup found insights, confirmed nothing, or failed to answer. */
+export type GeniusAnswerState = "answer" | "miss" | "failure";
+
+/** The state of Genius's answer; an empty annotations array confirms no annotations. */
+export const geniusAnswerState = (answer: SavedGenius | null): GeniusAnswerState =>
+  answer === null
+    ? "failure"
+    : answer.match === null ||
+        (answer.description === null && answer.referents !== null && answer.referents.length === 0)
+      ? "miss"
+      : "answer";
+
 /** [song]'s Genius answer as the phone stores it, with the title and artist it was asked for. */
 export const storedGenius = (
   song: Pick<SongLookup, "title" | "artist">,

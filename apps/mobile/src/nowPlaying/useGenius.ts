@@ -1,6 +1,7 @@
 import {
   GENIUS_LOADING_NOTE_DELAY_MS,
   geniusAbout,
+  geniusAnswerState,
   geniusLoadingNote,
   geniusReferents,
   geniusTranslationTarget,
@@ -49,6 +50,7 @@ export interface GeniusShown {
   readonly state: "settled";
   readonly about: GeniusAboutCard | null;
   readonly referents: readonly GeniusReferent[] | null;
+  readonly noInsights: boolean;
 }
 
 /** While the saved answer is read or Genius is asked, before a result is settled. */
@@ -211,7 +213,7 @@ export const useGenius = (
   const invite = answered && saved === null && !ask.signedIn;
   return useMemo(() => {
     if (waiting) return { state: "loading", showNote: loading.showNote };
-    if (invite) return { state: "settled", about: "signIn", referents: null };
+    if (invite) return { state: "settled", about: "signIn", referents: null, noInsights: false };
     if (saved === null) return null;
     const { description: original } = saved;
     const shown = geniusAbout(saved, target);
@@ -219,6 +221,7 @@ export const useGenius = (
       state: "settled",
       referents: geniusReferents(saved, target),
       about: original === null || shown === null ? null : { original, shown },
+      noInsights: geniusAnswerState(saved) === "miss",
     };
   }, [invite, loading, saved, target, waiting]);
 };
