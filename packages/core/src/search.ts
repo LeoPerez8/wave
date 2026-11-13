@@ -12,6 +12,7 @@
  */
 
 import { compareStrings, foldAccentsAndCase } from "./library.ts";
+import { parseLyrics } from "./lyrics.ts";
 
 export type SearchKind = "artist" | "album" | "song" | "playlist" | "genre";
 
@@ -64,6 +65,43 @@ const LEADING_ARTICLE = /^(?:the|a|an) (?=\S)/;
  */
 export const normalizeSearchText = (text: string): string =>
   foldAccentsAndCase(text.replace(APOSTROPHES, "")).replace(SEPARATORS, " ").trim();
+
+export interface LyricSearchMatch {
+  readonly line: string;
+  /** UTF-16 ranges in `line`, suitable for rendering highlighted text. */
+  readonly ranges: readonly { readonly start: number; readonly end: number }[];
+}
+
+/** Finds the first lyric line containing the query's words in order and next to one another. */
+export const findLyricMatch = (lyricsText: string, query: string): LyricSearchMatch | null => {
+  const words = normalizeSearchText(query).split(" ").filter(Boolean);
+  if (words.length === 0) return null;
+  const lyrics = parseLyrics(lyricsText);
+  const lines =
+    lyrics.kind === "synced"
+      ? lyrics.lines.map((line) => line.text)
+      : lyrics.kind === "unsynced"
+        ? lyrics.lines
+        : [];
+  for (const line of lines) {
+    const tokens = [...line.matchAll(/[\p{L}\p{N}]+(?:['’ʼ`´][\p{L}\p{N}]+)*/gu)].map((match) => ({
+      word: normalizeSearchText(match[0]),
+      start: match.index,
+      end: match.index + match[0].length,
+    }));
+    for (let start = 0; start <= tokens.length - words.length; start++) {
+      if (words.every((word, offset) => tokens[start + offset]?.word === word)) {
+        return {
+          line,
+          ranges: tokens
+            .slice(start, start + words.length)
+            .map(({ start, end }) => ({ start, end })),
+        };
+      }
+    }
+  }
+  return null;
+};
 
 /** How well an entry matches, best first. */
 const Tier = {

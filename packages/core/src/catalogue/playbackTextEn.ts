@@ -77,7 +77,6 @@ export const playbackTextEn = {
   /** An unsynced lyric line with Genius highlights: a hold opens its annotations. */
   longPressForGeniussAnnotations: "Long press for Genius's annotations",
   longer: "Longer",
-  lyrics: "Lyrics",
   more: "More",
   moreInsights: "More insights",
   moveDown: "Move down",
@@ -143,6 +142,8 @@ export const playbackTextEn = {
   songMenu: "Song Menu",
   songActions: "Song actions",
   songs: "Songs",
+  lyrics: "Lyrics",
+  lyricsSearchSection: "Lyrics",
   songsAlbumsArtistsGenres: "Songs, albums, artists, genres",
   startTimer: "Start Timer",
   startsListeningAgainFromThisSource: "Starts listening again from this source",

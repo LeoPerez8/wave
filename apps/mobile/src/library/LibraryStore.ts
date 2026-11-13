@@ -297,6 +297,16 @@ import {
 } from "./db/replacementDuplicates";
 import { keepLyricsMiss, selectLyricsSearchTrack, type LyricsSearchTrack } from "./db/lyricsMisses";
 import {
+  keepLyricsSearchText,
+  selectLyricsCandidates,
+  selectLyricsIndexPage,
+  selectLyricsIndexTarget,
+  selectStaleLyricsIndexPage,
+  selectLyricsTrackIdAtPath,
+  type LyricsCandidate,
+  type LyricsIndexTarget,
+} from "./db/lyricsSearchIndex";
+import {
   type KnownVideosCursor,
   selectKnownVideos,
   selectKnownVideosPage,
@@ -1455,6 +1465,31 @@ export class LibraryStore extends Context.Service<
       trackId: number,
       checkedAt: number | null,
     ) => Effect.Effect<void, LibraryStoreError>;
+    /** A page of existing Library files whose lyrics have not been indexed yet. */
+    readonly lyricsIndexPage: (
+      afterId: number,
+      limit: number,
+    ) => Effect.Effect<readonly LyricsIndexTarget[], LibraryStoreError>;
+    /** Current file and has-lyrics flag for a track changed by a scan or tag write. */
+    readonly lyricsIndexTarget: (
+      trackId: number,
+    ) => Effect.Effect<LyricsIndexTarget | null, LibraryStoreError>;
+    /** A bounded page of indexed rows whose file/lyrics flag became stale. */
+    readonly staleLyricsIndexPage: (
+      afterId: number,
+      limit: number,
+    ) => Effect.Effect<readonly LyricsIndexTarget[], LibraryStoreError>;
+    /** Track id currently using a file path, if any. */
+    readonly lyricsTrackIdAtPath: (path: string) => Effect.Effect<number | null, LibraryStoreError>;
+    /** Stores timestamp-free lyrics and their searchable word positions, local to this phone. */
+    readonly keepLyricsSearchText: (
+      trackId: number,
+      lyrics: string,
+    ) => Effect.Effect<void, LibraryStoreError>;
+    /** Indexed phrase candidates; Core finds their matching line and highlight ranges. */
+    readonly searchLyrics: (
+      query: string,
+    ) => Effect.Effect<readonly LyricsCandidate[], LibraryStoreError>;
     /**
      * Every YT Music song the owner streamed before streamed plays were
      * recorded (the old counter), with how often and when first.
@@ -2422,6 +2457,24 @@ const make = Effect.gen(function* () {
 
     keepLyricsMiss: (trackId, checkedAt) =>
       writeAttempt("remember the lyrics search", () => keepLyricsMiss(db, trackId, checkedAt)),
+
+    lyricsIndexPage: (afterId, limit) =>
+      attempt("read a page of lyrics to index", () => selectLyricsIndexPage(db, afterId, limit)),
+
+    lyricsIndexTarget: (trackId) =>
+      attempt("read lyrics index target", () => selectLyricsIndexTarget(db, trackId)),
+
+    staleLyricsIndexPage: (afterId, limit) =>
+      attempt("read stale lyrics index rows", () => selectStaleLyricsIndexPage(db, afterId, limit)),
+
+    lyricsTrackIdAtPath: (path) =>
+      attempt("find lyrics index track", () => selectLyricsTrackIdAtPath(db, path)),
+
+    keepLyricsSearchText: (trackId, lyrics) =>
+      writeAttempt("index lyrics for Search", () => keepLyricsSearchText(db, trackId, lyrics)),
+
+    searchLyrics: (query) =>
+      attempt("search indexed lyrics", () => selectLyricsCandidates(db, query)),
 
     streamedSongs: attempt("read the songs streamed", () => selectStreamedSongs(db)),
 

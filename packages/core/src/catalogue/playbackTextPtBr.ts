@@ -78,6 +78,7 @@ export const playbackTextPtBr: typeof playbackTextEn = {
   longPressForGeniussAnnotations: "Mantenha pressionado para ver as anotações do Genius",
   longer: "Mais tempo",
   lyrics: "Letra",
+  lyricsSearchSection: "Letras",
   more: "Mais",
   moreInsights: "Mais informações",
   moveDown: "Mover para baixo",
