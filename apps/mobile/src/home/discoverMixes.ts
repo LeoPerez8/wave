@@ -3,7 +3,9 @@ import { currentLocalisation } from "@/localisation/localisation";
 import {
   artistMixNeedsChartSteps,
   artistMixSeedsSteps,
+  blendDiscoverMix,
   discoverMixKeep,
+  discoverMixCaption,
   discoverMixRowsToBuild,
   discoverMixesBuilt,
   homeMixBuildsDue,
@@ -415,6 +417,20 @@ const SECTIONS: Record<MixSectionId, MixSection> = {
   // Discover mixes' key: Artist mixes took its place.
   "artist-mixes": section("home.discoverMixes", buildArtistMixes, 0),
   "genre-mixes": section("home.genreMixes", buildGenreMixes, RETRY_MS),
+};
+
+/** The saved mix behind a queue's persisted Discover context, if it still exists. */
+export const savedDiscoverMixForContinuation = (id: string) => {
+  const mix = SECTIONS[mixSectionOfId(id)].saved.get()?.mixes.find((mix) => mix.id === id);
+  return mix === undefined
+    ? null
+    : {
+        mix,
+        title: discoverMixCaption(
+          blendDiscoverMix(mix, { level: 5 }),
+          currentLocalisation().strings,
+        ).title,
+      };
 };
 
 /**
