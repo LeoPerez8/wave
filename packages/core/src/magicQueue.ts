@@ -174,6 +174,8 @@ export const magicListSeedSongs = (
 
 /** A Magic Queue under way: plain JSON saved with its queue. */
 export interface MagicSession {
+  /** Search starts and automatic queue continuations keep to their seed. */
+  readonly faithful?: boolean;
   /** Continued from an ordinary queue: the first batch adds ten songs after it. */
   readonly continuation?: boolean;
   readonly radioSeed?: MagicSongRadioSeed;
@@ -266,6 +268,17 @@ export const magicSeedProfile = (
   return averageProfile(session.radioArtists, profileOf);
 };
 
+/** The genre profile a faithful session follows, dropping list families below 10%. */
+export const magicFaithfulGenreProfile = (
+  session: MagicSession,
+  profileOf?: GenreProfileOf,
+): GenreProfile | null => {
+  const profile = magicSeedProfile(session, profileOf);
+  if (profile === null) return null;
+  const known = new Map([...profile].filter(([, share]) => share >= 0.1));
+  return known.size === 0 ? null : known;
+};
+
 /** The context kind of a Magic Queue's queue; its id is the session's. */
 export const MAGIC_QUEUE_CONTEXT = "magic";
 
@@ -301,11 +314,13 @@ export const startMagicQueue = (
     random,
     radio,
     ytShare = YT_SHARE_START,
+    faithful = false,
   }: {
     readonly id: string;
     readonly random: RandomSource;
     readonly radio?: MagicRadioSeed;
     readonly ytShare?: number;
+    readonly faithful?: boolean;
   },
 ): { readonly session: MagicSession; readonly first: string } | null => {
   const pick =
@@ -316,6 +331,7 @@ export const startMagicQueue = (
   return {
     session: {
       id,
+      ...(faithful ? { faithful: true } : {}),
       seed,
       ...(radio?.song === undefined ? {} : { radioSeed: radio.song }),
       ...(radio?.songs === undefined || radio.songs.length === 0
@@ -415,7 +431,15 @@ export const searchSongTap = <
  */
 export const startStreamedMagicQueue = (
   song: YtSong,
-  { id, ytShare }: { readonly id: string; readonly ytShare?: number },
+  {
+    id,
+    ytShare,
+    faithful = false,
+  }: {
+    readonly id: string;
+    readonly ytShare?: number;
+    readonly faithful?: boolean;
+  },
 ): { readonly session: MagicSession; readonly first: string } => {
   const trackId = ytTrackId(song.videoId);
   const started = startMagicQueue(
@@ -424,6 +448,7 @@ export const startStreamedMagicQueue = (
     {
       id,
       random: () => 0,
+      faithful,
       radio: {
         song: {
           id: `song:${trackId}`,
@@ -818,6 +843,7 @@ export const parseMagicSession = (value: unknown): MagicSession | null => {
   return {
     ...(validSeed ? { radioSeed: radioSeed as unknown as MagicSongRadioSeed } : {}),
     ...(value["continuation"] === true ? { continuation: true } : {}),
+    ...(value["faithful"] === true ? { faithful: true } : {}),
     ...(Array.isArray(likedRadios) && likedRadios.every(isRadioSeed)
       ? { likedRadios: likedRadios as unknown as readonly MagicSongRadioSeed[] }
       : {}),

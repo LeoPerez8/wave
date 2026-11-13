@@ -826,6 +826,7 @@ export {
   magicLibraryMapperSteps,
   magicRadioArtists,
   magicSeedProfile,
+  magicFaithfulGenreProfile,
   magicYtSong,
   magicPlaySignal,
   magicQueueEdits,

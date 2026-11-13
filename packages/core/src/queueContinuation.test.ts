@@ -91,6 +91,7 @@ test("continuing preserves the queue and appends ten fresh songs through the ord
   const session = parseMagicSession(
     JSON.parse(JSON.stringify(continueMagicQueue(started.session, state))),
   )!;
+  assert.equal(session.faithful, true);
   const command = {
     type: "continueMagicQueue",
     sessionId: session.id,

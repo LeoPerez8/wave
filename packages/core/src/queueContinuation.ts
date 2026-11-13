@@ -114,5 +114,6 @@ export const queueContinuation = (
 export const continueMagicQueue = (session: MagicSession, state: QueueState): MagicSession => ({
   ...session,
   continuation: true,
+  faithful: true,
   used: [...new Set(state.entries.map((entry) => entry.trackId))],
 });

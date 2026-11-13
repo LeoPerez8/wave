@@ -39,6 +39,8 @@ export interface RadioRankingOptions {
   /** A continued queue without online radios also weighs the rest of the Library. */
   readonly libraryFallback?: boolean;
   readonly faithfulness?: MixSliderStep;
+  /** Faithful Magic Queue sessions leave incompatible Library songs out too. */
+  readonly excludeIncompatible?: boolean;
   readonly popularity?: MixSliderStep;
   /** Queue track ids already played, queued or explicitly excluded by the caller. */
   readonly exclude?: ReadonlySet<string>;
@@ -82,7 +84,12 @@ export const rankRadioSongs = (
       Math.max(...profiles.map((profile) => genreAffinity(seed.profile!, profile))) <
         GENRE_AFFINITY_THRESHOLD;
     const step = options.faithfulness ?? 3;
-    if (candidate.source === "stream" && incompatible && step === 1) return;
+    if (
+      incompatible &&
+      step === 1 &&
+      (candidate.source === "stream" || options.excludeIncompatible)
+    )
+      return;
     const penalty = incompatible ? { 1: 8, 2: 8, 3: 5, 4: 2, 5: 0 }[step] : 0;
     let session = 0;
     for (const signal of sources.signals ?? []) {
