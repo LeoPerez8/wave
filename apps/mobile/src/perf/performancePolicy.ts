@@ -453,11 +453,11 @@ export const WHOLE_LIBRARY: Record<string, WholeLibraryException> = {
       "Opening a kept notification result needs current Library identity after the runtime restarts. This fallback reads the shared songs query only for that explicit action and resolves the kept answer without searching, rather than subscribing during startup or listening.",
     capabilities: ["library/hooks.ts#songs"],
   },
-  "search/GeniusHitActions.tsx#openGeniusHitActions": {
+  "search/GeniusHitActions.tsx#geniusHitLookup": {
     howOften:
-      "Once per long press on a Genius result in Search's Lyrics section; showing the results reads nothing.",
+      "Once per tap or long press on a Genius result in Search's Lyrics section (a tap while one resolves is ignored); showing the results reads nothing.",
     reason:
-      "The menu resolves the hit as Recognize resolves a match (resolveRecognition), which needs the Library before searching online, using the shared songs query. geniusHitMenu.test.ts covers no online search for a Library match.",
+      "A tap and the menu both resolve the hit as Recognize resolves a match (resolveRecognition), which needs the Library before searching online, using the shared songs query. geniusHitMenu.test.ts covers no online search for a Library match.",
     capabilities: ["library/hooks.ts#songs"],
   },
   "search/GeniusHitActions.tsx#GeniusHitActionsMenu": {
@@ -928,9 +928,13 @@ export const OWN_PRESS: Record<string, Exception> = {
     reason:
       "An Upcoming Shows ticket card: the whole card opens the tickets, its long press opens the show's menu.",
   },
-  "search/SearchResultsList.tsx#SearchResultsList": {
+  "search/LyricResultRows.tsx#LyricResultRow": {
     reason:
-      "Search's Lyrics rows (a Library, saved or Genius match with its line or credit): a tap plays or resolves the song, a long press opens its menu.",
+      "Search's Lyrics row for a Library or saved streamed match, with its matched line: a tap plays the song, a long press opens its menu.",
+  },
+  "search/LyricResultRows.tsx#GeniusLyricResultRow": {
+    reason:
+      "Search's Lyrics row for a Genius match: a tap resolves and plays the song (busy meanwhile), a long press opens its menu.",
   },
   "search/ArtworkRow.tsx#ArtworkRow": {
     reason: "Search's album and artist result row.",

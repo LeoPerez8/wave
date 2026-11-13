@@ -3,7 +3,7 @@ import { test } from "node:test";
 
 import { catalogueOf, type YtSong } from "@wave/core";
 
-import { geniusHitMenu, resolveGeniusHit } from "./geniusHitMenu.ts";
+import { geniusHitMenu, geniusHitOpener, resolveGeniusHit } from "./geniusHitMenu.ts";
 
 const hit = {
   id: 8,
@@ -171,4 +171,72 @@ test("a download under way offers Cancel Download for the streamed song", async 
   assert.equal(cancel?.label, "Cancel Download");
   cancel?.run();
   assert.deepEqual(done, [["cancelDownload", online]]);
+});
+
+/** A tap's effects, recorded in order. */
+const tapRecorder = () => {
+  const done: unknown[][] = [];
+  return {
+    done,
+    effects: {
+      play: (song: unknown) => void done.push(["play", song]),
+      openUrl: (url: string) => void done.push(["openUrl", url]),
+      pending: (pending: { readonly id: number } | null) =>
+        void done.push(["pending", pending?.id ?? null]),
+    },
+  };
+};
+
+test("a tapped Genius result plays the song it resolves to, as its long press resolves it", async () => {
+  const { ports, searched } = lookup([], [online]);
+  const { done, effects } = tapRecorder();
+  await geniusHitOpener(ports, effects)(hit);
+  assert.deepEqual(searched, ["Teardrop Massive Attack"]);
+  assert.deepEqual(done, [
+    ["pending", 8],
+    ["play", { source: "stream", song: online }],
+    ["pending", null],
+  ]);
+});
+
+test("a second tap while the first resolves searches nothing more and plays once", async () => {
+  const searched: string[] = [];
+  const asked: ((songs: readonly YtSong[]) => void)[] = [];
+  const answer = (songs: readonly YtSong[]) => {
+    for (const reply of asked.splice(0)) reply(songs);
+  };
+  const ports = {
+    library: async () => [],
+    ytMusic: () => true,
+    search: (_asker: unknown, query: string) => {
+      searched.push(query);
+      return new Promise<{ ok: true; songs: readonly YtSong[] }>((resolve) => {
+        asked.push((songs) => resolve({ ok: true, songs }));
+      });
+    },
+  };
+  const { done, effects } = tapRecorder();
+  const open = geniusHitOpener(ports, effects);
+  const first = open(hit);
+  const second = open(hit);
+  await new Promise((resolve) => setImmediate(resolve));
+  answer([online]);
+  await Promise.all([first, second]);
+  assert.deepEqual(searched, ["Teardrop Massive Attack"]);
+  assert.deepEqual(done, [
+    ["pending", 8],
+    ["play", { source: "stream", song: online }],
+    ["pending", null],
+  ]);
+
+  // Once it has played, the next tap is taken again.
+  const again = open(hit);
+  await new Promise((resolve) => setImmediate(resolve));
+  answer([]);
+  await again;
+  assert.deepEqual(done.slice(3), [
+    ["pending", 8],
+    ["openUrl", hit.url],
+    ["pending", null],
+  ]);
 });

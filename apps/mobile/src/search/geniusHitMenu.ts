@@ -53,6 +53,52 @@ export type GeniusHitPlayable<L, S> =
   | { readonly source: "library"; readonly track: L }
   | { readonly source: "stream"; readonly song: S };
 
+/** What [result] plays: the Library track or the streamed song; null when it has neither. */
+const playableOf = <L extends RecognizeTrack, S extends YtSong>(
+  result: RecognizeResult<L, S>,
+): GeniusHitPlayable<L, S> | null =>
+  result.kind === "library"
+    ? { source: "library", track: result.track }
+    : result.kind === "stream"
+      ? { source: "stream", song: result.song }
+      : null;
+
+/** What a tap on a Genius result does. */
+export interface GeniusHitTapEffects<L, S> {
+  readonly play: (song: GeniusHitPlayable<L, S>) => void;
+  readonly openUrl: (url: string) => void;
+  /** The hit whose song is being looked up, then null once it plays or opens. */
+  readonly pending: (hit: GeniusLyricsHit | null) => void;
+}
+
+/**
+ * Taps on Genius results: each resolves as its long press does (`resolveGeniusHit`) and plays
+ * the Library song or the streamed one, else opens the hit on Genius. One at a time: a tap
+ * while one resolves is ignored, so a double tap searches YT Music once and plays once.
+ */
+export const geniusHitOpener = <L extends RecognizeTrack, S extends YtSong>(
+  lookup: RecognitionLookup<L, S>,
+  effects: GeniusHitTapEffects<L, S>,
+): ((hit: GeniusLyricsHit) => Promise<void>) => {
+  let opening = false;
+  return async (hit) => {
+    if (opening) return;
+    opening = true;
+    effects.pending(hit);
+    try {
+      const result = await resolveGeniusHit(lookup, hit, new AbortController().signal).catch(
+        () => null,
+      );
+      const playable = result === null ? null : playableOf(result);
+      if (playable !== null) effects.play(playable);
+      else effects.openUrl(hit.url);
+    } finally {
+      opening = false;
+      effects.pending(null);
+    }
+  };
+};
+
 /** What the menu's entries do. */
 export interface GeniusHitEffects<L extends RecognizeTrack, S extends YtSong> {
   readonly play: (song: GeniusHitPlayable<L, S>) => void;
@@ -79,12 +125,7 @@ export const geniusHitMenu = <L extends RecognizeTrack, S extends YtSong>(
   effects: GeniusHitEffects<L, S>,
 ): readonly GeniusHitMenuEntry[] => {
   const labels = geniusLyricsResultActionLabels(catalogue);
-  const playable: GeniusHitPlayable<L, S> | null =
-    result.kind === "library"
-      ? { source: "library", track: result.track }
-      : result.kind === "stream"
-        ? { source: "stream", song: result.song }
-        : null;
+  const playable = playableOf(result);
   const run = (action: GeniusLyricsResultAction): void => {
     switch (action) {
       case "play":

@@ -1,13 +1,16 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import { createElement } from "react";
+import type { SongLookup } from "@wave/core";
 import { act, create, type ReactTestRenderer } from "react-test-renderer";
 
 import { reactCompilerBuilds, stubModule } from "../perf/reactCompilerBuilds.ts";
 
 Object.assign(globalThis, { IS_REACT_ACT_ENVIRONMENT: true });
 
-const requestsModule = stubModule("export const requests = [];");
+const requestsModule = stubModule(
+  "export const requests = []; export const worker = { reply: { meta: { status: 502 } } };",
+);
 const builds = await reactCompilerBuilds<typeof import("./geniusLyricsSearch.ts")>(
   new URL("./geniusLyricsSearch.ts", import.meta.url).href,
   {
@@ -16,16 +19,19 @@ const builds = await reactCompilerBuilds<typeof import("./geniusLyricsSearch.ts"
       "export const online = () => true; export const subscribeConnectivity = () => () => {};",
     ),
     "@/sync/askWaveService": stubModule(
-      `import { requests } from ${JSON.stringify(requestsModule)};
+      `import { requests, worker } from ${JSON.stringify(requestsModule)};
        export const askWaveService = async (path) => {
          requests.push(path);
-         return { meta: { status: 502 } };
+         return worker.reply;
        };`,
     ),
     "@/sync/waveSignedIn": stubModule("export const useWaveSignedIn = () => true;"),
   },
 );
-const { requests } = (await import(requestsModule)) as { requests: string[] };
+const { requests, worker } = (await import(requestsModule)) as {
+  requests: string[];
+  worker: { reply: unknown };
+};
 
 const reply = {
   meta: { status: 200 },
@@ -49,7 +55,7 @@ const reply = {
 for (const [build, { requestGeniusLyricsSearch }] of Object.entries(builds)) {
   test(`${build}: Genius lyric search asks with the phrase and keeps covers and credits`, async () => {
     const paths: string[] = [];
-    const answer = await requestGeniusLyricsSearch("teardrop massive attack", [], {
+    const answer = await requestGeniusLyricsSearch("teardrop massive attack", {
       enabled: true,
       signedIn: true,
       isOnline: () => true,
@@ -82,18 +88,17 @@ for (const [build, { requestGeniusLyricsSearch }] of Object.entries(builds)) {
       return reply;
     };
     const base = { enabled: true, signedIn: true, isOnline: () => true, ask };
-    assert.equal((await requestGeniusLyricsSearch("one two", [], base)).status, "idle");
+    assert.equal((await requestGeniusLyricsSearch("one two", base)).status, "idle");
     assert.equal(
-      (await requestGeniusLyricsSearch("one two three", [], { ...base, signedIn: false })).status,
+      (await requestGeniusLyricsSearch("one two three", { ...base, signedIn: false })).status,
       "signedOut",
     );
     assert.equal(
-      (await requestGeniusLyricsSearch("one two three", [], { ...base, isOnline: () => false }))
-        .status,
+      (await requestGeniusLyricsSearch("one two three", { ...base, isOnline: () => false })).status,
       "offline",
     );
     assert.equal(
-      (await requestGeniusLyricsSearch("one two three", [], { ...base, enabled: false })).status,
+      (await requestGeniusLyricsSearch("one two three", { ...base, enabled: false })).status,
       "disabled",
     );
     assert.equal(calls, 0);
@@ -103,7 +108,7 @@ for (const [build, { requestGeniusLyricsSearch }] of Object.entries(builds)) {
     const base = { enabled: true, signedIn: true, isOnline: () => true };
     assert.equal(
       (
-        await requestGeniusLyricsSearch("one two three", [], {
+        await requestGeniusLyricsSearch("one two three", {
           ...base,
           ask: async () => ({ meta: { status: 502 } }),
         })
@@ -111,7 +116,7 @@ for (const [build, { requestGeniusLyricsSearch }] of Object.entries(builds)) {
       "failed",
     );
     let connected = true;
-    const answer = await requestGeniusLyricsSearch("one two three", [], {
+    const answer = await requestGeniusLyricsSearch("one two three", {
       ...base,
       isOnline: () => connected,
       ask: async () => {
@@ -152,6 +157,61 @@ for (const [build, { useGeniusLyricsSearch }] of Object.entries(builds)) {
       assert.equal(requests.length, 2);
       assert.equal(seen.at(-1)?.state.status, "failed");
     } finally {
+      await act(() => renderer?.unmount());
+    }
+  });
+}
+
+for (const [build, { useGeniusLyricsSearch }] of Object.entries(builds)) {
+  test(`${build}: a Library re-read keeps Genius's answer and asks nothing again`, async () => {
+    requests.length = 0;
+    worker.reply = reply;
+    const seen: ReturnType<typeof useGeniusLyricsSearch>[] = [];
+    function View({ library }: { library: readonly SongLookup[] }) {
+      seen.push(useGeniusLyricsSearch("teardrop massive attack", library, true));
+      return createElement("view");
+    }
+
+    let renderer: ReactTestRenderer | undefined;
+    try {
+      await act(async () => {
+        renderer = create(createElement(View, { library: [] }));
+      });
+      await act(() => new Promise((resolve) => setTimeout(resolve, 360)));
+      assert.equal(requests.length, 1);
+      assert.equal(seen.at(-1)?.state.status, "hits");
+
+      // A scan batch or a play count re-reads the Library: a new list, the same query.
+      await act(async () => {
+        renderer?.update(
+          createElement(View, {
+            library: [{ title: "Angel", artist: "Massive Attack", album: null, durationMs: 0 }],
+          }),
+        );
+      });
+      await act(() => new Promise((resolve) => setTimeout(resolve, 360)));
+      assert.equal(requests.length, 1);
+      const kept = seen.at(-1)?.state;
+      assert.equal(kept?.status, "hits");
+      assert.equal(kept?.status === "hits" ? kept.hits.length : -1, 1);
+
+      // The Library gains the song: its row leaves the Genius hits, still without asking again.
+      await act(async () => {
+        renderer?.update(
+          createElement(View, {
+            library: [{ title: "Teardrop", artist: "Massive Attack", album: null, durationMs: 0 }],
+          }),
+        );
+      });
+      await act(() => new Promise((resolve) => setTimeout(resolve, 360)));
+      assert.equal(requests.length, 1);
+      assert.deepEqual(seen.at(-1)?.state, {
+        query: "teardrop massive attack",
+        status: "hits",
+        hits: [],
+      });
+    } finally {
+      worker.reply = { meta: { status: 502 } };
       await act(() => renderer?.unmount());
     }
   });

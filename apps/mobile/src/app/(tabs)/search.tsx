@@ -4,7 +4,6 @@ import { IconSearch } from "@tabler/icons-react-native";
 import {
   heldTracks,
   inLibraryUnlessHeld,
-  type GeniusLyricsHit,
   type SearchKind,
   type YtPick,
   ytSectionToggle,
@@ -49,9 +48,11 @@ import {
   ytFooterRows,
 } from "@/search/rows";
 import { useLocalLyricsSearch } from "@/search/lyricsSearch";
+import { expansionAfterTyping, NO_EXPANSION, showAllLyricsOf, showAllOf } from "@/search/expansion";
 import { useGeniusLyricsSearch } from "@/search/geniusLyricsSearch";
 import { playSearchSong } from "@/search/playSearchSong";
-import { resolveRecognition } from "@/recognize/resolveRecognition";
+import { geniusHitLookup } from "@/search/GeniusHitActions";
+import { geniusHitOpener } from "@/search/geniusHitMenu";
 import { openRecognize, recognizeAvailable } from "@/recognize/RecognizeCard";
 import { useSearchRequests } from "@/search/queryRequest";
 import { useYtMusicSection } from "@/search/ytMusicSearch";
@@ -63,11 +64,8 @@ import { useTopArtistSongs } from "@/search/topArtistSongs";
 import { SearchResultsList } from "@/search/SearchResultsList";
 import { useListSelection } from "@/selection/useListSelection";
 import { useLineToggle } from "@/ytmusic/OnlineToggle";
-import { searchRecordingInTurn } from "@/ytmusic/askYtMusic";
-import { ytMusicEnabled } from "@/settings/ytMusic";
 import { useHeldSongs, useSongsInPlace } from "@/ytmusic/songsInPlace";
 
-const NO_KINDS: ReadonlySet<SearchKind> = new Set();
 const NO_YT_SONGS: readonly NativeYtSong[] = [];
 const NO_TRACKS: ReadonlySet<number> = new Set();
 const NO_SONG_ROWS: readonly SongRow[] = [];
@@ -124,8 +122,7 @@ export default function SearchScreen() {
   useRenderCount("SearchScreen");
   const insets = useSafeAreaInsets();
   const [query, setQuery] = useState("");
-  const [expanded, setExpanded] = useState<ReadonlySet<SearchKind>>(NO_KINDS);
-  const [lyricsExpanded, setLyricsExpanded] = useState(false);
+  const [expansion, setExpansion] = useState(NO_EXPANSION);
   const field = useRef<ComponentRef<typeof TextInput>>(null);
   const reduceMotion = useReducedMotion();
   // The tab's tap raises the keyboard; the Library is read only once it has.
@@ -226,13 +223,13 @@ export default function SearchScreen() {
     const found = () =>
       resultRows(
         results,
-        expanded,
+        expansion.kinds,
         ytView,
         placed,
         topArtistSongs,
         language,
         lyricHits,
-        lyricsExpanded,
+        expansion.lyrics,
         deferredQuery,
         onlineLyrics,
         onlineLyricsStatus,
@@ -250,13 +247,12 @@ export default function SearchScreen() {
     results,
     libraryEmpty,
     deferredQuery,
-    expanded,
+    expansion,
     ytView,
     placed,
     topArtistSongs,
     language,
     lyricHits,
-    lyricsExpanded,
     geniusLyrics,
   ]);
 
@@ -283,7 +279,7 @@ export default function SearchScreen() {
   const changeQuery = useCallback((text: string) => {
     perfMark("search.typed", text);
     setQuery(text);
-    if (text.trim() === "") setExpanded(NO_KINDS);
+    setExpansion((current) => expansionAfterTyping(current, text));
   }, []);
   const remember = useCallback(() => rememberSearch(query), [query]);
   const pickRecent = useCallback((recent: string) => {
@@ -293,41 +289,19 @@ export default function SearchScreen() {
   // Opened with a query (an unavailable playlist entry's Search): it searches for it.
   useSearchRequests(pickRecent);
   const showAll = useCallback(
-    (kind: SearchKind) => setExpanded((kinds) => new Set(kinds).add(kind)),
+    (kind: SearchKind) => setExpansion((current) => showAllOf(current, kind)),
     [],
   );
-  const showAllLyrics = useCallback(() => setLyricsExpanded(true), []);
-  const openGeniusHit = useCallback(
-    async (hit: GeniusLyricsHit) => {
-      const resolution = await resolveRecognition(
-        {
-          library: async () => library?.songs ?? [],
-          ytMusic: ytMusicEnabled,
-          search: (asker, _query, signal, song) => searchRecordingInTurn(asker, song, signal, true),
-        },
-        {
-          title: hit.title,
-          artist: hit.artist,
-          album: null,
-          coverUrl: hit.artworkUrl,
-          isrc: null,
-          releaseYear: null,
-        },
-        new AbortController().signal,
-      ).catch(() => null);
-      if (resolution?.kind === "resolved") {
-        if (resolution.result.kind === "library") {
-          void playSearchSong({ source: "library", track: resolution.result.track });
-          return;
-        }
-        if (resolution.result.kind === "stream") {
-          void playSearchSong({ source: "stream", song: resolution.result.song });
-          return;
-        }
-      }
-      void Linking.openURL(hit.url).catch(() => undefined);
-    },
-    [library?.songs],
+  const showAllLyrics = useCallback(() => setExpansion(showAllLyricsOf), []);
+  // A tapped Genius result plays what its long press would, one at a time; its row shows
+  // it's being looked up meanwhile.
+  const [pendingGeniusHit, setPendingGeniusHit] = useState<number | null>(null);
+  const [openGeniusHit] = useState(() =>
+    geniusHitOpener(geniusHitLookup, {
+      play: (song) => void playSearchSong(song),
+      openUrl: (url) => void Linking.openURL(url).catch(() => undefined),
+      pending: (hit) => setPendingGeniusHit(hit?.id ?? null),
+    }),
   );
 
   // The release runner's typing response: the results for what was typed, on screen.
@@ -405,6 +379,7 @@ export default function SearchScreen() {
               onShowAll={showAll}
               onShowAllLyrics={showAllLyrics}
               onGeniusHit={openGeniusHit}
+              pendingGeniusHit={pendingGeniusHit}
               onRetryGenius={retryGeniusLyrics}
               integrated={ytView?.integrated ?? false}
               selection={selection}
