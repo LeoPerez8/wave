@@ -88,9 +88,42 @@ test("faithful ranking excludes incompatible Library songs and fills only the sh
     faithful.map((candidate) => candidate.trackId),
     ["same", "unknown"],
   );
-  const batch = completeMagicRadioBatch(session, faithful, [], { seed: close, liked: [] });
+  const batch = completeMagicRadioBatch(session, faithful, [], () => ({ seed: close, liked: [] }));
   assert.deepEqual(batch.trackIds, ["same", "unknown", "metal"]);
+  assert.deepEqual(
+    batch.songs.map((song) => song.trackId),
+    ["same", "unknown", "metal"],
+  );
   assert.equal(batch.session.faithful, true);
+});
+
+test("a full faithful batch never ranks its Close fallback", () => {
+  const make = (trackId: string): import("./index.ts").MagicSong => ({
+    trackId,
+    artists: [magicArtistKey(trackId)],
+    genre: "reggae",
+    style: null,
+  });
+  const session = startMagicQueue({ kind: "track", id: "seed", title: "Seed" }, [make("seed")], {
+    id: "full",
+    random: () => 0,
+    faithful: true,
+  })!.session;
+  const faithful = rankRadioSongs(
+    { artists: ["Seed"], profile: new Map([["reggae", 1]]) },
+    {
+      pages: [],
+      library: Array.from({ length: 12 }, (_, n) => make(`song-${n}`)),
+    },
+    { faithfulness: 1, excludeIncompatible: true, libraryFallback: true },
+  );
+  let ranked = 0;
+  const batch = completeMagicRadioBatch(session, faithful, [], () => {
+    ranked++;
+    return { seed: [], liked: [] };
+  });
+  assert.ok(batch.trackIds.length >= 9);
+  assert.equal(ranked, 0);
 });
 const librarySong = (trackId: string, artist: string) => ({
   trackId,
