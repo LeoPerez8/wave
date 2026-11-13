@@ -453,6 +453,19 @@ export const WHOLE_LIBRARY: Record<string, WholeLibraryException> = {
       "Opening a kept notification result needs current Library identity after the runtime restarts. This fallback reads the shared songs query only for that explicit action and resolves the kept answer without searching, rather than subscribing during startup or listening.",
     capabilities: ["library/hooks.ts#songs"],
   },
+  "search/GeniusHitActions.tsx#geniusHitLookup": {
+    howOften:
+      "Once per tap or long press on a Genius result in Search's Lyrics section (a tap while one resolves is ignored); showing the results reads nothing.",
+    reason:
+      "A tap and the menu both resolve the hit as Recognize resolves a match (resolveRecognition), which needs the Library before searching online, using the shared songs query. geniusHitMenu.test.ts covers no online search for a Library match.",
+    capabilities: ["library/hooks.ts#songs"],
+  },
+  "search/GeniusHitActions.tsx#GeniusHitActionsMenu": {
+    howOften: "Once per shared Library version while a streamed result's menu is open.",
+    reason:
+      "As Recognize's result card, the explicitly opened menu follows download membership only for a streamed result, so a completed download is not offered again.",
+    capabilities: ["ytmusic/libraryFinder.ts#useLoadedInLibrary"],
+  },
   "ytmusic/YtSongActions.tsx#runYtSongSwipe": {
     howOften: "Once per completed song swipe; finder reads are shared per Library version.",
     reason: "Explicit song menus and completed swipes resolve Library identity for their action.",
@@ -914,6 +927,14 @@ export const OWN_PRESS: Record<string, Exception> = {
   "home/UpcomingShows.tsx#ShowCard": {
     reason:
       "An Upcoming Shows ticket card: the whole card opens the tickets, its long press opens the show's menu.",
+  },
+  "search/LyricResultRows.tsx#LyricResultRow": {
+    reason:
+      "Search's Lyrics row for a Library or saved streamed match, with its matched line: a tap plays the song, a long press opens its menu.",
+  },
+  "search/LyricResultRows.tsx#GeniusLyricResultRow": {
+    reason:
+      "Search's Lyrics row for a Genius match: a tap resolves and plays the song (busy meanwhile), a long press opens its menu.",
   },
   "search/ArtworkRow.tsx#ArtworkRow": {
     reason: "Search's album and artist result row.",

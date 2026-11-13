@@ -145,12 +145,25 @@ export const magicRadioReadPlan = (
   };
 };
 
-/** Selects and commits a ranked batch against the latest session, including recording aliases. */
+/**
+ * Selects and commits a ranked batch against the latest session, including
+ * recording aliases. A short batch fills its missing places from [fallback]'s
+ * ranking, which is only asked for then (ranking is the slow part). The
+ * chosen songs come back in order with their track ids.
+ */
 export const completeMagicRadioBatch = (
   session: MagicSession,
   seed: readonly RankedRadioSong[],
   liked: readonly RankedRadioSong[],
-): { readonly session: MagicSession; readonly trackIds: readonly string[] } => {
+  fallback?: () => {
+    readonly seed: readonly RankedRadioSong[];
+    readonly liked: readonly RankedRadioSong[];
+  },
+): {
+  readonly session: MagicSession;
+  readonly trackIds: readonly string[];
+  readonly songs: readonly RankedRadioSong[];
+} => {
   const exclude = magicRadioExclusions(
     session,
     [...seed, ...liked].flatMap((s) => s.song ?? []),
@@ -158,16 +171,49 @@ export const completeMagicRadioBatch = (
   const eligible = (song: RankedRadioSong) =>
     !exclude.has(song.trackId) &&
     (song.song === null || !exclude.has(ytTrackId(song.song.videoId)));
-  const selected = magicRadioBatch(seed.filter(eligible), liked.filter(eligible), {
+  const primary = magicRadioBatch(seed.filter(eligible), liked.filter(eligible), {
     size: batchSize(session),
     newMusicShare: session.ytShare,
   });
+  const primaryIds = new Set(primary.map((song) => song.trackId));
+  const remaining = batchSize(session) - primary.length;
+  const isNewRecording = (song: RankedRadioSong): boolean =>
+    !primary.some((chosen) => {
+      if (chosen.trackId === song.trackId) return true;
+      if (chosen.song === null || song.song === null) return false;
+      return (
+        chosen.song.videoId === song.song.videoId ||
+        recordingMatches(
+          {
+            title: chosen.song.title,
+            artist: chosen.song.artists.join(", "),
+            durationMs: chosen.song.durationMs ?? 0,
+          },
+          song.song,
+        )
+      );
+    });
+  const fills = remaining > 0 ? fallback?.() : undefined;
+  const isFill = (song: RankedRadioSong) =>
+    eligible(song) && !primaryIds.has(song.trackId) && isNewRecording(song);
+  const fill =
+    fills === undefined
+      ? []
+      : magicRadioBatch(fills.seed.filter(isFill), fills.liked.filter(isFill), {
+          size: remaining,
+          newMusicShare: session.ytShare,
+        });
+  const selected = [...primary, ...fill];
   const trackIds = selected.map((song) => song.trackId);
-  if (trackIds.length === 0) return { session, trackIds };
+  if (trackIds.length === 0) return { session, trackIds, songs: selected };
   const used = new Set(session.used);
   for (const song of selected) {
     used.add(song.trackId);
     if (song.song !== null) used.add(ytTrackId(song.song.videoId));
   }
-  return { trackIds, session: { ...session, used: [...used], batches: session.batches + 1 } };
+  return {
+    trackIds,
+    songs: selected,
+    session: { ...session, used: [...used], batches: session.batches + 1 },
+  };
 };

@@ -116,7 +116,7 @@ export const magicYtSong = (
 
 /** What a Magic Queue was started from. */
 export interface MagicSeed {
-  readonly kind: "track" | "album" | "artist" | "playlist";
+  readonly kind: "track" | "album" | "artist" | "playlist" | "list";
   readonly id: string;
   /** Its name, as Up Next says it ("Magic Queue · from <title>"). */
   readonly title: string;
@@ -132,14 +132,14 @@ export interface MagicSongRadioSeed {
   readonly kind?: "song" | "artist";
 }
 
-/** A song of an album or playlist seed, whose radio a batch may read (`magicBatchRadios`). */
+/** A song of a list seed, whose radio a batch may read (`magicBatchRadios`). */
 export interface MagicSeedSong extends MagicSongRadioSeed {
   /** Its counted plays: the most played are drawn most often. */
   readonly plays: number;
 }
 
 /**
- * The seed songs of an album or a playlist ([songs]: its Library songs, with
+ * The seed songs of a list ([songs]: its Library songs, with
  * their artists' names and video id, and its streamed ones), in order, each
  * with its counted plays from [plays] (by queue track id; a song missing from
  * it was never counted): a streamed song is a seed as a Library one is.
@@ -174,6 +174,8 @@ export const magicListSeedSongs = (
 
 /** A Magic Queue under way: plain JSON saved with its queue. */
 export interface MagicSession {
+  /** Search starts and automatic queue continuations keep to their seed. */
+  readonly faithful?: boolean;
   /** Continued from an ordinary queue: the first batch adds ten songs after it. */
   readonly continuation?: boolean;
   readonly radioSeed?: MagicSongRadioSeed;
@@ -266,6 +268,23 @@ export const magicSeedProfile = (
   return averageProfile(session.radioArtists, profileOf);
 };
 
+/** The genre profile a faithful session follows, dropping list families below 10%. */
+export const magicFaithfulGenreProfile = (
+  session: MagicSession,
+  profileOf?: GenreProfileOf,
+): GenreProfile | null => {
+  const profile = magicSeedProfile(session, profileOf);
+  if (profile === null) return null;
+  if (
+    session.seed.kind !== "album" &&
+    session.seed.kind !== "playlist" &&
+    session.seed.kind !== "list"
+  )
+    return profile;
+  const known = new Map([...profile].filter(([, share]) => share >= 0.1));
+  return known.size === 0 ? null : known;
+};
+
 /** The context kind of a Magic Queue's queue; its id is the session's. */
 export const MAGIC_QUEUE_CONTEXT = "magic";
 
@@ -301,11 +320,13 @@ export const startMagicQueue = (
     random,
     radio,
     ytShare = YT_SHARE_START,
+    faithful = false,
   }: {
     readonly id: string;
     readonly random: RandomSource;
     readonly radio?: MagicRadioSeed;
     readonly ytShare?: number;
+    readonly faithful?: boolean;
   },
 ): { readonly session: MagicSession; readonly first: string } | null => {
   const pick =
@@ -316,6 +337,7 @@ export const startMagicQueue = (
   return {
     session: {
       id,
+      ...(faithful ? { faithful: true } : {}),
       seed,
       ...(radio?.song === undefined ? {} : { radioSeed: radio.song }),
       ...(radio?.songs === undefined || radio.songs.length === 0
@@ -415,7 +437,15 @@ export const searchSongTap = <
  */
 export const startStreamedMagicQueue = (
   song: YtSong,
-  { id, ytShare }: { readonly id: string; readonly ytShare?: number },
+  {
+    id,
+    ytShare,
+    faithful = false,
+  }: {
+    readonly id: string;
+    readonly ytShare?: number;
+    readonly faithful?: boolean;
+  },
 ): { readonly session: MagicSession; readonly first: string } => {
   const trackId = ytTrackId(song.videoId);
   const started = startMagicQueue(
@@ -424,6 +454,7 @@ export const startStreamedMagicQueue = (
     {
       id,
       random: () => 0,
+      faithful,
       radio: {
         song: {
           id: `song:${trackId}`,
@@ -443,7 +474,7 @@ export const startStreamedMagicQueue = (
   return started!;
 };
 
-/** How many of an album's or a playlist's songs a session keeps to draw its radios from. */
+/** How many songs a list seed keeps to draw its radios from. */
 const MAX_SEED_SONGS = 200;
 
 /** Up to `MAX_SEED_SONGS` of [songs], the most played, in their order. */
@@ -455,7 +486,7 @@ const mostPlayed = (songs: readonly MagicSeedSong[]): readonly MagicSeedSong[] =
 };
 
 /**
- * The radios [session]'s next batch reads: an album's or a playlist's draws
+ * The radios [session]'s next batch reads: a list seed draws
  * up to 3 of its songs by different artists, the most played most often,
  * leaving out songs drawn for earlier batches while others remain
  * (`drawSeedSongs`). The draw is made once a batch; [session] comes back
@@ -760,7 +791,7 @@ const isStrings = (value: unknown): value is string[] =>
 const isWeights = (value: unknown): value is Record<string, number> =>
   isRecord(value) && Object.values(value).every((weight) => typeof weight === "number");
 
-const SEED_KINDS: ReadonlySet<unknown> = new Set(["track", "album", "artist", "playlist"]);
+const SEED_KINDS: ReadonlySet<unknown> = new Set(["track", "album", "artist", "playlist", "list"]);
 
 /** Whether [value] is a saved `MagicSongRadioSeed`. */
 const isRadioSeed = (value: unknown): value is Record<string, unknown> =>
@@ -818,6 +849,7 @@ export const parseMagicSession = (value: unknown): MagicSession | null => {
   return {
     ...(validSeed ? { radioSeed: radioSeed as unknown as MagicSongRadioSeed } : {}),
     ...(value["continuation"] === true ? { continuation: true } : {}),
+    ...(value["faithful"] === true ? { faithful: true } : {}),
     ...(Array.isArray(likedRadios) && likedRadios.every(isRadioSeed)
       ? { likedRadios: likedRadios as unknown as readonly MagicSongRadioSeed[] }
       : {}),

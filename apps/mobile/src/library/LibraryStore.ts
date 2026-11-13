@@ -280,7 +280,16 @@ import {
   removePendingFavorites,
   selectPendingFavorites,
 } from "./db/pendingFavorites";
-import { forgetSavedLyrics, keepSavedLyrics, selectSavedLyrics } from "./db/savedLyrics";
+import {
+  forgetSavedLyrics,
+  indexSavedLyrics,
+  keepSavedLyrics,
+  selectSavedLyrics,
+  selectSavedLyricsCandidates,
+  selectSavedLyricsSearchIndexPage,
+  type SavedLyricsCandidate,
+} from "./db/savedLyrics";
+import { notifyLyricsSearchIndexChanged } from "./lyricsSearchVersion";
 import {
   rememberNoBetterCopies,
   replaceTrackFile,
@@ -296,6 +305,16 @@ import {
   type DuplicateFixToApply,
 } from "./db/replacementDuplicates";
 import { keepLyricsMiss, selectLyricsSearchTrack, type LyricsSearchTrack } from "./db/lyricsMisses";
+import {
+  keepLyricsSearchText,
+  selectLyricsCandidates,
+  selectLyricsIndexPage,
+  selectLyricsIndexTarget,
+  selectStaleLyricsIndexPage,
+  selectLyricsTrackIdAtPath,
+  type LyricsCandidate,
+  type LyricsIndexTarget,
+} from "./db/lyricsSearchIndex";
 import {
   type KnownVideosCursor,
   selectKnownVideos,
@@ -358,6 +377,7 @@ import {
   selectSongOrder,
   selectSongSummaries,
   selectSongsWithIds,
+  selectSongsWithVideos,
   selectSortedSongs,
   type SongOrder,
   type SongSummary,
@@ -1000,6 +1020,10 @@ export class LibraryStore extends Context.Service<
      * (a song link's Library copy), or null.
      */
     readonly songWithVideo: (videoId: string) => Effect.Effect<SongRow | null, LibraryStoreError>;
+    /** Downloaded Library copies of [videoIds], in one read, by video id. */
+    readonly songsWithVideos: (
+      videoIds: readonly string[],
+    ) => Effect.Effect<ReadonlyMap<string, SongRow>, LibraryStoreError>;
     /** Each of the songs [ids]' counted plays, by song id (those with any). */
     readonly countedPlays: (
       ids: readonly number[],
@@ -1454,6 +1478,47 @@ export class LibraryStore extends Context.Service<
     readonly keepLyricsMiss: (
       trackId: number,
       checkedAt: number | null,
+    ) => Effect.Effect<void, LibraryStoreError>;
+    /** A page of existing Library files whose lyrics have not been indexed yet. */
+    readonly lyricsIndexPage: (
+      afterId: number,
+      limit: number,
+    ) => Effect.Effect<readonly LyricsIndexTarget[], LibraryStoreError>;
+    /** Current file and has-lyrics flag for a track changed by a scan or tag write. */
+    readonly lyricsIndexTarget: (
+      trackId: number,
+    ) => Effect.Effect<LyricsIndexTarget | null, LibraryStoreError>;
+    /** A bounded page of indexed rows whose file/lyrics flag became stale. */
+    readonly staleLyricsIndexPage: (
+      afterId: number,
+      limit: number,
+    ) => Effect.Effect<readonly LyricsIndexTarget[], LibraryStoreError>;
+    /** Track id currently using a file path, if any. */
+    readonly lyricsTrackIdAtPath: (path: string) => Effect.Effect<number | null, LibraryStoreError>;
+    /**
+     * Stores timestamp-free lyrics and their searchable word positions, local to
+     * this phone. Empty lyrics mark the file checked; null removes the song.
+     */
+    readonly keepLyricsSearchText: (
+      trackId: number,
+      lyrics: string | null,
+    ) => Effect.Effect<void, LibraryStoreError>;
+    /** Indexed phrase candidates; Core finds their matching line and highlight ranges. */
+    readonly searchLyrics: (
+      query: string,
+    ) => Effect.Effect<readonly LyricsCandidate[], LibraryStoreError>;
+    /** Indexed saved streamed-song lyrics that may contain [query]. */
+    readonly searchSavedLyrics: (
+      query: string,
+    ) => Effect.Effect<readonly SavedLyricsCandidate[], LibraryStoreError>;
+    /** A bounded page of found saved lyrics still to backfill into Search. */
+    readonly savedLyricsSearchIndexPage: (
+      afterVideoId: string,
+      limit: number,
+    ) => Effect.Effect<readonly SavedLyricsCandidate[], LibraryStoreError>;
+    /** Adds a pre-migration saved lyric to Search's word index. */
+    readonly indexSavedLyricsSearchText: (
+      candidate: SavedLyricsCandidate,
     ) => Effect.Effect<void, LibraryStoreError>;
     /**
      * Every YT Music song the owner streamed before streamed plays were
@@ -2092,6 +2157,8 @@ const make = Effect.gen(function* () {
         const id = selectSongWithVideo(db, videoId);
         return id === null ? null : (selectSongsWithIds(db, [id])[0] ?? null);
       }),
+    songsWithVideos: (videoIds) =>
+      attempt("read the songs of videos", () => selectSongsWithVideos(db, videoIds)),
     countedPlays: (ids) =>
       attempt("read the songs' counted plays", () => selectCountedPlays(db, ids)),
     songCountedPlays: (trackIds) =>
@@ -2412,16 +2479,51 @@ const make = Effect.gen(function* () {
     savedLyrics: (videoId) => attempt("read saved lyrics", () => selectSavedLyrics(db, videoId)),
 
     keepSavedLyrics: (videoId, saved) =>
-      writeAttempt("save lyrics", () => keepSavedLyrics(db, videoId, saved, Date.now())),
+      writeAttempt("save lyrics", () => {
+        keepSavedLyrics(db, videoId, saved, Date.now());
+        notifyLyricsSearchIndexChanged();
+      }),
 
     forgetSavedLyrics: (videoIds) =>
-      writeAttempt("forget saved lyrics", () => forgetSavedLyrics(db, videoIds)),
+      writeAttempt("forget saved lyrics", () => {
+        forgetSavedLyrics(db, videoIds);
+        notifyLyricsSearchIndexChanged();
+      }),
 
     lyricsSearchTrack: (trackId) =>
       attempt("read the song's lyrics search", () => selectLyricsSearchTrack(db, trackId)),
 
     keepLyricsMiss: (trackId, checkedAt) =>
       writeAttempt("remember the lyrics search", () => keepLyricsMiss(db, trackId, checkedAt)),
+
+    lyricsIndexPage: (afterId, limit) =>
+      attempt("read a page of lyrics to index", () => selectLyricsIndexPage(db, afterId, limit)),
+
+    lyricsIndexTarget: (trackId) =>
+      attempt("read lyrics index target", () => selectLyricsIndexTarget(db, trackId)),
+
+    staleLyricsIndexPage: (afterId, limit) =>
+      attempt("read stale lyrics index rows", () => selectStaleLyricsIndexPage(db, afterId, limit)),
+
+    lyricsTrackIdAtPath: (path) =>
+      attempt("find lyrics index track", () => selectLyricsTrackIdAtPath(db, path)),
+
+    keepLyricsSearchText: (trackId, lyrics) =>
+      writeAttempt("index lyrics for Search", () => keepLyricsSearchText(db, trackId, lyrics)),
+
+    searchLyrics: (query) =>
+      attempt("search indexed lyrics", () => selectLyricsCandidates(db, query)),
+
+    searchSavedLyrics: (query) =>
+      attempt("search saved lyrics", () => selectSavedLyricsCandidates(db, query)),
+
+    savedLyricsSearchIndexPage: (afterVideoId, limit) =>
+      attempt("read saved lyrics to index", () =>
+        selectSavedLyricsSearchIndexPage(db, afterVideoId, limit),
+      ),
+
+    indexSavedLyricsSearchText: (candidate) =>
+      writeAttempt("index saved lyrics for Search", () => indexSavedLyrics(db, candidate)),
 
     streamedSongs: attempt("read the songs streamed", () => selectStreamedSongs(db)),
 

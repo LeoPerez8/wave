@@ -3,8 +3,14 @@ import { formatNumber } from "../formatting.ts";
 import type { playbackTextEn } from "./playbackTextEn.ts";
 export const playbackTextPtBr: typeof playbackTextEn = {
   aboutGenius: "Sobre · Genius",
+  loadingGeniusInsights: "Carregando informações do Genius…",
+  geniusHasNoInsightsForThisSong: "O Genius não tem informações sobre esta música",
+  couldntLoadGeniusInsights: "Não foi possível carregar as informações do Genius",
   signInToSeeWhatGeniusSaysAboutThisSong:
     "Inicie sessão em uma Conta Wave para ver o que o Genius diz sobre esta música.",
+  signInToWaveAccountToSearchLyricsOnline:
+    "Inicie sessão em uma Conta Wave para buscar letras online",
+  couldntSearchLyricsOnline: "Não foi possível buscar letras online",
   addLyricsToThisSongsTagsOrPutAnLrcFileWithTheSameNameBesideIt:
     "Adicione a letra às tags da música ou coloque um arquivo .lrc com o mesmo nome ao lado dela.",
   addToPlaylist: "Adicionar à Playlist",
@@ -75,6 +81,9 @@ export const playbackTextPtBr: typeof playbackTextEn = {
   longPressForGeniussAnnotations: "Mantenha pressionado para ver as anotações do Genius",
   longer: "Mais tempo",
   lyrics: "Letra",
+  lyricsSearchSection: "Letras",
+  geniusLyricsResult: (title: string, artist: string) => `${title}, ${artist}, no Genius`,
+  openInGenius: "Abrir no Genius",
   more: "Mais",
   moreInsights: "Mais informações",
   moveDown: "Mover para baixo",

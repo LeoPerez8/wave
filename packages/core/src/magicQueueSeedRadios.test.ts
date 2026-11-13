@@ -36,6 +36,7 @@ const start = (seed: MagicSeed, songs: readonly MagicSeedSong[]): MagicSession =
 };
 const album: MagicSeed = { kind: "album", id: "9", title: "Album" };
 const playlist: MagicSeed = { kind: "playlist", id: "4", title: "Mix" };
+const list: MagicSeed = { kind: "list", id: "yt:last", title: "Last song" };
 const nextBatch = (session: MagicSession): MagicSession => ({
   ...session,
   batches: session.batches + 1,
@@ -139,6 +140,25 @@ test("a long playlist keeps its 200 most played songs to draw from", () => {
   const session = start(playlist, songs);
   assert.equal(session.seedSongs?.length, 200);
   assert.ok(!session.seedSongs?.some((song) => song.plays < 50));
+});
+
+test("a loose queue list keeps its 200 most played songs and saves the batch draw", () => {
+  const songs = Array.from({ length: 205 }, (_, index) =>
+    seedSong(`q${index}`, `Artist ${index}`, index),
+  );
+  const session = start(list, songs);
+  assert.equal(session.seedSongs?.length, 200);
+  assert.deepEqual(
+    session.seedSongs?.map((song) => song.id),
+    songs.slice(5).map((song) => song.id),
+  );
+  const drawn = magicBatchRadios(session, seededRandom("queue"));
+  const restored = parseMagicSession(JSON.parse(JSON.stringify(drawn.session)));
+  assert.deepEqual(restored, drawn.session);
+  assert.deepEqual(
+    magicBatchRadios(restored!, seededRandom("retry")).seeds.map((song) => song.id),
+    drawn.seeds.map((song) => song.id),
+  );
 });
 
 test("a playlist's streamed songs are seeds too, each with its counted plays", () => {

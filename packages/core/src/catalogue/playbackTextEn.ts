@@ -2,9 +2,14 @@ import { plural } from "../plural.ts";
 import { formatNumber } from "../formatting.ts";
 export const playbackTextEn = {
   aboutGenius: "About · Genius",
+  loadingGeniusInsights: "Loading Genius insights…",
+  geniusHasNoInsightsForThisSong: "Genius has no insights for this song",
+  couldntLoadGeniusInsights: "Couldn't load Genius insights",
   /** The About card's place while no Wave account is signed in (Genius is asked through it). */
   signInToSeeWhatGeniusSaysAboutThisSong:
     "Sign in to a Wave account to see what Genius says about this song.",
+  signInToWaveAccountToSearchLyricsOnline: "Sign in to a Wave account to search lyrics online",
+  couldntSearchLyricsOnline: "Couldn't search lyrics online",
   addLyricsToThisSongsTagsOrPutAnLrcFileWithTheSameNameBesideIt:
     "Add lyrics to this song's tags, or put an .lrc file with the same name beside it.",
   addToPlaylist: "Add to Playlist",
@@ -74,7 +79,6 @@ export const playbackTextEn = {
   /** An unsynced lyric line with Genius highlights: a hold opens its annotations. */
   longPressForGeniussAnnotations: "Long press for Genius's annotations",
   longer: "Longer",
-  lyrics: "Lyrics",
   more: "More",
   moreInsights: "More insights",
   moveDown: "Move down",
@@ -140,6 +144,12 @@ export const playbackTextEn = {
   songMenu: "Song Menu",
   songActions: "Song actions",
   songs: "Songs",
+  lyrics: "Lyrics",
+  lyricsSearchSection: "Lyrics",
+  /** A Genius result in Search's Lyrics section, for screen readers. */
+  geniusLyricsResult: (title: string, artist: string) => `${title}, ${artist}, on Genius`,
+  /** A Genius result's long-press menu entry: opens the song's page on genius.com. */
+  openInGenius: "Open in Genius",
   songsAlbumsArtistsGenres: "Songs, albums, artists, genres",
   startTimer: "Start Timer",
   startsListeningAgainFromThisSource: "Starts listening again from this source",

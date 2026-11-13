@@ -65,6 +65,7 @@ import { onPlayEnded } from "./PlayHistory";
 import { Queue, queueState, toQueueTrack, type QueueTrack } from "./Queue";
 import { queueTracks, toYtQueueTrack } from "./queueTracks";
 import { readQueueContinuationSeed } from "./queueContinuationSeed";
+import { savedDiscoverMixForContinuation } from "../home/discoverMixes";
 import { makeQueueLengths } from "./queueLengths";
 import { latestTasteProfile, tasteProfileForRecommendation } from "./TasteProfile";
 import { cacheYtCoversInBackground, ytQueueTrack } from "./ytQueueTracks";
@@ -245,13 +246,14 @@ export const startMagicQueue = (
   seedSongs: readonly SongRow[],
   streamedSongs: readonly YtSong[] = [],
   continuation?: QueueState,
+  faithful = false,
 ) =>
   Effect.gen(function* () {
     if (continuation === undefined && !ytMusicEnabled()) return;
     const startedAt = Date.now();
     const playable = seedSongs.filter(songHasFile);
-    // An album's or a playlist's songs are all radio seeds, with or without a file.
-    const list = seed.kind === "album" || seed.kind === "playlist";
+    // A list seed's songs are radio seeds, with or without a file.
+    const list = seed.kind === "album" || seed.kind === "playlist" || seed.kind === "list";
     const radioSongs = list ? seedSongs : playable;
     const store = yield* LibraryStore;
     const artists = yield* store.artistsByIds([
@@ -344,6 +346,7 @@ export const startMagicQueue = (
         ].slice(0, SEED_VIDEO_IDS),
       },
       ytShare: magicQueueShare(discoverLevel.get()),
+      faithful: faithful || continuation !== undefined,
     });
     if (started === null) return;
     if (continuation !== undefined) {
@@ -377,13 +380,14 @@ export const startMagicQueue = (
  * first 9 recommendations follow from its radio (Core's
  * `startStreamedMagicQueue`).
  */
-export const startStreamedMagicQueue = (song: YtSong) =>
+export const startStreamedMagicQueue = (song: YtSong, faithful = false) =>
   Effect.gen(function* () {
     if (!ytMusicEnabled()) return;
     const startedAt = Date.now();
     const { session } = startStreamedSession(song, {
       id: String(Date.now()),
       ytShare: magicQueueShare(discoverLevel.get()),
+      faithful,
     });
     // Nothing of the Library was read for it: the first pick waits for the snapshot's.
     startingLibrary = { songs: [], artists: [] };
@@ -547,7 +551,7 @@ export const layer = Layer.effectDiscard(
         const playable = library.songs.filter(songHasFile);
         const candidates = yt.candidates;
         const likedCandidates = yt.likedCandidates;
-        const batch = completeMagicRadioBatch(session, candidates, likedCandidates);
+        const batch = completeMagicRadioBatch(session, candidates, likedCandidates, yt.fallback);
         if (batch.trackIds.length === 0)
           return {
             kind: "empty",
@@ -561,24 +565,19 @@ export const layer = Layer.effectDiscard(
             refill: yt.refilled,
           } satisfies MagicBatchOutcome;
         save(batch.session);
-        const allCandidates = [...candidates, ...likedCandidates];
         const tracks = new Map<string, QueueTrack>(
           playable.map((song) => [String(song.id), toQueueTrack(song)]),
         );
-        for (const candidate of allCandidates)
+        // The batch's own songs, so a stream that only the Close fill ranked has its track too.
+        for (const candidate of batch.songs)
           if (candidate.source === "stream" && candidate.song !== null)
             tracks.set(candidate.trackId, toYtQueueTrack(candidate.song, null));
         const songs = batch.trackIds.flatMap((id) => tracks.get(id) ?? []);
         yield* queue.dispatch({ type: "append", trackIds: songs.map((song) => song.id) }, songs);
-        const picked = new Set(batch.trackIds);
         appended(songs.length);
         yield* cacheYtCoversInBackground(
-          allCandidates.flatMap((candidate) =>
-            picked.has(candidate.trackId) &&
-            candidate.source === "stream" &&
-            candidate.song !== null
-              ? [candidate.song]
-              : [],
+          batch.songs.flatMap((candidate) =>
+            candidate.source === "stream" && candidate.song !== null ? [candidate.song] : [],
           ),
         ).pipe(Effect.provideService(YtMusic, ytMusic), Effect.provideService(Player, player));
         return { kind: "appended", songs: songs.length } satisfies MagicBatchOutcome;
@@ -680,7 +679,12 @@ export const layer = Layer.effectDiscard(
           const state = queueState.get();
           const seed = continuationSeedNow(state);
           if (seed === null) return;
-          const input = yield* readQueueContinuationSeed(seed, store, queueTracks.get());
+          const input = yield* readQueueContinuationSeed(
+            seed,
+            store,
+            queueTracks.get(),
+            savedDiscoverMixForContinuation,
+          );
           if (queueState.get() !== state) continue;
           if (input === null) return;
           yield* startMagicQueue(input.seed, input.songs, input.streamed, state).pipe(

@@ -5,13 +5,29 @@
  * the store tests.
  */
 import type { SavedLyrics } from "@wave/core";
-import { eq, inArray } from "drizzle-orm";
+import { and, asc, eq, gt, isNotNull, isNull, sql, inArray } from "drizzle-orm";
 
 import type { LibraryDatabase } from "./database.ts";
+import {
+  keepLyricsWords,
+  selectLyricsWordCandidates,
+  type LyricsWordIndex,
+} from "./lyricsWordIndex.ts";
 import * as schema from "./schema.ts";
 
 /** SQLite caps the variables in one statement; batches stay well under it. */
 const BATCH = 200;
+
+export interface SavedLyricsCandidate {
+  readonly videoId: string;
+  readonly lyrics: string;
+}
+
+const SAVED_LYRICS: LyricsWordIndex = {
+  texts: "saved_lyrics_search_index",
+  words: "saved_lyrics_search_words",
+  key: "video_id",
+};
 
 /** What is saved for [videoId], or null for nothing. */
 export const selectSavedLyrics = (db: LibraryDatabase, videoId: string): SavedLyrics | null => {
@@ -41,6 +57,7 @@ export const keepSavedLyrics = (
     .values({ videoId, ...row })
     .onConflictDoUpdate({ target: schema.savedLyrics.videoId, set: row })
     .run();
+  keepLyricsWords(db, SAVED_LYRICS, videoId, saved.kind === "found" ? saved.lyrics.text : null);
 };
 
 /** Drops what is saved for [videoIds]: a download put their lyrics in a file. */
@@ -52,3 +69,43 @@ export const forgetSavedLyrics = (db: LibraryDatabase, videoIds: readonly string
       .run();
   }
 };
+
+/** A bounded page of existing found lyrics whose Search index has not been built yet. */
+export const selectSavedLyricsSearchIndexPage = (
+  db: LibraryDatabase,
+  afterVideoId: string,
+  limit: number,
+): SavedLyricsCandidate[] => {
+  const saved = schema.savedLyrics;
+  const index = schema.savedLyricsSearchIndex;
+  return db
+    .select({ videoId: saved.videoId, lyrics: saved.lyrics })
+    .from(saved)
+    .leftJoin(index, eq(index.videoId, saved.videoId))
+    .where(
+      and(
+        gt(saved.videoId, afterVideoId),
+        isNotNull(saved.lyrics),
+        sql`trim(${saved.lyrics}) <> ''`,
+        isNull(index.videoId),
+      ),
+    )
+    .orderBy(asc(saved.videoId))
+    .limit(limit)
+    .all()
+    .filter((row): row is SavedLyricsCandidate => row.lyrics !== null);
+};
+
+/** Indexes found lyrics that predate the saved-lyrics Search index migration. */
+export const indexSavedLyrics = (db: LibraryDatabase, candidate: SavedLyricsCandidate): void =>
+  keepLyricsWords(db, SAVED_LYRICS, candidate.videoId, candidate.lyrics);
+
+/** Saved non-D lyrics whose indexed words hold [query]'s words in order (`selectLyricsWordCandidates`). */
+export const selectSavedLyricsCandidates = (
+  db: LibraryDatabase,
+  query: string,
+): SavedLyricsCandidate[] =>
+  selectLyricsWordCandidates(db, SAVED_LYRICS, query).map(({ key, lyrics }) => ({
+    videoId: String(key),
+    lyrics,
+  }));

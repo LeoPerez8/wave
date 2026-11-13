@@ -3,6 +3,7 @@ import {
   formatNumber,
   joinArtists,
   type QueueContext,
+  type GeniusLyricsHit,
   type SearchKind,
   type YtArtistAlbum,
 } from "@wave/core";
@@ -19,6 +20,7 @@ import { NameRow } from "@/catalog/NameRow";
 import { SKELETON_ROWS, TrackSkeletons } from "@/catalog/Skeletons";
 import { useChromeInset } from "@/chrome/chrome";
 import { TextButton } from "@/components/TextButton";
+import { WaveSignInButton } from "@/sync/WaveSignInButton";
 import { listedTrackItem, type TrackItem } from "@/playback/actionTargets";
 import { LibraryAlbumCardRow } from "@/library/LibraryAlbumCard";
 import { openAlbum, openArtist, openGenre, openPlaylist } from "@/library/routes";
@@ -29,6 +31,7 @@ import {
   openPlaylistActions,
 } from "@/playback/ActionsMenu";
 
+import { GeniusLyricResultRow, LYRIC_ROW_HEIGHT, LyricResultRow } from "./LyricResultRows";
 import { playSearchSong } from "./playSearchSong";
 import type { ResultRow, ResultSong } from "./rows";
 import type { SearchHit } from "./searchIndex";
@@ -51,6 +54,10 @@ const SEARCH_CONTEXT: QueueContext = { kind: "search", id: null };
 
 const HEIGHT: Readonly<Record<ResultRow["type"], number>> = {
   heading: CELL * 6,
+  lyric: LYRIC_ROW_HEIGHT,
+  geniusLyric: LYRIC_ROW_HEIGHT,
+  geniusState: CELL * 6,
+  moreLyrics: CELL * 6,
   hit: grid.row,
   more: CELL * 6,
   capped: CELL * 6,
@@ -75,7 +82,9 @@ const ytAlbumHead = (album: YtArtistAlbum) => ({
 const keyExtractor = (row: ResultRow): string => row.key;
 const itemType = (row: ResultRow): ResultRow["type"] => row.type;
 const itemSize = (row: ResultRow): number | undefined =>
-  row.type === "note" || row.type === "capped" ? undefined : HEIGHT[row.type];
+  row.type === "note" || row.type === "capped" || row.type === "geniusState"
+    ? undefined
+    : HEIGHT[row.type];
 
 /** A song result as a song card's row: its play disc, "Song · " before its artist. */
 const SONG_CARD = { leading: { kind: "playDisc" }, kindLine: true } as const;
@@ -103,6 +112,11 @@ type Props = {
   /** Called when a result opens, so the search is kept among the recent ones. */
   onOpen: () => void;
   onShowAll: (kind: SearchKind) => void;
+  onShowAllLyrics: () => void;
+  onGeniusHit: (hit: GeniusLyricsHit) => void;
+  /** The Genius result whose song a tap is looking up, by id; its row shows it's busy. */
+  pendingGeniusHit: number | null;
+  onRetryGenius: () => void;
   /** Search shows YouTube Music's results (an integrated view): Library albums open integrated. */
   integrated: boolean;
   /** Song results are selectable; other results ignore taps while selecting. */
@@ -182,15 +196,25 @@ function Hit({
  * Search results in one virtualised list of fixed-height rows: section heads,
  * results and "Show all". Scrolling or tapping a row lets the keyboard go.
  */
-export function SearchResultsList({ rows, onOpen, onShowAll, integrated, selection }: Props) {
+export function SearchResultsList({
+  rows,
+  onOpen,
+  onShowAll,
+  onShowAllLyrics,
+  onGeniusHit,
+  pendingGeniusHit,
+  onRetryGenius,
+  integrated,
+  selection,
+}: Props) {
   const { strings } = useLocalisation();
   const { language } = useLocalisation();
   const scrollable = useListScrollable();
   const bottomInset = useChromeInset();
   const rowSelection = useMemo(() => songSelection(selection, songItem), [selection]);
   const rowState = useMemo(
-    () => ({ selection: selection.selection, integrated, language }),
-    [selection.selection, integrated, language],
+    () => ({ selection: selection.selection, integrated, language, pendingGeniusHit }),
+    [selection.selection, integrated, language, pendingGeniusHit],
   );
 
   const renderSlot = useCallback(
@@ -200,6 +224,56 @@ export function SearchResultsList({ rows, onOpen, onShowAll, integrated, selecti
           return (
             <View className="justify-end" style={{ height: HEIGHT.heading, paddingBottom: CELL }}>
               <CatalogLine>{item.label}</CatalogLine>
+            </View>
+          );
+        case "lyric":
+          return <LyricResultRow hit={item.hit} selecting={selection.selecting} onOpen={onOpen} />;
+        case "geniusLyric":
+          return (
+            <GeniusLyricResultRow
+              hit={item.hit}
+              selecting={selection.selecting}
+              pending={pendingGeniusHit === item.hit.id}
+              onOpen={onOpen}
+              onGeniusHit={onGeniusHit}
+            />
+          );
+        case "geniusState":
+          // Why the online part of Lyrics has nothing to show; wraps, so its height varies.
+          return (
+            <View className="justify-center" style={{ minHeight: HEIGHT.geniusState }}>
+              {item.status === "signedOut" ? (
+                <WaveSignInButton
+                  look="row"
+                  message={strings.playbackText.signInToWaveAccountToSearchLyricsOnline}
+                />
+              ) : item.status === "offline" ? (
+                <Text
+                  accessibilityLiveRegion="polite"
+                  className="font-sans text-footnote text-secondary"
+                >
+                  {strings.playbackText.noConnection}
+                </Text>
+              ) : (
+                <View className="flex-row items-center" style={{ gap: CELL * 2 }}>
+                  <Text
+                    accessibilityLiveRegion="polite"
+                    className="flex-1 font-sans text-footnote text-secondary"
+                  >
+                    {strings.playbackText.couldntSearchLyricsOnline}
+                  </Text>
+                  <TextButton label={strings.playbackText.tryAgain} onPress={onRetryGenius} />
+                </View>
+              )}
+            </View>
+          );
+        case "moreLyrics":
+          return (
+            <View style={{ height: HEIGHT.moreLyrics }}>
+              <TextButton
+                label={strings.playbackText.showAllValue(formatNumber(language, item.total))}
+                onPress={onShowAllLyrics}
+              />
             </View>
           );
         case "hit":
@@ -300,7 +374,18 @@ export function SearchResultsList({ rows, onOpen, onShowAll, integrated, selecti
           );
       }
     },
-    [onOpen, onShowAll, integrated, selection, language, strings],
+    [
+      onOpen,
+      onShowAll,
+      onShowAllLyrics,
+      onGeniusHit,
+      pendingGeniusHit,
+      onRetryGenius,
+      integrated,
+      selection,
+      language,
+      strings,
+    ],
   );
 
   return (

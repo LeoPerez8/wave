@@ -1,4 +1,11 @@
-import { parseTrackId, type MagicSeed, type QueueContinuationSeed, type YtSong } from "@wave/core";
+import {
+  parseTrackId,
+  ytTrackId,
+  type MagicSeed,
+  type QueueContinuationSeed,
+  type DiscoverMix,
+  type YtSong,
+} from "@wave/core";
 import * as Effect from "effect/Effect";
 import type { LibraryStore, LibraryStoreError, SongRow } from "../library/LibraryStore.ts";
 import { queuedYtSong, type QueueTrack } from "./queueTracks.ts";
@@ -9,11 +16,18 @@ interface ContinuationInput {
   readonly streamed: readonly YtSong[];
 }
 
-/** Reads only the original list, or the last song; queue context survives a restart. */
+/**
+ * Reads the original list or loose queue, or the last song; queue state
+ * survives a restart. A Discover mix that is gone, or was rebuilt since the
+ * queue played it, falls back to the queue's own songs as a list.
+ */
 export const readQueueContinuationSeed = (
   source: QueueContinuationSeed,
   store: Pick<LibraryStore["Service"], "getAlbum" | "getArtist" | "getPlaylist" | "songsByIds">,
   tracks: ReadonlyMap<string, QueueTrack>,
+  readDiscoverMix: (
+    id: string,
+  ) => { readonly mix: DiscoverMix; readonly title: string } | null = () => null,
 ): Effect.Effect<ContinuationInput | null, LibraryStoreError> =>
   Effect.gen(function* () {
     const id = Number(source.id);
@@ -50,6 +64,70 @@ export const readQueueContinuationSeed = (
               item.source === "stream" ? [item.song] : [],
             ),
           };
+    }
+    if (source.kind === "discoverMix") {
+      const found = readDiscoverMix(source.id);
+      // A mix rebuilt under the same id has other new songs: none the queue played.
+      const played = new Set(source.trackIds);
+      const saved =
+        found !== null && found.mix.songs.some((song) => played.has(ytTrackId(song.videoId)))
+          ? found
+          : null;
+      if (saved === null) {
+        const lastTrackId = source.trackIds.at(-1);
+        if (lastTrackId === undefined) return null;
+        const fallback = yield* readQueueContinuationSeed(
+          { kind: "list", id: lastTrackId, trackIds: source.trackIds },
+          store,
+          tracks,
+        );
+        return fallback;
+      }
+      const { mix, title } = saved;
+      const libraryIds = [
+        ...new Set(
+          (mix.familiar ?? []).flatMap((entry) =>
+            entry.source === "library" ? [entry.track.id] : [],
+          ),
+        ),
+      ];
+      const songs = yield* store.songsByIds(libraryIds);
+      return {
+        seed: { kind: "list", id: mix.id, title },
+        songs,
+        streamed: [
+          ...mix.songs,
+          ...(mix.familiar ?? []).flatMap((entry) =>
+            entry.source === "stream" ? [entry.song] : [],
+          ),
+        ],
+      };
+    }
+    if (source.kind === "list") {
+      const trackIds = source.trackIds;
+      const libraryIds = [
+        ...new Set(
+          trackIds.flatMap((trackId) => {
+            const ref = parseTrackId(trackId);
+            return ref?.kind === "library" ? [ref.id] : [];
+          }),
+        ),
+      ];
+      const songs = yield* store.songsByIds(libraryIds);
+      const lastTrackId = source.id;
+      const title =
+        songs.find((song) => String(song.id) === lastTrackId)?.title ??
+        tracks.get(lastTrackId)?.title;
+      if (title === undefined) return null;
+      return {
+        seed: { kind: "list", id: source.id, title },
+        songs,
+        streamed: trackIds.flatMap((trackId) => {
+          const track = tracks.get(trackId);
+          const song = track === undefined ? null : queuedYtSong(track);
+          return song === null ? [] : [song];
+        }),
+      };
     }
     const ref = parseTrackId(source.id);
     if (ref?.kind === "library") {

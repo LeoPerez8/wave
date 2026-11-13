@@ -1,4 +1,12 @@
-import { catalogueOf, formatNumber, type AppLanguage } from "@wave/core";
+import {
+  catalogueOf,
+  formatNumber,
+  GENIUS_LYRICS_SEARCH_PREVIEW,
+  joinArtists,
+  normalizeSearchText,
+  uniqueGeniusLyricsHits,
+  type AppLanguage,
+} from "@wave/core";
 import type {
   DiscoverSong,
   MixedSong,
@@ -6,6 +14,7 @@ import type {
   SearchKind,
   SearchResults,
   SongsInPlace,
+  GeniusLyricsHit,
   YtArtistAlbum,
   YtArtistCandidate,
   YtSearchTop,
@@ -16,7 +25,8 @@ import type {
 import type { SongRow } from "@/library/LibraryStore";
 import type { NativeYtSong } from "@/native/waveYtMusic";
 
-import { songHit, type SearchHit } from "./searchIndex";
+import type { SearchHit } from "./searchIndex";
+import type { LocalLyricsHit } from "./lyricsSearch";
 import type { TopArtistSongs } from "./topArtistSongs";
 
 /** A song result: the Library's, or one YT Music found that the Library lacks. */
@@ -34,6 +44,14 @@ export type PlacedYtSongs = Pick<SongsInPlace<NativeYtSong, SongRow, number>, "s
 /** One row of the results list: a section head, a result, or a group's "Show all". */
 export type ResultRow =
   | { readonly type: "heading"; readonly key: string; readonly label: string }
+  | { readonly type: "lyric"; readonly key: string; readonly hit: LocalLyricsHit }
+  | { readonly type: "geniusLyric"; readonly key: string; readonly hit: GeniusLyricsHit }
+  | {
+      readonly type: "geniusState";
+      readonly key: string;
+      readonly status: "signedOut" | "offline" | "failed";
+    }
+  | { readonly type: "moreLyrics"; readonly key: string; readonly total: number }
   | {
       readonly type: "hit";
       readonly key: string;
@@ -94,6 +112,49 @@ const PREVIEW: Readonly<Record<SearchKind, number>> = {
   playlist: 4,
   genre: 4,
 };
+const LYRIC_PREVIEW = 5;
+
+const lyricRows = (
+  hits: readonly LocalLyricsHit[],
+  geniusHits: readonly GeniusLyricsHit[],
+  expanded: boolean,
+  language: AppLanguage,
+  onlineStatus: "signedOut" | "offline" | "failed" | null,
+): ResultRow[] => {
+  if (hits.length === 0 && geniusHits.length === 0 && onlineStatus === null) return [];
+  const shown = expanded ? hits : hits.slice(0, LYRIC_PREVIEW);
+  const shownGenius = expanded ? geniusHits : geniusHits.slice(0, GENIUS_LYRICS_SEARCH_PREVIEW);
+  const total = hits.length + geniusHits.length;
+  return [
+    {
+      type: "heading",
+      key: "heading:lyrics",
+      label: `${catalogueOf(language).playbackText.lyricsSearchSection} · ${formatNumber(language, total)}`,
+    },
+    ...shown.map((hit) => ({
+      type: "lyric" as const,
+      key: hit.source === "library" ? `lyrics:${hit.song.id}` : `lyrics:yt:${hit.song.videoId}`,
+      hit,
+    })),
+    ...shownGenius.map((hit) => ({
+      type: "geniusLyric" as const,
+      key: `genius-lyrics:${hit.id}`,
+      hit,
+    })),
+    ...(onlineStatus === null
+      ? []
+      : [
+          {
+            type: "geniusState" as const,
+            key: `genius-state:${onlineStatus}`,
+            status: onlineStatus,
+          },
+        ]),
+    ...(shown.length < hits.length || shownGenius.length < geniusHits.length
+      ? [{ type: "moreLyrics" as const, key: "more:lyrics", total }]
+      : []),
+  ];
+};
 
 const labels = (language: AppLanguage): Readonly<Record<SearchKind, string>> => ({
   artist: catalogueOf(language).playbackText.artists,
@@ -101,6 +162,13 @@ const labels = (language: AppLanguage): Readonly<Record<SearchKind, string>> => 
   song: catalogueOf(language).playbackText.songs,
   playlist: catalogueOf(language).playbackText.playlists,
   genre: catalogueOf(language).playbackText.genres,
+});
+
+const songHit = (song: SongRow): SearchHit => ({
+  kind: "song",
+  name: song.title,
+  also: [song.artist, song.album],
+  song,
 });
 
 const hitId = (hit: SearchHit): number => {
@@ -167,8 +235,69 @@ export const resultRows = (
   { songs: placed, rowOf }: PlacedYtSongs,
   topArtist: TopArtistSongs | null = null,
   language: AppLanguage = "en",
+  lyrics: readonly LocalLyricsHit[] = [],
+  lyricsExpanded = false,
+  query = "",
+  geniusLyrics: readonly GeniusLyricsHit[] = [],
+  onlineStatus: "signedOut" | "offline" | "failed" | null = null,
 ): ResultRow[] => {
   const rows: ResultRow[] = [];
+  const songIds = new Set<number>([
+    ...results.groups.flatMap((group) =>
+      group.kind === "song"
+        ? group.items.flatMap((hit) => (hit.kind === "song" ? [hit.song.id] : []))
+        : [],
+    ),
+    ...placed.flatMap((row) => (row.source === "library" ? [row.track.id] : [])),
+    ...(results.top?.kind === "song" ? [results.top.song.id] : []),
+  ]);
+  const streamedVideoIds = new Set(
+    placed.flatMap((row) => (row.source === "stream" ? [row.song.videoId] : [])),
+  );
+  const visibleLyrics = lyrics.filter((hit) =>
+    hit.source === "library" ? !songIds.has(hit.song.id) : !streamedVideoIds.has(hit.song.videoId),
+  );
+  const geniusLocal = [
+    ...visibleLyrics.map((hit) =>
+      hit.source === "library"
+        ? {
+            title: hit.song.title,
+            artist: hit.song.artist,
+            album: hit.song.album,
+            durationMs: hit.song.durationMs,
+          }
+        : {
+            title: hit.song.title,
+            artist: joinArtists(hit.song.artists),
+            album: hit.song.album,
+            durationMs: hit.song.durationMs ?? 0,
+          },
+    ),
+    ...placed.flatMap((row) =>
+      row.source === "stream"
+        ? [
+            {
+              title: row.song.title,
+              artist: joinArtists(row.song.artists),
+              album: row.song.album,
+              durationMs: row.song.durationMs ?? 0,
+            },
+          ]
+        : [],
+    ),
+  ];
+  const visibleGenius = uniqueGeniusLyricsHits(geniusLyrics, [], geniusLocal);
+  const wordCount = normalizeSearchText(query).split(" ").filter(Boolean).length;
+  const lyricsFirst = wordCount >= 3;
+  const lyricSection = (): ResultRow[] =>
+    lyricRows(
+      visibleLyrics,
+      visibleGenius,
+      lyricsExpanded,
+      language,
+      lyricsFirst ? onlineStatus : null,
+    );
+  if (lyricsFirst) rows.push(...lyricSection());
   const ytArtists = yt?.artists ?? NO_YT_ARTISTS;
   const ytAlbums = yt?.albums ?? NO_YT_ALBUMS;
   const ytSongRow = (song: NativeYtSong, top: boolean): ResultRow => ({
@@ -224,6 +353,7 @@ export const resultRows = (
       ytTopRow(ytTop),
     );
   }
+  const afterTopResult = rows.length;
   const groups: SearchGroup<SearchHit>[] = [...results.groups];
   for (const kind of YT_KINDS)
     if (ytRows(kind).length > 0 && !groups.some((group) => group.kind === kind))
@@ -244,7 +374,10 @@ export const resultRows = (
       rows.push({ type: "more", key: `more:${group.kind}`, kind: group.kind, total });
     else if (shown.length < total)
       rows.push({ type: "capped", key: `capped:${group.kind}`, shown: shown.length, total });
+    if (group.kind === "song" && !lyricsFirst) rows.push(...lyricSection());
   }
+  if (!lyricsFirst && !groups.some((group) => group.kind === "song"))
+    rows.splice(afterTopResult, 0, ...lyricSection());
   return rows;
 };
 

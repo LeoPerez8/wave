@@ -2,7 +2,15 @@
 import assert from "node:assert/strict";
 import { beforeEach, describe, test } from "node:test";
 
-import { forgetSavedLyrics, keepSavedLyrics, selectSavedLyrics } from "./savedLyrics.ts";
+import {
+  forgetSavedLyrics,
+  indexSavedLyrics,
+  keepSavedLyrics,
+  selectSavedLyrics,
+  selectSavedLyricsCandidates,
+  selectSavedLyricsSearchIndexPage,
+} from "./savedLyrics.ts";
+import * as schema from "./schema.ts";
 import { openTestDatabase, type TestDatabase } from "./testDatabase.ts";
 
 let db: TestDatabase;
@@ -33,5 +41,65 @@ describe("lyrics saved for non-D songs", () => {
     forgetSavedLyrics(db, ["crush"]);
     assert.equal(selectSavedLyrics(db, "crush"), null);
     assert.notEqual(selectSavedLyrics(db, "harder"), null);
+  });
+
+  test("saved lyrics are searchable by normalized phrase and leave no stale candidates", () => {
+    keepSavedLyrics(db, "crush", {
+      kind: "found",
+      lyrics: { synced: true, text: "[00:01.00]Trem-Balá!\nOutra linha" },
+    });
+    keepSavedLyrics(db, "miss", { kind: "miss", checkedAt: 1_000 });
+
+    assert.deepEqual(selectSavedLyricsCandidates(db, "trem bala"), [
+      { videoId: "crush", lyrics: "[00:01.00]Trem-Balá!\nOutra linha" },
+    ]);
+    assert.deepEqual(selectSavedLyricsCandidates(db, "outra trem"), []);
+
+    keepSavedLyrics(db, "crush", { kind: "found", lyrics: { synced: false, text: "new words" } });
+    assert.deepEqual(selectSavedLyricsCandidates(db, "trem bala"), []);
+    assert.deepEqual(selectSavedLyricsCandidates(db, "new words"), [
+      { videoId: "crush", lyrics: "new words" },
+    ]);
+
+    forgetSavedLyrics(db, ["crush"]);
+    assert.deepEqual(selectSavedLyricsCandidates(db, "new words"), []);
+  });
+
+  test("a phrase repeated in a chorus finds its saved lyrics once", () => {
+    const text = "I love you\nyes I love you\nI love you";
+    keepSavedLyrics(db, "chorus", { kind: "found", lyrics: { synced: false, text } });
+
+    assert.deepEqual(selectSavedLyricsCandidates(db, "i love"), [
+      { videoId: "chorus", lyrics: text },
+    ]);
+  });
+
+  test("a common word hands Search at most 100 saved lyrics", () => {
+    for (let n = 0; n < 101; n++)
+      keepSavedLyrics(db, `video-${n}`, {
+        kind: "found",
+        lyrics: { synced: false, text: "love\nlove" },
+      });
+
+    assert.equal(selectSavedLyricsCandidates(db, "love").length, 100);
+  });
+
+  test("the background index page backfills saved lyrics from before the migration", () => {
+    db.insert(schema.savedLyrics)
+      .values({
+        videoId: "old-video",
+        lyrics: "old saved phrase",
+        synced: false,
+        checkedAt: 1_000,
+      })
+      .run();
+
+    const page = selectSavedLyricsSearchIndexPage(db, "", 10);
+    assert.deepEqual(page, [{ videoId: "old-video", lyrics: "old saved phrase" }]);
+    indexSavedLyrics(db, page[0]!);
+    assert.deepEqual(selectSavedLyricsCandidates(db, "saved phrase"), [
+      { videoId: "old-video", lyrics: "old saved phrase" },
+    ]);
+    assert.deepEqual(selectSavedLyricsSearchIndexPage(db, "", 10), []);
   });
 });

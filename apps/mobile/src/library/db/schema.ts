@@ -828,6 +828,29 @@ export const savedLyrics = sqliteTable("saved_lyrics", {
   checkedAt: integer("checked_at").notNull(),
 });
 
+/** Word positions for saved streamed-song lyrics, searchable offline by video. */
+export const savedLyricsSearchIndex = sqliteTable("saved_lyrics_search_index", {
+  videoId: text("video_id")
+    .primaryKey()
+    .references(() => savedLyrics.videoId, { onDelete: "cascade" }),
+  lyrics: text("lyrics").notNull(),
+});
+
+export const savedLyricsSearchWords = sqliteTable(
+  "saved_lyrics_search_words",
+  {
+    videoId: text("video_id")
+      .notNull()
+      .references(() => savedLyricsSearchIndex.videoId, { onDelete: "cascade" }),
+    position: integer("position").notNull(),
+    word: text("word").notNull(),
+  },
+  (t) => [
+    primaryKey({ columns: [t.videoId, t.position] }),
+    index("saved_lyrics_search_word_idx").on(t.word, t.videoId, t.position),
+  ],
+);
+
 /**
  * The songs a quality replacement found no better copy of (Core's
  * `noBetterCopies`): no Soulseek 320 for an upgrade, no YouTube Music match
@@ -859,6 +882,30 @@ export const lyricsMisses = sqliteTable("lyrics_misses", {
   /** When the search found nothing (ms since the epoch). */
   checkedAt: integer("checked_at").notNull(),
 });
+
+/** Timestamp-free local lyrics text used to narrow Search candidates. Never synced. */
+export const lyricsSearchIndex = sqliteTable("lyrics_search_index", {
+  trackId: integer("track_id")
+    .primaryKey()
+    .references(() => tracks.id, { onDelete: "cascade" }),
+  lyrics: text("lyrics").notNull(),
+});
+
+/** Word positions are indexed for contiguous lyric phrase candidate lookup. */
+export const lyricsSearchWords = sqliteTable(
+  "lyrics_search_words",
+  {
+    trackId: integer("track_id")
+      .notNull()
+      .references(() => lyricsSearchIndex.trackId, { onDelete: "cascade" }),
+    position: integer("position").notNull(),
+    word: text("word").notNull(),
+  },
+  (t) => [
+    primaryKey({ columns: [t.trackId, t.position] }),
+    index("lyrics_search_word_idx").on(t.word, t.trackId, t.position),
+  ],
+);
 
 /**
  * YT Music songs the owner streamed (`writePlaylistYtSong`'s JSON, by video):

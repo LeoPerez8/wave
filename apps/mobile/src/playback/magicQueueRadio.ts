@@ -6,6 +6,7 @@ import {
   magicLibrarySongs,
   magicRadioExclusions,
   magicRadioReadPlan,
+  magicFaithfulGenreProfile,
   magicSeedProfile,
   magicYtSong,
   availableMagicSongs,
@@ -82,7 +83,14 @@ export const magicQueueYtCandidates = (
   Effect.gen(function* () {
     const yt = yield* YtMusic;
     if (!ytMusicEnabled() && !session.continuation)
-      return { candidates: [], likedCandidates: [], ranked: 0, eligible: 0, refilled: null };
+      return {
+        candidates: [],
+        likedCandidates: [],
+        fallback: undefined,
+        ranked: 0,
+        eligible: 0,
+        refilled: null,
+      };
     const context = yield* Effect.context<LibraryStore>();
     const seeds = drawn.length > 0 ? drawn : [legacySeed(session)];
     const liked = ((sessionNow?.() ?? session).likedRadios ?? []).filter(
@@ -114,7 +122,7 @@ export const magicQueueYtCandidates = (
             Effect.map((ids) => new Set(ids)),
             Effect.orElseSucceed(() => new Set<string>()),
           );
-    const rank = (group: readonly SongRadioSeed[], original: boolean) => {
+    const rank = (group: readonly SongRadioSeed[], original: boolean, faithfulFallback = false) => {
       const current = sessionNow?.() ?? session;
       const read = readers.current(session.id, group);
       // Old artist radios still provide an offline fallback until an ordered page is saved.
@@ -135,7 +143,12 @@ export const magicQueueYtCandidates = (
       return availableMagicSongs(
         current,
         rankRadioSongs(
-          { artists, profile: magicSeedProfile(session, profileOf) },
+          {
+            artists,
+            profile: session.faithful
+              ? magicFaithfulGenreProfile(session, profileOf)
+              : magicSeedProfile(session, profileOf),
+          },
           {
             // Several radios interleave by position before ranking.
             pages: radios.map((radio) => ({
@@ -153,7 +166,14 @@ export const magicQueueYtCandidates = (
             signals: current.radioSignals ?? [],
             popularityOf: (id) => popularity.get(id) ?? 0,
           },
-          { ...sliders, exclude, libraryFallback: session.continuation === true && !connected },
+          {
+            ...sliders,
+            faithfulness: current.faithful ? (faithfulFallback ? 2 : 1) : sliders.faithfulness,
+            popularity: current.faithful ? 3 : sliders.popularity,
+            excludeIncompatible: current.faithful && !faithfulFallback,
+            exclude,
+            libraryFallback: session.continuation === true && !connected,
+          },
         ),
         { online: online(), ytMusic: ytMusicEnabled(), cachedVideos },
       );
@@ -173,11 +193,16 @@ export const magicQueueYtCandidates = (
     });
     const candidates = rank(seeds, true);
     const likedCandidates = rank(liked, false);
+    // Ranked again at Close only when the faithful batch comes up short (`completeMagicRadioBatch`).
+    const fallback = session.faithful
+      ? () => ({ seed: rank(seeds, true, true), liked: rank(liked, false, true) })
+      : undefined;
     found = [...candidates, ...likedCandidates];
     const songs = read.reduce((sum, { page }) => sum + (page?.songs.length ?? 0), 0);
     return {
       candidates,
       likedCandidates,
+      fallback,
       ranked: songs,
       eligible: candidates.length + likedCandidates.length,
       refilled: read.every(({ page }) => page === null) ? null : songs,

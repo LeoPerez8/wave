@@ -12,6 +12,7 @@
  */
 
 import { compareStrings, foldAccentsAndCase } from "./library.ts";
+import { parseLyrics } from "./lyrics.ts";
 
 export type SearchKind = "artist" | "album" | "song" | "playlist" | "genre";
 
@@ -64,6 +65,55 @@ const LEADING_ARTICLE = /^(?:the|a|an) (?=\S)/;
  */
 export const normalizeSearchText = (text: string): string =>
   foldAccentsAndCase(text.replace(APOSTROPHES, "")).replace(SEPARATORS, " ").trim();
+
+export interface LyricSearchMatch {
+  readonly line: string;
+  /** UTF-16 ranges in `line`, suitable for rendering highlighted text. */
+  readonly ranges: readonly { readonly start: number; readonly end: number }[];
+}
+
+/**
+ * A lyric line's words as the lyrics index splits them (`normalizeSearchText`),
+ * each with its range in the line. Combining marks stay inside a word, so text
+ * written with decomposed accents (`n`, `a`, U+0303, `o` for `não`) reads as one word.
+ */
+const lyricWords = (line: string): { word: string; start: number; end: number }[] =>
+  [...line.matchAll(LYRIC_TOKEN)].flatMap((match) =>
+    normalizeSearchText(match[0])
+      .split(" ")
+      .filter(Boolean)
+      .map((word) => ({ word, start: match.index, end: match.index + match[0].length })),
+  );
+
+const LYRIC_TOKEN = /[\p{L}\p{N}\p{M}]+(?:['’ʼ`´][\p{L}\p{N}\p{M}]+)*/gu;
+
+/** Finds the first lyric line containing the query's words in order and next to one another. */
+export const findLyricMatch = (lyricsText: string, query: string): LyricSearchMatch | null => {
+  const words = normalizeSearchText(query).split(" ").filter(Boolean);
+  if (words.length === 0) return null;
+  const lyrics = parseLyrics(lyricsText);
+  const lines =
+    lyrics.kind === "synced"
+      ? lyrics.lines.map((line) => line.text)
+      : lyrics.kind === "unsynced"
+        ? lyrics.lines
+        : [];
+  for (const line of lines) {
+    const tokens = lyricWords(line);
+    for (let start = 0; start <= tokens.length - words.length; start++) {
+      if (words.every((word, offset) => tokens[start + offset]?.word === word)) {
+        const ranges: { start: number; end: number }[] = [];
+        for (const token of tokens.slice(start, start + words.length)) {
+          // Words folded out of one character share its range; highlight it once.
+          if (ranges.at(-1)?.start !== token.start)
+            ranges.push({ start: token.start, end: token.end });
+        }
+        return { line, ranges };
+      }
+    }
+  }
+  return null;
+};
 
 /** How well an entry matches, best first. */
 const Tier = {

@@ -4,10 +4,12 @@ import { RECAP_PLAY_CONTEXT } from "./recapMusic.ts";
 import type { SleepTimer } from "./sleepTimer.ts";
 
 /** The source whose songs and name the app reads when a queue continues. */
-export interface QueueContinuationSeed {
-  readonly kind: "album" | "playlist" | "artist" | "track";
-  readonly id: string;
-}
+export type QueueContinuationSeed =
+  | { readonly kind: "album" | "playlist" | "artist" | "track"; readonly id: string }
+  /** Every entry in a loose queue, including History; `id` names the list by its last song. */
+  | { readonly kind: "list"; readonly id: string; readonly trackIds: readonly string[] }
+  /** A Discover mix id, with the played queue saved for when its mix is gone. */
+  | { readonly kind: "discoverMix"; readonly id: string; readonly trackIds: readonly string[] };
 
 /** What tells how much of a queue is left to play, against the Buffer setting. */
 export interface QueueTimeAhead {
@@ -101,6 +103,18 @@ export const queueContinuation = (
     (context.kind === "album" || context.kind === "playlist" || context.kind === "artist")
   )
     return { kind: context.kind, id: context.id };
+  if (context?.kind === "discoverMix" && context.id !== null)
+    return {
+      kind: "discoverMix",
+      id: context.id,
+      trackIds: state.entries.map((entry) => entry.trackId),
+    };
+  if (state.entries.length > 1)
+    return {
+      kind: "list",
+      id: last.trackId,
+      trackIds: state.entries.map((entry) => entry.trackId),
+    };
   return { kind: "track", id: last.trackId };
 };
 
@@ -108,5 +122,6 @@ export const queueContinuation = (
 export const continueMagicQueue = (session: MagicSession, state: QueueState): MagicSession => ({
   ...session,
   continuation: true,
+  faithful: true,
   used: [...new Set(state.entries.map((entry) => entry.trackId))],
 });

@@ -329,7 +329,7 @@ export const settingsEn = {
     "Leaves WhatsApp voice notes, phone and call recordings, and clips under 30 seconds with no artist out of the Library.",
   geniusInsights: "Genius insights",
   openingLyricsOnASongWithLyrics:
-    "Opening Lyrics on a song with lyrics shows what Genius says about it above the lyrics and highlights the lines Genius annotates, which means sending Genius the song's title and artist. Off, Wave makes no requests to Genius.",
+    "Opening Lyrics on a song with lyrics shows what Genius says about it above the lyrics and highlights the lines Genius annotates. Searching lyrics also sends the phrase to Genius. Off, Wave makes no requests to Genius.",
   notInYourMusicFolders: "Not in your music folders",
   waveOnlyShowsSongsFromYourMusic:
     "Wave only shows songs from your music folders, so there's nothing to exclude here.",

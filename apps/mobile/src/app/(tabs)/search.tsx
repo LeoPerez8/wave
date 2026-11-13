@@ -18,7 +18,7 @@ import {
   useRef,
   useState,
 } from "react";
-import { ScrollView, Text, TextInput, View } from "react-native";
+import { Linking, ScrollView, Text, TextInput, View } from "react-native";
 import Animated, { LayoutAnimationConfig, useReducedMotion } from "react-native-reanimated";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
@@ -47,6 +47,12 @@ import {
   songResults,
   ytFooterRows,
 } from "@/search/rows";
+import { useLocalLyricsSearch } from "@/search/lyricsSearch";
+import { expansionAfterTyping, NO_EXPANSION, showAllLyricsOf, showAllOf } from "@/search/expansion";
+import { useGeniusLyricsSearch } from "@/search/geniusLyricsSearch";
+import { playSearchSong } from "@/search/playSearchSong";
+import { geniusHitLookup } from "@/search/GeniusHitActions";
+import { geniusHitOpener } from "@/search/geniusHitMenu";
 import { openRecognize, recognizeAvailable } from "@/recognize/RecognizeCard";
 import { useSearchRequests } from "@/search/queryRequest";
 import { useYtMusicSection } from "@/search/ytMusicSearch";
@@ -60,9 +66,9 @@ import { useListSelection } from "@/selection/useListSelection";
 import { useLineToggle } from "@/ytmusic/OnlineToggle";
 import { useHeldSongs, useSongsInPlace } from "@/ytmusic/songsInPlace";
 
-const NO_KINDS: ReadonlySet<SearchKind> = new Set();
 const NO_YT_SONGS: readonly NativeYtSong[] = [];
 const NO_TRACKS: ReadonlySet<number> = new Set();
+const NO_SONG_ROWS: readonly SongRow[] = [];
 
 const trackId = (song: SongRow): number => song.id;
 
@@ -116,7 +122,7 @@ export default function SearchScreen() {
   useRenderCount("SearchScreen");
   const insets = useSafeAreaInsets();
   const [query, setQuery] = useState("");
-  const [expanded, setExpanded] = useState<ReadonlySet<SearchKind>>(NO_KINDS);
+  const [expansion, setExpansion] = useState(NO_EXPANSION);
   const field = useRef<ComponentRef<typeof TextInput>>(null);
   const reduceMotion = useReducedMotion();
   // The tab's tap raises the keyboard; the Library is read only once it has.
@@ -176,6 +182,24 @@ export default function SearchScreen() {
     [ytSection, inLibrary, holding.held],
   );
   const placed = useSongsInPlace(holding, ytView?.songs ?? NO_YT_SONGS, find);
+  const lyricsSkipIds = useMemo(
+    () =>
+      new Set([
+        ...(results === null ? [] : songResults(results).map((song) => song.id)),
+        ...placed.songs.flatMap((row) => (row.source === "library" ? [row.track.id] : [])),
+      ]),
+    [results, placed.songs],
+  );
+  const lyricHits = useLocalLyricsSearch(
+    deferredQuery,
+    library?.songs ?? NO_SONG_ROWS,
+    lyricsSkipIds,
+  );
+  const { state: geniusLyrics, retry: retryGeniusLyrics } = useGeniusLyricsSearch(
+    deferredQuery,
+    library?.songs ?? NO_SONG_ROWS,
+    index !== null,
+  );
   // A Library artist on top, with Online, counts the songs their online page adds.
   const topArtist = results?.top?.kind === "artist" ? results.top.artist : null;
   const topArtistSongs = useTopArtistSongs(
@@ -189,12 +213,48 @@ export default function SearchScreen() {
     if (results === null) return [];
     const ytFound =
       ytView === null ? 0 : ytView.songs.length + ytView.artists.length + ytView.albums.length;
+    const onlineLyrics = geniusLyrics.status === "hits" ? geniusLyrics.hits : [];
+    const onlineLyricsStatus =
+      geniusLyrics.status === "signedOut" ||
+      geniusLyrics.status === "offline" ||
+      geniusLyrics.status === "failed"
+        ? geniusLyrics.status
+        : null;
+    const found = () =>
+      resultRows(
+        results,
+        expansion.kinds,
+        ytView,
+        placed,
+        topArtistSongs,
+        language,
+        lyricHits,
+        expansion.lyrics,
+        deferredQuery,
+        onlineLyrics,
+        onlineLyricsStatus,
+      );
+    // With nothing found, the library's line stays and Lyrics says why it has nothing online.
     const ours =
-      libraryEmpty && ytFound === 0
-        ? [noLibraryResultsRow(deferredQuery, language)]
-        : resultRows(results, expanded, ytView, placed, topArtistSongs, language);
+      libraryEmpty && ytFound === 0 && lyricHits.length === 0 && onlineLyrics.length === 0
+        ? [
+            noLibraryResultsRow(deferredQuery, language),
+            ...(onlineLyricsStatus === null ? [] : found()),
+          ]
+        : found();
     return [...ours, ...ytFooterRows(ytView, language)];
-  }, [results, libraryEmpty, deferredQuery, expanded, ytView, placed, topArtistSongs, language]);
+  }, [
+    results,
+    libraryEmpty,
+    deferredQuery,
+    expansion,
+    ytView,
+    placed,
+    topArtistSongs,
+    language,
+    lyricHits,
+    geniusLyrics,
+  ]);
 
   // Song results can be selected. The selection lives here, not in the list,
   // so a new query (or none matching) keeps it: checked songs that drop out of
@@ -219,7 +279,7 @@ export default function SearchScreen() {
   const changeQuery = useCallback((text: string) => {
     perfMark("search.typed", text);
     setQuery(text);
-    if (text.trim() === "") setExpanded(NO_KINDS);
+    setExpansion((current) => expansionAfterTyping(current, text));
   }, []);
   const remember = useCallback(() => rememberSearch(query), [query]);
   const pickRecent = useCallback((recent: string) => {
@@ -229,8 +289,19 @@ export default function SearchScreen() {
   // Opened with a query (an unavailable playlist entry's Search): it searches for it.
   useSearchRequests(pickRecent);
   const showAll = useCallback(
-    (kind: SearchKind) => setExpanded((kinds) => new Set(kinds).add(kind)),
+    (kind: SearchKind) => setExpansion((current) => showAllOf(current, kind)),
     [],
+  );
+  const showAllLyrics = useCallback(() => setExpansion(showAllLyricsOf), []);
+  // A tapped Genius result plays what its long press would, one at a time; its row shows
+  // it's being looked up meanwhile.
+  const [pendingGeniusHit, setPendingGeniusHit] = useState<number | null>(null);
+  const [openGeniusHit] = useState(() =>
+    geniusHitOpener(geniusHitLookup, {
+      play: (song) => void playSearchSong(song),
+      openUrl: (url) => void Linking.openURL(url).catch(() => undefined),
+      pending: (hit) => setPendingGeniusHit(hit?.id ?? null),
+    }),
   );
 
   // The release runner's typing response: the results for what was typed, on screen.
@@ -244,7 +315,15 @@ export default function SearchScreen() {
   // one, so refining a query never animates or remounts the list.
   const content = query.trim() === "" ? "recents" : index === null ? "preparing" : "results";
   // With YT Music on, its results (or its quiet line) show when the library has nothing.
-  const noResults = libraryEmpty && ytView === null && deferredQuery === query;
+  const noResults =
+    libraryEmpty &&
+    ytView === null &&
+    lyricHits.length === 0 &&
+    !(geniusLyrics.status === "hits" && geniusLyrics.hits.length > 0) &&
+    geniusLyrics.status !== "signedOut" &&
+    geniusLyrics.status !== "offline" &&
+    geniusLyrics.status !== "failed" &&
+    deferredQuery === query;
   return (
     <View className="flex-1 bg-background">
       <View style={{ paddingTop: insets.top + 16, paddingHorizontal: grid.margin, gap: 16 }}>
@@ -298,6 +377,10 @@ export default function SearchScreen() {
               rows={rows}
               onOpen={remember}
               onShowAll={showAll}
+              onShowAllLyrics={showAllLyrics}
+              onGeniusHit={openGeniusHit}
+              pendingGeniusHit={pendingGeniusHit}
+              onRetryGenius={retryGeniusLyrics}
               integrated={ytView?.integrated ?? false}
               selection={selection}
             />

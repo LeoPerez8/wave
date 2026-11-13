@@ -1,5 +1,8 @@
 import {
+  GENIUS_LOADING_NOTE_DELAY_MS,
   geniusAbout,
+  geniusAnswerState,
+  geniusLoadingNote,
   geniusReferents,
   geniusTranslationTarget,
   songLookup,
@@ -7,7 +10,7 @@ import {
   type SavedGenius,
 } from "@wave/core";
 import { Storage } from "expo-sqlite/kv-store";
-import { useEffect, useMemo, useState, useSyncExternalStore } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
 
 import { useLocalisation } from "@/localisation/localisation";
 import { waveAccountAvailable } from "@/settings/waveAccount";
@@ -18,7 +21,7 @@ import {
 } from "@/settings/genius";
 
 import { loadGenius, translateGenius, type GeniusAsk, type GeniusService } from "./geniusSource";
-import { keepGenius } from "./geniusStorage";
+import { dropGenius as forgetGenius, keepGenius } from "./geniusStorage";
 import { isPlayheadLive, playheadVisibility } from "./playhead";
 import { askWaveService } from "@/sync/askWaveService";
 import { useWaveSignedIn } from "@/sync/waveSignedIn";
@@ -44,9 +47,22 @@ export const geniusAboutKey = (about: GeniusAboutCard | null): string | undefine
 
 /** What the Lyrics view shows of Genius's answer. */
 export interface GeniusShown {
+  readonly state: "settled";
   readonly about: GeniusAboutCard | null;
   readonly referents: readonly GeniusReferent[] | null;
+  readonly noInsights: boolean;
+  readonly failed: boolean;
+  readonly retry: () => void;
 }
+
+/** While the saved answer is read or Genius is asked, before a result is settled. */
+export interface GeniusLoading {
+  readonly state: "loading";
+  readonly showNote: boolean;
+}
+
+/** The Lyrics view's Genius state, shaped to distinguish later miss and failure outcomes. */
+export type GeniusState = GeniusLoading | GeniusShown;
 
 /**
  * [request]'s answer, or a failure once it takes longer than
@@ -109,7 +125,7 @@ export const useGenius = (
   title: string,
   artist: string,
   hasLyrics: boolean,
-): GeniusShown | null => {
+): GeniusState | null => {
   const { language } = useLocalisation();
   const target = geniusTranslationTarget(language);
   const on = useGeniusInsightsEnabled();
@@ -126,18 +142,55 @@ export const useGenius = (
       : { key: song, song: lookup, signedIn: signedIn === true, target };
   }, [asking, song, title, artist, target, signedIn]);
   const [answer, setAnswer] = useState<{ ask: GeniusAsk; saved: SavedGenius | null } | null>(null);
+  const settled = useRef<{ ask: GeniusAsk; saved: SavedGenius | null } | null>(null);
+  const [loading, setLoading] = useState<{
+    readonly ask: GeniusAsk;
+    readonly showNote: boolean;
+  } | null>(null);
+  const [attempt, setAttempt] = useState<{
+    readonly ask: GeniusAsk;
+    readonly number: number;
+  } | null>(null);
+  const attemptNumber = attempt?.ask === ask ? attempt.number : 0;
+  const retry = useCallback(() => {
+    if (ask === null || !on || !visible || !geniusInsightsEnabled()) return;
+    setLoading({ ask, showNote: true });
+    setAttempt((previous) => ({
+      ask,
+      number: previous?.ask === ask ? previous.number + 1 : 1,
+    }));
+  }, [ask, on, visible]);
 
   // Asks only while Now Playing shows on screen; an answer already in stays while it's hidden.
   useEffect(() => {
     if (ask === null || !visible) return undefined;
     const controller = new AbortController();
     let current = true;
+    let noteTimer: ReturnType<typeof setTimeout> | undefined;
+    const known = settled.current;
+    const retrying = attemptNumber > 0;
+    if (retrying || known?.ask !== ask || known.saved === null) {
+      setLoading({ ask, showNote: retrying });
+      noteTimer =
+        ask.signedIn && !retrying
+          ? setTimeout(() => {
+              if (current) {
+                setLoading((was) =>
+                  was?.ask === ask
+                    ? { ask, showNote: geniusLoadingNote("loading", GENIUS_LOADING_NOTE_DELAY_MS) }
+                    : was,
+                );
+              }
+            }, GENIUS_LOADING_NOTE_DELAY_MS)
+          : undefined;
+    }
     const stop = subscribeGeniusInsights(() => {
       if (!geniusInsightsEnabled()) controller.abort();
     });
     const service: GeniusService = {
       read: (key) => Storage.getItemAsync(key),
       keep: keepGenius,
+      drop: forgetGenius,
       enabled: () =>
         current && !controller.signal.aborted && geniusInsightsEnabled() && isPlayheadLive(),
       get: (path) => withTimeout(controller, () => askWaveService(path)),
@@ -150,7 +203,13 @@ export const useGenius = (
     };
     void loadGenius(ask, service).then(async (saved) => {
       // A failure while an answer for this song is already in (shown before Now Playing hid) keeps it.
-      if (current) setAnswer((was) => (saved === null && was?.ask === ask ? was : { ask, saved }));
+      if (current) {
+        const next =
+          saved === null && settled.current?.ask === ask ? settled.current : { ask, saved };
+        if (saved !== null || !ask.signedIn) settled.current = next;
+        setAnswer((was) => (saved === null && was?.ask === ask ? was : next));
+        setLoading(null);
+      }
       if (saved === null) return;
       // The original shows meanwhile; a failure leaves it.
       const translated = await translateGenius(ask, saved, service);
@@ -158,23 +217,50 @@ export const useGenius = (
     });
     return () => {
       current = false;
+      if (noteTimer !== undefined) clearTimeout(noteTimer);
+      setLoading((was) => (was?.ask === ask ? null : was));
       stop();
       controller.abort();
     };
-  }, [ask, visible]);
+  }, [ask, attemptNumber, visible]);
 
   const answered = ask !== null && answer?.ask === ask;
   const saved = answered ? answer.saved : null;
+  const waiting =
+    ask !== null && (loading?.ask === ask || (attemptNumber > 0 && answer?.ask !== ask));
   // Signed out with nothing saved: the invitation, once the store has been read.
   const invite = answered && saved === null && !ask.signedIn;
   return useMemo(() => {
-    if (invite) return { about: "signIn", referents: null };
-    if (saved === null) return null;
+    if (waiting) return { state: "loading", showNote: loading?.showNote ?? attemptNumber > 0 };
+    if (invite)
+      return {
+        state: "settled",
+        about: "signIn",
+        referents: null,
+        noInsights: false,
+        failed: false,
+        retry,
+      };
+    if (saved === null) {
+      if (!answered || !ask?.signedIn) return null;
+      return {
+        state: "settled",
+        about: null,
+        referents: null,
+        noInsights: false,
+        failed: true,
+        retry,
+      };
+    }
     const { description: original } = saved;
     const shown = geniusAbout(saved, target);
     return {
+      state: "settled",
       referents: geniusReferents(saved, target),
       about: original === null || shown === null ? null : { original, shown },
+      noInsights: geniusAnswerState(saved) === "miss",
+      failed: geniusAnswerState(saved) === "failure",
+      retry,
     };
-  }, [invite, saved, target]);
+  }, [answered, ask, attemptNumber, invite, loading, retry, saved, target, waiting]);
 };

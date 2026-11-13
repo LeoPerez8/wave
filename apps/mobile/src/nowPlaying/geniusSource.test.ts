@@ -44,6 +44,9 @@ const phone = () => {
     keep: async (key, value) => {
       storage.set(key, value);
     },
+    drop: async (key) => {
+      storage.delete(key);
+    },
     enabled: () => true,
     get: async (url) => {
       requests.push(url);
@@ -140,7 +143,9 @@ test("a matched song without a description keeps its id for later insights", asy
   service.get = async (url) =>
     url.includes("/search?")
       ? fixture("search")
-      : { meta: { status: 200 }, response: { song: { id: 10356, description: { plain: "?" } } } };
+      : url.includes("/referents?")
+        ? fixture("referents-1")
+        : { meta: { status: 200 }, response: { song: { id: 10356, description: { plain: "?" } } } };
   const saved = await loadGenius(ask, service, 100);
   assert.equal(saved?.match?.id, 10356);
   assert.equal(saved?.description, null);
@@ -225,6 +230,23 @@ test("failed annotations keep the About and are asked again next time", async ()
   const second = await loadGenius(ask, service, 200);
   assert.deepEqual(referentIds(second), [2001, 2002, 2003, 2004]);
   assert.equal(requests.filter((url) => url.includes("/referents?")).length, 1);
+});
+
+test("failed annotations without a description are not saved and are asked again", async () => {
+  const { service, requests, storage } = phone();
+  service.get = async (url) => {
+    requests.push(url);
+    if (url.includes("/search?")) return fixture("search");
+    if (url.includes("/referents?")) throw Error("offline");
+    return {
+      meta: { status: 200 },
+      response: { song: { id: 10356, description: { plain: "?" } } },
+    };
+  };
+  assert.equal(await loadGenius(ask, service, 100), null);
+  assert.equal(storage.size, 0);
+  assert.equal(await loadGenius(ask, service, 200), null);
+  assert.equal(requests.filter((url) => url.includes("/search?")).length, 2);
 });
 
 test("no match asks for no annotations, and insights turned off stop them", async () => {

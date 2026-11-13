@@ -16,6 +16,7 @@ import {
   magicBatchRadios,
   magicLibrarySongs,
   magicSeedProfile,
+  magicFaithfulGenreProfile,
   magicYtSong,
   magicRadioArtists,
   magicQueueEdits,
@@ -57,6 +58,77 @@ const songsBy = (prefix: string, artist: string, count: number, genre = "Rock"):
   Array.from({ length: count }, (_, i) => song(`${prefix}${i + 1}`, artist, genre));
 
 describe("Starting a Magic Queue", () => {
+  test("faithfulness survives saving while older and ordinary sessions remain unfaithful", () => {
+    const seed = song("s1", "Seed Artist");
+    const ordinary = startMagicQueue(SONG_SEED, [seed], { id: "ordinary", random: first })!.session;
+    const faithful = startMagicQueue(SONG_SEED, [seed], {
+      id: "search",
+      random: first,
+      faithful: true,
+    })!.session;
+    assert.equal(ordinary.faithful, undefined);
+    assert.equal(parseMagicSession(JSON.parse(JSON.stringify(faithful)))?.faithful, true);
+    const old = { ...faithful };
+    delete (old as { faithful?: boolean }).faithful;
+    assert.equal(parseMagicSession(old)?.faithful, undefined);
+  });
+  test("a faithful list seed keeps families at 10% of songs with known genres", () => {
+    const profile = genreProfile([
+      ...Array.from({ length: 9 }, () => ({ genre: "Rock" })),
+      { genre: "Jazz" },
+      { genre: null },
+    ]);
+    const started = startMagicQueue(
+      { kind: "playlist", id: "list", title: "List" },
+      [song("s1", "Seed Artist")],
+      {
+        id: "faithful-list",
+        random: first,
+        faithful: true,
+        radio: { artists: ["Seed Artist"], profile },
+      },
+    )!.session;
+    assert.deepEqual(
+      [...magicFaithfulGenreProfile(started)!],
+      [
+        ["rock", 0.9],
+        ["jazz", 0.1],
+      ],
+    );
+    const below = { ...started, seedProfile: { rock: 0.91, jazz: 0.09 } };
+    assert.deepEqual([...magicFaithfulGenreProfile(below)!], [["rock", 0.91]]);
+  });
+  test("faithful song and artist seeds keep their full genre profile", () => {
+    const profile = new Map([
+      ["rock", 0.91],
+      ["jazz", 0.09],
+    ]);
+    for (const seed of [
+      SONG_SEED,
+      { kind: "artist" as const, id: "artist", title: "Artist" },
+    ]) {
+      const started = startMagicQueue(seed, [song("s1", "Seed Artist")], {
+        id: `faithful-${seed.kind}`,
+        random: first,
+        faithful: true,
+        radio: { artists: ["Seed Artist"], profile },
+      })!.session;
+      assert.deepEqual([...magicFaithfulGenreProfile(started)!], [...profile]);
+    }
+  });
+  test("a faithful list with no known genres has a neutral genre profile", () => {
+    const started = startMagicQueue(
+      { kind: "list", id: "mix", title: "Discover mix" },
+      [song("s1", "Seed Artist", null)],
+      {
+        id: "faithful-unknown-list",
+        random: first,
+        faithful: true,
+        radio: { artists: ["Seed Artist"], profile: null },
+      },
+    )!.session;
+    assert.equal(magicFaithfulGenreProfile(started), null);
+  });
   test("new sessions and signals omit retired weights while old sessions still load", () => {
     const started = startMagicQueue(SONG_SEED, [song("s1", "Seed Artist")], {
       id: "m1",
