@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { test } from "node:test";
-import { geniusCandidates, pickGeniusSong } from "./index.ts";
+import { geniusAnswerState, geniusCandidates, pickGeniusSong } from "./index.ts";
 const search = JSON.parse(
   readFileSync(new URL("./fixtures/genius/search.json", import.meta.url), "utf8"),
 );
@@ -29,6 +29,21 @@ test("Genius matches Fix Song's normalized title and artist, rejecting a cover",
     pickGeniusSong({ title: "Other", artist: "John Lennon", album: null, durationMs: 0 }, hits),
     null,
   );
+});
+
+test("Genius distinguishes a confirmed miss from an answer or a failure", () => {
+  const match = {
+    id: 10356,
+    title: "Imagine",
+    artist: "John Lennon",
+    url: "https://genius.com/John-lennon-imagine-lyrics",
+  };
+  const base = { checkedAt: 100, translations: {} };
+  assert.equal(geniusAnswerState({ ...base, match: null, description: null, referents: null }), "miss");
+  assert.equal(geniusAnswerState({ ...base, match, description: null, referents: [] }), "miss");
+  assert.equal(geniusAnswerState({ ...base, match, description: null, referents: null }), "answer");
+  assert.equal(geniusAnswerState({ ...base, match, description: "About", referents: [] }), "answer");
+  assert.equal(geniusAnswerState(null), "failure");
 });
 
 test("Genius reads plain descriptions, distinguishes absent text from failed replies", async () => {

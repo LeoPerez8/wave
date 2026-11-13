@@ -2514,7 +2514,8 @@ export {
   savedGenius,
   storedGenius,
 } from "./genius.ts";
-export type { GeniusHit, GeniusMatch, SavedGenius } from "./genius.ts";
+export { geniusAnswerState } from "./genius.ts";
+export type { GeniusAnswerState, GeniusHit, GeniusMatch, SavedGenius } from "./genius.ts";
 export { GENIUS_LOADING_NOTE_DELAY_MS, geniusLoadingNote } from "./geniusLoading.ts";
 export type { GeniusInsightState } from "./geniusLoading.ts";
 export {
