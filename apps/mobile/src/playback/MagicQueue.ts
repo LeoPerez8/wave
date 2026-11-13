@@ -65,6 +65,7 @@ import { onPlayEnded } from "./PlayHistory";
 import { Queue, queueState, toQueueTrack, type QueueTrack } from "./Queue";
 import { queueTracks, toYtQueueTrack } from "./queueTracks";
 import { readQueueContinuationSeed } from "./queueContinuationSeed";
+import { savedDiscoverMixForContinuation } from "../home/discoverMixes";
 import { makeQueueLengths } from "./queueLengths";
 import { latestTasteProfile, tasteProfileForRecommendation } from "./TasteProfile";
 import { cacheYtCoversInBackground, ytQueueTrack } from "./ytQueueTracks";
@@ -683,7 +684,12 @@ export const layer = Layer.effectDiscard(
           const state = queueState.get();
           const seed = continuationSeedNow(state);
           if (seed === null) return;
-          const input = yield* readQueueContinuationSeed(seed, store, queueTracks.get());
+          const input = yield* readQueueContinuationSeed(
+            seed,
+            store,
+            queueTracks.get(),
+            savedDiscoverMixForContinuation,
+          );
           if (queueState.get() !== state) continue;
           if (input === null) return;
           yield* startMagicQueue(input.seed, input.songs, input.streamed, state).pipe(

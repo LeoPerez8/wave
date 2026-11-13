@@ -70,6 +70,26 @@ test("loose queues continue from every song, including History, as a list", () =
   });
 });
 
+test("a Discover mix continuation keeps its mix id and its queue songs for fallback", () => {
+  let state = reduceQueue(EMPTY_QUEUE, {
+    type: "play",
+    trackIds: ["yt:first", "yt:second"],
+    context: { kind: "discoverMix", id: "mix-42" },
+  }).state;
+  state = reduceQueue(state, { type: "next" }).state;
+  const write = queueWrite(null, { state, positionMs: 0 });
+  const restored = savedQueueState({
+    queue: write.queue!,
+    metadata: write.metadata!,
+    index: write.index!,
+  })!;
+  assert.deepEqual(queueContinuation(restored), {
+    kind: "discoverMix",
+    id: "mix-42",
+    trackIds: ["yt:first", "yt:second"],
+  });
+});
+
 test("continuing preserves the queue and appends ten fresh songs through the ordinary Magic Queue batch", () => {
   let state = reduceQueue(EMPTY_QUEUE, {
     type: "play",
