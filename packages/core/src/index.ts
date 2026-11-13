@@ -161,10 +161,12 @@ export type { ReorderDrag, ReorderEdge, ReorderGridDrag, ReorderRow } from "./re
 export {
   RECENT_SEARCHES,
   createSearchIndex,
+  findLyricMatch,
   normalizeSearchText,
   rememberSearch,
 } from "./search.ts";
 export type {
+  LyricSearchMatch,
   SearchEntry,
   SearchGroup,
   SearchIndex,
