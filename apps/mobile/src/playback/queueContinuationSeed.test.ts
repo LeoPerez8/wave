@@ -88,7 +88,7 @@ test("a loose queue reads every restored entry, including History, as a list see
   );
 });
 
-test("a saved Discover mix restores its song radios after restart, then falls back to the queue list when gone", async (t) => {
+test("a saved Discover mix restores its song radios after restart, then falls back to the queue list when gone or rebuilt", async (t) => {
   const db = await openTestDatabase();
   t.after(() => closeTestDatabase(db));
   const history = addTrack(db, { title: "History", artist: "Artist", album: "Album" });
@@ -106,7 +106,7 @@ test("a saved Discover mix restores its song radios after restart, then falls ba
   };
   const queue = reduceQueue(EMPTY_QUEUE, {
     type: "play",
-    trackIds: [String(history), String(last)],
+    trackIds: [String(history), "yt:radio-song", String(last)],
     context: { kind: "discoverMix", id: "mix-42" },
   }).state;
   const source = {
@@ -136,9 +136,34 @@ test("a saved Discover mix restores its song radios after restart, then falls ba
     readQueueContinuationSeed(source, store, new Map(), () => ({ mix, title: "Artist mix" })),
   );
   assert.deepEqual(restored?.seed, { kind: "list", id: "mix-42", title: "Artist mix" });
-  assert.deepEqual(restored?.streamed.map((song) => song.videoId), ["radio-song"]);
+  assert.deepEqual(
+    restored?.streamed.map((song) => song.videoId),
+    ["radio-song"],
+  );
 
   const fallback = await Effect.runPromise(readQueueContinuationSeed(source, store, new Map()));
   assert.deepEqual(fallback?.seed, { kind: "list", id: String(last), title: "Last" });
-  assert.deepEqual(fallback?.songs.map((song) => song.title), ["History", "Last"]);
+  assert.deepEqual(
+    fallback?.songs.map((song) => song.title),
+    ["History", "Last"],
+  );
+
+  // Rebuilt under the same id: none of its new songs is one the queue played.
+  const rebuilt = {
+    ...mix,
+    songs: [{ ...mix.songs[0]!, videoId: "rebuilt-song", title: "Rebuilt song" }],
+    familiar: [{ source: "library", track: { id: history, title: "History", artist: "Artist" } }],
+  } as DiscoverMix;
+  const afterRebuild = await Effect.runPromise(
+    readQueueContinuationSeed(source, store, new Map(), () => ({
+      mix: rebuilt,
+      title: "Artist mix",
+    })),
+  );
+  assert.deepEqual(afterRebuild?.seed, { kind: "list", id: String(last), title: "Last" });
+  assert.deepEqual(
+    afterRebuild?.songs.map((song) => song.title),
+    ["History", "Last"],
+  );
+  assert.deepEqual(afterRebuild?.streamed, []);
 });

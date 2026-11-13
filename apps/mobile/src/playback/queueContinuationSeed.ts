@@ -1,5 +1,6 @@
 import {
   parseTrackId,
+  ytTrackId,
   type MagicSeed,
   type QueueContinuationSeed,
   type DiscoverMix,
@@ -15,13 +16,18 @@ interface ContinuationInput {
   readonly streamed: readonly YtSong[];
 }
 
-/** Reads the original list or loose queue, or the last song; queue state survives a restart. */
+/**
+ * Reads the original list or loose queue, or the last song; queue state
+ * survives a restart. A Discover mix that is gone, or was rebuilt since the
+ * queue played it, falls back to the queue's own songs as a list.
+ */
 export const readQueueContinuationSeed = (
   source: QueueContinuationSeed,
   store: Pick<LibraryStore["Service"], "getAlbum" | "getArtist" | "getPlaylist" | "songsByIds">,
   tracks: ReadonlyMap<string, QueueTrack>,
-  readDiscoverMix: (id: string) => { readonly mix: DiscoverMix; readonly title: string } | null =
-    () => null,
+  readDiscoverMix: (
+    id: string,
+  ) => { readonly mix: DiscoverMix; readonly title: string } | null = () => null,
 ): Effect.Effect<ContinuationInput | null, LibraryStoreError> =>
   Effect.gen(function* () {
     const id = Number(source.id);
@@ -60,7 +66,13 @@ export const readQueueContinuationSeed = (
           };
     }
     if (source.kind === "discoverMix") {
-      const saved = readDiscoverMix(source.id);
+      const found = readDiscoverMix(source.id);
+      // A mix rebuilt under the same id has other new songs: none the queue played.
+      const played = new Set(source.trackIds);
+      const saved =
+        found !== null && found.mix.songs.some((song) => played.has(ytTrackId(song.videoId)))
+          ? found
+          : null;
       if (saved === null) {
         const lastTrackId = source.trackIds.at(-1);
         if (lastTrackId === undefined) return null;
