@@ -8,6 +8,8 @@ export const playbackTextEn = {
   /** The About card's place while no Wave account is signed in (Genius is asked through it). */
   signInToSeeWhatGeniusSaysAboutThisSong:
     "Sign in to a Wave account to see what Genius says about this song.",
+  signInToWaveAccountToSearchLyricsOnline: "Sign in to a Wave account to search lyrics online",
+  couldntSearchLyricsOnline: "Couldn't search lyrics online",
   addLyricsToThisSongsTagsOrPutAnLrcFileWithTheSameNameBesideIt:
     "Add lyrics to this song's tags, or put an .lrc file with the same name beside it.",
   addToPlaylist: "Add to Playlist",

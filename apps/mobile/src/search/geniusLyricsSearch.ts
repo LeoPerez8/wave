@@ -6,7 +6,7 @@ import {
   type GeniusLyricsSearchState,
   type SongLookup,
 } from "@wave/core";
-import { useEffect, useState, useSyncExternalStore } from "react";
+import { useCallback, useEffect, useState, useSyncExternalStore } from "react";
 
 import { useGeniusInsightsEnabled } from "@/settings/genius";
 import { online, subscribeConnectivity } from "@/native/waveNative";
@@ -62,11 +62,16 @@ export const useGeniusLyricsSearch = (
   query: string,
   library: readonly SongLookup[],
   libraryReady: boolean,
-): GeniusLyricsSearchState => {
+): { readonly state: GeniusLyricsSearchState; readonly retry: () => void } => {
   const enabled = useGeniusInsightsEnabled();
   const signedIn = useWaveSignedIn();
   const isOnline = useSyncExternalStore(subscribeConnectivity, online);
   const [state, setState] = useState<GeniusLyricsSearchState>({ query: "", status: "idle" });
+  const [retryCount, setRetryCount] = useState(0);
+  const retry = useCallback(() => {
+    setState({ query, status: "loading" });
+    setRetryCount((count) => count + 1);
+  }, [query]);
   useEffect(() => {
     const request = geniusLyricsSearchRequest(query, enabled);
     if (
@@ -105,13 +110,15 @@ export const useGeniusLyricsSearch = (
       live = false;
       clearTimeout(timer);
     };
-  }, [query, library, libraryReady, enabled, signedIn, isOnline]);
+  }, [query, library, libraryReady, enabled, signedIn, isOnline, retryCount]);
 
   const request = geniusLyricsSearchRequest(query, enabled);
-  if (!enabled) return { query, status: "disabled" };
-  if (request === null || signedIn === null || !libraryReady) return { query, status: "idle" };
-  if (!isOnline) return { query, status: "offline" };
-  if (!signedIn) return { query, status: "signedOut" };
-  if (state.query === query) return state;
-  return { query, status: "idle" };
+  let current: GeniusLyricsSearchState;
+  if (!enabled) current = { query, status: "disabled" };
+  else if (request === null || signedIn === null || !libraryReady)
+    current = { query, status: "idle" };
+  else if (!isOnline) current = { query, status: "offline" };
+  else if (!signedIn) current = { query, status: "signedOut" };
+  else current = state.query === query ? state : { query, status: "idle" };
+  return { state: current, retry };
 };

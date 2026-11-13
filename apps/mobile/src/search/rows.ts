@@ -46,6 +46,11 @@ export type ResultRow =
   | { readonly type: "heading"; readonly key: string; readonly label: string }
   | { readonly type: "lyric"; readonly key: string; readonly hit: LocalLyricsHit }
   | { readonly type: "geniusLyric"; readonly key: string; readonly hit: GeniusLyricsHit }
+  | {
+      readonly type: "geniusState";
+      readonly key: string;
+      readonly status: "signedOut" | "offline" | "failed";
+    }
   | { readonly type: "moreLyrics"; readonly key: string; readonly total: number }
   | {
       readonly type: "hit";
@@ -114,8 +119,9 @@ const lyricRows = (
   geniusHits: readonly GeniusLyricsHit[],
   expanded: boolean,
   language: AppLanguage,
+  onlineStatus: "signedOut" | "offline" | "failed" | null,
 ): ResultRow[] => {
-  if (hits.length === 0 && geniusHits.length === 0) return [];
+  if (hits.length === 0 && geniusHits.length === 0 && onlineStatus === null) return [];
   const shown = expanded ? hits : hits.slice(0, LYRIC_PREVIEW);
   const shownGenius = expanded ? geniusHits : geniusHits.slice(0, GENIUS_LYRICS_SEARCH_PREVIEW);
   const total = hits.length + geniusHits.length;
@@ -135,6 +141,15 @@ const lyricRows = (
       key: `genius-lyrics:${hit.id}`,
       hit,
     })),
+    ...(onlineStatus === null
+      ? []
+      : [
+          {
+            type: "geniusState" as const,
+            key: `genius-state:${onlineStatus}`,
+            status: onlineStatus,
+          },
+        ]),
     ...(shown.length < hits.length || shownGenius.length < geniusHits.length
       ? [{ type: "moreLyrics" as const, key: "more:lyrics", total }]
       : []),
@@ -224,6 +239,7 @@ export const resultRows = (
   lyricsExpanded = false,
   query = "",
   geniusLyrics: readonly GeniusLyricsHit[] = [],
+  onlineStatus: "signedOut" | "offline" | "failed" | null = null,
 ): ResultRow[] => {
   const rows: ResultRow[] = [];
   const songIds = new Set<number>([
@@ -271,10 +287,16 @@ export const resultRows = (
     ),
   ];
   const visibleGenius = uniqueGeniusLyricsHits(geniusLyrics, [], geniusLocal);
-  const lyricSection = (): ResultRow[] =>
-    lyricRows(visibleLyrics, visibleGenius, lyricsExpanded, language);
   const wordCount = normalizeSearchText(query).split(" ").filter(Boolean).length;
   const lyricsFirst = wordCount >= 3;
+  const lyricSection = (): ResultRow[] =>
+    lyricRows(
+      visibleLyrics,
+      visibleGenius,
+      lyricsExpanded,
+      language,
+      lyricsFirst ? onlineStatus : null,
+    );
   if (lyricsFirst) rows.push(...lyricSection());
   const ytArtists = yt?.artists ?? NO_YT_ARTISTS;
   const ytAlbums = yt?.albums ?? NO_YT_ALBUMS;

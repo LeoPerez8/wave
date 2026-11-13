@@ -146,6 +146,66 @@ describe("Search lyric section", () => {
     assert.equal(expanded.filter((row) => row.type === "geniusLyric").length, 20);
   });
 
+  test("online lyrics states appear in Lyrics only for eligible queries", () => {
+    const signedOut = resultRows(
+      empty,
+      new Set(),
+      null,
+      noPlaced,
+      null,
+      "en",
+      [],
+      false,
+      "one two three",
+      [],
+      "signedOut",
+    );
+    assert.deepEqual(
+      signedOut.map((row) => row.type),
+      ["heading", "geniusState"],
+    );
+    const signInRow = signedOut.at(-1);
+    assert.equal(signInRow?.type, "geniusState");
+    if (signInRow?.type === "geniusState") assert.equal(signInRow.status, "signedOut");
+
+    const offline = resultRows(
+      empty,
+      new Set(),
+      null,
+      noPlaced,
+      null,
+      "en",
+      lyricHits(1),
+      false,
+      "one two three",
+      [],
+      "offline",
+    );
+    assert.equal(
+      offline.some((row) => row.type === "lyric"),
+      true,
+    );
+    assert.equal(offline.at(-1)?.type, "geniusState");
+
+    const short = resultRows(
+      empty,
+      new Set(),
+      null,
+      noPlaced,
+      null,
+      "en",
+      [],
+      false,
+      "two words",
+      [],
+      "failed",
+    );
+    assert.equal(
+      short.some((row) => row.type === "geniusState"),
+      false,
+    );
+  });
+
   test("saved streamed songs keep one lyric row and leave out their YT result duplicate", () => {
     const song = {
       videoId: "streamed-video",
