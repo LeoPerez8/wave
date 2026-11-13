@@ -42,6 +42,11 @@ export interface GeniusHit extends GeniusMatch {
   readonly credit: string;
 }
 
+/** A search result for Search's Lyrics section, including Genius's square cover. */
+export interface GeniusLyricsHit extends GeniusHit {
+  readonly artworkUrl: string | null;
+}
+
 /** Null means a failed reply, an empty array a successful search with no songs. */
 export const geniusCandidates = (reply: unknown): GeniusHit[] | null => {
   const body = geniusResponse(reply);
@@ -60,6 +65,27 @@ export const geniusCandidates = (reply: unknown): GeniusHit[] | null => {
     const artist = song.primary_artist.name;
     const credit = typeof song.artist_names === "string" ? song.artist_names : artist;
     return [{ id: song.id, title: song.title, artist, credit, url: song.url }];
+  });
+};
+
+/** The first page of Genius search hits with the cover Search shows. */
+export const geniusLyricsCandidates = (reply: unknown): GeniusLyricsHit[] | null => {
+  const candidates = geniusCandidates(reply);
+  const hits = geniusResponse(reply)?.hits;
+  if (candidates === null || !Array.isArray(hits)) return null;
+  let songIndex = 0;
+  return candidates.map((candidate) => {
+    while (songIndex < hits.length) {
+      const entry = hits[songIndex++];
+      if (!isRecord(entry) || !isRecord(entry.result) || entry.type !== "song") continue;
+      if (entry.result.id !== candidate.id) continue;
+      const image = entry.result.song_art_image_thumbnail_url;
+      return {
+        ...candidate,
+        artworkUrl: typeof image === "string" && image.trim() !== "" ? image : null,
+      };
+    }
+    return { ...candidate, artworkUrl: null };
   });
 };
 

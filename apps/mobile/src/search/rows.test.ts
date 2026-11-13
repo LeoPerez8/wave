@@ -2,7 +2,7 @@
 import assert from "node:assert/strict";
 import { describe, test } from "node:test";
 
-import type { SearchResults } from "@wave/core";
+import type { GeniusLyricsHit, SearchResults } from "@wave/core";
 import type { SongRow } from "@/library/LibraryStore";
 import type { NativeYtSong } from "@/native/waveYtMusic";
 import type { LocalLyricsHit } from "./lyricsSearch.ts";
@@ -21,6 +21,16 @@ const lyricHits = (count: number): LocalLyricsHit[] =>
       { start: 0, end: 4 },
       { start: 5, end: 9 },
     ],
+  }));
+
+const geniusHits = (count: number): GeniusLyricsHit[] =>
+  Array.from({ length: count }, (_, index) => ({
+    id: index + 1,
+    title: `Genius song ${index + 1}`,
+    artist: "Artist",
+    credit: "Artist",
+    url: `https://genius.com/${index + 1}`,
+    artworkUrl: null,
   }));
 
 describe("Search lyric section", () => {
@@ -103,7 +113,40 @@ describe("Search lyric section", () => {
     );
   });
 
-  test("a saved streamed song keeps one lyric row and leaves out its YT result duplicate", () => {
+  test("Genius follows local hits, shows five hits, and expands to its first page", () => {
+    const rows = resultRows(
+      empty,
+      new Set(),
+      null,
+      noPlaced,
+      null,
+      "en",
+      lyricHits(1),
+      false,
+      "one two three",
+      geniusHits(20),
+    );
+    assert.equal(rows[1]?.type, "lyric");
+    assert.equal(rows[2]?.type, "geniusLyric");
+    assert.equal(rows.filter((row) => row.type === "geniusLyric").length, 5);
+    assert.equal(rows.at(-1)?.type, "moreLyrics");
+
+    const expanded = resultRows(
+      empty,
+      new Set(),
+      null,
+      noPlaced,
+      null,
+      "en",
+      lyricHits(1),
+      true,
+      "one two three",
+      geniusHits(20),
+    );
+    assert.equal(expanded.filter((row) => row.type === "geniusLyric").length, 20);
+  });
+
+  test("saved streamed songs keep one lyric row and leave out their YT result duplicate", () => {
     const song = {
       videoId: "streamed-video",
       title: "Streamed song",
@@ -120,7 +163,6 @@ describe("Search lyric section", () => {
       line: "remembered lyric",
       ranges: [{ start: 0, end: 10 }],
     } as const;
-
     const rows = resultRows(
       empty,
       new Set(),
@@ -138,6 +180,32 @@ describe("Search lyric section", () => {
       assert.equal(lyric.key, "lyrics:yt:streamed-video");
       assert.equal(lyric.hit.source, "stream");
     }
+
+    const sameSong = resultRows(
+      empty,
+      new Set(),
+      null,
+      noPlaced,
+      null,
+      "en",
+      [hit],
+      false,
+      "three words here",
+      [
+        {
+          id: 99,
+          title: song.title,
+          artist: "Artist",
+          credit: "Artist",
+          url: "https://genius.com/streamed-song",
+          artworkUrl: null,
+        },
+      ],
+    );
+    assert.equal(
+      sameSong.some((row) => row.type === "geniusLyric"),
+      false,
+    );
 
     const alreadyShown: PlacedYtSongs = {
       songs: [{ source: "stream", song }],
