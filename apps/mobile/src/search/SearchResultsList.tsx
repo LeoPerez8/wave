@@ -215,6 +215,14 @@ export function SearchResultsList({
           );
         case "lyric": {
           const { hit } = item;
+          const song =
+            hit.source === "library"
+              ? { source: "library" as const, track: hit.song }
+              : { source: "stream" as const, song: hit.song };
+          const title = hit.source === "library" ? hit.song.title : hit.song.title;
+          const artist = hit.source === "library" ? hit.song.artist : joinArtists(hit.song.artists);
+          const artwork =
+            hit.source === "library" ? artworkUri(hit.song) : (hit.song.artworkUrl ?? undefined);
           const parts: { text: string; highlighted: boolean }[] = [];
           let cursor = 0;
           for (const range of hit.ranges) {
@@ -228,22 +236,22 @@ export function SearchResultsList({
           return (
             <Pressable
               accessibilityRole="button"
-              accessibilityLabel={`${hit.song.title}, ${hit.song.artist}. ${hit.line}`}
+              accessibilityLabel={`${title}, ${artist}. ${hit.line}`}
               className="flex-row items-center"
               style={{ height: HEIGHT.lyric, gap: CELL * 1.5 }}
               onPress={() => {
                 onOpen();
-                void playSearchSong({ source: "library", track: hit.song });
+                void playSearchSong(song);
               }}
-              onLongPress={() => openMixedSongActions({ source: "library", track: hit.song })}
+              onLongPress={() => openMixedSongActions(song)}
             >
-              <Artwork uri={artworkUri(hit.song)} size={CELL * 5} />
+              <Artwork uri={artwork} size={CELL * 5} />
               <View className="flex-1">
                 <Text numberOfLines={1} className="font-sans text-body font-medium text-foreground">
-                  {hit.song.title}
+                  {title}
                 </Text>
                 <Text numberOfLines={1} className="font-sans text-footnote text-secondary">
-                  {hit.song.artist}
+                  {artist}
                 </Text>
                 <Text numberOfLines={1} className="font-sans text-footnote text-secondary">
                   {parts.map((part, index) => (

@@ -1448,6 +1448,20 @@ CREATE TABLE lyrics_search_words (
 --> statement-breakpoint
 CREATE INDEX lyrics_search_word_idx ON lyrics_search_words (word, track_id, position);`;
 
+const m0061 = `CREATE TABLE saved_lyrics_search_index (
+  video_id text PRIMARY KEY NOT NULL REFERENCES saved_lyrics(video_id) ON DELETE CASCADE,
+  lyrics text NOT NULL
+);
+--> statement-breakpoint
+CREATE TABLE saved_lyrics_search_words (
+  video_id text NOT NULL REFERENCES saved_lyrics_search_index(video_id) ON DELETE CASCADE,
+  position integer NOT NULL,
+  word text NOT NULL,
+  PRIMARY KEY (video_id, position)
+);
+--> statement-breakpoint
+CREATE INDEX saved_lyrics_search_word_idx ON saved_lyrics_search_words (word, video_id, position);`;
+
 export default {
   journal: {
     entries: [
@@ -1532,6 +1546,12 @@ export default {
       { idx: 58, when: 1_796_817_600_000, tag: "0058_loudness_measurements", breakpoints: true },
       { idx: 59, when: 1_796_904_000_000, tag: "0059_list_download_members", breakpoints: true },
       { idx: 60, when: 1_796_990_400_000, tag: "0060_lyrics_search_index", breakpoints: true },
+      {
+        idx: 61,
+        when: 1_797_076_800_000,
+        tag: "0061_saved_lyrics_search_index",
+        breakpoints: true,
+      },
     ],
   },
   migrations: {
@@ -1596,5 +1616,6 @@ export default {
     m0058,
     m0059,
     m0060,
+    m0061,
   },
 };
