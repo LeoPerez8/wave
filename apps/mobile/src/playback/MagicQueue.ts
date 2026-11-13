@@ -245,6 +245,7 @@ export const startMagicQueue = (
   seedSongs: readonly SongRow[],
   streamedSongs: readonly YtSong[] = [],
   continuation?: QueueState,
+  faithful = false,
 ) =>
   Effect.gen(function* () {
     if (continuation === undefined && !ytMusicEnabled()) return;
@@ -344,6 +345,7 @@ export const startMagicQueue = (
         ].slice(0, SEED_VIDEO_IDS),
       },
       ytShare: magicQueueShare(discoverLevel.get()),
+      faithful: faithful || continuation !== undefined,
     });
     if (started === null) return;
     if (continuation !== undefined) {
@@ -377,13 +379,14 @@ export const startMagicQueue = (
  * first 9 recommendations follow from its radio (Core's
  * `startStreamedMagicQueue`).
  */
-export const startStreamedMagicQueue = (song: YtSong) =>
+export const startStreamedMagicQueue = (song: YtSong, faithful = false) =>
   Effect.gen(function* () {
     if (!ytMusicEnabled()) return;
     const startedAt = Date.now();
     const { session } = startStreamedSession(song, {
       id: String(Date.now()),
       ytShare: magicQueueShare(discoverLevel.get()),
+      faithful,
     });
     // Nothing of the Library was read for it: the first pick waits for the snapshot's.
     startingLibrary = { songs: [], artists: [] };
@@ -547,7 +550,7 @@ export const layer = Layer.effectDiscard(
         const playable = library.songs.filter(songHasFile);
         const candidates = yt.candidates;
         const likedCandidates = yt.likedCandidates;
-        const batch = completeMagicRadioBatch(session, candidates, likedCandidates);
+        const batch = completeMagicRadioBatch(session, candidates, likedCandidates, yt.fallback);
         if (batch.trackIds.length === 0)
           return {
             kind: "empty",

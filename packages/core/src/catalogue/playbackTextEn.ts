@@ -2,6 +2,8 @@ import { plural } from "../plural.ts";
 import { formatNumber } from "../formatting.ts";
 export const playbackTextEn = {
   aboutGenius: "About · Genius",
+  loadingGeniusInsights: "Loading Genius insights…",
+  geniusHasNoInsightsForThisSong: "Genius has no insights for this song",
   /** The About card's place while no Wave account is signed in (Genius is asked through it). */
   signInToSeeWhatGeniusSaysAboutThisSong:
     "Sign in to a Wave account to see what Genius says about this song.",
