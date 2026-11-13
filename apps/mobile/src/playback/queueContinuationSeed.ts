@@ -1,4 +1,9 @@
-import { parseTrackId, type MagicSeed, type QueueContinuationSeed, type YtSong } from "@wave/core";
+import {
+  parseTrackId,
+  type MagicSeed,
+  type QueueContinuationSeed,
+  type YtSong,
+} from "@wave/core";
 import * as Effect from "effect/Effect";
 import type { LibraryStore, LibraryStoreError, SongRow } from "../library/LibraryStore.ts";
 import { queuedYtSong, type QueueTrack } from "./queueTracks.ts";
@@ -9,7 +14,7 @@ interface ContinuationInput {
   readonly streamed: readonly YtSong[];
 }
 
-/** Reads only the original list, or the last song; queue context survives a restart. */
+/** Reads the original list or loose queue, or the last song; queue state survives a restart. */
 export const readQueueContinuationSeed = (
   source: QueueContinuationSeed,
   store: Pick<LibraryStore["Service"], "getAlbum" | "getArtist" | "getPlaylist" | "songsByIds">,
@@ -50,6 +55,32 @@ export const readQueueContinuationSeed = (
               item.source === "stream" ? [item.song] : [],
             ),
           };
+    }
+    if (source.kind === "list") {
+      const trackIds = source.trackIds;
+      const libraryIds = [
+        ...new Set(
+          trackIds.flatMap((trackId) => {
+            const ref = parseTrackId(trackId);
+            return ref?.kind === "library" ? [ref.id] : [];
+          }),
+        ),
+      ];
+      const songs = yield* store.songsByIds(libraryIds);
+      const lastTrackId = source.id;
+      const title =
+        songs.find((song) => String(song.id) === lastTrackId)?.title ??
+        tracks.get(lastTrackId)?.title;
+      if (title === undefined) return null;
+      return {
+        seed: { kind: "list", id: source.id, title },
+        songs,
+        streamed: trackIds.flatMap((trackId) => {
+          const track = tracks.get(trackId);
+          const song = track === undefined ? null : queuedYtSong(track);
+          return song === null ? [] : [song];
+        }),
+      };
     }
     const ref = parseTrackId(source.id);
     if (ref?.kind === "library") {
