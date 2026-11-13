@@ -148,6 +148,8 @@ export const playbackTextEn = {
   lyricsSearchSection: "Lyrics",
   /** A Genius result in Search's Lyrics section, for screen readers. */
   geniusLyricsResult: (title: string, artist: string) => `${title}, ${artist}, on Genius`,
+  /** A Genius result's long-press menu entry: opens the song's page on genius.com. */
+  openInGenius: "Open in Genius",
   songsAlbumsArtistsGenres: "Songs, albums, artists, genres",
   startTimer: "Start Timer",
   startsListeningAgainFromThisSource: "Starts listening again from this source",

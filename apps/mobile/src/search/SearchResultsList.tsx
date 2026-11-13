@@ -32,6 +32,7 @@ import {
   openPlaylistActions,
 } from "@/playback/ActionsMenu";
 
+import { openGeniusHitActions } from "./GeniusHitActions";
 import { playSearchSong } from "./playSearchSong";
 import type { ResultRow, ResultSong } from "./rows";
 import type { SearchHit } from "./searchIndex";
@@ -286,6 +287,7 @@ export function SearchResultsList({
                 onOpen();
                 onGeniusHit(hit);
               }}
+              onLongPress={() => openGeniusHitActions(hit)}
             >
               <Artwork uri={hit.artworkUrl ?? undefined} size={CELL * 5} />
               <View className="flex-1">
