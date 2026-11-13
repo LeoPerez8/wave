@@ -7,18 +7,10 @@ import { LibraryStore, type LibraryStoreError } from "./LibraryStore";
 import { onLibraryChange } from "./libraryChanges";
 import { lyricsEdits } from "./lyricsEdits";
 import { readTrackLyrics } from "@/playback/trackLyrics";
-import { makeExternalStore } from "@/lib/externalStore";
+import { notifyLyricsSearchIndexChanged } from "./lyricsSearchVersion";
 
 const PAGE_SIZE = 16;
-export const lyricsSearchIndexVersion = makeExternalStore(0);
-let versionTimer: ReturnType<typeof setTimeout> | undefined;
-const changed = (): void => {
-  if (versionTimer !== undefined) return;
-  versionTimer = setTimeout(() => {
-    versionTimer = undefined;
-    lyricsSearchIndexVersion.update((version) => version + 1);
-  }, 350);
-};
+const changed = notifyLyricsSearchIndexChanged;
 
 type LyricsStore = Pick<
   LibraryStore["Service"],
@@ -27,6 +19,8 @@ type LyricsStore = Pick<
   | "staleLyricsIndexPage"
   | "lyricsTrackIdAtPath"
   | "keepLyricsSearchText"
+  | "savedLyricsSearchIndexPage"
+  | "indexSavedLyricsSearchText"
 >;
 
 const plainText = (lyrics: Lyrics): string =>
@@ -69,6 +63,7 @@ export const startLyricsSearchIndex = (): (() => void) => {
   let working = false;
   let cursor = 0;
   let staleCursor = 0;
+  let savedCursor = "";
   let pruneStale = false;
   let runAgain = false;
   const pending = new Set<number>();
@@ -90,6 +85,19 @@ export const startLyricsSearchIndex = (): (() => void) => {
           await refreshTrack(id!);
         }
         if (stopped) break;
+        const savedPage = await withStore((store) =>
+          store.savedLyricsSearchIndexPage(savedCursor, PAGE_SIZE),
+        );
+        if (savedPage == null) break;
+        for (const saved of savedPage) {
+          if (stopped) break;
+          savedCursor = saved.videoId;
+          await freeTurn();
+          await withStore((store) => store.indexSavedLyricsSearchText(saved));
+          changed();
+        }
+        runAgain ||= savedPage.length === PAGE_SIZE;
+        if (runAgain) continue;
         if (pruneStale) {
           const stale = await withStore((store) =>
             store.staleLyricsIndexPage(staleCursor, PAGE_SIZE),

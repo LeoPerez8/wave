@@ -10,6 +10,7 @@ import {
   selectSongOrder,
   selectSongSummaries,
   selectSongsWithIds,
+  selectSongsWithVideos,
 } from "./songOrder.ts";
 import { addMissingSong, addTrack, openTestDatabase, type TestDatabase } from "./testDatabase.ts";
 import { BY_TITLE, trackQuery } from "./tracks.ts";
@@ -151,6 +152,24 @@ describe("selectSongsWithIds", () => {
     const songs = everySong(db);
     const ids = [songs[40]!.id, songs[0]!.id, 12_345, songs[11]!.id];
     assert.deepEqual(selectSongsWithIds(db, ids), [songs[40], songs[0], songs[11]]);
+  });
+});
+
+describe("selectSongsWithVideos", () => {
+  test("returns downloaded Library copies by video id and leaves out missing songs", async () => {
+    const db = await openTestDatabase();
+    const downloaded = addTrack(db, { title: "Downloaded", artist: "Artist", album: "Album" });
+    const missing = addMissingSong(db, { title: "Missing", artist: "Artist", album: "Album" });
+    db.update(schema.tracks)
+      .set({ videoId: "video-1" })
+      .where(eq(schema.tracks.id, downloaded))
+      .run();
+    db.update(schema.tracks).set({ videoId: "video-2" }).where(eq(schema.tracks.id, missing)).run();
+
+    const result = selectSongsWithVideos(db, ["video-1", "video-2", "video-1"]);
+    assert.equal(result.get("video-1")?.id, downloaded);
+    assert.equal(result.has("video-2"), false);
+    assert.equal(result.size, 1);
   });
 });
 

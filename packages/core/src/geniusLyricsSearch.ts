@@ -27,9 +27,10 @@ export const geniusLyricsSearchRequest = (
 export const uniqueGeniusLyricsHits = (
   hits: readonly GeniusLyricsHit[],
   library: readonly SongLookup[],
+  alsoLocal: readonly SongLookup[] = [],
 ): GeniusLyricsHit[] => {
   const libraryByTitle = new Map<string, SongLookup[]>();
-  for (const song of library) {
+  for (const song of [...library, ...alsoLocal]) {
     const title = titleName(song.title);
     const matches = libraryByTitle.get(title) ?? [];
     matches.push(song);

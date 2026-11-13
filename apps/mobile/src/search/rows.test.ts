@@ -4,6 +4,7 @@ import { describe, test } from "node:test";
 
 import type { GeniusLyricsHit, SearchResults } from "@wave/core";
 import type { SongRow } from "@/library/LibraryStore";
+import type { NativeYtSong } from "@/native/waveYtMusic";
 import type { LocalLyricsHit } from "./lyricsSearch.ts";
 import type { SearchHit } from "./searchIndex.ts";
 import { resultRows, type PlacedYtSongs } from "./rows.ts";
@@ -143,5 +144,87 @@ describe("Search lyric section", () => {
       geniusHits(20),
     );
     assert.equal(expanded.filter((row) => row.type === "geniusLyric").length, 20);
+  });
+
+  test("saved streamed songs keep one lyric row and leave out their YT result duplicate", () => {
+    const song = {
+      videoId: "streamed-video",
+      title: "Streamed song",
+      artists: ["Artist"],
+      album: null,
+      albumId: null,
+      durationMs: 180_000,
+      artworkUrl: null,
+      explicit: false,
+    } satisfies NativeYtSong;
+    const hit = {
+      source: "stream",
+      song,
+      line: "remembered lyric",
+      ranges: [{ start: 0, end: 10 }],
+    } as const;
+    const rows = resultRows(
+      empty,
+      new Set(),
+      null,
+      noPlaced,
+      null,
+      "en",
+      [hit],
+      false,
+      "three words here",
+    );
+    const lyric = rows.find((row) => row.type === "lyric");
+    assert.equal(lyric?.type, "lyric");
+    if (lyric?.type === "lyric") {
+      assert.equal(lyric.key, "lyrics:yt:streamed-video");
+      assert.equal(lyric.hit.source, "stream");
+    }
+
+    const sameSong = resultRows(
+      empty,
+      new Set(),
+      null,
+      noPlaced,
+      null,
+      "en",
+      [hit],
+      false,
+      "three words here",
+      [
+        {
+          id: 99,
+          title: song.title,
+          artist: "Artist",
+          credit: "Artist",
+          url: "https://genius.com/streamed-song",
+          artworkUrl: null,
+        },
+      ],
+    );
+    assert.equal(
+      sameSong.some((row) => row.type === "geniusLyric"),
+      false,
+    );
+
+    const alreadyShown: PlacedYtSongs = {
+      songs: [{ source: "stream", song }],
+      rowOf: new Map([[song.videoId, 0]]),
+    };
+    const deduplicated = resultRows(
+      empty,
+      new Set(),
+      null,
+      alreadyShown,
+      null,
+      "en",
+      [hit],
+      false,
+      "three words here",
+    );
+    assert.equal(
+      deduplicated.some((row) => row.type === "lyric"),
+      false,
+    );
   });
 });

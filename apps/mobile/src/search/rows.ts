@@ -2,7 +2,9 @@ import {
   catalogueOf,
   formatNumber,
   GENIUS_LYRICS_SEARCH_PREVIEW,
+  joinArtists,
   normalizeSearchText,
+  uniqueGeniusLyricsHits,
   type AppLanguage,
 } from "@wave/core";
 import type {
@@ -123,7 +125,11 @@ const lyricRows = (
       key: "heading:lyrics",
       label: `${catalogueOf(language).playbackText.lyricsSearchSection} · ${formatNumber(language, total)}`,
     },
-    ...shown.map((hit) => ({ type: "lyric" as const, key: `lyrics:${hit.song.id}`, hit })),
+    ...shown.map((hit) => ({
+      type: "lyric" as const,
+      key: hit.source === "library" ? `lyrics:${hit.song.id}` : `lyrics:yt:${hit.song.videoId}`,
+      hit,
+    })),
     ...shownGenius.map((hit) => ({
       type: "geniusLyric" as const,
       key: `genius-lyrics:${hit.id}`,
@@ -229,9 +235,44 @@ export const resultRows = (
     ...placed.flatMap((row) => (row.source === "library" ? [row.track.id] : [])),
     ...(results.top?.kind === "song" ? [results.top.song.id] : []),
   ]);
-  const visibleLyrics = lyrics.filter((hit) => !songIds.has(hit.song.id));
+  const streamedVideoIds = new Set(
+    placed.flatMap((row) => (row.source === "stream" ? [row.song.videoId] : [])),
+  );
+  const visibleLyrics = lyrics.filter((hit) =>
+    hit.source === "library" ? !songIds.has(hit.song.id) : !streamedVideoIds.has(hit.song.videoId),
+  );
+  const geniusLocal = [
+    ...visibleLyrics.map((hit) =>
+      hit.source === "library"
+        ? {
+            title: hit.song.title,
+            artist: hit.song.artist,
+            album: hit.song.album,
+            durationMs: hit.song.durationMs,
+          }
+        : {
+            title: hit.song.title,
+            artist: joinArtists(hit.song.artists),
+            album: hit.song.album,
+            durationMs: hit.song.durationMs ?? 0,
+          },
+    ),
+    ...placed.flatMap((row) =>
+      row.source === "stream"
+        ? [
+            {
+              title: row.song.title,
+              artist: joinArtists(row.song.artists),
+              album: row.song.album,
+              durationMs: row.song.durationMs ?? 0,
+            },
+          ]
+        : [],
+    ),
+  ];
+  const visibleGenius = uniqueGeniusLyricsHits(geniusLyrics, [], geniusLocal);
   const lyricSection = (): ResultRow[] =>
-    lyricRows(visibleLyrics, geniusLyrics, lyricsExpanded, language);
+    lyricRows(visibleLyrics, visibleGenius, lyricsExpanded, language);
   const wordCount = normalizeSearchText(query).split(" ").filter(Boolean).length;
   const lyricsFirst = wordCount >= 3;
   if (lyricsFirst) rows.push(...lyricSection());

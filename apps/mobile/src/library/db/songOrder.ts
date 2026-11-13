@@ -15,7 +15,7 @@ import {
   type PlaylistFindText,
   type SongOrderField,
 } from "@wave/core";
-import { asc, desc, eq, inArray, sql, type SQL } from "drizzle-orm";
+import { asc, desc, eq, inArray, isNotNull, sql, type SQL } from "drizzle-orm";
 import type { SQLiteColumn } from "drizzle-orm/sqlite-core";
 
 import { chunks } from "./chunks.ts";
@@ -188,6 +188,28 @@ export const selectSongSummaries = (
  */
 export const selectSongsWithIds = (db: LibraryDatabase, ids: readonly number[]) =>
   byIds(ids, (some) => trackQuery(db).where(inArray(schema.tracks.id, some)).all());
+
+/** Downloaded Library copies of [videoIds], by video id, read in one bounded query. */
+export const selectSongsWithVideos = (db: LibraryDatabase, videoIds: readonly string[]) => {
+  const wanted = [...new Set(videoIds)];
+  if (wanted.length === 0) return new Map();
+  const rows = db.all<{ readonly id: number; readonly videoId: string }>(sql`
+    SELECT id, video_id AS videoId FROM tracks
+    WHERE video_id IN (SELECT value FROM json_each(${JSON.stringify(wanted)}))
+      AND ${isNotNull(schema.tracks.path)}`);
+  const songs = new Map(
+    selectSongsWithIds(
+      db,
+      rows.map((row) => row.id),
+    ).map((song) => [song.id, song]),
+  );
+  return new Map(
+    rows.flatMap(({ id, videoId }) => {
+      const song = songs.get(id);
+      return song === undefined ? [] : [[videoId, song] as const];
+    }),
+  );
+};
 
 /**
  * What finds each song of the Library, missing songs included, by Track id:
