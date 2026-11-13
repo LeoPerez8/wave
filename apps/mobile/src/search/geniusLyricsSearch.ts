@@ -6,7 +6,7 @@ import {
   type GeniusLyricsSearchState,
   type SongLookup,
 } from "@wave/core";
-import { useCallback, useEffect, useState, useSyncExternalStore } from "react";
+import { useCallback, useEffect, useMemo, useState, useSyncExternalStore } from "react";
 
 import { useGeniusInsightsEnabled } from "@/settings/genius";
 import { online, subscribeConnectivity } from "@/native/waveNative";
@@ -23,10 +23,12 @@ export interface GeniusLyricsSearchPorts {
   readonly ask: (query: string) => Promise<unknown>;
 }
 
-/** Requests a settled Genius state after policy checks; network errors remain distinct from offline. */
+/**
+ * Requests a settled Genius state after policy checks; network errors remain distinct from offline.
+ * Its hits are Genius's whole answer: the hook leaves out the Library's songs as it shows them.
+ */
 export const requestGeniusLyricsSearch = async (
   query: string,
-  library: readonly SongLookup[],
   ports: GeniusLyricsSearchPorts,
 ): Promise<GeniusLyricsSearchState> => {
   const request = geniusLyricsSearchRequest(query, ports.enabled);
@@ -49,15 +51,17 @@ export const requestGeniusLyricsSearch = async (
       if (timeout !== undefined) clearTimeout(timeout);
     });
     const hits = geniusLyricsCandidates(reply);
-    return hits === null
-      ? { query, status: "failed" }
-      : { query, status: "hits", hits: uniqueGeniusLyricsHits(hits, library) };
+    return hits === null ? { query, status: "failed" } : { query, status: "hits", hits };
   } catch {
     return { query, status: ports.isOnline() ? "failed" : "offline" };
   }
 };
 
-/** Asks once each time a 3+ word query pauses; old replies never replace the current query. */
+/**
+ * Asks once each time a 3+ word query pauses; old replies never replace the current query.
+ * A Library re-read (a scan batch, a play count) asks nothing again: the answer is kept and
+ * the hits the Library now holds are left out as it's shown.
+ */
 export const useGeniusLyricsSearch = (
   query: string,
   library: readonly SongLookup[],
@@ -88,7 +92,7 @@ export const useGeniusLyricsSearch = (
     const timer = setTimeout(() => {
       const loading: GeniusLyricsSearchState = { query, status: "loading" };
       setState(loading);
-      void requestGeniusLyricsSearch(query, library, {
+      void requestGeniusLyricsSearch(query, {
         enabled,
         signedIn,
         isOnline: () => isOnline,
@@ -110,7 +114,7 @@ export const useGeniusLyricsSearch = (
       live = false;
       clearTimeout(timer);
     };
-  }, [query, library, libraryReady, enabled, signedIn, isOnline, retryCount]);
+  }, [query, libraryReady, enabled, signedIn, isOnline, retryCount]);
 
   const request = geniusLyricsSearchRequest(query, enabled);
   let current: GeniusLyricsSearchState;
@@ -120,5 +124,12 @@ export const useGeniusLyricsSearch = (
   else if (!isOnline) current = { query, status: "offline" };
   else if (!signedIn) current = { query, status: "signedOut" };
   else current = state.query === query ? state : { query, status: "idle" };
-  return { state: current, retry };
+  const shown = useMemo(
+    (): GeniusLyricsSearchState =>
+      current.status === "hits"
+        ? { ...current, hits: uniqueGeniusLyricsHits(current.hits, library) }
+        : current,
+    [current, library],
+  );
+  return { state: shown, retry };
 };
