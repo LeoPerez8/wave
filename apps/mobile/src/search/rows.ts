@@ -1,4 +1,10 @@
-import { catalogueOf, formatNumber, normalizeSearchText, type AppLanguage } from "@wave/core";
+import {
+  catalogueOf,
+  formatNumber,
+  GENIUS_LYRICS_SEARCH_PREVIEW,
+  normalizeSearchText,
+  type AppLanguage,
+} from "@wave/core";
 import type {
   DiscoverSong,
   MixedSong,
@@ -6,6 +12,7 @@ import type {
   SearchKind,
   SearchResults,
   SongsInPlace,
+  GeniusLyricsHit,
   YtArtistAlbum,
   YtArtistCandidate,
   YtSearchTop,
@@ -36,6 +43,7 @@ export type PlacedYtSongs = Pick<SongsInPlace<NativeYtSong, SongRow, number>, "s
 export type ResultRow =
   | { readonly type: "heading"; readonly key: string; readonly label: string }
   | { readonly type: "lyric"; readonly key: string; readonly hit: LocalLyricsHit }
+  | { readonly type: "geniusLyric"; readonly key: string; readonly hit: GeniusLyricsHit }
   | { readonly type: "moreLyrics"; readonly key: string; readonly total: number }
   | {
       readonly type: "hit";
@@ -101,20 +109,28 @@ const LYRIC_PREVIEW = 5;
 
 const lyricRows = (
   hits: readonly LocalLyricsHit[],
+  geniusHits: readonly GeniusLyricsHit[],
   expanded: boolean,
   language: AppLanguage,
 ): ResultRow[] => {
-  if (hits.length === 0) return [];
+  if (hits.length === 0 && geniusHits.length === 0) return [];
   const shown = expanded ? hits : hits.slice(0, LYRIC_PREVIEW);
+  const shownGenius = expanded ? geniusHits : geniusHits.slice(0, GENIUS_LYRICS_SEARCH_PREVIEW);
+  const total = hits.length + geniusHits.length;
   return [
     {
       type: "heading",
       key: "heading:lyrics",
-      label: `${catalogueOf(language).playbackText.lyricsSearchSection} · ${formatNumber(language, hits.length)}`,
+      label: `${catalogueOf(language).playbackText.lyricsSearchSection} · ${formatNumber(language, total)}`,
     },
     ...shown.map((hit) => ({ type: "lyric" as const, key: `lyrics:${hit.song.id}`, hit })),
-    ...(shown.length < hits.length
-      ? [{ type: "moreLyrics" as const, key: "more:lyrics", total: hits.length }]
+    ...shownGenius.map((hit) => ({
+      type: "geniusLyric" as const,
+      key: `genius-lyrics:${hit.id}`,
+      hit,
+    })),
+    ...(shown.length < hits.length || shownGenius.length < geniusHits.length
+      ? [{ type: "moreLyrics" as const, key: "more:lyrics", total }]
       : []),
   ];
 };
@@ -201,6 +217,7 @@ export const resultRows = (
   lyrics: readonly LocalLyricsHit[] = [],
   lyricsExpanded = false,
   query = "",
+  geniusLyrics: readonly GeniusLyricsHit[] = [],
 ): ResultRow[] => {
   const rows: ResultRow[] = [];
   const songIds = new Set<number>([
@@ -213,7 +230,8 @@ export const resultRows = (
     ...(results.top?.kind === "song" ? [results.top.song.id] : []),
   ]);
   const visibleLyrics = lyrics.filter((hit) => !songIds.has(hit.song.id));
-  const lyricSection = (): ResultRow[] => lyricRows(visibleLyrics, lyricsExpanded, language);
+  const lyricSection = (): ResultRow[] =>
+    lyricRows(visibleLyrics, geniusLyrics, lyricsExpanded, language);
   const wordCount = normalizeSearchText(query).split(" ").filter(Boolean).length;
   const lyricsFirst = wordCount >= 3;
   if (lyricsFirst) rows.push(...lyricSection());

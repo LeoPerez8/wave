@@ -2508,6 +2508,7 @@ export type { SyncClock, SyncTriggers, SyncTriggersInput } from "./syncTriggers.
 export {
   GENIUS_MISS_MS,
   geniusCandidates,
+  geniusLyricsCandidates,
   geniusDescription,
   geniusQueryUrl,
   geniusSearchQuery,
@@ -2518,7 +2519,22 @@ export {
   storedGenius,
 } from "./genius.ts";
 export { geniusAnswerState } from "./genius.ts";
-export type { GeniusAnswerState, GeniusHit, GeniusMatch, SavedGenius } from "./genius.ts";
+export type {
+  GeniusAnswerState,
+  GeniusHit,
+  GeniusLyricsHit,
+  GeniusMatch,
+  SavedGenius,
+} from "./genius.ts";
+export {
+  GENIUS_LYRICS_SEARCH_DELAY_MS,
+  GENIUS_LYRICS_SEARCH_LIMIT,
+  GENIUS_LYRICS_SEARCH_PREVIEW,
+  geniusLyricsSearchRequest,
+  settleGeniusLyricsSearch,
+  uniqueGeniusLyricsHits,
+} from "./geniusLyricsSearch.ts";
+export type { GeniusLyricsSearchRequest, GeniusLyricsSearchState } from "./geniusLyricsSearch.ts";
 export { GENIUS_LOADING_NOTE_DELAY_MS, geniusLoadingNote } from "./geniusLoading.ts";
 export type { GeniusInsightState } from "./geniusLoading.ts";
 export {

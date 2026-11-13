@@ -1,0 +1,117 @@
+import {
+  geniusLyricsCandidates,
+  geniusLyricsSearchRequest,
+  settleGeniusLyricsSearch,
+  uniqueGeniusLyricsHits,
+  type GeniusLyricsSearchState,
+  type SongLookup,
+} from "@wave/core";
+import { useEffect, useState, useSyncExternalStore } from "react";
+
+import { useGeniusInsightsEnabled } from "@/settings/genius";
+import { online, subscribeConnectivity } from "@/native/waveNative";
+import { askWaveService } from "@/sync/askWaveService";
+import { useWaveSignedIn } from "@/sync/waveSignedIn";
+
+const REQUEST_TIMEOUT_MS = 15_000;
+
+/** The JSON response for a query, or an explicit no-request outcome. */
+export interface GeniusLyricsSearchPorts {
+  readonly enabled: boolean;
+  readonly signedIn: boolean | null;
+  readonly isOnline: () => boolean;
+  readonly ask: (query: string) => Promise<unknown>;
+}
+
+/** Requests a settled Genius state after policy checks; network errors remain distinct from offline. */
+export const requestGeniusLyricsSearch = async (
+  query: string,
+  library: readonly SongLookup[],
+  ports: GeniusLyricsSearchPorts,
+): Promise<GeniusLyricsSearchState> => {
+  const request = geniusLyricsSearchRequest(query, ports.enabled);
+  if (!ports.enabled) return { query, status: "disabled" };
+  if (request === null) return { query, status: "idle" };
+  if (!ports.isOnline()) return { query, status: "offline" };
+  if (ports.signedIn === null) return { query, status: "idle" };
+  if (!ports.signedIn) return { query, status: "signedOut" };
+  try {
+    let timeout: ReturnType<typeof setTimeout> | undefined;
+    const reply = await Promise.race([
+      ports.ask(`/v1/genius/search?q=${encodeURIComponent(request.query)}`),
+      new Promise<never>((_, reject) => {
+        timeout = setTimeout(
+          () => reject(new Error("Genius search timed out")),
+          REQUEST_TIMEOUT_MS,
+        );
+      }),
+    ]).finally(() => {
+      if (timeout !== undefined) clearTimeout(timeout);
+    });
+    const hits = geniusLyricsCandidates(reply);
+    return hits === null
+      ? { query, status: "failed" }
+      : { query, status: "hits", hits: uniqueGeniusLyricsHits(hits, library) };
+  } catch {
+    return { query, status: ports.isOnline() ? "failed" : "offline" };
+  }
+};
+
+/** Asks once each time a 3+ word query pauses; old replies never replace the current query. */
+export const useGeniusLyricsSearch = (
+  query: string,
+  library: readonly SongLookup[],
+  libraryReady: boolean,
+): GeniusLyricsSearchState => {
+  const enabled = useGeniusInsightsEnabled();
+  const signedIn = useWaveSignedIn();
+  const isOnline = useSyncExternalStore(subscribeConnectivity, online);
+  const [state, setState] = useState<GeniusLyricsSearchState>({ query: "", status: "idle" });
+  useEffect(() => {
+    const request = geniusLyricsSearchRequest(query, enabled);
+    if (
+      !enabled ||
+      request === null ||
+      signedIn === null ||
+      !libraryReady ||
+      !isOnline ||
+      !signedIn
+    )
+      return undefined;
+
+    let live = true;
+    const timer = setTimeout(() => {
+      const loading: GeniusLyricsSearchState = { query, status: "loading" };
+      setState(loading);
+      void requestGeniusLyricsSearch(query, library, {
+        enabled,
+        signedIn,
+        isOnline: () => isOnline,
+        ask: askWaveService,
+      }).then((settled) => {
+        if (!live) return;
+        const answer =
+          settled.status === "hits"
+            ? { status: "hits" as const, hits: settled.hits }
+            : settled.status === "signedOut" ||
+                settled.status === "failed" ||
+                settled.status === "offline"
+              ? { status: settled.status }
+              : { status: "failed" as const };
+        setState((current) => settleGeniusLyricsSearch(current, query, answer));
+      });
+    }, request.delayMs);
+    return () => {
+      live = false;
+      clearTimeout(timer);
+    };
+  }, [query, library, libraryReady, enabled, signedIn, isOnline]);
+
+  const request = geniusLyricsSearchRequest(query, enabled);
+  if (!enabled) return { query, status: "disabled" };
+  if (request === null || signedIn === null || !libraryReady) return { query, status: "idle" };
+  if (!isOnline) return { query, status: "offline" };
+  if (!signedIn) return { query, status: "signedOut" };
+  if (state.query === query) return state;
+  return { query, status: "idle" };
+};

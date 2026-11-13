@@ -319,7 +319,7 @@ export const settingsPtBr: typeof settingsEn = {
     "Deixa fora da Biblioteca as mensagens de voz do WhatsApp, as gravações do celular e de chamadas e os áudios de menos de 30 segundos sem artista.",
   geniusInsights: "Informações do Genius",
   openingLyricsOnASongWithLyrics:
-    "Abrir Letra em uma música com letra mostra as informações do Genius e destaca os versos com anotações. Isso envia ao Genius o título e o artista da música. Desativado, o Wave não faz solicitações ao Genius.",
+    "Abrir Letra em uma música com letra mostra as informações do Genius e destaca os versos com anotações. Buscar letras também envia a frase ao Genius. Desativado, o Wave não faz solicitações ao Genius.",
   notInYourMusicFolders: "Fora das suas pastas de música",
   waveOnlyShowsSongsFromYourMusic:
     "O Wave só mostra músicas das suas pastas de música. Não há nada para excluir aqui.",

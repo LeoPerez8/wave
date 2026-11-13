@@ -3,6 +3,7 @@ import {
   formatNumber,
   joinArtists,
   type QueueContext,
+  type GeniusLyricsHit,
   type SearchKind,
   type YtArtistAlbum,
 } from "@wave/core";
@@ -53,6 +54,7 @@ const SEARCH_CONTEXT: QueueContext = { kind: "search", id: null };
 const HEIGHT: Readonly<Record<ResultRow["type"], number>> = {
   heading: CELL * 6,
   lyric: grid.row + CELL * 2,
+  geniusLyric: grid.row + CELL * 2,
   moreLyrics: CELL * 6,
   hit: grid.row,
   more: CELL * 6,
@@ -107,6 +109,7 @@ type Props = {
   onOpen: () => void;
   onShowAll: (kind: SearchKind) => void;
   onShowAllLyrics: () => void;
+  onGeniusHit: (hit: GeniusLyricsHit) => void;
   /** Search shows YouTube Music's results (an integrated view): Library albums open integrated. */
   integrated: boolean;
   /** Song results are selectable; other results ignore taps while selecting. */
@@ -191,6 +194,7 @@ export function SearchResultsList({
   onOpen,
   onShowAll,
   onShowAllLyrics,
+  onGeniusHit,
   integrated,
   selection,
 }: Props) {
@@ -251,6 +255,31 @@ export function SearchResultsList({
                       {part.text}
                     </Text>
                   ))}
+                </Text>
+              </View>
+            </Pressable>
+          );
+        }
+        case "geniusLyric": {
+          const { hit } = item;
+          return (
+            <Pressable
+              accessibilityRole="button"
+              accessibilityLabel={`${hit.title}, ${hit.artist}, Genius`}
+              className="flex-row items-center"
+              style={{ height: HEIGHT.geniusLyric, gap: CELL * 1.5 }}
+              onPress={() => {
+                onOpen();
+                onGeniusHit(hit);
+              }}
+            >
+              <Artwork uri={hit.artworkUrl ?? undefined} size={CELL * 5} />
+              <View className="flex-1">
+                <Text numberOfLines={1} className="font-sans text-body font-medium text-foreground">
+                  {hit.title}
+                </Text>
+                <Text numberOfLines={1} className="font-sans text-footnote text-secondary">
+                  {hit.artist}
                 </Text>
               </View>
             </Pressable>
@@ -363,7 +392,7 @@ export function SearchResultsList({
           );
       }
     },
-    [onOpen, onShowAll, onShowAllLyrics, integrated, selection, language, strings],
+    [onOpen, onShowAll, onShowAllLyrics, onGeniusHit, integrated, selection, language, strings],
   );
 
   return (

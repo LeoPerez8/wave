@@ -4,6 +4,7 @@ import { IconSearch } from "@tabler/icons-react-native";
 import {
   heldTracks,
   inLibraryUnlessHeld,
+  type GeniusLyricsHit,
   type SearchKind,
   type YtPick,
   ytSectionToggle,
@@ -18,7 +19,7 @@ import {
   useRef,
   useState,
 } from "react";
-import { ScrollView, Text, TextInput, View } from "react-native";
+import { Linking, ScrollView, Text, TextInput, View } from "react-native";
 import Animated, { LayoutAnimationConfig, useReducedMotion } from "react-native-reanimated";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
@@ -48,6 +49,9 @@ import {
   ytFooterRows,
 } from "@/search/rows";
 import { useLocalLyricsSearch } from "@/search/lyricsSearch";
+import { useGeniusLyricsSearch } from "@/search/geniusLyricsSearch";
+import { playSearchSong } from "@/search/playSearchSong";
+import { resolveRecognition } from "@/recognize/resolveRecognition";
 import { openRecognize, recognizeAvailable } from "@/recognize/RecognizeCard";
 import { useSearchRequests } from "@/search/queryRequest";
 import { useYtMusicSection } from "@/search/ytMusicSearch";
@@ -59,6 +63,8 @@ import { useTopArtistSongs } from "@/search/topArtistSongs";
 import { SearchResultsList } from "@/search/SearchResultsList";
 import { useListSelection } from "@/selection/useListSelection";
 import { useLineToggle } from "@/ytmusic/OnlineToggle";
+import { searchRecordingInTurn } from "@/ytmusic/askYtMusic";
+import { ytMusicEnabled } from "@/settings/ytMusic";
 import { useHeldSongs, useSongsInPlace } from "@/ytmusic/songsInPlace";
 
 const NO_KINDS: ReadonlySet<SearchKind> = new Set();
@@ -192,6 +198,11 @@ export default function SearchScreen() {
     library?.songs ?? NO_SONG_ROWS,
     lyricsSkipIds,
   );
+  const geniusLyrics = useGeniusLyricsSearch(
+    deferredQuery,
+    library?.songs ?? NO_SONG_ROWS,
+    index !== null,
+  );
   // A Library artist on top, with Online, counts the songs their online page adds.
   const topArtist = results?.top?.kind === "artist" ? results.top.artist : null;
   const topArtistSongs = useTopArtistSongs(
@@ -205,8 +216,9 @@ export default function SearchScreen() {
     if (results === null) return [];
     const ytFound =
       ytView === null ? 0 : ytView.songs.length + ytView.artists.length + ytView.albums.length;
+    const onlineLyrics = geniusLyrics.status === "hits" ? geniusLyrics.hits : [];
     const ours =
-      libraryEmpty && ytFound === 0 && lyricHits.length === 0
+      libraryEmpty && ytFound === 0 && lyricHits.length === 0 && onlineLyrics.length === 0
         ? [noLibraryResultsRow(deferredQuery, language)]
         : resultRows(
             results,
@@ -218,6 +230,7 @@ export default function SearchScreen() {
             lyricHits,
             lyricsExpanded,
             deferredQuery,
+            onlineLyrics,
           );
     return [...ours, ...ytFooterRows(ytView, language)];
   }, [
@@ -231,6 +244,7 @@ export default function SearchScreen() {
     language,
     lyricHits,
     lyricsExpanded,
+    geniusLyrics,
   ]);
 
   // Song results can be selected. The selection lives here, not in the list,
@@ -270,6 +284,38 @@ export default function SearchScreen() {
     [],
   );
   const showAllLyrics = useCallback(() => setLyricsExpanded(true), []);
+  const openGeniusHit = useCallback(
+    async (hit: GeniusLyricsHit) => {
+      const resolution = await resolveRecognition(
+        {
+          library: async () => library?.songs ?? [],
+          ytMusic: ytMusicEnabled,
+          search: (asker, _query, signal, song) => searchRecordingInTurn(asker, song, signal, true),
+        },
+        {
+          title: hit.title,
+          artist: hit.artist,
+          album: null,
+          coverUrl: hit.artworkUrl,
+          isrc: null,
+          releaseYear: null,
+        },
+        new AbortController().signal,
+      ).catch(() => null);
+      if (resolution?.kind === "resolved") {
+        if (resolution.result.kind === "library") {
+          void playSearchSong({ source: "library", track: resolution.result.track });
+          return;
+        }
+        if (resolution.result.kind === "stream") {
+          void playSearchSong({ source: "stream", song: resolution.result.song });
+          return;
+        }
+      }
+      void Linking.openURL(hit.url).catch(() => undefined);
+    },
+    [library?.songs],
+  );
 
   // The release runner's typing response: the results for what was typed, on screen.
   useEffect(() => {
@@ -283,7 +329,11 @@ export default function SearchScreen() {
   const content = query.trim() === "" ? "recents" : index === null ? "preparing" : "results";
   // With YT Music on, its results (or its quiet line) show when the library has nothing.
   const noResults =
-    libraryEmpty && ytView === null && lyricHits.length === 0 && deferredQuery === query;
+    libraryEmpty &&
+    ytView === null &&
+    lyricHits.length === 0 &&
+    !(geniusLyrics.status === "hits" && geniusLyrics.hits.length > 0) &&
+    deferredQuery === query;
   return (
     <View className="flex-1 bg-background">
       <View style={{ paddingTop: insets.top + 16, paddingHorizontal: grid.margin, gap: 16 }}>
@@ -338,6 +388,7 @@ export default function SearchScreen() {
               onOpen={remember}
               onShowAll={showAll}
               onShowAllLyrics={showAllLyrics}
+              onGeniusHit={openGeniusHit}
               integrated={ytView?.integrated ?? false}
               selection={selection}
             />
