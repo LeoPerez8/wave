@@ -2620,6 +2620,8 @@ export type {
 export {
   resolveRecognizedSong,
   recognizeResultActions,
+  geniusLyricsResultActions,
+  geniusLyricsResultActionLabels,
   recognizePlaylistSong,
 } from "./recognition.ts";
 
@@ -2628,7 +2630,9 @@ export type {
   RecognizeResolution,
   RecognizeResult,
   RecognizeResultAction,
+  RecognizeResultOptions,
   RecognizeTrack,
+  GeniusLyricsResultAction,
 } from "./recognition.ts";
 export { planShazamAdd } from "./shazamPlaylist.ts";
 export { bounceDemoSwipe, sampleSwipeActions } from "./motionSample.ts";

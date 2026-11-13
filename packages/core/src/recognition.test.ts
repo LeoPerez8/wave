@@ -8,6 +8,9 @@ import {
   writePlaylistEntrySong,
   recognizePlaylistSong,
   recognizeResultActions,
+  geniusLyricsResultActions,
+  geniusLyricsResultActionLabels,
+  catalogueOf,
   resolveRecognizedSong,
   type RecognizedSong,
 } from "./index.ts";
@@ -182,6 +185,45 @@ test("recognized downloads offer cancel or retry from the existing queue status 
       "listenAgain",
     ]);
   }
+});
+
+test("a Genius result menu uses the resolved song actions and always ends with Open in Genius", () => {
+  const library = resolved(undefined, [track]);
+  const stream = resolved({ ok: true, songs: [onlineSong] });
+  const unavailable = resolved({ ok: true, songs: [] });
+
+  assert.deepEqual(geniusLyricsResultActions(library, { ytMusic: true }), [
+    "play",
+    "playNext",
+    "addToPlaylist",
+    "goToAlbum",
+    "openInGenius",
+  ]);
+  assert.deepEqual(geniusLyricsResultActions(stream, { ytMusic: true }), [
+    "play",
+    "playNext",
+    "addToPlaylist",
+    "download",
+    "openInGenius",
+  ]);
+  assert.deepEqual(geniusLyricsResultActions(stream, { ytMusic: false }), [
+    "addToPlaylist",
+    "openInGenius",
+  ]);
+  assert.deepEqual(geniusLyricsResultActions(unavailable, { ytMusic: true }), [
+    "addToPlaylist",
+    "openInGenius",
+  ]);
+});
+
+test("a Genius result menu reads its entries in the app language", () => {
+  const english = geniusLyricsResultActionLabels();
+  assert.equal(english.openInGenius, "Open in Genius");
+  assert.equal(english.addToPlaylist, "Add to Playlist");
+  const portuguese = geniusLyricsResultActionLabels(catalogueOf("pt-BR"));
+  assert.equal(portuguese.openInGenius, "Abrir no Genius");
+  assert.equal(portuguese.play, "Reproduzir");
+  assert.equal(portuguese.goToAlbum, "Ir para o Álbum");
 });
 
 test("each recognized kind saves as its existing playlist entry and round-trips without new columns", () => {

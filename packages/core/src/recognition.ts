@@ -1,4 +1,5 @@
 /** Resolves a recognized song into the same songs playlists and playback already use. */
+import { en, type Catalogue } from "./catalogueEn.ts";
 import { ytDownloadActions, type YtDownloadAction, type YtDownloadStatus } from "./ytDownloads.ts";
 import { splitCredit } from "./credits.ts";
 import type { PlaylistSong, UnavailableSong, UnsearchedSong } from "./playlistEntries.ts";
@@ -138,6 +139,42 @@ export const recognizeResultActions = (
         ? ytDownloadActions(status, { inLibrary })
         : [];
   return [...play, "addToShazam", "addToPlaylist", ...more, "listenAgain"];
+};
+
+/** Actions for a Genius Lyrics result's long-press menu. */
+export type GeniusLyricsResultAction =
+  Exclude<RecognizeResultAction, "addToShazam" | "listenAgain"> | "openInGenius";
+
+/**
+ * A Genius hit uses Recognize's resolved-song actions, without the recognition-only
+ * Shazam and Listen Again entries, and keeps its source page available at the end.
+ */
+export const geniusLyricsResultActions = (
+  result: RecognizeResult,
+  options: RecognizeResultOptions,
+): readonly GeniusLyricsResultAction[] => [
+  ...recognizeResultActions(result, options).filter(
+    (action): action is Exclude<RecognizeResultAction, "addToShazam" | "listenAgain"> =>
+      action !== "addToShazam" && action !== "listenAgain",
+  ),
+  "openInGenius",
+];
+
+/** A Genius Lyrics result menu's entry labels in [catalogue]'s language. */
+export const geniusLyricsResultActionLabels = (
+  catalogue: Catalogue = en,
+): Readonly<Record<GeniusLyricsResultAction, string>> => {
+  const text = catalogue.playbackText;
+  return {
+    play: text.play,
+    playNext: text.playNext,
+    addToPlaylist: text.addToPlaylist,
+    goToAlbum: text.goToAlbum,
+    download: text.download,
+    cancelDownload: text.cancelDownload,
+    retryDownload: text.retryDownload,
+    openInGenius: text.openInGenius,
+  };
 };
 
 /** The picker and one-tap saves both take the existing playlist entry union. */

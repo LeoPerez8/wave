@@ -80,6 +80,7 @@ export const playbackTextPtBr: typeof playbackTextEn = {
   lyrics: "Letra",
   lyricsSearchSection: "Letras",
   geniusLyricsResult: (title: string, artist: string) => `${title}, ${artist}, no Genius`,
+  openInGenius: "Abrir no Genius",
   more: "Mais",
   moreInsights: "Mais informações",
   moveDown: "Mover para baixo",
