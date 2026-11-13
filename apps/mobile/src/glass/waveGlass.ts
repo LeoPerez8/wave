@@ -4,7 +4,7 @@ import type { ColorValue, ViewProps } from "react-native";
 
 /**
  * Native bindings from `modules/wave-glass`: the glass view, the cover under Now
- * Playing and the frame-time meter.
+ * Playing, the edge fade of its scrolling lines and the frame-time meter.
  */
 
 export interface FrameStats {
@@ -26,6 +26,8 @@ declare class WaveGlassModule extends NativeModule<WaveGlassEvents> {
   stopFrameStats(): void;
   /** The launch intent's glass probe (Core `GLASS_PROBE_EXTRA`); null without one. Perf builds only. */
   perfGlassProbe(): string | null;
+  /** Android's animator duration scale: 1 by default, 0 with animations removed. */
+  animatorDurationScale(): number;
 }
 
 export const WaveGlass = requireNativeModule<WaveGlassModule>("WaveGlass");
@@ -78,3 +80,19 @@ export interface NativeWaveUnderlineProps extends ViewProps {
 /** The playing song's wavy underline, animated on the RenderThread (see WaveUnderlineView.kt). */
 export const NativeWaveUnderline: ComponentType<NativeWaveUnderlineProps> =
   requireNativeView<NativeWaveUnderlineProps>("WaveGlass", "WaveUnderline");
+
+export interface NativeFadeEdgesProps extends ViewProps {
+  /** The edge that fades all the time; the other fades only while the content is away from rest. */
+  readonly fixedEdge: "left" | "right" | "none";
+  /** How far the content (the first child) moves in one loop, in dp; 0 while still. */
+  readonly travel: number;
+  /** How wide each edge fades, in dp. */
+  readonly fadeLength: number;
+}
+
+/**
+ * Clips its content and fades it out at the edges, for Now Playing's scrolling
+ * lines (see WaveFadeEdgesView.kt).
+ */
+export const NativeFadeEdges: ComponentType<NativeFadeEdgesProps> =
+  requireNativeView<NativeFadeEdgesProps>("WaveGlass", "WaveFadeEdges");

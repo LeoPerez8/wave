@@ -2769,3 +2769,5 @@ export type {
   ListDownloadsIndex,
   ListDownloadsScope,
 } from "./listDownloadProgress.ts";
+export { MARQUEE, marqueeOffset, marqueePlan, marqueeStill, readsRightToLeft } from "./marquee.ts";
+export type { MarqueeLine, MarqueeLineSize, MarqueePlan } from "./marquee.ts";
