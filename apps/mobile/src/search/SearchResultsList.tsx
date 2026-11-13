@@ -273,7 +273,7 @@ export function SearchResultsList({
           return (
             <Pressable
               accessibilityRole="button"
-              accessibilityLabel={`${hit.title}, ${hit.artist}, Genius`}
+              accessibilityLabel={strings.playbackText.geniusLyricsResult(hit.title, hit.artist)}
               className="flex-row items-center"
               style={{ height: HEIGHT.geniusLyric, gap: CELL * 1.5 }}
               onPress={() => {
