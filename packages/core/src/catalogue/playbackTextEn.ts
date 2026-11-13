@@ -140,6 +140,7 @@ export const playbackTextEn = {
   songActions: "Song actions",
   songs: "Songs",
   lyrics: "Lyrics",
+  lyricsSearchSection: "Lyrics",
   songsAlbumsArtistsGenres: "Songs, albums, artists, genres",
   startTimer: "Start Timer",
   startsListeningAgainFromThisSource: "Starts listening again from this source",

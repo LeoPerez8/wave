@@ -120,6 +120,8 @@ registerPerfMeta("search", () => ({ ...catalog.stats() }));
 export interface LibrarySearch {
   readonly index: SearchIndex<SearchHit>;
   readonly library: YtSearchLibrary<YtSong>;
+  /** Current Library rows, for joining indexed lyric candidates to playable songs. */
+  readonly songs: readonly SongRow[];
   /** The Library song a YT Music song already is: it follows a download at once. */
   readonly find: FindInLibrary;
 }
@@ -199,9 +201,10 @@ export const useSearchIndex = (active: boolean): LibrarySearch | null => {
         ? null
         : {
             index,
+            songs: songs ?? [],
             library: { hasSong: (song: YtSong) => find(song) !== null, ...releases },
             find,
           },
-    [index, find, releases],
+    [index, find, releases, songs],
   );
 };

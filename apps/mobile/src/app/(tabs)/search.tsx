@@ -47,6 +47,7 @@ import {
   songResults,
   ytFooterRows,
 } from "@/search/rows";
+import { useLocalLyricsSearch } from "@/search/lyricsSearch";
 import { openRecognize, recognizeAvailable } from "@/recognize/RecognizeCard";
 import { useSearchRequests } from "@/search/queryRequest";
 import { useYtMusicSection } from "@/search/ytMusicSearch";
@@ -63,6 +64,7 @@ import { useHeldSongs, useSongsInPlace } from "@/ytmusic/songsInPlace";
 const NO_KINDS: ReadonlySet<SearchKind> = new Set();
 const NO_YT_SONGS: readonly NativeYtSong[] = [];
 const NO_TRACKS: ReadonlySet<number> = new Set();
+const NO_SONG_ROWS: readonly SongRow[] = [];
 
 const trackId = (song: SongRow): number => song.id;
 
@@ -117,6 +119,7 @@ export default function SearchScreen() {
   const insets = useSafeAreaInsets();
   const [query, setQuery] = useState("");
   const [expanded, setExpanded] = useState<ReadonlySet<SearchKind>>(NO_KINDS);
+  const [lyricsExpanded, setLyricsExpanded] = useState(false);
   const field = useRef<ComponentRef<typeof TextInput>>(null);
   const reduceMotion = useReducedMotion();
   // The tab's tap raises the keyboard; the Library is read only once it has.
@@ -176,6 +179,19 @@ export default function SearchScreen() {
     [ytSection, inLibrary, holding.held],
   );
   const placed = useSongsInPlace(holding, ytView?.songs ?? NO_YT_SONGS, find);
+  const lyricsSkipIds = useMemo(
+    () =>
+      new Set([
+        ...(results === null ? [] : songResults(results).map((song) => song.id)),
+        ...placed.songs.flatMap((row) => (row.source === "library" ? [row.track.id] : [])),
+      ]),
+    [results, placed.songs],
+  );
+  const lyricHits = useLocalLyricsSearch(
+    deferredQuery,
+    library?.songs ?? NO_SONG_ROWS,
+    lyricsSkipIds,
+  );
   // A Library artist on top, with Online, counts the songs their online page adds.
   const topArtist = results?.top?.kind === "artist" ? results.top.artist : null;
   const topArtistSongs = useTopArtistSongs(
@@ -190,11 +206,32 @@ export default function SearchScreen() {
     const ytFound =
       ytView === null ? 0 : ytView.songs.length + ytView.artists.length + ytView.albums.length;
     const ours =
-      libraryEmpty && ytFound === 0
+      libraryEmpty && ytFound === 0 && lyricHits.length === 0
         ? [noLibraryResultsRow(deferredQuery, language)]
-        : resultRows(results, expanded, ytView, placed, topArtistSongs, language);
+        : resultRows(
+            results,
+            expanded,
+            ytView,
+            placed,
+            topArtistSongs,
+            language,
+            lyricHits,
+            lyricsExpanded,
+            deferredQuery,
+          );
     return [...ours, ...ytFooterRows(ytView, language)];
-  }, [results, libraryEmpty, deferredQuery, expanded, ytView, placed, topArtistSongs, language]);
+  }, [
+    results,
+    libraryEmpty,
+    deferredQuery,
+    expanded,
+    ytView,
+    placed,
+    topArtistSongs,
+    language,
+    lyricHits,
+    lyricsExpanded,
+  ]);
 
   // Song results can be selected. The selection lives here, not in the list,
   // so a new query (or none matching) keeps it: checked songs that drop out of
@@ -232,6 +269,7 @@ export default function SearchScreen() {
     (kind: SearchKind) => setExpanded((kinds) => new Set(kinds).add(kind)),
     [],
   );
+  const showAllLyrics = useCallback(() => setLyricsExpanded(true), []);
 
   // The release runner's typing response: the results for what was typed, on screen.
   useEffect(() => {
@@ -244,7 +282,8 @@ export default function SearchScreen() {
   // one, so refining a query never animates or remounts the list.
   const content = query.trim() === "" ? "recents" : index === null ? "preparing" : "results";
   // With YT Music on, its results (or its quiet line) show when the library has nothing.
-  const noResults = libraryEmpty && ytView === null && deferredQuery === query;
+  const noResults =
+    libraryEmpty && ytView === null && lyricHits.length === 0 && deferredQuery === query;
   return (
     <View className="flex-1 bg-background">
       <View style={{ paddingTop: insets.top + 16, paddingHorizontal: grid.margin, gap: 16 }}>
@@ -298,6 +337,7 @@ export default function SearchScreen() {
               rows={rows}
               onOpen={remember}
               onShowAll={showAll}
+              onShowAllLyrics={showAllLyrics}
               integrated={ytView?.integrated ?? false}
               selection={selection}
             />

@@ -18,4 +18,14 @@ describe("findLyricMatch", () => {
     assert.equal(findLyricMatch("Bala trem", "trem bala"), null);
     assert.equal(findLyricMatch("trem, and then bala", "trem bala"), null);
   });
+
+  test("apostrophes do not split a lyric search word", () => {
+    assert.deepEqual(findLyricMatch("Don't stop!", "dont stop"), {
+      line: "Don't stop!",
+      ranges: [
+        { start: 0, end: 5 },
+        { start: 6, end: 10 },
+      ],
+    });
+  });
 });

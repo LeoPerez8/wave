@@ -84,7 +84,7 @@ export const findLyricMatch = (lyricsText: string, query: string): LyricSearchMa
         ? lyrics.lines
         : [];
   for (const line of lines) {
-    const tokens = [...line.matchAll(/[\p{L}\p{N}]+/gu)].map((match) => ({
+    const tokens = [...line.matchAll(/[\p{L}\p{N}]+(?:['’ʼ`´][\p{L}\p{N}]+)*/gu)].map((match) => ({
       word: normalizeSearchText(match[0]),
       start: match.index,
       end: match.index + match[0].length,
