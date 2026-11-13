@@ -22,7 +22,11 @@ const changed = (): void => {
 
 type LyricsStore = Pick<
   LibraryStore["Service"],
-  "lyricsIndexTarget" | "lyricsIndexPage" | "lyricsTrackIdAtPath" | "keepLyricsSearchText"
+  | "lyricsIndexTarget"
+  | "lyricsIndexPage"
+  | "staleLyricsIndexPage"
+  | "lyricsTrackIdAtPath"
+  | "keepLyricsSearchText"
 >;
 
 const plainText = (lyrics: Lyrics): string =>
@@ -64,6 +68,8 @@ export const startLyricsSearchIndex = (): (() => void) => {
   let stopped = false;
   let working = false;
   let cursor = 0;
+  let staleCursor = 0;
+  let pruneStale = false;
   let runAgain = false;
   const pending = new Set<number>();
 
@@ -84,6 +90,24 @@ export const startLyricsSearchIndex = (): (() => void) => {
           await refreshTrack(id!);
         }
         if (stopped) break;
+        if (pruneStale) {
+          const stale = await withStore((store) =>
+            store.staleLyricsIndexPage(staleCursor, PAGE_SIZE),
+          );
+          if (stale == null || stale.length === 0) {
+            pruneStale = false;
+            staleCursor = 0;
+          } else {
+            for (const track of stale) {
+              if (stopped) break;
+              staleCursor = track.id;
+              await freeTurn();
+              await refreshTrack(track.id);
+            }
+            runAgain ||= stale.length === PAGE_SIZE;
+          }
+          if (runAgain) continue;
+        }
         const page = await withStore((store) => store.lyricsIndexPage(cursor, PAGE_SIZE));
         if (page == null) break;
         if (page.length === 0) {
@@ -109,6 +133,8 @@ export const startLyricsSearchIndex = (): (() => void) => {
     if (change.kind !== "tracks") return;
     if (change.ids === undefined) {
       cursor = 0;
+      staleCursor = 0;
+      pruneStale = true;
       runAgain = true;
     } else {
       for (const id of change.ids) pending.add(id);

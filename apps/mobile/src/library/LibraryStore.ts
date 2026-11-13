@@ -301,6 +301,7 @@ import {
   selectLyricsCandidates,
   selectLyricsIndexPage,
   selectLyricsIndexTarget,
+  selectStaleLyricsIndexPage,
   selectLyricsTrackIdAtPath,
   type LyricsCandidate,
   type LyricsIndexTarget,
@@ -1473,6 +1474,11 @@ export class LibraryStore extends Context.Service<
     readonly lyricsIndexTarget: (
       trackId: number,
     ) => Effect.Effect<LyricsIndexTarget | null, LibraryStoreError>;
+    /** A bounded page of indexed rows whose file/lyrics flag became stale. */
+    readonly staleLyricsIndexPage: (
+      afterId: number,
+      limit: number,
+    ) => Effect.Effect<readonly LyricsIndexTarget[], LibraryStoreError>;
     /** Track id currently using a file path, if any. */
     readonly lyricsTrackIdAtPath: (path: string) => Effect.Effect<number | null, LibraryStoreError>;
     /** Stores timestamp-free lyrics and their searchable word positions, local to this phone. */
@@ -2457,6 +2463,9 @@ const make = Effect.gen(function* () {
 
     lyricsIndexTarget: (trackId) =>
       attempt("read lyrics index target", () => selectLyricsIndexTarget(db, trackId)),
+
+    staleLyricsIndexPage: (afterId, limit) =>
+      attempt("read stale lyrics index rows", () => selectStaleLyricsIndexPage(db, afterId, limit)),
 
     lyricsTrackIdAtPath: (path) =>
       attempt("find lyrics index track", () => selectLyricsTrackIdAtPath(db, path)),

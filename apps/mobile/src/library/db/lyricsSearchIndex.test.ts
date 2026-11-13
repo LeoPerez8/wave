@@ -3,7 +3,7 @@ import assert from "node:assert/strict";
 import { beforeEach, describe, test } from "node:test";
 
 import { normalizeTrack } from "@wave/core";
-import { desc } from "drizzle-orm";
+import { desc, eq } from "drizzle-orm";
 
 import type { IndexedTrack } from "../LibraryStore.ts";
 import { creditSplits } from "./credits.ts";
@@ -12,11 +12,12 @@ import {
   selectLyricsCandidates,
   selectLyricsIndexPage,
   selectLyricsSearchText,
+  selectStaleLyricsIndexPage,
 } from "./lyricsSearchIndex.ts";
 import { saveBatch } from "./save.ts";
 import { deleteTracksById } from "./tracks.ts";
 import * as schema from "./schema.ts";
-import { openTestDatabase, type TestDatabase } from "./testDatabase.ts";
+import { openTestDatabase, reopenTestDatabase, type TestDatabase } from "./testDatabase.ts";
 
 let db: TestDatabase;
 
@@ -86,5 +87,22 @@ describe("local lyrics search index", () => {
     deleteTracksById(db, [id]);
     assert.equal(selectLyricsSearchText(db, id), null);
     assert.deepEqual(selectLyricsCandidates(db, "new phrase"), []);
+  });
+
+  test("lyrics stay indexed across a database reopen", async () => {
+    const id = saveTrack("Persistent");
+    keepLyricsSearchText(db, id, "keep this phrase");
+    db = await reopenTestDatabase(db);
+
+    assert.equal(selectLyricsSearchText(db, id), "keep this phrase");
+    assert.equal(selectLyricsCandidates(db, "keep this phrase")[0]?.trackId, id);
+  });
+
+  test("a Library song that lost its file is found by the stale-index sweep", () => {
+    const id = saveTrack("Missing file");
+    keepLyricsSearchText(db, id, "old local lyric");
+    db.update(schema.tracks).set({ path: null }).where(eq(schema.tracks.id, id)).run();
+
+    assert.deepEqual(selectStaleLyricsIndexPage(db, 0, 20), [{ id, path: null, hasLyrics: true }]);
   });
 });

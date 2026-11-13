@@ -1,6 +1,6 @@
 /** Local, on-device lyrics text and its indexed word-position candidate lookup. */
 import { normalizeSearchText } from "@wave/core";
-import { and, asc, eq, gt, isNotNull, isNull, sql } from "drizzle-orm";
+import { and, asc, eq, gt, isNotNull, isNull, or, sql } from "drizzle-orm";
 
 import type { LibraryDatabase } from "./database.ts";
 import * as schema from "./schema.ts";
@@ -62,6 +62,23 @@ export const selectLyricsIndexPage = (
     .limit(limit)
     .all()
     .filter((track): track is LyricsIndexTarget => track.path !== null);
+};
+
+/** Indexed rows whose file or has-lyrics flag went stale during a broad scan/deletion event. */
+export const selectStaleLyricsIndexPage = (
+  db: LibraryDatabase,
+  afterId: number,
+  limit: number,
+): LyricsIndexTarget[] => {
+  const { tracks, lyricsSearchIndex } = schema;
+  return db
+    .select({ id: tracks.id, path: tracks.path, hasLyrics: tracks.hasLyrics })
+    .from(lyricsSearchIndex)
+    .innerJoin(tracks, eq(tracks.id, lyricsSearchIndex.trackId))
+    .where(and(gt(tracks.id, afterId), or(isNull(tracks.path), eq(tracks.hasLyrics, false))))
+    .orderBy(asc(tracks.id))
+    .limit(limit)
+    .all();
 };
 
 /** Replaces [trackId]'s indexed lyrics. Empty text removes it from Search. */
