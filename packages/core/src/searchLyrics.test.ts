@@ -29,3 +29,27 @@ describe("findLyricMatch", () => {
     });
   });
 });
+
+describe("findLyricMatch with decomposed accents", () => {
+  test("a line written with combining accents matches the folded word the index holds", () => {
+    const line = "Na\u0303o sei";
+    assert.deepEqual(findLyricMatch(line, "nao sei"), {
+      line,
+      ranges: [
+        { start: 0, end: 4 },
+        { start: 5, end: 8 },
+      ],
+    });
+  });
+
+  test("a character the index splits into two words matches both and highlights itself once", () => {
+    assert.deepEqual(findLyricMatch("Take \u00bd now", "take 1 2 now"), {
+      line: "Take \u00bd now",
+      ranges: [
+        { start: 0, end: 4 },
+        { start: 5, end: 6 },
+        { start: 7, end: 10 },
+      ],
+    });
+  });
+});
