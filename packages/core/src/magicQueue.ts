@@ -275,6 +275,12 @@ export const magicFaithfulGenreProfile = (
 ): GenreProfile | null => {
   const profile = magicSeedProfile(session, profileOf);
   if (profile === null) return null;
+  if (
+    session.seed.kind !== "album" &&
+    session.seed.kind !== "playlist" &&
+    session.seed.kind !== "list"
+  )
+    return profile;
   const known = new Map([...profile].filter(([, share]) => share >= 0.1));
   return known.size === 0 ? null : known;
 };
