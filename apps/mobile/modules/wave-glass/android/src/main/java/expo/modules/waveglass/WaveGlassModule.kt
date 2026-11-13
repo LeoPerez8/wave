@@ -1,5 +1,6 @@
 package expo.modules.waveglass
 
+import android.animation.ValueAnimator
 import android.graphics.Color
 import android.os.Handler
 import android.os.HandlerThread
@@ -10,8 +11,9 @@ import expo.modules.kotlin.modules.ModuleDefinition
 
 /**
  * The native glass view (the tab bar and mini player material), the view that
- * hides the screen under a settled Now Playing (issue #721) and a frame-time
- * meter used by the glass spike screen (issue #4).
+ * hides the screen under a settled Now Playing (issue #721), the edge fade of
+ * Now Playing's scrolling lines and a frame-time meter used by the glass spike
+ * screen (issue #4).
  *
  * The meter listens to FrameMetrics for the current window, so it measures what
  * the RenderThread and GPU actually took per frame (where blur and shaders cost
@@ -35,6 +37,10 @@ class WaveGlassModule : Module() {
     Function("perfGlassProbe") {
       appContext.currentActivity?.intent?.getStringExtra(GLASS_PROBE_EXTRA)
     }
+
+    // Android's animator duration scale (Developer options), which Now Playing's scrolling
+    // lines follow as Android's own animations do: 0 with animations removed.
+    Function("animatorDurationScale") { ValueAnimator.getDurationScale() }
 
     OnDestroy { stopFrameStats() }
 
@@ -63,6 +69,13 @@ class WaveGlassModule : Module() {
       }
       Prop("animating") { view: WaveUnderlineView, animating: Boolean -> view.animating = animating }
       Prop("shape") { view: WaveUnderlineView, shape: String? -> view.shape = shape ?: "underline" }
+    }
+
+    View(WaveFadeEdgesView::class) {
+      Name("WaveFadeEdges")
+      Prop("fixedEdge") { view: WaveFadeEdgesView, edge: String? -> view.fixedEdge = edge ?: "none" }
+      Prop("travel") { view: WaveFadeEdgesView, travel: Float -> view.travelDp = travel }
+      Prop("fadeLength") { view: WaveFadeEdgesView, length: Float -> view.fadeLengthDp = length }
     }
   }
 

@@ -37,6 +37,7 @@ import { useStreamedArtistLink } from "@/ytmusic/streamedArtist";
 import { nowPlayingLibraryArtistLink } from "./artistLink";
 import { CoverPress, STAR_POP } from "./CoverPress";
 import { usePlayingYtSong } from "./hooks";
+import { MarqueeText, useMarqueeGroup, type MarqueeGroup } from "./Marquee";
 import {
   nowPlayingSongActions,
   songActionFailed,
@@ -161,14 +162,30 @@ type LinkProps = {
   timingKind: "artistLink" | "albumLink";
   revealsCurrentScreen?: boolean;
   className: string;
+  /** The scrolling lines it belongs to, and its place among them. */
+  marquee: MarqueeGroup;
+  line: number;
 };
 
-/** A line of metadata that opens its album or artist screen. */
-function MetaLink({ label, open, hint, className, timingKind, revealsCurrentScreen }: LinkProps) {
+/** A line of metadata that opens its album or artist screen; a long one scrolls. */
+function MetaLink({
+  label,
+  open,
+  hint,
+  className,
+  timingKind,
+  revealsCurrentScreen,
+  marquee,
+  line,
+}: LinkProps) {
   const text = (
-    <Text numberOfLines={1} className={className}>
-      {label}
-    </Text>
+    <MarqueeText
+      text={label}
+      group={marquee}
+      index={line}
+      className={className}
+      standalone={open === null}
+    />
   );
   if (open === null) return <View style={{ paddingVertical: CELL / 2 }}>{text}</View>;
   return (
@@ -323,6 +340,8 @@ export function PlayerView({ item, details, playing }: Props) {
   const album = details?.album ?? item.album ?? strings.playbackText.unknownAlbum;
   const failure = useSyncExternalStore(playbackState.subscribe, playbackState.get);
   const notice = playerNotice(playerTrouble(failure), strings);
+  // Title, artist and album scroll together when too long (the notice in the album's place doesn't).
+  const marquee = useMarqueeGroup([title, artist, notice === null ? album : null]);
   // Read ahead, so the screens open header-first; only while the sheet is
   // shown, so track changes behind a closed Now Playing don't pay for it.
   const shown = useNowPlayingShown();
@@ -382,13 +401,15 @@ export function PlayerView({ item, details, playing }: Props) {
       <NowPlayingArtwork uri={item.artworkUri} playing={playing} streamed={streamedCover} />
       <View className="flex-row items-center" style={{ gap: CELL }}>
         <View className="flex-1">
-          <Text
-            numberOfLines={1}
-            accessibilityRole="header"
+          <MarqueeText
+            text={title}
+            group={marquee}
+            index={0}
+            standalone
+            role="header"
+            fill
             className="font-sans text-title3 font-medium text-foreground"
-          >
-            {title}
-          </Text>
+          />
           <MetaLink
             label={artist}
             open={
@@ -400,6 +421,8 @@ export function PlayerView({ item, details, playing }: Props) {
             }
             hint={strings.playbackText.opensTheArtist}
             timingKind="artistLink"
+            marquee={marquee}
+            line={1}
             revealsCurrentScreen={
               openLocalArtist !== null
                 ? details !== null && details.artistIds.length > 0 && artistTo === undefined
@@ -413,6 +436,8 @@ export function PlayerView({ item, details, playing }: Props) {
               open={details === null ? null : () => openAlbum(details.albumId, links.album)}
               hint={strings.playbackText.opensTheAlbum}
               timingKind="albumLink"
+              marquee={marquee}
+              line={2}
               className="font-sans text-body text-secondary"
             />
           ) : (

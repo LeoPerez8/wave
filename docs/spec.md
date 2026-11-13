@@ -282,6 +282,18 @@ On a pushed page whose title sits in its scrolling content, the title appears be
 - **Tapping it** scrolls the list, animated, to where the page opens: head at the top and a hidden Find field still hidden. With Keep Find Field Visible on, the list goes to its top and the field stays pinned. From further than two list heights away, the list jumps to two list heights from there first and animates the rest, so a playlist of thousands of songs doesn't sweep past blank rows. Under reduce motion it jumps straight there (Core's `compactTitleScroll`).
 - **During a Find query** the head has stepped aside, so the compact title shows wherever the list is and the page stays named. A tap goes to the very top of the results, with the field and its query in view, and keeps the query.
 
+### Now Playing's long names
+
+In Now Playing's player view, a title, artist or album too long for its line scrolls so it can be read in full (#1088). The Mini player and the Queue and Lyrics headers keep their ellipsis.
+
+- **Which lines.** The title (in the space beside the favorite star), the artist and the album, each only when it doesn't fit. A line that fits looks as a plain one-line text. The notice that takes the album's place ("Waiting for connection" or why playback stopped) keeps its two lines and doesn't scroll.
+- **The cycle.** A line rests at its start for 3 s, then scrolls left at 30 dp a second in a continuous loop: its start follows its end after a 32 dp gap and arrives back where it began with no jump. Then it rests again and repeats. Text that reads right to left (its first letter Hebrew, Arabic or another such script) rests on its right end and moves right (Core's `marqueePlan`, `readsRightToLeft`).
+- **Edges.** The end the text runs off fades it out at all times, at rest too, so an overflowing line never shows an ellipsis. The other edge fades only while the line is away from rest, growing as it starts and shrinking as the text's start comes back round. Android's own fading edges draw it, masking the text over Now Playing's ground (`WaveFadeEdges` in `modules/wave-glass`).
+- **Lines together.** The lines that overflow start scrolling at the same moment. Each stops when it is back at its start, and the next rest begins once the longest has finished.
+- **When it runs.** Whenever the player view is on screen, playing or paused; not in the Queue, Lyrics or Related views, with Now Playing closed or with Wave in the background. The lines start over at their rest when Now Playing opens, when the player view comes back, and when a line's text changes (a new song, the artist arriving from the song's details, the notice clearing).
+- **Motion settings.** Every time follows Android's animator duration scale, read at each start: twice as fast at 0.5×. With Remove animations or reduce motion on, the lines hold still and end in an ellipsis (Core's `marqueeStill`).
+- **Taps and screen readers.** No new gesture: the artist and album open their screens as before, also while moving. Screen readers read each line's full text once, the title still as a header.
+
 ### Playlist recommendations
 
 **Recommendation failures (#613).** A failed read leaves the recommendation loading state and shows a quiet "Couldn't load recommendations." line with **Try Again** (for a fresh playlist suggestion, only once no radio has answered; see "A fresh suggestion"); saved mixes and remaining playlist offers stay usable. Try Again asks afresh without replaying a saved Add or Dismiss. Search and radio reads have an 8-second network deadline. Background Library, catalog, graph and taste derivation has no request deadline and never holds a recommendation open.
