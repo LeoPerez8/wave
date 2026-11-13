@@ -93,11 +93,21 @@ export default function RootLayout() {
         "scan",
         () => void startInitialScan().then(launchScanDone),
       );
+      const stopLyricsIndex = afterFirstSettled("lyricsSearchIndex", () => {
+        void import("@/library/lyricsSearchIndex").then(({ startLyricsSearchIndex }) => {
+          if (!disposed) stopLyrics = startLyricsSearchIndex();
+        });
+      });
+      let disposed = false;
+      let stopLyrics: (() => void) | undefined;
       // Link imports kept when Wave last closed go on filling their playlists.
       const stopImports = afterFirstSettled("imports", resumePlaylistImports);
       // A From YT Music batch Android stopped reads the playlists it hadn't, in order.
       const stopYtImport = afterFirstSettled("ytLibraryImport", resumeYtLibraryImport);
       return () => {
+        disposed = true;
+        stopLyricsIndex();
+        stopLyrics?.();
         stopScan();
         stopImports();
         stopYtImport();

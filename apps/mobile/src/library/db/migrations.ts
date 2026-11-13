@@ -1433,6 +1433,21 @@ const m0059 = `CREATE INDEX playlist_items_listed_title_idx ON playlist_items ((
   THEN CASE WHEN json_extract(yt_song, '$.videoId') IS NULL
   THEN json_extract(yt_song, '$.title') END END), deleted, playlist_id);`;
 
+// Local-only lyric text and indexed word positions narrow phrase candidates before Core verifies lines.
+const m0060 = `CREATE TABLE lyrics_search_index (
+  track_id integer PRIMARY KEY NOT NULL REFERENCES tracks(id) ON DELETE CASCADE,
+  lyrics text NOT NULL
+);
+--> statement-breakpoint
+CREATE TABLE lyrics_search_words (
+  track_id integer NOT NULL REFERENCES lyrics_search_index(track_id) ON DELETE CASCADE,
+  position integer NOT NULL,
+  word text NOT NULL,
+  PRIMARY KEY (track_id, position)
+);
+--> statement-breakpoint
+CREATE INDEX lyrics_search_word_idx ON lyrics_search_words (word, track_id, position);`;
+
 export default {
   journal: {
     entries: [
@@ -1516,6 +1531,7 @@ export default {
       { idx: 57, when: 1_796_731_200_000, tag: "0057_loudness_tags", breakpoints: true },
       { idx: 58, when: 1_796_817_600_000, tag: "0058_loudness_measurements", breakpoints: true },
       { idx: 59, when: 1_796_904_000_000, tag: "0059_list_download_members", breakpoints: true },
+      { idx: 60, when: 1_796_990_400_000, tag: "0060_lyrics_search_index", breakpoints: true },
     ],
   },
   migrations: {
@@ -1579,5 +1595,6 @@ export default {
     m0057,
     m0058,
     m0059,
+    m0060,
   },
 };

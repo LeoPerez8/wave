@@ -860,6 +860,30 @@ export const lyricsMisses = sqliteTable("lyrics_misses", {
   checkedAt: integer("checked_at").notNull(),
 });
 
+/** Timestamp-free local lyrics text used to narrow Search candidates. Never synced. */
+export const lyricsSearchIndex = sqliteTable("lyrics_search_index", {
+  trackId: integer("track_id")
+    .primaryKey()
+    .references(() => tracks.id, { onDelete: "cascade" }),
+  lyrics: text("lyrics").notNull(),
+});
+
+/** Word positions are indexed for contiguous lyric phrase candidate lookup. */
+export const lyricsSearchWords = sqliteTable(
+  "lyrics_search_words",
+  {
+    trackId: integer("track_id")
+      .notNull()
+      .references(() => lyricsSearchIndex.trackId, { onDelete: "cascade" }),
+    position: integer("position").notNull(),
+    word: text("word").notNull(),
+  },
+  (t) => [
+    primaryKey({ columns: [t.trackId, t.position] }),
+    index("lyrics_search_word_idx").on(t.word, t.trackId, t.position),
+  ],
+);
+
 /**
  * YT Music songs the owner streamed (`writePlaylistYtSong`'s JSON, by video):
  * how many times and when first and last. Streamed plays aren't play history

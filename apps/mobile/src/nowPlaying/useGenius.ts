@@ -10,7 +10,7 @@ import {
   type SavedGenius,
 } from "@wave/core";
 import { Storage } from "expo-sqlite/kv-store";
-import { useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
 
 import { useLocalisation } from "@/localisation/localisation";
 import { waveAccountAvailable } from "@/settings/waveAccount";
@@ -21,7 +21,7 @@ import {
 } from "@/settings/genius";
 
 import { loadGenius, translateGenius, type GeniusAsk, type GeniusService } from "./geniusSource";
-import { keepGenius } from "./geniusStorage";
+import { dropGenius as forgetGenius, keepGenius } from "./geniusStorage";
 import { isPlayheadLive, playheadVisibility } from "./playhead";
 import { askWaveService } from "@/sync/askWaveService";
 import { useWaveSignedIn } from "@/sync/waveSignedIn";
@@ -51,6 +51,8 @@ export interface GeniusShown {
   readonly about: GeniusAboutCard | null;
   readonly referents: readonly GeniusReferent[] | null;
   readonly noInsights: boolean;
+  readonly failed: boolean;
+  readonly retry: () => void;
 }
 
 /** While the saved answer is read or Genius is asked, before a result is settled. */
@@ -145,6 +147,19 @@ export const useGenius = (
     readonly ask: GeniusAsk;
     readonly showNote: boolean;
   } | null>(null);
+  const [attempt, setAttempt] = useState<{
+    readonly ask: GeniusAsk;
+    readonly number: number;
+  } | null>(null);
+  const attemptNumber = attempt?.ask === ask ? attempt.number : 0;
+  const retry = useCallback(() => {
+    if (ask === null || !on || !visible || !geniusInsightsEnabled()) return;
+    setLoading({ ask, showNote: true });
+    setAttempt((previous) => ({
+      ask,
+      number: previous?.ask === ask ? previous.number + 1 : 1,
+    }));
+  }, [ask, on, visible]);
 
   // Asks only while Now Playing shows on screen; an answer already in stays while it's hidden.
   useEffect(() => {
@@ -153,19 +168,21 @@ export const useGenius = (
     let current = true;
     let noteTimer: ReturnType<typeof setTimeout> | undefined;
     const known = settled.current;
-    if (known?.ask !== ask || known.saved === null) {
-      setLoading({ ask, showNote: false });
-      noteTimer = ask.signedIn
-        ? setTimeout(() => {
-            if (current) {
-              setLoading((was) =>
-                was?.ask === ask
-                  ? { ask, showNote: geniusLoadingNote("loading", GENIUS_LOADING_NOTE_DELAY_MS) }
-                  : was,
-              );
-            }
-          }, GENIUS_LOADING_NOTE_DELAY_MS)
-        : undefined;
+    const retrying = attemptNumber > 0;
+    if (retrying || known?.ask !== ask || known.saved === null) {
+      setLoading({ ask, showNote: retrying });
+      noteTimer =
+        ask.signedIn && !retrying
+          ? setTimeout(() => {
+              if (current) {
+                setLoading((was) =>
+                  was?.ask === ask
+                    ? { ask, showNote: geniusLoadingNote("loading", GENIUS_LOADING_NOTE_DELAY_MS) }
+                    : was,
+                );
+              }
+            }, GENIUS_LOADING_NOTE_DELAY_MS)
+          : undefined;
     }
     const stop = subscribeGeniusInsights(() => {
       if (!geniusInsightsEnabled()) controller.abort();
@@ -173,6 +190,7 @@ export const useGenius = (
     const service: GeniusService = {
       read: (key) => Storage.getItemAsync(key),
       keep: keepGenius,
+      drop: forgetGenius,
       enabled: () =>
         current && !controller.signal.aborted && geniusInsightsEnabled() && isPlayheadLive(),
       get: (path) => withTimeout(controller, () => askWaveService(path)),
@@ -204,17 +222,36 @@ export const useGenius = (
       stop();
       controller.abort();
     };
-  }, [ask, visible]);
+  }, [ask, attemptNumber, visible]);
 
   const answered = ask !== null && answer?.ask === ask;
   const saved = answered ? answer.saved : null;
-  const waiting = ask !== null && loading?.ask === ask;
+  const waiting =
+    ask !== null && (loading?.ask === ask || (attemptNumber > 0 && answer?.ask !== ask));
   // Signed out with nothing saved: the invitation, once the store has been read.
   const invite = answered && saved === null && !ask.signedIn;
   return useMemo(() => {
-    if (waiting) return { state: "loading", showNote: loading.showNote };
-    if (invite) return { state: "settled", about: "signIn", referents: null, noInsights: false };
-    if (saved === null) return null;
+    if (waiting) return { state: "loading", showNote: loading?.showNote ?? attemptNumber > 0 };
+    if (invite)
+      return {
+        state: "settled",
+        about: "signIn",
+        referents: null,
+        noInsights: false,
+        failed: false,
+        retry,
+      };
+    if (saved === null) {
+      if (!answered || !ask?.signedIn) return null;
+      return {
+        state: "settled",
+        about: null,
+        referents: null,
+        noInsights: false,
+        failed: true,
+        retry,
+      };
+    }
     const { description: original } = saved;
     const shown = geniusAbout(saved, target);
     return {
@@ -222,6 +259,8 @@ export const useGenius = (
       referents: geniusReferents(saved, target),
       about: original === null || shown === null ? null : { original, shown },
       noInsights: geniusAnswerState(saved) === "miss",
+      failed: geniusAnswerState(saved) === "failure",
+      retry,
     };
-  }, [invite, loading, saved, target, waiting]);
+  }, [answered, ask, attemptNumber, invite, loading, retry, saved, target, waiting]);
 };

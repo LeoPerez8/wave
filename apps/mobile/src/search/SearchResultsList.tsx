@@ -7,9 +7,10 @@ import {
   type YtArtistAlbum,
 } from "@wave/core";
 import { useCallback, useMemo } from "react";
-import { Text, View } from "react-native";
+import { Pressable, Text, View } from "react-native";
 
 import { artworkUri } from "@/catalog/artworkUri";
+import { Artwork } from "@/catalog/Artwork";
 import { AlbumCardRow } from "@/catalog/cards/AlbumCard";
 import { ArtistCardRow } from "@/catalog/cards/ArtistCard";
 import { PlaylistCardRow } from "@/catalog/cards/PlaylistCard";
@@ -51,6 +52,8 @@ const SEARCH_CONTEXT: QueueContext = { kind: "search", id: null };
 
 const HEIGHT: Readonly<Record<ResultRow["type"], number>> = {
   heading: CELL * 6,
+  lyric: grid.row + CELL * 2,
+  moreLyrics: CELL * 6,
   hit: grid.row,
   more: CELL * 6,
   capped: CELL * 6,
@@ -103,6 +106,7 @@ type Props = {
   /** Called when a result opens, so the search is kept among the recent ones. */
   onOpen: () => void;
   onShowAll: (kind: SearchKind) => void;
+  onShowAllLyrics: () => void;
   /** Search shows YouTube Music's results (an integrated view): Library albums open integrated. */
   integrated: boolean;
   /** Song results are selectable; other results ignore taps while selecting. */
@@ -182,7 +186,14 @@ function Hit({
  * Search results in one virtualised list of fixed-height rows: section heads,
  * results and "Show all". Scrolling or tapping a row lets the keyboard go.
  */
-export function SearchResultsList({ rows, onOpen, onShowAll, integrated, selection }: Props) {
+export function SearchResultsList({
+  rows,
+  onOpen,
+  onShowAll,
+  onShowAllLyrics,
+  integrated,
+  selection,
+}: Props) {
   const { strings } = useLocalisation();
   const { language } = useLocalisation();
   const scrollable = useListScrollable();
@@ -200,6 +211,58 @@ export function SearchResultsList({ rows, onOpen, onShowAll, integrated, selecti
           return (
             <View className="justify-end" style={{ height: HEIGHT.heading, paddingBottom: CELL }}>
               <CatalogLine>{item.label}</CatalogLine>
+            </View>
+          );
+        case "lyric": {
+          const { hit } = item;
+          const parts: { text: string; highlighted: boolean }[] = [];
+          let cursor = 0;
+          for (const range of hit.ranges) {
+            if (range.start > cursor)
+              parts.push({ text: hit.line.slice(cursor, range.start), highlighted: false });
+            parts.push({ text: hit.line.slice(range.start, range.end), highlighted: true });
+            cursor = range.end;
+          }
+          if (cursor < hit.line.length)
+            parts.push({ text: hit.line.slice(cursor), highlighted: false });
+          return (
+            <Pressable
+              accessibilityRole="button"
+              accessibilityLabel={`${hit.song.title}, ${hit.song.artist}. ${hit.line}`}
+              className="flex-row items-center"
+              style={{ height: HEIGHT.lyric, gap: CELL * 1.5 }}
+              onPress={() => {
+                onOpen();
+                void playSearchSong({ source: "library", track: hit.song });
+              }}
+              onLongPress={() => openMixedSongActions({ source: "library", track: hit.song })}
+            >
+              <Artwork uri={artworkUri(hit.song)} size={CELL * 5} />
+              <View className="flex-1">
+                <Text numberOfLines={1} className="font-sans text-body font-medium text-foreground">
+                  {hit.song.title}
+                </Text>
+                <Text numberOfLines={1} className="font-sans text-footnote text-secondary">
+                  {hit.song.artist}
+                </Text>
+                <Text numberOfLines={1} className="font-sans text-footnote text-secondary">
+                  {parts.map((part, index) => (
+                    <Text key={index} className={part.highlighted ? "text-accent" : undefined}>
+                      {part.text}
+                    </Text>
+                  ))}
+                </Text>
+              </View>
+            </Pressable>
+          );
+        }
+        case "moreLyrics":
+          return (
+            <View style={{ height: HEIGHT.moreLyrics }}>
+              <TextButton
+                label={strings.playbackText.showAllValue(formatNumber(language, item.total))}
+                onPress={onShowAllLyrics}
+              />
             </View>
           );
         case "hit":
@@ -300,7 +363,7 @@ export function SearchResultsList({ rows, onOpen, onShowAll, integrated, selecti
           );
       }
     },
-    [onOpen, onShowAll, integrated, selection, language, strings],
+    [onOpen, onShowAll, onShowAllLyrics, integrated, selection, language, strings],
   );
 
   return (

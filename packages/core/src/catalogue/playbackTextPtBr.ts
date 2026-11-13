@@ -5,6 +5,7 @@ export const playbackTextPtBr: typeof playbackTextEn = {
   aboutGenius: "Sobre · Genius",
   loadingGeniusInsights: "Carregando informações do Genius…",
   geniusHasNoInsightsForThisSong: "O Genius não tem informações sobre esta música",
+  couldntLoadGeniusInsights: "Não foi possível carregar as informações do Genius",
   signInToSeeWhatGeniusSaysAboutThisSong:
     "Inicie sessão em uma Conta Wave para ver o que o Genius diz sobre esta música.",
   addLyricsToThisSongsTagsOrPutAnLrcFileWithTheSameNameBesideIt:
@@ -77,6 +78,7 @@ export const playbackTextPtBr: typeof playbackTextEn = {
   longPressForGeniussAnnotations: "Mantenha pressionado para ver as anotações do Genius",
   longer: "Mais tempo",
   lyrics: "Letra",
+  lyricsSearchSection: "Letras",
   more: "Mais",
   moreInsights: "Mais informações",
   moveDown: "Mover para baixo",

@@ -119,10 +119,15 @@ export type GeniusAnswerState = "answer" | "miss" | "failure";
 export const geniusAnswerState = (answer: SavedGenius | null): GeniusAnswerState =>
   answer === null
     ? "failure"
-    : answer.match === null ||
-        (answer.description === null && answer.referents !== null && answer.referents.length === 0)
+    : answer.match === null
       ? "miss"
-      : "answer";
+      : answer.description === null
+        ? answer.referents === null
+          ? "failure"
+          : answer.referents.length === 0
+            ? "miss"
+            : "answer"
+        : "answer";
 
 /** [song]'s Genius answer as the phone stores it, with the title and artist it was asked for. */
 export const storedGenius = (
