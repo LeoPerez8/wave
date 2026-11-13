@@ -65,6 +65,25 @@ describe("lyrics saved for non-D songs", () => {
     assert.deepEqual(selectSavedLyricsCandidates(db, "new words"), []);
   });
 
+  test("a phrase repeated in a chorus finds its saved lyrics once", () => {
+    const text = "I love you\nyes I love you\nI love you";
+    keepSavedLyrics(db, "chorus", { kind: "found", lyrics: { synced: false, text } });
+
+    assert.deepEqual(selectSavedLyricsCandidates(db, "i love"), [
+      { videoId: "chorus", lyrics: text },
+    ]);
+  });
+
+  test("a common word hands Search at most 100 saved lyrics", () => {
+    for (let n = 0; n < 101; n++)
+      keepSavedLyrics(db, `video-${n}`, {
+        kind: "found",
+        lyrics: { synced: false, text: "love\nlove" },
+      });
+
+    assert.equal(selectSavedLyricsCandidates(db, "love").length, 100);
+  });
+
   test("the background index page backfills saved lyrics from before the migration", () => {
     db.insert(schema.savedLyrics)
       .values({
