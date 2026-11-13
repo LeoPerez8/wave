@@ -150,6 +150,10 @@ export const completeMagicRadioBatch = (
   session: MagicSession,
   seed: readonly RankedRadioSong[],
   liked: readonly RankedRadioSong[],
+  fallback?: {
+    readonly seed: readonly RankedRadioSong[];
+    readonly liked: readonly RankedRadioSong[];
+  },
 ): { readonly session: MagicSession; readonly trackIds: readonly string[] } => {
   const exclude = magicRadioExclusions(
     session,
@@ -158,10 +162,41 @@ export const completeMagicRadioBatch = (
   const eligible = (song: RankedRadioSong) =>
     !exclude.has(song.trackId) &&
     (song.song === null || !exclude.has(ytTrackId(song.song.videoId)));
-  const selected = magicRadioBatch(seed.filter(eligible), liked.filter(eligible), {
+  const primary = magicRadioBatch(seed.filter(eligible), liked.filter(eligible), {
     size: batchSize(session),
     newMusicShare: session.ytShare,
   });
+  const primaryIds = new Set(primary.map((song) => song.trackId));
+  const remaining = batchSize(session) - primary.length;
+  const isNewRecording = (song: RankedRadioSong): boolean =>
+    !primary.some((chosen) => {
+      if (chosen.trackId === song.trackId) return true;
+      if (chosen.song === null || song.song === null) return false;
+      return (
+        chosen.song.videoId === song.song.videoId ||
+        recordingMatches(
+          {
+            title: chosen.song.title,
+            artist: chosen.song.artists.join(", "),
+            durationMs: chosen.song.durationMs ?? 0,
+          },
+          song.song,
+        )
+      );
+    });
+  const fill =
+    remaining > 0 && fallback !== undefined
+      ? magicRadioBatch(
+          fallback.seed.filter(
+            (song) => eligible(song) && !primaryIds.has(song.trackId) && isNewRecording(song),
+          ),
+          fallback.liked.filter(
+            (song) => eligible(song) && !primaryIds.has(song.trackId) && isNewRecording(song),
+          ),
+          { size: remaining, newMusicShare: session.ytShare },
+        )
+      : [];
+  const selected = [...primary, ...fill];
   const trackIds = selected.map((song) => song.trackId);
   if (trackIds.length === 0) return { session, trackIds };
   const used = new Set(session.used);
