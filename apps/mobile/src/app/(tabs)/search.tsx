@@ -198,7 +198,7 @@ export default function SearchScreen() {
     library?.songs ?? NO_SONG_ROWS,
     lyricsSkipIds,
   );
-  const geniusLyrics = useGeniusLyricsSearch(
+  const { state: geniusLyrics, retry: retryGeniusLyrics } = useGeniusLyricsSearch(
     deferredQuery,
     library?.songs ?? NO_SONG_ROWS,
     index !== null,
@@ -217,21 +217,34 @@ export default function SearchScreen() {
     const ytFound =
       ytView === null ? 0 : ytView.songs.length + ytView.artists.length + ytView.albums.length;
     const onlineLyrics = geniusLyrics.status === "hits" ? geniusLyrics.hits : [];
+    const onlineLyricsStatus =
+      geniusLyrics.status === "signedOut" ||
+      geniusLyrics.status === "offline" ||
+      geniusLyrics.status === "failed"
+        ? geniusLyrics.status
+        : null;
+    const found = () =>
+      resultRows(
+        results,
+        expanded,
+        ytView,
+        placed,
+        topArtistSongs,
+        language,
+        lyricHits,
+        lyricsExpanded,
+        deferredQuery,
+        onlineLyrics,
+        onlineLyricsStatus,
+      );
+    // With nothing found, the library's line stays and Lyrics says why it has nothing online.
     const ours =
       libraryEmpty && ytFound === 0 && lyricHits.length === 0 && onlineLyrics.length === 0
-        ? [noLibraryResultsRow(deferredQuery, language)]
-        : resultRows(
-            results,
-            expanded,
-            ytView,
-            placed,
-            topArtistSongs,
-            language,
-            lyricHits,
-            lyricsExpanded,
-            deferredQuery,
-            onlineLyrics,
-          );
+        ? [
+            noLibraryResultsRow(deferredQuery, language),
+            ...(onlineLyricsStatus === null ? [] : found()),
+          ]
+        : found();
     return [...ours, ...ytFooterRows(ytView, language)];
   }, [
     results,
@@ -333,6 +346,9 @@ export default function SearchScreen() {
     ytView === null &&
     lyricHits.length === 0 &&
     !(geniusLyrics.status === "hits" && geniusLyrics.hits.length > 0) &&
+    geniusLyrics.status !== "signedOut" &&
+    geniusLyrics.status !== "offline" &&
+    geniusLyrics.status !== "failed" &&
     deferredQuery === query;
   return (
     <View className="flex-1 bg-background">
@@ -389,6 +405,7 @@ export default function SearchScreen() {
               onShowAll={showAll}
               onShowAllLyrics={showAllLyrics}
               onGeniusHit={openGeniusHit}
+              onRetryGenius={retryGeniusLyrics}
               integrated={ytView?.integrated ?? false}
               selection={selection}
             />
