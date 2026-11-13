@@ -8,6 +8,9 @@ export const playbackTextPtBr: typeof playbackTextEn = {
   couldntLoadGeniusInsights: "Não foi possível carregar as informações do Genius",
   signInToSeeWhatGeniusSaysAboutThisSong:
     "Inicie sessão em uma Conta Wave para ver o que o Genius diz sobre esta música.",
+  signInToWaveAccountToSearchLyricsOnline:
+    "Inicie sessão em uma Conta Wave para buscar letras online",
+  couldntSearchLyricsOnline: "Não foi possível buscar letras online",
   addLyricsToThisSongsTagsOrPutAnLrcFileWithTheSameNameBesideIt:
     "Adicione a letra às tags da música ou coloque um arquivo .lrc com o mesmo nome ao lado dela.",
   addToPlaylist: "Adicionar à Playlist",

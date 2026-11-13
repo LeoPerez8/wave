@@ -1,8 +1,13 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
+import { createElement } from "react";
+import { act, create, type ReactTestRenderer } from "react-test-renderer";
 
 import { reactCompilerBuilds, stubModule } from "../perf/reactCompilerBuilds.ts";
 
+Object.assign(globalThis, { IS_REACT_ACT_ENVIRONMENT: true });
+
+const requestsModule = stubModule("export const requests = [];");
 const builds = await reactCompilerBuilds<typeof import("./geniusLyricsSearch.ts")>(
   new URL("./geniusLyricsSearch.ts", import.meta.url).href,
   {
@@ -10,10 +15,17 @@ const builds = await reactCompilerBuilds<typeof import("./geniusLyricsSearch.ts"
     "@/native/waveNative": stubModule(
       "export const online = () => true; export const subscribeConnectivity = () => () => {};",
     ),
-    "@/sync/askWaveService": stubModule("export const askWaveService = async () => null;"),
+    "@/sync/askWaveService": stubModule(
+      `import { requests } from ${JSON.stringify(requestsModule)};
+       export const askWaveService = async (path) => {
+         requests.push(path);
+         return { meta: { status: 502 } };
+       };`,
+    ),
     "@/sync/waveSignedIn": stubModule("export const useWaveSignedIn = () => true;"),
   },
 );
+const { requests } = (await import(requestsModule)) as { requests: string[] };
 
 const reply = {
   meta: { status: 200 },
@@ -108,5 +120,39 @@ for (const [build, { requestGeniusLyricsSearch }] of Object.entries(builds)) {
       },
     });
     assert.equal(answer.status, "offline");
+  });
+}
+
+for (const [build, { useGeniusLyricsSearch }] of Object.entries(builds)) {
+  test(`${build}: Try Again asks Genius again`, async () => {
+    requests.length = 0;
+    const seen: ReturnType<typeof useGeniusLyricsSearch>[] = [];
+    const library: never[] = [];
+    function View() {
+      const controller = useGeniusLyricsSearch("one two three", library, true);
+      seen.push(controller);
+      return createElement("view");
+    }
+
+    let renderer: ReactTestRenderer | undefined;
+    try {
+      // Effects run when act's callback ends, so the typing pause is waited out in its own act.
+      await act(async () => {
+        renderer = create(createElement(View));
+      });
+      await act(() => new Promise((resolve) => setTimeout(resolve, 360)));
+      assert.equal(seen.at(-1)?.state.status, "failed");
+      assert.equal(requests.length, 1);
+
+      await act(async () => {
+        seen.at(-1)?.retry();
+      });
+      assert.equal(seen.at(-1)?.state.status, "loading");
+      await act(() => new Promise((resolve) => setTimeout(resolve, 360)));
+      assert.equal(requests.length, 2);
+      assert.equal(seen.at(-1)?.state.status, "failed");
+    } finally {
+      await act(() => renderer?.unmount());
+    }
   });
 }
