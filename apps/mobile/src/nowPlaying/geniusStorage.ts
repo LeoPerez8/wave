@@ -37,3 +37,25 @@ export const keepGenius = (key: string, value: string): Promise<void> => {
   writing = write;
   return write;
 };
+
+/** Forgets an unusable failed answer from both storage and its eviction order. */
+export const dropGenius = (key: string): Promise<void> => {
+  const write = writing
+    .catch(() => undefined)
+    .then(async () => {
+      let keys: string[] = [];
+      try {
+        const stored: unknown = JSON.parse((await Storage.getItemAsync(INDEX)) ?? "[]");
+        if (Array.isArray(stored))
+          keys = stored.filter(
+            (entry): entry is string => typeof entry === "string" && entry.startsWith(PREFIX),
+          );
+      } catch {
+        /* An unreadable index starts afresh. */
+      }
+      await Storage.setItemAsync(INDEX, JSON.stringify(keys.filter((entry) => entry !== key)));
+      await Storage.removeItemAsync(key);
+    });
+  writing = write;
+  return write;
+};
