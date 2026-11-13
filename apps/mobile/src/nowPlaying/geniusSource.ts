@@ -26,6 +26,7 @@ import {
 export interface GeniusService {
   readonly read: (key: string) => Promise<string | null>;
   readonly keep: (key: string, value: string) => Promise<void>;
+  readonly drop: (key: string) => Promise<void>;
   /** GETs the sync service's [path] with the session and gives Genius's JSON; rejects when it can't. */
   readonly get: (path: string) => Promise<unknown>;
   /** POSTs the form [body] to [url] and gives its JSON; rejects when it can't. */
@@ -54,6 +55,12 @@ const saveGenius = (ask: GeniusAsk, answer: SavedGenius, service: GeniusService)
   service
     .keep(geniusStorageKey(ask.key), storedGenius(ask.song, answer))
     .catch((cause: unknown) => console.warn("[wave] couldn't save Genius's answer", cause));
+
+/** Forget a partial match that gave no usable answer after its annotations failed. */
+const dropGenius = (key: string, service: GeniusService): Promise<void> =>
+  service
+    .drop(key)
+    .catch((cause: unknown) => console.warn("[wave] couldn't forget Genius's answer", cause));
 
 /**
  * Every page of the annotated fragments of Genius's song [id] (docs/spec.md,
@@ -107,7 +114,10 @@ export const loadGenius = async (
       if (saved.match === null || saved.referents !== null || !ask.signedIn) return saved;
       const referents = await loadReferents(saved.match.id, service);
       if (!service.enabled()) return null;
-      if (referents === null) return saved;
+      if (referents === null) {
+        if (saved.description === null) await dropGenius(key, service);
+        return saved.description === null ? null : saved;
+      }
       const result: SavedGenius = { ...saved, referents };
       await saveGenius(ask, result, service);
       return result;
@@ -127,6 +137,10 @@ export const loadGenius = async (
       if (about === null || !service.enabled()) return null;
       description = about.text;
       referents = annotated;
+      if (description === null && referents === null) {
+        await dropGenius(key, service);
+        return null;
+      }
     }
     const result: SavedGenius = { checkedAt: now, match, description, referents, translations: {} };
     await saveGenius(ask, result, service);

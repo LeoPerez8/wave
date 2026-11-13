@@ -191,6 +191,23 @@ function GeniusNoInsightsNote({ shown }: { shown: boolean }) {
   );
 }
 
+/** A failed Genius answer stays in the About card's place and can be asked again. */
+function GeniusFailureNote({ shown, retry }: { shown: boolean; retry: () => void }) {
+  const { strings } = useLocalisation();
+  if (!shown) return null;
+  return (
+    <View className="flex-row items-center justify-between" style={{ gap: CELL * 2 }}>
+      <Text
+        className="flex-1 font-sans text-footnote text-secondary"
+        accessibilityLiveRegion="polite"
+      >
+        {strings.playbackText.couldntLoadGeniusInsights}
+      </Text>
+      <TextButton label={strings.playbackText.tryAgain} onPress={retry} />
+    </View>
+  );
+}
+
 /** The square dots standing in for a pause between sung lines. */
 function PauseDots({ current }: { current: boolean }) {
   return (
@@ -381,6 +398,8 @@ function SyncedLyrics({
   about,
   loadingNote,
   noInsights,
+  failed,
+  retryGenius,
   annotations,
 }: {
   lines: readonly LyricLine[];
@@ -392,6 +411,8 @@ function SyncedLyrics({
   about: GeniusAboutCard | null;
   loadingNote: boolean;
   noInsights: boolean;
+  failed: boolean;
+  retryGenius: () => void;
   annotations: GeniusPlacement | null;
 }) {
   useRenderCount("SyncedLyrics");
@@ -550,6 +571,7 @@ function SyncedLyrics({
       <GeniusAbout key={geniusAboutKey(about)} about={about} />
       <GeniusLoadingNote shown={loadingNote} />
       <GeniusNoInsightsNote shown={noInsights} />
+      <GeniusFailureNote shown={failed} retry={retryGenius} />
       <TranslationNote shown={translation} retry={retryTranslation} />
       {lines.map((line, at) => (
         <SyncedLine
@@ -590,6 +612,8 @@ function UnsyncedLyrics({
   about,
   loadingNote,
   noInsights,
+  failed,
+  retryGenius,
   annotations,
 }: {
   lines: readonly string[];
@@ -599,6 +623,8 @@ function UnsyncedLyrics({
   about: GeniusAboutCard | null;
   loadingNote: boolean;
   noInsights: boolean;
+  failed: boolean;
+  retryGenius: () => void;
   annotations: GeniusPlacement | null;
 }) {
   const { strings } = useLocalisation();
@@ -612,6 +638,7 @@ function UnsyncedLyrics({
       <GeniusAbout key={geniusAboutKey(about)} about={about} />
       <GeniusLoadingNote shown={loadingNote} />
       <GeniusNoInsightsNote shown={noInsights} />
+      <GeniusFailureNote shown={failed} retry={retryGenius} />
       <TranslationNote shown={translation} retry={retryTranslation} />
       {lines.map((line, at) => {
         if (line === "") {
@@ -785,6 +812,8 @@ function LyricsBody({
   about,
   loadingNote,
   noInsights,
+  failed,
+  retryGenius,
   annotations,
 }: {
   shown: Shown | null;
@@ -798,6 +827,8 @@ function LyricsBody({
   about: GeniusAboutCard | null;
   loadingNote: boolean;
   noInsights: boolean;
+  failed: boolean;
+  retryGenius: () => void;
   annotations: GeniusPlacement | null;
 }) {
   const { strings } = useLocalisation();
@@ -825,6 +856,8 @@ function LyricsBody({
           about={about}
           loadingNote={loadingNote}
           noInsights={noInsights}
+          failed={failed}
+          retryGenius={retryGenius}
           annotations={annotations}
         />
       );
@@ -838,6 +871,8 @@ function LyricsBody({
           about={about}
           loadingNote={loadingNote}
           noInsights={noInsights}
+          failed={failed}
+          retryGenius={retryGenius}
           annotations={annotations}
         />
       );
@@ -954,6 +989,8 @@ export function LyricsView({
   const about = genius?.state === "settled" ? genius.about : null;
   const loadingNote = genius?.state === "loading" && genius.showNote;
   const noInsights = genius?.state === "settled" && genius.noInsights;
+  const failed = genius?.state === "settled" && genius.failed;
+  const retryGenius = genius?.state === "settled" ? genius.retry : () => {};
   const referents = genius?.state === "settled" ? genius.referents : null;
   // Where Genius's fragments sit on these lines; recomputed only when the lyrics or the answer change.
   const annotations = useMemo(
@@ -1077,6 +1114,8 @@ export function LyricsView({
         about={about}
         loadingNote={loadingNote}
         noInsights={noInsights}
+        failed={failed}
+        retryGenius={retryGenius}
         annotations={annotations}
       />
     </View>
