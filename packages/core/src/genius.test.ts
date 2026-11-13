@@ -44,7 +44,14 @@ test("Genius distinguishes a confirmed miss from an answer or a failure", () => 
     "miss",
   );
   assert.equal(geniusAnswerState({ ...base, match, description: null, referents: [] }), "miss");
-  assert.equal(geniusAnswerState({ ...base, match, description: null, referents: null }), "answer");
+  assert.equal(
+    geniusAnswerState({ ...base, match, description: null, referents: null }),
+    "failure",
+  );
+  assert.equal(
+    geniusAnswerState({ ...base, match, description: "About", referents: null }),
+    "answer",
+  );
   assert.equal(
     geniusAnswerState({ ...base, match, description: "About", referents: [] }),
     "answer",
