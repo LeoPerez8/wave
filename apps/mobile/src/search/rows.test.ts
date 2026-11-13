@@ -4,6 +4,7 @@ import { describe, test } from "node:test";
 
 import type { SearchResults } from "@wave/core";
 import type { SongRow } from "@/library/LibraryStore";
+import type { NativeYtSong } from "@/native/waveYtMusic";
 import type { LocalLyricsHit } from "./lyricsSearch.ts";
 import type { SearchHit } from "./searchIndex.ts";
 import { resultRows, type PlacedYtSongs } from "./rows.ts";
@@ -98,6 +99,63 @@ describe("Search lyric section", () => {
     );
     assert.equal(
       rows.some((row) => row.type === "lyric"),
+      false,
+    );
+  });
+
+  test("a saved streamed song keeps one lyric row and leaves out its YT result duplicate", () => {
+    const song = {
+      videoId: "streamed-video",
+      title: "Streamed song",
+      artists: ["Artist"],
+      album: null,
+      albumId: null,
+      durationMs: 180_000,
+      artworkUrl: null,
+      explicit: false,
+    } satisfies NativeYtSong;
+    const hit = {
+      source: "stream",
+      song,
+      line: "remembered lyric",
+      ranges: [{ start: 0, end: 10 }],
+    } as const;
+
+    const rows = resultRows(
+      empty,
+      new Set(),
+      null,
+      noPlaced,
+      null,
+      "en",
+      [hit],
+      false,
+      "three words here",
+    );
+    const lyric = rows.find((row) => row.type === "lyric");
+    assert.equal(lyric?.type, "lyric");
+    if (lyric?.type === "lyric") {
+      assert.equal(lyric.key, "lyrics:yt:streamed-video");
+      assert.equal(lyric.hit.source, "stream");
+    }
+
+    const alreadyShown: PlacedYtSongs = {
+      songs: [{ source: "stream", song }],
+      rowOf: new Map([[song.videoId, 0]]),
+    };
+    const deduplicated = resultRows(
+      empty,
+      new Set(),
+      null,
+      alreadyShown,
+      null,
+      "en",
+      [hit],
+      false,
+      "three words here",
+    );
+    assert.equal(
+      deduplicated.some((row) => row.type === "lyric"),
       false,
     );
   });

@@ -112,7 +112,11 @@ const lyricRows = (
       key: "heading:lyrics",
       label: `${catalogueOf(language).playbackText.lyricsSearchSection} · ${formatNumber(language, hits.length)}`,
     },
-    ...shown.map((hit) => ({ type: "lyric" as const, key: `lyrics:${hit.song.id}`, hit })),
+    ...shown.map((hit) => ({
+      type: "lyric" as const,
+      key: hit.source === "library" ? `lyrics:${hit.song.id}` : `lyrics:yt:${hit.song.videoId}`,
+      hit,
+    })),
     ...(shown.length < hits.length
       ? [{ type: "moreLyrics" as const, key: "more:lyrics", total: hits.length }]
       : []),
@@ -212,7 +216,12 @@ export const resultRows = (
     ...placed.flatMap((row) => (row.source === "library" ? [row.track.id] : [])),
     ...(results.top?.kind === "song" ? [results.top.song.id] : []),
   ]);
-  const visibleLyrics = lyrics.filter((hit) => !songIds.has(hit.song.id));
+  const streamedVideoIds = new Set(
+    placed.flatMap((row) => (row.source === "stream" ? [row.song.videoId] : [])),
+  );
+  const visibleLyrics = lyrics.filter((hit) =>
+    hit.source === "library" ? !songIds.has(hit.song.id) : !streamedVideoIds.has(hit.song.videoId),
+  );
   const lyricSection = (): ResultRow[] => lyricRows(visibleLyrics, lyricsExpanded, language);
   const wordCount = normalizeSearchText(query).split(" ").filter(Boolean).length;
   const lyricsFirst = wordCount >= 3;

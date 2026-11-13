@@ -4,15 +4,23 @@ import { useEffect, useMemo, useState, useSyncExternalStore } from "react";
 
 import type { SongRow } from "@/library/LibraryStore";
 import { LibraryStore } from "@/library/LibraryStore";
-import { lyricsSearchIndexVersion } from "@/library/lyricsSearchIndex";
+import { lyricsSearchIndexVersion } from "@/library/lyricsSearchVersion";
 import { appRuntime } from "@/library/runtime";
+import type { NativeYtSong } from "@/native/waveYtMusic";
 
-export interface LocalLyricsHit {
-  readonly source: "library";
-  readonly song: SongRow;
-  readonly line: string;
-  readonly ranges: readonly { readonly start: number; readonly end: number }[];
-}
+export type LocalLyricsHit =
+  | {
+      readonly source: "library";
+      readonly song: SongRow;
+      readonly line: string;
+      readonly ranges: readonly { readonly start: number; readonly end: number }[];
+    }
+  | {
+      readonly source: "stream";
+      readonly song: NativeYtSong;
+      readonly line: string;
+      readonly ranges: readonly { readonly start: number; readonly end: number }[];
+    };
 
 const EMPTY: readonly LocalLyricsHit[] = [];
 
@@ -41,20 +49,34 @@ export const useLocalLyricsSearch = (
       .runPromise(
         Effect.gen(function* () {
           const store = yield* LibraryStore;
-          return yield* store.searchLyrics(normalized);
+          const candidates = yield* store.searchLyrics(normalized);
+          const saved = yield* store.searchSavedLyrics(normalized);
+          const streamed = yield* store.streamedSongsByIds(
+            saved.map((candidate) => candidate.videoId),
+          );
+          const libraryCopies = yield* store.songsWithVideos(
+            saved.map((candidate) => candidate.videoId),
+          );
+          const hits: LocalLyricsHit[] = [];
+          for (const candidate of candidates) {
+            if (skipIds.has(candidate.trackId)) continue;
+            const song = songsById.get(candidate.trackId);
+            if (song === undefined) continue;
+            const match = findLyricMatch(candidate.lyrics, normalized);
+            if (match !== null) hits.push({ source: "library", song, ...match });
+          }
+          for (const candidate of saved) {
+            const song = streamed.get(candidate.videoId);
+            if (song === undefined || libraryCopies.has(candidate.videoId)) continue;
+            const match = findLyricMatch(candidate.lyrics, normalized);
+            if (match !== null) hits.push({ source: "stream", song, ...match });
+          }
+          return hits;
         }),
       )
       .then((candidates) => {
         if (cancelled) return;
-        const hits: LocalLyricsHit[] = [];
-        for (const candidate of candidates) {
-          if (skipIds.has(candidate.trackId)) continue;
-          const song = songsById.get(candidate.trackId);
-          if (song === undefined) continue;
-          const match = findLyricMatch(candidate.lyrics, normalized);
-          if (match !== null) hits.push({ source: "library", song, ...match });
-        }
-        setAnswer({ query, version, hits });
+        setAnswer({ query, version, hits: candidates });
       })
       .catch(() => {
         if (!cancelled) setAnswer({ query, version, hits: EMPTY });
