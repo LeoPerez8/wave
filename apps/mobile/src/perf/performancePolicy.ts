@@ -933,14 +933,12 @@ export const OWN_PRESS: Record<string, Exception> = {
     reason: "Now Playing's cover: a tap plays or pauses, with its own press animation.",
   },
   "nowPlaying/LyricsView.tsx#SyncedLine": {
-    reason: "A synced lyric line is the target: a tap seeks to it.",
+    reason:
+      "A synced lyric line is the target: a tap seeks to it, a long press opens its Genius annotations.",
   },
   "nowPlaying/LyricsView.tsx#UnsyncedLyrics": {
-    reason: "Each unsynced line is a target that selects it to share.",
-  },
-  "nowPlaying/GeniusAnnotations.tsx#HighlightedLine": {
     reason:
-      "A Genius highlight is a span of a lyric line's text that wraps with it mid-line, which only a nested Text's onPress can be; a Pressable can't sit inline. A tap opens its annotations, the rest of the line still seeks.",
+      "Each unsynced line is a target that selects it to share; otherwise a line with Genius highlights long-presses to its annotations.",
   },
   "components/ScreenHeader.tsx#ScreenHeader": {
     reason:

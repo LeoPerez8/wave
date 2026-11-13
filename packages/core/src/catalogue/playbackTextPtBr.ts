@@ -72,6 +72,7 @@ export const playbackTextPtBr: typeof playbackTextEn = {
   instrumental: "Instrumental",
   karaoke: "Karaokê",
   loadingOnlineResults: "Carregando resultados online",
+  longPressForGeniussAnnotations: "Mantenha pressionado para ver as anotações do Genius",
   longer: "Mais tempo",
   lyrics: "Letra",
   more: "Mais",
@@ -103,6 +104,8 @@ export const playbackTextPtBr: typeof playbackTextEn = {
   playbackPosition: "Posição da reprodução",
   playlists: "Playlists",
   playsFromThisLine: "Reproduz a partir deste verso",
+  playsFromThisLineLongPressForGeniussAnnotations:
+    "Reproduz a partir deste verso. Mantenha pressionado para ver as anotações do Genius",
   playsTheSong: "Reproduz a música",
   playsThisSongAgainLongPressForSongActions:
     "Reproduz esta música novamente. Mantenha pressionado para ver as ações da música",
@@ -128,7 +131,6 @@ export const playbackTextPtBr: typeof playbackTextEn = {
   showLess: "Mostrar Menos",
   showPlayer: "Mostrar player",
   showsGeniussAnnotation: "Mostra a anotação do Genius",
-  showsGeniussAnnotations: "Mostra as anotações do Genius",
   showsAllOfIt: "Mostra tudo",
   showsLessOfIt: "Mostra menos",
   shuffle: "Aleatório",

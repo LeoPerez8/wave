@@ -71,6 +71,8 @@ export const playbackTextEn = {
   instrumental: "Instrumental",
   karaoke: "Karaoke",
   loadingOnlineResults: "Loading online results",
+  /** An unsynced lyric line with Genius highlights: a hold opens its annotations. */
+  longPressForGeniussAnnotations: "Long press for Genius's annotations",
   longer: "Longer",
   lyrics: "Lyrics",
   more: "More",
@@ -102,6 +104,9 @@ export const playbackTextEn = {
   playbackPosition: "Playback position",
   playlists: "Playlists",
   playsFromThisLine: "Plays from this line",
+  /** A synced lyric line with Genius highlights: a tap seeks, a hold opens its annotations. */
+  playsFromThisLineLongPressForGeniussAnnotations:
+    "Plays from this line. Long press for Genius's annotations",
   playsTheSong: "Plays the song",
   playsThisSongAgainLongPressForSongActions: "Plays this song again. Long press for song actions",
   playsThisSongNowLongPressForSongActions: "Plays this song now. Long press for song actions",
@@ -125,7 +130,6 @@ export const playbackTextEn = {
   showLess: "Show Less",
   showPlayer: "Show player",
   showsGeniussAnnotation: "Shows Genius's annotation",
-  showsGeniussAnnotations: "Shows Genius's annotations",
   showsAllOfIt: "Shows all of it",
   showsLessOfIt: "Shows less of it",
   shuffle: "Shuffle",

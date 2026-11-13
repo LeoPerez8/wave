@@ -1,5 +1,6 @@
 import { currentLocalisation, useLocalisation } from "@/localisation/localisation";
 import {
+  geniusLineReferents,
   geniusLineSegments,
   geniusSection,
   withOpacity,
@@ -86,13 +87,18 @@ function AnnotationCard({
   );
 }
 
-/** How screen readers name the annotations on [referents]. */
+/**
+ * How screen readers name the annotations on [referents]: the fragment, or
+ * each of them when a line's long press opens several.
+ */
 const annotationLabel = (referents: readonly GeniusReferent[]): string =>
-  currentLocalisation().strings.playbackText.annotationOn(explained(referents[0]!.fragment));
+  currentLocalisation().strings.playbackText.annotationOn(
+    referents.map((referent) => explained(referent.fragment)).join(", "),
+  );
 
 /**
- * Opens [referents]' annotations (a highlight's, or one of More insights) on
- * a card over the lyrics (docs/spec.md, "Genius annotations").
+ * Opens [referents]' annotations (a line's, or one of More insights) on a
+ * card over the lyrics (docs/spec.md, "Genius annotations").
  */
 const openAnnotations = (referents: readonly GeniusReferent[]): void => {
   openOverlay({
@@ -101,19 +107,15 @@ const openAnnotations = (referents: readonly GeniusReferent[]): void => {
   });
 };
 
-const pressAnnotations = (referents: readonly GeniusReferent[]): void => {
-  void Haptics.selectionAsync();
-  openAnnotations(referents);
-};
-
 /** The soft backdrop under an annotated fragment, as genius.com's: the ink, faint. */
 const useHighlightFill = (): string => withOpacity(useThemeColor("foreground"), 0.1);
 
 /**
- * A lyric line's text with its annotated fragments on a soft backdrop; a tap
- * on one opens its annotation, a tap elsewhere goes to the line's own press.
- * [lit] says which of its words are in ink (Karaoke's sung words; none
- * given leaves the colour to the line). Put it inside the line's Text.
+ * A lyric line's text with its annotated fragments on a soft backdrop. The
+ * fragments take no press of their own: a tap anywhere on the line is the
+ * line's, and a long press on it opens them (`lineAnnotations`). [lit] says
+ * which of its words are in ink (Karaoke's sung words; none given leaves the
+ * colour to the line). Put it inside the line's Text.
  */
 export function HighlightedLine({
   text,
@@ -126,42 +128,37 @@ export function HighlightedLine({
   wordStarts?: readonly number[];
   lit?: (word: number) => boolean;
 }) {
-  const { strings } = useLocalisation();
   const fill = useHighlightFill();
   if (highlights.length === 0 && wordStarts === undefined) return text;
-  return geniusLineSegments(text, highlights, wordStarts).map((segment) => {
-    const { referents } = segment;
-    const annotated = referents.length > 0;
-    return (
-      // A highlight is a span of the line's text that wraps with it, which only a nested Text
-      // can be; reviewed in OWN_PRESS (perf/performancePolicy.ts).
-      <Text
-        key={segment.start}
-        className={lit?.(segment.word) ? "text-foreground" : undefined}
-        style={annotated ? { backgroundColor: fill } : undefined}
-        onPress={annotated ? () => pressAnnotations(referents) : undefined}
-        accessibilityRole={annotated ? "link" : undefined}
-        accessibilityHint={annotated ? strings.playbackText.showsGeniussAnnotations : undefined}
-      >
-        {text.slice(segment.start, segment.end)}
-      </Text>
-    );
-  });
+  return geniusLineSegments(text, highlights, wordStarts).map((segment) => (
+    <Text
+      key={segment.start}
+      className={lit?.(segment.word) ? "text-foreground" : undefined}
+      style={segment.referents.length > 0 ? { backgroundColor: fill } : undefined}
+    >
+      {text.slice(segment.start, segment.end)}
+    </Text>
+  ));
 }
 
 /** A highlight's accessibility action, named after the referent placed there first. */
 const actionName = (referents: readonly GeniusReferent[]): string => `genius-${referents[0]!.id}`;
 
 /**
- * Screen readers' way to a line's annotations, which a press on the line
- * hides: one action for each highlight on it, opening all its annotations.
+ * A lyric line's way to its annotations, spread on its `Press`: a long press
+ * (after Settings' long-press delay) gives the long-press haptic and opens
+ * every annotation on the line, and screen readers get one action for each
+ * highlight. Nothing for a line without highlights.
  */
-export const annotationActions = (
+export const lineAnnotations = (
   highlights: readonly GeniusHighlight[],
 ): {
+  readonly onLongPress?: () => void;
   readonly accessibilityActions?: { name: string; label: string }[];
   readonly onAccessibilityAction?: (event: { nativeEvent: { actionName: string } }) => void;
 } => {
+  const all = geniusLineReferents(highlights);
+  if (all.length === 0) return {};
   // One action a place: the parts of a highlight running over lines share their referents,
   // and a fragment repeated on the line opens the same annotations.
   const places = [
@@ -169,8 +166,11 @@ export const annotationActions = (
       highlights.map((highlight) => [actionName(highlight.referents), highlight.referents]),
     ).values(),
   ];
-  if (places.length === 0) return {};
   return {
+    onLongPress: () => {
+      void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+      openAnnotations(all);
+    },
     accessibilityActions: places.map((referents) => ({
       name: actionName(referents),
       label: annotationLabel(referents),
