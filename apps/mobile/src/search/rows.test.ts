@@ -113,7 +113,7 @@ describe("Search lyric section", () => {
     );
   });
 
-  test("a Genius hit for a Library song shows unless a local result shows that song", () => {
+  test("a Genius hit shows unless a Lyrics row shows that song", () => {
     const original = {
       id: 7,
       title: "Just Pretend",
@@ -200,7 +200,8 @@ describe("Search lyric section", () => {
       query,
       hits,
     );
-    assert.deepEqual(geniusIds(shownInSongs), [1]);
+    // Songs shows the song, so its local Lyrics row goes; Genius's hit keeps it in Lyrics.
+    assert.deepEqual(geniusIds(shownInSongs), [1, 2]);
 
     const placedLibrary: PlacedYtSongs = {
       songs: [
@@ -233,7 +234,51 @@ describe("Search lyric section", () => {
       query,
       hits,
     );
-    assert.deepEqual(geniusIds(placedInSongs), [1]);
+    assert.deepEqual(geniusIds(placedInSongs), [1, 2]);
+  });
+
+  test("Genius's hit for the original stays in Lyrics when YT Music streams it in Songs", () => {
+    const original: NativeYtSong = {
+      videoId: "party-in-the-usa",
+      title: "Party In The U.S.A.",
+      artists: ["Miley Cyrus"],
+      album: "The Time Of Our Lives",
+      albumId: null,
+      durationMs: 202_000,
+      artworkUrl: null,
+      explicit: false,
+    };
+    const hit = (id: number, title: string, artist: string): GeniusLyricsHit => ({
+      id,
+      title,
+      artist,
+      credit: artist,
+      url: `https://genius.com/${id}`,
+      artworkUrl: null,
+    });
+    const rows = resultRows(
+      empty,
+      new Set(),
+      null,
+      { songs: [{ source: "stream", song: original }], rowOf: new Map([[original.videoId, 0]]) },
+      null,
+      "en",
+      [],
+      false,
+      "it's a party in the usa",
+      [
+        hit(2509, "Party in the U.S.A.", "Miley Cyrus"),
+        hit(1937224, "Party in the U.S.A.", "The Barden Bellas"),
+        hit(7839798, "Party In The U.S.A. (Live)", "Miley Cyrus"),
+      ],
+    );
+    const lyrics = rows.flatMap((row) => (row.type === "geniusLyric" ? [row.hit.id] : []));
+    assert.deepEqual(lyrics, [2509, 1937224, 7839798]);
+    assert.equal(rows[1]?.type, "geniusLyric");
+    assert.equal(
+      rows.some((row) => row.type === "ytSong" && row.song.videoId === original.videoId),
+      true,
+    );
   });
 
   test("Genius follows local hits, shows five hits, and expands to its first page", () => {

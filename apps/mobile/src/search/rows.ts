@@ -259,43 +259,24 @@ export const resultRows = (
   const visibleLyrics = lyrics.filter((hit) =>
     hit.source === "library" ? !songIds.has(hit.song.id) : !streamedVideoIds.has(hit.song.videoId),
   );
-  // Genius's hits leave out what a local result shows: the songs in Songs and the Lyrics rows.
-  const geniusLocal = [
-    ...shownLibrary.map((song) => ({
-      title: song.title,
-      artist: song.artist,
-      album: song.album,
-      durationMs: song.durationMs,
-    })),
-    ...visibleLyrics.map((hit) =>
-      hit.source === "library"
-        ? {
-            title: hit.song.title,
-            artist: hit.song.artist,
-            album: hit.song.album,
-            durationMs: hit.song.durationMs,
-          }
-        : {
-            title: hit.song.title,
-            artist: joinArtists(hit.song.artists),
-            album: hit.song.album,
-            durationMs: hit.song.durationMs ?? 0,
-          },
-    ),
-    ...placed.flatMap((row) =>
-      row.source === "stream"
-        ? [
-            {
-              title: row.song.title,
-              artist: joinArtists(row.song.artists),
-              album: row.song.album,
-              durationMs: row.song.durationMs ?? 0,
-            },
-          ]
-        : [],
-    ),
-  ];
-  const visibleGenius = uniqueGeniusLyricsHits(geniusLyrics, geniusLocal);
+  // Genius's hits leave out the songs a Lyrics row shows. A song in Songs keeps its hit: a
+  // phrase query finds its song in Lyrics, so the original isn't left to its covers (#1115).
+  const lyricSongs = visibleLyrics.map((hit) =>
+    hit.source === "library"
+      ? {
+          title: hit.song.title,
+          artist: hit.song.artist,
+          album: hit.song.album,
+          durationMs: hit.song.durationMs,
+        }
+      : {
+          title: hit.song.title,
+          artist: joinArtists(hit.song.artists),
+          album: hit.song.album,
+          durationMs: hit.song.durationMs ?? 0,
+        },
+  );
+  const visibleGenius = uniqueGeniusLyricsHits(geniusLyrics, lyricSongs);
   const wordCount = normalizeSearchText(query).split(" ").filter(Boolean).length;
   const lyricsFirst = wordCount >= 3;
   const lyricSection = (): ResultRow[] =>

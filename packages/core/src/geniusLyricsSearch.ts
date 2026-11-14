@@ -24,9 +24,8 @@ export const geniusLyricsSearchRequest = (
 };
 
 /**
- * Genius's [hits] without the songs a local result already [shown] in Search (a Lyrics row or a
- * song in Songs, Library or streamed). A Library song shown nowhere, its file without lyrics
- * say, keeps its Genius hit (#1111).
+ * Genius's [hits] without the songs Search's Lyrics rows already [shown]. A song shown only in
+ * Songs, Library or streamed, keeps its Genius hit (#1111, #1115).
  */
 export const uniqueGeniusLyricsHits = (
   hits: readonly GeniusLyricsHit[],
