@@ -103,10 +103,7 @@ describe("Starting a Magic Queue", () => {
       ["rock", 0.91],
       ["jazz", 0.09],
     ]);
-    for (const seed of [
-      SONG_SEED,
-      { kind: "artist" as const, id: "artist", title: "Artist" },
-    ]) {
+    for (const seed of [SONG_SEED, { kind: "artist" as const, id: "artist", title: "Artist" }]) {
       const started = startMagicQueue(seed, [song("s1", "Seed Artist")], {
         id: `faithful-${seed.kind}`,
         random: first,
