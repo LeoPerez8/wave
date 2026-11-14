@@ -113,6 +113,14 @@ class WaveFadeEdgesView(context: Context, appContext: AppContext) : ExpoView(con
       else -> movingStrength()
     }
 
+  /**
+   * React Native lays out the content, which is far wider than this view
+   * (both copies of the text side by side). An ExpoView is a LinearLayout,
+   * whose own layout pass would cut the content down to this view's width,
+   * clipping the text's end and the copy that follows it as the line moves.
+   */
+  override fun onLayout(changed: Boolean, left: Int, top: Int, right: Int, bottom: Int) = Unit
+
   override fun getLeftFadingEdgeStrength(): Float = strength("left")
 
   override fun getRightFadingEdgeStrength(): Float = strength("right")
