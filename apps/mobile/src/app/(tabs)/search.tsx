@@ -197,7 +197,6 @@ export default function SearchScreen() {
   );
   const { state: geniusLyrics, retry: retryGeniusLyrics } = useGeniusLyricsSearch(
     deferredQuery,
-    library?.songs ?? NO_SONG_ROWS,
     index !== null,
   );
   // A Library artist on top, with Online, counts the songs their online page adds.

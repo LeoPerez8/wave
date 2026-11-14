@@ -2,11 +2,9 @@ import {
   geniusLyricsCandidates,
   geniusLyricsSearchRequest,
   settleGeniusLyricsSearch,
-  uniqueGeniusLyricsHits,
   type GeniusLyricsSearchState,
-  type SongLookup,
 } from "@wave/core";
-import { useCallback, useEffect, useMemo, useState, useSyncExternalStore } from "react";
+import { useCallback, useEffect, useState, useSyncExternalStore } from "react";
 
 import { useGeniusInsightsEnabled } from "@/settings/genius";
 import { online, subscribeConnectivity } from "@/native/waveNative";
@@ -25,7 +23,7 @@ export interface GeniusLyricsSearchPorts {
 
 /**
  * Requests a settled Genius state after policy checks; network errors remain distinct from offline.
- * Its hits are Genius's whole answer: the hook leaves out the Library's songs as it shows them.
+ * Its hits are Genius's whole answer: Search's rows leave out the songs a local result shows.
  */
 export const requestGeniusLyricsSearch = async (
   query: string,
@@ -59,12 +57,11 @@ export const requestGeniusLyricsSearch = async (
 
 /**
  * Asks once each time a 3+ word query pauses; old replies never replace the current query.
- * A Library re-read (a scan batch, a play count) asks nothing again: the answer is kept and
- * the hits the Library now holds are left out as it's shown.
+ * A Library re-read (a scan batch, a play count) asks nothing again: the answer is kept, and
+ * Search's rows leave out the hits a local result now shows (`resultRows`).
  */
 export const useGeniusLyricsSearch = (
   query: string,
-  library: readonly SongLookup[],
   libraryReady: boolean,
 ): { readonly state: GeniusLyricsSearchState; readonly retry: () => void } => {
   const enabled = useGeniusInsightsEnabled();
@@ -124,12 +121,5 @@ export const useGeniusLyricsSearch = (
   else if (!isOnline) current = { query, status: "offline" };
   else if (!signedIn) current = { query, status: "signedOut" };
   else current = state.query === query ? state : { query, status: "idle" };
-  const shown = useMemo(
-    (): GeniusLyricsSearchState =>
-      current.status === "hits"
-        ? { ...current, hits: uniqueGeniusLyricsHits(current.hits, library) }
-        : current,
-    [current, library],
-  );
-  return { state: shown, retry };
+  return { state: current, retry };
 };
