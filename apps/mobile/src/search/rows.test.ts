@@ -274,6 +274,8 @@ describe("Search lyric section", () => {
     );
     const lyrics = rows.flatMap((row) => (row.type === "geniusLyric" ? [row.hit.id] : []));
     assert.deepEqual(lyrics, [2509, 1937224, 7839798]);
+    // Lyrics leads the page: its heading, then Genius's first hit, the original.
+    assert.equal(rows[0]?.key, "heading:lyrics");
     assert.equal(rows[1]?.type, "geniusLyric");
     assert.equal(
       rows.some((row) => row.type === "ytSong" && row.song.videoId === original.videoId),

@@ -24,7 +24,7 @@ export const geniusLyricsSearchRequest = (
 };
 
 /**
- * Genius's [hits] without the songs Search's Lyrics rows already [shown]. A song shown only in
+ * Genius's [hits] without the songs Search's Lyrics rows already show ([shown]). A song shown only in
  * Songs, Library or streamed, keeps its Genius hit (#1111, #1115).
  */
 export const uniqueGeniusLyricsHits = (
