@@ -23,7 +23,7 @@ export interface GeniusLyricsSearchPorts {
 
 /**
  * Requests a settled Genius state after policy checks; network errors remain distinct from offline.
- * Its hits are Genius's whole answer: Search's rows leave out the songs a local result shows.
+ * Its hits are Genius's whole answer: Search's rows leave out the songs a Lyrics row shows.
  */
 export const requestGeniusLyricsSearch = async (
   query: string,
@@ -58,7 +58,7 @@ export const requestGeniusLyricsSearch = async (
 /**
  * Asks once each time a 3+ word query pauses; old replies never replace the current query.
  * A Library re-read (a scan batch, a play count) asks nothing again: the answer is kept, and
- * Search's rows leave out the hits a local result now shows (`resultRows`).
+ * Search's rows leave out the hits a Lyrics row now shows (`resultRows`).
  */
 export const useGeniusLyricsSearch = (
   query: string,
