@@ -23,23 +23,26 @@ export const geniusLyricsSearchRequest = (
   return { query: trimmed, delayMs: GENIUS_LYRICS_SEARCH_DELAY_MS };
 };
 
-/** Genius hits already represented by a Library song are left to the local Lyrics result. */
+/**
+ * Genius's [hits] without the songs a local result already [shown] in Search (a Lyrics row or a
+ * song in Songs, Library or streamed). A Library song shown nowhere, its file without lyrics
+ * say, keeps its Genius hit (#1111).
+ */
 export const uniqueGeniusLyricsHits = (
   hits: readonly GeniusLyricsHit[],
-  library: readonly SongLookup[],
-  alsoLocal: readonly SongLookup[] = [],
+  shown: readonly SongLookup[],
 ): GeniusLyricsHit[] => {
-  const libraryByTitle = new Map<string, SongLookup[]>();
-  for (const song of [...library, ...alsoLocal]) {
+  const shownByTitle = new Map<string, SongLookup[]>();
+  for (const song of shown) {
     const title = titleName(song.title);
-    const matches = libraryByTitle.get(title) ?? [];
+    const matches = shownByTitle.get(title) ?? [];
     matches.push(song);
-    libraryByTitle.set(title, matches);
+    shownByTitle.set(title, matches);
   }
   return hits
     .filter(
       (hit) =>
-        !libraryByTitle
+        !shownByTitle
           .get(titleName(hit.title))
           ?.some(
             (song) =>

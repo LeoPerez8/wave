@@ -113,6 +113,129 @@ describe("Search lyric section", () => {
     );
   });
 
+  test("a Genius hit for a Library song shows unless a local result shows that song", () => {
+    const original = {
+      id: 7,
+      title: "Just Pretend",
+      artist: "Bad Omens",
+      album: "The Death of Peace of Mind",
+      durationMs: 205_000,
+    } as SongRow;
+    const hits: GeniusLyricsHit[] = [
+      {
+        id: 1,
+        title: "Just Pretend (Acoustic)",
+        artist: "The Veer Union",
+        credit: "The Veer Union",
+        url: "https://genius.com/1",
+        artworkUrl: null,
+      },
+      {
+        id: 2,
+        title: "Just Pretend",
+        artist: "Bad Omens",
+        credit: "Bad Omens",
+        url: "https://genius.com/2",
+        artworkUrl: null,
+      },
+    ];
+    const query = "i can wait for you at the bottom";
+    const geniusIds = (rows: ReturnType<typeof resultRows>) =>
+      rows.flatMap((row) => (row.type === "geniusLyric" ? [row.hit.id] : []));
+
+    // The Library holds the song, but its file has no lyrics: no local result shows it.
+    const noLocal = resultRows(
+      empty,
+      new Set(),
+      null,
+      noPlaced,
+      null,
+      "en",
+      [],
+      false,
+      query,
+      hits,
+    );
+    assert.deepEqual(geniusIds(noLocal), [1, 2]);
+
+    const lyricRow: LocalLyricsHit = {
+      source: "library",
+      song: original,
+      line: "I can wait for you at the bottom",
+      ranges: [{ start: 0, end: 32 }],
+    };
+    const local = resultRows(
+      empty,
+      new Set(),
+      null,
+      noPlaced,
+      null,
+      "en",
+      [lyricRow],
+      false,
+      query,
+      hits,
+    );
+    assert.deepEqual(geniusIds(local), [1]);
+
+    const inSongs: SearchResults<SearchHit> = {
+      top: null,
+      groups: [
+        {
+          kind: "song",
+          items: [{ kind: "song", name: original.title, also: [], song: original }],
+          total: 1,
+        },
+      ],
+    };
+    const shownInSongs = resultRows(
+      inSongs,
+      new Set(),
+      null,
+      noPlaced,
+      null,
+      "en",
+      [lyricRow],
+      false,
+      query,
+      hits,
+    );
+    assert.deepEqual(geniusIds(shownInSongs), [1]);
+
+    const placedLibrary: PlacedYtSongs = {
+      songs: [
+        {
+          source: "library",
+          song: {
+            videoId: "just-pretend",
+            title: "Just Pretend",
+            artists: ["Bad Omens"],
+            album: null,
+            albumId: null,
+            durationMs: 205_000,
+            artworkUrl: null,
+            explicit: false,
+          },
+          track: original,
+        },
+      ],
+      rowOf: new Map(),
+    };
+    const placedInSongs = resultRows(
+      empty,
+      new Set(),
+      null,
+      placedLibrary,
+      null,
+      "en",
+      [],
+      false,
+      query,
+      hits,
+    );
+    assert.deepEqual(geniusIds(placedInSongs), [1]);
+  });
+
   test("Genius follows local hits, shows five hits, and expands to its first page", () => {
     const rows = resultRows(
       empty,

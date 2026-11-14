@@ -242,22 +242,31 @@ export const resultRows = (
   onlineStatus: "signedOut" | "offline" | "failed" | null = null,
 ): ResultRow[] => {
   const rows: ResultRow[] = [];
-  const songIds = new Set<number>([
+  // The Library songs Songs shows, which Lyrics leaves out.
+  const shownLibrary = [
     ...results.groups.flatMap((group) =>
       group.kind === "song"
-        ? group.items.flatMap((hit) => (hit.kind === "song" ? [hit.song.id] : []))
+        ? group.items.flatMap((hit) => (hit.kind === "song" ? [hit.song] : []))
         : [],
     ),
-    ...placed.flatMap((row) => (row.source === "library" ? [row.track.id] : [])),
-    ...(results.top?.kind === "song" ? [results.top.song.id] : []),
-  ]);
+    ...placed.flatMap((row) => (row.source === "library" ? [row.track] : [])),
+    ...(results.top?.kind === "song" ? [results.top.song] : []),
+  ];
+  const songIds = new Set(shownLibrary.map((song) => song.id));
   const streamedVideoIds = new Set(
     placed.flatMap((row) => (row.source === "stream" ? [row.song.videoId] : [])),
   );
   const visibleLyrics = lyrics.filter((hit) =>
     hit.source === "library" ? !songIds.has(hit.song.id) : !streamedVideoIds.has(hit.song.videoId),
   );
+  // Genius's hits leave out what a local result shows: the songs in Songs and the Lyrics rows.
   const geniusLocal = [
+    ...shownLibrary.map((song) => ({
+      title: song.title,
+      artist: song.artist,
+      album: song.album,
+      durationMs: song.durationMs,
+    })),
     ...visibleLyrics.map((hit) =>
       hit.source === "library"
         ? {
@@ -286,7 +295,7 @@ export const resultRows = (
         : [],
     ),
   ];
-  const visibleGenius = uniqueGeniusLyricsHits(geniusLyrics, [], geniusLocal);
+  const visibleGenius = uniqueGeniusLyricsHits(geniusLyrics, geniusLocal);
   const wordCount = normalizeSearchText(query).split(" ").filter(Boolean).length;
   const lyricsFirst = wordCount >= 3;
   const lyricSection = (): ResultRow[] =>

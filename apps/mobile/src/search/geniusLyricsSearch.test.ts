@@ -1,7 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import { createElement } from "react";
-import type { SongLookup } from "@wave/core";
 import { act, create, type ReactTestRenderer } from "react-test-renderer";
 
 import { reactCompilerBuilds, stubModule } from "../perf/reactCompilerBuilds.ts";
@@ -132,9 +131,8 @@ for (const [build, { useGeniusLyricsSearch }] of Object.entries(builds)) {
   test(`${build}: Try Again asks Genius again`, async () => {
     requests.length = 0;
     const seen: ReturnType<typeof useGeniusLyricsSearch>[] = [];
-    const library: never[] = [];
     function View() {
-      const controller = useGeniusLyricsSearch("one two three", library, true);
+      const controller = useGeniusLyricsSearch("one two three", true);
       seen.push(controller);
       return createElement("view");
     }
@@ -163,53 +161,37 @@ for (const [build, { useGeniusLyricsSearch }] of Object.entries(builds)) {
 }
 
 for (const [build, { useGeniusLyricsSearch }] of Object.entries(builds)) {
-  test(`${build}: a Library re-read keeps Genius's answer and asks nothing again`, async () => {
+  test(`${build}: a Library re-read keeps Genius's whole answer and asks nothing again`, async () => {
     requests.length = 0;
     worker.reply = reply;
     const seen: ReturnType<typeof useGeniusLyricsSearch>[] = [];
-    function View({ library }: { library: readonly SongLookup[] }) {
-      seen.push(useGeniusLyricsSearch("teardrop massive attack", library, true));
+    // Search re-renders on a scan batch or a play count.
+    function View() {
+      seen.push(useGeniusLyricsSearch("teardrop massive attack", true));
       return createElement("view");
     }
 
     let renderer: ReactTestRenderer | undefined;
     try {
       await act(async () => {
-        renderer = create(createElement(View, { library: [] }));
+        renderer = create(createElement(View));
       });
       await act(() => new Promise((resolve) => setTimeout(resolve, 360)));
       assert.equal(requests.length, 1);
       assert.equal(seen.at(-1)?.state.status, "hits");
 
-      // A scan batch or a play count re-reads the Library: a new list, the same query.
+      // The Library may now hold the song. Its hit stays in the answer: Search's rows leave it
+      // out only while a local result shows the song (#1111).
       await act(async () => {
-        renderer?.update(
-          createElement(View, {
-            library: [{ title: "Angel", artist: "Massive Attack", album: null, durationMs: 0 }],
-          }),
-        );
+        renderer?.update(createElement(View));
       });
       await act(() => new Promise((resolve) => setTimeout(resolve, 360)));
       assert.equal(requests.length, 1);
       const kept = seen.at(-1)?.state;
       assert.equal(kept?.status, "hits");
-      assert.equal(kept?.status === "hits" ? kept.hits.length : -1, 1);
-
-      // The Library gains the song: its row leaves the Genius hits, still without asking again.
-      await act(async () => {
-        renderer?.update(
-          createElement(View, {
-            library: [{ title: "Teardrop", artist: "Massive Attack", album: null, durationMs: 0 }],
-          }),
-        );
-      });
-      await act(() => new Promise((resolve) => setTimeout(resolve, 360)));
-      assert.equal(requests.length, 1);
-      assert.deepEqual(seen.at(-1)?.state, {
-        query: "teardrop massive attack",
-        status: "hits",
-        hits: [],
-      });
+      assert.deepEqual(kept?.status === "hits" ? kept.hits.map((hit) => hit.title) : [], [
+        "Teardrop",
+      ]);
     } finally {
       worker.reply = { meta: { status: 502 } };
       await act(() => renderer?.unmount());
