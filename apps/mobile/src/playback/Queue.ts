@@ -746,7 +746,7 @@ export const layer = Layer.effect(
       Effect.gen(function* () {
         waiting = null;
         pausedForSearch = false;
-        learnQueueTracksForUndo([...tracks.values()], undo.keepPlayback);
+        learnQueueTracksForUndo([...tracks.values()], undo.keepPlayback === true);
         queueSource.set(source);
         const state = undoneQueue(undo, queueState.get());
         queueState.set(state);
