@@ -271,24 +271,33 @@ export const createSyncService = (options: SyncServiceOptions): SyncService => {
 
   /**
    * Counts a sign-in against [key]'s minute (`sign_in_windows`), refusing with
-   * 429 past `maxSignInsPerMinute`. Rows of past minutes go as it counts.
+   * 429 past `maxSignInsPerMinute`, or when [key] is new and the minute
+   * already holds `maxSignInKeysPerMinute` keys. Rows of past minutes go as
+   * it counts.
    */
   const countSignIn = async (key: string): Promise<void> => {
     const at = now();
     const window = Math.floor(at / 60_000);
+    // One transaction: a key already counted always counts on, and a new one
+    // is added only below the cap, so two sign-ins can't both take the last place.
     const [, counted] = await db.batch(
       [
         { sql: "DELETE FROM sign_in_windows WHERE window_start <> ?", args: [window] },
         {
-          sql: `INSERT INTO sign_in_windows (key, window_start, window_count) VALUES (?, ?, 1)
+          sql: `INSERT INTO sign_in_windows (key, window_start, window_count)
+                SELECT ?, ?, 1
+                WHERE EXISTS (SELECT 1 FROM sign_in_windows WHERE key = ?)
+                   OR (SELECT count(*) FROM sign_in_windows) < ?
                 ON CONFLICT (key) DO UPDATE SET window_count = window_count + 1
                 RETURNING window_count`,
-          args: [key, window],
+          args: [key, window, key, limits.maxSignInKeysPerMinute],
         },
       ],
       "write",
     );
-    if (Number(counted?.rows[0]?.window_count) > limits.maxSignInsPerMinute) {
+    const count = counted?.rows[0]?.window_count;
+    if (count === undefined) throw tooMany("maxSignInKeysPerMinute", at);
+    if (Number(count) > limits.maxSignInsPerMinute) {
       throw tooMany("maxSignInsPerMinute", at);
     }
   };
