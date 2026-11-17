@@ -269,7 +269,7 @@ export const learnQueueTracksForPlay = (
   learnQueueTracks(tracks, {
     forgetOthers:
       playReplacesQueue(command, passOver) &&
-      !(command.type === "play" && command.keepCurrentIfSame === true),
+      !(command.type === "play" && command.keepCurrentAndReplaceUpNext !== undefined),
   });
 
 /** Restores old queue tracks while retaining a recommendation the player still holds. */

@@ -114,8 +114,7 @@ describe("queue tracks", () => {
       type: "play",
       trackIds: ["3"],
       context: { kind: "magic", id: "session" },
-      keepCurrentIfSame: true,
-      replaceUpNextWith: ["4", "5"],
+      keepCurrentAndReplaceUpNext: { trackId: "3" },
     } as const;
 
     learnQueueTracksForPlay(command, [song(3), song(4), song(5)].map(toQueueTrack), () => false);
