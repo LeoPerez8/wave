@@ -122,7 +122,10 @@ test("continuing preserves the queue and appends ten fresh songs through the ord
   assert.equal(continued.state.entries, state.entries);
   assert.equal(continued.state.index, 1);
   assert.deepEqual(continued.state.context, { kind: MAGIC_QUEUE_CONTEXT, id: "session" });
-  assert.equal(queueUndo(state, command, { key: state.entries[1]!.key, positionMs: 15_000 }), null);
+  assert.equal(
+    queueUndo(state, command, { key: state.entries[1]!.key, positionMs: 15_000 }, continued),
+    null,
+  );
   assert.equal(magicPickDue(session, null, continued.state, { type: "endOfQueue" }), false);
   for (const repeat of ["all", "one"] as const)
     assert.equal(magicPickDue(session, null, { ...continued.state, repeat }), false);

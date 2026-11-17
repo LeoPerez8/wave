@@ -33,7 +33,9 @@ export const playSearchSong = async (song: ResultSong): Promise<void> => {
     case "magicQueue":
       runMagicQueueStart(
         tap.from === "library"
-          ? startMagicQueue(tap.seed, [tap.track], [], undefined, true)
+          ? tap.song === undefined
+            ? startMagicQueue(tap.seed, [tap.track], [], undefined, true)
+            : startStreamedMagicQueue(tap.song, true, tap.track)
           : startStreamedMagicQueue(tap.song, true),
       );
       return;

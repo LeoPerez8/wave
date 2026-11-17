@@ -22,6 +22,7 @@ import {
   magicPlaySignal,
   magicQueueEdits,
   magicQueueLabel,
+  magicQueueKeepsPlayingSong,
   magicQueueShare,
   magicSignal,
   parseMagicSession,
@@ -377,10 +378,11 @@ export const startMagicQueue = (
  * Starts a Magic Queue from a streamed YT Music [song] (its long-press menu
  * in Search, a YT Music list, a Discover mix or the queue): as a Library
  * song's does, it replaces the queue (with Undo) with the song, and the
- * first 9 recommendations follow from its radio (Core's
+ * first 9 recommendations follow from its radio, even when [libraryTrack]
+ * supplies the audio (Core's
  * `startStreamedMagicQueue`).
  */
-export const startStreamedMagicQueue = (song: YtSong, faithful = false) =>
+export const startStreamedMagicQueue = (song: YtSong, faithful = false, libraryTrack?: SongRow) =>
   Effect.gen(function* () {
     if (!ytMusicEnabled()) return;
     const startedAt = Date.now();
@@ -388,10 +390,16 @@ export const startStreamedMagicQueue = (song: YtSong, faithful = false) =>
       id: String(Date.now()),
       ytShare: magicQueueShare(discoverLevel.get()),
       faithful,
+      ...(libraryTrack?.path === null || libraryTrack === undefined
+        ? {}
+        : { firstTrackId: String(libraryTrack.id) }),
     });
     // Nothing of the Library was read for it: the first pick waits for the snapshot's.
     startingLibrary = { songs: [], artists: [] };
-    const track = yield* ytQueueTrack(song);
+    const track =
+      libraryTrack !== undefined && songHasFile(libraryTrack)
+        ? toQueueTrack(libraryTrack)
+        : yield* ytQueueTrack(song);
     yield* begin(session, startedAt, track);
     yield* cacheYtCoversInBackground(track.thumbPath === null ? [song] : []);
   });
@@ -418,6 +426,42 @@ const begin = (session: MagicSession, startedAt: number, track: QueueTrack) =>
     failedBatch.set(null);
     emptyBatch.set(null);
     const queue = yield* Queue;
+    const state = queueState.get();
+    const currentTrackId = state.entries[state.index]?.trackId ?? null;
+    const currentTrack =
+      currentTrackId === null ? undefined : queueTracks.get().get(currentTrackId);
+    const seedRecording = session.radioSeed;
+    const keepCurrent =
+      session.seed.kind === "track" &&
+      currentTrack !== undefined &&
+      magicQueueKeepsPlayingSong(
+        {
+          trackId: session.seed.id,
+          videoId: seedRecording?.videoId ?? track.ytSong?.videoId,
+          // A session without a radio seed (no radio was read) is matched by its own track.
+          recording:
+            seedRecording === undefined
+              ? {
+                  title: track.title,
+                  artists: track.ytSong?.artists ?? [track.artist],
+                  durationMs: track.durationMs ?? 0,
+                }
+              : {
+                  title: seedRecording.title,
+                  artists: seedRecording.artists,
+                  durationMs: seedRecording.durationMs ?? 0,
+                },
+        },
+        {
+          trackId: currentTrack.id,
+          videoId: currentTrack.ytSong?.videoId,
+          recording: {
+            title: currentTrack.title,
+            artists: currentTrack.ytSong?.artists ?? [currentTrack.artist],
+            durationMs: currentTrack.durationMs ?? 0,
+          },
+        },
+      );
     yield* queue.dispatch(
       {
         type: "play",
@@ -425,6 +469,7 @@ const begin = (session: MagicSession, startedAt: number, track: QueueTrack) =>
         startIndex: 0,
         context: { kind: MAGIC_QUEUE_CONTEXT, id: session.id },
         shuffle: false,
+        ...(keepCurrent ? { keepCurrentAndReplaceUpNext: { trackId: currentTrack.id } } : {}),
       },
       [track],
     );

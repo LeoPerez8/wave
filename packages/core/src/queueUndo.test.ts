@@ -31,38 +31,83 @@ const onB = { key: "2", positionMs: 73_000 };
 
 describe("queueUndo", () => {
   test("a play over a queue with a song current offers going back to it, where its song was", () => {
-    assert.deepEqual(queueUndo(playing, playAlbum, onB), { state: playing, positionMs: 73_000 });
-  });
-
-  test("goes back to the start of the song when the player is on another one", () => {
-    // The player went on to "q" while a search held the queue on "b".
-    assert.deepEqual(queueUndo(playing, playAlbum, { key: "4", positionMs: 12_000 }), {
-      state: playing,
-      positionMs: 0,
-    });
-  });
-
-  test("the first play offers nothing: there's no queue to go back to", () => {
-    assert.equal(queueUndo(EMPTY_QUEUE, playAlbum, onB), null);
-  });
-
-  test("a play of nothing offers nothing: no new queue plays", () => {
-    assert.equal(queueUndo(playing, { type: "play", trackIds: [], context: album }, onB), null);
-  });
-
-  test("a play whose every song is passed over offers nothing: the queue stays", () => {
-    const explicit = (trackId: string): boolean => trackId === "x" || trackId === "y";
-    assert.equal(queueUndo(playing, playAlbum, onB, explicit), null);
-    const one = (trackId: string): boolean => trackId === "x";
-    assert.deepEqual(queueUndo(playing, playAlbum, onB, one), {
+    assert.deepEqual(queueUndo(playing, playAlbum, onB, reduceQueue(playing, playAlbum)), {
       state: playing,
       positionMs: 73_000,
     });
   });
 
+  test("goes back to the start of the song when the player is on another one", () => {
+    // The player went on to "q" while a search held the queue on "b".
+    assert.deepEqual(
+      queueUndo(
+        playing,
+        playAlbum,
+        { key: "4", positionMs: 12_000 },
+        reduceQueue(playing, playAlbum),
+      ),
+      {
+        state: playing,
+        positionMs: 0,
+      },
+    );
+  });
+
+  test("marks a Magic Queue from the current song for playback-preserving Undo", () => {
+    const command: QueueCommand = {
+      type: "play",
+      trackIds: ["b"],
+      context: { kind: "magic", id: "session" },
+      keepCurrentAndReplaceUpNext: { trackId: "b" },
+    };
+    assert.deepEqual(queueUndo(playing, command, onB, reduceQueue(playing, command)), {
+      state: playing,
+      positionMs: 73_000,
+      keepPlayback: true,
+    });
+  });
+
+  test("the first play offers nothing: there's no queue to go back to", () => {
+    assert.equal(queueUndo(EMPTY_QUEUE, playAlbum, onB, reduceQueue(EMPTY_QUEUE, playAlbum)), null);
+  });
+
+  test("a play of nothing offers nothing: no new queue plays", () => {
+    const command: QueueCommand = { type: "play", trackIds: [], context: album };
+    assert.equal(queueUndo(playing, command, onB, reduceQueue(playing, command)), null);
+  });
+
+  test("a play whose every song is passed over offers nothing: the queue stays", () => {
+    const explicit = (trackId: string): boolean => trackId === "x" || trackId === "y";
+    assert.equal(
+      queueUndo(
+        playing,
+        playAlbum,
+        onB,
+        reduceQueue(playing, playAlbum, undefined, undefined, explicit),
+        explicit,
+      ),
+      null,
+    );
+    const one = (trackId: string): boolean => trackId === "x";
+    assert.deepEqual(
+      queueUndo(
+        playing,
+        playAlbum,
+        onB,
+        reduceQueue(playing, playAlbum, undefined, undefined, one),
+        one,
+      ),
+      { state: playing, positionMs: 73_000 },
+    );
+  });
+
   test("only a play offers it, not changes to the same queue", () => {
-    assert.equal(queueUndo(playing, { type: "next" }, onB), null);
-    assert.equal(queueUndo(playing, { type: "playNext", trackIds: ["x"] }, onB), null);
+    assert.equal(
+      queueUndo(playing, { type: "next" }, onB, reduceQueue(playing, { type: "next" })),
+      null,
+    );
+    const command: QueueCommand = { type: "playNext", trackIds: ["x"] };
+    assert.equal(queueUndo(playing, command, onB, reduceQueue(playing, command)), null);
   });
 });
 
@@ -81,6 +126,85 @@ describe("undoneQueue", () => {
     assert.equal(back.nextKey, 7);
     const added = reduceQueue(back, { type: "addToQueue", trackIds: ["z"] }).state;
     assert.equal(added.entries.find((entry) => entry.trackId === "z")?.key, "7");
+  });
+
+  test("restores a Magic Queue's previous queue without changing the kept entry", () => {
+    const before = { ...playing, shuffle: true, repeat: "all" } satisfies QueueState;
+    const command: QueueCommand = {
+      type: "play",
+      context: { kind: "magic", id: "session" },
+      keepCurrentAndReplaceUpNext: { trackId: "b" },
+      trackIds: ["b", "r1", "r2"],
+    };
+    const started = reduceQueue(before, command).state;
+    const undo = queueUndo(before, command, onB, reduceQueue(before, command))!;
+    const restored = undoneQueue(undo, started);
+    assert.deepEqual(
+      { ...restored, nextKey: before.nextKey },
+      { ...before, nextKey: before.nextKey },
+    );
+    assert.equal(restored.nextKey, started.nextKey);
+  });
+
+  test("keeps a played recommendation current and puts the previous Up Next after it", () => {
+    const before = { ...playing, shuffle: true, repeat: "all" } satisfies QueueState;
+    const command: QueueCommand = {
+      type: "play",
+      context: { kind: "magic", id: "session" },
+      keepCurrentAndReplaceUpNext: { trackId: "b" },
+      trackIds: ["b", "r1", "r2"],
+    };
+    const started = reduceQueue(before, command).state;
+    const advanced = reduceQueue(started, { type: "next" }).state;
+    const undo = queueUndo(before, command, onB, reduceQueue(before, command))!;
+    const restored = undoneQueue(undo, advanced);
+    const expected = {
+      ...advanced,
+      context: before.context,
+      entries: [
+        ...advanced.entries.slice(0, advanced.index + 1),
+        ...before.entries.slice(before.index + 1),
+      ],
+      shuffle: before.shuffle,
+      repeat: before.repeat,
+      nextKey: advanced.nextKey,
+    };
+    assert.deepEqual(restored, expected);
+  });
+
+  test("does not mark Undo playback-preserving when the reducer replaced the queue", () => {
+    const before = playing;
+    const command: QueueCommand = {
+      type: "play",
+      trackIds: ["x", "y"],
+      context: { kind: "magic", id: "session" },
+      keepCurrentAndReplaceUpNext: { trackId: "not-current" },
+    };
+    assert.deepEqual(queueUndo(before, command, onB, reduceQueue(before, command)), {
+      state: before,
+      positionMs: 73_000,
+    });
+  });
+
+  test("restores the whole old queue when Undo follows a move back into History", () => {
+    const before = { ...playing, shuffle: true, repeat: "all" } satisfies QueueState;
+    const command: QueueCommand = {
+      type: "play",
+      trackIds: ["b", "r1", "r2"],
+      context: { kind: "magic", id: "session" },
+      keepCurrentAndReplaceUpNext: { trackId: "b" },
+    };
+    const started = reduceQueue(before, command).state;
+    const backInHistory = reduceQueue(started, {
+      type: "jumpTo",
+      key: before.entries[0]!.key,
+    }).state;
+    const undo = queueUndo(before, command, onB, reduceQueue(before, command))!;
+
+    assert.deepEqual(
+      { ...undoneQueue(undo, backInHistory), nextKey: before.nextKey },
+      { ...before, nextKey: before.nextKey },
+    );
   });
 });
 

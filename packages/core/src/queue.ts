@@ -46,6 +46,8 @@ export type QueueCommand =
       readonly context: QueueContext;
       /** Overrides the current shuffle setting (an album's Shuffle button). */
       readonly shuffle?: boolean | undefined;
+      /** Keep this current entry and use the remaining trackIds as replacement Up Next. */
+      readonly keepCurrentAndReplaceUpNext?: { readonly trackId: string } | undefined;
     }
   | { readonly type: "next" }
   | { readonly type: "previous"; readonly positionMs: number }
@@ -175,6 +177,41 @@ const play = (
   kind: Shuffle,
   passOver: PassOver,
 ): QueueResult => {
+  if (command.keepCurrentAndReplaceUpNext !== undefined) {
+    const current = currentEntry(state);
+    if (
+      current !== null &&
+      current.trackId === command.keepCurrentAndReplaceUpNext.trackId &&
+      !passOver(current.trackId)
+    ) {
+      const { entries: recommendations, nextKey } = makeEntries(
+        command.trackIds.slice(1),
+        state.nextKey,
+        () => null,
+      );
+      return result(
+        {
+          ...state,
+          context: command.context,
+          entries: [...state.entries.slice(0, state.index + 1), ...recommendations],
+          shuffle: false,
+          repeat: "off",
+          nextKey,
+        },
+        "keep",
+      );
+    }
+    return play(
+      state,
+      {
+        ...command,
+        keepCurrentAndReplaceUpNext: undefined,
+      },
+      random,
+      kind,
+      passOver,
+    );
+  }
   if (!playReplacesQueue(command, passOver)) return result(state);
   const { trackIds, startIndex: tapped } = playedTracks(command, passOver);
   const { entries, nextKey } = makeEntries(trackIds, state.nextKey, (i) => i);
@@ -196,6 +233,7 @@ const play = (
     entries,
     index,
     shuffle: false,
+    repeat: state.repeat,
     nextKey,
   };
   if (!shuffle) return result(started, "play");

@@ -25,11 +25,13 @@ import { onLibraryChange } from "@/library/libraryChanges";
 import { LibraryStore, type PlayableSongRow } from "@/library/LibraryStore";
 import { libraryQuery, useLibraryQuery } from "@/library/sharedQueries";
 import { showToast } from "@/overlay/toast";
-import { startMagicQueue, startStreamedMagicQueue } from "@/playback/MagicQueue";
-import { runMagicQueueStart } from "@/playback/magicQueueStart";
+import { startMagicQueue } from "@/playback/MagicQueue";
+import { runMagicQueueStart, startMagicQueueFromStream } from "@/playback/magicQueueStart";
+import { appRuntime } from "@/library/runtime";
 
 import { createPlaylistSeedIdsRead, readPlaylistSeedIds } from "./playlistSeedIds";
 import { randomMagicQueueRead } from "./randomMagicQueueRead";
+import { startFromLibraryMatch } from "./streamedMagicQueueStart";
 
 /** What the row draws (Core's `magicQueueShown`), its mixes' songs picked. */
 export type MagicQueueShown = CoreMagicQueueShown<PlayableSongRow>;
@@ -145,4 +147,7 @@ export const startMagicQueueFrom = (song: PlayableSongRow): void =>
 
 /** Starts a Magic Queue from a streamed [song] (a mix's or a playlist's), as its long-press menu's Magic Queue does. */
 export const startStreamedMagicQueueFrom = (song: YtAlbumSong): void =>
-  runMagicQueueStart(startStreamedMagicQueue(song));
+  void startFromLibraryMatch(
+    appRuntime.runPromise(Effect.flatMap(LibraryStore, (store) => store.matchingSong(song))),
+    (found) => startMagicQueueFromStream(song, found),
+  );

@@ -21,9 +21,11 @@ import {
   unsearchedTrackId,
   ytSongArtist,
   ytTrackId,
+  playReplacesQueue,
   type ArtworkPalette,
   type QueueCover,
   type QueueEntry,
+  type QueueCommand,
   type ShuffleSong,
   type UnsearchedSong,
   type YtSong,
@@ -40,6 +42,8 @@ export interface QueueTrack {
   readonly path: string;
   readonly title: string;
   readonly artist: string;
+  /** Track length for the same-recording check when a Library file meets a stream. */
+  readonly durationMs?: number | null;
   /**
    * A YT Music song's artists as YouTube Music credits them, for Now Playing's
    * artist link (Core's `streamedArtistLink`). Missing from a Library track's,
@@ -93,6 +97,7 @@ export const toQueueTrack = (song: PlayableSongRow): QueueTrack => ({
   path: song.path,
   title: song.title,
   artist: song.artist,
+  durationMs: song.durationMs,
   album: song.album,
   artworkPath: song.artworkPath,
   thumbPath: song.thumbPath,
@@ -119,6 +124,7 @@ export const toYtQueueTrack = (song: QueuedYtSong, artwork: CachedArtwork | null
     path: id,
     title: song.title,
     artist: ytSongArtist(song),
+    durationMs: song.durationMs,
     artists: song.artists,
     album: song.album,
     artworkPath:
@@ -253,6 +259,24 @@ export const learnQueueTracks = (
   for (const track of tracks) next.set(track.id, track);
   queueTracks.set(next);
 };
+
+/** Learns tracks for a play without dropping History when it keeps the current entry. */
+export const learnQueueTracksForPlay = (
+  command: QueueCommand,
+  tracks: readonly QueueTrack[],
+  passOver: (trackId: string) => boolean,
+): void =>
+  learnQueueTracks(tracks, {
+    forgetOthers:
+      playReplacesQueue(command, passOver) &&
+      !(command.type === "play" && command.keepCurrentAndReplaceUpNext !== undefined),
+  });
+
+/** Restores old queue tracks while retaining a recommendation the player still holds. */
+export const learnQueueTracksForUndo = (
+  tracks: readonly QueueTrack[],
+  keepPlayback: boolean,
+): void => learnQueueTracks(tracks, { forgetOthers: !keepPlayback });
 
 /** How many YT Music covers are cached at once while a play goes on (`cacheYtCoversLater`). */
 export const YT_COVERS_AT_ONCE = 2;

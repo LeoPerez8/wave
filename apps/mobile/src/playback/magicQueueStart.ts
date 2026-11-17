@@ -12,7 +12,7 @@ import type { SongRow } from "@/library/LibraryStore";
 import { appRuntime } from "@/library/runtime";
 import { showError } from "@/overlay/alert";
 
-import { startMagicQueue, startStreamedMagicQueue } from "./MagicQueue";
+import { startStreamedMagicQueue } from "./MagicQueue";
 
 type AppServices = ManagedRuntime.ManagedRuntime.Services<typeof appRuntime>;
 
@@ -26,15 +26,15 @@ export const runMagicQueueStart = <A, E>(start: Effect.Effect<A, E, AppServices>
 };
 
 /**
- * Starts a Magic Queue from streamed [song]: from the Library's file when
- * [found] (the Library's song it is) has one, as that song's own menu would,
- * else from the stream's radio (Core's `streamedSongMagicStart`).
+ * Starts a Magic Queue from streamed [song]: when [found] (the Library's
+ * matching song) has a file it supplies playback, while the session stays
+ * seeded by [song]; otherwise the stream supplies playback too.
  */
 export const startMagicQueueFromStream = (song: YtSong, found: SongRow | null): void => {
   const start = streamedSongMagicStart(found);
   runMagicQueueStart(
     start.from === "library"
-      ? startMagicQueue(start.seed, [start.track])
+      ? startStreamedMagicQueue(song, false, start.track)
       : startStreamedMagicQueue(song),
   );
 };

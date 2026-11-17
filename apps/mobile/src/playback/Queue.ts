@@ -19,7 +19,6 @@ import {
   playerQueueWindow,
   playerRepeatMode,
   queueSourceAfter,
-  playReplacesQueue,
   queuedPassedOver,
   queuedToast,
   queueUndo,
@@ -82,6 +81,8 @@ import { searchPlaying } from "./playingSearch";
 import {
   evenShuffleSongs,
   learnQueueTracks,
+  learnQueueTracksForPlay,
+  learnQueueTracksForUndo,
   learnTracksToLoad,
   queueTracks,
   type QueueTrack,
@@ -298,7 +299,7 @@ const learnTracks = (
   command: QueueCommand,
   added: readonly QueueTrack[],
   passOver: PassOver,
-): void => learnQueueTracks(added, { forgetOthers: playReplacesQueue(command, passOver) });
+): void => learnQueueTracksForPlay(command, added, passOver);
 
 /** A song's title for a notice, from what the queue knows of it. */
 const titleOf = (trackId: string): string =>
@@ -590,6 +591,7 @@ export const layer = Layer.effect(
         );
         if (command.type === "playerMoved") native = { ...native, currentKey: command.key };
         const before = queueState.get();
+        const reduced = yield* reduce(before, command, passOver);
         // A play offers going back to the queue the player holds (a walk's
         // goes back there too) and withdraws an earlier Undo; a command
         // taking a walk's place keeps its Undo.
@@ -597,7 +599,13 @@ export const layer = Layer.effect(
         if (command.type === "play") {
           withdrawUndo();
           const player = { key: native.currentKey, positionMs: currentPositionMs() };
-          const undo = queueUndo(pending?.walk.before ?? before, command, player, passOver);
+          const undo = queueUndo(
+            pending?.walk.before ?? before,
+            command,
+            player,
+            reduced,
+            passOver,
+          );
           const from = takeBack?.source ?? source;
           takeBack =
             undo === null || from === null
@@ -611,7 +619,6 @@ export const layer = Layer.effect(
           const queued = queuedToast(command, passOver, currentLocalisation().strings);
           if (queued !== null) showQueuedToast(queued, command.type);
         }
-        const reduced = yield* reduce(before, command, passOver);
         const step = startPlayingWalk(before, command, reduced, pending?.walk ?? null);
         // The player went on past songs still unsearched: they're skipped, as a failed search skips them.
         if (command.type === "playerMoved" && step.kind === "go") {
@@ -732,7 +739,7 @@ export const layer = Layer.effect(
           if (offered?.takeBack !== takeBack) return;
           offered = null;
           yield* putBack(takeBack);
-          yield* player.play;
+          if (!takeBack.undo.keepPlayback) yield* player.play;
         }),
       );
 
@@ -745,11 +752,16 @@ export const layer = Layer.effect(
       Effect.gen(function* () {
         waiting = null;
         pausedForSearch = false;
-        learnQueueTracks([...tracks.values()], { forgetOthers: true });
+        learnQueueTracksForUndo([...tracks.values()], undo.keepPlayback === true);
         queueSource.set(source);
         const state = undoneQueue(undo, queueState.get());
         queueState.set(state);
         queueChanged();
+        if (undo.keepPlayback) {
+          yield* sync(state, "undo");
+          yield* applyRepeat(state);
+          return;
+        }
         // Paused while the player changes songs, so the old one doesn't play from its start first.
         yield* player.pause;
         yield* sync(state, "undo");
