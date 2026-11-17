@@ -70,6 +70,15 @@ its Wave account (keyed by Google's `sub`).
 `429` past `maxSignInsPerMinute`: attempts from one address (Cloudflare's `CF-Connecting-IP`,
 counted before the ID token is checked) or sign-ins to one Google account.
 
+Those counts live in one table that keeps only the current minute and holds at most
+`maxSignInKeysPerMinute` addresses and Google accounts together. When it's full, an attempt
+from an address or for a Google account not yet counted that minute answers
+`429 { "error": "limit", "limit": "maxSignInKeysPerMinute" }`, with `Retry-After` until the
+next minute. Keys already counted keep counting toward `maxSignInsPerMinute`, nothing is
+evicted or reset, and sessions already made keep working, since a request with a session never
+touches the table. The cost: a flood from enough addresses can hold back new sign-ins for the
+rest of a minute. That was accepted in #1127 over a table that grows with the flood.
+
 A sign-in that would make a new account is refused, and makes nothing, when the service holds
 `maxAccounts` accounts (`403 { "error": "limit", "limit": "maxAccounts" }`) or has made
 `maxNewAccountsPerDay` in the last 24 hours (`429 { "error": "limit", "limit":
@@ -330,6 +339,7 @@ answer (its over-quota error names the key), nothing cached, and a log line that
 | 413    | `{ "error": "limit", "limit": "<name>" }`                                                      |
 | 429    | `{ "error": "limit", "limit": "maxRequestsPerMinute" }`, with `Retry-After`                    |
 | 429    | `{ "error": "limit", "limit": "maxSignInsPerMinute" }`, with `Retry-After`                     |
+| 429    | `{ "error": "limit", "limit": "maxSignInKeysPerMinute" }`, with `Retry-After`                  |
 | 429    | `{ "error": "limit", "limit": "maxNewAccountsPerDay" }`, with `Retry-After`                    |
 | 429    | `{ "error": "limit", "limit": "maxRequestsPerAddressPerMinute" }`, with `Retry-After`          |
 | 429    | `{ "error": "limit", "limit": "maxFailedLookupsPerAddressPerMinute" }`, with `Retry-After`     |
@@ -363,6 +373,7 @@ answer (its over-quota error names the key), nothing cached, and a log line that
 | `maxDismissedSuggestions`                 | 50,000    |                                                      |
 | `maxRequestsPerMinute`                    | 120       | per session                                          |
 | `maxSignInsPerMinute`                     | 10        | `POST /v1/session`, per address and per account      |
+| `maxSignInKeysPerMinute`                  | 1,000     | addresses and accounts counted in a minute, together |
 | `maxAccounts`                             | 10        | accounts the service holds at once                   |
 | `maxNewAccountsPerDay`                    | 10        | new accounts in any 24 hours                         |
 | `maxRequestsPerAddressPerMinute`          | 600       | every route, per address                             |

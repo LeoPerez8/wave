@@ -28,6 +28,15 @@ export const SYNC_LIMITS = {
    */
   maxSignInsPerMinute: 10,
   /**
+   * Address and Google-account keys `POST /v1/session` counts in the current
+   * minute, together. Past it, a sign-in that needs a new key answers 429
+   * until the next minute; keys already counted keep their counts, and
+   * sessions already made keep working. A flood from many addresses can hold
+   * new sign-ins back for the rest of that minute: an accepted tradeoff for a
+   * table that can't grow without bound.
+   */
+  maxSignInKeysPerMinute: 1_000,
+  /**
    * Requests per minute from one address to any route, counted before the
    * database. Sized for a carrier that puts many phones behind one address.
    * `ADDRESS_LIMITER` in `wrangler.toml` holds the same number. Cloudflare's
