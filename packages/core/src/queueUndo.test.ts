@@ -42,6 +42,21 @@ describe("queueUndo", () => {
     });
   });
 
+  test("marks a Magic Queue from the current song for playback-preserving Undo", () => {
+    const command: QueueCommand = {
+      type: "play",
+      trackIds: ["b"],
+      context: { kind: "magic", id: "session" },
+      keepCurrentIfSame: true,
+      replaceUpNextWith: ["r1", "r2"],
+    };
+    assert.deepEqual(queueUndo(playing, command, onB), {
+      state: playing,
+      positionMs: 73_000,
+      keepPlayback: true,
+    });
+  });
+
   test("the first play offers nothing: there's no queue to go back to", () => {
     assert.equal(queueUndo(EMPTY_QUEUE, playAlbum, onB), null);
   });
@@ -81,6 +96,52 @@ describe("undoneQueue", () => {
     assert.equal(back.nextKey, 7);
     const added = reduceQueue(back, { type: "addToQueue", trackIds: ["z"] }).state;
     assert.equal(added.entries.find((entry) => entry.trackId === "z")?.key, "7");
+  });
+
+  test("restores a Magic Queue's previous queue without changing the kept entry", () => {
+    const before = { ...playing, shuffle: true, repeat: "all" } satisfies QueueState;
+    const command: QueueCommand = {
+      type: "play",
+      trackIds: ["b"],
+      context: { kind: "magic", id: "session" },
+      keepCurrentIfSame: true,
+      replaceUpNextWith: ["r1", "r2"],
+    };
+    const started = reduceQueue(before, command).state;
+    const undo = queueUndo(before, command, onB)!;
+    const restored = undoneQueue(undo, started);
+    assert.deepEqual(
+      { ...restored, nextKey: before.nextKey },
+      { ...before, nextKey: before.nextKey },
+    );
+    assert.equal(restored.nextKey, started.nextKey);
+  });
+
+  test("keeps a played recommendation current and puts the previous Up Next after it", () => {
+    const before = { ...playing, shuffle: true, repeat: "all" } satisfies QueueState;
+    const command: QueueCommand = {
+      type: "play",
+      trackIds: ["b"],
+      context: { kind: "magic", id: "session" },
+      keepCurrentIfSame: true,
+      replaceUpNextWith: ["r1", "r2"],
+    };
+    const started = reduceQueue(before, command).state;
+    const advanced = reduceQueue(started, { type: "next" }).state;
+    const undo = queueUndo(before, command, onB)!;
+    const restored = undoneQueue(undo, advanced);
+    const expected = {
+      ...advanced,
+      context: before.context,
+      entries: [
+        ...advanced.entries.slice(0, advanced.index + 1),
+        ...before.entries.slice(before.index + 1),
+      ],
+      shuffle: before.shuffle,
+      repeat: before.repeat,
+      nextKey: advanced.nextKey,
+    };
+    assert.deepEqual(restored, expected);
   });
 });
 
