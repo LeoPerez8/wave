@@ -426,6 +426,9 @@ jobs:
       - name: Action pins
         run: scripts/ci/step.sh "Action pins" node scripts/ci/action-pins.ts
 
+      - name: Untrusted code
+        run: scripts/ci/step.sh "Untrusted code" node scripts/ci/untrusted-code.ts
+
       - name: Test
         env:
           PACKAGES_FILTER: ${{ steps.packages.outputs.filter }}

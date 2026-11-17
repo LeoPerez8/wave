@@ -29,6 +29,15 @@ export const SYNC_LIMITS = {
    */
   maxSignInsPerMinute: 10,
   /**
+   * Address and Google-account keys `POST /v1/session` counts in the current
+   * minute, together. Past it, a sign-in that needs a new key answers 429
+   * until the next minute; keys already counted keep their counts, and
+   * sessions already made keep working. A flood from many addresses can hold
+   * new sign-ins back for the rest of that minute: an accepted tradeoff for a
+   * table that can't grow without bound.
+   */
+  maxSignInKeysPerMinute: 1_000,
+  /**
    * Requests per minute from one address to any route, counted before the
    * database. Sized for a carrier that puts many phones behind one address.
    * `ADDRESS_LIMITER` in `wrangler.toml` holds the same number. Cloudflare's
@@ -45,11 +54,14 @@ export const SYNC_LIMITS = {
   maxFailedLookupsPerAddressPerMinute: 20,
   failedLookupBlockSeconds: 300,
   /**
-   * Wave accounts the service holds, and new ones it makes in any 24 hours.
-   * Checked only when a sign-in would make an account: existing accounts
-   * always sign in.
+   * Wave accounts the service holds at once, one per Google subject, taken
+   * first come and freed when an account is deleted; and new ones it makes in
+   * any 24 hours. Checked only when a sign-in would make an account: existing
+   * accounts always sign in, from any number of phones. The daily count looks
+   * only at accounts that still exist, so it doesn't cap registrations after
+   * deletions.
    */
-  maxAccounts: 100,
+  maxAccounts: 10,
   maxNewAccountsPerDay: 10,
   /**
    * Requests one account may send the Genius routes per minute, counted
