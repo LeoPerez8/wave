@@ -44,11 +44,14 @@ export const SYNC_LIMITS = {
   maxFailedLookupsPerAddressPerMinute: 20,
   failedLookupBlockSeconds: 300,
   /**
-   * Wave accounts the service holds, and new ones it makes in any 24 hours.
-   * Checked only when a sign-in would make an account: existing accounts
-   * always sign in.
+   * Wave accounts the service holds at once, one per Google subject, taken
+   * first come and freed when an account is deleted; and new ones it makes in
+   * any 24 hours. Checked only when a sign-in would make an account: existing
+   * accounts always sign in, from any number of phones. The daily count looks
+   * only at accounts that still exist, so it doesn't cap registrations after
+   * deletions.
    */
-  maxAccounts: 100,
+  maxAccounts: 10,
   maxNewAccountsPerDay: 10,
   /**
    * Requests one account may send the Genius routes per minute, counted
