@@ -356,11 +356,51 @@ export const startMagicQueue = (
   };
 };
 
-/** Whether a manual song seed is the exact track already playing. */
+/** The known stable identities of a song used when a Magic Queue starts. */
+export interface MagicQueueSongIdentity {
+  readonly trackId: string;
+  readonly videoId?: string | null;
+  readonly recordingKey?: string | null;
+  readonly recording?: {
+    readonly title: string;
+    readonly artists: readonly string[];
+    readonly durationMs: number;
+  };
+}
+
+/** Whether a manual song seed is the playing recording, including across sources. */
 export const magicQueueKeepsPlayingSong = (
-  seedTrackId: string,
-  playingTrackId: string | null,
-): boolean => playingTrackId !== null && seedTrackId === playingTrackId;
+  seed: string | MagicQueueSongIdentity,
+  playing: string | MagicQueueSongIdentity | null,
+): boolean => {
+  if (playing === null) return false;
+  if (typeof seed === "string" && typeof playing === "string") return seed === playing;
+  const seedIdentity = typeof seed === "string" ? { trackId: seed } : seed;
+  const playingIdentity = typeof playing === "string" ? { trackId: playing } : playing;
+  return (
+    seedIdentity.trackId === playingIdentity.trackId ||
+    (seedIdentity.videoId !== undefined &&
+      seedIdentity.videoId !== null &&
+      seedIdentity.videoId === playingIdentity.videoId) ||
+    (seedIdentity.recordingKey !== undefined &&
+      seedIdentity.recordingKey !== null &&
+      seedIdentity.recordingKey === playingIdentity.recordingKey) ||
+    (seedIdentity.recording !== undefined &&
+      playingIdentity.recording !== undefined &&
+      recordingMatches(
+        {
+          title: seedIdentity.recording.title,
+          artist: seedIdentity.recording.artists.join(", "),
+          durationMs: seedIdentity.recording.durationMs,
+        },
+        {
+          title: playingIdentity.recording.title,
+          artists: playingIdentity.recording.artists,
+          durationMs: playingIdentity.recording.durationMs,
+        },
+      ))
+  );
+};
 
 /** Where a streamed song's Magic Queue starts (`streamedSongMagicStart`). */
 export type StreamedSongMagicStart<T> =
@@ -399,6 +439,8 @@ export type SearchSongTap<S, T> =
       readonly from: "library";
       readonly seed: MagicSeed;
       readonly track: T;
+      /** The picked stream remains the session seed even when its file plays. */
+      readonly song?: S;
     }
   /** Its Magic Queue, from the stream's own radio (`startStreamedMagicQueue`). */
   | { readonly play: "magicQueue"; readonly from: "stream"; readonly song: S }
@@ -427,7 +469,12 @@ export const searchSongTap = <
       ? { play: "nothing" }
       : { play: "alone", track: file };
   const start = streamedSongMagicStart(file);
-  if (start.from === "library") return { play: "magicQueue", ...start };
+  if (start.from === "library")
+    return {
+      play: "magicQueue",
+      ...start,
+      ...(song.source === "stream" ? { song: song.song } : {}),
+    };
   // Only a streamed song lacks a file here: a Library song without one downloads above.
   return song.source === "stream"
     ? { play: "magicQueue", from: "stream", song: song.song }
@@ -447,10 +494,13 @@ export const startStreamedMagicQueue = (
     id,
     ytShare,
     faithful = false,
+    firstTrackId,
   }: {
     readonly id: string;
     readonly ytShare?: number;
     readonly faithful?: boolean;
+    /** Queue id of a local file that will play for this streamed seed. */
+    readonly firstTrackId?: string;
   },
 ): { readonly session: MagicSession; readonly first: string } => {
   const trackId = ytTrackId(song.videoId);
@@ -477,7 +527,9 @@ export const startStreamedMagicQueue = (
     },
   );
   // A song seed always has its song.
-  return started!;
+  return firstTrackId === undefined
+    ? started!
+    : { ...started!, session: { ...started!.session, used: [firstTrackId] } };
 };
 
 /** How many songs a list seed keeps to draw its radios from. */

@@ -65,6 +65,56 @@ describe("Starting a Magic Queue", () => {
     assert.equal(magicQueueKeepsPlayingSong("track-1", null), false);
   });
 
+  test("keeps the playing recording across sources by video id or recording key", () => {
+    assert.equal(
+      magicQueueKeepsPlayingSong(
+        { trackId: "12", videoId: "video", recordingKey: "album\u001fsong" },
+        { trackId: "yt:video", videoId: "video" },
+      ),
+      true,
+    );
+    assert.equal(
+      magicQueueKeepsPlayingSong(
+        { trackId: "yt:video", videoId: "video" },
+        { trackId: "12", videoId: "video", recordingKey: "album\u001fsong" },
+      ),
+      true,
+    );
+    assert.equal(
+      magicQueueKeepsPlayingSong(
+        { trackId: "12", recordingKey: "album\u001fsong" },
+        { trackId: "13", recordingKey: "album\u001flive" },
+      ),
+      false,
+    );
+    assert.equal(
+      magicQueueKeepsPlayingSong(
+        {
+          trackId: "yt:video",
+          recording: { title: "Midnight City", artists: ["M83"], durationMs: 244_000 },
+        },
+        {
+          trackId: "12",
+          recording: { title: "Midnight City", artists: ["M83"], durationMs: 245_000 },
+        },
+      ),
+      true,
+    );
+    assert.equal(
+      magicQueueKeepsPlayingSong(
+        {
+          trackId: "yt:video",
+          recording: { title: "Midnight City (Live)", artists: ["M83"], durationMs: 244_000 },
+        },
+        {
+          trackId: "12",
+          recording: { title: "Midnight City", artists: ["M83"], durationMs: 244_000 },
+        },
+      ),
+      false,
+    );
+  });
+
   test("faithfulness survives saving while older and ordinary sessions remain unfaithful", () => {
     const seed = song("s1", "Seed Artist");
     const ordinary = startMagicQueue(SONG_SEED, [seed], { id: "ordinary", random: first })!.session;
@@ -585,6 +635,16 @@ describe("a Magic Queue from a streamed song", () => {
     });
   });
 
+  test("keeps the stream's radio seed while counting its Library file as the started song", () => {
+    const { session } = startStreamedMagicQueue(streamed, {
+      id: "s2",
+      firstTrackId: "12",
+    });
+    assert.equal(session.seed.id, "yt:vid1");
+    assert.equal(session.radioSeed?.videoId, "vid1");
+    assert.deepEqual(session.used, ["12"]);
+  });
+
   test("starts from the stream when the Library hasn't the song, or has it without a file", () => {
     assert.deepEqual(streamedSongMagicStart(null), { from: "stream" });
     assert.deepEqual(streamedSongMagicStart({ id: 12, title: "Midnight City", path: null }), {
@@ -635,6 +695,7 @@ describe("searchSongTap", () => {
         from: "library",
         seed: { kind: "track", id: "12", title: "Midnight City" },
         track: file,
+        song: stream,
       },
     );
   });

@@ -181,6 +181,13 @@ export const WHOLE_LIBRARY: Record<string, WholeLibraryException> = {
       "Explicitly opened mix menu resolves downloads and playlist entries; not an always-mounted control.",
     capabilities: ["ytmusic/libraryFinder.ts#currentLibraryFinder"],
   },
+  "home/magicQueueSection.ts#startStreamedMagicQueueFrom": {
+    howOften:
+      "Once per Discover Magic Queue tile press; finder reads are shared per Library version.",
+    reason:
+      "The explicit start resolves its picked stream to a Library file before playback, while keeping the session seeded by the stream.",
+    capabilities: ["ytmusic/libraryFinder.ts#currentLibraryFinder"],
+  },
   "home/discoverMixes.ts#useLibraryTracks": {
     howOften:
       "Once per shared songs-query version while a mix page or menu is visible; Home does not follow these rows.",
