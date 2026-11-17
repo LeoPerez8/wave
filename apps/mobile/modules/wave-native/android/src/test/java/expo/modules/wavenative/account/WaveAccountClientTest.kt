@@ -72,6 +72,7 @@ class WaveAccountClientTest {
     val limits = listOf(
       Reply(403, """{"error":"limit","limit":"maxAccounts"}""") to WaveAccountFailure.ACCOUNTS_FULL,
       Reply(429, """{"error":"limit","limit":"maxNewAccountsPerDay"}""") to WaveAccountFailure.NEW_ACCOUNTS_PAUSED,
+      Reply(403, """{"error":"limit","limit":"maxSessionsPerAccount"}""") to WaveAccountFailure.SESSIONS_FULL,
       Reply(429, """{"error":"limit","limit":"maxSignInsPerMinute"}""") to WaveAccountFailure.REJECTED,
     )
     for ((reply, expected) in limits) {
@@ -79,6 +80,22 @@ class WaveAccountClientTest {
         assertEquals(expected, failure { client().signIn(service.url, ana) })
         assertEquals(WaveSessionState.SignedOut, client().session())
       }
+    }
+  }
+
+  @Test fun `a sign-in past the account's sessions keeps the phone's session and sends it nowhere`() {
+    FakeWaveService { Reply(403, """{"error":"limit","limit":"maxSessionsPerAccount"}""") }.use { service ->
+      val kept = WaveSessionState.SignedIn(service.url, "fixture-session-token", anaAccount)
+      WaveAccountStore(file, TestCipher.sameKey).save(kept)
+      val heard = mutableListOf<WaveSessionState>()
+      val client = client().also { it.subscribe { state -> heard.add(state) } }
+      assertEquals(WaveAccountFailure.SESSIONS_FULL, failure { client.signIn(service.url, ana) })
+      assertEquals(kept, client().session())
+      assertTrue(heard.isEmpty())
+      val request = service.received.single()
+      assertEquals(null, request.headers["authorization"])
+      assertFalse(request.body.contains("fixture-session-token"))
+      assertFalse(WaveAccountFailure.SESSIONS_FULL.notice.contains("fixture-session-token"))
     }
   }
 

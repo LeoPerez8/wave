@@ -46,6 +46,8 @@ const signInFailure = (error: unknown): WaveSignInFailure => {
       return "accountsFull";
     case "ERR_WAVE_NEW_ACCOUNTS_PAUSED":
       return "newAccountsPaused";
+    case "ERR_WAVE_SESSIONS_FULL":
+      return "sessionsFull";
     default:
       return "failed";
   }
