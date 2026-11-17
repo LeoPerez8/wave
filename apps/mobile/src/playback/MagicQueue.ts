@@ -378,7 +378,8 @@ export const startMagicQueue = (
  * Starts a Magic Queue from a streamed YT Music [song] (its long-press menu
  * in Search, a YT Music list, a Discover mix or the queue): as a Library
  * song's does, it replaces the queue (with Undo) with the song, and the
- * first 9 recommendations follow from its radio (Core's
+ * first 9 recommendations follow from its radio, even when [libraryTrack]
+ * supplies the audio (Core's
  * `startStreamedMagicQueue`).
  */
 export const startStreamedMagicQueue = (song: YtSong, faithful = false, libraryTrack?: SongRow) =>
