@@ -22,6 +22,7 @@ import {
   magicPlaySignal,
   magicQueueEdits,
   magicQueueLabel,
+  magicQueueKeepsPlayingSong,
   magicQueueShare,
   magicSignal,
   parseMagicSession,
@@ -418,6 +419,10 @@ const begin = (session: MagicSession, startedAt: number, track: QueueTrack) =>
     failedBatch.set(null);
     emptyBatch.set(null);
     const queue = yield* Queue;
+    const state = queueState.get();
+    const currentTrackId = state.entries[state.index]?.trackId ?? null;
+    const keepCurrent =
+      session.seed.kind === "track" && magicQueueKeepsPlayingSong(track.id, currentTrackId);
     yield* queue.dispatch(
       {
         type: "play",
@@ -425,6 +430,7 @@ const begin = (session: MagicSession, startedAt: number, track: QueueTrack) =>
         startIndex: 0,
         context: { kind: MAGIC_QUEUE_CONTEXT, id: session.id },
         shuffle: false,
+        ...(keepCurrent ? { keepCurrentIfSame: true, replaceUpNextWith: [] } : {}),
       },
       [track],
     );

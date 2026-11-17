@@ -356,6 +356,12 @@ export const startMagicQueue = (
   };
 };
 
+/** Whether a manual song seed is the exact track already playing. */
+export const magicQueueKeepsPlayingSong = (
+  seedTrackId: string,
+  playingTrackId: string | null,
+): boolean => playingTrackId !== null && seedTrackId === playingTrackId;
+
 /** Where a streamed song's Magic Queue starts (`streamedSongMagicStart`). */
 export type StreamedSongMagicStart<T> =
   /** From the Library's file, seeded by its track, as that song's own menu would. */

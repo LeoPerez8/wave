@@ -21,6 +21,7 @@ import {
   magicRadioArtists,
   magicQueueEdits,
   magicQueueLabel,
+  magicQueueKeepsPlayingSong,
   magicQueueShare,
   magicSignal,
   magicPlaySignal,
@@ -58,6 +59,12 @@ const songsBy = (prefix: string, artist: string, count: number, genre = "Rock"):
   Array.from({ length: count }, (_, i) => song(`${prefix}${i + 1}`, artist, genre));
 
 describe("Starting a Magic Queue", () => {
+  test("keeps only a seed with the playing track's exact id", () => {
+    assert.equal(magicQueueKeepsPlayingSong("track-1", "track-1"), true);
+    assert.equal(magicQueueKeepsPlayingSong("track-1", "track-2"), false);
+    assert.equal(magicQueueKeepsPlayingSong("track-1", null), false);
+  });
+
   test("faithfulness survives saving while older and ordinary sessions remain unfaithful", () => {
     const seed = song("s1", "Seed Artist");
     const ordinary = startMagicQueue(SONG_SEED, [seed], { id: "ordinary", random: first })!.session;
