@@ -70,11 +70,23 @@ its Wave account (keyed by Google's `sub`).
 `429` past `maxSignInsPerMinute`: attempts from one address (Cloudflare's `CF-Connecting-IP`,
 counted before the ID token is checked) or sign-ins to one Google account.
 
+Those counts live in one table that keeps only the current minute and holds at most
+`maxSignInKeysPerMinute` addresses and Google accounts together. When it's full, an attempt
+from an address or for a Google account not yet counted that minute answers
+`429 { "error": "limit", "limit": "maxSignInKeysPerMinute" }`, with `Retry-After` until the
+next minute. Keys already counted keep counting toward `maxSignInsPerMinute`, nothing is
+evicted or reset, and sessions already made keep working, since a request with a session never
+touches the table. The cost: a flood from enough addresses can hold back new sign-ins for the
+rest of a minute. That was accepted in #1127 over a table that grows with the flood.
+
 A sign-in that would make a new account is refused, and makes nothing, when the service holds
 `maxAccounts` accounts (`403 { "error": "limit", "limit": "maxAccounts" }`) or has made
 `maxNewAccountsPerDay` in the last 24 hours (`429 { "error": "limit", "limit":
 "maxNewAccountsPerDay" }`, with `Retry-After` until the oldest of them is a day old). Existing
-accounts sign in either way.
+accounts sign in either way. An account is one Google subject, so more phones and repeat
+sign-ins take no new place, and a deleted account's place goes to the next new sign-in. The
+daily count only sees accounts that still exist, so it isn't a cap on registrations after
+deletions.
 
 The service keeps only a SHA-256 of the session token. A session lasts until it is ended,
 the account is deleted, or it goes 90 days without a request: then it answers
@@ -327,6 +339,7 @@ answer (its over-quota error names the key), nothing cached, and a log line that
 | 413    | `{ "error": "limit", "limit": "<name>" }`                                                      |
 | 429    | `{ "error": "limit", "limit": "maxRequestsPerMinute" }`, with `Retry-After`                    |
 | 429    | `{ "error": "limit", "limit": "maxSignInsPerMinute" }`, with `Retry-After`                     |
+| 429    | `{ "error": "limit", "limit": "maxSignInKeysPerMinute" }`, with `Retry-After`                  |
 | 429    | `{ "error": "limit", "limit": "maxNewAccountsPerDay" }`, with `Retry-After`                    |
 | 429    | `{ "error": "limit", "limit": "maxRequestsPerAddressPerMinute" }`, with `Retry-After`          |
 | 429    | `{ "error": "limit", "limit": "maxFailedLookupsPerAddressPerMinute" }`, with `Retry-After`     |
@@ -360,7 +373,8 @@ answer (its over-quota error names the key), nothing cached, and a log line that
 | `maxDismissedSuggestions`                 | 50,000    |                                                      |
 | `maxRequestsPerMinute`                    | 120       | per session                                          |
 | `maxSignInsPerMinute`                     | 10        | `POST /v1/session`, per address and per account      |
-| `maxAccounts`                             | 100       | accounts the service holds                           |
+| `maxSignInKeysPerMinute`                  | 1,000     | addresses and accounts counted in a minute, together |
+| `maxAccounts`                             | 10        | accounts the service holds at once                   |
 | `maxNewAccountsPerDay`                    | 10        | new accounts in any 24 hours                         |
 | `maxRequestsPerAddressPerMinute`          | 600       | every route, per address                             |
 | `maxFailedLookupsPerAddressPerMinute`     | 20        | lookups that find no session, per address            |
@@ -396,6 +410,29 @@ Past it, it logs a line starting `wave usage warning:` with `console.error`, onc
 the same kind of line, once a day. Search the Worker's logs for `wave usage warning` to see
 them; a Cloudflare notification on that line emails the owner. Without its secrets the watch
 is skipped. Change the threshold in `src/limits.ts` and deploy.
+
+Each run first deletes the `usage_warnings` rows older than today and the 29 UTC days before
+it, so with today's two kinds of line the table holds at most 60 rows. That cleanup runs with
+or without the secrets and whether or not Cloudflare answers; if it fails, the run logs a note
+and still reads the figures. There's no route that runs it.
+
+### Operational tables
+
+The rows the service keeps for itself, apart from the synced Library, and what bounds each:
+
+| Table               | Bound                                                                                      |
+| ------------------- | ------------------------------------------------------------------------------------------ |
+| `usage_warnings`    | today and the 29 UTC days before, deleted by the usage watch                               |
+| `upstream_usage`    | one row per account and provider count (three today), reset by the next UTC day's request  |
+| `sign_in_windows`   | `maxSignInKeysPerMinute` keys of the current minute; a sign-in deletes older minutes' rows |
+| `sessions`          | ended by sign-out, 90 idle days or account deletion (`POST /v1/session`)                   |
+| `accounts`          | `maxAccounts`                                                                              |
+| `soulseek_accounts` | one row per account                                                                        |
+| `migrations`        | one row per migration                                                                      |
+
+The usage watch deletes `usage_warnings` rows and nothing else. Sessions, sign-in counts,
+tombstones and synced rows are bounded by the session, sign-in and table limits above, never by
+it; it never resets a provider's count for the day either.
 
 Turso's usage (rows read and written, storage) is checked by hand once a month, in Turso's
 dashboard. The Worker holds no Turso Platform token: one can do far more than read usage, and
@@ -518,7 +555,8 @@ By hand, the steps are:
 
 4. Migrate and deploy. The `deploy` script runs the pending migrations against the database
    in your shell's environment, then `wrangler deploy` (it needs `run`: `pnpm deploy` is a
-   pnpm command of its own):
+   pnpm command of its own). It stops before `wrangler deploy` when the database holds more
+   than `maxAccounts` accounts, and removes none:
 
    ```sh
    TURSO_DATABASE_URL=libsql://… TURSO_AUTH_TOKEN=… pnpm --filter @wave/sync run deploy
