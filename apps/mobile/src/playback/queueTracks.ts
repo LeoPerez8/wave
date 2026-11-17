@@ -41,7 +41,7 @@ export interface QueueTrack {
   readonly title: string;
   readonly artist: string;
   /** Track length for the same-recording check when a Library file meets a stream. */
-  readonly durationMs?: number;
+  readonly durationMs?: number | null;
   /**
    * A YT Music song's artists as YouTube Music credits them, for Now Playing's
    * artist link (Core's `streamedArtistLink`). Missing from a Library track's,

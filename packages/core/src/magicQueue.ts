@@ -440,7 +440,7 @@ export type SearchSongTap<S, T> =
       readonly seed: MagicSeed;
       readonly track: T;
       /** The picked stream remains the session seed even when its file plays. */
-      readonly song: S;
+      readonly song?: S;
     }
   /** Its Magic Queue, from the stream's own radio (`startStreamedMagicQueue`). */
   | { readonly play: "magicQueue"; readonly from: "stream"; readonly song: S }

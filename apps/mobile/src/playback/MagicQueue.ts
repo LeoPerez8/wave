@@ -381,11 +381,7 @@ export const startMagicQueue = (
  * first 9 recommendations follow from its radio (Core's
  * `startStreamedMagicQueue`).
  */
-export const startStreamedMagicQueue = (
-  song: YtSong,
-  faithful = false,
-  libraryTrack?: SongRow,
-) =>
+export const startStreamedMagicQueue = (song: YtSong, faithful = false, libraryTrack?: SongRow) =>
   Effect.gen(function* () {
     if (!ytMusicEnabled()) return;
     const startedAt = Date.now();
@@ -400,7 +396,7 @@ export const startStreamedMagicQueue = (
     // Nothing of the Library was read for it: the first pick waits for the snapshot's.
     startingLibrary = { songs: [], artists: [] };
     const track =
-      libraryTrack !== undefined && libraryTrack.path !== null
+      libraryTrack !== undefined && songHasFile(libraryTrack)
         ? toQueueTrack(libraryTrack)
         : yield* ytQueueTrack(song);
     yield* begin(session, startedAt, track);
@@ -431,7 +427,8 @@ const begin = (session: MagicSession, startedAt: number, track: QueueTrack) =>
     const queue = yield* Queue;
     const state = queueState.get();
     const currentTrackId = state.entries[state.index]?.trackId ?? null;
-    const currentTrack = currentTrackId === null ? undefined : queueTracks.get().get(currentTrackId);
+    const currentTrack =
+      currentTrackId === null ? undefined : queueTracks.get().get(currentTrackId);
     const seedRecording = session.radioSeed;
     const keepCurrent =
       session.seed.kind === "track" &&
@@ -446,7 +443,7 @@ const begin = (session: MagicSession, startedAt: number, track: QueueTrack) =>
               : {
                   title: seedRecording.title,
                   artists: seedRecording.artists,
-                  durationMs: seedRecording.durationMs,
+                  durationMs: seedRecording.durationMs ?? 0,
                 },
         },
         {
