@@ -74,7 +74,10 @@ A sign-in that would make a new account is refused, and makes nothing, when the 
 `maxAccounts` accounts (`403 { "error": "limit", "limit": "maxAccounts" }`) or has made
 `maxNewAccountsPerDay` in the last 24 hours (`429 { "error": "limit", "limit":
 "maxNewAccountsPerDay" }`, with `Retry-After` until the oldest of them is a day old). Existing
-accounts sign in either way.
+accounts sign in either way. An account is one Google subject, so more phones and repeat
+sign-ins take no new place, and a deleted account's place goes to the next new sign-in. The
+daily count only sees accounts that still exist, so it isn't a cap on registrations after
+deletions.
 
 The service keeps only a SHA-256 of the session token. A session lasts until it is ended,
 the account is deleted, or it goes 90 days without a request: then it answers
@@ -360,7 +363,7 @@ answer (its over-quota error names the key), nothing cached, and a log line that
 | `maxDismissedSuggestions`                 | 50,000    |                                                      |
 | `maxRequestsPerMinute`                    | 120       | per session                                          |
 | `maxSignInsPerMinute`                     | 10        | `POST /v1/session`, per address and per account      |
-| `maxAccounts`                             | 100       | accounts the service holds                           |
+| `maxAccounts`                             | 10        | accounts the service holds at once                   |
 | `maxNewAccountsPerDay`                    | 10        | new accounts in any 24 hours                         |
 | `maxRequestsPerAddressPerMinute`          | 600       | every route, per address                             |
 | `maxFailedLookupsPerAddressPerMinute`     | 20        | lookups that find no session, per address            |
@@ -541,7 +544,8 @@ By hand, the steps are:
 
 4. Migrate and deploy. The `deploy` script runs the pending migrations against the database
    in your shell's environment, then `wrangler deploy` (it needs `run`: `pnpm deploy` is a
-   pnpm command of its own):
+   pnpm command of its own). It stops before `wrangler deploy` when the database holds more
+   than `maxAccounts` accounts, and removes none:
 
    ```sh
    TURSO_DATABASE_URL=libsql://… TURSO_AUTH_TOKEN=… pnpm --filter @wave/sync run deploy
