@@ -437,10 +437,15 @@ const begin = (session: MagicSession, startedAt: number, track: QueueTrack) =>
       magicQueueKeepsPlayingSong(
         {
           trackId: session.seed.id,
-          videoId: seedRecording?.videoId,
+          videoId: seedRecording?.videoId ?? track.ytSong?.videoId,
+          // A session without a radio seed (no radio was read) is matched by its own track.
           recording:
             seedRecording === undefined
-              ? undefined
+              ? {
+                  title: track.title,
+                  artists: track.ytSong?.artists ?? [track.artist],
+                  durationMs: track.durationMs ?? 0,
+                }
               : {
                   title: seedRecording.title,
                   artists: seedRecording.artists,

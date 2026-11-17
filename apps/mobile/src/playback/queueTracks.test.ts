@@ -10,6 +10,8 @@ import {
   YT_COVERS_AT_ONCE,
   cacheYtCoversLater,
   learnQueueTracks,
+  learnQueueTracksForPlay,
+  learnQueueTracksForUndo,
   learnTracksToLoad,
   learnUnknownQueueTracks,
   lookupFailed,
@@ -104,6 +106,30 @@ describe("queue tracks", () => {
     assert.equal(toQueueTrack({ ...song(2), explicit: "clean" }).explicit, false);
     assert.equal(toQueueTrack(song(3)).explicit, false);
     assert.equal(toYtQueueTrack({ ...ytSong("x"), explicit: true }, null).explicit, true);
+  });
+
+  test("a keep start retains History tracks while learning its recommendations", () => {
+    learnQueueTracks([song(1), song(2)].map(toQueueTrack), { forgetOthers: true });
+    const command = {
+      type: "play",
+      trackIds: ["3"],
+      context: { kind: "magic", id: "session" },
+      keepCurrentAndReplaceUpNext: { trackId: "3" },
+    } as const;
+
+    learnQueueTracksForPlay(command, [song(3), song(4), song(5)].map(toQueueTrack), () => false);
+
+    assert.deepEqual([...queueTracks.get().keys()], ["1", "2", "3", "4", "5"]);
+    assert.equal(queueTracks.get().get("1")?.title, "Song 1");
+  });
+
+  test("Undo after a keep start retains the recommendation still playing", () => {
+    learnQueueTracks([song(3)].map(toQueueTrack), { forgetOthers: true });
+
+    learnQueueTracksForUndo([song(1), song(2)].map(toQueueTrack), true);
+
+    assert.deepEqual([...queueTracks.get().keys()], ["3", "1", "2"]);
+    assert.equal(queueTracks.get().get("3")?.title, "Song 3");
   });
 
   test("a YT Music song plays by its track id, with its credit and cached artwork", () => {

@@ -19,7 +19,6 @@ import {
   playerQueueWindow,
   playerRepeatMode,
   queueSourceAfter,
-  playReplacesQueue,
   queuedPassedOver,
   queuedToast,
   queueUndo,
@@ -82,6 +81,8 @@ import { searchPlaying } from "./playingSearch";
 import {
   evenShuffleSongs,
   learnQueueTracks,
+  learnQueueTracksForPlay,
+  learnQueueTracksForUndo,
   learnTracksToLoad,
   queueTracks,
   type QueueTrack,
@@ -298,7 +299,7 @@ const learnTracks = (
   command: QueueCommand,
   added: readonly QueueTrack[],
   passOver: PassOver,
-): void => learnQueueTracks(added, { forgetOthers: playReplacesQueue(command, passOver) });
+): void => learnQueueTracksForPlay(command, added, passOver);
 
 /** A song's title for a notice, from what the queue knows of it. */
 const titleOf = (trackId: string): string =>
@@ -751,7 +752,7 @@ export const layer = Layer.effect(
       Effect.gen(function* () {
         waiting = null;
         pausedForSearch = false;
-        learnQueueTracks([...tracks.values()], { forgetOthers: true });
+        learnQueueTracksForUndo([...tracks.values()], undo.keepPlayback === true);
         queueSource.set(source);
         const state = undoneQueue(undo, queueState.get());
         queueState.set(state);

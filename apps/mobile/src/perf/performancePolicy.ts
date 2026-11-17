@@ -18,6 +18,7 @@ export const LIBRARY_SEEDS = [
   "library/playlistRecommendationInputs.ts#sharePlaylistRecommendationInputs",
   "library/playlistRecommendationInputs.ts#observePlaylistRecommendationInputs",
   "library/LibraryStore.ts#listSongs",
+  "library/LibraryStore.ts#matchingSong",
   "library/LibraryStore.ts#listSortedSongs",
   "library/LibraryStore.ts#listArtists",
   "library/LibraryStore.ts#tasteHistory",
@@ -183,10 +184,24 @@ export const WHOLE_LIBRARY: Record<string, WholeLibraryException> = {
   },
   "home/magicQueueSection.ts#startStreamedMagicQueueFrom": {
     howOften:
-      "Once per Discover Magic Queue tile press; finder reads are shared per Library version.",
+      "Once per Discover Magic Queue tile press; the indexed query returns one matching song.",
     reason:
-      "The explicit start resolves its picked stream to a Library file before playback, while keeping the session seeded by the stream.",
-    capabilities: ["ytmusic/libraryFinder.ts#currentLibraryFinder"],
+      "The explicit start uses the indexed recording match to resolve its picked stream to a Library file before playback, while keeping the session seeded by the stream. The matchingSong.test.ts fixture checks the indexed query returns fewer than ten rows in a 1,000-track Library.",
+    capabilities: ["library/LibraryStore.ts#matchingSong"],
+  },
+  "home/mixBuildLibrary.ts#readMixBuildLibrary": {
+    howOften:
+      "Once per returned streamed radio song in a cold Home mix build; each indexed query finds one match.",
+    reason:
+      "The cold mix build resolves each chosen radio song against its Library recording so the mix picks the file; its inputs are read in bounded pages after Home settlement. Covered by home/mixBuildLibrary.test.ts.",
+    capabilities: ["library/LibraryStore.ts#matchingSong"],
+  },
+  "playback/hooks.ts#playingIds": {
+    howOften:
+      "Once per current queue recording when playback identity is first read or that entry changes.",
+    reason:
+      "The targeted lookup resolves the current streamed song to its Library recording for playback identity; it reads one indexed match rather than the Library song list. Covered by playingIds.test.ts.",
+    capabilities: ["library/LibraryStore.ts#matchingSong"],
   },
   "home/discoverMixes.ts#useLibraryTracks": {
     howOften:
