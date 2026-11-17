@@ -1,25 +1,88 @@
 import assert from "node:assert/strict";
 import { describe, test } from "node:test";
-import { SYNC_LIMITS } from "./limits.ts";
-import { type Harness, harness, requestAccountDeletion, sessionCount } from "./testing.ts";
+import {
+  type Harness,
+  favorite,
+  harness,
+  pull,
+  push,
+  requestAccountDeletion,
+  sessionCount,
+} from "./testing.ts";
 
 const HOUR = 3_600_000;
 
 const accountCount = async (service: Harness): Promise<number> =>
   Number((await service.db.execute("SELECT count(*) AS n FROM accounts")).rows[0]?.n);
 
+/** Google account [n]'s claims. */
+const person = (n: number) => ({ sub: `sub-${n}`, email: `p${n}@example.com` });
+
 /** Signs in as Google account [n], answering the service's response. */
 const signInAs = async (service: Harness, n: number): Promise<Response> =>
   service.request("POST", "/v1/session", {
     json: {
-      idToken: await service.google.idToken({ sub: `sub-${n}`, email: `p${n}@example.com` }),
+      idToken: await service.google.idToken(person(n)),
     },
   });
 
 describe("account limits", () => {
-  test("start at 100 accounts and 10 new accounts a day", () => {
-    assert.equal(SYNC_LIMITS.maxAccounts, 100);
-    assert.equal(SYNC_LIMITS.maxNewAccountsPerDay, 10);
+  test("admit ten Google accounts at once and refuse an eleventh on a later day", async () => {
+    const service = await harness();
+    for (let n = 1; n <= 10; n++) assert.equal((await signInAs(service, n)).status, 200);
+    service.now += 24 * HOUR;
+    const refused = await signInAs(service, 11);
+    assert.equal(refused.status, 403);
+    assert.deepEqual(await refused.json(), { error: "limit", limit: "maxAccounts" });
+    assert.equal(await accountCount(service), 10);
+  });
+
+  test("a full service keeps its ten accounts working and hands a deleted one's place to one newcomer", async () => {
+    const service = await harness();
+    const sessions: string[] = [];
+    for (let n = 1; n <= 10; n++) {
+      const response = await signInAs(service, n);
+      assert.equal(response.status, 200);
+      const { sessionToken } = (await response.json()) as { sessionToken: string };
+      await push(service, sessionToken, { favorites: [favorite(`song-of-${n}`, n)] });
+      sessions.push(sessionToken);
+    }
+
+    // A second phone for an existing account takes no new place.
+    const secondPhone = await signInAs(service, 1);
+    assert.equal(secondPhone.status, 200);
+    assert.equal(await accountCount(service), 10);
+    assert.equal((await signInAs(service, 11)).status, 403);
+
+    // Deleting an account frees its place with no one admitting the next.
+    const deleted = await requestAccountDeletion(service, sessions[2]!, person(3));
+    assert.equal(deleted.status, 204);
+    assert.equal((await service.request("GET", "/v1/pull", { session: sessions[2]! })).status, 401);
+    assert.equal(
+      Number(
+        (
+          await service.db.execute({
+            sql: "SELECT count(*) AS n FROM accounts WHERE google_sub = ?",
+            args: ["sub-3"],
+          })
+        ).rows[0]?.n,
+      ),
+      0,
+    );
+
+    // Two newcomers race for it: one gets it, the other is refused.
+    const raced = await Promise.all([signInAs(service, 11), signInAs(service, 12)]);
+    assert.deepEqual(raced.map((answer) => answer.status).toSorted(), [200, 403]);
+    assert.equal(await accountCount(service), 10);
+
+    // The newcomer starts empty, and the others keep their own rows.
+    const winner = raced.find((answer) => answer.status === 200)!;
+    const { sessionToken } = (await winner.json()) as { sessionToken: string };
+    assert.deepEqual((await pull(service, sessionToken)).favorites, []);
+    assert.deepEqual(
+      (await pull(service, sessions[0]!)).favorites.map((row) => row.id),
+      ["song-of-1"],
+    );
   });
 
   test("past maxAccounts, a new Google account is refused and nothing is made", async () => {
