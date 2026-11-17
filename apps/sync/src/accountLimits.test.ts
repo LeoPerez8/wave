@@ -57,7 +57,7 @@ describe("account limits", () => {
     // Deleting an account frees its place with no one admitting the next.
     const deleted = await requestAccountDeletion(service, sessions[2]!, person(3));
     assert.equal(deleted.status, 204);
-    assert.equal((await service.request("GET", "/v1/pull", { session: sessions[2] })).status, 401);
+    assert.equal((await service.request("GET", "/v1/pull", { session: sessions[2]! })).status, 401);
     assert.equal(
       Number(
         (
