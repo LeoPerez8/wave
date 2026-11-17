@@ -85,10 +85,10 @@ const upsert = (
   };
 };
 
-const liveRowCount = async (tx: Transaction, table: SyncTable, accountId: string) => {
-  const live = table.kind === "rows" ? " AND deleted = 0" : "";
+/** How many of [accountId]'s rows [table] retains, deletion records included. */
+const retainedRowCount = async (tx: Transaction, table: SyncTable, accountId: string) => {
   const result = await tx.execute({
-    sql: `SELECT count(*) AS n FROM ${table.sqlName} WHERE account_id = ?${live}`,
+    sql: `SELECT count(*) AS n FROM ${table.sqlName} WHERE account_id = ?`,
     args: [accountId],
   });
   return Number(result.rows[0]?.n ?? 0);
@@ -170,9 +170,8 @@ export const pushRows = (
     }
     await tx.batch(writes);
 
-    for (const [table, rows] of accepted) {
-      if (!rows.some((row) => !row.deleted)) continue;
-      if ((await liveRowCount(tx, table, accountId)) > limits[table.limit]) {
+    for (const table of accepted.keys()) {
+      if ((await retainedRowCount(tx, table, accountId)) > limits[table.limit]) {
         await tx.rollback();
         return { overLimit: table.limit };
       }
