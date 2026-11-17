@@ -156,7 +156,10 @@ update` and is published as usual, and phones find no update. The Worker's URL i
    Keep it private: phones reach it only through the Worker.
 2. Deploy the Worker: `pnpm --filter @wave/updates run deploy`. Check it answers:
    `curl -i https://wave-updates.leonardolp2424.workers.dev/v1/manifest` gives `400`.
-3. Create a Cloudflare API token with **Workers R2 Storage: Edit** on the account.
+3. Create a Cloudflare API token with **Workers R2 Storage: Edit** on the account. As
+   Cloudflare documents it, that covers every bucket in the account and their settings, not
+   Workers. This step is setup advice: `docs/verification/1132.md` records what the live token
+   was found to hold.
 4. Add these secrets to both Environments, `ti` and `main` (GitHub › Settings › Environments;
    `gh secret set <name> --env ti`, then `--env main`), never as repository secrets. "Release
    secrets" in `docs/spec.md` says who sees them:
