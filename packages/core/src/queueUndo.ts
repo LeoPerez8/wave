@@ -17,6 +17,8 @@ import {
 export interface QueueUndo {
   readonly state: QueueState;
   readonly positionMs: number;
+  /** This play kept the current song; Undo must change the queue without touching playback. */
+  readonly keepPlayback?: boolean;
 }
 
 /** The entry the player is on (its key), and how far into it, in ms. */
@@ -44,7 +46,13 @@ export const queueUndo = (
   if (!replaces || command.type !== "play" || command.trackIds.length === 0 || before.index < 0)
     return null;
   const onIt = before.entries[before.index]?.key === player.key;
-  return { state: before, positionMs: onIt ? player.positionMs : 0 };
+  const keepPlayback =
+    command.keepCurrentIfSame === true && command.replaceUpNextWith !== undefined && onIt;
+  return {
+    state: before,
+    positionMs: onIt ? player.positionMs : 0,
+    ...(keepPlayback ? { keepPlayback: true } : {}),
+  };
 };
 
 /**
@@ -52,10 +60,27 @@ export const queueUndo = (
  * keeping their keys, with the key counter past both queues', so no entry
  * added later reuses a key either of them held.
  */
-export const undoneQueue = (undo: QueueUndo, now: QueueState): QueueState => ({
-  ...undo.state,
-  nextKey: Math.max(undo.state.nextKey, now.nextKey),
-});
+export const undoneQueue = (undo: QueueUndo, now: QueueState): QueueState => {
+  const nextKey = Math.max(undo.state.nextKey, now.nextKey);
+  if (!undo.keepPlayback) return { ...undo.state, nextKey };
+
+  const original = undo.state.entries[undo.state.index];
+  const current = now.entries[now.index];
+  if (original === undefined || current === undefined || original.key === current.key)
+    return { ...undo.state, nextKey };
+
+  return {
+    ...now,
+    context: undo.state.context,
+    entries: [
+      ...now.entries.slice(0, now.index + 1),
+      ...undo.state.entries.slice(undo.state.index + 1),
+    ],
+    shuffle: undo.state.shuffle,
+    repeat: undo.state.repeat,
+    nextKey,
+  };
+};
 
 /** Each of [notices] there is, on one line in order; null when there's none. */
 export const noticeLine = (notices: readonly (string | null)[]): string | null => {

@@ -732,7 +732,7 @@ export const layer = Layer.effect(
           if (offered?.takeBack !== takeBack) return;
           offered = null;
           yield* putBack(takeBack);
-          yield* player.play;
+          if (!takeBack.undo.keepPlayback) yield* player.play;
         }),
       );
 
@@ -750,6 +750,11 @@ export const layer = Layer.effect(
         const state = undoneQueue(undo, queueState.get());
         queueState.set(state);
         queueChanged();
+        if (undo.keepPlayback) {
+          yield* sync(state, "undo");
+          yield* applyRepeat(state);
+          return;
+        }
         // Paused while the player changes songs, so the old one doesn't play from its start first.
         yield* player.pause;
         yield* sync(state, "undo");
