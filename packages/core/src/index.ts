@@ -833,6 +833,7 @@ export {
   magicPlaySignal,
   magicQueueEdits,
   magicQueueLabel,
+  magicQueueKeepsPlayingSong,
   magicSignal,
   parseMagicSession,
   startMagicQueue,

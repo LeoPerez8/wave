@@ -44,6 +44,49 @@ describe("play", () => {
     );
     assert.equal(playback, "play");
   });
+
+  test("a Magic Queue from the current song replaces Up Next and keeps the play in place", () => {
+    const before = apply(
+      start("a b c d", 2),
+      { type: "setShuffle", on: true },
+      { type: "setRepeat", mode: "all" },
+    );
+    const history = queueHistory(before);
+    const current = currentEntry(before);
+    const { state, playback } = reduceQueue(before, {
+      type: "play",
+      trackIds: ["c"],
+      context: { kind: "magic", id: "session" },
+      shuffle: false,
+      keepCurrentIfSame: true,
+      replaceUpNextWith: ["r1", "r2", "r3", "r4", "r5", "r6", "r7", "r8", "r9"],
+    });
+
+    assert.equal(playback, "keep");
+    assert.equal(currentEntry(state)?.key, current?.key);
+    assert.deepEqual(queueHistory(state), history);
+    assert.deepEqual(
+      upNext(state).map((entry) => entry.trackId),
+      ["r1", "r2", "r3", "r4", "r5", "r6", "r7", "r8", "r9"],
+    );
+    assert.equal(state.shuffle, false);
+    assert.equal(state.repeat, "off");
+  });
+
+  test("a Magic Queue start keeps playback only when its seed matches the current song", () => {
+    const before = apply(start("a b c", 1), { type: "setRepeat", mode: "all" });
+    const { state, playback } = reduceQueue(before, {
+      type: "play",
+      trackIds: ["a"],
+      context: { kind: "magic", id: "session" },
+      shuffle: false,
+      keepCurrentIfSame: true,
+      replaceUpNextWith: ["r1"],
+    });
+    assert.equal(playback, "play");
+    assert.equal(show(state), "[a] r1");
+    assert.equal(state.repeat, "off");
+  });
 });
 
 describe("next", () => {
