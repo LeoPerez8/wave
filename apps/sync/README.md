@@ -411,6 +411,29 @@ the same kind of line, once a day. Search the Worker's logs for `wave usage warn
 them; a Cloudflare notification on that line emails the owner. Without its secrets the watch
 is skipped. Change the threshold in `src/limits.ts` and deploy.
 
+Each run first deletes the `usage_warnings` rows older than today and the 29 UTC days before
+it, so with today's two kinds of line the table holds at most 60 rows. That cleanup runs with
+or without the secrets and whether or not Cloudflare answers; if it fails, the run logs a note
+and still reads the figures. There's no route that runs it.
+
+### Operational tables
+
+The rows the service keeps for itself, apart from the synced Library, and what bounds each:
+
+| Table               | Bound                                                                                     |
+| ------------------- | ----------------------------------------------------------------------------------------- |
+| `usage_warnings`    | today and the 29 UTC days before, deleted by the usage watch                              |
+| `upstream_usage`    | one row per account and provider count (three today), reset by the next UTC day's request |
+| `sign_in_windows`   | the current minute's keys; a sign-in deletes the older ones (`maxSignInsPerMinute`)       |
+| `sessions`          | ended by sign-out, 90 idle days or account deletion (`POST /v1/session`)                  |
+| `accounts`          | `maxAccounts`                                                                             |
+| `soulseek_accounts` | one row per account                                                                       |
+| `migrations`        | one row per migration                                                                     |
+
+The usage watch deletes `usage_warnings` rows and nothing else. Sessions, sign-in counts,
+tombstones and synced rows are bounded by the session, sign-in and table limits above, never by
+it; it never resets a provider's count for the day either.
+
 Turso's usage (rows read and written, storage) is checked by hand once a month, in Turso's
 dashboard. The Worker holds no Turso Platform token: one can do far more than read usage, and
 the Worker already holds the database.
