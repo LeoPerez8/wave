@@ -1,7 +1,8 @@
 /**
  * A Wave sync service for tests, run by plain Node: one account's rows in
  * memory, merged by Core's rules as `apps/sync` merges them, numbered by
- * change and paged by pulls as the service pages them, with its body limit.
+ * change and paged by pulls as the service pages them, with its body limit
+ * and, when set, its retained-row limits.
  * It answers what `WaveAccount.request` would.
  */
 import {
@@ -37,7 +38,26 @@ export interface TestSyncService extends SyncTransport {
   offline: boolean;
   /** How many of the next requests are refused for the request rate (429). */
   refuse: number;
+  /**
+   * The most rows, deletions included, a table may hold: a push that would
+   * add an id past it is refused whole (413), as the service refuses it.
+   */
+  rowLimits: Partial<Record<Table, number>>;
 }
+
+/** The service's name for each table's row limit (`SYNC_LIMITS`). */
+const LIMIT_NAMES: Record<Table, string> = {
+  songs: "maxSongs",
+  playlists: "maxPlaylists",
+  playlistEntries: "maxPlaylistEntries",
+  favorites: "maxFavorites",
+  preferences: "maxPreferences",
+  plays: "maxPlays",
+  follows: "maxFollows",
+  hiddenReleases: "maxHiddenReleases",
+  notifiedShows: "maxNotifiedShows",
+  dismissedSuggestions: "maxDismissedSuggestions",
+};
 
 export const testSyncService = (options: { readonly pageSize?: number } = {}): TestSyncService => {
   const pageSize = options.pageSize ?? 1_000;
@@ -49,20 +69,30 @@ export const testSyncService = (options: { readonly pageSize?: number } = {}): T
 
   const push = (body: Partial<SyncTables>) => {
     const accepted: Record<string, number> = {};
+    const won = new Map<Table, readonly SyncTables[Table][number][]>();
     for (const table of TABLES) {
       const incoming = body[table] ?? [];
       const current = rowsOf(table);
-      const won =
+      const merged =
         table === "plays"
           ? mergePlays(current as SyncPlayRow[], incoming as SyncPlayRow[]).added
           : mergeRows(
               current as SyncTables["songs"][number][],
               incoming as SyncTables["songs"][number][],
             ).accepted;
-      for (const row of won) {
+      const ids = new Set(current.map((row) => row.id));
+      const limit = service.rowLimits[table];
+      const added = new Set(merged.map((row) => row.id).filter((id) => !ids.has(id))).size;
+      if (limit !== undefined && added > 0 && ids.size + added > limit) {
+        return { limit: LIMIT_NAMES[table] };
+      }
+      won.set(table, merged);
+    }
+    for (const [table, rows] of won) {
+      for (const row of rows) {
         held.set(`${table}:${row.id}`, { table, row, changeNo: ++changeSeq });
       }
-      accepted[table] = won.length;
+      accepted[table] = rows.length;
     }
     return { accepted };
   };
@@ -98,6 +128,7 @@ export const testSyncService = (options: { readonly pageSize?: number } = {}): T
   const service: TestSyncService = {
     offline: false,
     refuse: 0,
+    rowLimits: {},
     requests: [],
     rows: () =>
       Object.fromEntries(TABLES.map((table) => [table, rowsOf(table)])) as unknown as SyncTables,
@@ -113,7 +144,11 @@ export const testSyncService = (options: { readonly pageSize?: number } = {}): T
         if (new TextEncoder().encode(body).length > MAX_BODY_BYTES) {
           return { status: 413, body: '{"error":"limit","limit":"maxBodyBytes"}' };
         }
-        return { status: 200, body: JSON.stringify(push(JSON.parse(body))) };
+        const pushed = push(JSON.parse(body));
+        if ("limit" in pushed) {
+          return { status: 413, body: JSON.stringify({ error: "limit", limit: pushed.limit }) };
+        }
+        return { status: 200, body: JSON.stringify(pushed) };
       }
       const since = /^\/v1\/pull\?since=(\d+)$/.exec(path)?.[1];
       if (method === "GET" && since !== undefined) {
