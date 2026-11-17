@@ -55,11 +55,10 @@ describe("play", () => {
     const current = currentEntry(before);
     const { state, playback } = reduceQueue(before, {
       type: "play",
-      trackIds: ["c"],
       context: { kind: "magic", id: "session" },
       shuffle: false,
-      keepCurrentIfSame: true,
-      replaceUpNextWith: ["r1", "r2", "r3", "r4", "r5", "r6", "r7", "r8", "r9"],
+      keepCurrentAndReplaceUpNext: { trackId: "c" },
+      trackIds: ["c", "r1", "r2", "r3", "r4", "r5", "r6", "r7", "r8", "r9"],
     });
 
     assert.equal(playback, "keep");
@@ -77,15 +76,41 @@ describe("play", () => {
     const before = apply(start("a b c", 1), { type: "setRepeat", mode: "all" });
     const { state, playback } = reduceQueue(before, {
       type: "play",
-      trackIds: ["a"],
       context: { kind: "magic", id: "session" },
       shuffle: false,
-      keepCurrentIfSame: true,
-      replaceUpNextWith: ["r1"],
+      trackIds: ["a", "r1"],
     });
     assert.equal(playback, "play");
     assert.equal(show(state), "[a] r1");
-    assert.equal(state.repeat, "off");
+    assert.equal(state.repeat, "all");
+  });
+
+  test("keeps the current entry when the seed is the same recording from another source", () => {
+    const before = start("yt:vid d", 0);
+    const current = currentEntry(before);
+    const { state, playback } = reduceQueue(before, {
+      type: "play",
+      trackIds: ["12", "r1", "r2"],
+      context: { kind: "magic", id: "session" },
+      keepCurrentAndReplaceUpNext: { trackId: "yt:vid" },
+    });
+
+    assert.equal(playback, "keep");
+    assert.equal(currentEntry(state)?.key, current?.key);
+    assert.equal(show(state), "[yt:vid] r1 r2");
+  });
+
+  test("falls back to the seed if the player advances before the keep command is reduced", () => {
+    const before = start("yt:vid d", 1);
+    const { state, playback } = reduceQueue(before, {
+      type: "play",
+      trackIds: ["12", "r1"],
+      context: { kind: "magic", id: "session" },
+      keepCurrentAndReplaceUpNext: { trackId: "yt:vid" },
+    });
+
+    assert.equal(playback, "play");
+    assert.equal(show(state), "[12] r1");
   });
 });
 

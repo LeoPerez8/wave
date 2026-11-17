@@ -590,6 +590,7 @@ export const layer = Layer.effect(
         );
         if (command.type === "playerMoved") native = { ...native, currentKey: command.key };
         const before = queueState.get();
+        const reduced = yield* reduce(before, command, passOver);
         // A play offers going back to the queue the player holds (a walk's
         // goes back there too) and withdraws an earlier Undo; a command
         // taking a walk's place keeps its Undo.
@@ -597,7 +598,13 @@ export const layer = Layer.effect(
         if (command.type === "play") {
           withdrawUndo();
           const player = { key: native.currentKey, positionMs: currentPositionMs() };
-          const undo = queueUndo(pending?.walk.before ?? before, command, player, passOver);
+          const undo = queueUndo(
+            pending?.walk.before ?? before,
+            command,
+            player,
+            reduced,
+            passOver,
+          );
           const from = takeBack?.source ?? source;
           takeBack =
             undo === null || from === null
@@ -611,7 +618,6 @@ export const layer = Layer.effect(
           const queued = queuedToast(command, passOver, currentLocalisation().strings);
           if (queued !== null) showQueuedToast(queued, command.type);
         }
-        const reduced = yield* reduce(before, command, passOver);
         const step = startPlayingWalk(before, command, reduced, pending?.walk ?? null);
         // The player went on past songs still unsearched: they're skipped, as a failed search skips them.
         if (command.type === "playerMoved" && step.kind === "go") {

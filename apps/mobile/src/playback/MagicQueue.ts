@@ -464,7 +464,7 @@ const begin = (session: MagicSession, startedAt: number, track: QueueTrack) =>
         startIndex: 0,
         context: { kind: MAGIC_QUEUE_CONTEXT, id: session.id },
         shuffle: false,
-        ...(keepCurrent ? { keepCurrentIfSame: true, replaceUpNextWith: [] } : {}),
+        ...(keepCurrent ? { keepCurrentAndReplaceUpNext: { trackId: currentTrack.id } } : {}),
       },
       [track],
     );
