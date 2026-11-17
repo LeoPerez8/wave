@@ -10,6 +10,7 @@ import {
   type PassOver,
   type QueueCommand,
   type QueuePlayback,
+  type QueueResult,
   type QueueState,
 } from "./queue.ts";
 
@@ -40,14 +41,23 @@ export const queueUndo = (
   before: QueueState,
   command: QueueCommand,
   player: PlayerAt,
+  after: QueueResult,
   passOver?: PassOver,
 ): QueueUndo | null => {
   const replaces = playReplacesQueue(command, passOver);
   if (!replaces || command.type !== "play" || command.trackIds.length === 0 || before.index < 0)
     return null;
   const onIt = before.entries[before.index]?.key === player.key;
+  const original = before.entries[before.index];
+  const current = after.state.entries[after.state.index];
   const keepPlayback =
-    command.keepCurrentIfSame === true && command.replaceUpNextWith !== undefined && onIt;
+    command.type === "play" &&
+    command.keepCurrentAndReplaceUpNext !== undefined &&
+    after.playback === "keep" &&
+    after.state.context?.kind === command.context.kind &&
+    after.state.context?.id === command.context.id &&
+    original !== undefined &&
+    current?.key === original.key;
   return {
     state: before,
     positionMs: onIt ? player.positionMs : 0,
@@ -67,6 +77,8 @@ export const undoneQueue = (undo: QueueUndo, now: QueueState): QueueState => {
   const original = undo.state.entries[undo.state.index];
   const current = now.entries[now.index];
   if (original === undefined || current === undefined || original.key === current.key)
+    return { ...undo.state, nextKey };
+  if (undo.state.entries.some((entry) => entry.key === current.key))
     return { ...undo.state, nextKey };
 
   return {
