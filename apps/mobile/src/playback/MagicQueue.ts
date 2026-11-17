@@ -381,7 +381,11 @@ export const startMagicQueue = (
  * first 9 recommendations follow from its radio (Core's
  * `startStreamedMagicQueue`).
  */
-export const startStreamedMagicQueue = (song: YtSong, faithful = false) =>
+export const startStreamedMagicQueue = (
+  song: YtSong,
+  faithful = false,
+  libraryTrack?: SongRow,
+) =>
   Effect.gen(function* () {
     if (!ytMusicEnabled()) return;
     const startedAt = Date.now();
@@ -389,10 +393,16 @@ export const startStreamedMagicQueue = (song: YtSong, faithful = false) =>
       id: String(Date.now()),
       ytShare: magicQueueShare(discoverLevel.get()),
       faithful,
+      ...(libraryTrack?.path === null || libraryTrack === undefined
+        ? {}
+        : { firstTrackId: String(libraryTrack.id) }),
     });
     // Nothing of the Library was read for it: the first pick waits for the snapshot's.
     startingLibrary = { songs: [], artists: [] };
-    const track = yield* ytQueueTrack(song);
+    const track =
+      libraryTrack !== undefined && libraryTrack.path !== null
+        ? toQueueTrack(libraryTrack)
+        : yield* ytQueueTrack(song);
     yield* begin(session, startedAt, track);
     yield* cacheYtCoversInBackground(track.thumbPath === null ? [song] : []);
   });
@@ -421,8 +431,34 @@ const begin = (session: MagicSession, startedAt: number, track: QueueTrack) =>
     const queue = yield* Queue;
     const state = queueState.get();
     const currentTrackId = state.entries[state.index]?.trackId ?? null;
+    const currentTrack = currentTrackId === null ? undefined : queueTracks.get().get(currentTrackId);
+    const seedRecording = session.radioSeed;
     const keepCurrent =
-      session.seed.kind === "track" && magicQueueKeepsPlayingSong(track.id, currentTrackId);
+      session.seed.kind === "track" &&
+      currentTrack !== undefined &&
+      magicQueueKeepsPlayingSong(
+        {
+          trackId: session.seed.id,
+          videoId: seedRecording?.videoId,
+          recording:
+            seedRecording === undefined
+              ? undefined
+              : {
+                  title: seedRecording.title,
+                  artists: seedRecording.artists,
+                  durationMs: seedRecording.durationMs,
+                },
+        },
+        {
+          trackId: currentTrack.id,
+          videoId: currentTrack.ytSong?.videoId,
+          recording: {
+            title: currentTrack.title,
+            artists: currentTrack.ytSong?.artists ?? [currentTrack.artist],
+            durationMs: currentTrack.durationMs ?? 0,
+          },
+        },
+      );
     yield* queue.dispatch(
       {
         type: "play",

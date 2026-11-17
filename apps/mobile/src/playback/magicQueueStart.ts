@@ -12,7 +12,7 @@ import type { SongRow } from "@/library/LibraryStore";
 import { appRuntime } from "@/library/runtime";
 import { showError } from "@/overlay/alert";
 
-import { startMagicQueue, startStreamedMagicQueue } from "./MagicQueue";
+import { startStreamedMagicQueue } from "./MagicQueue";
 
 type AppServices = ManagedRuntime.ManagedRuntime.Services<typeof appRuntime>;
 
@@ -34,7 +34,7 @@ export const startMagicQueueFromStream = (song: YtSong, found: SongRow | null): 
   const start = streamedSongMagicStart(found);
   runMagicQueueStart(
     start.from === "library"
-      ? startMagicQueue(start.seed, [start.track])
+      ? startStreamedMagicQueue(song, false, start.track)
       : startStreamedMagicQueue(song),
   );
 };

@@ -40,6 +40,8 @@ export interface QueueTrack {
   readonly path: string;
   readonly title: string;
   readonly artist: string;
+  /** Track length for the same-recording check when a Library file meets a stream. */
+  readonly durationMs?: number;
   /**
    * A YT Music song's artists as YouTube Music credits them, for Now Playing's
    * artist link (Core's `streamedArtistLink`). Missing from a Library track's,
@@ -93,6 +95,7 @@ export const toQueueTrack = (song: PlayableSongRow): QueueTrack => ({
   path: song.path,
   title: song.title,
   artist: song.artist,
+  durationMs: song.durationMs,
   album: song.album,
   artworkPath: song.artworkPath,
   thumbPath: song.thumbPath,
@@ -119,6 +122,7 @@ export const toYtQueueTrack = (song: QueuedYtSong, artwork: CachedArtwork | null
     path: id,
     title: song.title,
     artist: ytSongArtist(song),
+    durationMs: song.durationMs,
     artists: song.artists,
     album: song.album,
     artworkPath:
