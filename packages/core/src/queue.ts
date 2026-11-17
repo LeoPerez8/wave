@@ -46,10 +46,8 @@ export type QueueCommand =
       readonly context: QueueContext;
       /** Overrides the current shuffle setting (an album's Shuffle button). */
       readonly shuffle?: boolean | undefined;
-      /** Preserve the current entry and replace Up Next only when it is the seed. */
-      readonly keepCurrentIfSame?: boolean | undefined;
-      /** Recommendations replacing Up Next for a Magic Queue started from the current song. */
-      readonly replaceUpNextWith?: readonly string[] | undefined;
+      /** Keep this current entry and use the remaining trackIds as replacement Up Next. */
+      readonly keepCurrentAndReplaceUpNext?: { readonly trackId: string } | undefined;
     }
   | { readonly type: "next" }
   | { readonly type: "previous"; readonly positionMs: number }
@@ -179,11 +177,15 @@ const play = (
   kind: Shuffle,
   passOver: PassOver,
 ): QueueResult => {
-  if (command.keepCurrentIfSame && command.replaceUpNextWith !== undefined) {
+  if (command.keepCurrentAndReplaceUpNext !== undefined) {
     const current = currentEntry(state);
-    if (current !== null && current.trackId === command.trackIds[0] && !passOver(current.trackId)) {
+    if (
+      current !== null &&
+      current.trackId === command.keepCurrentAndReplaceUpNext.trackId &&
+      !passOver(current.trackId)
+    ) {
       const { entries: recommendations, nextKey } = makeEntries(
-        command.replaceUpNextWith,
+        command.trackIds.slice(1),
         state.nextKey,
         () => null,
       );
@@ -203,9 +205,7 @@ const play = (
       state,
       {
         ...command,
-        trackIds: [...command.trackIds, ...command.replaceUpNextWith],
-        keepCurrentIfSame: false,
-        replaceUpNextWith: undefined,
+        keepCurrentAndReplaceUpNext: undefined,
       },
       random,
       kind,
@@ -233,7 +233,7 @@ const play = (
     entries,
     index,
     shuffle: false,
-    repeat: command.context.kind === "magic" ? "off" : state.repeat,
+    repeat: state.repeat,
     nextKey,
   };
   if (!shuffle) return result(started, "play");
