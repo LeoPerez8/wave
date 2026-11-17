@@ -1165,10 +1165,10 @@ describe("syncCycle", () => {
     setFavorites(a.db, [a.track("Airbag"), a.track("Lucky")], true, a.now());
     await assert.rejects(a.sync());
     assert.deepEqual(service.rows().favorites, []);
-    assert.deepEqual(selectFavoriteTrackIds(a.db).toSorted(), [
-      a.track("Airbag"),
-      a.track("Lucky"),
-    ].toSorted());
+    assert.deepEqual(
+      selectFavoriteTrackIds(a.db).toSorted(),
+      [a.track("Airbag"), a.track("Lucky")].toSorted(),
+    );
     assert.equal(selectJoinedAccount(a.db), account);
 
     service.rowLimits = {};

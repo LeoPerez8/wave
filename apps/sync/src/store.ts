@@ -150,7 +150,9 @@ export const pushRows = (
         ...new Set(incoming.map((row) => row.id)),
       ]);
       const merged =
-        table.kind === "rows" ? mergeRows(held, incoming).accepted : mergePlays(held, incoming).added;
+        table.kind === "rows"
+          ? mergeRows(held, incoming).accepted
+          : mergePlays(held, incoming).added;
       accepted.set(table, merged);
       const heldIds = new Set(held.map((row) => row.id));
       if (merged.some((row) => !heldIds.has(row.id))) growing.add(table);
