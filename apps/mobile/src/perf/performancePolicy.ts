@@ -18,6 +18,7 @@ export const LIBRARY_SEEDS = [
   "library/playlistRecommendationInputs.ts#sharePlaylistRecommendationInputs",
   "library/playlistRecommendationInputs.ts#observePlaylistRecommendationInputs",
   "library/LibraryStore.ts#listSongs",
+  "library/LibraryStore.ts#matchingSong",
   "library/LibraryStore.ts#listSortedSongs",
   "library/LibraryStore.ts#listArtists",
   "library/LibraryStore.ts#tasteHistory",
@@ -183,10 +184,10 @@ export const WHOLE_LIBRARY: Record<string, WholeLibraryException> = {
   },
   "home/magicQueueSection.ts#startStreamedMagicQueueFrom": {
     howOften:
-      "Once per Discover Magic Queue tile press; finder reads are shared per Library version.",
+      "Once per Discover Magic Queue tile press; the indexed query returns one matching song.",
     reason:
-      "The explicit start resolves its picked stream to a Library file before playback, while keeping the session seeded by the stream.",
-    capabilities: ["ytmusic/libraryFinder.ts#currentLibraryFinder"],
+      "The explicit start uses the indexed recording match to resolve its picked stream to a Library file before playback, while keeping the session seeded by the stream. The matchingSong.test.ts fixture checks the indexed query returns fewer than ten rows in a 1,000-track Library.",
+    capabilities: ["library/LibraryStore.ts#matchingSong"],
   },
   "home/discoverMixes.ts#useLibraryTracks": {
     howOften:
