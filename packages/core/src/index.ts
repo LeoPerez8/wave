@@ -846,6 +846,7 @@ export type {
   MagicArtistKey,
   MagicLibrarySong,
   MagicQueueEdits,
+  MagicQueueSongIdentity,
   MagicRadioSeed,
   MagicSeed,
   StreamedSongMagicStart,
