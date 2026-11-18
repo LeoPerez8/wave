@@ -13,6 +13,7 @@ pnpm --filter @wave/desktop typecheck
 pnpm --filter @wave/desktop test       # node:test units in src/
 pnpm --filter @wave/desktop lint
 pnpm --filter @wave/desktop test:e2e   # builds out/, then runs the Playwright smoke test
+pnpm --filter @wave/desktop test:perf  # isolated launch, scroll and whole-app memory check
 pnpm --filter @wave/desktop dev        # the app with hot reload
 ```
 
@@ -20,6 +21,9 @@ pnpm --filter @wave/desktop dev        # the app with hot reload
 to `apps/desktop/test-results/`, which git ignores; read the PNGs to check what the window
 shows. Add a check as a test in `apps/desktop/e2e/` rather than a throwaway script, so CI runs
 it too.
+
+The performance check runs separately from `test:e2e`. Its limits, fixture, memory accounting
+and CI artifact names are in [Desktop performance in CI](../performance/1166-desktop.md).
 
 ## The audio engine
 

@@ -293,8 +293,12 @@ export function App() {
           : labels.library));
   const playlistId = route.kind === "playlist" ? route.id : undefined;
   const scanning = scan?.status === "scanning";
+  // A playlist's image is an edit none of the three counts, and its page shows it.
   const revision =
-    (scan?.revision ?? 0) + (playback.view?.revision ?? 0) + (account?.revision ?? 0);
+    (scan?.revision ?? 0) +
+    (playback.view?.revision ?? 0) +
+    (account?.revision ?? 0) +
+    playlistEdits.edits;
   return (
     <main
       ref={shell}

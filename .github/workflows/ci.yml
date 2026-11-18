@@ -949,6 +949,27 @@ jobs:
             scripts/ci/step.sh "Smoke test" pnpm --filter @wave/desktop test:e2e
           fi
 
+      # Separate from the smoke suite: one window, no retries, real native services.
+      - name: Performance
+        id: performance
+        run: |
+          if [ "$RUNNER_OS" = "Linux" ]; then
+            scripts/ci/step.sh "Performance" xvfb-run -a pnpm --filter @wave/desktop test:perf
+          else
+            scripts/ci/step.sh "Performance" pnpm --filter @wave/desktop test:perf
+          fi
+
+      # Main and release-tag runs always include both desktop jobs, so each release's run
+      # holds its memory at rest. The measurements are kept even when a target fails.
+      - name: Keep desktop performance and memory
+        if: always() && (steps.performance.outcome == 'success' || steps.performance.outcome == 'failure')
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: desktop-performance-${{ matrix.report }}
+          path: apps/desktop/perf-results
+          if-no-files-found: error
+          retention-days: 90
+
       - name: Keep the smoke test's screenshots
         if: failure()
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2

@@ -155,6 +155,21 @@ export function VirtualTable({
         setReady(true);
         setActive((index) => Math.max(0, Math.min(index, results[0]![1].total - 1)));
         onHero?.(results[0]![1].hero);
+        // Read the pages on either side too, so a scroll that crosses into one finds its rows
+        // already here rather than drawing a gap while the read is on its way.
+        const near = [firstPage - 1, lastPage + 1].filter(
+          (index) => index >= 0 && index * SIZE < results[0]![1].total && !cache.current.has(index),
+        );
+        if (near.length === 0) return;
+        const read = await Promise.all(
+          near.map(
+            async (index) =>
+              [index, await window.wave.library.browse(scope, index * SIZE, SIZE)] as const,
+          ),
+        );
+        if (!current) return;
+        for (const [index, page] of read) cache.current.set(index, page);
+        setPages(new Map(cache.current));
       } catch {
         if (current) onError();
       }
