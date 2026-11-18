@@ -320,3 +320,104 @@ test("missing-song progress is readable by id and a notice records a download st
     downloads.dispose();
   }
 });
+
+/** The star's state the service keeps on this computer: a key-value store. */
+const starSetup = (starred: number[]) => {
+  const kept = new Map<string, string>();
+  const stars = new Set(starred);
+  const done = setup({
+    favorites: () => stars,
+    store: {
+      read: (key) => kept.get(key) ?? null,
+      write: (key, value) => {
+        if (value === null) kept.delete(key);
+        else kept.set(key, value);
+      },
+    },
+  });
+  return { ...done, stars, kept };
+};
+
+test("a star means downloaded: each starred missing song is asked for under Favorites, once", async () => {
+  const { journal, downloads } = starSetup([42]);
+  await downloads.syncStars();
+  assert.deepEqual(
+    requests(journal).map(({ song, origin }) => [song.videoId, origin]),
+    [["missing:42", { kind: "favorites", id: "favorites", name: "Favorites" }]],
+  );
+  // A star's download says nothing of its own: the star is the toast.
+  assert.equal(downloads.view().notice, null);
+  // Seen once, a star doesn't ask again, even after its download was cancelled.
+  await downloads.cancel(["missing:42"]);
+  await downloads.syncStars();
+  assert.equal(requests(journal).length, 1);
+  downloads.dispose();
+});
+
+test("a new star on a missing song asks for it; unstarring it before the file arrives cancels", async () => {
+  const { journal, downloads, stars } = starSetup([]);
+  await downloads.syncStars();
+  assert.equal(requests(journal).length, 0);
+  stars.add(41);
+  await downloads.syncStars();
+  assert.deepEqual(
+    requests(journal).map(({ song }) => song.videoId),
+    ["missing:41"],
+  );
+  stars.delete(41);
+  await downloads.syncStars();
+  assert.deepEqual(journal.asked("downloads.cancel"), [{ id: "missing:41" }]);
+  downloads.dispose();
+});
+
+test("unstarring keeps a download the owner asked for, and a star retries a failed one", async () => {
+  const { journal, downloads, stars } = starSetup([]);
+  await downloads.missing([41]);
+  stars.add(41);
+  await downloads.syncStars();
+  // Already on its way: the star leaves it be, and taking the star back doesn't cancel it.
+  assert.equal(requests(journal).length, 1);
+  stars.delete(41);
+  await downloads.syncStars();
+  assert.deepEqual(journal.asked("downloads.cancel"), []);
+  journal.set("missing:41", { phase: "failed", reason: "notFound" });
+  await downloads.refresh();
+  stars.add(41);
+  await downloads.syncStars();
+  assert.deepEqual(
+    requests(journal).map(({ song, origin }) => [song.videoId, origin]),
+    [
+      ["missing:41", null],
+      ["missing:41", null],
+    ],
+  );
+  downloads.dispose();
+});
+
+test("an owner's Download takes a star's download from the star", async () => {
+  const { journal, downloads, stars } = starSetup([42]);
+  await downloads.syncStars();
+  await downloads.missingAction("downloadAll");
+  stars.delete(42);
+  await downloads.syncStars();
+  assert.deepEqual(journal.asked("downloads.cancel"), []);
+  downloads.dispose();
+});
+
+test("what the stars asked is kept, so a restart neither asks again nor forgets to cancel", async () => {
+  const first = starSetup([42]);
+  await first.downloads.syncStars();
+  first.downloads.dispose();
+  const kept = [...first.kept];
+  const { journal, downloads, stars, kept: store } = starSetup([42]);
+  for (const [key, value] of kept) store.set(key, value);
+  // The journal still holds the job the first run asked for.
+  for (const [id, job] of first.journal.jobs) journal.jobs.set(id, job);
+  await downloads.refresh();
+  await downloads.syncStars();
+  assert.equal(requests(journal).length, 0);
+  stars.delete(42);
+  await downloads.syncStars();
+  assert.deepEqual(journal.asked("downloads.cancel"), [{ id: "missing:42" }]);
+  downloads.dispose();
+});

@@ -8,6 +8,7 @@
 import {
   albumDownloadOrigin,
   applyJournalChanges,
+  FAVORITES_DOWNLOAD_ORIGIN,
   downloadRunProgress,
   downloadSource,
   followDownloadRun,
@@ -17,7 +18,15 @@ import {
   missingSongTrackId,
   missingSongsDownload,
   NO_DOWNLOAD_RUN,
+  readStarDownloads,
+  readSyncedStars,
   soulseekRecording,
+  starAskedAfter,
+  starredDownload,
+  syncedStarDownloads,
+  unstarredDownload,
+  writeStarDownloads,
+  writeSyncedStars,
   ytDownloadAwaitsAnswer,
   ytDownloadProgress,
   ytDownloadsFromJournal,
@@ -61,6 +70,10 @@ export interface DownloadsDeps {
   readonly ytMusicOn: () => boolean;
   /** The lines' language. */
   readonly catalogue: Catalogue;
+  /** The Library's starred songs, by Track id; none by default. */
+  readonly favorites?: () => ReadonlySet<number>;
+  /** Where what the stars asked for is kept on this computer, never synced. */
+  readonly store?: StarStore;
   readonly now?: () => number;
   /** The re-read while songs are on their way, in case an event was missed. */
   readonly pollMs?: number;
@@ -94,8 +107,27 @@ export interface DownloadsShape {
   /** Download in best quality: Soulseek's session is on. */
   readonly bestQuality: () => Promise<boolean>;
   readonly setBestQuality: (on: boolean) => Promise<boolean>;
+  /**
+   * A star means downloaded (docs/spec.md, "A star means downloaded"): each starred missing song
+   * the stars haven't asked for yet joins the queue under Favorites, and a star taken off, here
+   * or on another device, takes back the download only it asked for. Run after a star changed,
+   * a sync pulled stars or missing songs, and once the journal starts.
+   */
+  readonly syncStars: () => Promise<void>;
   readonly dispose: () => void;
 }
+
+/** A small key-value store on this computer. */
+export interface StarStore {
+  readonly read: (key: string) => string | null;
+  /** Null forgets [key]. */
+  readonly write: (key: string, value: string | null) => void;
+}
+
+/** The starred missing songs seen (Core's `syncedStarDownloads`), as the phone keys them. */
+const SEEN_STARS = "downloads.syncedStars";
+/** The downloads only a star asked for (Core's `readStarDownloads`), as the phone keys them. */
+const STAR_ASKED = "downloads.starAsked";
 
 /** A job as the journal hands it over: Core's journal job, with the YT Music song it was asked as. */
 type Job = YtDownloadJournalJob<YtSong>;
@@ -242,12 +274,13 @@ export const createDownloads = (deps: DownloadsDeps): DownloadsShape => {
     requests = next.catch(() => {});
     return next;
   };
-  const enqueue = async (asked: readonly JobRequest[]) => {
+  /** [told]: the window says the downloads started; a star's say nothing, the star is the toast. */
+  const enqueue = async (asked: readonly JobRequest[], told = true) => {
     if (asked.length === 0) return;
     const active = new Set(followed.filter(ytDownloadUnfinished).map((job) => job.id));
     const count = asked.filter((request) => !active.has(request.song.videoId)).length;
     await deps.call("downloads.enqueueAll", { requests: asked });
-    if (count > 0) notice = { id: ++noticeId, count };
+    if (count > 0 && told) notice = { id: ++noticeId, count };
     if (online) await deps.call("downloads.start", {}).catch(() => null);
     await refresh();
   };
@@ -256,6 +289,14 @@ export const createDownloads = (deps: DownloadsDeps): DownloadsShape => {
     if (ids === undefined) return found;
     const byTrack = new Map(found.map((job) => [job.missing.trackId, job]));
     return ids.flatMap((id) => byTrack.get(id) ?? []);
+  };
+
+  const store: StarStore = deps.store ?? { read: () => null, write: () => {} };
+  /** The owner asked for [ids] themselves: they carry on whatever happens to the stars. */
+  const ownerAsked = (ids: readonly string[]) => {
+    const asked = readStarDownloads(store.read(STAR_ASKED));
+    const after = starAskedAfter(asked, { kind: "ownerAsked", ids });
+    if (after !== asked) store.write(STAR_ASKED, writeStarDownloads(after));
   };
 
   const failedJobs = () =>
@@ -357,6 +398,7 @@ export const createDownloads = (deps: DownloadsDeps): DownloadsShape => {
     missing: (trackIds) =>
       queued(async () => {
         const current = await session();
+        ownerAsked(trackIds.map(missingSongJobId));
         await enqueue(missingJobs(trackIds).map((job) => missingSongRequest(job, current)));
       }),
     missingAction: (action, albumId) =>
@@ -374,6 +416,7 @@ export const createDownloads = (deps: DownloadsDeps): DownloadsShape => {
         }
         const current = await session();
         const songs = action === "downloadAll" ? download.toDownload : download.toRetry;
+        if (action === "downloadAll") ownerAsked(missing.map((job) => job.videoId));
         await enqueue(songs.map((job) => missingSongRequest(job, current, origin)));
       }),
     retry: (ids) =>
@@ -420,6 +463,39 @@ export const createDownloads = (deps: DownloadsDeps): DownloadsShape => {
     bestQuality: async () => (await session()).status !== "off",
     setBestQuality: async (on) =>
       (await deps.call(on ? "soulseek.turnOn" : "soulseek.turnOff", {})).status !== "off",
+    syncStars: () =>
+      queued(async () => {
+        if (deps.favorites === undefined) return;
+        await refresh();
+        const starred = deps.favorites();
+        const missing = deps.missingSongs().map((track) => track.id);
+        const { download, cancel, seen } = syncedStarDownloads(
+          { starred, missing },
+          readSyncedStars(store.read(SEEN_STARS)),
+        );
+        let asked = readStarDownloads(store.read(STAR_ASKED));
+        const cancelled = cancel.map(missingSongJobId);
+        for (const id of cancelled)
+          if (unstarredDownload(statuses.get(id) ?? null, { starAsked: asked.has(id) }) === "cancel")
+            await deps.call("downloads.cancel", { id });
+        const current = await session();
+        const requests: JobRequest[] = [];
+        const queuedIds: string[] = [];
+        for (const job of missingJobs(download)) {
+          const step = starredDownload(statuses.get(job.videoId) ?? null);
+          if (step === "keep") continue;
+          requests.push(
+            missingSongRequest(job, current, step === "queue" ? FAVORITES_DOWNLOAD_ORIGIN : null),
+          );
+          if (step === "queue") queuedIds.push(job.videoId);
+        }
+        asked = starAskedAfter(asked, { kind: "unstarred", ids: cancelled });
+        asked = starAskedAfter(asked, { kind: "starred", queued: queuedIds });
+        store.write(STAR_ASKED, writeStarDownloads(asked));
+        store.write(SEEN_STARS, writeSyncedStars(seen));
+        if (requests.length > 0) await enqueue(requests, false);
+        else if (cancelled.length > 0) await refresh();
+      }),
     dispose: () => {
       disposed = true;
       clearInterval(poll);

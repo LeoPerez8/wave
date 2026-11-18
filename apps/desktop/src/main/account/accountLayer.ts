@@ -9,6 +9,7 @@ import * as Context from "effect/Context";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import type { AccountView } from "../../shared/account.ts";
+import { Downloads } from "../downloads/downloadsLayer.ts";
 import { DesktopLibrary } from "../library/library.ts";
 import { Playback } from "../playback/playback.ts";
 import { changesPlaybackSettings } from "../playback/playbackSettings.ts";
@@ -46,6 +47,12 @@ export const accountLayer = (options: {
       const db = yield* Database;
       const library = yield* DesktopLibrary;
       const playback = yield* Playback;
+      const downloads = yield* Downloads;
+      // A star means downloaded: a missing song's star, set here or pulled, asks for its file.
+      const syncStars = () =>
+        void downloads
+          .syncStars()
+          .catch((error: unknown) => console.warn("[wave] The stars' downloads failed", error));
       const { account } = options;
       const sync = createDesktopSync({
         db,
@@ -61,6 +68,7 @@ export const accountLayer = (options: {
                 console.warn("[wave] The account's playback settings didn't apply", error),
               );
         },
+        starsPulled: syncStars,
         ...(options.clock === undefined ? {} : { clock: options.clock }),
       });
       // A scan that ended before this layer was built counts as the first.
@@ -71,7 +79,10 @@ export const accountLayer = (options: {
       });
       const stopPlayback = playback.subscribe((change) => {
         if (change === "played") sync.played("ended");
-        else sync.edited({ songs: false });
+        else {
+          sync.edited({ songs: false });
+          syncStars();
+        }
       });
       sync.start();
       yield* Effect.addFinalizer(() =>

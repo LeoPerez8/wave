@@ -8,7 +8,7 @@ import type { WaveBridge } from "../src/shared/bridge.ts";
 import type { DownloadsView } from "../src/shared/downloads.ts";
 import type { SongTags } from "../src/shared/tags.ts";
 import { Database } from "@wave/client";
-import { addTrack, type TestDatabase } from "@wave/client/testing";
+import { addTrack, star, type TestDatabase } from "@wave/client/testing";
 import { sql } from "drizzle-orm";
 import * as Effect from "effect/Effect";
 import { libraryLayer } from "../src/main/database.ts";
@@ -93,6 +93,53 @@ test("a missing Search song waits offline and resumes its download instead of pl
     await expect.poll(async () => (await downloads(page)).online).toBe(true);
     // With no source enabled, the resumed job fails and remains available to retry.
     await expect.poll(async () => (await downloads(page)).failed).toBe(1);
+  } finally {
+    await app.close();
+    rmSync(data, { recursive: true, force: true });
+  }
+});
+
+test("missing favorites queue at startup and when starred from Songs", async () => {
+  const data = mkdtempSync(join(tmpdir(), "wave-e2e-favorites-downloads-"));
+  await Effect.runPromise(
+    Effect.gen(function* () {
+      const db = (yield* Database) as unknown as TestDatabase;
+      const existing = addTrack(db, { title: "Existing Star" });
+      const newStar = addTrack(db, { title: "New Star" });
+      db.run(sql`UPDATE tracks SET path = NULL WHERE id IN (${existing}, ${newStar})`);
+      star(db, existing, 1000);
+      db.run(sql`INSERT INTO desktop_settings (key, value) VALUES ('settings.ytMusic', 'off')`);
+    }).pipe(Effect.provide(libraryLayer(join(data, "wave.db")))),
+  );
+  const app = await electron.launch({
+    args: [appFolder, "--lang=en-US"],
+    env: { ...process.env, WAVE_DATA_DIR: data, WAVE_MUSIC_DIR: join(data, "Absent") },
+  });
+  try {
+    const page = await app.firstWindow();
+    await app.evaluate(({ net }) => {
+      net.isOnline = () => false;
+    });
+    await expect.poll(async () => (await downloads(page)).online).toBe(false);
+    const titles = () =>
+      page.evaluate(async () =>
+        (await (window as unknown as Wave).wave.downloads.rows(0, 10)).items.map((row) => row.title),
+      );
+    await page.getByRole("button", { name: "Songs", exact: true }).click();
+    const row = page.getByRole("row", { name: /New Star/ });
+    await row.click({ button: "right" });
+    await page.getByRole("menuitem", { name: "Favorite", exact: true }).click();
+    await page.getByRole("button", { name: "Favorites", exact: true }).click();
+    await expect(page.getByRole("row", { name: /New Star/ })).toBeVisible();
+    await expect.poll(titles).toEqual(["Existing Star", "New Star"]);
+    await page.getByTestId("downloads-nav").click();
+    await expect(page.getByText("New Star", { exact: true })).toBeVisible();
+    await page.screenshot({ path: test.info().outputPath("starred-downloads.png") });
+
+    await page.getByRole("button", { name: "Favorites", exact: true }).click();
+    await row.click({ button: "right" });
+    await page.getByRole("menuitem", { name: "Remove from Favorites", exact: true }).click();
+    await expect.poll(titles).toEqual(["Existing Star"]);
   } finally {
     await app.close();
     rmSync(data, { recursive: true, force: true });
