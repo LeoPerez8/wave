@@ -92,7 +92,10 @@ const claim = (fields: Partial<DownloadClaim>): DownloadClaim => ({
 test("a YT Music song is prepared from YouTube, tagged from its album page and the lookups", async () => {
   const answer = (await createAnswers(deps()).answer(claim({}))) as Answer;
   assert.equal(answer["source"], "youtube");
-  assert.equal(answer["targetPath"], "C:/Music/Elis Regina & Tom Jobim/Elis & Tom/01 Águas de Março.m4a");
+  assert.equal(
+    answer["targetPath"],
+    "C:/Music/Elis Regina & Tom Jobim/Elis & Tom/01 Águas de Março.m4a",
+  );
   assert.equal(answer["tags"].album, "Elis & Tom");
   assert.equal(answer["tags"].year, 1974);
   assert.equal(answer["tags"].genre, "MPB");
@@ -145,7 +148,13 @@ test("no folder to download into fails the prepare with its plan", async () => {
 
 test("YouTube audio of another length is turned down; the song's length is accepted", async () => {
   const answers = createAnswers(deps());
-  const audio = { partPath: "x.part", bytes: 1, mimeType: "audio/mp4", itag: 140, bitrate: 128_000 };
+  const audio = {
+    partPath: "x.part",
+    bytes: 1,
+    mimeType: "audio/mp4",
+    itag: 140,
+    bitrate: 128_000,
+  };
   assert.deepEqual(
     await answers.answer(
       claim({ decision: "confirm", receiptId: "r", audio: { ...audio, durationMs: 212_500 } }),
@@ -183,6 +192,18 @@ test("publish names the place in the Library's folders at the policy's revision"
     targetPath: "C:/Music/Elis Regina/Elis & Tom/01 Águas de Março.m4a",
     revision: 7,
   });
+});
+
+test("import puts a Windows path the JVM saved with backslashes in the Library with forward slashes", async () => {
+  imported.length = 0;
+  const answers = createAnswers(deps({ platform: "win32" }));
+  const saved = String.raw`C:\Music\x.m4a`;
+  assert.deepEqual(
+    await answers.answer(claim({ decision: "import", source: "youtube", saved: { path: saved } })),
+    // The JVM matches its answer against the path it saved.
+    { path: saved },
+  );
+  assert.deepEqual(imported, [{ path: "C:/Music/x.m4a", videoId: "abcdefghijk", fills: null }]);
 });
 
 test("import puts the file in the Library with its video, and a missing song fills its Track", async () => {

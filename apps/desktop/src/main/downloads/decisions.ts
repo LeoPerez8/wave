@@ -10,12 +10,13 @@ import {
   downloadFailurePlan,
   downloadJobKind,
   downloadSource,
-  isWithin,
   missingSongJob,
   missingSongLookup,
   missingSongSearch,
   missingSongTags,
   missingSongVideo,
+  scanPath,
+  scanPathWithin,
   soulseekCandidates,
   soulseekQuery,
   soulseekReceivedMatches,
@@ -80,6 +81,8 @@ export interface AnswerDeps {
   readonly log?: (level: "info" | "warn", message: string) => void;
   /** How long a download waits for optional metadata (an album page, lyrics); 3 s, as the phone. */
   readonly optionalMs?: number;
+  /** The JVM saves Windows paths with backslashes; the Library keeps forward slashes. */
+  readonly platform?: string;
 }
 
 /** A decision the journal leased: the job as `downloads.claim` answers it. */
@@ -151,7 +154,8 @@ const native = async <A>(call: () => Promise<A>): Promise<A> => {
   }
 };
 
-type Settled<A> = { readonly ok: true; readonly value: A } | { readonly ok: false; readonly error: DownloadFailed };
+type Settled<A> =
+  { readonly ok: true; readonly value: A } | { readonly ok: false; readonly error: DownloadFailed };
 
 const settle = async <A>(call: () => Promise<A>): Promise<Settled<A>> => {
   try {
@@ -253,7 +257,14 @@ export const createAnswers = (deps: AnswerDeps): Answers => {
     if (candidates.length === 0) return { failure: "unavailable", tags, failurePlan, ...fallback };
     const target = ytDownloadDestination(roots, excludedFolders, tags, "soulseek");
     if (target === null) throw new DownloadFailed("noFolder");
-    return { source: "soulseek", candidates, tags, targetPath: target.path, failurePlan, ...fallback };
+    return {
+      source: "soulseek",
+      candidates,
+      tags,
+      targetPath: target.path,
+      failurePlan,
+      ...fallback,
+    };
   };
 
   const prepareSong = async (song: DownloadClaim["song"]): Promise<object> => {
@@ -285,7 +296,8 @@ export const createAnswers = (deps: AnswerDeps): Answers => {
     if (!deps.ytMusicOn()) throw new DownloadFailed("noSource");
     const { tags, targetPath } = claim;
     if (tags === undefined || targetPath === undefined) throw new DownloadFailed("failed");
-    const video = downloadJobKind(claim.id).kind === "song" ? await audioTrack(claim.song) : undefined;
+    const video =
+      downloadJobKind(claim.id).kind === "song" ? await audioTrack(claim.song) : undefined;
     return {
       source: "youtube",
       ...(video === undefined ? {} : { video }),
@@ -362,7 +374,8 @@ export const createAnswers = (deps: AnswerDeps): Answers => {
   };
 
   const prepare = (claim: DownloadClaim): Promise<object> => {
-    if (claim.fellBackFrom !== undefined && claim.source === "youtube") return prepareFallback(claim);
+    if (claim.fellBackFrom !== undefined && claim.source === "youtube")
+      return prepareFallback(claim);
     const job = downloadJobKind(claim.id);
     if (job.kind === "missing") return prepareMissingSong(job.trackId);
     // Quality replacements and unsearched songs aren't made on the desktop.
@@ -388,18 +401,24 @@ export const createAnswers = (deps: AnswerDeps): Answers => {
   const publish = async (claim: DownloadClaim): Promise<object> => {
     const { roots, excludedFolders, revision } = await deps.policy();
     if (claim.tags === undefined) throw new DownloadFailed("failed");
-    const target = ytDownloadDestination(roots, excludedFolders, claim.tags, claim.source ?? "soulseek");
+    const target = ytDownloadDestination(
+      roots,
+      excludedFolders,
+      claim.tags,
+      claim.source ?? "soulseek",
+    );
     if (target === null) throw new DownloadFailed("noFolder");
     return { targetPath: target.path, revision };
   };
 
   const importDownload = async (claim: DownloadClaim): Promise<object> => {
     if (claim.saved === undefined) throw new DownloadFailed("failed");
-    const { path } = claim.saved;
+    const platform = deps.platform ?? process.platform;
+    const path = scanPath(claim.saved.path, platform);
     const { roots, excludedFolders } = await deps.policy();
     if (
-      !roots.some((root) => isWithin(path, root.path)) ||
-      excludedFolders.some((folder) => isWithin(path, folder))
+      !roots.some((root) => scanPathWithin(path, root.path, platform)) ||
+      excludedFolders.some((folder) => scanPathWithin(path, folder, platform))
     )
       throw new DownloadFailed("noFolder");
     const job = downloadJobKind(claim.id);
@@ -409,7 +428,8 @@ export const createAnswers = (deps: AnswerDeps): Answers => {
         ? null
         : (claim.video ?? (job.kind === "song" ? claim.song.videoId : null));
     await deps.importFile(path, { videoId, fills });
-    return { path };
+    // The JVM matches the answer against the path it saved.
+    return { path: claim.saved.path };
   };
 
   const decide = async (claim: DownloadClaim): Promise<object> => {
