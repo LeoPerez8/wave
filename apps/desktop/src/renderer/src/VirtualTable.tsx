@@ -72,6 +72,10 @@ export function VirtualTable({
   const firstPage = Math.floor(start / SIZE);
   const lastPage = Math.floor(Math.max(start, end - 1) / SIZE);
   const songList = !["albums", "artists", "playlists", "genres"].includes(scope.kind);
+  const emptyMessage =
+    scope.kind in text.library.sectionEmpty
+      ? text.library.sectionEmpty[scope.kind as keyof typeof text.library.sectionEmpty]
+      : labels.noResults;
 
   useEffect(() => {
     const element = viewport.current!;
@@ -128,6 +132,7 @@ export function VirtualTable({
   const jump = async (letter: string) => {
     try {
       move(await window.wave.library.letter(scope, letter));
+      viewport.current?.parentElement?.focus();
     } catch {
       onError();
     }
@@ -165,7 +170,11 @@ export function VirtualTable({
       aria-rowcount={total + 1}
       aria-colcount={5}
       tabIndex={0}
-      aria-activedescendant={total && get(active) ? `library-row-${active}` : undefined}
+      aria-activedescendant={
+        total && active >= start && active < end && get(active)
+          ? `library-row-${active}`
+          : undefined
+      }
       onKeyDown={key}
     >
       <div className="table-head table-columns" role="row" aria-rowindex={1}>
@@ -216,7 +225,16 @@ export function VirtualTable({
                         <Artwork hash={row.artworkHash} artist={scope.kind === "artists"} />
                       )}
                       <span className="row-play">
-                        <Icon name={row.unavailable ? "folder" : "play"} size={16} />
+                        <Icon
+                          name={
+                            row.unavailable
+                              ? "folder"
+                              : songList && row.path === null
+                                ? "missing"
+                                : "play"
+                          }
+                          size={16}
+                        />
                       </span>
                     </span>
                     <span className="truncate">{row.title}</span>
@@ -240,7 +258,7 @@ export function VirtualTable({
         </div>
         {total === 0 && (
           <p className="empty" role="status">
-            {ready ? labels.noResults : labels.loading}
+            {ready ? emptyMessage : labels.loading}
           </p>
         )}
       </div>

@@ -287,6 +287,9 @@ h2 {
 .table-row[aria-disabled="true"] {
   color: var(--color-secondary);
 }
+.table-row[aria-disabled="true"] .row-play {
+  display: flex;
+}
 .title-cell {
   display: flex;
   align-items: center;

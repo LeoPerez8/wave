@@ -185,7 +185,7 @@ test("every Library page is reachable using only the keyboard on an empty Librar
       await expect(page.getByRole("heading", { level: 1 })).toHaveText(name);
       if (name !== "Settings") {
         await expect(page.getByRole("grid")).toBeFocused();
-        await expect(page.getByRole("grid")).toContainText("No songs found.");
+        await expect(page.getByRole("grid").getByRole("status")).not.toHaveText("Loading…");
       }
     }
   } finally {

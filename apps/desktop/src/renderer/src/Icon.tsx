@@ -1,4 +1,5 @@
 const paths: Record<string, string> = {
+  missing: "M6 6l12 12M6 18 18 6",
   home: "m3 10 9-7 9 7v11h-6v-7H9v7H3Z",
   search: "M21 21l-5-5M18 10a8 8 0 1 1-16 0 8 8 0 0 1 16 0",
   songs: "M9 18V5l12-2v13M9 8l12-2M9 18c0 4-7 4-7 0s7-4 7 0M21 16c0 4-7 4-7 0s7-4 7 0",
