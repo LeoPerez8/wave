@@ -885,6 +885,9 @@ h2 {
   top: auto;
   bottom: 112px;
 }
+.action-toast > button {
+  white-space: nowrap;
+}
 button.accent {
   color: var(--color-on-accent);
   background: var(--color-accent);

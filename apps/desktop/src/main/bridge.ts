@@ -32,7 +32,11 @@ import { runSongAction, songMenu } from "./library/songActions.ts";
 import type { Appearance } from "../shared/bridge.ts";
 import { VIDEO_ID, YtMusic } from "./yt/ytMusic.ts";
 import { Downloads } from "./downloads/downloadsLayer.ts";
-import { MISSING_SONGS_ACTIONS } from "../shared/downloads.ts";
+import {
+  MISSING_SONGS_ACTIONS,
+  MISSING_SONGS_LISTS,
+  type MissingSongsList,
+} from "../shared/downloads.ts";
 import type { MissingSongsDownloadAction } from "@wave/core";
 import { createYtFeatureHandlers } from "./yt/ytBridge.ts";
 import type { YtFeatures } from "./yt/ytServices.ts";
@@ -63,6 +67,13 @@ const validScope = (value: unknown): value is BrowseScope => {
 };
 
 const LIST_OF_LISTS = ["albums", "artists", "playlists", "genres"];
+
+/** A page whose missing songs download together, and only that. */
+const missingSongsList = (value: unknown): MissingSongsList | undefined => {
+  if (typeof value !== "object" || value === null) return undefined;
+  const { kind, id } = value as MissingSongsList;
+  return MISSING_SONGS_LISTS.includes(kind) && songId(id) ? { kind, id } : undefined;
+};
 
 const songId = (value: unknown): boolean =>
   typeof value === "number" && Number.isSafeInteger(value) && value > 0;
@@ -355,10 +366,12 @@ const createHandlers = (
       validPage(offset, limit)
         ? downloadsCall((d) => d.rows(offset as number, limit as number))
         : refuse("downloads.rows", "invalid page"),
-    "downloads.album": ([albumId]) =>
-      songId(albumId)
-        ? downloadsCall((d) => d.albumView(albumId as number))
-        : refuse("downloads.album", "invalid album"),
+    "downloads.list": ([value]) => {
+      const list = missingSongsList(value);
+      return list === undefined
+        ? refuse("downloads.list", "invalid list")
+        : downloadsCall((d) => d.listView(list));
+    },
     "downloads.yt": ([ids]) => {
       const asked = videoIds(ids);
       return asked === undefined
@@ -371,13 +384,13 @@ const createHandlers = (
         ? refuse("downloads.missing", "invalid songs")
         : downloadsCall((d) => d.missing(asked));
     },
-    "downloads.missingAction": ([action, albumId]) =>
-      MISSING_SONGS_ACTIONS.includes(action as MissingSongsDownloadAction) &&
-      (albumId === undefined || songId(albumId))
-        ? downloadsCall((d) =>
-            d.missingAction(action as MissingSongsDownloadAction, albumId as number | undefined),
-          )
-        : refuse("downloads.missingAction", "invalid action or album"),
+    "downloads.missingAction": ([action, value]) => {
+      const list = value === undefined ? undefined : missingSongsList(value);
+      return MISSING_SONGS_ACTIONS.includes(action as MissingSongsDownloadAction) &&
+        (value === undefined || list !== undefined)
+        ? downloadsCall((d) => d.missingAction(action as MissingSongsDownloadAction, list))
+        : refuse("downloads.missingAction", "invalid action or list");
+    },
     "downloads.retry": ([ids]) => {
       const asked = ids === undefined ? undefined : downloadIds(ids);
       return ids !== undefined && asked === undefined
