@@ -7,7 +7,8 @@
 #   scripts/ci/publish-release.sh <apk path>
 # Run from a checkout of the repo. Env: GH_TOKEN, RELEASE_TAG (default GITHUB_REF_NAME),
 # GITHUB_REF_TYPE, RELEASE_SHA (the commit a branch push releases: its version bump; default
-# GITHUB_SHA), RELEASE_NOTES_FILE (optional: the patch notes).
+# GITHUB_SHA), RELEASE_NOTES_FILE (optional: the patch notes), PROVENANCE_FILE (optional: the
+# release gate's sealed record, attached as wave-<version>.provenance.json; docs/release-provenance.md).
 set -euo pipefail
 
 apk="$1"
@@ -16,6 +17,11 @@ version="${tag#v}"
 dir="${RUNNER_TEMP:-/tmp}"
 asset="$dir/wave-$version.apk"
 cp "$apk" "$asset"
+assets=("$asset")
+if [ -n "${PROVENANCE_FILE:-}" ]; then
+  cp "$PROVENANCE_FILE" "$dir/wave-$version.provenance.json"
+  assets+=("$dir/wave-$version.provenance.json")
+fi
 
 notes="${RELEASE_NOTES_FILE:-}"
 if [ -z "$notes" ]; then
@@ -43,13 +49,13 @@ fi
 
 # A re-run of the same tag replaces the APK and leaves the release as it was.
 if gh release view "$tag" > /dev/null 2>&1; then
-  gh release upload "$tag" "$asset" --clobber
+  gh release upload "$tag" "${assets[@]}" --clobber
   if [[ "$version" == *-ti ]]; then gh release edit "$tag" --prerelease --latest=false; fi
 elif [ ${#target[@]} -gt 0 ]; then
-  gh release create "$tag" "$asset" "${target[@]}" "${flags[@]}" \
+  gh release create "$tag" "${assets[@]}" "${target[@]}" "${flags[@]}" \
     --title "Wave $version" --notes-file "$notes"
 else
-  gh release create "$tag" "$asset" --verify-tag "${flags[@]}" \
+  gh release create "$tag" "${assets[@]}" --verify-tag "${flags[@]}" \
     --title "Wave $version" --notes-file "$notes"
 fi
 echo "Published $tag: ${GITHUB_SERVER_URL:-https://github.com}/${GITHUB_REPOSITORY:?}/releases/tag/$tag"

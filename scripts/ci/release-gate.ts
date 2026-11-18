@@ -152,7 +152,10 @@ const artifactOf = (android: Outputs, releaseTag: string): Artifact => {
     updateChannel: android.update_channel ?? "",
     updateSha256,
   };
-  if (!/^unsigned-wave-[\w.-]+\.apk$/.test(artifact.name) || !/^wave-[\w.-]+\.apk$/.test(artifact.apk))
+  if (
+    !/^unsigned-wave-[\w.-]+\.apk$/.test(artifact.name) ||
+    !/^wave-[\w.-]+\.apk$/.test(artifact.apk)
+  )
     refuse("android named no APK.");
   if (build === "full") {
     if (android.base) refuse("android built in full but named a kept base.");
@@ -162,8 +165,7 @@ const artifactOf = (android: Outputs, releaseTag: string): Artifact => {
   if (releaseTag && !releaseTag.endsWith("-ti")) refuse(`${releaseTag} must build in full.`);
   const base = keptBuild(parse(android.base ?? ""));
   if (!base) return refuse("android repacked without a kept full build's record.");
-  if (base.key !== runtimeVersion)
-    refuse("android repacked a kept build of another native side.");
+  if (base.key !== runtimeVersion) refuse("android repacked a kept build of another native side.");
   return { ...artifact, base };
 };
 
@@ -199,15 +201,15 @@ export const digestOf = (path: string): string => {
   if (!statSync(path).isDirectory()) return sha256(readFileSync(path));
   const files = (prefix: string): string[] =>
     readdirSync(join(path, prefix), { withFileTypes: true }).flatMap((entry) =>
-      entry.isDirectory()
-        ? files(`${prefix}${entry.name}/`)
-        : [`${prefix}${entry.name}`],
+      entry.isDirectory() ? files(`${prefix}${entry.name}/`) : [`${prefix}${entry.name}`],
     );
   return sha256(
     files("")
       .sort()
-      .map((file) => `${file} ${sha256(readFileSync(join(path, file)))}
-`)
+      .map(
+        (file) => `${file} ${sha256(readFileSync(join(path, file)))}
+`,
+      )
       .join(""),
   );
 };
@@ -229,7 +231,9 @@ const runFromEnv = (env: NodeJS.ProcessEnv): Run => ({
 
 const cli = ([command, first, second]: string[]): string => {
   if (command === "admit" && first)
-    return JSON.stringify(admitRelease(parse(readFileSync(first, "utf8")), runFromEnv(process.env)));
+    return JSON.stringify(
+      admitRelease(parse(readFileSync(first, "utf8")), runFromEnv(process.env)),
+    );
   if (command === "digest" && first) return digestOf(first);
   if (command === "verify" && first && second) {
     const { artifact } = provenanceAt(first);

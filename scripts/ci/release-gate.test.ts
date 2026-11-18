@@ -249,9 +249,12 @@ describe("release-gate.ts in the release job", () => {
     assert.equal(sealed.status, 0, sealed.stderr);
     const seal = JSON.parse(sealed.stdout);
     assert.equal(seal.artifact.signedSha256, sha256("signed apk"));
-    assert.deepEqual({ ...seal, artifact: { ...seal.artifact, signedSha256: undefined } }, {
-      ...record,
-      artifact: { ...record.artifact, signedSha256: undefined },
-    });
+    assert.deepEqual(
+      { ...seal, artifact: { ...seal.artifact, signedSha256: undefined } },
+      {
+        ...record,
+        artifact: { ...record.artifact, signedSha256: undefined },
+      },
+    );
   });
 });
