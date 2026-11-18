@@ -8,6 +8,7 @@
     "./db/*": "./src/db/*.ts",
     "./testing": "./src/db/testDatabase.ts",
     "./testing/fastAgainFixture": "./src/db/fastAgainFixture.ts",
+    "./downloads/lookups": "./src/downloads/lookups.ts",
     "./artworkUri": "./src/artworkUri.ts",
     "./playlistRecommendationTracks": "./src/playlistRecommendationTracks.ts",
     "./playbackSession": "./src/playbackSession.ts",

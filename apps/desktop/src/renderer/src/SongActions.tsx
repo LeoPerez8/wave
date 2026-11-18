@@ -11,6 +11,7 @@ import {
   planAlert,
   queuedToast,
   splitActionBar,
+  tagLookupsToast,
   toastDuration,
   type ActionSurface,
   type AlertSpec,
@@ -90,6 +91,8 @@ export function useSongActions({ go, select, failed, changed, newPlaylist }: Opt
   const run = useCallback(
     async (target: SongTarget, action: SongRunAction, surface: ActionSurface, id?: number) => {
       try {
+        // Each song waits on LRCLIB and Deezer: say it's under way.
+        if (action === "fixSong" || action === "fixSongs") notify(text.fixSongs.progress);
         const result = await window.wave.songs.run(target, action, id);
         changed();
         switch (result.kind) {
@@ -112,6 +115,8 @@ export function useSongActions({ go, select, failed, changed, newPlaylist }: Opt
             );
           case "removed":
             return;
+          case "fixed":
+            return notify(tagLookupsToast(result.results, result.stop, result.skipped, text));
           case "playlistRemoved":
             return notify(text.playlists.removed(result.count), () => {
               void window.wave.playlists
@@ -147,6 +152,8 @@ export function useSongActions({ go, select, failed, changed, newPlaylist }: Opt
         case "addToQueue":
         case "favorite":
         case "unfavorite":
+        case "fixSong":
+        case "fixSongs":
           return {
             ...base,
             run: () => {
@@ -268,7 +275,7 @@ export function useSongActions({ go, select, failed, changed, newPlaylist }: Opt
             },
           };
         default:
-          // Copy Link and Fix Song come with their features' tickets.
+          // Copy Link comes with its feature ticket.
           return { ...base, disabled: true };
       }
     },

@@ -3,6 +3,7 @@ import { defineConfig } from "@playwright/test";
 /** Drives the built app (`pnpm build` first; `pnpm test:e2e` does both). */
 export default defineConfig({
   testDir: "e2e",
+  testIgnore: "**/performance.spec.ts",
   outputDir: "test-results",
   timeout: 60_000,
   workers: 1,

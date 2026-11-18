@@ -26,6 +26,7 @@ const paths: Record<string, string> = {
   menu: "M5 11v2m7-2v2m7-2v2",
   folder: "M3 7V4h6l3 3h9v14H3Z",
   add: "M12 4v16M4 12h16",
+  download: "M12 3v12m-5-5 5 5 5-5M4 21h16",
 };
 export function Icon({ name, size = 20 }: { readonly name: string; readonly size?: number }) {
   return (

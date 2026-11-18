@@ -38,6 +38,9 @@ import {
 import { appearance } from "./preferences.ts";
 import { artworkStore } from "./library/artwork.ts";
 import { ytMusicLayer } from "./yt/ytMusic.ts";
+import { downloadsLayer } from "./downloads/downloadsLayer.ts";
+import { keyringHost } from "./downloads/keyring.ts";
+import type { KotlinEvent } from "./kotlin/protocol.ts";
 import { ytFeaturesLayer } from "./yt/ytServices.ts";
 import { lyricsLayer } from "./lyrics/lyrics.ts";
 import { botguardPost, createPoTokens, poTokenHost } from "./yt/poTokens.ts";
@@ -59,6 +62,8 @@ if (dataFolder !== undefined && dataFolder !== "") app.setPath("userData", dataF
 let window: BrowserWindow | undefined;
 let system: ReturnType<typeof installDesktopSystem> | undefined;
 let showRequested = false;
+// Set once the page is loaded and the services are up; the window isn't shown before.
+let windowReady = false;
 
 /**
  * Wave's caches: %LOCALAPPDATA%\Wave or ~/.cache/wave (cover art, streamed audio); tests point
@@ -78,7 +83,7 @@ const poTokens = createPoTokens({ openPage: openPoTokenPage, post: botguardPost(
 
 const showWindow = () => {
   showRequested = true;
-  if (window === undefined) return;
+  if (window === undefined || !windowReady) return;
   if (window.isMinimized()) window.restore();
   window.show();
   window.focus();
@@ -87,7 +92,11 @@ const showWindow = () => {
 // The account's theme once the services are up (docs/spec-desktop.md, Wave account and sync).
 let theme: ThemeChoice = DEFAULT_THEME_CHOICE;
 const colours = () => themeFor(theme)[nativeTheme.shouldUseDarkColors ? "dark" : "light"];
-const createWindow = (onFocus: () => void) => {
+/**
+ * Opens the window and loads its page while the services are still starting, and shows it once
+ * both are done: the page is loaded by then, and the account's theme is known before it's seen.
+ */
+const createWindow = (onFocus: () => void, services: Promise<void>) => {
   const created = new BrowserWindow({
     width: 1280,
     height: 800,
@@ -129,9 +138,19 @@ const createWindow = (onFocus: () => void) => {
       app.quit();
     }
   });
-  created.once("ready-to-show", () => {
-    if (!process.argv.includes("--hidden") || showRequested) created.show();
-  });
+  const painted = new Promise<void>((resolve) => created.once("ready-to-show", () => resolve()));
+  void Promise.all([painted, services]).then(
+    () => {
+      if (created.isDestroyed()) return;
+      created.setBackgroundColor(colours().background);
+      update();
+      windowReady = true;
+      // Started with the system, Wave stays in the tray until it's asked for.
+      if (!process.argv.includes("--hidden") || showRequested) created.show();
+    },
+    // Without its services Wave has nothing to show; the failure is reported where they start.
+    () => {},
+  );
   created.on("closed", () => {
     window = undefined;
     system?.close();
@@ -174,11 +193,16 @@ else {
       dataDir: join(app.getPath("userData"), "kotlin"),
       platform: process.platform,
     });
+    // What the JVM tells main unasked (`ready`, `downloadsChanged`), for whoever listens.
+    const kotlinListeners = new Set<(event: KotlinEvent) => void>();
     const base = Layer.mergeAll(
       libraryLayer(join(app.getPath("userData"), "wave.db")),
       kotlinLayer({
         spawn: spawnLines(jvm, (text) => process.stderr.write(`[jvm] ${text}`)),
-        host: { poToken: poTokenHost(poTokens) },
+        host: { poToken: poTokenHost(poTokens), ...keyringHost(safeStorage) },
+        onEvent: (event) => {
+          for (const listener of kotlinListeners) listener(event);
+        },
       }),
     );
     // The player streams YT Music songs through YtMusic, into the bounded audio cache.
@@ -187,9 +211,14 @@ else {
         fork: forkAudio(join(import.meta.dirname, "audio.js"), addon, cacheFolder("audio")),
       }),
     ).pipe(Layer.provideMerge(ytMusicLayer()), Layer.provideMerge(base));
+    // Electron resolves Windows' Music known folder and Linux's XDG user directory.
+    const musicFolder = process.env["WAVE_MUSIC_DIR"] ?? app.getPath("music");
+    const pickFolder = async () => {
+      const result = await dialog.showOpenDialog({ properties: ["openDirectory"] });
+      return result.canceled ? undefined : result.filePaths[0];
+    };
     const library = desktopLibraryLayer({
-      // Electron resolves Windows' Music known folder and Linux's XDG user directory.
-      musicFolder: process.env["WAVE_MUSIC_DIR"] ?? app.getPath("music"),
+      musicFolder,
       platform: process.platform,
       cacheArtwork: (() => {
         let store: ReturnType<typeof artworkStore> | undefined;
@@ -211,12 +240,23 @@ else {
           return store(encoded);
         };
       })(),
-      pickFolder: async () => {
-        const result = await dialog.showOpenDialog({ properties: ["openDirectory"] });
-        return result.canceled ? undefined : result.filePaths[0];
-      },
+      pickFolder,
     }).pipe(Layer.provideMerge(services));
     const text = catalogueOf(resolveAppLanguage(app.getPreferredSystemLanguages()), "desktop");
+    const downloads = downloadsLayer({
+      catalogue: text,
+      platform: process.platform,
+      musicFolder,
+      pickFolder,
+      online: () => net.isOnline(),
+      events: (listener) => {
+        kotlinListeners.add(listener);
+        return () => kotlinListeners.delete(listener);
+      },
+      log: (level, message) =>
+        process.stderr.write(`[downloads] ${level}: ${message}
+`),
+    }).pipe(Layer.provideMerge(library));
     const config = accountConfig(
       // Named one by one: the bundler puts each value in, not the whole environment.
       {
@@ -300,7 +340,7 @@ else {
             Layer.provideMerge(
               playlists.pipe(
                 Layer.provideMerge(
-                  Layer.mergeAll(playbackLayer, lyricsLayer()).pipe(Layer.provideMerge(library)),
+                  Layer.mergeAll(playbackLayer, lyricsLayer()).pipe(Layer.provideMerge(downloads)),
                 ),
               ),
             ),
@@ -311,9 +351,12 @@ else {
     const readTheme = () =>
       runtime.runPromise(Effect.map(Account, (it) => readThemeChoice(it.view().theme)));
     // Builds the services now, so the JVM starts with the app rather than on the first call.
-    await runtime.context();
-    nativeTheme.themeSource = await runtime.runPromise(Effect.map(Database, appearance));
-    theme = await readTheme();
+    const started = (async () => {
+      await runtime.context();
+      nativeTheme.themeSource = await runtime.runPromise(Effect.map(Database, appearance));
+      theme = await readTheme();
+    })();
+    // A call from the page waits for the services it needs.
     registerBridge(
       ipcMain,
       runtime,
@@ -356,7 +399,8 @@ else {
       void readTheme().then((choice) => {
         theme = choice;
       });
-    });
+    }, started);
+    await started;
     system = installDesktopSystem({
       window: window!,
       db: await runtime.runPromise(Database),

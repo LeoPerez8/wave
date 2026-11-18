@@ -1,0 +1,45 @@
+.content:has(.home-page) {
+  overflow-y: auto;
+}
+.home-page {
+  display: flex;
+  flex-direction: column;
+  gap: 32px;
+  padding-bottom: 32px;
+}
+.home-page > *,
+.home-page .home-table {
+  flex-shrink: 0;
+  min-width: 0;
+}
+.home-table .table-area {
+  height: 100%;
+  padding-right: 0;
+}
+.home-table .table-columns {
+  grid-template-columns: minmax(180px, 1.5fr) minmax(110px, 1fr) minmax(100px, 1fr) 28px 80px;
+}
+.home-hint,
+.home-empty p {
+  max-width: 65ch;
+  font-size: 13px;
+  line-height: 1.5;
+}
+.home-page .shelf {
+  margin: 0;
+}
+.home-page .tile > .artwork {
+  border-radius: 6px;
+}
+.home-page .tile > .artist-image {
+  border-radius: 50%;
+}
+.home-retry button {
+  margin-top: 8px;
+  color: var(--color-accent);
+}
+@container (max-width: 759px) {
+  .home-table .table-columns {
+    grid-template-columns: minmax(140px, 1.5fr) minmax(90px, 1fr) 28px 80px;
+  }
+}

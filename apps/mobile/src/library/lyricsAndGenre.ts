@@ -11,32 +11,16 @@
  * downloaded file is `lookUpLyricsAndGenre` then `writeLyricsAndGenre`.
  */
 import {
-  LRCLIB_HEADERS,
   advisoryTag,
-  deezerAlbum,
-  deezerAlbumTracks,
-  deezerAlbumTracksUrl,
-  deezerAlbumUrl,
-  deezerTags,
-  deezerTrackCandidates,
-  deezerTrackSearchUrl,
   canFixSong,
-  deezerFollowUps,
   fixLookups,
   lookupsUnreachable,
-  lrclibCandidates,
-  lrclibSearchUrl,
   lookupFailureLine,
   missingTags,
-  pickDeezerTrack,
-  pickFoundLyrics,
   settledTags,
   songLookup,
   songTagOutcome,
   tagWriteFailureLine,
-  type DeezerAlbum,
-  type DeezerAlbumTrack,
-  type DeezerTags,
   type FoundLyrics,
   type FoundTags,
   type IndexedTags,
@@ -49,6 +33,7 @@ import {
   type TagWriteReport,
   type TagWriteStep,
 } from "@wave/core";
+import { createLookups } from "@wave/client/downloads/lookups";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 
@@ -86,16 +71,6 @@ class NativeTagWriteError extends Error {
   }
 }
 
-/** A request answered with an HTTP error: the log line says its status. */
-class HttpStatusError extends Error {
-  readonly status: number;
-  constructor(status: number, url: string) {
-    super(`HTTP ${status} for ${url}`);
-    this.name = "HttpStatusError";
-    this.status = status;
-  }
-}
-
 /** A song to fix: its file, what is sent about it, and what it already has. */
 export interface TaggableSong extends IndexedTags {
   readonly path: string;
@@ -108,74 +83,10 @@ export interface TaggableSong extends IndexedTags {
 /** A lookup (every request it makes) that takes longer than this has failed. */
 const LOOKUP_TIMEOUT = "30 seconds";
 
-const getJson = async (
-  url: string,
-  signal: AbortSignal,
-  headers?: Record<string, string>,
-): Promise<unknown> => {
-  const response = await fetch(url, { signal, headers });
-  if (!response.ok) throw new HttpStatusError(response.status, url);
-  return response.json();
-};
-
-/** Deezer albums (genre and year) already fetched in this app session, by album id: songs share them. */
-const deezerAlbums = new Map<number, DeezerAlbum>();
-/** Deezer album tracklists already fetched in this app session, by album id. */
-const deezerTracklists = new Map<number, readonly DeezerAlbumTrack[]>();
-
-const findLyrics = async (song: SongLookup, signal: AbortSignal) => {
-  const candidates = lrclibCandidates(await getJson(lrclibSearchUrl(song), signal, LRCLIB_HEADERS));
-  if (candidates === null) throw new Error("LRCLIB didn't answer with search results");
-  return pickFoundLyrics(song, candidates);
-};
-
-const findAlbum = async (albumId: number, signal: AbortSignal): Promise<DeezerAlbum> => {
-  const known = deezerAlbums.get(albumId);
-  if (known !== undefined) return known;
-  const album = deezerAlbum(await getJson(deezerAlbumUrl(albumId), signal));
-  if (album === null) throw new Error("Deezer didn't answer with an album");
-  deezerAlbums.set(albumId, album);
-  return album;
-};
-
-/** [albumId]'s tracklist, or null when Deezer doesn't give it: the genre and year still count. */
-const findTracklist = async (
-  albumId: number,
-  signal: AbortSignal,
-): Promise<readonly DeezerAlbumTrack[] | null> => {
-  const known = deezerTracklists.get(albumId);
-  if (known !== undefined) return known;
-  try {
-    const tracklist = deezerAlbumTracks(await getJson(deezerAlbumTracksUrl(albumId), signal));
-    if (tracklist !== null) deezerTracklists.set(albumId, tracklist);
-    return tracklist;
-  } catch (cause) {
-    if (signal.aborted) throw cause;
-    logLookupFailure("Deezer album tracklist lookup", "Deezer", cause);
-    return null;
-  }
-};
-
-/**
- * What Deezer says about [song] (Core's `deezerTags`) that a song with [has]
- * lacks: its album (genre and year) and that album's tracklist (track number)
- * are fetched only when Core's `deezerFollowUps` says they could fill
- * something in, each once per album and session.
- */
-const findDeezerTags = async (
-  song: SongLookup,
-  has: IndexedTags,
-  signal: AbortSignal,
-): Promise<DeezerTags | null> => {
-  const tracks = deezerTrackCandidates(await getJson(deezerTrackSearchUrl(song), signal));
-  if (tracks === null) throw new Error("Deezer didn't answer with search results");
-  const match = pickDeezerTrack(song, tracks);
-  if (match === null) return null;
-  const next = deezerFollowUps(has, match);
-  const album = next.album ? await findAlbum(match.albumId, signal) : null;
-  const tracklist = next.tracklist ? await findTracklist(match.albumId, signal) : null;
-  return deezerTags(match, album, tracklist);
-};
+const { findLyrics, findDeezerTags } = createLookups(
+  (...args) => fetch(...args),
+  (cause) => logLookupFailure("Deezer album tracklist lookup", "Deezer", cause),
+);
 
 /**
  * One service's lookup, settled: what it answered, or that it failed (or took

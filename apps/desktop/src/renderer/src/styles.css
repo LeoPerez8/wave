@@ -1032,6 +1032,67 @@ kbd {
   border-color: var(--color-accent);
   background: radial-gradient(circle, var(--color-on-accent) 0 3px, var(--color-accent) 3.5px);
 }
+/* A YouTube Music result's Download sits in the star's column. */
+.yt-item {
+  position: relative;
+}
+.yt-download {
+  position: absolute;
+  top: 6px;
+  right: 78px;
+  width: 28px;
+  height: 28px;
+  color: var(--color-secondary);
+}
+.yt-download:hover,
+.yt-download:focus-visible {
+  color: var(--color-accent);
+}
+/* Downloads: the songs on their way and the ones that failed. */
+.downloads-page {
+  overflow: auto;
+  padding-right: 22px;
+}
+.downloads-bar {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  padding: 0 12px 14px;
+}
+.downloads-bar button,
+.download-row button {
+  color: var(--color-accent);
+}
+.downloads-bar button:disabled,
+.download-row button:disabled {
+  opacity: 0.65;
+}
+.downloads-note {
+  padding: 0 12px 14px;
+}
+.download-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  height: 48px;
+  padding: 0 12px;
+  border-bottom: 1px solid color-mix(in srgb, var(--color-separator) 45%, transparent);
+}
+.download-song {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+}
+.download-song > .secondary {
+  font-size: 12px;
+}
+.nav-count {
+  margin-left: auto;
+  font-size: 11px;
+  color: var(--color-secondary);
+  font-variant-numeric: tabular-nums;
+}
 
 /* Search: the top result, the Songs table, lyrics hits and the shelves, scrolling together. */
 .search-page {
@@ -1106,6 +1167,9 @@ kbd {
 }
 .search-row:focus-visible .row-play {
   display: flex;
+}
+.search-row[data-missing] {
+  color: var(--color-secondary);
 }
 .search-row-title {
   display: flex;
