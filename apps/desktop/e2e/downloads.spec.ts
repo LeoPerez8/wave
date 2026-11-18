@@ -7,6 +7,11 @@ import { _electron as electron, expect, test, type Page } from "@playwright/test
 import type { WaveBridge } from "../src/shared/bridge.ts";
 import type { DownloadsView } from "../src/shared/downloads.ts";
 import type { SongTags } from "../src/shared/tags.ts";
+import { Database } from "@wave/client";
+import { addTrack, type TestDatabase } from "@wave/client/testing";
+import { sql } from "drizzle-orm";
+import * as Effect from "effect/Effect";
+import { libraryLayer } from "../src/main/database.ts";
 
 /**
  * Downloads in the built app with the JVM `pnpm build:jvm` built, against the live YouTube
@@ -28,6 +33,35 @@ const audioFiles = (folder: string): string[] =>
     if (statSync(path).isDirectory()) return audioFiles(path);
     return /\.(m4a|mp3)$/i.test(name) ? [path] : [];
   });
+
+test("activating a missing Search song downloads it instead of playing", async () => {
+  const data = mkdtempSync(join(tmpdir(), "wave-e2e-missing-"));
+  await Effect.runPromise(
+    Effect.gen(function* () {
+      const db = (yield* Database) as unknown as TestDatabase;
+      const id = addTrack(db, { title: "Missing Road", artist: "Nick Drake", album: "Pink Moon" });
+      db.run(sql`UPDATE tracks SET path = NULL WHERE id = ${id}`);
+      // Avoid a live search; the journal should retain the failed job with no source available.
+      db.run(sql`INSERT INTO desktop_settings (key, value) VALUES ('settings.ytMusic', 'off')`);
+    }).pipe(Effect.provide(libraryLayer(join(data, "wave.db")))),
+  );
+  const app = await electron.launch({
+    args: [appFolder, "--lang=en-US"],
+    env: { ...process.env, WAVE_DATA_DIR: data, WAVE_MUSIC_DIR: join(data, "Absent") },
+  });
+  try {
+    const page = await app.firstWindow();
+    await page.getByRole("searchbox", { name: "Search" }).fill("Missing Road");
+    await page.getByTestId("search-song").dblclick();
+    await expect.poll(async () => (await downloads(page)).rows).toBe(1);
+    await expect(page.getByTestId("downloads-nav")).toBeVisible();
+    const view = await page.evaluate(() => (window as unknown as Wave).wave.playback.view());
+    expect(view.current).toBeNull();
+  } finally {
+    await app.close();
+    rmSync(data, { recursive: true, force: true });
+  }
+});
 
 test("a YouTube Music song downloads into the Library with its tags", async () => {
   test.setTimeout(240_000);

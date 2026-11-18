@@ -100,6 +100,10 @@ export const ptBR: Catalogue = {
       "Os downloads pausam enquanto você está offline e continuam quando você voltar.",
     downloadsFolder: "Os downloads vão para",
     changeFolder: "Mudar Pasta",
+    similarArtists: "Artistas parecidos",
+    youMightAlsoLike: "Você também pode gostar",
+    magicQueueIdle:
+      "Comece uma Fila Mágica com uma destas músicas ou pelo menu de qualquer música.",
     sidePanel: "Painel lateral",
     removeFromQueue: (title: string) => `Remover “${title}” da Fila`,
   },

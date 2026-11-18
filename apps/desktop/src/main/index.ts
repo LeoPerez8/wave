@@ -41,6 +41,7 @@ import { ytMusicLayer } from "./yt/ytMusic.ts";
 import { downloadsLayer } from "./downloads/downloadsLayer.ts";
 import { keyringHost } from "./downloads/keyring.ts";
 import type { KotlinEvent } from "./kotlin/protocol.ts";
+import { ytFeaturesLayer } from "./yt/ytServices.ts";
 import { lyricsLayer } from "./lyrics/lyrics.ts";
 import { botguardPost, createPoTokens, poTokenHost } from "./yt/poTokens.ts";
 import { openPoTokenPage } from "./yt/poTokenWindow.ts";
@@ -309,9 +310,13 @@ else {
         focused: () => BrowserWindow.getFocusedWindow() !== null,
       }).pipe(
         Layer.provideMerge(
-          playlists.pipe(
+          ytFeaturesLayer({ online: () => net.isOnline() }).pipe(
             Layer.provideMerge(
-              Layer.mergeAll(playbackLayer, lyricsLayer()).pipe(Layer.provideMerge(downloads)),
+              playlists.pipe(
+                Layer.provideMerge(
+                  Layer.mergeAll(playbackLayer, lyricsLayer()).pipe(Layer.provideMerge(downloads)),
+                ),
+              ),
             ),
           ),
         ),

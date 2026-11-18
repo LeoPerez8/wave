@@ -410,6 +410,84 @@ h2 {
   padding: 14px 12px;
   font-size: 13px;
 }
+/* YouTube Music's pages (Discover, Magic Queue, artist and album pages) scroll as one. */
+.yt-page {
+  flex: 1;
+  min-height: 0;
+  overflow: auto;
+  padding: 0 22px 24px 0;
+}
+.yt-page h2,
+.related-panel h2 {
+  margin-top: 22px;
+}
+.yt-page h3,
+.related-panel h3 {
+  font-size: 14px;
+  font-weight: 600;
+  margin: 18px 0 6px;
+}
+.yt-lead {
+  font-size: 12px;
+  padding-bottom: 6px;
+}
+.yt-list-item {
+  display: flex;
+  align-items: center;
+}
+.yt-list-item > .yt-row {
+  flex: 1;
+  min-width: 0;
+}
+.text-button {
+  color: var(--color-accent);
+  margin-left: 6px;
+}
+.home-discover {
+  flex-shrink: 0;
+  max-height: 46%;
+  overflow: auto;
+  padding: 0 22px 12px 0;
+}
+.shelf-row {
+  display: flex;
+  gap: 18px;
+  overflow-x: auto;
+  padding-bottom: 6px;
+}
+.tile {
+  display: flex;
+  flex-direction: column;
+  width: 132px;
+  flex-shrink: 0;
+  text-align: left;
+  color: inherit;
+}
+.tile > .artwork {
+  width: 132px;
+  height: 132px;
+  border-radius: 6px;
+}
+.tile > .artist-image {
+  border-radius: 50%;
+}
+.tile:focus-visible {
+  outline: 2px solid var(--color-accent);
+  outline-offset: 2px;
+  border-radius: 6px;
+}
+.tile-title {
+  font-size: 13px;
+  margin-top: 8px;
+}
+.tile-caption {
+  font-size: 12px;
+  margin-top: 2px;
+}
+.related-panel {
+  min-height: 0;
+  overflow: auto;
+}
 .setting-switch {
   display: flex;
   align-items: center;
@@ -1089,6 +1167,9 @@ kbd {
 }
 .search-row:focus-visible .row-play {
   display: flex;
+}
+.search-row[data-missing] {
+  color: var(--color-secondary);
 }
 .search-row-title {
   display: flex;

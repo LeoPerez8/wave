@@ -34,6 +34,7 @@ import { registerBridge, type IpcHandler } from "./bridge.ts";
 import { DesktopLibrary, desktopLibraryLayer } from "./library/library.ts";
 import { preference } from "./preferences.ts";
 import { ytMusicLayer } from "./yt/ytMusic.ts";
+import { ytFeaturesLayer } from "./yt/ytServices.ts";
 import { lyricsLayer } from "./lyrics/lyrics.ts";
 import { accountLayer } from "./account/accountLayer.ts";
 import { downloadsLayer } from "./downloads/downloadsLayer.ts";
@@ -164,7 +165,42 @@ const jvmInMemory = () => {
                     continuation: null,
                   },
                 }
-              : { id, result: null };
+              : method === "songRadio"
+                ? {
+                    id,
+                    result: {
+                      songs: Array.from({ length: 12 }, (_, n) => ({
+                        ...ytSongNamed(`radio${String(n).padStart(6, "0")}`, `Radio ${n}`),
+                        artists: [`Singer ${n}`],
+                      })),
+                      continuation: null,
+                    },
+                  }
+                : method === "artist"
+                  ? {
+                      id,
+                      result: {
+                        name: "Nick Drake",
+                        songs: [ytSongNamed("abcdefghijk", "Pink Moon")],
+                        albums: [{ browseId: "MPREb_pinkmoon", title: "Pink Moon", year: 1972 }],
+                        singles: [],
+                        similar: [{ name: "John Martyn", browseId: "UCjohnmartyn" }],
+                      },
+                    }
+                  : method === "related"
+                    ? {
+                        id,
+                        result: {
+                          songs: [
+                            {
+                              ...ytSongNamed("mayyounever", "May You Never"),
+                              artists: ["John Martyn"],
+                            },
+                          ],
+                          artists: [{ name: "John Martyn", browseId: "UCjohnmartyn" }],
+                        },
+                      }
+                    : { id, result: null };
       }
       queueMicrotask(() => events.line(JSON.stringify(answer)));
     },
@@ -233,18 +269,22 @@ const connect = (
       ...(account.clock === undefined ? {} : { clock: account.clock }),
     }).pipe(
       Layer.provideMerge(
-        desktopPlaylistsLayer({
-          platform: process.platform,
-          imageFolder: join(dirname(file), "playlist-images"),
-          codec: { original: () => undefined, squares: () => [] },
-          pickImage: async () => undefined,
-          pickPlaylists: async () => picked.playlists,
-        }).pipe(
+        ytFeaturesLayer({ online: () => true }).pipe(
           Layer.provideMerge(
-            Layer.mergeAll(
-              playbackLayer,
-              lyricsLayer({ fetch: () => Promise.reject(new Error("no network")) }),
-            ).pipe(Layer.provideMerge(downloads)),
+            desktopPlaylistsLayer({
+              platform: process.platform,
+              imageFolder: join(dirname(file), "playlist-images"),
+              codec: { original: () => undefined, squares: () => [] },
+              pickImage: async () => undefined,
+              pickPlaylists: async () => picked.playlists,
+            }).pipe(
+              Layer.provideMerge(
+                Layer.mergeAll(
+                  playbackLayer,
+                  lyricsLayer({ fetch: () => Promise.reject(new Error("no network")) }),
+                ).pipe(Layer.provideMerge(downloads)),
+              ),
+            ),
           ),
         ),
       ),
@@ -1093,6 +1133,110 @@ test("main refuses YT Music calls with bad songs, settings, queries or covers", 
   });
 });
 
+test("a Magic Queue, an artist page and Discover's row come through the bridge, quietly offline", async () => {
+  await withFile(async (file) => {
+    const { runtime, exposed, handlers, jvm } = connect(file);
+    const wave = exposed.get("wave") as WaveBridge;
+    try {
+      const pinkMoon = await runtime.runPromise(
+        Effect.gen(function* () {
+          const db = (yield* Database) as unknown as TestDatabase;
+          const ids = ["Parasite", "Pink Moon", "Road"].map((title, n) =>
+            addTrack(db, {
+              title,
+              artist: "Nick Drake",
+              album: "Pink Moon",
+              trackNumber: n + 1,
+              durationMs: 124_000,
+            }),
+          );
+          return ids[1]!;
+        }),
+      );
+      // With YT Music on, a song's menu offers Start Magic Queue after Add to Queue.
+      const one = { scope: { kind: "songs" }, ids: [pinkMoon] } as const;
+      assert.deepEqual(
+        (await wave.songs.actions(one, "menu")).entries.slice(0, 3).map((entry) => entry.action),
+        ["playNext", "addToQueue", "magicQueue"],
+      );
+      await wave.settings.setYtMusic(false);
+      assert.ok(
+        !(await wave.songs.actions(one, "menu")).entries.some((e) => e.action === "magicQueue"),
+      );
+      await wave.settings.setYtMusic(true);
+      // The sleep timer at End of Queue holds the recommendations back until it is turned off.
+      await wave.playback.setSleepTimer({ type: "endOfQueue" });
+      assert.equal(
+        await wave.magicQueue.start({ scope: { kind: "songs" }, ids: [pinkMoon] }),
+        true,
+      );
+      await new Promise((resolve) => setTimeout(resolve, 50));
+      assert.equal((await wave.playback.view()).length, 1, "the queue plays out");
+      await wave.playback.setSleepTimer(null);
+      await until(async () => (await wave.playback.view()).length > 1);
+      assert.equal((await wave.playback.view()).current?.title, "Pink Moon");
+      assert.deepEqual(await wave.magicQueue.view(), { title: "Pink Moon", status: "idle" });
+      const queue = await wave.playback.queue(0, 20);
+      assert.ok(
+        queue.items.some((row) => row.videoId?.startsWith("radio")),
+        "the song's radio joins the queue",
+      );
+
+      const artist = await wave.yt.artist("UCnickdrake");
+      assert.equal(artist.status, "ok");
+      assert.equal(artist.page?.name, "Nick Drake");
+      assert.deepEqual(
+        artist.page?.songs.items.map((row) => row.title),
+        ["Pink Moon"],
+      );
+      assert.deepEqual(
+        artist.page?.similar.map((found) => found.name),
+        ["John Martyn"],
+      );
+      assert.equal((await wave.discover.picks()).items.length, 3);
+
+      // Related: a row's + lines it up as the menu's Add to Queue does, a click plays it now.
+      const related = await wave.yt.related();
+      assert.equal(related.status, "ok");
+      assert.deepEqual(
+        related.songs.items.map((row) => row.videoId),
+        ["mayyounever"],
+      );
+      await wave.yt.queue("addToQueue", "mayyounever");
+      const queued = await wave.playback.queue(0, 100);
+      assert.deepEqual(
+        queued.items.slice(0, 2).map((row) => row.title),
+        ["Pink Moon", "May You Never"],
+      );
+      await wave.yt.queue("playNow", "mayyounever");
+      await until(async () => (await wave.playback.view()).current?.title === "May You Never");
+
+      // Offline, a page says so and nothing else.
+      jvm.ytError = "ERR_YT_OFFLINE";
+      assert.deepEqual(await wave.yt.artist("UCnickdrake"), { status: "offline", page: null });
+      await wave.playback.command({ type: "next" });
+      const offline = await wave.yt.related();
+      assert.equal(offline.status, "offline");
+      assert.equal(offline.songs.total, 0);
+
+      const call = (channel: string, ...args: unknown[]) =>
+        handlers.get(channel)!(trusted, ...args);
+      await assert.rejects(call("yt.artist", "../etc"), /Refused/);
+      await assert.rejects(
+        call("magicQueue.start", { scope: { kind: "songs" }, ids: [] }),
+        /Refused/,
+      );
+      await assert.rejects(call("magicQueue.startStreamed", "nope"), /Refused/);
+      await assert.rejects(call("discover.playMix", "mix", -1), /Refused/);
+      await assert.rejects(call("yt.queue", "shuffle", "mayyounever"), /Refused/);
+      await assert.rejects(call("yt.queue", "playNow", "unknownsong"), /yt-unknown/);
+      assert.equal(await call("discover.playMix", "gone", 0), false);
+    } finally {
+      await runtime.dispose();
+    }
+  });
+});
+
 test("a song's menu and the selection bar offer and run the phone's actions through the bridge", async () => {
   await withFile(async (file) => {
     const { runtime, exposed } = connect(file);
@@ -1116,6 +1260,7 @@ test("a song's menu and the selection bar offer and run the phone's actions thro
       assert.deepEqual(menu.entries, [
         { action: "playNext" },
         { action: "addToQueue" },
+        { action: "magicQueue" },
         { action: "addToPlaylist" },
         { action: "favorite" },
         { action: "goToAlbum", albumId: album.id },

@@ -1,19 +1,21 @@
 /**
- * The side panel (docs/spec-desktop.md, Window and layout): Lyrics and Queue as two tabs on the
- * right of the window, toggled from the player bar. It takes a grid column, so it pushes the
+ * The side panel (docs/spec-desktop.md, Window and layout): Lyrics and Queue as tabs on the
+ * right of the window, toggled from the player bar, and Related beside them with YouTube Music on. It takes a grid column, so it pushes the
  * content instead of covering it.
  */
-import { useState, type KeyboardEvent } from "react";
+import { useState, type KeyboardEvent, type MouseEvent } from "react";
 
+import type { BrowseRow } from "../../shared/browse.ts";
 import type { PlaybackCommand, PlayerView } from "../../shared/playerView.ts";
-import { LyricsView } from "./LyricsView.tsx";
+import type { YtArtistCandidate } from "../../shared/ytPages.ts";
+import { LyricsView, trackIdOf } from "./LyricsView.tsx";
+import { panelTabs, shownPanelTab, stepPanelTab, type PanelTab } from "../../shared/panelTabs.ts";
 import { QueuePanel } from "./QueuePanel.tsx";
-import { labels } from "./text.ts";
+import { RelatedPanel } from "./RelatedPanel.tsx";
+import { labels, text } from "./text.ts";
 import "./panel.css";
 
-export type PanelTab = "lyrics" | "queue";
-
-const TABS: readonly PanelTab[] = ["lyrics", "queue"];
+export type { PanelTab };
 
 /** Which tab the panel shows, or null while it is closed; the bar's buttons toggle it. */
 export function useSidePanel() {
@@ -27,8 +29,11 @@ export function useSidePanel() {
 }
 
 export function SidePanel({
-  tab,
+  tab: asked,
   onTab,
+  ytMusic,
+  onArtist,
+  onSongMenu,
   view,
   run,
   onError,
@@ -36,25 +41,32 @@ export function SidePanel({
 }: {
   readonly tab: PanelTab;
   readonly onTab: (tab: PanelTab) => void;
+  /** YouTube Music is on: the panel has its Related tab. */
+  readonly ytMusic: boolean;
+  /** Opens one of Related's similar artists. */
+  readonly onArtist: (artist: YtArtistCandidate) => void;
+  /** Opens the menu of one of Related's songs. */
+  readonly onSongMenu: (row: BrowseRow, event: MouseEvent<HTMLElement>) => void;
   readonly view: PlayerView | undefined;
   readonly run: (action: Promise<unknown>) => void;
   readonly onError: () => void;
   /** Now Playing covers it: out of reach until that closes. */
   readonly hidden: boolean;
 }) {
+  const tab = shownPanelTab(asked, ytMusic);
   const command = (next: PlaybackCommand) => run(window.wave.playback.command(next));
   const key = (event: KeyboardEvent) => {
     const step = event.key === "ArrowRight" ? 1 : event.key === "ArrowLeft" ? -1 : 0;
     if (step === 0) return;
     event.preventDefault();
-    const next = TABS[(TABS.indexOf(tab) + step + TABS.length) % TABS.length]!;
+    const next = stepPanelTab(tab, step, ytMusic);
     onTab(next);
     document.getElementById(`panel-tab-${next}`)?.focus();
   };
   return (
     <aside className="side-panel" aria-label={labels.sidePanel} inert={hidden}>
       <div className="panel-tabs" role="tablist" onKeyDown={key}>
-        {TABS.map((name) => (
+        {panelTabs(ytMusic).map((name) => (
           <button
             key={name}
             id={`panel-tab-${name}`}
@@ -64,7 +76,7 @@ export function SidePanel({
             tabIndex={tab === name ? 0 : -1}
             onClick={() => onTab(name)}
           >
-            {labels[name]}
+            {name === "related" ? text.playbackText.related : labels[name]}
           </button>
         ))}
       </div>
@@ -79,6 +91,13 @@ export function SidePanel({
             song={view?.current ?? null}
             positionMs={view?.status.positionMs ?? 0}
             onSeek={(positionMs) => run(window.wave.playback.seek(positionMs))}
+          />
+        ) : tab === "related" ? (
+          <RelatedPanel
+            song={view?.current ? trackIdOf(view.current) : null}
+            run={run}
+            onArtist={onArtist}
+            onSongMenu={onSongMenu}
           />
         ) : view === undefined ? null : (
           <QueuePanel view={view} command={command} onError={onError} />

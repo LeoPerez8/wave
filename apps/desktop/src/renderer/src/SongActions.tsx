@@ -259,12 +259,27 @@ export function useSongActions({ go, select, failed, changed, newPlaylist }: Opt
                 },
               }),
           };
+        case "magicQueue":
+          return {
+            ...base,
+            run: () => {
+              finish();
+              const couldnt = () => failed(text.playbackText.couldntStartTheMagicQueue);
+              void window.wave.magicQueue
+                .start(target)
+                .then((started) => {
+                  changed();
+                  if (!started) couldnt();
+                })
+                .catch(couldnt);
+            },
+          };
         default:
-          // Copy Link and Magic Queue come with their features' tickets.
+          // Copy Link comes with its feature ticket.
           return { ...base, disabled: true };
       }
     },
-    [go, run, select, newPlaylist],
+    [go, run, select, changed, failed, newPlaylist],
   );
 
   /** Opens one song's menu at [at], with [extra] entries (Move Up, Move Down) at its end. */

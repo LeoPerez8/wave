@@ -45,6 +45,20 @@ export interface KotlinMethods extends KotlinDownloadMethods {
   };
   /** Turns YT Music on or off in the JVM; its calls then fail with `ERR_YT_DISABLED`. */
   readonly setYtMusic: { readonly params: { readonly enabled: boolean }; readonly result: null };
+  /** YouTube Music's pages (`YtPages`), parsed in main by `yt/ytPages.ts`. */
+  readonly artist: { readonly params: { readonly browseId: string }; readonly result: unknown };
+  readonly album: { readonly params: { readonly browseId: string }; readonly result: unknown };
+  readonly searchArtists: { readonly params: { readonly query: string }; readonly result: unknown };
+  readonly songRadio: { readonly params: { readonly videoId: string }; readonly result: unknown };
+  readonly artistRadio: {
+    readonly params: { readonly browseId: string };
+    readonly result: unknown;
+  };
+  readonly radioMore: {
+    readonly params: { readonly continuation: string };
+    readonly result: unknown;
+  };
+  readonly related: { readonly params: { readonly videoId: string }; readonly result: unknown };
   /** Fix Songs' tag write (`SongTagWriter`): what was written, or `{failed}` with the step. */
   readonly "tags.writeSong": {
     readonly params: {
