@@ -7,6 +7,7 @@ import expo.modules.wavenative.yt.YtClient
 import expo.modules.wavenative.yt.YtException
 import expo.modules.wavenative.yt.YtFailure
 import expo.modules.wavenative.yt.YtPages
+import expo.modules.wavenative.yt.YtRadioStart
 import expo.modules.wavenative.yt.ytHttpClient
 import java.io.File
 import kotlinx.serialization.json.JsonElement
@@ -26,6 +27,11 @@ import kotlinx.serialization.json.contentOrNull
  *   address, the headers to send, its type, itag and length. `fresh` drops the address googlevideo
  *   just turned down (403/410) first. The address and headers are the session's: never logged.
  * - `setYtMusic` `{enabled}`: YT Music on or off (Settings), as the phone's `setEnabled`.
+ * - `artist` `{browseId}`, `album` `{browseId}`, `searchArtists` `{query}`, `songRadio` `{videoId}`,
+ *   `artistRadio` `{browseId}`, `startedRadio` `{playlistId, params?}`, `radioMore`
+ *   `{continuation}` and `related` `{videoId}`: YouTube Music's pages as the phone's
+ *   `WaveYtMusic` and `WaveYtDownloads` modules answer them (Discover, artist pages, the Magic
+ *   Queue and Related).
  * - `readLyrics` `{path}`: a track's lyrics as found, `{embedded, sidecar}`, either null (`LyricsReader`).
  * - `ytLyrics` `{videoId}`: YT Music's lyrics for a song (plain text), or null when it has none.
  *
@@ -39,6 +45,7 @@ class WaveDesktop(
 ) {
   val yt = YtClient(DesktopYtPlatform(dataDir, host, http, online))
   private val tags = AudioTagReader(primary = JAudioTaggerReader())
+  private val pages = YtPages(yt)
 
   suspend fun handle(method: String, params: JsonObject): JsonElement =
     when (method) {
@@ -59,6 +66,16 @@ class WaveDesktop(
         yt.enabled = params.flag("enabled") ?: throw CodedError("ERR_BAD_PARAMS", "enabled must be a boolean")
         JsonNull
       }
+      "artist" -> jsonOf(pages.artist(params.browseId()).toMap())
+      "album" -> jsonOf(pages.album(params.browseId()).toMap())
+      "searchArtists" -> jsonOf(yt.searchArtists(params.string("query")).map { it.toMap() })
+      "songRadio" -> jsonOf(pages.songRadio(params.videoId()).toMap())
+      "artistRadio" -> jsonOf(pages.artistRadio(params.browseId()).toMap())
+      "startedRadio" -> jsonOf(
+        pages.startedRadio(YtRadioStart(params.string("playlistId"), params.optionalString("params"))).toMap(),
+      )
+      "radioMore" -> jsonOf(pages.radioMore(params.string("continuation")).toMap())
+      "related" -> jsonOf(pages.related(params.videoId()).toMap())
       else -> throw CodedError("ERR_UNKNOWN_METHOD", "No method $method")
     }
 
@@ -98,7 +115,17 @@ class WaveDesktop(
     (this[name] as? JsonPrimitive)?.takeIf { it.isString }?.contentOrNull
       ?: throw CodedError("ERR_BAD_PARAMS", "$name must be a string")
 
+  private fun JsonObject.optionalString(name: String): String? =
+    (this[name] as? JsonPrimitive)?.takeIf { it.isString }?.contentOrNull
+
+  private fun JsonObject.videoId(): String =
+    string("videoId").takeIf(VIDEO_ID::matches) ?: throw CodedError("ERR_BAD_PARAMS", "videoId must be a video id")
+
+  private fun JsonObject.browseId(): String =
+    string("browseId").takeIf(BROWSE_ID::matches) ?: throw CodedError("ERR_BAD_PARAMS", "browseId must be a browse id")
+
   private companion object {
     val VIDEO_ID = Regex("[A-Za-z0-9_-]{11}")
+    val BROWSE_ID = Regex("[A-Za-z0-9_-]{2,128}")
   }
 }

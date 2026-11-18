@@ -47,7 +47,7 @@ const wave = (page: Page) =>
     const view = await bridge.playback.view();
     return {
       songs: songs.items.map((song) => ({ title: song.title, favorite: song.favorite })),
-      queued: view.length,
+      current: view.current?.title ?? null,
     };
   });
 
@@ -100,7 +100,8 @@ test("song menus, selection and the window's shortcuts", async () => {
     await menu("Alpha").getByRole("menuitem", { name: labels.addToQueue }).click();
     await expect(menu("Alpha")).toBeHidden();
     await expect(toast(text.itemActions.addedToQueue)).toBeVisible();
-    await expect.poll(async () => (await wave(page)).queued).toBe(1);
+    // An empty queue plays it; Continue Queue then goes on after it, as on the phone.
+    await expect.poll(async () => (await wave(page)).current).toBe("Alpha");
 
     // Shift+F10 opens the focused row's menu; Enter on Favorite stars it.
     await row("Bravo").click();

@@ -31,6 +31,8 @@ import { runSongAction, songMenu } from "./library/songActions.ts";
 import type { Appearance } from "../shared/bridge.ts";
 import { ytRow } from "../shared/yt.ts";
 import { VIDEO_ID, YtMusic } from "./yt/ytMusic.ts";
+import { createYtFeatureHandlers } from "./yt/ytBridge.ts";
+import type { YtFeatures } from "./yt/ytServices.ts";
 import { Lyrics } from "./lyrics/lyrics.ts";
 import { DesktopPlaylists } from "./library/playlists.ts";
 import { playlistHandlers } from "./playlistHandlers.ts";
@@ -99,6 +101,7 @@ export type BridgeServices =
   | DesktopLibrary
   | Playback
   | YtMusic
+  | YtFeatures
   | Account
   | Lyrics
   | DesktopPlaylists;
@@ -198,6 +201,7 @@ const createHandlers = (onAppearance: (mode: Appearance) => void): Handlers => {
         return yield* Effect.fail(new Error("[folder-unavailable] Drive is not connected"));
     });
   return {
+    ...createYtFeatureHandlers(validTarget),
     "playback.view": () => playbackCall((p) => p.view()),
     "playback.start": ([scope, index, shuffle]) =>
       validScope(scope) &&
@@ -349,7 +353,7 @@ const createHandlers = (onAppearance: (mode: Appearance) => void): Handlers => {
     "songs.actions": ([target, surface]) =>
       validTarget(target) && (surface === "menu" || surface === "selection")
         ? Effect.gen(function* () {
-            return songMenu(yield* Database, target, surface);
+            return songMenu(yield* Database, target, surface, (yield* YtMusic).enabled());
           })
         : refuse("songs.actions", "invalid songs or surface"),
     "songs.run": ([target, action, playlistId]) =>

@@ -1,11 +1,12 @@
 import { readThemeChoice, themeFor } from "@wave/core";
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, type MouseEvent } from "react";
 import type { AccountView } from "../../shared/account.ts";
 import type { BrowseRow, BrowseScope } from "../../shared/browse.ts";
 import type { ScanStatus } from "../../shared/library.ts";
 import { PlayerBar, usePlayback } from "./PlayerBar.tsx";
 import { NowPlaying } from "./NowPlaying.tsx";
 import { SidePanel, useSidePanel } from "./SidePanel.tsx";
+import { shownPanelTab } from "../../shared/panelTabs.ts";
 import { Icon } from "./Icon.tsx";
 import { Artwork, VirtualTable } from "./VirtualTable.tsx";
 import { FolderSettings } from "./FolderSettings.tsx";
@@ -19,14 +20,17 @@ import { SelectionBar, useSongActions, type Selection } from "./SongActions.tsx"
 import { usePlaylistEdits } from "./Playlists.tsx";
 import { Graveyard } from "./Graveyard.tsx";
 import { labels, text } from "./text.ts";
+import { DiscoverSection } from "./Discover.tsx";
+import { isYtRoute, streamedSongItems, YtPage, type YtRoute } from "./YtPages.tsx";
 
 type Route =
   | BrowseScope
   | { readonly kind: "home" }
   | { readonly kind: "settings" }
-  | { readonly kind: "graveyard"; readonly id: number };
+  | { readonly kind: "graveyard"; readonly id: number }
+  | YtRoute;
 const sections = ["playlists", "artists", "albums", "songs", "genres", "favorites"] as const;
-/** YT Music's sidebar pages; their pages come in later tickets. */
+/** YT Music's sidebar pages; Downloads comes with its ticket. */
 const ytPages = [
   ["discover", "home"],
   ["magicQueue", "queue"],
@@ -196,7 +200,10 @@ export function App() {
   }, [route]);
   const scope = useMemo<BrowseScope>(
     () =>
-      route.kind === "home" || route.kind === "settings" || route.kind === "graveyard"
+      route.kind === "home" ||
+      route.kind === "settings" ||
+      route.kind === "graveyard" ||
+      isYtRoute(route)
         ? { kind: "songs" }
         : route,
     [route],
@@ -226,6 +233,18 @@ export function App() {
       return false;
     },
   });
+  /** A YouTube Music page's song menu: a streamed song's, or a Library song's. */
+  const ytSongMenu = (row: BrowseRow, event: MouseEvent<HTMLElement>) =>
+    row.videoId !== undefined
+      ? actions.openItems(
+          text.desktopLibrary.songMenu(row.title),
+          streamedSongItems(row.videoId, playback.run),
+          event.currentTarget,
+        )
+      : actions.openMenu({ scope: { kind: "songs" }, ids: [row.id] }, row.title, {
+          x: event.clientX,
+          y: event.clientY,
+        });
   const open = (row: BrowseRow, index: number) => {
     const detail = {
       albums: "album",
@@ -327,7 +346,9 @@ export function App() {
                   className="nav-item"
                   aria-label={labels[key]}
                   title={labels[key]}
-                  disabled
+                  aria-current={route.kind === key ? "page" : undefined}
+                  disabled={key === "downloads"}
+                  onClick={() => key !== "downloads" && go({ kind: key })}
                 >
                   <Icon name={icon} />
                   <span>{labels[key]}</span>
@@ -444,7 +465,7 @@ export function App() {
               </div>
             </div>
           </div>
-        ) : (
+        ) : route.kind === "ytArtist" || route.kind === "ytAlbum" ? null : (
           <div className="page-heading">
             <h1>{title}</h1>
             {(route.kind === "home" || route.kind === "songs") && (
@@ -558,6 +579,14 @@ export function App() {
               )}
             </section>
           </div>
+        ) : isYtRoute(route) ? (
+          <YtPage
+            route={route}
+            run={playback.run}
+            revision={playback.view?.revision ?? 0}
+            go={go}
+            onSongMenu={ytSongMenu}
+          />
         ) : route.kind === "graveyard" ? (
           <Graveyard
             playlistId={route.id}
@@ -597,6 +626,7 @@ export function App() {
           </SearchPage>
         ) : (
           <>
+            {route.kind === "home" && ytMusic && <DiscoverSection run={playback.run} />}
             {selection && (
               <SelectionBar
                 scope={scope}
@@ -637,6 +667,9 @@ export function App() {
         <SidePanel
           tab={panel.tab}
           onTab={panel.show}
+          ytMusic={ytMusic}
+          onArtist={(artist) => go({ kind: "ytArtist", id: artist.browseId })}
+          onSongMenu={ytSongMenu}
           view={playback.view}
           run={playback.run}
           onError={failed}
@@ -648,7 +681,7 @@ export function App() {
       )}
       <PlayerBar
         playback={playback}
-        panel={panel.tab}
+        panel={panel.tab && shownPanelTab(panel.tab, ytMusic)}
         onPanel={panel.toggle}
         onNowPlaying={() => setNowPlaying(true)}
       />

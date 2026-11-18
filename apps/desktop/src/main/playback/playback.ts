@@ -14,6 +14,8 @@ import { createSongMeasurements } from "@wave/client/songMeasurements";
 import {
   parseTrackId,
   ytTrackId,
+  type PlayEvent,
+  type QueueCommand,
   type QueueState,
   type SleepTimer,
   type SleepTimerChoice,
@@ -80,6 +82,21 @@ export interface PlaybackShape {
    */
   readonly setSleepTimer: (choice: SleepTimerChoice | null) => Promise<SleepTimer | null>;
   readonly sleepTimer: () => SleepTimer | null;
+  /** The queue as Core holds it. */
+  readonly queueState: () => QueueState;
+  /** Whether the queue's current song is playing. */
+  readonly playing: () => boolean;
+  /** A queue command from main (the Magic Queue's); a new queue offers Undo, as `start` does. */
+  readonly dispatch: (command: QueueCommand) => Promise<void>;
+  /** Hears the queue change and plays end, until the returned function is called. */
+  readonly watch: (watcher: QueueWatcher) => () => void;
+}
+
+/** What follows the queue from main: the Magic Queue. */
+export interface QueueWatcher {
+  /** The queue changed, or its song started playing. */
+  readonly queueChanged: () => void;
+  readonly playEnded: (play: PlayEvent, byNext: boolean) => void;
 }
 
 export type PlaybackChange = "played" | "starred";
@@ -117,6 +134,7 @@ export const playbackLayer = Layer.effect(
     let volume = savedVolume(preference(db, "volume"));
     let muted = preference(db, "muted") === "true";
     const listeners = new Set<(change: PlaybackChange) => void>();
+    const watchers = new Set<QueueWatcher>();
     const tell = (change: PlaybackChange) => {
       for (const listener of listeners) listener(change);
     };
@@ -135,7 +153,10 @@ export const playbackLayer = Layer.effect(
         source: "desktop",
         available: (path) => !library.unavailable(path),
         streamed: yt.song,
-        playEnded: () => tell("played"),
+        playEnded: (play, byNext) => {
+          tell("played");
+          for (const watcher of watchers) watcher.playEnded(play, byNext);
+        },
         stopped: (why) => stoppedBy(why),
         gainDb: gains.gainDb,
       }),
@@ -168,8 +189,11 @@ export const playbackLayer = Layer.effect(
         session.gainsChanged().catch(failed);
       },
     });
-    /** The queue changed: songs it brought in may need measuring. */
-    const queueChanged = () => void measurements.wake().catch(() => undefined);
+    /** The queue changed: songs it brought in may need measuring, and the Magic Queue hears it. */
+    const queueChanged = () => {
+      void measurements.wake().catch(() => undefined);
+      for (const watcher of watchers) watcher.queueChanged();
+    };
     /** Sends the stored settings to the engine; each applies from its next move. */
     const sendSettings = async () => {
       await run(player.setCrossfade(settings.crossfadeSeconds));
@@ -186,12 +210,16 @@ export const playbackLayer = Layer.effect(
     yield* Effect.promise(() => sendSettings().catch(failed));
     queueChanged();
     let queueFed = session.snapshot().queue;
+    let playingFed = false;
     const stop = player.subscribe((event) => {
       session
         .feed(event.status, event.transitions)
         .then(() => {
-          if (session.snapshot().queue === queueFed) return;
-          queueFed = session.snapshot().queue;
+          const { queue, status } = session.snapshot();
+          const startedPlaying = status.state === "playing" && !playingFed;
+          playingFed = status.state === "playing";
+          if (queue === queueFed && !startedPlaying) return;
+          queueFed = queue;
           queueChanged();
         })
         .catch(failed);
@@ -377,8 +405,23 @@ export const playbackLayer = Layer.effect(
         return settings;
       },
       applySettings: () => playBySettings(readPlaybackSettings(db)),
+      queueState: () => session.snapshot().queue,
+      playing: () => session.snapshot().status.state === "playing",
+      dispatch: async (command) => {
+        error = null;
+        await session.dispatch(command);
+        if (command.type === "play" && session.snapshot().canUndo) undoOffer++;
+        keepQueued();
+        queueChanged();
+      },
+      watch: (watcher) => {
+        watchers.add(watcher);
+        return () => void watchers.delete(watcher);
+      },
       setSleepTimer: async (choice) => {
         await sleep.set(choice);
+        // Turning End of Queue off lets a waiting Magic Queue batch join at once.
+        for (const watcher of watchers) watcher.queueChanged();
         return sleep.current();
       },
       sleepTimer: sleep.current,

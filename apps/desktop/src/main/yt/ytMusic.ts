@@ -53,6 +53,8 @@ export interface YtMusicShape {
   readonly search: (query: string) => Promise<YtSearch>;
   /** A song a search or the saved queue named, by its video id. */
   readonly song: (videoId: string) => YtAlbumSong | undefined;
+  /** Remembers songs another page brought (artist pages, radios, Related), so they can play. */
+  readonly keep: (songs: readonly YtAlbumSong[]) => void;
   /** Where the engine fetches `videoId` from; `fresh` skips the JVM's cached address. */
   readonly resolve: (videoId: string, fresh: boolean) => Promise<ResolvedStream>;
   /** Keeps the details of the YT Music songs in `entries` (a queue's) for the next launch. */
@@ -97,7 +99,7 @@ const ytSong = (value: unknown): YtAlbumSong | undefined => {
   };
 };
 
-const ytSongs = (value: unknown): YtAlbumSong[] =>
+export const ytSongs = (value: unknown): YtAlbumSong[] =>
   Array.isArray(value) ? value.flatMap((item) => ytSong(item) ?? []) : [];
 
 const codeOf = (error: unknown): string | undefined => {
@@ -184,6 +186,9 @@ export const createYtMusic = (deps: YtMusicDeps): YtMusicShape => {
       }
     },
     song: (videoId) => known.get(videoId),
+    keep: (songs) => {
+      for (const song of songs) remember(song);
+    },
     resolve: async (videoId, fresh) => {
       if (!enabled()) throw coded("ERR_YT_DISABLED", "YT Music is off");
       const found = await deps.call("resolveStream", { videoId, fresh });

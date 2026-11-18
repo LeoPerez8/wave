@@ -88,11 +88,12 @@ const pageOf = (scope: BrowseScope) =>
     ? { kind: scope.kind, id: scope.id }
     : undefined;
 
-/** The entries to show for [target] on [surface]. */
+/** The entries to show for [target] on [surface]; with [ytMusic] on, one song starts a Magic Queue. */
 export const songMenu = (
   db: LibraryDatabase,
   target: SongTarget,
   surface: ActionSurface,
+  ytMusic = false,
 ): SongMenu => {
   // A playlist's page offers Remove from Playlist.
   const inPlaylist = target.scope.kind === "playlist";
@@ -102,6 +103,7 @@ export const songMenu = (
     surface,
     selectable: true,
     page: pageOf(target.scope),
+    ytMusic,
   });
   const artistIds = entries.flatMap((entry) =>
     entry.action !== "goToArtist" || !("artists" in entry)

@@ -192,3 +192,10 @@ test("a cover that isn't a small image, or doesn't arrive, is no cover", async (
   const offline = answering(() => Promise.reject(new TypeError("fetch failed")));
   assert.equal(await offline.artwork(url), null);
 });
+
+test("songs a page brought are known for playback like a search's", () => {
+  const { yt } = setup();
+  assert.equal(yt.song("abcdefghijk"), undefined);
+  yt.keep([songOf("abcdefghijk", "Pink Moon")] as never);
+  assert.equal(yt.song("abcdefghijk")?.title, "Pink Moon");
+});
