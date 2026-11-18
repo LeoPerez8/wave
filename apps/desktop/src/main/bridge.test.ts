@@ -8,7 +8,7 @@ import { addTrack, openTestDatabase, star, type TestDatabase } from "@wave/clien
 import { creditSplits } from "@wave/client/db/credits";
 import { stampPreference } from "@wave/client/db/sync";
 import { syncCycle } from "@wave/client/sync/syncCycle";
-import { catalogueOf, scanPath, type SyncClock } from "@wave/core";
+import { catalogueOf, recordingMatchTitle, scanPath, type SyncClock } from "@wave/core";
 import { sql } from "drizzle-orm";
 import { createPlaylist } from "@wave/client/db/playlists";
 import * as Effect from "effect/Effect";
@@ -17,6 +17,7 @@ import * as ManagedRuntime from "effect/ManagedRuntime";
 import { exposeBridge } from "../preload/expose.ts";
 import { BRIDGE_CALLS, type WaveBridge } from "../shared/bridge.ts";
 import type { PlaybackStatus } from "../shared/playback.ts";
+import type { LanguageView } from "../shared/language.ts";
 import {
   answer,
   type AddonEngine,
@@ -49,6 +50,31 @@ import { recordPlay } from "@wave/client/db/playHistory";
 import { editHomeArrangement, parseHomeArrangement, storedHomeArrangement } from "@wave/core";
 
 const trusted = { senderFrame: "window" };
+
+test("the language choice is validated, resolves once in main and survives reopening", async () => {
+  await withFile(async (file) => {
+    const first = connect(file);
+    const wave = first.exposed.get("wave") as WaveBridge;
+    try {
+      assert.deepEqual(await wave.settings.language(), { choice: "system", language: "en" });
+      await wave.settings.setLanguage("pt-BR");
+      assert.deepEqual(await wave.settings.language(), { choice: "pt-BR", language: "pt-BR" });
+      await assert.rejects(first.handlers.get("settings.setLanguage")!(trusted, "fr"), /refused/i);
+      assert.equal((await wave.settings.language()).language, "pt-BR");
+    } finally {
+      await first.runtime.dispose();
+    }
+    const second = connect(file);
+    try {
+      const reopened = second.exposed.get("wave") as WaveBridge;
+      assert.deepEqual(await reopened.settings.language(), { choice: "pt-BR", language: "pt-BR" });
+      await reopened.settings.setLanguage("system");
+      assert.deepEqual(await reopened.settings.language(), { choice: "system", language: "en" });
+    } finally {
+      await second.runtime.dispose();
+    }
+  });
+});
 
 test("Home follows the account's arrangement and plays its ranked list with Home context", async () => {
   await withFile(async (file) => {
@@ -364,9 +390,11 @@ const connect = (
     events: () => () => {},
     fetch: () => Promise.reject(new Error("no network")),
   }).pipe(Layer.provideMerge(library));
+  const languages: LanguageView[] = [];
   const runtime = ManagedRuntime.make(
     accountLayer({
       account: account.service,
+      languageChanged: (view) => languages.push(view),
       focused: () => true,
       ...(account.clock === undefined ? {} : { clock: account.clock }),
     }).pipe(
@@ -435,6 +463,7 @@ const connect = (
     jvm: jvm.state,
     picked,
     copied,
+    languages,
   };
 };
 
@@ -1097,8 +1126,6 @@ test("Search finds YouTube Music songs and one plays from the results as a new q
           ["bcdefghijkl", true],
         ],
       );
-      await wave.playback.favorite();
-      assert.equal((await wave.playback.view()).current?.favorite, false, "not a Library song");
       const kept = await runtime.runPromise(
         Effect.map(Database, (db) => preference(db, "playback.ytTracks")),
       );
@@ -1111,6 +1138,157 @@ test("Search finds YouTube Music songs and one plays from the results as a new q
         'setYtMusic {"enabled":true}',
         'search {"query":"pink moon"}',
       ]);
+      await wave.playback.favorite();
+      assert.equal((await wave.playback.view()).current?.favorite, true, "its star waits for it");
+      await wave.playback.favorite();
+      assert.equal((await wave.playback.view()).current?.favorite, false);
+    } finally {
+      await runtime.dispose();
+    }
+  });
+});
+
+test("a streamed song has the phone's menu: star, playlist, download, its album and artist", async () => {
+  await withFile(async (file) => {
+    const { runtime, exposed, downloads, handlers } = connect(file);
+    try {
+      const wave = exposed.get("wave") as WaveBridge;
+      await wave.yt.search("pink moon");
+      const menu = await wave.streamed.menu("abcdefghijk");
+      assert.equal(menu.title, "Pink Moon");
+      assert.deepEqual(
+        menu.entries.map((entry) => entry.action),
+        [
+          "playNext",
+          "addToQueue",
+          "magicQueue",
+          "addToPlaylist",
+          "favorite",
+          "goToAlbum",
+          "goToArtist",
+          "share",
+          "download",
+        ],
+      );
+      assert.deepEqual(menu.entries[5], { action: "goToAlbum", album: "MPREb_pinkmoon" });
+      assert.deepEqual(menu.entries[6], {
+        action: "goToArtist",
+        artists: { kind: "open", target: { kind: "yt", name: "Nick Drake" } },
+      });
+      assert.deepEqual(menu.download, { kind: "download" });
+      const playing = await wave.streamed.menu("abcdefghijk", true);
+      assert.ok(!playing.entries.some((entry) => entry.action === "playNext"));
+
+      // A star means downloaded: it waits as a pending favorite while the file comes.
+      assert.deepEqual(await wave.streamed.run("abcdefghijk", "favorite"), {
+        kind: "favorite",
+        on: true,
+        count: 1,
+      });
+      const pending = () =>
+        runtime.runPromise(
+          Effect.map(Database, (db) =>
+            db.all<{ videoId: string }>(sql`SELECT video_id AS videoId FROM pending_favorites`),
+          ),
+        );
+      assert.deepEqual(await pending(), [{ videoId: "abcdefghijk" }]);
+      assert.ok(
+        downloads.some((call) => call.includes('"abcdefghijk"')),
+        downloads.join(", "),
+      );
+      const starred = await wave.streamed.menu("abcdefghijk");
+      assert.equal(starred.favorite, true);
+      assert.ok(starred.entries.some((entry) => entry.action === "unfavorite"));
+      await wave.playback.startYt(["abcdefghijk"], 0);
+      assert.equal((await wave.playback.view()).current?.favorite, true);
+      assert.equal((await wave.playback.queue(0, 10)).items[0]?.favorite, true);
+      await wave.streamed.run("abcdefghijk", "unfavorite");
+      assert.deepEqual(await pending(), []);
+      assert.equal((await wave.streamed.menu("abcdefghijk")).favorite, false);
+
+      // Add to Playlist keeps a YT Music entry, which becomes the Library's song once it's here.
+      const made = await wave.playlists.create("Evening");
+      assert.deepEqual(await wave.streamed.run("bcdefghijkl", "addToPlaylist", made.id), {
+        kind: "playlist",
+        name: "Evening",
+        added: 1,
+        alreadyIn: 0,
+      });
+      const entries = await runtime.runPromise(
+        Effect.map(Database, (db) =>
+          db.all<{ ytSong: string | null }>(
+            sql`SELECT yt_song AS ytSong FROM playlist_items WHERE playlist_id=${made.id}`,
+          ),
+        ),
+      );
+      assert.equal(entries.length, 1);
+      assert.match(entries[0]!.ytSong ?? "", /bcdefghijkl/);
+      assert.ok(
+        downloads.some((call) => call.includes('"bcdefghijkl"')),
+        "its download is asked",
+      );
+
+      assert.deepEqual(await wave.streamed.run("bcdefghijkl", "playNext"), {
+        kind: "queued",
+        count: 1,
+      });
+      assert.deepEqual(
+        (await wave.playback.queue(0, 2)).items.map((row) => row.videoId),
+        ["abcdefghijk", "bcdefghijkl"],
+      );
+
+      // The Library has the song: its menu stars the Library's song.
+      const road = await runtime.runPromise(
+        Effect.map(Database, (db) => {
+          const id = addTrack(db as unknown as TestDatabase, {
+            title: "Road",
+            artist: "Nick Drake",
+            album: "Pink Moon",
+            durationMs: 124_000,
+          });
+          // As a scan keeps it, for finding the Library's song for a streamed one.
+          db.run(sql`UPDATE tracks SET match_title=${recordingMatchTitle("Road")} WHERE id=${id}`);
+          return id;
+        }),
+      );
+      await wave.streamed.run("bcdefghijkl", "favorite");
+      const library = await wave.songs.actions({ scope: { kind: "songs" }, ids: [road] }, "menu");
+      assert.ok(library.entries.some((entry) => entry.action === "unfavorite"));
+
+      for (const args of [
+        ["not a video", false],
+        ["zzzzzzzzzzz", false],
+      ])
+        await assert.rejects(handlers.get("streamed.menu")!(trusted, ...args));
+      await assert.rejects(handlers.get("streamed.run")!(trusted, "abcdefghijk", "delete"));
+      await assert.rejects(handlers.get("streamed.run")!(trusted, "abcdefghijk", "addToPlaylist"));
+    } finally {
+      await runtime.dispose();
+    }
+  });
+});
+
+test("a streamed song added to a playlist goes up to the account", async () => {
+  await withFile(async (file) => {
+    const app = await desktop();
+    const phone = await app.service.signIn();
+    const { clock, pass } = fakeClock();
+    const { runtime, exposed } = connect(file, undefined, { service: app.open(), clock });
+    const wave = exposed.get("wave") as WaveBridge;
+    try {
+      await wave.account.signIn();
+      await wave.yt.search("pink moon");
+      const made = await wave.playlists.create("Evening");
+      await wave.streamed.run("abcdefghijk", "addToPlaylist", made.id);
+      await pass(10_000);
+      let entries: readonly unknown[] = [];
+      // Asked seldom: the service answers 429 to a client that pulls too often.
+      for (let tries = 0; tries < 20 && entries.length === 0; tries++) {
+        await new Promise((resolve) => setTimeout(resolve, 100));
+        entries = (await pullAll(app.service, phone)).playlistEntries;
+      }
+      assert.equal(entries.length, 1);
+      assert.match(JSON.stringify(entries[0]), /abcdefghijk/);
     } finally {
       await runtime.dispose();
     }
@@ -1164,6 +1342,67 @@ test("the invitation to sign in shows once the first scan finished, until it's a
       assert.equal((await reopened.account.view()).invitation, false, "answered for good");
     } finally {
       await second.runtime.dispose();
+    }
+  });
+});
+
+test("the account's language applies on sign-in and later pulls, and desktop changes sync back", async () => {
+  await withFile(async (file) => {
+    const app = await desktop();
+    const phone = await app.service.signIn();
+    const phoneDb = await openTestDatabase();
+    const values = new Map<string, string>([["settings.language", "pt-BR"]]);
+    const phoneSync = () =>
+      syncCycle({
+        db: phoneDb,
+        splits: creditSplits(),
+        account: "ana@example.com",
+        transport: {
+          request: async (method, path, body) => {
+            const response = await app.service.request(method, path, {
+              session: phone,
+              ...(body === null ? {} : { body, headers: { "content-type": "application/json" } }),
+            });
+            return { status: response.status, body: await response.text() };
+          },
+        },
+        preferences: {
+          value: (key) => values.get(key) ?? null,
+          apply: (key, value) => {
+            if (value === null) values.delete(key);
+            else values.set(key, value);
+          },
+        },
+        now: Date.now,
+        songsChanged: false,
+        wait: async () => {},
+      });
+    stampPreference(phoneDb, "settings.language", Date.now());
+    await phoneSync();
+    const { clock, pass } = fakeClock();
+    const { runtime, exposed, languages } = connect(file, undefined, {
+      service: app.open(),
+      clock,
+    });
+    const wave = exposed.get("wave") as WaveBridge;
+    try {
+      await wave.account.signIn();
+      await until(async () => (await wave.settings.language()).language === "pt-BR");
+      assert.deepEqual(languages.at(-1), { choice: "pt-BR", language: "pt-BR" });
+      await wave.settings.setLanguage("en");
+      await pass(10_000);
+      await until(async () => {
+        await phoneSync();
+        return values.get("settings.language") === "en";
+      });
+      values.set("settings.language", "system");
+      stampPreference(phoneDb, "settings.language", Date.now() + 1000);
+      await phoneSync();
+      await pass(15 * 60_000);
+      await until(async () => (await wave.settings.language()).choice === "system");
+      assert.deepEqual(languages.at(-1), { choice: "system", language: "en" });
+    } finally {
+      await runtime.dispose();
     }
   });
 });
@@ -1508,6 +1747,23 @@ test("a Magic Queue, an artist page and Discover's row come through the bridge, 
       await assert.rejects(call("yt.queue", "shuffle", "mayyounever"), /Refused/);
       await assert.rejects(call("yt.queue", "playNow", "unknownsong"), /yt-unknown/);
       assert.equal(await call("discover.playMix", "gone", 0), false);
+      await assert.rejects(
+        call("discover.setSettings", { level: 6, faithfulness: 3, popularity: 3 }),
+        /Refused/,
+      );
+      assert.deepEqual(
+        await call("discover.setSettings", { level: 5, faithfulness: 1, popularity: 4 }),
+        {
+          level: 5,
+          faithfulness: 1,
+          popularity: 4,
+        },
+      );
+      assert.deepEqual(await wave.discover.settings(), {
+        level: 5,
+        faithfulness: 1,
+        popularity: 4,
+      });
     } finally {
       await runtime.dispose();
     }

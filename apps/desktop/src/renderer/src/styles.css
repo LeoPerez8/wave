@@ -203,9 +203,10 @@ input::placeholder {
   flex-direction: column;
   padding: 26px 32px 0;
 }
+/* One light title for list pages and heroes, as the phone's large title (story 63). */
 h1 {
-  font-size: 30px;
-  font-weight: 600;
+  font-size: 36px;
+  font-weight: 300;
   line-height: 1.2;
   letter-spacing: -0.025em;
   overflow-wrap: anywhere;
@@ -443,12 +444,6 @@ h2 {
   color: var(--color-accent);
   margin-left: 6px;
 }
-.home-discover {
-  flex-shrink: 0;
-  max-height: 46%;
-  overflow: auto;
-  padding: 0 22px 12px 0;
-}
 .shelf-row {
   display: flex;
   gap: 18px;
@@ -522,7 +517,6 @@ h2 {
 }
 .hero h1 {
   font-size: 36px;
-  font-weight: 350;
 }
 .hero-artist {
   font-size: 16px;
@@ -674,6 +668,13 @@ h2 {
 .player-song .icon-button {
   margin-left: auto;
 }
+/* The bar's star is the secondary colour, as the rows' are: an outline, filled once starred. */
+.player-bar .player-song > .icon-button {
+  color: var(--color-highlight);
+}
+.player-bar .player-song > .icon-button[aria-pressed="true"] svg {
+  fill: currentColor;
+}
 .transport {
   display: flex;
   align-items: center;
@@ -789,6 +790,7 @@ h2 {
     width: 168px;
     height: 168px;
   }
+  h1,
   .hero h1 {
     font-size: 30px;
   }
@@ -1166,7 +1168,7 @@ kbd {
 .search-empty h2 {
   font-size: 15px;
   font-weight: 600;
-  padding: 0 12px 8px;
+  padding: 0 0 8px;
 }
 .search-heading {
   display: flex;
@@ -1246,8 +1248,18 @@ kbd {
   min-width: 0;
 }
 .search-tile > :first-child {
+  display: block;
   aspect-ratio: 1;
+  min-width: 0;
+  min-height: 0;
+  overflow: hidden;
   margin-bottom: 6px;
+}
+.search-tile > :first-child > .artwork {
+  display: flex;
+}
+.search-tile .artwork img {
+  display: block;
 }
 .search-tile > .artist-image .artwork {
   border-radius: 50%;

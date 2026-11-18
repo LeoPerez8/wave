@@ -28,9 +28,16 @@ import { ShortcutsSheet } from "./Shortcuts.tsx";
 import { SelectionBar, useSongActions, type Selection } from "./SongActions.tsx";
 import { usePlaylistEdits } from "./Playlists.tsx";
 import { Graveyard } from "./Graveyard.tsx";
-import { labels, text } from "./text.ts";
+import { applyLanguage, labels, text, useLanguage, tagTitle, artistName } from "./text.ts";
+import { LanguageSettings } from "./LanguageSettings.tsx";
 import { Home } from "./Home.tsx";
-import { isYtRoute, streamedSongItems, YtPage, type YtRoute } from "./YtPages.tsx";
+import { isYtRoute, YtPage, type YtRoute } from "./YtPages.tsx";
+import {
+  NowPlayingSongActions,
+  playlistItems,
+  useStreamedSong,
+  useStreamedSongs,
+} from "./StreamedSongMenu.tsx";
 
 type Route =
   | BrowseScope
@@ -80,6 +87,7 @@ function IconButton({
   );
 }
 export function App() {
+  const localisation = useLanguage();
   const [history, setHistory] = useState<readonly Route[]>([{ kind: "home" }]);
   const [position, setPosition] = useState(0);
   const route = history[position]!;
@@ -170,6 +178,9 @@ export function App() {
           );
           const counts = await window.wave.library.counts();
           if (current) setCount(counts.songs);
+          // A sync may have pulled the account's language.
+          const spoken = await window.wave.settings.language();
+          if (current) applyLanguage(spoken);
           const view = await window.wave.account.view();
           if (current)
             setAccount((previous) =>
@@ -264,18 +275,87 @@ export function App() {
       return false;
     },
   });
-  /** A YouTube Music page's song menu: a streamed song's, or a Library song's. */
+  const streamed = useStreamedSongs({
+    go,
+    failed: (message) => setError(message ?? text.desktopLibrary.actionFailed),
+    notify,
+    changed: playback.refresh,
+  });
+  /** A YouTube Music page's or the Queue's song menu: a streamed song's, or a Library song's. */
   const ytSongMenu = (row: BrowseRow, event: MouseEvent<HTMLElement>) =>
     row.videoId !== undefined
       ? actions.openItems(
           text.desktopLibrary.songMenu(row.title),
-          streamedSongItems(row.videoId, playback.run),
+          streamed.items(row.videoId),
           event.currentTarget,
         )
       : actions.openMenu({ scope: { kind: "songs" }, ids: [row.id] }, row.title, {
           x: event.clientX,
           y: event.clientY,
         });
+  /** The song playing's menu, from the player bar. */
+  const playingMenu = (element: HTMLElement) => {
+    const song = playback.view?.current;
+    if (song === null || song === undefined) return;
+    if (song.videoId !== undefined)
+      return actions.openItems(
+        text.desktopLibrary.songMenu(song.title),
+        streamed.items(song.videoId, true),
+        element,
+      );
+    const rect = element.getBoundingClientRect();
+    actions.openMenu({ scope: { kind: "songs" }, ids: [song.id] }, song.title, {
+      x: rect.left,
+      y: rect.top,
+    });
+  };
+  const playingSong = playback.view?.current ?? null;
+  const playingStreamed = useStreamedSong(
+    nowPlaying ? playingSong?.videoId : undefined,
+    playback.view?.revision ?? 0,
+    // Read again every two seconds while it plays, for its download's progress.
+    Math.floor((playback.view?.status.positionMs ?? 0) / 2000),
+  );
+  /** Now Playing's Add to Playlist and Download, for a streamed song or a Library one. */
+  const nowPlayingActions = playingSong && (
+    <NowPlayingSongActions
+      download={
+        playingSong.videoId !== undefined
+          ? playingStreamed?.download
+          : { kind: playingSong.path === null ? "download" : "downloaded" }
+      }
+      onAddToPlaylist={(element) => {
+        const { videoId } = playingSong;
+        const target = { scope: { kind: "songs" }, ids: [playingSong.id] } as const;
+        actions.openItems(
+          text.playbackText.addToPlaylist,
+          videoId !== undefined
+            ? playlistItems((id) => void streamed.run(videoId, "addToPlaylist", "menu", id))
+            : actions.itemFor(
+                { action: "addToPlaylist" },
+                target,
+                { entries: [], count: 1, title: playingSong.title, artists: [] },
+                "menu",
+                () => {},
+              ).open!(),
+          element,
+        );
+      }}
+      onDownload={() => {
+        const { videoId } = playingSong;
+        if (videoId !== undefined)
+          void streamed.run(
+            videoId,
+            playingStreamed?.download.kind === "failed" ? "retryDownload" : "download",
+          );
+        else
+          void window.wave.songs
+            .run({ scope: { kind: "songs" }, ids: [playingSong.id] }, "download")
+            .then(playback.refresh)
+            .catch(() => failed());
+      }}
+    />
+  );
   const open = (row: BrowseRow, index: number) => {
     const detail = {
       albums: "album",
@@ -287,6 +367,8 @@ export function App() {
     else if (row.unavailable) setError(text.desktopLibrary.driveDisconnected);
     else playback.run(window.wave.playback.start(scope, index));
   };
+  /** The sidebar field holds the search on screen: empty elsewhere, its query again on Back. */
+  const field = route.kind === "search" ? (route.query ?? query) : "";
   /** The page whose missing songs download together, when this is one. */
   const missingList: MissingSongsList | undefined =
     scope.id !== undefined && (MISSING_SONGS_LISTS as readonly string[]).includes(scope.kind)
@@ -352,7 +434,7 @@ export function App() {
   const title =
     route.kind === "graveyard"
       ? text.playlists.graveyard
-      : (hero?.title ??
+      : ((hero && tagTitle(hero.title, route.kind)) ??
         (route.kind in labels
           ? (labels[route.kind as keyof typeof labels] as string)
           : labels.library));
@@ -391,9 +473,9 @@ export function App() {
             type="search"
             aria-label={labels.search}
             placeholder={labels.search}
-            value={query}
+            value={field}
             onChange={(event) => searchFor(event.target.value)}
-            onFocus={() => route.kind !== "search" && go({ kind: "search", query })}
+            onFocus={() => route.kind !== "search" && go({ kind: "search", query: field })}
             onKeyDown={(event) => event.key === "Enter" && rememberSearch()}
           />
         </label>
@@ -531,7 +613,7 @@ export function App() {
             />
             <div className="hero-copy">
               <h1>{title}</h1>
-              {hero.artist && <p className="hero-artist">{hero.artist}</p>}
+              {hero.artist && <p className="hero-artist">{artistName(hero.artist)}</p>}
               <p className="hero-meta">
                 {[
                   labels[route.kind as "album" | "artist" | "playlist" | "genre"],
@@ -658,6 +740,7 @@ export function App() {
                       </option>
                     ))}
                   </select>
+                  <LanguageSettings view={localisation} onError={failed} />
                 </>
               ) : setting === "accounts" ? (
                 <>
@@ -729,6 +812,7 @@ export function App() {
               playback.run(window.wave.magicQueue.startStreamed(videoId));
             }}
             onYtDownload={(videoId) => download(window.wave.downloads.yt([videoId]))}
+            onYtMenu={ytSongMenu}
             ytLinks={{
               onArtist: (name) => {
                 rememberSearch();
@@ -828,6 +912,7 @@ export function App() {
           run={playback.run}
           links={ytLinks}
           onClose={() => setNowPlaying(false)}
+          actions={nowPlayingActions}
         />
       )}
       <PlayerBar
@@ -835,6 +920,7 @@ export function App() {
         panel={panel.tab && shownPanelTab(panel.tab, ytMusic)}
         onPanel={panel.toggle}
         onNowPlaying={() => setNowPlaying(true)}
+        onMenu={playingMenu}
         links={ytLinks}
       />
       <Links

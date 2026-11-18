@@ -294,3 +294,49 @@ test("Copy Link reads its one song, not the whole Library", async () => {
     closeTestDatabase(db);
   }
 });
+
+test("a pasted song whose radio names no album gets its album from a search for it", async () => {
+  const db = await openTestDatabase();
+  try {
+    const song = {
+      videoId: "abcdefghijk",
+      title: "Pink Moon",
+      artists: ["Nick Drake"],
+      durationMs: 124000,
+    };
+    const calls: string[] = [];
+    const remembered: { album?: string | null }[] = [];
+    let changes = 0;
+    const links = createDesktopLinks({
+      db,
+      enabled: () => true,
+      online: () => true,
+      call: async (method) => {
+        calls.push(method);
+        return {
+          songs:
+            method === "songRadio"
+              ? [song]
+              : [
+                  { ...song, videoId: "zzzzzzzzzzz", title: "Road", album: "Other" },
+                  { ...song, album: "Pink Moon", albumId: "MPREb_pinkmoon" },
+                ],
+        } as never;
+      },
+      start: async () => {},
+      remember: (found) => remembered.push(found),
+      writeClipboard: () => {},
+      changed: () => changes++,
+    });
+    assert.deepEqual(await links.open("https://music.youtube.com/watch?v=abcdefghijk", "en"), {
+      kind: "playing",
+    });
+    for (let waited = 0; remembered.length === 0 && waited < 50; waited++)
+      await new Promise((resolve) => setTimeout(resolve, 10));
+    assert.deepEqual(calls, ["songRadio", "search"]);
+    assert.equal(remembered[0]?.album, "Pink Moon");
+    assert.equal(changes, 1);
+  } finally {
+    closeTestDatabase(db);
+  }
+});

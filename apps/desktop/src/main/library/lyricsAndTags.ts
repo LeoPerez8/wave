@@ -18,7 +18,7 @@ import type { LibraryFixProgress, LyricsAndTagsSettings } from "../../shared/lyr
 import type { FixSongsResult } from "../../shared/songActions.ts";
 import type { FixSongsRunOptions } from "./fixSongs.ts";
 import { lookupsEnabled } from "../lookupSettings.ts";
-import { keepSyncedPreference, syncedPreference } from "../sync/desktopSync.ts";
+import { keepPreference, syncedPreference } from "../sync/desktopSync.ts";
 
 /** Settings › Download artist photos, as the account holds it. */
 export const artistPhotosEnabled = (db: LibraryDatabase): boolean =>
@@ -51,7 +51,7 @@ export const saveLyricsAndTags = (
   ] as const;
   for (const [name, key, value] of writes) {
     if (after[name] === before[name]) continue;
-    keepSyncedPreference(db, key, value);
+    keepPreference(db, key, value);
     stampPreference(db, key, now);
   }
   return after;

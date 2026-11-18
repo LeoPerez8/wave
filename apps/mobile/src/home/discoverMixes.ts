@@ -9,8 +9,7 @@ import {
   discoverMixRowsToBuild,
   discoverMixesBuilt,
   homeMixBuildsDue,
-  discoverMixesOfRadiosSteps,
-  rankedDiscoverMixRead,
+  rankedDiscoverMixesSteps,
   discoverMixesRerun,
   discoverMixesSection,
   genreMixSeedsSteps,
@@ -105,29 +104,19 @@ const radioMixes = (
       inputs.catalog.map((entry) => [entry.song.videoId, 1 - 0.5 ** entry.radios.length]),
     );
     const profileOf = (name: string) => inputs.profiles.profileOf(name) ?? lookedUpProfileOf(name);
-    const reads = seeds.flatMap((seed, i) => {
-      const page = pages[i];
-      return page == null || page.length === 0
-        ? []
-        : [
-            rankedDiscoverMixRead(
-              seed,
-              {
-                pages: page,
-                taste: inputs.taste,
-                profileOf,
-                popularityOf: (videoId) => popularity.get(videoId) ?? 0,
-              },
-              { ...sliders, ...(seed.kind === "artist" ? { profile: profileOf(seed.name) } : {}) },
-            ),
-          ];
-    });
     const mixes = yield* runSteps(
-      discoverMixesOfRadiosSteps(reads, {
-        known: inputs.library.known,
-        library: inputs.library,
-        ...(avoid === undefined ? {} : { avoid }),
-      }),
+      rankedDiscoverMixesSteps(
+        seeds.map((seed, i) => ({ seed, pages: pages[i] ?? [] })),
+        {
+          known: inputs.library.known,
+          library: inputs.library,
+          taste: inputs.taste,
+          profileOf,
+          popularityOf: (videoId) => popularity.get(videoId) ?? 0,
+        },
+        sliders,
+        avoid,
+      ),
       recommendationTurnEffect,
     );
     return { mixes, sliders };

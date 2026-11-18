@@ -5,6 +5,8 @@
  */
 import type { PlayerView, PlaybackCommand, PlayStart, QueueRow } from "./playerView.ts";
 import type { WindowSettings } from "./windowSettings.ts";
+import type { LanguageChoice } from "@wave/core";
+import type { LanguageView } from "./language.ts";
 import type { LibraryCounts } from "@wave/client/db/counts";
 import type { PlaybackStatus } from "./playback.ts";
 import type { SongState } from "./songState.ts";
@@ -16,6 +18,7 @@ import type { YtSearchPage, YtStatus } from "./yt.ts";
 import type { SearchOnline } from "@wave/core";
 import type {
   DiscoverMixesView,
+  DiscoverSettings,
   MagicQueueView,
   YtAlbumView,
   YtArtistView,
@@ -46,6 +49,7 @@ import type {
   SongTarget,
 } from "./songActions.ts";
 import { LINK_CALLS, linkBridge, type LinkContract } from "./links.ts";
+import { STREAMED_CALLS, streamedBridge, type StreamedContract } from "./streamedSongs.ts";
 export type Appearance = "system" | "light" | "dark";
 
 /** One window of a list, as a list call returns it. */
@@ -57,7 +61,7 @@ export interface Page<T> {
 }
 
 /** Each call's arguments and result. Arguments reach main as untrusted data. */
-export interface BridgeContract extends PlaylistContract, LinkContract {
+export interface BridgeContract extends PlaylistContract, LinkContract, StreamedContract {
   readonly "system.mediaBackend": {
     readonly args: readonly [];
     readonly result: "native" | "chromium";
@@ -114,6 +118,11 @@ export interface BridgeContract extends PlaylistContract, LinkContract {
   readonly "account.answerInvitation": { readonly args: readonly []; readonly result: void };
 
   readonly "settings.appearance": { readonly args: readonly []; readonly result: Appearance };
+  readonly "settings.language": { readonly args: readonly []; readonly result: LanguageView };
+  readonly "settings.setLanguage": {
+    readonly args: readonly [choice: LanguageChoice];
+    readonly result: void;
+  };
   readonly "settings.setAppearance": {
     readonly args: readonly [appearance: Appearance];
     readonly result: void;
@@ -196,6 +205,11 @@ export interface BridgeContract extends PlaylistContract, LinkContract {
   readonly "discover.picks": { readonly args: readonly []; readonly result: Page<BrowseRow> };
   /** Discover's Artist mixes, built once a day. */
   readonly "discover.mixes": { readonly args: readonly []; readonly result: DiscoverMixesView };
+  readonly "discover.settings": { readonly args: readonly []; readonly result: DiscoverSettings };
+  readonly "discover.setSettings": {
+    readonly args: readonly [DiscoverSettings];
+    readonly result: DiscoverSettings;
+  };
   /** Plays today's mix [id] from its song [index]; false when the mix is gone. */
   readonly "discover.playMix": {
     readonly args: readonly [id: string, index: number];
@@ -344,6 +358,8 @@ export const BRIDGE_CALLS = [
   "player.status",
   "tags.read",
   "settings.appearance",
+  "settings.language",
+  "settings.setLanguage",
   "settings.window",
   "settings.setWindow",
   "settings.setAppearance",
@@ -362,6 +378,8 @@ export const BRIDGE_CALLS = [
   "yt.queue",
   "discover.picks",
   "discover.mixes",
+  "discover.settings",
+  "discover.setSettings",
   "discover.playMix",
   "magicQueue.start",
   "magicQueue.startStreamed",
@@ -394,6 +412,7 @@ export const BRIDGE_CALLS = [
   "home.view",
   "home.play",
   ...LINK_CALLS,
+  ...STREAMED_CALLS,
 ] as const satisfies readonly BridgeCall[] &
   (BridgeContract extends PagedLists<BridgeContract> ? unknown : never);
 
@@ -405,6 +424,8 @@ export type Invoke = <C extends BridgeCall>(
 /** `window.wave`. */
 export interface WaveBridge {
   readonly links: ReturnType<typeof linkBridge>;
+  /** A streamed YouTube Music song's menu. */
+  readonly streamed: ReturnType<typeof streamedBridge>;
   readonly system: { readonly mediaBackend: () => Promise<"native" | "chromium"> };
   readonly home: {
     readonly view: () => Promise<HomeView>;
@@ -473,6 +494,8 @@ export interface WaveBridge {
     readonly window: () => Promise<WindowSettings>;
     readonly setWindow: (change: Partial<WindowSettings>) => Promise<WindowSettings>;
     readonly appearance: () => Promise<Appearance>;
+    readonly language: () => Promise<LanguageView>;
+    readonly setLanguage: (choice: LanguageChoice) => Promise<void>;
     readonly setAppearance: (appearance: Appearance) => Promise<void>;
     /** Settings › Playback: Crossfade, Normalize Volume and Buffer, synced with the account. */
     readonly playback: () => Promise<PlaybackSettings>;
@@ -497,6 +520,8 @@ export interface WaveBridge {
   readonly discover: {
     readonly picks: () => Promise<Page<BrowseRow>>;
     readonly mixes: () => Promise<DiscoverMixesView>;
+    readonly settings: () => Promise<DiscoverSettings>;
+    readonly setSettings: (value: DiscoverSettings) => Promise<DiscoverSettings>;
     readonly playMix: (id: string, index: number) => Promise<boolean>;
   };
   readonly magicQueue: {
@@ -598,6 +623,8 @@ export const createBridge = (invoke: Invoke): WaveBridge => ({
   },
   settings: {
     appearance: () => invoke("settings.appearance"),
+    language: () => invoke("settings.language"),
+    setLanguage: (choice) => invoke("settings.setLanguage", choice),
     window: () => invoke("settings.window"),
     setWindow: (change) => invoke("settings.setWindow", change),
     setAppearance: (appearance) => invoke("settings.setAppearance", appearance),
@@ -620,6 +647,8 @@ export const createBridge = (invoke: Invoke): WaveBridge => ({
   discover: {
     picks: () => invoke("discover.picks"),
     mixes: () => invoke("discover.mixes"),
+    settings: () => invoke("discover.settings"),
+    setSettings: (value) => invoke("discover.setSettings", value),
     playMix: (id, index) => invoke("discover.playMix", id, index),
   },
   magicQueue: {
@@ -663,4 +692,5 @@ export const createBridge = (invoke: Invoke): WaveBridge => ({
     play: (section, index) => invoke("home.play", section, index),
   },
   links: linkBridge(invoke),
+  streamed: streamedBridge(invoke),
 });

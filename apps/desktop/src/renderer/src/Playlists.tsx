@@ -303,11 +303,12 @@ const dialogKeys = (close: () => void) => (event: KeyboardEvent<HTMLElement>) =>
   } else trapTab(event);
 };
 
-const problems = {
-  empty: text.playlists.nameEmpty,
-  taken: text.playlists.nameTaken,
-  tooLong: text.playlists.nameTooLong,
-} as const;
+const problems = () =>
+  ({
+    empty: text.playlists.nameEmpty,
+    taken: text.playlists.nameTaken,
+    tooLong: text.playlists.nameTooLong,
+  }) as const;
 
 /** New Playlist and Rename: the name, checked as it is typed by Core's rules. */
 function NameDialog({
@@ -337,7 +338,8 @@ function NameDialog({
   }, [name, playlistId]);
   const result = check?.name === name ? check.check : undefined;
   // The suggested name is shown without a complaint until it is edited.
-  const problem = result?.ok === false && name !== naming.initial ? problems[result.problem] : null;
+  const problem =
+    result?.ok === false && name !== naming.initial ? problems()[result.problem] : null;
   const title =
     naming.kind === "create" ? text.playlists.newPlaylistTitle : text.playlists.renamePlaylist;
   const submit = () => {

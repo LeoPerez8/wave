@@ -39,6 +39,9 @@ import type { TabBarTab } from "./tabBar.ts";
 export const en = {
   desktopWindow: desktopWindowEn,
   desktopLayout: {
+    language: "Language",
+    // Each language under its own name, so it can be found from the other one.
+    languages: { system: "System", en: "English", "pt-BR": "Português (Brasil)" },
     brand: "Wave",
     home: "Home",
     search: "Search",

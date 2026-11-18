@@ -1,12 +1,19 @@
 import { toastDuration } from "@wave/core";
-import { useCallback, useEffect, useRef, useState, type CSSProperties } from "react";
+import {
+  useCallback,
+  useEffect,
+  useRef,
+  useState,
+  type CSSProperties,
+  type MouseEvent,
+} from "react";
 
 import type { PlaybackCommand, PlayerView } from "../../shared/playerView.ts";
 import { Icon } from "./Icon.tsx";
 import type { PanelTab } from "./SidePanel.tsx";
 import { SleepTimer } from "./SleepTimer.tsx";
 import { useDesktopKeys } from "./keys.ts";
-import { labels, text } from "./text.ts";
+import { albumName, artistName, labels, text } from "./text.ts";
 import { Artwork, time } from "./VirtualTable.tsx";
 import { AlbumCredit, ArtistCredit, type YtCreditLinks } from "./YtCredit.tsx";
 
@@ -132,6 +139,7 @@ export function PlayerBar({
   panel,
   onPanel,
   onNowPlaying,
+  onMenu,
   links,
 }: {
   readonly playback: ReturnType<typeof usePlayback>;
@@ -139,6 +147,8 @@ export function PlayerBar({
   readonly panel: PanelTab | null;
   readonly onPanel: (tab: PanelTab) => void;
   readonly onNowPlaying: () => void;
+  /** Opens the song playing's menu under [element]. */
+  readonly onMenu: (element: HTMLElement) => void;
   /** Where a streamed song's artist and album names lead. */
   readonly links: YtCreditLinks;
 }) {
@@ -157,7 +167,7 @@ export function PlayerBar({
   const button = (
     icon: string,
     label: string,
-    action: () => void,
+    action: (event: MouseEvent<HTMLElement>) => void,
     pressed?: boolean,
     disabled = song === null,
     badge?: string,
@@ -199,8 +209,8 @@ export function PlayerBar({
                 <div className="truncate player-title">{song?.title ?? labels.nothingPlaying}</div>
                 {song && (
                   <div className="player-credit-twin" aria-hidden="true">
-                    <div className="truncate secondary">{song.artist}</div>
-                    <div className="truncate tertiary">{song.album}</div>
+                    <div className="truncate secondary">{artistName(song.artist)}</div>
+                    <div className="truncate tertiary">{albumName(song.album)}</div>
                   </div>
                 )}
               </div>
@@ -220,8 +230,7 @@ export function PlayerBar({
             labels.favorite,
             () => run(window.wave.playback.favorite()),
             song?.favorite,
-            // A YouTube Music song isn't in the Library, so it can't be a favorite.
-            song === null || song.videoId !== undefined,
+            song === null,
           )}
         </div>
         <div className="player-center">
@@ -276,8 +285,13 @@ export function PlayerBar({
           <SleepTimer timer={view?.sleepTimer ?? null} disabled={song === null} run={run} />
           {button("lyrics", labels.lyrics, () => onPanel("lyrics"), panel === "lyrics", !view)}
           {button("queue", labels.queue, () => onPanel("queue"), panel === "queue", !view)}
-          {/* The song menu's ticket comes after this one; the bar keeps its layout meanwhile. */}
-          {button("menu", labels.menu, () => {}, undefined, true)}
+          {button(
+            "menu",
+            labels.menu,
+            (event) => onMenu(event.currentTarget),
+            undefined,
+            song === null,
+          )}
           {button(
             view?.muted ? "mute" : "volume",
             view?.muted ? labels.unmute : labels.mute,

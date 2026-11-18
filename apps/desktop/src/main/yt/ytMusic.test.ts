@@ -236,3 +236,16 @@ test("the service is up before the JVM answers: a silent JVM doesn't hold Wave's
     await new Promise((resolve) => setTimeout(resolve, 50));
   }
 });
+
+test("a song known with its album keeps it when a later answer leaves the album out", () => {
+  const { yt } = setup();
+  yt.keep([songOf("abcdefghijk", "Pink Moon")] as never);
+  yt.keep([
+    { ...songOf("abcdefghijk", "Pink Moon"), album: null, albumId: null, artworkUrl: null },
+  ] as never);
+  assert.equal(yt.song("abcdefghijk")?.album, "Pink Moon");
+  assert.equal(yt.song("abcdefghijk")?.albumId, "MPREb_pinkmoon");
+  assert.equal(yt.song("abcdefghijk")?.artworkUrl, songOf("x").artworkUrl);
+  yt.keep([{ ...songOf("abcdefghijk", "Pink Moon"), album: "Bryter Layter" }] as never);
+  assert.equal(yt.song("abcdefghijk")?.album, "Bryter Layter");
+});

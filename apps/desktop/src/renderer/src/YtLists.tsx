@@ -2,7 +2,7 @@ import { useState, type MouseEvent, type ReactNode } from "react";
 import type { BrowseRow } from "../../shared/browse.ts";
 import type { YtStatus } from "../../shared/yt.ts";
 import { Icon } from "./Icon.tsx";
-import { labels } from "./text.ts";
+import { labels, albumName, artistName } from "./text.ts";
 import { Artwork, time } from "./VirtualTable.tsx";
 
 /**
@@ -50,7 +50,7 @@ export function YtSongList({
             role="listitem"
             className="table-row table-columns yt-row"
             aria-selected={selected === index}
-            aria-label={[row.title, row.artist].filter(Boolean).join(", ")}
+            aria-label={[row.title, artistName(row.artist)].filter(Boolean).join(", ")}
             onClick={() => setSelected(index)}
             onDoubleClick={() => onPlay(index)}
             onContextMenu={
@@ -77,8 +77,8 @@ export function YtSongList({
               </span>
               <span className="truncate">{row.title}</span>
             </span>
-            <span className="truncate secondary">{row.artist}</span>
-            <span className="album-column truncate secondary">{row.album}</span>
+            <span className="truncate secondary">{artistName(row.artist)}</span>
+            <span className="album-column truncate secondary">{albumName(row.album)}</span>
             <span className="star-column" />
             <span className="time-column secondary">
               {row.durationMs > 0 ? time(row.durationMs) : ""}
@@ -110,19 +110,23 @@ export function Shelf({
   title,
   items,
   artists = false,
+  nested = false,
   onOpen,
   onMenu,
 }: {
   readonly title: string;
   readonly items: readonly TileItem[];
   readonly artists?: boolean;
+  /** Its title is a level lower: a row of a section with its own title (Home's Discover). */
+  readonly nested?: boolean;
   readonly onOpen: (index: number) => void;
   readonly onMenu?: (index: number, at: { readonly x: number; readonly y: number }) => void;
 }) {
   if (items.length === 0) return null;
+  const Heading = nested ? "h3" : "h2";
   return (
     <section className="shelf" aria-label={title}>
-      <h2>{title}</h2>
+      <Heading>{title}</Heading>
       <div className="shelf-row" role="list">
         {items.map((item, index) => (
           <div key={item.key} role="listitem">

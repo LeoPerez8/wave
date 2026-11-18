@@ -49,6 +49,7 @@ import { searchLibrary } from "./library/search.ts";
 import { validWindowSettings } from "../shared/windowSettings.ts";
 import { readWindowSettings, changeWindowSettings } from "./system/windowSettings.ts";
 import { homeHandlers } from "./homeHandlers.ts";
+import { streamedHandlers } from "./yt/streamedHandlers.ts";
 import {
   clearRecentSearches,
   listRecentSearchesSync,
@@ -245,6 +246,7 @@ const createHandlers = (
   mediaBackend: () => "native" | "chromium",
 ): Handlers => {
   let loadedPath: string | undefined;
+  const streamed = streamedHandlers();
   const checkAvailable = (path: string | undefined) =>
     Effect.gen(function* () {
       const library = yield* DesktopLibrary;
@@ -263,6 +265,7 @@ const createHandlers = (
         : refuse("settings.setWindow", "invalid window setting"),
     ...createYtFeatureHandlers(validTarget),
     ...linkHandlers(validTarget),
+    ...streamed.handlers,
     "playback.view": () => playbackCall((p) => p.view()),
     "playback.start": ([scope, index, shuffle]) =>
       validScope(scope) &&
@@ -296,7 +299,7 @@ const createHandlers = (
         : refuse("playback.seek", "invalid time"),
     "playback.undo": () => playbackCall((p) => p.undo()),
     "playback.dismissUndo": () => playbackCall((p) => p.dismissUndo()),
-    "playback.favorite": () => playbackCall((p) => p.favorite()),
+    "playback.favorite": () => streamed.favoritePlaying,
     "playback.volume": ([value, muted]) =>
       typeof value === "number" &&
       Number.isFinite(value) &&
@@ -330,6 +333,11 @@ const createHandlers = (
       Effect.gen(function* () {
         return appearance(yield* Database);
       }),
+    "settings.language": () => Effect.map(Account, (it) => it.language()),
+    "settings.setLanguage": ([choice]) =>
+      choice === "system" || choice === "en" || choice === "pt-BR"
+        ? Effect.map(Account, (it) => it.setLanguage(choice))
+        : refuse("settings.setLanguage", "invalid language"),
     "settings.setAppearance": ([mode]) =>
       mode === "light" || mode === "dark" || mode === "system"
         ? Effect.gen(function* () {

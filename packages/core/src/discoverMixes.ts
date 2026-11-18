@@ -420,9 +420,8 @@ export const discoverMixCaption = (
     const key = identityKey(lead);
     if (!artists.has(key)) artists.set(key, lead);
   }
-  const name = genre === undefined ? mix.seed.name : genreTitle(genre);
   return {
-    title: strings.discover.mixTitle(name),
+    title: strings.discover.mixTitle(discoverMixName(mix.seed)),
     artists: [...artists.values()].join(", "),
     line: strings.discover.songs(mix.songs.length),
     artworkUrl: mixCover(mix),
@@ -478,6 +477,10 @@ export interface DiscoverMixesBuild {
   /** Legacy saved variety; absent for radio builds. */
   readonly variety?: number;
 }
+
+/** The name a mix's title gives it: its seed artist's, or its genre family's (`genreTitle`). */
+export const discoverMixName = (seed: Pick<DiscoverMixSeed, "name" | "genre">): string =>
+  seed.genre === undefined ? seed.name : genreTitle(seed.genre);
 
 /** A genre as a mix's title names it: one typed all in lowercase gets capital initials. */
 const genreTitle = (genre: string): string =>
