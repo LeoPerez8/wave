@@ -5,6 +5,7 @@
  */
 import type { LibraryCounts } from "@wave/client/db/counts";
 import type { PlaybackStatus } from "./playback.ts";
+import type { SongTags } from "./tags.ts";
 
 /** One window of a list, as a list call returns it. */
 export interface Page<T> {
@@ -29,6 +30,8 @@ export interface BridgeContract {
     readonly result: PlaybackStatus;
   };
   readonly "player.status": { readonly args: readonly []; readonly result: PlaybackStatus };
+  /** Reads an audio file's tags, by its absolute path, as the phone's scan does. */
+  readonly "tags.read": { readonly args: readonly [path: string]; readonly result: SongTags };
 }
 
 export type BridgeCall = keyof BridgeContract;
@@ -44,6 +47,7 @@ export const BRIDGE_CALLS = [
   "player.pause",
   "player.seek",
   "player.status",
+  "tags.read",
 ] as const satisfies readonly BridgeCall[] &
   (BridgeContract extends PagedLists<BridgeContract> ? unknown : never);
 
@@ -65,6 +69,9 @@ export interface WaveBridge {
     readonly seek: (positionMs: number) => Promise<PlaybackStatus>;
     readonly status: () => Promise<PlaybackStatus>;
   };
+  readonly tags: {
+    readonly read: (path: string) => Promise<SongTags>;
+  };
 }
 
 export const createBridge = (invoke: Invoke): WaveBridge => ({
@@ -77,5 +84,8 @@ export const createBridge = (invoke: Invoke): WaveBridge => ({
     pause: () => invoke("player.pause"),
     seek: (positionMs) => invoke("player.seek", positionMs),
     status: () => invoke("player.status"),
+  },
+  tags: {
+    read: (path) => invoke("tags.read", path),
   },
 });

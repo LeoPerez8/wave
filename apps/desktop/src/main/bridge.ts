@@ -7,6 +7,7 @@ import { BRIDGE_CALLS, type BridgeCall, type BridgeContract } from "../shared/br
 import { PLAYABLE_EXTENSIONS } from "../shared/playback.ts";
 import { Player } from "./audio/player.ts";
 import type { AudioEngineError } from "./audio/supervisor.ts";
+import { Kotlin } from "./kotlin/kotlin.ts";
 
 export type IpcHandler = (event: unknown, ...args: unknown[]) => Promise<unknown>;
 
@@ -19,7 +20,7 @@ interface Runtime<R> {
 }
 
 /** The services the calls use. */
-export type BridgeServices = Database | Player;
+export type BridgeServices = Database | Player | Kotlin;
 
 const refuse = (call: BridgeCall, why: string) => Effect.fail(new Error(`Refused ${call}: ${why}`));
 
@@ -40,6 +41,13 @@ const playerCall = <A>(
     // Only the message crosses IPC, so the window reads the engine's code from it.
     Effect.mapError((error) => new Error(`[${error.code}] ${error.message}`)),
   );
+
+const kotlinCall = <A>(
+  run: (kotlin: Kotlin["Service"]) => Effect.Effect<A, { readonly code: string; readonly message: string }>,
+): Effect.Effect<A, Error, Kotlin> =>
+  Effect.gen(function* () {
+    return yield* run(yield* Kotlin);
+  }).pipe(Effect.mapError((error) => new Error(`[${error.code}] ${error.message}`)));
 
 /** What each call does; `args` come from the window and are checked here before use. */
 const HANDLERS: {
@@ -64,6 +72,12 @@ const HANDLERS: {
       ? playerCall((player) => player.seek(positionMs))
       : refuse("player.seek", "not a time in milliseconds"),
   "player.status": () => playerCall((player) => player.status()),
+  "tags.read": ([path]) => {
+    const song = songPath(path);
+    return song === undefined
+      ? refuse("tags.read", "not an absolute path to an audio file")
+      : kotlinCall((kotlin) => kotlin.readTags(song));
+  },
 };
 
 /** Registers every call, answering only frames `isTrusted` accepts. */

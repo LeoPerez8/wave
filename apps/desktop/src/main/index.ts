@@ -6,6 +6,8 @@ import { forkAudio } from "./audio/fork.ts";
 import { playerLayer } from "./audio/player.ts";
 import { registerBridge } from "./bridge.ts";
 import { libraryLayer } from "./database.ts";
+import { kotlinLayer } from "./kotlin/kotlin.ts";
+import { jvmCommand, spawnLines } from "./kotlin/spawn.ts";
 import { guardWindow } from "./security.ts";
 
 // %APPDATA%\Wave or ~/.config/Wave, from the product name; tests point it at a folder of their own.
@@ -57,12 +59,24 @@ else {
     // The engine built by `pnpm build:native`; tests may point at another build.
     const addon =
       process.env["WAVE_AUDIO_ADDON"] ?? join(app.getAppPath(), "native", "wave-audio.node");
+    // The runtime and JAR from `pnpm build:jvm`; tests may point at others.
+    const jvm = jvmCommand({
+      runtime: process.env["WAVE_JVM_RUNTIME"] ?? join(app.getAppPath(), "jvm", "runtime"),
+      jar: process.env["WAVE_KOTLIN_JAR"] ?? join(app.getAppPath(), "jvm", "wave-kotlin.jar"),
+      dataDir: join(app.getPath("userData"), "kotlin"),
+      platform: process.platform,
+    });
     const runtime = ManagedRuntime.make(
       Layer.mergeAll(
         libraryLayer(join(app.getPath("userData"), "wave.db")),
         playerLayer({ fork: forkAudio(join(import.meta.dirname, "audio.js"), addon) }),
+        kotlinLayer({
+          spawn: spawnLines(jvm, (text) => process.stderr.write(`[jvm] ${text}`)),
+        }),
       ),
     );
+    // Builds the services now, so the JVM starts with the app rather than on the first call.
+    void runtime.context();
     registerBridge(
       ipcMain,
       runtime,
