@@ -7,15 +7,19 @@
  */
 import { Database } from "@wave/client";
 import { saveMeasurement, selectSongsToMeasure } from "@wave/client/db/loudness";
+import { selectMissingSongs } from "@wave/client/db/missingSongs";
 import { setFavorites } from "@wave/client/db/playHistory";
 import { createPlaybackSession, type AudioPort } from "@wave/client/playbackSession";
 import { createQueueGains, queueAlbum } from "@wave/client/queueGains";
 import { createSongMeasurements } from "@wave/client/songMeasurements";
 import {
+  listPlay,
+  missingSongYtSong,
   parseTrackId,
   tappedMissingSong,
   skipMissingSongs,
   ytTrackId,
+  type YtAlbumSong,
   type PlayEvent,
   type QueueCommand,
   type QueueState,
@@ -28,7 +32,7 @@ import * as Layer from "effect/Layer";
 
 import type { Page } from "../../shared/bridge.ts";
 import type { BrowseRow, BrowseScope } from "../../shared/browse.ts";
-import type { PlaybackCommand, PlayerView, QueueRow } from "../../shared/playerView.ts";
+import type { PlaybackCommand, PlayerView, PlayStart, QueueRow } from "../../shared/playerView.ts";
 import { ytRow } from "../../shared/yt.ts";
 import type { PlaybackSettings } from "../../shared/playbackSettings.ts";
 import { Player } from "../audio/player.ts";
@@ -36,6 +40,7 @@ import { browseSongs, browseTrackIds } from "../library/browse.ts";
 import { DesktopLibrary } from "../library/library.ts";
 import { preference, savePreference } from "../preferences.ts";
 import { YtMusic } from "../yt/ytMusic.ts";
+import { streamedStarred } from "../yt/streamedSong.ts";
 import { streamedWithinBuffer } from "./bufferAhead.ts";
 import { readPlaybackSettings, savePlaybackSettings } from "./playbackSettings.ts";
 import { createSleepTimer } from "./sleepTimer.ts";
@@ -49,14 +54,17 @@ export interface PlaybackShape {
    * Plays [scope]'s songs as a new queue: from row [index], or shuffled when [shuffle] is
    * true, or from the first song. A queue it replaces can come back with `undo`.
    */
-  readonly start: (scope: BrowseScope, index?: number, shuffle?: boolean) => Promise<void>;
-  /** Activates a song in a resolved list; missing songs download, then play after import. */
+  readonly start: (scope: BrowseScope, index?: number, shuffle?: boolean) => Promise<PlayStart>;
+  /**
+   * Activates a song in a resolved list; missing songs download, then play after import. With
+   * no [index] (Play, Shuffle), missing songs YouTube Music has stream while it's on.
+   */
   readonly activate: (
     ids: readonly string[],
     index: number | undefined,
     context: NonNullable<QueueState["context"]>,
     shuffle?: boolean,
-  ) => Promise<void>;
+  ) => Promise<PlayStart>;
   /** Plays YouTube Music songs a search found, from [index], as a new queue. */
   readonly startYt: (videoIds: readonly string[], index: number) => Promise<void>;
   /** A queue command: Next, Previous, shuffle, repeat, and the Queue's edits. */
@@ -292,7 +300,9 @@ export const playbackLayer = Layer.effect(
       return refs.map((ref) => {
         if (ref?.kind === "library") return songs.get(ref.id);
         const song = ref?.kind === "yt" ? yt.song(ref.videoId) : undefined;
-        return song === undefined ? undefined : ytRow(song);
+        return song === undefined
+          ? undefined
+          : { ...ytRow(song), favorite: streamedStarred(db, song) };
       });
     };
     /** Keeps the queue's YT Music songs for the next launch, after anything that changes it. */
@@ -360,10 +370,11 @@ export const playbackLayer = Layer.effect(
           if (pending === request) pending = undefined;
           throw cause;
         }
-        return;
+        return { kind: "downloading" };
       }
+      if (index === undefined) return playList(ids, context, shuffle, hasFile, isMissing);
       const play = skipMissingSongs(ids, index, hasFile);
-      if (play === null) return;
+      if (play === null) return { kind: "nothing", missing: 0 };
       await moved(
         session.dispatch({
           type: "play",
@@ -374,6 +385,42 @@ export const playbackLayer = Layer.effect(
         }),
         true,
       );
+      return { kind: "playing", streamed: 0, leftOut: 0 };
+    };
+    /**
+     * A list's Play or Shuffle (Core's `listPlay`): its songs with a file and, with YT Music on,
+     * its missing songs YouTube Music has, streamed in their place; the others are counted.
+     */
+    const playList = async (
+      ids: readonly string[],
+      context: NonNullable<QueueState["context"]>,
+      shuffle: boolean | undefined,
+      hasFile: (id: string) => boolean,
+      isMissing: (id: string) => boolean,
+    ): Promise<PlayStart> => {
+      const listed = ids.filter((id) => hasFile(id) || isMissing(id));
+      const streams = new Map<string, YtAlbumSong>();
+      if (yt.enabled())
+        for (const track of selectMissingSongs(db, listed.filter(isMissing).map(Number))) {
+          const song = missingSongYtSong(track);
+          if (song !== null) streams.set(String(track.id), { ...song, albumId: null });
+        }
+      const play = listPlay(listed, { hasFile, streams: (id) => streams.has(id) });
+      if (play.kind === "nothing") return { kind: "nothing", missing: play.missing.length };
+      yt.keep(play.streamed.map((id) => streams.get(id)!));
+      await moved(
+        session.dispatch({
+          type: "play",
+          trackIds: play.songs.map((id) => {
+            const stream = streams.get(id);
+            return stream === undefined ? id : ytTrackId(stream.videoId);
+          }),
+          context,
+          shuffle,
+        }),
+        true,
+      );
+      return { kind: "playing", streamed: play.streamed.length, leftOut: play.leftOut.length };
     };
     const stopImports = library.subscribe(() => {
       const request = pending;
@@ -430,7 +477,7 @@ export const playbackLayer = Layer.effect(
         if (index !== undefined && chosen === undefined) throw new Error("Invalid song position");
         // A song from Search plays alone, as on the phone with YT Music off.
         const alone = scope.kind === "search" && chosen !== undefined;
-        await activate(
+        return activate(
           alone ? [chosen] : ids,
           alone ? 0 : index,
           scope.kind === "search"

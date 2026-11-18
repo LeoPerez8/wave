@@ -1,5 +1,5 @@
 import { formatNumber, type SearchOnline } from "@wave/core";
-import { useEffect, useState, type ReactNode } from "react";
+import { useEffect, useState, type MouseEvent, type ReactNode } from "react";
 import type { BrowseRow, BrowseScope } from "../../shared/browse.ts";
 import {
   searchSections,
@@ -10,26 +10,26 @@ import {
   type SearchSection,
 } from "../../shared/search.ts";
 import { Icon } from "./Icon.tsx";
-import { language, labels, text } from "./text.ts";
+import { language, labels, text, albumName, artistName, tagTitle } from "./text.ts";
 import type { SongState } from "../../shared/songState.ts";
 import { markClass, rowMark, SongMark, useSongStates } from "./SongMark.tsx";
 import { Artwork, time } from "./VirtualTable.tsx";
-import { YtResults } from "./YtResults.tsx";
+import { YtResults, type YtSearchLinks } from "./YtResults.tsx";
 
-const groupLabel: Readonly<Record<SearchKind, string>> = {
+const groupLabel = (): Readonly<Record<SearchKind, string>> => ({
   song: text.playbackText.songs,
   album: text.playbackText.albums,
   artist: text.playbackText.artists,
   playlist: text.playbackText.playlists,
   genre: text.playbackText.genres,
-};
-const kindLabel: Readonly<Record<SearchKind, string>> = {
+});
+const kindLabel = (): Readonly<Record<SearchKind, string>> => ({
   song: text.playbackText.song,
   album: labels.album,
   artist: labels.artist,
   playlist: labels.playlist,
   genre: labels.genre,
-};
+});
 const count = (value: number) => formatNumber(language, value);
 
 /** A song row of Search: double-click or Enter plays it, the context menu opens its actions. */
@@ -60,7 +60,7 @@ function SongRow({
       data-testid={testId}
       aria-selected={selected}
       aria-disabled={row.unavailable}
-      aria-label={[row.title, row.artist].filter(Boolean).join(", ")}
+      aria-label={[row.title, artistName(row.artist)].filter(Boolean).join(", ")}
       onClick={onSelect}
       onDoubleClick={onPlay}
       onKeyDown={(event) => {
@@ -85,8 +85,8 @@ function SongRow({
           {subtitle}
         </span>
       </span>
-      <span className="truncate secondary">{row.artist}</span>
-      <span className="album-column truncate secondary">{row.album}</span>
+      <span className="truncate secondary">{artistName(row.artist)}</span>
+      <span className="album-column truncate secondary">{albumName(row.album)}</span>
       <span className="star-column">{row.favorite && <Icon name="favorites" size={14} />}</span>
       <span className="time-column secondary">
         {row.durationMs > 0 ? time(row.durationMs) : ""}
@@ -214,6 +214,10 @@ export interface SearchPageProps {
   readonly searchOnline: SearchOnline | undefined;
   readonly onYtPlay: (videoId: string) => void;
   readonly onYtDownload: (videoId: string) => void;
+  /** Opens a YouTube Music result's song menu. */
+  readonly onYtMenu?: (row: BrowseRow, event: MouseEvent<HTMLElement>) => void;
+  /** Where YouTube Music's artists, albums and song credits lead. */
+  readonly ytLinks: YtSearchLinks;
 }
 
 /**
@@ -247,6 +251,8 @@ export function SearchPage(props: SearchPageProps) {
         libraryHasResults={current === undefined ? undefined : current.groups.length > 0}
         onPlay={props.onYtPlay}
         onDownload={props.onYtDownload}
+        onMenu={props.onYtMenu}
+        links={props.ytLinks}
       >
         <LibraryResults {...props} view={current} />
       </YtResults>
@@ -304,7 +310,7 @@ function LibraryResults({
           <button
             className="search-top"
             data-testid="search-top"
-            aria-label={[row.title, kindLabel[kind]].join(", ")}
+            aria-label={[tagTitle(row.title, kind), kindLabel()[kind]].join(", ")}
             onDoubleClick={() => openRow(kind, row)}
             onClick={() => kind !== "song" && openRow(kind, row)}
             onKeyDown={(event) => {
@@ -323,9 +329,11 @@ function LibraryResults({
                 artist={kind === "artist"}
               />
             </span>
-            <span className="search-top-name">{row.title}</span>
+            <span className="search-top-name">{tagTitle(row.title, kind)}</span>
             <span className="secondary">
-              {[kindLabel[kind], kind === "artist" ? "" : row.artist].filter(Boolean).join(" · ")}
+              {[kindLabel()[kind], kind === "artist" ? "" : artistName(row.artist)]
+                .filter(Boolean)
+                .join(" · ")}
             </span>
           </button>
         </section>
@@ -335,7 +343,7 @@ function LibraryResults({
       <h2>
         {section.type === "lyrics"
           ? text.playbackText.lyricsSearchSection
-          : groupLabel[section.kind]}
+          : groupLabel()[section.kind]}
         {` · ${count(section.total)}`}
       </h2>
     );
@@ -401,7 +409,9 @@ function LibraryResults({
               key={row.id}
               role="listitem"
               className="search-tile"
-              aria-label={[row.title, row.artist].filter(Boolean).join(", ")}
+              aria-label={[tagTitle(row.title, section.kind), artistName(row.artist)]
+                .filter(Boolean)
+                .join(", ")}
               onClick={() => openRow(section.kind, row)}
             >
               <span className={section.kind === "artist" ? "artist-image" : undefined}>
@@ -417,9 +427,9 @@ function LibraryResults({
                   artist={section.kind === "artist"}
                 />
               </span>
-              <span className="truncate">{row.title}</span>
+              <span className="truncate">{tagTitle(row.title, section.kind)}</span>
               <span className="truncate secondary">
-                {section.kind === "album" ? row.artist : labels.songCount(row.count)}
+                {section.kind === "album" ? artistName(row.artist) : labels.songCount(row.count)}
               </span>
             </button>
           ))}

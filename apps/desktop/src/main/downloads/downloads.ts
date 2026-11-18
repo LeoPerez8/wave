@@ -6,7 +6,6 @@
  * The journal works only while the computer is online ([DownloadsShape.setOnline]).
  */
 import {
-  albumDownloadOrigin,
   applyJournalChanges,
   downloadRunProgress,
   downloadSource,
@@ -36,7 +35,12 @@ import {
 } from "@wave/core";
 
 import type { Page } from "../../shared/bridge.ts";
-import type { DownloadRow, DownloadsView, MissingSongsView } from "../../shared/downloads.ts";
+import type {
+  DownloadRow,
+  DownloadsView,
+  MissingSongsList,
+  MissingSongsView,
+} from "../../shared/downloads.ts";
 import type { KotlinDownloadMethod, KotlinMethods, SoulseekSession } from "../kotlin/protocol.ts";
 import type { DownloadClaim } from "./decisions.ts";
 
@@ -52,10 +56,13 @@ export interface DownloadsDeps {
   readonly answer: (claim: DownloadClaim) => Promise<object>;
   /** The Library's missing songs ([ids] only, when given). */
   readonly missingSongs: (ids?: readonly number[]) => readonly MissingTrack[];
-  /** A Library album's title and its missing songs, in album order; null for no such album. */
-  readonly album: (
-    albumId: number,
-  ) => { readonly title: string; readonly missing: readonly number[] } | null;
+  /**
+   * A page's songs in page order (the missing ones among them download) and the source its
+   * downloads group under; null for no such album, artist, genre or playlist.
+   */
+  readonly list: (
+    list: MissingSongsList,
+  ) => { readonly ids: readonly number[]; readonly origin: DownloadOrigin | null } | null;
   /** A YT Music song a search found, by its video id. */
   readonly ytSong: (videoId: string) => YtSong | undefined;
   readonly ytMusicOn: () => boolean;
@@ -75,15 +82,20 @@ export interface DownloadsShape {
   readonly refresh: () => Promise<void>;
   readonly view: () => DownloadsView;
   readonly status: (trackId: number) => YtDownloadStatus | null;
+  /** A YT Music song's download, by its video id. */
+  readonly ytStatus: (videoId: string) => YtDownloadStatus | null;
   readonly rows: (offset: number, limit: number) => Page<DownloadRow>;
-  /** An album's missing songs and their downloads; null for no such album. */
-  readonly albumView: (albumId: number) => MissingSongsView | null;
+  /** A page's missing songs and their downloads; null for no such page. */
+  readonly listView: (list: MissingSongsList) => MissingSongsView | null;
   /** Downloads YT Music songs a search found. */
   readonly yt: (videoIds: readonly string[]) => Promise<void>;
   /** Downloads missing songs, each into its Track (a missing song's click). */
   readonly missing: (trackIds: readonly number[]) => Promise<void>;
-  /** Download All, Retry Failed or Cancel on every missing song, or [albumId]'s. */
-  readonly missingAction: (action: MissingSongsDownloadAction, albumId?: number) => Promise<void>;
+  /** Download All, Retry Failed or Cancel on every missing song, or [list]'s, in its order. */
+  readonly missingAction: (
+    action: MissingSongsDownloadAction,
+    list?: MissingSongsList,
+  ) => Promise<void>;
   /** Asks again for the failed songs [ids], or every failed song. */
   readonly retry: (ids?: readonly string[]) => Promise<void>;
   readonly cancel: (ids: readonly string[]) => Promise<void>;
@@ -315,6 +327,7 @@ export const createDownloads = (deps: DownloadsDeps): DownloadsShape => {
     },
     refresh,
     status: (trackId) => statuses.get(missingSongJobId(trackId)) ?? null,
+    ytStatus: (videoId) => statuses.get(videoId) ?? null,
     view: () => {
       const overall = downloadRunProgress(run).overall;
       return {
@@ -331,9 +344,9 @@ export const createDownloads = (deps: DownloadsDeps): DownloadsShape => {
       const items = shownRows();
       return { items: items.slice(offset, offset + limit), offset, total: items.length };
     },
-    albumView: (albumId) => {
-      const album = deps.album(albumId);
-      return album === null ? null : missingView(missingJobs(album.missing));
+    listView: (list) => {
+      const found = deps.list(list);
+      return found === null ? null : missingView(missingJobs(found.ids));
     },
     yt: (videoIds) =>
       queued(async () => {
@@ -359,14 +372,13 @@ export const createDownloads = (deps: DownloadsDeps): DownloadsShape => {
         const current = await session();
         await enqueue(missingJobs(trackIds).map((job) => missingSongRequest(job, current)));
       }),
-    missingAction: (action, albumId) =>
+    missingAction: (action, list) =>
       queued(async () => {
-        const album = albumId === undefined ? null : deps.album(albumId);
-        if (albumId !== undefined && album === null) return;
-        const missing = missingJobs(album?.missing);
+        const found = list === undefined ? null : deps.list(list);
+        if (list !== undefined && found === null) return;
+        const missing = missingJobs(found?.ids);
         const download = missingSongsDownload(missing, followed, deps.catalogue);
-        const origin =
-          album === null ? null : albumDownloadOrigin({ id: albumId!, title: album.title });
+        const origin = found?.origin ?? null;
         if (action === "cancel") {
           for (const id of download.toCancel) await deps.call("downloads.cancel", { id });
           await refresh();

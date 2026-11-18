@@ -2,12 +2,13 @@
  * Main's side of the bridge for YouTube Music's pages, Discover and the Magic Queue
  * (`YtFeatures`): each call's arguments are checked before use, and songs go back as rows.
  */
-import { ytTrackId, type YtAlbumSong } from "@wave/core";
+import { discoverMixCaption, ytTrackId, type YtAlbumSong } from "@wave/core";
 import * as Effect from "effect/Effect";
 
 import type { BridgeCall, BridgeContract, Page } from "../../shared/bridge.ts";
 import type { BrowseRow } from "../../shared/browse.ts";
 import type { SongTarget } from "../../shared/songActions.ts";
+import type { DiscoverSettings } from "../../shared/ytPages.ts";
 import { ytRow } from "../../shared/yt.ts";
 import { browseSongs } from "../library/browse.ts";
 import { Database } from "@wave/client";
@@ -16,6 +17,7 @@ import { VIDEO_ID, YtMusic } from "./ytMusic.ts";
 import { YtFeatures } from "./ytServices.ts";
 
 type YtFeatureCall =
+  | "yt.search"
   | "yt.artist"
   | "yt.findArtist"
   | "yt.album"
@@ -23,6 +25,8 @@ type YtFeatureCall =
   | "yt.queue"
   | "discover.picks"
   | "discover.mixes"
+  | "discover.settings"
+  | "discover.setSettings"
   | "discover.playMix"
   | "magicQueue.start"
   | "magicQueue.startStreamed"
@@ -56,9 +60,21 @@ const rows = (songs: readonly YtAlbumSong[]): Page<BrowseRow> => {
   return { items, offset: 0, total: items.length };
 };
 
+const sliderStep = (value: unknown): boolean =>
+  typeof value === "number" && Number.isInteger(value) && value >= 1 && value <= 5;
+const discoverSettings = (value: unknown): value is DiscoverSettings => {
+  if (typeof value !== "object" || value === null) return false;
+  const { level, faithfulness, popularity } = value as Record<string, unknown>;
+  return sliderStep(level) && sliderStep(faithfulness) && sliderStep(popularity);
+};
+
 export const createYtFeatureHandlers = (
   validTarget: (value: unknown) => value is SongTarget,
 ): YtFeatureHandlers => ({
+  "yt.search": ([query]) =>
+    typeof query === "string" && query.length <= 500
+      ? featuresCall(({ search }) => search(query))
+      : refuse("yt.search", "invalid query"),
   "yt.artist": ([id]) =>
     browseId(id)
       ? featuresCall(async ({ pages }) => {
@@ -120,13 +136,42 @@ export const createYtFeatureHandlers = (
       return { items, offset: 0, total: items.length };
     }),
   "discover.mixes": () =>
-    featuresCall(async ({ discover }) => {
-      const { status, mixes } = await discover.mixes();
+    Effect.gen(function* () {
+      const { discover } = yield* YtFeatures;
+      const db = yield* Database;
+      const { status, mixes } = yield* Effect.promise(() => discover.mixes());
       return {
         status,
-        mixes: mixes.map((mix) => ({ id: mix.id, name: mix.name, songs: rows(mix.songs) })),
+        mixes: mixes.map((mix) => {
+          // Familiar songs the Library has are its rows; the others stream.
+          const items = mix.songs.flatMap((song) =>
+            song.source === "stream" ? [ytRow(song.song)] : browseSongs(db, [song.track.id]),
+          );
+          // Its tile's lead artists and cover, as the phone's (Core's `discoverMixCaption`).
+          const { artists, artworkUrl } = discoverMixCaption(mix);
+          return {
+            id: mix.id,
+            name: mix.name,
+            row: mix.row,
+            artists,
+            artworkUrl: artworkUrl?.startsWith("https:") === true ? artworkUrl : null,
+            songs: { items, offset: 0, total: items.length },
+          };
+        }),
       };
     }),
+  "discover.settings": () => featuresCall(({ discover }) => discover.settings()),
+  "discover.setSettings": ([value]) =>
+    discoverSettings(value)
+      ? featuresCall(({ discover }) => {
+          discover.setSettings({
+            level: value.level,
+            faithfulness: value.faithfulness,
+            popularity: value.popularity,
+          });
+          return discover.settings();
+        })
+      : refuse("discover.setSettings", "invalid settings"),
   "discover.playMix": ([id, index]) =>
     typeof id === "string" &&
     id.length <= 200 &&

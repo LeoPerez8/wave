@@ -52,6 +52,51 @@ export function skipMissingSongs<T>(
 }
 
 /**
+ * What a list's Play or Shuffle plays (`listPlay`): its songs that can play, in
+ * list order, those of them [streamed] from YouTube Music, and the missing
+ * songs [leftOut] because they can't; or nothing, with the [missing] songs to
+ * offer to download.
+ */
+export type ListPlay<T> =
+  | {
+      readonly kind: "play";
+      readonly songs: readonly T[];
+      readonly streamed: readonly T[];
+      readonly leftOut: readonly T[];
+    }
+  | { readonly kind: "nothing"; readonly missing: readonly T[] };
+
+/**
+ * What Play or Shuffle on [songs] plays while some are missing songs (no file
+ * here, [hasFile]): the songs with a file and, with YT Music on, the missing
+ * songs YouTube Music has ([streams]: a video it was downloaded from), all in
+ * list order. The others are left out and named, so the page says so and
+ * offers their download; with nothing that can play, the list plays nothing.
+ * Pass a [streams] that is always false while YT Music is off.
+ */
+export const listPlay = <T>(
+  songs: readonly T[],
+  {
+    hasFile,
+    streams,
+  }: { readonly hasFile: (song: T) => boolean; readonly streams: (song: T) => boolean },
+): ListPlay<T> => {
+  const play: T[] = [];
+  const streamed: T[] = [];
+  const leftOut: T[] = [];
+  for (const song of songs) {
+    if (hasFile(song)) play.push(song);
+    else if (streams(song)) {
+      play.push(song);
+      streamed.push(song);
+    } else leftOut.push(song);
+  }
+  return play.length === 0
+    ? { kind: "nothing", missing: leftOut }
+    : { kind: "play", songs: play, streamed, leftOut };
+};
+
+/**
  * The missing song a tap on [songs] at [startIndex] downloads (docs/spec.md,
  * "Missing songs": tapping one downloads it), or null when the tapped song
  * has a file ([hasFile]) or nothing was tapped (Play, Shuffle).

@@ -72,7 +72,7 @@ export const artistPageHandlers = (): Handlers => ({
                 : libraryCount + from.streamed;
           if (at !== undefined && at >= ids.length)
             return yield* Effect.fail(new Error("Invalid song position"));
-          yield* Effect.tryPromise({
+          return yield* Effect.tryPromise({
             try: () =>
               playback.activate(ids, at, { kind: "artist", id: String(artistId) }, shuffle),
             catch: (error) => error,

@@ -5,7 +5,7 @@ import { Icon } from "./Icon.tsx";
 import { pressOf } from "./keys.ts";
 import { isChecked, toggled, type Selection } from "./SongActions.tsx";
 import { markClass, rowMark, SongMark, useSongStates } from "./SongMark.tsx";
-import { labels, text } from "./text.ts";
+import { labels, text, albumName, artistName, tagTitle } from "./text.ts";
 
 const SIZE = 100;
 const HEIGHT = 40;
@@ -375,13 +375,13 @@ export function VirtualTable({
                         title={row.title}
                       />
                     </span>
-                    <span className="truncate">{row.title}</span>
+                    <span className="truncate">{tagTitle(row.title, scope.kind)}</span>
                   </div>
                   <div role="gridcell" className="truncate secondary">
-                    {songList ? row.artist : labels.songCount(row.count)}
+                    {songList ? artistName(row.artist) : labels.songCount(row.count)}
                   </div>
                   <div role="gridcell" className="album-column truncate secondary">
-                    {row.album || (!songList ? row.artist : "")}
+                    {albumName(row.album) || (!songList ? artistName(row.artist) : "")}
                   </div>
                   <div role="gridcell" className="star-column">
                     {row.favorite && <Icon name="favorites" size={14} />}

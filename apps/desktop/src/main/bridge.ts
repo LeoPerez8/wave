@@ -30,10 +30,13 @@ import {
 } from "../shared/songActions.ts";
 import { runSongAction, songMenu } from "./library/songActions.ts";
 import type { Appearance } from "../shared/bridge.ts";
-import { ytRow } from "../shared/yt.ts";
 import { VIDEO_ID, YtMusic } from "./yt/ytMusic.ts";
 import { Downloads } from "./downloads/downloadsLayer.ts";
-import { MISSING_SONGS_ACTIONS } from "../shared/downloads.ts";
+import {
+  MISSING_SONGS_ACTIONS,
+  MISSING_SONGS_LISTS,
+  type MissingSongsList,
+} from "../shared/downloads.ts";
 import type { MissingSongsDownloadAction } from "@wave/core";
 import { createYtFeatureHandlers } from "./yt/ytBridge.ts";
 import type { YtFeatures } from "./yt/ytServices.ts";
@@ -47,6 +50,7 @@ import { searchLibrary } from "./library/search.ts";
 import { validWindowSettings } from "../shared/windowSettings.ts";
 import { readWindowSettings, changeWindowSettings } from "./system/windowSettings.ts";
 import { homeHandlers } from "./homeHandlers.ts";
+import { streamedHandlers } from "./yt/streamedHandlers.ts";
 import {
   clearRecentSearches,
   listRecentSearchesSync,
@@ -65,6 +69,13 @@ const validScope = (value: unknown): value is BrowseScope => {
 };
 
 const LIST_OF_LISTS = ["albums", "artists", "playlists", "genres"];
+
+/** A page whose missing songs download together, and only that. */
+const missingSongsList = (value: unknown): MissingSongsList | undefined => {
+  if (typeof value !== "object" || value === null) return undefined;
+  const { kind, id } = value as MissingSongsList;
+  return MISSING_SONGS_LISTS.includes(kind) && songId(id) ? { kind, id } : undefined;
+};
 
 const songId = (value: unknown): boolean =>
   typeof value === "number" && Number.isSafeInteger(value) && value > 0;
@@ -236,6 +247,7 @@ const createHandlers = (
   mediaBackend: () => "native" | "chromium",
 ): Handlers => {
   let loadedPath: string | undefined;
+  const streamed = streamedHandlers();
   const checkAvailable = (path: string | undefined) =>
     Effect.gen(function* () {
       const library = yield* DesktopLibrary;
@@ -255,6 +267,7 @@ const createHandlers = (
     ...createYtFeatureHandlers(validTarget),
     ...linkHandlers(validTarget),
     ...artistPageHandlers(),
+    ...streamed.handlers,
     "playback.view": () => playbackCall((p) => p.view()),
     "playback.start": ([scope, index, shuffle]) =>
       validScope(scope) &&
@@ -288,7 +301,7 @@ const createHandlers = (
         : refuse("playback.seek", "invalid time"),
     "playback.undo": () => playbackCall((p) => p.undo()),
     "playback.dismissUndo": () => playbackCall((p) => p.dismissUndo()),
-    "playback.favorite": () => playbackCall((p) => p.favorite()),
+    "playback.favorite": () => streamed.favoritePlaying,
     "playback.volume": ([value, muted]) =>
       typeof value === "number" &&
       Number.isFinite(value) &&
@@ -322,6 +335,11 @@ const createHandlers = (
       Effect.gen(function* () {
         return appearance(yield* Database);
       }),
+    "settings.language": () => Effect.map(Account, (it) => it.language()),
+    "settings.setLanguage": ([choice]) =>
+      choice === "system" || choice === "en" || choice === "pt-BR"
+        ? Effect.map(Account, (it) => it.setLanguage(choice))
+        : refuse("settings.setLanguage", "invalid language"),
     "settings.setAppearance": ([mode]) =>
       mode === "light" || mode === "dark" || mode === "system"
         ? Effect.gen(function* () {
@@ -349,14 +367,6 @@ const createHandlers = (
       typeof on === "boolean"
         ? ytCall((yt) => yt.setEnabled(on))
         : refuse("settings.setYtMusic", "invalid setting"),
-    "yt.search": ([query]) =>
-      typeof query === "string" && query.length <= 500
-        ? ytCall(async (yt) => {
-            const found = await yt.search(query);
-            const items = found.songs.map(ytRow);
-            return { status: found.status, songs: { items, offset: 0, total: items.length } };
-          })
-        : refuse("yt.search", "invalid query"),
     "yt.artwork": ([url]) =>
       typeof url === "string" && url.length <= 2_000
         ? ytCall((yt) => yt.artwork(url))
@@ -366,10 +376,12 @@ const createHandlers = (
       validPage(offset, limit)
         ? downloadsCall((d) => d.rows(offset as number, limit as number))
         : refuse("downloads.rows", "invalid page"),
-    "downloads.album": ([albumId]) =>
-      songId(albumId)
-        ? downloadsCall((d) => d.albumView(albumId as number))
-        : refuse("downloads.album", "invalid album"),
+    "downloads.list": ([value]) => {
+      const list = missingSongsList(value);
+      return list === undefined
+        ? refuse("downloads.list", "invalid list")
+        : downloadsCall((d) => d.listView(list));
+    },
     "downloads.yt": ([ids]) => {
       const asked = videoIds(ids);
       return asked === undefined
@@ -382,13 +394,13 @@ const createHandlers = (
         ? refuse("downloads.missing", "invalid songs")
         : downloadsCall((d) => d.missing(asked));
     },
-    "downloads.missingAction": ([action, albumId]) =>
-      MISSING_SONGS_ACTIONS.includes(action as MissingSongsDownloadAction) &&
-      (albumId === undefined || songId(albumId))
-        ? downloadsCall((d) =>
-            d.missingAction(action as MissingSongsDownloadAction, albumId as number | undefined),
-          )
-        : refuse("downloads.missingAction", "invalid action or album"),
+    "downloads.missingAction": ([action, value]) => {
+      const list = value === undefined ? undefined : missingSongsList(value);
+      return MISSING_SONGS_ACTIONS.includes(action as MissingSongsDownloadAction) &&
+        (value === undefined || list !== undefined)
+        ? downloadsCall((d) => d.missingAction(action as MissingSongsDownloadAction, list))
+        : refuse("downloads.missingAction", "invalid action or list");
+    },
     "downloads.retry": ([ids]) => {
       const asked = ids === undefined ? undefined : downloadIds(ids);
       return ids !== undefined && asked === undefined

@@ -5,26 +5,39 @@
  */
 import { Database } from "@wave/client";
 import type { LibraryDatabase } from "@wave/client/db/database";
+import { selectAlbums } from "@wave/client/db/albums";
 import { listArtistsSync } from "@wave/client/db/libraryQueries";
+import { mixSongsPage } from "@wave/client/db/mixInputs";
 import { selectCountedPlays } from "@wave/client/db/playTotals";
 import { selectVideoIds, trackQuery } from "@wave/client/db/tracks";
 import {
+  libraryArtistFinder,
   libraryFinder,
+  libraryReleaseFinder,
   localDay,
   parseTrackId,
   readContinueQueue,
   readSearchOnline,
   searchOnlineAlways,
+  readDiscoverMixLevel,
+  readMixSliders,
+  parseHomeArrangement,
   ytTrackId,
   type PlayedSeedArtist,
   type QueueContinuationSeed,
+  type DiscoverLibrarySong,
+  type DiscoverMixSong,
+  type DiscoverSongPlays,
   type YtAlbumSong,
+  type YtArtistAlbum,
+  type YtSong,
 } from "@wave/core";
 import * as Context from "effect/Context";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 
 import type { BrowseKind } from "../../shared/browse.ts";
+import { ytRow, type YtSearchPage } from "../../shared/yt.ts";
 import type { SongTarget } from "../../shared/songActions.ts";
 import { Kotlin } from "../kotlin/kotlin.ts";
 import { browseLibrary, browseTrackIds } from "../library/browse.ts";
@@ -57,6 +70,11 @@ export interface YtFeaturesShape {
   readonly magicQueue: MagicQueueShape;
   /** A Library artist page's YouTube Music section. */
   readonly artistSection: ArtistSectionShape;
+  /**
+   * Search's YouTube Music answer for [query]: its songs, artists and albums, and which of them
+   * the Library already has. One search that fails fails them all, as on the phone.
+   */
+  readonly search: (query: string) => Promise<YtSearchPage>;
   /** The Related tab of the song playing; nothing when no song plays. */
   readonly related: () => Promise<YtRelatedRead>;
   /** Plays a Magic Queue of [target]'s songs; false when none of them can play. */
@@ -77,8 +95,18 @@ interface LibraryRead {
     readonly name: string;
     readonly songs: number;
   }[];
-  readonly known: (song: YtAlbumSong) => boolean;
+  readonly known: (song: YtSong) => boolean;
+  /** Whether the Library has the YT Music artist [name] (Core's `libraryArtistFinder`). */
+  readonly hasArtist: (name: string) => boolean;
+  /** Whether the Library has [release] (Core's `libraryReleaseFinder`). */
+  readonly hasAlbum: (release: YtArtistAlbum) => boolean;
 }
+
+/** Built on first use: most reads never ask about artists or albums. */
+const lazily = <A>(build: () => A): (() => A) => {
+  let built: { readonly value: A } | null = null;
+  return () => (built ??= { value: build() }).value;
+};
 
 /** The Library's songs with a file, its artists and its counted plays, as these features weigh them. */
 const readLibrary = (db: LibraryDatabase): LibraryRead => {
@@ -100,15 +128,20 @@ const readLibrary = (db: LibraryDatabase): LibraryRead => {
     };
   });
   const find = libraryFinder(songs);
+  const artists = listArtistsSync(db).map((artist) => ({
+    id: artist.id,
+    name: artist.name,
+    songs: artist.trackCount,
+  }));
+  const artistNamed = lazily(() => libraryArtistFinder(artists));
+  const releaseOf = lazily(() => libraryReleaseFinder(artistNamed(), selectAlbums(db, undefined)));
   return {
     songs,
     byId: new Map(songs.map((song) => [song.id, song])),
-    artists: listArtistsSync(db).map((artist) => ({
-      id: artist.id,
-      name: artist.name,
-      songs: artist.trackCount,
-    })),
+    artists,
     known: (song) => find(song) !== null,
+    hasArtist: (name) => artistNamed()(name) !== null,
+    hasAlbum: (release) => releaseOf()(release) !== null,
   };
 };
 
@@ -132,6 +165,14 @@ const playedArtists = (db: LibraryDatabase, library: LibraryRead): PlayedSeedArt
     .sort((a, b) => b.countedPlays - a.countedPlays);
 };
 
+/** Discover's sliders, kept on this computer under the phone's names (not synced). */
+const DISCOVER_LEVEL = "home.discoverLevel";
+const DISCOVER_SLIDERS = "home.discoverSliders";
+
+/** A song of a mix as the queue names it. */
+const mixTrackId = (song: DiscoverMixSong): string =>
+  song.source === "stream" ? ytTrackId(song.song.videoId) : String(song.track.id);
+
 const LISTS: readonly BrowseKind[] = ["album", "artist", "playlist"];
 
 /** YtFeatures over the Library, playback and the JVM; [online] is the system's connection. */
@@ -153,6 +194,40 @@ export const ytFeaturesLayer = (options: { readonly online: () => boolean }) =>
         return cached.read;
       };
 
+      let mixCached:
+        | {
+            readonly revision: number;
+            readonly songs: readonly DiscoverLibrarySong[];
+            readonly plays: readonly DiscoverSongPlays[];
+          }
+        | undefined;
+      /** The songs with a file as the mixes read them, genre tags and counted plays included. */
+      const mixLibrary = () => {
+        const { revision } = library.status();
+        if (mixCached?.revision !== revision) {
+          const { byId } = current();
+          const songs: DiscoverLibrarySong[] = [];
+          for (let after = 0; ;) {
+            const page = mixSongsPage(db, after);
+            const last = page.at(-1);
+            if (last === undefined) break;
+            for (const song of page)
+              if (byId.has(song.id)) songs.push({ ...song, durationMs: song.durationMs ?? 0 });
+            after = last.id;
+          }
+          const counted = selectCountedPlays(
+            db,
+            songs.map((song) => song.id),
+          );
+          mixCached = {
+            revision,
+            songs,
+            plays: [...counted].map(([id, countedPlays]) => ({ id, countedPlays })),
+          };
+        }
+        return { songs: mixCached.songs, plays: mixCached.plays };
+      };
+
       const pages = createYtPages({
         call: (method, params) => Effect.runPromise(kotlin.call(method, params)),
         keep: yt.keep,
@@ -162,6 +237,7 @@ export const ytFeaturesLayer = (options: { readonly online: () => boolean }) =>
         played: () => playedArtists(db, current()),
         library: () => ({
           trackIds: current().songs.map((song) => song.id),
+          ...mixLibrary(),
           artists: current().artists.map((artist) => ({
             id: artist.id,
             name: artist.name,
@@ -171,6 +247,19 @@ export const ytFeaturesLayer = (options: { readonly online: () => boolean }) =>
         known: (song) => current().known(song),
         pages,
         today: () => localDay(Date.now()),
+        online: options.online,
+        enabled: yt.enabled,
+        readSettings: () => ({
+          level: readDiscoverMixLevel(preference(db, DISCOVER_LEVEL) ?? null),
+          ...readMixSliders(preference(db, DISCOVER_SLIDERS) ?? null),
+        }),
+        saveSettings: ({ level, faithfulness, popularity }) => {
+          savePreference(db, DISCOVER_LEVEL, String(level));
+          // The phone's format, defaults included, so a move back to them replaces the last.
+          savePreference(db, DISCOVER_SLIDERS, JSON.stringify({ faithfulness, popularity }));
+        },
+        rows: () =>
+          parseHomeArrangement(syncedPreference(db, "settings.homeArrangement")).discoverRows,
       });
 
       /** [ids]' Library songs, in order; ids no longer playable are left out. */
@@ -198,11 +287,13 @@ export const ytFeaturesLayer = (options: { readonly online: () => boolean }) =>
           const mix = discover.mix(source.id);
           const played = new Set(source.trackIds);
           // A mix rebuilt under the same id has other new songs: none the queue played.
-          if (mix !== undefined && mix.songs.some((song) => played.has(ytTrackId(song.videoId))))
+          if (mix !== undefined && mix.songs.some((song) => played.has(mixTrackId(song))))
             return {
               seed: { kind: "list", id: mix.id, title: mix.name },
-              songs: [],
-              streamed: mix.songs,
+              songs: songsOf(
+                mix.songs.flatMap((song) => (song.source === "library" ? [song.track.id] : [])),
+              ),
+              streamed: mix.songs.flatMap((song) => (song.source === "stream" ? [song.song] : [])),
             };
           const last = source.trackIds.at(-1);
           return last === undefined
@@ -292,6 +383,33 @@ export const ytFeaturesLayer = (options: { readonly online: () => boolean }) =>
         discover,
         magicQueue,
         artistSection,
+        search: async (query) => {
+          const [found, catalog] = await Promise.all([yt.search(query), pages.catalog(query)]);
+          const status = found.status !== "ok" ? found.status : catalog.status;
+          if (status !== "ok")
+            return {
+              status,
+              songs: { items: [], offset: 0, total: 0 },
+              artists: [],
+              albums: [],
+              inLibrary: { songs: [], artists: [], albums: [] },
+            };
+          const library = current();
+          const items = found.songs.map(ytRow);
+          return {
+            status,
+            songs: { items, offset: 0, total: items.length },
+            artists: catalog.artists,
+            albums: catalog.albums,
+            inLibrary: {
+              songs: found.songs.filter(library.known).map((song) => song.videoId),
+              artists: catalog.artists
+                .filter((artist) => library.hasArtist(artist.name))
+                .map((artist) => artist.browseId),
+              albums: catalog.albums.filter(library.hasAlbum).map((album) => album.browseId),
+            },
+          };
+        },
         related: async () => {
           const song = playback.view().current;
           if (song === null) return { status: "ok", songs: [], artists: [] };
@@ -351,7 +469,7 @@ export const ytFeaturesLayer = (options: { readonly online: () => boolean }) =>
           if (mix === undefined || index < 0 || index >= mix.songs.length) return false;
           await playback.dispatch({
             type: "play",
-            trackIds: mix.songs.map((song) => ytTrackId(song.videoId)),
+            trackIds: mix.songs.map(mixTrackId),
             startIndex: index,
             context: { kind: "discoverMix", id },
           });

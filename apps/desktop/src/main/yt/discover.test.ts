@@ -81,7 +81,14 @@ test("Artist mixes grow from the most played artists' radios, songs the owner kn
   );
   const mix = read.mixes[0]!;
   assert.equal(mix.songs.length, 12);
-  assert.ok(mix.songs.every((found) => !found.videoId.startsWith("known")));
+  // A known song may come back only in the familiar share, which Discover's level blends in.
+  assert.ok(
+    mix.songs.every(
+      (found) =>
+        found.source === "stream" &&
+        (found.familiar === true || !found.song.videoId.startsWith("known")),
+    ),
+  );
   assert.deepEqual(discover.mix(mix.id)?.songs, mix.songs);
 });
 
@@ -118,4 +125,82 @@ test("the Magic Queue row is nine of the Library's songs, all of them when fewer
   const picks = many.discover.picks();
   assert.equal(picks.length, 9);
   assert.equal(new Set(picks).size, 9);
+});
+
+test("Genre mixes grow from tagged Library families and remain playable by id", async () => {
+  const { discover } = setup({
+    library: () => ({
+      trackIds: [1, 2, 3, 4, 5],
+      artists: [{ id: 1, name: "Daft Punk", songCount: 5 }],
+      songs: Array.from({ length: 5 }, (_, n) => ({
+        id: n + 1,
+        title: `Local ${n}`,
+        artist: "Daft Punk",
+        artistIds: [1],
+        durationMs: 200_000,
+        addedAt: 0,
+        genre: "Electronic",
+      })),
+    }),
+  });
+  const read = await discover.mixes();
+  const genre = read.mixes.find((mix) => mix.id === "genre:electronic");
+  assert.ok(genre, "five tagged songs qualify the Electronic family");
+  assert.ok(genre.songs.length >= 10);
+  assert.deepEqual([genre.row, genre.name], ["genre-mixes", "Electronic"]);
+  assert.deepEqual(discover.mix(genre.id), genre);
+});
+
+test("Discover hides cached rows when offline or YT Music is off and recovers quietly", async () => {
+  const state = { online: true, enabled: true };
+  const { discover } = setup({ online: () => state.online, enabled: () => state.enabled });
+  assert.equal((await discover.mixes()).mixes.length, 1);
+  state.online = false;
+  assert.deepEqual(await discover.mixes(), { status: "offline", mixes: [] });
+  state.online = true;
+  state.enabled = false;
+  assert.deepEqual(await discover.mixes(), { status: "disabled", mixes: [] });
+  state.enabled = true;
+  assert.equal((await discover.mixes()).mixes.length, 1);
+});
+
+test("Discover settings reblend familiar songs without reading radios again", async () => {
+  const { discover, asked } = setup({
+    library: () => ({
+      trackIds: [1, 2, 3, 4, 5],
+      artists: [{ id: 1, name: "Daft Punk", songCount: 5 }],
+      songs: Array.from({ length: 5 }, (_, n) => ({
+        id: n + 1,
+        title: `Local ${n}`,
+        artist: "Daft Punk",
+        artistIds: [1],
+        durationMs: 200_000,
+        addedAt: 0,
+        genre: "Electronic",
+      })),
+    }),
+  });
+  await discover.mixes();
+  const count = asked.length;
+  discover.setSettings({ level: 5, faithfulness: 1, popularity: 5 });
+  const allNew = await discover.mixes();
+  assert.ok(allNew.mixes[0]!.songs.every((song) => song.source === "stream"));
+  discover.setSettings({ level: 1, faithfulness: 1, popularity: 5 });
+  const familiar = await discover.mixes();
+  assert.ok(familiar.mixes[0]!.songs.some((song) => song.source === "library"));
+  assert.equal(asked.length, count, "slider changes use the day's cached radios");
+  assert.deepEqual(discover.settings(), { level: 1, faithfulness: 1, popularity: 5 });
+});
+
+test("a mix row Home doesn't show isn't built and reads no radio", async () => {
+  const rows = { shown: ["magic-queue", "genre-mixes"] as const };
+  const { discover, asked } = setup({ rows: () => rows.shown });
+  assert.deepEqual(await discover.mixes(), { status: "ok", mixes: [] });
+  assert.deepEqual(asked, [], "no tagged family and no Artist mixes: nothing to read");
+  (rows as { shown: readonly string[] }).shown = ["artist-mixes"];
+  const read = await discover.mixes();
+  assert.deepEqual(
+    read.mixes.map((mix) => [mix.row, mix.name]),
+    [["artist-mixes", "Daft Punk"]],
+  );
 });

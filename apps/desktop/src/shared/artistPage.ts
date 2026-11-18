@@ -6,6 +6,7 @@
 import type { YtArtistAlbum, YtArtistSectionNote, YtPick } from "@wave/core";
 import type { Invoke, Page } from "./bridge.ts";
 import type { BrowseRow } from "./browse.ts";
+import type { PlayStart } from "./playerView.ts";
 
 /** An artist's Library albums: their own, and the ones they appear on. Album rows. */
 export interface ArtistAlbums {
@@ -67,7 +68,7 @@ export interface ArtistPageContract {
       start: ArtistPlayStart,
       shuffle: boolean,
     ];
-    readonly result: void;
+    readonly result: PlayStart;
   };
 }
 

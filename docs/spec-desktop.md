@@ -236,8 +236,13 @@ ADR: `docs/adr/0004-kotlin-on-a-bundled-jvm.md`.
 - The desktop is one more device with its own device id. A synced entry is the local Track with
   the same recording key, as between phones.
 - An account song with no file here is a missing song, as on the phone: dimmed, a click
-  downloads it through Core's `downloadSource`, with Download All and an album's Download
-  Missing Songs.
+  downloads it through Core's `downloadSource`, with Download All and Download Missing Songs on
+  album, artist, genre and playlist pages, with how many are missing (an album's in album order
+  and under the album, a playlist's in playlist order and under the playlist).
+- Play and Shuffle on a list with missing songs play what can play (Core's `listPlay`): the
+  songs with a file and, with YT Music on, the missing songs downloaded from a YouTube Music
+  video, streamed in their place. A toast counts the ones left out and offers Download Missing
+  Songs; when nothing can play, it says so and offers the same.
 - Plays on the computer count in the account's history and stats with a new play `source` value,
   `desktop`. A phone release and a sync Worker that accept `desktop` go out first; the desktop
   sends plays only after that. Older phones that drop an unknown source must already accept it.
@@ -358,6 +363,17 @@ The prototype was approved on 2026-11-18 after an Impeccable critique; its decis
   on Wi-Fi") gets a desktop variant ("This computer") in both languages, and strings about Wi-Fi
   and mobile data don't show on the desktop. New strings follow the glossary in `docs/spec.md` ›
   Language.
+- Settings › Appearance has Language: System, English or Português (Brasil), each language under
+  its own name (#1186). It is the account-wide synced setting `settings.language` (`en`,
+  `pt-BR` or `system`, kept as a value so it replaces an earlier choice); signed out it stays on
+  this computer. System follows the computer's preferred languages by Core's
+  `resolveAppLanguage` (`--lang` overrides them for checks). Main decides the language once
+  (Core's `chosenAppLanguage`) and the window asks it, so the window, the tray menu, native
+  dialogs and the close-to-tray notice always agree, and a change or a pulled value applies
+  without a restart. The phone doesn't read the setting yet; it follows Android's language.
+- The Library stores "Unknown Album" and "Unknown Artist" for a missing tag; every list, the bar,
+  Now Playing, the tray and the system media controls show them in the current language (Core's
+  `displayTag`), and Library identity keeps the stored value.
 
 ### Build, release and updates
 
