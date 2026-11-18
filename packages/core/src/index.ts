@@ -1040,6 +1040,7 @@ export {
   libraryPathIndex,
   parseM3u,
   planM3uImport,
+  resolveDesktopM3uPath,
   resolveM3uPath,
   summarizeM3uImport,
 } from "./m3u.ts";

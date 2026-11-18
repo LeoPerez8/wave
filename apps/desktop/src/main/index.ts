@@ -22,6 +22,8 @@ import { kotlinLayer } from "./kotlin/kotlin.ts";
 import { jvmCommand, spawnLines } from "./kotlin/spawn.ts";
 import { guardWindow } from "./security.ts";
 import { desktopLibraryLayer } from "./library/library.ts";
+import { desktopPlaylistsLayer } from "./library/playlists.ts";
+import { nativeImageCodec } from "./library/nativeImageCodec.ts";
 import { Database } from "@wave/client";
 import * as Effect from "effect/Effect";
 import {
@@ -255,13 +257,39 @@ else {
       fetch,
       online: () => net.isOnline(),
     });
+    const playlists = desktopPlaylistsLayer({
+      platform: process.platform,
+      imageFolder: join(app.getPath("userData"), "playlist-images"),
+      codec: nativeImageCodec(nativeImage),
+      pickImage: async () => {
+        const result = await dialog.showOpenDialog({
+          title: text.itemActions.labels.changeImage,
+          properties: ["openFile"],
+          // Format names, which read the same in every language.
+          filters: [{ name: "JPEG, PNG", extensions: ["jpg", "jpeg", "png"] }],
+        });
+        return result.canceled ? undefined : result.filePaths[0];
+      },
+      pickPlaylists: async () => {
+        const result = await dialog.showOpenDialog({
+          title: text.playlists.importPlaylists,
+          properties: ["openFile", "multiSelections"],
+          filters: [{ name: "M3U", extensions: ["m3u", "m3u8"] }],
+        });
+        return result.canceled ? [] : result.filePaths;
+      },
+    });
     const runtime = ManagedRuntime.make(
       accountLayer({
         account,
         focused: () => BrowserWindow.getFocusedWindow() !== null,
       }).pipe(
         Layer.provideMerge(
-          Layer.mergeAll(playbackLayer, lyricsLayer()).pipe(Layer.provideMerge(library)),
+          playlists.pipe(
+            Layer.provideMerge(
+              Layer.mergeAll(playbackLayer, lyricsLayer()).pipe(Layer.provideMerge(library)),
+            ),
+          ),
         ),
       ),
     );

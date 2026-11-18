@@ -1,6 +1,7 @@
 import { sql, type SQL } from "drizzle-orm";
 import type { LibraryDatabase } from "@wave/client/db/database";
 import type { BrowsePage, BrowseRow, BrowseScope } from "../../shared/browse.ts";
+import { searchSongIds } from "./search.ts";
 
 const SONGS = sql`SELECT t.id, t.title, t.artist_credit AS artist, a.title AS album,
   t.artwork_hash AS artworkHash, t.duration_ms AS durationMs, 1 AS count,
@@ -40,6 +41,7 @@ const listing = (scope: BrowseScope): { source: SQL; order: SQL } => {
     case "playlists":
       return {
         source: sql`SELECT p.id, p.name AS title, wave_sort_key(p.name) AS sort, '' AS artist, '' AS album,
+      p.image_thumb_path AS imageKey,
       (SELECT t.artwork_hash FROM playlist_items i JOIN tracks t ON t.id=i.track_id
         WHERE i.playlist_id=p.id AND i.deleted=0 AND t.artwork_hash IS NOT NULL ORDER BY i.order_key LIMIT 1) AS artworkHash,
       coalesce(sum(t.duration_ms),0) AS durationMs, count(i.id) AS count FROM playlists p
@@ -73,11 +75,6 @@ const listing = (scope: BrowseScope): { source: SQL; order: SQL } => {
         source: sql`SELECT songs.* FROM (${SONGS}) songs JOIN favorites f ON f.track_id=songs.id WHERE f.deleted=0`,
         order: sql`(SELECT added_at FROM favorites WHERE track_id=id) DESC, sort, id`,
       };
-    case "search":
-      return {
-        source: sql`${SONGS} WHERE instr(lower(t.title || ' ' || t.artist_credit || ' ' || a.title), lower(${scope.query ?? ""}))>0`,
-        order,
-      };
     default:
       return { source: SONGS, order: sql`sort, artistSort, coalesce(path,''), id` };
   }
@@ -105,6 +102,10 @@ export const browseLibrary = (
   offset: number,
   limit: number,
 ): BrowsePage => {
+  if (scope.kind === "search") {
+    const ids = searchSongIds(db, scope.query ?? "");
+    return { items: browseSongs(db, ids.slice(offset, offset + limit)), offset, total: ids.length };
+  }
   const { source, order } = listing(scope);
   const total = db.get<{ count: number }>(sql`SELECT count(*) AS count FROM (${source})`)!.count;
   const items = db
@@ -142,6 +143,8 @@ export const browseLibrary = (
 };
 
 export const browseLetter = (db: LibraryDatabase, scope: BrowseScope, letter: string): number => {
+  // Search's songs are in rank order, not by letter.
+  if (scope.kind === "search") return 0;
   const { source, order } = listing(scope);
   return (
     db.get<{ position: number }>(sql`SELECT position FROM (
@@ -153,24 +156,36 @@ export const browseLetter = (db: LibraryDatabase, scope: BrowseScope, letter: st
 /** The ids of [scope]'s songs, in the order its list shows them; none for a list of lists. */
 export const browseTrackIds = (db: LibraryDatabase, scope: BrowseScope): string[] => {
   if (["albums", "artists", "playlists", "genres"].includes(scope.kind)) return [];
+  if (scope.kind === "search") return searchSongIds(db, scope.query ?? "").map(String);
   const { source, order } = listing(scope);
   return db
     .all<{ id: number }>(sql`SELECT id FROM (${source}) ORDER BY ${order}`)
     .map((song) => String(song.id));
 };
 
-/** The songs [ids] as rows, in the order given; an id with no song is left out. */
-export const browseSongs = (db: LibraryDatabase, ids: readonly number[]): BrowseRow[] => {
+/** [source]'s rows [ids], in the order given; an id it lacks is left out. */
+const rowsById = (db: LibraryDatabase, source: SQL, ids: readonly number[]): BrowseRow[] => {
   if (ids.length === 0) return [];
   const found = new Map(
     db
       .all<BrowseRow>(
-        sql`SELECT * FROM (${SONGS}) WHERE id IN (${sql.join(
+        sql`SELECT * FROM (${source}) WHERE id IN (${sql.join(
           ids.map((id) => sql`${id}`),
           sql`, `,
         )})`,
       )
-      .map((song) => [song.id, row(song)]),
+      .map((value) => [value.id, row(value)]),
   );
   return ids.flatMap((id) => found.get(id) ?? []);
 };
+
+/** The songs [ids] as rows, in the order given; an id with no song is left out. */
+export const browseSongs = (db: LibraryDatabase, ids: readonly number[]): BrowseRow[] =>
+  rowsById(db, SONGS, ids);
+
+/** The albums, artists, playlists or genres [ids] as their lists show them, in the order given. */
+export const browseRows = (
+  db: LibraryDatabase,
+  kind: "albums" | "artists" | "playlists" | "genres",
+  ids: readonly number[],
+): BrowseRow[] => rowsById(db, listing({ kind }).source, ids);

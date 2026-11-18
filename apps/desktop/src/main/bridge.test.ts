@@ -8,7 +8,8 @@ import { addTrack, openTestDatabase, star, type TestDatabase } from "@wave/clien
 import { creditSplits } from "@wave/client/db/credits";
 import { stampPreference } from "@wave/client/db/sync";
 import { syncCycle } from "@wave/client/sync/syncCycle";
-import type { SyncClock } from "@wave/core";
+import { scanPath, type SyncClock } from "@wave/core";
+import { sql } from "drizzle-orm";
 import { createPlaylist } from "@wave/client/db/playlists";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
@@ -35,6 +36,7 @@ import { preference } from "./preferences.ts";
 import { ytMusicLayer } from "./yt/ytMusic.ts";
 import { lyricsLayer } from "./lyrics/lyrics.ts";
 import { accountLayer } from "./account/accountLayer.ts";
+import { desktopPlaylistsLayer } from "./library/playlists.ts";
 import { createWaveAccount, type WaveAccountService } from "./account/account.ts";
 import { sessionStore } from "./account/sessionStore.ts";
 import { desktop, keyring } from "./account/testAccount.ts";
@@ -190,6 +192,8 @@ const connect = (
 ) => {
   const audio = audioInMemory();
   const jvm = jvmInMemory();
+  /** What the M3U picker answers. */
+  const picked = { playlists: [] as string[] };
   const library = desktopLibraryLayer({
     musicFolder: join(dirname(file), "Music"),
     platform: process.platform,
@@ -208,10 +212,20 @@ const connect = (
       ...(account.clock === undefined ? {} : { clock: account.clock }),
     }).pipe(
       Layer.provideMerge(
-        Layer.mergeAll(
-          playbackLayer,
-          lyricsLayer({ fetch: () => Promise.reject(new Error("no network")) }),
-        ).pipe(Layer.provideMerge(library)),
+        desktopPlaylistsLayer({
+          platform: process.platform,
+          imageFolder: join(dirname(file), "playlist-images"),
+          codec: { original: () => undefined, squares: () => [] },
+          pickImage: async () => undefined,
+          pickPlaylists: async () => picked.playlists,
+        }).pipe(
+          Layer.provideMerge(
+            Layer.mergeAll(
+              playbackLayer,
+              lyricsLayer({ fetch: () => Promise.reject(new Error("no network")) }),
+            ).pipe(Layer.provideMerge(library)),
+          ),
+        ),
       ),
     ),
   );
@@ -245,6 +259,7 @@ const connect = (
     reads: jvm.reads,
     yt: jvm.yt,
     jvm: jvm.state,
+    picked,
   };
 };
 
@@ -1180,6 +1195,150 @@ test("main refuses song actions with a bad target, surface, action or playlist",
         await assert.rejects(call("songs.run", one, action), /refused/i, String(action));
       await assert.rejects(call("songs.run", one, "addToPlaylist"), /refused/i);
       await assert.rejects(call("songs.run", one, "addToPlaylist", -1), /refused/i);
+    } finally {
+      await runtime.dispose();
+    }
+  });
+});
+
+test("New Playlist, Remove from Playlist and an M3U import show in the playlists list at once", async () => {
+  await withFile(async (file) => {
+    const { runtime, exposed, picked } = connect(file);
+    const wave = exposed.get("wave") as WaveBridge;
+    try {
+      const ids = await runtime.runPromise(
+        Effect.gen(function* () {
+          const db = (yield* Database) as unknown as TestDatabase;
+          return ["Parasite", "Road"].map((title) =>
+            addTrack(db, { title, artist: "Nick Drake", album: "Pink Moon" }),
+          );
+        }),
+      );
+      const sidebar = async () =>
+        (await wave.library.browse({ kind: "playlists" }, 0, 50)).items.map((row) => row.title);
+      const songs = { kind: "songs" } as const;
+      const before = (await wave.playback.view()).revision;
+      const made = await wave.playlists.create(await wave.playlists.newName("en"), {
+        scope: songs,
+        ids,
+      });
+      assert.deepEqual(made, { id: made.id, name: "New Playlist", added: 2 });
+      assert.deepEqual(await sidebar(), ["New Playlist"]);
+      assert.ok((await wave.playback.view()).revision > before, "the window hears of it");
+      await wave.playlists.rename(made.id, "Evening");
+      assert.deepEqual(await sidebar(), ["Evening"]);
+
+      const onPage = { scope: { kind: "playlist", id: made.id }, ids: [ids[0]!] } as const;
+      assert.ok(
+        (await wave.songs.actions(onPage, "menu")).entries.some(
+          (entry) => entry.action === "removeFromPlaylist",
+        ),
+      );
+      assert.deepEqual(await wave.songs.run(onPage, "removeFromPlaylist"), {
+        kind: "playlistRemoved",
+        count: 1,
+      });
+      assert.equal((await wave.playlists.graveyard(made.id, 0, 10)).items[0]?.title, "Parasite");
+      await wave.playlists.undoRemove();
+      assert.equal((await wave.library.browse(onPage.scope, 0, 10)).total, 2);
+
+      // Another player's playlist beside the music, naming it by a relative path.
+      const road = join(dirname(file), "Music", "Road.mp3");
+      await runtime.runPromise(
+        Effect.gen(function* () {
+          const db = yield* Database;
+          db.run(
+            sql`UPDATE tracks SET path=${scanPath(road, process.platform)} WHERE id=${ids[1]!}`,
+          );
+        }),
+      );
+      const m3u = join(dirname(file), "Music", "Night.m3u8");
+      mkdirSync(dirname(m3u), { recursive: true });
+      writeFileSync(m3u, "#EXTM3U\nRoad.mp3\nGone.mp3\n");
+      picked.playlists = [m3u];
+      assert.deepEqual(await wave.playlists.chooseImport(), {
+        files: [{ name: "Night.m3u8", clash: null }],
+      });
+      const result = await wave.playlists.runImport(["keepBoth"]);
+      assert.deepEqual(result.outcomes, [
+        { kind: "imported", name: "Night", songs: 1, missing: ["Gone.mp3"], replaced: false },
+      ]);
+      assert.deepEqual(await sidebar(), ["Evening", "Night"]);
+
+      await wave.playlists.delete(made.id);
+      assert.ok(!(await sidebar()).includes("Evening"));
+    } finally {
+      await runtime.dispose();
+    }
+  });
+});
+
+test("main refuses playlist calls with a bad playlist, name, page, answer or framing", async () => {
+  await withFile(async (file) => {
+    const { runtime, handlers } = connect(file);
+    const call = (channel: string, ...args: unknown[]) => handlers.get(channel)!(trusted, ...args);
+    try {
+      await assert.rejects(call("playlists.create", "x".repeat(501)), /refused/i);
+      await assert.rejects(
+        call("playlists.create", "A", { scope: { kind: "albums" } }),
+        /refused/i,
+      );
+      await assert.rejects(call("playlists.rename", 0, "A"), /refused/i);
+      await assert.rejects(call("playlists.newName", "fr"), /refused/i);
+      await assert.rejects(call("playlists.move", 1, 1, "left"), /refused/i);
+      await assert.rejects(call("playlists.graveyard", 1, 0, 201), /refused/i);
+      await assert.rejects(call("playlists.forget", 1, "all"), /refused/i);
+      await assert.rejects(call("playlists.runImport", ["delete"]), /refused/i);
+      await assert.rejects(
+        call("playlists.saveImage", 1, { zoom: Number.NaN, centerX: 0.5, centerY: 0.5 }),
+        /refused/i,
+      );
+      await assert.rejects(call("playlists.image", 1, "large"), /refused/i);
+      // Remove from Playlist acts only on a playlist's own list.
+      await assert.rejects(
+        call("songs.run", { scope: { kind: "songs" }, ids: [1] }, "removeFromPlaylist"),
+        /refused/i,
+      );
+      await assert.rejects(call("playlists.runImport", []), /Nothing to import/);
+    } finally {
+      await runtime.dispose();
+    }
+  });
+});
+
+test("Search ranks the Library as the phone does, plays a result alone and keeps recent searches", async () => {
+  await withFile(async (file) => {
+    const { runtime, exposed, handlers } = connect(file);
+    const wave = exposed.get("wave") as WaveBridge;
+    const call = (channel: string, ...args: unknown[]) => handlers.get(channel)!(trusted, ...args);
+    try {
+      await runtime.runPromise(
+        Effect.gen(function* () {
+          const db = (yield* Database) as unknown as TestDatabase;
+          for (const [n, title] of ["Parasite", "Pink Moon", "Road"].entries())
+            addTrack(db, { title, artist: "Nick Drake", album: "Pink Moon", trackNumber: n + 1 });
+        }),
+      );
+      const view = await wave.search.library("pink moon");
+      assert.deepEqual([view.top?.kind, view.top?.row.title], ["album", "Pink Moon"]);
+      const songs = view.groups.find((group) => group.kind === "song")!;
+      assert.equal(songs.items[0]?.title, "Pink Moon", "its title beats an album match");
+      await wave.playback.start({ kind: "search", query: "pink moon" }, 1);
+      const playing = await wave.playback.view();
+      assert.equal(playing.current?.title, songs.items[1]?.title);
+      assert.equal(playing.length, 1, "a song from search plays alone");
+
+      assert.deepEqual((await wave.search.recent()).items, []);
+      await wave.search.remember("Pink moon");
+      await wave.search.remember("road ");
+      assert.deepEqual((await wave.search.remember("pink MOON")).items, ["pink MOON", "road"]);
+      assert.deepEqual((await wave.search.recent()).items, ["pink MOON", "road"]);
+      await wave.search.clearRecent();
+      assert.deepEqual((await wave.search.recent()).items, []);
+
+      await assert.rejects(call("search.library", 7), /Refused/);
+      await assert.rejects(call("search.library", "x".repeat(501)), /Refused/);
+      await assert.rejects(call("search.remember", null), /Refused/);
     } finally {
       await runtime.dispose();
     }
