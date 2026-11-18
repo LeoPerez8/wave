@@ -4,6 +4,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { test } from "node:test";
 import { openTestDatabase } from "@wave/client/testing";
+import { tracks } from "@wave/client/db/schema";
 import { createScanner } from "./scanner.ts";
 
 test("opening indexes Music, reads changes incrementally and keeps renamed songs", async () => {
@@ -166,6 +167,43 @@ test("removing songs from the Library keeps their files out of later scans until
     assert.deepEqual(scanner.exclusions().items, [one!.path]);
     await scanner.include(one!.path!);
     assert.equal(scanner.songs(0, 20).total, 2);
+  } finally {
+    await scanner.dispose();
+    await rm(folder, { recursive: true, force: true });
+  }
+});
+
+test("a downloaded file joins the Library at once, with its video and its lyrics", async () => {
+  const folder = await mkdtemp(join(tmpdir(), "wave-import-"));
+  const music = join(folder, "Music");
+  await mkdir(join(music, "Elis Regina"), { recursive: true });
+  const db = await openTestDatabase();
+  const scanner = createScanner({
+    db,
+    platform: process.platform,
+    musicFolder: music,
+    readTags: async () => ({
+      title: "Águas de Março",
+      artist: "Elis Regina",
+      durationMs: 212000,
+      hasLyrics: true,
+    }),
+  });
+  try {
+    await scanner.refresh();
+    const path = join(music, "Elis Regina", "01 Águas de Março.m4a");
+    await writeFile(path, "music");
+    const before = scanner.status().revision;
+    await scanner.importFile(path, { videoId: "abcdefghijk", fills: null });
+    const row = db
+      .select({ videoId: tracks.videoId, hasLyrics: tracks.hasLyrics })
+      .from(tracks)
+      .all();
+    assert.deepEqual(row, [{ videoId: "abcdefghijk", hasLyrics: true }]);
+    assert.ok(scanner.status().revision > before);
+    // The next scan finds it unchanged.
+    await scanner.refresh();
+    assert.equal(scanner.songs(0, 20).total, 1);
   } finally {
     await scanner.dispose();
     await rm(folder, { recursive: true, force: true });
