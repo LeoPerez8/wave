@@ -129,7 +129,7 @@ test("the page has no Node and only the typed bridge", async () => {
       "wave.magicQueue.retry",
       "wave.downloads.view",
       "wave.downloads.rows",
-      "wave.downloads.album",
+      "wave.downloads.list",
       "wave.downloads.yt",
       "wave.downloads.missing",
       "wave.downloads.missingAction",
