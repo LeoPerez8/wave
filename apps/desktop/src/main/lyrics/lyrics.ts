@@ -36,7 +36,6 @@ import type { LibraryDatabase } from "@wave/client/db/database";
 import { keepLyricsMiss, selectLyricsSearchTrack } from "@wave/client/db/lyricsMisses";
 import { keepSavedLyrics, selectSavedLyrics } from "@wave/client/db/savedLyrics";
 import { selectPlayableSongs } from "@wave/client/db/tracks";
-import { sql } from "drizzle-orm";
 import * as Context from "effect/Context";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
@@ -44,11 +43,9 @@ import * as Layer from "effect/Layer";
 import { Kotlin } from "../kotlin/kotlin.ts";
 import { YtMusic } from "../yt/ytMusic.ts";
 import { DesktopLibrary } from "../library/library.ts";
+import { lookupsEnabled } from "../lookupSettings.ts";
 
 import type { SongLyrics } from "../../shared/lyrics.ts";
-
-/** Settings' "Fix songs online", the phone's synced key: on unless it says "off". */
-export const LOOKUPS_SETTING = "settings.findLyricsAndGenre";
 
 /** How long a source may take before it counts as unreachable, as on the phone. */
 const LOOKUP_TIMEOUT_MS = 30_000;
@@ -85,10 +82,7 @@ export const createLyrics = (deps: LyricsDeps): LyricsShape => {
   /** Searches running, by track id: asking again joins them. */
   const running = new Map<string, Promise<SongLyrics>>();
 
-  const lookupsOn = () =>
-    deps.db.get<{ value: string }>(
-      sql`SELECT value FROM desktop_synced_preferences WHERE key = ${LOOKUPS_SETTING}`,
-    )?.value !== "off";
+  const lookupsOn = () => lookupsEnabled(deps.db);
 
   const withTimeout = <A>(promise: Promise<A>): Promise<A> =>
     new Promise<A>((resolve, reject) => {

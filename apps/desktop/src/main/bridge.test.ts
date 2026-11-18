@@ -1379,6 +1379,30 @@ test("main refuses song actions with a bad target, surface, action or playlist",
   });
 });
 
+test("Fix Song stays off when the Wave account turns online lookups off", async () => {
+  await withFile(async (file) => {
+    const { runtime, exposed } = connect(file);
+    try {
+      const id = await runtime.runPromise(
+        Effect.gen(function* () {
+          const db = (yield* Database) as unknown as TestDatabase;
+          db.run(
+            sql`INSERT INTO desktop_synced_preferences (key, value) VALUES ('settings.findLyricsAndGenre', 'off')`,
+          );
+          return addTrack(db, { title: "Road", artist: "Nick Drake", album: "Pink Moon" });
+        }),
+      );
+      const wave = exposed.get("wave") as WaveBridge;
+      const target = { scope: { kind: "songs" as const }, ids: [id] };
+      const menu = await wave.songs.actions(target, "menu");
+      assert.ok(!menu.entries.some((entry) => entry.action === "fixSong"));
+      await assert.rejects(wave.songs.run(target, "fixSong"), /lookups-off/);
+    } finally {
+      await runtime.dispose();
+    }
+  });
+});
+
 test("a YT Music song a search found is downloaded through the JVM's journal", async () => {
   await withFile(async (file) => {
     const { runtime, exposed, downloads } = connect(file);

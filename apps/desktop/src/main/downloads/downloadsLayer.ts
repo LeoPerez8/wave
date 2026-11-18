@@ -23,6 +23,7 @@ import { YtMusic } from "../yt/ytMusic.ts";
 import { createAnswers } from "./decisions.ts";
 import { createDownloads, type DownloadCall, type DownloadsShape } from "./downloads.ts";
 import { createLookups } from "@wave/client/downloads/lookups";
+import { lookupsEnabled } from "../lookupSettings.ts";
 
 /** The folder new downloads go to (Settings › Downloads); a scan root. */
 export const DOWNLOADS_FOLDER = "downloads.folder";
@@ -63,7 +64,9 @@ export const downloadsLayer = (options: DownloadsLayerOptions) =>
       const library = yield* DesktopLibrary;
       const yt = yield* YtMusic;
       const call: DownloadCall = (method, params) => Effect.runPromise(kotlin.call(method, params));
-      const { lookUp } = createLookups(options.fetch);
+      const lookups = createLookups(options.fetch);
+      const lookUp: typeof lookups.lookUp = (song, has) =>
+        lookupsEnabled(db) ? lookups.lookUp(song, has) : Promise.resolve(null);
 
       const folder = () => {
         const roots = desktopRoots(db, options.platform);
@@ -164,8 +167,9 @@ export const downloadsLayer = (options: DownloadsLayerOptions) =>
           await policy().catch(() => null);
           return path;
         },
-        fixSongs: (ids) =>
-          fixSongs(
+        fixSongs: async (ids) => {
+          if (!lookupsEnabled(db)) throw new Error("[lookups-off] Online lookups are off");
+          return fixSongs(
             {
               db,
               lookUp,
@@ -175,7 +179,8 @@ export const downloadsLayer = (options: DownloadsLayerOptions) =>
               reimport: (path) => library.importFile(path),
             },
             ids,
-          ),
+          );
+        },
       } satisfies DesktopDownloadsShape;
     }),
   );

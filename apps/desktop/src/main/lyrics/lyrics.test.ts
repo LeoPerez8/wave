@@ -5,7 +5,8 @@ import { keepSavedLyrics } from "@wave/client/db/savedLyrics";
 import { ytTrackId, type LyricsSources, type NonDSongDetails } from "@wave/core";
 import { sql } from "drizzle-orm";
 
-import { createLyrics, LOOKUPS_SETTING } from "./lyrics.ts";
+import { createLyrics } from "./lyrics.ts";
+import { LOOKUPS_SETTING } from "../lookupSettings.ts";
 
 const DAY = 24 * 60 * 60 * 1000;
 

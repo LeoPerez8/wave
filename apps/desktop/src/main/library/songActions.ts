@@ -24,6 +24,7 @@ import type {
   SongTarget,
 } from "../../shared/songActions.ts";
 import { browseTrackIds } from "./browse.ts";
+import { lookupsEnabled } from "../lookupSettings.ts";
 
 /** What main needs to run the entries. */
 export interface SongActionPorts {
@@ -120,8 +121,7 @@ export const songMenu = (
     surface,
     selectable: true,
     page: pageOf(target.scope),
-    // LRCLIB and Deezer have no off switch on the desktop yet (#1162).
-    onlineLookups: true,
+    onlineLookups: lookupsEnabled(db),
     ytMusic,
   });
   const artistIds = entries.flatMap((entry) =>
