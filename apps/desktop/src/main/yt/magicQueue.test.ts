@@ -55,7 +55,7 @@ const setup = ({
 } = {}) => {
   let state: QueueState = EMPTY_QUEUE;
   const asked: string[] = [];
-  const world = { online, songRadio };
+  const world = { online, songRadio, playing: true };
   const magic = createMagicQueue({
     queue: () => state,
     dispatch: async (command: QueueCommand) => {
@@ -78,6 +78,7 @@ const setup = ({
     ytMusic: () => true,
     online: () => world.online,
     continueQueue: () => true,
+    playing: () => world.playing,
     ahead: () => null,
     continuation,
     load: () => null,
@@ -159,6 +160,24 @@ test("a YT Music song starts a Magic Queue of its own radio", async () => {
   assert.equal(queue().entries[0]?.trackId, ytTrackId(song.videoId));
   assert.equal(queue().entries.length, 1 + 9);
   assert.equal(asked[0], `songRadio ${song.videoId}`);
+});
+
+test("a queue at its last song goes on only once that song plays, as on the phone", async () => {
+  const { magic, queue, play, world } = setup({
+    continuation: () => ({
+      seed: { kind: "album", id: "7", title: "Random Access Memories" },
+      songs: [getLucky],
+      streamed: [],
+    }),
+  });
+  world.playing = false;
+  await play({ type: "addToQueue", trackIds: ["1"] });
+  assert.equal(queue().entries.length, 1);
+  world.playing = true;
+  magic.queueChanged();
+  await magic.settled();
+  assert.equal(queue().context?.kind, "magic");
+  assert.equal(queue().entries.length, 1 + 10);
 });
 
 test("an album's queue at its last song goes on as a Magic Queue of the album", async () => {

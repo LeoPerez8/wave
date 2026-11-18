@@ -75,6 +75,8 @@ export interface PlaybackShape {
   readonly applySettings: () => Promise<void>;
   /** The queue as Core holds it. */
   readonly queueState: () => QueueState;
+  /** Whether the queue's current song is playing. */
+  readonly playing: () => boolean;
   /** A queue command from main (the Magic Queue's); a new queue offers Undo, as `start` does. */
   readonly dispatch: (command: QueueCommand) => Promise<void>;
   /** Hears the queue change and plays end, until the returned function is called. */
@@ -83,6 +85,7 @@ export interface PlaybackShape {
 
 /** What follows the queue from main: the Magic Queue. */
 export interface QueueWatcher {
+  /** The queue changed, or its song started playing. */
   readonly queueChanged: () => void;
   readonly playEnded: (play: PlayEvent, byNext: boolean) => void;
 }
@@ -186,12 +189,16 @@ export const playbackLayer = Layer.effect(
     yield* Effect.promise(() => sendSettings().catch(failed));
     queueChanged();
     let queueFed = session.snapshot().queue;
+    let playingFed = false;
     const stop = player.subscribe((event) => {
       session
         .feed(event.status, event.transitions)
         .then(() => {
-          if (session.snapshot().queue === queueFed) return;
-          queueFed = session.snapshot().queue;
+          const { queue, status } = session.snapshot();
+          const startedPlaying = status.state === "playing" && !playingFed;
+          playingFed = status.state === "playing";
+          if (queue === queueFed && !startedPlaying) return;
+          queueFed = queue;
           queueChanged();
         })
         .catch(failed);
@@ -368,6 +375,7 @@ export const playbackLayer = Layer.effect(
       },
       applySettings: () => playBySettings(readPlaybackSettings(db)),
       queueState: () => session.snapshot().queue,
+      playing: () => session.snapshot().status.state === "playing",
       dispatch: async (command) => {
         error = null;
         await session.dispatch(command);

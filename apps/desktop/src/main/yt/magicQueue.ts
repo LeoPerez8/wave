@@ -91,6 +91,8 @@ export interface MagicQueueDeps {
   readonly online: () => boolean;
   /** Settings › Playback › Continue Queue. */
   readonly continueQueue: () => boolean;
+  /** Whether the queue's current song is playing: an ordinary queue goes on only then. */
+  readonly playing: () => boolean;
   /** How much of the queue is left against the Buffer; null to continue at the last song. */
   readonly ahead: () => QueueTimeAhead | null;
   /** The list a queue that ends came from (`queueContinuation`), or null when it's gone. */
@@ -425,7 +427,7 @@ export const createMagicQueue = (deps: MagicQueueDeps): MagicQueueShape => {
 
   /** An ordinary queue at its end goes on as a Magic Queue of the list it came from. */
   const followQueueEnd = (state: QueueState) => {
-    if (continuedFrom === state) return;
+    if (continuedFrom === state || !deps.playing()) return;
     const seed = queueContinuation(state, {
       enabled: deps.continueQueue(),
       ahead: deps.ahead(),
