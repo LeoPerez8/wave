@@ -180,6 +180,23 @@ WAVE_DATA_DIR="$(mktemp -d)" pnpm --filter @wave/desktop exec electron-vite dev 
 Stop the Electron processes it started when done: a second launch only focuses the first
 window (the single-instance lock), so a leftover one hides your new code.
 
+## Tray and system media controls
+
+`e2e/system.spec.ts` covers close-to-tray, the one-time notice, the second launch, the `--hidden`
+start and Settings › Window. Two variables add the real system controls to it:
+
+- Windows: `WAVE_SMTC_PROBE=<path to smtc-probe.exe>`. Build the probe with
+  `cargo build -p wave-media-node --example smtc-probe` in `apps/desktop/native`. It reads Wave's
+  session from Windows and presses its buttons, so no other player may be running. The cover must
+  be 71 px or more, or Chromium drops it.
+- Linux: `WAVE_PLAYERCTL=1`, with `playerctl` installed and a session bus (WSLg has one; elsewhere
+  wrap the run in `dbus-run-session --`). The addon needs `libdbus-1-dev` and `pkg-config` to
+  build; `WAVE_MEDIA_ADDON` points Wave at one built elsewhere. With no session bus Wave logs
+  `[system] Media controls unavailable` and uses Chromium's session.
+
+The spec never turns on Start with the system, so it writes no login entry. `autostart.test.ts`
+covers what the switch registers.
+
 ## Linux under WSLg
 
 Windows' `node_modules` can't run in WSL. Clone into WSL's own disk and install there (worktree

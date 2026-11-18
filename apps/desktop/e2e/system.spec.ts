@@ -266,7 +266,9 @@ test("close keeps playing, the tray notice appears once, relaunch shows Wave, an
     const exited = app.waitForEvent("close");
     await close();
     await exited;
-    expect(errors.join("")).not.toContain("[system] Media controls unavailable");
+    // A machine with no session bus (CI's plain run) has no MPRIS to offer.
+    if (process.platform !== "linux" || process.env["WAVE_PLAYERCTL"] === "1")
+      expect(errors.join("")).not.toContain("[system] Media controls unavailable");
     expect(errors.join("")).not.toContain("[system] Media command failed");
   } finally {
     // Closing an app that already quit throws.

@@ -324,9 +324,10 @@ The prototype was approved on 2026-11-18 after an Impeccable critique; its decis
   to the second launch is not handled; links arrive by paste or drag.
 - The system media controls (SMTC on Windows, MPRIS on Linux) show title, artist, album, cover
   and position with seeking, with Play/Pause, Next and Previous. Media keys reach Wave through
-  them, with no global shortcut. The bridge is the Rust `souvlaki` crate, with Chromium's Media
-  Session and a silent audio element as the fallback; the first system-integration ticket
-  checks it.
+  them, with no global shortcut. On Linux the bridge is the Rust `souvlaki` crate, in its own
+  addon (`wave-media.node`). On Windows it is Chromium's Media Session with a silent audio
+  element: the check in #1157 found `souvlaki` publishing the song there while the system's Pause
+  never reached Wave. Linux falls back to Chromium's session when the addon doesn't load.
 - No file associations, no `https` link handler and no floating mini player in v1. Windows lets
   an app own `https` links only for a domain it proves it owns.
 
