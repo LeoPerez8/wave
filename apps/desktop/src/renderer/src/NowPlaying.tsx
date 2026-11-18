@@ -10,7 +10,15 @@ import {
   type ArtworkPalette,
   type Gradient,
 } from "@wave/core";
-import { useEffect, useLayoutEffect, useMemo, useRef, useState, type CSSProperties } from "react";
+import {
+  useEffect,
+  useLayoutEffect,
+  useMemo,
+  useRef,
+  useState,
+  type CSSProperties,
+  type ReactNode,
+} from "react";
 
 import type { BrowseRow } from "../../shared/browse.ts";
 import type { PlayerView } from "../../shared/playerView.ts";
@@ -93,10 +101,13 @@ export function NowPlaying({
   view,
   run,
   onClose,
+  actions,
 }: {
   readonly view: PlayerView | undefined;
   readonly run: (action: Promise<unknown>) => void;
   readonly onClose: () => void;
+  /** Add to Playlist and Download for the song playing. */
+  readonly actions?: ReactNode;
 }) {
   const song = view?.current ?? null;
   const palette = usePalette(song);
@@ -148,6 +159,7 @@ export function NowPlaying({
           <h1 className="truncate">{song?.title ?? text.desktopLayout.nothingPlaying}</h1>
           {song && <p className="truncate secondary">{song.artist}</p>}
           {song?.album && <p className="truncate tertiary">{song.album}</p>}
+          {song && actions}
         </div>
       </div>
       <div className="now-playing-lyrics">

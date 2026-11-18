@@ -7,7 +7,7 @@ import {
   type SearchOnline,
   type YtSong,
 } from "@wave/core";
-import { useEffect, useReducer, useState, type ReactNode } from "react";
+import { useEffect, useReducer, useState, type MouseEvent, type ReactNode } from "react";
 import type { BrowseRow } from "../../shared/browse.ts";
 import type { YtSearchPage } from "../../shared/yt.ts";
 import { Icon } from "./Icon.tsx";
@@ -29,6 +29,7 @@ export function YtResults({
   libraryHasResults,
   onPlay,
   onDownload,
+  onMenu,
   children,
 }: {
   readonly query: string;
@@ -39,6 +40,8 @@ export function YtResults({
   readonly onPlay: (videoId: string) => void;
   /** Downloads a song into the Library; it shows on the Downloads page. */
   readonly onDownload: (videoId: string) => void;
+  /** Opens a song's menu (a right-click). */
+  readonly onMenu?: ((row: BrowseRow, event: MouseEvent<HTMLElement>) => void) | undefined;
   readonly children: ReactNode;
 }) {
   const [section, dispatch] = useReducer(stepYtSection<SearchSong>, YT_SECTION_HIDDEN);
@@ -158,6 +161,12 @@ export function YtResults({
                   aria-label={[row.title, row.artist].filter(Boolean).join(", ")}
                   onClick={() => setSelected(index)}
                   onDoubleClick={() => row.videoId !== undefined && onPlay(row.videoId)}
+                  onContextMenu={(event) => {
+                    if (onMenu === undefined) return;
+                    event.preventDefault();
+                    setSelected(index);
+                    onMenu(row, event);
+                  }}
                   onKeyDown={(event) => {
                     if (event.key === "Enter") {
                       event.preventDefault();

@@ -1,5 +1,5 @@
 import { formatNumber, type SearchOnline } from "@wave/core";
-import { useEffect, useState, type ReactNode } from "react";
+import { useEffect, useState, type MouseEvent, type ReactNode } from "react";
 import type { BrowseRow, BrowseScope } from "../../shared/browse.ts";
 import {
   searchSections,
@@ -214,6 +214,8 @@ export interface SearchPageProps {
   readonly searchOnline: SearchOnline | undefined;
   readonly onYtPlay: (videoId: string) => void;
   readonly onYtDownload: (videoId: string) => void;
+  /** Opens a YouTube Music result's song menu. */
+  readonly onYtMenu?: (row: BrowseRow, event: MouseEvent<HTMLElement>) => void;
 }
 
 /**
@@ -247,6 +249,7 @@ export function SearchPage(props: SearchPageProps) {
         libraryHasResults={current === undefined ? undefined : current.groups.length > 0}
         onPlay={props.onYtPlay}
         onDownload={props.onYtDownload}
+        onMenu={props.onYtMenu}
       >
         <LibraryResults {...props} view={current} />
       </YtResults>
