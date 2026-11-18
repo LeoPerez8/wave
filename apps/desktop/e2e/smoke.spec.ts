@@ -81,6 +81,7 @@ test("the page has no Node and only the typed bridge", async () => {
       "wave.playback.volume",
       "wave.playback.queue",
       "wave.playback.setSleepTimer",
+      "wave.lyrics.song",
       "wave.library.artwork",
       "wave.library.browse",
       "wave.library.letter",

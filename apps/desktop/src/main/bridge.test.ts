@@ -33,6 +33,7 @@ import { registerBridge, type IpcHandler } from "./bridge.ts";
 import { DesktopLibrary, desktopLibraryLayer } from "./library/library.ts";
 import { preference } from "./preferences.ts";
 import { ytMusicLayer } from "./yt/ytMusic.ts";
+import { lyricsLayer } from "./lyrics/lyrics.ts";
 import { accountLayer } from "./account/accountLayer.ts";
 import { createWaveAccount, type WaveAccountService } from "./account/account.ts";
 import { sessionStore } from "./account/sessionStore.ts";
@@ -133,7 +134,9 @@ const jvmInMemory = () => {
         params: { path: string };
       };
       let answer: unknown;
-      if (method === "readTags") {
+      if (method === "readLyrics") {
+        answer = { id, result: { embedded: null, sidecar: `[00:01.00]${basename(params.path)}` } };
+      } else if (method === "readTags") {
         reads.push(params.path);
         answer = params.path.includes("unreadable")
           ? { id, error: { code: "ERR_UNEXPECTED", message: "FileNotFoundException" } }
@@ -203,7 +206,14 @@ const connect = (
       account: account.service,
       focused: () => true,
       ...(account.clock === undefined ? {} : { clock: account.clock }),
-    }).pipe(Layer.provideMerge(playbackLayer.pipe(Layer.provideMerge(library)))),
+    }).pipe(
+      Layer.provideMerge(
+        Layer.mergeAll(
+          playbackLayer,
+          lyricsLayer({ fetch: () => Promise.reject(new Error("no network")) }),
+        ).pipe(Layer.provideMerge(library)),
+      ),
+    ),
   );
   const handlers = new Map<string, IpcHandler>();
   registerBridge(
@@ -627,6 +637,30 @@ test("the window sets a sleep timer, End of track holds the next song back, and 
         "endOfTrack",
       ])
         await assert.rejects(call("playback.setSleepTimer", bad), /refused/i);
+    } finally {
+      await runtime.dispose();
+    }
+  });
+});
+
+test("the window reads a song's lyrics from its file, and a bad track id is refused", async () => {
+  await withFile(async (file) => {
+    const { runtime, exposed, handlers } = connect(file);
+    const wave = exposed.get("wave") as WaveBridge;
+    const call = (channel: string, ...args: unknown[]) => handlers.get(channel)!(trusted, ...args);
+    try {
+      const id = await runtime.runPromise(
+        Effect.gen(function* () {
+          const db = (yield* Database) as unknown as TestDatabase;
+          return addTrack(db, { title: "Road", artist: "Nick Drake", album: "Pink Moon" });
+        }),
+      );
+      assert.deepEqual(await wave.lyrics.song(String(id)), {
+        kind: "synced",
+        lines: [{ timeMs: 1000, text: "Road.mp3" }],
+      });
+      for (const bad of [42, "", "1".repeat(201), null])
+        await assert.rejects(call("lyrics.song", bad), /refused/i);
     } finally {
       await runtime.dispose();
     }

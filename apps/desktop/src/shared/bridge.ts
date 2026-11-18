@@ -12,6 +12,7 @@ import type { DesktopFolder, DesktopSong, ScanStatus } from "./library.ts";
 import type { BrowseScope, BrowsePage } from "./browse.ts";
 import type { YtSearchPage } from "./yt.ts";
 import type { AccountView } from "./account.ts";
+import type { SongLyrics } from "./lyrics.ts";
 import type { SleepTimer, SleepTimerChoice } from "@wave/core";
 import type {
   ActionSurface,
@@ -60,6 +61,11 @@ export interface BridgeContract {
     readonly result: Page<QueueRow>;
   };
   /** Starts a sleep timer, replacing the running one; null cancels it. Main enforces it. */
+  /** What the Lyrics view shows for a queue track (`QueueEntry.trackId`). */
+  readonly "lyrics.song": {
+    readonly args: readonly [trackId: string];
+    readonly result: SongLyrics;
+  };
   readonly "playback.setSleepTimer": {
     readonly args: readonly [choice: SleepTimerChoice | null];
     readonly result: SleepTimer | null;
@@ -166,6 +172,7 @@ export const BRIDGE_CALLS = [
   "playback.volume",
   "playback.queue",
   "playback.setSleepTimer",
+  "lyrics.song",
 
   "library.artwork",
   "library.browse",
@@ -226,6 +233,9 @@ export interface WaveBridge {
     readonly volume: (volume: number, muted: boolean) => Promise<void>;
     readonly queue: (offset: number, limit: number) => Promise<Page<QueueRow>>;
     readonly setSleepTimer: (choice: SleepTimerChoice | null) => Promise<SleepTimer | null>;
+  };
+  readonly lyrics: {
+    readonly song: (trackId: string) => Promise<SongLyrics>;
   };
   readonly library: {
     readonly artwork: (hash: string, large: boolean) => Promise<string | null>;
@@ -301,6 +311,9 @@ export const createBridge = (invoke: Invoke): WaveBridge => ({
     volume: (volume, muted) => invoke("playback.volume", volume, muted),
     queue: (offset, limit) => invoke("playback.queue", offset, limit),
     setSleepTimer: (choice) => invoke("playback.setSleepTimer", choice),
+  },
+  lyrics: {
+    song: (trackId) => invoke("lyrics.song", trackId),
   },
   library: {
     artwork: (hash, large) => invoke("library.artwork", hash, large),

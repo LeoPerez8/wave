@@ -31,6 +31,7 @@ import { runSongAction, songMenu } from "./library/songActions.ts";
 import type { Appearance } from "../shared/bridge.ts";
 import { ytRow } from "../shared/yt.ts";
 import { VIDEO_ID, YtMusic } from "./yt/ytMusic.ts";
+import { Lyrics } from "./lyrics/lyrics.ts";
 
 const validScope = (value: unknown): value is BrowseScope => {
   if (typeof value !== "object" || value === null) return false;
@@ -77,7 +78,7 @@ interface Runtime<R> {
 
 /** The services the calls use. */
 export type BridgeServices =
-  Database | Player | Kotlin | DesktopLibrary | Playback | YtMusic | Account;
+  Database | Player | Kotlin | DesktopLibrary | Playback | YtMusic | Account | Lyrics;
 
 const refuse = (call: BridgeCall, why: string) => Effect.fail(new Error(`Refused ${call}: ${why}`));
 
@@ -230,6 +231,13 @@ const createHandlers = (onAppearance: (mode: Appearance) => void): Handlers => {
       validSleepTimerChoice(choice)
         ? playbackCall((p) => p.setSleepTimer(choice))
         : refuse("playback.setSleepTimer", "invalid sleep timer"),
+    "lyrics.song": ([trackId]) =>
+      typeof trackId === "string" && trackId.length > 0 && trackId.length <= 200
+        ? Effect.gen(function* () {
+            const lyrics = yield* Lyrics;
+            return yield* Effect.tryPromise({ try: () => lyrics.song(trackId), catch: (e) => e });
+          })
+        : refuse("lyrics.song", "invalid track id"),
     "settings.appearance": () =>
       Effect.gen(function* () {
         return appearance(yield* Database);

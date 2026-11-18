@@ -36,6 +36,7 @@ import {
 import { appearance } from "./preferences.ts";
 import { artworkStore } from "./library/artwork.ts";
 import { ytMusicLayer } from "./yt/ytMusic.ts";
+import { lyricsLayer } from "./lyrics/lyrics.ts";
 import { botguardPost, createPoTokens, poTokenHost } from "./yt/poTokens.ts";
 import { openPoTokenPage } from "./yt/poTokenWindow.ts";
 import { createWaveAccount } from "./account/account.ts";
@@ -258,7 +259,11 @@ else {
       accountLayer({
         account,
         focused: () => BrowserWindow.getFocusedWindow() !== null,
-      }).pipe(Layer.provideMerge(playbackLayer.pipe(Layer.provideMerge(library)))),
+      }).pipe(
+        Layer.provideMerge(
+          Layer.mergeAll(playbackLayer, lyricsLayer()).pipe(Layer.provideMerge(library)),
+        ),
+      ),
     );
     const readTheme = () =>
       runtime.runPromise(Effect.map(Account, (it) => readThemeChoice(it.view().theme)));
