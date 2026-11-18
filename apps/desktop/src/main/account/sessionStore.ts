@@ -42,7 +42,7 @@ export interface SessionStore {
 }
 
 /** Chromium's Linux backends that store in plain text or found none. */
-const NO_KEYRING = new Set(["basic_text", "unknown"]);
+export const NO_KEYRING: ReadonlySet<string> = new Set(["basic_text", "unknown"]);
 
 const parsed = (text: string): StoredSession | null => {
   try {

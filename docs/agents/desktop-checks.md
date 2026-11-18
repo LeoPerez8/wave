@@ -167,6 +167,34 @@ to Playlist and Remove from Library. A target is `{scope, ids}` or `{scope, all:
 until Settings includes it again; the file stays on disk. The renderer's keys go through Core's
 `desktopKey`, with focus read by `keys.ts`.
 
+## Downloads and Fix Songs
+
+`Downloads` (`src/main/downloads/downloadsLayer.ts`) follows the shared JVM's durable download
+journal. Main answers its leased prepare, confirm, publish and import decisions using Core's
+rules. The JVM runs the shared YouTube and Soulseek transfers and tag writers; audio stays in
+files. Completed files are imported immediately through `DesktopLibrary.importFile`, preserving
+a missing song's identity. The scanner also refreshes lyrics search text after a tag write.
+
+The window uses `wave.downloads.view/rows/album`, `yt`, `missing`, `missingAction`, `retry`,
+`cancel`, `clearFailed`, `folder/pickFolder` and `bestQuality/setBestQuality`. `missingAction`
+accepts `downloadAll`, `retryFailed` or `cancel`, optionally for an album. Rows are paged, up to
+200 per read. Settings' selected target folder becomes a scan root. Main checks connectivity
+every three seconds and stops or restarts the journal accordingly.
+
+`songs.run` accepts `fixSong` and `fixSongs`. The shared client module
+`@wave/client/downloads/lookups` supplies both apps' LRCLIB and Deezer requests and album caches.
+The synced `settings.findLyricsAndGenre` switch gates lookups and Fix Song's menu entry.
+Lyrics found online for a Library song are written through `tags.writeSong` and reimported too.
+
+The JVM adds `downloads.*`, `download.album/watchSong/lyrics`, `soulseek.session/turnOn/turnOff/search`
+and `tags.writeSong`. Its `downloadsChanged` events trigger journal reads. Soulseek credentials
+are sealed by main's `seal/unseal` host calls through Electron's keyring; without a keyring they
+stay in memory. Rebuild the JAR with `pnpm --filter @wave/desktop build:jvm` after Kotlin changes.
+
+`e2e/downloads.spec.ts` checks a missing Search song waiting offline and resuming through the real
+JVM, and a live YouTube download with its tags read back and its Library entry visible. The live
+check stops after search on CI; inspect its annotations if YouTube refuses the machine.
+
 ## The dev window
 
 To look at `pnpm dev` from an agent, start it in the background with a debugging port and a

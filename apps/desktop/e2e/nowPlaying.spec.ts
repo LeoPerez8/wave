@@ -76,6 +76,11 @@ test("lyrics follow and seek, the queue moves by keyboard, Now Playing tints, th
   await Effect.runPromise(
     Effect.gen(function* () {
       const db = (yield* Database) as unknown as TestDatabase;
+      // These four fixture songs stay local while the panel exercises their queue.
+      db.run(sql`INSERT INTO desktop_settings (key, value) VALUES ('settings.ytMusic', 'off')`);
+      db.run(
+        sql`INSERT INTO desktop_synced_preferences (key, value) VALUES ('settings.continueQueue', 'off')`,
+      );
       for (let n = 1; n <= 4; n++) {
         const id = addTrack(db, {
           title: `Song ${n}`,

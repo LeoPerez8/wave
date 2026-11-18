@@ -1,4 +1,6 @@
+import { formatNumber } from "../formatting.ts";
 import type { CatalogueVariants } from "../localisation.ts";
+import { plural } from "../plural.ts";
 
 /** `desktopEn.ts` in Brazilian Portuguese, key for key. */
 export const desktopPtBr = {
@@ -6,6 +8,10 @@ export const desktopPtBr = {
     thisPhone: "Este computador",
   },
   settings: {
+    missingSongs: {
+      missing: (n: number) =>
+        `${formatNumber("pt-BR", n)} ${plural("pt-BR", n, { one: "música não está", other: "músicas não estão" })} neste computador`,
+    },
     waveAccountNote:
       "Opcional. Com a sessão iniciada, sua lista de músicas, playlists, favoritas, histórico " +
       "de ouvidas e preferências vão para o servidor do Wave, e seus celulares e este " +

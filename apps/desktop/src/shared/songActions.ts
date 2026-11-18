@@ -1,5 +1,5 @@
 /** What a song's menu and the selection bar act on, and what their actions report back. */
-import type { ActionSurface, ItemActionEntry } from "@wave/core";
+import type { ActionSurface, ItemActionEntry, SongTagOutcome, TagLookupStop } from "@wave/core";
 import type { BrowseScope } from "./browse.ts";
 
 /** The most songs a target names one by one; Select All names the unchecked ones instead. */
@@ -35,6 +35,8 @@ export const SONG_RUN_ACTIONS = [
   "addToPlaylist",
   "removeFromPlaylist",
   "removeFromLibrary",
+  "fixSong",
+  "fixSongs",
 ] as const;
 export type SongRunAction = (typeof SONG_RUN_ACTIONS)[number];
 
@@ -50,4 +52,13 @@ export type SongRunResult =
     }
   | { readonly kind: "removed"; readonly count: number }
   /** Songs taken out of the playlist the target lists; `playlists.undoRemove` puts them back. */
-  | { readonly kind: "playlistRemoved"; readonly count: number };
+  | { readonly kind: "playlistRemoved"; readonly count: number }
+  | ({ readonly kind: "fixed" } & FixSongsResult);
+
+/** What Fix Songs came to, song by song, for Core's `tagLookupsToast`. */
+export interface FixSongsResult {
+  readonly results: readonly { readonly title: string; readonly outcome: SongTagOutcome }[];
+  /** Songs left out as complete (Core's `songsToFix`). */
+  readonly skipped: number;
+  readonly stop?: TagLookupStop;
+}

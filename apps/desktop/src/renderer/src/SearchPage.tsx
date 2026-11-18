@@ -53,7 +53,8 @@ function SongRow({
       className="table-row table-columns search-row"
       data-testid={testId}
       aria-selected={selected}
-      aria-disabled={row.unavailable || row.path === null}
+      aria-disabled={row.unavailable}
+      data-missing={row.path === null || undefined}
       aria-label={[row.title, row.artist].filter(Boolean).join(", ")}
       onClick={onSelect}
       onDoubleClick={onPlay}
@@ -73,7 +74,10 @@ function SongRow({
         <span className="row-picture">
           <Artwork hash={row.artworkHash} />
           <span className="row-play">
-            <Icon name={row.unavailable ? "folder" : "play"} size={16} />
+            <Icon
+              name={row.unavailable ? "folder" : row.path === null ? "download" : "play"}
+              size={16}
+            />
           </span>
         </span>
         <span className="search-row-title">
@@ -199,7 +203,7 @@ export interface SearchPageProps {
   /** Opens an album, artist, playlist or genre. */
   readonly onOpen: (route: BrowseScope) => void;
   /** Plays song [index] of the songs Search lists (its Songs group, then its lyrics hits). */
-  readonly onPlay: (index: number) => void;
+  readonly onPlay: (index: number, row: BrowseRow) => void;
   readonly onMenu: (row: BrowseRow, at: { readonly x: number; readonly y: number }) => void;
   /** A song on a drive that isn't connected was asked to play. */
   readonly onUnavailable: () => void;
@@ -256,7 +260,7 @@ export function SearchPage({
   const songs = view.groups.find((group) => group.kind === "song")?.items ?? [];
   const play = (row: BrowseRow, index: number) => {
     if (row.unavailable) return onUnavailable();
-    onPlay(index);
+    onPlay(index, row);
   };
   const openRow = (kind: SearchKind, row: BrowseRow) => {
     if (kind === "song") {

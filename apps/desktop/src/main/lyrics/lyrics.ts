@@ -5,7 +5,7 @@
  * - A Library song shows its file's lyrics (tags or a sidecar `.lrc`, read by the JVM). A file
  *   with none is searched online (`libraryLyrics`): LRCLIB, then YT Music for a song downloaded
  *   from a video. A miss is remembered for a week (`lyricsMisses`). The phone writes a hit into
- *   the file; the desktop has no tag writer yet, so a hit is kept for the session only.
+ *   the file through the shared Kotlin writer and rereads its Library entry.
  * - A YT Music song (`nonDLyrics`) shows what is saved against its video, else is searched the
  *   same way, and a hit or a miss is saved (`savedLyrics`).
  *
@@ -36,18 +36,16 @@ import type { LibraryDatabase } from "@wave/client/db/database";
 import { keepLyricsMiss, selectLyricsSearchTrack } from "@wave/client/db/lyricsMisses";
 import { keepSavedLyrics, selectSavedLyrics } from "@wave/client/db/savedLyrics";
 import { selectPlayableSongs } from "@wave/client/db/tracks";
-import { sql } from "drizzle-orm";
 import * as Context from "effect/Context";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 
 import { Kotlin } from "../kotlin/kotlin.ts";
 import { YtMusic } from "../yt/ytMusic.ts";
+import { DesktopLibrary } from "../library/library.ts";
+import { lookupsEnabled } from "../lookupSettings.ts";
 
 import type { SongLyrics } from "../../shared/lyrics.ts";
-
-/** Settings' "Fix songs online", the phone's synced key: on unless it says "off". */
-export const LOOKUPS_SETTING = "settings.findLyricsAndGenre";
 
 /** How long a source may take before it counts as unreachable, as on the phone. */
 const LOOKUP_TIMEOUT_MS = 30_000;
@@ -56,6 +54,8 @@ export interface LyricsDeps {
   readonly db: LibraryDatabase;
   /** The lyrics in the file at `path` and in its sidecar (`readLyrics` on the JVM). */
   readonly readFile: (path: string) => Promise<LyricsSources>;
+  /** Writes a found lyric into the file (or sidecar), then rereads its Library entry. */
+  readonly writeFile: (path: string, text: string) => Promise<void>;
   /** LRCLIB's JSON answer at `url`; fails when it can't be reached. */
   readonly lrclib: (url: string, headers: Readonly<Record<string, string>>) => Promise<unknown>;
   /** YT Music's lyrics for a video (plain text), or null (`ytLyrics` on the JVM). */
@@ -82,10 +82,7 @@ export const createLyrics = (deps: LyricsDeps): LyricsShape => {
   /** Searches running, by track id: asking again joins them. */
   const running = new Map<string, Promise<SongLyrics>>();
 
-  const lookupsOn = () =>
-    deps.db.get<{ value: string }>(
-      sql`SELECT value FROM desktop_synced_preferences WHERE key = ${LOOKUPS_SETTING}`,
-    )?.value !== "off";
+  const lookupsOn = () => lookupsEnabled(deps.db);
 
   const withTimeout = <A>(promise: Promise<A>): Promise<A> =>
     new Promise<A>((resolve, reject) => {
@@ -140,7 +137,8 @@ export const createLyrics = (deps: LyricsDeps): LyricsShape => {
     const song = libraryLyricsSong(track);
     const on = lookupsOn();
     const ytOn = deps.ytMusicOn();
-    return search(song, (answers) => {
+    let write: FoundLyrics | undefined;
+    const result = await search(song, (answers) => {
       const step = libraryLyrics(song, {
         missedAt: track.missedAt,
         answers,
@@ -152,6 +150,7 @@ export const createLyrics = (deps: LyricsDeps): LyricsShape => {
         case "searching":
           return { ask: step.ask };
         case "lyrics":
+          write = step.write;
           found.set(id, step.lyrics);
           return { done: step.lyrics };
         case "none":
@@ -161,6 +160,11 @@ export const createLyrics = (deps: LyricsDeps): LyricsShape => {
           return { done: FAILED };
       }
     });
+    if (write !== undefined)
+      await deps.writeFile(path, write.text).catch((error) => {
+        console.warn(`[lyrics] The found lyrics couldn't be saved: ${String(error)}`);
+      });
+    return result;
   };
 
   const ytSong = async (trackId: string): Promise<SongLyrics> => {
@@ -219,10 +223,26 @@ export const lyricsLayer = (options: { readonly fetch?: typeof globalThis.fetch 
       const db = yield* Database;
       const kotlin = yield* Kotlin;
       const yt = yield* YtMusic;
+      const library = yield* DesktopLibrary;
       const fetch = options.fetch ?? globalThis.fetch;
       return createLyrics({
         db,
         readFile: (path) => Effect.runPromise(kotlin.call("readLyrics", { path })),
+        writeFile: async (path, lyrics) => {
+          const report = await Effect.runPromise(
+            kotlin.call("tags.writeSong", {
+              path,
+              lyrics,
+              genre: null,
+              trackNumber: null,
+              discNumber: null,
+              year: null,
+              advisory: null,
+            }),
+          );
+          if ("failed" in report) throw new Error("The lyrics tag write failed");
+          await library.importFile(path);
+        },
         lrclib: async (url, headers) => {
           const response = await fetch(url, { headers });
           if (!response.ok) throw new Error(`LRCLIB answered ${response.status}`);

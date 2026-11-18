@@ -25,6 +25,7 @@ import {
 import { trackQuery, BY_TITLE } from "@wave/client/db/tracks";
 import { creditSplits } from "@wave/client/db/credits";
 import { removeSongs } from "@wave/client/db/missingSongs";
+import { saveBatch } from "@wave/client/db/save";
 import { chunks } from "@wave/client/db/chunks";
 import { excludedFolders as exclusions, tracks } from "@wave/client/db/schema";
 import { inArray } from "drizzle-orm";
@@ -182,6 +183,22 @@ export const createScanner = ({
   }, retryMs);
   retry.unref();
 
+  /** The Library's row for [file], from the [tags] read from it and its [lyrics]' text. */
+  const trackOf = async (
+    file: { readonly path: string; readonly sizeBytes: number; readonly modifiedAt: number },
+    tags: Partial<SongTags>,
+    lyrics: string | null,
+  ): Promise<IndexedTrack> => ({
+    ...normalizeTrack({ ...tags, path: file.path }),
+    ...file,
+    sampleRate: tags.sampleRate ?? null,
+    bitrateKbps: tags.bitrateKbps ?? null,
+    artworkHash: tags.artworkBase64 && cacheArtwork ? await cacheArtwork(tags.artworkBase64) : null,
+    hasLyrics: lyrics !== null,
+    explicit: explicitFromAdvisory(tags.advisory ?? null),
+    loudness: gainTags(tags.loudnessTags ?? {}),
+  });
+
   const scan = async () => {
     if (!initialized) {
       ensureDefaultRoot(db, await canonical(musicFolder));
@@ -306,17 +323,7 @@ export const createScanner = ({
           sidecar: await readSidecar(file.path, sidecars),
         }),
       );
-      const track = {
-        ...normalizeTrack({ ...tags, path: file.path }),
-        ...file,
-        sampleRate: tags.sampleRate ?? null,
-        bitrateKbps: tags.bitrateKbps ?? null,
-        artworkHash:
-          tags.artworkBase64 && cacheArtwork ? await cacheArtwork(tags.artworkBase64) : null,
-        hasLyrics: lyrics !== null,
-        explicit: explicitFromAdvisory(tags.advisory ?? null),
-        loudness: gainTags(tags.loudnessTags ?? {}),
-      };
+      const track = await trackOf(file, tags, lyrics);
       if (
         isVoiceNoteOrRecording(
           track,
@@ -423,6 +430,50 @@ export const createScanner = ({
       await active;
       settings.include(await canonical(path));
       await refresh();
+    },
+    /**
+     * Puts the file a download saved at [path] in the Library now, as the phone's
+     * `importDownload` does: with the YouTube Music video it came from, filling in missing song
+     * [fills] when it was one. A scan later finds it unchanged. A file Fix Songs retagged is
+     * read again the same way.
+     */
+    importFile: async (
+      path: string,
+      made: { readonly videoId: string | null; readonly fills: number | null } = {
+        videoId: null,
+        fills: null,
+      },
+    ) => {
+      await active;
+      const file = scanPath(await realpath(path).catch(() => path), platform);
+      const info = await stat(file);
+      const tags = await readTags(file);
+      const lyrics = plainText(
+        pickLyrics({ embedded: tags.lyrics ?? null, sidecar: await readSidecar(file, new Map()) }),
+      );
+      const track = await trackOf(
+        { path: file, sizeBytes: info.size, modifiedAt: info.mtimeMs },
+        tags,
+        lyrics,
+      );
+      saveBatch(
+        db,
+        creditSplits(),
+        [
+          {
+            ...track,
+            ...(made.videoId === null ? {} : { videoId: made.videoId }),
+            ...(made.fills === null ? {} : { fills: made.fills }),
+          },
+        ],
+        [],
+        [],
+        Date.now(),
+      );
+      const id = selectLyricsTrackIdAtPath(db, file);
+      if (id !== null) keepLyricsSearchText(db, id, lyrics);
+      state = { ...state, revision: state.revision + 1 };
+      for (const listener of listeners) listener();
     },
     status: (): ScanStatus => state,
     /** Hears each scan that finished; the Wave account's sync looks at the song list then. */

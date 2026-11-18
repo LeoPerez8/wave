@@ -38,6 +38,9 @@ import {
 import { appearance } from "./preferences.ts";
 import { artworkStore } from "./library/artwork.ts";
 import { ytMusicLayer } from "./yt/ytMusic.ts";
+import { downloadsLayer } from "./downloads/downloadsLayer.ts";
+import { keyringHost } from "./downloads/keyring.ts";
+import type { KotlinEvent } from "./kotlin/protocol.ts";
 import { ytFeaturesLayer } from "./yt/ytServices.ts";
 import { lyricsLayer } from "./lyrics/lyrics.ts";
 import { botguardPost, createPoTokens, poTokenHost } from "./yt/poTokens.ts";
@@ -164,11 +167,16 @@ else {
       dataDir: join(app.getPath("userData"), "kotlin"),
       platform: process.platform,
     });
+    // What the JVM tells main unasked (`ready`, `downloadsChanged`), for whoever listens.
+    const kotlinListeners = new Set<(event: KotlinEvent) => void>();
     const base = Layer.mergeAll(
       libraryLayer(join(app.getPath("userData"), "wave.db")),
       kotlinLayer({
         spawn: spawnLines(jvm, (text) => process.stderr.write(`[jvm] ${text}`)),
-        host: { poToken: poTokenHost(poTokens) },
+        host: { poToken: poTokenHost(poTokens), ...keyringHost(safeStorage) },
+        onEvent: (event) => {
+          for (const listener of kotlinListeners) listener(event);
+        },
       }),
     );
     // The player streams YT Music songs through YtMusic, into the bounded audio cache.
@@ -177,9 +185,14 @@ else {
         fork: forkAudio(join(import.meta.dirname, "audio.js"), addon, cacheFolder("audio")),
       }),
     ).pipe(Layer.provideMerge(ytMusicLayer()), Layer.provideMerge(base));
+    // Electron resolves Windows' Music known folder and Linux's XDG user directory.
+    const musicFolder = process.env["WAVE_MUSIC_DIR"] ?? app.getPath("music");
+    const pickFolder = async () => {
+      const result = await dialog.showOpenDialog({ properties: ["openDirectory"] });
+      return result.canceled ? undefined : result.filePaths[0];
+    };
     const library = desktopLibraryLayer({
-      // Electron resolves Windows' Music known folder and Linux's XDG user directory.
-      musicFolder: process.env["WAVE_MUSIC_DIR"] ?? app.getPath("music"),
+      musicFolder,
       platform: process.platform,
       cacheArtwork: (() => {
         let store: ReturnType<typeof artworkStore> | undefined;
@@ -201,12 +214,23 @@ else {
           return store(encoded);
         };
       })(),
-      pickFolder: async () => {
-        const result = await dialog.showOpenDialog({ properties: ["openDirectory"] });
-        return result.canceled ? undefined : result.filePaths[0];
-      },
+      pickFolder,
     }).pipe(Layer.provideMerge(services));
     const text = catalogueOf(resolveAppLanguage(app.getPreferredSystemLanguages()), "desktop");
+    const downloads = downloadsLayer({
+      catalogue: text,
+      platform: process.platform,
+      musicFolder,
+      pickFolder,
+      online: () => net.isOnline(),
+      events: (listener) => {
+        kotlinListeners.add(listener);
+        return () => kotlinListeners.delete(listener);
+      },
+      log: (level, message) =>
+        process.stderr.write(`[downloads] ${level}: ${message}
+`),
+    }).pipe(Layer.provideMerge(library));
     const config = accountConfig(
       // Named one by one: the bundler puts each value in, not the whole environment.
       {
@@ -290,7 +314,7 @@ else {
             Layer.provideMerge(
               playlists.pipe(
                 Layer.provideMerge(
-                  Layer.mergeAll(playbackLayer, lyricsLayer()).pipe(Layer.provideMerge(library)),
+                  Layer.mergeAll(playbackLayer, lyricsLayer()).pipe(Layer.provideMerge(downloads)),
                 ),
               ),
             ),

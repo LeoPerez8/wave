@@ -19,8 +19,9 @@ import type {
   YtRelatedView,
 } from "./ytPages.ts";
 import type { AccountView } from "./account.ts";
+import type { MissingSongsDownloadAction, SleepTimer, SleepTimerChoice } from "@wave/core";
+import type { DownloadRow, DownloadsView, MissingSongsView } from "./downloads.ts";
 import type { SongLyrics } from "./lyrics.ts";
-import type { SleepTimer, SleepTimerChoice } from "@wave/core";
 import {
   PLAYLIST_CALLS,
   playlistBridge,
@@ -109,6 +110,45 @@ export interface BridgeContract extends PlaylistContract {
   readonly "yt.search": { readonly args: readonly [query: string]; readonly result: YtSearchPage };
   /** A YouTube Music cover as a data URL, or null. */
   readonly "yt.artwork": { readonly args: readonly [url: string]; readonly result: string | null };
+  readonly "downloads.view": { readonly args: readonly []; readonly result: DownloadsView };
+  readonly "downloads.rows": {
+    readonly args: readonly [offset: number, limit: number];
+    readonly result: Page<DownloadRow>;
+  };
+  /** An album's missing songs and their downloads; null for no such album. */
+  readonly "downloads.album": {
+    readonly args: readonly [albumId: number];
+    readonly result: MissingSongsView | null;
+  };
+  readonly "downloads.yt": {
+    readonly args: readonly [videoIds: readonly string[]];
+    readonly result: void;
+  };
+  readonly "downloads.missing": {
+    readonly args: readonly [trackIds: readonly number[]];
+    readonly result: void;
+  };
+  readonly "downloads.missingAction": {
+    readonly args: readonly [action: MissingSongsDownloadAction, albumId?: number];
+    readonly result: void;
+  };
+  readonly "downloads.retry": {
+    readonly args: readonly [ids?: readonly string[]];
+    readonly result: void;
+  };
+  readonly "downloads.cancel": {
+    readonly args: readonly [ids: readonly string[]];
+    readonly result: void;
+  };
+  readonly "downloads.clearFailed": { readonly args: readonly []; readonly result: void };
+  readonly "downloads.folder": { readonly args: readonly []; readonly result: string };
+  /** Asks for the folder downloads go to; null when cancelled. */
+  readonly "downloads.pickFolder": { readonly args: readonly []; readonly result: string | null };
+  readonly "downloads.bestQuality": { readonly args: readonly []; readonly result: boolean };
+  readonly "downloads.setBestQuality": {
+    readonly args: readonly [on: boolean];
+    readonly result: boolean;
+  };
   /** A YouTube Music artist page, by its browse id. */
   readonly "yt.artist": {
     readonly args: readonly [browseId: string];
@@ -283,6 +323,19 @@ export const BRIDGE_CALLS = [
   "magicQueue.startStreamed",
   "magicQueue.view",
   "magicQueue.retry",
+  "downloads.view",
+  "downloads.rows",
+  "downloads.album",
+  "downloads.yt",
+  "downloads.missing",
+  "downloads.missingAction",
+  "downloads.retry",
+  "downloads.cancel",
+  "downloads.clearFailed",
+  "downloads.folder",
+  "downloads.pickFolder",
+  "downloads.bestQuality",
+  "downloads.setBestQuality",
   "account.view",
   "account.signIn",
   "account.cancelSignIn",
@@ -388,6 +441,23 @@ export interface WaveBridge {
     readonly view: () => Promise<MagicQueueView>;
     readonly retry: () => Promise<void>;
   };
+  /** Downloads into the Library: YT Music songs and missing songs, from YouTube Music or Soulseek. */
+  readonly downloads: {
+    readonly view: () => Promise<DownloadsView>;
+    readonly rows: (offset: number, limit: number) => Promise<Page<DownloadRow>>;
+    readonly album: (albumId: number) => Promise<MissingSongsView | null>;
+    readonly yt: (videoIds: readonly string[]) => Promise<void>;
+    readonly missing: (trackIds: readonly number[]) => Promise<void>;
+    /** Download All, Retry Failed or Cancel on every missing song, or one album's. */
+    readonly missingAction: (action: MissingSongsDownloadAction, albumId?: number) => Promise<void>;
+    readonly retry: (ids?: readonly string[]) => Promise<void>;
+    readonly cancel: (ids: readonly string[]) => Promise<void>;
+    readonly clearFailed: () => Promise<void>;
+    readonly folder: () => Promise<string>;
+    readonly pickFolder: () => Promise<string | null>;
+    readonly bestQuality: () => Promise<boolean>;
+    readonly setBestQuality: (on: boolean) => Promise<boolean>;
+  };
   /** The Wave account: the session itself never reaches the window. */
   readonly account: {
     readonly view: () => Promise<AccountView>;
@@ -483,6 +553,21 @@ export const createBridge = (invoke: Invoke): WaveBridge => ({
     startStreamed: (videoId) => invoke("magicQueue.startStreamed", videoId),
     view: () => invoke("magicQueue.view"),
     retry: () => invoke("magicQueue.retry"),
+  },
+  downloads: {
+    view: () => invoke("downloads.view"),
+    rows: (offset, limit) => invoke("downloads.rows", offset, limit),
+    album: (albumId) => invoke("downloads.album", albumId),
+    yt: (videoIds) => invoke("downloads.yt", videoIds),
+    missing: (trackIds) => invoke("downloads.missing", trackIds),
+    missingAction: (action, albumId) => invoke("downloads.missingAction", action, albumId),
+    retry: (ids) => invoke("downloads.retry", ids),
+    cancel: (ids) => invoke("downloads.cancel", ids),
+    clearFailed: () => invoke("downloads.clearFailed"),
+    folder: () => invoke("downloads.folder"),
+    pickFolder: () => invoke("downloads.pickFolder"),
+    bestQuality: () => invoke("downloads.bestQuality"),
+    setBestQuality: (on) => invoke("downloads.setBestQuality", on),
   },
   account: {
     view: () => invoke("account.view"),

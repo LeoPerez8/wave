@@ -31,6 +31,9 @@ import { runSongAction, songMenu } from "./library/songActions.ts";
 import type { Appearance } from "../shared/bridge.ts";
 import { ytRow } from "../shared/yt.ts";
 import { VIDEO_ID, YtMusic } from "./yt/ytMusic.ts";
+import { Downloads } from "./downloads/downloadsLayer.ts";
+import { MISSING_SONGS_ACTIONS } from "../shared/downloads.ts";
+import type { MissingSongsDownloadAction } from "@wave/core";
 import { createYtFeatureHandlers } from "./yt/ytBridge.ts";
 import type { YtFeatures } from "./yt/ytServices.ts";
 import { Lyrics } from "./lyrics/lyrics.ts";
@@ -101,6 +104,7 @@ export type BridgeServices =
   | DesktopLibrary
   | Playback
   | YtMusic
+  | Downloads
   | YtFeatures
   | Account
   | Lyrics
@@ -162,20 +166,46 @@ const videoIds = (value: unknown): readonly string[] | undefined =>
     ? (value as string[])
     : undefined;
 
+const downloadsCall = <A>(run: (downloads: Downloads["Service"]) => A | Promise<A>) =>
+  Effect.gen(function* () {
+    const downloads = yield* Downloads;
+    return yield* Effect.tryPromise({ try: async () => run(downloads), catch: (error) => error });
+  });
+
+/** A journal job's id: a video id, or a missing song's `missing:<trackId>`. */
+const DOWNLOAD_ID = /^(?:[A-Za-z0-9_-]{11}|missing:[1-9]\d{0,15})$/;
+
+/** At most a queue's worth of journal job ids. */
+const downloadIds = (value: unknown): readonly string[] | undefined =>
+  Array.isArray(value) &&
+  value.length <= 500 &&
+  value.every((id) => typeof id === "string" && DOWNLOAD_ID.test(id))
+    ? (value as string[])
+    : undefined;
+
+/** At most a queue's worth of Track ids. */
+const trackIds = (value: unknown): readonly number[] | undefined =>
+  Array.isArray(value) && value.length > 0 && value.length <= 500 && value.every(songId)
+    ? (value as number[])
+    : undefined;
+
+const validPage = (offset: unknown, limit: unknown): boolean =>
+  typeof offset === "number" &&
+  Number.isSafeInteger(offset) &&
+  offset >= 0 &&
+  typeof limit === "number" &&
+  Number.isSafeInteger(limit) &&
+  limit >= 1 &&
+  limit <= 200;
+
 const pageCall = <T>(
   call: BridgeCall,
   args: readonly unknown[],
   run: (library: DesktopLibrary["Service"], offset: number, limit: number) => Page<T>,
 ) => {
   const [offset, limit] = args;
-  return typeof offset === "number" &&
-    Number.isSafeInteger(offset) &&
-    offset >= 0 &&
-    typeof limit === "number" &&
-    Number.isSafeInteger(limit) &&
-    limit >= 1 &&
-    limit <= 200
-    ? libraryCall((library) => run(library, offset, limit))
+  return validPage(offset, limit)
+    ? libraryCall((library) => run(library, offset as number, limit as number))
     : refuse(call, "invalid page");
 };
 
@@ -298,6 +328,54 @@ const createHandlers = (onAppearance: (mode: Appearance) => void): Handlers => {
       typeof url === "string" && url.length <= 2_000
         ? ytCall((yt) => yt.artwork(url))
         : refuse("yt.artwork", "invalid address"),
+    "downloads.view": () => downloadsCall((d) => d.view()),
+    "downloads.rows": ([offset, limit]) =>
+      validPage(offset, limit)
+        ? downloadsCall((d) => d.rows(offset as number, limit as number))
+        : refuse("downloads.rows", "invalid page"),
+    "downloads.album": ([albumId]) =>
+      songId(albumId)
+        ? downloadsCall((d) => d.albumView(albumId as number))
+        : refuse("downloads.album", "invalid album"),
+    "downloads.yt": ([ids]) => {
+      const asked = videoIds(ids);
+      return asked === undefined
+        ? refuse("downloads.yt", "invalid songs")
+        : downloadsCall((d) => d.yt(asked));
+    },
+    "downloads.missing": ([ids]) => {
+      const asked = trackIds(ids);
+      return asked === undefined
+        ? refuse("downloads.missing", "invalid songs")
+        : downloadsCall((d) => d.missing(asked));
+    },
+    "downloads.missingAction": ([action, albumId]) =>
+      MISSING_SONGS_ACTIONS.includes(action as MissingSongsDownloadAction) &&
+      (albumId === undefined || songId(albumId))
+        ? downloadsCall((d) =>
+            d.missingAction(action as MissingSongsDownloadAction, albumId as number | undefined),
+          )
+        : refuse("downloads.missingAction", "invalid action or album"),
+    "downloads.retry": ([ids]) => {
+      const asked = ids === undefined ? undefined : downloadIds(ids);
+      return ids !== undefined && asked === undefined
+        ? refuse("downloads.retry", "invalid downloads")
+        : downloadsCall((d) => d.retry(asked));
+    },
+    "downloads.cancel": ([ids]) => {
+      const asked = downloadIds(ids);
+      return asked === undefined
+        ? refuse("downloads.cancel", "invalid downloads")
+        : downloadsCall((d) => d.cancel(asked));
+    },
+    "downloads.clearFailed": () => downloadsCall((d) => d.clearFailed()),
+    "downloads.folder": () => downloadsCall((d) => d.folder()),
+    "downloads.pickFolder": () => downloadsCall((d) => d.pickFolder()),
+    "downloads.bestQuality": () => downloadsCall((d) => d.bestQuality()),
+    "downloads.setBestQuality": ([on]) =>
+      typeof on === "boolean"
+        ? downloadsCall((d) => d.setBestQuality(on))
+        : refuse("downloads.setBestQuality", "invalid setting"),
     "account.view": () => accountCall((a) => a.view()),
     "account.signIn": () => accountCall((a) => a.signIn()),
     "account.cancelSignIn": () => accountCall((a) => a.cancelSignIn()),
@@ -365,6 +443,7 @@ const createHandlers = (onAppearance: (mode: Appearance) => void): Handlers => {
             const db = yield* Database;
             const library = yield* DesktopLibrary;
             const playback = yield* Playback;
+            const downloads = yield* Downloads;
             const playlists = yield* DesktopPlaylists;
             return yield* Effect.tryPromise({
               try: () =>
@@ -373,6 +452,7 @@ const createHandlers = (onAppearance: (mode: Appearance) => void): Handlers => {
                     db,
                     queue: (type, trackIds) => playback.command({ type, trackIds: [...trackIds] }),
                     removeSongs: (trackIds) => library.removeSongs(trackIds),
+                    fixSongs: (trackIds) => downloads.fixSongs(trackIds),
                     changed: playback.refresh,
                     removeFromPlaylist: playlists.removeSongs,
                   },

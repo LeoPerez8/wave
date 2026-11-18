@@ -8,7 +8,7 @@ import { addTrack, openTestDatabase, star, type TestDatabase } from "@wave/clien
 import { creditSplits } from "@wave/client/db/credits";
 import { stampPreference } from "@wave/client/db/sync";
 import { syncCycle } from "@wave/client/sync/syncCycle";
-import { scanPath, type SyncClock } from "@wave/core";
+import { catalogueOf, scanPath, type SyncClock } from "@wave/core";
 import { sql } from "drizzle-orm";
 import { createPlaylist } from "@wave/client/db/playlists";
 import * as Effect from "effect/Effect";
@@ -37,6 +37,7 @@ import { ytMusicLayer } from "./yt/ytMusic.ts";
 import { ytFeaturesLayer } from "./yt/ytServices.ts";
 import { lyricsLayer } from "./lyrics/lyrics.ts";
 import { accountLayer } from "./account/accountLayer.ts";
+import { downloadsLayer } from "./downloads/downloadsLayer.ts";
 import { desktopPlaylistsLayer } from "./library/playlists.ts";
 import { createWaveAccount, type WaveAccountService } from "./account/account.ts";
 import { sessionStore } from "./account/sessionStore.ts";
@@ -128,6 +129,7 @@ const ytSongNamed = (videoId: string, title: string) => ({
 const jvmInMemory = () => {
   const reads: string[] = [];
   const yt: string[] = [];
+  const downloads: string[] = [];
   const state = { ytError: undefined as string | undefined };
   const spawn = (events: KotlinEvents) => ({
     write: (text: string) => {
@@ -144,6 +146,9 @@ const jvmInMemory = () => {
         answer = params.path.includes("unreadable")
           ? { id, error: { code: "ERR_UNEXPECTED", message: "FileNotFoundException" } }
           : { id, result: tagsTitled(basename(params.path)) };
+      } else if (/^(downloads?|soulseek|tags)\./.test(method)) {
+        downloads.push(`${method} ${JSON.stringify(params)}`);
+        answer = { id, result: downloadAnswers[method] ?? null };
       } else {
         yt.push(`${method} ${JSON.stringify(params)}`);
         answer =
@@ -201,7 +206,14 @@ const jvmInMemory = () => {
     },
     kill: () => setImmediate(events.exit),
   });
-  return { layer: kotlinLayer({ spawn }), reads, yt, state };
+  return { layer: kotlinLayer({ spawn }), reads, yt, downloads, state };
+};
+
+/** An empty download journal, as the JVM answers it. */
+const downloadAnswers: Readonly<Record<string, unknown>> = {
+  "downloads.changes": { revision: 0, jobs: [], ids: null },
+  "downloads.refreshPolicy": 1,
+  "soulseek.session": { status: "off", username: null },
 };
 
 /** A build with no sync service: Settings has no Sign In and nothing goes out. */
@@ -241,6 +253,15 @@ const connect = (
       ),
     ),
   );
+  const downloads = downloadsLayer({
+    catalogue: catalogueOf("en", "desktop"),
+    platform: process.platform,
+    musicFolder: join(dirname(file), "Music"),
+    pickFolder: async () => undefined,
+    online: () => true,
+    events: () => () => {},
+    fetch: () => Promise.reject(new Error("no network")),
+  }).pipe(Layer.provideMerge(library));
   const runtime = ManagedRuntime.make(
     accountLayer({
       account: account.service,
@@ -261,7 +282,7 @@ const connect = (
                 Layer.mergeAll(
                   playbackLayer,
                   lyricsLayer({ fetch: () => Promise.reject(new Error("no network")) }),
-                ).pipe(Layer.provideMerge(library)),
+                ).pipe(Layer.provideMerge(downloads)),
               ),
             ),
           ),
@@ -298,6 +319,7 @@ const connect = (
     measured: audio.measured,
     reads: jvm.reads,
     yt: jvm.yt,
+    downloads: jvm.downloads,
     jvm: jvm.state,
     picked,
   };
@@ -1243,6 +1265,8 @@ test("a song's menu and the selection bar offer and run the phone's actions thro
         { action: "favorite" },
         { action: "goToAlbum", albumId: album.id },
         { action: "goToArtist", artists: { kind: "open", artistId: menu.artists[0]!.id } },
+        // It has no lyrics, genre or year to fix yet.
+        { action: "fixSong" },
         { action: "select" },
         { action: "removeFromLibrary" },
       ]);
@@ -1256,7 +1280,15 @@ test("a song's menu and the selection bar offer and run the phone's actions thro
       );
       assert.deepEqual(
         onAlbum.entries.map((entry) => entry.action),
-        ["playNext", "addToQueue", "addToPlaylist", "favorite", "goToArtist", "removeFromLibrary"],
+        [
+          "playNext",
+          "addToQueue",
+          "addToPlaylist",
+          "favorite",
+          "goToArtist",
+          "fixSong",
+          "removeFromLibrary",
+        ],
       );
 
       // Select All with one song unchecked acts on the others, in list order.
@@ -1284,6 +1316,7 @@ test("a song's menu and the selection bar offer and run the phone's actions thro
           "unfavorite",
           "goToAlbum",
           "goToArtist",
+          "fixSongs",
           "removeFromLibrary",
         ],
       );
@@ -1340,6 +1373,52 @@ test("main refuses song actions with a bad target, surface, action or playlist",
         await assert.rejects(call("songs.run", one, action), /refused/i, String(action));
       await assert.rejects(call("songs.run", one, "addToPlaylist"), /refused/i);
       await assert.rejects(call("songs.run", one, "addToPlaylist", -1), /refused/i);
+    } finally {
+      await runtime.dispose();
+    }
+  });
+});
+
+test("Fix Song stays off when the Wave account turns online lookups off", async () => {
+  await withFile(async (file) => {
+    const { runtime, exposed } = connect(file);
+    try {
+      const id = await runtime.runPromise(
+        Effect.gen(function* () {
+          const db = (yield* Database) as unknown as TestDatabase;
+          db.run(
+            sql`INSERT INTO desktop_synced_preferences (key, value) VALUES ('settings.findLyricsAndGenre', 'off')`,
+          );
+          return addTrack(db, { title: "Road", artist: "Nick Drake", album: "Pink Moon" });
+        }),
+      );
+      const wave = exposed.get("wave") as WaveBridge;
+      const target = { scope: { kind: "songs" as const }, ids: [id] };
+      const menu = await wave.songs.actions(target, "menu");
+      assert.ok(!menu.entries.some((entry) => entry.action === "fixSong"));
+      await assert.rejects(wave.songs.run(target, "fixSong"), /lookups-off/);
+    } finally {
+      await runtime.dispose();
+    }
+  });
+});
+
+test("a YT Music song a search found is downloaded through the JVM's journal", async () => {
+  await withFile(async (file) => {
+    const { runtime, exposed, downloads } = connect(file);
+    const wave = exposed.get("wave") as WaveBridge;
+    try {
+      await wave.yt.search("pink moon");
+      await wave.downloads.yt(["abcdefghijk"]);
+      const asked = downloads.find((line) => line.startsWith("downloads.enqueueAll "));
+      assert.ok(asked?.includes('"videoId":"abcdefghijk"'));
+      assert.ok(asked?.includes('"source":"youtube"'));
+      const view = await wave.downloads.view();
+      assert.equal(view.online, true);
+      assert.deepEqual(view.missing, { count: 0, line: null, actions: [], notFound: null });
+      assert.deepEqual(await wave.downloads.rows(0, 50), { items: [], offset: 0, total: 0 });
+      assert.equal(await wave.downloads.album(999), null);
+      assert.equal(await wave.downloads.bestQuality(), false);
     } finally {
       await runtime.dispose();
     }
@@ -1412,6 +1491,29 @@ test("New Playlist, Remove from Playlist and an M3U import show in the playlists
 
       await wave.playlists.delete(made.id);
       assert.ok(!(await sidebar()).includes("Evening"));
+    } finally {
+      await runtime.dispose();
+    }
+  });
+});
+
+test("main refuses download calls with bad songs, actions, ids or pages", async () => {
+  await withFile(async (file) => {
+    const { runtime, handlers } = connect(file);
+    try {
+      const call = (channel: string, ...args: unknown[]) =>
+        handlers.get(channel)!(trusted, ...args);
+      await assert.rejects(call("downloads.yt", ["../etc/passwd"]), /Refused/);
+      await assert.rejects(call("downloads.yt", []), /Refused/);
+      await assert.rejects(call("downloads.missing", [0]), /Refused/);
+      await assert.rejects(call("downloads.missing", "1"), /Refused/);
+      await assert.rejects(call("downloads.missingAction", "deleteAll"), /Refused/);
+      await assert.rejects(call("downloads.missingAction", "downloadAll", -1), /Refused/);
+      await assert.rejects(call("downloads.album", "7"), /Refused/);
+      await assert.rejects(call("downloads.retry", [7]), /Refused/);
+      await assert.rejects(call("downloads.cancel", "abcdefghijk"), /Refused/);
+      await assert.rejects(call("downloads.rows", 0, 10_000), /Refused/);
+      await assert.rejects(call("downloads.setBestQuality", "on"), /Refused/);
     } finally {
       await runtime.dispose();
     }

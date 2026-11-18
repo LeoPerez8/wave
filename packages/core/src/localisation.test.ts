@@ -87,6 +87,14 @@ describe("catalogueOf", () => {
     assert.equal(catalogueOf("pt-BR", "desktop").playbackText.thisPhone, "Este computador");
     assert.equal(catalogueOf("en", "phone").playbackText.thisPhone, "This phone");
     assert.equal(catalogueOf("pt-BR").playbackText.thisPhone, "Este celular");
+    assert.equal(
+      catalogueOf("en", "desktop").settings.missingSongs.missing(2),
+      "2 songs aren't on this computer",
+    );
+    assert.equal(
+      catalogueOf("pt-BR", "desktop").settings.missingSongs.missing(1),
+      "1 música não está neste computador",
+    );
   });
 
   test("each desktop variant reads in both languages", () => {

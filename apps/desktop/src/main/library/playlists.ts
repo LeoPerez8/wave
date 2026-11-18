@@ -431,9 +431,7 @@ export class DesktopPlaylists extends Context.Service<DesktopPlaylists, Playlist
 ) {}
 
 /** The playlists over the Library; each edit refreshes the window and pushes to sync. */
-export const desktopPlaylistsLayer = (
-  options: Omit<PlaylistOptions, "db" | "changed" | "now">,
-) =>
+export const desktopPlaylistsLayer = (options: Omit<PlaylistOptions, "db" | "changed" | "now">) =>
   Layer.effect(
     DesktopPlaylists,
     Effect.gen(function* () {
