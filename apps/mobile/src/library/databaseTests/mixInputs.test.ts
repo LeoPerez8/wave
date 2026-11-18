@@ -14,7 +14,9 @@ import { recordPlay } from "@wave/client/db/playHistory";
 import { playedEntityTotals } from "@wave/client/db/playedEntities";
 import type { PlayEvent, YtAlbumSong } from "@wave/core";
 const collect = <A>(
-  read: (after: number) => Effect.Effect<import("@wave/client/db/artistGraph").GraphPage<A, number>, unknown>,
+  read: (
+    after: number,
+  ) => Effect.Effect<import("@wave/client/db/artistGraph").GraphPage<A, number>, unknown>,
 ) => {
   const rows: A[] = [];
   let after = 0;

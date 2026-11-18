@@ -107,7 +107,8 @@ test("growing unrelated credits leaves ranked reads and a fixed artist page's cr
 test("complete metadata preserves collaboration, album-only, compilation, missing and tied-order semantics", async () => {
   const { eq, sql } = await import("drizzle-orm");
   const schema = await import("@wave/client/db/schema");
-  const { selectArtists, selectArtistDetail, refreshArtistImages } = await import("@wave/client/db/artists");
+  const { selectArtists, selectArtistDetail, refreshArtistImages } =
+    await import("@wave/client/db/artists");
   const { openTestDatabase, closeTestDatabase, addTrack, addMissingSong } =
     await import("@wave/client/testing");
   const db = await openTestDatabase();

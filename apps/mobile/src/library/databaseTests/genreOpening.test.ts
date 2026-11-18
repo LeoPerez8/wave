@@ -14,7 +14,11 @@ import * as Effect from "effect/Effect";
 
 import { loadLibraryStore } from "../../../bench/fastAgain/store.ts";
 import { createFastAgainFixture } from "@wave/client/testing/fastAgainFixture";
-import { selectGenreOrderSlice, type GenreCursor, type GenreOrderSlice } from "@wave/client/db/genrePages";
+import {
+  selectGenreOrderSlice,
+  type GenreCursor,
+  type GenreOrderSlice,
+} from "@wave/client/db/genrePages";
 import { selectSongSummaries } from "@wave/client/db/songOrder";
 import {
   addLibrary,

@@ -4,7 +4,12 @@ import { fileURLToPath } from "node:url";
 import * as Effect from "effect/Effect";
 import { libraryFinder, normalizeTrack, type YtSong } from "@wave/core";
 import { loadLibraryStore } from "../../../bench/fastAgain/store.ts";
-import { addLibrary, closeTestDatabase, openTestDatabase, traceQueries } from "@wave/client/testing";
+import {
+  addLibrary,
+  closeTestDatabase,
+  openTestDatabase,
+  traceQueries,
+} from "@wave/client/testing";
 
 const root = fileURLToPath(new URL("../../../../../", import.meta.url));
 const song: YtSong = {

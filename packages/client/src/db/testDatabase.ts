@@ -32,8 +32,6 @@ export const closeTestDatabase = (db: TestDatabase): void => {
   clients.delete(db);
 };
 
-
-
 /** The migrations up to and including the one tagged `through`. */
 const migrationsThrough = (through: string): typeof migrations => {
   const last = migrations.journal.entries.findIndex((entry) => entry.tag === through);
