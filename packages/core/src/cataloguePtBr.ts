@@ -87,6 +87,12 @@ export const ptBR: Catalogue = {
     jump: "Ir para uma letra",
     open: "Abrir",
     songCount: (n: number) => `${n.toLocaleString("pt-BR")} ${n === 1 ? "música" : "músicas"}`,
+    ytMusic: "YT Music",
+    discover: "Descobrir",
+    magicQueue: "Fila Mágica",
+    youTubeMusic: "YouTube Music",
+    ytOffline: "O YouTube Music volta quando você estiver online.",
+    ytFailed: "O YouTube Music não respondeu. Tente de novo daqui a pouco.",
   },
   desktopLibrary: {
     refresh: "Atualizar",

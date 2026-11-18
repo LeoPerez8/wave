@@ -379,6 +379,48 @@ h2 {
   padding: 32px 12px;
   color: var(--color-secondary);
 }
+/* Search's YouTube Music songs sit under the Library's and scroll on their own. */
+.yt-results {
+  flex-shrink: 0;
+  max-height: 42%;
+  overflow: auto;
+  padding: 18px 22px 12px 0;
+}
+.yt-results h2 {
+  font-size: 15px;
+  font-weight: 600;
+  padding: 0 12px 8px;
+}
+.yt-row {
+  position: static;
+  width: 100%;
+  text-align: left;
+  color: inherit;
+}
+.yt-row:focus-visible {
+  outline: 2px solid var(--color-accent);
+  outline-offset: -2px;
+  border-radius: 4px;
+}
+.yt-row:focus-visible .row-play {
+  display: flex;
+}
+.yt-quiet {
+  flex-shrink: 0;
+  padding: 14px 12px;
+  font-size: 13px;
+}
+.setting-switch {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-top: 12px;
+}
+.setting-hint {
+  margin-top: 6px;
+  max-width: 520px;
+  font-size: 12px;
+}
 .hero {
   display: flex;
   gap: 28px;

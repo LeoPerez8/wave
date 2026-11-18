@@ -8,36 +8,40 @@ const HEIGHT = 40;
 export const time = (ms: number) =>
   `${Math.floor(ms / 60000)}:${String(Math.floor(ms / 1000) % 60).padStart(2, "0")}`;
 const images = new Map<string, Promise<string | null>>();
+/** A Library cover by its hash, or a YouTube Music cover by its address (`url`). */
 export function Artwork({
   hash,
+  url,
   artist = false,
   large = false,
 }: {
   readonly hash?: string | null;
+  readonly url?: string | null;
   readonly artist?: boolean;
   readonly large?: boolean;
 }) {
   const [loaded, setLoaded] = useState<{ key: string; image: string | null }>();
-  const imageKey = `${hash}-${large}`;
+  const imageKey = hash ? `${hash}-${large}` : url ? `url:${url}` : "";
   const image = loaded?.key === imageKey ? loaded.image : null;
   useEffect(() => {
     let current = true;
-    if (hash) {
-      const key = `${hash}-${large}`;
-      let read = images.get(key);
+    if (imageKey !== "") {
+      let read = images.get(imageKey);
       if (!read) {
-        read = window.wave.library.artwork(hash, large).catch(() => null);
-        images.set(key, read);
+        read = (
+          hash ? window.wave.library.artwork(hash, large) : window.wave.yt.artwork(url!)
+        ).catch(() => null);
+        images.set(imageKey, read);
       }
       if (images.size > 64) images.delete(images.keys().next().value!);
       void read.then((image) => {
-        if (current) setLoaded({ key: `${hash}-${large}`, image });
+        if (current) setLoaded({ key: imageKey, image });
       });
     }
     return () => {
       current = false;
     };
-  }, [hash, large]);
+  }, [imageKey, hash, url, large]);
   return (
     <span className={`artwork ${artist ? "artist-image" : ""}`}>
       {image ? <img src={image} alt="" /> : <Icon name={artist ? "artists" : "songs"} />}

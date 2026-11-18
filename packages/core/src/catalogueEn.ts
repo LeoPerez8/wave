@@ -88,6 +88,12 @@ export const en = {
     jump: "Jump to a letter",
     open: "Open",
     songCount: (n: number) => `${n.toLocaleString("en-US")} ${n === 1 ? "song" : "songs"}`,
+    ytMusic: "YT Music",
+    discover: "Discover",
+    magicQueue: "Magic Queue",
+    youTubeMusic: "YouTube Music",
+    ytOffline: "YouTube Music comes back when you're online.",
+    ytFailed: "YouTube Music didn't answer. Try again in a moment.",
   },
   desktopLibrary: {
     refresh: "Refresh",
