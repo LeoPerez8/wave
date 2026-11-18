@@ -239,6 +239,29 @@ describe("ytSearchQuery", () => {
 });
 
 describe("stepYtSection", () => {
+  test("an unanswered Library lookup allows Online on request and under Always", () => {
+    const pending = {
+      type: "typed",
+      query: "daft",
+      enabled: true,
+      libraryHasResults: undefined,
+    } as const;
+    const waiting = stepYtSection(YT_SECTION_HIDDEN, pending);
+    assert.equal(ytSectionToggle(waiting), "library");
+    assert.equal(waiting.status, "offered");
+    assert.deepEqual(stepYtSection(waiting, ONLINE), {
+      status: "loading",
+      query: "daft",
+      by: "user",
+      delayMs: 0,
+    });
+    assert.equal(stepYtSection(waiting, { ...pending, always: true }).status, "loading");
+    assert.equal(
+      stepYtSection(waiting, { ...pending, libraryHasResults: false }).status,
+      "loading",
+    );
+  });
+
   test("typing a query the Library has results for asks nothing", () => {
     assert.deepEqual(typedFound(YT_SECTION_HIDDEN, "daft"), {
       status: "offered",
