@@ -111,8 +111,8 @@ export const searchSections = (
       },
     ];
   };
-  const groups = (["song", "album", "artist", "playlist", "genre"] as const).flatMap(
-    (kind) => view.groups.filter((group) => group.kind === kind),
+  const groups = (["song", "album", "artist", "playlist", "genre"] as const).flatMap((kind) =>
+    view.groups.filter((group) => group.kind === kind),
   );
   for (const group of groups) {
     const open = expanded.has(group.kind) || view.groups.length === 1;
