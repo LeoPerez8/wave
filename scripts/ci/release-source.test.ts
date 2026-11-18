@@ -5,7 +5,7 @@ import { mkdirSync, mkdtempSync, readFileSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
-import { releaseSource, sourceDirections, verifySource } from "./release-source.ts";
+import { appVersionAt, releaseSource, sourceDirections, verifySource } from "./release-source.ts";
 import type { SourceManifest } from "./release-source.ts";
 
 const REPO = "LeoPerez8/wave";
@@ -328,5 +328,13 @@ describe("release-source.ts manifest", () => {
       ["com.github.MetrolistGroup.innertubex:innertubex:0.8.6", "net.jthink:jaudiotagger:3.0.1"],
     );
     assert.ok(manifest.pending.some((item) => item.startsWith("gradle:release-closure")));
+  });
+});
+
+describe("appVersionAt", () => {
+  it("reads package.json's version, or app.config.ts's constant on the earliest tags", () => {
+    assert.equal(appVersionAt('{"version":"0.68.0-ti"}', ""), "0.68.0-ti");
+    assert.equal(appVersionAt('{"name":"@wave/mobile"}', 'const version = "0.5.0";\n'), "0.5.0");
+    assert.equal(appVersionAt("{}", "no version here"), "");
   });
 });

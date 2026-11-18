@@ -272,6 +272,20 @@ export const sourceDirections = (manifest: SourceManifest): string => {
   return `${lines.join("\n")}\n`;
 };
 
+/**
+ * The app version a commit names: apps/mobile/package.json's, or on the earliest tags (v0.5.x),
+ * the `const version` app.config.ts held before the version moved to package.json.
+ */
+export const appVersionAt = (packageJson: string, appConfig: string): string => {
+  try {
+    const { version } = JSON.parse(packageJson) as { version?: unknown };
+    if (typeof version === "string") return version;
+  } catch {
+    // Read as having no version.
+  }
+  return /^const version = "([^"]+)";$/m.exec(appConfig)?.[1] ?? "";
+};
+
 const git = (dir: string, ...args: string[]) =>
   spawnSync("git", ["-C", dir, ...args], { encoding: "utf8" });
 
@@ -293,12 +307,9 @@ export const verifySource = (manifest: SourceManifest, dir: string): string[] =>
   const tagged = commitOf(dir, `refs/tags/${manifest.releaseTag}`);
   if (tagged !== source)
     problems.push(`${manifest.releaseTag} is on ${tagged ?? "no commit"}, not on ${source}.`);
-  const packageJson = git(dir, "show", `${source}:apps/mobile/package.json`);
-  const version =
-    packageJson.status === 0
-      ? (JSON.parse(packageJson.stdout) as { version?: string }).version
-      : "";
-  const versionProblem = releaseTagProblem(manifest.releaseTag, version ?? "");
+  const show = (path: string) => git(dir, "show", `${source}:${path}`).stdout;
+  const version = appVersionAt(show("apps/mobile/package.json"), show("apps/mobile/app.config.ts"));
+  const versionProblem = releaseTagProblem(manifest.releaseTag, version);
   if (versionProblem) problems.push(versionProblem);
   for (const path of manifest.buildInputs)
     if (git(dir, "cat-file", "-e", `${source}:${path}`).status !== 0)
@@ -402,10 +413,10 @@ if (process.argv[1] === fileURLToPath(import.meta.url)) {
       const lockfile = (rev: string) =>
         git(".", "rev-parse", `${rev}:pnpm-lock.yaml`).stdout.trim();
       const head = commitOf(".", "HEAD") ?? refuse("no HEAD.");
-      const packageJson = git(".", "show", `${commit}:apps/mobile/package.json`).stdout;
+      const show = (path: string) => git(".", "show", `${commit}:${path}`).stdout;
       const manifest = releaseSource({
         ...(await inventoryInputs()),
-        version: (JSON.parse(packageJson) as { version: string }).version,
+        version: appVersionAt(show("apps/mobile/package.json"), show("apps/mobile/app.config.ts")),
         buildInputs: BUILD_INPUTS.filter(
           (path) => git(".", "cat-file", "-e", `${commit}:${path}`).status === 0,
         ),

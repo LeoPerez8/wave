@@ -173,6 +173,8 @@ These keep source delivery from being complete. Each manifest lists the ones tha
 - Notices are listed by file name in the manifest. No release ships their texts as a file or an
   in-app screen yet.
 - innertubex and jaudiotagger sources are linked, not mirrored with the release.
+- An over-the-air update reaches phones with no release page. The app doesn't show where its
+  source is, so the directions sit only on the GitHub release of the same version.
 - Releases before the gate don't name a repack's native base.
 - A full independent APK build from a clean machine has not been run for this ticket; see
   `docs/verification/1135.md` for what was.
