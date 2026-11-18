@@ -14,6 +14,7 @@
     "start": "electron-vite preview",
     "test": "node --test \"src/**/*.test.ts\"",
     "test:e2e": "electron-vite build && playwright test",
+    "test:perf": "electron-vite build && playwright test --config playwright.performance.config.ts",
     "typecheck": "tsc --noEmit && tsc --noEmit -p tsconfig.web.json",
     "lint": "oxlint --quiet ."
   },
