@@ -989,7 +989,7 @@ jobs:
           cache: pnpm
 
       - name: Install
-        run: scripts/ci/step.sh "Install" pnpm install --frozen-lockfile --filter "@wave/desktop..."
+        run: scripts/ci/step.sh "Install" pnpm install --frozen-lockfile --filter "@wave/desktop..." --filter "@wave/sync..."
 
       - name: Typecheck
         run: scripts/ci/step.sh "Typecheck" pnpm --filter @wave/desktop typecheck
