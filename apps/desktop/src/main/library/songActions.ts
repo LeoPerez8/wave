@@ -7,10 +7,17 @@ import type { LibraryDatabase } from "@wave/client/db/database";
 import { chunks } from "@wave/client/db/chunks";
 import { setFavorites } from "@wave/client/db/playHistory";
 import { addToPlaylist } from "@wave/client/db/playlists";
-import { desktopSongActions, type ActionItem, type ActionSurface } from "@wave/core";
+import {
+  canFixSong,
+  desktopSongActions,
+  type ActionItem,
+  type ActionSurface,
+  type ExplicitFlag,
+} from "@wave/core";
 import { sql } from "drizzle-orm";
 import type { BrowseScope } from "../../shared/browse.ts";
 import type {
+  FixSongsResult,
   SongMenu,
   SongRunAction,
   SongRunResult,
@@ -27,6 +34,8 @@ export interface SongActionPorts {
   readonly removeSongs: (trackIds: readonly number[]) => Promise<void>;
   /** Tells the window its rows changed (a star). */
   readonly changed: () => void;
+  /** Fix Songs on the songs, one after another (`fixSongs`). */
+  readonly fixSongs: (trackIds: readonly number[]) => Promise<FixSongsResult>;
 }
 
 /** [target]'s song ids, once each, in its list's order. */
@@ -64,10 +73,17 @@ const songFacts = (db: LibraryDatabase, ids: readonly number[]): SongFacts[] => 
       albumId: number;
       path: string | null;
       favorite: number;
+      hasLyrics: number;
+      genre: string | null;
+      trackNumber: number | null;
+      year: number | null;
+      explicit: ExplicitFlag;
     }>(
       sql`SELECT t.id, t.title, t.album_id AS albumId, t.path,
-        EXISTS(SELECT 1 FROM favorites f WHERE f.track_id=t.id AND f.deleted=0) AS favorite
-        FROM tracks t WHERE t.id IN (${list})`,
+        EXISTS(SELECT 1 FROM favorites f WHERE f.track_id=t.id AND f.deleted=0) AS favorite,
+        t.has_lyrics AS hasLyrics, g.name AS genre, t.track_number AS trackNumber, t.year,
+        t.explicit
+        FROM tracks t LEFT JOIN genres g ON g.id = t.genre_id WHERE t.id IN (${list})`,
     ))
       found.set(song.id, {
         id: song.id,
@@ -76,6 +92,7 @@ const songFacts = (db: LibraryDatabase, ids: readonly number[]): SongFacts[] => 
         artistIds: credits.get(song.id) ?? [],
         favorite: song.favorite === 1,
         missing: song.path === null,
+        fixable: canFixSong({ ...song, hasLyrics: song.hasLyrics === 1 }),
       });
   }
   return ids.flatMap((id) => found.get(id) ?? []);
@@ -98,6 +115,8 @@ export const songMenu = (
     surface,
     selectable: true,
     page: pageOf(target.scope),
+    // LRCLIB and Deezer have no off switch on the desktop yet (#1162).
+    onlineLookups: true,
   });
   const artistIds = entries.flatMap((entry) =>
     entry.action !== "goToArtist" || !("artists" in entry)
@@ -175,5 +194,11 @@ export const runSongAction = async (
       await ports.removeSongs(ids);
       ports.changed();
       return { kind: "removed", count: ids.length };
+    case "fixSong":
+    case "fixSongs": {
+      const result = await ports.fixSongs(ids);
+      ports.changed();
+      return { kind: "fixed", ...result };
+    }
   }
 };

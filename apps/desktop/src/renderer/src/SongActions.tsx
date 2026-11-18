@@ -10,6 +10,7 @@ import {
   isDestructiveAction,
   queuedToast,
   splitActionBar,
+  tagLookupsToast,
   toastDuration,
   type ActionSurface,
   type AlertSpec,
@@ -83,6 +84,8 @@ export function useSongActions({ go, select, failed, changed }: Options) {
   const run = useCallback(
     async (target: SongTarget, action: SongRunAction, surface: ActionSurface, id?: number) => {
       try {
+        // Each song waits on LRCLIB and Deezer: say it's under way.
+        if (action === "fixSong" || action === "fixSongs") notify(text.fixSongs.progress);
         const result = await window.wave.songs.run(target, action, id);
         changed();
         switch (result.kind) {
@@ -105,6 +108,8 @@ export function useSongActions({ go, select, failed, changed }: Options) {
             );
           case "removed":
             return;
+          case "fixed":
+            return notify(tagLookupsToast(result.results, result.stop, result.skipped, text));
         }
       } catch {
         failed(action === "removeFromLibrary" ? text.songDeletion.couldntRemoveSongs : undefined);
@@ -133,6 +138,8 @@ export function useSongActions({ go, select, failed, changed }: Options) {
         case "addToQueue":
         case "favorite":
         case "unfavorite":
+        case "fixSong":
+        case "fixSongs":
           return {
             ...base,
             run: () => {
@@ -212,7 +219,7 @@ export function useSongActions({ go, select, failed, changed }: Options) {
               }),
           };
         default:
-          // Copy Link, Magic Queue and Fix Song come with their features' tickets.
+          // Copy Link and Magic Queue come with their features' tickets.
           return { ...base, disabled: true };
       }
     },
