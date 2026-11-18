@@ -33,12 +33,14 @@ test("the dev window may also reach Vite's server for hot reload", () => {
 
 /** A window's events as Electron fires them, recording what Wave does with each. */
 const fakeContents = () => {
-  const listeners = new Map<string, (event: { preventDefault: () => void }, url: string) => void>();
-  let openHandler: ((details: { url: string }) => { action: "allow" | "deny" }) | undefined;
-  const contents: GuardedContents = {
-    on: (name, listener) => void listeners.set(name, listener),
-    setWindowOpenHandler: (handler) => void (openHandler = handler),
-  };
+  type Listener = (event: { preventDefault: () => void }, url: string) => void;
+  type OpenHandler = (details: { url: string }) => { action: "allow" | "deny" };
+  const listeners = new Map<string, Listener>();
+  let openHandler: OpenHandler | undefined;
+  const contents = {
+    on: (name: string, listener: Listener) => void listeners.set(name, listener),
+    setWindowOpenHandler: (handler: OpenHandler) => void (openHandler = handler),
+  } as unknown as GuardedContents;
   const fire = (name: string, url = "") => {
     let prevented = false;
     listeners.get(name)?.({ preventDefault: () => void (prevented = true) }, url);

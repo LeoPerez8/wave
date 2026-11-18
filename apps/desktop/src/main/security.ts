@@ -1,4 +1,5 @@
 /** What Wave's window may load and where it may go. */
+import type { WebContents } from "electron";
 
 /** The window's Content-Security-Policy. Dev adds what Vite's hot reload needs, never eval. */
 export const contentSecurityPolicy = (dev: boolean): string =>
@@ -24,18 +25,8 @@ const webLink = (url: string): string | undefined => {
   }
 };
 
-type Listener = (event: { preventDefault: () => void }, url: string) => void;
-
 /** The part of Electron's WebContents the guard uses. */
-export interface GuardedContents {
-  readonly on: (
-    event: "will-navigate" | "will-redirect" | "will-attach-webview",
-    listener: Listener,
-  ) => unknown;
-  readonly setWindowOpenHandler: (
-    handler: (details: { url: string }) => { action: "allow" | "deny" },
-  ) => void;
-}
+export type GuardedContents = Pick<WebContents, "on" | "setWindowOpenHandler">;
 
 /** Keeps the window on Wave: no navigation, no new windows, no webviews; web links go to the browser. */
 export const guardWindow = (

@@ -1,0 +1,37 @@
+@import "tailwindcss";
+
+/* The shared colours (packages/theme) set these per scheme; Tailwind gets their names here
+ * and reads the values at runtime. themeNames.test.ts keeps the list in step. */
+@custom-variant light (@media (prefers-color-scheme: light));
+@custom-variant dark (@media (prefers-color-scheme: dark));
+
+@theme reference {
+  --color-background: var(--color-background);
+  --color-grouped: var(--color-grouped);
+  --color-surface: var(--color-surface);
+  --color-foreground: var(--color-foreground);
+  --color-secondary: var(--color-secondary);
+  --color-tertiary: var(--color-tertiary);
+  --color-separator: var(--color-separator);
+  --color-fill: var(--color-fill);
+  --color-accent: var(--color-accent);
+  --color-on-accent: var(--color-on-accent);
+  --color-highlight: var(--color-highlight);
+  --color-destructive: var(--color-destructive);
+  --color-scrim: var(--color-scrim);
+  --color-recap-red: var(--color-recap-red);
+  --color-recap-orange: var(--color-recap-orange);
+  --color-recap-green: var(--color-recap-green);
+  --color-recap-blue: var(--color-recap-blue);
+  --color-recap-indigo: var(--color-recap-indigo);
+  --color-recap-purple: var(--color-recap-purple);
+  --color-recap-pink: var(--color-recap-pink);
+  --color-recap-grey: var(--color-recap-grey);
+  --color-on-recap: var(--color-on-recap);
+}
+
+@import "../../../../../packages/theme/colours.css";
+
+@theme {
+  --font-sans: "Inter", system-ui, sans-serif;
+}
