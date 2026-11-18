@@ -3,16 +3,19 @@
 // admits the release only when every prerequisite succeeded for the one release source this
 // run selected. What it admits becomes the release's provenance record
 // (docs/release-provenance.md), which the release job checks the APK against before signing it.
-//   node scripts/ci/release-gate.ts admit <needs.json>   the provenance record, as one JSON line;
-//                                                         reads the GITHUB_* names of the run
+//   node scripts/ci/release-gate.ts admit <needs.json> [<ti record>]
+//                                     the provenance record, as one JSON line; reads the GITHUB_*
+//                                     names of the run. A stable tag needs its ti release's record.
 //   node scripts/ci/release-gate.ts digest <file|dir>     a file's SHA-256, or a folder's (digestOf)
 //   node scripts/ci/release-gate.ts verify <provenance.json> <unsigned apk>
 //   node scripts/ci/release-gate.ts verify-update <provenance.json> <update dir>
 //   node scripts/ci/release-gate.ts seal <provenance.json> <signed apk>   the record, signed
+//   node scripts/ci/release-gate.ts verify-release <record> <tag> <commit> [<signed apk>]
+//                                     a published release's sealed record (verifyPublished)
 // Every command fails, printing nothing to stdout, when the evidence doesn't hold. It uses no
 // token, key or network.
 import { createHash } from "node:crypto";
-import { readdirSync, readFileSync, statSync } from "node:fs";
+import { existsSync, readdirSync, readFileSync, statSync } from "node:fs";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 
@@ -46,6 +49,16 @@ export type Provenance = {
   /** The CI run that admitted it. */
   run: Run;
   artifact: Artifact;
+  /** A stable release's tested ti release: same source, its sealed record (#1130). */
+  promotedFrom?: Promotion;
+};
+
+export type Promotion = {
+  releaseTag: string;
+  source: string;
+  run: Pick<Run, "repository" | "id" | "attempt">;
+  /** The ti APK as its release published it. */
+  signedSha256: string;
 };
 
 export type Run = { repository: string; id: number; attempt: number; event: string; ref: string };
@@ -94,8 +107,11 @@ const succeeded = (needs: Record<string, unknown>, name: Prerequisite): Outputs 
   );
 };
 
-/** Admits a release from its prerequisites' evidence, or throws why it's refused. */
-export const admitRelease = (needs: unknown, run: Run = NO_RUN): Provenance => {
+/**
+ * Admits a release from its prerequisites' evidence, or throws why it's refused. A stable
+ * release also needs `promoted`: the sealed record of the ti release it promotes.
+ */
+export const admitRelease = (needs: unknown, run: Run = NO_RUN, promoted?: unknown): Provenance => {
   if (!record(needs)) return refuse("no evidence.");
   const outputs = Object.fromEntries(
     PREREQUISITES.map((name) => [name, succeeded(needs, name)]),
@@ -121,12 +137,46 @@ export const admitRelease = (needs: unknown, run: Run = NO_RUN): Provenance => {
   // The Patch notes job always succeeds, so a release reads the step's own outcome.
   if (releaseTag && outputs.notes.outcome !== "success")
     refuse(`notes were not built for ${releaseTag}.`);
-  return {
+  const artifact = artifactOf(outputs.android, releaseTag);
+  const provenance: Provenance = {
     schema: "wave-release-provenance/1",
     source,
     releaseTag,
     run,
-    artifact: artifactOf(outputs.android, releaseTag),
+    artifact,
+  };
+  if (!releaseTag || releaseTag.endsWith("-ti")) return provenance;
+  return { ...provenance, promotedFrom: promotionOf(promoted, `${releaseTag}-ti`, source) };
+};
+
+/**
+ * What a stable release promotes: the ti release of the same number, sealed by its release job
+ * and built from the same source. A ti release from before the gate has no record, so it can't
+ * be promoted; a newer one can (docs/release-provenance.md).
+ */
+const promotionOf = (value: unknown, tiTag: string, source: string): Promotion => {
+  if (!record(value) || value.schema !== "wave-release-provenance/1" || !record(value.artifact))
+    return refuse(`${tiTag} has no provenance record, so it can't be promoted.`);
+  const { releaseTag, artifact } = value;
+  if (releaseTag !== tiTag)
+    refuse(`the promoted record is ${String(releaseTag)}'s, not ${tiTag}'s.`);
+  if (value.source !== source)
+    refuse(
+      `${tiTag} was built from ${String(value.source).slice(0, 7)}, not ${source.slice(0, 7)}.`,
+    );
+  const signedSha256 = artifact.signedSha256;
+  if (typeof signedSha256 !== "string" || !SHA256.test(signedSha256))
+    refuse(`${tiTag}'s record isn't sealed, so its release never published it.`);
+  const run = record(value.run) ? value.run : {};
+  return {
+    releaseTag: tiTag,
+    source,
+    run: {
+      repository: String(run.repository ?? ""),
+      id: Number(run.id ?? 0),
+      attempt: Number(run.attempt ?? 0),
+    },
+    signedSha256: signedSha256 as string,
   };
 };
 
@@ -194,8 +244,7 @@ const sha256 = (data: string | Buffer) => createHash("sha256").update(data).dige
 
 /**
  * A file's SHA-256, or a folder's: the SHA-256 of its files' relative paths and SHA-256s, one
- * `<path> <sha256>
-` line each, sorted by path.
+ * `<path>\0<sha256>\n` line each (a NUL between them), sorted by path.
  */
 export const digestOf = (path: string): string => {
   if (!statSync(path).isDirectory()) return sha256(readFileSync(path));
@@ -206,10 +255,7 @@ export const digestOf = (path: string): string => {
   return sha256(
     files("")
       .sort()
-      .map(
-        (file) => `${file} ${sha256(readFileSync(join(path, file)))}
-`,
-      )
+      .map((file) => `${file}\0${sha256(readFileSync(join(path, file)))}\n`)
       .join(""),
   );
 };
@@ -221,6 +267,31 @@ const provenanceAt = (path: string): Provenance => {
   return value as Provenance;
 };
 
+/**
+ * Checks a published release's sealed record (`wave-<version>.provenance.json`): it names this
+ * tag, the tag's commit as its source and, given the release's APK, that APK as the one it signed.
+ * Promotion and rollback trust a release only through this (docs/release-provenance.md).
+ */
+export const verifyPublished = (
+  value: unknown,
+  { tag, commit, signedSha256 }: { tag: string; commit: string; signedSha256?: string },
+): Provenance => {
+  if (!record(value) || value.schema !== "wave-release-provenance/1" || !record(value.artifact))
+    return refuse(`${tag} has no provenance record.`);
+  const provenance = value as Provenance;
+  if (provenance.releaseTag !== tag)
+    refuse(`the record is ${provenance.releaseTag}'s, not ${tag}'s.`);
+  if (!SHA.test(commit) || provenance.source !== commit)
+    refuse(
+      `${tag} is on ${commit.slice(0, 7)}, but its record names ${provenance.source.slice(0, 7)}.`,
+    );
+  const sealed = provenance.artifact.signedSha256 ?? "";
+  if (!SHA256.test(sealed)) refuse(`${tag}'s record isn't sealed, so its release never signed it.`);
+  if (signedSha256 !== undefined && signedSha256 !== sealed)
+    refuse(`${tag}'s APK isn't the one its record sealed (${sealed}).`);
+  return provenance;
+};
+
 const runFromEnv = (env: NodeJS.ProcessEnv): Run => ({
   repository: env.GITHUB_REPOSITORY ?? "",
   id: Number(env.GITHUB_RUN_ID ?? 0),
@@ -229,10 +300,14 @@ const runFromEnv = (env: NodeJS.ProcessEnv): Run => ({
   ref: env.GITHUB_REF ?? "",
 });
 
-const cli = ([command, first, second]: string[]): string => {
+/** A file's JSON, or undefined when it's missing or isn't JSON. */
+const readJson = (path: string | undefined): unknown =>
+  path && existsSync(path) ? parse(readFileSync(path, "utf8")) : undefined;
+
+const cli = ([command, first, second, third, fourth]: string[]): string => {
   if (command === "admit" && first)
     return JSON.stringify(
-      admitRelease(parse(readFileSync(first, "utf8")), runFromEnv(process.env)),
+      admitRelease(parse(readFileSync(first, "utf8")), runFromEnv(process.env), readJson(second)),
     );
   if (command === "digest" && first) return digestOf(first);
   if (command === "verify" && first && second) {
@@ -253,6 +328,14 @@ const cli = ([command, first, second]: string[]): string => {
       ...provenance,
       artifact: { ...provenance.artifact, signedSha256: digestOf(second) },
     });
+  }
+  if (command === "verify-release" && first && second && third) {
+    const provenance = verifyPublished(readJson(first), {
+      tag: second,
+      commit: third,
+      ...(fourth ? { signedSha256: digestOf(fourth) } : {}),
+    });
+    return `Verified ${second}: ${provenance.source}, APK ${provenance.artifact.signedSha256}`;
   }
   throw new Error(`Unknown or incomplete command: ${command ?? "(none)"}`);
 };

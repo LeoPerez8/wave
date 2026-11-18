@@ -258,3 +258,122 @@ describe("release-gate.ts in the release job", () => {
     );
   });
 });
+
+describe("a promotion's admission", () => {
+  /** The sealed record the ti release v1.3.0-ti carries on its GitHub Release. */
+  const tiRecord = (overrides: Record<string, unknown> = {}) => {
+    const record = admitRelease(healthy(), {
+      repository: "o/r",
+      id: 70,
+      attempt: 1,
+      event: "push",
+      ref: "refs/heads/main",
+    });
+    return {
+      ...record,
+      artifact: { ...record.artifact, signedSha256: "5".repeat(64) },
+      ...overrides,
+    };
+  };
+  const stable = () => {
+    const needs = healthy();
+    needs.checks.outputs.release_tag = "v1.3.0";
+    needs.android.outputs.update_channel = "main";
+    return needs;
+  };
+
+  it("links the stable release to the tested ti release of the same source", () => {
+    const provenance = admitRelease(stable(), undefined, tiRecord());
+    assert.deepEqual(provenance.promotedFrom, {
+      releaseTag: "v1.3.0-ti",
+      source: SOURCE,
+      run: { repository: "o/r", id: 70, attempt: 1 },
+      signedSha256: "5".repeat(64),
+    });
+  });
+
+  it("refuses a stable release with no sealed record of its ti release", () => {
+    assert.throws(() => admitRelease(stable()), /v1\.3\.0-ti/);
+    assert.throws(() => admitRelease(stable(), undefined, {}), /v1\.3\.0-ti/);
+    const unsealed = tiRecord();
+    delete (unsealed.artifact as { signedSha256?: string }).signedSha256;
+    assert.throws(() => admitRelease(stable(), undefined, unsealed), /sealed/);
+  });
+
+  it("refuses a ti record of another source or another version", () => {
+    assert.throws(
+      () => admitRelease(stable(), undefined, tiRecord({ source: EVENT })),
+      new RegExp(EVENT.slice(0, 7)),
+    );
+    assert.throws(
+      () => admitRelease(stable(), undefined, tiRecord({ releaseTag: "v1.2.9-ti" })),
+      /v1\.2\.9-ti/,
+    );
+  });
+
+  it("leaves ti releases as they were, with nothing to link", () => {
+    assert.equal(admitRelease(healthy()).promotedFrom, undefined);
+  });
+
+  it("reads the ti record from the file the gate job fetched, or refuses without one", () => {
+    const dir = mkdtempSync(join(tmpdir(), "wave-gate-"));
+    writeFileSync(join(dir, "needs.json"), JSON.stringify(stable()));
+    writeFileSync(join(dir, "ti.json"), JSON.stringify(tiRecord()));
+    const admitted = run(["admit", join(dir, "needs.json"), join(dir, "ti.json")]);
+    assert.equal(admitted.status, 0, admitted.stderr);
+    assert.equal(JSON.parse(admitted.stdout).promotedFrom.releaseTag, "v1.3.0-ti");
+    const missing = run(["admit", join(dir, "needs.json"), join(dir, "absent.json")]);
+    assert.notEqual(missing.status, 0);
+    assert.equal(missing.stdout, "");
+  });
+});
+
+describe("a published release's record", () => {
+  /** v1.3.0-ti as its GitHub Release holds it: the sealed record and the signed APK. */
+  const published = () => {
+    const dir = mkdtempSync(join(tmpdir(), "wave-published-"));
+    const record = admitRelease(healthy());
+    writeFileSync(join(dir, "wave-1.3.0-ti.apk"), "signed apk");
+    const signedSha256 = createHash("sha256").update("signed apk").digest("hex");
+    const write = (value: unknown) =>
+      writeFileSync(join(dir, "record.json"), JSON.stringify(value));
+    write({ ...record, artifact: { ...record.artifact, signedSha256 } });
+    const verify = (tag = "v1.3.0-ti", commit = SOURCE) =>
+      run([
+        "verify-release",
+        join(dir, "record.json"),
+        tag,
+        commit,
+        join(dir, "wave-1.3.0-ti.apk"),
+      ]);
+    return { dir, record, signedSha256, write, verify };
+  };
+
+  it("holds for the release's own tag, commit and APK", () => {
+    const { verify } = published();
+    const checked = verify();
+    assert.equal(checked.status, 0, checked.stderr);
+  });
+
+  it("fails for another tag or commit", () => {
+    const { verify } = published();
+    assert.match(verify("v1.3.1-ti").stderr, /v1\.3\.1-ti/);
+    assert.match(verify("v1.3.0-ti", EVENT).stderr, new RegExp(EVENT.slice(0, 7)));
+    assert.notEqual(verify("v1.3.0-ti", EVENT).status, 0);
+  });
+
+  it("fails when the APK isn't the one the record sealed, or the record isn't sealed", () => {
+    const { dir, record, write, verify } = published();
+    writeFileSync(join(dir, "wave-1.3.0-ti.apk"), "another apk");
+    assert.match(verify().stderr, /APK/);
+    write(record);
+    assert.match(verify().stderr, /sealed/);
+  });
+
+  it("fails without a record, as for a release published before the gate", () => {
+    const { dir } = published();
+    const missing = run(["verify-release", join(dir, "absent.json"), "v1.3.0-ti", SOURCE]);
+    assert.notEqual(missing.status, 0);
+    assert.match(missing.stderr, /no provenance record/);
+  });
+});
