@@ -49,11 +49,7 @@ import type {
   SongTarget,
 } from "./songActions.ts";
 import { LINK_CALLS, linkBridge, type LinkContract } from "./links.ts";
-import {
-  ARTIST_PAGE_CALLS,
-  artistPageBridge,
-  type ArtistPageContract,
-} from "./artistPage.ts";
+import { ARTIST_PAGE_CALLS, artistPageBridge, type ArtistPageContract } from "./artistPage.ts";
 import { STREAMED_CALLS, streamedBridge, type StreamedContract } from "./streamedSongs.ts";
 export type Appearance = "system" | "light" | "dark";
 
