@@ -66,7 +66,14 @@ test("the page has no Node and only the typed bridge", async () => {
   expect(reach).toEqual({
     require: "undefined",
     process: "undefined",
-    wave: ["wave.library.counts"],
+    wave: [
+      "wave.library.counts",
+      "wave.player.load",
+      "wave.player.play",
+      "wave.player.pause",
+      "wave.player.seek",
+      "wave.player.status",
+    ],
   });
 });
 

@@ -1,0 +1,3 @@
+/target/
+# The addon `pnpm build:native` copies here for the audio process.
+/wave-audio.node
