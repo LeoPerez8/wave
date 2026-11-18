@@ -115,6 +115,10 @@ test("the page has no Node and only the typed bridge", async () => {
       "wave.account.signOut",
       "wave.account.signOutEverywhere",
       "wave.account.answerInvitation",
+      "wave.search.library",
+      "wave.search.recent",
+      "wave.search.remember",
+      "wave.search.clearRecent",
     ],
   });
 });

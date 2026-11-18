@@ -8,6 +8,7 @@ import { Icon } from "./Icon.tsx";
 import { Artwork, VirtualTable } from "./VirtualTable.tsx";
 import { FolderSettings } from "./FolderSettings.tsx";
 import { YtResults } from "./YtResults.tsx";
+import { SearchPage } from "./SearchPage.tsx";
 import { AccountSettings, SignInInvitation } from "./AccountSettings.tsx";
 import { PlaybackSettings } from "./PlaybackSettings.tsx";
 import { useDesktopKeys } from "./keys.ts";
@@ -205,6 +206,19 @@ export function App() {
     else if (row.unavailable) setError(text.desktopLibrary.driveDisconnected);
     else playback.run(window.wave.playback.start(scope, index));
   };
+  const searchFor = (query: string) => {
+    setQuery(query);
+    if (route.kind !== "search") go({ kind: "search", query });
+    else
+      setHistory((previous) =>
+        previous.map((r, i) => (i === position ? { kind: "search", query } : r)),
+      );
+  };
+  /** Keeps the search in Recent searches, as the phone does on submit or opening a result. */
+  const rememberSearch = () => {
+    const query = route.kind === "search" ? (route.query ?? "").trim() : "";
+    if (query !== "") void window.wave.search.remember(query).catch(failed);
+  };
   const title =
     hero?.title ??
     (route.kind in labels ? (labels[route.kind as keyof typeof labels] as string) : labels.library);
@@ -234,15 +248,9 @@ export function App() {
             aria-label={labels.search}
             placeholder={labels.search}
             value={query}
-            onChange={(event) => {
-              const query = event.target.value;
-              setQuery(query);
-              if (route.kind !== "search") go({ kind: "search", query });
-              else
-                setHistory((previous) =>
-                  previous.map((r, i) => (i === position ? { kind: "search", query } : r)),
-                );
-            }}
+            onChange={(event) => searchFor(event.target.value)}
+            onFocus={() => route.kind !== "search" && go({ kind: "search", query })}
+            onKeyDown={(event) => event.key === "Enter" && rememberSearch()}
           />
         </label>
         <nav aria-label={labels.library}>
@@ -477,6 +485,36 @@ export function App() {
               )}
             </section>
           </div>
+        ) : route.kind === "search" ? (
+          <SearchPage
+            query={route.query ?? ""}
+            revision={revision}
+            onOpen={(next) => {
+              rememberSearch();
+              go(next);
+            }}
+            onPlay={(index) => {
+              rememberSearch();
+              playback.run(window.wave.playback.start(scope, index));
+            }}
+            onMenu={(row, at) => actions.openMenu({ scope, ids: [row.id] }, row.title, at)}
+            onUnavailable={() => setError(text.desktopLibrary.driveDisconnected)}
+            onPick={(picked) => {
+              searchFor(picked);
+              void window.wave.search.remember(picked).catch(failed);
+            }}
+            onError={failed}
+          >
+            {ytMusic && (
+              <YtResults
+                query={route.query ?? ""}
+                onPlay={(videoIds, index) => {
+                  rememberSearch();
+                  playback.run(window.wave.playback.startYt(videoIds, index));
+                }}
+              />
+            )}
+          </SearchPage>
         ) : (
           <>
             {selection && (
@@ -504,14 +542,6 @@ export function App() {
                   : (row, at) => actions.openMenu({ scope, ids: [row.id] }, row.title, at)
               }
             />
-            {route.kind === "search" && ytMusic && (
-              <YtResults
-                query={route.query ?? ""}
-                onPlay={(videoIds, index) =>
-                  playback.run(window.wave.playback.startYt(videoIds, index))
-                }
-              />
-            )}
           </>
         )}
       </div>
