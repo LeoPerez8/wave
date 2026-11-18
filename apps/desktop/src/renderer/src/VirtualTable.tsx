@@ -183,7 +183,7 @@ export function VirtualTable({
           {songList ? text.desktopLibrary.artistColumn : labels.songs}
         </span>
         <span role="columnheader" className="album-column">
-          {text.desktopLibrary.albumColumn}
+          {songList ? text.desktopLibrary.albumColumn : text.desktopLibrary.artistColumn}
         </span>
         <span role="columnheader" className="star-column" aria-label={labels.favorite}>
           <Icon name="favorites" size={14} />

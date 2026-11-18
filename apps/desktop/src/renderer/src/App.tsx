@@ -321,9 +321,11 @@ export function App() {
         ) : (
           <div className="page-heading">
             <h1>{title}</h1>
-            <p className="secondary" data-testid="song-count">
-              {labels.songCount(count)}
-            </p>
+            {(route.kind === "home" || route.kind === "songs") && (
+              <p className="secondary" data-testid="song-count">
+                {labels.songCount(count)}
+              </p>
+            )}
           </div>
         )}
         {scanning && (
