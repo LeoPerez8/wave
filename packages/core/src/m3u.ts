@@ -5,6 +5,7 @@
 
 import type { AlertSpec } from "./alert.ts";
 import { foldAccentsAndCase } from "./library.ts";
+import { scanPath } from "./desktopScan.ts";
 import { catalogueOf, type AppLanguage } from "./localisation.ts";
 import { PLAYLIST_NAME_MAX } from "./playlists.ts";
 
@@ -66,6 +67,49 @@ export const resolveM3uPath = (location: string, playlistPath: string | null): s
   return normalizePath(path);
 };
 
+const FILE_URL_ANY = /^file:/i;
+const DRIVE_ROOT = /^[a-z]:\//i;
+const DRIVE_OR_SHARE = /^([a-z]:|\/\/[^/]+\/[^/]+)/i;
+
+/**
+ * The desktop's [resolveM3uPath]: on Windows a playlist from another player
+ * writes drive paths (`C:\Music\a.mp3`), network paths, paths from the
+ * drive's root and file URLs, and each resolves to the scanner's spelling
+ * (`scanPath`), so a Library track's path finds it. Elsewhere the phone's
+ * rules hold.
+ */
+export const resolveDesktopM3uPath = (
+  location: string,
+  playlistPath: string | null,
+  platform: string,
+): string | null => {
+  if (platform !== "win32") return resolveM3uPath(location, playlistPath);
+  let path = location;
+  if (FILE_URL_ANY.test(path)) {
+    path = path.replace(FILE_URL_ANY, "");
+    try {
+      path = decodeURIComponent(path);
+    } catch {
+      // A stray "%" that isn't an escape: keep it as written.
+    }
+    path = path.replaceAll("\\", "/");
+    // file:///C:/a → C:/a; file://host/share/a → //host/share/a.
+    if (/^\/{1,3}[a-z]:\//i.test(path)) path = path.replace(/^\/+/, "");
+    else if (!path.startsWith("//")) return null;
+  } else if (URL_SCHEME.test(path)) {
+    return null;
+  }
+  path = path.replaceAll("\\", "/");
+  if (DRIVE_ROOT.test(path) || path.startsWith("//")) return scanPath(path, platform);
+  if (/^[a-z]:/i.test(path) || playlistPath === null) return null;
+  const playlist = scanPath(playlistPath, platform);
+  if (path.startsWith("/")) {
+    const root = DRIVE_OR_SHARE.exec(playlist)?.[1];
+    return root === undefined ? null : scanPath(root + path, platform);
+  }
+  return scanPath(`${playlist.slice(0, playlist.lastIndexOf("/"))}/${path}`, platform);
+};
+
 /** An absolute path with `.`, `..` and repeated slashes worked out. */
 const normalizePath = (path: string): string => {
   const parts: string[] = [];
@@ -116,13 +160,21 @@ export interface M3uImport<Id> {
   readonly missing: readonly string[];
 }
 
-/** Matches an M3U file's entries to Library tracks by path. */
-export const planM3uImport = <Id>(file: M3uFile, library: LibraryPathIndex<Id>): M3uImport<Id> => {
+/**
+ * Matches an M3U file's entries to Library tracks by path. [resolve] reads an
+ * entry's location: the phone's rules unless a desktop passes its own
+ * (`resolveDesktopM3uPath`).
+ */
+export const planM3uImport = <Id>(
+  file: M3uFile,
+  library: LibraryPathIndex<Id>,
+  resolve: (location: string, playlistPath: string | null) => string | null = resolveM3uPath,
+): M3uImport<Id> => {
   const trackIds: Id[] = [];
   const seen = new Set<Id>();
   const missing: string[] = [];
   for (const entry of parseM3u(file.text)) {
-    const path = resolveM3uPath(entry.location, file.path);
+    const path = resolve(entry.location, file.path);
     const id = path === null ? undefined : library.find(path);
     if (id === undefined) missing.push(entry.title ?? lastSegment(entry.location));
     else if (!seen.has(id)) {

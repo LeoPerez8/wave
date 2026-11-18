@@ -12,6 +12,12 @@ import type { DesktopFolder, DesktopSong, ScanStatus } from "./library.ts";
 import type { BrowseScope, BrowsePage } from "./browse.ts";
 import type { YtSearchPage } from "./yt.ts";
 import type { AccountView } from "./account.ts";
+import {
+  PLAYLIST_CALLS,
+  playlistBridge,
+  type PlaylistBridge,
+  type PlaylistContract,
+} from "./playlists.ts";
 import type { LibrarySearchView } from "./search.ts";
 import type {
   ActionSurface,
@@ -31,7 +37,7 @@ export interface Page<T> {
 }
 
 /** Each call's arguments and result. Arguments reach main as untrusted data. */
-export interface BridgeContract {
+export interface BridgeContract extends PlaylistContract {
   readonly "playback.view": { readonly args: readonly []; readonly result: PlayerView };
   readonly "playback.start": {
     readonly args: readonly [scope: BrowseScope, index?: number, shuffle?: boolean];
@@ -209,6 +215,7 @@ export const BRIDGE_CALLS = [
   "account.signOut",
   "account.signOutEverywhere",
   "account.answerInvitation",
+  ...PLAYLIST_CALLS,
   "search.library",
   "search.recent",
   "search.remember",
@@ -294,6 +301,8 @@ export interface WaveBridge {
     readonly signOutEverywhere: () => Promise<void>;
     readonly answerInvitation: () => Promise<void>;
   };
+  /** Playlists' edits, images, Graveyard and M3U import. */
+  readonly playlists: PlaylistBridge;
   /** Search over the Library, and its recent searches. */
   readonly search: {
     readonly library: (query: string) => Promise<LibrarySearchView>;
@@ -367,6 +376,7 @@ export const createBridge = (invoke: Invoke): WaveBridge => ({
     signOutEverywhere: () => invoke("account.signOutEverywhere"),
     answerInvitation: () => invoke("account.answerInvitation"),
   },
+  playlists: playlistBridge(invoke),
   search: {
     library: (query) => invoke("search.library", query),
     recent: () => invoke("search.recent"),

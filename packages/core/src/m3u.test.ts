@@ -11,6 +11,7 @@ import {
   libraryPathIndex,
   parseM3u,
   planM3uImport,
+  resolveDesktopM3uPath,
   resolveM3uPath,
   summarizeM3uImport,
 } from "./index.ts";
@@ -260,5 +261,74 @@ describe("summarizeM3uImport", () => {
       { heading: "cover.jpg", detail: "Not an M3U playlist", missing: [] },
       { heading: "Broken.m3u8", detail: "Couldn't be read", missing: [] },
     ]);
+  });
+});
+
+describe("resolveDesktopM3uPath", () => {
+  test("on Windows, a drive path is read with either slash, in the scanner's spelling", () => {
+    assert.equal(
+      resolveDesktopM3uPath("C:\\Music\\Rock\\Airbag.mp3", null, "win32"),
+      "C:/Music/Rock/Airbag.mp3",
+    );
+    assert.equal(
+      resolveDesktopM3uPath("D:/Music/Bloom.flac", null, "win32"),
+      "D:/Music/Bloom.flac",
+    );
+  });
+
+  test("on Windows, a relative path starts from the playlist file's folder", () => {
+    assert.equal(
+      resolveDesktopM3uPath("..\\Rock\\Airbag.mp3", "C:/Music/Lists/Drive.m3u8", "win32"),
+      "C:/Music/Rock/Airbag.mp3",
+    );
+    assert.equal(
+      resolveDesktopM3uPath("Airbag.mp3", "C:\\Music\\Drive.m3u", "win32"),
+      "C:/Music/Airbag.mp3",
+    );
+  });
+
+  test("on Windows, a path from the drive's root takes the playlist file's drive", () => {
+    assert.equal(
+      resolveDesktopM3uPath("\\Music\\Airbag.mp3", "E:/Lists/Drive.m3u8", "win32"),
+      "E:/Music/Airbag.mp3",
+    );
+    assert.equal(resolveDesktopM3uPath("\\Music\\Airbag.mp3", null, "win32"), null);
+  });
+
+  test("on Windows, network paths and file URLs are files too", () => {
+    assert.equal(
+      resolveDesktopM3uPath("\\\\nas\\music\\Airbag.mp3", null, "win32"),
+      "//nas/music/Airbag.mp3",
+    );
+    assert.equal(
+      resolveDesktopM3uPath("file:///C:/My%20Music/Airbag.mp3", null, "win32"),
+      "C:/My Music/Airbag.mp3",
+    );
+    assert.equal(resolveDesktopM3uPath("https://example.com/a.mp3", null, "win32"), null);
+  });
+
+  test("on Linux, the phone's rules hold", () => {
+    assert.equal(
+      resolveDesktopM3uPath("../Rock/Airbag.mp3", "/home/me/Music/Lists/Drive.m3u", "linux"),
+      "/home/me/Music/Rock/Airbag.mp3",
+    );
+    assert.equal(resolveDesktopM3uPath("C:\\Music\\Airbag.mp3", null, "linux"), null);
+  });
+
+  test("an import on Windows matches a playlist from another player, ignoring case", () => {
+    const library = libraryPathIndex([
+      { id: 1, path: "C:/Music/Rock/Airbag.mp3" },
+      { id: 2, path: "C:/Music/Bloom.flac" },
+    ]);
+    const text =
+      "#EXTM3U\r\n#EXTINF:1,Radiohead - Airbag\r\nc:\\music\\rock\\airbag.mp3\r\n..\\Bloom.flac\r\nGone.mp3\r\n";
+    assert.deepEqual(
+      planM3uImport(
+        { name: "Drive.m3u8", path: "C:/Music/Lists/Drive.m3u8", text },
+        library,
+        (location, playlistPath) => resolveDesktopM3uPath(location, playlistPath, "win32"),
+      ),
+      { name: "Drive", trackIds: [1, 2], missing: ["Gone.mp3"] },
+    );
   });
 });
