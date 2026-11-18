@@ -37,7 +37,7 @@ export const desktop = async (options: HarnessOptions = {}) => {
     write: (path, bytes) => void disk.set(path, bytes),
     remove: (path) => void disk.delete(path),
   };
-  let browser = async (): Promise<BrowserIdentity> => ({
+  let browser = async (_signal: AbortSignal): Promise<BrowserIdentity> => ({
     idToken: await service.google.idToken({ aud: DESKTOP_CLIENT, name: "Ana" }),
     email: "ana@example.com",
     name: "Ana",
