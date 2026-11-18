@@ -44,7 +44,11 @@ export interface PlaybackShape {
   readonly queue: (offset: number, limit: number) => Page<QueueRow>;
   /** Saves the position and the play so far. */
   readonly flush: () => Promise<void>;
+  /** Hears a play that ended and a star that changed: the Wave account's sync sends them. */
+  readonly subscribe: (listener: (change: PlaybackChange) => void) => () => void;
 }
+
+export type PlaybackChange = "played" | "starred";
 
 export class Playback extends Context.Service<Playback, PlaybackShape>()(
   "@wave/desktop/Playback",
@@ -76,6 +80,10 @@ export const playbackLayer = Layer.effect(
     let undoOffer = 0;
     let volume = savedVolume(preference(db, "volume"));
     let muted = preference(db, "muted") === "true";
+    const listeners = new Set<(change: PlaybackChange) => void>();
+    const tell = (change: PlaybackChange) => {
+      for (const listener of listeners) listener(change);
+    };
     const failed = (cause: unknown) => {
       error = cause instanceof Error ? cause.message : String(cause);
     };
@@ -85,6 +93,7 @@ export const playbackLayer = Layer.effect(
         audio,
         source: "desktop",
         available: (path) => !library.unavailable(path),
+        playEnded: () => tell("played"),
       }),
     );
     yield* Effect.promise(() => run(player.setVolume(muted ? 0 : volume)).catch(failed));
@@ -165,6 +174,7 @@ export const playbackLayer = Layer.effect(
         if (current === null) return;
         setFavorites(db, [current.id], !current.favorite, Date.now());
         revision++;
+        tell("starred");
       },
       volume: async (value, mute) => {
         await run(player.setVolume(mute ? 0 : value));
@@ -199,6 +209,10 @@ export const playbackLayer = Layer.effect(
         };
       },
       flush: session.flush,
+      subscribe: (listener) => {
+        listeners.add(listener);
+        return () => void listeners.delete(listener);
+      },
     };
   }),
 );

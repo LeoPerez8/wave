@@ -47,6 +47,7 @@ export interface DesktopSync {
   readonly revision: () => number;
   /** Resolves once no sync runs. */
   readonly idle: () => Promise<void>;
+  /** Stops timing syncs; one running finishes, or fails quietly as the Library closes. */
   readonly dispose: () => void;
 }
 
@@ -102,6 +103,8 @@ export const createDesktopSync = (deps: DesktopSyncDeps): DesktopSync => {
   let revision = 0;
   let running: Promise<boolean> | null = null;
   let unsubscribe: (() => void) | null = null;
+  /** Wave is quitting: a sync cut short by the Library closing isn't news. */
+  let disposed = false;
 
   /** Leaves the account if the Library is still joined with one. */
   const leave = (): void => {
@@ -129,6 +132,7 @@ export const createDesktopSync = (deps: DesktopSyncDeps): DesktopSync => {
       if (changedAnything(pulled)) revision++;
       return true;
     } catch (error) {
+      if (disposed) return false;
       const code = (error as { code?: unknown; cause?: { code?: unknown } }).code;
       const causeCode = (error as { cause?: { code?: unknown } }).cause?.code;
       if (!EXPECTED.has(String(code)) && !EXPECTED.has(String(causeCode)))
@@ -136,7 +140,7 @@ export const createDesktopSync = (deps: DesktopSyncDeps): DesktopSync => {
       return false;
     } finally {
       // Signed out while it ran: what it joined goes too.
-      if (email === null) leave();
+      if (email === null && !disposed) leave();
     }
   };
 
@@ -198,6 +202,7 @@ export const createDesktopSync = (deps: DesktopSyncDeps): DesktopSync => {
       }
     },
     dispose: () => {
+      disposed = true;
       unsubscribe?.();
       unsubscribe = null;
       triggers?.stop();

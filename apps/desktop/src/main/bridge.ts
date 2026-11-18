@@ -11,6 +11,7 @@ import { Player } from "./audio/player.ts";
 import type { AudioEngineError } from "./audio/supervisor.ts";
 import { Kotlin } from "./kotlin/kotlin.ts";
 import { DesktopLibrary } from "./library/library.ts";
+import { Account } from "./account/accountLayer.ts";
 import type { Page } from "../shared/bridge.ts";
 import { BROWSE_KINDS, type BrowseScope } from "../shared/browse.ts";
 import { browseLetter } from "./library/browse.ts";
@@ -40,7 +41,7 @@ interface Runtime<R> {
 }
 
 /** The services the calls use. */
-export type BridgeServices = Database | Player | Kotlin | DesktopLibrary | Playback;
+export type BridgeServices = Database | Player | Kotlin | DesktopLibrary | Playback | Account;
 
 const refuse = (call: BridgeCall, why: string) => Effect.fail(new Error(`Refused ${call}: ${why}`));
 
@@ -99,6 +100,12 @@ const pageCall = <T>(
     ? libraryCall((library) => run(library, offset, limit))
     : refuse(call, "invalid page");
 };
+
+const accountCall = <A>(run: (account: Account["Service"]) => A | Promise<A>) =>
+  Effect.gen(function* () {
+    const account = yield* Account;
+    return yield* Effect.tryPromise({ try: async () => run(account), catch: (error) => error });
+  });
 
 /** What each call does; `args` come from the window and are checked here before use. */
 type Handlers = {
@@ -169,6 +176,12 @@ const createHandlers = (onAppearance: (mode: Appearance) => void): Handlers => {
             onAppearance(mode);
           })
         : refuse("settings.setAppearance", "invalid appearance"),
+    "account.view": () => accountCall((a) => a.view()),
+    "account.signIn": () => accountCall((a) => a.signIn()),
+    "account.cancelSignIn": () => accountCall((a) => a.cancelSignIn()),
+    "account.signOut": () => accountCall((a) => a.signOut()),
+    "account.signOutEverywhere": () => accountCall((a) => a.signOutEverywhere()),
+    "account.answerInvitation": () => accountCall((a) => a.answerInvitation()),
     "library.artwork": ([hash, large]) =>
       typeof hash === "string" && /^[a-f0-9]{40}$/.test(hash) && typeof large === "boolean"
         ? Effect.gen(function* () {

@@ -4,7 +4,11 @@ import { tmpdir } from "node:os";
 import { basename, dirname, join } from "node:path";
 import { test } from "node:test";
 import { Database } from "@wave/client";
-import { addTrack, star, type TestDatabase } from "@wave/client/testing";
+import { addTrack, openTestDatabase, star, type TestDatabase } from "@wave/client/testing";
+import { creditSplits } from "@wave/client/db/credits";
+import { stampPreference } from "@wave/client/db/sync";
+import { syncCycle } from "@wave/client/sync/syncCycle";
+import type { SyncClock } from "@wave/core";
 import { createPlaylist } from "@wave/client/db/playlists";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
@@ -22,6 +26,12 @@ import { libraryLayer } from "./database.ts";
 import { playbackLayer } from "./playback/playback.ts";
 import { registerBridge, type IpcHandler } from "./bridge.ts";
 import { DesktopLibrary, desktopLibraryLayer } from "./library/library.ts";
+import { accountLayer } from "./account/accountLayer.ts";
+import { createWaveAccount, type WaveAccountService } from "./account/account.ts";
+import { sessionStore } from "./account/sessionStore.ts";
+import { desktop, keyring } from "./account/testAccount.ts";
+import { pullAll } from "../../../sync/src/testing.ts";
+import { fakeClock } from "../../../../packages/core/src/testSyncClock.ts";
 
 const trusted = { senderFrame: "window" };
 
@@ -94,19 +104,41 @@ const jvmInMemory = () => {
   return { layer: kotlinLayer({ spawn }), reads };
 };
 
-const connect = (file: string, isTrusted = (event: unknown) => event === trusted) => {
+/** A build with no sync service: Settings has no Sign In and nothing goes out. */
+const noAccount = (): WaveAccountService =>
+  createWaveAccount({
+    store: sessionStore({
+      box: keyring,
+      file: "session.bin",
+      files: { read: () => undefined, write: () => {}, remove: () => {} },
+      platform: process.platform,
+    }),
+    syncUrl: null,
+    signInWithBrowser: () => Promise.reject(new Error("no sign-in")),
+    fetch: () => Promise.reject(new Error("no network")),
+    online: () => false,
+  });
+
+const connect = (
+  file: string,
+  isTrusted = (event: unknown) => event === trusted,
+  account: { readonly service: WaveAccountService; readonly clock?: SyncClock } = {
+    service: noAccount(),
+  },
+) => {
   const audio = audioInMemory();
   const jvm = jvmInMemory();
+  const library = desktopLibraryLayer({
+    musicFolder: join(dirname(file), "Music"),
+    platform: process.platform,
+    pickFolder: async () => undefined,
+  }).pipe(Layer.provideMerge(Layer.mergeAll(libraryLayer(file), audio.layer, jvm.layer)));
   const runtime = ManagedRuntime.make(
-    playbackLayer.pipe(
-      Layer.provideMerge(
-        desktopLibraryLayer({
-          musicFolder: join(dirname(file), "Music"),
-          platform: process.platform,
-          pickFolder: async () => undefined,
-        }).pipe(Layer.provideMerge(Layer.mergeAll(libraryLayer(file), audio.layer, jvm.layer))),
-      ),
-    ),
+    accountLayer({
+      account: account.service,
+      focused: () => true,
+      ...(account.clock === undefined ? {} : { clock: account.clock }),
+    }).pipe(Layer.provideMerge(playbackLayer.pipe(Layer.provideMerge(library)))),
   );
   const handlers = new Map<string, IpcHandler>();
   registerBridge(
@@ -495,6 +527,140 @@ test("main refuses playback calls with a bad scope, row, command, time or volume
         engineCalls.filter((c) => !c.startsWith("volume")),
         [],
       );
+    } finally {
+      await runtime.dispose();
+    }
+  });
+});
+
+/** Waits until [ready] holds, as the window's polling does. */
+const until = async (ready: () => Promise<boolean>): Promise<void> => {
+  for (let tries = 0; tries < 500; tries++) {
+    if (await ready()) return;
+    await new Promise((resolve) => setTimeout(resolve, 10));
+  }
+  assert.fail("never ready");
+};
+
+test("a build with no sync service shows no Sign In and no invitation", async () => {
+  await withFile(async (file) => {
+    mkdirSync(join(dirname(file), "Music"));
+    const { runtime, exposed } = connect(file);
+    const wave = exposed.get("wave") as WaveBridge;
+    try {
+      await until(async () => (await wave.library.scanStatus()).status === "done");
+      const view = await wave.account.view();
+      assert.deepEqual(view.account, { kind: "unavailable" });
+      assert.equal(view.invitation, false);
+      assert.equal(view.theme, null);
+    } finally {
+      await runtime.dispose();
+    }
+  });
+});
+
+test("the invitation to sign in shows once the first scan finished, until it's answered", async () => {
+  await withFile(async (file) => {
+    mkdirSync(join(dirname(file), "Music"));
+    const app = await desktop();
+    const first = connect(file, undefined, { service: app.open() });
+    const wave = first.exposed.get("wave") as WaveBridge;
+    try {
+      await until(async () => (await wave.library.scanStatus()).status === "done");
+      assert.equal((await wave.account.view()).invitation, true);
+      await wave.account.answerInvitation();
+      assert.equal((await wave.account.view()).invitation, false);
+    } finally {
+      await first.runtime.dispose();
+    }
+    const second = connect(file, undefined, { service: app.open() });
+    const reopened = second.exposed.get("wave") as WaveBridge;
+    try {
+      await until(async () => (await reopened.library.scanStatus()).status === "done");
+      assert.equal((await reopened.account.view()).invitation, false, "answered for good");
+    } finally {
+      await second.runtime.dispose();
+    }
+  });
+});
+
+test("signing in from the window brings the account's playlists and theme, and a star goes up", async () => {
+  await withFile(async (file) => {
+    const app = await desktop();
+    const phone = await app.service.signIn();
+    const { clock, pass } = fakeClock();
+    const { runtime, exposed } = connect(file, undefined, { service: app.open(), clock });
+    const wave = exposed.get("wave") as WaveBridge;
+    try {
+      await runtime.runPromise(
+        Effect.gen(function* () {
+          const db = (yield* Database) as unknown as TestDatabase;
+          addTrack(db, { title: "Pink Moon", artist: "Nick Drake", album: "Pink Moon" });
+        }),
+      );
+      // The phone's Library: a playlist of a song this computer has and one it hasn't.
+      const phoneDb = await openTestDatabase();
+      const pinkMoon = addTrack(phoneDb, {
+        title: "Pink Moon",
+        artist: "Nick Drake",
+        album: "Pink Moon",
+      });
+      const road = addTrack(phoneDb, { title: "Road", artist: "Nick Drake", album: "Pink Moon" });
+      createPlaylist(
+        phoneDb,
+        "Night",
+        [
+          { source: "library", trackId: pinkMoon },
+          { source: "library", trackId: road },
+        ],
+        Date.now(),
+      );
+      stampPreference(phoneDb, "settings.theme", Date.now());
+      await syncCycle({
+        db: phoneDb,
+        splits: creditSplits(),
+        transport: {
+          request: async (method, path, body) => {
+            const response = await app.service.request(method, path, {
+              session: phone,
+              ...(body === null ? {} : { body, headers: { "content-type": "application/json" } }),
+            });
+            return { status: response.status, body: await response.text() };
+          },
+        },
+        account: "ana@example.com",
+        preferences: {
+          value: (key) => (key === "settings.theme" ? '{"light":"white"}' : null),
+          apply: () => {},
+        },
+        now: Date.now,
+        songsChanged: true,
+        wait: async () => {},
+      });
+
+      const before = (await wave.account.view()).revision;
+      await wave.account.signIn();
+      assert.equal((await wave.account.view()).account.kind, "account");
+      await until(async () => (await wave.account.view()).revision > before);
+      await until(
+        async () => (await wave.library.browse({ kind: "playlists" }, 0, 10)).total === 1,
+      );
+      const night = (await wave.library.browse({ kind: "playlists" }, 0, 10)).items[0]!;
+      assert.deepEqual(
+        (await wave.library.browse({ kind: "playlist", id: night.id }, 0, 10)).items.map(
+          (row) => [row.title, row.path === null],
+        ),
+        [
+          ["Pink Moon", false],
+          ["Road", true],
+        ],
+      );
+      assert.equal((await wave.account.view()).theme, '{"light":"white"}');
+
+      await wave.playback.start({ kind: "songs" }, 0);
+      await wave.playback.favorite();
+      await pass(10_000);
+      await until(async () => (await pullAll(app.service, phone)).favorites.length === 1);
     } finally {
       await runtime.dispose();
     }

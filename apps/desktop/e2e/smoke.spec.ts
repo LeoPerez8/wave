@@ -99,6 +99,12 @@ test("the page has no Node and only the typed bridge", async () => {
       "wave.tags.read",
       "wave.settings.appearance",
       "wave.settings.setAppearance",
+      "wave.account.view",
+      "wave.account.signIn",
+      "wave.account.cancelSignIn",
+      "wave.account.signOut",
+      "wave.account.signOutEverywhere",
+      "wave.account.answerInvitation",
     ],
   });
 });
