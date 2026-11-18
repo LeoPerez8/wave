@@ -148,6 +148,7 @@ export { elapsedWavePath } from "./elapsedWave.ts";
 export type { ElapsedWave } from "./elapsedWave.ts";
 export { contrastRatio, crossfadeGround, lyricsDimOpacity, paletteGradient } from "./palette.ts";
 export type { ArtworkPalette, Gradient, GradientTheme, GroundLayers } from "./palette.ts";
+export { pixelPalette } from "./pixelPalette.ts";
 export { settleSheet } from "./sheet.ts";
 export type { SheetDrag, SheetState } from "./sheet.ts";
 export {
