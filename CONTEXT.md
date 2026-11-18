@@ -17,7 +17,7 @@ _Avoid_: iTunes (the original idea, since replaced)
 ### Music
 
 **Library**:
-Every music file on the phone that wave knows about. There is no catalog or streaming content: nothing in wave exists outside the Library.
+Every music file on this device (phone or computer) that wave knows about. Each device has its own Library. There is no catalog or streaming content: nothing in wave exists outside the Library.
 _Avoid_: collection, catalog
 
 **Track**:
@@ -25,7 +25,7 @@ One playable piece of music in the Library, usually one audio file.
 _Avoid_: song, file
 
 **non-D**:
-Short for non-downloaded; a song this phone has no audio file for: YT Music songs, unsearched entries and missing songs.
+Short for non-downloaded; a song this device has no audio file for: YT Music songs, unsearched entries and missing songs.
 
 **Credit**:
 The artist tag of a Track as written, such as "Ariana Grande, Doja Cat". A credit names one or more Artists. Rows show the credit as written. A tag with several values gives a credit per value, each naming its own Artists, and rows show them joined with commas.
