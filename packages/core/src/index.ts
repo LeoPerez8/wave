@@ -2836,3 +2836,10 @@ export type {
   ShortcutId,
   ShortcutKey,
 } from "./desktopKeys.ts";
+export {
+  LANGUAGE_PREFERENCE,
+  readLanguageChoice,
+  chosenAppLanguage,
+  type LanguageChoice,
+} from "./languageChoice.ts";
+export { displayTag } from "./displayTag.ts";
