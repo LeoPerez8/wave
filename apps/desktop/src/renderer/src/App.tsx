@@ -14,6 +14,8 @@ import { YtResults } from "./YtResults.tsx";
 import { SearchPage } from "./SearchPage.tsx";
 import { AccountSettings, SignInInvitation } from "./AccountSettings.tsx";
 import { PlaybackSettings } from "./PlaybackSettings.tsx";
+import { WindowSettings } from "./WindowSettings.tsx";
+import { SystemMediaSession } from "./SystemMediaSession.tsx";
 import { useDesktopKeys } from "./keys.ts";
 import { ShortcutsSheet } from "./Shortcuts.tsx";
 import { SelectionBar, useSongActions, type Selection } from "./SongActions.tsx";
@@ -574,6 +576,8 @@ export function App() {
                 </>
               ) : setting === "playback" ? (
                 <PlaybackSettings onError={failed} />
+              ) : setting === "window" ? (
+                <WindowSettings onError={failed} />
               ) : (
                 <p className="secondary">{labels.unavailableSection}</p>
               )}
@@ -685,6 +689,7 @@ export function App() {
         onPanel={panel.toggle}
         onNowPlaying={() => setNowPlaying(true)}
       />
+      <SystemMediaSession view={playback.view} refresh={playback.refresh} />
       {actions.overlays}
       {playlistEdits.overlays}
       {shortcuts && <ShortcutsSheet onClose={() => setShortcuts(false)} />}

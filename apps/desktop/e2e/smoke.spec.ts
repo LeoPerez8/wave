@@ -68,6 +68,7 @@ test("the page has no Node and only the typed bridge", async () => {
     require: "undefined",
     process: "undefined",
     wave: [
+      "wave.system.mediaBackend",
       "wave.playback.view",
       "wave.playback.start",
       "wave.playback.startYt",
@@ -104,6 +105,8 @@ test("the page has no Node and only the typed bridge", async () => {
       "wave.player.status",
       "wave.tags.read",
       "wave.settings.appearance",
+      "wave.settings.window",
+      "wave.settings.setWindow",
       "wave.settings.setAppearance",
       "wave.settings.playback",
       "wave.settings.setPlayback",

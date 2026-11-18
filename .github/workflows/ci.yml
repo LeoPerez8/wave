@@ -909,7 +909,7 @@ jobs:
       # cpal reads ALSA's headers on Linux; Windows needs nothing more than the runner's MSVC.
       - name: Install the audio headers
         if: runner.os == 'Linux'
-        run: scripts/ci/step.sh "Install the audio headers" bash -c "sudo apt-get update && sudo apt-get install -y --no-install-recommends libasound2-dev"
+        run: scripts/ci/step.sh "Install the audio headers" bash -c "sudo apt-get update && sudo apt-get install -y --no-install-recommends libasound2-dev libdbus-1-dev"
 
       - name: Restore the audio engine's build
         uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830 # v4.3.0

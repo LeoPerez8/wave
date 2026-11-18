@@ -3,12 +3,7 @@
  * the playlist's image, Move Up and Move Down, Undo of a removal, the Graveyard and the M3U
  * import. Main does the work; the window asks and shows.
  */
-import type {
-  AppLanguage,
-  ImageFraming,
-  M3uImportOutcome,
-  PlaylistNameCheck,
-} from "@wave/core";
+import type { AppLanguage, ImageFraming, M3uImportOutcome, PlaylistNameCheck } from "@wave/core";
 import type { BridgeContract, Invoke, Page } from "./bridge.ts";
 import type { BrowseRow } from "./browse.ts";
 import type { SongTarget } from "./songActions.ts";
@@ -74,7 +69,10 @@ export interface PlaylistContract {
     readonly args: readonly [playlistId: number, name: string];
     readonly result: void;
   };
-  readonly "playlists.delete": { readonly args: readonly [playlistId: number]; readonly result: void };
+  readonly "playlists.delete": {
+    readonly args: readonly [playlistId: number];
+    readonly result: void;
+  };
   readonly "playlists.info": {
     readonly args: readonly [playlistId: number];
     readonly result: PlaylistInfo | null;
@@ -100,7 +98,10 @@ export interface PlaylistContract {
     readonly result: void;
   };
   /** Opens the file picker for M3U playlists; null when nothing was picked. */
-  readonly "playlists.chooseImport": { readonly args: readonly []; readonly result: ImportChoice | null };
+  readonly "playlists.chooseImport": {
+    readonly args: readonly [];
+    readonly result: ImportChoice | null;
+  };
   /** Imports the files picked last, with an answer for each file. */
   readonly "playlists.runImport": {
     readonly args: readonly [answers: readonly ImportAnswer[]];

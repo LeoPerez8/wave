@@ -37,6 +37,8 @@ import { Lyrics } from "./lyrics/lyrics.ts";
 import { DesktopPlaylists } from "./library/playlists.ts";
 import { playlistHandlers } from "./playlistHandlers.ts";
 import { searchLibrary } from "./library/search.ts";
+import { validWindowSettings } from "../shared/windowSettings.ts";
+import { readWindowSettings, changeWindowSettings } from "./system/windowSettings.ts";
 import {
   clearRecentSearches,
   listRecentSearchesSync,
@@ -192,7 +194,11 @@ type Handlers = {
   ) => Effect.Effect<BridgeContract[C]["result"], unknown, BridgeServices>;
 };
 
-const createHandlers = (onAppearance: (mode: Appearance) => void): Handlers => {
+const createHandlers = (
+  onAppearance: (mode: Appearance) => void,
+  setLogin: (on: boolean) => Promise<void>,
+  mediaBackend: () => "native" | "chromium",
+): Handlers => {
   let loadedPath: string | undefined;
   const checkAvailable = (path: string | undefined) =>
     Effect.gen(function* () {
@@ -201,6 +207,15 @@ const createHandlers = (onAppearance: (mode: Appearance) => void): Handlers => {
         return yield* Effect.fail(new Error("[folder-unavailable] Drive is not connected"));
     });
   return {
+    "system.mediaBackend": () => Effect.sync(mediaBackend),
+    "settings.window": () => Effect.map(Database, readWindowSettings),
+    "settings.setWindow": ([change]) =>
+      validWindowSettings(change)
+        ? Effect.gen(function* () {
+            const db = yield* Database;
+            return yield* Effect.tryPromise(() => changeWindowSettings(db, change, setLogin));
+          })
+        : refuse("settings.setWindow", "invalid window setting"),
     ...createYtFeatureHandlers(validTarget),
     "playback.view": () => playbackCall((p) => p.view()),
     "playback.start": ([scope, index, shuffle]) =>
@@ -443,8 +458,12 @@ export const registerBridge = (
   runtime: Runtime<BridgeServices>,
   isTrusted: (event: unknown) => boolean,
   onAppearance: (mode: Appearance) => void = () => {},
+  setLogin: (on: boolean) => Promise<void> = async () => {
+    throw new Error("Login registration unavailable");
+  },
+  mediaBackend: () => "native" | "chromium" = () => "native",
 ): void => {
-  const handlers = createHandlers(onAppearance);
+  const handlers = createHandlers(onAppearance, setLogin, mediaBackend);
   for (const call of BRIDGE_CALLS) {
     const handler: (args: readonly unknown[]) => Effect.Effect<unknown, unknown, BridgeServices> =
       handlers[call];

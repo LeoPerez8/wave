@@ -1,4 +1,5 @@
 import { desktopShortcutsPtBr } from "./catalogue/desktopShortcutsPtBr.ts";
+import { desktopWindowPtBr } from "./catalogue/desktopWindowPtBr.ts";
 import { libraryPtBr } from "./catalogue/libraryPtBr.ts";
 import { playlistsPtBr } from "./catalogue/playlistsPtBr.ts";
 import { importsPtBr } from "./catalogue/importsPtBr.ts";
@@ -35,6 +36,7 @@ import { versionHistoryPtBr } from "./catalogue/versionHistoryPtBr.ts";
 import type { Catalogue } from "./catalogueEn.ts";
 
 export const ptBR: Catalogue = {
+  desktopWindow: desktopWindowPtBr,
   desktopLayout: {
     brand: "Wave",
     home: "Início",
