@@ -78,7 +78,7 @@ const jvmInMemory = () => {
     write: (text: string) => {
       const { id, params } = JSON.parse(text) as { id: number; params: { path: string } };
       reads.push(params.path);
-      const answer = params.path.includes("missing")
+      const answer = params.path.includes("unreadable")
         ? { id, error: { code: "ERR_UNEXPECTED", message: "FileNotFoundException" } }
         : { id, result: tagsTitled(basename(params.path)) };
       queueMicrotask(() => events.line(JSON.stringify(answer)));
@@ -243,7 +243,7 @@ test("the window reads a song's tags through the JVM", async () => {
     assert.deepEqual(await wave.tags.read(song), tagsTitled("Pink Moon.flac"));
     assert.deepEqual(reads, [song]);
     await assert.rejects(
-      wave.tags.read(join(tmpdir(), "missing.mp3")),
+      wave.tags.read(join(tmpdir(), "unreadable.mp3")),
       /\[ERR_UNEXPECTED\] FileNotFoundException/,
     );
     await runtime.dispose();
