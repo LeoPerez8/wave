@@ -121,7 +121,7 @@ const workerRequests = async (
 };
 
 /** How many UTC days of warnings are kept: today and the days before it. */
-const WARNING_DAYS_KEPT = 30;
+export const WARNING_DAYS_KEPT = 30;
 
 const DAY_MS = 24 * 60 * 60 * 1000;
 

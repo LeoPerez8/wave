@@ -7,6 +7,7 @@
   "scripts": {
     "dev": "wrangler dev",
     "migrate": "node scripts/migrate.ts",
+    "compatibility": "node scripts/compatibility-report.ts",
     "deploy": "node scripts/migrate.ts && wrangler deploy",
     "test": "node --test",
     "typecheck": "tsc --noEmit"
