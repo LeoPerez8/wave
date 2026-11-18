@@ -255,6 +255,7 @@ const connect = (
     measured: audio.measured,
     reads: jvm.reads,
     yt: jvm.yt,
+    downloads: jvm.downloads,
     jvm: jvm.state,
   };
 };
@@ -1130,6 +1131,51 @@ test("main refuses song actions with a bad target, surface, action or playlist",
         await assert.rejects(call("songs.run", one, action), /refused/i, String(action));
       await assert.rejects(call("songs.run", one, "addToPlaylist"), /refused/i);
       await assert.rejects(call("songs.run", one, "addToPlaylist", -1), /refused/i);
+    } finally {
+      await runtime.dispose();
+    }
+  });
+});
+
+test("a YT Music song a search found is downloaded through the JVM's journal", async () => {
+  await withFile(async (file) => {
+    const { runtime, exposed, downloads } = connect(file);
+    const wave = exposed.get("wave") as WaveBridge;
+    try {
+      await wave.yt.search("pink moon");
+      await wave.downloads.yt(["abcdefghijk"]);
+      const asked = downloads.find((line) => line.startsWith("downloads.enqueueAll "));
+      assert.ok(asked?.includes('"videoId":"abcdefghijk"'));
+      assert.ok(asked?.includes('"source":"youtube"'));
+      const view = await wave.downloads.view();
+      assert.equal(view.online, true);
+      assert.deepEqual(view.missing, { count: 0, line: null, actions: [], notFound: null });
+      assert.deepEqual(await wave.downloads.rows(0, 50), { items: [], offset: 0, total: 0 });
+      assert.equal(await wave.downloads.album(999), null);
+      assert.equal(await wave.downloads.bestQuality(), false);
+    } finally {
+      await runtime.dispose();
+    }
+  });
+});
+
+test("main refuses download calls with bad songs, actions, ids or pages", async () => {
+  await withFile(async (file) => {
+    const { runtime, handlers } = connect(file);
+    try {
+      const call = (channel: string, ...args: unknown[]) =>
+        handlers.get(channel)!(trusted, ...args);
+      await assert.rejects(call("downloads.yt", ["../etc/passwd"]), /Refused/);
+      await assert.rejects(call("downloads.yt", []), /Refused/);
+      await assert.rejects(call("downloads.missing", [0]), /Refused/);
+      await assert.rejects(call("downloads.missing", "1"), /Refused/);
+      await assert.rejects(call("downloads.missingAction", "deleteAll"), /Refused/);
+      await assert.rejects(call("downloads.missingAction", "downloadAll", -1), /Refused/);
+      await assert.rejects(call("downloads.album", "7"), /Refused/);
+      await assert.rejects(call("downloads.retry", [7]), /Refused/);
+      await assert.rejects(call("downloads.cancel", "abcdefghijk"), /Refused/);
+      await assert.rejects(call("downloads.rows", 0, 10_000), /Refused/);
+      await assert.rejects(call("downloads.setBestQuality", "on"), /Refused/);
     } finally {
       await runtime.dispose();
     }
