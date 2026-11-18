@@ -3,6 +3,7 @@
 pub mod decode;
 pub mod engine;
 mod error;
+mod gapless;
 pub mod output;
 pub mod player;
 

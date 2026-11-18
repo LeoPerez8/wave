@@ -17,6 +17,7 @@ pub struct PlaybackStatus {
     pub duration_ms: Option<f64>,
     /// The output device's name; absent while the song keeps time without one.
     pub device: Option<String>,
+    pub key: Option<String>,
 }
 
 impl From<EngineStatus> for PlaybackStatus {
@@ -26,6 +27,7 @@ impl From<EngineStatus> for PlaybackStatus {
             position_ms: status.position_ms,
             duration_ms: status.duration_ms,
             device: status.device,
+            key: status.key,
         }
     }
 }
@@ -49,8 +51,25 @@ impl AudioEngine {
     }
 
     #[napi]
-    pub fn load(&self, path: String) -> Result<PlaybackStatus> {
-        self.engine.load(Path::new(&path)).map(Into::into).map_err(refused)
+    pub fn load(&self, path: String, key: Option<String>) -> Result<PlaybackStatus> {
+        self.engine.load_entry(Path::new(&path), key).map(Into::into).map_err(refused)
+    }
+
+    #[napi]
+    pub fn preload(&self, path: Option<String>, key: Option<String>) -> Result<()> {
+        self.engine.preload(path.as_ref().zip(key).map(|(p, k)| (Path::new(p), k))).map_err(refused)
+    }
+    #[napi]
+    pub fn set_volume(&self, volume: f64) {
+        self.engine.set_volume(volume as f32);
+    }
+    #[napi]
+    pub fn transitions(&self) -> Vec<PlaybackTransition> {
+        self.engine
+            .take_transitions()
+            .into_iter()
+            .map(|t| PlaybackTransition { key: t.key, at_ms: t.at_ms })
+            .collect()
     }
 
     #[napi]
@@ -72,4 +91,10 @@ impl AudioEngine {
     pub fn status(&self) -> PlaybackStatus {
         self.engine.status().into()
     }
+}
+
+#[napi(object)]
+pub struct PlaybackTransition {
+    pub key: String,
+    pub at_ms: f64,
 }

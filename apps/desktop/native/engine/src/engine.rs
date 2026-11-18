@@ -15,6 +15,7 @@ pub struct Status {
     pub duration_ms: Option<f64>,
     /// The output device by its system name; `None` while the song keeps time without one.
     pub device: Option<String>,
+    pub key: Option<String>,
 }
 
 pub struct Engine {
@@ -48,6 +49,20 @@ impl Engine {
         self.player.play()
     }
 
+    pub fn load_entry(&self, path: &Path, key: Option<String>) -> Result<Status, EngineError> {
+        self.player.load_entry(path, key)?;
+        Ok(self.status())
+    }
+    pub fn preload(&self, next: Option<(&Path, String)>) -> Result<(), EngineError> {
+        self.player.preload(next)
+    }
+    pub fn take_transitions(&self) -> Vec<crate::player::Transition> {
+        self.player.take_transitions()
+    }
+    pub fn set_volume(&self, volume: f32) {
+        self.player.set_volume(volume);
+    }
+
     pub fn pause(&self) -> Result<(), EngineError> {
         self.player.pause()
     }
@@ -68,6 +83,7 @@ impl Engine {
                 .and_then(|track| track.duration_frames)
                 .map(|frames| frames_to_ms(frames, rate)),
             device: self.output.device(),
+            key: self.player.key(),
         }
     }
 }

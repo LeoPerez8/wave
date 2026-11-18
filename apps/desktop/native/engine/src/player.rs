@@ -5,6 +5,7 @@ use std::collections::VecDeque;
 use std::path::Path;
 use std::sync::{Arc, Condvar, Mutex, MutexGuard};
 use std::thread;
+use std::time::{SystemTime, UNIX_EPOCH};
 
 use crate::decode::Decoder;
 use crate::error::EngineError;
@@ -53,6 +54,20 @@ struct Job {
     seek: Option<u64>,
 }
 
+struct Prepared {
+    decoder: Decoder,
+    samples: VecDeque<f32>,
+    track: TrackInfo,
+    key: String,
+    ended: bool,
+}
+
+#[derive(Debug, Clone)]
+pub struct Transition {
+    pub key: String,
+    pub at_ms: f64,
+}
+
 struct State {
     /// Bumped by every load and seek, so frames decoded for an older request are dropped.
     generation: u64,
@@ -65,6 +80,10 @@ struct State {
     position: u64,
     track: Option<TrackInfo>,
     shutdown: bool,
+    next: Option<Prepared>,
+    key: Option<String>,
+    transitions: Vec<Transition>,
+    volume: f32,
 }
 
 struct Shared {
@@ -95,6 +114,10 @@ impl Player {
                 position: 0,
                 track: None,
                 shutdown: false,
+                next: None,
+                key: None,
+                transitions: Vec::new(),
+                volume: 1.0,
             }),
             wake: Condvar::new(),
         });
@@ -108,6 +131,10 @@ impl Player {
 
     /// Opens `path` paused at its start, in place of any song loaded before.
     pub fn load(&self, path: &Path) -> Result<TrackInfo, EngineError> {
+        self.load_entry(path, None)
+    }
+
+    pub fn load_entry(&self, path: &Path, key: Option<String>) -> Result<TrackInfo, EngineError> {
         let decoder = Decoder::open(path)?;
         let track = TrackInfo {
             sample_rate: decoder.sample_rate(),
@@ -121,8 +148,48 @@ impl Player {
         state.state = PlayState::Paused;
         state.position = 0;
         state.track = Some(track);
+        state.next = None;
+        state.key = key;
+        state.transitions.clear();
         self.shared.wake.notify_all();
         Ok(track)
+    }
+
+    /// Decode a bounded head now, before the callback reaches the current song's end.
+    pub fn preload(&self, next: Option<(&Path, String)>) -> Result<(), EngineError> {
+        let prepared = if let Some((path, key)) = next {
+            let mut decoder = Decoder::open(path)?;
+            let track = TrackInfo {
+                sample_rate: decoder.sample_rate(),
+                duration_frames: decoder.duration_frames(),
+            };
+            let mut samples = VecDeque::new();
+            let mut ended = false;
+            while samples.len() < (track.sample_rate as f64 * BUFFER_SECONDS) as usize * 2 {
+                match decoder.next_chunk()? {
+                    Some(chunk) => samples.extend(chunk),
+                    None => {
+                        ended = true;
+                        break;
+                    }
+                }
+            }
+            Some(Prepared { decoder, samples, track, key, ended })
+        } else {
+            None
+        };
+        self.shared.lock().next = prepared;
+        Ok(())
+    }
+
+    pub fn key(&self) -> Option<String> {
+        self.shared.lock().key.clone()
+    }
+    pub fn take_transitions(&self) -> Vec<Transition> {
+        std::mem::take(&mut self.shared.lock().transitions)
+    }
+    pub fn set_volume(&self, volume: f32) {
+        self.shared.lock().volume = volume.clamp(0.0, 1.0);
     }
 
     pub fn play(&self) -> Result<(), EngineError> {
@@ -178,18 +245,39 @@ impl Player {
     pub fn render(&self, out: &mut [f32]) {
         let mut state = self.shared.lock();
         let mut written = 0;
-        if state.state == PlayState::Playing {
-            let take = out.len().min(state.queue.len()) & !1;
-            for (slot, sample) in out.iter_mut().zip(state.queue.drain(..take)) {
-                *slot = sample;
+        while state.state == PlayState::Playing && written < out.len() {
+            let take = (out.len() - written).min(state.queue.len()) & !1;
+            let volume = state.volume;
+            for (slot, sample) in out[written..].iter_mut().zip(state.queue.drain(..take)) {
+                *slot = sample * volume;
             }
-            written = take;
+            written += take;
             state.position += (take / 2) as u64;
             if state.queue.is_empty() && state.decoded_all && state.job.is_none() {
-                state.state = PlayState::Ended;
+                if let Some(next) = state.next.take() {
+                    let at_ms = SystemTime::now()
+                        .duration_since(UNIX_EPOCH)
+                        .unwrap_or_default()
+                        .as_secs_f64()
+                        * 1000.0;
+                    state.transitions.push(Transition { key: next.key.clone(), at_ms });
+                    state.key = Some(next.key);
+                    state.track = Some(next.track);
+                    state.position = 0;
+                    state.queue = next.samples;
+                    state.decoded_all = next.ended;
+                    state.generation += 1;
+                    state.job = Some(Job { decoder: Some(next.decoder), seek: None });
+                    self.shared.wake.notify_all();
+                } else {
+                    state.state = PlayState::Ended;
+                }
             }
             if take > 0 {
                 self.shared.wake.notify_all();
+            }
+            if take == 0 {
+                break;
             }
         }
         out[written..].fill(0.0);
