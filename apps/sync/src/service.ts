@@ -137,7 +137,7 @@ const TICKETMASTER_SPACING_MS = 250;
 const MAX_TURN_WAIT_MS = 5_000;
 
 /** How long a session lasts unused: any authenticated request starts it again. */
-const SESSION_UNUSED_MS = 90 * 24 * 60 * 60 * 1000;
+export const SESSION_UNUSED_MS = 90 * 24 * 60 * 60 * 1000;
 
 export type SyncService = (request: Request) => Promise<Response>;
 

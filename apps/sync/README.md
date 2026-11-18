@@ -6,19 +6,20 @@
 account, asks Genius and Ticketmaster for signed-in phones and deletes accounts. See "Wave
 account and sync", "Genius About" and "Followed artists" in `docs/spec.md`.
 
-| File                 | What it holds                                                           |
-| -------------------- | ----------------------------------------------------------------------- |
-| `src/worker.ts`      | The Worker entry: builds the service from the Worker's secrets and vars |
-| `src/service.ts`     | The routes, sessions, the rate limits and the allowlist                 |
-| `src/google.ts`      | Checking a Google ID token (RS256 against Google's JWKS)                |
-| `src/store.ts`       | Push (merge and number changes), pull (pages) and account deletion      |
-| `src/soulseek.ts`    | The account's Soulseek account, its password encrypted (`SOULSEEK_KEY`) |
-| `src/proxy.ts`       | A provider's fixed requests: the cache, the provider call, its failures |
-| `src/tables.ts`      | The synced tables: wire fields, checks and columns                      |
-| `src/migrations.ts`  | The schema, as ordered migrations                                       |
-| `src/limits.ts`      | `SYNC_LIMITS` and `USAGE_WARNINGS`                                      |
-| `src/usage.ts`       | The hourly usage watch (the Cron Trigger)                               |
-| `scripts/migrate.ts` | Runs pending migrations against `TURSO_DATABASE_URL`                    |
+| File                   | What it holds                                                           |
+| ---------------------- | ----------------------------------------------------------------------- |
+| `src/worker.ts`        | The Worker entry: builds the service from the Worker's secrets and vars |
+| `src/service.ts`       | The routes, sessions, the rate limits and the allowlist                 |
+| `src/google.ts`        | Checking a Google ID token (RS256 against Google's JWKS)                |
+| `src/store.ts`         | Push (merge and number changes), pull (pages) and account deletion      |
+| `src/soulseek.ts`      | The account's Soulseek account, its password encrypted (`SOULSEEK_KEY`) |
+| `src/proxy.ts`         | A provider's fixed requests: the cache, the provider call, its failures |
+| `src/tables.ts`        | The synced tables: wire fields, checks and columns                      |
+| `src/migrations.ts`    | The schema, as ordered migrations                                       |
+| `src/limits.ts`        | `SYNC_LIMITS` and `USAGE_WARNINGS`                                      |
+| `src/usage.ts`         | The hourly usage watch (the Cron Trigger)                               |
+| `scripts/migrate.ts`   | Runs pending migrations against `TURSO_DATABASE_URL`                    |
+| `src/compatibility.ts` | The compatibility report: current use against the selected limits       |
 
 ## API
 
@@ -437,6 +438,49 @@ it; it never resets a provider's count for the day either.
 Turso's usage (rows read and written, storage) is checked by hand once a month, in Turso's
 dashboard. The Worker holds no Turso Platform token: one can do far more than read usage, and
 the Worker already holds the database.
+
+## Compatibility report
+
+Before a limit from the security readiness spec (#1122) is switched on, the compatibility report
+checks that it wouldn't interrupt how the service is used now. It only reads and only counts:
+accounts are `account-1`, `account-2`… by creation order, and no token, email, Google subject,
+key or row leaves the database. It changes nothing, evicts no account and revokes no session.
+
+It compares, against the limits it's checking (`SELECTED_LIMITS` in `src/compatibility.ts`):
+
+- accounts held, against `maxAccounts`;
+- per account, valid sessions (used in the last 90 days) against ten, and expired ones apart;
+- per account and synced table, rows held with tombstones counted, against the table's limit;
+- this minute's sign-in counters against `maxSignInKeysPerMinute`, and older ones apart;
+- `usage_warnings` rows against 60, and those older than the 30 days kept;
+- `upstream_usage` rows, and the most one account holds, against three.
+
+The result is `compatible`, `incompatible` or `insufficient-evidence`, dated, with the
+environment's name, the revision checked and the reasons. Over `maxAccounts`, ten valid sessions
+or a table's limit is flagged, and so is being exactly at one: the next phone's sign-in or the
+next new row would be refused. A full sign-in counter table is flagged too. Without the database,
+or without the owner's checks of the installed app, the result is `insufficient-evidence`, never
+`compatible`.
+
+Run it from the owner's machine with a read-only database token, right before activation:
+
+```sh
+turso db tokens create wave-sync --read-only --expiration 1h
+TURSO_DATABASE_URL=libsql://… TURSO_AUTH_TOKEN=<read-only token>   pnpm --filter @wave/sync run compatibility --environment production-sync   --revision <commit being switched on>   --installed-client sign-in=passed,push-pull=passed,library-preserved=passed,sessions-preserved=passed
+```
+
+It prints the report as JSON and exits 0 when compatible, 1 when incompatible and 2 on
+insufficient evidence. Pass `--installed-client` only with what you saw on a phone running the
+installed Wave against that service: signing in again, a push and a pull, the Library unchanged
+after them, and the phone's other sessions still signed in. Leave out a check you didn't see; it
+stays pending. `--source fixture` marks a local or test database.
+
+Without access to the database, run it anyway: it prints a dated `insufficient-evidence` report.
+Keep that as the pending evidence, and don't switch the limit on. `activationBlockers` in
+`src/compatibility.ts` is what decides whether a report can authorize activation: only a
+`compatible` report of the live service, for the same revision, taken in the hour before. An
+older report, one from a test database or one for another revision doesn't count, so take a new
+one each time.
 
 ## Configuration
 
