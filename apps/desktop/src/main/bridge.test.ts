@@ -36,6 +36,9 @@ import { preference } from "./preferences.ts";
 import { ytMusicLayer } from "./yt/ytMusic.ts";
 import { desktopLinksLayer } from "./links/layer.ts";
 import { ytFeaturesLayer } from "./yt/ytServices.ts";
+import { ytAccountLayer } from "./yt/ytAccountLayer.ts";
+import type { YtBrowserOutcome } from "./yt/ytBrowserSignIn.ts";
+import { createYtSessions, ytSessionStore } from "./yt/ytSessionStore.ts";
 import { lyricsLayer } from "./lyrics/lyrics.ts";
 import { accountLayer } from "./account/accountLayer.ts";
 import { downloadsLayer } from "./downloads/downloadsLayer.ts";
@@ -203,7 +206,11 @@ const jvmInMemory = () => {
   const reads: string[] = [];
   const yt: string[] = [];
   const downloads: string[] = [];
-  const state = { ytError: undefined as string | undefined };
+  const state = {
+    ytError: undefined as string | undefined,
+    /** What the JVM answers a YT call by name, ahead of its own answers. */
+    answers: {} as Record<string, unknown>,
+  };
   const spawn = (events: KotlinEvents) => ({
     write: (text: string) => {
       const { id, method, params } = JSON.parse(text) as {
@@ -227,53 +234,55 @@ const jvmInMemory = () => {
         answer =
           state.ytError !== undefined && method !== "setYtMusic"
             ? { id, error: { code: state.ytError, message: "no" } }
-            : method === "search"
-              ? {
-                  id,
-                  result: {
-                    songs: [
-                      ytSongNamed("abcdefghijk", "Pink Moon"),
-                      ytSongNamed("bcdefghijkl", "Road"),
-                    ],
-                    continuation: null,
-                  },
-                }
-              : method === "songRadio"
+            : method in state.answers
+              ? { id, result: state.answers[method] }
+              : method === "search"
                 ? {
                     id,
                     result: {
-                      songs: Array.from({ length: 12 }, (_, n) => ({
-                        ...ytSongNamed(`radio${String(n).padStart(6, "0")}`, `Radio ${n}`),
-                        artists: [`Singer ${n}`],
-                      })),
+                      songs: [
+                        ytSongNamed("abcdefghijk", "Pink Moon"),
+                        ytSongNamed("bcdefghijkl", "Road"),
+                      ],
                       continuation: null,
                     },
                   }
-                : method === "artist"
+                : method === "songRadio"
                   ? {
                       id,
                       result: {
-                        name: "Nick Drake",
-                        songs: [ytSongNamed("abcdefghijk", "Pink Moon")],
-                        albums: [{ browseId: "MPREb_pinkmoon", title: "Pink Moon", year: 1972 }],
-                        singles: [],
-                        similar: [{ name: "John Martyn", browseId: "UCjohnmartyn" }],
+                        songs: Array.from({ length: 12 }, (_, n) => ({
+                          ...ytSongNamed(`radio${String(n).padStart(6, "0")}`, `Radio ${n}`),
+                          artists: [`Singer ${n}`],
+                        })),
+                        continuation: null,
                       },
                     }
-                  : method === "related"
+                  : method === "artist"
                     ? {
                         id,
                         result: {
-                          songs: [
-                            {
-                              ...ytSongNamed("mayyounever", "May You Never"),
-                              artists: ["John Martyn"],
-                            },
-                          ],
-                          artists: [{ name: "John Martyn", browseId: "UCjohnmartyn" }],
+                          name: "Nick Drake",
+                          songs: [ytSongNamed("abcdefghijk", "Pink Moon")],
+                          albums: [{ browseId: "MPREb_pinkmoon", title: "Pink Moon", year: 1972 }],
+                          singles: [],
+                          similar: [{ name: "John Martyn", browseId: "UCjohnmartyn" }],
                         },
                       }
-                    : { id, result: null };
+                    : method === "related"
+                      ? {
+                          id,
+                          result: {
+                            songs: [
+                              {
+                                ...ytSongNamed("mayyounever", "May You Never"),
+                                artists: ["John Martyn"],
+                              },
+                            ],
+                            artists: [{ name: "John Martyn", browseId: "UCjohnmartyn" }],
+                          },
+                        }
+                      : { id, result: null };
       }
       queueMicrotask(() => events.line(JSON.stringify(answer)));
     },
@@ -316,6 +325,16 @@ const connect = (
   /** What the M3U picker answers. */
   const copied: string[] = [];
   const picked = { playlists: [] as string[] };
+  /** How the browser's YouTube sign-in ends. */
+  const browser = { outcome: { kind: "noBrowser" } as YtBrowserOutcome };
+  const ytSessions = createYtSessions(
+    ytSessionStore({
+      box: keyring,
+      file: "yt-session.bin",
+      files: { read: () => undefined, write: () => {}, remove: () => {} },
+      platform: process.platform,
+    }),
+  );
   const library = desktopLibraryLayer({
     musicFolder: join(dirname(file), "Music"),
     platform: process.platform,
@@ -343,12 +362,19 @@ const connect = (
       ...(account.clock === undefined ? {} : { clock: account.clock }),
     }).pipe(
       Layer.provideMerge(
-        desktopLinksLayer({
-          online: () => true,
-          writeClipboard: (text) => {
-            copied.push(text);
-          },
-        }).pipe(
+        Layer.mergeAll(
+          desktopLinksLayer({
+            online: () => true,
+            writeClipboard: (text) => {
+              copied.push(text);
+            },
+          }),
+          ytAccountLayer({
+            sessions: ytSessions,
+            online: () => true,
+            startSignIn: () => ({ outcome: Promise.resolve(browser.outcome), cancel: () => {} }),
+          }),
+        ).pipe(
           Layer.provideMerge(
             ytFeaturesLayer({ online: () => true }).pipe(
               Layer.provideMerge(
@@ -407,6 +433,7 @@ const connect = (
     jvm: jvm.state,
     picked,
     copied,
+    browser,
   };
 };
 
@@ -1736,6 +1763,87 @@ test("Copy Link puts a song's share link on the clipboard, and pasted text that 
       await assert.rejects(call("links.copySong", "not a video", "en"), /refused/i);
       await assert.rejects(call("links.copyPlaylist", 0, "en"), /refused/i);
       await assert.rejects(call("links.importPlaylist", "token", "yes"), /refused/i);
+    } finally {
+      await runtime.dispose();
+    }
+  });
+});
+
+test("YouTube's sign-in shows the account, and one of its playlists is imported with its YT songs", async () => {
+  await withFile(async (file) => {
+    const { runtime, exposed, handlers, browser, jvm, yt } = connect(file);
+    const wave = exposed.get("wave") as WaveBridge;
+    const call = (channel: string, ...args: unknown[]) => handlers.get(channel)!(trusted, ...args);
+    const account = { name: "Ana", email: "ana@example.com", photoUrl: null };
+    try {
+      await wave.settings.setYtMusic(true);
+      assert.deepEqual(await wave.ytAccount.view(), {
+        account: { kind: "signedOut", action: "signIn", note: "optional" },
+        keyringMissing: false,
+        noBrowser: false,
+      });
+      await wave.ytAccount.signIn();
+      assert.equal((await wave.ytAccount.view()).noBrowser, true);
+
+      // A made-up cookie under the names YouTube's have: no account's.
+      browser.outcome = {
+        kind: "signedIn",
+        cookie: "SAPISID=fake-value",
+        dataSyncId: null,
+        sessionIndex: "0",
+      };
+      jvm.answers = {
+        ytSignIn: { status: "signedIn", account },
+        libraryPlaylists: [
+          { playlistId: "PLroad", title: "Road", artworkUrl: null, songCount: 2, kind: "own" },
+        ],
+        playlist: {
+          title: "Road",
+          artworkUrl: null,
+          songs: [ytSongNamed("abcdefghijk", "Pink Moon"), ytSongNamed("bcdefghijkl", "Road")],
+          continuation: null,
+        },
+      };
+      await wave.ytAccount.signIn();
+      assert.ok(yt.includes('ytSignIn {"cookie":"SAPISID=fake-value","sessionIndex":"0"}'));
+      const view = await wave.ytAccount.view();
+      assert.deepEqual(view.account, { kind: "account", account, action: "signOut" });
+      assert.ok(!JSON.stringify(view).includes("fake-value"), "the window never gets the cookie");
+
+      assert.deepEqual(await wave.ytAccount.playlists("en"), {
+        status: "ok",
+        playlists: [
+          { playlistId: "LM", title: "Liked Songs", artworkUrl: null, line: null },
+          { playlistId: "PLroad", title: "Road", artworkUrl: null, line: "2 songs" },
+        ],
+      });
+      const opened = await wave.links.open("https://music.youtube.com/playlist?list=PLroad", "en");
+      assert.equal(opened.kind, "playlist");
+      if (opened.kind !== "playlist") return;
+      assert.equal(opened.view.canImport, true);
+      const saved = await wave.links.importPlaylist(opened.token, false);
+      const songs = await wave.library.browse({ kind: "playlist", id: saved.playlistId }, 0, 10);
+      assert.deepEqual(
+        songs.items.map((row) => [row.title, row.videoId]),
+        [
+          ["Pink Moon", "abcdefghijk"],
+          ["Road", "bcdefghijkl"],
+        ],
+      );
+      assert.equal(songs.total, 2);
+      assert.equal(new Set(songs.items.map((row) => row.id)).size, 2, "each row has its own id");
+
+      // The playlist plays its YT songs from the one clicked.
+      await wave.playback.start({ kind: "playlist", id: saved.playlistId }, 1);
+      assert.equal((await wave.playback.view()).current?.videoId, "bcdefghijkl");
+      assert.deepEqual(
+        (await wave.playback.queue(0, 10)).items.map((row) => [row.videoId, row.current]),
+        [
+          ["abcdefghijk", false],
+          ["bcdefghijkl", true],
+        ],
+      );
+      await assert.rejects(call("ytAccount.playlists", "fr"), /refused/i);
     } finally {
       await runtime.dispose();
     }

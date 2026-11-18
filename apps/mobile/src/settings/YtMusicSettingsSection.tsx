@@ -1,10 +1,4 @@
-import {
-  releaseBackgroundLine,
-  ytAccountView,
-  type Catalogue,
-  type YtAccount,
-  type YtAccountNote,
-} from "@wave/core";
+import { releaseBackgroundLine, ytAccountNotes, ytAccountView, type YtAccount } from "@wave/core";
 import { Text, View } from "react-native";
 
 import { CatalogLine } from "@/catalog/CatalogLine";
@@ -21,13 +15,6 @@ import { searchOnlineChoice } from "./searchOnline";
 import { SignInRows } from "./SignInRows";
 import { useYtAccount } from "./ytAccount";
 import { setYtMusicEnabled, useYtMusicEnabled } from "./ytMusic";
-
-const notes = ({ settings }: Catalogue): Record<YtAccountNote, string> => ({
-  optional: settings.ytMusicNote,
-  expired: settings.yourYouTubeSessionEndedSoYTMusic,
-  offline: settings.couldntSignInWithoutAConnection,
-  failed: settings.youtubeDidntConfirmTheSigninTryAgain,
-});
 
 /** The signed-in account: its picture, name and email, and Sign Out. */
 function AccountRow({ account, onSignOut }: { account: YtAccount; onSignOut: () => void }) {
@@ -109,7 +96,7 @@ export function YtMusicSettingsSection() {
           ) : (
             <SignInRows
               action={view.action}
-              note={notes(strings)[view.note]}
+              note={ytAccountNotes(strings)[view.note]}
               onSignIn={account.signIn}
             />
           )}

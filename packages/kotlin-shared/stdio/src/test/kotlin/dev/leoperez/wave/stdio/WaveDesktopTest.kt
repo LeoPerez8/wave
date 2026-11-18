@@ -264,4 +264,111 @@ class WaveDesktopTest {
     host.write("""{"id":19,"method":"ytLyrics","params":{"videoId":"4D7u5KF7SP8"}}""")
     assertEquals("ERR_YT_DISABLED", host.next().code())
   }
+
+  /** YouTube Music as a signed-in account sees it: its account menu and its library's playlists. */
+  private fun youTubeAccount(menu: String = "yt/account-menu-signed-in.json"): YtHttp =
+    youTubeBy { path -> if (path.endsWith("/account_menu")) menu else "yt/library-playlists.json" }
+
+  /** A made-up cookie with the names a signed-in one has; no account's. */
+  private val fakeCookie = "SAPISID=fake-sapisid; __Secure-3PAPISID=fake-3p; SID=fake-sid"
+
+  private fun JsonObject.status() = this["result"]!!.jsonObject["status"]!!.jsonPrimitive.content
+
+  @Test
+  fun signingInAnswersTheAccountAndHandsTheSessionToTheHost() {
+    val dataDir = Fixtures.tempDir()
+    val host = Host()
+    val desktop = WaveDesktop(host.lines, dataDir, http = youTubeAccount(), online = { true })
+    withHost(desktop::handle, host) {
+      host.write("""{"id":40,"method":"ytSignIn","params":{"cookie":"$fakeCookie","dataSyncId":"123||456","sessionIndex":"1"}}""")
+      val answer = host.next()
+      assertEquals("signedIn", answer.status())
+      assertEquals("Leo Perez", answer["result"]!!.jsonObject["account"]!!.jsonObject["name"]!!.jsonPrimitive.content)
+      assertTrue("the answer holds no cookie", "fake-sapisid" !in answer.toString())
+      val kept = host.ytSession!!
+      assertEquals(fakeCookie, kept["cookie"]!!.jsonPrimitive.content)
+      assertEquals("123", kept["dataSyncId"]!!.jsonPrimitive.content)
+      assertEquals("1", kept["authUser"]!!.jsonPrimitive.content)
+      assertEquals("Leo Perez", kept["account"]!!.jsonObject["name"]!!.jsonPrimitive.content)
+      host.write("""{"id":41,"method":"ytSession","params":{}}""")
+      assertEquals("signedIn", host.next().status())
+    }
+    val written = dataDir.walkTopDown().filter { it.isFile }.filter { "fake-sapisid" in it.readText() }.toList()
+    assertEquals("no file in the data folder holds the cookie", emptyList<java.io.File>(), written)
+  }
+
+  @Test
+  fun signingInWithoutTheChannelsIdStillSignsIn() = withDesktop(youTubeAccount()) { host ->
+    host.write("""{"id":42,"method":"ytSignIn","params":{"cookie":"$fakeCookie"}}""")
+    assertEquals("signedIn", host.next().status())
+    assertEquals(JsonNull, host.ytSession!!["dataSyncId"])
+    assertEquals("0", host.ytSession!!["authUser"]!!.jsonPrimitive.content)
+  }
+
+  @Test
+  fun aCookieThatIsntASignedInOneOrThatYouTubeTurnsDownFails() {
+    withDesktop(youTubeAccount()) { host ->
+      host.write("""{"id":43,"method":"ytSignIn","params":{"cookie":"VISITOR_INFO1_LIVE=x"}}""")
+      assertEquals("ERR_YT_FAILED", host.next().code())
+      assertEquals(0, host.ytSessionSaves)
+    }
+    withDesktop(youTubeAccount("yt/account-menu-signed-out.json")) { host ->
+      host.write("""{"id":44,"method":"ytSignIn","params":{"cookie":"$fakeCookie"}}""")
+      assertEquals("ERR_YT_FAILED", host.next().code())
+      assertEquals(0, host.ytSessionSaves)
+    }
+  }
+
+  /** The session main kept from an earlier run, as it hands it to a JVM that starts. */
+  private fun keptSession() = Json.parseToJsonElement(
+    """{"cookie":"$fakeCookie","dataSyncId":null,"authUser":"0","account":{"name":"Leo Perez","email":"leo@example.com","photoUrl":null}}""",
+  ).jsonObject
+
+  @Test
+  fun theSessionTheHostKeepsOpensTheAccountsPlaylists() {
+    val (host, desktop) = desktop(youTubeAccount())
+    host.ytSession = keptSession()
+    withHost(desktop::handle, host) {
+      host.write("""{"id":45,"method":"libraryPlaylists","params":{}}""")
+      val playlists = host.next()["result"]!!.jsonArray
+      assertTrue(playlists.isNotEmpty())
+      assertTrue(playlists[0].jsonObject.containsKey("playlistId"))
+      host.write("""{"id":46,"method":"ytSession","params":{}}""")
+      val session = host.next()
+      assertEquals("signedIn", session.status())
+      assertEquals("leo@example.com", session["result"]!!.jsonObject["account"]!!.jsonObject["email"]!!.jsonPrimitive.content)
+    }
+  }
+
+  @Test
+  fun theAccountsPlaylistsWithoutASessionSaySignedOut() = withDesktop(youTubeAccount()) { host ->
+    host.write("""{"id":47,"method":"libraryPlaylists","params":{}}""")
+    assertEquals("ERR_YT_SIGNED_OUT", host.next().code())
+  }
+
+  @Test
+  fun signingOutForgetsTheSessionOnTheHostToo() {
+    val (host, desktop) = desktop(youTubeAccount())
+    host.ytSession = keptSession()
+    withHost(desktop::handle, host) {
+      host.write("""{"id":48,"method":"ytSignOut","params":{}}""")
+      assertEquals("signedOut", host.next().status())
+      assertEquals(null, host.ytSession)
+      assertEquals(1, host.ytSessionSaves)
+      host.write("""{"id":49,"method":"libraryPlaylists","params":{}}""")
+      assertEquals("ERR_YT_SIGNED_OUT", host.next().code())
+    }
+  }
+
+  @Test
+  fun aSessionYouTubeStoppedAcceptingIsKeptAsExpired() {
+    val (host, desktop) = desktop(youTubeAccount("yt/account-menu-signed-out.json"))
+    host.ytSession = keptSession()
+    withHost(desktop::handle, host) {
+      host.write("""{"id":50,"method":"ytCheckSession","params":{}}""")
+      assertEquals("expired", host.next().status())
+      assertEquals(true, host.ytSession!!["expired"]!!.jsonPrimitive.content.toBoolean())
+      assertTrue("an expired session keeps no cookie", !host.ytSession!!.containsKey("cookie"))
+    }
+  }
 }

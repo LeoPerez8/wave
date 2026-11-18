@@ -30,7 +30,7 @@ import type { PlaybackCommand, PlayerView, QueueRow } from "../../shared/playerV
 import { ytRow } from "../../shared/yt.ts";
 import type { PlaybackSettings } from "../../shared/playbackSettings.ts";
 import { Player } from "../audio/player.ts";
-import { browseSongs, browseTrackIds } from "../library/browse.ts";
+import { browseSongs, browseTrackIds, playlistSongs } from "../library/browse.ts";
 import { DesktopLibrary } from "../library/library.ts";
 import { preference, savePreference } from "../preferences.ts";
 import { YtMusic } from "../yt/ytMusic.ts";
@@ -340,9 +340,20 @@ export const playbackLayer = Layer.effect(
       view,
       start: async (scope, index, shuffle) => {
         error = null;
-        const ids = browseTrackIds(db, scope);
+        // A playlist with YT Music songs plays them in their places, as its page lists them.
+        const mixed =
+          scope.kind === "playlist" && scope.id !== undefined
+            ? playlistSongs(db, scope.id)
+            : undefined;
+        if (mixed !== undefined)
+          yt.keep(mixed.flatMap((song) => ("song" in song ? [song.song] : [])));
+        const ids =
+          mixed?.map((song) =>
+            "song" in song ? ytTrackId(song.song.videoId) : String(song.trackId),
+          ) ?? browseTrackIds(db, scope);
         const chosen = index === undefined ? undefined : ids[index];
-        if (chosen !== undefined && rows([Number(chosen)])[0]?.unavailable)
+        const ref = chosen === undefined ? null : parseTrackId(chosen);
+        if (ref?.kind === "library" && rows([ref.id])[0]?.unavailable)
           throw new Error("[folder-unavailable] Drive is not connected");
         // A song from Search plays alone, as on the phone with YT Music off.
         const alone = scope.kind === "search" && chosen !== undefined;

@@ -38,6 +38,27 @@ export interface KotlinMethods extends KotlinDownloadMethods {
     };
     readonly result: null;
   };
+  /**
+   * Signs YT Music in with the session the browser sign-in read (`yt/ytBrowserSignIn.ts`); the
+   * account's session (`YtSessionState.toMap`). The JVM keeps the cookie with main
+   * (`ytSession.save`), never in a file of its own.
+   */
+  readonly ytSignIn: {
+    readonly params: {
+      readonly cookie: string;
+      readonly dataSyncId?: string;
+      readonly sessionIndex: string;
+    };
+    readonly result: unknown;
+  };
+  /** Forgets the YouTube session; signed out. */
+  readonly ytSignOut: { readonly params: object; readonly result: unknown };
+  /** The YouTube session as kept, without asking YouTube. */
+  readonly ytSession: { readonly params: object; readonly result: unknown };
+  /** The YouTube session after asking YouTube whether it still accepts it. */
+  readonly ytCheckSession: { readonly params: object; readonly result: unknown };
+  /** The signed-in account's library playlists (`YtLibraryPlaylist.toMap`). */
+  readonly libraryPlaylists: { readonly params: object; readonly result: unknown };
   /** A playlist's first page (`YtPlaylist.toMap`). */
   readonly playlist: { readonly params: { readonly playlistId: string }; readonly result: unknown };
   /** A playlist's next page. */

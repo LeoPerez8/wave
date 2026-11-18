@@ -26,6 +26,10 @@ export const desktopPtBr = {
     yourWaveSessionEndedSoThisPhone:
       "Sua sessão do Wave terminou, então a sessão deste computador foi finalizada. Inicie sessão novamente para manter seu backup.",
     addAGoogleAccountToThisPhone: "Não foi possível iniciar sessão. Tente novamente.",
+    ytMusicNote:
+      "Iniciar sessão é opcional. Buscar, a reprodução e os mixes do Início usam sua conta. A sessão fica neste computador. Com Baixar na melhor qualidade desativado, ou quando o Soulseek não encontra uma música, o download vem do YouTube Music: AAC a 256 kbps com Premium, cerca de 128 kbps sem Premium.",
+    searchPlaybackAndHomesMixesUseThis:
+      "Buscar, a reprodução e os mixes do Início usam esta conta. Finalizar sessão esquece a conta neste computador.",
     signOutOnAllPhones: "Finalizar Sessão em Todos os Dispositivos",
     everyPhoneOnThisWaveAccountSignedOut:
       "A sessão de todos os dispositivos nesta Conta Wave foi finalizada. Inicie sessão novamente para manter seu backup.",
