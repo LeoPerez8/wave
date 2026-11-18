@@ -1,5 +1,5 @@
 /** SQLite's orders restored in JS, so reads that walk pages by id sort their copy in yielding steps. */
-import type { SongRow } from "./LibraryStore.ts";
+import type { SongRow } from "@wave/client";
 
 /** SQLite BINARY: Unicode code points (not UTF-16 or locale order). */
 export const binary = (a: string, b: string): number => {

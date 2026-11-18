@@ -1,5 +1,5 @@
 import { useLocalisation } from "@/localisation/localisation";
-import type { PlayedAlbum, PlayedArtist } from "@/library/db/playedEntities";
+import type { PlayedAlbum, PlayedArtist } from "@wave/client/db/playedEntities";
 import {
   STATS_TOP,
   homeRecapVisibility,
@@ -15,6 +15,7 @@ import { useCallback, useEffect, useState } from "react";
 import { AppState } from "react-native";
 
 import type { LibraryStoreError } from "@/library/LibraryStore";
+
 import { useFocusedVersion } from "@/lib/useFocusedVersion";
 import { appRuntime } from "@/library/runtime";
 import { playHistoryVersion } from "@/playback/PlayHistory";

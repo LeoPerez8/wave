@@ -6,19 +6,19 @@ import { normalizeTrack, type Lyrics } from "@wave/core";
 import { desc, eq } from "drizzle-orm";
 import * as Effect from "effect/Effect";
 
-import { creditSplits } from "./db/credits.ts";
+import { creditSplits } from "@wave/client/db/credits";
 import {
   keepLyricsSearchText,
   selectLyricsCandidates,
   selectLyricsIndexPage,
   selectLyricsIndexTarget,
   selectStaleLyricsIndexPage,
-} from "./db/lyricsSearchIndex.ts";
-import { indexSavedLyrics, selectSavedLyricsSearchIndexPage } from "./db/savedLyrics.ts";
-import { saveBatch } from "./db/save.ts";
-import * as schema from "./db/schema.ts";
-import { openTestDatabase, type TestDatabase } from "./db/testDatabase.ts";
-import type { IndexedTrack } from "./LibraryStore.ts";
+} from "@wave/client/db/lyricsSearchIndex";
+import { indexSavedLyrics, selectSavedLyricsSearchIndexPage } from "@wave/client/db/savedLyrics";
+import { saveBatch } from "@wave/client/db/save";
+import * as schema from "@wave/client/db/schema";
+import { openTestDatabase, type TestDatabase } from "@wave/client/testing";
+import type { IndexedTrack } from "@wave/client";
 import { createLyricsSearchIndexer, type LyricsIndexStore } from "./lyricsSearchIndexer.ts";
 
 let db: TestDatabase;

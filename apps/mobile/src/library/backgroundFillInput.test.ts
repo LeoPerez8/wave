@@ -3,7 +3,7 @@ import { test } from "node:test";
 import { fileURLToPath } from "node:url";
 import * as Effect from "effect/Effect";
 import { loadLibraryStore } from "../../bench/fastAgain/store.ts";
-import { openTestDatabase, closeTestDatabase, observeSqlTasks } from "./db/testDatabase.ts";
+import { openTestDatabase, closeTestDatabase, observeSqlTasks } from "@wave/client/testing";
 import { readBackgroundFillInput } from "./backgroundFillInput.ts";
 
 const root = fileURLToPath(new URL("../../../../", import.meta.url));

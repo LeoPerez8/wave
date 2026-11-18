@@ -21,7 +21,7 @@ const stubs: Record<string, string> = {
     export const ActivityIndicator = "spinner";
   `),
   "@/catalog/Artwork": stubModule('export const Artwork = "img";'),
-  "@/catalog/artworkUri": stubModule("export const artworkUri = () => undefined;"),
+  "@wave/client/artworkUri": stubModule("export const artworkUri = () => undefined;"),
   "@/catalog/grid": stubModule("export const CELL = 8; export const grid = { row: 64 };"),
   "@/localisation/localisation": stubModule(`
     export const useLocalisation = () => ({

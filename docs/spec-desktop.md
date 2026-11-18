@@ -161,7 +161,7 @@ ADR: `docs/adr/0002-shared-client-package.md`.
   in its own PR that also points the phone at the package. The phone's tests stay green and its
   releases go on as usual. No re-export shims are left behind.
 - The desktop UI is new React DOM, styled with Tailwind 4. No `.tsx` is shared with the phone.
-  The colour tokens move from `apps/mobile/global.css` to a shared CSS file both apps import;
+  The colour tokens live in `packages/theme/colours.css`, imported by each app's stylesheet;
   Core's `theme.ts` mirror and its drift test stay.
 - `apps/desktop` holds the Electron app (`src/main`, `src/preload`, `src/renderer`) and a Cargo
   workspace in `apps/desktop/native/`.

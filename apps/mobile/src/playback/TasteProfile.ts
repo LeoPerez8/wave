@@ -5,7 +5,8 @@ import * as Layer from "effect/Layer";
 import { recommendationTurnEffect } from "@/lib/recommendationWork";
 
 import { onLibraryChange, onStarred, onUnstarred, onYtSongSignal } from "@/library/libraryChanges";
-import { LibraryStore, type SongRow, type ArtistRow } from "@/library/LibraryStore";
+import { LibraryStore } from "@/library/LibraryStore";
+import { type SongRow, type ArtistRow } from "@wave/client";
 
 import { deriveTaste, deriveTasteFromLibrary } from "./tasteDerivation";
 import { makeLiveTaste } from "./liveTaste";

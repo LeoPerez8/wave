@@ -1,5 +1,5 @@
 import { createHash } from "node:crypto";
-import { traceQueries } from "../../../src/library/db/testDatabase.ts";
+import { traceQueries } from "@wave/client/testing";
 import { seedArtistOpening } from "../artistOpeningFixture.ts";
 import { loadArtistOpening } from "../artistOpeningReplay.ts";
 import type { BenchMeasurement, FastAgainBench } from "../types.ts";

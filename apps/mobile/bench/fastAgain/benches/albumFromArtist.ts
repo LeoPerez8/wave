@@ -2,7 +2,7 @@ import { createHash } from "node:crypto";
 import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import * as Effect from "effect/Effect";
-import { traceQueries } from "../../../src/library/db/testDatabase.ts";
+import { traceQueries } from "@wave/client/testing";
 import { loadArtistOpening } from "../artistOpeningReplay.ts";
 import { seedArtistOpening } from "../artistOpeningFixture.ts";
 import { loadDetailOpening } from "../detailOpeningReplay.ts";

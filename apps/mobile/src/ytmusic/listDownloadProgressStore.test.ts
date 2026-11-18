@@ -111,7 +111,7 @@ test("saved entries advance an open list and completion, cancellation and retry 
 test("an old membership read cannot undo a playlist edit or a hidden screen, and a failed read retries", async () => {
   const journal = makeExternalStore<readonly YtDownloadJournalJob[]>([job("a")]);
   const changed = makeExternalStore(0);
-  type Members = import("../library/db/listDownloadMembers.ts").DownloadListMembers;
+  type Members = import("@wave/client/db/listDownloadMembers").DownloadListMembers;
   let resolve: (members: Members) => void = () => {};
   let reads = 0;
   const members: Members = new Map([["playlist:1", [{ kind: "song", videoId: "a" }]]]);

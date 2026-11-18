@@ -17,8 +17,10 @@ import { type UsageSecrets, watchUsage } from "./usage.ts";
 export interface Env extends UsageSecrets {
   readonly TURSO_DATABASE_URL?: string;
   readonly TURSO_AUTH_TOKEN?: string;
-  /** Wave's web OAuth client id, which ID tokens' audience must be. */
+  /** Wave's web OAuth client id, used by the phone. */
   readonly GOOGLE_CLIENT_ID?: string;
+  /** Optional Desktop OAuth client id; never included in the repo. */
+  readonly GOOGLE_DESKTOP_CLIENT_ID?: string;
   /** Emails that may sign in, separated by commas. Unset lets any Google account in. */
   readonly ALLOWED_EMAILS?: string;
   /**
@@ -100,6 +102,9 @@ export default {
       addressLimiter,
       failedLookupLimiter,
       googleClientId: GOOGLE_CLIENT_ID,
+      ...(env.GOOGLE_DESKTOP_CLIENT_ID === undefined
+        ? {}
+        : { googleDesktopClientId: env.GOOGLE_DESKTOP_CLIENT_ID }),
       googleKeys: keys,
       memory,
       upstream,

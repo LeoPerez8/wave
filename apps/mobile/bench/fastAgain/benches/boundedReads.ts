@@ -2,11 +2,7 @@
 import assert from "node:assert/strict";
 import { eq } from "drizzle-orm";
 import * as Effect from "effect/Effect";
-import {
-  addHistory,
-  traceArtistCreditVisits,
-  traceQueries,
-} from "../../../src/library/db/testDatabase.ts";
+import { addHistory, traceArtistCreditVisits, traceQueries } from "@wave/client/testing";
 import { selectArtistsBefore600 } from "../artistCountReference.ts";
 import { loadLibraryStore } from "../store.ts";
 import type { FastAgainBench } from "../types.ts";
@@ -16,12 +12,10 @@ export const bench: FastAgainBench = {
   async run(context) {
     const { fixture, measure } = context;
     const store = await loadLibraryStore(context.root, fixture.db);
-    const tracks = await context.loadModule<typeof import("../../../src/library/db/tracks.ts")>(
-      "apps/mobile/src/library/db/tracks.ts",
-    );
-    const schema = await context.loadModule<typeof import("../../../src/library/db/schema.ts")>(
-      "apps/mobile/src/library/db/schema.ts",
-    );
+    const tracks =
+      await context.loadModule<typeof import("@wave/client/db/tracks")>("@wave/client/db/tracks");
+    const schema =
+      await context.loadModule<typeof import("@wave/client/db/schema")>("@wave/client/db/schema");
     const ids = [fixture.targets.small.artistId, fixture.targets.large.artistId];
     const page10 = { offset: 3, limit: 10 };
     const page50 = { offset: 0, limit: 50 };

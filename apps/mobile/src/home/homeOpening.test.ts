@@ -5,13 +5,8 @@ import { createLibraryQueries } from "@wave/core";
 import { fileURLToPath } from "node:url";
 
 import { loadLibraryStore } from "../../bench/fastAgain/store.ts";
-import { createFastAgainFixture } from "../library/db/fastAgainFixture.ts";
-import {
-  addTrack,
-  closeTestDatabase,
-  openTestDatabase,
-  traceQueries,
-} from "../library/db/testDatabase.ts";
+import { createFastAgainFixture } from "@wave/client/testing/fastAgainFixture";
+import { addTrack, closeTestDatabase, openTestDatabase, traceQueries } from "@wave/client/testing";
 import {
   afterHomeFrame,
   homeContent,
@@ -21,7 +16,7 @@ import {
   magicQueueGrid,
 } from "./homeOpening.ts";
 import type { HomeContent } from "./homeOpening.ts";
-import type { HomePlays, HomeSections } from "../library/db/playHistory.ts";
+import type { HomePlays, HomeSections } from "@wave/client/db/playHistory";
 
 const root = fileURLToPath(new URL("../../../../", import.meta.url));
 

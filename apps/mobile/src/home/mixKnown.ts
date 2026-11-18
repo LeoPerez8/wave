@@ -10,7 +10,8 @@ import { useSyncExternalStore } from "react";
 
 import { settledTurnEffect } from "@/lib/backgroundWork";
 import { makeExternalStore } from "@/lib/externalStore";
-import { LibraryStore, type ArtistRow, type SongRow } from "@/library/LibraryStore";
+import { LibraryStore } from "@/library/LibraryStore";
+import { type ArtistRow, type SongRow } from "@wave/client";
 import { onLibraryChange } from "@/library/libraryChanges";
 import { createKnownVideosRead, readKnownVideos } from "./knownVideosRead";
 import { appRuntime } from "@/library/runtime";

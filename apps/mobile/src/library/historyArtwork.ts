@@ -1,6 +1,6 @@
 import type { SongRowArtwork } from "@wave/core";
-import { artworkUri } from "../catalog/artworkUri.ts";
-import type { ListeningHistoryRow } from "./db/listeningHistory.ts";
+import { artworkUri } from "@wave/client/artworkUri";
+import type { ListeningHistoryRow } from "@wave/client/db/listeningHistory";
 
 /**
  * A History row's cover. A Library play shows the cover it was played with,

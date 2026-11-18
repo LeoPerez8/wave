@@ -5,7 +5,7 @@ import { useState } from "react";
 
 import { DetailFrame } from "@/library/DetailFrame";
 import { GenreSongList, useGenreOpening } from "@/library/GenreSongList";
-import type { GenreOpening, GenreRow } from "@/library/LibraryStore";
+import type { GenreOpening, GenreRow } from "@wave/client";
 import { parseId, useKnownRow } from "@/library/routes";
 import { useSongSort } from "@/library/songSort";
 

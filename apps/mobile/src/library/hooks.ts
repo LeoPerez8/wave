@@ -18,25 +18,24 @@ import { homeContent, type HomeContent } from "@/home/homeOpening";
 import { useSightedStore } from "@/lib/screenSight";
 import { createAllFilesAccess, type AllFilesAccessState } from "./allFilesAccess";
 
-import type { LibraryCounts } from "./db/counts";
-import type { LinkRows } from "./db/links";
-import type { HomePlays, HomeSections } from "./db/playHistory";
+import type { LibraryCounts } from "@wave/client/db/counts";
+import type { LinkRows } from "@wave/client/db/links";
+import type { HomePlays, HomeSections } from "@wave/client/db/playHistory";
 import { scanState, type ScanState } from "./LibraryScan";
 import { homeReads } from "./homeReads";
+import { LibraryStore, type LibraryStoreError } from "./LibraryStore";
 import {
-  LibraryStore,
   type AlbumDetail,
   type AlbumRow,
   type ArtistDetail,
   type ArtistRow,
   type FavoriteRow,
   type GenreRow,
-  type LibraryStoreError,
   type PlaylistDetail,
   type PlaylistRow,
   type ScanRootSummary,
   type SongRow,
-} from "./LibraryStore";
+} from "@wave/client";
 import { knownPlaylists, listPlaylistsRemembered } from "./playlists";
 import { appRuntime } from "./runtime";
 import { libraryQuery, useLibraryQuery, type LibraryQuery } from "./sharedQueries";

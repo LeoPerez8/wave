@@ -25,6 +25,17 @@ const keptEverything = async (service: Harness, session: string): Promise<void> 
 };
 
 describe("DELETE /v1/account needs a fresh Google sign-in", () => {
+  test("a configured Desktop client can reauthenticate the session account", async () => {
+    const service = await harness({ googleDesktopClientId: "desktop-oauth-test-audience" });
+    const session = await service.signIn({ aud: "desktop-oauth-test-audience" });
+    const response = await service.request("DELETE", "/v1/account", {
+      session,
+      json: { idToken: await service.google.idToken({ aud: "desktop-oauth-test-audience" }) },
+    });
+    assert.equal(response.status, 204);
+    assert.equal((await service.request("GET", "/v1/pull", { session })).status, 401);
+  });
+
   test("an ID token for the session's Google account, just issued, deletes the account", async () => {
     const service = await harness();
     const session = await anaWithRows(service);

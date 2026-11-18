@@ -1,7 +1,7 @@
 import { NO_HELD_SONGS, songsInPlace, type HeldSongs, type SongsInPlace } from "@wave/core";
 import { useEffect, useMemo } from "react";
 
-import type { SongRow } from "@/library/LibraryStore";
+import type { SongRow } from "@wave/client";
 import { useVisitState } from "@/lib/useVisitState";
 import type { NativeYtSong } from "@/native/waveYtMusic";
 

@@ -1,7 +1,7 @@
 /** Extra artist-page cases: an appearance, saved Popular order and remote-only additions. */
 import * as Effect from "effect/Effect";
 import { sql } from "drizzle-orm";
-import type { FastAgainFixture } from "../../src/library/db/fastAgainFixture.ts";
+import type { FastAgainFixture } from "@wave/client/testing/fastAgainFixture";
 import type { loadArtistOpening } from "./artistOpeningReplay.ts";
 
 export const seedArtistOpening = (

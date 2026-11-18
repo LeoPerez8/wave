@@ -3,7 +3,7 @@ import { createHash } from "node:crypto";
 import { performance } from "node:perf_hooks";
 import * as Effect from "effect/Effect";
 import { eq } from "drizzle-orm";
-import { playEvents } from "../../../src/library/db/schema.ts";
+import { playEvents } from "@wave/client/db/schema";
 import { createRecapReplay } from "../recapReplay.ts";
 import { percentiles } from "../measure.ts";
 import type { FastAgainBench, BenchMeasurement } from "../types.ts";

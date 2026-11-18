@@ -1,0 +1,29 @@
+{
+  "name": "@wave/client",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts",
+    "./db/*": "./src/db/*.ts",
+    "./testing": "./src/db/testDatabase.ts",
+    "./testing/fastAgainFixture": "./src/db/fastAgainFixture.ts",
+    "./artworkUri": "./src/artworkUri.ts",
+    "./playlistRecommendationTracks": "./src/playlistRecommendationTracks.ts"
+  },
+  "scripts": {
+    "test": "node --test \"src/**/*.test.ts\"",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@wave/core": "workspace:*",
+    "drizzle-orm": "0.45.4",
+    "effect": "4.0.2"
+  },
+  "devDependencies": {
+    "@types/node": "catalog:",
+    "@types/sql.js": "^1.4.11",
+    "sql.js": "^1.14.2",
+    "typescript": "catalog:"
+  }
+}

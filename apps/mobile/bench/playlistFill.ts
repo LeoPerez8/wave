@@ -21,15 +21,15 @@ import { resolve } from "node:path";
 import { performance } from "node:perf_hooks";
 import { pathToFileURL } from "node:url";
 
-import type * as Playlists from "../src/library/db/playlists.ts";
-import type * as Schema from "../src/library/db/schema.ts";
-import type * as Fixtures from "../src/library/db/testDatabase.ts";
+import type * as Playlists from "@wave/client/db/playlists";
+import type * as Schema from "@wave/client/db/schema";
+import type * as Fixtures from "@wave/client/testing";
 import { median, printMeta } from "./measure.ts";
 
 const dbFlag = process.argv.indexOf("--db");
 const dbDir =
   dbFlag < 0
-    ? new URL("../src/library/db/", import.meta.url)
+    ? new URL("@wave/client/db/", import.meta.url)
     : pathToFileURL(`${resolve(process.argv[dbFlag + 1] ?? "")}/`);
 const load = <M>(file: string): Promise<M> => import(new URL(file, dbDir).href) as Promise<M>;
 const {

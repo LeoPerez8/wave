@@ -9,6 +9,11 @@ const run = (args: string[], stdin: string) =>
   execFileSync(process.execPath, [script, ...args], { input: stdin, encoding: "utf8" });
 
 describe("changes", () => {
+  it("releases phone changes to the shared client and checks its dependents", () => {
+    const paths = ["packages/client/src/db/tracks.ts"];
+    assert.equal(changes(paths).app, true);
+    assert.equal(reachesUsers(paths), true);
+  });
   it("touches no area for a docs-only change", () => {
     const result = changes(["docs/spec.md", "docs/spotify-samples/track-metadata.json"]);
     assert.ok(Object.values(result).every((value) => value === false));

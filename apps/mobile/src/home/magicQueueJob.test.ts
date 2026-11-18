@@ -5,7 +5,7 @@ import * as Effect from "effect/Effect";
 import { sql } from "drizzle-orm";
 import { localDay, magicQueuePicks, seededRandom, type MagicQueuePicks } from "@wave/core";
 import { loadLibraryStore } from "../../bench/fastAgain/store.ts";
-import { createFastAgainFixture } from "../library/db/fastAgainFixture.ts";
+import { createFastAgainFixture } from "@wave/client/testing/fastAgainFixture";
 import { readTasteLibrary, deriveTaste } from "../playback/tasteDerivation.ts";
 import { homeMagicQueueDue, buildHomeMagicQueue } from "./magicQueueJob.ts";
 

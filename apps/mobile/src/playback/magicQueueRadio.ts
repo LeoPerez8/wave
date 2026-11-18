@@ -22,12 +22,8 @@ import {
 import * as Effect from "effect/Effect";
 
 import { lookedUpProfileOf } from "@/home/artistGenres";
-import {
-  songHasFile,
-  type SongRow,
-  type ArtistRow,
-  type LibraryStore,
-} from "@/library/LibraryStore";
+import { type LibraryStore } from "@/library/LibraryStore";
+import { songHasFile, type SongRow, type ArtistRow } from "@wave/client";
 import { online } from "@/native/waveNative";
 import { WaveYtMusic } from "@/native/waveYtMusic";
 import { ytMusicEnabled } from "@/settings/ytMusic";

@@ -9,6 +9,7 @@ import {
 } from "@wave/core";
 import * as Effect from "effect/Effect";
 import { LibraryStore } from "@/library/LibraryStore";
+
 import { followedArtistsEnabled } from "@/settings/followedArtists";
 import { currentFollowCountry } from "@/settings/followCountry";
 import { showsConfigured, showsNotificationsEnabled } from "@/library/showNotifications";

@@ -37,7 +37,7 @@ import {
 } from "./AlbumGrid";
 import { FindFrame, FindHead, useFindInLegendList } from "./FindInPlaylist";
 import { useAlbums, useArtists, useGenres, useScanStatus } from "./hooks";
-import type { AlbumRow, ArtistRow, GenreRow } from "./LibraryStore";
+import type { AlbumRow, ArtistRow, GenreRow } from "@wave/client";
 import { openArtist, openGenre } from "./routes";
 import { useSpine } from "./useSpine";
 import { useListScrollable } from "@/motion/heldTouch";

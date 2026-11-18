@@ -32,7 +32,7 @@ import { TextButton } from "@/components/TextButton";
 import { rise, riseReduced } from "@/motion/entry";
 import { perfMark, useRenderCount } from "@/perf/perf";
 import { clearRecentSearches, rememberSearch, useRecentSearches } from "@/search/recentSearches";
-import type { SongRow } from "@/library/LibraryStore";
+import type { SongRow } from "@wave/client";
 import type { NativeYtSong } from "@/native/waveYtMusic";
 import {
   listedTrackItem,

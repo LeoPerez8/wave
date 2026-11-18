@@ -14,7 +14,7 @@ import * as Effect from "effect/Effect";
 import * as Result from "effect/Result";
 import { useEffect, useMemo, useReducer, useRef } from "react";
 
-import type { ArtistRow } from "@/library/LibraryStore";
+import type { ArtistRow } from "@wave/client";
 import { appRuntime } from "@/library/runtime";
 import type { NativeYtSong } from "@/native/waveYtMusic";
 import { fetchArtist, readSaved } from "@/ytmusic/artistSection";

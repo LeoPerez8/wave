@@ -11,7 +11,7 @@ import { freeTurnEffect } from "@/lib/backgroundWork";
 import { runSteps } from "@/lib/stepped";
 import { libraryListQueries } from "@/library/hooks";
 import { libraryVersion } from "@/library/LibraryScan";
-import type { SongRow } from "@/library/LibraryStore";
+import type { SongRow } from "@wave/client";
 import { appRuntime } from "@/library/runtime";
 import { useLibraryQuery } from "@/library/sharedQueries";
 

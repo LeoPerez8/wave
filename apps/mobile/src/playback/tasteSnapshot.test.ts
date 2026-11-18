@@ -18,8 +18,9 @@ import {
   type TasteHistory,
 } from "@wave/core";
 import { loadLibraryStore } from "../../bench/fastAgain/store.ts";
-import { createFastAgainFixture } from "../library/db/fastAgainFixture.ts";
+import { createFastAgainFixture } from "@wave/client/testing/fastAgainFixture";
 import type { LibraryStore } from "../library/LibraryStore.ts";
+
 import { buildHomeMagicQueue } from "../home/magicQueueJob.ts";
 import { deriveTaste, readTasteLibrary } from "./tasteDerivation.ts";
 

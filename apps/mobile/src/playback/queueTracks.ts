@@ -33,7 +33,7 @@ import {
 import * as Effect from "effect/Effect";
 
 import { makeExternalStore } from "../lib/externalStore.ts";
-import type { PlayableSongRow } from "../library/LibraryStore.ts";
+import type { PlayableSongRow } from "@wave/client";
 import type { NativeYtSong } from "../native/waveYtMusic.ts";
 
 /** What the player and the queue rows need to know about a track. */

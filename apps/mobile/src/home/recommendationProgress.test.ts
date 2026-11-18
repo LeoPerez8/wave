@@ -19,9 +19,9 @@ import {
   startMagicQueue,
 } from "@wave/core";
 import { loadLibraryStore } from "../../bench/fastAgain/store.ts";
-import { addLibrary, closeTestDatabase, openTestDatabase } from "../library/db/testDatabase.ts";
-import { addCandidates } from "../library/db/candidateCatalog.ts";
-import { createPlaylist } from "../library/db/playlists.ts";
+import { addLibrary, closeTestDatabase, openTestDatabase } from "@wave/client/testing";
+import { addCandidates } from "@wave/client/db/candidateCatalog";
+import { createPlaylist } from "@wave/client/db/playlists";
 import {
   readRecommendationFavorites,
   sharePlaylistRecommendationInputs,
@@ -200,7 +200,7 @@ test("2,531 Tracks and 900 artists finish paging, refill a Magic Queue online, a
 });
 
 test("scan writes while a playlist reads neither fail nor restart its read; the visit catches up once", async () => {
-  const { createFastAgainFixture } = await import("../library/db/fastAgainFixture.ts");
+  const { createFastAgainFixture } = await import("@wave/client/testing/fastAgainFixture");
   const { observePlaylistRecommendationInputs } =
     await import("../library/playlistRecommendationInputs.ts");
   const { followPlaylistRecommendations } =

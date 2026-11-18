@@ -1,4 +1,4 @@
-import type { PlayedAlbum, PlayedArtist } from "@/library/db/playedEntities";
+import type { PlayedAlbum, PlayedArtist } from "@wave/client/db/playedEntities";
 import {
   ARTIST_MOST_PLAYED,
   artistStats,

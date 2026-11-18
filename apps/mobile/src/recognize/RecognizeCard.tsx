@@ -17,7 +17,7 @@ import { CatalogLine } from "@/catalog/CatalogLine";
 import { CELL } from "@/catalog/grid";
 import { TextButton } from "@/components/TextButton";
 import { NativeWaveUnderline } from "@/glass/waveGlass";
-import type { SongRow } from "@/library/LibraryStore";
+import type { SongRow } from "@wave/client";
 import { openAddToPlaylist } from "@/library/PlaylistSheets";
 import { addToShazam } from "@/library/playlists";
 import { openAlbum } from "@/library/routes";

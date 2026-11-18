@@ -1,23 +1,36 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { syncTriggers, type PlayEvent, type YtAlbumSong } from "@wave/core";
+import {
+  availableRecaps,
+  recap,
+  recapWindow,
+  recordingKey,
+  syncTriggers,
+  type PlayEvent,
+  type RecapPeriod,
+  type YtAlbumSong,
+} from "@wave/core";
 import { eq, sql } from "drizzle-orm";
 
 import { harness, pullAll, push } from "../../../sync/src/testing.ts";
-import { creditSplits } from "../library/db/credits.ts";
-import { endPlay, recordPlay } from "../library/db/playHistory.ts";
-import { listeningHistory } from "../library/db/listeningHistory.ts";
+import { creditSplits } from "@wave/client/db/credits";
+import { endPlay, recordPlay } from "@wave/client/db/playHistory";
+import { listeningHistory } from "@wave/client/db/listeningHistory";
 import {
   addTrack,
   migrateTestDatabase,
   openTestDatabase,
+  reopenTestDatabase,
   type TestDatabase,
-} from "../library/db/testDatabase.ts";
-import { deleteTracksById } from "../library/db/tracks.ts";
-import * as schema from "../library/db/schema.ts";
-import { saveImportedPlays } from "../library/db/blackPlayer.ts";
+} from "@wave/client/testing";
+import { deleteTracksById } from "@wave/client/db/tracks";
+import * as schema from "@wave/client/db/schema";
+import { saveImportedPlays } from "@wave/client/db/blackPlayer";
 import { syncCycle, type SyncTransport } from "./syncCycle.ts";
 import { fakeClock } from "../../../../packages/core/src/testSyncClock.ts";
+import { joinAccount, selectUnpushed } from "@wave/client/db/syncRows";
+import { countedListening, songPlayTotals } from "@wave/client/db/stats";
+import { playedEntityTotals, recapPlays } from "@wave/client/db/playedEntities";
 
 const SONG: YtAlbumSong = {
   videoId: "history-video",
@@ -73,6 +86,91 @@ const phone = async (transport: SyncTransport, existing?: TestDatabase) => {
     });
   return { db, sync, historyChanges: () => historyChanges };
 };
+
+test("pulled desktop plays survive reopening and count in History, Stats and Recap once", async () => {
+  const { service, session, transport } = await account();
+  const b = await phone(transport);
+  const track = addTrack(b.db, { title: "Airbag", artist: "Radiohead", album: "OK Computer" });
+  const songId = recordingKey({
+    title: "Airbag",
+    album: "OK Computer",
+    albumArtist: "Radiohead",
+    discNumber: null,
+    trackNumber: null,
+  });
+  const period: RecapPeriod = { kind: "month", year: 2026, month: 9 };
+  const desktop: PlayEvent = { ...PLAY, source: "desktop", listenedMs: 360_000 };
+  const rows = Array.from({ length: 40 }, (_, i) => ({
+    id: `desktop-device:${i}`,
+    songId,
+    startedAt: new Date(2026, 8, 1 + (i % 28), 12).getTime() + i,
+    listenedMs: desktop.listenedMs,
+    durationMs: 360_000,
+    endReason: "completed",
+    counted: true,
+    contextType: "album",
+    contextId: "OK Computer",
+    source: desktop.source,
+    importedFrom: null,
+    snapshot: {
+      title: "Airbag",
+      artist: "Radiohead",
+      album: "OK Computer",
+      artworkPath: null,
+      thumbPath: null,
+    },
+  }));
+  await push(service, session, {
+    plays: [
+      ...rows,
+      {
+        ...rows[0],
+        id: "desktop-device:skip",
+        counted: false,
+        listenedMs: 5_000,
+        endReason: "skipped",
+      },
+    ],
+  });
+  assert.equal((await b.sync()).pulled.plays, true);
+  const replay: SyncTransport = {
+    request: (method, path, body) =>
+      transport.request(method, method === "GET" ? "/v1/pull?since=0" : path, body),
+  };
+  assert.equal((await b.sync(false, replay)).pulled.plays, false);
+
+  const db = await reopenTestDatabase(b.db);
+  const history = listeningHistory(db).rows;
+  assert.equal(history.length, 40);
+  assert.ok(history.every((row) => row.song?.id === track && row.snapshot.title === "Airbag"));
+  const window = recapWindow(period);
+  assert.deepEqual(
+    songPlayTotals(db, window).map((row) => [row.song, row.countedPlays, row.listenedMs]),
+    [[{ kind: "library", id: track }, 40, 14_400_000]],
+  );
+  const stats = playedEntityTotals(db, window);
+  assert.deepEqual(
+    stats.artists.map((row) => [row.item.name, row.countedPlays]),
+    [["Radiohead", 40]],
+  );
+  assert.deepEqual(
+    stats.albums.map((row) => [row.item.title, row.countedPlays]),
+    [["OK Computer", 40]],
+  );
+  const listening = countedListening(db);
+  assert.deepEqual(availableRecaps(listening, new Date(2026, 9, 1).getTime()), [period]);
+  const shown = recap({ period, listening, ...recapPlays(db, window) });
+  assert.equal(shown.minutesListened, 240);
+  assert.deepEqual(
+    shown.topSongs.map((row) => [row.id, row.countedPlays]),
+    [[track, 40]],
+  );
+  joinAccount(db, "another@example.com");
+  const kept = selectUnpushed(db, 100, () => null).rows.plays;
+  assert.equal(kept.length, 41);
+  assert.ok(kept.every((row) => row.source === "desktop"));
+  service.db.close();
+});
 
 test("a finished streamed play reaches the service with its recording key, snapshot and portable cover", async () => {
   const { service, session, transport } = await account();

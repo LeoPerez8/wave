@@ -15,7 +15,7 @@ import { useLocalSearchParams } from "expo-router";
 import { useCallback, useEffect, useMemo } from "react";
 import { Text, useWindowDimensions, View } from "react-native";
 
-import { artworkUri } from "@/catalog/artworkUri";
+import { artworkUri } from "@wave/client/artworkUri";
 import { Artwork } from "@/catalog/Artwork";
 
 import { CELL, grid } from "@/catalog/grid";
@@ -34,7 +34,7 @@ import { followArtistLink } from "@/library/ArtistChoice";
 import { DetailFrame } from "@/library/DetailFrame";
 
 import { useAlbum, useLinkRows } from "@/library/hooks";
-import type { AlbumRow, AlbumTrackRow, SongRow } from "@/library/LibraryStore";
+import type { AlbumRow, AlbumTrackRow, SongRow } from "@wave/client";
 import { parseId, useKnownRow, useOpenedIntegrated } from "@/library/routes";
 import { songCount } from "@/library/TrackList";
 import { useLocalisation } from "@/localisation/localisation";

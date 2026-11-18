@@ -21,17 +21,17 @@ import {
 } from "@wave/core";
 import { performance } from "node:perf_hooks";
 
-import type { IndexedTrack } from "../src/library/LibraryStore.ts";
-import { creditSplits } from "../src/library/db/credits.ts";
+import type { IndexedTrack } from "@wave/client";
+import { creditSplits } from "@wave/client/db/credits";
 import {
   addToPlaylist,
   linkPlaylistEntries,
   selectPlaylistEntriesRevision,
-} from "../src/library/db/playlists.ts";
-import { saveBatch } from "../src/library/db/save.ts";
-import * as schema from "../src/library/db/schema.ts";
-import { openTestDatabase } from "../src/library/db/testDatabase.ts";
-import { selectKnownFiles } from "../src/library/db/tracks.ts";
+} from "@wave/client/db/playlists";
+import { saveBatch } from "@wave/client/db/save";
+import * as schema from "@wave/client/db/schema";
+import { openTestDatabase } from "@wave/client/testing";
+import { selectKnownFiles } from "@wave/client/db/tracks";
 import { median } from "./measure.ts";
 
 const quick = process.argv.includes("--quick");

@@ -22,7 +22,7 @@ import { NativeCover } from "@/glass/waveGlass";
 import { CoveredByNowPlaying } from "@/lib/screenSight";
 import { addScreenBackHandler } from "@/overlay/back";
 import { useRenderCount } from "@/perf/perf";
-import type { TrackDetails } from "@/library/LibraryStore";
+import type { TrackDetails } from "@wave/client";
 import { useCurrentTrackId } from "@/playback/hooks";
 import { playbackState, type PlaybackState } from "@/playback/Player";
 import { LyricCardLayer } from "@/share/LyricCardLayer";

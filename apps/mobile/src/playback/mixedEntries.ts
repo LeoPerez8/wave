@@ -1,5 +1,5 @@
 import { selectionEntries, type YtArtistAlbum } from "@wave/core";
-import type { AlbumRow, SongRow } from "../library/LibraryStore.ts";
+import type { AlbumRow, SongRow } from "@wave/client";
 import type { NativeYtSong } from "../native/waveYtMusic.ts";
 import type { FindInLibrary } from "../ytmusic/libraryFinder.ts";
 import type { TargetEntry } from "./actionTargets.ts";

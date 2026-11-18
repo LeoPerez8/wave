@@ -6,6 +6,7 @@ import { freeTurn } from "@/lib/backgroundWork";
 import { playHistoryVersion } from "@/playback/PlayHistory";
 import { lyricsAndGenreLookupsEnabled } from "@/settings/lyricsAndGenre";
 import { LibraryStore } from "./LibraryStore";
+
 import { lookUpStreamedGenre, logLookupFailure } from "./lyricsAndGenre";
 import { appRuntime } from "./runtime";
 import { fillStreamedGenres } from "./streamedGenreFill";

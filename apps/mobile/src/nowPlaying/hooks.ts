@@ -9,7 +9,8 @@ import * as Effect from "effect/Effect";
 import { useEffect, useMemo, useState, useSyncExternalStore } from "react";
 import { useColorScheme } from "react-native";
 
-import { LibraryStore, type TrackDetails } from "@/library/LibraryStore";
+import { LibraryStore } from "@/library/LibraryStore";
+import { type TrackDetails } from "@wave/client";
 import { appRuntime } from "@/library/runtime";
 import type { NativeYtSong } from "@/native/waveYtMusic";
 import {

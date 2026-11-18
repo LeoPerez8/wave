@@ -19,7 +19,7 @@ import { router } from "@/lib/timingRouter";
 import { useState, type ComponentType, type ReactNode } from "react";
 import { Text, View, useWindowDimensions } from "react-native";
 
-import { artworkUri } from "@/catalog/artworkUri";
+import { artworkUri } from "@wave/client/artworkUri";
 import { COVER_ROW_TILE } from "@/catalog/CoverRow";
 import { PlaylistCard } from "@/catalog/cards/PlaylistCard";
 import { SongCard } from "@/catalog/cards/SongCard";
@@ -29,7 +29,7 @@ import { SkeletonGroup, SongCardSkeleton } from "@/catalog/Skeletons";
 import { TitledSection } from "@/catalog/TitledSection";
 import { RecommendationsFailed } from "@/components/RecommendationsFailed";
 import { openStatsSeeAll } from "@/library/routes";
-import type { PlayableSongRow } from "@/library/LibraryStore";
+import type { PlayableSongRow } from "@wave/client";
 import { Crossfade } from "@/motion/Crossfade";
 import { openTrackActions } from "@/playback/ActionsMenu";
 import { useYtMusicEnabled } from "@/settings/ytMusic";

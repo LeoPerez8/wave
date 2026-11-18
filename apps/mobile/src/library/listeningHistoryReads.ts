@@ -2,7 +2,7 @@ import {
   startingAt,
   type ListeningHistoryCursor,
   type ListeningHistoryPage,
-} from "./db/listeningHistory.ts";
+} from "@wave/client/db/listeningHistory";
 
 /**
  * The next page (`more`), the one above a moment's (`newer`), the newest one

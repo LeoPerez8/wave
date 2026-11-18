@@ -3,11 +3,7 @@ import * as Effect from "effect/Effect";
 import { performance } from "node:perf_hooks";
 import { setImmediate } from "node:timers/promises";
 import { percentiles } from "./measure.ts";
-import {
-  traceQueries,
-  observeSqlTasks,
-  type TestDatabase,
-} from "../../src/library/db/testDatabase.ts";
+import { traceQueries, observeSqlTasks, type TestDatabase } from "@wave/client/testing";
 
 const round = (value: number) => Number(value.toFixed(3));
 /** Times complete JS tasks between injected free turns; `turn` ends the open task, then yields. */

@@ -8,7 +8,7 @@ import { setImmediate } from "node:timers/promises";
 import * as Effect from "effect/Effect";
 import type { DiscoverMixes, MagicSong, TasteProfile } from "@wave/core";
 
-import { traceQueries } from "../../../src/library/db/testDatabase.ts";
+import { traceQueries } from "@wave/client/testing";
 import { startupReplay } from "../startupReplay.ts";
 import { freeTurnTasks, measureCooperative } from "../cooperative.ts";
 import { profileKey } from "./tasteProfile.ts";
