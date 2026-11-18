@@ -1,10 +1,11 @@
-import assert from "node:assert/strict";
+﻿import assert from "node:assert/strict";
 import { mkdtempSync, rmSync, mkdirSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { basename, dirname, join } from "node:path";
 import { test } from "node:test";
 import { Database } from "@wave/client";
-import { addTrack, type TestDatabase } from "@wave/client/testing";
+import { addTrack, star, type TestDatabase } from "@wave/client/testing";
+import { createPlaylist } from "@wave/client/db/playlists";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import * as ManagedRuntime from "effect/ManagedRuntime";
@@ -151,6 +152,84 @@ test("the window reads the Library's counts through the bridge", async () => {
     const wave = exposed.get("wave") as WaveBridge;
     assert.equal((await wave.library.counts()).songs, 1);
     await runtime.dispose();
+  });
+});
+
+test("Library browsing pages albums and their ordered songs through the bridge", async () => {
+  await withFile(async (file) => {
+    const { runtime, exposed } = connect(file);
+    try {
+      await runtime.runPromise(
+        Effect.gen(function* () {
+          const db = (yield* Database) as unknown as TestDatabase;
+          addTrack(db, { title: "Road", artist: "Nick Drake", album: "Pink Moon", trackNumber: 3 });
+          addTrack(db, {
+            title: "Pink Moon",
+            artist: "Nick Drake",
+            album: "Pink Moon",
+            trackNumber: 1,
+          });
+        }),
+      );
+      const wave = exposed.get("wave") as WaveBridge;
+      const albums = await wave.library.browse({ kind: "albums" }, 0, 1);
+      assert.equal(albums.total, 1);
+      assert.equal(albums.items[0]?.title, "Pink Moon");
+      const songs = await wave.library.browse({ kind: "album", id: albums.items[0]!.id }, 0, 1);
+      assert.equal(songs.total, 2);
+      assert.equal(songs.items[0]?.title, "Pink Moon");
+      assert.equal(songs.items[0]?.trackNumber, 1);
+      const rest = await wave.library.browse({ kind: "album", id: albums.items[0]!.id }, 1, 1);
+      assert.equal(rest.items[0]?.title, "Road");
+      await assert.rejects(wave.library.browse({ kind: "songs" }, 0, 201), /Refused/);
+    } finally {
+      await runtime.dispose();
+    }
+  });
+});
+
+test("Library browsing finds favorites, individual artists, genres, playlists and letters", async () => {
+  await withFile(async (file) => {
+    const { runtime, exposed } = connect(file);
+    try {
+      await runtime.runPromise(
+        Effect.gen(function* () {
+          const db = (yield* Database) as unknown as TestDatabase;
+          const id = addTrack(db, { title: "Road", artist: "Nick Drake", genre: "Folk" });
+          addTrack(db, { title: "Another song", artist: "Nick Drake" });
+          star(db, id, 1000);
+          createPlaylist(db, "Evening", [{ source: "library", trackId: id }], 1000);
+        }),
+      );
+      const wave = exposed.get("wave") as WaveBridge;
+      assert.equal(
+        (await wave.library.browse({ kind: "favorites" }, 0, 10)).items[0]?.title,
+        "Road",
+      );
+      const artists = await wave.library.browse({ kind: "artists" }, 0, 10);
+      assert.equal(artists.items[0]?.title, "Nick Drake");
+      const artist = await wave.library.browse({ kind: "artist", id: artists.items[0]!.id }, 0, 10);
+      assert.equal(artist.items[0]?.artist, "");
+      assert.equal((await wave.library.browse({ kind: "genres" }, 0, 10)).items[0]?.title, "Folk");
+      const playlists = await wave.library.browse({ kind: "playlists" }, 0, 10);
+      assert.equal(playlists.items[0]?.title, "Evening");
+      assert.equal(
+        (await wave.library.browse({ kind: "playlist", id: playlists.items[0]!.id }, 0, 1)).items[0]
+          ?.title,
+        "Road",
+      );
+      assert.equal(await wave.library.letter({ kind: "songs" }, "R"), 1);
+      const browse = (scope: unknown) =>
+        (wave.library.browse as (s: unknown, o: number, l: number) => Promise<unknown>)(
+          scope,
+          0,
+          10,
+        );
+      await assert.rejects(browse({ kind: "album", id: -1 }), /Refused/);
+      await assert.rejects(browse({ kind: "injected" }), /Refused/);
+    } finally {
+      await runtime.dispose();
+    }
   });
 });
 

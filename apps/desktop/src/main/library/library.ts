@@ -4,8 +4,15 @@ import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import { Kotlin } from "../kotlin/kotlin.ts";
 import { createScanner } from "./scanner.ts";
+import { browseLibrary } from "./browse.ts";
+import type { BrowseScope } from "../../shared/browse.ts";
 
 export interface DesktopLibraryShape extends ReturnType<typeof createScanner> {
+  readonly browse: (
+    scope: BrowseScope,
+    offset: number,
+    limit: number,
+  ) => ReturnType<typeof browseLibrary>;
   readonly pickRoot: () => Promise<void>;
   readonly pickExclusion: () => Promise<void>;
 }
@@ -34,6 +41,16 @@ export const desktopLibraryLayer = (options: {
           void scanner.refresh();
           return {
             ...scanner,
+            browse: (scope: BrowseScope, offset: number, limit: number) => {
+              const page = browseLibrary(db, scope, offset, limit);
+              return {
+                ...page,
+                items: page.items.map((row) => ({
+                  ...row,
+                  unavailable: row.path !== null && scanner.unavailable(row.path),
+                })),
+              };
+            },
             pickRoot: async () => {
               const path = await options.pickFolder();
               if (path !== undefined) await scanner.addRoot(path);

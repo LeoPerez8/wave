@@ -7,6 +7,7 @@ import type { LibraryCounts } from "@wave/client/db/counts";
 import type { PlaybackStatus } from "./playback.ts";
 import type { SongTags } from "./tags.ts";
 import type { DesktopFolder, DesktopSong, ScanStatus } from "./library.ts";
+import type { BrowseScope, BrowsePage } from "./browse.ts";
 
 /** One window of a list, as a list call returns it. */
 export interface Page<T> {
@@ -18,6 +19,14 @@ export interface Page<T> {
 
 /** Each call's arguments and result. Arguments reach main as untrusted data. */
 export interface BridgeContract {
+  readonly "library.browse": {
+    readonly args: readonly [scope: BrowseScope, offset: number, limit: number];
+    readonly result: BrowsePage;
+  };
+  readonly "library.letter": {
+    readonly args: readonly [scope: BrowseScope, letter: string];
+    readonly result: number;
+  };
   readonly "library.counts": { readonly args: readonly []; readonly result: LibraryCounts };
   readonly "library.scanStatus": { readonly args: readonly []; readonly result: ScanStatus };
   readonly "library.refresh": { readonly args: readonly []; readonly result: void };
@@ -60,6 +69,8 @@ type PagedLists<T> = {
   readonly [C in keyof T]: T[C] extends { readonly result: readonly unknown[] } ? never : T[C];
 };
 export const BRIDGE_CALLS = [
+  "library.browse",
+  "library.letter",
   "library.counts",
   "library.scanStatus",
   "library.refresh",
@@ -87,6 +98,8 @@ export type Invoke = <C extends BridgeCall>(
 /** `window.wave`. */
 export interface WaveBridge {
   readonly library: {
+    readonly browse: (scope: BrowseScope, offset: number, limit: number) => Promise<BrowsePage>;
+    readonly letter: (scope: BrowseScope, letter: string) => Promise<number>;
     readonly counts: () => Promise<LibraryCounts>;
     readonly scanStatus: () => Promise<ScanStatus>;
     readonly refresh: () => Promise<void>;
@@ -113,6 +126,8 @@ export interface WaveBridge {
 
 export const createBridge = (invoke: Invoke): WaveBridge => ({
   library: {
+    browse: (scope, offset, limit) => invoke("library.browse", scope, offset, limit),
+    letter: (scope, letter) => invoke("library.letter", scope, letter),
     counts: () => invoke("library.counts"),
     scanStatus: () => invoke("library.scanStatus"),
     refresh: () => invoke("library.refresh"),

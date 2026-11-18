@@ -1,4 +1,4 @@
-/** Main's side of the bridge: one IPC handler per call in the contract. */
+﻿/** Main's side of the bridge: one IPC handler per call in the contract. */
 import { extname, isAbsolute, normalize } from "node:path";
 import { Database } from "@wave/client";
 import { libraryCounts } from "@wave/client/db/counts";
@@ -10,6 +10,19 @@ import type { AudioEngineError } from "./audio/supervisor.ts";
 import { Kotlin } from "./kotlin/kotlin.ts";
 import { DesktopLibrary } from "./library/library.ts";
 import type { Page } from "../shared/bridge.ts";
+import { BROWSE_KINDS, type BrowseScope } from "../shared/browse.ts";
+import { browseLetter } from "./library/browse.ts";
+
+const validScope = (value: unknown): value is BrowseScope => {
+  if (typeof value !== "object" || value === null) return false;
+  const { kind, id, query } = value as BrowseScope;
+  return (
+    BROWSE_KINDS.includes(kind) &&
+    (!["album", "artist", "playlist", "genre"].includes(kind) ||
+      (Number.isSafeInteger(id) && id! > 0)) &&
+    (query === undefined || (typeof query === "string" && query.length <= 500))
+  );
+};
 
 export type IpcHandler = (event: unknown, ...args: unknown[]) => Promise<unknown>;
 
@@ -92,6 +105,18 @@ const createHandlers = (): Handlers => {
         return yield* Effect.fail(new Error("[folder-unavailable] Drive is not connected"));
     });
   return {
+    "library.browse": ([scope, offset, limit]) =>
+      validScope(scope)
+        ? pageCall("library.browse", [offset, limit], (library, offset, limit) =>
+            library.browse(scope, offset, limit),
+          )
+        : refuse("library.browse", "invalid scope"),
+    "library.letter": ([scope, letter]) =>
+      validScope(scope) && typeof letter === "string" && /^[a-z0-9]$/i.test(letter)
+        ? Effect.gen(function* () {
+            return browseLetter(yield* Database, scope, letter);
+          })
+        : refuse("library.letter", "invalid letter or scope"),
     "library.counts": () =>
       Effect.gen(function* () {
         return libraryCounts(yield* Database);
@@ -167,3 +192,4 @@ export const registerBridge = (
     });
   }
 };
+
