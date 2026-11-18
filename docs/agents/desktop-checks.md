@@ -21,6 +21,22 @@ to `apps/desktop/test-results/`, which git ignores; read the PNGs to check what 
 shows. Add a check as a test in `apps/desktop/e2e/` rather than a throwaway script, so CI runs
 it too.
 
+## The audio engine
+
+The engine is Rust in `apps/desktop/native` (Symphonia decodes, cpal plays), loaded as a Node
+addon by the audio utility process (`src/main/audio/process.ts`). It needs Rust (stable), CMake
+(libopus builds from source) and, on Linux, ALSA's headers (`libasound2-dev`).
+
+```sh
+cargo test --manifest-path apps/desktop/native/Cargo.toml   # decoding and seeking golden tests
+pnpm --filter @wave/desktop build:native                     # builds native/wave-audio.node
+```
+
+Build the addon before `test:e2e`: without it the app runs, but every player call fails with
+`[unavailable]`. `WAVE_AUDIO_ADDON` points main at another build. `e2e/audio.spec.ts` plays each
+fixture in `native/engine/tests/fixtures`; its `device` annotation (`--reporter=json`) names the
+output that played it, or `none` when the engine kept time without one, as on CI.
+
 ## Data
 
 `WAVE_DATA_DIR` points the app at a folder of its own instead of the user's data folder; the
@@ -52,6 +68,10 @@ pnpm install --frozen-lockfile --filter "@wave/desktop..."
 pnpm --filter @wave/desktop test:e2e
 ```
 
-WSLg provides the display (`DISPLAY=:0`). Electron's binary downloads on the first run. CI runs
+WSLg provides the display (`DISPLAY=:0`) and a PulseAudio server (`RDP Sink`). That server has no
+cookie in your home, so point `PULSE_COOKIE` at any 256-byte file
+(`head -c 256 /dev/zero > ~/pulse-cookie`); without it the engine finds no device and plays
+silently. Without sudo, unpack `libasound2-dev` with `dpkg -x` and point `PKG_CONFIG_PATH` at its
+`alsa.pc`. Electron's binary downloads on the first run. CI runs
 the same set on `ubuntu-22.04` under `xvfb-run` and on `windows-latest` (the Desktop jobs in
 `.github/workflows/ci.yml`).

@@ -6,17 +6,49 @@ import { test } from "node:test";
 import { Database } from "@wave/client";
 import { addTrack, type TestDatabase } from "@wave/client/testing";
 import * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
 import * as ManagedRuntime from "effect/ManagedRuntime";
 import { exposeBridge } from "../preload/expose.ts";
 import { BRIDGE_CALLS, type WaveBridge } from "../shared/bridge.ts";
+import type { PlaybackStatus } from "../shared/playback.ts";
+import { answer, type AddonEngine } from "./audio/protocol.ts";
+import { playerLayer } from "./audio/player.ts";
+import type { AudioEvents } from "./audio/supervisor.ts";
 import { libraryLayer } from "./database.ts";
 import { registerBridge, type IpcHandler } from "./bridge.ts";
 
 const trusted = { senderFrame: "window" };
 
 /** Main's handlers wired to a preload through an in-memory IPC, as Electron does. */
+/** An audio process in memory, whose engine records what it was asked. */
+const audioInMemory = () => {
+  const engineCalls: string[] = [];
+  let status: PlaybackStatus = { state: "idle", positionMs: 0 };
+  const engine: AddonEngine = {
+    load: (path) => {
+      engineCalls.push(`load ${path}`);
+      status = { state: "paused", positionMs: 0, durationMs: 1_000 };
+      return status;
+    },
+    play: () => {
+      if (status.state === "idle") throw new Error("[nothing-loaded] no song is loaded");
+      status = { ...status, state: "playing" };
+    },
+    pause: () => void (status = { ...status, state: "paused" }),
+    seek: (positionMs) => void (status = { ...status, positionMs }),
+    status: () => status,
+  };
+  const fork = (events: AudioEvents) => ({
+    send: (request: Parameters<typeof answer>[1]) =>
+      queueMicrotask(() => events.message(answer(engine, request))),
+    kill: () => setImmediate(events.exit),
+  });
+  return { layer: playerLayer({ fork }), engineCalls };
+};
+
 const connect = (file: string, isTrusted = (event: unknown) => event === trusted) => {
-  const runtime = ManagedRuntime.make(libraryLayer(file));
+  const audio = audioInMemory();
+  const runtime = ManagedRuntime.make(Layer.mergeAll(libraryLayer(file), audio.layer));
   const handlers = new Map<string, IpcHandler>();
   registerBridge(
     { handle: (channel, handler) => handlers.set(channel, handler) },
@@ -36,7 +68,7 @@ const connect = (file: string, isTrusted = (event: unknown) => event === trusted
       },
     },
   );
-  return { runtime, handlers, exposed, sent };
+  return { runtime, handlers, exposed, sent, engineCalls: audio.engineCalls };
 };
 
 const withFile = async (run: (file: string) => Promise<void>): Promise<void> => {
@@ -101,6 +133,62 @@ test("main refuses a call from a frame other than Wave's window", async () => {
     const counts = handlers.get("library.counts");
     assert.ok(counts !== undefined);
     await assert.rejects(async () => counts({ senderFrame: "an embedded page" }), /untrusted/i);
+    await runtime.dispose();
+  });
+});
+
+const song = join(tmpdir(), "Pink Moon.flac");
+
+test("the window plays, pauses and seeks a song through the bridge", async () => {
+  await withFile(async (file) => {
+    const { runtime, exposed, engineCalls } = connect(file);
+    const wave = exposed.get("wave") as WaveBridge;
+    assert.deepEqual(await wave.player.load(song), {
+      state: "paused",
+      positionMs: 0,
+      durationMs: 1_000,
+    });
+    assert.equal((await wave.player.play()).state, "playing");
+    assert.equal((await wave.player.seek(400)).positionMs, 400);
+    assert.equal((await wave.player.pause()).state, "paused");
+    assert.deepEqual(await wave.player.status(), {
+      state: "paused",
+      positionMs: 400,
+      durationMs: 1_000,
+    });
+    assert.deepEqual(engineCalls, [`load ${song}`]);
+    await runtime.dispose();
+  });
+});
+
+test("main refuses a player call whose arguments aren't a song and a time", async () => {
+  await withFile(async (file) => {
+    const { runtime, handlers, engineCalls } = connect(file);
+    const call = (channel: string, ...args: unknown[]) => {
+      const handler = handlers.get(channel);
+      assert.ok(handler !== undefined, channel);
+      return handler(trusted, ...args);
+    };
+    for (const path of [
+      "music/a.flac",
+      join(tmpdir(), "notes.txt"),
+      join(tmpdir(), "no-extension"),
+      42,
+      undefined,
+    ])
+      await assert.rejects(call("player.load", path), /refused/i, String(path));
+    for (const positionMs of [-1, Number.NaN, Number.POSITIVE_INFINITY, "400", undefined])
+      await assert.rejects(call("player.seek", positionMs), /refused/i, String(positionMs));
+    assert.deepEqual(engineCalls, []);
+    await runtime.dispose();
+  });
+});
+
+test("an engine failure reaches the window with its code", async () => {
+  await withFile(async (file) => {
+    const { runtime, exposed } = connect(file);
+    const wave = exposed.get("wave") as WaveBridge;
+    await assert.rejects(wave.player.play(), /\[nothing-loaded\] no song is loaded/);
     await runtime.dispose();
   });
 });
