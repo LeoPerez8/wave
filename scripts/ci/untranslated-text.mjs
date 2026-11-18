@@ -7,6 +7,8 @@ const ts = createRequire(require.resolve("react-doctor"))("typescript");
 const UI_PROPERTIES = new Set([
   "accessibilityLabel",
   "accessibilityHint",
+  "aria-label",
+  "alt",
   "title",
   "label",
   "placeholder",
@@ -72,8 +74,11 @@ export const isTextSource = (file) =>
 const NOT_UI = /^\/\/ not UI text: \S/;
 
 const hasText = (text) => /\p{L}/u.test(text) && !BRANDS.has(text.trim());
+// Text-like React Native components, and every DOM element (the desktop renders React DOM).
 const textComponent = (node) =>
-  /(?:Text|Title|Heading|Paragraph|Caption|Label)$/.test(node.openingElement.tagName.getText());
+  /^[a-z]|(?:Text|Title|Heading|Paragraph|Caption|Label)$/.test(
+    node.openingElement.tagName.getText(),
+  );
 
 /** Syntactic guard: inspect visible values, never imports, enum ids, logs or error constructors. */
 export function findUntranslatedText(file, source) {

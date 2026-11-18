@@ -133,3 +133,24 @@ test("a marked declaration or property is not UI copy; the marker needs a reason
     ["Visible label", "Still visible"],
   );
 });
+
+test("in the desktop, finds text in any DOM element and its aria-label, alt and title", () => {
+  const source = [
+    '<main><h1>Library</h1><p className="text-secondary">{songs} songs</p></main>;',
+    '<button aria-label="Play" title={busy ? "Wait" : strings.play}><img alt="Cover" /></button>;',
+    "<span>{strings.library.songCount(count)}</span>;",
+  ].join("\n");
+  assert.deepEqual(
+    findUntranslatedText("apps/desktop/src/renderer/App.tsx", source).map(({ line, text }) => [
+      line,
+      text,
+    ]),
+    [
+      [1, "Library"],
+      [1, "songs"],
+      [2, "Play"],
+      [2, "Wait"],
+      [2, "Cover"],
+    ],
+  );
+});
