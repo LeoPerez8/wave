@@ -80,7 +80,11 @@ const showWindow = () => {
 // The account's theme once the services are up (docs/spec-desktop.md, Wave account and sync).
 let theme: ThemeChoice = DEFAULT_THEME_CHOICE;
 const colours = () => themeFor(theme)[nativeTheme.shouldUseDarkColors ? "dark" : "light"];
-const createWindow = (onFocus: () => void) => {
+/**
+ * Opens the window and loads its page while the services are still starting, and shows it once
+ * both are done: the page is loaded by then, and the account's theme is known before it's seen.
+ */
+const createWindow = (onFocus: () => void, services: Promise<void>) => {
   const created = new BrowserWindow({
     width: 1280,
     height: 800,
@@ -121,7 +125,17 @@ const createWindow = (onFocus: () => void) => {
       app.quit();
     }
   });
-  created.once("ready-to-show", () => created.show());
+  const painted = new Promise<void>((resolve) => created.once("ready-to-show", () => resolve()));
+  void Promise.all([painted, services]).then(
+    () => {
+      if (created.isDestroyed()) return;
+      created.setBackgroundColor(colours().background);
+      update();
+      created.show();
+    },
+    // Without its services Wave has nothing to show; the failure is reported where they start.
+    () => {},
+  );
   created.on("closed", () => {
     window = undefined;
     // The token window is hidden, so it alone mustn't keep Wave running.
@@ -301,9 +315,12 @@ else {
     const readTheme = () =>
       runtime.runPromise(Effect.map(Account, (it) => readThemeChoice(it.view().theme)));
     // Builds the services now, so the JVM starts with the app rather than on the first call.
-    await runtime.context();
-    nativeTheme.themeSource = await runtime.runPromise(Effect.map(Database, appearance));
-    theme = await readTheme();
+    const started = (async () => {
+      await runtime.context();
+      nativeTheme.themeSource = await runtime.runPromise(Effect.map(Database, appearance));
+      theme = await readTheme();
+    })();
+    // A call from the page waits for the services it needs.
     registerBridge(
       ipcMain,
       runtime,
@@ -328,6 +345,7 @@ else {
       void readTheme().then((choice) => {
         theme = choice;
       });
-    });
+    }, started);
+    await started;
   });
 }
