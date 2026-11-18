@@ -61,6 +61,21 @@ const preference = (changedAt: number, value: unknown) => ({
 });
 
 describe("POST /v1/push and GET /v1/pull", () => {
+  test("a desktop play is stored and returned unchanged to another device", async () => {
+    const service = await harness();
+    const desktop = await service.signIn();
+    const phone = await service.signIn();
+    const row = play("desktop-device:1", { source: "desktop" });
+
+    const accepted = await push(service, desktop, { plays: [row] });
+    assert.equal((accepted.accepted as Record<string, number>).plays, 1);
+    assert.deepEqual((await pull(service, phone)).plays, [
+      { ...row, snapshot: null, videoId: null },
+    ]);
+    await push(service, desktop, { plays: [row] });
+    assert.equal((await pull(service, phone)).plays.length, 1);
+  });
+
   test("malformed play metadata refuses the whole push", async () => {
     const service = await harness();
     const session = await service.signIn();

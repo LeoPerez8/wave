@@ -49,9 +49,9 @@ export interface PlayContext {
 /**
  * Where a play was started from: `auto` when Android Auto started the
  * playback, `phone` otherwise (the app, the notification, the lock screen,
- * Bluetooth).
+ * Bluetooth), or `desktop` when started on a computer.
  */
-export type PlaySource = "phone" | "auto";
+export type PlaySource = "phone" | "auto" | "desktop";
 
 /**
  * The source of the queue's plays after `command`, sent from `by`: starting
