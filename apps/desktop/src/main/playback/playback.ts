@@ -11,7 +11,13 @@ import { setFavorites } from "@wave/client/db/playHistory";
 import { createPlaybackSession, type AudioPort } from "@wave/client/playbackSession";
 import { createQueueGains, queueAlbum } from "@wave/client/queueGains";
 import { createSongMeasurements } from "@wave/client/songMeasurements";
-import { parseTrackId, ytTrackId, type QueueState } from "@wave/core";
+import {
+  parseTrackId,
+  ytTrackId,
+  type QueueState,
+  type SleepTimer,
+  type SleepTimerChoice,
+} from "@wave/core";
 import * as Context from "effect/Context";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
@@ -27,6 +33,7 @@ import { DesktopLibrary } from "../library/library.ts";
 import { preference, savePreference } from "../preferences.ts";
 import { YtMusic } from "../yt/ytMusic.ts";
 import { readPlaybackSettings, savePlaybackSettings } from "./playbackSettings.ts";
+import { createSleepTimer } from "./sleepTimer.ts";
 
 export interface PlaybackShape {
   /** What the player bar shows; cheap enough to poll. */
@@ -67,6 +74,12 @@ export interface PlaybackShape {
   readonly setSettings: (change: Partial<PlaybackSettings>) => Promise<PlaybackSettings>;
   /** Plays by the stored settings again, after sync pulled the account's values. */
   readonly applySettings: () => Promise<void>;
+  /**
+   * Starts a sleep timer, replacing the running one; null cancels it. End of queue also means
+   * nothing adds songs to a queue that plays out.
+   */
+  readonly setSleepTimer: (choice: SleepTimerChoice | null) => Promise<SleepTimer | null>;
+  readonly sleepTimer: () => SleepTimer | null;
 }
 
 export type PlaybackChange = "played" | "starred";
@@ -114,6 +127,7 @@ export const playbackLayer = Layer.effect(
     let settings = readPlaybackSettings(db);
     /** Playback is shutting down: nothing more is measured, as the Library is closing. */
     let closing = false;
+    let stoppedBy: (why: "trackEnd" | "queueEnd") => void = () => {};
     const session = yield* Effect.promise(() =>
       createPlaybackSession({
         db,
@@ -122,9 +136,20 @@ export const playbackLayer = Layer.effect(
         available: (path) => !library.unavailable(path),
         streamed: yt.song,
         playEnded: () => tell("played"),
+        stopped: (why) => stoppedBy(why),
         gainDb: gains.gainDb,
       }),
     );
+    const sleep = createSleepTimer({
+      now: Date.now,
+      pause: session.pause,
+      pauseAtTrackEnd: session.pauseAtTrackEnd,
+      schedule: (ms, run) => {
+        const handle = setTimeout(run, ms);
+        return () => clearTimeout(handle);
+      },
+    });
+    stoppedBy = (why) => void sleep.stopped(why).catch(failed);
     // Normalize Volume's measurements: the queue's songs with no value of their own, one at a
     // time, the song playing and the next ones first (Core's `songsToMeasure`).
     const measurements = createSongMeasurements({
@@ -174,6 +199,7 @@ export const playbackLayer = Layer.effect(
     yield* Effect.addFinalizer(() =>
       Effect.promise(async () => {
         closing = true;
+        sleep.close();
         stop();
         await session.close().catch(failed);
       }),
@@ -233,6 +259,7 @@ export const playbackLayer = Layer.effect(
         muted,
         revision,
         error,
+        sleepTimer: sleep.current(),
       };
     };
 
@@ -284,7 +311,10 @@ export const playbackLayer = Layer.effect(
         keepQueued();
         queueChanged();
       },
-      play: session.play,
+      play: async () => {
+        await session.play();
+        await sleep.resumed();
+      },
       pause: session.pause,
       seek: session.seek,
       undo: async () => {
@@ -347,6 +377,11 @@ export const playbackLayer = Layer.effect(
         return settings;
       },
       applySettings: () => playBySettings(readPlaybackSettings(db)),
+      setSleepTimer: async (choice) => {
+        await sleep.set(choice);
+        return sleep.current();
+      },
+      sleepTimer: sleep.current,
     };
   }),
 );

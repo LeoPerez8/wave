@@ -148,6 +148,7 @@ export { elapsedWavePath } from "./elapsedWave.ts";
 export type { ElapsedWave } from "./elapsedWave.ts";
 export { contrastRatio, crossfadeGround, lyricsDimOpacity, paletteGradient } from "./palette.ts";
 export type { ArtworkPalette, Gradient, GradientTheme, GroundLayers } from "./palette.ts";
+export { pixelPalette } from "./pixelPalette.ts";
 export { settleSheet } from "./sheet.ts";
 export type { SheetDrag, SheetState } from "./sheet.ts";
 export {
@@ -247,14 +248,23 @@ export {
   SLEEP_TIMER_PRESETS,
   formatSleepMinutes,
   formatSleepRemaining,
+  sleepTimerCheckIn,
   sleepTimerEntryLabel,
   sleepTimerLabelChangesIn,
   sleepTimerLabelSeconds,
+  sleepTimerPausesAtTrackEnd,
   sleepTimerRemaining,
   startSleepTimer,
   stepSleepMinutes,
+  stepSleepTimer,
 } from "./sleepTimer.ts";
-export type { SleepTimer, SleepTimerChoice, SleepTimerClock } from "./sleepTimer.ts";
+export type {
+  SleepTimer,
+  SleepTimerChoice,
+  SleepTimerClock,
+  SleepTimerEvent,
+  SleepTimerStep,
+} from "./sleepTimer.ts";
 export {
   RELOAD_RESUME_WINDOW_MS,
   UPDATE_APK_RETRY_INTERVAL_MS,

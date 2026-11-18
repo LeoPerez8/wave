@@ -233,6 +233,29 @@ test("a song that ends with nothing preloaded loads the next one and keeps playi
   assert.equal(session.snapshot().status.state, "playing");
 });
 
+test("pausing at a song's end lines nothing up, then leaves the next song paused at its start", async (t) => {
+  const stops: string[] = [];
+  const { audio, session, keys } = await album(t, { stopped: (why) => stops.push(why) });
+  await session.pauseAtTrackEnd(true);
+  assert.equal(audio.preloaded(), undefined);
+  await session.feed({ key: keys[0], state: "ended", positionMs: 60000, durationMs: 60000 });
+  assert.equal(current(session), keys[1]);
+  assert.equal(session.snapshot().status.state, "paused");
+  assert.equal(session.snapshot().status.positionMs, 0);
+  assert.deepEqual(stops, ["trackEnd"]);
+  await session.pauseAtTrackEnd(false);
+  assert.equal(audio.preloaded(), keys[2]);
+});
+
+test("the queue playing out tells why playback stopped", async (t) => {
+  const stops: string[] = [];
+  const { session, keys } = await album(t, { stopped: (why) => stops.push(why) });
+  await session.dispatch({ type: "jumpTo", key: keys[2]! });
+  await session.feed({ key: keys[2], state: "ended", positionMs: 60000, durationMs: 60000 });
+  assert.equal(session.snapshot().status.state, "paused");
+  assert.deepEqual(stops, ["queueEnd"]);
+});
+
 test("Next ends the play as skipped by Next; Previous and a jump don't", async (t) => {
   const ended: boolean[] = [];
   const { session, keys } = await album(t, { playEnded: (_play, byNext) => ended.push(byNext) });

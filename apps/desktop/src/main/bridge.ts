@@ -6,7 +6,11 @@ import * as Effect from "effect/Effect";
 import { BRIDGE_CALLS, type BridgeCall, type BridgeContract } from "../shared/bridge.ts";
 import { PLAYABLE_EXTENSIONS } from "../shared/playback.ts";
 import { Playback } from "./playback/playback.ts";
-import { validPlaybackCommand, validPlaybackSettings } from "./playback/validation.ts";
+import {
+  validPlaybackCommand,
+  validPlaybackSettings,
+  validSleepTimerChoice,
+} from "./playback/validation.ts";
 import { Player } from "./audio/player.ts";
 import type { AudioEngineError } from "./audio/supervisor.ts";
 import { Kotlin } from "./kotlin/kotlin.ts";
@@ -27,6 +31,7 @@ import { runSongAction, songMenu } from "./library/songActions.ts";
 import type { Appearance } from "../shared/bridge.ts";
 import { ytRow } from "../shared/yt.ts";
 import { VIDEO_ID, YtMusic } from "./yt/ytMusic.ts";
+import { Lyrics } from "./lyrics/lyrics.ts";
 import { DesktopPlaylists } from "./library/playlists.ts";
 import { playlistHandlers } from "./playlistHandlers.ts";
 import { searchLibrary } from "./library/search.ts";
@@ -88,7 +93,15 @@ interface Runtime<R> {
 
 /** The services the calls use. */
 export type BridgeServices =
-  Database | Player | Kotlin | DesktopLibrary | Playback | YtMusic | Account | DesktopPlaylists;
+  | Database
+  | Player
+  | Kotlin
+  | DesktopLibrary
+  | Playback
+  | YtMusic
+  | Account
+  | Lyrics
+  | DesktopPlaylists;
 
 const refuse = (call: BridgeCall, why: string) => Effect.fail(new Error(`Refused ${call}: ${why}`));
 
@@ -237,6 +250,17 @@ const createHandlers = (onAppearance: (mode: Appearance) => void): Handlers => {
       limit <= 200
         ? playbackCall((p) => p.queue(offset, limit))
         : refuse("playback.queue", "invalid page"),
+    "playback.setSleepTimer": ([choice]) =>
+      validSleepTimerChoice(choice)
+        ? playbackCall((p) => p.setSleepTimer(choice))
+        : refuse("playback.setSleepTimer", "invalid sleep timer"),
+    "lyrics.song": ([trackId]) =>
+      typeof trackId === "string" && trackId.length > 0 && trackId.length <= 200
+        ? Effect.gen(function* () {
+            const lyrics = yield* Lyrics;
+            return yield* Effect.tryPromise({ try: () => lyrics.song(trackId), catch: (e) => e });
+          })
+        : refuse("lyrics.song", "invalid track id"),
     "settings.appearance": () =>
       Effect.gen(function* () {
         return appearance(yield* Database);

@@ -95,6 +95,8 @@ export const en = {
     youTubeMusic: "YouTube Music",
     ytOffline: "YouTube Music comes back when you're online.",
     ytFailed: "YouTube Music didn't answer. Try again in a moment.",
+    sidePanel: "Side panel",
+    removeFromQueue: (title: string) => `Remove “${title}” from the Queue`,
   },
   desktopLibrary: {
     refresh: "Refresh",

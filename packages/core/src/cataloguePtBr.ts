@@ -94,6 +94,8 @@ export const ptBR: Catalogue = {
     youTubeMusic: "YouTube Music",
     ytOffline: "O YouTube Music volta quando você estiver online.",
     ytFailed: "O YouTube Music não respondeu. Tente de novo daqui a pouco.",
+    sidePanel: "Painel lateral",
+    removeFromQueue: (title: string) => `Remover “${title}” da Fila`,
   },
   desktopLibrary: {
     refresh: "Atualizar",

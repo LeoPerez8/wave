@@ -10,6 +10,9 @@ import {
   startSleepTimer,
   stepSleepMinutes,
   sleepTimerEntryLabel,
+  sleepTimerCheckIn,
+  sleepTimerPausesAtTrackEnd,
+  stepSleepTimer,
 } from "./index.ts";
 
 describe("startSleepTimer", () => {
@@ -127,5 +130,72 @@ describe("formatSleepMinutes", () => {
     assert.equal(formatSleepMinutes(45, pt), "45 min");
     assert.equal(formatSleepMinutes(90, pt), "1 h 30 min");
     assert.equal(formatSleepMinutes(120, pt), "2 h");
+  });
+});
+
+describe("stepSleepTimer", () => {
+  const at = Date.UTC(2026, 9, 11, 22, 0);
+  const deadline = startSleepTimer({ type: "minutes", minutes: 30 }, at)!;
+
+  test("a 30-minute timer's check at 22:30 pauses playback and ends the timer", () => {
+    assert.deepEqual(stepSleepTimer(deadline, { type: "check", now: at + 30 * 60_000 }), {
+      timer: null,
+      pause: true,
+    });
+  });
+
+  test("a check that runs early keeps the timer and waits for the rest", () => {
+    const now = at + 29 * 60_000;
+    assert.deepEqual(stepSleepTimer(deadline, { type: "check", now }), {
+      timer: deadline,
+      pause: false,
+    });
+    assert.equal(sleepTimerCheckIn(deadline, now), 60_000);
+  });
+
+  test("playing again after the deadline passed while paused ends the timer without pausing", () => {
+    assert.deepEqual(stepSleepTimer(deadline, { type: "resumed", now: at + 31 * 60_000 }), {
+      timer: null,
+      pause: false,
+    });
+    assert.deepEqual(stepSleepTimer(deadline, { type: "resumed", now: at + 10 * 60_000 }), {
+      timer: deadline,
+      pause: false,
+    });
+  });
+
+  test("end of track holds the next song back, and ends once the track finished", () => {
+    const timer = startSleepTimer({ type: "endOfTrack" }, at);
+    assert.equal(sleepTimerPausesAtTrackEnd(timer), true);
+    assert.equal(sleepTimerPausesAtTrackEnd(deadline), false);
+    assert.equal(sleepTimerPausesAtTrackEnd(null), false);
+    assert.deepEqual(stepSleepTimer(timer, { type: "trackFinished" }), {
+      timer: null,
+      pause: false,
+    });
+    assert.deepEqual(stepSleepTimer(timer, { type: "queueEnded" }), { timer: null, pause: false });
+    assert.equal(sleepTimerCheckIn(timer, at), null);
+  });
+
+  test("end of queue lets songs go on, and pauses when the queue plays out", () => {
+    const timer = startSleepTimer({ type: "endOfQueue" }, at);
+    assert.equal(sleepTimerPausesAtTrackEnd(timer), false);
+    assert.deepEqual(stepSleepTimer(timer, { type: "trackFinished" }), {
+      timer,
+      pause: false,
+    });
+    assert.deepEqual(stepSleepTimer(timer, { type: "queueEnded" }), { timer: null, pause: true });
+  });
+
+  test("with no timer nothing happens", () => {
+    assert.deepEqual(stepSleepTimer(null, { type: "check", now: at }), {
+      timer: null,
+      pause: false,
+    });
+    assert.equal(sleepTimerCheckIn(null, at), null);
+  });
+
+  test("a deadline already due is checked at once", () => {
+    assert.equal(sleepTimerCheckIn(deadline, at + 31 * 60_000), 0);
   });
 });

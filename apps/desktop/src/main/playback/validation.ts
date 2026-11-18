@@ -1,4 +1,9 @@
-import { CROSSFADE, STREAM_BUFFER_MINUTES } from "@wave/core";
+import {
+  CROSSFADE,
+  CUSTOM_SLEEP_MINUTES,
+  STREAM_BUFFER_MINUTES,
+  type SleepTimerChoice,
+} from "@wave/core";
 
 import type { PlaybackCommand } from "../../shared/playerView.ts";
 import type { PlaybackSettings } from "../../shared/playbackSettings.ts";
@@ -43,4 +48,18 @@ export const validPlaybackCommand = (value: unknown): value is PlaybackCommand =
     default:
       return false;
   }
+};
+
+/** Whether [value], sent by the window, is a sleep timer main may start (null cancels one). */
+export const validSleepTimerChoice = (value: unknown): value is SleepTimerChoice | null => {
+  if (value === null) return true;
+  if (typeof value !== "object") return false;
+  const v = value as Record<string, unknown>;
+  if (v.type === "endOfTrack" || v.type === "endOfQueue") return true;
+  return (
+    v.type === "minutes" &&
+    Number.isSafeInteger(v.minutes) &&
+    (v.minutes as number) >= CUSTOM_SLEEP_MINUTES.min &&
+    (v.minutes as number) <= CUSTOM_SLEEP_MINUTES.max
+  );
 };

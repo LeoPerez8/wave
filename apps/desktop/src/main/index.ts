@@ -38,6 +38,7 @@ import {
 import { appearance } from "./preferences.ts";
 import { artworkStore } from "./library/artwork.ts";
 import { ytMusicLayer } from "./yt/ytMusic.ts";
+import { lyricsLayer } from "./lyrics/lyrics.ts";
 import { botguardPost, createPoTokens, poTokenHost } from "./yt/poTokens.ts";
 import { openPoTokenPage } from "./yt/poTokenWindow.ts";
 import { createWaveAccount } from "./account/account.ts";
@@ -284,7 +285,11 @@ else {
         focused: () => BrowserWindow.getFocusedWindow() !== null,
       }).pipe(
         Layer.provideMerge(
-          playlists.pipe(Layer.provideMerge(playbackLayer.pipe(Layer.provideMerge(library)))),
+          playlists.pipe(
+            Layer.provideMerge(
+              Layer.mergeAll(playbackLayer, lyricsLayer()).pipe(Layer.provideMerge(library)),
+            ),
+          ),
         ),
       ),
     );
