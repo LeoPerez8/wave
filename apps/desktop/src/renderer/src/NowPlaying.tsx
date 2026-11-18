@@ -45,12 +45,19 @@ const paletteOf = (src: string) =>
 function usePalette(song: BrowseRow | null) {
   const hash = song?.artworkHash ?? null;
   const url = song?.artworkUrl ?? null;
-  const key = hash ?? url;
+  const id = song?.id;
+  const key = hash ?? url ?? (id ? `song:${id}` : null);
   const [palette, setPalette] = useState<{ key: string; palette: ArtworkPalette | null }>();
   useEffect(() => {
     if (key === null) return;
     let current = true;
-    void (hash !== null ? window.wave.library.artwork(hash, false) : window.wave.yt.artwork(url!))
+    void (
+      hash !== null
+        ? window.wave.library.artwork(hash, false)
+        : url !== null
+          ? window.wave.yt.artwork(url)
+          : window.wave.library.cover("song", id!, false)
+    )
       .then((image) => (image === null ? null : paletteOf(image)))
       .catch(() => null)
       .then((found) => {
@@ -59,7 +66,7 @@ function usePalette(song: BrowseRow | null) {
     return () => {
       current = false;
     };
-  }, [key, hash, url]);
+  }, [key, hash, url, id]);
   return key !== null && palette?.key === key ? palette.palette : null;
 }
 
@@ -143,7 +150,7 @@ export function NowPlaying({
         <Icon name="back" />
       </button>
       <div className="now-playing-song">
-        <Artwork large hash={song?.artworkHash} url={song?.artworkUrl} />
+        <Artwork large kind="song" id={song?.id} hash={song?.artworkHash} url={song?.artworkUrl} />
         <div className="now-playing-copy">
           <h1 className="truncate">{song?.title ?? text.desktopLayout.nothingPlaying}</h1>
           {song && <p className="truncate secondary">{song.artist}</p>}

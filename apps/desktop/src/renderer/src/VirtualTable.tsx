@@ -17,6 +17,8 @@ const images = new Map<string, Promise<string | null>>();
  */
 export function Artwork({
   hash,
+  kind,
+  id,
   url,
   playlist,
   image: playlistImage,
@@ -24,6 +26,8 @@ export function Artwork({
   large = false,
 }: {
   readonly hash?: string | null;
+  readonly kind?: "song" | "album" | "artist" | undefined;
+  readonly id?: number | undefined;
   readonly url?: string | null;
   readonly playlist?: number;
   readonly image?: string | null;
@@ -32,14 +36,17 @@ export function Artwork({
 }) {
   const [loaded, setLoaded] = useState<{ key: string; image: string | null }>();
   const own = playlist !== undefined && playlistImage ? playlist : undefined;
+  const lookup = kind !== undefined && id !== undefined && id > 0 && (kind === "artist" || !hash);
   const imageKey =
     own !== undefined
       ? `playlist:${own}:${playlistImage}-${large}`
-      : hash
-        ? `${hash}-${large}`
-        : url
-          ? `url:${url}`
-          : "";
+      : lookup
+        ? `${kind}:${id}-${large}`
+        : hash
+          ? `${hash}-${large}`
+          : url
+            ? `url:${url}`
+            : "";
   const image = loaded?.key === imageKey ? loaded.image : null;
   useEffect(() => {
     let current = true;
@@ -49,11 +56,16 @@ export function Artwork({
         read = (
           own !== undefined
             ? window.wave.playlists.image(own, large)
-            : hash
-              ? window.wave.library.artwork(hash, large)
-              : window.wave.yt.artwork(url!)
+            : lookup
+              ? window.wave.library.cover(kind!, id!, large)
+              : hash
+                ? window.wave.library.artwork(hash, large)
+                : window.wave.yt.artwork(url!)
         ).catch(() => null);
         images.set(imageKey, read);
+        void read.then((value) => {
+          if (value === null) images.delete(imageKey);
+        });
       }
       if (images.size > 64) images.delete(images.keys().next().value!);
       void read.then((image) => {
@@ -63,7 +75,7 @@ export function Artwork({
     return () => {
       current = false;
     };
-  }, [imageKey, own, hash, url, large]);
+  }, [imageKey, own, hash, url, large, lookup, kind, id]);
   return (
     <span className={`artwork ${artist ? "artist-image" : ""}`}>
       {image ? <img src={image} alt="" /> : <Icon name={artist ? "artists" : "songs"} />}
@@ -335,6 +347,16 @@ export function VirtualTable({
                       ) : (
                         <Artwork
                           hash={row.artworkHash}
+                          kind={
+                            scope.kind === "artists"
+                              ? "artist"
+                              : scope.kind === "albums"
+                                ? "album"
+                                : songList
+                                  ? "song"
+                                  : undefined
+                          }
+                          id={row.id}
                           artist={scope.kind === "artists"}
                           {...(scope.kind === "playlists"
                             ? { playlist: row.id, image: row.imageKey ?? null }

@@ -72,7 +72,7 @@ function SongRow({
     >
       <span className="title-cell">
         <span className="row-picture">
-          <Artwork hash={row.artworkHash} />
+          <Artwork kind="song" id={row.id} hash={row.artworkHash} />
           <span className="row-play">
             <Icon
               name={row.unavailable ? "folder" : row.path === null ? "download" : "play"}
@@ -288,7 +288,13 @@ export function SearchPage({
             }}
           >
             <span className={kind === "artist" ? "search-top-art artist-image" : "search-top-art"}>
-              <Artwork large hash={row.artworkHash} artist={kind === "artist"} />
+              <Artwork
+                large
+                kind={kind === "song" || kind === "album" || kind === "artist" ? kind : undefined}
+                id={row.id}
+                hash={row.artworkHash}
+                artist={kind === "artist"}
+              />
             </span>
             <span className="search-top-name">{row.title}</span>
             <span className="secondary">
@@ -370,7 +376,17 @@ export function SearchPage({
               onClick={() => openRow(section.kind, row)}
             >
               <span className={section.kind === "artist" ? "artist-image" : undefined}>
-                <Artwork large hash={row.artworkHash} artist={section.kind === "artist"} />
+                <Artwork
+                  large
+                  kind={
+                    section.kind === "song" || section.kind === "album" || section.kind === "artist"
+                      ? section.kind
+                      : undefined
+                  }
+                  id={row.id}
+                  hash={row.artworkHash}
+                  artist={section.kind === "artist"}
+                />
               </span>
               <span className="truncate">{row.title}</span>
               <span className="truncate secondary">

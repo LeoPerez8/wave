@@ -187,7 +187,7 @@ export function PlayerBar({
             disabled={song === null}
             onClick={onNowPlaying}
           >
-            <Artwork hash={song?.artworkHash} url={song?.artworkUrl} />
+            <Artwork kind="song" id={song?.id} hash={song?.artworkHash} url={song?.artworkUrl} />
             <div className="player-metadata">
               <div className="truncate player-title">{song?.title ?? labels.nothingPlaying}</div>
               {song && (
