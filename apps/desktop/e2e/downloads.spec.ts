@@ -175,7 +175,9 @@ test("missing favorites queue at startup and when starred from Songs", async () 
     await expect.poll(async () => (await downloads(page)).online).toBe(false);
     const titles = () =>
       page.evaluate(async () =>
-        (await (window as unknown as Wave).wave.downloads.rows(0, 10)).items.map((row) => row.title),
+        (await (window as unknown as Wave).wave.downloads.rows(0, 10)).items.map(
+          (row) => row.title,
+        ),
       );
     await page.getByRole("button", { name: "Songs", exact: true }).click();
     const row = page.getByRole("row", { name: /New Star/ });
