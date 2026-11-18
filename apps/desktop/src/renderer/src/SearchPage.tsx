@@ -60,7 +60,7 @@ function SongRow({
       data-testid={testId}
       aria-selected={selected}
       aria-disabled={row.unavailable}
-      aria-label={[row.title, row.artist].filter(Boolean).join(", ")}
+      aria-label={[row.title, artistName(row.artist)].filter(Boolean).join(", ")}
       onClick={onSelect}
       onDoubleClick={onPlay}
       onKeyDown={(event) => {

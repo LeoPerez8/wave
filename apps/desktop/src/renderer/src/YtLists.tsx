@@ -50,7 +50,7 @@ export function YtSongList({
             role="listitem"
             className="table-row table-columns yt-row"
             aria-selected={selected === index}
-            aria-label={[row.title, row.artist].filter(Boolean).join(", ")}
+            aria-label={[row.title, artistName(row.artist)].filter(Boolean).join(", ")}
             onClick={() => setSelected(index)}
             onDoubleClick={() => onPlay(index)}
             onContextMenu={
