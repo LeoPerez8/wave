@@ -109,6 +109,8 @@ test("a disconnected root stays grey and refuses playback, then comes back with 
     .poll(async () => (await songs()).items.every((song) => song.unavailable), { timeout: 15000 })
     .toBe(true);
   expect((await songs()).total).toBe(1200);
+  // The window opens on Home; the grey rows are in Songs.
+  await page.getByRole("button", { name: "Songs", exact: true }).click();
   await expect(page.getByRole("row", { disabled: true }).first()).toBeVisible();
   const path = (await songs()).items[0]!.path!;
   const failure = await page.evaluate(async (path) => {

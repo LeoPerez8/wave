@@ -32,7 +32,8 @@ test("YT Music: the setting, the sidebar, Search's results, and a song that play
   try {
     const page = await app.firstWindow();
     const sidebar = page.locator(".sidebar");
-    await expect(sidebar.getByText("YT Music", { exact: true })).toBeVisible();
+    // A narrow window hides the sidebar's headings, so the entries say whether YT Music is on.
+    await expect(sidebar.getByRole("button", { name: "Discover" })).toBeVisible();
     await expect(sidebar.getByRole("button", { name: "Magic Queue" })).toBeEnabled();
     await expect(sidebar.getByRole("button", { name: "Downloads" })).toBeEnabled();
 
@@ -41,7 +42,7 @@ test("YT Music: the setting, the sidebar, Search's results, and a song that play
     const toggle = page.getByRole("checkbox", { name: "Use YT Music" });
     await expect(toggle).toBeChecked();
     await toggle.uncheck();
-    await expect(sidebar.getByText("YT Music", { exact: true })).toBeHidden();
+    await expect(sidebar.getByRole("button", { name: "Discover" })).toBeHidden();
     await page.getByRole("searchbox", { name: "Search" }).fill("nick drake pink moon");
     await page.waitForTimeout(1_500);
     await expect(page.getByTestId("yt-results")).toHaveCount(0);
