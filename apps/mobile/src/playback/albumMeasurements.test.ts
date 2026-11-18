@@ -12,7 +12,7 @@ import {
 } from "@wave/client/db/loudness";
 import * as schema from "@wave/client/db/schema";
 import { createEntryGains } from "./songGains.ts";
-import { createSongMeasurements } from "./songMeasurements.ts";
+import { createSongMeasurements } from "@wave/client/songMeasurements";
 
 test("the queue runner measures the whole album first and delivers completion without a Library change", async () => {
   const db = await openTestDatabase();
