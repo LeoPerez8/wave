@@ -2,7 +2,7 @@
  * Main's side of the bridge for YouTube Music's pages, Discover and the Magic Queue
  * (`YtFeatures`): each call's arguments are checked before use, and songs go back as rows.
  */
-import type { YtAlbumSong } from "@wave/core";
+import { ytTrackId, type YtAlbumSong } from "@wave/core";
 import * as Effect from "effect/Effect";
 
 import type { BridgeCall, BridgeContract, Page } from "../../shared/bridge.ts";
@@ -11,6 +11,7 @@ import type { SongTarget } from "../../shared/songActions.ts";
 import { ytRow } from "../../shared/yt.ts";
 import { browseSongs } from "../library/browse.ts";
 import { Database } from "@wave/client";
+import { Playback } from "../playback/playback.ts";
 import { VIDEO_ID, YtMusic } from "./ytMusic.ts";
 import { YtFeatures } from "./ytServices.ts";
 
@@ -19,6 +20,7 @@ type YtFeatureCall =
   | "yt.findArtist"
   | "yt.album"
   | "yt.related"
+  | "yt.queue"
   | "discover.picks"
   | "discover.mixes"
   | "discover.playMix"
@@ -30,7 +32,11 @@ type YtFeatureCall =
 export type YtFeatureHandlers = {
   readonly [C in YtFeatureCall]: (
     args: readonly unknown[],
-  ) => Effect.Effect<BridgeContract[C]["result"], unknown, YtFeatures | YtMusic | Database>;
+  ) => Effect.Effect<
+    BridgeContract[C]["result"],
+    unknown,
+    YtFeatures | YtMusic | Database | Playback
+  >;
 };
 
 const refuse = (call: BridgeCall, why: string) => Effect.fail(new Error(`Refused ${call}: ${why}`));
@@ -92,6 +98,21 @@ export const createYtFeatureHandlers = (
       const { status, songs, artists } = await related();
       return { status, songs: rows(songs), artists };
     }),
+  "yt.queue": ([type, videoId]) =>
+    (type === "playNow" || type === "addToQueue") &&
+    typeof videoId === "string" &&
+    VIDEO_ID.test(videoId)
+      ? Effect.gen(function* () {
+          // Only a song a page brought can stream.
+          if ((yield* YtMusic).song(videoId) === undefined)
+            return yield* Effect.fail(new Error("[yt-unknown] That song isn't known anymore"));
+          const playback = yield* Playback;
+          return yield* Effect.tryPromise({
+            try: () => playback.dispatch({ type, trackIds: [ytTrackId(videoId)] }),
+            catch: (error) => error,
+          });
+        })
+      : refuse("yt.queue", "invalid song"),
   "discover.picks": () =>
     Effect.gen(function* () {
       const features = yield* YtFeatures;

@@ -177,7 +177,20 @@ const jvmInMemory = () => {
                         similar: [{ name: "John Martyn", browseId: "UCjohnmartyn" }],
                       },
                     }
-                  : { id, result: null };
+                  : method === "related"
+                    ? {
+                        id,
+                        result: {
+                          songs: [
+                            {
+                              ...ytSongNamed("mayyounever", "May You Never"),
+                              artists: ["John Martyn"],
+                            },
+                          ],
+                          artists: [{ name: "John Martyn", browseId: "UCjohnmartyn" }],
+                        },
+                      }
+                    : { id, result: null };
       }
       queueMicrotask(() => events.line(JSON.stringify(answer)));
     },
@@ -1023,6 +1036,17 @@ test("a Magic Queue, an artist page and Discover's row come through the bridge, 
           return ids[1]!;
         }),
       );
+      // With YT Music on, a song's menu offers Start Magic Queue after Add to Queue.
+      const one = { scope: { kind: "songs" }, ids: [pinkMoon] } as const;
+      assert.deepEqual(
+        (await wave.songs.actions(one, "menu")).entries.slice(0, 3).map((entry) => entry.action),
+        ["playNext", "addToQueue", "magicQueue"],
+      );
+      await wave.settings.setYtMusic(false);
+      assert.ok(
+        !(await wave.songs.actions(one, "menu")).entries.some((e) => e.action === "magicQueue"),
+      );
+      await wave.settings.setYtMusic(true);
       assert.equal(await wave.magicQueue.start({ scope: { kind: "songs" }, ids: [pinkMoon] }), true);
       await until(async () => (await wave.playback.view()).length > 1);
       assert.equal((await wave.playback.view()).current?.title, "Pink Moon");
@@ -1046,13 +1070,29 @@ test("a Magic Queue, an artist page and Discover's row come through the bridge, 
       );
       assert.equal((await wave.discover.picks()).items.length, 3);
 
+      // Related: a row's + lines it up as the menu's Add to Queue does, a click plays it now.
+      const related = await wave.yt.related();
+      assert.equal(related.status, "ok");
+      assert.deepEqual(
+        related.songs.items.map((row) => row.videoId),
+        ["mayyounever"],
+      );
+      await wave.yt.queue("addToQueue", "mayyounever");
+      const queued = await wave.playback.queue(0, 100);
+      assert.deepEqual(
+        queued.items.slice(0, 2).map((row) => row.title),
+        ["Pink Moon", "May You Never"],
+      );
+      await wave.yt.queue("playNow", "mayyounever");
+      await until(async () => (await wave.playback.view()).current?.title === "May You Never");
+
       // Offline, a page says so and nothing else.
       jvm.ytError = "ERR_YT_OFFLINE";
       assert.deepEqual(await wave.yt.artist("UCnickdrake"), { status: "offline", page: null });
       await wave.playback.command({ type: "next" });
-      const related = await wave.yt.related();
-      assert.equal(related.status, "offline");
-      assert.equal(related.songs.total, 0);
+      const offline = await wave.yt.related();
+      assert.equal(offline.status, "offline");
+      assert.equal(offline.songs.total, 0);
 
       const call = (channel: string, ...args: unknown[]) =>
         handlers.get(channel)!(trusted, ...args);
@@ -1060,6 +1100,8 @@ test("a Magic Queue, an artist page and Discover's row come through the bridge, 
       await assert.rejects(call("magicQueue.start", { scope: { kind: "songs" }, ids: [] }), /Refused/);
       await assert.rejects(call("magicQueue.startStreamed", "nope"), /Refused/);
       await assert.rejects(call("discover.playMix", "mix", -1), /Refused/);
+      await assert.rejects(call("yt.queue", "shuffle", "mayyounever"), /Refused/);
+      await assert.rejects(call("yt.queue", "playNow", "unknownsong"), /yt-unknown/);
       assert.equal(await call("discover.playMix", "gone", 0), false);
     } finally {
       await runtime.dispose();
@@ -1090,6 +1132,7 @@ test("a song's menu and the selection bar offer and run the phone's actions thro
       assert.deepEqual(menu.entries, [
         { action: "playNext" },
         { action: "addToQueue" },
+        { action: "magicQueue" },
         { action: "addToPlaylist" },
         { action: "favorite" },
         { action: "goToAlbum", albumId: album.id },

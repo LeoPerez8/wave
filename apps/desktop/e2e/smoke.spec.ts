@@ -113,6 +113,7 @@ test("the page has no Node and only the typed bridge", async () => {
       "wave.yt.findArtist",
       "wave.yt.album",
       "wave.yt.related",
+      "wave.yt.queue",
       "wave.discover.picks",
       "wave.discover.mixes",
       "wave.discover.playMix",

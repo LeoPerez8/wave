@@ -101,6 +101,11 @@ export interface BridgeContract {
   readonly "yt.album": { readonly args: readonly [browseId: string]; readonly result: YtAlbumView };
   /** The Related tab of the song playing. */
   readonly "yt.related": { readonly args: readonly []; readonly result: YtRelatedView };
+  /** Plays a YouTube Music song a page brought now, or adds it to the end of the queue. */
+  readonly "yt.queue": {
+    readonly args: readonly [type: "playNow" | "addToQueue", videoId: string];
+    readonly result: void;
+  };
   /** Discover's Magic Queue row: nine Library songs at random. */
   readonly "discover.picks": { readonly args: readonly []; readonly result: Page<BrowseRow> };
   /** Discover's Artist mixes, built once a day. */
@@ -230,6 +235,7 @@ export const BRIDGE_CALLS = [
   "yt.findArtist",
   "yt.album",
   "yt.related",
+  "yt.queue",
   "discover.picks",
   "discover.mixes",
   "discover.playMix",
@@ -320,6 +326,7 @@ export interface WaveBridge {
     ) => Promise<{ readonly status: YtStatus; readonly browseId: string | null }>;
     readonly album: (browseId: string) => Promise<YtAlbumView>;
     readonly related: () => Promise<YtRelatedView>;
+    readonly queue: (type: "playNow" | "addToQueue", videoId: string) => Promise<void>;
   };
   readonly discover: {
     readonly picks: () => Promise<Page<BrowseRow>>;
@@ -402,6 +409,7 @@ export const createBridge = (invoke: Invoke): WaveBridge => ({
     findArtist: (name) => invoke("yt.findArtist", name),
     album: (browseId) => invoke("yt.album", browseId),
     related: () => invoke("yt.related"),
+    queue: (type, videoId) => invoke("yt.queue", type, videoId),
   },
   discover: {
     picks: () => invoke("discover.picks"),

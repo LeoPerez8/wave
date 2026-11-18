@@ -320,7 +320,7 @@ const createHandlers = (onAppearance: (mode: Appearance) => void): Handlers => {
     "songs.actions": ([target, surface]) =>
       validTarget(target) && (surface === "menu" || surface === "selection")
         ? Effect.gen(function* () {
-            return songMenu(yield* Database, target, surface);
+            return songMenu(yield* Database, target, surface, (yield* YtMusic).enabled());
           })
         : refuse("songs.actions", "invalid songs or surface"),
     "songs.run": ([target, action, playlistId]) =>
