@@ -10,6 +10,8 @@
  */
 
 import { createHash, createPrivateKey } from "node:crypto";
+// The digest the release gate records for the update folder, so R2's file list is checked the same way.
+import { digestOfFiles } from "../../../scripts/ci/release-gate.ts";
 import {
   type Channel,
   type LatestUpdate,
@@ -48,15 +50,6 @@ const sha256 = (data: string) => createHash("sha256").update(data).digest("hex")
 
 const isRecord = (value: unknown): value is Record<string, unknown> =>
   typeof value === "object" && value !== null && !Array.isArray(value);
-
-/** The release gate's digest of a folder from its files' digests (release-gate.ts digestOf). */
-const folderDigest = (files: Readonly<Record<string, string>>) =>
-  sha256(
-    Object.keys(files)
-      .sort()
-      .map((path) => `${path}\0${files[path]}\n`)
-      .join(""),
-  );
 
 const sameJson = (a: unknown, b: unknown): boolean => {
   if (Array.isArray(a) || Array.isArray(b))
@@ -111,7 +104,7 @@ const checkProvenance = (
     refuse("its record isn't sealed, so its release never published it.");
   const exported = update.exported;
   if (!exported) return refuse("its update in R2 has no list of its files to check.");
-  if (folderDigest(exported.files) !== artifact.updateSha256)
+  if (digestOfFiles(exported.files) !== artifact.updateSha256)
     refuse("its update in R2 isn't the export its record admitted.");
   const exportedFiles = new Set(Object.values(exported.files));
   for (const asset of [update.launchAsset, ...update.assets]) {
