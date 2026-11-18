@@ -34,7 +34,7 @@ const audioFiles = (folder: string): string[] =>
     return /\.(m4a|mp3)$/i.test(name) ? [path] : [];
   });
 
-test("activating a missing Search song downloads it instead of playing", async () => {
+test("a missing Search song waits offline and resumes its download instead of playing", async () => {
   const data = mkdtempSync(join(tmpdir(), "wave-e2e-missing-"));
   await Effect.runPromise(
     Effect.gen(function* () {
@@ -51,12 +51,27 @@ test("activating a missing Search song downloads it instead of playing", async (
   });
   try {
     const page = await app.firstWindow();
+    await app.evaluate(({ net }) => {
+      net.isOnline = () => false;
+    });
+    await expect.poll(async () => (await downloads(page)).online).toBe(false);
     await page.getByRole("searchbox", { name: "Search" }).fill("Missing Road");
     await page.getByTestId("search-song").dblclick();
     await expect.poll(async () => (await downloads(page)).rows).toBe(1);
     await expect(page.getByTestId("downloads-nav")).toBeVisible();
     const view = await page.evaluate(() => (window as unknown as Wave).wave.playback.view());
     expect(view.current).toBeNull();
+    await page.getByTestId("downloads-nav").click();
+    await expect(
+      page.getByText("Downloads pause while you're offline and go on once you're back."),
+    ).toBeVisible();
+    expect((await downloads(page)).failed).toBe(0);
+    await app.evaluate(({ net }) => {
+      net.isOnline = () => true;
+    });
+    await expect.poll(async () => (await downloads(page)).online).toBe(true);
+    // With no source enabled, the resumed job fails and remains available to retry.
+    await expect.poll(async () => (await downloads(page)).failed).toBe(1);
   } finally {
     await app.close();
     rmSync(data, { recursive: true, force: true });
