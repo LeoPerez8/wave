@@ -9,7 +9,7 @@ import type { Client } from "@libsql/client";
 import { SYNC_LIMITS } from "./limits.ts";
 import { SESSION_UNUSED_MS } from "./sessions.ts";
 import { SYNC_TABLES } from "./tables.ts";
-import { WARNING_DAYS_KEPT } from "./usage.ts";
+import { WARNING_DAYS_KEPT, warningOutsideWindow } from "./usage.ts";
 
 /**
  * The limits #1122 selects, beside each sync category's row quota (`SYNC_LIMITS`, tombstones
@@ -125,8 +125,6 @@ export interface CompatibilityReport {
   readonly inventory: Inventory | null;
 }
 
-const DAY_MS = 24 * 60 * 60 * 1000;
-
 const readInventory = async (db: Client, now: number): Promise<Inventory> => {
   const validSince = now - SESSION_UNUSED_MS;
   const retained = SYNC_TABLES.flatMap((table) => [
@@ -136,9 +134,7 @@ const readInventory = async (db: Client, now: number): Promise<Inventory> => {
       : `0 AS "${table.name}:deleted"`,
   ]);
   const minute = Math.floor(now / 60_000);
-  const firstKeptDay = new Date(now - (SELECTED_LIMITS.usageWarningDays - 1) * DAY_MS)
-    .toISOString()
-    .slice(0, 10);
+  const outsideWindow = warningOutsideWindow(now);
   // Counts only: no id, email, subject or key leaves the database.
   const [accounts, counters, warnings, providers] = await db.batch(
     [
@@ -158,9 +154,9 @@ const readInventory = async (db: Client, now: number): Promise<Inventory> => {
         args: [minute, minute],
       },
       {
-        sql: `SELECT count(*) AS retained, count(*) FILTER (WHERE period < ?) AS outside
+        sql: `SELECT count(*) AS retained, count(*) FILTER (WHERE ${outsideWindow.sql}) AS outside
               FROM usage_warnings`,
-        args: [firstKeptDay],
+        args: outsideWindow.args,
       },
       {
         sql: `SELECT count(*) AS n FROM upstream_usage GROUP BY account_id ORDER BY n DESC`,

@@ -125,10 +125,24 @@ export const WARNING_DAYS_KEPT = 30;
 
 const DAY_MS = 24 * 60 * 60 * 1000;
 
-/** Deletes the warnings of UTC days before the last `WARNING_DAYS_KEPT` as of [at]. */
+/**
+ * The condition, on `usage_warnings`, for a warning whose period (a UTC day `YYYY-MM-DD` or month
+ * `YYYY-MM`) has no day among the last `WARNING_DAYS_KEPT` as of [at], with its arguments.
+ */
+export const warningOutsideWindow = (
+  at: number,
+): { readonly sql: string; readonly args: string[] } => {
+  const oldestDay = new Date(at - (WARNING_DAYS_KEPT - 1) * DAY_MS).toISOString().slice(0, 10);
+  return {
+    sql: "(CASE WHEN length(period) = 7 THEN period < ? ELSE period < ? END)",
+    args: [oldestDay.slice(0, 7), oldestDay],
+  };
+};
+
+/** Deletes the warnings of periods wholly before the last `WARNING_DAYS_KEPT` UTC days as of [at]. */
 const forgetOldWarnings = async (db: Client, at: number): Promise<void> => {
-  const oldestKept = new Date(at - (WARNING_DAYS_KEPT - 1) * DAY_MS).toISOString().slice(0, 10);
-  await db.execute({ sql: "DELETE FROM usage_warnings WHERE period < ?", args: [oldestKept] });
+  const outside = warningOutsideWindow(at);
+  await db.execute({ sql: `DELETE FROM usage_warnings WHERE ${outside.sql}`, args: outside.args });
 };
 
 export const watchUsage = async (options: UsageWatchOptions): Promise<void> => {

@@ -465,3 +465,21 @@ test("an account holding more provider-usage rows than its three categories is f
     { code: "provider-usage-over-limit", account: "account-2", count: 4, limit: 3 },
   ]);
 });
+
+test("a usage warning for the current month is counted inside the days kept", async () => {
+  const service = await harness();
+  service.now = Date.UTC(2026, 10, 18, 12);
+  for (const period of ["2026-09", "2026-10", "2026-11"]) {
+    await service.db.execute({
+      sql: "INSERT INTO usage_warnings (name, period, warned_at) VALUES ('monthly', ?, 0)",
+      args: [period],
+    });
+  }
+  const report = await compatibilityReport({
+    db: service.db,
+    environment: "local-sync",
+    source: "fixture",
+    now: service.now,
+  });
+  assert.deepEqual(report.inventory?.usageWarnings, { retained: 3, outsideWindow: 1, limit: 60 });
+});
