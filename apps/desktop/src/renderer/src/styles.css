@@ -954,3 +954,128 @@ kbd {
   border-color: var(--color-accent);
   background: radial-gradient(circle, var(--color-on-accent) 0 3px, var(--color-accent) 3.5px);
 }
+
+/* Search: the top result, the Songs table, lyrics hits and the shelves, scrolling together. */
+.search-page {
+  flex: 1;
+  min-height: 0;
+  overflow: auto;
+  padding: 0 22px 24px 0;
+}
+.search-page .yt-results {
+  max-height: none;
+  overflow: visible;
+  padding-right: 0;
+}
+.search-section {
+  padding-top: 18px;
+}
+.search-section h2,
+.search-empty h2 {
+  font-size: 15px;
+  font-weight: 600;
+  padding: 0 12px 8px;
+}
+.search-heading {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+}
+.search-empty {
+  padding: 32px 12px;
+}
+.search-top {
+  display: grid;
+  justify-items: start;
+  gap: 4px;
+  padding: 12px;
+  border-radius: 8px;
+  color: inherit;
+  text-align: left;
+}
+.search-top:hover,
+.search-tile:hover,
+.recent-search:hover {
+  background: var(--color-fill);
+}
+.search-top:focus-visible,
+.search-tile:focus-visible,
+.recent-search:focus-visible,
+.search-row:focus-visible {
+  outline: 2px solid var(--color-accent);
+  outline-offset: -2px;
+  border-radius: 4px;
+}
+.search-top-art {
+  width: 112px;
+  height: 112px;
+  margin-bottom: 8px;
+}
+.search-top-art.artist-image .artwork {
+  border-radius: 50%;
+}
+.search-top-name {
+  font-size: 22px;
+  font-weight: 600;
+}
+.search-row {
+  position: static;
+  width: 100%;
+  min-height: 40px;
+  height: auto;
+  text-align: left;
+  color: inherit;
+}
+.search-row:focus-visible .row-play {
+  display: flex;
+}
+.search-row-title {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+.lyric-line mark {
+  background: none;
+  color: var(--color-foreground);
+  font-weight: 600;
+}
+.search-shelf {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
+  gap: 12px;
+}
+.search-tile {
+  display: grid;
+  gap: 2px;
+  padding: 8px;
+  border-radius: 8px;
+  color: inherit;
+  text-align: left;
+  min-width: 0;
+}
+.search-tile > :first-child {
+  aspect-ratio: 1;
+  margin-bottom: 6px;
+}
+.search-tile > .artist-image .artwork {
+  border-radius: 50%;
+}
+.search-more {
+  padding: 6px 12px;
+  color: var(--color-accent);
+  font-size: 13px;
+}
+.search-capped {
+  padding: 6px 12px;
+  font-size: 12px;
+}
+.recent-search {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  padding: 8px 12px;
+  border-radius: 6px;
+  color: inherit;
+  text-align: left;
+}

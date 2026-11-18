@@ -51,3 +51,83 @@ export interface LibrarySearchView {
   /** Three or more words put Lyrics before everything else. */
   readonly lyricsFirst: boolean;
 }
+
+/** What a section shows: some of its matches, and whether "Show all" or the cap note follows. */
+interface Shown {
+  /** How many it shows. */
+  readonly shown: number;
+  /** How many match. */
+  readonly total: number;
+  /** "Show all" follows: the section shows a preview. */
+  readonly more: boolean;
+  /** The section is open but lists only the best `shown` of `total`. */
+  readonly capped: boolean;
+}
+
+export type SearchSection =
+  | { readonly type: "top"; readonly result: SearchResult }
+  | (Shown & {
+      readonly type: "songs" | "shelf";
+      readonly kind: SearchKind;
+      readonly rows: readonly BrowseRow[];
+    })
+  | (Shown & {
+      readonly type: "lyrics";
+      readonly hits: readonly LyricsHitView[];
+      /** The first hit's place among the songs a search plays (after its Songs group). */
+      readonly firstIndex: number;
+    });
+
+/** A section [expanded] holds shows every match it has. */
+export type SearchExpansion = ReadonlySet<SearchKind | "lyrics">;
+
+/**
+ * The desktop's Search page: the top result, the Songs table, then the other groups as shelves
+ * in Core's order (the phone lists every group in Core's order). A group shows a preview with "Show all",
+ * unless it's opened or the only one. Lyrics follow Songs, follow the top result when no song
+ * matches, and lead when the query has three or more words.
+ */
+export const searchSections = (
+  view: LibrarySearchView,
+  expanded: SearchExpansion,
+): SearchSection[] => {
+  const sections: SearchSection[] = [];
+  if (view.top !== null) sections.push({ type: "top", result: view.top });
+  const afterTop = sections.length;
+  const songs = view.groups.find((group) => group.kind === "song");
+  const lyrics = (): SearchSection[] => {
+    const total = view.lyrics.length;
+    if (total === 0) return [];
+    const hits = expanded.has("lyrics") ? view.lyrics : view.lyrics.slice(0, LYRICS_PREVIEW);
+    return [
+      {
+        type: "lyrics",
+        hits,
+        shown: hits.length,
+        total,
+        more: hits.length < total,
+        capped: false,
+        firstIndex: songs?.items.length ?? 0,
+      },
+    ];
+  };
+  // The desktop puts Songs' table first; the shelves keep Core's order.
+  const groups = [...(songs ? [songs] : []), ...view.groups.filter((group) => group !== songs)];
+  for (const group of groups) {
+    const open = expanded.has(group.kind) || view.groups.length === 1;
+    const rows = open ? group.items : group.items.slice(0, SEARCH_PREVIEW[group.kind]);
+    sections.push({
+      type: group.kind === "song" ? "songs" : "shelf",
+      kind: group.kind,
+      rows,
+      shown: rows.length,
+      total: group.total,
+      more: !open && rows.length < group.total,
+      capped: open && rows.length < group.total,
+    });
+    if (group.kind === "song" && !view.lyricsFirst) sections.push(...lyrics());
+  }
+  if (view.lyricsFirst) sections.unshift(...lyrics());
+  else if (songs === undefined) sections.splice(afterTop, 0, ...lyrics());
+  return sections;
+};
