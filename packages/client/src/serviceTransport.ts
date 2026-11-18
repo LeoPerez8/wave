@@ -7,9 +7,9 @@ import type { DeezerTransport, SpotifyTransport } from "@wave/core";
 
 /** Spotify as Core's Spotify readers ask it. */
 export const spotifyTransport =
-  (signal: AbortSignal): SpotifyTransport =>
+  (signal: AbortSignal, fetcher = globalThis.fetch): SpotifyTransport =>
   async (request) => {
-    const response = await fetch(request.url, {
+    const response = await fetcher(request.url, {
       method: request.method,
       headers: request.headers,
       body: request.body ?? undefined,
@@ -20,9 +20,9 @@ export const spotifyTransport =
 
 /** Deezer's public API, as `readDeezerTrack` asks it: a GET with no cookies. */
 export const deezerTransport =
-  (signal: AbortSignal): DeezerTransport =>
+  (signal: AbortSignal, fetcher = globalThis.fetch): DeezerTransport =>
   async (url) => {
-    const response = await fetch(url, { credentials: "omit", signal });
+    const response = await fetcher(url, { credentials: "omit", signal });
     return { status: response.status, body: await response.text() };
   };
 
@@ -36,7 +36,12 @@ export const followShortLink = async (
   url: string,
   { body }: { readonly body: boolean },
   signal: AbortSignal,
+  fetcher = globalThis.fetch,
 ): Promise<{ readonly url: string; readonly body: string }> => {
-  const response = await fetch(url, { method: body ? "GET" : "HEAD", credentials: "omit", signal });
+  const response = await fetcher(url, {
+    method: body ? "GET" : "HEAD",
+    credentials: "omit",
+    signal,
+  });
   return { url: response.url, body: body ? await response.text() : "" };
 };
