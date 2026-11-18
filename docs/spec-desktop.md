@@ -403,7 +403,8 @@ work, image sizes, bounded caches, virtualised lists, numbers not adjectives). T
 - List reads cross the bridge as pages; nothing sends a whole table over IPC.
 - Every table is virtualised.
 - Measured targets, in a test that runs on CI's Windows and Linux runners: the window is ready in
-  under 2 s from launch; scrolling the Songs table over 50,000 songs keeps up with the display;
+  under 2 s from launch, ready meaning Home drawn with its sections and song count from a
+  50,000-song library; scrolling the Songs table over 50,000 songs keeps up with the display;
   memory at rest (all processes) is recorded each release. No hard memory limit in v1.
 
 ## Testing decisions
