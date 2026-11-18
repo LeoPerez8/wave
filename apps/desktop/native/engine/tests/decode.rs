@@ -113,3 +113,8 @@ fn a_file_that_is_not_audio_is_refused() {
 fn a_missing_file_is_refused() {
     assert!(Decoder::open(&fixture("missing.flac")).is_err());
 }
+
+#[test]
+fn itunes_only_aac_trims_and_seeks_without_an_edit_list() {
+    assert_lossy("tone-smpb.m4a", 44_100, 0, 15.0);
+}
