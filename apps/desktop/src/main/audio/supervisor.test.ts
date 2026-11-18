@@ -8,7 +8,11 @@ import {
   type ResolveAnswer,
   type ResolveEvent,
 } from "./protocol.ts";
+import { pass, withFakeClock } from "../testing/fakeClock.ts";
 import { AudioEngineError, superviseAudio, type AudioEvents } from "./supervisor.ts";
+
+// Restarts, timeouts and the heartbeat run on a clock the tests move with `pass`.
+withFakeClock();
 
 /** A pretend engine, kept across restarts only in what `log` records. */
 const pretendEngine = (): AddonEngine => {
@@ -68,7 +72,7 @@ const fakeProcesses = () => {
         // A song whose decoding crashes the process, from the first restart on.
         if (request.call === "seek" && child.loaded.includes("poison") && forks > 1) {
           child.alive = false;
-          setImmediate(events.exit);
+          queueMicrotask(events.exit);
           return;
         }
         const response = answer(engine, request);
@@ -78,7 +82,7 @@ const fakeProcesses = () => {
         if (!child.alive) return;
         child.alive = false;
         log.push(`${forks}:killed`);
-        setImmediate(events.exit);
+        queueMicrotask(events.exit);
       },
     };
   };
@@ -94,12 +98,10 @@ const fakeProcesses = () => {
     crash: () => {
       if (current === undefined) return;
       current.alive = false;
-      setImmediate(current.events.exit);
+      queueMicrotask(current.events.exit);
     },
   };
 };
-
-const settle = (ms = 30) => new Promise((resolve) => setTimeout(resolve, ms));
 
 const quick = { callTimeoutMs: 100, heartbeatMs: 1_000_000, restartDelayMs: () => 0 };
 
@@ -132,7 +134,7 @@ test("after a crash a new process takes over, paused where the song was", async 
   await audio.call("seek", [42_000]);
   await audio.call("play", []);
   processes.crash();
-  await settle();
+  await pass();
   assert.equal(processes.forks(), 2, "restarted without waiting for a call");
   const status = await audio.call("status", []);
   assert.deepEqual(status, { state: "paused", positionMs: 42_000, durationMs: 180_000 });
@@ -151,13 +153,17 @@ test("a call that never answers kills the stalled process, which then restarts",
   const audio = superviseAudio({ fork: processes.fork, ...quick });
   await audio.call("load", ["/music/a.flac"]);
   processes.stall();
-  await assert.rejects(audio.call("play", []), (error) => {
+  const unanswered = assert.rejects(audio.call("play", []), (error) => {
     assert.ok(error instanceof AudioEngineError);
     assert.equal(error.code, "stalled");
     return true;
   });
-  await settle();
+  await pass(99);
+  assert.ok(!processes.log.includes("1:killed"), "the call still has time to answer");
+  await pass(1);
+  await unanswered;
   assert.ok(processes.log.includes("1:killed"));
+  await pass();
   assert.equal(processes.forks(), 2);
   assert.equal((await audio.call("play", [])).state, "playing");
   audio.dispose();
@@ -170,11 +176,13 @@ test("calls waiting when the process dies reject, and later calls work", async (
   processes.stall();
   const waiting = audio.call("status", []);
   processes.crash();
-  await assert.rejects(
+  const rejected = assert.rejects(
     waiting,
     (error) => error instanceof AudioEngineError && error.code === "restarted",
   );
-  await settle();
+  await pass();
+  await rejected;
+  assert.equal(processes.forks(), 2);
   assert.equal((await audio.call("status", [])).state, "idle");
   audio.dispose();
 });
@@ -184,9 +192,12 @@ test("the heartbeat finds a stalled process with no call waiting", async () => {
   const audio = superviseAudio({ fork: processes.fork, ...quick, heartbeatMs: 20 });
   await audio.call("status", []);
   processes.stall();
-  await settle(300);
+  await pass(20);
+  assert.equal(processes.log.at(-1), "1:status", "the heartbeat asked");
+  await pass(100);
   assert.ok(processes.log.includes("1:killed"));
-  assert.ok(processes.forks() >= 2);
+  await pass();
+  assert.equal(processes.forks(), 2);
   audio.dispose();
 });
 
@@ -196,11 +207,11 @@ test("a song that keeps crashing the process is dropped instead of restored for 
   await audio.call("load", ["/music/poison.mp3"]);
   await audio.call("seek", [5_000]);
   processes.crash();
-  await settle(100);
-  const forks = processes.forks();
-  await settle(100);
-  assert.equal(processes.forks(), forks, "stopped restarting");
-  assert.ok(forks <= 5, `${forks} forks`);
+  await pass(10);
+  // The second and third die restoring the song; the fourth starts without it.
+  assert.equal(processes.forks(), 4);
+  await pass(60_000);
+  assert.equal(processes.forks(), 4, "stopped restarting");
   assert.equal((await audio.call("status", [])).state, "idle", "nothing restored");
   audio.dispose();
 });
@@ -210,7 +221,7 @@ test("disposing kills the process and stops restarting it", async () => {
   const audio = superviseAudio({ fork: processes.fork, ...quick });
   await audio.call("status", []);
   audio.dispose();
-  await settle();
+  await pass();
   assert.equal(processes.forks(), 1);
   assert.ok(processes.log.includes("1:killed"));
   await assert.rejects(
@@ -226,7 +237,7 @@ test("a new process also gets back the volume and the song lined up after the cu
   await audio.call("setVolume", [0.4]);
   await audio.call("preload", ["/music/b.opus", "2"]);
   processes.crash();
-  await settle();
+  await pass();
   assert.deepEqual(processes.log.slice(-3), [
     "2:load /music/a.opus",
     "2:setVolume 0.4",
@@ -243,7 +254,7 @@ test("a new process also gets back the playback settings and each song's gain an
   await audio.call("setNormalize", [false]);
   await audio.call("preload", ["/music/b.opus", "2", 1.5, false]);
   processes.crash();
-  await settle();
+  await pass();
   assert.deepEqual(processes.requests.slice(-4), [
     "2:load /music/a.opus,1,-3",
     "2:setCrossfade 5",
@@ -264,7 +275,7 @@ test("once the engine moves on, the song lined up is restored with its own gain"
     transitions: [{ key: "2", atMs: 1, kind: "crossfade" }],
   });
   processes.crash();
-  await settle();
+  await pass();
   assert.deepEqual(processes.requests.slice(-1), ["2:load /music/b.opus,2,1.5"]);
   audio.dispose();
 });
@@ -274,7 +285,7 @@ test("a measurement answers when the process reports it, and fails if the proces
   const audio = superviseAudio({ fork: processes.fork, ...quick });
   const measured = audio.measure("/music/a.flac");
   const dropped = audio.measure("/music/b.flac");
-  await settle();
+  await pass();
   const ids = processes.requests
     .filter((r) => r.startsWith("1:measure"))
     .map((r) => r.split(",")[1]);
@@ -287,10 +298,11 @@ test("a measurement answers when the process reports it, and fails if the proces
   });
   assert.deepEqual(await measured, { kind: "measured", loudness: -8, peak: 0.9 });
   processes.crash();
-  await assert.rejects(dropped, (error) => error instanceof AudioEngineError);
-  await settle();
+  const gone = assert.rejects(dropped, (error) => error instanceof AudioEngineError);
+  await pass();
+  await gone;
   const unmeasurable = audio.measure("/music/c.flac");
-  await settle();
+  await pass();
   const [, id] = processes.requests.at(-1)!.split(",");
   processes.emit({
     event: "playback",
@@ -340,7 +352,7 @@ test("the process's request for a song's address is answered from main, with a f
   });
   processes.emit({ event: "resolve", id: 1, videoId: "abcdefghijk", fresh: false });
   processes.emit({ event: "resolve", id: 2, videoId: "offlinesong", fresh: true });
-  await settle();
+  await pass();
   assert.deepEqual(asked, ["abcdefghijk false", "offlinesong true"]);
   assert.deepEqual(processes.log, ["1:resolved 1 itag 140", "1:resolved 2 ERR_YT_OFFLINE"]);
   audio.dispose();
@@ -350,15 +362,20 @@ test("a load that fetches a YT Music song may take longer than other calls", asy
   const processes = fakeProcesses();
   const audio = superviseAudio({ fork: processes.fork, ...quick, streamCallTimeoutMs: 300 });
   processes.stall();
-  const started = Date.now();
+  let ended = 0;
+  const count = () => void (ended += 1);
   const load = audio.call("load", ["yt:abcdefghijk"]);
   const play = audio.call("play", []);
-  await assert.rejects(
-    load,
+  const stalled = assert.rejects(
+    load.finally(count),
     (error) => error instanceof AudioEngineError && error.code === "stalled",
   );
-  await assert.rejects(play);
-  assert.ok(Date.now() - started >= 280, "waited for the fetch");
+  const behindIt = assert.rejects(play.finally(count));
+  await pass(299);
+  assert.equal(ended, 0, "both waited for the fetch");
+  await pass(1);
+  await stalled;
+  await behindIt;
   audio.dispose();
 });
 
@@ -367,10 +384,11 @@ test("calls made while the process is down wait for its restart instead of start
   const audio = superviseAudio({ fork: processes.fork, ...quick, restartDelayMs: () => 120 });
   await audio.call("load", ["/music/a.opus"]);
   processes.crash();
-  await settle();
+  await pass();
   const polls = [audio.call("status", []), audio.call("status", []), audio.call("play", [])];
-  await settle();
+  await pass(119);
   assert.equal(processes.forks(), 1, "no call restarts the process before its wait is over");
+  await pass(1);
   const answers = await Promise.all(polls);
   assert.equal(processes.forks(), 2);
   assert.equal(answers[2]?.state, "playing", "the calls reach the new process, in order");
@@ -382,7 +400,7 @@ test("calls waiting for a restart fail when the engine is shut down", async () =
   const audio = superviseAudio({ fork: processes.fork, ...quick, restartDelayMs: () => 60_000 });
   await audio.call("status", []);
   processes.crash();
-  await settle();
+  await pass();
   const waiting = audio.call("status", []);
   audio.dispose();
   await assert.rejects(
@@ -397,7 +415,7 @@ test("a restarted process gets the Buffer's songs again", async () => {
   const audio = superviseAudio({ fork: processes.fork, ...quick });
   await audio.call("buffer", [["aaaaaaaaaaa", "bbbbbbbbbbb"]]);
   processes.crash();
-  await settle();
+  await pass();
   assert.deepEqual(
     processes.requests.filter((request) => request.includes("buffer")),
     ["1:buffer aaaaaaaaaaa,bbbbbbbbbbb", "2:buffer aaaaaaaaaaa,bbbbbbbbbbb"],

@@ -62,9 +62,13 @@ test("desktop launch, 50,000-song scrolling and whole-app memory meet the releas
     });
     const page = await app.firstWindow();
     const windowMs = performance.now() - launch;
-    // Readiness includes the populated, hydrated UI and a paint, not just ready-to-show.
+    // Ready is Home, the first page, drawn from the library and painted, not just ready-to-show:
+    // its sections are in the page and its heading counts the 50,000 songs.
     await page.waitForFunction(
-      () => document.querySelector('[role="grid"][aria-rowcount="50001"] [data-row="0"]') !== null,
+      () =>
+        document.querySelector('[data-testid="home"] [data-section]') !== null &&
+        document.querySelector('[data-testid="song-count"]')?.textContent?.includes("50,000") ===
+          true,
     );
     await page.evaluate(
       () =>
