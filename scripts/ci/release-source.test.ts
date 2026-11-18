@@ -54,6 +54,51 @@ const inputs = (record: unknown = sealed()) => ({
   blockers: [{ subject: "gradle:release-closure", reason: "Pending: not observed." }],
 });
 
+describe("the release tag rules", () => {
+  it("are apps/mobile/plugins/appVersion.ts's: the versionCode it derives and the tags it refuses", async () => {
+    // A path tsc doesn't follow (it reads apps/mobile as CommonJS); Node runs the file as it is.
+    const original = new URL("../../apps/mobile/plugins/appVersion.ts", import.meta.url).href;
+    const app = (await import(original)) as {
+      versionCode: (version: string) => number;
+      releaseTagProblem: (tag: string, version: string) => string | undefined;
+    };
+    const { record: _, ...rest } = inputs();
+    const copied = (tag: string, version: string) => {
+      try {
+        return releaseSource({ ...rest, version, legacy: { tag, commit: SOURCE } }).generated
+          .versionCode;
+      } catch {
+        return "refused";
+      }
+    };
+    const fromApp = (tag: string, version: string) => {
+      if (app.releaseTagProblem(tag, version) !== undefined) return "refused";
+      try {
+        return app.versionCode(tag.slice(1));
+      } catch {
+        return "refused";
+      }
+    };
+    const cases = [
+      ["v0.5.0", "0.5.0"],
+      ["v1.3.0-ti", "1.3.0-ti"],
+      ["v1.3.0", "1.3.0-ti"],
+      ["v12.34.56", "12.34.56"],
+      ["v0.99.9-ti", "0.99.9-ti"],
+      ["v1.3.0-ti", "1.3.0"],
+      ["v1.3.1", "1.3.0"],
+      ["v1.100.0", "1.100.0"],
+      ["v1.3", "1.3"],
+      ["vfoo", "foo"],
+      ["1.3.0", "1.3.0"],
+    ] as const;
+    for (const [tag, version] of cases)
+      assert.equal(copied(tag, version), fromApp(tag, version), `${tag} at ${version}`);
+    assert.equal(fromApp("v12.34.56", "12.34.56"), 123456);
+    assert.equal(fromApp("v1.3.1", "1.3.0"), "refused");
+  });
+});
+
 describe("releaseSource", () => {
   it("ties a sealed full build to its exact commit, never to a moving branch", () => {
     const manifest = releaseSource(inputs());
