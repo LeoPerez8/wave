@@ -71,7 +71,8 @@ const IMAGE = /\.(avif|bmp|gif|heic|heif|ico|jpe?g|ktx|png|psd|svg|tiff?|webp)$/
  * native fingerprint (native modules, native dependencies, the app config, config plugins),
  * the Android project prebuild generated in `<appDir>/android` (it also catches what the
  * fingerprint misses, like files a config plugin imports), the Kotlin it shares with the desktop
- * (packages/kotlin-shared, a build Gradle includes, which the fingerprint doesn't see), the app's
+ * (packages/kotlin-shared, a build Gradle includes, which the fingerprint doesn't see; its
+ * `stdio/` is the desktop's JVM entry point, which no APK holds, so it stays out), the app's
  * image assets, and the assets Metro emitted for this bundle. Metro's assets are Android
  * resources that Gradle compiles into the APK, and a JS-only change can add one (an image from
  * a package), so a repack is only safe when they match the kept build's exactly.
@@ -132,7 +133,7 @@ export const apkCacheKey = ({
         files(
           sharedDir,
           (name) => PROJECT_STATE.has(name),
-          () => true,
+          (path) => !path.startsWith("stdio/"),
         ),
       )
     : "";

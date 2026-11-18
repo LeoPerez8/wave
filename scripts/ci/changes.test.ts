@@ -49,6 +49,20 @@ describe("changes", () => {
     assert.equal(reachesUsers(paths), true);
   });
 
+  it("doesn't release the phone for the desktop's JVM entry point, and still runs its tests", () => {
+    const paths = [
+      "packages/kotlin-shared/stdio/src/main/kotlin/dev/leoperez/wave/stdio/WaveDesktop.kt",
+      "packages/kotlin-shared/stdio/build.gradle.kts",
+      "apps/desktop/src/main/index.ts",
+    ];
+    const result = changes(paths);
+    assert.equal(result.app, false);
+    assert.equal(reachesUsers(paths), false);
+    assert.equal(result.nativeTests, true);
+    assert.equal(result.desktopChecks, true);
+    assert.equal(reachesUsers([...paths, "packages/kotlin-shared/build.gradle.kts"]), true);
+  });
+
   it("runs the native tests when wave-glass changes", () => {
     assert.equal(
       changes([
