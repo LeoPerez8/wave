@@ -64,7 +64,10 @@ export interface PlaybackShape {
   readonly refresh: () => void;
   /** Sets the volume (0 to 1) and mute, kept across launches. */
   readonly volume: (value: number, muted: boolean) => Promise<void>;
-  /** A page of the queue, History first. */
+  /**
+   * A page of the queue, History first. An entry whose song nothing knows has no row, so a row
+   * is found by its `at`, never by where it sits in the page.
+   */
   readonly queue: (offset: number, limit: number) => Page<QueueRow>;
   /** Saves the position and the play so far. */
   readonly flush: () => Promise<void>;
@@ -255,6 +258,21 @@ export const playbackLayer = Layer.effect(
     };
     /** Keeps the queue's YT Music songs for the next launch, after anything that changes it. */
     const keepQueued = () => yt.keepQueued(session.snapshot().queue.entries);
+    /**
+     * Follows a queue change the session was asked for, [replaced] when it plays a new queue.
+     * The queue changes even when its song then won't load, so a failure is followed too.
+     */
+    const moved = async (change: Promise<void>, replaced = false) => {
+      const before = session.snapshot().queue;
+      try {
+        await change;
+      } finally {
+        const { queue, canUndo } = session.snapshot();
+        if (replaced && canUndo && queue !== before) undoOffer++;
+        keepQueued();
+        queueChanged();
+      }
+    };
     /** The current song's row, read again only when the queue or a star changed. */
     let currentRow: { readonly revision: number; readonly row: BrowseRow | null } | undefined;
     /** The last finished scan seen: it can bring tag values, and files to try measuring again. */
@@ -301,7 +319,7 @@ export const playbackLayer = Layer.effect(
           throw new Error("[folder-unavailable] Drive is not connected");
         // A song from Search plays alone, as on the phone with YT Music off.
         const alone = scope.kind === "search" && chosen !== undefined;
-        await session.dispatch({
+        const playing = session.dispatch({
           type: "play",
           trackIds: alone ? [chosen] : ids,
           ...(index === undefined ? {} : { startIndex: alone ? 0 : index }),
@@ -311,33 +329,24 @@ export const playbackLayer = Layer.effect(
               ? { kind: "search", id: null }
               : { kind: scope.kind, id: scope.id === undefined ? null : String(scope.id) },
         });
-        if (session.snapshot().canUndo) undoOffer++;
-        keepQueued();
-        queueChanged();
+        await moved(playing, true);
       },
       startYt: async (videoIds, index) => {
         error = null;
         if (videoIds.some((videoId) => yt.song(videoId) === undefined))
           throw new Error("[yt-unknown] That song isn't in the search results anymore");
-        await session.dispatch({
+        const playing = session.dispatch({
           type: "play",
           trackIds: videoIds.map(ytTrackId),
           startIndex: index,
           context: { kind: "search", id: null },
         });
-        if (session.snapshot().canUndo) undoOffer++;
-        keepQueued();
-        queueChanged();
+        await moved(playing, true);
       },
       command: async (command) => {
         error = null;
-        await session.dispatch(
-          command.type === "previous"
-            ? { ...command, positionMs: session.snapshot().status.positionMs }
-            : command,
-        );
-        keepQueued();
-        queueChanged();
+        // Previous goes by the position the session holds when its turn comes.
+        await moved(session.dispatch(command));
       },
       play: async () => {
         await session.play();
@@ -345,11 +354,7 @@ export const playbackLayer = Layer.effect(
       },
       pause: session.pause,
       seek: session.seek,
-      undo: async () => {
-        await session.undo();
-        keepQueued();
-        queueChanged();
-      },
+      undo: () => moved(session.undo()),
       dismissUndo: session.dismissUndo,
       favorite: () => {
         const current = view().current;
@@ -386,6 +391,7 @@ export const playbackLayer = Layer.effect(
                   {
                     ...song,
                     key: entry.key,
+                    at,
                     history: at < queue.index,
                     current: at === queue.index,
                   },
@@ -409,10 +415,7 @@ export const playbackLayer = Layer.effect(
       playing: () => session.snapshot().status.state === "playing",
       dispatch: async (command) => {
         error = null;
-        await session.dispatch(command);
-        if (command.type === "play" && session.snapshot().canUndo) undoOffer++;
-        keepQueued();
-        queueChanged();
+        await moved(session.dispatch(command), command.type === "play");
       },
       watch: (watcher) => {
         watchers.add(watcher);
