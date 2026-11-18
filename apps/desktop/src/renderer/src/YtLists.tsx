@@ -97,6 +97,8 @@ export interface TileItem {
   readonly caption?: string | null;
   readonly artworkUrl?: string | null;
   readonly artworkHash?: string | null;
+  readonly artworkKind?: "song" | "album" | "artist" | undefined;
+  readonly artworkId?: number | undefined;
   /** What a screen reader says, when the title alone doesn't say what a click does. */
   readonly label?: string;
   /** A missing song: dimmed, as its row is. */
@@ -151,7 +153,14 @@ export function Shelf({
                 })
               }
             >
-              <Artwork hash={item.artworkHash} url={item.artworkUrl} artist={artists} large />
+              <Artwork
+                kind={item.artworkKind}
+                id={item.artworkId}
+                hash={item.artworkHash}
+                url={item.artworkUrl}
+                artist={artists}
+                large
+              />
               <span className="tile-title truncate">{item.title}</span>
               {item.caption && (
                 <span className="tile-caption truncate secondary">{item.caption}</span>

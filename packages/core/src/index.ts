@@ -1339,7 +1339,13 @@ export type {
   StreamedArtistLink,
   StreamedArtistTarget,
 } from "./streamedArtist.ts";
-export { pagePlayback, skipMissingSongs, tappedMissingSong } from "./pagePlayback.ts";
+export {
+  listPlay,
+  pagePlayback,
+  skipMissingSongs,
+  tappedMissingSong,
+  type ListPlay,
+} from "./pagePlayback.ts";
 export type { PagePlayback, PlayableSongs } from "./pagePlayback.ts";
 export {
   planPlaylistSongs,

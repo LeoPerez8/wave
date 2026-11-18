@@ -18,6 +18,7 @@ import { Icon } from "./Icon.tsx";
 import { LyricsView } from "./LyricsView.tsx";
 import { text } from "./text.ts";
 import { Artwork } from "./VirtualTable.tsx";
+import { AlbumCredit, ArtistCredit, type YtCreditLinks } from "./YtCredit.tsx";
 import "./panel.css";
 
 /** The artwork is sampled this small: plenty for a palette. */
@@ -45,12 +46,19 @@ const paletteOf = (src: string) =>
 function usePalette(song: BrowseRow | null) {
   const hash = song?.artworkHash ?? null;
   const url = song?.artworkUrl ?? null;
-  const key = hash ?? url;
+  const id = song?.id;
+  const key = hash ?? url ?? (id ? `song:${id}` : null);
   const [palette, setPalette] = useState<{ key: string; palette: ArtworkPalette | null }>();
   useEffect(() => {
     if (key === null) return;
     let current = true;
-    void (hash !== null ? window.wave.library.artwork(hash, false) : window.wave.yt.artwork(url!))
+    void (
+      hash !== null
+        ? window.wave.library.artwork(hash, false)
+        : url !== null
+          ? window.wave.yt.artwork(url)
+          : window.wave.library.cover("song", id!, false)
+    )
       .then((image) => (image === null ? null : paletteOf(image)))
       .catch(() => null)
       .then((found) => {
@@ -59,7 +67,7 @@ function usePalette(song: BrowseRow | null) {
     return () => {
       current = false;
     };
-  }, [key, hash, url]);
+  }, [key, hash, url, id]);
   return key !== null && palette?.key === key ? palette.palette : null;
 }
 
@@ -92,10 +100,13 @@ function useShellColours() {
 export function NowPlaying({
   view,
   run,
+  links,
   onClose,
 }: {
   readonly view: PlayerView | undefined;
   readonly run: (action: Promise<unknown>) => void;
+  /** Where a streamed song's artist and album names lead; opening one closes Now Playing. */
+  readonly links: YtCreditLinks;
   readonly onClose: () => void;
 }) {
   const song = view?.current ?? null;
@@ -143,11 +154,11 @@ export function NowPlaying({
         <Icon name="back" />
       </button>
       <div className="now-playing-song">
-        <Artwork large hash={song?.artworkHash} url={song?.artworkUrl} />
+        <Artwork large kind="song" id={song?.id} hash={song?.artworkHash} url={song?.artworkUrl} />
         <div className="now-playing-copy">
           <h1 className="truncate">{song?.title ?? text.desktopLayout.nothingPlaying}</h1>
-          {song && <p className="truncate secondary">{song.artist}</p>}
-          {song?.album && <p className="truncate tertiary">{song.album}</p>}
+          {song && <ArtistCredit row={song} links={links} className="truncate secondary" />}
+          {song?.album && <AlbumCredit row={song} links={links} className="truncate tertiary" />}
         </div>
       </div>
       <div className="now-playing-lyrics">

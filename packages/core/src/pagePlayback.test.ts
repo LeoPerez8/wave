@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import { describe, test } from "node:test";
 
 import {
+  listPlay,
   pagePlayback,
   skipMissingSongs,
   tappedMissingSong,
@@ -100,5 +101,50 @@ describe("skipMissingSongs", () => {
       play?.songs.map((row) => row.path),
       ["/a.mp3"],
     );
+  });
+});
+
+describe("listPlay", () => {
+  /** 1 and 4 have a file; 2 and 5 are missing songs YouTube Music has; 3 is one it doesn't. */
+  const hasFile = (song: Track) => song.id === 1 || song.id === 4;
+  const streams = (song: Track) => song.id === 2 || song.id === 5;
+  const songs: readonly Track[] = [{ id: 1 }, { id: 2 }, { id: 3 }, { id: 4 }, { id: 5 }];
+
+  test("with YT Music on, Play streams the missing songs it can, in list order, and names the rest", () => {
+    assert.deepEqual(listPlay(songs, { hasFile, streams }), {
+      kind: "play",
+      songs: [{ id: 1 }, { id: 2 }, { id: 4 }, { id: 5 }],
+      streamed: [{ id: 2 }, { id: 5 }],
+      leftOut: [{ id: 3 }],
+    });
+  });
+
+  test("with YT Music off, Play plays the songs with a file and names every missing one", () => {
+    assert.deepEqual(listPlay(songs, { hasFile, streams: () => false }), {
+      kind: "play",
+      songs: [{ id: 1 }, { id: 4 }],
+      streamed: [],
+      leftOut: [{ id: 2 }, { id: 3 }, { id: 5 }],
+    });
+  });
+
+  test("a list of missing songs that can't stream plays nothing and names them for download", () => {
+    assert.deepEqual(listPlay([{ id: 2 }, { id: 3 }], { hasFile, streams: () => false }), {
+      kind: "nothing",
+      missing: [{ id: 2 }, { id: 3 }],
+    });
+  });
+
+  test("a list of missing songs that all stream plays them all, with nothing left out", () => {
+    assert.deepEqual(listPlay([{ id: 5 }, { id: 2 }], { hasFile, streams }), {
+      kind: "play",
+      songs: [{ id: 5 }, { id: 2 }],
+      streamed: [{ id: 5 }, { id: 2 }],
+      leftOut: [],
+    });
+  });
+
+  test("an empty list plays nothing and has nothing to download", () => {
+    assert.deepEqual(listPlay([], { hasFile, streams }), { kind: "nothing", missing: [] });
   });
 });

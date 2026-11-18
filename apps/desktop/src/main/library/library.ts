@@ -7,8 +7,13 @@ import { createScanner } from "./scanner.ts";
 import { browseLibrary } from "./browse.ts";
 import type { BrowseScope } from "../../shared/browse.ts";
 import { preference, savePreference } from "../preferences.ts";
+import type { ArtworkKind } from "./onlineArtwork.ts";
+import { missingSongCover } from "@wave/client/artworkLookup";
+import type { YtAlbum } from "@wave/core";
+import { YtMusic } from "../yt/ytMusic.ts";
 
 export interface DesktopLibraryShape extends ReturnType<typeof createScanner> {
+  readonly cover?: (kind: ArtworkKind, id: number, large: boolean) => Promise<string | null>;
   readonly browse: (
     scope: BrowseScope,
     offset: number,
@@ -27,12 +32,31 @@ export const desktopLibraryLayer = (options: {
   readonly platform: string;
   readonly pickFolder: () => Promise<string | undefined>;
   readonly cacheArtwork?: (db: Database["Service"], encoded: string) => Promise<string | null>;
+  readonly onlineArtwork?: (
+    db: Database["Service"],
+    ytMusic: {
+      readonly on: () => boolean;
+      /** The cover of a video's album on YouTube Music, as a phone download takes it. */
+      readonly videoCover: (videoId: string) => Promise<string | null>;
+    },
+  ) => (kind: ArtworkKind, id: number, large: boolean) => Promise<string | null>;
 }) =>
   Layer.effect(
     DesktopLibrary,
     Effect.gen(function* () {
       const db = yield* Database;
       const kotlin = yield* Kotlin;
+      const yt = yield* YtMusic;
+      const ytMusic = {
+        on: yt.enabled,
+        videoCover: (videoId: string) =>
+          missingSongCover(
+            { videoId, artworkUrl: null },
+            (id) => Effect.runPromise(kotlin.call("download.watchSong", { videoId: id })),
+            async (browseId) =>
+              (await Effect.runPromise(kotlin.call("download.album", { browseId }))) as YtAlbum,
+          ),
+      };
       return yield* Effect.acquireRelease(
         Effect.sync(() => {
           const scanner = createScanner({
@@ -51,6 +75,7 @@ export const desktopLibraryLayer = (options: {
           void scanner.refresh();
           return {
             ...scanner,
+            cover: options.onlineArtwork?.(db, ytMusic),
             browse: (scope: BrowseScope, offset: number, limit: number) => {
               const page = browseLibrary(db, scope, offset, limit);
               return {

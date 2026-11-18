@@ -8,6 +8,7 @@ import { SleepTimer } from "./SleepTimer.tsx";
 import { useDesktopKeys } from "./keys.ts";
 import { labels, text } from "./text.ts";
 import { Artwork, time } from "./VirtualTable.tsx";
+import { AlbumCredit, ArtistCredit, type YtCreditLinks } from "./YtCredit.tsx";
 
 /** How often the window reads the player: often enough for the scrubber while playing. */
 const PLAYING_POLL_MS = 100;
@@ -131,12 +132,15 @@ export function PlayerBar({
   panel,
   onPanel,
   onNowPlaying,
+  links,
 }: {
   readonly playback: ReturnType<typeof usePlayback>;
   /** The side panel's open tab, or null while it is closed. */
   readonly panel: PanelTab | null;
   readonly onPanel: (tab: PanelTab) => void;
   readonly onNowPlaying: () => void;
+  /** Where a streamed song's artist and album names lead. */
+  readonly links: YtCreditLinks;
 }) {
   const { view, run } = playback;
   const [drag, setDrag] = useState<number>();
@@ -180,24 +184,37 @@ export function PlayerBar({
       <UndoToast offer={view?.undoOffer ?? null} run={run} />
       <footer className="player-bar" aria-label={labels.player}>
         <div className="player-song">
-          <button
-            className="player-now"
-            title={text.playbackText.opensNowPlaying}
-            aria-haspopup="dialog"
-            disabled={song === null}
-            onClick={onNowPlaying}
-          >
-            <Artwork hash={song?.artworkHash} url={song?.artworkUrl} />
-            <div className="player-metadata">
-              <div className="truncate player-title">{song?.title ?? labels.nothingPlaying}</div>
-              {song && (
-                <>
-                  <div className="truncate secondary">{song.artist}</div>
-                  <div className="truncate tertiary">{song.album}</div>
-                </>
-              )}
-            </div>
-          </button>
+          {/* The artwork and title open Now Playing; a streamed song's names, over the button, open
+              their pages. The button holds the names' twins so both stack the same. */}
+          <div className="player-now-area">
+            <button
+              className="player-now"
+              title={text.playbackText.opensNowPlaying}
+              aria-haspopup="dialog"
+              disabled={song === null}
+              onClick={onNowPlaying}
+            >
+              <Artwork kind="song" id={song?.id} hash={song?.artworkHash} url={song?.artworkUrl} />
+              <div className="player-metadata">
+                <div className="truncate player-title">{song?.title ?? labels.nothingPlaying}</div>
+                {song && (
+                  <div className="player-credit-twin" aria-hidden="true">
+                    <div className="truncate secondary">{song.artist}</div>
+                    <div className="truncate tertiary">{song.album}</div>
+                  </div>
+                )}
+              </div>
+            </button>
+            {song && (
+              <div className="player-metadata player-credits">
+                <div className="truncate player-title player-credit-twin" aria-hidden="true">
+                  {song.title}
+                </div>
+                <ArtistCredit row={song} links={links} className="truncate secondary" />
+                <AlbumCredit row={song} links={links} className="truncate tertiary" />
+              </div>
+            )}
+          </div>
           {button(
             "favorites",
             labels.favorite,

@@ -17,6 +17,7 @@ import { VIDEO_ID, YtMusic } from "./ytMusic.ts";
 import { YtFeatures } from "./ytServices.ts";
 
 type YtFeatureCall =
+  | "yt.search"
   | "yt.artist"
   | "yt.findArtist"
   | "yt.album"
@@ -70,6 +71,10 @@ const discoverSettings = (value: unknown): value is DiscoverSettings => {
 export const createYtFeatureHandlers = (
   validTarget: (value: unknown) => value is SongTarget,
 ): YtFeatureHandlers => ({
+  "yt.search": ([query]) =>
+    typeof query === "string" && query.length <= 500
+      ? featuresCall(({ search }) => search(query))
+      : refuse("yt.search", "invalid query"),
   "yt.artist": ([id]) =>
     browseId(id)
       ? featuresCall(async ({ pages }) => {

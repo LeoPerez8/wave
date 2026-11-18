@@ -3,7 +3,7 @@
  * object as `window.wave`; main answers each call in `BridgeContract` and nothing else.
  * A call that reads a list returns a `Page`, never the whole list.
  */
-import type { PlayerView, PlaybackCommand, QueueRow } from "./playerView.ts";
+import type { PlayerView, PlaybackCommand, PlayStart, QueueRow } from "./playerView.ts";
 import type { WindowSettings } from "./windowSettings.ts";
 import type { LibraryCounts } from "@wave/client/db/counts";
 import type { PlaybackStatus } from "./playback.ts";
@@ -24,7 +24,12 @@ import type {
 } from "./ytPages.ts";
 import type { AccountView } from "./account.ts";
 import type { MissingSongsDownloadAction, SleepTimer, SleepTimerChoice } from "@wave/core";
-import type { DownloadRow, DownloadsView, MissingSongsView } from "./downloads.ts";
+import type {
+  DownloadRow,
+  DownloadsView,
+  MissingSongsList,
+  MissingSongsView,
+} from "./downloads.ts";
 import type { SongLyrics } from "./lyrics.ts";
 import {
   PLAYLIST_CALLS,
@@ -66,7 +71,7 @@ export interface BridgeContract extends PlaylistContract, LinkContract {
   readonly "playback.view": { readonly args: readonly []; readonly result: PlayerView };
   readonly "playback.start": {
     readonly args: readonly [scope: BrowseScope, index?: number, shuffle?: boolean];
-    readonly result: void;
+    readonly result: PlayStart;
   };
   readonly "playback.startYt": {
     readonly args: readonly [videoIds: readonly string[], index: number];
@@ -135,9 +140,9 @@ export interface BridgeContract extends PlaylistContract, LinkContract {
     readonly args: readonly [offset: number, limit: number];
     readonly result: Page<DownloadRow>;
   };
-  /** An album's missing songs and their downloads; null for no such album. */
-  readonly "downloads.album": {
-    readonly args: readonly [albumId: number];
+  /** A page's missing songs and their downloads; null for no such page. */
+  readonly "downloads.list": {
+    readonly args: readonly [list: MissingSongsList];
     readonly result: MissingSongsView | null;
   };
   readonly "downloads.yt": {
@@ -149,7 +154,7 @@ export interface BridgeContract extends PlaylistContract, LinkContract {
     readonly result: void;
   };
   readonly "downloads.missingAction": {
-    readonly args: readonly [action: MissingSongsDownloadAction, albumId?: number];
+    readonly args: readonly [action: MissingSongsDownloadAction, list?: MissingSongsList];
     readonly result: void;
   };
   readonly "downloads.retry": {
@@ -214,6 +219,10 @@ export interface BridgeContract extends PlaylistContract, LinkContract {
   readonly "magicQueue.retry": { readonly args: readonly []; readonly result: void };
   readonly "library.artwork": {
     readonly args: readonly [hash: string, large: boolean];
+    readonly result: string | null;
+  };
+  readonly "library.cover": {
+    readonly args: readonly [kind: "song" | "album" | "artist", id: number, large: boolean];
     readonly result: string | null;
   };
   readonly "library.browse": {
@@ -315,6 +324,7 @@ export const BRIDGE_CALLS = [
   "lyrics.song",
 
   "library.artwork",
+  "library.cover",
   "library.browse",
   "library.letter",
   "library.counts",
@@ -364,7 +374,7 @@ export const BRIDGE_CALLS = [
   "magicQueue.retry",
   "downloads.view",
   "downloads.rows",
-  "downloads.album",
+  "downloads.list",
   "downloads.yt",
   "downloads.missing",
   "downloads.missingAction",
@@ -407,7 +417,7 @@ export interface WaveBridge {
   };
   readonly playback: {
     readonly view: () => Promise<PlayerView>;
-    readonly start: (scope: BrowseScope, index?: number, shuffle?: boolean) => Promise<void>;
+    readonly start: (scope: BrowseScope, index?: number, shuffle?: boolean) => Promise<PlayStart>;
     readonly startYt: (videoIds: readonly string[], index: number) => Promise<void>;
     readonly command: (command: PlaybackCommand) => Promise<void>;
     readonly play: () => Promise<void>;
@@ -425,6 +435,11 @@ export interface WaveBridge {
   };
   readonly library: {
     readonly artwork: (hash: string, large: boolean) => Promise<string | null>;
+    readonly cover: (
+      kind: "song" | "album" | "artist",
+      id: number,
+      large: boolean,
+    ) => Promise<string | null>;
     readonly browse: (scope: BrowseScope, offset: number, limit: number) => Promise<BrowsePage>;
     readonly letter: (scope: BrowseScope, letter: string) => Promise<number>;
     readonly counts: () => Promise<LibraryCounts>;
@@ -501,11 +516,14 @@ export interface WaveBridge {
   readonly downloads: {
     readonly view: () => Promise<DownloadsView>;
     readonly rows: (offset: number, limit: number) => Promise<Page<DownloadRow>>;
-    readonly album: (albumId: number) => Promise<MissingSongsView | null>;
+    readonly list: (list: MissingSongsList) => Promise<MissingSongsView | null>;
     readonly yt: (videoIds: readonly string[]) => Promise<void>;
     readonly missing: (trackIds: readonly number[]) => Promise<void>;
-    /** Download All, Retry Failed or Cancel on every missing song, or one album's. */
-    readonly missingAction: (action: MissingSongsDownloadAction, albumId?: number) => Promise<void>;
+    /** Download All, Retry Failed or Cancel on every missing song, or one page's. */
+    readonly missingAction: (
+      action: MissingSongsDownloadAction,
+      list?: MissingSongsList,
+    ) => Promise<void>;
     readonly retry: (ids?: readonly string[]) => Promise<void>;
     readonly cancel: (ids: readonly string[]) => Promise<void>;
     readonly clearFailed: () => Promise<void>;
@@ -556,6 +574,7 @@ export const createBridge = (invoke: Invoke): WaveBridge => ({
   },
   library: {
     artwork: (hash, large) => invoke("library.artwork", hash, large),
+    cover: (kind, id, large) => invoke("library.cover", kind, id, large),
     browse: (scope, offset, limit) => invoke("library.browse", scope, offset, limit),
     letter: (scope, letter) => invoke("library.letter", scope, letter),
     counts: () => invoke("library.counts"),
@@ -621,10 +640,10 @@ export const createBridge = (invoke: Invoke): WaveBridge => ({
   downloads: {
     view: () => invoke("downloads.view"),
     rows: (offset, limit) => invoke("downloads.rows", offset, limit),
-    album: (albumId) => invoke("downloads.album", albumId),
+    list: (list) => invoke("downloads.list", list),
     yt: (videoIds) => invoke("downloads.yt", videoIds),
     missing: (trackIds) => invoke("downloads.missing", trackIds),
-    missingAction: (action, albumId) => invoke("downloads.missingAction", action, albumId),
+    missingAction: (action, list) => invoke("downloads.missingAction", action, list),
     retry: (ids) => invoke("downloads.retry", ids),
     cancel: (ids) => invoke("downloads.cancel", ids),
     clearFailed: () => invoke("downloads.clearFailed"),
