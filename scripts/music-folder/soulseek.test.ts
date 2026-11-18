@@ -18,7 +18,7 @@ const here = dirname(fileURLToPath(import.meta.url));
 const fixture = readFileSync(
   join(
     here,
-    "../../apps/mobile/modules/wave-native/android/src/test/resources/fixtures/soulseek-320.mp3",
+    "../../packages/kotlin-shared/src/testFixtures/resources/fixtures/soulseek-320.mp3",
   ),
 );
 const toolchain = findToolchain();

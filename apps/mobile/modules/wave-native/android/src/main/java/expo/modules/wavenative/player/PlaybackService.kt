@@ -48,7 +48,7 @@ import expo.modules.wavenative.launcher.LauncherIconSwitcher
 import expo.modules.wavenative.log.WaveLog
 import expo.modules.wavenative.net.AndroidConnectivity
 import expo.modules.wavenative.yt.YtAudioCache
-import expo.modules.wavenative.yt.YtClient
+import expo.modules.wavenative.yt.AndroidYtClient
 import expo.modules.wavenative.yt.YtDataSource
 import expo.modules.wavenative.yt.YtMedia
 import expo.modules.wavenative.yt.YtStreamFailure
@@ -327,7 +327,7 @@ class PlaybackService : MediaLibraryService() {
     val dataSources = YtDataSource.Factory(
       DefaultDataSource.Factory(this, DefaultHttpDataSource.Factory().setAllowCrossProtocolRedirects(true)),
       audioCache = { YtAudioCache.get(this) },
-    ) { YtClient.get(this) }
+    ) { AndroidYtClient.get(this) }
     // Normalize Volume scales each song's samples in the sink, under the crossfade's volume.
     val gain = GainStage(
       loudnessOf = SongGains::loudnessOf,

@@ -8,6 +8,7 @@ import { updateSigning } from "./plugins/updateSigning.ts";
 import { withArtProfiles } from "./plugins/withArtProfiles.ts";
 import { withGradleBuildCache } from "./plugins/withGradleBuildCache.ts";
 import { withHermesFlags } from "./plugins/withHermesFlags.ts";
+import { withKotlinShared } from "./plugins/withKotlinShared.ts";
 import { withLauncherIcons } from "./plugins/withLauncherIcons.ts";
 import { withLaunchSplash } from "./plugins/withLaunchSplash.ts";
 import { withShareShortcut } from "./plugins/withShareShortcut.ts";
@@ -165,11 +166,14 @@ const config: ExpoConfig = {
 // (Expo runs mods in reverse order) and can edit that splash's style. The sharing shortcut's
 // share target comes first so it runs last, once the launcher icons' aliases exist.
 // Gradle reuses cached outputs (#185), and Hermes skips the unused source map (#187).
-// The APK ships Wave's own ART profiles from profiles/ (#317).
+// The APK ships Wave's own ART profiles from profiles/ (#317), and builds the Kotlin it shares with
+// Wave desktop from packages/kotlin-shared (#1144).
 const configured = withAppLanguages(
   withArtProfiles(
     withHermesFlags(
-      withGradleBuildCache(withLaunchSplash(withLauncherIcons(withShareShortcut(config)))),
+      withKotlinShared(
+        withGradleBuildCache(withLaunchSplash(withLauncherIcons(withShareShortcut(config)))),
+      ),
     ),
   ),
 );

@@ -1,6 +1,7 @@
 package expo.modules.wavenative.scan
 
 import expo.modules.wavenative.Fixtures
+import expo.modules.wavenative.download.DownloadFiles
 import java.io.File
 import org.junit.Assert.assertEquals
 import org.junit.Test
@@ -69,5 +70,20 @@ class AudioFileWalkerTest {
     val found = mutableListOf<File>()
     AudioFileWalker(listOf(root), emptyList()).walk(isCancelled = { found.isNotEmpty() }) { found.add(it) }
     assertEquals(1, found.size)
+  }
+
+  @Test
+  fun aDownloadsPartFileSitsBesideItsTargetHiddenFromScansButKeepsItsFormat() {
+    val root = Fixtures.tempDir()
+    val target = File(root, "Daft Punk/RAM/08 Get Lucky.m4a")
+    val part = DownloadFiles.partFileFor(target)
+    assertEquals(target.parentFile, part.parentFile)
+    assertEquals("m4a", part.extension)
+    part.parentFile.mkdirs()
+    part.writeText("audio")
+
+    val found = mutableListOf<File>()
+    AudioFileWalker(listOf(root), emptyList()).walk { found += it }
+    assertEquals(emptyList<File>(), found)
   }
 }

@@ -17,7 +17,7 @@ class YtDownloadModule : Module() {
     get() = appContext.reactContext ?: throw Exceptions.ReactContextLost()
 
   private val client: YtClient
-    get() = YtClient.get(context)
+    get() = AndroidYtClient.get(context)
 
   override fun definition() = ModuleDefinition {
     Name("WaveYtDownloads")

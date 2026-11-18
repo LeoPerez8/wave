@@ -147,7 +147,7 @@ export const bench: FastAgainBench = {
           connectivityFixture: { internetCapability: true, validated: false },
           nativeRequestTimeoutMs: 20000,
           timeoutSource:
-            "apps/mobile/modules/wave-native/android/src/main/java/expo/modules/wavenative/yt/YtClient.kt",
+            "packages/kotlin-shared/src/main/kotlin/expo/modules/wavenative/yt/YtClient.kt",
           limit:
             "20 ms is an injected transport deadline, not a measured native timeout or phone speedup; after requires no transport response",
         },
