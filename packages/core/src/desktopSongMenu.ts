@@ -12,12 +12,13 @@ import {
   type ItemActionEntry,
 } from "./itemActions.ts";
 
-/** The entries a desktop song menu can hold; Share is its Copy Link. */
+/** The entries a desktop song menu can hold; Share is its Copy Link. A playlist's songs can leave it. */
 const OFFERED: ReadonlySet<ItemAction> = new Set<ItemAction>([
   "playNext",
   "addToQueue",
   "magicQueue",
   "addToPlaylist",
+  "removeFromPlaylist",
   "favorite",
   "unfavorite",
   "goToAlbum",
