@@ -10,7 +10,7 @@ const box = (available = true) => ({
 });
 
 test("the JVM's Soulseek account is sealed with the keyring and unsealed back", async () => {
-  const host = keyringHost(box());
+  const host = keyringHost(box(), "win32");
   const plain = Buffer.from("account secret").toString("base64");
   const sealed = (await host.seal!({ data: plain })) as { data: string };
   assert.notEqual(sealed.data, plain);
