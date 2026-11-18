@@ -143,7 +143,8 @@ class Cancelled extends Error {}
 
 export const startYtBrowserSignIn = (options: YtBrowserSignInOptions): YtBrowserSignIn => {
   const { browser, spawn, files, connect } = options;
-  if (browser === null) return { outcome: Promise.resolve({ kind: "noBrowser" }), cancel: () => {} };
+  if (browser === null)
+    return { outcome: Promise.resolve({ kind: "noBrowser" }), cancel: () => {} };
   const now = options.now ?? Date.now;
   const wait =
     options.wait ?? ((ms: number) => new Promise<void>((resolve) => setTimeout(resolve, ms)));
