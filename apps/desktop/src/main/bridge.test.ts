@@ -8,7 +8,7 @@ import { addTrack, openTestDatabase, star, type TestDatabase } from "@wave/clien
 import { creditSplits } from "@wave/client/db/credits";
 import { stampPreference } from "@wave/client/db/sync";
 import { syncCycle } from "@wave/client/sync/syncCycle";
-import { catalogueOf, scanPath, type SyncClock } from "@wave/core";
+import { catalogueOf, recordingMatchTitle, scanPath, type SyncClock } from "@wave/core";
 import { sql } from "drizzle-orm";
 import { createPlaylist } from "@wave/client/db/playlists";
 import * as Effect from "effect/Effect";
@@ -1069,8 +1069,6 @@ test("Search finds YouTube Music songs and one plays from the results as a new q
           ["bcdefghijkl", true],
         ],
       );
-      await wave.playback.favorite();
-      assert.equal((await wave.playback.view()).current?.favorite, false, "not a Library song");
       const kept = await runtime.runPromise(
         Effect.map(Database, (db) => preference(db, "playback.ytTracks")),
       );
@@ -1083,6 +1081,151 @@ test("Search finds YouTube Music songs and one plays from the results as a new q
         'setYtMusic {"enabled":true}',
         'search {"query":"pink moon"}',
       ]);
+      await wave.playback.favorite();
+      assert.equal((await wave.playback.view()).current?.favorite, true, "its star waits for it");
+      await wave.playback.favorite();
+      assert.equal((await wave.playback.view()).current?.favorite, false);
+    } finally {
+      await runtime.dispose();
+    }
+  });
+});
+
+test("a streamed song has the phone's menu: star, playlist, download, its album and artist", async () => {
+  await withFile(async (file) => {
+    const { runtime, exposed, downloads, handlers } = connect(file);
+    try {
+      const wave = exposed.get("wave") as WaveBridge;
+      await wave.yt.search("pink moon");
+      const menu = await wave.streamed.menu("abcdefghijk");
+      assert.equal(menu.title, "Pink Moon");
+      assert.deepEqual(
+        menu.entries.map((entry) => entry.action),
+        [
+          "playNext",
+          "addToQueue",
+          "magicQueue",
+          "addToPlaylist",
+          "favorite",
+          "goToAlbum",
+          "goToArtist",
+          "share",
+          "download",
+        ],
+      );
+      assert.deepEqual(menu.entries[5], { action: "goToAlbum", album: "MPREb_pinkmoon" });
+      assert.deepEqual(menu.entries[6], {
+        action: "goToArtist",
+        artists: { kind: "open", target: { kind: "yt", name: "Nick Drake" } },
+      });
+      assert.deepEqual(menu.download, { kind: "download" });
+      const playing = await wave.streamed.menu("abcdefghijk", true);
+      assert.ok(!playing.entries.some((entry) => entry.action === "playNext"));
+
+      // A star means downloaded: it waits as a pending favorite while the file comes.
+      assert.deepEqual(await wave.streamed.run("abcdefghijk", "favorite"), {
+        kind: "favorite",
+        on: true,
+        count: 1,
+      });
+      const pending = () =>
+        runtime.runPromise(
+          Effect.map(Database, (db) =>
+            db.all<{ videoId: string }>(sql`SELECT video_id AS videoId FROM pending_favorites`),
+          ),
+        );
+      assert.deepEqual(await pending(), [{ videoId: "abcdefghijk" }]);
+      assert.ok(downloads.some((call) => call.includes('"abcdefghijk"')), downloads.join(", "));
+      const starred = await wave.streamed.menu("abcdefghijk");
+      assert.equal(starred.favorite, true);
+      assert.ok(starred.entries.some((entry) => entry.action === "unfavorite"));
+      await wave.playback.startYt(["abcdefghijk"], 0);
+      assert.equal((await wave.playback.view()).current?.favorite, true);
+      assert.equal((await wave.playback.queue(0, 10)).items[0]?.favorite, true);
+      await wave.streamed.run("abcdefghijk", "unfavorite");
+      assert.deepEqual(await pending(), []);
+      assert.equal((await wave.streamed.menu("abcdefghijk")).favorite, false);
+
+      // Add to Playlist keeps a YT Music entry, which becomes the Library's song once it's here.
+      const made = await wave.playlists.create("Evening");
+      assert.deepEqual(await wave.streamed.run("bcdefghijkl", "addToPlaylist", made.id), {
+        kind: "playlist",
+        name: "Evening",
+        added: 1,
+        alreadyIn: 0,
+      });
+      const entries = await runtime.runPromise(
+        Effect.map(Database, (db) =>
+          db.all<{ ytSong: string | null }>(
+            sql`SELECT yt_song AS ytSong FROM playlist_items WHERE playlist_id=${made.id}`,
+          ),
+        ),
+      );
+      assert.equal(entries.length, 1);
+      assert.match(entries[0]!.ytSong ?? "", /bcdefghijkl/);
+      assert.ok(downloads.some((call) => call.includes('"bcdefghijkl"')), "its download is asked");
+
+      assert.deepEqual(await wave.streamed.run("bcdefghijkl", "playNext"), {
+        kind: "queued",
+        count: 1,
+      });
+      assert.deepEqual(
+        (await wave.playback.queue(0, 2)).items.map((row) => row.videoId),
+        ["abcdefghijk", "bcdefghijkl"],
+      );
+
+      // The Library has the song: its menu stars the Library's song.
+      const road = await runtime.runPromise(
+        Effect.map(Database, (db) => {
+          const id = addTrack(db as unknown as TestDatabase, {
+            title: "Road",
+            artist: "Nick Drake",
+            album: "Pink Moon",
+            durationMs: 124_000,
+          });
+          // As a scan keeps it, for finding the Library's song for a streamed one.
+          db.run(sql`UPDATE tracks SET match_title=${recordingMatchTitle("Road")} WHERE id=${id}`);
+          return id;
+        }),
+      );
+      await wave.streamed.run("bcdefghijkl", "favorite");
+      const library = await wave.songs.actions({ scope: { kind: "songs" }, ids: [road] }, "menu");
+      assert.ok(library.entries.some((entry) => entry.action === "unfavorite"));
+
+      for (const args of [
+        ["not a video", false],
+        ["zzzzzzzzzzz", false],
+      ])
+        await assert.rejects(handlers.get("streamed.menu")!(trusted, ...args));
+      await assert.rejects(handlers.get("streamed.run")!(trusted, "abcdefghijk", "delete"));
+      await assert.rejects(handlers.get("streamed.run")!(trusted, "abcdefghijk", "addToPlaylist"));
+    } finally {
+      await runtime.dispose();
+    }
+  });
+});
+
+test("a streamed song added to a playlist goes up to the account", async () => {
+  await withFile(async (file) => {
+    const app = await desktop();
+    const phone = await app.service.signIn();
+    const { clock, pass } = fakeClock();
+    const { runtime, exposed } = connect(file, undefined, { service: app.open(), clock });
+    const wave = exposed.get("wave") as WaveBridge;
+    try {
+      await wave.account.signIn();
+      await wave.yt.search("pink moon");
+      const made = await wave.playlists.create("Evening");
+      await wave.streamed.run("abcdefghijk", "addToPlaylist", made.id);
+      await pass(10_000);
+      let entries: readonly unknown[] = [];
+      // Asked seldom: the service answers 429 to a client that pulls too often.
+      for (let tries = 0; tries < 20 && entries.length === 0; tries++) {
+        await new Promise((resolve) => setTimeout(resolve, 100));
+        entries = (await pullAll(app.service, phone)).playlistEntries;
+      }
+      assert.equal(entries.length, 1);
+      assert.match(JSON.stringify(entries[0]), /abcdefghijk/);
     } finally {
       await runtime.dispose();
     }

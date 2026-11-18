@@ -75,6 +75,8 @@ export interface DownloadsShape {
   readonly refresh: () => Promise<void>;
   readonly view: () => DownloadsView;
   readonly status: (trackId: number) => YtDownloadStatus | null;
+  /** A YT Music song's download, by its video id. */
+  readonly ytStatus: (videoId: string) => YtDownloadStatus | null;
   readonly rows: (offset: number, limit: number) => Page<DownloadRow>;
   /** An album's missing songs and their downloads; null for no such album. */
   readonly albumView: (albumId: number) => MissingSongsView | null;
@@ -315,6 +317,7 @@ export const createDownloads = (deps: DownloadsDeps): DownloadsShape => {
     },
     refresh,
     status: (trackId) => statuses.get(missingSongJobId(trackId)) ?? null,
+    ytStatus: (videoId) => statuses.get(videoId) ?? null,
     view: () => {
       const overall = downloadRunProgress(run).overall;
       return {
