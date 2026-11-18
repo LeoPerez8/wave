@@ -5,6 +5,7 @@ import { join } from "node:path";
 import { test } from "node:test";
 import { openTestDatabase } from "@wave/client/testing";
 import { tracks } from "@wave/client/db/schema";
+import { selectLyricsCandidates } from "@wave/client/db/lyricsSearchIndex";
 import { createScanner } from "./scanner.ts";
 
 test("opening indexes Music, reads changes incrementally and keeps renamed songs", async () => {
@@ -186,7 +187,7 @@ test("a downloaded file joins the Library at once, with its video and its lyrics
       title: "Águas de Março",
       artist: "Elis Regina",
       durationMs: 212000,
-      hasLyrics: true,
+      lyrics: "É pau, é pedra, é o fim do caminho",
     }),
   });
   try {
@@ -201,11 +202,56 @@ test("a downloaded file joins the Library at once, with its video and its lyrics
       .all();
     assert.deepEqual(row, [{ videoId: "abcdefghijk", hasLyrics: true }]);
     assert.ok(scanner.status().revision > before);
+    assert.equal(selectLyricsCandidates(db, "fim do caminho").length, 1, "Search finds its lyrics");
     // The next scan finds it unchanged.
     await scanner.refresh();
     assert.equal(scanner.songs(0, 20).total, 1);
   } finally {
     await scanner.dispose();
+    await rm(folder, { recursive: true, force: true });
+  }
+});
+
+test("a scan indexes each song's lyrics for Search, a sidecar .lrc beating unsynced tags", async () => {
+  const folder = await mkdtemp(join(tmpdir(), "wave-lyrics-"));
+  const music = join(folder, "Music");
+  await mkdir(music);
+  await writeFile(join(music, "Tagged.flac"), "music");
+  await writeFile(join(music, "Sidecar.mp3"), "music");
+  await writeFile(
+    join(music, "SIDECAR.LRC"),
+    "[ar:Nick Drake]\n[00:01.00]Pink moon is on its way\n",
+  );
+  await writeFile(join(music, "Plain.ogg"), "music");
+  let tagged: string | null = "Did I see you down\nUnder a harvest moon";
+  const db = await openTestDatabase();
+  const scanner = createScanner({
+    db,
+    platform: process.platform,
+    musicFolder: music,
+    readTags: async (path) => ({
+      title: path.split(/[\\/]/).at(-1)!,
+      artist: "Nick Drake",
+      durationMs: 124000,
+      lyrics: path.endsWith("Tagged.flac") ? tagged : "Unsynced tags lose to a synced sidecar",
+    }),
+  });
+  const found = (query: string) =>
+    selectLyricsCandidates(db, query).map(
+      (hit) => scanner.songs(0, 20).items.find((song) => song.id === hit.trackId)?.title,
+    );
+  try {
+    await scanner.refresh();
+    assert.deepEqual(found("harvest moon"), ["Tagged.flac"]);
+    assert.deepEqual(found("pink moon"), ["Sidecar.mp3"]);
+    assert.deepEqual(found("unsynced tags"), ["Plain.ogg"]);
+    assert.deepEqual(found("nick drake"), [], "header tags aren't lyrics");
+    tagged = null;
+    await writeFile(join(music, "Tagged.flac"), "music, retagged");
+    await scanner.refresh();
+    assert.deepEqual(found("harvest moon"), [], "lyrics taken out of the tags leave Search");
+  } finally {
+    scanner.dispose();
     await rm(folder, { recursive: true, force: true });
   }
 });

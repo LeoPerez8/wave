@@ -165,7 +165,7 @@ class DesktopDownloadsTest {
     assertTrue("a written report, not a failure: $report", report["failed"] == null)
     val tags = result("readTags", """{"path":${quote(file.path)}}""").jsonObject
     assertEquals("Bossa Nova", tags["genre"]!!.jsonPrimitive.content)
-    assertEquals(true, tags["hasLyrics"]!!.jsonPrimitive.content.toBoolean())
+    assertEquals("First line", tags["lyrics"]!!.jsonPrimitive.content)
   }
 }
 

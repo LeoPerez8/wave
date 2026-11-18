@@ -33,6 +33,16 @@ export interface KotlinMethods extends KotlinDownloadMethods {
       readonly loudnessDb: number | null;
     } | null;
   };
+  /** A track's lyrics as found: in its tags and in a sidecar `.lrc` (`LyricsReader`). */
+  readonly readLyrics: {
+    readonly params: { readonly path: string };
+    readonly result: { readonly embedded: string | null; readonly sidecar: string | null };
+  };
+  /** YT Music's lyrics for a song (plain text), or null when it has none. */
+  readonly ytLyrics: {
+    readonly params: { readonly videoId: string };
+    readonly result: string | null;
+  };
   /** Turns YT Music on or off in the JVM; its calls then fail with `ERR_YT_DISABLED`. */
   readonly setYtMusic: { readonly params: { readonly enabled: boolean }; readonly result: null };
   /** Fix Songs' tag write (`SongTagWriter`): what was written, or `{failed}` with the step. */

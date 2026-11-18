@@ -37,7 +37,7 @@ test("Fix Songs looks up what a song lacks, writes it into the file and the Libr
           trackNumber: "4",
           year: "1972",
           advisory: "0",
-          hasLyrics: true,
+          lyrics: "And now I'm darker than the deepest sea",
           durationMs: 163000,
         }
       : { title: "Pink Moon", artist: "Nick Drake", album: "Pink Moon", durationMs: 124000 });
@@ -68,7 +68,7 @@ test("Fix Songs looks up what a song lacks, writes it into the file and the Libr
             trackNumber: String(params.trackNumber),
             year: String(params.year),
             advisory: String(params.advisory),
-            hasLyrics: true,
+            lyrics: "Saw it written and I saw it say",
           });
           return {
             lyrics: "tags",

@@ -33,6 +33,7 @@ export const SONG_RUN_ACTIONS = [
   "favorite",
   "unfavorite",
   "addToPlaylist",
+  "removeFromPlaylist",
   "removeFromLibrary",
   "fixSong",
   "fixSongs",
@@ -50,6 +51,8 @@ export type SongRunResult =
       readonly alreadyIn: number;
     }
   | { readonly kind: "removed"; readonly count: number }
+  /** Songs taken out of the playlist the target lists; `playlists.undoRemove` puts them back. */
+  | { readonly kind: "playlistRemoved"; readonly count: number }
   | ({ readonly kind: "fixed" } & FixSongsResult);
 
 /** What Fix Songs came to, song by song, for Core's `tagLookupsToast`. */

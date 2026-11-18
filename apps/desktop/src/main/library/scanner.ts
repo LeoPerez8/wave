@@ -1,14 +1,16 @@
 /** Filesystem work stays in main; identity, reconciliation and storage come from Core/Client. */
-import { readdir, stat, realpath } from "node:fs/promises";
+import { readdir, readFile, stat, realpath } from "node:fs/promises";
 import { watch, realpathSync, type FSWatcher } from "node:fs";
-import { dirname, extname, join, normalize } from "node:path";
+import { basename, dirname, extname, join, normalize } from "node:path";
 import {
   explicitFromAdvisory,
   gainTags,
   isVoiceNoteOrRecording,
   normalizeTrack,
+  pickLyrics,
   scanPath,
   scanPathKey,
+  type Lyrics,
   type ScanFolder,
 } from "@wave/core";
 import type { LibraryDatabase } from "@wave/client/db/database";
@@ -28,6 +30,7 @@ import { chunks } from "@wave/client/db/chunks";
 import { excludedFolders as exclusions, tracks } from "@wave/client/db/schema";
 import { inArray } from "drizzle-orm";
 import { libraryCounts } from "@wave/client/db/counts";
+import { keepLyricsSearchText, selectLyricsTrackIdAtPath } from "@wave/client/db/lyricsSearchIndex";
 import { scanPathWithin } from "@wave/core";
 import type { IndexedTrack } from "@wave/client";
 import type { Page } from "../../shared/bridge.ts";
@@ -45,6 +48,51 @@ export interface ScannerOptions {
   readonly quietMs?: number;
   readonly retryMs?: number;
 }
+
+/** The words Search finds a song by: its lyrics' lines, without times. */
+const plainText = (lyrics: Lyrics): string | null =>
+  lyrics.kind === "synced"
+    ? lyrics.lines.map((line) => line.text).join("\n")
+    : lyrics.kind === "unsynced"
+      ? lyrics.lines.join("\n")
+      : null;
+
+/**
+ * [audio]'s sidecar `.lrc` text: `Song.lrc` beside `Song.mp3`, or `Song.mp3.lrc`, names matching
+ * ignoring case (the shared Kotlin's `Sidecars.find`). [names] caches each folder's `.lrc` files.
+ */
+const readSidecar = async (
+  audio: string,
+  names: Map<string, Promise<Map<string, string>>>,
+): Promise<string | null> => {
+  const folder = dirname(audio);
+  let listing = names.get(folder);
+  if (listing === undefined) {
+    listing = readdir(folder).then(
+      (files) =>
+        new Map(
+          files
+            .filter((name) => extname(name).toLowerCase() === ".lrc")
+            .map((name) => [name.toLowerCase(), name]),
+        ),
+      () => new Map(),
+    );
+    names.set(folder, listing);
+  }
+  const files = await listing;
+  const name = basename(audio);
+  const wanted = [`${name.slice(0, name.length - extname(name).length)}.lrc`, `${name}.lrc`];
+  for (const candidate of wanted) {
+    const found = files.get(candidate.toLowerCase());
+    if (found !== undefined)
+      try {
+        return await readFile(join(folder, found), "utf8");
+      } catch {
+        return null;
+      }
+  }
+  return null;
+};
 
 const AUDIO = new Set(["mp3", "flac", "m4a", "aac", "ogg", "oga", "opus", "wav"]);
 
@@ -135,17 +183,18 @@ export const createScanner = ({
   }, retryMs);
   retry.unref();
 
-  /** The Library's row for [file], from the [tags] read from it. */
+  /** The Library's row for [file], from the [tags] read from it and its [lyrics]' text. */
   const trackOf = async (
     file: { readonly path: string; readonly sizeBytes: number; readonly modifiedAt: number },
     tags: Partial<SongTags>,
+    lyrics: string | null,
   ): Promise<IndexedTrack> => ({
     ...normalizeTrack({ ...tags, path: file.path }),
     ...file,
     sampleRate: tags.sampleRate ?? null,
     bitrateKbps: tags.bitrateKbps ?? null,
     artworkHash: tags.artworkBase64 && cacheArtwork ? await cacheArtwork(tags.artworkBase64) : null,
-    hasLyrics: tags.hasLyrics ?? false,
+    hasLyrics: lyrics !== null,
     explicit: explicitFromAdvisory(tags.advisory ?? null),
     loudness: gainTags(tags.loudnessTags ?? {}),
   });
@@ -240,10 +289,18 @@ export const createScanner = ({
     );
     state = { ...state, phase: "reading" };
     let batch: IndexedTrack[] = [];
+    /** The lyrics text Search indexes for each file in [batch]; null takes a song out. */
+    let lyricsOf = new Map<string, string | null>();
+    const sidecars = new Map<string, Promise<Map<string, string>>>();
     const save = () => {
       if (batch.length === 0) return;
       index.save(batch);
+      for (const [path, text] of lyricsOf) {
+        const id = selectLyricsTrackIdAtPath(db, path);
+        if (id !== null) keepLyricsSearchText(db, id, text);
+      }
       batch = [];
+      lyricsOf = new Map();
       state = { ...state, revision: state.revision + 1 };
     };
     for (const [key, file] of files) {
@@ -260,7 +317,13 @@ export const createScanner = ({
       }
       const tags = await readTags(file.path);
       if (rereadTags) upgraded.add(key);
-      const track = await trackOf(file, tags);
+      const lyrics = plainText(
+        pickLyrics({
+          embedded: tags.lyrics ?? null,
+          sidecar: await readSidecar(file.path, sidecars),
+        }),
+      );
+      const track = await trackOf(file, tags, lyrics);
       if (
         isVoiceNoteOrRecording(
           track,
@@ -268,7 +331,10 @@ export const createScanner = ({
         )
       )
         index.skip([file]);
-      else batch.push(track);
+      else {
+        batch.push(track);
+        lyricsOf.set(track.path, lyrics);
+      }
       state = { ...state, filesRead: state.filesRead + 1 };
       if (batch.length >= 100) save();
     }
@@ -381,9 +447,14 @@ export const createScanner = ({
       await active;
       const file = scanPath(await realpath(path).catch(() => path), platform);
       const info = await stat(file);
+      const tags = await readTags(file);
+      const lyrics = plainText(
+        pickLyrics({ embedded: tags.lyrics ?? null, sidecar: await readSidecar(file, new Map()) }),
+      );
       const track = await trackOf(
         { path: file, sizeBytes: info.size, modifiedAt: info.mtimeMs },
-        await readTags(file),
+        tags,
+        lyrics,
       );
       saveBatch(
         db,
@@ -399,6 +470,8 @@ export const createScanner = ({
         [],
         Date.now(),
       );
+      const id = selectLyricsTrackIdAtPath(db, file);
+      if (id !== null) keepLyricsSearchText(db, id, lyrics);
       state = { ...state, revision: state.revision + 1 };
       for (const listener of listeners) listener();
     },

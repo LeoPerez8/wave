@@ -8,6 +8,7 @@ import {
   describePlaylistAdd,
   favoriteToast,
   isDestructiveAction,
+  planAlert,
   queuedToast,
   splitActionBar,
   tagLookupsToast,
@@ -56,6 +57,8 @@ interface Options {
   readonly failed: (message?: string) => void;
   /** Reads the player and the rows again once an action changed them. */
   readonly changed: () => void;
+  /** New Playlist from Add to Playlist: asks for a name, then makes it with [target]'s songs. */
+  readonly newPlaylist?: (target: SongTarget) => void;
 }
 
 interface Confirm {
@@ -68,17 +71,21 @@ const playlists = async () =>
   (await window.wave.library.browse({ kind: "playlists" }, 0, 200)).items;
 
 /** The menus, toasts and question an entry can show, and how to open them. */
-export function useSongActions({ go, select, failed, changed }: Options) {
+export function useSongActions({ go, select, failed, changed, newPlaylist }: Options) {
   const [menu, setMenu] = useState<{
     readonly label: string;
     readonly items: Promise<readonly MenuItem[]> | readonly MenuItem[];
     readonly at: { readonly x: number; readonly y: number };
   }>();
-  const [toast, setToast] = useState<{ readonly message: string; readonly id: number }>();
+  const [toast, setToast] = useState<{
+    readonly message: string;
+    readonly id: number;
+    readonly undo?: () => void;
+  }>();
   const [confirm, setConfirm] = useState<Confirm>();
 
-  const notify = useCallback((message: string | null) => {
-    if (message !== null) setToast({ message, id: Date.now() });
+  const notify = useCallback((message: string | null, undo?: () => void) => {
+    if (message !== null) setToast({ message, id: Date.now(), ...(undo ? { undo } : {}) });
   }, []);
 
   const run = useCallback(
@@ -110,6 +117,13 @@ export function useSongActions({ go, select, failed, changed }: Options) {
             return;
           case "fixed":
             return notify(tagLookupsToast(result.results, result.stop, result.skipped, text));
+          case "playlistRemoved":
+            return notify(text.playlists.removed(result.count), () => {
+              void window.wave.playlists
+                .undoRemove()
+                .then(changed)
+                .catch(() => failed(text.playlists.couldntRestore));
+            });
         }
       } catch {
         failed(action === "removeFromLibrary" ? text.songDeletion.couldntRemoveSongs : undefined);
@@ -152,16 +166,43 @@ export function useSongActions({ go, select, failed, changed }: Options) {
             ...base,
             open: async () => {
               const rows = await playlists();
-              return rows.length === 0
-                ? [{ key: "none", label: text.desktopLibrary.noPlaylists, disabled: true }]
-                : rows.map((row) => ({
-                    key: `playlist-${row.id}`,
-                    label: row.title,
-                    run: () => {
-                      finish();
-                      void run(target, "addToPlaylist", surface, row.id);
+              const create: MenuItem[] = newPlaylist
+                ? [
+                    {
+                      key: "new-playlist",
+                      label: text.playlists.newPlaylist,
+                      run: () => {
+                        finish();
+                        newPlaylist(target);
+                      },
                     },
-                  }));
+                  ]
+                : [];
+              return rows.length === 0
+                ? [
+                    ...create,
+                    { key: "none", label: text.desktopLibrary.noPlaylists, disabled: true },
+                  ]
+                : [
+                    ...create,
+                    ...rows.map((row) => ({
+                      key: `playlist-${row.id}`,
+                      label: row.title,
+                      run: () => {
+                        finish();
+                        void run(target, "addToPlaylist", surface, row.id);
+                      },
+                    })),
+                  ];
+            },
+          };
+        case "removeFromPlaylist":
+          // As on the phone: no question, and the toast's Undo puts the songs back.
+          return {
+            ...base,
+            run: () => {
+              finish();
+              void run(target, "removeFromPlaylist", surface);
             },
           };
         case "goToAlbum":
@@ -223,20 +264,26 @@ export function useSongActions({ go, select, failed, changed }: Options) {
           return { ...base, disabled: true };
       }
     },
-    [go, run, select],
+    [go, run, select, newPlaylist],
   );
 
-  /** Opens one song's menu at [at]. */
+  /** Opens one song's menu at [at], with [extra] entries (Move Up, Move Down) at its end. */
   const openMenu = useCallback(
-    (target: SongTarget, title: string, at: { readonly x: number; readonly y: number }) =>
+    (
+      target: SongTarget,
+      title: string,
+      at: { readonly x: number; readonly y: number },
+      extra: readonly MenuItem[] = [],
+    ) =>
       setMenu({
         label: text.desktopLibrary.songMenu(title),
         at,
         items: window.wave.songs
           .actions(target, "menu")
-          .then((about) =>
-            about.entries.map((entry) => itemFor(entry, target, about, "menu", () => {})),
-          ),
+          .then((about) => [
+            ...about.entries.map((entry) => itemFor(entry, target, about, "menu", () => {})),
+            ...extra,
+          ]),
       }),
     [itemFor],
   );
@@ -259,7 +306,9 @@ export function useSongActions({ go, select, failed, changed }: Options) {
   const overlays = (
     <>
       {menu && <Menu label={menu.label} items={menu.items} at={menu.at} onClose={closeMenu} />}
-      {toast && <Toast key={toast.id} message={toast.message} onDone={hideToast} />}
+      {toast && (
+        <Toast key={toast.id} message={toast.message} onDone={hideToast} onUndo={toast.undo} />
+      )}
       {confirm && (
         <ConfirmDialog
           spec={confirm.spec}
@@ -285,7 +334,16 @@ export function useSongActions({ go, select, failed, changed }: Options) {
   };
 }
 
-function Toast({ message, onDone }: { readonly message: string; readonly onDone: () => void }) {
+/** A toast for the phone's time; with [onUndo], an Undo button too. */
+export function Toast({
+  message,
+  onDone,
+  onUndo,
+}: {
+  readonly message: string;
+  readonly onDone: () => void;
+  readonly onUndo?: (() => void) | undefined;
+}) {
   useEffect(() => {
     const timer = setTimeout(onDone, toastDuration(message));
     return () => clearTimeout(timer);
@@ -293,28 +351,43 @@ function Toast({ message, onDone }: { readonly message: string; readonly onDone:
   return (
     <div className="playback-toast action-toast" role="status">
       <span>{message}</span>
+      {onUndo && (
+        <button
+          className="toast-action"
+          onClick={() => {
+            onDone();
+            onUndo();
+          }}
+        >
+          {text.playlists.undo}
+        </button>
+      )}
     </div>
   );
 }
 
 /** Keeps Tab inside [element]'s buttons. */
-const trapTab = (event: KeyboardEvent<HTMLElement>) => {
+export const trapTab = (event: KeyboardEvent<HTMLElement>) => {
   if (event.key !== "Tab") return;
-  const buttons = [...event.currentTarget.querySelectorAll<HTMLElement>("button")];
+  const buttons = [...event.currentTarget.querySelectorAll<HTMLElement>("button, input")];
   const at = buttons.indexOf(document.activeElement as HTMLElement);
   const next = (at + (event.shiftKey ? -1 : 1) + buttons.length) % buttons.length;
   event.preventDefault();
   buttons[next]?.focus();
 };
 
-/** Wave's alert: Cancel and the action, Cancel focused; Esc cancels. */
-function ConfirmDialog({
+/**
+ * Wave's alert (Core's `planAlert`): Cancel, or the spec's dismiss label, then the action, the
+ * first focused; Esc chooses the first. Without an action it is a message with OK.
+ */
+export function ConfirmDialog({
   spec,
   onChoose,
 }: {
   readonly spec: AlertSpec;
   readonly onChoose: (yes: boolean) => void;
 }) {
+  const { buttons } = planAlert(spec, text);
   return (
     <div className="dialog-backdrop">
       <div
@@ -336,15 +409,22 @@ function ConfirmDialog({
           {spec.message}
         </p>
         <div className="dialog-buttons">
-          <button autoFocus onClick={() => onChoose(false)}>
-            {text.alert.cancel}
-          </button>
-          <button
-            className={spec.action?.destructive ? "destructive" : "accent"}
-            onClick={() => onChoose(true)}
-          >
-            {spec.action?.label}
-          </button>
+          {buttons.map((button, index) => (
+            <button
+              key={button.choice}
+              autoFocus={index === 0}
+              className={
+                button.choice === "dismiss"
+                  ? undefined
+                  : button.tone === "destructive"
+                    ? "destructive"
+                    : "accent"
+              }
+              onClick={() => onChoose(button.choice === "action")}
+            >
+              {button.label}
+            </button>
+          ))}
         </div>
       </div>
     </div>

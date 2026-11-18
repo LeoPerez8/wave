@@ -100,3 +100,22 @@ test("a missing song can't be queued but can leave the Library, as on the phone"
 test("no songs, no entries", () => {
   assert.deepEqual(actions({ items: [] }), []);
 });
+
+test("a playlist's songs can leave it, from their menu or the selection bar", () => {
+  const listed = { ...song, inPlaylist: true };
+  assert.deepEqual(actions({ items: [listed], selectable: true }), [
+    "playNext",
+    "addToQueue",
+    "addToPlaylist",
+    "favorite",
+    "removeFromPlaylist",
+    "goToAlbum",
+    "goToArtist",
+    "select",
+    "removeFromLibrary",
+  ]);
+  assert.ok(
+    actions({ items: [listed, listed], surface: "selection" }).includes("removeFromPlaylist"),
+  );
+  assert.ok(!actions({ items: [song] }).includes("removeFromPlaylist"));
+});

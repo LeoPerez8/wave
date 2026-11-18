@@ -1,8 +1,10 @@
 import { toastDuration } from "@wave/core";
-import { Fragment, useCallback, useEffect, useRef, useState, type CSSProperties } from "react";
+import { useCallback, useEffect, useRef, useState, type CSSProperties } from "react";
 
 import type { PlaybackCommand, PlayerView } from "../../shared/playerView.ts";
 import { Icon } from "./Icon.tsx";
+import type { PanelTab } from "./SidePanel.tsx";
+import { SleepTimer } from "./SleepTimer.tsx";
 import { useDesktopKeys } from "./keys.ts";
 import { labels, text } from "./text.ts";
 import { Artwork, time } from "./VirtualTable.tsx";
@@ -124,7 +126,18 @@ function UndoToast({
   );
 }
 
-export function PlayerBar({ playback }: { readonly playback: ReturnType<typeof usePlayback> }) {
+export function PlayerBar({
+  playback,
+  panel,
+  onPanel,
+  onNowPlaying,
+}: {
+  readonly playback: ReturnType<typeof usePlayback>;
+  /** The side panel's open tab, or null while it is closed. */
+  readonly panel: PanelTab | null;
+  readonly onPanel: (tab: PanelTab) => void;
+  readonly onNowPlaying: () => void;
+}) {
   const { view, run } = playback;
   const [drag, setDrag] = useState<number>();
   usePlayerKeys(view, run);
@@ -167,16 +180,24 @@ export function PlayerBar({ playback }: { readonly playback: ReturnType<typeof u
       <UndoToast offer={view?.undoOffer ?? null} run={run} />
       <footer className="player-bar" aria-label={labels.player}>
         <div className="player-song">
-          <Artwork hash={song?.artworkHash} url={song?.artworkUrl} />
-          <div className="player-metadata">
-            <div className="truncate player-title">{song?.title ?? labels.nothingPlaying}</div>
-            {song && (
-              <>
-                <div className="truncate secondary">{song.artist}</div>
-                <div className="truncate tertiary">{song.album}</div>
-              </>
-            )}
-          </div>
+          <button
+            className="player-now"
+            title={text.playbackText.opensNowPlaying}
+            aria-haspopup="dialog"
+            disabled={song === null}
+            onClick={onNowPlaying}
+          >
+            <Artwork hash={song?.artworkHash} url={song?.artworkUrl} />
+            <div className="player-metadata">
+              <div className="truncate player-title">{song?.title ?? labels.nothingPlaying}</div>
+              {song && (
+                <>
+                  <div className="truncate secondary">{song.artist}</div>
+                  <div className="truncate tertiary">{song.album}</div>
+                </>
+              )}
+            </div>
+          </button>
           {button(
             "favorites",
             labels.favorite,
@@ -235,10 +256,11 @@ export function PlayerBar({ playback }: { readonly playback: ReturnType<typeof u
           </div>
         </div>
         <div className="player-tools">
-          {(["sleep", "lyrics", "queue", "menu"] as const).map((key) => (
-            // Their tickets come after this one; the bar keeps its layout meanwhile.
-            <Fragment key={key}>{button(key, labels[key], () => {}, undefined, true)}</Fragment>
-          ))}
+          <SleepTimer timer={view?.sleepTimer ?? null} disabled={song === null} run={run} />
+          {button("lyrics", labels.lyrics, () => onPanel("lyrics"), panel === "lyrics", !view)}
+          {button("queue", labels.queue, () => onPanel("queue"), panel === "queue", !view)}
+          {/* The song menu's ticket comes after this one; the bar keeps its layout meanwhile. */}
+          {button("menu", labels.menu, () => {}, undefined, true)}
           {button(
             view?.muted ? "mute" : "volume",
             view?.muted ? labels.unmute : labels.mute,

@@ -4,10 +4,13 @@ import type { AccountView } from "../../shared/account.ts";
 import type { BrowseRow, BrowseScope } from "../../shared/browse.ts";
 import type { ScanStatus } from "../../shared/library.ts";
 import { PlayerBar, usePlayback } from "./PlayerBar.tsx";
+import { NowPlaying } from "./NowPlaying.tsx";
+import { SidePanel, useSidePanel } from "./SidePanel.tsx";
 import { Icon } from "./Icon.tsx";
 import { Artwork, VirtualTable } from "./VirtualTable.tsx";
 import { FolderSettings } from "./FolderSettings.tsx";
 import { YtResults } from "./YtResults.tsx";
+import { SearchPage } from "./SearchPage.tsx";
 import { AccountSettings, SignInInvitation } from "./AccountSettings.tsx";
 import { PlaybackSettings } from "./PlaybackSettings.tsx";
 import { AlbumDownloadButton } from "./AlbumDownloadButton.tsx";
@@ -17,13 +20,16 @@ import { downloadPercent, useDownloads } from "./useDownloads.ts";
 import { useDesktopKeys } from "./keys.ts";
 import { ShortcutsSheet } from "./Shortcuts.tsx";
 import { SelectionBar, useSongActions, type Selection } from "./SongActions.tsx";
+import { usePlaylistEdits } from "./Playlists.tsx";
+import { Graveyard } from "./Graveyard.tsx";
 import { labels, text } from "./text.ts";
 
 type Route =
   | BrowseScope
   | { readonly kind: "home" }
   | { readonly kind: "settings" }
-  | { readonly kind: "downloads" };
+  | { readonly kind: "downloads" }
+  | { readonly kind: "graveyard"; readonly id: number };
 const sections = ["playlists", "artists", "albums", "songs", "genres", "favorites"] as const;
 /** YT Music's sidebar pages; their pages come in later tickets. */
 const ytPages = [
@@ -87,11 +93,22 @@ export function App() {
   const percent = downloadPercent(downloads);
   const download = (run: Promise<unknown>) => void run.catch(failed);
   const [shortcuts, setShortcuts] = useState(false);
+  const panel = useSidePanel();
+  const [nowPlaying, setNowPlaying] = useState(false);
   /** Selection mode, for the list it was turned on in. */
   const [selecting, setSelecting] = useState<{
     readonly list: string;
     readonly selection: Selection;
   }>();
+  const playlistEdits = usePlaylistEdits({
+    go: (next) => go(next),
+    deleted: (id) => {
+      if ((route.kind === "playlist" || route.kind === "graveyard") && route.id === id)
+        go({ kind: "home" });
+    },
+    failed: (message) => setError(message),
+    changed: playback.refresh,
+  });
   const search = useRef<HTMLInputElement>(null);
   const content = useRef<HTMLDivElement>(null);
   const shell = useRef<HTMLElement>(null);
@@ -173,14 +190,24 @@ export function App() {
     return () => {
       current = false;
     };
-  }, [scan?.revision, account?.revision, playlistOffset, failed]);
+  }, [
+    scan?.revision,
+    account?.revision,
+    playback.view?.revision,
+    playlistEdits.edits,
+    playlistOffset,
+    failed,
+  ]);
   useEffect(() => {
     if (route.kind !== "search")
       content.current?.querySelector<HTMLElement>("[role=grid]")?.focus();
   }, [route]);
   const scope = useMemo<BrowseScope>(
     () =>
-      route.kind === "home" || route.kind === "settings" || route.kind === "downloads"
+      route.kind === "home" ||
+      route.kind === "settings" ||
+      route.kind === "downloads" ||
+      route.kind === "graveyard"
         ? { kind: "songs" }
         : route,
     [route],
@@ -194,6 +221,7 @@ export function App() {
     select: (ids) => setSelection({ all: false, ids: new Set(ids) }),
     failed: (message) => setError(message ?? text.desktopLibrary.actionFailed),
     changed: playback.refresh,
+    newPlaylist: playlistEdits.newPlaylist,
   });
   useDesktopKeys({
     search: () => search.current?.focus(),
@@ -202,8 +230,9 @@ export function App() {
     rescan: () => void window.wave.library.refresh().catch(failed),
     shortcuts: () => setShortcuts((open) => !open),
     close: () => {
-      if (actions.closeMenu()) return;
+      if (actions.closeMenu() || playlistEdits.closeMenu()) return;
       if (shortcuts) return setShortcuts(false);
+      if (nowPlaying) return setNowPlaying(false);
       if (selection) return setSelection(undefined);
       return false;
     },
@@ -222,14 +251,37 @@ export function App() {
       download(window.wave.downloads.missing([row.id]));
     else playback.run(window.wave.playback.start(scope, index));
   };
+  const searchFor = (query: string) => {
+    setQuery(query);
+    if (route.kind !== "search") go({ kind: "search", query });
+    else
+      setHistory((previous) =>
+        previous.map((r, i) => (i === position ? { kind: "search", query } : r)),
+      );
+  };
+  /** Keeps the search in Recent searches, as the phone does on submit or opening a result. */
+  const rememberSearch = () => {
+    const query = route.kind === "search" ? (route.query ?? "").trim() : "";
+    if (query !== "") void window.wave.search.remember(query).catch(failed);
+  };
   const title =
-    hero?.title ??
-    (route.kind in labels ? (labels[route.kind as keyof typeof labels] as string) : labels.library);
+    route.kind === "graveyard"
+      ? text.playlists.graveyard
+      : (hero?.title ??
+        (route.kind in labels
+          ? (labels[route.kind as keyof typeof labels] as string)
+          : labels.library));
+  const playlistId = route.kind === "playlist" ? route.id : undefined;
   const scanning = scan?.status === "scanning";
   const revision =
     (scan?.revision ?? 0) + (playback.view?.revision ?? 0) + (account?.revision ?? 0);
   return (
-    <main ref={shell} className="desktop-shell" data-appearance={appearance}>
+    <main
+      ref={shell}
+      className="desktop-shell"
+      data-appearance={appearance}
+      data-panel={panel.tab ?? undefined}
+    >
       <header className="titlebar">
         <div className="brand">{labels.brand}</div>
         <div className="history-buttons">
@@ -242,7 +294,7 @@ export function App() {
           />
         </div>
       </header>
-      <aside className="sidebar">
+      <aside className="sidebar" inert={nowPlaying}>
         <label className="search-field" title={labels.search}>
           <Icon name="search" />
           <input
@@ -251,15 +303,9 @@ export function App() {
             aria-label={labels.search}
             placeholder={labels.search}
             value={query}
-            onChange={(event) => {
-              const query = event.target.value;
-              setQuery(query);
-              if (route.kind !== "search") go({ kind: "search", query });
-              else
-                setHistory((previous) =>
-                  previous.map((r, i) => (i === position ? { kind: "search", query } : r)),
-                );
-            }}
+            onChange={(event) => searchFor(event.target.value)}
+            onFocus={() => route.kind !== "search" && go({ kind: "search", query })}
+            onKeyDown={(event) => event.key === "Enter" && rememberSearch()}
           />
         </label>
         <nav aria-label={labels.library}>
@@ -332,6 +378,10 @@ export function App() {
               title={row.title}
               aria-current={route.kind === "playlist" && route.id === row.id ? "page" : undefined}
               onClick={() => go({ kind: "playlist", id: row.id })}
+              onContextMenu={(event) => {
+                event.preventDefault();
+                playlistEdits.openMenu(row.id, { x: event.clientX, y: event.clientY });
+              }}
             >
               <Icon name="playlists" />
               <span className="truncate">{row.title}</span>
@@ -357,7 +407,7 @@ export function App() {
             className="nav-item"
             aria-label={labels.newPlaylist}
             title={labels.newPlaylist}
-            disabled
+            onClick={() => playlistEdits.newPlaylist()}
           >
             <Icon name="add" />
             <span>{labels.newPlaylist}</span>
@@ -374,10 +424,17 @@ export function App() {
           <span>{labels.settings}</span>
         </button>
       </aside>
-      <div className="content" ref={content}>
-        {hero ? (
+      <div className="content" ref={content} inert={nowPlaying}>
+        {hero && route.kind !== "graveyard" ? (
           <div className="hero" data-testid="hero">
-            <Artwork large hash={hero.artworkHash} artist={route.kind === "artist"} />
+            <Artwork
+              large
+              hash={hero.artworkHash}
+              artist={route.kind === "artist"}
+              {...(route.kind === "playlist"
+                ? { playlist: route.id, image: hero.imageKey ?? null }
+                : {})}
+            />
             <div className="hero-copy">
               <h1>{title}</h1>
               {hero.artist && <p className="hero-artist">{hero.artist}</p>}
@@ -410,6 +467,19 @@ export function App() {
                     onError={failed}
                   />
                 )}
+                {playlistId !== undefined && (
+                  <button
+                    aria-label={text.playlists.playlistActions}
+                    title={text.playlists.playlistActions}
+                    aria-haspopup="menu"
+                    onClick={(event) => {
+                      const rect = event.currentTarget.getBoundingClientRect();
+                      playlistEdits.openMenu(playlistId, { x: rect.left, y: rect.bottom + 4 });
+                    }}
+                  >
+                    <Icon name="menu" size={16} />
+                  </button>
+                )}
               </div>
             </div>
           </div>
@@ -420,6 +490,14 @@ export function App() {
               <p className="secondary" data-testid="song-count">
                 {labels.songCount(count)}
               </p>
+            )}
+            {route.kind === "playlists" && (
+              <div className="hero-actions">
+                <button onClick={playlistEdits.importPlaylists}>
+                  <Icon name="folder" size={16} />
+                  {text.playlists.importPlaylists}
+                </button>
+              </div>
             )}
           </div>
         )}
@@ -523,6 +601,44 @@ export function App() {
           </div>
         ) : route.kind === "downloads" ? (
           <DownloadsPage view={downloads} onError={failed} />
+        ) : route.kind === "graveyard" ? (
+          <Graveyard
+            playlistId={route.id}
+            revision={revision}
+            changed={playback.refresh}
+            failed={(message) => setError(message ?? text.desktopLibrary.actionFailed)}
+          />
+        ) : route.kind === "search" ? (
+          <SearchPage
+            query={route.query ?? ""}
+            revision={revision}
+            onOpen={(next) => {
+              rememberSearch();
+              go(next);
+            }}
+            onPlay={(index) => {
+              rememberSearch();
+              playback.run(window.wave.playback.start(scope, index));
+            }}
+            onMenu={(row, at) => actions.openMenu({ scope, ids: [row.id] }, row.title, at)}
+            onUnavailable={() => setError(text.desktopLibrary.driveDisconnected)}
+            onPick={(picked) => {
+              searchFor(picked);
+              void window.wave.search.remember(picked).catch(failed);
+            }}
+            onError={failed}
+          >
+            {ytMusic && (
+              <YtResults
+                query={route.query ?? ""}
+                onPlay={(videoIds, index) => {
+                  rememberSearch();
+                  playback.run(window.wave.playback.startYt(videoIds, index));
+                }}
+                onDownload={(videoId) => download(window.wave.downloads.yt([videoId]))}
+              />
+            )}
+          </SearchPage>
         ) : (
           <>
             {selection && (
@@ -547,23 +663,41 @@ export function App() {
               onMenu={
                 selection
                   ? undefined
-                  : (row, at) => actions.openMenu({ scope, ids: [row.id] }, row.title, at)
+                  : (row, at) =>
+                      actions.openMenu(
+                        { scope, ids: [row.id] },
+                        row.title,
+                        at,
+                        scope.kind === "playlist" && scope.id !== undefined
+                          ? playlistEdits.moveItems(scope.id, row.id)
+                          : [],
+                      )
               }
             />
-            {route.kind === "search" && ytMusic && (
-              <YtResults
-                query={route.query ?? ""}
-                onPlay={(videoIds, index) =>
-                  playback.run(window.wave.playback.startYt(videoIds, index))
-                }
-                onDownload={(videoId) => download(window.wave.downloads.yt([videoId]))}
-              />
-            )}
           </>
         )}
       </div>
-      <PlayerBar playback={playback} />
+      {panel.tab && (
+        <SidePanel
+          tab={panel.tab}
+          onTab={panel.show}
+          view={playback.view}
+          run={playback.run}
+          onError={failed}
+          hidden={nowPlaying}
+        />
+      )}
+      {nowPlaying && (
+        <NowPlaying view={playback.view} run={playback.run} onClose={() => setNowPlaying(false)} />
+      )}
+      <PlayerBar
+        playback={playback}
+        panel={panel.tab}
+        onPanel={panel.toggle}
+        onNowPlaying={() => setNowPlaying(true)}
+      />
       {actions.overlays}
+      {playlistEdits.overlays}
       {shortcuts && <ShortcutsSheet onClose={() => setShortcuts(false)} />}
     </main>
   );

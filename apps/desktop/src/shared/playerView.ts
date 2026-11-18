@@ -1,5 +1,5 @@
 import type { AudioStatus } from "@wave/client/playbackSession";
-import type { RepeatMode } from "@wave/core";
+import type { RepeatMode, SleepTimer } from "@wave/core";
 
 import type { BrowseRow } from "./browse.ts";
 
@@ -25,6 +25,8 @@ export interface PlayerView {
   readonly revision: number;
   /** The last failure behind the window's back, such as a song the engine couldn't open. */
   readonly error: string | null;
+  /** The running sleep timer, or null. */
+  readonly sleepTimer: SleepTimer | null;
 }
 
 /** A queue row: a song with its entry's key, and where it stands against the current one. */

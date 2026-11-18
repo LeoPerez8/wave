@@ -100,6 +100,8 @@ export const ptBR: Catalogue = {
       "Os downloads pausam enquanto você está offline e continuam quando você voltar.",
     downloadsFolder: "Os downloads vão para",
     changeFolder: "Mudar Pasta",
+    sidePanel: "Painel lateral",
+    removeFromQueue: (title: string) => `Remover “${title}” da Fila`,
   },
   desktopLibrary: {
     refresh: "Atualizar",

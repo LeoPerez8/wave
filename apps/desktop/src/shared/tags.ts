@@ -26,8 +26,8 @@ export interface SongTags {
   readonly sampleRate: number | null;
   readonly bitrateKbps: number | null;
   readonly advisory: string | null;
-  /** Whether the file carries lyrics (`readTags` only). */
-  readonly hasLyrics?: boolean;
+  /** Embedded lyrics as tagged: plain text, or LRC for synced lyrics (Core tells them apart). */
+  readonly lyrics?: string | null;
   /** ReplayGain and R128 tags as tagged, when the file has any. */
   readonly loudnessTags: Readonly<Record<string, string | null>> | null;
 }

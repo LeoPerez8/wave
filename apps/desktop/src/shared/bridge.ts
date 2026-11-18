@@ -12,8 +12,16 @@ import type { DesktopFolder, DesktopSong, ScanStatus } from "./library.ts";
 import type { BrowseScope, BrowsePage } from "./browse.ts";
 import type { YtSearchPage } from "./yt.ts";
 import type { AccountView } from "./account.ts";
-import type { MissingSongsDownloadAction } from "@wave/core";
+import type { MissingSongsDownloadAction, SleepTimer, SleepTimerChoice } from "@wave/core";
 import type { DownloadRow, DownloadsView, MissingSongsView } from "./downloads.ts";
+import type { SongLyrics } from "./lyrics.ts";
+import {
+  PLAYLIST_CALLS,
+  playlistBridge,
+  type PlaylistBridge,
+  type PlaylistContract,
+} from "./playlists.ts";
+import type { LibrarySearchView } from "./search.ts";
 import type {
   ActionSurface,
   SongMenu,
@@ -32,7 +40,7 @@ export interface Page<T> {
 }
 
 /** Each call's arguments and result. Arguments reach main as untrusted data. */
-export interface BridgeContract {
+export interface BridgeContract extends PlaylistContract {
   readonly "playback.view": { readonly args: readonly []; readonly result: PlayerView };
   readonly "playback.start": {
     readonly args: readonly [scope: BrowseScope, index?: number, shuffle?: boolean];
@@ -59,6 +67,16 @@ export interface BridgeContract {
   readonly "playback.queue": {
     readonly args: readonly [offset: number, limit: number];
     readonly result: Page<QueueRow>;
+  };
+  /** Starts a sleep timer, replacing the running one; null cancels it. Main enforces it. */
+  /** What the Lyrics view shows for a queue track (`QueueEntry.trackId`). */
+  readonly "lyrics.song": {
+    readonly args: readonly [trackId: string];
+    readonly result: SongLyrics;
+  };
+  readonly "playback.setSleepTimer": {
+    readonly args: readonly [choice: SleepTimerChoice | null];
+    readonly result: SleepTimer | null;
   };
 
   readonly "account.view": { readonly args: readonly []; readonly result: AccountView };
@@ -179,6 +197,19 @@ export interface BridgeContract {
   readonly "player.status": { readonly args: readonly []; readonly result: PlaybackStatus };
   /** Reads an audio file's tags, by its absolute path, as the phone's scan does. */
   readonly "tags.read": { readonly args: readonly [path: string]; readonly result: SongTags };
+  /** The Library's results for a query, ranked as the phone ranks them. */
+  readonly "search.library": {
+    readonly args: readonly [query: string];
+    readonly result: LibrarySearchView;
+  };
+  /** The recent searches, newest first: all of them, at most Core's `RECENT_SEARCHES`. */
+  readonly "search.recent": { readonly args: readonly []; readonly result: Page<string> };
+  /** Keeps a search (Core's `rememberSearch`) and answers the list as it is now. */
+  readonly "search.remember": {
+    readonly args: readonly [query: string];
+    readonly result: Page<string>;
+  };
+  readonly "search.clearRecent": { readonly args: readonly []; readonly result: void };
 }
 
 export type BridgeCall = keyof BridgeContract;
@@ -200,6 +231,8 @@ export const BRIDGE_CALLS = [
   "playback.favorite",
   "playback.volume",
   "playback.queue",
+  "playback.setSleepTimer",
+  "lyrics.song",
 
   "library.artwork",
   "library.browse",
@@ -249,6 +282,11 @@ export const BRIDGE_CALLS = [
   "account.signOut",
   "account.signOutEverywhere",
   "account.answerInvitation",
+  ...PLAYLIST_CALLS,
+  "search.library",
+  "search.recent",
+  "search.remember",
+  "search.clearRecent",
 ] as const satisfies readonly BridgeCall[] &
   (BridgeContract extends PagedLists<BridgeContract> ? unknown : never);
 
@@ -272,6 +310,10 @@ export interface WaveBridge {
     readonly favorite: () => Promise<void>;
     readonly volume: (volume: number, muted: boolean) => Promise<void>;
     readonly queue: (offset: number, limit: number) => Promise<Page<QueueRow>>;
+    readonly setSleepTimer: (choice: SleepTimerChoice | null) => Promise<SleepTimer | null>;
+  };
+  readonly lyrics: {
+    readonly song: (trackId: string) => Promise<SongLyrics>;
   };
   readonly library: {
     readonly artwork: (hash: string, large: boolean) => Promise<string | null>;
@@ -347,6 +389,15 @@ export interface WaveBridge {
     readonly signOutEverywhere: () => Promise<void>;
     readonly answerInvitation: () => Promise<void>;
   };
+  /** Playlists' edits, images, Graveyard and M3U import. */
+  readonly playlists: PlaylistBridge;
+  /** Search over the Library, and its recent searches. */
+  readonly search: {
+    readonly library: (query: string) => Promise<LibrarySearchView>;
+    readonly recent: () => Promise<Page<string>>;
+    readonly remember: (query: string) => Promise<Page<string>>;
+    readonly clearRecent: () => Promise<void>;
+  };
 }
 
 export const createBridge = (invoke: Invoke): WaveBridge => ({
@@ -363,6 +414,10 @@ export const createBridge = (invoke: Invoke): WaveBridge => ({
     favorite: () => invoke("playback.favorite"),
     volume: (volume, muted) => invoke("playback.volume", volume, muted),
     queue: (offset, limit) => invoke("playback.queue", offset, limit),
+    setSleepTimer: (choice) => invoke("playback.setSleepTimer", choice),
+  },
+  lyrics: {
+    song: (trackId) => invoke("lyrics.song", trackId),
   },
   library: {
     artwork: (hash, large) => invoke("library.artwork", hash, large),
@@ -427,5 +482,12 @@ export const createBridge = (invoke: Invoke): WaveBridge => ({
     signOut: () => invoke("account.signOut"),
     signOutEverywhere: () => invoke("account.signOutEverywhere"),
     answerInvitation: () => invoke("account.answerInvitation"),
+  },
+  playlists: playlistBridge(invoke),
+  search: {
+    library: (query) => invoke("search.library", query),
+    recent: () => invoke("search.recent"),
+    remember: (query) => invoke("search.remember", query),
+    clearRecent: () => invoke("search.clearRecent"),
   },
 });

@@ -116,6 +116,11 @@ export interface PlaybackSession {
    * it, and the current one from its next start.
    */
   readonly gainsChanged: () => Promise<void>;
+  /**
+   * While on, each song ends paused: nothing is lined up after it, and once it ends the next
+   * song waits paused at its start (the sleep timer's End of track).
+   */
+  readonly pauseAtTrackEnd: (on: boolean) => Promise<void>;
   /** Saves the position and the play so far, as before quitting. */
   readonly flush: () => Promise<void>;
   /** Pauses, saves, and ends the play open; the session does nothing more. */
@@ -140,6 +145,11 @@ export interface PlaybackSessionDeps {
   /** The snapshot changed. */
   readonly changed?: () => void;
   readonly playEnded?: (play: PlayEvent, byNext: boolean) => void;
+  /**
+   * Playback stopped by itself: a song ended while `pauseAtTrackEnd` was on (`trackEnd`), or
+   * the queue played out (`queueEnd`).
+   */
+  readonly stopped?: (why: "trackEnd" | "queueEnd") => void;
   /** Normalize Volume's gain in dB for [entry] of [queue] (Core's `entryGain`, or typical gain). */
   readonly gainDb?: (queue: QueueState, entry: QueueEntry) => number | undefined;
 }
@@ -166,6 +176,7 @@ export const createPlaybackSession = async (
   let lastSaved: QueuePersistenceState | null = null;
   let lane = Promise.resolve();
   let closed = false;
+  let holdNext = false;
   const rowIds = new Map<string, number>();
 
   const identity = (play: PlayEvent) => `${play.trackId}:${play.startedAt}`;
@@ -265,7 +276,7 @@ export const createPlaybackSession = async (
     const key = plannedKey();
     const entry = key === undefined ? null : currentEntry(planned.state);
     const path = entry === null ? undefined : pathOf(entry.trackId);
-    if (path === undefined || entry === null || key === undefined) {
+    if (holdNext || path === undefined || entry === null || key === undefined) {
       await audio.preload(undefined, undefined);
       return;
     }
@@ -452,6 +463,17 @@ export const createPlaybackSession = async (
           // The end of the queue stays paused at the start of its last song, as Core's stop says.
           await restart(true);
           save();
+          deps.stopped?.("queueEnd");
+          return;
+        }
+        if (holdNext) {
+          followPlan(now());
+          try {
+            await loadCurrent(0, false);
+          } catch {
+            accept({ state: "idle", positionMs: 0 });
+          }
+          deps.stopped?.("trackEnd");
           return;
         }
         // Nothing was preloaded (it failed, or the audio process restarted): load what Core planned.
@@ -461,6 +483,12 @@ export const createPlaybackSession = async (
         } catch {
           accept({ state: "idle", positionMs: 0 });
         }
+      }),
+    pauseAtTrackEnd: (on) =>
+      serial(async () => {
+        if (holdNext === on) return;
+        holdNext = on;
+        if (planned !== null) await prepare();
       }),
     gainsChanged: () =>
       serial(async () => {
