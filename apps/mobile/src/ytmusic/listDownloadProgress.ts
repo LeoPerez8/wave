@@ -2,8 +2,9 @@ import { useCallback } from "react";
 import { useSightedStore } from "@/lib/screenSight";
 import { onLibraryChange } from "@/library/libraryChanges";
 import { LibraryStore } from "@/library/LibraryStore";
+
 import { appRuntime } from "@/library/runtime";
-import type { DownloadListKey } from "@/library/db/listDownloadMembers";
+import type { DownloadListKey } from "@wave/client/db/listDownloadMembers";
 import { useLocalisation } from "@/localisation/localisation";
 import { journal } from "./downloadJournal";
 import { createListDownloadProgressStore } from "./listDownloadProgressStore";

@@ -2,7 +2,8 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 import type { YtSong } from "@wave/core";
 import { createNotificationStar } from "./notificationStar.ts";
-import { playingSongTarget, type PlayingSongAnswer, type PlayingSongTarget } from "./songLookup.ts";
+import { playingSongTarget } from "./songLookup.ts";
+import { type PlayingSongAnswer, type PlayingSongTarget } from "@wave/client";
 
 const song: YtSong = {
   videoId: "one",

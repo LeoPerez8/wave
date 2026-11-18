@@ -1,14 +1,14 @@
 import { usePositions } from "@/lib/usePositions";
 import { useLocalisation } from "@/localisation/localisation";
-import type { PlayedAlbum, PlayedArtist } from "@/library/db/playedEntities";
+import type { PlayedAlbum, PlayedArtist } from "@wave/client/db/playedEntities";
 import { PlayedAlbumCard, PlayedArtistCard } from "@/stats/PlayedEntityViews";
 import { discoverTrackId, type QueueContext } from "@wave/core";
 import { useCallback } from "react";
 
 import { COVER_ROW_TILE, CoverRow } from "@/catalog/CoverRow";
 import { runTrackSwipe } from "@/playback/rowSwipe";
-import type { SongRow } from "@/library/LibraryStore";
-import type { MostPlayedRow } from "@/library/db/playHistory";
+import type { SongRow } from "@wave/client";
+import type { MostPlayedRow } from "@wave/client/db/playHistory";
 import { playPlaylist, playSongs } from "@/playback/actions";
 import { openTrackActions } from "@/playback/ActionsMenu";
 import { mixedSongEntry, openMixedSongActions, runMixedSongSwipe } from "@/songs/mixedSongs";

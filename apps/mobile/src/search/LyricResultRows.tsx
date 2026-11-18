@@ -3,7 +3,7 @@ import { joinArtists } from "@wave/core";
 import { ActivityIndicator, Pressable, Text, View } from "react-native";
 
 import { Artwork } from "@/catalog/Artwork";
-import { artworkUri } from "@/catalog/artworkUri";
+import { artworkUri } from "@wave/client/artworkUri";
 import { CELL, grid } from "@/catalog/grid";
 import { useLocalisation } from "@/localisation/localisation";
 import { openMixedSongActions } from "@/songs/mixedSongs";

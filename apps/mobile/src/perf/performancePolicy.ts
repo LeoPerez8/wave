@@ -24,10 +24,10 @@ export const LIBRARY_SEEDS = [
   "library/LibraryStore.ts#tasteHistory",
   "library/LibraryStore.ts#countedListening",
   "library/LibraryStore.ts#countedListeningPage",
-  "library/db/stats.ts#countedListening",
-  "library/db/stats.ts#countedListeningPage",
+  "@wave/client/db/stats.ts#countedListening",
+  "@wave/client/db/stats.ts#countedListeningPage",
   "stats/Stats.ts#recaps",
-  "library/db/taste.ts#tasteHistory",
+  "@wave/client/db/taste.ts#tasteHistory",
   "library/hooks.ts#songs",
   "library/hooks.ts#artists",
   "library/hooks.ts#useArtists",
@@ -244,9 +244,9 @@ export const WHOLE_LIBRARY: Record<string, WholeLibraryException> = {
     reason:
       "The store implements taste history and bounded counted-listening pages. Its legacy whole-history driver remains a compatibility/control capability only; production Stats callers must use the separately inventoried bounded seam.",
     capabilities: [
-      "library/db/taste.ts#tasteHistory",
-      "library/db/stats.ts#countedListening",
-      "library/db/stats.ts#countedListeningPage",
+      "@wave/client/db/taste.ts#tasteHistory",
+      "@wave/client/db/stats.ts#countedListening",
+      "@wave/client/db/stats.ts#countedListeningPage",
     ],
   },
   "library/releaseDates.ts#run": {
@@ -891,7 +891,7 @@ export const isRow = (owner: string): boolean =>
 /** Core's `fileUri` builds file URIs; for artwork only the one helper calls it. */
 export const FILE_URI = "../../../packages/core/src/fileUri.ts#fileUri";
 export const ARTWORK_URI_BUILDERS: Record<string, Exception> = {
-  "catalog/artworkUri.ts#artworkUri": {
+  "@wave/client/artworkUri.ts#artworkUri": {
     reason:
       "The one artwork helper (#726): picks thumbnail, medium or original and builds the URI, with one fallback order.",
   },

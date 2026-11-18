@@ -14,7 +14,7 @@ import {
   startPlaylistImport,
 } from "@wave/core";
 import { loadLibraryStore } from "../../bench/fastAgain/store.ts";
-import { createFastAgainFixture } from "./db/fastAgainFixture.ts";
+import { createFastAgainFixture } from "@wave/client/testing/fastAgainFixture";
 import { finishLinkImport } from "./startupJobs.ts";
 import { resumeLibraryReads } from "./libraryImportResume.ts";
 const root = fileURLToPath(new URL("../../../../", import.meta.url));

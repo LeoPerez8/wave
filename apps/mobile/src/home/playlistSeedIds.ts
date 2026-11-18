@@ -6,7 +6,7 @@
 import * as Effect from "effect/Effect";
 
 import { createSourceRead } from "../lib/sourceRead.ts";
-import { readVideoPages } from "../library/db/videoPages.ts";
+import { readVideoPages } from "@wave/client/db/videoPages";
 import type { LibraryStore } from "../library/LibraryStore.ts";
 
 /** Every page of the entries' video ids, each video once, with [between] between pages. */

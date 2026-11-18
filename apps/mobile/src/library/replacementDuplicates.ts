@@ -22,6 +22,7 @@ import { WaveSoulseek } from "@/native/waveSoulseek";
 import { finishFileDeletions } from "./fileDeletions";
 import { libraryEdited } from "./LibraryScan";
 import { LibraryStore } from "./LibraryStore";
+
 import { appRuntime } from "./runtime";
 
 /**

@@ -6,7 +6,8 @@ import { extname, resolve } from "node:path";
 import { pathToFileURL } from "node:url";
 
 import type { LibraryStore } from "../../src/library/LibraryStore.ts";
-import type { TestDatabase } from "../../src/library/db/testDatabase.ts";
+
+import type { TestDatabase } from "@wave/client/testing";
 import { setDesktopDatabase } from "./platformDatabase.ts";
 
 const dependencyParent = new URL("../../package.json", import.meta.url).href;
@@ -23,16 +24,31 @@ export const loadWorktreeModule = async <A = Record<string, unknown>>(
   relativePath: string,
 ): Promise<A> => {
   const base = resolve(root);
-  const storeUrl = pathToFileURL(resolve(base, "apps/mobile/src/library/LibraryStore.ts")).href;
+  const driverUrl = pathToFileURL(resolve(base, "apps/mobile/src/library/sqliteDriver.ts")).href;
   const hooks = registerHooks({
     resolve(specifier, context, nextResolve) {
       if (
-        context.parentURL === storeUrl &&
+        context.parentURL === driverUrl &&
         ["expo-sqlite", "drizzle-orm/expo-sqlite", "drizzle-orm/expo-sqlite/migrator"].includes(
           specifier,
         )
       )
         return { url: platform, shortCircuit: true };
+      if (specifier.startsWith("@wave/client")) {
+        const suffix = specifier.slice("@wave/client".length);
+        const path =
+          suffix === ""
+            ? "index"
+            : suffix === "/testing"
+              ? "db/testDatabase"
+              : suffix === "/testing/fastAgainFixture"
+                ? "db/fastAgainFixture"
+                : suffix.slice(1);
+        return nextResolve(
+          pathToFileURL(resolve(base, "packages/client/src", `${path}.ts`)).href,
+          context,
+        );
+      }
       if (specifier === "@wave/core") {
         return nextResolve(
           pathToFileURL(resolve(base, "packages/core/src/index.ts")).href,
@@ -54,7 +70,10 @@ export const loadWorktreeModule = async <A = Record<string, unknown>>(
     },
   });
   try {
-    return (await import(pathToFileURL(resolve(base, relativePath)).href)) as A;
+    const path = relativePath.startsWith("@wave/client/")
+      ? resolve(base, "packages/client/src", `${relativePath.slice("@wave/client/".length)}.ts`)
+      : resolve(base, relativePath);
+    return (await import(pathToFileURL(path).href)) as A;
   } finally {
     hooks.deregister();
   }

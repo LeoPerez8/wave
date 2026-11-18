@@ -4,8 +4,8 @@ import { existsSync, readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import * as Effect from "effect/Effect";
 import type * as Core from "@wave/core";
-import type { SongRow } from "../../../src/library/LibraryStore.ts";
-import { traceQueries } from "../../../src/library/db/testDatabase.ts";
+import type { SongRow } from "@wave/client";
+import { traceQueries } from "@wave/client/testing";
 import { loadLibraryStore } from "../store.ts";
 import type { FastAgainBench } from "../types.ts";
 

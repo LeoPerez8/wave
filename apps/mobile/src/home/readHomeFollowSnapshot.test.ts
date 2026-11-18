@@ -4,7 +4,7 @@ import { fileURLToPath } from "node:url";
 import * as Effect from "effect/Effect";
 import type { FollowRelease } from "@wave/core";
 import { loadLibraryStore } from "../../bench/fastAgain/store.ts";
-import { openTestDatabase, closeTestDatabase } from "../library/db/testDatabase.ts";
+import { openTestDatabase, closeTestDatabase } from "@wave/client/testing";
 import { readHomeFollowSnapshot } from "./readHomeFollowSnapshot.ts";
 
 const root = fileURLToPath(new URL("../../../../", import.meta.url));

@@ -2,8 +2,8 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 import * as Effect from "effect/Effect";
 import { createKnownVideosRead } from "./knownVideosRead.ts";
-import { createFastAgainFixture } from "../library/db/fastAgainFixture.ts";
-import { selectKnownVideos } from "../library/db/mixKnown.ts";
+import { createFastAgainFixture } from "@wave/client/testing/fastAgainFixture";
+import { selectKnownVideos } from "@wave/client/db/mixKnown";
 
 test("unchanged Home return and two sections read zero known-video rows; only relevant source changes reread", async () => {
   const fixture = await createFastAgainFixture();

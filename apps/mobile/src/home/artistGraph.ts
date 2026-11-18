@@ -7,7 +7,8 @@ import {
 } from "@wave/core";
 import * as Effect from "effect/Effect";
 import type { LibraryStore, LibraryStoreError } from "@/library/LibraryStore";
-import type { GraphPlayCursor } from "../library/db/artistGraph.ts";
+
+import type { GraphPlayCursor } from "@wave/client/db/artistGraph";
 import { readCatalogInputs } from "./catalogInputs.ts";
 import { runSteps } from "../lib/stepped.ts";
 

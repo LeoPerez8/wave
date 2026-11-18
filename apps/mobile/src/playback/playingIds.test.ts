@@ -10,7 +10,7 @@ import {
   closeTestDatabase,
   openTestDatabase,
   traceQueries,
-} from "../library/db/testDatabase.ts";
+} from "@wave/client/testing";
 
 const tick = () => new Promise((resolve) => setTimeout(resolve, 10));
 const root = fileURLToPath(new URL("../../../../", import.meta.url));

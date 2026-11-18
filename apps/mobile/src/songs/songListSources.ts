@@ -1,5 +1,5 @@
 import { canFixSong, type ActionItem, type SongListRowSource, type SongRowState } from "@wave/core";
-import type { SongRow, SongSummary } from "@/library/LibraryStore";
+import type { SongRow, SongSummary } from "@wave/client";
 
 export interface SongListEntry {
   readonly source: SongListRowSource;

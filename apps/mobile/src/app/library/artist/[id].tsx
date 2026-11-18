@@ -48,7 +48,7 @@ import { entryText, FindFrame, FindHead, useFindInLegendList } from "@/library/F
 
 import { useArtist } from "@/library/hooks";
 import { LibraryAlbumCard } from "@/library/LibraryAlbumCard";
-import type { AlbumRow, ArtistDetail, ArtistRow, SongRow } from "@/library/LibraryStore";
+import type { AlbumRow, ArtistDetail, ArtistRow, SongRow } from "@wave/client";
 import { openAlbum, parseId, useKnownRow, useOpenedIntegrated } from "@/library/routes";
 import { SongSortButton } from "@/library/SongSortButton";
 import { useSortedSongs } from "@/library/songSort";

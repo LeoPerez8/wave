@@ -14,11 +14,11 @@ import { sql } from "drizzle-orm";
 import * as Effect from "effect/Effect";
 
 import { loadLibraryStore } from "../../bench/fastAgain/store.ts";
-import { createFastAgainFixture } from "./db/fastAgainFixture.ts";
-import { selectGenreOrderSlice } from "./db/genrePages.ts";
-import { traceQueries } from "./db/testDatabase.ts";
+import { createFastAgainFixture } from "@wave/client/testing/fastAgainFixture";
+import { selectGenreOrderSlice } from "@wave/client/db/genrePages";
+import { traceQueries } from "@wave/client/testing";
 import { createGenreOrderActions, createGenreOrderLoad, readGenreOrder } from "./genreOrder.ts";
-import type { SongOrder } from "./LibraryStore.ts";
+import type { SongOrder } from "@wave/client";
 
 const root = fileURLToPath(new URL("../../../../", import.meta.url));
 

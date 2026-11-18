@@ -6,6 +6,7 @@ import { makeExternalStore } from "@/lib/externalStore";
 import { useSightedStore } from "@/lib/screenSight";
 import { showError } from "@/overlay/alert";
 import { LibraryStore } from "./LibraryStore";
+
 import { appRuntime } from "./runtime";
 
 /** The dismissed suggestions' follow keys; undefined until read once. */

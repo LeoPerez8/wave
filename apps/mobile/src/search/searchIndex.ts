@@ -11,7 +11,7 @@ import {
 import { useEffect, useMemo, useSyncExternalStore } from "react";
 
 import { libraryListQueries } from "@/library/hooks";
-import type { AlbumRow, ArtistRow, GenreRow, PlaylistRow, SongRow } from "@/library/LibraryStore";
+import type { AlbumRow, ArtistRow, GenreRow, PlaylistRow, SongRow } from "@wave/client";
 import { useLibraryQuery } from "@/library/sharedQueries";
 import { perfMark, registerPerfMeta } from "@/perf/perf";
 import { useLoadedLibraryFinder, type FindInLibrary } from "@/ytmusic/libraryFinder";

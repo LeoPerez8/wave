@@ -1,5 +1,5 @@
 import { performance } from "node:perf_hooks";
-import { traceQueries, type TestDatabase } from "../../src/library/db/testDatabase.ts";
+import { traceQueries, type TestDatabase } from "@wave/client/testing";
 import type { ReadMeasurement } from "./types.ts";
 
 const round = (n: number): number => Number(n.toFixed(3));

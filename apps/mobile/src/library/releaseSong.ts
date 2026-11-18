@@ -8,7 +8,7 @@ import {
   type ReleaseKeySong,
 } from "@wave/core";
 
-import type { PlaylistEntryRow, SongRow } from "./LibraryStore";
+import type { PlaylistEntryRow, SongRow } from "@wave/client";
 import { releaseAnswers } from "./releaseAnswers";
 import { typedReleaseDates } from "./typedReleaseDates";
 

@@ -15,10 +15,11 @@ import {
   type YtAlbumSong,
 } from "@wave/core";
 import * as Effect from "effect/Effect";
-import type { LibraryStore, SongRow, ArtistRow } from "../library/LibraryStore.ts";
+import type { LibraryStore } from "../library/LibraryStore.ts";
+import type { SongRow, ArtistRow } from "@wave/client";
 import { binary, byTitleArtistPath } from "../library/binaryOrder.ts";
 import { runSteps } from "../lib/stepped.ts";
-import type { MixStreamedPlays } from "../library/db/mixInputs.ts";
+import type { MixStreamedPlays } from "@wave/client/db/mixInputs";
 
 type MixSong = SongRow & { readonly genres?: readonly string[] };
 export const readMixInputs = (

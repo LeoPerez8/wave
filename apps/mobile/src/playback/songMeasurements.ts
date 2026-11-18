@@ -23,7 +23,7 @@
 import { measureCandidates, songsToMeasure, type AlbumLoudness, type QueueState } from "@wave/core";
 import * as Effect from "effect/Effect";
 
-import type { SongMeasurement, SongToMeasure } from "../library/db/loudness.ts";
+import type { SongMeasurement, SongToMeasure } from "@wave/client/db/loudness";
 import type { AudioMeasurement } from "../native/audioMeasurement.ts";
 
 /** The queue now, and the Library album it plays, for Core's `songsToMeasure`. */

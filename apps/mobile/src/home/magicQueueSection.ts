@@ -22,7 +22,8 @@ import { useCallback, useMemo, useRef, useState } from "react";
 
 import { freeTurnEffect } from "@/lib/backgroundWork";
 import { onLibraryChange } from "@/library/libraryChanges";
-import { LibraryStore, type PlayableSongRow } from "@/library/LibraryStore";
+import { LibraryStore } from "@/library/LibraryStore";
+import { type PlayableSongRow } from "@wave/client";
 import { libraryQuery, useLibraryQuery } from "@/library/sharedQueries";
 import { showToast } from "@/overlay/toast";
 import { startMagicQueue } from "@/playback/MagicQueue";

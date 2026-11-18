@@ -5,29 +5,29 @@ import { describe, test } from "node:test";
 import { normalizeTrack, type PlayEvent } from "@wave/core";
 import { eq, inArray } from "drizzle-orm";
 
-import type { IndexedTrack } from "../library/LibraryStore.ts";
-import { selectAlbumDetail, selectAlbums } from "../library/db/albums.ts";
-import { creditSplits } from "../library/db/credits.ts";
-import { filesGone, removeSongs, signOut } from "../library/db/missingSongs.ts";
-import { saveBatch } from "../library/db/save.ts";
-import { selectSkippedFiles, skipFiles } from "../library/db/skippedFiles.ts";
-import * as schema from "../library/db/schema.ts";
+import type { IndexedTrack } from "@wave/client";
+import { selectAlbumDetail, selectAlbums } from "@wave/client/db/albums";
+import { creditSplits } from "@wave/client/db/credits";
+import { filesGone, removeSongs, signOut } from "@wave/client/db/missingSongs";
+import { saveBatch } from "@wave/client/db/save";
+import { selectSkippedFiles, skipFiles } from "@wave/client/db/skippedFiles";
+import * as schema from "@wave/client/db/schema";
 import {
   endPlay,
   listFavorites,
   recordPlay,
   selectFavoriteTrackIds,
   setFavorites,
-} from "../library/db/playHistory.ts";
-import { stampPreference } from "../library/db/sync.ts";
-import { countFollows, removeFollow, saveFollow, selectFollow } from "../library/db/follows.ts";
-import { hideFollowRelease, readFollowReleases } from "../library/db/followReleases.ts";
-import { markShowNotified, readFollowShows } from "../library/db/followShows.ts";
+} from "@wave/client/db/playHistory";
+import { stampPreference } from "@wave/client/db/sync";
+import { countFollows, removeFollow, saveFollow, selectFollow } from "@wave/client/db/follows";
+import { hideFollowRelease, readFollowReleases } from "@wave/client/db/followReleases";
+import { markShowNotified, readFollowShows } from "@wave/client/db/followShows";
 import {
   dismissFollowSuggestion,
   selectDismissedFollowSuggestions,
   undoFollowSuggestionDismissal,
-} from "../library/db/followSuggestionDismissals.ts";
+} from "@wave/client/db/followSuggestionDismissals";
 import {
   addToPlaylist,
   addToShazam,
@@ -40,16 +40,16 @@ import {
   renamePlaylist,
   selectPlaylist,
   selectPlaylists,
-} from "../library/db/playlists.ts";
-import { saveImportedPlays } from "../library/db/blackPlayer.ts";
-import { trackPlayTotals } from "../library/db/stats.ts";
+} from "@wave/client/db/playlists";
+import { saveImportedPlays } from "@wave/client/db/blackPlayer";
+import { trackPlayTotals } from "@wave/client/db/stats";
 import {
   addTrack,
   openTestDatabase,
   type FixtureTrack,
   type TestDatabase,
-} from "../library/db/testDatabase.ts";
-import { selectJoinedAccount } from "../library/db/syncRows.ts";
+} from "@wave/client/testing";
+import { selectJoinedAccount } from "@wave/client/db/syncRows";
 import { syncCycle, type SyncPreferences, type SyncTransport } from "./syncCycle.ts";
 import { testSyncService, type TestSyncService } from "./testSyncService.ts";
 

@@ -11,7 +11,7 @@ import Svg, { Circle } from "react-native-svg";
 
 import { CELL } from "@/catalog/grid";
 import { openAddToPlaylist } from "@/library/PlaylistSheets";
-import { songHasFile } from "@/library/LibraryStore";
+import { songHasFile } from "@wave/client";
 import { IconButton } from "@/components/IconButton";
 import { Press } from "@/motion/Press";
 import type { NativeYtSong } from "@/native/waveYtMusic";

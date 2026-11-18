@@ -29,7 +29,8 @@ import * as Effect from "effect/Effect";
 import * as Result from "effect/Result";
 import { Storage } from "expo-sqlite/kv-store";
 
-import { LibraryStore, type SongRow, type PlaylistEntryRow } from "@/library/LibraryStore";
+import { LibraryStore } from "@/library/LibraryStore";
+import { type SongRow, type PlaylistEntryRow } from "@wave/client";
 import { appRuntime } from "@/library/runtime";
 import { settleUnsearchedSong } from "@/library/unsearchedEntries";
 import { currentLocalisation } from "@/localisation/localisation";

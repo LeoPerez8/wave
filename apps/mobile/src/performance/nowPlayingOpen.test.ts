@@ -10,8 +10,9 @@ import {
   closeTestDatabase,
   openTestDatabase,
   traceQueries,
-} from "../library/db/testDatabase.ts";
-import { createNowPlayingSongLookup, type PlayingSongTarget } from "../nowPlaying/songLookup.ts";
+} from "@wave/client/testing";
+import { createNowPlayingSongLookup } from "../nowPlaying/songLookup.ts";
+import { type PlayingSongTarget } from "@wave/client";
 import { createNowPlayingSongActions } from "../nowPlaying/songActions.ts";
 
 const root = fileURLToPath(new URL("../../../../", import.meta.url));

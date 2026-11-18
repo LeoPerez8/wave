@@ -3,7 +3,7 @@
  * are unchanged; open/drizzle hand it the already migrated sql.js database.
  * Only LibraryStore's platform imports resolve here (never testDatabase's).
  */
-import type { TestDatabase } from "../../src/library/db/testDatabase.ts";
+import type { TestDatabase } from "@wave/client/testing";
 
 let database: TestDatabase | undefined;
 export const setDesktopDatabase = (db: TestDatabase): void => {

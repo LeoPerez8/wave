@@ -4,7 +4,7 @@ import { test } from "node:test";
 import { createElement, useLayoutEffect } from "react";
 import { act, create } from "react-test-renderer";
 
-import type { SongRow } from "@/library/LibraryStore";
+import type { SongRow } from "@wave/client";
 
 Object.assign(globalThis, { IS_REACT_ACT_ENVIRONMENT: true });
 const boundary = `data:text/javascript,${encodeURIComponent(`

@@ -5,18 +5,8 @@ import {
   type LibrarySongKey,
   type YtSong,
 } from "@wave/core";
-import type { SongRow } from "../library/LibraryStore.ts";
 
-/** The song captured by a render/gesture, even if playback moves on while it resolves. */
-export interface PlayingSongTarget {
-  readonly trackId: string;
-  readonly song: YtSong | null;
-}
-export interface PlayingSongAnswer {
-  readonly track: SongRow | null;
-  readonly favorite: boolean;
-  readonly pendingFavorite: boolean;
-}
+import type { PlayingSongTarget, PlayingSongAnswer } from "@wave/client";
 
 /**
  * The song a star or button acts on for queue track [trackId]: none while nothing plays, or

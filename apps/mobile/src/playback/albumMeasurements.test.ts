@@ -3,14 +3,14 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 import * as Effect from "effect/Effect";
 import { EMPTY_QUEUE, reduceQueue } from "@wave/core";
-import { addTrack, openTestDatabase } from "../library/db/testDatabase.ts";
+import { addTrack, openTestDatabase } from "@wave/client/testing";
 import {
   saveMeasurement,
   selectAlbumLoudness,
   selectSongLoudness,
   selectSongsToMeasure,
-} from "../library/db/loudness.ts";
-import * as schema from "../library/db/schema.ts";
+} from "@wave/client/db/loudness";
+import * as schema from "@wave/client/db/schema";
 import { createEntryGains } from "./songGains.ts";
 import { createSongMeasurements } from "./songMeasurements.ts";
 

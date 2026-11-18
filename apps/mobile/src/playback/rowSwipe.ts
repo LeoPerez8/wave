@@ -10,7 +10,7 @@ import {
   type SwipeSettings,
 } from "@wave/core";
 import { favoriteIdsNow } from "@/library/favorites";
-import type { ArtistRow } from "@/library/LibraryStore";
+import type { ArtistRow } from "@wave/client";
 import { currentPath } from "@/library/routes";
 import { songsWithIds } from "@/library/sectionSongs";
 import { showError } from "@/overlay/alert";

@@ -15,23 +15,18 @@ import { artistStats, statsWindow } from "@wave/core";
 import { eq } from "drizzle-orm";
 import assert from "node:assert/strict";
 
-import { creditSplits, relinkCredits } from "../src/library/db/credits.ts";
-import { recordPlay } from "../src/library/db/playHistory.ts";
-import * as schema from "../src/library/db/schema.ts";
-import {
-  artistPlays,
-  songListening,
-  songsCrediting,
-  trackPlayTotals,
-} from "../src/library/db/stats.ts";
+import { creditSplits, relinkCredits } from "@wave/client/db/credits";
+import { recordPlay } from "@wave/client/db/playHistory";
+import * as schema from "@wave/client/db/schema";
+import { artistPlays, songListening, songsCrediting, trackPlayTotals } from "@wave/client/db/stats";
 import {
   addHistory,
   addTrack,
   openTestDatabase,
   traceQueries,
   type TestDatabase,
-} from "../src/library/db/testDatabase.ts";
-import { deleteTracks } from "../src/library/db/tracks.ts";
+} from "@wave/client/testing";
+import { deleteTracks } from "@wave/client/db/tracks";
 import { printMeta, timeRuns } from "./measure.ts";
 
 const quick = process.argv.includes("--quick");

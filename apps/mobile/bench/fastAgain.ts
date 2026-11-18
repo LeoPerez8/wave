@@ -1,4 +1,4 @@
-import { FAST_AGAIN_DESKTOP } from "../src/library/db/fastAgainFixture.ts";
+import { FAST_AGAIN_DESKTOP } from "@wave/client/testing/fastAgainFixture";
 import { main } from "./fastAgain/runner.ts";
 
 try {

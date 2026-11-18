@@ -6,7 +6,7 @@ import { setImmediate } from "node:timers/promises";
 import { asc, gt } from "drizzle-orm";
 import * as Effect from "effect/Effect";
 
-import { traceQueries } from "../../../src/library/db/testDatabase.ts";
+import { traceQueries } from "@wave/client/testing";
 import { percentiles, timeRuns } from "../measure.ts";
 import { loadLibraryStore } from "../store.ts";
 import type { FastAgainBench, ReadMeasurement } from "../types.ts";
@@ -21,12 +21,10 @@ export const bench: FastAgainBench = {
   name: "songReadSlices",
   async run(context) {
     const store = await loadLibraryStore(context.root, context.fixture.db);
-    const tracksModule = await context.loadModule<
-      typeof import("../../../src/library/db/tracks.ts")
-    >("apps/mobile/src/library/db/tracks.ts");
-    const schema = await context.loadModule<typeof import("../../../src/library/db/schema.ts")>(
-      "apps/mobile/src/library/db/schema.ts",
-    );
+    const tracksModule =
+      await context.loadModule<typeof import("@wave/client/db/tracks")>("@wave/client/db/tracks");
+    const schema =
+      await context.loadModule<typeof import("@wave/client/db/schema")>("@wave/client/db/schema");
     const full = Effect.runSync(store.listSongs);
     const expected = key(full.map((row) => row.id));
     const results: ReadMeasurement[] = [

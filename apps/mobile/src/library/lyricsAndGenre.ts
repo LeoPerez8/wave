@@ -58,6 +58,7 @@ import { lyricsAndGenreLookupsEnabled } from "@/settings/lyricsAndGenre";
 import { libraryEdited, songsFilledIn, toIndexedArtwork, toIndexedTrack } from "./LibraryScan";
 import { publishSavedStars } from "./libraryChanges";
 import { LibraryStore } from "./LibraryStore";
+
 import { lyricsWritten } from "./lyricsEdits";
 
 /** LRCLIB or Deezer couldn't be reached, or answered with something that isn't a result. */

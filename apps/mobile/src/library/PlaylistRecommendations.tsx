@@ -32,7 +32,7 @@ import {
 } from "@/songs/mixedSongs";
 import { useSongRows } from "@/songs/useSongRows";
 
-import type { PlaylistEntryRow } from "./LibraryStore";
+import type { PlaylistEntryRow } from "@wave/client";
 import {
   createPlaylistSuggestionsVisit,
   type PlaylistSuggestionsVisit,

@@ -15,9 +15,10 @@ import {
 import * as Effect from "effect/Effect";
 import { useSyncExternalStore } from "react";
 
-import { artworkUri } from "@/catalog/artworkUri";
+import { artworkUri } from "@wave/client/artworkUri";
 import { makeExternalStore } from "@/lib/externalStore";
-import { LibraryStore, type SongRow } from "@/library/LibraryStore";
+import { LibraryStore } from "@/library/LibraryStore";
+import { type SongRow } from "@wave/client";
 import { appRuntime } from "@/library/runtime";
 import { appLog } from "@/log/appLog";
 import { cacheStreamedCover } from "@/playback/queueTracks";

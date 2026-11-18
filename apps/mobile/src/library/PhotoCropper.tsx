@@ -26,7 +26,7 @@ import Animated, { useAnimatedStyle, useSharedValue } from "react-native-reanima
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { scheduleOnRN } from "react-native-worklets";
 
-import { artworkUri } from "@/catalog/artworkUri";
+import { artworkUri } from "@wave/client/artworkUri";
 import { CELL, grid } from "@/catalog/grid";
 import { useLocalisation } from "@/localisation/localisation";
 import { TextButton } from "@/components/TextButton";

@@ -4,10 +4,12 @@
  */
 import * as Effect from "effect/Effect";
 import type * as Core from "@wave/core";
-import type { ArtistDetail, LibraryStore, SongRow } from "../../src/library/LibraryStore.ts";
+import type { LibraryStore } from "../../src/library/LibraryStore.ts";
+
+import type { ArtistDetail, SongRow } from "@wave/client";
 import type { NativeYtSong } from "../../src/native/waveYtMusic.ts";
 import { loadLibraryStore, loadWorktreeModule } from "./store.ts";
-import type { TestDatabase } from "../../src/library/db/testDatabase.ts";
+import type { TestDatabase } from "@wave/client/testing";
 
 const context = (detail: ArtistDetail, now: number, integrated: boolean, settled: boolean) => ({
   name: detail.artist.name,

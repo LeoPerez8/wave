@@ -6,6 +6,8 @@ set -euo pipefail
 
 cd "$(git rev-parse --show-toplevel)"
 pnpm -s lint --quiet
+node scripts/ci/client-imports.ts
+node --test scripts/ci/client-imports.test.ts >/dev/null
 cd apps/mobile
 node --disable-warning=MODULE_TYPELESS_PACKAGE_JSON --test \
   src/hermes.test.ts src/perf/memoDependencies.test.ts src/untranslatedText.test.ts >/dev/null

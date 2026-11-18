@@ -6,7 +6,8 @@ import {
   type RandomSource,
 } from "@wave/core";
 import * as Effect from "effect/Effect";
-import type { LibraryStore, PlayableSongRow } from "../library/LibraryStore.ts";
+import type { LibraryStore } from "../library/LibraryStore.ts";
+import type { PlayableSongRow } from "@wave/client";
 
 let nextRead = 0;
 

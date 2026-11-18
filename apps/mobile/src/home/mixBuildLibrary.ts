@@ -6,7 +6,8 @@ import {
   type YtSong,
 } from "@wave/core";
 import * as Effect from "effect/Effect";
-import type { ArtistRow, LibraryStore, SongRow } from "../library/LibraryStore.ts";
+import type { LibraryStore } from "../library/LibraryStore.ts";
+import type { ArtistRow, SongRow } from "@wave/client";
 import { runSteps } from "../lib/stepped.ts";
 import { readKnownVideos } from "./knownVideosRead.ts";
 import type { MixIndexes, MixSong } from "./mixKnown.ts";

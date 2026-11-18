@@ -9,6 +9,7 @@ import { registerPerfMeta } from "@/perf/perf";
 
 import { onLibraryChange } from "./libraryChanges";
 import type { LibraryStore, LibraryStoreError } from "./LibraryStore";
+
 import { appRuntime } from "./runtime";
 
 /**

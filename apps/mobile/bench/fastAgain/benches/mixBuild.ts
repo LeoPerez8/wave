@@ -5,7 +5,7 @@ import { performance } from "node:perf_hooks";
 import { setImmediate } from "node:timers/promises";
 import * as Effect from "effect/Effect";
 import { sql } from "drizzle-orm";
-import { traceQueries } from "../../../src/library/db/testDatabase.ts";
+import { traceQueries } from "@wave/client/testing";
 import { loadLibraryStore } from "../store.ts";
 import { percentiles } from "../measure.ts";
 import type { MixIndexes } from "../../../src/home/mixKnown.ts";

@@ -5,7 +5,7 @@ import { beforeEach, describe, test } from "node:test";
 import type { QueueEntry, YtSong } from "@wave/core";
 import * as Effect from "effect/Effect";
 
-import type { PlayableSongRow } from "../library/LibraryStore.ts";
+import type { PlayableSongRow } from "@wave/client";
 import {
   YT_COVERS_AT_ONCE,
   cacheYtCoversLater,

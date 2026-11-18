@@ -20,13 +20,9 @@ import {
 } from "@wave/core";
 import * as Effect from "effect/Effect";
 import { runSteps } from "../lib/stepped.ts";
-import type { SkippedFile } from "./db/skippedFiles.ts";
-import type {
-  IndexedArtwork,
-  IndexedKnownFile,
-  IndexedTrack,
-  LibraryStore,
-} from "./LibraryStore.ts";
+import type { SkippedFile } from "@wave/client/db/skippedFiles";
+import type { LibraryStore } from "./LibraryStore.ts";
+import type { IndexedArtwork, IndexedKnownFile, IndexedTrack } from "@wave/client";
 import type { KnownFile } from "./NativeScanner.ts";
 
 /**

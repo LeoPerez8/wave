@@ -26,7 +26,8 @@ import { resolveStreamedArtistTap } from "@/ytmusic/streamedArtist";
 import { followStreamedArtistTap } from "@/ytmusic/streamedArtistTap";
 import { openYtArtistNamed } from "@/ytmusic/routes";
 
-import { LibraryStore, type ArtistRow } from "./LibraryStore";
+import { LibraryStore } from "./LibraryStore";
+import { type ArtistRow } from "@wave/client";
 import { openArtist } from "./routes";
 import { appRuntime } from "./runtime";
 
