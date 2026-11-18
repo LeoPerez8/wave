@@ -235,6 +235,17 @@ export function App() {
     changed: playback.refresh,
     newPlaylist: playlistEdits.newPlaylist,
   });
+  // Says a download began, wherever it was asked for; a notice from before the window opened isn't news.
+  const noticeSeen = useRef<number | null | undefined>(undefined);
+  const notice = downloads?.notice;
+  const { notify } = actions;
+  useEffect(() => {
+    if (downloads === undefined) return;
+    const seen = noticeSeen.current;
+    noticeSeen.current = notice?.id ?? null;
+    if (seen !== undefined && notice && notice.id !== seen)
+      notify(text.desktopLibrary.downloadStarted(notice.count));
+  }, [downloads, notice, notify]);
   useDesktopKeys({
     search: () => search.current?.focus(),
     back,
@@ -270,9 +281,6 @@ export function App() {
     } as const;
     if (scope.kind in detail) go({ kind: detail[scope.kind as keyof typeof detail], id: row.id });
     else if (row.unavailable) setError(text.desktopLibrary.driveDisconnected);
-    // A missing song downloads instead of playing (Core's `downloadSource` picks where from).
-    else if (row.path === null && row.videoId === undefined && row.id > 0)
-      download(window.wave.downloads.missing([row.id]));
     else playback.run(window.wave.playback.start(scope, index));
   };
   const searchFor = (query: string) => {
@@ -655,10 +663,9 @@ export function App() {
               rememberSearch();
               go(next);
             }}
-            onPlay={(index, row) => {
+            onPlay={(index) => {
               rememberSearch();
-              if (row.path === null) download(window.wave.downloads.missing([row.id]));
-              else playback.run(window.wave.playback.start(scope, index));
+              playback.run(window.wave.playback.start(scope, index));
             }}
             onMenu={(row, at) => actions.openMenu({ scope, ids: [row.id] }, row.title, at)}
             onUnavailable={() => setError(text.desktopLibrary.driveDisconnected)}

@@ -185,7 +185,10 @@ accepts `downloadAll`, `retryFailed` or `cancel`, optionally for an album. Rows 
 200 per read. Settings' selected target folder becomes a scan root. Main checks connectivity
 every three seconds and stops or restarts the journal accordingly.
 
-`songs.run` accepts `fixSong` and `fixSongs`. The shared client module
+`songs.run` accepts `download` (the menu's Download for missing songs), `fixSong` and `fixSongs`.
+Every song list's click goes through main's `Playback.activate`: a tapped missing song downloads
+and plays once its file is imported. `songs.states(ids)` (up to 200) gives each visible row's
+download and whether its file failed to play; `downloads.view().notice` drives the start toast. The shared client module
 `@wave/client/downloads/lookups` supplies both apps' LRCLIB and Deezer requests and album caches.
 The synced `settings.findLyricsAndGenre` switch gates lookups and Fix Song's menu entry.
 Lyrics found online for a Library song are written through `tags.writeSong` and reimported too.

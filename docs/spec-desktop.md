@@ -302,7 +302,9 @@ The prototype was approved on 2026-11-18 after an Impeccable critique; its decis
 - Settings is a page with its own side list: Library, Appearance, Window, Playback, Lyrics and
   tags, Downloads, Accounts, Version History.
 - Offline, the YT Music parts of Home, Search, artist pages, Discover and Magic Queue become one
-  quiet line saying they come back online, and downloads pause. A missing file shows an × glyph.
+  quiet line saying they come back online, and downloads pause. A missing song is dimmed, with
+  no × (a download on its way shows its progress on the row); the × marks only a file that failed
+  to play.
 - No chips, no filled Play button, no card around the top result (Quiet Catalog, as on the
   phone).
 

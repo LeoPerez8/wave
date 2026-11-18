@@ -96,6 +96,7 @@ test("the page has no Node and only the typed bridge", async () => {
       "wave.library.exclude",
       "wave.library.removeRoot",
       "wave.library.include",
+      "wave.songs.states",
       "wave.songs.actions",
       "wave.songs.run",
       "wave.player.load",

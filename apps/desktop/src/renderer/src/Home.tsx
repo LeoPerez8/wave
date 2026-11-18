@@ -146,6 +146,8 @@ export function Home({
                       caption:
                         row.playCount === undefined ? row.artist : text.stats.plays(row.playCount),
                       label: [row.title, row.artist].filter(Boolean).join(", "),
+                      missing:
+                        section.kind === "song" && row.path === null && row.videoId === undefined,
                     }))}
                     onOpen={(index) => open(section, index)}
                     onMenu={

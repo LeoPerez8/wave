@@ -1168,9 +1168,6 @@ kbd {
 .search-row:focus-visible .row-play {
   display: flex;
 }
-.search-row[data-missing] {
-  color: var(--color-secondary);
-}
 .search-row-title {
   display: flex;
   flex-direction: column;
@@ -1220,4 +1217,31 @@ kbd {
   border-radius: 6px;
   color: inherit;
   text-align: left;
+}
+
+/* A missing song (the account has it, this computer has no file) is dimmed; a click downloads it. */
+.missing-row {
+  color: var(--color-secondary);
+}
+.missing-row .artwork {
+  opacity: 0.45;
+}
+/* A song's state over its picture: a download on its way, or a file that failed to play. */
+.row-mark {
+  display: flex;
+}
+.failed-row .row-mark {
+  color: var(--color-destructive);
+}
+.row-progress {
+  width: 20px;
+  height: 4px;
+  border-radius: 2px;
+  background: var(--color-separator);
+  overflow: hidden;
+}
+.row-progress > span {
+  display: block;
+  height: 100%;
+  background: var(--color-accent);
 }
