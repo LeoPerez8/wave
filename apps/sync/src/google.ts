@@ -1,7 +1,7 @@
 /**
  * Checking a Google ID token (docs/spec.md, "Signing in"): its RS256
  * signature against Google's published keys, its issuer, its audience
- * against Wave's web client id and its expiry. Nothing here logs a token.
+ * against Wave's configured client ids and its expiry. Nothing here logs a token.
  */
 
 export const GOOGLE_CERTS_URL = "https://www.googleapis.com/oauth2/v3/certs";
@@ -102,12 +102,16 @@ const isRecord = (value: unknown): value is Readonly<Record<string, unknown>> =>
 
 /**
  * Who [token] says signed in, or `null` when it isn't a valid Google ID token
- * for [clientId]: a bad signature, another issuer or audience, expired, or
+ * for one of [clientIds]: a bad signature, another issuer or audience, expired, or
  * an unverified email.
  */
 export const verifyGoogleIdToken = async (
   token: string,
-  options: { readonly clientId: string; readonly keys: GoogleKeys; readonly now: () => number },
+  options: {
+    readonly clientIds: readonly string[];
+    readonly keys: GoogleKeys;
+    readonly now: () => number;
+  },
 ): Promise<GoogleIdentity | null> => {
   const parts = token.split(".");
   if (parts.length !== 3) return null;
@@ -124,7 +128,7 @@ export const verifyGoogleIdToken = async (
   if (!(await crypto.subtle.verify("RSASSA-PKCS1-v1_5", key, signature, signed))) return null;
 
   if (typeof payload.iss !== "string" || !ISSUERS.has(payload.iss)) return null;
-  if (payload.aud !== options.clientId) return null;
+  if (typeof payload.aud !== "string" || !options.clientIds.includes(payload.aud)) return null;
   if (typeof payload.exp !== "number" || payload.exp * 1000 + CLOCK_SKEW_MS <= options.now()) {
     return null;
   }
