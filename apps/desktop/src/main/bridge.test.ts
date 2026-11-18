@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
-import { mkdtempSync, rmSync } from "node:fs";
+import { mkdtempSync, rmSync, mkdirSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
-import { basename, join } from "node:path";
+import { basename, dirname, join } from "node:path";
 import { test } from "node:test";
 import { Database } from "@wave/client";
 import { addTrack, type TestDatabase } from "@wave/client/testing";
@@ -19,6 +19,7 @@ import type { KotlinEvents } from "./kotlin/supervisor.ts";
 import type { SongTags } from "../shared/tags.ts";
 import { libraryLayer } from "./database.ts";
 import { registerBridge, type IpcHandler } from "./bridge.ts";
+import { DesktopLibrary, desktopLibraryLayer } from "./library/library.ts";
 
 const trusted = { senderFrame: "window" };
 
@@ -91,7 +92,13 @@ const jvmInMemory = () => {
 const connect = (file: string, isTrusted = (event: unknown) => event === trusted) => {
   const audio = audioInMemory();
   const jvm = jvmInMemory();
-  const runtime = ManagedRuntime.make(Layer.mergeAll(libraryLayer(file), audio.layer, jvm.layer));
+  const runtime = ManagedRuntime.make(
+    desktopLibraryLayer({
+      musicFolder: join(dirname(file), "Music"),
+      platform: process.platform,
+      pickFolder: async () => undefined,
+    }).pipe(Layer.provideMerge(Layer.mergeAll(libraryLayer(file), audio.layer, jvm.layer))),
+  );
   const handlers = new Map<string, IpcHandler>();
   registerBridge(
     { handle: (channel, handler) => handlers.set(channel, handler) },
@@ -144,6 +151,44 @@ test("the window reads the Library's counts through the bridge", async () => {
     const wave = exposed.get("wave") as WaveBridge;
     assert.equal((await wave.library.counts()).songs, 1);
     await runtime.dispose();
+  });
+});
+
+test("the window reads scan progress and paged songs and refuses invalid page sizes", async () => {
+  await withFile(async (file) => {
+    const { runtime, exposed } = connect(file);
+    try {
+      const wave = exposed.get("wave") as WaveBridge;
+      assert.ok(["idle", "scanning", "done"].includes((await wave.library.scanStatus()).status));
+      assert.equal((await wave.library.songs(0, 10)).total, 0);
+      await assert.rejects(wave.library.songs(0, 10000), /Refused/);
+      await assert.rejects(wave.library.songs(-1, 10), /Refused/);
+    } finally {
+      await runtime.dispose();
+    }
+  });
+});
+
+test("a paused song cannot resume or reload from an unavailable folder", async () => {
+  await withFile(async (file) => {
+    const music = join(dirname(file), "Music");
+    mkdirSync(music);
+    const song = join(music, "One.flac");
+    writeFileSync(song, "music");
+    const { runtime, exposed } = connect(file);
+    const wave = exposed.get("wave") as WaveBridge;
+    try {
+      const library = await runtime.runPromise(DesktopLibrary);
+      await library.refresh();
+      const indexedPath = library.songs(0, 10).items[0]!.path!;
+      await wave.player.load(song);
+      rmSync(music, { recursive: true });
+      await library.refresh();
+      await assert.rejects(wave.player.play(), /folder-unavailable/);
+      await assert.rejects(wave.player.load(indexedPath), /folder-unavailable/);
+    } finally {
+      await runtime.dispose();
+    }
   });
 });
 

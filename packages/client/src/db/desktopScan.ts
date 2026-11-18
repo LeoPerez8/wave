@@ -47,10 +47,9 @@ export const desktopScanIndex = (db: LibraryDatabase, platform: string) => {
       const paths = new Set(files.map((file) => scanPathKey(file.path, platform)));
       missing = missing.filter((file) => !paths.has(scanPathKey(file.path, platform)));
     },
-    begin: (roots: readonly ScanFolder[], seenPaths: readonly string[]) => {
+    begin: (roots: readonly ScanFolder[], seenPaths: readonly string[], rows = read()) => {
       folders = roots;
       seen = new Set(seenPaths.map((path) => scanPathKey(path, platform)));
-      const rows = read();
       known = new Map(rows.map((row) => [scanPathKey(row.path, platform), row]));
       missing = rows.filter((row) => scanFileState(row.path, roots, seen, platform) === "missing");
       changed = false;
