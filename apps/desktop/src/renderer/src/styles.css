@@ -443,12 +443,6 @@ h2 {
   color: var(--color-accent);
   margin-left: 6px;
 }
-.home-discover {
-  flex-shrink: 0;
-  max-height: 46%;
-  overflow: auto;
-  padding: 0 22px 12px 0;
-}
 .shelf-row {
   display: flex;
   gap: 18px;

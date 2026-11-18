@@ -1598,6 +1598,23 @@ test("a Magic Queue, an artist page and Discover's row come through the bridge, 
       await assert.rejects(call("yt.queue", "shuffle", "mayyounever"), /Refused/);
       await assert.rejects(call("yt.queue", "playNow", "unknownsong"), /yt-unknown/);
       assert.equal(await call("discover.playMix", "gone", 0), false);
+      await assert.rejects(
+        call("discover.setSettings", { level: 6, faithfulness: 3, popularity: 3 }),
+        /Refused/,
+      );
+      assert.deepEqual(
+        await call("discover.setSettings", { level: 5, faithfulness: 1, popularity: 4 }),
+        {
+          level: 5,
+          faithfulness: 1,
+          popularity: 4,
+        },
+      );
+      assert.deepEqual(await wave.discover.settings(), {
+        level: 5,
+        faithfulness: 1,
+        popularity: 4,
+      });
     } finally {
       await runtime.dispose();
     }

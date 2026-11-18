@@ -16,6 +16,7 @@ import { catalogueOf } from "@wave/core";
 import * as Effect from "effect/Effect";
 import { libraryLayer } from "../src/main/database.ts";
 import type { WaveBridge } from "../src/shared/bridge.ts";
+import { DISCOVER_FIXTURE, stubDiscover } from "./discoverFixture.ts";
 
 const appFolder = join(import.meta.dirname, "..");
 /** From Node, the electron package is the path of its executable. */
@@ -127,6 +128,8 @@ test("the page has no Node and only the typed bridge", async () => {
       "wave.yt.queue",
       "wave.discover.picks",
       "wave.discover.mixes",
+      "wave.discover.settings",
+      "wave.discover.setSettings",
       "wave.discover.playMix",
       "wave.magicQueue.start",
       "wave.magicQueue.startStreamed",
@@ -250,13 +253,26 @@ test("a second launch shows and focuses the running window, then quits", async (
 
 test("with YouTube Music on, Discover and the Magic Queue open from the sidebar", async () => {
   const text = catalogueOf("en", "desktop");
+  await stubDiscover(app);
   await page.evaluate(() =>
     (window as unknown as { wave: WaveBridge }).wave.settings.setYtMusic(true),
   );
   await page.reload();
   await page.getByRole("button", { name: text.desktopLayout.discover, exact: true }).click();
-  await expect(page.getByTestId("discover")).toBeVisible();
-  await expect(page.getByTestId("discover").locator(".tile")).toHaveCount(3);
+  const discover = page.getByTestId("discover");
+  await expect(discover).toBeVisible();
+  // The Magic Queue row's Library songs, then the fixture's mixes under their rows.
+  const picks = await page.evaluate(() =>
+    (window as unknown as { wave: WaveBridge }).wave.discover.picks(),
+  );
+  expect(picks.total).toBeGreaterThan(0);
+  await expect(discover.locator(".tile")).toHaveCount(picks.total);
+  for (const mix of DISCOVER_FIXTURE.mixes) {
+    const row = discover.getByRole("region", { name: text.discover.rows[mix.row], exact: true });
+    await expect(
+      row.getByRole("heading", { name: text.discover.mixTitle(mix.name) }),
+    ).toContainText(text.discover.songs(mix.songs.total));
+  }
   await page.getByRole("button", { name: text.desktopLayout.magicQueue, exact: true }).click();
   await expect(page.getByTestId("magic-queue")).toContainText(text.desktopLayout.magicQueueIdle);
 });

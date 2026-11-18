@@ -68,6 +68,7 @@ export const readHome = (db: LibraryDatabase, stored: string | null): HomeView =
   const nothingPlayed = home.recentlyPlayed.length === 0 && home.mostPlayed.length === 0;
   return {
     ...page(items),
+    discoverRows: arrangement.discoverRows,
     hint: empty
       ? "empty"
       : arrangement.sections.length === 0
