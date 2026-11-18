@@ -6,8 +6,8 @@ const SONGS = sql`SELECT t.id, t.title, t.artist_credit AS artist, a.title AS al
   t.artwork_hash AS artworkHash, t.duration_ms AS durationMs, 1 AS count,
   t.year, g.name AS genre, t.track_number AS trackNumber, t.path,
   EXISTS(SELECT 1 FROM favorites f WHERE f.track_id=t.id AND f.deleted=0) AS favorite,
-  t.title_sort AS sort, t.disc_number AS disc, t.album_id AS albumId
-  FROM tracks t JOIN albums a ON a.id=t.album_id LEFT JOIN genres g ON g.id=t.genre_id`;
+  t.title_sort AS sort, p.sort AS artistSort, t.disc_number AS disc, t.album_id AS albumId
+  FROM tracks t JOIN artists p ON p.id=t.artist_id JOIN albums a ON a.id=t.album_id LEFT JOIN genres g ON g.id=t.genre_id`;
 
 const listing = (scope: BrowseScope): { source: SQL; order: SQL } => {
   const order = sql`sort, id`;
@@ -15,10 +15,12 @@ const listing = (scope: BrowseScope): { source: SQL; order: SQL } => {
     case "albums":
       return {
         source: sql`SELECT a.id, a.title, a.album_artist_credit AS artist,
-      '' AS album, a.artwork_hash AS artworkHash, coalesce(sum(t.duration_ms),0) AS durationMs,
-      count(t.id) AS count, a.year, min(g.name) AS genre FROM albums a JOIN tracks t ON t.album_id=a.id
+      '' AS album, a.title_sort AS sort, a.artwork_hash AS artworkHash, coalesce(sum(t.duration_ms),0) AS durationMs,
+      count(t.id) AS count, a.year,
+      (SELECT g.name FROM tracks gt JOIN genres g ON g.id=gt.genre_id WHERE gt.album_id=a.id GROUP BY g.id ORDER BY count(*) DESC, g.sort LIMIT 1) AS genre
+      FROM albums a JOIN tracks t ON t.album_id=a.id
       LEFT JOIN genres g ON g.id=t.genre_id GROUP BY a.id`,
-        order: sql`lower(title), id`,
+        order: sql`sort, wave_sort_key(artist), id`,
       };
     case "artists":
       return {
@@ -37,26 +39,29 @@ const listing = (scope: BrowseScope): { source: SQL; order: SQL } => {
       };
     case "playlists":
       return {
-        source: sql`SELECT p.id, p.name AS title, '' AS artist, '' AS album,
+        source: sql`SELECT p.id, p.name AS title, wave_sort_key(p.name) AS sort, '' AS artist, '' AS album,
       (SELECT t.artwork_hash FROM playlist_items i JOIN tracks t ON t.id=i.track_id
         WHERE i.playlist_id=p.id AND i.deleted=0 AND t.artwork_hash IS NOT NULL ORDER BY i.order_key LIMIT 1) AS artworkHash,
       coalesce(sum(t.duration_ms),0) AS durationMs, count(i.id) AS count FROM playlists p
       LEFT JOIN playlist_items i ON i.playlist_id=p.id AND i.deleted=0
       LEFT JOIN tracks t ON t.id=i.track_id WHERE p.deleted=0 GROUP BY p.id`,
-        order: sql`lower(title), id`,
+        order,
       };
     case "album":
       return {
         source: sql`${SONGS} WHERE t.album_id=${scope.id}`,
-        order: sql`coalesce(disc,1), coalesce(trackNumber,0), sort, id`,
+        order: sql`coalesce(disc,1), coalesce(trackNumber,9007199254740991), sort, coalesce(path,''), id`,
       };
     case "artist":
       return {
         source: sql`${SONGS} WHERE EXISTS(SELECT 1 FROM track_artists ta WHERE ta.track_id=t.id AND ta.artist_id=${scope.id})`,
-        order,
+        order: sql`sort, artistSort, coalesce(path,''), id`,
       };
     case "genre":
-      return { source: sql`${SONGS} WHERE t.genre_id=${scope.id}`, order };
+      return {
+        source: sql`${SONGS} WHERE t.genre_id=${scope.id}`,
+        order: sql`sort, artistSort, coalesce(path,''), id`,
+      };
     case "playlist":
       return {
         source: sql`SELECT songs.*, i.order_key AS position FROM (${SONGS}) songs
@@ -74,7 +79,7 @@ const listing = (scope: BrowseScope): { source: SQL; order: SQL } => {
         order,
       };
     default:
-      return { source: SONGS, order };
+      return { source: SONGS, order: sql`sort, artistSort, coalesce(path,''), id` };
   }
 };
 
@@ -140,8 +145,7 @@ export const browseLetter = (db: LibraryDatabase, scope: BrowseScope, letter: st
   const { source, order } = listing(scope);
   return (
     db.get<{ position: number }>(sql`SELECT position FROM (
-    SELECT title, row_number() OVER (ORDER BY ${order}) - 1 AS position FROM (${source})
-    ) WHERE upper(substr(title,1,1)) >= ${letter.toUpperCase()} ORDER BY position LIMIT 1`)
-      ?.position ?? 0
+    SELECT sort, row_number() OVER (ORDER BY ${order}) - 1 AS position FROM (${source})
+    ) WHERE substr(sort,1,1) >= wave_sort_key(${letter}) ORDER BY position LIMIT 1`)?.position ?? 0
   );
 };

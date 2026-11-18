@@ -126,11 +126,19 @@ else {
                       )),
                 "artwork",
               ),
-              (bytes, size) => {
+              (bytes) => {
                 const image = nativeImage.createFromBuffer(bytes);
-                return image.isEmpty()
-                  ? Buffer.alloc(0)
-                  : image.resize({ width: size, height: size, quality: "good" }).toPNG();
+                if (image.isEmpty()) return undefined;
+                const { width, height } = image.getSize();
+                const resized = (side: number) =>
+                  image
+                    .resize(
+                      width >= height
+                        ? { width: Math.min(side, width), quality: "good" }
+                        : { height: Math.min(side, height), quality: "good" },
+                    )
+                    .toJPEG(90);
+                return { thumb: resized(300), medium: resized(640) };
               },
             );
             return store(encoded);

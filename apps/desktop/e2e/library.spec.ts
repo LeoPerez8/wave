@@ -77,6 +77,11 @@ test("first launch shows progress, indexes Music with Kotlin and keeps list read
     (window as unknown as { wave: WaveBridge }).wave.library.browse({ kind: "albums" }, 0, 10),
   );
   expect(covers.items[0]?.artworkHash).toMatch(/^[a-f0-9]{40}$/);
+  const image = await page.evaluate(
+    (hash) => (window as unknown as { wave: WaveBridge }).wave.library.artwork(hash, true),
+    covers.items[0]!.artworkHash!,
+  );
+  expect(image).toMatch(/^data:image\/jpeg;base64,/);
   firstId = (await songs()).items.find((song) => song.path?.endsWith("/0000.flac"))!.id;
   await page.screenshot({ path: join(appFolder, "test-results", "library-scanned.png") });
 });

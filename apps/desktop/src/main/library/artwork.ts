@@ -1,6 +1,6 @@
 import { createHash } from "node:crypto";
-import { mkdir, writeFile, readFile } from "node:fs/promises";
-import { join } from "node:path";
+import { mkdir, writeFile, readFile, rename } from "node:fs/promises";
+import { dirname, join } from "node:path";
 import { eq } from "drizzle-orm";
 import type { LibraryDatabase } from "@wave/client/db/database";
 import { artwork } from "@wave/client/db/schema";
@@ -9,7 +9,7 @@ import { artwork } from "@wave/client/db/schema";
 export const artworkStore = (
   db: LibraryDatabase,
   directory: string,
-  resize: (bytes: Buffer, size: number) => Buffer,
+  process: (bytes: Buffer) => { readonly thumb: Buffer; readonly medium: Buffer } | undefined,
 ) => {
   const saved = new Set<string>();
   return async (encoded: string): Promise<string | null> => {
@@ -19,13 +19,21 @@ export const artworkStore = (
     const hash = createHash("sha1").update(bytes).digest("hex");
     if (saved.has(hash)) return hash;
     try {
-      const image = resize(bytes, 512);
-      const thumb = resize(bytes, 56);
-      if (!image.length || !thumb.length) return null;
+      const display = process(bytes);
+      if (!display) return null;
       await mkdir(directory, { recursive: true });
-      const path = join(directory, `${hash}.png`);
-      const thumbPath = join(directory, `${hash}.thumb.png`);
-      await Promise.all([writeFile(path, image), writeFile(thumbPath, thumb)]);
+      const extension = bytes[0] === 0x89 ? "png" : bytes[0] === 0xff ? "jpg" : "img";
+      const path = join(directory, `${hash}.${extension}`);
+      const thumbPath = join(directory, `${hash}_thumb.jpg`);
+      const atomic = async (file: string, content: Buffer) => {
+        await writeFile(`${file}.tmp`, content);
+        await rename(`${file}.tmp`, file);
+      };
+      await Promise.all([
+        atomic(path, bytes),
+        atomic(thumbPath, display.thumb),
+        atomic(join(directory, `${hash}_medium.jpg`), display.medium),
+      ]);
       db.insert(artwork)
         .values({ hash, path, thumbPath, palette: {} })
         .onConflictDoUpdate({ target: artwork.hash, set: { path, thumbPath } })
@@ -47,9 +55,14 @@ export const readArtwork = async (
   const row = db.select().from(artwork).where(eq(artwork.hash, hash)).get();
   if (!row) return null;
   try {
-    const bytes = await readFile(large ? row.path : row.thumbPath);
+    const bytes = large
+      ? await readFile(join(dirname(row.path), `${hash}_medium.jpg`)).catch(() =>
+          readFile(row.path),
+        )
+      : await readFile(row.thumbPath);
+    const mime = bytes[0] === 0xff ? "image/jpeg" : "image/png";
     return bytes.length <= 2 * 1024 * 1024
-      ? `data:image/png;base64,${bytes.toString("base64")}`
+      ? `data:${mime};base64,${bytes.toString("base64")}`
       : null;
   } catch {
     return null;

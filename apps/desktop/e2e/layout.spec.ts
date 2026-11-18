@@ -151,3 +151,45 @@ test("Library navigation, responsive tables and keyboard focus work with 50,000 
     rmSync(data, { recursive: true, force: true });
   }
 });
+
+test("every Library page is reachable using only the keyboard on an empty Library", async () => {
+  const data = mkdtempSync(join(tmpdir(), "wave-keyboard-"));
+  const app = await electron.launch({
+    args: [appFolder, "--lang=en-US"],
+    env: { ...process.env, WAVE_DATA_DIR: data, WAVE_MUSIC_DIR: join(data, "Absent") },
+  });
+  try {
+    const page = await app.firstWindow();
+    await page.keyboard.press("Control+f");
+    for (const name of [
+      "Home",
+      "Playlists",
+      "Artists",
+      "Albums",
+      "Songs",
+      "Genres",
+      "Favorites",
+      "Settings",
+    ]) {
+      for (
+        let tabs = 0;
+        tabs < 30 &&
+        !(await page
+          .getByRole("button", { name, exact: true })
+          .evaluate((element) => element === document.activeElement));
+        tabs++
+      )
+        await page.keyboard.press("Tab");
+      await expect(page.getByRole("button", { name, exact: true })).toBeFocused();
+      await page.keyboard.press("Enter");
+      await expect(page.getByRole("heading", { level: 1 })).toHaveText(name);
+      if (name !== "Settings") {
+        await expect(page.getByRole("grid")).toBeFocused();
+        await expect(page.getByRole("grid")).toContainText("No songs found.");
+      }
+    }
+  } finally {
+    await app.close();
+    rmSync(data, { recursive: true, force: true });
+  }
+});

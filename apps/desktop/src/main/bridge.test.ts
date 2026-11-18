@@ -169,6 +169,7 @@ test("Library browsing pages albums and their ordered songs through the bridge",
             album: "Pink Moon",
             trackNumber: 1,
           });
+          addTrack(db, { title: "Bonus", artist: "Nick Drake", album: "Pink Moon" });
         }),
       );
       const wave = exposed.get("wave") as WaveBridge;
@@ -176,7 +177,7 @@ test("Library browsing pages albums and their ordered songs through the bridge",
       assert.equal(albums.total, 1);
       assert.equal(albums.items[0]?.title, "Pink Moon");
       const songs = await wave.library.browse({ kind: "album", id: albums.items[0]!.id }, 0, 1);
-      assert.equal(songs.total, 2);
+      assert.equal(songs.total, 3);
       assert.equal(songs.items[0]?.title, "Pink Moon");
       assert.equal(songs.items[0]?.trackNumber, 1);
       const rest = await wave.library.browse({ kind: "album", id: albums.items[0]!.id }, 1, 1);

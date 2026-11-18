@@ -62,6 +62,7 @@ export const createScanner = ({
   };
   let initialized = false;
   let rereadTags = forceTags;
+  const upgraded = new Set<string>();
   let rootPaths: readonly string[] = [];
   const index = desktopScanIndex(db, platform);
   const settings = desktopFolders(db, platform);
@@ -223,7 +224,7 @@ export const createScanner = ({
       if (disposed) return;
       const previous = known.get(key);
       if (
-        !rereadTags &&
+        (!rereadTags || upgraded.has(key)) &&
         previous?.sizeBytes === file.sizeBytes &&
         previous.modifiedAt === file.modifiedAt &&
         previous.path === file.path
@@ -232,6 +233,7 @@ export const createScanner = ({
         continue;
       }
       const tags = await readTags(file.path);
+      if (rereadTags) upgraded.add(key);
       const track = {
         ...normalizeTrack({ ...tags, path: file.path }),
         ...file,
@@ -271,6 +273,7 @@ export const createScanner = ({
     // An unavailable root must be revisited before completing this one-time upgrade.
     if (roots.every((root) => root.available)) {
       rereadTags = false;
+      upgraded.clear();
       tagsUpdated?.();
     }
     markScanned(
