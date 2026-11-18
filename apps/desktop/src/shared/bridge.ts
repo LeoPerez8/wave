@@ -9,8 +9,15 @@ import type { PlaybackStatus } from "./playback.ts";
 import type { PlaybackSettings } from "./playbackSettings.ts";
 import type { SongTags } from "./tags.ts";
 import type { DesktopFolder, DesktopSong, ScanStatus } from "./library.ts";
-import type { BrowseScope, BrowsePage } from "./browse.ts";
-import type { YtSearchPage } from "./yt.ts";
+import type { BrowseScope, BrowsePage, BrowseRow } from "./browse.ts";
+import type { YtSearchPage, YtStatus } from "./yt.ts";
+import type {
+  DiscoverMixesView,
+  MagicQueueView,
+  YtAlbumView,
+  YtArtistView,
+  YtRelatedView,
+} from "./ytPages.ts";
 import type { AccountView } from "./account.ts";
 import type {
   ActionSurface,
@@ -83,6 +90,36 @@ export interface BridgeContract {
   readonly "yt.search": { readonly args: readonly [query: string]; readonly result: YtSearchPage };
   /** A YouTube Music cover as a data URL, or null. */
   readonly "yt.artwork": { readonly args: readonly [url: string]; readonly result: string | null };
+  /** A YouTube Music artist page, by its browse id. */
+  readonly "yt.artist": { readonly args: readonly [browseId: string]; readonly result: YtArtistView };
+  /** The YouTube Music artist named [name]'s browse id, or null. */
+  readonly "yt.findArtist": {
+    readonly args: readonly [name: string];
+    readonly result: { readonly status: YtStatus; readonly browseId: string | null };
+  };
+  /** A YouTube Music album page, by its browse id. */
+  readonly "yt.album": { readonly args: readonly [browseId: string]; readonly result: YtAlbumView };
+  /** The Related tab of the song playing. */
+  readonly "yt.related": { readonly args: readonly []; readonly result: YtRelatedView };
+  /** Discover's Magic Queue row: nine Library songs at random. */
+  readonly "discover.picks": { readonly args: readonly []; readonly result: Page<BrowseRow> };
+  /** Discover's Artist mixes, built once a day. */
+  readonly "discover.mixes": { readonly args: readonly []; readonly result: DiscoverMixesView };
+  /** Plays today's mix [id] from its song [index]; false when the mix is gone. */
+  readonly "discover.playMix": {
+    readonly args: readonly [id: string, index: number];
+    readonly result: boolean;
+  };
+  /** Plays a Magic Queue of [target]'s songs; false when none can play. */
+  readonly "magicQueue.start": { readonly args: readonly [target: SongTarget]; readonly result: boolean };
+  /** Plays a Magic Queue of a YouTube Music song's radio. */
+  readonly "magicQueue.startStreamed": {
+    readonly args: readonly [videoId: string];
+    readonly result: void;
+  };
+  readonly "magicQueue.view": { readonly args: readonly []; readonly result: MagicQueueView };
+  /** Try Again, after a batch found nothing. */
+  readonly "magicQueue.retry": { readonly args: readonly []; readonly result: void };
   readonly "library.artwork": {
     readonly args: readonly [hash: string, large: boolean];
     readonly result: string | null;
@@ -189,6 +226,17 @@ export const BRIDGE_CALLS = [
   "settings.setYtMusic",
   "yt.search",
   "yt.artwork",
+  "yt.artist",
+  "yt.findArtist",
+  "yt.album",
+  "yt.related",
+  "discover.picks",
+  "discover.mixes",
+  "discover.playMix",
+  "magicQueue.start",
+  "magicQueue.startStreamed",
+  "magicQueue.view",
+  "magicQueue.retry",
   "account.view",
   "account.signIn",
   "account.cancelSignIn",
@@ -266,6 +314,23 @@ export interface WaveBridge {
   readonly yt: {
     readonly search: (query: string) => Promise<YtSearchPage>;
     readonly artwork: (url: string) => Promise<string | null>;
+    readonly artist: (browseId: string) => Promise<YtArtistView>;
+    readonly findArtist: (
+      name: string,
+    ) => Promise<{ readonly status: YtStatus; readonly browseId: string | null }>;
+    readonly album: (browseId: string) => Promise<YtAlbumView>;
+    readonly related: () => Promise<YtRelatedView>;
+  };
+  readonly discover: {
+    readonly picks: () => Promise<Page<BrowseRow>>;
+    readonly mixes: () => Promise<DiscoverMixesView>;
+    readonly playMix: (id: string, index: number) => Promise<boolean>;
+  };
+  readonly magicQueue: {
+    readonly start: (target: SongTarget) => Promise<boolean>;
+    readonly startStreamed: (videoId: string) => Promise<void>;
+    readonly view: () => Promise<MagicQueueView>;
+    readonly retry: () => Promise<void>;
   };
   /** The Wave account: the session itself never reaches the window. */
   readonly account: {
@@ -333,6 +398,21 @@ export const createBridge = (invoke: Invoke): WaveBridge => ({
   yt: {
     search: (query) => invoke("yt.search", query),
     artwork: (url) => invoke("yt.artwork", url),
+    artist: (browseId) => invoke("yt.artist", browseId),
+    findArtist: (name) => invoke("yt.findArtist", name),
+    album: (browseId) => invoke("yt.album", browseId),
+    related: () => invoke("yt.related"),
+  },
+  discover: {
+    picks: () => invoke("discover.picks"),
+    mixes: () => invoke("discover.mixes"),
+    playMix: (id, index) => invoke("discover.playMix", id, index),
+  },
+  magicQueue: {
+    start: (target) => invoke("magicQueue.start", target),
+    startStreamed: (videoId) => invoke("magicQueue.startStreamed", videoId),
+    view: () => invoke("magicQueue.view"),
+    retry: () => invoke("magicQueue.retry"),
   },
   account: {
     view: () => invoke("account.view"),

@@ -50,6 +50,7 @@ import {
   type YtAlbumSong,
 } from "@wave/core";
 
+import type { MagicQueueStatus, MagicQueueView } from "../../shared/ytPages.ts";
 import type { YtStatus } from "../../shared/yt.ts";
 import type { YtPagesShape, YtRadioRead } from "./ytPages.ts";
 
@@ -101,14 +102,7 @@ export interface MagicQueueDeps {
   readonly now?: () => number;
 }
 
-/** How the Magic Queue's next batch is going, for Up Next and its page. */
-export type MagicQueueStatus = "idle" | "loading" | "offline" | "failed" | "empty";
-
-export interface MagicQueueView {
-  /** The seed's name ("Magic Queue · from …"), or null while no Magic Queue plays. */
-  readonly title: string | null;
-  readonly status: MagicQueueStatus;
-}
+export type { MagicQueueStatus, MagicQueueView };
 
 export interface MagicQueueShape {
   /** Plays a Magic Queue of [input], replacing the queue; false when it has no song to play. */

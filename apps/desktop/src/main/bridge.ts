@@ -27,6 +27,8 @@ import { runSongAction, songMenu } from "./library/songActions.ts";
 import type { Appearance } from "../shared/bridge.ts";
 import { ytRow } from "../shared/yt.ts";
 import { VIDEO_ID, YtMusic } from "./yt/ytMusic.ts";
+import { createYtFeatureHandlers } from "./yt/ytBridge.ts";
+import type { YtFeatures } from "./yt/ytServices.ts";
 
 const validScope = (value: unknown): value is BrowseScope => {
   if (typeof value !== "object" || value === null) return false;
@@ -79,6 +81,7 @@ export type BridgeServices =
   | DesktopLibrary
   | Playback
   | YtMusic
+  | YtFeatures
   | Account;
 
 const refuse = (call: BridgeCall, why: string) => Effect.fail(new Error(`Refused ${call}: ${why}`));
@@ -176,6 +179,7 @@ const createHandlers = (onAppearance: (mode: Appearance) => void): Handlers => {
         return yield* Effect.fail(new Error("[folder-unavailable] Drive is not connected"));
     });
   return {
+    ...createYtFeatureHandlers(validTarget),
     "playback.view": () => playbackCall((p) => p.view()),
     "playback.start": ([scope, index, shuffle]) =>
       validScope(scope) &&

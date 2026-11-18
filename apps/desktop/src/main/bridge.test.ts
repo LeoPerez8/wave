@@ -33,6 +33,7 @@ import { registerBridge, type IpcHandler } from "./bridge.ts";
 import { DesktopLibrary, desktopLibraryLayer } from "./library/library.ts";
 import { preference } from "./preferences.ts";
 import { ytMusicLayer } from "./yt/ytMusic.ts";
+import { ytFeaturesLayer } from "./yt/ytServices.ts";
 import { accountLayer } from "./account/accountLayer.ts";
 import { createWaveAccount, type WaveAccountService } from "./account/account.ts";
 import { sessionStore } from "./account/sessionStore.ts";
@@ -154,7 +155,29 @@ const jvmInMemory = () => {
                     continuation: null,
                   },
                 }
-              : { id, result: null };
+              : method === "songRadio"
+                ? {
+                    id,
+                    result: {
+                      songs: Array.from({ length: 12 }, (_, n) => ({
+                        ...ytSongNamed(`radio${String(n).padStart(6, "0")}`, `Radio ${n}`),
+                        artists: [`Singer ${n}`],
+                      })),
+                      continuation: null,
+                    },
+                  }
+                : method === "artist"
+                  ? {
+                      id,
+                      result: {
+                        name: "Nick Drake",
+                        songs: [ytSongNamed("abcdefghijk", "Pink Moon")],
+                        albums: [{ browseId: "MPREb_pinkmoon", title: "Pink Moon", year: 1972 }],
+                        singles: [],
+                        similar: [{ name: "John Martyn", browseId: "UCjohnmartyn" }],
+                      },
+                    }
+                  : { id, result: null };
       }
       queueMicrotask(() => events.line(JSON.stringify(answer)));
     },
@@ -203,7 +226,13 @@ const connect = (
       account: account.service,
       focused: () => true,
       ...(account.clock === undefined ? {} : { clock: account.clock }),
-    }).pipe(Layer.provideMerge(playbackLayer.pipe(Layer.provideMerge(library)))),
+    }).pipe(
+      Layer.provideMerge(
+        ytFeaturesLayer({ online: () => true }).pipe(
+          Layer.provideMerge(playbackLayer.pipe(Layer.provideMerge(library))),
+        ),
+      ),
+    ),
   );
   const handlers = new Map<string, IpcHandler>();
   registerBridge(
@@ -968,6 +997,70 @@ test("main refuses YT Music calls with bad songs, settings, queries or covers", 
         /yt-unknown/,
         "only songs a search found",
       );
+    } finally {
+      await runtime.dispose();
+    }
+  });
+});
+
+test("a Magic Queue, an artist page and Discover's row come through the bridge, quietly offline", async () => {
+  await withFile(async (file) => {
+    const { runtime, exposed, handlers, jvm } = connect(file);
+    const wave = exposed.get("wave") as WaveBridge;
+    try {
+      const pinkMoon = await runtime.runPromise(
+        Effect.gen(function* () {
+          const db = (yield* Database) as unknown as TestDatabase;
+          const ids = ["Parasite", "Pink Moon", "Road"].map((title, n) =>
+            addTrack(db, {
+              title,
+              artist: "Nick Drake",
+              album: "Pink Moon",
+              trackNumber: n + 1,
+              durationMs: 124_000,
+            }),
+          );
+          return ids[1]!;
+        }),
+      );
+      assert.equal(await wave.magicQueue.start({ scope: { kind: "songs" }, ids: [pinkMoon] }), true);
+      await until(async () => (await wave.playback.view()).length > 1);
+      assert.equal((await wave.playback.view()).current?.title, "Pink Moon");
+      assert.deepEqual(await wave.magicQueue.view(), { title: "Pink Moon", status: "idle" });
+      const queue = await wave.playback.queue(0, 20);
+      assert.ok(
+        queue.items.some((row) => row.videoId?.startsWith("radio")),
+        "the song's radio joins the queue",
+      );
+
+      const artist = await wave.yt.artist("UCnickdrake");
+      assert.equal(artist.status, "ok");
+      assert.equal(artist.page?.name, "Nick Drake");
+      assert.deepEqual(
+        artist.page?.songs.items.map((row) => row.title),
+        ["Pink Moon"],
+      );
+      assert.deepEqual(
+        artist.page?.similar.map((found) => found.name),
+        ["John Martyn"],
+      );
+      assert.equal((await wave.discover.picks()).items.length, 3);
+
+      // Offline, a page says so and nothing else.
+      jvm.ytError = "ERR_YT_OFFLINE";
+      assert.deepEqual(await wave.yt.artist("UCnickdrake"), { status: "offline", page: null });
+      await wave.playback.command({ type: "next" });
+      const related = await wave.yt.related();
+      assert.equal(related.status, "offline");
+      assert.equal(related.songs.total, 0);
+
+      const call = (channel: string, ...args: unknown[]) =>
+        handlers.get(channel)!(trusted, ...args);
+      await assert.rejects(call("yt.artist", "../etc"), /Refused/);
+      await assert.rejects(call("magicQueue.start", { scope: { kind: "songs" }, ids: [] }), /Refused/);
+      await assert.rejects(call("magicQueue.startStreamed", "nope"), /Refused/);
+      await assert.rejects(call("discover.playMix", "mix", -1), /Refused/);
+      assert.equal(await call("discover.playMix", "gone", 0), false);
     } finally {
       await runtime.dispose();
     }
