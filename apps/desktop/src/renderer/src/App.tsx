@@ -1,5 +1,5 @@
 import { Links } from "./Links.tsx";
-import { readThemeChoice, themeFor, type SearchOnline } from "@wave/core";
+import { listDuration, readThemeChoice, themeFor, type SearchOnline } from "@wave/core";
 import { useCallback, useEffect, useMemo, useRef, useState, type MouseEvent } from "react";
 import type { AccountView } from "../../shared/account.ts";
 import type { BrowseRow, BrowseScope } from "../../shared/browse.ts";
@@ -507,7 +507,7 @@ export function App() {
                   hero.genre,
                   hero.year,
                   labels.songCount(hero.count),
-                  labels.minutes(Math.round(hero.durationMs / 60000)),
+                  listDuration(hero.durationMs, text.library),
                 ]
                   .filter(Boolean)
                   .join(" · ")}

@@ -1,4 +1,4 @@
-import { desktopKey } from "@wave/core";
+import { desktopKey, formatDuration } from "@wave/core";
 import { useEffect, useRef, useState, type KeyboardEvent, type MouseEvent } from "react";
 import type { BrowsePage, BrowseRow, BrowseScope } from "../../shared/browse.ts";
 import { Icon } from "./Icon.tsx";
@@ -9,8 +9,8 @@ import { labels, text } from "./text.ts";
 
 const SIZE = 100;
 const HEIGHT = 40;
-export const time = (ms: number) =>
-  `${Math.floor(ms / 60000)}:${String(Math.floor(ms / 1000) % 60).padStart(2, "0")}`;
+/** A song's or a list's length, "3:07" or "36:43:09": Core's, as the phone's. */
+export const time = formatDuration;
 const images = new Map<string, Promise<string | null>>();
 /**
  * A Library cover by its hash, a YouTube Music cover by its address (`url`), or a playlist's own
