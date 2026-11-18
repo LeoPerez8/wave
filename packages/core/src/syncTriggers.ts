@@ -24,6 +24,15 @@ export interface SyncClock {
   readonly after: (ms: number, run: () => void) => () => void;
 }
 
+/** The system's time and timers: what the phone and the computer sync on. */
+export const SYSTEM_SYNC_CLOCK: SyncClock = {
+  now: Date.now,
+  after: (ms, run) => {
+    const timer = setTimeout(run, ms);
+    return () => clearTimeout(timer);
+  },
+};
+
 export interface SyncTriggersInput {
   readonly clock: SyncClock;
   /** Whether Wave is in the foreground: only play ends in the background batch. */

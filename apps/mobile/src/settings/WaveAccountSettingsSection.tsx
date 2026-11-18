@@ -1,10 +1,11 @@
 import {
   missingSongsDownloadActionLabels,
+  waveAccountActionNotes,
+  waveAccountNotes,
   waveAccountView,
-  type Catalogue,
+  waveSignInLabels,
   ytSongArtist,
   type WaveAccount,
-  type WaveAccountActionNote,
   type WaveAccountView,
 } from "@wave/core";
 import { Text, View } from "react-native";
@@ -18,15 +19,6 @@ import { runMissingSongsDownloadAction, useMissingSongsDownload } from "@/ytmusi
 
 import { AccountPhoto } from "./AccountPhoto";
 import { useWaveAccount, waveAccountAvailable } from "./waveAccount";
-import { waveAccountNotes, waveSignInLabels } from "./waveAccountText";
-
-const actionNotes = ({ settings }: Catalogue): Record<WaveAccountActionNote, string> => ({
-  offline: settings.couldntDeleteTheAccountWithoutAConnection,
-  failed: settings.wavesServerDidntDeleteTheAccountTry,
-  wrongGoogleAccount: settings.googleDidntConfirmThisAccountPick,
-  signOutEverywhereOffline: settings.couldntSignOutOnAllPhonesWithoutAConnection,
-  signOutEverywhereFailed: settings.wavesServerDidntSignOutThePhonesTry,
-});
 
 type AccountView = Extract<WaveAccountView, { kind: "account" }>;
 
@@ -98,7 +90,9 @@ function AccountRow({
         />
       </View>
       <Text accessibilityLiveRegion="polite" className="font-sans text-footnote text-secondary">
-        {note === null ? strings.settings.waveAccountSignOutNote : actionNotes(strings)[note]}
+        {note === null
+          ? strings.settings.waveAccountSignOutNote
+          : waveAccountActionNotes(strings)[note]}
       </Text>
     </>
   );

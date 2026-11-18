@@ -2,6 +2,8 @@ import assert from "node:assert/strict";
 import { describe, test } from "node:test";
 
 import {
+  ytDownloadAwaitsAnswer,
+  ytDownloadUnfinished,
   ytDownloadActions,
   ytDownloadLine,
   ytDownloadProgress,
@@ -206,5 +208,42 @@ describe("a YT Music song's download, as its row and menu show it", () => {
     assert.equal(ytDownloadProgress({ kind: "downloading", received: 20, total: 10 }), 1);
     assert.equal(ytDownloadProgress({ kind: "queued" }), null);
     assert.equal(ytDownloadProgress(null), null);
+  });
+});
+
+describe("a journal job, as the downloads' run reads it", () => {
+  test("a job waits for Wave's answer at each step the journal hands over", () => {
+    for (const phase of ["preparing", "sourceReady", "awaitingPublication"] as const) {
+      assert.equal(ytDownloadAwaitsAnswer(job("a", { phase })), true, phase);
+    }
+    for (const phase of ["queued", "prepared", "transferring", "tagging", "publishing"] as const) {
+      assert.equal(ytDownloadAwaitsAnswer(job("a", { phase })), false, phase);
+    }
+    assert.equal(ytDownloadAwaitsAnswer(job("a", { phase: "failed", reason: "noSource" })), false);
+  });
+
+  test("a completed job waits for its import, once", () => {
+    assert.equal(ytDownloadAwaitsAnswer(job("a", { phase: "completed" })), true);
+    assert.equal(
+      ytDownloadAwaitsAnswer(job("a", { phase: "completed", acknowledged: true })),
+      false,
+    );
+    assert.equal(
+      ytDownloadAwaitsAnswer(job("a", { phase: "completed", importFailure: "storage" })),
+      false,
+    );
+  });
+
+  test("a failure, a cancel or an import ends a job; anything else is still on its way", () => {
+    assert.equal(ytDownloadUnfinished(job("a")), true);
+    assert.equal(ytDownloadUnfinished(job("a", { phase: "transferring" })), true);
+    assert.equal(ytDownloadUnfinished(job("a", { phase: "completed" })), true);
+    assert.equal(ytDownloadUnfinished(job("a", { phase: "completed", acknowledged: true })), false);
+    assert.equal(
+      ytDownloadUnfinished(job("a", { phase: "completed", importFailure: "storage" })),
+      false,
+    );
+    assert.equal(ytDownloadUnfinished(job("a", { phase: "failed", reason: "noSource" })), false);
+    assert.equal(ytDownloadUnfinished(job("a", { phase: "cancelled" })), false);
   });
 });

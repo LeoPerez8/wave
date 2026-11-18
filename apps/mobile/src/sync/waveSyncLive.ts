@@ -1,4 +1,4 @@
-import { syncTriggers, type SyncClock, type SyncTriggers, type WaveSession } from "@wave/core";
+import { SYSTEM_SYNC_CLOCK, syncTriggers, type SyncTriggers, type WaveSession } from "@wave/core";
 import * as Effect from "effect/Effect";
 import { AppState } from "react-native";
 
@@ -20,14 +20,6 @@ export const make = Effect.gen(function* () {
   let ports: WaveSyncPorts | null = null;
   /** The account signed in (its email), or null. */
   let account: string | null = null;
-
-  const clock: SyncClock = {
-    now: Date.now,
-    after: (ms, run) => {
-      const timer = setTimeout(run, ms);
-      return () => clearTimeout(timer);
-    },
-  };
 
   /** One sync; resolves whether it finished. */
   const run = async (songs: boolean): Promise<boolean> => {
@@ -75,7 +67,7 @@ export const make = Effect.gen(function* () {
   // The first sync after launch looks at the song list too.
   const signedInTriggers = (): SyncTriggers =>
     (triggers ??= syncTriggers({
-      clock,
+      clock: SYSTEM_SYNC_CLOCK,
       inForeground: () => AppState.currentState === "active",
       run,
       songsChanged: true,
