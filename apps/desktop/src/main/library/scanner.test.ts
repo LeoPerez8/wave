@@ -1,8 +1,18 @@
 import assert from "node:assert/strict";
-import { mkdtemp, mkdir, writeFile, rename, rm, symlink, realpath } from "node:fs/promises";
+import fs from "node:fs";
+import fsPromises, {
+  mkdtemp,
+  mkdir,
+  writeFile,
+  rename,
+  rm,
+  symlink,
+  realpath,
+} from "node:fs/promises";
+import { syncBuiltinESMExports } from "node:module";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { test } from "node:test";
+import { mock, test } from "node:test";
 import { openTestDatabase } from "@wave/client/testing";
 import { tracks } from "@wave/client/db/schema";
 import { selectLyricsCandidates } from "@wave/client/db/lyricsSearchIndex";
@@ -255,3 +265,124 @@ test("a scan indexes each song's lyrics for Search, a sidecar .lrc beating unsyn
     await rm(folder, { recursive: true, force: true });
   }
 });
+
+test("a broken link or a subfolder that can't be read leaves its music folder available", async () => {
+  const folder = await mkdtemp(join(tmpdir(), "wave-unreadable-"));
+  const music = join(folder, "Music");
+  const locked = join(music, "Locked");
+  await mkdir(locked, { recursive: true });
+  await writeFile(join(music, "One.flac"), "music");
+  await writeFile(join(locked, "Two.flac"), "music");
+  await symlink(
+    join(folder, "Gone"),
+    join(music, "Broken"),
+    process.platform === "win32" ? "junction" : "dir",
+  );
+  let retries = 0;
+  const scanner = createScanner({
+    db: await openTestDatabase(),
+    platform: process.platform,
+    musicFolder: music,
+    quietMs: 10,
+    retryMs: 30,
+    readTags: async () => ({ artist: "Nick Drake", durationMs: 124000 }),
+  });
+  const names = () => scanner.songs(0, 20).items.map((song) => song.path!.split("/").at(-1));
+  const readFolder = fsPromises.readdir;
+  try {
+    await scanner.refresh();
+    assert.deepEqual(names(), ["One.flac", "Two.flac"]);
+    assert.equal(scanner.folders().items[0]!.available, true);
+    assert.equal(scanner.songs(0, 20).items[0]!.unavailable, false);
+
+    const lockedPath = await realpath(locked);
+    mock.method(fsPromises, "readdir", (async (path: string, ...rest: unknown[]) => {
+      if (typeof path === "string" && (await realpath(path).catch(() => path)) === lockedPath)
+        throw Object.assign(new Error("EACCES: permission denied"), { code: "EACCES" });
+      return (readFolder as (...args: unknown[]) => unknown)(path, ...rest);
+    }) as typeof fsPromises.readdir);
+    syncBuiltinESMExports();
+    await writeFile(join(music, "Three.flac"), "music");
+    await scanner.refresh();
+    // The folder that can't be read keeps its song; the rest of the scan goes on.
+    assert.deepEqual(names(), ["One.flac", "Three.flac", "Two.flac"]);
+    assert.equal(scanner.folders().items[0]!.available, true);
+    assert.ok(scanner.songs(0, 20).items.every((song) => !song.unavailable));
+    // The watch's own scan for Three.flac ends first.
+    await new Promise((resolve) => setTimeout(resolve, 150));
+    scanner.subscribe(() => {
+      retries += 1;
+    });
+    await new Promise((resolve) => setTimeout(resolve, 250));
+    assert.equal(retries, 0, "nothing rescans while the root itself can be read");
+  } finally {
+    mock.restoreAll();
+    syncBuiltinESMExports();
+    await scanner.dispose();
+    await rm(folder, { recursive: true, force: true });
+  }
+});
+
+test("removing songs from the Library tells the listeners the song list changed", async () => {
+  const folder = await mkdtemp(join(tmpdir(), "wave-remove-heard-"));
+  const music = join(folder, "Music");
+  await mkdir(music);
+  await writeFile(join(music, "One.flac"), "music");
+  const scanner = createScanner({
+    db: await openTestDatabase(),
+    platform: process.platform,
+    musicFolder: music,
+    readTags: async () => ({ artist: "Nick Drake", durationMs: 124000 }),
+  });
+  try {
+    await scanner.refresh();
+    let heard = 0;
+    scanner.subscribe(() => {
+      heard += 1;
+    });
+    await scanner.removeSongs([scanner.songs(0, 20).items[0]!.id]);
+    assert.equal(heard, 1);
+  } finally {
+    await scanner.dispose();
+    await rm(folder, { recursive: true, force: true });
+  }
+});
+
+test(
+  "on Windows the recursive watch stays inside the music folder",
+  { skip: process.platform !== "win32" },
+  async () => {
+    const folder = await mkdtemp(join(tmpdir(), "wave-watch-scope-"));
+    const music = join(folder, "Music");
+    await mkdir(music);
+    const watched: { path: string; recursive: boolean }[] = [];
+    const watchFolder = fs.watch;
+    mock.method(fs, "watch", ((path: string, options: { recursive?: boolean }, heard: never) => {
+      watched.push({ path: String(path), recursive: options.recursive === true });
+      return watchFolder(path, options, heard);
+    }) as typeof fs.watch);
+    syncBuiltinESMExports();
+    const scanner = createScanner({
+      db: await openTestDatabase(),
+      platform: process.platform,
+      musicFolder: music,
+      readTags: async () => ({ artist: "Nick Drake", durationMs: 124000 }),
+    });
+    try {
+      await scanner.refresh();
+      const root = await realpath(music);
+      const parent = await realpath(folder);
+      assert.deepEqual(
+        watched.filter((watch) => watch.recursive).map((watch) => watch.path),
+        [root],
+      );
+      // The parent is still watched, for the root itself coming and going.
+      assert.ok(watched.some((watch) => !watch.recursive && watch.path === parent));
+    } finally {
+      mock.restoreAll();
+      syncBuiltinESMExports();
+      await scanner.dispose();
+      await rm(folder, { recursive: true, force: true });
+    }
+  },
+);
