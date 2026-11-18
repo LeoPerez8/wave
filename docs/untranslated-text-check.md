@@ -1,12 +1,12 @@
 # Untranslated text check
 
-The app's and Core's tests fail when UI text is written straight in the code instead of
+The apps' and Core's tests fail when UI text is written straight in the code instead of
 coming from the catalogue (`packages/core/src/catalogue/`). Run it from the repository root
 (Node and workspace dev dependencies installed):
 
 ```sh
 node scripts/ci/untranslated-text-report.ts
-node --test apps/mobile/src/untranslatedText.test.ts packages/core/src/untranslatedText.test.ts
+node --test apps/mobile/src/untranslatedText.test.ts packages/core/src/untranslatedText.test.ts   apps/desktop/src/untranslatedText.test.ts
 ```
 
 Each prints every finding with its file, line and column, then a total, and fails on any
@@ -17,8 +17,9 @@ whatever it finds.
 
 ## What it reads
 
-The AST scanner (`scripts/ci/untranslated-text.mjs`) checks Text-like children, visible
-property values (`accessibilityLabel`, `title`, `label`, `placeholder`, `message`…), and the
+The AST scanner (`scripts/ci/untranslated-text.mjs`) checks Text-like children, the children
+of every DOM element (the desktop's React DOM), visible property values (`accessibilityLabel`,
+`aria-label`, `alt`, `title`, `label`, `placeholder`, `message`…), and the
 arguments of toast, alert, confirm, `confirmAction`, `showMessage`, `showError`, `showAlert` and announce
 calls. In Core it also checks English-shaped literals in return statements and arrow
 expressions. It follows conditional and concatenated values, but doesn't trace identifiers,
