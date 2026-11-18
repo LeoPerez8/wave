@@ -70,6 +70,7 @@ test("the page has no Node and only the typed bridge", async () => {
     wave: [
       "wave.playback.view",
       "wave.playback.start",
+      "wave.playback.startYt",
       "wave.playback.command",
       "wave.playback.play",
       "wave.playback.pause",
@@ -104,6 +105,10 @@ test("the page has no Node and only the typed bridge", async () => {
       "wave.settings.setAppearance",
       "wave.settings.playback",
       "wave.settings.setPlayback",
+      "wave.settings.ytMusic",
+      "wave.settings.setYtMusic",
+      "wave.yt.search",
+      "wave.yt.artwork",
       "wave.account.view",
       "wave.account.signIn",
       "wave.account.cancelSignIn",
