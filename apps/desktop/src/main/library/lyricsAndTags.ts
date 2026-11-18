@@ -14,7 +14,9 @@ import {
   writeFindLyricsAndGenre,
 } from "@wave/core";
 
-import type { LyricsAndTagsSettings } from "../../shared/lyricsAndTags.ts";
+import type { LibraryFixProgress, LyricsAndTagsSettings } from "../../shared/lyricsAndTags.ts";
+import type { FixSongsResult } from "../../shared/songActions.ts";
+import type { FixSongsRunOptions } from "./fixSongs.ts";
 import { lookupsEnabled } from "../lookupSettings.ts";
 import { keepSyncedPreference, syncedPreference } from "../sync/desktopSync.ts";
 
@@ -53,4 +55,46 @@ export const saveLyricsAndTags = (
     stampPreference(db, key, now);
   }
   return after;
+};
+
+/** Fix songs in the whole Library: one run at a time, followed by Settings and stopped by Cancel. */
+export interface LibraryFixRun {
+  /** How far the run is; null while none goes on. */
+  readonly progress: () => LibraryFixProgress | null;
+  /** Starts a run, or joins the one going on; answers how it went once it ends. */
+  readonly start: () => Promise<FixSongsResult>;
+  /** Stops the run after the song under way; what was written stays. */
+  readonly cancel: () => void;
+}
+
+export const createLibraryFixRun = (ports: {
+  /** The Library's songs; Fix Songs picks those that lack something (Core's `songsToFix`). */
+  readonly songs: () => readonly number[];
+  readonly fix: (ids: readonly number[], options: FixSongsRunOptions) => Promise<FixSongsResult>;
+}): LibraryFixRun => {
+  let running: { promise: Promise<FixSongsResult>; controller: AbortController } | null = null;
+  let progress: LibraryFixProgress = { done: 0, total: 0 };
+  return {
+    progress: () => (running === null ? null : progress),
+    start: () => {
+      if (running !== null) return running.promise;
+      const controller = new AbortController();
+      progress = { done: 0, total: 0 };
+      const promise = (async () => {
+        try {
+          return await ports.fix(ports.songs(), {
+            signal: controller.signal,
+            progress: (done, total) => {
+              progress = { done, total };
+            },
+          });
+        } finally {
+          running = null;
+        }
+      })();
+      running = { promise, controller };
+      return promise;
+    },
+    cancel: () => running?.controller.abort(),
+  };
 };

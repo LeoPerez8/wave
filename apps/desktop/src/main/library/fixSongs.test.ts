@@ -144,3 +144,48 @@ test("Fix Songs stops when LRCLIB and Deezer can't be reached", async () => {
     await rm(folder, { recursive: true, force: true });
   }
 });
+
+test("Fix Songs tells its progress and stops when cancelled, counting the songs left", async () => {
+  const folder = await mkdtemp(join(tmpdir(), "wave-fix-cancel-"));
+  const music = join(folder, "Music");
+  await mkdir(music);
+  for (const name of ["A", "B", "C", "D"]) await writeFile(join(music, `${name}.mp3`), "music");
+  const db = await openTestDatabase();
+  const scanner = createScanner({
+    db,
+    platform: process.platform,
+    musicFolder: music,
+    readTags: async (path) => ({ title: path.slice(-5, -4), artist: "Nick Drake", durationMs: 1000 }),
+  });
+  const controller = new AbortController();
+  const progress: [number, number][] = [];
+  try {
+    await scanner.refresh();
+    const ids = scanner.songs(0, 20).items.map((song) => song.id);
+    const result = await fixSongs(
+      {
+        db,
+        lookUp: async () => {
+          if (progress.length === 3) controller.abort();
+          return { ...FOUND, lyrics: null, genre: null, trackNumber: null, year: null, explicit: "unknown" };
+        },
+        writeSong: async () => assert.fail("nothing found, nothing written"),
+        reimport: async () => {},
+        minMs: 0,
+      },
+      ids,
+      { signal: controller.signal, progress: (done, total) => progress.push([done, total]) },
+    );
+    assert.deepEqual(progress, [
+      [0, 4],
+      [1, 4],
+      [2, 4],
+      [3, 4],
+    ]);
+    assert.equal(result.results.length, 3);
+    assert.deepEqual(result.stop, { stopped: "cancelled", left: 1 });
+  } finally {
+    scanner.dispose();
+    await rm(folder, { recursive: true, force: true });
+  }
+});

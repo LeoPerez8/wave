@@ -3,9 +3,12 @@ import { test } from "node:test";
 import { openTestDatabase } from "@wave/client/testing";
 import { sql } from "drizzle-orm";
 
+import type { FixSongsRunOptions } from "./fixSongs.ts";
+import type { FixSongsResult } from "../../shared/songActions.ts";
 import { lookupsEnabled } from "../lookupSettings.ts";
 import {
   artistPhotosEnabled,
+  createLibraryFixRun,
   readLyricsAndTags,
   saveLyricsAndTags,
 } from "./lyricsAndTags.ts";
@@ -61,4 +64,62 @@ test("saving a switch at the value it has stamps nothing", async () => {
   const db = await library();
   saveLyricsAndTags(db, { fixSongsOnline: true, downloadArtistPhotos: true }, 1_000);
   assert.deepEqual(stamps(db), []);
+});
+
+test("Fix songs in the whole Library runs once on every song, telling its progress", async () => {
+  const asked: (readonly number[])[] = [];
+  let finish!: (result: FixSongsResult) => void;
+  let options!: FixSongsRunOptions;
+  const run = createLibraryFixRun({
+    songs: () => [3, 1, 2],
+    fix: (ids, given) => {
+      asked.push(ids);
+      options = given;
+      return new Promise((resolve) => (finish = resolve));
+    },
+  });
+  assert.equal(run.progress(), null);
+  const started = run.start();
+  assert.deepEqual(run.progress(), { done: 0, total: 0 });
+  options.progress?.(1, 2);
+  assert.deepEqual(run.progress(), { done: 1, total: 2 });
+  assert.equal(run.start(), started, "a second start joins the run");
+  const result: FixSongsResult = { results: [], skipped: 3 };
+  finish(result);
+  assert.equal(await started, result);
+  assert.equal(run.progress(), null);
+  assert.deepEqual(asked, [[3, 1, 2]]);
+});
+
+test("Cancel stops the run, and the next start runs afresh", async () => {
+  let options!: FixSongsRunOptions;
+  const run = createLibraryFixRun({
+    songs: () => [1],
+    fix: async (_ids, given) => {
+      options = given;
+      await new Promise<void>((resolve) => given.signal?.addEventListener("abort", () => resolve()));
+      return { results: [], skipped: 0, stop: { stopped: "cancelled", left: 1 } };
+    },
+  });
+  const started = run.start();
+  run.cancel();
+  assert.equal(options.signal?.aborted, true);
+  assert.deepEqual((await started).stop, { stopped: "cancelled", left: 1 });
+  assert.equal(run.progress(), null);
+  const again = run.start();
+  assert.notEqual(again, started);
+  assert.equal(options.signal?.aborted, false);
+  run.cancel();
+  await again;
+});
+
+test("a run that fails ends, so the next can start", async () => {
+  const run = createLibraryFixRun({
+    songs: () => [1],
+    fix: async () => {
+      throw new Error("[lookups-off] Online lookups are off");
+    },
+  });
+  await assert.rejects(run.start(), /lookups-off/);
+  assert.equal(run.progress(), null);
 });
