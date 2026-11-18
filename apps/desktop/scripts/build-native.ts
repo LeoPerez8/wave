@@ -14,7 +14,12 @@ const built = spawnSync("cargo", ["build", "--release", "--locked", "-p", "wave-
 if (built.status !== 0) process.exit(built.status ?? 1);
 
 const target = process.env["CARGO_BUILD_TARGET"];
-const folder = join(native, "target", ...(target === undefined || target === "" ? [] : [target]), "release");
+const folder = join(
+  native,
+  "target",
+  ...(target === undefined || target === "" ? [] : [target]),
+  "release",
+);
 const library =
   process.platform === "win32"
     ? "wave_audio_node.dll"

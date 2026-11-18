@@ -26,7 +26,9 @@ export default defineConfig({
     // The audio process is a second entry, forked from main as a utility process.
     build: {
       externalizeDeps: { exclude: ["@wave/client", "@wave/core"] },
-      rolldownOptions: { input: { index: "src/main/index.ts", audio: "src/main/audio/process.ts" } },
+      rolldownOptions: {
+        input: { index: "src/main/index.ts", audio: "src/main/audio/process.ts" },
+      },
     },
   },
   preload: {

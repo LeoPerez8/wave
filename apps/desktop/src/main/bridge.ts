@@ -21,8 +21,7 @@ interface Runtime<R> {
 /** The services the calls use. */
 export type BridgeServices = Database | Player;
 
-const refuse = (call: BridgeCall, why: string) =>
-  Effect.fail(new Error(`Refused ${call}: ${why}`));
+const refuse = (call: BridgeCall, why: string) => Effect.fail(new Error(`Refused ${call}: ${why}`));
 
 /** An absolute path to a file the engine plays. */
 const songPath = (value: unknown): string | undefined =>

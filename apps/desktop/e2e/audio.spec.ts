@@ -40,8 +40,8 @@ const player = (call: PlayerCall, arg?: string | number): Promise<PlaybackStatus
   page.evaluate(
     ([call, arg]) => {
       type Call = (...args: unknown[]) => Promise<PlaybackStatus>;
-      const bridge = (globalThis as unknown as { wave: { player: Record<PlayerCall, Call> } })
-        .wave.player;
+      const bridge = (globalThis as unknown as { wave: { player: Record<PlayerCall, Call> } }).wave
+        .player;
       return bridge[call](...(arg === undefined ? [] : [arg]));
     },
     [call, arg] as const,

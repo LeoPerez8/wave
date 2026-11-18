@@ -108,7 +108,12 @@ test("after a crash a new process takes over, paused where the song was", async 
   const status = await audio.call("status", []);
   assert.deepEqual(status, { state: "paused", positionMs: 42_000, durationMs: 180_000 });
   assert.equal((await audio.call("play", [])).state, "playing");
-  assert.deepEqual(processes.log.slice(-4), ["2:load /music/a.opus", "2:seek 42000", "2:status", "2:play"]);
+  assert.deepEqual(processes.log.slice(-4), [
+    "2:load /music/a.opus",
+    "2:seek 42000",
+    "2:status",
+    "2:play",
+  ]);
   audio.dispose();
 });
 
@@ -136,7 +141,10 @@ test("calls waiting when the process dies reject, and later calls work", async (
   processes.stall();
   const waiting = audio.call("status", []);
   processes.crash();
-  await assert.rejects(waiting, (error) => error instanceof AudioEngineError && error.code === "restarted");
+  await assert.rejects(
+    waiting,
+    (error) => error instanceof AudioEngineError && error.code === "restarted",
+  );
   await settle();
   assert.equal((await audio.call("status", [])).state, "idle");
   audio.dispose();
@@ -176,5 +184,8 @@ test("disposing kills the process and stops restarting it", async () => {
   await settle();
   assert.equal(processes.forks(), 1);
   assert.ok(processes.log.includes("1:killed"));
-  await assert.rejects(audio.call("status", []), (error) => error instanceof AudioEngineError && error.code === "disposed");
+  await assert.rejects(
+    audio.call("status", []),
+    (error) => error instanceof AudioEngineError && error.code === "disposed",
+  );
 });

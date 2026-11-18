@@ -18,7 +18,10 @@ export interface Page<T> {
 export interface BridgeContract {
   readonly "library.counts": { readonly args: readonly []; readonly result: LibraryCounts };
   /** Opens an audio file by its absolute path, paused at its start. */
-  readonly "player.load": { readonly args: readonly [path: string]; readonly result: PlaybackStatus };
+  readonly "player.load": {
+    readonly args: readonly [path: string];
+    readonly result: PlaybackStatus;
+  };
   readonly "player.play": { readonly args: readonly []; readonly result: PlaybackStatus };
   readonly "player.pause": { readonly args: readonly []; readonly result: PlaybackStatus };
   readonly "player.seek": {
