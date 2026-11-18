@@ -143,6 +143,15 @@ export function Home({
                       key: String(row.id),
                       title: row.title,
                       artworkHash: row.artworkHash,
+                      artworkKind:
+                        section.kind === "artist"
+                          ? "artist"
+                          : section.kind === "album"
+                            ? "album"
+                            : section.kind === "song"
+                              ? "song"
+                              : undefined,
+                      artworkId: row.id,
                       caption:
                         row.playCount === undefined ? row.artist : text.stats.plays(row.playCount),
                       label: [row.title, row.artist].filter(Boolean).join(", "),

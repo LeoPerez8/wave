@@ -213,6 +213,10 @@ export interface BridgeContract extends PlaylistContract, LinkContract {
     readonly args: readonly [hash: string, large: boolean];
     readonly result: string | null;
   };
+  readonly "library.cover": {
+    readonly args: readonly [kind: "song" | "album" | "artist", id: number, large: boolean];
+    readonly result: string | null;
+  };
   readonly "library.browse": {
     readonly args: readonly [scope: BrowseScope, offset: number, limit: number];
     readonly result: BrowsePage;
@@ -312,6 +316,7 @@ export const BRIDGE_CALLS = [
   "lyrics.song",
 
   "library.artwork",
+  "library.cover",
   "library.browse",
   "library.letter",
   "library.counts",
@@ -420,6 +425,11 @@ export interface WaveBridge {
   };
   readonly library: {
     readonly artwork: (hash: string, large: boolean) => Promise<string | null>;
+    readonly cover: (
+      kind: "song" | "album" | "artist",
+      id: number,
+      large: boolean,
+    ) => Promise<string | null>;
     readonly browse: (scope: BrowseScope, offset: number, limit: number) => Promise<BrowsePage>;
     readonly letter: (scope: BrowseScope, letter: string) => Promise<number>;
     readonly counts: () => Promise<LibraryCounts>;
@@ -549,6 +559,7 @@ export const createBridge = (invoke: Invoke): WaveBridge => ({
   },
   library: {
     artwork: (hash, large) => invoke("library.artwork", hash, large),
+    cover: (kind, id, large) => invoke("library.cover", kind, id, large),
     browse: (scope, offset, limit) => invoke("library.browse", scope, offset, limit),
     letter: (scope, letter) => invoke("library.letter", scope, letter),
     counts: () => invoke("library.counts"),

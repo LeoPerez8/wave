@@ -469,6 +469,10 @@ export function App() {
             <Artwork
               large
               hash={hero.artworkHash}
+              kind={
+                route.kind === "artist" ? "artist" : route.kind === "album" ? "album" : undefined
+              }
+              id={hero.id}
               artist={route.kind === "artist"}
               {...(route.kind === "playlist"
                 ? { playlist: route.id, image: hero.imageKey ?? null }
