@@ -7,6 +7,7 @@ test("desktop paths use slashes without losing drive and network roots", () => {
   assert.equal(scanPath("C:\\Music\\Album\\..\\Song.flac", "win32"), "C:/Music/Song.flac");
   assert.equal(scanPath("C:\\", "win32"), "C:/");
   assert.equal(scanPath("\\\\server\\share\\Music\\", "win32"), "//server/share/Music");
+  assert.equal(scanPath("\\\\server\\share\\..\\Song.flac", "win32"), "//server/share/Song.flac");
   assert.equal(scanPath("/home/me/Music/./", "linux"), "/home/me/Music");
   assert.equal(scanPathKey("C:\\MUSIC\\Song.FLAC", "win32"), "c:/music/song.flac");
   assert.notEqual(scanPathKey("/Music/A.flac", "linux"), scanPathKey("/Music/a.flac", "linux"));

@@ -43,7 +43,15 @@ export const desktopScanIndex = (db: LibraryDatabase, platform: string) => {
     known: read,
     skipped: () => db.select().from(skippedFiles).all(),
     skip: (files: readonly SkippedFile[]) => {
-      skipFiles(db, splits, files, Date.now());
+      const aliases = files.flatMap((file) => {
+        const path = known.get(scanPathKey(file.path, platform))?.path;
+        return path !== undefined && path !== file.path ? [{ ...file, path }] : [];
+      });
+      skipFiles(db, splits, [...files, ...aliases], Date.now());
+      unskipFiles(
+        db,
+        aliases.map((file) => file.path),
+      );
       const paths = new Set(files.map((file) => scanPathKey(file.path, platform)));
       missing = missing.filter((file) => !paths.has(scanPathKey(file.path, platform)));
     },
@@ -95,8 +103,8 @@ export const desktopScanIndex = (db: LibraryDatabase, platform: string) => {
             missing.map((row) => row.path),
             Date.now(),
           );
-          pruneOrphans(tx, splits);
         }
+        if (changed || missing.length > 0) pruneOrphans(tx, splits);
         if (changed) linkPlaylistEntries(tx, Date.now());
       });
     },

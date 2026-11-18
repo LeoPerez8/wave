@@ -2,10 +2,11 @@
 export const scanPath = (path: string, platform: string): string => {
   const slashed = platform === "win32" ? path.replaceAll("\\", "/") : path;
   const prefix = slashed.startsWith("//") ? "//" : slashed.startsWith("/") ? "/" : "";
+  const protectedParts = platform === "win32" && prefix === "//" ? 2 : 0;
   const parts: string[] = [];
   for (const part of slashed.split("/")) {
     if (part === "" || part === ".") continue;
-    if (part === ".." && parts.length > 0 && !parts.at(-1)!.endsWith(":")) parts.pop();
+    if (part === ".." && parts.length > protectedParts && !parts.at(-1)!.endsWith(":")) parts.pop();
     else if (part !== "..") parts.push(part);
   }
   const result = prefix + parts.join("/");
