@@ -15,7 +15,7 @@ import { WARNING_DAYS_KEPT, warningOutsideWindow } from "./usage.ts";
  * The limits #1122 selects, beside each sync category's row quota (`SYNC_LIMITS`, tombstones
  * counted). Those the service already enforces come from where it keeps them.
  */
-export const SELECTED_LIMITS = {
+const SELECTED_LIMITS = {
   accounts: SYNC_LIMITS.maxAccounts,
   /** Sessions unused for less than `SESSION_UNUSED_MS`, per account. */
   validSessionsPerAccount: SYNC_LIMITS.maxSessionsPerAccount,
@@ -305,7 +305,7 @@ export const compatibilityReport = async (options: ReportOptions): Promise<Compa
 };
 
 /** How old a report may be when the limits are switched on. */
-export const REPORT_MAX_AGE_MS = 60 * 60 * 1000;
+const REPORT_MAX_AGE_MS = 60 * 60 * 1000;
 
 /**
  * Why [report] can't authorize switching on the limits for [sourceRevision]
