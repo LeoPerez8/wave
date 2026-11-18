@@ -1,0 +1,1676 @@
+{
+  "observed": "2026-11-18",
+  "commit": "6b31a7cc027d3d16bf12803418b7d101493a91d0",
+  "command": "pnpm --filter @wave/mobile exec expo prebuild --platform android --no-install, then ./gradlew :app:dependencies --configuration releaseRuntimeClasspath in apps/mobile/android",
+  "licenceSource": "Each library's Maven POM <licenses> (or its parent POM's) on the repository Gradle resolved it from; licence is the SPDX reading of what the POM states.",
+  "projects": [
+    ":expo",
+    ":expo-constants",
+    ":expo-dom-webview",
+    ":expo-eas-client",
+    ":expo-json-utils",
+    ":expo-log-box",
+    ":expo-manifests",
+    ":expo-modules-core",
+    ":expo-structured-headers",
+    ":expo-updates",
+    ":expo-updates-interface",
+    ":react-native-gesture-handler",
+    ":react-native-masked-view_masked-view",
+    ":react-native-reanimated",
+    ":react-native-safe-area-context",
+    ":react-native-screens",
+    ":react-native-svg",
+    ":react-native-worklets",
+    ":shopify_react-native-skia",
+    ":wave-glass",
+    ":wave-native",
+    ":kotlin-shared"
+  ],
+  "libraries": [
+    {
+      "coordinate": "androidx.activity:activity-ktx:1.8.1",
+      "licence": "Apache-2.0",
+      "stated": "The Apache Software License, Version 2.0",
+      "source": "POM https://dl.google.com/dl/android/maven2"
+    },
+    {
+      "coordinate": "androidx.activity:activity:1.8.1",
+      "licence": "Apache-2.0",
+      "stated": "The Apache Software License, Version 2.0",
+      "source": "POM https://dl.google.com/dl/android/maven2"
+    },
+    {
+      "coordinate": "androidx.annotation:annotation-experimental:1.4.1",
+      "licence": "Apache-2.0",
+      "stated": "The Apache Software License, Version 2.0",
+      "source": "POM https://dl.google.com/dl/android/maven2"
+    },
+    {
+      "coordinate": "androidx.annotation:annotation-jvm:1.10.0",
+      "licence": "Apache-2.0",
+      "stated": "The Apache Software License, Version 2.0",
+      "source": "POM https://dl.google.com/dl/android/maven2"
+    },
+    {
+      "coordinate": "androidx.annotation:annotation:1.10.0",
+      "licence": "Apache-2.0",
+      "stated": "The Apache Software License, Version 2.0",
+      "source": "POM https://dl.google.com/dl/android/maven2"
+    },
+    {
+      "coordinate": "androidx.appcompat:appcompat-resources:1.7.1",
+      "licence": "Apache-2.0",
+      "stated": "The Apache Software License, Version 2.0",
+      "source": "POM https://dl.google.com/dl/android/maven2"
+    },
+    {
+      "coordinate": "androidx.appcompat:appcompat:1.7.1",
+      "licence": "Apache-2.0",
+      "stated": "The Apache Software License, Version 2.0",
+      "source": "POM https://dl.google.com/dl/android/maven2"
+    },
+    {
+      "coordinate": "androidx.arch.core:core-common:2.2.0",
+      "licence": "Apache-2.0",
+      "stated": "The Apache Software License, Version 2.0",
+      "source": "POM https://dl.google.com/dl/android/maven2"
+    },
+    {
+      "coordinate": "androidx.arch.core:core-runtime:2.2.0",
+      "licence": "Apache-2.0",
+      "stated": "The Apache Software License, Version 2.0",
+      "source": "POM https://dl.google.com/dl/android/maven2"
+    },
+    {
+      "coordinate": "androidx.autofill:autofill:1.3.0",
+      "licence": "Apache-2.0",
+      "stated": "The Apache Software License, Version 2.0",
+      "source": "POM https://dl.google.com/dl/android/maven2"
+    },
+    {
+      "coordinate": "androidx.biometric:biometric:1.1.0",
+      "licence": "Apache-2.0",
+      "stated": "The Apache Software License, Version 2.0",
+      "source": "POM https://dl.google.com/dl/android/maven2"
+    },
+    {
+      "coordinate": "androidx.car.app:app:1.7.0",
+      "licence": "Apache-2.0",
+      "stated": "The Apache Software License, Version 2.0",
+      "source": "POM https://dl.google.com/dl/android/maven2"
+    },
+    {
+      "coordinate": "androidx.cardview:cardview:1.0.0",
+      "licence": "Apache-2.0",
+      "stated": "The Apache Software License, Version 2.0",
+      "source": "POM https://dl.google.com/dl/android/maven2"
+    },
+    {
+      "coordinate": "androidx.collection:collection-jvm:1.4.4",
+      "licence": "Apache-2.0",
+      "stated": "The Apache Software License, Version 2.0",
+      "source": "POM https://dl.google.com/dl/android/maven2"
+    },
+    {
+      "coordinate": "androidx.collection:collection-ktx:1.4.4",
+      "licence": "Apache-2.0",
+      "stated": "The Apache Software License, Version 2.0",
+      "source": "POM https://dl.google.com/dl/android/maven2"
+    },
+    {
+      "coordinate": "androidx.collection:collection:1.4.4",
+      "licence": "Apache-2.0",
+      "stated": "The Apache Software License, Version 2.0",
+      "source": "POM https://dl.google.com/dl/android/maven2"
+    },
+    {
+      "coordinate": "androidx.concurrent:concurrent-futures:1.2.0",
+      "licence": "Apache-2.0",
+      "stated": "The Apache Software License, Version 2.0",
+      "source": "POM https://dl.google.com/dl/android/maven2"
+    },
+    {
+      "coordinate": "androidx.constraintlayout:constraintlayout-core:1.0.0",
+      "licence": "Apache-2.0",
+      "stated": "The Apache Software License, Version 2.0",
+      "source": "POM https://dl.google.com/dl/android/maven2"
+    },
+    {
+      "coordinate": "androidx.constraintlayout:constraintlayout:2.1.0",
+      "licence": "Apache-2.0",
+      "stated": "The Apache Software License, Version 2.0",
+      "source": "POM https://dl.google.com/dl/android/maven2"
+    },
+    {
+      "coordinate": "androidx.coordinatorlayout:coordinatorlayout:1.2.0",
+      "licence": "Apache-2.0",
+      "stated": "The Apache Software License, Version 2.0",
+      "source": "POM https://dl.google.com/dl/android/maven2"
+    },
+    {
+      "coordinate": "androidx.core:core-ktx:1.18.0",
+      "licence": "Apache-2.0",
+      "stated": "The Apache Software License, Version 2.0",
+      "source": "POM https://dl.google.com/dl/android/maven2"
+    },
+    {
+      "coordinate": "androidx.core:core-splashscreen:1.2.0",
+      "licence": "Apache-2.0",
+      "stated": "The Apache Software License, Version 2.0",
+      "source": "POM https://dl.google.com/dl/android/maven2"
+    },
+    {
+      "coordinate": "androidx.core:core-viewtree:1.0.0",
+      "licence": "Apache-2.0",
+      "stated": "The Apache Software License, Version 2.0",
+      "source": "POM https://dl.google.com/dl/android/maven2"
+    },
+    {
+      "coordinate": "androidx.core:core:1.18.0",
+      "licence": "Apache-2.0",
+      "stated": "The Apache Software License, Version 2.0",
+      "source": "POM https://dl.google.com/dl/android/maven2"
+    },
+    {
+      "coordinate": "androidx.credentials:credentials-play-services-auth:1.6.0",
+      "licence": "Apache-2.0",
+      "stated": "The Apache Software License, Version 2.0",
+      "source": "POM https://dl.google.com/dl/android/maven2"
+    },
+    {
+      "coordinate": "androidx.credentials:credentials:1.6.0",
+      "licence": "Apache-2.0",
+      "stated": "The Apache Software License, Version 2.0",
+      "source": "POM https://dl.google.com/dl/android/maven2"
+    },
+    {
+      "coordinate": "androidx.cursoradapter:cursoradapter:1.0.0",
+      "licence": "Apache-2.0",
+      "stated": "The Apache Software License, Version 2.0",
+      "source": "POM https://dl.google.com/dl/android/maven2"
+    },
+    {
+      "coordinate": "androidx.customview:customview:1.1.0",
+      "licence": "Apache-2.0",
+      "stated": "The Apache Software License, Version 2.0",
+      "source": "POM https://dl.google.com/dl/android/maven2"
+    },
+    {
+      "coordinate": "androidx.documentfile:documentfile:1.1.0",
+      "licence": "Apache-2.0",
+      "stated": "The Apache Software License, Version 2.0",
+      "source": "POM https://dl.google.com/dl/android/maven2"
+    },
+    {
+      "coordinate": "androidx.drawerlayout:drawerlayout:1.1.1",
+      "licence": "Apache-2.0",
+      "stated": "The Apache Software License, Version 2.0",
+      "source": "POM https://dl.google.com/dl/android/maven2"
+    },
+    {
+      "coordinate": "androidx.dynamicanimation:dynamicanimation:1.1.0",
+      "licence": "Apache-2.0",
+      "stated": "The Apache Software License, Version 2.0",
+      "source": "POM https://dl.google.com/dl/android/maven2"
+    },
+    {
+      "coordinate": "androidx.emoji2:emoji2-views-helper:1.3.0",
+      "licence": "Apache-2.0",
+      "stated": "The Apache Software License, Version 2.0",
+      "source": "POM https://dl.google.com/dl/android/maven2"
+    },
+    {
+      "coordinate": "androidx.emoji2:emoji2:1.3.0",
+      "licence": "Apache-2.0",
+      "stated": "The Apache Software License, Version 2.0",
+      "source": "POM https://dl.google.com/dl/android/maven2"
+    },
+    {
+      "coordinate": "androidx.exifinterface:exifinterface:1.3.6",
+      "licence": "Apache-2.0",
+      "stated": "The Apache Software License, Version 2.0",
+      "source": "POM https://dl.google.com/dl/android/maven2"
+    },
+    {
+      "coordinate": "androidx.fragment:fragment-ktx:1.8.9",
+      "licence": "Apache-2.0",
+      "stated": "The Apache Software License, Version 2.0",
+      "source": "POM https://dl.google.com/dl/android/maven2"
+    },
+    {
+      "coordinate": "androidx.fragment:fragment:1.8.9",
+      "licence": "Apache-2.0",
+      "stated": "The Apache Software License, Version 2.0",
+      "source": "POM https://dl.google.com/dl/android/maven2"
+    },
+    {
+      "coordinate": "androidx.graphics:graphics-shapes-android:1.0.1",
+      "licence": "Apache-2.0",
+      "stated": "The Apache Software License, Version 2.0",
+      "source": "POM https://dl.google.com/dl/android/maven2"
+    },
+    {
+      "coordinate": "androidx.graphics:graphics-shapes:1.0.1",
+      "licence": "Apache-2.0",
+      "stated": "The Apache Software License, Version 2.0",
+      "source": "POM https://dl.google.com/dl/android/maven2"
+    },
+    {
+      "coordinate": "androidx.interpolator:interpolator:1.0.0",
+      "licence": "Apache-2.0",
+      "stated": "The Apache Software License, Version 2.0",
+      "source": "POM https://dl.google.com/dl/android/maven2"
+    },
+    {
+      "coordinate": "androidx.legacy:legacy-support-core-utils:1.0.0",
+      "licence": "Apache-2.0",
+      "stated": "The Apache Software License, Version 2.0",
+      "source": "POM https://dl.google.com/dl/android/maven2"
+    },
+    {
+      "coordinate": "androidx.lifecycle:lifecycle-common-java8:2.8.0",
+      "licence": "Apache-2.0",
+      "stated": "The Apache Software License, Version 2.0",
+      "source": "POM https://dl.google.com/dl/android/maven2"
+    },
+    {
+      "coordinate": "androidx.lifecycle:lifecycle-common-jvm:2.8.0",
+      "licence": "Apache-2.0",
+      "stated": "The Apache Software License, Version 2.0",
+      "source": "POM https://dl.google.com/dl/android/maven2"
+    },
+    {
+      "coordinate": "androidx.lifecycle:lifecycle-common:2.8.0",
+      "licence": "Apache-2.0",
+      "stated": "The Apache Software License, Version 2.0",
+      "source": "POM https://dl.google.com/dl/android/maven2"
+    },
+    {
+      "coordinate": "androidx.lifecycle:lifecycle-livedata-core-ktx:2.8.0",
+      "licence": "Apache-2.0",
+      "stated": "The Apache Software License, Version 2.0",
+      "source": "POM https://dl.google.com/dl/android/maven2"
+    },
+    {
+      "coordinate": "androidx.lifecycle:lifecycle-livedata-core:2.8.0",
+      "licence": "Apache-2.0",
+      "stated": "The Apache Software License, Version 2.0",
+      "source": "POM https://dl.google.com/dl/android/maven2"
+    },
+    {
+      "coordinate": "androidx.lifecycle:lifecycle-livedata:2.8.0",
+      "licence": "Apache-2.0",
+      "stated": "The Apache Software License, Version 2.0",
+      "source": "POM https://dl.google.com/dl/android/maven2"
+    },
+    {
+      "coordinate": "androidx.lifecycle:lifecycle-process:2.8.0",
+      "licence": "Apache-2.0",
+      "stated": "The Apache Software License, Version 2.0",
+      "source": "POM https://dl.google.com/dl/android/maven2"
+    },
+    {
+      "coordinate": "androidx.lifecycle:lifecycle-runtime-android:2.8.0",
+      "licence": "Apache-2.0",
+      "stated": "The Apache Software License, Version 2.0",
+      "source": "POM https://dl.google.com/dl/android/maven2"
+    },
+    {
+      "coordinate": "androidx.lifecycle:lifecycle-runtime-ktx-android:2.8.0",
+      "licence": "Apache-2.0",
+      "stated": "The Apache Software License, Version 2.0",
+      "source": "POM https://dl.google.com/dl/android/maven2"
+    },
+    {
+      "coordinate": "androidx.lifecycle:lifecycle-runtime-ktx:2.8.0",
+      "licence": "Apache-2.0",
+      "stated": "The Apache Software License, Version 2.0",
+      "source": "POM https://dl.google.com/dl/android/maven2"
+    },
+    {
+      "coordinate": "androidx.lifecycle:lifecycle-runtime:2.8.0",
+      "licence": "Apache-2.0",
+      "stated": "The Apache Software License, Version 2.0",
+      "source": "POM https://dl.google.com/dl/android/maven2"
+    },
+    {
+      "coordinate": "androidx.lifecycle:lifecycle-service:2.8.0",
+      "licence": "Apache-2.0",
+      "stated": "The Apache Software License, Version 2.0",
+      "source": "POM https://dl.google.com/dl/android/maven2"
+    },
+    {
+      "coordinate": "androidx.lifecycle:lifecycle-viewmodel-android:2.8.0",
+      "licence": "Apache-2.0",
+      "stated": "The Apache Software License, Version 2.0",
+      "source": "POM https://dl.google.com/dl/android/maven2"
+    },
+    {
+      "coordinate": "androidx.lifecycle:lifecycle-viewmodel-ktx:2.8.0",
+      "licence": "Apache-2.0",
+      "stated": "The Apache Software License, Version 2.0",
+      "source": "POM https://dl.google.com/dl/android/maven2"
+    },
+    {
+      "coordinate": "androidx.lifecycle:lifecycle-viewmodel-savedstate:2.8.0",
+      "licence": "Apache-2.0",
+      "stated": "The Apache Software License, Version 2.0",
+      "source": "POM https://dl.google.com/dl/android/maven2"
+    },
+    {
+      "coordinate": "androidx.lifecycle:lifecycle-viewmodel:2.8.0",
+      "licence": "Apache-2.0",
+      "stated": "The Apache Software License, Version 2.0",
+      "source": "POM https://dl.google.com/dl/android/maven2"
+    },
+    {
+      "coordinate": "androidx.loader:loader:1.1.0",
+      "licence": "Apache-2.0",
+      "stated": "The Apache Software License, Version 2.0",
+      "source": "POM https://dl.google.com/dl/android/maven2"
+    },
+    {
+      "coordinate": "androidx.localbroadcastmanager:localbroadcastmanager:1.0.0",
+      "licence": "Apache-2.0",
+      "stated": "The Apache Software License, Version 2.0",
+      "source": "POM https://dl.google.com/dl/android/maven2"
+    },
+    {
+      "coordinate": "androidx.media3:media3-common:1.11.1",
+      "licence": "Apache-2.0",
+      "stated": "The Apache Software License, Version 2.0",
+      "source": "POM https://dl.google.com/dl/android/maven2"
+    },
+    {
+      "coordinate": "androidx.media3:media3-container:1.11.1",
+      "licence": "Apache-2.0",
+      "stated": "The Apache Software License, Version 2.0",
+      "source": "POM https://dl.google.com/dl/android/maven2"
+    },
+    {
+      "coordinate": "androidx.media3:media3-database:1.11.1",
+      "licence": "Apache-2.0",
+      "stated": "The Apache Software License, Version 2.0",
+      "source": "POM https://dl.google.com/dl/android/maven2"
+    },
+    {
+      "coordinate": "androidx.media3:media3-datasource:1.11.1",
+      "licence": "Apache-2.0",
+      "stated": "The Apache Software License, Version 2.0",
+      "source": "POM https://dl.google.com/dl/android/maven2"
+    },
+    {
+      "coordinate": "androidx.media3:media3-decoder:1.11.1",
+      "licence": "Apache-2.0",
+      "stated": "The Apache Software License, Version 2.0",
+      "source": "POM https://dl.google.com/dl/android/maven2"
+    },
+    {
+      "coordinate": "androidx.media3:media3-exoplayer:1.11.1",
+      "licence": "Apache-2.0",
+      "stated": "The Apache Software License, Version 2.0",
+      "source": "POM https://dl.google.com/dl/android/maven2"
+    },
+    {
+      "coordinate": "androidx.media3:media3-extractor:1.11.1",
+      "licence": "Apache-2.0",
+      "stated": "The Apache Software License, Version 2.0",
+      "source": "POM https://dl.google.com/dl/android/maven2"
+    },
+    {
+      "coordinate": "androidx.media3:media3-session:1.11.1",
+      "licence": "Apache-2.0",
+      "stated": "The Apache Software License, Version 2.0",
+      "source": "POM https://dl.google.com/dl/android/maven2"
+    },
+    {
+      "coordinate": "androidx.media:media:1.7.0",
+      "licence": "Apache-2.0",
+      "stated": "The Apache Software License, Version 2.0",
+      "source": "POM https://dl.google.com/dl/android/maven2"
+    },
+    {
+      "coordinate": "androidx.palette:palette:1.0.0",
+      "licence": "Apache-2.0",
+      "stated": "The Apache Software License, Version 2.0",
+      "source": "POM https://dl.google.com/dl/android/maven2"
+    },
+    {
+      "coordinate": "androidx.print:print:1.0.0",
+      "licence": "Apache-2.0",
+      "stated": "The Apache Software License, Version 2.0",
+      "source": "POM https://dl.google.com/dl/android/maven2"
+    },
+    {
+      "coordinate": "androidx.profileinstaller:profileinstaller:1.4.1",
+      "licence": "Apache-2.0",
+      "stated": "The Apache Software License, Version 2.0",
+      "source": "POM https://dl.google.com/dl/android/maven2"
+    },
+    {
+      "coordinate": "androidx.recyclerview:recyclerview:1.2.1",
+      "licence": "Apache-2.0",
+      "stated": "The Apache Software License, Version 2.0",
+      "source": "POM https://dl.google.com/dl/android/maven2"
+    },
+    {
+      "coordinate": "androidx.resourceinspection:resourceinspection-annotation:1.0.1",
+      "licence": "Apache-2.0",
+      "stated": "The Apache Software License, Version 2.0",
+      "source": "POM https://dl.google.com/dl/android/maven2"
+    },
+    {
+      "coordinate": "androidx.room:room-common:2.6.1",
+      "licence": "Apache-2.0",
+      "stated": "The Apache Software License, Version 2.0",
+      "source": "POM https://dl.google.com/dl/android/maven2"
+    },
+    {
+      "coordinate": "androidx.room:room-ktx:2.6.1",
+      "licence": "Apache-2.0",
+      "stated": "The Apache Software License, Version 2.0",
+      "source": "POM https://dl.google.com/dl/android/maven2"
+    },
+    {
+      "coordinate": "androidx.room:room-runtime:2.6.1",
+      "licence": "Apache-2.0",
+      "stated": "The Apache Software License, Version 2.0",
+      "source": "POM https://dl.google.com/dl/android/maven2"
+    },
+    {
+      "coordinate": "androidx.savedstate:savedstate-ktx:1.2.1",
+      "licence": "Apache-2.0",
+      "stated": "The Apache Software License, Version 2.0",
+      "source": "POM https://dl.google.com/dl/android/maven2"
+    },
+    {
+      "coordinate": "androidx.savedstate:savedstate:1.2.1",
+      "licence": "Apache-2.0",
+      "stated": "The Apache Software License, Version 2.0",
+      "source": "POM https://dl.google.com/dl/android/maven2"
+    },
+    {
+      "coordinate": "androidx.sqlite:sqlite-framework:2.4.0",
+      "licence": "Apache-2.0",
+      "stated": "The Apache Software License, Version 2.0",
+      "source": "POM https://dl.google.com/dl/android/maven2"
+    },
+    {
+      "coordinate": "androidx.sqlite:sqlite:2.4.0",
+      "licence": "Apache-2.0",
+      "stated": "The Apache Software License, Version 2.0",
+      "source": "POM https://dl.google.com/dl/android/maven2"
+    },
+    {
+      "coordinate": "androidx.startup:startup-runtime:1.2.0",
+      "licence": "Apache-2.0",
+      "stated": "The Apache Software License, Version 2.0",
+      "source": "POM https://dl.google.com/dl/android/maven2"
+    },
+    {
+      "coordinate": "androidx.swiperefreshlayout:swiperefreshlayout:1.1.0",
+      "licence": "Apache-2.0",
+      "stated": "The Apache Software License, Version 2.0",
+      "source": "POM https://dl.google.com/dl/android/maven2"
+    },
+    {
+      "coordinate": "androidx.tracing:tracing-ktx:1.2.0",
+      "licence": "Apache-2.0",
+      "stated": "The Apache Software License, Version 2.0",
+      "source": "POM https://dl.google.com/dl/android/maven2"
+    },
+    {
+      "coordinate": "androidx.tracing:tracing:1.2.0",
+      "licence": "Apache-2.0",
+      "stated": "The Apache Software License, Version 2.0",
+      "source": "POM https://dl.google.com/dl/android/maven2"
+    },
+    {
+      "coordinate": "androidx.transition:transition-ktx:1.7.0",
+      "licence": "Apache-2.0",
+      "stated": "The Apache Software License, Version 2.0",
+      "source": "POM https://dl.google.com/dl/android/maven2"
+    },
+    {
+      "coordinate": "androidx.transition:transition:1.7.0",
+      "licence": "Apache-2.0",
+      "stated": "The Apache Software License, Version 2.0",
+      "source": "POM https://dl.google.com/dl/android/maven2"
+    },
+    {
+      "coordinate": "androidx.vectordrawable:vectordrawable-animated:1.1.0",
+      "licence": "Apache-2.0",
+      "stated": "The Apache Software License, Version 2.0",
+      "source": "POM https://dl.google.com/dl/android/maven2"
+    },
+    {
+      "coordinate": "androidx.vectordrawable:vectordrawable:1.1.0",
+      "licence": "Apache-2.0",
+      "stated": "The Apache Software License, Version 2.0",
+      "source": "POM https://dl.google.com/dl/android/maven2"
+    },
+    {
+      "coordinate": "androidx.versionedparcelable:versionedparcelable:1.1.1",
+      "licence": "Apache-2.0",
+      "stated": "The Apache Software License, Version 2.0",
+      "source": "POM https://dl.google.com/dl/android/maven2"
+    },
+    {
+      "coordinate": "androidx.viewpager2:viewpager2:1.0.0",
+      "licence": "Apache-2.0",
+      "stated": "The Apache Software License, Version 2.0",
+      "source": "POM https://dl.google.com/dl/android/maven2"
+    },
+    {
+      "coordinate": "androidx.viewpager:viewpager:1.0.0",
+      "licence": "Apache-2.0",
+      "stated": "The Apache Software License, Version 2.0",
+      "source": "POM https://dl.google.com/dl/android/maven2"
+    },
+    {
+      "coordinate": "androidx.window:window-core-android:1.5.1",
+      "licence": "Apache-2.0",
+      "stated": "The Apache Software License, Version 2.0",
+      "source": "POM https://dl.google.com/dl/android/maven2"
+    },
+    {
+      "coordinate": "androidx.window:window-core:1.5.1",
+      "licence": "Apache-2.0",
+      "stated": "The Apache Software License, Version 2.0",
+      "source": "POM https://dl.google.com/dl/android/maven2"
+    },
+    {
+      "coordinate": "androidx.window:window:1.5.1",
+      "licence": "Apache-2.0",
+      "stated": "The Apache Software License, Version 2.0",
+      "source": "POM https://dl.google.com/dl/android/maven2"
+    },
+    {
+      "coordinate": "androidx.work:work-runtime-ktx:2.9.1",
+      "licence": "Apache-2.0",
+      "stated": "The Apache Software License, Version 2.0",
+      "source": "POM https://dl.google.com/dl/android/maven2"
+    },
+    {
+      "coordinate": "androidx.work:work-runtime:2.9.1",
+      "licence": "Apache-2.0",
+      "stated": "The Apache Software License, Version 2.0",
+      "source": "POM https://dl.google.com/dl/android/maven2"
+    },
+    {
+      "coordinate": "com.caverock:androidsvg-aar:1.4",
+      "licence": "Apache-2.0",
+      "stated": "The Apache Software License, Version 2.0",
+      "source": "POM https://repo1.maven.org/maven2"
+    },
+    {
+      "coordinate": "com.charleskorn.kaml:kaml-jvm:0.79.0",
+      "licence": "Apache-2.0",
+      "stated": "The Apache License, Version 2.0",
+      "source": "POM https://repo1.maven.org/maven2"
+    },
+    {
+      "coordinate": "com.charleskorn.kaml:kaml:0.79.0",
+      "licence": "Apache-2.0",
+      "stated": "The Apache License, Version 2.0",
+      "source": "POM https://repo1.maven.org/maven2"
+    },
+    {
+      "coordinate": "com.facebook.fbjni:fbjni:0.7.0",
+      "licence": "Apache-2.0",
+      "stated": "APACHE-2",
+      "source": "POM https://repo1.maven.org/maven2"
+    },
+    {
+      "coordinate": "com.facebook.fresco:animated-base:3.7.0",
+      "licence": "MIT",
+      "stated": "MIT",
+      "source": "POM https://repo1.maven.org/maven2"
+    },
+    {
+      "coordinate": "com.facebook.fresco:animated-drawable:3.7.0",
+      "licence": "MIT",
+      "stated": "MIT",
+      "source": "POM https://repo1.maven.org/maven2"
+    },
+    {
+      "coordinate": "com.facebook.fresco:animated-gif-lite:3.7.0",
+      "licence": "MIT",
+      "stated": "MIT",
+      "source": "POM https://repo1.maven.org/maven2"
+    },
+    {
+      "coordinate": "com.facebook.fresco:animated-gif:3.7.0",
+      "licence": "MIT",
+      "stated": "MIT",
+      "source": "POM https://repo1.maven.org/maven2"
+    },
+    {
+      "coordinate": "com.facebook.fresco:drawee:3.7.0",
+      "licence": "MIT",
+      "stated": "MIT",
+      "source": "POM https://repo1.maven.org/maven2"
+    },
+    {
+      "coordinate": "com.facebook.fresco:fbcore:3.7.0",
+      "licence": "MIT",
+      "stated": "MIT",
+      "source": "POM https://repo1.maven.org/maven2"
+    },
+    {
+      "coordinate": "com.facebook.fresco:fresco:3.7.0",
+      "licence": "MIT",
+      "stated": "MIT",
+      "source": "POM https://repo1.maven.org/maven2"
+    },
+    {
+      "coordinate": "com.facebook.fresco:imagepipeline-base:3.7.0",
+      "licence": "MIT",
+      "stated": "MIT",
+      "source": "POM https://repo1.maven.org/maven2"
+    },
+    {
+      "coordinate": "com.facebook.fresco:imagepipeline-native:3.7.0",
+      "licence": "MIT",
+      "stated": "MIT",
+      "source": "POM https://repo1.maven.org/maven2"
+    },
+    {
+      "coordinate": "com.facebook.fresco:imagepipeline-okhttp3:3.7.0",
+      "licence": "MIT",
+      "stated": "MIT",
+      "source": "POM https://repo1.maven.org/maven2"
+    },
+    {
+      "coordinate": "com.facebook.fresco:imagepipeline:3.7.0",
+      "licence": "MIT",
+      "stated": "MIT",
+      "source": "POM https://repo1.maven.org/maven2"
+    },
+    {
+      "coordinate": "com.facebook.fresco:memory-type-ashmem:3.7.0",
+      "licence": "MIT",
+      "stated": "MIT",
+      "source": "POM https://repo1.maven.org/maven2"
+    },
+    {
+      "coordinate": "com.facebook.fresco:memory-type-java:3.7.0",
+      "licence": "MIT",
+      "stated": "MIT",
+      "source": "POM https://repo1.maven.org/maven2"
+    },
+    {
+      "coordinate": "com.facebook.fresco:memory-type-native:3.7.0",
+      "licence": "MIT",
+      "stated": "MIT",
+      "source": "POM https://repo1.maven.org/maven2"
+    },
+    {
+      "coordinate": "com.facebook.fresco:middleware:3.7.0",
+      "licence": "MIT",
+      "stated": "MIT",
+      "source": "POM https://repo1.maven.org/maven2"
+    },
+    {
+      "coordinate": "com.facebook.fresco:nativeimagefilters:3.7.0",
+      "licence": "MIT",
+      "stated": "MIT",
+      "source": "POM https://repo1.maven.org/maven2"
+    },
+    {
+      "coordinate": "com.facebook.fresco:nativeimagetranscoder:3.7.0",
+      "licence": "MIT",
+      "stated": "MIT",
+      "source": "POM https://repo1.maven.org/maven2"
+    },
+    {
+      "coordinate": "com.facebook.fresco:soloader:3.7.0",
+      "licence": "MIT",
+      "stated": "MIT",
+      "source": "POM https://repo1.maven.org/maven2"
+    },
+    {
+      "coordinate": "com.facebook.fresco:ui-common:3.7.0",
+      "licence": "MIT",
+      "stated": "MIT",
+      "source": "POM https://repo1.maven.org/maven2"
+    },
+    {
+      "coordinate": "com.facebook.fresco:ui-core:3.7.0",
+      "licence": "MIT",
+      "stated": "MIT",
+      "source": "POM https://repo1.maven.org/maven2"
+    },
+    {
+      "coordinate": "com.facebook.fresco:urimod:3.7.0",
+      "licence": "MIT",
+      "stated": "MIT",
+      "source": "POM https://repo1.maven.org/maven2"
+    },
+    {
+      "coordinate": "com.facebook.fresco:vito-core-common-impl:3.7.0",
+      "licence": "MIT",
+      "stated": "MIT",
+      "source": "POM https://repo1.maven.org/maven2"
+    },
+    {
+      "coordinate": "com.facebook.fresco:vito-core-impl:3.7.0",
+      "licence": "MIT",
+      "stated": "MIT",
+      "source": "POM https://repo1.maven.org/maven2"
+    },
+    {
+      "coordinate": "com.facebook.fresco:vito-core-java-impl:3.7.0",
+      "licence": "MIT",
+      "stated": "MIT",
+      "source": "POM https://repo1.maven.org/maven2"
+    },
+    {
+      "coordinate": "com.facebook.fresco:vito-core:3.7.0",
+      "licence": "MIT",
+      "stated": "MIT",
+      "source": "POM https://repo1.maven.org/maven2"
+    },
+    {
+      "coordinate": "com.facebook.fresco:vito-drawee-support:3.7.0",
+      "licence": "MIT",
+      "stated": "MIT",
+      "source": "POM https://repo1.maven.org/maven2"
+    },
+    {
+      "coordinate": "com.facebook.fresco:vito-options:3.7.0",
+      "licence": "MIT",
+      "stated": "MIT",
+      "source": "POM https://repo1.maven.org/maven2"
+    },
+    {
+      "coordinate": "com.facebook.fresco:vito-provider:3.7.0",
+      "licence": "MIT",
+      "stated": "MIT",
+      "source": "POM https://repo1.maven.org/maven2"
+    },
+    {
+      "coordinate": "com.facebook.fresco:vito-renderer:3.7.0",
+      "licence": "MIT",
+      "stated": "MIT",
+      "source": "POM https://repo1.maven.org/maven2"
+    },
+    {
+      "coordinate": "com.facebook.fresco:vito-source:3.7.0",
+      "licence": "MIT",
+      "stated": "MIT",
+      "source": "POM https://repo1.maven.org/maven2"
+    },
+    {
+      "coordinate": "com.facebook.fresco:webpsupport:3.7.0",
+      "licence": "MIT",
+      "stated": "MIT",
+      "source": "POM https://repo1.maven.org/maven2"
+    },
+    {
+      "coordinate": "com.facebook.hermes:hermes-android:260318099.0.4",
+      "licence": "MIT",
+      "stated": "MIT License",
+      "source": "POM https://repo1.maven.org/maven2 (the closure substitutes com.facebook.react:hermes-android with it)"
+    },
+    {
+      "coordinate": "com.facebook.infer.annotation:infer-annotation:0.18.0",
+      "licence": "MIT",
+      "stated": "MIT license",
+      "source": "POM https://repo1.maven.org/maven2"
+    },
+    {
+      "coordinate": "com.facebook.react:react-android:0.88.0-rc.4",
+      "licence": "MIT",
+      "stated": "MIT License",
+      "source": "POM https://repo1.maven.org/maven2"
+    },
+    {
+      "coordinate": "com.facebook.soloader:annotation:0.12.1",
+      "licence": "Apache-2.0",
+      "stated": "Apache-2",
+      "source": "POM https://repo1.maven.org/maven2"
+    },
+    {
+      "coordinate": "com.facebook.soloader:nativeloader:0.12.1",
+      "licence": "Apache-2.0",
+      "stated": "Apache-2",
+      "source": "POM https://repo1.maven.org/maven2"
+    },
+    {
+      "coordinate": "com.facebook.soloader:soloader:0.12.1",
+      "licence": "Apache-2.0",
+      "stated": "Apache-2",
+      "source": "POM https://repo1.maven.org/maven2"
+    },
+    {
+      "coordinate": "com.facebook.yoga:proguard-annotations:1.19.0",
+      "licence": "MIT",
+      "stated": "MIT License",
+      "source": "POM https://repo1.maven.org/maven2"
+    },
+    {
+      "coordinate": "com.github.MetrolistGroup.innertubex:innertubex-android:0.11.9",
+      "licence": "GPL-3.0",
+      "stated": "GNU General Public License, version 3",
+      "source": "POM https://jitpack.io"
+    },
+    {
+      "coordinate": "com.github.MetrolistGroup.innertubex:innertubex:0.11.9",
+      "licence": "GPL-3.0",
+      "stated": "GNU General Public License, version 3",
+      "source": "POM https://jitpack.io"
+    },
+    {
+      "coordinate": "com.github.MetrolistGroup.quackjs:quackjs-android:0.1.4",
+      "licence": "GPL-3.0-only",
+      "stated": "GNU General Public License, version 3 only",
+      "source": "POM https://jitpack.io"
+    },
+    {
+      "coordinate": "com.github.MetrolistGroup.quackjs:quackjs:0.1.4",
+      "licence": "GPL-3.0-only",
+      "stated": "GNU General Public License, version 3 only",
+      "source": "POM https://jitpack.io"
+    },
+    {
+      "coordinate": "com.github.bumptech.glide:annotations:5.0.5",
+      "licence": "BSD-2-Clause AND Apache-2.0",
+      "stated": "Simplified BSD License | Apache License, Version 2.0",
+      "source": "POM https://repo1.maven.org/maven2"
+    },
+    {
+      "coordinate": "com.github.bumptech.glide:avif-integration:5.0.5",
+      "licence": "BSD-2-Clause AND Apache-2.0",
+      "stated": "Simplified BSD License | Apache License, Version 2.0",
+      "source": "POM https://repo1.maven.org/maven2"
+    },
+    {
+      "coordinate": "com.github.bumptech.glide:disklrucache:5.0.5",
+      "licence": "BSD-2-Clause AND Apache-2.0",
+      "stated": "Simplified BSD License | Apache License, Version 2.0",
+      "source": "POM https://repo1.maven.org/maven2"
+    },
+    {
+      "coordinate": "com.github.bumptech.glide:gifdecoder:5.0.5",
+      "licence": "BSD-2-Clause AND Apache-2.0",
+      "stated": "Simplified BSD License | Apache License, Version 2.0",
+      "source": "POM https://repo1.maven.org/maven2"
+    },
+    {
+      "coordinate": "com.github.bumptech.glide:glide:5.0.5",
+      "licence": "BSD-2-Clause AND Apache-2.0",
+      "stated": "Simplified BSD License | Apache License, Version 2.0",
+      "source": "POM https://repo1.maven.org/maven2"
+    },
+    {
+      "coordinate": "com.github.bumptech.glide:okhttp3-integration:5.0.5",
+      "licence": "BSD-2-Clause AND Apache-2.0",
+      "stated": "Simplified BSD License | Apache License, Version 2.0",
+      "source": "POM https://repo1.maven.org/maven2"
+    },
+    {
+      "coordinate": "com.github.penfeizhou.android.animation:apng:3.0.5",
+      "licence": "Apache-2.0",
+      "stated": "The Apache License, Version 2.0",
+      "source": "POM https://repo1.maven.org/maven2"
+    },
+    {
+      "coordinate": "com.github.penfeizhou.android.animation:avif:3.0.5",
+      "licence": "Apache-2.0",
+      "stated": "The Apache License, Version 2.0",
+      "source": "POM https://repo1.maven.org/maven2"
+    },
+    {
+      "coordinate": "com.github.penfeizhou.android.animation:awebp:3.0.5",
+      "licence": "Apache-2.0",
+      "stated": "The Apache License, Version 2.0",
+      "source": "POM https://repo1.maven.org/maven2"
+    },
+    {
+      "coordinate": "com.github.penfeizhou.android.animation:frameanimation:3.0.5",
+      "licence": "Apache-2.0",
+      "stated": "The Apache License, Version 2.0",
+      "source": "POM https://repo1.maven.org/maven2"
+    },
+    {
+      "coordinate": "com.github.penfeizhou.android.animation:gif:3.0.5",
+      "licence": "Apache-2.0",
+      "stated": "The Apache License, Version 2.0",
+      "source": "POM https://repo1.maven.org/maven2"
+    },
+    {
+      "coordinate": "com.github.penfeizhou.android.animation:glide-plugin:3.0.5",
+      "licence": "Apache-2.0",
+      "stated": "The Apache License, Version 2.0",
+      "source": "POM https://repo1.maven.org/maven2"
+    },
+    {
+      "coordinate": "com.google.android.gms:play-services-auth-api-phone:18.0.2",
+      "licence": "LicenseRef-Android-SDK (proprietary)",
+      "stated": "Android Software Development Kit License",
+      "source": "POM https://dl.google.com/dl/android/maven2"
+    },
+    {
+      "coordinate": "com.google.android.gms:play-services-auth-base:18.0.10",
+      "licence": "LicenseRef-Android-SDK (proprietary)",
+      "stated": "Android Software Development Kit License",
+      "source": "POM https://dl.google.com/dl/android/maven2"
+    },
+    {
+      "coordinate": "com.google.android.gms:play-services-auth-blockstore:16.4.0",
+      "licence": "LicenseRef-Android-SDK (proprietary)",
+      "stated": "Android Software Development Kit License",
+      "source": "POM https://dl.google.com/dl/android/maven2"
+    },
+    {
+      "coordinate": "com.google.android.gms:play-services-auth:21.1.1",
+      "licence": "LicenseRef-Android-SDK (proprietary)",
+      "stated": "Android Software Development Kit License",
+      "source": "POM https://dl.google.com/dl/android/maven2"
+    },
+    {
+      "coordinate": "com.google.android.gms:play-services-base:18.5.0",
+      "licence": "LicenseRef-Android-SDK (proprietary)",
+      "stated": "Android Software Development Kit License",
+      "source": "POM https://dl.google.com/dl/android/maven2"
+    },
+    {
+      "coordinate": "com.google.android.gms:play-services-basement:18.5.0",
+      "licence": "LicenseRef-Android-SDK (proprietary)",
+      "stated": "Android Software Development Kit License",
+      "source": "POM https://dl.google.com/dl/android/maven2"
+    },
+    {
+      "coordinate": "com.google.android.gms:play-services-fido:21.0.0",
+      "licence": "LicenseRef-Android-SDK (proprietary)",
+      "stated": "Android Software Development Kit License",
+      "source": "POM https://dl.google.com/dl/android/maven2"
+    },
+    {
+      "coordinate": "com.google.android.gms:play-services-identity-credentials:16.0.0-alpha08",
+      "licence": "LicenseRef-Android-SDK (proprietary)",
+      "stated": "Android Software Development Kit License",
+      "source": "POM https://dl.google.com/dl/android/maven2"
+    },
+    {
+      "coordinate": "com.google.android.gms:play-services-tasks:18.2.0",
+      "licence": "LicenseRef-Android-SDK (proprietary)",
+      "stated": "Android Software Development Kit License",
+      "source": "POM https://dl.google.com/dl/android/maven2"
+    },
+    {
+      "coordinate": "com.google.android.libraries.identity.googleid:googleid:1.2.1",
+      "licence": "LicenseRef-Android-SDK (proprietary)",
+      "stated": "Android Software Development Kit License",
+      "source": "POM https://dl.google.com/dl/android/maven2"
+    },
+    {
+      "coordinate": "com.google.android.material:material:1.13.0",
+      "licence": "Apache-2.0",
+      "stated": "The Apache Software License, Version 2.0",
+      "source": "POM https://dl.google.com/dl/android/maven2"
+    },
+    {
+      "coordinate": "com.google.code.findbugs:jsr305:3.0.2",
+      "licence": "Apache-2.0",
+      "stated": "The Apache Software License, Version 2.0",
+      "source": "POM https://repo1.maven.org/maven2"
+    },
+    {
+      "coordinate": "com.google.code.gson:gson:2.8.6",
+      "licence": "Apache-2.0",
+      "stated": "Apache 2.0",
+      "source": "parent POM https://repo1.maven.org/maven2"
+    },
+    {
+      "coordinate": "com.google.errorprone:error_prone_annotations:2.28.0",
+      "licence": "Apache-2.0",
+      "stated": "Apache 2.0",
+      "source": "POM https://repo1.maven.org/maven2"
+    },
+    {
+      "coordinate": "com.google.guava:failureaccess:1.0.2",
+      "licence": "Apache-2.0",
+      "stated": "The Apache Software License, Version 2.0",
+      "source": "parent POM https://repo1.maven.org/maven2"
+    },
+    {
+      "coordinate": "com.google.guava:guava:33.3.1-android",
+      "licence": "Apache-2.0",
+      "stated": "Apache License, Version 2.0",
+      "source": "parent POM https://repo1.maven.org/maven2"
+    },
+    {
+      "coordinate": "com.google.guava:listenablefuture:9999.0-empty-to-avoid-conflict-with-guava",
+      "licence": "Apache-2.0",
+      "stated": "The Apache Software License, Version 2.0",
+      "source": "parent POM https://repo1.maven.org/maven2"
+    },
+    {
+      "coordinate": "com.google.j2objc:j2objc-annotations:3.0.0",
+      "licence": "Apache-2.0",
+      "stated": "Apache License, Version 2.0",
+      "source": "POM https://repo1.maven.org/maven2"
+    },
+    {
+      "coordinate": "com.parse.bolts:bolts-tasks:1.4.0",
+      "licence": "BSD-3-Clause",
+      "stated": "BSD License",
+      "source": "POM https://repo1.maven.org/maven2"
+    },
+    {
+      "coordinate": "com.squareup.okhttp3:okhttp-android:5.5.0",
+      "licence": "Apache-2.0",
+      "stated": "The Apache Software License, Version 2.0",
+      "source": "POM https://repo1.maven.org/maven2"
+    },
+    {
+      "coordinate": "com.squareup.okhttp3:okhttp-bom:5.5.0",
+      "licence": "Apache-2.0",
+      "stated": "The Apache Software License, Version 2.0",
+      "source": "POM https://repo1.maven.org/maven2"
+    },
+    {
+      "coordinate": "com.squareup.okhttp3:okhttp-java-net-cookiejar:5.5.0",
+      "licence": "Apache-2.0",
+      "stated": "The Apache Software License, Version 2.0",
+      "source": "POM https://repo1.maven.org/maven2"
+    },
+    {
+      "coordinate": "com.squareup.okhttp3:okhttp-urlconnection:5.5.0",
+      "licence": "Apache-2.0",
+      "stated": "The Apache Software License, Version 2.0",
+      "source": "POM https://repo1.maven.org/maven2"
+    },
+    {
+      "coordinate": "com.squareup.okhttp3:okhttp:5.5.0",
+      "licence": "Apache-2.0",
+      "stated": "The Apache Software License, Version 2.0",
+      "source": "POM https://repo1.maven.org/maven2"
+    },
+    {
+      "coordinate": "com.squareup.okio:okio-jvm:3.18.2",
+      "licence": "Apache-2.0",
+      "stated": "The Apache Software License, Version 2.0",
+      "source": "POM https://repo1.maven.org/maven2"
+    },
+    {
+      "coordinate": "com.squareup.okio:okio:3.18.2",
+      "licence": "Apache-2.0",
+      "stated": "The Apache Software License, Version 2.0",
+      "source": "POM https://repo1.maven.org/maven2"
+    },
+    {
+      "coordinate": "com.squareup.zstd:zstd-kmp-android:0.4.0",
+      "licence": "Apache-2.0",
+      "stated": "The Apache Software License, Version 2.0",
+      "source": "POM https://repo1.maven.org/maven2"
+    },
+    {
+      "coordinate": "com.squareup.zstd:zstd-kmp-okio-android:0.4.0",
+      "licence": "Apache-2.0",
+      "stated": "The Apache Software License, Version 2.0",
+      "source": "POM https://repo1.maven.org/maven2"
+    },
+    {
+      "coordinate": "com.squareup.zstd:zstd-kmp-okio:0.4.0",
+      "licence": "Apache-2.0",
+      "stated": "The Apache Software License, Version 2.0",
+      "source": "POM https://repo1.maven.org/maven2"
+    },
+    {
+      "coordinate": "com.squareup.zstd:zstd-kmp:0.4.0",
+      "licence": "Apache-2.0",
+      "stated": "The Apache Software License, Version 2.0",
+      "source": "POM https://repo1.maven.org/maven2"
+    },
+    {
+      "coordinate": "commons-codec:commons-codec:1.10",
+      "licence": "Apache-2.0",
+      "stated": "Apache License, Version 2.0",
+      "source": "parent POM org.apache:apache:15 through org.apache.commons:commons-parent:35, https://repo1.maven.org/maven2"
+    },
+    {
+      "coordinate": "commons-io:commons-io:1.4",
+      "licence": "Apache-2.0",
+      "stated": "The Apache Software License, Version 2.0",
+      "source": "parent POM org.apache:apache:4 through org.apache.commons:commons-parent:7, https://repo1.maven.org/maven2"
+    },
+    {
+      "coordinate": "expo.modules.asset:expo.modules.asset:58.0.13",
+      "licence": "MIT",
+      "stated": "MIT License",
+      "source": "POM local-maven-repo in expo-asset"
+    },
+    {
+      "coordinate": "expo.modules.image:expo.modules.image:58.0.13",
+      "licence": "MIT",
+      "stated": "MIT License",
+      "source": "POM local-maven-repo in expo-image"
+    },
+    {
+      "coordinate": "expo.modules.router:expo.modules.router:58.0.17",
+      "licence": "MIT",
+      "stated": "MIT License",
+      "source": "POM local-maven-repo in expo-router"
+    },
+    {
+      "coordinate": "host.exp.exponent:expo.modules.backgroundtask:58.0.11",
+      "licence": "MIT",
+      "stated": "MIT License",
+      "source": "POM local-maven-repo in expo-background-task"
+    },
+    {
+      "coordinate": "host.exp.exponent:expo.modules.filesystem:58.0.8",
+      "licence": "MIT",
+      "stated": "MIT License",
+      "source": "POM local-maven-repo in expo-file-system"
+    },
+    {
+      "coordinate": "host.exp.exponent:expo.modules.font:58.0.7",
+      "licence": "MIT",
+      "stated": "MIT License",
+      "source": "POM local-maven-repo in expo-font"
+    },
+    {
+      "coordinate": "host.exp.exponent:expo.modules.haptics:58.0.5",
+      "licence": "MIT",
+      "stated": "MIT License",
+      "source": "POM local-maven-repo in expo-haptics"
+    },
+    {
+      "coordinate": "host.exp.exponent:expo.modules.keepawake:58.0.3",
+      "licence": "MIT",
+      "stated": "MIT License",
+      "source": "POM local-maven-repo in expo-keep-awake"
+    },
+    {
+      "coordinate": "host.exp.exponent:expo.modules.linking:58.0.11",
+      "licence": "MIT",
+      "stated": "MIT License",
+      "source": "POM local-maven-repo in expo-linking"
+    },
+    {
+      "coordinate": "host.exp.exponent:expo.modules.splashscreen:58.0.7",
+      "licence": "MIT",
+      "stated": "MIT License",
+      "source": "POM local-maven-repo in expo-splash-screen"
+    },
+    {
+      "coordinate": "host.exp.exponent:expo.modules.sqlite:58.0.11",
+      "licence": "MIT",
+      "stated": "MIT License",
+      "source": "POM local-maven-repo in expo-sqlite"
+    },
+    {
+      "coordinate": "host.exp.exponent:expo.modules.statusbar:58.0.3",
+      "licence": "MIT",
+      "stated": "MIT License",
+      "source": "POM local-maven-repo in expo-status-bar"
+    },
+    {
+      "coordinate": "host.exp.exponent:expo.modules.systemui:58.0.5",
+      "licence": "MIT",
+      "stated": "MIT License",
+      "source": "POM local-maven-repo in expo-system-ui"
+    },
+    {
+      "coordinate": "host.exp.exponent:expo.modules.taskmanager:58.0.12",
+      "licence": "MIT",
+      "stated": "MIT License",
+      "source": "POM local-maven-repo in expo-task-manager"
+    },
+    {
+      "coordinate": "host.exp.exponent:org.unimodules.apploader:58.0.2",
+      "licence": "MIT",
+      "stated": "MIT License",
+      "source": "POM local-maven-repo in unimodules-app-loader"
+    },
+    {
+      "coordinate": "io.github.expo.kolibri:kolibri-android:0.2.0",
+      "licence": "MIT",
+      "stated": "The MIT License",
+      "source": "POM https://repo1.maven.org/maven2"
+    },
+    {
+      "coordinate": "io.github.expo.kolibri:runtime:0.2.0",
+      "licence": "MIT",
+      "stated": "The MIT License",
+      "source": "POM https://repo1.maven.org/maven2"
+    },
+    {
+      "coordinate": "io.github.expo.pika:pika-api:1.1.0",
+      "licence": "MIT",
+      "stated": "The MIT License",
+      "source": "POM https://repo1.maven.org/maven2"
+    },
+    {
+      "coordinate": "io.github.expo:expo-modules-v2-react:0.2.4",
+      "licence": "MIT",
+      "stated": "The MIT License",
+      "source": "POM https://repo1.maven.org/maven2"
+    },
+    {
+      "coordinate": "io.ktor:ktor-client-content-negotiation-jvm:3.6.0",
+      "licence": "Apache-2.0",
+      "stated": "The Apache Software License, Version 2.0",
+      "source": "POM https://repo1.maven.org/maven2"
+    },
+    {
+      "coordinate": "io.ktor:ktor-client-content-negotiation:3.6.0",
+      "licence": "Apache-2.0",
+      "stated": "The Apache Software License, Version 2.0",
+      "source": "POM https://repo1.maven.org/maven2"
+    },
+    {
+      "coordinate": "io.ktor:ktor-client-core-jvm:3.6.0",
+      "licence": "Apache-2.0",
+      "stated": "The Apache Software License, Version 2.0",
+      "source": "POM https://repo1.maven.org/maven2"
+    },
+    {
+      "coordinate": "io.ktor:ktor-client-core:3.6.0",
+      "licence": "Apache-2.0",
+      "stated": "The Apache Software License, Version 2.0",
+      "source": "POM https://repo1.maven.org/maven2"
+    },
+    {
+      "coordinate": "io.ktor:ktor-client-okhttp-jvm:3.6.0",
+      "licence": "Apache-2.0",
+      "stated": "The Apache Software License, Version 2.0",
+      "source": "POM https://repo1.maven.org/maven2"
+    },
+    {
+      "coordinate": "io.ktor:ktor-client-okhttp:3.6.0",
+      "licence": "Apache-2.0",
+      "stated": "The Apache Software License, Version 2.0",
+      "source": "POM https://repo1.maven.org/maven2"
+    },
+    {
+      "coordinate": "io.ktor:ktor-events-jvm:3.6.0",
+      "licence": "Apache-2.0",
+      "stated": "The Apache Software License, Version 2.0",
+      "source": "POM https://repo1.maven.org/maven2"
+    },
+    {
+      "coordinate": "io.ktor:ktor-events:3.6.0",
+      "licence": "Apache-2.0",
+      "stated": "The Apache Software License, Version 2.0",
+      "source": "POM https://repo1.maven.org/maven2"
+    },
+    {
+      "coordinate": "io.ktor:ktor-http-cio-jvm:3.6.0",
+      "licence": "Apache-2.0",
+      "stated": "The Apache Software License, Version 2.0",
+      "source": "POM https://repo1.maven.org/maven2"
+    },
+    {
+      "coordinate": "io.ktor:ktor-http-cio:3.6.0",
+      "licence": "Apache-2.0",
+      "stated": "The Apache Software License, Version 2.0",
+      "source": "POM https://repo1.maven.org/maven2"
+    },
+    {
+      "coordinate": "io.ktor:ktor-http-jvm:3.6.0",
+      "licence": "Apache-2.0",
+      "stated": "The Apache Software License, Version 2.0",
+      "source": "POM https://repo1.maven.org/maven2"
+    },
+    {
+      "coordinate": "io.ktor:ktor-http:3.6.0",
+      "licence": "Apache-2.0",
+      "stated": "The Apache Software License, Version 2.0",
+      "source": "POM https://repo1.maven.org/maven2"
+    },
+    {
+      "coordinate": "io.ktor:ktor-io-jvm:3.6.0",
+      "licence": "Apache-2.0",
+      "stated": "The Apache Software License, Version 2.0",
+      "source": "POM https://repo1.maven.org/maven2"
+    },
+    {
+      "coordinate": "io.ktor:ktor-io:3.6.0",
+      "licence": "Apache-2.0",
+      "stated": "The Apache Software License, Version 2.0",
+      "source": "POM https://repo1.maven.org/maven2"
+    },
+    {
+      "coordinate": "io.ktor:ktor-network-jvm:3.6.0",
+      "licence": "Apache-2.0",
+      "stated": "The Apache Software License, Version 2.0",
+      "source": "POM https://repo1.maven.org/maven2"
+    },
+    {
+      "coordinate": "io.ktor:ktor-network:3.6.0",
+      "licence": "Apache-2.0",
+      "stated": "The Apache Software License, Version 2.0",
+      "source": "POM https://repo1.maven.org/maven2"
+    },
+    {
+      "coordinate": "io.ktor:ktor-openapi-schema-jvm:3.6.0",
+      "licence": "Apache-2.0",
+      "stated": "The Apache Software License, Version 2.0",
+      "source": "POM https://repo1.maven.org/maven2"
+    },
+    {
+      "coordinate": "io.ktor:ktor-openapi-schema:3.6.0",
+      "licence": "Apache-2.0",
+      "stated": "The Apache Software License, Version 2.0",
+      "source": "POM https://repo1.maven.org/maven2"
+    },
+    {
+      "coordinate": "io.ktor:ktor-serialization-jvm:3.6.0",
+      "licence": "Apache-2.0",
+      "stated": "The Apache Software License, Version 2.0",
+      "source": "POM https://repo1.maven.org/maven2"
+    },
+    {
+      "coordinate": "io.ktor:ktor-serialization-kotlinx-json-jvm:3.6.0",
+      "licence": "Apache-2.0",
+      "stated": "The Apache Software License, Version 2.0",
+      "source": "POM https://repo1.maven.org/maven2"
+    },
+    {
+      "coordinate": "io.ktor:ktor-serialization-kotlinx-json:3.6.0",
+      "licence": "Apache-2.0",
+      "stated": "The Apache Software License, Version 2.0",
+      "source": "POM https://repo1.maven.org/maven2"
+    },
+    {
+      "coordinate": "io.ktor:ktor-serialization-kotlinx-jvm:3.6.0",
+      "licence": "Apache-2.0",
+      "stated": "The Apache Software License, Version 2.0",
+      "source": "POM https://repo1.maven.org/maven2"
+    },
+    {
+      "coordinate": "io.ktor:ktor-serialization-kotlinx:3.6.0",
+      "licence": "Apache-2.0",
+      "stated": "The Apache Software License, Version 2.0",
+      "source": "POM https://repo1.maven.org/maven2"
+    },
+    {
+      "coordinate": "io.ktor:ktor-serialization:3.6.0",
+      "licence": "Apache-2.0",
+      "stated": "The Apache Software License, Version 2.0",
+      "source": "POM https://repo1.maven.org/maven2"
+    },
+    {
+      "coordinate": "io.ktor:ktor-sse-jvm:3.6.0",
+      "licence": "Apache-2.0",
+      "stated": "The Apache Software License, Version 2.0",
+      "source": "POM https://repo1.maven.org/maven2"
+    },
+    {
+      "coordinate": "io.ktor:ktor-sse:3.6.0",
+      "licence": "Apache-2.0",
+      "stated": "The Apache Software License, Version 2.0",
+      "source": "POM https://repo1.maven.org/maven2"
+    },
+    {
+      "coordinate": "io.ktor:ktor-utils-jvm:3.6.0",
+      "licence": "Apache-2.0",
+      "stated": "The Apache Software License, Version 2.0",
+      "source": "POM https://repo1.maven.org/maven2"
+    },
+    {
+      "coordinate": "io.ktor:ktor-utils:3.6.0",
+      "licence": "Apache-2.0",
+      "stated": "The Apache Software License, Version 2.0",
+      "source": "POM https://repo1.maven.org/maven2"
+    },
+    {
+      "coordinate": "io.ktor:ktor-websocket-serialization-jvm:3.6.0",
+      "licence": "Apache-2.0",
+      "stated": "The Apache Software License, Version 2.0",
+      "source": "POM https://repo1.maven.org/maven2"
+    },
+    {
+      "coordinate": "io.ktor:ktor-websocket-serialization:3.6.0",
+      "licence": "Apache-2.0",
+      "stated": "The Apache Software License, Version 2.0",
+      "source": "POM https://repo1.maven.org/maven2"
+    },
+    {
+      "coordinate": "io.ktor:ktor-websockets-jvm:3.6.0",
+      "licence": "Apache-2.0",
+      "stated": "The Apache Software License, Version 2.0",
+      "source": "POM https://repo1.maven.org/maven2"
+    },
+    {
+      "coordinate": "io.ktor:ktor-websockets:3.6.0",
+      "licence": "Apache-2.0",
+      "stated": "The Apache Software License, Version 2.0",
+      "source": "POM https://repo1.maven.org/maven2"
+    },
+    {
+      "coordinate": "it.krzeminski:snakeyaml-engine-kmp-jvm:3.1.1",
+      "licence": "Apache-2.0",
+      "stated": "Apache-2.0",
+      "source": "POM https://repo1.maven.org/maven2"
+    },
+    {
+      "coordinate": "it.krzeminski:snakeyaml-engine-kmp:3.1.1",
+      "licence": "Apache-2.0",
+      "stated": "Apache-2.0",
+      "source": "POM https://repo1.maven.org/maven2"
+    },
+    {
+      "coordinate": "javax.inject:javax.inject:1",
+      "licence": "Apache-2.0",
+      "stated": "The Apache Software License, Version 2.0",
+      "source": "POM https://repo1.maven.org/maven2"
+    },
+    {
+      "coordinate": "jp.wasabeef:glide-transformations:4.3.0",
+      "licence": "Apache-2.0",
+      "stated": "The Apache Software License, Version 2.0",
+      "source": "POM https://repo1.maven.org/maven2"
+    },
+    {
+      "coordinate": "net.jthink:jaudiotagger:3.0.1",
+      "licence": "LGPL-2.1-or-later",
+      "stated": "LGPL",
+      "source": "POM https://repo1.maven.org/maven2"
+    },
+    {
+      "coordinate": "net.thauvin.erik.urlencoder:urlencoder-lib-jvm:1.6.0",
+      "licence": "Apache-2.0",
+      "stated": "The Apache License, Version 2.0",
+      "source": "POM https://repo1.maven.org/maven2"
+    },
+    {
+      "coordinate": "net.thauvin.erik.urlencoder:urlencoder-lib:1.6.0",
+      "licence": "Apache-2.0",
+      "stated": "The Apache License, Version 2.0",
+      "source": "POM https://repo1.maven.org/maven2"
+    },
+    {
+      "coordinate": "org.aomedia.avif.android:avif:1.1.1.14d8e3c4",
+      "licence": "BSD-2-Clause",
+      "stated": "BSD 2-Clause License",
+      "source": "POM https://repo1.maven.org/maven2"
+    },
+    {
+      "coordinate": "org.brotli:dec:0.1.2",
+      "licence": "MIT",
+      "stated": "MIT License",
+      "source": "parent POM https://repo1.maven.org/maven2"
+    },
+    {
+      "coordinate": "org.checkerframework:checker-qual:3.43.0",
+      "licence": "MIT",
+      "stated": "The MIT License",
+      "source": "POM https://repo1.maven.org/maven2"
+    },
+    {
+      "coordinate": "org.jetbrains.kotlin:kotlin-annotations-jvm:1.3.72",
+      "licence": "Apache-2.0",
+      "stated": "The Apache License, Version 2.0",
+      "source": "POM https://repo1.maven.org/maven2"
+    },
+    {
+      "coordinate": "org.jetbrains.kotlin:kotlin-bom:1.8.22",
+      "licence": "Apache-2.0",
+      "stated": "The Apache Software License, Version 2.0",
+      "source": "POM https://repo1.maven.org/maven2"
+    },
+    {
+      "coordinate": "org.jetbrains.kotlin:kotlin-reflect:2.4.20",
+      "licence": "Apache-2.0",
+      "stated": "Apache-2.0",
+      "source": "POM https://repo1.maven.org/maven2"
+    },
+    {
+      "coordinate": "org.jetbrains.kotlin:kotlin-stdlib-common:2.4.21",
+      "licence": "Apache-2.0",
+      "stated": "Apache-2.0",
+      "source": "POM https://repo1.maven.org/maven2"
+    },
+    {
+      "coordinate": "org.jetbrains.kotlin:kotlin-stdlib-jdk7:2.4.20",
+      "licence": "Apache-2.0",
+      "stated": "Apache-2.0",
+      "source": "POM https://repo1.maven.org/maven2"
+    },
+    {
+      "coordinate": "org.jetbrains.kotlin:kotlin-stdlib-jdk8:1.8.22",
+      "licence": "Apache-2.0",
+      "stated": "The Apache License, Version 2.0",
+      "source": "POM https://repo1.maven.org/maven2"
+    },
+    {
+      "coordinate": "org.jetbrains.kotlin:kotlin-stdlib:2.4.21",
+      "licence": "Apache-2.0",
+      "stated": "Apache-2.0",
+      "source": "POM https://repo1.maven.org/maven2"
+    },
+    {
+      "coordinate": "org.jetbrains.kotlinx:kotlinx-coroutines-android:1.11.0",
+      "licence": "Apache-2.0",
+      "stated": "Apache-2.0",
+      "source": "POM https://repo1.maven.org/maven2"
+    },
+    {
+      "coordinate": "org.jetbrains.kotlinx:kotlinx-coroutines-bom:1.11.0",
+      "licence": "Apache-2.0",
+      "stated": "Apache-2.0",
+      "source": "POM https://repo1.maven.org/maven2"
+    },
+    {
+      "coordinate": "org.jetbrains.kotlinx:kotlinx-coroutines-core-jvm:1.11.0",
+      "licence": "Apache-2.0",
+      "stated": "Apache-2.0",
+      "source": "POM https://repo1.maven.org/maven2"
+    },
+    {
+      "coordinate": "org.jetbrains.kotlinx:kotlinx-coroutines-core:1.11.0",
+      "licence": "Apache-2.0",
+      "stated": "Apache-2.0",
+      "source": "POM https://repo1.maven.org/maven2"
+    },
+    {
+      "coordinate": "org.jetbrains.kotlinx:kotlinx-coroutines-slf4j:1.11.0",
+      "licence": "Apache-2.0",
+      "stated": "Apache-2.0",
+      "source": "POM https://repo1.maven.org/maven2"
+    },
+    {
+      "coordinate": "org.jetbrains.kotlinx:kotlinx-datetime-jvm:0.8.0-0.6.x-compat",
+      "licence": "Apache-2.0",
+      "stated": "Apache-2.0",
+      "source": "POM https://repo1.maven.org/maven2"
+    },
+    {
+      "coordinate": "org.jetbrains.kotlinx:kotlinx-datetime:0.8.0-0.6.x-compat",
+      "licence": "Apache-2.0",
+      "stated": "Apache-2.0",
+      "source": "POM https://repo1.maven.org/maven2"
+    },
+    {
+      "coordinate": "org.jetbrains.kotlinx:kotlinx-io-bytestring-jvm:0.9.1",
+      "licence": "Apache-2.0",
+      "stated": "Apache-2.0",
+      "source": "POM https://repo1.maven.org/maven2"
+    },
+    {
+      "coordinate": "org.jetbrains.kotlinx:kotlinx-io-bytestring:0.9.1",
+      "licence": "Apache-2.0",
+      "stated": "Apache-2.0",
+      "source": "POM https://repo1.maven.org/maven2"
+    },
+    {
+      "coordinate": "org.jetbrains.kotlinx:kotlinx-io-core-jvm:0.9.1",
+      "licence": "Apache-2.0",
+      "stated": "Apache-2.0",
+      "source": "POM https://repo1.maven.org/maven2"
+    },
+    {
+      "coordinate": "org.jetbrains.kotlinx:kotlinx-io-core:0.9.1",
+      "licence": "Apache-2.0",
+      "stated": "Apache-2.0",
+      "source": "POM https://repo1.maven.org/maven2"
+    },
+    {
+      "coordinate": "org.jetbrains.kotlinx:kotlinx-serialization-bom:1.12.0",
+      "licence": "Apache-2.0",
+      "stated": "Apache-2.0",
+      "source": "POM https://repo1.maven.org/maven2"
+    },
+    {
+      "coordinate": "org.jetbrains.kotlinx:kotlinx-serialization-core-jvm:1.12.0",
+      "licence": "Apache-2.0",
+      "stated": "Apache-2.0",
+      "source": "POM https://repo1.maven.org/maven2"
+    },
+    {
+      "coordinate": "org.jetbrains.kotlinx:kotlinx-serialization-core:1.12.0",
+      "licence": "Apache-2.0",
+      "stated": "Apache-2.0",
+      "source": "POM https://repo1.maven.org/maven2"
+    },
+    {
+      "coordinate": "org.jetbrains.kotlinx:kotlinx-serialization-json-io-jvm:1.12.0",
+      "licence": "Apache-2.0",
+      "stated": "Apache-2.0",
+      "source": "POM https://repo1.maven.org/maven2"
+    },
+    {
+      "coordinate": "org.jetbrains.kotlinx:kotlinx-serialization-json-io:1.12.0",
+      "licence": "Apache-2.0",
+      "stated": "Apache-2.0",
+      "source": "POM https://repo1.maven.org/maven2"
+    },
+    {
+      "coordinate": "org.jetbrains.kotlinx:kotlinx-serialization-json-jvm:1.12.0",
+      "licence": "Apache-2.0",
+      "stated": "Apache-2.0",
+      "source": "POM https://repo1.maven.org/maven2"
+    },
+    {
+      "coordinate": "org.jetbrains.kotlinx:kotlinx-serialization-json:1.12.0",
+      "licence": "Apache-2.0",
+      "stated": "Apache-2.0",
+      "source": "POM https://repo1.maven.org/maven2"
+    },
+    {
+      "coordinate": "org.jetbrains:annotations:23.0.0",
+      "licence": "Apache-2.0",
+      "stated": "The Apache Software License, Version 2.0",
+      "source": "POM https://repo1.maven.org/maven2"
+    },
+    {
+      "coordinate": "org.jspecify:jspecify:1.0.0",
+      "licence": "Apache-2.0",
+      "stated": "The Apache License, Version 2.0",
+      "source": "POM https://repo1.maven.org/maven2"
+    },
+    {
+      "coordinate": "org.slf4j:slf4j-api:2.0.19",
+      "licence": "MIT",
+      "stated": "MIT",
+      "source": "parent POM org.slf4j:slf4j-bom:2.0.19 through slf4j-parent, https://repo1.maven.org/maven2"
+    }
+  ]
+}

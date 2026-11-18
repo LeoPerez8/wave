@@ -2,6 +2,7 @@
   "name": "@wave/sync",
   "version": "0.0.0",
   "private": true,
+  "license": "GPL-3.0-only",
   "description": "Wave's sync service: a Cloudflare Worker in front of one Turso (libSQL) database.",
   "type": "module",
   "scripts": {

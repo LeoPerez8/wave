@@ -98,3 +98,13 @@ claude plugin install impeccable@impeccable
 ```
 
 Issues live on GitHub; ready tickets carry the `ready-for-agent` label; docs live in `docs/`.
+
+## Licence
+
+Wave is free software under the GNU General Public License version 3 only (`GPL-3.0-only`), from
+2026-11-18. The licence text is in [LICENSE](LICENSE). [NOTICE.md](NOTICE.md) holds the copyright
+line, an additional permission under GPLv3 section 7 for linking Google Play services, the paths
+that stay in the repository but aren't covered by the grant, and the files under other licences.
+Third-party components and their notices are listed in
+[docs/licensing/rights-inventory.md](docs/licensing/rights-inventory.md), and
+[docs/release-source.md](docs/release-source.md) says how to get and build a release's source.
