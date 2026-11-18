@@ -65,7 +65,11 @@ export class YtFeatures extends Context.Service<YtFeatures, YtFeaturesShape>()(
 interface LibraryRead {
   readonly songs: readonly MagicQueueSong[];
   readonly byId: ReadonlyMap<number, MagicQueueSong>;
-  readonly artists: readonly { readonly id: number; readonly name: string; readonly songs: number }[];
+  readonly artists: readonly {
+    readonly id: number;
+    readonly name: string;
+    readonly songs: number;
+  }[];
   readonly known: (song: YtAlbumSong) => boolean;
 }
 
@@ -188,7 +192,11 @@ export const ytFeaturesLayer = (options: { readonly online: () => boolean }) =>
           const played = new Set(source.trackIds);
           // A mix rebuilt under the same id has other new songs: none the queue played.
           if (mix !== undefined && mix.songs.some((song) => played.has(ytTrackId(song.videoId))))
-            return { seed: { kind: "list", id: mix.id, title: mix.name }, songs: [], streamed: mix.songs };
+            return {
+              seed: { kind: "list", id: mix.id, title: mix.name },
+              songs: [],
+              streamed: mix.songs,
+            };
           const last = source.trackIds.at(-1);
           return last === undefined
             ? null
@@ -302,7 +310,11 @@ export const ytFeaturesLayer = (options: { readonly online: () => boolean }) =>
           return magicQueue.start({
             seed:
               whole && title !== undefined
-                ? { kind: scope.kind as "album" | "artist" | "playlist", id: String(scope.id), title }
+                ? {
+                    kind: scope.kind as "album" | "artist" | "playlist",
+                    id: String(scope.id),
+                    title,
+                  }
                 : songs.length === 1
                   ? { kind: "track", id: String(first.id), title: first.title }
                   : { kind: "list", id: String(first.id), title: first.title },

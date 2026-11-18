@@ -129,7 +129,9 @@ export function Shelf({
           >
             <Artwork hash={item.artworkHash} url={item.artworkUrl} artist={artists} large />
             <span className="tile-title truncate">{item.title}</span>
-            {item.caption && <span className="tile-caption truncate secondary">{item.caption}</span>}
+            {item.caption && (
+              <span className="tile-caption truncate secondary">{item.caption}</span>
+            )}
           </button>
         ))}
       </div>

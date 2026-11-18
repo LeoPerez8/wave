@@ -48,7 +48,10 @@ export interface DiscoverShape {
   /** The Magic Queue row: nine Library songs at random, by id. */
   readonly picks: () => readonly number[];
   /** Today's Artist mixes, built on the first call of the day. */
-  readonly mixes: () => Promise<{ readonly status: YtStatus; readonly mixes: readonly DesktopMix[] }>;
+  readonly mixes: () => Promise<{
+    readonly status: YtStatus;
+    readonly mixes: readonly DesktopMix[];
+  }>;
   /** One of today's mixes, by its id. */
   readonly mix: (id: string) => DesktopMix | undefined;
 }
@@ -56,8 +59,10 @@ export interface DiscoverShape {
 export const createDiscover = (deps: DiscoverDeps): DiscoverShape => {
   const random = deps.random ?? Math.random;
   let built: { readonly day: string; readonly mixes: readonly DesktopMix[] } | null = null;
-  let building: Promise<{ readonly status: YtStatus; readonly mixes: readonly DesktopMix[] }> | null =
-    null;
+  let building: Promise<{
+    readonly status: YtStatus;
+    readonly mixes: readonly DesktopMix[];
+  }> | null = null;
   const build = async () => {
     const day = deps.today();
     const seeds = artistMixSeeds(

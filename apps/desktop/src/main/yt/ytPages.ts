@@ -186,7 +186,9 @@ export const createYtPages = (deps: YtPagesDeps): YtPagesShape => {
       read<{ status: YtStatus; browseId: string | null }>({ browseId: null }, async () => {
         if (pickYtArtist(name, [{ name, browseId: "-", audience: null }]) === null)
           return { browseId: null };
-        return { browseId: pickYtArtist(name, artists(await deps.call("searchArtists", { query: name }))) };
+        return {
+          browseId: pickYtArtist(name, artists(await deps.call("searchArtists", { query: name }))),
+        };
       }),
     album: (browseId) =>
       read<YtAlbumRead>({ album: null }, async () => {
@@ -213,9 +215,7 @@ export const createYtPages = (deps: YtPagesDeps): YtPagesShape => {
     artistRadio: (browseId) =>
       read<YtRadioRead>(noRadio, async () => radio(await deps.call("artistRadio", { browseId }))),
     radioMore: (continuation) =>
-      read<YtRadioRead>(noRadio, async () =>
-        radio(await deps.call("radioMore", { continuation })),
-      ),
+      read<YtRadioRead>(noRadio, async () => radio(await deps.call("radioMore", { continuation }))),
     related: (videoId, playing) =>
       read<YtRelatedRead>({ songs: [], artists: [] }, async () => {
         const page = record(await deps.call("related", { videoId }));

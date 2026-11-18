@@ -96,7 +96,8 @@ export const ptBR: Catalogue = {
     ytFailed: "O YouTube Music não respondeu. Tente de novo daqui a pouco.",
     similarArtists: "Artistas parecidos",
     youMightAlsoLike: "Você também pode gostar",
-    magicQueueIdle: "Comece uma Fila Mágica com uma destas músicas ou pelo menu de qualquer música.",
+    magicQueueIdle:
+      "Comece uma Fila Mágica com uma destas músicas ou pelo menu de qualquer música.",
   },
   desktopLibrary: {
     refresh: "Atualizar",

@@ -40,8 +40,14 @@ export interface KotlinMethods {
   readonly album: { readonly params: { readonly browseId: string }; readonly result: unknown };
   readonly searchArtists: { readonly params: { readonly query: string }; readonly result: unknown };
   readonly songRadio: { readonly params: { readonly videoId: string }; readonly result: unknown };
-  readonly artistRadio: { readonly params: { readonly browseId: string }; readonly result: unknown };
-  readonly radioMore: { readonly params: { readonly continuation: string }; readonly result: unknown };
+  readonly artistRadio: {
+    readonly params: { readonly browseId: string };
+    readonly result: unknown;
+  };
+  readonly radioMore: {
+    readonly params: { readonly continuation: string };
+    readonly result: unknown;
+  };
   readonly related: { readonly params: { readonly videoId: string }; readonly result: unknown };
 }
 

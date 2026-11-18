@@ -155,8 +155,10 @@ export const createMagicQueue = (deps: MagicQueueDeps): MagicQueueShape => {
     session !== null && isMagicQueue(session, deps.queue()) ? session : null;
   let picking: string | null = null;
   /** Why the session's last pick added nothing, by its id. */
-  let stuck: { readonly id: string; readonly status: Exclude<MagicQueueStatus, "idle" | "loading"> } | null =
-    null;
+  let stuck: {
+    readonly id: string;
+    readonly status: Exclude<MagicQueueStatus, "idle" | "loading">;
+  } | null = null;
   /** This session's radios, by seed id. */
   let radios = new Map<string, RadioRead>();
   let radiosOf: string | null = null;
@@ -216,11 +218,15 @@ export const createMagicQueue = (deps: MagicQueueDeps): MagicQueueShape => {
         return "ok";
       }),
     );
-    return statuses.find((status) => status === "offline") ?? statuses.find((s) => s !== "ok") ?? "ok";
+    return (
+      statuses.find((status) => status === "offline") ?? statuses.find((s) => s !== "ok") ?? "ok"
+    );
   };
 
   /** [wanted]'s next batch, as the phone picks one; how it went. */
-  const pick = async (wanted: MagicSession): Promise<"appended" | Exclude<MagicQueueStatus, "idle" | "loading">> => {
+  const pick = async (
+    wanted: MagicSession,
+  ): Promise<"appended" | Exclude<MagicQueueStatus, "idle" | "loading">> => {
     const drawn = magicBatchRadios(wanted, random);
     if (drawn.session !== wanted) save(drawn.session);
     const current = () => (session?.id === wanted.id ? session : drawn.session);
@@ -248,12 +254,19 @@ export const createMagicQueue = (deps: MagicQueueDeps): MagicQueueShape => {
       const live = current();
       const pages = group.flatMap((seed) => {
         const radio = radios.get(seed.id);
-        return radio === undefined ? [] : [{ id: seed.id, artists: seed.artists, songs: radio.songs }];
+        return radio === undefined
+          ? []
+          : [{ id: seed.id, artists: seed.artists, songs: radio.songs }];
       });
       return availableMagicSongs(
         live,
         rankRadioSongs(
-          { artists, profile: genreProfile(library.songs.filter((song) => live.used.includes(String(song.id)))) },
+          {
+            artists,
+            profile: genreProfile(
+              library.songs.filter((song) => live.used.includes(String(song.id))),
+            ),
+          },
           {
             pages,
             library: original ? library.songs.map(mapLibrary) : [],
@@ -275,7 +288,12 @@ export const createMagicQueue = (deps: MagicQueueDeps): MagicQueueShape => {
         { online: connected, ytMusic: deps.ytMusic(), cachedVideos: null },
       );
     };
-    const plan = magicRadioReadPlan(current(), rank(seeds, true), rank(liked, false), liked.length > 0);
+    const plan = magicRadioReadPlan(
+      current(),
+      rank(seeds, true),
+      rank(liked, false),
+      liked.length > 0,
+    );
     const original = new Set(seeds.map((seed) => seed.id));
     const status =
       deps.ytMusic() || current().continuation === true
@@ -287,7 +305,11 @@ export const createMagicQueue = (deps: MagicQueueDeps): MagicQueueShape => {
     if (live?.id !== wanted.id || !wantsMagicBatch(live, deps.queue())) return "appended";
     const batch = completeMagicRadioBatch(live, rank(seeds, true), rank(liked, false));
     if (batch.trackIds.length === 0)
-      return status === "offline" || !connected ? "offline" : status === "failed" ? "failed" : "empty";
+      return status === "offline" || !connected
+        ? "offline"
+        : status === "failed"
+          ? "failed"
+          : "empty";
     save(batch.session);
     for (const song of batch.songs) if (song.source === "stream") found.set(song.trackId, song);
     await deps.dispatch({ type: "append", trackIds: [...batch.trackIds] });
@@ -436,7 +458,9 @@ export const createMagicQueue = (deps: MagicQueueDeps): MagicQueueShape => {
     continuedFrom = state;
     const input = deps.continuation(seed);
     if (input === null) return;
-    running = running.then(() => startOf(input, state).then(() => undefined)).catch(() => undefined);
+    running = running
+      .then(() => startOf(input, state).then(() => undefined))
+      .catch(() => undefined);
   };
 
   /** The song [trackId] as the session's signals know it. */

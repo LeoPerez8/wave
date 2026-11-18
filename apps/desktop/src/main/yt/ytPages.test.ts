@@ -98,7 +98,10 @@ test("an artist is found by their exact name, the most followed of namesakes", a
 
 test("a radio page leaves out music videos and keeps where it goes on", async () => {
   const { pages, kept } = setup(() => ({
-    songs: [{ ...songOf("aaaaaaaaaaa"), video: false }, { ...songOf("bbbbbbbbbbb"), video: true }],
+    songs: [
+      { ...songOf("aaaaaaaaaaa"), video: false },
+      { ...songOf("bbbbbbbbbbb"), video: true },
+    ],
     continuation: "next-page",
   }));
   const radio = await pages.songRadio("khnokW3Mw24");

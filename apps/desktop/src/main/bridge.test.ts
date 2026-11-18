@@ -1047,7 +1047,10 @@ test("a Magic Queue, an artist page and Discover's row come through the bridge, 
         !(await wave.songs.actions(one, "menu")).entries.some((e) => e.action === "magicQueue"),
       );
       await wave.settings.setYtMusic(true);
-      assert.equal(await wave.magicQueue.start({ scope: { kind: "songs" }, ids: [pinkMoon] }), true);
+      assert.equal(
+        await wave.magicQueue.start({ scope: { kind: "songs" }, ids: [pinkMoon] }),
+        true,
+      );
       await until(async () => (await wave.playback.view()).length > 1);
       assert.equal((await wave.playback.view()).current?.title, "Pink Moon");
       assert.deepEqual(await wave.magicQueue.view(), { title: "Pink Moon", status: "idle" });
@@ -1097,7 +1100,10 @@ test("a Magic Queue, an artist page and Discover's row come through the bridge, 
       const call = (channel: string, ...args: unknown[]) =>
         handlers.get(channel)!(trusted, ...args);
       await assert.rejects(call("yt.artist", "../etc"), /Refused/);
-      await assert.rejects(call("magicQueue.start", { scope: { kind: "songs" }, ids: [] }), /Refused/);
+      await assert.rejects(
+        call("magicQueue.start", { scope: { kind: "songs" }, ids: [] }),
+        /Refused/,
+      );
       await assert.rejects(call("magicQueue.startStreamed", "nope"), /Refused/);
       await assert.rejects(call("discover.playMix", "mix", -1), /Refused/);
       await assert.rejects(call("yt.queue", "shuffle", "mayyounever"), /Refused/);

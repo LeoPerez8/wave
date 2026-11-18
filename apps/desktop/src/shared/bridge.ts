@@ -91,7 +91,10 @@ export interface BridgeContract {
   /** A YouTube Music cover as a data URL, or null. */
   readonly "yt.artwork": { readonly args: readonly [url: string]; readonly result: string | null };
   /** A YouTube Music artist page, by its browse id. */
-  readonly "yt.artist": { readonly args: readonly [browseId: string]; readonly result: YtArtistView };
+  readonly "yt.artist": {
+    readonly args: readonly [browseId: string];
+    readonly result: YtArtistView;
+  };
   /** The YouTube Music artist named [name]'s browse id, or null. */
   readonly "yt.findArtist": {
     readonly args: readonly [name: string];
@@ -116,7 +119,10 @@ export interface BridgeContract {
     readonly result: boolean;
   };
   /** Plays a Magic Queue of [target]'s songs; false when none can play. */
-  readonly "magicQueue.start": { readonly args: readonly [target: SongTarget]; readonly result: boolean };
+  readonly "magicQueue.start": {
+    readonly args: readonly [target: SongTarget];
+    readonly result: boolean;
+  };
   /** Plays a Magic Queue of a YouTube Music song's radio. */
   readonly "magicQueue.startStreamed": {
     readonly args: readonly [videoId: string];
