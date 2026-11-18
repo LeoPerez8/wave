@@ -27,6 +27,8 @@ import { runSongAction, songMenu } from "./library/songActions.ts";
 import type { Appearance } from "../shared/bridge.ts";
 import { ytRow } from "../shared/yt.ts";
 import { VIDEO_ID, YtMusic } from "./yt/ytMusic.ts";
+import { DesktopPlaylists } from "./library/playlists.ts";
+import { playlistHandlers } from "./playlistHandlers.ts";
 
 const validScope = (value: unknown): value is BrowseScope => {
   if (typeof value !== "object" || value === null) return false;
@@ -79,7 +81,8 @@ export type BridgeServices =
   | DesktopLibrary
   | Playback
   | YtMusic
-  | Account;
+  | Account
+  | DesktopPlaylists;
 
 const refuse = (call: BridgeCall, why: string) => Effect.fail(new Error(`Refused ${call}: ${why}`));
 
@@ -322,11 +325,13 @@ const createHandlers = (onAppearance: (mode: Appearance) => void): Handlers => {
     "songs.run": ([target, action, playlistId]) =>
       validTarget(target) &&
       SONG_RUN_ACTIONS.includes(action as SongRunAction) &&
-      (action === "addToPlaylist" ? songId(playlistId) : playlistId === undefined)
+      (action === "addToPlaylist" ? songId(playlistId) : playlistId === undefined) &&
+      (action !== "removeFromPlaylist" || target.scope.kind === "playlist")
         ? Effect.gen(function* () {
             const db = yield* Database;
             const library = yield* DesktopLibrary;
             const playback = yield* Playback;
+            const playlists = yield* DesktopPlaylists;
             return yield* Effect.tryPromise({
               try: () =>
                 runSongAction(
@@ -335,6 +340,7 @@ const createHandlers = (onAppearance: (mode: Appearance) => void): Handlers => {
                     queue: (type, trackIds) => playback.command({ type, trackIds: [...trackIds] }),
                     removeSongs: (trackIds) => library.removeSongs(trackIds),
                     changed: playback.refresh,
+                    removeFromPlaylist: playlists.removeSongs,
                   },
                   target,
                   action as SongRunAction,
@@ -373,6 +379,7 @@ const createHandlers = (onAppearance: (mode: Appearance) => void): Handlers => {
         ? refuse("tags.read", "not an absolute path to an audio file")
         : kotlinCall((kotlin) => kotlin.readTags(song));
     },
+    ...playlistHandlers(validTarget),
   };
 };
 
