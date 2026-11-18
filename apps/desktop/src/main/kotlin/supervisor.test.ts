@@ -156,11 +156,17 @@ test("main answers the JVM's request with an error code when it can't", async ()
   await settle();
   // Each is answered as it finishes, not in the order asked.
   const byId = (line: unknown) => String((line as { id: unknown }).id);
-  assert.deepEqual(jvms.fromHost.toSorted((a, b) => byId(a).localeCompare(byId(b))), [
-    { id: "j1", error: { code: "ERR_NO_TOKEN", message: "BotGuard refused" } },
-    { id: "j2", error: { code: "ERR_UNKNOWN_METHOD", message: "Main has no method signInCookie" } },
-    { id: "j3", error: { code: "ERR_HOST", message: "boom" } },
-  ]);
+  assert.deepEqual(
+    jvms.fromHost.toSorted((a, b) => byId(a).localeCompare(byId(b))),
+    [
+      { id: "j1", error: { code: "ERR_NO_TOKEN", message: "BotGuard refused" } },
+      {
+        id: "j2",
+        error: { code: "ERR_UNKNOWN_METHOD", message: "Main has no method signInCookie" },
+      },
+      { id: "j3", error: { code: "ERR_HOST", message: "boom" } },
+    ],
+  );
   kotlin.dispose();
 });
 
@@ -173,8 +179,7 @@ test("the JVM's events reach main, and lines that aren't the protocol are skippe
     ...quick,
   });
   jvms.say({ event: "ready", java: "21.0.12" });
-  for (const line of ["SLF4J(W): No providers", "[1,2]", '{"id":99,"result":1}'])
-    jvms.sayRaw(line);
+  for (const line of ["SLF4J(W): No providers", "[1,2]", '{"id":99,"result":1}']) jvms.sayRaw(line);
   assert.deepEqual(events, [{ event: "ready", java: "21.0.12" }]);
   assert.equal(await kotlin.call("search", { query: "after the noise" }), "answered");
   kotlin.dispose();

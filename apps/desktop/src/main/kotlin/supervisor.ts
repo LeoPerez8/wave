@@ -118,7 +118,8 @@ export const superviseKotlin = (options: KotlinSupervisorOptions): KotlinSupervi
     void answer.then(
       (result) => owner.write(JSON.stringify({ id, result: result ?? null })),
       (error: unknown) => {
-        const code = isRecord(error) && typeof error["code"] === "string" ? error["code"] : "ERR_HOST";
+        const code =
+          isRecord(error) && typeof error["code"] === "string" ? error["code"] : "ERR_HOST";
         const message = error instanceof Error ? error.message : String(error);
         owner.write(JSON.stringify({ id, error: { code, message } }));
       },

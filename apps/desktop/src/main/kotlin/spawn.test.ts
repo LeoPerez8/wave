@@ -21,7 +21,12 @@ test("the JVM runs the bundled JAR from the bundled runtime, with a 128 MB heap 
     "--data",
     join("/data", "kotlin"),
   ]);
-  const windows = jvmCommand({ runtime: "C:\\Wave\\jvm\\runtime", jar: "x", dataDir: "y", platform: "win32" });
+  const windows = jvmCommand({
+    runtime: "C:\\Wave\\jvm\\runtime",
+    jar: "x",
+    dataDir: "y",
+    platform: "win32",
+  });
   assert.equal(windows.file, join("C:\\Wave\\jvm\\runtime", "bin", "java.exe"));
 });
 

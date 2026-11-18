@@ -91,9 +91,7 @@ const jvmInMemory = () => {
 const connect = (file: string, isTrusted = (event: unknown) => event === trusted) => {
   const audio = audioInMemory();
   const jvm = jvmInMemory();
-  const runtime = ManagedRuntime.make(
-    Layer.mergeAll(libraryLayer(file), audio.layer, jvm.layer),
-  );
+  const runtime = ManagedRuntime.make(Layer.mergeAll(libraryLayer(file), audio.layer, jvm.layer));
   const handlers = new Map<string, IpcHandler>();
   registerBridge(
     { handle: (channel, handler) => handlers.set(channel, handler) },

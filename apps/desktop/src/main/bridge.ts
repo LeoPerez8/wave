@@ -43,7 +43,9 @@ const playerCall = <A>(
   );
 
 const kotlinCall = <A>(
-  run: (kotlin: Kotlin["Service"]) => Effect.Effect<A, { readonly code: string; readonly message: string }>,
+  run: (
+    kotlin: Kotlin["Service"],
+  ) => Effect.Effect<A, { readonly code: string; readonly message: string }>,
 ): Effect.Effect<A, Error, Kotlin> =>
   Effect.gen(function* () {
     return yield* run(yield* Kotlin);
