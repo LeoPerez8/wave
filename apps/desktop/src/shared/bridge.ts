@@ -39,6 +39,7 @@ import type {
   SongTarget,
 } from "./songActions.ts";
 import { LINK_CALLS, linkBridge, type LinkContract } from "./links.ts";
+import { YT_ACCOUNT_CALLS, ytAccountBridge, type YtAccountContract } from "./ytAccount.ts";
 export type Appearance = "system" | "light" | "dark";
 
 /** One window of a list, as a list call returns it. */
@@ -50,7 +51,7 @@ export interface Page<T> {
 }
 
 /** Each call's arguments and result. Arguments reach main as untrusted data. */
-export interface BridgeContract extends PlaylistContract, LinkContract {
+export interface BridgeContract extends PlaylistContract, LinkContract, YtAccountContract {
   readonly "system.mediaBackend": {
     readonly args: readonly [];
     readonly result: "native" | "chromium";
@@ -370,6 +371,7 @@ export const BRIDGE_CALLS = [
   "home.view",
   "home.play",
   ...LINK_CALLS,
+  ...YT_ACCOUNT_CALLS,
 ] as const satisfies readonly BridgeCall[] &
   (BridgeContract extends PagedLists<BridgeContract> ? unknown : never);
 
@@ -381,6 +383,8 @@ export type Invoke = <C extends BridgeCall>(
 /** `window.wave`. */
 export interface WaveBridge {
   readonly links: ReturnType<typeof linkBridge>;
+  /** The YouTube account: its session never reaches the window. */
+  readonly ytAccount: ReturnType<typeof ytAccountBridge>;
   readonly system: { readonly mediaBackend: () => Promise<"native" | "chromium"> };
   readonly home: {
     readonly view: () => Promise<HomeView>;
@@ -623,4 +627,5 @@ export const createBridge = (invoke: Invoke): WaveBridge => ({
     play: (section, index) => invoke("home.play", section, index),
   },
   links: linkBridge(invoke),
+  ytAccount: ytAccountBridge(invoke),
 });

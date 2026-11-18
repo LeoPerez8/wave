@@ -174,6 +174,11 @@ test("the page has no Node and only the typed bridge", async () => {
       "wave.links.importPlaylist",
       "wave.links.copySong",
       "wave.links.copyPlaylist",
+      "wave.ytAccount.view",
+      "wave.ytAccount.signIn",
+      "wave.ytAccount.cancelSignIn",
+      "wave.ytAccount.signOut",
+      "wave.ytAccount.playlists",
     ],
   });
 });

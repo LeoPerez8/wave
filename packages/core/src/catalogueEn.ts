@@ -133,6 +133,10 @@ export const en = {
       "This computer has no keyring, so the session lasts until Wave quits. Sign in again next time.",
     browserTitle: "Back to Wave",
     browserMessage: "You can close this tab. Wave finishes signing in.",
+    closeBrowserWhenDone:
+      "Sign in in the browser window that opened, then close it. Wave picks up the session once the window is closed.",
+    noBrowser:
+      "Signing in to YouTube needs Chrome, Edge, Brave or Chromium on this computer. Install one and try again.",
   },
   desktopShortcuts: desktopShortcutsEn,
   downloadNotice: downloadNoticeEn,

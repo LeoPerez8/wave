@@ -28,6 +28,10 @@ test("after the first scan Wave invites to sign in once, and Settings › Accoun
     const settings = page.getByTestId("account-settings");
     await expect(settings.getByRole("button", { name: "Sign In with Google" })).toBeVisible();
     await expect(settings).toContainText("Audio and file paths never do.");
+    // YouTube's own Sign In sits under Use YT Music; nothing opens unless it is clicked.
+    const youtube = page.getByTestId("yt-account-settings");
+    await expect(youtube.getByRole("button", { name: "Sign In", exact: true })).toBeVisible();
+    await expect(youtube).toContainText("The session stays on this computer.");
     await app.close();
     app = await electron.launch({ args: [appFolder, "--lang=en-US"], env });
     page = await app.firstWindow();

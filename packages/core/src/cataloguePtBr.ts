@@ -132,6 +132,10 @@ export const ptBR: Catalogue = {
       "Este computador não tem um chaveiro, então a sessão dura até o Wave fechar. Inicie sessão novamente na próxima vez.",
     browserTitle: "Volte ao Wave",
     browserMessage: "Você pode fechar esta aba. O Wave termina de iniciar sessão.",
+    closeBrowserWhenDone:
+      "Inicie sessão na janela do navegador que abriu e depois feche a janela. O Wave recebe a sessão quando ela é fechada.",
+    noBrowser:
+      "Iniciar sessão no YouTube precisa do Chrome, Edge, Brave ou Chromium neste computador. Instale um deles e tente novamente.",
   },
   desktopShortcuts: desktopShortcutsPtBr,
   downloadNotice: downloadNoticePtBr,
