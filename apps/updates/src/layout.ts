@@ -127,6 +127,19 @@ export interface StoredUpdate {
   readonly metadata: Record<string, string>;
   readonly extra: { readonly expoClient: Record<string, unknown> };
   readonly signed: SignedManifest;
+  /**
+   * The export it was published from, which a rollback checks against the release's provenance
+   * record (promote.ts). Absent on updates published before records. Never in the manifest.
+   */
+  readonly exported?: ExportedFiles;
+}
+
+/** An `expo export` folder as the release gate digests it (docs/release-provenance.md). */
+export interface ExportedFiles {
+  /** Each file's hex SHA-256, by its path in the folder. */
+  readonly files: Readonly<Record<string, string>>;
+  /** The text of its expo-config.json, the app config phones read under the update. */
+  readonly config: string | null;
 }
 
 /**

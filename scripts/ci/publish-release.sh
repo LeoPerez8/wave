@@ -47,8 +47,20 @@ if [ "${GITHUB_REF_TYPE:-tag}" = "branch" ]; then
   if [ -z "$tagged" ]; then target=(--target "$sha"); fi
 fi
 
-# A re-run of the same tag replaces the APK and leaves the release as it was.
+# A re-run of the same tag replaces the APK and leaves the release as it was. A release whose
+# record names another source keeps its APK and record (docs/release-provenance.md); one from
+# before records has none to compare.
 if gh release view "$tag" > /dev/null 2>&1; then
+  published="$dir/published-provenance"
+  if gh release download "$tag" --pattern "wave-$version.provenance.json" --dir "$published" \
+    --clobber > /dev/null 2>&1; then
+    recorded="$(node -p 'JSON.parse(require("fs").readFileSync(process.argv[1], "utf8")).source ?? ""' \
+      "$published/wave-$version.provenance.json" 2> /dev/null || true)"
+    if [ "$recorded" != "${RELEASE_SHA:-${GITHUB_SHA:?}}" ]; then
+      echo "::error::$tag was published from ${recorded:0:7}, not from this run's ${RELEASE_SHA:-$GITHUB_SHA}. Its APK and record stay as they are."
+      exit 1
+    fi
+  fi
   gh release upload "$tag" "${assets[@]}" --clobber
   if [[ "$version" == *-ti ]]; then gh release edit "$tag" --prerelease --latest=false; fi
 elif [ ${#target[@]} -gt 0 ]; then
