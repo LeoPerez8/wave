@@ -27,6 +27,11 @@ const fakeEngine = (arriveMs = 5) => {
     },
     preload: (path) => void calls.push(`preload ${path ?? "-"}`),
     setVolume: () => {},
+    setCrossfade: () => {},
+    setNormalize: () => {},
+    measure: () => {},
+    cancelMeasurements: () => {},
+    measurements: () => [],
     transitions: () => [],
     play: () => {
       calls.push("play");
