@@ -166,16 +166,16 @@ export const browseTrackIds = (db: LibraryDatabase, scope: BrowseScope): string[
 /** [source]'s rows [ids], in the order given; an id it lacks is left out. */
 const rowsById = (db: LibraryDatabase, source: SQL, ids: readonly number[]): BrowseRow[] => {
   if (ids.length === 0) return [];
-  const found = new Map(
-    db
-      .all<BrowseRow>(
-        sql`SELECT * FROM (${source}) WHERE id IN (${sql.join(
-          ids.map((id) => sql`${id}`),
-          sql`, `,
-        )})`,
-      )
-      .map((value) => [value.id, row(value)]),
-  );
+  const found = new Map<number, BrowseRow>();
+  // SQLite takes a bounded number of values per statement; a whole Library's Play reads them all.
+  for (let at = 0; at < ids.length; at += 1000)
+    for (const value of db.all<BrowseRow>(
+      sql`SELECT * FROM (${source}) WHERE id IN (${sql.join(
+        ids.slice(at, at + 1000).map((id) => sql`${id}`),
+        sql`, `,
+      )})`,
+    ))
+      found.set(value.id, row(value));
   return ids.flatMap((id) => found.get(id) ?? []);
 };
 

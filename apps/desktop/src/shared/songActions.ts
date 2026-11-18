@@ -28,6 +28,7 @@ export interface SongMenu {
 
 /** The entries main runs; the others open a page, a submenu or selection in the window. */
 export const SONG_RUN_ACTIONS = [
+  "download",
   "playNext",
   "addToQueue",
   "favorite",
@@ -42,6 +43,7 @@ export type SongRunAction = (typeof SONG_RUN_ACTIONS)[number];
 
 /** What an action did, for its toast. */
 export type SongRunResult =
+  | { readonly kind: "downloaded"; readonly count: number }
   | { readonly kind: "queued"; readonly count: number }
   | { readonly kind: "favorite"; readonly on: boolean; readonly count: number }
   | {
