@@ -1,0 +1,567 @@
+{
+  "observed": "2026-11-18",
+  "inventoriedAt": "2d95fbb9c814b3b5147ad71b24bb8f58520b78d8",
+  "reviews": [
+    {
+      "package": "@expo-google-fonts/inter@0.4.2",
+      "status": "compatible",
+      "evidence": "Declared \"MIT AND OFL-1.1\": the package code is MIT and the Inter font files are OFL-1.1. The fonts ship as separate font files the app loads, kept under OFL-1.1 and not relicensed; OFL-1.1 permits bundling with any software, and the FSF lists it as a free licence for fonts. The OFL text and Inter's copyright notice ship with the release (component asset:inter-font)."
+    },
+    {
+      "package": "glob@13.0.6",
+      "status": "pending",
+      "evidence": "BlueOak-1.0.0 is a permissive licence the FSF licence list (updated 2026-04-22) doesn't classify. Resolve by showing the package is absent from the release JS bundle and APK (a Node-only build dependency), or by a recorded compatibility determination."
+    },
+    {
+      "package": "lightningcss-android-arm64@1.32.0",
+      "status": "compatible",
+      "evidence": "Observed 2026-11-18 in the npm registry tarball of this exact version: MPL-2.0, and no file outside the licence text carries the Exhibit B \"Incompatible With Secondary Licenses\" notice, so MPL-2.0 section 3.3 allows a Larger Work under the GNU GPL (FSF licence list, #MPL-2.0). A build-time CSS compiler (lightningcss, through tailwindcss and uniwind); the MPL-covered files stay under MPL-2.0."
+    },
+    {
+      "package": "lightningcss-android-arm64@1.33.0",
+      "status": "compatible",
+      "evidence": "Observed 2026-11-18 in the npm registry tarball of this exact version: MPL-2.0, and no file outside the licence text carries the Exhibit B \"Incompatible With Secondary Licenses\" notice, so MPL-2.0 section 3.3 allows a Larger Work under the GNU GPL (FSF licence list, #MPL-2.0). A build-time CSS compiler (lightningcss, through tailwindcss and uniwind); the MPL-covered files stay under MPL-2.0."
+    },
+    {
+      "package": "lightningcss-darwin-arm64@1.30.1",
+      "status": "compatible",
+      "evidence": "Observed 2026-11-18 in the npm registry tarball of this exact version: MPL-2.0, and no file outside the licence text carries the Exhibit B \"Incompatible With Secondary Licenses\" notice, so MPL-2.0 section 3.3 allows a Larger Work under the GNU GPL (FSF licence list, #MPL-2.0). A build-time CSS compiler (lightningcss, through tailwindcss and uniwind); the MPL-covered files stay under MPL-2.0."
+    },
+    {
+      "package": "lightningcss-darwin-arm64@1.32.0",
+      "status": "compatible",
+      "evidence": "Observed 2026-11-18 in the npm registry tarball of this exact version: MPL-2.0, and no file outside the licence text carries the Exhibit B \"Incompatible With Secondary Licenses\" notice, so MPL-2.0 section 3.3 allows a Larger Work under the GNU GPL (FSF licence list, #MPL-2.0). A build-time CSS compiler (lightningcss, through tailwindcss and uniwind); the MPL-covered files stay under MPL-2.0."
+    },
+    {
+      "package": "lightningcss-darwin-arm64@1.33.0",
+      "status": "compatible",
+      "evidence": "Observed 2026-11-18 in the npm registry tarball of this exact version: MPL-2.0, and no file outside the licence text carries the Exhibit B \"Incompatible With Secondary Licenses\" notice, so MPL-2.0 section 3.3 allows a Larger Work under the GNU GPL (FSF licence list, #MPL-2.0). A build-time CSS compiler (lightningcss, through tailwindcss and uniwind); the MPL-covered files stay under MPL-2.0."
+    },
+    {
+      "package": "lightningcss-darwin-x64@1.30.1",
+      "status": "compatible",
+      "evidence": "Observed 2026-11-18 in the npm registry tarball of this exact version: MPL-2.0, and no file outside the licence text carries the Exhibit B \"Incompatible With Secondary Licenses\" notice, so MPL-2.0 section 3.3 allows a Larger Work under the GNU GPL (FSF licence list, #MPL-2.0). A build-time CSS compiler (lightningcss, through tailwindcss and uniwind); the MPL-covered files stay under MPL-2.0."
+    },
+    {
+      "package": "lightningcss-darwin-x64@1.32.0",
+      "status": "compatible",
+      "evidence": "Observed 2026-11-18 in the npm registry tarball of this exact version: MPL-2.0, and no file outside the licence text carries the Exhibit B \"Incompatible With Secondary Licenses\" notice, so MPL-2.0 section 3.3 allows a Larger Work under the GNU GPL (FSF licence list, #MPL-2.0). A build-time CSS compiler (lightningcss, through tailwindcss and uniwind); the MPL-covered files stay under MPL-2.0."
+    },
+    {
+      "package": "lightningcss-darwin-x64@1.33.0",
+      "status": "compatible",
+      "evidence": "Observed 2026-11-18 in the npm registry tarball of this exact version: MPL-2.0, and no file outside the licence text carries the Exhibit B \"Incompatible With Secondary Licenses\" notice, so MPL-2.0 section 3.3 allows a Larger Work under the GNU GPL (FSF licence list, #MPL-2.0). A build-time CSS compiler (lightningcss, through tailwindcss and uniwind); the MPL-covered files stay under MPL-2.0."
+    },
+    {
+      "package": "lightningcss-freebsd-x64@1.30.1",
+      "status": "compatible",
+      "evidence": "Observed 2026-11-18 in the npm registry tarball of this exact version: MPL-2.0, and no file outside the licence text carries the Exhibit B \"Incompatible With Secondary Licenses\" notice, so MPL-2.0 section 3.3 allows a Larger Work under the GNU GPL (FSF licence list, #MPL-2.0). A build-time CSS compiler (lightningcss, through tailwindcss and uniwind); the MPL-covered files stay under MPL-2.0."
+    },
+    {
+      "package": "lightningcss-freebsd-x64@1.32.0",
+      "status": "compatible",
+      "evidence": "Observed 2026-11-18 in the npm registry tarball of this exact version: MPL-2.0, and no file outside the licence text carries the Exhibit B \"Incompatible With Secondary Licenses\" notice, so MPL-2.0 section 3.3 allows a Larger Work under the GNU GPL (FSF licence list, #MPL-2.0). A build-time CSS compiler (lightningcss, through tailwindcss and uniwind); the MPL-covered files stay under MPL-2.0."
+    },
+    {
+      "package": "lightningcss-freebsd-x64@1.33.0",
+      "status": "compatible",
+      "evidence": "Observed 2026-11-18 in the npm registry tarball of this exact version: MPL-2.0, and no file outside the licence text carries the Exhibit B \"Incompatible With Secondary Licenses\" notice, so MPL-2.0 section 3.3 allows a Larger Work under the GNU GPL (FSF licence list, #MPL-2.0). A build-time CSS compiler (lightningcss, through tailwindcss and uniwind); the MPL-covered files stay under MPL-2.0."
+    },
+    {
+      "package": "lightningcss-linux-arm-gnueabihf@1.30.1",
+      "status": "compatible",
+      "evidence": "Observed 2026-11-18 in the npm registry tarball of this exact version: MPL-2.0, and no file outside the licence text carries the Exhibit B \"Incompatible With Secondary Licenses\" notice, so MPL-2.0 section 3.3 allows a Larger Work under the GNU GPL (FSF licence list, #MPL-2.0). A build-time CSS compiler (lightningcss, through tailwindcss and uniwind); the MPL-covered files stay under MPL-2.0."
+    },
+    {
+      "package": "lightningcss-linux-arm-gnueabihf@1.32.0",
+      "status": "compatible",
+      "evidence": "Observed 2026-11-18 in the npm registry tarball of this exact version: MPL-2.0, and no file outside the licence text carries the Exhibit B \"Incompatible With Secondary Licenses\" notice, so MPL-2.0 section 3.3 allows a Larger Work under the GNU GPL (FSF licence list, #MPL-2.0). A build-time CSS compiler (lightningcss, through tailwindcss and uniwind); the MPL-covered files stay under MPL-2.0."
+    },
+    {
+      "package": "lightningcss-linux-arm-gnueabihf@1.33.0",
+      "status": "compatible",
+      "evidence": "Observed 2026-11-18 in the npm registry tarball of this exact version: MPL-2.0, and no file outside the licence text carries the Exhibit B \"Incompatible With Secondary Licenses\" notice, so MPL-2.0 section 3.3 allows a Larger Work under the GNU GPL (FSF licence list, #MPL-2.0). A build-time CSS compiler (lightningcss, through tailwindcss and uniwind); the MPL-covered files stay under MPL-2.0."
+    },
+    {
+      "package": "lightningcss-linux-arm64-gnu@1.30.1",
+      "status": "compatible",
+      "evidence": "Observed 2026-11-18 in the npm registry tarball of this exact version: MPL-2.0, and no file outside the licence text carries the Exhibit B \"Incompatible With Secondary Licenses\" notice, so MPL-2.0 section 3.3 allows a Larger Work under the GNU GPL (FSF licence list, #MPL-2.0). A build-time CSS compiler (lightningcss, through tailwindcss and uniwind); the MPL-covered files stay under MPL-2.0."
+    },
+    {
+      "package": "lightningcss-linux-arm64-gnu@1.32.0",
+      "status": "compatible",
+      "evidence": "Observed 2026-11-18 in the npm registry tarball of this exact version: MPL-2.0, and no file outside the licence text carries the Exhibit B \"Incompatible With Secondary Licenses\" notice, so MPL-2.0 section 3.3 allows a Larger Work under the GNU GPL (FSF licence list, #MPL-2.0). A build-time CSS compiler (lightningcss, through tailwindcss and uniwind); the MPL-covered files stay under MPL-2.0."
+    },
+    {
+      "package": "lightningcss-linux-arm64-gnu@1.33.0",
+      "status": "compatible",
+      "evidence": "Observed 2026-11-18 in the npm registry tarball of this exact version: MPL-2.0, and no file outside the licence text carries the Exhibit B \"Incompatible With Secondary Licenses\" notice, so MPL-2.0 section 3.3 allows a Larger Work under the GNU GPL (FSF licence list, #MPL-2.0). A build-time CSS compiler (lightningcss, through tailwindcss and uniwind); the MPL-covered files stay under MPL-2.0."
+    },
+    {
+      "package": "lightningcss-linux-arm64-musl@1.30.1",
+      "status": "compatible",
+      "evidence": "Observed 2026-11-18 in the npm registry tarball of this exact version: MPL-2.0, and no file outside the licence text carries the Exhibit B \"Incompatible With Secondary Licenses\" notice, so MPL-2.0 section 3.3 allows a Larger Work under the GNU GPL (FSF licence list, #MPL-2.0). A build-time CSS compiler (lightningcss, through tailwindcss and uniwind); the MPL-covered files stay under MPL-2.0."
+    },
+    {
+      "package": "lightningcss-linux-arm64-musl@1.32.0",
+      "status": "compatible",
+      "evidence": "Observed 2026-11-18 in the npm registry tarball of this exact version: MPL-2.0, and no file outside the licence text carries the Exhibit B \"Incompatible With Secondary Licenses\" notice, so MPL-2.0 section 3.3 allows a Larger Work under the GNU GPL (FSF licence list, #MPL-2.0). A build-time CSS compiler (lightningcss, through tailwindcss and uniwind); the MPL-covered files stay under MPL-2.0."
+    },
+    {
+      "package": "lightningcss-linux-arm64-musl@1.33.0",
+      "status": "compatible",
+      "evidence": "Observed 2026-11-18 in the npm registry tarball of this exact version: MPL-2.0, and no file outside the licence text carries the Exhibit B \"Incompatible With Secondary Licenses\" notice, so MPL-2.0 section 3.3 allows a Larger Work under the GNU GPL (FSF licence list, #MPL-2.0). A build-time CSS compiler (lightningcss, through tailwindcss and uniwind); the MPL-covered files stay under MPL-2.0."
+    },
+    {
+      "package": "lightningcss-linux-x64-gnu@1.30.1",
+      "status": "compatible",
+      "evidence": "Observed 2026-11-18 in the npm registry tarball of this exact version: MPL-2.0, and no file outside the licence text carries the Exhibit B \"Incompatible With Secondary Licenses\" notice, so MPL-2.0 section 3.3 allows a Larger Work under the GNU GPL (FSF licence list, #MPL-2.0). A build-time CSS compiler (lightningcss, through tailwindcss and uniwind); the MPL-covered files stay under MPL-2.0."
+    },
+    {
+      "package": "lightningcss-linux-x64-gnu@1.32.0",
+      "status": "compatible",
+      "evidence": "Observed 2026-11-18 in the npm registry tarball of this exact version: MPL-2.0, and no file outside the licence text carries the Exhibit B \"Incompatible With Secondary Licenses\" notice, so MPL-2.0 section 3.3 allows a Larger Work under the GNU GPL (FSF licence list, #MPL-2.0). A build-time CSS compiler (lightningcss, through tailwindcss and uniwind); the MPL-covered files stay under MPL-2.0."
+    },
+    {
+      "package": "lightningcss-linux-x64-gnu@1.33.0",
+      "status": "compatible",
+      "evidence": "Observed 2026-11-18 in the npm registry tarball of this exact version: MPL-2.0, and no file outside the licence text carries the Exhibit B \"Incompatible With Secondary Licenses\" notice, so MPL-2.0 section 3.3 allows a Larger Work under the GNU GPL (FSF licence list, #MPL-2.0). A build-time CSS compiler (lightningcss, through tailwindcss and uniwind); the MPL-covered files stay under MPL-2.0."
+    },
+    {
+      "package": "lightningcss-linux-x64-musl@1.30.1",
+      "status": "compatible",
+      "evidence": "Observed 2026-11-18 in the npm registry tarball of this exact version: MPL-2.0, and no file outside the licence text carries the Exhibit B \"Incompatible With Secondary Licenses\" notice, so MPL-2.0 section 3.3 allows a Larger Work under the GNU GPL (FSF licence list, #MPL-2.0). A build-time CSS compiler (lightningcss, through tailwindcss and uniwind); the MPL-covered files stay under MPL-2.0."
+    },
+    {
+      "package": "lightningcss-linux-x64-musl@1.32.0",
+      "status": "compatible",
+      "evidence": "Observed 2026-11-18 in the npm registry tarball of this exact version: MPL-2.0, and no file outside the licence text carries the Exhibit B \"Incompatible With Secondary Licenses\" notice, so MPL-2.0 section 3.3 allows a Larger Work under the GNU GPL (FSF licence list, #MPL-2.0). A build-time CSS compiler (lightningcss, through tailwindcss and uniwind); the MPL-covered files stay under MPL-2.0."
+    },
+    {
+      "package": "lightningcss-linux-x64-musl@1.33.0",
+      "status": "compatible",
+      "evidence": "Observed 2026-11-18 in the npm registry tarball of this exact version: MPL-2.0, and no file outside the licence text carries the Exhibit B \"Incompatible With Secondary Licenses\" notice, so MPL-2.0 section 3.3 allows a Larger Work under the GNU GPL (FSF licence list, #MPL-2.0). A build-time CSS compiler (lightningcss, through tailwindcss and uniwind); the MPL-covered files stay under MPL-2.0."
+    },
+    {
+      "package": "lightningcss-win32-arm64-msvc@1.30.1",
+      "status": "compatible",
+      "evidence": "Observed 2026-11-18 in the npm registry tarball of this exact version: MPL-2.0, and no file outside the licence text carries the Exhibit B \"Incompatible With Secondary Licenses\" notice, so MPL-2.0 section 3.3 allows a Larger Work under the GNU GPL (FSF licence list, #MPL-2.0). A build-time CSS compiler (lightningcss, through tailwindcss and uniwind); the MPL-covered files stay under MPL-2.0."
+    },
+    {
+      "package": "lightningcss-win32-arm64-msvc@1.32.0",
+      "status": "compatible",
+      "evidence": "Observed 2026-11-18 in the npm registry tarball of this exact version: MPL-2.0, and no file outside the licence text carries the Exhibit B \"Incompatible With Secondary Licenses\" notice, so MPL-2.0 section 3.3 allows a Larger Work under the GNU GPL (FSF licence list, #MPL-2.0). A build-time CSS compiler (lightningcss, through tailwindcss and uniwind); the MPL-covered files stay under MPL-2.0."
+    },
+    {
+      "package": "lightningcss-win32-arm64-msvc@1.33.0",
+      "status": "compatible",
+      "evidence": "Observed 2026-11-18 in the npm registry tarball of this exact version: MPL-2.0, and no file outside the licence text carries the Exhibit B \"Incompatible With Secondary Licenses\" notice, so MPL-2.0 section 3.3 allows a Larger Work under the GNU GPL (FSF licence list, #MPL-2.0). A build-time CSS compiler (lightningcss, through tailwindcss and uniwind); the MPL-covered files stay under MPL-2.0."
+    },
+    {
+      "package": "lightningcss-win32-x64-msvc@1.30.1",
+      "status": "compatible",
+      "evidence": "Observed 2026-11-18 in the npm registry tarball of this exact version: MPL-2.0, and no file outside the licence text carries the Exhibit B \"Incompatible With Secondary Licenses\" notice, so MPL-2.0 section 3.3 allows a Larger Work under the GNU GPL (FSF licence list, #MPL-2.0). A build-time CSS compiler (lightningcss, through tailwindcss and uniwind); the MPL-covered files stay under MPL-2.0."
+    },
+    {
+      "package": "lightningcss-win32-x64-msvc@1.32.0",
+      "status": "compatible",
+      "evidence": "Observed 2026-11-18 in the npm registry tarball of this exact version: MPL-2.0, and no file outside the licence text carries the Exhibit B \"Incompatible With Secondary Licenses\" notice, so MPL-2.0 section 3.3 allows a Larger Work under the GNU GPL (FSF licence list, #MPL-2.0). A build-time CSS compiler (lightningcss, through tailwindcss and uniwind); the MPL-covered files stay under MPL-2.0."
+    },
+    {
+      "package": "lightningcss-win32-x64-msvc@1.33.0",
+      "status": "compatible",
+      "evidence": "Observed 2026-11-18 in the npm registry tarball of this exact version: MPL-2.0, and no file outside the licence text carries the Exhibit B \"Incompatible With Secondary Licenses\" notice, so MPL-2.0 section 3.3 allows a Larger Work under the GNU GPL (FSF licence list, #MPL-2.0). A build-time CSS compiler (lightningcss, through tailwindcss and uniwind); the MPL-covered files stay under MPL-2.0."
+    },
+    {
+      "package": "lightningcss@1.30.1",
+      "status": "compatible",
+      "evidence": "Observed 2026-11-18 in the npm registry tarball of this exact version: MPL-2.0, and no file outside the licence text carries the Exhibit B \"Incompatible With Secondary Licenses\" notice, so MPL-2.0 section 3.3 allows a Larger Work under the GNU GPL (FSF licence list, #MPL-2.0). A build-time CSS compiler (lightningcss, through tailwindcss and uniwind); the MPL-covered files stay under MPL-2.0."
+    },
+    {
+      "package": "lightningcss@1.32.0",
+      "status": "compatible",
+      "evidence": "Observed 2026-11-18 in the npm registry tarball of this exact version: MPL-2.0, and no file outside the licence text carries the Exhibit B \"Incompatible With Secondary Licenses\" notice, so MPL-2.0 section 3.3 allows a Larger Work under the GNU GPL (FSF licence list, #MPL-2.0). A build-time CSS compiler (lightningcss, through tailwindcss and uniwind); the MPL-covered files stay under MPL-2.0."
+    },
+    {
+      "package": "lightningcss@1.33.0",
+      "status": "compatible",
+      "evidence": "Observed 2026-11-18 in the npm registry tarball of this exact version: MPL-2.0, and no file outside the licence text carries the Exhibit B \"Incompatible With Secondary Licenses\" notice, so MPL-2.0 section 3.3 allows a Larger Work under the GNU GPL (FSF licence list, #MPL-2.0). A build-time CSS compiler (lightningcss, through tailwindcss and uniwind); the MPL-covered files stay under MPL-2.0."
+    },
+    {
+      "package": "lru-cache@11.5.3",
+      "status": "pending",
+      "evidence": "BlueOak-1.0.0 is a permissive licence the FSF licence list (updated 2026-04-22) doesn't classify. Resolve by showing the package is absent from the release JS bundle and APK (a Node-only build dependency), or by a recorded compatibility determination."
+    },
+    {
+      "package": "minimatch@10.2.6",
+      "status": "pending",
+      "evidence": "BlueOak-1.0.0 is a permissive licence the FSF licence list (updated 2026-04-22) doesn't classify. Resolve by showing the package is absent from the release JS bundle and APK (a Node-only build dependency), or by a recorded compatibility determination."
+    },
+    {
+      "package": "minipass@7.1.3",
+      "status": "pending",
+      "evidence": "BlueOak-1.0.0 is a permissive licence the FSF licence list (updated 2026-04-22) doesn't classify. Resolve by showing the package is absent from the release JS bundle and APK (a Node-only build dependency), or by a recorded compatibility determination."
+    },
+    {
+      "package": "path-scurry@2.0.2",
+      "status": "pending",
+      "evidence": "BlueOak-1.0.0 is a permissive licence the FSF licence list (updated 2026-04-22) doesn't classify. Resolve by showing the package is absent from the release JS bundle and APK (a Node-only build dependency), or by a recorded compatibility determination."
+    },
+    {
+      "package": "sax@1.6.1",
+      "status": "pending",
+      "evidence": "BlueOak-1.0.0 is a permissive licence the FSF licence list (updated 2026-04-22) doesn't classify. Resolve by showing the package is absent from the release JS bundle and APK (a Node-only build dependency), or by a recorded compatibility determination."
+    }
+  ],
+  "components": [
+    {
+      "id": "contributor:LeoPerez8",
+      "kind": "first-party-code",
+      "status": "compatible",
+      "licence": "none declared (all rights reserved until the declaration ticket)",
+      "evidence": "The repository owner. 2,527 commits authored as LeoPerez8 on the integration tip 2d95fbb9 (git log). The owner can license this code under GPL-3.0-only, except the third-party portions listed under port:*."
+    },
+    {
+      "id": "contributor:Ygor Perez de Oliveira",
+      "kind": "first-party-code",
+      "status": "pending",
+      "licence": "none declared",
+      "evidence": "672 commits authored as Ygor Perez de Oliveira and 21 as ygor-infotera on 2d95fbb9, including the app icon commit 6fe6e6be. Part of this history shares an author address with LeoPerez8's, which doesn't establish who holds the rights. Needed: a written statement from this contributor (or of an assignment to the owner) that their contributions may be licensed under GPL-3.0-only."
+    },
+    {
+      "id": "contributor:github-actions[bot]",
+      "kind": "first-party-code",
+      "status": "compatible",
+      "evidence": "165 commits, the \"Release Wave <version>\" version bumps and lockfile/format autofixes CI makes from the owner's workflows. Mechanical changes with no separate author."
+    },
+    {
+      "id": "first-party:ai-assisted",
+      "kind": "first-party-code",
+      "status": "compatible",
+      "evidence": "1,976 commits carry a Co-Authored-By trailer for AI assistants (Claude, Codex, GPT), and one is authored as Claude. No third party claims rights in that output; copyright may not subsist in purely generated parts, which narrows what the grant covers but doesn't stop the owner from granting it."
+    },
+    {
+      "id": "port:metrolist-potoken",
+      "kind": "ported-code",
+      "status": "action-required",
+      "licence": "GPL-3.0 (Metrolist, no version-selection statement); NewPipe upstream GPL-3.0-or-later",
+      "paths": [
+        "apps/mobile/modules/wave-native/android/src/main/java/expo/modules/wavenative/yt/potoken/YtPoTokens.kt",
+        "apps/mobile/modules/wave-native/android/src/main/java/expo/modules/wavenative/yt/potoken/YtPoTokenWebView.kt",
+        "apps/mobile/modules/wave-native/android/src/main/java/expo/modules/wavenative/yt/potoken/YtBotGuard.kt",
+        "apps/mobile/modules/wave-native/android/src/main/assets/wave_po_token.html"
+      ],
+      "evidence": "Ported 2026-10-13 (a3f085e9) from Metrolist's app/src/main/kotlin/com/metrolist/music/utils/potoken/{PoTokenGenerator,PoTokenWebView,JavaScriptUtil}.kt and app/src/main/assets/po_token.html. The port didn't record an upstream revision. Metrolist v13.7.0 (7c5ba3ad22cb562d337897f82163a2b7fce665f3, the last release before the port) holds those paths; its po_token.html is identical to Wave's below Wave's 3-line header (upstream last changed in 98116669); its LICENSE is the GPLv3 text and neither it nor the README states \"or any later version\"; the ported files carry no headers. NewPipe v0.29.3 (8e15d04e) has the originals under app/src/main/java/org/schabi/newpipe/util/potoken and its README grants GPL-3.0-or-later. Every reading allows GPLv3, so the code can be part of a GPL-3.0-only work; the owner can't relicense it.",
+      "action": "Record the upstream revision ported (v13.7.0 is the candidate the html matches) and give each file a notice naming Metrolist and NewPipe, their licence and that Wave modified it, with the date (GPLv3 section 5a).",
+      "notice": "Metrolist contributors and NewPipe contributors, GPL-3.0 (NewPipe: GPL-3.0-or-later); modified by Wave."
+    },
+    {
+      "id": "port:yt-response-walks",
+      "kind": "ported-code",
+      "status": "action-required",
+      "licence": "GPL-3.0 if derived (Metrolist, innertubex); MIT if derived (ytmusicapi)",
+      "paths": [
+        "apps/mobile/modules/wave-native/android/src/main/java/expo/modules/wavenative/yt/YtAlbumParser.kt",
+        "apps/mobile/modules/wave-native/android/src/main/java/expo/modules/wavenative/yt/YtArtistParser.kt",
+        "apps/mobile/modules/wave-native/android/src/main/java/expo/modules/wavenative/yt/YtHomeParser.kt",
+        "apps/mobile/modules/wave-native/android/src/main/java/expo/modules/wavenative/yt/YtLibraryParser.kt",
+        "apps/mobile/modules/wave-native/android/src/main/java/expo/modules/wavenative/yt/YtOwnPlaylistParser.kt",
+        "apps/mobile/modules/wave-native/android/src/main/java/expo/modules/wavenative/yt/YtPlaylistParser.kt",
+        "apps/mobile/modules/wave-native/android/src/main/java/expo/modules/wavenative/yt/YtRadioParser.kt",
+        "apps/mobile/modules/wave-native/android/src/main/java/expo/modules/wavenative/yt/YtSearchParser.kt",
+        "apps/mobile/modules/wave-native/android/src/main/java/expo/modules/wavenative/yt/YtWatchParser.kt",
+        "apps/mobile/modules/wave-native/android/src/main/java/expo/modules/wavenative/yt/YtAccountMenu.kt",
+        "apps/mobile/modules/wave-native/android/src/main/java/expo/modules/wavenative/yt/YtClient.kt"
+      ],
+      "evidence": "Their doc comments say the response walk \"follows\" Metrolist's page classes (GPL-3.0), innertubex's AccountMenuResponse (GPL-3.0) or ytmusicapi (MIT), and YtClient reuses Metrolist's search filter parameters. No comparison against an upstream revision was made, so whether expression was copied is open. Compatibility doesn't depend on it: GPL-3.0 and MIT code can both be part of a GPL-3.0-only work.",
+      "action": "Either credit Metrolist, innertubex and ytmusicapi in these files' notices as derived code, or record a comparison against an exact upstream revision showing only the response format was reused.",
+      "notice": "Metrolist and innertubex contributors (GPL-3.0); ytmusicapi (MIT): credit if treated as derived."
+    },
+    {
+      "id": "port:shazamio-signature",
+      "kind": "ported-code",
+      "status": "action-required",
+      "licence": "MIT (shazamio-core 2.0.0), possibly GPL-3.0-or-later (SongRec)",
+      "paths": [
+        "apps/mobile/modules/wave-native/android/src/main/java/expo/modules/wavenative/recognize/SignatureGenerator.kt",
+        "apps/mobile/modules/wave-native/android/src/main/java/expo/modules/wavenative/recognize/HanningWindow.kt"
+      ],
+      "evidence": "Ported 2026-10-28 (0504b9bc) from shazamio-core tag 2.0.0 (5690a2e99ba2aa6456a742c5b1defd8e7841826b): LICENSE \"MIT License, Copyright (c) 2024 dotX12\", Cargo.toml license = \"MIT\". HanningWindow.kt holds hanning.rs's literal table. Wave's comment calls the generator \"itself SongRec's\"; SongRec 0.8.2 (79d3d771) has src/core/fingerprinting/{algorithm,hanning,signature_format}.rs, Cargo.toml license = \"GPL-3.0+\", and shazamio-core's THIRD-PARTY-NOTICES.md doesn't name SongRec. Open rights question: whether shazamio-core's files derive from SongRec. Compatible either way, as MIT and GPL-3.0-or-later both allow GPL-3.0-only.",
+      "action": "Carry shazamio-core's MIT notice in both files, and SongRec's GPL-3.0-or-later credit unless a comparison shows shazamio-core's code is independent.",
+      "notice": "shazamio-core 2.0.0, MIT, Copyright (c) 2024 dotX12; SongRec (GPL-3.0-or-later) credit pending the comparison."
+    },
+    {
+      "id": "port:chfft-rfft",
+      "kind": "ported-code",
+      "status": "action-required",
+      "licence": "MPL-2.0",
+      "paths": [
+        "apps/mobile/modules/wave-native/android/src/main/java/expo/modules/wavenative/recognize/RealFft2048.kt"
+      ],
+      "evidence": "\"Ported operation for operation\" from chfft 0.3.4's RFft1D (crates.io: MPL-2.0; crate sha256 103be009e532bf7f2cdbf24dc76953f55c83f03bac8a8ced0d2a21b639907dc0). Its source files carry the MPL-2.0 header and no Exhibit B notice, so MPL-2.0 section 3.3 allows the Larger Work under GPL-3.0-only, provided this file stays available under MPL-2.0 too. The file has no MPL notice now.",
+      "action": "Add chfft's MPL-2.0 notice to RealFft2048.kt and keep the file MPL-2.0; leave it out of the owner's GPL-3.0-only grant.",
+      "notice": "Derived from chfft 0.3.4 (chalharu), MPL-2.0; this file remains under MPL-2.0."
+    },
+    {
+      "id": "first-party:shazam-fixture-tool",
+      "kind": "first-party-code",
+      "status": "compatible",
+      "evidence": "apps/mobile/modules/wave-native/android/src/test/fixtures-src/shazam: Wave's own scripts. They fetch shazamio-core 2.0.0 at build time and include its files by path; nothing of it is committed, and none of it ships."
+    },
+    {
+      "id": "com.github.MetrolistGroup.innertubex:innertubex:0.8.6",
+      "kind": "native-library",
+      "status": "compatible",
+      "coordinates": ["com.github.MetrolistGroup.innertubex:innertubex:0.8.6"],
+      "licence": "GPL-3.0 (no version-selection statement)",
+      "evidence": "JitPack built 0.8.6 from tag v0.8.6 (tag object a432558d) = commit af31fd2ba65cb8cb56461c103517be96564cd91b. At that commit LICENSE is the GPLv3 text and README says \"GNU General Public License v3.0\", with no \"or any later version\" outside the licence text itself; the POM names GPL version 3. GPLv3 allows a GPL-3.0-only work. It bundles src/commonMain/resources/yt_ejs/yt.solver.{core,lib}.min.js, generated by yt-dlp/ejs under the Unlicense, carrying meriyah 6.1.4 (ISC) and astring 1.9.0 (MIT). Runtime dependencies (POM): ktor-client-core 3.6.0, kotlinx-serialization-json 1.11.0, kotlinx-coroutines-core 1.11.0, kotlin-stdlib 2.4.20, quickjs-kt 1.0.15 (Apache-2.0, POM).",
+      "notice": "innertubex's GPLv3 licence and its bundled notices (Unlicense yt-dlp/ejs, ISC meriyah, MIT astring); the release's Corresponding Source includes innertubex at af31fd2b."
+    },
+    {
+      "id": "net.jthink:jaudiotagger:3.0.1",
+      "kind": "native-library",
+      "status": "compatible",
+      "coordinates": ["net.jthink:jaudiotagger:3.0.1"],
+      "licence": "LGPL-2.1-or-later",
+      "notice": "LGPL-2.1 text; the library's source at 3.0.1.",
+      "evidence": "POM names \"LGPL\"; 100 source files of the 3.0.1 sources jar on Maven Central state \"version 2.1 of the License, or (at your option) any later version\". LGPL-2.1-or-later is compatible with GPLv3 (FSF licence list)."
+    },
+    {
+      "id": "androidx.palette:palette:1.0.0",
+      "kind": "native-library",
+      "status": "compatible",
+      "coordinates": ["androidx.palette:palette:1.0.0"],
+      "licence": "Apache-2.0",
+      "notice": "Apache-2.0 text and the library's NOTICE file, if any.",
+      "evidence": "Apache-2.0 (Maven POM <licenses>, observed 2026-11-18)"
+    },
+    {
+      "id": "androidx.core:core:1.16.0",
+      "kind": "native-library",
+      "status": "compatible",
+      "coordinates": ["androidx.core:core:1.16.0"],
+      "licence": "Apache-2.0",
+      "notice": "Apache-2.0 text and the library's NOTICE file, if any.",
+      "evidence": "Apache-2.0 (Maven POM <licenses>, observed 2026-11-18)"
+    },
+    {
+      "id": "androidx.media3:media3-exoplayer:1.11.1",
+      "kind": "native-library",
+      "status": "compatible",
+      "coordinates": ["androidx.media3:media3-exoplayer:1.11.1"],
+      "licence": "Apache-2.0",
+      "notice": "Apache-2.0 text and the library's NOTICE file, if any.",
+      "evidence": "Apache-2.0 (Maven POM <licenses>, observed 2026-11-18)"
+    },
+    {
+      "id": "androidx.media3:media3-session:1.11.1",
+      "kind": "native-library",
+      "status": "compatible",
+      "coordinates": ["androidx.media3:media3-session:1.11.1"],
+      "licence": "Apache-2.0",
+      "notice": "Apache-2.0 text and the library's NOTICE file, if any.",
+      "evidence": "Apache-2.0 (Maven POM <licenses>, observed 2026-11-18)"
+    },
+    {
+      "id": "androidx.car.app:app:1.7.0",
+      "kind": "native-library",
+      "status": "compatible",
+      "coordinates": ["androidx.car.app:app:1.7.0"],
+      "licence": "Apache-2.0",
+      "notice": "Apache-2.0 text and the library's NOTICE file, if any.",
+      "evidence": "Apache-2.0 (Maven POM <licenses>, observed 2026-11-18)"
+    },
+    {
+      "id": "androidx.credentials:credentials:1.6.0",
+      "kind": "native-library",
+      "status": "compatible",
+      "coordinates": ["androidx.credentials:credentials:1.6.0"],
+      "licence": "Apache-2.0",
+      "notice": "Apache-2.0 text and the library's NOTICE file, if any.",
+      "evidence": "Apache-2.0 (Maven POM <licenses>, observed 2026-11-18)"
+    },
+    {
+      "id": "androidx.credentials:credentials-play-services-auth:1.6.0",
+      "kind": "native-library",
+      "status": "compatible",
+      "coordinates": ["androidx.credentials:credentials-play-services-auth:1.6.0"],
+      "licence": "Apache-2.0",
+      "notice": "Apache-2.0 text and the library's NOTICE file, if any.",
+      "evidence": "Apache-2.0 (Maven POM <licenses>, observed 2026-11-18)"
+    },
+    {
+      "id": "io.ktor:ktor-client-okhttp:3.6.0",
+      "kind": "native-library",
+      "status": "compatible",
+      "coordinates": ["io.ktor:ktor-client-okhttp:3.6.0"],
+      "licence": "Apache-2.0",
+      "notice": "Apache-2.0 text and the library's NOTICE file, if any.",
+      "evidence": "Apache-2.0 (Maven POM <licenses>, observed 2026-11-18)"
+    },
+    {
+      "id": "com.squareup.okhttp3:okhttp-bom:5.5.0",
+      "kind": "native-library",
+      "status": "compatible",
+      "coordinates": ["com.squareup.okhttp3:okhttp-bom:5.5.0"],
+      "licence": "Apache-2.0",
+      "notice": "Apache-2.0 text and the library's NOTICE file, if any.",
+      "evidence": "Apache-2.0 (Maven POM <licenses>, observed 2026-11-18)"
+    },
+    {
+      "id": "io.ktor:ktor-client-content-negotiation:3.6.0",
+      "kind": "native-library",
+      "status": "compatible",
+      "coordinates": ["io.ktor:ktor-client-content-negotiation:3.6.0"],
+      "licence": "Apache-2.0",
+      "notice": "Apache-2.0 text and the library's NOTICE file, if any.",
+      "evidence": "Apache-2.0 (Maven POM <licenses>, observed 2026-11-18)"
+    },
+    {
+      "id": "io.ktor:ktor-serialization-kotlinx-json:3.6.0",
+      "kind": "native-library",
+      "status": "compatible",
+      "coordinates": ["io.ktor:ktor-serialization-kotlinx-json:3.6.0"],
+      "licence": "Apache-2.0",
+      "notice": "Apache-2.0 text and the library's NOTICE file, if any.",
+      "evidence": "Apache-2.0 (Maven POM <licenses>, observed 2026-11-18)"
+    },
+    {
+      "id": "org.jetbrains.kotlinx:kotlinx-serialization-json:1.11.0",
+      "kind": "native-library",
+      "status": "compatible",
+      "coordinates": ["org.jetbrains.kotlinx:kotlinx-serialization-json:1.11.0"],
+      "licence": "Apache-2.0",
+      "notice": "Apache-2.0 text and the library's NOTICE file, if any.",
+      "evidence": "Apache-2.0 (Maven POM <licenses>, observed 2026-11-18)"
+    },
+    {
+      "id": "com.google.android.libraries.identity.googleid:googleid:1.2.1",
+      "kind": "native-library",
+      "status": "pending",
+      "coordinates": ["com.google.android.libraries.identity.googleid:googleid:1.2.1"],
+      "licence": "Android Software Development Kit License (proprietary)",
+      "evidence": "The POM names the \"Android Software Development Kit License\". androidx.credentials:credentials-play-services-auth:1.6.0 also brings com.google.android.gms play-services-auth 21.1.1, play-services-identity-credentials 16.0.0-alpha08, play-services-auth-blockstore 16.4.0 and play-services-fido 21.0.0, all under that licence (their POMs). These ship inside the APK, beside third-party GPL-3.0 code (innertubex, the Metrolist/NewPipe ports). They aren't part of the phone's operating system, so whether the GPLv3 System Library exception covers them is unresolved, and the owner can add a section 7 permission only for code the owner holds.",
+      "action": "Get a compatibility determination for conveying Google sign-in's Play services libraries with the GPL-3.0 third-party code, or build the GPL release without them (for example, a sign-in path without Play services)."
+    },
+    {
+      "id": "gradle:release-closure",
+      "kind": "native-library",
+      "status": "pending",
+      "evidence": "The exact resolved releaseRuntimeClasspath (transitive versions after Gradle conflict resolution, plus the app module's react-android, hermes-android and Expo modules' Maven dependencies) wasn't observed: this environment has no JDK or Gradle. Native code inside npm packages (react-native-skia-android 154.0.0's Skia build and its bundled libraries, Hermes) declares only the package licence.",
+      "action": "For an exact release commit, record `./gradlew :app:dependencies --configuration releaseRuntimeClasspath` and the APK's bundled licence files, then add each library with its licence here."
+    },
+    {
+      "id": "asset:app-icons",
+      "kind": "asset",
+      "status": "compatible",
+      "paths": ["apps/mobile/assets/*.png"],
+      "evidence": "Rendered by Wave's own zero-dependency script apps/mobile/scripts/render-icons.ts (commit 6fe6e6be, \"rendered by a zero-dependency script\"; white icons d084fc77). Launcher and splash drawables are generated by Wave's config plugins. Rights follow the contributors' (see contributor:*)."
+    },
+    {
+      "id": "asset:inter-font",
+      "kind": "asset",
+      "status": "compatible",
+      "licence": "OFL-1.1",
+      "evidence": "Inter from @expo-google-fonts/inter 0.4.2, bundled in the APK as font files (see that package's review).",
+      "notice": "Inter font, SIL Open Font License 1.1, with its copyright notice; not relicensed."
+    },
+    {
+      "id": "asset:tabler-icons",
+      "kind": "asset",
+      "status": "compatible",
+      "licence": "MIT",
+      "evidence": "UI icons come from @tabler/icons-react-native 3.49.0 and @tabler/icons 3.49.0 (MIT, package.json and LICENSE).",
+      "notice": "Tabler Icons, MIT licence and copyright notice."
+    },
+    {
+      "id": "asset:design-reference-icons",
+      "kind": "asset",
+      "status": "pending",
+      "paths": [
+        "docs/design/even-shuffle/reference-*.svg",
+        "docs/design/smart-shuffle/reference-*.svg"
+      ],
+      "evidence": "Comparison references beside Wave's own icon studies; reference-real.svg's path appears to be Tabler's shuffle icon (MIT). Origin not recorded.",
+      "action": "Confirm each reference's source; carry its licence notice (Tabler: MIT) or leave it out of the GPL grant."
+    },
+    {
+      "id": "asset:design-studies",
+      "kind": "asset",
+      "status": "compatible",
+      "paths": [
+        "docs/design/even-shuffle/0*.svg",
+        "docs/design/smart-shuffle/0*.svg",
+        "docs/design/*/review.png",
+        "docs/design/smart-shuffle/index.html"
+      ],
+      "evidence": "Wave's own icon studies (commits 5bff38d7, 94b8ae6c, 96f77997, e7327ccc, 1af49184)."
+    },
+    {
+      "id": "asset:evidence-screenshots",
+      "kind": "asset",
+      "status": "pending",
+      "paths": ["docs/agents/evidence/534/*.png"],
+      "evidence": "120 screenshots of Wave's UI. They may show a test Library's album artwork and song names, which belong to third parties. Not inspected image by image.",
+      "action": "Inspect them; keep third-party artwork out of the GPL grant (exclude, or record as third-party material)."
+    },
+    {
+      "id": "data:service-samples",
+      "kind": "documentation",
+      "status": "action-required",
+      "paths": ["docs/spotify-samples/*", "docs/google-translate-samples/*"],
+      "evidence": "Responses captured from Spotify's and Google Translate's services for research (7552cc0d, a5678ca3, aca31833, 29f675fe). Their content (catalogue metadata, page markup) belongs to those services and their rights holders.",
+      "action": "Leave them out of the GPL grant and the source package's licensed files, or remove them."
+    },
+    {
+      "id": "fixtures:youtube-responses",
+      "kind": "test-fixture",
+      "status": "action-required",
+      "paths": ["apps/mobile/modules/wave-native/android/src/test/resources/fixtures/yt/*.json"],
+      "evidence": "\"Real fixtures\" (89897b7e): captured YouTube Music responses holding third-party catalogue data. Test-only; not in the APK.",
+      "action": "Leave them out of the GPL grant (record as third-party data), or replace them with reduced synthetic responses."
+    },
+    {
+      "id": "fixtures:audio",
+      "kind": "test-fixture",
+      "status": "pending",
+      "paths": [
+        "apps/mobile/modules/wave-native/android/src/test/resources/fixtures/*.{mp3,m4a,ogg,opus,flac,wav,png}"
+      ],
+      "evidence": "24 audio files of 1–62 KB and a 121-byte cover.png, added in 904bf236, 64eb3e65, 46be56b9, 4a194cfb and 954c0847 (soulseek-320.mp3). How they were made isn't recorded. Test-only; not in the APK.",
+      "action": "Record how each was made (synthesised audio is the owner's), or replace any of unknown origin."
+    },
+    {
+      "id": "fixtures:shazam-pcm",
+      "kind": "test-fixture",
+      "status": "compatible",
+      "paths": ["apps/mobile/modules/wave-native/android/src/test/resources/fixtures/shazam/*"],
+      "evidence": "Synthesised notes and noise, made by make_fixtures.py as fixtures/shazam/README.md describes."
+    },
+    {
+      "id": "data:generated-and-measured",
+      "kind": "documentation",
+      "status": "compatible",
+      "paths": [
+        "docs/performance/results/*",
+        "scripts/perf/testdata/*",
+        "scripts/ci/fixtures/*",
+        "apps/mobile/certs/certificate.pem"
+      ],
+      "evidence": "Measurements and build outputs of Wave itself, and the public update-signing certificate (a public key, not a secret). No third-party content found."
+    },
+    {
+      "id": "docs:first-party",
+      "kind": "documentation",
+      "status": "compatible",
+      "paths": ["docs/**/*.md", "README.md", "CONTEXT.md", "CLAUDE.md"],
+      "evidence": "Written in this repository by its contributors (rights as in contributor:*). Names Apple Music and BlackPlayer EX only as references; no third-party text or artwork copied was found."
+    },
+    {
+      "id": "distribution:released-android",
+      "kind": "distribution",
+      "status": "action-required",
+      "evidence": "Every v* release tag from v0.5.0 (the first) to v0.68.0-ti contains a3f085e9, which added innertubex and the Metrolist/NewPipe ports. Those APKs, OTA bundles and repacks were conveyed without a licence for the combined work, a notices file or source access tied to each release. The repository at each tag is public, which alone isn't a compliance finding.",
+      "action": "#1135: per-release source access (tag, native base of repacks, notices) for the versions already distributed as well as new ones; the owner's licence declaration then covers them. GPLv3 section 8 lets rights be reinstated once a violation is cured."
+    }
+  ]
+}

@@ -1,0 +1,4657 @@
+{
+  "lockfileSha256": "4c0e5e8927d2a60ed3679988718eaf58fe6e6d559913f4a91476f0678ef3f99e",
+  "importers": {
+    "apps/mobile": [
+      {
+        "name": "2g",
+        "version": "0.4.4",
+        "licence": "MIT",
+        "notices": ["LICENSE.md"],
+        "source": "installed package.json"
+      },
+      {
+        "name": "@babel/code-frame",
+        "version": "7.29.7",
+        "licence": "MIT",
+        "notices": ["LICENSE"],
+        "source": "installed package.json"
+      },
+      {
+        "name": "@babel/compat-data",
+        "version": "7.29.7",
+        "licence": "MIT",
+        "notices": ["LICENSE"],
+        "source": "installed package.json"
+      },
+      {
+        "name": "@babel/core",
+        "version": "7.29.7",
+        "licence": "MIT",
+        "notices": ["LICENSE"],
+        "source": "installed package.json"
+      },
+      {
+        "name": "@babel/generator",
+        "version": "7.29.8",
+        "licence": "MIT",
+        "notices": ["LICENSE"],
+        "source": "installed package.json"
+      },
+      {
+        "name": "@babel/helper-annotate-as-pure",
+        "version": "7.29.7",
+        "licence": "MIT",
+        "notices": ["LICENSE"],
+        "source": "installed package.json"
+      },
+      {
+        "name": "@babel/helper-compilation-targets",
+        "version": "7.29.7",
+        "licence": "MIT",
+        "notices": ["LICENSE"],
+        "source": "installed package.json"
+      },
+      {
+        "name": "@babel/helper-create-class-features-plugin",
+        "version": "7.29.7",
+        "licence": "MIT",
+        "notices": ["LICENSE"],
+        "source": "installed package.json"
+      },
+      {
+        "name": "@babel/helper-create-regexp-features-plugin",
+        "version": "7.29.10",
+        "licence": "MIT",
+        "notices": ["LICENSE"],
+        "source": "installed package.json"
+      },
+      {
+        "name": "@babel/helper-define-polyfill-provider",
+        "version": "0.6.8",
+        "licence": "MIT",
+        "notices": ["LICENSE"],
+        "source": "installed package.json"
+      },
+      {
+        "name": "@babel/helper-globals",
+        "version": "7.29.7",
+        "licence": "MIT",
+        "notices": ["LICENSE"],
+        "source": "installed package.json"
+      },
+      {
+        "name": "@babel/helper-member-expression-to-functions",
+        "version": "7.29.7",
+        "licence": "MIT",
+        "notices": ["LICENSE"],
+        "source": "installed package.json"
+      },
+      {
+        "name": "@babel/helper-module-imports",
+        "version": "7.29.7",
+        "licence": "MIT",
+        "notices": ["LICENSE"],
+        "source": "installed package.json"
+      },
+      {
+        "name": "@babel/helper-module-transforms",
+        "version": "7.29.7",
+        "licence": "MIT",
+        "notices": ["LICENSE"],
+        "source": "installed package.json"
+      },
+      {
+        "name": "@babel/helper-optimise-call-expression",
+        "version": "7.29.7",
+        "licence": "MIT",
+        "notices": ["LICENSE"],
+        "source": "installed package.json"
+      },
+      {
+        "name": "@babel/helper-plugin-utils",
+        "version": "7.29.7",
+        "licence": "MIT",
+        "notices": ["LICENSE"],
+        "source": "installed package.json"
+      },
+      {
+        "name": "@babel/helper-remap-async-to-generator",
+        "version": "7.29.7",
+        "licence": "MIT",
+        "notices": ["LICENSE"],
+        "source": "installed package.json"
+      },
+      {
+        "name": "@babel/helper-replace-supers",
+        "version": "7.29.7",
+        "licence": "MIT",
+        "notices": ["LICENSE"],
+        "source": "installed package.json"
+      },
+      {
+        "name": "@babel/helper-skip-transparent-expression-wrappers",
+        "version": "7.29.7",
+        "licence": "MIT",
+        "notices": ["LICENSE"],
+        "source": "installed package.json"
+      },
+      {
+        "name": "@babel/helper-string-parser",
+        "version": "7.29.7",
+        "licence": "MIT",
+        "notices": ["LICENSE"],
+        "source": "installed package.json"
+      },
+      {
+        "name": "@babel/helper-validator-identifier",
+        "version": "7.29.7",
+        "licence": "MIT",
+        "notices": ["LICENSE"],
+        "source": "installed package.json"
+      },
+      {
+        "name": "@babel/helper-validator-option",
+        "version": "7.29.7",
+        "licence": "MIT",
+        "notices": ["LICENSE"],
+        "source": "installed package.json"
+      },
+      {
+        "name": "@babel/helper-wrap-function",
+        "version": "7.29.7",
+        "licence": "MIT",
+        "notices": ["LICENSE"],
+        "source": "installed package.json"
+      },
+      {
+        "name": "@babel/helpers",
+        "version": "7.29.10",
+        "licence": "MIT",
+        "notices": ["LICENSE"],
+        "source": "installed package.json"
+      },
+      {
+        "name": "@babel/parser",
+        "version": "7.29.9",
+        "licence": "MIT",
+        "notices": ["LICENSE"],
+        "source": "installed package.json"
+      },
+      {
+        "name": "@babel/plugin-proposal-decorators",
+        "version": "7.29.7",
+        "licence": "MIT",
+        "notices": ["LICENSE"],
+        "source": "installed package.json"
+      },
+      {
+        "name": "@babel/plugin-proposal-export-default-from",
+        "version": "7.29.7",
+        "licence": "MIT",
+        "notices": ["LICENSE"],
+        "source": "installed package.json"
+      },
+      {
+        "name": "@babel/plugin-syntax-decorators",
+        "version": "7.29.7",
+        "licence": "MIT",
+        "notices": ["LICENSE"],
+        "source": "installed package.json"
+      },
+      {
+        "name": "@babel/plugin-syntax-dynamic-import",
+        "version": "7.8.3",
+        "licence": "MIT",
+        "notices": ["LICENSE"],
+        "source": "installed package.json"
+      },
+      {
+        "name": "@babel/plugin-syntax-export-default-from",
+        "version": "7.29.7",
+        "licence": "MIT",
+        "notices": ["LICENSE"],
+        "source": "installed package.json"
+      },
+      {
+        "name": "@babel/plugin-syntax-flow",
+        "version": "7.29.7",
+        "licence": "MIT",
+        "notices": ["LICENSE"],
+        "source": "installed package.json"
+      },
+      {
+        "name": "@babel/plugin-syntax-jsx",
+        "version": "7.29.7",
+        "licence": "MIT",
+        "notices": ["LICENSE"],
+        "source": "installed package.json"
+      },
+      {
+        "name": "@babel/plugin-syntax-nullish-coalescing-operator",
+        "version": "7.8.3",
+        "licence": "MIT",
+        "notices": ["LICENSE"],
+        "source": "installed package.json"
+      },
+      {
+        "name": "@babel/plugin-syntax-optional-chaining",
+        "version": "7.8.3",
+        "licence": "MIT",
+        "notices": ["LICENSE"],
+        "source": "installed package.json"
+      },
+      {
+        "name": "@babel/plugin-syntax-typescript",
+        "version": "7.29.7",
+        "licence": "MIT",
+        "notices": ["LICENSE"],
+        "source": "installed package.json"
+      },
+      {
+        "name": "@babel/plugin-transform-arrow-functions",
+        "version": "7.29.7",
+        "licence": "MIT",
+        "notices": ["LICENSE"],
+        "source": "installed package.json"
+      },
+      {
+        "name": "@babel/plugin-transform-async-generator-functions",
+        "version": "7.29.7",
+        "licence": "MIT",
+        "notices": ["LICENSE"],
+        "source": "installed package.json"
+      },
+      {
+        "name": "@babel/plugin-transform-async-to-generator",
+        "version": "7.29.7",
+        "licence": "MIT",
+        "notices": ["LICENSE"],
+        "source": "installed package.json"
+      },
+      {
+        "name": "@babel/plugin-transform-block-scoping",
+        "version": "7.29.7",
+        "licence": "MIT",
+        "notices": ["LICENSE"],
+        "source": "installed package.json"
+      },
+      {
+        "name": "@babel/plugin-transform-class-properties",
+        "version": "7.29.7",
+        "licence": "MIT",
+        "notices": ["LICENSE"],
+        "source": "installed package.json"
+      },
+      {
+        "name": "@babel/plugin-transform-class-static-block",
+        "version": "7.29.7",
+        "licence": "MIT",
+        "notices": ["LICENSE"],
+        "source": "installed package.json"
+      },
+      {
+        "name": "@babel/plugin-transform-classes",
+        "version": "7.29.7",
+        "licence": "MIT",
+        "notices": ["LICENSE"],
+        "source": "installed package.json"
+      },
+      {
+        "name": "@babel/plugin-transform-destructuring",
+        "version": "7.29.7",
+        "licence": "MIT",
+        "notices": ["LICENSE"],
+        "source": "installed package.json"
+      },
+      {
+        "name": "@babel/plugin-transform-export-namespace-from",
+        "version": "7.29.7",
+        "licence": "MIT",
+        "notices": ["LICENSE"],
+        "source": "installed package.json"
+      },
+      {
+        "name": "@babel/plugin-transform-flow-strip-types",
+        "version": "7.29.7",
+        "licence": "MIT",
+        "notices": ["LICENSE"],
+        "source": "installed package.json"
+      },
+      {
+        "name": "@babel/plugin-transform-for-of",
+        "version": "7.29.7",
+        "licence": "MIT",
+        "notices": ["LICENSE"],
+        "source": "installed package.json"
+      },
+      {
+        "name": "@babel/plugin-transform-logical-assignment-operators",
+        "version": "7.29.7",
+        "licence": "MIT",
+        "notices": ["LICENSE"],
+        "source": "installed package.json"
+      },
+      {
+        "name": "@babel/plugin-transform-modules-commonjs",
+        "version": "7.29.7",
+        "licence": "MIT",
+        "notices": ["LICENSE"],
+        "source": "installed package.json"
+      },
+      {
+        "name": "@babel/plugin-transform-named-capturing-groups-regex",
+        "version": "7.29.7",
+        "licence": "MIT",
+        "notices": ["LICENSE"],
+        "source": "installed package.json"
+      },
+      {
+        "name": "@babel/plugin-transform-nullish-coalescing-operator",
+        "version": "7.29.7",
+        "licence": "MIT",
+        "notices": ["LICENSE"],
+        "source": "installed package.json"
+      },
+      {
+        "name": "@babel/plugin-transform-object-rest-spread",
+        "version": "7.29.7",
+        "licence": "MIT",
+        "notices": ["LICENSE"],
+        "source": "installed package.json"
+      },
+      {
+        "name": "@babel/plugin-transform-optional-catch-binding",
+        "version": "7.29.7",
+        "licence": "MIT",
+        "notices": ["LICENSE"],
+        "source": "installed package.json"
+      },
+      {
+        "name": "@babel/plugin-transform-optional-chaining",
+        "version": "7.29.7",
+        "licence": "MIT",
+        "notices": ["LICENSE"],
+        "source": "installed package.json"
+      },
+      {
+        "name": "@babel/plugin-transform-parameters",
+        "version": "7.29.7",
+        "licence": "MIT",
+        "notices": ["LICENSE"],
+        "source": "installed package.json"
+      },
+      {
+        "name": "@babel/plugin-transform-private-methods",
+        "version": "7.29.7",
+        "licence": "MIT",
+        "notices": ["LICENSE"],
+        "source": "installed package.json"
+      },
+      {
+        "name": "@babel/plugin-transform-private-property-in-object",
+        "version": "7.29.7",
+        "licence": "MIT",
+        "notices": ["LICENSE"],
+        "source": "installed package.json"
+      },
+      {
+        "name": "@babel/plugin-transform-react-display-name",
+        "version": "7.29.7",
+        "licence": "MIT",
+        "notices": ["LICENSE"],
+        "source": "installed package.json"
+      },
+      {
+        "name": "@babel/plugin-transform-react-jsx",
+        "version": "7.29.7",
+        "licence": "MIT",
+        "notices": ["LICENSE"],
+        "source": "installed package.json"
+      },
+      {
+        "name": "@babel/plugin-transform-react-jsx-development",
+        "version": "7.29.7",
+        "licence": "MIT",
+        "notices": ["LICENSE"],
+        "source": "installed package.json"
+      },
+      {
+        "name": "@babel/plugin-transform-react-jsx-self",
+        "version": "7.29.7",
+        "licence": "MIT",
+        "notices": ["LICENSE"],
+        "source": "installed package.json"
+      },
+      {
+        "name": "@babel/plugin-transform-react-jsx-source",
+        "version": "7.29.7",
+        "licence": "MIT",
+        "notices": ["LICENSE"],
+        "source": "installed package.json"
+      },
+      {
+        "name": "@babel/plugin-transform-react-pure-annotations",
+        "version": "7.29.7",
+        "licence": "MIT",
+        "notices": ["LICENSE"],
+        "source": "installed package.json"
+      },
+      {
+        "name": "@babel/plugin-transform-regenerator",
+        "version": "7.29.8",
+        "licence": "MIT",
+        "notices": ["LICENSE"],
+        "source": "installed package.json"
+      },
+      {
+        "name": "@babel/plugin-transform-runtime",
+        "version": "7.29.7",
+        "licence": "MIT",
+        "notices": ["LICENSE"],
+        "source": "installed package.json"
+      },
+      {
+        "name": "@babel/plugin-transform-shorthand-properties",
+        "version": "7.29.7",
+        "licence": "MIT",
+        "notices": ["LICENSE"],
+        "source": "installed package.json"
+      },
+      {
+        "name": "@babel/plugin-transform-template-literals",
+        "version": "7.29.7",
+        "licence": "MIT",
+        "notices": ["LICENSE"],
+        "source": "installed package.json"
+      },
+      {
+        "name": "@babel/plugin-transform-typescript",
+        "version": "7.29.9",
+        "licence": "MIT",
+        "notices": ["LICENSE"],
+        "source": "installed package.json"
+      },
+      {
+        "name": "@babel/plugin-transform-unicode-regex",
+        "version": "7.29.7",
+        "licence": "MIT",
+        "notices": ["LICENSE"],
+        "source": "installed package.json"
+      },
+      {
+        "name": "@babel/preset-typescript",
+        "version": "7.29.7",
+        "licence": "MIT",
+        "notices": ["LICENSE"],
+        "source": "installed package.json"
+      },
+      {
+        "name": "@babel/runtime",
+        "version": "7.29.10",
+        "licence": "MIT",
+        "notices": ["LICENSE"],
+        "source": "installed package.json"
+      },
+      {
+        "name": "@babel/template",
+        "version": "7.29.7",
+        "licence": "MIT",
+        "notices": ["LICENSE"],
+        "source": "installed package.json"
+      },
+      {
+        "name": "@babel/traverse",
+        "version": "7.29.10",
+        "licence": "MIT",
+        "notices": ["LICENSE"],
+        "source": "installed package.json"
+      },
+      {
+        "name": "@babel/types",
+        "version": "7.29.8",
+        "licence": "MIT",
+        "notices": ["LICENSE"],
+        "source": "installed package.json"
+      },
+      {
+        "name": "@expo-google-fonts/inter",
+        "version": "0.4.2",
+        "licence": "MIT AND OFL-1.1",
+        "notices": ["LICENSE"],
+        "source": "installed package.json"
+      },
+      {
+        "name": "@expo/cli",
+        "version": "58.1.6",
+        "licence": "MIT",
+        "notices": ["LICENSE", "LICENSE-third-party"],
+        "source": "installed package.json"
+      },
+      {
+        "name": "@expo/code-signing-certificates",
+        "version": "0.0.7",
+        "licence": "MIT",
+        "notices": ["LICENSE"],
+        "source": "installed package.json"
+      },
+      {
+        "name": "@expo/config",
+        "version": "58.0.4",
+        "licence": "MIT",
+        "notices": ["LICENSE"],
+        "source": "installed package.json"
+      },
+      {
+        "name": "@expo/config-plugins",
+        "version": "58.0.7",
+        "licence": "MIT",
+        "notices": ["LICENSE"],
+        "source": "installed package.json"
+      },
+      {
+        "name": "@expo/config-types",
+        "version": "58.0.2",
+        "licence": "MIT",
+        "notices": ["LICENSE"],
+        "source": "installed package.json"
+      },
+      {
+        "name": "@expo/devcert",
+        "version": "1.2.2",
+        "licence": "MIT",
+        "notices": ["LICENSE"],
+        "source": "installed package.json"
+      },
+      {
+        "name": "@expo/devtools",
+        "version": "58.0.2",
+        "licence": "MIT",
+        "notices": ["LICENSE"],
+        "source": "installed package.json"
+      },
+      {
+        "name": "@expo/dom-webview",
+        "version": "58.0.2",
+        "licence": "MIT",
+        "notices": ["LICENSE"],
+        "source": "installed package.json"
+      },
+      {
+        "name": "@expo/env",
+        "version": "2.5.1",
+        "licence": "MIT",
+        "notices": ["LICENSE"],
+        "source": "installed package.json"
+      },
+      {
+        "name": "@expo/env",
+        "version": "2.5.3",
+        "licence": "MIT",
+        "notices": ["LICENSE"],
+        "source": "installed package.json"
+      },
+      {
+        "name": "@expo/fingerprint",
+        "version": "0.21.4",
+        "licence": "MIT",
+        "notices": ["LICENSE"],
+        "source": "installed package.json"
+      },
+      {
+        "name": "@expo/image-utils",
+        "version": "0.12.4",
+        "licence": "MIT",
+        "notices": ["LICENSE"],
+        "source": "installed package.json"
+      },
+      {
+        "name": "@expo/inline-modules",
+        "version": "0.2.4",
+        "licence": "MIT",
+        "notices": ["LICENSE"],
+        "source": "installed package.json"
+      },
+      {
+        "name": "@expo/json-file",
+        "version": "11.2.1",
+        "licence": "MIT",
+        "notices": ["LICENSE"],
+        "source": "installed package.json"
+      },
+      {
+        "name": "@expo/local-build-cache-provider",
+        "version": "58.0.4",
+        "licence": "MIT",
+        "notices": ["LICENSE"],
+        "source": "installed package.json"
+      },
+      {
+        "name": "@expo/log-box",
+        "version": "58.0.12",
+        "licence": "MIT",
+        "notices": ["LICENSE"],
+        "source": "installed package.json"
+      },
+      {
+        "name": "@expo/log-box-utils",
+        "version": "58.0.2",
+        "licence": "MIT",
+        "notices": ["LICENSE"],
+        "source": "installed package.json"
+      },
+      {
+        "name": "@expo/metro",
+        "version": "58.0.0-rc.0",
+        "licence": "MIT",
+        "notices": ["LICENSE"],
+        "source": "installed package.json"
+      },
+      {
+        "name": "@expo/metro-config",
+        "version": "58.0.11",
+        "licence": "MIT",
+        "notices": ["LICENSE"],
+        "source": "installed package.json"
+      },
+      {
+        "name": "@expo/metro-file-map",
+        "version": "58.0.4",
+        "licence": "MIT",
+        "notices": ["LICENSE"],
+        "source": "installed package.json"
+      },
+      {
+        "name": "@expo/metro-runtime",
+        "version": "58.0.14",
+        "licence": "MIT",
+        "notices": ["LICENSE"],
+        "source": "installed package.json"
+      },
+      {
+        "name": "@expo/osascript",
+        "version": "2.8.1",
+        "licence": "MIT",
+        "notices": ["LICENSE"],
+        "source": "installed package.json"
+      },
+      {
+        "name": "@expo/package-manager",
+        "version": "1.14.1",
+        "licence": "MIT",
+        "notices": ["LICENSE"],
+        "source": "installed package.json"
+      },
+      {
+        "name": "@expo/platforms",
+        "version": "58.0.1",
+        "licence": "MIT",
+        "notices": ["LICENSE"],
+        "source": "installed package.json"
+      },
+      {
+        "name": "@expo/plist",
+        "version": "0.10.1",
+        "licence": "MIT",
+        "notices": ["LICENSE"],
+        "source": "installed package.json"
+      },
+      {
+        "name": "@expo/prebuild-config",
+        "version": "58.0.11",
+        "licence": "MIT",
+        "notices": ["LICENSE"],
+        "source": "installed package.json"
+      },
+      {
+        "name": "@expo/require-utils",
+        "version": "58.0.3",
+        "licence": "MIT",
+        "notices": ["LICENSE"],
+        "source": "installed package.json"
+      },
+      {
+        "name": "@expo/router-server",
+        "version": "58.0.11",
+        "licence": "MIT",
+        "notices": ["LICENSE"],
+        "source": "installed package.json"
+      },
+      {
+        "name": "@expo/schema-utils",
+        "version": "58.0.1",
+        "licence": "MIT",
+        "notices": ["LICENSE"],
+        "source": "installed package.json"
+      },
+      {
+        "name": "@expo/sdk-runtime-versions",
+        "version": "1.0.1",
+        "licence": "MIT",
+        "notices": ["LICENSE"],
+        "source": "installed package.json"
+      },
+      {
+        "name": "@expo/spawn-async",
+        "version": "1.8.0",
+        "licence": "MIT",
+        "notices": ["LICENSE"],
+        "source": "installed package.json"
+      },
+      {
+        "name": "@expo/sudo-prompt",
+        "version": "9.3.2",
+        "licence": "MIT",
+        "notices": ["LICENSE"],
+        "source": "installed package.json"
+      },
+      {
+        "name": "@expo/ws-tunnel",
+        "version": "2.0.1",
+        "licence": "MIT",
+        "notices": ["LICENSE"],
+        "source": "installed package.json"
+      },
+      {
+        "name": "@expo/xcpretty",
+        "version": "4.4.6",
+        "licence": "MIT",
+        "notices": ["LICENSE"],
+        "source": "installed package.json"
+      },
+      {
+        "name": "@isaacs/ttlcache",
+        "version": "1.4.1",
+        "licence": "ISC",
+        "notices": ["LICENSE"],
+        "source": "installed package.json"
+      },
+      {
+        "name": "@jest/schemas",
+        "version": "29.6.3",
+        "licence": "MIT",
+        "notices": ["LICENSE"],
+        "source": "installed package.json"
+      },
+      {
+        "name": "@jest/types",
+        "version": "29.6.3",
+        "licence": "MIT",
+        "notices": ["LICENSE"],
+        "source": "installed package.json"
+      },
+      {
+        "name": "@jridgewell/gen-mapping",
+        "version": "0.3.13",
+        "licence": "MIT",
+        "notices": ["LICENSE"],
+        "source": "installed package.json"
+      },
+      {
+        "name": "@jridgewell/remapping",
+        "version": "2.3.5",
+        "licence": "MIT",
+        "notices": ["LICENSE"],
+        "source": "installed package.json"
+      },
+      {
+        "name": "@jridgewell/resolve-uri",
+        "version": "3.1.2",
+        "licence": "MIT",
+        "notices": ["LICENSE"],
+        "source": "installed package.json"
+      },
+      {
+        "name": "@jridgewell/source-map",
+        "version": "0.3.11",
+        "licence": "MIT",
+        "notices": ["LICENSE"],
+        "source": "installed package.json"
+      },
+      {
+        "name": "@jridgewell/sourcemap-codec",
+        "version": "1.6.0",
+        "licence": "MIT",
+        "notices": ["LICENSE"],
+        "source": "installed package.json"
+      },
+      {
+        "name": "@jridgewell/trace-mapping",
+        "version": "0.3.31",
+        "licence": "MIT",
+        "notices": ["LICENSE"],
+        "source": "installed package.json"
+      },
+      {
+        "name": "@legendapp/list",
+        "version": "3.3.5",
+        "licence": "MIT",
+        "notices": ["LICENSE"],
+        "source": "installed package.json"
+      },
+      {
+        "name": "@libsql/client",
+        "version": "0.18.0",
+        "licence": "MIT",
+        "notices": [],
+        "source": "installed package.json"
+      },
+      {
+        "name": "@libsql/core",
+        "version": "0.18.0",
+        "licence": "MIT",
+        "notices": [],
+        "source": "installed package.json"
+      },
+      {
+        "name": "@libsql/darwin-arm64",
+        "version": "0.5.29",
+        "licence": "MIT",
+        "notices": null,
+        "source": "npm registry metadata"
+      },
+      {
+        "name": "@libsql/darwin-x64",
+        "version": "0.5.29",
+        "licence": "MIT",
+        "notices": null,
+        "source": "npm registry metadata"
+      },
+      {
+        "name": "@libsql/hrana-client",
+        "version": "0.10.0",
+        "licence": "MIT",
+        "notices": ["LICENSE"],
+        "source": "installed package.json"
+      },
+      {
+        "name": "@libsql/isomorphic-ws",
+        "version": "0.1.5",
+        "licence": "MIT",
+        "notices": [],
+        "source": "installed package.json"
+      },
+      {
+        "name": "@libsql/linux-arm-gnueabihf",
+        "version": "0.5.29",
+        "licence": "MIT",
+        "notices": null,
+        "source": "npm registry metadata"
+      },
+      {
+        "name": "@libsql/linux-arm-musleabihf",
+        "version": "0.5.29",
+        "licence": "MIT",
+        "notices": null,
+        "source": "npm registry metadata"
+      },
+      {
+        "name": "@libsql/linux-arm64-gnu",
+        "version": "0.5.29",
+        "licence": "MIT",
+        "notices": null,
+        "source": "npm registry metadata"
+      },
+      {
+        "name": "@libsql/linux-arm64-musl",
+        "version": "0.5.29",
+        "licence": "MIT",
+        "notices": null,
+        "source": "npm registry metadata"
+      },
+      {
+        "name": "@libsql/linux-x64-gnu",
+        "version": "0.5.29",
+        "licence": "MIT",
+        "notices": null,
+        "source": "npm registry metadata"
+      },
+      {
+        "name": "@libsql/linux-x64-musl",
+        "version": "0.5.29",
+        "licence": "MIT",
+        "notices": null,
+        "source": "npm registry metadata"
+      },
+      {
+        "name": "@libsql/win32-x64-msvc",
+        "version": "0.5.29",
+        "licence": "MIT",
+        "notices": [],
+        "source": "installed package.json"
+      },
+      {
+        "name": "@neon-rs/load",
+        "version": "0.0.4",
+        "licence": "MIT",
+        "notices": ["LICENSE"],
+        "source": "installed package.json"
+      },
+      {
+        "name": "@noxcturnal/noxcturnal-darwin-arm64",
+        "version": "0.1.1",
+        "licence": "MIT",
+        "notices": null,
+        "source": "npm registry metadata"
+      },
+      {
+        "name": "@noxcturnal/noxcturnal-darwin-x64",
+        "version": "0.1.1",
+        "licence": "MIT",
+        "notices": null,
+        "source": "npm registry metadata"
+      },
+      {
+        "name": "@noxcturnal/noxcturnal-linux-arm64-gnu",
+        "version": "0.1.1",
+        "licence": "MIT",
+        "notices": null,
+        "source": "npm registry metadata"
+      },
+      {
+        "name": "@noxcturnal/noxcturnal-linux-arm64-musl",
+        "version": "0.1.1",
+        "licence": "MIT",
+        "notices": null,
+        "source": "npm registry metadata"
+      },
+      {
+        "name": "@noxcturnal/noxcturnal-linux-x64-gnu",
+        "version": "0.1.1",
+        "licence": "MIT",
+        "notices": null,
+        "source": "npm registry metadata"
+      },
+      {
+        "name": "@noxcturnal/noxcturnal-linux-x64-musl",
+        "version": "0.1.1",
+        "licence": "MIT",
+        "notices": null,
+        "source": "npm registry metadata"
+      },
+      {
+        "name": "@noxcturnal/noxcturnal-win32-arm64-msvc",
+        "version": "0.1.1",
+        "licence": "MIT",
+        "notices": null,
+        "source": "npm registry metadata"
+      },
+      {
+        "name": "@noxcturnal/noxcturnal-win32-x64-msvc",
+        "version": "0.1.1",
+        "licence": "MIT",
+        "notices": [],
+        "source": "installed package.json"
+      },
+      {
+        "name": "@opentelemetry/api",
+        "version": "1.9.1",
+        "licence": "Apache-2.0",
+        "notices": ["LICENSE"],
+        "source": "installed package.json"
+      },
+      {
+        "name": "@oxc-project/types",
+        "version": "0.141.0",
+        "licence": "MIT",
+        "notices": ["LICENSE"],
+        "source": "installed package.json"
+      },
+      {
+        "name": "@radix-ui/primitive",
+        "version": "1.1.7",
+        "licence": "MIT",
+        "notices": ["LICENSE"],
+        "source": "installed package.json"
+      },
+      {
+        "name": "@radix-ui/react-collection",
+        "version": "1.1.16",
+        "licence": "MIT",
+        "notices": ["LICENSE"],
+        "source": "installed package.json"
+      },
+      {
+        "name": "@radix-ui/react-compose-refs",
+        "version": "1.1.5",
+        "licence": "MIT",
+        "notices": ["LICENSE"],
+        "source": "installed package.json"
+      },
+      {
+        "name": "@radix-ui/react-context",
+        "version": "1.2.2",
+        "licence": "MIT",
+        "notices": ["LICENSE"],
+        "source": "installed package.json"
+      },
+      {
+        "name": "@radix-ui/react-direction",
+        "version": "1.1.5",
+        "licence": "MIT",
+        "notices": ["LICENSE"],
+        "source": "installed package.json"
+      },
+      {
+        "name": "@radix-ui/react-id",
+        "version": "1.1.4",
+        "licence": "MIT",
+        "notices": ["LICENSE"],
+        "source": "installed package.json"
+      },
+      {
+        "name": "@radix-ui/react-presence",
+        "version": "1.1.11",
+        "licence": "MIT",
+        "notices": ["LICENSE"],
+        "source": "installed package.json"
+      },
+      {
+        "name": "@radix-ui/react-primitive",
+        "version": "2.1.11",
+        "licence": "MIT",
+        "notices": ["LICENSE"],
+        "source": "installed package.json"
+      },
+      {
+        "name": "@radix-ui/react-roving-focus",
+        "version": "1.1.20",
+        "licence": "MIT",
+        "notices": ["LICENSE"],
+        "source": "installed package.json"
+      },
+      {
+        "name": "@radix-ui/react-slot",
+        "version": "1.4.0",
+        "licence": "MIT",
+        "notices": ["LICENSE"],
+        "source": "installed package.json"
+      },
+      {
+        "name": "@radix-ui/react-tabs",
+        "version": "1.1.22",
+        "licence": "MIT",
+        "notices": ["LICENSE"],
+        "source": "installed package.json"
+      },
+      {
+        "name": "@radix-ui/react-use-callback-ref",
+        "version": "1.1.4",
+        "licence": "MIT",
+        "notices": ["LICENSE"],
+        "source": "installed package.json"
+      },
+      {
+        "name": "@radix-ui/react-use-controllable-state",
+        "version": "1.2.6",
+        "licence": "MIT",
+        "notices": ["LICENSE"],
+        "source": "installed package.json"
+      },
+      {
+        "name": "@radix-ui/react-use-effect-event",
+        "version": "0.0.5",
+        "licence": "MIT",
+        "notices": ["LICENSE"],
+        "source": "installed package.json"
+      },
+      {
+        "name": "@radix-ui/react-use-is-hydrated",
+        "version": "0.1.3",
+        "licence": "MIT",
+        "notices": ["LICENSE"],
+        "source": "installed package.json"
+      },
+      {
+        "name": "@radix-ui/react-use-layout-effect",
+        "version": "1.1.4",
+        "licence": "MIT",
+        "notices": ["LICENSE"],
+        "source": "installed package.json"
+      },
+      {
+        "name": "@react-native-masked-view/masked-view",
+        "version": "0.3.2",
+        "licence": "MIT",
+        "notices": ["LICENSE"],
+        "source": "installed package.json"
+      },
+      {
+        "name": "@react-native/asset-utils",
+        "version": "0.88.0-rc.4",
+        "licence": "MIT",
+        "notices": [],
+        "source": "installed package.json"
+      },
+      {
+        "name": "@react-native/asset-utils",
+        "version": "0.88.1",
+        "licence": "MIT",
+        "notices": [],
+        "source": "installed package.json"
+      },
+      {
+        "name": "@react-native/babel-plugin-codegen",
+        "version": "0.88.0-rc.4",
+        "licence": "MIT",
+        "notices": [],
+        "source": "installed package.json"
+      },
+      {
+        "name": "@react-native/babel-preset",
+        "version": "0.88.0-rc.4",
+        "licence": "MIT",
+        "notices": [],
+        "source": "installed package.json"
+      },
+      {
+        "name": "@react-native/codegen",
+        "version": "0.88.0-rc.4",
+        "licence": "MIT",
+        "notices": [],
+        "source": "installed package.json"
+      },
+      {
+        "name": "@react-native/community-cli-plugin",
+        "version": "0.88.0-rc.4",
+        "licence": "MIT",
+        "notices": [],
+        "source": "installed package.json"
+      },
+      {
+        "name": "@react-native/debugger-frontend",
+        "version": "0.88.0-rc.4",
+        "licence": "BSD-3-Clause",
+        "notices": [],
+        "source": "installed package.json"
+      },
+      {
+        "name": "@react-native/debugger-shell",
+        "version": "0.88.0-rc.4",
+        "licence": "MIT",
+        "notices": [],
+        "source": "installed package.json"
+      },
+      {
+        "name": "@react-native/dev-middleware",
+        "version": "0.88.0-rc.4",
+        "licence": "MIT",
+        "notices": [],
+        "source": "installed package.json"
+      },
+      {
+        "name": "@react-native/gradle-plugin",
+        "version": "0.88.0-rc.4",
+        "licence": "MIT",
+        "notices": [],
+        "source": "installed package.json"
+      },
+      {
+        "name": "@react-native/js-polyfills",
+        "version": "0.88.0-rc.4",
+        "licence": "MIT",
+        "notices": [],
+        "source": "installed package.json"
+      },
+      {
+        "name": "@react-native/metro-babel-transformer",
+        "version": "0.88.0-rc.4",
+        "licence": "MIT",
+        "notices": [],
+        "source": "installed package.json"
+      },
+      {
+        "name": "@react-native/metro-config",
+        "version": "0.88.0-rc.4",
+        "licence": "MIT",
+        "notices": [],
+        "source": "installed package.json"
+      },
+      {
+        "name": "@react-native/normalize-colors",
+        "version": "0.88.0-rc.3",
+        "licence": "MIT",
+        "notices": [],
+        "source": "installed package.json"
+      },
+      {
+        "name": "@react-native/normalize-colors",
+        "version": "0.88.0-rc.4",
+        "licence": "MIT",
+        "notices": [],
+        "source": "installed package.json"
+      },
+      {
+        "name": "@react-native/virtualized-lists",
+        "version": "0.88.0-rc.4",
+        "licence": "MIT",
+        "notices": [],
+        "source": "installed package.json"
+      },
+      {
+        "name": "@shopify/react-native-skia",
+        "version": "2.13.1",
+        "licence": "MIT",
+        "notices": ["LICENSE.md"],
+        "source": "installed package.json"
+      },
+      {
+        "name": "@sinclair/typebox",
+        "version": "0.27.12",
+        "licence": "MIT",
+        "notices": ["license"],
+        "source": "installed package.json"
+      },
+      {
+        "name": "@tabler/icons",
+        "version": "3.49.0",
+        "licence": "MIT",
+        "notices": ["LICENSE"],
+        "source": "installed package.json"
+      },
+      {
+        "name": "@tabler/icons-react-native",
+        "version": "3.49.0",
+        "licence": "MIT",
+        "notices": ["LICENSE"],
+        "source": "installed package.json"
+      },
+      {
+        "name": "@tailwindcss/node",
+        "version": "4.3.3",
+        "licence": "MIT",
+        "notices": ["LICENSE"],
+        "source": "installed package.json"
+      },
+      {
+        "name": "@tailwindcss/oxide",
+        "version": "4.3.3",
+        "licence": "MIT",
+        "notices": ["LICENSE"],
+        "source": "installed package.json"
+      },
+      {
+        "name": "@tailwindcss/oxide-android-arm64",
+        "version": "4.3.3",
+        "licence": "MIT",
+        "notices": null,
+        "source": "npm registry metadata"
+      },
+      {
+        "name": "@tailwindcss/oxide-darwin-arm64",
+        "version": "4.3.3",
+        "licence": "MIT",
+        "notices": null,
+        "source": "npm registry metadata"
+      },
+      {
+        "name": "@tailwindcss/oxide-darwin-x64",
+        "version": "4.3.3",
+        "licence": "MIT",
+        "notices": null,
+        "source": "npm registry metadata"
+      },
+      {
+        "name": "@tailwindcss/oxide-freebsd-x64",
+        "version": "4.3.3",
+        "licence": "MIT",
+        "notices": null,
+        "source": "npm registry metadata"
+      },
+      {
+        "name": "@tailwindcss/oxide-linux-arm-gnueabihf",
+        "version": "4.3.3",
+        "licence": "MIT",
+        "notices": null,
+        "source": "npm registry metadata"
+      },
+      {
+        "name": "@tailwindcss/oxide-linux-arm64-gnu",
+        "version": "4.3.3",
+        "licence": "MIT",
+        "notices": null,
+        "source": "npm registry metadata"
+      },
+      {
+        "name": "@tailwindcss/oxide-linux-arm64-musl",
+        "version": "4.3.3",
+        "licence": "MIT",
+        "notices": null,
+        "source": "npm registry metadata"
+      },
+      {
+        "name": "@tailwindcss/oxide-linux-x64-gnu",
+        "version": "4.3.3",
+        "licence": "MIT",
+        "notices": null,
+        "source": "npm registry metadata"
+      },
+      {
+        "name": "@tailwindcss/oxide-linux-x64-musl",
+        "version": "4.3.3",
+        "licence": "MIT",
+        "notices": null,
+        "source": "npm registry metadata"
+      },
+      {
+        "name": "@tailwindcss/oxide-wasm32-wasi",
+        "version": "4.3.3",
+        "licence": "MIT",
+        "notices": null,
+        "source": "npm registry metadata"
+      },
+      {
+        "name": "@tailwindcss/oxide-win32-arm64-msvc",
+        "version": "4.3.3",
+        "licence": "MIT",
+        "notices": null,
+        "source": "npm registry metadata"
+      },
+      {
+        "name": "@tailwindcss/oxide-win32-x64-msvc",
+        "version": "4.3.3",
+        "licence": "MIT",
+        "notices": ["LICENSE"],
+        "source": "installed package.json"
+      },
+      {
+        "name": "@types/emscripten",
+        "version": "1.41.6",
+        "licence": "MIT",
+        "notices": ["LICENSE"],
+        "source": "installed package.json"
+      },
+      {
+        "name": "@types/istanbul-lib-coverage",
+        "version": "2.0.6",
+        "licence": "MIT",
+        "notices": ["LICENSE"],
+        "source": "installed package.json"
+      },
+      {
+        "name": "@types/istanbul-lib-report",
+        "version": "3.0.3",
+        "licence": "MIT",
+        "notices": ["LICENSE"],
+        "source": "installed package.json"
+      },
+      {
+        "name": "@types/istanbul-reports",
+        "version": "3.0.4",
+        "licence": "MIT",
+        "notices": ["LICENSE"],
+        "source": "installed package.json"
+      },
+      {
+        "name": "@types/node",
+        "version": "26.6.5",
+        "licence": "MIT",
+        "notices": ["LICENSE"],
+        "source": "installed package.json"
+      },
+      {
+        "name": "@types/react",
+        "version": "19.3.0",
+        "licence": "MIT",
+        "notices": ["LICENSE"],
+        "source": "installed package.json"
+      },
+      {
+        "name": "@types/react-test-renderer",
+        "version": "19.3.0",
+        "licence": "MIT",
+        "notices": ["LICENSE"],
+        "source": "installed package.json"
+      },
+      {
+        "name": "@types/sql.js",
+        "version": "1.4.11",
+        "licence": "MIT",
+        "notices": ["LICENSE"],
+        "source": "installed package.json"
+      },
+      {
+        "name": "@types/ws",
+        "version": "8.18.2",
+        "licence": "MIT",
+        "notices": ["LICENSE"],
+        "source": "installed package.json"
+      },
+      {
+        "name": "@types/yargs",
+        "version": "17.0.35",
+        "licence": "MIT",
+        "notices": ["LICENSE"],
+        "source": "installed package.json"
+      },
+      {
+        "name": "@types/yargs-parser",
+        "version": "21.0.3",
+        "licence": "MIT",
+        "notices": ["LICENSE"],
+        "source": "installed package.json"
+      },
+      {
+        "name": "@typescript/typescript-aix-ppc64",
+        "version": "7.0.2",
+        "licence": "Apache-2.0",
+        "notices": null,
+        "source": "npm registry metadata"
+      },
+      {
+        "name": "@typescript/typescript-darwin-arm64",
+        "version": "7.0.2",
+        "licence": "Apache-2.0",
+        "notices": null,
+        "source": "npm registry metadata"
+      },
+      {
+        "name": "@typescript/typescript-darwin-x64",
+        "version": "7.0.2",
+        "licence": "Apache-2.0",
+        "notices": null,
+        "source": "npm registry metadata"
+      },
+      {
+        "name": "@typescript/typescript-freebsd-arm64",
+        "version": "7.0.2",
+        "licence": "Apache-2.0",
+        "notices": null,
+        "source": "npm registry metadata"
+      },
+      {
+        "name": "@typescript/typescript-freebsd-x64",
+        "version": "7.0.2",
+        "licence": "Apache-2.0",
+        "notices": null,
+        "source": "npm registry metadata"
+      },
+      {
+        "name": "@typescript/typescript-linux-arm",
+        "version": "7.0.2",
+        "licence": "Apache-2.0",
+        "notices": null,
+        "source": "npm registry metadata"
+      },
+      {
+        "name": "@typescript/typescript-linux-arm64",
+        "version": "7.0.2",
+        "licence": "Apache-2.0",
+        "notices": null,
+        "source": "npm registry metadata"
+      },
+      {
+        "name": "@typescript/typescript-linux-loong64",
+        "version": "7.0.2",
+        "licence": "Apache-2.0",
+        "notices": null,
+        "source": "npm registry metadata"
+      },
+      {
+        "name": "@typescript/typescript-linux-mips64el",
+        "version": "7.0.2",
+        "licence": "Apache-2.0",
+        "notices": null,
+        "source": "npm registry metadata"
+      },
+      {
+        "name": "@typescript/typescript-linux-ppc64",
+        "version": "7.0.2",
+        "licence": "Apache-2.0",
+        "notices": null,
+        "source": "npm registry metadata"
+      },
+      {
+        "name": "@typescript/typescript-linux-riscv64",
+        "version": "7.0.2",
+        "licence": "Apache-2.0",
+        "notices": null,
+        "source": "npm registry metadata"
+      },
+      {
+        "name": "@typescript/typescript-linux-s390x",
+        "version": "7.0.2",
+        "licence": "Apache-2.0",
+        "notices": null,
+        "source": "npm registry metadata"
+      },
+      {
+        "name": "@typescript/typescript-linux-x64",
+        "version": "7.0.2",
+        "licence": "Apache-2.0",
+        "notices": null,
+        "source": "npm registry metadata"
+      },
+      {
+        "name": "@typescript/typescript-netbsd-arm64",
+        "version": "7.0.2",
+        "licence": "Apache-2.0",
+        "notices": null,
+        "source": "npm registry metadata"
+      },
+      {
+        "name": "@typescript/typescript-netbsd-x64",
+        "version": "7.0.2",
+        "licence": "Apache-2.0",
+        "notices": null,
+        "source": "npm registry metadata"
+      },
+      {
+        "name": "@typescript/typescript-openbsd-arm64",
+        "version": "7.0.2",
+        "licence": "Apache-2.0",
+        "notices": null,
+        "source": "npm registry metadata"
+      },
+      {
+        "name": "@typescript/typescript-openbsd-x64",
+        "version": "7.0.2",
+        "licence": "Apache-2.0",
+        "notices": null,
+        "source": "npm registry metadata"
+      },
+      {
+        "name": "@typescript/typescript-sunos-x64",
+        "version": "7.0.2",
+        "licence": "Apache-2.0",
+        "notices": null,
+        "source": "npm registry metadata"
+      },
+      {
+        "name": "@typescript/typescript-win32-arm64",
+        "version": "7.0.2",
+        "licence": "Apache-2.0",
+        "notices": null,
+        "source": "npm registry metadata"
+      },
+      {
+        "name": "@typescript/typescript-win32-x64",
+        "version": "7.0.2",
+        "licence": "Apache-2.0",
+        "notices": ["LICENSE", "NOTICE.txt"],
+        "source": "installed package.json"
+      },
+      {
+        "name": "@ungap/structured-clone",
+        "version": "1.4.0",
+        "licence": "ISC",
+        "notices": ["LICENSE"],
+        "source": "installed package.json"
+      },
+      {
+        "name": "@webgpu/types",
+        "version": "0.1.21",
+        "licence": "BSD-3-Clause",
+        "notices": ["LICENSE"],
+        "source": "installed package.json"
+      },
+      {
+        "name": "@xmldom/xmldom",
+        "version": "0.8.15",
+        "licence": "MIT",
+        "notices": ["LICENSE"],
+        "source": "installed package.json"
+      },
+      {
+        "name": "@xmldom/xmldom",
+        "version": "0.9.12",
+        "licence": "MIT",
+        "notices": ["LICENSE"],
+        "source": "installed package.json"
+      },
+      {
+        "name": "accepts",
+        "version": "1.3.8",
+        "licence": "MIT",
+        "notices": ["LICENSE"],
+        "source": "installed package.json"
+      },
+      {
+        "name": "accepts",
+        "version": "2.0.0",
+        "licence": "MIT",
+        "notices": ["LICENSE"],
+        "source": "installed package.json"
+      },
+      {
+        "name": "acorn",
+        "version": "8.19.0",
+        "licence": "MIT",
+        "notices": ["LICENSE"],
+        "source": "installed package.json"
+      },
+      {
+        "name": "agent-base",
+        "version": "7.1.4",
+        "licence": "MIT",
+        "notices": ["LICENSE"],
+        "source": "installed package.json"
+      },
+      {
+        "name": "agent-cli-detector",
+        "version": "0.1.7",
+        "licence": "MIT",
+        "notices": ["LICENSE"],
+        "source": "installed package.json"
+      },
+      {
+        "name": "anser",
+        "version": "1.4.10",
+        "licence": "MIT",
+        "notices": ["LICENSE"],
+        "source": "installed package.json"
+      },
+      {
+        "name": "ansi-escapes",
+        "version": "4.3.2",
+        "licence": "MIT",
+        "notices": ["license"],
+        "source": "installed package.json"
+      },
+      {
+        "name": "ansi-regex",
+        "version": "4.1.1",
+        "licence": "MIT",
+        "notices": ["license"],
+        "source": "installed package.json"
+      },
+      {
+        "name": "ansi-regex",
+        "version": "5.0.1",
+        "licence": "MIT",
+        "notices": ["license"],
+        "source": "installed package.json"
+      },
+      {
+        "name": "ansi-styles",
+        "version": "3.2.1",
+        "licence": "MIT",
+        "notices": ["license"],
+        "source": "installed package.json"
+      },
+      {
+        "name": "ansi-styles",
+        "version": "4.3.0",
+        "licence": "MIT",
+        "notices": ["license"],
+        "source": "installed package.json"
+      },
+      {
+        "name": "ansi-styles",
+        "version": "5.2.0",
+        "licence": "MIT",
+        "notices": ["license"],
+        "source": "installed package.json"
+      },
+      {
+        "name": "arg",
+        "version": "4.1.3",
+        "licence": "MIT",
+        "notices": ["LICENSE.md"],
+        "source": "installed package.json"
+      },
+      {
+        "name": "arg",
+        "version": "5.0.2",
+        "licence": "MIT",
+        "notices": ["LICENSE.md"],
+        "source": "installed package.json"
+      },
+      {
+        "name": "argparse",
+        "version": "2.0.1",
+        "licence": "Python-2.0",
+        "notices": ["LICENSE"],
+        "source": "installed package.json"
+      },
+      {
+        "name": "asap",
+        "version": "2.0.6",
+        "licence": "MIT",
+        "notices": ["LICENSE.md"],
+        "source": "installed package.json"
+      },
+      {
+        "name": "await-lock",
+        "version": "2.2.2",
+        "licence": "MIT",
+        "notices": ["LICENSE"],
+        "source": "installed package.json"
+      },
+      {
+        "name": "babel-plugin-polyfill-corejs2",
+        "version": "0.4.17",
+        "licence": "MIT",
+        "notices": ["LICENSE"],
+        "source": "installed package.json"
+      },
+      {
+        "name": "babel-plugin-polyfill-corejs3",
+        "version": "0.13.0",
+        "licence": "MIT",
+        "notices": ["LICENSE"],
+        "source": "installed package.json"
+      },
+      {
+        "name": "babel-plugin-polyfill-regenerator",
+        "version": "0.6.8",
+        "licence": "MIT",
+        "notices": ["LICENSE"],
+        "source": "installed package.json"
+      },
+      {
+        "name": "babel-plugin-react-compiler",
+        "version": "1.0.0",
+        "licence": "MIT",
+        "notices": [],
+        "source": "installed package.json"
+      },
+      {
+        "name": "babel-plugin-react-native-web",
+        "version": "0.21.4",
+        "licence": "MIT",
+        "notices": ["LICENSE"],
+        "source": "installed package.json"
+      },
+      {
+        "name": "babel-plugin-syntax-hermes-parser",
+        "version": "0.36.1",
+        "licence": "MIT",
+        "notices": ["LICENSE"],
+        "source": "installed package.json"
+      },
+      {
+        "name": "babel-plugin-transform-flow-enums",
+        "version": "0.0.2",
+        "licence": "MIT",
+        "notices": ["LICENSE"],
+        "source": "installed package.json"
+      },
+      {
+        "name": "babel-preset-expo",
+        "version": "58.0.12",
+        "licence": "MIT",
+        "notices": ["LICENSE"],
+        "source": "installed package.json"
+      },
+      {
+        "name": "balanced-match",
+        "version": "4.0.4",
+        "licence": "MIT",
+        "notices": ["LICENSE.md"],
+        "source": "installed package.json"
+      },
+      {
+        "name": "base64-js",
+        "version": "1.5.1",
+        "licence": "MIT",
+        "notices": ["LICENSE"],
+        "source": "installed package.json"
+      },
+      {
+        "name": "baseline-browser-mapping",
+        "version": "2.11.28",
+        "licence": "Apache-2.0",
+        "notices": ["LICENSE.txt"],
+        "source": "installed package.json"
+      },
+      {
+        "name": "big-integer",
+        "version": "1.6.52",
+        "licence": "Unlicense",
+        "notices": ["LICENSE"],
+        "source": "installed package.json"
+      },
+      {
+        "name": "boolbase",
+        "version": "1.0.0",
+        "licence": "ISC",
+        "notices": [],
+        "source": "installed package.json"
+      },
+      {
+        "name": "bplist-creator",
+        "version": "0.1.0",
+        "licence": "MIT",
+        "notices": ["LICENSE"],
+        "source": "installed package.json"
+      },
+      {
+        "name": "bplist-parser",
+        "version": "0.3.1",
+        "licence": "MIT",
+        "notices": [],
+        "source": "installed package.json"
+      },
+      {
+        "name": "bplist-parser",
+        "version": "0.3.2",
+        "licence": "MIT",
+        "notices": [],
+        "source": "installed package.json"
+      },
+      {
+        "name": "brace-expansion",
+        "version": "5.0.12",
+        "licence": "MIT",
+        "notices": ["LICENSE"],
+        "source": "installed package.json"
+      },
+      {
+        "name": "braces",
+        "version": "3.0.3",
+        "licence": "MIT",
+        "notices": ["LICENSE"],
+        "source": "installed package.json"
+      },
+      {
+        "name": "browserslist",
+        "version": "4.29.3",
+        "licence": "MIT",
+        "notices": ["LICENSE"],
+        "source": "installed package.json"
+      },
+      {
+        "name": "bser",
+        "version": "2.1.2",
+        "licence": "MIT",
+        "notices": ["LICENSE"],
+        "source": "installed package.json"
+      },
+      {
+        "name": "buffer-from",
+        "version": "1.1.2",
+        "licence": "MIT",
+        "notices": ["LICENSE"],
+        "source": "installed package.json"
+      },
+      {
+        "name": "bytes",
+        "version": "3.1.2",
+        "licence": "MIT",
+        "notices": ["LICENSE"],
+        "source": "installed package.json"
+      },
+      {
+        "name": "camelcase",
+        "version": "6.3.0",
+        "licence": "MIT",
+        "notices": ["license"],
+        "source": "installed package.json"
+      },
+      {
+        "name": "caniuse-lite",
+        "version": "1.0.30001815",
+        "licence": "CC-BY-4.0",
+        "notices": ["LICENSE"],
+        "source": "installed package.json"
+      },
+      {
+        "name": "canvaskit-wasm",
+        "version": "0.41.0",
+        "licence": "BSD-3-Clause",
+        "notices": ["LICENSE"],
+        "source": "installed package.json"
+      },
+      {
+        "name": "chalk",
+        "version": "2.4.2",
+        "licence": "MIT",
+        "notices": ["license"],
+        "source": "installed package.json"
+      },
+      {
+        "name": "chalk",
+        "version": "4.1.2",
+        "licence": "MIT",
+        "notices": ["license"],
+        "source": "installed package.json"
+      },
+      {
+        "name": "ci-info",
+        "version": "3.9.0",
+        "licence": "MIT",
+        "notices": ["LICENSE"],
+        "source": "installed package.json"
+      },
+      {
+        "name": "cli-cursor",
+        "version": "2.1.0",
+        "licence": "MIT",
+        "notices": ["license"],
+        "source": "installed package.json"
+      },
+      {
+        "name": "cli-spinners",
+        "version": "2.9.2",
+        "licence": "MIT",
+        "notices": ["license"],
+        "source": "installed package.json"
+      },
+      {
+        "name": "client-only",
+        "version": "0.0.1",
+        "licence": "MIT",
+        "notices": [],
+        "source": "installed package.json"
+      },
+      {
+        "name": "cliui",
+        "version": "8.0.1",
+        "licence": "ISC",
+        "notices": ["LICENSE.txt"],
+        "source": "installed package.json"
+      },
+      {
+        "name": "clone",
+        "version": "1.0.4",
+        "licence": "MIT",
+        "notices": ["LICENSE"],
+        "source": "installed package.json"
+      },
+      {
+        "name": "color",
+        "version": "4.2.3",
+        "licence": "MIT",
+        "notices": ["LICENSE"],
+        "source": "installed package.json"
+      },
+      {
+        "name": "color-convert",
+        "version": "1.9.3",
+        "licence": "MIT",
+        "notices": ["LICENSE"],
+        "source": "installed package.json"
+      },
+      {
+        "name": "color-convert",
+        "version": "2.0.1",
+        "licence": "MIT",
+        "notices": ["LICENSE"],
+        "source": "installed package.json"
+      },
+      {
+        "name": "color-name",
+        "version": "1.1.3",
+        "licence": "MIT",
+        "notices": ["LICENSE"],
+        "source": "installed package.json"
+      },
+      {
+        "name": "color-name",
+        "version": "1.1.4",
+        "licence": "MIT",
+        "notices": ["LICENSE"],
+        "source": "installed package.json"
+      },
+      {
+        "name": "color-string",
+        "version": "1.9.1",
+        "licence": "MIT",
+        "notices": ["LICENSE"],
+        "source": "installed package.json"
+      },
+      {
+        "name": "commander",
+        "version": "12.1.0",
+        "licence": "MIT",
+        "notices": ["LICENSE"],
+        "source": "installed package.json"
+      },
+      {
+        "name": "commander",
+        "version": "2.20.3",
+        "licence": "MIT",
+        "notices": ["LICENSE"],
+        "source": "installed package.json"
+      },
+      {
+        "name": "commander",
+        "version": "7.2.0",
+        "licence": "MIT",
+        "notices": ["LICENSE"],
+        "source": "installed package.json"
+      },
+      {
+        "name": "compressible",
+        "version": "2.0.18",
+        "licence": "MIT",
+        "notices": ["LICENSE"],
+        "source": "installed package.json"
+      },
+      {
+        "name": "compression",
+        "version": "1.8.2",
+        "licence": "MIT",
+        "notices": ["LICENSE"],
+        "source": "installed package.json"
+      },
+      {
+        "name": "connect",
+        "version": "3.7.0",
+        "licence": "MIT",
+        "notices": ["LICENSE"],
+        "source": "installed package.json"
+      },
+      {
+        "name": "content-type",
+        "version": "2.1.0",
+        "licence": "MIT",
+        "notices": ["LICENSE"],
+        "source": "installed package.json"
+      },
+      {
+        "name": "convert-source-map",
+        "version": "2.0.0",
+        "licence": "MIT",
+        "notices": ["LICENSE"],
+        "source": "installed package.json"
+      },
+      {
+        "name": "core-js-compat",
+        "version": "3.50.0",
+        "licence": "MIT",
+        "notices": ["LICENSE"],
+        "source": "installed package.json"
+      },
+      {
+        "name": "cross-spawn",
+        "version": "7.0.6",
+        "licence": "MIT",
+        "notices": ["LICENSE"],
+        "source": "installed package.json"
+      },
+      {
+        "name": "css-select",
+        "version": "5.2.2",
+        "licence": "BSD-2-Clause",
+        "notices": ["LICENSE"],
+        "source": "installed package.json"
+      },
+      {
+        "name": "css-tree",
+        "version": "1.1.3",
+        "licence": "MIT",
+        "notices": ["LICENSE"],
+        "source": "installed package.json"
+      },
+      {
+        "name": "css-what",
+        "version": "6.2.2",
+        "licence": "BSD-2-Clause",
+        "notices": ["LICENSE"],
+        "source": "installed package.json"
+      },
+      {
+        "name": "csstype",
+        "version": "3.2.3",
+        "licence": "MIT",
+        "notices": ["LICENSE"],
+        "source": "installed package.json"
+      },
+      {
+        "name": "culori",
+        "version": "4.0.2",
+        "licence": "MIT",
+        "notices": ["LICENSE"],
+        "source": "installed package.json"
+      },
+      {
+        "name": "debug",
+        "version": "2.6.9",
+        "licence": "MIT",
+        "notices": ["LICENSE"],
+        "source": "installed package.json"
+      },
+      {
+        "name": "debug",
+        "version": "3.2.7",
+        "licence": "MIT",
+        "notices": ["LICENSE"],
+        "source": "installed package.json"
+      },
+      {
+        "name": "debug",
+        "version": "4.4.3",
+        "licence": "MIT",
+        "notices": ["LICENSE"],
+        "source": "installed package.json"
+      },
+      {
+        "name": "deepmerge",
+        "version": "4.3.1",
+        "licence": "MIT",
+        "notices": ["license.txt"],
+        "source": "installed package.json"
+      },
+      {
+        "name": "defaults",
+        "version": "1.0.4",
+        "licence": "MIT",
+        "notices": ["LICENSE"],
+        "source": "installed package.json"
+      },
+      {
+        "name": "define-lazy-prop",
+        "version": "2.0.0",
+        "licence": "MIT",
+        "notices": ["license"],
+        "source": "installed package.json"
+      },
+      {
+        "name": "depd",
+        "version": "2.0.0",
+        "licence": "MIT",
+        "notices": ["LICENSE"],
+        "source": "installed package.json"
+      },
+      {
+        "name": "destroy",
+        "version": "1.2.0",
+        "licence": "MIT",
+        "notices": ["LICENSE"],
+        "source": "installed package.json"
+      },
+      {
+        "name": "detect-libc",
+        "version": "2.0.2",
+        "licence": "Apache-2.0",
+        "notices": ["LICENSE"],
+        "source": "installed package.json"
+      },
+      {
+        "name": "detect-libc",
+        "version": "2.1.2",
+        "licence": "Apache-2.0",
+        "notices": ["LICENSE"],
+        "source": "installed package.json"
+      },
+      {
+        "name": "dnssd-advertise",
+        "version": "1.1.6",
+        "licence": "MIT",
+        "notices": ["LICENSE.md"],
+        "source": "installed package.json"
+      },
+      {
+        "name": "dom-serializer",
+        "version": "2.0.0",
+        "licence": "MIT",
+        "notices": ["LICENSE"],
+        "source": "installed package.json"
+      },
+      {
+        "name": "domelementtype",
+        "version": "2.3.0",
+        "licence": "BSD-2-Clause",
+        "notices": ["LICENSE"],
+        "source": "installed package.json"
+      },
+      {
+        "name": "domhandler",
+        "version": "5.0.3",
+        "licence": "BSD-2-Clause",
+        "notices": ["LICENSE"],
+        "source": "installed package.json"
+      },
+      {
+        "name": "domutils",
+        "version": "3.2.2",
+        "licence": "BSD-2-Clause",
+        "notices": ["LICENSE"],
+        "source": "installed package.json"
+      },
+      {
+        "name": "drizzle-orm",
+        "version": "0.45.4",
+        "licence": "Apache-2.0",
+        "notices": [],
+        "source": "installed package.json"
+      },
+      {
+        "name": "ee-first",
+        "version": "1.1.1",
+        "licence": "MIT",
+        "notices": ["LICENSE"],
+        "source": "installed package.json"
+      },
+      {
+        "name": "effect",
+        "version": "4.0.2",
+        "licence": "MIT",
+        "notices": ["LICENSE"],
+        "source": "installed package.json"
+      },
+      {
+        "name": "electron-to-chromium",
+        "version": "1.5.452",
+        "licence": "ISC",
+        "notices": ["LICENSE"],
+        "source": "installed package.json"
+      },
+      {
+        "name": "emoji-regex",
+        "version": "8.0.0",
+        "licence": "MIT",
+        "notices": ["LICENSE-MIT.txt"],
+        "source": "installed package.json"
+      },
+      {
+        "name": "encodeurl",
+        "version": "1.0.2",
+        "licence": "MIT",
+        "notices": ["LICENSE"],
+        "source": "installed package.json"
+      },
+      {
+        "name": "encodeurl",
+        "version": "2.0.0",
+        "licence": "MIT",
+        "notices": ["LICENSE"],
+        "source": "installed package.json"
+      },
+      {
+        "name": "enhanced-resolve",
+        "version": "5.26.0",
+        "licence": "MIT",
+        "notices": ["LICENSE"],
+        "source": "installed package.json"
+      },
+      {
+        "name": "entities",
+        "version": "4.5.0",
+        "licence": "BSD-2-Clause",
+        "notices": ["LICENSE"],
+        "source": "installed package.json"
+      },
+      {
+        "name": "error-stack-parser",
+        "version": "2.1.4",
+        "licence": "MIT",
+        "notices": ["LICENSE"],
+        "source": "installed package.json"
+      },
+      {
+        "name": "es-errors",
+        "version": "1.3.0",
+        "licence": "MIT",
+        "notices": ["LICENSE"],
+        "source": "installed package.json"
+      },
+      {
+        "name": "escalade",
+        "version": "3.2.0",
+        "licence": "MIT",
+        "notices": ["license"],
+        "source": "installed package.json"
+      },
+      {
+        "name": "escape-html",
+        "version": "1.0.3",
+        "licence": "MIT",
+        "notices": ["LICENSE"],
+        "source": "installed package.json"
+      },
+      {
+        "name": "escape-string-regexp",
+        "version": "1.0.5",
+        "licence": "MIT",
+        "notices": ["license"],
+        "source": "installed package.json"
+      },
+      {
+        "name": "etag",
+        "version": "1.8.1",
+        "licence": "MIT",
+        "notices": ["LICENSE"],
+        "source": "installed package.json"
+      },
+      {
+        "name": "expo",
+        "version": "58.0.7",
+        "licence": "MIT",
+        "notices": ["LICENSE"],
+        "source": "installed package.json"
+      },
+      {
+        "name": "expo-asset",
+        "version": "58.0.13",
+        "licence": "MIT",
+        "notices": ["LICENSE"],
+        "source": "installed package.json"
+      },
+      {
+        "name": "expo-background-task",
+        "version": "58.0.11",
+        "licence": "MIT",
+        "notices": ["LICENSE"],
+        "source": "installed package.json"
+      },
+      {
+        "name": "expo-build-properties",
+        "version": "58.0.10",
+        "licence": "MIT",
+        "notices": ["LICENSE"],
+        "source": "installed package.json"
+      },
+      {
+        "name": "expo-constants",
+        "version": "58.0.10",
+        "licence": "MIT",
+        "notices": ["LICENSE"],
+        "source": "installed package.json"
+      },
+      {
+        "name": "expo-eas-client",
+        "version": "58.0.2",
+        "licence": "MIT",
+        "notices": ["LICENSE"],
+        "source": "installed package.json"
+      },
+      {
+        "name": "expo-file-system",
+        "version": "58.0.8",
+        "licence": "MIT",
+        "notices": ["LICENSE"],
+        "source": "installed package.json"
+      },
+      {
+        "name": "expo-font",
+        "version": "58.0.7",
+        "licence": "MIT",
+        "notices": ["LICENSE"],
+        "source": "installed package.json"
+      },
+      {
+        "name": "expo-glass-effect",
+        "version": "58.0.3",
+        "licence": "MIT",
+        "notices": ["LICENSE"],
+        "source": "installed package.json"
+      },
+      {
+        "name": "expo-haptics",
+        "version": "58.0.5",
+        "licence": "MIT",
+        "notices": ["LICENSE"],
+        "source": "installed package.json"
+      },
+      {
+        "name": "expo-image",
+        "version": "58.0.13",
+        "licence": "MIT",
+        "notices": ["LICENSE"],
+        "source": "installed package.json"
+      },
+      {
+        "name": "expo-json-utils",
+        "version": "58.0.1",
+        "licence": "MIT",
+        "notices": ["LICENSE"],
+        "source": "installed package.json"
+      },
+      {
+        "name": "expo-keep-awake",
+        "version": "58.0.3",
+        "licence": "MIT",
+        "notices": ["LICENSE"],
+        "source": "installed package.json"
+      },
+      {
+        "name": "expo-linking",
+        "version": "58.0.11",
+        "licence": "MIT",
+        "notices": ["LICENSE"],
+        "source": "installed package.json"
+      },
+      {
+        "name": "expo-manifests",
+        "version": "58.0.1",
+        "licence": "MIT",
+        "notices": ["LICENSE"],
+        "source": "installed package.json"
+      },
+      {
+        "name": "expo-modules-autolinking",
+        "version": "58.0.11",
+        "licence": "MIT",
+        "notices": ["LICENSE"],
+        "source": "installed package.json"
+      },
+      {
+        "name": "expo-modules-core",
+        "version": "58.0.15",
+        "licence": "MIT",
+        "notices": ["LICENSE"],
+        "source": "installed package.json"
+      },
+      {
+        "name": "expo-modules-jsi",
+        "version": "58.0.10",
+        "licence": "MIT",
+        "notices": ["LICENSE"],
+        "source": "installed package.json"
+      },
+      {
+        "name": "expo-modules-macros",
+        "version": "0.15.0",
+        "licence": "MIT",
+        "notices": ["LICENSE"],
+        "source": "installed package.json"
+      },
+      {
+        "name": "expo-router",
+        "version": "58.0.17",
+        "licence": "MIT",
+        "notices": [],
+        "source": "installed package.json"
+      },
+      {
+        "name": "expo-server",
+        "version": "58.0.4",
+        "licence": "MIT",
+        "notices": ["LICENSE"],
+        "source": "installed package.json"
+      },
+      {
+        "name": "expo-splash-screen",
+        "version": "58.0.7",
+        "licence": "MIT",
+        "notices": ["LICENSE"],
+        "source": "installed package.json"
+      },
+      {
+        "name": "expo-sqlite",
+        "version": "58.0.11",
+        "licence": "MIT",
+        "notices": ["LICENSE"],
+        "source": "installed package.json"
+      },
+      {
+        "name": "expo-status-bar",
+        "version": "58.0.3",
+        "licence": "MIT",
+        "notices": ["LICENSE"],
+        "source": "installed package.json"
+      },
+      {
+        "name": "expo-structured-headers",
+        "version": "58.0.1",
+        "licence": "MIT",
+        "notices": [],
+        "source": "installed package.json"
+      },
+      {
+        "name": "expo-system-ui",
+        "version": "58.0.5",
+        "licence": "MIT",
+        "notices": ["LICENSE"],
+        "source": "installed package.json"
+      },
+      {
+        "name": "expo-task-manager",
+        "version": "58.0.12",
+        "licence": "MIT",
+        "notices": ["LICENSE"],
+        "source": "installed package.json"
+      },
+      {
+        "name": "expo-updates",
+        "version": "58.0.20",
+        "licence": "MIT",
+        "notices": [],
+        "source": "installed package.json"
+      },
+      {
+        "name": "expo-updates-interface",
+        "version": "58.0.1",
+        "licence": "MIT",
+        "notices": ["LICENSE"],
+        "source": "installed package.json"
+      },
+      {
+        "name": "exponential-backoff",
+        "version": "3.1.3",
+        "licence": "Apache-2.0",
+        "notices": ["LICENSE"],
+        "source": "installed package.json"
+      },
+      {
+        "name": "fb-dotslash",
+        "version": "0.5.8",
+        "licence": "(MIT OR Apache-2.0)",
+        "notices": [],
+        "source": "installed package.json"
+      },
+      {
+        "name": "fb-watchman",
+        "version": "2.0.4",
+        "licence": "MIT",
+        "notices": ["LICENSE"],
+        "source": "installed package.json"
+      },
+      {
+        "name": "fdir",
+        "version": "6.5.0",
+        "licence": "MIT",
+        "notices": ["LICENSE"],
+        "source": "installed package.json"
+      },
+      {
+        "name": "fetch-nodeshim",
+        "version": "0.4.10",
+        "licence": "MIT",
+        "notices": ["LICENSE.md"],
+        "source": "installed package.json"
+      },
+      {
+        "name": "fill-range",
+        "version": "7.1.1",
+        "licence": "MIT",
+        "notices": ["LICENSE"],
+        "source": "installed package.json"
+      },
+      {
+        "name": "finalhandler",
+        "version": "1.1.2",
+        "licence": "MIT",
+        "notices": ["LICENSE"],
+        "source": "installed package.json"
+      },
+      {
+        "name": "flow-enums-runtime",
+        "version": "0.0.6",
+        "licence": "MIT",
+        "notices": ["LICENSE"],
+        "source": "installed package.json"
+      },
+      {
+        "name": "flow-estree",
+        "version": "0.327.0",
+        "licence": "MIT",
+        "notices": [],
+        "source": "installed package.json"
+      },
+      {
+        "name": "flow-estree",
+        "version": "0.331.0",
+        "licence": "MIT",
+        "notices": [],
+        "source": "installed package.json"
+      },
+      {
+        "name": "flow-parser",
+        "version": "0.327.0",
+        "licence": "MIT",
+        "notices": [],
+        "source": "installed package.json"
+      },
+      {
+        "name": "flow-parser",
+        "version": "0.331.0",
+        "licence": "MIT",
+        "notices": [],
+        "source": "installed package.json"
+      },
+      {
+        "name": "fresh",
+        "version": "0.5.2",
+        "licence": "MIT",
+        "notices": ["LICENSE"],
+        "source": "installed package.json"
+      },
+      {
+        "name": "function-bind",
+        "version": "1.1.2",
+        "licence": "MIT",
+        "notices": ["LICENSE"],
+        "source": "installed package.json"
+      },
+      {
+        "name": "gensync",
+        "version": "1.0.0-beta.2",
+        "licence": "MIT",
+        "notices": ["LICENSE"],
+        "source": "installed package.json"
+      },
+      {
+        "name": "get-caller-file",
+        "version": "2.0.5",
+        "licence": "ISC",
+        "notices": ["LICENSE.md"],
+        "source": "installed package.json"
+      },
+      {
+        "name": "getenv",
+        "version": "2.0.0",
+        "licence": "MIT",
+        "notices": ["LICENSE.md"],
+        "source": "installed package.json"
+      },
+      {
+        "name": "glob",
+        "version": "13.0.6",
+        "licence": "BlueOak-1.0.0",
+        "notices": ["LICENSE.md"],
+        "source": "installed package.json"
+      },
+      {
+        "name": "graceful-fs",
+        "version": "4.2.11",
+        "licence": "ISC",
+        "notices": ["LICENSE"],
+        "source": "installed package.json"
+      },
+      {
+        "name": "has-flag",
+        "version": "3.0.0",
+        "licence": "MIT",
+        "notices": ["license"],
+        "source": "installed package.json"
+      },
+      {
+        "name": "has-flag",
+        "version": "4.0.0",
+        "licence": "MIT",
+        "notices": ["license"],
+        "source": "installed package.json"
+      },
+      {
+        "name": "hasown",
+        "version": "2.0.4",
+        "licence": "MIT",
+        "notices": ["LICENSE"],
+        "source": "installed package.json"
+      },
+      {
+        "name": "hermes-compiler",
+        "version": "260318099.0.4",
+        "licence": "MIT",
+        "notices": [],
+        "source": "installed package.json"
+      },
+      {
+        "name": "hermes-estree",
+        "version": "0.36.1",
+        "licence": "MIT",
+        "notices": ["LICENSE"],
+        "source": "installed package.json"
+      },
+      {
+        "name": "hermes-parser",
+        "version": "0.36.1",
+        "licence": "MIT",
+        "notices": ["LICENSE"],
+        "source": "installed package.json"
+      },
+      {
+        "name": "hosted-git-info",
+        "version": "7.0.2",
+        "licence": "ISC",
+        "notices": ["LICENSE"],
+        "source": "installed package.json"
+      },
+      {
+        "name": "http-errors",
+        "version": "2.0.1",
+        "licence": "MIT",
+        "notices": ["LICENSE"],
+        "source": "installed package.json"
+      },
+      {
+        "name": "https-proxy-agent",
+        "version": "7.0.6",
+        "licence": "MIT",
+        "notices": ["LICENSE"],
+        "source": "installed package.json"
+      },
+      {
+        "name": "ignore",
+        "version": "5.3.2",
+        "licence": "MIT",
+        "notices": ["LICENSE-MIT"],
+        "source": "installed package.json"
+      },
+      {
+        "name": "inherits",
+        "version": "2.0.4",
+        "licence": "ISC",
+        "notices": ["LICENSE"],
+        "source": "installed package.json"
+      },
+      {
+        "name": "invariant",
+        "version": "2.2.4",
+        "licence": "MIT",
+        "notices": ["LICENSE"],
+        "source": "installed package.json"
+      },
+      {
+        "name": "is-arrayish",
+        "version": "0.3.4",
+        "licence": "MIT",
+        "notices": ["LICENSE"],
+        "source": "installed package.json"
+      },
+      {
+        "name": "is-core-module",
+        "version": "2.17.0",
+        "licence": "MIT",
+        "notices": ["LICENSE"],
+        "source": "installed package.json"
+      },
+      {
+        "name": "is-docker",
+        "version": "2.2.1",
+        "licence": "MIT",
+        "notices": ["license"],
+        "source": "installed package.json"
+      },
+      {
+        "name": "is-fullwidth-code-point",
+        "version": "3.0.0",
+        "licence": "MIT",
+        "notices": ["license"],
+        "source": "installed package.json"
+      },
+      {
+        "name": "is-number",
+        "version": "7.0.0",
+        "licence": "MIT",
+        "notices": ["LICENSE"],
+        "source": "installed package.json"
+      },
+      {
+        "name": "is-wsl",
+        "version": "2.2.0",
+        "licence": "MIT",
+        "notices": ["license"],
+        "source": "installed package.json"
+      },
+      {
+        "name": "isexe",
+        "version": "2.0.0",
+        "licence": "ISC",
+        "notices": ["LICENSE"],
+        "source": "installed package.json"
+      },
+      {
+        "name": "jest-get-type",
+        "version": "29.6.3",
+        "licence": "MIT",
+        "notices": ["LICENSE"],
+        "source": "installed package.json"
+      },
+      {
+        "name": "jest-util",
+        "version": "29.7.0",
+        "licence": "MIT",
+        "notices": ["LICENSE"],
+        "source": "installed package.json"
+      },
+      {
+        "name": "jest-validate",
+        "version": "29.7.0",
+        "licence": "MIT",
+        "notices": ["LICENSE"],
+        "source": "installed package.json"
+      },
+      {
+        "name": "jest-worker",
+        "version": "29.7.0",
+        "licence": "MIT",
+        "notices": ["LICENSE"],
+        "source": "installed package.json"
+      },
+      {
+        "name": "jimp-compact",
+        "version": "0.16.1",
+        "licence": "MIT",
+        "notices": [],
+        "source": "installed package.json"
+      },
+      {
+        "name": "jiti",
+        "version": "2.7.0",
+        "licence": "MIT",
+        "notices": ["LICENSE"],
+        "source": "installed package.json"
+      },
+      {
+        "name": "js-base64",
+        "version": "3.9.4",
+        "licence": "BSD-3-Clause",
+        "notices": ["LICENSE.md"],
+        "source": "installed package.json"
+      },
+      {
+        "name": "js-tokens",
+        "version": "4.0.0",
+        "licence": "MIT",
+        "notices": ["LICENSE"],
+        "source": "installed package.json"
+      },
+      {
+        "name": "js-yaml",
+        "version": "4.3.2",
+        "licence": "MIT",
+        "notices": ["LICENSE"],
+        "source": "installed package.json"
+      },
+      {
+        "name": "jsc-safe-url",
+        "version": "0.2.4",
+        "licence": "0BSD",
+        "notices": ["LICENSE"],
+        "source": "installed package.json"
+      },
+      {
+        "name": "jsesc",
+        "version": "3.1.0",
+        "licence": "MIT",
+        "notices": ["LICENSE-MIT.txt"],
+        "source": "installed package.json"
+      },
+      {
+        "name": "json5",
+        "version": "2.2.3",
+        "licence": "MIT",
+        "notices": ["LICENSE.md"],
+        "source": "installed package.json"
+      },
+      {
+        "name": "kleur",
+        "version": "3.0.3",
+        "licence": "MIT",
+        "notices": ["license"],
+        "source": "installed package.json"
+      },
+      {
+        "name": "lan-network",
+        "version": "0.2.1",
+        "licence": "MIT",
+        "notices": ["LICENSE.md"],
+        "source": "installed package.json"
+      },
+      {
+        "name": "leven",
+        "version": "3.1.0",
+        "licence": "MIT",
+        "notices": ["license"],
+        "source": "installed package.json"
+      },
+      {
+        "name": "libsql",
+        "version": "0.5.29",
+        "licence": "MIT",
+        "notices": ["LICENSE"],
+        "source": "installed package.json"
+      },
+      {
+        "name": "lightningcss",
+        "version": "1.30.1",
+        "licence": "MPL-2.0",
+        "notices": ["LICENSE"],
+        "source": "installed package.json"
+      },
+      {
+        "name": "lightningcss",
+        "version": "1.32.0",
+        "licence": "MPL-2.0",
+        "notices": ["LICENSE"],
+        "source": "installed package.json"
+      },
+      {
+        "name": "lightningcss",
+        "version": "1.33.0",
+        "licence": "MPL-2.0",
+        "notices": ["LICENSE"],
+        "source": "installed package.json"
+      },
+      {
+        "name": "lightningcss-android-arm64",
+        "version": "1.32.0",
+        "licence": "MPL-2.0",
+        "notices": null,
+        "source": "npm registry metadata"
+      },
+      {
+        "name": "lightningcss-android-arm64",
+        "version": "1.33.0",
+        "licence": "MPL-2.0",
+        "notices": null,
+        "source": "npm registry metadata"
+      },
+      {
+        "name": "lightningcss-darwin-arm64",
+        "version": "1.30.1",
+        "licence": "MPL-2.0",
+        "notices": null,
+        "source": "npm registry metadata"
+      },
+      {
+        "name": "lightningcss-darwin-arm64",
+        "version": "1.32.0",
+        "licence": "MPL-2.0",
+        "notices": null,
+        "source": "npm registry metadata"
+      },
+      {
+        "name": "lightningcss-darwin-arm64",
+        "version": "1.33.0",
+        "licence": "MPL-2.0",
+        "notices": null,
+        "source": "npm registry metadata"
+      },
+      {
+        "name": "lightningcss-darwin-x64",
+        "version": "1.30.1",
+        "licence": "MPL-2.0",
+        "notices": null,
+        "source": "npm registry metadata"
+      },
+      {
+        "name": "lightningcss-darwin-x64",
+        "version": "1.32.0",
+        "licence": "MPL-2.0",
+        "notices": null,
+        "source": "npm registry metadata"
+      },
+      {
+        "name": "lightningcss-darwin-x64",
+        "version": "1.33.0",
+        "licence": "MPL-2.0",
+        "notices": null,
+        "source": "npm registry metadata"
+      },
+      {
+        "name": "lightningcss-freebsd-x64",
+        "version": "1.30.1",
+        "licence": "MPL-2.0",
+        "notices": null,
+        "source": "npm registry metadata"
+      },
+      {
+        "name": "lightningcss-freebsd-x64",
+        "version": "1.32.0",
+        "licence": "MPL-2.0",
+        "notices": null,
+        "source": "npm registry metadata"
+      },
+      {
+        "name": "lightningcss-freebsd-x64",
+        "version": "1.33.0",
+        "licence": "MPL-2.0",
+        "notices": null,
+        "source": "npm registry metadata"
+      },
+      {
+        "name": "lightningcss-linux-arm-gnueabihf",
+        "version": "1.30.1",
+        "licence": "MPL-2.0",
+        "notices": null,
+        "source": "npm registry metadata"
+      },
+      {
+        "name": "lightningcss-linux-arm-gnueabihf",
+        "version": "1.32.0",
+        "licence": "MPL-2.0",
+        "notices": null,
+        "source": "npm registry metadata"
+      },
+      {
+        "name": "lightningcss-linux-arm-gnueabihf",
+        "version": "1.33.0",
+        "licence": "MPL-2.0",
+        "notices": null,
+        "source": "npm registry metadata"
+      },
+      {
+        "name": "lightningcss-linux-arm64-gnu",
+        "version": "1.30.1",
+        "licence": "MPL-2.0",
+        "notices": null,
+        "source": "npm registry metadata"
+      },
+      {
+        "name": "lightningcss-linux-arm64-gnu",
+        "version": "1.32.0",
+        "licence": "MPL-2.0",
+        "notices": null,
+        "source": "npm registry metadata"
+      },
+      {
+        "name": "lightningcss-linux-arm64-gnu",
+        "version": "1.33.0",
+        "licence": "MPL-2.0",
+        "notices": null,
+        "source": "npm registry metadata"
+      },
+      {
+        "name": "lightningcss-linux-arm64-musl",
+        "version": "1.30.1",
+        "licence": "MPL-2.0",
+        "notices": null,
+        "source": "npm registry metadata"
+      },
+      {
+        "name": "lightningcss-linux-arm64-musl",
+        "version": "1.32.0",
+        "licence": "MPL-2.0",
+        "notices": null,
+        "source": "npm registry metadata"
+      },
+      {
+        "name": "lightningcss-linux-arm64-musl",
+        "version": "1.33.0",
+        "licence": "MPL-2.0",
+        "notices": null,
+        "source": "npm registry metadata"
+      },
+      {
+        "name": "lightningcss-linux-x64-gnu",
+        "version": "1.30.1",
+        "licence": "MPL-2.0",
+        "notices": null,
+        "source": "npm registry metadata"
+      },
+      {
+        "name": "lightningcss-linux-x64-gnu",
+        "version": "1.32.0",
+        "licence": "MPL-2.0",
+        "notices": null,
+        "source": "npm registry metadata"
+      },
+      {
+        "name": "lightningcss-linux-x64-gnu",
+        "version": "1.33.0",
+        "licence": "MPL-2.0",
+        "notices": null,
+        "source": "npm registry metadata"
+      },
+      {
+        "name": "lightningcss-linux-x64-musl",
+        "version": "1.30.1",
+        "licence": "MPL-2.0",
+        "notices": null,
+        "source": "npm registry metadata"
+      },
+      {
+        "name": "lightningcss-linux-x64-musl",
+        "version": "1.32.0",
+        "licence": "MPL-2.0",
+        "notices": null,
+        "source": "npm registry metadata"
+      },
+      {
+        "name": "lightningcss-linux-x64-musl",
+        "version": "1.33.0",
+        "licence": "MPL-2.0",
+        "notices": null,
+        "source": "npm registry metadata"
+      },
+      {
+        "name": "lightningcss-win32-arm64-msvc",
+        "version": "1.30.1",
+        "licence": "MPL-2.0",
+        "notices": null,
+        "source": "npm registry metadata"
+      },
+      {
+        "name": "lightningcss-win32-arm64-msvc",
+        "version": "1.32.0",
+        "licence": "MPL-2.0",
+        "notices": null,
+        "source": "npm registry metadata"
+      },
+      {
+        "name": "lightningcss-win32-arm64-msvc",
+        "version": "1.33.0",
+        "licence": "MPL-2.0",
+        "notices": null,
+        "source": "npm registry metadata"
+      },
+      {
+        "name": "lightningcss-win32-x64-msvc",
+        "version": "1.30.1",
+        "licence": "MPL-2.0",
+        "notices": ["LICENSE"],
+        "source": "installed package.json"
+      },
+      {
+        "name": "lightningcss-win32-x64-msvc",
+        "version": "1.32.0",
+        "licence": "MPL-2.0",
+        "notices": ["LICENSE"],
+        "source": "installed package.json"
+      },
+      {
+        "name": "lightningcss-win32-x64-msvc",
+        "version": "1.33.0",
+        "licence": "MPL-2.0",
+        "notices": ["LICENSE"],
+        "source": "installed package.json"
+      },
+      {
+        "name": "lodash.debounce",
+        "version": "4.0.8",
+        "licence": "MIT",
+        "notices": ["LICENSE"],
+        "source": "installed package.json"
+      },
+      {
+        "name": "lodash.throttle",
+        "version": "4.1.1",
+        "licence": "MIT",
+        "notices": ["LICENSE"],
+        "source": "installed package.json"
+      },
+      {
+        "name": "log-symbols",
+        "version": "2.2.0",
+        "licence": "MIT",
+        "notices": ["license"],
+        "source": "installed package.json"
+      },
+      {
+        "name": "loose-envify",
+        "version": "1.4.0",
+        "licence": "MIT",
+        "notices": ["LICENSE"],
+        "source": "installed package.json"
+      },
+      {
+        "name": "lru-cache",
+        "version": "10.4.3",
+        "licence": "ISC",
+        "notices": ["LICENSE"],
+        "source": "installed package.json"
+      },
+      {
+        "name": "lru-cache",
+        "version": "11.5.3",
+        "licence": "BlueOak-1.0.0",
+        "notices": ["LICENSE.md"],
+        "source": "installed package.json"
+      },
+      {
+        "name": "lru-cache",
+        "version": "5.1.1",
+        "licence": "ISC",
+        "notices": ["LICENSE"],
+        "source": "installed package.json"
+      },
+      {
+        "name": "magic-string",
+        "version": "0.30.21",
+        "licence": "MIT",
+        "notices": ["LICENSE"],
+        "source": "installed package.json"
+      },
+      {
+        "name": "makeerror",
+        "version": "1.0.12",
+        "licence": "BSD-3-Clause",
+        "notices": ["license"],
+        "source": "installed package.json"
+      },
+      {
+        "name": "mdn-data",
+        "version": "2.0.14",
+        "licence": "CC0-1.0",
+        "notices": ["LICENSE"],
+        "source": "installed package.json"
+      },
+      {
+        "name": "memoize-one",
+        "version": "5.2.1",
+        "licence": "MIT",
+        "notices": ["LICENSE"],
+        "source": "installed package.json"
+      },
+      {
+        "name": "merge-stream",
+        "version": "2.0.0",
+        "licence": "MIT",
+        "notices": ["LICENSE"],
+        "source": "installed package.json"
+      },
+      {
+        "name": "metro",
+        "version": "0.87.1",
+        "licence": "MIT",
+        "notices": [],
+        "source": "installed package.json"
+      },
+      {
+        "name": "metro-babel-transformer",
+        "version": "0.87.1",
+        "licence": "MIT",
+        "notices": [],
+        "source": "installed package.json"
+      },
+      {
+        "name": "metro-cache",
+        "version": "0.87.1",
+        "licence": "MIT",
+        "notices": [],
+        "source": "installed package.json"
+      },
+      {
+        "name": "metro-cache-key",
+        "version": "0.87.1",
+        "licence": "MIT",
+        "notices": [],
+        "source": "installed package.json"
+      },
+      {
+        "name": "metro-config",
+        "version": "0.87.1",
+        "licence": "MIT",
+        "notices": [],
+        "source": "installed package.json"
+      },
+      {
+        "name": "metro-core",
+        "version": "0.87.1",
+        "licence": "MIT",
+        "notices": [],
+        "source": "installed package.json"
+      },
+      {
+        "name": "metro-file-map",
+        "version": "0.87.1",
+        "licence": "MIT",
+        "notices": [],
+        "source": "installed package.json"
+      },
+      {
+        "name": "metro-minify-terser",
+        "version": "0.87.1",
+        "licence": "MIT",
+        "notices": [],
+        "source": "installed package.json"
+      },
+      {
+        "name": "metro-resolver",
+        "version": "0.87.1",
+        "licence": "MIT",
+        "notices": [],
+        "source": "installed package.json"
+      },
+      {
+        "name": "metro-runtime",
+        "version": "0.87.1",
+        "licence": "MIT",
+        "notices": [],
+        "source": "installed package.json"
+      },
+      {
+        "name": "metro-source-map",
+        "version": "0.87.1",
+        "licence": "MIT",
+        "notices": [],
+        "source": "installed package.json"
+      },
+      {
+        "name": "metro-symbolicate",
+        "version": "0.87.1",
+        "licence": "MIT",
+        "notices": [],
+        "source": "installed package.json"
+      },
+      {
+        "name": "metro-transform-plugins",
+        "version": "0.87.1",
+        "licence": "MIT",
+        "notices": [],
+        "source": "installed package.json"
+      },
+      {
+        "name": "metro-transform-worker",
+        "version": "0.87.1",
+        "licence": "MIT",
+        "notices": [],
+        "source": "installed package.json"
+      },
+      {
+        "name": "micromatch",
+        "version": "4.0.8",
+        "licence": "MIT",
+        "notices": ["LICENSE"],
+        "source": "installed package.json"
+      },
+      {
+        "name": "mime",
+        "version": "1.6.0",
+        "licence": "MIT",
+        "notices": ["LICENSE"],
+        "source": "installed package.json"
+      },
+      {
+        "name": "mime-db",
+        "version": "1.52.0",
+        "licence": "MIT",
+        "notices": ["LICENSE"],
+        "source": "installed package.json"
+      },
+      {
+        "name": "mime-db",
+        "version": "1.54.0",
+        "licence": "MIT",
+        "notices": ["LICENSE"],
+        "source": "installed package.json"
+      },
+      {
+        "name": "mime-types",
+        "version": "2.1.35",
+        "licence": "MIT",
+        "notices": ["LICENSE"],
+        "source": "installed package.json"
+      },
+      {
+        "name": "mime-types",
+        "version": "3.0.2",
+        "licence": "MIT",
+        "notices": ["LICENSE"],
+        "source": "installed package.json"
+      },
+      {
+        "name": "mimic-fn",
+        "version": "1.2.0",
+        "licence": "MIT",
+        "notices": ["license"],
+        "source": "installed package.json"
+      },
+      {
+        "name": "minimatch",
+        "version": "10.2.6",
+        "licence": "BlueOak-1.0.0",
+        "notices": ["LICENSE.md"],
+        "source": "installed package.json"
+      },
+      {
+        "name": "minipass",
+        "version": "7.1.3",
+        "licence": "BlueOak-1.0.0",
+        "notices": ["LICENSE.md"],
+        "source": "installed package.json"
+      },
+      {
+        "name": "ms",
+        "version": "2.0.0",
+        "licence": "MIT",
+        "notices": ["license.md"],
+        "source": "installed package.json"
+      },
+      {
+        "name": "ms",
+        "version": "2.1.3",
+        "licence": "MIT",
+        "notices": ["license.md"],
+        "source": "installed package.json"
+      },
+      {
+        "name": "multitars",
+        "version": "1.0.2",
+        "licence": "MIT",
+        "notices": ["LICENSE.md"],
+        "source": "installed package.json"
+      },
+      {
+        "name": "nanoid",
+        "version": "3.3.20",
+        "licence": "MIT",
+        "notices": ["LICENSE"],
+        "source": "installed package.json"
+      },
+      {
+        "name": "negotiator",
+        "version": "0.6.3",
+        "licence": "MIT",
+        "notices": ["LICENSE"],
+        "source": "installed package.json"
+      },
+      {
+        "name": "negotiator",
+        "version": "0.6.4",
+        "licence": "MIT",
+        "notices": ["LICENSE"],
+        "source": "installed package.json"
+      },
+      {
+        "name": "negotiator",
+        "version": "1.1.0",
+        "licence": "MIT",
+        "notices": ["LICENSE"],
+        "source": "installed package.json"
+      },
+      {
+        "name": "node-forge",
+        "version": "1.4.0",
+        "licence": "(BSD-3-Clause OR GPL-2.0)",
+        "notices": ["LICENSE"],
+        "source": "installed package.json"
+      },
+      {
+        "name": "node-int64",
+        "version": "0.4.0",
+        "licence": "MIT",
+        "notices": ["LICENSE"],
+        "source": "installed package.json"
+      },
+      {
+        "name": "node-releases",
+        "version": "2.0.58",
+        "licence": "MIT",
+        "notices": ["LICENSE"],
+        "source": "installed package.json"
+      },
+      {
+        "name": "noxcturnal",
+        "version": "0.1.1",
+        "licence": "MIT",
+        "notices": [],
+        "source": "installed package.json"
+      },
+      {
+        "name": "npm-package-arg",
+        "version": "11.0.3",
+        "licence": "ISC",
+        "notices": ["LICENSE"],
+        "source": "installed package.json"
+      },
+      {
+        "name": "nth-check",
+        "version": "2.1.1",
+        "licence": "BSD-2-Clause",
+        "notices": ["LICENSE"],
+        "source": "installed package.json"
+      },
+      {
+        "name": "nullthrows",
+        "version": "1.1.1",
+        "licence": "MIT",
+        "notices": ["LICENSE"],
+        "source": "installed package.json"
+      },
+      {
+        "name": "ob1",
+        "version": "0.87.1",
+        "licence": "MIT",
+        "notices": [],
+        "source": "installed package.json"
+      },
+      {
+        "name": "on-finished",
+        "version": "2.3.0",
+        "licence": "MIT",
+        "notices": ["LICENSE"],
+        "source": "installed package.json"
+      },
+      {
+        "name": "on-finished",
+        "version": "2.4.1",
+        "licence": "MIT",
+        "notices": ["LICENSE"],
+        "source": "installed package.json"
+      },
+      {
+        "name": "on-headers",
+        "version": "1.1.0",
+        "licence": "MIT",
+        "notices": ["LICENSE"],
+        "source": "installed package.json"
+      },
+      {
+        "name": "onetime",
+        "version": "2.0.1",
+        "licence": "MIT",
+        "notices": ["license"],
+        "source": "installed package.json"
+      },
+      {
+        "name": "open",
+        "version": "8.4.2",
+        "licence": "MIT",
+        "notices": ["license"],
+        "source": "installed package.json"
+      },
+      {
+        "name": "ora",
+        "version": "3.4.0",
+        "licence": "MIT",
+        "notices": ["license"],
+        "source": "installed package.json"
+      },
+      {
+        "name": "parse-png",
+        "version": "2.1.0",
+        "licence": "MIT",
+        "notices": ["license"],
+        "source": "installed package.json"
+      },
+      {
+        "name": "parseurl",
+        "version": "1.3.3",
+        "licence": "MIT",
+        "notices": ["LICENSE"],
+        "source": "installed package.json"
+      },
+      {
+        "name": "path-key",
+        "version": "3.1.1",
+        "licence": "MIT",
+        "notices": ["license"],
+        "source": "installed package.json"
+      },
+      {
+        "name": "path-parse",
+        "version": "1.0.7",
+        "licence": "MIT",
+        "notices": ["LICENSE"],
+        "source": "installed package.json"
+      },
+      {
+        "name": "path-scurry",
+        "version": "2.0.2",
+        "licence": "BlueOak-1.0.0",
+        "notices": ["LICENSE.md"],
+        "source": "installed package.json"
+      },
+      {
+        "name": "picocolors",
+        "version": "1.1.1",
+        "licence": "ISC",
+        "notices": ["LICENSE"],
+        "source": "installed package.json"
+      },
+      {
+        "name": "picomatch",
+        "version": "2.3.2",
+        "licence": "MIT",
+        "notices": ["LICENSE"],
+        "source": "installed package.json"
+      },
+      {
+        "name": "picomatch",
+        "version": "4.0.7",
+        "licence": "MIT",
+        "notices": ["LICENSE"],
+        "source": "installed package.json"
+      },
+      {
+        "name": "plist",
+        "version": "3.1.1",
+        "licence": "MIT",
+        "notices": ["LICENSE"],
+        "source": "installed package.json"
+      },
+      {
+        "name": "pngjs",
+        "version": "3.4.0",
+        "licence": "MIT",
+        "notices": ["LICENSE"],
+        "source": "installed package.json"
+      },
+      {
+        "name": "postcss",
+        "version": "8.5.29",
+        "licence": "MIT",
+        "notices": ["LICENSE"],
+        "source": "installed package.json"
+      },
+      {
+        "name": "pretty-format",
+        "version": "29.7.0",
+        "licence": "MIT",
+        "notices": ["LICENSE"],
+        "source": "installed package.json"
+      },
+      {
+        "name": "proc-log",
+        "version": "4.2.0",
+        "licence": "ISC",
+        "notices": ["LICENSE"],
+        "source": "installed package.json"
+      },
+      {
+        "name": "progress",
+        "version": "2.0.3",
+        "licence": "MIT",
+        "notices": ["LICENSE"],
+        "source": "installed package.json"
+      },
+      {
+        "name": "promise",
+        "version": "8.3.0",
+        "licence": "MIT",
+        "notices": ["LICENSE"],
+        "source": "installed package.json"
+      },
+      {
+        "name": "promise-limit",
+        "version": "2.7.0",
+        "licence": "ISC",
+        "notices": [],
+        "source": "installed package.json"
+      },
+      {
+        "name": "prompts",
+        "version": "2.4.2",
+        "licence": "MIT",
+        "notices": ["license"],
+        "source": "installed package.json"
+      },
+      {
+        "name": "range-parser",
+        "version": "1.2.1",
+        "licence": "MIT",
+        "notices": ["LICENSE"],
+        "source": "installed package.json"
+      },
+      {
+        "name": "react",
+        "version": "19.3.0",
+        "licence": "MIT",
+        "notices": ["LICENSE"],
+        "source": "installed package.json"
+      },
+      {
+        "name": "react-devtools-core",
+        "version": "6.1.5",
+        "licence": "MIT",
+        "notices": [],
+        "source": "installed package.json"
+      },
+      {
+        "name": "react-dom",
+        "version": "19.3.0",
+        "licence": "MIT",
+        "notices": ["LICENSE"],
+        "source": "installed package.json"
+      },
+      {
+        "name": "react-fast-compare",
+        "version": "3.2.2",
+        "licence": "MIT",
+        "notices": ["LICENSE"],
+        "source": "installed package.json"
+      },
+      {
+        "name": "react-freeze",
+        "version": "1.0.4",
+        "licence": "MIT",
+        "notices": ["LICENSE"],
+        "source": "installed package.json"
+      },
+      {
+        "name": "react-is",
+        "version": "18.3.1",
+        "licence": "MIT",
+        "notices": ["LICENSE"],
+        "source": "installed package.json"
+      },
+      {
+        "name": "react-is",
+        "version": "19.3.0",
+        "licence": "MIT",
+        "notices": ["LICENSE"],
+        "source": "installed package.json"
+      },
+      {
+        "name": "react-native",
+        "version": "0.88.0-rc.4",
+        "licence": "MIT",
+        "notices": ["LICENSE"],
+        "source": "installed package.json"
+      },
+      {
+        "name": "react-native-drawer-layout",
+        "version": "4.2.11",
+        "licence": "MIT",
+        "notices": ["LICENSE"],
+        "source": "installed package.json"
+      },
+      {
+        "name": "react-native-gesture-handler",
+        "version": "3.2.1",
+        "licence": "MIT",
+        "notices": ["LICENSE"],
+        "source": "installed package.json"
+      },
+      {
+        "name": "react-native-is-edge-to-edge",
+        "version": "1.3.1",
+        "licence": "MIT",
+        "notices": ["LICENSE"],
+        "source": "installed package.json"
+      },
+      {
+        "name": "react-native-reanimated",
+        "version": "4.7.0",
+        "licence": "MIT",
+        "notices": ["LICENSE"],
+        "source": "installed package.json"
+      },
+      {
+        "name": "react-native-safe-area-context",
+        "version": "5.9.1",
+        "licence": "MIT",
+        "notices": ["LICENSE"],
+        "source": "installed package.json"
+      },
+      {
+        "name": "react-native-screens",
+        "version": "4.28.0",
+        "licence": "MIT",
+        "notices": ["LICENSE"],
+        "source": "installed package.json"
+      },
+      {
+        "name": "react-native-skia-android",
+        "version": "154.0.0",
+        "licence": "MIT",
+        "notices": [],
+        "source": "installed package.json"
+      },
+      {
+        "name": "react-native-skia-apple-ios",
+        "version": "154.0.0",
+        "licence": "MIT",
+        "notices": [],
+        "source": "installed package.json"
+      },
+      {
+        "name": "react-native-skia-apple-macos",
+        "version": "154.0.0",
+        "licence": "MIT",
+        "notices": [],
+        "source": "installed package.json"
+      },
+      {
+        "name": "react-native-skia-apple-tvos",
+        "version": "154.0.0",
+        "licence": "MIT",
+        "notices": [],
+        "source": "installed package.json"
+      },
+      {
+        "name": "react-native-svg",
+        "version": "15.15.5",
+        "licence": "MIT",
+        "notices": ["LICENSE"],
+        "source": "installed package.json"
+      },
+      {
+        "name": "react-native-worklets",
+        "version": "0.13.0",
+        "licence": "MIT",
+        "notices": ["LICENSE"],
+        "source": "installed package.json"
+      },
+      {
+        "name": "react-reconciler",
+        "version": "0.31.0",
+        "licence": "MIT",
+        "notices": ["LICENSE"],
+        "source": "installed package.json"
+      },
+      {
+        "name": "react-refresh",
+        "version": "0.14.2",
+        "licence": "MIT",
+        "notices": ["LICENSE"],
+        "source": "installed package.json"
+      },
+      {
+        "name": "regenerate",
+        "version": "1.5.0",
+        "licence": "MIT",
+        "notices": ["LICENSE-MIT.txt"],
+        "source": "installed package.json"
+      },
+      {
+        "name": "regenerate-unicode-properties",
+        "version": "10.3.0",
+        "licence": "MIT",
+        "notices": ["LICENSE-MIT.txt"],
+        "source": "installed package.json"
+      },
+      {
+        "name": "regenerator-runtime",
+        "version": "0.13.11",
+        "licence": "MIT",
+        "notices": ["LICENSE"],
+        "source": "installed package.json"
+      },
+      {
+        "name": "regexpu-core",
+        "version": "6.5.3",
+        "licence": "MIT",
+        "notices": ["LICENSE-MIT.txt"],
+        "source": "installed package.json"
+      },
+      {
+        "name": "regjsgen",
+        "version": "0.8.0",
+        "licence": "MIT",
+        "notices": ["LICENSE-MIT.txt"],
+        "source": "installed package.json"
+      },
+      {
+        "name": "regjsparser",
+        "version": "0.13.4",
+        "licence": "BSD-2-Clause",
+        "notices": ["LICENSE.BSD"],
+        "source": "installed package.json"
+      },
+      {
+        "name": "require-directory",
+        "version": "2.1.1",
+        "licence": "MIT",
+        "notices": ["LICENSE"],
+        "source": "installed package.json"
+      },
+      {
+        "name": "resolve",
+        "version": "1.22.13",
+        "licence": "MIT",
+        "notices": ["LICENSE"],
+        "source": "installed package.json"
+      },
+      {
+        "name": "resolve-from",
+        "version": "5.0.0",
+        "licence": "MIT",
+        "notices": ["license"],
+        "source": "installed package.json"
+      },
+      {
+        "name": "resolve-workspace-root",
+        "version": "2.0.1",
+        "licence": "MIT",
+        "notices": ["LICENSE.md"],
+        "source": "installed package.json"
+      },
+      {
+        "name": "restore-cursor",
+        "version": "2.0.0",
+        "licence": "MIT",
+        "notices": ["license"],
+        "source": "installed package.json"
+      },
+      {
+        "name": "safe-buffer",
+        "version": "5.2.1",
+        "licence": "MIT",
+        "notices": ["LICENSE"],
+        "source": "installed package.json"
+      },
+      {
+        "name": "sandbox-cli-detector",
+        "version": "0.2.0",
+        "licence": "MIT",
+        "notices": ["LICENSE"],
+        "source": "installed package.json"
+      },
+      {
+        "name": "sax",
+        "version": "1.6.1",
+        "licence": "BlueOak-1.0.0",
+        "notices": ["LICENSE.md"],
+        "source": "installed package.json"
+      },
+      {
+        "name": "scheduler",
+        "version": "0.25.0",
+        "licence": "MIT",
+        "notices": ["LICENSE"],
+        "source": "installed package.json"
+      },
+      {
+        "name": "scheduler",
+        "version": "0.28.0",
+        "licence": "MIT",
+        "notices": ["LICENSE"],
+        "source": "installed package.json"
+      },
+      {
+        "name": "semver",
+        "version": "6.3.1",
+        "licence": "ISC",
+        "notices": ["LICENSE"],
+        "source": "installed package.json"
+      },
+      {
+        "name": "semver",
+        "version": "7.8.5",
+        "licence": "ISC",
+        "notices": ["LICENSE"],
+        "source": "installed package.json"
+      },
+      {
+        "name": "send",
+        "version": "0.19.2",
+        "licence": "MIT",
+        "notices": ["LICENSE"],
+        "source": "installed package.json"
+      },
+      {
+        "name": "serialize-error",
+        "version": "2.1.0",
+        "licence": "MIT",
+        "notices": ["license"],
+        "source": "installed package.json"
+      },
+      {
+        "name": "serve-static",
+        "version": "1.16.3",
+        "licence": "MIT",
+        "notices": ["LICENSE"],
+        "source": "installed package.json"
+      },
+      {
+        "name": "server-only",
+        "version": "0.0.1",
+        "licence": "MIT",
+        "notices": [],
+        "source": "installed package.json"
+      },
+      {
+        "name": "setprototypeof",
+        "version": "1.2.0",
+        "licence": "ISC",
+        "notices": ["LICENSE"],
+        "source": "installed package.json"
+      },
+      {
+        "name": "sf-symbols-typescript",
+        "version": "2.2.0",
+        "licence": "MIT",
+        "notices": ["LICENSE"],
+        "source": "installed package.json"
+      },
+      {
+        "name": "shebang-command",
+        "version": "2.0.0",
+        "licence": "MIT",
+        "notices": ["license"],
+        "source": "installed package.json"
+      },
+      {
+        "name": "shebang-regex",
+        "version": "3.0.0",
+        "licence": "MIT",
+        "notices": ["license"],
+        "source": "installed package.json"
+      },
+      {
+        "name": "shell-quote",
+        "version": "1.12.0",
+        "licence": "MIT",
+        "notices": ["LICENSE"],
+        "source": "installed package.json"
+      },
+      {
+        "name": "signal-exit",
+        "version": "3.0.7",
+        "licence": "ISC",
+        "notices": ["LICENSE.txt"],
+        "source": "installed package.json"
+      },
+      {
+        "name": "simple-plist",
+        "version": "1.3.1",
+        "licence": "MIT",
+        "notices": ["LICENSE"],
+        "source": "installed package.json"
+      },
+      {
+        "name": "simple-swizzle",
+        "version": "0.2.4",
+        "licence": "MIT",
+        "notices": ["LICENSE"],
+        "source": "installed package.json"
+      },
+      {
+        "name": "sisteransi",
+        "version": "1.0.5",
+        "licence": "MIT",
+        "notices": ["license"],
+        "source": "installed package.json"
+      },
+      {
+        "name": "slugify",
+        "version": "1.6.9",
+        "licence": "MIT",
+        "notices": ["LICENSE"],
+        "source": "installed package.json"
+      },
+      {
+        "name": "source-map",
+        "version": "0.5.7",
+        "licence": "BSD-3-Clause",
+        "notices": ["LICENSE"],
+        "source": "installed package.json"
+      },
+      {
+        "name": "source-map",
+        "version": "0.6.1",
+        "licence": "BSD-3-Clause",
+        "notices": ["LICENSE"],
+        "source": "installed package.json"
+      },
+      {
+        "name": "source-map-js",
+        "version": "1.2.2",
+        "licence": "BSD-3-Clause",
+        "notices": ["LICENSE"],
+        "source": "installed package.json"
+      },
+      {
+        "name": "source-map-support",
+        "version": "0.5.21",
+        "licence": "MIT",
+        "notices": ["LICENSE.md"],
+        "source": "installed package.json"
+      },
+      {
+        "name": "sql.js",
+        "version": "1.14.2",
+        "licence": "MIT",
+        "notices": ["AUTHORS", "LICENSE"],
+        "source": "installed package.json"
+      },
+      {
+        "name": "stackframe",
+        "version": "1.3.4",
+        "licence": "MIT",
+        "notices": ["LICENSE"],
+        "source": "installed package.json"
+      },
+      {
+        "name": "stacktrace-parser",
+        "version": "0.1.11",
+        "licence": "MIT",
+        "notices": ["LICENSE"],
+        "source": "installed package.json"
+      },
+      {
+        "name": "standard-navigation",
+        "version": "0.0.5",
+        "licence": "MIT",
+        "notices": [],
+        "source": "installed package.json"
+      },
+      {
+        "name": "statuses",
+        "version": "1.5.0",
+        "licence": "MIT",
+        "notices": ["LICENSE"],
+        "source": "installed package.json"
+      },
+      {
+        "name": "statuses",
+        "version": "2.0.2",
+        "licence": "MIT",
+        "notices": ["LICENSE"],
+        "source": "installed package.json"
+      },
+      {
+        "name": "stream-buffers",
+        "version": "2.2.0",
+        "licence": "Unlicense",
+        "notices": [],
+        "source": "installed package.json"
+      },
+      {
+        "name": "string-width",
+        "version": "4.2.3",
+        "licence": "MIT",
+        "notices": ["license"],
+        "source": "installed package.json"
+      },
+      {
+        "name": "strip-ansi",
+        "version": "5.2.0",
+        "licence": "MIT",
+        "notices": ["license"],
+        "source": "installed package.json"
+      },
+      {
+        "name": "strip-ansi",
+        "version": "6.0.1",
+        "licence": "MIT",
+        "notices": ["license"],
+        "source": "installed package.json"
+      },
+      {
+        "name": "structured-headers",
+        "version": "0.4.1",
+        "licence": "MIT",
+        "notices": [],
+        "source": "installed package.json"
+      },
+      {
+        "name": "supports-color",
+        "version": "5.5.0",
+        "licence": "MIT",
+        "notices": ["license"],
+        "source": "installed package.json"
+      },
+      {
+        "name": "supports-color",
+        "version": "7.2.0",
+        "licence": "MIT",
+        "notices": ["license"],
+        "source": "installed package.json"
+      },
+      {
+        "name": "supports-color",
+        "version": "8.1.1",
+        "licence": "MIT",
+        "notices": ["license"],
+        "source": "installed package.json"
+      },
+      {
+        "name": "supports-hyperlinks",
+        "version": "2.3.0",
+        "licence": "MIT",
+        "notices": ["license"],
+        "source": "installed package.json"
+      },
+      {
+        "name": "supports-preserve-symlinks-flag",
+        "version": "1.0.0",
+        "licence": "MIT",
+        "notices": ["LICENSE"],
+        "source": "installed package.json"
+      },
+      {
+        "name": "tailwindcss",
+        "version": "4.3.3",
+        "licence": "MIT",
+        "notices": ["LICENSE"],
+        "source": "installed package.json"
+      },
+      {
+        "name": "tapable",
+        "version": "2.3.3",
+        "licence": "MIT",
+        "notices": ["LICENSE"],
+        "source": "installed package.json"
+      },
+      {
+        "name": "terminal-link",
+        "version": "2.1.1",
+        "licence": "MIT",
+        "notices": ["license"],
+        "source": "installed package.json"
+      },
+      {
+        "name": "terser",
+        "version": "5.51.2",
+        "licence": "BSD-2-Clause",
+        "notices": ["LICENSE"],
+        "source": "installed package.json"
+      },
+      {
+        "name": "throat",
+        "version": "5.0.0",
+        "licence": "MIT",
+        "notices": ["LICENSE"],
+        "source": "installed package.json"
+      },
+      {
+        "name": "tinyglobby",
+        "version": "0.2.17",
+        "licence": "MIT",
+        "notices": ["LICENSE"],
+        "source": "installed package.json"
+      },
+      {
+        "name": "tmpl",
+        "version": "1.0.5",
+        "licence": "BSD-3-Clause",
+        "notices": ["license"],
+        "source": "installed package.json"
+      },
+      {
+        "name": "to-regex-range",
+        "version": "5.0.1",
+        "licence": "MIT",
+        "notices": ["LICENSE"],
+        "source": "installed package.json"
+      },
+      {
+        "name": "toidentifier",
+        "version": "1.0.1",
+        "licence": "MIT",
+        "notices": ["LICENSE"],
+        "source": "installed package.json"
+      },
+      {
+        "name": "toqr",
+        "version": "0.1.1",
+        "licence": "MIT",
+        "notices": ["LICENSE.md"],
+        "source": "installed package.json"
+      },
+      {
+        "name": "type-fest",
+        "version": "0.21.3",
+        "licence": "(MIT OR CC0-1.0)",
+        "notices": ["license"],
+        "source": "installed package.json"
+      },
+      {
+        "name": "type-fest",
+        "version": "0.7.1",
+        "licence": "(MIT OR CC0-1.0)",
+        "notices": ["license"],
+        "source": "installed package.json"
+      },
+      {
+        "name": "typescript",
+        "version": "7.0.2",
+        "licence": "Apache-2.0",
+        "notices": ["LICENSE", "NOTICE.txt"],
+        "source": "installed package.json"
+      },
+      {
+        "name": "undici-types",
+        "version": "8.9.0",
+        "licence": "MIT",
+        "notices": ["LICENSE"],
+        "source": "installed package.json"
+      },
+      {
+        "name": "unicode-canonical-property-names-ecmascript",
+        "version": "2.0.1",
+        "licence": "MIT",
+        "notices": ["LICENSE-MIT.txt"],
+        "source": "installed package.json"
+      },
+      {
+        "name": "unicode-match-property-ecmascript",
+        "version": "2.0.0",
+        "licence": "MIT",
+        "notices": ["LICENSE-MIT.txt"],
+        "source": "installed package.json"
+      },
+      {
+        "name": "unicode-match-property-value-ecmascript",
+        "version": "2.2.1",
+        "licence": "MIT",
+        "notices": ["LICENSE-MIT.txt"],
+        "source": "installed package.json"
+      },
+      {
+        "name": "unicode-property-aliases-ecmascript",
+        "version": "2.2.0",
+        "licence": "MIT",
+        "notices": ["LICENSE-MIT.txt"],
+        "source": "installed package.json"
+      },
+      {
+        "name": "unimodules-app-loader",
+        "version": "58.0.2",
+        "licence": "MIT",
+        "notices": ["LICENSE"],
+        "source": "installed package.json"
+      },
+      {
+        "name": "uniwind",
+        "version": "1.12.1",
+        "licence": "MIT",
+        "notices": ["LICENSE"],
+        "source": "installed package.json"
+      },
+      {
+        "name": "unpipe",
+        "version": "1.0.0",
+        "licence": "MIT",
+        "notices": ["LICENSE"],
+        "source": "installed package.json"
+      },
+      {
+        "name": "update-browserslist-db",
+        "version": "1.3.4",
+        "licence": "MIT",
+        "notices": ["LICENSE"],
+        "source": "installed package.json"
+      },
+      {
+        "name": "use-latest-callback",
+        "version": "0.2.6",
+        "licence": "MIT",
+        "notices": ["LICENSE"],
+        "source": "installed package.json"
+      },
+      {
+        "name": "use-sync-external-store",
+        "version": "1.7.0",
+        "licence": "MIT",
+        "notices": ["LICENSE"],
+        "source": "installed package.json"
+      },
+      {
+        "name": "utils-merge",
+        "version": "1.0.1",
+        "licence": "MIT",
+        "notices": ["LICENSE"],
+        "source": "installed package.json"
+      },
+      {
+        "name": "uuid",
+        "version": "7.0.3",
+        "licence": "MIT",
+        "notices": ["LICENSE.md"],
+        "source": "installed package.json"
+      },
+      {
+        "name": "validate-npm-package-name",
+        "version": "5.0.1",
+        "licence": "ISC",
+        "notices": ["LICENSE"],
+        "source": "installed package.json"
+      },
+      {
+        "name": "vary",
+        "version": "1.1.2",
+        "licence": "MIT",
+        "notices": ["LICENSE"],
+        "source": "installed package.json"
+      },
+      {
+        "name": "vlq",
+        "version": "1.0.1",
+        "licence": "MIT",
+        "notices": ["LICENSE"],
+        "source": "installed package.json"
+      },
+      {
+        "name": "walker",
+        "version": "1.0.8",
+        "licence": "Apache-2.0",
+        "notices": ["LICENSE"],
+        "source": "installed package.json"
+      },
+      {
+        "name": "warn-once",
+        "version": "0.1.1",
+        "licence": "MIT",
+        "notices": ["LICENSE"],
+        "source": "installed package.json"
+      },
+      {
+        "name": "wcwidth",
+        "version": "1.0.1",
+        "licence": "MIT",
+        "notices": ["LICENSE"],
+        "source": "installed package.json"
+      },
+      {
+        "name": "whatwg-fetch",
+        "version": "3.6.20",
+        "licence": "MIT",
+        "notices": ["LICENSE"],
+        "source": "installed package.json"
+      },
+      {
+        "name": "whatwg-url-minimum",
+        "version": "0.2.0",
+        "licence": "MIT",
+        "notices": ["LICENSE.md"],
+        "source": "installed package.json"
+      },
+      {
+        "name": "which",
+        "version": "2.0.2",
+        "licence": "ISC",
+        "notices": ["LICENSE"],
+        "source": "installed package.json"
+      },
+      {
+        "name": "wrap-ansi",
+        "version": "7.0.0",
+        "licence": "MIT",
+        "notices": ["license"],
+        "source": "installed package.json"
+      },
+      {
+        "name": "ws",
+        "version": "7.5.13",
+        "licence": "MIT",
+        "notices": ["LICENSE"],
+        "source": "installed package.json"
+      },
+      {
+        "name": "ws",
+        "version": "8.22.0",
+        "licence": "MIT",
+        "notices": ["LICENSE"],
+        "source": "installed package.json"
+      },
+      {
+        "name": "xcode",
+        "version": "3.0.1",
+        "licence": "Apache-2.0",
+        "notices": ["AUTHORS", "LICENSE", "NOTICE"],
+        "source": "installed package.json"
+      },
+      {
+        "name": "xml2js",
+        "version": "0.6.0",
+        "licence": "MIT",
+        "notices": ["LICENSE"],
+        "source": "installed package.json"
+      },
+      {
+        "name": "xmlbuilder",
+        "version": "11.0.1",
+        "licence": "MIT",
+        "notices": ["LICENSE"],
+        "source": "installed package.json"
+      },
+      {
+        "name": "xmlbuilder",
+        "version": "15.1.1",
+        "licence": "MIT",
+        "notices": ["LICENSE"],
+        "source": "installed package.json"
+      },
+      {
+        "name": "y18n",
+        "version": "5.0.8",
+        "licence": "ISC",
+        "notices": ["LICENSE"],
+        "source": "installed package.json"
+      },
+      {
+        "name": "yallist",
+        "version": "3.1.1",
+        "licence": "ISC",
+        "notices": ["LICENSE"],
+        "source": "installed package.json"
+      },
+      {
+        "name": "yargs",
+        "version": "17.7.3",
+        "licence": "MIT",
+        "notices": ["LICENSE"],
+        "source": "installed package.json"
+      },
+      {
+        "name": "yargs-parser",
+        "version": "21.1.1",
+        "licence": "ISC",
+        "notices": ["LICENSE.txt"],
+        "source": "installed package.json"
+      },
+      {
+        "name": "zod",
+        "version": "3.25.76",
+        "licence": "MIT",
+        "notices": ["LICENSE"],
+        "source": "installed package.json"
+      }
+    ],
+    "apps/sync": [
+      {
+        "name": "@libsql/client",
+        "version": "0.18.0",
+        "licence": "MIT",
+        "notices": [],
+        "source": "installed package.json"
+      },
+      {
+        "name": "@libsql/core",
+        "version": "0.18.0",
+        "licence": "MIT",
+        "notices": [],
+        "source": "installed package.json"
+      },
+      {
+        "name": "@libsql/darwin-arm64",
+        "version": "0.5.29",
+        "licence": "MIT",
+        "notices": null,
+        "source": "npm registry metadata"
+      },
+      {
+        "name": "@libsql/darwin-x64",
+        "version": "0.5.29",
+        "licence": "MIT",
+        "notices": null,
+        "source": "npm registry metadata"
+      },
+      {
+        "name": "@libsql/hrana-client",
+        "version": "0.10.0",
+        "licence": "MIT",
+        "notices": ["LICENSE"],
+        "source": "installed package.json"
+      },
+      {
+        "name": "@libsql/isomorphic-ws",
+        "version": "0.1.5",
+        "licence": "MIT",
+        "notices": [],
+        "source": "installed package.json"
+      },
+      {
+        "name": "@libsql/linux-arm-gnueabihf",
+        "version": "0.5.29",
+        "licence": "MIT",
+        "notices": null,
+        "source": "npm registry metadata"
+      },
+      {
+        "name": "@libsql/linux-arm-musleabihf",
+        "version": "0.5.29",
+        "licence": "MIT",
+        "notices": null,
+        "source": "npm registry metadata"
+      },
+      {
+        "name": "@libsql/linux-arm64-gnu",
+        "version": "0.5.29",
+        "licence": "MIT",
+        "notices": null,
+        "source": "npm registry metadata"
+      },
+      {
+        "name": "@libsql/linux-arm64-musl",
+        "version": "0.5.29",
+        "licence": "MIT",
+        "notices": null,
+        "source": "npm registry metadata"
+      },
+      {
+        "name": "@libsql/linux-x64-gnu",
+        "version": "0.5.29",
+        "licence": "MIT",
+        "notices": null,
+        "source": "npm registry metadata"
+      },
+      {
+        "name": "@libsql/linux-x64-musl",
+        "version": "0.5.29",
+        "licence": "MIT",
+        "notices": null,
+        "source": "npm registry metadata"
+      },
+      {
+        "name": "@libsql/win32-x64-msvc",
+        "version": "0.5.29",
+        "licence": "MIT",
+        "notices": [],
+        "source": "installed package.json"
+      },
+      {
+        "name": "@neon-rs/load",
+        "version": "0.0.4",
+        "licence": "MIT",
+        "notices": ["LICENSE"],
+        "source": "installed package.json"
+      },
+      {
+        "name": "@types/node",
+        "version": "26.6.5",
+        "licence": "MIT",
+        "notices": ["LICENSE"],
+        "source": "installed package.json"
+      },
+      {
+        "name": "@types/ws",
+        "version": "8.18.2",
+        "licence": "MIT",
+        "notices": ["LICENSE"],
+        "source": "installed package.json"
+      },
+      {
+        "name": "detect-libc",
+        "version": "2.0.2",
+        "licence": "Apache-2.0",
+        "notices": ["LICENSE"],
+        "source": "installed package.json"
+      },
+      {
+        "name": "js-base64",
+        "version": "3.9.4",
+        "licence": "BSD-3-Clause",
+        "notices": ["LICENSE.md"],
+        "source": "installed package.json"
+      },
+      {
+        "name": "libsql",
+        "version": "0.5.29",
+        "licence": "MIT",
+        "notices": ["LICENSE"],
+        "source": "installed package.json"
+      },
+      {
+        "name": "promise-limit",
+        "version": "2.7.0",
+        "licence": "ISC",
+        "notices": [],
+        "source": "installed package.json"
+      },
+      {
+        "name": "undici-types",
+        "version": "8.9.0",
+        "licence": "MIT",
+        "notices": ["LICENSE"],
+        "source": "installed package.json"
+      },
+      {
+        "name": "ws",
+        "version": "8.22.0",
+        "licence": "MIT",
+        "notices": ["LICENSE"],
+        "source": "installed package.json"
+      }
+    ]
+  }
+}
