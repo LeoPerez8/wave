@@ -55,11 +55,13 @@ test("desktop launch, 50,000-song scrolling and whole-app memory meet the releas
       }).pipe(Effect.provide(libraryLayer(join(data, "wave.db")))),
     );
     const launch = performance.now();
+    const launchedAt = Date.now();
     app = await electron.launch({
       args: [appFolder, "--lang=en-US"],
       env: { ...process.env, WAVE_DATA_DIR: data, WAVE_MUSIC_DIR: join(data, "Absent") },
     });
     const page = await app.firstWindow();
+    const windowMs = performance.now() - launch;
     // Readiness includes the populated, hydrated UI and a paint, not just ready-to-show.
     await page.waitForFunction(
       () => document.querySelector('[role="grid"][aria-rowcount="50001"] [data-row="0"]') !== null,
@@ -72,6 +74,15 @@ test("desktop launch, 50,000-song scrolling and whole-app memory meet the releas
     );
     const readyMs = performance.now() - launch;
     report["readyMs"] = readyMs;
+    // Where the time went, by the page's own clock. Only readyMs is held to the limit.
+    report["startup"] = {
+      windowOpenedMs: windowMs,
+      pageStartedMs: (await page.evaluate(() => performance.timeOrigin)) - launchedAt,
+      pageLoadedMs:
+        (await page.evaluate(
+          () => performance.timeOrigin + performance.getEntriesByType("navigation")[0]!.duration,
+        )) - launchedAt,
+    };
     expect(
       await app.evaluate(({ BrowserWindow }) => BrowserWindow.getAllWindows()[0]!.isVisible()),
     ).toBe(true);
@@ -140,6 +151,7 @@ test("desktop launch, 50,000-song scrolling and whole-app memory meet the releas
       const frames = await page.locator(".table-viewport").evaluate(async (element) => {
         const intervals: number[] = [];
         let incompleteFrames = 0;
+        const incompleteAt: { frame: number; first: number; rendered: number[] }[] = [];
         let maxRows = 0;
         let last = await new Promise<number>((resolve) => requestAnimationFrame(resolve));
         for (let i = 0; i < 120; i++) {
@@ -156,10 +168,18 @@ test("desktop launch, 50,000-song scrolling and whole-app memory meet the releas
             Array.from({ length: end - first }, (_, i) => first + i).some(
               (index) => !indices.has(index),
             )
-          )
+          ) {
             incompleteFrames++;
+            incompleteAt.push({ frame: i, first, rendered: [...indices].sort((a, b) => a - b) });
+          }
         }
-        return { intervals, incompleteFrames, maxRows, endScrollTop: element.scrollTop };
+        return {
+          intervals,
+          incompleteFrames,
+          incompleteAt,
+          maxRows,
+          endScrollTop: element.scrollTop,
+        };
       });
       segments.push({
         startRow: row,

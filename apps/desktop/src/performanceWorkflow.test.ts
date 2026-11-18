@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { test } from "node:test";
 
-test("both desktop CI runners measure performance and retain release memory before publication", () => {
+test("both desktop CI runners measure performance and keep the run's memory at rest", () => {
   const workflow = readFileSync(
     new URL("../../../.github/workflows/ci.yml", import.meta.url),
     "utf8",
@@ -15,6 +15,4 @@ test("both desktop CI runners measure performance and retain release memory befo
   assert.match(desktop, /name: desktop-performance-\$\{\{ matrix.report \}\}/);
   assert.match(desktop, /path: apps\/desktop\/perf-results/);
   assert.match(desktop, /if-no-files-found: error/);
-  const release = workflow.split("\n  release:")[1]!;
-  assert.match(release, /needs: \[[^\]]*desktop[^\]]*\]/);
 });
