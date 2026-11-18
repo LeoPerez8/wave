@@ -1,11 +1,13 @@
-import { DEFAULT_THEME_CHOICE, themeFor } from "@wave/core";
+import { readThemeChoice, themeFor } from "@wave/core";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import type { AccountView } from "../../shared/account.ts";
 import type { BrowseRow, BrowseScope } from "../../shared/browse.ts";
 import type { ScanStatus } from "../../shared/library.ts";
 import { PlayerBar, usePlayback } from "./PlayerBar.tsx";
 import { Icon } from "./Icon.tsx";
 import { Artwork, VirtualTable } from "./VirtualTable.tsx";
 import { FolderSettings } from "./FolderSettings.tsx";
+import { AccountSettings, SignInInvitation } from "./AccountSettings.tsx";
 import { labels, text } from "./text.ts";
 
 type Route = BrowseScope | { readonly kind: "home" } | { readonly kind: "settings" };
@@ -49,6 +51,8 @@ export function App() {
   const route = history[position]!;
   const [hero, setHero] = useState<BrowseRow>();
   const [scan, setScan] = useState<ScanStatus>();
+  const [account, setAccount] = useState<AccountView>();
+  const theme = account?.theme;
   const [count, setCount] = useState(0);
   const [error, setError] = useState<string>();
   const [query, setQuery] = useState("");
@@ -69,7 +73,8 @@ export function App() {
     const media = matchMedia("(prefers-color-scheme: dark)");
     const apply = () => {
       const scheme = appearance === "system" ? (media.matches ? "dark" : "light") : appearance;
-      const colours = themeFor(DEFAULT_THEME_CHOICE)[scheme];
+      // The Wave account's theme, the phone's choice, once the Library synced it.
+      const colours = themeFor(readThemeChoice(theme ?? null))[scheme];
       for (const [key, value] of Object.entries(colours))
         shell.current?.style.setProperty(`--color-${key}`, value);
       shell.current!.style.colorScheme = scheme;
@@ -77,7 +82,7 @@ export function App() {
     apply();
     media.addEventListener("change", apply);
     return () => media.removeEventListener("change", apply);
-  }, [appearance]);
+  }, [appearance, theme]);
 
   const go = (next: Route) => {
     setHistory((previous) => [...previous.slice(0, position + 1), next]);
@@ -106,6 +111,11 @@ export function App() {
           );
           const counts = await window.wave.library.counts();
           if (current) setCount(counts.songs);
+          const view = await window.wave.account.view();
+          if (current)
+            setAccount((previous) =>
+              JSON.stringify(previous) === JSON.stringify(view) ? previous : view,
+            );
         }
       } catch {
         if (current) failed();
@@ -133,7 +143,7 @@ export function App() {
     return () => {
       current = false;
     };
-  }, [scan?.revision, playlistOffset, failed]);
+  }, [scan?.revision, account?.revision, playlistOffset, failed]);
   useEffect(() => {
     const key = (event: KeyboardEvent) => {
       if (event.key === "F5") {
@@ -356,6 +366,7 @@ export function App() {
             {error ?? text.settings.couldntScanYourMusic}
           </p>
         )}
+        {account?.invitation && <SignInInvitation onError={failed} />}
         {route.kind === "settings" ? (
           <div className="settings-page">
             <nav aria-label={labels.settings}>
@@ -397,6 +408,8 @@ export function App() {
                     ))}
                   </select>
                 </>
+              ) : setting === "accounts" ? (
+                <AccountSettings view={account} onError={failed} />
               ) : (
                 <p className="secondary">{labels.unavailableSection}</p>
               )}
@@ -406,7 +419,9 @@ export function App() {
           <VirtualTable
             key={JSON.stringify(scope)}
             scope={scope}
-            revision={(scan?.revision ?? 0) + (playback.view?.revision ?? 0)}
+            revision={
+              (scan?.revision ?? 0) + (playback.view?.revision ?? 0) + (account?.revision ?? 0)
+            }
             onHero={setHero}
             onOpen={open}
             onError={failed}
