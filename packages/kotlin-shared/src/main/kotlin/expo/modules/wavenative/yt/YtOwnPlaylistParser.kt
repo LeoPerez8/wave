@@ -1,3 +1,8 @@
+// The response walk in this file follows ytmusicapi (https://github.com/sigma67/ytmusicapi, MIT
+// License, Copyright (c) sigma67), and is credited here as derived code (upstream revision not
+// recorded). Modified by Wave from 2026-10-18 on, and conveyed under the GNU GPL version 3
+// (LICENSE, NOTICE.md).
+
 package expo.modules.wavenative.yt
 
 import kotlinx.serialization.json.Json

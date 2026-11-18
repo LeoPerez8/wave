@@ -389,9 +389,14 @@ describe("release-source.ts manifest", () => {
     assert.ok(manifest.buildInputs.includes("docs/release-source.md"));
     assert.deepEqual(
       manifest.thirdPartySource.map(({ subject }) => subject),
-      ["com.github.MetrolistGroup.innertubex:innertubex:0.8.6", "net.jthink:jaudiotagger:3.0.1"],
+      [
+        "com.github.MetrolistGroup.innertubex:innertubex:0.11.9",
+        "com.github.MetrolistGroup.innertubex:innertubex:0.8.6",
+        "com.github.MetrolistGroup.quackjs:quackjs:0.1.4",
+        "net.jthink:jaudiotagger:3.0.1",
+      ],
     );
-    assert.ok(manifest.pending.some((item) => item.startsWith("gradle:release-closure")));
+    assert.deepEqual(manifest.pending, []);
   });
 });
 

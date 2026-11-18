@@ -1,6 +1,6 @@
 {
   "observed": "2026-11-18",
-  "inventoriedAt": "2d95fbb9c814b3b5147ad71b24bb8f58520b78d8",
+  "inventoriedAt": "6b31a7cc027d3d16bf12803418b7d101493a91d0",
   "reviews": [
     {
       "package": "@expo-google-fonts/inter@0.4.2",
@@ -9,8 +9,8 @@
     },
     {
       "package": "glob@13.0.6",
-      "status": "pending",
-      "evidence": "BlueOak-1.0.0 is a permissive licence the FSF licence list (updated 2026-04-22) doesn't classify. Resolve by showing the package is absent from the release JS bundle and APK (a Node-only build dependency), or by a recorded compatibility determination."
+      "status": "compatible",
+      "evidence": "Observed 2026-11-18 at 6b31a7cc: absent from the release JS bundle. `expo export --platform android --no-bytecode --source-maps` built index-6eb99dbb.js, and its source map's 9,911 sources come from 68 npm packages, none of them this one. No Gradle project or native library comes from it either. A Node-only build dependency, reached in the lockfile only through @expo/cli, @expo/config, @expo/config-plugins, @expo/fingerprint, @expo/metro-config and expo-updates (only expo-updates/utils/build/vcs.js, a command-line helper). Wave's releases don't convey a copy of it, so its BlueOak-1.0.0 terms don't reach them."
     },
     {
       "package": "lightningcss-android-arm64@1.32.0",
@@ -189,28 +189,28 @@
     },
     {
       "package": "lru-cache@11.5.3",
-      "status": "pending",
-      "evidence": "BlueOak-1.0.0 is a permissive licence the FSF licence list (updated 2026-04-22) doesn't classify. Resolve by showing the package is absent from the release JS bundle and APK (a Node-only build dependency), or by a recorded compatibility determination."
+      "status": "compatible",
+      "evidence": "Observed 2026-11-18 at 6b31a7cc: absent from the release JS bundle. `expo export --platform android --no-bytecode --source-maps` built index-6eb99dbb.js, and its source map's 9,911 sources come from 68 npm packages, none of them this one. No Gradle project or native library comes from it either. A Node-only build dependency, reached in the lockfile only through glob's dependency path-scurry. Wave's releases don't convey a copy of it, so its BlueOak-1.0.0 terms don't reach them."
     },
     {
       "package": "minimatch@10.2.6",
-      "status": "pending",
-      "evidence": "BlueOak-1.0.0 is a permissive licence the FSF licence list (updated 2026-04-22) doesn't classify. Resolve by showing the package is absent from the release JS bundle and APK (a Node-only build dependency), or by a recorded compatibility determination."
+      "status": "compatible",
+      "evidence": "Observed 2026-11-18 at 6b31a7cc: absent from the release JS bundle. `expo export --platform android --no-bytecode --source-maps` built index-6eb99dbb.js, and its source map's 9,911 sources come from 68 npm packages, none of them this one. No Gradle project or native library comes from it either. A Node-only build dependency, reached in the lockfile only through glob, @expo/fingerprint, eslint and @eslint/config-array. Wave's releases don't convey a copy of it, so its BlueOak-1.0.0 terms don't reach them."
     },
     {
       "package": "minipass@7.1.3",
-      "status": "pending",
-      "evidence": "BlueOak-1.0.0 is a permissive licence the FSF licence list (updated 2026-04-22) doesn't classify. Resolve by showing the package is absent from the release JS bundle and APK (a Node-only build dependency), or by a recorded compatibility determination."
+      "status": "compatible",
+      "evidence": "Observed 2026-11-18 at 6b31a7cc: absent from the release JS bundle. `expo export --platform android --no-bytecode --source-maps` built index-6eb99dbb.js, and its source map's 9,911 sources come from 68 npm packages, none of them this one. No Gradle project or native library comes from it either. A Node-only build dependency, reached in the lockfile only through glob and path-scurry. Wave's releases don't convey a copy of it, so its BlueOak-1.0.0 terms don't reach them."
     },
     {
       "package": "path-scurry@2.0.2",
-      "status": "pending",
-      "evidence": "BlueOak-1.0.0 is a permissive licence the FSF licence list (updated 2026-04-22) doesn't classify. Resolve by showing the package is absent from the release JS bundle and APK (a Node-only build dependency), or by a recorded compatibility determination."
+      "status": "compatible",
+      "evidence": "Observed 2026-11-18 at 6b31a7cc: absent from the release JS bundle. `expo export --platform android --no-bytecode --source-maps` built index-6eb99dbb.js, and its source map's 9,911 sources come from 68 npm packages, none of them this one. No Gradle project or native library comes from it either. A Node-only build dependency, reached in the lockfile only through glob. Wave's releases don't convey a copy of it, so its BlueOak-1.0.0 terms don't reach them."
     },
     {
       "package": "sax@1.6.1",
-      "status": "pending",
-      "evidence": "BlueOak-1.0.0 is a permissive licence the FSF licence list (updated 2026-04-22) doesn't classify. Resolve by showing the package is absent from the release JS bundle and APK (a Node-only build dependency), or by a recorded compatibility determination."
+      "status": "compatible",
+      "evidence": "Observed 2026-11-18 at 6b31a7cc: absent from the release JS bundle. `expo export --platform android --no-bytecode --source-maps` built index-6eb99dbb.js, and its source map's 9,911 sources come from 68 npm packages, none of them this one. No Gradle project or native library comes from it either. A Node-only build dependency, reached in the lockfile only through xml2js, which @expo/config-plugins and expo-splash-screen's config plugin (plugin/build) use at prebuild. Wave's releases don't convey a copy of it, so its BlueOak-1.0.0 terms don't reach them."
     }
   ],
   "components": [
@@ -218,15 +218,16 @@
       "id": "contributor:LeoPerez8",
       "kind": "first-party-code",
       "status": "compatible",
-      "licence": "none declared (all rights reserved until the declaration ticket)",
-      "evidence": "The repository owner. 2,527 commits authored as LeoPerez8 on the integration tip 2d95fbb9 (git log). The owner can license this code under GPL-3.0-only, except the third-party portions listed under port:*."
+      "licence": "GPL-3.0-only (LICENSE, NOTICE.md; declared 2026-11-18)",
+      "evidence": "The repository owner. 2,527 commits authored as LeoPerez8 on the integration tip 2d95fbb9 (git log). The owner licenses this code under GPL-3.0-only, except the third-party portions listed under port:*."
     },
     {
       "id": "contributor:Ygor Perez de Oliveira",
       "kind": "first-party-code",
-      "status": "pending",
-      "licence": "none declared",
-      "evidence": "672 commits authored as Ygor Perez de Oliveira and 21 as ygor-infotera on 2d95fbb9, including the app icon commit 6fe6e6be. Part of this history shares an author address with LeoPerez8's, which doesn't establish who holds the rights. Needed: a written statement from this contributor (or of an assignment to the owner) that their contributions may be licensed under GPL-3.0-only."
+      "status": "compatible",
+      "licence": "GPL-3.0-only (LICENSE, NOTICE.md; declared 2026-11-18)",
+      "evidence": "672 commits authored as Ygor Perez de Oliveira and 21 as ygor-infotera on 2d95fbb9, including the app icon commit 6fe6e6be. On 2026-11-18 the owner stated that they wrote the code under all three identities, LeoPerez8, Ygor Perez de Oliveira and ygor-infotera (\"foi eu que codei pelas 3 contas\"). Resolved on that statement: these commits have the same rights holder as contributor:LeoPerez8.",
+      "resolution": "owner statement, 2026-11-18"
     },
     {
       "id": "contributor:github-actions[bot]",
@@ -243,64 +244,64 @@
     {
       "id": "port:metrolist-potoken",
       "kind": "ported-code",
-      "status": "action-required",
+      "status": "compatible",
       "licence": "GPL-3.0 (Metrolist, no version-selection statement); NewPipe upstream GPL-3.0-or-later",
       "paths": [
         "apps/mobile/modules/wave-native/android/src/main/java/expo/modules/wavenative/yt/potoken/YtPoTokens.kt",
         "apps/mobile/modules/wave-native/android/src/main/java/expo/modules/wavenative/yt/potoken/YtPoTokenWebView.kt",
-        "apps/mobile/modules/wave-native/android/src/main/java/expo/modules/wavenative/yt/potoken/YtBotGuard.kt",
+        "packages/kotlin-shared/src/main/kotlin/expo/modules/wavenative/yt/potoken/YtBotGuard.kt",
         "apps/mobile/modules/wave-native/android/src/main/assets/wave_po_token.html"
       ],
-      "evidence": "Ported 2026-10-13 (a3f085e9) from Metrolist's app/src/main/kotlin/com/metrolist/music/utils/potoken/{PoTokenGenerator,PoTokenWebView,JavaScriptUtil}.kt and app/src/main/assets/po_token.html. The port didn't record an upstream revision. Metrolist v13.7.0 (7c5ba3ad22cb562d337897f82163a2b7fce665f3, the last release before the port) holds those paths; its po_token.html is identical to Wave's below Wave's 3-line header (upstream last changed in 98116669); its LICENSE is the GPLv3 text and neither it nor the README states \"or any later version\"; the ported files carry no headers. NewPipe v0.29.3 (8e15d04e) has the originals under app/src/main/java/org/schabi/newpipe/util/potoken and its README grants GPL-3.0-or-later. Every reading allows GPLv3, so the code can be part of a GPL-3.0-only work; the owner can't relicense it.",
-      "action": "Record the upstream revision ported (v13.7.0 is the candidate the html matches) and give each file a notice naming Metrolist and NewPipe, their licence and that Wave modified it, with the date (GPLv3 section 5a).",
-      "notice": "Metrolist contributors and NewPipe contributors, GPL-3.0 (NewPipe: GPL-3.0-or-later); modified by Wave."
+      "evidence": "Ported 2026-10-13 (a3f085e9) from Metrolist's app/src/main/kotlin/com/metrolist/music/utils/potoken/{PoTokenGenerator,PoTokenWebView,JavaScriptUtil}.kt and app/src/main/assets/po_token.html. The port didn't record an upstream revision. Metrolist v13.7.0 (7c5ba3ad22cb562d337897f82163a2b7fce665f3, the last release before the port) holds those paths; its po_token.html is identical to Wave's below Wave's 3-line header (upstream last changed in 98116669); its LICENSE is the GPLv3 text and neither it nor the README states \"or any later version\"; the ported files carry no headers. NewPipe v0.29.3 (8e15d04e) has the originals under app/src/main/java/org/schabi/newpipe/util/potoken and its README grants GPL-3.0-or-later. Every reading allows GPLv3, so the code can be part of a GPL-3.0-only work; the owner can't relicense it. Resolved 2026-11-18: v13.7.0 is recorded as the revision the port follows (the html matches it), and each file names Metrolist's and NewPipe's source paths, revisions, copyright holders and licences. Each file's header says it was modified by Wave, from which date, and that it is conveyed under the GNU GPL version 3 (GPLv3 section 5a).",
+      "notice": "Metrolist contributors and NewPipe contributors, GPL-3.0 (NewPipe: GPL-3.0-or-later); modified by Wave from 2026-10-13. Headers in each file.",
+      "resolution": "observed, notices added"
     },
     {
       "id": "port:yt-response-walks",
       "kind": "ported-code",
-      "status": "action-required",
+      "status": "compatible",
       "licence": "GPL-3.0 if derived (Metrolist, innertubex); MIT if derived (ytmusicapi)",
       "paths": [
-        "apps/mobile/modules/wave-native/android/src/main/java/expo/modules/wavenative/yt/YtAlbumParser.kt",
-        "apps/mobile/modules/wave-native/android/src/main/java/expo/modules/wavenative/yt/YtArtistParser.kt",
-        "apps/mobile/modules/wave-native/android/src/main/java/expo/modules/wavenative/yt/YtHomeParser.kt",
-        "apps/mobile/modules/wave-native/android/src/main/java/expo/modules/wavenative/yt/YtLibraryParser.kt",
-        "apps/mobile/modules/wave-native/android/src/main/java/expo/modules/wavenative/yt/YtOwnPlaylistParser.kt",
-        "apps/mobile/modules/wave-native/android/src/main/java/expo/modules/wavenative/yt/YtPlaylistParser.kt",
-        "apps/mobile/modules/wave-native/android/src/main/java/expo/modules/wavenative/yt/YtRadioParser.kt",
-        "apps/mobile/modules/wave-native/android/src/main/java/expo/modules/wavenative/yt/YtSearchParser.kt",
-        "apps/mobile/modules/wave-native/android/src/main/java/expo/modules/wavenative/yt/YtWatchParser.kt",
-        "apps/mobile/modules/wave-native/android/src/main/java/expo/modules/wavenative/yt/YtAccountMenu.kt",
-        "apps/mobile/modules/wave-native/android/src/main/java/expo/modules/wavenative/yt/YtClient.kt"
+        "packages/kotlin-shared/src/main/kotlin/expo/modules/wavenative/yt/YtAlbumParser.kt",
+        "packages/kotlin-shared/src/main/kotlin/expo/modules/wavenative/yt/YtArtistParser.kt",
+        "packages/kotlin-shared/src/main/kotlin/expo/modules/wavenative/yt/YtHomeParser.kt",
+        "packages/kotlin-shared/src/main/kotlin/expo/modules/wavenative/yt/YtLibraryParser.kt",
+        "packages/kotlin-shared/src/main/kotlin/expo/modules/wavenative/yt/YtOwnPlaylistParser.kt",
+        "packages/kotlin-shared/src/main/kotlin/expo/modules/wavenative/yt/YtPlaylistParser.kt",
+        "packages/kotlin-shared/src/main/kotlin/expo/modules/wavenative/yt/YtRadioParser.kt",
+        "packages/kotlin-shared/src/main/kotlin/expo/modules/wavenative/yt/YtSearchParser.kt",
+        "packages/kotlin-shared/src/main/kotlin/expo/modules/wavenative/yt/YtWatchParser.kt",
+        "packages/kotlin-shared/src/main/kotlin/expo/modules/wavenative/yt/YtAccountMenu.kt",
+        "packages/kotlin-shared/src/main/kotlin/expo/modules/wavenative/yt/YtClient.kt"
       ],
-      "evidence": "Their doc comments say the response walk \"follows\" Metrolist's page classes (GPL-3.0), innertubex's AccountMenuResponse (GPL-3.0) or ytmusicapi (MIT), and YtClient reuses Metrolist's search filter parameters. No comparison against an upstream revision was made, so whether expression was copied is open. Compatibility doesn't depend on it: GPL-3.0 and MIT code can both be part of a GPL-3.0-only work.",
-      "action": "Either credit Metrolist, innertubex and ytmusicapi in these files' notices as derived code, or record a comparison against an exact upstream revision showing only the response format was reused.",
-      "notice": "Metrolist and innertubex contributors (GPL-3.0); ytmusicapi (MIT): credit if treated as derived."
+      "evidence": "Their doc comments say the response walk \"follows\" Metrolist's page classes (GPL-3.0), innertubex's AccountMenuResponse (GPL-3.0) or ytmusicapi (MIT), and YtClient reuses Metrolist's search filter parameters. No comparison against an upstream revision was made, so whether expression was copied is open. Compatibility doesn't depend on it: GPL-3.0 and MIT code can both be part of a GPL-3.0-only work. Resolved 2026-11-18: the files credit Metrolist, innertubex and ytmusicapi as derived code, with each upstream's licence and copyright holder; the upstream revision isn't recorded and the headers say so. Each file's header says it was modified by Wave, from which date, and that it is conveyed under the GNU GPL version 3 (GPLv3 section 5a).",
+      "notice": "Metrolist contributors and innertubex contributors (GPL-3.0); ytmusicapi, MIT, Copyright (c) sigma67. Credited as derived code in each file's header.",
+      "resolution": "observed, credited as derived code"
     },
     {
       "id": "port:shazamio-signature",
       "kind": "ported-code",
-      "status": "action-required",
+      "status": "compatible",
       "licence": "MIT (shazamio-core 2.0.0), possibly GPL-3.0-or-later (SongRec)",
       "paths": [
         "apps/mobile/modules/wave-native/android/src/main/java/expo/modules/wavenative/recognize/SignatureGenerator.kt",
         "apps/mobile/modules/wave-native/android/src/main/java/expo/modules/wavenative/recognize/HanningWindow.kt"
       ],
-      "evidence": "Ported 2026-10-28 (0504b9bc) from shazamio-core tag 2.0.0 (5690a2e99ba2aa6456a742c5b1defd8e7841826b): LICENSE \"MIT License, Copyright (c) 2024 dotX12\", Cargo.toml license = \"MIT\". HanningWindow.kt holds hanning.rs's literal table. Wave's comment calls the generator \"itself SongRec's\"; SongRec 0.8.2 (79d3d771) has src/core/fingerprinting/{algorithm,hanning,signature_format}.rs, Cargo.toml license = \"GPL-3.0+\", and shazamio-core's THIRD-PARTY-NOTICES.md doesn't name SongRec. Open rights question: whether shazamio-core's files derive from SongRec. Compatible either way, as MIT and GPL-3.0-or-later both allow GPL-3.0-only.",
-      "action": "Carry shazamio-core's MIT notice in both files, and SongRec's GPL-3.0-or-later credit unless a comparison shows shazamio-core's code is independent.",
-      "notice": "shazamio-core 2.0.0, MIT, Copyright (c) 2024 dotX12; SongRec (GPL-3.0-or-later) credit pending the comparison."
+      "evidence": "Ported 2026-10-28 (0504b9bc) from shazamio-core tag 2.0.0 (5690a2e99ba2aa6456a742c5b1defd8e7841826b): LICENSE \"MIT License, Copyright (c) 2024 dotX12\", Cargo.toml license = \"MIT\". HanningWindow.kt holds hanning.rs's literal table. Wave's comment calls the generator \"itself SongRec's\"; SongRec 0.8.2 (79d3d771) has src/core/fingerprinting/{algorithm,hanning,signature_format}.rs, Cargo.toml license = \"GPL-3.0+\", and shazamio-core's THIRD-PARTY-NOTICES.md doesn't name SongRec. Open rights question: whether shazamio-core's files derive from SongRec. Compatible either way, as MIT and GPL-3.0-or-later both allow GPL-3.0-only. Resolved 2026-11-18: both files carry shazamio-core's MIT notice and credit SongRec (GPL-3.0-or-later), since no comparison has shown shazamio-core's code independent. Each file's header says it was modified by Wave, from which date, and that it is conveyed under the GNU GPL version 3 (GPLv3 section 5a).",
+      "notice": "shazamio-core 2.0.0, MIT, Copyright (c) 2024 dotX12; SongRec contributors, GPL-3.0-or-later. Headers in both files.",
+      "resolution": "observed, notices added"
     },
     {
       "id": "port:chfft-rfft",
       "kind": "ported-code",
-      "status": "action-required",
+      "status": "compatible",
       "licence": "MPL-2.0",
       "paths": [
         "apps/mobile/modules/wave-native/android/src/main/java/expo/modules/wavenative/recognize/RealFft2048.kt"
       ],
-      "evidence": "\"Ported operation for operation\" from chfft 0.3.4's RFft1D (crates.io: MPL-2.0; crate sha256 103be009e532bf7f2cdbf24dc76953f55c83f03bac8a8ced0d2a21b639907dc0). Its source files carry the MPL-2.0 header and no Exhibit B notice, so MPL-2.0 section 3.3 allows the Larger Work under GPL-3.0-only, provided this file stays available under MPL-2.0 too. The file has no MPL notice now.",
-      "action": "Add chfft's MPL-2.0 notice to RealFft2048.kt and keep the file MPL-2.0; leave it out of the owner's GPL-3.0-only grant.",
-      "notice": "Derived from chfft 0.3.4 (chalharu), MPL-2.0; this file remains under MPL-2.0."
+      "evidence": "\"Ported operation for operation\" from chfft 0.3.4's RFft1D (crates.io: MPL-2.0; crate sha256 103be009e532bf7f2cdbf24dc76953f55c83f03bac8a8ced0d2a21b639907dc0). Its source files carry the MPL-2.0 header and no Exhibit B notice, so MPL-2.0 section 3.3 allows the Larger Work under GPL-3.0-only, provided this file stays available under MPL-2.0 too. Resolved 2026-11-18: RealFft2048.kt carries the MPL-2.0 Exhibit A notice and names chfft 0.3.4 and its author; NOTICE.md keeps it out of the owner's GPL-3.0-only grant.",
+      "notice": "Derived from chfft 0.3.4 (chalharu), MPL-2.0; this file remains under MPL-2.0.",
+      "resolution": "observed, notice added; the file stays MPL-2.0"
     },
     {
       "id": "first-party:shazam-fixture-tool",
@@ -309,14 +310,52 @@
       "evidence": "apps/mobile/modules/wave-native/android/src/test/fixtures-src/shazam: Wave's own scripts. They fetch shazamio-core 2.0.0 at build time and include its files by path; nothing of it is committed, and none of it ships."
     },
     {
+      "id": "com.github.MetrolistGroup.innertubex:innertubex:0.11.9",
+      "kind": "native-library",
+      "status": "compatible",
+      "correspondingSource": "https://github.com/MetrolistGroup/innertubex/tree/719948b994d71d700a6d0615c6d8e2985ca371f6",
+      "coordinates": [
+        "com.github.MetrolistGroup.innertubex:innertubex:0.11.9",
+        "com.github.MetrolistGroup.innertubex:innertubex-android:0.11.9"
+      ],
+      "licence": "GPL-3.0 (no version-selection statement)",
+      "evidence": "Declared by packages/kotlin-shared/build.gradle.kts (Wave moved from 0.8.6 to 0.11.9 in e43013b7). JitPack built 0.11.9 from tag v0.11.9 (tag object 0916ff35) = commit 719948b994d71d700a6d0615c6d8e2985ca371f6. At that commit LICENSE is the unmodified GPLv3 text (sha256 3972dc97…) and README says \"GNU General Public License v3.0\", with no \"or any later version\" outside the licence text itself; the POM names \"GNU General Public License, version 3\". GPLv3 allows a GPL-3.0-only work. The tree holds no bundled JavaScript or native files. Runtime dependencies (POM): ktor-client-core 3.6.0, kotlinx-serialization-json 1.12.0, kotlinx-coroutines-core 1.11.0 and quackjs 0.1.4 (its own entry); the release closure records their resolved versions.",
+      "notice": "innertubex contributors, GPLv3; the release's Corresponding Source includes innertubex at 719948b9.",
+      "resolution": "observed"
+    },
+    {
       "id": "com.github.MetrolistGroup.innertubex:innertubex:0.8.6",
       "kind": "native-library",
       "status": "compatible",
       "correspondingSource": "https://github.com/MetrolistGroup/innertubex/tree/af31fd2ba65cb8cb56461c103517be96564cd91b",
       "coordinates": ["com.github.MetrolistGroup.innertubex:innertubex:0.8.6"],
       "licence": "GPL-3.0 (no version-selection statement)",
-      "evidence": "JitPack built 0.8.6 from tag v0.8.6 (tag object a432558d) = commit af31fd2ba65cb8cb56461c103517be96564cd91b. At that commit LICENSE is the GPLv3 text and README says \"GNU General Public License v3.0\", with no \"or any later version\" outside the licence text itself; the POM names GPL version 3. GPLv3 allows a GPL-3.0-only work. It bundles src/commonMain/resources/yt_ejs/yt.solver.{core,lib}.min.js, generated by yt-dlp/ejs under the Unlicense, carrying meriyah 6.1.4 (ISC) and astring 1.9.0 (MIT). Runtime dependencies (POM): ktor-client-core 3.6.0, kotlinx-serialization-json 1.11.0, kotlinx-coroutines-core 1.11.0, kotlin-stdlib 2.4.20, quickjs-kt 1.0.15 (Apache-2.0, POM).",
-      "notice": "innertubex's GPLv3 licence and its bundled notices (Unlicense yt-dlp/ejs, ISC meriyah, MIT astring); the release's Corresponding Source includes innertubex at af31fd2b."
+      "evidence": "Declared by wave-native's build.gradle in every release from v0.5.0 to v0.69.0-ti; e43013b7 replaced it with 0.11.9, so no current build uses it. Kept for those releases' Corresponding Source. JitPack built 0.8.6 from tag v0.8.6 (tag object a432558d) = commit af31fd2ba65cb8cb56461c103517be96564cd91b. At that commit LICENSE is the GPLv3 text and README says \"GNU General Public License v3.0\", with no \"or any later version\" outside the licence text itself; the POM names GPL version 3. GPLv3 allows a GPL-3.0-only work. It bundles src/commonMain/resources/yt_ejs/yt.solver.{core,lib}.min.js, generated by yt-dlp/ejs under the Unlicense, carrying meriyah 6.1.4 (ISC) and astring 1.9.0 (MIT). Runtime dependencies (POM): ktor-client-core 3.6.0, kotlinx-serialization-json 1.11.0, kotlinx-coroutines-core 1.11.0, kotlin-stdlib 2.4.20, quickjs-kt 1.0.15 (Apache-2.0, POM).",
+      "notice": "innertubex's GPLv3 licence and its bundled notices (Unlicense yt-dlp/ejs, ISC meriyah, MIT astring); the release's Corresponding Source includes innertubex at af31fd2b.",
+      "resolution": "observed"
+    },
+    {
+      "id": "com.github.MetrolistGroup.quackjs:quackjs:0.1.4",
+      "kind": "native-library",
+      "status": "compatible",
+      "resolution": "observed",
+      "correspondingSource": "https://github.com/MetrolistGroup/quackjs/tree/d867d98f9f2562009399cdfecd67e626a086f878",
+      "coordinates": [
+        "com.github.MetrolistGroup.quackjs:quackjs:0.1.4",
+        "com.github.MetrolistGroup.quackjs:quackjs-android:0.1.4"
+      ],
+      "licence": "GPL-3.0-only",
+      "evidence": "A JavaScript interpreter in Kotlin that innertubex 0.11.9 depends on (the release closure resolves it). JitPack built 0.1.4 from tag v0.1.4 (tag object 055a1cef) = commit d867d98f9f2562009399cdfecd67e626a086f878. The POM names \"GNU General Public License, version 3 only\" and README says \"Licensed under GPL-3.0-only\"; LICENSE is the GPLv3 text, reflowed. THIRD_PARTY_NOTICES.md and licenses/ cover only test fixtures (Apache-2.0, MIT) and the Gradle wrapper, which don't ship. The runtime has no dependency beyond the Kotlin standard library (quickjs-kt, coroutines and serialization are test-only).",
+      "notice": "quackjs contributors, GPL-3.0-only; the release's Corresponding Source includes quackjs at d867d98f."
+    },
+    {
+      "id": "dev.leoperez.wave:kotlin-shared:0.0.0",
+      "kind": "first-party-code",
+      "status": "compatible",
+      "resolution": "observed",
+      "coordinates": ["dev.leoperez.wave:kotlin-shared:0.0.0"],
+      "licence": "GPL-3.0-only (LICENSE, NOTICE.md; declared 2026-11-18)",
+      "evidence": "Wave's own Kotlin module in packages/kotlin-shared. wave-native declares this coordinate and apps/mobile/plugins/kotlinShared.ts substitutes the project for it (the release closure shows `-> project :kotlin-shared`). Its code's rights are those of contributor:* and port:* (the response walks and YtBotGuard live there); the libraries it ships are declared in packages/kotlin-shared/build.gradle.kts, which the check reads."
     },
     {
       "id": "net.jthink:jaudiotagger:3.0.1",
@@ -439,18 +478,19 @@
     {
       "id": "com.google.android.libraries.identity.googleid:googleid:1.2.1",
       "kind": "native-library",
-      "status": "pending",
+      "status": "compatible",
       "coordinates": ["com.google.android.libraries.identity.googleid:googleid:1.2.1"],
       "licence": "Android Software Development Kit License (proprietary)",
-      "evidence": "The POM names the \"Android Software Development Kit License\". androidx.credentials:credentials-play-services-auth:1.6.0 also brings com.google.android.gms play-services-auth 21.1.1, play-services-identity-credentials 16.0.0-alpha08, play-services-auth-blockstore 16.4.0 and play-services-fido 21.0.0, all under that licence (their POMs). These ship inside the APK, beside third-party GPL-3.0 code (innertubex, the Metrolist/NewPipe ports). They aren't part of the phone's operating system, so whether the GPLv3 System Library exception covers them is unresolved, and the owner can add a section 7 permission only for code the owner holds.",
-      "action": "Get a compatibility determination for conveying Google sign-in's Play services libraries with the GPL-3.0 third-party code, or build the GPL release without them (for example, a sign-in path without Play services)."
+      "evidence": "The POM names the \"Android Software Development Kit License\". androidx.credentials:credentials-play-services-auth:1.6.0 also brings com.google.android.gms play-services-auth 21.1.1, play-services-identity-credentials 16.0.0-alpha08, play-services-auth-blockstore 16.4.0 and play-services-fido 21.0.0, all under that licence (their POMs). These ship inside the APK, beside third-party GPL-3.0 code (innertubex, the Metrolist/NewPipe ports). They aren't part of the phone's operating system, so whether the GPLv3 System Library exception covers them is unresolved, and the owner can add a section 7 permission only for code the owner holds. Owner exception, 2026-11-18: the owner keeps googleid 1.2.1 and the Play services libraries it and credentials-play-services-auth bring (10 under the Android SDK License, listed in android-release-closure.json), and NOTICE.md grants a GPLv3 section 7 additional permission to convey the owner's code combined with them. That permission covers only code the owner holds. The third-party GPL code in the same APK (innertubex, quackjs, the Metrolist/NewPipe ports) has no such permission from its holders; the owner accepts that risk, as every release so far has shipped this combination.",
+      "resolution": "owner exception, 2026-11-18",
+      "notice": "Google Play services and Google ID libraries, Android Software Development Kit License; conveyed under the section 7 additional permission in NOTICE.md."
     },
     {
       "id": "gradle:release-closure",
       "kind": "native-library",
-      "status": "pending",
-      "evidence": "The exact resolved releaseRuntimeClasspath (transitive versions after Gradle conflict resolution, plus the app module's react-android, hermes-android and Expo modules' Maven dependencies) wasn't observed: this environment has no JDK or Gradle. Native code inside npm packages (react-native-skia-android 154.0.0's Skia build and its bundled libraries, Hermes) declares only the package licence.",
-      "action": "For an exact release commit, record `./gradlew :app:dependencies --configuration releaseRuntimeClasspath` and the APK's bundled licence files, then add each library with its licence here."
+      "status": "compatible",
+      "evidence": "Observed 2026-11-18 at 6b31a7cc: after prebuild, `./gradlew :app:dependencies --configuration releaseRuntimeClasspath` resolves 274 libraries and 22 Gradle projects, recorded with each POM's licence in docs/licensing/android-release-closure.json. Libraries: 194 Apache-2.0; 57 MIT (hermes-android, react-android, slf4j-api and others); 6 Glide artifacts under BSD-2-Clause and Apache-2.0; avif BSD-2-Clause; bolts-tasks 1.4.0 BSD-3-Clause (Fresco's dependency; its repository also carries Facebook's Additional Grant of Patent Rights v2, a patent grant that adds no condition to the copyright licence and that the FSF list doesn't classify); jaudiotagger LGPL-2.1-or-later; innertubex GPL-3.0 and quackjs GPL-3.0-only (their own entries); and 10 Play services libraries under the Android SDK License (owner exception, see googleid). Apache-2.0, MIT, BSD-2-Clause, BSD-3-Clause and LGPL-2.1-or-later are GPLv3-compatible (FSF licence list). The projects are the Expo and React Native modules built from npm packages in npm-packages.json, and Wave's wave-native, wave-glass and kotlin-shared. Native code inside npm packages (react-native-skia-android 154.0.0's Skia build, Hermes) declares only its package's licence, MIT for both. The record holds for this commit: a change to a build.gradle, or to the npm packages that bring Gradle modules, needs the closure observed again.",
+      "resolution": "observed"
     },
     {
       "id": "asset:app-icons",
@@ -478,13 +518,13 @@
     {
       "id": "asset:design-reference-icons",
       "kind": "asset",
-      "status": "pending",
+      "status": "compatible",
       "paths": [
         "docs/design/even-shuffle/reference-*.svg",
         "docs/design/smart-shuffle/reference-*.svg"
       ],
-      "evidence": "Comparison references beside Wave's own icon studies; reference-real.svg's path appears to be Tabler's shuffle icon (MIT). Origin not recorded.",
-      "action": "Confirm each reference's source; carry its licence notice (Tabler: MIT) or leave it out of the GPL grant."
+      "evidence": "Comparison references beside Wave's own icon studies; reference-real.svg's path appears to be Tabler's shuffle icon (MIT). Origin not recorded. Excluded from the grant, 2026-11-18: by the owner's decision this material stays in the repository as third-party content, outside the GPL-3.0-only grant, and NOTICE.md names its path. None of it ships in a release.",
+      "resolution": "excluded from the grant"
     },
     {
       "id": "asset:design-studies",
@@ -501,36 +541,36 @@
     {
       "id": "asset:evidence-screenshots",
       "kind": "asset",
-      "status": "pending",
-      "paths": ["docs/agents/evidence/534/*.png"],
-      "evidence": "120 screenshots of Wave's UI. They may show a test Library's album artwork and song names, which belong to third parties. Not inspected image by image.",
-      "action": "Inspect them; keep third-party artwork out of the GPL grant (exclude, or record as third-party material)."
+      "status": "compatible",
+      "paths": ["docs/agents/evidence/534/*"],
+      "evidence": "120 screenshots of Wave's UI with their 120 text dumps and 2 JSON files. They may show a test Library's album artwork and song names, which belong to third parties. Not inspected image by image. Excluded from the grant, 2026-11-18: by the owner's decision this material stays in the repository as third-party content, outside the GPL-3.0-only grant, and NOTICE.md names its path. None of it ships in a release.",
+      "resolution": "excluded from the grant"
     },
     {
       "id": "data:service-samples",
       "kind": "documentation",
-      "status": "action-required",
+      "status": "compatible",
       "paths": ["docs/spotify-samples/*", "docs/google-translate-samples/*"],
-      "evidence": "Responses captured from Spotify's and Google Translate's services for research (7552cc0d, a5678ca3, aca31833, 29f675fe). Their content (catalogue metadata, page markup) belongs to those services and their rights holders.",
-      "action": "Leave them out of the GPL grant and the source package's licensed files, or remove them."
+      "evidence": "Responses captured from Spotify's and Google Translate's services for research (7552cc0d, a5678ca3, aca31833, 29f675fe). Their content (catalogue metadata, page markup) belongs to those services and their rights holders. Excluded from the grant, 2026-11-18: by the owner's decision this material stays in the repository as third-party content, outside the GPL-3.0-only grant, and NOTICE.md names its path. None of it ships in a release.",
+      "resolution": "excluded from the grant"
     },
     {
       "id": "fixtures:youtube-responses",
       "kind": "test-fixture",
-      "status": "action-required",
-      "paths": ["apps/mobile/modules/wave-native/android/src/test/resources/fixtures/yt/*.json"],
-      "evidence": "\"Real fixtures\" (89897b7e): captured YouTube Music responses holding third-party catalogue data. Test-only; not in the APK.",
-      "action": "Leave them out of the GPL grant (record as third-party data), or replace them with reduced synthetic responses."
+      "status": "compatible",
+      "paths": ["packages/kotlin-shared/src/testFixtures/resources/fixtures/yt/*.json"],
+      "evidence": "\"Real fixtures\" (89897b7e): 32 captured YouTube Music responses holding third-party catalogue data, now in kotlin-shared's test fixtures. Test-only; not in the APK. Excluded from the grant, 2026-11-18: by the owner's decision this material stays in the repository as third-party content, outside the GPL-3.0-only grant, and NOTICE.md names its path. None of it ships in a release.",
+      "resolution": "excluded from the grant"
     },
     {
       "id": "fixtures:audio",
       "kind": "test-fixture",
-      "status": "pending",
+      "status": "compatible",
       "paths": [
-        "apps/mobile/modules/wave-native/android/src/test/resources/fixtures/*.{mp3,m4a,ogg,opus,flac,wav,png}"
+        "packages/kotlin-shared/src/testFixtures/resources/fixtures/*.{mp3,m4a,ogg,opus,flac,wav,png}"
       ],
-      "evidence": "24 audio files of 1–62 KB and a 121-byte cover.png, added in 904bf236, 64eb3e65, 46be56b9, 4a194cfb and 954c0847 (soulseek-320.mp3). How they were made isn't recorded. Test-only; not in the APK.",
-      "action": "Record how each was made (synthesised audio is the owner's), or replace any of unknown origin."
+      "evidence": "24 audio files of 1–62 KB and a 121-byte cover.png, added in 904bf236, 64eb3e65, 46be56b9, 4a194cfb and 954c0847 (soulseek-320.mp3), now in kotlin-shared's test fixtures. How they were made isn't recorded. Test-only; not in the APK. Excluded from the grant, 2026-11-18: by the owner's decision this material stays in the repository as third-party content, outside the GPL-3.0-only grant, and NOTICE.md names its path. None of it ships in a release.",
+      "resolution": "excluded from the grant"
     },
     {
       "id": "fixtures:shazam-pcm",
@@ -561,9 +601,9 @@
     {
       "id": "distribution:released-android",
       "kind": "distribution",
-      "status": "action-required",
-      "evidence": "Every v* release tag from v0.5.0 (the first) to v0.68.0-ti contains a3f085e9, which added innertubex and the Metrolist/NewPipe ports. Those APKs, OTA bundles and repacks were conveyed without a licence for the combined work, a notices file or source access tied to each release. The repository at each tag is public, which alone isn't a compliance finding.",
-      "action": "#1135: per-release source access (tag, native base of repacks, notices) for the versions already distributed as well as new ones; the owner's licence declaration then covers them. GPLv3 section 8 lets rights be reinstated once a violation is cured."
+      "status": "compatible",
+      "evidence": "Every v* release tag from v0.5.0 (the first) to v0.68.0-ti contains a3f085e9, which added innertubex and the Metrolist/NewPipe ports. Those APKs, OTA bundles and repacks were conveyed without a licence for the combined work, a notices file or source access tied to each release. The repository at each tag is public, which alone isn't a compliance finding. Owner exception, 2026-11-18: the owner declares GPL-3.0-only (LICENSE, NOTICE.md) and accepts the risk for the third-party GPL code those releases conveyed without notices or per-release source access; that has been the status quo of every release. The owner turns on RELEASE_SOURCE_DELIVERY and backfills source access for the published releases as docs/release-source.md describes (legacy manifests for the releases before the gate); GPLv3 section 8 reinstates rights once a violation is cured.",
+      "resolution": "owner exception, 2026-11-18"
     }
   ]
 }

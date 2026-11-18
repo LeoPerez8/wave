@@ -354,6 +354,8 @@ export const verifySource = (manifest: SourceManifest, dir: string): string[] =>
 
 /** The files the build reads besides the app's code, those present in this checkout. */
 const BUILD_INPUTS = [
+  "LICENSE",
+  "NOTICE.md",
   "package.json",
   "pnpm-lock.yaml",
   "pnpm-workspace.yaml",
@@ -367,6 +369,8 @@ const BUILD_INPUTS = [
   "apps/mobile/modules",
   "apps/mobile/certs/certificate.pem",
   "packages/core",
+  "packages/client",
+  "packages/kotlin-shared",
   "scripts/ci/bundle.sh",
   "scripts/ci/export-update.sh",
   "scripts/ci/prebuilt-bundle.gradle",
@@ -381,6 +385,7 @@ const BUILD_INPUTS = [
   "docs/licensing/rights-inventory.md",
   "docs/licensing/components.json",
   "docs/licensing/npm-packages.json",
+  "docs/licensing/android-release-closure.json",
 ];
 
 const inventoryInputs = async () => {

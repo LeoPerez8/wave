@@ -1,5 +1,5 @@
 {
-  "lockfileSha256": "4c0e5e8927d2a60ed3679988718eaf58fe6e6d559913f4a91476f0678ef3f99e",
+  "lockfileSha256": "e0855ef6dfc826a84c8150ee0b69793e77864be3531928f7357237861e4b3d05",
   "importers": {
     "apps/mobile": [
       {
@@ -517,7 +517,7 @@
         "name": "@expo-google-fonts/inter",
         "version": "0.4.2",
         "licence": "MIT AND OFL-1.1",
-        "notices": ["LICENSE"],
+        "notices": ["LICENSE", "LICENSE_FONT"],
         "source": "installed package.json"
       },
       {
@@ -1354,6 +1354,13 @@
         "source": "installed package.json"
       },
       {
+        "name": "@types/better-sqlite3",
+        "version": "9.6.0",
+        "licence": "MIT",
+        "notices": ["LICENSE"],
+        "source": "installed package.json"
+      },
+      {
         "name": "@types/emscripten",
         "version": "1.41.6",
         "licence": "MIT",
@@ -1390,6 +1397,13 @@
       },
       {
         "name": "@types/react",
+        "version": "19.3.0",
+        "licence": "MIT",
+        "notices": ["LICENSE"],
+        "source": "installed package.json"
+      },
+      {
+        "name": "@types/react-dom",
         "version": "19.3.0",
         "licence": "MIT",
         "notices": ["LICENSE"],
@@ -1792,6 +1806,13 @@
         "version": "2.11.28",
         "licence": "Apache-2.0",
         "notices": ["LICENSE.txt"],
+        "source": "installed package.json"
+      },
+      {
+        "name": "better-sqlite3",
+        "version": "13.2.0",
+        "licence": "MIT",
+        "notices": ["LICENSE"],
         "source": "installed package.json"
       },
       {
@@ -3423,6 +3444,13 @@
         "version": "1.1.0",
         "licence": "MIT",
         "notices": ["LICENSE"],
+        "source": "installed package.json"
+      },
+      {
+        "name": "node-addon-api",
+        "version": "8.9.2",
+        "licence": "MIT",
+        "notices": ["LICENSE.md"],
         "source": "installed package.json"
       },
       {

@@ -1,3 +1,11 @@
+// Derived from Metrolist's
+// app/src/main/kotlin/com/metrolist/music/utils/potoken/PoTokenGenerator.kt
+// (https://github.com/MetrolistGroup/Metrolist; v13.7.0, 7c5ba3ad, is the last release before the
+// port), which comes from NewPipe's app/src/main/java/org/schabi/newpipe/util/potoken (v0.29.3,
+// 8e15d04e). Copyright (C) Metrolist contributors and NewPipe contributors. Metrolist licenses it
+// under the GNU GPL version 3, NewPipe under the GNU GPL version 3 or later. Modified by Wave from
+// 2026-10-13 on, and conveyed under the GNU GPL version 3 (LICENSE, NOTICE.md).
+
 package expo.modules.wavenative.yt.potoken
 
 import android.content.Context

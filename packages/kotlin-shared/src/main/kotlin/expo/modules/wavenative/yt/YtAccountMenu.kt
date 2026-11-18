@@ -1,3 +1,8 @@
+// The response walk in this file follows innertubex's `AccountMenuResponse`
+// (https://github.com/MetrolistGroup/innertubex, GNU GPL version 3, Copyright (C) innertubex
+// contributors), and is credited here as derived code (upstream revision not recorded). Modified by
+// Wave from 2026-10-13 on, and conveyed under the GNU GPL version 3 (LICENSE, NOTICE.md).
+
 package expo.modules.wavenative.yt
 
 import kotlinx.serialization.json.Json
