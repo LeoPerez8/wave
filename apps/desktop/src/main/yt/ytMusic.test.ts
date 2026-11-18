@@ -1,7 +1,15 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import { ytTrackId, type QueueEntry } from "@wave/core";
-import { createYtMusic, type YtCall } from "./ytMusic.ts";
+import { mkdtempSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+import * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import * as ManagedRuntime from "effect/ManagedRuntime";
+import { libraryLayer } from "../database.ts";
+import { Kotlin } from "../kotlin/kotlin.ts";
+import { YtMusic, createYtMusic, ytMusicLayer, type YtCall } from "./ytMusic.ts";
 
 const songOf = (videoId: string, title = `Song ${videoId}`) => ({
   videoId,
@@ -198,4 +206,33 @@ test("songs a page brought are known for playback like a search's", () => {
   assert.equal(yt.song("abcdefghijk"), undefined);
   yt.keep([songOf("abcdefghijk", "Pink Moon")] as never);
   assert.equal(yt.song("abcdefghijk")?.title, "Pink Moon");
+});
+
+test("the service is up before the JVM answers: a silent JVM doesn't hold Wave's start", async () => {
+  const folder = mkdtempSync(join(tmpdir(), "wave-yt-"));
+  const asked: string[] = [];
+  const silent = Layer.succeed(Kotlin, {
+    call: (method) => {
+      asked.push(method);
+      return Effect.never;
+    },
+    readTags: () => Effect.never,
+  });
+  const runtime = ManagedRuntime.make(
+    ytMusicLayer().pipe(
+      Layer.provide(Layer.mergeAll(libraryLayer(join(folder, "wave.db")), silent)),
+    ),
+  );
+  try {
+    const built = await Promise.race([
+      runtime.runPromise(Effect.map(YtMusic, (yt) => yt.enabled())),
+      new Promise<"waiting">((resolve) => setTimeout(() => resolve("waiting"), 2_000)),
+    ]);
+    assert.equal(built, true);
+    assert.deepEqual(asked, ["setYtMusic"], "the JVM is still told the setting");
+  } finally {
+    // The call that never answers would hold a graceful close.
+    void runtime.dispose();
+    await new Promise((resolve) => setTimeout(resolve, 50));
+  }
 });
