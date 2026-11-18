@@ -159,18 +159,29 @@ export const browseTrackIds = (db: LibraryDatabase, scope: BrowseScope): string[
     .map((song) => String(song.id));
 };
 
-/** The songs [ids] as rows, in the order given; an id with no song is left out. */
-export const browseSongs = (db: LibraryDatabase, ids: readonly number[]): BrowseRow[] => {
+/** [source]'s rows [ids], in the order given; an id it lacks is left out. */
+const rowsById = (db: LibraryDatabase, source: SQL, ids: readonly number[]): BrowseRow[] => {
   if (ids.length === 0) return [];
   const found = new Map(
     db
       .all<BrowseRow>(
-        sql`SELECT * FROM (${SONGS}) WHERE id IN (${sql.join(
+        sql`SELECT * FROM (${source}) WHERE id IN (${sql.join(
           ids.map((id) => sql`${id}`),
           sql`, `,
         )})`,
       )
-      .map((song) => [song.id, row(song)]),
+      .map((value) => [value.id, row(value)]),
   );
   return ids.flatMap((id) => found.get(id) ?? []);
 };
+
+/** The songs [ids] as rows, in the order given; an id with no song is left out. */
+export const browseSongs = (db: LibraryDatabase, ids: readonly number[]): BrowseRow[] =>
+  rowsById(db, SONGS, ids);
+
+/** The albums, artists, playlists or genres [ids] as their lists show them, in the order given. */
+export const browseRows = (
+  db: LibraryDatabase,
+  kind: "albums" | "artists" | "playlists" | "genres",
+  ids: readonly number[],
+): BrowseRow[] => rowsById(db, listing({ kind }).source, ids);
