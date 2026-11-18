@@ -44,7 +44,7 @@ import { useCallback, useEffect, useMemo, useSyncExternalStore } from "react";
 import { runSteps } from "@/lib/stepped";
 import { settledTurnEffect } from "@/lib/backgroundWork";
 import { recommendationTurnEffect } from "@/lib/recommendationWork";
-import { makeExternalStore, type ExternalStore } from "@/lib/externalStore";
+import { makeExternalStore, type ExternalStore } from "@wave/client/externalStore";
 import { withNetworkLog } from "@/lib/networkMeter";
 import { persistedSetting, type PersistedSetting } from "@/lib/persistedSetting";
 import { libraryListQueries } from "@/library/hooks";

@@ -3,7 +3,8 @@
  * requests with it. It runs apart from main, so a crash here costs only this process.
  */
 import { createRequire } from "node:module";
-import { answer, type AddonEngine, type AudioRequest } from "./protocol.ts";
+import type { PlaybackStatus } from "../../shared/playback.ts";
+import { answer, playbackEvent, stamped, type AddonEngine, type AudioRequest } from "./protocol.ts";
 
 interface Addon {
   readonly AudioEngine: new () => AddonEngine;
@@ -22,5 +23,19 @@ const load = (): { engine?: AddonEngine; problem?: string } => {
 
 const { engine, problem } = load();
 process.parentPort.on("message", (event) =>
-  process.parentPort.postMessage(answer(engine, event.data as AudioRequest, problem)),
+  process.parentPort.postMessage(
+    stamped(answer(engine, event.data as AudioRequest, problem), Date.now()),
+  ),
 );
+
+// Main hears of every move to the preloaded song, and of the position, without asking, even
+// while the window is hidden. The move itself happens in Rust's output callback.
+let reported: PlaybackStatus | undefined;
+if (engine !== undefined) {
+  setInterval(() => {
+    const event = playbackEvent(engine, reported, Date.now());
+    if (event === undefined) return;
+    reported = event.status;
+    process.parentPort.postMessage(event);
+  }, 25);
+}

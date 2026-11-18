@@ -8,7 +8,7 @@
  */
 import type { ReactNode } from "react";
 
-import { makeExternalStore } from "../lib/externalStore.ts";
+import { makeExternalStore } from "@wave/client/externalStore";
 
 /** What a toast's action button says, and what tapping it does. */
 export interface ToastAction {

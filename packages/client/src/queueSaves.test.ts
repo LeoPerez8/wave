@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import type { QueueWrite } from "@wave/core";
-import { makeExternalStore } from "../lib/externalStore.ts";
+import { makeExternalStore } from "./externalStore.ts";
 import { observeQueueSaves } from "./queueSaves.ts";
 
 const setup = (isPlaying: boolean) => {

@@ -19,6 +19,7 @@ import { kotlinLayer } from "./kotlin/kotlin.ts";
 import type { KotlinEvents } from "./kotlin/supervisor.ts";
 import type { SongTags } from "../shared/tags.ts";
 import { libraryLayer } from "./database.ts";
+import { playbackLayer } from "./playback/playback.ts";
 import { registerBridge, type IpcHandler } from "./bridge.ts";
 import { DesktopLibrary, desktopLibraryLayer } from "./library/library.ts";
 
@@ -30,9 +31,9 @@ const audioInMemory = () => {
   const engineCalls: string[] = [];
   let status: PlaybackStatus = { state: "idle", positionMs: 0 };
   const engine: AddonEngine = {
-    load: (path) => {
+    load: (path, key) => {
       engineCalls.push(`load ${path}`);
-      status = { state: "paused", positionMs: 0, durationMs: 1_000 };
+      status = { state: "paused", positionMs: 0, durationMs: 1_000, ...(key ? { key } : {}) };
       return status;
     },
     play: () => {
@@ -42,6 +43,9 @@ const audioInMemory = () => {
     pause: () => void (status = { ...status, state: "paused" }),
     seek: (positionMs) => void (status = { ...status, positionMs }),
     status: () => status,
+    preload: (path) => void (path === undefined || engineCalls.push(`preload ${path}`)),
+    transitions: () => [],
+    setVolume: (volume) => void engineCalls.push(`volume ${volume}`),
   };
   const fork = (events: AudioEvents) => ({
     send: (request: Parameters<typeof answer>[1]) =>
@@ -94,11 +98,15 @@ const connect = (file: string, isTrusted = (event: unknown) => event === trusted
   const audio = audioInMemory();
   const jvm = jvmInMemory();
   const runtime = ManagedRuntime.make(
-    desktopLibraryLayer({
-      musicFolder: join(dirname(file), "Music"),
-      platform: process.platform,
-      pickFolder: async () => undefined,
-    }).pipe(Layer.provideMerge(Layer.mergeAll(libraryLayer(file), audio.layer, jvm.layer))),
+    playbackLayer.pipe(
+      Layer.provideMerge(
+        desktopLibraryLayer({
+          musicFolder: join(dirname(file), "Music"),
+          platform: process.platform,
+          pickFolder: async () => undefined,
+        }).pipe(Layer.provideMerge(Layer.mergeAll(libraryLayer(file), audio.layer, jvm.layer))),
+      ),
+    ),
   );
   const handlers = new Map<string, IpcHandler>();
   registerBridge(
@@ -346,7 +354,11 @@ test("the window plays, pauses and seeks a song through the bridge", async () =>
       positionMs: 400,
       durationMs: 1_000,
     });
-    assert.deepEqual(engineCalls, [`load ${song}`]);
+    // Playback sets the saved volume as it starts; the song is what this test plays.
+    assert.deepEqual(
+      engineCalls.filter((c) => !c.startsWith("volume")),
+      [`load ${song}`],
+    );
     await runtime.dispose();
   });
 });
@@ -369,7 +381,10 @@ test("main refuses a player call whose arguments aren't a song and a time", asyn
       await assert.rejects(call("player.load", path), /refused/i, String(path));
     for (const positionMs of [-1, Number.NaN, Number.POSITIVE_INFINITY, "400", undefined])
       await assert.rejects(call("player.seek", positionMs), /refused/i, String(positionMs));
-    assert.deepEqual(engineCalls, []);
+    assert.deepEqual(
+      engineCalls.filter((c) => !c.startsWith("volume")),
+      [],
+    );
     await runtime.dispose();
   });
 });
@@ -406,5 +421,82 @@ test("main refuses to read tags from anything but an audio file's absolute path"
       await assert.rejects(read(trusted, path), /refused/i, String(path));
     assert.deepEqual(reads, []);
     await runtime.dispose();
+  });
+});
+
+test("the window plays a list from a row, skips, stars and sets the volume through the bridge", async () => {
+  await withFile(async (file) => {
+    const { runtime, exposed, engineCalls } = connect(file);
+    const wave = exposed.get("wave") as WaveBridge;
+    try {
+      await runtime.runPromise(
+        Effect.gen(function* () {
+          const db = (yield* Database) as unknown as TestDatabase;
+          for (const [n, title] of ["Parasite", "Pink Moon", "Road"].entries())
+            addTrack(db, { title, artist: "Nick Drake", album: "Pink Moon", trackNumber: n + 1 });
+        }),
+      );
+      const album = (await wave.library.browse({ kind: "albums" }, 0, 1)).items[0]!;
+      await wave.playback.start({ kind: "album", id: album.id }, 1);
+      let view = await wave.playback.view();
+      assert.equal(view.current?.title, "Pink Moon");
+      assert.equal(view.status.state, "playing");
+      assert.equal(view.length, 3);
+      assert.equal(view.index, 1);
+      assert.equal(view.undoOffer, null, "nothing was playing before");
+      assert.ok(
+        engineCalls.includes("preload /Music/Pink Moon/Road.mp3"),
+        "the next song is lined up",
+      );
+      await wave.playback.command({ type: "next" });
+      await wave.playback.favorite();
+      view = await wave.playback.view();
+      assert.equal(view.current?.title, "Road");
+      assert.equal(view.current?.favorite, true);
+      await wave.playback.start({ kind: "songs" }, 0);
+      assert.notEqual((await wave.playback.view()).undoOffer, null, "a new queue offers Undo");
+      await wave.playback.undo();
+      assert.equal((await wave.playback.view()).current?.title, "Road");
+      await wave.playback.volume(0.25, true);
+      view = await wave.playback.view();
+      assert.equal(view.volume, 0.25);
+      assert.equal(view.muted, true);
+      assert.equal(engineCalls.at(-1), "volume 0");
+      const queue = await wave.playback.queue(0, 10);
+      assert.deepEqual(
+        queue.items.map((row) => [row.title, row.history, row.current]),
+        [
+          ["Parasite", true, false],
+          ["Pink Moon", true, false],
+          ["Road", false, true],
+        ],
+      );
+    } finally {
+      await runtime.dispose();
+    }
+  });
+});
+
+test("main refuses playback calls with a bad scope, row, command, time or volume", async () => {
+  await withFile(async (file) => {
+    const { runtime, handlers, engineCalls } = connect(file);
+    const call = (channel: string, ...args: unknown[]) => handlers.get(channel)!(trusted, ...args);
+    try {
+      await assert.rejects(call("playback.start", { kind: "albums" }, 0), /refused/i);
+      await assert.rejects(call("playback.start", { kind: "songs" }, -1), /refused/i);
+      await assert.rejects(call("playback.start", { kind: "songs" }, 0, "yes"), /refused/i);
+      await assert.rejects(call("playback.command", { type: "clear" }), /refused/i);
+      await assert.rejects(call("playback.command", { type: "jumpTo", key: "x" }), /refused/i);
+      await assert.rejects(call("playback.seek", -5), /refused/i);
+      await assert.rejects(call("playback.volume", 2, false), /refused/i);
+      await assert.rejects(call("playback.volume", 0.5, "no"), /refused/i);
+      await assert.rejects(call("playback.queue", 0, 500), /refused/i);
+      assert.deepEqual(
+        engineCalls.filter((c) => !c.startsWith("volume")),
+        [],
+      );
+    } finally {
+      await runtime.dispose();
+    }
   });
 });

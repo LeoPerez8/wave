@@ -15,7 +15,7 @@ import * as Layer from "effect/Layer";
 import type * as Scope from "effect/Scope";
 
 import { askForNotifications } from "@/lib/askForNotifications";
-import { makeExternalStore } from "@/lib/externalStore";
+import { makeExternalStore } from "@wave/client/externalStore";
 import { perfCount } from "@/perf/perf";
 import { makePlaybackStores } from "./playbackStores";
 import type { SongGainUpdate } from "./songGains";

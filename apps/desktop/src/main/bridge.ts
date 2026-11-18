@@ -5,6 +5,8 @@ import { libraryCounts } from "@wave/client/db/counts";
 import * as Effect from "effect/Effect";
 import { BRIDGE_CALLS, type BridgeCall, type BridgeContract } from "../shared/bridge.ts";
 import { PLAYABLE_EXTENSIONS } from "../shared/playback.ts";
+import { Playback } from "./playback/playback.ts";
+import { validPlaybackCommand } from "./playback/validation.ts";
 import { Player } from "./audio/player.ts";
 import type { AudioEngineError } from "./audio/supervisor.ts";
 import { Kotlin } from "./kotlin/kotlin.ts";
@@ -38,7 +40,7 @@ interface Runtime<R> {
 }
 
 /** The services the calls use. */
-export type BridgeServices = Database | Player | Kotlin | DesktopLibrary;
+export type BridgeServices = Database | Player | Kotlin | DesktopLibrary | Playback;
 
 const refuse = (call: BridgeCall, why: string) => Effect.fail(new Error(`Refused ${call}: ${why}`));
 
@@ -75,6 +77,12 @@ const libraryCall = <A>(run: (library: DesktopLibrary["Service"]) => A | Promise
     return yield* Effect.tryPromise({ try: async () => run(library), catch: (error) => error });
   });
 
+const playbackCall = <A>(run: (playback: Playback["Service"]) => A | Promise<A>) =>
+  Effect.gen(function* () {
+    const playback = yield* Playback;
+    return yield* Effect.tryPromise({ try: async () => run(playback), catch: (error) => error });
+  });
+
 const pageCall = <T>(
   call: BridgeCall,
   args: readonly unknown[],
@@ -108,6 +116,48 @@ const createHandlers = (onAppearance: (mode: Appearance) => void): Handlers => {
         return yield* Effect.fail(new Error("[folder-unavailable] Drive is not connected"));
     });
   return {
+    "playback.view": () => playbackCall((p) => p.view()),
+    "playback.start": ([scope, index, shuffle]) =>
+      validScope(scope) &&
+      !["albums", "artists", "playlists", "genres"].includes(scope.kind) &&
+      (index === undefined ||
+        (typeof index === "number" && Number.isSafeInteger(index) && index >= 0)) &&
+      (shuffle === undefined || typeof shuffle === "boolean")
+        ? playbackCall((p) =>
+            p.start(scope, index as number | undefined, shuffle as boolean | undefined),
+          )
+        : refuse("playback.start", "invalid play context"),
+    "playback.command": ([command]) =>
+      validPlaybackCommand(command)
+        ? playbackCall((p) => p.command(command))
+        : refuse("playback.command", "invalid command"),
+    "playback.play": () => playbackCall((p) => p.play()),
+    "playback.pause": () => playbackCall((p) => p.pause()),
+    "playback.seek": ([ms]) =>
+      typeof ms === "number" && Number.isFinite(ms) && ms >= 0
+        ? playbackCall((p) => p.seek(ms))
+        : refuse("playback.seek", "invalid time"),
+    "playback.undo": () => playbackCall((p) => p.undo()),
+    "playback.dismissUndo": () => playbackCall((p) => p.dismissUndo()),
+    "playback.favorite": () => playbackCall((p) => p.favorite()),
+    "playback.volume": ([value, muted]) =>
+      typeof value === "number" &&
+      Number.isFinite(value) &&
+      value >= 0 &&
+      value <= 1 &&
+      typeof muted === "boolean"
+        ? playbackCall((p) => p.volume(value, muted))
+        : refuse("playback.volume", "invalid volume"),
+    "playback.queue": ([offset, limit]) =>
+      typeof offset === "number" &&
+      Number.isSafeInteger(offset) &&
+      offset >= 0 &&
+      typeof limit === "number" &&
+      Number.isSafeInteger(limit) &&
+      limit > 0 &&
+      limit <= 200
+        ? playbackCall((p) => p.queue(offset, limit))
+        : refuse("playback.queue", "invalid page"),
     "settings.appearance": () =>
       Effect.gen(function* () {
         return appearance(yield* Database);

@@ -5,6 +5,7 @@ import * as ManagedRuntime from "effect/ManagedRuntime";
 import { forkAudio } from "./audio/fork.ts";
 import { playerLayer } from "./audio/player.ts";
 import { registerBridge } from "./bridge.ts";
+import { playbackLayer } from "./playback/playback.ts";
 import { libraryLayer } from "./database.ts";
 import { kotlinLayer } from "./kotlin/kotlin.ts";
 import { jvmCommand, spawnLines } from "./kotlin/spawn.ts";
@@ -102,54 +103,52 @@ else {
         spawn: spawnLines(jvm, (text) => process.stderr.write(`[jvm] ${text}`)),
       }),
     );
-    const runtime = ManagedRuntime.make(
-      desktopLibraryLayer({
-        // Electron resolves Windows' Music known folder and Linux's XDG user directory.
-        musicFolder: process.env["WAVE_MUSIC_DIR"] ?? app.getPath("music"),
-        platform: process.platform,
-        cacheArtwork: (() => {
-          let store: ReturnType<typeof artworkStore> | undefined;
-          return (db, encoded) => {
-            store ??= artworkStore(
-              db,
-              join(
-                process.env["WAVE_DATA_DIR"] ??
-                  (process.platform === "win32"
-                    ? join(
-                        process.env["LOCALAPPDATA"] ??
-                          join(app.getPath("home"), "AppData", "Local"),
-                        "Wave",
-                      )
-                    : join(
-                        process.env["XDG_CACHE_HOME"] ?? join(app.getPath("home"), ".cache"),
-                        "wave",
-                      )),
-                "artwork",
-              ),
-              (bytes) => {
-                const image = nativeImage.createFromBuffer(bytes);
-                if (image.isEmpty()) return undefined;
-                const { width, height } = image.getSize();
-                const resized = (side: number) =>
-                  image
-                    .resize(
-                      width >= height
-                        ? { width: Math.min(side, width), quality: "good" }
-                        : { height: Math.min(side, height), quality: "good" },
+    const library = desktopLibraryLayer({
+      // Electron resolves Windows' Music known folder and Linux's XDG user directory.
+      musicFolder: process.env["WAVE_MUSIC_DIR"] ?? app.getPath("music"),
+      platform: process.platform,
+      cacheArtwork: (() => {
+        let store: ReturnType<typeof artworkStore> | undefined;
+        return (db, encoded) => {
+          store ??= artworkStore(
+            db,
+            join(
+              process.env["WAVE_DATA_DIR"] ??
+                (process.platform === "win32"
+                  ? join(
+                      process.env["LOCALAPPDATA"] ?? join(app.getPath("home"), "AppData", "Local"),
+                      "Wave",
                     )
-                    .toJPEG(90);
-                return { thumb: resized(300), medium: resized(640) };
-              },
-            );
-            return store(encoded);
-          };
-        })(),
-        pickFolder: async () => {
-          const result = await dialog.showOpenDialog({ properties: ["openDirectory"] });
-          return result.canceled ? undefined : result.filePaths[0];
-        },
-      }).pipe(Layer.provideMerge(services)),
-    );
+                  : join(
+                      process.env["XDG_CACHE_HOME"] ?? join(app.getPath("home"), ".cache"),
+                      "wave",
+                    )),
+              "artwork",
+            ),
+            (bytes) => {
+              const image = nativeImage.createFromBuffer(bytes);
+              if (image.isEmpty()) return undefined;
+              const { width, height } = image.getSize();
+              const resized = (side: number) =>
+                image
+                  .resize(
+                    width >= height
+                      ? { width: Math.min(side, width), quality: "good" }
+                      : { height: Math.min(side, height), quality: "good" },
+                  )
+                  .toJPEG(90);
+              return { thumb: resized(300), medium: resized(640) };
+            },
+          );
+          return store(encoded);
+        };
+      })(),
+      pickFolder: async () => {
+        const result = await dialog.showOpenDialog({ properties: ["openDirectory"] });
+        return result.canceled ? undefined : result.filePaths[0];
+      },
+    }).pipe(Layer.provideMerge(services));
+    const runtime = ManagedRuntime.make(playbackLayer.pipe(Layer.provideMerge(library)));
     // Builds the services now, so the JVM starts with the app rather than on the first call.
     await runtime.context();
     nativeTheme.themeSource = await runtime.runPromise(Effect.map(Database, appearance));
@@ -163,7 +162,14 @@ else {
         nativeTheme.themeSource = mode;
       },
     );
-    app.on("will-quit", () => void runtime.dispose());
+    // The queue's position and the play so far are saved before the app exits.
+    let quitting = false;
+    app.on("before-quit", (event) => {
+      if (quitting) return;
+      event.preventDefault();
+      quitting = true;
+      void runtime.dispose().finally(() => app.quit());
+    });
     createWindow();
   });
 }

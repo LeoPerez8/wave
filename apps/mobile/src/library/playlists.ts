@@ -12,7 +12,7 @@ import * as Effect from "effect/Effect";
 import { Image } from "react-native";
 
 import { artworkUri } from "@wave/client/artworkUri";
-import { makeExternalStore } from "@/lib/externalStore";
+import { makeExternalStore } from "@wave/client/externalStore";
 import { currentLocalisation } from "@/localisation/localisation";
 import { WaveNative, type PlaylistPhoto } from "@/native/waveNative";
 

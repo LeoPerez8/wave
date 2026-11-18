@@ -2,6 +2,7 @@ import { DEFAULT_THEME_CHOICE, themeFor } from "@wave/core";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { BrowseRow, BrowseScope } from "../../shared/browse.ts";
 import type { ScanStatus } from "../../shared/library.ts";
+import { PlayerBar, usePlayback } from "./PlayerBar.tsx";
 import { Icon } from "./Icon.tsx";
 import { Artwork, VirtualTable } from "./VirtualTable.tsx";
 import { FolderSettings } from "./FolderSettings.tsx";
@@ -57,6 +58,7 @@ export function App() {
   const [playlistOffset, setPlaylistOffset] = useState(0);
   const [playlistTotal, setPlaylistTotal] = useState(0);
   const failed = useCallback(() => setError(text.desktopLibrary.actionFailed), []);
+  const playback = usePlayback(failed);
   const search = useRef<HTMLInputElement>(null);
   const content = useRef<HTMLDivElement>(null);
   const shell = useRef<HTMLElement>(null);
@@ -162,7 +164,7 @@ export function App() {
     () => (route.kind === "home" || route.kind === "settings" ? { kind: "songs" } : route),
     [route],
   );
-  const open = (row: BrowseRow) => {
+  const open = (row: BrowseRow, index: number) => {
     const detail = {
       albums: "album",
       artists: "artist",
@@ -170,8 +172,8 @@ export function App() {
       genres: "genre",
     } as const;
     if (scope.kind in detail) go({ kind: detail[scope.kind as keyof typeof detail], id: row.id });
-    // The playback ticket connects activation to a play context.
     else if (row.unavailable) setError(text.desktopLibrary.driveDisconnected);
+    else playback.run(window.wave.playback.start(scope, index));
   };
   const title =
     hero?.title ??
@@ -307,11 +309,13 @@ export function App() {
                   .join(" · ")}
               </p>
               <div className="hero-actions">
-                <button disabled>
+                <button onClick={() => playback.run(window.wave.playback.start(scope, 0, false))}>
                   <Icon name="play" size={16} />
                   {labels.play}
                 </button>
-                <button disabled>
+                <button
+                  onClick={() => playback.run(window.wave.playback.start(scope, undefined, true))}
+                >
                   <Icon name="shuffle" size={16} />
                   {labels.shuffle}
                 </button>
@@ -402,40 +406,14 @@ export function App() {
           <VirtualTable
             key={JSON.stringify(scope)}
             scope={scope}
-            revision={scan?.revision ?? 0}
+            revision={(scan?.revision ?? 0) + (playback.view?.revision ?? 0)}
             onHero={setHero}
             onOpen={open}
             onError={failed}
           />
         )}
       </div>
-      <footer className="player-bar" aria-label={labels.player}>
-        <div className="player-song">
-          <Artwork />
-          <span className="secondary truncate">{labels.nothingPlaying}</span>
-          <IconButton icon="favorites" label={labels.favorite} disabled />
-        </div>
-        <div className="player-center">
-          <div className="transport">
-            {(["shuffle", "previous", "play", "next", "repeat"] as const).map((key) => (
-              <IconButton key={key} icon={key} label={labels[key]} disabled />
-            ))}
-          </div>
-          <div className="scrubber" aria-hidden="true">
-            <span>–:––</span>
-            <svg viewBox="0 0 400 12" preserveAspectRatio="none">
-              <path d="M0 6 Q5 0 10 6 T20 6 T30 6 T40 6 T50 6 T60 6 T70 6 T80 6 T90 6 T100 6 T110 6 T120 6 T130 6 T140 6 T150 6 T160 6 T170 6 T180 6 T190 6 T200 6 T210 6 T220 6 T230 6 T240 6 T250 6 T260 6 T270 6 T280 6 T290 6 T300 6 T310 6 T320 6 T330 6 T340 6 T350 6 T360 6 T370 6 T380 6 T390 6 T400 6" />
-            </svg>
-            <span>–:––</span>
-          </div>
-        </div>
-        <div className="player-tools">
-          {(["sleep", "lyrics", "queue", "menu", "volume"] as const).map((key) => (
-            <IconButton key={key} icon={key} label={labels[key]} disabled />
-          ))}
-          <input type="range" aria-label={labels.volume} disabled />
-        </div>
-      </footer>
+      <PlayerBar playback={playback} />
     </main>
   );
 }

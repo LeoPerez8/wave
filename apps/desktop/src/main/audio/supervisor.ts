@@ -3,12 +3,12 @@
  * process that exits, or stops answering, is replaced, and the new one gets the song back,
  * paused where it was. So a crash or a stall in audio never reaches the window.
  */
-import type { PlaybackStatus } from "../../shared/playback.ts";
+import type { PlaybackStatus, PlaybackEvent } from "../../shared/playback.ts";
 import type { AudioCall, AudioRequest, AudioResponse } from "./protocol.ts";
 
 /** What a forked process reports back. */
 export interface AudioEvents {
-  readonly message: (response: AudioResponse) => void;
+  readonly message: (response: AudioResponse | PlaybackEvent) => void;
   readonly exit: () => void;
 }
 
@@ -41,6 +41,7 @@ export class AudioEngineError extends Error {
 export interface AudioSupervisor {
   readonly call: (call: AudioCall, args: readonly unknown[]) => Promise<PlaybackStatus>;
   readonly dispose: () => void;
+  readonly subscribe: (listener: (event: PlaybackEvent) => void) => () => void;
 }
 
 interface Waiting {
@@ -67,12 +68,34 @@ export const superviseAudio = (options: AudioSupervisorOptions): AudioSupervisor
   let restartTimer: ReturnType<typeof setTimeout> | undefined;
   let disposed = false;
   const waiting = new Map<number, Waiting>();
+  const listeners = new Set<(event: PlaybackEvent) => void>();
   /** The song to give a new process, and where it was. */
-  let song: { readonly path: string; positionMs: number } | undefined;
+  let song: { path: string; positionMs: number; key?: string | undefined } | undefined;
+  /** The song lined up after it, which becomes the song once the engine moves on to it. */
+  let lined: { readonly path: string; readonly key: string } | undefined;
+  let volume: number | undefined;
 
   const remember = (call: AudioCall, args: readonly unknown[], status: PlaybackStatus) => {
-    if (call === "load") song = { path: String(args[0]), positionMs: status.positionMs };
-    else if (song !== undefined && status.state !== "idle") song.positionMs = status.positionMs;
+    if (call === "load") {
+      song = { path: String(args[0]), positionMs: status.positionMs, key: status.key };
+      lined = undefined;
+      return;
+    }
+    if (call === "preload") {
+      const [path, key] = args;
+      lined = typeof path === "string" && typeof key === "string" ? { path, key } : undefined;
+    }
+    if (call === "setVolume") volume = Number(args[0]);
+    if (song !== undefined && status.state !== "idle") song.positionMs = status.positionMs;
+  };
+
+  /** Follows the engine onto the song it moved to by itself. */
+  const follow = (status: PlaybackStatus) => {
+    if (song === undefined) return;
+    if (lined !== undefined && status.key === lined.key && song.key !== lined.key) {
+      song = { path: lined.path, key: lined.key, positionMs: status.positionMs };
+      lined = undefined;
+    } else if (status.state !== "idle") song.positionMs = status.positionMs;
   };
 
   const failAll = (code: string, message: string) => {
@@ -106,8 +129,13 @@ export const superviseAudio = (options: AudioSupervisorOptions): AudioSupervisor
       target.send({ id, call, args });
     });
 
-  const onMessage = (owner: AudioProcess) => (response: AudioResponse) => {
+  const onMessage = (owner: AudioProcess) => (response: AudioResponse | PlaybackEvent) => {
     if (owner !== current) return;
+    if ("event" in response) {
+      follow(response.status);
+      for (const listener of listeners) listener(response);
+      return;
+    }
     const call = waiting.get(response.id);
     if (call === undefined) return;
     clearTimeout(call.timer);
@@ -144,12 +172,17 @@ export const superviseAudio = (options: AudioSupervisorOptions): AudioSupervisor
     child = options.fork(events);
     current = child;
     if (song !== undefined) {
-      const { path, positionMs } = song;
-      // Paused where it was; a failure here shows on the user's next call.
-      void send("load", [path], true)
+      const { path, positionMs, key } = song;
+      const next = lined;
+      const level = volume;
+      // Paused where it was, at the same volume, the next song lined up again; a failure here
+      // shows on the user's next call.
+      void send("load", [path, key], true)
         .then(() => (positionMs > 0 ? send("seek", [positionMs], true) : undefined))
+        .then(() => (level === undefined ? undefined : send("setVolume", [level], true)))
+        .then(() => (next === undefined ? undefined : send("preload", [next.path, next.key], true)))
         .catch(() => undefined);
-    }
+    } else if (volume !== undefined) void send("setVolume", [volume], true).catch(() => undefined);
     return child;
   }
 
@@ -162,10 +195,17 @@ export const superviseAudio = (options: AudioSupervisorOptions): AudioSupervisor
 
   return {
     call: (call, args) => send(call, args),
+    subscribe: (listener) => {
+      listeners.add(listener);
+      return () => {
+        listeners.delete(listener);
+      };
+    },
     dispose: () => {
       if (disposed) return;
       disposed = true;
       clearInterval(heartbeat);
+      listeners.clear();
       if (restartTimer !== undefined) clearTimeout(restartTimer);
       failAll("disposed", "the audio engine was shut down");
       current?.kill();

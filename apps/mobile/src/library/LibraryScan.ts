@@ -27,7 +27,7 @@ import {
 } from "./startupJobs";
 
 import { startupTurnEffect } from "@/lib/backgroundWork";
-import { makeExternalStore } from "@/lib/externalStore";
+import { makeExternalStore } from "@wave/client/externalStore";
 import { argbToHex, type NativeArtwork, type NativeScannedTrack } from "@/native/waveNative";
 import { skipVoiceNotes } from "@/settings/skipVoiceNotes";
 

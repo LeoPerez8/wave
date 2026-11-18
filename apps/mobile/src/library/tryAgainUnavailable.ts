@@ -16,7 +16,7 @@ import {
 } from "@wave/core";
 import { useSyncExternalStore } from "react";
 
-import { makeExternalStore } from "@/lib/externalStore";
+import { makeExternalStore } from "@wave/client/externalStore";
 import { currentLocalisation } from "@/localisation/localisation";
 import { showError } from "@/overlay/alert";
 import { showToast } from "@/overlay/toast";

@@ -1,7 +1,7 @@
 import { useIsFocused } from "expo-router";
 import { useEffect } from "react";
 
-import { makeExternalStore } from "@/lib/externalStore";
+import { makeExternalStore } from "@wave/client/externalStore";
 
 /** How many list pills are really on screen. The update pill waits for them to leave. */
 export const listPillsUp = makeExternalStore(0);

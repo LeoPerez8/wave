@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 
-import { makeExternalStore } from "./externalStore.ts";
+import { makeExternalStore } from "@wave/client/externalStore";
 import { holdable } from "./holdable.ts";
 
 test("unheld, it shows the source's value as it changes", () => {

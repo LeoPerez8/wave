@@ -48,7 +48,7 @@ import { useSyncExternalStore } from "react";
 import { magicProfileOf } from "@/home/artistGenres";
 import { recommendationSnapshot } from "@/home/recommendationSnapshot";
 import { discoverLevel, discoverSliders } from "@/lib/discoverSettings";
-import { makeExternalStore, subscribeAll } from "@/lib/externalStore";
+import { makeExternalStore, subscribeAll } from "@wave/client/externalStore";
 import { oneAtATime } from "@/lib/oneAtATime";
 import { onStarred, onYtSongSignal } from "@/library/libraryChanges";
 import { LibraryStore } from "@/library/LibraryStore";

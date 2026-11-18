@@ -98,11 +98,10 @@ fn opus_decodes_and_seeks_in_place() {
     assert_lossy("tone.opus", 48_000, 0, 15.0);
 }
 
-/// Symphonia leaves an M4A's encoder delay in (1,024 frames from ffmpeg's encoder); #1150 trims
-/// it from `elst` or `iTunSMPB` for gapless playback.
+/// AAC's edit list removes both encoder delay and trailing padding.
 #[test]
 fn aac_decodes_and_seeks_in_place() {
-    assert_lossy("tone.m4a", 44_100, 1024, 15.0);
+    assert_lossy("tone.m4a", 44_100, 0, 15.0);
 }
 
 #[test]
@@ -113,4 +112,9 @@ fn a_file_that_is_not_audio_is_refused() {
 #[test]
 fn a_missing_file_is_refused() {
     assert!(Decoder::open(&fixture("missing.flac")).is_err());
+}
+
+#[test]
+fn itunes_only_aac_trims_and_seeks_without_an_edit_list() {
+    assert_lossy("tone-smpb.m4a", 44_100, 0, 15.0);
 }

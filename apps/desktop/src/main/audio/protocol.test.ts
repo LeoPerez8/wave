@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import type { PlaybackStatus } from "../../shared/playback.ts";
-import { answer, type AddonEngine } from "./protocol.ts";
+import { answer, playbackEvent, stamped, type AddonEngine } from "./protocol.ts";
 
 const paused: PlaybackStatus = { state: "paused", positionMs: 0, durationMs: 1000 };
 
@@ -26,6 +26,9 @@ const fakeEngine = () => {
       status = { ...status, positionMs };
     },
     status: () => status,
+    preload: () => {},
+    transitions: () => [],
+    setVolume: () => {},
   };
   return { engine, calls };
 };
@@ -71,4 +74,35 @@ test("an unknown call or a broken addon answers with an error instead of throwin
   const broken = answer(undefined, { id: 9, call: "status", args: [] });
   assert.equal(broken.ok, false);
   assert.equal(!broken.ok && broken.error.code, "unavailable");
+});
+
+test("the process reports playback only when the status moved or the engine changed songs", () => {
+  const { engine } = fakeEngine();
+  let transitions: { key: string; atMs: number }[] = [];
+  const watched: AddonEngine = { ...engine, transitions: () => transitions.splice(0) };
+  const first = playbackEvent(watched, undefined, 100);
+  assert.deepEqual(first, {
+    event: "playback",
+    status: { state: "idle", positionMs: 0, observedAtMs: 100 },
+    transitions: [],
+  });
+  assert.equal(playbackEvent(watched, first!.status, 125), undefined, "nothing moved");
+  transitions = [{ key: "2", atMs: 140 }];
+  assert.deepEqual(playbackEvent(watched, first!.status, 150)?.transitions, [
+    { key: "2", atMs: 140 },
+  ]);
+  engine.seek(300);
+  assert.equal(playbackEvent(watched, first!.status, 175)?.status.positionMs, 300);
+});
+
+test("an answer carries the time the process took it", () => {
+  const { engine } = fakeEngine();
+  const response = stamped(answer(engine, { id: 1, call: "status", args: [] }), 500);
+  assert.deepEqual(response, {
+    id: 1,
+    ok: true,
+    result: { state: "idle", positionMs: 0, observedAtMs: 500 },
+  });
+  const refused = answer(engine, { id: 2, call: "load", args: ["/missing"] });
+  assert.equal(stamped(refused, 500), refused);
 });

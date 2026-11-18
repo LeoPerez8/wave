@@ -1,4 +1,4 @@
-import { makeExternalStore } from "@/lib/externalStore";
+import { makeExternalStore } from "@wave/client/externalStore";
 
 /**
  * Bumped when this phone saves a follow, an unfollow, a hidden release, a

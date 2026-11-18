@@ -4,7 +4,7 @@ import { afterEach, beforeEach, describe, mock, test } from "node:test";
 
 import { parseLyrics, type AutoLyricsText, type Lyrics } from "@wave/core";
 
-import { makeExternalStore } from "../lib/externalStore.ts";
+import { makeExternalStore } from "@wave/client/externalStore";
 import { startAutoLyricLines, type AutoLyricLinesPlayback } from "./autoLyricLines.ts";
 
 const SONG = parseLyrics("[00:02.00]One\n[00:05.00]Two\n[00:09.00]Three");

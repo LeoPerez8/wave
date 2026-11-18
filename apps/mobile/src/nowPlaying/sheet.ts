@@ -21,7 +21,7 @@ import { Dimensions } from "react-native";
 import { makeMutable, withSpring } from "react-native-reanimated";
 import { scheduleOnRN } from "react-native-worklets";
 
-import { makeExternalStore } from "@/lib/externalStore";
+import { makeExternalStore } from "@wave/client/externalStore";
 import { dismissAllOverlays } from "@/overlay/overlay";
 import { perfMark } from "@/perf/perf";
 

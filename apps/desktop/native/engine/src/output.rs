@@ -218,7 +218,7 @@ fn run(
             let due = (clock.elapsed().as_secs_f64() * rate as f64) as usize;
             if due > 0 {
                 silence.resize(due * 2, 0.0);
-                player.render(&mut silence);
+                player.render(&mut silence, rate);
                 clock += Duration::from_secs_f64(due as f64 / rate as f64);
             }
         }
@@ -257,9 +257,9 @@ fn build(
             config,
             move |out: &mut [f32], _| {
                 if direct {
-                    player.render(out);
+                    player.render(out, song_rate);
                 } else {
-                    adapter.fill(out, |input| player.render(input));
+                    adapter.fill(out, |input| player.render(input, song_rate));
                 }
             },
             move |error| {

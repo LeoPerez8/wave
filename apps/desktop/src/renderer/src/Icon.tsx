@@ -12,6 +12,8 @@ const paths: Record<string, string> = {
     "M12 8a4 4 0 1 1 0 8 4 4 0 0 1 0-8M10 2h4l1 3 3 1 3-1 2 4-2 3 1 3-2 4-3-1-3 2-1 3h-4l-1-3-3-1-3 1-2-4 2-3-1-3 2-4 3 1 3-2Z",
   back: "m15 5-7 7 7 7",
   forward: "m9 5 7 7-7 7",
+  pause: "M8 4v16M16 4v16",
+  mute: "M3 9h4l5-5v16l-5-5H3ZM16 9l6 6m0-6-6 6",
   play: "m8 4 13 8-13 8Z",
   previous: "M4 4v16M20 4 7 12l13 8Z",
   next: "M20 4v16M4 4l13 8-13 8Z",

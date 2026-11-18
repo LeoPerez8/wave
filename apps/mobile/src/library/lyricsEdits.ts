@@ -1,4 +1,4 @@
-import { makeExternalStore } from "@/lib/externalStore";
+import { makeExternalStore } from "@wave/client/externalStore";
 
 /**
  * Bumped whenever Wave writes a song's lyrics (into its tags or a sidecar

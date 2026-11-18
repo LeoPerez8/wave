@@ -1,6 +1,6 @@
 import type { PlayerTrouble, PositionReport } from "@wave/core";
 import type { NativePlayerState, PlayerErrorEvent, PlayerPosition } from "../native/wavePlayer.ts";
-import { makeExternalStore } from "../lib/externalStore.ts";
+import { makeExternalStore } from "@wave/client/externalStore";
 
 /** Playback changes only; timestamped positions are held by PositionState. */
 export interface PlaybackState extends Omit<NativePlayerState, "index" | keyof PlayerPosition> {

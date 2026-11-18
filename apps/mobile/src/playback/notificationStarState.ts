@@ -1,4 +1,4 @@
-import { makeExternalStore } from "@/lib/externalStore";
+import { makeExternalStore } from "@wave/client/externalStore";
 
 /**
  * Whether the media notification's Favorite button shows a filled star: the playing song is a

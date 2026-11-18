@@ -22,7 +22,7 @@ import * as Effect from "effect/Effect";
 import { lookedUpProfileOf } from "@/home/artistGenres";
 import { afterPaint } from "@/lib/afterPaint";
 import { settledTurnEffect } from "@/lib/backgroundWork";
-import { makeExternalStore, type ExternalStore } from "@/lib/externalStore";
+import { makeExternalStore, type ExternalStore } from "@wave/client/externalStore";
 import { recommendationSteps, recommendationTurn } from "@/lib/recommendationWork";
 import { sightOf, type ScreenSight } from "@/lib/sight";
 import { appLog } from "@/log/appLog";

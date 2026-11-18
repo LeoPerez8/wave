@@ -4,7 +4,7 @@ import { useEffect, useSyncExternalStore } from "react";
 import { LibraryStore } from "@/library/LibraryStore";
 
 import { appRuntime } from "@/library/runtime";
-import { makeExternalStore } from "@/lib/externalStore";
+import { makeExternalStore } from "@wave/client/externalStore";
 
 /** The recent searches, newest first; null until read from the store. */
 const recent = makeExternalStore<readonly string[] | null>(null);

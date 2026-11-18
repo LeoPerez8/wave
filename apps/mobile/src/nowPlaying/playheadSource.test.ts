@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import type { PositionReport, SleepTimer } from "@wave/core";
-import { makeExternalStore } from "../lib/externalStore.ts";
+import { makeExternalStore } from "@wave/client/externalStore";
 import { observePlayhead } from "./playheadSource.ts";
 
 const setup = () => {

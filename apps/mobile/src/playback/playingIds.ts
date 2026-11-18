@@ -7,7 +7,7 @@ import {
   type LibrarySongKey,
   type YtSong,
 } from "@wave/core";
-import type { ExternalStore } from "../lib/externalStore.ts";
+import type { ExternalStore } from "@wave/client/externalStore";
 
 export interface PlayingTarget {
   readonly id: string | null;

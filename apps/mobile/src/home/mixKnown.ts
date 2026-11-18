@@ -9,7 +9,7 @@ import * as Effect from "effect/Effect";
 import { useSyncExternalStore } from "react";
 
 import { settledTurnEffect } from "@/lib/backgroundWork";
-import { makeExternalStore } from "@/lib/externalStore";
+import { makeExternalStore } from "@wave/client/externalStore";
 import { LibraryStore } from "@/library/LibraryStore";
 import { type ArtistRow, type SongRow } from "@wave/client";
 import { onLibraryChange } from "@/library/libraryChanges";

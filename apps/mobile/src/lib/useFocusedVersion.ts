@@ -4,7 +4,7 @@ import { useCallback, useEffect, useState } from "react";
 
 import { isNowPlayingShown, onNowPlayingShownChange } from "@/nowPlaying/sheet";
 
-import type { ExternalStore } from "./externalStore";
+import type { ExternalStore } from "@wave/client/externalStore";
 
 /**
  * `store`'s version as the screen should show it: every change while the

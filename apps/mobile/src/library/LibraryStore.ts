@@ -109,7 +109,7 @@ import type {
   YtSong,
   YtDownloadJournalJob,
 } from "@wave/core";
-import { makeExternalStore, type ExternalStore } from "@/lib/externalStore";
+import { makeExternalStore, type ExternalStore } from "@wave/client/externalStore";
 import { followSaved } from "./followsSaved";
 import { publishSavedRecordings } from "./libraryChanges";
 import { backfillRecordingTitles, selectMatchingSong } from "@wave/client/db/matchingSong";

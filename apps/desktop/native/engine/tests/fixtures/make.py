@@ -51,3 +51,37 @@ with tempfile.TemporaryDirectory() as scratch:
     opus = os.path.join(scratch, "48000.wav")
     write_wav(opus, 48000)
     encode(opus, "tone.opus", "-c:a", "libopus", "-b:a", "96k")
+
+
+def smpb_only(source, target):
+    """Writes [source] with its edit list hidden and an iTunSMPB tag instead, so the trim must
+    come from the iTunes tag alone (1,024 frames of priming, 956 of padding, 44,100 of audio)."""
+    data = open(source, "rb").read()
+
+    def box(kind, body):
+        return struct.pack(">I", len(body) + 8) + kind + body
+
+    smpb = b" 00000000 00000400 000003BC 000000000000AC44"
+    tag = box(b"----", box(b"mean", bytes(4) + b"com.apple.iTunes")
+              + box(b"name", bytes(4) + b"iTunSMPB") + box(b"data", struct.pack(">II", 1, 0) + smpb))
+    handler = box(b"hdlr", bytes(8) + b"mdirappl" + bytes(9))
+    metadata = box(b"udta", box(b"meta", bytes(4) + handler + box(b"ilst", tag)))
+    offset = 0
+    while offset + 8 <= len(data):
+        size, kind = struct.unpack_from(">I4s", data, offset)
+        if kind == b"moov":
+            # ffmpeg writes moov after mdat, so resizing it moves no chunk offset.
+            moov = data[offset + 8:offset + size].replace(b"elst", b"free")
+            parts, at = [], 0
+            while at + 8 <= len(moov):
+                length = struct.unpack_from(">I", moov, at)[0]
+                if moov[at + 4:at + 8] != b"udta":
+                    parts.append(moov[at:at + length])
+                at += length
+            moov = box(b"moov", b"".join(parts) + metadata)
+            open(target, "wb").write(data[:offset] + moov + data[offset + size:])
+            return
+        offset += size
+
+
+smpb_only(os.path.join(out, "tone.m4a"), os.path.join(out, "tone-smpb.m4a"))

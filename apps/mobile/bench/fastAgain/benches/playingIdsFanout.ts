@@ -5,7 +5,7 @@ import { performance } from "node:perf_hooks";
 import * as Effect from "effect/Effect";
 import { sql } from "drizzle-orm";
 import type { YtSong } from "@wave/core";
-import { makeExternalStore } from "../../../src/lib/externalStore.ts";
+import { makeExternalStore } from "@wave/client/externalStore";
 import { traceQueries } from "@wave/client/testing";
 import { percentiles } from "../measure.ts";
 import { loadLibraryStore } from "../store.ts";

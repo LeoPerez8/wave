@@ -13,9 +13,6 @@ const focusedNow = (focused: boolean) => Object.assign(globalThis, { __listPillF
 const hooks = registerHooks({
   resolve(specifier, context, next) {
     if (specifier === "expo-router") return { url: navigation, shortCircuit: true };
-    if (specifier === "@/lib/externalStore") {
-      return next(import.meta.resolve("../lib/externalStore.ts"), context);
-    }
     return next(specifier, context);
   },
 });

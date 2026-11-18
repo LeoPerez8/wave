@@ -22,9 +22,9 @@ const shared: OpenTest = { calls: [], signedIn: false, confirms: false, signsIn:
 Object.assign(globalThis, { openTest: shared, IS_REACT_ACT_ENVIRONMENT: true });
 
 const core = JSON.stringify(import.meta.resolve("@wave/core"));
-const store = JSON.stringify(import.meta.resolve("../lib/externalStore.ts"));
+const store = JSON.stringify(import.meta.resolve("@wave/client/externalStore"));
 const stubs: Record<string, string> = {
-  "@/lib/externalStore": stubModule(`export * from ${store};`),
+  "@wave/client/externalStore": stubModule(`export * from ${store};`),
   "@/localisation/localisation": stubModule(`
     import { catalogueOf } from ${core};
     export const currentLocalisation = () => ({ language: "en", strings: catalogueOf("en") });

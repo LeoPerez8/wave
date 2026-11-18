@@ -10,7 +10,7 @@ use symphonia::core::errors::Error as SymphoniaError;
 use symphonia::core::formats::probe::Hint;
 use symphonia::core::formats::{FormatOptions, FormatReader, SeekMode, SeekTo, TrackType};
 use symphonia::core::io::MediaSourceStream;
-use symphonia::core::meta::MetadataOptions;
+use symphonia::core::meta::{MetadataOptions, RawValue};
 use symphonia::core::units::{TimeBase, Timestamp};
 use symphonia_adapter_libopus::OpusDecoder;
 
@@ -65,9 +65,21 @@ impl Decoder {
             hint.with_extension(extension);
         }
         let stream = MediaSourceStream::new(Box::new(file), Default::default());
-        let format = symphonia::default::get_probe()
+        let mut format = symphonia::default::get_probe()
             .probe(&hint, stream, FormatOptions::default(), MetadataOptions::default())
             .map_err(|e| EngineError::Unsupported(e.to_string()))?;
+        let smpb = format.metadata().current().and_then(|rev| {
+            rev.media.tags.iter().find_map(|tag| {
+                if !tag.raw.key.contains("iTunSMPB") {
+                    return None;
+                }
+                match &tag.raw.value {
+                    RawValue::String(s) => crate::gapless::smpb(s),
+                    RawValue::Binary(b) => crate::gapless::smpb(&String::from_utf8_lossy(b)),
+                    _ => None,
+                }
+            })
+        });
         let track = format
             .default_track(TrackType::Audio)
             .ok_or_else(|| EngineError::Unsupported("no audio track".into()))?;
@@ -83,6 +95,15 @@ impl Decoder {
         let rate =
             params.sample_rate.ok_or_else(|| EngineError::Unsupported("no sample rate".into()))?;
         let num_frames = track.num_frames;
+        let trim = if path
+            .extension()
+            .and_then(|s| s.to_str())
+            .is_some_and(|s| s.eq_ignore_ascii_case("m4a") || s.eq_ignore_ascii_case("mp4"))
+        {
+            smpb.or_else(|| crate::gapless::from_mp4(path, track.id, rate))
+        } else {
+            None
+        };
 
         let mut decoder = Decoder {
             path: path.to_path_buf(),
@@ -106,7 +127,11 @@ impl Decoder {
         // pre-skip in; the timeline's origin covers both.
         decoder.duration =
             num_frames.map(|frames| frames.saturating_sub(first.first_frame.max(0) as u64));
-        decoder.pending = Some(first.samples);
+        if let Some(trim) = trim {
+            decoder.origin += trim.delay as i64;
+            decoder.duration = Some(trim.frames);
+        }
+        decoder.pending = decoder.trim_chunk(first);
         Ok(decoder)
     }
 
@@ -128,17 +153,24 @@ impl Decoder {
             let Some(chunk) = self.decode_next()? else {
                 return Ok(None);
             };
-            let first = chunk.first_frame - self.origin;
-            let frames = (chunk.samples.len() / 2) as i64;
-            let drop = (self.drop_before as i64 - first).clamp(0, frames) as usize;
-            if drop as i64 == frames {
-                continue;
+            if let Some(samples) = self.trim_chunk(chunk) {
+                return Ok(Some(samples));
             }
-            self.drop_before = 0;
-            let mut samples = chunk.samples;
-            samples.drain(..drop * 2);
-            return Ok(Some(samples));
         }
+    }
+
+    fn trim_chunk(&mut self, chunk: Chunk) -> Option<Vec<f32>> {
+        let first = chunk.first_frame - self.origin;
+        let frames = (chunk.samples.len() / 2) as i64;
+        let drop = (self.drop_before as i64 - first).clamp(0, frames) as usize;
+        let end =
+            self.duration.map_or(frames, |duration| (duration as i64 - first).clamp(0, frames))
+                as usize;
+        if end <= drop {
+            return None;
+        }
+        self.drop_before = 0;
+        Some(chunk.samples[drop * 2..end * 2].to_vec())
     }
 
     /// Moves to `frame`, so the next chunk starts exactly there.

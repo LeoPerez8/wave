@@ -54,7 +54,7 @@ export function VirtualTable({
 }: {
   readonly scope: BrowseScope;
   readonly revision: number;
-  readonly onOpen: (row: BrowseRow) => void;
+  readonly onOpen: (row: BrowseRow, index: number) => void;
   readonly onHero?: (row: BrowseRow | undefined) => void;
   readonly onError: () => void;
 }) {
@@ -152,7 +152,7 @@ export function VirtualTable({
     } else if (event.key === "Enter") {
       event.preventDefault();
       const row = get(active);
-      if (row) onOpen(row);
+      if (row) onOpen(row, active);
     } else if (/^[a-z0-9]$/i.test(event.key) && !event.ctrlKey && !event.altKey) {
       event.preventDefault();
       void jump(event.key);
@@ -215,7 +215,7 @@ export function VirtualTable({
                     setActive(index);
                     viewport.current!.parentElement!.focus();
                   }}
-                  onDoubleClick={() => onOpen(row)}
+                  onDoubleClick={() => onOpen(row, index)}
                 >
                   <div role="gridcell" className="title-cell">
                     <span className="row-picture">

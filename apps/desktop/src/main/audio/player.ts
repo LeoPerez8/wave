@@ -5,7 +5,7 @@
 import * as Context from "effect/Context";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
-import type { PlaybackStatus } from "../../shared/playback.ts";
+import type { PlaybackStatus, PlaybackEvent } from "../../shared/playback.ts";
 import type { AudioCall } from "./protocol.ts";
 import {
   AudioEngineError,
@@ -16,7 +16,13 @@ import {
 
 export interface PlayerShape {
   /** Opens `path`, paused at its start, in place of the song before. */
-  readonly load: (path: string) => Effect.Effect<PlaybackStatus, AudioEngineError>;
+  readonly load: (path: string, key?: string) => Effect.Effect<PlaybackStatus, AudioEngineError>;
+  readonly preload: (
+    path?: string,
+    key?: string,
+  ) => Effect.Effect<PlaybackStatus, AudioEngineError>;
+  readonly setVolume: (volume: number) => Effect.Effect<PlaybackStatus, AudioEngineError>;
+  readonly subscribe: (listener: (event: PlaybackEvent) => void) => () => void;
   readonly play: () => Effect.Effect<PlaybackStatus, AudioEngineError>;
   readonly pause: () => Effect.Effect<PlaybackStatus, AudioEngineError>;
   readonly seek: (positionMs: number) => Effect.Effect<PlaybackStatus, AudioEngineError>;
@@ -32,7 +38,10 @@ const playerOf = (audio: AudioSupervisor): PlayerShape => {
   const run = (call: AudioCall, args: readonly unknown[]) =>
     Effect.tryPromise({ try: () => audio.call(call, args), catch: asError });
   return {
-    load: (path) => run("load", [path]),
+    load: (path, key) => run("load", [path, key]),
+    preload: (path, key) => run("preload", [path, key]),
+    setVolume: (volume) => run("setVolume", [volume]),
+    subscribe: audio.subscribe,
     play: () => run("play", []),
     pause: () => run("pause", []),
     seek: (positionMs) => run("seek", [positionMs]),

@@ -15,7 +15,7 @@ import Animated, {
 } from "react-native-reanimated";
 
 import { CELL } from "@/catalog/grid";
-import { subscribeAll } from "@/lib/externalStore";
+import { subscribeAll } from "@wave/client/externalStore";
 import { followArtistLink, followStreamedArtistLink } from "@/library/ArtistChoice";
 import { useScopedSongStarred } from "@/library/favorites";
 import { useLinkRows } from "@/library/hooks";

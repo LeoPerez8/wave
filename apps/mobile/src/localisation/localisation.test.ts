@@ -3,7 +3,7 @@ import { test } from "node:test";
 import { createElement, memo, useEffect } from "react";
 import { act, create, type ReactTestRenderer } from "react-test-renderer";
 
-import type { ExternalStore } from "../lib/externalStore.ts";
+import type { ExternalStore } from "@wave/client/externalStore";
 import { reactCompilerBuilds, stubModule } from "../perf/reactCompilerBuilds.ts";
 
 // A phone in Portuguese reads Wave in Portuguese with no switch, and Android's
@@ -12,7 +12,7 @@ import { reactCompilerBuilds, stubModule } from "../perf/reactCompilerBuilds.ts"
 
 Object.assign(globalThis, { IS_REACT_ACT_ENVIRONMENT: true });
 
-const externalStore = JSON.stringify(new URL("../lib/externalStore.ts", import.meta.url).href);
+const externalStore = JSON.stringify(import.meta.resolve("@wave/client/externalStore"));
 /** The phone's languages (Android's, through the native layer). */
 const device = stubModule(
   `import { makeExternalStore } from ${externalStore};

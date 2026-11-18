@@ -1,7 +1,7 @@
 import type { DatedRelease, LogLevel } from "@wave/core";
 import * as Effect from "effect/Effect";
 
-import { makeExternalStore, type ExternalStore } from "../lib/externalStore.ts";
+import { makeExternalStore, type ExternalStore } from "@wave/client/externalStore";
 
 /** What Version History has read of the channel's history, in this JS runtime. */
 export interface VersionHistoryState {
