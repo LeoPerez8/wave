@@ -194,3 +194,16 @@ test("a second launch shows and focuses the running window, then quits", async (
     .toBe(true);
   expect(app.windows()).toHaveLength(1);
 });
+
+test("with YouTube Music on, Discover and the Magic Queue open from the sidebar", async () => {
+  const text = catalogueOf("en", "desktop");
+  await page.evaluate(() =>
+    (window as unknown as { wave: WaveBridge }).wave.settings.setYtMusic(true),
+  );
+  await page.reload();
+  await page.getByRole("button", { name: text.desktopLayout.discover, exact: true }).click();
+  await expect(page.getByTestId("discover")).toBeVisible();
+  await expect(page.getByTestId("discover").locator(".tile")).toHaveCount(3);
+  await page.getByRole("button", { name: text.desktopLayout.magicQueue, exact: true }).click();
+  await expect(page.getByTestId("magic-queue")).toContainText(text.desktopLayout.magicQueueIdle);
+});
