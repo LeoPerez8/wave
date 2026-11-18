@@ -30,7 +30,7 @@ import { useSyncExternalStore } from "react";
 
 import { currentLocalisation, useLocalisation } from "@/localisation/localisation";
 
-import { makeExternalStore, subscribeAll } from "@/lib/externalStore";
+import { makeExternalStore, subscribeAll } from "@wave/client/externalStore";
 
 import { playlistImports } from "./playlistImportsStore";
 import { ytLibraryBatch, ytLibraryBatchPause } from "./ytLibraryBatchStore";

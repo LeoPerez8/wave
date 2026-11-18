@@ -2,7 +2,7 @@
 import assert from "node:assert/strict";
 import { describe, test } from "node:test";
 
-import { makeExternalStore } from "./externalStore.ts";
+import { makeExternalStore } from "@wave/client/externalStore";
 import { makeVersionedCache } from "./versionedCache.ts";
 
 /** A build the test settles by hand, recording which version each was for. */

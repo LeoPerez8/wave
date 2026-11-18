@@ -25,7 +25,7 @@ import { useSyncExternalStore } from "react";
 import { AppState } from "react-native";
 
 import { askForNotifications } from "@/lib/askForNotifications";
-import { makeExternalStore } from "@/lib/externalStore";
+import { makeExternalStore } from "@wave/client/externalStore";
 import { persistedSetting } from "@/lib/persistedSetting";
 import { appLog } from "@/log/appLog";
 import { WaveLibraryLookup } from "@/native/waveLibraryLookup";

@@ -134,7 +134,7 @@ import { downloadReleaseDate } from "@/library/releaseAnswers";
 import { streamedReleaseSong } from "@/library/releaseSong";
 import { appRuntime } from "@/library/runtime";
 import { settleUnsearchedSong } from "@/library/unsearchedEntries";
-import { makeExternalStore } from "@/lib/externalStore";
+import { makeExternalStore } from "@wave/client/externalStore";
 import { useSightedStore } from "@/lib/screenSight";
 import { WaveNative } from "@/native/waveNative";
 import {

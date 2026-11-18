@@ -17,7 +17,7 @@ import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import { useSyncExternalStore } from "react";
 
-import { makeExternalStore } from "@/lib/externalStore";
+import { makeExternalStore } from "@wave/client/externalStore";
 import { WaveNative, type ArtistPhotoFiles } from "@/native/waveNative";
 import { artistPhotosEnabled, useArtistPhotosEnabled } from "@/settings/artistPhotos";
 

@@ -1,7 +1,7 @@
 import type { WaveSession } from "@wave/core";
 import { useSyncExternalStore } from "react";
 
-import { makeExternalStore } from "@/lib/externalStore";
+import { makeExternalStore } from "@wave/client/externalStore";
 import { WaveAccount } from "@/native/waveAccount";
 
 /** Whether a Wave account is signed in; null until the native module has said. */

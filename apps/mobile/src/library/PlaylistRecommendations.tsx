@@ -20,7 +20,7 @@ import { TitledSection } from "@/catalog/TitledSection";
 import { FloatingPill } from "@/components/FloatingPill";
 import { IconButton } from "@/components/IconButton";
 import { TextButton } from "@/components/TextButton";
-import { makeExternalStore, type ExternalStore } from "@/lib/externalStore";
+import { makeExternalStore, type ExternalStore } from "@wave/client/externalStore";
 import { useScreenSight } from "@/lib/screenSight";
 import { CROSSFADE_MS } from "@/motion/Crossfade";
 import { playTrackIds, playYtSongs } from "@/playback/actions";

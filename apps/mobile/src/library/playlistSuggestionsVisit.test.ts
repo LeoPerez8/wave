@@ -7,7 +7,7 @@ import { runInNewContext } from "node:vm";
 
 import { goToSuggestionsOffered } from "@wave/core";
 
-import { makeExternalStore } from "../lib/externalStore.ts";
+import { makeExternalStore } from "@wave/client/externalStore";
 
 /** What the app's boundaries answer in this file. */
 const app = {
@@ -112,7 +112,7 @@ const boundary = `data:text/javascript,${encodeURIComponent(`
       return { id: "song:" + id, artists: ["Artist " + id], songs: (app.radios.get(id) ?? app.radio).split("").map(song) };
     })));
 `)}`;
-const REAL = new Set(["@/lib/externalStore", "@/lib/sight"]);
+const REAL = new Set(["@/lib/sight"]);
 const MOCKED = new Set([
   "expo-sqlite/kv-store",
   "./LibraryStore",

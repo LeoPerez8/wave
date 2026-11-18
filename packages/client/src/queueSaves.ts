@@ -1,6 +1,6 @@
 import type { QueueWrite } from "@wave/core";
 
-import type { ExternalStore } from "../lib/externalStore.ts";
+import type { ExternalStore } from "./externalStore.ts";
 import { observePlayCheckpoints } from "./playCheckpoints.ts";
 
 /** How often the position is written while playing; it's also written on pause and on leaving the app. */

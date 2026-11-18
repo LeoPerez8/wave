@@ -41,7 +41,7 @@ const track = (
 
 test("committed scan additions and edits acquire a match without changing playback", async () => {
   const { createPlayingIds } = await import("./playingIds.ts");
-  const { makeExternalStore } = await import("../lib/externalStore.ts");
+  const { makeExternalStore } = await import("@wave/client/externalStore");
   const bus = await import("../library/libraryChanges.ts");
   const db = await openTestDatabase();
   let stop: (() => void) | undefined;
@@ -97,7 +97,7 @@ test("committed scan additions and edits acquire a match without changing playba
 
 test("scan bursts retag the matched row with one throttled lookup", async () => {
   const { createPlayingIds } = await import("./playingIds.ts");
-  const { makeExternalStore } = await import("../lib/externalStore.ts");
+  const { makeExternalStore } = await import("@wave/client/externalStore");
   const bus = await import("../library/libraryChanges.ts");
   const db = await openTestDatabase();
   let stop: (() => void) | undefined;
@@ -130,7 +130,7 @@ test("scan bursts retag the matched row with one throttled lookup", async () => 
 
 test("unrelated and rolled-back saves do no lookup, and saved-recording sources detach", async () => {
   const { createPlayingIds } = await import("./playingIds.ts");
-  const { makeExternalStore } = await import("../lib/externalStore.ts");
+  const { makeExternalStore } = await import("@wave/client/externalStore");
   const bus = await import("../library/libraryChanges.ts");
   const db = await openTestDatabase();
   let stop: (() => void) | undefined;
@@ -190,7 +190,7 @@ test("unrelated and rolled-back saves do no lookup, and saved-recording sources 
 
 test("eight mounted lists share one source refresh and row read across the playing download", async () => {
   const { createPlayingIds } = await import("./playingIds.ts");
-  const { makeExternalStore } = await import("../lib/externalStore.ts");
+  const { makeExternalStore } = await import("@wave/client/externalStore");
   const bus = await import("../library/libraryChanges.ts");
   const db = await openTestDatabase();
   try {
@@ -271,7 +271,7 @@ test("eight mounted lists share one source refresh and row read across the playi
 
 test("rapid track changes discard old lookups and unchanged queue metadata never re-reads", async () => {
   const { createPlayingIds } = await import("./playingIds.ts");
-  const { makeExternalStore } = await import("../lib/externalStore.ts");
+  const { makeExternalStore } = await import("@wave/client/externalStore");
   const bus = await import("../library/libraryChanges.ts");
   const target = makeExternalStore({
     id: "yt:playing" as string | null,
@@ -317,7 +317,7 @@ test("rapid track changes discard old lookups and unchanged queue metadata never
 
 test("a download during an in-flight lookup discards its older answer", async () => {
   const { createPlayingIds } = await import("./playingIds.ts");
-  const { makeExternalStore } = await import("../lib/externalStore.ts");
+  const { makeExternalStore } = await import("@wave/client/externalStore");
   const bus = await import("../library/libraryChanges.ts");
   const target = makeExternalStore({ id: "yt:playing", song });
   const answers: ((row: { id: number } | null) => void)[] = [];

@@ -42,7 +42,7 @@ import { scheduleOnRN } from "react-native-worklets";
 import { CompactTitleHead, useCompactTitleList } from "@/components/CompactTitle";
 import { FLOATING_PILL_ROOM } from "@/components/FloatingPill";
 import { afterPaint } from "@/lib/afterPaint";
-import { makeExternalStore } from "@/lib/externalStore";
+import { makeExternalStore } from "@wave/client/externalStore";
 import { usePositions } from "@/lib/usePositions";
 import { CELL, grid } from "@/catalog/grid";
 import { useLocalisation } from "@/localisation/localisation";

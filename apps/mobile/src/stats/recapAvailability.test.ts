@@ -7,7 +7,7 @@ import {
 } from "@wave/core";
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { makeExternalStore } from "../lib/externalStore.ts";
+import { makeExternalStore } from "@wave/client/externalStore";
 import { shareRecapAvailability } from "./recapAvailability.ts";
 
 const flush = async () => {

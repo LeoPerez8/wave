@@ -4,7 +4,7 @@ import { createElement } from "react";
 import { act, create } from "react-test-renderer";
 import { createLibraryQueries, type LibraryChange } from "@wave/core";
 
-import { makeExternalStore } from "./externalStore.ts";
+import { makeExternalStore } from "@wave/client/externalStore";
 import {
   attachInSight,
   everyWhileInSight,

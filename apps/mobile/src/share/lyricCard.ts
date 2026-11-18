@@ -1,6 +1,6 @@
 import { useSyncExternalStore } from "react";
 
-import { makeExternalStore } from "@/lib/externalStore";
+import { makeExternalStore } from "@wave/client/externalStore";
 
 /** What a lyrics card shows (docs/spec.md, "Sharing lyrics"). */
 export interface LyricCardContent {

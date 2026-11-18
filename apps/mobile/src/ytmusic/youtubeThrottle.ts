@@ -1,7 +1,7 @@
 import { ytThrottleNotice, ytThrottleRead, ytThrottleRestored, type YtThrottle } from "@wave/core";
 import { useEffect, useSyncExternalStore } from "react";
 
-import { makeExternalStore } from "@/lib/externalStore";
+import { makeExternalStore } from "@wave/client/externalStore";
 import { currentLocalisation, subscribeLocalisation } from "@/localisation/localisation";
 import { appLog } from "@/log/appLog";
 import { WaveSoulseek, type NativeDownloadJob } from "@/native/waveSoulseek";

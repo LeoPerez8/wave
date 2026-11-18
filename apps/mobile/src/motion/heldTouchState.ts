@@ -1,6 +1,6 @@
 import { createMenuTouchOwnership, type MenuTouchOwnership, type SlidePoint } from "@wave/core";
 
-import { makeExternalStore } from "../lib/externalStore.ts";
+import { makeExternalStore } from "@wave/client/externalStore";
 
 /**
  * The finger that long-pressed a `Press` and is still down. Opening a menu

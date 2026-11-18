@@ -4,7 +4,7 @@ import { useSightedStore } from "@/lib/screenSight";
 import { followArtistKey, type FollowedArtist, type FollowLevel } from "@wave/core";
 import * as Effect from "effect/Effect";
 import { useCallback, useEffect } from "react";
-import { makeExternalStore } from "@/lib/externalStore";
+import { makeExternalStore } from "@wave/client/externalStore";
 import { showError } from "@/overlay/alert";
 import { LibraryStore } from "./LibraryStore";
 

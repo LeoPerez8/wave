@@ -4,7 +4,7 @@ import type { SearchOnline } from "@wave/core";
 import { createElement } from "react";
 import { act, create, type ReactTestRenderer } from "react-test-renderer";
 
-import type { ExternalStore } from "../lib/externalStore.ts";
+import type { ExternalStore } from "@wave/client/externalStore";
 import { reactCompilerBuilds, stubModule } from "../perf/reactCompilerBuilds.ts";
 
 // Always on Wi-Fi reads the network once a visit, as written and as the React
@@ -14,7 +14,7 @@ Object.assign(globalThis, { IS_REACT_ACT_ENVIRONMENT: true });
 
 const react = JSON.stringify(import.meta.resolve("react"));
 const core = JSON.stringify(import.meta.resolve("@wave/core"));
-const externalStore = JSON.stringify(new URL("../lib/externalStore.ts", import.meta.url).href);
+const externalStore = JSON.stringify(import.meta.resolve("@wave/client/externalStore"));
 /** The preference and the network, which counts its reads. */
 const device = stubModule(
   `import { makeExternalStore } from ${externalStore};

@@ -54,7 +54,7 @@ Budgets:
 - Ongoing play-history progress still saves every 15 seconds while playing and on pauses,
   app departure and teardown. That required persistence clock is separate from reports;
   it does not subscribe to positions or change listening-time classification. The queue's
-  resume position has its own 5-second clock while playing (`playback/queueSaves.ts`), so a
+  resume position has its own 5-second clock while playing (`packages/client/src/queueSaves.ts`), so a
   kill loses at most about 5 seconds of place whether or not Now Playing is open.
 - Keep the existing 50 ms Now Playing spring-start budget and compare frame misses and
   scrub latency against #546 on the same S24+. This ticket makes no new phone latency or

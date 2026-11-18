@@ -11,7 +11,7 @@ import { router } from "@/lib/timingRouter";
 import { useLayoutEffect, useState, useSyncExternalStore } from "react";
 
 import { continueTiming, timingRouteCommitted } from "@/lib/timing";
-import { makeExternalStore } from "@/lib/externalStore";
+import { makeExternalStore } from "@wave/client/externalStore";
 import { noteScreen } from "@/log/appLog";
 
 import type { AlbumRow, ArtistRow, GenreRow, PlaylistRow } from "@wave/client";

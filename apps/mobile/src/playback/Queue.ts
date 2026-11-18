@@ -61,7 +61,7 @@ import * as Layer from "effect/Layer";
 import * as Semaphore from "effect/Semaphore";
 
 import { afterFirstSettled } from "@/lib/backgroundWork";
-import { makeExternalStore, subscribeAll } from "@/lib/externalStore";
+import { makeExternalStore, subscribeAll } from "@wave/client/externalStore";
 import { onLibraryChange, onScanFinished } from "@/library/libraryChanges";
 import { LibraryStore } from "@/library/LibraryStore";
 

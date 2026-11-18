@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { makeExternalStore } from "../lib/externalStore.ts";
+import { makeExternalStore } from "./externalStore.ts";
 import { observePlayCheckpoints } from "./playCheckpoints.ts";
 
 test("event-only playback still checkpoints every 15 seconds, and stops while paused or disposed", (t) => {

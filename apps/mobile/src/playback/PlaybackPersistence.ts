@@ -17,7 +17,7 @@ import { ytMusicEnabled } from "@/settings/ytMusic";
 
 import { Player, playbackState } from "./Player";
 import { Queue, currentPositionMs, queueState, settledQueue, toQueueTrack } from "./Queue";
-import { observeQueueSaves } from "./queueSaves";
+import { observeQueueSaves } from "@wave/client/queueSaves";
 import { learnUnknownQueueTracks, queueTracks, type QueueTrack } from "./queueTracks";
 import { onSavePlaceForReload, takePlayingAtReload } from "./reloadResume";
 import { savedYtQueueTracks, saveYtQueueTracks } from "./savedYtTracks";

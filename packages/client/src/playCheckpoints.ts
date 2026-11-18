@@ -1,4 +1,4 @@
-import type { ExternalStore } from "../lib/externalStore.ts";
+import type { ExternalStore } from "./externalStore.ts";
 
 /**
  * Calls [save] every [intervalMs] while playing, without periodic native

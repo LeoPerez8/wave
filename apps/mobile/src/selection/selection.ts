@@ -10,7 +10,7 @@ import {
 } from "@wave/core";
 import { useMemo, useSyncExternalStore } from "react";
 
-import { makeExternalStore } from "@/lib/externalStore";
+import { makeExternalStore } from "@wave/client/externalStore";
 import type { ActionItems } from "@/playback/actionTargets";
 
 /**

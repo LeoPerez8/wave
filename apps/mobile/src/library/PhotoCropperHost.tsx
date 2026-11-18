@@ -5,7 +5,7 @@
 import type { ImageFraming } from "@wave/core";
 import { useSyncExternalStore } from "react";
 
-import { makeExternalStore } from "@/lib/externalStore";
+import { makeExternalStore } from "@wave/client/externalStore";
 import type { PlaylistPhoto } from "@/native/waveNative";
 
 import { CropScreen } from "./PhotoCropper";

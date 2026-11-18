@@ -32,7 +32,7 @@ import {
 } from "@wave/core";
 import * as Effect from "effect/Effect";
 
-import { makeExternalStore } from "../lib/externalStore.ts";
+import { makeExternalStore } from "@wave/client/externalStore";
 import type { PlayableSongRow } from "@wave/client";
 import type { NativeYtSong } from "../native/waveYtMusic.ts";
 

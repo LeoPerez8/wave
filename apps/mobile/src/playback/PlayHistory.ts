@@ -17,12 +17,12 @@ import * as Exit from "effect/Exit";
 import * as Layer from "effect/Layer";
 import { AppState } from "react-native";
 
-import { makeExternalStore } from "@/lib/externalStore";
+import { makeExternalStore } from "@wave/client/externalStore";
 import { publishLibraryChange } from "@/library/libraryChanges";
 import { LibraryStore } from "@/library/LibraryStore";
 
 import { Player, playbackState, positionState } from "./Player";
-import { observePlayCheckpoints } from "./playCheckpoints";
+import { observePlayCheckpoints } from "@wave/client/playCheckpoints";
 import { keptPlayingKey, queueSource, queueState } from "./Queue";
 import { queuedYtSong, queueTracks } from "./queueTracks";
 
