@@ -13,6 +13,38 @@ import type { SongTags } from "../../shared/tags.ts";
 
 /** What main can ask the JVM, as `WaveDesktop.handle` answers it. */
 export interface KotlinMethods {
+  /** A playlist of the signed-in account: its privacy and entries, or null when it is gone. */
+  readonly ownPlaylist: {
+    readonly params: { readonly playlistId: string };
+    readonly result: {
+      readonly privacy: string | null;
+      readonly entries: readonly { readonly videoId: string; readonly setVideoId: string }[];
+    } | null;
+  };
+  /** Makes a playlist on the signed-in account; its id. */
+  readonly createPlaylist: {
+    readonly params: {
+      readonly title: string;
+      readonly videoIds: readonly string[];
+      readonly privacy: "UNLISTED";
+    };
+    readonly result: string;
+  };
+  /** Edits a playlist of the signed-in account (`YtPlaylistEdit.of`). */
+  readonly editPlaylist: {
+    readonly params: {
+      readonly playlistId: string;
+      readonly edits: readonly Record<string, string | null>[];
+    };
+    readonly result: null;
+  };
+  /** A playlist's first page (`YtPlaylist.toMap`). */
+  readonly playlist: { readonly params: { readonly playlistId: string }; readonly result: unknown };
+  /** A playlist's next page. */
+  readonly playlistMore: {
+    readonly params: { readonly continuation: string };
+    readonly result: unknown;
+  };
   /** An audio file's tags. */
   readonly readTags: { readonly params: { readonly path: string }; readonly result: SongTags };
   /** YouTube Music's Songs search, its first page (`YtSearchPage.toMap`). */
