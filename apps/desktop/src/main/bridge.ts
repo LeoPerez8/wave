@@ -34,6 +34,8 @@ import { VIDEO_ID, YtMusic } from "./yt/ytMusic.ts";
 import { createYtFeatureHandlers } from "./yt/ytBridge.ts";
 import type { YtFeatures } from "./yt/ytServices.ts";
 import { Lyrics } from "./lyrics/lyrics.ts";
+import { DesktopLinks } from "./links/layer.ts";
+import { linkHandlers } from "./links/handlers.ts";
 import { DesktopPlaylists } from "./library/playlists.ts";
 import { playlistHandlers } from "./playlistHandlers.ts";
 import { searchLibrary } from "./library/search.ts";
@@ -104,7 +106,8 @@ export type BridgeServices =
   | YtFeatures
   | Account
   | Lyrics
-  | DesktopPlaylists;
+  | DesktopPlaylists
+  | DesktopLinks;
 
 const refuse = (call: BridgeCall, why: string) => Effect.fail(new Error(`Refused ${call}: ${why}`));
 
@@ -202,6 +205,7 @@ const createHandlers = (onAppearance: (mode: Appearance) => void): Handlers => {
     });
   return {
     ...createYtFeatureHandlers(validTarget),
+    ...linkHandlers(validTarget),
     "playback.view": () => playbackCall((p) => p.view()),
     "playback.start": ([scope, index, shuffle]) =>
       validScope(scope) &&

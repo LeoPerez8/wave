@@ -34,6 +34,7 @@ import { registerBridge, type IpcHandler } from "./bridge.ts";
 import { DesktopLibrary, desktopLibraryLayer } from "./library/library.ts";
 import { preference } from "./preferences.ts";
 import { ytMusicLayer } from "./yt/ytMusic.ts";
+import { desktopLinksLayer } from "./links/layer.ts";
 import { ytFeaturesLayer } from "./yt/ytServices.ts";
 import { lyricsLayer } from "./lyrics/lyrics.ts";
 import { accountLayer } from "./account/accountLayer.ts";
@@ -229,6 +230,7 @@ const connect = (
   const audio = audioInMemory();
   const jvm = jvmInMemory();
   /** What the M3U picker answers. */
+  const copied: string[] = [];
   const picked = { playlists: [] as string[] };
   const library = desktopLibraryLayer({
     musicFolder: join(dirname(file), "Music"),
@@ -248,20 +250,29 @@ const connect = (
       ...(account.clock === undefined ? {} : { clock: account.clock }),
     }).pipe(
       Layer.provideMerge(
-        ytFeaturesLayer({ online: () => true }).pipe(
+        desktopLinksLayer({
+          online: () => true,
+          writeClipboard: (text) => {
+            copied.push(text);
+          },
+        }).pipe(
           Layer.provideMerge(
-            desktopPlaylistsLayer({
-              platform: process.platform,
-              imageFolder: join(dirname(file), "playlist-images"),
-              codec: { original: () => undefined, squares: () => [] },
-              pickImage: async () => undefined,
-              pickPlaylists: async () => picked.playlists,
-            }).pipe(
+            ytFeaturesLayer({ online: () => true }).pipe(
               Layer.provideMerge(
-                Layer.mergeAll(
-                  playbackLayer,
-                  lyricsLayer({ fetch: () => Promise.reject(new Error("no network")) }),
-                ).pipe(Layer.provideMerge(library)),
+                desktopPlaylistsLayer({
+                  platform: process.platform,
+                  imageFolder: join(dirname(file), "playlist-images"),
+                  codec: { original: () => undefined, squares: () => [] },
+                  pickImage: async () => undefined,
+                  pickPlaylists: async () => picked.playlists,
+                }).pipe(
+                  Layer.provideMerge(
+                    Layer.mergeAll(
+                      playbackLayer,
+                      lyricsLayer({ fetch: () => Promise.reject(new Error("no network")) }),
+                    ).pipe(Layer.provideMerge(library)),
+                  ),
+                ),
               ),
             ),
           ),
@@ -300,6 +311,7 @@ const connect = (
     yt: jvm.yt,
     jvm: jvm.state,
     picked,
+    copied,
   };
 };
 
@@ -1243,6 +1255,7 @@ test("a song's menu and the selection bar offer and run the phone's actions thro
         { action: "favorite" },
         { action: "goToAlbum", albumId: album.id },
         { action: "goToArtist", artists: { kind: "open", artistId: menu.artists[0]!.id } },
+        { action: "share" },
         { action: "select" },
         { action: "removeFromLibrary" },
       ]);
@@ -1445,6 +1458,32 @@ test("main refuses playlist calls with a bad playlist, name, page, answer or fra
         /refused/i,
       );
       await assert.rejects(call("playlists.runImport", []), /Nothing to import/);
+    } finally {
+      await runtime.dispose();
+    }
+  });
+});
+
+test("Copy Link puts a song's share link on the clipboard, and pasted text that is no link does nothing", async () => {
+  await withFile(async (file) => {
+    const { runtime, exposed, handlers, copied, engineCalls } = connect(file);
+    const wave = exposed.get("wave") as WaveBridge;
+    const call = (channel: string, ...args: unknown[]) => handlers.get(channel)!(trusted, ...args);
+    try {
+      assert.deepEqual(await wave.links.copySong("abcdefghijk", "en"), {
+        kind: "copied",
+        message: "Link copied",
+      });
+      assert.deepEqual(copied, ["https://song.link/y/abcdefghijk"]);
+      const before = engineCalls.length;
+      assert.deepEqual(await wave.links.open("Pink Moon by Nick Drake", "en"), { kind: "ignored" });
+      assert.equal(engineCalls.length, before);
+      assert.equal(copied.length, 1);
+      await assert.rejects(call("links.open", 7, "en"), /refused/i);
+      await assert.rejects(call("links.open", "x".repeat(16_385), "en"), /refused/i);
+      await assert.rejects(call("links.copySong", "not a video", "en"), /refused/i);
+      await assert.rejects(call("links.copyPlaylist", 0, "en"), /refused/i);
+      await assert.rejects(call("links.importPlaylist", "token", "yes"), /refused/i);
     } finally {
       await runtime.dispose();
     }

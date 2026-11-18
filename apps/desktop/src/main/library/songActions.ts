@@ -104,6 +104,7 @@ export const songMenu = (
     selectable: true,
     page: pageOf(target.scope),
     ytMusic,
+    copyLink: ytMusic,
   });
   const artistIds = entries.flatMap((entry) =>
     entry.action !== "goToArtist" || !("artists" in entry)
