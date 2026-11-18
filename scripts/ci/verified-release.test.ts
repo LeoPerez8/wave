@@ -17,7 +17,14 @@ const release = ({
   record = true,
   apk = "signed apk",
   source = COMMIT,
-}: { record?: boolean; apk?: string; source?: string } = {}) => {
+  fail = "",
+}: {
+  record?: boolean;
+  apk?: string;
+  source?: string;
+  /** A gh call that fails as an unreachable GitHub would: `view` or `download`. */
+  fail?: "" | "view" | "download";
+} = {}) => {
   const dir = mkdtempSync(join(tmpdir(), "wave-verified-"));
   const assets = join(dir, "assets");
   mkdirSync(assets);
@@ -40,7 +47,11 @@ const release = ({
     `#!/bin/sh
 case "$1 $2" in
   "api repos/o/r/commits/v1.3.0-ti") echo "${COMMIT}" ;;
+  "release view")
+    [ "${fail}" = view ] && { echo "HTTP 502" >&2; exit 1; }
+    ls "${assets}" ;;
   "release download")
+    [ "${fail}" = download ] && { echo "HTTP 502" >&2; exit 1; }
     while [ $# -gt 0 ]; do [ "$1" = "--dir" ] && out="$2"; shift; done
     mkdir -p "$out" && cp "${assets}"/* "$out"/ ;;
   *) echo "unexpected gh $*" >&2; exit 1 ;;
@@ -97,5 +108,23 @@ describe("verified-release.sh", () => {
   it("never lets the transition skip the check of a release that has a record", () => {
     const { status } = release({ apk: "another apk" })("--allow-unrecorded");
     assert.notEqual(status, 0);
+  });
+
+  it("fails, even through the transition, when GitHub can't say what the release holds", () => {
+    for (const flags of [[], ["--allow-unrecorded"]]) {
+      const { status, stdout, output } = release({ fail: "view" })(...flags);
+      assert.notEqual(status, 0);
+      assert.doesNotMatch(stdout, /::warning::/);
+      assert.equal(output, "");
+    }
+  });
+
+  it("fails, even through the transition, when a release's record can't be downloaded", () => {
+    for (const flags of [[], ["--allow-unrecorded"]]) {
+      const { status, stdout, output } = release({ fail: "download" })(...flags);
+      assert.notEqual(status, 0);
+      assert.match(stdout, /::error::.*couldn't be downloaded/);
+      assert.equal(output, "");
+    }
   });
 });
