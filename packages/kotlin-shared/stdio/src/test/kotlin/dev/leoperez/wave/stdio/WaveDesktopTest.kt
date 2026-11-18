@@ -122,4 +122,78 @@ class WaveDesktopTest {
     host.write("""{"id":13,"method":"setYtMusic","params":{"enabled":"no"}}""")
     assertEquals("ERR_BAD_PARAMS", host.next().code())
   }
+
+  /** YouTube Music answering a watch page (`next`) with [next] and every other request with [other]. */
+  private fun youTubeWatch(next: String, other: String): YtHttp = { _, _ ->
+    HttpClient(
+      MockEngine { request ->
+        val fixture = if (request.url.encodedPath.endsWith("/next")) next else other
+        respond(
+          Fixtures.file(fixture).readText(),
+          headers = headersOf(HttpHeaders.ContentType, ContentType.Application.Json.toString()),
+        )
+      },
+    ) {
+      expectSuccess = false
+      install(ContentNegotiation) { json(Json { ignoreUnknownKeys = true; explicitNulls = false; encodeDefaults = true }) }
+    }
+  }
+
+  @Test
+  fun answersAnArtistPageWithItsTopSongs() = withDesktop(youTube("yt/artist-page.json")) { host ->
+    host.write("""{"id":20,"method":"artist","params":{"browseId":"UC_kRDKYrUlrbtrSiyu5Tflg"}}""")
+    val page = host.next()["result"]!!.jsonObject
+    assertEquals("Daft Punk", page["name"]!!.jsonPrimitive.content)
+    assertEquals(5, page["songs"]!!.jsonArray.size)
+    assertEquals("khnokW3Mw24", page["songs"]!!.jsonArray[0].jsonObject["videoId"]!!.jsonPrimitive.content)
+  }
+
+  @Test
+  fun answersAnAlbumWithItsTracks() = withDesktop(youTube("yt/album-page.json")) { host ->
+    host.write("""{"id":21,"method":"album","params":{"browseId":"MPREb_abc"}}""")
+    val album = host.next()["result"]!!.jsonObject
+    assertEquals("Random Access Memories", album["title"]!!.jsonPrimitive.content)
+    assertEquals(13, album["tracks"]!!.jsonArray.size)
+  }
+
+  @Test
+  fun answersASongRadioAndItsNextPage() = withDesktop(youTube("yt/radio-song.json")) { host ->
+    host.write("""{"id":22,"method":"songRadio","params":{"videoId":"4D7u5KF7SP8"}}""")
+    val page = host.next()["result"]!!.jsonObject
+    val songs = page["songs"]!!.jsonArray
+    assertTrue(songs.isNotEmpty())
+    assertTrue(songs[0].jsonObject.containsKey("video"))
+    assertTrue(page.containsKey("continuation"))
+  }
+
+  @Test
+  fun answersMoreOfARadio() = withDesktop(youTube("yt/radio-more.json")) { host ->
+    host.write("""{"id":23,"method":"radioMore","params":{"continuation":"token"}}""")
+    assertTrue(host.next()["result"]!!.jsonObject["songs"]!!.jsonArray.isNotEmpty())
+  }
+
+  @Test
+  fun answersArtistsNamedLikeAQuery() = withDesktop(youTube("yt/search-artists.json")) { host ->
+    host.write("""{"id":24,"method":"searchArtists","params":{"query":"daft punk"}}""")
+    val artists = host.next()["result"]!!.jsonArray
+    assertEquals(7, artists.size)
+    assertTrue(artists[0].jsonObject["browseId"]!!.jsonPrimitive.content.startsWith("UC"))
+  }
+
+  @Test
+  fun answersASongsRelatedTab() =
+    withDesktop(youTubeWatch(next = "yt/next-song.json", other = "yt/related-song.json")) { host ->
+      host.write("""{"id":25,"method":"related","params":{"videoId":"5NV6Rdv1a3I"}}""")
+      val related = host.next()["result"]!!.jsonObject
+      assertEquals("Killer Queen", related["songs"]!!.jsonArray[0].jsonObject["title"]!!.jsonPrimitive.content)
+      assertEquals("Justice", related["artists"]!!.jsonArray[0].jsonObject["name"]!!.jsonPrimitive.content)
+    }
+
+  @Test
+  fun aPageReadWithABadIdFailsWithACode() = withDesktop { host ->
+    host.write("""{"id":26,"method":"songRadio","params":{"videoId":"../x"}}""")
+    assertEquals("ERR_BAD_PARAMS", host.next().code())
+    host.write("""{"id":27,"method":"artist","params":{"browseId":"../x"}}""")
+    assertEquals("ERR_BAD_PARAMS", host.next().code())
+  }
 }
