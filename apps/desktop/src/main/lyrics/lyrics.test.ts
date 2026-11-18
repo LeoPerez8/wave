@@ -38,6 +38,7 @@ const lyricsOver = (
   db: TestDatabase,
   sources: {
     readonly file?: (path: string) => Promise<LyricsSources>;
+    readonly writeFile?: (path: string, text: string) => Promise<void>;
     readonly lrclib?: (url: string) => Promise<unknown>;
     readonly ytMusic?: (videoId: string) => Promise<string | null>;
     readonly songs?: Readonly<Record<string, NonDSongDetails>>;
@@ -64,6 +65,7 @@ const lyricsOver = (
     ytSong: (videoId) => sources.songs?.[videoId],
     ytMusicOn: () => sources.ytMusicOn ?? true,
     now: sources.now ?? (() => 1_000),
+    writeFile: sources.writeFile ?? (async () => {}),
   });
   return { service, asked };
 };
@@ -98,6 +100,25 @@ test("a Library song without lyrics is found on LRCLIB, and kept for the session
     "lrclib ?track_name=Road&artist_name=Nick Drake",
     "file /Music/Pink Moon/Road.mp3",
   ]);
+});
+
+test("lyrics found online survive a new Lyrics service by being written into the file", async () => {
+  const db = await library();
+  const id = road(db);
+  let embedded: string | null = null;
+  const sources = {
+    file: async () => ({ embedded, sidecar: null }),
+    lrclib: async () => lrclibRoad({ synced: "[00:02.00]Found it" }),
+    writeFile: async (_path: string, text: string) => {
+      embedded = text;
+    },
+  };
+  await lyricsOver(db, sources).service.song(String(id));
+  const restarted = lyricsOver(db, { file: sources.file, lrclib: async () => [] });
+  assert.deepEqual(await restarted.service.song(String(id)), {
+    kind: "synced",
+    lines: [{ timeMs: 2000, text: "Found it" }],
+  });
 });
 
 test("a search that finds nothing is remembered for a week", async () => {
