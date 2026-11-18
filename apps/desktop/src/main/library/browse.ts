@@ -40,6 +40,7 @@ const listing = (scope: BrowseScope): { source: SQL; order: SQL } => {
     case "playlists":
       return {
         source: sql`SELECT p.id, p.name AS title, wave_sort_key(p.name) AS sort, '' AS artist, '' AS album,
+      p.image_thumb_path AS imageKey,
       (SELECT t.artwork_hash FROM playlist_items i JOIN tracks t ON t.id=i.track_id
         WHERE i.playlist_id=p.id AND i.deleted=0 AND t.artwork_hash IS NOT NULL ORDER BY i.order_key LIMIT 1) AS artworkHash,
       coalesce(sum(t.duration_ms),0) AS durationMs, count(i.id) AS count FROM playlists p
