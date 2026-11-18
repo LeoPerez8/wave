@@ -8,7 +8,7 @@ import { addTrack, openTestDatabase, star, type TestDatabase } from "@wave/clien
 import { creditSplits } from "@wave/client/db/credits";
 import { stampPreference } from "@wave/client/db/sync";
 import { syncCycle } from "@wave/client/sync/syncCycle";
-import type { SyncClock } from "@wave/core";
+import { catalogueOf, type SyncClock } from "@wave/core";
 import { createPlaylist } from "@wave/client/db/playlists";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
@@ -34,6 +34,7 @@ import { DesktopLibrary, desktopLibraryLayer } from "./library/library.ts";
 import { preference } from "./preferences.ts";
 import { ytMusicLayer } from "./yt/ytMusic.ts";
 import { accountLayer } from "./account/accountLayer.ts";
+import { downloadsLayer } from "./downloads/downloadsLayer.ts";
 import { createWaveAccount, type WaveAccountService } from "./account/account.ts";
 import { sessionStore } from "./account/sessionStore.ts";
 import { desktop, keyring } from "./account/testAccount.ts";
@@ -124,6 +125,7 @@ const ytSongNamed = (videoId: string, title: string) => ({
 const jvmInMemory = () => {
   const reads: string[] = [];
   const yt: string[] = [];
+  const downloads: string[] = [];
   const state = { ytError: undefined as string | undefined };
   const spawn = (events: KotlinEvents) => ({
     write: (text: string) => {
@@ -138,6 +140,9 @@ const jvmInMemory = () => {
         answer = params.path.includes("unreadable")
           ? { id, error: { code: "ERR_UNEXPECTED", message: "FileNotFoundException" } }
           : { id, result: tagsTitled(basename(params.path)) };
+      } else if (/^(downloads?|soulseek|tags)\./.test(method)) {
+        downloads.push(`${method} ${JSON.stringify(params)}`);
+        answer = { id, result: downloadAnswers[method] ?? null };
       } else {
         yt.push(`${method} ${JSON.stringify(params)}`);
         answer =
@@ -160,7 +165,14 @@ const jvmInMemory = () => {
     },
     kill: () => setImmediate(events.exit),
   });
-  return { layer: kotlinLayer({ spawn }), reads, yt, state };
+  return { layer: kotlinLayer({ spawn }), reads, yt, downloads, state };
+};
+
+/** An empty download journal, as the JVM answers it. */
+const downloadAnswers: Readonly<Record<string, unknown>> = {
+  "downloads.changes": { revision: 0, jobs: [], ids: null },
+  "downloads.refreshPolicy": 1,
+  "soulseek.session": { status: "off", username: null },
 };
 
 /** A build with no sync service: Settings has no Sign In and nothing goes out. */
@@ -198,12 +210,21 @@ const connect = (
       ),
     ),
   );
+  const downloads = downloadsLayer({
+    catalogue: catalogueOf("en", "desktop"),
+    platform: process.platform,
+    musicFolder: join(dirname(file), "Music"),
+    pickFolder: async () => undefined,
+    online: () => true,
+    events: () => () => {},
+    fetch: () => Promise.reject(new Error("no network")),
+  }).pipe(Layer.provideMerge(library));
   const runtime = ManagedRuntime.make(
     accountLayer({
       account: account.service,
       focused: () => true,
       ...(account.clock === undefined ? {} : { clock: account.clock }),
-    }).pipe(Layer.provideMerge(playbackLayer.pipe(Layer.provideMerge(library)))),
+    }).pipe(Layer.provideMerge(playbackLayer.pipe(Layer.provideMerge(downloads)))),
   );
   const handlers = new Map<string, IpcHandler>();
   registerBridge(
@@ -1001,6 +1022,8 @@ test("a song's menu and the selection bar offer and run the phone's actions thro
         { action: "favorite" },
         { action: "goToAlbum", albumId: album.id },
         { action: "goToArtist", artists: { kind: "open", artistId: menu.artists[0]!.id } },
+        // It has no lyrics, genre or year to fix yet.
+        { action: "fixSong" },
         { action: "select" },
         { action: "removeFromLibrary" },
       ]);
@@ -1014,7 +1037,15 @@ test("a song's menu and the selection bar offer and run the phone's actions thro
       );
       assert.deepEqual(
         onAlbum.entries.map((entry) => entry.action),
-        ["playNext", "addToQueue", "addToPlaylist", "favorite", "goToArtist", "removeFromLibrary"],
+        [
+          "playNext",
+          "addToQueue",
+          "addToPlaylist",
+          "favorite",
+          "goToArtist",
+          "fixSong",
+          "removeFromLibrary",
+        ],
       );
 
       // Select All with one song unchecked acts on the others, in list order.
@@ -1042,6 +1073,7 @@ test("a song's menu and the selection bar offer and run the phone's actions thro
           "unfavorite",
           "goToAlbum",
           "goToArtist",
+          "fixSongs",
           "removeFromLibrary",
         ],
       );

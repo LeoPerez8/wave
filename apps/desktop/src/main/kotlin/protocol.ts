@@ -61,6 +61,8 @@ export interface KotlinDownloadMethods {
       readonly requests: readonly {
         readonly song: object;
         readonly recording: object;
+        /** The unfinished job this song shares, as another result id of the same recording. */
+        readonly equivalentId?: string | null;
         readonly source: string | null;
         readonly origin: object | null;
       }[];
@@ -72,11 +74,16 @@ export interface KotlinDownloadMethods {
     readonly params: { readonly revision: number };
     readonly result: {
       readonly revision: number;
-      readonly jobs: readonly unknown[] | null;
-      readonly ids: readonly string[];
+      /** Each job that changed since. */
+      readonly jobs: readonly unknown[];
+      /** Every job's id, when the order changed since; else null. */
+      readonly ids: readonly string[] | null;
     };
   };
-  readonly "downloads.claim": { readonly params: { readonly id: string }; readonly result: unknown };
+  readonly "downloads.claim": {
+    readonly params: { readonly id: string };
+    readonly result: unknown;
+  };
   readonly "downloads.renew": {
     readonly params: { readonly id: string; readonly generation: number; readonly token: string };
     readonly result: boolean;
@@ -106,7 +113,10 @@ export interface KotlinDownloadMethods {
   };
   readonly "downloads.start": { readonly params: object; readonly result: null };
   readonly "downloads.stop": { readonly params: object; readonly result: null };
-  readonly "download.album": { readonly params: { readonly browseId: string }; readonly result: unknown };
+  readonly "download.album": {
+    readonly params: { readonly browseId: string };
+    readonly result: unknown;
+  };
   readonly "download.watchSong": {
     readonly params: { readonly videoId: string };
     readonly result: { readonly albumId: string | null; readonly lyricsBrowseId: string | null };

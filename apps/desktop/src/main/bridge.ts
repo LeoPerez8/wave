@@ -27,6 +27,7 @@ import { runSongAction, songMenu } from "./library/songActions.ts";
 import type { Appearance } from "../shared/bridge.ts";
 import { ytRow } from "../shared/yt.ts";
 import { VIDEO_ID, YtMusic } from "./yt/ytMusic.ts";
+import { Downloads } from "./downloads/downloadsLayer.ts";
 
 const validScope = (value: unknown): value is BrowseScope => {
   if (typeof value !== "object" || value === null) return false;
@@ -73,13 +74,7 @@ interface Runtime<R> {
 
 /** The services the calls use. */
 export type BridgeServices =
-  | Database
-  | Player
-  | Kotlin
-  | DesktopLibrary
-  | Playback
-  | YtMusic
-  | Account;
+  Database | Player | Kotlin | DesktopLibrary | Playback | YtMusic | Downloads | Account;
 
 const refuse = (call: BridgeCall, why: string) => Effect.fail(new Error(`Refused ${call}: ${why}`));
 
@@ -327,6 +322,7 @@ const createHandlers = (onAppearance: (mode: Appearance) => void): Handlers => {
             const db = yield* Database;
             const library = yield* DesktopLibrary;
             const playback = yield* Playback;
+            const downloads = yield* Downloads;
             return yield* Effect.tryPromise({
               try: () =>
                 runSongAction(
@@ -334,6 +330,7 @@ const createHandlers = (onAppearance: (mode: Appearance) => void): Handlers => {
                     db,
                     queue: (type, trackIds) => playback.command({ type, trackIds: [...trackIds] }),
                     removeSongs: (trackIds) => library.removeSongs(trackIds),
+                    fixSongs: (trackIds) => downloads.fixSongs(trackIds),
                     changed: playback.refresh,
                   },
                   target,
