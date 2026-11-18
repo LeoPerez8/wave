@@ -1,0 +1,237 @@
+/**
+ * YouTube Music's pages on the desktop (docs/spec-desktop.md, Window and layout): artist pages,
+ * albums, song and artist radios and the Related tab, read in the JVM (`YtPages`) and checked
+ * here before Discover, the Magic Queue and Related use them. Each read says how it went
+ * (`YtStatus`): offline, YT Music off or a failure leave nothing, and the window shows its quiet
+ * line. Songs a page brings are kept (`keep`) so they can stream.
+ */
+import {
+  pickYtArtist,
+  relatedWithoutPlaying,
+  songSearchMatch,
+  songSearchQuery,
+  type LibrarySongKey,
+  type SongSearchKey,
+  type YtAlbumSong,
+  type YtArtistAlbum,
+  type YtArtistCandidate,
+  type YtArtistPage,
+} from "@wave/core";
+
+import type { YtStatus } from "../../shared/yt.ts";
+import type { KotlinMethods } from "../kotlin/protocol.ts";
+import { ytSongs } from "./ytMusic.ts";
+
+type PagesMethod =
+  | "artist"
+  | "album"
+  | "search"
+  | "searchArtists"
+  | "songRadio"
+  | "artistRadio"
+  | "radioMore"
+  | "related";
+
+/** A JVM call; rejects with an error carrying the JVM's `code`. */
+export type YtPagesCall = <M extends PagesMethod>(
+  method: M,
+  params: KotlinMethods[M]["params"],
+) => Promise<KotlinMethods[M]["result"]>;
+
+export interface YtPagesDeps {
+  readonly call: YtPagesCall;
+  /** Remembers songs a page brought, so they can stream and be queued. */
+  readonly keep: (songs: readonly YtAlbumSong[]) => void;
+  /** YT Music's setting: off, nothing is asked. */
+  readonly enabled: () => boolean;
+}
+
+export interface YtArtistRead {
+  readonly status: YtStatus;
+  readonly page: YtArtistPage<YtAlbumSong> | null;
+}
+
+export interface YtRadioRead {
+  readonly status: YtStatus;
+  /** The radio's songs, music videos left out. */
+  readonly songs: readonly YtAlbumSong[];
+  /** Where the radio goes on (`radioMore`), or null at its end. */
+  readonly continuation: string | null;
+}
+
+export interface YtRelatedRead {
+  readonly status: YtStatus;
+  readonly songs: readonly YtAlbumSong[];
+  readonly artists: readonly YtArtistCandidate[];
+}
+
+export interface YtAlbumRead {
+  readonly status: YtStatus;
+  readonly album: {
+    readonly title: string;
+    readonly artists: readonly string[];
+    readonly year: number | null;
+    readonly artworkUrl: string | null;
+    readonly songs: readonly YtAlbumSong[];
+  } | null;
+}
+
+export interface YtPagesShape {
+  readonly artist: (browseId: string) => Promise<YtArtistRead>;
+  /** The YouTube Music artist named [name] (`pickYtArtist`), or null without one. */
+  readonly findArtist: (
+    name: string,
+  ) => Promise<{ readonly status: YtStatus; readonly browseId: string | null }>;
+  readonly album: (browseId: string) => Promise<YtAlbumRead>;
+  readonly songRadio: (videoId: string) => Promise<YtRadioRead>;
+  readonly artistRadio: (browseId: string) => Promise<YtRadioRead>;
+  readonly radioMore: (continuation: string) => Promise<YtRadioRead>;
+  /** The Related tab of [videoId], without [playing] in any version (`relatedWithoutPlaying`). */
+  readonly related: (
+    videoId: string,
+    playing: Pick<LibrarySongKey, "title" | "artist"> | null,
+  ) => Promise<YtRelatedRead>;
+  /** The video id of [song]'s recording, by one Songs search (`songSearchMatch`), or null. */
+  readonly findSong: (song: SongSearchKey) => Promise<string | null>;
+}
+
+const text = (value: unknown): value is string => typeof value === "string";
+const record = (value: unknown): Record<string, unknown> =>
+  typeof value === "object" && value !== null ? (value as Record<string, unknown>) : {};
+const list = (value: unknown): readonly unknown[] => (Array.isArray(value) ? value : []);
+const BROWSE_ID = /^[A-Za-z0-9_-]{2,128}$/;
+
+const statusOf = (error: unknown): YtStatus => {
+  const code = (error as { code?: unknown } | null)?.code;
+  return code === "ERR_YT_OFFLINE" ? "offline" : code === "ERR_YT_DISABLED" ? "disabled" : "failed";
+};
+
+const albumOf = (value: unknown): YtArtistAlbum | undefined => {
+  const item = record(value);
+  if (!text(item["browseId"]) || !BROWSE_ID.test(item["browseId"]) || !text(item["title"]))
+    return undefined;
+  const release = item["releaseType"];
+  return {
+    kind: "album",
+    browseId: item["browseId"],
+    title: item["title"],
+    artists: list(item["artists"]).filter(text),
+    year: typeof item["year"] === "number" ? item["year"] : null,
+    artworkUrl: text(item["artworkUrl"]) ? item["artworkUrl"] : null,
+    ...(release === "single" || release === "ep" || release === "album"
+      ? { releaseType: release }
+      : {}),
+  };
+};
+
+const artistOf = (value: unknown): YtArtistCandidate | undefined => {
+  const item = record(value);
+  if (!text(item["name"]) || !text(item["browseId"]) || !BROWSE_ID.test(item["browseId"]))
+    return undefined;
+  return {
+    name: item["name"],
+    browseId: item["browseId"],
+    audience: typeof item["audience"] === "number" ? item["audience"] : null,
+    artworkUrl: text(item["artworkUrl"]) ? item["artworkUrl"] : null,
+  };
+};
+
+const albums = (value: unknown) => list(value).flatMap((item) => albumOf(item) ?? []);
+const artists = (value: unknown) => list(value).flatMap((item) => artistOf(item) ?? []);
+
+export const createYtPages = (deps: YtPagesDeps): YtPagesShape => {
+  /** Runs [read] when YT Music is on, its failure as a status with [empty]. */
+  const read = async <R extends { readonly status: YtStatus }>(
+    empty: Omit<R, "status">,
+    run: () => Promise<Omit<R, "status">>,
+  ): Promise<R> => {
+    if (!deps.enabled()) return { status: "disabled", ...empty } as R;
+    try {
+      return { status: "ok", ...(await run()) } as R;
+    } catch (error) {
+      return { status: statusOf(error), ...empty } as R;
+    }
+  };
+  const songs = (value: unknown) => {
+    const found = ytSongs(value);
+    deps.keep(found);
+    return found;
+  };
+  const radio = (answer: unknown) => {
+    const page = record(answer);
+    return {
+      songs: songs(list(page["songs"]).filter((song) => record(song)["video"] !== true)),
+      continuation: text(page["continuation"]) ? page["continuation"] : null,
+    };
+  };
+  const noRadio = { songs: [], continuation: null };
+  return {
+    artist: (browseId) =>
+      read<YtArtistRead>({ page: null }, async () => {
+        const page = record(await deps.call("artist", { browseId }));
+        if (!text(page["name"])) throw new Error("Not an artist page");
+        return {
+          page: {
+            name: page["name"],
+            artworkUrl: text(page["artworkUrl"]) ? page["artworkUrl"] : null,
+            songs: songs(page["songs"]),
+            songsPlaylistId: text(page["songsPlaylistId"]) ? page["songsPlaylistId"] : null,
+            albums: albums(page["albums"]),
+            singles: albums(page["singles"]),
+            similar: artists(page["similar"]),
+          },
+        };
+      }),
+    findArtist: (name) =>
+      read<{ status: YtStatus; browseId: string | null }>({ browseId: null }, async () => {
+        if (pickYtArtist(name, [{ name, browseId: "-", audience: null }]) === null)
+          return { browseId: null };
+        return { browseId: pickYtArtist(name, artists(await deps.call("searchArtists", { query: name }))) };
+      }),
+    album: (browseId) =>
+      read<YtAlbumRead>({ album: null }, async () => {
+        const album = record(await deps.call("album", { browseId }));
+        if (!text(album["title"])) throw new Error("Not an album page");
+        return {
+          album: {
+            title: album["title"],
+            artists: list(album["artists"]).filter(text),
+            year: typeof album["year"] === "number" ? album["year"] : null,
+            artworkUrl: text(album["artworkUrl"]) ? album["artworkUrl"] : null,
+            songs: songs(
+              list(album["tracks"]).map((track) => ({
+                album: album["title"],
+                artworkUrl: album["artworkUrl"],
+                ...record(track),
+              })),
+            ),
+          },
+        };
+      }),
+    songRadio: (videoId) =>
+      read<YtRadioRead>(noRadio, async () => radio(await deps.call("songRadio", { videoId }))),
+    artistRadio: (browseId) =>
+      read<YtRadioRead>(noRadio, async () => radio(await deps.call("artistRadio", { browseId }))),
+    radioMore: (continuation) =>
+      read<YtRadioRead>(noRadio, async () =>
+        radio(await deps.call("radioMore", { continuation })),
+      ),
+    related: (videoId, playing) =>
+      read<YtRelatedRead>({ songs: [], artists: [] }, async () => {
+        const page = record(await deps.call("related", { videoId }));
+        return {
+          songs: relatedWithoutPlaying(playing, songs(page["songs"])),
+          artists: artists(page["artists"]),
+        };
+      }),
+    findSong: async (song) => {
+      if (!deps.enabled()) return null;
+      try {
+        const page = record(await deps.call("search", { query: songSearchQuery(song) }));
+        return songSearchMatch(song, songs(page["songs"]));
+      } catch {
+        return null;
+      }
+    },
+  };
+};
