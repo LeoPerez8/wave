@@ -541,6 +541,71 @@ describe("the service", () => {
     const post = new Request(`${ORIGIN}/v1/manifest`, { method: "POST" });
     assert.equal((await service.fetch(post)).status, 405);
   });
+
+  // The bucket as phones see it through the Worker: everything CI published for a channel.
+  const publishedBucket = async () => {
+    const storage = memoryStorage();
+    await publish(storage);
+    const notes = {
+      en: { new: ["Something"], fixes: [] },
+      "pt-BR": { new: ["Algo"], fixes: [] },
+    };
+    await publishNotes({ channel: "ti", version: "1.2.3-ti", notes, ...storage });
+    const apk = {
+      version: "1.2.3-ti",
+      runtimeVersion: "native-a",
+      url: "https://github.com/o/r/releases/download/v1.2.3-ti/wave-1.2.3-ti.apk",
+      size: 1,
+      sha256: "ab".repeat(32),
+    };
+    await publishLatestApk({ channel: "ti", apk, signingKey: shipped.privateKey, ...storage });
+    const asset = new URL((await manifestOf(await askFor(storage))).launchAsset.url).pathname;
+    const contents = async () => {
+      const { objects } = await storage.list({ prefix: "" });
+      return new Map(
+        await Promise.all(objects.map(async ({ key }) => [key, await storage.read(key)] as const)),
+      );
+    };
+    const paths = [
+      "/v1/manifest",
+      "/v1/notes?channel=ti",
+      "/v1/apk?channel=ti",
+      asset,
+      `/v1/assets/${"c".repeat(64)}`,
+      "/notes/ti.json",
+      "/apks/ti/latest.json",
+      "/",
+    ];
+    return { storage, contents, paths };
+  };
+
+  it("lets no outside request upload, replace or remove a stored file", async () => {
+    const { storage, contents, paths } = await publishedBucket();
+    const service = createUpdateService(storage);
+    const before = await contents();
+    for (const method of ["HEAD", "OPTIONS", "POST", "PUT", "PATCH", "DELETE"])
+      for (const path of paths) {
+        const body = method === "HEAD" || method === "OPTIONS" ? null : "replacement bytes";
+        const response = await service.fetch(new Request(`${ORIGIN}${path}`, { method, body }));
+        assert.equal(response.status, 405, `${method} ${path}`);
+      }
+    assert.deepEqual(await contents(), before);
+  });
+
+  it("writes nothing on a read but the notes history it rebuilds from the stored notes", async () => {
+    const { storage, contents, paths } = await publishedBucket();
+    const service = createUpdateService(storage);
+    await storage.remove("notes/ti.json");
+    const before = await contents();
+    for (const path of paths) await service.fetch(new Request(`${ORIGIN}${path}`));
+    const after = await contents();
+    const changed = [...after.keys()].filter((key) => after.get(key) !== before.get(key));
+    assert.deepEqual(changed, ["notes/ti.json"]);
+    assert.deepEqual(
+      [...before.keys()].filter((key) => !after.has(key)),
+      [],
+    );
+  });
 });
 
 describe("publishNotes", () => {
