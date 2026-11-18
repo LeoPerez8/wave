@@ -255,12 +255,39 @@ export const createLibraryArtwork = (options: {
     }
   };
 
+  const folderOf = (cache: string) => join(directory, createHash("sha1").update(cache).digest("hex"));
+
+  /** The folders artists' photos are kept in, whether or not one was found yet. */
+  const artistFolders = (): string[] =>
+    db
+      .all<{ key: string }>(sql`SELECT key FROM artists WHERE key IS NOT NULL`)
+      .map(({ key }) => folderOf(`artist:${key}`));
+
+  const hasPhoto = (folder: string): Promise<boolean> =>
+    stat(join(folder, "thumb.jpg")).then(
+      () => true,
+      () => false,
+    );
+
+  /** Settings › Lyrics and tags › Clear artist photos. */
+  const artistPhotos = {
+    /** How many artist photos are kept. */
+    count: async (): Promise<number> =>
+      (await Promise.all(artistFolders().map(hasPhoto))).filter(Boolean).length,
+    /** Deletes them, and what was noted about each lookup, so they're looked up again. */
+    clear: async (): Promise<void> => {
+      await Promise.all(
+        artistFolders().map((folder) => rm(folder, { recursive: true, force: true })),
+      );
+    },
+  };
+
   /**
    * The picture of a Library song, album or artist, as a data URL; null for none.
    * Asks online at most once per album or artist, and again only when Core's
    * retry time for a miss has come.
    */
-  return async (kind: ArtworkKind, id: number, large: boolean): Promise<string | null> => {
+  const cover = async (kind: ArtworkKind, id: number, large: boolean): Promise<string | null> => {
     const subject = kind === "artist" ? artistSubject(id) : songSubject(kind, id);
     if (!subject) return null;
     const local = () =>
@@ -268,7 +295,7 @@ export const createLibraryArtwork = (options: {
     // A cover from a file wins; an artist's photo wins over the album cover standing in for it.
     if (subject.cache === "" || (kind !== "artist" && subject.hash)) return local();
     if (kind === "artist" && options.photosEnabled?.() === false) return local();
-    const folder = join(directory, createHash("sha1").update(subject.cache).digest("hex"));
+    const folder = folderOf(subject.cache);
     try {
       const found = await saved(folder, large);
       if (found !== null) return found;
@@ -284,6 +311,10 @@ export const createLibraryArtwork = (options: {
       return local();
     }
   };
+  return Object.assign(cover, { artistPhotos });
 };
+
+/** What `createLibraryArtwork` gives: a picture by kind and id, and the artist photos kept. */
+export type LibraryArtwork = ReturnType<typeof createLibraryArtwork>;
 
 const NOTHING: Omit<Subject, "hash"> = { cache: "", name: "", find: async () => null };
