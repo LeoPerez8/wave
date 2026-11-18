@@ -1,5 +1,5 @@
 /**
- * Fix Song's online lookups on the desktop, as the phone's `lookUpLyricsAndGenre` makes them: a
+ * Fix Song's online lookups, shared by the phone and desktop: a
  * song's lyrics on LRCLIB (synced preferred) and, on Deezer, its album's genre and year, its
  * track number and whether it's explicit, all matched by Core. Only the title, artist, album and
  * length are sent. Each service settles on its own (Core's `settledTags`).
@@ -24,6 +24,7 @@ import {
   type DeezerAlbumTrack,
   type DeezerTags,
   type FoundTags,
+  type FoundLyrics,
   type IndexedTags,
   type SongLookup,
   type TagLookup,
@@ -31,6 +32,16 @@ import {
 
 /** A lookup (every request it makes) that takes longer than this has failed. */
 const LOOKUP_TIMEOUT_MS = 30_000;
+
+/** An HTTP failure keeps its status and URL for the phone's existing lookup log. */
+class HttpStatusError extends Error {
+  readonly status: number;
+  constructor(status: number, url: string) {
+    super(`HTTP ${status} for ${url}`);
+    this.name = "HttpStatusError";
+    this.status = status;
+  }
+}
 
 /** A song with nothing yet (a download being tagged): everything is looked up. */
 const HAS_NOTHING: IndexedTags = {
@@ -42,6 +53,12 @@ const HAS_NOTHING: IndexedTags = {
 };
 
 export interface Lookups {
+  readonly findLyrics: (song: SongLookup, signal: AbortSignal) => Promise<FoundLyrics | null>;
+  readonly findDeezerTags: (
+    song: SongLookup,
+    has: IndexedTags,
+    signal: AbortSignal,
+  ) => Promise<DeezerTags | null>;
   /**
    * What [song] lacks, given what it [has]: null when no service asked answered (or none had to
    * be asked and nothing was found). Never rejects.
@@ -49,12 +66,15 @@ export interface Lookups {
   readonly lookUp: (song: SongLookup, has?: IndexedTags) => Promise<FoundTags | null>;
 }
 
-export const createLookups = (fetch: typeof globalThis.fetch = globalThis.fetch): Lookups => {
+export const createLookups = (
+  fetch: typeof globalThis.fetch = globalThis.fetch,
+  tracklistFailed: (cause: unknown) => void = () => {},
+): Lookups => {
   const albums = new Map<number, DeezerAlbum>();
   const tracklists = new Map<number, readonly DeezerAlbumTrack[]>();
   const getJson = async (url: string, signal: AbortSignal, headers?: Record<string, string>) => {
     const response = await fetch(url, { signal, ...(headers === undefined ? {} : { headers }) });
-    if (!response.ok) throw new Error(`HTTP ${response.status}`);
+    if (!response.ok) throw new HttpStatusError(response.status, url);
     return (await response.json()) as unknown;
   };
   const findAlbum = async (albumId: number, signal: AbortSignal) => {
@@ -72,7 +92,9 @@ export const createLookups = (fetch: typeof globalThis.fetch = globalThis.fetch)
       const tracklist = deezerAlbumTracks(await getJson(deezerAlbumTracksUrl(albumId), signal));
       if (tracklist !== null) tracklists.set(albumId, tracklist);
       return tracklist;
-    } catch {
+    } catch (cause) {
+      if (signal.aborted) throw cause;
+      tracklistFailed(cause);
       // The genre and year still count.
       return null;
     }
@@ -106,6 +128,8 @@ export const createLookups = (fetch: typeof globalThis.fetch = globalThis.fetch)
     }
   };
   return {
+    findLyrics,
+    findDeezerTags,
     lookUp: async (song, has = HAS_NOTHING) => {
       const ask = fixLookups(has);
       const [lyrics, deezer] = await Promise.all([
