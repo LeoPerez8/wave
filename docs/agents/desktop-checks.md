@@ -92,6 +92,38 @@ and exclusion plans with Windows identity. Canonical links inside selected roots
 once; targets outside those roots need their own root. Hidden files and folders are ignored,
 and voice notes use Core's existing filter and Client's skipped-file index.
 
+## Library layout checks
+
+`e2e/layout.spec.ts` seeds 50,000 songs through SQLite and drives the real window. It checks
+bounded rendered rows, scrolling (the `scroll-p95-ms` annotation), row selection and keyboard
+movement, letter jumps, history, every Library page and hero, the 960×600 window, the 760 px
+content breakpoint, search focus, Appearance and empty-library keyboard navigation.
+Light and dark screenshots are `layout-<platform>-<scheme>-<page>.png` in `test-results/`.
+Run it on Windows and WSLg and inspect the PNGs, including Settings and the heroes.
+
+The `library.browse(scope, offset, limit)` bridge call returns `BrowsePage`: one `Page<BrowseRow>`
+and an optional hero. Scopes are `songs`, `albums`, `artists`, `playlists`, `genres`, `favorites`,
+`album`, `artist`, `playlist`, `genre` and `search`; detail scopes require a positive `id`, and
+Search accepts `query` (up to 500 characters). Reads accept at most 200 rows. The table requests
+100 at a time, retains at most seven pages, and renders the viewport plus overscan. It is one
+tab stop, using `aria-activedescendant` for virtual rows. `library.letter(scope, letter)` returns
+the row offset for a jump. Main registers Core's `sortKey` as SQLite's `wave_sort_key`.
+
+`library.artwork(hash, large)` returns a cached data URL or null. It only accepts SHA-1 hashes
+already in the artwork table. The shared JVM's `readTags` adds optional `artworkBase64` for covers
+up to 8 MiB; the phone's metadata map stays unchanged. Desktop scans keep the original bytes,
+300 px thumbnails and 640 px medium JPEGs, preserving aspect ratio. The cache is under
+`%LOCALAPPDATA%/Wave/artwork` or `$XDG_CACHE_HOME/wave/artwork` (`~/.cache/wave` by default).
+`WAVE_DATA_DIR` also isolates this cache for tests. Existing indexes get a tag reread once to
+fill artwork; unavailable roots postpone completion of that upgrade.
+
+`settings.appearance()` and `settings.setAppearance(system|light|dark)` persist in the
+device-local `desktop_settings` table. Main applies the choice to Electron's `nativeTheme`,
+including the Windows title bar overlay. The renderer uses Core's default theme derivation.
+The other Settings sections and player controls are placeholders for their tickets. Row
+activation is the `onOpen` callback on `VirtualTable`; the playback ticket connects song
+activation and the hero's Play/Shuffle controls to a play context.
+
 ## The dev window
 
 To look at `pnpm dev` from an agent, start it in the background with a debugging port and a

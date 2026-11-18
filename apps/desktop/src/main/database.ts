@@ -5,6 +5,7 @@ import BetterSqlite3 from "better-sqlite3";
 import { drizzle } from "drizzle-orm/better-sqlite3";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
+import { sortKey } from "@wave/core";
 
 /** The connection to `file`, closed when the layer's scope closes. */
 export const sqliteDriverLayer = (file: string) =>
@@ -12,7 +13,16 @@ export const sqliteDriverLayer = (file: string) =>
     SqliteDriver,
     Effect.acquireRelease(
       Effect.try({
-        try: () => drizzle({ client: new BetterSqlite3(file), schema }),
+        try: () => {
+          const client = new BetterSqlite3(file);
+          client.function("wave_sort_key", { deterministic: true }, (value) =>
+            sortKey(String(value)),
+          );
+          client.exec(
+            "CREATE TABLE IF NOT EXISTS desktop_settings (key TEXT PRIMARY KEY, value TEXT NOT NULL)",
+          );
+          return drizzle({ client, schema });
+        },
         catch: (cause) => new DatabaseError({ cause }),
       }),
       (db) => Effect.sync(() => db.$client.close()),

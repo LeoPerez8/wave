@@ -73,6 +73,15 @@ test("first launch shows progress, indexes Music with Kotlin and keeps list read
   await done();
   expect((await songs()).total).toBe(1200);
   expect((await songs()).items).toHaveLength(200);
+  const covers = await page.evaluate(() =>
+    (window as unknown as { wave: WaveBridge }).wave.library.browse({ kind: "albums" }, 0, 10),
+  );
+  expect(covers.items[0]?.artworkHash).toMatch(/^[a-f0-9]{40}$/);
+  const image = await page.evaluate(
+    (hash) => (window as unknown as { wave: WaveBridge }).wave.library.artwork(hash, true),
+    covers.items[0]!.artworkHash!,
+  );
+  expect(image).toMatch(/^data:image\/jpeg;base64,/);
   firstId = (await songs()).items.find((song) => song.path?.endsWith("/0000.flac"))!.id;
   await page.screenshot({ path: join(appFolder, "test-results", "library-scanned.png") });
 });
@@ -100,7 +109,7 @@ test("a disconnected root stays grey and refuses playback, then comes back with 
     .poll(async () => (await songs()).items.every((song) => song.unavailable), { timeout: 15000 })
     .toBe(true);
   expect((await songs()).total).toBe(1200);
-  await expect(page.locator("tbody tr[aria-disabled=true]").first()).toBeVisible();
+  await expect(page.getByRole("row", { disabled: true }).first()).toBeVisible();
   const path = (await songs()).items[0]!.path!;
   const failure = await page.evaluate(async (path) => {
     try {

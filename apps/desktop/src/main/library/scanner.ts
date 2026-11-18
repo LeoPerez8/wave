@@ -33,6 +33,9 @@ export interface ScannerOptions {
   readonly platform: string;
   readonly musicFolder: string;
   readonly readTags: (path: string) => Promise<Partial<SongTags>>;
+  readonly cacheArtwork?: (encoded: string) => Promise<string | null>;
+  readonly forceTags?: boolean;
+  readonly tagsUpdated?: () => void;
   readonly quietMs?: number;
   readonly retryMs?: number;
 }
@@ -44,6 +47,9 @@ export const createScanner = ({
   platform,
   musicFolder,
   readTags,
+  cacheArtwork,
+  forceTags = false,
+  tagsUpdated,
   quietMs = 2000,
   retryMs = 10000,
 }: ScannerOptions) => {
@@ -55,6 +61,8 @@ export const createScanner = ({
     }
   };
   let initialized = false;
+  let rereadTags = forceTags;
+  const upgraded = new Set<string>();
   let rootPaths: readonly string[] = [];
   const index = desktopScanIndex(db, platform);
   const settings = desktopFolders(db, platform);
@@ -216,6 +224,7 @@ export const createScanner = ({
       if (disposed) return;
       const previous = known.get(key);
       if (
+        (!rereadTags || upgraded.has(key)) &&
         previous?.sizeBytes === file.sizeBytes &&
         previous.modifiedAt === file.modifiedAt &&
         previous.path === file.path
@@ -224,12 +233,14 @@ export const createScanner = ({
         continue;
       }
       const tags = await readTags(file.path);
+      if (rereadTags) upgraded.add(key);
       const track = {
         ...normalizeTrack({ ...tags, path: file.path }),
         ...file,
         sampleRate: tags.sampleRate ?? null,
         bitrateKbps: tags.bitrateKbps ?? null,
-        artworkHash: null,
+        artworkHash:
+          tags.artworkBase64 && cacheArtwork ? await cacheArtwork(tags.artworkBase64) : null,
         hasLyrics: false,
         explicit: explicitFromAdvisory(tags.advisory ?? null),
         loudness: gainTags(tags.loudnessTags ?? {}),
@@ -259,6 +270,12 @@ export const createScanner = ({
       }),
     );
     index.finish(roots);
+    // An unavailable root must be revisited before completing this one-time upgrade.
+    if (roots.every((root) => root.available)) {
+      rereadTags = false;
+      upgraded.clear();
+      tagsUpdated?.();
+    }
     markScanned(
       db,
       roots.filter((root) => root.available).map((root) => root.path),

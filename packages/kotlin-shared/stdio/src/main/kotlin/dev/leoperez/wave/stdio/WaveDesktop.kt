@@ -31,7 +31,12 @@ class WaveDesktop(
   suspend fun handle(method: String, params: JsonObject): JsonElement =
     when (method) {
       "search" -> jsonOf(yt.searchSongs(params.string("query")).toMap())
-      "readTags" -> jsonOf(tags.read(File(params.string("path"))).toMap())
+      "readTags" -> {
+        val read = tags.read(File(params.string("path")))
+        jsonOf(read.toMap() + ("artworkBase64" to read.artwork
+          ?.takeIf { it.size <= 8 * 1024 * 1024 }
+          ?.let { java.util.Base64.getEncoder().encodeToString(it) }))
+      }
       else -> throw CodedError("ERR_UNKNOWN_METHOD", "No method $method")
     }
 
