@@ -447,6 +447,7 @@ export const settingsPtBr: typeof settingsEn = {
     `Escolhe a ação de deslizar para a ${side === "left" ? "esquerda" : "direita"}`,
   minutes: (n) =>
     `${formatNumber("pt-BR", n)} ${plural("pt-BR", n, { zero: "minutos", one: "minuto", other: "minutos" })}`,
+  seconds: (n) => `${formatNumber("pt-BR", n)} s`,
   downloadedLine: (count, line) => `${count} baixadas, ${line}`,
   colourMode: (mode, colour) => `Modo ${mode.toLowerCase()}: ${colour}`,
   adjustedColour: (light, dark) =>

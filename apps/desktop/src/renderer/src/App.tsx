@@ -6,6 +6,7 @@ import { PlayerBar, usePlayback } from "./PlayerBar.tsx";
 import { Icon } from "./Icon.tsx";
 import { Artwork, VirtualTable } from "./VirtualTable.tsx";
 import { FolderSettings } from "./FolderSettings.tsx";
+import { PlaybackSettings } from "./PlaybackSettings.tsx";
 import { labels, text } from "./text.ts";
 
 type Route = BrowseScope | { readonly kind: "home" } | { readonly kind: "settings" };
@@ -397,6 +398,8 @@ export function App() {
                     ))}
                   </select>
                 </>
+              ) : setting === "playback" ? (
+                <PlaybackSettings onError={failed} />
               ) : (
                 <p className="secondary">{labels.unavailableSection}</p>
               )}

@@ -9,4 +9,8 @@ export const desktopEn = {
   playbackText: {
     thisPhone: "This computer",
   },
+  settings: {
+    howMuchOfAStreamedSongWave:
+      "How much of a streamed song Wave loads ahead, carrying on into the next songs in Up Next, so playback keeps going through a dead zone. Longer uses more memory: about 50 MB at 30 minutes. Downloaded songs play from this computer either way.",
+  },
 } satisfies CatalogueVariants;
