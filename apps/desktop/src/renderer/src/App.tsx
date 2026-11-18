@@ -1,6 +1,14 @@
 import { Links } from "./Links.tsx";
 import { readThemeChoice, themeFor, type SearchOnline } from "@wave/core";
-import { useCallback, useEffect, useMemo, useRef, useState, type MouseEvent } from "react";
+import {
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  type MouseEvent,
+  type ReactNode,
+} from "react";
 import type { AccountView } from "../../shared/account.ts";
 import type { BrowseRow, BrowseScope } from "../../shared/browse.ts";
 import type { ScanStatus } from "../../shared/library.ts";
@@ -29,6 +37,7 @@ import { Graveyard } from "./Graveyard.tsx";
 import { labels, text } from "./text.ts";
 import { Home } from "./Home.tsx";
 import { isYtRoute, streamedSongItems, YtPage, type YtRoute } from "./YtPages.tsx";
+import { AlbumArtistLink, ArtistPage, ArtistToggle, useArtistSection } from "./ArtistPage.tsx";
 
 type Route =
   | BrowseScope
@@ -283,6 +292,11 @@ export function App() {
     } as const;
     if (scope.kind in detail) go({ kind: detail[scope.kind as keyof typeof detail], id: row.id });
     else if (row.unavailable) setError(text.desktopLibrary.driveDisconnected);
+    else if (scope.kind === "artist" && scope.id !== undefined)
+      // With Online, the page plays its Library songs and the ones YouTube Music adds.
+      playback.run(
+        window.wave.artistPage.play(scope.id, artistSection.pick, { library: index }, false),
+      );
     else playback.run(window.wave.playback.start(scope, index));
   };
   const searchFor = (query: string) => {
@@ -313,6 +327,41 @@ export function App() {
     (playback.view?.revision ?? 0) +
     (account?.revision ?? 0) +
     playlistEdits.edits;
+  const artistSection = useArtistSection(
+    route.kind === "artist" ? route.id : undefined,
+    ytMusic,
+    revision,
+    failed,
+  );
+  /** Plays the page's songs; an artist's page with Online takes YouTube Music's songs too. */
+  const playPage = (shuffle: boolean) =>
+    playback.run(
+      route.kind === "artist" && route.id !== undefined
+        ? window.wave.artistPage.play(route.id, artistSection.pick, null, shuffle)
+        : window.wave.playback.start(scope, shuffle ? undefined : 0, shuffle),
+    );
+  /** An artist's songs table, inside their page's shelves and YouTube Music section. */
+  const artistPage = (table: ReactNode) =>
+    route.kind === "artist" && route.id !== undefined ? (
+      <ArtistPage
+        artistId={route.id}
+        revision={revision}
+        section={artistSection}
+        onAlbum={(id) => go({ kind: "album", id })}
+        onYtAlbum={(id) => go({ kind: "ytAlbum", id })}
+        onPlayStreamed={(index) =>
+          playback.run(
+            window.wave.artistPage.play(route.id!, artistSection.pick, { streamed: index }, false),
+          )
+        }
+        onSongMenu={ytSongMenu}
+        onError={failed}
+      >
+        {table}
+      </ArtistPage>
+    ) : (
+      table
+    );
   return (
     <main
       ref={shell}
@@ -480,7 +529,19 @@ export function App() {
             />
             <div className="hero-copy">
               <h1>{title}</h1>
-              {hero.artist && <p className="hero-artist">{hero.artist}</p>}
+              {hero.artist &&
+                (route.kind === "album" && route.id !== undefined ? (
+                  <AlbumArtistLink
+                    albumId={route.id}
+                    credit={hero.artist}
+                    onArtist={(id) => go({ kind: "artist", id })}
+                    onChoose={(items, element) =>
+                      actions.openItems(text.desktopLibrary.chooseArtist, items, element)
+                    }
+                  />
+                ) : (
+                  <p className="hero-artist">{hero.artist}</p>
+                ))}
               <p className="hero-meta">
                 {[
                   labels[route.kind as "album" | "artist" | "playlist" | "genre"],
@@ -493,16 +554,15 @@ export function App() {
                   .join(" · ")}
               </p>
               <div className="hero-actions">
-                <button onClick={() => playback.run(window.wave.playback.start(scope, 0, false))}>
+                <button onClick={() => playPage(false)}>
                   <Icon name="play" size={16} />
                   {labels.play}
                 </button>
-                <button
-                  onClick={() => playback.run(window.wave.playback.start(scope, undefined, true))}
-                >
+                <button onClick={() => playPage(true)}>
                   <Icon name="shuffle" size={16} />
                   {labels.shuffle}
                 </button>
+                {route.kind === "artist" && <ArtistToggle section={artistSection} />}
                 {route.kind === "album" && route.id !== undefined && (
                   <AlbumDownloadButton
                     albumId={route.id}
@@ -720,29 +780,31 @@ export function App() {
                 onDone={() => setSelection(undefined)}
               />
             )}
-            <VirtualTable
-              key={list}
-              scope={scope}
-              revision={revision}
-              onHero={setHero}
-              onOpen={open}
-              onError={failed}
-              selection={selection}
-              onSelection={setSelection}
-              onMenu={
-                selection
-                  ? undefined
-                  : (row, at) =>
-                      actions.openMenu(
-                        { scope, ids: [row.id] },
-                        row.title,
-                        at,
-                        scope.kind === "playlist" && scope.id !== undefined
-                          ? playlistEdits.moveItems(scope.id, row.id)
-                          : [],
-                      )
-              }
-            />
+            {artistPage(
+              <VirtualTable
+                key={list}
+                scope={scope}
+                revision={revision}
+                onHero={setHero}
+                onOpen={open}
+                onError={failed}
+                selection={selection}
+                onSelection={setSelection}
+                onMenu={
+                  selection
+                    ? undefined
+                    : (row, at) =>
+                        actions.openMenu(
+                          { scope, ids: [row.id] },
+                          row.title,
+                          at,
+                          scope.kind === "playlist" && scope.id !== undefined
+                            ? playlistEdits.moveItems(scope.id, row.id)
+                            : [],
+                        )
+                }
+              />,
+            )}
           </>
         )}
       </div>
