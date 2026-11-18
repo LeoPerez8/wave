@@ -41,6 +41,7 @@ import {
   type MagicSession,
   type MagicSong,
   type MagicSongRadioSeed,
+  type PlayEvent,
   type QueueCommand,
   type QueueContinuationSeed,
   type QueueState,
@@ -118,7 +119,7 @@ export interface MagicQueueShape {
   readonly queueChanged: () => void;
   /** A play ended: a quick skip or a song played through teaches the session. */
   readonly playEnded: (
-    play: { readonly trackId: string; readonly endReason: string; readonly listenedMs: number },
+    play: Pick<PlayEvent, "trackId" | "endReason" | "listenedMs">,
     byNext: boolean,
   ) => void;
   readonly view: () => MagicQueueView;
@@ -493,7 +494,7 @@ export const createMagicQueue = (deps: MagicQueueDeps): MagicQueueShape => {
       const live = active();
       if (live === null) return;
       const kind = magicPlaySignal({
-        play: { endReason: play.endReason as never, listenedMs: play.listenedMs },
+        play,
         byNext,
       });
       if (kind !== null) save(magicSignal(live, { kind, song: magicSong(play.trackId) }));

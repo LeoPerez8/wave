@@ -11,7 +11,13 @@ import { setFavorites } from "@wave/client/db/playHistory";
 import { createPlaybackSession, type AudioPort } from "@wave/client/playbackSession";
 import { createQueueGains, queueAlbum } from "@wave/client/queueGains";
 import { createSongMeasurements } from "@wave/client/songMeasurements";
-import { parseTrackId, ytTrackId, type QueueState } from "@wave/core";
+import {
+  parseTrackId,
+  ytTrackId,
+  type PlayEvent,
+  type QueueCommand,
+  type QueueState,
+} from "@wave/core";
 import * as Context from "effect/Context";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
@@ -67,6 +73,18 @@ export interface PlaybackShape {
   readonly setSettings: (change: Partial<PlaybackSettings>) => Promise<PlaybackSettings>;
   /** Plays by the stored settings again, after sync pulled the account's values. */
   readonly applySettings: () => Promise<void>;
+  /** The queue as Core holds it. */
+  readonly queueState: () => QueueState;
+  /** A queue command from main (the Magic Queue's); a new queue offers Undo, as `start` does. */
+  readonly dispatch: (command: QueueCommand) => Promise<void>;
+  /** Hears the queue change and plays end, until the returned function is called. */
+  readonly watch: (watcher: QueueWatcher) => () => void;
+}
+
+/** What follows the queue from main: the Magic Queue. */
+export interface QueueWatcher {
+  readonly queueChanged: () => void;
+  readonly playEnded: (play: PlayEvent, byNext: boolean) => void;
 }
 
 export type PlaybackChange = "played" | "starred";
@@ -104,6 +122,7 @@ export const playbackLayer = Layer.effect(
     let volume = savedVolume(preference(db, "volume"));
     let muted = preference(db, "muted") === "true";
     const listeners = new Set<(change: PlaybackChange) => void>();
+    const watchers = new Set<QueueWatcher>();
     const tell = (change: PlaybackChange) => {
       for (const listener of listeners) listener(change);
     };
@@ -121,7 +140,10 @@ export const playbackLayer = Layer.effect(
         source: "desktop",
         available: (path) => !library.unavailable(path),
         streamed: yt.song,
-        playEnded: () => tell("played"),
+        playEnded: (play, byNext) => {
+          tell("played");
+          for (const watcher of watchers) watcher.playEnded(play, byNext);
+        },
         gainDb: gains.gainDb,
       }),
     );
@@ -143,8 +165,11 @@ export const playbackLayer = Layer.effect(
         session.gainsChanged().catch(failed);
       },
     });
-    /** The queue changed: songs it brought in may need measuring. */
-    const queueChanged = () => void measurements.wake().catch(() => undefined);
+    /** The queue changed: songs it brought in may need measuring, and the Magic Queue hears it. */
+    const queueChanged = () => {
+      void measurements.wake().catch(() => undefined);
+      for (const watcher of watchers) watcher.queueChanged();
+    };
     /** Sends the stored settings to the engine; each applies from its next move. */
     const sendSettings = async () => {
       await run(player.setCrossfade(settings.crossfadeSeconds));
@@ -342,6 +367,18 @@ export const playbackLayer = Layer.effect(
         return settings;
       },
       applySettings: () => playBySettings(readPlaybackSettings(db)),
+      queueState: () => session.snapshot().queue,
+      dispatch: async (command) => {
+        error = null;
+        await session.dispatch(command);
+        if (command.type === "play" && session.snapshot().canUndo) undoOffer++;
+        keepQueued();
+        queueChanged();
+      },
+      watch: (watcher) => {
+        watchers.add(watcher);
+        return () => void watchers.delete(watcher);
+      },
     };
   }),
 );
