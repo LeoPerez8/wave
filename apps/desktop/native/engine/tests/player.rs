@@ -5,8 +5,8 @@ mod common;
 use std::time::{Duration, Instant};
 
 use common::{fixture, source_16bit};
-use wave_audio::player::{PlayState, Player};
 use wave_audio::EngineError;
+use wave_audio::player::{PlayState, Player};
 
 const RATE: u32 = 22_050;
 

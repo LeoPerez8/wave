@@ -224,7 +224,8 @@ fn decode_loop(shared: &Shared) {
                 if state.job.is_some() {
                     break;
                 }
-                let target = state.track.map_or(0, |t| (t.sample_rate as f64 * BUFFER_SECONDS) as usize * 2);
+                let target =
+                    state.track.map_or(0, |t| (t.sample_rate as f64 * BUFFER_SECONDS) as usize * 2);
                 if decoder.is_some() && !state.decoded_all && state.queue.len() < target {
                     break;
                 }
@@ -236,11 +237,11 @@ fn decode_loop(shared: &Shared) {
             if let Some(next) = job.decoder {
                 decoder = Some(next);
             }
-            if let (Some(frame), Some(current)) = (job.seek, decoder.as_mut()) {
-                if current.seek(frame).is_err() {
-                    finish(shared, generation);
-                    continue;
-                }
+            if let (Some(frame), Some(current)) = (job.seek, decoder.as_mut())
+                && current.seek(frame).is_err()
+            {
+                finish(shared, generation);
+                continue;
             }
         }
         let Some(current) = decoder.as_mut() else { continue };

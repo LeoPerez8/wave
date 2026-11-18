@@ -80,9 +80,8 @@ impl Decoder {
         let decoder = codecs()
             .make_audio_decoder(&params, &AudioDecoderOptions::default())
             .map_err(|e| EngineError::Unsupported(e.to_string()))?;
-        let rate = params
-            .sample_rate
-            .ok_or_else(|| EngineError::Unsupported("no sample rate".into()))?;
+        let rate =
+            params.sample_rate.ok_or_else(|| EngineError::Unsupported("no sample rate".into()))?;
         let duration = track.num_frames.map(|frames| {
             frames
                 .saturating_sub(track.delay.unwrap_or(0) as u64)
@@ -169,7 +168,9 @@ impl Decoder {
                     self.at_end = true;
                     return Ok(None);
                 }
-                Err(SymphoniaError::IoError(e)) if e.kind() == std::io::ErrorKind::UnexpectedEof => {
+                Err(SymphoniaError::IoError(e))
+                    if e.kind() == std::io::ErrorKind::UnexpectedEof =>
+                {
                     self.at_end = true;
                     return Ok(None);
                 }
