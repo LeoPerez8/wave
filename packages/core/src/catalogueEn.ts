@@ -115,6 +115,10 @@ export const en = {
     unavailableFolder: "Unavailable folder",
     driveDisconnected: "The drive isn't connected. Reconnect it and try again.",
     actionFailed: "Couldn't complete that action. Try again.",
+    downloadStarted: (count: number) =>
+      count === 1 ? "Download started" : `Downloading ${count} songs`,
+    downloading: (title: string) => `Downloading ${title}`,
+    fileFailed: "Couldn't play this file",
     titleColumn: "Title",
     artistColumn: "Artist",
     albumColumn: "Album",
