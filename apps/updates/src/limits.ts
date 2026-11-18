@@ -4,6 +4,8 @@
  * which needs nothing created before a deploy. The address is only ever held as a SHA-256.
  */
 
+import { sha256Hex } from "@wave/core";
+
 /** The routes counted, each on its own. */
 export type CountedRoute = "manifest" | "notes" | "apk" | "assets";
 
@@ -44,7 +46,7 @@ export const dayEndsAt = (day: string): number => Date.parse(`${day}T00:00:00.00
  * The block an address counts under: an IPv4 address on its own, an IPv6 one by its /64, the
  * block a single subscriber is given.
  */
-export const addressBlock = (address: string): string => {
+const addressBlock = (address: string): string => {
   const trimmed = address.trim().toLowerCase();
   // IPv4, also when written inside IPv6 (`::ffff:192.0.2.1`).
   if (trimmed.includes(".")) return trimmed.slice(trimmed.lastIndexOf(":") + 1);
@@ -63,14 +65,6 @@ export const addressBlock = (address: string): string => {
         ];
   const prefix = all.slice(0, 4).map((group) => group.replace(/^0+(?=.)/, ""));
   return `${prefix.join(":")}::/64`;
-};
-
-/** [text]'s SHA-256, in hex, as the sync service keys addresses. */
-const sha256Hex = async (text: string): Promise<string> => {
-  const digest = new Uint8Array(
-    await crypto.subtle.digest("SHA-256", new TextEncoder().encode(text)),
-  );
-  return Array.from(digest, (byte) => byte.toString(16).padStart(2, "0")).join("");
 };
 
 /** The key an address is counted by: its block's SHA-256. The address itself is never kept. */
@@ -98,7 +92,7 @@ interface Tally {
  * One address's counts. A refused request writes nothing. The first count of a day sets an alarm
  * for its end, which deletes them all, so an address leaves nothing behind once its day is over.
  */
-export const countRequest = async (
+const countRequest = async (
   storage: CountStorage,
   { key, day, max }: { key: CountKey; day: string; max: number },
 ): Promise<boolean> => {
@@ -116,12 +110,18 @@ const ROUTES: readonly string[] = ["manifest", "notes", "apk", "assets"] satisfi
 const isCountKey = (key: unknown): key is CountKey =>
   typeof key === "string" && (ROUTES.includes(key) || /^asset [0-9a-f]{64}$/.test(key));
 
+/** What Cloudflare calls on a Durable Object: a request to it, and its alarm. */
+interface CountsObject {
+  fetch(request: Request): Promise<Response>;
+  alarm(): Promise<void>;
+}
+
 /**
  * The Durable Object holding one address's counts (wrangler.toml), named by the address's key.
  * Only the Worker reaches it. Its storage blocks other requests while one counts, so a count
  * can't be read twice before it's written.
  */
-export class RequestCounts {
+export class RequestCounts implements CountsObject {
   readonly storage: CountStorage;
 
   constructor(state: { readonly storage: CountStorage }) {
