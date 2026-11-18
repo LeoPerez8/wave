@@ -672,6 +672,59 @@ test("the invitation to sign in shows once the first scan finished, until it's a
   });
 });
 
+test("a phone's Settings › Playback reaches the desktop's engine when a sync pulls it", async () => {
+  await withFile(async (file) => {
+    const app = await desktop();
+    const phone = await app.service.signIn();
+    const { runtime, exposed, engineCalls } = connect(file, undefined, { service: app.open() });
+    const wave = exposed.get("wave") as WaveBridge;
+    try {
+      // The phone sets a 6 s Crossfade and turns Normalize Volume off, then syncs.
+      const phoneDb = await openTestDatabase();
+      const values = new Map([
+        ["settings.crossfadeSeconds", "6"],
+        ["settings.normalizeVolume", "off"],
+      ]);
+      for (const key of values.keys()) stampPreference(phoneDb, key, Date.now());
+      await syncCycle({
+        db: phoneDb,
+        splits: creditSplits(),
+        transport: {
+          request: async (method, path, body) => {
+            const response = await app.service.request(method, path, {
+              session: phone,
+              ...(body === null ? {} : { body, headers: { "content-type": "application/json" } }),
+            });
+            return { status: response.status, body: await response.text() };
+          },
+        },
+        account: "ana@example.com",
+        preferences: { value: (key) => values.get(key) ?? null, apply: () => {} },
+        now: Date.now,
+        songsChanged: true,
+        wait: async () => {},
+      });
+
+      assert.equal((await wave.settings.playback()).crossfadeSeconds, 0);
+      assert.ok(
+        engineCalls.includes("settings crossfade 0"),
+        "the engine starts with the defaults",
+      );
+      await wave.account.signIn();
+      await until(async () => (await wave.settings.playback()).crossfadeSeconds === 6);
+      assert.deepEqual(await wave.settings.playback(), {
+        crossfadeSeconds: 6,
+        normalizeVolume: false,
+        bufferMinutes: 2,
+      });
+      await until(async () => engineCalls.includes("settings normalize false"));
+      assert.deepEqual(engineCalls.slice(-2), ["settings crossfade 6", "settings normalize false"]);
+    } finally {
+      await runtime.dispose();
+    }
+  });
+});
+
 test("signing in from the window brings the account's playlists and theme, and a star goes up", async () => {
   await withFile(async (file) => {
     const app = await desktop();
@@ -735,9 +788,10 @@ test("signing in from the window brings the account's playlists and theme, and a
       );
       const night = (await wave.library.browse({ kind: "playlists" }, 0, 10)).items[0]!;
       assert.deepEqual(
-        (await wave.library.browse({ kind: "playlist", id: night.id }, 0, 10)).items.map(
-          (row) => [row.title, row.path === null],
-        ),
+        (await wave.library.browse({ kind: "playlist", id: night.id }, 0, 10)).items.map((row) => [
+          row.title,
+          row.path === null,
+        ]),
         [
           ["Pink Moon", false],
           ["Road", true],

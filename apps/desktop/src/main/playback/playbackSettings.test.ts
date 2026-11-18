@@ -4,6 +4,7 @@ import { openTestDatabase } from "@wave/client/testing";
 import { sql } from "drizzle-orm";
 
 import {
+  changesPlaybackSettings,
   PLAYBACK_SETTING_KEYS,
   readPlaybackSettings,
   savePlaybackSettings,
@@ -79,4 +80,11 @@ test("the account's values, as sync pulls them, are read by Core's rules (a Cros
     normalizeVolume: true,
     bufferMinutes: 30,
   });
+});
+
+test("a pull changed Settings › Playback only when it brought one of its keys", () => {
+  assert.equal(changesPlaybackSettings(["settings.theme", "settings.crossfadeSeconds"]), true);
+  assert.equal(changesPlaybackSettings(["settings.streamBufferMinutes"]), true);
+  assert.equal(changesPlaybackSettings(["settings.theme", "settings.tabBar"]), false);
+  assert.equal(changesPlaybackSettings([]), false);
 });

@@ -33,6 +33,8 @@ export interface DesktopSyncDeps {
   readonly wait?: (ms: number) => Promise<void>;
   /** Where a sync that failed for an unexpected reason is told; console.warn by default. */
   readonly log?: (message: string, error: unknown) => void;
+  /** A sync pulled new values for the synced settings [keys], already kept. */
+  readonly preferencesPulled?: (keys: readonly string[]) => void;
 }
 
 export interface DesktopSync {
@@ -130,6 +132,8 @@ export const createDesktopSync = (deps: DesktopSyncDeps): DesktopSync => {
         historyChanged: () => void revision++,
       });
       if (changedAnything(pulled)) revision++;
+      if (pulled.preferences.length > 0)
+        deps.preferencesPulled?.(pulled.preferences.map(({ key }) => key));
       return true;
     } catch (error) {
       if (disposed) return false;

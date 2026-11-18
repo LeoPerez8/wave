@@ -11,6 +11,7 @@ import * as Layer from "effect/Layer";
 import type { AccountView } from "../../shared/account.ts";
 import { DesktopLibrary } from "../library/library.ts";
 import { Playback } from "../playback/playback.ts";
+import { changesPlaybackSettings } from "../playback/playbackSettings.ts";
 import { preference, savePreference } from "../preferences.ts";
 import { createDesktopSync, syncedPreference } from "../sync/desktopSync.ts";
 import type { WaveAccountService } from "./account.ts";
@@ -50,6 +51,16 @@ export const accountLayer = (options: {
         db,
         account,
         focused: options.focused,
+        // The account's Crossfade, Normalize Volume or Buffer apply from the next song, as a
+        // change in Settings › Playback does.
+        preferencesPulled: (keys) => {
+          if (changesPlaybackSettings(keys))
+            playback
+              .applySettings()
+              .catch((error: unknown) =>
+                console.warn("[wave] The account's playback settings didn't apply", error),
+              );
+        },
         ...(options.clock === undefined ? {} : { clock: options.clock }),
       });
       // A scan that ended before this layer was built counts as the first.
