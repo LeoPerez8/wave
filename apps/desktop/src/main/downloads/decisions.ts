@@ -5,6 +5,7 @@
  * (publish) and its import into the Library (import). Every rule is Core's; this module only
  * gathers what they read, through [AnswerDeps].
  */
+import { missingSongCover } from "@wave/client/artworkLookup";
 import {
   downloadFailureAnswer,
   downloadFailurePlan,
@@ -309,14 +310,13 @@ export const createAnswers = (deps: AnswerDeps): Answers => {
   };
 
   /** A video's album cover, read as a YT Music song's download reads its album. */
-  const withCover = async (video: MissingSongVideo | null): Promise<MissingSongVideo | null> => {
-    if (video === null || video.artworkUrl !== null) return video;
-    const artworkUrl = await optional(async () => {
-      const { albumId } = await deps.watchSong(video.videoId);
-      return albumId === null ? null : (await deps.album(albumId)).artworkUrl;
-    });
-    return { ...video, artworkUrl };
-  };
+  const withCover = async (video: MissingSongVideo | null): Promise<MissingSongVideo | null> =>
+    video === null
+      ? null
+      : {
+          ...video,
+          artworkUrl: await optional(() => missingSongCover(video, deps.watchSong, deps.album)),
+        };
 
   const prepareMissingSong = async (trackId: number): Promise<object> => {
     const policy = await deps.policy();

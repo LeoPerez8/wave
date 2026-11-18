@@ -211,6 +211,16 @@ class WaveDesktopTest {
   }
 
   @Test
+  fun answersAlbumsNamedLikeAQuery() = withDesktop(youTube("yt/search-albums.json")) { host ->
+    host.write("""{"id":28,"method":"searchAlbums","params":{"query":"watch the throne"}}""")
+    val albums = host.next()["result"]!!.jsonArray
+    assertTrue(albums.isNotEmpty())
+    val album = albums[0].jsonObject
+    assertEquals("album", album["kind"]!!.jsonPrimitive.content)
+    assertTrue(album["browseId"]!!.jsonPrimitive.content.startsWith("MPRE"))
+  }
+
+  @Test
   fun answersASongsRelatedTab() =
     withDesktop(youTubeWatch(next = "yt/next-song.json", other = "yt/related-song.json")) { host ->
       host.write("""{"id":25,"method":"related","params":{"videoId":"5NV6Rdv1a3I"}}""")

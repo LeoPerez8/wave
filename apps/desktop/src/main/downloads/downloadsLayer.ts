@@ -7,15 +7,21 @@ import { Database } from "@wave/client";
 import { desktopRoots } from "@wave/client/db/desktopFolders";
 import { excludedFolders } from "@wave/client/db/libraryQueries";
 import { selectAlbumsMissingSongs, selectMissingSongs } from "@wave/client/db/missingSongs";
-import { albums } from "@wave/client/db/schema";
-import type { Catalogue, SoulseekCandidate, TagWriteReport, YtAlbum } from "@wave/core";
-import { eq } from "drizzle-orm";
+import {
+  albumDownloadOrigin,
+  playlistDownloadOrigin,
+  type Catalogue,
+  type SoulseekCandidate,
+  type TagWriteReport,
+  type YtAlbum,
+} from "@wave/core";
 import * as Context from "effect/Context";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import type { FixSongsResult } from "../../shared/songActions.ts";
 import { Kotlin } from "../kotlin/kotlin.ts";
 import type { KotlinEvent } from "../kotlin/protocol.ts";
+import { browseRows, browseTrackIds } from "../library/browse.ts";
 import { fixSongs } from "../library/fixSongs.ts";
 import { DesktopLibrary } from "../library/library.ts";
 import { preference, savePreference } from "../preferences.ts";
@@ -117,14 +123,22 @@ export const downloadsLayer = (options: DownloadsLayerOptions) =>
         call,
         answer,
         missingSongs: (ids) => selectMissingSongs(db, ids),
-        album: (albumId) => {
-          const found = db
-            .select({ title: albums.title })
-            .from(albums)
-            .where(eq(albums.id, albumId))
-            .get();
+        list: (list) => {
+          const found = browseRows(db, `${list.kind}s`, [list.id])[0];
           if (found === undefined) return null;
-          return { title: found.title, missing: selectAlbumsMissingSongs(db, [albumId])[0] ?? [] };
+          // An album downloads in album order, the others in their page's order.
+          if (list.kind === "album")
+            return {
+              ids: selectAlbumsMissingSongs(db, [list.id])[0] ?? [],
+              origin: albumDownloadOrigin({ id: list.id, title: found.title }),
+            };
+          return {
+            ids: browseTrackIds(db, list).map(Number),
+            origin:
+              list.kind === "playlist"
+                ? playlistDownloadOrigin({ id: list.id, name: found.title })
+                : null,
+          };
         },
         ytSong: yt.song,
         ytMusicOn: yt.enabled,

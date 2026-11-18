@@ -121,6 +121,13 @@ export const en = {
     downloadStarted: (count: number) =>
       count === 1 ? "Download started" : `Downloading ${count} songs`,
     downloading: (title: string) => `Downloading ${title}`,
+    /** Play or Shuffle on a list none of whose songs can play here (Core's `listPlay`). */
+    nothingToPlay: "None of these songs are on this computer yet. Download them to play them here.",
+    /** Play or Shuffle left out [count] missing songs it couldn't stream. */
+    leftOut: (count: number) =>
+      count === 1
+        ? "1 song isn't on this computer, so it was left out."
+        : `${count} songs aren't on this computer, so they were left out.`,
     fileFailed: "Couldn't play this file",
     titleColumn: "Title",
     artistColumn: "Artist",

@@ -27,6 +27,7 @@ type PagesMethod =
   | "album"
   | "search"
   | "searchArtists"
+  | "searchAlbums"
   | "songRadio"
   | "artistRadio"
   | "radioMore"
@@ -65,6 +66,12 @@ export interface YtRelatedRead {
   readonly artists: readonly YtArtistCandidate[];
 }
 
+export interface YtCatalogRead {
+  readonly status: YtStatus;
+  readonly artists: readonly YtArtistCandidate[];
+  readonly albums: readonly YtArtistAlbum[];
+}
+
 export interface YtAlbumRead {
   readonly status: YtStatus;
   readonly album: {
@@ -83,6 +90,8 @@ export interface YtPagesShape {
     name: string,
   ) => Promise<{ readonly status: YtStatus; readonly browseId: string | null }>;
   readonly album: (browseId: string) => Promise<YtAlbumRead>;
+  /** YouTube Music's artists and albums for [query], as Search shows them with its songs. */
+  readonly catalog: (query: string) => Promise<YtCatalogRead>;
   readonly songRadio: (videoId: string) => Promise<YtRadioRead>;
   readonly artistRadio: (browseId: string) => Promise<YtRadioRead>;
   readonly radioMore: (continuation: string) => Promise<YtRadioRead>;
@@ -209,6 +218,14 @@ export const createYtPages = (deps: YtPagesDeps): YtPagesShape => {
             ),
           },
         };
+      }),
+    catalog: (query) =>
+      read<YtCatalogRead>({ artists: [], albums: [] }, async () => {
+        const [found, releases] = await Promise.all([
+          deps.call("searchArtists", { query }),
+          deps.call("searchAlbums", { query }),
+        ]);
+        return { artists: artists(found), albums: albums(releases) };
       }),
     songRadio: (videoId) =>
       read<YtRadioRead>(noRadio, async () => radio(await deps.call("songRadio", { videoId }))),

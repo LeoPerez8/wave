@@ -885,6 +885,9 @@ h2 {
   top: auto;
   bottom: 112px;
 }
+.action-toast > button {
+  white-space: nowrap;
+}
 button.accent {
   color: var(--color-on-accent);
   background: var(--color-accent);
@@ -1035,6 +1038,36 @@ kbd {
 /* A YouTube Music result's Download sits in the star's column. */
 .yt-item {
   position: relative;
+}
+/* Search's YouTube Music rows: the row's button under its artist and album names, which open their
+   pages; a click anywhere else in the row reaches the row. */
+.yt-item > .yt-row {
+  grid-column: 1 / -1;
+  grid-row: 1;
+  width: auto;
+  margin-inline: -12px;
+}
+.yt-credit {
+  grid-row: 1;
+  grid-column: 2;
+  min-width: 0;
+  pointer-events: none;
+}
+.yt-credit-album {
+  grid-column: 3;
+}
+.credit-link {
+  pointer-events: auto;
+  padding: 0;
+  font: inherit;
+  color: inherit;
+  text-align: left;
+}
+.credit-link:not(:disabled):hover,
+.credit-link:focus-visible {
+  color: var(--color-foreground);
+  text-decoration: underline;
+  background: none;
 }
 .yt-download {
   position: absolute;

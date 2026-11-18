@@ -145,6 +145,15 @@ export function Home({
                       key: String(row.id),
                       title: tagTitle(row.title, section.kind),
                       artworkHash: row.artworkHash,
+                      artworkKind:
+                        section.kind === "artist"
+                          ? "artist"
+                          : section.kind === "album"
+                            ? "album"
+                            : section.kind === "song"
+                              ? "song"
+                              : undefined,
+                      artworkId: row.id,
                       caption:
                         row.playCount === undefined
                           ? artistName(row.artist)

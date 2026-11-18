@@ -82,11 +82,18 @@ export function useSongActions({ go, select, failed, changed, newPlaylist }: Opt
     readonly message: string;
     readonly id: number;
     readonly undo?: () => void;
+    readonly action?: ToastAction;
   }>();
   const [confirm, setConfirm] = useState<Confirm>();
 
-  const notify = useCallback((message: string | null, undo?: () => void) => {
-    if (message !== null) setToast({ message, id: Date.now(), ...(undo ? { undo } : {}) });
+  const notify = useCallback((message: string | null, undo?: () => void, action?: ToastAction) => {
+    if (message !== null)
+      setToast({
+        message,
+        id: Date.now(),
+        ...(undo ? { undo } : {}),
+        ...(action ? { action } : {}),
+      });
   }, []);
 
   const run = useCallback(
@@ -334,7 +341,13 @@ export function useSongActions({ go, select, failed, changed, newPlaylist }: Opt
     <>
       {menu && <Menu label={menu.label} items={menu.items} at={menu.at} onClose={closeMenu} />}
       {toast && (
-        <Toast key={toast.id} message={toast.message} onDone={hideToast} onUndo={toast.undo} />
+        <Toast
+          key={toast.id}
+          message={toast.message}
+          onDone={hideToast}
+          onUndo={toast.undo}
+          action={toast.action}
+        />
       )}
       {confirm && (
         <ConfirmDialog
@@ -352,7 +365,7 @@ export function useSongActions({ go, select, failed, changed, newPlaylist }: Opt
     openItems,
     itemFor,
     overlays,
-    /** Shows [message] as the window's toast. */
+    /** Shows [message] as the window's toast, with Undo or another [action] to offer. */
     notify,
     /** Closes the open menu, if one is; false when none was. */
     closeMenu: () => {
@@ -363,15 +376,23 @@ export function useSongActions({ go, select, failed, changed, newPlaylist }: Opt
   };
 }
 
-/** A toast for the phone's time; with [onUndo], an Undo button too. */
+/** A button a toast offers besides Undo, such as Download Missing Songs. */
+export interface ToastAction {
+  readonly label: string;
+  readonly run: () => void;
+}
+
+/** A toast for the phone's time; with [onUndo], an Undo button too, or [action]'s. */
 export function Toast({
   message,
   onDone,
   onUndo,
+  action,
 }: {
   readonly message: string;
   readonly onDone: () => void;
   readonly onUndo?: (() => void) | undefined;
+  readonly action?: ToastAction | undefined;
 }) {
   useEffect(() => {
     const timer = setTimeout(onDone, toastDuration(message));
@@ -389,6 +410,17 @@ export function Toast({
           }}
         >
           {text.playlists.undo}
+        </button>
+      )}
+      {action && (
+        <button
+          className="toast-action"
+          onClick={() => {
+            onDone();
+            action.run();
+          }}
+        >
+          {action.label}
         </button>
       )}
     </div>

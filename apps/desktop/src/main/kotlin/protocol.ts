@@ -81,6 +81,7 @@ export interface KotlinMethods extends KotlinDownloadMethods {
   readonly artist: { readonly params: { readonly browseId: string }; readonly result: unknown };
   readonly album: { readonly params: { readonly browseId: string }; readonly result: unknown };
   readonly searchArtists: { readonly params: { readonly query: string }; readonly result: unknown };
+  readonly searchAlbums: { readonly params: { readonly query: string }; readonly result: unknown };
   readonly songRadio: { readonly params: { readonly videoId: string }; readonly result: unknown };
   readonly artistRadio: {
     readonly params: { readonly browseId: string };

@@ -5,11 +5,14 @@
  */
 import { Database } from "@wave/client";
 import type { LibraryDatabase } from "@wave/client/db/database";
+import { selectAlbums } from "@wave/client/db/albums";
 import { listArtistsSync } from "@wave/client/db/libraryQueries";
 import { selectCountedPlays } from "@wave/client/db/playTotals";
 import { selectVideoIds, trackQuery } from "@wave/client/db/tracks";
 import {
+  libraryArtistFinder,
   libraryFinder,
+  libraryReleaseFinder,
   localDay,
   parseTrackId,
   readContinueQueue,
@@ -17,12 +20,14 @@ import {
   type PlayedSeedArtist,
   type QueueContinuationSeed,
   type YtAlbumSong,
+  type YtArtistAlbum,
 } from "@wave/core";
 import * as Context from "effect/Context";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 
 import type { BrowseKind } from "../../shared/browse.ts";
+import { ytRow, type YtSearchPage } from "../../shared/yt.ts";
 import type { SongTarget } from "../../shared/songActions.ts";
 import { Kotlin } from "../kotlin/kotlin.ts";
 import { browseLibrary, browseTrackIds } from "../library/browse.ts";
@@ -50,6 +55,11 @@ export interface YtFeaturesShape {
   readonly pages: YtPagesShape;
   readonly discover: DiscoverShape;
   readonly magicQueue: MagicQueueShape;
+  /**
+   * Search's YouTube Music answer for [query]: its songs, artists and albums, and which of them
+   * the Library already has. One search that fails fails them all, as on the phone.
+   */
+  readonly search: (query: string) => Promise<YtSearchPage>;
   /** The Related tab of the song playing; nothing when no song plays. */
   readonly related: () => Promise<YtRelatedRead>;
   /** Plays a Magic Queue of [target]'s songs; false when none of them can play. */
@@ -71,7 +81,17 @@ interface LibraryRead {
     readonly songs: number;
   }[];
   readonly known: (song: YtAlbumSong) => boolean;
+  /** Whether the Library has the YT Music artist [name] (Core's `libraryArtistFinder`). */
+  readonly hasArtist: (name: string) => boolean;
+  /** Whether the Library has [release] (Core's `libraryReleaseFinder`). */
+  readonly hasAlbum: (release: YtArtistAlbum) => boolean;
 }
+
+/** Built on first use: most reads never ask about artists or albums. */
+const lazily = <A>(build: () => A): (() => A) => {
+  let built: { readonly value: A } | null = null;
+  return () => (built ??= { value: build() }).value;
+};
 
 /** The Library's songs with a file, its artists and its counted plays, as these features weigh them. */
 const readLibrary = (db: LibraryDatabase): LibraryRead => {
@@ -93,15 +113,20 @@ const readLibrary = (db: LibraryDatabase): LibraryRead => {
     };
   });
   const find = libraryFinder(songs);
+  const artists = listArtistsSync(db).map((artist) => ({
+    id: artist.id,
+    name: artist.name,
+    songs: artist.trackCount,
+  }));
+  const artistNamed = lazily(() => libraryArtistFinder(artists));
+  const releaseOf = lazily(() => libraryReleaseFinder(artistNamed(), selectAlbums(db, undefined)));
   return {
     songs,
     byId: new Map(songs.map((song) => [song.id, song])),
-    artists: listArtistsSync(db).map((artist) => ({
-      id: artist.id,
-      name: artist.name,
-      songs: artist.trackCount,
-    })),
+    artists,
     known: (song) => find(song) !== null,
+    hasArtist: (name) => artistNamed()(name) !== null,
+    hasAlbum: (release) => releaseOf()(release) !== null,
   };
 };
 
@@ -269,6 +294,33 @@ export const ytFeaturesLayer = (options: { readonly online: () => boolean }) =>
         pages,
         discover,
         magicQueue,
+        search: async (query) => {
+          const [found, catalog] = await Promise.all([yt.search(query), pages.catalog(query)]);
+          const status = found.status !== "ok" ? found.status : catalog.status;
+          if (status !== "ok")
+            return {
+              status,
+              songs: { items: [], offset: 0, total: 0 },
+              artists: [],
+              albums: [],
+              inLibrary: { songs: [], artists: [], albums: [] },
+            };
+          const library = current();
+          const items = found.songs.map(ytRow);
+          return {
+            status,
+            songs: { items, offset: 0, total: items.length },
+            artists: catalog.artists,
+            albums: catalog.albums,
+            inLibrary: {
+              songs: found.songs.filter(library.known).map((song) => song.videoId),
+              artists: catalog.artists
+                .filter((artist) => library.hasArtist(artist.name))
+                .map((artist) => artist.browseId),
+              albums: catalog.albums.filter(library.hasAlbum).map((album) => album.browseId),
+            },
+          };
+        },
         related: async () => {
           const song = playback.view().current;
           if (song === null) return { status: "ok", songs: [], artists: [] };

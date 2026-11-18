@@ -14,7 +14,7 @@ import { language, labels, text, albumName, artistName, tagTitle } from "./text.
 import type { SongState } from "../../shared/songState.ts";
 import { markClass, rowMark, SongMark, useSongStates } from "./SongMark.tsx";
 import { Artwork, time } from "./VirtualTable.tsx";
-import { YtResults } from "./YtResults.tsx";
+import { YtResults, type YtSearchLinks } from "./YtResults.tsx";
 
 const groupLabel = (): Readonly<Record<SearchKind, string>> => ({
   song: text.playbackText.songs,
@@ -77,7 +77,7 @@ function SongRow({
     >
       <span className="title-cell">
         <span className="row-picture">
-          <Artwork hash={row.artworkHash} />
+          <Artwork kind="song" id={row.id} hash={row.artworkHash} />
           <SongMark mark={mark} title={row.title} />
         </span>
         <span className="search-row-title">
@@ -214,6 +214,8 @@ export interface SearchPageProps {
   readonly searchOnline: SearchOnline | undefined;
   readonly onYtPlay: (videoId: string) => void;
   readonly onYtDownload: (videoId: string) => void;
+  /** Where YouTube Music's artists, albums and song credits lead. */
+  readonly ytLinks: YtSearchLinks;
 }
 
 /**
@@ -247,6 +249,7 @@ export function SearchPage(props: SearchPageProps) {
         libraryHasResults={current === undefined ? undefined : current.groups.length > 0}
         onPlay={props.onYtPlay}
         onDownload={props.onYtDownload}
+        links={props.ytLinks}
       >
         <LibraryResults {...props} view={current} />
       </YtResults>
@@ -315,7 +318,13 @@ function LibraryResults({
             }}
           >
             <span className={kind === "artist" ? "search-top-art artist-image" : "search-top-art"}>
-              <Artwork large hash={row.artworkHash} artist={kind === "artist"} />
+              <Artwork
+                large
+                kind={kind === "song" || kind === "album" || kind === "artist" ? kind : undefined}
+                id={row.id}
+                hash={row.artworkHash}
+                artist={kind === "artist"}
+              />
             </span>
             <span className="search-top-name">{tagTitle(row.title, kind)}</span>
             <span className="secondary">
@@ -403,7 +412,17 @@ function LibraryResults({
               onClick={() => openRow(section.kind, row)}
             >
               <span className={section.kind === "artist" ? "artist-image" : undefined}>
-                <Artwork large hash={row.artworkHash} artist={section.kind === "artist"} />
+                <Artwork
+                  large
+                  kind={
+                    section.kind === "song" || section.kind === "album" || section.kind === "artist"
+                      ? section.kind
+                      : undefined
+                  }
+                  id={row.id}
+                  hash={row.artworkHash}
+                  artist={section.kind === "artist"}
+                />
               </span>
               <span className="truncate">{tagTitle(row.title, section.kind)}</span>
               <span className="truncate secondary">

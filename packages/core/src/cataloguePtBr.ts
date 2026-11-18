@@ -119,6 +119,12 @@ export const ptBR: Catalogue = {
     actionFailed: "Não foi possível concluir essa ação. Tente de novo.",
     downloadStarted: (count) => (count === 1 ? "Baixando a música" : `Baixando ${count} músicas`),
     downloading: (title) => `Baixando ${title}`,
+    nothingToPlay:
+      "Nenhuma destas músicas está neste computador ainda. Baixe-as para tocá-las aqui.",
+    leftOut: (count) =>
+      count === 1
+        ? "1 música não está neste computador, então ficou de fora."
+        : `${count} músicas não estão neste computador, então ficaram de fora.`,
     fileFailed: "Não foi possível reproduzir este arquivo",
     titleColumn: "Título",
     artistColumn: "Artista",
