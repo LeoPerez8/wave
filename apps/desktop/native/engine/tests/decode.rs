@@ -62,12 +62,12 @@ fn flac_decodes_and_seeks_sample_exact() {
 fn assert_lossy(name: &str, rate: u32, delay: i64, min_snr: f64) {
     let mut decoder = Decoder::open(&fixture(name)).expect("opens");
     assert_eq!(decoder.sample_rate(), rate, "{name}: rate");
-    let duration = decoder.duration_frames().expect("knows its length") as i64;
-    assert!(
-        (duration - rate as i64 - delay).abs() <= rate as i64 / 20,
-        "{name}: duration {duration} frames"
-    );
+    let duration = decoder.duration_frames().expect("knows its length");
     let pcm = decode_all(&mut decoder);
+    assert_eq!(pcm.len() as u64 / 2, duration, "{name}: the length it states is what decodes");
+    if delay == 0 {
+        assert_eq!(duration, rate as u64, "{name}: trimmed to the signal's length");
+    }
     let start = rate as u64 / 5;
     let (found, correlation) = lag(&pcm[start as usize * 2..], start, rate, 3000);
     assert_eq!(found, delay, "{name}: delay (correlation {correlation:.4})");

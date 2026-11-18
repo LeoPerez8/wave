@@ -82,11 +82,8 @@ impl Decoder {
             .map_err(|e| EngineError::Unsupported(e.to_string()))?;
         let rate =
             params.sample_rate.ok_or_else(|| EngineError::Unsupported("no sample rate".into()))?;
-        let duration = track.num_frames.map(|frames| {
-            frames
-                .saturating_sub(track.delay.unwrap_or(0) as u64)
-                .saturating_sub(track.padding.unwrap_or(0) as u64)
-        });
+        let num_frames = track.num_frames;
+
         let mut decoder = Decoder {
             path: path.to_path_buf(),
             at_end: false,
@@ -95,7 +92,7 @@ impl Decoder {
             format,
             decoder,
             rate,
-            duration,
+            duration: None,
             origin: 0,
             drop_before: 0,
             pending: None,
@@ -105,6 +102,10 @@ impl Decoder {
             .decode_next()?
             .ok_or_else(|| EngineError::Unsupported("no audio in the file".into()))?;
         decoder.origin = first.first_frame;
+        // Demuxers count delay and padding out of `num_frames`, except that Opus counts its
+        // pre-skip in; the timeline's origin covers both.
+        decoder.duration =
+            num_frames.map(|frames| frames.saturating_sub(first.first_frame.max(0) as u64));
         decoder.pending = Some(first.samples);
         Ok(decoder)
     }

@@ -9,7 +9,7 @@ publish.workspace = true
 crate-type = ["cdylib"]
 
 [dependencies]
-napi = { version = "3.16.2", default-features = false, features = ["napi4"] }
+napi = { version = "3.16.2", default-features = false, features = ["napi4", "dyn-symbols"] }
 napi-derive = "3.7.1"
 wave-audio = { path = "../engine" }
 
