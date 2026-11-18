@@ -14,6 +14,8 @@ import { AlbumCredit, ArtistCredit, type YtCreditLinks } from "./YtCredit.tsx";
 const PLAYING_POLL_MS = 100;
 const IDLE_POLL_MS = 1000;
 const VOLUME_STEP = 0.05;
+/** What ← and → seek on the focused scrubber (docs/spec-desktop.md, Keyboard). */
+const SEEK_STEP_MS = 5000;
 
 /** The player's state, read from main, and `run` for a bridge call that changes it. */
 export function usePlayback(failed: () => void) {
@@ -264,8 +266,17 @@ export function PlayerBar({
                 disabled={song === null}
                 onChange={(event) => setDrag(Number(event.target.value))}
                 onPointerUp={(event) => seekTo(Number(event.currentTarget.value))}
-                onKeyUp={(event) => {
-                  if (drag !== undefined) seekTo(Number(event.currentTarget.value));
+                onKeyDown={(event) => {
+                  // The arrows move 5 seconds, not the slider's own step; a held key adds up.
+                  if (event.ctrlKey || event.metaKey || event.altKey || event.shiftKey) return;
+                  const back = event.key === "ArrowLeft" || event.key === "ArrowDown";
+                  if (!back && event.key !== "ArrowRight" && event.key !== "ArrowUp") return;
+                  event.preventDefault();
+                  const moved = position + (back ? -SEEK_STEP_MS : SEEK_STEP_MS);
+                  setDrag(Math.max(0, Math.min(duration, moved)));
+                }}
+                onKeyUp={() => {
+                  if (drag !== undefined) seekTo(drag);
                 }}
               />
             </div>
