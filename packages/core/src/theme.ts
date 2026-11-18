@@ -1,8 +1,8 @@
 /**
  * Wave's colour theme ("The Quiet Catalog"): one tonal ramp of blue-grey
  * neutrals (OKLCH hue ~215) that every neutral token picks a step from, plus
- * teal (accent), ember (highlight) and a destructive red. `apps/mobile/global.css`
- * mirrors these values as CSS variables; the app's tests keep the two in sync.
+ * teal (accent), ember (highlight) and a destructive red. `packages/theme/colours.css`
+ * holds the shared CSS variables; the mobile app's drift tests keep them in sync.
  */
 
 import { contrastRatio } from "./palette.ts";
@@ -27,7 +27,7 @@ export const TONES = [
   "#0a1113",
 ] as const;
 
-/** The colour tokens of one scheme, named as in global.css (`--color-<name>`). */
+/** The colour tokens of one scheme, named as in colours.css (`--color-<name>`). */
 export interface ThemeColors {
   /** The ground of every screen. */
   readonly background: string;
@@ -120,7 +120,7 @@ export type RecapColour =
 
 /**
  * The colours a Recap's slides, its share image, Stats' Recap tiles and
- * Home's Recap card sit on; global.css declares them as
+ * Home's Recap card sit on; the shared colours.css declares them as
  * `--color-recap-<name>`, the same in both schemes (a story keeps its colour
  * whatever the theme). They are a Recap's own and deep enough that the
  * white ink (`on-recap`, `RECAP_INK`) reads as text, its quieter lines at

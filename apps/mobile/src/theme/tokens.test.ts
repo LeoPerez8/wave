@@ -7,7 +7,7 @@ import { DEFAULT_THEME, RECAP_COLOURS, RECAP_INK, TONES } from "@wave/core";
 
 const read = (path: string): string => readFileSync(new URL(path, import.meta.url), "utf8");
 
-const css = read("../../global.css");
+const css = read("../../../../packages/theme/colours.css");
 const appConfig = read("../../app.config.ts");
 
 /** `--color-<name>: #rrggbb;` declarations inside a block. */
@@ -21,11 +21,11 @@ const declarations = (block: string): Record<string, string> =>
 
 const variant = (scheme: "light" | "dark"): Record<string, string> => {
   const match = new RegExp(`@variant ${scheme} \\{([^}]*)\\}`).exec(css);
-  assert.ok(match?.[1] !== undefined, `global.css has a ${scheme} variant`);
+  assert.ok(match?.[1] !== undefined, `colours.css has a ${scheme} variant`);
   return declarations(match[1]);
 };
 
-describe("global.css colour tokens", () => {
+describe("shared colour tokens", () => {
   test("each scheme declares exactly Core's default theme, the Recap colours and their ink", () => {
     for (const scheme of ["light", "dark"] as const) {
       const recap = Object.fromEntries(
