@@ -28,6 +28,7 @@ import {
 import type { ImageEdit, ImportAnswer } from "../../shared/playlists.ts";
 import type { SongTarget } from "../../shared/songActions.ts";
 import "./playlists.css";
+import { copyLink } from "./copyLink.ts";
 import { Menu, type MenuItem } from "./Menu.tsx";
 import { ConfirmDialog, Toast, trapTab } from "./SongActions.tsx";
 import { language, text } from "./text.ts";
@@ -176,6 +177,17 @@ export function usePlaylistEdits({ go, deleted, failed, changed }: Options) {
               key: "graveyard",
               label: text.playlists.graveyard,
               run: () => go({ kind: "graveyard", id: playlistId }),
+            },
+          ]
+        : []),
+      ...((await window.wave.settings.ytMusic())
+        ? [
+            {
+              key: "copyLink",
+              label: text.share.copyLink,
+              run: () => {
+                void copyLink(window.wave.links.copyPlaylist(playlistId, language));
+              },
             },
           ]
         : []),

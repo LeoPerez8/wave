@@ -167,6 +167,15 @@ to Playlist and Remove from Library. A target is `{scope, ids}` or `{scope, all:
 until Settings includes it again; the file stays on disk. The renderer's keys go through Core's
 `desktopKey`, with focus read by `keys.ts`.
 
+## Links
+
+`e2e/links.spec.ts` pastes and drops each kind of link the phone opens (a YT Music song and
+playlist, a Spotify track, playlist and short link) with YT Music off, so every one answers with
+the same card and no service is asked anything. It also checks that pasted text that is no link
+does nothing, that a paste into the search field stays a paste, and that Copy Link reaches the
+system clipboard. What a link opens with YT Music on is tested in
+`src/main/links/links.test.ts`, against a fake JVM and `fetch`.
+
 ## The dev window
 
 To look at `pnpm dev` from an agent, start it in the background with a debugging port and a
