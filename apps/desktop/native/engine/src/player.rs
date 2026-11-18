@@ -9,6 +9,7 @@ use std::time::{SystemTime, UNIX_EPOCH};
 
 use crate::decode::Decoder;
 use crate::error::EngineError;
+use crate::stream::Origin;
 
 /// How much decoded audio waits ahead of the output, in seconds.
 const BUFFER_SECONDS: f64 = 0.5;
@@ -135,7 +136,16 @@ impl Player {
     }
 
     pub fn load_entry(&self, path: &Path, key: Option<String>) -> Result<TrackInfo, EngineError> {
-        let decoder = Decoder::open(path)?;
+        self.load_origin(&Origin::File(path.to_path_buf()), key)
+    }
+
+    /// Opens a song from a file or a stream, paused at its start.
+    pub fn load_origin(
+        &self,
+        origin: &Origin,
+        key: Option<String>,
+    ) -> Result<TrackInfo, EngineError> {
+        let decoder = Decoder::open_origin(origin)?;
         let track = TrackInfo {
             sample_rate: decoder.sample_rate(),
             duration_frames: decoder.duration_frames(),
@@ -157,8 +167,12 @@ impl Player {
 
     /// Decode a bounded head now, before the callback reaches the current song's end.
     pub fn preload(&self, next: Option<(&Path, String)>) -> Result<(), EngineError> {
-        let prepared = if let Some((path, key)) = next {
-            let mut decoder = Decoder::open(path)?;
+        self.preload_origin(next.map(|(path, key)| (Origin::File(path.to_path_buf()), key)))
+    }
+
+    pub fn preload_origin(&self, next: Option<(Origin, String)>) -> Result<(), EngineError> {
+        let prepared = if let Some((origin, key)) = next {
+            let mut decoder = Decoder::open_origin(&origin)?;
             let track = TrackInfo {
                 sample_rate: decoder.sample_rate(),
                 duration_frames: decoder.duration_frames(),

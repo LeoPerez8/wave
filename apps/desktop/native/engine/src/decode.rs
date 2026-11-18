@@ -1,7 +1,6 @@
 //! One file, decoded to interleaved stereo `f32` frames at the file's own rate.
 
-use std::fs::File;
-use std::path::{Path, PathBuf};
+use std::path::Path;
 use std::sync::OnceLock;
 
 use symphonia::core::codecs::audio::{AudioDecoder, AudioDecoderOptions};
@@ -15,6 +14,7 @@ use symphonia::core::units::{TimeBase, Timestamp};
 use symphonia_adapter_libopus::OpusDecoder;
 
 use crate::error::EngineError;
+use crate::stream::Origin;
 
 /// Symphonia's codecs plus Opus through libopus.
 fn codecs() -> &'static CodecRegistry {
@@ -32,7 +32,8 @@ fn codecs() -> &'static CodecRegistry {
 const PREROLL_SECONDS: f64 = 0.1;
 
 pub struct Decoder {
-    path: PathBuf,
+    /// Where the song is read from, to open it again.
+    source: Origin,
     /// The demuxer has run out; Symphonia's MP4 reader can't seek after that.
     at_end: bool,
     format: Box<dyn FormatReader>,
@@ -59,12 +60,18 @@ struct Chunk {
 
 impl Decoder {
     pub fn open(path: &Path) -> Result<Decoder, EngineError> {
-        let file = File::open(path).map_err(|e| EngineError::NotFound(e.to_string()))?;
+        Decoder::open_origin(&Origin::File(path.to_path_buf()))
+    }
+
+    pub fn open_origin(source: &Origin) -> Result<Decoder, EngineError> {
+        let media = source.source().map_err(|e| EngineError::NotFound(e.to_string()))?;
+        let length = media.byte_len();
+        let extension = source.extension();
         let mut hint = Hint::new();
-        if let Some(extension) = path.extension().and_then(|e| e.to_str()) {
+        if let Some(extension) = &extension {
             hint.with_extension(extension);
         }
-        let stream = MediaSourceStream::new(Box::new(file), Default::default());
+        let stream = MediaSourceStream::new(media, Default::default());
         let mut format = symphonia::default::get_probe()
             .probe(&hint, stream, FormatOptions::default(), MetadataOptions::default())
             .map_err(|e| EngineError::Unsupported(e.to_string()))?;
@@ -95,18 +102,20 @@ impl Decoder {
         let rate =
             params.sample_rate.ok_or_else(|| EngineError::Unsupported("no sample rate".into()))?;
         let num_frames = track.num_frames;
-        let trim = if path
-            .extension()
-            .and_then(|s| s.to_str())
+        let trim = if extension
+            .as_deref()
             .is_some_and(|s| s.eq_ignore_ascii_case("m4a") || s.eq_ignore_ascii_case("mp4"))
         {
-            smpb.or_else(|| crate::gapless::from_mp4(path, track.id, rate))
+            smpb.or_else(|| {
+                let reader = source.source().ok()?;
+                crate::gapless::from_mp4_reader(reader, length?, track.id, rate)
+            })
         } else {
             None
         };
 
         let mut decoder = Decoder {
-            path: path.to_path_buf(),
+            source: source.clone(),
             at_end: false,
             track_id: track.id,
             time_base: track.time_base,
@@ -176,7 +185,7 @@ impl Decoder {
     /// Moves to `frame`, so the next chunk starts exactly there.
     pub fn seek(&mut self, frame: u64) -> Result<(), EngineError> {
         if self.at_end {
-            *self = Decoder::open(&self.path)?;
+            *self = Decoder::open_origin(&self.source.clone())?;
         }
         let preroll = (self.rate as f64 * PREROLL_SECONDS) as u64;
         let from = frame.saturating_sub(preroll) as i64 + self.origin;

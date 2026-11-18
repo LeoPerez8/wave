@@ -1,7 +1,5 @@
 //! AAC trim metadata. Only the bounded `moov` box is read; audio bytes stay streamed.
-use std::fs::File;
 use std::io::{Read, Seek, SeekFrom};
-use std::path::Path;
 
 #[derive(Clone, Copy, Debug)]
 pub struct Trim {
@@ -80,9 +78,14 @@ fn edits(moov: &[u8], track_id: u32, rate: u32) -> Option<Trim> {
     }
     None
 }
-pub fn from_mp4(path: &Path, track_id: u32, rate: u32) -> Option<Trim> {
-    let mut file = File::open(path).ok()?;
-    let length = file.metadata().ok()?.len();
+/// The trim from an MP4's edit list, read from any seekable reader of `length` bytes, such as
+/// a song still downloading.
+pub fn from_mp4_reader<R: Read + Seek>(
+    mut file: R,
+    length: u64,
+    track_id: u32,
+    rate: u32,
+) -> Option<Trim> {
     let mut offset = 0u64;
     while offset.checked_add(8)? <= length {
         file.seek(SeekFrom::Start(offset)).ok()?;
