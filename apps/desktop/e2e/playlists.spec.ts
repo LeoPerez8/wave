@@ -70,6 +70,28 @@ test("playlists: create, rename, add, remove, Graveyard, import and delete", asy
     await expect(inSidebar("Evening")).toBeVisible();
     await expect(inSidebar("Morning")).toHaveCount(0);
 
+    // Change Image frames a photo; the page shows it, and Adjust Image is offered.
+    const cover = join(
+      appFolder,
+      "../../packages/kotlin-shared/src/testFixtures/resources/fixtures/cover.png",
+    );
+    await app.evaluate(({ dialog }, path) => {
+      dialog.showOpenDialog = async () => ({ canceled: false, filePaths: [path] });
+    }, cover);
+    const actions = page.getByRole("button", { name: text.playlists.playlistActions });
+    await actions.click();
+    await page.getByRole("menuitem", { name: labels.changeImage }).click();
+    const cropper = page.getByRole("dialog", { name: text.library.moveAndScale });
+    await cropper.getByRole("button", { name: text.library.zoomIn }).click();
+    await page.screenshot({
+      path: test.info().outputPath(`playlist-image-${process.platform}.png`),
+    });
+    await cropper.getByRole("button", { name: text.library.done }).click();
+    await expect(page.locator(".hero .artwork img")).toBeVisible();
+    await actions.click();
+    await expect(page.getByRole("menuitem", { name: labels.adjustImage })).toBeVisible();
+    await page.keyboard.press("Escape");
+
     // Add to Playlist from the song menu.
     await page.getByRole("button", { name: "Songs", exact: true }).click();
     for (const title of ["Alpha", "Bravo"]) {
