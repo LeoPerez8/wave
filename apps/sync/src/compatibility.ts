@@ -88,6 +88,8 @@ export interface AccountInventory {
     readonly headroom: number;
   };
   readonly retained: Readonly<Record<string, Retained>>;
+  /** Its provider-usage rows, one per counted category. */
+  readonly providerUsage: { readonly rows: number; readonly limit: number };
 }
 
 export interface Inventory {
@@ -144,6 +146,7 @@ const readInventory = async (db: Client, now: number): Promise<Inventory> => {
         sql: `SELECT
                 (SELECT count(*) FROM sessions s WHERE s.account_id = a.id AND s.last_used_at > ?) AS valid,
                 (SELECT count(*) FROM sessions s WHERE s.account_id = a.id AND s.last_used_at <= ?) AS expired,
+                (SELECT count(*) FROM upstream_usage u WHERE u.account_id = a.id) AS provider_rows,
                 ${retained.join(",\n")}
               FROM accounts a ORDER BY a.created_at, a.rowid`,
         args: [validSince, validSince],
@@ -193,6 +196,10 @@ const readInventory = async (db: Client, now: number): Promise<Inventory> => {
           ];
         }),
       ),
+      providerUsage: {
+        rows: Number(row.provider_rows),
+        limit: SELECTED_LIMITS.providerUsagePerAccount,
+      },
     };
   });
   const current = Number(counters?.rows[0]?.current);
@@ -230,7 +237,16 @@ const blockers = (inventory: Inventory): Finding[] => {
   if (accounts.count > accounts.limit) {
     found.push({ code: "accounts-over-limit", count: accounts.count, limit: accounts.limit });
   }
-  for (const { label, sessions, retained } of inventory.perAccount) {
+  for (const { label, sessions, retained, providerUsage } of inventory.perAccount) {
+    // The categories are fixed, so all three in use is normal; more is a row the limit doesn't expect.
+    if (providerUsage.rows > providerUsage.limit) {
+      found.push({
+        code: "provider-usage-over-limit",
+        account: label,
+        count: providerUsage.rows,
+        limit: providerUsage.limit,
+      });
+    }
     // At the limit the next phone's sign-in is refused; over it, the sessions stay but no new one starts.
     if (sessions.valid >= sessions.limit) {
       found.push({
