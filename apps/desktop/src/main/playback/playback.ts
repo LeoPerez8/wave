@@ -2,11 +2,15 @@
  * Playback: the queue the player bar plays, over the audio process. The queue, shuffle,
  * repeat, Undo, counted plays and the saved queue are Core's rules, run by
  * `@wave/client/playbackSession`; this service adds what is the desktop's own: the Library's
- * rows, the volume, and the scopes the window plays from.
+ * rows, the volume, the scopes the window plays from, and Settings › Playback (Crossfade,
+ * Normalize Volume and the measurements it needs, Buffer).
  */
 import { Database } from "@wave/client";
+import { saveMeasurement, selectSongsToMeasure } from "@wave/client/db/loudness";
 import { setFavorites } from "@wave/client/db/playHistory";
 import { createPlaybackSession, type AudioPort } from "@wave/client/playbackSession";
+import { createQueueGains, queueAlbum } from "@wave/client/queueGains";
+import { createSongMeasurements } from "@wave/client/songMeasurements";
 import type { QueueState } from "@wave/core";
 import * as Context from "effect/Context";
 import * as Effect from "effect/Effect";
@@ -15,10 +19,12 @@ import * as Layer from "effect/Layer";
 import type { Page } from "../../shared/bridge.ts";
 import type { BrowseRow, BrowseScope } from "../../shared/browse.ts";
 import type { PlaybackCommand, PlayerView, QueueRow } from "../../shared/playerView.ts";
+import type { PlaybackSettings } from "../../shared/playbackSettings.ts";
 import { Player } from "../audio/player.ts";
 import { browseSongs, browseTrackIds } from "../library/browse.ts";
 import { DesktopLibrary } from "../library/library.ts";
 import { preference, savePreference } from "../preferences.ts";
+import { readPlaybackSettings, savePlaybackSettings } from "./playbackSettings.ts";
 
 export interface PlaybackShape {
   /** What the player bar shows; cheap enough to poll. */
@@ -44,6 +50,12 @@ export interface PlaybackShape {
   readonly queue: (offset: number, limit: number) => Page<QueueRow>;
   /** Saves the position and the play so far. */
   readonly flush: () => Promise<void>;
+  /** Settings › Playback as the account holds them. */
+  readonly settings: () => PlaybackSettings;
+  /** Keeps the owner's change to Settings › Playback; it applies from the next song. */
+  readonly setSettings: (change: Partial<PlaybackSettings>) => Promise<PlaybackSettings>;
+  /** Plays by the stored settings again, after sync pulled the account's values. */
+  readonly applySettings: () => Promise<void>;
 }
 
 export class Playback extends Context.Service<Playback, PlaybackShape>()(
@@ -63,8 +75,9 @@ export const playbackLayer = Layer.effect(
     const library = yield* DesktopLibrary;
     const run = Effect.runPromise;
     const audio: AudioPort = {
-      load: (path, key) => run(player.load(path, key)),
-      preload: (path, key) => run(player.preload(path, key)),
+      load: (path, key, options) => run(player.load(path, key, options?.gainDb)),
+      preload: (path, key, options) =>
+        run(player.preload(path, key, options?.gainDb, options?.fade)),
       play: () => run(player.play()),
       pause: () => run(player.pause()),
       seek: (positionMs) => run(player.seek(positionMs)),
@@ -79,20 +92,68 @@ export const playbackLayer = Layer.effect(
     const failed = (cause: unknown) => {
       error = cause instanceof Error ? cause.message : String(cause);
     };
+    const gains = createQueueGains(db);
+    let settings = readPlaybackSettings(db);
+    /** Playback is shutting down: nothing more is measured, as the Library is closing. */
+    let closing = false;
     const session = yield* Effect.promise(() =>
       createPlaybackSession({
         db,
         audio,
         source: "desktop",
         available: (path) => !library.unavailable(path),
+        gainDb: gains.gainDb,
       }),
     );
+    // Normalize Volume's measurements: the queue's songs with no value of their own, one at a
+    // time, the song playing and the next ones first (Core's `songsToMeasure`).
+    const measurements = createSongMeasurements({
+      on: () => !closing && settings.normalizeVolume,
+      queue: () =>
+        Effect.sync(() => {
+          const state = session.snapshot().queue;
+          return { state, album: queueAlbum(db, state) };
+        }),
+      songsToMeasure: (ids) => Effect.sync(() => selectSongsToMeasure(db, ids)),
+      measure: player.measure,
+      cancel: () => void run(player.cancelMeasurements()).catch(() => undefined),
+      save: (song, measurement) => Effect.sync(() => saveMeasurement(db, song, measurement)),
+      learned: () => {
+        gains.changed();
+        session.gainsChanged().catch(failed);
+      },
+    });
+    /** The queue changed: songs it brought in may need measuring. */
+    const queueChanged = () => void measurements.wake().catch(() => undefined);
+    /** Sends the stored settings to the engine; each applies from its next move. */
+    const sendSettings = async () => {
+      await run(player.setCrossfade(settings.crossfadeSeconds));
+      await run(player.setNormalize(settings.normalizeVolume));
+    };
+    /** Plays by [next] from here, measuring or not as its Normalize Volume says. */
+    const playBySettings = async (next: typeof settings) => {
+      const switched = next.normalizeVolume !== settings.normalizeVolume;
+      settings = next;
+      await sendSettings();
+      if (switched) measurements.switched();
+    };
     yield* Effect.promise(() => run(player.setVolume(muted ? 0 : volume)).catch(failed));
+    yield* Effect.promise(() => sendSettings().catch(failed));
+    queueChanged();
+    let queueFed = session.snapshot().queue;
     const stop = player.subscribe((event) => {
-      session.feed(event.status, event.transitions).catch(failed);
+      session
+        .feed(event.status, event.transitions)
+        .then(() => {
+          if (session.snapshot().queue === queueFed) return;
+          queueFed = session.snapshot().queue;
+          queueChanged();
+        })
+        .catch(failed);
     });
     yield* Effect.addFinalizer(() =>
       Effect.promise(async () => {
+        closing = true;
         stop();
         await session.close().catch(failed);
       }),
@@ -105,7 +166,15 @@ export const playbackLayer = Layer.effect(
       }));
     /** The current song's row, read again only when the queue or a star changed. */
     let currentRow: { readonly revision: number; readonly row: BrowseRow | null } | undefined;
+    /** The last finished scan seen: it can bring tag values, and files to try measuring again. */
+    let scanSeen = library.status().revision;
     const view = (): PlayerView => {
+      const scan = library.status();
+      if (scan.status === "done" && scan.revision !== scanSeen) {
+        scanSeen = scan.revision;
+        gains.changed();
+        measurements.scanned();
+      }
       const { queue, status, canUndo } = session.snapshot();
       if (queue !== lastQueue) {
         lastQueue = queue;
@@ -146,6 +215,7 @@ export const playbackLayer = Layer.effect(
           context: { kind: scope.kind, id: scope.id === undefined ? null : String(scope.id) },
         });
         if (session.snapshot().canUndo) undoOffer++;
+        queueChanged();
       },
       command: async (command) => {
         error = null;
@@ -154,11 +224,15 @@ export const playbackLayer = Layer.effect(
             ? { ...command, positionMs: session.snapshot().status.positionMs }
             : command,
         );
+        queueChanged();
       },
       play: session.play,
       pause: session.pause,
       seek: session.seek,
-      undo: session.undo,
+      undo: async () => {
+        await session.undo();
+        queueChanged();
+      },
       dismissUndo: session.dismissUndo,
       favorite: () => {
         const current = view().current;
@@ -199,6 +273,12 @@ export const playbackLayer = Layer.effect(
         };
       },
       flush: session.flush,
+      settings: () => settings,
+      setSettings: async (change) => {
+        await playBySettings(savePlaybackSettings(db, change, Date.now()));
+        return settings;
+      },
+      applySettings: () => playBySettings(readPlaybackSettings(db)),
     };
   }),
 );

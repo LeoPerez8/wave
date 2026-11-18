@@ -28,7 +28,7 @@ export interface QueueGains {
 }
 
 /** The Library album a queue plays, for album gain; null for any other context. */
-const queueAlbum = (db: LibraryDatabase, queue: QueueState): AlbumLoudness | null => {
+export const queueAlbum = (db: LibraryDatabase, queue: QueueState): AlbumLoudness | null => {
   if (queue.context?.kind !== "album" || queue.context.id === null) return null;
   const id = Number(queue.context.id);
   return Number.isInteger(id) ? selectAlbumLoudness(db, id) : null;

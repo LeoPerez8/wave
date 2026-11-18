@@ -6,6 +6,7 @@
 import type { PlayerView, PlaybackCommand, QueueRow } from "./playerView.ts";
 import type { LibraryCounts } from "@wave/client/db/counts";
 import type { PlaybackStatus } from "./playback.ts";
+import type { PlaybackSettings } from "./playbackSettings.ts";
 import type { SongTags } from "./tags.ts";
 import type { DesktopFolder, DesktopSong, ScanStatus } from "./library.ts";
 import type { BrowseScope, BrowsePage } from "./browse.ts";
@@ -49,6 +50,11 @@ export interface BridgeContract {
   readonly "settings.setAppearance": {
     readonly args: readonly [appearance: Appearance];
     readonly result: void;
+  };
+  readonly "settings.playback": { readonly args: readonly []; readonly result: PlaybackSettings };
+  readonly "settings.setPlayback": {
+    readonly args: readonly [change: Partial<PlaybackSettings>];
+    readonly result: PlaybackSettings;
   };
   readonly "library.artwork": {
     readonly args: readonly [hash: string, large: boolean];
@@ -137,6 +143,8 @@ export const BRIDGE_CALLS = [
   "tags.read",
   "settings.appearance",
   "settings.setAppearance",
+  "settings.playback",
+  "settings.setPlayback",
 ] as const satisfies readonly BridgeCall[] &
   (BridgeContract extends PagedLists<BridgeContract> ? unknown : never);
 
@@ -189,6 +197,10 @@ export interface WaveBridge {
   readonly settings: {
     readonly appearance: () => Promise<Appearance>;
     readonly setAppearance: (appearance: Appearance) => Promise<void>;
+    /** Settings › Playback: Crossfade, Normalize Volume and Buffer, synced with the account. */
+    readonly playback: () => Promise<PlaybackSettings>;
+    /** Keeps a change to Settings › Playback; it applies from the next song. */
+    readonly setPlayback: (change: Partial<PlaybackSettings>) => Promise<PlaybackSettings>;
   };
 }
 
@@ -234,5 +246,7 @@ export const createBridge = (invoke: Invoke): WaveBridge => ({
   settings: {
     appearance: () => invoke("settings.appearance"),
     setAppearance: (appearance) => invoke("settings.setAppearance", appearance),
+    playback: () => invoke("settings.playback"),
+    setPlayback: (change) => invoke("settings.setPlayback", change),
   },
 });

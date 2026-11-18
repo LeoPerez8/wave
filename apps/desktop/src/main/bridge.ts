@@ -6,7 +6,7 @@ import * as Effect from "effect/Effect";
 import { BRIDGE_CALLS, type BridgeCall, type BridgeContract } from "../shared/bridge.ts";
 import { PLAYABLE_EXTENSIONS } from "../shared/playback.ts";
 import { Playback } from "./playback/playback.ts";
-import { validPlaybackCommand } from "./playback/validation.ts";
+import { validPlaybackCommand, validPlaybackSettings } from "./playback/validation.ts";
 import { Player } from "./audio/player.ts";
 import type { AudioEngineError } from "./audio/supervisor.ts";
 import { Kotlin } from "./kotlin/kotlin.ts";
@@ -169,6 +169,11 @@ const createHandlers = (onAppearance: (mode: Appearance) => void): Handlers => {
             onAppearance(mode);
           })
         : refuse("settings.setAppearance", "invalid appearance"),
+    "settings.playback": () => playbackCall((p) => p.settings()),
+    "settings.setPlayback": ([change]) =>
+      validPlaybackSettings(change)
+        ? playbackCall((p) => p.setSettings(change))
+        : refuse("settings.setPlayback", "invalid playback settings"),
     "library.artwork": ([hash, large]) =>
       typeof hash === "string" && /^[a-f0-9]{40}$/.test(hash) && typeof large === "boolean"
         ? Effect.gen(function* () {
