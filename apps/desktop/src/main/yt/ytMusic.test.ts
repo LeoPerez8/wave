@@ -160,10 +160,15 @@ test("covers come only from YouTube's image hosts, as small images, and are kept
     (await yt.artwork("https://i.ytimg.com/vi/abcdefghijk/hqdefault.jpg")) !== null,
     true,
   );
+  assert.notEqual(
+    await yt.artwork("https://yt3.googleusercontent.com/def=w120-h120"),
+    null,
+    "YouTube Music's song covers come from yt3 too",
+  );
   assert.equal(await yt.artwork("http://lh3.googleusercontent.com/abc"), null, "https only");
   assert.equal(await yt.artwork("https://evil.example/abc.jpg"), null);
   assert.equal(await yt.artwork("https://googleusercontent.com.evil.example/a"), null);
-  assert.equal(fetched.length, 2, "the cover is fetched once");
+  assert.equal(fetched.length, 3, "the cover is fetched once");
 });
 
 test("a cover that isn't a small image, or doesn't arrive, is no cover", async () => {

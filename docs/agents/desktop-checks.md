@@ -52,6 +52,11 @@ Kotlin call fails with `[ERR_UNEXPECTED]`. `WAVE_JVM_RUNTIME` and `WAVE_KOTLIN_J
 other builds. `e2e/kotlin.spec.ts` reads the tag fixtures the phone's tests read, kills the JVM
 mid-call, and records its resident memory at rest as the `jvm-resident-mb` annotation.
 
+`e2e/ytmusic.spec.ts` checks YT Music against the live YouTube Music: the setting, the sidebar's
+entries, Search's results, and (off CI) a song that plays, seeks and moves on. Its `yt-search`
+annotation gives the number of songs, or the quiet line when YouTube asked for a bot check.
+Streamed audio is cached under `audio/` in the cache folder (`WAVE_DATA_DIR` in tests).
+
 ## Data
 
 `WAVE_DATA_DIR` points the app at a folder of its own instead of the user's data folder; the

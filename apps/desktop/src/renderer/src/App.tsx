@@ -432,10 +432,11 @@ export function App() {
                       checked={ytMusic}
                       onChange={(event) => {
                         const on = event.target.checked;
-                        void window.wave.settings
-                          .setYtMusic(on)
-                          .then(() => setYtMusic(on))
-                          .catch(failed);
+                        setYtMusic(on);
+                        void window.wave.settings.setYtMusic(on).catch(() => {
+                          setYtMusic(!on);
+                          failed();
+                        });
                       }}
                     />
                     <span>{text.settings.useYTMusic}</span>

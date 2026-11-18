@@ -64,7 +64,7 @@ export interface YtMusicShape {
 export const VIDEO_ID = /^[A-Za-z0-9_-]{11}$/;
 /** YouTube's image hosts; the window's CSP loads nothing else. */
 const ARTWORK_HOSTS = [
-  /^lh\d\.googleusercontent\.com$/,
+  /^(lh|yt)\d\.googleusercontent\.com$/,
   /^i\d?\.ytimg\.com$/,
   /^yt\d\.ggpht\.com$/,
 ];
