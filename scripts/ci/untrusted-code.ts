@@ -14,42 +14,70 @@ import { fileURLToPath } from "node:url";
  */
 const ALLOWED_TRIGGERS = new Set(["pull_request", "push", "workflow_dispatch"]);
 
-/** The events under the workflow's `on:`, in either the block or the inline form. */
-const triggersOf = (workflow: string): string[] => {
-  const inline = /^on:[ \t]*(\S.*)$/m.exec(workflow)?.[1];
-  if (inline)
-    return inline
-      .replace(/[[\]]/g, "")
-      .split(",")
-      .map((name) => name.trim());
-  const block = /^on:[ \t]*\n((?:[ \t]+.*\n?|\s*\n)*)/m.exec(workflow)?.[1] ?? "";
-  return [...block.matchAll(/^ {2}([\w-]+):/gm)].map((match) => match[1]!);
+/** A line without its trailing `# comment`, trimmed: empty for a blank or comment line. */
+const valueOf = (line: string): string => line.replace(/(^|[ \t])#.*$/, "").trim();
+
+const indentOf = (line: string): number => /^ */.exec(line)![0].length;
+
+/** A mapping key or sequence item's name: `  - "push": # x` → `push`. */
+const nameOf = (line: string): string =>
+  valueOf(line)
+    .replace(/^-[ \t]*/, "")
+    .replace(/:.*$/, "")
+    .replace(/^(["'])(.*)\1$/, "$2");
+
+/** Each top-level `<key>:` line, by index, with what follows the colon. */
+const topLevel = (lines: string[], key: string) =>
+  lines.flatMap((line, index) => {
+    const match = new RegExp(`^(["']?)${key}\\1:(.*)$`).exec(line);
+    return match ? [{ index, value: valueOf(match[2]!) }] : [];
+  });
+
+/** The entries nested under lines[at]: each line at the block's indentation, with those below it. */
+const entriesUnder = (lines: string[], at: number) => {
+  const entries: { name: string; body: string[] }[] = [];
+  let indent = -1;
+  for (const line of lines.slice(at + 1)) {
+    if (valueOf(line) === "") continue;
+    const depth = indentOf(line);
+    if (depth === 0) break;
+    if (indent < 0) indent = depth;
+    if (depth <= indent) entries.push({ name: nameOf(line), body: [] });
+    else entries.at(-1)?.body.push(line);
+  }
+  return entries;
 };
 
-/** Each job of the workflow, by name, as the text under its `  <name>:` line. */
-const jobsOf = (workflow: string): Map<string, string> => {
-  const start = workflow.indexOf("\njobs:\n");
-  const jobs = new Map<string, string>();
-  if (start < 0) return jobs;
-  const body = workflow.slice(start + "\njobs:\n".length).split(/\n(?=\S)/)[0]!;
-  for (const block of body.split(/\n(?= {2}[\w-]+:[ \t]*(?:#.*)?\n)/)) {
-    const name = /^ {2}([\w-]+):/.exec(block)?.[1];
-    if (name) jobs.set(name, block);
-  }
-  return jobs;
-};
+/** The events under the workflow's `on:`, in either the block or the inline form. */
+const triggersOf = (lines: string[]): string[] =>
+  topLevel(lines, "on").flatMap(({ index, value }) =>
+    value
+      ? value
+          .replace(/[[\]]/g, "")
+          .split(",")
+          .map((name) => name.trim())
+      : entriesUnder(lines, index).map((entry) => entry.name),
+  );
 
 /** Each rule [workflow] breaks, as a short label; empty when it keeps them all. */
 export function untrustedCodeExposures(workflow: string): string[] {
-  const found = triggersOf(workflow)
+  const lines = workflow.split(/\r\n?|\n/);
+  const found = triggersOf(lines)
     .filter((name) => !ALLOWED_TRIGGERS.has(name))
     .map((name) => `trigger ${name}`);
   // Without it, every job gets the repository's default token, whatever that is set to.
-  if (!/^permissions:[ \t]*\{\}[ \t]*(#.*)?$/m.test(workflow)) {
+  const permissions = topLevel(lines, "permissions");
+  if (permissions.length === 0 || permissions.some(({ value }) => !/^\{\s*\}$/.test(value))) {
     found.push("workflow permissions not {}");
   }
-  for (const [name, job] of jobsOf(workflow)) {
-    if (!/^ {4}permissions:/m.test(job)) found.push(`job ${name} has no permissions`);
+  for (const { index } of topLevel(lines, "jobs")) {
+    for (const { name, body } of entriesUnder(lines, index)) {
+      const keys = body.filter((line) => indentOf(line) === indentOf(body[0] ?? ""));
+      const asked = keys.filter((line) => nameOf(line) === "permissions");
+      if (asked.length === 0) found.push(`job ${name} has no permissions`);
+      else if (asked.some((line) => valueOf(line.replace(/^[^:]*:/, "")) === "write-all"))
+        found.push(`job ${name} permissions write-all`);
+    }
   }
   return found;
 }

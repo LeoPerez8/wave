@@ -41,6 +41,55 @@ describe("untrustedCodeExposures", () => {
     assert.deepEqual(untrustedCodeExposures(workflow), ["job lint has no permissions"]);
   });
 
+  /** A workflow breaking a trigger rule and a job rule, written with [comments] on its keys. */
+  const exposed = (comments: boolean) => {
+    const note = (text: string) => (comments ? ` # ${text}` : "");
+    return [
+      `on:${note("when it runs")}`,
+      `  pull_request_target:${note("the base token")}`,
+      "  push:",
+      `permissions: {}${note("none by default")}`,
+      `jobs:${note("each job")}`,
+      `  test:${note("the tests")}`,
+      "    runs-on: ubuntu-latest",
+      `    permissions:${note("read only")}`,
+      "      contents: read",
+      "  lint:",
+      "    runs-on: ubuntu-latest",
+    ];
+  };
+  const both = ["trigger pull_request_target", "job lint has no permissions"];
+
+  it("reads a workflow saved with CRLF line endings", () => {
+    assert.deepEqual(untrustedCodeExposures(exposed(false).join("\r\n")), both);
+  });
+
+  it("reads trailing comments on on:, jobs: and the trigger keys", () => {
+    assert.deepEqual(untrustedCodeExposures(exposed(true).join("\n")), both);
+    const inline = ["on: [push, pull_request] # both", "permissions: {}", ...job].join("\n");
+    assert.deepEqual(untrustedCodeExposures(inline), []);
+  });
+
+  it("names a job that asks for every write permission", () => {
+    const workflow = [
+      "on:",
+      "  push:",
+      "permissions: {}",
+      "jobs:",
+      "  release:",
+      "    runs-on: ubuntu-latest",
+      "    permissions: write-all # everything",
+    ].join("\n");
+    assert.deepEqual(untrustedCodeExposures(workflow), ["job release permissions write-all"]);
+  });
+
+  it("names any top-level permissions besides {}, even beside a {} one", () => {
+    const block = ["on: push", "permissions:", "  contents: write", ...job].join("\n");
+    const twice = ["on: push", "permissions: {}", "permissions: write-all", ...job].join("\n");
+    assert.deepEqual(untrustedCodeExposures(block), ["workflow permissions not {}"]);
+    assert.deepEqual(untrustedCodeExposures(twice), ["workflow permissions not {}"]);
+  });
+
   it("finds nothing in the repository's workflows", () => {
     const dir = fileURLToPath(new URL("../../.github/workflows/", import.meta.url));
     const files = readdirSync(dir).filter((file) => file.endsWith(".yml"));
