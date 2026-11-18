@@ -59,6 +59,39 @@ Library is `wave.db` in it. Seed one before launching with `libraryLayer` from
 `src/main/database.ts` and `addTrack` from `@wave/client/testing`, as `e2e/smoke.spec.ts` does.
 Pass `--lang=en-US` (or `pt-BR`) to fix the app's language.
 
+## Library scans
+
+Main provides `DesktopLibrary` through `desktopLibraryLayer`, which consumes `Database` and
+`Kotlin`. It starts an incremental scan immediately, using Electron's `app.getPath("music")`
+for the system Music folder. `WAVE_MUSIC_DIR` overrides that first-run default for isolated
+checks; an existing database keeps its chosen roots. First launch opens no permission dialog.
+
+The service watches recursively from each root's parent on Windows and watches each directory
+on Linux. It reconciles after 2 seconds without changes. Unavailable roots and failed watcher
+registrations are retried every 10 seconds, followed by that quiet period. Handles are rebuilt
+after a scan so a remounted directory's new inode is watched. Closing the service closes the
+handles and waits for its current tag read before releasing the database.
+
+`e2e/library.spec.ts` checks a 1,200-file first scan with the real JVM, progress, paging, live
+file changes, root disappearance/recovery, F5, changes while closed and folder settings. The
+folder-picker result is supplied by the test; checking the actual native dialog and physically
+unplugging a drive remain owner checks. Screenshots are `library-progress.png`,
+`library-scanned.png` and `library-unavailable.png` in `test-results/`.
+
+The bridge adds `library.scanStatus`, `refresh`, `songs`, `roots`, `exclusions`, `addRoot`,
+`exclude`, `removeRoot` and `include`. List calls take `(offset, limit)` and accept at most
+200 rows. `addRoot` and `exclude` open the native picker; paths for removal/inclusion must
+already belong to the stored settings. `player.load` and `player.play` reject unavailable
+folders with `[folder-unavailable]`. `scanStatus.revision` changes after a saved batch and at
+completion; views re-read their pages on that revision, while visible.
+
+Core's `scanPath`, `scanPathKey`, `scanPathWithin` and `scanFileState` own desktop path and
+availability decisions. Client's `db/desktopScan` reuses Core reconciliation and the phone's
+saving, leaving-song, credit and playlist rules. `db/desktopFolders` applies the shared root
+and exclusion plans with Windows identity. Canonical links inside selected roots are followed
+once; targets outside those roots need their own root. Hidden files and folders are ignored,
+and voice notes use Core's existing filter and Client's skipped-file index.
+
 ## The dev window
 
 To look at `pnpm dev` from an agent, start it in the background with a debugging port and a

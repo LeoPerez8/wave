@@ -2799,4 +2799,6 @@ export type {
   ListDownloadsScope,
 } from "./listDownloadProgress.ts";
 export { MARQUEE, marqueeOffset, marqueePlan, marqueeStill, readsRightToLeft } from "./marquee.ts";
+export { scanPath, scanPathKey, scanPathWithin, scanFileState } from "./desktopScan.ts";
+export type { ScanFolder } from "./desktopScan.ts";
 export type { MarqueeLine, MarqueeLineSize, MarqueePlan } from "./marquee.ts";

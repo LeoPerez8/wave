@@ -1,5 +1,5 @@
 import { join } from "node:path";
-import { BrowserWindow, app, ipcMain, shell } from "electron";
+import { BrowserWindow, app, dialog, ipcMain, shell } from "electron";
 import * as Layer from "effect/Layer";
 import * as ManagedRuntime from "effect/ManagedRuntime";
 import { forkAudio } from "./audio/fork.ts";
@@ -9,6 +9,7 @@ import { libraryLayer } from "./database.ts";
 import { kotlinLayer } from "./kotlin/kotlin.ts";
 import { jvmCommand, spawnLines } from "./kotlin/spawn.ts";
 import { guardWindow } from "./security.ts";
+import { desktopLibraryLayer } from "./library/library.ts";
 
 // %APPDATA%\Wave or ~/.config/Wave, from the product name; tests point it at a folder of their own.
 const dataFolder = process.env["WAVE_DATA_DIR"];
@@ -66,14 +67,23 @@ else {
       dataDir: join(app.getPath("userData"), "kotlin"),
       platform: process.platform,
     });
+    const services = Layer.mergeAll(
+      libraryLayer(join(app.getPath("userData"), "wave.db")),
+      playerLayer({ fork: forkAudio(join(import.meta.dirname, "audio.js"), addon) }),
+      kotlinLayer({
+        spawn: spawnLines(jvm, (text) => process.stderr.write(`[jvm] ${text}`)),
+      }),
+    );
     const runtime = ManagedRuntime.make(
-      Layer.mergeAll(
-        libraryLayer(join(app.getPath("userData"), "wave.db")),
-        playerLayer({ fork: forkAudio(join(import.meta.dirname, "audio.js"), addon) }),
-        kotlinLayer({
-          spawn: spawnLines(jvm, (text) => process.stderr.write(`[jvm] ${text}`)),
-        }),
-      ),
+      desktopLibraryLayer({
+        // Electron resolves Windows' Music known folder and Linux's XDG user directory.
+        musicFolder: process.env["WAVE_MUSIC_DIR"] ?? app.getPath("music"),
+        platform: process.platform,
+        pickFolder: async () => {
+          const result = await dialog.showOpenDialog({ properties: ["openDirectory"] });
+          return result.canceled ? undefined : result.filePaths[0];
+        },
+      }).pipe(Layer.provideMerge(services)),
     );
     // Builds the services now, so the JVM starts with the app rather than on the first call.
     void runtime.context();
