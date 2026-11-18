@@ -4,8 +4,9 @@ How to get the source of a Wave release and build it yourself (#1135, spec #1122
 of this file at the commit a release names, not the one on `main`: the build steps change with
 the code.
 
-Wave declares no licence yet (`docs/licensing/rights-inventory.md`). This file and the tool it
-describes prepare source delivery for the GPL-3.0-only declaration. Neither is that declaration.
+Wave is licensed GPL-3.0-only from 2026-11-18 ([LICENSE](../LICENSE), [NOTICE.md](../NOTICE.md),
+`docs/licensing/rights-inventory.md`). This file and the tool it describes are how each release
+offers its Corresponding Source.
 
 ## What identifies a release's source
 
@@ -13,19 +14,19 @@ Each release is one commit. The release gate records it (`docs/release-provenanc
 `scripts/ci/release-source.ts` turns that record into a **source manifest**,
 `wave-<version>.source.json`, plus directions in Markdown, `wave-<version>.source.md`:
 
-| Field              | What it holds                                                                                                                                                                                              |
-| ------------------ | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `source`           | The commit, with an archive and a browse link that name it by SHA. Never a branch.                                                                                                                         |
-| `build`            | `full`, `repack`, or `unknown` for a release from before the gate.                                                                                                                                         |
-| `nativeBase`       | For a repack, the commit its kept native build came from. The APK carries code from both commits, so both are its source.                                                                                  |
-| `promotedFrom`     | For a stable release, the ti release it promotes (`docs/release-provenance.md`, Promotion): its tag and signed APK digest. The tool refuses a record that promotes another source.                         |
-| `generated`        | What CI generates on top of the tree: the version name and code (a promotion drops `-ti`), the update channel and the runtime version it stamps into the manifest (`scripts/ci/update-config.ts`).         |
-| `artifacts`        | The published APK's name and digests, from the sealed record.                                                                                                                                              |
-| `buildInputs`      | The files besides the app's code that drive the build, all inside the source tree: the lockfile, workspace config, config plugins, native modules, CI build scripts, the inventory and this file.          |
-| `instructions`     | This file at a fixed commit.                                                                                                                                                                               |
-| `thirdPartySource` | Exact source of the GPL-family libraries the APK links from outside the tree: innertubex at `af31fd2b` and the jaudiotagger 3.0.1 sources jar (`correspondingSource` in `docs/licensing/components.json`). |
-| `notices`          | `node scripts/ci/rights-inventory.ts notices` for that commit: every shipped npm package with its notice files, then each component's notice.                                                              |
-| `pending`          | What isn't settled for that release, starting with the rights inventory's open items.                                                                                                                      |
+| Field              | What it holds                                                                                                                                                                                                                                                     |
+| ------------------ | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `source`           | The commit, with an archive and a browse link that name it by SHA. Never a branch.                                                                                                                                                                                |
+| `build`            | `full`, `repack`, or `unknown` for a release from before the gate.                                                                                                                                                                                                |
+| `nativeBase`       | For a repack, the commit its kept native build came from. The APK carries code from both commits, so both are its source.                                                                                                                                         |
+| `promotedFrom`     | For a stable release, the ti release it promotes (`docs/release-provenance.md`, Promotion): its tag and signed APK digest. The tool refuses a record that promotes another source.                                                                                |
+| `generated`        | What CI generates on top of the tree: the version name and code (a promotion drops `-ti`), the update channel and the runtime version it stamps into the manifest (`scripts/ci/update-config.ts`).                                                                |
+| `artifacts`        | The published APK's name and digests, from the sealed record.                                                                                                                                                                                                     |
+| `buildInputs`      | The files besides the app's code that drive the build, all inside the source tree: the lockfile, workspace config, config plugins, native modules, CI build scripts, the inventory and this file.                                                                 |
+| `instructions`     | This file at a fixed commit.                                                                                                                                                                                                                                      |
+| `thirdPartySource` | Exact source of the GPL-family libraries the APK links from outside the tree: innertubex (`af31fd2b` for 0.8.6, `719948b9` for 0.11.9), quackjs at `d867d98f` and the jaudiotagger 3.0.1 sources jar (`correspondingSource` in `docs/licensing/components.json`). |
+| `notices`          | `node scripts/ci/rights-inventory.ts notices` for that commit: every shipped npm package with its notice files, then each component's notice.                                                                                                                     |
+| `pending`          | What isn't settled for that release, starting with the rights inventory's open items.                                                                                                                                                                             |
 
 The manifest holds links, version numbers and digests. The tool builds it field by field from
 the record, so nothing else in a record can end up in it. It never holds a key, a token or a
@@ -45,7 +46,7 @@ is in the source's history, and that every link names a commit.
 ### Releases from before the gate
 
 Tags `v0.5.0` to `v0.68.0-ti` have no provenance record, and none of them holds the rights
-inventory. Run this from a checkout that has both the tag and this file (a commit on `main`
+inventory or a licence. Run this from a checkout that has both the tag and this file (a commit on `main`
 pushed to GitHub, so the link works):
 
 ```sh
@@ -54,7 +55,9 @@ node scripts/ci/release-source.ts legacy v0.68.0-ti --instructions-at <commit ho
 
 It reads the tag's version and build inputs through git, and the notices from the checkout's
 inventory. When the tag's `pnpm-lock.yaml` differs from the checkout's, `pending` says the notices
-come from a later inventory and the tag needs its own snapshot.
+come from a later inventory and the tag needs its own snapshot. `thirdPartySource` also comes from
+the checkout, so it lists every GPL library source the inventory records, including ones that tag
+didn't ship (those tags shipped innertubex 0.8.6, not 0.11.9 or quackjs).
 
 The manifest says `"provenance": "none"` and `"build": "unknown"`. Some of those APKs were
 repacks, and no record says which commit their native part came from. It is an earlier commit on
@@ -68,7 +71,7 @@ Release commits stay reachable because `v*` tags can only be moved or deleted by
 release commit. A branch link would show whatever `main` holds today.
 
 The third-party links point at other people's servers. GPLv3 §6(d) leaves Wave responsible for
-that source staying available while it offers the APK. Mirroring innertubex and jaudiotagger as
+that source staying available while it offers the APK. Mirroring innertubex, quackjs and jaudiotagger as
 release assets is not done; see [Open items](#open-items).
 
 ## Building a release yourself
@@ -157,20 +160,23 @@ noted above. Revisit this if Wave ever ships on devices.
 `scripts/ci/publish-release.sh` attaches `SOURCE_MANIFEST_FILE` and `SOURCE_DIRECTIONS_FILE`
 when they're set, as `wave-<version>.source.json` and `.source.md`, and adds the directions to
 the release notes. The release job builds them only when the repository variable
-`RELEASE_SOURCE_DELIVERY` is `on`. It is off: turning it on is the owner's decision, made with
-the licence declaration, and changes what every later release page shows.
+`RELEASE_SOURCE_DELIVERY` is `on`. The owner turns it on with the licence declaration of
+2026-11-18; it changes what every later release page shows.
 
-Releases already published get their manifests by hand (`legacy` above), attached by the owner
-when source delivery is turned on. Nothing here edits a published release.
+Releases already published get their manifests by hand (`legacy` above, or `manifest` from the
+tag's checkout for a release with a record), attached by the owner. The tool edits no published
+release.
 
 ## Open items
 
 These keep source delivery from being complete. Each manifest lists the ones that apply.
 
-- The rights inventory is blocked (`node scripts/ci/rights-inventory.ts check`). Its items reach
-  every manifest's `pending`.
-- The resolved Gradle release closure, and the native libraries inside npm packages, aren't in
-  the notices. Nobody has run the closure on a machine with a JDK.
+- The resolved Gradle release closure is recorded (`docs/licensing/android-release-closure.json`,
+  observed at `6b31a7cc`), but `notices` doesn't list its libraries, and nothing re-observes it
+  when a `build.gradle` changes.
+- Releases before 2026-11-18 carry no licence file, and their tree's inventory (where one exists)
+  says the inventory was blocked. `v0.70.0-ti` ships innertubex 0.11.9 and quackjs, which the
+  inventory at its own commit doesn't name.
 - Notices are listed by file name in the manifest. No release ships their texts as a file or an
   in-app screen yet.
 - innertubex and jaudiotagger sources are linked, not mirrored with the release.

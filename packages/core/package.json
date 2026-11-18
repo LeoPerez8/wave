@@ -2,6 +2,7 @@
   "name": "@wave/core",
   "version": "0.0.0",
   "private": true,
+  "license": "GPL-3.0-only",
   "description": "Wave's domain logic. Pure TypeScript with zero runtime dependencies, so its tests run anywhere with plain Node.",
   "type": "module",
   "exports": {

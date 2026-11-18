@@ -1,3 +1,10 @@
+// Ported from shazamio-core 2.0.0 (https://github.com/shazamio/shazamio-core, 5690a2e9), its
+// `SignatureGenerator` under src/fingerprinting: MIT License, Copyright (c) 2024 dotX12.
+// shazamio-core's fingerprinting follows SongRec (https://github.com/marin-m/SongRec, GNU GPL
+// version 3 or later, Copyright (C) SongRec contributors), credited here because no comparison has
+// shown the code independent. Modified by Wave from 2026-10-28 on, and conveyed under the GNU GPL
+// version 3 (LICENSE, NOTICE.md).
+
 package expo.modules.wavenative.recognize
 
 import java.io.ByteArrayOutputStream

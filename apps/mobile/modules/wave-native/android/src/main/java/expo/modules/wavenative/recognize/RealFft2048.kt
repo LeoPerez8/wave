@@ -1,3 +1,10 @@
+// This Source Code Form is subject to the terms of the Mozilla Public License, v. 2.0. If a copy of
+// the MPL was not distributed with this file, You can obtain one at https://mozilla.org/MPL/2.0/.
+//
+// Ported from chfft 0.3.4 by chalharu (https://crates.io/crates/chfft/0.3.4), its RFft1D. Modified
+// by Wave from 2026-10-28 on. This file stays under MPL-2.0, outside Wave's GPL-3.0-only grant;
+// MPL-2.0 section 3.3 lets it be part of the GPL-3.0-only work (NOTICE.md).
+
 package expo.modules.wavenative.recognize
 
 /**

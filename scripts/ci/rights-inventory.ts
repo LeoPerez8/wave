@@ -214,6 +214,8 @@ export type Component = {
   notice?: string;
   /** Where its exact source is, for a library whose licence makes it Corresponding Source. */
   correspondingSource?: string;
+  /** How a blocker became compatible: observed, an owner statement or exception, or excluded. */
+  resolution?: string;
 };
 
 /** A notice a release carries: a package's notice files (null when not observed) or a component's. */
@@ -366,6 +368,7 @@ const SHIPPED_IMPORTERS = ["apps/mobile", "apps/sync"];
 const GRADLE_FILES = [
   "apps/mobile/modules/wave-native/android/build.gradle",
   "apps/mobile/modules/wave-glass/android/build.gradle",
+  "packages/kotlin-shared/build.gradle.kts",
 ];
 const SNAPSHOT = "docs/licensing/npm-packages.json";
 const COMPONENTS = "docs/licensing/components.json";

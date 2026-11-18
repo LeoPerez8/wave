@@ -19,7 +19,59 @@ Evidence kinds:
 - **code inspection**: read from the source.
 - **observed state**: read from GitHub or a provider (read-only), with its date.
 
-## Verdict
+## Activation, 2026-11-18
+
+Everything below this section is the decision as recorded at `61774d29`, before any of it ran. This
+section records what happened after, on the owner's instruction in the session that built it.
+
+- **Merge and first gated release.** PR #1137 merged into `main` as `e37f04a4`. CI run
+  `44251200418` bumped to `a1f23cf0` (Release Wave 0.69.0-ti); Version, Secret scan, Release gate
+  and Publish versioned release passed, and the GitHub Release `v0.69.0-ti` carries
+  `wave-0.69.0-ti.provenance.json`. The PR's own runs passed Native unit tests, which hold
+  `WaveAccountClientTest.kt`.
+- **Compatibility report against production.** Run at 19:07 UTC for `c9120524` (the `main` tip
+  then) with a read-only database token that expired after an hour: `compatible`, exit 0, no
+  findings. Counts: 4 accounts of 10; at most 3 valid sessions in an account, none expired; every
+  synced table far under its quota with tombstones counted; 0 current sign-in counters (2 stale);
+  11 usage warnings, none outside the window; at most 3 provider usage rows in an account. The
+  four installed-app checks (sign-in, push and pull, Library preserved, other sessions preserved)
+  were seen by the owner on a phone and passed with `--installed-client`.
+- **Worker settings.** The sync Worker's secret names were read; `ALLOWED_EMAILS` isn't among them,
+  so admission is first come, first served.
+- **Sync Worker deployed** from `c9120524` with `pnpm --filter @wave/sync run deploy`: the migration
+  step reported the database up to date, and `wrangler deploy` made version
+  `a5fc8960-f9dd-4c48-9a80-710e52de89fb` current. The owner then checked Wave on a phone against it
+  and reported everything working.
+- **Licence.** GPL-3.0-only declared on 2026-11-18 on the owner's instruction: `LICENSE` (the
+  unmodified GPLv3 text), `NOTICE.md` (copyright, the §7 Play services permission, the paths left
+  out of the grant) and `"license": "GPL-3.0-only"` in every first-party `package.json`. The
+  owner stated the same day that the LeoPerez8, "Ygor Perez de Oliveira" and ygor-infotera
+  identities are all theirs.
+
+Controls after activation:
+
+| #   | Control                                            | Result              | Basis                                                                                                                                                                                                                                                                                                                                                             |
+| --- | -------------------------------------------------- | ------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| 1   | Current use fits the limits                        | **pass**            | The production report above, `compatible`.                                                                                                                                                                                                                                                                                                                        |
+| 2–6 | Account, row, session, counter and metadata limits | **pass**            | Deployed in `a5fc8960`, with production counts inside every limit and the owner's phone check after the deploy. Local tests at `61774d29`.                                                                                                                                                                                                                        |
+| 7   | Release gate                                       | **pass**            | First run on GitHub admitted `e37f04a4` and published `v0.69.0-ti` with its record.                                                                                                                                                                                                                                                                               |
+| 8   | Provenance through promotion and rollback          | **owner exception** | No promotion or rollback has run with the new checks. Accepted by the owner on 2026-11-18; the first promotion or rollback is its evidence.                                                                                                                                                                                                                       |
+| 9   | Contributor isolation                              | **pass**            | Unchanged.                                                                                                                                                                                                                                                                                                                                                        |
+| 10  | Publishing permissions                             | **owner exception** | The CI Cloudflare token's scope and expiry, and whether R2 S3 keys exist, are still unread. Accepted by the owner on 2026-11-18.                                                                                                                                                                                                                                  |
+| 11  | Sync credential separation                         | **owner exception** | Provider-side token kinds and scopes are still unread. Accepted by the owner on 2026-11-18.                                                                                                                                                                                                                                                                       |
+| 12  | Operational controls                               | **owner exception** | MFA, audit logs, backups and billing alerts are still unobserved. Accepted by the owner on 2026-11-18.                                                                                                                                                                                                                                                            |
+| 13  | Rights inventory                                   | **pass**            | `node scripts/ci/rights-inventory.ts check` exits 0 at the licence change (parent `6b31a7cc`): "ready for GPL-3.0-only". Two of its resolutions are owner exceptions of 2026-11-18 (Play services with a §7 permission; releases already distributed), and five groups of files are excluded from the grant (`docs/licensing/rights-inventory.md` › Resolutions). |
+| 14  | Release source delivery                            | **owner action**    | Turned on by the owner; backfill run recorded by the release-source run. Not observed in this record.                                                                                                                                                                                                                                                             |
+
+**Verdict after activation: ready**, with owner exceptions. Rows 1 to 7, 9 and 13 pass; rows 8, 10,
+11 and 12 are owner exceptions; row 14 counts once the release-source run records the backfill. A
+clean full APK build with a recipient's own key, which step 4 below asked for, hasn't been run.
+
+An owner exception is not a pass: it records that the owner closed the ticket knowing the
+observation is missing. Reading those settings later and recording them here turns each into a pass
+or a fail.
+
+## Verdict at `61774d29`
 
 **NOT READY.** Of 14 essential controls, 1 passes, 2 fail and 11 are unknown. No owner exception
 is on record, and this document doesn't propose one. A control without an observed pass or a

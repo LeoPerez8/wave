@@ -1,6 +1,7 @@
 {
   "name": "wave",
   "private": true,
+  "license": "GPL-3.0-only",
   "description": "Local music player for Android with Apple Music's look and feel.",
   "type": "module",
   "scripts": {
