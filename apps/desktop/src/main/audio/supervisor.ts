@@ -2,18 +2,30 @@
  * Main's hold on the audio process. Each call goes to the process and waits for its answer; a
  * process that exits, or stops answering, is replaced, and the new one gets the song back,
  * paused where it was. So a crash or a stall in audio never reaches the window.
+ *
+ * The process asks main for a YT Music song's address with a `resolve` event; main answers
+ * through `options.resolve`. A load that fetches a song may take as long as the network does.
  */
 import type { PlaybackStatus, PlaybackEvent } from "../../shared/playback.ts";
-import type { AudioCall, AudioRequest, AudioResponse } from "./protocol.ts";
+import {
+  failure,
+  streamedVideoId,
+  type AudioCall,
+  type AudioRequest,
+  type AudioResponse,
+  type ResolveAnswer,
+  type ResolveEvent,
+  type ResolvedStream,
+} from "./protocol.ts";
 
 /** What a forked process reports back. */
 export interface AudioEvents {
-  readonly message: (response: AudioResponse | PlaybackEvent) => void;
+  readonly message: (response: AudioResponse | PlaybackEvent | ResolveEvent) => void;
   readonly exit: () => void;
 }
 
 export interface AudioProcess {
-  readonly send: (request: AudioRequest) => void;
+  readonly send: (request: AudioRequest | ResolveAnswer) => void;
   readonly kill: () => void;
 }
 
@@ -26,6 +38,13 @@ export interface AudioSupervisorOptions {
   readonly heartbeatMs?: number;
   /** The wait before the `attempt`th restart in a row (from 1). */
   readonly restartDelayMs?: (attempt: number) => number;
+  /** How long a call may wait while a YT Music song is fetched for a load. */
+  readonly streamCallTimeoutMs?: number;
+  /**
+   * A YT Music song's address, from the JVM; `fresh` asks past one it kept. A failure's `code`
+   * reaches the load that needed it. The address is the session's: never log it.
+   */
+  readonly resolve?: (videoId: string, fresh: boolean) => Promise<ResolvedStream>;
 }
 
 /** A call the engine refused, or one the process couldn't answer. */
@@ -61,6 +80,7 @@ const backoff = (attempt: number) => Math.min(250 * 2 ** (attempt - 1), 10_000);
 
 export const superviseAudio = (options: AudioSupervisorOptions): AudioSupervisor => {
   const callTimeoutMs = options.callTimeoutMs ?? 5_000;
+  const streamCallTimeoutMs = options.streamCallTimeoutMs ?? 45_000;
   const restartDelayMs = options.restartDelayMs ?? backoff;
   let current: AudioProcess | undefined;
   let nextId = 1;
@@ -118,36 +138,71 @@ export const superviseAudio = (options: AudioSupervisorOptions): AudioSupervisor
       }
       const target = current ?? start();
       const id = nextId++;
-      const timer = setTimeout(() => {
-        const stalled = waiting.get(id);
-        if (stalled === undefined) return;
-        waiting.delete(id);
-        stalled.reject(new AudioEngineError("stalled", `the audio engine didn't answer ${call}`));
-        if (current === target) target.kill();
-      }, callTimeoutMs);
+      // Calls queue behind a load that fetches a song, so they wait as long as it may.
+      const fetching =
+        (call === "load" && streamedVideoId(args[0]) !== undefined) ||
+        [...waiting.values()].some(
+          (w) => w.call === "load" && streamedVideoId(w.args[0]) !== undefined,
+        );
+      const timer = setTimeout(
+        () => {
+          const stalled = waiting.get(id);
+          if (stalled === undefined) return;
+          waiting.delete(id);
+          stalled.reject(new AudioEngineError("stalled", `the audio engine didn't answer ${call}`));
+          if (current === target) target.kill();
+        },
+        fetching ? streamCallTimeoutMs : callTimeoutMs,
+      );
       waiting.set(id, { call, args, resolve, reject, restoring, timer });
       target.send({ id, call, args });
     });
 
-  const onMessage = (owner: AudioProcess) => (response: AudioResponse | PlaybackEvent) => {
-    if (owner !== current) return;
-    if ("event" in response) {
-      follow(response.status);
-      for (const listener of listeners) listener(response);
-      return;
-    }
-    const call = waiting.get(response.id);
-    if (call === undefined) return;
-    clearTimeout(call.timer);
-    waiting.delete(response.id);
-    if (response.ok) {
-      if (!call.restoring) {
-        failuresInARow = 0;
-        remember(call.call, call.args, response.result);
-      }
-      call.resolve(response.result);
-    } else call.reject(new AudioEngineError(response.error.code, response.error.message));
+  const resolveFor = (owner: AudioProcess, event: ResolveEvent) => {
+    const asked =
+      options.resolve === undefined
+        ? Promise.reject(new Error("YT Music isn't available"))
+        : options.resolve(event.videoId, event.fresh);
+    void asked.then(
+      (address) => owner === current && owner.send({ resolved: event.id, address }),
+      (error: unknown) => {
+        if (owner !== current) return;
+        const coded = error as { code?: unknown; message?: unknown };
+        owner.send({
+          resolved: event.id,
+          error:
+            typeof coded.code === "string"
+              ? { code: coded.code, message: String(coded.message ?? coded.code) }
+              : failure(error),
+        });
+      },
+    );
   };
+
+  const onMessage =
+    (owner: AudioProcess) => (response: AudioResponse | PlaybackEvent | ResolveEvent) => {
+      if (owner !== current) return;
+      if ("event" in response && response.event === "resolve") {
+        resolveFor(owner, response);
+        return;
+      }
+      if ("event" in response) {
+        follow(response.status);
+        for (const listener of listeners) listener(response);
+        return;
+      }
+      const call = waiting.get(response.id);
+      if (call === undefined) return;
+      clearTimeout(call.timer);
+      waiting.delete(response.id);
+      if (response.ok) {
+        if (!call.restoring) {
+          failuresInARow = 0;
+          remember(call.call, call.args, response.result);
+        }
+        call.resolve(response.result);
+      } else call.reject(new AudioEngineError(response.error.code, response.error.message));
+    };
 
   const onExit = (owner: AudioProcess) => () => {
     if (owner !== current) return;

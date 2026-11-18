@@ -12,7 +12,12 @@ import * as ManagedRuntime from "effect/ManagedRuntime";
 import { exposeBridge } from "../preload/expose.ts";
 import { BRIDGE_CALLS, type WaveBridge } from "../shared/bridge.ts";
 import type { PlaybackStatus } from "../shared/playback.ts";
-import { answer, type AddonEngine } from "./audio/protocol.ts";
+import {
+  answer,
+  type AddonEngine,
+  type AudioRequest,
+  type ResolveAnswer,
+} from "./audio/protocol.ts";
 import { playerLayer } from "./audio/player.ts";
 import type { AudioEvents } from "./audio/supervisor.ts";
 import { kotlinLayer } from "./kotlin/kotlin.ts";
@@ -48,8 +53,8 @@ const audioInMemory = () => {
     setVolume: (volume) => void engineCalls.push(`volume ${volume}`),
   };
   const fork = (events: AudioEvents) => ({
-    send: (request: Parameters<typeof answer>[1]) =>
-      queueMicrotask(() => events.message(answer(engine, request))),
+    send: (request: AudioRequest | ResolveAnswer) =>
+      "resolved" in request || queueMicrotask(() => events.message(answer(engine, request))),
     kill: () => setImmediate(events.exit),
   });
   return { layer: playerLayer({ fork }), engineCalls };

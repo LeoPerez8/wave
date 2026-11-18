@@ -16,6 +16,47 @@ export interface AddonEngine {
   readonly status: () => PlaybackStatus;
 }
 
+/** A YT Music song's address, as the JVM's `resolveStream` gives it. Never logged. */
+export interface ResolvedStream {
+  readonly url: string;
+  readonly headers: Readonly<Record<string, string>>;
+  readonly itag: number;
+  readonly mimeType: string;
+  readonly contentLength?: number | null | undefined;
+}
+
+/** How far the engine has a YT Music song: whole in the cache, playable, on its way, or not. */
+export type StreamState = "cached" | "ready" | "loading" | "failed" | "missing";
+
+/** The addon's engine with an audio cache, which also plays `yt:<videoId>` paths. */
+export interface StreamingEngine extends AddonEngine {
+  readonly openStream: (videoId: string, address: ResolvedStream) => void;
+  readonly streamState: (videoId: string) => StreamState;
+  /** Songs whose address expired while they were fetched. */
+  readonly streamRequests: () => readonly { readonly id: number; readonly videoId: string }[];
+  readonly answerStream: (id: number, address?: ResolvedStream, error?: string) => void;
+}
+
+/** A path the engine reads as a YT Music song. */
+export const STREAMED = "yt:";
+
+/** The video id of a `yt:` path, or `undefined` for a file. */
+export const streamedVideoId = (path: unknown): string | undefined =>
+  typeof path === "string" && path.startsWith(STREAMED) ? path.slice(STREAMED.length) : undefined;
+
+/** The audio process asks main for a song's address; `fresh` skips one main may have kept. */
+export interface ResolveEvent {
+  readonly event: "resolve";
+  readonly id: number;
+  readonly videoId: string;
+  readonly fresh: boolean;
+}
+
+/** Main's answer to a `ResolveEvent`. */
+export type ResolveAnswer =
+  | { readonly resolved: number; readonly address: ResolvedStream }
+  | { readonly resolved: number; readonly error: AudioFailure };
+
 export type AudioCall = "load" | "play" | "pause" | "seek" | "status" | "preload" | "setVolume";
 
 export interface AudioRequest {
@@ -34,7 +75,7 @@ export type AudioResponse =
   | { readonly id: number; readonly ok: true; readonly result: PlaybackStatus }
   | { readonly id: number; readonly ok: false; readonly error: AudioFailure };
 
-const failure = (error: unknown): AudioFailure => {
+export const failure = (error: unknown): AudioFailure => {
   const text = error instanceof Error ? error.message : String(error);
   const coded = /^\[([a-z-]+)\] (.*)$/s.exec(text);
   return coded === null

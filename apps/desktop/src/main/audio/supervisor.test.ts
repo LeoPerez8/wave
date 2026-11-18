@@ -1,7 +1,13 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import type { PlaybackEvent, PlaybackStatus } from "../../shared/playback.ts";
-import { answer, type AddonEngine, type AudioRequest } from "./protocol.ts";
+import {
+  answer,
+  type AddonEngine,
+  type AudioRequest,
+  type ResolveAnswer,
+  type ResolveEvent,
+} from "./protocol.ts";
 import { AudioEngineError, superviseAudio, type AudioEvents } from "./supervisor.ts";
 
 /** A pretend engine, kept across restarts only in what `log` records. */
@@ -37,7 +43,12 @@ const fakeProcesses = () => {
     const child = { events, stalled: false, alive: true, loaded: "" };
     current = child;
     return {
-      send: (request: AudioRequest) => {
+      send: (request: AudioRequest | ResolveAnswer) => {
+        if ("resolved" in request) {
+          const how = "address" in request ? `itag ${request.address.itag}` : request.error.code;
+          log.push(`${forks}:resolved ${request.resolved} ${how}`);
+          return;
+        }
         log.push(`${forks}:${request.call}${request.args.length > 0 ? ` ${request.args[0]}` : ""}`);
         if (child.stalled || !child.alive) return;
         if (request.call === "load") child.loaded = String(request.args[0]);
@@ -65,7 +76,7 @@ const fakeProcesses = () => {
     stall: () => {
       if (current !== undefined) current.stalled = true;
     },
-    emit: (event: PlaybackEvent) => current?.events.message(event),
+    emit: (event: PlaybackEvent | ResolveEvent) => current?.events.message(event),
     crash: () => {
       if (current === undefined) return;
       current.alive = false;
@@ -228,5 +239,42 @@ test("events from the current process reach every subscriber until it unsubscrib
     transitions: [],
   });
   assert.deepEqual(seen, ["playing"]);
+  audio.dispose();
+});
+
+test("the process's request for a song's address is answered from main, with a failure's code", async () => {
+  const processes = fakeProcesses();
+  const asked: string[] = [];
+  const audio = superviseAudio({
+    fork: processes.fork,
+    ...quick,
+    resolve: async (videoId, fresh) => {
+      asked.push(`${videoId} ${fresh}`);
+      if (videoId === "offlinesong")
+        throw Object.assign(new Error("offline"), { code: "ERR_YT_OFFLINE" });
+      return { url: "https://example.invalid", headers: {}, itag: 140, mimeType: "audio/mp4" };
+    },
+  });
+  processes.emit({ event: "resolve", id: 1, videoId: "abcdefghijk", fresh: false });
+  processes.emit({ event: "resolve", id: 2, videoId: "offlinesong", fresh: true });
+  await settle();
+  assert.deepEqual(asked, ["abcdefghijk false", "offlinesong true"]);
+  assert.deepEqual(processes.log, ["1:resolved 1 itag 140", "1:resolved 2 ERR_YT_OFFLINE"]);
+  audio.dispose();
+});
+
+test("a load that fetches a YT Music song may take longer than other calls", async () => {
+  const processes = fakeProcesses();
+  const audio = superviseAudio({ fork: processes.fork, ...quick, streamCallTimeoutMs: 300 });
+  processes.stall();
+  const started = Date.now();
+  const load = audio.call("load", ["yt:abcdefghijk"]);
+  const play = audio.call("play", []);
+  await assert.rejects(
+    load,
+    (error) => error instanceof AudioEngineError && error.code === "stalled",
+  );
+  await assert.rejects(play);
+  assert.ok(Date.now() - started >= 280, "waited for the fetch");
   audio.dispose();
 });
