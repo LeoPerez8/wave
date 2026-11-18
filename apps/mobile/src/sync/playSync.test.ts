@@ -28,9 +28,9 @@ import * as schema from "@wave/client/db/schema";
 import { saveImportedPlays } from "@wave/client/db/blackPlayer";
 import { syncCycle, type SyncTransport } from "./syncCycle.ts";
 import { fakeClock } from "../../../../packages/core/src/testSyncClock.ts";
-import { joinAccount, selectUnpushed } from "../library/db/syncRows.ts";
-import { countedListening, songPlayTotals } from "../library/db/stats.ts";
-import { playedEntityTotals, recapPlays } from "../library/db/playedEntities.ts";
+import { joinAccount, selectUnpushed } from "@wave/client/db/syncRows";
+import { countedListening, songPlayTotals } from "@wave/client/db/stats";
+import { playedEntityTotals, recapPlays } from "@wave/client/db/playedEntities";
 
 const SONG: YtAlbumSong = {
   videoId: "history-video",
