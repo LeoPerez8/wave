@@ -361,3 +361,33 @@ test("a load that fetches a YT Music song may take longer than other calls", asy
   assert.ok(Date.now() - started >= 280, "waited for the fetch");
   audio.dispose();
 });
+
+test("calls made while the process is down wait for its restart instead of starting it at once", async () => {
+  const processes = fakeProcesses();
+  const audio = superviseAudio({ fork: processes.fork, ...quick, restartDelayMs: () => 120 });
+  await audio.call("load", ["/music/a.opus"]);
+  processes.crash();
+  await settle();
+  const polls = [audio.call("status", []), audio.call("status", []), audio.call("play", [])];
+  await settle();
+  assert.equal(processes.forks(), 1, "no call restarts the process before its wait is over");
+  const answers = await Promise.all(polls);
+  assert.equal(processes.forks(), 2);
+  assert.equal(answers[2]?.state, "playing", "the calls reach the new process, in order");
+  audio.dispose();
+});
+
+test("calls waiting for a restart fail when the engine is shut down", async () => {
+  const processes = fakeProcesses();
+  const audio = superviseAudio({ fork: processes.fork, ...quick, restartDelayMs: () => 60_000 });
+  await audio.call("status", []);
+  processes.crash();
+  await settle();
+  const waiting = audio.call("status", []);
+  audio.dispose();
+  await assert.rejects(
+    waiting,
+    (error) => error instanceof AudioEngineError && error.code === "disposed",
+  );
+  assert.equal(processes.forks(), 1);
+});

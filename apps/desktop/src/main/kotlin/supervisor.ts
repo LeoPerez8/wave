@@ -1,8 +1,10 @@
 /**
  * Main's hold on the JVM that runs `packages/kotlin-shared` (docs/spec-desktop.md, Kotlin on the
  * JVM). Calls go to it as JSON lines and wait for their answer; the JVM asks main for what only
- * main can do the same way. A JVM that exits is replaced, and the calls it held fail with the
- * phone's `ERR_UNEXPECTED`, so a crash never reaches the window as anything but a failed call.
+ * main can do the same way. A JVM that exits is replaced after a wait that grows with each
+ * failure in a row, and the calls it held fail with the phone's `ERR_UNEXPECTED`, so a crash
+ * never reaches the window as anything but a failed call. Calls made during the wait go to the
+ * new JVM.
  */
 import type { HostMethods, KotlinEvent, KotlinMethod, KotlinMethods } from "./protocol.ts";
 
@@ -67,8 +69,14 @@ export const superviseKotlin = (options: KotlinSupervisorOptions): KotlinSupervi
   let failuresInARow = 0;
   let restartTimer: ReturnType<typeof setTimeout> | undefined;
   const waiting = new Map<number, Waiting>();
+  /**
+   * Lines of calls made while no JVM runs. They go to the one the restart brings, so a call
+   * never starts a JVM ahead of the restart's wait.
+   */
+  const unsent: string[] = [];
 
   const failAll = (message: string) => {
+    unsent.length = 0;
     for (const [id, call] of waiting) {
       waiting.delete(id);
       call.reject(new KotlinError("ERR_UNEXPECTED", message));
@@ -132,7 +140,7 @@ export const superviseKotlin = (options: KotlinSupervisorOptions): KotlinSupervi
     failAll("The JVM stopped before answering");
     if (disposed) return;
     failuresInARow += 1;
-    // Back with the app's other services, so the next call doesn't wait for a JVM to start.
+    // Back by itself, after a wait that grows with each failure in a row.
     restartTimer = setTimeout(() => {
       restartTimer = undefined;
       if (!disposed && current === undefined) start();
@@ -147,6 +155,7 @@ export const superviseKotlin = (options: KotlinSupervisorOptions): KotlinSupervi
     };
     child = options.spawn(events);
     current = child;
+    for (const line of unsent.splice(0)) child.write(line);
     return child;
   }
 
@@ -159,10 +168,11 @@ export const superviseKotlin = (options: KotlinSupervisorOptions): KotlinSupervi
           reject(new KotlinError("ERR_UNEXPECTED", "The JVM was shut down"));
           return;
         }
-        const target = current ?? start();
         const id = nextId++;
         waiting.set(id, { resolve: resolve as (result: unknown) => void, reject });
-        target.write(JSON.stringify({ id, method, params }));
+        const line = JSON.stringify({ id, method, params });
+        if (current === undefined) unsent.push(line);
+        else current.write(line);
       }),
     dispose: () => {
       if (disposed) return;

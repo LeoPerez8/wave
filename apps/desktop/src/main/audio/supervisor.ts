@@ -1,8 +1,9 @@
 /**
  * Main's hold on the audio process. Each call goes to the process and waits for its answer; a
- * process that exits, or stops answering, is replaced, and the new one gets the song back,
- * paused where it was, with the playback settings. So a crash or a stall in audio never reaches
- * the window.
+ * process that exits, or stops answering, is replaced after a wait that grows with each failure
+ * in a row, and the new one gets the song back, paused where it was, with the playback
+ * settings, then the calls made while there was none. So a crash or a stall in audio never
+ * reaches the window.
  *
  * The process asks main for a YT Music song's address with a `resolve` event; main answers
  * through `options.resolve`. A load that fetches a song may take as long as the network does.
@@ -128,6 +129,12 @@ export const superviseAudio = (options: AudioSupervisorOptions): AudioSupervisor
     }
   >();
   let nextMeasurement = 1;
+  /**
+   * Calls made while no process runs. They go to the one the restart brings, so a call never
+   * starts a process ahead of the restart's wait.
+   */
+  const held: { readonly run: () => void; readonly reject: (error: AudioEngineError) => void }[] =
+    [];
 
   const remember = (call: AudioCall, args: readonly unknown[], status: PlaybackStatus) => {
     if (call === "load") {
@@ -193,7 +200,11 @@ export const superviseAudio = (options: AudioSupervisorOptions): AudioSupervisor
         reject(new AudioEngineError("disposed", "the audio engine was shut down"));
         return;
       }
-      const target = current ?? start();
+      const target = current;
+      if (target === undefined) {
+        held.push({ run: () => send(call, args, restoring).then(resolve, reject), reject });
+        return;
+      }
       const id = nextId++;
       // Calls queue behind a load that fetches a song, so they wait as long as it may.
       const fetching =
@@ -313,6 +324,7 @@ export const superviseAudio = (options: AudioSupervisorOptions): AudioSupervisor
         )
         .catch(() => undefined);
     } else void restoreSettings().catch(() => undefined);
+    for (const call of held.splice(0)) call.run();
     return child;
   }
 
@@ -347,6 +359,8 @@ export const superviseAudio = (options: AudioSupervisorOptions): AudioSupervisor
       listeners.clear();
       if (restartTimer !== undefined) clearTimeout(restartTimer);
       failAll("disposed", "the audio engine was shut down");
+      for (const call of held.splice(0))
+        call.reject(new AudioEngineError("disposed", "the audio engine was shut down"));
       dropMeasurements("disposed", "the audio engine was shut down");
       current?.kill();
       current = undefined;
