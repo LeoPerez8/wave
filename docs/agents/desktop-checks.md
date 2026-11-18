@@ -37,6 +37,21 @@ Build the addon before `test:e2e`: without it the app runs, but every player cal
 fixture in `native/engine/tests/fixtures`; its `device` annotation (`--reporter=json`) names the
 output that played it, or `none` when the engine kept time without one, as on CI.
 
+## The JVM
+
+The shared Kotlin (`packages/kotlin-shared`) runs in a JVM main starts with the app
+(`src/main/kotlin/`), over JSON lines on stdio. `build:jvm` needs `JAVA_HOME` set to a JDK 21 for
+the system you check on (CI uses Temurin 21).
+
+```sh
+pnpm --filter @wave/desktop build:jvm   # jvm/wave-kotlin.jar and jvm/runtime (jlink)
+```
+
+Build it before `test:e2e`: without it main keeps restarting a JVM that can't start, and every
+Kotlin call fails with `[ERR_UNEXPECTED]`. `WAVE_JVM_RUNTIME` and `WAVE_KOTLIN_JAR` point main at
+other builds. `e2e/kotlin.spec.ts` reads the tag fixtures the phone's tests read, kills the JVM
+mid-call, and records its resident memory at rest as the `jvm-resident-mb` annotation.
+
 ## Data
 
 `WAVE_DATA_DIR` points the app at a folder of its own instead of the user's data folder; the

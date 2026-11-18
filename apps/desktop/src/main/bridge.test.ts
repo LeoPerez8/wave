@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { basename, join } from "node:path";
 import { test } from "node:test";
 import { Database } from "@wave/client";
 import { addTrack, type TestDatabase } from "@wave/client/testing";
@@ -14,6 +14,9 @@ import type { PlaybackStatus } from "../shared/playback.ts";
 import { answer, type AddonEngine } from "./audio/protocol.ts";
 import { playerLayer } from "./audio/player.ts";
 import type { AudioEvents } from "./audio/supervisor.ts";
+import { kotlinLayer } from "./kotlin/kotlin.ts";
+import type { KotlinEvents } from "./kotlin/supervisor.ts";
+import type { SongTags } from "../shared/tags.ts";
 import { libraryLayer } from "./database.ts";
 import { registerBridge, type IpcHandler } from "./bridge.ts";
 
@@ -46,9 +49,49 @@ const audioInMemory = () => {
   return { layer: playerLayer({ fork }), engineCalls };
 };
 
+/** Tags as the shared Kotlin reads them, for a song titled `title`. */
+const tagsTitled = (title: string): SongTags => ({
+  title,
+  artist: "Nick Drake",
+  artists: ["Nick Drake"],
+  album: "Pink Moon",
+  albumArtist: null,
+  albumArtists: [],
+  genre: null,
+  genres: [],
+  releaseDate: null,
+  year: "1972",
+  trackNumber: "1",
+  discNumber: null,
+  compilation: false,
+  durationMs: 124_000,
+  sampleRate: 44_100,
+  bitrateKbps: 900,
+  advisory: null,
+  loudnessTags: null,
+});
+
+/** A JVM in memory that reads tags as the shared Kotlin does, and records the paths it read. */
+const jvmInMemory = () => {
+  const reads: string[] = [];
+  const spawn = (events: KotlinEvents) => ({
+    write: (text: string) => {
+      const { id, params } = JSON.parse(text) as { id: number; params: { path: string } };
+      reads.push(params.path);
+      const answer = params.path.includes("unreadable")
+        ? { id, error: { code: "ERR_UNEXPECTED", message: "FileNotFoundException" } }
+        : { id, result: tagsTitled(basename(params.path)) };
+      queueMicrotask(() => events.line(JSON.stringify(answer)));
+    },
+    kill: () => setImmediate(events.exit),
+  });
+  return { layer: kotlinLayer({ spawn }), reads };
+};
+
 const connect = (file: string, isTrusted = (event: unknown) => event === trusted) => {
   const audio = audioInMemory();
-  const runtime = ManagedRuntime.make(Layer.mergeAll(libraryLayer(file), audio.layer));
+  const jvm = jvmInMemory();
+  const runtime = ManagedRuntime.make(Layer.mergeAll(libraryLayer(file), audio.layer, jvm.layer));
   const handlers = new Map<string, IpcHandler>();
   registerBridge(
     { handle: (channel, handler) => handlers.set(channel, handler) },
@@ -68,7 +111,7 @@ const connect = (file: string, isTrusted = (event: unknown) => event === trusted
       },
     },
   );
-  return { runtime, handlers, exposed, sent, engineCalls: audio.engineCalls };
+  return { runtime, handlers, exposed, sent, engineCalls: audio.engineCalls, reads: jvm.reads };
 };
 
 const withFile = async (run: (file: string) => Promise<void>): Promise<void> => {
@@ -189,6 +232,32 @@ test("an engine failure reaches the window with its code", async () => {
     const { runtime, exposed } = connect(file);
     const wave = exposed.get("wave") as WaveBridge;
     await assert.rejects(wave.player.play(), /\[nothing-loaded\] no song is loaded/);
+    await runtime.dispose();
+  });
+});
+
+test("the window reads a song's tags through the JVM", async () => {
+  await withFile(async (file) => {
+    const { runtime, exposed, reads } = connect(file);
+    const wave = exposed.get("wave") as WaveBridge;
+    assert.deepEqual(await wave.tags.read(song), tagsTitled("Pink Moon.flac"));
+    assert.deepEqual(reads, [song]);
+    await assert.rejects(
+      wave.tags.read(join(tmpdir(), "unreadable.mp3")),
+      /\[ERR_UNEXPECTED\] FileNotFoundException/,
+    );
+    await runtime.dispose();
+  });
+});
+
+test("main refuses to read tags from anything but an audio file's absolute path", async () => {
+  await withFile(async (file) => {
+    const { runtime, handlers, reads } = connect(file);
+    const read = handlers.get("tags.read");
+    assert.ok(read !== undefined);
+    for (const path of ["music/a.flac", join(tmpdir(), "notes.txt"), 42, undefined])
+      await assert.rejects(read(trusted, path), /refused/i, String(path));
+    assert.deepEqual(reads, []);
     await runtime.dispose();
   });
 });

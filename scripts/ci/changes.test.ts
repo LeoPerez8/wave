@@ -107,6 +107,7 @@ describe("changes", () => {
     "packages/client/src/db/tracks.ts",
     "packages/core/src/queue.ts",
     "packages/theme/colours.css",
+    "packages/kotlin-shared/stdio/src/main/kotlin/dev/leoperez/wave/stdio/WaveDesktop.kt",
     "pnpm-lock.yaml",
     "tsconfig.base.json",
     ".github/workflows/ci.yml",

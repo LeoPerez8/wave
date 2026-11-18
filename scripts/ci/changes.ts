@@ -35,9 +35,15 @@ const AREAS = {
     "apps/mobile/plugins/",
     "apps/mobile/package.json",
   ],
-  // What the desktop app is built from. It isn't released yet, so a change to it alone
-  // releases nothing.
-  desktop: ["apps/desktop/", "packages/client/", "packages/core/", "packages/theme/"],
+  // What the desktop app is built from, with the Kotlin its JVM runs (#1147). It isn't
+  // released yet, so a change to it alone releases nothing.
+  desktop: [
+    "apps/desktop/",
+    "packages/client/",
+    "packages/core/",
+    "packages/theme/",
+    "packages/kotlin-shared/",
+  ],
 } as const;
 
 type Area = keyof typeof AREAS;

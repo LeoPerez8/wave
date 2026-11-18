@@ -10,6 +10,7 @@
     "dev": "electron-vite dev",
     "build": "electron-vite build",
     "build:native": "node scripts/build-native.ts",
+    "build:jvm": "node scripts/build-jvm.ts",
     "start": "electron-vite preview",
     "test": "node --test \"src/**/*.test.ts\"",
     "test:e2e": "electron-vite build && playwright test",
