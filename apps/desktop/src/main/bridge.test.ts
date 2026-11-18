@@ -260,20 +260,48 @@ const jvmInMemory = () => {
                         similar: [{ name: "John Martyn", browseId: "UCjohnmartyn" }],
                       },
                     }
-                  : method === "related"
+                  : method === "searchArtists"
                     ? {
                         id,
-                        result: {
-                          songs: [
+                        result: [
+                          { name: "Nick Drake", browseId: "UCnickdrake", audience: 900 },
+                          { name: "Nick Drake Tribute", browseId: "UCtribute", audience: 3 },
+                        ],
+                      }
+                    : method === "searchAlbums"
+                      ? {
+                          id,
+                          result: [
                             {
-                              ...ytSongNamed("mayyounever", "May You Never"),
-                              artists: ["John Martyn"],
+                              kind: "album",
+                              browseId: "MPREb_pinkmoon",
+                              title: "Pink Moon",
+                              artists: ["Nick Drake"],
+                              year: 1972,
+                            },
+                            {
+                              kind: "album",
+                              browseId: "MPREb_brynter",
+                              title: "Bryter Layter",
+                              artists: ["Nick Drake"],
+                              year: 1971,
                             },
                           ],
-                          artists: [{ name: "John Martyn", browseId: "UCjohnmartyn" }],
-                        },
-                      }
-                    : { id, result: null };
+                        }
+                      : method === "related"
+                        ? {
+                            id,
+                            result: {
+                              songs: [
+                                {
+                                  ...ytSongNamed("mayyounever", "May You Never"),
+                                  artists: ["John Martyn"],
+                                },
+                              ],
+                              artists: [{ name: "John Martyn", browseId: "UCjohnmartyn" }],
+                            },
+                          }
+                        : { id, result: null };
       }
       queueMicrotask(() => events.line(JSON.stringify(answer)));
     },
@@ -1193,6 +1221,50 @@ test("a phone's Settings › Playback reaches the desktop's engine when a sync p
   });
 });
 
+test("Search finds YouTube Music artists and albums, and says which the Library has", async () => {
+  await withFile(async (file) => {
+    const { runtime, exposed } = connect(file);
+    try {
+      const wave = exposed.get("wave") as WaveBridge;
+      await runtime.runPromise(
+        Effect.gen(function* () {
+          const db = (yield* Database) as unknown as TestDatabase;
+          addTrack(db, {
+            title: "Pink Moon",
+            artist: "Nick Drake",
+            album: "Pink Moon",
+            trackNumber: 1,
+            durationMs: 124_000,
+          });
+        }),
+      );
+      const found = await wave.yt.search("nick drake");
+      assert.equal(found.status, "ok");
+      assert.deepEqual(
+        found.artists.map((artist) => artist.browseId),
+        ["UCnickdrake", "UCtribute"],
+      );
+      assert.deepEqual(
+        found.albums.map((album) => [album.browseId, album.title]),
+        [
+          ["MPREb_pinkmoon", "Pink Moon"],
+          ["MPREb_brynter", "Bryter Layter"],
+        ],
+      );
+      assert.deepEqual(found.inLibrary, {
+        songs: ["abcdefghijk"],
+        artists: ["UCnickdrake"],
+        albums: ["MPREb_pinkmoon"],
+      });
+      const [row] = found.songs.items;
+      assert.deepEqual(row?.artists, ["Nick Drake"], "a row names each artist");
+      assert.equal(row?.albumId, "MPREb_pinkmoon", "a row knows its album page");
+    } finally {
+      await runtime.dispose();
+    }
+  });
+});
+
 test("YT Music turned off hides its results and tells the JVM, and offline says so quietly", async () => {
   await withFile(async (file) => {
     const { runtime, exposed, yt, jvm } = connect(file);
@@ -1206,7 +1278,8 @@ test("YT Music turned off hides its results and tells the JVM, and offline says 
       await wave.settings.setYtMusic(true);
       jvm.ytError = "ERR_YT_OFFLINE";
       const offline = await wave.yt.search("pink moon");
-      assert.deepEqual(offline, { status: "offline", songs: { items: [], offset: 0, total: 0 } });
+      assert.equal(offline.status, "offline");
+      assert.deepEqual([offline.songs.items, offline.artists, offline.albums], [[], [], []]);
     } finally {
       await runtime.dispose();
     }

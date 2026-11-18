@@ -30,7 +30,6 @@ import {
 } from "../shared/songActions.ts";
 import { runSongAction, songMenu } from "./library/songActions.ts";
 import type { Appearance } from "../shared/bridge.ts";
-import { ytRow } from "../shared/yt.ts";
 import { VIDEO_ID, YtMusic } from "./yt/ytMusic.ts";
 import { Downloads } from "./downloads/downloadsLayer.ts";
 import { MISSING_SONGS_ACTIONS } from "../shared/downloads.ts";
@@ -347,14 +346,6 @@ const createHandlers = (
       typeof on === "boolean"
         ? ytCall((yt) => yt.setEnabled(on))
         : refuse("settings.setYtMusic", "invalid setting"),
-    "yt.search": ([query]) =>
-      typeof query === "string" && query.length <= 500
-        ? ytCall(async (yt) => {
-            const found = await yt.search(query);
-            const items = found.songs.map(ytRow);
-            return { status: found.status, songs: { items, offset: 0, total: items.length } };
-          })
-        : refuse("yt.search", "invalid query"),
     "yt.artwork": ([url]) =>
       typeof url === "string" && url.length <= 2_000
         ? ytCall((yt) => yt.artwork(url))
