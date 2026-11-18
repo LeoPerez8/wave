@@ -362,6 +362,17 @@ describe("a published release's record", () => {
     assert.notEqual(verify("v1.3.0-ti", EVENT).status, 0);
   });
 
+  it("fails, saying so, when the record's source isn't a commit", () => {
+    const { record, signedSha256, write, verify } = published();
+    for (const source of [undefined, 42, ["x"], SOURCE.toUpperCase(), `${SOURCE}\n`]) {
+      write({ ...record, source, artifact: { ...record.artifact, signedSha256 } });
+      const checked = verify();
+      assert.notEqual(checked.status, 0, String(source));
+      assert.match(checked.stderr, /v1\.3\.0-ti is on .*, but its record names no commit\./);
+      assert.doesNotMatch(checked.stderr, /TypeError/);
+    }
+  });
+
   it("fails when the APK isn't the one the record sealed, or the record isn't sealed", () => {
     const { dir, record, write, verify } = published();
     writeFileSync(join(dir, "wave-1.3.0-ti.apk"), "another apk");

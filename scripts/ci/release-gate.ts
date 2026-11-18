@@ -281,10 +281,10 @@ export const verifyPublished = (
   const provenance = value as Provenance;
   if (provenance.releaseTag !== tag)
     refuse(`the record is ${provenance.releaseTag}'s, not ${tag}'s.`);
-  if (!SHA.test(commit) || provenance.source !== commit)
-    refuse(
-      `${tag} is on ${commit.slice(0, 7)}, but its record names ${provenance.source.slice(0, 7)}.`,
-    );
+  const source: unknown = provenance.source;
+  const named = typeof source === "string" && SHA.test(source) ? source.slice(0, 7) : "no commit";
+  if (!SHA.test(commit) || source !== commit)
+    refuse(`${tag} is on ${commit.slice(0, 7)}, but its record names ${named}.`);
   const sealed = provenance.artifact.signedSha256 ?? "";
   if (!SHA256.test(sealed)) refuse(`${tag}'s record isn't sealed, so its release never signed it.`);
   if (signedSha256 !== undefined && signedSha256 !== sealed)
