@@ -1,6 +1,10 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
+import { pass, withFakeClock } from "../testing/fakeClock.ts";
 import { KotlinError, superviseKotlin, type KotlinEvents } from "./supervisor.ts";
+
+// Restarts run on a clock the tests move with `pass`.
+withFakeClock();
 
 type Handle = (method: string, params: Record<string, unknown>) => unknown;
 
@@ -43,7 +47,7 @@ const fakeJvms = (handle: Handle = () => null) => {
       kill: () => {
         if (!jvm.alive) return;
         jvm.alive = false;
-        setImmediate(events.exit);
+        queueMicrotask(events.exit);
       },
     };
   };
@@ -56,12 +60,10 @@ const fakeJvms = (handle: Handle = () => null) => {
     crash: () => {
       if (current === undefined || !current.alive) return;
       current.alive = false;
-      setImmediate(current.events.exit);
+      queueMicrotask(current.events.exit);
     },
   };
 };
-
-const settle = (ms = 20) => new Promise((resolve) => setTimeout(resolve, ms));
 
 const quick = { restartDelayMs: () => 0 };
 
@@ -98,15 +100,16 @@ test("a JVM that dies fails the calls it held, and a new one answers the next", 
   const jvms = fakeJvms(() => (hang ? new Promise(() => undefined) : { title: "ok" }));
   const kotlin = superviseKotlin({ spawn: jvms.spawn, ...quick });
   const pending = kotlin.call("readTags", { path: "/music/a.flac" });
-  await settle();
+  await pass();
   jvms.crash();
-  await assert.rejects(pending, (error: unknown) => {
+  const failed = assert.rejects(pending, (error: unknown) => {
     assert.ok(error instanceof KotlinError);
     assert.equal(error.code, "ERR_UNEXPECTED");
     return true;
   });
+  await pass();
+  await failed;
   // Restarted with the app's services, before anyone calls.
-  await settle();
   assert.equal(jvms.spawns(), 2);
   hang = false;
   assert.deepEqual(await kotlin.call("readTags", { path: "/music/a.flac" }), { title: "ok" });
@@ -128,7 +131,7 @@ test("the JVM asks main, and main answers from its host method", async () => {
     ...quick,
   });
   jvms.say({ id: "j1", method: "poToken", params: { identifiers: ["visitor", "video"] } });
-  await settle();
+  await pass();
   assert.deepEqual(asked, [{ identifiers: ["visitor", "video"] }]);
   assert.deepEqual(jvms.fromHost, [
     { id: "j1", result: { tokens: ["visitor-token", "video-token"] } },
@@ -153,7 +156,7 @@ test("main answers the JVM's request with an error code when it can't", async ()
   jvms.say({ id: "j1", method: "poToken", params: {} });
   jvms.say({ id: "j2", method: "signInCookie", params: {} });
   jvms.say({ id: "j3", method: "broken" });
-  await settle();
+  await pass();
   // Each is answered as it finishes, not in the order asked.
   const byId = (line: unknown) => String((line as { id: unknown }).id);
   assert.deepEqual(
@@ -189,10 +192,11 @@ test("a call made while the JVM is down waits for its restart instead of startin
   const jvms = fakeJvms(() => "answered");
   const kotlin = superviseKotlin({ spawn: jvms.spawn, restartDelayMs: () => 120 });
   jvms.crash();
-  await settle();
+  await pass();
   const calls = [kotlin.call("search", { query: "a" }), kotlin.call("search", { query: "b" })];
-  await settle();
+  await pass(119);
   assert.equal(jvms.spawns(), 1, "no call starts a JVM before its wait is over");
+  await pass(1);
   assert.deepEqual(await Promise.all(calls), ["answered", "answered"]);
   assert.equal(jvms.spawns(), 2);
   kotlin.dispose();
@@ -206,17 +210,23 @@ test("a JVM that can't start fails the calls that waited for it, and is tried ag
     spawn: (events) => {
       spawns += 1;
       if (starts) return jvms.spawn(events);
-      setImmediate(events.exit);
+      queueMicrotask(events.exit);
       return { write: () => undefined, kill: () => undefined };
     },
     restartDelayMs: () => 40,
   });
-  await settle();
+  await pass();
   assert.equal(spawns, 1);
-  await assert.rejects(kotlin.call("search", { query: "a" }), { code: "ERR_UNEXPECTED" });
-  assert.equal(spawns, 2, "one start per wait, however many calls come");
+  const failed = assert.rejects(kotlin.call("search", { query: "a" }), { code: "ERR_UNEXPECTED" });
+  await pass(39);
+  assert.equal(spawns, 1, "one start per wait, however many calls come");
+  await pass(1);
+  await failed;
+  assert.equal(spawns, 2);
   starts = true;
-  assert.equal(await kotlin.call("search", { query: "b" }), "answered");
+  const answered = kotlin.call("search", { query: "b" });
+  await pass(40);
+  assert.equal(await answered, "answered");
   assert.equal(spawns, 3);
   kotlin.dispose();
 });
@@ -225,7 +235,7 @@ test("calls waiting for a restart fail when main shuts the JVM down", async () =
   const jvms = fakeJvms(() => "answered");
   const kotlin = superviseKotlin({ spawn: jvms.spawn, restartDelayMs: () => 60_000 });
   jvms.crash();
-  await settle();
+  await pass();
   const waiting = kotlin.call("search", { query: "a" });
   kotlin.dispose();
   await assert.rejects(waiting, { code: "ERR_UNEXPECTED" });
@@ -241,6 +251,6 @@ test("shutting down fails what's pending, kills the JVM and refuses new calls", 
   await assert.rejects(kotlin.call("readTags", { path: "/music/a.flac" }), {
     code: "ERR_UNEXPECTED",
   });
-  await settle();
+  await pass();
   assert.equal(jvms.spawns(), 1);
 });
