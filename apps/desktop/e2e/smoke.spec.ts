@@ -170,6 +170,10 @@ test("the page has no Node and only the typed bridge", async () => {
       "wave.search.clearRecent",
       "wave.home.view",
       "wave.home.play",
+      "wave.links.open",
+      "wave.links.importPlaylist",
+      "wave.links.copySong",
+      "wave.links.copyPlaylist",
     ],
   });
 });

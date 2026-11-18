@@ -6,10 +6,13 @@ import expo.modules.wavenative.tags.JAudioTaggerReader
 import expo.modules.wavenative.yt.YtClient
 import expo.modules.wavenative.yt.YtException
 import expo.modules.wavenative.yt.YtFailure
+import expo.modules.wavenative.yt.YtPlaylistWrites
+import expo.modules.wavenative.yt.YtPlaylistEdit
 import expo.modules.wavenative.yt.YtPages
 import expo.modules.wavenative.yt.YtRadioStart
 import expo.modules.wavenative.yt.ytHttpClient
 import java.io.File
+import kotlinx.serialization.json.JsonArray
 import kotlinx.serialization.json.JsonElement
 import kotlinx.serialization.json.JsonNull
 import kotlinx.serialization.json.JsonObject
@@ -17,7 +20,6 @@ import kotlinx.serialization.json.JsonPrimitive
 import kotlinx.serialization.json.booleanOrNull
 import kotlinx.serialization.json.contentOrNull
 import kotlinx.serialization.json.doubleOrNull
-import kotlinx.serialization.json.JsonArray
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import expo.modules.wavenative.download.DurableDownloads
@@ -61,6 +63,7 @@ class WaveDesktop(
   private val tags = AudioTagReader(primary = JAudioTaggerReader())
   val downloads = DesktopDownloads(host, dataDir, yt, online, audioStreams(yt))
   private val pages = YtPages(yt)
+  private val playlists = YtPlaylistWrites(yt)
 
   suspend fun handle(method: String, params: JsonObject): JsonElement =
     when (method) {
@@ -81,6 +84,27 @@ class WaveDesktop(
         yt.enabled = params.flag("enabled") ?: throw CodedError("ERR_BAD_PARAMS", "enabled must be a boolean")
         JsonNull
       }
+      "ownPlaylist" -> jsonOf(playlists.ownPlaylist(params.string("playlistId"))?.toMap())
+      "createPlaylist" -> {
+        val ids = (params["videoIds"] as? JsonArray)?.map {
+          (it as? JsonPrimitive)?.takeIf { value -> value.isString }?.contentOrNull?.takeIf(VIDEO_ID::matches)
+            ?: throw CodedError("ERR_BAD_PARAMS", "videoIds must contain video ids")
+        } ?: throw CodedError("ERR_BAD_PARAMS", "videoIds must be an array")
+        val privacy = params.string("privacy").takeIf { it in YtPlaylistEdit.PRIVACIES }
+          ?: throw CodedError("ERR_BAD_PARAMS", "Invalid privacy")
+        JsonPrimitive(playlists.create(params.string("title"), ids, privacy))
+      }
+      "editPlaylist" -> {
+        val edits = (params["edits"] as? JsonArray)?.map { value ->
+          val fields = (value as? JsonObject)?.mapValues { (_, item) -> (item as? JsonPrimitive)?.contentOrNull }
+            ?: throw CodedError("ERR_BAD_PARAMS", "Invalid playlist edit")
+          YtPlaylistEdit.of(fields) ?: throw CodedError("ERR_BAD_PARAMS", "Invalid playlist edit")
+        } ?: throw CodedError("ERR_BAD_PARAMS", "edits must be an array")
+        playlists.edit(params.string("playlistId"), edits)
+        JsonNull
+      }
+      "playlist" -> jsonOf(pages.playlist(params.string("playlistId")).toMap())
+      "playlistMore" -> jsonOf(pages.playlistMore(params.string("continuation")).toMap())
       "tags.writeSong" -> withContext(Dispatchers.IO) { writeSong(params) }
       else -> withContext(Dispatchers.IO) { downloadCall(method, params) }
     }

@@ -123,6 +123,7 @@ export const songMenu = (
     page: pageOf(target.scope),
     onlineLookups: lookupsEnabled(db),
     ytMusic,
+    copyLink: ytMusic,
   });
   const artistIds = entries.flatMap((entry) =>
     entry.action !== "goToArtist" || !("artists" in entry)

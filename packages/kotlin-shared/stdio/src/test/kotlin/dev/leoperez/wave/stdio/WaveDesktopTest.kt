@@ -92,6 +92,19 @@ class WaveDesktopTest {
     }
 
   @Test
+  fun aLinkedPlaylistOfflineFailsWithThePhonesCode() =
+    withDesktop(youTube(failure = UnknownHostException("music.youtube.com")), online = false) { host ->
+      host.write("""{"id":30,"method":"playlist","params":{"playlistId":"PLabcdefghijk"}}""")
+      assertEquals("ERR_YT_OFFLINE", host.next().code())
+    }
+
+  @Test
+  fun sharingAPlaylistWithoutAYouTubeSessionSaysSignedOut() = withDesktop { host ->
+    host.write("""{"id":31,"method":"createPlaylist","params":{"title":"Night Music","videoIds":["abcdefghijk"],"privacy":"UNLISTED"}}""")
+    assertEquals("ERR_YT_SIGNED_OUT", host.next().code())
+  }
+
+  @Test
   fun anUnknownMethodFailsWithACode() = withDesktop { host ->
     host.write("""{"id":4,"method":"fly","params":{}}""")
     assertEquals("ERR_UNKNOWN_METHOD", host.next().code())

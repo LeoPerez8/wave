@@ -21,6 +21,7 @@ import { useCallback, useEffect, useState, type KeyboardEvent } from "react";
 import type { BrowseScope } from "../../shared/browse.ts";
 import type { SongMenu, SongRunAction, SongTarget } from "../../shared/songActions.ts";
 import { Menu, type MenuItem } from "./Menu.tsx";
+import { copyLink } from "./copyLink.ts";
 import { language, text } from "./text.ts";
 
 /** Checked songs: the ones in [ids], or with [all] every song of the list but those. */
@@ -259,6 +260,14 @@ export function useSongActions({ go, select, failed, changed, newPlaylist }: Opt
                 },
               }),
           };
+        case "share":
+          return {
+            ...base,
+            run: () => {
+              finish();
+              void copyLink(window.wave.links.copySong(target, language));
+            },
+          };
         case "magicQueue":
           return {
             ...base,
@@ -275,7 +284,7 @@ export function useSongActions({ go, select, failed, changed, newPlaylist }: Opt
             },
           };
         default:
-          // Copy Link comes with its feature ticket.
+          // An action the desktop doesn't offer.
           return { ...base, disabled: true };
       }
     },

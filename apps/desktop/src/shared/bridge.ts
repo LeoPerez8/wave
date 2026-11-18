@@ -38,6 +38,7 @@ import type {
   SongRunResult,
   SongTarget,
 } from "./songActions.ts";
+import { LINK_CALLS, linkBridge, type LinkContract } from "./links.ts";
 export type Appearance = "system" | "light" | "dark";
 
 /** One window of a list, as a list call returns it. */
@@ -49,7 +50,7 @@ export interface Page<T> {
 }
 
 /** Each call's arguments and result. Arguments reach main as untrusted data. */
-export interface BridgeContract extends PlaylistContract {
+export interface BridgeContract extends PlaylistContract, LinkContract {
   readonly "system.mediaBackend": {
     readonly args: readonly [];
     readonly result: "native" | "chromium";
@@ -368,6 +369,7 @@ export const BRIDGE_CALLS = [
   "search.clearRecent",
   "home.view",
   "home.play",
+  ...LINK_CALLS,
 ] as const satisfies readonly BridgeCall[] &
   (BridgeContract extends PagedLists<BridgeContract> ? unknown : never);
 
@@ -378,6 +380,7 @@ export type Invoke = <C extends BridgeCall>(
 
 /** `window.wave`. */
 export interface WaveBridge {
+  readonly links: ReturnType<typeof linkBridge>;
   readonly system: { readonly mediaBackend: () => Promise<"native" | "chromium"> };
   readonly home: {
     readonly view: () => Promise<HomeView>;
@@ -619,4 +622,5 @@ export const createBridge = (invoke: Invoke): WaveBridge => ({
     view: () => invoke("home.view"),
     play: (section, index) => invoke("home.play", section, index),
   },
+  links: linkBridge(invoke),
 });

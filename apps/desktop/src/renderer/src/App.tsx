@@ -1,3 +1,4 @@
+import { Links } from "./Links.tsx";
 import { readThemeChoice, themeFor } from "@wave/core";
 import { useCallback, useEffect, useMemo, useRef, useState, type MouseEvent } from "react";
 import type { AccountView } from "../../shared/account.ts";
@@ -101,6 +102,7 @@ export function App() {
   const [shortcuts, setShortcuts] = useState(false);
   const panel = useSidePanel();
   const [nowPlaying, setNowPlaying] = useState(false);
+  const linkPlaying = useCallback(() => setNowPlaying(true), [setNowPlaying]);
   /** Selection mode, for the list it was turned on in. */
   const [selecting, setSelecting] = useState<{
     readonly list: string;
@@ -747,6 +749,15 @@ export function App() {
         panel={panel.tab && shownPanelTab(panel.tab, ytMusic)}
         onPanel={panel.toggle}
         onNowPlaying={() => setNowPlaying(true)}
+      />
+      <Links
+        onPlaying={linkPlaying}
+        onPlaylist={(id) => go({ kind: "playlist", id })}
+        onSearch={(value) => {
+          setQuery(value);
+          go({ kind: "search" });
+        }}
+        onChanged={playback.refresh}
       />
       <SystemMediaSession view={playback.view} refresh={playback.refresh} />
       {actions.overlays}

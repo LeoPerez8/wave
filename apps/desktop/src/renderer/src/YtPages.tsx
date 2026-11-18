@@ -3,7 +3,8 @@ import type { BrowseRow } from "../../shared/browse.ts";
 import { DiscoverPage } from "./Discover.tsx";
 import { MagicQueuePage } from "./MagicQueuePage.tsx";
 import type { MenuItem } from "./Menu.tsx";
-import { text } from "./text.ts";
+import { copyLink } from "./copyLink.ts";
+import { language, text } from "./text.ts";
 import { YtAlbumPage, YtArtistPage } from "./YtArtist.tsx";
 
 /** YouTube Music's pages: Discover, the Magic Queue, and an artist's or album's page. */
@@ -25,7 +26,7 @@ export const isYtRoute = (route: { readonly kind: string }): route is YtRoute =>
 
 type Run = (action: Promise<unknown>) => void;
 
-/** A YouTube Music song's menu: Add to Queue and Start Magic Queue. */
+/** A YouTube Music song's menu: Add to Queue, Start Magic Queue and Copy Link. */
 export const streamedSongItems = (videoId: string, run: Run): readonly MenuItem[] => [
   {
     key: "addToQueue",
@@ -36,6 +37,11 @@ export const streamedSongItems = (videoId: string, run: Run): readonly MenuItem[
     key: "magicQueue",
     label: text.itemActions.labels.magicQueue,
     run: () => run(window.wave.magicQueue.startStreamed(videoId)),
+  },
+  {
+    key: "copyLink",
+    label: text.share.copyLink,
+    run: () => void copyLink(window.wave.links.copySong(videoId, language)),
   },
 ];
 

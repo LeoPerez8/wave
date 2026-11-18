@@ -199,6 +199,15 @@ stay in memory. Rebuild the JAR with `pnpm --filter @wave/desktop build:jvm` aft
 JVM, and a live YouTube download with its tags read back and its Library entry visible. The live
 check stops after search on CI; inspect its annotations if YouTube refuses the machine.
 
+## Links
+
+`e2e/links.spec.ts` pastes and drops each kind of link the phone opens (a YT Music song and
+playlist, a Spotify track, playlist and short link) with YT Music off, so every one answers with
+the same card and no service is asked anything. It also checks that pasted text that is no link
+does nothing, that a paste into the search field stays a paste, and that Copy Link reaches the
+system clipboard. What a link opens with YT Music on is tested in
+`src/main/links/links.test.ts`, against a fake JVM and `fetch`.
+
 ## The dev window
 
 To look at `pnpm dev` from an agent, start it in the background with a debugging port and a

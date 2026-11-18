@@ -2,6 +2,7 @@ import { readFileSync, rmSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import {
   BrowserWindow,
+  clipboard,
   app,
   dialog,
   ipcMain,
@@ -38,6 +39,7 @@ import {
 import { appearance } from "./preferences.ts";
 import { artworkStore } from "./library/artwork.ts";
 import { ytMusicLayer } from "./yt/ytMusic.ts";
+import { desktopLinksLayer } from "./links/layer.ts";
 import { downloadsLayer } from "./downloads/downloadsLayer.ts";
 import { keyringHost } from "./downloads/keyring.ts";
 import type { KotlinEvent } from "./kotlin/protocol.ts";
@@ -336,11 +338,20 @@ else {
         focused: () => BrowserWindow.getFocusedWindow() !== null,
       }).pipe(
         Layer.provideMerge(
-          ytFeaturesLayer({ online: () => net.isOnline() }).pipe(
+          desktopLinksLayer({
+            online: () => net.isOnline(),
+            writeClipboard: (text) => clipboard.writeText(text),
+          }).pipe(
             Layer.provideMerge(
-              playlists.pipe(
+              ytFeaturesLayer({ online: () => net.isOnline() }).pipe(
                 Layer.provideMerge(
-                  Layer.mergeAll(playbackLayer, lyricsLayer()).pipe(Layer.provideMerge(downloads)),
+                  playlists.pipe(
+                    Layer.provideMerge(
+                      Layer.mergeAll(playbackLayer, lyricsLayer()).pipe(
+                        Layer.provideMerge(downloads),
+                      ),
+                    ),
+                  ),
                 ),
               ),
             ),
