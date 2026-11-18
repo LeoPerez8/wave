@@ -17,7 +17,9 @@ account and sync", "Genius About" and "Followed artists" in `docs/spec.md`.
 | `src/tables.ts`      | The synced tables: wire fields, checks and columns                      |
 | `src/migrations.ts`  | The schema, as ordered migrations                                       |
 | `src/limits.ts`      | `SYNC_LIMITS` and `USAGE_WARNINGS`                                      |
-| `src/usage.ts`       | The hourly usage watch (the Cron Trigger)                               |
+| `src/sessions.ts`    | Session expiry and the hourly deletion of expired sessions              |
+| `src/maintenance.ts` | The hourly maintenance (the Cron Trigger): expired sessions, usage      |
+| `src/usage.ts`       | The hourly usage watch                                                  |
 | `scripts/migrate.ts` | Runs pending migrations against `TURSO_DATABASE_URL`                    |
 
 ## API
@@ -88,10 +90,22 @@ sign-ins take no new place, and a deleted account's place goes to the next new s
 daily count only sees accounts that still exist, so it isn't a cap on registrations after
 deletions.
 
+An account has at most `maxSessionsPerAccount` (10) valid sessions. A sign-in first deletes the
+account's sessions that went 90 days without a request, then makes the session only if fewer
+than 10 are left, all in one transaction, so sign-ins at the same moment can't pass the limit.
+Past it, the sign-in answers `403 { "error": "limit", "limit": "maxSessionsPerAccount" }`,
+makes nothing and ends no session: every phone already signed in stays signed in. Signing out
+on one phone (`DELETE /v1/session`) frees its place, and Sign Out on All Phones
+(`DELETE /v1/sessions`) frees all of the account's places and no other account's. An account
+that held more than 10 valid sessions when the limit arrived keeps all of them and gets a new
+one only once it is below 10; that excess is counted in the rollout evidence, not reported as
+within the limit.
+
 The service keeps only a SHA-256 of the session token. A session lasts until it is ended,
 the account is deleted, or it goes 90 days without a request: then it answers
 `401 { "error": "unauthorized" }` and is deleted. Every request made with it starts the 90
-days again.
+days again. A session that never comes back is deleted by the account's next sign-in or by the
+hourly maintenance ([Hourly maintenance](#hourly-maintenance)), whichever is first.
 
 ### `DELETE /v1/session`
 
@@ -335,6 +349,7 @@ answer (its over-quota error names the key), nothing cached, and a log line that
 | 401    | `{ "error": "id_token_required" }`                                                             |
 | 403    | `{ "error": "not_allowed" }`                                                                   |
 | 403    | `{ "error": "limit", "limit": "maxAccounts" }`                                                 |
+| 403    | `{ "error": "limit", "limit": "maxSessionsPerAccount" }`                                       |
 | 404    | `{ "error": "not_found" }`                                                                     |
 | 413    | `{ "error": "limit", "limit": "<name>" }`                                                      |
 | 429    | `{ "error": "limit", "limit": "maxRequestsPerMinute" }`, with `Retry-After`                    |
@@ -356,7 +371,7 @@ answer (its over-quota error names the key), nothing cached, and a log line that
 ## Limits
 
 `SYNC_LIMITS` in `src/limits.ts`. Past one, the service answers `413` (`429` for a rate,
-`403` for `maxAccounts`) and names it. Starting values, so a 50,000-song Library with 200,000 plays fits:
+`403` for `maxAccounts` and `maxSessionsPerAccount`) and names it. Starting values, so a 50,000-song Library with 200,000 plays fits:
 
 | Limit                                     | Value     |                                                      |
 | ----------------------------------------- | --------- | ---------------------------------------------------- |
@@ -376,6 +391,7 @@ answer (its over-quota error names the key), nothing cached, and a log line that
 | `maxSignInKeysPerMinute`                  | 1,000     | addresses and accounts counted in a minute, together |
 | `maxAccounts`                             | 10        | accounts the service holds at once                   |
 | `maxNewAccountsPerDay`                    | 10        | new accounts in any 24 hours                         |
+| `maxSessionsPerAccount`                   | 10        | valid sessions per account, for a new sign-in        |
 | `maxRequestsPerAddressPerMinute`          | 600       | every route, per address                             |
 | `maxFailedLookupsPerAddressPerMinute`     | 20        | lookups that find no session, per address            |
 | `failedLookupBlockSeconds`                | 300       | how long an address past the line above is held back |
@@ -401,9 +417,28 @@ requests a day in all, shared by every account.
 
 A push that would take a table past its limit is refused whole.
 
+## Hourly maintenance
+
+Every hour (`[triggers]` in `wrangler.toml`) the Worker runs `src/maintenance.ts`. It deletes
+every session that went 90 days without a request, so a phone that never comes back doesn't
+keep its place, and runs the usage watch below. Each task runs whatever happens to the other:
+missing analytics secrets or a failed Cloudflare request don't stop the session cleanup, and a
+failed cleanup logs `maintenance: couldn't delete expired sessions` and still runs the watch.
+It deletes nothing else: no valid session, synced row or tombstone.
+
+### Every session lost while the account is full
+
+If an account holds 10 valid sessions and none of those phones still has its token (all reset,
+lost or reinstalled), a new sign-in is refused until one expires, 90 days after its last
+request. Nothing in the service resets this, on purpose: there is no public route to end
+sessions without one of them, and no way around the Google sign-in. When the holder can't wait,
+the owner ends that account's sessions with the runbook's step for ending sessions, scoped to
+that one account, after confirming who is asking through a channel the owner already trusts.
+The account's data stays, and the holder signs in again.
+
 ## Usage watch
 
-Every hour (`[triggers]` in `wrangler.toml`) the Worker reads today's requests to every Worker
+Every hour, as part of the hourly maintenance, the Worker reads today's requests to every Worker
 on the Cloudflare account (Workers Free stops all of them at 100,000 a day, from midnight UTC)
 and compares them with `USAGE_WARNINGS` in `src/limits.ts`:
 
@@ -567,6 +602,12 @@ By hand, the steps are:
    ```sh
    TURSO_DATABASE_URL=libsql://… TURSO_AUTH_TOKEN=… pnpm --filter @wave/sync run deploy
    ```
+
+Before the first deploy with `maxSessionsPerAccount`, count each account's valid sessions in
+the live database (read only, counts only) and record any account at or above 10 in the rollout
+evidence. If that count shows the limit would refuse a sign-in someone needs, stop and agree a
+plan with the owner first; the limit never ends a session to make room, but it does refuse new
+ones.
 
 Deploy play snapshot and video id support before releasing an app that sends those
 fields. Existing clients can keep pushing and pulling while the new service runs.

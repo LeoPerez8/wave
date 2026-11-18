@@ -270,6 +270,8 @@ export const settingsPtBr: typeof settingsEn = {
     "O servidor do Wave não tem espaço para novas Contas Wave. Tudo neste celular continua funcionando.",
   wavesServerMadeAllTheNewAccountsItCanToday:
     "O servidor do Wave já criou hoje todas as novas Contas Wave que podia. Tente novamente amanhã. Tudo neste celular continua funcionando.",
+  tooManyPhonesSignedInToThisWaveAccount:
+    "Há celulares demais com sessão iniciada nesta Conta Wave. Finalize a sessão em um que você não usa mais e tente novamente. Tudo neste celular continua funcionando.",
   couldntSignInTryAgain: "Não foi possível iniciar sessão. Tente novamente.",
   signInWithGoogle: "Iniciar Sessão com o Google",
   couldntDeleteTheAccountWithoutAConnection: "Não foi possível apagar a conta sem conexão.",

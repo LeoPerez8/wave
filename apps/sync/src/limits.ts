@@ -64,6 +64,14 @@ export const SYNC_LIMITS = {
   maxAccounts: 10,
   maxNewAccountsPerDay: 10,
   /**
+   * Valid sessions one account may have: a sign-in past it answers 403 and
+   * every existing session keeps working. Sessions unused for 90 days don't
+   * count; they are deleted at the sign-in and by the hourly maintenance.
+   * An account that already had more when the limit came keeps them all, and
+   * signs in again once it is below the limit.
+   */
+  maxSessionsPerAccount: 10,
+  /**
    * Requests one account may send the Genius routes per minute, counted
    * before the cache. A song the Lyrics view hasn't seen costs a search, the
    * song and a page of referents per 50 annotated fragments (up to 20).
