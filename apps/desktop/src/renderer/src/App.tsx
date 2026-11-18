@@ -13,9 +13,15 @@ import { PlaybackSettings } from "./PlaybackSettings.tsx";
 import { useDesktopKeys } from "./keys.ts";
 import { ShortcutsSheet } from "./Shortcuts.tsx";
 import { SelectionBar, useSongActions, type Selection } from "./SongActions.tsx";
+import { usePlaylistEdits } from "./Playlists.tsx";
+import { Graveyard } from "./Graveyard.tsx";
 import { labels, text } from "./text.ts";
 
-type Route = BrowseScope | { readonly kind: "home" } | { readonly kind: "settings" };
+type Route =
+  | BrowseScope
+  | { readonly kind: "home" }
+  | { readonly kind: "settings" }
+  | { readonly kind: "graveyard"; readonly id: number };
 const sections = ["playlists", "artists", "albums", "songs", "genres", "favorites"] as const;
 /** YT Music's sidebar pages; their pages come in later tickets. */
 const ytPages = [
@@ -81,6 +87,15 @@ export function App() {
     readonly list: string;
     readonly selection: Selection;
   }>();
+  const playlistEdits = usePlaylistEdits({
+    go: (next) => go(next),
+    deleted: (id) => {
+      if ((route.kind === "playlist" || route.kind === "graveyard") && route.id === id)
+        go({ kind: "home" });
+    },
+    failed: (message) => setError(message),
+    changed: playback.refresh,
+  });
   const search = useRef<HTMLInputElement>(null);
   const content = useRef<HTMLDivElement>(null);
   const shell = useRef<HTMLElement>(null);
@@ -162,13 +177,23 @@ export function App() {
     return () => {
       current = false;
     };
-  }, [scan?.revision, account?.revision, playlistOffset, failed]);
+  }, [
+    scan?.revision,
+    account?.revision,
+    playback.view?.revision,
+    playlistEdits.edits,
+    playlistOffset,
+    failed,
+  ]);
   useEffect(() => {
     if (route.kind !== "search")
       content.current?.querySelector<HTMLElement>("[role=grid]")?.focus();
   }, [route]);
   const scope = useMemo<BrowseScope>(
-    () => (route.kind === "home" || route.kind === "settings" ? { kind: "songs" } : route),
+    () =>
+      route.kind === "home" || route.kind === "settings" || route.kind === "graveyard"
+        ? { kind: "songs" }
+        : route,
     [route],
   );
   const list = JSON.stringify(scope);
@@ -180,6 +205,7 @@ export function App() {
     select: (ids) => setSelection({ all: false, ids: new Set(ids) }),
     failed: (message) => setError(message ?? text.desktopLibrary.actionFailed),
     changed: playback.refresh,
+    newPlaylist: playlistEdits.newPlaylist,
   });
   useDesktopKeys({
     search: () => search.current?.focus(),
@@ -188,7 +214,7 @@ export function App() {
     rescan: () => void window.wave.library.refresh().catch(failed),
     shortcuts: () => setShortcuts((open) => !open),
     close: () => {
-      if (actions.closeMenu()) return;
+      if (actions.closeMenu() || playlistEdits.closeMenu()) return;
       if (shortcuts) return setShortcuts(false);
       if (selection) return setSelection(undefined);
       return false;
@@ -206,8 +232,13 @@ export function App() {
     else playback.run(window.wave.playback.start(scope, index));
   };
   const title =
-    hero?.title ??
-    (route.kind in labels ? (labels[route.kind as keyof typeof labels] as string) : labels.library);
+    route.kind === "graveyard"
+      ? text.playlists.graveyard
+      : (hero?.title ??
+        (route.kind in labels
+          ? (labels[route.kind as keyof typeof labels] as string)
+          : labels.library));
+  const playlistId = route.kind === "playlist" ? route.id : undefined;
   const scanning = scan?.status === "scanning";
   const revision =
     (scan?.revision ?? 0) + (playback.view?.revision ?? 0) + (account?.revision ?? 0);
@@ -297,6 +328,10 @@ export function App() {
               title={row.title}
               aria-current={route.kind === "playlist" && route.id === row.id ? "page" : undefined}
               onClick={() => go({ kind: "playlist", id: row.id })}
+              onContextMenu={(event) => {
+                event.preventDefault();
+                playlistEdits.openMenu(row.id, { x: event.clientX, y: event.clientY });
+              }}
             >
               <Icon name="playlists" />
               <span className="truncate">{row.title}</span>
@@ -322,7 +357,7 @@ export function App() {
             className="nav-item"
             aria-label={labels.newPlaylist}
             title={labels.newPlaylist}
-            disabled
+            onClick={() => playlistEdits.newPlaylist()}
           >
             <Icon name="add" />
             <span>{labels.newPlaylist}</span>
@@ -340,9 +375,16 @@ export function App() {
         </button>
       </aside>
       <div className="content" ref={content}>
-        {hero ? (
+        {hero && route.kind !== "graveyard" ? (
           <div className="hero" data-testid="hero">
-            <Artwork large hash={hero.artworkHash} artist={route.kind === "artist"} />
+            <Artwork
+              large
+              hash={hero.artworkHash}
+              artist={route.kind === "artist"}
+              {...(route.kind === "playlist"
+                ? { playlist: route.id, image: hero.imageKey ?? null }
+                : {})}
+            />
             <div className="hero-copy">
               <h1>{title}</h1>
               {hero.artist && <p className="hero-artist">{hero.artist}</p>}
@@ -368,6 +410,19 @@ export function App() {
                   <Icon name="shuffle" size={16} />
                   {labels.shuffle}
                 </button>
+                {playlistId !== undefined && (
+                  <button
+                    aria-label={text.playlists.playlistActions}
+                    title={text.playlists.playlistActions}
+                    aria-haspopup="menu"
+                    onClick={(event) => {
+                      const rect = event.currentTarget.getBoundingClientRect();
+                      playlistEdits.openMenu(playlistId, { x: rect.left, y: rect.bottom + 4 });
+                    }}
+                  >
+                    <Icon name="menu" size={16} />
+                  </button>
+                )}
               </div>
             </div>
           </div>
@@ -378,6 +433,14 @@ export function App() {
               <p className="secondary" data-testid="song-count">
                 {labels.songCount(count)}
               </p>
+            )}
+            {route.kind === "playlists" && (
+              <div className="hero-actions">
+                <button onClick={playlistEdits.importPlaylists}>
+                  <Icon name="folder" size={16} />
+                  {text.playlists.importPlaylists}
+                </button>
+              </div>
             )}
           </div>
         )}
@@ -477,6 +540,13 @@ export function App() {
               )}
             </section>
           </div>
+        ) : route.kind === "graveyard" ? (
+          <Graveyard
+            playlistId={route.id}
+            revision={revision}
+            changed={playback.refresh}
+            failed={(message) => setError(message ?? text.desktopLibrary.actionFailed)}
+          />
         ) : (
           <>
             {selection && (
@@ -501,7 +571,15 @@ export function App() {
               onMenu={
                 selection
                   ? undefined
-                  : (row, at) => actions.openMenu({ scope, ids: [row.id] }, row.title, at)
+                  : (row, at) =>
+                      actions.openMenu(
+                        { scope, ids: [row.id] },
+                        row.title,
+                        at,
+                        scope.kind === "playlist" && scope.id !== undefined
+                          ? playlistEdits.moveItems(scope.id, row.id)
+                          : [],
+                      )
               }
             />
             {route.kind === "search" && ytMusic && (
@@ -517,6 +595,7 @@ export function App() {
       </div>
       <PlayerBar playback={playback} />
       {actions.overlays}
+      {playlistEdits.overlays}
       {shortcuts && <ShortcutsSheet onClose={() => setShortcuts(false)} />}
     </main>
   );
