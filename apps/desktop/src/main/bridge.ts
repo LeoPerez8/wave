@@ -173,7 +173,7 @@ const pageCall = <T>(
 ) => {
   const [offset, limit] = args;
   return validPage(offset, limit)
-    ? libraryCall((library) => run(library, offset, limit))
+    ? libraryCall((library) => run(library, offset as number, limit as number))
     : refuse(call, "invalid page");
 };
 
