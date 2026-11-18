@@ -244,12 +244,17 @@ export const playbackLayer = Layer.effect(
         const chosen = index === undefined ? undefined : ids[index];
         if (chosen !== undefined && rows([Number(chosen)])[0]?.unavailable)
           throw new Error("[folder-unavailable] Drive is not connected");
+        // A song from Search plays alone, as on the phone with YT Music off.
+        const alone = scope.kind === "search" && chosen !== undefined;
         await session.dispatch({
           type: "play",
-          trackIds: ids,
-          ...(index === undefined ? {} : { startIndex: index }),
+          trackIds: alone ? [chosen] : ids,
+          ...(index === undefined ? {} : { startIndex: alone ? 0 : index }),
           ...(shuffle === undefined ? {} : { shuffle }),
-          context: { kind: scope.kind, id: scope.id === undefined ? null : String(scope.id) },
+          context:
+            scope.kind === "search"
+              ? { kind: "search", id: null }
+              : { kind: scope.kind, id: scope.id === undefined ? null : String(scope.id) },
         });
         if (session.snapshot().canUndo) undoOffer++;
         keepQueued();

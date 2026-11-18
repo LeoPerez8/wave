@@ -1103,3 +1103,42 @@ test("main refuses song actions with a bad target, surface, action or playlist",
     }
   });
 });
+
+test("Search ranks the Library as the phone does, plays a result alone and keeps recent searches", async () => {
+  await withFile(async (file) => {
+    const { runtime, exposed, handlers } = connect(file);
+    const wave = exposed.get("wave") as WaveBridge;
+    const call = (channel: string, ...args: unknown[]) => handlers.get(channel)!(trusted, ...args);
+    try {
+      await runtime.runPromise(
+        Effect.gen(function* () {
+          const db = (yield* Database) as unknown as TestDatabase;
+          for (const [n, title] of ["Parasite", "Pink Moon", "Road"].entries())
+            addTrack(db, { title, artist: "Nick Drake", album: "Pink Moon", trackNumber: n + 1 });
+        }),
+      );
+      const view = await wave.search.library("pink moon");
+      assert.deepEqual([view.top?.kind, view.top?.row.title], ["album", "Pink Moon"]);
+      const songs = view.groups.find((group) => group.kind === "song")!;
+      assert.equal(songs.items[0]?.title, "Pink Moon", "its title beats an album match");
+      await wave.playback.start({ kind: "search", query: "pink moon" }, 1);
+      const playing = await wave.playback.view();
+      assert.equal(playing.current?.title, songs.items[1]?.title);
+      assert.equal(playing.length, 1, "a song from search plays alone");
+
+      assert.deepEqual((await wave.search.recent()).items, []);
+      await wave.search.remember("Pink moon");
+      await wave.search.remember("road ");
+      assert.deepEqual((await wave.search.remember("pink MOON")).items, ["pink MOON", "road"]);
+      assert.deepEqual((await wave.search.recent()).items, ["pink MOON", "road"]);
+      await wave.search.clearRecent();
+      assert.deepEqual((await wave.search.recent()).items, []);
+
+      await assert.rejects(call("search.library", 7), /Refused/);
+      await assert.rejects(call("search.library", "x".repeat(501)), /Refused/);
+      await assert.rejects(call("search.remember", null), /Refused/);
+    } finally {
+      await runtime.dispose();
+    }
+  });
+});
