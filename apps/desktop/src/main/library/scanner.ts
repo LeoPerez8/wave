@@ -130,7 +130,7 @@ export const createScanner = ({
   };
   let roots: readonly ScanFolder[] = [];
   let disposed = false;
-  /** Hear each scan that finished. */
+  /** Hear each change to the song list. */
   const listeners = new Set<() => void>();
   let active: Promise<void> | undefined;
   let again = false;
@@ -145,12 +145,12 @@ export const createScanner = ({
     }, quietMs);
     timer.unref();
   };
-  const watchFolder = (path: string) => {
+  const watchFolder = (path: string, recursive = false) => {
     if (watches.has(path) || disposed) return;
     try {
       const watcher = watch(
         realpathSync.native(normalize(path)),
-        { recursive: platform === "win32" },
+        { recursive },
         (_event, filename) => {
           if (filename === null) {
             schedule();
@@ -224,7 +224,13 @@ export const createScanner = ({
     const visited = new Set<string>();
     const watched = new Set<string>();
     const nextRoots: ScanFolder[] = [];
-    const walk = async (folder: string): Promise<void> => {
+    /** Folders and links inside a root that couldn't be read: what the Library has there stays. */
+    const unreadable: string[] = [];
+    /** Whether [error] says the entry is gone, which is a deletion; any other says nothing. */
+    const gone = (error: unknown) =>
+      ["ENOENT", "ENOTDIR"].includes((error as { code?: string }).code ?? "");
+    /** Only a root that can't be read fails its walk; an entry inside it is skipped. */
+    const walk = async (folder: string, root = false): Promise<void> => {
       if (disposed || excluded.some((path) => scanPathWithin(folder, path, platform))) return;
       const key = scanPathKey(folder, platform);
       if (visited.has(key)) return;
@@ -233,7 +239,14 @@ export const createScanner = ({
         watched.add(folder);
         watchFolder(folder);
       }
-      const children = await readdir(folder, { withFileTypes: true });
+      let children;
+      try {
+        children = await readdir(folder, { withFileTypes: true });
+      } catch (error) {
+        if (root) throw error;
+        if (!gone(error)) unreadable.push(folder);
+        return;
+      }
       children.sort((a, b) => a.name.localeCompare(b.name));
       for (const child of children) {
         if (disposed) return;
@@ -244,31 +257,42 @@ export const createScanner = ({
         // As on the phone, canonical paths prevent loops and repeated files. A link outside
         // the selected roots belongs to its own root, so it cannot leave an unowned Track.
         if (!rootPaths.some((root) => scanPathWithin(path, root, platform))) continue;
-        const linked = child.isSymbolicLink() ? await stat(path) : undefined;
-        if (child.isDirectory() || linked?.isDirectory()) await walk(path);
-        else if (
-          (child.isFile() || linked?.isFile()) &&
-          AUDIO.has(extname(path).slice(1).toLowerCase()) &&
-          !excludedFiles.has(scanPathKey(path, platform))
-        ) {
-          const info = await stat(path);
-          files.set(scanPathKey(path, platform), {
-            path,
-            sizeBytes: info.size,
-            modifiedAt: info.mtimeMs,
-          });
-          state = { ...state, filesFound: files.size };
+        try {
+          const linked = child.isSymbolicLink() ? await stat(path) : undefined;
+          if (child.isDirectory() || linked?.isDirectory()) await walk(path);
+          else if (
+            (child.isFile() || linked?.isFile()) &&
+            AUDIO.has(extname(path).slice(1).toLowerCase()) &&
+            !excludedFiles.has(scanPathKey(path, platform))
+          ) {
+            const info = await stat(path);
+            files.set(scanPathKey(path, platform), {
+              path,
+              sizeBytes: info.size,
+              modifiedAt: info.mtimeMs,
+            });
+            state = { ...state, filesFound: files.size };
+          }
+        } catch (error) {
+          if (!gone(error)) unreadable.push(path);
         }
       }
     };
+    // Windows watches a root's whole tree in one recursive watch; elsewhere the walk watches each
+    // folder. These go first: a root can be another's parent, or its own (a drive).
+    if (platform === "win32")
+      for (const root of listRoots(db)) {
+        watched.add(root.path);
+        watchFolder(root.path, true);
+      }
     for (const root of listRoots(db)) {
+      // The parent hears the root itself come and go.
       watched.add(dirname(root.path));
       watchFolder(dirname(root.path));
       try {
-        await walk(root.path);
+        await walk(root.path, true);
         nextRoots.push({ path: root.path, available: true });
       } catch {
-        // An incomplete walk says nothing about deletion, even if only one subtree failed.
         nextRoots.push({ path: root.path, available: false });
       }
     }
@@ -282,11 +306,11 @@ export const createScanner = ({
     const known = new Map(
       [...indexed, ...index.skipped()].map((file) => [scanPathKey(file.path, platform), file]),
     );
-    index.begin(
-      roots,
-      [...files.values()].map((file) => file.path),
-      indexed,
-    );
+    // An entry that couldn't be read says nothing about deletion: its files count as seen.
+    const kept = [...known.values()]
+      .map((file) => file.path)
+      .filter((path) => unreadable.some((entry) => scanPathWithin(path, entry, platform)));
+    index.begin(roots, [...[...files.values()].map((file) => file.path), ...kept], indexed);
     state = { ...state, phase: "reading" };
     let batch: IndexedTrack[] = [];
     /** The lyrics text Search indexes for each file in [batch]; null takes a song out. */
@@ -425,6 +449,7 @@ export const createScanner = ({
       });
       removeSongs(db, creditSplits(), trackIds, Date.now());
       state = { ...state, revision: state.revision + 1 };
+      for (const listener of listeners) listener();
     },
     include: async (path: string) => {
       await active;
@@ -476,7 +501,7 @@ export const createScanner = ({
       for (const listener of listeners) listener();
     },
     status: (): ScanStatus => state,
-    /** Hears each scan that finished; the Wave account's sync looks at the song list then. */
+    /** Hears each change to the song list (a scan that finished, an import, a removal); the Wave account's sync looks at it then. */
     subscribe: (listener: () => void): (() => void) => {
       listeners.add(listener);
       return () => void listeners.delete(listener);

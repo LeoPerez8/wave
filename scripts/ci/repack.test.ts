@@ -129,6 +129,24 @@ describe("apkCacheKey", () => {
     assert.notEqual(key(dir), previous);
   });
 
+  it("doesn't change when only the desktop's JVM entry point in the shared Kotlin changes", () => {
+    const dir = app();
+    const shared = resolve(dir, "../../packages/kotlin-shared");
+    const entry = join(shared, "stdio/src/main/kotlin/WaveDesktop.kt");
+    mkdirSync(dirname(entry), { recursive: true });
+    writeFileSync(join(shared, "build.gradle.kts"), "plugins {}");
+    writeFileSync(entry, "fun main() {}");
+    const previous = key(dir);
+    writeFileSync(entry, "fun main() { serve() }");
+    writeFileSync(join(shared, "stdio/build.gradle.kts"), "plugins {}");
+    assert.equal(key(dir), previous);
+    // A package of the shared code with the same name still counts.
+    const named = join(shared, "src/main/kotlin/stdio/Lines.kt");
+    mkdirSync(dirname(named), { recursive: true });
+    writeFileSync(named, "class Lines");
+    assert.notEqual(key(dir), previous);
+  });
+
   it("ignores build output in the shared Kotlin", () => {
     const dir = app();
     const shared = resolve(dir, "../../packages/kotlin-shared");

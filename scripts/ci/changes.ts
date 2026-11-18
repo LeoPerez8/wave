@@ -11,7 +11,7 @@ import { fileURLToPath } from "node:url";
 // Areas of the repo that CI decisions depend on. A path ending in "/" covers
 // everything under it; any other path is one file. Markdown is never in an area.
 const AREAS = {
-  // The APK, with the Kotlin it shares with the desktop (#1144).
+  // The APK, with the Kotlin it shares with the desktop (#1144), less DESKTOP_ONLY.
   app: ["apps/mobile/", "packages/client/", "packages/kotlin-shared/"],
   core: ["packages/core/"],
   // The Wave account's sync service. Not in the APK, but users see what it does.
@@ -26,7 +26,7 @@ const AREAS = {
   // TypeScript config the packages extend.
   tsconfig: ["tsconfig.base.json"],
   // The native modules with JVM tests and what decides how prebuild generates the
-  // project they build in.
+  // project they build in. The shared Kotlin's build tests the desktop's entry point too.
   native: [
     "apps/mobile/modules/wave-native/",
     "apps/mobile/modules/wave-glass/",
@@ -47,6 +47,10 @@ const AREAS = {
 } as const;
 
 type Area = keyof typeof AREAS;
+
+// What only the desktop app is built from, inside or beside an area the phone shares. The
+// desktop isn't released yet, so a change to these alone is no `app` change: it releases nothing.
+const DESKTOP_ONLY = ["apps/desktop/", "packages/kotlin-shared/stdio/"];
 
 // A change to these areas can break any package, so Checks then typechecks and tests
 // all of them. Otherwise it checks only the packages a PR changed and their dependents.
@@ -78,7 +82,12 @@ const decide = (touched: (area: Area) => boolean): Changes => {
 
 export const changes = (paths: readonly string[]): Changes =>
   decide((area) =>
-    paths.some((path) => !path.endsWith(".md") && AREAS[area].some((entry) => covers(entry, path))),
+    paths.some(
+      (path) =>
+        !path.endsWith(".md") &&
+        AREAS[area].some((entry) => covers(entry, path)) &&
+        !(area === "app" && DESKTOP_ONLY.some((entry) => covers(entry, path))),
+    ),
   );
 
 /**
