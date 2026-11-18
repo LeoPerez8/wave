@@ -17,6 +17,7 @@ import type { Page } from "../../shared/bridge.ts";
 import type { PlaybackCommand, PlayerView, QueueRow } from "../../shared/playerView.ts";
 import { Icon } from "./Icon.tsx";
 import { pressOf } from "./keys.ts";
+import { queueRowAt } from "./queueRows.ts";
 import { rovingTarget } from "./rovingList.ts";
 import { labels, text } from "./text.ts";
 import { Artwork, time } from "./VirtualTable.tsx";
@@ -116,7 +117,7 @@ export function QueuePanel({
 
   const rowAt = (at: number): QueueRow | undefined => {
     if (pages.revision !== revision) return undefined;
-    return pages.pages.get(Math.floor(at / SIZE))?.items[at % SIZE];
+    return queueRowAt(pages.pages, SIZE, at);
   };
   const keyAt = (at: number) => rowAt(at)?.key ?? null;
   const upNext = (at: number) => at > index && at < length;

@@ -124,9 +124,12 @@ const audioInMemory = () => {
   /** Each song's Normalize Volume gain as it was loaded or lined up, and the files measured. */
   const gains: string[] = [];
   const measured: string[] = [];
+  /** Files whose name is here won't open. */
+  const broken = new Set<string>();
   let status: PlaybackStatus = { state: "idle", positionMs: 0 };
   const engine: AddonEngine = {
     load: (path, key, gainDb) => {
+      if (broken.has(basename(path))) throw new Error("[decode] can't open the file");
       engineCalls.push(`load ${path}`);
       gains.push(`${basename(path)} ${gainDb}`);
       status = { state: "paused", positionMs: 0, durationMs: 1_000, ...(key ? { key } : {}) };
@@ -154,7 +157,7 @@ const audioInMemory = () => {
       "resolved" in request || queueMicrotask(() => events.message(answer(engine, request))),
     kill: () => setImmediate(events.exit),
   });
-  return { layer: playerLayer({ fork }), engineCalls, gains, measured };
+  return { layer: playerLayer({ fork }), engineCalls, gains, measured, broken };
 };
 
 /** Tags as the shared Kotlin reads them, for a song titled `title`. */
@@ -397,6 +400,7 @@ const connect = (
     engineCalls: audio.engineCalls,
     gains: audio.gains,
     measured: audio.measured,
+    broken: audio.broken,
     reads: jvm.reads,
     yt: jvm.yt,
     downloads: jvm.downloads,
@@ -750,6 +754,83 @@ test("the window plays a list from a row, skips, stars and sets the volume throu
     } finally {
       await runtime.dispose();
     }
+  });
+});
+
+/** Runs [check] over a bridge whose Library is the album Pink Moon's three songs. */
+const withAlbum = (
+  check: (
+    wave: WaveBridge,
+    album: { readonly id: number },
+    bridge: ReturnType<typeof connect>,
+  ) => Promise<void>,
+) =>
+  withFile(async (file) => {
+    const bridge = connect(file);
+    const wave = bridge.exposed.get("wave") as WaveBridge;
+    try {
+      await bridge.runtime.runPromise(
+        Effect.gen(function* () {
+          const db = (yield* Database) as unknown as TestDatabase;
+          for (const [n, title] of ["Parasite", "Pink Moon", "Road"].entries())
+            addTrack(db, { title, artist: "Nick Drake", album: "Pink Moon", trackNumber: n + 1 });
+        }),
+      );
+      await check(wave, (await wave.library.browse({ kind: "albums" }, 0, 1)).items[0]!, bridge);
+    } finally {
+      await bridge.runtime.dispose();
+    }
+  });
+
+test("a queue row says its place, so a song the Library lost leaves the rows after it right", async () => {
+  await withAlbum(async (wave, album, { runtime }) => {
+    await wave.playback.start({ kind: "album", id: album.id }, 0);
+    await runtime.runPromise(
+      Effect.gen(function* () {
+        const db = yield* Database;
+        db.run(sql`PRAGMA foreign_keys=OFF`);
+        db.run(sql`DELETE FROM tracks WHERE title='Pink Moon'`);
+      }),
+    );
+    const queue = await wave.playback.queue(0, 10);
+    assert.equal(queue.total, 3);
+    assert.deepEqual(
+      queue.items.map((row) => [row.at, row.title]),
+      [
+        [0, "Parasite"],
+        [2, "Road"],
+      ],
+    );
+    assert.deepEqual(
+      (await wave.playback.queue(2, 10)).items.map((row) => [row.at, row.title]),
+      [[2, "Road"]],
+    );
+  });
+});
+
+test("Previous pressed while Next still runs goes back to the song before", async () => {
+  await withAlbum(async (wave, album) => {
+    await wave.playback.start({ kind: "album", id: album.id }, 0);
+    await wave.playback.seek(60_000);
+    await Promise.all([
+      wave.playback.command({ type: "next" }),
+      wave.playback.command({ type: "previous" }),
+    ]);
+    assert.equal((await wave.playback.view()).current?.title, "Parasite");
+  });
+});
+
+test("a song that won't open still leaves its new queue showing, stopped, with Undo offered", async () => {
+  await withAlbum(async (wave, album, { broken }) => {
+    await wave.playback.start({ kind: "album", id: album.id }, 0);
+    broken.add("Road.mp3");
+    await assert.rejects(wave.playback.start({ kind: "songs" }, 2), /can't open/);
+    const view = await wave.playback.view();
+    assert.equal(view.current?.title, "Road");
+    assert.equal(view.status.state, "idle");
+    assert.notEqual(view.undoOffer, null, "the queue it replaced can come back");
+    await wave.playback.undo();
+    assert.equal((await wave.playback.view()).current?.title, "Parasite");
   });
 });
 

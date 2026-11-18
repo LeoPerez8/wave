@@ -29,9 +29,13 @@ export interface PlayerView {
   readonly sleepTimer: SleepTimer | null;
 }
 
-/** A queue row: a song with its entry's key, and where it stands against the current one. */
+/**
+ * A queue row: a song with its entry's key, its place in the queue (History included), and where
+ * it stands against the current one.
+ */
 export interface QueueRow extends BrowseRow {
   readonly key: string;
+  readonly at: number;
   readonly history: boolean;
   readonly current: boolean;
 }

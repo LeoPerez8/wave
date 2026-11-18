@@ -371,3 +371,114 @@ test("each song loads and lines up at its Normalize Volume gain, read again once
   await session.dispatch({ type: "next" });
   assert.equal(audio.options.loaded?.gainDb, -2.5);
 });
+
+/** A device whose `load` fails for the paths `broken` names. */
+const deviceFailing = (broken: Set<string>) => {
+  const audio = device();
+  const port: AudioPort = {
+    ...audio,
+    load: async (path, key, how) => {
+      for (const name of broken) if (path.includes(name)) throw new Error("[decode] can't open");
+      return audio.load(path, key, how);
+    },
+  };
+  return port;
+};
+
+test("Previous with no position goes by the session's own when its turn comes", async (t) => {
+  const db = await openTestDatabase();
+  const ids = [addTrack(db, { title: "First" }), addTrack(db, { title: "Second" })];
+  const session = await createPlaybackSession({ db, audio: device(), source: "desktop" });
+  t.after(() => session.close());
+  await session.dispatch({
+    type: "play",
+    trackIds: ids.map(String),
+    context: { kind: "songs", id: null },
+  });
+  await session.seek(60000);
+  const current = () => session.snapshot().queue.entries[session.snapshot().queue.index]?.trackId;
+  // Previous is asked while Next still runs: the new song is at its start, so it goes back.
+  await Promise.all([session.dispatch({ type: "next" }), session.dispatch({ type: "previous" })]);
+  assert.equal(current(), String(ids[0]));
+  await session.seek(4000);
+  await session.dispatch({ type: "previous" });
+  assert.equal(current(), String(ids[0]), "past three seconds it restarts the song");
+  assert.equal(session.snapshot().status.positionMs, 0);
+  await session.dispatch({ type: "next" });
+  await session.seek(4000);
+  await session.dispatch({ type: "previous" });
+  assert.equal(current(), String(ids[1]));
+});
+
+test("a new queue whose song won't load still replaces the old one, stopped, with Undo", async (t) => {
+  const db = await openTestDatabase();
+  const a = addTrack(db, { title: "First" });
+  const b = addTrack(db, { title: "Broken" });
+  const broken = new Set(["Broken"]);
+  let changes = 0;
+  const session = await createPlaybackSession({
+    db,
+    audio: deviceFailing(broken),
+    source: "desktop",
+    changed: () => changes++,
+  });
+  t.after(() => session.close());
+  await session.dispatch({
+    type: "play",
+    trackIds: [String(a)],
+    context: { kind: "songs", id: null },
+  });
+  await session.seek(12000);
+  const before = changes;
+  await assert.rejects(
+    session.dispatch({ type: "play", trackIds: [String(b)], context: { kind: "songs", id: null } }),
+    /decode/,
+  );
+  const failed = session.snapshot();
+  assert.deepEqual(
+    failed.queue.entries.map((entry) => entry.trackId),
+    [String(b)],
+  );
+  assert.equal(failed.status.state, "idle", "the old song doesn't play on under the new queue");
+  assert.equal(failed.status.key, undefined);
+  assert.equal(failed.canUndo, true);
+  assert.ok(changes > before, "the change is told");
+  // Play tries the queue's song again instead of resuming the one the audio process still holds.
+  await assert.rejects(session.play(), /decode/);
+  broken.clear();
+  await session.play();
+  assert.equal(session.snapshot().status.state, "playing");
+  assert.equal(session.snapshot().status.key, session.snapshot().queue.entries[0]?.key);
+  await session.undo();
+  assert.equal(session.snapshot().queue.entries[0]?.trackId, String(a));
+  assert.equal(session.snapshot().status.positionMs, 12000);
+});
+
+test("Undo to a song that won't load goes back to the old queue, stopped", async (t) => {
+  const db = await openTestDatabase();
+  const a = addTrack(db, { title: "Broken" });
+  const b = addTrack(db, { title: "Second" });
+  const broken = new Set<string>();
+  let changes = 0;
+  const session = await createPlaybackSession({
+    db,
+    audio: deviceFailing(broken),
+    source: "desktop",
+    changed: () => changes++,
+  });
+  t.after(() => session.close());
+  for (const id of [a, b])
+    await session.dispatch({
+      type: "play",
+      trackIds: [String(id)],
+      context: { kind: "songs", id: null },
+    });
+  broken.add("Broken");
+  const before = changes;
+  await assert.rejects(session.undo(), /decode/);
+  const undone = session.snapshot();
+  assert.equal(undone.queue.entries[0]?.trackId, String(a));
+  assert.equal(undone.status.state, "idle");
+  assert.equal(undone.canUndo, false);
+  assert.ok(changes > before, "the change is told");
+});
