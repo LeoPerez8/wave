@@ -1,11 +1,15 @@
 //! The engine the app drives: one player on the default output device.
 
-use std::path::Path;
-use std::sync::Arc;
+use std::collections::VecDeque;
+use std::path::{Path, PathBuf};
+use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::{Arc, Condvar, Mutex, MutexGuard};
+use std::thread;
 
 use crate::error::EngineError;
+use crate::loudness::{Measurement, measure};
 use crate::output::Output;
-use crate::player::{PlayState, Player, TrackInfo};
+use crate::player::{Next, PlayState, Player, TrackInfo, Transition};
 
 #[derive(Debug, Clone, PartialEq)]
 pub struct Status {
@@ -21,6 +25,7 @@ pub struct Status {
 pub struct Engine {
     player: Arc<Player>,
     output: Output,
+    measuring: Measuring,
 }
 
 impl Engine {
@@ -37,7 +42,7 @@ impl Engine {
     fn start(silent: bool) -> Engine {
         let player = Arc::new(Player::new());
         let output = Output::start(Arc::clone(&player), silent);
-        Engine { player, output }
+        Engine { player, output, measuring: Measuring::start() }
     }
 
     pub fn load(&self, path: &Path) -> Result<Status, EngineError> {
@@ -49,18 +54,53 @@ impl Engine {
         self.player.play()
     }
 
-    pub fn load_entry(&self, path: &Path, key: Option<String>) -> Result<Status, EngineError> {
-        self.player.load_entry(path, key)?;
+    /// Opens `path` for queue entry `key`, paused, at Normalize Volume's `gain_db`.
+    pub fn load_entry(
+        &self,
+        path: &Path,
+        key: Option<String>,
+        gain_db: Option<f64>,
+    ) -> Result<Status, EngineError> {
+        self.player.load_entry(path, key, gain_db)?;
         Ok(self.status())
     }
-    pub fn preload(&self, next: Option<(&Path, String)>) -> Result<(), EngineError> {
+
+    pub fn preload(&self, next: Option<Next<'_>>) -> Result<(), EngineError> {
         self.player.preload(next)
     }
-    pub fn take_transitions(&self) -> Vec<crate::player::Transition> {
+
+    pub fn take_transitions(&self) -> Vec<Transition> {
         self.player.take_transitions()
     }
+
     pub fn set_volume(&self, volume: f32) {
         self.player.set_volume(volume);
+    }
+
+    /// Crossfade's overlap in seconds (Settings › Playback); from the next song on.
+    pub fn set_crossfade(&self, seconds: f64) {
+        self.player.set_crossfade(seconds * 1000.0);
+    }
+
+    /// Normalize Volume's switch; at once.
+    pub fn set_normalize(&self, on: bool) {
+        self.player.set_normalize(on);
+    }
+
+    /// Queues `path` to be measured for Normalize Volume, away from playback; its result comes
+    /// back from [take_measurements](Engine::take_measurements) under `id`.
+    pub fn measure(&self, path: &Path, id: String) {
+        self.measuring.push(path.to_path_buf(), id);
+    }
+
+    /// Drops every measurement not done yet: each reports `Cancelled`.
+    pub fn cancel_measurements(&self) {
+        self.measuring.cancel();
+    }
+
+    /// The measurements finished since the last call.
+    pub fn take_measurements(&self) -> Vec<(String, Measurement)> {
+        self.measuring.take()
     }
 
     pub fn pause(&self) -> Result<(), EngineError> {
@@ -91,6 +131,95 @@ impl Engine {
 impl Default for Engine {
     fn default() -> Engine {
         Engine::new()
+    }
+}
+
+/// Measures songs one at a time on a thread of its own, so playback never waits on it.
+struct Measuring {
+    shared: Arc<MeasureShared>,
+    worker: Option<thread::JoinHandle<()>>,
+}
+
+struct MeasureShared {
+    state: Mutex<MeasureState>,
+    wake: Condvar,
+    /// Set to stop the measurement under way; cleared as the next one starts.
+    cancelled: AtomicBool,
+}
+
+#[derive(Default)]
+struct MeasureState {
+    queue: VecDeque<(PathBuf, String)>,
+    done: Vec<(String, Measurement)>,
+    shutdown: bool,
+}
+
+impl MeasureShared {
+    fn lock(&self) -> MutexGuard<'_, MeasureState> {
+        self.state.lock().unwrap_or_else(|poisoned| poisoned.into_inner())
+    }
+}
+
+impl Measuring {
+    fn start() -> Measuring {
+        let shared = Arc::new(MeasureShared {
+            state: Mutex::new(MeasureState::default()),
+            wake: Condvar::new(),
+            cancelled: AtomicBool::new(false),
+        });
+        let worker_shared = Arc::clone(&shared);
+        let worker = thread::Builder::new()
+            .name("wave-measure".into())
+            .spawn(move || measure_loop(&worker_shared))
+            .expect("starts the measuring thread");
+        Measuring { shared, worker: Some(worker) }
+    }
+
+    fn push(&self, path: PathBuf, id: String) {
+        self.shared.lock().queue.push_back((path, id));
+        self.shared.wake.notify_all();
+    }
+
+    fn cancel(&self) {
+        let mut state = self.shared.lock();
+        self.shared.cancelled.store(true, Ordering::SeqCst);
+        let waiting: Vec<_> = state.queue.drain(..).collect();
+        state.done.extend(waiting.into_iter().map(|(_, id)| (id, Measurement::Cancelled)));
+    }
+
+    fn take(&self) -> Vec<(String, Measurement)> {
+        std::mem::take(&mut self.shared.lock().done)
+    }
+}
+
+impl Drop for Measuring {
+    fn drop(&mut self) {
+        self.shared.lock().shutdown = true;
+        self.shared.cancelled.store(true, Ordering::SeqCst);
+        self.shared.wake.notify_all();
+        if let Some(worker) = self.worker.take() {
+            let _ = worker.join();
+        }
+    }
+}
+
+fn measure_loop(shared: &MeasureShared) {
+    loop {
+        let (path, id) = {
+            let mut state = shared.lock();
+            loop {
+                if state.shutdown {
+                    return;
+                }
+                if let Some(job) = state.queue.pop_front() {
+                    shared.cancelled.store(false, Ordering::SeqCst);
+                    break job;
+                }
+                state = shared.wake.wait(state).unwrap_or_else(|poisoned| poisoned.into_inner());
+            }
+        };
+        let result = measure(&path, &shared.cancelled);
+        shared.lock().done.push((id, result));
     }
 }
 

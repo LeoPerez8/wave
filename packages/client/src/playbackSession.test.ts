@@ -5,28 +5,39 @@ import { addTrack, openTestDatabase, libraryRow } from "./db/testDatabase.ts";
 import {
   createPlaybackSession,
   type AudioPort,
+  type AudioSongOptions,
   type AudioStatus,
   type PlaybackSession,
 } from "./playbackSession.ts";
 
-const device = (): AudioPort & { preloaded: () => string | undefined; forget: () => void } => {
+const device = (): AudioPort & {
+  preloaded: () => string | undefined;
+  forget: () => void;
+  /** How the last song loaded, and the one lined up, are to play. */
+  options: { loaded?: AudioSongOptions | undefined; lined?: AudioSongOptions | undefined };
+} => {
   let state: AudioStatus = { state: "idle", positionMs: 0 };
   let preloaded: string | undefined;
+  const options: { loaded?: AudioSongOptions; lined?: AudioSongOptions } = {};
   return {
     preloaded: () => preloaded,
+    options,
     // The audio process restarted: its preloaded song is gone.
     forget: () => {
       preloaded = undefined;
     },
-    load: async (path, key) =>
-      (state = {
+    load: async (path, key, how) => {
+      options.loaded = how;
+      return (state = {
         state: "paused",
         positionMs: 0,
         key,
         durationMs: path.includes("Short") ? 1000 : 60000,
-      }),
-    preload: async (_path, key) => {
+      });
+    },
+    preload: async (_path, key, how) => {
       preloaded = key;
+      options.lined = how;
       return state;
     },
     play: async () => (state = { ...state, state: "playing" }),
@@ -237,4 +248,48 @@ test("a fresh report still applies an engine transition queued behind an older s
     { key: keys[1]!, atMs: 3990 },
   ]);
   assert.equal(current(session), keys[1]);
+});
+
+test("a crossfade moves the queue on and the song fading out counts once its fade ends", async (t) => {
+  let now = 1000;
+  const ended: string[] = [];
+  const { session, keys, audio, ids } = await album(t, {
+    now: () => now,
+    playEnded: (play) => ended.push(`${play.trackId}:${play.endReason}`),
+  });
+  assert.equal(audio.options.lined?.fade, true);
+  now += 55000;
+  await session.feed({ key: keys[1], state: "playing", positionMs: 100 }, [
+    { key: keys[1]!, atMs: now - 100, kind: "crossfade" },
+  ]);
+  assert.equal(current(session), keys[1]);
+  assert.equal(audio.preloaded(), keys[2]);
+  assert.deepEqual(ended, [], "the first song still plays, fading out");
+  now += 5000;
+  await session.feed({ key: keys[1], state: "playing", positionMs: 5100 }, [
+    { key: keys[0]!, atMs: now, kind: "fadeEnded" },
+  ]);
+  assert.deepEqual(ended, [`${ids[0]}:completed`]);
+});
+
+test("repeat one lines the song up again without a fade", async (t) => {
+  const { session, audio } = await album(t);
+  await session.dispatch({ type: "setRepeat", mode: "one" });
+  assert.equal(audio.options.lined?.fade, false);
+  await session.dispatch({ type: "setRepeat", mode: "all" });
+  assert.equal(audio.options.lined?.fade, true);
+});
+
+test("each song loads and lines up at its Normalize Volume gain, read again once one is learned", async (t) => {
+  const gains = new Map<string, number>();
+  const { session, audio, ids } = await album(t, {
+    gainDb: (_queue, entry) => gains.get(entry.trackId) ?? -5,
+  });
+  assert.equal(audio.options.loaded?.gainDb, -5);
+  assert.equal(audio.options.lined?.gainDb, -5);
+  gains.set(String(ids[1]), -2.5);
+  await session.gainsChanged();
+  assert.equal(audio.options.lined?.gainDb, -2.5);
+  await session.dispatch({ type: "next" });
+  assert.equal(audio.options.loaded?.gainDb, -2.5);
 });

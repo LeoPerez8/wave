@@ -458,6 +458,8 @@ export const settingsEn = {
   swipeHint: (side: "left" | "right") => `Chooses what swiping ${side} runs`,
   minutes: (n: number) =>
     `${formatNumber("en", n)} ${plural("en", n, { one: "minute", other: "minutes" })}`,
+  /** A Crossfade length, as the slider shows it. */
+  seconds: (n: number) => `${formatNumber("en", n)} s`,
   downloadedLine: (count: string, line: string) => `${count} downloaded, ${line}`,
   colourMode: (mode: string, colour: string) => `${mode} mode: ${colour}`,
   adjustedColour: (light: boolean, dark: boolean) =>

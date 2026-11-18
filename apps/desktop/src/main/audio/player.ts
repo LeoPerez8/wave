@@ -5,6 +5,7 @@
 import * as Context from "effect/Context";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
+import type { AudioMeasurement } from "@wave/client/songMeasurements";
 import type { PlaybackStatus, PlaybackEvent } from "../../shared/playback.ts";
 import type { AudioCall } from "./protocol.ts";
 import {
@@ -15,13 +16,34 @@ import {
 } from "./supervisor.ts";
 
 export interface PlayerShape {
-  /** Opens `path`, paused at its start, in place of the song before. */
-  readonly load: (path: string, key?: string) => Effect.Effect<PlaybackStatus, AudioEngineError>;
+  /**
+   * Opens `path`, paused at its start, in place of the song before, to play at `gainDb` while
+   * Normalize Volume is on (as it is, without one).
+   */
+  readonly load: (
+    path: string,
+    key?: string,
+    gainDb?: number,
+  ) => Effect.Effect<PlaybackStatus, AudioEngineError>;
+  /**
+   * Lines up the song after the current one, or none without `path`. `fade` false keeps the move
+   * gapless whatever Crossfade is (repeat one).
+   */
   readonly preload: (
     path?: string,
     key?: string,
+    gainDb?: number,
+    fade?: boolean,
   ) => Effect.Effect<PlaybackStatus, AudioEngineError>;
   readonly setVolume: (volume: number) => Effect.Effect<PlaybackStatus, AudioEngineError>;
+  /** Crossfade in seconds, 0 for off; applies from the next move. */
+  readonly setCrossfade: (seconds: number) => Effect.Effect<PlaybackStatus, AudioEngineError>;
+  /** Normalize Volume's switch; applies from the next frame. */
+  readonly setNormalize: (on: boolean) => Effect.Effect<PlaybackStatus, AudioEngineError>;
+  /** Measures the loudness of the file at `path`, after those asked before. */
+  readonly measure: (path: string) => Promise<AudioMeasurement>;
+  /** Stops the measurements running and waiting; each answers `cancelled`. */
+  readonly cancelMeasurements: () => Effect.Effect<PlaybackStatus, AudioEngineError>;
   readonly subscribe: (listener: (event: PlaybackEvent) => void) => () => void;
   readonly play: () => Effect.Effect<PlaybackStatus, AudioEngineError>;
   readonly pause: () => Effect.Effect<PlaybackStatus, AudioEngineError>;
@@ -38,9 +60,13 @@ const playerOf = (audio: AudioSupervisor): PlayerShape => {
   const run = (call: AudioCall, args: readonly unknown[]) =>
     Effect.tryPromise({ try: () => audio.call(call, args), catch: asError });
   return {
-    load: (path, key) => run("load", [path, key]),
-    preload: (path, key) => run("preload", [path, key]),
+    load: (path, key, gainDb) => run("load", [path, key, gainDb]),
+    preload: (path, key, gainDb, fade) => run("preload", [path, key, gainDb, fade]),
     setVolume: (volume) => run("setVolume", [volume]),
+    setCrossfade: (seconds) => run("setCrossfade", [seconds]),
+    setNormalize: (on) => run("setNormalize", [on]),
+    measure: audio.measure,
+    cancelMeasurements: () => run("cancelMeasurements", []),
     subscribe: audio.subscribe,
     play: () => run("play", []),
     pause: () => run("pause", []),

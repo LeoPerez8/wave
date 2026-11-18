@@ -6,7 +6,7 @@ import * as Effect from "effect/Effect";
 import { BRIDGE_CALLS, type BridgeCall, type BridgeContract } from "../shared/bridge.ts";
 import { PLAYABLE_EXTENSIONS } from "../shared/playback.ts";
 import { Playback } from "./playback/playback.ts";
-import { validPlaybackCommand } from "./playback/validation.ts";
+import { validPlaybackCommand, validPlaybackSettings } from "./playback/validation.ts";
 import { Player } from "./audio/player.ts";
 import type { AudioEngineError } from "./audio/supervisor.ts";
 import { Kotlin } from "./kotlin/kotlin.ts";
@@ -17,6 +17,13 @@ import { BROWSE_KINDS, type BrowseScope } from "../shared/browse.ts";
 import { browseLetter } from "./library/browse.ts";
 import { readArtwork } from "./library/artwork.ts";
 import { appearance, savePreference } from "./preferences.ts";
+import {
+  MAX_TARGET_IDS,
+  SONG_RUN_ACTIONS,
+  type SongRunAction,
+  type SongTarget,
+} from "../shared/songActions.ts";
+import { runSongAction, songMenu } from "./library/songActions.ts";
 import type { Appearance } from "../shared/bridge.ts";
 
 const validScope = (value: unknown): value is BrowseScope => {
@@ -27,6 +34,28 @@ const validScope = (value: unknown): value is BrowseScope => {
     (!["album", "artist", "playlist", "genre"].includes(kind) ||
       (Number.isSafeInteger(id) && id! > 0)) &&
     (query === undefined || (typeof query === "string" && query.length <= 500))
+  );
+};
+
+const LIST_OF_LISTS = ["albums", "artists", "playlists", "genres"];
+
+const songId = (value: unknown): boolean =>
+  typeof value === "number" && Number.isSafeInteger(value) && value > 0;
+
+/** A target of songs: a list of songs, and the ones named or all but the ones named. */
+const validTarget = (value: unknown): value is SongTarget => {
+  if (typeof value !== "object" || value === null) return false;
+  const { scope } = value as SongTarget;
+  if (!validScope(scope) || LIST_OF_LISTS.includes(scope.kind)) return false;
+  const { ids, all, except } = value as { ids?: unknown; all?: unknown; except?: unknown };
+  if (all === true)
+    return Array.isArray(except) && except.length <= MAX_TARGET_IDS && except.every(songId);
+  return (
+    all === undefined &&
+    Array.isArray(ids) &&
+    ids.length >= 1 &&
+    ids.length <= MAX_TARGET_IDS &&
+    ids.every(songId)
   );
 };
 
@@ -126,7 +155,7 @@ const createHandlers = (onAppearance: (mode: Appearance) => void): Handlers => {
     "playback.view": () => playbackCall((p) => p.view()),
     "playback.start": ([scope, index, shuffle]) =>
       validScope(scope) &&
-      !["albums", "artists", "playlists", "genres"].includes(scope.kind) &&
+      !LIST_OF_LISTS.includes(scope.kind) &&
       (index === undefined ||
         (typeof index === "number" && Number.isSafeInteger(index) && index >= 0)) &&
       (shuffle === undefined || typeof shuffle === "boolean")
@@ -182,6 +211,11 @@ const createHandlers = (onAppearance: (mode: Appearance) => void): Handlers => {
     "account.signOut": () => accountCall((a) => a.signOut()),
     "account.signOutEverywhere": () => accountCall((a) => a.signOutEverywhere()),
     "account.answerInvitation": () => accountCall((a) => a.answerInvitation()),
+    "settings.playback": () => playbackCall((p) => p.settings()),
+    "settings.setPlayback": ([change]) =>
+      validPlaybackSettings(change)
+        ? playbackCall((p) => p.setSettings(change))
+        : refuse("settings.setPlayback", "invalid playback settings"),
     "library.artwork": ([hash, large]) =>
       typeof hash === "string" && /^[a-f0-9]{40}$/.test(hash) && typeof large === "boolean"
         ? Effect.gen(function* () {
@@ -228,6 +262,37 @@ const createHandlers = (onAppearance: (mode: Appearance) => void): Handlers => {
       typeof path === "string" && isAbsolute(path)
         ? libraryCall((library) => library.include(path))
         : refuse("library.include", "invalid folder"),
+    "songs.actions": ([target, surface]) =>
+      validTarget(target) && (surface === "menu" || surface === "selection")
+        ? Effect.gen(function* () {
+            return songMenu(yield* Database, target, surface);
+          })
+        : refuse("songs.actions", "invalid songs or surface"),
+    "songs.run": ([target, action, playlistId]) =>
+      validTarget(target) &&
+      SONG_RUN_ACTIONS.includes(action as SongRunAction) &&
+      (action === "addToPlaylist" ? songId(playlistId) : playlistId === undefined)
+        ? Effect.gen(function* () {
+            const db = yield* Database;
+            const library = yield* DesktopLibrary;
+            const playback = yield* Playback;
+            return yield* Effect.tryPromise({
+              try: () =>
+                runSongAction(
+                  {
+                    db,
+                    queue: (type, trackIds) => playback.command({ type, trackIds: [...trackIds] }),
+                    removeSongs: (trackIds) => library.removeSongs(trackIds),
+                    changed: playback.refresh,
+                  },
+                  target,
+                  action as SongRunAction,
+                  playlistId as number | undefined,
+                ),
+              catch: (error) => error,
+            });
+          })
+        : refuse("songs.run", "invalid songs, action or playlist"),
     "player.load": ([path]) => {
       const song = songPath(path);
       return song === undefined

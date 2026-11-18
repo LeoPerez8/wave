@@ -27,6 +27,7 @@ import * as Effect from "effect/Effect";
 import {
   DEFAULT_THEME_CHOICE,
   catalogueOf,
+  desktopKey,
   readThemeChoice,
   resolveAppLanguage,
   themeFor,
@@ -84,6 +85,19 @@ const createWindow = (onFocus: () => void) => {
     },
   });
   guardWindow(created.webContents, (url) => void shell.openExternal(url));
+  // Ctrl+Q quits from anywhere in the window, a field included.
+  created.webContents.on("before-input-event", (event, input) => {
+    if (
+      input.type === "keyDown" &&
+      desktopKey(
+        { key: input.key, ctrl: input.control, alt: input.alt, shift: input.shift },
+        "other",
+      ) === "quit"
+    ) {
+      event.preventDefault();
+      app.quit();
+    }
+  });
   created.once("ready-to-show", () => created.show());
   created.on("closed", () => {
     window = undefined;

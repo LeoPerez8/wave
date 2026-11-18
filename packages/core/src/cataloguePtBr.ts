@@ -1,3 +1,4 @@
+import { desktopShortcutsPtBr } from "./catalogue/desktopShortcutsPtBr.ts";
 import { libraryPtBr } from "./catalogue/libraryPtBr.ts";
 import { playlistsPtBr } from "./catalogue/playlistsPtBr.ts";
 import { importsPtBr } from "./catalogue/importsPtBr.ts";
@@ -100,6 +101,10 @@ export const ptBR: Catalogue = {
     previous: "Página anterior",
     next: "Próxima página",
     page: (first: number, last: number, total: number) => `${first}–${last} de ${total}`,
+    songMenu: (title: string) => `Ações de “${title}”`,
+    chooseArtist: "Escolha um Artista",
+    noPlaylists: "Nenhuma playlist ainda",
+    checkSong: (title: string) => `Selecionar “${title}”`,
   },
   desktopAccount: {
     finishInBrowser: "Termine de iniciar sessão no navegador.",
@@ -108,6 +113,7 @@ export const ptBR: Catalogue = {
     browserTitle: "Volte ao Wave",
     browserMessage: "Você pode fechar esta aba. O Wave termina de iniciar sessão.",
   },
+  desktopShortcuts: desktopShortcutsPtBr,
   downloadNotice: downloadNoticePtBr,
   native: nativePtBr,
   auto: autoPtBr,

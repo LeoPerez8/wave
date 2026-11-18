@@ -11,6 +11,8 @@
     "./artworkUri": "./src/artworkUri.ts",
     "./playlistRecommendationTracks": "./src/playlistRecommendationTracks.ts",
     "./playbackSession": "./src/playbackSession.ts",
+    "./queueGains": "./src/queueGains.ts",
+    "./songMeasurements": "./src/songMeasurements.ts",
     "./externalStore": "./src/externalStore.ts",
     "./playCheckpoints": "./src/playCheckpoints.ts",
     "./queueSaves": "./src/queueSaves.ts",

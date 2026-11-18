@@ -259,7 +259,9 @@ fn build(
                 if direct {
                     player.render(out, song_rate);
                 } else {
-                    adapter.fill(out, |input| player.render(input, song_rate));
+                    adapter.fill(out, |input| {
+                        player.render(input, song_rate);
+                    });
                 }
             },
             move |error| {

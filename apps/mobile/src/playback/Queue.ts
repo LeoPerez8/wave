@@ -90,7 +90,7 @@ import {
 } from "./queueTracks";
 import { savedYtQueueTracks } from "./savedYtTracks";
 import { createEntryGains, type PlayerGain } from "./songGains";
-import { createSongMeasurements } from "./songMeasurements";
+import { createSongMeasurements } from "@wave/client/songMeasurements";
 
 export { toQueueTrack, type QueueTrack } from "./queueTracks";
 

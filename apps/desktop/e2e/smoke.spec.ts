@@ -15,6 +15,7 @@ import { addTrack, type TestDatabase } from "@wave/client/testing";
 import { catalogueOf } from "@wave/core";
 import * as Effect from "effect/Effect";
 import { libraryLayer } from "../src/main/database.ts";
+import type { WaveBridge } from "../src/shared/bridge.ts";
 
 const appFolder = join(import.meta.dirname, "..");
 /** From Node, the electron package is the path of its executable. */
@@ -91,6 +92,8 @@ test("the page has no Node and only the typed bridge", async () => {
       "wave.library.exclude",
       "wave.library.removeRoot",
       "wave.library.include",
+      "wave.songs.actions",
+      "wave.songs.run",
       "wave.player.load",
       "wave.player.play",
       "wave.player.pause",
@@ -105,8 +108,27 @@ test("the page has no Node and only the typed bridge", async () => {
       "wave.account.signOut",
       "wave.account.signOutEverywhere",
       "wave.account.answerInvitation",
+      "wave.settings.playback",
+      "wave.settings.setPlayback",
     ],
   });
+});
+
+test("Settings › Playback keeps a change to Crossfade, Normalize Volume and Buffer", async () => {
+  const text = catalogueOf("en", "desktop");
+  await page.getByRole("button", { name: text.desktopLayout.settings, exact: true }).click();
+  await page.getByRole("button", { name: text.desktopLayout.playback, exact: true }).click();
+  const crossfade = page.getByRole("slider", { name: text.settings.crossfade });
+  await expect(crossfade).toHaveAttribute("aria-valuetext", text.settings.off);
+  await crossfade.fill("6.5");
+  await expect(crossfade).toHaveAttribute("aria-valuetext", text.settings.seconds(6.5));
+  await page.getByRole("switch", { name: text.settings.normalizeVolume }).uncheck();
+  await page.getByRole("combobox", { name: text.settings.buffer }).selectOption(String(10));
+  await expect
+    .poll(() =>
+      page.evaluate(() => (window as unknown as { wave: WaveBridge }).wave.settings.playback()),
+    )
+    .toEqual({ crossfadeSeconds: 6.5, normalizeVolume: false, bufferMinutes: 10 });
 });
 
 test("the CSP stops the page evaluating strings as code", async () => {

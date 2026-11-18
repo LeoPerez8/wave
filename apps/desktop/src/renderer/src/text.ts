@@ -1,3 +1,4 @@
 import { catalogueOf, resolveAppLanguage } from "@wave/core";
-export const text = catalogueOf(resolveAppLanguage(navigator.languages), "desktop");
+export const language = resolveAppLanguage(navigator.languages);
+export const text = catalogueOf(language, "desktop");
 export const labels = text.desktopLayout;
