@@ -320,6 +320,11 @@ const createHandlers = (
       Effect.gen(function* () {
         return appearance(yield* Database);
       }),
+    "settings.language": () => Effect.map(Account, (it) => it.language()),
+    "settings.setLanguage": ([choice]) =>
+      choice === "system" || choice === "en" || choice === "pt-BR"
+        ? Effect.map(Account, (it) => it.setLanguage(choice))
+        : refuse("settings.setLanguage", "invalid language"),
     "settings.setAppearance": ([mode]) =>
       mode === "light" || mode === "dark" || mode === "system"
         ? Effect.gen(function* () {

@@ -128,7 +128,9 @@ export const downloadsLayer = (options: DownloadsLayerOptions) =>
         },
         ytSong: yt.song,
         ytMusicOn: yt.enabled,
-        catalogue: options.catalogue,
+        get catalogue() {
+          return options.catalogue;
+        },
       });
 
       const started = () => {

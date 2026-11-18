@@ -4,7 +4,7 @@ import { join } from "node:path";
 import { pathToFileURL } from "node:url";
 import { app, dialog, Menu, Tray, type BrowserWindow } from "electron";
 import type { LibraryDatabase } from "@wave/client/db/database";
-import type { Catalogue } from "@wave/core";
+import { displayTag, type AppLanguage, type Catalogue } from "@wave/core";
 import type { PlaybackShape } from "../playback/playback.ts";
 import type { YtMusicShape } from "../yt/ytMusic.ts";
 import { readArtwork } from "../library/artwork.ts";
@@ -33,12 +33,13 @@ export const installDesktopSystem = (options: {
   readonly db: LibraryDatabase;
   readonly playback: PlaybackShape;
   readonly yt: YtMusicShape;
-  readonly text: Catalogue;
+  readonly text: () => Catalogue;
+  readonly language: () => AppLanguage;
   readonly mediaAddon: string;
   readonly cache: string;
   readonly show: () => void;
 }) => {
-  const { window, db, playback, text } = options;
+  const { window, db, playback } = options;
   const lifecycle = createWindowLifecycle({
     visible: () => window.isVisible() && !window.isMinimized(),
     hide: () => window.hide(),
@@ -47,8 +48,9 @@ export const installDesktopSystem = (options: {
     closeQuits: () => readWindowSettings(db).closeQuits,
     noticed: () => preference(db, "window.trayNotice") === "true",
     rememberNotice: () => savePreference(db, "window.trayNotice", "true"),
-    notice: () =>
-      dialog.showMessageBox({
+    notice: () => {
+      const text = options.text();
+      return dialog.showMessageBox({
         type: "info",
         title: text.desktopWindow.notice,
         message:
@@ -56,13 +58,14 @@ export const installDesktopSystem = (options: {
             ? text.desktopWindow.noticeLinux
             : text.desktopWindow.noticeWindows,
         buttons: [text.alert.ok],
-      }),
+      });
+    },
   });
   window.on("close", lifecycle.close);
   let tray: Tray | undefined;
   try {
     tray = new Tray(trayIcon());
-    tray.setToolTip(text.desktopLayout.brand);
+    tray.setToolTip(options.text().desktopLayout.brand);
     tray.on("click", lifecycle.toggle);
   } catch {
     console.warn("[system] Tray unavailable; launch Wave again or use MPRIS Raise.");
@@ -97,8 +100,8 @@ export const installDesktopSystem = (options: {
         ? {
             key: status.key ?? String(current.videoId ?? current.id),
             title: current.title,
-            artist: current.artist,
-            album: current.album,
+            artist: displayTag(current.artist, "artist", options.language()),
+            album: displayTag(current.album, "album", options.language()),
             coverUrl,
           }
         : null,
@@ -126,6 +129,7 @@ export const installDesktopSystem = (options: {
     process.platform === "win32" ? `file://${path}` : pathToFileURL(path).href;
   const refresh = () => {
     if (closed) return;
+    const text = options.text();
     const { current, status } = playback.view();
     const signature = JSON.stringify([
       status.key,
@@ -173,14 +177,15 @@ export const installDesktopSystem = (options: {
     }
     media.update();
     for (const command of native?.drain() ?? []) run(command);
-    const menuKey = JSON.stringify([current?.title, current?.artist, status.state]);
+    const artist = current ? displayTag(current.artist, "artist", options.language()) : "";
+    const menuKey = JSON.stringify([current?.title, artist, status.state, options.language()]);
     if (tray && menuKey !== lastMenu) {
       lastMenu = menuKey;
       const labels = text.desktopLayout;
       tray.setContextMenu(
         Menu.buildFromTemplate([
           {
-            label: current ? `${current.title} · ${current.artist}` : labels.nothingPlaying,
+            label: current ? `${current.title} · ${artist}` : labels.nothingPlaying,
             enabled: false,
           },
           { type: "separator" },

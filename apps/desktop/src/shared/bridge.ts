@@ -5,6 +5,8 @@
  */
 import type { PlayerView, PlaybackCommand, QueueRow } from "./playerView.ts";
 import type { WindowSettings } from "./windowSettings.ts";
+import type { LanguageChoice } from "@wave/core";
+import type { LanguageView } from "./language.ts";
 import type { LibraryCounts } from "@wave/client/db/counts";
 import type { PlaybackStatus } from "./playback.ts";
 import type { SongState } from "./songState.ts";
@@ -109,6 +111,11 @@ export interface BridgeContract extends PlaylistContract, LinkContract {
   readonly "account.answerInvitation": { readonly args: readonly []; readonly result: void };
 
   readonly "settings.appearance": { readonly args: readonly []; readonly result: Appearance };
+  readonly "settings.language": { readonly args: readonly []; readonly result: LanguageView };
+  readonly "settings.setLanguage": {
+    readonly args: readonly [choice: LanguageChoice];
+    readonly result: void;
+  };
   readonly "settings.setAppearance": {
     readonly args: readonly [appearance: Appearance];
     readonly result: void;
@@ -334,6 +341,8 @@ export const BRIDGE_CALLS = [
   "player.status",
   "tags.read",
   "settings.appearance",
+  "settings.language",
+  "settings.setLanguage",
   "settings.window",
   "settings.setWindow",
   "settings.setAppearance",
@@ -458,6 +467,8 @@ export interface WaveBridge {
     readonly window: () => Promise<WindowSettings>;
     readonly setWindow: (change: Partial<WindowSettings>) => Promise<WindowSettings>;
     readonly appearance: () => Promise<Appearance>;
+    readonly language: () => Promise<LanguageView>;
+    readonly setLanguage: (choice: LanguageChoice) => Promise<void>;
     readonly setAppearance: (appearance: Appearance) => Promise<void>;
     /** Settings › Playback: Crossfade, Normalize Volume and Buffer, synced with the account. */
     readonly playback: () => Promise<PlaybackSettings>;
@@ -579,6 +590,8 @@ export const createBridge = (invoke: Invoke): WaveBridge => ({
   },
   settings: {
     appearance: () => invoke("settings.appearance"),
+    language: () => invoke("settings.language"),
+    setLanguage: (choice) => invoke("settings.setLanguage", choice),
     window: () => invoke("settings.window"),
     setWindow: (change) => invoke("settings.setWindow", change),
     setAppearance: (appearance) => invoke("settings.setAppearance", appearance),

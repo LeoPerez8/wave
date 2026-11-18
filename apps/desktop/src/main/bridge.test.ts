@@ -17,6 +17,7 @@ import * as ManagedRuntime from "effect/ManagedRuntime";
 import { exposeBridge } from "../preload/expose.ts";
 import { BRIDGE_CALLS, type WaveBridge } from "../shared/bridge.ts";
 import type { PlaybackStatus } from "../shared/playback.ts";
+import type { LanguageView } from "../shared/language.ts";
 import {
   answer,
   type AddonEngine,
@@ -49,6 +50,31 @@ import { recordPlay } from "@wave/client/db/playHistory";
 import { editHomeArrangement, parseHomeArrangement, storedHomeArrangement } from "@wave/core";
 
 const trusted = { senderFrame: "window" };
+
+test("the language choice is validated, resolves once in main and survives reopening", async () => {
+  await withFile(async (file) => {
+    const first = connect(file);
+    const wave = first.exposed.get("wave") as WaveBridge;
+    try {
+      assert.deepEqual(await wave.settings.language(), { choice: "system", language: "en" });
+      await wave.settings.setLanguage("pt-BR");
+      assert.deepEqual(await wave.settings.language(), { choice: "pt-BR", language: "pt-BR" });
+      await assert.rejects(first.handlers.get("settings.setLanguage")!(trusted, "fr"), /refused/i);
+      assert.equal((await wave.settings.language()).language, "pt-BR");
+    } finally {
+      await first.runtime.dispose();
+    }
+    const second = connect(file);
+    try {
+      const reopened = second.exposed.get("wave") as WaveBridge;
+      assert.deepEqual(await reopened.settings.language(), { choice: "pt-BR", language: "pt-BR" });
+      await reopened.settings.setLanguage("system");
+      assert.deepEqual(await reopened.settings.language(), { choice: "system", language: "en" });
+    } finally {
+      await second.runtime.dispose();
+    }
+  });
+});
 
 test("Home follows the account's arrangement and plays its ranked list with Home context", async () => {
   await withFile(async (file) => {
@@ -336,9 +362,11 @@ const connect = (
     events: () => () => {},
     fetch: () => Promise.reject(new Error("no network")),
   }).pipe(Layer.provideMerge(library));
+  const languages: LanguageView[] = [];
   const runtime = ManagedRuntime.make(
     accountLayer({
       account: account.service,
+      languageChanged: (view) => languages.push(view),
       focused: () => true,
       ...(account.clock === undefined ? {} : { clock: account.clock }),
     }).pipe(
@@ -407,6 +435,7 @@ const connect = (
     jvm: jvm.state,
     picked,
     copied,
+    languages,
   };
 };
 
@@ -1136,6 +1165,67 @@ test("the invitation to sign in shows once the first scan finished, until it's a
       assert.equal((await reopened.account.view()).invitation, false, "answered for good");
     } finally {
       await second.runtime.dispose();
+    }
+  });
+});
+
+test("the account's language applies on sign-in and later pulls, and desktop changes sync back", async () => {
+  await withFile(async (file) => {
+    const app = await desktop();
+    const phone = await app.service.signIn();
+    const phoneDb = await openTestDatabase();
+    const values = new Map<string, string>([["settings.language", "pt-BR"]]);
+    const phoneSync = () =>
+      syncCycle({
+        db: phoneDb,
+        splits: creditSplits(),
+        account: "ana@example.com",
+        transport: {
+          request: async (method, path, body) => {
+            const response = await app.service.request(method, path, {
+              session: phone,
+              ...(body === null ? {} : { body, headers: { "content-type": "application/json" } }),
+            });
+            return { status: response.status, body: await response.text() };
+          },
+        },
+        preferences: {
+          value: (key) => values.get(key) ?? null,
+          apply: (key, value) => {
+            if (value === null) values.delete(key);
+            else values.set(key, value);
+          },
+        },
+        now: Date.now,
+        songsChanged: false,
+        wait: async () => {},
+      });
+    stampPreference(phoneDb, "settings.language", Date.now());
+    await phoneSync();
+    const { clock, pass } = fakeClock();
+    const { runtime, exposed, languages } = connect(file, undefined, {
+      service: app.open(),
+      clock,
+    });
+    const wave = exposed.get("wave") as WaveBridge;
+    try {
+      await wave.account.signIn();
+      await until(async () => (await wave.settings.language()).language === "pt-BR");
+      assert.deepEqual(languages.at(-1), { choice: "pt-BR", language: "pt-BR" });
+      await wave.settings.setLanguage("en");
+      await pass(10_000);
+      await until(async () => {
+        await phoneSync();
+        return values.get("settings.language") === "en";
+      });
+      values.set("settings.language", "system");
+      stampPreference(phoneDb, "settings.language", Date.now() + 1000);
+      await phoneSync();
+      await pass(15 * 60_000);
+      await until(async () => (await wave.settings.language()).choice === "system");
+      assert.deepEqual(languages.at(-1), { choice: "system", language: "en" });
+    } finally {
+      await runtime.dispose();
     }
   });
 });
