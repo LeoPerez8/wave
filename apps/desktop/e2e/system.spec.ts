@@ -179,7 +179,15 @@ test("close keeps playing, the tray notice appears once, relaunch shows Wave, an
     if (process.platform === "linux" && process.env["WAVE_PLAYERCTL"] === "1") {
       const control = (...args: string[]) =>
         execFileSync("playerctl", ["--player=wave", ...args], { encoding: "utf8" });
-      await expect.poll(() => control("metadata", "xesam:title").trim()).toBe("Tray Song 1");
+      // playerctl fails until the first metadata is published.
+      const playing = () => {
+        try {
+          return control("metadata", "xesam:title").trim();
+        } catch {
+          return "";
+        }
+      };
+      await expect.poll(playing).toBe("Tray Song 1");
       expect(control("metadata", "xesam:artist")).toContain("Wave Test");
       expect(control("metadata", "mpris:artUrl")).toContain("file://");
       control("pause");
@@ -196,9 +204,9 @@ test("close keeps playing, the tray notice appears once, relaunch shows Wave, an
         .toBeGreaterThanOrEqual(5000);
       control("play");
       control("next");
-      await expect.poll(() => control("metadata", "xesam:title").trim()).toBe("Tray Song 2");
+      await expect.poll(playing).toBe("Tray Song 2");
       control("previous");
-      await expect.poll(() => control("metadata", "xesam:title").trim()).toBe("Tray Song 1");
+      await expect.poll(playing).toBe("Tray Song 1");
       execFileSync("dbus-send", [
         "--session",
         "--dest=org.mpris.MediaPlayer2.wave",
