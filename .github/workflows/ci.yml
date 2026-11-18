@@ -906,10 +906,11 @@ jobs:
       - name: Lint
         run: scripts/ci/step.sh "Lint" pnpm --filter @wave/desktop lint
 
-      # cpal reads ALSA's headers on Linux; Windows needs nothing more than the runner's MSVC.
+      # cpal reads ALSA's headers on Linux and the media controls' addon D-Bus's; playerctl checks
+      # those controls. Windows needs nothing more than the runner's MSVC.
       - name: Install the audio headers
         if: runner.os == 'Linux'
-        run: scripts/ci/step.sh "Install the audio headers" bash -c "sudo apt-get update && sudo apt-get install -y --no-install-recommends libasound2-dev"
+        run: scripts/ci/step.sh "Install the audio headers" bash -c "sudo apt-get update && sudo apt-get install -y --no-install-recommends libasound2-dev libdbus-1-dev playerctl"
 
       - name: Restore the audio engine's build
         uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830 # v4.3.0
@@ -945,6 +946,8 @@ jobs:
         run: |
           if [ "$RUNNER_OS" = "Linux" ]; then
             scripts/ci/step.sh "Smoke test" xvfb-run -a pnpm --filter @wave/desktop test:e2e
+            # MPRIS needs a session bus, which only this check gets: playerctl drives Wave.
+            scripts/ci/step.sh "System media controls" env WAVE_PLAYERCTL=1 dbus-run-session -- xvfb-run -a pnpm --filter @wave/desktop exec playwright test e2e/system.spec.ts
           else
             scripts/ci/step.sh "Smoke test" pnpm --filter @wave/desktop test:e2e
           fi

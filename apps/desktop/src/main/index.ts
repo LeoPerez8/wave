@@ -50,12 +50,20 @@ import { Account, accountLayer } from "./account/accountLayer.ts";
 import { signInWithBrowser } from "./account/browserSignIn.ts";
 import { accountConfig } from "./account/config.ts";
 import { sessionStore } from "./account/sessionStore.ts";
+import { installDesktopSystem } from "./system/desktopSystem.ts";
+import { configureAutostart } from "./system/autostart.ts";
+import { Playback } from "./playback/playback.ts";
+import { YtMusic } from "./yt/ytMusic.ts";
 
 // %APPDATA%\Wave or ~/.config/Wave, from the product name; tests point it at a folder of their own.
 const dataFolder = process.env["WAVE_DATA_DIR"];
 if (dataFolder !== undefined && dataFolder !== "") app.setPath("userData", dataFolder);
 
 let window: BrowserWindow | undefined;
+let system: ReturnType<typeof installDesktopSystem> | undefined;
+let showRequested = false;
+// Set once the page is loaded and the services are up; the window isn't shown before.
+let windowReady = false;
 
 /**
  * Wave's caches: %LOCALAPPDATA%\Wave or ~/.cache/wave (cover art, streamed audio); tests point
@@ -74,7 +82,8 @@ const cacheFolder = (name: string) =>
 const poTokens = createPoTokens({ openPage: openPoTokenPage, post: botguardPost() });
 
 const showWindow = () => {
-  if (window === undefined) return;
+  showRequested = true;
+  if (window === undefined || !windowReady) return;
   if (window.isMinimized()) window.restore();
   window.show();
   window.focus();
@@ -112,6 +121,7 @@ const createWindow = (onFocus: () => void, services: Promise<void>) => {
       sandbox: true,
       nodeIntegration: false,
       webviewTag: false,
+      autoplayPolicy: "no-user-gesture-required",
     },
   });
   guardWindow(created.webContents, (url) => void shell.openExternal(url));
@@ -134,14 +144,16 @@ const createWindow = (onFocus: () => void, services: Promise<void>) => {
       if (created.isDestroyed()) return;
       created.setBackgroundColor(colours().background);
       update();
-      created.show();
+      windowReady = true;
+      // Started with the system, Wave stays in the tray until it's asked for.
+      if (!process.argv.includes("--hidden") || showRequested) created.show();
     },
     // Without its services Wave has nothing to show; the failure is reported where they start.
     () => {},
   );
   created.on("closed", () => {
     window = undefined;
-    // The token window is hidden, so it alone mustn't keep Wave running.
+    system?.close();
     poTokens.close();
     app.quit();
   });
@@ -354,6 +366,21 @@ else {
       (mode) => {
         nativeTheme.themeSource = mode;
       },
+      (on) =>
+        configureAutostart(
+          {
+            platform: process.platform,
+            config: process.env["XDG_CONFIG_HOME"] ?? join(app.getPath("home"), ".config"),
+            executable:
+              process.platform === "linux"
+                ? (process.env["APPIMAGE"] ?? process.execPath)
+                : process.execPath,
+            args: app.isPackaged ? [] : [app.getAppPath()],
+            setLogin: (settings) => app.setLoginItemSettings(settings),
+          },
+          on,
+        ),
+      () => system?.mediaBackend ?? (process.platform === "win32" ? "chromium" : "native"),
     );
     // The queue's position and the play so far are saved before the app exits.
     let quitting = false;
@@ -361,6 +388,9 @@ else {
       if (quitting) return;
       event.preventDefault();
       quitting = true;
+      system?.beginQuit();
+      system?.close();
+      poTokens.close();
       void runtime.dispose().finally(() => app.quit());
     });
     createWindow(() => {
@@ -371,5 +401,16 @@ else {
       });
     }, started);
     await started;
+    system = installDesktopSystem({
+      window: window!,
+      db: await runtime.runPromise(Database),
+      playback: await runtime.runPromise(Playback),
+      yt: await runtime.runPromise(YtMusic),
+      text,
+      mediaAddon:
+        process.env["WAVE_MEDIA_ADDON"] ?? join(app.getAppPath(), "native", "wave-media.node"),
+      cache: cacheFolder("system-media"),
+      show: showWindow,
+    });
   });
 }

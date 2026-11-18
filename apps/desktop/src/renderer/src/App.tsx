@@ -14,6 +14,8 @@ import { YtResults } from "./YtResults.tsx";
 import { SearchPage } from "./SearchPage.tsx";
 import { AccountSettings, SignInInvitation } from "./AccountSettings.tsx";
 import { PlaybackSettings } from "./PlaybackSettings.tsx";
+import { WindowSettings } from "./WindowSettings.tsx";
+import { SystemMediaSession } from "./SystemMediaSession.tsx";
 import { AlbumDownloadButton } from "./AlbumDownloadButton.tsx";
 import { DownloadSettings } from "./DownloadSettings.tsx";
 import { DownloadsPage } from "./DownloadsPage.tsx";
@@ -617,6 +619,8 @@ export function App() {
                 </>
               ) : setting === "playback" ? (
                 <PlaybackSettings onError={failed} />
+              ) : setting === "window" ? (
+                <WindowSettings onError={failed} />
               ) : setting === "downloads" ? (
                 <DownloadSettings onError={failed} />
               ) : (
@@ -744,6 +748,7 @@ export function App() {
         onPanel={panel.toggle}
         onNowPlaying={() => setNowPlaying(true)}
       />
+      <SystemMediaSession view={playback.view} refresh={playback.refresh} />
       {actions.overlays}
       {playlistEdits.overlays}
       {shortcuts && <ShortcutsSheet onClose={() => setShortcuts(false)} />}

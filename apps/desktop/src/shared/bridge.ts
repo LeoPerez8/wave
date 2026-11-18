@@ -4,6 +4,7 @@
  * A call that reads a list returns a `Page`, never the whole list.
  */
 import type { PlayerView, PlaybackCommand, QueueRow } from "./playerView.ts";
+import type { WindowSettings } from "./windowSettings.ts";
 import type { LibraryCounts } from "@wave/client/db/counts";
 import type { PlaybackStatus } from "./playback.ts";
 import type { PlaybackSettings } from "./playbackSettings.ts";
@@ -49,6 +50,15 @@ export interface Page<T> {
 
 /** Each call's arguments and result. Arguments reach main as untrusted data. */
 export interface BridgeContract extends PlaylistContract {
+  readonly "system.mediaBackend": {
+    readonly args: readonly [];
+    readonly result: "native" | "chromium";
+  };
+  readonly "settings.window": { readonly args: readonly []; readonly result: WindowSettings };
+  readonly "settings.setWindow": {
+    readonly args: readonly [change: Partial<WindowSettings>];
+    readonly result: WindowSettings;
+  };
   readonly "playback.view": { readonly args: readonly []; readonly result: PlayerView };
   readonly "playback.start": {
     readonly args: readonly [scope: BrowseScope, index?: number, shuffle?: boolean];
@@ -273,6 +283,7 @@ type PagedLists<T> = {
   readonly [C in keyof T]: T[C] extends { readonly result: readonly unknown[] } ? never : T[C];
 };
 export const BRIDGE_CALLS = [
+  "system.mediaBackend",
   "playback.view",
   "playback.start",
   "playback.startYt",
@@ -310,6 +321,8 @@ export const BRIDGE_CALLS = [
   "player.status",
   "tags.read",
   "settings.appearance",
+  "settings.window",
+  "settings.setWindow",
   "settings.setAppearance",
   "settings.playback",
   "settings.setPlayback",
@@ -365,6 +378,7 @@ export type Invoke = <C extends BridgeCall>(
 
 /** `window.wave`. */
 export interface WaveBridge {
+  readonly system: { readonly mediaBackend: () => Promise<"native" | "chromium"> };
   readonly home: {
     readonly view: () => Promise<HomeView>;
     readonly play: (section: "most-played" | "favorites", index: number) => Promise<void>;
@@ -422,6 +436,8 @@ export interface WaveBridge {
     readonly read: (path: string) => Promise<SongTags>;
   };
   readonly settings: {
+    readonly window: () => Promise<WindowSettings>;
+    readonly setWindow: (change: Partial<WindowSettings>) => Promise<WindowSettings>;
     readonly appearance: () => Promise<Appearance>;
     readonly setAppearance: (appearance: Appearance) => Promise<void>;
     /** Settings › Playback: Crossfade, Normalize Volume and Buffer, synced with the account. */
@@ -491,6 +507,7 @@ export interface WaveBridge {
 }
 
 export const createBridge = (invoke: Invoke): WaveBridge => ({
+  system: { mediaBackend: () => invoke("system.mediaBackend") },
   playback: {
     view: () => invoke("playback.view"),
     start: (scope, index, shuffle) => invoke("playback.start", scope, index, shuffle),
@@ -540,6 +557,8 @@ export const createBridge = (invoke: Invoke): WaveBridge => ({
   },
   settings: {
     appearance: () => invoke("settings.appearance"),
+    window: () => invoke("settings.window"),
+    setWindow: (change) => invoke("settings.setWindow", change),
     setAppearance: (appearance) => invoke("settings.setAppearance", appearance),
     playback: () => invoke("settings.playback"),
     setPlayback: (change) => invoke("settings.setPlayback", change),

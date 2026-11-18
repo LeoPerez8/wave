@@ -25,6 +25,10 @@ test("no policy lets the window evaluate strings as code", () => {
   for (const dev of [false, true]) assert.doesNotMatch(contentSecurityPolicy(dev), /unsafe-eval/);
 });
 
+test("the system media fallback can play only a local blob, never network audio", () => {
+  assert.deepEqual(directives(contentSecurityPolicy(false)).get("media-src"), ["blob:"]);
+});
+
 test("the dev window may also reach Vite's server for hot reload", () => {
   const policy = directives(contentSecurityPolicy(true));
   assert.ok(policy.get("connect-src")?.includes("ws://localhost:*"));
