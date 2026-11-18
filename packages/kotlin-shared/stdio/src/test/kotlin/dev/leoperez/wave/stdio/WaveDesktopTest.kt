@@ -66,6 +66,14 @@ class WaveDesktopTest {
   }
 
   @Test
+  fun aTagReadCarriesTheFilesEmbeddedLyrics() = withDesktop { host ->
+    val path = Json.encodeToString(String.serializer(), Fixtures.file("lyrics.mp3").absolutePath)
+    host.write("""{"id":1,"method":"readTags","params":{"path":$path}}""")
+    val lyrics = host.next()["result"]!!.jsonObject["lyrics"]!!.jsonPrimitive.content
+    assertEquals("[00:00.50]Olá, onda\n[00:01.00]Second line", lyrics)
+  }
+
+  @Test
   fun answersASearchWithYouTubeMusicsSongs() = withDesktop(youTube("yt/search-songs.json")) { host ->
     host.write("""{"id":2,"method":"search","params":{"query":"get lucky"}}""")
     val songs = host.next()["result"]!!.jsonObject["songs"]!!.jsonArray
