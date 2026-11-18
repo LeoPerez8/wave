@@ -34,7 +34,7 @@ test("YT Music: the setting, the sidebar, Search's results, and a song that play
     const sidebar = page.locator(".sidebar");
     await expect(sidebar.getByText("YT Music", { exact: true })).toBeVisible();
     await expect(sidebar.getByRole("button", { name: "Magic Queue" })).toBeEnabled();
-    await expect(sidebar.getByRole("button", { name: "Downloads" })).toBeDisabled();
+    await expect(sidebar.getByRole("button", { name: "Downloads" })).toBeEnabled();
 
     await page.getByRole("button", { name: "Settings" }).click();
     await page.getByRole("button", { name: "Accounts" }).click();
