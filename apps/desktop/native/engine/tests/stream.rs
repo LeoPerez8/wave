@@ -357,3 +357,67 @@ fn the_engine_plays_a_yt_path_from_its_stream() {
     assert_eq!(status.state, PlayState::Paused);
     assert!(status.duration_ms.is_some_and(|ms| ms > 900.0));
 }
+
+/// A `Memory` whose fetches named in `held` (`<url>@<start>`) wait until they're released.
+struct Gated {
+    inner: Memory,
+    held: Mutex<Vec<String>>,
+    released: std::sync::Condvar,
+}
+
+impl Gated {
+    fn new(inner: Memory, held: &[&str]) -> Gated {
+        Gated {
+            inner,
+            held: Mutex::new(held.iter().map(|key| (*key).to_owned()).collect()),
+            released: std::sync::Condvar::new(),
+        }
+    }
+
+    fn release(&self, key: &str) {
+        self.held.lock().unwrap().retain(|held| held != key);
+        self.released.notify_all();
+    }
+}
+
+impl Fetcher for Gated {
+    fn fetch(&self, address: &StreamAddress, start: u64, end: u64) -> Result<Fetched, FetchError> {
+        let key = format!("{}@{start}", address.url);
+        let mut held = self.held.lock().unwrap();
+        while held.contains(&key) {
+            held = self.released.wait(held).unwrap();
+        }
+        drop(held);
+        self.inner.fetch(address, start, end)
+    }
+}
+
+#[test]
+fn a_stopped_download_leaves_the_file_of_the_one_started_after_it() {
+    let dir = temp_dir("restart");
+    let fetcher = Arc::new(Gated::new(
+        memory(&["old", "new", "b", "c"]),
+        &["old@0", "b@0", "c@0", "new@4096"],
+    ));
+    let streams = Streams::new(AudioCache::new(dir.clone(), 1 << 30), fetcher.clone(), never())
+        .with_chunk(4096);
+    let length = Some(song().len() as u64);
+    // Two newer songs stop the first one's download while its fetch is still out.
+    streams.start(ID, address("old", length));
+    streams.start("bbbbbbbbbbb", address("b", length));
+    streams.start("ccccccccccc", address("c", length));
+    assert_eq!(streams.state(ID), StreamState::Failed);
+    fetcher.release("b@0");
+    fetcher.release("c@0");
+    // The user comes back to the song: it's fetched again, into the same part file.
+    streams.start(ID, address("new", length));
+    wait_for(&streams, ID, StreamState::Ready);
+    // The old fetch returns and its worker ends, while the new download is half done.
+    fetcher.release("old@0");
+    thread::sleep(Duration::from_millis(300));
+    fetcher.release("new@4096");
+    wait_for(&streams, ID, StreamState::Cached);
+    let cached = streams.cache().complete(ID).expect("the song is in the cache");
+    assert_eq!(fs::read(cached).unwrap(), song());
+    let _ = fs::remove_dir_all(dir);
+}

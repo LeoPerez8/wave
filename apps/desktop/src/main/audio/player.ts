@@ -41,6 +41,11 @@ export interface PlayerShape {
   readonly setCrossfade: (seconds: number) => Effect.Effect<PlaybackStatus, AudioEngineError>;
   /** Normalize Volume's switch; applies from the next frame. */
   readonly setNormalize: (on: boolean) => Effect.Effect<PlaybackStatus, AudioEngineError>;
+  /**
+   * The YT Music songs Settings › Playback › Buffer reaches after the current one, as video
+   * ids in playing order: the audio process fetches them into its cache ahead of their turn.
+   */
+  readonly buffer: (videoIds: readonly string[]) => Effect.Effect<PlaybackStatus, AudioEngineError>;
   /** Measures the loudness of the file at `path`, after those asked before. */
   readonly measure: (path: string) => Promise<AudioMeasurement>;
   /** Stops the measurements running and waiting; each answers `cancelled`. */
@@ -66,6 +71,7 @@ const playerOf = (audio: AudioSupervisor): PlayerShape => {
     setVolume: (volume) => run("setVolume", [volume]),
     setCrossfade: (seconds) => run("setCrossfade", [seconds]),
     setNormalize: (on) => run("setNormalize", [on]),
+    buffer: (videoIds) => run("buffer", [videoIds]),
     measure: audio.measure,
     cancelMeasurements: () => run("cancelMeasurements", []),
     subscribe: audio.subscribe,

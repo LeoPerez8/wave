@@ -194,6 +194,12 @@ ADR: `docs/adr/0004-kotlin-on-a-bundled-jvm.md`.
 - An own engine on Symphonia (decoding) and cpal (output) applies the phone's playback rules one
   to one: gapless, crossfade on a second voice, the per-song gain Core computes for Normalize
   Volume, Buffer, and the counted-play events Core expects.
+- Buffer: the engine fetches a YT Music song whole into its audio cache, so on the desktop the
+  setting says how many songs ahead are fetched, not how much audio is held. Core's
+  `songsWithinBuffer` names the songs after the current one until they play for as long as the
+  Buffer (library files count for their time; a song of unknown length ends the reach), and the
+  audio process fetches the streamed ones one at a time, in order. A queue or Buffer change
+  sends a new list. Songs a change leaves out stay in the cache until it needs the room.
 - Formats: MP3, AAC/M4A, FLAC, Vorbis, Opus (libopus through an adapter) and WAV. ALAC and
   HE-AAC are not in v1.
 - Gapless AAC in M4A: Symphonia ignores the encoder delay and padding, so the engine reads them

@@ -185,24 +185,51 @@ test("the JVM's events reach main, and lines that aren't the protocol are skippe
   kotlin.dispose();
 });
 
-test("a JVM that can't start fails the call, and the next call starts another", async () => {
-  let starts = true;
+test("a call made while the JVM is down waits for its restart instead of starting one", async () => {
+  const jvms = fakeJvms(() => "answered");
+  const kotlin = superviseKotlin({ spawn: jvms.spawn, restartDelayMs: () => 120 });
+  jvms.crash();
+  await settle();
+  const calls = [kotlin.call("search", { query: "a" }), kotlin.call("search", { query: "b" })];
+  await settle();
+  assert.equal(jvms.spawns(), 1, "no call starts a JVM before its wait is over");
+  assert.deepEqual(await Promise.all(calls), ["answered", "answered"]);
+  assert.equal(jvms.spawns(), 2);
+  kotlin.dispose();
+});
+
+test("a JVM that can't start fails the calls that waited for it, and is tried again later", async () => {
+  let starts = false;
+  let spawns = 0;
   const jvms = fakeJvms(() => "answered");
   const kotlin = superviseKotlin({
     spawn: (events) => {
+      spawns += 1;
       if (starts) return jvms.spawn(events);
       setImmediate(events.exit);
       return { write: () => undefined, kill: () => undefined };
     },
-    restartDelayMs: () => 60_000,
+    restartDelayMs: () => 40,
   });
-  starts = false;
-  jvms.crash();
   await settle();
+  assert.equal(spawns, 1);
   await assert.rejects(kotlin.call("search", { query: "a" }), { code: "ERR_UNEXPECTED" });
+  assert.equal(spawns, 2, "one start per wait, however many calls come");
   starts = true;
   assert.equal(await kotlin.call("search", { query: "b" }), "answered");
+  assert.equal(spawns, 3);
   kotlin.dispose();
+});
+
+test("calls waiting for a restart fail when main shuts the JVM down", async () => {
+  const jvms = fakeJvms(() => "answered");
+  const kotlin = superviseKotlin({ spawn: jvms.spawn, restartDelayMs: () => 60_000 });
+  jvms.crash();
+  await settle();
+  const waiting = kotlin.call("search", { query: "a" });
+  kotlin.dispose();
+  await assert.rejects(waiting, { code: "ERR_UNEXPECTED" });
+  assert.equal(jvms.spawns(), 1);
 });
 
 test("shutting down fails what's pending, kills the JVM and refuses new calls", async () => {

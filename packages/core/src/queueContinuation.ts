@@ -39,6 +39,28 @@ const songsAhead = (
   return total >= ahead.bufferMs ? "covered" : "short";
 };
 
+/**
+ * The songs the Buffer reaches, by track id in playing order: those after the
+ * current one, up to the song during which they have played for as long as
+ * the Buffer. A player that fetches whole songs (the desktop) fetches these
+ * ahead. As in `queueContinuation`, where the current song is playing doesn't
+ * count. A song of unknown length (null, or none) is reached and ends the
+ * reach: the songs after it wait until it's the next one. The caller keeps
+ * the streamed ones; library files count for their time only.
+ */
+export const songsWithinBuffer = (state: QueueState, ahead: QueueTimeAhead): string[] => {
+  const reached: string[] = [];
+  let total = 0;
+  for (let i = state.index + 1; i < state.entries.length && total < ahead.bufferMs; i++) {
+    const trackId = state.entries[i]!.trackId;
+    reached.push(trackId);
+    const duration = ahead.durationMs(trackId);
+    if (duration === null || !(duration > 0)) break;
+    total += duration;
+  }
+  return reached;
+};
+
 /** How many songs' lengths `queueLengthsToRead` asks for at a time. */
 const LENGTHS_AT_A_TIME = 20;
 

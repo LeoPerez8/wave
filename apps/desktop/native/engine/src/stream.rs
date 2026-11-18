@@ -478,12 +478,17 @@ impl Worker {
             progress.done = true;
         } else {
             progress.failed = !cancelled;
-            let _ = fs::remove_file(&progress.path);
         }
+        let path = progress.path.clone();
         self.download.changed.notify_all();
         drop(progress);
         let mut registry = lock(&self.registry);
-        let ours = registry.downloads.get(&id).is_some_and(|d| Arc::ptr_eq(d, &self.download));
+        let replaced = !self.current(&registry) && registry.downloads.contains_key(&id);
+        let ours = self.current(&registry);
+        // A download of the song started since writes the same part file, so it stays.
+        if !ok && !replaced {
+            let _ = fs::remove_file(&path);
+        }
         // A failed download stays, so its state says so until the song is resolved again.
         if ours && (ok || cancelled) {
             registry.downloads.remove(&id);
@@ -551,13 +556,21 @@ impl Worker {
                 let reserve = total;
                 let registry = Arc::clone(&self.registry);
                 self.cache.make_room(reserve, &|video_id| lock(&registry).in_use(video_id));
-                let created = File::options()
-                    .read(true)
-                    .write(true)
-                    .create(true)
-                    .truncate(true)
-                    .open(&path)
-                    .and_then(|f| f.set_len(total).map(|_| f));
+                // Under the registry's lock, so a download that was stopped and started again
+                // meanwhile doesn't empty the file its successor writes.
+                let created = {
+                    let registry = lock(&self.registry);
+                    if !self.current(&registry) || self.download.lock().cancelled {
+                        return Err(());
+                    }
+                    File::options()
+                        .read(true)
+                        .write(true)
+                        .create(true)
+                        .truncate(true)
+                        .open(&path)
+                        .and_then(|f| f.set_len(total).map(|_| f))
+                };
                 file = Some(created.map_err(|_| ())?);
                 let mut progress = self.download.lock();
                 if progress.total.is_none() {
@@ -585,6 +598,14 @@ impl Worker {
         let whole = self.cache.commit(&progress.path).map_err(|_| ())?;
         progress.path = whole;
         Ok(())
+    }
+
+    /// Whether this is still the song's download, and not one started after it was stopped.
+    fn current(&self, registry: &Registry) -> bool {
+        registry
+            .downloads
+            .get(&self.download.video_id)
+            .is_some_and(|d| Arc::ptr_eq(d, &self.download))
     }
 
     /// The chunk to fetch next: the one a reader waits for, else the next one in order.
