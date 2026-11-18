@@ -14,7 +14,6 @@ import io.ktor.client.plugins.HttpTimeout
 import io.ktor.client.plugins.contentnegotiation.ContentNegotiation
 import io.ktor.client.statement.bodyAsText
 import io.ktor.serialization.kotlinx.json.json
-import java.io.File
 import java.util.Locale
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
@@ -43,7 +42,7 @@ interface YtPlatform {
   fun online(): Boolean
 
   /** Where the signed-in session is kept: storage that is never backed up, synced or logged. */
-  val sessionFile: File
+  val sessionStore: YtSessionStore
 
   /** Where the visitor data is kept across launches ([YtVisitorData]). */
   val visitorData: YtVisitorStore
@@ -122,12 +121,12 @@ class YtClient(private val platform: YtPlatform) {
     get() = tube.also { session }
 
   /**
-   * The YouTube account requests go out as, kept in [YtPlatform.sessionFile]
+   * The YouTube account requests go out as, kept in [YtPlatform.sessionStore]
    * (never in a backup, never shown to JS or logged).
    */
   val session: YtSession by lazy {
     YtSession(
-      YtSessionStore(platform.sessionFile),
+      platform.sessionStore,
       rejects = { it is InnerTubeHttpException && it.status.value == 401 },
     ) { tube.use(it) }
   }

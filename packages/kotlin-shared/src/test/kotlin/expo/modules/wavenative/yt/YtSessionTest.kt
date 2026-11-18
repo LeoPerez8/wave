@@ -20,7 +20,7 @@ class YtSessionTest {
   /** YouTube refusing the credentials, as innertubex reports it (HTTP 401). */
   private class Rejected : Exception("search failed with HTTP 401")
 
-  private fun session() = YtSession(YtSessionStore(file), rejects = { it is Rejected }) { sentWith = it }
+  private fun session() = YtSession(YtSessionFile(file), rejects = { it is Rejected }) { sentWith = it }
 
   @Test
   fun afterARestartRequestsGoOutAsTheSignedInAccount() {

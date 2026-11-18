@@ -44,10 +44,19 @@ object YtSignInPage {
       (json.parseToJsonElement(evaluatedConfig!!) as JsonPrimitive).contentOrNull
         ?.let { json.parseToJsonElement(it) as JsonObject }
     }.getOrNull()
+    return credentials(cookie, config.text("dataSyncId"), config.text("sessionIndex"))
+  }
+
+  /**
+   * The session, given the [cookie] for music.youtube.com and the page config's `DATASYNC_ID` and
+   * `SESSION_INDEX` as read ([CONFIG_SCRIPT]'s fields); null when the cookie isn't a signed-in one.
+   */
+  fun credentials(cookie: String?, dataSyncId: String?, sessionIndex: String?): YtCredentials? {
+    if (cookie == null || !isSignedIn(cookie)) return null
     return YtCredentials(
       cookie = cookie,
-      dataSyncId = config.text("dataSyncId")?.substringBefore("||")?.ifBlank { null },
-      authUser = config.text("sessionIndex")?.takeIf { it.isNotEmpty() && it.all(Char::isDigit) } ?: "0",
+      dataSyncId = dataSyncId?.substringBefore("||")?.ifBlank { null },
+      authUser = sessionIndex?.takeIf { it.isNotEmpty() && it.all(Char::isDigit) } ?: "0",
     )
   }
 
