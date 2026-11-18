@@ -1,8 +1,13 @@
 // Rolls a channel back to a version R2 still keeps. The Roll back an update workflow runs it.
 //   node apps/updates/scripts/promote.ts
 // Env: CLOUDFLARE_API_TOKEN, CLOUDFLARE_ACCOUNT_ID, UPDATES_SIGNING_KEY, WAVE_UPDATE_CHANNEL,
-// WAVE_UPDATE_VERSION. Anything that stops it fails the run and says why as an error annotation.
-// A promotion is a new manifest, so with no key it stops rather than promote something unsigned.
+// WAVE_UPDATE_VERSION, WAVE_PROVENANCE_FILE (the release's sealed record, which the workflow
+// checked against its tag; unset or empty when the release has none, and a record named but
+// unreadable stops it) and WAVE_ALLOW_UNRECORDED
+// ("true": the owner's transition for an update published before records). Anything that stops it
+// fails the run and says why as an error annotation. A promotion is a new manifest, so with no key
+// it stops rather than promote something unsigned.
+import { readFileSync } from "node:fs";
 import { isChannel } from "../src/layout.ts";
 import { promoteUpdate } from "../src/promote.ts";
 import { wranglerBucket } from "./bucket.ts";
@@ -13,6 +18,8 @@ const {
   UPDATES_SIGNING_KEY: signingKey,
   WAVE_UPDATE_CHANNEL: channel = "",
   WAVE_UPDATE_VERSION: rawVersion = "",
+  WAVE_PROVENANCE_FILE: provenanceFile = "",
+  WAVE_ALLOW_UNRECORDED: allowUnrecorded = "",
 } = process.env;
 // The tag's name works as well as the version.
 const version = rawVersion.trim().replace(/^v/, "");
@@ -34,8 +41,23 @@ if (!token || !account) {
 } else if (version === "") {
   stop("No version given.");
 } else {
+  let provenance: unknown;
+  if (provenanceFile) {
+    try {
+      provenance = JSON.parse(readFileSync(provenanceFile, "utf8"));
+    } catch {
+      stop(`${version}'s provenance record couldn't be read, so nothing was promoted.`);
+    }
+  }
   try {
-    const id = await promoteUpdate({ channel, version, signingKey, ...wranglerBucket() });
+    const id = await promoteUpdate({
+      channel,
+      version,
+      provenance,
+      allowUnrecorded: allowUnrecorded === "true",
+      signingKey,
+      ...wranglerBucket(),
+    });
     console.log(`${channel} now gives its phones ${version}, as update ${id}.`);
   } catch (error) {
     stop(error instanceof Error ? error.message : String(error));

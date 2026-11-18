@@ -47,7 +47,7 @@ const signUpdate = (
   update: Omit<StoredUpdate, "signed">,
   { signingKey, origin = UPDATES_ORIGIN }: UpdateSigning,
 ): StoredUpdate => {
-  const { signed: _, ...fields } = update as StoredUpdate;
+  const { signed: _, exported, ...fields } = update as StoredUpdate;
   const withUrl = (asset: StoredAsset) => ({
     ...asset,
     url: `${origin}/v1/assets/${asset.key}`,
@@ -58,7 +58,11 @@ const signUpdate = (
     assets: fields.assets.map(withUrl),
   });
   const sig = createSign("RSA-SHA256").update(manifest, "utf8").sign(signingKey, "base64");
-  return { ...fields, signed: { manifest, signature: `sig="${sig}", ${SIGNATURE_PARAMETERS}` } };
+  return {
+    ...fields,
+    ...(exported ? { exported } : {}),
+    signed: { manifest, signature: `sig="${sig}", ${SIGNATURE_PARAMETERS}` },
+  };
 };
 
 const json = (value: unknown) => new TextEncoder().encode(JSON.stringify(value));

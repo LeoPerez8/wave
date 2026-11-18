@@ -5,7 +5,8 @@
  * `maxAccounts`) with `{ "error": "limit", "limit": "<name>" }`.
  *
  * Starting values, chosen so a 50,000-song Library with 200,000 plays fits
- * with room to grow. Row counts leave tombstones out.
+ * with room to grow. Row counts include tombstones; a push past one is
+ * refused only when it adds an id (src/store.ts, `pushRows`).
  */
 export const SYNC_LIMITS = {
   /** The largest request body, in bytes. A first push of a large history goes in batches under it. */
@@ -28,6 +29,15 @@ export const SYNC_LIMITS = {
    */
   maxSignInsPerMinute: 10,
   /**
+   * Address and Google-account keys `POST /v1/session` counts in the current
+   * minute, together. Past it, a sign-in that needs a new key answers 429
+   * until the next minute; keys already counted keep their counts, and
+   * sessions already made keep working. A flood from many addresses can hold
+   * new sign-ins back for the rest of that minute: an accepted tradeoff for a
+   * table that can't grow without bound.
+   */
+  maxSignInKeysPerMinute: 1_000,
+  /**
    * Requests per minute from one address to any route, counted before the
    * database. Sized for a carrier that puts many phones behind one address.
    * `ADDRESS_LIMITER` in `wrangler.toml` holds the same number. Cloudflare's
@@ -44,12 +54,23 @@ export const SYNC_LIMITS = {
   maxFailedLookupsPerAddressPerMinute: 20,
   failedLookupBlockSeconds: 300,
   /**
-   * Wave accounts the service holds, and new ones it makes in any 24 hours.
-   * Checked only when a sign-in would make an account: existing accounts
-   * always sign in.
+   * Wave accounts the service holds at once, one per Google subject, taken
+   * first come and freed when an account is deleted; and new ones it makes in
+   * any 24 hours. Checked only when a sign-in would make an account: existing
+   * accounts always sign in, from any number of phones. The daily count looks
+   * only at accounts that still exist, so it doesn't cap registrations after
+   * deletions.
    */
-  maxAccounts: 100,
+  maxAccounts: 10,
   maxNewAccountsPerDay: 10,
+  /**
+   * Valid sessions one account may have: a sign-in past it answers 403 and
+   * every existing session keeps working. Sessions unused for 90 days don't
+   * count; they are deleted at the sign-in and by the hourly maintenance.
+   * An account that already had more when the limit came keeps them all, and
+   * signs in again once it is below the limit.
+   */
+  maxSessionsPerAccount: 10,
   /**
    * Requests one account may send the Genius routes per minute, counted
    * before the cache. A song the Lyrics view hasn't seen costs a search, the

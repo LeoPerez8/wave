@@ -201,7 +201,7 @@ describe("stepWaveAccount", () => {
   });
 
   test("the service's account limits each say why, with Sign In still offered", () => {
-    for (const reason of ["accountsFull", "newAccountsPaused"] as const) {
+    for (const reason of ["accountsFull", "newAccountsPaused", "sessionsFull"] as const) {
       const refused = stepWaveAccount(WAVE_ACCOUNT_SIGNED_OUT, { type: "signInFailed", reason });
       assert.deepEqual(waveAccountView(refused, true), {
         kind: "signedOut",

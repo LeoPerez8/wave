@@ -1,6 +1,8 @@
 /**
- * The update service's routes. They read from `UpdateStorage` only, which R2 implements in
- * production (worker.ts) and memory in the tests. See README.md.
+ * The update service's routes, over `UpdateStorage`, which R2 implements in production
+ * (worker.ts) and memory in the tests. They answer GET only. The one write is the notes
+ * history a read rebuilds from the stored notes; the binding itself can write and delete, so
+ * that limit is this code's, not R2's. See README.md.
  */
 
 import { versionOrder } from "@wave/core";

@@ -104,19 +104,23 @@ describe("limits", () => {
     }
   });
 
-  test("tombstones don't count against a table's limit", async () => {
+  test("tombstones count against a table's limit with the live rows", async () => {
     const service = await harness({ limits: { maxFavorites: 2 } });
     const session = await service.signIn();
     await push(service, session, { favorites: [favorite("a", 1), favorite("b", 1)] });
     await push(service, session, {
       favorites: [{ id: "a", changedAt: 2, phoneId: "phone-a", deleted: true }],
     });
-    await push(service, session, { favorites: [favorite("c", 3)] });
+    const refused = await service.request("POST", "/v1/push", {
+      session,
+      json: { favorites: [favorite("c", 3)] },
+    });
+    assert.equal(refused.status, 413);
+    assert.deepEqual(await refused.json(), { error: "limit", limit: "maxFavorites" });
     const pulled = await pull(service, session);
     assert.deepEqual(pulled.favorites.map((row) => [row.id, row.deleted]).toSorted(), [
       ["a", true],
       ["b", false],
-      ["c", false],
     ]);
   });
 

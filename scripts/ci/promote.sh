@@ -4,7 +4,7 @@
 # token's tag push starts no run by itself, so nothing runs twice. promote-version.ts picks and
 # checks the version.
 #   scripts/ci/promote.sh [<version>]
-# Run from a checkout of the repo with its tags. Env: GH_TOKEN, GITHUB_REPOSITORY.
+# Run from a checkout of the repo with its tags. Env: GH_TOKEN, GITHUB_REPOSITORY. Needs node.
 set -euo pipefail
 
 here="$(cd "$(dirname "$0")" && pwd)"
@@ -25,6 +25,13 @@ fi
 # The run uses the workflow as the tag has it, so the tag must be able to start one.
 if ! git show "$commit:.github/workflows/ci.yml" | grep -q 'workflow_dispatch:'; then
   echo "::error::$from predates promotions: its CI can't be started on a tag. Promote a newer version." >&2
+  exit 1
+fi
+
+# Only the ti release that was tested: its sealed record names this commit and its APK
+# (docs/release-provenance.md). The tag run's gate checks the record again before it admits.
+if ! "$here/verified-release.sh" "$from" "$tmp/release"; then
+  echo "::error::$from has no verified provenance record, so it can't be promoted. A ti release published before records can't be; promote a newer one." >&2
   exit 1
 fi
 

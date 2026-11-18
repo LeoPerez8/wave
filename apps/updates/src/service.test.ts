@@ -1,12 +1,21 @@
 import assert from "node:assert/strict";
 import { spawnSync } from "node:child_process";
-import { chmodSync, mkdtempSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
+import {
+  chmodSync,
+  mkdtempSync,
+  mkdirSync,
+  readFileSync,
+  readdirSync,
+  statSync,
+  writeFileSync,
+} from "node:fs";
 import { createHash, createVerify, generateKeyPairSync } from "node:crypto";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { describe, it } from "node:test";
 import { fileURLToPath } from "node:url";
-import { UPDATES_ORIGIN, latestKey, updateKey } from "./layout.ts";
+import { digestOf } from "../../../scripts/ci/release-gate.ts";
+import { type StoredUpdate, UPDATES_ORIGIN, latestKey, updateKey } from "./layout.ts";
 import { promoteUpdate } from "./promote.ts";
 import { publishLatestApk, publishNotes, publishUpdate } from "./publish.ts";
 import { createUpdateService } from "./service.ts";
@@ -40,9 +49,11 @@ const askFor = (
     }),
   );
 
-// `expo export`'s output for one bundle and one image.
-const exported = (bundle: string, image = "image"): string => {
+// `expo export`'s output for one bundle and one image, with the app config CI adds beside it
+// (scripts/ci/export-update.sh) when there's one.
+const exported = (bundle: string, image = "image", config?: Record<string, unknown>): string => {
   const dir = mkdtempSync(join(tmpdir(), "wave-update-"));
+  if (config) writeFileSync(join(dir, "expo-config.json"), JSON.stringify(config));
   mkdirSync(join(dir, "_expo/static/js/android"), { recursive: true });
   mkdirSync(join(dir, "assets"));
   writeFileSync(join(dir, "_expo/static/js/android/index.hbc"), bundle);
@@ -85,17 +96,48 @@ const publish = (
     ...overrides,
   });
 
-// A release of that version: CI's export carries it in the app config.
-const release = (
+// The sealed records of each storage's releases, by channel and version, as their GitHub
+// Releases carry them (docs/release-provenance.md).
+const records = new WeakMap<object, Map<string, Record<string, unknown>>>();
+const recordOf = (storage: object, channel: string, version: string) =>
+  records.get(storage)?.get(`${channel} ${version}`);
+
+/** What the release gate records for an exported update, with its seal. */
+const sealedRecord = (input: {
+  version: string;
+  channel: string;
+  runtimeVersion: string;
+  dir: string;
+}) => ({
+  schema: "wave-release-provenance/1",
+  source: "b".repeat(40),
+  releaseTag: `v${input.version}`,
+  run: { repository: "o/r", id: 1, attempt: 1, event: "push", ref: "refs/heads/main" },
+  artifact: {
+    build: "full",
+    runtimeVersion: input.runtimeVersion,
+    updateChannel: input.channel,
+    // The gate's own digest, independent of what the update service computes.
+    updateSha256: digestOf(input.dir),
+    signedSha256: "5".repeat(64),
+  },
+});
+
+// A release of that version: CI's export carries it in the app config, and the release gate
+// recorded the export.
+const release = async (
   storage: ReturnType<typeof memoryStorage>,
   version: string,
   overrides: Partial<Parameters<typeof publishUpdate>[0]> = {},
-) =>
-  publish(storage, {
-    dir: exported(`bundle of ${version}`, `image of ${version}`),
-    appConfig: { name: "Wave", version },
-    ...overrides,
-  });
+) => {
+  const appConfig = { name: "Wave", version };
+  const dir = exported(`bundle of ${version}`, `image of ${version}`, appConfig);
+  const { channel = "ti", runtimeVersion = "native-a" } = overrides;
+  const kept = records.get(storage) ?? new Map();
+  records.set(storage, kept);
+  kept.set(`${channel} ${version}`, sealedRecord({ version, channel, runtimeVersion, dir }));
+  return publish(storage, { dir, appConfig, ...overrides });
+};
 
 const promote = (
   storage: ReturnType<typeof memoryStorage>,
@@ -105,6 +147,7 @@ const promote = (
   promoteUpdate({
     channel: "ti",
     version,
+    provenance: recordOf(storage, overrides.channel ?? "ti", version),
     origin: ORIGIN,
     signingKey: shipped.privateKey,
     put: storage.put,
@@ -541,6 +584,71 @@ describe("the service", () => {
     const post = new Request(`${ORIGIN}/v1/manifest`, { method: "POST" });
     assert.equal((await service.fetch(post)).status, 405);
   });
+
+  // The bucket as phones see it through the Worker: everything CI published for a channel.
+  const publishedBucket = async () => {
+    const storage = memoryStorage();
+    await publish(storage);
+    const notes = {
+      en: { new: ["Something"], fixes: [] },
+      "pt-BR": { new: ["Algo"], fixes: [] },
+    };
+    await publishNotes({ channel: "ti", version: "1.2.3-ti", notes, ...storage });
+    const apk = {
+      version: "1.2.3-ti",
+      runtimeVersion: "native-a",
+      url: "https://github.com/o/r/releases/download/v1.2.3-ti/wave-1.2.3-ti.apk",
+      size: 1,
+      sha256: "ab".repeat(32),
+    };
+    await publishLatestApk({ channel: "ti", apk, signingKey: shipped.privateKey, ...storage });
+    const asset = new URL((await manifestOf(await askFor(storage))).launchAsset.url).pathname;
+    const contents = async () => {
+      const { objects } = await storage.list({ prefix: "" });
+      return new Map(
+        await Promise.all(objects.map(async ({ key }) => [key, await storage.read(key)] as const)),
+      );
+    };
+    const paths = [
+      "/v1/manifest",
+      "/v1/notes?channel=ti",
+      "/v1/apk?channel=ti",
+      asset,
+      `/v1/assets/${"c".repeat(64)}`,
+      "/notes/ti.json",
+      "/apks/ti/latest.json",
+      "/",
+    ];
+    return { storage, contents, paths };
+  };
+
+  it("lets no outside request upload, replace or remove a stored file", async () => {
+    const { storage, contents, paths } = await publishedBucket();
+    const service = createUpdateService(storage);
+    const before = await contents();
+    for (const method of ["HEAD", "OPTIONS", "POST", "PUT", "PATCH", "DELETE"])
+      for (const path of paths) {
+        const body = method === "HEAD" || method === "OPTIONS" ? null : "replacement bytes";
+        const response = await service.fetch(new Request(`${ORIGIN}${path}`, { method, body }));
+        assert.equal(response.status, 405, `${method} ${path}`);
+      }
+    assert.deepEqual(await contents(), before);
+  });
+
+  it("writes nothing on a read but the notes history it rebuilds from the stored notes", async () => {
+    const { storage, contents, paths } = await publishedBucket();
+    const service = createUpdateService(storage);
+    await storage.remove("notes/ti.json");
+    const before = await contents();
+    for (const path of paths) await service.fetch(new Request(`${ORIGIN}${path}`));
+    const after = await contents();
+    const changed = [...after.keys()].filter((key) => after.get(key) !== before.get(key));
+    assert.deepEqual(changed, ["notes/ti.json"]);
+    assert.deepEqual(
+      [...before.keys()].filter((key) => !after.has(key)),
+      [],
+    );
+  });
 });
 
 describe("publishNotes", () => {
@@ -717,6 +825,128 @@ describe("a promoted update", () => {
   });
 });
 
+describe("a rollback's provenance", () => {
+  type Stored = StoredUpdate;
+  const twoReleases = async (storage: ReturnType<typeof memoryStorage>) => {
+    const first = await release(storage, "1.0.0-ti");
+    const current = await release(storage, "1.0.1-ti");
+    return { first, current };
+  };
+  const stored = async (storage: ReturnType<typeof memoryStorage>, id: string): Promise<Stored> =>
+    JSON.parse((await storage.read(updateKey("ti", "native-a", id)))!);
+  const replace = (storage: ReturnType<typeof memoryStorage>, id: string, update: unknown) =>
+    storage.put(updateKey("ti", "native-a", id), JSON.stringify(update), "application/json");
+  const phonesOn = async (storage: ReturnType<typeof memoryStorage>): Promise<string> =>
+    (await manifestOf(await askFor(storage))).id;
+
+  it("rolls back to the release's own update with nothing but R2 and its sealed record", async () => {
+    const storage = memoryStorage();
+    await twoReleases(storage);
+    const id = await promote(storage, "1.0.0-ti");
+    assert.equal(await phonesOn(storage), id);
+  });
+
+  it("refuses a record that admitted another update, and leaves phones where they are", async () => {
+    const storage = memoryStorage();
+    const { current } = await twoReleases(storage);
+    const record = recordOf(storage, "ti", "1.0.0-ti")!;
+    const artifact = record.artifact as Record<string, unknown>;
+    const other = { ...record, artifact: { ...artifact, updateSha256: "1".repeat(64) } };
+    await assert.rejects(promote(storage, "1.0.0-ti", { provenance: other }), /record/);
+    assert.equal(await phonesOn(storage), current);
+  });
+
+  it("refuses a record of another version, channel or native side", async () => {
+    const storage = memoryStorage();
+    await twoReleases(storage);
+    const record = recordOf(storage, "ti", "1.0.0-ti")!;
+    const artifact = record.artifact as Record<string, unknown>;
+    for (const provenance of [
+      recordOf(storage, "ti", "1.0.1-ti"),
+      { ...record, artifact: { ...artifact, updateChannel: "main" } },
+      { ...record, artifact: { ...artifact, runtimeVersion: "native-b" } },
+      { ...record, artifact: { ...artifact, signedSha256: undefined } },
+      { ...record, schema: "something else" },
+    ])
+      await assert.rejects(promote(storage, "1.0.0-ti", { provenance }), /1\.0\.0-ti/);
+  });
+
+  it("refuses an update in R2 changed after it was published", async () => {
+    const storage = memoryStorage();
+    const { first, current } = await twoReleases(storage);
+    const original = await stored(storage, first);
+    const newer = await stored(storage, current);
+    for (const changed of [
+      // Another release's bundle under this release's name.
+      { ...original, launchAsset: newer.launchAsset },
+      // A file the export didn't have.
+      { ...original, assets: [...original.assets, { ...newer.launchAsset, key: "0".repeat(64) }] },
+      // The right file under a hash phones would check against something else.
+      { ...original, launchAsset: { ...original.launchAsset, hash: newer.launchAsset.hash } },
+      // Another app config, such as another sync address.
+      {
+        ...original,
+        extra: { expoClient: { ...original.extra.expoClient, syncUrl: "https://elsewhere.test" } },
+      },
+      // The list of exported files itself.
+      {
+        ...original,
+        exported: { ...original.exported, files: { "metadata.json": "0".repeat(64) } },
+      },
+    ]) {
+      await replace(storage, first, changed);
+      await assert.rejects(promote(storage, "1.0.0-ti"), /1\.0\.0-ti/);
+      assert.equal(await phonesOn(storage), current);
+    }
+  });
+
+  it("never lets the transition skip the check of an update that has a record", async () => {
+    const storage = memoryStorage();
+    const { current } = await twoReleases(storage);
+    await assert.rejects(
+      promote(storage, "1.0.0-ti", { provenance: undefined, allowUnrecorded: true }),
+      /1\.0\.0-ti/,
+    );
+    assert.equal(await phonesOn(storage), current);
+  });
+
+  describe("of a release published before records", () => {
+    /** 1.0.0-ti as a publish before #1130 left it: no list of exported files. */
+    const legacy = async (storage: ReturnType<typeof memoryStorage>) => {
+      const { first, current } = await twoReleases(storage);
+      const { exported: _, ...update } = await stored(storage, first);
+      await replace(storage, first, update);
+      return { first, current };
+    };
+
+    it("is refused unless the owner allows the transition, and says why", async () => {
+      const storage = memoryStorage();
+      const { current } = await legacy(storage);
+      await assert.rejects(
+        promote(storage, "1.0.0-ti", { provenance: undefined }),
+        /1\.0\.0-ti.*no provenance record/,
+      );
+      assert.equal(await phonesOn(storage), current);
+    });
+
+    it("goes ahead when the transition is allowed, still checking the runtime version", async () => {
+      const storage = memoryStorage();
+      await legacy(storage);
+      const id = await promote(storage, "1.0.0-ti", {
+        provenance: undefined,
+        allowUnrecorded: true,
+      });
+      assert.equal(await phonesOn(storage), id);
+    });
+
+    it("is refused when its release has a record its update can't be checked against", async () => {
+      const storage = memoryStorage();
+      await legacy(storage);
+      await assert.rejects(promote(storage, "1.0.0-ti", { allowUnrecorded: true }), /1\.0\.0-ti/);
+    });
+  });
+});
+
 describe("retention", () => {
   // The hex name of a file with that content, the way its manifest's URL ends.
   const assetStatus = (storage: ReturnType<typeof memoryStorage>, content: string) =>
@@ -867,10 +1097,25 @@ esac
     const publishScript = (version: string, env: Record<string, string>) => {
       const dir = exported(`bundle of ${version}`);
       writeFileSync(join(dir, "expo-config.json"), JSON.stringify({ name: "Wave", version }));
+      // The release's sealed record, as the Roll back workflow downloads it from its Release.
+      const record = sealedRecord({ version, channel: "ti", runtimeVersion: "native-a", dir });
+      writeFileSync(join(bin, `wave-${version}.provenance.json`), JSON.stringify(record));
       return run("publish.ts", [dir], { WAVE_RUNTIME_VERSION: "native-a", ...env });
     };
+    const recordFile = (version: string) => join(bin, `wave-${version}.provenance.json`);
     const stored = (key: string) => readFileSync(join(bin, "r2/wave-updates", key), "utf8");
-    return { run, publishScript, stored };
+    /** Leaves [version]'s update as a publish before records did: no list of exported files. */
+    const unrecorded = (version: string) => {
+      const root = join(bin, "r2/wave-updates");
+      for (const name of readdirSync(root, { recursive: true }) as string[]) {
+        const file = join(root, name);
+        if (!name.endsWith(".json") || !statSync(file).isFile()) continue;
+        const { exported: _, ...update } = JSON.parse(readFileSync(file, "utf8"));
+        if (update.extra?.expoClient?.version === version)
+          writeFileSync(file, JSON.stringify(update));
+      }
+    };
+    return { run, publishScript, stored, recordFile, unrecorded };
   };
   const key = { UPDATES_SIGNING_KEY: shipped.privateKey };
 
@@ -891,13 +1136,17 @@ esac
   });
 
   describe("promote.ts", () => {
-    const toFirst = { WAVE_UPDATE_VERSION: "1.0.0-ti" };
     const published = () => {
       const r2 = bucket();
       r2.publishScript("1.0.0-ti", key);
       r2.publishScript("1.0.1-ti", key);
       return r2;
     };
+    const toFirst = { WAVE_UPDATE_VERSION: "1.0.0-ti" };
+    const withRecord = (r2: ReturnType<typeof bucket>) => ({
+      ...toFirst,
+      WAVE_PROVENANCE_FILE: r2.recordFile("1.0.0-ti"),
+    });
 
     it("fails, says why and promotes nothing without the signing key", () => {
       const r2 = published();
@@ -911,7 +1160,7 @@ esac
 
     it("signs the promoted update and keeps the key from what it runs", () => {
       const r2 = published();
-      const { status, calls } = r2.run("promote.ts", [], { ...key, ...toFirst });
+      const { status, calls } = r2.run("promote.ts", [], { ...key, ...withRecord(r2) });
       assert.equal(status, 0);
       assert.match(calls, /latest\.json key=none/);
       assert.doesNotMatch(calls, /PRIVATE KEY/);
@@ -925,6 +1174,58 @@ esac
         accepts(shipped.publicKey, { header: signed.signature, body: signed.manifest }),
         true,
       );
+    });
+
+    it("refuses, promoting nothing, without the release's record or with another's", () => {
+      const r2 = published();
+      const latest = r2.stored(latestKey("ti", "native-a"));
+      const none = r2.run("promote.ts", [], { ...key, ...toFirst });
+      assert.equal(none.status, 1);
+      assert.match(none.output, /::error::1\.0\.0-ti can't go back on ti/);
+      const other = r2.run("promote.ts", [], {
+        ...key,
+        ...toFirst,
+        WAVE_PROVENANCE_FILE: r2.recordFile("1.0.1-ti"),
+      });
+      assert.equal(other.status, 1);
+      assert.doesNotMatch(none.calls + other.calls, /put/);
+      assert.equal(r2.stored(latestKey("ti", "native-a")), latest);
+    });
+
+    it("takes the owner's transition only for an update published before records", () => {
+      const r2 = published();
+      const allowed = r2.run("promote.ts", [], {
+        ...key,
+        ...toFirst,
+        WAVE_ALLOW_UNRECORDED: "true",
+      });
+      // 1.0.0-ti was published with its files listed, so it still needs its record.
+      assert.equal(allowed.status, 1);
+      assert.match(allowed.output, /published with a record/);
+    });
+
+    it("refuses, promoting nothing, when the record it was given can't be read", () => {
+      const r2 = published();
+      r2.unrecorded("1.0.0-ti");
+      const latest = r2.stored(latestKey("ti", "native-a"));
+      const missing = r2.run("promote.ts", [], {
+        ...key,
+        ...toFirst,
+        WAVE_ALLOW_UNRECORDED: "true",
+        WAVE_PROVENANCE_FILE: `${r2.recordFile("1.0.0-ti")}.gone`,
+      });
+      assert.equal(missing.status, 1);
+      assert.match(missing.output, /::error::.*provenance record.*couldn't be read/);
+      assert.doesNotMatch(missing.calls, /put/);
+      assert.equal(r2.stored(latestKey("ti", "native-a")), latest);
+
+      // With no record named, the transition still takes an update published before records.
+      const allowed = r2.run("promote.ts", [], {
+        ...key,
+        ...toFirst,
+        WAVE_ALLOW_UNRECORDED: "true",
+      });
+      assert.equal(allowed.status, 0, allowed.output);
     });
 
     it("gets the key from the workflow that runs it", () => {

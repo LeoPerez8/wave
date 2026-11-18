@@ -88,20 +88,27 @@ jobs:
           if-no-files-found: ignore
           retention-days: 1
 
-  # Fails when the commits this run brings in carry a secret (scripts/ci/secret-scan.sh, with
-  # .gitleaks.toml). It runs the PR's scripts, so its token is read-only: its comment goes in a
+  # Fails when the release source carries a secret (scripts/ci/secret-scan.sh, with
+  # .gitleaks.toml): a PR's commits up to its autofix commit, or every commit the source adds
+  # since its channel's previous release, version bump included. Its outputs are evidence for
+  # the release gate. It runs the PR's scripts, so its token is read-only: its comment goes in a
   # ci-report-* artifact for the Report job to post.
   secret-scan:
     name: Secret scan
+    needs: [source]
     runs-on: ubuntu-latest
     permissions:
       # Reads the run's jobs for the report.
       actions: read
       contents: read
+    outputs:
+      source: ${{ steps.scan.outputs.source }}
+      range: ${{ steps.scan.outputs.range }}
     steps:
       - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.1.0
         with:
-          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+          ref: ${{ needs.source.outputs.sha }}
+          # The source's history and the release tags its range starts from.
           fetch-depth: 0
           persist-credentials: false
 
@@ -112,10 +119,10 @@ jobs:
           package-manager-cache: false
 
       - name: Scan for secrets
+        id: scan
         env:
           BASE_SHA: ${{ github.event.pull_request.base.sha }}
-          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
-          BEFORE: ${{ github.event.before }}
+          SOURCE_SHA: ${{ needs.source.outputs.sha }}
         run: scripts/ci/step.sh "Scan for secrets" scripts/ci/secret-scan.sh
 
       - name: Report
@@ -174,7 +181,7 @@ jobs:
   # job, whose bump may sit on a newer tip of main than the pushed commit.
   notes:
     name: Patch notes
-    needs: [version]
+    needs: [version, source]
     runs-on: ubuntu-latest
     permissions:
       contents: read
@@ -184,16 +191,22 @@ jobs:
       # The same notes in each language, as one line of JSON, for the update service.
       localized: ${{ steps.notes.outputs.localized }}
       # 'success' when they were built. A branch push only learns in Checks whether it
-      # releases, so the release job checks this instead of this job failing.
+      # releases, so the release gate checks this instead of this job failing.
       outcome: ${{ steps.notes.outcome }}
+      source: ${{ steps.checked.outputs.source }}
     steps:
       - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.1.0
         with:
-          ref: ${{ needs.version.outputs.sha || github.event.pull_request.head.sha || github.sha }}
+          ref: ${{ needs.source.outputs.sha }}
           # The previous version's tag and every commit since it; file contents on demand.
           fetch-depth: 0
           filter: blob:none
           persist-credentials: false
+
+      # The release gate's evidence: the commit this job actually checked out.
+      - name: Record the checked-out source
+        id: checked
+        run: echo "source=$(git rev-parse HEAD)" | tee -a "$GITHUB_OUTPUT"
 
       - uses: actions/setup-node@a0853c24544627f65ddf259abe73b1d18a591444 # v5.0.0
         with:
@@ -365,18 +378,41 @@ jobs:
           if-no-files-found: ignore
           retention-days: 1
 
+  # The release source (docs/release-provenance.md): the one commit the rest of the run scans,
+  # checks and builds, and that a release signs and publishes. The autofix commit on a PR, the
+  # version bump on main (which may sit on a newer tip than the pushed commit), or else the
+  # event's commit. It runs no code from the repo and holds no token.
+  source:
+    name: Release source
+    needs: [version, autofix-apply]
+    runs-on: ubuntu-latest
+    permissions: {}
+    outputs:
+      sha: ${{ steps.pick.outputs.sha }}
+    steps:
+      - name: Pick the release source
+        id: pick
+        env:
+          SOURCE_SHA: ${{ needs.autofix-apply.outputs.sha || needs.version.outputs.sha || github.event.pull_request.head.sha || github.sha }}
+        run: |
+          if ! [[ "$SOURCE_SHA" =~ ^[0-9a-f]{40}$ ]]; then
+            echo "::error::No release source: \"$SOURCE_SHA\"."
+            exit 1
+          fi
+          echo "sha=$SOURCE_SHA" | tee -a "$GITHUB_OUTPUT"
+
   checks:
     name: Checks
-    needs: [version, autofix-apply]
+    needs: [version, source]
     runs-on: ubuntu-latest
     permissions:
       contents: read
       actions: read
       pull-requests: read
     outputs:
-      # The commit the rest of the run checks out: the autofix commit on PRs, the version
-      # bump on main.
-      sha: ${{ needs.autofix-apply.outputs.sha || needs.version.outputs.sha || github.event.pull_request.head.sha || github.sha }}
+      # The release source, which the rest of the run checks out.
+      sha: ${{ needs.source.outputs.sha }}
+      source: ${{ steps.checked.outputs.source }}
       # The versioned release this run publishes, or empty: the version bump's on main
       # (scripts/ci/next-version.ts), or a promoted or hand-pushed tag, which "Check release tag"
       # checked.
@@ -384,8 +420,13 @@ jobs:
     steps:
       - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.1.0
         with:
-          ref: ${{ needs.autofix-apply.outputs.sha || needs.version.outputs.sha || github.event.pull_request.head.sha || github.ref }}
+          ref: ${{ needs.source.outputs.sha }}
           persist-credentials: false
+
+      # The release gate's evidence: the commit this job actually checked out.
+      - name: Record the checked-out source
+        id: checked
+        run: echo "source=$(git rev-parse HEAD)" | tee -a "$GITHUB_OUTPUT"
 
       - uses: pnpm/action-setup@b906affcce14559ad1aafd4ab0e942779e9f58b1 # v4.3.0
 
@@ -426,6 +467,9 @@ jobs:
       - name: Action pins
         run: scripts/ci/step.sh "Action pins" node scripts/ci/action-pins.ts
 
+      - name: Untrusted code
+        run: scripts/ci/step.sh "Untrusted code" node scripts/ci/untrusted-code.ts
+
       - name: Test
         env:
           PACKAGES_FILTER: ${{ steps.packages.outputs.filter }}
@@ -435,7 +479,7 @@ jobs:
         if: always() && env.IS_SAME_REPO_PR == 'true' && job.status != 'cancelled'
         env:
           GH_TOKEN: ${{ github.token }}
-          HEAD_SHA: ${{ needs.autofix-apply.outputs.sha || github.event.pull_request.head.sha }}
+          HEAD_SHA: ${{ needs.source.outputs.sha }}
         run: scripts/ci/report.sh "${{ job.status }}" "Checks"
 
       - name: Keep the report
@@ -452,20 +496,28 @@ jobs:
   # instead of before it.
   native-tests:
     name: Native unit tests
-    needs: [changes, checks]
-    # Only PRs can skip: on main and release tags every area counts as changed.
+    needs: [changes, checks, source]
+    # Only PRs can skip: on main and release tags every area counts as changed, and the release
+    # gate refuses a release whose native tests didn't run and pass.
     if: needs.changes.outputs.nativeTests == 'true'
     runs-on: ubuntu-latest
     permissions:
       contents: read
       actions: read
+    outputs:
+      source: ${{ steps.checked.outputs.source }}
     env:
-      HEAD_SHA: ${{ needs.checks.outputs.sha }}
+      HEAD_SHA: ${{ needs.source.outputs.sha }}
     steps:
       - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.1.0
         with:
-          ref: ${{ needs.checks.outputs.sha }}
+          ref: ${{ needs.source.outputs.sha }}
           persist-credentials: false
+
+      # The release gate's evidence: the commit this job actually checked out.
+      - name: Record the checked-out source
+        id: checked
+        run: echo "source=$(git rev-parse HEAD)" | tee -a "$GITHUB_OUTPUT"
 
       - uses: pnpm/action-setup@b906affcce14559ad1aafd4ab0e942779e9f58b1 # v4.3.0
 
@@ -520,13 +572,21 @@ jobs:
 
   android:
     name: Android APK
-    needs: [changes, checks, notes]
+    needs: [changes, checks, notes, source]
     outputs:
       # The APK without a signature, which only the release job signs, and the name it signs it as.
       artifact: ${{ steps.apk.outputs.artifact }}
       apk: ${{ steps.apk.outputs.name }}
       update_channel: ${{ steps.updates.outputs.WAVE_UPDATE_CHANNEL }}
       runtime_version: ${{ steps.updates.outputs.WAVE_RUNTIME_VERSION }}
+      # Provenance for the release gate (docs/release-provenance.md): the commit built, full or
+      # repack, the unsigned APK's and the bundle's SHA-256, a repack's kept base and the update's.
+      source: ${{ steps.checked.outputs.source }}
+      build: ${{ steps.apk.outputs.build }}
+      apk_sha256: ${{ steps.apk.outputs.apk_sha256 }}
+      bundle_sha256: ${{ steps.apk.outputs.bundle_sha256 }}
+      base: ${{ steps.apk.outputs.base }}
+      update_sha256: ${{ steps.update_digest.outputs.sha256 }}
     # Only release runs (pushes to main and tags) build an APK: a PR run gets no secret, and its
     # native code compiles in the Native unit tests job. This job holds no signing key either: it
     # hands an unsigned APK to the release job, which signs it in its channel's Environment.
@@ -544,7 +604,7 @@ jobs:
     env:
       # Genius's token and Ticketmaster's key are the sync Worker's alone: the APK asks both
       # through its routes (docs/spec.md, "Genius About" and "Followed artists").
-      HEAD_SHA: ${{ needs.checks.outputs.sha }}
+      HEAD_SHA: ${{ needs.source.outputs.sha }}
       # ccache (scripts/ci/ccache.sh) keeps its cache in ~/.cache/ccache.
       # Paths under the checkout are hashed relative to it, and the working directory
       # isn't hashed, so a different checkout path still hits.
@@ -562,8 +622,13 @@ jobs:
     steps:
       - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.1.0
         with:
-          ref: ${{ needs.checks.outputs.sha }}
+          ref: ${{ needs.source.outputs.sha }}
           persist-credentials: false
+
+      # The release gate's evidence: the commit this job actually checked out.
+      - name: Record the checked-out source
+        id: checked
+        run: echo "source=$(git rev-parse HEAD)" | tee -a "$GITHUB_OUTPUT"
 
       - uses: pnpm/action-setup@b906affcce14559ad1aafd4ab0e942779e9f58b1 # v4.3.0
 
@@ -640,6 +705,13 @@ jobs:
         continue-on-error: true
         run: scripts/ci/step.sh "Export the over-the-air update" scripts/ci/export-update.sh "$RUNNER_TEMP/update"
 
+      # What the release job checks the update against before publishing it.
+      - name: Digest the over-the-air update
+        id: update_digest
+        if: steps.export_update.outcome == 'success'
+        continue-on-error: true
+        run: echo "sha256=$(node scripts/ci/release-gate.ts digest "$RUNNER_TEMP/update")" | tee -a "$GITHUB_OUTPUT"
+
       - name: Keep the over-the-air update
         if: steps.export_update.outcome == 'success'
         continue-on-error: true
@@ -678,10 +750,19 @@ jobs:
           name: kept-${{ steps.key.outputs.key }}
           path: ${{ env.KEPT_APK }}
 
+      # A kept APK repacks only with the record of the full build that kept it: the commit and
+      # run that built it, for the release's provenance, and its digest (scripts/ci/kept-build.ts).
+      - name: Check the kept build's record
+        id: kept_base
+        if: steps.kept.outputs.cache-hit == 'true' || steps.kept_download.outcome == 'success'
+        env:
+          NATIVE_KEY: ${{ steps.key.outputs.key }}
+        run: node scripts/ci/kept-build.ts check "$KEPT_APK" "$NATIVE_KEY" | tee -a "$GITHUB_OUTPUT"
+
       # Stable tags stay full builds. Pushes to main and -ti tags may repack.
       - name: Plan the APK build
         env:
-          KEPT: ${{ steps.kept.outputs.cache-hit == 'true' || steps.kept_download.outcome == 'success' }}
+          KEPT: ${{ steps.kept_base.outputs.base != '' }}
         run: node scripts/ci/repack.ts plan | tee -a "$GITHUB_ENV"
 
       - name: Repack the kept APK
@@ -769,13 +850,17 @@ jobs:
           key: ${{ steps.ccache.outputs.cache-primary-key }}
 
       # A full build keeps its APK for later runs with the same native side to repack: unsigned,
-      # and with no key beside it. Gradle and Metro cache writes above stay limited to main.
+      # with its record and no key beside it. Gradle and Metro cache writes above stay limited
+      # to main.
       - name: Keep the full build for repacks
         if: env.APK_BUILD == 'full' && steps.kept.outputs.cache-hit != 'true'
+        env:
+          NATIVE_KEY: ${{ steps.key.outputs.key }}
         run: |
           rm -rf "$KEPT_APK" && mkdir -p "$KEPT_APK"
           cp "$BUILT_APK" "$KEPT_APK/app-release.apk"
-          test "$(ls -A "$KEPT_APK")" = app-release.apk
+          node scripts/ci/kept-build.ts keep "$KEPT_APK" "$NATIVE_KEY" "$HEAD_SHA" "$GITHUB_RUN_ID"
+          test "$(ls -A "$KEPT_APK" | sort | tr '\n' ' ')" = "app-release.apk kept-build.json "
 
       - name: Save the kept APK
         if: env.APK_BUILD == 'full' && steps.kept.outputs.cache-hit != 'true'
@@ -795,6 +880,8 @@ jobs:
 
       - name: Collect APK
         id: apk
+        env:
+          KEPT_BASE: ${{ steps.kept_base.outputs.base }}
         run: |
           name="wave-${HEAD_SHA:0:7}.apk"
           built="${BUILT_APK:?}"
@@ -805,9 +892,16 @@ jobs:
           grep -qaF -- "${EXPO_PUBLIC_WAVE_BUILD_LABEL:?}" "$bundle"
           echo "Labelled: $EXPO_PUBLIC_WAVE_BUILD_LABEL"
           cp "$built" "$RUNNER_TEMP/unsigned-$name"
-          echo "path=$RUNNER_TEMP/unsigned-$name" >> "$GITHUB_OUTPUT"
-          echo "artifact=unsigned-$name" >> "$GITHUB_OUTPUT"
-          echo "name=$name" >> "$GITHUB_OUTPUT"
+          {
+            echo "path=$RUNNER_TEMP/unsigned-$name"
+            echo "artifact=unsigned-$name"
+            echo "name=$name"
+            echo "build=${APK_BUILD:?}"
+            echo "apk_sha256=$(node scripts/ci/release-gate.ts digest "$RUNNER_TEMP/unsigned-$name")"
+            echo "bundle_sha256=$(node scripts/ci/release-gate.ts digest "$bundle")"
+            # A repack's native base: the kept full build's record.
+            if [ "$APK_BUILD" = repack ]; then echo "base=${KEPT_BASE:?}"; fi
+          } | tee -a "$GITHUB_OUTPUT"
 
       # The APK's and the Hermes bundle's size against their budget (scripts/ci/size-budget.json),
       # for the sticky comment and every run's summary, releases' included. Over budget warns;
@@ -871,18 +965,76 @@ jobs:
           fi
           scripts/ci/post-reports.sh "$RUNNER_TEMP/ci-report"
 
+  # The release gate (docs/release-provenance.md, scripts/ci/release-gate.ts). The release job,
+  # and with it the signing key and the publishing secrets, opens only when Secret scan, Checks,
+  # the native tests, the patch notes and the APK all succeeded on the run's release source.
+  # It runs when one of them failed too, to say what refused the release; a cancelled run stops
+  # here. Its provenance record is what the release job checks the APK and the update against.
+  # It holds no secret and opens no Environment, so a healthy ti release still needs no approval.
+  release-gate:
+    name: Release gate
+    needs: [source, changes, secret-scan, checks, native-tests, notes, android]
+    if: >-
+      ${{ !cancelled() && (needs.checks.outputs.release_tag != '' ||
+      startsWith(github.ref, 'refs/tags/v') ||
+      (github.event_name == 'push' && github.ref == 'refs/heads/main')) }}
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    outputs:
+      sha: ${{ steps.admit.outputs.sha }}
+    steps:
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.1.0
+        with:
+          ref: ${{ needs.source.outputs.sha }}
+          sparse-checkout: scripts/ci
+          persist-credentials: false
+
+      - uses: actions/setup-node@a0853c24544627f65ddf259abe73b1d18a591444 # v5.0.0
+        with:
+          node-version: 22
+          package-manager-cache: false
+
+      # A stable tag promotes the ti release of the same number, and is admitted only with that
+      # release's sealed record for the same source (#1130). Without one, admit refuses.
+      - name: Fetch the promoted ti release's record
+        if: startsWith(github.ref, 'refs/tags/v') && !endsWith(github.ref, '-ti')
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release download "${GITHUB_REF_NAME}-ti" --repo "$GITHUB_REPOSITORY" \
+            --pattern "wave-${GITHUB_REF_NAME#v}-ti.provenance.json" --dir "$RUNNER_TEMP/promoted" ||
+            echo "::warning::${GITHUB_REF_NAME}-ti has no provenance record to download."
+
+      - name: Admit the release
+        id: admit
+        env:
+          NEEDS: ${{ toJSON(needs) }}
+        run: |
+          printf '%s' "$NEEDS" > "$RUNNER_TEMP/needs.json"
+          node scripts/ci/release-gate.ts admit "$RUNNER_TEMP/needs.json" "$RUNNER_TEMP/promoted/wave-${GITHUB_REF_NAME#v}-ti.provenance.json" > "$RUNNER_TEMP/provenance.json"
+          cat "$RUNNER_TEMP/provenance.json"
+          node -e 'console.log(`sha=${JSON.parse(require("fs").readFileSync(process.argv[1], "utf8")).source}`)' \
+            "$RUNNER_TEMP/provenance.json" | tee -a "$GITHUB_OUTPUT"
+
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: release-provenance
+          path: ${{ runner.temp }}/provenance.json
+          retention-days: 14
+
   # Signs the APK and publishes the release the Checks job decided on: a hand-pushed tag, or a
   # branch push's version bump, whose v<version> tag the Version job pushed with it. A tag pushed
   # with the workflow's token doesn't start another run. A push to main that releases nothing
-  # still signs its APK here, for the rolling ti-latest build.
+  # still signs its APK here, for the rolling ti-latest build. Only what the release gate
+  # admitted gets here: test releases can repack without Gradle, but neither channel publishes
+  # before the native tests pass, and the stable path keeps its full APK build policy.
   release:
     name: Publish versioned release
-    needs: [checks, android, native-tests, notes]
-    # Test releases can repack without Gradle, but neither channel publishes before
-    # the native tests pass. The stable path keeps its full APK build policy.
+    needs: [release-gate, checks, android, notes]
     if: >-
-      ${{ needs.checks.outputs.release_tag != '' ||
-      (github.event_name == 'push' && github.ref == 'refs/heads/main') }}
+      ${{ needs.release-gate.result == 'success' && (needs.checks.outputs.release_tag != '' ||
+      (github.event_name == 'push' && github.ref == 'refs/heads/main')) }}
     # The release secrets, the APK's release key among them, live only in the release
     # Environments (docs/spec.md, Release secrets). ti opens to pushes to main with no approval; every tag run, a promotion's or a
     # hand-pushed -ti tag's, takes main and waits for the owner. The channel stays the run's.
@@ -905,16 +1057,33 @@ jobs:
 
       - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.1.0
         with:
-          ref: ${{ needs.checks.outputs.sha }}
+          ref: ${{ needs.release-gate.outputs.sha }}
           persist-credentials: false
           sparse-checkout: |
             scripts/ci
             apps/updates
 
+      - uses: actions/setup-node@a0853c24544627f65ddf259abe73b1d18a591444 # v5.0.0
+        with:
+          node-version: 22
+          package-manager-cache: false
+
+      # The gate's provenance record (docs/release-provenance.md).
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
+        with:
+          name: release-provenance
+          path: ${{ runner.temp }}/provenance
+
       - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
         with:
           name: ${{ needs.android.outputs.artifact }}
           path: ${{ runner.temp }}/unsigned
+
+      # Nothing is signed but the unsigned APK the gate admitted for the release source.
+      - name: Check the APK against the gate's record
+        env:
+          UNSIGNED: ${{ needs.android.outputs.artifact }}
+        run: node scripts/ci/release-gate.ts verify "$RUNNER_TEMP/provenance/provenance.json" "$RUNNER_TEMP/unsigned/$UNSIGNED"
 
       # Every APK a phone installs carries the release key and its rotation proof from the old
       # key, full builds and repacks alike, on both channels (docs/spec.md, APK signing).
@@ -926,6 +1095,43 @@ jobs:
           UNSIGNED: ${{ needs.android.outputs.artifact }}
           APK_NAME: ${{ needs.android.outputs.apk }}
         run: scripts/ci/sign-apk.sh "$RUNNER_TEMP/unsigned/$UNSIGNED" "$RUNNER_TEMP/release/$APK_NAME"
+
+      # The record, with the signed APK's digest, goes with the release and stays with the run.
+      - name: Seal the provenance record
+        env:
+          APK_NAME: ${{ needs.android.outputs.apk }}
+        run: |
+          node scripts/ci/release-gate.ts seal "$RUNNER_TEMP/provenance/provenance.json"             "$RUNNER_TEMP/release/$APK_NAME" > "$RUNNER_TEMP/provenance/sealed.json"
+          cat "$RUNNER_TEMP/provenance/sealed.json"
+
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: release-provenance-sealed
+          path: ${{ runner.temp }}/provenance/sealed.json
+          retention-days: 14
+
+      # Where this release's source is (docs/release-source.md). Off until the owner sets the
+      # repository variable RELEASE_SOURCE_DELIVERY to `on`. Once on, a manifest that doesn't
+      # check out against the tag stops the release before anything is published.
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.1.0
+        if: vars.RELEASE_SOURCE_DELIVERY == 'on' && needs.checks.outputs.release_tag != ''
+        with:
+          ref: ${{ needs.release-gate.outputs.sha }}
+          path: release-source
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Prepare the release source
+        if: vars.RELEASE_SOURCE_DELIVERY == 'on' && needs.checks.outputs.release_tag != ''
+        working-directory: release-source
+        run: |
+          out="$RUNNER_TEMP/source"
+          mkdir -p "$out"
+          node scripts/ci/release-source.ts manifest "$RUNNER_TEMP/provenance/sealed.json" > "$out/manifest.json"
+          node scripts/ci/release-source.ts verify "$out/manifest.json"
+          node scripts/ci/release-source.ts directions "$out/manifest.json" > "$out/directions.md"
+          echo "SOURCE_MANIFEST_FILE=$out/manifest.json" >> "$GITHUB_ENV"
+          echo "SOURCE_DIRECTIONS_FILE=$out/directions.md" >> "$GITHUB_ENV"
 
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:
@@ -941,7 +1147,7 @@ jobs:
         continue-on-error: ${{ needs.checks.outputs.release_tag != '' }}
         env:
           GH_TOKEN: ${{ github.token }}
-          HEAD_SHA: ${{ needs.checks.outputs.sha }}
+          HEAD_SHA: ${{ needs.release-gate.outputs.sha }}
           APK_NAME: ${{ needs.android.outputs.apk }}
         run: |
           tag="ti-latest"; asset="wave-ti.apk"
@@ -957,9 +1163,10 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
           RELEASE_TAG: ${{ needs.checks.outputs.release_tag }}
-          RELEASE_SHA: ${{ needs.checks.outputs.sha }}
+          RELEASE_SHA: ${{ needs.release-gate.outputs.sha }}
           PATCH_NOTES: ${{ needs.notes.outputs.notes }}
           APK_NAME: ${{ needs.android.outputs.apk }}
+          PROVENANCE_FILE: ${{ runner.temp }}/provenance/sealed.json
         run: |
           if [ -n "$PATCH_NOTES" ]; then
             export RELEASE_NOTES_FILE="$RUNNER_TEMP/patch-notes.md"
@@ -981,14 +1188,7 @@ jobs:
       # After the release, so phones never get a version that has none: publish-release.sh answers
       # no url when it published nothing (a moved tag). None of these can fail the release: without
       # the secrets the last one says so and publishes nothing.
-      - uses: actions/setup-node@a0853c24544627f65ddf259abe73b1d18a591444 # v5.0.0
-        if: steps.published.outputs.url != ''
-        continue-on-error: true
-        with:
-          node-version: 22
-          package-manager-cache: false
-
-      # Before the update, so a phone that gets it finds its notes.
+      # The notes go before the update, so a phone that gets it finds its notes.
       - name: Publish the release notes
         if: steps.published.outputs.url != ''
         continue-on-error: true
@@ -1023,8 +1223,15 @@ jobs:
           name: update-${{ needs.checks.outputs.release_tag }}
           path: ${{ runner.temp }}/update
 
+      # Phones get only the update the gate admitted, exported from the release source.
+      - name: Check the update against the gate's record
+        id: update_admitted
+        if: env.UPDATES_CONFIGURED == 'true' && steps.published.outputs.url != ''
+        continue-on-error: true
+        run: node scripts/ci/release-gate.ts verify-update "$RUNNER_TEMP/provenance/provenance.json" "$RUNNER_TEMP/update"
+
       - name: Publish the over-the-air update
-        if: steps.published.outputs.url != ''
+        if: steps.published.outputs.url != '' && steps.update_admitted.outcome == 'success'
         continue-on-error: true
         env:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
