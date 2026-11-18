@@ -1714,6 +1714,7 @@ export type {
 export {
   discoverMix,
   discoverMixCaption,
+  discoverMixName,
   discoverMixSongs,
   discoverMixesBuilt,
   discoverMixesDue,
@@ -2438,7 +2439,7 @@ export type { LostLinkTap, LostTapReason } from "./lostTap.ts";
 export { createArtistGraphBuild, type ArtistGraphCatalogEntry } from "./artistGraphBuild.ts";
 export { mixKnownSongsSteps } from "./mixKnownSongs.ts";
 export { genreMixSeedsSteps } from "./genreMixes.ts";
-export { mapSteps, sortSteps } from "./buildSteps.ts";
+export { mapSteps, sortSteps, finishSteps } from "./buildSteps.ts";
 export { libraryMixProfilesSteps } from "./genreAffinity.ts";
 export { rankPlaysSteps } from "./stats.ts";
 
@@ -2497,6 +2498,7 @@ export {
 } from "./radioRanking.ts";
 
 export { rankedDiscoverMixRead } from "./radioMixes.ts";
+export { rankedDiscoverMixes, rankedDiscoverMixesSteps } from "./rankedDiscoverMixes.ts";
 export { RADIO_CACHE_FRESH_MS, radioCacheFresh } from "./radioCache.ts";
 export {
   listeningHistoryDays,
