@@ -14,11 +14,11 @@ v1 delivers the core player and library. v2 adds the advanced audio and library-
 
 ## Glossary
 
-- **Track** — one song in the library: an audio file on the phone, or, while signed in to a Wave account, a missing song.
+- **Track** — one song in the library: an audio file on this device, or, while signed in to a Wave account, a missing song.
 - **Wave account** — an optional sign-in (with Google) that keeps the Library's song list, playlists, favorites, play history and preferences on Wave's sync service, so another phone signed in to it gets them back. It never holds audio. _Avoid_: YouTube account (that's YT Music's sign-in), cloud library.
 - **Recording key** — what makes two songs on different phones the same song for a Wave account: the album's identity (album title + album artist), the normalised title, and the disc and track number when the file has them. Length within 3 seconds only breaks a tie. Core's `recordingKey` decides.
-- **Missing song** — a Track the Wave account has but this phone has no file for. It shows in the Library, dimmed, and tapping it downloads it. _Avoid_: ghost track, remote track.
-- **non-D** — short for non-downloaded; a song this phone has no audio file for: YT Music songs, unsearched entries and missing songs.
+- **Missing song** — a Track the Wave account has but this device has no file for. It shows in the Library, dimmed, and tapping it downloads it. _Avoid_: ghost track, remote track.
+- **non-D** — short for non-downloaded; a song this device has no audio file for: YT Music songs, unsearched entries and missing songs.
 - **Unsearched entry** — a playlist entry for a song a Spotify import listed, or for a song without a video id that left the Library (Delete, Remove from Library, a signed-out scan), and nothing has searched on YouTube Music yet. It keeps what Spotify listed (title, artists, album, length, Spotify's cover), or what the Library knew of the song (no cover), as an unavailable entry does, and is stored the same way: no new column, no video id, marked unsearched. It looks, plays, queues and joins playlists as a YT Music entry does, and Wave searches it when it's about to play, or in the background while Wave runs (the background fill). Found, it becomes a YT Music entry in its place; not found, an unavailable entry; a search that fails leaves it unsearched. _Avoid_: pending song, placeholder.
 - **Unavailable entry** — a playlist entry for a song a playlist import couldn't find: no match on YouTube Music or in the Library, or a Spotify local file with no artist, which is never searched. It keeps its place and what the source listed (title, artists, album, length, and Spotify's cover when there is one), shows dimmed with why ("Not found online", "Local file on Spotify"), never plays, and becomes the Library's song once the Library has it. _Avoid_: missing song (that's a Track with no file on this phone), not-found song.
 - **Album** — tracks grouped by album title + album artist.
@@ -29,7 +29,7 @@ v1 delivers the core player and library. v2 adds the advanced audio and library-
 - **Album artist** — the artist an album is filed under: the first artist its album artist credit names (the credit falls back to the track's; "Various Artists" for compilations). The album shows under that artist's Albums and under the other credited artists' Appears on.
 - **Genre** — an alternative grouping of tracks.
 - **Style** — a group of genre tags that sound alike, finer than a genre family (Heavy: Nu Metal, Alternative Metal, Rap Metal; Soft / acoustic: Soft Rock, Pop Rock, Acoustic), so a seed's style tells its sound apart where its family can't. Core's style table sits beside the families (`genreStyle`); a family that doesn't split keeps one style of its own. A generic tag ("Rock", "Alternative", "Pop") and a Deezer profile (always coarse) know a family only, never a style, and Wave doesn't guess a style from a family. _Avoid_: sub-genre, subgenre.
-- **Folder** — a directory on the phone. The index records the folder each track is in, and scan roots and excluded folders are folders, but the Library doesn't browse by folder.
+- **Folder** — a directory on this device. The index records the folder each track is in, and scan roots and excluded folders are folders, but the Library doesn't browse by folder.
 - **Playlist** — a user-made, ordered list of tracks; with YT Music, it can also hold YT Music songs the library doesn't have yet (YT Music entries), streamed until the library has them.
 - **Scan root** — a folder Wave indexes; **Excluded folder** — a folder under a root that Wave ignores.
 - **Library scan** — walking the scan roots and reconciling files with the index (full on first run, incremental afterwards).
@@ -1292,9 +1292,9 @@ The mechanical checks are `apps/mobile/src/perf/performanceGuards.test.ts` (#729
 
 - v2 features: equalizer and presets, tag editor, smart playlists, M3U export, Last.fm scrobbling, home-screen widgets, album artwork download, statistics/metrics screens (v1 only records the data).
 - For Normalize Volume: a limiter, true-peak measurement, a user-set target or pre-amp, a Track/Album/Auto choice in Settings, any UI for measuring progress or a song's gain, writing ReplayGain tags into files (Wave's own downloads included), syncing measurements between phones, and reading `iTunNORM`.
-- iOS, desktop, web.
+- iOS and web. Windows and Linux have their own spec, `docs/spec-desktop.md`.
 - Streaming services other than YouTube Music (see YT Music), cloud libraries, network shares. Spotify is only read for playlists to import, and nothing streams from it.
-- Uploading audio to the Wave account, a web or desktop view of it, sharing between accounts, and signing in with anything but Google.
+- Uploading audio to the Wave account, a web view of it, sharing between accounts, and signing in with anything but Google.
 - Play Store distribution.
 - Chromecast / casting; Android Auto beyond what Media3 provides for free. Android Auto is one of the two primary listening scenes, so a browsable Auto library is the first v2 candidate.
 - Languages other than English and Brazilian Portuguese, and a language picker inside Wave (see Language).
