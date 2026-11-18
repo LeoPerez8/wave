@@ -4,6 +4,7 @@
  * A call that reads a list returns a `Page`, never the whole list.
  */
 import type { PlayerView, PlaybackCommand, QueueRow } from "./playerView.ts";
+import type { WindowSettings } from "./windowSettings.ts";
 import type { LibraryCounts } from "@wave/client/db/counts";
 import type { PlaybackStatus } from "./playback.ts";
 import type { PlaybackSettings } from "./playbackSettings.ts";
@@ -19,8 +20,9 @@ import type {
   YtRelatedView,
 } from "./ytPages.ts";
 import type { AccountView } from "./account.ts";
+import type { MissingSongsDownloadAction, SleepTimer, SleepTimerChoice } from "@wave/core";
+import type { DownloadRow, DownloadsView, MissingSongsView } from "./downloads.ts";
 import type { SongLyrics } from "./lyrics.ts";
-import type { SleepTimer, SleepTimerChoice } from "@wave/core";
 import {
   PLAYLIST_CALLS,
   playlistBridge,
@@ -28,6 +30,7 @@ import {
   type PlaylistContract,
 } from "./playlists.ts";
 import type { LibrarySearchView } from "./search.ts";
+import type { HomeView } from "./home.ts";
 import type {
   ActionSurface,
   SongMenu,
@@ -48,6 +51,15 @@ export interface Page<T> {
 
 /** Each call's arguments and result. Arguments reach main as untrusted data. */
 export interface BridgeContract extends PlaylistContract, LinkContract {
+  readonly "system.mediaBackend": {
+    readonly args: readonly [];
+    readonly result: "native" | "chromium";
+  };
+  readonly "settings.window": { readonly args: readonly []; readonly result: WindowSettings };
+  readonly "settings.setWindow": {
+    readonly args: readonly [change: Partial<WindowSettings>];
+    readonly result: WindowSettings;
+  };
   readonly "playback.view": { readonly args: readonly []; readonly result: PlayerView };
   readonly "playback.start": {
     readonly args: readonly [scope: BrowseScope, index?: number, shuffle?: boolean];
@@ -110,6 +122,45 @@ export interface BridgeContract extends PlaylistContract, LinkContract {
   readonly "yt.search": { readonly args: readonly [query: string]; readonly result: YtSearchPage };
   /** A YouTube Music cover as a data URL, or null. */
   readonly "yt.artwork": { readonly args: readonly [url: string]; readonly result: string | null };
+  readonly "downloads.view": { readonly args: readonly []; readonly result: DownloadsView };
+  readonly "downloads.rows": {
+    readonly args: readonly [offset: number, limit: number];
+    readonly result: Page<DownloadRow>;
+  };
+  /** An album's missing songs and their downloads; null for no such album. */
+  readonly "downloads.album": {
+    readonly args: readonly [albumId: number];
+    readonly result: MissingSongsView | null;
+  };
+  readonly "downloads.yt": {
+    readonly args: readonly [videoIds: readonly string[]];
+    readonly result: void;
+  };
+  readonly "downloads.missing": {
+    readonly args: readonly [trackIds: readonly number[]];
+    readonly result: void;
+  };
+  readonly "downloads.missingAction": {
+    readonly args: readonly [action: MissingSongsDownloadAction, albumId?: number];
+    readonly result: void;
+  };
+  readonly "downloads.retry": {
+    readonly args: readonly [ids?: readonly string[]];
+    readonly result: void;
+  };
+  readonly "downloads.cancel": {
+    readonly args: readonly [ids: readonly string[]];
+    readonly result: void;
+  };
+  readonly "downloads.clearFailed": { readonly args: readonly []; readonly result: void };
+  readonly "downloads.folder": { readonly args: readonly []; readonly result: string };
+  /** Asks for the folder downloads go to; null when cancelled. */
+  readonly "downloads.pickFolder": { readonly args: readonly []; readonly result: string | null };
+  readonly "downloads.bestQuality": { readonly args: readonly []; readonly result: boolean };
+  readonly "downloads.setBestQuality": {
+    readonly args: readonly [on: boolean];
+    readonly result: boolean;
+  };
   /** A YouTube Music artist page, by its browse id. */
   readonly "yt.artist": {
     readonly args: readonly [browseId: string];
@@ -219,6 +270,11 @@ export interface BridgeContract extends PlaylistContract, LinkContract {
     readonly result: Page<string>;
   };
   readonly "search.clearRecent": { readonly args: readonly []; readonly result: void };
+  readonly "home.view": { readonly args: readonly []; readonly result: HomeView };
+  readonly "home.play": {
+    readonly args: readonly [section: "most-played" | "favorites", index: number];
+    readonly result: void;
+  };
 }
 
 export type BridgeCall = keyof BridgeContract;
@@ -228,6 +284,7 @@ type PagedLists<T> = {
   readonly [C in keyof T]: T[C] extends { readonly result: readonly unknown[] } ? never : T[C];
 };
 export const BRIDGE_CALLS = [
+  "system.mediaBackend",
   "playback.view",
   "playback.start",
   "playback.startYt",
@@ -265,6 +322,8 @@ export const BRIDGE_CALLS = [
   "player.status",
   "tags.read",
   "settings.appearance",
+  "settings.window",
+  "settings.setWindow",
   "settings.setAppearance",
   "settings.playback",
   "settings.setPlayback",
@@ -284,6 +343,19 @@ export const BRIDGE_CALLS = [
   "magicQueue.startStreamed",
   "magicQueue.view",
   "magicQueue.retry",
+  "downloads.view",
+  "downloads.rows",
+  "downloads.album",
+  "downloads.yt",
+  "downloads.missing",
+  "downloads.missingAction",
+  "downloads.retry",
+  "downloads.cancel",
+  "downloads.clearFailed",
+  "downloads.folder",
+  "downloads.pickFolder",
+  "downloads.bestQuality",
+  "downloads.setBestQuality",
   "account.view",
   "account.signIn",
   "account.cancelSignIn",
@@ -295,6 +367,8 @@ export const BRIDGE_CALLS = [
   "search.recent",
   "search.remember",
   "search.clearRecent",
+  "home.view",
+  "home.play",
   ...LINK_CALLS,
 ] as const satisfies readonly BridgeCall[] &
   (BridgeContract extends PagedLists<BridgeContract> ? unknown : never);
@@ -307,6 +381,11 @@ export type Invoke = <C extends BridgeCall>(
 /** `window.wave`. */
 export interface WaveBridge {
   readonly links: ReturnType<typeof linkBridge>;
+  readonly system: { readonly mediaBackend: () => Promise<"native" | "chromium"> };
+  readonly home: {
+    readonly view: () => Promise<HomeView>;
+    readonly play: (section: "most-played" | "favorites", index: number) => Promise<void>;
+  };
   readonly playback: {
     readonly view: () => Promise<PlayerView>;
     readonly start: (scope: BrowseScope, index?: number, shuffle?: boolean) => Promise<void>;
@@ -360,6 +439,8 @@ export interface WaveBridge {
     readonly read: (path: string) => Promise<SongTags>;
   };
   readonly settings: {
+    readonly window: () => Promise<WindowSettings>;
+    readonly setWindow: (change: Partial<WindowSettings>) => Promise<WindowSettings>;
     readonly appearance: () => Promise<Appearance>;
     readonly setAppearance: (appearance: Appearance) => Promise<void>;
     /** Settings › Playback: Crossfade, Normalize Volume and Buffer, synced with the account. */
@@ -391,6 +472,23 @@ export interface WaveBridge {
     readonly view: () => Promise<MagicQueueView>;
     readonly retry: () => Promise<void>;
   };
+  /** Downloads into the Library: YT Music songs and missing songs, from YouTube Music or Soulseek. */
+  readonly downloads: {
+    readonly view: () => Promise<DownloadsView>;
+    readonly rows: (offset: number, limit: number) => Promise<Page<DownloadRow>>;
+    readonly album: (albumId: number) => Promise<MissingSongsView | null>;
+    readonly yt: (videoIds: readonly string[]) => Promise<void>;
+    readonly missing: (trackIds: readonly number[]) => Promise<void>;
+    /** Download All, Retry Failed or Cancel on every missing song, or one album's. */
+    readonly missingAction: (action: MissingSongsDownloadAction, albumId?: number) => Promise<void>;
+    readonly retry: (ids?: readonly string[]) => Promise<void>;
+    readonly cancel: (ids: readonly string[]) => Promise<void>;
+    readonly clearFailed: () => Promise<void>;
+    readonly folder: () => Promise<string>;
+    readonly pickFolder: () => Promise<string | null>;
+    readonly bestQuality: () => Promise<boolean>;
+    readonly setBestQuality: (on: boolean) => Promise<boolean>;
+  };
   /** The Wave account: the session itself never reaches the window. */
   readonly account: {
     readonly view: () => Promise<AccountView>;
@@ -412,6 +510,7 @@ export interface WaveBridge {
 }
 
 export const createBridge = (invoke: Invoke): WaveBridge => ({
+  system: { mediaBackend: () => invoke("system.mediaBackend") },
   playback: {
     view: () => invoke("playback.view"),
     start: (scope, index, shuffle) => invoke("playback.start", scope, index, shuffle),
@@ -461,6 +560,8 @@ export const createBridge = (invoke: Invoke): WaveBridge => ({
   },
   settings: {
     appearance: () => invoke("settings.appearance"),
+    window: () => invoke("settings.window"),
+    setWindow: (change) => invoke("settings.setWindow", change),
     setAppearance: (appearance) => invoke("settings.setAppearance", appearance),
     playback: () => invoke("settings.playback"),
     setPlayback: (change) => invoke("settings.setPlayback", change),
@@ -487,6 +588,21 @@ export const createBridge = (invoke: Invoke): WaveBridge => ({
     view: () => invoke("magicQueue.view"),
     retry: () => invoke("magicQueue.retry"),
   },
+  downloads: {
+    view: () => invoke("downloads.view"),
+    rows: (offset, limit) => invoke("downloads.rows", offset, limit),
+    album: (albumId) => invoke("downloads.album", albumId),
+    yt: (videoIds) => invoke("downloads.yt", videoIds),
+    missing: (trackIds) => invoke("downloads.missing", trackIds),
+    missingAction: (action, albumId) => invoke("downloads.missingAction", action, albumId),
+    retry: (ids) => invoke("downloads.retry", ids),
+    cancel: (ids) => invoke("downloads.cancel", ids),
+    clearFailed: () => invoke("downloads.clearFailed"),
+    folder: () => invoke("downloads.folder"),
+    pickFolder: () => invoke("downloads.pickFolder"),
+    bestQuality: () => invoke("downloads.bestQuality"),
+    setBestQuality: (on) => invoke("downloads.setBestQuality", on),
+  },
   account: {
     view: () => invoke("account.view"),
     signIn: () => invoke("account.signIn"),
@@ -501,6 +617,10 @@ export const createBridge = (invoke: Invoke): WaveBridge => ({
     recent: () => invoke("search.recent"),
     remember: (query) => invoke("search.remember", query),
     clearRecent: () => invoke("search.clearRecent"),
+  },
+  home: {
+    view: () => invoke("home.view"),
+    play: (section, index) => invoke("home.play", section, index),
   },
   links: linkBridge(invoke),
 });

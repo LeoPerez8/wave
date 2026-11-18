@@ -28,7 +28,8 @@ const serviceOrigin = (text: string | undefined, packaged: boolean): string | nu
   try {
     const url = new URL(text);
     const secure =
-      url.protocol === "https:" || (!packaged && url.protocol === "http:" && LOCAL.has(url.hostname));
+      url.protocol === "https:" ||
+      (!packaged && url.protocol === "http:" && LOCAL.has(url.hostname));
     return secure ? url.origin : null;
   } catch {
     return null;
@@ -37,7 +38,8 @@ const serviceOrigin = (text: string | undefined, packaged: boolean): string | nu
 
 export const accountConfig = (built: Env, runtime: Env, packaged: boolean): AccountConfig => {
   const pick = (name: string) =>
-    (packaged ? undefined : value(runtime[`WAVE_${name}`])) ?? value(built[`MAIN_VITE_WAVE_${name}`]);
+    (packaged ? undefined : value(runtime[`WAVE_${name}`])) ??
+    value(built[`MAIN_VITE_WAVE_${name}`]);
   const clientId = pick("GOOGLE_DESKTOP_CLIENT_ID") ?? null;
   const syncUrl = serviceOrigin(pick("SYNC_URL"), packaged);
   return {

@@ -32,6 +32,7 @@ fun main(args: Array<String>) {
   val input = System.`in`.bufferedReader(Charsets.UTF_8)
   lines.event("ready", buildJsonObject { put("java", JsonPrimitive(System.getProperty("java.version"))) })
   runBlocking(Dispatchers.Default) { lines.serve(input::readLine, desktop::handle) }
+  desktop.close()
   desktop.yt.http.close()
 }
 

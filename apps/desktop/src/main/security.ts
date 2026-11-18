@@ -8,6 +8,7 @@ export const contentSecurityPolicy = (dev: boolean): string =>
     dev ? "script-src 'self' 'unsafe-inline'" : "script-src 'self'",
     dev ? "style-src 'self' 'unsafe-inline'" : "style-src 'self'",
     "img-src 'self' data: blob:",
+    "media-src blob:",
     "font-src 'self'",
     dev ? "connect-src 'self' ws://localhost:*" : "connect-src 'self'",
     "object-src 'none'",

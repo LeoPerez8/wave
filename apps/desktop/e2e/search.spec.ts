@@ -62,6 +62,11 @@ test("Search finds, plays and remembers as on the phone", async () => {
   await Effect.runPromise(
     Effect.gen(function* () {
       const db = (yield* Database) as unknown as TestDatabase;
+      // This scenario checks Search with YT Music off; it must not extend the one-song queue.
+      db.run(sql`INSERT INTO desktop_settings (key, value) VALUES ('settings.ytMusic', 'off')`);
+      db.run(
+        sql`INSERT INTO desktop_synced_preferences (key, value) VALUES ('settings.continueQueue', 'off')`,
+      );
       for (const song of SONGS) {
         const id = addTrack(db, song);
         const path = join(data, `${song.title}.wav`);

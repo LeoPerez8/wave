@@ -107,11 +107,13 @@ export function Shelf({
   items,
   artists = false,
   onOpen,
+  onMenu,
 }: {
   readonly title: string;
   readonly items: readonly TileItem[];
   readonly artists?: boolean;
   readonly onOpen: (index: number) => void;
+  readonly onMenu?: (index: number, at: { readonly x: number; readonly y: number }) => void;
 }) {
   if (items.length === 0) return null;
   return (
@@ -119,20 +121,37 @@ export function Shelf({
       <h2>{title}</h2>
       <div className="shelf-row" role="list">
         {items.map((item, index) => (
-          <button
-            key={item.key}
-            role="listitem"
-            className="tile"
-            aria-label={item.label ?? item.title}
-            title={item.title}
-            onClick={() => onOpen(index)}
-          >
-            <Artwork hash={item.artworkHash} url={item.artworkUrl} artist={artists} large />
-            <span className="tile-title truncate">{item.title}</span>
-            {item.caption && (
-              <span className="tile-caption truncate secondary">{item.caption}</span>
-            )}
-          </button>
+          <div key={item.key} role="listitem">
+            <button
+              className="tile"
+              aria-label={item.label ?? item.title}
+              title={item.title}
+              onClick={() => onOpen(index)}
+              onContextMenu={
+                onMenu &&
+                ((event) => {
+                  event.preventDefault();
+                  onMenu(index, { x: event.clientX, y: event.clientY });
+                })
+              }
+              onKeyDown={
+                onMenu &&
+                ((event) => {
+                  if (event.key === "ContextMenu" || (event.key === "F10" && event.shiftKey)) {
+                    event.preventDefault();
+                    const rect = event.currentTarget.getBoundingClientRect();
+                    onMenu(index, { x: rect.left, y: rect.bottom });
+                  }
+                })
+              }
+            >
+              <Artwork hash={item.artworkHash} url={item.artworkUrl} artist={artists} large />
+              <span className="tile-title truncate">{item.title}</span>
+              {item.caption && (
+                <span className="tile-caption truncate secondary">{item.caption}</span>
+              )}
+            </button>
+          </div>
         ))}
       </div>
     </section>

@@ -175,8 +175,7 @@ test("Move Up and Move Down move a song one place among the songs its page shows
 });
 
 /** Gives the Library's songs Windows paths, as the desktop's scan files them. */
-const onDriveC = (db: LibraryDatabase) =>
-  db.run(sql`UPDATE tracks SET path = 'C:' || path`);
+const onDriveC = (db: LibraryDatabase) => db.run(sql`UPDATE tracks SET path = 'C:' || path`);
 
 test("an M3U8 from another player on Windows imports by Core's rules", async () => {
   await setUp(async ({ db, folder, playlists, picked, changes }) => {

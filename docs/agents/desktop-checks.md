@@ -13,6 +13,7 @@ pnpm --filter @wave/desktop typecheck
 pnpm --filter @wave/desktop test       # node:test units in src/
 pnpm --filter @wave/desktop lint
 pnpm --filter @wave/desktop test:e2e   # builds out/, then runs the Playwright smoke test
+pnpm --filter @wave/desktop test:perf  # isolated launch, scroll and whole-app memory check
 pnpm --filter @wave/desktop dev        # the app with hot reload
 ```
 
@@ -20,6 +21,9 @@ pnpm --filter @wave/desktop dev        # the app with hot reload
 to `apps/desktop/test-results/`, which git ignores; read the PNGs to check what the window
 shows. Add a check as a test in `apps/desktop/e2e/` rather than a throwaway script, so CI runs
 it too.
+
+The performance check runs separately from `test:e2e`. Its limits, fixture, memory accounting
+and CI artifact names are in [Desktop performance in CI](../performance/1166-desktop.md).
 
 ## The audio engine
 
@@ -167,6 +171,34 @@ to Playlist and Remove from Library. A target is `{scope, ids}` or `{scope, all:
 until Settings includes it again; the file stays on disk. The renderer's keys go through Core's
 `desktopKey`, with focus read by `keys.ts`.
 
+## Downloads and Fix Songs
+
+`Downloads` (`src/main/downloads/downloadsLayer.ts`) follows the shared JVM's durable download
+journal. Main answers its leased prepare, confirm, publish and import decisions using Core's
+rules. The JVM runs the shared YouTube and Soulseek transfers and tag writers; audio stays in
+files. Completed files are imported immediately through `DesktopLibrary.importFile`, preserving
+a missing song's identity. The scanner also refreshes lyrics search text after a tag write.
+
+The window uses `wave.downloads.view/rows/album`, `yt`, `missing`, `missingAction`, `retry`,
+`cancel`, `clearFailed`, `folder/pickFolder` and `bestQuality/setBestQuality`. `missingAction`
+accepts `downloadAll`, `retryFailed` or `cancel`, optionally for an album. Rows are paged, up to
+200 per read. Settings' selected target folder becomes a scan root. Main checks connectivity
+every three seconds and stops or restarts the journal accordingly.
+
+`songs.run` accepts `fixSong` and `fixSongs`. The shared client module
+`@wave/client/downloads/lookups` supplies both apps' LRCLIB and Deezer requests and album caches.
+The synced `settings.findLyricsAndGenre` switch gates lookups and Fix Song's menu entry.
+Lyrics found online for a Library song are written through `tags.writeSong` and reimported too.
+
+The JVM adds `downloads.*`, `download.album/watchSong/lyrics`, `soulseek.session/turnOn/turnOff/search`
+and `tags.writeSong`. Its `downloadsChanged` events trigger journal reads. Soulseek credentials
+are sealed by main's `seal/unseal` host calls through Electron's keyring; without a keyring they
+stay in memory. Rebuild the JAR with `pnpm --filter @wave/desktop build:jvm` after Kotlin changes.
+
+`e2e/downloads.spec.ts` checks a missing Search song waiting offline and resuming through the real
+JVM, and a live YouTube download with its tags read back and its Library entry visible. The live
+check stops after search on CI; inspect its annotations if YouTube refuses the machine.
+
 ## Links
 
 `e2e/links.spec.ts` pastes and drops each kind of link the phone opens (a YT Music song and
@@ -188,6 +220,23 @@ WAVE_DATA_DIR="$(mktemp -d)" pnpm --filter @wave/desktop exec electron-vite dev 
 
 Stop the Electron processes it started when done: a second launch only focuses the first
 window (the single-instance lock), so a leftover one hides your new code.
+
+## Tray and system media controls
+
+`e2e/system.spec.ts` covers close-to-tray, the one-time notice, the second launch, the `--hidden`
+start and Settings › Window. Two variables add the real system controls to it:
+
+- Windows: `WAVE_SMTC_PROBE=<path to smtc-probe.exe>`. Build the probe with
+  `cargo build -p wave-media-node --example smtc-probe` in `apps/desktop/native`. It reads Wave's
+  session from Windows and presses its buttons, so no other player may be running. The cover must
+  be 71 px or more, or Chromium drops it.
+- Linux: `WAVE_PLAYERCTL=1`, with `playerctl` installed and a session bus (WSLg has one; elsewhere
+  wrap the run in `dbus-run-session --`). The addon needs `libdbus-1-dev` and `pkg-config` to
+  build; `WAVE_MEDIA_ADDON` points Wave at one built elsewhere. With no session bus Wave logs
+  `[system] Media controls unavailable` and uses Chromium's session.
+
+The spec never turns on Start with the system, so it writes no login entry. `autostart.test.ts`
+covers what the switch registers.
 
 ## Linux under WSLg
 

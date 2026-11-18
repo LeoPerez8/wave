@@ -1,4 +1,5 @@
 test-results/
 playwright-report/
+perf-results/
 # The JAR and Java runtime `pnpm build:jvm` builds for main.
 /jvm/

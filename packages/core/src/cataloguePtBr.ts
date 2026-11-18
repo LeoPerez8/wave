@@ -1,4 +1,5 @@
 import { desktopShortcutsPtBr } from "./catalogue/desktopShortcutsPtBr.ts";
+import { desktopWindowPtBr } from "./catalogue/desktopWindowPtBr.ts";
 import { libraryPtBr } from "./catalogue/libraryPtBr.ts";
 import { playlistsPtBr } from "./catalogue/playlistsPtBr.ts";
 import { importsPtBr } from "./catalogue/importsPtBr.ts";
@@ -35,6 +36,7 @@ import { versionHistoryPtBr } from "./catalogue/versionHistoryPtBr.ts";
 import type { Catalogue } from "./catalogueEn.ts";
 
 export const ptBR: Catalogue = {
+  desktopWindow: desktopWindowPtBr,
   desktopLayout: {
     brand: "Wave",
     home: "Início",
@@ -94,6 +96,12 @@ export const ptBR: Catalogue = {
     youTubeMusic: "YouTube Music",
     ytOffline: "O YouTube Music volta quando você estiver online.",
     ytFailed: "O YouTube Music não respondeu. Tente de novo daqui a pouco.",
+    downloadsProgress: (percent: number) => `Downloads, ${percent}% concluído`,
+    nothingDownloading: "As músicas que você baixar aparecem aqui até chegarem à Biblioteca.",
+    downloadsOffline:
+      "Os downloads pausam enquanto você está offline e continuam quando você voltar.",
+    downloadsFolder: "Os downloads vão para",
+    changeFolder: "Mudar Pasta",
     similarArtists: "Artistas parecidos",
     youMightAlsoLike: "Você também pode gostar",
     magicQueueIdle:
