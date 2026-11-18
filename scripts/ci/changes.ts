@@ -33,6 +33,9 @@ const AREAS = {
     "apps/mobile/plugins/",
     "apps/mobile/package.json",
   ],
+  // What the desktop app is built from. It isn't released yet, so a change to it alone
+  // releases nothing.
+  desktop: ["apps/desktop/", "packages/client/", "packages/core/", "packages/theme/"],
 } as const;
 
 type Area = keyof typeof AREAS;
@@ -44,7 +47,11 @@ const ALL_PACKAGES_AREAS: readonly Area[] = ["workspace", "ci", "tsconfig", "per
 // The native modules' JVM tests can only change result when one of these does.
 const NATIVE_TEST_AREAS: readonly Area[] = ["native", "workspace", "ci"];
 
-export type Changes = Record<Area | "allPackages" | "nativeTests", boolean>;
+// The desktop's own checks on Windows and Linux (the Desktop job) can only change result
+// when one of these does.
+const DESKTOP_CHECK_AREAS: readonly Area[] = ["desktop", "workspace", "ci", "tsconfig"];
+
+export type Changes = Record<Area | "allPackages" | "nativeTests" | "desktopChecks", boolean>;
 
 const covers = (entry: string, path: string) =>
   entry.endsWith("/") ? path.startsWith(entry) : path === entry;
@@ -57,6 +64,7 @@ const decide = (touched: (area: Area) => boolean): Changes => {
     ...areas,
     allPackages: ALL_PACKAGES_AREAS.some((area) => areas[area]),
     nativeTests: NATIVE_TEST_AREAS.some((area) => areas[area]),
+    desktopChecks: DESKTOP_CHECK_AREAS.some((area) => areas[area]),
   };
 };
 
