@@ -93,4 +93,33 @@ class WaveDesktopTest {
     host.write("""{"id":5,"method":"search","params":{}}""")
     assertEquals("ERR_BAD_PARAMS", host.next().code())
   }
+
+  @Test
+  fun withYtMusicOffASearchAndAStreamFailAsOff() = withDesktop { host ->
+    host.write("""{"id":6,"method":"setYtMusic","params":{"enabled":false}}""")
+    assertTrue(host.next().containsKey("result"))
+    host.write("""{"id":7,"method":"search","params":{"query":"get lucky"}}""")
+    assertEquals("ERR_YT_DISABLED", host.next().code())
+    host.write("""{"id":8,"method":"resolveStream","params":{"videoId":"4D7u5KF7SP8"}}""")
+    assertEquals("ERR_YT_DISABLED", host.next().code())
+    host.write("""{"id":9,"method":"setYtMusic","params":{"enabled":true}}""")
+    host.next()
+    host.write("""{"id":10,"method":"search","params":{"query":"get lucky"}}""")
+    assertEquals(20, host.next()["result"]!!.jsonObject["songs"]!!.jsonArray.size)
+  }
+
+  @Test
+  fun aStreamOfflineFailsWithThePhonesCode() =
+    withDesktop(youTube(failure = UnknownHostException("music.youtube.com")), online = false) { host ->
+      host.write("""{"id":11,"method":"resolveStream","params":{"videoId":"4D7u5KF7SP8","fresh":true}}""")
+      assertEquals("ERR_YT_OFFLINE", host.next().code())
+    }
+
+  @Test
+  fun aStreamOrASettingWithBadParamsFailsWithACode() = withDesktop { host ->
+    host.write("""{"id":12,"method":"resolveStream","params":{"videoId":"../../etc"}}""")
+    assertEquals("ERR_BAD_PARAMS", host.next().code())
+    host.write("""{"id":13,"method":"setYtMusic","params":{"enabled":"no"}}""")
+    assertEquals("ERR_BAD_PARAMS", host.next().code())
+  }
 }
