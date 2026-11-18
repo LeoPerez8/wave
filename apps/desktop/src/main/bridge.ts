@@ -29,6 +29,12 @@ import { ytRow } from "../shared/yt.ts";
 import { VIDEO_ID, YtMusic } from "./yt/ytMusic.ts";
 import { DesktopPlaylists } from "./library/playlists.ts";
 import { playlistHandlers } from "./playlistHandlers.ts";
+import { searchLibrary } from "./library/search.ts";
+import {
+  clearRecentSearches,
+  listRecentSearchesSync,
+  rememberSearchSync,
+} from "@wave/client/db/libraryQueries";
 
 const validScope = (value: unknown): value is BrowseScope => {
   if (typeof value !== "object" || value === null) return false;
@@ -63,6 +69,13 @@ const validTarget = (value: unknown): value is SongTarget => {
   );
 };
 
+/** What Search takes: typed text, as long as a query gets. */
+const searchQuery = (value: unknown): value is string =>
+  typeof value === "string" && value.length <= 500;
+
+/** A short list, whole, as a page. */
+const allOf = <T>(items: readonly T[]): Page<T> => ({ items, offset: 0, total: items.length });
+
 export type IpcHandler = (event: unknown, ...args: unknown[]) => Promise<unknown>;
 
 interface IpcMainLike {
@@ -75,14 +88,7 @@ interface Runtime<R> {
 
 /** The services the calls use. */
 export type BridgeServices =
-  | Database
-  | Player
-  | Kotlin
-  | DesktopLibrary
-  | Playback
-  | YtMusic
-  | Account
-  | DesktopPlaylists;
+  Database | Player | Kotlin | DesktopLibrary | Playback | YtMusic | Account | DesktopPlaylists;
 
 const refuse = (call: BridgeCall, why: string) => Effect.fail(new Error(`Refused ${call}: ${why}`));
 
@@ -380,6 +386,26 @@ const createHandlers = (onAppearance: (mode: Appearance) => void): Handlers => {
         : kotlinCall((kotlin) => kotlin.readTags(song));
     },
     ...playlistHandlers(validTarget),
+    "search.library": ([query]) =>
+      searchQuery(query)
+        ? Effect.gen(function* () {
+            return searchLibrary(yield* Database, query);
+          })
+        : refuse("search.library", "invalid query"),
+    "search.recent": () =>
+      Effect.gen(function* () {
+        return allOf(listRecentSearchesSync(yield* Database));
+      }),
+    "search.remember": ([query]) =>
+      searchQuery(query)
+        ? Effect.gen(function* () {
+            return allOf(rememberSearchSync(yield* Database, query, Date.now()));
+          })
+        : refuse("search.remember", "invalid query"),
+    "search.clearRecent": () =>
+      Effect.gen(function* () {
+        clearRecentSearches(yield* Database);
+      }),
   };
 };
 

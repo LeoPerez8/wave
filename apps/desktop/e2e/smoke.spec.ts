@@ -134,6 +134,10 @@ test("the page has no Node and only the typed bridge", async () => {
       "wave.playlists.cancelImage",
       "wave.playlists.removeImage",
       "wave.playlists.image",
+      "wave.search.library",
+      "wave.search.recent",
+      "wave.search.remember",
+      "wave.search.clearRecent",
     ],
   });
 });

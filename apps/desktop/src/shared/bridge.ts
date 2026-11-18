@@ -12,7 +12,13 @@ import type { DesktopFolder, DesktopSong, ScanStatus } from "./library.ts";
 import type { BrowseScope, BrowsePage } from "./browse.ts";
 import type { YtSearchPage } from "./yt.ts";
 import type { AccountView } from "./account.ts";
-import { PLAYLIST_CALLS, playlistBridge, type PlaylistBridge, type PlaylistContract } from "./playlists.ts";
+import {
+  PLAYLIST_CALLS,
+  playlistBridge,
+  type PlaylistBridge,
+  type PlaylistContract,
+} from "./playlists.ts";
+import type { LibrarySearchView } from "./search.ts";
 import type {
   ActionSurface,
   SongMenu,
@@ -139,6 +145,19 @@ export interface BridgeContract extends PlaylistContract {
   readonly "player.status": { readonly args: readonly []; readonly result: PlaybackStatus };
   /** Reads an audio file's tags, by its absolute path, as the phone's scan does. */
   readonly "tags.read": { readonly args: readonly [path: string]; readonly result: SongTags };
+  /** The Library's results for a query, ranked as the phone ranks them. */
+  readonly "search.library": {
+    readonly args: readonly [query: string];
+    readonly result: LibrarySearchView;
+  };
+  /** The recent searches, newest first: all of them, at most Core's `RECENT_SEARCHES`. */
+  readonly "search.recent": { readonly args: readonly []; readonly result: Page<string> };
+  /** Keeps a search (Core's `rememberSearch`) and answers the list as it is now. */
+  readonly "search.remember": {
+    readonly args: readonly [query: string];
+    readonly result: Page<string>;
+  };
+  readonly "search.clearRecent": { readonly args: readonly []; readonly result: void };
 }
 
 export type BridgeCall = keyof BridgeContract;
@@ -197,6 +216,10 @@ export const BRIDGE_CALLS = [
   "account.signOutEverywhere",
   "account.answerInvitation",
   ...PLAYLIST_CALLS,
+  "search.library",
+  "search.recent",
+  "search.remember",
+  "search.clearRecent",
 ] as const satisfies readonly BridgeCall[] &
   (BridgeContract extends PagedLists<BridgeContract> ? unknown : never);
 
@@ -280,6 +303,13 @@ export interface WaveBridge {
   };
   /** Playlists' edits, images, Graveyard and M3U import. */
   readonly playlists: PlaylistBridge;
+  /** Search over the Library, and its recent searches. */
+  readonly search: {
+    readonly library: (query: string) => Promise<LibrarySearchView>;
+    readonly recent: () => Promise<Page<string>>;
+    readonly remember: (query: string) => Promise<Page<string>>;
+    readonly clearRecent: () => Promise<void>;
+  };
 }
 
 export const createBridge = (invoke: Invoke): WaveBridge => ({
@@ -347,4 +377,10 @@ export const createBridge = (invoke: Invoke): WaveBridge => ({
     answerInvitation: () => invoke("account.answerInvitation"),
   },
   playlists: playlistBridge(invoke),
+  search: {
+    library: (query) => invoke("search.library", query),
+    recent: () => invoke("search.recent"),
+    remember: (query) => invoke("search.remember", query),
+    clearRecent: () => invoke("search.clearRecent"),
+  },
 });
