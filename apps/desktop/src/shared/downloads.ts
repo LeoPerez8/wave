@@ -33,6 +33,8 @@ export interface MissingSongsView {
 }
 
 export interface DownloadsView {
+  /** Latest accepted request, for the window's start notice; repeated reads keep its id. */
+  readonly notice: { readonly id: number; readonly count: number } | null;
   /** Downloads pause while the computer is offline, and go on once it's back. */
   readonly online: boolean;
   /** How far the run has come, 0 to 1 (the sidebar's percentage); null with no run. */

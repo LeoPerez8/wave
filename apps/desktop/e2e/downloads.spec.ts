@@ -56,7 +56,28 @@ test("a missing Search song waits offline and resumes its download instead of pl
     });
     await expect.poll(async () => (await downloads(page)).online).toBe(false);
     await page.getByRole("searchbox", { name: "Search" }).fill("Missing Road");
-    await page.getByTestId("search-song").dblclick();
+    const row = page.getByTestId("search-song");
+    // A missing song is dimmed, not marked as broken, and a double-click downloads it.
+    await expect(row).toHaveClass(/missing-row/);
+    await page.screenshot({
+      path: test.info().outputPath(`missing-search-${process.platform}.png`),
+    });
+    await row.dblclick();
+    await expect(page.getByText("Download started", { exact: true })).toBeVisible();
+    await expect(row.getByRole("progressbar")).toBeVisible();
+    await page.screenshot({
+      path: test.info().outputPath(`missing-started-${process.platform}.png`),
+    });
+    // The Songs table shows the same row on its way, and its menu offers Download.
+    await page.getByRole("button", { name: "Songs", exact: true }).click();
+    const songRow = page.getByRole("row", { name: /Missing Road/ });
+    await expect(songRow).toHaveClass(/missing-row/);
+    await expect(songRow).not.toHaveAttribute("aria-disabled", "true");
+    await expect(songRow.getByRole("progressbar")).toBeVisible();
+    await songRow.click({ button: "right" });
+    await expect(page.getByRole("menuitem", { name: "Download", exact: true })).toBeVisible();
+    await page.screenshot({ path: test.info().outputPath(`missing-menu-${process.platform}.png`) });
+    await page.keyboard.press("Escape");
     await expect.poll(async () => (await downloads(page)).rows).toBe(1);
     await expect(page.getByTestId("downloads-nav")).toBeVisible();
     const view = await page.evaluate(() => (window as unknown as Wave).wave.playback.view());

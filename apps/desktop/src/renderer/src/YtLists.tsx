@@ -99,6 +99,8 @@ export interface TileItem {
   readonly artworkHash?: string | null;
   /** What a screen reader says, when the title alone doesn't say what a click does. */
   readonly label?: string;
+  /** A missing song: dimmed, as its row is. */
+  readonly missing?: boolean;
 }
 
 /** A row of tiles that scrolls sideways; artists' tiles are round. */
@@ -123,7 +125,7 @@ export function Shelf({
         {items.map((item, index) => (
           <div key={item.key} role="listitem">
             <button
-              className="tile"
+              className={item.missing ? "tile missing-row" : "tile"}
               aria-label={item.label ?? item.title}
               title={item.title}
               onClick={() => onOpen(index)}

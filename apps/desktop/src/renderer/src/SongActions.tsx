@@ -97,6 +97,8 @@ export function useSongActions({ go, select, failed, changed, newPlaylist }: Opt
         const result = await window.wave.songs.run(target, action, id);
         changed();
         switch (result.kind) {
+          case "downloaded":
+            return;
           case "queued":
             return notify(
               queuedToast(
@@ -152,6 +154,7 @@ export function useSongActions({ go, select, failed, changed, newPlaylist }: Opt
         case "playNext":
         case "addToQueue":
         case "favorite":
+        case "download":
         case "unfavorite":
         case "fixSong":
         case "fixSongs":
@@ -349,6 +352,8 @@ export function useSongActions({ go, select, failed, changed, newPlaylist }: Opt
     openItems,
     itemFor,
     overlays,
+    /** Shows [message] as the window's toast. */
+    notify,
     /** Closes the open menu, if one is; false when none was. */
     closeMenu: () => {
       if (menu === undefined) return false;

@@ -11,6 +11,8 @@ import {
 } from "../../shared/search.ts";
 import { Icon } from "./Icon.tsx";
 import { language, labels, text } from "./text.ts";
+import type { SongState } from "../../shared/songState.ts";
+import { markClass, rowMark, SongMark, useSongStates } from "./SongMark.tsx";
 import { Artwork, time } from "./VirtualTable.tsx";
 import { YtResults } from "./YtResults.tsx";
 
@@ -39,7 +41,9 @@ function SongRow({
   onPlay,
   onMenu,
   testId,
+  states,
 }: {
+  readonly states: ReadonlyMap<number, SongState>;
   readonly row: BrowseRow;
   readonly subtitle?: ReactNode;
   readonly selected: boolean;
@@ -48,14 +52,14 @@ function SongRow({
   readonly onMenu: (at: { readonly x: number; readonly y: number }) => void;
   readonly testId: string;
 }) {
+  const mark = rowMark(row, states);
   return (
     <button
       role="listitem"
-      className="table-row table-columns search-row"
+      className={`table-row table-columns search-row ${markClass(mark)}`}
       data-testid={testId}
       aria-selected={selected}
-      aria-disabled={row.unavailable || row.path === null}
-      data-missing={row.path === null || undefined}
+      aria-disabled={row.unavailable}
       aria-label={[row.title, row.artist].filter(Boolean).join(", ")}
       onClick={onSelect}
       onDoubleClick={onPlay}
@@ -74,12 +78,7 @@ function SongRow({
       <span className="title-cell">
         <span className="row-picture">
           <Artwork hash={row.artworkHash} />
-          <span className="row-play">
-            <Icon
-              name={row.unavailable ? "folder" : row.path === null ? "missing" : "play"}
-              size={16}
-            />
-          </span>
+          <SongMark mark={mark} title={row.title} />
         </span>
         <span className="search-row-title">
           <span className="truncate">{row.title}</span>
@@ -269,6 +268,11 @@ function LibraryResults({
   const trimmed = query.trim();
   const [expanded, setExpanded] = useState<{ query: string; open: SearchExpansion }>();
   const [selected, setSelected] = useState<number>();
+  const songs = view?.groups.find((group) => group.kind === "song")?.items ?? [];
+  const states = useSongStates([
+    ...songs.map((row) => row.id),
+    ...(view?.lyrics ?? []).map((hit) => hit.row.id),
+  ]);
   if (trimmed === "")
     return <RecentSearches revision={revision} onPick={onPick} onError={onError} />;
   if (view === undefined)
@@ -281,7 +285,6 @@ function LibraryResults({
   const showAll = (key: SearchKind | "lyrics") =>
     setExpanded({ query: view.query, open: new Set([...open, key]) });
   const sections = searchSections(view, open);
-  const songs = view.groups.find((group) => group.kind === "song")?.items ?? [];
   const play = (row: BrowseRow, index: number) => {
     if (row.unavailable) return onUnavailable();
     onPlay(index, row);
@@ -343,6 +346,7 @@ function LibraryResults({
           <div role="list">
             {section.hits.map((hit, i) => (
               <SongRow
+                states={states}
                 key={hit.row.id}
                 testId="search-lyric"
                 row={hit.row}
@@ -364,6 +368,7 @@ function LibraryResults({
           <div role="list">
             {section.rows.map((row, index) => (
               <SongRow
+                states={states}
                 key={row.id}
                 testId="search-song"
                 row={row}

@@ -1822,3 +1822,136 @@ test("Search ranks the Library as the phone does, plays a result alone and keeps
     }
   });
 });
+
+test("Home downloads a missing song without disturbing playback and plays its imported file", async () => {
+  await withFile(async (file) => {
+    const { runtime, exposed, downloads } = connect(file);
+    const wave = exposed.get("wave") as WaveBridge;
+    try {
+      const id = await runtime.runPromise(
+        Effect.gen(function* () {
+          const db = (yield* Database) as unknown as TestDatabase;
+          const id = addTrack(db, { title: "Road", artist: "Nick Drake", album: "Pink Moon" });
+          db.run(sql`UPDATE tracks SET path = NULL WHERE id = ${id}`);
+          star(db, id, 400);
+          return id;
+        }),
+      );
+      await wave.home.play("favorites", 0);
+      assert.equal((await wave.playback.view()).current, null);
+      assert.ok(
+        downloads.some(
+          (line) => line.startsWith("downloads.enqueueAll ") && line.includes(`missing:${id}`),
+        ),
+      );
+      await runtime.runPromise(
+        Effect.gen(function* () {
+          const library = yield* DesktopLibrary;
+          writeFileSync(join(dirname(file), "Road.mp3"), "audio fixture");
+          yield* Effect.promise(() =>
+            library.importFile(join(dirname(file), "Road.mp3"), { videoId: null, fills: id }),
+          );
+        }),
+      );
+      for (let i = 0; i < 40 && (await wave.playback.view()).current === null; i++)
+        await new Promise((resolve) => setTimeout(resolve, 10));
+      assert.equal((await wave.playback.view()).current?.id, id);
+      assert.equal((await wave.playback.view()).status.state, "playing");
+    } finally {
+      await runtime.dispose();
+    }
+  });
+});
+
+test("Download from selection queues only missing songs and reports the count", async () => {
+  await withFile(async (file) => {
+    const { runtime, exposed, downloads } = connect(file);
+    const wave = exposed.get("wave") as WaveBridge;
+    try {
+      const ids = await runtime.runPromise(
+        Effect.gen(function* () {
+          const db = (yield* Database) as unknown as TestDatabase;
+          const ids = [
+            addTrack(db, { title: "Road" }),
+            addTrack(db, { title: "Moon" }),
+            addTrack(db, { title: "Local" }),
+          ];
+          db.run(sql`UPDATE tracks SET path = NULL WHERE id IN (${ids[0]}, ${ids[1]})`);
+          return ids;
+        }),
+      );
+      const target = { scope: { kind: "songs" as const }, ids };
+      assert.ok(
+        (await wave.songs.actions(target, "selection")).entries.some(
+          (entry) => entry.action === "download",
+        ),
+      );
+      assert.deepEqual(await wave.songs.run(target, "download"), { kind: "downloaded", count: 2 });
+      const asked = downloads.find((line) => line.startsWith("downloads.enqueueAll "))!;
+      assert.ok(asked.includes(`missing:${ids[0]}`));
+      assert.ok(asked.includes(`missing:${ids[1]}`));
+      assert.ok(!asked.includes(`missing:${ids[2]}`));
+    } finally {
+      await runtime.dispose();
+    }
+  });
+});
+
+test("a file that failed playback is marked separately from a missing song", async () => {
+  await withFile(async (file) => {
+    const { runtime, exposed, broken, handlers } = connect(file);
+    const wave = exposed.get("wave") as WaveBridge;
+    try {
+      const id = await runtime.runPromise(
+        Effect.gen(function* () {
+          const db = (yield* Database) as unknown as TestDatabase;
+          return addTrack(db, { title: "Broken" });
+        }),
+      );
+      broken.add("Broken.mp3");
+      await assert.rejects(wave.playback.start({ kind: "songs" }, 0));
+      assert.deepEqual((await wave.songs.states([id])).items, [
+        { id, failed: true, download: null },
+      ]);
+      await wave.playback.command({ type: "setRepeat", mode: "all" });
+      assert.equal((await wave.songs.states([id])).items[0]?.failed, true);
+      broken.clear();
+      await wave.playback.start({ kind: "songs" }, 0);
+      assert.equal((await wave.songs.states([id])).items[0]?.failed, false);
+      await assert.rejects(
+        handlers.get("songs.states")!(
+          trusted,
+          Array.from({ length: 201 }, (_, n) => n + 1),
+        ),
+        /Refused/,
+      );
+    } finally {
+      await runtime.dispose();
+    }
+  });
+});
+
+test("Play on a long list with missing songs plays the songs that have a file", async () => {
+  await withFile(async (file) => {
+    const { runtime, exposed } = connect(file);
+    const wave = exposed.get("wave") as WaveBridge;
+    try {
+      await runtime.runPromise(
+        Effect.gen(function* () {
+          const db = (yield* Database) as unknown as TestDatabase;
+          for (let n = 0; n < 1_200; n++)
+            addTrack(db, { title: `Song ${String(n).padStart(4, "0")}` });
+          db.run(sql`UPDATE tracks SET path = NULL WHERE title IN ('Song 0000', 'Song 0001')`);
+        }),
+      );
+      await wave.playback.start({ kind: "songs" }, 0, false);
+      assert.equal((await wave.playback.view()).current, null);
+      await wave.playback.start({ kind: "songs" }, undefined, false);
+      const view = await wave.playback.view();
+      assert.equal(view.current?.title, "Song 0002");
+      assert.equal((await wave.playback.queue(0, 1)).total, 1_198);
+    } finally {
+      await runtime.dispose();
+    }
+  });
+});

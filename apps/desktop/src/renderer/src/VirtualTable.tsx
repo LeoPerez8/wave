@@ -4,6 +4,7 @@ import type { BrowsePage, BrowseRow, BrowseScope } from "../../shared/browse.ts"
 import { Icon } from "./Icon.tsx";
 import { pressOf } from "./keys.ts";
 import { isChecked, toggled, type Selection } from "./SongActions.tsx";
+import { markClass, rowMark, SongMark, useSongStates } from "./SongMark.tsx";
 import { labels, text } from "./text.ts";
 
 const SIZE = 100;
@@ -180,6 +181,11 @@ export function VirtualTable({
     };
   }, [scope, revision, firstPage, lastPage, onHero, onError, preview]);
   const get = (index: number) => pages.get(Math.floor(index / SIZE))?.items[index % SIZE];
+  const states = useSongStates(
+    songList
+      ? Array.from({ length: Math.max(0, end - start) }, (_, i) => get(start + i)?.id ?? 0)
+      : [],
+  );
   const move = (index: number) => {
     const next = Math.max(0, Math.min(total - 1, index));
     setActive(next);
@@ -298,6 +304,7 @@ export function VirtualTable({
         <div className="table-space" style={{ height: total * HEIGHT }}>
           {Array.from({ length: Math.max(0, end - start) }, (_, i) => start + i).map((index) => {
             const row = get(index);
+            const mark = row && songList ? rowMark(row, states) : undefined;
             return (
               row && (
                 <div
@@ -309,8 +316,8 @@ export function VirtualTable({
                   aria-selected={
                     selection === undefined ? selected === index : isChecked(selection, row.id)
                   }
-                  aria-disabled={songList && (row.unavailable || row.path === null)}
-                  className={`table-row table-columns ${active === index ? "active-row" : ""}`}
+                  aria-disabled={songList && row.unavailable}
+                  className={`table-row table-columns ${active === index ? "active-row" : ""} ${mark ? markClass(mark) : ""}`}
                   style={{ top: index * HEIGHT }}
                   onClick={() => {
                     setSelected(index);
@@ -341,18 +348,10 @@ export function VirtualTable({
                             : {})}
                         />
                       )}
-                      <span className="row-play">
-                        <Icon
-                          name={
-                            row.unavailable
-                              ? "folder"
-                              : songList && row.path === null
-                                ? "missing"
-                                : "play"
-                          }
-                          size={16}
-                        />
-                      </span>
+                      <SongMark
+                        mark={mark ?? { kind: row.unavailable ? "unavailable" : "play" }}
+                        title={row.title}
+                      />
                     </span>
                     <span className="truncate">{row.title}</span>
                   </div>

@@ -13,6 +13,7 @@ import {
   followDownloadRun,
   joinArtists,
   missingSongJob,
+  missingSongJobId,
   missingSongTrackId,
   missingSongsDownload,
   NO_DOWNLOAD_RUN,
@@ -31,6 +32,7 @@ import {
   type MissingTrack,
   type YtDownloadJournalJob,
   type YtSong,
+  type YtDownloadStatus,
 } from "@wave/core";
 
 import type { Page } from "../../shared/bridge.ts";
@@ -72,6 +74,7 @@ export interface DownloadsShape {
   /** The journal changed (`downloadsChanged`): reads what changed and answers what waits. */
   readonly refresh: () => Promise<void>;
   readonly view: () => DownloadsView;
+  readonly status: (trackId: number) => YtDownloadStatus | null;
   readonly rows: (offset: number, limit: number) => Page<DownloadRow>;
   /** An album's missing songs and their downloads; null for no such album. */
   readonly albumView: (albumId: number) => MissingSongsView | null;
@@ -124,6 +127,9 @@ export const createDownloads = (deps: DownloadsDeps): DownloadsShape => {
 
   let followed: readonly Job[] = [];
   let revision = 0;
+  let notice: DownloadsView["notice"] = null;
+  let noticeId = 0;
+  let statuses = new Map<string, YtDownloadStatus>();
   let run: DownloadRun = NO_DOWNLOAD_RUN;
   let online = true;
   let started = false;
@@ -177,6 +183,9 @@ export const createDownloads = (deps: DownloadsDeps): DownloadsShape => {
         ids: changes.ids ?? null,
       });
       revision = changes.revision;
+      statuses = new Map(
+        ytDownloadsFromJournal(followed).jobs.map((job) => [job.song.videoId, job.status]),
+      );
       run = followDownloadRun(run, followed, now());
       for (const job of followed) if (ytDownloadAwaitsAnswer(job)) void answerJob(job.id);
       const active = followed.some(ytDownloadUnfinished);
@@ -235,7 +244,10 @@ export const createDownloads = (deps: DownloadsDeps): DownloadsShape => {
   };
   const enqueue = async (asked: readonly JobRequest[]) => {
     if (asked.length === 0) return;
+    const active = new Set(followed.filter(ytDownloadUnfinished).map((job) => job.id));
+    const count = asked.filter((request) => !active.has(request.song.videoId)).length;
     await deps.call("downloads.enqueueAll", { requests: asked });
+    if (count > 0) notice = { id: ++noticeId, count };
     if (online) await deps.call("downloads.start", {}).catch(() => null);
     await refresh();
   };
@@ -302,10 +314,12 @@ export const createDownloads = (deps: DownloadsDeps): DownloadsShape => {
       await refresh();
     },
     refresh,
+    status: (trackId) => statuses.get(missingSongJobId(trackId)) ?? null,
     view: () => {
       const overall = downloadRunProgress(run).overall;
       return {
         online,
+        notice,
         progress: progress(),
         run: overall,
         rows: shownRows().length,

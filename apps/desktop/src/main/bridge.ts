@@ -459,6 +459,24 @@ const createHandlers = (
       typeof path === "string" && isAbsolute(path)
         ? libraryCall((library) => library.include(path))
         : refuse("library.include", "invalid folder"),
+    "songs.states": ([ids]) => {
+      const asked = trackIds(ids);
+      return asked === undefined || asked.length > 200
+        ? refuse("songs.states", "invalid songs")
+        : Effect.gen(function* () {
+            const downloads = yield* Downloads;
+            const playback = yield* Playback;
+            return {
+              offset: 0,
+              total: asked.length,
+              items: asked.map((id) => ({
+                id,
+                download: downloads.status(id),
+                failed: playback.fileFailed(id),
+              })),
+            };
+          });
+    },
     "songs.actions": ([target, surface]) =>
       validTarget(target) && (surface === "menu" || surface === "selection")
         ? Effect.gen(function* () {
@@ -481,6 +499,7 @@ const createHandlers = (
                 runSongAction(
                   {
                     db,
+                    download: downloads.missing,
                     queue: (type, trackIds) => playback.command({ type, trackIds: [...trackIds] }),
                     removeSongs: (trackIds) => library.removeSongs(trackIds),
                     fixSongs: (trackIds) => downloads.fixSongs(trackIds),

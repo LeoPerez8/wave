@@ -306,3 +306,17 @@ test("Retry asks again for a failed song, and Clear Failed takes the failures of
   assert.equal(downloads.view().failed, 0);
   downloads.dispose();
 });
+
+test("missing-song progress is readable by id and a notice records a download start", async () => {
+  const { downloads, journal } = setup();
+  try {
+    await downloads.missing([41]);
+    assert.deepEqual(downloads.status(41), { kind: "queued" });
+    assert.equal(downloads.view().notice?.count, 1);
+    journal.set("missing:41", { phase: "transferring", progress: 0.4 });
+    await downloads.refresh();
+    assert.equal(downloads.status(41)?.kind, "downloading");
+  } finally {
+    downloads.dispose();
+  }
+});

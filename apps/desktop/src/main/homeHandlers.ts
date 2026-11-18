@@ -46,13 +46,11 @@ export const homeHandlers = {
       const playback = yield* Playback;
       yield* Effect.tryPromise({
         try: () =>
-          playback.dispatch({
-            type: "play",
-            trackIds: rows.map((row) => String(row.id)),
-            startIndex: index,
-            shuffle: false,
-            context: { kind: "home", id: section },
-          }),
+          playback.activate(
+            rows.map((row) => String(row.id)),
+            index,
+            { kind: "home", id: section },
+          ),
         catch: (error) => error,
       });
     }),

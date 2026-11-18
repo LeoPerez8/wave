@@ -7,6 +7,7 @@ import type { PlayerView, PlaybackCommand, QueueRow } from "./playerView.ts";
 import type { WindowSettings } from "./windowSettings.ts";
 import type { LibraryCounts } from "@wave/client/db/counts";
 import type { PlaybackStatus } from "./playback.ts";
+import type { SongState } from "./songState.ts";
 import type { PlaybackSettings } from "./playbackSettings.ts";
 import type { SongTags } from "./tags.ts";
 import type { DesktopFolder, DesktopSong, ScanStatus } from "./library.ts";
@@ -240,6 +241,10 @@ export interface BridgeContract extends PlaylistContract, LinkContract {
   readonly "library.removeRoot": { readonly args: readonly [path: string]; readonly result: void };
   readonly "library.include": { readonly args: readonly [path: string]; readonly result: void };
   /** The entries a song's menu (or the selection bar) offers for [target]. */
+  readonly "songs.states": {
+    readonly args: readonly [ids: readonly number[]];
+    readonly result: Page<SongState>;
+  };
   readonly "songs.actions": {
     readonly args: readonly [target: SongTarget, surface: ActionSurface];
     readonly result: SongMenu;
@@ -319,6 +324,7 @@ export const BRIDGE_CALLS = [
   "library.exclude",
   "library.removeRoot",
   "library.include",
+  "songs.states",
   "songs.actions",
   "songs.run",
   "player.load",
@@ -428,6 +434,8 @@ export interface WaveBridge {
     readonly include: (path: string) => Promise<void>;
   };
   readonly songs: {
+    /** Where each song's download is and whether its file failed to play; 200 songs at most. */
+    readonly states: (ids: readonly number[]) => Promise<Page<SongState>>;
     readonly actions: (target: SongTarget, surface: ActionSurface) => Promise<SongMenu>;
     readonly run: (
       target: SongTarget,
@@ -555,6 +563,7 @@ export const createBridge = (invoke: Invoke): WaveBridge => ({
     include: (path) => invoke("library.include", path),
   },
   songs: {
+    states: (ids) => invoke("songs.states", ids),
     actions: (target, surface) => invoke("songs.actions", target, surface),
     run: (target, action, playlistId) => invoke("songs.run", target, action, playlistId),
   },
