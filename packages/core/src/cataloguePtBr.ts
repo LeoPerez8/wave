@@ -34,6 +34,19 @@ import { versionHistoryPtBr } from "./catalogue/versionHistoryPtBr.ts";
 import type { Catalogue } from "./catalogueEn.ts";
 
 export const ptBR: Catalogue = {
+  desktopLibrary: {
+    refresh: "Atualizar",
+    refreshKey: "F5",
+    unavailableFolder: "Pasta indisponível",
+    driveDisconnected: "A unidade não está conectada. Reconecte e tente de novo.",
+    actionFailed: "Não foi possível concluir essa ação. Tente de novo.",
+    titleColumn: "Título",
+    artistColumn: "Artista",
+    albumColumn: "Álbum",
+    previous: "Página anterior",
+    next: "Próxima página",
+    page: (first: number, last: number, total: number) => `${first}–${last} de ${total}`,
+  },
   downloadNotice: downloadNoticePtBr,
   native: nativePtBr,
   auto: autoPtBr,

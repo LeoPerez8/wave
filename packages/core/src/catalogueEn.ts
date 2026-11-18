@@ -35,6 +35,19 @@ import { versionHistoryEn } from "./catalogue/versionHistoryEn.ts";
 import type { TabBarTab } from "./tabBar.ts";
 
 export const en = {
+  desktopLibrary: {
+    refresh: "Refresh",
+    refreshKey: "F5",
+    unavailableFolder: "Unavailable folder",
+    driveDisconnected: "The drive isn't connected. Reconnect it and try again.",
+    actionFailed: "Couldn't complete that action. Try again.",
+    titleColumn: "Title",
+    artistColumn: "Artist",
+    albumColumn: "Album",
+    previous: "Previous page",
+    next: "Next page",
+    page: (first: number, last: number, total: number) => `${first}–${last} of ${total}`,
+  },
   downloadNotice: downloadNoticeEn,
   native: nativeEn,
   auto: autoEn,
