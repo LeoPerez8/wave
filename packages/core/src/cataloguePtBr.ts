@@ -98,6 +98,8 @@ export const ptBR: Catalogue = {
     youMightAlsoLike: "Você também pode gostar",
     magicQueueIdle:
       "Comece uma Fila Mágica com uma destas músicas ou pelo menu de qualquer música.",
+    sidePanel: "Painel lateral",
+    removeFromQueue: (title: string) => `Remover “${title}” da Fila`,
   },
   desktopLibrary: {
     refresh: "Atualizar",

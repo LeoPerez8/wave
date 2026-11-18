@@ -11,20 +11,35 @@ const HEIGHT = 40;
 export const time = (ms: number) =>
   `${Math.floor(ms / 60000)}:${String(Math.floor(ms / 1000) % 60).padStart(2, "0")}`;
 const images = new Map<string, Promise<string | null>>();
-/** A Library cover by its hash, or a YouTube Music cover by its address (`url`). */
+/**
+ * A Library cover by its hash, a YouTube Music cover by its address (`url`), or a playlist's own
+ * image ([playlist] with its [image] key, which changes whenever the image does).
+ */
 export function Artwork({
   hash,
   url,
+  playlist,
+  image: playlistImage,
   artist = false,
   large = false,
 }: {
   readonly hash?: string | null;
   readonly url?: string | null;
+  readonly playlist?: number;
+  readonly image?: string | null;
   readonly artist?: boolean;
   readonly large?: boolean;
 }) {
   const [loaded, setLoaded] = useState<{ key: string; image: string | null }>();
-  const imageKey = hash ? `${hash}-${large}` : url ? `url:${url}` : "";
+  const own = playlist !== undefined && playlistImage ? playlist : undefined;
+  const imageKey =
+    own !== undefined
+      ? `playlist:${own}:${playlistImage}-${large}`
+      : hash
+        ? `${hash}-${large}`
+        : url
+          ? `url:${url}`
+          : "";
   const image = loaded?.key === imageKey ? loaded.image : null;
   useEffect(() => {
     let current = true;
@@ -32,7 +47,11 @@ export function Artwork({
       let read = images.get(imageKey);
       if (!read) {
         read = (
-          hash ? window.wave.library.artwork(hash, large) : window.wave.yt.artwork(url!)
+          own !== undefined
+            ? window.wave.playlists.image(own, large)
+            : hash
+              ? window.wave.library.artwork(hash, large)
+              : window.wave.yt.artwork(url!)
         ).catch(() => null);
         images.set(imageKey, read);
       }
@@ -44,7 +63,7 @@ export function Artwork({
     return () => {
       current = false;
     };
-  }, [imageKey, hash, url, large]);
+  }, [imageKey, own, hash, url, large]);
   return (
     <span className={`artwork ${artist ? "artist-image" : ""}`}>
       {image ? <img src={image} alt="" /> : <Icon name={artist ? "artists" : "songs"} />}
@@ -280,7 +299,13 @@ export function VirtualTable({
                       {scope.kind === "album" ? (
                         <span className="track-number">{row.trackNumber ?? index + 1}</span>
                       ) : (
-                        <Artwork hash={row.artworkHash} artist={scope.kind === "artists"} />
+                        <Artwork
+                          hash={row.artworkHash}
+                          artist={scope.kind === "artists"}
+                          {...(scope.kind === "playlists"
+                            ? { playlist: row.id, image: row.imageKey ?? null }
+                            : {})}
+                        />
                       )}
                       <span className="row-play">
                         <Icon

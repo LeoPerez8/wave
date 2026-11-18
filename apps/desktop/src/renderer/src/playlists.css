@@ -1,0 +1,104 @@
+/* Playlist edits (Playlists.tsx) and a playlist's Graveyard (Graveyard.tsx). */
+.dialog-input {
+  width: 100%;
+}
+.dialog-problem {
+  min-height: 1.2em;
+  font-size: 12px;
+  color: var(--color-destructive);
+}
+.crop-dialog {
+  width: auto;
+  align-items: center;
+}
+.crop-square {
+  position: relative;
+  overflow: hidden;
+  flex-shrink: 0;
+  border-radius: 6px;
+  background: var(--color-fill);
+  touch-action: none;
+  cursor: grab;
+}
+.crop-square:focus-visible {
+  outline: 2px solid var(--color-accent);
+  outline-offset: 2px;
+}
+.crop-square img {
+  position: absolute;
+  top: 0;
+  left: 0;
+  max-width: none;
+  transform-origin: 0 0;
+  user-select: none;
+  pointer-events: none;
+}
+.crop-tools {
+  display: flex;
+  gap: 8px;
+}
+.crop-tools button,
+.graveyard button {
+  padding: 5px 10px;
+}
+.dialog .crop-tools + .dialog-buttons {
+  align-self: stretch;
+}
+.import-summary {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  min-height: 0;
+  overflow: auto;
+}
+.import-summary h3 {
+  font-size: 13px;
+  font-weight: 600;
+}
+.import-summary p,
+.import-missing {
+  font-size: 12px;
+}
+.import-missing {
+  margin: 4px 0 0;
+  padding-left: 18px;
+}
+.graveyard {
+  min-height: 0;
+  overflow: auto;
+}
+.graveyard-actions {
+  display: flex;
+  justify-content: flex-end;
+  padding-bottom: 8px;
+}
+.graveyard-list {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.graveyard-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  min-height: 48px;
+  border-bottom: 1px solid color-mix(in srgb, var(--color-separator) 45%, transparent);
+}
+.graveyard-row > .artwork {
+  width: 36px;
+  height: 36px;
+  flex-shrink: 0;
+}
+.graveyard-row > .artwork svg {
+  width: 16px;
+  height: 16px;
+}
+.graveyard-copy {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+}
+.graveyard-copy .secondary {
+  font-size: 12px;
+}

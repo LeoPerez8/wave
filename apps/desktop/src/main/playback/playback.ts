@@ -17,6 +17,8 @@ import {
   type PlayEvent,
   type QueueCommand,
   type QueueState,
+  type SleepTimer,
+  type SleepTimerChoice,
 } from "@wave/core";
 import * as Context from "effect/Context";
 import * as Effect from "effect/Effect";
@@ -33,6 +35,7 @@ import { DesktopLibrary } from "../library/library.ts";
 import { preference, savePreference } from "../preferences.ts";
 import { YtMusic } from "../yt/ytMusic.ts";
 import { readPlaybackSettings, savePlaybackSettings } from "./playbackSettings.ts";
+import { createSleepTimer } from "./sleepTimer.ts";
 
 export interface PlaybackShape {
   /** What the player bar shows; cheap enough to poll. */
@@ -73,6 +76,12 @@ export interface PlaybackShape {
   readonly setSettings: (change: Partial<PlaybackSettings>) => Promise<PlaybackSettings>;
   /** Plays by the stored settings again, after sync pulled the account's values. */
   readonly applySettings: () => Promise<void>;
+  /**
+   * Starts a sleep timer, replacing the running one; null cancels it. End of queue also means
+   * nothing adds songs to a queue that plays out.
+   */
+  readonly setSleepTimer: (choice: SleepTimerChoice | null) => Promise<SleepTimer | null>;
+  readonly sleepTimer: () => SleepTimer | null;
   /** The queue as Core holds it. */
   readonly queueState: () => QueueState;
   /** Whether the queue's current song is playing. */
@@ -136,6 +145,7 @@ export const playbackLayer = Layer.effect(
     let settings = readPlaybackSettings(db);
     /** Playback is shutting down: nothing more is measured, as the Library is closing. */
     let closing = false;
+    let stoppedBy: (why: "trackEnd" | "queueEnd") => void = () => {};
     const session = yield* Effect.promise(() =>
       createPlaybackSession({
         db,
@@ -147,9 +157,20 @@ export const playbackLayer = Layer.effect(
           tell("played");
           for (const watcher of watchers) watcher.playEnded(play, byNext);
         },
+        stopped: (why) => stoppedBy(why),
         gainDb: gains.gainDb,
       }),
     );
+    const sleep = createSleepTimer({
+      now: Date.now,
+      pause: session.pause,
+      pauseAtTrackEnd: session.pauseAtTrackEnd,
+      schedule: (ms, run) => {
+        const handle = setTimeout(run, ms);
+        return () => clearTimeout(handle);
+      },
+    });
+    stoppedBy = (why) => void sleep.stopped(why).catch(failed);
     // Normalize Volume's measurements: the queue's songs with no value of their own, one at a
     // time, the song playing and the next ones first (Core's `songsToMeasure`).
     const measurements = createSongMeasurements({
@@ -206,6 +227,7 @@ export const playbackLayer = Layer.effect(
     yield* Effect.addFinalizer(() =>
       Effect.promise(async () => {
         closing = true;
+        sleep.close();
         stop();
         await session.close().catch(failed);
       }),
@@ -265,6 +287,7 @@ export const playbackLayer = Layer.effect(
         muted,
         revision,
         error,
+        sleepTimer: sleep.current(),
       };
     };
 
@@ -276,12 +299,17 @@ export const playbackLayer = Layer.effect(
         const chosen = index === undefined ? undefined : ids[index];
         if (chosen !== undefined && rows([Number(chosen)])[0]?.unavailable)
           throw new Error("[folder-unavailable] Drive is not connected");
+        // A song from Search plays alone, as on the phone with YT Music off.
+        const alone = scope.kind === "search" && chosen !== undefined;
         await session.dispatch({
           type: "play",
-          trackIds: ids,
-          ...(index === undefined ? {} : { startIndex: index }),
+          trackIds: alone ? [chosen] : ids,
+          ...(index === undefined ? {} : { startIndex: alone ? 0 : index }),
           ...(shuffle === undefined ? {} : { shuffle }),
-          context: { kind: scope.kind, id: scope.id === undefined ? null : String(scope.id) },
+          context:
+            scope.kind === "search"
+              ? { kind: "search", id: null }
+              : { kind: scope.kind, id: scope.id === undefined ? null : String(scope.id) },
         });
         if (session.snapshot().canUndo) undoOffer++;
         keepQueued();
@@ -311,7 +339,10 @@ export const playbackLayer = Layer.effect(
         keepQueued();
         queueChanged();
       },
-      play: session.play,
+      play: async () => {
+        await session.play();
+        await sleep.resumed();
+      },
       pause: session.pause,
       seek: session.seek,
       undo: async () => {
@@ -387,6 +418,11 @@ export const playbackLayer = Layer.effect(
         watchers.add(watcher);
         return () => void watchers.delete(watcher);
       },
+      setSleepTimer: async (choice) => {
+        await sleep.set(choice);
+        return sleep.current();
+      },
+      sleepTimer: sleep.current,
     };
   }),
 );

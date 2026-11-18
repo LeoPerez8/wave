@@ -6,7 +6,11 @@ import * as Effect from "effect/Effect";
 import { BRIDGE_CALLS, type BridgeCall, type BridgeContract } from "../shared/bridge.ts";
 import { PLAYABLE_EXTENSIONS } from "../shared/playback.ts";
 import { Playback } from "./playback/playback.ts";
-import { validPlaybackCommand, validPlaybackSettings } from "./playback/validation.ts";
+import {
+  validPlaybackCommand,
+  validPlaybackSettings,
+  validSleepTimerChoice,
+} from "./playback/validation.ts";
 import { Player } from "./audio/player.ts";
 import type { AudioEngineError } from "./audio/supervisor.ts";
 import { Kotlin } from "./kotlin/kotlin.ts";
@@ -29,6 +33,15 @@ import { ytRow } from "../shared/yt.ts";
 import { VIDEO_ID, YtMusic } from "./yt/ytMusic.ts";
 import { createYtFeatureHandlers } from "./yt/ytBridge.ts";
 import type { YtFeatures } from "./yt/ytServices.ts";
+import { Lyrics } from "./lyrics/lyrics.ts";
+import { DesktopPlaylists } from "./library/playlists.ts";
+import { playlistHandlers } from "./playlistHandlers.ts";
+import { searchLibrary } from "./library/search.ts";
+import {
+  clearRecentSearches,
+  listRecentSearchesSync,
+  rememberSearchSync,
+} from "@wave/client/db/libraryQueries";
 
 const validScope = (value: unknown): value is BrowseScope => {
   if (typeof value !== "object" || value === null) return false;
@@ -63,6 +76,13 @@ const validTarget = (value: unknown): value is SongTarget => {
   );
 };
 
+/** What Search takes: typed text, as long as a query gets. */
+const searchQuery = (value: unknown): value is string =>
+  typeof value === "string" && value.length <= 500;
+
+/** A short list, whole, as a page. */
+const allOf = <T>(items: readonly T[]): Page<T> => ({ items, offset: 0, total: items.length });
+
 export type IpcHandler = (event: unknown, ...args: unknown[]) => Promise<unknown>;
 
 interface IpcMainLike {
@@ -82,7 +102,9 @@ export type BridgeServices =
   | Playback
   | YtMusic
   | YtFeatures
-  | Account;
+  | Account
+  | Lyrics
+  | DesktopPlaylists;
 
 const refuse = (call: BridgeCall, why: string) => Effect.fail(new Error(`Refused ${call}: ${why}`));
 
@@ -232,6 +254,17 @@ const createHandlers = (onAppearance: (mode: Appearance) => void): Handlers => {
       limit <= 200
         ? playbackCall((p) => p.queue(offset, limit))
         : refuse("playback.queue", "invalid page"),
+    "playback.setSleepTimer": ([choice]) =>
+      validSleepTimerChoice(choice)
+        ? playbackCall((p) => p.setSleepTimer(choice))
+        : refuse("playback.setSleepTimer", "invalid sleep timer"),
+    "lyrics.song": ([trackId]) =>
+      typeof trackId === "string" && trackId.length > 0 && trackId.length <= 200
+        ? Effect.gen(function* () {
+            const lyrics = yield* Lyrics;
+            return yield* Effect.tryPromise({ try: () => lyrics.song(trackId), catch: (e) => e });
+          })
+        : refuse("lyrics.song", "invalid track id"),
     "settings.appearance": () =>
       Effect.gen(function* () {
         return appearance(yield* Database);
@@ -326,11 +359,13 @@ const createHandlers = (onAppearance: (mode: Appearance) => void): Handlers => {
     "songs.run": ([target, action, playlistId]) =>
       validTarget(target) &&
       SONG_RUN_ACTIONS.includes(action as SongRunAction) &&
-      (action === "addToPlaylist" ? songId(playlistId) : playlistId === undefined)
+      (action === "addToPlaylist" ? songId(playlistId) : playlistId === undefined) &&
+      (action !== "removeFromPlaylist" || target.scope.kind === "playlist")
         ? Effect.gen(function* () {
             const db = yield* Database;
             const library = yield* DesktopLibrary;
             const playback = yield* Playback;
+            const playlists = yield* DesktopPlaylists;
             return yield* Effect.tryPromise({
               try: () =>
                 runSongAction(
@@ -339,6 +374,7 @@ const createHandlers = (onAppearance: (mode: Appearance) => void): Handlers => {
                     queue: (type, trackIds) => playback.command({ type, trackIds: [...trackIds] }),
                     removeSongs: (trackIds) => library.removeSongs(trackIds),
                     changed: playback.refresh,
+                    removeFromPlaylist: playlists.removeSongs,
                   },
                   target,
                   action as SongRunAction,
@@ -377,6 +413,27 @@ const createHandlers = (onAppearance: (mode: Appearance) => void): Handlers => {
         ? refuse("tags.read", "not an absolute path to an audio file")
         : kotlinCall((kotlin) => kotlin.readTags(song));
     },
+    ...playlistHandlers(validTarget),
+    "search.library": ([query]) =>
+      searchQuery(query)
+        ? Effect.gen(function* () {
+            return searchLibrary(yield* Database, query);
+          })
+        : refuse("search.library", "invalid query"),
+    "search.recent": () =>
+      Effect.gen(function* () {
+        return allOf(listRecentSearchesSync(yield* Database));
+      }),
+    "search.remember": ([query]) =>
+      searchQuery(query)
+        ? Effect.gen(function* () {
+            return allOf(rememberSearchSync(yield* Database, query, Date.now()));
+          })
+        : refuse("search.remember", "invalid query"),
+    "search.clearRecent": () =>
+      Effect.gen(function* () {
+        clearRecentSearches(yield* Database);
+      }),
   };
 };
 

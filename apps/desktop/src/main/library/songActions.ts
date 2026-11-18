@@ -27,6 +27,8 @@ export interface SongActionPorts {
   readonly removeSongs: (trackIds: readonly number[]) => Promise<void>;
   /** Tells the window its rows changed (a star). */
   readonly changed: () => void;
+  /** Takes songs out of a playlist, as its Graveyard keeps them; how many came out. */
+  readonly removeFromPlaylist: (playlistId: number, trackIds: readonly number[]) => number;
 }
 
 /** [target]'s song ids, once each, in its list's order. */
@@ -93,7 +95,9 @@ export const songMenu = (
   surface: ActionSurface,
   ytMusic = false,
 ): SongMenu => {
-  const items = songFacts(db, targetSongs(db, target));
+  // A playlist's page offers Remove from Playlist.
+  const inPlaylist = target.scope.kind === "playlist";
+  const items = songFacts(db, targetSongs(db, target)).map((song) => ({ ...song, inPlaylist }));
   const entries = desktopSongActions({
     items,
     surface,
@@ -166,12 +170,19 @@ export const runSongAction = async (
         ids.map((id) => ({ source: "library", trackId: id })),
         Date.now(),
       );
+      ports.changed();
       return {
         kind: "playlist",
         name: result.name,
         added: result.added,
         alreadyIn: result.alreadyIn,
       };
+    }
+    case "removeFromPlaylist": {
+      const { scope } = target;
+      if (scope.kind !== "playlist" || scope.id === undefined)
+        throw new Error("The songs aren't a playlist's");
+      return { kind: "playlistRemoved", count: ports.removeFromPlaylist(scope.id, ids) };
     }
     case "removeFromLibrary":
       await ports.removeSongs(ids);

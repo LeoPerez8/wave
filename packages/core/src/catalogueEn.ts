@@ -98,6 +98,8 @@ export const en = {
     similarArtists: "Similar artists",
     youMightAlsoLike: "You might also like",
     magicQueueIdle: "Start a Magic Queue from one of these songs, or from any song's menu.",
+    sidePanel: "Side panel",
+    removeFromQueue: (title: string) => `Remove “${title}” from the Queue`,
   },
   desktopLibrary: {
     refresh: "Refresh",

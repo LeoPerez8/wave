@@ -1,5 +1,6 @@
 package dev.leoperez.wave.stdio
 
+import expo.modules.wavenative.lyrics.LyricsReader
 import expo.modules.wavenative.tags.AudioTagReader
 import expo.modules.wavenative.tags.JAudioTaggerReader
 import expo.modules.wavenative.yt.YtClient
@@ -21,7 +22,7 @@ import kotlinx.serialization.json.contentOrNull
  * phone's module answers JS for the same call, and fails with the same codes.
  *
  * - `search` `{query}`: YouTube Music's Songs search, its first page (`YtSearchPage.toMap`).
- * - `readTags` `{path}`: an audio file's tags (`RawTags.toMap`).
+ * - `readTags` `{path}`: an audio file's tags (`RawTags.toMap`), its embedded lyrics and cover.
  * - `resolveStream` `{videoId, fresh?}`: where the audio engine fetches a YT Music song from: the
  *   address, the headers to send, its type, itag and length. `fresh` drops the address googlevideo
  *   just turned down (403/410) first. The address and headers are the session's: never logged.
@@ -31,6 +32,8 @@ import kotlinx.serialization.json.contentOrNull
  *   `{continuation}` and `related` `{videoId}`: YouTube Music's pages as the phone's
  *   `WaveYtMusic` and `WaveYtDownloads` modules answer them (Discover, artist pages, the Magic
  *   Queue and Related).
+ * - `readLyrics` `{path}`: a track's lyrics as found, `{embedded, sidecar}`, either null (`LyricsReader`).
+ * - `ytLyrics` `{videoId}`: YT Music's lyrics for a song (plain text), or null when it has none.
  *
  * Wave's data (the YouTube session and visitor data) lives in [dataDir].
  */
@@ -49,11 +52,16 @@ class WaveDesktop(
       "search" -> jsonOf(yt.searchSongs(params.string("query")).toMap())
       "readTags" -> {
         val read = tags.read(File(params.string("path")))
-        jsonOf(read.toMap() + ("artworkBase64" to read.artwork
+        // Lyrics too, for Search's lyrics index; the phone reads them apart.
+        jsonOf(read.toMap() + ("lyrics" to read.lyrics) + ("artworkBase64" to read.artwork
           ?.takeIf { it.size <= 8 * 1024 * 1024 }
           ?.let { java.util.Base64.getEncoder().encodeToString(it) }))
       }
       "resolveStream" -> resolveStream(params.string("videoId"), params.flag("fresh") ?: false)
+      "readLyrics" -> LyricsReader(tags).read(File(params.string("path"))).let {
+        jsonOf(mapOf("embedded" to it.embedded, "sidecar" to it.sidecar))
+      }
+      "ytLyrics" -> ytLyrics(params.string("videoId"))
       "setYtMusic" -> {
         yt.enabled = params.flag("enabled") ?: throw CodedError("ERR_BAD_PARAMS", "enabled must be a boolean")
         JsonNull
@@ -91,6 +99,13 @@ class WaveDesktop(
         "loudnessDb" to stream.loudnessDb,
       ),
     )
+  }
+
+  private suspend fun ytLyrics(videoId: String): JsonElement {
+    if (!VIDEO_ID.matches(videoId)) throw CodedError("ERR_BAD_PARAMS", "videoId must be a video id")
+    val pages = YtPages(yt)
+    val browseId = pages.song(videoId).lyricsBrowseId ?: return JsonNull
+    return JsonPrimitive(pages.lyrics(browseId))
   }
 
   private fun JsonObject.flag(name: String): Boolean? =

@@ -3,8 +3,9 @@
  * and how much of it is left.
  *
  * A timer either runs to a wall-clock deadline (15/30/45/60 minutes or a custom
- * duration) or waits for the playing track or the queue to finish. The native player
- * enforces it (so it fires with Wave in the background); JS shows it.
+ * duration) or waits for the playing track or the queue to finish. The player enforces it
+ * (the phone's native player, the desktop's main process), so it fires with Wave in the
+ * background; the screen only shows it.
  */
 
 import { en, type Catalogue } from "./catalogueEn.ts";
@@ -117,3 +118,60 @@ export const sleepTimerRemaining = (timer: SleepTimer, clock: SleepTimerClock): 
   if (clock.durationMs === null) return null;
   return Math.max(0, clock.durationMs - clock.positionMs);
 };
+
+/**
+ * What happened to playback that a running timer answers: its scheduled `check` ran,
+ * playback `resumed`, a song finished (the player held the next one back, or went on to it),
+ * or the queue played out.
+ */
+export type SleepTimerEvent =
+  | { readonly type: "check"; readonly now: number }
+  | { readonly type: "resumed"; readonly now: number }
+  | { readonly type: "trackFinished" }
+  | { readonly type: "queueEnded" };
+
+/** The timer after an event, and whether playback pauses now. */
+export interface SleepTimerStep {
+  readonly timer: SleepTimer | null;
+  readonly pause: boolean;
+}
+
+/**
+ * How a timer answers [event], as the phone's player enforces it: a deadline pauses once its
+ * check runs on time; playing again after a deadline passed unheard (the computer slept) ends
+ * it without pausing; End of track ends with the track, its player holding the next song back;
+ * End of queue pauses when the queue plays out.
+ */
+export const stepSleepTimer = (
+  timer: SleepTimer | null,
+  event: SleepTimerEvent,
+): SleepTimerStep => {
+  const kept = { timer, pause: false };
+  if (timer === null) return kept;
+  switch (event.type) {
+    case "check":
+      return timer.type === "deadline" && event.now >= timer.endsAt
+        ? { timer: null, pause: true }
+        : kept;
+    case "resumed":
+      return timer.type === "deadline" && event.now >= timer.endsAt
+        ? { timer: null, pause: false }
+        : kept;
+    case "trackFinished":
+      return timer.type === "endOfTrack" ? { timer: null, pause: false } : kept;
+    case "queueEnded":
+      return timer.type === "endOfQueue"
+        ? { timer: null, pause: true }
+        : timer.type === "endOfTrack"
+          ? { timer: null, pause: false }
+          : kept;
+  }
+};
+
+/** When a deadline's check runs, in ms from [now]; null for a timer that waits for playback. */
+export const sleepTimerCheckIn = (timer: SleepTimer | null, now: number): number | null =>
+  timer?.type === "deadline" ? Math.max(0, timer.endsAt - now) : null;
+
+/** Whether the player stops at the end of each song, so nothing of the next one plays. */
+export const sleepTimerPausesAtTrackEnd = (timer: SleepTimer | null): boolean =>
+  timer?.type === "endOfTrack";

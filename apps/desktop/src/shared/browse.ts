@@ -37,6 +37,8 @@ export interface BrowseRow {
   readonly videoId?: string;
   /** A YouTube Music song's cover, fetched through `yt.artwork`. */
   readonly artworkUrl?: string | null;
+  /** A playlist's own image, fetched through `playlists.image`; changes when the image does. */
+  readonly imageKey?: string | null;
 }
 export interface BrowsePage extends Page<BrowseRow> {
   readonly hero?: BrowseRow;

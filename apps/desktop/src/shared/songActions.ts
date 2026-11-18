@@ -33,6 +33,7 @@ export const SONG_RUN_ACTIONS = [
   "favorite",
   "unfavorite",
   "addToPlaylist",
+  "removeFromPlaylist",
   "removeFromLibrary",
 ] as const;
 export type SongRunAction = (typeof SONG_RUN_ACTIONS)[number];
@@ -47,4 +48,6 @@ export type SongRunResult =
       readonly added: number;
       readonly alreadyIn: number;
     }
-  | { readonly kind: "removed"; readonly count: number };
+  | { readonly kind: "removed"; readonly count: number }
+  /** Songs taken out of the playlist the target lists; `playlists.undoRemove` puts them back. */
+  | { readonly kind: "playlistRemoved"; readonly count: number };

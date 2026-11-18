@@ -16,6 +16,7 @@ import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.jsonArray
 import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.jsonPrimitive
+import kotlinx.serialization.json.JsonNull
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
 import org.junit.Test
@@ -63,6 +64,14 @@ class WaveDesktopTest {
     assertTrue(cover.size > 100)
     assertEquals(0x89.toByte(), cover[0])
     assertEquals(0x50.toByte(), cover[1])
+  }
+
+  @Test
+  fun aTagReadCarriesTheFilesEmbeddedLyrics() = withDesktop { host ->
+    val path = Json.encodeToString(String.serializer(), Fixtures.file("lyrics.mp3").absolutePath)
+    host.write("""{"id":1,"method":"readTags","params":{"path":$path}}""")
+    val lyrics = host.next()["result"]!!.jsonObject["lyrics"]!!.jsonPrimitive.content
+    assertEquals("[00:00.50]Olá, onda\n[00:01.00]Second line", lyrics)
   }
 
   @Test
@@ -124,10 +133,18 @@ class WaveDesktopTest {
   }
 
   /** YouTube Music answering a watch page (`next`) with [next] and every other request with [other]. */
-  private fun youTubeWatch(next: String, other: String): YtHttp = { _, _ ->
+  private fun youTubeWatch(next: String, other: String): YtHttp =
+    youTubeBy { path -> if (path.endsWith("/next")) next else other }
+
+  /** YouTube Music answering a watch page with [watch] and any browse with the lyrics page. */
+  private fun youTubeLyrics(watch: String = "yt/next-song.json"): YtHttp =
+    youTubeBy { path -> if (path.endsWith("/browse")) "yt/song-lyrics.json" else watch }
+
+  /** YouTube Music answering each request with the fixture [pick] names for its path. */
+  private fun youTubeBy(pick: (String) -> String): YtHttp = { _, _ ->
     HttpClient(
       MockEngine { request ->
-        val fixture = if (request.url.encodedPath.endsWith("/next")) next else other
+        val fixture = pick(request.url.encodedPath)
         respond(
           Fixtures.file(fixture).readText(),
           headers = headersOf(HttpHeaders.ContentType, ContentType.Application.Json.toString()),
@@ -195,5 +212,43 @@ class WaveDesktopTest {
     assertEquals("ERR_BAD_PARAMS", host.next().code())
     host.write("""{"id":27,"method":"artist","params":{"browseId":"../x"}}""")
     assertEquals("ERR_BAD_PARAMS", host.next().code())
+  }
+
+  @Test
+  fun readsATracksEmbeddedAndSidecarLyrics() = withDesktop { host ->
+    val folder = Fixtures.libraryOf("lyrics.flac" to "Song.flac")
+    java.io.File(folder, "Song.lrc").writeText("[00:02.00]Sidecar")
+    val path = Json.encodeToString(String.serializer(), java.io.File(folder, "Song.flac").absolutePath)
+    host.write("""{"id":14,"method":"readLyrics","params":{"path":$path}}""")
+    val lyrics = host.next()["result"]!!.jsonObject
+    assertTrue(lyrics["embedded"]!!.jsonPrimitive.content.isNotBlank())
+    assertEquals("[00:02.00]Sidecar", lyrics["sidecar"]!!.jsonPrimitive.content)
+  }
+
+  @Test
+  fun aTrackWithoutLyricsReadsAsNone() = withDesktop { host ->
+    val path = Json.encodeToString(String.serializer(), Fixtures.file("tagged.mp3").absolutePath)
+    host.write("""{"id":15,"method":"readLyrics","params":{"path":$path}}""")
+    val lyrics = host.next()["result"]!!.jsonObject
+    assertEquals(JsonNull, lyrics["sidecar"])
+  }
+
+  @Test
+  fun answersASongsYtMusicLyrics() = withDesktop(youTubeLyrics()) { host ->
+    host.write("""{"id":16,"method":"ytLyrics","params":{"videoId":"4D7u5KF7SP8"}}""")
+    assertEquals(
+      "First line of the song\r\nSecond line\r\n\r\nA line after a break",
+      host.next()["result"]!!.jsonPrimitive.content,
+    )
+  }
+
+  @Test
+  fun ytLyricsWithBadParamsOrYtMusicOffFail() = withDesktop(youTubeLyrics()) { host ->
+    host.write("""{"id":17,"method":"ytLyrics","params":{"videoId":"../../etc"}}""")
+    assertEquals("ERR_BAD_PARAMS", host.next().code())
+    host.write("""{"id":18,"method":"setYtMusic","params":{"enabled":false}}""")
+    host.next()
+    host.write("""{"id":19,"method":"ytLyrics","params":{"videoId":"4D7u5KF7SP8"}}""")
+    assertEquals("ERR_YT_DISABLED", host.next().code())
   }
 }
