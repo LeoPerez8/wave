@@ -5,7 +5,8 @@
  * `maxAccounts`) with `{ "error": "limit", "limit": "<name>" }`.
  *
  * Starting values, chosen so a 50,000-song Library with 200,000 plays fits
- * with room to grow. Row counts leave tombstones out.
+ * with room to grow. Row counts include tombstones; a push past one is
+ * refused only when it adds an id (src/store.ts, `pushRows`).
  */
 export const SYNC_LIMITS = {
   /** The largest request body, in bytes. A first push of a large history goes in batches under it. */
@@ -62,6 +63,14 @@ export const SYNC_LIMITS = {
    */
   maxAccounts: 10,
   maxNewAccountsPerDay: 10,
+  /**
+   * Valid sessions one account may have: a sign-in past it answers 403 and
+   * every existing session keeps working. Sessions unused for 90 days don't
+   * count; they are deleted at the sign-in and by the hourly maintenance.
+   * An account that already had more when the limit came keeps them all, and
+   * signs in again once it is below the limit.
+   */
+  maxSessionsPerAccount: 10,
   /**
    * Requests one account may send the Genius routes per minute, counted
    * before the cache. A song the Lyrics view hasn't seen costs a search, the

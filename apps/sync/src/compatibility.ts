@@ -7,7 +7,7 @@
 
 import type { Client } from "@libsql/client";
 import { SYNC_LIMITS } from "./limits.ts";
-import { SESSION_UNUSED_MS } from "./service.ts";
+import { SESSION_UNUSED_MS } from "./sessions.ts";
 import { SYNC_TABLES } from "./tables.ts";
 import { WARNING_DAYS_KEPT } from "./usage.ts";
 
@@ -18,7 +18,7 @@ import { WARNING_DAYS_KEPT } from "./usage.ts";
 export const SELECTED_LIMITS = {
   accounts: SYNC_LIMITS.maxAccounts,
   /** Sessions unused for less than `SESSION_UNUSED_MS`, per account. */
-  validSessionsPerAccount: 10,
+  validSessionsPerAccount: SYNC_LIMITS.maxSessionsPerAccount,
   /** Sign-in counters (`sign_in_windows`) in the current minute, by address and Google account. */
   authCounters: SYNC_LIMITS.maxSignInKeysPerMinute,
   /** Days of usage warnings kept: today (UTC) and the days before. */

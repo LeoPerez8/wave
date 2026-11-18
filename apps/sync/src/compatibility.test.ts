@@ -126,7 +126,13 @@ const preference = (id: string, deleted: boolean) => ({
 test("excesses the limits would meet are flagged, and nothing is evicted, revoked or deleted", async () => {
   // Accounts and sessions made before the limits were switched on.
   const service = await harness({
-    limits: { maxAccounts: 100, maxNewAccountsPerDay: 100, maxSignInsPerMinute: 100 },
+    limits: {
+      maxAccounts: 100,
+      maxNewAccountsPerDay: 100,
+      maxSignInsPerMinute: 100,
+      maxSessionsPerAccount: 100,
+      maxPreferences: 1_000,
+    },
   });
   // account-1: ten phones, so its next sign-in would be refused.
   const full: string[] = [];

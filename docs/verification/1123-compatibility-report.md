@@ -10,18 +10,16 @@ pass.
 
 ## Limits the report checks
 
-Taken from the integration branch on 2026-11-18:
+Taken from the integration branch at `8c2c35b6` on 2026-11-18:
 
-| Limit                           | Value                                                | Where it comes from                          |
-| ------------------------------- | ---------------------------------------------------- | -------------------------------------------- |
-| Simultaneous Google accounts    | 10                                                   | `SYNC_LIMITS.maxAccounts` (#1125)            |
-| Valid sessions per account      | 10, valid meaning used in the last 90 days           | #1122; `SESSION_UNUSED_MS`                   |
-| Current-minute sign-in counters | 1,000                                                | `SYNC_LIMITS.maxSignInKeysPerMinute` (#1127) |
-| Retained rows per synced table  | each table's `SYNC_LIMITS` value, tombstones counted | `SYNC_LIMITS`, `SYNC_TABLES` (#1124)         |
-| Usage warnings                  | 30 UTC days, at most 60 rows                         | `WARNING_DAYS_KEPT` (#1128)                  |
-| Provider usage rows             | three per account                                    | `upstream_usage` (#1128)                     |
-
-The session limit isn't enforced by the service yet (#1126); the report checks it ahead of that.
+| Limit                           | Value                                                | Where it comes from                                              |
+| ------------------------------- | ---------------------------------------------------- | ---------------------------------------------------------------- |
+| Simultaneous Google accounts    | 10                                                   | `SYNC_LIMITS.maxAccounts` (#1125)                                |
+| Valid sessions per account      | 10, valid meaning used in the last 90 days           | `SYNC_LIMITS.maxSessionsPerAccount`, `SESSION_UNUSED_MS` (#1126) |
+| Current-minute sign-in counters | 1,000                                                | `SYNC_LIMITS.maxSignInKeysPerMinute` (#1127)                     |
+| Retained rows per synced table  | each table's `SYNC_LIMITS` value, tombstones counted | `SYNC_LIMITS`, `SYNC_TABLES` (#1124)                             |
+| Usage warnings                  | 30 UTC days, at most 60 rows                         | `WARNING_DAYS_KEPT` (#1128)                                      |
+| Provider usage rows             | three per account                                    | `upstream_usage` (#1128)                                         |
 
 ## Local evidence
 
@@ -33,8 +31,8 @@ The session limit isn't enforced by the service yet (#1126); the report checks i
 - Accounts, valid and expired sessions, rows with tombstones per table, sign-in counters, usage
   warnings and provider usage are counted. The serialized report holds no session token, email,
   Google subject or row id.
-- Eleven accounts made before the limit, an account with ten sessions, one with eleven and a
-  table over its limit by its tombstones are each flagged, and the result is `incompatible`. A
+- Eleven accounts, an account with eleven sessions and a table over its limit by its tombstones,
+  all made before the limits, and an account with ten sessions are each flagged, and the result is `incompatible`. A
   table exactly at its limit is flagged (its next new id would be refused), and so is a full
   sign-in counter table.
 - After every report, each phone still pulls the same Library with its session: nothing is
