@@ -1346,9 +1346,9 @@ test("a song's menu and the selection bar offer and run the phone's actions thro
         { action: "favorite" },
         { action: "goToAlbum", albumId: album.id },
         { action: "goToArtist", artists: { kind: "open", artistId: menu.artists[0]!.id } },
-        { action: "share" },
         // It has no lyrics, genre or year to fix yet.
         { action: "fixSong" },
+        { action: "share" },
         { action: "select" },
         { action: "removeFromLibrary" },
       ]);
