@@ -1,3 +1,4 @@
+import { desktopShortcutsPtBr } from "./catalogue/desktopShortcutsPtBr.ts";
 import { libraryPtBr } from "./catalogue/libraryPtBr.ts";
 import { playlistsPtBr } from "./catalogue/playlistsPtBr.ts";
 import { importsPtBr } from "./catalogue/importsPtBr.ts";
@@ -100,7 +101,12 @@ export const ptBR: Catalogue = {
     previous: "Página anterior",
     next: "Próxima página",
     page: (first: number, last: number, total: number) => `${first}–${last} de ${total}`,
+    songMenu: (title: string) => `Ações de “${title}”`,
+    chooseArtist: "Escolha um Artista",
+    noPlaylists: "Nenhuma playlist ainda",
+    checkSong: (title: string) => `Selecionar “${title}”`,
   },
+  desktopShortcuts: desktopShortcutsPtBr,
   downloadNotice: downloadNoticePtBr,
   native: nativePtBr,
   auto: autoPtBr,

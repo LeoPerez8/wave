@@ -588,3 +588,133 @@ test("main refuses playback calls with a bad scope, row, command, time or volume
     }
   });
 });
+
+test("a song's menu and the selection bar offer and run the phone's actions through the bridge", async () => {
+  await withFile(async (file) => {
+    const { runtime, exposed } = connect(file);
+    const wave = exposed.get("wave") as WaveBridge;
+    try {
+      const { ids, playlistId } = await runtime.runPromise(
+        Effect.gen(function* () {
+          const db = (yield* Database) as unknown as TestDatabase;
+          const ids = ["Parasite", "Pink Moon", "Road"].map((title, n) =>
+            addTrack(db, { title, artist: "Nick Drake", album: "Pink Moon", trackNumber: n + 1 }),
+          );
+          const playlistId = createPlaylist(db, "Evening", [], 1000).playlistId;
+          return { ids, playlistId };
+        }),
+      );
+      const songs = { kind: "songs" } as const;
+      const album = (await wave.library.browse({ kind: "albums" }, 0, 1)).items[0]!;
+      const menu = await wave.songs.actions({ scope: songs, ids: [ids[0]!] }, "menu");
+      assert.equal(menu.title, "Parasite");
+      assert.equal(menu.count, 1);
+      assert.deepEqual(menu.entries, [
+        { action: "playNext" },
+        { action: "addToQueue" },
+        { action: "addToPlaylist" },
+        { action: "favorite" },
+        { action: "goToAlbum", albumId: album.id },
+        { action: "goToArtist", artists: { kind: "open", artistId: menu.artists[0]!.id } },
+        { action: "select" },
+        { action: "removeFromLibrary" },
+      ]);
+      assert.deepEqual(
+        menu.artists.map((artist) => artist.name),
+        ["Nick Drake"],
+      );
+      const onAlbum = await wave.songs.actions(
+        { scope: { kind: "album", id: album.id }, ids: [ids[0]!] },
+        "selection",
+      );
+      assert.deepEqual(
+        onAlbum.entries.map((entry) => entry.action),
+        ["playNext", "addToQueue", "addToPlaylist", "favorite", "goToArtist", "removeFromLibrary"],
+      );
+
+      // Select All with one song unchecked acts on the others, in list order.
+      const rest = { scope: songs, all: true, except: [ids[1]!] } as const;
+      assert.equal((await wave.songs.actions(rest, "selection")).count, 2);
+      await wave.playback.start(songs, 1);
+      assert.deepEqual(await wave.songs.run(rest, "addToQueue"), { kind: "queued", count: 2 });
+      assert.deepEqual(
+        (await wave.playback.queue(0, 10)).items.map((row) => row.title),
+        // Queued songs play after the current one, ahead of the rest of the list, as on the phone.
+        ["Parasite", "Pink Moon", "Parasite", "Road", "Road"],
+      );
+      assert.deepEqual(await wave.songs.run(rest, "favorite"), {
+        kind: "favorite",
+        on: true,
+        count: 2,
+      });
+      assert.equal((await wave.library.browse({ kind: "favorites" }, 0, 10)).total, 2);
+      assert.deepEqual(
+        (await wave.songs.actions(rest, "selection")).entries.map((entry) => entry.action),
+        [
+          "playNext",
+          "addToQueue",
+          "addToPlaylist",
+          "unfavorite",
+          "goToAlbum",
+          "goToArtist",
+          "removeFromLibrary",
+        ],
+      );
+      assert.deepEqual(await wave.songs.run(rest, "addToPlaylist", playlistId), {
+        kind: "playlist",
+        name: "Evening",
+        added: 2,
+        alreadyIn: 0,
+      });
+      assert.deepEqual(await wave.songs.run(rest, "addToPlaylist", playlistId), {
+        kind: "playlist",
+        name: "Evening",
+        added: 0,
+        alreadyIn: 2,
+      });
+      assert.deepEqual(
+        await wave.songs.run({ scope: songs, ids: [ids[2]!] }, "removeFromLibrary"),
+        {
+          kind: "removed",
+          count: 1,
+        },
+      );
+      assert.deepEqual(
+        (await wave.library.browse(songs, 0, 10)).items.map((row) => row.title),
+        ["Parasite", "Pink Moon"],
+      );
+      assert.deepEqual((await wave.library.exclusions(0, 10)).items, ["/Music/Pink Moon/Road.mp3"]);
+    } finally {
+      await runtime.dispose();
+    }
+  });
+});
+
+test("main refuses song actions with a bad target, surface, action or playlist", async () => {
+  await withFile(async (file) => {
+    const { runtime, handlers } = connect(file);
+    const call = (channel: string, ...args: unknown[]) => handlers.get(channel)!(trusted, ...args);
+    const songs = { kind: "songs" };
+    try {
+      for (const target of [
+        undefined,
+        { scope: songs },
+        { scope: { kind: "albums" }, ids: [1] },
+        { scope: songs, ids: [0] },
+        { scope: songs, ids: ["1"] },
+        { scope: songs, ids: Array.from({ length: 10_001 }, (_, n) => n + 1) },
+        { scope: songs, all: false, except: [] },
+        { scope: songs, all: true, except: [1.5] },
+      ])
+        await assert.rejects(call("songs.actions", target, "menu"), /refused/i);
+      const one = { scope: songs, ids: [1] };
+      await assert.rejects(call("songs.actions", one, "bar"), /refused/i);
+      for (const action of ["delete", "select", "goToAlbum", undefined])
+        await assert.rejects(call("songs.run", one, action), /refused/i, String(action));
+      await assert.rejects(call("songs.run", one, "addToPlaylist"), /refused/i);
+      await assert.rejects(call("songs.run", one, "addToPlaylist", -1), /refused/i);
+    } finally {
+      await runtime.dispose();
+    }
+  });
+});

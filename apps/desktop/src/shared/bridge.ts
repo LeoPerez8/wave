@@ -10,6 +10,13 @@ import type { PlaybackSettings } from "./playbackSettings.ts";
 import type { SongTags } from "./tags.ts";
 import type { DesktopFolder, DesktopSong, ScanStatus } from "./library.ts";
 import type { BrowseScope, BrowsePage } from "./browse.ts";
+import type {
+  ActionSurface,
+  SongMenu,
+  SongRunAction,
+  SongRunResult,
+  SongTarget,
+} from "./songActions.ts";
 export type Appearance = "system" | "light" | "dark";
 
 /** One window of a list, as a list call returns it. */
@@ -87,6 +94,16 @@ export interface BridgeContract {
   readonly "library.exclude": { readonly args: readonly []; readonly result: void };
   readonly "library.removeRoot": { readonly args: readonly [path: string]; readonly result: void };
   readonly "library.include": { readonly args: readonly [path: string]; readonly result: void };
+  /** The entries a song's menu (or the selection bar) offers for [target]. */
+  readonly "songs.actions": {
+    readonly args: readonly [target: SongTarget, surface: ActionSurface];
+    readonly result: SongMenu;
+  };
+  /** Runs one of the entries main runs; Add to Playlist names the playlist. */
+  readonly "songs.run": {
+    readonly args: readonly [target: SongTarget, action: SongRunAction, playlistId?: number];
+    readonly result: SongRunResult;
+  };
   /** Opens an audio file by its absolute path, paused at its start. */
   readonly "player.load": {
     readonly args: readonly [path: string];
@@ -135,6 +152,8 @@ export const BRIDGE_CALLS = [
   "library.exclude",
   "library.removeRoot",
   "library.include",
+  "songs.actions",
+  "songs.run",
   "player.load",
   "player.play",
   "player.pause",
@@ -182,6 +201,14 @@ export interface WaveBridge {
     readonly exclude: () => Promise<void>;
     readonly removeRoot: (path: string) => Promise<void>;
     readonly include: (path: string) => Promise<void>;
+  };
+  readonly songs: {
+    readonly actions: (target: SongTarget, surface: ActionSurface) => Promise<SongMenu>;
+    readonly run: (
+      target: SongTarget,
+      action: SongRunAction,
+      playlistId?: number,
+    ) => Promise<SongRunResult>;
   };
   /** One song at a time; each call answers with the engine's status after it. */
   readonly player: {
@@ -232,6 +259,10 @@ export const createBridge = (invoke: Invoke): WaveBridge => ({
     exclude: () => invoke("library.exclude"),
     removeRoot: (path) => invoke("library.removeRoot", path),
     include: (path) => invoke("library.include", path),
+  },
+  songs: {
+    actions: (target, surface) => invoke("songs.actions", target, surface),
+    run: (target, action, playlistId) => invoke("songs.run", target, action, playlistId),
   },
   player: {
     load: (path) => invoke("player.load", path),

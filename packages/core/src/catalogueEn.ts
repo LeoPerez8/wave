@@ -1,3 +1,4 @@
+import { desktopShortcutsEn } from "./catalogue/desktopShortcutsEn.ts";
 import { libraryEn } from "./catalogue/libraryEn.ts";
 import { playlistsEn } from "./catalogue/playlistsEn.ts";
 import { importsEn } from "./catalogue/importsEn.ts";
@@ -101,7 +102,12 @@ export const en = {
     previous: "Previous page",
     next: "Next page",
     page: (first: number, last: number, total: number) => `${first}–${last} of ${total}`,
+    songMenu: (title: string) => `Actions for “${title}”`,
+    chooseArtist: "Choose an Artist",
+    noPlaylists: "No playlists yet",
+    checkSong: (title: string) => `Select “${title}”`,
   },
+  desktopShortcuts: desktopShortcutsEn,
   downloadNotice: downloadNoticeEn,
   native: nativeEn,
   auto: autoEn,

@@ -7,6 +7,9 @@ import { Icon } from "./Icon.tsx";
 import { Artwork, VirtualTable } from "./VirtualTable.tsx";
 import { FolderSettings } from "./FolderSettings.tsx";
 import { PlaybackSettings } from "./PlaybackSettings.tsx";
+import { useDesktopKeys } from "./keys.ts";
+import { ShortcutsSheet } from "./Shortcuts.tsx";
+import { SelectionBar, useSongActions, type Selection } from "./SongActions.tsx";
 import { labels, text } from "./text.ts";
 
 type Route = BrowseScope | { readonly kind: "home" } | { readonly kind: "settings" };
@@ -60,6 +63,12 @@ export function App() {
   const [playlistTotal, setPlaylistTotal] = useState(0);
   const failed = useCallback(() => setError(text.desktopLibrary.actionFailed), []);
   const playback = usePlayback(failed);
+  const [shortcuts, setShortcuts] = useState(false);
+  /** Selection mode, for the list it was turned on in. */
+  const [selecting, setSelecting] = useState<{
+    readonly list: string;
+    readonly selection: Selection;
+  }>();
   const search = useRef<HTMLInputElement>(null);
   const content = useRef<HTMLDivElement>(null);
   const shell = useRef<HTMLElement>(null);
@@ -136,28 +145,6 @@ export function App() {
     };
   }, [scan?.revision, playlistOffset, failed]);
   useEffect(() => {
-    const key = (event: KeyboardEvent) => {
-      if (event.key === "F5") {
-        event.preventDefault();
-        void window.wave.library.refresh().catch(failed);
-      }
-      if (event.ctrlKey && event.key.toLowerCase() === "f") {
-        event.preventDefault();
-        search.current?.focus();
-      }
-      if (event.altKey && event.key === "ArrowLeft") {
-        event.preventDefault();
-        back();
-      }
-      if (event.altKey && event.key === "ArrowRight") {
-        event.preventDefault();
-        forward();
-      }
-    };
-    window.addEventListener("keydown", key);
-    return () => window.removeEventListener("keydown", key);
-  }, [back, forward, failed]);
-  useEffect(() => {
     if (route.kind !== "search")
       content.current?.querySelector<HTMLElement>("[role=grid]")?.focus();
   }, [route]);
@@ -165,6 +152,29 @@ export function App() {
     () => (route.kind === "home" || route.kind === "settings" ? { kind: "songs" } : route),
     [route],
   );
+  const list = JSON.stringify(scope);
+  const selection = selecting?.list === list ? selecting.selection : undefined;
+  const setSelection = (selection: Selection | undefined) =>
+    setSelecting(selection && { list, selection });
+  const actions = useSongActions({
+    go,
+    select: (ids) => setSelection({ all: false, ids: new Set(ids) }),
+    failed: (message) => setError(message ?? text.desktopLibrary.actionFailed),
+    changed: playback.refresh,
+  });
+  useDesktopKeys({
+    search: () => search.current?.focus(),
+    back,
+    forward,
+    rescan: () => void window.wave.library.refresh().catch(failed),
+    shortcuts: () => setShortcuts((open) => !open),
+    close: () => {
+      if (actions.closeMenu()) return;
+      if (shortcuts) return setShortcuts(false);
+      if (selection) return setSelection(undefined);
+      return false;
+    },
+  });
   const open = (row: BrowseRow, index: number) => {
     const detail = {
       albums: "album",
@@ -180,6 +190,7 @@ export function App() {
     hero?.title ??
     (route.kind in labels ? (labels[route.kind as keyof typeof labels] as string) : labels.library);
   const scanning = scan?.status === "scanning";
+  const revision = (scan?.revision ?? 0) + (playback.view?.revision ?? 0);
   return (
     <main ref={shell} className="desktop-shell" data-appearance={appearance}>
       <header className="titlebar">
@@ -406,17 +417,38 @@ export function App() {
             </section>
           </div>
         ) : (
-          <VirtualTable
-            key={JSON.stringify(scope)}
-            scope={scope}
-            revision={(scan?.revision ?? 0) + (playback.view?.revision ?? 0)}
-            onHero={setHero}
-            onOpen={open}
-            onError={failed}
-          />
+          <>
+            {selection && (
+              <SelectionBar
+                scope={scope}
+                selection={selection}
+                revision={revision}
+                actions={actions}
+                onChange={setSelection}
+                onDone={() => setSelection(undefined)}
+              />
+            )}
+            <VirtualTable
+              key={list}
+              scope={scope}
+              revision={revision}
+              onHero={setHero}
+              onOpen={open}
+              onError={failed}
+              selection={selection}
+              onSelection={setSelection}
+              onMenu={
+                selection
+                  ? undefined
+                  : (row, at) => actions.openMenu({ scope, ids: [row.id] }, row.title, at)
+              }
+            />
+          </>
         )}
       </div>
       <PlayerBar playback={playback} />
+      {actions.overlays}
+      {shortcuts && <ShortcutsSheet onClose={() => setShortcuts(false)} />}
     </main>
   );
 }

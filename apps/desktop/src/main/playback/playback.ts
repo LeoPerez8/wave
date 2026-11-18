@@ -44,6 +44,8 @@ export interface PlaybackShape {
   readonly dismissUndo: () => void;
   /** Stars or unstars the current song. */
   readonly favorite: () => void;
+  /** Reads the songs' rows again, after something else changed them (a star, a removal). */
+  readonly refresh: () => void;
   /** Sets the volume (0 to 1) and mute, kept across launches. */
   readonly volume: (value: number, muted: boolean) => Promise<void>;
   /** A page of the queue, History first. */
@@ -238,6 +240,9 @@ export const playbackLayer = Layer.effect(
         const current = view().current;
         if (current === null) return;
         setFavorites(db, [current.id], !current.favorite, Date.now());
+        revision++;
+      },
+      refresh: () => {
         revision++;
       },
       volume: async (value, mute) => {

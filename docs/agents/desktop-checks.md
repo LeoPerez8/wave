@@ -124,6 +124,22 @@ The other Settings sections and player controls are placeholders for their ticke
 activation is the `onOpen` callback on `VirtualTable`; the playback ticket connects song
 activation and the hero's Play/Shuffle controls to a play context.
 
+## Song menus and keys
+
+`e2e/songMenus.spec.ts` opens a song's menu by right-click, Shift+F10 and the Menu key, queues
+and stars from it, checks selection (Select, Select All, unchecking, Esc, Remove with its
+question), lists the shortcuts with Ctrl+/ and quits with Ctrl+Q. Playwright's keys go through
+the page, so the spec sends Ctrl+Q with `webContents.sendInputEvent`: main reads it in
+`before-input-event`, before any field can take it. The screenshot is
+`song-menus-<platform>.png`.
+
+`songs.actions(target, surface)` returns Core's entries for a menu or the selection bar;
+`songs.run(target, action, playlistId?)` runs Play Next, Add to Queue, Favorite, Unfavorite, Add
+to Playlist and Remove from Library. A target is `{scope, ids}` or `{scope, all: true, except}`
+(at most 10,000 ids). Remove from Library adds a file exclusion, so later scans skip the file
+until Settings includes it again; the file stays on disk. The renderer's keys go through Core's
+`desktopKey`, with focus read by `keys.ts`.
+
 ## The dev window
 
 To look at `pnpm dev` from an agent, start it in the background with a debugging port and a
