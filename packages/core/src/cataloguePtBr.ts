@@ -38,6 +38,8 @@ import type { Catalogue } from "./catalogueEn.ts";
 export const ptBR: Catalogue = {
   desktopWindow: desktopWindowPtBr,
   desktopLayout: {
+    language: "Idioma",
+    languages: { system: "Sistema", en: "English", "pt-BR": "Português (Brasil)" },
     brand: "Wave",
     home: "Início",
     search: "Buscar",

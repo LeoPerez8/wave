@@ -5,7 +5,7 @@ import type { HomeSectionView, HomeView } from "../../shared/home.ts";
 import { DiscoverSection } from "./Discover.tsx";
 import { Shelf } from "./YtLists.tsx";
 import { VirtualTable } from "./VirtualTable.tsx";
-import { text, labels } from "./text.ts";
+import { text, labels, tagTitle, artistName } from "./text.ts";
 import "./home.css";
 
 const SONGS: BrowseScope = { kind: "favorites" };
@@ -21,16 +21,18 @@ function MostPlayed({
   readonly onError: () => void;
   readonly onMenu: (row: BrowseRow, at: { readonly x: number; readonly y: number }) => void;
 }) {
+  // The current language's text, so the labels follow a change of language.
+  const strings = text;
   const preview = useMemo(
     () => ({
       id: "home-most-played",
-      label: text.home.sections["most-played"],
+      label: strings.home.sections["most-played"],
       page: section.rows,
       trailing: (row: BrowseRow) =>
-        text.stats.plays(section.rows.items.find((r) => r.id === row.id)?.playCount ?? 0),
-      trailingHeading: text.stats.facts.plays,
+        strings.stats.plays(section.rows.items.find((r) => r.id === row.id)?.playCount ?? 0),
+      trailingHeading: strings.stats.facts.plays,
     }),
-    [section],
+    [section, strings],
   );
   return (
     <div className="home-table" style={{ height: section.rows.total * 40 + 30 }}>
@@ -141,11 +143,15 @@ export function Home({
                     artists={section.kind === "artist"}
                     items={section.rows.items.map((row) => ({
                       key: String(row.id),
-                      title: row.title,
+                      title: tagTitle(row.title, section.kind),
                       artworkHash: row.artworkHash,
                       caption:
-                        row.playCount === undefined ? row.artist : text.stats.plays(row.playCount),
-                      label: [row.title, row.artist].filter(Boolean).join(", "),
+                        row.playCount === undefined
+                          ? artistName(row.artist)
+                          : text.stats.plays(row.playCount),
+                      label: [tagTitle(row.title, section.kind), artistName(row.artist)]
+                        .filter(Boolean)
+                        .join(", "),
                       missing:
                         section.kind === "song" && row.path === null && row.videoId === undefined,
                     }))}

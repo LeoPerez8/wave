@@ -4,11 +4,11 @@ import type { MissingSongsView } from "../../shared/downloads.ts";
 import { Icon } from "./Icon.tsx";
 import { text } from "./text.ts";
 
-const LABELS: Record<MissingSongsDownloadAction, string> = {
+const actionLabels = (): Record<MissingSongsDownloadAction, string> => ({
   downloadAll: text.itemActions.labels.downloadMissingSongs,
   retryFailed: text.itemActions.labels.retryFailed,
   cancel: text.downloads.albumActions.cancelAlbumDownload,
-};
+});
 
 /**
  * An album page's Download Missing Songs, beside Play and Shuffle while the album has songs this
@@ -53,7 +53,7 @@ export function AlbumDownloadButton({
         }
       >
         <Icon name="download" size={16} />
-        {LABELS[action]}
+        {actionLabels()[action]}
       </button>
       {missing.line !== null && action !== "downloadAll" && (
         <span className="secondary hero-download-line">{missing.line}</span>

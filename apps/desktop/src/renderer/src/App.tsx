@@ -26,7 +26,8 @@ import { ShortcutsSheet } from "./Shortcuts.tsx";
 import { SelectionBar, useSongActions, type Selection } from "./SongActions.tsx";
 import { usePlaylistEdits } from "./Playlists.tsx";
 import { Graveyard } from "./Graveyard.tsx";
-import { labels, text } from "./text.ts";
+import { applyLanguage, labels, text, useLanguage, tagTitle, artistName } from "./text.ts";
+import { LanguageSettings } from "./LanguageSettings.tsx";
 import { Home } from "./Home.tsx";
 import { isYtRoute, streamedSongItems, YtPage, type YtRoute } from "./YtPages.tsx";
 
@@ -78,6 +79,7 @@ function IconButton({
   );
 }
 export function App() {
+  const localisation = useLanguage();
   const [history, setHistory] = useState<readonly Route[]>([{ kind: "home" }]);
   const [position, setPosition] = useState(0);
   const route = history[position]!;
@@ -168,6 +170,9 @@ export function App() {
           );
           const counts = await window.wave.library.counts();
           if (current) setCount(counts.songs);
+          // A sync may have pulled the account's language.
+          const spoken = await window.wave.settings.language();
+          if (current) applyLanguage(spoken);
           const view = await window.wave.account.view();
           if (current)
             setAccount((previous) =>
@@ -301,7 +306,7 @@ export function App() {
   const title =
     route.kind === "graveyard"
       ? text.playlists.graveyard
-      : (hero?.title ??
+      : ((hero && tagTitle(hero.title, route.kind)) ??
         (route.kind in labels
           ? (labels[route.kind as keyof typeof labels] as string)
           : labels.library));
@@ -476,7 +481,7 @@ export function App() {
             />
             <div className="hero-copy">
               <h1>{title}</h1>
-              {hero.artist && <p className="hero-artist">{hero.artist}</p>}
+              {hero.artist && <p className="hero-artist">{artistName(hero.artist)}</p>}
               <p className="hero-meta">
                 {[
                   labels[route.kind as "album" | "artist" | "playlist" | "genre"],
@@ -605,6 +610,7 @@ export function App() {
                       </option>
                     ))}
                   </select>
+                  <LanguageSettings view={localisation} onError={failed} />
                 </>
               ) : setting === "accounts" ? (
                 <>
