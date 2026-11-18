@@ -6,6 +6,9 @@ import type { CatalogueVariants } from "../localisation.ts";
  * `desktopPtBr.ts` holds the same keys.
  */
 export const desktopEn = {
+  home: {
+    noSections: "Your Home sections are hidden. Arrange Home on your phone to add them back.",
+  },
   playbackText: {
     thisPhone: "This computer",
   },
@@ -34,7 +37,8 @@ export const desktopEn = {
     },
     signInInvitation: {
       libraryTitle: "Your Library on every device",
-      library: "Playlists, favorites, play history and preferences on your phones and this computer.",
+      library:
+        "Playlists, favorites, play history and preferences on your phones and this computer.",
     },
     howMuchOfAStreamedSongWave:
       "How much of a streamed song Wave loads ahead, carrying on into the next songs in Up Next, so playback keeps going through a dead zone. Longer uses more memory: about 50 MB at 30 minutes. Downloaded songs play from this computer either way.",
