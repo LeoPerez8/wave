@@ -149,3 +149,28 @@ export const browseLetter = (db: LibraryDatabase, scope: BrowseScope, letter: st
     ) WHERE substr(sort,1,1) >= wave_sort_key(${letter}) ORDER BY position LIMIT 1`)?.position ?? 0
   );
 };
+
+/** The ids of [scope]'s songs, in the order its list shows them; none for a list of lists. */
+export const browseTrackIds = (db: LibraryDatabase, scope: BrowseScope): string[] => {
+  if (["albums", "artists", "playlists", "genres"].includes(scope.kind)) return [];
+  const { source, order } = listing(scope);
+  return db
+    .all<{ id: number }>(sql`SELECT id FROM (${source}) ORDER BY ${order}`)
+    .map((song) => String(song.id));
+};
+
+/** The songs [ids] as rows, in the order given; an id with no song is left out. */
+export const browseSongs = (db: LibraryDatabase, ids: readonly number[]): BrowseRow[] => {
+  if (ids.length === 0) return [];
+  const found = new Map(
+    db
+      .all<BrowseRow>(
+        sql`SELECT * FROM (${SONGS}) WHERE id IN (${sql.join(
+          ids.map((id) => sql`${id}`),
+          sql`, `,
+        )})`,
+      )
+      .map((song) => [song.id, row(song)]),
+  );
+  return ids.flatMap((id) => found.get(id) ?? []);
+};

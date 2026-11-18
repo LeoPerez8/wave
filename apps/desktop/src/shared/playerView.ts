@@ -1,0 +1,50 @@
+import type { AudioStatus } from "@wave/client/playbackSession";
+import type { RepeatMode } from "@wave/core";
+
+import type { BrowseRow } from "./browse.ts";
+
+/** What the player bar shows (`window.wave.playback.view()`). */
+export interface PlayerView {
+  readonly status: AudioStatus;
+  /** The current song, or null when the queue is empty. */
+  readonly current: BrowseRow | null;
+  /** The current song's place in the queue, History included. */
+  readonly index: number;
+  readonly length: number;
+  readonly shuffle: boolean;
+  readonly repeat: RepeatMode;
+  /**
+   * The Undo "New queue playing" offers: a number that changes with each new offer, or null
+   * when there is none.
+   */
+  readonly undoOffer: number | null;
+  /** 0 to 1; muted keeps it. */
+  readonly volume: number;
+  readonly muted: boolean;
+  /** Changes whenever the queue or the current song's star changes. */
+  readonly revision: number;
+  /** The last failure behind the window's back, such as a song the engine couldn't open. */
+  readonly error: string | null;
+}
+
+/** A queue row: a song with its entry's key, and where it stands against the current one. */
+export interface QueueRow extends BrowseRow {
+  readonly key: string;
+  readonly history: boolean;
+  readonly current: boolean;
+}
+
+/** The queue commands the window can send (Core's `QueueCommand`, as the window may give them). */
+export type PlaybackCommand =
+  | { readonly type: "next" }
+  | { readonly type: "previous" }
+  | { readonly type: "setShuffle"; readonly on: boolean }
+  | { readonly type: "setRepeat"; readonly mode: RepeatMode }
+  | { readonly type: "jumpTo" | "remove"; readonly key: string }
+  | { readonly type: "playNext" | "addToQueue"; readonly trackIds: readonly string[] }
+  | {
+      readonly type: "move";
+      readonly key: string;
+      readonly before: string | null;
+      readonly after: string | null;
+    };

@@ -3,6 +3,7 @@
  * object as `window.wave`; main answers each call in `BridgeContract` and nothing else.
  * A call that reads a list returns a `Page`, never the whole list.
  */
+import type { PlayerView, PlaybackCommand, QueueRow } from "./playerView.ts";
 import type { LibraryCounts } from "@wave/client/db/counts";
 import type { PlaybackStatus } from "./playback.ts";
 import type { SongTags } from "./tags.ts";
@@ -20,6 +21,30 @@ export interface Page<T> {
 
 /** Each call's arguments and result. Arguments reach main as untrusted data. */
 export interface BridgeContract {
+  readonly "playback.view": { readonly args: readonly []; readonly result: PlayerView };
+  readonly "playback.start": {
+    readonly args: readonly [scope: BrowseScope, index?: number, shuffle?: boolean];
+    readonly result: void;
+  };
+  readonly "playback.command": {
+    readonly args: readonly [command: PlaybackCommand];
+    readonly result: void;
+  };
+  readonly "playback.play": { readonly args: readonly []; readonly result: void };
+  readonly "playback.pause": { readonly args: readonly []; readonly result: void };
+  readonly "playback.seek": { readonly args: readonly [positionMs: number]; readonly result: void };
+  readonly "playback.undo": { readonly args: readonly []; readonly result: void };
+  readonly "playback.dismissUndo": { readonly args: readonly []; readonly result: void };
+  readonly "playback.favorite": { readonly args: readonly []; readonly result: void };
+  readonly "playback.volume": {
+    readonly args: readonly [volume: number, muted: boolean];
+    readonly result: void;
+  };
+  readonly "playback.queue": {
+    readonly args: readonly [offset: number, limit: number];
+    readonly result: Page<QueueRow>;
+  };
+
   readonly "settings.appearance": { readonly args: readonly []; readonly result: Appearance };
   readonly "settings.setAppearance": {
     readonly args: readonly [appearance: Appearance];
@@ -79,6 +104,18 @@ type PagedLists<T> = {
   readonly [C in keyof T]: T[C] extends { readonly result: readonly unknown[] } ? never : T[C];
 };
 export const BRIDGE_CALLS = [
+  "playback.view",
+  "playback.start",
+  "playback.command",
+  "playback.play",
+  "playback.pause",
+  "playback.seek",
+  "playback.undo",
+  "playback.dismissUndo",
+  "playback.favorite",
+  "playback.volume",
+  "playback.queue",
+
   "library.artwork",
   "library.browse",
   "library.letter",
@@ -110,6 +147,19 @@ export type Invoke = <C extends BridgeCall>(
 
 /** `window.wave`. */
 export interface WaveBridge {
+  readonly playback: {
+    readonly view: () => Promise<PlayerView>;
+    readonly start: (scope: BrowseScope, index?: number, shuffle?: boolean) => Promise<void>;
+    readonly command: (command: PlaybackCommand) => Promise<void>;
+    readonly play: () => Promise<void>;
+    readonly pause: () => Promise<void>;
+    readonly seek: (positionMs: number) => Promise<void>;
+    readonly undo: () => Promise<void>;
+    readonly dismissUndo: () => Promise<void>;
+    readonly favorite: () => Promise<void>;
+    readonly volume: (volume: number, muted: boolean) => Promise<void>;
+    readonly queue: (offset: number, limit: number) => Promise<Page<QueueRow>>;
+  };
   readonly library: {
     readonly artwork: (hash: string, large: boolean) => Promise<string | null>;
     readonly browse: (scope: BrowseScope, offset: number, limit: number) => Promise<BrowsePage>;
@@ -143,6 +193,19 @@ export interface WaveBridge {
 }
 
 export const createBridge = (invoke: Invoke): WaveBridge => ({
+  playback: {
+    view: () => invoke("playback.view"),
+    start: (scope, index, shuffle) => invoke("playback.start", scope, index, shuffle),
+    command: (command) => invoke("playback.command", command),
+    play: () => invoke("playback.play"),
+    pause: () => invoke("playback.pause"),
+    seek: (positionMs) => invoke("playback.seek", positionMs),
+    undo: () => invoke("playback.undo"),
+    dismissUndo: () => invoke("playback.dismissUndo"),
+    favorite: () => invoke("playback.favorite"),
+    volume: (volume, muted) => invoke("playback.volume", volume, muted),
+    queue: (offset, limit) => invoke("playback.queue", offset, limit),
+  },
   library: {
     artwork: (hash, large) => invoke("library.artwork", hash, large),
     browse: (scope, offset, limit) => invoke("library.browse", scope, offset, limit),
