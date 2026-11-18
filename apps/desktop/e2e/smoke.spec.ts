@@ -73,6 +73,7 @@ test("the page has no Node and only the typed bridge", async () => {
       "wave.player.pause",
       "wave.player.seek",
       "wave.player.status",
+      "wave.tags.read",
     ],
   });
 });
