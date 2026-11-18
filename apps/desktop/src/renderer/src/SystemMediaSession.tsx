@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import type { PlayerView } from "../../shared/playerView.ts";
+import { albumName, artistName } from "./text.ts";
 
 /** Chromium needs an active media element even though the Rust engine plays Wave's audio. */
 const silentAudio = () => {
@@ -106,8 +107,8 @@ export function SystemMediaSession({
   }, [enabled, refresh]);
   const current = view?.current;
   const title = current?.title;
-  const artist = current?.artist;
-  const album = current?.album;
+  const artist = current && artistName(current.artist);
+  const album = current && albumName(current.album);
   const hash = current?.artworkHash;
   const artworkUrl = current?.artworkUrl;
   useEffect(() => {

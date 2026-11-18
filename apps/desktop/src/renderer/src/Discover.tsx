@@ -1,7 +1,7 @@
 import { useEffect, useState, type MouseEvent } from "react";
 import type { BrowseRow } from "../../shared/browse.ts";
 import type { DiscoverMixesView } from "../../shared/ytPages.ts";
-import { text } from "./text.ts";
+import { albumName, artistName, text } from "./text.ts";
 import { Shelf, YtQuiet, YtSongList } from "./YtLists.tsx";
 
 /**
@@ -40,9 +40,13 @@ export function MagicQueueRow({ run }: { readonly run: Run }) {
       items={picks.map((row) => ({
         key: String(row.id),
         title: row.title,
-        caption: row.artist,
+        caption: artistName(row.artist),
         artworkHash: row.artworkHash,
-        label: text.discover.startMagicQueue(row.title, row.artist, row.album || null),
+        label: text.discover.startMagicQueue(
+          row.title,
+          artistName(row.artist),
+          albumName(row.album) || null,
+        ),
       }))}
       onOpen={(index) => startFrom(run, picks[index]!.id)}
     />

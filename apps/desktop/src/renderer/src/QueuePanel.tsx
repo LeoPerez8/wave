@@ -19,7 +19,7 @@ import { Icon } from "./Icon.tsx";
 import { pressOf } from "./keys.ts";
 import { queueRowAt } from "./queueRows.ts";
 import { rovingTarget } from "./rovingList.ts";
-import { labels, text } from "./text.ts";
+import { labels, text, artistName } from "./text.ts";
 import { Artwork, time } from "./VirtualTable.tsx";
 
 const ROW = 48;
@@ -201,7 +201,7 @@ export function QueuePanel({
         role="option"
         aria-selected={active === at}
         aria-current={at === index ? "true" : undefined}
-        aria-label={row && `${row.title}, ${row.artist}`}
+        aria-label={row && `${row.title}, ${artistName(row.artist)}`}
         className={`queue-row ${at < index ? "history" : ""} ${at === index ? "playing" : ""} ${
           active === at ? "active-row" : ""
         } ${dragging === at ? "dragging" : ""}`}
@@ -227,7 +227,7 @@ export function QueuePanel({
             <Artwork kind="song" id={row.id} hash={row.artworkHash} url={row.artworkUrl} />
             <span className="queue-text">
               <span className="truncate">{row.title}</span>
-              <span className="truncate secondary">{row.artist}</span>
+              <span className="truncate secondary">{artistName(row.artist)}</span>
             </span>
             <span className="queue-time secondary">{time(row.durationMs)}</span>
             {at !== index && (
