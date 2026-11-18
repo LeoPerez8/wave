@@ -42,7 +42,14 @@ const shape = (sections: ReturnType<typeof searchSections>) =>
         }${section.capped ? " capped" : ""}`,
   );
 
-test("Search shows the top result, then Songs with its lyrics, then the shelves in Core's order", () => {
+test("Search shows Albums, Artists and Playlists shelves regardless of match ranking", () => {
+  assert.deepEqual(
+    shape(searchSections(view({ groups: [group("artist", 2), group("playlist", 1), group("album", 3), group("song", 2)] }), new Set())),
+    ["song:2/2", "album:3/3", "artist:2/2", "playlist:1/1"],
+  );
+});
+
+test("Search shows the top result, then Songs with its lyrics, then the shelves", () => {
   const sections = searchSections(
     view({
       top: { kind: "album", row: row(100) },
