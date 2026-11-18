@@ -87,7 +87,7 @@ jobs:
           HEAD_SHA: ${{ github.event.pull_request.head.sha }}
         run: |
           for job in "Desktop (Linux)" "Desktop (Windows)"; do
-            scripts/ci/report.sh skipped "$job"               "Nothing the desktop app is built from changed (apps/desktop, packages/client, core or theme, the lockfile or CI), so they didn't run."
+            scripts/ci/report.sh skipped "$job"               "Nothing the desktop app is built from changed (apps/desktop, packages/client, core, theme or kotlin-shared, the lockfile or CI), so they didn't run."
           done
 
       - name: Keep the report
