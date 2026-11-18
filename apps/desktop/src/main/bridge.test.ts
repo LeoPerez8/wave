@@ -999,6 +999,48 @@ test("main refuses playback calls with a bad scope, row, command, time or volume
   });
 });
 
+test("Search online is kept on this computer, starts as Only on demand and takes no other choice", async () => {
+  await withFile(async (file) => {
+    const { runtime, exposed, handlers } = connect(file);
+    try {
+      const wave = exposed.get("wave") as WaveBridge;
+      assert.equal(await wave.settings.searchOnline(), "onDemand");
+      await wave.settings.setSearchOnline("always");
+      assert.equal(await wave.settings.searchOnline(), "always");
+      await assert.rejects(
+        handlers.get("settings.setSearchOnline")!(trusted, "sometimes"),
+        /refused/i,
+      );
+      assert.equal(await wave.settings.searchOnline(), "always");
+      await assert.rejects(handlers.get("settings.setSearchOnline")!(trusted, "wifi"), /refused/i);
+      await wave.settings.setSearchOnline("onDemand");
+      assert.equal(await wave.settings.searchOnline(), "onDemand");
+    } finally {
+      await runtime.dispose();
+    }
+  });
+});
+
+test("a YouTube Music song found in Search plays alone and starts a Magic Queue", async () => {
+  await withFile(async (file) => {
+    const { runtime, exposed } = connect(file);
+    try {
+      const wave = exposed.get("wave") as WaveBridge;
+      await wave.yt.search("pink moon");
+      await wave.magicQueue.startStreamed("bcdefghijkl");
+      assert.equal((await wave.playback.view()).current?.videoId, "bcdefghijkl");
+      const queue = await wave.playback.queue(0, 10);
+      assert.ok(
+        !queue.items.some((row) => row.videoId === "abcdefghijk"),
+        "the other search result isn't queued",
+      );
+      assert.equal((await wave.magicQueue.view()).title, "Road");
+    } finally {
+      await runtime.dispose();
+    }
+  });
+});
+
 test("Search finds YouTube Music songs and one plays from the results as a new queue", async () => {
   await withFile(async (file) => {
     const { runtime, exposed, engineCalls, yt } = connect(file);

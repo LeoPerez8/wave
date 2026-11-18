@@ -12,6 +12,7 @@ import type { SongTags } from "./tags.ts";
 import type { DesktopFolder, DesktopSong, ScanStatus } from "./library.ts";
 import type { BrowseScope, BrowsePage, BrowseRow } from "./browse.ts";
 import type { YtSearchPage, YtStatus } from "./yt.ts";
+import type { SearchOnline } from "@wave/core";
 import type {
   DiscoverMixesView,
   MagicQueueView,
@@ -117,6 +118,11 @@ export interface BridgeContract extends PlaylistContract, LinkContract {
     readonly result: PlaybackSettings;
   };
   readonly "settings.ytMusic": { readonly args: readonly []; readonly result: boolean };
+  readonly "settings.searchOnline": { readonly args: readonly []; readonly result: SearchOnline };
+  readonly "settings.setSearchOnline": {
+    readonly args: readonly [value: SearchOnline];
+    readonly result: void;
+  };
   readonly "settings.setYtMusic": { readonly args: readonly [on: boolean]; readonly result: void };
   /** YouTube Music's songs for a query; never fails, `status` says why there are none. */
   readonly "yt.search": { readonly args: readonly [query: string]; readonly result: YtSearchPage };
@@ -328,6 +334,8 @@ export const BRIDGE_CALLS = [
   "settings.playback",
   "settings.setPlayback",
   "settings.ytMusic",
+  "settings.searchOnline",
+  "settings.setSearchOnline",
   "settings.setYtMusic",
   "yt.search",
   "yt.artwork",
@@ -448,6 +456,8 @@ export interface WaveBridge {
     /** Keeps a change to Settings › Playback; it applies from the next song. */
     readonly setPlayback: (change: Partial<PlaybackSettings>) => Promise<PlaybackSettings>;
     readonly ytMusic: () => Promise<boolean>;
+    readonly searchOnline: () => Promise<SearchOnline>;
+    readonly setSearchOnline: (value: SearchOnline) => Promise<void>;
     readonly setYtMusic: (on: boolean) => Promise<void>;
   };
   readonly yt: {
@@ -566,6 +576,8 @@ export const createBridge = (invoke: Invoke): WaveBridge => ({
     playback: () => invoke("settings.playback"),
     setPlayback: (change) => invoke("settings.setPlayback", change),
     ytMusic: () => invoke("settings.ytMusic"),
+    searchOnline: () => invoke("settings.searchOnline"),
+    setSearchOnline: (value) => invoke("settings.setSearchOnline", value),
     setYtMusic: (on) => invoke("settings.setYtMusic", on),
   },
   yt: {

@@ -1,5 +1,5 @@
 import { Links } from "./Links.tsx";
-import { readThemeChoice, themeFor } from "@wave/core";
+import { readThemeChoice, themeFor, type SearchOnline } from "@wave/core";
 import { useCallback, useEffect, useMemo, useRef, useState, type MouseEvent } from "react";
 import type { AccountView } from "../../shared/account.ts";
 import type { BrowseRow, BrowseScope } from "../../shared/browse.ts";
@@ -11,7 +11,7 @@ import { shownPanelTab } from "../../shared/panelTabs.ts";
 import { Icon } from "./Icon.tsx";
 import { Artwork, VirtualTable } from "./VirtualTable.tsx";
 import { FolderSettings } from "./FolderSettings.tsx";
-import { YtResults } from "./YtResults.tsx";
+import { SearchOnlineSetting } from "./SearchOnlineSetting.tsx";
 import { SearchPage } from "./SearchPage.tsx";
 import { AccountSettings, SignInInvitation } from "./AccountSettings.tsx";
 import { PlaybackSettings } from "./PlaybackSettings.tsx";
@@ -91,6 +91,7 @@ export function App() {
   const [setting, setSetting] = useState<(typeof settings)[number]>("library");
   const [appearance, setAppearance] = useState<"system" | "light" | "dark">("system");
   const [ytMusic, setYtMusic] = useState(false);
+  const [searchOnline, setSearchOnline] = useState<SearchOnline>();
   const [playlists, setPlaylists] = useState<readonly BrowseRow[]>([]);
   const [playlistOffset, setPlaylistOffset] = useState(0);
   const [playlistTotal, setPlaylistTotal] = useState(0);
@@ -123,6 +124,7 @@ export function App() {
   useEffect(() => {
     void window.wave.settings.appearance().then(setAppearance).catch(failed);
     void window.wave.settings.ytMusic().then(setYtMusic).catch(failed);
+    void window.wave.settings.searchOnline().then(setSearchOnline).catch(failed);
   }, [failed]);
   useEffect(() => {
     const media = matchMedia("(prefers-color-scheme: dark)");
@@ -618,6 +620,15 @@ export function App() {
                   <p className="secondary setting-hint">
                     {text.settings.searchAlsoFindsSongsOnYouTubeMusic}
                   </p>
+                  {ytMusic && searchOnline !== undefined && (
+                    <SearchOnlineSetting
+                      value={searchOnline}
+                      onChange={(value) => {
+                        setSearchOnline(value);
+                        void window.wave.settings.setSearchOnline(value).catch(failed);
+                      }}
+                    />
+                  )}
                 </>
               ) : setting === "playback" ? (
                 <PlaybackSettings onError={failed} />
@@ -650,6 +661,13 @@ export function App() {
         ) : route.kind === "search" ? (
           <SearchPage
             query={route.query ?? ""}
+            ytMusic={ytMusic}
+            searchOnline={searchOnline}
+            onYtPlay={(videoId) => {
+              rememberSearch();
+              playback.run(window.wave.magicQueue.startStreamed(videoId));
+            }}
+            onYtDownload={(videoId) => download(window.wave.downloads.yt([videoId]))}
             revision={revision}
             onOpen={(next) => {
               rememberSearch();
@@ -667,18 +685,7 @@ export function App() {
               void window.wave.search.remember(picked).catch(failed);
             }}
             onError={failed}
-          >
-            {ytMusic && (
-              <YtResults
-                query={route.query ?? ""}
-                onPlay={(videoIds, index) => {
-                  rememberSearch();
-                  playback.run(window.wave.playback.startYt(videoIds, index));
-                }}
-                onDownload={(videoId) => download(window.wave.downloads.yt([videoId]))}
-              />
-            )}
-          </SearchPage>
+          />
         ) : route.kind === "home" ? (
           <Home
             revision={revision}

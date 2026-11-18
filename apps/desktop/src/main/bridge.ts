@@ -20,7 +20,8 @@ import type { Page } from "../shared/bridge.ts";
 import { BROWSE_KINDS, type BrowseScope } from "../shared/browse.ts";
 import { browseLetter } from "./library/browse.ts";
 import { readArtwork } from "./library/artwork.ts";
-import { appearance, savePreference } from "./preferences.ts";
+import { appearance, preference, savePreference } from "./preferences.ts";
+import { readSearchOnline, writeSearchOnline } from "@wave/core";
 import {
   MAX_TARGET_IDS,
   SONG_RUN_ACTIONS,
@@ -332,6 +333,16 @@ const createHandlers = (
         ? playbackCall((p) => p.setSettings(change))
         : refuse("settings.setPlayback", "invalid playback settings"),
     "settings.ytMusic": () => ytCall((yt) => yt.enabled()),
+    "settings.searchOnline": () =>
+      Effect.map(Database, (db) =>
+        readSearchOnline(preference(db, "settings.searchOnline") ?? null),
+      ),
+    "settings.setSearchOnline": ([value]) =>
+      value === "always" || value === "onDemand"
+        ? Effect.map(Database, (db) =>
+            savePreference(db, "settings.searchOnline", writeSearchOnline(value) ?? ""),
+          )
+        : refuse("settings.setSearchOnline", "invalid setting"),
     "settings.setYtMusic": ([on]) =>
       typeof on === "boolean"
         ? ytCall((yt) => yt.setEnabled(on))
