@@ -28,8 +28,10 @@ sourceSets.test {
 application { mainClass.set("dev.leoperez.wave.stdio.MainKt") }
 
 // One JAR with every dependency in it, the shape the desktop bundles next to its Java runtime.
+// Stored, not deflated: the installer compresses it far better (about 5 MB instead of 12).
 tasks.register<Jar>("fatJar") {
   archiveFileName.set("wave-kotlin.jar")
+  entryCompression = ZipEntryCompression.STORED
   manifest { attributes["Main-Class"] = application.mainClass }
   duplicatesStrategy = DuplicatesStrategy.EXCLUDE
   from(sourceSets.main.get().output)
