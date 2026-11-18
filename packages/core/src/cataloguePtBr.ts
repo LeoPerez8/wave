@@ -94,6 +94,9 @@ export const ptBR: Catalogue = {
     youTubeMusic: "YouTube Music",
     ytOffline: "O YouTube Music volta quando você estiver online.",
     ytFailed: "O YouTube Music não respondeu. Tente de novo daqui a pouco.",
+    similarArtists: "Artistas parecidos",
+    youMightAlsoLike: "Você também pode gostar",
+    magicQueueIdle: "Comece uma Fila Mágica com uma destas músicas ou pelo menu de qualquer música.",
   },
   desktopLibrary: {
     refresh: "Atualizar",

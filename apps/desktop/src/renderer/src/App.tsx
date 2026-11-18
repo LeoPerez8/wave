@@ -1,5 +1,5 @@
 import { readThemeChoice, themeFor } from "@wave/core";
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, type MouseEvent } from "react";
 import type { AccountView } from "../../shared/account.ts";
 import type { BrowseRow, BrowseScope } from "../../shared/browse.ts";
 import type { ScanStatus } from "../../shared/library.ts";
@@ -14,10 +14,12 @@ import { useDesktopKeys } from "./keys.ts";
 import { ShortcutsSheet } from "./Shortcuts.tsx";
 import { SelectionBar, useSongActions, type Selection } from "./SongActions.tsx";
 import { labels, text } from "./text.ts";
+import { DiscoverSection } from "./Discover.tsx";
+import { isYtRoute, streamedSongItems, YtPage, type YtRoute } from "./YtPages.tsx";
 
-type Route = BrowseScope | { readonly kind: "home" } | { readonly kind: "settings" };
+type Route = BrowseScope | { readonly kind: "home" } | { readonly kind: "settings" } | YtRoute;
 const sections = ["playlists", "artists", "albums", "songs", "genres", "favorites"] as const;
-/** YT Music's sidebar pages; their pages come in later tickets. */
+/** YT Music's sidebar pages; Downloads comes with its ticket. */
 const ytPages = [
   ["discover", "home"],
   ["magicQueue", "queue"],
@@ -168,7 +170,10 @@ export function App() {
       content.current?.querySelector<HTMLElement>("[role=grid]")?.focus();
   }, [route]);
   const scope = useMemo<BrowseScope>(
-    () => (route.kind === "home" || route.kind === "settings" ? { kind: "songs" } : route),
+    () =>
+      route.kind === "home" || route.kind === "settings" || isYtRoute(route)
+        ? { kind: "songs" }
+        : route,
     [route],
   );
   const list = JSON.stringify(scope);
@@ -194,6 +199,18 @@ export function App() {
       return false;
     },
   });
+  /** A YouTube Music page's song menu: a streamed song's, or a Library song's. */
+  const ytSongMenu = (row: BrowseRow, event: MouseEvent<HTMLElement>) =>
+    row.videoId !== undefined
+      ? actions.openItems(
+          text.desktopLibrary.songMenu(row.title),
+          streamedSongItems(row.videoId, playback.run),
+          event.currentTarget,
+        )
+      : actions.openMenu({ scope: { kind: "songs" }, ids: [row.id] }, row.title, {
+          x: event.clientX,
+          y: event.clientY,
+        });
   const open = (row: BrowseRow, index: number) => {
     const detail = {
       albums: "album",
@@ -278,7 +295,9 @@ export function App() {
                   className="nav-item"
                   aria-label={labels[key]}
                   title={labels[key]}
-                  disabled
+                  aria-current={route.kind === key ? "page" : undefined}
+                  disabled={key === "downloads"}
+                  onClick={() => key !== "downloads" && go({ kind: key })}
                 >
                   <Icon name={icon} />
                   <span>{labels[key]}</span>
@@ -371,7 +390,7 @@ export function App() {
               </div>
             </div>
           </div>
-        ) : (
+        ) : route.kind === "ytArtist" || route.kind === "ytAlbum" ? null : (
           <div className="page-heading">
             <h1>{title}</h1>
             {(route.kind === "home" || route.kind === "songs") && (
@@ -477,8 +496,17 @@ export function App() {
               )}
             </section>
           </div>
+        ) : isYtRoute(route) ? (
+          <YtPage
+            route={route}
+            run={playback.run}
+            revision={playback.view?.revision ?? 0}
+            go={go}
+            onSongMenu={ytSongMenu}
+          />
         ) : (
           <>
+            {route.kind === "home" && ytMusic && <DiscoverSection run={playback.run} />}
             {selection && (
               <SelectionBar
                 scope={scope}

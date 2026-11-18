@@ -95,6 +95,9 @@ export const en = {
     youTubeMusic: "YouTube Music",
     ytOffline: "YouTube Music comes back when you're online.",
     ytFailed: "YouTube Music didn't answer. Try again in a moment.",
+    similarArtists: "Similar artists",
+    youMightAlsoLike: "You might also like",
+    magicQueueIdle: "Start a Magic Queue from one of these songs, or from any song's menu.",
   },
   desktopLibrary: {
     refresh: "Refresh",

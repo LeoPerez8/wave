@@ -211,12 +211,27 @@ export function useSongActions({ go, select, failed, changed }: Options) {
                 },
               }),
           };
+        case "magicQueue":
+          return {
+            ...base,
+            run: () => {
+              finish();
+              const couldnt = () => failed(text.playbackText.couldntStartTheMagicQueue);
+              void window.wave.magicQueue
+                .start(target)
+                .then((started) => {
+                  changed();
+                  if (!started) couldnt();
+                })
+                .catch(couldnt);
+            },
+          };
         default:
-          // Copy Link, Magic Queue and Fix Song come with their features' tickets.
+          // Copy Link and Fix Song come with their features' tickets.
           return { ...base, disabled: true };
       }
     },
-    [go, run, select],
+    [go, run, select, changed, failed],
   );
 
   /** Opens one song's menu at [at]. */
