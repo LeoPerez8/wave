@@ -92,9 +92,13 @@ test.afterAll(async () => {
 const go = (name: string) =>
   page.locator(".sidebar").getByRole("button", { name, exact: true }).click();
 const headers = () =>
-  page.getByRole("grid").first().getByRole("columnheader").evaluateAll((cells) =>
-    cells.map((cell) => cell.textContent || cell.getAttribute("aria-label")),
-  );
+  page
+    .getByRole("grid")
+    .first()
+    .getByRole("columnheader")
+    .evaluateAll((cells) =>
+      cells.map((cell) => cell.textContent || cell.getAttribute("aria-label")),
+    );
 
 test("the album page numbers every song and has no Album column", async () => {
   await go("Albums");
@@ -117,7 +121,7 @@ test("Artists, Genres and Playlists have no empty Artist or star header", async 
     await go(name);
     await expect(page.getByRole("grid").getByRole("row").nth(1)).toBeVisible();
     await shoot(name.toLowerCase());
-    expect(await headers()).toEqual(expected);
+    expect.soft(await headers(), name).toEqual(expected);
   }
 });
 
@@ -196,18 +200,15 @@ test("a streamed song gets a full-size cover, and the Related panel fits its wid
     unavailable: false,
   };
   const image = `data:image/png;base64,${readFileSync(cover).toString("base64")}`;
-  await app.evaluate(
-    ({ ipcMain }, image) => {
-      const seen: string[] = [];
-      (globalThis as { askedCovers?: string[] }).askedCovers = seen;
-      ipcMain.removeHandler("yt.artwork");
-      ipcMain.handle("yt.artwork", (_event, url: string) => {
-        seen.push(url);
-        return image;
-      });
-    },
-    image,
-  );
+  await app.evaluate(({ ipcMain }, image) => {
+    const seen: string[] = [];
+    (globalThis as { askedCovers?: string[] }).askedCovers = seen;
+    ipcMain.removeHandler("yt.artwork");
+    ipcMain.handle("yt.artwork", (_event, url: string) => {
+      seen.push(url);
+      return image;
+    });
+  }, image);
   await answer("settings.ytMusic", true);
   await answer("playback.view", {
     status: { state: "paused", positionMs: 0, durationMs: 200000 },
@@ -245,16 +246,16 @@ test("a streamed song gets a full-size cover, and the Related panel fits its wid
   const panel = page.locator(".related-panel");
   await expect(panel.getByRole("listitem").first()).toBeVisible();
   await shoot("related");
-  await expect(panel.locator("h2", { hasText: /^Related$/ })).toHaveCount(0);
-  expect(await panel.evaluate((el) => el.scrollWidth <= el.clientWidth)).toBe(true);
+  await expect.soft(panel.locator("h2", { hasText: /^Related$/ })).toHaveCount(0);
+  expect.soft(await panel.evaluate((el) => el.scrollWidth <= el.clientWidth)).toBe(true);
   const item = panel.locator(".yt-list-item").first();
   const add = await item.locator(".related-add").boundingBox();
-  const text = await item.locator(".yt-row > span").evaluateAll((spans) =>
-    spans.map((span) => span.getBoundingClientRect().right),
-  );
-  for (const right of text) expect(right).toBeLessThanOrEqual(add!.x + 1);
+  const text = await item
+    .locator(".yt-row > span")
+    .evaluateAll((spans) => spans.map((span) => span.getBoundingClientRect().right));
+  for (const right of text) expect.soft(right).toBeLessThanOrEqual(add!.x + 1);
   await app.evaluate(({ BrowserWindow }) => BrowserWindow.getAllWindows()[0]!.setSize(1440, 900));
-  await bar.locator(".player-now").click();
+  await bar.locator(".player-now .artwork").click();
   await expect(page.locator(".now-playing .artwork img")).toBeVisible();
   await shoot("now-playing");
   const covers = await app.evaluate(() => (globalThis as { askedCovers?: string[] }).askedCovers);

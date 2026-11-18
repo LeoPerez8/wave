@@ -65,12 +65,41 @@ export interface LinksOptions {
     params: KotlinMethods[M]["params"],
   ) => Promise<KotlinMethods[M]["result"]>;
   readonly start: (song: { readonly id: number } | YtAlbumSong) => Promise<void>;
+  /** Keeps what Wave learnt about a streamed song after it started (its album). */
+  readonly remember?: (song: YtAlbumSong) => void;
   readonly writeClipboard: (text: string) => void;
   readonly changed: () => void;
   readonly fetch?: typeof globalThis.fetch;
 }
 
 export const createDesktopLinks = (options: LinksOptions) => {
+  /**
+   * A linked song's radio names no album for it, so the player bar had no album line. Its album
+   * is the one a search for the song gives its video, or the same recording under another video.
+   */
+  const findAlbum = async (song: YtAlbumSong): Promise<void> => {
+    try {
+      const page = (await options.call("search", {
+        query: songSearchQuery(song as SongSearchKey),
+      })) as { songs?: unknown };
+      const found = ytSongs(page.songs).filter((candidate) => candidate.album);
+      const match =
+        found.find((candidate) => candidate.videoId === song.videoId) ??
+        found.find(
+          (candidate) => candidate.videoId === songSearchMatch(song as SongSearchKey, found),
+        );
+      if (match === undefined) return;
+      options.remember?.({
+        ...song,
+        album: match.album,
+        albumId: match.albumId,
+        artworkUrl: song.artworkUrl ?? match.artworkUrl,
+      });
+      options.changed();
+    } catch {
+      // The song plays without its album line.
+    }
+  };
   let pending: { token: string; plan: LinkImportPlan<YtAlbumSong> } | undefined;
   const unread = (reason: LinkReadFailure, language: AppLanguage): OpenLinkResult => ({
     kind: "playlist",
@@ -380,6 +409,7 @@ export const createDesktopLinks = (options: LinksOptions) => {
           song: songLinkNotFound(ending.song, { search: true }, language),
         };
       await options.start(ending.from === "library" ? ending.track : ending.song);
+      if (ending.from !== "library" && !ending.song.album) void findAlbum(ending.song);
       return { kind: "playing" };
     },
   };
