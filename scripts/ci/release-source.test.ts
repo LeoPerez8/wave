@@ -139,6 +139,25 @@ describe("releaseSource", () => {
     assert.equal(manifest.artifacts?.apk, "wave-1.3.0.apk");
   });
 
+  it("links a promotion to the ti release it promotes, from the same source", () => {
+    const promotedFrom = {
+      releaseTag: "v1.3.0-ti",
+      source: SOURCE,
+      run: { repository: REPO, id: 120, attempt: 1 },
+      signedSha256: "2".repeat(64),
+    };
+    const stable = (from: unknown) =>
+      releaseSource(
+        inputs(sealed({ updateChannel: "main" }, { releaseTag: "v1.3.0", promotedFrom: from })),
+      );
+    assert.deepEqual(stable(promotedFrom).promotedFrom, {
+      releaseTag: "v1.3.0-ti",
+      signedSha256: "2".repeat(64),
+    });
+    assert.throws(() => stable({ ...promotedFrom, source: BASE }), /promotes another source/);
+    assert.equal(releaseSource(inputs()).promotedFrom, null);
+  });
+
   it("copies nothing from a record beyond the fields it names", () => {
     const record = sealed({ keystorePassword: "hunter2" }, { token: "sekrit" });
     const manifest = JSON.stringify(releaseSource(inputs(record)));

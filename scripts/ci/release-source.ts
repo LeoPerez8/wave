@@ -32,6 +32,8 @@ export type SourceManifest = {
   /** A repack's native base needs its own source too; unknown before the gate. */
   build: "full" | "repack" | "unknown";
   nativeBase: (Revision & { runtimeVersion: string }) | null;
+  /** For a stable release, the ti release it promotes: same source, its own sealed APK. */
+  promotedFrom: { releaseTag: string; signedSha256: string } | null;
   /** The build instructions as they stood at a fixed commit. */
   instructions: string;
   /** What CI generated on top of the source tree. */
@@ -157,6 +159,7 @@ export const releaseSource = (inputs: SourceInputs): SourceManifest => {
       source: revision(repository, commit),
       build: "unknown",
       nativeBase: null,
+      promotedFrom: null,
       instructions: instructions(commit),
       generated: {
         versionName: version,
@@ -205,11 +208,21 @@ export const releaseSource = (inputs: SourceInputs): SourceManifest => {
       refuse("the native base was built for another runtime version.");
     nativeBase = { ...revision(repository, baseSource), runtimeVersion };
   }
+  let promotedFrom: SourceManifest["promotedFrom"] = null;
+  if (object(record.promotedFrom)) {
+    const from = record.promotedFrom;
+    if (text(from, "source") !== source) refuse("the record promotes another source.");
+    promotedFrom = {
+      releaseTag: text(from, "releaseTag"),
+      signedSha256: text(from, "signedSha256"),
+    };
+  }
   return {
     ...common,
     version,
     releaseTag: tag,
     provenance: "sealed-record",
+    promotedFrom,
     source: revision(repository, source),
     build,
     nativeBase,
