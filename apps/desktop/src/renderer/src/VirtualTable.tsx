@@ -1,4 +1,4 @@
-import { desktopKey } from "@wave/core";
+import { desktopKey, streamedCoverUrls } from "@wave/core";
 import { useEffect, useRef, useState, type KeyboardEvent, type MouseEvent } from "react";
 import type { BrowsePage, BrowseRow, BrowseScope } from "../../shared/browse.ts";
 import { Icon } from "./Icon.tsx";
@@ -6,15 +6,26 @@ import { pressOf } from "./keys.ts";
 import { isChecked, toggled, type Selection } from "./SongActions.tsx";
 import { markClass, rowMark, SongMark, useSongStates } from "./SongMark.tsx";
 import { labels, text, albumName, artistName, tagTitle } from "./text.ts";
+import { tableColumns } from "../../shared/tableColumns.ts";
+import "./tables.css";
 
 const SIZE = 100;
 const HEIGHT = 40;
 export const time = (ms: number) =>
   `${Math.floor(ms / 60000)}:${String(Math.floor(ms / 1000) % 60).padStart(2, "0")}`;
 const images = new Map<string, Promise<string | null>>();
+/** A streamed cover at the largest size YouTube has (Core's `streamedCoverUrls`), else [url] itself. */
+const largestCover = async (url: string): Promise<string | null> => {
+  for (const asked of [...streamedCoverUrls(url), url]) {
+    const image = await window.wave.yt.artwork(asked).catch(() => null);
+    if (image !== null) return image;
+  }
+  return null;
+};
 /**
  * A Library cover by its hash, a YouTube Music cover by its address (`url`), or a playlist's own
- * image ([playlist] with its [image] key, which changes whenever the image does).
+ * image ([playlist] with its [image] key, which changes whenever the image does). A [full] cover
+ * (Now Playing) asks for a streamed song's cover at its largest, not the row's thumbnail.
  */
 export function Artwork({
   hash,
@@ -25,6 +36,7 @@ export function Artwork({
   image: playlistImage,
   artist = false,
   large = false,
+  full = false,
 }: {
   readonly hash?: string | null;
   readonly kind?: "song" | "album" | "artist" | undefined;
@@ -34,6 +46,7 @@ export function Artwork({
   readonly image?: string | null;
   readonly artist?: boolean;
   readonly large?: boolean;
+  readonly full?: boolean;
 }) {
   const [loaded, setLoaded] = useState<{ key: string; image: string | null }>();
   const own = playlist !== undefined && playlistImage ? playlist : undefined;
@@ -46,7 +59,7 @@ export function Artwork({
         : hash
           ? `${hash}-${large}`
           : url
-            ? `url:${url}`
+            ? `url:${url}${full ? "-full" : ""}`
             : "";
   const image = loaded?.key === imageKey ? loaded.image : null;
   useEffect(() => {
@@ -61,7 +74,9 @@ export function Artwork({
               ? window.wave.library.cover(kind!, id!, large)
               : hash
                 ? window.wave.library.artwork(hash, large)
-                : window.wave.yt.artwork(url!)
+                : full
+                  ? largestCover(url!)
+                  : window.wave.yt.artwork(url!)
         ).catch(() => null);
         images.set(imageKey, read);
         void read.then((value) => {
@@ -76,7 +91,7 @@ export function Artwork({
     return () => {
       current = false;
     };
-  }, [imageKey, own, hash, url, large, lookup, kind, id]);
+  }, [imageKey, own, hash, url, large, lookup, kind, id, full]);
   return (
     <span className={`artwork ${artist ? "artist-image" : ""}`}>
       {image ? <img src={image} alt="" /> : <Icon name={artist ? "artists" : "songs"} />}
@@ -128,6 +143,7 @@ export function VirtualTable({
   const firstPage = Math.floor(start / SIZE);
   const lastPage = Math.floor(Math.max(start, end - 1) / SIZE);
   const songList = !["albums", "artists", "playlists", "genres"].includes(scope.kind);
+  const columns = tableColumns(scope.kind);
   const emptyMessage =
     scope.kind in text.library.sectionEmpty
       ? text.library.sectionEmpty[scope.kind as keyof typeof text.library.sectionEmpty]
@@ -277,7 +293,7 @@ export function VirtualTable({
   };
   return (
     <div
-      className={`table-area ${songList ? "song-table" : "group-table"}`}
+      className={`table-area ${songList ? "song-table" : "group-table"} ${columns.third === null ? "no-third" : ""} ${columns.star ? "" : "no-star"}`}
       role="grid"
       aria-label={
         preview?.label ??
@@ -286,7 +302,7 @@ export function VirtualTable({
           : labels.songs)
       }
       aria-rowcount={total + 1}
-      aria-colcount={5}
+      aria-colcount={3 + (columns.third === null ? 0 : 1) + (columns.star ? 1 : 0)}
       tabIndex={0}
       aria-activedescendant={
         total && active >= start && active < end && get(active) ? rowId(active) : undefined
@@ -297,14 +313,20 @@ export function VirtualTable({
       <div className="table-head table-columns" role="row" aria-rowindex={1}>
         <span role="columnheader">{text.desktopLibrary.titleColumn}</span>
         <span role="columnheader">
-          {songList ? text.desktopLibrary.artistColumn : labels.songs}
+          {columns.second === "artist" ? text.desktopLibrary.artistColumn : labels.songs}
         </span>
-        <span role="columnheader" className="album-column">
-          {songList ? text.desktopLibrary.albumColumn : text.desktopLibrary.artistColumn}
-        </span>
-        <span role="columnheader" className="star-column" aria-label={labels.favorite}>
-          <Icon name="favorites" size={14} />
-        </span>
+        {columns.third !== null && (
+          <span role="columnheader" className="album-column">
+            {columns.third === "album"
+              ? text.desktopLibrary.albumColumn
+              : text.desktopLibrary.artistColumn}
+          </span>
+        )}
+        {columns.star && (
+          <span role="columnheader" className="star-column" aria-label={labels.favorite}>
+            <Icon name="favorites" size={14} />
+          </span>
+        )}
         <span role="columnheader">{preview?.trailingHeading ?? labels.time}</span>
       </div>
       <div
@@ -349,7 +371,7 @@ export function VirtualTable({
                       />
                     )}
                     <span className="row-picture">
-                      {scope.kind === "album" ? (
+                      {columns.picture === "trackNumber" ? (
                         <span className="track-number">{row.trackNumber ?? index + 1}</span>
                       ) : (
                         <Artwork
@@ -380,12 +402,16 @@ export function VirtualTable({
                   <div role="gridcell" className="truncate secondary">
                     {songList ? artistName(row.artist) : labels.songCount(row.count)}
                   </div>
-                  <div role="gridcell" className="album-column truncate secondary">
-                    {albumName(row.album) || (!songList ? artistName(row.artist) : "")}
-                  </div>
-                  <div role="gridcell" className="star-column">
-                    {row.favorite && <Icon name="favorites" size={14} />}
-                  </div>
+                  {columns.third !== null && (
+                    <div role="gridcell" className="album-column truncate secondary">
+                      {columns.third === "album" ? albumName(row.album) : artistName(row.artist)}
+                    </div>
+                  )}
+                  {columns.star && (
+                    <div role="gridcell" className="star-column">
+                      {row.favorite && <Icon name="favorites" size={14} />}
+                    </div>
+                  )}
                   <div role="gridcell" className="time-column secondary">
                     {preview ? preview.trailing(row) : time(row.durationMs)}
                   </div>

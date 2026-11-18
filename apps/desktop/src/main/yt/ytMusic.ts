@@ -127,9 +127,25 @@ export const createYtMusic = (deps: YtMusicDeps): YtMusicShape => {
   const fetchImage = deps.fetch ?? globalThis.fetch;
   const maxArtworkBytes = deps.maxArtworkBytes ?? 2_000_000;
   const known = new Map<string, YtAlbumSong>();
+  /**
+   * Keeps [song] for playback. A later answer can know less about it (a radio's first item has
+   * no album line), so what it leaves out is taken from what Wave knew already.
+   */
   const remember = (song: YtAlbumSong) => {
+    const before = known.get(song.videoId);
     known.delete(song.videoId);
-    known.set(song.videoId, song);
+    known.set(
+      song.videoId,
+      before === undefined
+        ? song
+        : {
+            ...song,
+            album: song.album ?? before.album,
+            albumId: song.albumId ?? before.albumId,
+            artworkUrl: song.artworkUrl ?? before.artworkUrl,
+            durationMs: song.durationMs ?? before.durationMs,
+          },
+    );
     if (known.size > KNOWN_LIMIT) known.delete(known.keys().next().value!);
   };
   try {
