@@ -33,6 +33,10 @@ export interface BrowseRow {
   readonly favorite: boolean;
   readonly path: string | null;
   readonly unavailable: boolean;
+  /** A YouTube Music song's video id; its `id` is then 0 and it has no Library row. */
+  readonly videoId?: string;
+  /** A YouTube Music song's cover, fetched through `yt.artwork`. */
+  readonly artworkUrl?: string | null;
 }
 export interface BrowsePage extends Page<BrowseRow> {
   readonly hero?: BrowseRow;

@@ -3,7 +3,7 @@ import { BrowserWindow, app, dialog, ipcMain, shell, nativeImage, nativeTheme } 
 import * as Layer from "effect/Layer";
 import * as ManagedRuntime from "effect/ManagedRuntime";
 import { forkAudio } from "./audio/fork.ts";
-import { playerLayer } from "./audio/player.ts";
+import { streamingPlayerLayer } from "./audio/player.ts";
 import { registerBridge } from "./bridge.ts";
 import { playbackLayer } from "./playback/playback.ts";
 import { libraryLayer } from "./database.ts";
@@ -16,12 +16,31 @@ import * as Effect from "effect/Effect";
 import { DEFAULT_THEME_CHOICE, themeFor } from "@wave/core";
 import { appearance } from "./preferences.ts";
 import { artworkStore } from "./library/artwork.ts";
+import { ytMusicLayer } from "./yt/ytMusic.ts";
+import { botguardPost, createPoTokens, poTokenHost } from "./yt/poTokens.ts";
+import { openPoTokenPage } from "./yt/poTokenWindow.ts";
 
 // %APPDATA%\Wave or ~/.config/Wave, from the product name; tests point it at a folder of their own.
 const dataFolder = process.env["WAVE_DATA_DIR"];
 if (dataFolder !== undefined && dataFolder !== "") app.setPath("userData", dataFolder);
 
 let window: BrowserWindow | undefined;
+
+/**
+ * Wave's caches: %LOCALAPPDATA%\Wave or ~/.cache/wave (cover art, streamed audio); tests point
+ * them at their own folder with WAVE_DATA_DIR.
+ */
+const cacheFolder = (name: string) =>
+  join(
+    process.env["WAVE_DATA_DIR"] ??
+      (process.platform === "win32"
+        ? join(process.env["LOCALAPPDATA"] ?? join(app.getPath("home"), "AppData", "Local"), "Wave")
+        : join(process.env["XDG_CACHE_HOME"] ?? join(app.getPath("home"), ".cache"), "wave")),
+    name,
+  );
+
+/** Proof-of-origin tokens for the JVM's YouTube requests, minted in a hidden window. */
+const poTokens = createPoTokens({ openPage: openPoTokenPage, post: botguardPost() });
 
 const showWindow = () => {
   if (window === undefined) return;
@@ -63,6 +82,9 @@ const createWindow = () => {
   created.once("ready-to-show", () => created.show());
   created.on("closed", () => {
     window = undefined;
+    // The token window is hidden, so it alone mustn't keep Wave running.
+    poTokens.close();
+    app.quit();
   });
   const devServer = process.env["ELECTRON_RENDERER_URL"];
   if (!app.isPackaged && devServer !== undefined) void created.loadURL(devServer);
@@ -96,13 +118,19 @@ else {
       dataDir: join(app.getPath("userData"), "kotlin"),
       platform: process.platform,
     });
-    const services = Layer.mergeAll(
+    const base = Layer.mergeAll(
       libraryLayer(join(app.getPath("userData"), "wave.db")),
-      playerLayer({ fork: forkAudio(join(import.meta.dirname, "audio.js"), addon) }),
       kotlinLayer({
         spawn: spawnLines(jvm, (text) => process.stderr.write(`[jvm] ${text}`)),
+        host: { poToken: poTokenHost(poTokens) },
       }),
     );
+    // The player streams YT Music songs through YtMusic, into the bounded audio cache.
+    const services = Layer.mergeAll(
+      streamingPlayerLayer({
+        fork: forkAudio(join(import.meta.dirname, "audio.js"), addon, cacheFolder("audio")),
+      }),
+    ).pipe(Layer.provideMerge(ytMusicLayer()), Layer.provideMerge(base));
     const library = desktopLibraryLayer({
       // Electron resolves Windows' Music known folder and Linux's XDG user directory.
       musicFolder: process.env["WAVE_MUSIC_DIR"] ?? app.getPath("music"),
@@ -110,36 +138,20 @@ else {
       cacheArtwork: (() => {
         let store: ReturnType<typeof artworkStore> | undefined;
         return (db, encoded) => {
-          store ??= artworkStore(
-            db,
-            join(
-              process.env["WAVE_DATA_DIR"] ??
-                (process.platform === "win32"
-                  ? join(
-                      process.env["LOCALAPPDATA"] ?? join(app.getPath("home"), "AppData", "Local"),
-                      "Wave",
-                    )
-                  : join(
-                      process.env["XDG_CACHE_HOME"] ?? join(app.getPath("home"), ".cache"),
-                      "wave",
-                    )),
-              "artwork",
-            ),
-            (bytes) => {
-              const image = nativeImage.createFromBuffer(bytes);
-              if (image.isEmpty()) return undefined;
-              const { width, height } = image.getSize();
-              const resized = (side: number) =>
-                image
-                  .resize(
-                    width >= height
-                      ? { width: Math.min(side, width), quality: "good" }
-                      : { height: Math.min(side, height), quality: "good" },
-                  )
-                  .toJPEG(90);
-              return { thumb: resized(300), medium: resized(640) };
-            },
-          );
+          store ??= artworkStore(db, cacheFolder("artwork"), (bytes) => {
+            const image = nativeImage.createFromBuffer(bytes);
+            if (image.isEmpty()) return undefined;
+            const { width, height } = image.getSize();
+            const resized = (side: number) =>
+              image
+                .resize(
+                  width >= height
+                    ? { width: Math.min(side, width), quality: "good" }
+                    : { height: Math.min(side, height), quality: "good" },
+                )
+                .toJPEG(90);
+            return { thumb: resized(300), medium: resized(640) };
+          });
           return store(encoded);
         };
       })(),

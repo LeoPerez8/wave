@@ -7,7 +7,7 @@
 import { Database } from "@wave/client";
 import { setFavorites } from "@wave/client/db/playHistory";
 import { createPlaybackSession, type AudioPort } from "@wave/client/playbackSession";
-import type { QueueState } from "@wave/core";
+import { parseTrackId, ytTrackId, type QueueState } from "@wave/core";
 import * as Context from "effect/Context";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
@@ -15,10 +15,12 @@ import * as Layer from "effect/Layer";
 import type { Page } from "../../shared/bridge.ts";
 import type { BrowseRow, BrowseScope } from "../../shared/browse.ts";
 import type { PlaybackCommand, PlayerView, QueueRow } from "../../shared/playerView.ts";
+import { ytRow } from "../../shared/yt.ts";
 import { Player } from "../audio/player.ts";
 import { browseSongs, browseTrackIds } from "../library/browse.ts";
 import { DesktopLibrary } from "../library/library.ts";
 import { preference, savePreference } from "../preferences.ts";
+import { YtMusic } from "../yt/ytMusic.ts";
 
 export interface PlaybackShape {
   /** What the player bar shows; cheap enough to poll. */
@@ -28,6 +30,8 @@ export interface PlaybackShape {
    * true, or from the first song. A queue it replaces can come back with `undo`.
    */
   readonly start: (scope: BrowseScope, index?: number, shuffle?: boolean) => Promise<void>;
+  /** Plays YouTube Music songs a search found, from [index], as a new queue. */
+  readonly startYt: (videoIds: readonly string[], index: number) => Promise<void>;
   /** A queue command: Next, Previous, shuffle, repeat, and the Queue's edits. */
   readonly command: (command: PlaybackCommand) => Promise<void>;
   readonly play: () => Promise<void>;
@@ -61,6 +65,7 @@ export const playbackLayer = Layer.effect(
     const db = yield* Database;
     const player = yield* Player;
     const library = yield* DesktopLibrary;
+    const yt = yield* YtMusic;
     const run = Effect.runPromise;
     const audio: AudioPort = {
       load: (path, key) => run(player.load(path, key)),
@@ -85,6 +90,7 @@ export const playbackLayer = Layer.effect(
         audio,
         source: "desktop",
         available: (path) => !library.unavailable(path),
+        streamed: yt.song,
       }),
     );
     yield* Effect.promise(() => run(player.setVolume(muted ? 0 : volume)).catch(failed));
@@ -103,6 +109,23 @@ export const playbackLayer = Layer.effect(
         ...song,
         unavailable: song.path !== null && library.unavailable(song.path),
       }));
+    /** Each entry's row, Library songs read in one go; songs nothing knows are left out. */
+    const rowsOf = (trackIds: readonly string[]): (BrowseRow | undefined)[] => {
+      const refs = trackIds.map(parseTrackId);
+      const songs = new Map(
+        rows(refs.flatMap((ref) => (ref?.kind === "library" ? [ref.id] : []))).map((song) => [
+          song.id,
+          song,
+        ]),
+      );
+      return refs.map((ref) => {
+        if (ref?.kind === "library") return songs.get(ref.id);
+        const song = ref?.kind === "yt" ? yt.song(ref.videoId) : undefined;
+        return song === undefined ? undefined : ytRow(song);
+      });
+    };
+    /** Keeps the queue's YT Music songs for the next launch, after anything that changes it. */
+    const keepQueued = () => yt.keepQueued(session.snapshot().queue.entries);
     /** The current song's row, read again only when the queue or a star changed. */
     let currentRow: { readonly revision: number; readonly row: BrowseRow | null } | undefined;
     const view = (): PlayerView => {
@@ -113,7 +136,7 @@ export const playbackLayer = Layer.effect(
       }
       if (currentRow?.revision !== revision) {
         const entry = queue.entries[queue.index];
-        currentRow = { revision, row: entry ? (rows([Number(entry.trackId)])[0] ?? null) : null };
+        currentRow = { revision, row: entry ? (rowsOf([entry.trackId])[0] ?? null) : null };
       }
       return {
         status,
@@ -146,6 +169,20 @@ export const playbackLayer = Layer.effect(
           context: { kind: scope.kind, id: scope.id === undefined ? null : String(scope.id) },
         });
         if (session.snapshot().canUndo) undoOffer++;
+        keepQueued();
+      },
+      startYt: async (videoIds, index) => {
+        error = null;
+        if (videoIds.some((videoId) => yt.song(videoId) === undefined))
+          throw new Error("[yt-unknown] That song isn't in the search results anymore");
+        await session.dispatch({
+          type: "play",
+          trackIds: videoIds.map(ytTrackId),
+          startIndex: index,
+          context: { kind: "search", id: null },
+        });
+        if (session.snapshot().canUndo) undoOffer++;
+        keepQueued();
       },
       command: async (command) => {
         error = null;
@@ -154,15 +191,20 @@ export const playbackLayer = Layer.effect(
             ? { ...command, positionMs: session.snapshot().status.positionMs }
             : command,
         );
+        keepQueued();
       },
       play: session.play,
       pause: session.pause,
       seek: session.seek,
-      undo: session.undo,
+      undo: async () => {
+        await session.undo();
+        keepQueued();
+      },
       dismissUndo: session.dismissUndo,
       favorite: () => {
         const current = view().current;
-        if (current === null) return;
+        // A YT Music song isn't the Library's; starring it comes with its own ticket.
+        if (current === null || current.videoId !== undefined) return;
         setFavorites(db, [current.id], !current.favorite, Date.now());
         revision++;
       },
@@ -176,14 +218,12 @@ export const playbackLayer = Layer.effect(
       queue: (offset, limit) => {
         const { queue } = session.snapshot();
         const entries = queue.entries.slice(offset, offset + limit);
-        const songs = new Map(
-          rows(entries.map((entry) => Number(entry.trackId))).map((song) => [song.id, song]),
-        );
+        const songs = rowsOf(entries.map((entry) => entry.trackId));
         return {
           offset,
           total: queue.entries.length,
           items: entries.flatMap((entry, n) => {
-            const song = songs.get(Number(entry.trackId));
+            const song = songs[n];
             const at = offset + n;
             return song
               ? [

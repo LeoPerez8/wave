@@ -9,6 +9,7 @@ import type { PlaybackStatus } from "./playback.ts";
 import type { SongTags } from "./tags.ts";
 import type { DesktopFolder, DesktopSong, ScanStatus } from "./library.ts";
 import type { BrowseScope, BrowsePage } from "./browse.ts";
+import type { YtSearchPage } from "./yt.ts";
 export type Appearance = "system" | "light" | "dark";
 
 /** One window of a list, as a list call returns it. */
@@ -24,6 +25,10 @@ export interface BridgeContract {
   readonly "playback.view": { readonly args: readonly []; readonly result: PlayerView };
   readonly "playback.start": {
     readonly args: readonly [scope: BrowseScope, index?: number, shuffle?: boolean];
+    readonly result: void;
+  };
+  readonly "playback.startYt": {
+    readonly args: readonly [videoIds: readonly string[], index: number];
     readonly result: void;
   };
   readonly "playback.command": {
@@ -50,6 +55,12 @@ export interface BridgeContract {
     readonly args: readonly [appearance: Appearance];
     readonly result: void;
   };
+  readonly "settings.ytMusic": { readonly args: readonly []; readonly result: boolean };
+  readonly "settings.setYtMusic": { readonly args: readonly [on: boolean]; readonly result: void };
+  /** YouTube Music's songs for a query; never fails, `status` says why there are none. */
+  readonly "yt.search": { readonly args: readonly [query: string]; readonly result: YtSearchPage };
+  /** A YouTube Music cover as a data URL, or null. */
+  readonly "yt.artwork": { readonly args: readonly [url: string]; readonly result: string | null };
   readonly "library.artwork": {
     readonly args: readonly [hash: string, large: boolean];
     readonly result: string | null;
@@ -106,6 +117,7 @@ type PagedLists<T> = {
 export const BRIDGE_CALLS = [
   "playback.view",
   "playback.start",
+  "playback.startYt",
   "playback.command",
   "playback.play",
   "playback.pause",
@@ -137,6 +149,10 @@ export const BRIDGE_CALLS = [
   "tags.read",
   "settings.appearance",
   "settings.setAppearance",
+  "settings.ytMusic",
+  "settings.setYtMusic",
+  "yt.search",
+  "yt.artwork",
 ] as const satisfies readonly BridgeCall[] &
   (BridgeContract extends PagedLists<BridgeContract> ? unknown : never);
 
@@ -150,6 +166,7 @@ export interface WaveBridge {
   readonly playback: {
     readonly view: () => Promise<PlayerView>;
     readonly start: (scope: BrowseScope, index?: number, shuffle?: boolean) => Promise<void>;
+    readonly startYt: (videoIds: readonly string[], index: number) => Promise<void>;
     readonly command: (command: PlaybackCommand) => Promise<void>;
     readonly play: () => Promise<void>;
     readonly pause: () => Promise<void>;
@@ -189,6 +206,12 @@ export interface WaveBridge {
   readonly settings: {
     readonly appearance: () => Promise<Appearance>;
     readonly setAppearance: (appearance: Appearance) => Promise<void>;
+    readonly ytMusic: () => Promise<boolean>;
+    readonly setYtMusic: (on: boolean) => Promise<void>;
+  };
+  readonly yt: {
+    readonly search: (query: string) => Promise<YtSearchPage>;
+    readonly artwork: (url: string) => Promise<string | null>;
   };
 }
 
@@ -196,6 +219,7 @@ export const createBridge = (invoke: Invoke): WaveBridge => ({
   playback: {
     view: () => invoke("playback.view"),
     start: (scope, index, shuffle) => invoke("playback.start", scope, index, shuffle),
+    startYt: (videoIds, index) => invoke("playback.startYt", videoIds, index),
     command: (command) => invoke("playback.command", command),
     play: () => invoke("playback.play"),
     pause: () => invoke("playback.pause"),
@@ -234,5 +258,11 @@ export const createBridge = (invoke: Invoke): WaveBridge => ({
   settings: {
     appearance: () => invoke("settings.appearance"),
     setAppearance: (appearance) => invoke("settings.setAppearance", appearance),
+    ytMusic: () => invoke("settings.ytMusic"),
+    setYtMusic: (on) => invoke("settings.setYtMusic", on),
+  },
+  yt: {
+    search: (query) => invoke("yt.search", query),
+    artwork: (url) => invoke("yt.artwork", url),
   },
 });

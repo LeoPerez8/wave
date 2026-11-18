@@ -27,6 +27,8 @@ import { libraryLayer } from "./database.ts";
 import { playbackLayer } from "./playback/playback.ts";
 import { registerBridge, type IpcHandler } from "./bridge.ts";
 import { DesktopLibrary, desktopLibraryLayer } from "./library/library.ts";
+import { preference } from "./preferences.ts";
+import { ytMusicLayer } from "./yt/ytMusic.ts";
 
 const trusted = { senderFrame: "window" };
 
@@ -82,21 +84,63 @@ const tagsTitled = (title: string): SongTags => ({
   loudnessTags: null,
 });
 
-/** A JVM in memory that reads tags as the shared Kotlin does, and records the paths it read. */
+/** A YouTube Music song as the JVM's search answers it. */
+const ytSongNamed = (videoId: string, title: string) => ({
+  videoId,
+  title,
+  artists: ["Nick Drake"],
+  album: "Pink Moon",
+  albumId: "MPREb_pinkmoon",
+  durationMs: 124_000,
+  artworkUrl: "https://lh3.googleusercontent.com/cover=w120-h120",
+  explicit: false,
+  videoType: "MUSIC_VIDEO_TYPE_ATV",
+});
+
+/**
+ * A JVM in memory that reads tags as the shared Kotlin does and searches YouTube Music, and
+ * records the paths it read and the YT calls it got. `ytError` makes every YT call fail.
+ */
 const jvmInMemory = () => {
   const reads: string[] = [];
+  const yt: string[] = [];
+  const state = { ytError: undefined as string | undefined };
   const spawn = (events: KotlinEvents) => ({
     write: (text: string) => {
-      const { id, params } = JSON.parse(text) as { id: number; params: { path: string } };
-      reads.push(params.path);
-      const answer = params.path.includes("unreadable")
-        ? { id, error: { code: "ERR_UNEXPECTED", message: "FileNotFoundException" } }
-        : { id, result: tagsTitled(basename(params.path)) };
+      const { id, method, params } = JSON.parse(text) as {
+        id: number;
+        method: string;
+        params: { path: string };
+      };
+      let answer: unknown;
+      if (method === "readTags") {
+        reads.push(params.path);
+        answer = params.path.includes("unreadable")
+          ? { id, error: { code: "ERR_UNEXPECTED", message: "FileNotFoundException" } }
+          : { id, result: tagsTitled(basename(params.path)) };
+      } else {
+        yt.push(`${method} ${JSON.stringify(params)}`);
+        answer =
+          state.ytError !== undefined && method !== "setYtMusic"
+            ? { id, error: { code: state.ytError, message: "no" } }
+            : method === "search"
+              ? {
+                  id,
+                  result: {
+                    songs: [
+                      ytSongNamed("abcdefghijk", "Pink Moon"),
+                      ytSongNamed("bcdefghijkl", "Road"),
+                    ],
+                    continuation: null,
+                  },
+                }
+              : { id, result: null };
+      }
       queueMicrotask(() => events.line(JSON.stringify(answer)));
     },
     kill: () => setImmediate(events.exit),
   });
-  return { layer: kotlinLayer({ spawn }), reads };
+  return { layer: kotlinLayer({ spawn }), reads, yt, state };
 };
 
 const connect = (file: string, isTrusted = (event: unknown) => event === trusted) => {
@@ -109,7 +153,13 @@ const connect = (file: string, isTrusted = (event: unknown) => event === trusted
           musicFolder: join(dirname(file), "Music"),
           platform: process.platform,
           pickFolder: async () => undefined,
-        }).pipe(Layer.provideMerge(Layer.mergeAll(libraryLayer(file), audio.layer, jvm.layer))),
+        }).pipe(
+          Layer.provideMerge(
+            Layer.mergeAll(audio.layer, ytMusicLayer()).pipe(
+              Layer.provideMerge(Layer.mergeAll(libraryLayer(file), jvm.layer)),
+            ),
+          ),
+        ),
       ),
     ),
   );
@@ -132,7 +182,16 @@ const connect = (file: string, isTrusted = (event: unknown) => event === trusted
       },
     },
   );
-  return { runtime, handlers, exposed, sent, engineCalls: audio.engineCalls, reads: jvm.reads };
+  return {
+    runtime,
+    handlers,
+    exposed,
+    sent,
+    engineCalls: audio.engineCalls,
+    reads: jvm.reads,
+    yt: jvm.yt,
+    jvm: jvm.state,
+  };
 };
 
 const withFile = async (run: (file: string) => Promise<void>): Promise<void> => {
@@ -499,6 +558,98 @@ test("main refuses playback calls with a bad scope, row, command, time or volume
       assert.deepEqual(
         engineCalls.filter((c) => !c.startsWith("volume")),
         [],
+      );
+    } finally {
+      await runtime.dispose();
+    }
+  });
+});
+
+test("Search finds YouTube Music songs and one plays from the results as a new queue", async () => {
+  await withFile(async (file) => {
+    const { runtime, exposed, engineCalls, yt } = connect(file);
+    try {
+      const wave = exposed.get("wave") as WaveBridge;
+      assert.equal(await wave.settings.ytMusic(), true, "YT Music is on by default");
+      const found = await wave.yt.search("pink moon");
+      assert.equal(found.status, "ok");
+      assert.deepEqual(
+        found.songs.items.map((row) => [row.videoId, row.title, row.artist]),
+        [
+          ["abcdefghijk", "Pink Moon", "Nick Drake"],
+          ["bcdefghijkl", "Road", "Nick Drake"],
+        ],
+      );
+      await wave.playback.startYt(["abcdefghijk", "bcdefghijkl"], 1);
+      const view = await wave.playback.view();
+      assert.equal(view.current?.videoId, "bcdefghijkl");
+      assert.equal(view.current?.artworkUrl, "https://lh3.googleusercontent.com/cover=w120-h120");
+      assert.ok(engineCalls.includes("load yt:bcdefghijkl"), engineCalls.join(", "));
+      const queue = await wave.playback.queue(0, 10);
+      assert.deepEqual(
+        queue.items.map((row) => [row.videoId, row.current]),
+        [
+          ["abcdefghijk", false],
+          ["bcdefghijkl", true],
+        ],
+      );
+      await wave.playback.favorite();
+      assert.equal((await wave.playback.view()).current?.favorite, false, "not a Library song");
+      const kept = await runtime.runPromise(
+        Effect.map(Database, (db) => preference(db, "playback.ytTracks")),
+      );
+      assert.deepEqual(
+        (JSON.parse(kept ?? "[]") as { videoId: string }[]).map((song) => song.videoId),
+        ["abcdefghijk", "bcdefghijkl"],
+        "the queue's YT Music songs are kept for the next launch",
+      );
+      assert.deepEqual(yt.slice(0, 2), [
+        'setYtMusic {"enabled":true}',
+        'search {"query":"pink moon"}',
+      ]);
+    } finally {
+      await runtime.dispose();
+    }
+  });
+});
+
+test("YT Music turned off hides its results and tells the JVM, and offline says so quietly", async () => {
+  await withFile(async (file) => {
+    const { runtime, exposed, yt, jvm } = connect(file);
+    try {
+      const wave = exposed.get("wave") as WaveBridge;
+      await wave.settings.setYtMusic(false);
+      assert.equal(await wave.settings.ytMusic(), false);
+      assert.equal((await wave.yt.search("pink moon")).status, "disabled");
+      assert.ok(!yt.some((call) => call.startsWith("search")), "nothing is asked of YouTube");
+      assert.ok(yt.includes('setYtMusic {"enabled":false}'));
+      await wave.settings.setYtMusic(true);
+      jvm.ytError = "ERR_YT_OFFLINE";
+      const offline = await wave.yt.search("pink moon");
+      assert.deepEqual(offline, { status: "offline", songs: { items: [], offset: 0, total: 0 } });
+    } finally {
+      await runtime.dispose();
+    }
+  });
+});
+
+test("main refuses YT Music calls with bad songs, settings, queries or covers", async () => {
+  await withFile(async (file) => {
+    const { runtime, handlers } = connect(file);
+    try {
+      const call = (channel: string, ...args: unknown[]) =>
+        handlers.get(channel)!(trusted, ...args);
+      await assert.rejects(call("playback.startYt", ["../etc/passwd"], 0), /Refused/);
+      await assert.rejects(call("playback.startYt", ["abcdefghijk"], 1), /Refused/);
+      await assert.rejects(call("playback.startYt", [], 0), /Refused/);
+      await assert.rejects(call("settings.setYtMusic", "off"), /Refused/);
+      await assert.rejects(call("yt.search", { query: "a" }), /Refused/);
+      await assert.rejects(call("yt.artwork", 7), /Refused/);
+      assert.equal(await call("yt.artwork", "file:///C:/Windows/win.ini"), null);
+      await assert.rejects(
+        call("playback.startYt", ["zzzzzzzzzzz"], 0),
+        /yt-unknown/,
+        "only songs a search found",
       );
     } finally {
       await runtime.dispose();
