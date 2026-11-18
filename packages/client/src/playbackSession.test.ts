@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import { homePlays } from "./db/playHistory.ts";
+import { playEvents } from "./db/schema.ts";
 import { addTrack, openTestDatabase, libraryRow } from "./db/testDatabase.ts";
 import {
   createPlaybackSession,
@@ -237,4 +238,58 @@ test("a fresh report still applies an engine transition queued behind an older s
     { key: keys[1]!, atMs: 3990 },
   ]);
   assert.equal(current(session), keys[1]);
+});
+
+test("YT Music songs play from their yt: path between Library songs, and their plays keep the song", async (t) => {
+  const db = await openTestDatabase();
+  const a = addTrack(db, { title: "Library" });
+  const streamed = {
+    videoId: "abcdefghijk",
+    title: "Streamed",
+    artists: ["Someone"],
+    album: null,
+    albumId: null,
+    durationMs: 60000,
+    artworkUrl: null,
+    explicit: false,
+  };
+  const loaded: string[] = [];
+  const preloaded: (string | undefined)[] = [];
+  const audio = device();
+  let now = 1000;
+  const session = await createPlaybackSession({
+    db,
+    audio: {
+      ...audio,
+      load: (path, key) => {
+        loaded.push(path);
+        return audio.load(path, key);
+      },
+      preload: (path, key) => {
+        preloaded.push(path);
+        return audio.preload(path, key);
+      },
+    },
+    source: "desktop",
+    now: () => now,
+    streamed: (videoId) => (videoId === streamed.videoId ? streamed : undefined),
+  });
+  t.after(() => session.close());
+  await session.dispatch({
+    type: "play",
+    trackIds: ["yt:abcdefghijk", "yt:unknownsong", String(a)],
+    context: { kind: "search", id: null },
+  });
+  assert.deepEqual(loaded, ["yt:abcdefghijk"]);
+  assert.match(String(preloaded.at(-1)), /Library\.mp3$/, "an unknown streamed song is skipped");
+  await session.play();
+  now += 40000;
+  await session.pause();
+  const play = db
+    .select()
+    .from(playEvents)
+    .all()
+    .find((row) => row.videoId !== null);
+  assert.equal(play?.videoId, "abcdefghijk");
+  assert.equal(play?.streamedSong?.title, "Streamed");
 });
