@@ -13,7 +13,7 @@ import { guardWindow } from "./security.ts";
 import { desktopLibraryLayer } from "./library/library.ts";
 import { Database } from "@wave/client";
 import * as Effect from "effect/Effect";
-import { DEFAULT_THEME_CHOICE, themeFor } from "@wave/core";
+import { DEFAULT_THEME_CHOICE, desktopKey, themeFor } from "@wave/core";
 import { appearance } from "./preferences.ts";
 import { artworkStore } from "./library/artwork.ts";
 
@@ -60,6 +60,19 @@ const createWindow = () => {
     },
   });
   guardWindow(created.webContents, (url) => void shell.openExternal(url));
+  // Ctrl+Q quits from anywhere in the window, a field included.
+  created.webContents.on("before-input-event", (event, input) => {
+    if (
+      input.type === "keyDown" &&
+      desktopKey(
+        { key: input.key, ctrl: input.control, alt: input.alt, shift: input.shift },
+        "other",
+      ) === "quit"
+    ) {
+      event.preventDefault();
+      app.quit();
+    }
+  });
   created.once("ready-to-show", () => created.show());
   created.on("closed", () => {
     window = undefined;
