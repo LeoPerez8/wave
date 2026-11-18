@@ -12,7 +12,7 @@ import {
   type YtLibraryPauseReason,
 } from "@wave/core";
 
-import { makeExternalStore } from "@/lib/externalStore";
+import { makeExternalStore } from "@wave/client/externalStore";
 import { persistedSetting } from "@/lib/persistedSetting";
 
 export const ytLibraryBatch = persistedSetting<YtLibraryBatch>({

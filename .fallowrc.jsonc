@@ -23,6 +23,11 @@
     // #608's tap bench runs by path (docs/verification/602-608.md).
     "apps/mobile/bench/playlistRecommendationTap.ts",
     "scripts/**/*.test.ts",
+    // electron-vite builds the desktop from these: main, the audio process, the preload and the window.
+    "apps/desktop/src/main/index.ts",
+    "apps/desktop/src/main/audio/process.ts",
+    "apps/desktop/src/preload/index.ts",
+    "apps/desktop/src/renderer/src/main.tsx",
   ],
   // Core's exports map preserves its public API; internal modules remain checked.
   // Android loads this WebView asset through Kotlin rather than a JS import.

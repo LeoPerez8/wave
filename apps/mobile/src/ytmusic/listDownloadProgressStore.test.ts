@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import type { YtDownloadJournalJob } from "@wave/core";
-import { makeExternalStore } from "../lib/externalStore.ts";
+import { makeExternalStore } from "@wave/client/externalStore";
 import { createListDownloadProgressStore } from "./listDownloadProgressStore.ts";
 
 const job = (id: string, patch: Partial<YtDownloadJournalJob> = {}): YtDownloadJournalJob => ({
@@ -111,7 +111,7 @@ test("saved entries advance an open list and completion, cancellation and retry 
 test("an old membership read cannot undo a playlist edit or a hidden screen, and a failed read retries", async () => {
   const journal = makeExternalStore<readonly YtDownloadJournalJob[]>([job("a")]);
   const changed = makeExternalStore(0);
-  type Members = import("../library/db/listDownloadMembers.ts").DownloadListMembers;
+  type Members = import("@wave/client/db/listDownloadMembers").DownloadListMembers;
   let resolve: (members: Members) => void = () => {};
   let reads = 0;
   const members: Members = new Map([["playlist:1", [{ kind: "song", videoId: "a" }]]]);

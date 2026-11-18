@@ -39,7 +39,7 @@ import {
 import { ScreenHeader } from "@/components/ScreenHeader";
 import { TextButton } from "@/components/TextButton";
 import { albumRowHeight, toAlbumSummary } from "@/library/AlbumGrid";
-import type { AlbumRow, SongRow } from "@/library/LibraryStore";
+import type { AlbumRow, SongRow } from "@wave/client";
 import { openAlbum } from "@/library/routes";
 import { useListScrollable } from "@/motion/heldTouch";
 import type { NativeYtSong } from "@/native/waveYtMusic";

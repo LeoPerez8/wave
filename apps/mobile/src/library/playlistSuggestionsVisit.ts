@@ -22,13 +22,14 @@ import * as Effect from "effect/Effect";
 import { lookedUpProfileOf } from "@/home/artistGenres";
 import { afterPaint } from "@/lib/afterPaint";
 import { settledTurnEffect } from "@/lib/backgroundWork";
-import { makeExternalStore, type ExternalStore } from "@/lib/externalStore";
+import { makeExternalStore, type ExternalStore } from "@wave/client/externalStore";
 import { recommendationSteps, recommendationTurn } from "@/lib/recommendationWork";
 import { sightOf, type ScreenSight } from "@/lib/sight";
 import { appLog } from "@/log/appLog";
 import { online as phoneOnline } from "@/native/waveNative";
 
-import { LibraryStore, type PlaylistEntryRow, type SongRow } from "./LibraryStore";
+import { LibraryStore } from "./LibraryStore";
+import { type PlaylistEntryRow, type SongRow } from "@wave/client";
 import { onLibraryChange } from "./libraryChanges";
 import { followPlaylistRecommendations } from "./playlistRecommendationVisit";
 import {

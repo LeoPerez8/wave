@@ -8,6 +8,7 @@
 import type { FollowLevel } from "./followedArtists.ts";
 import type { SyncRow } from "./sync.ts";
 import type { PlaySnapshot } from "./listeningHistory.ts";
+import type { PlaySource } from "./playEvents.ts";
 
 /** A synced row with its table's own [Fields], or a tombstone, which carries none. */
 export type SyncedRow<Fields> =
@@ -93,7 +94,7 @@ export type SyncDismissedSuggestion = SyncedRow<{ readonly dismissedAt: number }
 /** How a play ended (Core's `PlayEndReason`). */
 export type SyncPlayEnd = "completed" | "skipped" | "stopped" | "interrupted";
 
-/** A play event; only ever added, its id made by the phone that recorded it. */
+/** A play event; only ever added, its id made by the device that recorded it. */
 export interface SyncPlayRow {
   readonly id: string;
   /** The song's recording key. */
@@ -105,7 +106,7 @@ export interface SyncPlayRow {
   readonly counted: boolean;
   readonly contextType: string | null;
   readonly contextId: string | null;
-  readonly source: "phone" | "auto";
+  readonly source: PlaySource;
   readonly importedFrom: "blackplayer" | null;
   /** What the play showed when it started; absent on older clients. */
   readonly snapshot?: PlaySnapshot | null;
@@ -203,7 +204,7 @@ export const SYNC_FIELDS: {
     counted: "bool",
     contextType: "text?",
     contextId: "text?",
-    source: ["phone", "auto"],
+    source: ["phone", "auto", "desktop"],
     importedFrom: ["blackplayer", null],
     snapshot: "snapshot?",
     videoId: "text?",

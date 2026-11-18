@@ -1,4 +1,4 @@
-import { makeExternalStore, type ExternalStore } from "../lib/externalStore.ts";
+import { makeExternalStore, type ExternalStore } from "@wave/client/externalStore";
 
 /** What Android says of the phone's default network. */
 export interface Connectivity {

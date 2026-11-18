@@ -1,18 +1,65 @@
-import { saveReleaseDate, saveTypedReleaseDate } from "./db/releaseDates";
-import { pendingStreamedGenres, keepStreamedGenre } from "./db/streamedGenres";
+import {
+  listSongs,
+  listGenres,
+  removeRootSync,
+  listArtistsSync,
+  getGenreSync,
+  listRecentSearchesSync,
+  rememberSearchSync,
+  ensureDefaultRoot,
+  listRoots,
+  addRoot,
+  addExcludedFolder,
+  excludedFolders,
+  countTracks,
+  trackDetails,
+  indexedFiles,
+  databaseWrites,
+  markScanned,
+  removeExcludedFolder,
+  clearRecentSearches,
+  albumsByIds,
+  linkEntries,
+} from "@wave/client/db/libraryQueries";
+import { songHasFile, Database as ClientDatabase, databaseLayer } from "@wave/client";
+import { sqliteDriverLayer } from "./sqliteDriver.ts";
+import type {
+  AlbumDetail,
+  AlbumRow,
+  ArtistDetail,
+  ArtistRow,
+  GenreDetail,
+  GenreRow,
+  IndexedArtwork,
+  IndexedKnownFile,
+  IndexedTrack,
+  LibraryLookupSong,
+  PathMove,
+  PlayableSongRow,
+  PlaylistAddResult,
+  PlaylistDetail,
+  PlaylistEntryRow,
+  PlaylistRow,
+  ScanRoot,
+  ScanRootSummary,
+  SongRow,
+  TrackDetails,
+} from "@wave/client";
+import { saveReleaseDate, saveTypedReleaseDate } from "@wave/client/db/releaseDates";
+import { pendingStreamedGenres, keepStreamedGenre } from "@wave/client/db/streamedGenres";
 import {
   readFollowShows,
   saveFollowShows,
   markShowNotified,
   type FollowShowCacheRow,
-} from "./db/followShows";
+} from "@wave/client/db/followShows";
 import {
   readFollowReleases,
   saveFollowReleases,
   hideFollowRelease,
   followReleaseListening,
   type FollowReleaseCache,
-} from "./db/followReleases";
+} from "@wave/client/db/followReleases";
 import type { FollowRelease, LeavingSong } from "@wave/core";
 import type { FollowedArtist, FollowLevel } from "@wave/core";
 import {
@@ -23,14 +70,17 @@ import {
   removeFollow,
   restoreFollow,
   type FollowTarget,
-} from "./db/follows";
+} from "@wave/client/db/follows";
 import {
   dismissFollowSuggestion,
   selectDismissedFollowSuggestions,
   undoFollowSuggestionDismissal,
-} from "./db/followSuggestionDismissals";
-import { selectDownloadsToForget } from "./db/downloadRecovery";
-import { selectListDownloadMembers, type DownloadListMembers } from "./db/listDownloadMembers";
+} from "@wave/client/db/followSuggestionDismissals";
+import { selectDownloadsToForget } from "@wave/client/db/downloadRecovery";
+import {
+  selectListDownloadMembers,
+  type DownloadListMembers,
+} from "@wave/client/db/listDownloadMembers";
 import type { ListDownloadsScope } from "@wave/core";
 import {
   playedEntityTotals,
@@ -43,14 +93,14 @@ import {
   type PlayedEntityTotals,
   type PlayedArtistSongs,
   type RecapPlays,
-} from "./db/playedEntities";
+} from "@wave/client/db/playedEntities";
 import {
   type RecommendationEntryCursor,
   recommendationFlagsPage,
   recommendationPendingPage,
   recommendationEntriesPage,
   recommendationFeedbackPage,
-} from "./db/recommendationPages";
+} from "@wave/client/db/recommendationPages";
 import type {
   AppLanguage,
   KeptSongs,
@@ -59,10 +109,10 @@ import type {
   YtSong,
   YtDownloadJournalJob,
 } from "@wave/core";
-import { makeExternalStore, type ExternalStore } from "@/lib/externalStore";
+import { makeExternalStore, type ExternalStore } from "@wave/client/externalStore";
 import { followSaved } from "./followsSaved";
 import { publishSavedRecordings } from "./libraryChanges";
-import { backfillRecordingTitles, selectMatchingSong } from "./db/matchingSong";
+import { backfillRecordingTitles, selectMatchingSong } from "@wave/client/db/matchingSong";
 import {
   tastePlaysPage,
   tasteFavoritesPage,
@@ -70,7 +120,7 @@ import {
   tasteArtistsPage,
   tasteRevision,
   watchTasteSources,
-} from "./db/tastePages";
+} from "@wave/client/db/tastePages";
 import { artistGraphSourcesChanged } from "@/home/graphSources";
 import {
   mixCreditPage,
@@ -81,7 +131,7 @@ import {
   mixSongsPage,
   mixArtistsPage,
   mixHistoryPage,
-} from "./db/mixInputs";
+} from "@wave/client/db/mixInputs";
 import {
   mixCatalogPage,
   graphRadioPage,
@@ -91,8 +141,8 @@ import {
   type GraphPage,
   type GraphPlay,
   type GraphPlayCursor,
-} from "./db/artistGraph";
-import { selectLeavingSong } from "./db/leavingSong";
+} from "@wave/client/db/artistGraph";
+import { selectLeavingSong } from "@wave/client/db/leavingSong";
 import {
   saveMeasurement,
   saveMeasurements,
@@ -104,18 +154,16 @@ import {
   type MeasuredSong,
   type SongMeasurement,
   type SongToMeasure,
-} from "./db/loudness";
-import { selectNowPlayingSong } from "./db/nowPlayingSong";
-import type { PlayingSongAnswer, PlayingSongTarget } from "../nowPlaying/songLookup";
+} from "@wave/client/db/loudness";
+import { selectNowPlayingSong } from "@wave/client/db/nowPlayingSong";
+import type { PlayingSongAnswer, PlayingSongTarget } from "@wave/client";
 import {
   acceptPlaylistRecommendation,
   dismissPlaylistRecommendation,
   selectPlaylistRecommendationInput,
   type PlaylistRecommendationInput,
-} from "./db/playlistRecommendations";
+} from "@wave/client/db/playlistRecommendations";
 import {
-  filesLeavingWithRoot,
-  rememberSearch,
   type ArtistFirstPlay,
   type BlackPlayerPlay,
   type BlackPlayerTrack,
@@ -124,7 +172,6 @@ import {
   type IndexedFile,
   type LibrarySongSort,
   type PlaylistSong,
-  type LibraryTrack,
   type MissingTrack,
   type PendingFavorite,
   type CountedListening,
@@ -139,11 +186,9 @@ import {
   type UnsearchedSong,
   type YtAlbumSong,
   type YtArtistSaved,
-  type ExplicitFlag,
   type SavedLyrics,
   type SongLoudness,
   type AlbumLoudness,
-  type TagGains,
   type NoBetterCopy,
   type QualityDirection,
   type QualityFile,
@@ -156,28 +201,25 @@ import {
   type PlaylistFindText,
   type PlaylistRecommendationSlot,
 } from "@wave/core";
-import { and, asc, desc, eq, inArray, sql } from "drizzle-orm";
-import { drizzle, type ExpoSQLiteDatabase } from "drizzle-orm/expo-sqlite";
-import { migrate } from "drizzle-orm/expo-sqlite/migrator";
+
 import * as Context from "effect/Context";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
-import { openDatabaseSync } from "expo-sqlite";
 
 import { timeLibraryRead } from "@/log/slowLibraryReads";
 import type { NativeYtSong } from "@/native/waveYtMusic";
-import { syncCycle, type SyncCycleInput, type SyncCycleResult } from "@/sync/syncCycle";
+import { syncCycle, type SyncCycleInput, type SyncCycleResult } from "@wave/client/sync/syncCycle";
 
-import { selectAlbumDetail, selectAlbums } from "./db/albums";
-import { importedPlays, saveImportedPlays, selectImportTracks } from "./db/blackPlayer";
+import { selectAlbumDetail, selectAlbums } from "@wave/client/db/albums";
+import { importedPlays, saveImportedPlays, selectImportTracks } from "@wave/client/db/blackPlayer";
 import {
   selectArtistCovers,
   selectArtistDetail,
   selectArtistSongs,
   selectArtists,
   selectArtistNamesForLink,
-} from "./db/artists";
+} from "@wave/client/db/artists";
 import {
   clearArtistPhotos,
   recordArtistPhoto,
@@ -186,27 +228,27 @@ import {
   type ArtistPhotoLookup,
   type ArtistPhotoRecord,
   type ArtistPhotoRow,
-} from "./db/artistPhotos";
+} from "@wave/client/db/artistPhotos";
 import {
   libraryCounts,
   libraryScale,
   sectionSongCounts,
   type LibraryCounts,
   type LibraryScale,
-} from "./db/counts";
-import { creditSplits, relinkCreditsIfUnlinked, type CreditSplits } from "./db/credits";
+} from "@wave/client/db/counts";
+import { creditSplits, relinkCreditsIfUnlinked } from "@wave/client/db/credits";
 import {
   selectGenreOpening,
   selectGenreOrderSlice,
   type GenreCursor,
   type GenreOpening,
   type GenreOrderSlice,
-} from "./db/genrePages";
-import { selectGenreSongs } from "./db/genres";
-import type { RowPage } from "./db/database";
-import { configureConnection, optimizeDatabase } from "./db/connection";
-import migrations from "./db/migrations";
-import { selectLinkRows, type LinkIds, type LinkRows } from "./db/links";
+} from "@wave/client/db/genrePages";
+
+import type { RowPage } from "@wave/client/db/database";
+import { optimizeDatabase } from "@wave/client/db/connection";
+
+import { selectLinkRows, type LinkIds, type LinkRows } from "@wave/client/db/links";
 import {
   homeAdded,
   homeFavorites,
@@ -224,18 +266,18 @@ import {
   type HomePlays,
   type HomeSections,
   type RecordedPlay,
-} from "./db/playHistory";
-import { listeningSums, selectCountedPlays, songCountedPlays } from "./db/playTotals";
-import { loadPlayback, savePlayback, type SavedPlayback } from "./db/playback";
-import { shuffleSongs } from "./db/shuffleSongs";
+} from "@wave/client/db/playHistory";
+import { listeningSums, selectCountedPlays, songCountedPlays } from "@wave/client/db/playTotals";
+import { loadPlayback, savePlayback, type SavedPlayback } from "@wave/client/db/playback";
+import { shuffleSongs } from "@wave/client/db/shuffleSongs";
 import {
   listeningHistory,
   listeningHistoryAround,
   newerListeningHistory,
   type ListeningHistoryCursor,
   type ListeningHistoryPage,
-} from "./db/listeningHistory";
-import { tasteHistory } from "./db/taste";
+} from "@wave/client/db/listeningHistory";
+import { tasteHistory } from "@wave/client/db/taste";
 import {
   removePlaylistImage,
   selectPlaylistImageOriginal,
@@ -243,13 +285,12 @@ import {
   takeDeletedPlaylistImages,
   type PlaylistImageFiles,
   type PlaylistImageOriginal,
-} from "./db/playlistImages";
+} from "@wave/client/db/playlistImages";
 import {
   addToPlaylist,
   createPlaylist,
   addToShazam,
   deletePlaylist,
-  linkPlaylistEntries,
   movePlaylistItem,
   removePlaylistItems,
   restorePlaylistItems,
@@ -271,15 +312,14 @@ import {
   selectUnsearchedEntries,
   settleTryAgain,
   settleUnsearchedEntries,
-  type PlaylistEntry,
   type PlaylistUnsearched,
   type UnsearchedEntriesSettled,
-} from "./db/playlists";
+} from "@wave/client/db/playlists";
 import {
   addPendingFavorites,
   removePendingFavorites,
   selectPendingFavorites,
-} from "./db/pendingFavorites";
+} from "@wave/client/db/pendingFavorites";
 import {
   forgetSavedLyrics,
   indexSavedLyrics,
@@ -288,7 +328,7 @@ import {
   selectSavedLyricsCandidates,
   selectSavedLyricsSearchIndexPage,
   type SavedLyricsCandidate,
-} from "./db/savedLyrics";
+} from "@wave/client/db/savedLyrics";
 import { notifyLyricsSearchIndexChanged } from "./lyricsSearchVersion";
 import {
   rememberNoBetterCopies,
@@ -297,14 +337,22 @@ import {
   selectQualityFiles,
   selectReplacedTrack,
   type ReplacedFile,
-} from "./db/qualityReplacement";
-import { forgetFileDeletions, pendingFileDeletions, recordFileDeletions } from "./db/fileDeletions";
+} from "@wave/client/db/qualityReplacement";
+import {
+  forgetFileDeletions,
+  pendingFileDeletions,
+  recordFileDeletions,
+} from "@wave/client/db/fileDeletions";
 import {
   fixReplacementDuplicate,
   selectDuplicateCheckFiles,
   type DuplicateFixToApply,
-} from "./db/replacementDuplicates";
-import { keepLyricsMiss, selectLyricsSearchTrack, type LyricsSearchTrack } from "./db/lyricsMisses";
+} from "@wave/client/db/replacementDuplicates";
+import {
+  keepLyricsMiss,
+  selectLyricsSearchTrack,
+  type LyricsSearchTrack,
+} from "@wave/client/db/lyricsMisses";
 import {
   keepLyricsSearchText,
   selectLyricsCandidates,
@@ -314,36 +362,30 @@ import {
   selectLyricsTrackIdAtPath,
   type LyricsCandidate,
   type LyricsIndexTarget,
-} from "./db/lyricsSearchIndex";
+} from "@wave/client/db/lyricsSearchIndex";
 import {
   type KnownVideosCursor,
   selectKnownVideos,
   selectKnownVideosPage,
   selectPlaylistedSongs,
   selectStreamedSongs,
-} from "./db/mixKnown";
-import type { VideoPage } from "./db/videoPages";
-import { addCandidates, selectCandidateCatalog } from "./db/candidateCatalog";
-import { hasUnscannedRoot, pruneOrphans, saveBatch, type SavedBatch } from "./db/save";
-import * as schema from "./db/schema";
+} from "@wave/client/db/mixKnown";
+import type { VideoPage } from "@wave/client/db/videoPages";
+import { addCandidates, selectCandidateCatalog } from "@wave/client/db/candidateCatalog";
+import { hasUnscannedRoot, saveBatch, type SavedBatch } from "@wave/client/db/save";
+
 import {
-  BY_TITLE,
-  filePath,
-  hasFile,
   selectKnownFiles,
   selectLibraryLookupSongs,
-  trackArtistIds,
   selectPlayableSongs,
   selectPlayableSongIds,
   hasPlayableSongOutside,
   selectSongGenres,
   selectSongWithVideo,
   selectVideoIds,
-  trackQuery,
   type SongGenres,
   type TrackScope,
-  withFile,
-} from "./db/tracks";
+} from "@wave/client/db/tracks";
 import {
   artistFirstPlays,
   artistPlays,
@@ -355,23 +397,22 @@ import {
   songPlayTotals,
   trackPlayTotals,
   type ArtistPlays,
-} from "./db/stats";
-import { streamedSongsOf } from "./db/streamedSongs";
-import { keyRecordings, stampPreference } from "./db/sync";
+} from "@wave/client/db/stats";
+import { streamedSongsOf } from "@wave/client/db/streamedSongs";
+import { keyRecordings, stampPreference } from "@wave/client/db/sync";
 import {
   filesGone,
-  leaveFiles,
   removeSongs,
   selectAlbumsMissingSongs,
   selectMissingSongs,
   signOut,
-} from "./db/missingSongs";
+} from "@wave/client/db/missingSongs";
 import {
   saveYtArtist,
   selectYtArtist,
   selectYtArtistSimilar,
   type YtArtistSimilar,
-} from "./db/ytArtists";
+} from "@wave/client/db/ytArtists";
 import {
   selectSongFindTexts,
   selectSongOrder,
@@ -381,11 +422,14 @@ import {
   selectSortedSongs,
   type SongOrder,
   type SongSummary,
-} from "./db/songOrder";
-import type { KnownFile } from "./NativeScanner";
-import { selectSkippedFiles, skipFiles, unskipFiles, type SkippedFile } from "./db/skippedFiles";
+} from "@wave/client/db/songOrder";
 
-const DATABASE_NAME = "wave.db";
+import {
+  selectSkippedFiles,
+  skipFiles,
+  unskipFiles,
+  type SkippedFile,
+} from "@wave/client/db/skippedFiles";
 
 export class LibraryStoreError extends Data.TaggedError("LibraryStoreError")<{
   readonly operation: string;
@@ -394,262 +438,6 @@ export class LibraryStoreError extends Data.TaggedError("LibraryStoreError")<{
   override get message(): string {
     return `Library store failed to ${this.operation}: ${String(this.cause)}`;
   }
-}
-
-/** An indexed file as a scan starts from it: what the native scan compares, and what tells a voice note. */
-export interface IndexedKnownFile extends KnownFile {
-  readonly durationMs: number;
-  /** The artist credit; "Unknown Artist" without an artist tag. */
-  readonly artist: string;
-}
-
-/** A track as the scanner reported it, after Core normalisation. */
-export interface IndexedTrack extends LibraryTrack {
-  readonly sizeBytes: number;
-  readonly modifiedAt: number;
-  readonly sampleRate: number | null;
-  readonly bitrateKbps: number | null;
-  readonly artworkHash: string | null;
-  /** Lyrics in its tags or a sidecar `.lrc`. */
-  readonly hasLyrics: boolean;
-  /** What its advisory tag says (Core's `explicitFromAdvisory`). */
-  readonly explicit: ExplicitFlag;
-  /**
-   * What its ReplayGain or R128 tags say, for Normalize Volume (Core's
-   * `gainTags`); absent or null values: nothing.
-   */
-  readonly loudness?: TagGains;
-  /**
-   * The YouTube video id of a song just downloaded from YouTube Music. Saving
-   * the file again without one (a rescan) keeps the one it has.
-   */
-  readonly videoId?: string | null;
-  /**
-   * The missing song a download of it was asked for (its Track id): the file
-   * fills that Track in, keeping its recording key, whatever its tags say.
-   */
-  readonly fills?: number;
-}
-
-export interface IndexedArtwork {
-  readonly hash: string;
-  readonly path: string;
-  readonly thumbPath: string;
-  readonly palette: schema.ArtworkPalette;
-}
-
-export interface ScanRoot {
-  readonly path: string;
-  readonly isDefault: boolean;
-  readonly lastScannedAt: number | null;
-}
-
-/** A scan root with the number of indexed tracks under it, for Music folders. */
-export interface ScanRootSummary extends ScanRoot {
-  readonly trackCount: number;
-}
-
-/** A song as Fix Songs on the whole Library sees it (Core's `songsToFix`). */
-export interface LibraryLookupSong {
-  readonly path: string;
-  readonly title: string;
-  readonly artist: string;
-  readonly album: string;
-  readonly durationMs: number;
-  readonly genre: string | null;
-  readonly hasLyrics: boolean;
-  readonly trackNumber: number | null;
-  readonly year: number | null;
-  /** Unknown (never checked) counts as missing: Fix Song fills it in from Deezer. */
-  readonly explicit: ExplicitFlag;
-}
-
-/** One row of the Songs list. */
-export interface SongRow {
-  readonly id: number;
-  /**
-   * The file; null for a missing song (a Track the Wave account has and this
-   * phone has no file for), which lists show dimmed and nothing plays.
-   */
-  readonly path: string | null;
-  readonly title: string;
-  /** The credit as written ("Ariana Grande, Doja Cat"). */
-  readonly artist: string;
-  readonly album: string;
-  readonly durationMs: number;
-  readonly thumbPath: string | null;
-  readonly artworkPath: string | null;
-  /** Core sort key of the title (files the row on the A–Z spine). */
-  readonly titleSort: string;
-  /** Core sort keys of the artist and album, for sorting song lists. */
-  readonly artistSort: string;
-  readonly albumSort: string;
-  /** When the file entered the library (epoch ms). */
-  readonly addedAt: number;
-  readonly albumId: number;
-  /** The primary artist: the first one [artist] credits. */
-  readonly artistId: number;
-  /** Every artist [artist] credits, primary first: Go to Artist offers them. */
-  readonly artistIds: readonly number[];
-  /** Orders the album's tracks, and so sorts by artist and by album. */
-  readonly discNumber: number | null;
-  readonly trackNumber: number | null;
-  /** Original-date tag, separate from the album Year fallback. */
-  readonly releaseDate?: string | null | undefined;
-  /** Fix Song fills it in when it's missing, as the track number, genre and lyrics. */
-  readonly year: number | null;
-  /** Null for a song without a genre tag. */
-  readonly genre: string | null;
-  /** Lyrics in the file's tags or in a sidecar `.lrc`. */
-  readonly hasLyrics: boolean;
-  /** Whether it's explicit, as its file's advisory tag says: rows show the E badge for it. */
-  readonly explicit: ExplicitFlag;
-}
-
-/** A song that can play: one with a file (the queue's, Android Auto's). */
-export type PlayableSongRow = SongRow & { readonly path: string };
-
-/** Whether [song] has a file to play (it isn't a missing song). */
-export const songHasFile = <S extends SongRow>(song: S): song is S & { readonly path: string } =>
-  song.path !== null;
-
-/** A track on an album screen, with what orders it there. */
-export type AlbumTrackRow = SongRow;
-
-export type { FavoriteRow, GenreOpening, SongOrder, SongSummary };
-
-/** One album of the Albums grid (and of an artist's albums). */
-export interface AlbumRow {
-  readonly id: number;
-  readonly title: string;
-  readonly titleSort: string;
-  /** The album artist credit as written; [albumArtistId] is the artist it is filed under. */
-  readonly albumArtist: string;
-  readonly albumArtistId: number;
-  /** Every artist [albumArtist] credits, primary first: Go to Artist offers them. */
-  readonly albumArtistIds: readonly number[];
-  readonly year: number | null;
-  readonly compilation: boolean;
-  readonly trackCount: number;
-  readonly durationMs: number;
-  readonly thumbPath: string | null;
-  readonly artworkPath: string | null;
-}
-
-/** One row of the Artists list: an individual artist, credited on songs or albums. */
-export interface ArtistRow {
-  readonly id: number;
-  readonly name: string;
-  readonly sort: string;
-  /** Albums filed under the artist. */
-  readonly albumCount: number;
-  /** Songs credited to the artist, or on albums credited to them. */
-  readonly trackCount: number;
-  /**
-   * The artist's image (an album cover, Core's `artistArtwork`): thumbnail for
-   * rows, full size for the artist page; null for the initial placeholder.
-   */
-  readonly thumbPath: string | null;
-  readonly artworkPath: string | null;
-}
-
-export interface GenreRow {
-  readonly id: number;
-  readonly name: string;
-  readonly sort: string;
-  readonly trackCount: number;
-}
-
-export interface AlbumDetail {
-  readonly album: AlbumRow;
-  /** The genre most of the album's tracks carry. */
-  readonly genre: string | null;
-  /** By disc, then track number (Core's `compareAlbumTracks`). */
-  readonly tracks: readonly AlbumTrackRow[];
-}
-
-export interface ArtistDetail {
-  readonly artist: ArtistRow;
-  /** Filed under the artist, newest first. */
-  readonly albums: readonly AlbumRow[];
-  /** Other albums with songs by the artist (compilations…), newest first. */
-  readonly appearsOn: readonly AlbumRow[];
-  /** By title. */
-  readonly songs: readonly SongRow[];
-}
-
-interface GenreDetail {
-  readonly genre: GenreRow;
-  /** By title. */
-  readonly songs: readonly SongRow[];
-}
-
-/** An indexed file found under a new path (see Core's `reconcileScan`). */
-export interface PathMove {
-  readonly from: string;
-  readonly to: string;
-}
-
-/** What Now Playing shows about a track beyond the player's item. */
-export interface TrackDetails {
-  readonly id: number;
-  readonly artistId: number;
-  /** Every artist the credit names, primary first: the artist line offers them. */
-  readonly artistIds: readonly number[];
-  readonly artist: string;
-  readonly albumId: number;
-  readonly album: string;
-  readonly palette: schema.ArtworkPalette | null;
-  /** The audio file, for reading its lyrics. */
-  readonly path: string;
-}
-
-/** One playlist of Library › Playlists. */
-export interface PlaylistRow {
-  readonly syncId?: string;
-  readonly id: number;
-  readonly name: string;
-  /** Core sort key of the name. */
-  readonly sort: string;
-  /** When it was made, in ms since the epoch (Recently Added). */
-  readonly createdAt: number;
-  /** Newest readable live entry's added date, or null when empty (Add to Playlist). */
-  readonly lastEntryAddedAt: number | null;
-  readonly trackCount: number;
-  readonly durationMs: number;
-  /** Its unavailable entries (songs an import couldn't find), counted in [trackCount] too. */
-  readonly unavailableCount: number;
-  /**
-   * Thumbnails of its artwork (Core's `playlistArtwork`): its own image alone,
-   * else its mosaic (none, one or four covers). Every place that shows a
-   * playlist's artwork reads these.
-   */
-  readonly thumbPaths: readonly string[];
-  /** Full-size versions of the same, for the playlist screen's header. */
-  readonly artworkPaths: readonly string[];
-  /** Whether the owner gave it its own image (its menu then offers Remove Image). */
-  readonly hasImage: boolean;
-}
-
-/**
- * One entry of a playlist, in its place (`itemId`; the same song may be in it
- * more than once): a Library song, or a YT Music song the Library doesn't
- * have, streamed (Core's `MixedSong`).
- */
-export type PlaylistEntryRow = PlaylistEntry<SongRow>;
-
-export interface PlaylistDetail {
-  readonly playlist: PlaylistRow;
-  /** In playlist order. */
-  readonly items: readonly PlaylistEntryRow[];
-}
-
-/** What adding songs to a playlist did. */
-export interface PlaylistAddResult {
-  readonly playlistId: number;
-  readonly name: string;
-  readonly added: number;
-  readonly alreadyIn: number;
 }
 
 export class LibraryStore extends Context.Service<
@@ -1612,95 +1400,6 @@ export class LibraryStore extends Context.Service<
   }
 >()("@wave/mobile/library/LibraryStore") {}
 
-type Database = ExpoSQLiteDatabase<typeof schema>;
-
-/** SQLite's default limit on bound parameters is far above this; it keeps statements small. */
-const DELETE_CHUNK = 500;
-
-const chunks = <A>(items: readonly A[]): A[][] => {
-  const result: A[][] = [];
-  for (let i = 0; i < items.length; i += DELETE_CHUNK) {
-    result.push(items.slice(i, i + DELETE_CHUNK));
-  }
-  return result;
-};
-
-const removeRootSync = (db: Database, splits: CreditSplits, path: string): void => {
-  const { scanRoots, tracks, excludedFolders } = schema;
-  db.transaction((tx) => {
-    const remaining = tx
-      .select({ path: scanRoots.path })
-      .from(scanRoots)
-      .all()
-      .map((root) => root.path)
-      .filter((root) => root !== path);
-    if (remaining.length === 0) throw new Error("Wave needs at least one music folder");
-
-    const under = tx
-      .select({ path: filePath })
-      .from(tracks)
-      // SQLite counts characters where JS counts UTF-16 units, so the length is taken in SQL.
-      .where(and(hasFile, sql`substr(${tracks.path}, 1, length(${path}) + 1) = ${`${path}/`}`))
-      .all()
-      .map((row) => row.path);
-    const leaving = filesLeavingWithRoot(under, path, remaining);
-    leaveFiles(tx, leaving, Date.now());
-    tx.delete(scanRoots).where(eq(scanRoots.path, path)).run();
-
-    // Exclusions only mean something inside a root.
-    const exclusions = tx
-      .select({ path: excludedFolders.path })
-      .from(excludedFolders)
-      .all()
-      .map((row) => row.path);
-    const stale = filesLeavingWithRoot(exclusions, path, remaining);
-    if (stale.length > 0) {
-      tx.delete(excludedFolders)
-        .where(inArray(excludedFolders.path, [...stale]))
-        .run();
-    }
-
-    pruneOrphans(tx, splits);
-  });
-};
-
-/** Artists with songs (see `selectArtists`), only [ids] if given. */
-const listArtistsSync = (db: Database, ids?: readonly number[]): ArtistRow[] =>
-  selectArtists(db, { ids });
-
-const getGenreSync = (db: Database, id: number): GenreDetail | null => {
-  const { genres } = schema;
-  const genre = db
-    .select({ id: genres.id, name: genres.name, sort: genres.sort })
-    .from(genres)
-    .where(eq(genres.id, id))
-    .get();
-  if (genre === undefined) return null;
-  const songs = selectGenreSongs(db, id);
-  return { genre: { ...genre, trackCount: songs.length }, songs };
-};
-
-const listRecentSearchesSync = (db: Pick<Database, "select">): string[] =>
-  db
-    .select({ query: schema.recentSearches.query })
-    .from(schema.recentSearches)
-    .orderBy(desc(schema.recentSearches.searchedAt))
-    .all()
-    .map((row) => row.query);
-
-/** Rewrites the list Core's `rememberSearch` returns, newest with the latest time. */
-const rememberSearchSync = (db: Database, query: string, now: number): readonly string[] =>
-  db.transaction((tx) => {
-    const recent = listRecentSearchesSync(tx);
-    const next = rememberSearch(recent, query);
-    if (next === recent) return recent;
-    tx.delete(schema.recentSearches).run();
-    tx.insert(schema.recentSearches)
-      .values(next.map((search, i) => ({ query: search, searchedAt: now - i })))
-      .run();
-    return next;
-  });
-
 const writeAttempt = <A>(operation: string, run: () => A): Effect.Effect<A, LibraryStoreError> =>
   Effect.try({ try: run, catch: (cause) => new LibraryStoreError({ operation, cause }) });
 
@@ -1717,27 +1416,12 @@ const attempt = <A>(
   });
 
 const make = Effect.gen(function* () {
-  const db: Database = yield* Effect.try({
-    try: () => {
-      const client = openDatabaseSync(DATABASE_NAME);
-      configureConnection((statements) => client.execSync(statements));
-      return drizzle(client, { schema });
-    },
-    catch: (cause) => new LibraryStoreError({ operation: "open the database", cause }),
-  });
-  yield* Effect.tryPromise({
-    try: () => migrate(db, migrations),
-    catch: (cause) => new LibraryStoreError({ operation: "migrate", cause }),
-  });
+  const db = yield* ClientDatabase;
   // The Library's credits and their splitter, kept between saves.
   const splits = creditSplits();
   // Every write on this connection and others, as SQLite counts them: a scan's cleanup
   // (`filesGone`) with nothing written since the last one has nothing left to do.
-  const writes = (): string => {
-    const row = db.get<{ writes: number; external: number }>(sql`
-      SELECT total_changes() AS writes, data_version AS external FROM pragma_data_version`)!;
-    return `${row.writes}:${row.external}`;
-  };
+  const writes = () => databaseWrites(db);
   // Null until this process cleans up: a save before it started may have left something.
   let prunedAt: string | null = null;
   // After the upgrade that brought credits in, the Library is re-filed under
@@ -1815,60 +1499,23 @@ const make = Effect.gen(function* () {
     listeningHistoryVersion,
     optimize: (when) => writeAttempt("optimize the database", () => optimizeDatabase(db, when)),
     ensureDefaultRoot: (path) =>
-      writeAttempt("set up scan roots", () => {
-        const existing = db.select().from(schema.scanRoots).all();
-        if (existing.length > 0) return existing;
-        db.insert(schema.scanRoots).values({ path, addedAt: Date.now(), isDefault: true }).run();
-        return db.select().from(schema.scanRoots).all();
-      }),
+      writeAttempt("set up scan roots", () => ensureDefaultRoot(db, path)),
 
-    listRoots: attempt("list music folders", () => {
-      const { scanRoots, tracks } = schema;
-      return db
-        .select({
-          path: scanRoots.path,
-          isDefault: scanRoots.isDefault,
-          lastScannedAt: scanRoots.lastScannedAt,
-          trackCount: sql<number>`(SELECT count(*) FROM ${tracks}
-            WHERE substr(${tracks.path}, 1, length(${scanRoots.path}) + 1) = ${scanRoots.path} || '/')`,
-        })
-        .from(scanRoots)
-        .orderBy(asc(scanRoots.addedAt), asc(scanRoots.path))
-        .all();
-    }),
+    listRoots: attempt("list music folders", () => listRoots(db)),
 
-    addRoot: (path, drop) =>
-      writeAttempt("add a music folder", () =>
-        db.transaction((tx) => {
-          const { scanRoots } = schema;
-          if (drop.length > 0)
-            tx.delete(scanRoots)
-              .where(inArray(scanRoots.path, [...drop]))
-              .run();
-          tx.insert(scanRoots).values({ path, addedAt: Date.now() }).onConflictDoNothing().run();
-          tx.update(scanRoots).set({ isDefault: false }).run();
-        }),
-      ),
+    addRoot: (path, drop) => writeAttempt("add a music folder", () => addRoot(db, path, drop)),
 
     removeRoot: (path) =>
       writeAttempt("remove a music folder", () => removeRootSync(db, splits, path)),
 
-    excludedFolders: attempt("read excluded folders", () =>
-      db
-        .select({ path: schema.excludedFolders.path })
-        .from(schema.excludedFolders)
-        .all()
-        .map((row) => row.path),
-    ),
+    excludedFolders: attempt("read excluded folders", () => excludedFolders(db)),
 
     saveBatch: (tracks, artworkRows, moves = [], options) =>
       writeAttempt("save scanned tracks", () =>
         saveBatch(db, splits, tracks, artworkRows, moves, Date.now(), options),
       ).pipe(Effect.tap(() => Effect.sync(() => publishSavedRecordings(tracks)))),
 
-    linkPlaylistEntries: writeAttempt("link playlist entries", () =>
-      db.transaction((tx) => linkPlaylistEntries(tx, Date.now())),
-    ),
+    linkPlaylistEntries: writeAttempt("link playlist entries", () => linkEntries(db, Date.now())),
 
     playlistEntriesRevision: attempt("read the playlists' revision", () =>
       selectPlaylistEntriesRevision(db),
@@ -1881,22 +1528,12 @@ const make = Effect.gen(function* () {
       writeAttempt("record the scan", () => {
         if (roots.length === 0) return;
         const pruned = prunedAt !== null && prunedAt === writes();
-        db.update(schema.scanRoots)
-          .set({ lastScannedAt: at })
-          .where(inArray(schema.scanRoots.path, [...roots]))
-          .run();
+        markScanned(db, roots, at);
         // When a scan ends: nothing the cleanup reads, so the Library stays cleaned up.
         if (pruned) prunedAt = writes();
       }),
 
-    countTracks: attempt(
-      "count tracks",
-      () =>
-        db
-          .select({ count: sql<number>`count(*)` })
-          .from(schema.tracks)
-          .get()?.count ?? 0,
-    ),
+    countTracks: attempt("count tracks", () => countTracks(db)),
 
     countLibrary: attempt("count the library", () => libraryCounts(db)),
     countSectionSongs: attempt("count the library's songs", () => sectionSongCounts(db)),
@@ -1933,11 +1570,7 @@ const make = Effect.gen(function* () {
     matchingSong: (song) => attempt("read matching song", () => selectMatchingSong(db, song)),
     downloadsToForget: (jobs) =>
       attempt("read downloaded files", () => selectDownloadsToForget(db, jobs)),
-    listSongs: attempt("list songs", () =>
-      trackQuery(db)
-        .orderBy(...BY_TITLE)
-        .all(),
-    ),
+    listSongs: attempt("list songs", () => listSongs(db)),
 
     listSortedSongs: (sort) => attempt("list sorted songs", () => selectSortedSongs(db, sort)),
     listSongOrder: (sort) =>
@@ -1960,28 +1593,7 @@ const make = Effect.gen(function* () {
     nowPlayingSong: (target) =>
       attempt("read the Now Playing song", () => selectNowPlayingSong(db, target)),
 
-    trackDetails: (id) =>
-      attempt(
-        "read the playing track",
-        () =>
-          db
-            .select({
-              id: schema.tracks.id,
-              artistId: schema.tracks.artistId,
-              artistIds: trackArtistIds,
-              artist: schema.tracks.artistCredit,
-              albumId: schema.tracks.albumId,
-              album: schema.albums.title,
-              palette: schema.artwork.palette,
-              path: filePath,
-            })
-            .from(schema.tracks)
-            .innerJoin(schema.artists, withFile(eq(schema.tracks.artistId, schema.artists.id)))
-            .innerJoin(schema.albums, eq(schema.tracks.albumId, schema.albums.id))
-            .leftJoin(schema.artwork, eq(schema.tracks.artworkHash, schema.artwork.hash))
-            .where(eq(schema.tracks.id, id))
-            .get() ?? null,
-      ),
+    trackDetails: (id) => attempt("read the playing track", () => trackDetails(db, id)),
 
     listAlbums: attempt("list albums", () => selectAlbums(db, undefined)),
 
@@ -2004,21 +1616,7 @@ const make = Effect.gen(function* () {
 
     artistCovers: (ids) => attempt("load artist covers", () => selectArtistCovers(db, ids)),
 
-    listGenres: attempt("list genres", () => {
-      const { genres, tracks } = schema;
-      return db
-        .select({
-          id: genres.id,
-          name: genres.name,
-          sort: genres.sort,
-          trackCount: sql<number>`count(${tracks.id})`,
-        })
-        .from(genres)
-        .innerJoin(tracks, eq(tracks.genreId, genres.id))
-        .groupBy(genres.id)
-        .orderBy(asc(genres.sort), asc(genres.id))
-        .all();
-    }),
+    listGenres: attempt("list genres", () => listGenres(db)),
 
     getAlbum: (id, scope) =>
       attempt(
@@ -2066,23 +1664,7 @@ const make = Effect.gen(function* () {
     unskipFiles: (paths) =>
       writeAttempt("forget skipped voice notes", () => unskipFiles(db, paths)),
 
-    indexedFiles: (paths) =>
-      attempt("read missing files", () =>
-        chunks(paths).flatMap((chunk) =>
-          db
-            .select({
-              path: filePath,
-              sizeBytes: schema.tracks.sizeBytes,
-              durationMs: schema.tracks.durationMs,
-              title: schema.tracks.title,
-              artist: schema.tracks.artistCredit,
-            })
-            .from(schema.tracks)
-            .innerJoin(schema.artists, eq(schema.tracks.artistId, schema.artists.id))
-            .where(and(hasFile, inArray(schema.tracks.path, chunk)))
-            .all(),
-        ),
-      ),
+    indexedFiles: (paths) => attempt("read missing files", () => indexedFiles(db, paths)),
 
     filesGone: (paths) =>
       writeAttempt("update songs whose files are gone", () => {
@@ -2105,23 +1687,11 @@ const make = Effect.gen(function* () {
       attempt("read albums' missing songs", () => selectAlbumsMissingSongs(db, albumIds)),
 
     addExcludedFolder: (path, drop) =>
-      writeAttempt("exclude a folder", () =>
-        db.transaction((tx) => {
-          const { excludedFolders } = schema;
-          if (drop.length > 0)
-            tx.delete(excludedFolders)
-              .where(inArray(excludedFolders.path, [...drop]))
-              .run();
-          tx.insert(excludedFolders)
-            .values({ path, addedAt: Date.now() })
-            .onConflictDoNothing()
-            .run();
-        }),
-      ),
+      writeAttempt("exclude a folder", () => addExcludedFolder(db, path, drop)),
 
     removeExcludedFolder: (path) =>
       writeAttempt("include a folder again", () => {
-        db.delete(schema.excludedFolders).where(eq(schema.excludedFolders.path, path)).run();
+        removeExcludedFolder(db, path);
       }),
 
     hasPlayableSongOutside: (ids) =>
@@ -2181,7 +1751,7 @@ const make = Effect.gen(function* () {
       writeAttempt("save the search", () => rememberSearchSync(db, query, Date.now())),
 
     clearRecentSearches: writeAttempt("clear recent searches", () => {
-      db.delete(schema.recentSearches).run();
+      clearRecentSearches(db);
     }),
 
     saveReleaseDate: (id, date) =>
@@ -2401,10 +1971,7 @@ const make = Effect.gen(function* () {
     creditedPlayTotals: (window) =>
       attempt("sum up album and artist plays", () => creditedPlayTotals(db, window)),
 
-    albumsByIds: (ids) =>
-      attempt("read ranked albums", () =>
-        ids.length === 0 ? [] : selectAlbums(db, inArray(schema.albums.id, [...ids])),
-      ),
+    albumsByIds: (ids) => attempt("read ranked albums", () => albumsByIds(db, ids)),
 
     artistsByIds: (ids) =>
       attempt("read ranked artists", () => (ids.length === 0 ? [] : listArtistsSync(db, ids))),
@@ -2574,4 +2141,7 @@ const make = Effect.gen(function* () {
   });
 });
 
-export const layer = Layer.effect(LibraryStore, make);
+export const layer = Layer.effect(LibraryStore, make).pipe(
+  Layer.provide(databaseLayer),
+  Layer.provide(sqliteDriverLayer),
+);

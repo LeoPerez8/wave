@@ -1,4 +1,4 @@
-import { makeExternalStore } from "../lib/externalStore.ts";
+import { makeExternalStore } from "@wave/client/externalStore";
 
 export interface AllFilesAccessState {
   readonly granted: boolean;

@@ -11,12 +11,13 @@ import * as Layer from "effect/Layer";
 import { AppState } from "react-native";
 
 import { LibraryStore } from "@/library/LibraryStore";
+
 import { appLog } from "@/log/appLog";
 import { ytMusicEnabled } from "@/settings/ytMusic";
 
 import { Player, playbackState } from "./Player";
 import { Queue, currentPositionMs, queueState, settledQueue, toQueueTrack } from "./Queue";
-import { observeQueueSaves } from "./queueSaves";
+import { observeQueueSaves } from "@wave/client/queueSaves";
 import { learnUnknownQueueTracks, queueTracks, type QueueTrack } from "./queueTracks";
 import { onSavePlaceForReload, takePlayingAtReload } from "./reloadResume";
 import { savedYtQueueTracks, saveYtQueueTracks } from "./savedYtTracks";

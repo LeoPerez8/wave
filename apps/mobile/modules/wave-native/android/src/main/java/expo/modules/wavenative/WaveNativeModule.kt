@@ -37,7 +37,7 @@ import expo.modules.wavenative.artwork.ArtworkProvider
 import expo.modules.wavenative.artwork.ArtworkStore
 import expo.modules.wavenative.artwork.MediumCoverBackfill
 import expo.modules.wavenative.download.AndroidMediaScans
-import expo.modules.wavenative.download.BackgroundThreads
+import expo.modules.wavenative.download.ThreadPriority
 import expo.modules.wavenative.files.AudioLengths
 import expo.modules.wavenative.files.DeleteOutcome
 import expo.modules.wavenative.files.TrackFileDeleter
@@ -542,7 +542,7 @@ class WaveNativeModule : Module() {
       // The file as the write finds it: a failed write may cut it short or rename it.
       val before = TagWriteFile.of(file)
       try {
-        BackgroundThreads.during {
+        ThreadPriority.during {
           val report =
             SongTagWriter().write(
               file,
@@ -588,7 +588,7 @@ class WaveNativeModule : Module() {
       val file = File(path)
       val before = TagWriteFile.of(file)
       try {
-        BackgroundThreads.during {
+        ThreadPriority.during {
           val report = SongTagWriter().write(file, lyrics = null, genre = null, originalDate = date)
           if (report.originalDate == TagDestination.TAGS) AndroidMediaScans.get(context).add(listOf(path))
           mapOf("originalDate" to report.originalDate.id)
@@ -609,7 +609,7 @@ class WaveNativeModule : Module() {
       val file = File(path)
       val before = TagWriteFile.of(file)
       try {
-        BackgroundThreads.during {
+        ThreadPriority.during {
           val report = SongTagWriter().replaceOriginalDate(file, date)
           if (report.originalDate == TagDestination.TAGS) AndroidMediaScans.get(context).add(listOf(path))
           mapOf("originalDate" to report.originalDate.id)

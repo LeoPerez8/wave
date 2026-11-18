@@ -16,10 +16,7 @@ import { connectSoulseek, findToolchain } from "./soulseek.ts";
 
 const here = dirname(fileURLToPath(import.meta.url));
 const fixture = readFileSync(
-  join(
-    here,
-    "../../apps/mobile/modules/wave-native/android/src/test/resources/fixtures/soulseek-320.mp3",
-  ),
+  join(here, "../../packages/kotlin-shared/src/testFixtures/resources/fixtures/soulseek-320.mp3"),
 );
 const toolchain = findToolchain();
 const LOCALHOST = 0x7f000001;

@@ -87,7 +87,7 @@ object PreDownloads {
   @OptIn(UnstableApi::class)
   internal fun run(context: Context, stop: AtomicBoolean): Boolean {
     val videoIds = list(context)
-    if (videoIds.isEmpty() || !YtClient.get(context).enabled) return false
+    if (videoIds.isEmpty() || !AndroidYtClient.get(context).enabled) return false
     val audio = YtAudioCache.get(context) ?: return false
     val connectivity = Connectivity(context)
     val networkBytes = AtomicLong()
@@ -113,7 +113,7 @@ object PreDownloads {
     val network = DefaultHttpDataSource.Factory().setAllowCrossProtocolRedirects(true).createDataSource()
     val source = YtDataSource(
       network,
-      client = { YtClient.get(context) },
+      client = { AndroidYtClient.get(context) },
       audioCache = { audio },
       onLoaded = { _, fromNetwork, _ -> counted(fromNetwork) },
       ahead = true,

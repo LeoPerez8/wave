@@ -16,7 +16,8 @@ import { cancelUnstarredDownloads, downloadStarredSongs } from "@/ytmusic/YtDown
 
 import { currentFavoriteIds, setFavorites, setPendingFavorites } from "./favorites";
 import { publishUnstarred, publishYtSongSignal } from "./libraryChanges";
-import { LibraryStore, songHasFile, type SongRow } from "./LibraryStore";
+import { LibraryStore } from "./LibraryStore";
+import { songHasFile, type SongRow } from "@wave/client";
 import { appRuntime } from "./runtime";
 
 /**

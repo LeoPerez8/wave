@@ -5,7 +5,7 @@ import { Text, View } from "react-native";
 import { CELL } from "@/catalog/grid";
 import { TitledSection } from "@/catalog/TitledSection";
 import { TotalsLine } from "@/catalog/TotalsLine";
-import type { SongRow } from "@/library/LibraryStore";
+import type { SongRow } from "@wave/client";
 import { perfMark, useRenderCount } from "@/perf/perf";
 
 import { useArtistStats } from "./hooks";

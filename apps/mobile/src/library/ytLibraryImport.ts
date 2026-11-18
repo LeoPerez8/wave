@@ -75,7 +75,7 @@ import * as Result from "effect/Result";
 import { useSyncExternalStore } from "react";
 import { AppState } from "react-native";
 
-import { makeExternalStore } from "@/lib/externalStore";
+import { makeExternalStore } from "@wave/client/externalStore";
 import { persistedSetting } from "@/lib/persistedSetting";
 import { appLog } from "@/log/appLog";
 import type { NativeYtSong } from "@/native/waveYtMusic";
@@ -88,6 +88,7 @@ import { makeImportIndexCache } from "./importIndexCache";
 import { endImportProgress, showImportProgress } from "./importProgress";
 import { libraryVersion } from "./LibraryScan";
 import { LibraryStore } from "./LibraryStore";
+
 import { listLibrary } from "./playlistImports";
 import { cancelPlaylistImport, settlePlaylistImport, startLinkImport } from "./playlistImports";
 import { createPlaylist, currentPlaylists, replacePlaylistSongs } from "./playlists";

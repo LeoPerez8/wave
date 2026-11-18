@@ -1,7 +1,7 @@
 import { registerTimingBackground, timingBackgroundChanged } from "@/lib/timing";
 import { failedJobs, queuedDownloadCounts, type QueuedDownloadCounts } from "@wave/core";
 
-import { makeExternalStore } from "@/lib/externalStore";
+import { makeExternalStore } from "@wave/client/externalStore";
 import type { NativeDownloadJob } from "@/native/waveSoulseek";
 
 /**

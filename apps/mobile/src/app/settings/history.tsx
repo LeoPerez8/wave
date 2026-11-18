@@ -27,7 +27,7 @@ import { grid, CELL } from "@/catalog/grid";
 import { useChromeInset } from "@/chrome/chrome";
 import { IconButton } from "@/components/IconButton";
 import { TextButton } from "@/components/TextButton";
-import type { ListeningHistoryRow } from "@/library/db/listeningHistory";
+import type { ListeningHistoryRow } from "@wave/client/db/listeningHistory";
 import { FindFrame, FindHead, useFindInLegendList } from "@/library/FindInPlaylist";
 import { historyArtwork } from "@/library/historyArtwork";
 import { useListeningHistory } from "@/library/useListeningHistory";

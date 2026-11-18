@@ -8,9 +8,14 @@
 **/build/**
 **/out/**
 **/coverage/**
+**/test-results/**
+**/playwright-report/**
 **/.cache/**
 **/.turbo/**
 **/.next/**
+apps/desktop/jvm/**
+# Recorded YT Music answers the Kotlin tests read as they came
+packages/kotlin-shared/src/testFixtures/resources/fixtures/**
 apps/mobile/expo-env.d.ts
 apps/mobile/uniwind-types.d.ts
 

@@ -18,6 +18,6 @@ regexes = ['''^[0-9a-f]{64}$''']
 description = "YouTube Music response fixtures"
 targetRules = ["generic-api-key"]
 condition = "AND"
-paths = ['''^apps/mobile/modules/wave-native/android/src/test/resources/fixtures/yt/[^/]+\.json$''']
+paths = ['''^packages/kotlin-shared/src/testFixtures/resources/fixtures/yt/[^/]+\.json$''']
 regexTarget = "match"
 regexes = ['''^(\w*EntityKey|token)"\s*:\s*"''']

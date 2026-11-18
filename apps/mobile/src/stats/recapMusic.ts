@@ -2,7 +2,7 @@ import { recapSong } from "@wave/core";
 import * as Effect from "effect/Effect";
 import { useEffect, useMemo, useRef, useState } from "react";
 
-import { songHasFile } from "@/library/LibraryStore";
+import { songHasFile } from "@wave/client";
 import { appRuntime } from "@/library/runtime";
 import { Player, playbackState } from "@/playback/Player";
 import { Queue, toQueueTrack, type QueueLoan } from "@/playback/Queue";

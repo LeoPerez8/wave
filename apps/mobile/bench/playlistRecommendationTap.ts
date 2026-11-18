@@ -28,15 +28,10 @@ import { resolve } from "node:path";
 import { performance } from "node:perf_hooks";
 import { pathToFileURL } from "node:url";
 
-import * as current from "../src/library/db/playlistRecommendations.ts";
-import { createPlaylist, selectPlaylist, selectPlaylists } from "../src/library/db/playlists.ts";
-import * as schema from "../src/library/db/schema.ts";
-import {
-  addHistory,
-  addTrack,
-  openTestDatabase,
-  traceQueries,
-} from "../src/library/db/testDatabase.ts";
+import * as current from "@wave/client/db/playlistRecommendations";
+import { createPlaylist, selectPlaylist, selectPlaylists } from "@wave/client/db/playlists";
+import * as schema from "@wave/client/db/schema";
+import { addHistory, addTrack, openTestDatabase, traceQueries } from "@wave/client/testing";
 import { median, printMeta } from "./measure.ts";
 
 const flag = (name: string): string | undefined => {

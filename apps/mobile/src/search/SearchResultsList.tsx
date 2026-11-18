@@ -10,7 +10,7 @@ import {
 import { useCallback, useMemo } from "react";
 import { Text, View } from "react-native";
 
-import { artworkUri } from "@/catalog/artworkUri";
+import { artworkUri } from "@wave/client/artworkUri";
 import { AlbumCardRow } from "@/catalog/cards/AlbumCard";
 import { ArtistCardRow } from "@/catalog/cards/ArtistCard";
 import { PlaylistCardRow } from "@/catalog/cards/PlaylistCard";

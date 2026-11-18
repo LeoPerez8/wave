@@ -1,4 +1,5 @@
 import { LibraryStore } from "@/library/LibraryStore";
+
 import { appRuntime } from "@/library/runtime";
 import { router } from "@/lib/timingRouter";
 import { useFollow } from "@/library/follows";
@@ -20,7 +21,7 @@ import { ArtistImage } from "@/catalog/ArtistImage";
 import { CELL } from "@/catalog/grid";
 import { Mosaic } from "@/catalog/Mosaic";
 import type { LibrarySection } from "@/catalog/sections";
-import type { LibraryCounts } from "@/library/db/counts";
+import type { LibraryCounts } from "@wave/client/db/counts";
 import { useSectionSongCounts } from "@/library/hooks";
 import type {
   AlbumRow,
@@ -29,7 +30,7 @@ import type {
   PlaylistEntryRow,
   PlaylistRow,
   SongRow,
-} from "@/library/LibraryStore";
+} from "@wave/client";
 import { playlistEntries, songsWithIds } from "@/library/sectionSongs";
 import { pressedMenuAllowed, pressedRect } from "@/motion/pressedRect";
 import { CardHeading } from "@/overlay/CardHeading";

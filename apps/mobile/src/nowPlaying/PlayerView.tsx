@@ -15,11 +15,12 @@ import Animated, {
 } from "react-native-reanimated";
 
 import { CELL } from "@/catalog/grid";
-import { subscribeAll } from "@/lib/externalStore";
+import { subscribeAll } from "@wave/client/externalStore";
 import { followArtistLink, followStreamedArtistLink } from "@/library/ArtistChoice";
 import { useScopedSongStarred } from "@/library/favorites";
 import { useLinkRows } from "@/library/hooks";
-import { LibraryStore, type TrackDetails } from "@/library/LibraryStore";
+import { LibraryStore } from "@/library/LibraryStore";
+import { type TrackDetails } from "@wave/client";
 import { appRuntime } from "@/library/runtime";
 import { showError } from "@/overlay/alert";
 import { openAlbum, useCurrentPath } from "@/library/routes";

@@ -1,7 +1,7 @@
 /** Two indexed table walks, preserving historical song/radio order without N+1 reads. */
 import type { CatalogRadio } from "@wave/core";
 import * as Effect from "effect/Effect";
-import type { GraphPage } from "../library/db/artistGraph.ts";
+import type { GraphPage } from "@wave/client/db/artistGraph";
 import { runSteps } from "../lib/stepped.ts";
 export const readCatalogInputs = <A, E>(
   songsPage: (after: number) => Effect.Effect<GraphPage<A, number>, E>,

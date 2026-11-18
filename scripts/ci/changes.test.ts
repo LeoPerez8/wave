@@ -9,6 +9,11 @@ const run = (args: string[], stdin: string) =>
   execFileSync(process.execPath, [script, ...args], { input: stdin, encoding: "utf8" });
 
 describe("changes", () => {
+  it("releases phone changes to the shared client and checks its dependents", () => {
+    const paths = ["packages/client/src/db/tracks.ts"];
+    assert.equal(changes(paths).app, true);
+    assert.equal(reachesUsers(paths), true);
+  });
   it("touches no area for a docs-only change", () => {
     const result = changes(["docs/spec.md", "docs/spotify-samples/track-metadata.json"]);
     assert.ok(Object.values(result).every((value) => value === false));
@@ -36,6 +41,26 @@ describe("changes", () => {
       ]).nativeTests,
       true,
     );
+  });
+
+  it("runs the native tests and releases the phone when the shared Kotlin changes", () => {
+    const paths = ["packages/kotlin-shared/src/main/kotlin/expo/modules/wavenative/yt/YtClient.kt"];
+    assert.equal(changes(paths).nativeTests, true);
+    assert.equal(reachesUsers(paths), true);
+  });
+
+  it("doesn't release the phone for the desktop's JVM entry point, and still runs its tests", () => {
+    const paths = [
+      "packages/kotlin-shared/stdio/src/main/kotlin/dev/leoperez/wave/stdio/WaveDesktop.kt",
+      "packages/kotlin-shared/stdio/build.gradle.kts",
+      "apps/desktop/src/main/index.ts",
+    ];
+    const result = changes(paths);
+    assert.equal(result.app, false);
+    assert.equal(reachesUsers(paths), false);
+    assert.equal(result.nativeTests, true);
+    assert.equal(result.desktopChecks, true);
+    assert.equal(reachesUsers([...paths, "packages/kotlin-shared/build.gradle.kts"]), true);
   });
 
   it("runs the native tests when wave-glass changes", () => {
@@ -91,6 +116,37 @@ describe("changes", () => {
     });
   }
 
+  for (const path of [
+    "apps/desktop/src/main/index.ts",
+    "packages/client/src/db/tracks.ts",
+    "packages/core/src/queue.ts",
+    "packages/theme/colours.css",
+    "packages/kotlin-shared/stdio/src/main/kotlin/dev/leoperez/wave/stdio/WaveDesktop.kt",
+    "pnpm-lock.yaml",
+    "tsconfig.base.json",
+    ".github/workflows/ci.yml",
+  ]) {
+    it(`checks the desktop on Windows and Linux when ${path} changes`, () => {
+      assert.equal(changes([path]).desktopChecks, true);
+    });
+  }
+
+  it("checks a desktop change without releasing the phone or running its native tests", () => {
+    const paths = ["apps/desktop/src/main/index.ts", "apps/desktop/package.json"];
+    const result = changes(paths);
+    assert.equal(result.desktop, true);
+    assert.equal(result.nativeTests, false);
+    assert.equal(result.allPackages, false);
+    assert.equal(reachesUsers(paths), false);
+  });
+
+  it("doesn't check the desktop for a phone-only or sync change", () => {
+    assert.equal(
+      changes(["apps/mobile/src/app/_layout.tsx", "apps/sync/src/worker.ts"]).desktopChecks,
+      false,
+    );
+  });
+
   it("names each area a change touches", () => {
     assert.deepEqual(changes(["packages/core/src/queue.ts", "pnpm-lock.yaml"]), {
       app: false,
@@ -102,8 +158,10 @@ describe("changes", () => {
       perf: false,
       tsconfig: false,
       native: false,
+      desktop: true,
       allPackages: true,
       nativeTests: true,
+      desktopChecks: true,
     });
     assert.deepEqual(changes(["apps/mobile/app.config.ts", ".github/workflows/ci.yml"]), {
       app: true,
@@ -115,8 +173,10 @@ describe("changes", () => {
       perf: false,
       tsconfig: false,
       native: true,
+      desktop: false,
       allPackages: true,
       nativeTests: true,
+      desktopChecks: true,
     });
   });
 });
@@ -125,14 +185,14 @@ describe("changes.ts as a command", () => {
   it("prints one GitHub output line per area for the paths on stdin", () => {
     assert.equal(
       run([], "docs/spec.md\npackages/core/src/queue.ts\n"),
-      "app=false\ncore=true\nsync=false\nupdates=false\nworkspace=false\nci=false\nperf=false\ntsconfig=false\nnative=false\nallPackages=false\nnativeTests=false\n",
+      "app=false\ncore=true\nsync=false\nupdates=false\nworkspace=false\nci=false\nperf=false\ntsconfig=false\nnative=false\ndesktop=true\nallPackages=false\nnativeTests=false\ndesktopChecks=true\n",
     );
   });
 
   it("counts every area as changed with --all, as on pushes to main", () => {
     assert.equal(
       run(["--all"], ""),
-      "app=true\ncore=true\nsync=true\nupdates=true\nworkspace=true\nci=true\nperf=true\ntsconfig=true\nnative=true\nallPackages=true\nnativeTests=true\n",
+      "app=true\ncore=true\nsync=true\nupdates=true\nworkspace=true\nci=true\nperf=true\ntsconfig=true\nnative=true\ndesktop=true\nallPackages=true\nnativeTests=true\ndesktopChecks=true\n",
     );
   });
 });

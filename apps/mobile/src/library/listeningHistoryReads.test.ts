@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 
-import type { ListeningHistoryPage, ListeningHistoryRow } from "./db/listeningHistory.ts";
+import type { ListeningHistoryPage, ListeningHistoryRow } from "@wave/client/db/listeningHistory";
 import { listeningHistoryReads, type ListeningHistoryFrom } from "./listeningHistoryReads.ts";
 
 const row = (id: number): ListeningHistoryRow => ({

@@ -1,4 +1,4 @@
-import { makeExternalStore } from "@/lib/externalStore";
+import { makeExternalStore } from "@wave/client/externalStore";
 
 /** Invalidates Search after either local or saved streamed lyrics change. */
 export const lyricsSearchIndexVersion = makeExternalStore(0);

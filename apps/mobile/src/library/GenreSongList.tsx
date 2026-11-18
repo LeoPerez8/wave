@@ -26,14 +26,14 @@ import {
   readGenreSongs,
   type GenreOrderLoad,
 } from "./genreOrder";
+import { LibraryStore } from "./LibraryStore";
 import {
-  LibraryStore,
   type GenreOpening,
   type GenreRow,
   type SongOrder,
   type SongRow,
   type SongSummary,
-} from "./LibraryStore";
+} from "@wave/client";
 import { usePagedSongs } from "./pagedSongs";
 import { songIdKey, useRowsNearScreen } from "./pagedSongRows";
 import { appRuntime } from "./runtime";

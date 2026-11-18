@@ -8,7 +8,7 @@ import { streamedSongMagicStart, type YtSong } from "@wave/core";
 import type * as Effect from "effect/Effect";
 import type * as ManagedRuntime from "effect/ManagedRuntime";
 
-import type { SongRow } from "@/library/LibraryStore";
+import type { SongRow } from "@wave/client";
 import { appRuntime } from "@/library/runtime";
 import { showError } from "@/overlay/alert";
 

@@ -2,10 +2,11 @@ import { currentLocalisation } from "@/localisation/localisation";
 import { useFocusEffect } from "expo-router";
 import * as Effect from "effect/Effect";
 import { useCallback } from "react";
-import { makeExternalStore } from "@/lib/externalStore";
+import { makeExternalStore } from "@wave/client/externalStore";
 import { useSightedStore } from "@/lib/screenSight";
 import { showError } from "@/overlay/alert";
 import { LibraryStore } from "./LibraryStore";
+
 import { appRuntime } from "./runtime";
 
 /** The dismissed suggestions' follow keys; undefined until read once. */

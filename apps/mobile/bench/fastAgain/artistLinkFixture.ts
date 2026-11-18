@@ -1,10 +1,6 @@
 /** Exact active-artist counts for #586, separate from the shared song/history sizes. */
 import { sql } from "drizzle-orm";
-import {
-  addLibrary,
-  closeTestDatabase,
-  openTestDatabase,
-} from "../../src/library/db/testDatabase.ts";
+import { addLibrary, closeTestDatabase, openTestDatabase } from "@wave/client/testing";
 
 export const createArtistLinkFixture = async (artists: number, songs = artists) => {
   const db = await openTestDatabase();

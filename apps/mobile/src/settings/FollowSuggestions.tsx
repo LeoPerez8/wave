@@ -8,7 +8,7 @@ import {
 import { useState } from "react";
 import { Text, View } from "react-native";
 
-import type { PlayedArtist } from "@/library/db/playedEntities";
+import type { PlayedArtist } from "@wave/client/db/playedEntities";
 import {
   dismissFollowSuggestion,
   undoFollowSuggestionDismissal,

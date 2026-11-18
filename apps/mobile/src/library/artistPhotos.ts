@@ -17,11 +17,11 @@ import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import { useSyncExternalStore } from "react";
 
-import { makeExternalStore } from "@/lib/externalStore";
+import { makeExternalStore } from "@wave/client/externalStore";
 import { WaveNative, type ArtistPhotoFiles } from "@/native/waveNative";
 import { artistPhotosEnabled, useArtistPhotosEnabled } from "@/settings/artistPhotos";
 
-import type { ArtistPhotoLookup, ArtistPhotoRecord } from "./db/artistPhotos";
+import type { ArtistPhotoLookup, ArtistPhotoRecord } from "@wave/client/db/artistPhotos";
 import { LibraryStore } from "./LibraryStore";
 
 /** Downloaded photos by artist key, loaded from the store when lookups start. */

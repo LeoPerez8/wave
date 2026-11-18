@@ -12,7 +12,8 @@ import { currentLocalisation } from "@/localisation/localisation";
 import type { ChoiceSetting } from "@/settings/ChoiceRow";
 
 import { usePlaylists } from "./hooks";
-import { LibraryStore, type PlaylistRow } from "./LibraryStore";
+import { LibraryStore } from "./LibraryStore";
+import { type PlaylistRow } from "@wave/client";
 import { NEVER_PLAYED, playlistOrder } from "./playlistOrder";
 import { knownPlaylists } from "./playlists";
 import { appRuntime } from "./runtime";

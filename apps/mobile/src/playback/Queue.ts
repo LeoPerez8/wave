@@ -61,9 +61,10 @@ import * as Layer from "effect/Layer";
 import * as Semaphore from "effect/Semaphore";
 
 import { afterFirstSettled } from "@/lib/backgroundWork";
-import { makeExternalStore, subscribeAll } from "@/lib/externalStore";
+import { makeExternalStore, subscribeAll } from "@wave/client/externalStore";
 import { onLibraryChange, onScanFinished } from "@/library/libraryChanges";
 import { LibraryStore } from "@/library/LibraryStore";
+
 import { currentLocalisation } from "@/localisation/localisation";
 import { WaveNative } from "@/native/waveNative";
 import type { NativeSyncStep, PlayerItem } from "@/native/wavePlayer";
@@ -89,7 +90,7 @@ import {
 } from "./queueTracks";
 import { savedYtQueueTracks } from "./savedYtTracks";
 import { createEntryGains, type PlayerGain } from "./songGains";
-import { createSongMeasurements } from "./songMeasurements";
+import { createSongMeasurements } from "@wave/client/songMeasurements";
 
 export { toQueueTrack, type QueueTrack } from "./queueTracks";
 

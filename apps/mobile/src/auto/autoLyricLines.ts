@@ -7,7 +7,7 @@
  */
 import { autoLyricLines, extrapolatePosition, type AutoLyricsText, type Lyrics } from "@wave/core";
 
-import type { ExternalStore } from "../lib/externalStore.ts";
+import type { ExternalStore } from "@wave/client/externalStore";
 
 /** What the lyrics need to know of the player (the app's `PositionState` fits). */
 export interface AutoLyricLinesPlayback {

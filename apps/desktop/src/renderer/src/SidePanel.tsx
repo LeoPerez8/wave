@@ -1,0 +1,108 @@
+/**
+ * The side panel (docs/spec-desktop.md, Window and layout): Lyrics and Queue as tabs on the
+ * right of the window, toggled from the player bar, and Related beside them with YouTube Music on. It takes a grid column, so it pushes the
+ * content instead of covering it.
+ */
+import { useState, type KeyboardEvent, type MouseEvent } from "react";
+
+import type { BrowseRow } from "../../shared/browse.ts";
+import type { PlaybackCommand, PlayerView } from "../../shared/playerView.ts";
+import type { YtArtistCandidate } from "../../shared/ytPages.ts";
+import { LyricsView, trackIdOf } from "./LyricsView.tsx";
+import { panelTabs, shownPanelTab, stepPanelTab, type PanelTab } from "../../shared/panelTabs.ts";
+import { QueuePanel } from "./QueuePanel.tsx";
+import { RelatedPanel } from "./RelatedPanel.tsx";
+import { labels, text } from "./text.ts";
+import "./panel.css";
+
+export type { PanelTab };
+
+/** Which tab the panel shows, or null while it is closed; the bar's buttons toggle it. */
+export function useSidePanel() {
+  const [tab, setTab] = useState<PanelTab | null>(null);
+  return {
+    tab,
+    show: setTab,
+    /** The bar's Lyrics or Queue button: opens the panel on [next], or closes it there. */
+    toggle: (next: PanelTab) => setTab((shown) => (shown === next ? null : next)),
+  };
+}
+
+export function SidePanel({
+  tab: asked,
+  onTab,
+  ytMusic,
+  onArtist,
+  onSongMenu,
+  view,
+  run,
+  onError,
+  hidden,
+}: {
+  readonly tab: PanelTab;
+  readonly onTab: (tab: PanelTab) => void;
+  /** YouTube Music is on: the panel has its Related tab. */
+  readonly ytMusic: boolean;
+  /** Opens one of Related's similar artists. */
+  readonly onArtist: (artist: YtArtistCandidate) => void;
+  /** Opens the menu of one of Related's songs. */
+  readonly onSongMenu: (row: BrowseRow, event: MouseEvent<HTMLElement>) => void;
+  readonly view: PlayerView | undefined;
+  readonly run: (action: Promise<unknown>) => void;
+  readonly onError: () => void;
+  /** Now Playing covers it: out of reach until that closes. */
+  readonly hidden: boolean;
+}) {
+  const tab = shownPanelTab(asked, ytMusic);
+  const command = (next: PlaybackCommand) => run(window.wave.playback.command(next));
+  const key = (event: KeyboardEvent) => {
+    const step = event.key === "ArrowRight" ? 1 : event.key === "ArrowLeft" ? -1 : 0;
+    if (step === 0) return;
+    event.preventDefault();
+    const next = stepPanelTab(tab, step, ytMusic);
+    onTab(next);
+    document.getElementById(`panel-tab-${next}`)?.focus();
+  };
+  return (
+    <aside className="side-panel" aria-label={labels.sidePanel} inert={hidden}>
+      <div className="panel-tabs" role="tablist" onKeyDown={key}>
+        {panelTabs(ytMusic).map((name) => (
+          <button
+            key={name}
+            id={`panel-tab-${name}`}
+            role="tab"
+            aria-selected={tab === name}
+            aria-controls="panel-body"
+            tabIndex={tab === name ? 0 : -1}
+            onClick={() => onTab(name)}
+          >
+            {name === "related" ? text.playbackText.related : labels[name]}
+          </button>
+        ))}
+      </div>
+      <div
+        id="panel-body"
+        className="panel-body"
+        role="tabpanel"
+        aria-labelledby={`panel-tab-${tab}`}
+      >
+        {tab === "lyrics" ? (
+          <LyricsView
+            song={view?.current ?? null}
+            positionMs={view?.status.positionMs ?? 0}
+            onSeek={(positionMs) => run(window.wave.playback.seek(positionMs))}
+          />
+        ) : tab === "related" ? (
+          <RelatedPanel
+            song={view?.current ? trackIdOf(view.current) : null}
+            run={run}
+            onArtist={onArtist}
+            onSongMenu={onSongMenu}
+          />
+        ) : view === undefined ? null : (
+          <QueuePanel view={view} command={command} onError={onError} />
+        )}
+      </div>
+    </aside>
+  );
+}

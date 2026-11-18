@@ -1,0 +1,11 @@
+# Wave's Rust code for the desktop app (docs/spec-desktop.md › Audio engine).
+[workspace]
+resolver = "3"
+members = ["engine", "node", "media"]
+
+[workspace.package]
+edition = "2024"
+publish = false
+
+[profile.release]
+lto = "thin"

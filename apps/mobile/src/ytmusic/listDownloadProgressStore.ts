@@ -4,8 +4,8 @@ import {
   type ListDownloadsScope,
   type YtDownloadJournalJob,
 } from "@wave/core";
-import type { ExternalStore } from "../lib/externalStore.ts";
-import type { DownloadListKey, DownloadListMembers } from "../library/db/listDownloadMembers.ts";
+import type { ExternalStore } from "@wave/client/externalStore";
+import type { DownloadListKey, DownloadListMembers } from "@wave/client/db/listDownloadMembers";
 
 interface Sources {
   readonly journal: Pick<ExternalStore<readonly YtDownloadJournalJob[]>, "get" | "subscribe">;

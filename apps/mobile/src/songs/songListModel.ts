@@ -1,4 +1,4 @@
-import { artworkUri } from "../catalog/artworkUri.ts";
+import { artworkUri } from "@wave/client/artworkUri";
 import { songRowView, type SongListRowSource, type SongRowState } from "@wave/core";
 
 /** The memoized leaf receives only display primitives and keyed action handlers. */

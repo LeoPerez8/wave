@@ -148,6 +148,7 @@ export { elapsedWavePath } from "./elapsedWave.ts";
 export type { ElapsedWave } from "./elapsedWave.ts";
 export { contrastRatio, crossfadeGround, lyricsDimOpacity, paletteGradient } from "./palette.ts";
 export type { ArtworkPalette, Gradient, GradientTheme, GroundLayers } from "./palette.ts";
+export { pixelPalette } from "./pixelPalette.ts";
 export { settleSheet } from "./sheet.ts";
 export type { SheetDrag, SheetState } from "./sheet.ts";
 export {
@@ -247,14 +248,23 @@ export {
   SLEEP_TIMER_PRESETS,
   formatSleepMinutes,
   formatSleepRemaining,
+  sleepTimerCheckIn,
   sleepTimerEntryLabel,
   sleepTimerLabelChangesIn,
   sleepTimerLabelSeconds,
+  sleepTimerPausesAtTrackEnd,
   sleepTimerRemaining,
   startSleepTimer,
   stepSleepMinutes,
+  stepSleepTimer,
 } from "./sleepTimer.ts";
-export type { SleepTimer, SleepTimerChoice, SleepTimerClock } from "./sleepTimer.ts";
+export type {
+  SleepTimer,
+  SleepTimerChoice,
+  SleepTimerClock,
+  SleepTimerEvent,
+  SleepTimerStep,
+} from "./sleepTimer.ts";
 export {
   RELOAD_RESUME_WINDOW_MS,
   UPDATE_APK_RETRY_INTERVAL_MS,
@@ -477,7 +487,7 @@ export {
 } from "./tabBar.ts";
 export type { TabBar, TabBarEdit, TabBarTab } from "./tabBar.ts";
 export { catalogueOf, resolveAppLanguage } from "./localisation.ts";
-export type { AppLanguage, Catalogue } from "./localisation.ts";
+export type { AppLanguage, Catalogue, CatalogueVariants, Device } from "./localisation.ts";
 export { plural } from "./plural.ts";
 export type { PluralForms } from "./plural.ts";
 export { createDeveloperTitleTaps } from "./developerSettings.ts";
@@ -921,6 +931,12 @@ export type {
   WaveAccountView,
   WaveSession,
 } from "./waveAccount.ts";
+export { waveAccountActionNotes, waveAccountNotes, waveSignInLabels } from "./waveAccountText.ts";
+export {
+  FIND_LYRICS_AND_GENRE_SETTING,
+  readFindLyricsAndGenre,
+  writeFindLyricsAndGenre,
+} from "./lookupsSetting.ts";
 export type { AccountSession, AccountSignInEvent, AccountSignInState } from "./accountSignIn.ts";
 export {
   SPOTIFY_ACCOUNT_SIGNED_OUT,
@@ -1030,6 +1046,7 @@ export {
   libraryPathIndex,
   parseM3u,
   planM3uImport,
+  resolveDesktopM3uPath,
   resolveM3uPath,
   summarizeM3uImport,
 } from "./m3u.ts";
@@ -1194,10 +1211,12 @@ export {
   YT_DOWNLOADS_NONE,
   YT_DOWNLOAD_ACTION_LABELS,
   ytDownloadActions,
+  ytDownloadAwaitsAnswer,
   ytDownloadLine,
   ytDownloadProgress,
   ytDownloadStatus,
   ytDownloadSharedJob,
+  ytDownloadUnfinished,
   ytDownloadsFromJournal,
 } from "./ytDownloads.ts";
 export type {
@@ -1527,6 +1546,7 @@ export { graveyardRemovalsOf, graveyardRestoreIndex, graveyardSongs } from "./pl
 export type { GraveyardItem, GraveyardSlot } from "./playlistGraveyard.ts";
 export {
   RECORDING_LENGTH_TOLERANCE_MS,
+  desktopUsesPreference,
   fillMissingSongs,
   findRecording,
   joinLibraries,
@@ -2500,10 +2520,12 @@ export {
   type SavedQueueParts,
 } from "./queuePersistence.ts";
 export {
+  DESKTOP_SYNC_PERIOD_MS,
   FOREGROUND_SYNC_INTERVAL_MS,
   PLAY_BATCH_DELAY_MS,
   PLAY_BATCH_MAX_MS,
   PUSH_DELAY_MS,
+  SYSTEM_SYNC_CLOCK,
   syncTriggers,
 } from "./syncTriggers.ts";
 export type { SyncClock, SyncTriggers, SyncTriggersInput } from "./syncTriggers.ts";
@@ -2789,7 +2811,7 @@ export { queueContinuation, continueMagicQueue } from "./queueContinuation.ts";
 export { readContinueQueue, writeContinueQueue } from "./queueContinuationSetting.ts";
 export { availableMagicSongs } from "./magicRadioLearning.ts";
 export type { QueueContinuationSeed } from "./queueContinuation.ts";
-export { queueLengthsToRead } from "./queueContinuation.ts";
+export { queueLengthsToRead, songsWithinBuffer } from "./queueContinuation.ts";
 export type { QueueTimeAhead } from "./queueContinuation.ts";
 export { albumDownloadMembers, indexListDownloads } from "./listDownloadProgress.ts";
 export type {
@@ -2799,4 +2821,17 @@ export type {
   ListDownloadsScope,
 } from "./listDownloadProgress.ts";
 export { MARQUEE, marqueeOffset, marqueePlan, marqueeStill, readsRightToLeft } from "./marquee.ts";
+export { scanPath, scanPathKey, scanPathWithin, scanFileState } from "./desktopScan.ts";
+export type { ScanFolder } from "./desktopScan.ts";
 export type { MarqueeLine, MarqueeLineSize, MarqueePlan } from "./marquee.ts";
+export { desktopSongActions } from "./desktopSongMenu.ts";
+export type { DesktopSongSubject } from "./desktopSongMenu.ts";
+export { DESKTOP_SHORTCUTS, desktopKey, shortcutKeys } from "./desktopKeys.ts";
+export type {
+  DesktopCommand,
+  DesktopFocus,
+  DesktopKeyPress,
+  DesktopShortcut,
+  ShortcutId,
+  ShortcutKey,
+} from "./desktopKeys.ts";

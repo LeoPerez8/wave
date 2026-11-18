@@ -25,13 +25,14 @@ import { useSyncExternalStore } from "react";
 import { AppState } from "react-native";
 
 import { askForNotifications } from "@/lib/askForNotifications";
-import { makeExternalStore } from "@/lib/externalStore";
+import { makeExternalStore } from "@wave/client/externalStore";
 import { persistedSetting } from "@/lib/persistedSetting";
 import { appLog } from "@/log/appLog";
 import { WaveLibraryLookup } from "@/native/waveLibraryLookup";
 import { showToast } from "@/overlay/toast";
 
 import { LibraryStore } from "./LibraryStore";
+
 import { fixEachSong, LookupsOff, type TaggableSong } from "./lyricsAndGenre";
 import { appRuntime } from "./runtime";
 

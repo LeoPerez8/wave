@@ -54,7 +54,8 @@ no token and no address.
 ### `POST /v1/session`
 
 Signs in. The ID token must carry a valid RS256 signature by one of Google's keys, the
-issuer `accounts.google.com`, the audience `GOOGLE_CLIENT_ID` (Wave's web client id), an
+issuer `accounts.google.com`, an audience matching `GOOGLE_CLIENT_ID` (Wave's web client id)
+or the optional `GOOGLE_DESKTOP_CLIENT_ID` (Wave's Desktop OAuth client id), an
 expiry in the future and a verified email. The first sign-in with a Google account creates
 its Wave account (keyed by Google's `sub`).
 
@@ -147,18 +148,18 @@ Each pushed row is merged with the stored one by `mergeRows`: the later `changed
 the greater `phoneId` breaks a tie. Plays are merged by `mergePlays`: a play whose `id` is
 already held is ignored.
 
-| Table                  | `id`                        | Fields (`?` may be `null`)                                                                                                                                                                                                                         |
-| ---------------------- | --------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `songs`                | recording key               | `title`, `credit`, `album?`, `albumArtist`, `discNumber?`, `trackNumber?`, `durationMs`, `year?`, `genre?`, `videoId?`, `addedAt`                                                                                                                  |
-| `playlists`            | playlist id                 | `name`, `createdAt`                                                                                                                                                                                                                                |
-| `playlistEntries`      | entry id                    | `playlistId`, `orderKey` (Core's `orderKeyBetween`), `songId?` (recording key), `ytSong?` (the YT Music song as the app stores it, text), `addedAt`. Exactly one of `songId` and `ytSong` is set.                                                  |
-| `favorites`            | recording key               | `addedAt`                                                                                                                                                                                                                                          |
-| `preferences`          | preference key              | `value?` (text: what the app's key-value store holds, `null` for nothing)                                                                                                                                                                          |
-| `plays`                | play id (made on the phone) | `songId` (recording key), `startedAt`, `listenedMs`, `durationMs?`, `endReason` (`completed`, `skipped`, `stopped`, `interrupted`), `counted` (boolean), `contextType?`, `contextId?`, `source` (`phone`, `auto`), `importedFrom?` (`blackplayer`) |
-| `follows`              | artist name key             | `name`, `level` (`releases`, `shows`), `followedAt`, `deezerId?`, `ytBrowseId?`                                                                                                                                                                    |
-| `hiddenReleases`       | release key                 | none                                                                                                                                                                                                                                               |
-| `notifiedShows`        | Ticketmaster event id       | none                                                                                                                                                                                                                                               |
-| `dismissedSuggestions` | artist name key             | `dismissedAt` (when the follow suggestion was dismissed; Undo is a tombstone)                                                                                                                                                                      |
+| Table                  | `id`                         | Fields (`?` may be `null`)                                                                                                                                                                                                                                    |
+| ---------------------- | ---------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `songs`                | recording key                | `title`, `credit`, `album?`, `albumArtist`, `discNumber?`, `trackNumber?`, `durationMs`, `year?`, `genre?`, `videoId?`, `addedAt`                                                                                                                             |
+| `playlists`            | playlist id                  | `name`, `createdAt`                                                                                                                                                                                                                                           |
+| `playlistEntries`      | entry id                     | `playlistId`, `orderKey` (Core's `orderKeyBetween`), `songId?` (recording key), `ytSong?` (the YT Music song as the app stores it, text), `addedAt`. Exactly one of `songId` and `ytSong` is set.                                                             |
+| `favorites`            | recording key                | `addedAt`                                                                                                                                                                                                                                                     |
+| `preferences`          | preference key               | `value?` (text: what the app's key-value store holds, `null` for nothing)                                                                                                                                                                                     |
+| `plays`                | play id (made on the device) | `songId` (recording key), `startedAt`, `listenedMs`, `durationMs?`, `endReason` (`completed`, `skipped`, `stopped`, `interrupted`), `counted` (boolean), `contextType?`, `contextId?`, `source` (`phone`, `auto`, `desktop`), `importedFrom?` (`blackplayer`) |
+| `follows`              | artist name key              | `name`, `level` (`releases`, `shows`), `followedAt`, `deezerId?`, `ytBrowseId?`                                                                                                                                                                               |
+| `hiddenReleases`       | release key                  | none                                                                                                                                                                                                                                                          |
+| `notifiedShows`        | Ticketmaster event id        | none                                                                                                                                                                                                                                                          |
+| `dismissedSuggestions` | artist name key              | `dismissedAt` (when the follow suggestion was dismissed; Undo is a tombstone)                                                                                                                                                                                 |
 
 Times are ms since the epoch; numbers are integers. Ids and text are at most 16,384
 characters. The tables and their fields are Core's wire (`SYNC_TABLE_NAMES`, `SYNC_FIELDS` in
@@ -534,18 +535,19 @@ rate limiting bindings, which `wrangler deploy` creates and which need Wrangler 
 later, the usage watch's Cron Trigger and the Workers Logs and Issues settings, with
 invocation logs off):
 
-| Name                         | Kind   |                                                                         |
-| ---------------------------- | ------ | ----------------------------------------------------------------------- |
-| `TURSO_DATABASE_URL`         | secret | `libsql://<db>-<org>.turso.io`                                          |
-| `TURSO_AUTH_TOKEN`           | secret | a Turso token for that database                                         |
-| `GOOGLE_CLIENT_ID`           | secret | Wave's **web** OAuth client id, the audience of the app's ID tokens     |
-| `SOULSEEK_KEY`               | secret | base64 of 32 random bytes: version 1 of the Soulseek key                |
-| `SOULSEEK_KEY_<n>`           | secret | optional: version n (2 or more) of the Soulseek key, the same way       |
-| `ALLOWED_EMAILS`             | secret | optional: emails that may sign in, separated by commas                  |
-| `GENIUS_ACCESS_TOKEN`        | secret | Genius's client access token, for the Genius routes                     |
-| `TICKETMASTER_API_KEY`       | secret | Ticketmaster Discovery's API key, for the Ticketmaster routes           |
-| `CLOUDFLARE_ACCOUNT_ID`      | secret | optional, for the usage watch: the Cloudflare account id                |
-| `CLOUDFLARE_ANALYTICS_TOKEN` | secret | optional, for the usage watch: a token with only Account Analytics Read |
+| Name                         | Kind   |                                                                             |
+| ---------------------------- | ------ | --------------------------------------------------------------------------- |
+| `TURSO_DATABASE_URL`         | secret | `libsql://<db>-<org>.turso.io`                                              |
+| `TURSO_AUTH_TOKEN`           | secret | a Turso token for that database                                             |
+| `GOOGLE_CLIENT_ID`           | secret | Wave's **web** OAuth client id, the audience of the app's ID tokens         |
+| `GOOGLE_DESKTOP_CLIENT_ID`   | secret | optional: Wave's Desktop OAuth client id; unset accepts only the web client |
+| `SOULSEEK_KEY`               | secret | base64 of 32 random bytes: version 1 of the Soulseek key                    |
+| `SOULSEEK_KEY_<n>`           | secret | optional: version n (2 or more) of the Soulseek key, the same way           |
+| `ALLOWED_EMAILS`             | secret | optional: emails that may sign in, separated by commas                      |
+| `GENIUS_ACCESS_TOKEN`        | secret | Genius's client access token, for the Genius routes                         |
+| `TICKETMASTER_API_KEY`       | secret | Ticketmaster Discovery's API key, for the Ticketmaster routes               |
+| `CLOUDFLARE_ACCOUNT_ID`      | secret | optional, for the usage watch: the Cloudflare account id                    |
+| `CLOUDFLARE_ANALYTICS_TOKEN` | secret | optional, for the usage watch: a token with only Account Analytics Read     |
 
 ### Soulseek keys
 
@@ -659,6 +661,13 @@ ones.
 
 Deploy play snapshot and video id support before releasing an app that sends those
 fields. Existing clients can keep pushing and pulling while the new service runs.
+
+Before the desktop sign-in ticket ships, the owner must create a Desktop OAuth client,
+set `GOOGLE_DESKTOP_CLIENT_ID` on the Worker (for example with
+`pnpm exec wrangler secret put GOOGLE_DESKTOP_CLIENT_ID` from `apps/sync`), and deploy
+with `pnpm --filter @wave/sync run deploy`. Keep the client id out of the repo.
+Deploy this Worker's `desktop` play-source support and ship the phone release that
+accepts it before any desktop build sends plays. Existing phones keep their web client.
 
 ## Extending it
 

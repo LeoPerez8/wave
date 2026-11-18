@@ -13,7 +13,7 @@ import { cloneElement, useCallback, type ReactElement } from "react";
 import { View } from "react-native";
 import { usePlaylistGraveyard } from "@/library/hooks";
 import { parseId } from "@/library/routes";
-import type { PlaylistEntryRow } from "@/library/LibraryStore";
+import type { PlaylistEntryRow } from "@wave/client";
 import {
   openPlaylistEntryActions,
   playPlaylistEntries,

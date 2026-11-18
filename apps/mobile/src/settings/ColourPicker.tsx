@@ -33,7 +33,7 @@ import { CatalogLine } from "@/catalog/CatalogLine";
 import { CELL, grid } from "@/catalog/grid";
 import { Hairline } from "@/catalog/Hairline";
 import { TextButton } from "@/components/TextButton";
-import { makeExternalStore, type ExternalStore } from "@/lib/externalStore";
+import { makeExternalStore, type ExternalStore } from "@wave/client/externalStore";
 import { showAlert } from "@/overlay/alert";
 import { CardEntries } from "@/overlay/CardEntries";
 import { presentOverlay } from "@/overlay/overlay";

@@ -6,7 +6,7 @@ import {
 } from "@wave/core";
 import * as Effect from "effect/Effect";
 
-import type { PlayedArtist, PlayedEntityTotal } from "./db/playedEntities";
+import type { PlayedArtist, PlayedEntityTotal } from "@wave/client/db/playedEntities";
 import { libraryQuery, useLibraryQuery } from "./sharedQueries";
 import { LibraryStore } from "./LibraryStore";
 

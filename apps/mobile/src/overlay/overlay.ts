@@ -3,7 +3,7 @@ import type { OverlayAlign, OverlayRect } from "@wave/core";
 import type { ReactNode } from "react";
 import { createContext, useSyncExternalStore } from "react";
 
-import { makeExternalStore } from "@/lib/externalStore";
+import { makeExternalStore } from "@wave/client/externalStore";
 import { pressedElement, type PressedElement } from "@/motion/pressedRect";
 import { traceLongPress } from "@/motion/longPressTrace";
 import { cancelHeldTouch } from "@/motion/heldTouchState";

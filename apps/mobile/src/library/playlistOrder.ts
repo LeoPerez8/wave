@@ -9,7 +9,8 @@ import * as Effect from "effect/Effect";
 
 import { persistedSetting } from "@/lib/persistedSetting";
 
-import type { LibraryStore, LibraryStoreError, PlaylistRow } from "./LibraryStore";
+import type { LibraryStore, LibraryStoreError } from "./LibraryStore";
+import type { PlaylistRow } from "@wave/client";
 
 const sameOrder = (a: PlaylistOrder, b: PlaylistOrder): boolean =>
   a.sort === b.sort &&

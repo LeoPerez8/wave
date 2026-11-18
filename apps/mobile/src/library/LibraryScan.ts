@@ -27,14 +27,15 @@ import {
 } from "./startupJobs";
 
 import { startupTurnEffect } from "@/lib/backgroundWork";
-import { makeExternalStore } from "@/lib/externalStore";
+import { makeExternalStore } from "@wave/client/externalStore";
 import { argbToHex, type NativeArtwork, type NativeScannedTrack } from "@/native/waveNative";
 import { skipVoiceNotes } from "@/settings/skipVoiceNotes";
 
-import type { ArtworkPalette } from "./db/schema";
-import type { SkippedFile } from "./db/skippedFiles";
+import type { ArtworkPalette } from "@wave/client/db/schema";
+import type { SkippedFile } from "@wave/client/db/skippedFiles";
 import { publishLibraryChange, publishSavedStars, publishScanFinished } from "./libraryChanges";
-import { LibraryStore, type IndexedArtwork, type IndexedTrack } from "./LibraryStore";
+import { LibraryStore } from "./LibraryStore";
+import { type IndexedArtwork, type IndexedTrack } from "@wave/client";
 import { NativeScanner, type ScanEvent } from "./NativeScanner";
 import { scanBatchChange } from "./scanChanges";
 

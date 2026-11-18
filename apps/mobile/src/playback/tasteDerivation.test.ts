@@ -16,15 +16,10 @@ import {
   type YtAlbumSong,
 } from "@wave/core";
 import { loadLibraryStore } from "../../bench/fastAgain/store.ts";
-import { createFastAgainFixture } from "../library/db/fastAgainFixture.ts";
-import {
-  addTrack,
-  openTestDatabase,
-  traceQueries,
-  observeSqlTasks,
-} from "../library/db/testDatabase.ts";
-import { recordPlay } from "../library/db/playHistory.ts";
-import { deleteTracksById } from "../library/db/tracks.ts";
+import { createFastAgainFixture } from "@wave/client/testing/fastAgainFixture";
+import { addTrack, openTestDatabase, traceQueries, observeSqlTasks } from "@wave/client/testing";
+import { recordPlay } from "@wave/client/db/playHistory";
+import { deleteTracksById } from "@wave/client/db/tracks";
 import { buildHomeMagicQueue } from "../home/magicQueueJob.ts";
 import {
   readTasteLibrary,

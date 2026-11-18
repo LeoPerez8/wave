@@ -9,7 +9,7 @@
     "prebuild": "EXPO_NO_GIT_STATUS=1 expo prebuild --clean --platform android",
     "typecheck": "tsc --noEmit",
     "icons": "node --disable-warning=MODULE_TYPELESS_PACKAGE_JSON scripts/render-icons.ts",
-    "test": "node --disable-warning=MODULE_TYPELESS_PACKAGE_JSON --test 'src/**/*.test.ts' 'plugins/**/*.test.ts'",
+    "test": "node --disable-warning=MODULE_TYPELESS_PACKAGE_JSON --test \"src/**/*.test.ts\" \"plugins/**/*.test.ts\"",
     "bench:artist-stats": "node --disable-warning=MODULE_TYPELESS_PACKAGE_JSON bench/artistStats.ts",
     "bench:home-totals": "node --disable-warning=MODULE_TYPELESS_PACKAGE_JSON bench/homeTotals.ts",
     "bench:playlist-fill": "node --disable-warning=MODULE_TYPELESS_PACKAGE_JSON bench/playlistFill.ts",
@@ -51,7 +51,8 @@
     "react-native-svg": "15.15.5",
     "react-native-worklets": "0.13.0",
     "tailwindcss": "^4.3.3",
-    "uniwind": "1.12.1"
+    "uniwind": "1.12.1",
+    "@wave/client": "workspace:*"
   },
   "devDependencies": {
     "@types/node": "catalog:",

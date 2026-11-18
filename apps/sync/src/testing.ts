@@ -265,6 +265,7 @@ export interface RequestOptions {
 }
 
 export interface HarnessOptions {
+  readonly googleDesktopClientId?: string;
   readonly allowedEmails?: string;
   readonly limits?: Partial<SyncLimits>;
   readonly pullPageSize?: number;
@@ -304,6 +305,9 @@ export const harness = async (options: HarnessOptions = {}, db?: Client): Promis
     addressLimiter: minuteLimiter(limits.maxRequestsPerAddressPerMinute, clock),
     failedLookupLimiter: minuteLimiter(limits.maxFailedLookupsPerAddressPerMinute, clock),
     googleClientId: CLIENT_ID,
+    ...(options.googleDesktopClientId === undefined
+      ? {}
+      : { googleDesktopClientId: options.googleDesktopClientId }),
     fetch: google.fetch,
     now: clock,
     limits,

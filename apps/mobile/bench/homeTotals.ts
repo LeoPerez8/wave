@@ -25,9 +25,9 @@ import { desc, eq, inArray, max, sql } from "drizzle-orm";
 import assert from "node:assert/strict";
 import { performance } from "node:perf_hooks";
 
-import { selectAlbums } from "../src/library/db/albums.ts";
-import { saveImportedPlays } from "../src/library/db/blackPlayer.ts";
-import { libraryCounts } from "../src/library/db/counts.ts";
+import { selectAlbums } from "@wave/client/db/albums";
+import { saveImportedPlays } from "@wave/client/db/blackPlayer";
+import { libraryCounts } from "@wave/client/db/counts";
 import {
   endPlay,
   homeAdded,
@@ -35,18 +35,18 @@ import {
   homePlays,
   recordPlay,
   updatePlay,
-} from "../src/library/db/playHistory.ts";
-import { listeningSums, playTotalsDrift } from "../src/library/db/playTotals.ts";
-import * as schema from "../src/library/db/schema.ts";
-import { creditedPlayTotals, songListening } from "../src/library/db/stats.ts";
+} from "@wave/client/db/playHistory";
+import { listeningSums, playTotalsDrift } from "@wave/client/db/playTotals";
+import * as schema from "@wave/client/db/schema";
+import { creditedPlayTotals, songListening } from "@wave/client/db/stats";
 import {
   addHistory,
   migrateTestDatabase,
   openTestDatabase,
   traceQueries,
   type TestDatabase,
-} from "../src/library/db/testDatabase.ts";
-import { songColumns } from "../src/library/db/tracks.ts";
+} from "@wave/client/testing";
+import { songColumns } from "@wave/client/db/tracks";
 import { printMeta, timeRuns } from "./measure.ts";
 
 const quick = process.argv.includes("--quick");

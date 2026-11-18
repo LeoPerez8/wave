@@ -4,7 +4,7 @@ import * as Effect from "effect/Effect";
 import { createElement } from "react";
 import { act, create, type ReactTestRenderer } from "react-test-renderer";
 
-import type { ExternalStore } from "../lib/externalStore.ts";
+import type { ExternalStore } from "@wave/client/externalStore";
 import { reactCompilerBuilds, stubModule } from "../perf/reactCompilerBuilds.ts";
 
 // The Stats hooks as written and as the React Compiler builds them: both read
@@ -35,7 +35,7 @@ const statsHooksTest = { stats, language: "en" };
 Object.assign(globalThis, { __statsHooksTest: statsHooksTest });
 
 const react = JSON.stringify(import.meta.resolve("react"));
-const externalStore = JSON.stringify(new URL("../lib/externalStore.ts", import.meta.url).href);
+const externalStore = JSON.stringify(import.meta.resolve("@wave/client/externalStore"));
 const playHistory = stubModule(
   `import { makeExternalStore } from ${externalStore};
    export const playHistoryVersion = makeExternalStore(0);`,

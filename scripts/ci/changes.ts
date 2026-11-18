@@ -11,7 +11,8 @@ import { fileURLToPath } from "node:url";
 // Areas of the repo that CI decisions depend on. A path ending in "/" covers
 // everything under it; any other path is one file. Markdown is never in an area.
 const AREAS = {
-  app: ["apps/mobile/"],
+  // The APK, with the Kotlin it shares with the desktop (#1144), less DESKTOP_ONLY.
+  app: ["apps/mobile/", "packages/client/", "packages/kotlin-shared/"],
   core: ["packages/core/"],
   // The Wave account's sync service. Not in the APK, but users see what it does.
   sync: ["apps/sync/"],
@@ -25,17 +26,31 @@ const AREAS = {
   // TypeScript config the packages extend.
   tsconfig: ["tsconfig.base.json"],
   // The native modules with JVM tests and what decides how prebuild generates the
-  // project they build in.
+  // project they build in. The shared Kotlin's build tests the desktop's entry point too.
   native: [
     "apps/mobile/modules/wave-native/",
     "apps/mobile/modules/wave-glass/",
+    "packages/kotlin-shared/",
     "apps/mobile/app.config.ts",
     "apps/mobile/plugins/",
     "apps/mobile/package.json",
   ],
+  // What the desktop app is built from, with the Kotlin its JVM runs (#1147). It isn't
+  // released yet, so a change to it alone releases nothing.
+  desktop: [
+    "apps/desktop/",
+    "packages/client/",
+    "packages/core/",
+    "packages/theme/",
+    "packages/kotlin-shared/",
+  ],
 } as const;
 
 type Area = keyof typeof AREAS;
+
+// What only the desktop app is built from, inside or beside an area the phone shares. The
+// desktop isn't released yet, so a change to these alone is no `app` change: it releases nothing.
+const DESKTOP_ONLY = ["apps/desktop/", "packages/kotlin-shared/stdio/"];
 
 // A change to these areas can break any package, so Checks then typechecks and tests
 // all of them. Otherwise it checks only the packages a PR changed and their dependents.
@@ -44,7 +59,11 @@ const ALL_PACKAGES_AREAS: readonly Area[] = ["workspace", "ci", "tsconfig", "per
 // The native modules' JVM tests can only change result when one of these does.
 const NATIVE_TEST_AREAS: readonly Area[] = ["native", "workspace", "ci"];
 
-export type Changes = Record<Area | "allPackages" | "nativeTests", boolean>;
+// The desktop's own checks on Windows and Linux (the Desktop job) can only change result
+// when one of these does.
+const DESKTOP_CHECK_AREAS: readonly Area[] = ["desktop", "workspace", "ci", "tsconfig"];
+
+export type Changes = Record<Area | "allPackages" | "nativeTests" | "desktopChecks", boolean>;
 
 const covers = (entry: string, path: string) =>
   entry.endsWith("/") ? path.startsWith(entry) : path === entry;
@@ -57,12 +76,18 @@ const decide = (touched: (area: Area) => boolean): Changes => {
     ...areas,
     allPackages: ALL_PACKAGES_AREAS.some((area) => areas[area]),
     nativeTests: NATIVE_TEST_AREAS.some((area) => areas[area]),
+    desktopChecks: DESKTOP_CHECK_AREAS.some((area) => areas[area]),
   };
 };
 
 export const changes = (paths: readonly string[]): Changes =>
   decide((area) =>
-    paths.some((path) => !path.endsWith(".md") && AREAS[area].some((entry) => covers(entry, path))),
+    paths.some(
+      (path) =>
+        !path.endsWith(".md") &&
+        AREAS[area].some((entry) => covers(entry, path)) &&
+        !(area === "app" && DESKTOP_ONLY.some((entry) => covers(entry, path))),
+    ),
   );
 
 /**

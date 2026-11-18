@@ -19,7 +19,8 @@ import { currentLocalisation } from "@/localisation/localisation";
 import { showMessage } from "@/overlay/alert";
 
 import { onLibraryChange } from "./libraryChanges";
-import { LibraryStore, type SongRow } from "./LibraryStore";
+import { LibraryStore } from "./LibraryStore";
+import { type SongRow } from "@wave/client";
 import { onPlaylistSongSortChanged, playlistSongSetting } from "./playlistSongSetting";
 import { onPlaylistsEdited } from "./playlists";
 import { releaseAnswers } from "./releaseAnswers";

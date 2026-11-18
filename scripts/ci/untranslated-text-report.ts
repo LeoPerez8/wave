@@ -52,4 +52,5 @@ export function runTextGuard(scope: string): void {
 if (process.argv[1] === fileURLToPath(import.meta.url)) {
   runTextGuard("apps/mobile/src");
   runTextGuard("packages/core/src");
+  runTextGuard("apps/desktop/src");
 }

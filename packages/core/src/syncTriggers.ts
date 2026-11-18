@@ -14,12 +14,24 @@ export const PLAY_BATCH_MAX_MS = 5 * 60_000;
 /** Returning to the app syncs only when the last sync that finished is older than this. */
 export const FOREGROUND_SYNC_INTERVAL_MS = 5 * 60_000;
 
+/** The desktop pulls this long after its last sync while signed in (docs/spec-desktop.md). */
+export const DESKTOP_SYNC_PERIOD_MS = 15 * 60_000;
+
 /** The time, and timers on it. */
 export interface SyncClock {
   readonly now: () => number;
   /** Runs [run] in [ms]; returns how to cancel it. */
   readonly after: (ms: number, run: () => void) => () => void;
 }
+
+/** The system's time and timers: what the phone and the computer sync on. */
+export const SYSTEM_SYNC_CLOCK: SyncClock = {
+  now: Date.now,
+  after: (ms, run) => {
+    const timer = setTimeout(run, ms);
+    return () => clearTimeout(timer);
+  },
+};
 
 export interface SyncTriggersInput {
   readonly clock: SyncClock;
@@ -32,6 +44,8 @@ export interface SyncTriggersInput {
   readonly run: (songs: boolean) => Promise<boolean>;
   /** Whether the first sync looks at the song list (the first after launch does). */
   readonly songsChanged?: boolean;
+  /** Syncs again this long after each sync, until signed out; none when left out. */
+  readonly everyMs?: number;
 }
 
 export interface SyncTriggers {
@@ -60,6 +74,7 @@ export const syncTriggers = ({
   inForeground,
   run,
   songsChanged: songsAtFirst = false,
+  everyMs,
 }: SyncTriggersInput): SyncTriggers => {
   let running = false;
   /** Asked to sync while one was running: sync once more when it ends. */
@@ -72,6 +87,11 @@ export const syncTriggers = ({
   let finishedAt: number | null = null;
   /** When the first play end of the batch waiting came, if one waits. */
   let batchSince: number | null = null;
+  /** Cancels the next periodic sync, if one is set. */
+  let cancelPeriodic: (() => void) | null = null;
+
+  /** Signed out since the last call to sync: no periodic sync is set again. */
+  let stopped = false;
 
   const cancelPending = (): void => {
     pending?.cancel();
@@ -79,6 +99,7 @@ export const syncTriggers = ({
   };
 
   const sync = (): void => {
+    stopped = false;
     cancelPending();
     batchSince = null;
     if (running) {
@@ -87,6 +108,8 @@ export const syncTriggers = ({
     }
     running = true;
     again = false;
+    cancelPeriodic?.();
+    cancelPeriodic = null;
     const songs = songsChanged;
     songsChanged = false;
     const startedAt = clock.now();
@@ -101,6 +124,7 @@ export const syncTriggers = ({
         else if (songs) songsChanged = true;
         running = false;
         if (again) sync();
+        else if (everyMs !== undefined && !stopped) cancelPeriodic = clock.after(everyMs, sync);
       });
   };
 
@@ -137,6 +161,9 @@ export const syncTriggers = ({
       batchSince = null;
       again = false;
       finishedAt = null;
+      stopped = true;
+      cancelPeriodic?.();
+      cancelPeriodic = null;
     },
   };
 };

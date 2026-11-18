@@ -28,7 +28,7 @@ import expo.modules.wavenative.tags.MediaRetrieverTagReader
 import expo.modules.wavenative.yt.AndroidAudioDuration
 import expo.modules.wavenative.yt.AndroidYtAudioStreams
 import expo.modules.wavenative.yt.YtAudioDownload
-import expo.modules.wavenative.yt.YtClient
+import expo.modules.wavenative.yt.AndroidYtClient
 import expo.modules.wavenative.yt.YtDownloadService
 import expo.modules.wavenative.yt.YtException
 import expo.modules.wavenative.yt.YtStreamFailure
@@ -47,7 +47,7 @@ import java.util.concurrent.TimeUnit
 /** Application-context owner, independent of Expo module and Activity lifetimes. */
 class AndroidDownloads private constructor(private val context: Context) {
   /** Writes the journal's changes that wait for their second (#452), off the main thread and whether or not the service runs. */
-  private val journalWriter = Executors.newSingleThreadScheduledExecutor(BackgroundThreads("Wave download journal", daemon = true))
+  private val journalWriter = Executors.newSingleThreadScheduledExecutor(BackgroundThreads("Wave download journal", daemon = true, lower = ThreadPriority::lower))
   // Each failure's cause also goes to the app log, so a device run shows why a download stopped;
   // and each transfer's speed, so it shows where a download's time went. Its budgets wait for the
   // download service (startWork): Wave opening before the service starts isn't charged.
@@ -245,7 +245,7 @@ class AndroidDownloads private constructor(private val context: Context) {
   suspend fun pauseYoutube(until: Long, level: Long) {
     val now = System.currentTimeMillis()
     if (until > now && jobs.youtubePause()?.until != until) {
-      YtClient.get(context).streams.renewSession()
+      AndroidYtClient.get(context).streams.renewSession()
       WaveLog.w(TAG, "YouTube downloads paused for ${LogUnits.duration(until - now)}: YouTube is limiting them (burst $level)")
     }
     jobs.pauseYoutube(until, level)
@@ -278,13 +278,13 @@ class AndroidDownloads private constructor(private val context: Context) {
     jobs.takeWriteStats()
     main.post { JsRuntime.ensureStarted(context, OWNER) }
     // Download work runs at background priority (#455): the UI and playback keep theirs.
-    deadlines = Executors.newSingleThreadScheduledExecutor(BackgroundThreads("Wave download deadlines")).also { executor ->
+    deadlines = Executors.newSingleThreadScheduledExecutor(BackgroundThreads("Wave download deadlines", lower = ThreadPriority::lower)).also { executor ->
       // Also refreshes the notification and the rows while transfers go on.
       executor.scheduleWithFixedDelay({ runCatching { jobs.expire(transport); changed(); main.post(refresh) } }, 1, 1, TimeUnit.SECONDS)
     }
     // Each song's transfer, tagging or publication runs on a thread of its own, several songs at once.
-    val pool = Executors.newCachedThreadPool(BackgroundThreads("Wave download step")).also { steps = it }
-    worker = Executors.newSingleThreadScheduledExecutor(BackgroundThreads("Wave download worker")).also { executor ->
+    val pool = Executors.newCachedThreadPool(BackgroundThreads("Wave download step", lower = ThreadPriority::lower)).also { steps = it }
+    worker = Executors.newSingleThreadScheduledExecutor(BackgroundThreads("Wave download worker", lower = ThreadPriority::lower)).also { executor ->
       executor.scheduleWithFixedDelay({
         runCatching {
           jobs.expire(transport)
@@ -332,7 +332,7 @@ class AndroidDownloads private constructor(private val context: Context) {
     worker?.shutdownNow(); worker = null
     steps?.shutdownNow(); steps = null
     deadlines?.shutdownNow(); deadlines = null
-    if (timedOut) Executors.newSingleThreadExecutor(BackgroundThreads("Wave download stop")).also { executor ->
+    if (timedOut) Executors.newSingleThreadExecutor(BackgroundThreads("Wave download stop", lower = ThreadPriority::lower)).also { executor ->
       executor.execute { try { jobs.interrupt(transport); changed() } finally { executor.shutdown() } }
     }
     main.post { JsRuntime.release(OWNER) }

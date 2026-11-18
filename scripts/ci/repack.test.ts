@@ -119,6 +119,46 @@ describe("apkCacheKey", () => {
     assert.notEqual(key(dir), previous);
   });
 
+  it("changes when the Kotlin the phone shares with the desktop changes", () => {
+    const dir = app();
+    const shared = resolve(dir, "../../packages/kotlin-shared/src/main/kotlin/YtClient.kt");
+    mkdirSync(dirname(shared), { recursive: true });
+    writeFileSync(shared, "class YtClient");
+    const previous = key(dir);
+    writeFileSync(shared, "class YtClient(val platform: YtPlatform)");
+    assert.notEqual(key(dir), previous);
+  });
+
+  it("doesn't change when only the desktop's JVM entry point in the shared Kotlin changes", () => {
+    const dir = app();
+    const shared = resolve(dir, "../../packages/kotlin-shared");
+    const entry = join(shared, "stdio/src/main/kotlin/WaveDesktop.kt");
+    mkdirSync(dirname(entry), { recursive: true });
+    writeFileSync(join(shared, "build.gradle.kts"), "plugins {}");
+    writeFileSync(entry, "fun main() {}");
+    const previous = key(dir);
+    writeFileSync(entry, "fun main() { serve() }");
+    writeFileSync(join(shared, "stdio/build.gradle.kts"), "plugins {}");
+    assert.equal(key(dir), previous);
+    // A package of the shared code with the same name still counts.
+    const named = join(shared, "src/main/kotlin/stdio/Lines.kt");
+    mkdirSync(dirname(named), { recursive: true });
+    writeFileSync(named, "class Lines");
+    assert.notEqual(key(dir), previous);
+  });
+
+  it("ignores build output in the shared Kotlin", () => {
+    const dir = app();
+    const shared = resolve(dir, "../../packages/kotlin-shared");
+    mkdirSync(join(shared, "build/libs"), { recursive: true });
+    writeFileSync(join(shared, "build.gradle.kts"), "plugins {}");
+    const previous = key(dir);
+    writeFileSync(join(shared, "build/libs/kotlin-shared.jar"), "jar");
+    mkdirSync(join(shared, ".gradle"), { recursive: true });
+    writeFileSync(join(shared, ".gradle/file-system.probe"), "probe");
+    assert.equal(key(dir), previous);
+  });
+
   it("doesn't change when only JS or TS changes", () => {
     const before = app();
     const after = app({

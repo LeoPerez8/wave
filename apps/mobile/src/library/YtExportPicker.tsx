@@ -28,7 +28,7 @@ import { Press } from "@/motion/Press";
 import { useThemeColor } from "@/theme/useThemeColor";
 
 import { FAVORITES_EXPORT_ID, useImportProgress } from "./importProgress";
-import type { PlaylistRow } from "./LibraryStore";
+import type { PlaylistRow } from "@wave/client";
 import { PickerSheetFrame } from "./PickerSheetFrame";
 import { useSortedPlaylists } from "./playlistSort";
 import { currentYtLibraryOrigins } from "./ytLibraryImport";

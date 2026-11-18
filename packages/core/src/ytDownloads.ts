@@ -134,6 +134,20 @@ const downloading = (phase: YtDownloadPhase): YtDownloadStatus => ({
   phase,
 });
 
+/** The journal handed the job over: it waits for Wave's next step (a search, a check, an import). */
+export const ytDownloadAwaitsAnswer = (job: YtDownloadJournalJob): boolean =>
+  job.phase === "preparing" ||
+  job.phase === "sourceReady" ||
+  job.phase === "awaitingPublication" ||
+  (job.phase === "completed" && job.acknowledged !== true && job.importFailure === undefined);
+
+/** Still on its way: a failure, a cancel or an import ends it. */
+export const ytDownloadUnfinished = (job: YtDownloadJournalJob): boolean =>
+  job.phase !== "failed" &&
+  job.phase !== "cancelled" &&
+  job.acknowledged !== true &&
+  job.importFailure === undefined;
+
 const journalStatus = (job: YtDownloadJournalJob): YtDownloadStatus => {
   if (job.importFailure !== undefined) return { kind: "failed", reason: job.importFailure };
   if (job.resumed === true && job.phase !== "failed" && job.phase !== "cancelled") {

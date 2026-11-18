@@ -1,0 +1,337 @@
+/* The side panel, Now Playing and the sleep timer (docs/spec-desktop.md, Window and layout). */
+
+.desktop-shell[data-panel] {
+  --panel-width: 320px;
+  grid-template-columns: var(--sidebar-width) minmax(0, 1fr) var(--panel-width);
+}
+@media (width < 1120px) {
+  .desktop-shell[data-panel] {
+    --panel-width: 280px;
+  }
+}
+
+/* The bar's artwork and title open Now Playing. */
+.player-now {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  min-width: 0;
+  padding: 2px;
+  margin: -2px;
+  text-align: left;
+  color: inherit;
+}
+.player-now:disabled {
+  opacity: 1;
+}
+.player-now:not(:disabled):hover {
+  background: none;
+}
+.player-now > .artwork {
+  width: 52px;
+  height: 52px;
+  border-radius: 6px;
+}
+.sleep-button:has(.sleep-left) {
+  width: auto;
+  gap: 4px;
+  padding-inline: 6px;
+}
+.sleep-left {
+  font-size: 11px;
+  font-variant-numeric: tabular-nums;
+}
+
+.side-panel {
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  border-left: 1px solid var(--color-separator);
+  background: var(--color-grouped);
+}
+.panel-tabs {
+  display: flex;
+  gap: 4px;
+  margin: 12px 14px 4px;
+  padding: 2px;
+  border-radius: 7px;
+  background: var(--color-fill);
+}
+.panel-tabs [role="tab"] {
+  flex: 1;
+  padding: 4px 8px;
+  font-weight: 500;
+  color: var(--color-secondary);
+}
+.panel-tabs [role="tab"][aria-selected="true"] {
+  color: var(--color-foreground);
+  background: var(--color-surface);
+  box-shadow: 0 1px 3px #0002;
+}
+.panel-body {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+}
+/* Related, as the panel's third tab. */
+.panel-body > .related-panel {
+  flex: 1;
+  padding: 0 14px 14px;
+}
+.panel-body > .related-panel h2 {
+  margin-top: 10px;
+}
+
+/* Lyrics, in the panel and in Now Playing. */
+.lyric-lines {
+  flex: 1;
+  min-height: 0;
+  overflow: auto;
+  padding: 24px 18px 40%;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  outline: none;
+}
+.lyric-line {
+  padding: 6px 8px;
+  border-radius: 6px;
+  font-size: 17px;
+  font-weight: 600;
+  line-height: 1.35;
+  color: var(--color-foreground);
+  opacity: var(--lyrics-dim, 0.38);
+  transition: opacity 0.2s;
+  overflow-wrap: anywhere;
+}
+.lyric-line:not(.unsynced):hover {
+  background: var(--color-fill);
+}
+.lyric-line.sung,
+.lyric-line.unsynced {
+  opacity: 1;
+}
+.lyric-lines:focus-visible .lyric-line[aria-selected="true"] {
+  outline: 2px solid var(--color-accent);
+  outline-offset: -2px;
+}
+.lyrics-note {
+  margin: auto;
+  padding: 24px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+  text-align: center;
+  color: var(--color-secondary);
+}
+.text-button {
+  padding: 4px 10px;
+  color: var(--color-accent);
+}
+.lyrics-skeleton {
+  padding: 24px 26px;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+.lyrics-skeleton span {
+  height: 16px;
+  border-radius: 4px;
+  background: var(--color-fill);
+  animation: lyrics-pulse 1.4s ease-in-out infinite;
+}
+@keyframes lyrics-pulse {
+  50% {
+    opacity: 0.5;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .lyrics-skeleton span {
+    animation: none;
+  }
+  .lyric-line {
+    transition: none;
+  }
+}
+
+/* The Queue tab. */
+.queue-list {
+  flex: 1;
+  min-height: 0;
+  overflow: auto;
+  position: relative;
+  outline: none;
+}
+.queue-space {
+  position: relative;
+}
+.queue-heading,
+.queue-note,
+.queue-row {
+  position: absolute;
+  left: 0;
+  right: 0;
+  height: 48px;
+}
+.queue-heading {
+  display: flex;
+  align-items: flex-end;
+  padding: 0 16px 8px;
+  font-size: 15px;
+  font-weight: 600;
+}
+.queue-note {
+  display: flex;
+  align-items: center;
+  padding: 0 16px;
+  color: var(--color-secondary);
+}
+.queue-note.static {
+  position: static;
+}
+.queue-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin: 0 8px;
+  padding: 0 6px;
+  border-radius: 6px;
+}
+.queue-row > .artwork {
+  width: 36px;
+  height: 36px;
+}
+.queue-row.history {
+  opacity: 0.55;
+}
+.queue-row.playing .queue-text > :first-child {
+  color: var(--color-accent);
+}
+.queue-row.dragging {
+  opacity: 0.4;
+}
+.queue-row.active-row {
+  background: var(--color-fill);
+}
+.queue-list:focus-visible .queue-row.active-row {
+  outline: 2px solid var(--color-accent);
+  outline-offset: -2px;
+}
+.queue-text {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  line-height: 1.35;
+}
+.queue-time {
+  font-size: 11px;
+  font-variant-numeric: tabular-nums;
+}
+/* The playing row has no remove button; its time lines up with the others'. */
+.queue-row.playing .queue-time {
+  margin-right: 34px;
+}
+.queue-row .queue-remove {
+  width: 24px;
+  height: 24px;
+  visibility: hidden;
+}
+.queue-row:hover .queue-remove,
+.queue-row.active-row .queue-remove {
+  visibility: visible;
+}
+
+/* Now Playing covers the window between the title bar and the player bar. */
+.now-playing {
+  position: fixed;
+  top: 48px;
+  bottom: 96px;
+  left: 0;
+  right: 0;
+  z-index: 10;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1.1fr);
+  gap: 48px;
+  padding: 40px 56px 0;
+  background: var(--color-background);
+  color: var(--color-foreground);
+}
+.now-playing .now-playing-close {
+  position: absolute;
+  top: 12px;
+  left: 16px;
+}
+.now-playing-song {
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  gap: 20px;
+  padding-bottom: 40px;
+}
+.now-playing-song > .artwork {
+  width: min(100%, 52vh);
+  height: auto;
+  aspect-ratio: 1;
+  border-radius: 10px;
+  box-shadow: 0 16px 48px #0003;
+}
+.now-playing-copy {
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.now-playing-copy h1 {
+  font-size: 24px;
+}
+.now-playing-copy p {
+  font-size: 15px;
+}
+.now-playing-lyrics {
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+}
+.now-playing .lyric-line {
+  font-size: 24px;
+}
+.now-playing .lyric-line:not(.unsynced):hover {
+  background: color-mix(in srgb, var(--color-foreground) 8%, transparent);
+}
+@media (width < 900px) {
+  .now-playing {
+    grid-template-columns: minmax(0, 1fr);
+    grid-template-rows: auto minmax(0, 1fr);
+    gap: 16px;
+    padding: 48px 28px 0;
+  }
+  .now-playing-song {
+    flex-direction: row;
+    align-items: center;
+    padding-bottom: 0;
+  }
+  .now-playing-song > .artwork {
+    width: 96px;
+  }
+}
+
+/* The custom sleep duration. */
+.sleep-stepper {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+.sleep-stepper button {
+  padding: 6px 12px;
+  border: 1px solid var(--color-separator);
+}
+.sleep-stepper output {
+  font-size: 22px;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+}

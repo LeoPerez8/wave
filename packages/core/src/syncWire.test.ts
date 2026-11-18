@@ -29,6 +29,23 @@ const play = (n: number): SyncPlayRow => ({
 const utf8Bytes = (text: string): number => new TextEncoder().encode(text).length;
 
 describe("readPullPage", () => {
+  test("keeps desktop and existing play sources, excluding unknown sources", () => {
+    const sources = ["phone", "auto", "desktop", "unknown"];
+    const page = readPullPage(
+      JSON.stringify({
+        plays: sources.map((source, n) => ({ ...play(n), source })),
+        cursor: "4",
+        more: false,
+      }),
+    );
+
+    assert.deepEqual(
+      page?.plays.map((row) => row.source),
+      ["phone", "auto", "desktop"],
+    );
+    assert.equal(page?.cursor, "4");
+  });
+
   test("keeps legacy plays with absent or null metadata but leaves malformed new fields out", () => {
     const snapshot = {
       title: "Something",

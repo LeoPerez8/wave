@@ -5,12 +5,9 @@ import {
   type PlaylistSong,
   type YtSong,
 } from "@wave/core";
-import type { SongRow } from "../library/LibraryStore.ts";
-import type {
-  PlayingSongAnswer,
-  PlayingSongTarget,
-  createNowPlayingSongLookup,
-} from "./songLookup.ts";
+import type { SongRow } from "@wave/client";
+import type { createNowPlayingSongLookup } from "./songLookup.ts";
+import type { PlayingSongAnswer, PlayingSongTarget } from "@wave/client";
 
 /** What a tap on Now Playing's Download button does (Core's `nowPlayingDownloadTap`). */
 export type PlayingSongDownload = NowPlayingDownloadTap<SongRow, YtSong>;

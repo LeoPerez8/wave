@@ -52,8 +52,10 @@ export interface SyncServiceOptions {
   readonly addressLimiter: RateLimiter;
   /** Counts failed session lookups by address (`maxFailedLookupsPerAddressPerMinute`). */
   readonly failedLookupLimiter: RateLimiter;
-  /** Wave's web OAuth client id: an ID token's audience must be it. */
+  /** Wave's web OAuth client id, used by the phone. */
   readonly googleClientId: string;
+  /** Optional Desktop OAuth client id, configured on the Worker. */
+  readonly googleDesktopClientId?: string;
   /** Emails that may sign in, separated by commas; unset or empty lets anyone in. */
   readonly allowedEmails?: string;
   /** How Google's keys are fetched (the Worker's `fetch`). */
@@ -233,6 +235,9 @@ export const createSyncService = (options: SyncServiceOptions): SyncService => {
   const limits = options.limits ?? SYNC_LIMITS;
   const pullPageSize = options.pullPageSize ?? PULL_PAGE_SIZE;
   const keys = options.googleKeys ?? googleKeys(options.fetch ?? fetch, now);
+  const clientIds = [options.googleClientId, options.googleDesktopClientId]
+    .map((id) => id?.trim())
+    .filter((id): id is string => id !== undefined && id !== "");
   const allowlist = parseAllowlist(options.allowedEmails);
   const log = options.log ?? ((message: string) => console.warn(message));
   const memory = options.memory ?? serviceMemory();
@@ -309,7 +314,7 @@ export const createSyncService = (options: SyncServiceOptions): SyncService => {
       typeof body === "object" && body !== null && "idToken" in body ? body.idToken : undefined;
     if (typeof idToken !== "string") throw failure(400, "bad_request");
     const identity = await verifyGoogleIdToken(idToken, {
-      clientId: options.googleClientId,
+      clientIds,
       keys,
       now,
     });
@@ -512,7 +517,7 @@ export const createSyncService = (options: SyncServiceOptions): SyncService => {
       typeof body === "object" && body !== null && "idToken" in body ? body.idToken : undefined;
     if (typeof idToken !== "string") throw failure(401, "id_token_required");
     const identity = await verifyGoogleIdToken(idToken, {
-      clientId: options.googleClientId,
+      clientIds,
       keys,
       now,
     });

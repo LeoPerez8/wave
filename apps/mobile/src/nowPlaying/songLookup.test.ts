@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { createNowPlayingSongLookup, type PlayingSongTarget } from "./songLookup.ts";
+import { createNowPlayingSongLookup } from "./songLookup.ts";
+import { type PlayingSongTarget } from "@wave/client";
 
 const target: PlayingSongTarget = {
   trackId: "yt:one",

@@ -34,17 +34,16 @@ import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 
-import type { RowPage } from "@/library/db/database";
-import type { HomeSections } from "@/library/db/playHistory";
+import type { RowPage } from "@wave/client/db/database";
+import type { HomeSections } from "@wave/client/db/playHistory";
+import { LibraryStore, type LibraryStoreError } from "@/library/LibraryStore";
 import {
-  LibraryStore,
   type AlbumRow,
-  type LibraryStoreError,
   type PlaylistEntryRow,
   songHasFile,
   type PlayableSongRow,
   type SongRow,
-} from "@/library/LibraryStore";
+} from "@wave/client";
 import { sortedPlaylists } from "@/library/playlistOrder";
 import type { AutoPlayback, AutoRequest } from "@/native/wavePlayer";
 import type { PlayerError } from "@/playback/Player";

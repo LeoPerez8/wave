@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 
-import { syncTriggers } from "./index.ts";
+import { DESKTOP_SYNC_PERIOD_MS, SYSTEM_SYNC_CLOCK, syncTriggers } from "./index.ts";
 import { fakeClock } from "./testSyncClock.ts";
 
 /**
@@ -241,4 +241,48 @@ test("the first sync after launch looks at the song list when asked to", async (
   triggers.edited({ songs: false });
   await pass(3_000);
   assert.deepEqual(runs, [true, false]);
+});
+
+test("with a period, Wave syncs again that long after the last sync, and stops when signed out", async () => {
+  const { clock, pass } = fakeClock();
+  const runs: number[] = [];
+  const triggers = syncTriggers({
+    clock,
+    inForeground: () => true,
+    everyMs: DESKTOP_SYNC_PERIOD_MS,
+    run: async () => {
+      runs.push(clock.now());
+      return true;
+    },
+  });
+  await pass(60 * 60_000);
+  assert.deepEqual(runs, [], "nothing runs before the first sync");
+  triggers.now();
+  await pass(0);
+  await pass(15 * 60_000);
+  assert.deepEqual(runs, [3_600_000, 4_500_000]);
+  triggers.edited({ songs: false });
+  await pass(3_000);
+  await pass(15 * 60_000 - 1);
+  assert.deepEqual(runs, [3_600_000, 4_500_000, 4_503_000], "an edit's sync moves the next one on");
+  await pass(1);
+  assert.equal(runs.length, 4);
+  triggers.stop();
+  await pass(60 * 60_000);
+  assert.equal(runs.length, 4);
+});
+
+test("the system's clock tells the time and runs a timer unless it's cancelled", async () => {
+  const before = Date.now();
+  assert.ok(SYSTEM_SYNC_CLOCK.now() >= before);
+  const ran: string[] = [];
+  const cancel = SYSTEM_SYNC_CLOCK.after(1, () => ran.push("cancelled"));
+  cancel();
+  await new Promise<void>((resolve) => {
+    SYSTEM_SYNC_CLOCK.after(5, () => {
+      ran.push("due");
+      resolve();
+    });
+  });
+  assert.deepEqual(ran, ["due"]);
 });

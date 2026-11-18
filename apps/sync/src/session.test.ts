@@ -4,6 +4,75 @@ import { migrate } from "./migrations.ts";
 import { favorite, freshDatabase, harness, pull, push, sessionCount } from "./testing.ts";
 
 describe("POST /v1/session", () => {
+  test("the configured Desktop client and the phone's web client reach the same account", async () => {
+    const service = await harness({ googleDesktopClientId: "desktop-oauth-test-audience" });
+    const phone = await service.signIn();
+    await push(service, phone, { favorites: [favorite("song-1", 1)] });
+    const desktop = await service.signIn({ aud: "desktop-oauth-test-audience" });
+    assert.notEqual(desktop, phone);
+    assert.deepEqual(
+      (await pull(service, desktop)).favorites.map((row) => row.id),
+      ["song-1"],
+    );
+  });
+
+  test("the Desktop audience is refused when its Worker setting is absent or blank", async () => {
+    for (const googleDesktopClientId of [undefined, "", "   "]) {
+      const service = await harness(
+        googleDesktopClientId === undefined ? {} : { googleDesktopClientId },
+      );
+      const response = await service.request("POST", "/v1/session", {
+        json: { idToken: await service.google.idToken({ aud: "desktop-oauth-test-audience" }) },
+      });
+      assert.equal(response.status, 401);
+      assert.deepEqual(await response.json(), { error: "invalid_id_token" });
+      await service.signIn();
+    }
+  });
+
+  test("configuring Desktop still refuses unrelated or malformed audiences and invalid ID tokens", async () => {
+    const service = await harness({ googleDesktopClientId: "desktop-oauth-test-audience" });
+    for (const claims of [
+      { aud: "unrelated-oauth-test-audience" },
+      { aud: "desktop-oauth-test-audience.extra" },
+      { aud: ["desktop-oauth-test-audience"] },
+      { aud: undefined },
+      { aud: "" },
+      { aud: "desktop-oauth-test-audience", iss: "https://other-issuer.example" },
+      { aud: "desktop-oauth-test-audience", exp: Math.floor(service.now / 1000) - 3600 },
+      { aud: "desktop-oauth-test-audience", email_verified: false },
+    ]) {
+      const response = await service.request("POST", "/v1/session", {
+        json: { idToken: await service.google.idToken(claims) },
+      });
+      assert.equal(response.status, 401);
+      assert.deepEqual(await response.json(), { error: "invalid_id_token" });
+    }
+    const forged = await service.request("POST", "/v1/session", {
+      json: { idToken: await service.google.forgedIdToken({ aud: "desktop-oauth-test-audience" }) },
+    });
+    assert.equal(forged.status, 401);
+    assert.equal(await sessionCount(service), 0);
+  });
+
+  test("Desktop sign-in obeys the account allowlist", async () => {
+    const service = await harness({
+      googleDesktopClientId: "desktop-oauth-test-audience",
+      allowedEmails: "ana@example.com",
+    });
+    const response = await service.request("POST", "/v1/session", {
+      json: {
+        idToken: await service.google.idToken({
+          aud: "desktop-oauth-test-audience",
+          sub: "other-sub",
+          email: "other@example.com",
+        }),
+      },
+    });
+    assert.equal(response.status, 403);
+    assert.equal(await sessionCount(service), 0);
+  });
+
   test("a valid Google ID token signs in and gives a session token", async () => {
     const service = await harness();
     const response = await service.request("POST", "/v1/session", {

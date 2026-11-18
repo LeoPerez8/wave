@@ -7,8 +7,9 @@
 import { PAGED_ROWS_LIMITS, spineEntries, type LibrarySongSort } from "@wave/core";
 import * as Effect from "effect/Effect";
 
-import type { GenreOrderSlice } from "./db/genrePages.ts";
-import type { LibraryStore, LibraryStoreError, SongOrder, SongRow } from "./LibraryStore.ts";
+import type { GenreOrderSlice } from "@wave/client/db/genrePages";
+import type { LibraryStore, LibraryStoreError } from "./LibraryStore.ts";
+import type { SongOrder, SongRow } from "@wave/client";
 
 type Slices = Pick<LibraryStore["Service"], "genreOrderSlice">;
 

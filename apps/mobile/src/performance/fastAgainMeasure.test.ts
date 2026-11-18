@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { createFastAgainFixture } from "../library/db/fastAgainFixture.ts";
-import { selectArtistDetail } from "../library/db/artists.ts";
+import { createFastAgainFixture } from "@wave/client/testing/fastAgainFixture";
+import { selectArtistDetail } from "@wave/client/db/artists";
 import { measureRead, percentiles } from "../../bench/fastAgain/measure.ts";
 
 test("measurements report actual SQL work separately from timed runs", async () => {

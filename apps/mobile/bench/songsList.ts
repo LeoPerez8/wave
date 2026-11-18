@@ -32,9 +32,9 @@ import {
   selectSongOrder,
   selectSongSummaries,
   selectSongsWithIds,
-} from "../src/library/db/songOrder.ts";
-import { addLibrary, openTestDatabase, traceQueries } from "../src/library/db/testDatabase.ts";
-import { BY_TITLE, selectPlayableSongs, trackQuery } from "../src/library/db/tracks.ts";
+} from "@wave/client/db/songOrder";
+import { addLibrary, openTestDatabase, traceQueries } from "@wave/client/testing";
+import { BY_TITLE, selectPlayableSongs, trackQuery } from "@wave/client/db/tracks";
 
 declare const gc: (() => void) | undefined;
 

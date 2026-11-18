@@ -9,8 +9,8 @@ import {
   itemActions,
 } from "@wave/core";
 import { loadLibraryStore } from "../../bench/fastAgain/store.ts";
-import { createFastAgainFixture } from "../library/db/fastAgainFixture.ts";
-import { traceQueries, type TracedQuery } from "../library/db/testDatabase.ts";
+import { createFastAgainFixture } from "@wave/client/testing/fastAgainFixture";
+import { traceQueries, type TracedQuery } from "@wave/client/testing";
 import { readLinkArtists } from "../library/artistLookup.ts";
 import { followStreamedArtistTap } from "../ytmusic/streamedArtistTap.ts";
 import { nowPlayingLibraryArtistLink } from "../nowPlaying/artistLink.ts";

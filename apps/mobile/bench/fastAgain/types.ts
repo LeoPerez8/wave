@@ -1,4 +1,4 @@
-import type { FastAgainFixture } from "../../src/library/db/fastAgainFixture.ts";
+import type { FastAgainFixture } from "@wave/client/testing/fastAgainFixture";
 import type { MeasureOptions } from "./measure.ts";
 
 export type BenchVariant = "after" | "before" | "reference";

@@ -5,6 +5,7 @@ import { openYtArtist, openYtArtistNamed } from "@/ytmusic/routes";
 
 import { findLinkArtists } from "./artistLookup";
 import { LibraryStore } from "./LibraryStore";
+
 import { openArtist } from "./routes";
 import { appRuntime } from "./runtime";
 

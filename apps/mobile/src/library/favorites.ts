@@ -8,7 +8,7 @@ import {
 } from "@wave/core";
 import { useEffect, useSyncExternalStore } from "react";
 
-import { makeExternalStore, subscribeAll } from "@/lib/externalStore";
+import { makeExternalStore, subscribeAll } from "@wave/client/externalStore";
 import { useSightedStore } from "@/lib/screenSight";
 
 import {
@@ -18,6 +18,7 @@ import {
   publishUnstarred,
 } from "./libraryChanges";
 import { LibraryStore } from "./LibraryStore";
+
 import { appRuntime } from "./runtime";
 
 /**

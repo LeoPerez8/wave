@@ -161,7 +161,7 @@ ADR: `docs/adr/0002-shared-client-package.md`.
   in its own PR that also points the phone at the package. The phone's tests stay green and its
   releases go on as usual. No re-export shims are left behind.
 - The desktop UI is new React DOM, styled with Tailwind 4. No `.tsx` is shared with the phone.
-  The colour tokens move from `apps/mobile/global.css` to a shared CSS file both apps import;
+  The colour tokens live in `packages/theme/colours.css`, imported by each app's stylesheet;
   Core's `theme.ts` mirror and its drift test stay.
 - `apps/desktop` holds the Electron app (`src/main`, `src/preload`, `src/renderer`) and a Cargo
   workspace in `apps/desktop/native/`.
@@ -175,9 +175,8 @@ ADR: `docs/adr/0004-kotlin-on-a-bundled-jvm.md`.
   Android module consumes and the desktop ships as a JAR. A fix there reaches both apps.
 - The scanner reads tags through the same Kotlin, so both devices read the same fields from the
   same file and recording keys match. The JVM is therefore required even with YT Music off.
-- Both apps move to innertubex 0.11.9 or later (the phone is on 0.8.6). On the JVM it needs no
-  QuickJS natives, so one JAR serves every OS, and its first web lookup takes 0.5 s instead of
-  5 to 7 s.
+- Both apps use innertubex 0.11.9 or later. On the JVM it needs no QuickJS natives, so one JAR
+  serves every OS, and its first web lookup takes 0.5 s instead of 5 to 7 s.
 - Per platform, outside the shared module: `YtClient`'s HTTP, the proof-of-origin token
   provider, the YouTube sign-in window, the player's stream source and cache.
 - Protocol: a child process speaking JSON lines over stdio, with requests both ways (the JVM
@@ -195,6 +194,12 @@ ADR: `docs/adr/0004-kotlin-on-a-bundled-jvm.md`.
 - An own engine on Symphonia (decoding) and cpal (output) applies the phone's playback rules one
   to one: gapless, crossfade on a second voice, the per-song gain Core computes for Normalize
   Volume, Buffer, and the counted-play events Core expects.
+- Buffer: the engine fetches a YT Music song whole into its audio cache, so on the desktop the
+  setting says how many songs ahead are fetched, not how much audio is held. Core's
+  `songsWithinBuffer` names the songs after the current one until they play for as long as the
+  Buffer (library files count for their time; a song of unknown length ends the reach), and the
+  audio process fetches the streamed ones one at a time, in order. A queue or Buffer change
+  sends a new list. Songs a change leaves out stay in the cache until it needs the room.
 - Formats: MP3, AAC/M4A, FLAC, Vorbis, Opus (libopus through an adapter) and WAV. ALAC and
   HE-AAC are not in v1.
 - Gapless AAC in M4A: Symphonia ignores the encoder delay and padding, so the engine reads them
@@ -321,13 +326,17 @@ The prototype was approved on 2026-11-18 after an Impeccable critique; its decis
   tray. Quit is the tray menu's Quit or Ctrl+Q. Settings offers "Closing the window quits Wave".
 - Starting with the system is off by default; the switch starts Wave hidden in the tray, not
   playing.
+- The window shows once its page and Wave's services are ready, and after 5 seconds without
+  them; it never waits for the JVM. When the services fail to start, Wave says "Wave couldn't
+  start" and quits, so no hidden process is left holding the single instance.
 - Single instance: a second launch shows the running window. A YT Music or Spotify link passed
   to the second launch is not handled; links arrive by paste or drag.
 - The system media controls (SMTC on Windows, MPRIS on Linux) show title, artist, album, cover
   and position with seeking, with Play/Pause, Next and Previous. Media keys reach Wave through
-  them, with no global shortcut. The bridge is the Rust `souvlaki` crate, with Chromium's Media
-  Session and a silent audio element as the fallback; the first system-integration ticket
-  checks it.
+  them, with no global shortcut. On Linux the bridge is the Rust `souvlaki` crate, in its own
+  addon (`wave-media.node`). On Windows it is Chromium's Media Session with a silent audio
+  element: the check in #1157 found `souvlaki` publishing the song there while the system's Pause
+  never reached Wave. Linux falls back to Chromium's session when the addon doesn't load.
 - No file associations, no `https` link handler and no floating mini player in v1. Windows lets
   an app own `https` links only for a domain it proves it owns.
 

@@ -1,5 +1,5 @@
 import { artistPhotoName, ytArtistQuery } from "@wave/core";
-import { makeExternalStore } from "../lib/externalStore.ts";
+import { makeExternalStore } from "@wave/client/externalStore";
 
 export interface LinkArtistName {
   readonly id: number;

@@ -5,7 +5,7 @@
 import { ytExportSignInAlert } from "@wave/core";
 import { useCallback, useEffect, useSyncExternalStore } from "react";
 
-import { makeExternalStore } from "@/lib/externalStore";
+import { makeExternalStore } from "@wave/client/externalStore";
 import { currentLocalisation } from "@/localisation/localisation";
 import { confirmAction } from "@/overlay/alert";
 import { signInToSpotify, spotifySignedIn } from "@/settings/spotifyAccount";

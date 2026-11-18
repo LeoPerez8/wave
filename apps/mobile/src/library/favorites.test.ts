@@ -5,7 +5,7 @@ import { fileURLToPath } from "node:url";
 import * as Effect from "effect/Effect";
 import { normalizeTrack } from "@wave/core";
 import { loadLibraryStore, loadWorktreeModule } from "../../bench/fastAgain/store.ts";
-import { closeTestDatabase, openTestDatabase } from "./db/testDatabase.ts";
+import { closeTestDatabase, openTestDatabase } from "@wave/client/testing";
 import type { LibraryStore } from "./LibraryStore.ts";
 
 test("cold scoped stars follow optimistic gestures and restore the saved star after a failed write without loading global lists", async () => {

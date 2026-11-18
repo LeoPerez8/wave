@@ -18,7 +18,7 @@ object AndroidMediaScans {
     batch ?: synchronized(this) { batch ?: create(context.applicationContext).also { batch = it } }
 
   private fun create(app: Context): MediaScanBatch {
-    val timer = Executors.newSingleThreadScheduledExecutor(BackgroundThreads("Wave media scans", daemon = true))
+    val timer = Executors.newSingleThreadScheduledExecutor(BackgroundThreads("Wave media scans", daemon = true, lower = ThreadPriority::lower))
     return MediaScanBatch(
       clock = SystemClock::elapsedRealtime,
       later = { delay, run -> timer.schedule({ runCatching(run) }, delay, TimeUnit.MILLISECONDS) },

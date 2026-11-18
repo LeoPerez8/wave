@@ -3,7 +3,7 @@ import test from "node:test";
 import * as Effect from "effect/Effect";
 import { fileURLToPath } from "node:url";
 
-import { createFastAgainFixture } from "../library/db/fastAgainFixture.ts";
+import { createFastAgainFixture } from "@wave/client/testing/fastAgainFixture";
 import { loadLibraryStore } from "../../bench/fastAgain/store.ts";
 
 const root = fileURLToPath(new URL("../../../../", import.meta.url));

@@ -7,16 +7,17 @@ import {
 } from "@wave/core";
 import { useEffect, useRef, useSyncExternalStore } from "react";
 
-import type { SongRow } from "@/library/LibraryStore";
+import type { SongRow } from "@wave/client";
 
 import { playPage } from "./actions";
 import { playbackState, type PlaybackState } from "./Player";
 import { queueState, upNextReshuffles } from "./Queue";
 import { queuedYtSong, queueTracks } from "./queueTracks";
 import * as Effect from "effect/Effect";
-import { subscribeAll } from "@/lib/externalStore";
+import { subscribeAll } from "@wave/client/externalStore";
 import { useSightedStore } from "@/lib/screenSight";
 import { LibraryStore } from "@/library/LibraryStore";
+
 import { appRuntime } from "@/library/runtime";
 import {
   onDownloadedRecording,

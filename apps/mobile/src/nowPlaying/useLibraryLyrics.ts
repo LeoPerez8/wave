@@ -2,8 +2,9 @@ import { libraryLyrics, libraryLyricsSong, type FoundLyrics, type Lyrics } from 
 import * as Effect from "effect/Effect";
 import { useMemo } from "react";
 
-import type { LyricsSearchTrack } from "@/library/db/lyricsMisses";
+import type { LyricsSearchTrack } from "@wave/client/db/lyricsMisses";
 import { LibraryStore } from "@/library/LibraryStore";
+
 import { TagWriteFailed, writeFoundLyrics } from "@/library/lyricsAndGenre";
 import { appRuntime } from "@/library/runtime";
 import { useLyricsAndGenreLookupsEnabled } from "@/settings/lyricsAndGenre";

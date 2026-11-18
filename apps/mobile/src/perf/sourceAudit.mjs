@@ -25,6 +25,19 @@ export const mobileSources = (root) => {
     }
   };
   walk(root);
+  const client = resolve(import.meta.dirname, "../../../../packages/client/src");
+  // The client ships in the phone too; keep its moved declarations in the same audits.
+  for (const entry of readdirSync(client, { recursive: true, encoding: "utf8" })) {
+    if (
+      /\.tsx?$/.test(entry) &&
+      !/\.(test|d)\.ts$/.test(entry) &&
+      !/(?:testDatabase|fastAgainFixture)\.ts$/.test(entry)
+    )
+      files[`@wave/client/${entry.split(sep).join("/")}`] = readFileSync(
+        join(client, entry),
+        "utf8",
+      );
+  }
   return files;
 };
 
@@ -65,7 +78,14 @@ const canonical = (path) => path.split(sep).join("/");
 export const auditSources = (files, options) => {
   const root = resolve(import.meta.dirname, "..");
   const absolute = new Map(
-    Object.entries(files).map(([path, text]) => [canonical(join(root, path)), text]),
+    Object.entries(files).map(([path, text]) => [
+      canonical(
+        path.startsWith("@wave/client/")
+          ? resolve(root, "../../../packages/client/src", path.slice("@wave/client/".length))
+          : join(root, path),
+      ),
+      text,
+    ]),
   );
   const compilerOptions = {
     target: ts.ScriptTarget.ESNext,
@@ -91,7 +111,10 @@ export const auditSources = (files, options) => {
   };
   const program = ts.createProgram([...absolute.keys()], compilerOptions, host);
   const checker = program.getTypeChecker();
-  const pathOf = (node) => relative(root, node.getSourceFile().fileName).split(sep).join("/");
+  const pathOf = (node) => {
+    const path = relative(root, node.getSourceFile().fileName).split(sep).join("/");
+    return path.replace("../../../packages/client/src/", "@wave/client/");
+  };
   // A dependency's declarations are named by its package (`react-native#Pressable`), wherever
   // the package manager put its typings.
   const moduleOf = (node) => {

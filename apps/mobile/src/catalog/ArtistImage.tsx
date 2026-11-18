@@ -3,7 +3,7 @@ import { IconUser } from "@tabler/icons-react-native";
 import { Image } from "expo-image";
 import { Image as SoftwareImage, PixelRatio, Text, View } from "react-native";
 
-import { artworkUri } from "./artworkUri";
+import { artworkUri } from "@wave/client/artworkUri";
 import { useArtistPhoto } from "@/library/artistPhotos";
 import { useCapturedImage, useInCapture } from "@/share/imageCapture";
 import { useThemeColor } from "@/theme/useThemeColor";
