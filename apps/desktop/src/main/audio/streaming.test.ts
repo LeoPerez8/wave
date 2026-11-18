@@ -156,3 +156,68 @@ test("an address that expires while fetching is resolved again through main", as
   assert.deepEqual(main.asked, [{ event: "resolve", id: 1, videoId: "abcdefghijk", fresh: true }]);
   assert.deepEqual(answers, ["9:140"]);
 });
+
+/** Main that never answers a request for an address, as when the JVM hangs. */
+const silentMain = (arriveMs = 5) => {
+  const engine = fakeEngine(arriveMs);
+  const asked: ResolveEvent[] = [];
+  const stream = streaming(engine.engine, (event) => void asked.push(event), undefined, {
+    readyTimeoutMs: 200,
+    resolveTimeoutMs: 40,
+    pollMs: 2,
+  });
+  return { ...engine, asked, stream };
+};
+
+test("an address that never comes fails the load in time, and the calls behind it run", async () => {
+  const { stream, calls } = silentMain();
+  const started = Date.now();
+  const load = stream.handle({ id: 1, call: "load", args: ["yt:abcdefghijk"] });
+  const pause = stream.handle({ id: 2, call: "pause", args: [] });
+  const response = await load;
+  assert.equal(response.ok ? "" : response.error.code, "stream-timeout");
+  assert.equal((await pause).ok, true);
+  assert.ok(Date.now() - started < 190, "well before the wait for the song's bytes is over");
+  assert.deepEqual(calls, []);
+  // An answer that comes after all is dropped.
+  stream.resolved({ resolved: 1, address });
+  assert.deepEqual(calls, []);
+});
+
+test("a newer load ends the wait of a load still fetching its song", async () => {
+  const { stream, calls } = setup(-1);
+  const started = Date.now();
+  const first = stream.handle({ id: 1, call: "load", args: ["yt:abcdefghijk", "k1"] });
+  const play = stream.handle({ id: 2, call: "play", args: [] });
+  await new Promise((resolve) => setTimeout(resolve, 20));
+  const second = await stream.handle({ id: 3, call: "load", args: ["/music/b.flac", "k2"] });
+  assert.ok(Date.now() - started < 150, "the second load didn't wait for the first to time out");
+  assert.equal(second.ok, true);
+  const superseded = await first;
+  assert.equal(superseded.ok ? "" : superseded.error.code, "superseded");
+  const played = await play;
+  assert.equal(played.ok ? "" : played.error.code, "superseded", "it was meant for the first song");
+  assert.deepEqual(calls, ["open abcdefghijk", "load /music/b.flac"]);
+});
+
+test("a load still waiting its turn is skipped once a newer one comes", async () => {
+  const { stream, calls } = setup(-1);
+  const first = stream.handle({ id: 1, call: "load", args: ["yt:abcdefghijk"] });
+  const second = stream.handle({ id: 2, call: "load", args: ["/music/b.flac"] });
+  const third = await stream.handle({ id: 3, call: "load", args: ["/music/c.flac"] });
+  assert.equal(third.ok, true);
+  for (const response of [await first, await second])
+    assert.equal(response.ok ? "" : response.error.code, "superseded");
+  assert.deepEqual(calls, ["load /music/c.flac"]);
+});
+
+test("the volume and the playback settings don't wait for a song being fetched", async () => {
+  const { stream } = setup(-1);
+  const load = stream.handle({ id: 1, call: "load", args: ["yt:abcdefghijk"] });
+  const started = Date.now();
+  for (const [n, call] of (["setVolume", "setCrossfade", "setNormalize"] as const).entries())
+    assert.equal((await stream.handle({ id: 10 + n, call, args: [1] })).ok, true);
+  assert.equal((await stream.handle({ id: 20, call: "cancelMeasurements", args: [] })).ok, true);
+  assert.ok(Date.now() - started < 100);
+  assert.equal((await load).ok, false);
+});
