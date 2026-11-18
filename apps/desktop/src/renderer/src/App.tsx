@@ -10,18 +10,26 @@ import { FolderSettings } from "./FolderSettings.tsx";
 import { YtResults } from "./YtResults.tsx";
 import { AccountSettings, SignInInvitation } from "./AccountSettings.tsx";
 import { PlaybackSettings } from "./PlaybackSettings.tsx";
+import { AlbumDownloadButton } from "./AlbumDownloadButton.tsx";
+import { DownloadSettings } from "./DownloadSettings.tsx";
+import { DownloadsPage } from "./DownloadsPage.tsx";
+import { downloadPercent, useDownloads } from "./useDownloads.ts";
 import { useDesktopKeys } from "./keys.ts";
 import { ShortcutsSheet } from "./Shortcuts.tsx";
 import { SelectionBar, useSongActions, type Selection } from "./SongActions.tsx";
 import { labels, text } from "./text.ts";
 
-type Route = BrowseScope | { readonly kind: "home" } | { readonly kind: "settings" };
+type Route =
+  | BrowseScope
+  | { readonly kind: "home" }
+  | { readonly kind: "settings" }
+  | { readonly kind: "downloads" };
 const sections = ["playlists", "artists", "albums", "songs", "genres", "favorites"] as const;
 /** YT Music's sidebar pages; their pages come in later tickets. */
 const ytPages = [
   ["discover", "home"],
   ["magicQueue", "queue"],
-  ["downloads", "folder"],
+  ["downloads", "download"],
 ] as const;
 const settings = [
   "library",
@@ -75,6 +83,9 @@ export function App() {
   const [playlistTotal, setPlaylistTotal] = useState(0);
   const failed = useCallback(() => setError(text.desktopLibrary.actionFailed), []);
   const playback = usePlayback(failed);
+  const downloads = useDownloads();
+  const percent = downloadPercent(downloads);
+  const download = (run: Promise<unknown>) => void run.catch(failed);
   const [shortcuts, setShortcuts] = useState(false);
   /** Selection mode, for the list it was turned on in. */
   const [selecting, setSelecting] = useState<{
@@ -168,7 +179,10 @@ export function App() {
       content.current?.querySelector<HTMLElement>("[role=grid]")?.focus();
   }, [route]);
   const scope = useMemo<BrowseScope>(
-    () => (route.kind === "home" || route.kind === "settings" ? { kind: "songs" } : route),
+    () =>
+      route.kind === "home" || route.kind === "settings" || route.kind === "downloads"
+        ? { kind: "songs" }
+        : route,
     [route],
   );
   const list = JSON.stringify(scope);
@@ -203,6 +217,9 @@ export function App() {
     } as const;
     if (scope.kind in detail) go({ kind: detail[scope.kind as keyof typeof detail], id: row.id });
     else if (row.unavailable) setError(text.desktopLibrary.driveDisconnected);
+    // A missing song downloads instead of playing (Core's `downloadSource` picks where from).
+    else if (row.path === null && row.videoId === undefined && row.id > 0)
+      download(window.wave.downloads.missing([row.id]));
     else playback.run(window.wave.playback.start(scope, index));
   };
   const title =
@@ -269,21 +286,39 @@ export function App() {
               <span>{labels[kind]}</span>
             </button>
           ))}
-          {ytMusic && (
+          {(ytMusic || (downloads?.rows ?? 0) > 0) && (
             <>
               <p className="nav-heading">{labels.ytMusic}</p>
-              {ytPages.map(([key, icon]) => (
-                <button
-                  key={key}
-                  className="nav-item"
-                  aria-label={labels[key]}
-                  title={labels[key]}
-                  disabled
-                >
-                  <Icon name={icon} />
-                  <span>{labels[key]}</span>
-                </button>
-              ))}
+              {ytPages.map(([key, icon]) =>
+                key === "downloads" ? (
+                  <button
+                    key={key}
+                    className="nav-item"
+                    aria-label={percent === null ? labels[key] : labels.downloadsProgress(percent)}
+                    title={labels[key]}
+                    aria-current={route.kind === key ? "page" : undefined}
+                    data-testid="downloads-nav"
+                    onClick={() => go({ kind: "downloads" })}
+                  >
+                    <Icon name={icon} />
+                    <span>{labels[key]}</span>
+                    {percent !== null && <span className="nav-count">{percent}%</span>}
+                  </button>
+                ) : (
+                  ytMusic && (
+                    <button
+                      key={key}
+                      className="nav-item"
+                      aria-label={labels[key]}
+                      title={labels[key]}
+                      disabled
+                    >
+                      <Icon name={icon} />
+                      <span>{labels[key]}</span>
+                    </button>
+                  )
+                ),
+              )}
             </>
           )}
         </nav>
@@ -368,6 +403,13 @@ export function App() {
                   <Icon name="shuffle" size={16} />
                   {labels.shuffle}
                 </button>
+                {route.kind === "album" && route.id !== undefined && (
+                  <AlbumDownloadButton
+                    albumId={route.id}
+                    revision={`${scan?.revision}:${account?.revision}:${downloads?.progress}:${downloads?.failed}`}
+                    onError={failed}
+                  />
+                )}
               </div>
             </div>
           </div>
@@ -472,11 +514,15 @@ export function App() {
                 </>
               ) : setting === "playback" ? (
                 <PlaybackSettings onError={failed} />
+              ) : setting === "downloads" ? (
+                <DownloadSettings onError={failed} />
               ) : (
                 <p className="secondary">{labels.unavailableSection}</p>
               )}
             </section>
           </div>
+        ) : route.kind === "downloads" ? (
+          <DownloadsPage view={downloads} onError={failed} />
         ) : (
           <>
             {selection && (
@@ -510,6 +556,7 @@ export function App() {
                 onPlay={(videoIds, index) =>
                   playback.run(window.wave.playback.startYt(videoIds, index))
                 }
+                onDownload={(videoId) => download(window.wave.downloads.yt([videoId]))}
               />
             )}
           </>
