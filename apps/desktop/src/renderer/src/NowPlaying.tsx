@@ -143,7 +143,7 @@ export function NowPlaying({
         <Icon name="back" />
       </button>
       <div className="now-playing-song">
-        <Artwork large hash={song?.artworkHash} url={song?.artworkUrl} />
+        <Artwork large full hash={song?.artworkHash} url={song?.artworkUrl} />
         <div className="now-playing-copy">
           <h1 className="truncate">{song?.title ?? text.desktopLayout.nothingPlaying}</h1>
           {song && <p className="truncate secondary">{song.artist}</p>}

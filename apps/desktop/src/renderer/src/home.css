@@ -28,6 +28,16 @@
 .home-page .shelf {
   margin: 0;
 }
+/* Section heads are the phone's catalog lines: small, tracked caps (story 63). */
+.home-page section > h2 {
+  font-size: 12px;
+  line-height: 16px;
+  font-weight: 600;
+  letter-spacing: 1.4px;
+  text-transform: uppercase;
+  color: var(--color-secondary);
+  margin-bottom: 12px;
+}
 .home-page .tile > .artwork {
   border-radius: 6px;
 }

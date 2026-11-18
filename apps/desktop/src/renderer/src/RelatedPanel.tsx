@@ -49,7 +49,6 @@ export function RelatedPanel({
   const songs = view?.songs.items ?? [];
   return (
     <section className="related-panel" aria-label={text.playbackText.related}>
-      <h2>{text.playbackText.related}</h2>
       {view === undefined ? (
         <p className="yt-quiet secondary" role="status">
           {labels.loading}

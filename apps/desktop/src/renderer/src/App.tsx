@@ -285,6 +285,8 @@ export function App() {
     else if (row.unavailable) setError(text.desktopLibrary.driveDisconnected);
     else playback.run(window.wave.playback.start(scope, index));
   };
+  /** The sidebar field holds the search on screen: empty elsewhere, its query again on Back. */
+  const field = route.kind === "search" ? (route.query ?? query) : "";
   const searchFor = (query: string) => {
     setQuery(query);
     if (route.kind !== "search") go({ kind: "search", query });
@@ -340,9 +342,9 @@ export function App() {
             type="search"
             aria-label={labels.search}
             placeholder={labels.search}
-            value={query}
+            value={field}
             onChange={(event) => searchFor(event.target.value)}
-            onFocus={() => route.kind !== "search" && go({ kind: "search", query })}
+            onFocus={() => route.kind !== "search" && go({ kind: "search", query: field })}
             onKeyDown={(event) => event.key === "Enter" && rememberSearch()}
           />
         </label>
