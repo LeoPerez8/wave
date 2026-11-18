@@ -56,6 +56,10 @@ test("a row plays its list; the keys pause and skip; a relaunch restores it paus
   await Effect.runPromise(
     Effect.gen(function* () {
       const db = (yield* Database) as unknown as TestDatabase;
+      // The queue must end at its third song: online, Continue with Magic Queue would add to it.
+      db.run(
+        sql`INSERT INTO desktop_synced_preferences (key, value) VALUES ('settings.continueQueue', 'off')`,
+      );
       for (let n = 1; n <= 3; n++) {
         const id = addTrack(db, {
           title: `Song ${n}`,
