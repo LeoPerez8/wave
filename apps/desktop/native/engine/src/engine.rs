@@ -10,6 +10,10 @@ use crate::error::EngineError;
 use crate::loudness::{Measurement, measure};
 use crate::output::Output;
 use crate::player::{Next, PlayState, Player, TrackInfo, Transition};
+use crate::stream::{Origin, Streams};
+
+/// A path the engine reads as a YT Music song: `yt:` and its video id.
+const STREAMED: &str = "yt:";
 
 #[derive(Debug, Clone, PartialEq)]
 pub struct Status {
@@ -25,6 +29,7 @@ pub struct Status {
 pub struct Engine {
     player: Arc<Player>,
     output: Output,
+    streams: Option<Arc<Streams>>,
     measuring: Measuring,
 }
 
@@ -40,14 +45,33 @@ impl Engine {
     }
 
     fn start(silent: bool) -> Engine {
+        Engine::with_streams(silent, None)
+    }
+
+    /// An engine that also plays YT Music songs, `yt:<videoId>`, through `streams`.
+    pub fn with_streams(silent: bool, streams: Option<Arc<Streams>>) -> Engine {
         let player = Arc::new(Player::new());
         let output = Output::start(Arc::clone(&player), silent);
-        Engine { player, output, measuring: Measuring::start() }
+        Engine { player, output, streams, measuring: Measuring::start() }
+    }
+
+    pub fn streams(&self) -> Option<&Arc<Streams>> {
+        self.streams.as_ref()
+    }
+
+    /// Where `path` is read from: the file, or a streamed song's cache or download.
+    fn origin(&self, path: &Path) -> Result<Origin, EngineError> {
+        let Some(video_id) = path.to_str().and_then(|p| p.strip_prefix(STREAMED)) else {
+            return Ok(Origin::File(path.to_path_buf()));
+        };
+        self.streams
+            .as_ref()
+            .and_then(|streams| streams.open(video_id))
+            .ok_or_else(|| EngineError::NotFound("the song isn't fetched".into()))
     }
 
     pub fn load(&self, path: &Path) -> Result<Status, EngineError> {
-        self.player.load(path)?;
-        Ok(self.status())
+        self.load_entry(path, None, None)
     }
 
     pub fn play(&self) -> Result<(), EngineError> {
@@ -61,12 +85,16 @@ impl Engine {
         key: Option<String>,
         gain_db: Option<f64>,
     ) -> Result<Status, EngineError> {
-        self.player.load_entry(path, key, gain_db)?;
+        self.player.load_origin(&self.origin(path)?, key, gain_db)?;
         Ok(self.status())
     }
 
     pub fn preload(&self, next: Option<Next<'_>>) -> Result<(), EngineError> {
-        self.player.preload(next)
+        let next = match next {
+            Some(next) => Some((self.origin(next.path)?, next)),
+            None => None,
+        };
+        self.player.preload_origin(next)
     }
 
     pub fn take_transitions(&self) -> Vec<Transition> {

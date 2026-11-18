@@ -10,6 +10,7 @@ import type { PlaybackSettings } from "./playbackSettings.ts";
 import type { SongTags } from "./tags.ts";
 import type { DesktopFolder, DesktopSong, ScanStatus } from "./library.ts";
 import type { BrowseScope, BrowsePage } from "./browse.ts";
+import type { YtSearchPage } from "./yt.ts";
 import type { AccountView } from "./account.ts";
 import type {
   ActionSurface,
@@ -33,6 +34,10 @@ export interface BridgeContract {
   readonly "playback.view": { readonly args: readonly []; readonly result: PlayerView };
   readonly "playback.start": {
     readonly args: readonly [scope: BrowseScope, index?: number, shuffle?: boolean];
+    readonly result: void;
+  };
+  readonly "playback.startYt": {
+    readonly args: readonly [videoIds: readonly string[], index: number];
     readonly result: void;
   };
   readonly "playback.command": {
@@ -72,6 +77,12 @@ export interface BridgeContract {
     readonly args: readonly [change: Partial<PlaybackSettings>];
     readonly result: PlaybackSettings;
   };
+  readonly "settings.ytMusic": { readonly args: readonly []; readonly result: boolean };
+  readonly "settings.setYtMusic": { readonly args: readonly [on: boolean]; readonly result: void };
+  /** YouTube Music's songs for a query; never fails, `status` says why there are none. */
+  readonly "yt.search": { readonly args: readonly [query: string]; readonly result: YtSearchPage };
+  /** A YouTube Music cover as a data URL, or null. */
+  readonly "yt.artwork": { readonly args: readonly [url: string]; readonly result: string | null };
   readonly "library.artwork": {
     readonly args: readonly [hash: string, large: boolean];
     readonly result: string | null;
@@ -138,6 +149,7 @@ type PagedLists<T> = {
 export const BRIDGE_CALLS = [
   "playback.view",
   "playback.start",
+  "playback.startYt",
   "playback.command",
   "playback.play",
   "playback.pause",
@@ -173,6 +185,10 @@ export const BRIDGE_CALLS = [
   "settings.setAppearance",
   "settings.playback",
   "settings.setPlayback",
+  "settings.ytMusic",
+  "settings.setYtMusic",
+  "yt.search",
+  "yt.artwork",
   "account.view",
   "account.signIn",
   "account.cancelSignIn",
@@ -192,6 +208,7 @@ export interface WaveBridge {
   readonly playback: {
     readonly view: () => Promise<PlayerView>;
     readonly start: (scope: BrowseScope, index?: number, shuffle?: boolean) => Promise<void>;
+    readonly startYt: (videoIds: readonly string[], index: number) => Promise<void>;
     readonly command: (command: PlaybackCommand) => Promise<void>;
     readonly play: () => Promise<void>;
     readonly pause: () => Promise<void>;
@@ -243,6 +260,12 @@ export interface WaveBridge {
     readonly playback: () => Promise<PlaybackSettings>;
     /** Keeps a change to Settings › Playback; it applies from the next song. */
     readonly setPlayback: (change: Partial<PlaybackSettings>) => Promise<PlaybackSettings>;
+    readonly ytMusic: () => Promise<boolean>;
+    readonly setYtMusic: (on: boolean) => Promise<void>;
+  };
+  readonly yt: {
+    readonly search: (query: string) => Promise<YtSearchPage>;
+    readonly artwork: (url: string) => Promise<string | null>;
   };
   /** The Wave account: the session itself never reaches the window. */
   readonly account: {
@@ -259,6 +282,7 @@ export const createBridge = (invoke: Invoke): WaveBridge => ({
   playback: {
     view: () => invoke("playback.view"),
     start: (scope, index, shuffle) => invoke("playback.start", scope, index, shuffle),
+    startYt: (videoIds, index) => invoke("playback.startYt", videoIds, index),
     command: (command) => invoke("playback.command", command),
     play: () => invoke("playback.play"),
     pause: () => invoke("playback.pause"),
@@ -303,6 +327,12 @@ export const createBridge = (invoke: Invoke): WaveBridge => ({
     setAppearance: (appearance) => invoke("settings.setAppearance", appearance),
     playback: () => invoke("settings.playback"),
     setPlayback: (change) => invoke("settings.setPlayback", change),
+    ytMusic: () => invoke("settings.ytMusic"),
+    setYtMusic: (on) => invoke("settings.setYtMusic", on),
+  },
+  yt: {
+    search: (query) => invoke("yt.search", query),
+    artwork: (url) => invoke("yt.artwork", url),
   },
   account: {
     view: () => invoke("account.view"),

@@ -7,6 +7,7 @@ import { PlayerBar, usePlayback } from "./PlayerBar.tsx";
 import { Icon } from "./Icon.tsx";
 import { Artwork, VirtualTable } from "./VirtualTable.tsx";
 import { FolderSettings } from "./FolderSettings.tsx";
+import { YtResults } from "./YtResults.tsx";
 import { AccountSettings, SignInInvitation } from "./AccountSettings.tsx";
 import { PlaybackSettings } from "./PlaybackSettings.tsx";
 import { useDesktopKeys } from "./keys.ts";
@@ -16,6 +17,12 @@ import { labels, text } from "./text.ts";
 
 type Route = BrowseScope | { readonly kind: "home" } | { readonly kind: "settings" };
 const sections = ["playlists", "artists", "albums", "songs", "genres", "favorites"] as const;
+/** YT Music's sidebar pages; their pages come in later tickets. */
+const ytPages = [
+  ["discover", "home"],
+  ["magicQueue", "queue"],
+  ["downloads", "folder"],
+] as const;
 const settings = [
   "library",
   "appearance",
@@ -62,6 +69,7 @@ export function App() {
   const [query, setQuery] = useState("");
   const [setting, setSetting] = useState<(typeof settings)[number]>("library");
   const [appearance, setAppearance] = useState<"system" | "light" | "dark">("system");
+  const [ytMusic, setYtMusic] = useState(false);
   const [playlists, setPlaylists] = useState<readonly BrowseRow[]>([]);
   const [playlistOffset, setPlaylistOffset] = useState(0);
   const [playlistTotal, setPlaylistTotal] = useState(0);
@@ -78,6 +86,7 @@ export function App() {
   const shell = useRef<HTMLElement>(null);
   useEffect(() => {
     void window.wave.settings.appearance().then(setAppearance).catch(failed);
+    void window.wave.settings.ytMusic().then(setYtMusic).catch(failed);
   }, [failed]);
   useEffect(() => {
     const media = matchMedia("(prefers-color-scheme: dark)");
@@ -260,6 +269,23 @@ export function App() {
               <span>{labels[kind]}</span>
             </button>
           ))}
+          {ytMusic && (
+            <>
+              <p className="nav-heading">{labels.ytMusic}</p>
+              {ytPages.map(([key, icon]) => (
+                <button
+                  key={key}
+                  className="nav-item"
+                  aria-label={labels[key]}
+                  title={labels[key]}
+                  disabled
+                >
+                  <Icon name={icon} />
+                  <span>{labels[key]}</span>
+                </button>
+              ))}
+            </>
+          )}
         </nav>
         <div className="sidebar-playlists">
           <p className="nav-heading">{labels.playlists}</p>
@@ -422,7 +448,28 @@ export function App() {
                   </select>
                 </>
               ) : setting === "accounts" ? (
-                <AccountSettings view={account} onError={failed} />
+                <>
+                  <AccountSettings view={account} onError={failed} />
+                  <h2>{labels.ytMusic}</h2>
+                  <label className="setting-switch">
+                    <input
+                      type="checkbox"
+                      checked={ytMusic}
+                      onChange={(event) => {
+                        const on = event.target.checked;
+                        setYtMusic(on);
+                        void window.wave.settings.setYtMusic(on).catch(() => {
+                          setYtMusic(!on);
+                          failed();
+                        });
+                      }}
+                    />
+                    <span>{text.settings.useYTMusic}</span>
+                  </label>
+                  <p className="secondary setting-hint">
+                    {text.settings.searchAlsoFindsSongsOnYouTubeMusic}
+                  </p>
+                </>
               ) : setting === "playback" ? (
                 <PlaybackSettings onError={failed} />
               ) : (
@@ -457,6 +504,14 @@ export function App() {
                   : (row, at) => actions.openMenu({ scope, ids: [row.id] }, row.title, at)
               }
             />
+            {route.kind === "search" && ytMusic && (
+              <YtResults
+                query={route.query ?? ""}
+                onPlay={(videoIds, index) =>
+                  playback.run(window.wave.playback.startYt(videoIds, index))
+                }
+              />
+            )}
           </>
         )}
       </div>

@@ -17,6 +17,24 @@ export interface KotlinMethods {
   readonly readTags: { readonly params: { readonly path: string }; readonly result: SongTags };
   /** YouTube Music's Songs search, its first page (`YtSearchPage.toMap`). */
   readonly search: { readonly params: { readonly query: string }; readonly result: unknown };
+  /**
+   * Where a song's audio is fetched from (`YtStreamResolver`); `fresh` skips the cached address.
+   * The address and headers are the session's: never logged.
+   */
+  readonly resolveStream: {
+    readonly params: { readonly videoId: string; readonly fresh?: boolean };
+    readonly result: {
+      readonly url: string;
+      readonly headers: Readonly<Record<string, string>>;
+      readonly mimeType: string;
+      readonly itag: number;
+      readonly contentLength: number | null;
+      readonly expiresAtMs: number;
+      readonly loudnessDb: number | null;
+    } | null;
+  };
+  /** Turns YT Music on or off in the JVM; its calls then fail with `ERR_YT_DISABLED`. */
+  readonly setYtMusic: { readonly params: { readonly enabled: boolean }; readonly result: null };
 }
 
 export type KotlinMethod = keyof KotlinMethods;

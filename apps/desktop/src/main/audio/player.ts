@@ -7,6 +7,7 @@ import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import type { AudioMeasurement } from "@wave/client/songMeasurements";
 import type { PlaybackStatus, PlaybackEvent } from "../../shared/playback.ts";
+import { YtMusic } from "../yt/ytMusic.ts";
 import type { AudioCall } from "./protocol.ts";
 import {
   AudioEngineError,
@@ -83,4 +84,21 @@ export const playerLayer = (options: AudioSupervisorOptions) =>
       Effect.sync(() => superviseAudio(options)),
       (audio) => Effect.sync(() => audio.dispose()),
     ).pipe(Effect.map(playerOf)),
+  );
+
+/**
+ * The Player that also plays YT Music songs (`yt:` paths): the audio process asks for their
+ * addresses, which YtMusic resolves through the JVM.
+ */
+export const streamingPlayerLayer = (options: Omit<AudioSupervisorOptions, "resolve">) =>
+  Layer.effect(
+    Player,
+    Effect.gen(function* () {
+      const yt = yield* YtMusic;
+      const audio = yield* Effect.acquireRelease(
+        Effect.sync(() => superviseAudio({ ...options, resolve: yt.resolve })),
+        (audio) => Effect.sync(() => audio.dispose()),
+      );
+      return playerOf(audio);
+    }),
   );

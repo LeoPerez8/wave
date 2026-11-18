@@ -25,6 +25,8 @@ import {
 } from "../shared/songActions.ts";
 import { runSongAction, songMenu } from "./library/songActions.ts";
 import type { Appearance } from "../shared/bridge.ts";
+import { ytRow } from "../shared/yt.ts";
+import { VIDEO_ID, YtMusic } from "./yt/ytMusic.ts";
 
 const validScope = (value: unknown): value is BrowseScope => {
   if (typeof value !== "object" || value === null) return false;
@@ -70,7 +72,14 @@ interface Runtime<R> {
 }
 
 /** The services the calls use. */
-export type BridgeServices = Database | Player | Kotlin | DesktopLibrary | Playback | Account;
+export type BridgeServices =
+  | Database
+  | Player
+  | Kotlin
+  | DesktopLibrary
+  | Playback
+  | YtMusic
+  | Account;
 
 const refuse = (call: BridgeCall, why: string) => Effect.fail(new Error(`Refused ${call}: ${why}`));
 
@@ -112,6 +121,21 @@ const playbackCall = <A>(run: (playback: Playback["Service"]) => A | Promise<A>)
     const playback = yield* Playback;
     return yield* Effect.tryPromise({ try: async () => run(playback), catch: (error) => error });
   });
+
+const ytCall = <A>(run: (yt: YtMusic["Service"]) => A | Promise<A>) =>
+  Effect.gen(function* () {
+    const yt = yield* YtMusic;
+    return yield* Effect.tryPromise({ try: async () => run(yt), catch: (error) => error });
+  });
+
+/** At most a queue's worth of video ids. */
+const videoIds = (value: unknown): readonly string[] | undefined =>
+  Array.isArray(value) &&
+  value.length > 0 &&
+  value.length <= 500 &&
+  value.every((id) => typeof id === "string" && VIDEO_ID.test(id))
+    ? (value as string[])
+    : undefined;
 
 const pageCall = <T>(
   call: BridgeCall,
@@ -163,6 +187,16 @@ const createHandlers = (onAppearance: (mode: Appearance) => void): Handlers => {
             p.start(scope, index as number | undefined, shuffle as boolean | undefined),
           )
         : refuse("playback.start", "invalid play context"),
+    "playback.startYt": ([ids, index]) => {
+      const songs = videoIds(ids);
+      return songs !== undefined &&
+        typeof index === "number" &&
+        Number.isSafeInteger(index) &&
+        index >= 0 &&
+        index < songs.length
+        ? playbackCall((p) => p.startYt(songs, index))
+        : refuse("playback.startYt", "invalid songs");
+    },
     "playback.command": ([command]) =>
       validPlaybackCommand(command)
         ? playbackCall((p) => p.command(command))
@@ -210,6 +244,23 @@ const createHandlers = (onAppearance: (mode: Appearance) => void): Handlers => {
       validPlaybackSettings(change)
         ? playbackCall((p) => p.setSettings(change))
         : refuse("settings.setPlayback", "invalid playback settings"),
+    "settings.ytMusic": () => ytCall((yt) => yt.enabled()),
+    "settings.setYtMusic": ([on]) =>
+      typeof on === "boolean"
+        ? ytCall((yt) => yt.setEnabled(on))
+        : refuse("settings.setYtMusic", "invalid setting"),
+    "yt.search": ([query]) =>
+      typeof query === "string" && query.length <= 500
+        ? ytCall(async (yt) => {
+            const found = await yt.search(query);
+            const items = found.songs.map(ytRow);
+            return { status: found.status, songs: { items, offset: 0, total: items.length } };
+          })
+        : refuse("yt.search", "invalid query"),
+    "yt.artwork": ([url]) =>
+      typeof url === "string" && url.length <= 2_000
+        ? ytCall((yt) => yt.artwork(url))
+        : refuse("yt.artwork", "invalid address"),
     "account.view": () => accountCall((a) => a.view()),
     "account.signIn": () => accountCall((a) => a.signIn()),
     "account.cancelSignIn": () => accountCall((a) => a.cancelSignIn()),

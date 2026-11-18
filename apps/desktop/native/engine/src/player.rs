@@ -14,6 +14,7 @@ use std::time::{SystemTime, UNIX_EPOCH};
 
 use crate::decode::Decoder;
 use crate::error::EngineError;
+use crate::stream::Origin;
 
 /// How much decoded audio waits ahead of the output, in seconds.
 const BUFFER_SECONDS: f64 = 0.5;
@@ -327,7 +328,17 @@ impl Player {
         key: Option<String>,
         gain_db: Option<f64>,
     ) -> Result<TrackInfo, EngineError> {
-        let decoder = Decoder::open(path)?;
+        self.load_origin(&Origin::File(path.to_path_buf()), key, gain_db)
+    }
+
+    /// Opens a song from a file or a stream for entry `key`, at `gain_db`, paused at its start.
+    pub fn load_origin(
+        &self,
+        origin: &Origin,
+        key: Option<String>,
+        gain_db: Option<f64>,
+    ) -> Result<TrackInfo, EngineError> {
+        let decoder = Decoder::open_origin(origin)?;
         let mut state = self.shared.lock();
         let id = state.new_id();
         let voice = Voice::new(id, key, decoder, gain_db);
@@ -345,10 +356,15 @@ impl Player {
     /// Lines up the song after the current one, its head decoded now so the move to it never
     /// waits on the file; `None` lines up nothing. A song already fading out goes on.
     pub fn preload(&self, next: Option<Next<'_>>) -> Result<(), EngineError> {
+        self.preload_origin(next.map(|next| (Origin::File(next.path.to_path_buf()), next)))
+    }
+
+    /// As `preload`, the song read from `origin` (a file or a stream) rather than `next.path`.
+    pub fn preload_origin(&self, next: Option<(Origin, Next<'_>)>) -> Result<(), EngineError> {
         let prepared = match next {
-            Some(next) => {
+            Some((origin, next)) => {
                 let mut voice =
-                    Voice::new(0, Some(next.key), Decoder::open(next.path)?, next.gain_db);
+                    Voice::new(0, Some(next.key), Decoder::open_origin(&origin)?, next.gain_db);
                 let decoder = voice.decoder.as_mut().expect("a new voice holds its decoder");
                 while voice.queue.len() < buffer_samples(voice.track) {
                     match decoder.next_chunk()? {

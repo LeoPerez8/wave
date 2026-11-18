@@ -167,7 +167,7 @@ export function PlayerBar({ playback }: { readonly playback: ReturnType<typeof u
       <UndoToast offer={view?.undoOffer ?? null} run={run} />
       <footer className="player-bar" aria-label={labels.player}>
         <div className="player-song">
-          <Artwork hash={song?.artworkHash} />
+          <Artwork hash={song?.artworkHash} url={song?.artworkUrl} />
           <div className="player-metadata">
             <div className="truncate player-title">{song?.title ?? labels.nothingPlaying}</div>
             {song && (
@@ -182,6 +182,8 @@ export function PlayerBar({ playback }: { readonly playback: ReturnType<typeof u
             labels.favorite,
             () => run(window.wave.playback.favorite()),
             song?.favorite,
+            // A YouTube Music song isn't in the Library, so it can't be a favorite.
+            song === null || song.videoId !== undefined,
           )}
         </div>
         <div className="player-center">

@@ -9,6 +9,7 @@ import {
   REAL_SHUFFLE,
   currentEntry,
   movedToFollowing,
+  parseTrackId,
   playSoFar,
   queueUndo,
   queueWrite,
@@ -28,6 +29,7 @@ import {
   type QueueUndo,
   type QueueWrite,
   type Shuffle,
+  type YtAlbumSong,
 } from "@wave/core";
 
 import type { LibraryDatabase } from "./db/database.ts";
@@ -129,6 +131,12 @@ export interface PlaybackSessionDeps {
   /** Whether the file behind a song can be read now. */
   readonly available?: (path: string) => boolean;
   readonly shuffle?: (state: QueueState, command: QueueCommand) => Shuffle;
+  /**
+   * A YT Music song's details, by video id, when the platform streams them. Its queue entry
+   * (`yt:<videoId>`) plays from the path `yt:<videoId>`, which the audio process fetches; an
+   * unknown one is skipped as unplayable. Without it, the queue holds Library songs only.
+   */
+  readonly streamed?: (videoId: string) => YtAlbumSong | undefined;
   /** The snapshot changed. */
   readonly changed?: () => void;
   readonly playEnded?: (play: PlayEvent, byNext: boolean) => void;
@@ -161,11 +169,17 @@ export const createPlaybackSession = async (
   const rowIds = new Map<string, number>();
 
   const identity = (play: PlayEvent) => `${play.trackId}:${play.startedAt}`;
-  const song = (id: string) => selectPlayableSongs(db, [Number(id)])[0];
-  const playable = (id: string) => {
-    const track = song(id);
-    return track?.path ? available(track.path) : false;
+  const streamedSong = (id: string): YtAlbumSong | undefined => {
+    const ref = parseTrackId(id);
+    return ref?.kind === "yt" ? deps.streamed?.(ref.videoId) : undefined;
   };
+  /** Where the audio process reads the song [id] from, when it can now. */
+  const pathOf = (id: string): string | undefined => {
+    if (parseTrackId(id)?.kind === "yt") return streamedSong(id) === undefined ? undefined : id;
+    const path = selectPlayableSongs(db, [Number(id)])[0]?.path;
+    return path && available(path) ? path : undefined;
+  };
+  const playable = (id: string) => pathOf(id) !== undefined;
   const currentKey = () => currentEntry(queue)?.key;
   const plannedKey = () =>
     planned === null || planned.playback === "stop" ? undefined : currentEntry(planned.state)?.key;
@@ -191,7 +205,10 @@ export const createPlaybackSession = async (
     tracker = result.state;
     for (const step of result.steps) {
       if (step.type === "started") {
-        rowIds.set(identity(step.play), recordPlay(db, step.play));
+        rowIds.set(
+          identity(step.play),
+          recordPlay(db, step.play, false, streamedSong(step.play.trackId)),
+        );
         continue;
       }
       const id = rowIds.get(identity(step.play));
@@ -247,8 +264,8 @@ export const createPlaybackSession = async (
     planned = reduce({ type: "trackEnded" });
     const key = plannedKey();
     const entry = key === undefined ? null : currentEntry(planned.state);
-    const path = entry === null ? undefined : song(entry.trackId)?.path;
-    if (!path || entry === null || key === undefined) {
+    const path = entry === null ? undefined : pathOf(entry.trackId);
+    if (path === undefined || entry === null || key === undefined) {
       await audio.preload(undefined, undefined);
       return;
     }
@@ -282,9 +299,9 @@ export const createPlaybackSession = async (
   };
   const loadCurrent = async (positionMs = 0, play = false) => {
     const entry = currentEntry(queue);
-    const track = entry === null ? undefined : song(entry.trackId);
-    if (entry === null || !track?.path || !available(track.path)) throw unavailable();
-    accept(await audio.load(track.path, entry.key, { gainDb: deps.gainDb?.(queue, entry) }));
+    const path = entry === null ? undefined : pathOf(entry.trackId);
+    if (entry === null || path === undefined) throw unavailable();
+    accept(await audio.load(path, entry.key, { gainDb: deps.gainDb?.(queue, entry) }));
     if (positionMs > 0) accept(await audio.seek(positionMs));
     await prepare();
     if (play) accept(await audio.play());
