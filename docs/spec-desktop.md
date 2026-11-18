@@ -358,6 +358,17 @@ The prototype was approved on 2026-11-18 after an Impeccable critique; its decis
   on Wi-Fi") gets a desktop variant ("This computer") in both languages, and strings about Wi-Fi
   and mobile data don't show on the desktop. New strings follow the glossary in `docs/spec.md` ›
   Language.
+- Settings › Appearance has Language: System, English or Português (Brasil), each language under
+  its own name (#1186). It is the account-wide synced setting `settings.language` (`en`,
+  `pt-BR` or `system`, kept as a value so it replaces an earlier choice); signed out it stays on
+  this computer. System follows the computer's preferred languages by Core's
+  `resolveAppLanguage` (`--lang` overrides them for checks). Main decides the language once
+  (Core's `chosenAppLanguage`) and the window asks it, so the window, the tray menu, native
+  dialogs and the close-to-tray notice always agree, and a change or a pulled value applies
+  without a restart. The phone doesn't read the setting yet; it follows Android's language.
+- The Library stores "Unknown Album" and "Unknown Artist" for a missing tag; every list, the bar,
+  Now Playing, the tray and the system media controls show them in the current language (Core's
+  `displayTag`), and Library identity keeps the stored value.
 
 ### Build, release and updates
 
