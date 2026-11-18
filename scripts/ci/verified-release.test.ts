@@ -69,7 +69,7 @@ describe("verified-release.sh", () => {
   it("answers the record of a release whose tag, record and APK agree", () => {
     const { status, output, dir, stderr } = release()();
     assert.equal(status, 0, stderr);
-    assert.equal(output, `file=${join(dir, "out", "wave-1.3.0-ti.provenance.json")}\n`);
+    assert.equal(output, `file=${join(dir, "out")}/wave-1.3.0-ti.provenance.json\n`);
   });
 
   it("fails for a record of another source or an APK it didn't seal", () => {

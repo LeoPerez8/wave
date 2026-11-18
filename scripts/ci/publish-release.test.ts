@@ -79,11 +79,8 @@ describe("publish-release.sh", () => {
     writeFileSync(record, "{}");
     const { status, gh, dir } = publish(SHA, { PROVENANCE_FILE: record });
     assert.equal(status, 0);
-    const asset = join(dir, "wave-1.3.0-ti.provenance.json");
-    assert.ok(
-      gh.includes(`release create v1.3.0-ti ${join(dir, "wave-1.3.0-ti.apk")} ${asset} `),
-      gh,
-    );
+    const asset = `${dir}/wave-1.3.0-ti.provenance.json`;
+    assert.ok(gh.includes(`release create v1.3.0-ti ${dir}/wave-1.3.0-ti.apk ${asset} `), gh);
     assert.equal(readFileSync(asset, "utf8"), "{}");
   });
 
@@ -98,8 +95,8 @@ describe("publish-release.sh", () => {
       RELEASE_NOTES_FILE: join(dir, "notes.md"),
     });
     assert.equal(published.status, 0);
-    const manifest = join(published.dir, "wave-1.3.0-ti.source.json");
-    const directions = join(published.dir, "wave-1.3.0-ti.source.md");
+    const manifest = `${published.dir}/wave-1.3.0-ti.source.json`;
+    const directions = `${published.dir}/wave-1.3.0-ti.source.md`;
     assert.ok(published.gh.includes(` ${manifest} ${directions} `), published.gh);
     assert.equal(readFileSync(manifest, "utf8"), '{"schema":"wave-release-source/1"}');
     const notes = /--notes-file (\S+)/.exec(published.gh)?.[1] ?? "";
