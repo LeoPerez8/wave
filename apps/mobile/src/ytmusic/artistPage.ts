@@ -19,7 +19,7 @@ import { online } from "@/native/waveNative";
 import type { NativeYtSong } from "@/native/waveYtMusic";
 
 import { useArtistPageOpening } from "./artistPageOpening";
-import { artistOpeningRequest } from "./artistOpeningRequest";
+import { artistOpeningRequest } from "@wave/client/ytArtistFetch";
 import { fetchArtist, readArtist, useSavedYtArtist } from "./artistSection";
 import { YtMusicError } from "./YtMusic";
 import { useLoadedLibraryFinder, type FindInLibrary } from "./libraryFinder";

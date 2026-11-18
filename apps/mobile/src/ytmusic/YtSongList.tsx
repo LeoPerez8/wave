@@ -74,7 +74,7 @@ import {
 import { SongList } from "@/songs/SongList";
 import { occurrenceKeys } from "@/songs/songRowState";
 
-import { artistOpeningRequest } from "./artistOpeningRequest";
+import { artistOpeningRequest } from "@wave/client/ytArtistFetch";
 import { askYtMusic } from "./askYtMusic";
 import {
   useInLibraryBetweenFrames,

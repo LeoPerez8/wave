@@ -21,7 +21,7 @@ import { useSearchOnlineAlways } from "@/settings/searchOnline";
 
 import { useYtArtistAnswer } from "./artistSection";
 import { albumOpening } from "./albumOpening";
-import { artistOpeningRequest } from "./artistOpeningRequest";
+import { artistOpeningRequest } from "@wave/client/ytArtistFetch";
 import { askYtMusic } from "./askYtMusic";
 import { useLoadedLibraryFinder } from "./libraryFinder";
 import { useLineToggle } from "./OnlineToggle";
