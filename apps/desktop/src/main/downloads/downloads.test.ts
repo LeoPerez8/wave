@@ -113,7 +113,10 @@ const setup = (change: Partial<DownloadsDeps> = {}) => {
     },
     missingSongs: (ids) =>
       ids === undefined ? missing : missing.filter((track) => ids.includes(track.id)),
-    album: (albumId) => (albumId === 7 ? { title: "Chega de Saudade", missing: [42] } : null),
+    list: (list) =>
+      list.kind === "album" && list.id === 7
+        ? { ids: [41, 42, 43], origin: { kind: "album", id: "7", name: "Chega de Saudade" } }
+        : null,
     ytSong: (videoId) => (videoId === song.videoId ? song : undefined),
     ytMusicOn: () => true,
     catalogue: catalogueOf("en", "desktop"),
@@ -196,16 +199,22 @@ test("a missing song clicked is downloaded into its Track, from its video when i
   downloads.dispose();
 });
 
-test("an album's Download Missing Songs asks for its songs under the album", async () => {
+test("an album's Download Missing Songs asks for its missing songs under the album", async () => {
   const { journal, downloads } = setup();
-  assert.deepEqual(downloads.albumView(7)?.actions, ["downloadAll"]);
-  await downloads.missingAction("downloadAll", 7);
+  const album = { kind: "album", id: 7 } as const;
+  assert.deepEqual(downloads.listView(album)?.actions, ["downloadAll"]);
+  assert.equal(downloads.listView(album)?.count, 2);
+  await downloads.missingAction("downloadAll", album);
+  const origin = { kind: "album", id: "7", name: "Chega de Saudade" };
   assert.deepEqual(
     requests(journal).map(({ song, origin }) => [song.videoId, origin]),
-    [["missing:42", { kind: "album", id: "7", name: "Chega de Saudade" }]],
+    [
+      ["missing:41", origin],
+      ["missing:42", origin],
+    ],
   );
-  assert.deepEqual(downloads.albumView(7)?.actions, ["cancel"]);
-  assert.equal(downloads.albumView(8), null);
+  assert.deepEqual(downloads.listView(album)?.actions, ["cancel"]);
+  assert.equal(downloads.listView({ kind: "album", id: 8 }), null);
   downloads.dispose();
 });
 

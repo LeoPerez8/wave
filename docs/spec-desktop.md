@@ -236,8 +236,13 @@ ADR: `docs/adr/0004-kotlin-on-a-bundled-jvm.md`.
 - The desktop is one more device with its own device id. A synced entry is the local Track with
   the same recording key, as between phones.
 - An account song with no file here is a missing song, as on the phone: dimmed, a click
-  downloads it through Core's `downloadSource`, with Download All and an album's Download
-  Missing Songs.
+  downloads it through Core's `downloadSource`, with Download All and Download Missing Songs on
+  album, artist, genre and playlist pages, with how many are missing (an album's in album order
+  and under the album, a playlist's in playlist order and under the playlist).
+- Play and Shuffle on a list with missing songs play what can play (Core's `listPlay`): the
+  songs with a file and, with YT Music on, the missing songs downloaded from a YouTube Music
+  video, streamed in their place. A toast counts the ones left out and offers Download Missing
+  Songs; when nothing can play, it says so and offers the same.
 - Plays on the computer count in the account's history and stats with a new play `source` value,
   `desktop`. A phone release and a sync Worker that accept `desktop` go out first; the desktop
   sends plays only after that. Older phones that drop an unknown source must already accept it.

@@ -42,7 +42,8 @@ import expo.modules.wavenative.yt.YtAudioStreams
  * - `setYtMusic` `{enabled}`: YT Music on or off (Settings), as the phone's `setEnabled`.
  * - `tags.writeSong`: Fix Songs' tag write, the phone's `writeLyricsAndGenre`.
  * - `downloads.*`, `download.*`, `soulseek.*`: downloads ([DesktopDownloads], [downloadCall]).
- * - `artist` `{browseId}`, `album` `{browseId}`, `searchArtists` `{query}`, `songRadio` `{videoId}`,
+ * - `artist` `{browseId}`, `album` `{browseId}`, `searchArtists` `{query}`, `searchAlbums`
+ *   `{query}`, `songRadio` `{videoId}`,
  *   `artistRadio` `{browseId}`, `startedRadio` `{playlistId, params?}`, `radioMore`
  *   `{continuation}` and `related` `{videoId}`: YouTube Music's pages as the phone's
  *   `WaveYtMusic` and `WaveYtDownloads` modules answer them (Discover, artist pages, the Magic
@@ -199,6 +200,7 @@ class WaveDesktop(
       "artist" -> jsonOf(pages.artist(params.browseId()).toMap())
       "album" -> jsonOf(pages.album(params.browseId()).toMap())
       "searchArtists" -> jsonOf(yt.searchArtists(params.string("query")).map { it.toMap() })
+      "searchAlbums" -> jsonOf(yt.searchAlbums(params.string("query")).map { it.toMap() })
       "songRadio" -> jsonOf(pages.songRadio(params.videoId()).toMap())
       "artistRadio" -> jsonOf(pages.artistRadio(params.browseId()).toMap())
       "startedRadio" -> jsonOf(
