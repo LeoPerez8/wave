@@ -101,7 +101,8 @@ const revision = (repository: string, sha: string): Revision => ({
   tree: `https://github.com/${repository}/tree/${sha}`,
 });
 
-// The release tag rules of apps/mobile/plugins/appVersion.ts, which CI can't import (it's app code).
+// A copy of apps/mobile/plugins/appVersion.ts's release tag rules: TypeScript reads apps/mobile as
+// CommonJS, so scripts/ci can't import them. release-source.test.ts pins the copy to the original.
 const VERSION = /^(\d+)\.(\d{1,2})\.(\d{1,2})(?:-ti)?$/;
 
 /** Android's versionCode for a version, as app.config.ts derives it. */

@@ -12,9 +12,15 @@ const SHA = "a".repeat(40);
 
 /**
  * Runs the script for a branch push, with a `git` that says where the tag is and a stub `gh`.
- * `existing` is the record of a GitHub Release the tag already has ("" for one without a record).
+ * `existing` is the record of a GitHub Release the tag already has ("" for one without a record);
+ * `fail` makes GitHub fail to list that release's assets or to download its record.
  */
-const publish = (tagged: string, extra: Record<string, string> = {}, existing?: string) => {
+const publish = (
+  tagged: string,
+  extra: Record<string, string> = {},
+  existing?: string,
+  fail: "" | "list" | "download" = "",
+) => {
   const dir = mkdtempSync(join(tmpdir(), "wave-release-"));
   const script = (name: string, body: string) => {
     writeFileSync(join(dir, name), `#!/bin/sh\n${body}\n`);
@@ -27,8 +33,15 @@ const publish = (tagged: string, extra: Record<string, string> = {}, existing?: 
     existing === undefined
       ? `case "$2" in view) exit 1 ;; esac; echo "gh $*" >> "${dir}/gh.log"`
       : `case "$2" in
-  view) exit 0 ;;
+  view)
+    case "$*" in *--json*)
+      ${fail === "list" ? 'echo "HTTP 502" >&2; exit 1' : ":"}
+      echo wave-1.3.0-ti.apk
+      [ -s "${dir}/existing.json" ] && echo wave-1.3.0-ti.provenance.json ;;
+    esac
+    exit 0 ;;
   download)
+    ${fail === "download" ? 'echo "HTTP 502" >&2; exit 1' : ":"}
     [ -s "${dir}/existing.json" ] || { echo "no assets match the file pattern" >&2; exit 1; }
     while [ $# -gt 0 ]; do [ "$1" = "--dir" ] && out="$2"; shift; done
     mkdir -p "$out" && cp "${dir}/existing.json" "$out/wave-1.3.0-ti.provenance.json"
@@ -122,10 +135,20 @@ describe("publish-release.sh over an existing release", () => {
   const record = (source: string) =>
     JSON.stringify({ schema: "wave-release-provenance/1", source });
 
-  it("replaces the APK of a re-run from the same source", () => {
-    const { status, gh } = publish(SHA, {}, record(SHA));
+  it("replaces the APK of a re-run from the same source and rewrites its notes", () => {
+    const sources = mkdtempSync(join(tmpdir(), "wave-source-"));
+    writeFileSync(join(sources, "directions.md"), "## Source for Wave 1.3.0-ti\n");
+    const { status, gh } = publish(
+      SHA,
+      { SOURCE_DIRECTIONS_FILE: join(sources, "directions.md") },
+      record(SHA),
+    );
     assert.equal(status, 0);
     assert.match(gh, /release upload v1\.3\.0-ti .* --clobber/);
+    const edit = /release edit v1\.3\.0-ti (.*)/.exec(gh)?.[1] ?? "";
+    assert.match(edit, /--prerelease --latest=false/);
+    const notes = /--notes-file (\S+)/.exec(edit)?.[1] ?? "";
+    assert.match(readFileSync(notes, "utf8"), /## Source for Wave 1\.3\.0-ti/);
   });
 
   it("leaves a release built from another source as it is, and fails", () => {
@@ -136,10 +159,27 @@ describe("publish-release.sh over an existing release", () => {
     assert.equal(output, "");
   });
 
-  it("replaces an APK published before records, as before", () => {
-    const { status, gh } = publish(SHA, {}, "");
-    assert.equal(status, 0);
-    assert.match(gh, /release upload v1\.3\.0-ti/);
+  it("keeps the APK of a release published before records, and fails saying so", () => {
+    const { status, gh, output, stdout } = publish(SHA, {}, "");
+    assert.notEqual(status, 0);
+    assert.match(stdout, /::error::.*before provenance records/);
+    assert.doesNotMatch(gh, /upload|edit|create/);
+    assert.equal(output, "");
+  });
+
+  it("fails, replacing nothing, when GitHub can't say what the release holds", () => {
+    const { status, gh, output } = publish(SHA, {}, record(SHA), "list");
+    assert.notEqual(status, 0);
+    assert.doesNotMatch(gh, /upload|edit|create/);
+    assert.equal(output, "");
+  });
+
+  it("fails, replacing nothing, when the release's record can't be downloaded", () => {
+    const { status, gh, output, stdout } = publish(SHA, {}, record(SHA), "download");
+    assert.notEqual(status, 0);
+    assert.match(stdout, /::error::.*couldn't be downloaded/);
+    assert.doesNotMatch(gh, /upload|edit|create/);
+    assert.equal(output, "");
   });
 });
 

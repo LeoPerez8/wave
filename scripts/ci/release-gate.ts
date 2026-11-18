@@ -243,20 +243,26 @@ const NO_RUN: Run = { repository: "", id: 0, attempt: 0, event: "", ref: "" };
 const sha256 = (data: string | Buffer) => createHash("sha256").update(data).digest("hex");
 
 /**
- * A file's SHA-256, or a folder's: the SHA-256 of its files' relative paths and SHA-256s, one
- * `<path>\0<sha256>\n` line each (a NUL between them), sorted by path.
+ * A folder's digest from its files' SHA-256s, by relative path: the SHA-256 of one
+ * `<path>\0<sha256>\n` line per file (a NUL between them), sorted by path.
  */
+export const digestOfFiles = (files: Readonly<Record<string, string>>): string =>
+  sha256(
+    Object.keys(files)
+      .sort()
+      .map((file) => `${file}\0${files[file]}\n`)
+      .join(""),
+  );
+
+/** A file's SHA-256, or a folder's (`digestOfFiles` of its files). */
 export const digestOf = (path: string): string => {
   if (!statSync(path).isDirectory()) return sha256(readFileSync(path));
   const files = (prefix: string): string[] =>
     readdirSync(join(path, prefix), { withFileTypes: true }).flatMap((entry) =>
       entry.isDirectory() ? files(`${prefix}${entry.name}/`) : [`${prefix}${entry.name}`],
     );
-  return sha256(
-    files("")
-      .sort()
-      .map((file) => `${file}\0${sha256(readFileSync(join(path, file)))}\n`)
-      .join(""),
+  return digestOfFiles(
+    Object.fromEntries(files("").map((file) => [file, sha256(readFileSync(join(path, file)))])),
   );
 };
 
@@ -281,10 +287,10 @@ export const verifyPublished = (
   const provenance = value as Provenance;
   if (provenance.releaseTag !== tag)
     refuse(`the record is ${provenance.releaseTag}'s, not ${tag}'s.`);
-  if (!SHA.test(commit) || provenance.source !== commit)
-    refuse(
-      `${tag} is on ${commit.slice(0, 7)}, but its record names ${provenance.source.slice(0, 7)}.`,
-    );
+  const source: unknown = provenance.source;
+  const named = typeof source === "string" && SHA.test(source) ? source.slice(0, 7) : "no commit";
+  if (!SHA.test(commit) || source !== commit)
+    refuse(`${tag} is on ${commit.slice(0, 7)}, but its record names ${named}.`);
   const sealed = provenance.artifact.signedSha256 ?? "";
   if (!SHA256.test(sealed)) refuse(`${tag}'s record isn't sealed, so its release never signed it.`);
   if (signedSha256 !== undefined && signedSha256 !== sealed)

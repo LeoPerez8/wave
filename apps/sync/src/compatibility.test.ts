@@ -425,3 +425,61 @@ test("a session unused for 90 days is counted as expired, apart from the valid o
   });
   await pull(service, phone);
 });
+
+test("an account holding more provider-usage rows than its three categories is flagged; three is not", async () => {
+  const service = await harness();
+  await service.signIn();
+  await service.signIn({ sub: "google-sub-2", email: "bia@example.com" });
+  const accounts = await service.db.execute("SELECT id FROM accounts ORDER BY created_at, rowid");
+  const [first, second] = accounts.rows.map((row) => String(row.id));
+  // Three categories for account-1, as the service counts them; four for account-2, from before.
+  const day = Math.floor(service.now / DAY_MS);
+  for (const [account, upstream] of [
+    [first, "genius"],
+    [first, "ticketmaster:attractions"],
+    [first, "ticketmaster:events"],
+    [second, "genius"],
+    [second, "ticketmaster:attractions"],
+    [second, "ticketmaster:events"],
+    [second, "retired-provider"],
+  ]) {
+    await service.db.execute({
+      sql: "INSERT INTO upstream_usage (account_id, upstream, day, count) VALUES (?, ?, ?, 1)",
+      args: [account!, upstream!, day],
+    });
+  }
+  const report = await compatibilityReport({
+    db: service.db,
+    environment: "local-sync",
+    source: "fixture",
+    now: service.now,
+    installedClient: {
+      "sign-in": "passed",
+      "push-pull": "passed",
+      "library-preserved": "passed",
+      "sessions-preserved": "passed",
+    },
+  });
+  assert.equal(report.result, "incompatible");
+  assert.deepEqual(report.findings, [
+    { code: "provider-usage-over-limit", account: "account-2", count: 4, limit: 3 },
+  ]);
+});
+
+test("a usage warning for the current month is counted inside the days kept", async () => {
+  const service = await harness();
+  service.now = Date.UTC(2026, 10, 18, 12);
+  for (const period of ["2026-09", "2026-10", "2026-11"]) {
+    await service.db.execute({
+      sql: "INSERT INTO usage_warnings (name, period, warned_at) VALUES ('monthly', ?, 0)",
+      args: [period],
+    });
+  }
+  const report = await compatibilityReport({
+    db: service.db,
+    environment: "local-sync",
+    source: "fixture",
+    now: service.now,
+  });
+  assert.deepEqual(report.inventory?.usageWarnings, { retained: 3, outsideWindow: 1, limit: 60 });
+});

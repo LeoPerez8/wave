@@ -1,6 +1,14 @@
 import assert from "node:assert/strict";
 import { spawnSync } from "node:child_process";
-import { chmodSync, mkdtempSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
+import {
+  chmodSync,
+  mkdtempSync,
+  mkdirSync,
+  readFileSync,
+  readdirSync,
+  statSync,
+  writeFileSync,
+} from "node:fs";
 import { createHash, createVerify, generateKeyPairSync } from "node:crypto";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -1096,7 +1104,18 @@ esac
     };
     const recordFile = (version: string) => join(bin, `wave-${version}.provenance.json`);
     const stored = (key: string) => readFileSync(join(bin, "r2/wave-updates", key), "utf8");
-    return { run, publishScript, stored, recordFile };
+    /** Leaves [version]'s update as a publish before records did: no list of exported files. */
+    const unrecorded = (version: string) => {
+      const root = join(bin, "r2/wave-updates");
+      for (const name of readdirSync(root, { recursive: true }) as string[]) {
+        const file = join(root, name);
+        if (!name.endsWith(".json") || !statSync(file).isFile()) continue;
+        const { exported: _, ...update } = JSON.parse(readFileSync(file, "utf8"));
+        if (update.extra?.expoClient?.version === version)
+          writeFileSync(file, JSON.stringify(update));
+      }
+    };
+    return { run, publishScript, stored, recordFile, unrecorded };
   };
   const key = { UPDATES_SIGNING_KEY: shipped.privateKey };
 
@@ -1183,6 +1202,30 @@ esac
       // 1.0.0-ti was published with its files listed, so it still needs its record.
       assert.equal(allowed.status, 1);
       assert.match(allowed.output, /published with a record/);
+    });
+
+    it("refuses, promoting nothing, when the record it was given can't be read", () => {
+      const r2 = published();
+      r2.unrecorded("1.0.0-ti");
+      const latest = r2.stored(latestKey("ti", "native-a"));
+      const missing = r2.run("promote.ts", [], {
+        ...key,
+        ...toFirst,
+        WAVE_ALLOW_UNRECORDED: "true",
+        WAVE_PROVENANCE_FILE: `${r2.recordFile("1.0.0-ti")}.gone`,
+      });
+      assert.equal(missing.status, 1);
+      assert.match(missing.output, /::error::.*provenance record.*couldn't be read/);
+      assert.doesNotMatch(missing.calls, /put/);
+      assert.equal(r2.stored(latestKey("ti", "native-a")), latest);
+
+      // With no record named, the transition still takes an update published before records.
+      const allowed = r2.run("promote.ts", [], {
+        ...key,
+        ...toFirst,
+        WAVE_ALLOW_UNRECORDED: "true",
+      });
+      assert.equal(allowed.status, 0, allowed.output);
     });
 
     it("gets the key from the workflow that runs it", () => {

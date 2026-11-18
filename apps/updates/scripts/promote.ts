@@ -2,11 +2,12 @@
 //   node apps/updates/scripts/promote.ts
 // Env: CLOUDFLARE_API_TOKEN, CLOUDFLARE_ACCOUNT_ID, UPDATES_SIGNING_KEY, WAVE_UPDATE_CHANNEL,
 // WAVE_UPDATE_VERSION, WAVE_PROVENANCE_FILE (the release's sealed record, which the workflow
-// checked against its tag; unset or missing when the release has none) and WAVE_ALLOW_UNRECORDED
+// checked against its tag; unset or empty when the release has none, and a record named but
+// unreadable stops it) and WAVE_ALLOW_UNRECORDED
 // ("true": the owner's transition for an update published before records). Anything that stops it
 // fails the run and says why as an error annotation. A promotion is a new manifest, so with no key
 // it stops rather than promote something unsigned.
-import { existsSync, readFileSync } from "node:fs";
+import { readFileSync } from "node:fs";
 import { isChannel } from "../src/layout.ts";
 import { promoteUpdate } from "../src/promote.ts";
 import { wranglerBucket } from "./bucket.ts";
@@ -40,11 +41,15 @@ if (!token || !account) {
 } else if (version === "") {
   stop("No version given.");
 } else {
+  let provenance: unknown;
+  if (provenanceFile) {
+    try {
+      provenance = JSON.parse(readFileSync(provenanceFile, "utf8"));
+    } catch {
+      stop(`${version}'s provenance record couldn't be read, so nothing was promoted.`);
+    }
+  }
   try {
-    const provenance: unknown =
-      provenanceFile && existsSync(provenanceFile)
-        ? JSON.parse(readFileSync(provenanceFile, "utf8"))
-        : undefined;
     const id = await promoteUpdate({
       channel,
       version,

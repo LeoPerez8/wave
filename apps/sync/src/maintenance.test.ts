@@ -96,3 +96,35 @@ describe("the hourly maintenance", () => {
     assert.equal(await sessionCount(service), 3);
   });
 });
+
+describe("the hourly maintenance: usage warnings by month", () => {
+  /** The periods of the warnings [service] still holds, after one run at [at]. */
+  const keptAfterRun = async (at: number, periods: readonly string[]) => {
+    const service = await harness();
+    for (const period of periods) {
+      await service.db.execute({
+        sql: "INSERT INTO usage_warnings (name, period, warned_at) VALUES ('monthly', ?, 0)",
+        args: [period],
+      });
+    }
+    service.now = at;
+    await maintain(service);
+    const { rows } = await service.db.execute("SELECT period FROM usage_warnings ORDER BY period");
+    return rows.map((row) => String(row.period));
+  };
+
+  test("keeps a month while any of its days is today or one of the 29 before", async () => {
+    // Kept days: 2026-10-20 to 2026-11-18.
+    assert.deepEqual(
+      await keptAfterRun(Date.UTC(2026, 10, 18, 12), ["2026-09", "2026-10", "2026-11"]),
+      ["2026-10", "2026-11"],
+    );
+  });
+
+  test("forgets a month once its last day is older than the days kept", async () => {
+    // Kept days: 2026-11-01 to 2026-11-30.
+    assert.deepEqual(await keptAfterRun(Date.UTC(2026, 10, 30, 12), ["2026-10", "2026-11"]), [
+      "2026-11",
+    ]);
+  });
+});

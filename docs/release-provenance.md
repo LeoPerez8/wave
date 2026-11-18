@@ -119,10 +119,11 @@ The over-the-air update is published only when `release-gate.ts verify-update` m
 downloaded update folder to `updateSha256`. A mismatch or an empty digest skips the update and
 leaves the GitHub Release as published, like the other post-release steps.
 
-A re-run of a tag whose GitHub Release already exists replaces its APK and record only when the
-record there names the same source. One built from another commit stays as it is and the step
-fails. A release from before records has nothing to compare, so a re-run replaces its APK as it
-always did.
+A re-run of a tag whose GitHub Release already exists replaces its APK and record, and rewrites
+its notes, only when the record there names the same source. One built from another commit stays
+as it is and the step fails. So does a release from before records that holds an APK: nothing
+shows that APK came from this run's source, so the step says so and replaces nothing. A listing
+or download GitHub can't answer fails the step too.
 
 ## Trusting a published release
 

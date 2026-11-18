@@ -37,6 +37,30 @@ const databaseWith = async (accounts: number): Promise<string> => {
   return url;
 };
 
+/** An empty database file's URL, deleted when the test file ends. */
+const emptyDatabase = (): string => {
+  const dir = mkdtempSync(join(tmpdir(), "wave-sync-rollout-"));
+  after(() => {
+    try {
+      rmSync(dir, { recursive: true, force: true });
+    } catch {
+      // Windows can hold the file a moment after closing; it's a temp dir.
+    }
+  });
+  return `file:${join(dir, "sync.db").replaceAll("\\", "/")}`;
+};
+
+/** The migrations [url]'s database has run. */
+const migrationsRun = async (url: string): Promise<string[]> => {
+  const db = createClient({ url });
+  try {
+    const result = await db.execute("SELECT id FROM migrations ORDER BY id");
+    return result.rows.map((row) => String(row.id));
+  } finally {
+    db.close();
+  }
+};
+
 /** Runs the deploy's migration step against [url], as `pnpm run deploy` does before `wrangler deploy`. */
 const runDeployMigration = (url: string) => {
   const { TURSO_AUTH_TOKEN: _, ...env } = process.env;
@@ -65,5 +89,35 @@ describe("the deploy's account-capacity stop", () => {
     } finally {
       db.close();
     }
+  });
+
+  test("a stopped deploy leaves the schema as it was: no pending migration runs", async () => {
+    const url = emptyDatabase();
+    const db = createClient({ url });
+    try {
+      await migrate(db, { until: "0012_upstream_usage" });
+      for (let n = 1; n <= 11; n++) {
+        await db.execute({
+          sql: "INSERT INTO accounts (id, google_sub, email, created_at) VALUES (?, ?, ?, ?)",
+          args: [`account-${n}`, `sub-${n}`, `p${n}@example.com`, n],
+        });
+      }
+    } finally {
+      db.close();
+    }
+    const before = await migrationsRun(url);
+
+    const run = runDeployMigration(url);
+    assert.equal(run.status, 1);
+    assert.match(run.stderr, /11 accounts/);
+    assert.deepEqual(await migrationsRun(url), before);
+    assert.ok(!before.includes("0013_usage_warnings"));
+  });
+
+  test("a database with no tables yet gets every migration", async () => {
+    const url = emptyDatabase();
+    const run = runDeployMigration(url);
+    assert.equal(run.status, 0, run.stderr);
+    assert.ok((await migrationsRun(url)).includes("0013_usage_warnings"));
   });
 });
