@@ -1,4 +1,4 @@
-import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { copyFileSync, mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
@@ -20,6 +20,10 @@ import type { WaveBridge } from "../src/shared/bridge.ts";
  */
 const appFolder = join(import.meta.dirname, "..");
 const text = catalogueOf("en", "desktop");
+const fixtures = join(
+  appFolder,
+  "../../packages/kotlin-shared/src/testFixtures/resources/fixtures",
+);
 const SONGS = [
   { title: "Pink Moon", artist: "Nick Drake", album: "Pink Moon" },
   { title: "Road", artist: "Nick Drake", album: "Pink Moon" },
@@ -143,6 +147,39 @@ test("Search finds, plays and remembers as on the phone", async () => {
     await expect(again.getByTestId("search-empty")).toBeVisible();
   } finally {
     await app.close().catch(() => {});
+    rmSync(data, { recursive: true, force: true });
+  }
+});
+
+// A sidecar .lrc: the lyrics fixtures are short and untagged, so the scan skips them as voice
+// notes, as the phone does. The JVM's embedded lyrics are covered by WaveDesktopTest.
+test("a scanned song is found by a phrase of its lyrics", async () => {
+  const data = mkdtempSync(join(tmpdir(), "wave-e2e-search-lyrics-"));
+  const music = join(data, "Music");
+  mkdirSync(music);
+  copyFileSync(join(fixtures, "tagged.flac"), join(music, "tagged.flac"));
+  writeFileSync(join(music, "tagged.lrc"), "[00:00.50]Olá, onda\n[00:01.00]Second line\n");
+  const app = await electron.launch({
+    args: [appFolder, "--lang=en-US"],
+    env: { ...process.env, WAVE_DATA_DIR: data, WAVE_MUSIC_DIR: music },
+  });
+  try {
+    const page = await app.firstWindow();
+    await expect
+      .poll(
+        () =>
+          page.evaluate(
+            async () =>
+              (await (window as unknown as { wave: WaveBridge }).wave.library.scanStatus()).status,
+          ),
+        { timeout: 30_000 },
+      )
+      .toBe("done");
+    await page.getByRole("searchbox", { name: text.desktopLayout.search }).fill("second line");
+    await expect(page.getByTestId("search-lyric")).toHaveCount(1);
+    await expect(page.getByTestId("search-lyric").locator("mark")).toHaveText(["Second", "line"]);
+  } finally {
+    await app.close();
     rmSync(data, { recursive: true, force: true });
   }
 });
