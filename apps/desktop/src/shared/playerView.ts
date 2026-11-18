@@ -54,3 +54,13 @@ export type PlaybackCommand =
       readonly before: string | null;
       readonly after: string | null;
     };
+
+/**
+ * What a list's Play, Shuffle or a tap did (Core's `listPlay`): it plays, streaming [streamed]
+ * missing songs and leaving [leftOut] out; nothing can play, with [missing] songs to download;
+ * or the tapped missing song downloads, to play once it's in.
+ */
+export type PlayStart =
+  | { readonly kind: "playing"; readonly streamed: number; readonly leftOut: number }
+  | { readonly kind: "nothing"; readonly missing: number }
+  | { readonly kind: "downloading" };

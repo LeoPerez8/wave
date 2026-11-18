@@ -17,7 +17,9 @@ import { AccountSettings, SignInInvitation } from "./AccountSettings.tsx";
 import { PlaybackSettings } from "./PlaybackSettings.tsx";
 import { WindowSettings } from "./WindowSettings.tsx";
 import { SystemMediaSession } from "./SystemMediaSession.tsx";
-import { AlbumDownloadButton } from "./AlbumDownloadButton.tsx";
+import { ListDownloadButton } from "./ListDownloadButton.tsx";
+import { MISSING_SONGS_LISTS, type MissingSongsList } from "../../shared/downloads.ts";
+import type { PlayStart } from "../../shared/playerView.ts";
 import { DownloadSettings } from "./DownloadSettings.tsx";
 import { DownloadsPage } from "./DownloadsPage.tsx";
 import { downloadPercent, useDownloads } from "./useDownloads.ts";
@@ -362,6 +364,35 @@ export function App() {
     else if (row.unavailable) setError(text.desktopLibrary.driveDisconnected);
     else playback.run(window.wave.playback.start(scope, index));
   };
+  /** The page whose missing songs download together, when this is one. */
+  const missingList: MissingSongsList | undefined =
+    scope.id !== undefined && (MISSING_SONGS_LISTS as readonly string[]).includes(scope.kind)
+      ? { kind: scope.kind as MissingSongsList["kind"], id: scope.id }
+      : undefined;
+  /** Play or Shuffle from the hero; says what it couldn't play, and offers the download. */
+  const playList = (shuffle: boolean) => {
+    const list = missingList;
+    const offer =
+      list === undefined
+        ? undefined
+        : {
+            label: text.itemActions.labels.downloadMissingSongs,
+            run: () => download(window.wave.downloads.missingAction("downloadAll", list)),
+          };
+    const said = (start: PlayStart) => {
+      if (start.kind === "nothing")
+        notify(
+          start.missing === 0
+            ? text.desktopLibrary.driveDisconnected
+            : text.desktopLibrary.nothingToPlay,
+          undefined,
+          start.missing === 0 ? undefined : offer,
+        );
+      else if (start.kind === "playing" && start.leftOut > 0)
+        notify(text.desktopLibrary.leftOut(start.leftOut), undefined, offer);
+    };
+    playback.run(window.wave.playback.start(scope, undefined, shuffle).then(said));
+  };
   const searchFor = (query: string) => {
     setQuery(query);
     if (route.kind !== "search") go({ kind: "search", query });
@@ -369,6 +400,26 @@ export function App() {
       setHistory((previous) =>
         previous.map((r, i) => (i === position ? { kind: "search", query } : r)),
       );
+  };
+  /**
+   * Where a streamed song's artist and album names lead (docs/spec-desktop.md, story 41): their
+   * YouTube Music pages, over whatever shows, Now Playing included; Back comes back here.
+   */
+  const ytLinks = {
+    onArtist: (name: string) => {
+      void window.wave.yt
+        .findArtist(name)
+        .then(({ browseId }) => {
+          if (browseId === null) return setError(text.library.couldntOpenArtist);
+          setNowPlaying(false);
+          go({ kind: "ytArtist", id: browseId });
+        })
+        .catch(() => setError(text.library.couldntOpenArtist));
+    },
+    onAlbum: (browseId: string) => {
+      setNowPlaying(false);
+      go({ kind: "ytAlbum", id: browseId });
+    },
   };
   /** Keeps the search in Recent searches, as the phone does on submit or opening a result. */
   const rememberSearch = () => {
@@ -546,6 +597,10 @@ export function App() {
             <Artwork
               large
               hash={hero.artworkHash}
+              kind={
+                route.kind === "artist" ? "artist" : route.kind === "album" ? "album" : undefined
+              }
+              id={hero.id}
               artist={route.kind === "artist"}
               {...(route.kind === "playlist"
                 ? { playlist: route.id, image: hero.imageKey ?? null }
@@ -566,19 +621,17 @@ export function App() {
                   .join(" · ")}
               </p>
               <div className="hero-actions">
-                <button onClick={() => playback.run(window.wave.playback.start(scope, 0, false))}>
+                <button onClick={() => playList(false)}>
                   <Icon name="play" size={16} />
                   {labels.play}
                 </button>
-                <button
-                  onClick={() => playback.run(window.wave.playback.start(scope, undefined, true))}
-                >
+                <button onClick={() => playList(true)}>
                   <Icon name="shuffle" size={16} />
                   {labels.shuffle}
                 </button>
-                {route.kind === "album" && route.id !== undefined && (
-                  <AlbumDownloadButton
-                    albumId={route.id}
+                {missingList !== undefined && (
+                  <ListDownloadButton
+                    list={missingList}
                     revision={`${scan?.revision}:${account?.revision}:${downloads?.progress}:${downloads?.failed}`}
                     onError={failed}
                   />
@@ -754,6 +807,20 @@ export function App() {
             }}
             onYtDownload={(videoId) => download(window.wave.downloads.yt([videoId]))}
             onYtMenu={ytSongMenu}
+            ytLinks={{
+              onArtist: (name) => {
+                rememberSearch();
+                ytLinks.onArtist(name);
+              },
+              onAlbum: (browseId) => {
+                rememberSearch();
+                ytLinks.onAlbum(browseId);
+              },
+              onArtistPage: (browseId) => {
+                rememberSearch();
+                go({ kind: "ytArtist", id: browseId });
+              },
+            }}
             revision={revision}
             onOpen={(next) => {
               rememberSearch();
@@ -837,6 +904,7 @@ export function App() {
         <NowPlaying
           view={playback.view}
           run={playback.run}
+          links={ytLinks}
           onClose={() => setNowPlaying(false)}
           actions={nowPlayingActions}
         />
@@ -847,6 +915,7 @@ export function App() {
         onPanel={panel.toggle}
         onNowPlaying={() => setNowPlaying(true)}
         onMenu={playingMenu}
+        links={ytLinks}
       />
       <Links
         onPlaying={linkPlaying}

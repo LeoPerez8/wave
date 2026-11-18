@@ -35,6 +35,10 @@ export interface BrowseRow {
   readonly unavailable: boolean;
   /** A YouTube Music song's video id; its `id` is then 0 and it has no Library row. */
   readonly videoId?: string;
+  /** A YouTube Music song's artists, each one, in order; [artist] joins them. */
+  readonly artists?: readonly string[];
+  /** A YouTube Music song's album page (its browse id), or null when YouTube Music names none. */
+  readonly albumId?: string | null;
   /** A YouTube Music song's cover, fetched through `yt.artwork`. */
   readonly artworkUrl?: string | null;
   /** A playlist's own image, fetched through `playlists.image`; changes when the image does. */

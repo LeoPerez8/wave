@@ -234,7 +234,7 @@ export function QueuePanel({
       >
         {row && (
           <>
-            <Artwork hash={row.artworkHash} url={row.artworkUrl} />
+            <Artwork kind="song" id={row.id} hash={row.artworkHash} url={row.artworkUrl} />
             <span className="queue-text">
               <span className="truncate">{row.title}</span>
               <span className="truncate secondary">{row.artist}</span>
