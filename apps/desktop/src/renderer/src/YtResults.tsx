@@ -10,7 +10,7 @@ import {
   type YtSearchLibrary,
   type YtSong,
 } from "@wave/core";
-import { useEffect, useMemo, useReducer, useState, type ReactNode } from "react";
+import { useEffect, useMemo, useReducer, useState, type MouseEvent, type ReactNode } from "react";
 import type { BrowseRow } from "../../shared/browse.ts";
 import type { YtSearchPage } from "../../shared/yt.ts";
 import { Icon } from "./Icon.tsx";
@@ -75,6 +75,7 @@ export function YtResults({
   libraryHasResults,
   onPlay,
   onDownload,
+  onMenu,
   links,
   children,
 }: {
@@ -86,6 +87,8 @@ export function YtResults({
   readonly onPlay: (videoId: string) => void;
   /** Downloads a song into the Library; it shows on the Downloads page. */
   readonly onDownload: (videoId: string) => void;
+  /** Opens a song's menu (a right-click). */
+  readonly onMenu?: ((row: BrowseRow, event: MouseEvent<HTMLElement>) => void) | undefined;
   readonly links: YtSearchLinks;
   readonly children: ReactNode;
 }) {
@@ -222,7 +225,17 @@ export function YtResults({
           {songs.length > 0 && (
             <div role="list" aria-label={text.playbackText.songs} data-testid="yt-songs">
               {songs.map((row, index) => (
-                <div key={row.videoId ?? index} role="listitem" className="yt-item table-columns">
+                <div
+                  key={row.videoId ?? index}
+                  role="listitem"
+                  className="yt-item table-columns"
+                  onContextMenu={(event) => {
+                    if (onMenu === undefined) return;
+                    event.preventDefault();
+                    setSelected(index);
+                    onMenu(row, event);
+                  }}
+                >
                   <button
                     className="table-row table-columns yt-row"
                     aria-selected={selected === index}

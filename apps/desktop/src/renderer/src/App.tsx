@@ -31,7 +31,13 @@ import { Graveyard } from "./Graveyard.tsx";
 import { applyLanguage, labels, text, useLanguage, tagTitle, artistName } from "./text.ts";
 import { LanguageSettings } from "./LanguageSettings.tsx";
 import { Home } from "./Home.tsx";
-import { isYtRoute, streamedSongItems, YtPage, type YtRoute } from "./YtPages.tsx";
+import { isYtRoute, YtPage, type YtRoute } from "./YtPages.tsx";
+import {
+  NowPlayingSongActions,
+  playlistItems,
+  useStreamedSong,
+  useStreamedSongs,
+} from "./StreamedSongMenu.tsx";
 
 type Route =
   | BrowseScope
@@ -269,18 +275,89 @@ export function App() {
       return false;
     },
   });
-  /** A YouTube Music page's song menu: a streamed song's, or a Library song's. */
+  const streamed = useStreamedSongs({
+    go,
+    failed: (message) => setError(message ?? text.desktopLibrary.actionFailed),
+    notify,
+    changed: playback.refresh,
+  });
+  /** A YouTube Music page's or the Queue's song menu: a streamed song's, or a Library song's. */
   const ytSongMenu = (row: BrowseRow, event: MouseEvent<HTMLElement>) =>
     row.videoId !== undefined
       ? actions.openItems(
           text.desktopLibrary.songMenu(row.title),
-          streamedSongItems(row.videoId, playback.run),
+          streamed.items(row.videoId),
           event.currentTarget,
         )
       : actions.openMenu({ scope: { kind: "songs" }, ids: [row.id] }, row.title, {
           x: event.clientX,
           y: event.clientY,
         });
+  /** The song playing's menu, from the player bar. */
+  const playingMenu = (element: HTMLElement) => {
+    const song = playback.view?.current;
+    if (song === null || song === undefined) return;
+    if (song.videoId !== undefined)
+      return actions.openItems(
+        text.desktopLibrary.songMenu(song.title),
+        streamed.items(song.videoId, true),
+        element,
+      );
+    const rect = element.getBoundingClientRect();
+    actions.openMenu({ scope: { kind: "songs" }, ids: [song.id] }, song.title, {
+      x: rect.left,
+      y: rect.top,
+    });
+  };
+  const playingSong = playback.view?.current ?? null;
+  const playingStreamed = useStreamedSong(
+    nowPlaying ? playingSong?.videoId : undefined,
+    playback.view?.revision ?? 0,
+    // Read again every two seconds while it plays, for its download's progress.
+    Math.floor((playback.view?.status.positionMs ?? 0) / 2000),
+  );
+  /** Now Playing's Add to Playlist and Download, for a streamed song or a Library one. */
+  const nowPlayingActions = playingSong && (
+    <NowPlayingSongActions
+      download={
+        playingSong.videoId !== undefined
+          ? playingStreamed?.download
+          : { kind: playingSong.path === null ? "download" : "downloaded" }
+      }
+      onAddToPlaylist={(element) => {
+        const { videoId } = playingSong;
+        const target = { scope: { kind: "songs" }, ids: [playingSong.id] } as const;
+        actions.openItems(
+          text.playbackText.addToPlaylist,
+          videoId !== undefined
+            ? playlistItems((id) => void streamed.run(videoId, "addToPlaylist", "menu", id))
+            : actions
+                .itemFor(
+                  { action: "addToPlaylist" },
+                  target,
+                  { entries: [], count: 1, title: playingSong.title, artists: [] },
+                  "menu",
+                  () => {},
+                )
+                .open!(),
+          element,
+        );
+      }}
+      onDownload={() => {
+        const { videoId } = playingSong;
+        if (videoId !== undefined)
+          void streamed.run(
+            videoId,
+            playingStreamed?.download.kind === "failed" ? "retryDownload" : "download",
+          );
+        else
+          void window.wave.songs
+            .run({ scope: { kind: "songs" }, ids: [playingSong.id] }, "download")
+            .then(playback.refresh)
+            .catch(() => failed());
+      }}
+    />
+  );
   const open = (row: BrowseRow, index: number) => {
     const detail = {
       albums: "album",
@@ -735,6 +812,7 @@ export function App() {
               playback.run(window.wave.magicQueue.startStreamed(videoId));
             }}
             onYtDownload={(videoId) => download(window.wave.downloads.yt([videoId]))}
+            onYtMenu={ytSongMenu}
             ytLinks={{
               onArtist: (name) => {
                 rememberSearch();
@@ -834,6 +912,7 @@ export function App() {
           run={playback.run}
           links={ytLinks}
           onClose={() => setNowPlaying(false)}
+          actions={nowPlayingActions}
         />
       )}
       <PlayerBar
@@ -841,6 +920,7 @@ export function App() {
         panel={panel.tab && shownPanelTab(panel.tab, ytMusic)}
         onPanel={panel.toggle}
         onNowPlaying={() => setNowPlaying(true)}
+        onMenu={playingMenu}
         links={ytLinks}
       />
       <Links

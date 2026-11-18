@@ -10,6 +10,7 @@ import {
   useState,
   type DragEvent,
   type KeyboardEvent,
+  type MouseEvent,
   type ReactNode,
 } from "react";
 
@@ -56,10 +57,13 @@ export function QueuePanel({
   view,
   command,
   onError,
+  onMenu,
 }: {
   readonly view: PlayerView;
   readonly command: (next: PlaybackCommand) => void;
   readonly onError: () => void;
+  /** Opens a row's song menu (a right-click). */
+  readonly onMenu?: ((row: QueueRow, event: MouseEvent<HTMLElement>) => void) | undefined;
 }) {
   const list = useRef<HTMLDivElement>(null);
   const [pages, setPages] = useState<{
@@ -221,6 +225,12 @@ export function QueuePanel({
           list.current?.focus();
         }}
         onDoubleClick={() => play(at)}
+        onContextMenu={(event) => {
+          if (row === undefined || onMenu === undefined) return;
+          event.preventDefault();
+          setActive(at);
+          onMenu(row, event);
+        }}
       >
         {row && (
           <>
