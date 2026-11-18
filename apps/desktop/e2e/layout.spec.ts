@@ -53,6 +53,14 @@ test("Library navigation, responsive tables and keyboard focus work with 50,000 
     const table = page.getByRole("grid");
     await expect(table).toHaveAttribute("aria-rowcount", "50001");
     await expect(page.getByRole("row", { name: /Pink Moon/ }).first()).toBeVisible();
+    const firstRow = page.locator("#library-row-0");
+    await expect(firstRow).toHaveCSS("height", "40px");
+    await firstRow.click();
+    await expect(firstRow).toHaveAttribute("aria-selected", "true");
+    await expect(firstRow.locator(".row-play")).toBeVisible();
+    await page.keyboard.press("ArrowDown");
+    await expect(table).toHaveAttribute("aria-activedescendant", "library-row-1");
+    await expect(firstRow).toHaveAttribute("aria-selected", "true");
     expect(await table.getByRole("row").count()).toBeLessThan(45);
     await table.focus();
     await page.keyboard.press("End");
