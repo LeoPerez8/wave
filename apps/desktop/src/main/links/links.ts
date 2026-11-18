@@ -39,6 +39,8 @@ import {
   type SongSearchKey,
 } from "@wave/core";
 import { trackQuery, selectSongWithVideo, selectVideoIds } from "@wave/client/db/tracks";
+import { tracks } from "@wave/client/db/schema";
+import { eq } from "drizzle-orm";
 import { songLinkEnding } from "@wave/client/songLinkEnding";
 import { spotifyTransport, deezerTransport, followShortLink } from "@wave/client/serviceTransport";
 import {
@@ -295,11 +297,7 @@ export const createDesktopLinks = (options: LinksOptions) => {
       if (typeof target !== "string") {
         const ids = targetSongs(options.db, target);
         const song =
-          ids.length === 1
-            ? trackQuery(options.db)
-                .all()
-                .find((row) => row.id === ids[0])
-            : undefined;
+          ids.length === 1 ? trackQuery(options.db).where(eq(tracks.id, ids[0]!)).get() : undefined;
         if (song !== undefined) {
           videoId = selectVideoIds(options.db, [song.id]).get(song.id) ?? null;
           search = librarySearchSong(song);
@@ -343,8 +341,10 @@ export const createDesktopLinks = (options: LinksOptions) => {
       const ending = await songLinkEnding<YtAlbumSong, (typeof songs)[number]>(
         shared.link,
         {
-          stored: async (videoId) =>
-            songs.find((song) => song.id === selectSongWithVideo(options.db, videoId)) ?? null,
+          stored: async (videoId) => {
+            const id = selectSongWithVideo(options.db, videoId);
+            return id === null ? null : (songs.find((song) => song.id === id) ?? null);
+          },
           find: async () => find,
           radio: async (videoId) => {
             try {

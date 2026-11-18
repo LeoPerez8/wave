@@ -1,7 +1,8 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { openTestDatabase, addTrack, closeTestDatabase } from "@wave/client/testing";
-import { sql } from "drizzle-orm";
+import { openTestDatabase, addTrack, closeTestDatabase, traceQueries } from "@wave/client/testing";
+import { tracks } from "@wave/client/db/schema";
+import { eq, sql } from "drizzle-orm";
 import { createDesktopLinks } from "./links.ts";
 import { createPlaylist } from "@wave/client/db/playlists";
 import { catalogueOf } from "@wave/core";
@@ -219,6 +220,76 @@ test("a playlist link that can't be read shows why, and a link with YT Music off
       "notice",
     );
     assert.deepEqual(await off.open("Pink Moon", "en"), { kind: "ignored" });
+  } finally {
+    closeTestDatabase(db);
+  }
+});
+
+test("a pasted link looks its video up in the Library once, however many songs there are", async () => {
+  const db = await openTestDatabase();
+  try {
+    for (const title of ["Hazey Jane", "Northern Sky", "Place to Be", "Road"])
+      addTrack(db, { title, artist: "Nick Drake" });
+    const id = addTrack(db, { title: "Pink Moon", artist: "Nick Drake" });
+    db.update(tracks).set({ videoId: "abcdefghijk" }).where(eq(tracks.id, id)).run();
+    const started: unknown[] = [];
+    const links = createDesktopLinks({
+      db,
+      enabled: () => true,
+      online: () => true,
+      call: async () => {
+        throw new Error("A stored video needs no lookup");
+      },
+      start: async (song) => {
+        started.push(song);
+      },
+      writeClipboard: () => {},
+      changed: () => {},
+    });
+    const { result, queries } = traceQueries(db, () =>
+      links.open("https://music.youtube.com/watch?v=abcdefghijk", "en"),
+    );
+    assert.deepEqual(await result, { kind: "playing" });
+    assert.equal((started[0] as { id: number }).id, id);
+    assert.equal(queries.filter((query) => query.sql.includes('"video_id" =')).length, 1);
+  } finally {
+    closeTestDatabase(db);
+  }
+});
+
+test("Copy Link reads its one song, not the whole Library", async () => {
+  const db = await openTestDatabase();
+  try {
+    db.run(sql`CREATE TABLE desktop_settings (key TEXT PRIMARY KEY, value TEXT NOT NULL)`);
+    for (const title of ["Hazey Jane", "Northern Sky", "Place to Be", "Road"])
+      addTrack(db, { title, artist: "Nick Drake" });
+    const id = addTrack(db, { title: "Pink Moon", artist: "Nick Drake" });
+    db.update(tracks).set({ videoId: "abcdefghijk" }).where(eq(tracks.id, id)).run();
+    const clipboard: string[] = [];
+    const links = createDesktopLinks({
+      db,
+      enabled: () => true,
+      online: () => true,
+      call: async () => {
+        throw new Error("A known video needs no search");
+      },
+      start: async () => {},
+      writeClipboard: (value) => {
+        clipboard.push(value);
+      },
+      changed: () => {},
+    });
+    const { result, queries } = traceQueries(db, () =>
+      links.copySong({ scope: { kind: "songs" }, ids: [id] }, "en"),
+    );
+    assert.equal((await result).kind, "copied");
+    assert.deepEqual(clipboard, ["https://song.link/y/abcdefghijk"]);
+    // The song's row is the read with its title's sort key; the target's ids are another.
+    const rows = queries.filter((query) => query.sql.includes('"title_sort"'));
+    assert.deepEqual(
+      rows.map((query) => query.rows),
+      [1],
+    );
   } finally {
     closeTestDatabase(db);
   }
