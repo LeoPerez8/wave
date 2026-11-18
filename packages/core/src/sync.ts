@@ -10,6 +10,23 @@ import { normalizeSearchText } from "./search.ts";
 /** Retired preferences stay stored locally but no longer go up or apply on a pull. */
 export const syncsPreference = (key: string): boolean => key !== "settings.tapAnimationMs";
 
+/**
+ * The phone's own UI settings (docs/spec-desktop.md, "Wave account and sync"):
+ * the desktop keeps their synced value but neither shows nor applies them.
+ */
+const PHONE_UI_PREFERENCES: ReadonlySet<string> = new Set([
+  "settings.tabBar",
+  "settings.swipeActions",
+  "settings.longPressDelayMs",
+  "settings.glass",
+  "settings.nowPlayingRow",
+  "settings.bounceAmount",
+]);
+
+/** Whether the desktop applies a synced preference: account-wide ones yes, the phone's UI ones no. */
+export const desktopUsesPreference = (key: string): boolean =>
+  syncsPreference(key) && !PHONE_UI_PREFERENCES.has(key);
+
 /** The tags a song's recording key is built from. A `LibraryTrack` has them all. */
 export interface RecordingTags {
   readonly title: string;

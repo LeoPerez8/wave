@@ -26,7 +26,7 @@ import {
 import { deleteTracksById } from "@wave/client/db/tracks";
 import * as schema from "@wave/client/db/schema";
 import { saveImportedPlays } from "@wave/client/db/blackPlayer";
-import { syncCycle, type SyncTransport } from "./syncCycle.ts";
+import { syncCycle, type SyncTransport } from "@wave/client/sync/syncCycle";
 import { fakeClock } from "../../../../packages/core/src/testSyncClock.ts";
 import { joinAccount, selectUnpushed } from "@wave/client/db/syncRows";
 import { countedListening, songPlayTotals } from "@wave/client/db/stats";

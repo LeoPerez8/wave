@@ -1527,6 +1527,7 @@ export { graveyardRemovalsOf, graveyardRestoreIndex, graveyardSongs } from "./pl
 export type { GraveyardItem, GraveyardSlot } from "./playlistGraveyard.ts";
 export {
   RECORDING_LENGTH_TOLERANCE_MS,
+  desktopUsesPreference,
   fillMissingSongs,
   findRecording,
   joinLibraries,
@@ -2500,6 +2501,7 @@ export {
   type SavedQueueParts,
 } from "./queuePersistence.ts";
 export {
+  DESKTOP_SYNC_PERIOD_MS,
   FOREGROUND_SYNC_INTERVAL_MS,
   PLAY_BATCH_DELAY_MS,
   PLAY_BATCH_MAX_MS,

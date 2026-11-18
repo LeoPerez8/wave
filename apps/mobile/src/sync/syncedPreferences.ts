@@ -29,7 +29,7 @@ import "@/settings/theme";
 import "@/settings/ytMusic";
 /* oxlint-enable import/no-unassigned-import */
 
-import type { SyncPreferences } from "./syncCycle";
+import type { SyncPreferences } from "@wave/client/sync/syncCycle";
 
 export const syncedPreferences: SyncPreferences = {
   value: syncedSettingValue,

@@ -106,6 +106,13 @@ export const ptBR: Catalogue = {
     noPlaylists: "Nenhuma playlist ainda",
     checkSong: (title: string) => `Selecionar “${title}”`,
   },
+  desktopAccount: {
+    finishInBrowser: "Termine de iniciar sessão no navegador.",
+    keyringMissing:
+      "Este computador não tem um chaveiro, então a sessão dura até o Wave fechar. Inicie sessão novamente na próxima vez.",
+    browserTitle: "Volte ao Wave",
+    browserMessage: "Você pode fechar esta aba. O Wave termina de iniciar sessão.",
+  },
   desktopShortcuts: desktopShortcutsPtBr,
   downloadNotice: downloadNoticePtBr,
   native: nativePtBr,

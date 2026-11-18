@@ -27,6 +27,12 @@ export const PLAYBACK_SETTING_KEYS = {
   bufferMinutes: "settings.streamBufferMinutes",
 } as const;
 
+/** Whether a pull that changed the synced settings [keys] changed Settings › Playback. */
+export const changesPlaybackSettings = (keys: readonly string[]): boolean => {
+  const playback: readonly string[] = Object.values(PLAYBACK_SETTING_KEYS);
+  return keys.some((key) => playback.includes(key));
+};
+
 const stored = (db: LibraryDatabase, key: string): string | null =>
   db.get<{ value: string }>(sql`SELECT value FROM desktop_synced_preferences WHERE key = ${key}`)
     ?.value ?? null;

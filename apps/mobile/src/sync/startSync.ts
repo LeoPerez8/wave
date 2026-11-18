@@ -13,7 +13,7 @@ import { WaveSoulseek } from "@/native/waveSoulseek";
 import { onPlaysRecorded, playHistoryChanged, type PlaysRecorded } from "@/playback/PlayHistory";
 import { followPulledBestQuality } from "@/settings/bestQuality";
 
-import type { SyncedChanges } from "./syncCycle";
+import type { SyncedChanges } from "@wave/client/sync/syncCycle";
 import { syncedPreferences } from "./syncedPreferences";
 import { WaveSync } from "./WaveSync";
 

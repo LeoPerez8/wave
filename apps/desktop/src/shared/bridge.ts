@@ -10,6 +10,7 @@ import type { PlaybackSettings } from "./playbackSettings.ts";
 import type { SongTags } from "./tags.ts";
 import type { DesktopFolder, DesktopSong, ScanStatus } from "./library.ts";
 import type { BrowseScope, BrowsePage } from "./browse.ts";
+import type { AccountView } from "./account.ts";
 import type {
   ActionSurface,
   SongMenu,
@@ -52,6 +53,14 @@ export interface BridgeContract {
     readonly args: readonly [offset: number, limit: number];
     readonly result: Page<QueueRow>;
   };
+
+  readonly "account.view": { readonly args: readonly []; readonly result: AccountView };
+  /** Opens Google's sign-in in the browser; resolves once it ended, however it did. */
+  readonly "account.signIn": { readonly args: readonly []; readonly result: void };
+  readonly "account.cancelSignIn": { readonly args: readonly []; readonly result: void };
+  readonly "account.signOut": { readonly args: readonly []; readonly result: void };
+  readonly "account.signOutEverywhere": { readonly args: readonly []; readonly result: void };
+  readonly "account.answerInvitation": { readonly args: readonly []; readonly result: void };
 
   readonly "settings.appearance": { readonly args: readonly []; readonly result: Appearance };
   readonly "settings.setAppearance": {
@@ -164,6 +173,12 @@ export const BRIDGE_CALLS = [
   "settings.setAppearance",
   "settings.playback",
   "settings.setPlayback",
+  "account.view",
+  "account.signIn",
+  "account.cancelSignIn",
+  "account.signOut",
+  "account.signOutEverywhere",
+  "account.answerInvitation",
 ] as const satisfies readonly BridgeCall[] &
   (BridgeContract extends PagedLists<BridgeContract> ? unknown : never);
 
@@ -229,6 +244,15 @@ export interface WaveBridge {
     /** Keeps a change to Settings › Playback; it applies from the next song. */
     readonly setPlayback: (change: Partial<PlaybackSettings>) => Promise<PlaybackSettings>;
   };
+  /** The Wave account: the session itself never reaches the window. */
+  readonly account: {
+    readonly view: () => Promise<AccountView>;
+    readonly signIn: () => Promise<void>;
+    readonly cancelSignIn: () => Promise<void>;
+    readonly signOut: () => Promise<void>;
+    readonly signOutEverywhere: () => Promise<void>;
+    readonly answerInvitation: () => Promise<void>;
+  };
 }
 
 export const createBridge = (invoke: Invoke): WaveBridge => ({
@@ -279,5 +303,13 @@ export const createBridge = (invoke: Invoke): WaveBridge => ({
     setAppearance: (appearance) => invoke("settings.setAppearance", appearance),
     playback: () => invoke("settings.playback"),
     setPlayback: (change) => invoke("settings.setPlayback", change),
+  },
+  account: {
+    view: () => invoke("account.view"),
+    signIn: () => invoke("account.signIn"),
+    cancelSignIn: () => invoke("account.cancelSignIn"),
+    signOut: () => invoke("account.signOut"),
+    signOutEverywhere: () => invoke("account.signOutEverywhere"),
+    answerInvitation: () => invoke("account.answerInvitation"),
   },
 });

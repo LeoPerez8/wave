@@ -107,6 +107,14 @@ export const en = {
     noPlaylists: "No playlists yet",
     checkSong: (title: string) => `Select “${title}”`,
   },
+  /** The desktop's Wave account: what the phone's Settings › Accounts has no need to say. */
+  desktopAccount: {
+    finishInBrowser: "Finish signing in in your browser.",
+    keyringMissing:
+      "This computer has no keyring, so the session lasts until Wave quits. Sign in again next time.",
+    browserTitle: "Back to Wave",
+    browserMessage: "You can close this tab. Wave finishes signing in.",
+  },
   desktopShortcuts: desktopShortcutsEn,
   downloadNotice: downloadNoticeEn,
   native: nativeEn,

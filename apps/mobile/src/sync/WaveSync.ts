@@ -3,7 +3,7 @@ import type * as Effect from "effect/Effect";
 
 import { lazyService } from "@/lib/lazyService";
 
-import type { SyncedChanges, SyncPreferences } from "./syncCycle";
+import type { SyncedChanges, SyncPreferences } from "@wave/client/sync/syncCycle";
 import { make } from "./waveSyncLive";
 
 /** What syncing needs from the app that only the app (not a headless start) has. */

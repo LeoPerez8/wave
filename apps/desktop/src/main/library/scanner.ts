@@ -81,6 +81,8 @@ export const createScanner = ({
   };
   let roots: readonly ScanFolder[] = [];
   let disposed = false;
+  /** Hear each scan that finished. */
+  const listeners = new Set<() => void>();
   let active: Promise<void> | undefined;
   let again = false;
   let timer: ReturnType<typeof setTimeout> | undefined;
@@ -290,6 +292,7 @@ export const createScanner = ({
       Date.now(),
     );
     state = { ...state, status: "done", revision: state.revision + 1 };
+    for (const listener of listeners) listener();
   };
 
   const refresh = (): Promise<void> => {
@@ -357,6 +360,11 @@ export const createScanner = ({
       await refresh();
     },
     status: (): ScanStatus => state,
+    /** Hears each scan that finished; the Wave account's sync looks at the song list then. */
+    subscribe: (listener: () => void): (() => void) => {
+      listeners.add(listener);
+      return () => void listeners.delete(listener);
+    },
     folders: (offset = 0, limit = 100): Page<DesktopFolder> => {
       const items = desktopRoots(db, platform).map((root) => ({
         ...root,
