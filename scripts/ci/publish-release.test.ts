@@ -11,7 +11,7 @@ const repoFile = (path: string) => fileURLToPath(new URL(`../../${path}`, import
 const SHA = "a".repeat(40);
 
 /** Runs the script for a branch push, with a `git` that says where the tag is and a stub `gh`. */
-const publish = (tagged: string) => {
+const publish = (tagged: string, extra: Record<string, string> = {}) => {
   const dir = mkdtempSync(join(tmpdir(), "wave-release-"));
   const script = (name: string, body: string) => {
     writeFileSync(join(dir, name), `#!/bin/sh\n${body}\n`);
@@ -36,10 +36,12 @@ const publish = (tagged: string) => {
         GITHUB_REF_TYPE: "branch",
         GITHUB_REPOSITORY: "o/r",
         GITHUB_OUTPUT: output,
+        ...extra,
       },
     },
   );
   return {
+    dir,
     status,
     stdout,
     output: readFileSync(output, "utf8"),
@@ -53,6 +55,19 @@ describe("publish-release.sh", () => {
     assert.equal(status, 0);
     assert.match(gh, /release create v1\.3\.0-ti/);
     assert.match(output, /^url=https:.*wave-1\.3\.0-ti\.apk$/m);
+  });
+
+  it("attaches the release's provenance record beside the APK", () => {
+    const record = join(mkdtempSync(join(tmpdir(), "wave-record-")), "provenance.json");
+    writeFileSync(record, "{}");
+    const { status, gh, dir } = publish(SHA, { PROVENANCE_FILE: record });
+    assert.equal(status, 0);
+    const asset = join(dir, "wave-1.3.0-ti.provenance.json");
+    assert.ok(
+      gh.includes(`release create v1.3.0-ti ${join(dir, "wave-1.3.0-ti.apk")} ${asset} `),
+      gh,
+    );
+    assert.equal(readFileSync(asset, "utf8"), "{}");
   });
 
   it("answers nothing when the tag moved, so nothing after it publishes", () => {
@@ -69,13 +84,13 @@ describe("the release job", () => {
     const workflow = readFileSync(repoFile(".github/workflows/ci.yml"), "utf8");
     const afterRelease = workflow.slice(workflow.indexOf("- name: Publish the release\n"));
     const steps = afterRelease.split(/\n(?= {6}- )/).slice(1);
-    const names = steps.map((step) => /name: (.*)/.exec(step)?.[1] ?? "setup-node");
+    const names = steps.map((step) => /name: (.*)/.exec(step)?.[1] ?? "");
     assert.deepEqual(names, [
       "Move the latest build",
-      "setup-node",
       "Publish the release notes",
       "Publish the latest APK",
       "Fetch the over-the-air update",
+      "Check the update against the gate's record",
       "Publish the over-the-air update",
     ]);
     for (const [index, step] of steps.entries()) {
