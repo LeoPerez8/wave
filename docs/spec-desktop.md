@@ -175,7 +175,7 @@ ADR: `docs/adr/0004-kotlin-on-a-bundled-jvm.md`.
   Android module consumes and the desktop ships as a JAR. A fix there reaches both apps.
 - The scanner reads tags through the same Kotlin, so both devices read the same fields from the
   same file and recording keys match. The JVM is therefore required even with YT Music off.
-- Both apps move to innertubex 0.11.9 or later (the phone is on 0.8.6). On the JVM it needs no
+- Both apps use innertubex 0.11.9 or later. On the JVM it needs no
   QuickJS natives, so one JAR serves every OS, and its first web lookup takes 0.5 s instead of
   5 to 7 s.
 - Per platform, outside the shared module: `YtClient`'s HTTP, the proof-of-origin token
