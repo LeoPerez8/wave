@@ -16,7 +16,7 @@ import type { BrowseRow } from "../../shared/browse.ts";
 import type { PlayerView } from "../../shared/playerView.ts";
 import { Icon } from "./Icon.tsx";
 import { LyricsView } from "./LyricsView.tsx";
-import { text } from "./text.ts";
+import { text, albumName, artistName } from "./text.ts";
 import { Artwork } from "./VirtualTable.tsx";
 import "./panel.css";
 
@@ -146,8 +146,8 @@ export function NowPlaying({
         <Artwork large hash={song?.artworkHash} url={song?.artworkUrl} />
         <div className="now-playing-copy">
           <h1 className="truncate">{song?.title ?? text.desktopLayout.nothingPlaying}</h1>
-          {song && <p className="truncate secondary">{song.artist}</p>}
-          {song?.album && <p className="truncate tertiary">{song.album}</p>}
+          {song && <p className="truncate secondary">{artistName(song.artist)}</p>}
+          {song?.album && <p className="truncate tertiary">{albumName(song.album)}</p>}
         </div>
       </div>
       <div className="now-playing-lyrics">

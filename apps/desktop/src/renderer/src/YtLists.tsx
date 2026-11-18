@@ -2,7 +2,7 @@ import { useState, type MouseEvent, type ReactNode } from "react";
 import type { BrowseRow } from "../../shared/browse.ts";
 import type { YtStatus } from "../../shared/yt.ts";
 import { Icon } from "./Icon.tsx";
-import { labels } from "./text.ts";
+import { labels, albumName, artistName } from "./text.ts";
 import { Artwork, time } from "./VirtualTable.tsx";
 
 /**
@@ -77,8 +77,8 @@ export function YtSongList({
               </span>
               <span className="truncate">{row.title}</span>
             </span>
-            <span className="truncate secondary">{row.artist}</span>
-            <span className="album-column truncate secondary">{row.album}</span>
+            <span className="truncate secondary">{artistName(row.artist)}</span>
+            <span className="album-column truncate secondary">{albumName(row.album)}</span>
             <span className="star-column" />
             <span className="time-column secondary">
               {row.durationMs > 0 ? time(row.durationMs) : ""}

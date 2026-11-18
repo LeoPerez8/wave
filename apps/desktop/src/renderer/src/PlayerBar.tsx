@@ -6,7 +6,7 @@ import { Icon } from "./Icon.tsx";
 import type { PanelTab } from "./SidePanel.tsx";
 import { SleepTimer } from "./SleepTimer.tsx";
 import { useDesktopKeys } from "./keys.ts";
-import { labels, text } from "./text.ts";
+import { labels, text, albumName, artistName } from "./text.ts";
 import { Artwork, time } from "./VirtualTable.tsx";
 
 /** How often the window reads the player: often enough for the scrubber while playing. */
@@ -192,8 +192,8 @@ export function PlayerBar({
               <div className="truncate player-title">{song?.title ?? labels.nothingPlaying}</div>
               {song && (
                 <>
-                  <div className="truncate secondary">{song.artist}</div>
-                  <div className="truncate tertiary">{song.album}</div>
+                  <div className="truncate secondary">{artistName(song.artist)}</div>
+                  <div className="truncate tertiary">{albumName(song.album)}</div>
                 </>
               )}
             </div>
