@@ -10,15 +10,32 @@ const repoFile = (path: string) => fileURLToPath(new URL(`../../${path}`, import
 
 const SHA = "a".repeat(40);
 
-/** Runs the script for a branch push, with a `git` that says where the tag is and a stub `gh`. */
-const publish = (tagged: string, extra: Record<string, string> = {}) => {
+/**
+ * Runs the script for a branch push, with a `git` that says where the tag is and a stub `gh`.
+ * `existing` is the record of a GitHub Release the tag already has ("" for one without a record).
+ */
+const publish = (tagged: string, extra: Record<string, string> = {}, existing?: string) => {
   const dir = mkdtempSync(join(tmpdir(), "wave-release-"));
   const script = (name: string, body: string) => {
     writeFileSync(join(dir, name), `#!/bin/sh\n${body}\n`);
     chmodSync(join(dir, name), 0o755);
   };
   script("git", `printf '%s\\trefs/tags/v1.3.0-ti\\n' "${tagged}"`);
-  script("gh", `case "$2" in view) exit 1 ;; esac; echo "gh $*" >> "${dir}/gh.log"`);
+  if (existing !== undefined) writeFileSync(join(dir, "existing.json"), existing);
+  script(
+    "gh",
+    existing === undefined
+      ? `case "$2" in view) exit 1 ;; esac; echo "gh $*" >> "${dir}/gh.log"`
+      : `case "$2" in
+  view) exit 0 ;;
+  download)
+    [ -s "${dir}/existing.json" ] || { echo "no assets match the file pattern" >&2; exit 1; }
+    while [ $# -gt 0 ]; do [ "$1" = "--dir" ] && out="$2"; shift; done
+    mkdir -p "$out" && cp "${dir}/existing.json" "$out/wave-1.3.0-ti.provenance.json"
+    exit 0 ;;
+esac
+echo "gh $*" >> "${dir}/gh.log"`,
+  );
   writeFileSync(join(dir, "gh.log"), "");
   writeFileSync(join(dir, "app.apk"), "apk");
   const output = join(dir, "output");
@@ -76,6 +93,31 @@ describe("publish-release.sh", () => {
     assert.match(stdout, /Publishing nothing/);
     assert.equal(gh, "");
     assert.equal(output, "");
+  });
+});
+
+describe("publish-release.sh over an existing release", () => {
+  const record = (source: string) =>
+    JSON.stringify({ schema: "wave-release-provenance/1", source });
+
+  it("replaces the APK of a re-run from the same source", () => {
+    const { status, gh } = publish(SHA, {}, record(SHA));
+    assert.equal(status, 0);
+    assert.match(gh, /release upload v1\.3\.0-ti .* --clobber/);
+  });
+
+  it("leaves a release built from another source as it is, and fails", () => {
+    const { status, gh, output, stdout } = publish(SHA, {}, record("c".repeat(40)));
+    assert.notEqual(status, 0);
+    assert.match(stdout, /ccccccc/);
+    assert.doesNotMatch(gh, /upload|create/);
+    assert.equal(output, "");
+  });
+
+  it("replaces an APK published before records, as before", () => {
+    const { status, gh } = publish(SHA, {}, "");
+    assert.equal(status, 0);
+    assert.match(gh, /release upload v1\.3\.0-ti/);
   });
 });
 

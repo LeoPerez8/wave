@@ -133,3 +133,99 @@ describe("the Android job's provenance", () => {
     );
   });
 });
+
+describe("a promotion", () => {
+  it("is admitted only with the sealed record of the ti release it promotes", () => {
+    const steps = stepsOf("release-gate");
+    const names = steps.map((step) => step.name);
+    const fetch = names.indexOf("Fetch the promoted ti release's record");
+    assert.ok(fetch >= 0 && fetch < names.indexOf("Admit the release"), names.join(", "));
+    const step = steps[fetch]!.text;
+    // Stable tags only; a ti release has nothing to link.
+    assert.match(
+      step,
+      /startsWith\(github\.ref, 'refs\/tags\/v'\) && !endsWith\(github\.ref, '-ti'\)/,
+    );
+    assert.match(step, /gh release download "\$\{GITHUB_REF_NAME\}-ti"/);
+    assert.doesNotMatch(step, /secrets\./);
+    assert.match(
+      steps.find((step) => step.name === "Admit the release")!.text,
+      /release-gate\.ts admit "\$RUNNER_TEMP\/needs\.json" "\$RUNNER_TEMP\/promoted\/wave-\$\{GITHUB_REF_NAME#v\}-ti\.provenance\.json"/,
+    );
+  });
+
+  it("checks the ti release before it pushes the stable tag", () => {
+    const promote = readFileSync(new URL("./promote.sh", import.meta.url), "utf8");
+    const verify = promote.indexOf('verified-release.sh" "$from"');
+    assert.ok(verify > 0, "promote.sh doesn't check the ti release");
+    assert.ok(verify < promote.indexOf('git tag "$to"'));
+  });
+});
+
+describe("a tag run", () => {
+  it("of any v* tag, pushed or started by hand, goes through the gate and the main Environment", () => {
+    assert.match(
+      workflow,
+      /IS_RELEASE: \$\{\{ \(github\.event_name == 'push' \|\| github\.event_name == 'workflow_dispatch'\) && startsWith\(github\.ref, 'refs\/tags\/v'\) \}\}/,
+    );
+    assert.match(job("release-gate"), /startsWith\(github\.ref, 'refs\/tags\/v'\)/);
+    assert.match(job("release"), /needs\.release-gate\.result == 'success'/);
+    // Only a push to main opens ti; a -ti tag made by hand waits for the owner like a stable one.
+    assert.match(
+      job("release"),
+      /environment: \$\{\{ github\.ref == 'refs\/heads\/main' && 'ti' \|\| 'main' \}\}/,
+    );
+  });
+});
+
+describe("a rollback", () => {
+  const rollback = readFileSync(
+    new URL("../../.github/workflows/rollback.yml", import.meta.url),
+    "utf8",
+  );
+  const steps = rollback
+    .slice(rollback.indexOf("    steps:\n"))
+    .split(/\n(?= {6}- )/)
+    .slice(1)
+    .map((step) => ({ name: /name: (.*)/.exec(step)?.[1] ?? "", text: step }));
+  const named = (name: string) => {
+    const step = steps.find((step) => step.name === name);
+    assert.ok(step, `rollback.yml has no "${name}" step`);
+    return step.text;
+  };
+
+  it("checks the release's record before any step that holds a secret", () => {
+    const names = steps.map((step) => step.name);
+    const check = names.indexOf("Check the release's provenance");
+    assert.ok(check >= 0 && check < names.indexOf("Promote the update"), names.join(", "));
+    for (const step of steps.slice(0, check + 1)) assert.doesNotMatch(step.text, /secrets\./);
+    assert.match(
+      named("Check the release's provenance"),
+      /scripts\/ci\/verified-release\.sh "v\$version"/,
+    );
+  });
+
+  it("hands the checked record to the promotion, which checks R2's update against it", () => {
+    const promote = named("Promote the update");
+    assert.match(promote, /WAVE_PROVENANCE_FILE: \$\{\{ steps\.provenance\.outputs\.file \}\}/);
+    assert.match(promote, /WAVE_ALLOW_UNRECORDED: \$\{\{ inputs\.allow_unrecorded \}\}/);
+  });
+
+  it("lets a release without a record through only when the owner asks, off by default", () => {
+    assert.match(
+      rollback,
+      /allow_unrecorded:\n\s+description: .+\n\s+required: false\n\s+type: boolean\n\s+default: false/,
+    );
+    assert.match(
+      named("Check the release's provenance"),
+      /if \[ "\$ALLOW_UNRECORDED" = "true" \]; then flags=\(--allow-unrecorded\); fi/,
+    );
+  });
+
+  it("keeps its channel's Environment and reads nothing but the repo", () => {
+    assert.match(rollback, /^ {4}environment: \$\{\{ inputs\.channel \}\}$/m);
+    assert.match(rollback, /^ {6}contents: read$/m);
+    assert.doesNotMatch(rollback, /: write$/m);
+    assert.match(rollback, /sparse-checkout: \|\n\s+apps\/updates\n\s+scripts\/ci/);
+  });
+});

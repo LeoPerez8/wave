@@ -1,8 +1,12 @@
 // Rolls a channel back to a version R2 still keeps. The Roll back an update workflow runs it.
 //   node apps/updates/scripts/promote.ts
 // Env: CLOUDFLARE_API_TOKEN, CLOUDFLARE_ACCOUNT_ID, UPDATES_SIGNING_KEY, WAVE_UPDATE_CHANNEL,
-// WAVE_UPDATE_VERSION. Anything that stops it fails the run and says why as an error annotation.
-// A promotion is a new manifest, so with no key it stops rather than promote something unsigned.
+// WAVE_UPDATE_VERSION, WAVE_PROVENANCE_FILE (the release's sealed record, which the workflow
+// checked against its tag; unset or missing when the release has none) and WAVE_ALLOW_UNRECORDED
+// ("true": the owner's transition for an update published before records). Anything that stops it
+// fails the run and says why as an error annotation. A promotion is a new manifest, so with no key
+// it stops rather than promote something unsigned.
+import { existsSync, readFileSync } from "node:fs";
 import { isChannel } from "../src/layout.ts";
 import { promoteUpdate } from "../src/promote.ts";
 import { wranglerBucket } from "./bucket.ts";
@@ -13,6 +17,8 @@ const {
   UPDATES_SIGNING_KEY: signingKey,
   WAVE_UPDATE_CHANNEL: channel = "",
   WAVE_UPDATE_VERSION: rawVersion = "",
+  WAVE_PROVENANCE_FILE: provenanceFile = "",
+  WAVE_ALLOW_UNRECORDED: allowUnrecorded = "",
 } = process.env;
 // The tag's name works as well as the version.
 const version = rawVersion.trim().replace(/^v/, "");
@@ -35,7 +41,18 @@ if (!token || !account) {
   stop("No version given.");
 } else {
   try {
-    const id = await promoteUpdate({ channel, version, signingKey, ...wranglerBucket() });
+    const provenance: unknown =
+      provenanceFile && existsSync(provenanceFile)
+        ? JSON.parse(readFileSync(provenanceFile, "utf8"))
+        : undefined;
+    const id = await promoteUpdate({
+      channel,
+      version,
+      provenance,
+      allowUnrecorded: allowUnrecorded === "true",
+      signingKey,
+      ...wranglerBucket(),
+    });
     console.log(`${channel} now gives its phones ${version}, as update ${id}.`);
   } catch (error) {
     stop(error instanceof Error ? error.message : String(error));

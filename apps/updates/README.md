@@ -143,6 +143,12 @@ was built for another runtime version than the channel's newest update. A bundle
 cross a native change: release a fix instead. `Constants.expoConfig.version` on the phone reads
 the promoted version.
 
+It also fails, before anything is signed, when the version's GitHub Release has no sealed
+provenance record for its tag's commit and APK, or when R2's update isn't the export that record
+admitted (`docs/release-provenance.md`, Rollback). Each published update keeps the list of its
+exported files for this check. A release published before records goes back only with the
+`allow_unrecorded` input set, which the owner decides, and then on its runtime version alone.
+
 ## What the owner sets up
 
 Nothing here is provisioned yet. Until it is, every release logs `Skipping the over-the-air
