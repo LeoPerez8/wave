@@ -420,6 +420,8 @@ export const playbackLayer = Layer.effect(
       },
       setSleepTimer: async (choice) => {
         await sleep.set(choice);
+        // Turning End of Queue off lets a waiting Magic Queue batch join at once.
+        for (const watcher of watchers) watcher.queueChanged();
         return sleep.current();
       },
       sleepTimer: sleep.current,

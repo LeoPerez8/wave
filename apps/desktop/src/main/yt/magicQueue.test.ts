@@ -6,6 +6,7 @@ import {
   ytTrackId,
   type QueueCommand,
   type QueueState,
+  type SleepTimer,
   type YtAlbumSong,
 } from "@wave/core";
 import { createMagicQueue, type MagicQueueInput, type MagicQueueSong } from "./magicQueue.ts";
@@ -55,7 +56,7 @@ const setup = ({
 } = {}) => {
   let state: QueueState = EMPTY_QUEUE;
   const asked: string[] = [];
-  const world = { online, songRadio, playing: true };
+  const world = { online, songRadio, playing: true, sleepTimer: null as SleepTimer | null };
   const magic = createMagicQueue({
     queue: () => state,
     dispatch: async (command: QueueCommand) => {
@@ -79,6 +80,7 @@ const setup = ({
     online: () => world.online,
     continueQueue: () => true,
     playing: () => world.playing,
+    sleepTimer: () => world.sleepTimer,
     ahead: () => null,
     continuation,
     load: () => null,
@@ -200,4 +202,44 @@ test("an album's queue at its last song goes on as a Magic Queue of the album", 
   );
   assert.equal(state.index, 1);
   assert.equal(state.entries.length, 2 + 10);
+});
+
+test("with the sleep timer at End of Queue no batch joins and no queue goes on, until it is off", async () => {
+  const { magic, queue, play, toLast, world, asked } = setup({
+    continuation: () => ({
+      seed: { kind: "album", id: "7", title: "Random Access Memories" },
+      songs: [getLucky],
+      streamed: [],
+    }),
+  });
+  await magic.start({
+    seed: { kind: "track", id: "1", title: "Get Lucky" },
+    songs: [getLucky],
+    streamed: [],
+  });
+  await magic.settled();
+  assert.equal(queue().entries.length, 1 + 9);
+
+  world.sleepTimer = { type: "endOfQueue" };
+  const read = asked.length;
+  await toLast();
+  assert.equal(queue().entries.length, 1 + 9, "the queue plays out");
+  assert.equal(asked.length, read, "and no radio is read for it");
+  assert.deepEqual(magic.view(), { title: "Get Lucky", status: "idle" });
+
+  // The timer turned off: playback tells the Magic Queue, and the batch joins.
+  world.sleepTimer = null;
+  magic.queueChanged();
+  await magic.settled();
+  assert.equal(queue().entries.length, 1 + 9 + 10);
+
+  // An ordinary queue at its last song doesn't go on either.
+  world.sleepTimer = { type: "endOfQueue" };
+  await play({ type: "play", trackIds: ["2"], context: { kind: "album", id: "7" } });
+  assert.equal(queue().context?.kind, "album");
+  assert.equal(queue().entries.length, 1);
+  world.sleepTimer = null;
+  magic.queueChanged();
+  await magic.settled();
+  assert.equal(queue().context?.kind, "magic");
 });

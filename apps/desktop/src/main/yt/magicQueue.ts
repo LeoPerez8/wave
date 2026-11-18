@@ -47,6 +47,7 @@ import {
   type QueueState,
   type QueueTimeAhead,
   type RankedRadioSong,
+  type SleepTimer,
   type YtAlbumSong,
 } from "@wave/core";
 
@@ -93,6 +94,11 @@ export interface MagicQueueDeps {
   readonly continueQueue: () => boolean;
   /** Whether the queue's current song is playing: an ordinary queue goes on only then. */
   readonly playing: () => boolean;
+  /**
+   * The running sleep timer. End of Queue lets the queue play out: no batch joins and no queue
+   * goes on while it is set (Core's `wantsMagicBatch` and `queueContinuation`).
+   */
+  readonly sleepTimer: () => SleepTimer | null;
   /** How much of the queue is left against the Buffer; null to continue at the last song. */
   readonly ahead: () => QueueTimeAhead | null;
   /** The list a queue that ends came from (`queueContinuation`), or null when it's gone. */
@@ -302,7 +308,8 @@ export const createMagicQueue = (deps: MagicQueueDeps): MagicQueueShape => {
           )
         : "disabled";
     const live = session;
-    if (live?.id !== wanted.id || !wantsMagicBatch(live, deps.queue())) return "appended";
+    if (live?.id !== wanted.id || !wantsMagicBatch(live, deps.queue(), deps.sleepTimer()))
+      return "appended";
     const batch = completeMagicRadioBatch(live, rank(seeds, true), rank(liked, false));
     if (batch.trackIds.length === 0)
       return status === "offline" || !connected
@@ -322,7 +329,11 @@ export const createMagicQueue = (deps: MagicQueueDeps): MagicQueueShape => {
       let again = true;
       while (again) {
         const wanted = active();
-        if (wanted === null || !magicPickDue(wanted, stuck?.id ?? null, deps.queue())) return;
+        if (
+          wanted === null ||
+          !magicPickDue(wanted, stuck?.id ?? null, deps.queue(), deps.sleepTimer())
+        )
+          return;
         picking = wanted.id;
         stuck = null;
         try {
@@ -331,7 +342,7 @@ export const createMagicQueue = (deps: MagicQueueDeps): MagicQueueShape => {
         } catch {
           stuck = { id: wanted.id, status: "failed" };
         }
-        const ended = magicPickEnded(wanted.id, picking, active(), deps.queue());
+        const ended = magicPickEnded(wanted.id, picking, active(), deps.queue(), deps.sleepTimer());
         picking = ended.picking;
         again = ended.again;
       }
@@ -452,6 +463,7 @@ export const createMagicQueue = (deps: MagicQueueDeps): MagicQueueShape => {
     if (continuedFrom === state || !deps.playing()) return;
     const seed = queueContinuation(state, {
       enabled: deps.continueQueue(),
+      sleepTimer: deps.sleepTimer(),
       ahead: deps.ahead(),
     });
     if (seed === null) return;
@@ -523,7 +535,7 @@ export const createMagicQueue = (deps: MagicQueueDeps): MagicQueueShape => {
       const live = active();
       if (live === null) return { title: null, status: "idle" };
       const state = deps.queue();
-      const wants = wantsMagicBatch(live, state);
+      const wants = wantsMagicBatch(live, state, deps.sleepTimer());
       return {
         title: live.seed.title,
         status:

@@ -1142,10 +1142,15 @@ test("a Magic Queue, an artist page and Discover's row come through the bridge, 
         !(await wave.songs.actions(one, "menu")).entries.some((e) => e.action === "magicQueue"),
       );
       await wave.settings.setYtMusic(true);
+      // The sleep timer at End of Queue holds the recommendations back until it is turned off.
+      await wave.playback.setSleepTimer({ type: "endOfQueue" });
       assert.equal(
         await wave.magicQueue.start({ scope: { kind: "songs" }, ids: [pinkMoon] }),
         true,
       );
+      await new Promise((resolve) => setTimeout(resolve, 50));
+      assert.equal((await wave.playback.view()).length, 1, "the queue plays out");
+      await wave.playback.setSleepTimer(null);
       await until(async () => (await wave.playback.view()).length > 1);
       assert.equal((await wave.playback.view()).current?.title, "Pink Moon");
       assert.deepEqual(await wave.magicQueue.view(), { title: "Pink Moon", status: "idle" });

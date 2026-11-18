@@ -245,6 +245,7 @@ export const ytFeaturesLayer = (options: { readonly online: () => boolean }) =>
         online: options.online,
         continueQueue: () => readContinueQueue(syncedPreference(db, CONTINUE_QUEUE)),
         playing: playback.playing,
+        sleepTimer: playback.sleepTimer,
         // The Buffer's look-ahead isn't on the desktop: a queue goes on at its last song.
         ahead: () => null,
         continuation,
