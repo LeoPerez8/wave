@@ -249,7 +249,8 @@ else {
       home: app.getPath("home"),
       platform: process.platform,
       env: process.env,
-      log: (line) => process.stderr.write(`[yt] ${line}
+      log: (line) =>
+        process.stderr.write(`[yt] ${line}
 `),
     });
     void ytSignIn.sweep();

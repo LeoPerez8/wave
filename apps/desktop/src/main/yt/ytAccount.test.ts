@@ -47,8 +47,20 @@ const desktop = (options: { readonly box?: SecretBox; readonly disk?: Map<string
     library: [
       { playlistId: "PL1", title: "Road", artworkUrl: null, songCount: 12, kind: "own" },
       { playlistId: "LM", title: "Liked Music", artworkUrl: null, songCount: 3, kind: "generated" },
-      { playlistId: "RDTMAK", title: "Supermix", artworkUrl: null, songCount: null, kind: "generated" },
-      { playlistId: "PL2", title: "Saved", artworkUrl: "https://img.test/a", songCount: null, kind: "saved" },
+      {
+        playlistId: "RDTMAK",
+        title: "Supermix",
+        artworkUrl: null,
+        songCount: null,
+        kind: "generated",
+      },
+      {
+        playlistId: "PL2",
+        title: "Saved",
+        artworkUrl: "https://img.test/a",
+        songCount: null,
+        kind: "saved",
+      },
     ] as unknown,
     closeWindow: (_outcome: YtBrowserOutcome) => {},
   };
@@ -104,13 +116,20 @@ test("Sign In opens the browser, and what it read signs YT Music in", async () =
     noBrowser: false,
   });
   const signingIn = account.signIn();
-  assert.equal(account.view().account?.kind === "signedOut" && account.view().account?.action, "signingIn");
+  assert.equal(
+    account.view().account?.kind === "signedOut" && account.view().account?.action,
+    "signingIn",
+  );
   world.closeWindow(READ);
   await signingIn;
   assert.deepEqual(calls, [
     { method: "ytSignIn", params: { cookie: COOKIE, dataSyncId: "111||222", sessionIndex: "0" } },
   ]);
-  assert.deepEqual(account.view().account, { kind: "account", account: ACCOUNT, action: "signOut" });
+  assert.deepEqual(account.view().account, {
+    kind: "account",
+    account: ACCOUNT,
+    action: "signOut",
+  });
   assert.ok(!disk.get("yt.bin")!.toString("utf8").includes("fake-value"));
 });
 
@@ -170,12 +189,20 @@ test("closing the window without signing in, or Cancel, leaves the account as it
   const closed = account.signIn();
   world.closeWindow({ kind: "closed" });
   await closed;
-  assert.deepEqual(account.view().account, { kind: "signedOut", action: "signIn", note: "optional" });
+  assert.deepEqual(account.view().account, {
+    kind: "signedOut",
+    action: "signIn",
+    note: "optional",
+  });
   const cancelled = account.signIn();
   account.cancelSignIn();
   await cancelled;
   assert.equal(world.cancelled, 1);
-  assert.deepEqual(account.view().account, { kind: "signedOut", action: "signIn", note: "optional" });
+  assert.deepEqual(account.view().account, {
+    kind: "signedOut",
+    action: "signIn",
+    note: "optional",
+  });
   assert.deepEqual(calls, []);
 });
 
@@ -185,7 +212,11 @@ test("without a browser to sign in with, the view says so until the next Sign In
   world.closeWindow({ kind: "noBrowser" });
   await first;
   assert.equal(account.view().noBrowser, true);
-  assert.deepEqual(account.view().account, { kind: "signedOut", action: "signIn", note: "optional" });
+  assert.deepEqual(account.view().account, {
+    kind: "signedOut",
+    action: "signIn",
+    note: "optional",
+  });
   const second = account.signIn();
   assert.equal(account.view().noBrowser, false);
   world.closeWindow({ kind: "closed" });
@@ -209,13 +240,21 @@ test("a sign-in that didn't work says why", async () => {
   const unreachable = account.signIn();
   world.closeWindow(READ);
   await unreachable;
-  assert.deepEqual(account.view().account, { kind: "signedOut", action: "signIn", note: "offline" });
+  assert.deepEqual(account.view().account, {
+    kind: "signedOut",
+    action: "signIn",
+    note: "offline",
+  });
 
   world.online = false;
   const before = world.browsers;
   await account.signIn();
   assert.equal(world.browsers, before, "offline, no browser opens");
-  assert.deepEqual(account.view().account, { kind: "signedOut", action: "signIn", note: "offline" });
+  assert.deepEqual(account.view().account, {
+    kind: "signedOut",
+    action: "signIn",
+    note: "offline",
+  });
 });
 
 test("a second Sign In while the browser is open opens no second browser", async () => {
@@ -234,7 +273,11 @@ test("Sign Out forgets the session, here and in the file", async () => {
   await signingIn;
   await account.signOut();
   assert.equal(disk.size, 0);
-  assert.deepEqual(account.view().account, { kind: "signedOut", action: "signIn", note: "optional" });
+  assert.deepEqual(account.view().account, {
+    kind: "signedOut",
+    action: "signIn",
+    note: "optional",
+  });
 });
 
 test("without a keyring the session is never written, and Settings says so", async () => {
