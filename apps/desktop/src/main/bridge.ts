@@ -6,7 +6,11 @@ import * as Effect from "effect/Effect";
 import { BRIDGE_CALLS, type BridgeCall, type BridgeContract } from "../shared/bridge.ts";
 import { PLAYABLE_EXTENSIONS } from "../shared/playback.ts";
 import { Playback } from "./playback/playback.ts";
-import { validPlaybackCommand, validPlaybackSettings } from "./playback/validation.ts";
+import {
+  validPlaybackCommand,
+  validPlaybackSettings,
+  validSleepTimerChoice,
+} from "./playback/validation.ts";
 import { Player } from "./audio/player.ts";
 import type { AudioEngineError } from "./audio/supervisor.ts";
 import { Kotlin } from "./kotlin/kotlin.ts";
@@ -73,13 +77,7 @@ interface Runtime<R> {
 
 /** The services the calls use. */
 export type BridgeServices =
-  | Database
-  | Player
-  | Kotlin
-  | DesktopLibrary
-  | Playback
-  | YtMusic
-  | Account;
+  Database | Player | Kotlin | DesktopLibrary | Playback | YtMusic | Account;
 
 const refuse = (call: BridgeCall, why: string) => Effect.fail(new Error(`Refused ${call}: ${why}`));
 
@@ -228,6 +226,10 @@ const createHandlers = (onAppearance: (mode: Appearance) => void): Handlers => {
       limit <= 200
         ? playbackCall((p) => p.queue(offset, limit))
         : refuse("playback.queue", "invalid page"),
+    "playback.setSleepTimer": ([choice]) =>
+      validSleepTimerChoice(choice)
+        ? playbackCall((p) => p.setSleepTimer(choice))
+        : refuse("playback.setSleepTimer", "invalid sleep timer"),
     "settings.appearance": () =>
       Effect.gen(function* () {
         return appearance(yield* Database);

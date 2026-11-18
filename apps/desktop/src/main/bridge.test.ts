@@ -585,6 +585,54 @@ test("the window plays a list from a row, skips, stars and sets the volume throu
   });
 });
 
+test("the window sets a sleep timer, End of track holds the next song back, and cancelling lets it go", async () => {
+  await withFile(async (file) => {
+    const { runtime, exposed, engineCalls, handlers } = connect(file);
+    const wave = exposed.get("wave") as WaveBridge;
+    const call = (channel: string, ...args: unknown[]) => handlers.get(channel)!(trusted, ...args);
+    try {
+      await runtime.runPromise(
+        Effect.gen(function* () {
+          const db = (yield* Database) as unknown as TestDatabase;
+          for (const [n, title] of ["Parasite", "Pink Moon", "Road"].entries())
+            addTrack(db, { title, artist: "Nick Drake", album: "Pink Moon", trackNumber: n + 1 });
+        }),
+      );
+      const album = (await wave.library.browse({ kind: "albums" }, 0, 1)).items[0]!;
+      await wave.playback.start({ kind: "album", id: album.id }, 0);
+      const before = Date.now();
+      const timer = await wave.playback.setSleepTimer({ type: "minutes", minutes: 30 });
+      assert.equal(timer?.type, "deadline");
+      const endsAt = timer?.type === "deadline" ? timer.endsAt : 0;
+      assert.ok(endsAt >= before + 30 * 60_000 && endsAt <= Date.now() + 30 * 60_000);
+      assert.deepEqual((await wave.playback.view()).sleepTimer, timer);
+
+      await wave.playback.setSleepTimer({ type: "endOfTrack" });
+      assert.deepEqual((await wave.playback.view()).sleepTimer, { type: "endOfTrack" });
+      const held = engineCalls.length;
+      await wave.playback.command({ type: "next" });
+      assert.ok(
+        !engineCalls.slice(held).includes("preload /Music/Pink Moon/Road.mp3"),
+        "nothing is lined up after the song that ends the timer",
+      );
+      assert.equal(await wave.playback.setSleepTimer(null), null);
+      assert.equal((await wave.playback.view()).sleepTimer, null);
+      assert.ok(engineCalls.slice(held).includes("preload /Music/Pink Moon/Road.mp3"));
+
+      for (const bad of [
+        { type: "minutes", minutes: 0 },
+        { type: "minutes", minutes: 721 },
+        { type: "minutes", minutes: 1.5 },
+        { type: "never" },
+        "endOfTrack",
+      ])
+        await assert.rejects(call("playback.setSleepTimer", bad), /refused/i);
+    } finally {
+      await runtime.dispose();
+    }
+  });
+});
+
 test("a song plays at its Normalize Volume gain, and songs with no value are measured", async () => {
   await withFile(async (file) => {
     const { runtime, exposed, gains, measured } = connect(file);

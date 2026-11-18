@@ -12,6 +12,7 @@ import type { DesktopFolder, DesktopSong, ScanStatus } from "./library.ts";
 import type { BrowseScope, BrowsePage } from "./browse.ts";
 import type { YtSearchPage } from "./yt.ts";
 import type { AccountView } from "./account.ts";
+import type { SleepTimer, SleepTimerChoice } from "@wave/core";
 import type {
   ActionSurface,
   SongMenu,
@@ -57,6 +58,11 @@ export interface BridgeContract {
   readonly "playback.queue": {
     readonly args: readonly [offset: number, limit: number];
     readonly result: Page<QueueRow>;
+  };
+  /** Starts a sleep timer, replacing the running one; null cancels it. Main enforces it. */
+  readonly "playback.setSleepTimer": {
+    readonly args: readonly [choice: SleepTimerChoice | null];
+    readonly result: SleepTimer | null;
   };
 
   readonly "account.view": { readonly args: readonly []; readonly result: AccountView };
@@ -159,6 +165,7 @@ export const BRIDGE_CALLS = [
   "playback.favorite",
   "playback.volume",
   "playback.queue",
+  "playback.setSleepTimer",
 
   "library.artwork",
   "library.browse",
@@ -218,6 +225,7 @@ export interface WaveBridge {
     readonly favorite: () => Promise<void>;
     readonly volume: (volume: number, muted: boolean) => Promise<void>;
     readonly queue: (offset: number, limit: number) => Promise<Page<QueueRow>>;
+    readonly setSleepTimer: (choice: SleepTimerChoice | null) => Promise<SleepTimer | null>;
   };
   readonly library: {
     readonly artwork: (hash: string, large: boolean) => Promise<string | null>;
@@ -292,6 +300,7 @@ export const createBridge = (invoke: Invoke): WaveBridge => ({
     favorite: () => invoke("playback.favorite"),
     volume: (volume, muted) => invoke("playback.volume", volume, muted),
     queue: (offset, limit) => invoke("playback.queue", offset, limit),
+    setSleepTimer: (choice) => invoke("playback.setSleepTimer", choice),
   },
   library: {
     artwork: (hash, large) => invoke("library.artwork", hash, large),
