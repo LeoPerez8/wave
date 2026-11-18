@@ -17,14 +17,27 @@
  * can't open now (a missing file, storage not mounted) is kept nowhere and
  * takes no place among the five; it's tried again after the next scan
  * ([scanned]) or launch. Turning the switch off stops the measurement running
- * and keeps nothing of it; turning it on picks up there. Kept free of Expo so
- * it runs under plain Node tests.
+ * and keeps nothing of it; turning it on picks up there. Shared by the phone
+ * and the desktop app.
  */
 import { measureCandidates, songsToMeasure, type AlbumLoudness, type QueueState } from "@wave/core";
 import * as Effect from "effect/Effect";
 
-import type { SongMeasurement, SongToMeasure } from "@wave/client/db/loudness";
-import type { AudioMeasurement } from "../native/audioMeasurement.ts";
+import type { SongMeasurement, SongToMeasure } from "./db/loudness.ts";
+
+/**
+ * What the audio engine's meter says of a file (the phone's
+ * `WaveNative.measureAudioLoudness`, the desktop engine's `measure`): its
+ * integrated loudness (ITU-R BS.1770, LUFS) and sample peak (0–1 full scale);
+ * that it couldn't decode it (`unmeasurable`, as the player couldn't play it
+ * either); that it couldn't open it now (`unreadable`: gone, or on storage
+ * that isn't mounted); or that Normalize Volume turning off stopped it.
+ */
+export type AudioMeasurement =
+  | { readonly kind: "measured"; readonly loudness: number; readonly peak: number }
+  | { readonly kind: "unmeasurable" }
+  | { readonly kind: "unreadable" }
+  | { readonly kind: "cancelled" };
 
 /** The queue now, and the Library album it plays, for Core's `songsToMeasure`. */
 export interface QueueToMeasure {

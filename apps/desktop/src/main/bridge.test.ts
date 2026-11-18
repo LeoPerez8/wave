@@ -29,10 +29,14 @@ const trusted = { senderFrame: "window" };
 /** An audio process in memory, whose engine records what it was asked. */
 const audioInMemory = () => {
   const engineCalls: string[] = [];
+  /** Each song's Normalize Volume gain as it was loaded or lined up, and the files measured. */
+  const gains: string[] = [];
+  const measured: string[] = [];
   let status: PlaybackStatus = { state: "idle", positionMs: 0 };
   const engine: AddonEngine = {
-    load: (path, key) => {
+    load: (path, key, gainDb) => {
       engineCalls.push(`load ${path}`);
+      gains.push(`${basename(path)} ${gainDb}`);
       status = { state: "paused", positionMs: 0, durationMs: 1_000, ...(key ? { key } : {}) };
       return status;
     },
@@ -46,13 +50,19 @@ const audioInMemory = () => {
     preload: (path) => void (path === undefined || engineCalls.push(`preload ${path}`)),
     transitions: () => [],
     setVolume: (volume) => void engineCalls.push(`volume ${volume}`),
+    setCrossfade: (seconds) => void engineCalls.push(`settings crossfade ${seconds}`),
+    setNormalize: (on) => void engineCalls.push(`settings normalize ${on}`),
+    // Measurements are never answered here: the in-memory process pushes no events.
+    measure: (path) => void measured.push(path),
+    cancelMeasurements: () => undefined,
+    measurements: () => [],
   };
   const fork = (events: AudioEvents) => ({
     send: (request: Parameters<typeof answer>[1]) =>
       queueMicrotask(() => events.message(answer(engine, request))),
     kill: () => setImmediate(events.exit),
   });
-  return { layer: playerLayer({ fork }), engineCalls };
+  return { layer: playerLayer({ fork }), engineCalls, gains, measured };
 };
 
 /** Tags as the shared Kotlin reads them, for a song titled `title`. */
@@ -127,7 +137,16 @@ const connect = (file: string, isTrusted = (event: unknown) => event === trusted
       },
     },
   );
-  return { runtime, handlers, exposed, sent, engineCalls: audio.engineCalls, reads: jvm.reads };
+  return {
+    runtime,
+    handlers,
+    exposed,
+    sent,
+    engineCalls: audio.engineCalls,
+    gains: audio.gains,
+    measured: audio.measured,
+    reads: jvm.reads,
+  };
 };
 
 const withFile = async (run: (file: string) => Promise<void>): Promise<void> => {
@@ -354,9 +373,9 @@ test("the window plays, pauses and seeks a song through the bridge", async () =>
       positionMs: 400,
       durationMs: 1_000,
     });
-    // Playback sets the saved volume as it starts; the song is what this test plays.
+    // Playback sets the saved volume and settings as it starts; the song is what this test plays.
     assert.deepEqual(
-      engineCalls.filter((c) => !c.startsWith("volume")),
+      engineCalls.filter((c) => !c.startsWith("volume") && !c.startsWith("settings")),
       [`load ${song}`],
     );
     await runtime.dispose();
@@ -382,7 +401,7 @@ test("main refuses a player call whose arguments aren't a song and a time", asyn
     for (const positionMs of [-1, Number.NaN, Number.POSITIVE_INFINITY, "400", undefined])
       await assert.rejects(call("player.seek", positionMs), /refused/i, String(positionMs));
     assert.deepEqual(
-      engineCalls.filter((c) => !c.startsWith("volume")),
+      engineCalls.filter((c) => !c.startsWith("volume") && !c.startsWith("settings")),
       [],
     );
     await runtime.dispose();
@@ -477,6 +496,75 @@ test("the window plays a list from a row, skips, stars and sets the volume throu
   });
 });
 
+test("a song plays at its Normalize Volume gain, and songs with no value are measured", async () => {
+  await withFile(async (file) => {
+    const { runtime, exposed, gains, measured } = connect(file);
+    const wave = exposed.get("wave") as WaveBridge;
+    try {
+      await runtime.runPromise(
+        Effect.gen(function* () {
+          const db = (yield* Database) as unknown as TestDatabase;
+          addTrack(db, { title: "Parasite", album: "Pink Moon", trackNumber: 1, addedAt: 1 });
+        }),
+      );
+      await wave.playback.start({ kind: "songs" }, 0);
+      // No tags, no measurement and too few songs for a median: Core's typical gain.
+      assert.deepEqual(gains, ["Parasite.mp3 -5"]);
+      for (let n = 0; n < 50 && measured.length === 0; n++)
+        await new Promise((resolve) => setTimeout(resolve, 10));
+      assert.deepEqual(measured, ["/Music/Pink Moon/Parasite.mp3"]);
+    } finally {
+      await runtime.dispose();
+    }
+  });
+});
+
+test("Settings › Playback is kept for the account and reaches the engine at once", async () => {
+  await withFile(async (file) => {
+    const { runtime, exposed, handlers, engineCalls } = connect(file);
+    const wave = exposed.get("wave") as WaveBridge;
+    const call = (channel: string, ...args: unknown[]) => handlers.get(channel)!(trusted, ...args);
+    try {
+      assert.deepEqual(await wave.settings.playback(), {
+        crossfadeSeconds: 0,
+        normalizeVolume: true,
+        bufferMinutes: 2,
+      });
+      assert.ok(engineCalls.includes("settings crossfade 0"), "the engine starts with them");
+      assert.ok(engineCalls.includes("settings normalize true"));
+      const after = await wave.settings.setPlayback({
+        crossfadeSeconds: 4,
+        normalizeVolume: false,
+      });
+      assert.deepEqual(after, { crossfadeSeconds: 4, normalizeVolume: false, bufferMinutes: 2 });
+      assert.deepEqual(engineCalls.slice(-2), ["settings crossfade 4", "settings normalize false"]);
+      await wave.settings.setPlayback({ bufferMinutes: 15 });
+      assert.deepEqual(await wave.settings.playback(), {
+        crossfadeSeconds: 4,
+        normalizeVolume: false,
+        bufferMinutes: 15,
+      });
+
+      for (const change of [
+        { crossfadeSeconds: 16 },
+        { crossfadeSeconds: Number.NaN },
+        { normalizeVolume: "off" },
+        { bufferMinutes: 3 },
+        { volume: 1 },
+        null,
+        "fast",
+      ])
+        await assert.rejects(
+          call("settings.setPlayback", change),
+          /refused/i,
+          JSON.stringify(change),
+        );
+    } finally {
+      await runtime.dispose();
+    }
+  });
+});
+
 test("main refuses playback calls with a bad scope, row, command, time or volume", async () => {
   await withFile(async (file) => {
     const { runtime, handlers, engineCalls } = connect(file);
@@ -492,7 +580,7 @@ test("main refuses playback calls with a bad scope, row, command, time or volume
       await assert.rejects(call("playback.volume", 0.5, "no"), /refused/i);
       await assert.rejects(call("playback.queue", 0, 500), /refused/i);
       assert.deepEqual(
-        engineCalls.filter((c) => !c.startsWith("volume")),
+        engineCalls.filter((c) => !c.startsWith("volume") && !c.startsWith("settings")),
         [],
       );
     } finally {

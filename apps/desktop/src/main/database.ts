@@ -21,6 +21,10 @@ export const sqliteDriverLayer = (file: string) =>
           client.exec(
             "CREATE TABLE IF NOT EXISTS desktop_settings (key TEXT PRIMARY KEY, value TEXT NOT NULL)",
           );
+          // The account's synced settings (`desktopSync.ts`), kept apart from the desktop's own.
+          client.exec(
+            "CREATE TABLE IF NOT EXISTS desktop_synced_preferences (key TEXT PRIMARY KEY, value TEXT NOT NULL)",
+          );
           return drizzle({ client, schema });
         },
         catch: (cause) => new DatabaseError({ cause }),

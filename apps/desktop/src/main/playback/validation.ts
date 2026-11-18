@@ -1,4 +1,21 @@
+import { CROSSFADE, STREAM_BUFFER_MINUTES } from "@wave/core";
+
 import type { PlaybackCommand } from "../../shared/playerView.ts";
+import type { PlaybackSettings } from "../../shared/playbackSettings.ts";
+
+/** Whether [value], sent by the window, is a change to Settings › Playback main may keep. */
+export const validPlaybackSettings = (value: unknown): value is Partial<PlaybackSettings> => {
+  if (typeof value !== "object" || value === null || Array.isArray(value)) return false;
+  const checks: Record<keyof PlaybackSettings, (x: unknown) => boolean> = {
+    crossfadeSeconds: (x) =>
+      typeof x === "number" && Number.isFinite(x) && x >= CROSSFADE.min && x <= CROSSFADE.max,
+    normalizeVolume: (x) => typeof x === "boolean",
+    bufferMinutes: (x) => (STREAM_BUFFER_MINUTES as readonly unknown[]).includes(x),
+  };
+  return Object.entries(value).every(
+    ([name, x]) => Object.hasOwn(checks, name) && checks[name as keyof PlaybackSettings](x),
+  );
+};
 
 /** Whether [value], sent by the window, is a queue command main may run. */
 export const validPlaybackCommand = (value: unknown): value is PlaybackCommand => {

@@ -1,7 +1,12 @@
-//! The song being played: a decoding thread fills a short buffer, and the output pulls frames
-//! from it. The position counts frames handed to the output.
+//! The song being played: a decoding thread fills a short buffer per voice, and the output pulls
+//! frames from it. The position counts frames of the current song handed to the output.
+//!
+//! A voice is one song's decoded audio, with the gain Normalize Volume gave it as it started, so
+//! the gain switches on the song's first frame. With crossfade, the song that ends on its own
+//! keeps a voice of its own while it fades out under the next one (docs/spec.md, story 22a).
 
 use std::collections::VecDeque;
+use std::f64::consts::FRAC_PI_2;
 use std::path::Path;
 use std::sync::{Arc, Condvar, Mutex, MutexGuard};
 use std::thread;
@@ -12,6 +17,10 @@ use crate::error::EngineError;
 
 /// How much decoded audio waits ahead of the output, in seconds.
 const BUFFER_SECONDS: f64 = 0.5;
+
+/// A next song that's ready with less than this left of the current one follows gaplessly
+/// (Core's `MIN_LATE_CROSSFADE_MS`).
+const MIN_LATE_CROSSFADE_MS: f64 = 1000.0;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum PlayState {
@@ -47,43 +56,221 @@ pub struct Progress {
     pub track: Option<TrackInfo>,
 }
 
-/// What the decoding thread is asked to do next: start on a new file, move, or both.
-#[derive(Default)]
-struct Job {
-    decoder: Option<Decoder>,
-    seek: Option<u64>,
+/// The song lined up after the current one.
+#[derive(Debug, Clone)]
+pub struct Next<'a> {
+    pub path: &'a Path,
+    /// The queue entry it plays.
+    pub key: String,
+    /// Its Normalize Volume gain in dB; none plays it as it is.
+    pub gain_db: Option<f64>,
+    /// Whether ending on its own into it may crossfade: not with repeat one, nor an end-of-song
+    /// sleep timer.
+    pub fade: bool,
 }
 
-struct Prepared {
-    decoder: Decoder,
-    samples: VecDeque<f32>,
-    track: TrackInfo,
-    key: String,
-    ended: bool,
+impl<'a> Next<'a> {
+    /// The song at `path`, for entry `key`, at 0 dB, crossfading when the setting is on.
+    pub fn new(path: &'a Path, key: impl Into<String>) -> Next<'a> {
+        Next { path, key: key.into(), gain_db: None, fade: true }
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum TransitionKind {
+    /// The current song ended and the next one followed without a gap.
+    Gapless,
+    /// The next song started fading in under the current one, which fades out.
+    Crossfade,
+    /// The song fading out went silent, or a seek cut it off.
+    FadeEnded,
+}
+
+impl TransitionKind {
+    pub fn as_str(self) -> &'static str {
+        match self {
+            TransitionKind::Gapless => "gapless",
+            TransitionKind::Crossfade => "crossfade",
+            TransitionKind::FadeEnded => "fadeEnded",
+        }
+    }
 }
 
 #[derive(Debug, Clone)]
 pub struct Transition {
+    /// The entry moved to; for `FadeEnded`, the one that faded out.
     pub key: String,
     pub at_ms: f64,
+    pub kind: TransitionKind,
+}
+
+/// One song's decoded audio on its way to the output.
+struct Voice {
+    /// Names the voice to the decoding thread, which may hold its decoder for a moment.
+    id: u64,
+    key: Option<String>,
+    track: TrackInfo,
+    /// Decoded interleaved stereo samples, starting at the voice's position.
+    queue: VecDeque<f32>,
+    /// Every frame up to the song's end is in `queue`.
+    decoded_all: bool,
+    /// `None` while the decoding thread decodes with it.
+    decoder: Option<Decoder>,
+    /// A seek the decoding thread hasn't made yet.
+    seek: Option<u64>,
+    /// Bumped by every seek, so frames decoded before it are dropped.
+    epoch: u64,
+    /// Normalize Volume's gain, settled when the song was loaded or lined up.
+    gain_db: Option<f64>,
+}
+
+impl Voice {
+    fn new(id: u64, key: Option<String>, decoder: Decoder, gain_db: Option<f64>) -> Voice {
+        Voice {
+            id,
+            key,
+            track: TrackInfo {
+                sample_rate: decoder.sample_rate(),
+                duration_frames: decoder.duration_frames(),
+            },
+            queue: VecDeque::new(),
+            decoded_all: false,
+            decoder: Some(decoder),
+            seek: None,
+            epoch: 0,
+            gain_db,
+        }
+    }
+
+    fn wants_decoding(&self) -> bool {
+        self.decoder.is_some()
+            && (self.seek.is_some()
+                || (!self.decoded_all && self.queue.len() < buffer_samples(self.track)))
+    }
+
+    fn gain(&self, normalize: bool) -> f32 {
+        match self.gain_db {
+            Some(db) if normalize && db.is_finite() => 10f64.powf(db / 20.0) as f32,
+            _ => 1.0,
+        }
+    }
+}
+
+fn buffer_samples(track: TrackInfo) -> usize {
+    (track.sample_rate as f64 * BUFFER_SECONDS) as usize * 2
+}
+
+/// The song fading out under the current one.
+struct Fade {
+    voice: Voice,
+    /// The overlap's length, and how much of it has played, in frames.
+    overlap: u64,
+    done: u64,
+}
+
+struct Upcoming {
+    voice: Voice,
+    fade: bool,
 }
 
 struct State {
-    /// Bumped by every load and seek, so frames decoded for an older request are dropped.
-    generation: u64,
-    job: Option<Job>,
-    /// Decoded interleaved stereo samples, starting at `position`.
-    queue: VecDeque<f32>,
-    /// Every frame of the current request is in `queue`.
-    decoded_all: bool,
+    current: Option<Voice>,
+    fading: Option<Fade>,
+    next: Option<Upcoming>,
     state: PlayState,
     position: u64,
-    track: Option<TrackInfo>,
     shutdown: bool,
-    next: Option<Prepared>,
-    key: Option<String>,
     transitions: Vec<Transition>,
     volume: f32,
+    /// Crossfade's overlap (Settings › Playback); 0 keeps every move gapless.
+    crossfade_ms: f64,
+    /// Normalize Volume's switch: off plays every song as it is, the playing one included.
+    normalize: bool,
+    last_id: u64,
+}
+
+impl State {
+    fn new_id(&mut self) -> u64 {
+        self.last_id += 1;
+        self.last_id
+    }
+
+    fn voice_mut(&mut self, id: u64) -> Option<&mut Voice> {
+        if let Some(voice) = self.current.as_mut().filter(|v| v.id == id) {
+            return Some(voice);
+        }
+        self.fading.as_mut().map(|f| &mut f.voice).filter(|v| v.id == id)
+    }
+
+    fn report(&mut self, key: String, kind: TransitionKind) {
+        let at_ms =
+            SystemTime::now().duration_since(UNIX_EPOCH).unwrap_or_default().as_secs_f64() * 1000.0;
+        self.transitions.push(Transition { key, at_ms, kind });
+    }
+
+    fn end_fade(&mut self) {
+        if let Some(fade) = self.fading.take() {
+            self.report(fade.voice.key.unwrap_or_default(), TransitionKind::FadeEnded);
+        }
+    }
+
+    /// The overlap, in frames, the current song would fade into the next one for, and where in
+    /// the current song it starts; `None` when the move is gapless.
+    fn planned_fade(&self) -> Option<(u64, u64)> {
+        let current = self.current.as_ref()?;
+        let next = self.next.as_ref().filter(|next| next.fade)?;
+        if self.fading.is_some()
+            || self.crossfade_ms <= 0.0
+            || next.voice.track.sample_rate != current.track.sample_rate
+        {
+            return None;
+        }
+        let duration = current.track.duration_frames?;
+        let rate = current.track.sample_rate as f64;
+        let setting = (self.crossfade_ms * rate / 1000.0).round() as u64;
+        // At most half the song (Core's `songOverlap`).
+        let overlap = setting.min(duration / 2);
+        if overlap == 0 {
+            return None;
+        }
+        let start = duration - overlap;
+        if self.position <= start {
+            return Some((overlap, start));
+        }
+        // Lined up late, or a seek into the overlap: Core's `lateCrossfadeOverlap`.
+        let left = duration.saturating_sub(self.position);
+        if (left as f64) * 1000.0 / rate < MIN_LATE_CROSSFADE_MS {
+            return None;
+        }
+        Some((left, self.position))
+    }
+
+    /// The next song starts fading in, current from its first frame, and the current one fades
+    /// out over `overlap` frames.
+    fn start_fade(&mut self, overlap: u64) {
+        let (Some(outgoing), Some(next)) = (self.current.take(), self.next.take()) else {
+            return;
+        };
+        self.report(next.voice.key.clone().unwrap_or_default(), TransitionKind::Crossfade);
+        self.current = Some(next.voice);
+        self.position = 0;
+        self.fading = Some(Fade { voice: outgoing, overlap, done: 0 });
+    }
+
+    /// The current song played to its end: the next one follows without a gap, or play ends.
+    fn finish_song(&mut self) {
+        match self.next.take() {
+            Some(next) => {
+                self.report(next.voice.key.clone().unwrap_or_default(), TransitionKind::Gapless);
+                self.current = Some(next.voice);
+                self.position = 0;
+            }
+            None => {
+                self.state = PlayState::Ended;
+                self.end_fade();
+            }
+        }
+    }
 }
 
 struct Shared {
@@ -106,18 +293,17 @@ impl Player {
     pub fn new() -> Player {
         let shared = Arc::new(Shared {
             state: Mutex::new(State {
-                generation: 0,
-                job: None,
-                queue: VecDeque::new(),
-                decoded_all: false,
+                current: None,
+                fading: None,
+                next: None,
                 state: PlayState::Idle,
                 position: 0,
-                track: None,
                 shutdown: false,
-                next: None,
-                key: None,
                 transitions: Vec::new(),
                 volume: 1.0,
+                crossfade_ms: 0.0,
+                normalize: true,
+                last_id: 0,
             }),
             wake: Condvar::new(),
         });
@@ -131,65 +317,82 @@ impl Player {
 
     /// Opens `path` paused at its start, in place of any song loaded before.
     pub fn load(&self, path: &Path) -> Result<TrackInfo, EngineError> {
-        self.load_entry(path, None)
+        self.load_entry(path, None, None)
     }
 
-    pub fn load_entry(&self, path: &Path, key: Option<String>) -> Result<TrackInfo, EngineError> {
+    /// Opens `path` for entry `key`, at `gain_db`, paused at its start. A song fading out stops.
+    pub fn load_entry(
+        &self,
+        path: &Path,
+        key: Option<String>,
+        gain_db: Option<f64>,
+    ) -> Result<TrackInfo, EngineError> {
         let decoder = Decoder::open(path)?;
-        let track = TrackInfo {
-            sample_rate: decoder.sample_rate(),
-            duration_frames: decoder.duration_frames(),
-        };
         let mut state = self.shared.lock();
-        state.generation += 1;
-        state.job = Some(Job { decoder: Some(decoder), seek: None });
-        state.queue.clear();
-        state.decoded_all = false;
+        let id = state.new_id();
+        let voice = Voice::new(id, key, decoder, gain_db);
+        let track = voice.track;
+        state.current = Some(voice);
+        state.fading = None;
+        state.next = None;
         state.state = PlayState::Paused;
         state.position = 0;
-        state.track = Some(track);
-        state.next = None;
-        state.key = key;
         state.transitions.clear();
         self.shared.wake.notify_all();
         Ok(track)
     }
 
-    /// Decode a bounded head now, before the callback reaches the current song's end.
-    pub fn preload(&self, next: Option<(&Path, String)>) -> Result<(), EngineError> {
-        let prepared = if let Some((path, key)) = next {
-            let mut decoder = Decoder::open(path)?;
-            let track = TrackInfo {
-                sample_rate: decoder.sample_rate(),
-                duration_frames: decoder.duration_frames(),
-            };
-            let mut samples = VecDeque::new();
-            let mut ended = false;
-            while samples.len() < (track.sample_rate as f64 * BUFFER_SECONDS) as usize * 2 {
-                match decoder.next_chunk()? {
-                    Some(chunk) => samples.extend(chunk),
-                    None => {
-                        ended = true;
-                        break;
+    /// Lines up the song after the current one, its head decoded now so the move to it never
+    /// waits on the file; `None` lines up nothing. A song already fading out goes on.
+    pub fn preload(&self, next: Option<Next<'_>>) -> Result<(), EngineError> {
+        let prepared = match next {
+            Some(next) => {
+                let mut voice =
+                    Voice::new(0, Some(next.key), Decoder::open(next.path)?, next.gain_db);
+                let decoder = voice.decoder.as_mut().expect("a new voice holds its decoder");
+                while voice.queue.len() < buffer_samples(voice.track) {
+                    match decoder.next_chunk()? {
+                        Some(chunk) => voice.queue.extend(chunk),
+                        None => {
+                            voice.decoded_all = true;
+                            break;
+                        }
                     }
                 }
+                Some(Upcoming { voice, fade: next.fade })
             }
-            Some(Prepared { decoder, samples, track, key, ended })
-        } else {
-            None
+            None => None,
         };
-        self.shared.lock().next = prepared;
+        let mut state = self.shared.lock();
+        state.next = prepared.map(|mut upcoming| {
+            upcoming.voice.id = state.new_id();
+            upcoming
+        });
         Ok(())
     }
 
     pub fn key(&self) -> Option<String> {
-        self.shared.lock().key.clone()
+        self.shared.lock().current.as_ref().and_then(|voice| voice.key.clone())
     }
+
+    /// The moves to the next song, and the fades that ended, since the last call.
     pub fn take_transitions(&self) -> Vec<Transition> {
         std::mem::take(&mut self.shared.lock().transitions)
     }
+
     pub fn set_volume(&self, volume: f32) {
         self.shared.lock().volume = volume.clamp(0.0, 1.0);
+    }
+
+    /// Crossfade's overlap in ms (0 to 15,000); read at each move, so it applies from the next.
+    pub fn set_crossfade(&self, ms: f64) {
+        self.shared.lock().crossfade_ms =
+            if ms.is_finite() { ms.clamp(0.0, 15_000.0) } else { 0.0 };
+    }
+
+    /// Normalize Volume's switch; applies at once, to the playing song too.
+    pub fn set_normalize(&self, on: bool) {
+        self.shared.lock().normalize = on;
     }
 
     pub fn play(&self) -> Result<(), EngineError> {
@@ -207,6 +410,7 @@ impl Player {
         Ok(())
     }
 
+    /// Pauses; a song fading out pauses with the current one.
     pub fn pause(&self) -> Result<(), EngineError> {
         let mut state = self.shared.lock();
         match state.state {
@@ -219,16 +423,18 @@ impl Player {
         }
     }
 
-    /// Moves to `frame`, keeping play or pause; past the end it stops at the end.
+    /// Moves to `frame`, keeping play or pause; past the end it stops at the end. A song fading
+    /// out stops.
     pub fn seek(&self, frame: u64) -> Result<(), EngineError> {
         let mut state = self.shared.lock();
-        let track = state.track.ok_or(EngineError::NothingLoaded)?;
-        let frame = track.duration_frames.map_or(frame, |end| frame.min(end));
-        state.generation += 1;
-        state.job.get_or_insert_with(Job::default).seek = Some(frame);
-        state.queue.clear();
-        state.decoded_all = false;
+        let voice = state.current.as_mut().ok_or(EngineError::NothingLoaded)?;
+        let frame = voice.track.duration_frames.map_or(frame, |end| frame.min(end));
+        voice.epoch += 1;
+        voice.seek = Some(frame);
+        voice.queue.clear();
+        voice.decoded_all = false;
         state.position = frame;
+        state.end_fade();
         if state.state == PlayState::Ended {
             state.state = PlayState::Paused;
         }
@@ -238,54 +444,90 @@ impl Player {
 
     pub fn progress(&self) -> Progress {
         let state = self.shared.lock();
-        Progress { state: state.state, position_frames: state.position, track: state.track }
+        Progress {
+            state: state.state,
+            position_frames: state.position,
+            track: state.current.as_ref().map(|voice| voice.track),
+        }
     }
 
-    /// Fills `out`, interleaved stereo for a stream at `rate`, with what plays next, or silence.
-    /// A song at another rate waits in silence, its position held, for a stream at its own rate:
-    /// a next song whose rate differs ends the buffer where the previous one ended.
-    pub fn render(&self, out: &mut [f32], rate: u32) {
+    /// Fills `out`, interleaved stereo for a stream at `rate`, with what plays next, or silence,
+    /// and says how many frames played. A song at another rate waits in silence, its position
+    /// held, for a stream at its own rate: a next song whose rate differs ends the buffer where
+    /// the previous one ended.
+    pub fn render(&self, out: &mut [f32], rate: u32) -> usize {
         let mut state = self.shared.lock();
+        let state = &mut *state;
         let mut written = 0;
-        while state.state == PlayState::Playing
-            && written < out.len()
-            && state.track.is_none_or(|track| track.sample_rate == rate)
-        {
-            let take = (out.len() - written).min(state.queue.len()) & !1;
-            let volume = state.volume;
-            for (slot, sample) in out[written..].iter_mut().zip(state.queue.drain(..take)) {
-                *slot = sample * volume;
+        while state.state == PlayState::Playing && written < out.len() {
+            let Some(current) = state.current.as_ref() else { break };
+            if current.track.sample_rate != rate {
+                break;
             }
-            written += take;
-            state.position += (take / 2) as u64;
-            if state.queue.is_empty() && state.decoded_all && state.job.is_none() {
-                if let Some(next) = state.next.take() {
-                    let at_ms = SystemTime::now()
-                        .duration_since(UNIX_EPOCH)
-                        .unwrap_or_default()
-                        .as_secs_f64()
-                        * 1000.0;
-                    state.transitions.push(Transition { key: next.key.clone(), at_ms });
-                    state.key = Some(next.key);
-                    state.track = Some(next.track);
-                    state.position = 0;
-                    state.queue = next.samples;
-                    state.decoded_all = next.ended;
-                    state.generation += 1;
-                    state.job = Some(Job { decoder: Some(next.decoder), seek: None });
-                    self.shared.wake.notify_all();
-                } else {
-                    state.state = PlayState::Ended;
+            let mut until_fade = u64::MAX;
+            if let Some((overlap, start)) = state.planned_fade() {
+                if state.position >= start {
+                    state.start_fade(overlap);
+                    continue;
+                }
+                until_fade = start - state.position;
+            }
+            let current = state.current.as_mut().expect("checked above");
+            let mut frames = ((out.len() - written) / 2).min(current.queue.len() / 2);
+            frames = frames.min(until_fade.min(usize::MAX as u64) as usize);
+            if let Some(fade) = state.fading.as_ref() {
+                frames = frames.min((fade.overlap - fade.done) as usize);
+                if !fade.voice.decoded_all {
+                    frames = frames.min(fade.voice.queue.len() / 2);
                 }
             }
-            if take > 0 {
-                self.shared.wake.notify_all();
+            let volume = state.volume;
+            let gain = current.gain(state.normalize) * volume;
+            let slots = &mut out[written..written + frames * 2];
+            match state.fading.as_mut() {
+                None => {
+                    for (slot, sample) in slots.iter_mut().zip(current.queue.drain(..frames * 2)) {
+                        *slot = sample * gain;
+                    }
+                }
+                Some(fade) => {
+                    let out_gain = fade.voice.gain(state.normalize) * volume;
+                    let overlap = fade.overlap as f64;
+                    let mut incoming = current.queue.drain(..frames * 2);
+                    for (n, frame) in slots.as_chunks_mut::<2>().0.iter_mut().enumerate() {
+                        let at = (fade.done + n as u64) as f64 / overlap;
+                        let fade_in = (at * FRAC_PI_2).sin() as f32;
+                        let fade_out = ((1.0 - at) * FRAC_PI_2).sin() as f32;
+                        for slot in frame {
+                            let new = incoming.next().unwrap_or(0.0);
+                            let old = fade.voice.queue.pop_front().unwrap_or(0.0);
+                            *slot = new * gain * fade_in + old * out_gain * fade_out;
+                        }
+                    }
+                    drop(incoming);
+                    fade.done += frames as u64;
+                    if fade.done >= fade.overlap
+                        || (fade.voice.decoded_all && fade.voice.queue.is_empty())
+                    {
+                        state.end_fade();
+                    }
+                }
             }
-            if take == 0 {
+            written += frames * 2;
+            state.position += frames as u64;
+            let current = state.current.as_ref().expect("still there");
+            let ended = current.queue.is_empty() && current.decoded_all && current.seek.is_none();
+            if ended {
+                state.finish_song();
+            }
+            if frames > 0 {
+                self.shared.wake.notify_all();
+            } else if !ended {
                 break;
             }
         }
         out[written..].fill(0.0);
+        written / 2
     }
 }
 
@@ -305,55 +547,46 @@ impl Drop for Player {
     }
 }
 
+/// Keeps every voice's buffer full: the current song's first, then the one fading out. It takes
+/// a voice's decoder while it decodes, and gives it back with the chunk.
 fn decode_loop(shared: &Shared) {
-    let mut decoder: Option<Decoder> = None;
     loop {
-        let (generation, job) = {
+        let (id, epoch, mut decoder, seek) = {
             let mut state = shared.lock();
             loop {
                 if state.shutdown {
                     return;
                 }
-                if state.job.is_some() {
-                    break;
-                }
-                let target =
-                    state.track.map_or(0, |t| (t.sample_rate as f64 * BUFFER_SECONDS) as usize * 2);
-                if decoder.is_some() && !state.decoded_all && state.queue.len() < target {
-                    break;
+                let current = state.current.as_mut().filter(|v| v.wants_decoding());
+                let voice = match current {
+                    Some(voice) => Some(voice),
+                    None => {
+                        state.fading.as_mut().map(|f| &mut f.voice).filter(|v| v.wants_decoding())
+                    }
+                };
+                if let Some(voice) = voice {
+                    let decoder = voice.decoder.take().expect("wants_decoding checks it");
+                    break (voice.id, voice.epoch, decoder, voice.seek.take());
                 }
                 state = shared.wake.wait(state).unwrap_or_else(|poisoned| poisoned.into_inner());
             }
-            (state.generation, state.job.take())
         };
-        if let Some(job) = job {
-            if let Some(next) = job.decoder {
-                decoder = Some(next);
-            }
-            if let (Some(frame), Some(current)) = (job.seek, decoder.as_mut())
-                && current.seek(frame).is_err()
-            {
-                finish(shared, generation);
-                continue;
-            }
+        let decoded = match seek {
+            Some(frame) => decoder.seek(frame),
+            None => Ok(()),
         }
-        let Some(current) = decoder.as_mut() else { continue };
-        // A file that breaks halfway ends there, as if it were shorter.
-        let chunk = current.next_chunk().ok().flatten();
+        .and_then(|()| decoder.next_chunk());
         let mut state = shared.lock();
-        if state.generation != generation || state.job.is_some() {
+        let Some(voice) = state.voice_mut(id) else { continue };
+        voice.decoder = Some(decoder);
+        if voice.epoch != epoch {
             continue;
         }
-        match chunk {
-            Some(samples) => state.queue.extend(samples),
-            None => state.decoded_all = true,
+        // A file that breaks halfway ends there, as if it were shorter.
+        match decoded {
+            Ok(Some(samples)) => voice.queue.extend(samples),
+            Ok(None) | Err(_) => voice.decoded_all = true,
         }
-    }
-}
-
-fn finish(shared: &Shared, generation: u64) {
-    let mut state = shared.lock();
-    if state.generation == generation && state.job.is_none() {
-        state.decoded_all = true;
+        shared.wake.notify_all();
     }
 }

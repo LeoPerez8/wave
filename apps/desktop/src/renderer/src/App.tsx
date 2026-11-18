@@ -6,6 +6,7 @@ import { PlayerBar, usePlayback } from "./PlayerBar.tsx";
 import { Icon } from "./Icon.tsx";
 import { Artwork, VirtualTable } from "./VirtualTable.tsx";
 import { FolderSettings } from "./FolderSettings.tsx";
+import { PlaybackSettings } from "./PlaybackSettings.tsx";
 import { useDesktopKeys } from "./keys.ts";
 import { ShortcutsSheet } from "./Shortcuts.tsx";
 import { SelectionBar, useSongActions, type Selection } from "./SongActions.tsx";
@@ -408,6 +409,8 @@ export function App() {
                     ))}
                   </select>
                 </>
+              ) : setting === "playback" ? (
+                <PlaybackSettings onError={failed} />
               ) : (
                 <p className="secondary">{labels.unavailableSection}</p>
               )}

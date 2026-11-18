@@ -70,3 +70,36 @@ fn a_seek_before_any_song_is_refused() {
     let engine = Engine::silent();
     assert_eq!(engine.seek(10.0).map_err(|e| e.code()), Err("nothing-loaded"));
 }
+
+fn measurements(engine: &Engine, count: usize) -> Vec<(String, &'static str)> {
+    let deadline = Instant::now() + Duration::from_secs(10);
+    let mut done = Vec::new();
+    while done.len() < count {
+        done.extend(engine.take_measurements().into_iter().map(|(id, m)| (id, m.kind())));
+        assert!(Instant::now() < deadline, "measured only {done:?}");
+        sleep(Duration::from_millis(5));
+    }
+    done
+}
+
+#[test]
+fn songs_are_measured_in_turn_while_one_plays_and_a_cancel_drops_the_rest() {
+    let engine = Engine::silent();
+    engine.load(&fixture("tone.flac")).expect("loads");
+    engine.play().expect("plays");
+    engine.measure(&fixture("tone.ogg"), "1".into());
+    engine.measure(&fixture("missing.ogg"), "2".into());
+    assert_eq!(
+        measurements(&engine, 2),
+        [("1".to_string(), "measured"), ("2".to_string(), "unreadable")]
+    );
+
+    engine.cancel_measurements();
+    for id in ["3", "4", "5"] {
+        engine.measure(&fixture("tone.wav"), id.into());
+    }
+    engine.cancel_measurements();
+    let done = measurements(&engine, 3);
+    assert!(done.iter().any(|(_, kind)| *kind == "cancelled"), "{done:?}");
+    assert_eq!(done.iter().map(|(id, _)| id.as_str()).collect::<Vec<_>>().len(), 3);
+}

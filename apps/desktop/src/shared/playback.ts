@@ -12,11 +12,33 @@ export interface PlaybackStatus {
   readonly observedAtMs?: number | undefined;
 }
 
+/**
+ * A move the engine made by itself: on to the song lined up, gaplessly or by a crossfade, and
+ * the end of a crossfade, when the song that faded out ([key]) went silent.
+ */
+export interface PlaybackTransition {
+  readonly key: string;
+  readonly atMs: number;
+  readonly kind?: "gapless" | "crossfade" | "fadeEnded" | undefined;
+}
+
+/** What the engine's meter gave for the file of measurement [id] (Normalize Volume). */
+export interface LoudnessResult {
+  readonly id: string;
+  readonly kind: "measured" | "unmeasurable" | "unreadable" | "cancelled";
+  /** Integrated loudness in LUFS, when measured. */
+  readonly loudness?: number | undefined;
+  /** Sample peak on a 0–1 scale, when measured. */
+  readonly peak?: number | undefined;
+}
+
 export interface PlaybackEvent {
   readonly event: "playback";
   readonly status: PlaybackStatus;
-  /** Each move to the preloaded song since the last event, in the order they played. */
-  readonly transitions: readonly { readonly key: string; readonly atMs: number }[];
+  /** Each move the engine made since the last event, in the order they played. */
+  readonly transitions: readonly PlaybackTransition[];
+  /** The measurements finished since the last event. */
+  readonly measurements?: readonly LoudnessResult[] | undefined;
 }
 
 /** The audio files the engine plays, by extension. */

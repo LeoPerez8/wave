@@ -2,13 +2,29 @@
  * The messages between main and the audio process. Main sends one request per call; the
  * process answers each with the engine's status after it, or with the engine's error.
  */
-import type { PlaybackStatus, PlaybackEvent } from "../../shared/playback.ts";
+import type { LoudnessResult, PlaybackStatus, PlaybackEvent } from "../../shared/playback.ts";
 
 /** The addon's `AudioEngine`, as `apps/desktop/native/node` exports it. */
 export interface AddonEngine {
-  readonly load: (path: string, key?: string) => PlaybackStatus;
-  readonly preload: (path: string | undefined, key: string | undefined) => void;
+  /** Opens [path] in place of the song before, to play at [gainDb] while Normalize Volume is on. */
+  readonly load: (path: string, key?: string, gainDb?: number) => PlaybackStatus;
+  /** Lines up the song after the current one; [fade] false keeps the move gapless (repeat one). */
+  readonly preload: (
+    path: string | undefined,
+    key: string | undefined,
+    gainDb?: number,
+    fade?: boolean,
+  ) => void;
   readonly setVolume: (volume: number) => void;
+  /** Crossfade's length in seconds, 0 for off; read as each move is decided. */
+  readonly setCrossfade: (seconds: number) => void;
+  /** Normalize Volume: off plays every song as it is, from the next frame. */
+  readonly setNormalize: (on: boolean) => void;
+  /** Measures [path]'s loudness on a thread of its own; the result comes back as [id]. */
+  readonly measure: (path: string, id: string) => void;
+  /** Stops the measurement running and those waiting; each answers "cancelled". */
+  readonly cancelMeasurements: () => void;
+  readonly measurements: () => readonly LoudnessResult[];
   readonly transitions: () => PlaybackEvent["transitions"];
   readonly play: () => void;
   readonly pause: () => void;
@@ -16,7 +32,18 @@ export interface AddonEngine {
   readonly status: () => PlaybackStatus;
 }
 
-export type AudioCall = "load" | "play" | "pause" | "seek" | "status" | "preload" | "setVolume";
+export type AudioCall =
+  | "load"
+  | "play"
+  | "pause"
+  | "seek"
+  | "status"
+  | "preload"
+  | "setVolume"
+  | "setCrossfade"
+  | "setNormalize"
+  | "measure"
+  | "cancelMeasurements";
 
 export interface AudioRequest {
   readonly id: number;
@@ -42,15 +69,34 @@ const failure = (error: unknown): AudioFailure => {
     : { code: coded[1] ?? "engine", message: coded[2] ?? text };
 };
 
+/** Structured clone keeps `undefined` in an array as is; a null from elsewhere means none too. */
+const text = (value: unknown) => (typeof value === "string" ? value : undefined);
+const finite = (value: unknown) =>
+  typeof value === "number" && Number.isFinite(value) ? value : undefined;
+const flag = (value: unknown) => (typeof value === "boolean" ? value : undefined);
+
 const run = (engine: AddonEngine, request: AudioRequest): PlaybackStatus | undefined => {
+  const [first, second, third, fourth] = request.args;
   switch (request.call) {
     case "load":
-      return engine.load(String(request.args[0]), request.args[1] as string | undefined);
+      return engine.load(String(first), text(second), finite(third));
     case "preload":
-      engine.preload(request.args[0] as string | undefined, request.args[1] as string | undefined);
+      engine.preload(text(first), text(second), finite(third), flag(fourth));
       return engine.status();
     case "setVolume":
-      engine.setVolume(Number(request.args[0]));
+      engine.setVolume(Number(first));
+      return engine.status();
+    case "setCrossfade":
+      engine.setCrossfade(Number(first));
+      return engine.status();
+    case "setNormalize":
+      engine.setNormalize(first === true);
+      return engine.status();
+    case "measure":
+      engine.measure(String(first), String(second));
+      return engine.status();
+    case "cancelMeasurements":
+      engine.cancelMeasurements();
       return engine.status();
     case "play":
       engine.play();
@@ -59,7 +105,7 @@ const run = (engine: AddonEngine, request: AudioRequest): PlaybackStatus | undef
       engine.pause();
       return engine.status();
     case "seek":
-      engine.seek(Number(request.args[0]));
+      engine.seek(Number(first));
       return engine.status();
     case "status":
       return engine.status();
@@ -98,8 +144,8 @@ const sameStatus = (a: PlaybackStatus, b: PlaybackStatus) =>
   a.device === b.device;
 
 /**
- * What the process pushes to main at [atMs]: the engine's status and the songs it moved on to
- * since [previous], or nothing when neither changed.
+ * What the process pushes to main at [atMs]: the engine's status, the moves it made and the
+ * measurements it finished since [previous], or nothing when none of them changed.
  */
 export const playbackEvent = (
   engine: AddonEngine,
@@ -108,8 +154,13 @@ export const playbackEvent = (
 ): PlaybackEvent | undefined => {
   const status = engine.status();
   const transitions = engine.transitions();
-  if (previous !== undefined && transitions.length === 0 && sameStatus(previous, status)) {
-    return undefined;
-  }
-  return { event: "playback", status: { ...status, observedAtMs: atMs }, transitions };
+  const measurements = engine.measurements();
+  const moved = transitions.length > 0 || measurements.length > 0;
+  if (previous !== undefined && !moved && sameStatus(previous, status)) return undefined;
+  const event: PlaybackEvent = {
+    event: "playback",
+    status: { ...status, observedAtMs: atMs },
+    transitions,
+  };
+  return measurements.length > 0 ? { ...event, measurements } : event;
 };
