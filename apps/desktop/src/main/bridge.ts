@@ -409,6 +409,17 @@ const createHandlers = (
             return yield* Effect.promise(() => readArtwork(db, hash, large));
           })
         : refuse("library.artwork", "invalid artwork"),
+    "library.cover": ([kind, id, large]) =>
+      (kind === "song" || kind === "album" || kind === "artist") &&
+      songId(id) &&
+      typeof large === "boolean"
+        ? Effect.gen(function* () {
+            const library = yield* DesktopLibrary;
+            return yield* Effect.promise(
+              () => library.cover?.(kind, id as number, large) ?? Promise.resolve(null),
+            );
+          })
+        : refuse("library.cover", "invalid identity"),
     "library.browse": ([scope, offset, limit]) =>
       validScope(scope)
         ? pageCall("library.browse", [offset, limit], (library, offset, limit) =>

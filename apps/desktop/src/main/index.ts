@@ -38,6 +38,9 @@ import {
 } from "@wave/core";
 import { appearance } from "./preferences.ts";
 import { artworkStore } from "./library/artwork.ts";
+import { createLibraryArtwork } from "./library/onlineArtwork.ts";
+import { syncedPreference } from "./sync/desktopSync.ts";
+import { lookupsEnabled } from "./lookupSettings.ts";
 import { ytMusicLayer } from "./yt/ytMusic.ts";
 import { desktopLinksLayer } from "./links/layer.ts";
 import { downloadsLayer } from "./downloads/downloadsLayer.ts";
@@ -234,6 +237,29 @@ else {
     const library = desktopLibraryLayer({
       musicFolder,
       platform: process.platform,
+      onlineArtwork: (db, ytMusic) =>
+        createLibraryArtwork({
+          db,
+          coversEnabled: () => lookupsEnabled(db),
+          ytMusicOn: ytMusic.on,
+          videoCover: ytMusic.videoCover,
+          directory: cacheFolder("online-artwork"),
+          photosEnabled: () => syncedPreference(db, "settings.downloadArtistPhotos") !== "off",
+          process: (bytes) => {
+            const image = nativeImage.createFromBuffer(bytes);
+            if (image.isEmpty()) return undefined;
+            const { width, height } = image.getSize();
+            const resized = (side: number) =>
+              image
+                .resize(
+                  width >= height
+                    ? { width: Math.min(side, width), quality: "good" }
+                    : { height: Math.min(side, height), quality: "good" },
+                )
+                .toJPEG(90);
+            return { thumb: resized(300), medium: resized(640) };
+          },
+        }),
       cacheArtwork: (() => {
         let store: ReturnType<typeof artworkStore> | undefined;
         return (db, encoded) => {
