@@ -679,7 +679,7 @@ export const playEvents = sqliteTable(
     contextType: text("context_type"),
     contextId: text("context_id"),
     /** Where the play was started from (Core's `PlaySource`); plays from before v2 are `phone`. */
-    source: text("source", { enum: ["phone", "auto"] })
+    source: text("source", { enum: ["phone", "auto", "desktop"] })
       .notNull()
       .default("phone"),
     /**
