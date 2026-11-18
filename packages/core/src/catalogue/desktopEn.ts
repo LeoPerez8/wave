@@ -8,6 +8,9 @@ import { plural } from "../plural.ts";
  * `desktopPtBr.ts` holds the same keys.
  */
 export const desktopEn = {
+  home: {
+    noSections: "Your Home sections are hidden. Arrange Home on your phone to add them back.",
+  },
   playbackText: {
     thisPhone: "This computer",
   },

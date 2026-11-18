@@ -40,6 +40,7 @@ import { Lyrics } from "./lyrics/lyrics.ts";
 import { DesktopPlaylists } from "./library/playlists.ts";
 import { playlistHandlers } from "./playlistHandlers.ts";
 import { searchLibrary } from "./library/search.ts";
+import { homeHandlers } from "./homeHandlers.ts";
 import {
   clearRecentSearches,
   listRecentSearchesSync,
@@ -494,6 +495,7 @@ const createHandlers = (onAppearance: (mode: Appearance) => void): Handlers => {
         : kotlinCall((kotlin) => kotlin.readTags(song));
     },
     ...playlistHandlers(validTarget),
+    ...homeHandlers,
     "search.library": ([query]) =>
       searchQuery(query)
         ? Effect.gen(function* () {

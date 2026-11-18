@@ -24,7 +24,7 @@ import { SelectionBar, useSongActions, type Selection } from "./SongActions.tsx"
 import { usePlaylistEdits } from "./Playlists.tsx";
 import { Graveyard } from "./Graveyard.tsx";
 import { labels, text } from "./text.ts";
-import { DiscoverSection } from "./Discover.tsx";
+import { Home } from "./Home.tsx";
 import { isYtRoute, streamedSongItems, YtPage, type YtRoute } from "./YtPages.tsx";
 
 type Route =
@@ -223,7 +223,10 @@ export function App() {
     setSelecting(selection && { list, selection });
   const actions = useSongActions({
     go,
-    select: (ids) => setSelection({ all: false, ids: new Set(ids) }),
+    select: (ids) => {
+      if (route.kind === "home") go({ kind: "songs" });
+      setSelection({ all: false, ids: new Set(ids) });
+    },
     failed: (message) => setError(message ?? text.desktopLibrary.actionFailed),
     changed: playback.refresh,
     newPlaylist: playlistEdits.newPlaylist,
@@ -666,9 +669,19 @@ export function App() {
               />
             )}
           </SearchPage>
+        ) : route.kind === "home" ? (
+          <Home
+            revision={revision}
+            ytMusic={ytMusic}
+            run={playback.run}
+            go={go}
+            onError={failed}
+            onMenu={(row, at) =>
+              actions.openMenu({ scope: { kind: "songs" }, ids: [row.id] }, row.title, at)
+            }
+          />
         ) : (
           <>
-            {route.kind === "home" && ytMusic && <DiscoverSection run={playback.run} />}
             {selection && (
               <SelectionBar
                 scope={scope}

@@ -80,6 +80,7 @@ export function VirtualTable({
   onMenu,
   selection,
   onSelection,
+  preview,
 }: {
   readonly scope: BrowseScope;
   readonly revision: number;
@@ -91,6 +92,14 @@ export function VirtualTable({
   /** Selection mode's checked songs, while it is on. */
   readonly selection?: Selection | undefined;
   readonly onSelection?: (selection: Selection) => void;
+  /** A bounded Home preview uses these rows with the same table, focus and menus. */
+  readonly preview?: {
+    readonly id: string;
+    readonly label: string;
+    readonly page: BrowsePage;
+    readonly trailing: (row: BrowseRow) => string;
+    readonly trailingHeading: string;
+  };
 }) {
   const viewport = useRef<HTMLDivElement>(null);
   const cache = useRef(new Map<number, BrowsePage>());
@@ -110,6 +119,7 @@ export function VirtualTable({
     scope.kind in text.library.sectionEmpty
       ? text.library.sectionEmpty[scope.kind as keyof typeof text.library.sectionEmpty]
       : labels.noResults;
+  const rowId = (index: number) => `${preview?.id ?? "library-row"}-${index}`;
 
   useEffect(() => {
     const element = viewport.current!;
@@ -130,7 +140,8 @@ export function VirtualTable({
             async (index) =>
               [
                 index,
-                cache.current.get(index) ??
+                preview?.page ??
+                  cache.current.get(index) ??
                   (await window.wave.library.browse(scope, index * SIZE, SIZE)),
               ] as const,
           ),
@@ -152,7 +163,7 @@ export function VirtualTable({
     return () => {
       current = false;
     };
-  }, [scope, revision, firstPage, lastPage, onHero, onError]);
+  }, [scope, revision, firstPage, lastPage, onHero, onError, preview]);
   const get = (index: number) => pages.get(Math.floor(index / SIZE))?.items[index % SIZE];
   const move = (index: number) => {
     const next = Math.max(0, Math.min(total - 1, index));
@@ -165,7 +176,16 @@ export function VirtualTable({
   };
   const jump = async (letter: string) => {
     try {
-      move(await window.wave.library.letter(scope, letter));
+      move(
+        preview
+          ? Math.max(
+              0,
+              preview.page.items.findIndex((row) =>
+                row.title.toLocaleLowerCase().startsWith(letter.toLocaleLowerCase()),
+              ),
+            )
+          : await window.wave.library.letter(scope, letter),
+      );
       viewport.current?.parentElement?.focus();
     } catch {
       onError();
@@ -175,7 +195,7 @@ export function VirtualTable({
   const menu = (index: number, at?: { readonly x: number; readonly y: number }) => {
     const row = get(index);
     if (row === undefined || onMenu === undefined || !songList) return;
-    const element = document.getElementById(`library-row-${index}`);
+    const element = document.getElementById(rowId(index));
     const rect = element?.getBoundingClientRect();
     onMenu(row, at ?? { x: (rect?.left ?? 0) + 48, y: rect?.bottom ?? 0 });
   };
@@ -227,17 +247,16 @@ export function VirtualTable({
       className={`table-area ${songList ? "song-table" : "group-table"}`}
       role="grid"
       aria-label={
-        typeof labels[scope.kind as keyof typeof labels] === "string"
+        preview?.label ??
+        (typeof labels[scope.kind as keyof typeof labels] === "string"
           ? (labels[scope.kind as keyof typeof labels] as string)
-          : labels.songs
+          : labels.songs)
       }
       aria-rowcount={total + 1}
       aria-colcount={5}
       tabIndex={0}
       aria-activedescendant={
-        total && active >= start && active < end && get(active)
-          ? `library-row-${active}`
-          : undefined
+        total && active >= start && active < end && get(active) ? rowId(active) : undefined
       }
       onKeyDown={key}
       onContextMenu={contextMenu}
@@ -253,7 +272,7 @@ export function VirtualTable({
         <span role="columnheader" className="star-column" aria-label={labels.favorite}>
           <Icon name="favorites" size={14} />
         </span>
-        <span role="columnheader">{labels.time}</span>
+        <span role="columnheader">{preview?.trailingHeading ?? labels.time}</span>
       </div>
       <div
         ref={viewport}
@@ -268,7 +287,7 @@ export function VirtualTable({
               row && (
                 <div
                   key={index}
-                  id={`library-row-${index}`}
+                  id={rowId(index)}
                   role="row"
                   aria-rowindex={index + 2}
                   data-row={index}
@@ -332,7 +351,7 @@ export function VirtualTable({
                     {row.favorite && <Icon name="favorites" size={14} />}
                   </div>
                   <div role="gridcell" className="time-column secondary">
-                    {time(row.durationMs)}
+                    {preview ? preview.trailing(row) : time(row.durationMs)}
                   </div>
                 </div>
               )
