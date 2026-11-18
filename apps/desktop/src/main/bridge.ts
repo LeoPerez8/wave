@@ -205,17 +205,17 @@ const createHandlers = (onAppearance: (mode: Appearance) => void): Handlers => {
             onAppearance(mode);
           })
         : refuse("settings.setAppearance", "invalid appearance"),
+    "settings.playback": () => playbackCall((p) => p.settings()),
+    "settings.setPlayback": ([change]) =>
+      validPlaybackSettings(change)
+        ? playbackCall((p) => p.setSettings(change))
+        : refuse("settings.setPlayback", "invalid playback settings"),
     "account.view": () => accountCall((a) => a.view()),
     "account.signIn": () => accountCall((a) => a.signIn()),
     "account.cancelSignIn": () => accountCall((a) => a.cancelSignIn()),
     "account.signOut": () => accountCall((a) => a.signOut()),
     "account.signOutEverywhere": () => accountCall((a) => a.signOutEverywhere()),
     "account.answerInvitation": () => accountCall((a) => a.answerInvitation()),
-    "settings.playback": () => playbackCall((p) => p.settings()),
-    "settings.setPlayback": ([change]) =>
-      validPlaybackSettings(change)
-        ? playbackCall((p) => p.setSettings(change))
-        : refuse("settings.setPlayback", "invalid playback settings"),
     "library.artwork": ([hash, large]) =>
       typeof hash === "string" && /^[a-f0-9]{40}$/.test(hash) && typeof large === "boolean"
         ? Effect.gen(function* () {

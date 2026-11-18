@@ -171,14 +171,14 @@ export const BRIDGE_CALLS = [
   "tags.read",
   "settings.appearance",
   "settings.setAppearance",
+  "settings.playback",
+  "settings.setPlayback",
   "account.view",
   "account.signIn",
   "account.cancelSignIn",
   "account.signOut",
   "account.signOutEverywhere",
   "account.answerInvitation",
-  "settings.playback",
-  "settings.setPlayback",
 ] as const satisfies readonly BridgeCall[] &
   (BridgeContract extends PagedLists<BridgeContract> ? unknown : never);
 
