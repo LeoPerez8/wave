@@ -8,7 +8,13 @@ import type { WaveAccount } from "@wave/core";
 
 /** The session as main holds it; the token never leaves main. */
 export type StoredSession =
-  | { readonly status: "signedIn"; readonly token: string; readonly account: WaveAccount }
+  | {
+      readonly status: "signedIn";
+      readonly token: string;
+      /** The service that gave the token: it goes nowhere else. */
+      readonly serviceUrl: string;
+      readonly account: WaveAccount;
+    }
   /** The service ended it (a 401): kept so Settings can say so after a restart. */
   | { readonly status: "ended"; readonly account: WaveAccount | null };
 
@@ -43,13 +49,19 @@ const parsed = (text: string): StoredSession | null => {
     const value = JSON.parse(text) as Partial<{
       status: unknown;
       token: unknown;
+      serviceUrl: unknown;
       account: unknown;
     }>;
     const account = value.account as WaveAccount | null | undefined;
     const validAccount =
       typeof account === "object" && account !== null && typeof account.email === "string";
-    if (value.status === "signedIn" && typeof value.token === "string" && validAccount)
-      return { status: "signedIn", token: value.token, account: account };
+    if (
+      value.status === "signedIn" &&
+      typeof value.token === "string" &&
+      typeof value.serviceUrl === "string" &&
+      validAccount
+    )
+      return { status: "signedIn", token: value.token, serviceUrl: value.serviceUrl, account };
     if (value.status === "ended")
       return { status: "ended", account: validAccount ? account : null };
   } catch {

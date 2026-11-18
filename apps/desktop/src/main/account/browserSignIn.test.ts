@@ -1,7 +1,11 @@
 import assert from "node:assert/strict";
 import { createHash } from "node:crypto";
 import { test } from "node:test";
-import { BrowserSignInError, signInWithBrowser, type BrowserSignInOptions } from "./browserSignIn.ts";
+import {
+  BrowserSignInError,
+  signInWithBrowser,
+  type BrowserSignInOptions,
+} from "./browserSignIn.ts";
 
 const base64url = (bytes: Buffer) => bytes.toString("base64url");
 const idToken = (claims: Record<string, unknown>) =>
@@ -47,7 +51,10 @@ const google = (answer: (params: URLSearchParams) => Record<string, string>) => 
   return { options, tokenCalls, page: () => page };
 };
 
-const approve = (params: URLSearchParams) => ({ code: "auth-code", state: params.get("state") ?? "" });
+const approve = (params: URLSearchParams) => ({
+  code: "auth-code",
+  state: params.get("state") ?? "",
+});
 
 test("Sign In opens Google with PKCE on a loopback address and comes back with the ID token", async () => {
   let opened: URLSearchParams | undefined;
@@ -117,7 +124,10 @@ test("Cancel in Wave stops waiting for the browser", async () => {
       controller.abort();
     },
   });
-  await assert.rejects(signIn, (error: unknown) => (error as BrowserSignInError).reason === "cancelled");
+  await assert.rejects(
+    signIn,
+    (error: unknown) => (error as BrowserSignInError).reason === "cancelled",
+  );
 });
 
 test("a browser that never comes back times out", async () => {

@@ -23,6 +23,7 @@ const disk = () => {
 const SIGNED_IN = {
   status: "signedIn",
   token: "session-token",
+  serviceUrl: "https://sync.wave.test",
   account: { email: "ana@example.com", name: "Ana", photoUrl: null },
 } as const;
 
@@ -34,7 +35,12 @@ test("a session saved with a keyring comes back after a restart, never as plain 
   const bytes = files.get("session.bin");
   assert.ok(bytes);
   assert.ok(!bytes.toString("utf8").includes("session-token"));
-  const second = sessionStore({ box: keyring(), file: "session.bin", files: io, platform: "linux" });
+  const second = sessionStore({
+    box: keyring(),
+    file: "session.bin",
+    files: io,
+    platform: "linux",
+  });
   assert.deepEqual(second.load(), SIGNED_IN);
 });
 
