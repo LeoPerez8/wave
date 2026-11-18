@@ -6,6 +6,8 @@ import { pressOf } from "./keys.ts";
 import { isChecked, toggled, type Selection } from "./SongActions.tsx";
 import { markClass, rowMark, SongMark, useSongStates } from "./SongMark.tsx";
 import { labels, text } from "./text.ts";
+import { tableColumns } from "../../shared/tableColumns.ts";
+import "./tables.css";
 
 const SIZE = 100;
 const HEIGHT = 40;
@@ -116,6 +118,7 @@ export function VirtualTable({
   const firstPage = Math.floor(start / SIZE);
   const lastPage = Math.floor(Math.max(start, end - 1) / SIZE);
   const songList = !["albums", "artists", "playlists", "genres"].includes(scope.kind);
+  const columns = tableColumns(scope.kind);
   const emptyMessage =
     scope.kind in text.library.sectionEmpty
       ? text.library.sectionEmpty[scope.kind as keyof typeof text.library.sectionEmpty]
@@ -265,7 +268,7 @@ export function VirtualTable({
   };
   return (
     <div
-      className={`table-area ${songList ? "song-table" : "group-table"}`}
+      className={`table-area ${songList ? "song-table" : "group-table"} ${columns.third === null ? "no-third" : ""} ${columns.star ? "" : "no-star"}`}
       role="grid"
       aria-label={
         preview?.label ??
@@ -274,7 +277,7 @@ export function VirtualTable({
           : labels.songs)
       }
       aria-rowcount={total + 1}
-      aria-colcount={5}
+      aria-colcount={3 + (columns.third === null ? 0 : 1) + (columns.star ? 1 : 0)}
       tabIndex={0}
       aria-activedescendant={
         total && active >= start && active < end && get(active) ? rowId(active) : undefined
@@ -285,14 +288,20 @@ export function VirtualTable({
       <div className="table-head table-columns" role="row" aria-rowindex={1}>
         <span role="columnheader">{text.desktopLibrary.titleColumn}</span>
         <span role="columnheader">
-          {songList ? text.desktopLibrary.artistColumn : labels.songs}
+          {columns.second === "artist" ? text.desktopLibrary.artistColumn : labels.songs}
         </span>
-        <span role="columnheader" className="album-column">
-          {songList ? text.desktopLibrary.albumColumn : text.desktopLibrary.artistColumn}
-        </span>
-        <span role="columnheader" className="star-column" aria-label={labels.favorite}>
-          <Icon name="favorites" size={14} />
-        </span>
+        {columns.third !== null && (
+          <span role="columnheader" className="album-column">
+            {columns.third === "album"
+              ? text.desktopLibrary.albumColumn
+              : text.desktopLibrary.artistColumn}
+          </span>
+        )}
+        {columns.star && (
+          <span role="columnheader" className="star-column" aria-label={labels.favorite}>
+            <Icon name="favorites" size={14} />
+          </span>
+        )}
         <span role="columnheader">{preview?.trailingHeading ?? labels.time}</span>
       </div>
       <div
@@ -337,7 +346,7 @@ export function VirtualTable({
                       />
                     )}
                     <span className="row-picture">
-                      {scope.kind === "album" ? (
+                      {columns.picture === "trackNumber" ? (
                         <span className="track-number">{row.trackNumber ?? index + 1}</span>
                       ) : (
                         <Artwork
@@ -358,12 +367,16 @@ export function VirtualTable({
                   <div role="gridcell" className="truncate secondary">
                     {songList ? row.artist : labels.songCount(row.count)}
                   </div>
-                  <div role="gridcell" className="album-column truncate secondary">
-                    {row.album || (!songList ? row.artist : "")}
-                  </div>
-                  <div role="gridcell" className="star-column">
-                    {row.favorite && <Icon name="favorites" size={14} />}
-                  </div>
+                  {columns.third !== null && (
+                    <div role="gridcell" className="album-column truncate secondary">
+                      {columns.third === "album" ? row.album : row.artist}
+                    </div>
+                  )}
+                  {columns.star && (
+                    <div role="gridcell" className="star-column">
+                      {row.favorite && <Icon name="favorites" size={14} />}
+                    </div>
+                  )}
                   <div role="gridcell" className="time-column secondary">
                     {preview ? preview.trailing(row) : time(row.durationMs)}
                   </div>

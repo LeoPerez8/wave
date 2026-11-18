@@ -1,0 +1,19 @@
+/* Tables without an Album column or a star (shared/tableColumns.ts): no header over an empty column. */
+.table-area.no-third .table-columns {
+  grid-template-columns: minmax(180px, 1.5fr) minmax(110px, 1fr) 28px 54px;
+}
+.table-area.no-star .table-columns {
+  grid-template-columns: minmax(180px, 1.5fr) minmax(110px, 1fr) minmax(100px, 1fr) 54px;
+}
+.table-area.no-third.no-star .table-columns {
+  grid-template-columns: minmax(180px, 1.5fr) minmax(110px, 1fr) 54px;
+}
+@container (width < 760px) {
+  .table-area.no-third .table-columns {
+    grid-template-columns: minmax(160px, 1.5fr) minmax(110px, 1fr) 28px 54px;
+  }
+  .table-area.no-star .table-columns,
+  .table-area.no-third.no-star .table-columns {
+    grid-template-columns: minmax(160px, 1.5fr) minmax(110px, 1fr) 54px;
+  }
+}
