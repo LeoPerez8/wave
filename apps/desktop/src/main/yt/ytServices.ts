@@ -13,6 +13,8 @@ import {
   localDay,
   parseTrackId,
   readContinueQueue,
+  readSearchOnline,
+  searchOnlineAlways,
   ytTrackId,
   type PlayedSeedArtist,
   type QueueContinuationSeed,
@@ -39,17 +41,22 @@ import {
   type MagicQueueSong,
 } from "./magicQueue.ts";
 import { createYtPages, type YtPagesShape, type YtRelatedRead } from "./ytPages.ts";
+import { createArtistSection, type ArtistSectionShape } from "./artistSection.ts";
 import { YtMusic } from "./ytMusic.ts";
 
 /** Where the Magic Queue's session is kept across launches. */
 export const MAGIC_QUEUE_SESSION = "playback.magicQueue";
 /** Settings › Playback › Continue with Magic Queue, as the account syncs it. */
 const CONTINUE_QUEUE = "settings.continueQueue";
+/** Settings › Accounts › Search online, kept on this computer. */
+const SEARCH_ONLINE = "settings.searchOnline";
 
 export interface YtFeaturesShape {
   readonly pages: YtPagesShape;
   readonly discover: DiscoverShape;
   readonly magicQueue: MagicQueueShape;
+  /** A Library artist page's YouTube Music section. */
+  readonly artistSection: ArtistSectionShape;
   /** The Related tab of the song playing; nothing when no song plays. */
   readonly related: () => Promise<YtRelatedRead>;
   /** Plays a Magic Queue of [target]'s songs; false when none of them can play. */
@@ -263,12 +270,28 @@ export const ytFeaturesLayer = (options: { readonly online: () => boolean }) =>
         }),
       );
 
+      const artistSection = createArtistSection({
+        db,
+        enabled: yt.enabled,
+        online: options.online,
+        // The desktop has no mobile data: Always on Wi-Fi is Always.
+        always: () =>
+          searchOnlineAlways(readSearchOnline(preference(db, SEARCH_ONLINE) ?? null), {
+            onMobileData: false,
+          }),
+        now: Date.now,
+        keep: yt.keep,
+        search: pages.searchArtists,
+        page: pages.artistWhole,
+      });
+
       let related: { readonly videoId: string; readonly read: Promise<YtRelatedRead> } | undefined;
 
       return {
         pages,
         discover,
         magicQueue,
+        artistSection,
         related: async () => {
           const song = playback.view().current;
           if (song === null) return { status: "ok", songs: [], artists: [] };

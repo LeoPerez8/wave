@@ -7,6 +7,7 @@
  */
 import {
   pickYtArtist,
+  readYtPlaylist,
   relatedWithoutPlaying,
   songSearchMatch,
   songSearchQuery,
@@ -16,6 +17,8 @@ import {
   type YtArtistAlbum,
   type YtArtistCandidate,
   type YtArtistPage,
+  type YtArtistSongsRead,
+  ytArtistFullPage,
 } from "@wave/core";
 
 import type { YtStatus } from "../../shared/yt.ts";
@@ -24,6 +27,8 @@ import { ytSongs } from "./ytMusic.ts";
 
 type PagesMethod =
   | "artist"
+  | "playlist"
+  | "playlistMore"
   | "album"
   | "search"
   | "searchArtists"
@@ -82,6 +87,13 @@ export interface YtPagesShape {
   readonly findArtist: (
     name: string,
   ) => Promise<{ readonly status: YtStatus; readonly browseId: string | null }>;
+  /**
+   * The artist [browseId]'s page with every song of theirs (`ytArtistFullPage`), as a Library
+   * artist's section reads it; rejects with the JVM's `code` when it gets no answer.
+   */
+  readonly artistWhole: (browseId: string) => Promise<YtArtistPage<YtAlbumSong>>;
+  /** An Artists search; rejects as [artistWhole]. */
+  readonly searchArtists: (query: string) => Promise<readonly YtArtistCandidate[]>;
   readonly album: (browseId: string) => Promise<YtAlbumRead>;
   readonly songRadio: (videoId: string) => Promise<YtRadioRead>;
   readonly artistRadio: (browseId: string) => Promise<YtRadioRead>;
@@ -100,6 +112,8 @@ const record = (value: unknown): Record<string, unknown> =>
   typeof value === "object" && value !== null ? (value as Record<string, unknown>) : {};
 const list = (value: unknown): readonly unknown[] => (Array.isArray(value) ? value : []);
 const BROWSE_ID = /^[A-Za-z0-9_-]{2,128}$/;
+
+const coded = (code: string) => Object.assign(new Error(code), { code });
 
 const statusOf = (error: unknown): YtStatus => {
   const code = (error as { code?: unknown } | null)?.code;
@@ -165,23 +179,69 @@ export const createYtPages = (deps: YtPagesDeps): YtPagesShape => {
     };
   };
   const noRadio = { songs: [], continuation: null };
+  /** The artist page [browseId] as read, its songs kept; rejects when it isn't one. */
+  const artistPage = async (browseId: string) => {
+    const page = record(await deps.call("artist", { browseId }));
+    if (!text(page["name"])) throw new Error("Not an artist page");
+    return {
+      name: page["name"],
+      artworkUrl: text(page["artworkUrl"]) ? page["artworkUrl"] : null,
+      songs: songs(page["songs"]),
+      songsPlaylistId: text(page["songsPlaylistId"]) ? page["songsPlaylistId"] : null,
+      albums: albums(page["albums"]),
+      singles: albums(page["singles"]),
+      similar: artists(page["similar"]),
+    };
+  };
+  const playlistPage = (value: unknown) => {
+    const page = record(value);
+    return {
+      songs: songs(page["songs"]),
+      continuation: text(page["continuation"]) ? page["continuation"] : null,
+    };
+  };
   return {
+    artistWhole: async (browseId) => {
+      if (!deps.enabled()) throw coded("ERR_YT_DISABLED");
+      const page = await artistPage(browseId);
+      const playlistId = page.songsPlaylistId;
+      let read: YtArtistSongsRead<YtAlbumSong> | null = null;
+      if (playlistId !== null) {
+        let pagesRead = 0;
+        try {
+          const playlist = await readYtPlaylist(
+            async () => ({
+              title: "",
+              author: null,
+              artworkUrl: null,
+              ...playlistPage(await deps.call("playlist", { playlistId })),
+            }),
+            async (continuation) => playlistPage(await deps.call("playlistMore", { continuation })),
+            { onPage: () => void (pagesRead += 1) },
+          );
+          read = { status: "read", songs: playlist.songs, truncated: playlist.truncated };
+        } catch (error) {
+          const status = statusOf(error);
+          read = { status: "failed", reason: status === "ok" ? "failed" : status, pagesRead };
+        }
+      }
+      const full = ytArtistFullPage(page, read);
+      if (full.status === "failed")
+        throw coded(
+          full.reason === "offline"
+            ? "ERR_YT_OFFLINE"
+            : full.reason === "disabled"
+              ? "ERR_YT_DISABLED"
+              : "ERR_YT_FAILED",
+        );
+      return full.page;
+    },
+    searchArtists: async (query) => {
+      if (!deps.enabled()) throw coded("ERR_YT_DISABLED");
+      return artists(await deps.call("searchArtists", { query }));
+    },
     artist: (browseId) =>
-      read<YtArtistRead>({ page: null }, async () => {
-        const page = record(await deps.call("artist", { browseId }));
-        if (!text(page["name"])) throw new Error("Not an artist page");
-        return {
-          page: {
-            name: page["name"],
-            artworkUrl: text(page["artworkUrl"]) ? page["artworkUrl"] : null,
-            songs: songs(page["songs"]),
-            songsPlaylistId: text(page["songsPlaylistId"]) ? page["songsPlaylistId"] : null,
-            albums: albums(page["albums"]),
-            singles: albums(page["singles"]),
-            similar: artists(page["similar"]),
-          },
-        };
-      }),
+      read<YtArtistRead>({ page: null }, async () => ({ page: await artistPage(browseId) })),
     findArtist: (name) =>
       read<{ status: YtStatus; browseId: string | null }>({ browseId: null }, async () => {
         if (pickYtArtist(name, [{ name, browseId: "-", audience: null }]) === null)

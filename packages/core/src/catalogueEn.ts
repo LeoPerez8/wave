@@ -129,6 +129,8 @@ export const en = {
     chooseArtist: "Choose an Artist",
     noPlaylists: "No playlists yet",
     checkSong: (title: string) => `Select “${title}”`,
+    /** An artist page's songs from YouTube Music, a page at a time. */
+    showMoreSongs: "Show more songs",
   },
   /** The desktop's Wave account: what the phone's Settings › Accounts has no need to say. */
   desktopAccount: {

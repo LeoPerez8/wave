@@ -128,6 +128,7 @@ export const ptBR: Catalogue = {
     chooseArtist: "Escolha um Artista",
     noPlaylists: "Nenhuma playlist ainda",
     checkSong: (title: string) => `Selecionar “${title}”`,
+    showMoreSongs: "Mostrar mais músicas",
   },
   desktopAccount: {
     finishInBrowser: "Termine de iniciar sessão no navegador.",
