@@ -108,19 +108,23 @@ export function Shelf({
   title,
   items,
   artists = false,
+  nested = false,
   onOpen,
   onMenu,
 }: {
   readonly title: string;
   readonly items: readonly TileItem[];
   readonly artists?: boolean;
+  /** Its title is a level lower: a row of a section with its own title (Home's Discover). */
+  readonly nested?: boolean;
   readonly onOpen: (index: number) => void;
   readonly onMenu?: (index: number, at: { readonly x: number; readonly y: number }) => void;
 }) {
   if (items.length === 0) return null;
+  const Heading = nested ? "h3" : "h2";
   return (
     <section className="shelf" aria-label={title}>
-      <h2>{title}</h2>
+      <Heading>{title}</Heading>
       <div className="shelf-row" role="list">
         {items.map((item, index) => (
           <div key={item.key} role="listitem">

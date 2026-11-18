@@ -2,7 +2,7 @@ import { homeSectionTitle } from "@wave/core";
 import { useEffect, useMemo, useState } from "react";
 import type { BrowseRow, BrowseScope } from "../../shared/browse.ts";
 import type { HomeSectionView, HomeView } from "../../shared/home.ts";
-import { DiscoverSection } from "./Discover.tsx";
+import { HomeDiscover } from "./HomeDiscover.tsx";
 import { Shelf } from "./YtLists.tsx";
 import { VirtualTable } from "./VirtualTable.tsx";
 import { text, labels } from "./text.ts";
@@ -122,7 +122,7 @@ export function Home({
           {view.hint === "none" && <p className="home-hint secondary">{text.home.noSections}</p>}
           {view.items.map((section) =>
             section.id === "discover" ? (
-              ytMusic && <DiscoverSection key={section.id} run={run} />
+              ytMusic && <HomeDiscover key={section.id} rows={view.discoverRows} run={run} />
             ) : (
               <div key={section.id} data-section={section.id}>
                 {section.id === "most-played" ? (

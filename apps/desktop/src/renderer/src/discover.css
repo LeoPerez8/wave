@@ -1,0 +1,69 @@
+/* Home's Discover section and its settings card (HomeDiscover.tsx, DiscoverSettings.tsx). */
+.home-discover-section {
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+}
+.home-discover-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding-right: 22px;
+}
+.home-discover-header h2 {
+  margin-bottom: 0;
+}
+.home-discover-section .shelf > h3 {
+  margin-bottom: 8px;
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--color-secondary);
+}
+.discover-skeleton {
+  width: 132px;
+  aspect-ratio: 1;
+  flex-shrink: 0;
+  border-radius: 6px;
+  background: var(--color-fill);
+}
+.discover-card {
+  position: fixed;
+  z-index: 21;
+  width: 300px;
+  max-height: calc(100vh - 16px);
+  overflow: auto;
+  padding: 14px 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  border: 1px solid var(--color-separator);
+  border-radius: 10px;
+  background: var(--color-surface);
+  box-shadow: 0 8px 28px #0003;
+}
+.discover-card h2 {
+  margin: 0;
+  padding: 0 0 10px;
+  font-size: 14px;
+  font-weight: 500;
+  border-bottom: 1px solid var(--color-separator);
+}
+.discover-slider {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  gap: 4px 12px;
+  font-size: 13px;
+}
+.discover-slider input {
+  grid-column: 1 / -1;
+  padding: 0;
+  border: 0;
+  background: none;
+  accent-color: var(--color-accent);
+}
+.discover-note {
+  grid-column: 1 / -1;
+  font-size: 12px;
+  line-height: 1.4;
+}
