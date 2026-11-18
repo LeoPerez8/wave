@@ -1,8 +1,8 @@
 /** Faithful data/effect replay, not RN rendering. Native transport and scheduling are boundaries. */
 import * as Effect from "effect/Effect";
 import type * as Core from "@wave/core";
-import type { TestDatabase } from "../../src/library/db/testDatabase.ts";
-import type { SongRow } from "../../src/library/LibraryStore.ts";
+import type { TestDatabase } from "@wave/client/testing";
+import type { SongRow } from "@wave/client";
 import type { NativeYtSong } from "../../src/native/waveYtMusic.ts";
 import { artistOpeningRequest } from "../../src/ytmusic/artistOpeningRequest.ts";
 import { albumOpening } from "../../src/ytmusic/albumOpening.ts";

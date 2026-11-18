@@ -1,6 +1,6 @@
 import { recognizePlaylistSong, type RecognizeResult } from "@wave/core";
 
-import type { SongRow } from "@/library/LibraryStore";
+import type { SongRow } from "@wave/client";
 import type { NativeYtSong } from "@/native/waveYtMusic";
 import { currentLibraryFinder } from "@/ytmusic/libraryFinder";
 

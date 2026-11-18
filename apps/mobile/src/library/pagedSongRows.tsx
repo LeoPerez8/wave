@@ -3,7 +3,7 @@ import type { OnViewableItemsChangedInfo } from "@legendapp/list/react-native";
 import { PAGED_ROWS_LIMITS, type PagedRows } from "@wave/core";
 import { useCallback, useRef } from "react";
 import type { ListSelection } from "@/selection/useListSelection";
-import type { SongSummary } from "./LibraryStore";
+import type { SongSummary } from "@wave/client";
 
 export const songIdKey = (id: number): string => String(id);
 

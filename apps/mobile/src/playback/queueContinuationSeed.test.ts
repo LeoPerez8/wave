@@ -4,11 +4,11 @@ import * as Effect from "effect/Effect";
 import { EMPTY_QUEUE, reduceQueue } from "@wave/core";
 import type { DiscoverMix } from "@wave/core";
 import { readQueueContinuationSeed } from "./queueContinuationSeed.ts";
-import { selectAlbumDetail, selectAlbums } from "../library/db/albums.ts";
-import { selectArtistDetail, selectArtists } from "../library/db/artists.ts";
-import { selectPlayableSongs } from "../library/db/tracks.ts";
-import { selectPlaylist, createPlaylist } from "../library/db/playlists.ts";
-import { addTrack, closeTestDatabase, openTestDatabase } from "../library/db/testDatabase.ts";
+import { selectAlbumDetail, selectAlbums } from "@wave/client/db/albums";
+import { selectArtistDetail, selectArtists } from "@wave/client/db/artists";
+import { selectPlayableSongs } from "@wave/client/db/tracks";
+import { selectPlaylist, createPlaylist } from "@wave/client/db/playlists";
+import { addTrack, closeTestDatabase, openTestDatabase } from "@wave/client/testing";
 
 test("a continued album, artist and playlist read the same songs as their Library pages after a restart", async (t) => {
   const db = await openTestDatabase();

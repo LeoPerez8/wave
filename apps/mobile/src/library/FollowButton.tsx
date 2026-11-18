@@ -19,7 +19,7 @@ import { ChoiceRow } from "@/settings/ChoiceRow";
 import { showError } from "@/overlay/alert";
 import { followUp, openOverlay } from "@/overlay/overlay";
 import { View, Text } from "react-native";
-import type { FollowTarget } from "./db/follows";
+import type { FollowTarget } from "@wave/client/db/follows";
 import { setArtistFollow, useFollow } from "./follows";
 
 export const openFollowCard = (artist: FollowTarget): void => {

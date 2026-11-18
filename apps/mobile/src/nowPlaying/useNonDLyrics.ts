@@ -11,6 +11,7 @@ import * as Effect from "effect/Effect";
 import { useMemo, useSyncExternalStore } from "react";
 
 import { LibraryStore } from "@/library/LibraryStore";
+
 import { appRuntime } from "@/library/runtime";
 import { queueTracks, type QueueTrack } from "@/playback/queueTracks";
 import { useLyricsAndGenreLookupsEnabled } from "@/settings/lyricsAndGenre";

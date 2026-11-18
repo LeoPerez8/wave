@@ -4,7 +4,7 @@ import type { YtArtistAlbum } from "@wave/core";
 import type { NativeYtSong } from "../native/waveYtMusic.ts";
 import { artistSelectionItems, mixedItemKey, mixedTarget } from "./mixedItems.ts";
 import { resolveMixedEntries } from "./mixedEntries.ts";
-import type { AlbumRow, SongRow } from "../library/LibraryStore.ts";
+import type { AlbumRow, SongRow } from "@wave/client";
 
 const release: YtArtistAlbum = {
   kind: "album",

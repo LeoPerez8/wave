@@ -1,7 +1,7 @@
 import { AppState } from "react-native";
 
 import { libraryListQueries } from "@/library/hooks";
-import type { SongRow } from "@/library/LibraryStore";
+import type { SongRow } from "@wave/client";
 import { appRuntime } from "@/library/runtime";
 import { appLog } from "@/log/appLog";
 import { online } from "@/native/waveNative";

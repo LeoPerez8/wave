@@ -13,7 +13,7 @@ import {
 } from "@wave/core";
 import { Storage } from "expo-sqlite/kv-store";
 
-import type { SongRow } from "./LibraryStore";
+import type { SongRow } from "@wave/client";
 
 /** The playlists with saved offers, oldest first; each one's offers are under its id. */
 const ORDER = "playlistSuggestions.savedOffers";

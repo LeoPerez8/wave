@@ -29,7 +29,7 @@ import {
   type DragState,
   type ListDrag,
 } from "./listDrag";
-import type { PlaylistRow } from "./LibraryStore";
+import type { PlaylistRow } from "@wave/client";
 import { moveShownPlaylist } from "./playlistOrder";
 
 /** The handle's touch target across: 48 dp, the handle drawn at its end. */

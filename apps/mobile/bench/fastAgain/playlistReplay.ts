@@ -4,8 +4,8 @@ import { existsSync } from "node:fs";
 import { resolve } from "node:path";
 import { setImmediate } from "node:timers/promises";
 import { performance } from "node:perf_hooks";
-import { traceQueries } from "../../src/library/db/testDatabase.ts";
-import type { FastAgainFixture } from "../../src/library/db/fastAgainFixture.ts";
+import { traceQueries } from "@wave/client/testing";
+import type { FastAgainFixture } from "@wave/client/testing/fastAgainFixture";
 import { loadLibraryStore, loadWorktreeModule } from "./store.ts";
 
 export const createPlaylistReplay = async (

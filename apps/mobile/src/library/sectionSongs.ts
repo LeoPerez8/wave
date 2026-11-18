@@ -1,12 +1,8 @@
 import { sectionSongs, type LibrarySectionSlug, type SectionCollection } from "@wave/core";
 import * as Effect from "effect/Effect";
 
-import {
-  LibraryStore,
-  type LibraryStoreError,
-  type PlaylistEntryRow,
-  type SongRow,
-} from "./LibraryStore";
+import { LibraryStore, type LibraryStoreError } from "./LibraryStore";
+import { type PlaylistEntryRow, type SongRow } from "@wave/client";
 import { sortedPlaylists } from "./playlistOrder";
 import { appRuntime } from "./runtime";
 import { songsSortNow, sortedForKind } from "./songSort";

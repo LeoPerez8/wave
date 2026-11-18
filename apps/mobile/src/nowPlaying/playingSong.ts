@@ -3,7 +3,8 @@ import { useEffect, useMemo, useSyncExternalStore } from "react";
 import { scopedSongStarredNow, rememberSongFavorite } from "@/library/favorites";
 import { onDownloadedRecording, onLibraryChange } from "@/library/libraryChanges";
 import { confirmDeleteSongs } from "@/library/deleteSongs";
-import { LibraryStore, type SongRow } from "@/library/LibraryStore";
+import { LibraryStore } from "@/library/LibraryStore";
+import { type SongRow } from "@wave/client";
 import { appRuntime } from "@/library/runtime";
 import { starSongs } from "@/library/starSongs";
 import { showError } from "@/overlay/alert";
@@ -12,11 +13,8 @@ import { streamPlayingInstead } from "@/playback/actions";
 import { ytMusicEnabled } from "@/settings/ytMusic";
 import { downloadMissingSongs, downloadYtSong } from "@/ytmusic/YtDownloads";
 import { createDeletePlayingSong } from "./deletePlayingSong";
-import {
-  createNowPlayingSongLookup,
-  playingSongTarget,
-  type PlayingSongTarget,
-} from "./songLookup";
+import { createNowPlayingSongLookup, playingSongTarget } from "./songLookup";
+import { type PlayingSongTarget } from "@wave/client";
 import { createNowPlayingSongActions } from "./songActions";
 
 /** A playing-song lookup reading the Library store, following its changes and downloads. */

@@ -2,8 +2,8 @@ import assert from "node:assert/strict";
 import { fileURLToPath } from "node:url";
 import { test } from "node:test";
 import * as Effect from "effect/Effect";
-import { createFastAgainFixture } from "../library/db/fastAgainFixture.ts";
-import { traceQueries } from "../library/db/testDatabase.ts";
+import { createFastAgainFixture } from "@wave/client/testing/fastAgainFixture";
+import { traceQueries } from "@wave/client/testing";
 import { loadArtistOpening } from "../../bench/fastAgain/artistOpeningReplay.ts";
 
 const root =

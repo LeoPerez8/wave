@@ -23,8 +23,8 @@ import { useMemo } from "react";
 
 import { followArtistLink, followStreamedArtistLink } from "@/library/ArtistChoice";
 import { confirmDeleteSongs, confirmRemoveSongs } from "@/library/deleteSongs";
-import type { LinkRows } from "@/library/db/links";
-import { songHasFile, type ArtistRow, type SongRow } from "@/library/LibraryStore";
+import type { LinkRows } from "@wave/client/db/links";
+import { songHasFile, type ArtistRow, type SongRow } from "@wave/client";
 import { useLiveFavoriteIds, useLivePendingFavoriteVideos } from "@/library/favorites";
 import { starSongs } from "@/library/starSongs";
 import { fixSongs } from "@/library/findLyricsAndGenre";

@@ -4,6 +4,7 @@ import { AppState } from "react-native";
 
 import { freeTurn } from "@/lib/backgroundWork";
 import { LibraryStore } from "@/library/LibraryStore";
+
 import { WaveAccount, waveAccountErrorCode, type WaveAccountErrorCode } from "@/native/waveAccount";
 import { perfCount } from "@/perf/perf";
 

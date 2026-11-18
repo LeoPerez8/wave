@@ -16,7 +16,7 @@ import { TextButton } from "@/components/TextButton";
 import { useLoadedExcludedFolders, useLoadedScanRoots, useScanStatus } from "@/library/hooks";
 import { promptForExcludedFolder } from "@/library/promptForExcludedFolder";
 import { promptForMusicFolder } from "@/library/promptForMusicFolder";
-import type { ScanRootSummary } from "@/library/LibraryStore";
+import type { ScanRootSummary } from "@wave/client";
 import { includeMusicFolder, removeMusicFolder } from "@/library/runtime";
 import { confirmAction, showError } from "@/overlay/alert";
 

@@ -1,8 +1,8 @@
 /** Known-video source versions: unrelated Library changes keep the answer and in-flight read. */
 import * as Effect from "effect/Effect";
 import { createSourceRead } from "../lib/sourceRead.ts";
-import { KNOWN_VIDEOS_START } from "../library/db/mixKnown.ts";
-import { readVideoPages } from "../library/db/videoPages.ts";
+import { KNOWN_VIDEOS_START } from "@wave/client/db/mixKnown";
+import { readVideoPages } from "@wave/client/db/videoPages";
 import type { LibraryStore } from "../library/LibraryStore.ts";
 
 export const createKnownVideosRead = <E, R>(read: Effect.Effect<readonly string[], E, R>) =>

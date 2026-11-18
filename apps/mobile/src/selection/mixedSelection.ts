@@ -1,4 +1,4 @@
-import type { AlbumRow } from "../library/LibraryStore.ts";
+import type { AlbumRow } from "@wave/client";
 import type { YtArtistAlbum } from "@wave/core";
 import type { TrackItem } from "../playback/actionTargets.ts";
 import { albumItem, ytAlbumItem, type MixedItem } from "../playback/mixedItems.ts";

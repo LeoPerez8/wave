@@ -2,7 +2,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import { fileURLToPath } from "node:url";
-import { createFastAgainFixture } from "../library/db/fastAgainFixture.ts";
+import { createFastAgainFixture } from "@wave/client/testing/fastAgainFixture";
 import { createPlaylistReplay } from "../../bench/fastAgain/playlistReplay.ts";
 
 const before = process.env.WAVE_BENCH_BEFORE;

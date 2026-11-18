@@ -4,7 +4,7 @@ import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import * as Effect from "effect/Effect";
 import * as Result from "effect/Result";
-import { traceQueries } from "../../../src/library/db/testDatabase.ts";
+import { traceQueries } from "@wave/client/testing";
 import { loadDetailOpening } from "../detailOpeningReplay.ts";
 import { percentiles } from "../measure.ts";
 import type { FastAgainBench, ReadMeasurement } from "../types.ts";

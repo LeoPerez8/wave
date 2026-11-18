@@ -8,11 +8,11 @@ import * as Effect from "effect/Effect";
 import { useEffect, useState, useSyncExternalStore } from "react";
 import { View } from "react-native";
 
-import { artworkUri } from "@/catalog/artworkUri";
+import { artworkUri } from "@wave/client/artworkUri";
 import { AlbumCard } from "@/catalog/cards/AlbumCard";
 import { ArtistCard } from "@/catalog/cards/ArtistCard";
 import { NameRow } from "@/catalog/NameRow";
-import type { PlayedAlbum, PlayedArtist, OnlineAlbum } from "@/library/db/playedEntities";
+import type { PlayedAlbum, PlayedArtist, OnlineAlbum } from "@wave/client/db/playedEntities";
 import { openAlbum, openArtist } from "@/library/routes";
 import { appRuntime } from "@/library/runtime";
 import { currentLocalisation } from "@/localisation/localisation";

@@ -6,7 +6,7 @@ import { createElement, type Context, type ReactElement } from "react";
 import { act, create, type ReactTestRenderer } from "react-test-renderer";
 
 import { stubModule } from "../perf/reactCompilerBuilds.ts";
-import type { PlaylistRow } from "./LibraryStore.ts";
+import type { PlaylistRow } from "@wave/client";
 
 Object.assign(globalThis, { IS_REACT_ACT_ENVIRONMENT: true });
 const react = JSON.stringify(import.meta.resolve("react"));

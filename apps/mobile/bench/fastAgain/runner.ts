@@ -10,7 +10,7 @@ import {
   FAST_AGAIN_DESKTOP,
   FAST_AGAIN_SIZES,
   type FastAgainSize,
-} from "../../src/library/db/fastAgainFixture.ts";
+} from "@wave/client/testing/fastAgainFixture";
 import { measureRead } from "./measure.ts";
 import { registerBench, registeredBenches } from "./registry.ts";
 import { loadWorktreeModule } from "./store.ts";

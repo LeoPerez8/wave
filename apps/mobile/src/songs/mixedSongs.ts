@@ -1,6 +1,6 @@
 import type { MixedSong, RowMenuAction, SongRowState } from "@wave/core";
 
-import type { SongRow } from "@/library/LibraryStore";
+import type { SongRow } from "@wave/client";
 import type { NativeYtSong } from "@/native/waveYtMusic";
 import { openTrackActions, type MenuOptions } from "@/playback/ActionsMenu";
 import type { RowSwipeOptions } from "@/playback/rowSwipe";

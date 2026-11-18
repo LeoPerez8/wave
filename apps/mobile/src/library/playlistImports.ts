@@ -33,9 +33,10 @@ import { appLog } from "@/log/appLog";
 import { showError } from "@/overlay/alert";
 import { perfMark, registerPerfMeta } from "@/perf/perf";
 
-import { playlistWorkReport } from "./db/playlistWork";
+import { playlistWorkReport } from "@wave/client/db/playlistWork";
 import { endImportProgress, showImportProgress } from "./importProgress";
 import { LibraryStore } from "./LibraryStore";
+
 import { playlistImports as imports } from "./playlistImportsStore";
 import { currentPlaylists, playlistsChanged } from "./playlists";
 import { appRuntime } from "./runtime";

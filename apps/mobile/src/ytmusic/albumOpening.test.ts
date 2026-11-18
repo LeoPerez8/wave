@@ -20,8 +20,8 @@ test("an online answer and a download leave the rows already shown in place", ()
 });
 
 test("an integrated album reads only its own rows and starts no YouTube ask before local content", async () => {
-  const { createFastAgainFixture } = await import("../library/db/fastAgainFixture.ts");
-  const { traceQueries } = await import("../library/db/testDatabase.ts");
+  const { createFastAgainFixture } = await import("@wave/client/testing/fastAgainFixture");
+  const { traceQueries } = await import("@wave/client/testing");
   const { loadDetailOpening } = await import("../../bench/fastAgain/detailOpeningReplay.ts");
   const { fileURLToPath } = await import("node:url");
   const fixture = await createFastAgainFixture();
@@ -45,7 +45,7 @@ test("an integrated album reads only its own rows and starts no YouTube ask befo
 });
 
 test("a real-store album stays usable while its deferred YouTube release never answers, then joins the answer", async () => {
-  const { createFastAgainFixture } = await import("../library/db/fastAgainFixture.ts");
+  const { createFastAgainFixture } = await import("@wave/client/testing/fastAgainFixture");
   const { loadDetailOpening } = await import("../../bench/fastAgain/detailOpeningReplay.ts");
   const { fileURLToPath } = await import("node:url");
   const Effect = await import("effect/Effect");

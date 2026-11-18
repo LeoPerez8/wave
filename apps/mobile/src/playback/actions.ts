@@ -25,12 +25,8 @@ import {
 } from "@wave/core";
 import * as Effect from "effect/Effect";
 
-import {
-  LibraryStore,
-  songHasFile,
-  type PlayableSongRow,
-  type SongRow,
-} from "@/library/LibraryStore";
+import { LibraryStore } from "@/library/LibraryStore";
+import { songHasFile, type PlayableSongRow, type SongRow } from "@wave/client";
 import { appRuntime } from "@/library/runtime";
 import { currentLocalisation } from "@/localisation/localisation";
 import { setShuffleKind } from "@/settings/shuffleKind";

@@ -4,7 +4,7 @@ import { test } from "node:test";
 import { fileURLToPath } from "node:url";
 import * as Effect from "effect/Effect";
 import { loadLibraryStore, loadWorktreeModule } from "../../bench/fastAgain/store.ts";
-import { closeTestDatabase, openTestDatabase } from "./db/testDatabase.ts";
+import { closeTestDatabase, openTestDatabase } from "@wave/client/testing";
 import type { LibraryStore } from "./LibraryStore.ts";
 
 const moduleUrl = (source: string): string => `data:text/javascript,${encodeURIComponent(source)}`;

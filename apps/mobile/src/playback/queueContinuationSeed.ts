@@ -7,7 +7,8 @@ import {
   type YtSong,
 } from "@wave/core";
 import * as Effect from "effect/Effect";
-import type { LibraryStore, LibraryStoreError, SongRow } from "../library/LibraryStore.ts";
+import type { LibraryStore, LibraryStoreError } from "../library/LibraryStore.ts";
+import type { SongRow } from "@wave/client";
 import { queuedYtSong, type QueueTrack } from "./queueTracks.ts";
 
 interface ContinuationInput {

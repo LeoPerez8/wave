@@ -8,7 +8,7 @@ import {
   rankedDiscoverMixRead,
   type YtAlbumSong,
 } from "@wave/core";
-import type { SongRow } from "../library/LibraryStore.ts";
+import type { SongRow } from "@wave/client";
 import { readMixBuildLibrary } from "./mixBuildLibrary.ts";
 
 for (const cachedFinder of [false, true])

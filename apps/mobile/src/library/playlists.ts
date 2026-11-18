@@ -11,7 +11,7 @@ import {
 import * as Effect from "effect/Effect";
 import { Image } from "react-native";
 
-import { artworkUri } from "@/catalog/artworkUri";
+import { artworkUri } from "@wave/client/artworkUri";
 import { makeExternalStore } from "@/lib/externalStore";
 import { currentLocalisation } from "@/localisation/localisation";
 import { WaveNative, type PlaylistPhoto } from "@/native/waveNative";
@@ -20,13 +20,9 @@ import { showError } from "@/overlay/alert";
 import { showToast } from "@/overlay/toast";
 import { shazamPlaylistId, setShazamPlaylistId } from "@/settings/shazamPlaylist";
 
-import { countNotified } from "./db/playlistWork";
-import {
-  LibraryStore,
-  type LibraryStoreError,
-  type PlaylistAddResult,
-  type PlaylistRow,
-} from "./LibraryStore";
+import { countNotified } from "@wave/client/db/playlistWork";
+import { LibraryStore, type LibraryStoreError } from "./LibraryStore";
+import { type PlaylistAddResult, type PlaylistRow } from "@wave/client";
 import { publishLibraryChange } from "./libraryChanges";
 import { appRuntime } from "./runtime";
 

@@ -12,7 +12,7 @@ import * as Result from "effect/Result";
 import { useCallback, useEffect, useRef, useState } from "react";
 
 import type { LineToggle } from "@/catalog/PlayShuffle";
-import type { SongRow } from "@/library/LibraryStore";
+import type { SongRow } from "@wave/client";
 import { useScreenSettled } from "@/lib/screenTiming";
 import { useVisitState } from "@/lib/useVisitState";
 import { online } from "@/native/waveNative";

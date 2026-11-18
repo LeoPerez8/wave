@@ -12,8 +12,8 @@ import {
   closeTestDatabase,
   openTestDatabase,
   traceQueries,
-} from "../library/db/testDatabase.ts";
-import type { PlayableSongRow } from "../library/LibraryStore.ts";
+} from "@wave/client/testing";
+import type { PlayableSongRow } from "@wave/client";
 import { readPlaylistSeedIds } from "./playlistSeedIds.ts";
 import { randomMagicQueueRead } from "./randomMagicQueueRead.ts";
 

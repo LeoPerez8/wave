@@ -50,6 +50,9 @@ importers:
       '@tabler/icons-react-native':
         specifier: ^3.44.0
         version: 3.49.0(react-native-svg@15.15.5(react-native@0.88.0-rc.4(@babel/core@7.29.7)(@react-native/metro-config@0.88.0-rc.4(@babel/core@7.29.7))(@types/react@19.3.0)(react@19.3.0))(react@19.3.0))(react@19.3.0)
+      '@wave/client':
+        specifier: workspace:*
+        version: link:../../packages/client
       '@wave/core':
         specifier: workspace:*
         version: link:../../packages/core
@@ -191,6 +194,31 @@ importers:
       wrangler:
         specifier: ^4.0.0
         version: 4.151.0(@types/node@24.12.4)
+
+  packages/client:
+    dependencies:
+      '@wave/core':
+        specifier: workspace:*
+        version: link:../core
+      drizzle-orm:
+        specifier: 0.45.4
+        version: 0.45.4(@libsql/client@0.18.0)(@opentelemetry/api@1.9.1)(@types/sql.js@1.4.11)(expo-sqlite@58.0.11(expo@58.0.7)(react-native@0.88.0-rc.4(@babel/core@7.29.7)(@react-native/metro-config@0.88.0-rc.4(@babel/core@7.29.7))(@types/react@19.3.0)(react@19.3.0))(react@19.3.0))(sql.js@1.14.2)
+      effect:
+        specifier: 4.0.2
+        version: 4.0.2
+    devDependencies:
+      '@types/node':
+        specifier: 'catalog:'
+        version: 24.12.4
+      '@types/sql.js':
+        specifier: ^1.4.11
+        version: 1.4.11
+      sql.js:
+        specifier: ^1.14.2
+        version: 1.14.2
+      typescript:
+        specifier: 'catalog:'
+        version: 7.0.2
 
   packages/core:
     devDependencies:

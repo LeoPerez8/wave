@@ -9,7 +9,8 @@ import { useEffect, useMemo, useSyncExternalStore } from "react";
 
 import { libraryVersion } from "@/library/LibraryScan";
 import { createArtistLinkLookup } from "@/library/artistLookup";
-import { LibraryStore, type ArtistRow } from "@/library/LibraryStore";
+import { LibraryStore } from "@/library/LibraryStore";
+import { type ArtistRow } from "@wave/client";
 import {
   currentRouteNow,
   useCurrentPath,

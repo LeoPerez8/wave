@@ -5,8 +5,8 @@ import { performance } from "node:perf_hooks";
 import * as Effect from "effect/Effect";
 import type { StreamedArtistLink } from "@wave/core";
 
-import type { ArtistRow } from "../../../src/library/LibraryStore.ts";
-import { traceQueries } from "../../../src/library/db/testDatabase.ts";
+import type { ArtistRow } from "@wave/client";
+import { traceQueries } from "@wave/client/testing";
 import { createArtistLinkFixture } from "../artistLinkFixture.ts";
 import { percentiles, timeRuns } from "../measure.ts";
 import { loadLibraryStore } from "../store.ts";

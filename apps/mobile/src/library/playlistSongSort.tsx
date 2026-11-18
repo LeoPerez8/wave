@@ -13,7 +13,7 @@ import { openOverlay } from "@/overlay/overlay";
 import { showToast } from "@/overlay/toast";
 import { pressedRect } from "@/motion/pressedRect";
 import { useLocalisation } from "@/localisation/localisation";
-import type { PlaylistEntryRow } from "./LibraryStore";
+import type { PlaylistEntryRow } from "@wave/client";
 import { playlistSongSetting, usePlaylistSongSort } from "./playlistSongSetting";
 import { ensureReleaseNotice } from "./releaseDates";
 import { entryReleaseSong, releaseSongDate } from "./releaseSong";

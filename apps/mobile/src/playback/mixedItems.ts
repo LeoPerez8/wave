@@ -6,7 +6,7 @@ import {
   type YtArtistAlbum,
   type YtArtistShelf,
 } from "@wave/core";
-import type { AlbumRow, SongRow } from "../library/LibraryStore.ts";
+import type { AlbumRow, SongRow } from "@wave/client";
 import type { NativeYtSong } from "../native/waveYtMusic.ts";
 import type { ActionItems, TrackItem } from "./actionTargets.ts";
 

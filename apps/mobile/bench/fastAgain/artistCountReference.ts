@@ -1,8 +1,8 @@
 /** Faithful pre-#600 selectArtists (2aae3bb8); global UNION before filtering/paging. */
 import { sql } from "drizzle-orm";
-import type { ArtistsQuery } from "../../src/library/db/artists.ts";
-import type { LibraryDatabase } from "../../src/library/db/database.ts";
-import type { ArtistRow } from "../../src/library/LibraryStore.ts";
+import type { ArtistsQuery } from "@wave/client/db/artists";
+import type { LibraryDatabase } from "@wave/client/db/database";
+import type { ArtistRow } from "@wave/client";
 
 export const selectArtistsBefore600 = (
   db: LibraryDatabase,

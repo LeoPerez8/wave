@@ -22,7 +22,7 @@ import { FavoritesExportLine } from "./FavoritesExportLine";
 import { ImportBatchLine } from "./ImportBatchLine";
 import { openPlaylistImport } from "./importPlaylistLink";
 import { useImportProgress } from "./importProgress";
-import type { PlaylistRow } from "./LibraryStore";
+import type { PlaylistRow } from "@wave/client";
 import { usePlaylistLayout } from "./playlistLayout";
 import { moveShownPlaylist } from "./playlistOrder";
 import { emptyPlaylistRow } from "./playlists";

@@ -5,7 +5,7 @@ import type { PlaylistSong } from "@wave/core";
 import * as Effect from "effect/Effect";
 
 import { loadLibraryStore } from "../../bench/fastAgain/store.ts";
-import { closeTestDatabase, openTestDatabase, traceQueries } from "../library/db/testDatabase.ts";
+import { closeTestDatabase, openTestDatabase, traceQueries } from "@wave/client/testing";
 import { createPlaylistSeedIdsRead, readPlaylistSeedIds } from "./playlistSeedIds.ts";
 
 const root = fileURLToPath(new URL("../../../../", import.meta.url));

@@ -4,7 +4,7 @@ import { Image } from "expo-image";
 import { useState } from "react";
 import { Image as SoftwareImage, PixelRatio, StyleSheet, View } from "react-native";
 
-import { artworkUri } from "./artworkUri";
+import { artworkUri } from "@wave/client/artworkUri";
 import { useCapturedImage, useInCapture } from "@/share/imageCapture";
 import { useThemeColor } from "@/theme/useThemeColor";
 

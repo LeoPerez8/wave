@@ -34,7 +34,8 @@ import {
 } from "react";
 
 import type { LineToggle } from "@/catalog/PlayShuffle";
-import { LibraryStore, type AlbumRow, type SongRow } from "@/library/LibraryStore";
+import { LibraryStore } from "@/library/LibraryStore";
+import { type AlbumRow, type SongRow } from "@wave/client";
 import { useSettledOnce } from "@/lib/screenTiming";
 import { useScreenSight } from "@/lib/screenSight";
 import { isScreenSettled } from "@/lib/timing";

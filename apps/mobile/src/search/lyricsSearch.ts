@@ -2,8 +2,9 @@ import { findLyricMatch } from "@wave/core";
 import * as Effect from "effect/Effect";
 import { useEffect, useMemo, useState, useSyncExternalStore } from "react";
 
-import type { SongRow } from "@/library/LibraryStore";
+import type { SongRow } from "@wave/client";
 import { LibraryStore } from "@/library/LibraryStore";
+
 import { lyricsSearchIndexVersion } from "@/library/lyricsSearchVersion";
 import { appRuntime } from "@/library/runtime";
 import type { NativeYtSong } from "@/native/waveYtMusic";
