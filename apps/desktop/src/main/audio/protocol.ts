@@ -2,18 +2,21 @@
  * The messages between main and the audio process. Main sends one request per call; the
  * process answers each with the engine's status after it, or with the engine's error.
  */
-import type { PlaybackStatus } from "../../shared/playback.ts";
+import type { PlaybackStatus, PlaybackEvent } from "../../shared/playback.ts";
 
 /** The addon's `AudioEngine`, as `apps/desktop/native/node` exports it. */
 export interface AddonEngine {
-  readonly load: (path: string) => PlaybackStatus;
+  readonly load: (path: string, key?: string) => PlaybackStatus;
+  readonly preload: (path: string | undefined, key: string | undefined) => void;
+  readonly setVolume: (volume: number) => void;
+  readonly transitions: () => PlaybackEvent["transitions"];
   readonly play: () => void;
   readonly pause: () => void;
   readonly seek: (positionMs: number) => void;
   readonly status: () => PlaybackStatus;
 }
 
-export type AudioCall = "load" | "play" | "pause" | "seek" | "status";
+export type AudioCall = "load" | "play" | "pause" | "seek" | "status" | "preload" | "setVolume";
 
 export interface AudioRequest {
   readonly id: number;
@@ -42,7 +45,13 @@ const failure = (error: unknown): AudioFailure => {
 const run = (engine: AddonEngine, request: AudioRequest): PlaybackStatus | undefined => {
   switch (request.call) {
     case "load":
-      return engine.load(String(request.args[0]));
+      return engine.load(String(request.args[0]), request.args[1] as string | undefined);
+    case "preload":
+      engine.preload(request.args[0] as string | undefined, request.args[1] as string | undefined);
+      return engine.status();
+    case "setVolume":
+      engine.setVolume(Number(request.args[0]));
+      return engine.status();
     case "play":
       engine.play();
       return engine.status();
@@ -75,4 +84,32 @@ export const answer = (
   } catch (error) {
     return { id: request.id, ok: false, error: failure(error) };
   }
+};
+
+/** [response] with the time the process took its status, so main can tell an older one. */
+export const stamped = (response: AudioResponse, atMs: number): AudioResponse =>
+  response.ok ? { ...response, result: { ...response.result, observedAtMs: atMs } } : response;
+
+const sameStatus = (a: PlaybackStatus, b: PlaybackStatus) =>
+  a.state === b.state &&
+  a.positionMs === b.positionMs &&
+  a.durationMs === b.durationMs &&
+  a.key === b.key &&
+  a.device === b.device;
+
+/**
+ * What the process pushes to main at [atMs]: the engine's status and the songs it moved on to
+ * since [previous], or nothing when neither changed.
+ */
+export const playbackEvent = (
+  engine: AddonEngine,
+  previous: PlaybackStatus | undefined,
+  atMs: number,
+): PlaybackEvent | undefined => {
+  const status = engine.status();
+  const transitions = engine.transitions();
+  if (previous !== undefined && transitions.length === 0 && sameStatus(previous, status)) {
+    return undefined;
+  }
+  return { event: "playback", status: { ...status, observedAtMs: atMs }, transitions };
 };

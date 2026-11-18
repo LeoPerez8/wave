@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import type { PlaybackStatus } from "../../shared/playback.ts";
+import type { PlaybackEvent, PlaybackStatus } from "../../shared/playback.ts";
 import { answer, type AddonEngine, type AudioRequest } from "./protocol.ts";
 import { AudioEngineError, superviseAudio, type AudioEvents } from "./supervisor.ts";
 
@@ -17,6 +17,9 @@ const pretendEngine = (): AddonEngine => {
     pause: () => void (status = { ...status, state: "paused" }),
     seek: (positionMs) => void (status = { ...status, positionMs }),
     status: () => status,
+    preload: () => {},
+    transitions: () => [],
+    setVolume: () => {},
   };
 };
 
@@ -62,6 +65,7 @@ const fakeProcesses = () => {
     stall: () => {
       if (current !== undefined) current.stalled = true;
     },
+    emit: (event: PlaybackEvent) => current?.events.message(event),
     crash: () => {
       if (current === undefined) return;
       current.alive = false;
@@ -188,4 +192,41 @@ test("disposing kills the process and stops restarting it", async () => {
     audio.call("status", []),
     (error) => error instanceof AudioEngineError && error.code === "disposed",
   );
+});
+
+test("a new process also gets back the volume and the song lined up after the current one", async () => {
+  const processes = fakeProcesses();
+  const audio = superviseAudio({ fork: processes.fork, ...quick });
+  await audio.call("load", ["/music/a.opus", "1"]);
+  await audio.call("setVolume", [0.4]);
+  await audio.call("preload", ["/music/b.opus", "2"]);
+  processes.crash();
+  await settle();
+  assert.deepEqual(processes.log.slice(-3), [
+    "2:load /music/a.opus",
+    "2:setVolume 0.4",
+    "2:preload /music/b.opus",
+  ]);
+  audio.dispose();
+});
+
+test("events from the current process reach every subscriber until it unsubscribes", async () => {
+  const processes = fakeProcesses();
+  const audio = superviseAudio({ fork: processes.fork, ...quick });
+  const seen: string[] = [];
+  const stop = audio.subscribe((event) => seen.push(event.status.state));
+  await audio.call("load", ["/music/a.opus", "1"]);
+  processes.emit({
+    event: "playback",
+    status: { state: "playing", positionMs: 5, key: "1" },
+    transitions: [],
+  });
+  stop();
+  processes.emit({
+    event: "playback",
+    status: { state: "paused", positionMs: 5, key: "1" },
+    transitions: [],
+  });
+  assert.deepEqual(seen, ["playing"]);
+  audio.dispose();
 });
