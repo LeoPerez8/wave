@@ -23,6 +23,7 @@ export const desktopScanIndex = (db: LibraryDatabase, platform: string) => {
   let missing: readonly IndexedFile[] = [];
   let folders: readonly ScanFolder[] = [];
   let changed = false;
+  let seen = new Set<string>();
   const read = () =>
     db
       .select({
@@ -48,7 +49,7 @@ export const desktopScanIndex = (db: LibraryDatabase, platform: string) => {
     },
     begin: (roots: readonly ScanFolder[], seenPaths: readonly string[]) => {
       folders = roots;
-      const seen = new Set(seenPaths.map((path) => scanPathKey(path, platform)));
+      seen = new Set(seenPaths.map((path) => scanPathKey(path, platform)));
       const rows = read();
       known = new Map(rows.map((row) => [scanPathKey(row.path, platform), row]));
       missing = rows.filter((row) => scanFileState(row.path, roots, seen, platform) === "missing");
@@ -80,6 +81,15 @@ export const desktopScanIndex = (db: LibraryDatabase, platform: string) => {
         (file) => scanFileState(file.path, folders, new Set(), platform) === "missing",
       );
       db.transaction((tx) => {
+        const skippedGone = tx
+          .select()
+          .from(skippedFiles)
+          .all()
+          .filter((file) => scanFileState(file.path, folders, seen, platform) === "missing");
+        unskipFiles(
+          tx,
+          skippedGone.map((file) => file.path),
+        );
         if (missing.length > 0) {
           leaveFiles(
             tx,

@@ -94,4 +94,7 @@ test("voice notes are remembered unread and indexed music that becomes a recordi
   index.finish();
   assert.equal(trackQuery(db).all().length, 0);
   assert.deepEqual(index.skipped(), [{ path: "/Music/One.flac", sizeBytes: 101, modifiedAt: 2 }]);
+  index.begin(roots, []);
+  index.finish();
+  assert.deepEqual(index.skipped(), []);
 });
