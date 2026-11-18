@@ -23,6 +23,8 @@ enum class WaveAccountFailure(val code: String, val notice: String) {
   ACCOUNTS_FULL("ERR_WAVE_ACCOUNTS_FULL", "Wave's server has no room for new accounts"),
   /** The service has made all the new accounts it may for now, and this Google account has none yet. */
   NEW_ACCOUNTS_PAUSED("ERR_WAVE_NEW_ACCOUNTS_PAUSED", "Wave's server isn't making new accounts today"),
+  /** The account has all the sessions the service lets it have: the phones signed in to it stay signed in. */
+  SESSIONS_FULL("ERR_WAVE_SESSIONS_FULL", "Too many phones are signed in to this Wave account"),
   /** There's no session to send the request with; nothing was sent. */
   SIGNED_OUT("ERR_WAVE_SIGNED_OUT", "Not signed in to a Wave account"),
   /** The service stopped accepting the session (a 401): the app is signed out. */
@@ -78,6 +80,8 @@ class WaveAccountClient(
         throw WaveAccountException(WaveAccountFailure.ACCOUNTS_FULL)
       response.status in 400..499 && response.limit() == "maxNewAccountsPerDay" ->
         throw WaveAccountException(WaveAccountFailure.NEW_ACCOUNTS_PAUSED)
+      response.status in 400..499 && response.limit() == "maxSessionsPerAccount" ->
+        throw WaveAccountException(WaveAccountFailure.SESSIONS_FULL)
       response.status == 403 -> throw WaveAccountException(WaveAccountFailure.NOT_ALLOWED)
       response.status in 400..499 -> throw WaveAccountException(WaveAccountFailure.REJECTED)
       response.status !in 200..299 -> throw WaveAccountException(WaveAccountFailure.UNREACHABLE)

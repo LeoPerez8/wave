@@ -27,6 +27,7 @@ import {
   proxiedAnswer,
   sha256Hex,
 } from "./proxy.ts";
+import { SESSION_UNUSED_MS } from "./sessions.ts";
 import { type PushBatch, deleteAccount, pullRows, pushRows } from "./store.ts";
 import { type IncomingRow, type SyncTable, InvalidRow, SYNC_TABLES, parseRow } from "./tables.ts";
 
@@ -135,9 +136,6 @@ const TICKETMASTER_SPACING_MS = 250;
 
 /** How long a request may wait for its turn with a paced provider before it answers 503 `busy`. */
 const MAX_TURN_WAIT_MS = 5_000;
-
-/** How long a session lasts unused: any authenticated request starts it again. */
-const SESSION_UNUSED_MS = 90 * 24 * 60 * 60 * 1000;
 
 export type SyncService = (request: Request) => Promise<Response>;
 
@@ -322,10 +320,17 @@ export const createSyncService = (options: SyncServiceOptions): SyncService => {
     await countSignIn(`sub:${identity.sub}`);
     const sessionToken = base64url(crypto.getRandomValues(new Uint8Array(32)));
     const at = now();
-    // One transaction: the account limits are checked where the account is
-    // made, so two sign-ins can't both take the last place.
-    const [, , , held] = await db.batch(
+    // One transaction: the account and session limits are checked where the
+    // account and the session are made, so two sign-ins can't both take the
+    // last place.
+    const [, , , made, held] = await db.batch(
       [
+        {
+          sql: `DELETE FROM sessions
+                WHERE last_used_at <= ?
+                  AND account_id IN (SELECT id FROM accounts WHERE google_sub = ?)`,
+          args: [at - SESSION_UNUSED_MS, identity.sub],
+        },
         {
           sql: "UPDATE accounts SET email = ? WHERE google_sub = ?",
           args: [identity.email, identity.sub],
@@ -349,8 +354,10 @@ export const createSyncService = (options: SyncServiceOptions): SyncService => {
         },
         {
           sql: `INSERT INTO sessions (token_hash, account_id, created_at, last_used_at)
-                SELECT ?, id, ?, ? FROM accounts WHERE google_sub = ?`,
-          args: [await sha256Hex(sessionToken), at, at, identity.sub],
+                SELECT ?, id, ?, ? FROM accounts
+                WHERE google_sub = ?
+                  AND (SELECT count(*) FROM sessions WHERE account_id = accounts.id) < ?`,
+          args: [await sha256Hex(sessionToken), at, at, identity.sub, limits.maxSessionsPerAccount],
         },
         {
           sql: `SELECT EXISTS (SELECT 1 FROM accounts WHERE google_sub = ?) AS present,
@@ -372,6 +379,8 @@ export const createSyncService = (options: SyncServiceOptions): SyncService => {
         }),
       );
     }
+    // The account's valid sessions stay as they are: none is ended to make room.
+    if (made?.rowsAffected !== 1) throw overLimit("maxSessionsPerAccount", 403);
     return json({ sessionToken, email: identity.email });
   };
 
