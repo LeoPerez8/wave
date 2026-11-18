@@ -33,7 +33,10 @@ export interface BrowseRow {
   readonly favorite: boolean;
   readonly path: string | null;
   readonly unavailable: boolean;
-  /** A YouTube Music song's video id; its `id` is then 0 and it has no Library row. */
+  /**
+   * A YouTube Music song's video id. It has no Library row: its `id` is 0, or in a playlist its
+   * entry's id negated.
+   */
   readonly videoId?: string;
   /** A YouTube Music song's artists, each one, in order; [artist] joins them. */
   readonly artists?: readonly string[];

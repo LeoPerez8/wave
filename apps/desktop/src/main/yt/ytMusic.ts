@@ -127,6 +127,8 @@ export const createYtMusic = (deps: YtMusicDeps): YtMusicShape => {
   const fetchImage = deps.fetch ?? globalThis.fetch;
   const maxArtworkBytes = deps.maxArtworkBytes ?? 2_000_000;
   const known = new Map<string, YtAlbumSong>();
+  /** How many songs are remembered: more once a list longer than that was kept to play. */
+  let room = KNOWN_LIMIT;
   /**
    * Keeps [song] for playback. A later answer can know less about it (a radio's first item has
    * no album line), so what it leaves out is taken from what Wave knew already.
@@ -146,7 +148,7 @@ export const createYtMusic = (deps: YtMusicDeps): YtMusicShape => {
             durationMs: song.durationMs ?? before.durationMs,
           },
     );
-    if (known.size > KNOWN_LIMIT) known.delete(known.keys().next().value!);
+    if (known.size > room) known.delete(known.keys().next().value!);
   };
   try {
     for (const song of ytSongs(JSON.parse(deps.read(QUEUED_YT_TRACKS) ?? "[]"))) remember(song);
@@ -203,6 +205,7 @@ export const createYtMusic = (deps: YtMusicDeps): YtMusicShape => {
     },
     song: (videoId) => known.get(videoId),
     keep: (songs) => {
+      room = Math.max(room, songs.length + KNOWN_LIMIT);
       for (const song of songs) remember(song);
     },
     resolve: async (videoId, fresh) => {

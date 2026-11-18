@@ -40,6 +40,10 @@ export const desktopEn = {
       "Your Wave session ended, so this computer is signed out. Sign in again to keep your backup.",
     // The browser has its own Google sign-in, so there's no account to add to the system.
     addAGoogleAccountToThisPhone: "Couldn't sign in. Try again.",
+    ytMusicNote:
+      "Signing in is optional. Signed in, Search, playback and Home's mixes use your account. The session stays on this computer. With Download in best quality off, or when Soulseek can't deliver a song, downloads come from YouTube Music: AAC at 256 kbps with Premium, about 128 kbps without.",
+    searchPlaybackAndHomesMixesUseThis:
+      "Search, playback and Home's mixes use this account. Signing out forgets it on this computer.",
     signOutOnAllPhones: "Sign Out on All Devices",
     everyPhoneOnThisWaveAccountSignedOut:
       "Every device on this Wave account is signed out. Sign in again to keep your backup.",

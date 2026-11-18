@@ -1,6 +1,9 @@
 import { sql, type SQL } from "drizzle-orm";
 import type { LibraryDatabase } from "@wave/client/db/database";
+import { selectPlaylistEntries } from "@wave/client/db/playlists";
+import type { YtAlbumSong } from "@wave/core";
 import type { BrowsePage, BrowseRow, BrowseScope } from "../../shared/browse.ts";
+import { ytRow } from "../../shared/yt.ts";
 import { searchSongIds } from "./search.ts";
 
 const SONGS = sql`SELECT t.id, t.title, t.artist_credit AS artist, a.title AS album,
@@ -95,6 +98,48 @@ const row = (value: Partial<BrowseRow> & Pick<BrowseRow, "id" | "title">): Brows
   favorite: Boolean(value.favorite),
 });
 
+/** A playlist's song that plays: a Library track or a YT Music song. */
+export type PlaylistSong =
+  | { readonly itemId: number; readonly trackId: number }
+  | { readonly itemId: number; readonly song: YtAlbumSong };
+
+/**
+ * The songs of a playlist that holds YT Music songs, in its order, for its page and for playing
+ * it; undefined for a playlist of Library tracks only, which SQL lists a page at a time. An
+ * entry that can't play (unsearched, unavailable) is left out.
+ */
+export const playlistSongs = (
+  db: LibraryDatabase,
+  playlistId: number,
+): PlaylistSong[] | undefined => {
+  const streamed = db.get(
+    sql`SELECT 1 FROM playlist_items WHERE playlist_id=${playlistId} AND deleted=0 AND yt_song IS NOT NULL LIMIT 1`,
+  );
+  if (streamed === undefined) return undefined;
+  return selectPlaylistEntries(db, playlistId).flatMap((entry): PlaylistSong[] =>
+    entry.source === "library"
+      ? [{ itemId: entry.itemId, trackId: entry.track.id }]
+      : entry.source === "stream"
+        ? [{ itemId: entry.itemId, song: entry.song }]
+        : [],
+  );
+};
+
+/** [songs] as rows: a YT Music song's `id` is its entry's, negated, so no two rows share one. */
+const playlistRows = (db: LibraryDatabase, songs: readonly PlaylistSong[]): BrowseRow[] => {
+  const tracks = new Map(
+    browseSongs(
+      db,
+      songs.flatMap((song) => ("trackId" in song ? [song.trackId] : [])),
+    ).map((track) => [track.id, track]),
+  );
+  return songs.flatMap((song) =>
+    "trackId" in song
+      ? (tracks.get(song.trackId) ?? [])
+      : [{ ...ytRow(song.song), id: -song.itemId }],
+  );
+};
+
 /** SQLite limits the read before rows cross IPC. No whole-library materialisation. */
 export const browseLibrary = (
   db: LibraryDatabase,
@@ -107,12 +152,19 @@ export const browseLibrary = (
     return { items: browseSongs(db, ids.slice(offset, offset + limit)), offset, total: ids.length };
   }
   const { source, order } = listing(scope);
-  const total = db.get<{ count: number }>(sql`SELECT count(*) AS count FROM (${source})`)!.count;
-  const items = db
-    .all<BrowseRow>(
-      sql`SELECT * FROM (${source}) ORDER BY ${order} LIMIT ${limit} OFFSET ${offset}`,
-    )
-    .map(row);
+  const mixed =
+    scope.kind === "playlist" && scope.id !== undefined ? playlistSongs(db, scope.id) : undefined;
+  const total =
+    mixed?.length ??
+    db.get<{ count: number }>(sql`SELECT count(*) AS count FROM (${source})`)!.count;
+  const items =
+    mixed !== undefined
+      ? playlistRows(db, mixed.slice(offset, offset + limit))
+      : db
+          .all<BrowseRow>(
+            sql`SELECT * FROM (${source}) ORDER BY ${order} LIMIT ${limit} OFFSET ${offset}`,
+          )
+          .map(row);
   const parentKind = {
     album: "albums",
     artist: "artists",
@@ -153,7 +205,10 @@ export const browseLetter = (db: LibraryDatabase, scope: BrowseScope, letter: st
   );
 };
 
-/** The ids of [scope]'s songs, in the order its list shows them; none for a list of lists. */
+/**
+ * The ids of [scope]'s Library songs, in the order its list shows them; none for a list of lists.
+ * A playlist's YT Music songs aren't among them (`playlistSongs` has those).
+ */
 export const browseTrackIds = (db: LibraryDatabase, scope: BrowseScope): string[] => {
   if (["albums", "artists", "playlists", "genres"].includes(scope.kind)) return [];
   if (scope.kind === "search") return searchSongIds(db, scope.query ?? "").map(String);

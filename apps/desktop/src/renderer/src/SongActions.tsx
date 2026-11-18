@@ -306,10 +306,12 @@ export function useSongActions({ go, select, failed, changed, newPlaylist }: Opt
     (
       label: string,
       items: Promise<readonly MenuItem[]> | readonly MenuItem[],
-      element: Element,
+      /** The element the menu opens under, or the point it opens at. */
+      from: Element | { readonly x: number; readonly y: number },
     ) => {
-      const rect = element.getBoundingClientRect();
-      setMenu({ label, items, at: { x: rect.left, y: rect.bottom + 4 } });
+      const rect = from instanceof Element ? from.getBoundingClientRect() : undefined;
+      const at = rect ? { x: rect.left, y: rect.bottom + 4 } : (from as { x: number; y: number });
+      setMenu({ label, items, at });
     },
     [setMenu],
   );

@@ -10,6 +10,7 @@ import {
   type ReactNode,
 } from "react";
 import type { AccountView } from "../../shared/account.ts";
+import type { YtAccountPanel } from "../../shared/ytAccount.ts";
 import type { BrowseRow, BrowseScope } from "../../shared/browse.ts";
 import type { ScanStatus } from "../../shared/library.ts";
 import { PlayerBar, usePlayback } from "./PlayerBar.tsx";
@@ -22,6 +23,7 @@ import { FolderSettings } from "./FolderSettings.tsx";
 import { SearchOnlineSetting } from "./SearchOnlineSetting.tsx";
 import { SearchPage } from "./SearchPage.tsx";
 import { AccountSettings, SignInInvitation } from "./AccountSettings.tsx";
+import { YtAccountSettings } from "./YtAccountSettings.tsx";
 import { PlaybackSettings } from "./PlaybackSettings.tsx";
 import { WindowSettings } from "./WindowSettings.tsx";
 import { SystemMediaSession } from "./SystemMediaSession.tsx";
@@ -104,6 +106,7 @@ export function App() {
   const [hero, setHero] = useState<BrowseRow>();
   const [scan, setScan] = useState<ScanStatus>();
   const [account, setAccount] = useState<AccountView>();
+  const [ytAccount, setYtAccount] = useState<YtAccountPanel>();
   const theme = account?.theme;
   const [count, setCount] = useState(0);
   const [error, setError] = useState<string>();
@@ -195,6 +198,11 @@ export function App() {
           if (current)
             setAccount((previous) =>
               JSON.stringify(previous) === JSON.stringify(view) ? previous : view,
+            );
+          const yt = await window.wave.ytAccount.view();
+          if (current)
+            setYtAccount((previous) =>
+              JSON.stringify(previous) === JSON.stringify(yt) ? previous : yt,
             );
         }
       } catch {
@@ -839,6 +847,7 @@ export function App() {
                       }}
                     />
                   )}
+                  <YtAccountSettings view={ytAccount} onError={failed} />
                 </>
               ) : setting === "playback" ? (
                 <PlaybackSettings onError={failed} />
@@ -950,7 +959,13 @@ export function App() {
                   selection
                     ? undefined
                     : (row, at) =>
-                        actions.openMenu(
+                      row.videoId !== undefined
+                        ? actions.openItems(
+                            text.desktopLibrary.songMenu(row.title),
+                            streamed.items(row.videoId),
+                            at,
+                          )
+                        : actions.openMenu(
                           { scope, ids: [row.id] },
                           row.title,
                           at,

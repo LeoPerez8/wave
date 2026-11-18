@@ -61,6 +61,9 @@ import { configureAutostart } from "./system/autostart.ts";
 import { followStart } from "./system/startup.ts";
 import { Playback } from "./playback/playback.ts";
 import { YtMusic } from "./yt/ytMusic.ts";
+import { ytAccountLayer } from "./yt/ytAccountLayer.ts";
+import { createYtSessions, ytSessionStore } from "./yt/ytSessionStore.ts";
+import { ytSignInSystem } from "./yt/ytSignInSystem.ts";
 
 // %APPDATA%\Wave or ~/.config/Wave, from the product name; tests point it at a folder of their own.
 const dataFolder = process.env["WAVE_DATA_DIR"];
@@ -220,11 +223,41 @@ else {
     });
     // What the JVM tells main unasked (`ready`, `downloadsChanged`), for whoever listens.
     const kotlinListeners = new Set<(event: KotlinEvent) => void>();
+    const sealedFiles = {
+      read: (path: string) => {
+        try {
+          return readFileSync(path);
+        } catch {
+          return undefined;
+        }
+      },
+      write: (path: string, bytes: Buffer) => writeFileSync(path, bytes, { mode: 0o600 }),
+      remove: (path: string) => rmSync(path, { force: true }),
+    };
+    // The YouTube session stays in main, sealed by the system's keyring, and the JVM asks for it
+    // each time it starts; without a keyring it is never written.
+    const ytSessions = createYtSessions(
+      ytSessionStore({
+        box: safeStorage,
+        file: join(app.getPath("userData"), "yt-session.bin"),
+        files: sealedFiles,
+        platform: process.platform,
+      }),
+    );
+    const ytSignIn = ytSignInSystem({
+      userData: app.getPath("userData"),
+      home: app.getPath("home"),
+      platform: process.platform,
+      env: process.env,
+      log: (line) => process.stderr.write(`[yt] ${line}
+`),
+    });
+    void ytSignIn.sweep();
     const base = Layer.mergeAll(
       libraryLayer(join(app.getPath("userData"), "wave.db")),
       kotlinLayer({
         spawn: spawnLines(jvm, (text) => process.stderr.write(`[jvm] ${text}`)),
-        host: { poToken: poTokenHost(poTokens), ...keyringHost(safeStorage) },
+        host: { poToken: poTokenHost(poTokens), ...keyringHost(safeStorage), ...ytSessions.host },
         onEvent: (event) => {
           for (const listener of kotlinListeners) listener(event);
         },
@@ -328,17 +361,7 @@ else {
       store: sessionStore({
         box: safeStorage,
         file: join(app.getPath("userData"), "wave-session.bin"),
-        files: {
-          read: (path) => {
-            try {
-              return readFileSync(path);
-            } catch {
-              return undefined;
-            }
-          },
-          write: (path, bytes) => writeFileSync(path, bytes, { mode: 0o600 }),
-          remove: (path) => rmSync(path, { force: true }),
-        },
+        files: sealedFiles,
         platform: process.platform,
       }),
       syncUrl: config.syncUrl,
@@ -399,10 +422,17 @@ else {
         focused: () => BrowserWindow.getFocusedWindow() !== null,
       }).pipe(
         Layer.provideMerge(
-          desktopLinksLayer({
-            online: () => net.isOnline(),
-            writeClipboard: (text) => clipboard.writeText(text),
-          }).pipe(
+          Layer.mergeAll(
+            desktopLinksLayer({
+              online: () => net.isOnline(),
+              writeClipboard: (text) => clipboard.writeText(text),
+            }),
+            ytAccountLayer({
+              sessions: ytSessions,
+              online: () => net.isOnline(),
+              startSignIn: ytSignIn.start,
+            }),
+          ).pipe(
             Layer.provideMerge(
               ytFeaturesLayer({ online: () => net.isOnline() }).pipe(
                 Layer.provideMerge(
