@@ -59,6 +59,10 @@ class WaveDesktopTest {
     assertEquals("Fixture Artist", tags["artist"]!!.jsonPrimitive.content)
     assertEquals("Fixture Album", tags["album"]!!.jsonPrimitive.content)
     assertTrue(tags["durationMs"]!!.jsonPrimitive.content.toDouble() > 0)
+    val cover = java.util.Base64.getDecoder().decode(tags["artworkBase64"]!!.jsonPrimitive.content)
+    assertTrue(cover.size > 100)
+    assertEquals(0x89.toByte(), cover[0])
+    assertEquals(0x50.toByte(), cover[1])
   }
 
   @Test

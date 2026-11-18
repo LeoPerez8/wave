@@ -233,6 +233,28 @@ test("Library browsing finds favorites, individual artists, genres, playlists an
   });
 });
 
+test("Appearance defaults to system, survives reopening and rejects unknown modes", async () => {
+  await withFile(async (file) => {
+    const first = connect(file);
+    try {
+      const wave = first.exposed.get("wave") as WaveBridge;
+      assert.equal(await wave.settings.appearance(), "system");
+      await wave.settings.setAppearance("dark");
+      assert.equal(await wave.settings.appearance(), "dark");
+      const handler = first.handlers.get("settings.setAppearance")!;
+      await assert.rejects(handler(trusted, "unknown"), /Refused/);
+    } finally {
+      await first.runtime.dispose();
+    }
+    const second = connect(file);
+    try {
+      assert.equal(await (second.exposed.get("wave") as WaveBridge).settings.appearance(), "dark");
+    } finally {
+      await second.runtime.dispose();
+    }
+  });
+});
+
 test("the window reads scan progress and paged songs and refuses invalid page sizes", async () => {
   await withFile(async (file) => {
     const { runtime, exposed } = connect(file);

@@ -12,6 +12,9 @@ import { DesktopLibrary } from "./library/library.ts";
 import type { Page } from "../shared/bridge.ts";
 import { BROWSE_KINDS, type BrowseScope } from "../shared/browse.ts";
 import { browseLetter } from "./library/browse.ts";
+import { readArtwork } from "./library/artwork.ts";
+import { appearance, savePreference } from "./preferences.ts";
+import type { Appearance } from "../shared/bridge.ts";
 
 const validScope = (value: unknown): value is BrowseScope => {
   if (typeof value !== "object" || value === null) return false;
@@ -96,7 +99,7 @@ type Handlers = {
   ) => Effect.Effect<BridgeContract[C]["result"], unknown, BridgeServices>;
 };
 
-const createHandlers = (): Handlers => {
+const createHandlers = (onAppearance: (mode: Appearance) => void): Handlers => {
   let loadedPath: string | undefined;
   const checkAvailable = (path: string | undefined) =>
     Effect.gen(function* () {
@@ -105,6 +108,24 @@ const createHandlers = (): Handlers => {
         return yield* Effect.fail(new Error("[folder-unavailable] Drive is not connected"));
     });
   return {
+    "settings.appearance": () =>
+      Effect.gen(function* () {
+        return appearance(yield* Database);
+      }),
+    "settings.setAppearance": ([mode]) =>
+      mode === "light" || mode === "dark" || mode === "system"
+        ? Effect.gen(function* () {
+            savePreference(yield* Database, "appearance", mode);
+            onAppearance(mode);
+          })
+        : refuse("settings.setAppearance", "invalid appearance"),
+    "library.artwork": ([hash, large]) =>
+      typeof hash === "string" && /^[a-f0-9]{40}$/.test(hash) && typeof large === "boolean"
+        ? Effect.gen(function* () {
+            const db = yield* Database;
+            return yield* Effect.promise(() => readArtwork(db, hash, large));
+          })
+        : refuse("library.artwork", "invalid artwork"),
     "library.browse": ([scope, offset, limit]) =>
       validScope(scope)
         ? pageCall("library.browse", [offset, limit], (library, offset, limit) =>
@@ -181,8 +202,9 @@ export const registerBridge = (
   ipcMain: IpcMainLike,
   runtime: Runtime<BridgeServices>,
   isTrusted: (event: unknown) => boolean,
+  onAppearance: (mode: Appearance) => void = () => {},
 ): void => {
-  const handlers = createHandlers();
+  const handlers = createHandlers(onAppearance);
   for (const call of BRIDGE_CALLS) {
     const handler: (args: readonly unknown[]) => Effect.Effect<unknown, unknown, BridgeServices> =
       handlers[call];
@@ -192,4 +214,3 @@ export const registerBridge = (
     });
   }
 };
-

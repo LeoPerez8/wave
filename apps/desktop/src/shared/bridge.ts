@@ -8,6 +8,7 @@ import type { PlaybackStatus } from "./playback.ts";
 import type { SongTags } from "./tags.ts";
 import type { DesktopFolder, DesktopSong, ScanStatus } from "./library.ts";
 import type { BrowseScope, BrowsePage } from "./browse.ts";
+export type Appearance = "system" | "light" | "dark";
 
 /** One window of a list, as a list call returns it. */
 export interface Page<T> {
@@ -19,6 +20,15 @@ export interface Page<T> {
 
 /** Each call's arguments and result. Arguments reach main as untrusted data. */
 export interface BridgeContract {
+  readonly "settings.appearance": { readonly args: readonly []; readonly result: Appearance };
+  readonly "settings.setAppearance": {
+    readonly args: readonly [appearance: Appearance];
+    readonly result: void;
+  };
+  readonly "library.artwork": {
+    readonly args: readonly [hash: string, large: boolean];
+    readonly result: string | null;
+  };
   readonly "library.browse": {
     readonly args: readonly [scope: BrowseScope, offset: number, limit: number];
     readonly result: BrowsePage;
@@ -69,6 +79,7 @@ type PagedLists<T> = {
   readonly [C in keyof T]: T[C] extends { readonly result: readonly unknown[] } ? never : T[C];
 };
 export const BRIDGE_CALLS = [
+  "library.artwork",
   "library.browse",
   "library.letter",
   "library.counts",
@@ -87,6 +98,8 @@ export const BRIDGE_CALLS = [
   "player.seek",
   "player.status",
   "tags.read",
+  "settings.appearance",
+  "settings.setAppearance",
 ] as const satisfies readonly BridgeCall[] &
   (BridgeContract extends PagedLists<BridgeContract> ? unknown : never);
 
@@ -98,6 +111,7 @@ export type Invoke = <C extends BridgeCall>(
 /** `window.wave`. */
 export interface WaveBridge {
   readonly library: {
+    readonly artwork: (hash: string, large: boolean) => Promise<string | null>;
     readonly browse: (scope: BrowseScope, offset: number, limit: number) => Promise<BrowsePage>;
     readonly letter: (scope: BrowseScope, letter: string) => Promise<number>;
     readonly counts: () => Promise<LibraryCounts>;
@@ -122,10 +136,15 @@ export interface WaveBridge {
   readonly tags: {
     readonly read: (path: string) => Promise<SongTags>;
   };
+  readonly settings: {
+    readonly appearance: () => Promise<Appearance>;
+    readonly setAppearance: (appearance: Appearance) => Promise<void>;
+  };
 }
 
 export const createBridge = (invoke: Invoke): WaveBridge => ({
   library: {
+    artwork: (hash, large) => invoke("library.artwork", hash, large),
     browse: (scope, offset, limit) => invoke("library.browse", scope, offset, limit),
     letter: (scope, letter) => invoke("library.letter", scope, letter),
     counts: () => invoke("library.counts"),
@@ -148,5 +167,9 @@ export const createBridge = (invoke: Invoke): WaveBridge => ({
   },
   tags: {
     read: (path) => invoke("tags.read", path),
+  },
+  settings: {
+    appearance: () => invoke("settings.appearance"),
+    setAppearance: (appearance) => invoke("settings.setAppearance", appearance),
   },
 });

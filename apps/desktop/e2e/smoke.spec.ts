@@ -67,6 +67,9 @@ test("the page has no Node and only the typed bridge", async () => {
     require: "undefined",
     process: "undefined",
     wave: [
+      "wave.library.artwork",
+      "wave.library.browse",
+      "wave.library.letter",
       "wave.library.counts",
       "wave.library.scanStatus",
       "wave.library.refresh",
@@ -83,6 +86,8 @@ test("the page has no Node and only the typed bridge", async () => {
       "wave.player.seek",
       "wave.player.status",
       "wave.tags.read",
+      "wave.settings.appearance",
+      "wave.settings.setAppearance",
     ],
   });
 });

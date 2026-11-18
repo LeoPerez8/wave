@@ -6,6 +6,7 @@ import { Kotlin } from "../kotlin/kotlin.ts";
 import { createScanner } from "./scanner.ts";
 import { browseLibrary } from "./browse.ts";
 import type { BrowseScope } from "../../shared/browse.ts";
+import { preference, savePreference } from "../preferences.ts";
 
 export interface DesktopLibraryShape extends ReturnType<typeof createScanner> {
   readonly browse: (
@@ -25,6 +26,7 @@ export const desktopLibraryLayer = (options: {
   readonly musicFolder: string;
   readonly platform: string;
   readonly pickFolder: () => Promise<string | undefined>;
+  readonly cacheArtwork?: (db: Database["Service"], encoded: string) => Promise<string | null>;
 }) =>
   Layer.effect(
     DesktopLibrary,
@@ -37,6 +39,14 @@ export const desktopLibraryLayer = (options: {
             ...options,
             db,
             readTags: (path) => Effect.runPromise(kotlin.readTags(path)),
+            cacheArtwork: options.cacheArtwork
+              ? (encoded) => options.cacheArtwork!(db, encoded)
+              : undefined,
+            forceTags:
+              options.cacheArtwork !== undefined && preference(db, "artworkVersion") !== "1",
+            tagsUpdated: options.cacheArtwork
+              ? () => savePreference(db, "artworkVersion", "1")
+              : undefined,
           });
           void scanner.refresh();
           return {

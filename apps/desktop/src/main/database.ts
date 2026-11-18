@@ -12,7 +12,13 @@ export const sqliteDriverLayer = (file: string) =>
     SqliteDriver,
     Effect.acquireRelease(
       Effect.try({
-        try: () => drizzle({ client: new BetterSqlite3(file), schema }),
+        try: () => {
+          const client = new BetterSqlite3(file);
+          client.exec(
+            "CREATE TABLE IF NOT EXISTS desktop_settings (key TEXT PRIMARY KEY, value TEXT NOT NULL)",
+          );
+          return drizzle({ client, schema });
+        },
         catch: (cause) => new DatabaseError({ cause }),
       }),
       (db) => Effect.sync(() => db.$client.close()),

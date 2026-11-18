@@ -4,6 +4,8 @@
  * so both devices build the same recording key from the same file.
  */
 export interface SongTags {
+  /** Embedded cover bytes. Desktop scan caches these by the phone's SHA-1 identity. */
+  readonly artworkBase64?: string | null;
   readonly title: string | null;
   readonly artist: string | null;
   readonly artists: readonly string[];
