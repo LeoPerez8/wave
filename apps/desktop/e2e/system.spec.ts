@@ -117,6 +117,18 @@ test("close keeps playing, the tray notice appears once, relaunch shows Wave, an
       await app.evaluate(() => (globalThis as unknown as { notices: string[] }).notices.length),
     ).toBe(1);
 
+    // Previous restarts a song that is past three seconds, and right after a skip the engine can
+    // still report the last song's position.
+    const songStarted = () =>
+      expect
+        .poll(() =>
+          page.evaluate(() =>
+            (window as unknown as { wave: WaveBridge }).wave.playback
+              .view()
+              .then((v) => v.status.positionMs),
+          ),
+        )
+        .toBeLessThan(3000);
     // Optional native OS probes; these operate the real session, not the renderer bridge.
     const probe = process.env["WAVE_SMTC_PROBE"];
     if (process.platform === "win32" && probe) {
@@ -165,6 +177,7 @@ test("close keeps playing, the tray notice appears once, relaunch shows Wave, an
           ),
         )
         .toBe("Tray Song 2");
+      await songStarted();
       control("previous", "Tray Song 2");
       await expect
         .poll(() =>
@@ -205,6 +218,7 @@ test("close keeps playing, the tray notice appears once, relaunch shows Wave, an
       control("play");
       control("next");
       await expect.poll(playing).toBe("Tray Song 2");
+      await songStarted();
       control("previous");
       await expect.poll(playing).toBe("Tray Song 1");
       execFileSync("dbus-send", [
