@@ -44,8 +44,7 @@ else
 fi
 # The directions sit next to the APK on the release page (GPLv3 section 6(d)).
 if [ -n "${SOURCE_DIRECTIONS_FILE:-}" ]; then
-  printf '
-' >> "$notes"
+  printf '\n' >> "$notes"
   cat "$SOURCE_DIRECTIONS_FILE" >> "$notes"
 fi
 
