@@ -22,7 +22,7 @@ export type AddRootPlan =
 
 /** Whether [path] is [folder] or inside it. */
 export const isWithin = (path: string, folder: string): boolean =>
-  path === folder || path.startsWith(folder === "/" ? "/" : `${folder}/`);
+  path === folder || path.startsWith(folder.endsWith("/") ? folder : `${folder}/`);
 
 /**
  * Plans adding [added] as a scan root. A folder inside an existing root adds
