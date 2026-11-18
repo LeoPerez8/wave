@@ -58,6 +58,8 @@ export const desktop = async (options: HarnessOptions = {}) => {
     service,
     disk,
     open,
+    /** The service's answer to a request, for a test that puts something in its way. */
+    fetch: ((input, init) => fetch(input, init)) as typeof globalThis.fetch,
     browser: (next: (signal: AbortSignal) => Promise<BrowserIdentity>) => void (browser = next),
     offline: () => {
       online = false;
