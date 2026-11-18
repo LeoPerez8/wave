@@ -16,6 +16,7 @@ import type { YtSearchPage, YtStatus } from "./yt.ts";
 import type { SearchOnline } from "@wave/core";
 import type {
   DiscoverMixesView,
+  DiscoverSettings,
   MagicQueueView,
   YtAlbumView,
   YtArtistView,
@@ -191,6 +192,8 @@ export interface BridgeContract extends PlaylistContract, LinkContract {
   readonly "discover.picks": { readonly args: readonly []; readonly result: Page<BrowseRow> };
   /** Discover's Artist mixes, built once a day. */
   readonly "discover.mixes": { readonly args: readonly []; readonly result: DiscoverMixesView };
+  readonly "discover.settings": { readonly args: readonly []; readonly result: DiscoverSettings };
+  readonly "discover.setSettings": { readonly args: readonly [DiscoverSettings]; readonly result: DiscoverSettings };
   /** Plays today's mix [id] from its song [index]; false when the mix is gone. */
   readonly "discover.playMix": {
     readonly args: readonly [id: string, index: number];
@@ -352,6 +355,8 @@ export const BRIDGE_CALLS = [
   "yt.queue",
   "discover.picks",
   "discover.mixes",
+  "discover.settings",
+  "discover.setSettings",
   "discover.playMix",
   "magicQueue.start",
   "magicQueue.startStreamed",
@@ -482,6 +487,8 @@ export interface WaveBridge {
   readonly discover: {
     readonly picks: () => Promise<Page<BrowseRow>>;
     readonly mixes: () => Promise<DiscoverMixesView>;
+    readonly settings: () => Promise<DiscoverSettings>;
+    readonly setSettings: (value: DiscoverSettings) => Promise<DiscoverSettings>;
     readonly playMix: (id: string, index: number) => Promise<boolean>;
   };
   readonly magicQueue: {
@@ -601,6 +608,8 @@ export const createBridge = (invoke: Invoke): WaveBridge => ({
   discover: {
     picks: () => invoke("discover.picks"),
     mixes: () => invoke("discover.mixes"),
+    settings: () => invoke("discover.settings"),
+    setSettings: (value) => invoke("discover.setSettings", value),
     playMix: (id, index) => invoke("discover.playMix", id, index),
   },
   magicQueue: {

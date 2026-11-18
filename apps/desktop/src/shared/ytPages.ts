@@ -4,7 +4,7 @@
  * went (`YtStatus`): offline, YT Music off or a failure leave nothing, and the window shows its
  * quiet line. Songs come as rows (`ytRow`), with `videoId` and no Library id.
  */
-import type { YtArtistAlbum, YtArtistCandidate } from "@wave/core";
+import type { DiscoverMixLevel, MixSliders, MixRowId, YtArtistAlbum, YtArtistCandidate } from "@wave/core";
 
 import type { Page } from "./bridge.ts";
 import type { BrowseRow } from "./browse.ts";
@@ -44,12 +44,21 @@ export interface YtRelatedView {
   readonly artists: readonly YtArtistCandidate[];
 }
 
-/** Discover's Artist mixes: today's, each named after its seed artist. */
+export interface DiscoverSettings extends MixSliders {
+  readonly level: DiscoverMixLevel;
+}
+
+/** Discover's Artist and Genre mixes: today's, each named after its seed artist or genre. */
 export interface DiscoverMixesView {
   readonly status: YtStatus;
   readonly mixes: readonly {
     readonly id: string;
     readonly name: string;
+    readonly row: MixRowId;
+    /** The first three artists it plays, its seed's first for a genre's mix. */
+    readonly artists: string;
+    /** Its tile's cover, from YouTube Music; null leaves the tile to its first song's. */
+    readonly artworkUrl: string | null;
     readonly songs: Page<BrowseRow>;
   }[];
 }
