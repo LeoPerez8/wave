@@ -1,6 +1,9 @@
 import { join } from "node:path";
 import { BrowserWindow, app, ipcMain, shell } from "electron";
+import * as Layer from "effect/Layer";
 import * as ManagedRuntime from "effect/ManagedRuntime";
+import { forkAudio } from "./audio/fork.ts";
+import { playerLayer } from "./audio/player.ts";
 import { registerBridge } from "./bridge.ts";
 import { libraryLayer } from "./database.ts";
 import { guardWindow } from "./security.ts";
@@ -48,15 +51,26 @@ const createWindow = () => {
 if (!app.requestSingleInstanceLock()) app.quit();
 else {
   app.on("second-instance", showWindow);
-  const runtime = ManagedRuntime.make(libraryLayer(join(app.getPath("userData"), "wave.db")));
-  registerBridge(
-    ipcMain,
-    runtime,
-    (event) =>
-      window !== undefined &&
-      (event as Electron.IpcMainInvokeEvent).senderFrame === window.webContents.mainFrame,
-  );
   app.on("window-all-closed", () => app.quit());
-  app.on("will-quit", () => void runtime.dispose());
-  void app.whenReady().then(createWindow);
+  // Utility processes start only once the app is ready, so the services wait for it too.
+  void app.whenReady().then(() => {
+    // The engine built by `pnpm build:native`; tests may point at another build.
+    const addon =
+      process.env["WAVE_AUDIO_ADDON"] ?? join(app.getAppPath(), "native", "wave-audio.node");
+    const runtime = ManagedRuntime.make(
+      Layer.mergeAll(
+        libraryLayer(join(app.getPath("userData"), "wave.db")),
+        playerLayer({ fork: forkAudio(join(import.meta.dirname, "audio.js"), addon) }),
+      ),
+    );
+    registerBridge(
+      ipcMain,
+      runtime,
+      (event) =>
+        window !== undefined &&
+        (event as Electron.IpcMainInvokeEvent).senderFrame === window.webContents.mainFrame,
+    );
+    app.on("will-quit", () => void runtime.dispose());
+    createWindow();
+  });
 }

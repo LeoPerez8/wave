@@ -31,12 +31,19 @@ const fakeProcesses = () => {
   const fork = (events: AudioEvents) => {
     forks += 1;
     const engine = pretendEngine();
-    const child = { events, stalled: false, alive: true };
+    const child = { events, stalled: false, alive: true, loaded: "" };
     current = child;
     return {
       send: (request: AudioRequest) => {
         log.push(`${forks}:${request.call}${request.args.length > 0 ? ` ${request.args[0]}` : ""}`);
         if (child.stalled || !child.alive) return;
+        if (request.call === "load") child.loaded = String(request.args[0]);
+        // A song whose decoding crashes the process, from the first restart on.
+        if (request.call === "seek" && child.loaded.includes("poison") && forks > 1) {
+          child.alive = false;
+          setImmediate(events.exit);
+          return;
+        }
         const response = answer(engine, request);
         queueMicrotask(() => child.alive && events.message(response));
       },
@@ -143,6 +150,21 @@ test("the heartbeat finds a stalled process with no call waiting", async () => {
   await settle(300);
   assert.ok(processes.log.includes("1:killed"));
   assert.ok(processes.forks() >= 2);
+  audio.dispose();
+});
+
+test("a song that keeps crashing the process is dropped instead of restored for ever", async () => {
+  const processes = fakeProcesses();
+  const audio = superviseAudio({ fork: processes.fork, ...quick });
+  await audio.call("load", ["/music/poison.mp3"]);
+  await audio.call("seek", [5_000]);
+  processes.crash();
+  await settle(100);
+  const forks = processes.forks();
+  await settle(100);
+  assert.equal(processes.forks(), forks, "stopped restarting");
+  assert.ok(forks <= 5, `${forks} forks`);
+  assert.equal((await audio.call("status", [])).state, "idle", "nothing restored");
   audio.dispose();
 });
 

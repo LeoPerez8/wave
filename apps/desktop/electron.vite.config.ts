@@ -23,7 +23,11 @@ export default defineConfig({
   main: {
     // Workspace packages are TypeScript source, so they go in the bundle; better-sqlite3 stays
     // outside it with its native binding.
-    build: { externalizeDeps: { exclude: ["@wave/client", "@wave/core"] } },
+    // The audio process is a second entry, forked from main as a utility process.
+    build: {
+      externalizeDeps: { exclude: ["@wave/client", "@wave/core"] },
+      rolldownOptions: { input: { index: "src/main/index.ts", audio: "src/main/audio/process.ts" } },
+    },
   },
   preload: {
     // A sandboxed preload must be one CommonJS file.

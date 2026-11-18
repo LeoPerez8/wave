@@ -48,8 +48,13 @@ interface Waiting {
   readonly args: readonly unknown[];
   readonly resolve: (status: PlaybackStatus) => void;
   readonly reject: (error: AudioEngineError) => void;
+  /** Sent by main to give a new process the song back, not by the window. */
+  readonly restoring: boolean;
   readonly timer: ReturnType<typeof setTimeout>;
 }
+
+/** Restarts in a row, with no call answered between them, after which the song isn't restored. */
+const RESTORE_ATTEMPTS = 3;
 
 const backoff = (attempt: number) => Math.min(250 * 2 ** (attempt - 1), 10_000);
 
@@ -78,7 +83,11 @@ export const superviseAudio = (options: AudioSupervisorOptions): AudioSupervisor
     }
   };
 
-  const send = (call: AudioCall, args: readonly unknown[]): Promise<PlaybackStatus> =>
+  const send = (
+    call: AudioCall,
+    args: readonly unknown[],
+    restoring = false,
+  ): Promise<PlaybackStatus> =>
     new Promise((resolve, reject) => {
       if (disposed) {
         reject(new AudioEngineError("disposed", "the audio engine was shut down"));
@@ -93,7 +102,7 @@ export const superviseAudio = (options: AudioSupervisorOptions): AudioSupervisor
         stalled.reject(new AudioEngineError("stalled", `the audio engine didn't answer ${call}`));
         if (current === target) target.kill();
       }, callTimeoutMs);
-      waiting.set(id, { call, args, resolve, reject, timer });
+      waiting.set(id, { call, args, resolve, reject, restoring, timer });
       target.send({ id, call, args });
     });
 
@@ -104,8 +113,10 @@ export const superviseAudio = (options: AudioSupervisorOptions): AudioSupervisor
     clearTimeout(call.timer);
     waiting.delete(response.id);
     if (response.ok) {
-      failuresInARow = 0;
-      remember(call.call, call.args, response.result);
+      if (!call.restoring) {
+        failuresInARow = 0;
+        remember(call.call, call.args, response.result);
+      }
       call.resolve(response.result);
     } else call.reject(new AudioEngineError(response.error.code, response.error.message));
   };
@@ -116,6 +127,8 @@ export const superviseAudio = (options: AudioSupervisorOptions): AudioSupervisor
     failAll("restarted", "the audio engine restarted");
     if (disposed) return;
     failuresInARow += 1;
+    // A song that crashes the process wherever it's restored would crash it for ever.
+    if (failuresInARow >= RESTORE_ATTEMPTS) song = undefined;
     restartTimer = setTimeout(() => {
       restartTimer = undefined;
       if (!disposed && current === undefined) start();
@@ -133,8 +146,8 @@ export const superviseAudio = (options: AudioSupervisorOptions): AudioSupervisor
     if (song !== undefined) {
       const { path, positionMs } = song;
       // Paused where it was; a failure here shows on the user's next call.
-      void send("load", [path])
-        .then(() => (positionMs > 0 ? send("seek", [positionMs]) : undefined))
+      void send("load", [path], true)
+        .then(() => (positionMs > 0 ? send("seek", [positionMs], true) : undefined))
         .catch(() => undefined);
     }
     return child;
@@ -148,7 +161,7 @@ export const superviseAudio = (options: AudioSupervisorOptions): AudioSupervisor
   start();
 
   return {
-    call: send,
+    call: (call, args) => send(call, args),
     dispose: () => {
       if (disposed) return;
       disposed = true;
