@@ -265,6 +265,7 @@ export interface RequestOptions {
 }
 
 export interface HarnessOptions {
+  readonly updatePassSigningKey?: string;
   readonly googleDesktopClientId?: string;
   readonly allowedEmails?: string;
   readonly limits?: Partial<SyncLimits>;
@@ -305,6 +306,9 @@ export const harness = async (options: HarnessOptions = {}, db?: Client): Promis
     addressLimiter: minuteLimiter(limits.maxRequestsPerAddressPerMinute, clock),
     failedLookupLimiter: minuteLimiter(limits.maxFailedLookupsPerAddressPerMinute, clock),
     googleClientId: CLIENT_ID,
+    ...(options.updatePassSigningKey === undefined
+      ? {}
+      : { updatePassSigningKey: options.updatePassSigningKey }),
     ...(options.googleDesktopClientId === undefined
       ? {}
       : { googleDesktopClientId: options.googleDesktopClientId }),

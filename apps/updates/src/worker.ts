@@ -9,6 +9,8 @@ import { type UpdateStorage, createUpdateService } from "./service.ts";
 export interface Env {
   readonly UPDATES: UpdateStorage;
   readonly REQUEST_COUNTS: CountNamespace;
+  readonly UPDATE_PASS_PUBLIC_KEYS?: string;
+  readonly REQUIRE_UPDATE_PASS?: string;
 }
 
 // One per isolate, so the refusals it remembers carry from one request to the next.
@@ -18,6 +20,10 @@ export default {
   fetch: (request: Request, env: Env): Promise<Response> => {
     service ??= createUpdateService(env.UPDATES, {
       counter: durableCounter(env.REQUEST_COUNTS),
+      ...(env.UPDATE_PASS_PUBLIC_KEYS === undefined
+        ? {}
+        : { updatePassPublicKeys: env.UPDATE_PASS_PUBLIC_KEYS }),
+      requireUpdatePass: env.REQUIRE_UPDATE_PASS === "true",
     });
     return service.fetch(request);
   },

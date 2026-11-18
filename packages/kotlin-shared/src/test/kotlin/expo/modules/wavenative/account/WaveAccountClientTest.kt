@@ -143,12 +143,48 @@ class WaveAccountClientTest {
     }
   }
 
-  @Test fun `JS can't ask for the Soulseek account, a session or anything but push and pull`() {
+  @Test fun `JS requests outside the allowlist send nothing`() {
     FakeWaveService().use { service ->
       val client = signedIn(service)
       for ((method, path) in listOf("GET" to "/v1/soulseek", "POST" to "/v1/session", "DELETE" to "/v1/account", "DELETE" to "/v1/sessions", "GET" to "https://elsewhere.example/v1/pull", "GET" to "/v1/pull/../soulseek", "PUT" to "/v1/push"))
         assertEquals("$method $path", WaveAccountFailure.FORBIDDEN_REQUEST, failure { client.request(method, path, null) })
       assertTrue(service.received.isEmpty())
+    }
+  }
+
+  @Test fun `JS can ask for an update pass with exactly a bodyless GET`() {
+    FakeWaveService { Reply(200, """{"pass":null}""") }.use { service ->
+      val client = signedIn(service)
+      val path = "/v1/update-pass"
+      assertEquals(WaveResponse(200, """{"pass":null}"""), client.request("GET", path, null))
+      val request = service.received.single()
+      assertEquals("GET" to path, request.method to request.path)
+      assertEquals("Bearer fixture-session-token", request.headers["authorization"])
+      for ((method, destination) in listOf(
+        "POST" to path,
+        "GET" to "$path/",
+        "GET" to "$path?x=1",
+        "GET" to "$path#x",
+        "GET" to "/v1/%75pdate-pass",
+        "GET" to "https://elsewhere.example$path",
+      )) {
+        assertEquals(WaveAccountFailure.FORBIDDEN_REQUEST, failure { client.request(method, destination, null) })
+      }
+      assertEquals(WaveAccountFailure.FORBIDDEN_REQUEST, failure { client.request("GET", path, "{}") })
+      assertEquals(1, service.received.size)
+    }
+  }
+
+  @Test fun `a pass that arrives after the session changed is discarded`() {
+    FakeWaveService().use { service ->
+      val client = signedIn(service)
+      val replacement = WaveSessionState.SignedIn(service.url, "fixture-newer-token", anaAccount)
+      service.respond = {
+        WaveAccountStore(file, TestCipher.sameKey).save(replacement)
+        Reply(200, """{"pass":"old-pass"}""")
+      }
+      assertEquals(WaveAccountFailure.SESSION_ENDED, failure { client.request("GET", "/v1/update-pass", null) })
+      assertEquals(replacement, client.session())
     }
   }
 

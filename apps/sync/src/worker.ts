@@ -16,6 +16,7 @@ import { runMaintenance } from "./maintenance.ts";
 import type { UsageSecrets } from "./usage.ts";
 
 export interface Env extends UsageSecrets {
+  readonly UPDATE_PASS_SIGNING_KEY?: string;
   readonly TURSO_DATABASE_URL?: string;
   readonly TURSO_AUTH_TOKEN?: string;
   /** Wave's web OAuth client id, used by the phone. */
@@ -103,6 +104,9 @@ export default {
       addressLimiter,
       failedLookupLimiter,
       googleClientId: GOOGLE_CLIENT_ID,
+      ...(env.UPDATE_PASS_SIGNING_KEY === undefined
+        ? {}
+        : { updatePassSigningKey: env.UPDATE_PASS_SIGNING_KEY }),
       ...(env.GOOGLE_DESKTOP_CLIENT_ID === undefined
         ? {}
         : { googleDesktopClientId: env.GOOGLE_DESKTOP_CLIENT_ID }),

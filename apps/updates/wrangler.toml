@@ -1,8 +1,10 @@
-# Wave's update service. It holds no secret and asks for no sign-in: what it serves is public.
+# Wave's update service. It verifies update passes with a public key and holds no secret.
 # Separate from the sync service, so a bad sync deploy can't take down the path to its fix.
 name = "wave-updates"
 main = "src/worker.ts"
 compatibility_date = "2026-10-01"
+# Keep the rollout variables set on the Worker when deploying code. Enforcement defaults off.
+keep_vars = true
 
 [[r2_buckets]]
 binding = "UPDATES"

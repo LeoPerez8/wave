@@ -137,12 +137,15 @@ class WaveAccountClient(
    * A request JS sends with the session it can't see: only a push (`POST /v1/push`), a pull
    * (`GET /v1/pull`), one of the Genius requests the Lyrics view makes (`GET /v1/genius/…`,
    * Core's `geniusProxy.ts`), or one of a show check's Ticketmaster requests
-   * (`GET /v1/ticketmaster/…`, Core's `ticketmasterProxy.ts`). The Soulseek account and sessions
-   * go between native code and the service.
+   * (`GET /v1/ticketmaster/…`, Core's `ticketmasterProxy.ts`), and the update pass. The Soulseek
+   * account and sessions go between native code and the service.
    */
   fun request(method: String, path: String, body: String?): WaveResponse {
     val allowed = (method == "POST" && path == "/v1/push") ||
-      (method == "GET" && (PULL.matches(path) || (GENIUS + TICKETMASTER).any { it.matches(path) }))
+      (method == "GET" && (
+        (path == UPDATE_PASS_PATH && body == null) ||
+          PULL.matches(path) || (GENIUS + TICKETMASTER).any { it.matches(path) }
+      ))
     if (!allowed) throw WaveAccountException(WaveAccountFailure.FORBIDDEN_REQUEST)
     return send(method, path, body)
   }
@@ -160,6 +163,8 @@ class WaveAccountClient(
       end(session)
       throw WaveAccountException(WaveAccountFailure.SESSION_ENDED)
     }
+    if (path == UPDATE_PASS_PATH && store.load() != session)
+      throw WaveAccountException(WaveAccountFailure.SESSION_ENDED)
     return response
   }
 
@@ -219,6 +224,7 @@ class WaveAccountClient(
   private fun JsonObject.text(key: String): String? = (this[key] as? JsonPrimitive)?.takeIf { it.isString }?.content
 
   private companion object {
+    const val UPDATE_PASS_PATH = "/v1/update-pass"
     val ID_TOKEN_REFUSALS = setOf("invalid_id_token", "id_token_required")
     val PULL = Regex("""^/v1/pull(\?since=[0-9A-Za-z_-]*)?$""")
     /** Core's `geniusSearchPath` (its text as `encodeURIComponent` writes it), `geniusSongPath` and `geniusReferentsPath`. */

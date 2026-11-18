@@ -13,6 +13,7 @@ import { randomUUID } from "node:crypto";
 import { readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
+import { UPDATE_PASS_HEADER, UPDATE_PASS_PLACEHOLDER } from "../../packages/core/src/updatePass.ts";
 import { withManifestMetaData } from "./apk-version.ts";
 
 export type UpdateChannel = "ti" | "main";
@@ -37,6 +38,7 @@ export const updateMetaData = (
   "expo.modules.updates.EXPO_RUNTIME_VERSION": runtimeVersion,
   "expo.modules.updates.UPDATES_CONFIGURATION_REQUEST_HEADERS_KEY": JSON.stringify({
     "expo-channel-name": channel ?? "none",
+    [UPDATE_PASS_HEADER]: UPDATE_PASS_PLACEHOLDER,
   }),
 });
 

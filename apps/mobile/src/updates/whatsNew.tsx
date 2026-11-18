@@ -24,6 +24,7 @@ import { CardEntries } from "@/overlay/CardEntries";
 import { isOverlayOpen, onOverlaysChange, openOverlay } from "@/overlay/overlay";
 
 import { RUNNING_VERSION } from "./runningVersion";
+import { fetchUpdateService } from "./updatePass";
 import { createWhatsNewRunner } from "./whatsNewRunner";
 import { settleWhatsNew } from "./whatsNewPending";
 
@@ -49,7 +50,7 @@ const fetchNotes = (
     });
     if (url === null) return yield* Effect.fail(new Error("No address for the notes"));
     const answer = yield* Effect.tryPromise(async (signal) => {
-      const response = await fetch(url, { signal });
+      const response = await fetchUpdateService(url, signal);
       if (!response.ok) throw new Error(`The service answered ${response.status}`);
       return (await response.json()) as unknown;
     });

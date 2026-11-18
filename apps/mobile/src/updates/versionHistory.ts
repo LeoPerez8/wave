@@ -24,6 +24,7 @@ import { useLocalisation } from "@/localisation/localisation";
 import { appLog } from "@/log/appLog";
 
 import { RUNNING_VERSION } from "./runningVersion";
+import { fetchUpdateService } from "./updatePass";
 import { createVersionHistoryStore, type VersionHistoryState } from "./versionHistoryStore";
 
 /** How long the service gets to answer before it counts as a failure. */
@@ -40,7 +41,7 @@ const fetchHistory = (): Effect.Effect<readonly DatedRelease[], unknown> =>
     });
     if (url === null) return yield* Effect.fail(new Error("No address for the version history"));
     const answer = yield* Effect.tryPromise(async (signal) => {
-      const response = await fetch(url, { signal });
+      const response = await fetchUpdateService(url, signal);
       if (!response.ok) throw new Error(`The service answered ${response.status}`);
       return (await response.json()) as unknown;
     });

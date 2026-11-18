@@ -2836,3 +2836,17 @@ export type {
   ShortcutId,
   ShortcutKey,
 } from "./desktopKeys.ts";
+export {
+  UPDATE_PASS_HEADER,
+  UPDATE_PASS_PLACEHOLDER,
+  WAVE_UPDATES_ORIGIN,
+  importUpdatePassPublicKeys,
+  importUpdatePassSigningKey,
+  issueUpdatePass,
+  readUpdatePass,
+  updatePassHeaders,
+  updatePassIsValid,
+  updatePassNeedsRenewal,
+  updateRequestHeaders,
+} from "./updatePass.ts";
+export type { UpdatePass } from "./updatePass.ts";

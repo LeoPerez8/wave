@@ -8,7 +8,13 @@
  */
 
 import type { Client } from "@libsql/client";
-import { geniusUpstreamUrl, sha256Hex, ticketmasterUpstreamUrl } from "@wave/core";
+import {
+  geniusUpstreamUrl,
+  importUpdatePassSigningKey,
+  issueUpdatePass,
+  sha256Hex,
+  ticketmasterUpstreamUrl,
+} from "@wave/core";
 import { type GoogleKeys, googleKeys, verifyGoogleIdToken } from "./google.ts";
 import { type SyncLimitName, type SyncLimits, SYNC_LIMITS } from "./limits.ts";
 import {
@@ -47,6 +53,8 @@ export interface ProviderAccess {
 
 export interface SyncServiceOptions {
   readonly db: Client;
+  /** The sync Worker's Ed25519 private key for update passes. */
+  readonly updatePassSigningKey?: string;
   /** Counts every request by address (`maxRequestsPerAddressPerMinute`). */
   readonly addressLimiter: RateLimiter;
   /** Counts failed session lookups by address (`maxFailedLookupsPerAddressPerMinute`). */
@@ -466,6 +474,20 @@ export const createSyncService = (options: SyncServiceOptions): SyncService => {
     async (context) =>
       route(context, await authenticate(context));
 
+  const updatePass = withSession(async () => {
+    const headers = { "cache-control": "no-store" };
+    const secret = options.updatePassSigningKey?.trim();
+    if (secret) {
+      try {
+        const key = await importUpdatePassSigningKey(secret);
+        return json(await issueUpdatePass(key, now()), 200, headers);
+      } catch {
+        log("sync service: update pass signing failed");
+      }
+    }
+    return json({ pass: null }, 200, headers);
+  });
+
   const endSession = withSession(async (_context, session) => {
     await db.execute({
       sql: "DELETE FROM sessions WHERE token_hash = ?",
@@ -726,6 +748,7 @@ export const createSyncService = (options: SyncServiceOptions): SyncService => {
     "DELETE /v1/sessions": endAllSessions,
     "POST /v1/push": pushChanges,
     "GET /v1/pull": pullChanges,
+    "GET /v1/update-pass": updatePass,
     "DELETE /v1/account": removeAccount,
     "PUT /v1/soulseek": putSoulseek,
     "GET /v1/soulseek": getSoulseek,

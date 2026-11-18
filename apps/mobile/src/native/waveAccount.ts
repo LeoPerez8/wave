@@ -43,8 +43,8 @@ declare class WaveAccountModule extends NativeModule<{
    */
   deleteAccount(webClientId: string): Promise<WaveSession | null>;
   /**
-   * Sends `POST /v1/push` or `GET /v1/pull?since=…` with the session; any
-   * other route rejects with `ERR_WAVE_FORBIDDEN_REQUEST`. Signed out, rejects
+   * Sends an allowlisted request (including `GET /v1/update-pass`) with the session.
+   * Other routes reject with `ERR_WAVE_FORBIDDEN_REQUEST`. Signed out, rejects
    * with `ERR_WAVE_SIGNED_OUT` and sends nothing; a 401 ends the session and
    * rejects with `ERR_WAVE_SESSION_ENDED`.
    */

@@ -1,5 +1,11 @@
 import assert from "node:assert/strict";
+import { execFileSync } from "node:child_process";
+import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import { describe, it } from "node:test";
+import { fileURLToPath } from "node:url";
+import { manifestMetaData } from "./apk-version.ts";
 import {
   stampManifestSource,
   updateChannel,
@@ -33,7 +39,7 @@ describe("updateMetaData", () => {
       "expo.modules.updates.ENABLED": true,
       "expo.modules.updates.EXPO_RUNTIME_VERSION": "apk-v1-abc",
       "expo.modules.updates.UPDATES_CONFIGURATION_REQUEST_HEADERS_KEY":
-        '{"expo-channel-name":"ti"}',
+        '{"expo-channel-name":"ti","wave-update-pass":"none"}',
     });
   });
 
@@ -47,14 +53,18 @@ describe("stampManifestSource", () => {
   const source = `<manifest><application>
     <meta-data android:name="expo.modules.updates.ENABLED" android:value="false"/>
     <meta-data android:name="expo.modules.updates.EXPO_RUNTIME_VERSION" android:value="@string/expo_runtime_version"/>
-    <meta-data android:name="expo.modules.updates.UPDATES_CONFIGURATION_REQUEST_HEADERS_KEY" android:value="{&quot;expo-channel-name&quot;:&quot;none&quot;}"/>
+    <meta-data android:name="expo.modules.updates.UPDATES_CONFIGURATION_REQUEST_HEADERS_KEY" android:value="{&quot;expo-channel-name&quot;:&quot;none&quot;,&quot;wave-update-pass&quot;:&quot;none&quot;}"/>
   </application></manifest>`;
 
   it("writes the channel and runtime version over prebuild's placeholders", () => {
     const stamped = stampManifestSource(source, updateMetaData("main", "apk-v1-abc"));
     assert.match(stamped, /updates\.ENABLED" android:value="true"/);
     assert.match(stamped, /EXPO_RUNTIME_VERSION" android:value="apk-v1-abc"/);
-    assert.match(stamped, /android:value="\{&quot;expo-channel-name&quot;:&quot;main&quot;\}"/);
+    assert.ok(
+      stamped.includes(
+        'android:value="{&quot;expo-channel-name&quot;:&quot;main&quot;,&quot;wave-update-pass&quot;:&quot;none&quot;}"',
+      ),
+    );
   });
 
   it("leaves the signing certificate as prebuild wrote it", () => {
@@ -69,6 +79,29 @@ describe("stampManifestSource", () => {
       () => stampManifestSource("<manifest/>", updateMetaData("ti", "x")),
       /updates\.ENABLED/,
     );
+  });
+});
+
+it("preserves the pass placeholder when stamping an unpacked APK for a different channel", (t) => {
+  const dir = mkdtempSync(join(tmpdir(), "wave-update-config-"));
+  t.after(() => rmSync(dir, { recursive: true, force: true }));
+  const manifestPath = join(dir, "AndroidManifest.xml");
+  // aapt2-compiled manifest with the three update metadata entries for the ti channel.
+  const fixture = new URL("./fixtures/AndroidManifest-updates.axml", import.meta.url);
+  writeFileSync(manifestPath, readFileSync(fixture));
+  mkdirSync(join(dir, "assets"));
+  writeFileSync(join(dir, "assets/app.manifest"), "{}");
+  const script = fileURLToPath(new URL("./update-config.ts", import.meta.url));
+  execFileSync(process.execPath, [script, "stamp-apk", dir], {
+    env: { ...process.env, WAVE_UPDATE_CHANNEL: "main", WAVE_RUNTIME_VERSION: "apk-v1-abc" },
+  });
+  const metadata = manifestMetaData(
+    readFileSync(manifestPath),
+    "expo.modules.updates.UPDATES_CONFIGURATION_REQUEST_HEADERS_KEY",
+  );
+  assert.deepEqual(JSON.parse(String(metadata)), {
+    "expo-channel-name": "main",
+    "wave-update-pass": "none",
   });
 });
 

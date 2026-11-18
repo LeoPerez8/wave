@@ -118,6 +118,14 @@ Signs this session out. `204`, no body. The account's other sessions stay signed
 Signs out everywhere: ends every session of the account, this one included. `204`, no body.
 Other accounts' sessions stay.
 
+### `GET /v1/update-pass`
+
+A session-authenticated request for an over-the-air update pass. It uses the normal sync
+authentication and request limits. The response contains `pass` and `expiresAt` (UTC milliseconds
+since the Unix epoch). The Ed25519-signed pass carries only the expiry, rounded to a UTC midnight
+about 30 days away. With no usable signing key, the response is `200` with `{"pass":null}`.
+Both responses use `Cache-Control: no-store`.
+
 ### `POST /v1/push`
 
 Changed rows in, by table. Every table is optional.
@@ -546,8 +554,21 @@ invocation logs off):
 | `ALLOWED_EMAILS`             | secret | optional: emails that may sign in, separated by commas                      |
 | `GENIUS_ACCESS_TOKEN`        | secret | Genius's client access token, for the Genius routes                         |
 | `TICKETMASTER_API_KEY`       | secret | Ticketmaster Discovery's API key, for the Ticketmaster routes               |
+| `UPDATE_PASS_SIGNING_KEY`    | secret | optional Ed25519 PKCS#8 private key for update passes, as PEM or base64     |
 | `CLOUDFLARE_ACCOUNT_ID`      | secret | optional, for the usage watch: the Cloudflare account id                    |
 | `CLOUDFLARE_ANALYTICS_TOKEN` | secret | optional, for the usage watch: a token with only Account Analytics Read     |
+
+### Update pass key
+
+Generate an Ed25519 key pair for update passes. Give only the sync Worker the
+`UPDATE_PASS_SIGNING_KEY` secret. The update Worker verifies passes with the matching SPKI public
+key. CI keeps using its release signing key for update manifests and APK metadata.
+
+Deploy sync with the secret first, then publish a full APK with the native request and Expo
+header placeholder. Deploy updates with the public key and enforcement off. Wait until current
+phones have installed the compatible APK before explicitly enabling enforcement. Signed-in phones
+with a valid pass skip the update Worker's per-address limits. Notes and compatibility APK
+metadata stay available under those limits without a pass. See the [update Worker rollout](../updates/README.md#rollout).
 
 ### Soulseek keys
 

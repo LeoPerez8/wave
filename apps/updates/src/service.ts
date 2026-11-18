@@ -2,11 +2,16 @@
  * The update service's routes, over `UpdateStorage`, which R2 implements in production
  * (worker.ts) and memory in the tests. They answer GET only. The one write is the notes
  * history a read rebuilds from the stored notes; the binding itself can write and delete, so
- * that limit is this code's, not R2's. Each address gets a daily number of answers per route
+ * that limit is this code's, not R2's. A verified update pass skips the address limits
  * (limits.ts). See README.md.
  */
 
-import { versionOrder } from "@wave/core";
+import {
+  UPDATE_PASS_HEADER,
+  importUpdatePassPublicKeys,
+  updatePassIsValid,
+  versionOrder,
+} from "@wave/core";
 
 import {
   type Channel,
@@ -114,15 +119,22 @@ const manifestRoute = async (request: Request, storage: UpdateStorage): Promise<
   });
 };
 
-const assetRoute = async (key: string, storage: UpdateStorage): Promise<Response> => {
-  if (!/^[0-9a-f]{64}$/.test(key)) return notFound();
+const GUARDED_CACHE = { "cache-control": "private, no-store" };
+
+const assetRoute = async (
+  key: string,
+  storage: UpdateStorage,
+  guarded: boolean,
+): Promise<Response> => {
+  const missing = () =>
+    new Response("Not found", { status: 404, headers: guarded ? GUARDED_CACHE : {} });
+  if (!/^[0-9a-f]{64}$/.test(key)) return missing();
   const object = await storage.get(assetKey(key));
-  if (!object) return notFound();
+  if (!object) return missing();
   return new Response(object.body, {
     headers: {
       "content-type": object.httpMetadata?.contentType ?? "application/octet-stream",
-      // Named by its content, so it never changes.
-      "cache-control": "public, max-age=31536000, immutable",
+      ...(guarded ? GUARDED_CACHE : { "cache-control": "public, max-age=31536000, immutable" }),
     },
   });
 };
@@ -245,13 +257,36 @@ export interface UpdateServiceOptions {
   /** Counts each address's answers. Without one, nothing is counted. */
   readonly counter?: RequestCounter;
   readonly now?: () => number;
+  readonly updatePassPublicKeys?: string;
+  readonly requireUpdatePass?: boolean;
+  readonly log?: (message: string) => void;
 }
 
 /** The service. Make one per isolate: it remembers who it refused today, so as not to ask again. */
 export const createUpdateService = (
   storage: UpdateStorage,
-  { counter, now = Date.now }: UpdateServiceOptions = {},
+  {
+    counter,
+    now = Date.now,
+    updatePassPublicKeys,
+    requireUpdatePass = false,
+    log = console.warn,
+  }: UpdateServiceOptions = {},
 ) => {
+  const loadKeys = async () => {
+    try {
+      const keys = await importUpdatePassPublicKeys(updatePassPublicKeys ?? "");
+      if (requireUpdatePass && keys.length === 0) {
+        log("update service: update pass verification keys are missing; using address limits");
+      }
+      return keys;
+    } catch {
+      log("update service: update pass verification keys are invalid; using address limits");
+      return [];
+    }
+  };
+  let verificationKeys: ReturnType<typeof loadKeys> | undefined;
+
   /** `<address key> <count key>` to the day it was refused on. */
   const refused = new Map<string, string>();
 
@@ -269,7 +304,7 @@ export const createUpdateService = (
     try {
       within = await counts.count(address, key, day, max);
     } catch (error) {
-      // What's served is public and signed: an outage of the counts mustn't stop updates.
+      // Only public requests reach the counts. Their outage mustn't stop updates.
       console.error(
         "update service: the request count failed:",
         error instanceof Error ? error.message : "unknown",
@@ -310,7 +345,18 @@ export const createUpdateService = (
       const { pathname } = url;
       const route = routeOf(pathname);
       if (route === null) return notFound();
-      if (!(await withinLimit(request, route, pathname))) return pastLimit(route, now());
+      const keys = await (verificationKeys ??= loadKeys());
+      const pass = request.headers.get(UPDATE_PASS_HEADER);
+      const valid =
+        keys.length > 0 && pass !== null && (await updatePassIsValid(keys, pass, now()));
+      const guarded = requireUpdatePass && keys.length > 0;
+      if (guarded && !valid) {
+        if (route === "manifest") return noUpdate();
+        if (route === "assets") {
+          return new Response("Update pass required", { status: 403, headers: GUARDED_CACHE });
+        }
+      }
+      if (!valid && !(await withinLimit(request, route, pathname))) return pastLimit(route, now());
       switch (route) {
         case "manifest":
           return manifestRoute(request, storage);
@@ -319,7 +365,7 @@ export const createUpdateService = (
         case "apk":
           return apkRoute(url, storage);
         case "assets":
-          return assetRoute(pathname.slice("/v1/assets/".length), storage);
+          return assetRoute(pathname.slice("/v1/assets/".length), storage, guarded || valid);
       }
     },
   };
