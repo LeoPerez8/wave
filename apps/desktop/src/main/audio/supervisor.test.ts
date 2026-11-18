@@ -391,3 +391,16 @@ test("calls waiting for a restart fail when the engine is shut down", async () =
   );
   assert.equal(processes.forks(), 1);
 });
+
+test("a restarted process gets the Buffer's songs again", async () => {
+  const processes = fakeProcesses();
+  const audio = superviseAudio({ fork: processes.fork, ...quick });
+  await audio.call("buffer", [["aaaaaaaaaaa", "bbbbbbbbbbb"]]);
+  processes.crash();
+  await settle();
+  assert.deepEqual(
+    processes.requests.filter((request) => request.includes("buffer")),
+    ["1:buffer aaaaaaaaaaa,bbbbbbbbbbb", "2:buffer aaaaaaaaaaa,bbbbbbbbbbb"],
+  );
+  audio.dispose();
+});

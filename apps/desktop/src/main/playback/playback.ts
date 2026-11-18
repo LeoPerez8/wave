@@ -34,6 +34,7 @@ import { browseSongs, browseTrackIds } from "../library/browse.ts";
 import { DesktopLibrary } from "../library/library.ts";
 import { preference, savePreference } from "../preferences.ts";
 import { YtMusic } from "../yt/ytMusic.ts";
+import { streamedWithinBuffer } from "./bufferAhead.ts";
 import { readPlaybackSettings, savePlaybackSettings } from "./playbackSettings.ts";
 import { createSleepTimer } from "./sleepTimer.ts";
 
@@ -189,9 +190,34 @@ export const playbackLayer = Layer.effect(
         session.gainsChanged().catch(failed);
       },
     });
-    /** The queue changed: songs it brought in may need measuring, and the Magic Queue hears it. */
+    /** How long a song plays, for the Buffer; null while nothing says. */
+    const lengthOf = (trackId: string): number | null => {
+      const ref = parseTrackId(trackId);
+      if (ref?.kind === "yt") return yt.song(ref.videoId)?.durationMs ?? null;
+      return ref?.kind === "library" ? (browseSongs(db, [ref.id])[0]?.durationMs ?? null) : null;
+    };
+    let bufferSent: string | undefined;
+    /** Tells the audio process which YT Music songs the Buffer reaches, when that changed. */
+    const sendBuffer = () => {
+      const videoIds = streamedWithinBuffer(
+        session.snapshot().queue,
+        settings.bufferMinutes,
+        lengthOf,
+      );
+      const sending = videoIds.join(" ");
+      if (sending === bufferSent) return;
+      bufferSent = sending;
+      run(player.buffer(videoIds)).catch(() => {
+        if (bufferSent === sending) bufferSent = undefined;
+      });
+    };
+    /**
+     * The queue changed: songs it brought in may need measuring, the Buffer may reach other
+     * songs, and the Magic Queue hears it.
+     */
     const queueChanged = () => {
       void measurements.wake().catch(() => undefined);
+      sendBuffer();
       for (const watcher of watchers) watcher.queueChanged();
     };
     /** Sends the stored settings to the engine; each applies from its next move. */
@@ -204,6 +230,7 @@ export const playbackLayer = Layer.effect(
       const switched = next.normalizeVolume !== settings.normalizeVolume;
       settings = next;
       await sendSettings();
+      sendBuffer();
       if (switched) measurements.switched();
     };
     yield* Effect.promise(() => run(player.setVolume(muted ? 0 : volume)).catch(failed));

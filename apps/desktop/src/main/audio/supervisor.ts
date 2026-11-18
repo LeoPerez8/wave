@@ -120,6 +120,8 @@ export const superviseAudio = (options: AudioSupervisorOptions): AudioSupervisor
   let volume: number | undefined;
   let crossfade: number | undefined;
   let normalize: boolean | undefined;
+  /** The songs the Buffer reaches, which a new process fetches ahead again. */
+  let buffered: readonly unknown[] | undefined;
   /** Measurements asked of the process running, by id. */
   const measuring = new Map<
     string,
@@ -162,6 +164,7 @@ export const superviseAudio = (options: AudioSupervisorOptions): AudioSupervisor
     if (call === "setVolume") volume = Number(args[0]);
     if (call === "setCrossfade") crossfade = Number(args[0]);
     if (call === "setNormalize") normalize = args[0] === true;
+    if (call === "buffer") buffered = Array.isArray(args[0]) ? args[0] : undefined;
     if (song !== undefined && status.state !== "idle") song.positionMs = status.positionMs;
   };
 
@@ -304,6 +307,7 @@ export const superviseAudio = (options: AudioSupervisorOptions): AudioSupervisor
     if (volume !== undefined) settings.push(["setVolume", [volume]]);
     if (crossfade !== undefined) settings.push(["setCrossfade", [crossfade]]);
     if (normalize !== undefined) settings.push(["setNormalize", [normalize]]);
+    if (buffered !== undefined) settings.push(["buffer", [buffered]]);
     const restoreSettings = () =>
       settings.reduce<Promise<unknown>>(
         (before, [call, args]) => before.then(() => send(call, args, true)),

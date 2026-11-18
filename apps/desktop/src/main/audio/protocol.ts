@@ -84,7 +84,9 @@ export type AudioCall =
   | "setCrossfade"
   | "setNormalize"
   | "measure"
-  | "cancelMeasurements";
+  | "cancelMeasurements"
+  /** The YT Music songs to fetch ahead for the Buffer, as video ids in playing order. */
+  | "buffer";
 
 export interface AudioRequest {
   readonly id: number;
@@ -149,6 +151,8 @@ const run = (engine: AddonEngine, request: AudioRequest): PlaybackStatus | undef
       engine.seek(Number(first));
       return engine.status();
     case "status":
+    // Only the streaming side fetches ahead; an engine by itself has nothing to do for it.
+    case "buffer":
       return engine.status();
     default:
       return undefined;

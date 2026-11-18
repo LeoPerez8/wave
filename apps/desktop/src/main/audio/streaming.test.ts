@@ -221,3 +221,74 @@ test("the volume and the playback settings don't wait for a song being fetched",
   assert.ok(Date.now() - started < 100);
   assert.equal((await load).ok, false);
 });
+
+const tick = (ms = 80) => new Promise((resolve) => setTimeout(resolve, ms));
+
+test("the Buffer's songs are fetched whole, one at a time and in order", async () => {
+  const { stream, calls, states, main } = setup(-1);
+  states.set("cachedsong1", "cached");
+  const answered = await stream.handle({
+    id: 1,
+    call: "buffer",
+    args: [["cachedsong1", "aaaaaaaaaaa", "bbbbbbbbbbb", "ccccccccccc"]],
+  });
+  assert.equal(answered.ok, true, "it answers at once, before any song is here");
+  await tick();
+  assert.deepEqual(calls, ["open aaaaaaaaaaa"]);
+  // Playable isn't whole yet: the next one waits.
+  states.set("aaaaaaaaaaa", "ready");
+  await tick();
+  assert.deepEqual(calls, ["open aaaaaaaaaaa"]);
+  states.set("aaaaaaaaaaa", "cached");
+  await tick();
+  assert.deepEqual(calls, ["open aaaaaaaaaaa", "open bbbbbbbbbbb"]);
+  // One that fails doesn't hold up the songs after it.
+  states.set("bbbbbbbbbbb", "failed");
+  await tick();
+  assert.deepEqual(calls, ["open aaaaaaaaaaa", "open bbbbbbbbbbb", "open ccccccccccc"]);
+  assert.deepEqual(
+    main.asked.map((event) => event.videoId),
+    ["aaaaaaaaaaa", "bbbbbbbbbbb", "ccccccccccc"],
+  );
+  states.set("ccccccccccc", "cached");
+  await tick();
+  assert.equal(calls.length, 3, "the failed one isn't asked for again by itself");
+});
+
+test("a new list for the Buffer leaves the songs it no longer names", async () => {
+  const { stream, calls, states } = setup(-1);
+  await stream.handle({ id: 1, call: "buffer", args: [["aaaaaaaaaaa", "bbbbbbbbbbb"]] });
+  await tick();
+  assert.deepEqual(calls, ["open aaaaaaaaaaa"]);
+  await stream.handle({ id: 2, call: "buffer", args: [["ccccccccccc"]] });
+  await tick();
+  assert.deepEqual(calls, ["open aaaaaaaaaaa", "open ccccccccccc"]);
+  states.set("ccccccccccc", "cached");
+  await stream.handle({ id: 3, call: "buffer", args: [[]] });
+  await tick();
+  assert.equal(calls.length, 2);
+});
+
+test("a song of the Buffer with no address is passed over, and tried again with a new list", async () => {
+  const { stream, calls, states } = setup(-1, (event) =>
+    event.videoId === "aaaaaaaaaaa" && calls.length === 0 ? "unplayable" : "ok",
+  );
+  await stream.handle({ id: 1, call: "buffer", args: [["aaaaaaaaaaa", "bbbbbbbbbbb"]] });
+  await tick();
+  assert.deepEqual(calls, ["open bbbbbbbbbbb"]);
+  states.set("bbbbbbbbbbb", "cached");
+  await stream.handle({ id: 2, call: "buffer", args: [["aaaaaaaaaaa"]] });
+  await tick();
+  assert.deepEqual(calls, ["open bbbbbbbbbbb", "open aaaaaaaaaaa"]);
+  await stream.handle({ id: 9, call: "buffer", args: [[]] });
+});
+
+test("the Buffer doesn't wait for a song being loaded, nor hold one up", async () => {
+  const { stream, calls } = setup(-1);
+  const load = stream.handle({ id: 1, call: "load", args: ["yt:abcdefghijk"] });
+  assert.equal((await stream.handle({ id: 2, call: "buffer", args: [["aaaaaaaaaaa"]] })).ok, true);
+  await tick();
+  assert.deepEqual([...calls].sort(), ["open aaaaaaaaaaa", "open abcdefghijk"]);
+  await stream.handle({ id: 9, call: "buffer", args: [[]] });
+  assert.equal((await load).ok, false);
+});
