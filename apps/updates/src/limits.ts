@@ -8,16 +8,29 @@
 export type CountedRoute = "manifest" | "notes" | "apk" | "assets";
 
 /**
- * Answers per address, route and UTC day. Assets are content-addressed files an update download
- * fetches in a burst; a whole export is well under a hundred, so 1,000 a day is never reached
- * by phones that get 3 manifest answers between them.
+ * Answers per address, route and UTC day. The app checks at most once every 15 minutes, 96 times
+ * a day, and each check asks the manifest and the APK route. An update download fetches only the
+ * files a phone lacks, the bundle and a few images, so 30 assets cover several releases a day.
  */
 export const DAILY_LIMITS: Readonly<Record<CountedRoute, number>> = {
-  manifest: 3,
-  notes: 3,
-  apk: 3,
-  assets: 1000,
+  manifest: 100,
+  notes: 30,
+  apk: 100,
+  assets: 30,
 };
+
+/**
+ * How often one address gets the same asset in a UTC day. A phone keeps a file it has, so it
+ * asks for each once; 3 covers the phones sharing an address.
+ */
+export const DAILY_LIMIT_PER_ASSET = 3;
+
+/** What a count is kept under: a route, or one asset by its SHA-256. */
+export type CountKey = CountedRoute | `asset ${string}`;
+
+/** The count of one asset, named as the route names it; null when that isn't a SHA-256. */
+export const assetCountKey = (sha256: string): CountKey | null =>
+  /^[0-9a-f]{64}$/.test(sha256) ? `asset ${sha256}` : null;
 
 const DAY_MS = 24 * 60 * 60_000;
 
@@ -63,9 +76,9 @@ const sha256Hex = async (text: string): Promise<string> => {
 /** The key an address is counted by: its block's SHA-256. The address itself is never kept. */
 export const addressKey = (address: string): Promise<string> => sha256Hex(addressBlock(address));
 
-/** Counts one answer from `route` on `day` for the address, and says whether it was within `max`. */
+/** Counts one answer under `key` on `day` for the address, and says whether it was within `max`. */
 export interface RequestCounter {
-  count(address: string, route: CountedRoute, day: string, max: number): Promise<boolean>;
+  count(address: string, key: CountKey, day: string, max: number): Promise<boolean>;
 }
 
 /** What a Durable Object's storage gives the counter. */
@@ -87,17 +100,21 @@ interface Tally {
  */
 export const countRequest = async (
   storage: CountStorage,
-  { route, day, max }: { route: CountedRoute; day: string; max: number },
+  { key, day, max }: { key: CountKey; day: string; max: number },
 ): Promise<boolean> => {
-  const stored = await storage.get<Tally>(route);
+  const stored = await storage.get<Tally>(key);
   const count = stored?.day === day ? stored.count : 0;
   if (count >= max) return false;
-  await storage.put(route, { day, count: count + 1 } satisfies Tally);
+  await storage.put(key, { day, count: count + 1 } satisfies Tally);
+  // Every count of a day ends with it, so setting the alarm again changes nothing.
   if (count === 0) await storage.setAlarm(dayEndsAt(day));
   return true;
 };
 
 const ROUTES: readonly string[] = ["manifest", "notes", "apk", "assets"] satisfies CountedRoute[];
+
+const isCountKey = (key: unknown): key is CountKey =>
+  typeof key === "string" && (ROUTES.includes(key) || /^asset [0-9a-f]{64}$/.test(key));
 
 /**
  * The Durable Object holding one address's counts (wrangler.toml), named by the address's key.
@@ -112,11 +129,11 @@ export class RequestCounts {
   }
 
   async fetch(request: Request): Promise<Response> {
-    const { route, day, max } = (await request.json()) as Record<string, unknown>;
-    if (!ROUTES.includes(String(route)) || typeof day !== "string" || typeof max !== "number") {
+    const { key, day, max } = (await request.json()) as Record<string, unknown>;
+    if (!isCountKey(key) || typeof day !== "string" || typeof max !== "number") {
       return new Response("Bad count", { status: 400 });
     }
-    const counted = await countRequest(this.storage, { route: route as CountedRoute, day, max });
+    const counted = await countRequest(this.storage, { key, day, max });
     return Response.json({ counted });
   }
 
@@ -133,11 +150,11 @@ export interface CountNamespace<Id = unknown> {
 
 /** Counts in the address's own `RequestCounts`. */
 export const durableCounter = <Id>(namespace: CountNamespace<Id>): RequestCounter => ({
-  count: async (address, route, day, max) => {
+  count: async (address, key, day, max) => {
     const counts = namespace.get(namespace.idFromName(address));
     const response = await counts.fetch("https://counts.internal/", {
       method: "POST",
-      body: JSON.stringify({ route, day, max }),
+      body: JSON.stringify({ key, day, max }),
     });
     if (!response.ok) throw new Error(`The count answered ${response.status}`);
     const { counted } = (await response.json()) as { counted: unknown };

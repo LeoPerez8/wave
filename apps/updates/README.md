@@ -114,26 +114,31 @@ Without the key, `publish-apk.ts` logs that it skipped and the release goes on.
 Each client address gets a number of answers per route and UTC day, each route counted on its
 own:
 
-| Route                 | Answers a day | Past it                             |
-| --------------------- | ------------- | ----------------------------------- |
-| `/v1/manifest`        | 3             | `204`, the protocol's "nothing new" |
-| `/v1/notes`           | 3             | `429`                               |
-| `/v1/apk`             | 3             | `429`                               |
-| `/v1/assets/<sha256>` | 1,000         | `429`                               |
+| Route                 | Answers a day               | Past it                             |
+| --------------------- | --------------------------- | ----------------------------------- |
+| `/v1/manifest`        | 100                         | `204`, the protocol's "nothing new" |
+| `/v1/notes`           | 30                          | `429`                               |
+| `/v1/apk`             | 100                         | `429`                               |
+| `/v1/assets/<sha256>` | 30, and 3 of the same asset | `429`                               |
 
 Every answer past a limit carries `retry-after`, the seconds to the next UTC midnight, when the
-counts start over. Paths that aren't a route and methods other than GET aren't counted.
+counts start over. Paths that aren't a route and methods other than GET aren't counted. The
+numbers are `DAILY_LIMITS` and `DAILY_LIMIT_PER_ASSET` in `src/limits.ts`.
 
 - **The manifest answers `204`**, not `429`. `expo-updates` takes a `204` as a finished check that
   found nothing, so the phone stays on the update it runs and asks again at its next check. A
-  `429` would reject `checkForUpdateAsync` and record a check error in `expo-updates`. A check and
-  the download after it both ask for the manifest, so a day's 3 answers bring one update at most.
+  `429` would reject `checkForUpdateAsync` and record a check error in `expo-updates`. The app
+  checks at most once every 15 minutes, 96 times a day, and each check asks the manifest and the
+  APK route, so 100 is a phone in use all day.
 - **Notes and the APK answer `429`.** The app treats it as any failed fetch: the APK check goes to
   the app log and comes round at a later check, Version History shows the list it kept, and What's
   New tries again later. A check the person asked for at the update button says it failed.
 - **Assets** are what one update download fetches at once: the bundle and every file it names that
-  the phone doesn't hold yet, well under a hundred. `expo-updates` drops the whole download when
-  one of them fails, so their limit is one no update reaches.
+  the phone doesn't hold yet, a few images at most. A phone keeps a file it has, so it asks for
+  each once: an address gets the same asset 3 times a day, which covers the phones sharing it,
+  and 30 assets in all, which covers several releases. `expo-updates` drops the whole download
+  when one asset fails, so a phone past either number gets that update the next UTC day. The
+  route's 30 are counted first, so an address past them leaves nothing more in the counts.
 
 An address is counted as Cloudflare names it in `cf-connecting-ip`: an IPv4 address on its own,
 an IPv6 address by its /64. Phones that share one address, behind a carrier's NAT or one home

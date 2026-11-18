@@ -24,10 +24,13 @@ import {
   updateKey,
 } from "./layout.ts";
 import {
+  type CountKey,
   type CountedRoute,
   DAILY_LIMITS,
+  DAILY_LIMIT_PER_ASSET,
   type RequestCounter,
   addressKey,
+  assetCountKey,
   dayEndsAt,
   dayOf,
 } from "./limits.ts";
@@ -249,22 +252,22 @@ export const createUpdateService = (
   storage: UpdateStorage,
   { counter, now = Date.now }: UpdateServiceOptions = {},
 ) => {
-  /** `<address key> <route>` to the day it was refused on. */
+  /** `<address key> <count key>` to the day it was refused on. */
   const refused = new Map<string, string>();
 
-  /** Whether the address may have this answer today. A failing count lets it through. */
-  const withinLimit = async (request: Request, route: CountedRoute): Promise<boolean> => {
-    // Cloudflare sets it on every request that reaches the Worker; only the tests leave it out.
-    // Kept only as a hash, and never logged.
-    const address = request.headers.get("cf-connecting-ip");
-    if (counter === undefined || address === null) return true;
-    const key = await addressKey(address);
+  /** Whether the address may have one more under `key` today. A failing count lets it through. */
+  const counted = async (
+    counts: RequestCounter,
+    address: string,
+    key: CountKey,
+    max: number,
+  ): Promise<boolean> => {
     const day = dayOf(now());
-    const remembered = `${key} ${route}`;
+    const remembered = `${address} ${key}`;
     if (refused.get(remembered) === day) return false;
-    let counted: boolean;
+    let within: boolean;
     try {
-      counted = await counter.count(key, route, day, DAILY_LIMITS[route]);
+      within = await counts.count(address, key, day, max);
     } catch (error) {
       // What's served is public and signed: an outage of the counts mustn't stop updates.
       console.error(
@@ -273,11 +276,31 @@ export const createUpdateService = (
       );
       return true;
     }
-    if (!counted) {
+    if (!within) {
       if (refused.size >= REMEMBERED_REFUSALS) refused.clear();
       refused.set(remembered, day);
     }
-    return counted;
+    return within;
+  };
+
+  /**
+   * Whether the address may have this answer today: within its route's count and, for an asset,
+   * within that asset's own. The route is counted first, so an address past it writes nothing.
+   */
+  const withinLimit = async (
+    request: Request,
+    route: CountedRoute,
+    pathname: string,
+  ): Promise<boolean> => {
+    // Cloudflare sets it on every request that reaches the Worker; only the tests leave it out.
+    // Kept only as a hash, and never logged.
+    const address = request.headers.get("cf-connecting-ip");
+    if (counter === undefined || address === null) return true;
+    const key = await addressKey(address);
+    if (!(await counted(counter, key, route, DAILY_LIMITS[route]))) return false;
+    if (route !== "assets") return true;
+    const asset = assetCountKey(pathname.slice("/v1/assets/".length));
+    return asset === null || (await counted(counter, key, asset, DAILY_LIMIT_PER_ASSET));
   };
 
   return {
@@ -287,7 +310,7 @@ export const createUpdateService = (
       const { pathname } = url;
       const route = routeOf(pathname);
       if (route === null) return notFound();
-      if (!(await withinLimit(request, route))) return pastLimit(route, now());
+      if (!(await withinLimit(request, route, pathname))) return pastLimit(route, now());
       switch (route) {
         case "manifest":
           return manifestRoute(request, storage);
