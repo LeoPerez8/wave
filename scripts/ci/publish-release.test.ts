@@ -70,6 +70,31 @@ describe("publish-release.sh", () => {
     assert.equal(readFileSync(asset, "utf8"), "{}");
   });
 
+  it("attaches the source manifest and its directions, and puts the directions in the notes", () => {
+    const dir = mkdtempSync(join(tmpdir(), "wave-source-"));
+    writeFileSync(join(dir, "manifest.json"), '{"schema":"wave-release-source/1"}');
+    writeFileSync(join(dir, "directions.md"), "## Source for Wave 1.3.0-ti\n");
+    writeFileSync(join(dir, "notes.md"), "- Fixed a thing\n");
+    const published = publish(SHA, {
+      SOURCE_MANIFEST_FILE: join(dir, "manifest.json"),
+      SOURCE_DIRECTIONS_FILE: join(dir, "directions.md"),
+      RELEASE_NOTES_FILE: join(dir, "notes.md"),
+    });
+    assert.equal(published.status, 0);
+    const manifest = join(published.dir, "wave-1.3.0-ti.source.json");
+    const directions = join(published.dir, "wave-1.3.0-ti.source.md");
+    assert.ok(published.gh.includes(` ${manifest} ${directions} `), published.gh);
+    assert.equal(readFileSync(manifest, "utf8"), '{"schema":"wave-release-source/1"}');
+    const notes = /--notes-file (\S+)/.exec(published.gh)?.[1] ?? "";
+    assert.equal(readFileSync(notes, "utf8"), "- Fixed a thing\n\n## Source for Wave 1.3.0-ti\n");
+  });
+
+  it("publishes without source files when the release job made none", () => {
+    const { status, gh } = publish(SHA);
+    assert.equal(status, 0);
+    assert.doesNotMatch(gh, /\.source\./);
+  });
+
   it("answers nothing when the tag moved, so nothing after it publishes", () => {
     const { status, stdout, output, gh } = publish("b".repeat(40));
     assert.equal(status, 0);
@@ -80,6 +105,31 @@ describe("publish-release.sh", () => {
 });
 
 describe("the release job", () => {
+  it("prepares the release source only when the owner turned source delivery on", () => {
+    const workflow = readFileSync(repoFile(".github/workflows/ci.yml"), "utf8");
+    const job = workflow.slice(workflow.indexOf("\n  release:\n"));
+    const steps = job.split(/\n(?= {6}- )/);
+    const at = (name: string) => steps.findIndex((step) => step.includes(`name: ${name}\n`));
+    const prepare = at("Prepare the release source");
+    assert.ok(prepare > at("Seal the provenance record"), "after the record is sealed");
+    assert.ok(prepare < at("Publish the release"), "before the release is published");
+    const checkout = steps[prepare - 1]!;
+    assert.match(checkout, /uses: actions\/checkout@[0-9a-f]{40}/);
+    assert.match(checkout, /ref: \$\{\{ needs\.release-gate\.outputs\.sha \}\}/);
+    assert.match(checkout, /persist-credentials: false/);
+    for (const step of [checkout, steps[prepare]!]) {
+      assert.match(
+        step,
+        /if: vars\.RELEASE_SOURCE_DELIVERY == 'on' && needs\.checks\.outputs\.release_tag != ''/,
+      );
+      assert.doesNotMatch(step, /secrets\./);
+    }
+    for (const command of ["manifest", "verify", "directions"])
+      assert.match(steps[prepare]!, new RegExp(`release-source\\.ts ${command} `));
+    assert.match(steps[prepare]!, /SOURCE_MANIFEST_FILE=.*>> "\$GITHUB_ENV"/);
+    assert.match(steps[prepare]!, /SOURCE_DIRECTIONS_FILE=.*>> "\$GITHUB_ENV"/);
+  });
+
   it("publishes nothing to phones unless the Release was published", () => {
     const workflow = readFileSync(repoFile(".github/workflows/ci.yml"), "utf8");
     const afterRelease = workflow.slice(workflow.indexOf("- name: Publish the release\n"));

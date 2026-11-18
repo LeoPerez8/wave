@@ -212,6 +212,8 @@ export type Component = {
   licence?: string;
   /** What a release must carry for it: the notice to keep, or where it is. */
   notice?: string;
+  /** Where its exact source is, for a library whose licence makes it Corresponding Source. */
+  correspondingSource?: string;
 };
 
 /** A notice a release carries: a package's notice files (null when not observed) or a component's. */
@@ -433,11 +435,23 @@ function recordedPackages(): (ShippedPackage & { notices: string[] | null })[] {
   return packages;
 }
 
-function check(): boolean {
+/** What keeps this checkout's inventory from passing, read from the repository root. */
+export function rightsBlockers(): Blocker[] {
   const { components, reviews } = JSON.parse(readFileSync(COMPONENTS, "utf8")) as Recorded;
   const packages = recordedPackages();
   const gradle = GRADLE_FILES.flatMap((file) => gradleCoordinates(readFileSync(file, "utf8")));
-  const report = rightsReport({ packages, reviews, components, gradle });
+  return rightsReport({ packages, reviews, components, gradle }).blockers;
+}
+
+/** The notices a release of this checkout carries, read from the repository root. */
+export function releaseNotices(): Notice[] {
+  const { components } = JSON.parse(readFileSync(COMPONENTS, "utf8")) as Recorded;
+  return requiredNotices(recordedPackages(), components);
+}
+
+function check(): boolean {
+  const blockers = rightsBlockers();
+  const report = { ready: blockers.length === 0, blockers };
   for (const { subject, reason } of report.blockers) console.log(`blocked: ${subject}: ${reason}`);
   console.log(
     report.ready
@@ -451,10 +465,8 @@ if (process.argv[1] === fileURLToPath(import.meta.url)) {
   const [command, flag, value] = process.argv.slice(2);
   if (command === "snapshot" && flag === "--node-modules" && value) await snapshot(value);
   else if (command === "check") process.exit(check() ? 0 : 1);
-  else if (command === "notices") {
-    const { components } = JSON.parse(readFileSync(COMPONENTS, "utf8")) as Recorded;
-    console.log(JSON.stringify(requiredNotices(recordedPackages(), components), null, 2));
-  } else {
+  else if (command === "notices") console.log(JSON.stringify(releaseNotices(), null, 2));
+  else {
     console.error(
       "Usage: node scripts/ci/rights-inventory.ts snapshot --node-modules <dir> | check | notices",
     );

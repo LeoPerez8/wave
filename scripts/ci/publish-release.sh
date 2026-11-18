@@ -8,7 +8,10 @@
 # Run from a checkout of the repo. Env: GH_TOKEN, RELEASE_TAG (default GITHUB_REF_NAME),
 # GITHUB_REF_TYPE, RELEASE_SHA (the commit a branch push releases: its version bump; default
 # GITHUB_SHA), RELEASE_NOTES_FILE (optional: the patch notes), PROVENANCE_FILE (optional: the
-# release gate's sealed record, attached as wave-<version>.provenance.json; docs/release-provenance.md).
+# release gate's sealed record, attached as wave-<version>.provenance.json; docs/release-provenance.md),
+# SOURCE_MANIFEST_FILE and SOURCE_DIRECTIONS_FILE (optional: where the release's source is, attached
+# as wave-<version>.source.json and .source.md, the directions also added to the notes;
+# docs/release-source.md).
 set -euo pipefail
 
 apk="$1"
@@ -23,10 +26,27 @@ if [ -n "${PROVENANCE_FILE:-}" ]; then
   assets+=("$dir/wave-$version.provenance.json")
 fi
 
-notes="${RELEASE_NOTES_FILE:-}"
-if [ -z "$notes" ]; then
-  notes="$dir/release-notes.md"
+if [ -n "${SOURCE_MANIFEST_FILE:-}" ]; then
+  cp "$SOURCE_MANIFEST_FILE" "$dir/wave-$version.source.json"
+  assets+=("$dir/wave-$version.source.json")
+fi
+if [ -n "${SOURCE_DIRECTIONS_FILE:-}" ]; then
+  cp "$SOURCE_DIRECTIONS_FILE" "$dir/wave-$version.source.md"
+  assets+=("$dir/wave-$version.source.md")
+fi
+
+notes="$dir/release-notes.md"
+if [ -n "${RELEASE_NOTES_FILE:-}" ]; then
+  cp "$RELEASE_NOTES_FILE" "$notes.in"
+  mv "$notes.in" "$notes"
+else
   echo "Wave $version for Android. Open wave-$version.apk on the phone to install it." > "$notes"
+fi
+# The directions sit next to the APK on the release page (GPLv3 section 6(d)).
+if [ -n "${SOURCE_DIRECTIONS_FILE:-}" ]; then
+  printf '
+' >> "$notes"
+  cat "$SOURCE_DIRECTIONS_FILE" >> "$notes"
 fi
 
 flags=(--latest)

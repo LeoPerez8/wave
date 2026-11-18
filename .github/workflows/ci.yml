@@ -1099,6 +1099,29 @@ jobs:
           path: ${{ runner.temp }}/provenance/sealed.json
           retention-days: 14
 
+      # Where this release's source is (docs/release-source.md). Off until the owner sets the
+      # repository variable RELEASE_SOURCE_DELIVERY to `on`. Once on, a manifest that doesn't
+      # check out against the tag stops the release before anything is published.
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.1.0
+        if: vars.RELEASE_SOURCE_DELIVERY == 'on' && needs.checks.outputs.release_tag != ''
+        with:
+          ref: ${{ needs.release-gate.outputs.sha }}
+          path: release-source
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Prepare the release source
+        if: vars.RELEASE_SOURCE_DELIVERY == 'on' && needs.checks.outputs.release_tag != ''
+        working-directory: release-source
+        run: |
+          out="$RUNNER_TEMP/source"
+          mkdir -p "$out"
+          node scripts/ci/release-source.ts manifest "$RUNNER_TEMP/provenance/sealed.json" > "$out/manifest.json"
+          node scripts/ci/release-source.ts verify "$out/manifest.json"
+          node scripts/ci/release-source.ts directions "$out/manifest.json" > "$out/directions.md"
+          echo "SOURCE_MANIFEST_FILE=$out/manifest.json" >> "$GITHUB_ENV"
+          echo "SOURCE_DIRECTIONS_FILE=$out/directions.md" >> "$GITHUB_ENV"
+
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:
           name: ${{ needs.android.outputs.apk }}
