@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { describe, test } from "node:test";
 
-import { formatDuration, formatRemaining } from "./index.ts";
+import { catalogueOf, formatDuration, formatRemaining, listDuration } from "./index.ts";
 
 describe("formatDuration", () => {
   test("formats minutes and zero-padded seconds below an hour", () => {
@@ -50,5 +50,30 @@ describe("formatRemaining", () => {
 
   test("never goes below zero when the position overshoots", () => {
     assert.equal(formatRemaining(200_000, 187_000), "-0:00");
+  });
+});
+
+describe("listDuration", () => {
+  const en = catalogueOf("en").library;
+  const pt = catalogueOf("pt-BR").library;
+
+  test("reads in minutes below an hour, never 0", () => {
+    assert.equal(listDuration(33 * 60_000, en), "33 min");
+    assert.equal(listDuration(20_000, en), "1 min");
+    assert.equal(listDuration(59 * 60_000 + 29_000, en), "59 min");
+  });
+
+  test("reads in hours and minutes from an hour up, in both languages", () => {
+    assert.equal(listDuration(59 * 60_000 + 31_000, en), "1 h");
+    assert.equal(listDuration(65 * 60_000, en), "1 h 5 min");
+    assert.equal(listDuration(132_189_000, en), "36 h 43 min");
+    assert.equal(listDuration(132_189_000, pt), "36 h 43 min");
+    assert.equal(listDuration(1_234 * 3_600_000, en), "1,234 h");
+    assert.equal(listDuration(1_234 * 3_600_000, pt), "1.234 h");
+  });
+
+  test("is null for a list with no known length", () => {
+    assert.equal(listDuration(0, en), null);
+    assert.equal(listDuration(Number.NaN, en), null);
   });
 });
