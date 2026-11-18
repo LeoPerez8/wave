@@ -68,3 +68,33 @@ pub fn snr(decoded: &[f32], offset: usize, start: u64, rate: u32, frames: usize)
     }
     out
 }
+
+/// Writes `seconds` of the test signal at `rate` as a 16-bit stereo WAV in a temp folder, so a
+/// test can have a song longer than the fixtures; it decodes to `source_16bit`.
+pub fn signal_wav(name: &str, seconds: f64, rate: u32) -> PathBuf {
+    let dir = std::env::temp_dir().join(format!("wave-signal-{}", std::process::id()));
+    std::fs::create_dir_all(&dir).expect("makes the folder");
+    let path = dir.join(name);
+    let frames = (seconds * rate as f64).round() as u64;
+    let data_bytes = (frames * 4) as u32;
+    let mut bytes = Vec::with_capacity(data_bytes as usize + 44);
+    bytes.extend_from_slice(b"RIFF");
+    bytes.extend_from_slice(&(36 + data_bytes).to_le_bytes());
+    bytes.extend_from_slice(b"WAVEfmt ");
+    bytes.extend_from_slice(&16u32.to_le_bytes());
+    bytes.extend_from_slice(&1u16.to_le_bytes());
+    bytes.extend_from_slice(&2u16.to_le_bytes());
+    bytes.extend_from_slice(&rate.to_le_bytes());
+    bytes.extend_from_slice(&(rate * 4).to_le_bytes());
+    bytes.extend_from_slice(&4u16.to_le_bytes());
+    bytes.extend_from_slice(&16u16.to_le_bytes());
+    bytes.extend_from_slice(b"data");
+    bytes.extend_from_slice(&data_bytes.to_le_bytes());
+    for n in 0..frames {
+        for sample in exact(n, rate) {
+            bytes.extend_from_slice(&((sample * 32767.0).round() as i16).to_le_bytes());
+        }
+    }
+    std::fs::write(&path, bytes).expect("writes the file");
+    path
+}
