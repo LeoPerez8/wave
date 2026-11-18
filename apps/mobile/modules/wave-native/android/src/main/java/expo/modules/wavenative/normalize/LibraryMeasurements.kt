@@ -9,6 +9,7 @@ import android.content.Context
 import android.os.SystemClock
 import android.util.Log
 import expo.modules.wavenative.download.BackgroundThreads
+import expo.modules.wavenative.download.ThreadPriority
 import expo.modules.wavenative.log.WaveLog
 import expo.modules.wavenative.player.NormalizeVolume
 import java.io.File
@@ -36,7 +37,7 @@ object LibraryMeasurements {
 
   /** The meter thread the queue's measurements and the job share, the queue's first. */
   val meter: SongMeter by lazy {
-    SongMeter(FileLoudness::measure, Executors.newSingleThreadExecutor(BackgroundThreads("wave-meter", daemon = true)))
+    SongMeter(FileLoudness::measure, Executors.newSingleThreadExecutor(BackgroundThreads("wave-meter", daemon = true, lower = ThreadPriority::lower)))
   }
 
   /** Called as the job keeps each result, while JS is there to take it in (`onLibraryMeasured`). */
@@ -46,7 +47,7 @@ object LibraryMeasurements {
   private var list: LibraryToMeasure? = null
 
   // Hands its work off the caller's thread: the switch is set on the main one.
-  private val worker = Executors.newSingleThreadExecutor(BackgroundThreads("wave-meter-list", daemon = true))
+  private val worker = Executors.newSingleThreadExecutor(BackgroundThreads("wave-meter-list", daemon = true, lower = ThreadPriority::lower))
 
   @Synchronized
   private fun list(context: Context): LibraryToMeasure =

@@ -43,6 +43,12 @@ describe("changes", () => {
     );
   });
 
+  it("runs the native tests and releases the phone when the shared Kotlin changes", () => {
+    const paths = ["packages/kotlin-shared/src/main/kotlin/expo/modules/wavenative/yt/YtClient.kt"];
+    assert.equal(changes(paths).nativeTests, true);
+    assert.equal(reachesUsers(paths), true);
+  });
+
   it("runs the native tests when wave-glass changes", () => {
     assert.equal(
       changes([

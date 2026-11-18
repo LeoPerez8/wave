@@ -11,7 +11,8 @@ import { fileURLToPath } from "node:url";
 // Areas of the repo that CI decisions depend on. A path ending in "/" covers
 // everything under it; any other path is one file. Markdown is never in an area.
 const AREAS = {
-  app: ["apps/mobile/", "packages/client/"],
+  // The APK, with the Kotlin it shares with the desktop (#1144).
+  app: ["apps/mobile/", "packages/client/", "packages/kotlin-shared/"],
   core: ["packages/core/"],
   // The Wave account's sync service. Not in the APK, but users see what it does.
   sync: ["apps/sync/"],
@@ -29,6 +30,7 @@ const AREAS = {
   native: [
     "apps/mobile/modules/wave-native/",
     "apps/mobile/modules/wave-glass/",
+    "packages/kotlin-shared/",
     "apps/mobile/app.config.ts",
     "apps/mobile/plugins/",
     "apps/mobile/package.json",

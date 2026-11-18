@@ -16,7 +16,7 @@ import expo.modules.wavenative.download.interruptibly
  * Never logs an address or its headers: they're the session's.
  */
 class AndroidYtAudioStreams(context: Context) : YtAudioStreams {
-  private val client = YtClient.get(context)
+  private val client = AndroidYtClient.get(context)
 
   override fun resolve(videoId: String): YtStream {
     // A cached address skips the resolver's own check; a download still needs YT Music on.

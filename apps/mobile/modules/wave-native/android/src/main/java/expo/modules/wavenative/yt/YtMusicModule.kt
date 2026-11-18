@@ -38,7 +38,7 @@ class YtMusicModule : Module() {
     get() = appContext.reactContext ?: throw Exceptions.ReactContextLost()
 
   private val client: YtClient
-    get() = YtClient.get(context)
+    get() = AndroidYtClient.get(context)
 
   /** The Library's artwork store: YT Music covers are cached beside the Library's. */
   private val artworkStore by lazy { ArtworkStore(File(context.filesDir, "artwork"), AndroidArtworkProcessor()) }

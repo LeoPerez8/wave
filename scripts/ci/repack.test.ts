@@ -119,6 +119,28 @@ describe("apkCacheKey", () => {
     assert.notEqual(key(dir), previous);
   });
 
+  it("changes when the Kotlin the phone shares with the desktop changes", () => {
+    const dir = app();
+    const shared = resolve(dir, "../../packages/kotlin-shared/src/main/kotlin/YtClient.kt");
+    mkdirSync(dirname(shared), { recursive: true });
+    writeFileSync(shared, "class YtClient");
+    const previous = key(dir);
+    writeFileSync(shared, "class YtClient(val platform: YtPlatform)");
+    assert.notEqual(key(dir), previous);
+  });
+
+  it("ignores build output in the shared Kotlin", () => {
+    const dir = app();
+    const shared = resolve(dir, "../../packages/kotlin-shared");
+    mkdirSync(join(shared, "build/libs"), { recursive: true });
+    writeFileSync(join(shared, "build.gradle.kts"), "plugins {}");
+    const previous = key(dir);
+    writeFileSync(join(shared, "build/libs/kotlin-shared.jar"), "jar");
+    mkdirSync(join(shared, ".gradle"), { recursive: true });
+    writeFileSync(join(shared, ".gradle/file-system.probe"), "probe");
+    assert.equal(key(dir), previous);
+  });
+
   it("doesn't change when only JS or TS changes", () => {
     const before = app();
     const after = app({

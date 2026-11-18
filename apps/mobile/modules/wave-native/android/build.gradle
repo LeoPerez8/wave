@@ -13,14 +13,23 @@ android {
     versionName '0.0.0'
     consumerProguardFiles 'proguard-rules.pro'
   }
+  // The test fixtures (audio files, YouTube answers) and their loader live with the shared Kotlin.
+  sourceSets {
+    test {
+      java.srcDirs += "${projectDir}/../../../../../packages/kotlin-shared/src/testFixtures/kotlin"
+      resources.srcDirs += "${projectDir}/../../../../../packages/kotlin-shared/src/testFixtures/resources"
+    }
+  }
   testOptions {
     unitTests.returnDefaultValues = true
   }
 }
 
 dependencies {
-  // Tag reading (and, in v2, writing) for MP3, FLAC, M4A, Ogg Vorbis and WAV.
-  implementation 'net.jthink:jaudiotagger:3.0.1'
+  // The Kotlin shared with Wave desktop (#1144): the YT Music client, Soulseek, downloads and
+  // tags, with jaudiotagger, innertubex (GPL-3.0, from JitPack), ktor and kotlinx.serialization.
+  // Gradle builds it from packages/kotlin-shared, which prebuild includes (plugins/kotlinShared.ts).
+  implementation 'dev.leoperez.wave:kotlin-shared:0.0.0'
   implementation 'androidx.palette:palette:1.0.0'
   // The "Import to Wave" sharing shortcut (ShareShortcut): ShortcutManagerCompat.
   implementation 'androidx.core:core:1.16.0'
@@ -32,19 +41,11 @@ dependencies {
   // Starting the JS runtime headless for Android Auto (JsRuntime). The app provides it;
   // React Native's Gradle plugin picks the version.
   compileOnly 'com.facebook.react:react-android'
-  // YT Music: innertubex (GPL-3.0, from JitPack) talks to YouTube Music; it ships no HTTP
-  // engine and sends @Serializable bodies, so the client needs OkHttp and content negotiation.
-  // Responses are parsed with kotlinx.serialization's JsonElement API (YtSearchParser).
-  implementation 'com.github.MetrolistGroup.innertubex:innertubex:0.11.9'
-  implementation 'io.ktor:ktor-client-okhttp:3.6.0'
   // ktor's OkHttp 5 replaces React Native's OkHttp 4 app-wide, but not React Native's
   // okhttp-urlconnection 4 cookie jar, which calls OkHttp 4 internals: any fetch to a host that
   // set a cookie (Deezer) then killed the app (#119). The BOM moves every OkHttp module to 5.
   // Keep it at or above the OkHttp ktor-client-okhttp asks for.
   implementation platform('com.squareup.okhttp3:okhttp-bom:5.5.0')
-  implementation 'io.ktor:ktor-client-content-negotiation:3.6.0'
-  implementation 'io.ktor:ktor-serialization-kotlinx-json:3.6.0'
-  implementation 'org.jetbrains.kotlinx:kotlinx-serialization-json:1.11.0'
 
   // Wave account: Google sign-in through Android's account picker (Credential Manager), for an
   // ID token for Wave's web client id.

@@ -6,7 +6,7 @@
 //   node scripts/ci/repack.ts hermes-flags <app/build.gradle>  hermesc's flags, one per line
 // `plan` reads GITHUB_EVENT_NAME, GITHUB_REF, IS_RELEASE and KEPT (the cache hit, 'true' or not).
 import { createHash } from "node:crypto";
-import { readdirSync, readFileSync } from "node:fs";
+import { existsSync, readdirSync, readFileSync } from "node:fs";
 import { createRequire } from "node:module";
 import { join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -70,10 +70,11 @@ const IMAGE = /\.(avif|bmp|gif|heic|heif|ico|jpe?g|ktx|png|psd|svg|tiff?|webp)$/
  * The key a full build's APK is kept under: what the APK's native side is made of. Expo's
  * native fingerprint (native modules, native dependencies, the app config, config plugins),
  * the Android project prebuild generated in `<appDir>/android` (it also catches what the
- * fingerprint misses, like files a config plugin imports), the app's image assets, and the
- * assets Metro emitted for this bundle. Metro's assets are Android resources that Gradle
- * compiles into the APK, and a JS-only change can add one (an image from a package), so a
- * repack is only safe when they match the kept build's exactly.
+ * fingerprint misses, like files a config plugin imports), the Kotlin it shares with the desktop
+ * (packages/kotlin-shared, a build Gradle includes, which the fingerprint doesn't see), the app's
+ * image assets, and the assets Metro emitted for this bundle. Metro's assets are Android
+ * resources that Gradle compiles into the APK, and a JS-only change can add one (an image from
+ * a package), so a repack is only safe when they match the kept build's exactly.
  * The CI workflow and scripts are part of the recipe too: build flags and the bundle
  * handoff can change the native APK. Hashing all CI files conservatively rebuilds it
  * after a CI-only change; a TS/TSX-only app change still reuses the key. So does a new app
@@ -124,11 +125,22 @@ export const apkCacheKey = ({
       () => true,
     ).map((path) => `scripts/ci/${path}`),
   ]);
+  const sharedDir = join(repo, "packages/kotlin-shared");
+  const shared = existsSync(sharedDir)
+    ? digest(
+        sharedDir,
+        files(
+          sharedDir,
+          (name) => PROJECT_STATE.has(name),
+          () => true,
+        ),
+      )
+    : "";
   const metro = sha256(JSON.stringify(Object.entries(metroAssets).sort()));
   // v2: kept from the first build the release key signs. A v1 build is signed with the public
   // debug key and kept beside it, so it never repacks, and the new runtime version sends phones
   // the first signed release as an APK.
-  return `apk-v2-${sha256(`${fingerprint}\n${project}\n${images}\n${config}\n${recipe}\n${metro}\n`)}`;
+  return `apk-v2-${sha256(`${fingerprint}\n${project}\n${images}\n${config}\n${recipe}\n${shared}\n${metro}\n`)}`;
 };
 
 /** The files Metro wrote to its assets folder (Android resources), by path, with their hashes. */

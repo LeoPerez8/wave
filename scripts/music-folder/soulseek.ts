@@ -18,7 +18,7 @@ import type { Peers } from "./replace-song.ts";
 const here = dirname(fileURLToPath(import.meta.url));
 const appClient = join(
   here,
-  "../../apps/mobile/modules/wave-native/android/src/main/java/expo/modules/wavenative/soulseek",
+  "../../packages/kotlin-shared/src/main/kotlin/expo/modules/wavenative/soulseek",
 );
 /** The app's client files the bridge compiles with; the Android-only ones are left out. */
 const sources = [
@@ -29,6 +29,7 @@ const sources = [
   join(appClient, "SoulseekFailure.kt"),
   join(appClient, "SoulseekAccounts.kt"),
   join(appClient, "WaveAccountSoulseek.kt"),
+  join(appClient, "../download/BackgroundThreads.kt"),
   join(here, "soulseek", "PcSoulseek.kt"),
 ];
 

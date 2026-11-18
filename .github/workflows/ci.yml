@@ -78,7 +78,7 @@ jobs:
           HEAD_SHA: ${{ github.event.pull_request.head.sha }}
         run: |
           scripts/ci/report.sh skipped "Native unit tests" \
-            "Nothing they test or compile changed (wave-native, wave-glass, the app config, config plugins, the lockfile or CI), so they didn't run."
+            "Nothing they test or compile changed (wave-native, wave-glass, the shared Kotlin, the app config, config plugins, the lockfile or CI), so they didn't run."
 
       - name: Report the skipped desktop checks
         if: steps.rule.outputs.desktopChecks == 'false' && env.IS_SAME_REPO_PR == 'true'
@@ -491,6 +491,12 @@ jobs:
           java-version: 17
 
       - uses: gradle/actions/setup-gradle@0723195856401067f7a2779048b490ace7a47d7c # v5.0.2
+
+      # The Kotlin the phone shares with the desktop builds and tests on its own, with no Android
+      # dependency (#1144), and so does the desktop's JVM entry point in it.
+      - name: Shared Kotlin
+        working-directory: packages/kotlin-shared
+        run: ../../scripts/ci/step.sh "Shared Kotlin" ./gradlew build --no-daemon --console=plain
 
       - name: Install
         run: scripts/ci/step.sh "Install" pnpm install --frozen-lockfile
