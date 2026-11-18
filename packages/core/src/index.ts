@@ -247,14 +247,23 @@ export {
   SLEEP_TIMER_PRESETS,
   formatSleepMinutes,
   formatSleepRemaining,
+  sleepTimerCheckIn,
   sleepTimerEntryLabel,
   sleepTimerLabelChangesIn,
   sleepTimerLabelSeconds,
+  sleepTimerPausesAtTrackEnd,
   sleepTimerRemaining,
   startSleepTimer,
   stepSleepMinutes,
+  stepSleepTimer,
 } from "./sleepTimer.ts";
-export type { SleepTimer, SleepTimerChoice, SleepTimerClock } from "./sleepTimer.ts";
+export type {
+  SleepTimer,
+  SleepTimerChoice,
+  SleepTimerClock,
+  SleepTimerEvent,
+  SleepTimerStep,
+} from "./sleepTimer.ts";
 export {
   RELOAD_RESUME_WINDOW_MS,
   UPDATE_APK_RETRY_INTERVAL_MS,
