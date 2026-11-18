@@ -18,6 +18,7 @@ import { Icon } from "./Icon.tsx";
 import { LyricsView } from "./LyricsView.tsx";
 import { text } from "./text.ts";
 import { Artwork } from "./VirtualTable.tsx";
+import { AlbumCredit, ArtistCredit, type YtCreditLinks } from "./YtCredit.tsx";
 import "./panel.css";
 
 /** The artwork is sampled this small: plenty for a palette. */
@@ -99,10 +100,13 @@ function useShellColours() {
 export function NowPlaying({
   view,
   run,
+  links,
   onClose,
 }: {
   readonly view: PlayerView | undefined;
   readonly run: (action: Promise<unknown>) => void;
+  /** Where a streamed song's artist and album names lead; opening one closes Now Playing. */
+  readonly links: YtCreditLinks;
   readonly onClose: () => void;
 }) {
   const song = view?.current ?? null;
@@ -153,8 +157,8 @@ export function NowPlaying({
         <Artwork large kind="song" id={song?.id} hash={song?.artworkHash} url={song?.artworkUrl} />
         <div className="now-playing-copy">
           <h1 className="truncate">{song?.title ?? text.desktopLayout.nothingPlaying}</h1>
-          {song && <p className="truncate secondary">{song.artist}</p>}
-          {song?.album && <p className="truncate tertiary">{song.album}</p>}
+          {song && <ArtistCredit row={song} links={links} className="truncate secondary" />}
+          {song?.album && <AlbumCredit row={song} links={links} className="truncate tertiary" />}
         </div>
       </div>
       <div className="now-playing-lyrics">

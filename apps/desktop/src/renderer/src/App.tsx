@@ -293,6 +293,26 @@ export function App() {
         previous.map((r, i) => (i === position ? { kind: "search", query } : r)),
       );
   };
+  /**
+   * Where a streamed song's artist and album names lead (docs/spec-desktop.md, story 41): their
+   * YouTube Music pages, over whatever shows, Now Playing included; Back comes back here.
+   */
+  const ytLinks = {
+    onArtist: (name: string) => {
+      void window.wave.yt
+        .findArtist(name)
+        .then(({ browseId }) => {
+          if (browseId === null) return setError(text.library.couldntOpenArtist);
+          setNowPlaying(false);
+          go({ kind: "ytArtist", id: browseId });
+        })
+        .catch(() => setError(text.library.couldntOpenArtist));
+    },
+    onAlbum: (browseId: string) => {
+      setNowPlaying(false);
+      go({ kind: "ytAlbum", id: browseId });
+    },
+  };
   /** Keeps the search in Recent searches, as the phone does on submit or opening a result. */
   const rememberSearch = () => {
     const query = route.kind === "search" ? (route.query ?? "").trim() : "";
@@ -680,6 +700,20 @@ export function App() {
               playback.run(window.wave.magicQueue.startStreamed(videoId));
             }}
             onYtDownload={(videoId) => download(window.wave.downloads.yt([videoId]))}
+            ytLinks={{
+              onArtist: (name) => {
+                rememberSearch();
+                ytLinks.onArtist(name);
+              },
+              onAlbum: (browseId) => {
+                rememberSearch();
+                ytLinks.onAlbum(browseId);
+              },
+              onArtistPage: (browseId) => {
+                rememberSearch();
+                go({ kind: "ytArtist", id: browseId });
+              },
+            }}
             revision={revision}
             onOpen={(next) => {
               rememberSearch();
@@ -760,13 +794,19 @@ export function App() {
         />
       )}
       {nowPlaying && (
-        <NowPlaying view={playback.view} run={playback.run} onClose={() => setNowPlaying(false)} />
+        <NowPlaying
+          view={playback.view}
+          run={playback.run}
+          links={ytLinks}
+          onClose={() => setNowPlaying(false)}
+        />
       )}
       <PlayerBar
         playback={playback}
         panel={panel.tab && shownPanelTab(panel.tab, ytMusic)}
         onPanel={panel.toggle}
         onNowPlaying={() => setNowPlaying(true)}
+        links={ytLinks}
       />
       <Links
         onPlaying={linkPlaying}

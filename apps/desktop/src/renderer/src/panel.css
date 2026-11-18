@@ -10,7 +10,30 @@
   }
 }
 
-/* The bar's artwork and title open Now Playing. */
+/* The bar's artwork and title open Now Playing; the names over them open their pages. */
+.player-now-area {
+  display: grid;
+  grid-template-columns: 52px minmax(0, 1fr);
+  column-gap: 12px;
+  align-items: center;
+  min-width: 0;
+}
+.player-now-area > .player-now {
+  grid-row: 1;
+  grid-column: 1 / -1;
+}
+.player-credits {
+  grid-row: 1;
+  grid-column: 2;
+  padding-block: 2px;
+  pointer-events: none;
+}
+.player-credits > span {
+  display: block;
+}
+.player-credit-twin {
+  visibility: hidden;
+}
 .player-now {
   display: flex;
   align-items: center;
@@ -288,7 +311,7 @@
 .now-playing-copy h1 {
   font-size: 24px;
 }
-.now-playing-copy p {
+.now-playing-copy > span {
   font-size: 15px;
 }
 .now-playing-lyrics {

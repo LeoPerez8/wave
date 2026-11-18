@@ -14,7 +14,7 @@ import { language, labels, text } from "./text.ts";
 import type { SongState } from "../../shared/songState.ts";
 import { markClass, rowMark, SongMark, useSongStates } from "./SongMark.tsx";
 import { Artwork, time } from "./VirtualTable.tsx";
-import { YtResults } from "./YtResults.tsx";
+import { YtResults, type YtSearchLinks } from "./YtResults.tsx";
 
 const groupLabel: Readonly<Record<SearchKind, string>> = {
   song: text.playbackText.songs,
@@ -214,6 +214,8 @@ export interface SearchPageProps {
   readonly searchOnline: SearchOnline | undefined;
   readonly onYtPlay: (videoId: string) => void;
   readonly onYtDownload: (videoId: string) => void;
+  /** Where YouTube Music's artists, albums and song credits lead. */
+  readonly ytLinks: YtSearchLinks;
 }
 
 /**
@@ -247,6 +249,7 @@ export function SearchPage(props: SearchPageProps) {
         libraryHasResults={current === undefined ? undefined : current.groups.length > 0}
         onPlay={props.onYtPlay}
         onDownload={props.onYtDownload}
+        links={props.ytLinks}
       >
         <LibraryResults {...props} view={current} />
       </YtResults>
