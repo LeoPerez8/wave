@@ -183,6 +183,8 @@ test("the page has no Node and only the typed bridge", async () => {
       "wave.links.importPlaylist",
       "wave.links.copySong",
       "wave.links.copyPlaylist",
+      "wave.streamed.menu",
+      "wave.streamed.run",
     ],
   });
 });

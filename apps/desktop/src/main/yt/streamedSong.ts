@@ -1,0 +1,191 @@
+/**
+ * A streamed YouTube Music song's menu on main's side, as the phone's (docs/spec.md, stories 46a
+ * and 77): Core's `ytSongActions` and `ytDownloadActions`, starring it (a star means downloaded:
+ * a pending favorite until the file comes, or the Library's song when the Library has it),
+ * adding it to a playlist (the Library's song, else a YT Music entry) and downloading it.
+ */
+import type { LibraryDatabase } from "@wave/client/db/database";
+import { selectNowPlayingSong } from "@wave/client/db/nowPlayingSong";
+import { addPendingFavorites, removePendingFavorites } from "@wave/client/db/pendingFavorites";
+import { setFavorites } from "@wave/client/db/playHistory";
+import { addToPlaylist } from "@wave/client/db/playlists";
+import {
+  artistPhotoName,
+  missingSongJobId,
+  nowPlayingDownload,
+  pendingFavorite,
+  streamedArtistLink,
+  unstarredDownload,
+  ytDownloadActions,
+  ytSongActions,
+  ytTrackId,
+  type PlaylistSong,
+  type YtAlbumSong,
+} from "@wave/core";
+import { sql } from "drizzle-orm";
+import type {
+  StreamedArtist,
+  StreamedEntry,
+  StreamedRunAction,
+  StreamedRunResult,
+  StreamedSongMenu,
+} from "../../shared/streamedSongs.ts";
+import type { DownloadsShape } from "../downloads/downloads.ts";
+
+export interface StreamedSongPorts {
+  readonly db: LibraryDatabase;
+  readonly ytMusic: () => boolean;
+  readonly downloads: Pick<
+    DownloadsShape,
+    "yt" | "missing" | "cancel" | "retry" | "status" | "ytStatus"
+  >;
+  readonly queue: (type: "playNext" | "addToQueue", videoId: string) => Promise<void>;
+  /** The rows changed (a star, a playlist): the window reads them again and the account hears. */
+  readonly changed: () => void;
+  /** The downloads only a star asked for, by job id, so taking the star back cancels them. */
+  readonly starAsked: Set<string>;
+}
+
+/** The entries the desktop offers; Select, Release Date and the playing card's are the phone's. */
+const OFFERED: ReadonlySet<string> = new Set<StreamedEntry["action"]>([
+  "playNext",
+  "addToQueue",
+  "magicQueue",
+  "addToPlaylist",
+  "favorite",
+  "unfavorite",
+  "goToAlbum",
+  "goToArtist",
+  "share",
+]);
+
+/** The Library artist named [name], as artist photos compare names; null for none. */
+const libraryArtist =
+  (db: LibraryDatabase) =>
+  (name: string): StreamedArtist | null => {
+    const key = artistPhotoName(name);
+    return (
+      db
+        .all<StreamedArtist>(
+          sql`SELECT id, name FROM artists WHERE name = ${name} COLLATE NOCASE ORDER BY id`,
+        )
+        .find((artist) => artistPhotoName(artist.name) === key) ?? null
+    );
+  };
+
+/** Whether [song] is starred: a pending favorite, or the Library's song for it starred. */
+export const streamedStarred = (db: LibraryDatabase, song: YtAlbumSong): boolean => {
+  const answer = selectNowPlayingSong(db, { trackId: ytTrackId(song.videoId), song });
+  return answer.favorite || answer.pendingFavorite;
+};
+
+/** What the Library holds of [song]: its song (with a file or missing) and its star. */
+const libraryFacts = (ports: StreamedSongPorts, song: YtAlbumSong) => {
+  const { track, favorite, pendingFavorite } = selectNowPlayingSong(ports.db, {
+    trackId: ytTrackId(song.videoId),
+    song,
+  });
+  const hasFile = track !== null && track.path !== null;
+  // A missing song downloads into its Library entry; anything else as a new song.
+  const jobId = track !== null && !hasFile ? missingSongJobId(track.id) : (song.videoId as string);
+  const status =
+    track !== null && !hasFile
+      ? ports.downloads.status(track.id)
+      : ports.downloads.ytStatus(song.videoId);
+  return { track, starred: favorite || pendingFavorite, hasFile, jobId, status };
+};
+
+export const streamedSongMenu = (
+  ports: StreamedSongPorts,
+  song: YtAlbumSong,
+  playing: boolean,
+): StreamedSongMenu => {
+  const { starred, hasFile, status } = libraryFacts(ports, song);
+  const ytMusic = ports.ytMusic();
+  const artists = streamedArtistLink(song.artists, {
+    libraryArtist: libraryArtist(ports.db),
+    enabled: ytMusic,
+    here: "/",
+  });
+  const entries: StreamedEntry[] = [
+    ...ytSongActions(artists, { favorite: starred, album: song.albumId, ytMusic, playing })
+      .filter((entry) => OFFERED.has(entry.action))
+      .map((entry): StreamedEntry => {
+        if (entry.action === "goToAlbum") return { action: "goToAlbum", album: entry.album };
+        if (entry.action !== "goToArtist")
+          return { action: entry.action as StreamedRunAction | "magicQueue" | "share" };
+        return { action: "goToArtist", artists: entry.artists };
+      }),
+    ...(hasFile ? [] : ytDownloadActions(status, { inLibrary: false })).map((action) => ({
+      action,
+    })),
+  ];
+  return {
+    title: song.title,
+    entries,
+    favorite: starred,
+    download: nowPlayingDownload(status, { hasFile }),
+  };
+};
+
+export const runStreamedAction = async (
+  ports: StreamedSongPorts,
+  song: YtAlbumSong,
+  action: StreamedRunAction,
+  playlistId?: number,
+): Promise<StreamedRunResult> => {
+  const { db, downloads } = ports;
+  const { track, hasFile, jobId, status } = libraryFacts(ports, song);
+  const download = () =>
+    track !== null && !hasFile ? downloads.missing([track.id]) : downloads.yt([song.videoId]);
+  switch (action) {
+    case "playNext":
+    case "addToQueue":
+      await ports.queue(action, song.videoId);
+      return { kind: "queued", count: 1 };
+    case "favorite":
+    case "unfavorite": {
+      const on = action === "favorite";
+      const now = Date.now();
+      if (track !== null) setFavorites(db, [track.id], on, now);
+      // Kept before its download is asked, so the file's landing finds it and stars the song.
+      if (on && track === null) addPendingFavorites(db, [pendingFavorite(song)], now);
+      if (!on) removePendingFavorites(db, [song.videoId]);
+      ports.changed();
+      if (on && !hasFile && status === null) {
+        ports.starAsked.add(jobId);
+        await download();
+      }
+      if (!on && ports.starAsked.delete(jobId)) {
+        if (unstarredDownload(status, { starAsked: true }) === "cancel")
+          await downloads.cancel([jobId]);
+      }
+      return { kind: "favorite", on, count: 1 };
+    }
+    case "addToPlaylist": {
+      if (playlistId === undefined) throw new Error("No playlist to add to");
+      const entry: PlaylistSong =
+        track === null ? { source: "stream", song } : { source: "library", trackId: track.id };
+      const result = addToPlaylist(db, playlistId, [entry], Date.now());
+      ports.changed();
+      // The desktop's playlists list the Library's songs: the song comes into the Library.
+      if (!hasFile && status === null) await download();
+      return {
+        kind: "playlist",
+        name: result.name,
+        added: result.added,
+        alreadyIn: result.alreadyIn,
+      };
+    }
+    case "download":
+      await download();
+      return { kind: "downloaded", count: 1 };
+    case "retryDownload":
+      await downloads.retry([jobId]);
+      return { kind: "downloaded", count: 1 };
+    case "cancelDownload":
+      ports.starAsked.delete(jobId);
+      await downloads.cancel([jobId]);
+      return { kind: "downloaded", count: 0 };
+  }
+};

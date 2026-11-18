@@ -10,7 +10,15 @@ import {
   type ArtworkPalette,
   type Gradient,
 } from "@wave/core";
-import { useEffect, useLayoutEffect, useMemo, useRef, useState, type CSSProperties } from "react";
+import {
+  useEffect,
+  useLayoutEffect,
+  useMemo,
+  useRef,
+  useState,
+  type CSSProperties,
+  type ReactNode,
+} from "react";
 
 import type { BrowseRow } from "../../shared/browse.ts";
 import type { PlayerView } from "../../shared/playerView.ts";
@@ -102,12 +110,15 @@ export function NowPlaying({
   run,
   links,
   onClose,
+  actions,
 }: {
   readonly view: PlayerView | undefined;
   readonly run: (action: Promise<unknown>) => void;
   /** Where a streamed song's artist and album names lead; opening one closes Now Playing. */
   readonly links: YtCreditLinks;
   readonly onClose: () => void;
+  /** Add to Playlist and Download for the song playing. */
+  readonly actions?: ReactNode;
 }) {
   const song = view?.current ?? null;
   const palette = usePalette(song);
@@ -156,11 +167,19 @@ export function NowPlaying({
         <Icon name="back" />
       </button>
       <div className="now-playing-song">
-        <Artwork large kind="song" id={song?.id} hash={song?.artworkHash} url={song?.artworkUrl} />
+        <Artwork
+          large
+          full
+          kind="song"
+          id={song?.id}
+          hash={song?.artworkHash}
+          url={song?.artworkUrl}
+        />
         <div className="now-playing-copy">
           <h1 className="truncate">{song?.title ?? text.desktopLayout.nothingPlaying}</h1>
           {song && <ArtistCredit row={song} links={links} className="truncate secondary" />}
           {song?.album && <AlbumCredit row={song} links={links} className="truncate tertiary" />}
+          {song && actions}
         </div>
       </div>
       <div className="now-playing-lyrics">
