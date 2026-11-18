@@ -262,13 +262,16 @@ else {
       codec: nativeImageCodec(nativeImage),
       pickImage: async () => {
         const result = await dialog.showOpenDialog({
+          title: text.itemActions.labels.changeImage,
           properties: ["openFile"],
-          filters: [{ name: "Images", extensions: ["jpg", "jpeg", "png"] }],
+          // Format names, which read the same in every language.
+          filters: [{ name: "JPEG, PNG", extensions: ["jpg", "jpeg", "png"] }],
         });
         return result.canceled ? undefined : result.filePaths[0];
       },
       pickPlaylists: async () => {
         const result = await dialog.showOpenDialog({
+          title: text.playlists.importPlaylists,
           properties: ["openFile", "multiSelections"],
           filters: [{ name: "M3U", extensions: ["m3u", "m3u8"] }],
         });
