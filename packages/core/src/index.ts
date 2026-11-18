@@ -2802,3 +2802,14 @@ export { MARQUEE, marqueeOffset, marqueePlan, marqueeStill, readsRightToLeft } f
 export { scanPath, scanPathKey, scanPathWithin, scanFileState } from "./desktopScan.ts";
 export type { ScanFolder } from "./desktopScan.ts";
 export type { MarqueeLine, MarqueeLineSize, MarqueePlan } from "./marquee.ts";
+export { desktopSongActions } from "./desktopSongMenu.ts";
+export type { DesktopSongSubject } from "./desktopSongMenu.ts";
+export { DESKTOP_SHORTCUTS, desktopKey, shortcutKeys } from "./desktopKeys.ts";
+export type {
+  DesktopCommand,
+  DesktopFocus,
+  DesktopKeyPress,
+  DesktopShortcut,
+  ShortcutId,
+  ShortcutKey,
+} from "./desktopKeys.ts";
