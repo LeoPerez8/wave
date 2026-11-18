@@ -8,7 +8,7 @@ use std::thread;
 use std::time::{Duration, Instant};
 
 use cpal::traits::{DeviceTrait, HostTrait, StreamTrait};
-use cpal::{ErrorKind, StreamConfig};
+use cpal::{BufferSize, ErrorKind, StreamConfig, SupportedBufferSize};
 
 use crate::player::Player;
 
@@ -16,6 +16,34 @@ use crate::player::Player;
 const TICK: Duration = Duration::from_millis(50);
 /// How often it asks the system which device is the default.
 const DEVICE_CHECK: Duration = Duration::from_secs(1);
+
+/// The callback period asked of devices that buffer deeply by default, in seconds. PulseAudio
+/// otherwise takes up to two seconds ahead, so a pause would be heard late and the position
+/// would run ahead of the sound.
+const PERIOD_SECONDS: f64 = 0.05;
+
+/// A period of [`PERIOD_SECONDS`] at `rate`, if the device takes one that size.
+pub fn buffer_for(supported: &SupportedBufferSize, rate: u32) -> BufferSize {
+    let period = (rate as f64 * PERIOD_SECONDS) as u32;
+    match supported {
+        SupportedBufferSize::Range { min, max } if (*min..=*max).contains(&period) => {
+            BufferSize::Fixed(period)
+        }
+        _ => BufferSize::Default,
+    }
+}
+
+/// The buffer to ask `device` for. Linux's sound servers buffer deeply unless asked not to;
+/// WASAPI's shared-mode default is already short.
+fn buffer_on(device: &cpal::Device, rate: u32) -> BufferSize {
+    if !cfg!(target_os = "linux") {
+        return BufferSize::Default;
+    }
+    device
+        .default_output_config()
+        .map(|config| buffer_for(config.buffer_size(), rate))
+        .unwrap_or(BufferSize::Default)
+}
 
 /// The stream that is playing, as far as deciding whether to rebuild it goes.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -202,10 +230,11 @@ fn open(host: &cpal::Host, player: &Arc<Player>, rate: u32) -> Option<Playing> {
     let device_id = device.id().ok()?.to_string();
     let broken = Arc::new(AtomicBool::new(false));
     let wanted =
-        StreamConfig { channels: 2, sample_rate: rate, buffer_size: cpal::BufferSize::Default };
+        StreamConfig { channels: 2, sample_rate: rate, buffer_size: buffer_on(&device, rate) };
     let stream = build(&device, wanted, rate, player, &broken).or_else(|| {
         // The device won't take the song as it is: play at its own rate and channels.
-        let own = device.default_output_config().ok()?.config();
+        let mut own = device.default_output_config().ok()?.config();
+        own.buffer_size = buffer_on(&device, own.sample_rate);
         build(&device, own, rate, player, &broken)
     })?;
     stream.play().ok()?;
@@ -290,6 +319,15 @@ mod tests {
                 next += 1.0;
             }
         }
+    }
+
+    #[test]
+    fn a_short_period_is_asked_for_when_the_device_allows_it() {
+        let range = SupportedBufferSize::Range { min: 1, max: 100_000 };
+        assert_eq!(buffer_for(&range, 48_000), BufferSize::Fixed(2_400));
+        let narrow = SupportedBufferSize::Range { min: 4_096, max: 8_192 };
+        assert_eq!(buffer_for(&narrow, 48_000), BufferSize::Default);
+        assert_eq!(buffer_for(&SupportedBufferSize::Unknown, 44_100), BufferSize::Default);
     }
 
     #[test]
