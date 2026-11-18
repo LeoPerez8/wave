@@ -95,7 +95,9 @@ test("a streamed song's menu from Search, the player bar, the Queue and Now Play
     await expect(actions.getByRole("button", { name: "Add to Playlist" })).toBeVisible();
     // Add to Playlist asked for the song's download: Download follows it until it's here.
     await expect(
-      actions.getByRole("button", { name: /^(Download|Waiting to download|Downloading.*|Downloaded)$/ }),
+      actions.getByRole("button", {
+        name: /^(Download|Waiting to download|Downloading.*|Downloaded)$/,
+      }),
     ).toBeVisible();
     await shot(page, "now-playing");
     await expect(actions.getByRole("button", { name: "Downloaded" })).toBeVisible({

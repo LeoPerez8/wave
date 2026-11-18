@@ -331,15 +331,13 @@ export function App() {
           text.playbackText.addToPlaylist,
           videoId !== undefined
             ? playlistItems((id) => void streamed.run(videoId, "addToPlaylist", "menu", id))
-            : actions
-                .itemFor(
-                  { action: "addToPlaylist" },
-                  target,
-                  { entries: [], count: 1, title: playingSong.title, artists: [] },
-                  "menu",
-                  () => {},
-                )
-                .open!(),
+            : actions.itemFor(
+                { action: "addToPlaylist" },
+                target,
+                { entries: [], count: 1, title: playingSong.title, artists: [] },
+                "menu",
+                () => {},
+              ).open!(),
           element,
         );
       }}

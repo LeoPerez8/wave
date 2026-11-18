@@ -87,8 +87,7 @@ const libraryFacts = (ports: StreamedSongPorts, song: YtAlbumSong) => {
   });
   const hasFile = track !== null && track.path !== null;
   // A missing song downloads into its Library entry; anything else as a new song.
-  const jobId =
-    track !== null && !hasFile ? missingSongJobId(track.id) : (song.videoId as string);
+  const jobId = track !== null && !hasFile ? missingSongJobId(track.id) : (song.videoId as string);
   const status =
     track !== null && !hasFile
       ? ports.downloads.status(track.id)
