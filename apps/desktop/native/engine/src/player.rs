@@ -241,11 +241,16 @@ impl Player {
         Progress { state: state.state, position_frames: state.position, track: state.track }
     }
 
-    /// Fills `out` (interleaved stereo at the song's rate) with what plays next, or silence.
-    pub fn render(&self, out: &mut [f32]) {
+    /// Fills `out`, interleaved stereo for a stream at `rate`, with what plays next, or silence.
+    /// A song at another rate waits in silence, its position held, for a stream at its own rate:
+    /// a next song whose rate differs ends the buffer where the previous one ended.
+    pub fn render(&self, out: &mut [f32], rate: u32) {
         let mut state = self.shared.lock();
         let mut written = 0;
-        while state.state == PlayState::Playing && written < out.len() {
+        while state.state == PlayState::Playing
+            && written < out.len()
+            && state.track.is_none_or(|track| track.sample_rate == rate)
+        {
             let take = (out.len() - written).min(state.queue.len()) & !1;
             let volume = state.volume;
             for (slot, sample) in out[written..].iter_mut().zip(state.queue.drain(..take)) {

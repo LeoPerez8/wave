@@ -17,7 +17,7 @@ fn play_frames(player: &Player, frames: usize) -> Vec<f32> {
     let deadline = Instant::now() + Duration::from_secs(10);
     while played.len() < frames * 2 {
         let before = player.progress().position_frames;
-        player.render(&mut block);
+        player.render(&mut block, RATE);
         let moved = (player.progress().position_frames - before) as usize;
         played.extend_from_slice(&block[..moved * 2]);
         if player.progress().state != PlayState::Playing {
@@ -50,7 +50,7 @@ fn a_loaded_song_waits_paused_at_its_start() {
     assert_eq!(progress.position_frames, 0);
 
     let mut block = [1.0f32; 64];
-    player.render(&mut block);
+    player.render(&mut block, RATE);
     assert!(block.iter().all(|&s| s == 0.0), "paused plays silence");
     assert_eq!(player.progress().position_frames, 0);
 }
@@ -74,7 +74,7 @@ fn pausing_holds_the_position_and_playing_resumes_there() {
     player.pause().expect("pauses");
     let held = player.progress().position_frames;
     let mut block = [1.0f32; 512];
-    player.render(&mut block);
+    player.render(&mut block, RATE);
     assert!(block.iter().all(|&s| s == 0.0));
     assert_eq!(player.progress().position_frames, held);
 
