@@ -14,7 +14,7 @@
  */
 
 /** The Worker's address, which a signed manifest's asset URLs name. app.config.ts asks it too. */
-export const UPDATES_ORIGIN = "https://wave-updates.leonardolp2424.workers.dev";
+export { WAVE_UPDATES_ORIGIN as UPDATES_ORIGIN } from "@wave/core";
 
 export const CHANNELS = ["ti", "main"] as const;
 export type Channel = (typeof CHANNELS)[number];

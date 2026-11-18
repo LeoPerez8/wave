@@ -1,5 +1,6 @@
 import type { ConfigContext, ExpoConfig } from "expo/config";
 
+import { UPDATE_PASS_HEADER, UPDATE_PASS_PLACEHOLDER } from "../../packages/core/src/updatePass.ts";
 import packageJson from "./package.json" with { type: "json" };
 
 import { versionCode } from "./plugins/appVersion.ts";
@@ -108,7 +109,7 @@ const config: ExpoConfig = {
     // Core's update policy decides when to check (apps/mobile/src/updates).
     checkAutomatically: "NEVER",
     fallbackToCacheTimeout: 0,
-    requestHeaders: { "expo-channel-name": "none" },
+    requestHeaders: { "expo-channel-name": "none", [UPDATE_PASS_HEADER]: UPDATE_PASS_PLACEHOLDER },
   },
   plugins: [
     "expo-updates",

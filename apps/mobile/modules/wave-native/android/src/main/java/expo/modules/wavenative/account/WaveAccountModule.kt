@@ -61,7 +61,7 @@ class WaveAccountModule : Module() {
       }
     }
 
-    /** `POST /v1/push` or `GET /v1/pull?since=…` with the session; `{ status, body }`. */
+    /** Sends an allowlisted request with the session and returns `{ status, body }`. */
     AsyncFunction("request") Coroutine { method: String, path: String, body: String? ->
       coded { withContext(Dispatchers.IO) { owner.client.request(method, path, body).toMap() } }
     }

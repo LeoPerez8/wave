@@ -86,7 +86,6 @@ const publish = (
     channel: "ti",
     runtimeVersion: "native-a",
     appConfig: { name: "Wave", version: "1.2.3-ti", extra: { syncUrl: "https://sync.test" } },
-    origin: ORIGIN,
     signingKey: shipped.privateKey,
     put: storage.put,
     read: storage.read,
@@ -148,7 +147,6 @@ const promote = (
     channel: "ti",
     version,
     provenance: recordOf(storage, overrides.channel ?? "ti", version),
-    origin: ORIGIN,
     signingKey: shipped.privateKey,
     put: storage.put,
     read: storage.read,
@@ -212,7 +210,7 @@ describe("GET /v1/manifest", () => {
     assert.equal(manifest.assets[0].hash, base64urlSha256("the image"));
     assert.equal(manifest.assets[0].fileExtension, ".png");
     assert.equal(manifest.assets[0].contentType, "image/png");
-    assert.ok(manifest.assets[0].url.startsWith(`${ORIGIN}/v1/assets/`));
+    assert.ok(manifest.assets[0].url.startsWith(`${UPDATES_ORIGIN}/v1/assets/`));
   });
 
   it("carries the app config, which Constants.expoConfig reads under an update", async () => {
@@ -305,7 +303,7 @@ describe("a signed update", () => {
 
   it("names its files at the origin it was signed for, whatever host was asked", async () => {
     const storage = memoryStorage();
-    await publish(storage);
+    await publish(storage, { origin: ORIGIN });
     const response = await createUpdateService(storage).fetch(
       new Request("https://elsewhere.test/v1/manifest", {
         headers: {
@@ -324,6 +322,19 @@ describe("a signed update", () => {
   it("is signed for the URL the app asks", () => {
     const appConfig = new URL("../../mobile/app.config.ts", import.meta.url);
     assert.ok(readFileSync(appConfig, "utf8").includes(`url: "${UPDATES_ORIGIN}/v1/manifest"`));
+  });
+
+  it("publishes the bundle and every asset on Wave's HTTPS update origin", async () => {
+    const storage = memoryStorage();
+    await publish(storage);
+    const part = await signedPart(await askFor(storage));
+    assert.equal(accepts(shipped.publicKey, part), true);
+    const manifest = JSON.parse(part.body);
+    for (const asset of [manifest.launchAsset, ...manifest.assets]) {
+      const url = new URL(asset.url);
+      assert.equal(url.origin, "https://wave-updates.leonardolp2424.workers.dev");
+      assert.match(url.pathname, /^\/v1\/assets\/[a-f0-9]{64}$/);
+    }
   });
 });
 

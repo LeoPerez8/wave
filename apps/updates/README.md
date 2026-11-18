@@ -2,8 +2,7 @@
 
 `apps/updates` delivers Wave's over-the-air JS updates: a Cloudflare Worker that answers the
 [`expo-updates` protocol](https://docs.expo.dev/technical-specs/expo-updates-1/) from an R2
-bucket. It's separate from the sync service, so a bad sync deploy can't take down the path that
-delivers its fix, and it needs no account or sign-in. See "Build and CI" in `docs/spec.md`.
+bucket. It verifies update passes locally with a public key. See "Build and CI" in `docs/spec.md`.
 
 | File                       | What it holds                                                    |
 | -------------------------- | ---------------------------------------------------------------- |
@@ -24,7 +23,7 @@ delivers its fix, and it needs no account or sign-in. See "Build and CI" in `doc
 
 ### `GET /v1/manifest`
 
-The check `expo-updates` makes at launch, with its headers `expo-protocol-version: 1`,
+The check Wave runs through `expo-updates`, with its headers `expo-protocol-version: 1`,
 `expo-platform: android`, `expo-channel-name` (`ti` or `main`), `expo-runtime-version` and
 `expo-current-update-id`.
 
@@ -33,13 +32,14 @@ runtime version and the phone isn't on it. `204` when there's nothing new. `400`
 platform, protocol or channel.
 
 An APK with the certificate also sends `expo-expect-signature`, and rejects an answer whose
-signature is missing or isn't from CI's key. The Worker holds no key: the publish script signs the
-manifest with its asset URLs at `UPDATES_ORIGIN` (`src/layout.ts`), and the Worker serves those
-exact bytes from any host. Changing the Worker's address takes a new publish as well as a new APK.
+signature is missing or isn't from CI's key. The publish script signs the manifest with all
+bundle and asset URLs at Wave's HTTPS `UPDATES_ORIGIN` (`src/layout.ts`). The Worker serves
+the signed bytes as published. Changing the Worker's address takes a new publish and a new APK.
 
 ### `GET /v1/assets/<sha256 hex>`
 
-A bundle or asset, named by its content and cached for good. `404` when there's none.
+A bundle or asset, named by its content. `404` when there's none. Public responses use immutable
+caching. When a pass grants access or enforcement is active, asset responses use `private, no-store`.
 
 ### `GET /v1/notes?channel=<ti|main>[&from=<version>][&to=<version>]`
 
@@ -111,8 +111,8 @@ Without the key, `publish-apk.ts` logs that it skipped and the release goes on.
 
 ## Limits
 
-Each client address gets a number of answers per route and UTC day, each route counted on its
-own:
+Requests without a valid update pass use these limits. Each route counts answers per client address
+and UTC day.
 
 | Route                 | Answers a day               | Past it                             |
 | --------------------- | --------------------------- | ----------------------------------- |
@@ -149,9 +149,41 @@ The counts live in `RequestCounts`, a SQLite-backed Durable Object per address, 
 migration in `wrangler.toml`. Workers Free allows it, and `wrangler deploy` creates it, so there's
 nothing to set up first. A refused request writes nothing, and each object deletes its counts
 when its day ends. An isolate remembers whom it refused today and refuses them again without
-asking. When the counts can't be reached, the Worker answers anyway and writes that the count
-failed to its console (`wrangler tail`; the Worker keeps no logs): what it serves is public and
-signed, so an outage of the counts mustn't stop updates.
+asking. When the counts can't be reached, the Worker answers requests that reach the limiter
+and logs the failure to its console (`wrangler tail`). Pass checks happen before the limiter.
+
+## Update passes
+
+The sync Worker issues the signed pass to an authenticated Wave session. The pass carries an
+expiry of about 30 days and contains no account data. Clients send it in `wave-update-pass`.
+Verification uses the sync Worker's Ed25519 public key. A valid pass skips the address limits
+on all four routes, including the per-asset limit. Android sends the header on the manifest and
+asset requests. The manifest extensions contain no pass.
+
+With enforcement off, a missing, invalid or expired pass gets the address limits above. Set
+`REQUIRE_UPDATE_PASS` to `true` to require a pass for OTA delivery. Without a valid pass,
+`/v1/manifest` answers `204` with no `retry-after`, and `/v1/assets/*` answers `403`.
+Notes and compatibility APK metadata still use their public address limits. If enforcement is
+requested with missing or invalid verification keys, the Worker logs the configuration problem
+and uses the address limits on all four routes. The log contains no pass or key material.
+
+### Rollout
+
+1. Set the `UPDATE_PASS_SIGNING_KEY` secret on the sync Worker and deploy sync. See [the sync
+   configuration](../sync/README.md#update-pass-key).
+2. Publish a full APK on each affected channel. It adds the native account route and bakes in the
+   Expo header placeholder. Keep the signed compatibility APK available through `/v1/apk`.
+3. Set the public `UPDATE_PASS_PUBLIC_KEYS` Worker variable to the matching Ed25519 SPKI
+   public key, as PEM or bare base64, and deploy updates with enforcement off. Check that a
+   signed-in phone on the new APK can fetch a manifest and its assets.
+4. After current phones have installed a compatible APK, explicitly set the updates Worker
+   variable `REQUIRE_UPDATE_PASS` to `true`. Remove it or set it to `false` to restore public
+   OTA delivery under the address limits. Keep any shared cache from serving previously cached
+   public asset responses at activation. Phones may still have assets they previously downloaded.
+
+For key rotation, deploy both public keys in `UPDATE_PASS_PUBLIC_KEYS` (comma-separated),
+then replace the sync signing key. Keep the old public key until passes issued under it expire.
+Keep the private key in sync and out of CI, the APK, and the update Worker.
 
 ## What R2 holds
 

@@ -1,6 +1,8 @@
 import assert from "node:assert/strict";
+import { generateKeyPairSync } from "node:crypto";
 import { readFileSync } from "node:fs";
 import { describe, it } from "node:test";
+import { importUpdatePassSigningKey, issueUpdatePass, UPDATE_PASS_HEADER } from "@wave/core";
 import { assetKey, latestApkKey, latestKey, notesHistoryKey, updateKey } from "./layout.ts";
 import {
   type CountedRoute,
@@ -8,7 +10,7 @@ import {
   DAILY_LIMIT_PER_ASSET,
   durableCounter,
 } from "./limits.ts";
-import { createUpdateService } from "./service.ts";
+import { createUpdateService, type UpdateServiceOptions } from "./service.ts";
 import { memoryCounts, memoryStorage } from "./testing.ts";
 import * as worker from "./worker.ts";
 
@@ -44,14 +46,22 @@ const PATHS: Record<CountedRoute, string> = {
   assets: `/v1/assets/${ASSET}`,
 };
 
-const setup = async (start = "2026-11-18T09:30:00.000Z") => {
+const TEST_TIME = "2026-11-18T09:30:00.000Z";
+
+const setup = async (start = TEST_TIME, options: UpdateServiceOptions = {}) => {
   const counts = memoryCounts();
   let at = Date.parse(start);
   const service = createUpdateService(await bucket(), {
     counter: durableCounter(counts.namespace),
     now: () => at,
+    ...options,
   });
-  const ask = (route: CountedRoute, address: string | null = PHONE, path = PATHS[route]) =>
+  const ask = (
+    route: CountedRoute,
+    address: string | null = PHONE,
+    path = PATHS[route],
+    pass?: string,
+  ) =>
     service.fetch(
       new Request(`${ORIGIN}${path}`, {
         headers: {
@@ -60,6 +70,7 @@ const setup = async (start = "2026-11-18T09:30:00.000Z") => {
           "expo-channel-name": "ti",
           "expo-runtime-version": "native-a",
           ...(address === null ? {} : { "cf-connecting-ip": address }),
+          ...(pass === undefined ? {} : { [UPDATE_PASS_HEADER]: pass }),
         },
       }),
     );
@@ -270,5 +281,107 @@ describe("the Worker's counts", () => {
     // SQLite-backed, the kind Workers Free allows.
     assert.match(toml, /new_sqlite_classes = \["RequestCounts"\]/);
     assert.equal(typeof worker.RequestCounts, "function");
+  });
+});
+
+describe("update passes", () => {
+  const { privateKey, publicKey } = generateKeyPairSync("ed25519", {
+    publicKeyEncoding: { type: "spki", format: "pem" },
+    privateKeyEncoding: { type: "pkcs8", format: "pem" },
+  });
+  const issue = async (now: number) =>
+    issueUpdatePass(await importUpdatePassSigningKey(privateKey), now);
+
+  it("bypasses all four limits and serves guarded assets without a public cache", async () => {
+    const { pass } = await issue(Date.now());
+    const counts = memoryCounts();
+    const env = {
+      UPDATES: await bucket(),
+      REQUEST_COUNTS: counts.namespace,
+      UPDATE_PASS_PUBLIC_KEYS: publicKey,
+      REQUIRE_UPDATE_PASS: "true",
+    };
+    const ask = (route: CountedRoute, credential?: string) =>
+      worker.default.fetch(
+        new Request(`${ORIGIN}${PATHS[route]}`, {
+          headers: {
+            "cf-connecting-ip": PHONE,
+            "expo-protocol-version": "1",
+            "expo-platform": "android",
+            "expo-channel-name": "ti",
+            "expo-runtime-version": "native-a",
+            ...(credential === undefined ? {} : { [UPDATE_PASS_HEADER]: credential }),
+          },
+        }),
+        env,
+      );
+
+    const manifest = await ask("manifest");
+    assert.equal(manifest.status, 204);
+    assert.equal(manifest.headers.get("expo-protocol-version"), "1");
+    assert.equal(manifest.headers.get("retry-after"), null);
+    const denied = await ask("assets", "invalid");
+    assert.equal(denied.status, 403);
+    assert.equal(denied.headers.get("cache-control"), "private, no-store");
+
+    for (const route of ["notes", "apk"] as const) {
+      for (let attempt = 0; attempt < DAILY_LIMITS[route]; attempt++) {
+        assert.equal((await ask(route)).status, 200);
+      }
+      assert.equal((await ask(route)).status, 429);
+    }
+    const previousCounts = counts.calls();
+    for (const route of ["manifest", "assets", "notes", "apk"] as const) {
+      const response = await ask(route, pass);
+      assert.equal(response.status, 200);
+      if (route === "assets") {
+        assert.equal(response.headers.get("cache-control"), "private, no-store");
+        assert.equal(await response.text(), "bytes");
+      }
+      if (route === "manifest") {
+        const body = await response.text();
+        assert.match(body, /expo-signature: sig="a"/);
+        assert.ok(body.includes('{"assetRequestHeaders":{}}'));
+        assert.ok(!body.includes(pass));
+      }
+    }
+    assert.equal(counts.calls(), previousCounts);
+  });
+
+  it("uses today's address limits when enforcement is off and the pass has expired", async () => {
+    const { ask, counts } = await setup(TEST_TIME, { updatePassPublicKeys: publicKey });
+    const now = Date.parse(TEST_TIME);
+    const expired = await issue(now - 32 * 86_400_000);
+    for (let attempt = 0; attempt < DAILY_LIMIT_PER_ASSET; attempt++) {
+      const response = await ask("assets", PHONE, PATHS.assets, expired.pass);
+      assert.equal(response.status, 200);
+      assert.equal(response.headers.get("cache-control"), "public, max-age=31536000, immutable");
+    }
+    assert.equal((await ask("assets", PHONE, PATHS.assets, expired.pass)).status, 429);
+    const previousCounts = counts.calls();
+    const { pass } = await issue(now);
+    const response = await ask("assets", PHONE, PATHS.assets, pass);
+    assert.equal(response.status, 200);
+    assert.equal(response.headers.get("cache-control"), "private, no-store");
+    assert.equal(counts.calls(), previousCounts);
+  });
+
+  it("falls back to the public limits when enforcement has no usable verification keys", async () => {
+    for (const keys of ["", "invalid-key-fixture", `${publicKey},invalid-key-fixture`]) {
+      const logs: string[] = [];
+      const { ask, pastLimit } = await setup(TEST_TIME, {
+        requireUpdatePass: true,
+        updatePassPublicKeys: keys,
+        log: (message) => logs.push(message),
+      });
+      assert.equal((await ask("manifest")).status, 200);
+      assert.equal((await ask("assets")).status, 200);
+      const manifest = await pastLimit("manifest", "203.0.113.8");
+      assert.equal(manifest.status, 204);
+      assert.ok(manifest.headers.has("retry-after"));
+      assert.deepEqual(logs, [
+        `update service: update pass verification keys are ${keys ? "invalid" : "missing"}; using address limits`,
+      ]);
+    }
   });
 });

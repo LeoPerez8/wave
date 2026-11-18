@@ -34,6 +34,7 @@ import { playbackState } from "@/playback/Player";
 import { prepareReload, reloadFailed } from "@/playback/reloadResume";
 
 import { createUpdateRunner } from "./updateRunner";
+import { fetchUpdateService, prepareUpdatePass, withExpoUpdatePass } from "./updatePass";
 
 /** How long the service gets to say which APK is the newest. */
 const APK_CHECK_TIMEOUT = "15 seconds";
@@ -100,7 +101,7 @@ const fetchLatestApk = (
   installer: NonNullable<typeof WaveSelfInstall>,
 ): Effect.Effect<LatestApk | null, unknown> =>
   Effect.tryPromise(async (signal) => {
-    const response = await fetch(url, { signal });
+    const response = await fetchUpdateService(url, signal);
     // The channel hasn't published one yet.
     if (response.status === 404) return null;
     if (!response.ok) throw new Error(`The service answered ${response.status}`);
@@ -171,10 +172,10 @@ const askMobileData = (): Promise<boolean> => {
 
 const runner = createUpdateRunner({
   client: {
-    check: Effect.tryPromise(() => Updates.checkForUpdateAsync()).pipe(
+    check: Effect.tryPromise(() => withExpoUpdatePass(Updates.checkForUpdateAsync)).pipe(
       Effect.map((result) => result.isAvailable),
     ),
-    download: Effect.tryPromise(() => Updates.fetchUpdateAsync()).pipe(
+    download: Effect.tryPromise(() => withExpoUpdatePass(Updates.fetchUpdateAsync)).pipe(
       Effect.map((result) => result.isNew || result.isRollBackToEmbedded),
     ),
     apply: Effect.tryPromise(async () => {
@@ -270,6 +271,7 @@ let started = false;
 export const startAppUpdates = (): void => {
   if (started || !Updates.isEnabled) return;
   started = true;
+  void prepareUpdatePass();
   let stopFollowingPlayer: (() => void) | null = null;
   const followPlayerIfHidden = (): void => {
     if (AppState.currentState === "active") {
@@ -282,8 +284,10 @@ export const startAppUpdates = (): void => {
   AppState.addEventListener("change", (appState) => {
     followPlayerIfHidden();
     // On the spot, as a quick return could beat the fresh answers and hide that Wave ever left.
-    if (appState === "active") runner.cameToFront();
-    else runner.reconsider();
+    if (appState === "active") {
+      void prepareUpdatePass();
+      runner.cameToFront();
+    } else runner.reconsider();
     reconsiderWithFreshAccess();
   });
   followPlayerIfHidden();
