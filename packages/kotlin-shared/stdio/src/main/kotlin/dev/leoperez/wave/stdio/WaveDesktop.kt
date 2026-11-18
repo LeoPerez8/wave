@@ -1,10 +1,12 @@
 package dev.leoperez.wave.stdio
 
+import expo.modules.wavenative.lyrics.LyricsReader
 import expo.modules.wavenative.tags.AudioTagReader
 import expo.modules.wavenative.tags.JAudioTaggerReader
 import expo.modules.wavenative.yt.YtClient
 import expo.modules.wavenative.yt.YtException
 import expo.modules.wavenative.yt.YtFailure
+import expo.modules.wavenative.yt.YtPages
 import expo.modules.wavenative.yt.ytHttpClient
 import java.io.File
 import kotlinx.serialization.json.JsonElement
@@ -24,6 +26,8 @@ import kotlinx.serialization.json.contentOrNull
  *   address, the headers to send, its type, itag and length. `fresh` drops the address googlevideo
  *   just turned down (403/410) first. The address and headers are the session's: never logged.
  * - `setYtMusic` `{enabled}`: YT Music on or off (Settings), as the phone's `setEnabled`.
+ * - `readLyrics` `{path}`: a track's lyrics as found, `{embedded, sidecar}`, either null (`LyricsReader`).
+ * - `ytLyrics` `{videoId}`: YT Music's lyrics for a song (plain text), or null when it has none.
  *
  * Wave's data (the YouTube session and visitor data) lives in [dataDir].
  */
@@ -46,6 +50,10 @@ class WaveDesktop(
           ?.let { java.util.Base64.getEncoder().encodeToString(it) }))
       }
       "resolveStream" -> resolveStream(params.string("videoId"), params.flag("fresh") ?: false)
+      "readLyrics" -> LyricsReader(tags).read(File(params.string("path"))).let {
+        jsonOf(mapOf("embedded" to it.embedded, "sidecar" to it.sidecar))
+      }
+      "ytLyrics" -> ytLyrics(params.string("videoId"))
       "setYtMusic" -> {
         yt.enabled = params.flag("enabled") ?: throw CodedError("ERR_BAD_PARAMS", "enabled must be a boolean")
         JsonNull
@@ -73,6 +81,13 @@ class WaveDesktop(
         "loudnessDb" to stream.loudnessDb,
       ),
     )
+  }
+
+  private suspend fun ytLyrics(videoId: String): JsonElement {
+    if (!VIDEO_ID.matches(videoId)) throw CodedError("ERR_BAD_PARAMS", "videoId must be a video id")
+    val pages = YtPages(yt)
+    val browseId = pages.song(videoId).lyricsBrowseId ?: return JsonNull
+    return JsonPrimitive(pages.lyrics(browseId))
   }
 
   private fun JsonObject.flag(name: String): Boolean? =
