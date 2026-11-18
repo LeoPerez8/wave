@@ -9,4 +9,6 @@ export const desktopWindowPtBr = {
     "A música continua tocando. Reabra o Wave pelo menu de aplicativos, pela bandeja ou pelos controles de mídia do sistema. Para encerrar ao fechar, ative Fechar a janela encerra o Wave em Ajustes › Janela.",
   show: "Mostrar Wave",
   quit: "Sair",
+  startFailed: "O Wave não pôde iniciar",
+  startFailedHint: "Algo de que o Wave precisa não iniciou. Abra o Wave de novo.",
 };

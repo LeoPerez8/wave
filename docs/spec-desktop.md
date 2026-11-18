@@ -320,6 +320,9 @@ The prototype was approved on 2026-11-18 after an Impeccable critique; its decis
   tray. Quit is the tray menu's Quit or Ctrl+Q. Settings offers "Closing the window quits Wave".
 - Starting with the system is off by default; the switch starts Wave hidden in the tray, not
   playing.
+- The window shows once its page and Wave's services are ready, and after 5 seconds without
+  them; it never waits for the JVM. When the services fail to start, Wave says "Wave couldn't
+  start" and quits, so no hidden process is left holding the single instance.
 - Single instance: a second launch shows the running window. A YT Music or Spotify link passed
   to the second launch is not handled; links arrive by paste or drag.
 - The system media controls (SMTC on Windows, MPRIS on Linux) show title, artist, album, cover
