@@ -2,7 +2,8 @@
  * The update service's routes, over `UpdateStorage`, which R2 implements in production
  * (worker.ts) and memory in the tests. They answer GET only. The one write is the notes
  * history a read rebuilds from the stored notes; the binding itself can write and delete, so
- * that limit is this code's, not R2's. See README.md.
+ * that limit is this code's, not R2's. Each address gets a daily number of answers per route
+ * (limits.ts). See README.md.
  */
 
 import { versionOrder } from "@wave/core";
@@ -22,6 +23,14 @@ import {
   notesPrefix,
   updateKey,
 } from "./layout.ts";
+import {
+  type CountedRoute,
+  DAILY_LIMITS,
+  type RequestCounter,
+  addressKey,
+  dayEndsAt,
+  dayOf,
+} from "./limits.ts";
 
 export interface UpdateStorage {
   get(key: string): Promise<{
@@ -198,16 +207,97 @@ const apkRoute = async (url: URL, storage: UpdateStorage): Promise<Response> => 
   });
 };
 
-export const createUpdateService = (storage: UpdateStorage) => ({
-  fetch: async (request: Request): Promise<Response> => {
-    if (request.method !== "GET") return new Response("Method not allowed", { status: 405 });
-    const url = new URL(request.url);
-    const { pathname } = url;
-    if (pathname === "/v1/manifest") return manifestRoute(request, storage);
-    if (pathname === "/v1/notes") return notesRoute(url, storage);
-    if (pathname === "/v1/apk") return apkRoute(url, storage);
-    const asset = /^\/v1\/assets\/([^/]+)$/.exec(pathname)?.[1];
-    if (asset !== undefined) return assetRoute(asset, storage);
-    return notFound();
-  },
-});
+/** The counted route a path belongs to, or null for one that's answered 404 at no cost. */
+const routeOf = (pathname: string): CountedRoute | null => {
+  if (pathname === "/v1/manifest") return "manifest";
+  if (pathname === "/v1/notes") return "notes";
+  if (pathname === "/v1/apk") return "apk";
+  return /^\/v1\/assets\/[^/]+$/.test(pathname) ? "assets" : null;
+};
+
+/**
+ * The answer once an address has had its answers for the day. The manifest's is the protocol's
+ * "nothing new", which expo-updates takes as a finished check: the phone stays on what it runs
+ * and checks again later. The other routes say to come back after the next UTC midnight.
+ */
+const pastLimit = (route: CountedRoute, now: number): Response => {
+  const day = dayOf(now);
+  const retryAfter = String(Math.max(1, Math.ceil((dayEndsAt(day) - now) / 1000)));
+  if (route === "manifest") {
+    return new Response(null, {
+      status: 204,
+      headers: { ...PROTOCOL_HEADERS, "retry-after": retryAfter },
+    });
+  }
+  return new Response("Too many requests today", {
+    status: 429,
+    headers: { "retry-after": retryAfter, "cache-control": "private, max-age=0" },
+  });
+};
+
+/** How many refusals an isolate remembers before it starts over. */
+const REMEMBERED_REFUSALS = 10_000;
+
+export interface UpdateServiceOptions {
+  /** Counts each address's answers. Without one, nothing is counted. */
+  readonly counter?: RequestCounter;
+  readonly now?: () => number;
+}
+
+/** The service. Make one per isolate: it remembers who it refused today, so as not to ask again. */
+export const createUpdateService = (
+  storage: UpdateStorage,
+  { counter, now = Date.now }: UpdateServiceOptions = {},
+) => {
+  /** `<address key> <route>` to the day it was refused on. */
+  const refused = new Map<string, string>();
+
+  /** Whether the address may have this answer today. A failing count lets it through. */
+  const withinLimit = async (request: Request, route: CountedRoute): Promise<boolean> => {
+    // Cloudflare sets it on every request that reaches the Worker; only the tests leave it out.
+    // Kept only as a hash, and never logged.
+    const address = request.headers.get("cf-connecting-ip");
+    if (counter === undefined || address === null) return true;
+    const key = await addressKey(address);
+    const day = dayOf(now());
+    const remembered = `${key} ${route}`;
+    if (refused.get(remembered) === day) return false;
+    let counted: boolean;
+    try {
+      counted = await counter.count(key, route, day, DAILY_LIMITS[route]);
+    } catch (error) {
+      // What's served is public and signed: an outage of the counts mustn't stop updates.
+      console.error(
+        "update service: the request count failed:",
+        error instanceof Error ? error.message : "unknown",
+      );
+      return true;
+    }
+    if (!counted) {
+      if (refused.size >= REMEMBERED_REFUSALS) refused.clear();
+      refused.set(remembered, day);
+    }
+    return counted;
+  };
+
+  return {
+    fetch: async (request: Request): Promise<Response> => {
+      if (request.method !== "GET") return new Response("Method not allowed", { status: 405 });
+      const url = new URL(request.url);
+      const { pathname } = url;
+      const route = routeOf(pathname);
+      if (route === null) return notFound();
+      if (!(await withinLimit(request, route))) return pastLimit(route, now());
+      switch (route) {
+        case "manifest":
+          return manifestRoute(request, storage);
+        case "notes":
+          return notesRoute(url, storage);
+        case "apk":
+          return apkRoute(url, storage);
+        case "assets":
+          return assetRoute(pathname.slice("/v1/assets/".length), storage);
+      }
+    },
+  };
+};

@@ -8,3 +8,12 @@ compatibility_date = "2026-10-01"
 binding = "UPDATES"
 bucket_name = "wave-updates"
 
+# Each address's answers per route and UTC day (src/limits.ts): one SQLite-backed Durable Object
+# per address, which Workers Free allows and a deploy creates, so nothing is set up by hand.
+[[durable_objects.bindings]]
+name = "REQUEST_COUNTS"
+class_name = "RequestCounts"
+
+[[migrations]]
+tag = "v1"
+new_sqlite_classes = ["RequestCounts"]
