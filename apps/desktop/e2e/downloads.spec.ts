@@ -8,6 +8,7 @@ import type { WaveBridge } from "../src/shared/bridge.ts";
 import type { DownloadsView } from "../src/shared/downloads.ts";
 import type { SongTags } from "../src/shared/tags.ts";
 import { Database } from "@wave/client";
+import { createPlaylist } from "@wave/client/db/playlists";
 import { addTrack, star, type TestDatabase } from "@wave/client/testing";
 import { sql } from "drizzle-orm";
 import * as Effect from "effect/Effect";
@@ -93,6 +94,57 @@ test("a missing Search song waits offline and resumes its download instead of pl
     await expect.poll(async () => (await downloads(page)).online).toBe(true);
     // With no source enabled, the resumed job fails and remains available to retry.
     await expect.poll(async () => (await downloads(page)).failed).toBe(1);
+  } finally {
+    await app.close();
+    rmSync(data, { recursive: true, force: true });
+  }
+});
+
+test("Play on a playlist of missing songs says so and offers to download them", async () => {
+  const data = mkdtempSync(join(tmpdir(), "wave-e2e-list-"));
+  await Effect.runPromise(
+    Effect.gen(function* () {
+      const db = (yield* Database) as unknown as TestDatabase;
+      const ids = [
+        addTrack(db, { title: "Missing Road", artist: "Nick Drake", album: "Pink Moon" }),
+        addTrack(db, { title: "Missing Moon", artist: "Nick Drake", album: "Pink Moon" }),
+      ];
+      db.run(sql`UPDATE tracks SET path = NULL`);
+      createPlaylist(
+        db,
+        "Evening",
+        ids.map((trackId) => ({ source: "library" as const, trackId })),
+        1000,
+      );
+      // Nothing streams and nothing is asked of YouTube.
+      db.run(sql`INSERT INTO desktop_settings (key, value) VALUES ('settings.ytMusic', 'off')`);
+    }).pipe(Effect.provide(libraryLayer(join(data, "wave.db")))),
+  );
+  const app = await electron.launch({
+    args: [appFolder, "--lang=en-US"],
+    env: { ...process.env, WAVE_DATA_DIR: data, WAVE_MUSIC_DIR: join(data, "Absent") },
+  });
+  try {
+    const page = await app.firstWindow();
+    await app.evaluate(({ net }) => {
+      net.isOnline = () => false;
+    });
+    await page.getByRole("button", { name: "Evening", exact: true }).click();
+    const hero = page.getByTestId("hero");
+    await expect(hero.getByTestId("list-download")).toHaveText("Download Missing Songs");
+    await expect(hero.getByText("2 songs aren't on this computer")).toBeVisible();
+    await hero.getByRole("button", { name: "Play", exact: true }).click();
+    const notice = page.getByRole("status").filter({ hasText: "None of these songs" });
+    await expect(notice).toBeVisible();
+    await page.screenshot({ path: test.info().outputPath(`list-nothing-${process.platform}.png`) });
+    await notice.getByRole("button", { name: "Download Missing Songs" }).click();
+    await expect(page.getByText("Downloading 2 songs", { exact: true })).toBeVisible();
+    await expect.poll(async () => (await downloads(page)).rows).toBe(2);
+    await page.screenshot({
+      path: test.info().outputPath(`list-downloading-${process.platform}.png`),
+    });
+    const view = await page.evaluate(() => (window as unknown as Wave).wave.playback.view());
+    expect(view.current).toBeNull();
   } finally {
     await app.close();
     rmSync(data, { recursive: true, force: true });

@@ -50,10 +50,10 @@ const FAILED: YtSearchPage = {
 };
 
 /** The line the section shows instead of results; offline and failures have their quiet line. */
-const NOTES: Readonly<Record<string, string>> = {
+const notes = (): Readonly<Record<string, string>> => ({
   noMatches: text.playbackText.nothingOnlineMatches,
   allInLibrary: text.playbackText.everythingFoundOnlineIsAlreadyInYourLibrary,
-};
+});
 
 /**
  * The section Search showed last, so Back to Search shows it again as it was (Online picked or
@@ -216,8 +216,8 @@ export function YtResults({
           data-testid="yt-results"
         >
           <h2 id="yt-results-heading">{labels.youTubeMusic}</h2>
-          {results.note !== null && NOTES[results.note] !== undefined && (
-            <p className="secondary">{NOTES[results.note]}</p>
+          {results.note !== null && notes()[results.note] !== undefined && (
+            <p className="secondary">{notes()[results.note]}</p>
           )}
           {songs.length > 0 && (
             <div role="list" aria-label={text.playbackText.songs} data-testid="yt-songs">

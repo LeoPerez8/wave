@@ -71,7 +71,7 @@ const storedPreference = (db: LibraryDatabase, key: string): string | null =>
     ?.value ?? null;
 
 /** Every synced value is kept, so joining the account again pushes what it held. */
-const keepPreference = (db: LibraryDatabase, key: string, value: string | null): void => {
+export const keepPreference = (db: LibraryDatabase, key: string, value: string | null): void => {
   if (value === null) db.run(sql`DELETE FROM desktop_synced_preferences WHERE key = ${key}`);
   else
     db.run(

@@ -6,7 +6,7 @@ import { Icon } from "./Icon.tsx";
 import type { PanelTab } from "./SidePanel.tsx";
 import { SleepTimer } from "./SleepTimer.tsx";
 import { useDesktopKeys } from "./keys.ts";
-import { labels, text } from "./text.ts";
+import { albumName, artistName, labels, text } from "./text.ts";
 import { Artwork, time } from "./VirtualTable.tsx";
 import { AlbumCredit, ArtistCredit, type YtCreditLinks } from "./YtCredit.tsx";
 
@@ -199,8 +199,8 @@ export function PlayerBar({
                 <div className="truncate player-title">{song?.title ?? labels.nothingPlaying}</div>
                 {song && (
                   <div className="player-credit-twin" aria-hidden="true">
-                    <div className="truncate secondary">{song.artist}</div>
-                    <div className="truncate tertiary">{song.album}</div>
+                    <div className="truncate secondary">{artistName(song.artist)}</div>
+                    <div className="truncate tertiary">{albumName(song.album)}</div>
                   </div>
                 )}
               </div>

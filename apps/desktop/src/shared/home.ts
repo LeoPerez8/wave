@@ -1,3 +1,4 @@
+import type { DiscoverRowId } from "@wave/core";
 import type { Page } from "./bridge.ts";
 import type { BrowseRow } from "./browse.ts";
 
@@ -17,5 +18,6 @@ export interface HomeSectionView {
   readonly rows: Page<HomeRow>;
 }
 export interface HomeView extends Page<HomeSectionView> {
+  readonly discoverRows: readonly DiscoverRowId[];
   readonly hint: "empty" | "play" | "none" | null;
 }
