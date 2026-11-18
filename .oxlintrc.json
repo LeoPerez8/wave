@@ -36,6 +36,8 @@
     "**/build/**",
     "**/out/**",
     "**/coverage/**",
+    "**/test-results/**",
+    "**/playwright-report/**",
     "**/.cache/**",
     "**/.turbo/**",
     "**/.next/**",
