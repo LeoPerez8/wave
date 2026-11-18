@@ -74,6 +74,21 @@ const shellColours = (shell: Element | null) => {
   };
 };
 
+/** The shell's colours, read again whenever App sets new ones (a scheme or theme change). */
+function useShellColours() {
+  const [colours, setColours] = useState(() =>
+    shellColours(document.querySelector(".desktop-shell")),
+  );
+  useEffect(() => {
+    const shell = document.querySelector(".desktop-shell");
+    if (shell === null) return;
+    const observer = new MutationObserver(() => setColours(shellColours(shell)));
+    observer.observe(shell, { attributes: true, attributeFilter: ["style"] });
+    return () => observer.disconnect();
+  }, []);
+  return colours;
+}
+
 export function NowPlaying({
   view,
   run,
@@ -87,15 +102,12 @@ export function NowPlaying({
   const palette = usePalette(song);
   const root = useRef<HTMLElement>(null);
   const opener = useRef<Element | null>(null);
-  const theme = shellColours(document.querySelector(".desktop-shell"));
-  const themeKey = [theme.scheme, theme.ground, ...theme.ink].join();
+  const theme = useShellColours();
   const ground = useMemo<{ gradient: Gradient; dim: number } | null>(() => {
     if (!HEX.test(theme.ground) || !theme.ink.every((ink) => HEX.test(ink))) return null;
     const gradient = paletteGradient(palette, theme);
     return { gradient, dim: lyricsDimOpacity(gradient, theme.ink[0]!) };
-    // The theme is read from the shell each render; its colours are what matter.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [palette, themeKey]);
+  }, [palette, theme]);
   // Focus moves in, and back to the bar's artwork or title once it closes.
   useLayoutEffect(() => {
     opener.current = document.activeElement;

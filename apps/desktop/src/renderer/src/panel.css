@@ -222,6 +222,10 @@
   font-size: 11px;
   font-variant-numeric: tabular-nums;
 }
+/* The playing row has no remove button; its time lines up with the others'. */
+.queue-row.playing .queue-time {
+  margin-right: 34px;
+}
 .queue-row .queue-remove {
   width: 24px;
   height: 24px;
