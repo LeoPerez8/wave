@@ -5,6 +5,8 @@
  * catalogue; `plural.ts` writes counted phrases.
  */
 
+import { desktopEn } from "./catalogue/desktopEn.ts";
+import { desktopPtBr } from "./catalogue/desktopPtBr.ts";
 import { en, type Catalogue } from "./catalogueEn.ts";
 import { ptBR } from "./cataloguePtBr.ts";
 
@@ -31,7 +33,45 @@ export const resolveAppLanguage = (preferred: readonly string[]): AppLanguage =>
   return "en";
 };
 
-const CATALOGUES: Readonly<Record<AppLanguage, Catalogue>> = { en, "pt-BR": ptBR };
+/** The kind of device Wave runs on, for the phrases that name it. */
+export type Device = "phone" | "desktop";
 
-/** Every piece of interface text in [language]. */
-export const catalogueOf = (language: AppLanguage): Catalogue => CATALOGUES[language];
+/** Phrases that replace a catalogue's own, nested as the catalogue nests them. */
+export type CatalogueVariants = Variants<Catalogue>;
+
+type Variants<T> = {
+  readonly [K in keyof T]?: T[K] extends string | ((...args: never[]) => unknown)
+    ? T[K]
+    : Variants<T[K]>;
+};
+
+const isGroup = (value: unknown): value is Record<string, unknown> =>
+  typeof value === "object" && value !== null && !Array.isArray(value);
+
+/** [base] with each phrase [variants] holds in its place. */
+const merge = (
+  base: Readonly<Record<string, unknown>>,
+  variants: Readonly<Record<string, unknown>>,
+): Record<string, unknown> => {
+  const merged: Record<string, unknown> = { ...base };
+  for (const [key, variant] of Object.entries(variants)) {
+    const own = merged[key];
+    merged[key] = isGroup(own) && isGroup(variant) ? merge(own, variant) : variant;
+  }
+  return merged;
+};
+
+const withVariants = (base: Catalogue, variants: CatalogueVariants): Catalogue =>
+  merge(base, variants) as Catalogue;
+
+const CATALOGUES: Readonly<Record<Device, Readonly<Record<AppLanguage, Catalogue>>>> = {
+  phone: { en, "pt-BR": ptBR },
+  desktop: { en: withVariants(en, desktopEn), "pt-BR": withVariants(ptBR, desktopPtBr) },
+};
+
+/**
+ * Every piece of interface text in [language], as [device] reads it: the
+ * desktop says "This computer" where the phone says "This phone".
+ */
+export const catalogueOf = (language: AppLanguage, device: Device = "phone"): Catalogue =>
+  CATALOGUES[device][language];
