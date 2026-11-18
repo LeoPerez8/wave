@@ -228,6 +228,11 @@ already distributed, and declares the licence. Each is a separate instruction.
   to require a reviewer for it. On `main` the owner's approval already gates it.
 - **The gate and the bot.** The gate has passed only in tests. If it refuses the bot's first real
   run, `ti` releases stop until a fix lands on `main`.
+- **Sessions lost without signing out.** An online Sign Out ends its session on the service, but a
+  phone that reinstalls Wave, resets, or signs out offline leaves its session there. A user who does
+  that often enough can reach the ten valid sessions and be refused sign-in until those sessions go
+  90 days unused. The way back is the owner removing that account's stale sessions by hand, or a
+  future device-management feature.
 - **Settings drift.** The GitHub and Cloudflare reads are from 2026-11-17 and 2026-11-18. Nothing
   re-reads them, so they must be read again before any activation.
 
