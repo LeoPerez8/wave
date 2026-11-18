@@ -44,7 +44,10 @@ export interface PlaybackShape {
   readonly dismissUndo: () => void;
   /** Stars or unstars the current song. */
   readonly favorite: () => void;
-  /** Reads the songs' rows again, after something else changed them (a star, a removal). */
+  /**
+   * Reads the songs' rows again, after something else changed them (a star, a removal), and
+   * tells the account's sync.
+   */
   readonly refresh: () => void;
   /** Sets the volume (0 to 1) and mute, kept across launches. */
   readonly volume: (value: number, muted: boolean) => Promise<void>;
@@ -254,6 +257,8 @@ export const playbackLayer = Layer.effect(
       },
       refresh: () => {
         revision++;
+        // A star from a song's menu or the selection bar goes up as the player's does.
+        tell("starred");
       },
       volume: async (value, mute) => {
         await run(player.setVolume(mute ? 0 : value));

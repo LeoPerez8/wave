@@ -803,6 +803,22 @@ test("signing in from the window brings the account's playlists and theme, and a
       await wave.playback.favorite();
       await pass(10_000);
       await until(async () => (await pullAll(app.service, phone)).favorites.length === 1);
+
+      // A star from a song's menu goes up the same way.
+      const roadRow = (await wave.library.browse({ kind: "playlist", id: night.id }, 0, 10))
+        .items[1]!;
+      await wave.songs.run(
+        { scope: { kind: "playlist", id: night.id }, ids: [roadRow.id] },
+        "favorite",
+      );
+      await pass(10_000);
+      // Asked seldom: the service answers 429 to a client that pulls too often.
+      let favorites = 0;
+      for (let tries = 0; tries < 20 && favorites < 2; tries++) {
+        await new Promise((resolve) => setTimeout(resolve, 100));
+        favorites = (await pullAll(app.service, phone)).favorites.length;
+      }
+      assert.equal(favorites, 2, "the song menu's star went up");
     } finally {
       await runtime.dispose();
     }
