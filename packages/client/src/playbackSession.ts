@@ -100,13 +100,26 @@ export interface SessionSnapshot {
   readonly canUndo: boolean;
 }
 
+/**
+ * A queue command (Core's `QueueCommand`). Previous with no position goes by the one the session
+ * holds when the command's turn comes, which a caller can't know while another command runs.
+ */
+export type SessionCommand =
+  | Exclude<QueueCommand, { readonly type: "previous" }>
+  | { readonly type: "previous"; readonly positionMs?: number | undefined };
+
 export interface PlaybackSession {
   readonly snapshot: () => SessionSnapshot;
-  /** A queue command (Core's `QueueCommand`); a play replacing a queue offers Undo. */
-  readonly dispatch: (command: QueueCommand) => Promise<void>;
+  /**
+   * A queue command; a play replacing a queue offers Undo. When the song it moves to won't
+   * load, the queue still changes, nothing plays, and the call rejects.
+   */
+  readonly dispatch: (command: SessionCommand) => Promise<void>;
+  /** Plays the queue's current song, loading it first when the audio process doesn't hold it. */
   readonly play: () => Promise<void>;
   readonly pause: () => Promise<void>;
   readonly seek: (positionMs: number) => Promise<void>;
+  /** Back to the queue the last play replaced; it rejects as `dispatch` does. */
   readonly undo: () => Promise<void>;
   readonly dismissUndo: () => void;
   /** What the audio process pushed: its status and the moves and fades since its last report. */
@@ -318,6 +331,23 @@ export const createPlaybackSession = async (
     if (play) accept(await audio.play());
     save();
   };
+  /**
+   * Loads the queue's current song after a move to it. When it won't load, the audio process
+   * still holds the song before it: that one stops, nothing is lined up, and the failure is
+   * thrown once the change is saved and told.
+   */
+  const loadMoved = async (positionMs: number, play: boolean) => {
+    try {
+      await loadCurrent(positionMs, play);
+    } catch (cause) {
+      planned = null;
+      await audio.pause().catch(() => undefined);
+      await audio.preload().catch(() => undefined);
+      accept({ state: "idle", positionMs: 0 });
+      save();
+      throw cause;
+    }
+  };
   const restart = async (pause: boolean) => {
     feedSignal({
       type: "seek",
@@ -353,13 +383,17 @@ export const createPlaybackSession = async (
 
   return {
     snapshot: () => ({ queue, status, canUndo: takeBack !== null }),
-    dispatch: (command) =>
+    dispatch: (given) =>
       serial(async () => {
         const before = queue;
         const previous = currentEntry(queue);
         const latest = await audio.status();
         // The audio process's position is newer than the last one reported.
         if (latest.key === currentKey()) accept(latest);
+        const command: QueueCommand =
+          given.type === "previous"
+            ? { type: "previous", positionMs: given.positionMs ?? status.positionMs }
+            : given;
         const result = reduce(command);
         if (command.type === "play") {
           takeBack = queueUndo(
@@ -379,7 +413,7 @@ export const createPlaybackSession = async (
           planned = null;
           accept({ state: "idle", positionMs: 0 });
         } else if (moved) {
-          await loadCurrent(0, result.playback === "play" || status.state === "playing");
+          await loadMoved(0, result.playback === "play" || status.state === "playing");
         } else if (result.playback === "restart" || result.playback === "stop") {
           await restart(result.playback === "stop");
           await prepare();
@@ -390,7 +424,9 @@ export const createPlaybackSession = async (
     play: () =>
       serial(async () => {
         if (currentEntry(queue) === null) return;
-        accept(await audio.play());
+        // A song that wouldn't load left the audio process without the queue's current one.
+        if (status.state === "idle") await loadCurrent(status.positionMs, true);
+        else accept(await audio.play());
         save();
       }),
     pause: () =>
@@ -425,7 +461,7 @@ export const createPlaybackSession = async (
         }
         leave(next, "playlist");
         queue = next;
-        await loadCurrent(undo.positionMs, true);
+        await loadMoved(undo.positionMs, true);
       }),
     dismissUndo: () => {
       takeBack = null;
