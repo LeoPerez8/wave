@@ -4,6 +4,8 @@ import type { AccountView } from "../../shared/account.ts";
 import type { BrowseRow, BrowseScope } from "../../shared/browse.ts";
 import type { ScanStatus } from "../../shared/library.ts";
 import { PlayerBar, usePlayback } from "./PlayerBar.tsx";
+import { NowPlaying } from "./NowPlaying.tsx";
+import { SidePanel, useSidePanel } from "./SidePanel.tsx";
 import { Icon } from "./Icon.tsx";
 import { Artwork, VirtualTable } from "./VirtualTable.tsx";
 import { FolderSettings } from "./FolderSettings.tsx";
@@ -76,6 +78,8 @@ export function App() {
   const failed = useCallback(() => setError(text.desktopLibrary.actionFailed), []);
   const playback = usePlayback(failed);
   const [shortcuts, setShortcuts] = useState(false);
+  const panel = useSidePanel();
+  const [nowPlaying, setNowPlaying] = useState(false);
   /** Selection mode, for the list it was turned on in. */
   const [selecting, setSelecting] = useState<{
     readonly list: string;
@@ -190,6 +194,7 @@ export function App() {
     close: () => {
       if (actions.closeMenu()) return;
       if (shortcuts) return setShortcuts(false);
+      if (nowPlaying) return setNowPlaying(false);
       if (selection) return setSelection(undefined);
       return false;
     },
@@ -212,7 +217,12 @@ export function App() {
   const revision =
     (scan?.revision ?? 0) + (playback.view?.revision ?? 0) + (account?.revision ?? 0);
   return (
-    <main ref={shell} className="desktop-shell" data-appearance={appearance}>
+    <main
+      ref={shell}
+      className="desktop-shell"
+      data-appearance={appearance}
+      data-panel={panel.tab ?? undefined}
+    >
       <header className="titlebar">
         <div className="brand">{labels.brand}</div>
         <div className="history-buttons">
@@ -225,7 +235,7 @@ export function App() {
           />
         </div>
       </header>
-      <aside className="sidebar">
+      <aside className="sidebar" inert={nowPlaying}>
         <label className="search-field" title={labels.search}>
           <Icon name="search" />
           <input
@@ -339,7 +349,7 @@ export function App() {
           <span>{labels.settings}</span>
         </button>
       </aside>
-      <div className="content" ref={content}>
+      <div className="content" ref={content} inert={nowPlaying}>
         {hero ? (
           <div className="hero" data-testid="hero">
             <Artwork large hash={hero.artworkHash} artist={route.kind === "artist"} />
@@ -515,7 +525,25 @@ export function App() {
           </>
         )}
       </div>
-      <PlayerBar playback={playback} />
+      {panel.tab && (
+        <SidePanel
+          tab={panel.tab}
+          onTab={panel.show}
+          view={playback.view}
+          run={playback.run}
+          onError={failed}
+          hidden={nowPlaying}
+        />
+      )}
+      {nowPlaying && (
+        <NowPlaying view={playback.view} run={playback.run} onClose={() => setNowPlaying(false)} />
+      )}
+      <PlayerBar
+        playback={playback}
+        panel={panel.tab}
+        onPanel={panel.toggle}
+        onNowPlaying={() => setNowPlaying(true)}
+      />
       {actions.overlays}
       {shortcuts && <ShortcutsSheet onClose={() => setShortcuts(false)} />}
     </main>

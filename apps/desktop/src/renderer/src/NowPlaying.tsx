@@ -1,0 +1,150 @@
+/**
+ * Now Playing (docs/spec-desktop.md, Window and layout): the artwork, the title and the lyrics
+ * over a background tinted from the artwork, as on the phone. It opens from the player bar's
+ * artwork or title, leaves the bar in reach, and closes with Esc or its close button.
+ */
+import {
+  lyricsDimOpacity,
+  paletteGradient,
+  pixelPalette,
+  type ArtworkPalette,
+  type Gradient,
+} from "@wave/core";
+import { useEffect, useLayoutEffect, useMemo, useRef, useState, type CSSProperties } from "react";
+
+import type { BrowseRow } from "../../shared/browse.ts";
+import type { PlayerView } from "../../shared/playerView.ts";
+import { Icon } from "./Icon.tsx";
+import { LyricsView } from "./LyricsView.tsx";
+import { text } from "./text.ts";
+import { Artwork } from "./VirtualTable.tsx";
+import "./panel.css";
+
+/** The artwork is sampled this small: plenty for a palette. */
+const SAMPLE = 48;
+const HEX = /^#[0-9a-f]{6}$/i;
+
+/** The palette of the image at [src] (a data URL), or null when it can't be read. */
+const paletteOf = (src: string) =>
+  new Promise<ArtworkPalette | null>((resolve) => {
+    const image = new Image();
+    image.onload = () => {
+      const canvas = document.createElement("canvas");
+      canvas.width = SAMPLE;
+      canvas.height = SAMPLE;
+      const context = canvas.getContext("2d", { willReadFrequently: true });
+      if (context === null) return resolve(null);
+      context.drawImage(image, 0, 0, SAMPLE, SAMPLE);
+      resolve(pixelPalette(context.getImageData(0, 0, SAMPLE, SAMPLE).data));
+    };
+    image.onerror = () => resolve(null);
+    image.src = src;
+  });
+
+/** The current song's artwork palette, or null without artwork. */
+function usePalette(song: BrowseRow | null) {
+  const hash = song?.artworkHash ?? null;
+  const url = song?.artworkUrl ?? null;
+  const key = hash ?? url;
+  const [palette, setPalette] = useState<{ key: string; palette: ArtworkPalette | null }>();
+  useEffect(() => {
+    if (key === null) return;
+    let current = true;
+    void (hash !== null ? window.wave.library.artwork(hash, false) : window.wave.yt.artwork(url!))
+      .then((image) => (image === null ? null : paletteOf(image)))
+      .catch(() => null)
+      .then((found) => {
+        if (current) setPalette({ key, palette: found });
+      });
+    return () => {
+      current = false;
+    };
+  }, [key, hash, url]);
+  return key !== null && palette?.key === key ? palette.palette : null;
+}
+
+/** The window's own colours, as App sets them on the shell. */
+const shellColours = (shell: Element | null) => {
+  const style = shell === null ? null : getComputedStyle(shell);
+  const colour = (name: string) => style?.getPropertyValue(`--color-${name}`).trim() ?? "";
+  return {
+    scheme: (style?.colorScheme === "dark" ? "dark" : "light") as "light" | "dark",
+    ground: colour("background"),
+    ink: [colour("foreground"), colour("accent")],
+  };
+};
+
+export function NowPlaying({
+  view,
+  run,
+  onClose,
+}: {
+  readonly view: PlayerView | undefined;
+  readonly run: (action: Promise<unknown>) => void;
+  readonly onClose: () => void;
+}) {
+  const song = view?.current ?? null;
+  const palette = usePalette(song);
+  const root = useRef<HTMLElement>(null);
+  const opener = useRef<Element | null>(null);
+  const theme = shellColours(document.querySelector(".desktop-shell"));
+  const themeKey = [theme.scheme, theme.ground, ...theme.ink].join();
+  const ground = useMemo<{ gradient: Gradient; dim: number } | null>(() => {
+    if (!HEX.test(theme.ground) || !theme.ink.every((ink) => HEX.test(ink))) return null;
+    const gradient = paletteGradient(palette, theme);
+    return { gradient, dim: lyricsDimOpacity(gradient, theme.ink[0]!) };
+    // The theme is read from the shell each render; its colours are what matter.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [palette, themeKey]);
+  // Focus moves in, and back to the bar's artwork or title once it closes.
+  useLayoutEffect(() => {
+    opener.current = document.activeElement;
+    root.current?.querySelector<HTMLElement>(".now-playing-close")?.focus();
+    return () => {
+      const element = opener.current;
+      if (element instanceof HTMLElement && element.isConnected) element.focus();
+    };
+  }, []);
+  const style = (
+    ground === null
+      ? {}
+      : {
+          background: `linear-gradient(180deg, ${ground.gradient.top}, ${ground.gradient.bottom})`,
+          "--lyrics-dim": ground.dim,
+        }
+  ) as CSSProperties;
+  return (
+    <section
+      ref={root}
+      className="now-playing"
+      role="dialog"
+      aria-label={text.playbackText.nowPlaying}
+      style={style}
+      data-testid="now-playing"
+    >
+      <button
+        className="icon-button now-playing-close"
+        aria-label={text.playbackText.closeNowPlaying}
+        title={text.playbackText.closeNowPlaying}
+        onClick={onClose}
+      >
+        <Icon name="back" />
+      </button>
+      <div className="now-playing-song">
+        <Artwork large hash={song?.artworkHash} url={song?.artworkUrl} />
+        <div className="now-playing-copy">
+          <h1 className="truncate">{song?.title ?? text.desktopLayout.nothingPlaying}</h1>
+          {song && <p className="truncate secondary">{song.artist}</p>}
+          {song?.album && <p className="truncate tertiary">{song.album}</p>}
+        </div>
+      </div>
+      <div className="now-playing-lyrics">
+        <LyricsView
+          song={song}
+          positionMs={view?.status.positionMs ?? 0}
+          onSeek={(positionMs) => run(window.wave.playback.seek(positionMs))}
+        />
+      </div>
+    </section>
+  );
+}
