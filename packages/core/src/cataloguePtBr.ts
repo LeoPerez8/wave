@@ -94,6 +94,12 @@ export const ptBR: Catalogue = {
     youTubeMusic: "YouTube Music",
     ytOffline: "O YouTube Music volta quando você estiver online.",
     ytFailed: "O YouTube Music não respondeu. Tente de novo daqui a pouco.",
+    downloadsProgress: (percent: number) => `Downloads, ${percent}% concluído`,
+    nothingDownloading: "As músicas que você baixar aparecem aqui até chegarem à Biblioteca.",
+    downloadsOffline:
+      "Os downloads pausam enquanto você está offline e continuam quando você voltar.",
+    downloadsFolder: "Os downloads vão para",
+    changeFolder: "Mudar Pasta",
   },
   desktopLibrary: {
     refresh: "Atualizar",

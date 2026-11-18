@@ -95,6 +95,12 @@ export const en = {
     youTubeMusic: "YouTube Music",
     ytOffline: "YouTube Music comes back when you're online.",
     ytFailed: "YouTube Music didn't answer. Try again in a moment.",
+    /** The sidebar's Downloads entry while a run is on its way. */
+    downloadsProgress: (percent: number) => `Downloads, ${percent}% done`,
+    nothingDownloading: "Songs you download show here until they're in the Library.",
+    downloadsOffline: "Downloads pause while you're offline and go on once you're back.",
+    downloadsFolder: "Downloads go to",
+    changeFolder: "Change Folder",
   },
   desktopLibrary: {
     refresh: "Refresh",
