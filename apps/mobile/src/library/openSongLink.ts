@@ -34,7 +34,8 @@ import { startMagicQueue, startStreamedMagicQueue } from "@/playback/MagicQueue"
 import { askYtMusic, searchRecordingInTurn } from "@/ytmusic/askYtMusic";
 import { currentLibraryFinder } from "@/ytmusic/libraryFinder";
 
-import { LibraryStore, type SongRow } from "./LibraryStore";
+import { LibraryStore } from "./LibraryStore";
+import { type SongRow } from "@wave/client";
 import { appRuntime } from "./runtime";
 import { deezerTransport, followShortLink, spotifyTransport } from "./serviceTransport";
 import { openSongNotFound } from "./SongNotFoundCard";

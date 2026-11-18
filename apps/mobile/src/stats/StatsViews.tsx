@@ -1,6 +1,6 @@
 import { useLocalisation } from "@/localisation/localisation";
 import { usePositions } from "@/lib/usePositions";
-import type { PlayedAlbum, PlayedArtist } from "@/library/db/playedEntities";
+import type { PlayedAlbum, PlayedArtist } from "@wave/client/db/playedEntities";
 import { PlayedAlbumRow, PlayedArtistRow } from "./PlayedEntityViews";
 import { IconChartBar } from "@tabler/icons-react-native";
 import { LegendList } from "@legendapp/list/react-native";

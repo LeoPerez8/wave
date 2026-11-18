@@ -18,11 +18,12 @@ import {
   type SnapshotVersions,
 } from "@wave/core";
 import * as Effect from "effect/Effect";
-import type { ArtistRow, LibraryStore, SongRow } from "./LibraryStore.ts";
+import type { LibraryStore } from "./LibraryStore.ts";
+import type { ArtistRow, SongRow } from "@wave/client";
 import {
   libraryRecommendationTrack,
   storedRecommendationTrack,
-} from "./playlistRecommendationTracks.ts";
+} from "@wave/client/playlistRecommendationTracks";
 import { readMixInputs } from "../home/mixInputs.ts";
 import { sharedRead } from "../lib/sharedRead.ts";
 import { snapshotRead } from "../lib/snapshotRead.ts";

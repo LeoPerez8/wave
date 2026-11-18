@@ -1,4 +1,4 @@
-import type { HomePlays, HomeSections } from "../library/db/playHistory.ts";
+import type { HomePlays, HomeSections } from "@wave/client/db/playHistory";
 import { STATS_FACT_LABELS, type HomeSectionId } from "@wave/core";
 import { CELL, grid } from "../catalog/grid.ts";
 

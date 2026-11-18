@@ -3,7 +3,7 @@ import assert from "node:assert/strict";
 import { describe, test } from "node:test";
 
 import type { GeniusLyricsHit, SearchResults } from "@wave/core";
-import type { SongRow } from "@/library/LibraryStore";
+import type { SongRow } from "@wave/client";
 import type { NativeYtSong } from "@/native/waveYtMusic";
 import type { LocalLyricsHit } from "./lyricsSearch.ts";
 import type { SearchHit } from "./searchIndex.ts";

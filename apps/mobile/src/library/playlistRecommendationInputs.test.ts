@@ -3,8 +3,8 @@ import test from "node:test";
 import type { LibraryChange } from "@wave/core";
 import * as Effect from "effect/Effect";
 import { fileURLToPath } from "node:url";
-import { createFastAgainFixture } from "./db/fastAgainFixture.ts";
-import { traceQueries } from "./db/testDatabase.ts";
+import { createFastAgainFixture } from "@wave/client/testing/fastAgainFixture";
+import { traceQueries } from "@wave/client/testing";
 import { loadLibraryStore } from "../../bench/fastAgain/store.ts";
 import { observePlaylistRecommendationInputs } from "./playlistRecommendationInputs.ts";
 
@@ -101,7 +101,7 @@ test("suggestion inputs never page the candidate catalog: the radios replace it"
 });
 
 test("a star reaches the next suggestions without paging the Library again", async () => {
-  const { setFavorites } = await import("./db/playHistory.ts");
+  const { setFavorites } = await import("@wave/client/db/playHistory");
   const fixture = await createFastAgainFixture();
   try {
     const store = await loadLibraryStore(root, fixture.db);
@@ -133,7 +133,7 @@ test("a star reaches the next suggestions without paging the Library again", asy
 });
 
 test("a write that leaves the Library's tracks as they were keeps its array, and its ranking indexes", async () => {
-  const { setFavorites } = await import("./db/playHistory.ts");
+  const { setFavorites } = await import("@wave/client/db/playHistory");
   const fixture = await createFastAgainFixture();
   try {
     const store = await loadLibraryStore(root, fixture.db);
@@ -170,12 +170,12 @@ test("a write that leaves the Library's tracks as they were keeps its array, and
 });
 
 test("paged input preserves stream/missing membership, multi-genres and playlist feedback order", async () => {
-  const { openTestDatabase, addTrack } = await import("./db/testDatabase.ts");
-  const { createPlaylist, addToPlaylist } = await import("./db/playlists.ts");
+  const { openTestDatabase, addTrack } = await import("@wave/client/testing");
+  const { createPlaylist, addToPlaylist } = await import("@wave/client/db/playlists");
   const { dismissPlaylistRecommendation, selectPlaylistRecommendationInput } =
-    await import("./db/playlistRecommendations.ts");
+    await import("@wave/client/db/playlistRecommendations");
   const { eq, sql } = await import("drizzle-orm");
-  const schema = await import("./db/schema.ts");
+  const schema = await import("@wave/client/db/schema");
   const { playlistRecommendations } = await import("@wave/core");
   const db = await openTestDatabase();
   const seed = addTrack(db, { title: "Seed", artist: "Radiohead", genre: "Rock" });

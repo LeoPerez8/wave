@@ -63,7 +63,7 @@ import { showToast } from "@/overlay/toast";
 import { openYtSongActions, runYtSongSwipe } from "@/ytmusic/YtSongActions";
 
 import { explainUnavailable, openUnavailableEntryActions } from "./UnavailableEntry";
-import type { PlaylistEntryRow } from "./LibraryStore";
+import type { PlaylistEntryRow } from "@wave/client";
 import { entryText, FindFrame, FindHead, useFindInLegendList } from "./FindInPlaylist";
 import { movePlaylistItem, removePlaylistItems } from "./playlists";
 

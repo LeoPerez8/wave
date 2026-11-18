@@ -26,7 +26,7 @@ import { useListSelection } from "@/selection/useListSelection";
 import { FindFrame, FindHead, useFindInLegendList } from "./FindInPlaylist";
 import { folderPhrase } from "./folderPhrase";
 import { useScanRoots, useScanStatus } from "./hooks";
-import type { SongOrder, SongRow } from "./LibraryStore";
+import type { SongOrder, SongRow } from "@wave/client";
 import { LibraryReadFeedback, LibraryReadNote } from "./LibraryReadFeedback";
 import { songOrderQueryKey, usePagedSongs, useSongFindTexts, useSongOrder } from "./pagedSongs";
 import { songIdKey, useRowsNearScreen } from "./pagedSongRows";

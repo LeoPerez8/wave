@@ -1,4 +1,4 @@
-import type { PlayedAlbum, PlayedArtist } from "@/library/db/playedEntities";
+import type { PlayedAlbum, PlayedArtist } from "@wave/client/db/playedEntities";
 import {
   statsWindow,
   type ArtistStats as ArtistStatsLines,
@@ -17,7 +17,8 @@ import * as Effect from "effect/Effect";
 import { lazyService } from "@/lib/lazyService";
 import type { RecapHistoryVersion } from "./recapAvailability";
 
-import type { LibraryStore, LibraryStoreError, SongRow } from "@/library/LibraryStore";
+import type { LibraryStore, LibraryStoreError } from "@/library/LibraryStore";
+import type { SongRow } from "@wave/client";
 
 import { make } from "./statsLive";
 

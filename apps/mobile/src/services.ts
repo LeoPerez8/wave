@@ -9,6 +9,7 @@ import { afterFirstSettled } from "@/lib/backgroundWork";
 import { onSyncedSettingChange } from "@/lib/persistedSetting";
 import { startBackgroundFill } from "@/library/backgroundFill";
 import { LibraryStore } from "@/library/LibraryStore";
+
 import { appRuntime } from "@/library/runtime";
 import type { AutoRequest } from "@/native/wavePlayer";
 import { startNotificationStar } from "@/nowPlaying/startNotificationStar";

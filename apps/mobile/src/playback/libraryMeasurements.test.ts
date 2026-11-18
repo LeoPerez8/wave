@@ -4,7 +4,7 @@ import { describe, test } from "node:test";
 
 import * as Effect from "effect/Effect";
 
-import type { MeasuredSong, SongToMeasure } from "../library/db/loudness.ts";
+import type { MeasuredSong, SongToMeasure } from "@wave/client/db/loudness";
 import type { LibraryMeasurement } from "../native/audioMeasurement.ts";
 import {
   CHANGES_SETTLE_MS,

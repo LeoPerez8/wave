@@ -5,7 +5,7 @@ import { recognizeTile, reportCardSession } from "@/native/waveRecognize";
 
 import { libraryListQueries } from "@/library/hooks";
 import { appRuntime } from "@/library/runtime";
-import type { SongRow } from "@/library/LibraryStore";
+import type { SongRow } from "@wave/client";
 import type { NativeYtSong } from "@/native/waveYtMusic";
 import { saveToShazam } from "@/library/playlists";
 import { resolveRecognitionSave } from "./resolveRecognitionSave";

@@ -1,9 +1,6 @@
 import { parseTrackId } from "@wave/core";
-import type {
-  PlayingSongAnswer,
-  PlayingSongTarget,
-  createNowPlayingSongLookup,
-} from "./songLookup.ts";
+import type { createNowPlayingSongLookup } from "./songLookup.ts";
+import type { PlayingSongAnswer, PlayingSongTarget } from "@wave/client";
 
 const sameTarget = (a: PlayingSongTarget | null, b: PlayingSongTarget | null): boolean =>
   a === b ||

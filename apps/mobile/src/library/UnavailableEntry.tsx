@@ -31,7 +31,7 @@ import { openSearch } from "@/search/queryRequest";
 import { useTabBar } from "@/settings/tabBar";
 import { useYtMusicEnabled } from "@/settings/ytMusic";
 
-import type { PlaylistEntryRow } from "./LibraryStore";
+import type { PlaylistEntryRow } from "@wave/client";
 import { removePlaylistItems } from "./playlists";
 import { tryAgainUnavailable, useTryingAgain } from "./tryAgainUnavailable";
 

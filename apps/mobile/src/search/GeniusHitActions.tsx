@@ -4,7 +4,7 @@ import { Linking, Text, View } from "react-native";
 import { Artwork } from "@/catalog/Artwork";
 import { CELL } from "@/catalog/grid";
 import { libraryListQueries } from "@/library/hooks";
-import type { SongRow } from "@/library/LibraryStore";
+import type { SongRow } from "@wave/client";
 import { openAddToPlaylist } from "@/library/PlaylistSheets";
 import { openAlbum } from "@/library/routes";
 import { appRuntime } from "@/library/runtime";

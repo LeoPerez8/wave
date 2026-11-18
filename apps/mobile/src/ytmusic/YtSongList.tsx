@@ -55,7 +55,7 @@ import { EmptyState } from "@/components/EmptyState";
 import { ScreenHeader } from "@/components/ScreenHeader";
 import { TextButton } from "@/components/TextButton";
 import { entryText, FindFrame, FindHead, useFindInLegendList } from "@/library/FindInPlaylist";
-import type { SongRow } from "@/library/LibraryStore";
+import type { SongRow } from "@wave/client";
 import { songCount } from "@/library/TrackList";
 import { useListScrollable } from "@/motion/heldTouch";
 import { useScreenSettled } from "@/lib/screenTiming";

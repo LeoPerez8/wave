@@ -26,7 +26,7 @@ import { showToast } from "@/overlay/toast";
 import { useThemeColor } from "@/theme/useThemeColor";
 
 import { usePlaylists } from "./hooks";
-import type { PlaylistRow } from "./LibraryStore";
+import type { PlaylistRow } from "@wave/client";
 import { cancelPlaylistImport } from "./playlistImports";
 import { PlaylistPickerHeading, usePlaylistPickerSearch } from "./PlaylistPickerSearch";
 import { framePhoto } from "./PhotoCropperHost";

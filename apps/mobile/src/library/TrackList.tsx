@@ -27,7 +27,7 @@ import { SongList } from "@/songs/SongList";
 import { librarySongEntry } from "@/songs/songListSources";
 
 import { FindFrame, FindHead, librarySongText, useFindInLegendList } from "./FindInPlaylist";
-import type { SongRow } from "./LibraryStore";
+import type { SongRow } from "@wave/client";
 import { useSpine } from "./useSpine";
 import { useListScrollable } from "@/motion/heldTouch";
 

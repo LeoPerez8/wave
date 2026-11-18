@@ -98,7 +98,7 @@ test("actual fetch/save workflow uses the saved match and keeps a full answer sa
   const { fetchArtistAnswer } = await import("./artistFetch.ts");
   const Effect = await import("effect/Effect");
   const { resolve } = await import("node:path");
-  const { createFastAgainFixture } = await import("../library/db/fastAgainFixture.ts");
+  const { createFastAgainFixture } = await import("@wave/client/testing/fastAgainFixture");
   const { loadLibraryStore } = await import("../../bench/fastAgain/store.ts");
   const fixture = await createFastAgainFixture();
   try {
@@ -251,8 +251,8 @@ test("real-store opening keeps local order offline, then saves one fake-YT answe
   const Effect = await import("effect/Effect");
   const { rankPopular, sortSongs } = await import("@wave/core");
   const { resolve } = await import("node:path");
-  const { createFastAgainFixture } = await import("../library/db/fastAgainFixture.ts");
-  const { traceQueries } = await import("../library/db/testDatabase.ts");
+  const { createFastAgainFixture } = await import("@wave/client/testing/fastAgainFixture");
+  const { traceQueries } = await import("@wave/client/testing");
   const { loadLibraryStore } = await import("../../bench/fastAgain/store.ts");
   const fixture = await createFastAgainFixture();
   try {
@@ -507,7 +507,7 @@ test("canceling a fake-YT page interrupts the actual fetch/save workflow before 
   const { artistOpeningRequest } = await import("./artistOpeningRequest.ts");
   const Effect = await import("effect/Effect");
   const { resolve } = await import("node:path");
-  const { createFastAgainFixture } = await import("../library/db/fastAgainFixture.ts");
+  const { createFastAgainFixture } = await import("@wave/client/testing/fastAgainFixture");
   const { loadLibraryStore } = await import("../../bench/fastAgain/store.ts");
   const fixture = await createFastAgainFixture();
   try {

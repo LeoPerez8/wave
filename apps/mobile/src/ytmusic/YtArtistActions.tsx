@@ -7,7 +7,7 @@ import { Text, View } from "react-native";
 
 import { ArtistImage } from "@/catalog/ArtistImage";
 import { CELL } from "@/catalog/grid";
-import type { SongRow } from "@/library/LibraryStore";
+import type { SongRow } from "@wave/client";
 import { appRuntime } from "@/library/runtime";
 import { pressedMenuAllowed, pressedRect } from "@/motion/pressedRect";
 import type { NativeYtSong } from "@/native/waveYtMusic";

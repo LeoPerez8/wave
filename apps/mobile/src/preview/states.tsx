@@ -11,7 +11,7 @@ import { View } from "react-native";
 
 import type { AlbumSummary } from "@/catalog/AlbumTile";
 import { openSourceMenu } from "@/library/importPlaylistLink";
-import type { AlbumRow, SongRow } from "@/library/LibraryStore";
+import type { AlbumRow, SongRow } from "@wave/client";
 import { promptNewPlaylist } from "@/library/PlaylistSheets";
 import type { PlaylistsControl } from "@/library/PlaylistsList";
 import { openSortMenu } from "@/library/SongSortButton";

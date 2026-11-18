@@ -4,18 +4,18 @@ import { syncTriggers, type PlayEvent, type YtAlbumSong } from "@wave/core";
 import { eq, sql } from "drizzle-orm";
 
 import { harness, pullAll, push } from "../../../sync/src/testing.ts";
-import { creditSplits } from "../library/db/credits.ts";
-import { endPlay, recordPlay } from "../library/db/playHistory.ts";
-import { listeningHistory } from "../library/db/listeningHistory.ts";
+import { creditSplits } from "@wave/client/db/credits";
+import { endPlay, recordPlay } from "@wave/client/db/playHistory";
+import { listeningHistory } from "@wave/client/db/listeningHistory";
 import {
   addTrack,
   migrateTestDatabase,
   openTestDatabase,
   type TestDatabase,
-} from "../library/db/testDatabase.ts";
-import { deleteTracksById } from "../library/db/tracks.ts";
-import * as schema from "../library/db/schema.ts";
-import { saveImportedPlays } from "../library/db/blackPlayer.ts";
+} from "@wave/client/testing";
+import { deleteTracksById } from "@wave/client/db/tracks";
+import * as schema from "@wave/client/db/schema";
+import { saveImportedPlays } from "@wave/client/db/blackPlayer";
 import { syncCycle, type SyncTransport } from "./syncCycle.ts";
 import { fakeClock } from "../../../../packages/core/src/testSyncClock.ts";
 

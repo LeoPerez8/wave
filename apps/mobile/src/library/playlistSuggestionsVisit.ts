@@ -28,7 +28,8 @@ import { sightOf, type ScreenSight } from "@/lib/sight";
 import { appLog } from "@/log/appLog";
 import { online as phoneOnline } from "@/native/waveNative";
 
-import { LibraryStore, type PlaylistEntryRow, type SongRow } from "./LibraryStore";
+import { LibraryStore } from "./LibraryStore";
+import { type PlaylistEntryRow, type SongRow } from "@wave/client";
 import { onLibraryChange } from "./libraryChanges";
 import { followPlaylistRecommendations } from "./playlistRecommendationVisit";
 import {

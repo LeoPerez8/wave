@@ -12,7 +12,8 @@ import * as Effect from "effect/Effect";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 import { useAlbums, useArtists } from "@/library/hooks";
-import { LibraryStore, type AlbumRow, type SongRow } from "@/library/LibraryStore";
+import { LibraryStore } from "@/library/LibraryStore";
+import { type AlbumRow, type SongRow } from "@wave/client";
 import { useSettledOnce } from "@/lib/screenTiming";
 import { online } from "@/native/waveNative";
 import type { NativeYtSong } from "@/native/waveYtMusic";

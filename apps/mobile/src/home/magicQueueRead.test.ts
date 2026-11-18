@@ -4,8 +4,8 @@ import { fileURLToPath } from "node:url";
 import * as Effect from "effect/Effect";
 import { createLibraryQueries } from "@wave/core";
 import { loadLibraryStore } from "../../bench/fastAgain/store.ts";
-import { createFastAgainFixture } from "../library/db/fastAgainFixture.ts";
-import { traceQueries } from "../library/db/testDatabase.ts";
+import { createFastAgainFixture } from "@wave/client/testing/fastAgainFixture";
+import { traceQueries } from "@wave/client/testing";
 import { magicQueueRead } from "./magicQueueRead.ts";
 
 const root = fileURLToPath(new URL("../../../../", import.meta.url));

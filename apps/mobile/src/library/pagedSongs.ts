@@ -8,7 +8,8 @@ import { useCallback, useEffect, useRef, useState, useSyncExternalStore } from "
 
 import { registerPerfMeta } from "@/perf/perf";
 
-import { LibraryStore, type SongOrder, type SongSummary } from "./LibraryStore";
+import { LibraryStore } from "./LibraryStore";
+import { type SongOrder, type SongSummary } from "@wave/client";
 import { appRuntime } from "./runtime";
 import { libraryQuery, useLibraryQuery, type LibraryQuery } from "./sharedQueries";
 

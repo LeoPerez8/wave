@@ -3,6 +3,7 @@ import * as Effect from "effect/Effect";
 import { freeTurn } from "@/lib/backgroundWork";
 import { appRuntime } from "./runtime";
 import { LibraryStore } from "./LibraryStore";
+
 import { onLibraryChange } from "./libraryChanges";
 import { lyricsEdits } from "./lyricsEdits";
 import { createLyricsSearchIndexer, type LyricsSearchIndexerDeps } from "./lyricsSearchIndexer";

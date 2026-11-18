@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 import type { PlaySnapshot } from "@wave/core";
 
-import type { SongRow } from "./LibraryStore.ts";
+import type { SongRow } from "@wave/client";
 import { songRowPresentation } from "../songs/songListModel.ts";
 import { historyArtwork, historyArtworkUri } from "./historyArtwork.ts";
 

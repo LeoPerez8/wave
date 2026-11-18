@@ -41,12 +41,12 @@ import Animated, {
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { scheduleOnRN } from "react-native-worklets";
 
-import { artworkUri } from "@/catalog/artworkUri";
+import { artworkUri } from "@wave/client/artworkUri";
 import { ArtistImage } from "@/catalog/ArtistImage";
 import { Artwork } from "@/catalog/Artwork";
 import { CELL, grid } from "@/catalog/grid";
 import { IconButton } from "@/components/IconButton";
-import type { PlayedAlbum, PlayedArtist } from "@/library/db/playedEntities";
+import type { PlayedAlbum, PlayedArtist } from "@wave/client/db/playedEntities";
 import { useYtMusicEnabled } from "@/settings/ytMusic";
 import { useInCapture } from "@/share/imageCapture";
 import { useThemeColor } from "@/theme/useThemeColor";

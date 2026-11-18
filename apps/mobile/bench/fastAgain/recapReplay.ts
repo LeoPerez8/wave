@@ -3,8 +3,8 @@ import * as Effect from "effect/Effect";
 import { existsSync } from "node:fs";
 import { resolve } from "node:path";
 import type { RecapPeriod } from "@wave/core";
-import type { FastAgainFixture } from "../../src/library/db/fastAgainFixture.ts";
-import { traceQueries, type TracedQuery } from "../../src/library/db/testDatabase.ts";
+import type { FastAgainFixture } from "@wave/client/testing/fastAgainFixture";
+import { traceQueries, type TracedQuery } from "@wave/client/testing";
 import { freeTurnTasks } from "./cooperative.ts";
 import { loadLibraryStore, loadWorktreeModule } from "./store.ts";
 

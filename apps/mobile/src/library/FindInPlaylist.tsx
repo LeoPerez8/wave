@@ -30,7 +30,7 @@ import { useLocalisation } from "@/localisation/localisation";
 import { SearchField } from "@/search/SearchField";
 import { useKeepFindVisible } from "@/settings/keepFindVisible";
 
-import type { SongRow } from "./LibraryStore";
+import type { SongRow } from "@wave/client";
 import { appRuntime } from "./runtime";
 
 /**

@@ -14,7 +14,8 @@ import * as Result from "effect/Result";
 
 import { runSteps } from "../lib/stepped.ts";
 import { byTitleArtistPath } from "../library/binaryOrder.ts";
-import type { LibraryStore, LibraryStoreError, SongRow } from "../library/LibraryStore.ts";
+import type { LibraryStore, LibraryStoreError } from "../library/LibraryStore.ts";
+import type { SongRow } from "@wave/client";
 
 /** One input snapshot shared by the live profile and Home's due pick. Not an Artist graph. */
 export interface TasteLibrary {

@@ -19,7 +19,7 @@ import { ArtistImage } from "@/catalog/ArtistImage";
 import { CELL, grid } from "@/catalog/grid";
 import { IconButton } from "@/components/IconButton";
 import { TextButton } from "@/components/TextButton";
-import type { FollowTarget } from "@/library/db/follows";
+import type { FollowTarget } from "@wave/client/db/follows";
 import { restoreArtistFollow, setArtistFollow } from "@/library/follows";
 import {
   askShowNotifications,

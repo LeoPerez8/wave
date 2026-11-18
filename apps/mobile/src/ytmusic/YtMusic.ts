@@ -14,7 +14,7 @@ import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 
 import { ytNetworkMeter } from "@/lib/networkMeter";
-import type { IndexedArtwork } from "@/library/LibraryStore";
+import type { IndexedArtwork } from "@wave/client";
 import { toIndexedArtwork } from "@/library/LibraryScan";
 import type { NativeYtAlbum } from "@/native/waveYtDownloads";
 import {

@@ -1,5 +1,6 @@
 import * as Effect from "effect/Effect";
 import { LibraryStore } from "./LibraryStore";
+
 import { WaveSoulseek } from "@/native/waveSoulseek";
 
 /** Reads committed folder policy; every publication and import also reads it afresh. */

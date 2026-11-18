@@ -22,7 +22,7 @@ import type {
   YtSectionView,
 } from "@wave/core";
 
-import type { SongRow } from "@/library/LibraryStore";
+import type { SongRow } from "@wave/client";
 import type { NativeYtSong } from "@/native/waveYtMusic";
 
 import type { SearchHit } from "./searchIndex";

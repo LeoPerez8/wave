@@ -1,6 +1,6 @@
 import { useWindowDimensions, View } from "react-native";
 
-import { artworkUri } from "@/catalog/artworkUri";
+import { artworkUri } from "@wave/client/artworkUri";
 import type { AlbumSummary } from "@/catalog/AlbumTile";
 import { captionHeight } from "@/catalog/cards/CardParts";
 import { CELL, grid } from "@/catalog/grid";
@@ -10,7 +10,7 @@ import { selectableRow } from "@/selection/selectableRow";
 import { useListSelection, type ListSelection } from "@/selection/useListSelection";
 
 import { LibraryAlbumCard } from "./LibraryAlbumCard";
-import type { AlbumRow } from "./LibraryStore";
+import type { AlbumRow } from "@wave/client";
 import { openAlbum } from "./routes";
 
 /** Fixed height of a tile's caption block (catalog line, two title lines, furniture line). */

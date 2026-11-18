@@ -3,7 +3,7 @@ import test from "node:test";
 import { stepNowPlayingSheet } from "@wave/core";
 import { LINK_SEQUENCES, replayLinks } from "../../bench/fastAgain/nowPlayingLinksReplay.ts";
 import { followNowPlayingLink } from "../nowPlaying/linkClose.ts";
-import { createFastAgainFixture } from "../library/db/fastAgainFixture.ts";
+import { createFastAgainFixture } from "@wave/client/testing/fastAgainFixture";
 
 test("at 1,000 songs every Now Playing link survives Back, drag, card dismissal and a second link", async () => {
   const fixture = await createFastAgainFixture();

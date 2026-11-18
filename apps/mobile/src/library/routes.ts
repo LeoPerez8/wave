@@ -14,7 +14,7 @@ import { continueTiming, timingRouteCommitted } from "@/lib/timing";
 import { makeExternalStore } from "@/lib/externalStore";
 import { noteScreen } from "@/log/appLog";
 
-import type { AlbumRow, ArtistRow, GenreRow, PlaylistRow } from "./LibraryStore";
+import type { AlbumRow, ArtistRow, GenreRow, PlaylistRow } from "@wave/client";
 
 /** The route showing: its path and its params (the global ones, every segment's). */
 export interface CurrentRoute {

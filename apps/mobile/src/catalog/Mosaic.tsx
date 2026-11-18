@@ -1,6 +1,6 @@
 import { View } from "react-native";
 
-import { artworkUri } from "./artworkUri";
+import { artworkUri } from "@wave/client/artworkUri";
 import { useYtMusicEnabled } from "@/settings/ytMusic";
 
 import { Artwork } from "./Artwork";
