@@ -53,6 +53,8 @@ const wave = (page: Page) =>
 
 /** Moves the open menu's focus down to the entry named [label]. */
 const focusEntry = async (page: Page, label: string) => {
+  // The entries load first; until then the keys still go to the list.
+  await expect(page.locator(":focus")).toHaveAttribute("role", "menuitem");
   for (let n = 0; n < 12; n++) {
     if ((await page.evaluate(() => document.activeElement?.textContent)) === label) return;
     await page.keyboard.press("ArrowDown");
@@ -90,7 +92,7 @@ test("song menus, selection and the window's shortcuts", async () => {
     // Right-click opens the menu at the pointer; Add to Queue queues the song with a toast.
     await row("Alpha").click({ button: "right" });
     await expect(menu("Alpha")).toBeVisible();
-    for (const action of ["playNext", "addToQueue", "addToPlaylist", "favorite", "select"])
+    for (const action of ["playNext", "addToQueue", "addToPlaylist", "favorite", "select"] as const)
       await expect(menu("Alpha").getByRole("menuitem", { name: labels[action] })).toBeVisible();
     await expect(
       menu("Alpha").getByRole("menuitem", { name: labels.removeFromLibrary }),
@@ -152,6 +154,19 @@ test("song menus, selection and the window's shortcuts", async () => {
     await expect(sheet.locator(".shortcut-row")).toHaveCount(21);
     await expect(sheet).toContainText(text.desktopShortcuts.labels.quit);
     await page.screenshot({ path: test.info().outputPath(`song-menus-${process.platform}.png`) });
+    // Tab reaches the list, whose keys scroll it rather than change the volume.
+    const volume = await page.evaluate(
+      async () => (await (window as unknown as { wave: WaveBridge }).wave.playback.view()).volume,
+    );
+    await page.keyboard.press("Tab");
+    await expect(sheet.getByRole("term").first()).toBeVisible();
+    await expect(page.locator(".shortcut-list")).toBeFocused();
+    await page.keyboard.press("ArrowDown");
+    expect(
+      await page.evaluate(
+        async () => (await (window as unknown as { wave: WaveBridge }).wave.playback.view()).volume,
+      ),
+    ).toBe(volume);
     await page.keyboard.press("Escape");
     await expect(sheet).toBeHidden();
 

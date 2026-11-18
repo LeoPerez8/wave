@@ -804,8 +804,11 @@ button.destructive {
 }
 .shortcuts-sheet {
   width: min(480px, calc(100vw - 32px));
+  overflow: hidden;
 }
 .shortcut-list {
+  min-height: 0;
+  overflow: auto;
   margin: 0;
   display: flex;
   flex-direction: column;
