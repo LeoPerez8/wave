@@ -4,7 +4,14 @@
  * A move applies at once: main re-blends and re-ranks the day's mixes from the radios it read.
  */
 import { discoverLevelLabel, sliderStep, type MixSliderStep } from "@wave/core";
-import { useCallback, useEffect, useLayoutEffect, useRef, useState, type KeyboardEvent } from "react";
+import {
+  useCallback,
+  useEffect,
+  useLayoutEffect,
+  useRef,
+  useState,
+  type KeyboardEvent,
+} from "react";
 
 import type { DiscoverSettings } from "../../shared/ytPages.ts";
 import { Icon } from "./Icon.tsx";

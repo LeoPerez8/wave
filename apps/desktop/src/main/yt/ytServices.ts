@@ -200,7 +200,7 @@ export const ytFeaturesLayer = (options: { readonly online: () => boolean }) =>
         if (mixCached?.revision !== revision) {
           const { byId } = current();
           const songs: DiscoverLibrarySong[] = [];
-          for (let after = 0; ; ) {
+          for (let after = 0; ;) {
             const page = mixSongsPage(db, after);
             const last = page.at(-1);
             if (last === undefined) break;
@@ -283,8 +283,10 @@ export const ytFeaturesLayer = (options: { readonly online: () => boolean }) =>
           if (mix !== undefined && mix.songs.some((song) => played.has(mixTrackId(song))))
             return {
               seed: { kind: "list", id: mix.id, title: mix.name },
-              songs: songsOf(mix.songs.flatMap(song => song.source === "library" ? [song.track.id] : [])),
-              streamed: mix.songs.flatMap(song => song.source === "stream" ? [song.song] : []),
+              songs: songsOf(
+                mix.songs.flatMap((song) => (song.source === "library" ? [song.track.id] : [])),
+              ),
+              streamed: mix.songs.flatMap((song) => (song.source === "stream" ? [song.song] : [])),
             };
           const last = source.trackIds.at(-1);
           return last === undefined

@@ -85,7 +85,8 @@ test("Artist mixes grow from the most played artists' radios, songs the owner kn
   assert.ok(
     mix.songs.every(
       (found) =>
-        found.source === "stream" && (found.familiar === true || !found.song.videoId.startsWith("known")),
+        found.source === "stream" &&
+        (found.familiar === true || !found.song.videoId.startsWith("known")),
     ),
   );
   assert.deepEqual(discover.mix(mix.id)?.songs, mix.songs);
@@ -132,8 +133,13 @@ test("Genre mixes grow from tagged Library families and remain playable by id", 
       trackIds: [1, 2, 3, 4, 5],
       artists: [{ id: 1, name: "Daft Punk", songCount: 5 }],
       songs: Array.from({ length: 5 }, (_, n) => ({
-        id: n + 1, title: `Local ${n}`, artist: "Daft Punk", artistIds: [1],
-        durationMs: 200_000, addedAt: 0, genre: "Electronic",
+        id: n + 1,
+        title: `Local ${n}`,
+        artist: "Daft Punk",
+        artistIds: [1],
+        durationMs: 200_000,
+        addedAt: 0,
+        genre: "Electronic",
       })),
     }),
   });
@@ -164,8 +170,13 @@ test("Discover settings reblend familiar songs without reading radios again", as
       trackIds: [1, 2, 3, 4, 5],
       artists: [{ id: 1, name: "Daft Punk", songCount: 5 }],
       songs: Array.from({ length: 5 }, (_, n) => ({
-        id: n + 1, title: `Local ${n}`, artist: "Daft Punk", artistIds: [1],
-        durationMs: 200_000, addedAt: 0, genre: "Electronic",
+        id: n + 1,
+        title: `Local ${n}`,
+        artist: "Daft Punk",
+        artistIds: [1],
+        durationMs: 200_000,
+        addedAt: 0,
+        genre: "Electronic",
       })),
     }),
   });
@@ -173,10 +184,10 @@ test("Discover settings reblend familiar songs without reading radios again", as
   const count = asked.length;
   discover.setSettings({ level: 5, faithfulness: 1, popularity: 5 });
   const allNew = await discover.mixes();
-  assert.ok(allNew.mixes[0]!.songs.every(song => song.source === "stream"));
+  assert.ok(allNew.mixes[0]!.songs.every((song) => song.source === "stream"));
   discover.setSettings({ level: 1, faithfulness: 1, popularity: 5 });
   const familiar = await discover.mixes();
-  assert.ok(familiar.mixes[0]!.songs.some(song => song.source === "library"));
+  assert.ok(familiar.mixes[0]!.songs.some((song) => song.source === "library"));
   assert.equal(asked.length, count, "slider changes use the day's cached radios");
   assert.deepEqual(discover.settings(), { level: 1, faithfulness: 1, popularity: 5 });
 });

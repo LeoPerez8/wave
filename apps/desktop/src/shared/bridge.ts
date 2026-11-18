@@ -198,7 +198,10 @@ export interface BridgeContract extends PlaylistContract, LinkContract {
   /** Discover's Artist mixes, built once a day. */
   readonly "discover.mixes": { readonly args: readonly []; readonly result: DiscoverMixesView };
   readonly "discover.settings": { readonly args: readonly []; readonly result: DiscoverSettings };
-  readonly "discover.setSettings": { readonly args: readonly [DiscoverSettings]; readonly result: DiscoverSettings };
+  readonly "discover.setSettings": {
+    readonly args: readonly [DiscoverSettings];
+    readonly result: DiscoverSettings;
+  };
   /** Plays today's mix [id] from its song [index]; false when the mix is gone. */
   readonly "discover.playMix": {
     readonly args: readonly [id: string, index: number];

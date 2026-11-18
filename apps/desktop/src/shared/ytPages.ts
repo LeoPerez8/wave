@@ -4,7 +4,13 @@
  * went (`YtStatus`): offline, YT Music off or a failure leave nothing, and the window shows its
  * quiet line. Songs come as rows (`ytRow`), with `videoId` and no Library id.
  */
-import type { DiscoverMixLevel, MixSliders, MixRowId, YtArtistAlbum, YtArtistCandidate } from "@wave/core";
+import type {
+  DiscoverMixLevel,
+  MixSliders,
+  MixRowId,
+  YtArtistAlbum,
+  YtArtistCandidate,
+} from "@wave/core";
 
 import type { Page } from "./bridge.ts";
 import type { BrowseRow } from "./browse.ts";

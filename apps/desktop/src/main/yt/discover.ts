@@ -126,7 +126,10 @@ export const createDiscover = (deps: DiscoverDeps): DiscoverShape => {
       empty: false,
     });
 
-  const build = async (using: DiscoverSettings, rowIds: readonly MixRowId[]): Promise<MixesRead> => {
+  const build = async (
+    using: DiscoverSettings,
+    rowIds: readonly MixRowId[],
+  ): Promise<MixesRead> => {
     const date = deps.today();
     if (day?.date !== date) day = { date, seeds: new Map(), radios: new Map() };
     const today = day;
@@ -190,7 +193,11 @@ export const createDiscover = (deps: DiscoverDeps): DiscoverShape => {
         using,
       );
       for (const mix of ranked)
-        mixes.push({ ...blendDiscoverMix(mix, { level: using.level }), name: discoverMixName(mix.seed), row });
+        mixes.push({
+          ...blendDiscoverMix(mix, { level: using.level }),
+          name: discoverMixName(mix.seed),
+          row,
+        });
     }
     const status: YtStatus =
       mixes.length > 0

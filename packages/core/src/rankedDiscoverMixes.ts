@@ -28,10 +28,20 @@ export function* rankedDiscoverMixesSteps<L extends DiscoverLibrarySong>(
   avoid?: ReadonlySet<string>,
 ) {
   const ranked = reads.flatMap(({ seed, pages }) =>
-    pages.length === 0 ? [] : [rankedDiscoverMixRead(seed, { ...sources, pages }, {
-      ...sliders,
-      ...(seed.kind === "artist" ? { profile: sources.profileOf?.(seed.name) ?? null } : {}),
-    })],
+    pages.length === 0
+      ? []
+      : [
+          rankedDiscoverMixRead(
+            seed,
+            { ...sources, pages },
+            {
+              ...sliders,
+              ...(seed.kind === "artist"
+                ? { profile: sources.profileOf?.(seed.name) ?? null }
+                : {}),
+            },
+          ),
+        ],
   );
   return yield* discoverMixesOfRadiosSteps(ranked, {
     known: sources.known,

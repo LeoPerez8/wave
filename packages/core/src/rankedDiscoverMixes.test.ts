@@ -71,7 +71,10 @@ test("both rows rank each seed's radio pages and leave out known songs and earli
     ["artist:portishead", "genre:electronic"],
   );
   const [artist, genre] = mixes;
-  assert.ok(artist!.songs.every((found) => found.videoId !== "p0"), "a played song is known");
+  assert.ok(
+    artist!.songs.every((found) => found.videoId !== "p0"),
+    "a played song is known",
+  );
   assert.ok(
     genre!.songs.every((found) => found.videoId.startsWith("d")),
     "the artist mix took the radios' shared songs",

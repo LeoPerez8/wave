@@ -1512,12 +1512,19 @@ test("a Magic Queue, an artist page and Discover's row come through the bridge, 
         call("discover.setSettings", { level: 6, faithfulness: 3, popularity: 3 }),
         /Refused/,
       );
-      assert.deepEqual(await call("discover.setSettings", { level: 5, faithfulness: 1, popularity: 4 }), {
+      assert.deepEqual(
+        await call("discover.setSettings", { level: 5, faithfulness: 1, popularity: 4 }),
+        {
+          level: 5,
+          faithfulness: 1,
+          popularity: 4,
+        },
+      );
+      assert.deepEqual(await wave.discover.settings(), {
         level: 5,
         faithfulness: 1,
         popularity: 4,
       });
-      assert.deepEqual(await wave.discover.settings(), { level: 5, faithfulness: 1, popularity: 4 });
     } finally {
       await runtime.dispose();
     }

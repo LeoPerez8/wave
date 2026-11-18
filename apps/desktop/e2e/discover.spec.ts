@@ -28,7 +28,9 @@ test("Home groups Discover's rows in the phone's order, plays a Genre mix, opens
   try {
     const page = await app.firstWindow();
     const played = await stubDiscover(app);
-    await page.evaluate(() => (window as unknown as { wave: WaveBridge }).wave.settings.setYtMusic(true));
+    await page.evaluate(() =>
+      (window as unknown as { wave: WaveBridge }).wave.settings.setYtMusic(true),
+    );
     await page.reload();
     const home = page.getByTestId("home");
     const discover = home.getByRole("region", { name: text.home.sections.discover, exact: true });
@@ -60,7 +62,9 @@ test("Home groups Discover's rows in the phone's order, plays a Genre mix, opens
     await expect(card).toContainText(text.discover.levels[5]);
     await page.screenshot({ path: test.info().outputPath("discover-settings.png") });
     await expect
-      .poll(() => page.evaluate(() => (window as unknown as { wave: WaveBridge }).wave.discover.settings()))
+      .poll(() =>
+        page.evaluate(() => (window as unknown as { wave: WaveBridge }).wave.discover.settings()),
+      )
       .toEqual({ level: 5, faithfulness: 3, popularity: 3 });
     await page.keyboard.press("Escape");
     await expect(card).toBeHidden();
@@ -72,9 +76,13 @@ test("Home groups Discover's rows in the phone's order, plays a Genre mix, opens
     await page.context().setOffline(false);
     await expect(discover).toBeVisible();
 
-    await page.evaluate(() => (window as unknown as { wave: WaveBridge }).wave.settings.setYtMusic(false));
+    await page.evaluate(() =>
+      (window as unknown as { wave: WaveBridge }).wave.settings.setYtMusic(false),
+    );
     await page.reload();
-    await expect(home.getByRole("region", { name: text.home.sections["recently-added"] })).toBeVisible();
+    await expect(
+      home.getByRole("region", { name: text.home.sections["recently-added"] }),
+    ).toBeVisible();
     await expect(discover).toHaveCount(0);
     await expect(home.getByRole("alert")).toHaveCount(0);
     await page.screenshot({ path: test.info().outputPath("home-yt-off.png") });
