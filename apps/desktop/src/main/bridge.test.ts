@@ -43,8 +43,77 @@ import { sessionStore } from "./account/sessionStore.ts";
 import { desktop, keyring } from "./account/testAccount.ts";
 import { pullAll } from "../../../sync/src/testing.ts";
 import { fakeClock } from "../../../../packages/core/src/testSyncClock.ts";
+import { recordPlay } from "@wave/client/db/playHistory";
+import { editHomeArrangement, parseHomeArrangement, storedHomeArrangement } from "@wave/core";
 
 const trusted = { senderFrame: "window" };
+
+test("Home follows the account's arrangement and plays its ranked list with Home context", async () => {
+  await withFile(async (file) => {
+    const { runtime, exposed, handlers } = connect(file);
+    const wave = exposed.get("wave") as WaveBridge;
+    try {
+      await runtime.runPromise(
+        Effect.gen(function* () {
+          const db = (yield* Database) as unknown as TestDatabase;
+          const first = addTrack(db, { title: "Pink Moon", artist: "Nick Drake" });
+          const second = addTrack(db, { title: "Road", artist: "Nick Drake" });
+          for (const [id, at] of [
+            [first, 100],
+            [first, 200],
+            [second, 300],
+          ] as const)
+            recordPlay(db, {
+              trackId: String(id),
+              startedAt: at,
+              counted: true,
+              listenedMs: 16000,
+              durationMs: 180000,
+              source: "desktop",
+              endReason: "skipped",
+              context: null,
+            });
+          star(db, second, 400);
+          const order = parseHomeArrangement(null);
+          const stored = storedHomeArrangement(
+            editHomeArrangement(order, {
+              move: { from: order.sections.indexOf("favorites"), to: 0 },
+            }),
+          );
+          db.run(
+            sql`INSERT INTO desktop_synced_preferences(key,value) VALUES('settings.homeArrangement',${stored!})`,
+          );
+        }),
+      );
+      const home = await wave.home.view();
+      assert.equal(home.items[0]?.id, "favorites");
+      await wave.home.play("most-played", 1);
+      assert.equal((await wave.playback.view()).current?.title, "Road");
+      assert.deepEqual(
+        (await wave.playback.queue(0, 10)).items.map((r) => r.title),
+        ["Pink Moon", "Road"],
+      );
+      await runtime.runPromise(
+        Effect.gen(function* () {
+          const db = yield* Database;
+          assert.deepEqual(
+            db.get(
+              sql`SELECT context_type AS kind, context_id AS id FROM play_events ORDER BY id DESC LIMIT 1`,
+            ),
+            { kind: "home", id: "most-played" },
+          );
+        }),
+      );
+      const call = (section: unknown, index: unknown) =>
+        handlers.get("home.play")!(trusted, section, index);
+      await assert.rejects(call("recently-added", 0), /refused/i);
+      await assert.rejects(call("favorites", -1), /refused/i);
+      await assert.rejects(call("favorites", 10), /refused/i);
+    } finally {
+      await runtime.dispose();
+    }
+  });
+});
 
 /** Main's handlers wired to a preload through an in-memory IPC, as Electron does. */
 /** An audio process in memory, whose engine records what it was asked. */

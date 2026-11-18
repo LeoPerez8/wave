@@ -28,6 +28,7 @@ import {
   type PlaylistContract,
 } from "./playlists.ts";
 import type { LibrarySearchView } from "./search.ts";
+import type { HomeView } from "./home.ts";
 import type {
   ActionSurface,
   SongMenu,
@@ -218,6 +219,11 @@ export interface BridgeContract extends PlaylistContract {
     readonly result: Page<string>;
   };
   readonly "search.clearRecent": { readonly args: readonly []; readonly result: void };
+  readonly "home.view": { readonly args: readonly []; readonly result: HomeView };
+  readonly "home.play": {
+    readonly args: readonly [section: "most-played" | "favorites", index: number];
+    readonly result: void;
+  };
 }
 
 export type BridgeCall = keyof BridgeContract;
@@ -294,6 +300,8 @@ export const BRIDGE_CALLS = [
   "search.recent",
   "search.remember",
   "search.clearRecent",
+  "home.view",
+  "home.play",
 ] as const satisfies readonly BridgeCall[] &
   (BridgeContract extends PagedLists<BridgeContract> ? unknown : never);
 
@@ -304,6 +312,10 @@ export type Invoke = <C extends BridgeCall>(
 
 /** `window.wave`. */
 export interface WaveBridge {
+  readonly home: {
+    readonly view: () => Promise<HomeView>;
+    readonly play: (section: "most-played" | "favorites", index: number) => Promise<void>;
+  };
   readonly playback: {
     readonly view: () => Promise<PlayerView>;
     readonly start: (scope: BrowseScope, index?: number, shuffle?: boolean) => Promise<void>;
@@ -498,5 +510,9 @@ export const createBridge = (invoke: Invoke): WaveBridge => ({
     recent: () => invoke("search.recent"),
     remember: (query) => invoke("search.remember", query),
     clearRecent: () => invoke("search.clearRecent"),
+  },
+  home: {
+    view: () => invoke("home.view"),
+    play: (section, index) => invoke("home.play", section, index),
   },
 });

@@ -152,6 +152,8 @@ test("the page has no Node and only the typed bridge", async () => {
       "wave.search.recent",
       "wave.search.remember",
       "wave.search.clearRecent",
+      "wave.home.view",
+      "wave.home.play",
     ],
   });
 });
