@@ -81,6 +81,43 @@ describe("catalogueOf", () => {
       ["Início", "Biblioteca", "Buscar", "Músicas", "Favoritas"],
     );
   });
+
+  test("the desktop names itself the computer where the phone names the phone", () => {
+    assert.equal(catalogueOf("en", "desktop").playbackText.thisPhone, "This computer");
+    assert.equal(catalogueOf("pt-BR", "desktop").playbackText.thisPhone, "Este computador");
+    assert.equal(catalogueOf("en", "phone").playbackText.thisPhone, "This phone");
+    assert.equal(catalogueOf("pt-BR").playbackText.thisPhone, "Este celular");
+  });
+
+  test("each desktop variant reads in both languages", () => {
+    const changed = (language: "en" | "pt-BR"): string[] => {
+      const paths: string[] = [];
+      const walk = (phone: unknown, desktop: unknown, path: string): void => {
+        if (phone === desktop) return;
+        if (typeof phone === "object" && phone !== null && typeof desktop === "object") {
+          for (const key of Object.keys(phone))
+            walk(
+              (phone as Record<string, unknown>)[key],
+              (desktop as Record<string, unknown>)[key],
+              `${path}.${key}`,
+            );
+        } else paths.push(path);
+      };
+      walk(catalogueOf(language), catalogueOf(language, "desktop"), "");
+      return paths;
+    };
+    assert.ok(changed("en").length > 0);
+    assert.deepEqual(changed("pt-BR"), changed("en"));
+  });
+
+  test("the desktop keeps every phrase that has no desktop variant", () => {
+    assert.equal(catalogueOf("en", "desktop").tabs.library, "Library");
+    assert.equal(catalogueOf("pt-BR", "desktop").library.songCount(2), "2 músicas");
+    assert.equal(
+      catalogueOf("en", "desktop").playbackText.aboutGenius,
+      catalogueOf("en").playbackText.aboutGenius,
+    );
+  });
 });
 
 describe("Portuguese counts at zero", () => {

@@ -51,6 +51,7 @@ jobs:
       ci: ${{ steps.rule.outputs.ci }}
       native: ${{ steps.rule.outputs.native }}
       nativeTests: ${{ steps.rule.outputs.nativeTests }}
+      desktopChecks: ${{ steps.rule.outputs.desktopChecks }}
     steps:
       - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.1.0
         with:
@@ -78,6 +79,16 @@ jobs:
         run: |
           scripts/ci/report.sh skipped "Native unit tests" \
             "Nothing they test or compile changed (wave-native, wave-glass, the app config, config plugins, the lockfile or CI), so they didn't run."
+
+      - name: Report the skipped desktop checks
+        if: steps.rule.outputs.desktopChecks == 'false' && env.IS_SAME_REPO_PR == 'true'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+        run: |
+          for job in "Desktop (Linux)" "Desktop (Windows)"; do
+            scripts/ci/report.sh skipped "$job"               "Nothing the desktop app is built from changed (apps/desktop, packages/client, core or theme, the lockfile or CI), so they didn't run."
+          done
 
       - name: Keep the report
         if: always() && env.IS_SAME_REPO_PR == 'true' && job.status != 'cancelled'
@@ -836,11 +847,98 @@ jobs:
           if-no-files-found: ignore
           retention-days: 1
 
+  # The desktop app's typecheck, unit tests, lint and Playwright smoke test, on each system it
+  # ships for (docs/agents/desktop-checks.md). It builds no installer and needs no secret.
+  desktop:
+    name: ${{ matrix.name }}
+    needs: [changes]
+    # Only PRs can skip: on main and release tags every area counts as changed.
+    if: needs.changes.outputs.desktopChecks == 'true'
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          # 22.04: Ubuntu 24.04's AppArmor stops Electron's sandbox from starting.
+          - os: ubuntu-22.04
+            name: Desktop (Linux)
+            report: desktop-linux
+          - os: windows-latest
+            name: Desktop (Windows)
+            report: desktop-windows
+    runs-on: ${{ matrix.os }}
+    permissions:
+      contents: read
+      actions: read
+    defaults:
+      run:
+        shell: bash
+    env:
+      HEAD_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
+    steps:
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.1.0
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+          persist-credentials: false
+
+      - uses: pnpm/action-setup@b906affcce14559ad1aafd4ab0e942779e9f58b1 # v4.3.0
+
+      - uses: actions/setup-node@a0853c24544627f65ddf259abe73b1d18a591444 # v5.0.0
+        with:
+          node-version: 22
+          cache: pnpm
+
+      - name: Install
+        run: scripts/ci/step.sh "Install" pnpm install --frozen-lockfile --filter "@wave/desktop..."
+
+      - name: Typecheck
+        run: scripts/ci/step.sh "Typecheck" pnpm --filter @wave/desktop typecheck
+
+      - name: Test
+        run: scripts/ci/step.sh "Test" pnpm --filter @wave/desktop test
+
+      - name: Lint
+        run: scripts/ci/step.sh "Lint" pnpm --filter @wave/desktop lint
+
+      # Linux runners have no display, so the window opens on a virtual one.
+      - name: Smoke test
+        run: |
+          if [ "$RUNNER_OS" = "Linux" ]; then
+            scripts/ci/step.sh "Smoke test" xvfb-run -a pnpm --filter @wave/desktop test:e2e
+          else
+            scripts/ci/step.sh "Smoke test" pnpm --filter @wave/desktop test:e2e
+          fi
+
+      - name: Keep the smoke test's screenshots
+        if: failure()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: desktop-smoke-${{ matrix.report }}
+          path: |
+            apps/desktop/test-results
+            apps/desktop/playwright-report
+          if-no-files-found: ignore
+          retention-days: 7
+
+      - name: Report
+        if: always() && env.IS_SAME_REPO_PR == 'true' && job.status != 'cancelled'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: scripts/ci/report.sh "${{ job.status }}" "${{ matrix.name }}"
+
+      - name: Keep the report
+        if: always() && env.IS_SAME_REPO_PR == 'true' && job.status != 'cancelled'
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: ci-report-${{ matrix.report }}
+          path: ${{ runner.temp }}/ci-report
+          if-no-files-found: ignore
+          retention-days: 1
+
   # Posts the comments the jobs above left in their ci-report-* artifacts. Those jobs run the
   # PR's code with read-only tokens; this one runs none of it, using the base branch's scripts.
   report:
     name: Report
-    needs: [changes, secret-scan, autofix, autofix-apply, checks, native-tests, android]
+    needs: [changes, secret-scan, autofix, autofix-apply, checks, native-tests, desktop, android]
     if: ${{ !cancelled() && github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == github.repository }}
     runs-on: ubuntu-latest
     permissions:

@@ -11,3 +11,4 @@ node --test scripts/ci/client-imports.test.ts >/dev/null
 cd apps/mobile
 node --disable-warning=MODULE_TYPELESS_PACKAGE_JSON --test \
   src/hermes.test.ts src/perf/memoDependencies.test.ts src/untranslatedText.test.ts >/dev/null
+node --test ../desktop/src/untranslatedText.test.ts >/dev/null

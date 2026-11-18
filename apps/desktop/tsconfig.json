@@ -1,0 +1,5 @@
+{
+  "extends": "../../tsconfig.base.json",
+  "compilerOptions": { "types": ["node"], "exactOptionalPropertyTypes": false },
+  "include": ["src/main", "src/preload", "src/shared", "src/*.test.ts", "e2e", "*.config.ts"]
+}
