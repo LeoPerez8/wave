@@ -4,7 +4,11 @@ import { tmpdir } from "node:os";
 import { basename, dirname, join } from "node:path";
 import { test } from "node:test";
 import { Database } from "@wave/client";
-import { addTrack, star, type TestDatabase } from "@wave/client/testing";
+import { addTrack, openTestDatabase, star, type TestDatabase } from "@wave/client/testing";
+import { creditSplits } from "@wave/client/db/credits";
+import { stampPreference } from "@wave/client/db/sync";
+import { syncCycle } from "@wave/client/sync/syncCycle";
+import type { SyncClock } from "@wave/core";
 import { createPlaylist } from "@wave/client/db/playlists";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
@@ -29,6 +33,12 @@ import { registerBridge, type IpcHandler } from "./bridge.ts";
 import { DesktopLibrary, desktopLibraryLayer } from "./library/library.ts";
 import { preference } from "./preferences.ts";
 import { ytMusicLayer } from "./yt/ytMusic.ts";
+import { accountLayer } from "./account/accountLayer.ts";
+import { createWaveAccount, type WaveAccountService } from "./account/account.ts";
+import { sessionStore } from "./account/sessionStore.ts";
+import { desktop, keyring } from "./account/testAccount.ts";
+import { pullAll } from "../../../sync/src/testing.ts";
+import { fakeClock } from "../../../../packages/core/src/testSyncClock.ts";
 
 const trusted = { senderFrame: "window" };
 
@@ -36,10 +46,14 @@ const trusted = { senderFrame: "window" };
 /** An audio process in memory, whose engine records what it was asked. */
 const audioInMemory = () => {
   const engineCalls: string[] = [];
+  /** Each song's Normalize Volume gain as it was loaded or lined up, and the files measured. */
+  const gains: string[] = [];
+  const measured: string[] = [];
   let status: PlaybackStatus = { state: "idle", positionMs: 0 };
   const engine: AddonEngine = {
-    load: (path, key) => {
+    load: (path, key, gainDb) => {
       engineCalls.push(`load ${path}`);
+      gains.push(`${basename(path)} ${gainDb}`);
       status = { state: "paused", positionMs: 0, durationMs: 1_000, ...(key ? { key } : {}) };
       return status;
     },
@@ -53,13 +67,19 @@ const audioInMemory = () => {
     preload: (path) => void (path === undefined || engineCalls.push(`preload ${path}`)),
     transitions: () => [],
     setVolume: (volume) => void engineCalls.push(`volume ${volume}`),
+    setCrossfade: (seconds) => void engineCalls.push(`settings crossfade ${seconds}`),
+    setNormalize: (on) => void engineCalls.push(`settings normalize ${on}`),
+    // Measurements are never answered here: the in-memory process pushes no events.
+    measure: (path) => void measured.push(path),
+    cancelMeasurements: () => undefined,
+    measurements: () => [],
   };
   const fork = (events: AudioEvents) => ({
     send: (request: AudioRequest | ResolveAnswer) =>
       "resolved" in request || queueMicrotask(() => events.message(answer(engine, request))),
     kill: () => setImmediate(events.exit),
   });
-  return { layer: playerLayer({ fork }), engineCalls };
+  return { layer: playerLayer({ fork }), engineCalls, gains, measured };
 };
 
 /** Tags as the shared Kotlin reads them, for a song titled `title`. */
@@ -143,25 +163,47 @@ const jvmInMemory = () => {
   return { layer: kotlinLayer({ spawn }), reads, yt, state };
 };
 
-const connect = (file: string, isTrusted = (event: unknown) => event === trusted) => {
+/** A build with no sync service: Settings has no Sign In and nothing goes out. */
+const noAccount = (): WaveAccountService =>
+  createWaveAccount({
+    store: sessionStore({
+      box: keyring,
+      file: "session.bin",
+      files: { read: () => undefined, write: () => {}, remove: () => {} },
+      platform: process.platform,
+    }),
+    syncUrl: null,
+    signInWithBrowser: () => Promise.reject(new Error("no sign-in")),
+    fetch: () => Promise.reject(new Error("no network")),
+    online: () => false,
+  });
+
+const connect = (
+  file: string,
+  isTrusted = (event: unknown) => event === trusted,
+  account: { readonly service: WaveAccountService; readonly clock?: SyncClock } = {
+    service: noAccount(),
+  },
+) => {
   const audio = audioInMemory();
   const jvm = jvmInMemory();
-  const runtime = ManagedRuntime.make(
-    playbackLayer.pipe(
-      Layer.provideMerge(
-        desktopLibraryLayer({
-          musicFolder: join(dirname(file), "Music"),
-          platform: process.platform,
-          pickFolder: async () => undefined,
-        }).pipe(
-          Layer.provideMerge(
-            Layer.mergeAll(audio.layer, ytMusicLayer()).pipe(
-              Layer.provideMerge(Layer.mergeAll(libraryLayer(file), jvm.layer)),
-            ),
-          ),
-        ),
+  const library = desktopLibraryLayer({
+    musicFolder: join(dirname(file), "Music"),
+    platform: process.platform,
+    pickFolder: async () => undefined,
+  }).pipe(
+    Layer.provideMerge(
+      Layer.mergeAll(audio.layer, ytMusicLayer()).pipe(
+        Layer.provideMerge(Layer.mergeAll(libraryLayer(file), jvm.layer)),
       ),
     ),
+  );
+  const runtime = ManagedRuntime.make(
+    accountLayer({
+      account: account.service,
+      focused: () => true,
+      ...(account.clock === undefined ? {} : { clock: account.clock }),
+    }).pipe(Layer.provideMerge(playbackLayer.pipe(Layer.provideMerge(library)))),
   );
   const handlers = new Map<string, IpcHandler>();
   registerBridge(
@@ -188,6 +230,8 @@ const connect = (file: string, isTrusted = (event: unknown) => event === trusted
     exposed,
     sent,
     engineCalls: audio.engineCalls,
+    gains: audio.gains,
+    measured: audio.measured,
     reads: jvm.reads,
     yt: jvm.yt,
     jvm: jvm.state,
@@ -418,9 +462,9 @@ test("the window plays, pauses and seeks a song through the bridge", async () =>
       positionMs: 400,
       durationMs: 1_000,
     });
-    // Playback sets the saved volume as it starts; the song is what this test plays.
+    // Playback sets the saved volume and settings as it starts; the song is what this test plays.
     assert.deepEqual(
-      engineCalls.filter((c) => !c.startsWith("volume")),
+      engineCalls.filter((c) => !c.startsWith("volume") && !c.startsWith("settings")),
       [`load ${song}`],
     );
     await runtime.dispose();
@@ -446,7 +490,7 @@ test("main refuses a player call whose arguments aren't a song and a time", asyn
     for (const positionMs of [-1, Number.NaN, Number.POSITIVE_INFINITY, "400", undefined])
       await assert.rejects(call("player.seek", positionMs), /refused/i, String(positionMs));
     assert.deepEqual(
-      engineCalls.filter((c) => !c.startsWith("volume")),
+      engineCalls.filter((c) => !c.startsWith("volume") && !c.startsWith("settings")),
       [],
     );
     await runtime.dispose();
@@ -541,6 +585,75 @@ test("the window plays a list from a row, skips, stars and sets the volume throu
   });
 });
 
+test("a song plays at its Normalize Volume gain, and songs with no value are measured", async () => {
+  await withFile(async (file) => {
+    const { runtime, exposed, gains, measured } = connect(file);
+    const wave = exposed.get("wave") as WaveBridge;
+    try {
+      await runtime.runPromise(
+        Effect.gen(function* () {
+          const db = (yield* Database) as unknown as TestDatabase;
+          addTrack(db, { title: "Parasite", album: "Pink Moon", trackNumber: 1, addedAt: 1 });
+        }),
+      );
+      await wave.playback.start({ kind: "songs" }, 0);
+      // No tags, no measurement and too few songs for a median: Core's typical gain.
+      assert.deepEqual(gains, ["Parasite.mp3 -5"]);
+      for (let n = 0; n < 50 && measured.length === 0; n++)
+        await new Promise((resolve) => setTimeout(resolve, 10));
+      assert.deepEqual(measured, ["/Music/Pink Moon/Parasite.mp3"]);
+    } finally {
+      await runtime.dispose();
+    }
+  });
+});
+
+test("Settings › Playback is kept for the account and reaches the engine at once", async () => {
+  await withFile(async (file) => {
+    const { runtime, exposed, handlers, engineCalls } = connect(file);
+    const wave = exposed.get("wave") as WaveBridge;
+    const call = (channel: string, ...args: unknown[]) => handlers.get(channel)!(trusted, ...args);
+    try {
+      assert.deepEqual(await wave.settings.playback(), {
+        crossfadeSeconds: 0,
+        normalizeVolume: true,
+        bufferMinutes: 2,
+      });
+      assert.ok(engineCalls.includes("settings crossfade 0"), "the engine starts with them");
+      assert.ok(engineCalls.includes("settings normalize true"));
+      const after = await wave.settings.setPlayback({
+        crossfadeSeconds: 4,
+        normalizeVolume: false,
+      });
+      assert.deepEqual(after, { crossfadeSeconds: 4, normalizeVolume: false, bufferMinutes: 2 });
+      assert.deepEqual(engineCalls.slice(-2), ["settings crossfade 4", "settings normalize false"]);
+      await wave.settings.setPlayback({ bufferMinutes: 15 });
+      assert.deepEqual(await wave.settings.playback(), {
+        crossfadeSeconds: 4,
+        normalizeVolume: false,
+        bufferMinutes: 15,
+      });
+
+      for (const change of [
+        { crossfadeSeconds: 16 },
+        { crossfadeSeconds: Number.NaN },
+        { normalizeVolume: "off" },
+        { bufferMinutes: 3 },
+        { volume: 1 },
+        null,
+        "fast",
+      ])
+        await assert.rejects(
+          call("settings.setPlayback", change),
+          /refused/i,
+          JSON.stringify(change),
+        );
+    } finally {
+      await runtime.dispose();
+    }
+  });
+});
+
 test("main refuses playback calls with a bad scope, row, command, time or volume", async () => {
   await withFile(async (file) => {
     const { runtime, handlers, engineCalls } = connect(file);
@@ -556,7 +669,7 @@ test("main refuses playback calls with a bad scope, row, command, time or volume
       await assert.rejects(call("playback.volume", 0.5, "no"), /refused/i);
       await assert.rejects(call("playback.queue", 0, 500), /refused/i);
       assert.deepEqual(
-        engineCalls.filter((c) => !c.startsWith("volume")),
+        engineCalls.filter((c) => !c.startsWith("volume") && !c.startsWith("settings")),
         [],
       );
     } finally {
@@ -613,6 +726,110 @@ test("Search finds YouTube Music songs and one plays from the results as a new q
   });
 });
 
+/** Waits until [ready] holds, as the window's polling does. */
+const until = async (ready: () => Promise<boolean>): Promise<void> => {
+  for (let tries = 0; tries < 500; tries++) {
+    if (await ready()) return;
+    await new Promise((resolve) => setTimeout(resolve, 10));
+  }
+  assert.fail("never ready");
+};
+
+test("a build with no sync service shows no Sign In and no invitation", async () => {
+  await withFile(async (file) => {
+    mkdirSync(join(dirname(file), "Music"));
+    const { runtime, exposed } = connect(file);
+    const wave = exposed.get("wave") as WaveBridge;
+    try {
+      await until(async () => (await wave.library.scanStatus()).status === "done");
+      const view = await wave.account.view();
+      assert.deepEqual(view.account, { kind: "unavailable" });
+      assert.equal(view.invitation, false);
+      assert.equal(view.theme, null);
+    } finally {
+      await runtime.dispose();
+    }
+  });
+});
+
+test("the invitation to sign in shows once the first scan finished, until it's answered", async () => {
+  await withFile(async (file) => {
+    mkdirSync(join(dirname(file), "Music"));
+    const app = await desktop();
+    const first = connect(file, undefined, { service: app.open() });
+    const wave = first.exposed.get("wave") as WaveBridge;
+    try {
+      await until(async () => (await wave.library.scanStatus()).status === "done");
+      assert.equal((await wave.account.view()).invitation, true);
+      await wave.account.answerInvitation();
+      assert.equal((await wave.account.view()).invitation, false);
+    } finally {
+      await first.runtime.dispose();
+    }
+    const second = connect(file, undefined, { service: app.open() });
+    const reopened = second.exposed.get("wave") as WaveBridge;
+    try {
+      await until(async () => (await reopened.library.scanStatus()).status === "done");
+      assert.equal((await reopened.account.view()).invitation, false, "answered for good");
+    } finally {
+      await second.runtime.dispose();
+    }
+  });
+});
+
+test("a phone's Settings › Playback reaches the desktop's engine when a sync pulls it", async () => {
+  await withFile(async (file) => {
+    const app = await desktop();
+    const phone = await app.service.signIn();
+    const { runtime, exposed, engineCalls } = connect(file, undefined, { service: app.open() });
+    const wave = exposed.get("wave") as WaveBridge;
+    try {
+      // The phone sets a 6 s Crossfade and turns Normalize Volume off, then syncs.
+      const phoneDb = await openTestDatabase();
+      const values = new Map([
+        ["settings.crossfadeSeconds", "6"],
+        ["settings.normalizeVolume", "off"],
+      ]);
+      for (const key of values.keys()) stampPreference(phoneDb, key, Date.now());
+      await syncCycle({
+        db: phoneDb,
+        splits: creditSplits(),
+        transport: {
+          request: async (method, path, body) => {
+            const response = await app.service.request(method, path, {
+              session: phone,
+              ...(body === null ? {} : { body, headers: { "content-type": "application/json" } }),
+            });
+            return { status: response.status, body: await response.text() };
+          },
+        },
+        account: "ana@example.com",
+        preferences: { value: (key) => values.get(key) ?? null, apply: () => {} },
+        now: Date.now,
+        songsChanged: true,
+        wait: async () => {},
+      });
+
+      assert.equal((await wave.settings.playback()).crossfadeSeconds, 0);
+      assert.ok(
+        engineCalls.includes("settings crossfade 0"),
+        "the engine starts with the defaults",
+      );
+      await wave.account.signIn();
+      await until(async () => (await wave.settings.playback()).crossfadeSeconds === 6);
+      assert.deepEqual(await wave.settings.playback(), {
+        crossfadeSeconds: 6,
+        normalizeVolume: false,
+        bufferMinutes: 2,
+      });
+      await until(async () => engineCalls.includes("settings normalize false"));
+      assert.deepEqual(engineCalls.slice(-2), ["settings crossfade 6", "settings normalize false"]);
+    } finally {
+      await runtime.dispose();
+    }
+  });
+});
+
 test("YT Music turned off hides its results and tells the JVM, and offline says so quietly", async () => {
   await withFile(async (file) => {
     const { runtime, exposed, yt, jvm } = connect(file);
@@ -627,6 +844,106 @@ test("YT Music turned off hides its results and tells the JVM, and offline says 
       jvm.ytError = "ERR_YT_OFFLINE";
       const offline = await wave.yt.search("pink moon");
       assert.deepEqual(offline, { status: "offline", songs: { items: [], offset: 0, total: 0 } });
+    } finally {
+      await runtime.dispose();
+    }
+  });
+});
+
+test("signing in from the window brings the account's playlists and theme, and a star goes up", async () => {
+  await withFile(async (file) => {
+    const app = await desktop();
+    const phone = await app.service.signIn();
+    const { clock, pass } = fakeClock();
+    const { runtime, exposed } = connect(file, undefined, { service: app.open(), clock });
+    const wave = exposed.get("wave") as WaveBridge;
+    try {
+      await runtime.runPromise(
+        Effect.gen(function* () {
+          const db = (yield* Database) as unknown as TestDatabase;
+          addTrack(db, { title: "Pink Moon", artist: "Nick Drake", album: "Pink Moon" });
+        }),
+      );
+      // The phone's Library: a playlist of a song this computer has and one it hasn't.
+      const phoneDb = await openTestDatabase();
+      const pinkMoon = addTrack(phoneDb, {
+        title: "Pink Moon",
+        artist: "Nick Drake",
+        album: "Pink Moon",
+      });
+      const road = addTrack(phoneDb, { title: "Road", artist: "Nick Drake", album: "Pink Moon" });
+      createPlaylist(
+        phoneDb,
+        "Night",
+        [
+          { source: "library", trackId: pinkMoon },
+          { source: "library", trackId: road },
+        ],
+        Date.now(),
+      );
+      stampPreference(phoneDb, "settings.theme", Date.now());
+      await syncCycle({
+        db: phoneDb,
+        splits: creditSplits(),
+        transport: {
+          request: async (method, path, body) => {
+            const response = await app.service.request(method, path, {
+              session: phone,
+              ...(body === null ? {} : { body, headers: { "content-type": "application/json" } }),
+            });
+            return { status: response.status, body: await response.text() };
+          },
+        },
+        account: "ana@example.com",
+        preferences: {
+          value: (key) => (key === "settings.theme" ? '{"light":"white"}' : null),
+          apply: () => {},
+        },
+        now: Date.now,
+        songsChanged: true,
+        wait: async () => {},
+      });
+
+      const before = (await wave.account.view()).revision;
+      await wave.account.signIn();
+      assert.equal((await wave.account.view()).account.kind, "account");
+      await until(async () => (await wave.account.view()).revision > before);
+      await until(
+        async () => (await wave.library.browse({ kind: "playlists" }, 0, 10)).total === 1,
+      );
+      const night = (await wave.library.browse({ kind: "playlists" }, 0, 10)).items[0]!;
+      assert.deepEqual(
+        (await wave.library.browse({ kind: "playlist", id: night.id }, 0, 10)).items.map((row) => [
+          row.title,
+          row.path === null,
+        ]),
+        [
+          ["Pink Moon", false],
+          ["Road", true],
+        ],
+      );
+      assert.equal((await wave.account.view()).theme, '{"light":"white"}');
+
+      await wave.playback.start({ kind: "songs" }, 0);
+      await wave.playback.favorite();
+      await pass(10_000);
+      await until(async () => (await pullAll(app.service, phone)).favorites.length === 1);
+
+      // A star from a song's menu goes up the same way.
+      const roadRow = (await wave.library.browse({ kind: "playlist", id: night.id }, 0, 10))
+        .items[1]!;
+      await wave.songs.run(
+        { scope: { kind: "playlist", id: night.id }, ids: [roadRow.id] },
+        "favorite",
+      );
+      await pass(10_000);
+      // Asked seldom: the service answers 429 to a client that pulls too often.
+      let favorites = 0;
+      for (let tries = 0; tries < 20 && favorites < 2; tries++) {
+        await new Promise((resolve) => setTimeout(resolve, 100));
+        favorites = (await pullAll(app.service, phone)).favorites.length;
+      }
+      assert.equal(favorites, 2, "the song menu's star went up");
     } finally {
       await runtime.dispose();
     }
@@ -651,6 +968,136 @@ test("main refuses YT Music calls with bad songs, settings, queries or covers", 
         /yt-unknown/,
         "only songs a search found",
       );
+    } finally {
+      await runtime.dispose();
+    }
+  });
+});
+
+test("a song's menu and the selection bar offer and run the phone's actions through the bridge", async () => {
+  await withFile(async (file) => {
+    const { runtime, exposed } = connect(file);
+    const wave = exposed.get("wave") as WaveBridge;
+    try {
+      const { ids, playlistId } = await runtime.runPromise(
+        Effect.gen(function* () {
+          const db = (yield* Database) as unknown as TestDatabase;
+          const ids = ["Parasite", "Pink Moon", "Road"].map((title, n) =>
+            addTrack(db, { title, artist: "Nick Drake", album: "Pink Moon", trackNumber: n + 1 }),
+          );
+          const playlistId = createPlaylist(db, "Evening", [], 1000).playlistId;
+          return { ids, playlistId };
+        }),
+      );
+      const songs = { kind: "songs" } as const;
+      const album = (await wave.library.browse({ kind: "albums" }, 0, 1)).items[0]!;
+      const menu = await wave.songs.actions({ scope: songs, ids: [ids[0]!] }, "menu");
+      assert.equal(menu.title, "Parasite");
+      assert.equal(menu.count, 1);
+      assert.deepEqual(menu.entries, [
+        { action: "playNext" },
+        { action: "addToQueue" },
+        { action: "addToPlaylist" },
+        { action: "favorite" },
+        { action: "goToAlbum", albumId: album.id },
+        { action: "goToArtist", artists: { kind: "open", artistId: menu.artists[0]!.id } },
+        { action: "select" },
+        { action: "removeFromLibrary" },
+      ]);
+      assert.deepEqual(
+        menu.artists.map((artist) => artist.name),
+        ["Nick Drake"],
+      );
+      const onAlbum = await wave.songs.actions(
+        { scope: { kind: "album", id: album.id }, ids: [ids[0]!] },
+        "selection",
+      );
+      assert.deepEqual(
+        onAlbum.entries.map((entry) => entry.action),
+        ["playNext", "addToQueue", "addToPlaylist", "favorite", "goToArtist", "removeFromLibrary"],
+      );
+
+      // Select All with one song unchecked acts on the others, in list order.
+      const rest = { scope: songs, all: true, except: [ids[1]!] } as const;
+      assert.equal((await wave.songs.actions(rest, "selection")).count, 2);
+      await wave.playback.start(songs, 1);
+      assert.deepEqual(await wave.songs.run(rest, "addToQueue"), { kind: "queued", count: 2 });
+      assert.deepEqual(
+        (await wave.playback.queue(0, 10)).items.map((row) => row.title),
+        // Queued songs play after the current one, ahead of the rest of the list, as on the phone.
+        ["Parasite", "Pink Moon", "Parasite", "Road", "Road"],
+      );
+      assert.deepEqual(await wave.songs.run(rest, "favorite"), {
+        kind: "favorite",
+        on: true,
+        count: 2,
+      });
+      assert.equal((await wave.library.browse({ kind: "favorites" }, 0, 10)).total, 2);
+      assert.deepEqual(
+        (await wave.songs.actions(rest, "selection")).entries.map((entry) => entry.action),
+        [
+          "playNext",
+          "addToQueue",
+          "addToPlaylist",
+          "unfavorite",
+          "goToAlbum",
+          "goToArtist",
+          "removeFromLibrary",
+        ],
+      );
+      assert.deepEqual(await wave.songs.run(rest, "addToPlaylist", playlistId), {
+        kind: "playlist",
+        name: "Evening",
+        added: 2,
+        alreadyIn: 0,
+      });
+      assert.deepEqual(await wave.songs.run(rest, "addToPlaylist", playlistId), {
+        kind: "playlist",
+        name: "Evening",
+        added: 0,
+        alreadyIn: 2,
+      });
+      assert.deepEqual(
+        await wave.songs.run({ scope: songs, ids: [ids[2]!] }, "removeFromLibrary"),
+        {
+          kind: "removed",
+          count: 1,
+        },
+      );
+      assert.deepEqual(
+        (await wave.library.browse(songs, 0, 10)).items.map((row) => row.title),
+        ["Parasite", "Pink Moon"],
+      );
+      assert.deepEqual((await wave.library.exclusions(0, 10)).items, ["/Music/Pink Moon/Road.mp3"]);
+    } finally {
+      await runtime.dispose();
+    }
+  });
+});
+
+test("main refuses song actions with a bad target, surface, action or playlist", async () => {
+  await withFile(async (file) => {
+    const { runtime, handlers } = connect(file);
+    const call = (channel: string, ...args: unknown[]) => handlers.get(channel)!(trusted, ...args);
+    const songs = { kind: "songs" };
+    try {
+      for (const target of [
+        undefined,
+        { scope: songs },
+        { scope: { kind: "albums" }, ids: [1] },
+        { scope: songs, ids: [0] },
+        { scope: songs, ids: ["1"] },
+        { scope: songs, ids: Array.from({ length: 10_001 }, (_, n) => n + 1) },
+        { scope: songs, all: false, except: [] },
+        { scope: songs, all: true, except: [1.5] },
+      ])
+        await assert.rejects(call("songs.actions", target, "menu"), /refused/i);
+      const one = { scope: songs, ids: [1] };
+      await assert.rejects(call("songs.actions", one, "bar"), /refused/i);
+      for (const action of ["delete", "select", "goToAlbum", undefined])
+        await assert.rejects(call("songs.run", one, action), /refused/i, String(action));
+      await assert.rejects(call("songs.run", one, "addToPlaylist"), /refused/i);
+      await assert.rejects(call("songs.run", one, "addToPlaylist", -1), /refused/i);
     } finally {
       await runtime.dispose();
     }

@@ -21,6 +21,11 @@ import {
   markScanned,
 } from "@wave/client/db/libraryQueries";
 import { trackQuery, BY_TITLE } from "@wave/client/db/tracks";
+import { creditSplits } from "@wave/client/db/credits";
+import { removeSongs } from "@wave/client/db/missingSongs";
+import { chunks } from "@wave/client/db/chunks";
+import { excludedFolders as exclusions, tracks } from "@wave/client/db/schema";
+import { inArray } from "drizzle-orm";
 import { libraryCounts } from "@wave/client/db/counts";
 import { scanPathWithin } from "@wave/core";
 import type { IndexedTrack } from "@wave/client";
@@ -76,6 +81,8 @@ export const createScanner = ({
   };
   let roots: readonly ScanFolder[] = [];
   let disposed = false;
+  /** Hear each scan that finished. */
+  const listeners = new Set<() => void>();
   let active: Promise<void> | undefined;
   let again = false;
   let timer: ReturnType<typeof setTimeout> | undefined;
@@ -146,6 +153,8 @@ export const createScanner = ({
       revision: state.revision,
     };
     const excluded = excludedFolders(db);
+    // A song removed from the Library is its file's own exclusion.
+    const excludedFiles = new Set(excluded.map((path) => scanPathKey(path, platform)));
     const files = new Map<string, { path: string; sizeBytes: number; modifiedAt: number }>();
     const visited = new Set<string>();
     const watched = new Set<string>();
@@ -174,7 +183,8 @@ export const createScanner = ({
         if (child.isDirectory() || linked?.isDirectory()) await walk(path);
         else if (
           (child.isFile() || linked?.isFile()) &&
-          AUDIO.has(extname(path).slice(1).toLowerCase())
+          AUDIO.has(extname(path).slice(1).toLowerCase()) &&
+          !excludedFiles.has(scanPathKey(path, platform))
         ) {
           const info = await stat(path);
           files.set(scanPathKey(path, platform), {
@@ -282,6 +292,7 @@ export const createScanner = ({
       Date.now(),
     );
     state = { ...state, status: "done", revision: state.revision + 1 };
+    for (const listener of listeners) listener();
   };
 
   const refresh = (): Promise<void> => {
@@ -323,12 +334,37 @@ export const createScanner = ({
       settings.exclude(await canonical(path));
       await refresh();
     },
+    /**
+     * Takes songs out of the Library, as the phone's Remove from Library does: their files
+     * stay on disk, excluded from later scans until Settings includes them again.
+     */
+    removeSongs: async (trackIds: readonly number[]) => {
+      await active;
+      db.transaction((tx) => {
+        for (const ids of chunks(trackIds)) {
+          const paths = tx
+            .select({ path: tracks.path })
+            .from(tracks)
+            .where(inArray(tracks.id, ids))
+            .all()
+            .flatMap((row) => (row.path === null ? [] : [{ path: row.path, addedAt: Date.now() }]));
+          if (paths.length > 0) tx.insert(exclusions).values(paths).onConflictDoNothing().run();
+        }
+      });
+      removeSongs(db, creditSplits(), trackIds, Date.now());
+      state = { ...state, revision: state.revision + 1 };
+    },
     include: async (path: string) => {
       await active;
       settings.include(await canonical(path));
       await refresh();
     },
     status: (): ScanStatus => state,
+    /** Hears each scan that finished; the Wave account's sync looks at the song list then. */
+    subscribe: (listener: () => void): (() => void) => {
+      listeners.add(listener);
+      return () => void listeners.delete(listener);
+    },
     folders: (offset = 0, limit = 100): Page<DesktopFolder> => {
       const items = desktopRoots(db, platform).map((root) => ({
         ...root,

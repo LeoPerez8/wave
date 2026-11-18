@@ -12,6 +12,7 @@ import {
   signOutPlan,
   syncsPreference,
   vanishedFile,
+  desktopUsesPreference,
 } from "./index.ts";
 import type { RawTrack } from "./index.ts";
 
@@ -39,6 +40,35 @@ describe("syncsPreference", () => {
     for (const key of ["settings.bounceAmount", "settings.longPressDelayMs", "settings.future"]) {
       assert.equal(syncsPreference(key), true);
     }
+  });
+});
+
+describe("desktopUsesPreference", () => {
+  test("the desktop ignores the phone's own UI settings", () => {
+    for (const key of [
+      "settings.tabBar",
+      "settings.swipeActions",
+      "settings.longPressDelayMs",
+      "settings.glass",
+      "settings.nowPlayingRow",
+      "settings.bounceAmount",
+    ])
+      assert.equal(desktopUsesPreference(key), false, key);
+  });
+
+  test("account-wide settings apply on the desktop", () => {
+    for (const key of [
+      "settings.theme",
+      "settings.ytMusic",
+      "settings.dontPlayExplicit",
+      "settings.normalizeVolume",
+      "settings.continueQueue",
+    ])
+      assert.equal(desktopUsesPreference(key), true, key);
+  });
+
+  test("a retired preference applies nowhere", () => {
+    assert.equal(desktopUsesPreference("settings.tapAnimationMs"), false);
   });
 });
 

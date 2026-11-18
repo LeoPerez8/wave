@@ -5,9 +5,8 @@ import { describe, test } from "node:test";
 import { EMPTY_QUEUE, reduceQueue, ytTrackId } from "@wave/core";
 import * as Effect from "effect/Effect";
 
-import type { SongMeasurement, SongToMeasure } from "@wave/client/db/loudness";
-import type { AudioMeasurement } from "../native/audioMeasurement.ts";
-import { createSongMeasurements } from "./songMeasurements.ts";
+import type { SongMeasurement, SongToMeasure } from "./db/loudness.ts";
+import { createSongMeasurements, type AudioMeasurement } from "./songMeasurements.ts";
 
 /** A promise for the meter's answer, settled by the test. */
 interface Pending {

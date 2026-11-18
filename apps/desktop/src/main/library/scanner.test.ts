@@ -138,3 +138,36 @@ test("watching picks up nested file changes and a disconnected root returns with
     await rm(folder, { recursive: true, force: true });
   }
 });
+
+test("removing songs from the Library keeps their files out of later scans until included", async () => {
+  const folder = await mkdtemp(join(tmpdir(), "wave-remove-"));
+  const music = join(folder, "Music");
+  await mkdir(music);
+  await writeFile(join(music, "One.flac"), "music");
+  await writeFile(join(music, "Two.flac"), "music");
+  const scanner = createScanner({
+    db: await openTestDatabase(),
+    platform: process.platform,
+    musicFolder: music,
+    readTags: async () => ({ artist: "Nick Drake", durationMs: 124000 }),
+  });
+  try {
+    await scanner.refresh();
+    const [one] = scanner.songs(0, 20).items.filter((song) => song.path!.endsWith("One.flac"));
+    const before = scanner.status().revision;
+    await scanner.removeSongs([one!.id]);
+    assert.deepEqual(
+      scanner.songs(0, 20).items.map((song) => song.path!.split("/").at(-1)),
+      ["Two.flac"],
+    );
+    assert.ok(scanner.status().revision > before);
+    await scanner.refresh();
+    assert.equal(scanner.songs(0, 20).total, 1);
+    assert.deepEqual(scanner.exclusions().items, [one!.path]);
+    await scanner.include(one!.path!);
+    assert.equal(scanner.songs(0, 20).total, 2);
+  } finally {
+    await scanner.dispose();
+    await rm(folder, { recursive: true, force: true });
+  }
+});

@@ -50,6 +50,8 @@ pub struct Decoder {
     /// The first chunk, decoded at open to find `origin`.
     pending: Option<Vec<f32>>,
     scratch: Vec<f32>,
+    /// How many channels the file has; the chunks are stereo whatever it is.
+    channels: usize,
 }
 
 /// Decoded stereo audio and where it starts on the track's timeline, in frames.
@@ -127,6 +129,7 @@ impl Decoder {
             drop_before: 0,
             pending: None,
             scratch: Vec::new(),
+            channels: 2,
         };
         let first = decoder
             .decode_next()?
@@ -146,6 +149,11 @@ impl Decoder {
 
     pub fn sample_rate(&self) -> u32 {
         self.rate
+    }
+
+    /// How many channels the file holds: 1 for mono, whose chunks repeat it on both sides.
+    pub fn source_channels(&self) -> usize {
+        self.channels
     }
 
     /// The song's length in frames, when the file says.
@@ -228,6 +236,7 @@ impl Decoder {
                 Err(e) => return Err(EngineError::Decode(e.to_string())),
             };
             let channels = buffer.spec().channels().count().max(1);
+            self.channels = channels;
             self.scratch.clear();
             buffer.copy_to_vec_interleaved(&mut self.scratch);
             let frames = (self.scratch.len() / channels) as i64;

@@ -6,10 +6,19 @@
 import type { PlayerView, PlaybackCommand, QueueRow } from "./playerView.ts";
 import type { LibraryCounts } from "@wave/client/db/counts";
 import type { PlaybackStatus } from "./playback.ts";
+import type { PlaybackSettings } from "./playbackSettings.ts";
 import type { SongTags } from "./tags.ts";
 import type { DesktopFolder, DesktopSong, ScanStatus } from "./library.ts";
 import type { BrowseScope, BrowsePage } from "./browse.ts";
 import type { YtSearchPage } from "./yt.ts";
+import type { AccountView } from "./account.ts";
+import type {
+  ActionSurface,
+  SongMenu,
+  SongRunAction,
+  SongRunResult,
+  SongTarget,
+} from "./songActions.ts";
 export type Appearance = "system" | "light" | "dark";
 
 /** One window of a list, as a list call returns it. */
@@ -50,10 +59,23 @@ export interface BridgeContract {
     readonly result: Page<QueueRow>;
   };
 
+  readonly "account.view": { readonly args: readonly []; readonly result: AccountView };
+  /** Opens Google's sign-in in the browser; resolves once it ended, however it did. */
+  readonly "account.signIn": { readonly args: readonly []; readonly result: void };
+  readonly "account.cancelSignIn": { readonly args: readonly []; readonly result: void };
+  readonly "account.signOut": { readonly args: readonly []; readonly result: void };
+  readonly "account.signOutEverywhere": { readonly args: readonly []; readonly result: void };
+  readonly "account.answerInvitation": { readonly args: readonly []; readonly result: void };
+
   readonly "settings.appearance": { readonly args: readonly []; readonly result: Appearance };
   readonly "settings.setAppearance": {
     readonly args: readonly [appearance: Appearance];
     readonly result: void;
+  };
+  readonly "settings.playback": { readonly args: readonly []; readonly result: PlaybackSettings };
+  readonly "settings.setPlayback": {
+    readonly args: readonly [change: Partial<PlaybackSettings>];
+    readonly result: PlaybackSettings;
   };
   readonly "settings.ytMusic": { readonly args: readonly []; readonly result: boolean };
   readonly "settings.setYtMusic": { readonly args: readonly [on: boolean]; readonly result: void };
@@ -92,6 +114,16 @@ export interface BridgeContract {
   readonly "library.exclude": { readonly args: readonly []; readonly result: void };
   readonly "library.removeRoot": { readonly args: readonly [path: string]; readonly result: void };
   readonly "library.include": { readonly args: readonly [path: string]; readonly result: void };
+  /** The entries a song's menu (or the selection bar) offers for [target]. */
+  readonly "songs.actions": {
+    readonly args: readonly [target: SongTarget, surface: ActionSurface];
+    readonly result: SongMenu;
+  };
+  /** Runs one of the entries main runs; Add to Playlist names the playlist. */
+  readonly "songs.run": {
+    readonly args: readonly [target: SongTarget, action: SongRunAction, playlistId?: number];
+    readonly result: SongRunResult;
+  };
   /** Opens an audio file by its absolute path, paused at its start. */
   readonly "player.load": {
     readonly args: readonly [path: string];
@@ -141,6 +173,8 @@ export const BRIDGE_CALLS = [
   "library.exclude",
   "library.removeRoot",
   "library.include",
+  "songs.actions",
+  "songs.run",
   "player.load",
   "player.play",
   "player.pause",
@@ -149,10 +183,18 @@ export const BRIDGE_CALLS = [
   "tags.read",
   "settings.appearance",
   "settings.setAppearance",
+  "settings.playback",
+  "settings.setPlayback",
   "settings.ytMusic",
   "settings.setYtMusic",
   "yt.search",
   "yt.artwork",
+  "account.view",
+  "account.signIn",
+  "account.cancelSignIn",
+  "account.signOut",
+  "account.signOutEverywhere",
+  "account.answerInvitation",
 ] as const satisfies readonly BridgeCall[] &
   (BridgeContract extends PagedLists<BridgeContract> ? unknown : never);
 
@@ -192,6 +234,14 @@ export interface WaveBridge {
     readonly removeRoot: (path: string) => Promise<void>;
     readonly include: (path: string) => Promise<void>;
   };
+  readonly songs: {
+    readonly actions: (target: SongTarget, surface: ActionSurface) => Promise<SongMenu>;
+    readonly run: (
+      target: SongTarget,
+      action: SongRunAction,
+      playlistId?: number,
+    ) => Promise<SongRunResult>;
+  };
   /** One song at a time; each call answers with the engine's status after it. */
   readonly player: {
     readonly load: (path: string) => Promise<PlaybackStatus>;
@@ -206,12 +256,25 @@ export interface WaveBridge {
   readonly settings: {
     readonly appearance: () => Promise<Appearance>;
     readonly setAppearance: (appearance: Appearance) => Promise<void>;
+    /** Settings › Playback: Crossfade, Normalize Volume and Buffer, synced with the account. */
+    readonly playback: () => Promise<PlaybackSettings>;
+    /** Keeps a change to Settings › Playback; it applies from the next song. */
+    readonly setPlayback: (change: Partial<PlaybackSettings>) => Promise<PlaybackSettings>;
     readonly ytMusic: () => Promise<boolean>;
     readonly setYtMusic: (on: boolean) => Promise<void>;
   };
   readonly yt: {
     readonly search: (query: string) => Promise<YtSearchPage>;
     readonly artwork: (url: string) => Promise<string | null>;
+  };
+  /** The Wave account: the session itself never reaches the window. */
+  readonly account: {
+    readonly view: () => Promise<AccountView>;
+    readonly signIn: () => Promise<void>;
+    readonly cancelSignIn: () => Promise<void>;
+    readonly signOut: () => Promise<void>;
+    readonly signOutEverywhere: () => Promise<void>;
+    readonly answerInvitation: () => Promise<void>;
   };
 }
 
@@ -245,6 +308,10 @@ export const createBridge = (invoke: Invoke): WaveBridge => ({
     removeRoot: (path) => invoke("library.removeRoot", path),
     include: (path) => invoke("library.include", path),
   },
+  songs: {
+    actions: (target, surface) => invoke("songs.actions", target, surface),
+    run: (target, action, playlistId) => invoke("songs.run", target, action, playlistId),
+  },
   player: {
     load: (path) => invoke("player.load", path),
     play: () => invoke("player.play"),
@@ -258,11 +325,21 @@ export const createBridge = (invoke: Invoke): WaveBridge => ({
   settings: {
     appearance: () => invoke("settings.appearance"),
     setAppearance: (appearance) => invoke("settings.setAppearance", appearance),
+    playback: () => invoke("settings.playback"),
+    setPlayback: (change) => invoke("settings.setPlayback", change),
     ytMusic: () => invoke("settings.ytMusic"),
     setYtMusic: (on) => invoke("settings.setYtMusic", on),
   },
   yt: {
     search: (query) => invoke("yt.search", query),
     artwork: (url) => invoke("yt.artwork", url),
+  },
+  account: {
+    view: () => invoke("account.view"),
+    signIn: () => invoke("account.signIn"),
+    cancelSignIn: () => invoke("account.cancelSignIn"),
+    signOut: () => invoke("account.signOut"),
+    signOutEverywhere: () => invoke("account.signOutEverywhere"),
+    answerInvitation: () => invoke("account.answerInvitation"),
   },
 });

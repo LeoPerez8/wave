@@ -1,6 +1,9 @@
-import { useEffect, useRef, useState, type KeyboardEvent } from "react";
+import { desktopKey } from "@wave/core";
+import { useEffect, useRef, useState, type KeyboardEvent, type MouseEvent } from "react";
 import type { BrowsePage, BrowseRow, BrowseScope } from "../../shared/browse.ts";
 import { Icon } from "./Icon.tsx";
+import { pressOf } from "./keys.ts";
+import { isChecked, toggled, type Selection } from "./SongActions.tsx";
 import { labels, text } from "./text.ts";
 
 const SIZE = 100;
@@ -55,12 +58,20 @@ export function VirtualTable({
   onOpen,
   onHero,
   onError,
+  onMenu,
+  selection,
+  onSelection,
 }: {
   readonly scope: BrowseScope;
   readonly revision: number;
   readonly onOpen: (row: BrowseRow, index: number) => void;
   readonly onHero?: (row: BrowseRow | undefined) => void;
   readonly onError: () => void;
+  /** Opens [row]'s menu at [at] (right-click, Shift+F10 or the Menu key). */
+  readonly onMenu?: (row: BrowseRow, at: { readonly x: number; readonly y: number }) => void;
+  /** Selection mode's checked songs, while it is on. */
+  readonly selection?: Selection | undefined;
+  readonly onSelection?: (selection: Selection) => void;
 }) {
   const viewport = useRef<HTMLDivElement>(null);
   const cache = useRef(new Map<number, BrowsePage>());
@@ -141,26 +152,56 @@ export function VirtualTable({
       onError();
     }
   };
+  /** Opens the menu of row [index], at [at] or under the row. */
+  const menu = (index: number, at?: { readonly x: number; readonly y: number }) => {
+    const row = get(index);
+    if (row === undefined || onMenu === undefined || !songList) return;
+    const element = document.getElementById(`library-row-${index}`);
+    const rect = element?.getBoundingClientRect();
+    onMenu(row, at ?? { x: (rect?.left ?? 0) + 48, y: rect?.bottom ?? 0 });
+  };
+  const choose = (row: BrowseRow, index: number) => {
+    if (selection !== undefined && onSelection !== undefined)
+      onSelection(toggled(selection, row.id));
+    else onOpen(row, index);
+  };
   const key = (event: KeyboardEvent) => {
-    const moves: Record<string, number> = {
-      ArrowDown: active + 1,
-      ArrowUp: active - 1,
-      Home: 0,
-      End: total - 1,
-      PageDown: active + Math.max(1, Math.floor(height / HEIGHT)),
-      PageUp: active - Math.max(1, Math.floor(height / HEIGHT)),
+    const page = Math.max(1, Math.floor(height / HEIGHT));
+    const moves: Partial<Record<string, number>> = {
+      rowDown: active + 1,
+      rowUp: active - 1,
+      firstRow: 0,
+      lastRow: total - 1,
+      pageDown: active + page,
+      pageUp: active - page,
     };
-    if (event.key in moves) {
+    const command = desktopKey(pressOf(event), "list");
+    if (command === undefined) return;
+    const to = moves[command];
+    if (to !== undefined) {
       event.preventDefault();
-      move(moves[event.key]!);
-    } else if (event.key === "Enter") {
+      move(to);
+    } else if (command === "playRow") {
       event.preventDefault();
       const row = get(active);
-      if (row) onOpen(row, active);
-    } else if (/^[a-z0-9]$/i.test(event.key) && !event.ctrlKey && !event.altKey) {
+      if (row) choose(row, active);
+    } else if (command === "jump") {
       event.preventDefault();
       void jump(event.key);
+    } else if (command === "songMenu") {
+      event.preventDefault();
+      menu(active);
     }
+  };
+  const contextMenu = (event: MouseEvent) => {
+    event.preventDefault();
+    const row = (event.target as Element).closest<HTMLElement>("[data-row]");
+    if (row === null) return;
+    const index = Number(row.dataset["row"]);
+    setSelected(index);
+    setActive(index);
+    viewport.current!.parentElement!.focus();
+    menu(index, { x: event.clientX, y: event.clientY });
   };
   return (
     <div
@@ -180,6 +221,7 @@ export function VirtualTable({
           : undefined
       }
       onKeyDown={key}
+      onContextMenu={contextMenu}
     >
       <div className="table-head table-columns" role="row" aria-rowindex={1}>
         <span role="columnheader">{text.desktopLibrary.titleColumn}</span>
@@ -210,7 +252,10 @@ export function VirtualTable({
                   id={`library-row-${index}`}
                   role="row"
                   aria-rowindex={index + 2}
-                  aria-selected={selected === index}
+                  data-row={index}
+                  aria-selected={
+                    selection === undefined ? selected === index : isChecked(selection, row.id)
+                  }
                   aria-disabled={songList && (row.unavailable || row.path === null)}
                   className={`table-row table-columns ${active === index ? "active-row" : ""}`}
                   style={{ top: index * HEIGHT }}
@@ -218,10 +263,19 @@ export function VirtualTable({
                     setSelected(index);
                     setActive(index);
                     viewport.current!.parentElement!.focus();
+                    if (selection !== undefined) choose(row, index);
                   }}
-                  onDoubleClick={() => onOpen(row, index)}
+                  onDoubleClick={() => selection === undefined && onOpen(row, index)}
                 >
                   <div role="gridcell" className="title-cell">
+                    {selection !== undefined && (
+                      <span
+                        className="row-check"
+                        role="checkbox"
+                        aria-checked={isChecked(selection, row.id)}
+                        aria-label={text.desktopLibrary.checkSong(row.title)}
+                      />
+                    )}
                     <span className="row-picture">
                       {scope.kind === "album" ? (
                         <span className="track-number">{row.trackNumber ?? index + 1}</span>

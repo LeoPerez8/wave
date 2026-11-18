@@ -1527,6 +1527,7 @@ export { graveyardRemovalsOf, graveyardRestoreIndex, graveyardSongs } from "./pl
 export type { GraveyardItem, GraveyardSlot } from "./playlistGraveyard.ts";
 export {
   RECORDING_LENGTH_TOLERANCE_MS,
+  desktopUsesPreference,
   fillMissingSongs,
   findRecording,
   joinLibraries,
@@ -2500,6 +2501,7 @@ export {
   type SavedQueueParts,
 } from "./queuePersistence.ts";
 export {
+  DESKTOP_SYNC_PERIOD_MS,
   FOREGROUND_SYNC_INTERVAL_MS,
   PLAY_BATCH_DELAY_MS,
   PLAY_BATCH_MAX_MS,
@@ -2802,3 +2804,14 @@ export { MARQUEE, marqueeOffset, marqueePlan, marqueeStill, readsRightToLeft } f
 export { scanPath, scanPathKey, scanPathWithin, scanFileState } from "./desktopScan.ts";
 export type { ScanFolder } from "./desktopScan.ts";
 export type { MarqueeLine, MarqueeLineSize, MarqueePlan } from "./marquee.ts";
+export { desktopSongActions } from "./desktopSongMenu.ts";
+export type { DesktopSongSubject } from "./desktopSongMenu.ts";
+export { DESKTOP_SHORTCUTS, desktopKey, shortcutKeys } from "./desktopKeys.ts";
+export type {
+  DesktopCommand,
+  DesktopFocus,
+  DesktopKeyPress,
+  DesktopShortcut,
+  ShortcutId,
+  ShortcutKey,
+} from "./desktopKeys.ts";

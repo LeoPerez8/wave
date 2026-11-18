@@ -1,12 +1,14 @@
 /**
  * Main's hold on the audio process. Each call goes to the process and waits for its answer; a
  * process that exits, or stops answering, is replaced, and the new one gets the song back,
- * paused where it was. So a crash or a stall in audio never reaches the window.
+ * paused where it was, with the playback settings. So a crash or a stall in audio never reaches
+ * the window.
  *
  * The process asks main for a YT Music song's address with a `resolve` event; main answers
  * through `options.resolve`. A load that fetches a song may take as long as the network does.
  */
-import type { PlaybackStatus, PlaybackEvent } from "../../shared/playback.ts";
+import type { AudioMeasurement } from "@wave/client/songMeasurements";
+import type { LoudnessResult, PlaybackStatus, PlaybackEvent } from "../../shared/playback.ts";
 import {
   failure,
   streamedVideoId,
@@ -59,6 +61,11 @@ export class AudioEngineError extends Error {
 
 export interface AudioSupervisor {
   readonly call: (call: AudioCall, args: readonly unknown[]) => Promise<PlaybackStatus>;
+  /**
+   * Measures the loudness of the file at [path] (Normalize Volume), one file at a time behind
+   * those asked before; rejects when the process goes before it answers.
+   */
+  readonly measure: (path: string) => Promise<AudioMeasurement>;
   readonly dispose: () => void;
   readonly subscribe: (listener: (event: PlaybackEvent) => void) => () => void;
 }
@@ -78,6 +85,13 @@ const RESTORE_ATTEMPTS = 3;
 
 const backoff = (attempt: number) => Math.min(250 * 2 ** (attempt - 1), 10_000);
 
+const measurementOf = (result: LoudnessResult): AudioMeasurement =>
+  result.kind === "measured"
+    ? { kind: "measured", loudness: result.loudness ?? Number.NaN, peak: result.peak ?? 0 }
+    : { kind: result.kind };
+
+const gainOf = (value: unknown) => (typeof value === "number" ? value : undefined);
+
 export const superviseAudio = (options: AudioSupervisorOptions): AudioSupervisor => {
   const callTimeoutMs = options.callTimeoutMs ?? 5_000;
   const streamCallTimeoutMs = options.streamCallTimeoutMs ?? 45_000;
@@ -89,23 +103,58 @@ export const superviseAudio = (options: AudioSupervisorOptions): AudioSupervisor
   let disposed = false;
   const waiting = new Map<number, Waiting>();
   const listeners = new Set<(event: PlaybackEvent) => void>();
-  /** The song to give a new process, and where it was. */
-  let song: { path: string; positionMs: number; key?: string | undefined } | undefined;
+  /** The song to give a new process, where it was, and the gain it plays at. */
+  let song:
+    | { path: string; positionMs: number; key?: string | undefined; gainDb?: number | undefined }
+    | undefined;
   /** The song lined up after it, which becomes the song once the engine moves on to it. */
-  let lined: { readonly path: string; readonly key: string } | undefined;
+  let lined:
+    | {
+        readonly path: string;
+        readonly key: string;
+        readonly gainDb: number | undefined;
+        readonly fade: boolean | undefined;
+      }
+    | undefined;
   let volume: number | undefined;
+  let crossfade: number | undefined;
+  let normalize: boolean | undefined;
+  /** Measurements asked of the process running, by id. */
+  const measuring = new Map<
+    string,
+    {
+      readonly resolve: (result: AudioMeasurement) => void;
+      readonly reject: (error: Error) => void;
+    }
+  >();
+  let nextMeasurement = 1;
 
   const remember = (call: AudioCall, args: readonly unknown[], status: PlaybackStatus) => {
     if (call === "load") {
-      song = { path: String(args[0]), positionMs: status.positionMs, key: status.key };
+      song = {
+        path: String(args[0]),
+        positionMs: status.positionMs,
+        key: status.key,
+        gainDb: gainOf(args[2]),
+      };
       lined = undefined;
       return;
     }
     if (call === "preload") {
-      const [path, key] = args;
-      lined = typeof path === "string" && typeof key === "string" ? { path, key } : undefined;
+      const [path, key, gainDb, fade] = args;
+      lined =
+        typeof path === "string" && typeof key === "string"
+          ? {
+              path,
+              key,
+              gainDb: gainOf(gainDb),
+              fade: typeof fade === "boolean" ? fade : undefined,
+            }
+          : undefined;
     }
     if (call === "setVolume") volume = Number(args[0]);
+    if (call === "setCrossfade") crossfade = Number(args[0]);
+    if (call === "setNormalize") normalize = args[0] === true;
     if (song !== undefined && status.state !== "idle") song.positionMs = status.positionMs;
   };
 
@@ -113,9 +162,17 @@ export const superviseAudio = (options: AudioSupervisorOptions): AudioSupervisor
   const follow = (status: PlaybackStatus) => {
     if (song === undefined) return;
     if (lined !== undefined && status.key === lined.key && song.key !== lined.key) {
-      song = { path: lined.path, key: lined.key, positionMs: status.positionMs };
+      const { path, key, gainDb } = lined;
+      song = { path, key, positionMs: status.positionMs, gainDb };
       lined = undefined;
     } else if (status.state !== "idle") song.positionMs = status.positionMs;
+  };
+
+  const dropMeasurements = (code: string, message: string) => {
+    for (const [id, pending] of measuring) {
+      measuring.delete(id);
+      pending.reject(new AudioEngineError(code, message));
+    }
   };
 
   const failAll = (code: string, message: string) => {
@@ -187,6 +244,11 @@ export const superviseAudio = (options: AudioSupervisorOptions): AudioSupervisor
         return;
       }
       if ("event" in response) {
+        for (const result of response.measurements ?? []) {
+          const pending = measuring.get(result.id);
+          measuring.delete(result.id);
+          pending?.resolve(measurementOf(result));
+        }
         follow(response.status);
         for (const listener of listeners) listener(response);
         return;
@@ -208,6 +270,7 @@ export const superviseAudio = (options: AudioSupervisorOptions): AudioSupervisor
     if (owner !== current) return;
     current = undefined;
     failAll("restarted", "the audio engine restarted");
+    dropMeasurements("restarted", "the audio engine restarted");
     if (disposed) return;
     failuresInARow += 1;
     // A song that crashes the process wherever it's restored would crash it for ever.
@@ -226,18 +289,30 @@ export const superviseAudio = (options: AudioSupervisorOptions): AudioSupervisor
     };
     child = options.fork(events);
     current = child;
+    const settings: [AudioCall, unknown[]][] = [];
+    if (volume !== undefined) settings.push(["setVolume", [volume]]);
+    if (crossfade !== undefined) settings.push(["setCrossfade", [crossfade]]);
+    if (normalize !== undefined) settings.push(["setNormalize", [normalize]]);
+    const restoreSettings = () =>
+      settings.reduce<Promise<unknown>>(
+        (before, [call, args]) => before.then(() => send(call, args, true)),
+        Promise.resolve(),
+      );
     if (song !== undefined) {
-      const { path, positionMs, key } = song;
+      const { path, positionMs, key, gainDb } = song;
       const next = lined;
-      const level = volume;
-      // Paused where it was, at the same volume, the next song lined up again; a failure here
-      // shows on the user's next call.
-      void send("load", [path, key], true)
+      // Paused where it was, with the same settings, the next song lined up again; a failure
+      // here shows on the user's next call.
+      void send("load", gainDb === undefined ? [path, key] : [path, key, gainDb], true)
         .then(() => (positionMs > 0 ? send("seek", [positionMs], true) : undefined))
-        .then(() => (level === undefined ? undefined : send("setVolume", [level], true)))
-        .then(() => (next === undefined ? undefined : send("preload", [next.path, next.key], true)))
+        .then(restoreSettings)
+        .then(() =>
+          next === undefined
+            ? undefined
+            : send("preload", [next.path, next.key, next.gainDb, next.fade], true),
+        )
         .catch(() => undefined);
-    } else if (volume !== undefined) void send("setVolume", [volume], true).catch(() => undefined);
+    } else void restoreSettings().catch(() => undefined);
     return child;
   }
 
@@ -250,6 +325,15 @@ export const superviseAudio = (options: AudioSupervisorOptions): AudioSupervisor
 
   return {
     call: (call, args) => send(call, args),
+    measure: (path) =>
+      new Promise((resolve, reject) => {
+        const id = `m${nextMeasurement++}`;
+        measuring.set(id, { resolve, reject });
+        send("measure", [path, id]).catch((error: unknown) => {
+          if (!measuring.delete(id)) return;
+          reject(error instanceof Error ? error : new AudioEngineError("engine", String(error)));
+        });
+      }),
     subscribe: (listener) => {
       listeners.add(listener);
       return () => {
@@ -263,6 +347,7 @@ export const superviseAudio = (options: AudioSupervisorOptions): AudioSupervisor
       listeners.clear();
       if (restartTimer !== undefined) clearTimeout(restartTimer);
       failAll("disposed", "the audio engine was shut down");
+      dropMeasurements("disposed", "the audio engine was shut down");
       current?.kill();
       current = undefined;
     },

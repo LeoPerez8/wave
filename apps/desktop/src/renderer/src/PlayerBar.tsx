@@ -3,6 +3,7 @@ import { Fragment, useCallback, useEffect, useRef, useState, type CSSProperties 
 
 import type { PlaybackCommand, PlayerView } from "../../shared/playerView.ts";
 import { Icon } from "./Icon.tsx";
+import { useDesktopKeys } from "./keys.ts";
 import { labels, text } from "./text.ts";
 import { Artwork, time } from "./VirtualTable.tsx";
 
@@ -44,7 +45,9 @@ export function usePlayback(failed: () => void) {
     },
     [failed],
   );
-  return { view, run };
+  /** Reads the player again now, after something else changed it. */
+  const refresh = useCallback(() => wake.current(), []);
+  return { view, run, refresh };
 }
 
 const repeatLabel = (view: PlayerView | undefined) =>
@@ -55,47 +58,34 @@ const repeatLabel = (view: PlayerView | undefined) =>
       : labels.repeatOff;
 const nextRepeat = { off: "all", all: "one", one: "off" } as const;
 
-/** Where Space belongs to the focused control: a button, a link, a switch or a field. */
-const OWNS_SPACE = "button, a[href], [role=button], [role=link], [role=switch], [role=checkbox]";
-const FIELD = "input, textarea, select, [contenteditable=true]";
-/** Where ↑ and ↓ move through a list instead of changing the volume. */
-const LIST = "[role=grid], [role=listbox], [role=list], [role=tree], [role=menu], button";
-
-/** The keys that work anywhere in the window (docs/spec-desktop.md, Keyboard). */
+/** The player's keys (docs/spec-desktop.md, Keyboard); Core's `desktopKey` scopes them. */
 function usePlayerKeys(view: PlayerView | undefined, run: (action: Promise<unknown>) => void) {
-  const latest = useRef(view);
-  useEffect(() => {
-    latest.current = view;
-  }, [view]);
-  useEffect(() => {
-    const onKey = (event: KeyboardEvent) => {
-      const target = event.target instanceof Element ? event.target : document.body;
-      const now = latest.current;
-      if (event.defaultPrevented || now === undefined || target.closest(FIELD)) return;
-      const act = (action: Promise<unknown>) => {
-        event.preventDefault();
-        run(action);
-      };
-      const plain = !event.ctrlKey && !event.altKey && !event.metaKey && !event.shiftKey;
-      const ctrl = event.ctrlKey && !event.altKey && !event.metaKey;
-      const playback = window.wave.playback;
-      if (event.code === "Space" && plain && !target.closest(OWNS_SPACE)) {
-        if (now.current !== null)
-          act(now.status.state === "playing" ? playback.pause() : playback.play());
-      } else if (ctrl && (event.key === "ArrowLeft" || event.key === "ArrowRight")) {
-        if (now.current !== null)
-          act(playback.command({ type: event.key === "ArrowLeft" ? "previous" : "next" }));
-      } else if (ctrl && event.key.toLowerCase() === "l") {
-        if (now.current !== null) act(playback.favorite());
-      } else if ((event.key === "ArrowUp" || event.key === "ArrowDown") && plain) {
-        if (target.closest(LIST)) return;
-        const step = event.key === "ArrowUp" ? VOLUME_STEP : -VOLUME_STEP;
-        act(playback.volume(Math.max(0, Math.min(1, now.volume + step)), false));
-      }
-    };
-    window.addEventListener("keydown", onKey);
-    return () => window.removeEventListener("keydown", onKey);
-  }, [run]);
+  const playback = window.wave.playback;
+  const playing = view !== undefined && view.current !== null;
+  const volume = (step: number) => () => {
+    if (view === undefined) return false;
+    run(playback.volume(Math.max(0, Math.min(1, view.volume + step)), false));
+  };
+  useDesktopKeys({
+    playPause: () => {
+      if (!playing) return false;
+      run(view.status.state === "playing" ? playback.pause() : playback.play());
+    },
+    next: () => {
+      if (!playing) return false;
+      run(playback.command({ type: "next" }));
+    },
+    previous: () => {
+      if (!playing) return false;
+      run(playback.command({ type: "previous" }));
+    },
+    favorite: () => {
+      if (!playing) return false;
+      run(playback.favorite());
+    },
+    volumeUp: volume(VOLUME_STEP),
+    volumeDown: volume(-VOLUME_STEP),
+  });
 }
 
 /** "New queue playing" with Undo, for as long as Core's toast lasts. */

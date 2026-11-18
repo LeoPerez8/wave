@@ -1,5 +1,6 @@
-import { DEFAULT_THEME_CHOICE, themeFor } from "@wave/core";
+import { readThemeChoice, themeFor } from "@wave/core";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import type { AccountView } from "../../shared/account.ts";
 import type { BrowseRow, BrowseScope } from "../../shared/browse.ts";
 import type { ScanStatus } from "../../shared/library.ts";
 import { PlayerBar, usePlayback } from "./PlayerBar.tsx";
@@ -7,6 +8,11 @@ import { Icon } from "./Icon.tsx";
 import { Artwork, VirtualTable } from "./VirtualTable.tsx";
 import { FolderSettings } from "./FolderSettings.tsx";
 import { YtResults } from "./YtResults.tsx";
+import { AccountSettings, SignInInvitation } from "./AccountSettings.tsx";
+import { PlaybackSettings } from "./PlaybackSettings.tsx";
+import { useDesktopKeys } from "./keys.ts";
+import { ShortcutsSheet } from "./Shortcuts.tsx";
+import { SelectionBar, useSongActions, type Selection } from "./SongActions.tsx";
 import { labels, text } from "./text.ts";
 
 type Route = BrowseScope | { readonly kind: "home" } | { readonly kind: "settings" };
@@ -56,6 +62,8 @@ export function App() {
   const route = history[position]!;
   const [hero, setHero] = useState<BrowseRow>();
   const [scan, setScan] = useState<ScanStatus>();
+  const [account, setAccount] = useState<AccountView>();
+  const theme = account?.theme;
   const [count, setCount] = useState(0);
   const [error, setError] = useState<string>();
   const [query, setQuery] = useState("");
@@ -67,6 +75,12 @@ export function App() {
   const [playlistTotal, setPlaylistTotal] = useState(0);
   const failed = useCallback(() => setError(text.desktopLibrary.actionFailed), []);
   const playback = usePlayback(failed);
+  const [shortcuts, setShortcuts] = useState(false);
+  /** Selection mode, for the list it was turned on in. */
+  const [selecting, setSelecting] = useState<{
+    readonly list: string;
+    readonly selection: Selection;
+  }>();
   const search = useRef<HTMLInputElement>(null);
   const content = useRef<HTMLDivElement>(null);
   const shell = useRef<HTMLElement>(null);
@@ -78,7 +92,8 @@ export function App() {
     const media = matchMedia("(prefers-color-scheme: dark)");
     const apply = () => {
       const scheme = appearance === "system" ? (media.matches ? "dark" : "light") : appearance;
-      const colours = themeFor(DEFAULT_THEME_CHOICE)[scheme];
+      // The Wave account's theme, the phone's choice, once the Library synced it.
+      const colours = themeFor(readThemeChoice(theme ?? null))[scheme];
       for (const [key, value] of Object.entries(colours))
         shell.current?.style.setProperty(`--color-${key}`, value);
       shell.current!.style.colorScheme = scheme;
@@ -86,7 +101,7 @@ export function App() {
     apply();
     media.addEventListener("change", apply);
     return () => media.removeEventListener("change", apply);
-  }, [appearance]);
+  }, [appearance, theme]);
 
   const go = (next: Route) => {
     setHistory((previous) => [...previous.slice(0, position + 1), next]);
@@ -115,6 +130,11 @@ export function App() {
           );
           const counts = await window.wave.library.counts();
           if (current) setCount(counts.songs);
+          const view = await window.wave.account.view();
+          if (current)
+            setAccount((previous) =>
+              JSON.stringify(previous) === JSON.stringify(view) ? previous : view,
+            );
         }
       } catch {
         if (current) failed();
@@ -142,29 +162,7 @@ export function App() {
     return () => {
       current = false;
     };
-  }, [scan?.revision, playlistOffset, failed]);
-  useEffect(() => {
-    const key = (event: KeyboardEvent) => {
-      if (event.key === "F5") {
-        event.preventDefault();
-        void window.wave.library.refresh().catch(failed);
-      }
-      if (event.ctrlKey && event.key.toLowerCase() === "f") {
-        event.preventDefault();
-        search.current?.focus();
-      }
-      if (event.altKey && event.key === "ArrowLeft") {
-        event.preventDefault();
-        back();
-      }
-      if (event.altKey && event.key === "ArrowRight") {
-        event.preventDefault();
-        forward();
-      }
-    };
-    window.addEventListener("keydown", key);
-    return () => window.removeEventListener("keydown", key);
-  }, [back, forward, failed]);
+  }, [scan?.revision, account?.revision, playlistOffset, failed]);
   useEffect(() => {
     if (route.kind !== "search")
       content.current?.querySelector<HTMLElement>("[role=grid]")?.focus();
@@ -173,6 +171,29 @@ export function App() {
     () => (route.kind === "home" || route.kind === "settings" ? { kind: "songs" } : route),
     [route],
   );
+  const list = JSON.stringify(scope);
+  const selection = selecting?.list === list ? selecting.selection : undefined;
+  const setSelection = (selection: Selection | undefined) =>
+    setSelecting(selection && { list, selection });
+  const actions = useSongActions({
+    go,
+    select: (ids) => setSelection({ all: false, ids: new Set(ids) }),
+    failed: (message) => setError(message ?? text.desktopLibrary.actionFailed),
+    changed: playback.refresh,
+  });
+  useDesktopKeys({
+    search: () => search.current?.focus(),
+    back,
+    forward,
+    rescan: () => void window.wave.library.refresh().catch(failed),
+    shortcuts: () => setShortcuts((open) => !open),
+    close: () => {
+      if (actions.closeMenu()) return;
+      if (shortcuts) return setShortcuts(false);
+      if (selection) return setSelection(undefined);
+      return false;
+    },
+  });
   const open = (row: BrowseRow, index: number) => {
     const detail = {
       albums: "album",
@@ -188,6 +209,8 @@ export function App() {
     hero?.title ??
     (route.kind in labels ? (labels[route.kind as keyof typeof labels] as string) : labels.library);
   const scanning = scan?.status === "scanning";
+  const revision =
+    (scan?.revision ?? 0) + (playback.view?.revision ?? 0) + (account?.revision ?? 0);
   return (
     <main ref={shell} className="desktop-shell" data-appearance={appearance}>
       <header className="titlebar">
@@ -382,6 +405,7 @@ export function App() {
             {error ?? text.settings.couldntScanYourMusic}
           </p>
         )}
+        {account?.invitation && <SignInInvitation onError={failed} />}
         {route.kind === "settings" ? (
           <div className="settings-page">
             <nav aria-label={labels.settings}>
@@ -425,6 +449,7 @@ export function App() {
                 </>
               ) : setting === "accounts" ? (
                 <>
+                  <AccountSettings view={account} onError={failed} />
                   <h2>{labels.ytMusic}</h2>
                   <label className="setting-switch">
                     <input
@@ -445,6 +470,8 @@ export function App() {
                     {text.settings.searchAlsoFindsSongsOnYouTubeMusic}
                   </p>
                 </>
+              ) : setting === "playback" ? (
+                <PlaybackSettings onError={failed} />
               ) : (
                 <p className="secondary">{labels.unavailableSection}</p>
               )}
@@ -452,13 +479,30 @@ export function App() {
           </div>
         ) : (
           <>
+            {selection && (
+              <SelectionBar
+                scope={scope}
+                selection={selection}
+                revision={revision}
+                actions={actions}
+                onChange={setSelection}
+                onDone={() => setSelection(undefined)}
+              />
+            )}
             <VirtualTable
-              key={JSON.stringify(scope)}
+              key={list}
               scope={scope}
-              revision={(scan?.revision ?? 0) + (playback.view?.revision ?? 0)}
+              revision={revision}
               onHero={setHero}
               onOpen={open}
               onError={failed}
+              selection={selection}
+              onSelection={setSelection}
+              onMenu={
+                selection
+                  ? undefined
+                  : (row, at) => actions.openMenu({ scope, ids: [row.id] }, row.title, at)
+              }
             />
             {route.kind === "search" && ytMusic && (
               <YtResults
@@ -472,6 +516,8 @@ export function App() {
         )}
       </div>
       <PlayerBar playback={playback} />
+      {actions.overlays}
+      {shortcuts && <ShortcutsSheet onClose={() => setShortcuts(false)} />}
     </main>
   );
 }

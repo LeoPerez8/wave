@@ -209,7 +209,7 @@ import * as Layer from "effect/Layer";
 
 import { timeLibraryRead } from "@/log/slowLibraryReads";
 import type { NativeYtSong } from "@/native/waveYtMusic";
-import { syncCycle, type SyncCycleInput, type SyncCycleResult } from "@/sync/syncCycle";
+import { syncCycle, type SyncCycleInput, type SyncCycleResult } from "@wave/client/sync/syncCycle";
 
 import { selectAlbumDetail, selectAlbums } from "@wave/client/db/albums";
 import { importedPlays, saveImportedPlays, selectImportTracks } from "@wave/client/db/blackPlayer";

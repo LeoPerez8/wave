@@ -8,9 +8,9 @@
  */
 import { pushBatches, pushBody, readPullPage, type SyncTables } from "@wave/core";
 
-import type { CreditSplits } from "@wave/client/db/credits";
-import type { LibraryDatabase } from "@wave/client/db/database";
-import { syncMissingSongs } from "@wave/client/db/missingSongs";
+import type { CreditSplits } from "../db/credits.ts";
+import type { LibraryDatabase } from "../db/database.ts";
+import { syncMissingSongs } from "../db/missingSongs.ts";
 import {
   applyPending,
   applyPulledPage,
@@ -23,7 +23,7 @@ import {
   selectSyncCursor,
   selectUnpushed,
   type PulledChanges,
-} from "@wave/client/db/syncRows";
+} from "../db/syncRows.ts";
 
 /** Sends a push or a pull with the session (`WaveAccount.request`). */
 export interface SyncTransport {

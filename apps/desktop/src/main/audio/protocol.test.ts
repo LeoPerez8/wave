@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import type { PlaybackStatus } from "../../shared/playback.ts";
-import { answer, playbackEvent, stamped, type AddonEngine } from "./protocol.ts";
+import type { LoudnessResult, PlaybackStatus } from "../../shared/playback.ts";
+import { answer, playbackEvent, stamped, type AddonEngine, type AudioCall } from "./protocol.ts";
 
 const paused: PlaybackStatus = { state: "paused", positionMs: 0, durationMs: 1000 };
 
@@ -10,8 +10,10 @@ const fakeEngine = () => {
   const calls: string[] = [];
   let status: PlaybackStatus = { state: "idle", positionMs: 0 };
   const engine: AddonEngine = {
-    load: (path) => {
-      calls.push(`load ${path}`);
+    load: (path, key, gainDb) => {
+      calls.push(
+        `load ${path}${key === undefined ? "" : ` ${key}`}${gainDb === undefined ? "" : ` ${gainDb}dB`}`,
+      );
       if (path.includes("missing")) throw new Error("[not-found] can't read the file: gone");
       status = paused;
       return status;
@@ -26,9 +28,15 @@ const fakeEngine = () => {
       status = { ...status, positionMs };
     },
     status: () => status,
-    preload: () => {},
+    preload: (path, key, gainDb, fade) =>
+      void calls.push(`preload ${path} ${key} ${gainDb} ${fade}`),
     transitions: () => [],
+    measurements: () => [],
     setVolume: () => {},
+    setCrossfade: (seconds) => void calls.push(`crossfade ${seconds}`),
+    setNormalize: (on) => void calls.push(`normalize ${on}`),
+    measure: (path, id) => void calls.push(`measure ${path} ${id}`),
+    cancelMeasurements: () => void calls.push("cancel measurements"),
   };
   return { engine, calls };
 };
@@ -52,6 +60,31 @@ test("each request runs on the engine and answers with the status after it", () 
     result: { state: "playing", positionMs: 400, durationMs: 1000 },
   });
   assert.deepEqual(calls, ["load /music/a.flac", "seek 400", "play"]);
+});
+
+test("the playback settings and each song's gain and fade reach the engine", () => {
+  const { engine, calls } = fakeEngine();
+  const requests: [AudioCall, unknown[]][] = [
+    ["load", ["/music/a.flac", "1", -4.5]],
+    ["preload", ["/music/b.flac", "2", 2, false]],
+    ["preload", ["/music/c.flac", "3", null, true]],
+    ["preload", [null, null, null, null]],
+    ["setCrossfade", [6.5]],
+    ["setNormalize", [false]],
+    ["measure", ["/music/d.flac", "m1"]],
+    ["cancelMeasurements", []],
+  ];
+  requests.forEach(([call, args], id) => assert.equal(answer(engine, { id, call, args }).ok, true));
+  assert.deepEqual(calls, [
+    "load /music/a.flac 1 -4.5dB",
+    "preload /music/b.flac 2 2 false",
+    "preload /music/c.flac 3 undefined true",
+    "preload undefined undefined undefined undefined",
+    "crossfade 6.5",
+    "normalize false",
+    "measure /music/d.flac m1",
+    "cancel measurements",
+  ]);
 });
 
 test("a refused call answers with the engine's code and message", () => {
@@ -93,6 +126,19 @@ test("the process reports playback only when the status moved or the engine chan
   ]);
   engine.seek(300);
   assert.equal(playbackEvent(watched, first!.status, 175)?.status.positionMs, 300);
+});
+
+test("finished measurements are reported as soon as there are any", () => {
+  const { engine } = fakeEngine();
+  let measured: LoudnessResult[] = [];
+  const watched: AddonEngine = { ...engine, measurements: () => measured.splice(0) };
+  const first = playbackEvent(watched, undefined, 100);
+  assert.equal(first?.measurements, undefined);
+  measured = [{ id: "m1", kind: "measured", loudness: -9.5, peak: 0.8 }];
+  assert.deepEqual(playbackEvent(watched, first!.status, 125)?.measurements, [
+    { id: "m1", kind: "measured", loudness: -9.5, peak: 0.8 },
+  ]);
+  assert.equal(playbackEvent(watched, first!.status, 150), undefined);
 });
 
 test("an answer carries the time the process took it", () => {

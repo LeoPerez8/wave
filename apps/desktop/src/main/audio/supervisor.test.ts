@@ -14,9 +14,14 @@ import { AudioEngineError, superviseAudio, type AudioEvents } from "./supervisor
 const pretendEngine = (): AddonEngine => {
   let status: PlaybackStatus = { state: "idle", positionMs: 0 };
   return {
-    load: (path) => {
+    load: (path, key) => {
       if (path.includes("missing")) throw new Error("[not-found] can't read the file");
-      status = { state: "paused", positionMs: 0, durationMs: 180_000 };
+      status = {
+        state: "paused",
+        positionMs: 0,
+        durationMs: 180_000,
+        ...(key === undefined ? {} : { key }),
+      };
       return status;
     },
     play: () => void (status = { ...status, state: "playing" }),
@@ -25,7 +30,12 @@ const pretendEngine = (): AddonEngine => {
     status: () => status,
     preload: () => {},
     transitions: () => [],
+    measurements: () => [],
     setVolume: () => {},
+    setCrossfade: () => {},
+    setNormalize: () => {},
+    measure: () => {},
+    cancelMeasurements: () => {},
   };
 };
 
@@ -35,6 +45,8 @@ const pretendEngine = (): AddonEngine => {
  */
 const fakeProcesses = () => {
   const log: string[] = [];
+  /** Every request with all its arguments, as `fork:call arg,arg`. */
+  const requests: string[] = [];
   let forks = 0;
   let current: { events: AudioEvents; stalled: boolean; alive: boolean } | undefined;
   const fork = (events: AudioEvents) => {
@@ -50,6 +62,7 @@ const fakeProcesses = () => {
           return;
         }
         log.push(`${forks}:${request.call}${request.args.length > 0 ? ` ${request.args[0]}` : ""}`);
+        requests.push(`${forks}:${request.call} ${request.args.map(String).join(",")}`);
         if (child.stalled || !child.alive) return;
         if (request.call === "load") child.loaded = String(request.args[0]);
         // A song whose decoding crashes the process, from the first restart on.
@@ -72,6 +85,7 @@ const fakeProcesses = () => {
   return {
     fork,
     log,
+    requests,
     forks: () => forks,
     stall: () => {
       if (current !== undefined) current.stalled = true;
@@ -219,6 +233,75 @@ test("a new process also gets back the volume and the song lined up after the cu
     "2:preload /music/b.opus",
   ]);
   audio.dispose();
+});
+
+test("a new process also gets back the playback settings and each song's gain and fade", async () => {
+  const processes = fakeProcesses();
+  const audio = superviseAudio({ fork: processes.fork, ...quick });
+  await audio.call("load", ["/music/a.opus", "1", -3]);
+  await audio.call("setCrossfade", [5]);
+  await audio.call("setNormalize", [false]);
+  await audio.call("preload", ["/music/b.opus", "2", 1.5, false]);
+  processes.crash();
+  await settle();
+  assert.deepEqual(processes.requests.slice(-4), [
+    "2:load /music/a.opus,1,-3",
+    "2:setCrossfade 5",
+    "2:setNormalize false",
+    "2:preload /music/b.opus,2,1.5,false",
+  ]);
+  audio.dispose();
+});
+
+test("once the engine moves on, the song lined up is restored with its own gain", async () => {
+  const processes = fakeProcesses();
+  const audio = superviseAudio({ fork: processes.fork, ...quick });
+  await audio.call("load", ["/music/a.opus", "1", -3]);
+  await audio.call("preload", ["/music/b.opus", "2", 1.5, true]);
+  processes.emit({
+    event: "playback",
+    status: { state: "playing", positionMs: 0, key: "2" },
+    transitions: [{ key: "2", atMs: 1, kind: "crossfade" }],
+  });
+  processes.crash();
+  await settle();
+  assert.deepEqual(processes.requests.slice(-1), ["2:load /music/b.opus,2,1.5"]);
+  audio.dispose();
+});
+
+test("a measurement answers when the process reports it, and fails if the process goes", async () => {
+  const processes = fakeProcesses();
+  const audio = superviseAudio({ fork: processes.fork, ...quick });
+  const measured = audio.measure("/music/a.flac");
+  const dropped = audio.measure("/music/b.flac");
+  await settle();
+  const ids = processes.requests
+    .filter((r) => r.startsWith("1:measure"))
+    .map((r) => r.split(",")[1]);
+  assert.equal(ids.length, 2);
+  processes.emit({
+    event: "playback",
+    status: { state: "idle", positionMs: 0 },
+    transitions: [],
+    measurements: [{ id: ids[0]!, kind: "measured", loudness: -8, peak: 0.9 }],
+  });
+  assert.deepEqual(await measured, { kind: "measured", loudness: -8, peak: 0.9 });
+  processes.crash();
+  await assert.rejects(dropped, (error) => error instanceof AudioEngineError);
+  await settle();
+  const unmeasurable = audio.measure("/music/c.flac");
+  await settle();
+  const [, id] = processes.requests.at(-1)!.split(",");
+  processes.emit({
+    event: "playback",
+    status: { state: "idle", positionMs: 0 },
+    transitions: [],
+    measurements: [{ id: id!, kind: "unmeasurable" }],
+  });
+  assert.deepEqual(await unmeasurable, { kind: "unmeasurable" });
+  const waiting = audio.measure("/music/d.flac");
+  audio.dispose();
+  await assert.rejects(waiting, (error) => error instanceof AudioEngineError);
 });
 
 test("events from the current process reach every subscriber until it unsubscribes", async () => {

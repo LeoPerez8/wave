@@ -1,5 +1,16 @@
+import { readFileSync, rmSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
-import { BrowserWindow, app, dialog, ipcMain, shell, nativeImage, nativeTheme } from "electron";
+import {
+  BrowserWindow,
+  app,
+  dialog,
+  ipcMain,
+  net,
+  shell,
+  nativeImage,
+  nativeTheme,
+  safeStorage,
+} from "electron";
 import * as Layer from "effect/Layer";
 import * as ManagedRuntime from "effect/ManagedRuntime";
 import { forkAudio } from "./audio/fork.ts";
@@ -13,12 +24,25 @@ import { guardWindow } from "./security.ts";
 import { desktopLibraryLayer } from "./library/library.ts";
 import { Database } from "@wave/client";
 import * as Effect from "effect/Effect";
-import { DEFAULT_THEME_CHOICE, themeFor } from "@wave/core";
+import {
+  DEFAULT_THEME_CHOICE,
+  catalogueOf,
+  desktopKey,
+  readThemeChoice,
+  resolveAppLanguage,
+  themeFor,
+  type ThemeChoice,
+} from "@wave/core";
 import { appearance } from "./preferences.ts";
 import { artworkStore } from "./library/artwork.ts";
 import { ytMusicLayer } from "./yt/ytMusic.ts";
 import { botguardPost, createPoTokens, poTokenHost } from "./yt/poTokens.ts";
 import { openPoTokenPage } from "./yt/poTokenWindow.ts";
+import { createWaveAccount } from "./account/account.ts";
+import { Account, accountLayer } from "./account/accountLayer.ts";
+import { signInWithBrowser } from "./account/browserSignIn.ts";
+import { accountConfig } from "./account/config.ts";
+import { sessionStore } from "./account/sessionStore.ts";
 
 // %APPDATA%\Wave or ~/.config/Wave, from the product name; tests point it at a folder of their own.
 const dataFolder = process.env["WAVE_DATA_DIR"];
@@ -49,9 +73,10 @@ const showWindow = () => {
   window.focus();
 };
 
-const colours = () =>
-  themeFor(DEFAULT_THEME_CHOICE)[nativeTheme.shouldUseDarkColors ? "dark" : "light"];
-const createWindow = () => {
+// The account's theme once the services are up (docs/spec-desktop.md, Wave account and sync).
+let theme: ThemeChoice = DEFAULT_THEME_CHOICE;
+const colours = () => themeFor(theme)[nativeTheme.shouldUseDarkColors ? "dark" : "light"];
+const createWindow = (onFocus: () => void) => {
   const created = new BrowserWindow({
     width: 1280,
     height: 800,
@@ -79,6 +104,19 @@ const createWindow = () => {
     },
   });
   guardWindow(created.webContents, (url) => void shell.openExternal(url));
+  // Ctrl+Q quits from anywhere in the window, a field included.
+  created.webContents.on("before-input-event", (event, input) => {
+    if (
+      input.type === "keyDown" &&
+      desktopKey(
+        { key: input.key, ctrl: input.control, alt: input.alt, shift: input.shift },
+        "other",
+      ) === "quit"
+    ) {
+      event.preventDefault();
+      app.quit();
+    }
+  });
   created.once("ready-to-show", () => created.show());
   created.on("closed", () => {
     window = undefined;
@@ -100,6 +138,10 @@ const createWindow = () => {
   };
   nativeTheme.on("updated", update);
   created.on("closed", () => nativeTheme.removeListener("updated", update));
+  created.on("focus", () => {
+    onFocus();
+    update();
+  });
 };
 
 if (!app.requestSingleInstanceLock()) app.quit();
@@ -160,10 +202,70 @@ else {
         return result.canceled ? undefined : result.filePaths[0];
       },
     }).pipe(Layer.provideMerge(services));
-    const runtime = ManagedRuntime.make(playbackLayer.pipe(Layer.provideMerge(library)));
+    const text = catalogueOf(resolveAppLanguage(app.getPreferredSystemLanguages()), "desktop");
+    const config = accountConfig(
+      // Named one by one: the bundler puts each value in, not the whole environment.
+      {
+        MAIN_VITE_WAVE_SYNC_URL: import.meta.env.MAIN_VITE_WAVE_SYNC_URL,
+        MAIN_VITE_WAVE_GOOGLE_DESKTOP_CLIENT_ID: import.meta.env
+          .MAIN_VITE_WAVE_GOOGLE_DESKTOP_CLIENT_ID,
+        MAIN_VITE_WAVE_GOOGLE_DESKTOP_CLIENT_SECRET: import.meta.env
+          .MAIN_VITE_WAVE_GOOGLE_DESKTOP_CLIENT_SECRET,
+      },
+      process.env,
+      app.isPackaged,
+    );
+    const { clientId } = config;
+    const account = createWaveAccount({
+      // The session stays in main, sealed by the system's keyring; without one it isn't written.
+      store: sessionStore({
+        box: safeStorage,
+        file: join(app.getPath("userData"), "wave-session.bin"),
+        files: {
+          read: (path) => {
+            try {
+              return readFileSync(path);
+            } catch {
+              return undefined;
+            }
+          },
+          write: (path, bytes) => writeFileSync(path, bytes, { mode: 0o600 }),
+          remove: (path) => rmSync(path, { force: true }),
+        },
+        platform: process.platform,
+      }),
+      syncUrl: config.syncUrl,
+      signInWithBrowser: (signal) =>
+        clientId === null
+          ? Promise.reject(new Error("This build has no Google client."))
+          : signInWithBrowser({
+              authUrl: "https://accounts.google.com/o/oauth2/v2/auth",
+              tokenUrl: "https://oauth2.googleapis.com/token",
+              clientId,
+              ...(config.clientSecret === undefined ? {} : { clientSecret: config.clientSecret }),
+              openExternal: (url) => shell.openExternal(url),
+              fetch,
+              page: {
+                title: text.desktopAccount.browserTitle,
+                message: text.desktopAccount.browserMessage,
+              },
+              signal,
+            }),
+      fetch,
+      online: () => net.isOnline(),
+    });
+    const runtime = ManagedRuntime.make(
+      accountLayer({
+        account,
+        focused: () => BrowserWindow.getFocusedWindow() !== null,
+      }).pipe(Layer.provideMerge(playbackLayer.pipe(Layer.provideMerge(library)))),
+    );
+    const readTheme = () =>
+      runtime.runPromise(Effect.map(Account, (it) => readThemeChoice(it.view().theme)));
     // Builds the services now, so the JVM starts with the app rather than on the first call.
     await runtime.context();
     nativeTheme.themeSource = await runtime.runPromise(Effect.map(Database, appearance));
+    theme = await readTheme();
     registerBridge(
       ipcMain,
       runtime,
@@ -182,6 +284,12 @@ else {
       quitting = true;
       void runtime.dispose().finally(() => app.quit());
     });
-    createWindow();
+    createWindow(() => {
+      // Back after five minutes away, the Library pulls; the account may have changed the theme.
+      void runtime.runPromise(Effect.map(Account, (it) => it.foreground()));
+      void readTheme().then((choice) => {
+        theme = choice;
+      });
+    });
   });
 }

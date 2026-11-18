@@ -17,7 +17,7 @@ use common::fixture;
 use wave_audio::cache::AudioCache;
 use wave_audio::decode::Decoder;
 use wave_audio::engine::Engine;
-use wave_audio::player::{PlayState, Player};
+use wave_audio::player::{Next, PlayState, Player};
 use wave_audio::stream::{
     FetchError, Fetched, Fetcher, HttpFetcher, Resolver, StreamAddress, StreamState, Streams,
 };
@@ -330,8 +330,9 @@ fn one_streamed_song_runs_into_the_next_without_a_gap() {
     let one = decode_all(&mut file);
 
     let player = Player::new();
-    player.load_origin(&streams.open("aaaaaaaaaaa").unwrap(), Some("1".into())).unwrap();
-    player.preload_origin(Some((streams.open("bbbbbbbbbbb").unwrap(), "2".into()))).unwrap();
+    player.load_origin(&streams.open("aaaaaaaaaaa").unwrap(), Some("1".into()), None).unwrap();
+    let next = Next::new(Path::new("yt:bbbbbbbbbbb"), "2");
+    player.preload_origin(Some((streams.open("bbbbbbbbbbb").unwrap(), next))).unwrap();
     let played = play_to_end(&player, rate);
     let mut both = one.clone();
     both.extend_from_slice(&one);
@@ -349,10 +350,10 @@ fn the_engine_plays_a_yt_path_from_its_stream() {
         never(),
     ));
     let engine = Engine::with_streams(true, Some(Arc::clone(&streams)));
-    let missing = engine.load_entry(Path::new("yt:abcdefghijk"), None);
+    let missing = engine.load_entry(Path::new("yt:abcdefghijk"), None, None);
     assert_eq!(missing.unwrap_err().code(), "not-found", "no address yet");
     streams.start(ID, address("a", Some(length)));
-    let status = engine.load_entry(Path::new("yt:abcdefghijk"), Some("1".into())).unwrap();
+    let status = engine.load_entry(Path::new("yt:abcdefghijk"), Some("1".into()), None).unwrap();
     assert_eq!(status.state, PlayState::Paused);
     assert!(status.duration_ms.is_some_and(|ms| ms > 900.0));
 }

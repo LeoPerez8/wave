@@ -22,6 +22,7 @@ import {
   type PlaySource,
   type PlaybackSignal,
   type QueueCommand,
+  type QueueEntry,
   type QueuePersistenceState,
   type QueueResult,
   type QueueState,
@@ -54,20 +55,38 @@ export interface AudioStatus {
   readonly observedAtMs?: number | undefined;
 }
 
-/** The audio process moved on to the preloaded song at [atMs], with no gap. */
+/**
+ * What the audio process did by itself at [atMs]: moved on to the preloaded
+ * song [key] with no gap (`gapless`, the default) or started fading it in
+ * under the current one (`crossfade`); or the song fading out, [key], went
+ * silent or was cut off by a seek (`fadeEnded`).
+ */
 export interface AudioTransition {
   readonly key: string;
   readonly atMs: number;
+  readonly kind?: "gapless" | "crossfade" | "fadeEnded" | undefined;
+}
+
+/** How the audio process plays a song it loads or lines up. */
+export interface AudioSongOptions {
+  /** Normalize Volume's gain for the song, settled as it starts; none plays it as it is. */
+  readonly gainDb?: number | undefined;
+  /** Whether the current song ending on its own may crossfade into it; never with repeat one. */
+  readonly fade?: boolean | undefined;
 }
 
 /**
  * The platform's audio process. `preload` lines up the song that follows the
- * current one, for a gapless move (with no path, nothing); it never disturbs
- * the current song.
+ * current one, for a gapless move or a crossfade (with no path, nothing); it
+ * never disturbs the current song.
  */
 export interface AudioPort {
-  readonly load: (path: string, key: string) => Promise<AudioStatus>;
-  readonly preload: (path?: string, key?: string) => Promise<AudioStatus>;
+  readonly load: (path: string, key: string, options?: AudioSongOptions) => Promise<AudioStatus>;
+  readonly preload: (
+    path?: string,
+    key?: string,
+    options?: AudioSongOptions,
+  ) => Promise<AudioStatus>;
   readonly play: () => Promise<AudioStatus>;
   readonly pause: () => Promise<AudioStatus>;
   readonly seek: (positionMs: number) => Promise<AudioStatus>;
@@ -90,8 +109,13 @@ export interface PlaybackSession {
   readonly seek: (positionMs: number) => Promise<void>;
   readonly undo: () => Promise<void>;
   readonly dismissUndo: () => void;
-  /** What the audio process pushed: its status and the gapless moves since its last report. */
+  /** What the audio process pushed: its status and the moves and fades since its last report. */
   readonly feed: (status: AudioStatus, transitions?: readonly AudioTransition[]) => Promise<void>;
+  /**
+   * Normalize Volume learned a song's value: the song lined up next plays at
+   * it, and the current one from its next start.
+   */
+  readonly gainsChanged: () => Promise<void>;
   /** Saves the position and the play so far, as before quitting. */
   readonly flush: () => Promise<void>;
   /** Pauses, saves, and ends the play open; the session does nothing more. */
@@ -116,6 +140,8 @@ export interface PlaybackSessionDeps {
   /** The snapshot changed. */
   readonly changed?: () => void;
   readonly playEnded?: (play: PlayEvent, byNext: boolean) => void;
+  /** Normalize Volume's gain in dB for [entry] of [queue] (Core's `entryGain`, or typical gain). */
+  readonly gainDb?: (queue: QueueState, entry: QueueEntry) => number | undefined;
 }
 
 const unavailable = () => new Error("[folder-unavailable] Song is unavailable");
@@ -239,10 +265,22 @@ export const createPlaybackSession = async (
     const key = plannedKey();
     const entry = key === undefined ? null : currentEntry(planned.state);
     const path = entry === null ? undefined : pathOf(entry.trackId);
-    await audio.preload(path, path ? key : undefined);
+    if (path === undefined || entry === null || key === undefined) {
+      await audio.preload(undefined, undefined);
+      return;
+    }
+    await audio.preload(path, key, {
+      gainDb: deps.gainDb?.(planned.state, entry),
+      // Repeat one plays the song again without a fade (docs/spec.md, story 22a).
+      fade: queue.repeat !== "one",
+    });
   };
   /** The player leaves the current entry for [to]'s current one. */
-  const leave = (to: QueueState, reason: "auto" | "repeat" | "seek" | "playlist", at = now()) => {
+  const leave = (
+    to: QueueState,
+    reason: "auto" | "repeat" | "seek" | "playlist" | "crossfade",
+    at = now(),
+  ) => {
     const from = currentKey() ?? null;
     const toKey = currentEntry(to)?.key ?? null;
     feedSignal({
@@ -254,16 +292,16 @@ export const createPlaybackSession = async (
     });
   };
   /** The song ended by itself and the player went on to what Core planned. */
-  const followPlan = (at: number) => {
+  const followPlan = (at: number, crossfade = false) => {
     const next = planned!.state;
-    leave(next, queue.repeat === "one" ? "repeat" : "auto", at);
+    leave(next, crossfade ? "crossfade" : queue.repeat === "one" ? "repeat" : "auto", at);
     queue = next;
   };
   const loadCurrent = async (positionMs = 0, play = false) => {
     const entry = currentEntry(queue);
     const path = entry === null ? undefined : pathOf(entry.trackId);
     if (entry === null || path === undefined) throw unavailable();
-    accept(await audio.load(path, entry.key));
+    accept(await audio.load(path, entry.key, { gainDb: deps.gainDb?.(queue, entry) }));
     if (positionMs > 0) accept(await audio.seek(positionMs));
     await prepare();
     if (play) accept(await audio.play());
@@ -386,8 +424,12 @@ export const createPlaybackSession = async (
       serial(async () => {
         let followed = false;
         for (const transition of transitions) {
+          if (transition.kind === "fadeEnded") {
+            feedSignal({ type: "fadeEnded", at: transition.atMs });
+            continue;
+          }
           if (transition.key !== plannedKey()) continue;
-          followPlan(transition.atMs);
+          followPlan(transition.atMs, transition.kind === "crossfade");
           const durationMs = next.key === transition.key ? next.durationMs : undefined;
           accept(
             { state: "playing", positionMs: 0, key: transition.key, durationMs },
@@ -419,6 +461,10 @@ export const createPlaybackSession = async (
         } catch {
           accept({ state: "idle", positionMs: 0 });
         }
+      }),
+    gainsChanged: () =>
+      serial(async () => {
+        if (planned !== null) await prepare();
       }),
     flush: () =>
       serial(async () => {
