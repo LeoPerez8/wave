@@ -17,9 +17,11 @@ import {
   missingSongsDownload,
   NO_DOWNLOAD_RUN,
   soulseekRecording,
+  ytDownloadAwaitsAnswer,
   ytDownloadProgress,
   ytDownloadsFromJournal,
   ytDownloadSharedJob,
+  ytDownloadUnfinished,
   type Catalogue,
   type DownloadOrigin,
   type DownloadRun,
@@ -103,19 +105,6 @@ interface JobRequest {
   readonly origin: DownloadOrigin | null;
 }
 
-const awaitsAnswer = (job: Job): boolean =>
-  job.phase === "preparing" ||
-  job.phase === "sourceReady" ||
-  job.phase === "awaitingPublication" ||
-  (job.phase === "completed" && job.acknowledged !== true && job.importFailure === undefined);
-
-/** Still on its way: a failure, a cancel or an import ends it. */
-const unfinished = (job: Job): boolean =>
-  job.phase !== "failed" &&
-  job.phase !== "cancelled" &&
-  job.acknowledged !== true &&
-  job.importFailure === undefined;
-
 /** What the journal holds of missing song [job]: a YT Music song named after its Track. */
 const journalSong = (job: MissingSongJob): YtSong & { readonly albumId: null } => ({
   videoId: job.videoId,
@@ -189,8 +178,8 @@ export const createDownloads = (deps: DownloadsDeps): DownloadsShape => {
       });
       revision = changes.revision;
       run = followDownloadRun(run, followed, now());
-      for (const job of followed) if (awaitsAnswer(job)) void answerJob(job.id);
-      const active = followed.some(unfinished);
+      for (const job of followed) if (ytDownloadAwaitsAnswer(job)) void answerJob(job.id);
+      const active = followed.some(ytDownloadUnfinished);
       if (active && poll === undefined && !disposed)
         poll = setInterval(() => void refresh().catch(() => {}), pollMs);
       if (!active && poll !== undefined) {

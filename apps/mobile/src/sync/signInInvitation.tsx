@@ -4,7 +4,13 @@
  * `nextFirstRunStep` decides when; Not Now, a tap outside, Back and Sign In with Google each answer
  * it for good. Wave works fully without it.
  */
-import { waveAccountView, type FirstRunAnswer, type FirstRunTourCard } from "@wave/core";
+import {
+  waveAccountNotes,
+  waveAccountView,
+  waveSignInLabels,
+  type FirstRunAnswer,
+  type FirstRunTourCard,
+} from "@wave/core";
 import { IconDevices, IconMessageCircle, IconTicket, type Icon } from "@tabler/icons-react-native";
 import { Storage } from "expo-sqlite/kv-store";
 import { useEffect } from "react";
@@ -17,7 +23,6 @@ import { WaveNative } from "@/native/waveNative";
 import { isNowPlayingShown, onNowPlayingShownChange } from "@/nowPlaying/sheet";
 import { isOverlayOpen, onOverlaysChange, openOverlay } from "@/overlay/overlay";
 import { useWaveAccount, waveAccountAvailable } from "@/settings/waveAccount";
-import { waveAccountNotes, waveSignInLabels } from "@/settings/waveAccountText";
 import { readSongLinkHandling } from "@/settings/songLinkHandling";
 import { useThemeColor } from "@/theme/useThemeColor";
 import { isWhatsNewPending, onWhatsNewPendingChange } from "@/updates/whatsNewPending";

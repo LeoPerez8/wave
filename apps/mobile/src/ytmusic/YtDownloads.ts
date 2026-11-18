@@ -87,6 +87,8 @@ import {
   type SoulseekCandidate,
   type UnsearchedSong,
   type YtAlbumDownload,
+  ytDownloadAwaitsAnswer,
+  ytDownloadUnfinished,
   type YtAlbumSong,
   type YtAlbumDownloadAction,
   type YtPlaylistDownload,
@@ -1091,22 +1093,9 @@ const answerJob = async (id: string): Promise<void> => {
   }
 };
 
-const awaitsAnswer = (job: NativeDownloadJob): boolean =>
-  job.phase === "preparing" ||
-  job.phase === "sourceReady" ||
-  job.phase === "awaitingPublication" ||
-  (job.phase === "completed" && job.acknowledged !== true && job.importFailure === undefined);
-
-/** Still on its way: a failure, a cancel or an import ends it. */
-const unfinished = (job: NativeDownloadJob): boolean =>
-  job.phase !== "failed" &&
-  job.phase !== "cancelled" &&
-  job.acknowledged !== true &&
-  job.importFailure === undefined;
-
 /** Whether job [id], being imported, is the last of its run: nothing else is on its way. */
 const lastOfRun = (id: string): boolean =>
-  followed.every((job) => job.id === id || !unfinished(job));
+  followed.every((job) => job.id === id || !ytDownloadUnfinished(job));
 
 /**
  * The journal as JS follows it, and the journal revision that is at: each refresh asks only for
@@ -1137,7 +1126,7 @@ const forgetDeletedDownloads = async (
   jobs: readonly NativeDownloadJob[],
 ): Promise<readonly NativeDownloadJob[]> => {
   const version = downloadLibraryVersion();
-  const recovered = await recoverDownloads(jobs, jobs.some(unfinished));
+  const recovered = await recoverDownloads(jobs, jobs.some(ytDownloadUnfinished));
   if (version !== downloadLibraryVersion()) refreshAgain = true;
   return recovered;
 };
@@ -1242,11 +1231,11 @@ const refresh = async (): Promise<void> => {
         downloads.set(ytDownloadsFromJournal(jobs));
         journal.set(jobs);
       }
-      for (const job of jobs) if (awaitsAnswer(job)) void answerJob(job.id);
+      for (const job of jobs) if (ytDownloadAwaitsAnswer(job)) void answerJob(job.id);
       void rememberNoBetterCopies(jobs);
       removeFailedReplacementFiles(jobs);
       replacementJournalRead(jobs);
-      const active = jobs.some(unfinished);
+      const active = jobs.some(ytDownloadUnfinished);
       // The run is over (its last songs answered in one poll, or it ended in a failure or a
       // cancel): what landed reaches the lists now, with any fill-in still on its way.
       if (!active) songsLanded([], { last: true });

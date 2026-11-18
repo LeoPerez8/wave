@@ -247,7 +247,9 @@ export const ytMusicLayer = (options: { readonly fetch?: typeof globalThis.fetch
         call: (method, params) => Effect.runPromise(kotlin.call(method, params)),
         ...(options.fetch === undefined ? {} : { fetch: options.fetch }),
       });
-      yield* Effect.promise(yt.start);
+      // Written to the JVM now, ahead of any later call, and never waited for: Wave's start
+      // doesn't hang on a JVM that is slow or silent. It never rejects.
+      void yt.start();
       return yt;
     }),
   );

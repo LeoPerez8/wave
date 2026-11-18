@@ -28,6 +28,8 @@ export const desktopEn = {
       "with no file here leave the Library.",
     yourWaveSessionEndedSoThisPhone:
       "Your Wave session ended, so this computer is signed out. Sign in again to keep your backup.",
+    // The browser has its own Google sign-in, so there's no account to add to the system.
+    addAGoogleAccountToThisPhone: "Couldn't sign in. Try again.",
     signOutOnAllPhones: "Sign Out on All Devices",
     everyPhoneOnThisWaveAccountSignedOut:
       "Every device on this Wave account is signed out. Sign in again to keep your backup.",

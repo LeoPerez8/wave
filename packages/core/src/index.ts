@@ -931,6 +931,12 @@ export type {
   WaveAccountView,
   WaveSession,
 } from "./waveAccount.ts";
+export { waveAccountActionNotes, waveAccountNotes, waveSignInLabels } from "./waveAccountText.ts";
+export {
+  FIND_LYRICS_AND_GENRE_SETTING,
+  readFindLyricsAndGenre,
+  writeFindLyricsAndGenre,
+} from "./lookupsSetting.ts";
 export type { AccountSession, AccountSignInEvent, AccountSignInState } from "./accountSignIn.ts";
 export {
   SPOTIFY_ACCOUNT_SIGNED_OUT,
@@ -1205,10 +1211,12 @@ export {
   YT_DOWNLOADS_NONE,
   YT_DOWNLOAD_ACTION_LABELS,
   ytDownloadActions,
+  ytDownloadAwaitsAnswer,
   ytDownloadLine,
   ytDownloadProgress,
   ytDownloadStatus,
   ytDownloadSharedJob,
+  ytDownloadUnfinished,
   ytDownloadsFromJournal,
 } from "./ytDownloads.ts";
 export type {
@@ -2517,6 +2525,7 @@ export {
   PLAY_BATCH_DELAY_MS,
   PLAY_BATCH_MAX_MS,
   PUSH_DELAY_MS,
+  SYSTEM_SYNC_CLOCK,
   syncTriggers,
 } from "./syncTriggers.ts";
 export type { SyncClock, SyncTriggers, SyncTriggersInput } from "./syncTriggers.ts";

@@ -70,6 +70,38 @@ test("Cancel stops waiting for the browser and leaves no note", async () => {
   assert.deepEqual(account.view().account, { kind: "signedOut", action: "signIn", note: "about" });
 });
 
+test("Cancel while the service answers the sign-in signs nobody in", async () => {
+  const app = await desktop();
+  let reached = () => {};
+  const atService = new Promise<void>((resolve) => (reached = resolve));
+  let release = () => {};
+  const held = new Promise<void>((resolve) => (release = resolve));
+  const account = app.open({
+    // The service has the request and answers it only after Cancel.
+    fetch: async (input, init) => {
+      const response = await app.fetch(input, init);
+      reached();
+      await held;
+      return response;
+    },
+  });
+  const heard: WaveSession[] = [];
+  account.subscribe((session) => heard.push(session));
+  const signingIn = account.signIn();
+  await atService;
+  account.cancelSignIn();
+  release();
+  await signingIn;
+  assert.deepEqual(account.view().account, { kind: "signedOut", action: "signIn", note: "about" });
+  assert.deepEqual(heard, []);
+  assert.equal(app.disk.size, 0);
+  assert.deepEqual(app.open().view().account, {
+    kind: "signedOut",
+    action: "signIn",
+    note: "about",
+  });
+});
+
 test("signing in with no network says Wave is offline", async () => {
   const app = await desktop();
   app.offline();

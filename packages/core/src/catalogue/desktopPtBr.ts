@@ -25,6 +25,7 @@ export const desktopPtBr = {
       "conta sem arquivo aqui saem da Biblioteca.",
     yourWaveSessionEndedSoThisPhone:
       "Sua sessão do Wave terminou, então a sessão deste computador foi finalizada. Inicie sessão novamente para manter seu backup.",
+    addAGoogleAccountToThisPhone: "Não foi possível iniciar sessão. Tente novamente.",
     signOutOnAllPhones: "Finalizar Sessão em Todos os Dispositivos",
     everyPhoneOnThisWaveAccountSignedOut:
       "A sessão de todos os dispositivos nesta Conta Wave foi finalizada. Inicie sessão novamente para manter seu backup.",

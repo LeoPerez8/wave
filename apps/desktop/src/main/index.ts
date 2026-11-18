@@ -54,6 +54,7 @@ import { accountConfig } from "./account/config.ts";
 import { sessionStore } from "./account/sessionStore.ts";
 import { installDesktopSystem } from "./system/desktopSystem.ts";
 import { configureAutostart } from "./system/autostart.ts";
+import { followStart } from "./system/startup.ts";
 import { Playback } from "./playback/playback.ts";
 import { YtMusic } from "./yt/ytMusic.ts";
 
@@ -64,7 +65,8 @@ if (dataFolder !== undefined && dataFolder !== "") app.setPath("userData", dataF
 let window: BrowserWindow | undefined;
 let system: ReturnType<typeof installDesktopSystem> | undefined;
 let showRequested = false;
-// Set once the page is loaded and the services are up; the window isn't shown before.
+// Set once the page is loaded and the services are up, or took too long; the window isn't shown
+// before.
 let windowReady = false;
 
 /**
@@ -97,8 +99,14 @@ const colours = () => themeFor(theme)[nativeTheme.shouldUseDarkColors ? "dark" :
 /**
  * Opens the window and loads its page while the services are still starting, and shows it once
  * both are done: the page is loaded by then, and the account's theme is known before it's seen.
+ * Services that take too long don't keep it hidden, and `failed` hears of services that fail
+ * (`followStart`).
  */
-const createWindow = (onFocus: () => void, services: Promise<void>) => {
+const createWindow = (
+  onFocus: () => void,
+  services: Promise<void>,
+  failed: (error: unknown) => void,
+) => {
   const created = new BrowserWindow({
     width: 1280,
     height: 800,
@@ -141,18 +149,22 @@ const createWindow = (onFocus: () => void, services: Promise<void>) => {
     }
   });
   const painted = new Promise<void>((resolve) => created.once("ready-to-show", () => resolve()));
-  void Promise.all([painted, services]).then(
-    () => {
+  followStart({
+    painted,
+    services,
+    started: () => {
       if (created.isDestroyed()) return;
       created.setBackgroundColor(colours().background);
       update();
+    },
+    reveal: () => {
+      if (created.isDestroyed()) return;
       windowReady = true;
       // Started with the system, Wave stays in the tray until it's asked for.
       if (!process.argv.includes("--hidden") || showRequested) created.show();
     },
-    // Without its services Wave has nothing to show; the failure is reported where they start.
-    () => {},
-  );
+    failed,
+  });
   created.on("closed", () => {
     window = undefined;
     system?.close();
@@ -395,6 +407,13 @@ else {
     );
     // The queue's position and the play so far are saved before the app exits.
     let quitting = false;
+    const closeServices = () => {
+      let timer: ReturnType<typeof setTimeout> | undefined;
+      return Promise.race([
+        runtime.dispose().catch(() => {}),
+        new Promise<void>((resolve) => (timer = setTimeout(resolve, 5_000))),
+      ]).finally(() => clearTimeout(timer));
+    };
     app.on("before-quit", (event) => {
       if (quitting) return;
       event.preventDefault();
@@ -402,21 +421,52 @@ else {
       system?.beginQuit();
       system?.close();
       poTokens.close();
-      void runtime.dispose().finally(() => app.quit());
+      // Services that hang as they close don't keep a process nobody can see.
+      void closeServices().finally(() => app.quit());
     });
-    createWindow(() => {
-      // Back after five minutes away, the Library pulls; the account may have changed the theme.
-      void runtime.runPromise(Effect.map(Account, (it) => it.foreground()));
-      void readTheme().then((choice) => {
-        theme = choice;
-      });
-    }, started);
-    await started;
+    createWindow(
+      () => {
+        // Back after five minutes away, the Library pulls; the account may have changed the theme.
+        void runtime.runPromise(Effect.map(Account, (it) => it.foreground())).catch(() => {});
+        void readTheme().then(
+          (choice) => {
+            theme = choice;
+          },
+          () => {},
+        );
+      },
+      started,
+      // Without its services Wave has nothing to show: it says so and quits.
+      (error) => {
+        if (quitting) return;
+        quitting = true;
+        console.error("[wave] Wave's services didn't start", error);
+        dialog.showErrorBox(text.desktopWindow.startFailed, text.desktopWindow.startFailedHint);
+        system?.close();
+        poTokens.close();
+        void closeServices().finally(() => app.exit(1));
+      },
+    );
+    // A start that failed is told above.
+    if (
+      !(await started.then(
+        () => true,
+        () => false,
+      ))
+    )
+      return;
+    const [db, playback, yt] = await Promise.all([
+      runtime.runPromise(Database),
+      runtime.runPromise(Playback),
+      runtime.runPromise(YtMusic),
+    ]);
+    // Closed while the services started: Wave is quitting.
+    if (window === undefined || quitting) return;
     system = installDesktopSystem({
-      window: window!,
-      db: await runtime.runPromise(Database),
-      playback: await runtime.runPromise(Playback),
-      yt: await runtime.runPromise(YtMusic),
+      window,
+      db,
+      playback,
+      yt,
       text,
       mediaAddon:
         process.env["WAVE_MEDIA_ADDON"] ?? join(app.getAppPath(), "native", "wave-media.node"),

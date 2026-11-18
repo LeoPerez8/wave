@@ -60,7 +60,7 @@ export interface WaveAccountService {
   readonly subscribe: (listener: (session: WaveSession) => void) => () => void;
   /** Opens Google's sign-in in the browser; resolves when it ended, however it did. */
   readonly signIn: () => Promise<void>;
-  /** Stops waiting for the browser. */
+  /** Stops the sign-in, in the browser or at the service: nobody is signed in. */
   readonly cancelSignIn: () => void;
   /** Tells the service, and forgets the session either way. */
   readonly signOut: () => Promise<void>;
@@ -124,6 +124,8 @@ export const createWaveAccount = (deps: WaveAccountDeps): WaveAccountService => 
     url: string,
     token: string | null,
     body: string | null,
+    /** Cancel, for a request the owner can back out of. */
+    cancel?: AbortSignal,
   ): Promise<Response> => {
     try {
       return await deps.fetch(url, {
@@ -134,7 +136,10 @@ export const createWaveAccount = (deps: WaveAccountDeps): WaveAccountService => 
           ...(body === null ? {} : { "content-type": "application/json" }),
         },
         ...(body === null ? {} : { body }),
-        signal: AbortSignal.timeout(20_000),
+        signal:
+          cancel === undefined
+            ? AbortSignal.timeout(20_000)
+            : AbortSignal.any([AbortSignal.timeout(20_000), cancel]),
       });
     } catch {
       throw unreachable();
@@ -170,7 +175,12 @@ export const createWaveAccount = (deps: WaveAccountDeps): WaveAccountService => 
         `${syncUrl}/v1/session`,
         null,
         JSON.stringify({ idToken: identity.idToken }),
+        controller.signal,
       );
+      if (controller.signal.aborted) {
+        step({ type: "signInCancelled" });
+        return;
+      }
       if (!response.ok) {
         step({ type: "signInFailed", reason: await refusal(response) });
         return;
@@ -183,6 +193,11 @@ export const createWaveAccount = (deps: WaveAccountDeps): WaveAccountService => 
         step({ type: "signInFailed", reason: "failed" });
         return;
       }
+      // Cancel while the answer was read: nothing is kept.
+      if (controller.signal.aborted) {
+        step({ type: "signInCancelled" });
+        return;
+      }
       const stored: StoredSession = {
         status: "signedIn",
         token: answer.sessionToken,
@@ -193,7 +208,10 @@ export const createWaveAccount = (deps: WaveAccountDeps): WaveAccountService => 
       step({ type: "signInEnded", session: publicSession(stored) });
       for (const listener of listeners) listener(publicSession(stored));
     } catch (error) {
-      if (error instanceof BrowserSignInError && error.reason === "cancelled")
+      if (
+        controller.signal.aborted ||
+        (error instanceof BrowserSignInError && error.reason === "cancelled")
+      )
         step({ type: "signInCancelled" });
       else if (error instanceof WaveAccountError)
         step({

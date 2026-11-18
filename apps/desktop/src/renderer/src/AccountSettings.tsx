@@ -1,31 +1,7 @@
-import type { Catalogue, WaveAccountActionNote, WaveAccountNote } from "@wave/core";
+import { waveAccountActionNotes, waveAccountNotes } from "@wave/core";
 import { useState } from "react";
 import type { AccountView } from "../../shared/account.ts";
 import { text } from "./text.ts";
-
-/** The line under Sign In: what the account is for, or why signing in didn't work. */
-const signInNotes = ({ settings }: Catalogue): Record<WaveAccountNote, string> => ({
-  about: settings.waveAccountNote,
-  ended: settings.yourWaveSessionEndedSoThisPhone,
-  deleted: settings.yourWaveAccountWasDeletedEverythingOn,
-  signedOutEverywhere: settings.everyPhoneOnThisWaveAccountSignedOut,
-  offline: settings.couldntSignInWithoutAConnection,
-  // The browser has its own Google sign-in, so there's no account to add to the system.
-  noGoogleAccount: settings.couldntSignInTryAgain,
-  notAllowed: settings.thisGoogleAccountCantUseWavesServer,
-  accountsFull: settings.wavesServerHasNoRoomForNewAccounts,
-  newAccountsPaused: settings.wavesServerMadeAllTheNewAccountsItCanToday,
-  failed: settings.couldntSignInTryAgain,
-});
-
-/** Why Sign Out on All Devices didn't work; the desktop has no Delete Account. */
-const actionNotes = ({ settings }: Catalogue): Record<WaveAccountActionNote, string> => ({
-  offline: settings.couldntSignOutOnAllPhonesWithoutAConnection,
-  failed: settings.wavesServerDidntSignOutThePhonesTry,
-  wrongGoogleAccount: settings.couldntSignInTryAgain,
-  signOutEverywhereOffline: settings.couldntSignOutOnAllPhonesWithoutAConnection,
-  signOutEverywhereFailed: settings.wavesServerDidntSignOutThePhonesTry,
-});
 
 /** Sign In, waiting on the browser, or the signed-in account with its sign-outs. */
 export function AccountSettings({
@@ -64,7 +40,7 @@ export function AccountSettings({
                     : text.settings.signInWithGoogle}
                 </button>
               </div>
-              <p className="secondary">{signInNotes(text)[account.note]}</p>
+              <p className="secondary">{waveAccountNotes(text)[account.note]}</p>
             </>
           )}
         </>
@@ -109,7 +85,7 @@ export function AccountSettings({
           <p className="secondary">
             {account.note === null
               ? text.settings.waveAccountSignOutNote
-              : actionNotes(text)[account.note]}
+              : waveAccountActionNotes(text)[account.note]}
           </p>
         </>
       )}

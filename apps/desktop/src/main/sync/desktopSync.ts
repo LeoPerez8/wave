@@ -14,6 +14,7 @@ import { syncCycle, type SyncedChanges } from "@wave/client/sync/syncCycle";
 import {
   DESKTOP_SYNC_PERIOD_MS,
   desktopUsesPreference,
+  SYSTEM_SYNC_CLOCK,
   syncTriggers,
   type SyncClock,
   type SyncTriggers,
@@ -53,14 +54,6 @@ export interface DesktopSync {
   readonly dispose: () => void;
 }
 
-const SYSTEM_CLOCK: SyncClock = {
-  now: Date.now,
-  after: (ms, run) => {
-    const timer = setTimeout(run, ms);
-    return () => clearTimeout(timer);
-  },
-};
-
 /** Offline, signed out or the session ended: Settings › Accounts says so, the log needn't. */
 const EXPECTED = new Set(["ERR_WAVE_OFFLINE", "ERR_WAVE_SIGNED_OUT", "ERR_WAVE_SESSION_ENDED"]);
 
@@ -97,7 +90,7 @@ const changedAnything = (pulled: SyncedChanges): boolean =>
 
 export const createDesktopSync = (deps: DesktopSyncDeps): DesktopSync => {
   const { db, account } = deps;
-  const clock = deps.clock ?? SYSTEM_CLOCK;
+  const clock = deps.clock ?? SYSTEM_SYNC_CLOCK;
   const log = deps.log ?? ((message, error) => console.warn(message, error));
   const splits = creditSplits();
   /** The account signed in (its email), or null. */

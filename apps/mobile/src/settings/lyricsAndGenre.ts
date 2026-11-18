@@ -1,11 +1,17 @@
+import {
+  FIND_LYRICS_AND_GENRE_SETTING,
+  readFindLyricsAndGenre,
+  writeFindLyricsAndGenre,
+} from "@wave/core";
+
 import { persistedSetting } from "@/lib/persistedSetting";
 
 /** Whether Wave may look songs' lyrics and genre up online (on unless the owner turned it off). */
 const findLyricsAndGenre = persistedSetting<boolean>({
-  key: "settings.findLyricsAndGenre",
+  key: FIND_LYRICS_AND_GENRE_SETTING,
   synced: true,
-  read: (stored) => stored !== "off",
-  write: (on) => (on ? null : "off"),
+  read: readFindLyricsAndGenre,
+  write: writeFindLyricsAndGenre,
 });
 
 export const lyricsAndGenreLookupsEnabled = findLyricsAndGenre.get;
