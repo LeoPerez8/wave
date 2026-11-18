@@ -2,7 +2,8 @@
  * The hourly usage watch (the Worker's Cron Trigger). It reads today's requests to every Worker
  * on the account from Cloudflare's GraphQL Analytics API and compares them with
  * `USAGE_WARNINGS`. Past the threshold it writes one line starting `wave usage warning:`, at most
- * once a UTC day; when it can't read them it writes the same kind of line, once a day. A
+ * once a UTC day; when it can't read them it writes the same kind of line, once a day. Each run
+ * first forgets the warnings older than `WARNING_DAYS_KEPT` UTC days, whatever happens next. A
  * Cloudflare notification turns those lines into an email (see README.md). No line carries a
  * token or the account. Turso's usage is checked by hand (README.md): a Turso Platform token
  * could do far more than read it, so the Worker that holds the database holds none.
@@ -119,6 +120,31 @@ const workerRequests = async (
   return total;
 };
 
+/** How many UTC days of warnings are kept: today and the days before it. */
+export const WARNING_DAYS_KEPT = 30;
+
+const DAY_MS = 24 * 60 * 60 * 1000;
+
+/**
+ * The condition, on `usage_warnings`, for a warning whose period (a UTC day `YYYY-MM-DD` or month
+ * `YYYY-MM`) has no day among the last `WARNING_DAYS_KEPT` as of [at], with its arguments.
+ */
+export const warningOutsideWindow = (
+  at: number,
+): { readonly sql: string; readonly args: string[] } => {
+  const oldestDay = new Date(at - (WARNING_DAYS_KEPT - 1) * DAY_MS).toISOString().slice(0, 10);
+  return {
+    sql: "(CASE WHEN length(period) = 7 THEN period < ? ELSE period < ? END)",
+    args: [oldestDay.slice(0, 7), oldestDay],
+  };
+};
+
+/** Deletes the warnings of periods wholly before the last `WARNING_DAYS_KEPT` UTC days as of [at]. */
+const forgetOldWarnings = async (db: Client, at: number): Promise<void> => {
+  const outside = warningOutsideWindow(at);
+  await db.execute({ sql: `DELETE FROM usage_warnings WHERE ${outside.sql}`, args: outside.args });
+};
+
 export const watchUsage = async (options: UsageWatchOptions): Promise<void> => {
   const { db, secrets } = options;
   const fetcher = options.fetch ?? fetch;
@@ -141,6 +167,13 @@ export const watchUsage = async (options: UsageWatchOptions): Promise<void> => {
     }
     warn(`wave usage warning: ${message}`);
   };
+
+  // The cleanup and the analytics check are independent: either one failing leaves the other.
+  try {
+    await forgetOldWarnings(db, at);
+  } catch {
+    note("usage watch: the old warnings couldn't be deleted this hour");
+  }
 
   const { CLOUDFLARE_ACCOUNT_ID: account, CLOUDFLARE_ANALYTICS_TOKEN: token } = secrets;
   if (!account || !token) {

@@ -1155,6 +1155,27 @@ describe("syncCycle", () => {
     assert.equal(service.rows().songs.length, 3);
   });
 
+  test("a push refused for a table's row limit keeps the Library and the account, and goes up once there's room", async () => {
+    const service = testSyncService();
+    const a = await phone(service);
+    await a.sync();
+    const account = selectJoinedAccount(a.db);
+
+    service.rowLimits = { favorites: 1 };
+    setFavorites(a.db, [a.track("Airbag"), a.track("Lucky")], true, a.now());
+    await assert.rejects(a.sync());
+    assert.deepEqual(service.rows().favorites, []);
+    assert.deepEqual(
+      selectFavoriteTrackIds(a.db).toSorted(),
+      [a.track("Airbag"), a.track("Lucky")].toSorted(),
+    );
+    assert.equal(selectJoinedAccount(a.db), account);
+
+    service.rowLimits = {};
+    await a.sync();
+    assert.equal(service.rows().favorites.length, 2);
+  });
+
   test("changes made offline wait and go up in full once online", async () => {
     const service = testSyncService();
     const a = await phone(service);

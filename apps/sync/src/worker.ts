@@ -12,7 +12,8 @@ import {
   createSyncService,
   serviceMemory,
 } from "./service.ts";
-import { type UsageSecrets, watchUsage } from "./usage.ts";
+import { runMaintenance } from "./maintenance.ts";
+import type { UsageSecrets } from "./usage.ts";
 
 export interface Env extends UsageSecrets {
   readonly TURSO_DATABASE_URL?: string;
@@ -116,14 +117,14 @@ export default {
     return service(request);
   },
 
-  /** The hourly usage watch (`[triggers]` in `wrangler.toml`, src/usage.ts). */
+  /** The hourly maintenance (`[triggers]` in `wrangler.toml`, src/maintenance.ts). */
   scheduled(_controller: unknown, env: Env, context: ScheduledContext): void {
     const { TURSO_DATABASE_URL: url, TURSO_AUTH_TOKEN: authToken } = env;
     if (url === undefined) {
-      console.error("usage watch: TURSO_DATABASE_URL isn't set");
+      console.error("maintenance: TURSO_DATABASE_URL isn't set");
       return;
     }
     const db = createClient({ url, ...(authToken === undefined ? {} : { authToken }) });
-    context.waitUntil(watchUsage({ db, secrets: env }));
+    context.waitUntil(runMaintenance({ db, secrets: env }));
   },
 };

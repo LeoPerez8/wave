@@ -11,7 +11,7 @@ type Run = (action: Promise<unknown>) => void;
 /** How often the page reads the session again while a batch loads. */
 const LOADING_POLL_MS = 1000;
 /** Up Next as the page lists it. */
-const UP_NEXT = 500;
+const UP_NEXT = 200;
 
 /** Whether the computer is online, as Chromium sees it. */
 export const useOnline = () => {

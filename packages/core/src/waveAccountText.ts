@@ -17,6 +17,7 @@ export const waveAccountNotes = ({ settings }: Catalogue): Record<WaveAccountNot
   notAllowed: settings.thisGoogleAccountCantUseWavesServer,
   accountsFull: settings.wavesServerHasNoRoomForNewAccounts,
   newAccountsPaused: settings.wavesServerMadeAllTheNewAccountsItCanToday,
+  sessionsFull: settings.tooManyPhonesSignedInToThisWaveAccount,
   failed: settings.couldntSignInTryAgain,
 });
 

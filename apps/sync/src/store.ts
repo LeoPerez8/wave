@@ -85,10 +85,10 @@ const upsert = (
   };
 };
 
-const liveRowCount = async (tx: Transaction, table: SyncTable, accountId: string) => {
-  const live = table.kind === "rows" ? " AND deleted = 0" : "";
+/** How many of [accountId]'s rows [table] retains, deletion records included. */
+const retainedRowCount = async (tx: Transaction, table: SyncTable, accountId: string) => {
   const result = await tx.execute({
-    sql: `SELECT count(*) AS n FROM ${table.sqlName} WHERE account_id = ?${live}`,
+    sql: `SELECT count(*) AS n FROM ${table.sqlName} WHERE account_id = ?`,
     args: [accountId],
   });
   return Number(result.rows[0]?.n ?? 0);
@@ -130,7 +130,9 @@ const inWriteTransaction = async <T>(
 /**
  * Merges [batch] into [accountId]'s rows: each incoming change that wins
  * (Core's rules) is stored with the account's next change number. Nothing
- * is stored when the result would hold more rows than [limits] allow.
+ * is stored when a category that gains an ID would then retain more rows,
+ * deletion records included, than [limits] allow. A category already past
+ * its limit keeps its rows and still takes changes to the IDs it holds.
  */
 export const pushRows = (
   db: Client,
@@ -140,17 +142,20 @@ export const pushRows = (
 ): Promise<PushResult> =>
   inWriteTransaction(db, async (tx) => {
     const accepted = new Map<SyncTable, readonly IncomingRow[]>();
+    // Categories where the merge adds an ID: only these can go past a limit.
+    const growing = new Set<SyncTable>();
     for (const [table, incoming] of batch) {
       if (incoming.length === 0) continue;
       const held = await heldRows(tx, table, accountId, [
         ...new Set(incoming.map((row) => row.id)),
       ]);
-      accepted.set(
-        table,
+      const merged =
         table.kind === "rows"
           ? mergeRows(held, incoming).accepted
-          : mergePlays(held, incoming).added,
-      );
+          : mergePlays(held, incoming).added;
+      accepted.set(table, merged);
+      const heldIds = new Set(held.map((row) => row.id));
+      if (merged.some((row) => !heldIds.has(row.id))) growing.add(table);
     }
 
     const total = [...accepted.values()].reduce((sum, rows) => sum + rows.length, 0);
@@ -170,9 +175,8 @@ export const pushRows = (
     }
     await tx.batch(writes);
 
-    for (const [table, rows] of accepted) {
-      if (!rows.some((row) => !row.deleted)) continue;
-      if ((await liveRowCount(tx, table, accountId)) > limits[table.limit]) {
+    for (const table of growing) {
+      if ((await retainedRowCount(tx, table, accountId)) > limits[table.limit]) {
         await tx.rollback();
         return { overLimit: table.limit };
       }

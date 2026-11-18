@@ -2,7 +2,9 @@ name: Roll back an update
 
 # Promotes an earlier bundle back onto a channel, for a bad update that doesn't crash. Phones on
 # that channel with the same runtime version move to it at their next check. See "Over-the-air
-# updates" in docs/spec.md.
+# updates" in docs/spec.md. It republishes the update R2 keeps for that release, with no new build,
+# once the release's sealed provenance record holds and R2's update is the one it admitted
+# (docs/release-provenance.md).
 on:
   workflow_dispatch:
     inputs:
@@ -15,6 +17,11 @@ on:
         description: The version to go back to, such as 0.46.1-ti
         required: true
         type: string
+      allow_unrecorded:
+        description: Owner's transition. Allow a release published before provenance records, checked on its runtime version alone
+        required: false
+        type: boolean
+        default: false
 
 permissions: {}
 
@@ -34,13 +41,30 @@ jobs:
     steps:
       - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.1.0
         with:
-          sparse-checkout: apps/updates
+          sparse-checkout: |
+            apps/updates
+            scripts/ci
           persist-credentials: false
 
       - uses: actions/setup-node@a0853c24544627f65ddf259abe73b1d18a591444 # v5.0.0
         with:
           node-version: 22
           package-manager-cache: false
+
+      # Before any secret: the release's GitHub Release has to carry a sealed record for its tag's
+      # commit and its APK. Only the owner's transition lets a release from before records through.
+      - name: Check the release's provenance
+        id: provenance
+        env:
+          GH_TOKEN: ${{ github.token }}
+          VERSION: ${{ inputs.version }}
+          ALLOW_UNRECORDED: ${{ inputs.allow_unrecorded }}
+        run: |
+          version="$(echo "$VERSION" | tr -d '[:space:]')"
+          version="${version#v}"
+          flags=()
+          if [ "$ALLOW_UNRECORDED" = "true" ]; then flags=(--allow-unrecorded); fi
+          scripts/ci/verified-release.sh "v$version" "$RUNNER_TEMP/release" "${flags[@]}"
 
       - name: Promote the update
         env:
@@ -49,4 +73,6 @@ jobs:
           UPDATES_SIGNING_KEY: ${{ secrets.UPDATES_SIGNING_KEY }}
           WAVE_UPDATE_CHANNEL: ${{ inputs.channel }}
           WAVE_UPDATE_VERSION: ${{ inputs.version }}
+          WAVE_PROVENANCE_FILE: ${{ steps.provenance.outputs.file }}
+          WAVE_ALLOW_UNRECORDED: ${{ inputs.allow_unrecorded }}
         run: node apps/updates/scripts/promote.ts

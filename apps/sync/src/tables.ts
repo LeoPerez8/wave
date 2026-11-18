@@ -27,7 +27,7 @@ type TableName = keyof SyncTables;
 
 /** How the service keeps a table: the part of it that isn't Core's wire. */
 interface TableStorage {
-  /** The limit on how many rows (tombstones aside) an account holds. */
+  /** The limit on how many rows an account holds, tombstones counted (`store.ts`). */
   readonly limit: SyncLimitName;
   /** A rule across fields a live row must keep, with what it says when broken. */
   readonly check?: (row: Readonly<Record<string, unknown>>) => string | null;

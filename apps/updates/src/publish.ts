@@ -4,10 +4,11 @@
  */
 
 import { createHash, createPrivateKey, createSign } from "node:crypto";
-import { readFileSync } from "node:fs";
+import { existsSync, readFileSync, readdirSync } from "node:fs";
 import { join } from "node:path";
 import {
   type Channel,
+  type ExportedFiles,
   type LatestApk,
   type ReleaseNotes,
   type SignedApk,
@@ -120,6 +121,26 @@ export const publishLatestApk = async ({
   await put(latestApkKey(channel), data, "application/json");
 };
 
+/** Every file of the export by its path, and its app config, for a later rollback's check. */
+const exportedFiles = (dir: string): ExportedFiles => {
+  const paths = (prefix: string): string[] =>
+    readdirSync(join(dir, prefix), { withFileTypes: true }).flatMap((entry) =>
+      entry.isDirectory() ? paths(`${prefix}${entry.name}/`) : [`${prefix}${entry.name}`],
+    );
+  const files = Object.fromEntries(
+    paths("").map((path) => [
+      path,
+      createHash("sha256")
+        .update(readFileSync(join(dir, path)))
+        .digest("hex"),
+    ]),
+  );
+  const config = existsSync(join(dir, "expo-config.json"))
+    ? readFileSync(join(dir, "expo-config.json"), "utf8")
+    : null;
+  return { files, config };
+};
+
 /** Publishes the update and answers its id. */
 export const publishUpdate = async ({
   dir,
@@ -164,6 +185,7 @@ export const publishUpdate = async ({
     assets,
     metadata: {},
     extra: { expoClient: { ...appConfig, runtimeVersion } },
+    exported: exportedFiles(dir),
   };
   await releaseUpdate(bucket, channel, update, { signingKey: privateKey, origin });
   return id;

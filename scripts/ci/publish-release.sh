@@ -7,7 +7,11 @@
 #   scripts/ci/publish-release.sh <apk path>
 # Run from a checkout of the repo. Env: GH_TOKEN, RELEASE_TAG (default GITHUB_REF_NAME),
 # GITHUB_REF_TYPE, RELEASE_SHA (the commit a branch push releases: its version bump; default
-# GITHUB_SHA), RELEASE_NOTES_FILE (optional: the patch notes).
+# GITHUB_SHA), RELEASE_NOTES_FILE (optional: the patch notes), PROVENANCE_FILE (optional: the
+# release gate's sealed record, attached as wave-<version>.provenance.json; docs/release-provenance.md),
+# SOURCE_MANIFEST_FILE and SOURCE_DIRECTIONS_FILE (optional: where the release's source is, attached
+# as wave-<version>.source.json and .source.md, the directions also added to the notes;
+# docs/release-source.md).
 set -euo pipefail
 
 apk="$1"
@@ -16,11 +20,32 @@ version="${tag#v}"
 dir="${RUNNER_TEMP:-/tmp}"
 asset="$dir/wave-$version.apk"
 cp "$apk" "$asset"
+assets=("$asset")
+if [ -n "${PROVENANCE_FILE:-}" ]; then
+  cp "$PROVENANCE_FILE" "$dir/wave-$version.provenance.json"
+  assets+=("$dir/wave-$version.provenance.json")
+fi
 
-notes="${RELEASE_NOTES_FILE:-}"
-if [ -z "$notes" ]; then
-  notes="$dir/release-notes.md"
+if [ -n "${SOURCE_MANIFEST_FILE:-}" ]; then
+  cp "$SOURCE_MANIFEST_FILE" "$dir/wave-$version.source.json"
+  assets+=("$dir/wave-$version.source.json")
+fi
+if [ -n "${SOURCE_DIRECTIONS_FILE:-}" ]; then
+  cp "$SOURCE_DIRECTIONS_FILE" "$dir/wave-$version.source.md"
+  assets+=("$dir/wave-$version.source.md")
+fi
+
+notes="$dir/release-notes.md"
+if [ -n "${RELEASE_NOTES_FILE:-}" ]; then
+  cp "$RELEASE_NOTES_FILE" "$notes.in"
+  mv "$notes.in" "$notes"
+else
   echo "Wave $version for Android. Open wave-$version.apk on the phone to install it." > "$notes"
+fi
+# The directions sit next to the APK on the release page (GPLv3 section 6(d)).
+if [ -n "${SOURCE_DIRECTIONS_FILE:-}" ]; then
+  printf '\n' >> "$notes"
+  cat "$SOURCE_DIRECTIONS_FILE" >> "$notes"
 fi
 
 flags=(--latest)
@@ -41,15 +66,42 @@ if [ "${GITHUB_REF_TYPE:-tag}" = "branch" ]; then
   if [ -z "$tagged" ]; then target=(--target "$sha"); fi
 fi
 
-# A re-run of the same tag replaces the APK and leaves the release as it was.
+# A re-run of the same tag replaces the APK and record and rewrites the notes, only when the
+# release's record names this run's source (docs/release-provenance.md). A release with another
+# source, or with an APK from before records, keeps what it has; so does any release GitHub
+# can't list or whose record can't be downloaded.
 if gh release view "$tag" > /dev/null 2>&1; then
-  gh release upload "$tag" "$asset" --clobber
-  if [[ "$version" == *-ti ]]; then gh release edit "$tag" --prerelease --latest=false; fi
+  if ! held="$(gh release view "$tag" --json assets --jq '.assets[].name')"; then
+    echo "::error::GitHub didn't say what $tag holds, so nothing was replaced."
+    exit 1
+  fi
+  has() { grep -qxF "$1" <<< "$held"; }
+  if has "wave-$version.provenance.json"; then
+    published="$dir/published-provenance"
+    if ! gh release download "$tag" --pattern "wave-$version.provenance.json" --dir "$published" \
+      --clobber > /dev/null; then
+      echo "::error::$tag's provenance record couldn't be downloaded, so nothing was replaced."
+      exit 1
+    fi
+    recorded="$(node -p 'JSON.parse(require("fs").readFileSync(process.argv[1], "utf8")).source ?? ""' \
+      "$published/wave-$version.provenance.json" 2> /dev/null || true)"
+    if [ "$recorded" != "${RELEASE_SHA:-${GITHUB_SHA:?}}" ]; then
+      echo "::error::$tag was published from ${recorded:0:7}, not from this run's ${RELEASE_SHA:-$GITHUB_SHA}. Its APK and record stay as they are."
+      exit 1
+    fi
+  elif has "wave-$version.apk"; then
+    echo "::error::$tag was published before provenance records, so nothing shows its APK came from this run's source. Its APK stays as it is."
+    exit 1
+  fi
+  gh release upload "$tag" "${assets[@]}" --clobber
+  edit=(--notes-file "$notes")
+  if [[ "$version" == *-ti ]]; then edit+=(--prerelease --latest=false); fi
+  gh release edit "$tag" "${edit[@]}"
 elif [ ${#target[@]} -gt 0 ]; then
-  gh release create "$tag" "$asset" "${target[@]}" "${flags[@]}" \
+  gh release create "$tag" "${assets[@]}" "${target[@]}" "${flags[@]}" \
     --title "Wave $version" --notes-file "$notes"
 else
-  gh release create "$tag" "$asset" --verify-tag "${flags[@]}" \
+  gh release create "$tag" "${assets[@]}" --verify-tag "${flags[@]}" \
     --title "Wave $version" --notes-file "$notes"
 fi
 echo "Published $tag: ${GITHUB_SERVER_URL:-https://github.com}/${GITHUB_REPOSITORY:?}/releases/tag/$tag"

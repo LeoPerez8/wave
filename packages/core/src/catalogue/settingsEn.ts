@@ -281,6 +281,8 @@ export const settingsEn = {
     "Wave's server has no room for new Wave accounts. Everything on this phone keeps working.",
   wavesServerMadeAllTheNewAccountsItCanToday:
     "Wave's server has made all the new Wave accounts it can today. Try again tomorrow. Everything on this phone keeps working.",
+  tooManyPhonesSignedInToThisWaveAccount:
+    "Too many phones are signed in to this Wave account. Sign out on one you no longer use, then try again. Everything on this phone keeps working.",
   couldntSignInTryAgain: "Couldn't sign in. Try again.",
   signInWithGoogle: "Sign In with Google",
   couldntDeleteTheAccountWithoutAConnection: "Couldn't delete the account without a connection.",

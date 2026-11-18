@@ -42,6 +42,29 @@ if ! grep -qs '"generic-api-key"' "$work/planted.json"; then
 fi
 
 range="${1:-}"
+here="$(cd "$(dirname "$0")" && pwd)"
+source_sha="${SOURCE_SHA:-}"
+if [ -z "$range" ] && [ -n "$source_sha" ]; then
+  # The run's release source (docs/release-provenance.md): the checkout must be that commit,
+  # and the scan covers everything it adds since the channel's previous release, so the
+  # version bump and autofix commits CI made count, as do pushes that never got a run.
+  if [ "$(git rev-parse HEAD)" != "$source_sha" ]; then
+    echo "The checkout is $(git rev-parse HEAD), not the release source $source_sha." >&2
+    exit 1
+  fi
+  if [ "${GITHUB_EVENT_NAME:-}" = "pull_request" ]; then
+    range="${BASE_SHA:?}..$source_sha"
+  else
+    channel=ti
+    if [[ "${GITHUB_REF:-}" == refs/tags/v* && "${GITHUB_REF}" != *-ti ]]; then channel=main; fi
+    previous="$("$here/previous-tag.sh" "$source_sha" "$channel")"
+    if [ -n "$previous" ]; then
+      range="$(git rev-parse "$previous^{commit}")..$source_sha"
+    else
+      range="$source_sha"
+    fi
+  fi
+fi
 if [ -z "$range" ]; then
   zero=0000000000000000000000000000000000000000
   if [ "${GITHUB_EVENT_NAME:-}" = "pull_request" ]; then
@@ -60,3 +83,7 @@ fi
 
 echo "Scanning $range"
 scan "$root" --log-opts="$range" --exit-code 1 --verbose
+# The evidence the release gate reads, only once the scan passed.
+if [ -n "$source_sha" ]; then
+  { echo "source=$source_sha"; echo "range=$range"; } >> "${GITHUB_OUTPUT:-/dev/null}"
+fi
