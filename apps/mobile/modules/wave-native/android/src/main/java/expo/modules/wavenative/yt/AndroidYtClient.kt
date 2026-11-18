@@ -39,7 +39,7 @@ private class AndroidYtPlatform(private val context: Context) : YtPlatform {
   override fun online(): Boolean = connectivity.online()
 
   /** In `noBackupFilesDir`: Android never backs it up. */
-  override val sessionFile: File get() = File(context.noBackupFilesDir, SESSION_FILE)
+  override val sessionStore: YtSessionStore get() = YtSessionFile(File(context.noBackupFilesDir, SESSION_FILE))
 
   override val visitorData: YtVisitorStore = object : YtVisitorStore {
     private val visitorPrefs = context.getSharedPreferences(VISITOR_PREFS, Context.MODE_PRIVATE)
