@@ -95,6 +95,8 @@
     // Zero disables the gate. This positive floor gates any new clone group.
     "threshold": 0.0001,
   },
+  // Cloudflare calls a Durable Object's handlers itself.
+  "usedClassMembers": [{ "implements": "CountsObject", "members": ["fetch", "alarm"] }],
   "audit": {
     "gate": "new-only",
     "css": false,

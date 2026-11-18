@@ -555,6 +555,7 @@ export {
 } from "./theme.ts";
 export { hexToHsv, hsvToHex, parseHexColour, withOpacity } from "./colour.ts";
 export type { Hsv } from "./colour.ts";
+export { sha256Hex } from "./sha256.ts";
 export {
   colourPickerLayout,
   colourPickerMarkers,

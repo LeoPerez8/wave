@@ -34,6 +34,8 @@ export interface UpstreamRequest {
   readonly secrets: readonly string[];
 }
 
+import { sha256Hex } from "@wave/core";
+
 /** What a provider answered: its JSON as text, or a failure (with its status when it answered). */
 export type UpstreamResult =
   | { readonly ok: true; readonly body: string }
@@ -44,14 +46,6 @@ const PROXY_USER_AGENT = "Wave (https://github.com/LeoPerez8/wave)";
 
 /** A provider request that takes longer than this has failed. */
 const UPSTREAM_TIMEOUT_MS = 10_000;
-
-/** [text]'s SHA-256, in hex (the service keys addresses and session tokens with it too). */
-export const sha256Hex = async (text: string): Promise<string> => {
-  const digest = new Uint8Array(
-    await crypto.subtle.digest("SHA-256", new TextEncoder().encode(text)),
-  );
-  return Array.from(digest, (byte) => byte.toString(16).padStart(2, "0")).join("");
-};
 
 /**
  * Where [request]'s answer is cached: a URL on the service's own [origin]

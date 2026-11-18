@@ -8,7 +8,7 @@
  */
 
 import type { Client } from "@libsql/client";
-import { geniusUpstreamUrl, ticketmasterUpstreamUrl } from "@wave/core";
+import { geniusUpstreamUrl, sha256Hex, ticketmasterUpstreamUrl } from "@wave/core";
 import { type GoogleKeys, googleKeys, verifyGoogleIdToken } from "./google.ts";
 import { type SyncLimitName, type SyncLimits, SYNC_LIMITS } from "./limits.ts";
 import {
@@ -25,7 +25,6 @@ import {
   cachedAnswer,
   keepAnswer,
   proxiedAnswer,
-  sha256Hex,
 } from "./proxy.ts";
 import { SESSION_UNUSED_MS } from "./sessions.ts";
 import { type PushBatch, deleteAccount, pullRows, pushRows } from "./store.ts";

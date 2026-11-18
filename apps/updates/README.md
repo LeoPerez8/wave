@@ -9,6 +9,7 @@ delivers its fix, and it needs no account or sign-in. See "Build and CI" in `doc
 | -------------------------- | ---------------------------------------------------------------- |
 | `src/worker.ts`            | The Worker entry: the service over the bucket in `wrangler.toml` |
 | `src/service.ts`           | The routes                                                       |
+| `src/limits.ts`            | Each address's daily answers, and the Durable Object that counts |
 | `src/layout.ts`            | What R2 holds, which the service and the publish script share    |
 | `src/publish.ts`           | Turns `expo export`'s output into a published update             |
 | `src/promote.ts`           | Republishes an earlier version as a channel's newest update      |
@@ -108,6 +109,50 @@ enough to offer an APK, and once a phone runs a release signed with Wave's relea
 itself installs only APKs signed with that key (`docs/spec.md`, APK signing).
 Without the key, `publish-apk.ts` logs that it skipped and the release goes on.
 
+## Limits
+
+Each client address gets a number of answers per route and UTC day, each route counted on its
+own:
+
+| Route                 | Answers a day               | Past it                             |
+| --------------------- | --------------------------- | ----------------------------------- |
+| `/v1/manifest`        | 100                         | `204`, the protocol's "nothing new" |
+| `/v1/notes`           | 30                          | `429`                               |
+| `/v1/apk`             | 100                         | `429`                               |
+| `/v1/assets/<sha256>` | 30, and 3 of the same asset | `429`                               |
+
+Every answer past a limit carries `retry-after`, the seconds to the next UTC midnight, when the
+counts start over. Paths that aren't a route and methods other than GET aren't counted. The
+numbers are `DAILY_LIMITS` and `DAILY_LIMIT_PER_ASSET` in `src/limits.ts`.
+
+- **The manifest answers `204`**, not `429`. `expo-updates` takes a `204` as a finished check that
+  found nothing, so the phone stays on the update it runs and asks again at its next check. A
+  `429` would reject `checkForUpdateAsync` and record a check error in `expo-updates`. The app
+  checks at most once every 15 minutes, 96 times a day, and each check asks the manifest and the
+  APK route, so 100 is a phone in use all day.
+- **Notes and the APK answer `429`.** The app treats it as any failed fetch: the APK check goes to
+  the app log and comes round at a later check, Version History shows the list it kept, and What's
+  New tries again later. A check the person asked for at the update button says it failed.
+- **Assets** are what one update download fetches at once: the bundle and every file it names that
+  the phone doesn't hold yet, a few images at most. A phone keeps a file it has, so it asks for
+  each once: an address gets the same asset 3 times a day, which covers the phones sharing it,
+  and 30 assets in all, which covers several releases. `expo-updates` drops the whole download
+  when one asset fails, so a phone past either number gets that update the next UTC day. The
+  route's 30 are counted first, so an address past them leaves nothing more in the counts.
+
+An address is counted as Cloudflare names it in `cf-connecting-ip`: an IPv4 address on its own,
+an IPv6 address by its /64. Phones that share one address, behind a carrier's NAT or one home
+network, share its answers. The address is kept only as the SHA-256 of that block and never
+logged. A request with no `cf-connecting-ip` (only the tests send one) isn't counted.
+
+The counts live in `RequestCounts`, a SQLite-backed Durable Object per address, declared with its
+migration in `wrangler.toml`. Workers Free allows it, and `wrangler deploy` creates it, so there's
+nothing to set up first. A refused request writes nothing, and each object deletes its counts
+when its day ends. An isolate remembers whom it refused today and refuses them again without
+asking. When the counts can't be reached, the Worker answers anyway and writes that the count
+failed to its console (`wrangler tail`; the Worker keeps no logs): what it serves is public and
+signed, so an outage of the counts mustn't stop updates.
+
 ## What R2 holds
 
 ```
@@ -177,4 +222,5 @@ update` and is published as usual, and phones find no update. The Worker's URL i
 5. Install the first APK with `expo-updates` by hand. Later JS-only releases reach it with no
    install.
 
-A change to this package isn't released with the app. Deploy it the same way as step 2.
+A change to this package isn't released with the app. Deploy it the same way as step 2. The
+first deploy with `RequestCounts` applies its migration (`v1` in `wrangler.toml`) by itself.
