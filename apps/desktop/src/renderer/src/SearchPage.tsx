@@ -1,4 +1,4 @@
-import { formatNumber } from "@wave/core";
+import { formatNumber, type SearchOnline } from "@wave/core";
 import { useEffect, useState, type ReactNode } from "react";
 import type { BrowseRow, BrowseScope } from "../../shared/browse.ts";
 import {
@@ -12,6 +12,7 @@ import {
 import { Icon } from "./Icon.tsx";
 import { language, labels, text } from "./text.ts";
 import { Artwork, time } from "./VirtualTable.tsx";
+import { YtResults } from "./YtResults.tsx";
 
 const groupLabel: Readonly<Record<SearchKind, string>> = {
   song: text.playbackText.songs,
@@ -53,7 +54,7 @@ function SongRow({
       className="table-row table-columns search-row"
       data-testid={testId}
       aria-selected={selected}
-      aria-disabled={row.unavailable}
+      aria-disabled={row.unavailable || row.path === null}
       data-missing={row.path === null || undefined}
       aria-label={[row.title, row.artist].filter(Boolean).join(", ")}
       onClick={onSelect}
@@ -75,7 +76,7 @@ function SongRow({
           <Artwork hash={row.artworkHash} />
           <span className="row-play">
             <Icon
-              name={row.unavailable ? "folder" : row.path === null ? "download" : "play"}
+              name={row.unavailable ? "folder" : row.path === null ? "missing" : "play"}
               size={16}
             />
           </span>
@@ -210,8 +211,10 @@ export interface SearchPageProps {
   /** A recent search was picked. */
   readonly onPick: (query: string) => void;
   readonly onError: () => void;
-  /** YouTube Music's results, under the Library's. */
-  readonly children?: ReactNode;
+  readonly ytMusic: boolean;
+  readonly searchOnline: SearchOnline | undefined;
+  readonly onYtPlay: (videoId: string) => void;
+  readonly onYtDownload: (videoId: string) => void;
 }
 
 /**
@@ -219,21 +222,10 @@ export interface SearchPageProps {
  * the songs found by their lyrics and the Albums, Artists, Playlists and Genres shelves.
  * An empty field shows the recent searches.
  */
-export function SearchPage({
-  query,
-  revision,
-  onOpen,
-  onPlay,
-  onMenu,
-  onUnavailable,
-  onPick,
-  onError,
-  children,
-}: SearchPageProps) {
+export function SearchPage(props: SearchPageProps) {
+  const { query, revision, onError } = props;
   const trimmed = query.trim();
   const [view, setView] = useState<LibrarySearchView>();
-  const [expanded, setExpanded] = useState<{ query: string; open: SearchExpansion }>();
-  const [selected, setSelected] = useState<number>();
   useEffect(() => {
     if (trimmed === "") return;
     let current = true;
@@ -245,6 +237,38 @@ export function SearchPage({
       current = false;
     };
   }, [trimmed, revision, onError]);
+  const current = view?.query === trimmed ? view : undefined;
+  return (
+    <div className="search-page" data-testid="search-page">
+      <YtResults
+        query={trimmed}
+        enabled={props.ytMusic}
+        preference={props.searchOnline}
+        // As on the phone, lyrics hits alone don't keep YouTube Music from being asked.
+        libraryHasResults={current === undefined ? undefined : current.groups.length > 0}
+        onPlay={props.onYtPlay}
+        onDownload={props.onYtDownload}
+      >
+        <LibraryResults {...props} view={current} />
+      </YtResults>
+    </div>
+  );
+}
+
+function LibraryResults({
+  query,
+  revision,
+  onOpen,
+  onPlay,
+  onMenu,
+  onUnavailable,
+  onPick,
+  onError,
+  view,
+}: SearchPageProps & { readonly view: LibrarySearchView | undefined }) {
+  const trimmed = query.trim();
+  const [expanded, setExpanded] = useState<{ query: string; open: SearchExpansion }>();
+  const [selected, setSelected] = useState<number>();
   if (trimmed === "")
     return <RecentSearches revision={revision} onPick={onPick} onError={onError} />;
   if (view === undefined)
@@ -384,7 +408,7 @@ export function SearchPage({
     );
   };
   return (
-    <div className="search-page" data-testid="search-page">
+    <>
       {sections.length === 0 ? (
         <p className="search-empty secondary" data-testid="search-nothing">
           {text.playbackText.nothingInYourLibraryMatchesValue(trimmed)}
@@ -392,7 +416,6 @@ export function SearchPage({
       ) : (
         sections.map(render)
       )}
-      {children}
-    </div>
+    </>
   );
 }

@@ -44,7 +44,14 @@ const shape = (sections: ReturnType<typeof searchSections>) =>
 
 test("Search shows Albums, Artists and Playlists shelves regardless of match ranking", () => {
   assert.deepEqual(
-    shape(searchSections(view({ groups: [group("artist", 2), group("playlist", 1), group("album", 3), group("song", 2)] }), new Set())),
+    shape(
+      searchSections(
+        view({
+          groups: [group("artist", 2), group("playlist", 1), group("album", 3), group("song", 2)],
+        }),
+        new Set(),
+      ),
+    ),
     ["song:2/2", "album:3/3", "artist:2/2", "playlist:1/1"],
   );
 });

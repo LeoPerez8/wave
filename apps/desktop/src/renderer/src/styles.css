@@ -1095,6 +1095,26 @@ kbd {
 }
 
 /* Search: the top result, the Songs table, lyrics hits and the shelves, scrolling together. */
+.search-online-toggle {
+  display: flex;
+  gap: 4px;
+  padding-block: 8px;
+}
+.search-online-toggle button {
+  padding: 8px 16px;
+  color: var(--color-secondary);
+}
+.search-online-toggle button[aria-pressed="true"] {
+  color: var(--color-accent);
+  background: var(--color-fill);
+}
+.search-online-setting {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 16px;
+  margin-top: 16px;
+}
 .search-page {
   flex: 1;
   min-height: 0;
