@@ -74,6 +74,14 @@
   display: flex;
   flex-direction: column;
 }
+/* Related, as the panel's third tab. */
+.panel-body > .related-panel {
+  flex: 1;
+  padding: 0 14px 14px;
+}
+.panel-body > .related-panel h2 {
+  margin-top: 10px;
+}
 
 /* Lyrics, in the panel and in Now Playing. */
 .lyric-lines {

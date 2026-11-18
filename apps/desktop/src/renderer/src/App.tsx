@@ -6,6 +6,7 @@ import type { ScanStatus } from "../../shared/library.ts";
 import { PlayerBar, usePlayback } from "./PlayerBar.tsx";
 import { NowPlaying } from "./NowPlaying.tsx";
 import { SidePanel, useSidePanel } from "./SidePanel.tsx";
+import { shownPanelTab } from "../../shared/panelTabs.ts";
 import { Icon } from "./Icon.tsx";
 import { Artwork, VirtualTable } from "./VirtualTable.tsx";
 import { FolderSettings } from "./FolderSettings.tsx";
@@ -666,6 +667,9 @@ export function App() {
         <SidePanel
           tab={panel.tab}
           onTab={panel.show}
+          ytMusic={ytMusic}
+          onArtist={(artist) => go({ kind: "ytArtist", id: artist.browseId })}
+          onSongMenu={ytSongMenu}
           view={playback.view}
           run={playback.run}
           onError={failed}
@@ -677,7 +681,7 @@ export function App() {
       )}
       <PlayerBar
         playback={playback}
-        panel={panel.tab}
+        panel={panel.tab && shownPanelTab(panel.tab, ytMusic)}
         onPanel={panel.toggle}
         onNowPlaying={() => setNowPlaying(true)}
       />
