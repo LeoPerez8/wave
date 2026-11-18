@@ -361,7 +361,7 @@ answer (its over-quota error names the key), nothing cached, and a log line that
 | Limit                                     | Value     |                                                      |
 | ----------------------------------------- | --------- | ---------------------------------------------------- |
 | `maxBodyBytes`                            | 2 MiB     | per request; a large first push goes in batches      |
-| `maxSongs`                                | 100,000   | rows per account, tombstones aside                   |
+| `maxSongs`                                | 100,000   | rows per account, tombstones included                |
 | `maxPlaylists`                            | 5,000     |                                                      |
 | `maxPlaylistEntries`                      | 250,000   |                                                      |
 | `maxFavorites`                            | 100,000   |                                                      |
@@ -384,6 +384,12 @@ answer (its over-quota error names the key), nothing cached, and a log line that
 | `maxTicketmasterRequestsPerMinute`        | 300       | the Ticketmaster routes, per account                 |
 | `maxTicketmasterAttractionSearchesPerDay` | 200       | attraction searches, cached or not, per account      |
 | `maxTicketmasterEventLookupsPerDay`       | 200       | event lookups, cached or not, per account            |
+
+A table's row limit counts its tombstones with its live rows, and the service never removes either
+to make room. A push is refused whole only when a table it adds an id to would then hold more rows
+than its limit; a change to an id the account already holds (an edit, a removal, bringing it back)
+always fits, so a table already past its limit keeps its rows and refuses only new ids. A refused
+push stores nothing and moves no cursor.
 
 The two per-address rates, `maxGeniusRequestsPerMinute` and `maxTicketmasterRequestsPerMinute`
 are also the `simple.limit` of `ADDRESS_LIMITER`, `FAILED_LOOKUP_LIMITER`, `GENIUS_LIMITER` and

@@ -5,7 +5,8 @@
  * `maxAccounts`) with `{ "error": "limit", "limit": "<name>" }`.
  *
  * Starting values, chosen so a 50,000-song Library with 200,000 plays fits
- * with room to grow. Row counts leave tombstones out.
+ * with room to grow. Row counts include tombstones; a push past one is
+ * refused only when it adds an id (src/store.ts, `pushRows`).
  */
 export const SYNC_LIMITS = {
   /** The largest request body, in bytes. A first push of a large history goes in batches under it. */
