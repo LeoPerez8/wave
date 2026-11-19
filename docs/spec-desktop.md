@@ -239,6 +239,11 @@ ADR: `docs/adr/0004-kotlin-on-a-bundled-jvm.md`.
   downloads it through Core's `downloadSource`, with Download All and Download Missing Songs on
   album, artist, genre and playlist pages, with how many are missing (an album's in album order
   and under the album, a playlist's in playlist order and under the playlist).
+- A star means downloaded, as on the phone (`docs/spec.md`, A star means downloaded): a missing
+  song with a star downloads on its own under Favorites, when it is starred here, after a sync
+  that brought stars or songs, and as Wave starts. Unstarring it before the file arrives cancels
+  the download only the star asked for. What the stars asked is kept on this computer
+  (`downloads.syncedStars`, `downloads.starAsked`), never synced.
 - Play and Shuffle on a list with missing songs play what can play (Core's `listPlay`): the
   songs with a file and, with YT Music on, the missing songs downloaded from a YouTube Music
   video, streamed in their place. A toast counts the ones left out and offers Download Missing
@@ -280,7 +285,8 @@ The prototype was approved on 2026-11-18 after an Impeccable critique; its decis
   percentage); the user's playlists with New Playlist; Settings pinned at the bottom. Back and
   forward arrows sit in the title bar.
 - Lyrics and the Queue share the side panel, toggled from the player bar. Now Playing (artwork,
-  title, lyrics) opens from the bar's artwork or title and closes with Esc.
+  title, lyrics) opens from the bar's artwork or title and closes with Esc. Focus lands on Now
+  Playing itself, so Space still plays and pauses; Tab reaches its close button.
 - Minimum window 960×600. Below 1120 px wide the sidebar shows icons only. When the content is
   narrower than 760 px, tables drop the Album column, the search top result stacks and hero
   artwork shrinks to 168 px.
@@ -300,7 +306,8 @@ The prototype was approved on 2026-11-18 after an Impeccable critique; its decis
 - Home shows the phone's sections in the phone's order, following the account's synced
   arrangement: shelves of tiles, Most played as a table.
 - Album, artist and playlist pages have a hero: artwork, a light title, and the kind in the line
-  under it ("Album · Indie Folk · 1995 · 7 songs · 33 min"), with no label above the title. Play
+  under it ("Album · Indie Folk · 1995 · 7 songs · 33 min", or "36 h 43 min" from an hour up, Core's `listDuration`; a table's Time
+  column reads "36:43:09"), with no label above the title. Play
   and Shuffle are text buttons in the accent, without a filled box.
 - Search: a top result (artwork and name, no card), a Songs table, then Albums, Artists and
   Playlists shelves, then YouTube Music results. An empty field lists recent searches.
@@ -363,6 +370,17 @@ The prototype was approved on 2026-11-18 after an Impeccable critique; its decis
   on Wi-Fi") gets a desktop variant ("This computer") in both languages, and strings about Wi-Fi
   and mobile data don't show on the desktop. New strings follow the glossary in `docs/spec.md` ›
   Language.
+- Settings › Appearance has Language: System, English or Português (Brasil), each language under
+  its own name (#1186). It is the account-wide synced setting `settings.language` (`en`,
+  `pt-BR` or `system`, kept as a value so it replaces an earlier choice); signed out it stays on
+  this computer. System follows the computer's preferred languages by Core's
+  `resolveAppLanguage` (`--lang` overrides them for checks). Main decides the language once
+  (Core's `chosenAppLanguage`) and the window asks it, so the window, the tray menu, native
+  dialogs and the close-to-tray notice always agree, and a change or a pulled value applies
+  without a restart. The phone doesn't read the setting yet; it follows Android's language.
+- The Library stores "Unknown Album" and "Unknown Artist" for a missing tag; every list, the bar,
+  Now Playing, the tray and the system media controls show them in the current language (Core's
+  `displayTag`), and Library identity keeps the stored value.
 
 ### Build, release and updates
 

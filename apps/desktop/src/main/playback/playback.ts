@@ -40,6 +40,7 @@ import { browseSongs, browseTrackIds } from "../library/browse.ts";
 import { DesktopLibrary } from "../library/library.ts";
 import { preference, savePreference } from "../preferences.ts";
 import { YtMusic } from "../yt/ytMusic.ts";
+import { streamedStarred } from "../yt/streamedSong.ts";
 import { streamedWithinBuffer } from "./bufferAhead.ts";
 import { readPlaybackSettings, savePlaybackSettings } from "./playbackSettings.ts";
 import { createSleepTimer } from "./sleepTimer.ts";
@@ -299,7 +300,9 @@ export const playbackLayer = Layer.effect(
       return refs.map((ref) => {
         if (ref?.kind === "library") return songs.get(ref.id);
         const song = ref?.kind === "yt" ? yt.song(ref.videoId) : undefined;
-        return song === undefined ? undefined : ytRow(song);
+        return song === undefined
+          ? undefined
+          : { ...ytRow(song), favorite: streamedStarred(db, song) };
       });
     };
     /** Keeps the queue's YT Music songs for the next launch, after anything that changes it. */

@@ -1,3 +1,7 @@
+/**
+ * Asking YouTube Music for a Library artist's page and saving the answer (docs/spec.md, "YT
+ * Music", Artist page), for the phone and the desktop alike: transport and persistence are ports.
+ */
 import {
   pickYtArtist,
   ytArtistAnswerKept,
@@ -9,7 +13,14 @@ import {
 } from "@wave/core";
 import * as Effect from "effect/Effect";
 
-import { artistOpeningRequest } from "./artistOpeningRequest.ts";
+/** Checks the connection when it runs, after the section's settlement gate, before any network effect. */
+export const artistOpeningRequest = <A, E, R>(
+  online: () => boolean,
+  request: Effect.Effect<A, E, R>,
+): Effect.Effect<A, E | { readonly reason: "offline" }, R> =>
+  Effect.suspend((): Effect.Effect<A, E | { readonly reason: "offline" }, R> =>
+    online() ? request : Effect.fail({ reason: "offline" }),
+  );
 
 /** The actual artist lookup/save workflow; transport and persistence are its ports. */
 export const fetchArtistAnswer = <S extends YtSong, E, R>(

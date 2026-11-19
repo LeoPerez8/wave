@@ -1,0 +1,49 @@
+/* A Library artist's page (ArtistPage.tsx): shelves, the songs table and YouTube Music's songs
+   scroll as one. The table takes at most the page's height, so it scrolls on its own and hands
+   the wheel back to the page at either end. */
+.artist-page {
+  flex: 1;
+  min-height: 0;
+  overflow: auto;
+  padding-bottom: 24px;
+}
+.artist-page > .table-area {
+  flex: none;
+  max-height: 100%;
+}
+.artist-page > .shelf + .shelf {
+  margin-top: 8px;
+}
+.artist-songs-heading {
+  margin: 22px 0 6px;
+}
+.artist-page > .shelf:first-child h2,
+.artist-page > .artist-songs-heading:first-child {
+  margin-top: 0;
+}
+.artist-page > .yt-list {
+  padding-right: 22px;
+}
+.artist-more {
+  padding: 12px;
+  color: var(--color-accent);
+}
+.hero-actions .artist-toggle {
+  padding-block: 0;
+}
+.hero-actions .artist-toggle button {
+  padding: 4px 14px;
+  color: var(--color-secondary);
+}
+.hero-actions .artist-toggle button[aria-pressed="true"] {
+  color: var(--color-accent);
+  background: var(--color-fill);
+}
+.hero-artist-link {
+  color: inherit;
+  font: inherit;
+}
+.hero-artist-link:hover,
+.hero-artist-link:focus-visible {
+  text-decoration: underline;
+}

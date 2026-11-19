@@ -1,6 +1,6 @@
 import { Fragment, type MouseEvent } from "react";
 import type { BrowseRow } from "../../shared/browse.ts";
-import { text } from "./text.ts";
+import { albumName, artistName, text } from "./text.ts";
 
 /** Where a streamed song's artist and album names lead: their YouTube Music pages. */
 export interface YtCreditLinks {
@@ -31,7 +31,7 @@ export function ArtistCredit({
 }) {
   const names = row.artists !== undefined && row.artists.length > 0 ? row.artists : [row.artist];
   if (row.videoId === undefined || links === undefined || row.artist === "")
-    return <span className={className}>{row.artist}</span>;
+    return <span className={className}>{artistName(row.artist)}</span>;
   return (
     <span className={className}>
       {names.map((name, index) => (
@@ -64,7 +64,7 @@ export function AlbumCredit({
 }) {
   const albumId = row.albumId;
   if (row.videoId === undefined || links === undefined || !albumId || row.album === "")
-    return <span className={className}>{row.album}</span>;
+    return <span className={className}>{albumName(row.album)}</span>;
   return (
     <span className={className}>
       <button

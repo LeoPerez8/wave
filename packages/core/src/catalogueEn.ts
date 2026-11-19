@@ -39,6 +39,9 @@ import type { TabBarTab } from "./tabBar.ts";
 export const en = {
   desktopWindow: desktopWindowEn,
   desktopLayout: {
+    language: "Language",
+    // Each language under its own name, so it can be found from the other one.
+    languages: { system: "System", en: "English", "pt-BR": "Português (Brasil)" },
     brand: "Wave",
     home: "Home",
     search: "Search",
@@ -137,6 +140,8 @@ export const en = {
     chooseArtist: "Choose an Artist",
     noPlaylists: "No playlists yet",
     checkSong: (title: string) => `Select “${title}”`,
+    /** An artist page's songs from YouTube Music, a page at a time. */
+    showMoreSongs: "Show more songs",
   },
   /** The desktop's Wave account: what the phone's Settings › Accounts has no need to say. */
   desktopAccount: {

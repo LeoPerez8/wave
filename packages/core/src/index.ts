@@ -28,7 +28,8 @@ export type {
   PlaysToMerge,
   StreamedPlaySums,
 } from "./countedPlays.ts";
-export { formatDuration, formatRemaining } from "./time.ts";
+export { formatDuration, formatRemaining, listDuration } from "./time.ts";
+export type { ListDurationText } from "./time.ts";
 export { recommendationDeadline, recommendationFrameBudget } from "./recommendationWork.ts";
 export {
   ANCHOR_UNMEASURED,
@@ -1720,6 +1721,7 @@ export type {
 export {
   discoverMix,
   discoverMixCaption,
+  discoverMixName,
   discoverMixSongs,
   discoverMixesBuilt,
   discoverMixesDue,
@@ -2444,7 +2446,7 @@ export type { LostLinkTap, LostTapReason } from "./lostTap.ts";
 export { createArtistGraphBuild, type ArtistGraphCatalogEntry } from "./artistGraphBuild.ts";
 export { mixKnownSongsSteps } from "./mixKnownSongs.ts";
 export { genreMixSeedsSteps } from "./genreMixes.ts";
-export { mapSteps, sortSteps } from "./buildSteps.ts";
+export { mapSteps, sortSteps, finishSteps } from "./buildSteps.ts";
 export { libraryMixProfilesSteps } from "./genreAffinity.ts";
 export { rankPlaysSteps } from "./stats.ts";
 
@@ -2503,6 +2505,7 @@ export {
 } from "./radioRanking.ts";
 
 export { rankedDiscoverMixRead } from "./radioMixes.ts";
+export { rankedDiscoverMixes, rankedDiscoverMixesSteps } from "./rankedDiscoverMixes.ts";
 export { RADIO_CACHE_FRESH_MS, radioCacheFresh } from "./radioCache.ts";
 export {
   listeningHistoryDays,
@@ -2842,3 +2845,10 @@ export type {
   ShortcutId,
   ShortcutKey,
 } from "./desktopKeys.ts";
+export {
+  LANGUAGE_PREFERENCE,
+  readLanguageChoice,
+  chosenAppLanguage,
+  type LanguageChoice,
+} from "./languageChoice.ts";
+export { displayTag } from "./displayTag.ts";

@@ -36,6 +36,8 @@ export interface DesktopSyncDeps {
   readonly log?: (message: string, error: unknown) => void;
   /** A sync pulled new values for the synced settings [keys], already kept. */
   readonly preferencesPulled?: (keys: readonly string[]) => void;
+  /** A sync pulled stars or songs: a star of a missing song may ask for its download. */
+  readonly starsPulled?: () => void;
 }
 
 export interface DesktopSync {
@@ -69,7 +71,7 @@ const storedPreference = (db: LibraryDatabase, key: string): string | null =>
     ?.value ?? null;
 
 /** Every synced value is kept, so joining the account again pushes what it held. */
-const keepPreference = (db: LibraryDatabase, key: string, value: string | null): void => {
+export const keepPreference = (db: LibraryDatabase, key: string, value: string | null): void => {
   if (value === null) db.run(sql`DELETE FROM desktop_synced_preferences WHERE key = ${key}`);
   else
     db.run(
@@ -127,6 +129,7 @@ export const createDesktopSync = (deps: DesktopSyncDeps): DesktopSync => {
       if (changedAnything(pulled)) revision++;
       if (pulled.preferences.length > 0)
         deps.preferencesPulled?.(pulled.preferences.map(({ key }) => key));
+      if (pulled.favorites || pulled.songs || pulled.library) deps.starsPulled?.();
       return true;
     } catch (error) {
       if (disposed) return false;

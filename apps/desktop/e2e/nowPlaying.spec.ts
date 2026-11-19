@@ -139,11 +139,30 @@ test("lyrics follow and seek, the queue moves by keyboard, Now Playing tints, th
       await shot(page, `${theme}-lyrics`);
     }
 
+    // The scrubber is a slider: ← and → seek 5 seconds.
+    const position = async () => Math.round((await read(page)).status.positionMs / 100);
+    await page.getByRole("slider", { name: "Playback position" }).focus();
+    await page.keyboard.press("ArrowRight");
+    await expect.poll(position).toBe(80);
+    await page.keyboard.press("ArrowLeft");
+    await expect.poll(position).toBe(30);
+
     // Now Playing: from the bar's artwork or title, tinted from the artwork; Esc closes it.
     await page.getByTitle("Opens Now Playing").click();
     const nowPlaying = page.getByRole("dialog", { name: "Now Playing" });
     await expect(nowPlaying).toBeVisible();
+    // Focus is on Now Playing itself, not on Close, so Space plays and pauses and it stays open.
+    await expect(nowPlaying).toBeFocused();
+    const state = async () => (await read(page)).status.state;
+    await page.keyboard.press("Space");
+    await expect.poll(state).toBe("playing");
+    await expect(page.getByRole("button", { name: "Pause", exact: true })).toBeVisible();
+    await page.keyboard.press("Space");
+    await expect.poll(state).not.toBe("playing");
+    await expect(nowPlaying).toBeVisible();
+    await page.keyboard.press("Tab");
     await expect(page.getByRole("button", { name: "Close Now Playing" })).toBeFocused();
+    await nowPlaying.focus();
     await expect(nowPlaying.getByRole("option", { name: "The tide goes out" })).toBeVisible();
     await expect
       .poll(() => nowPlaying.evaluate((element) => element.style.background))

@@ -1,12 +1,14 @@
 import { useEffect, useState, type MouseEvent } from "react";
 import type { BrowseRow } from "../../shared/browse.ts";
+import type { MixRowId } from "@wave/core";
 import type { DiscoverMixesView } from "../../shared/ytPages.ts";
-import { text } from "./text.ts";
+import { albumName, artistName, text } from "./text.ts";
 import { Shelf, YtQuiet, YtSongList } from "./YtLists.tsx";
 
 /**
  * Discover (docs/spec.md, Discover; story 29a): the Magic Queue row's songs, each starting a
- * Magic Queue, and today's Artist mixes. Offline, the mixes become the quiet line.
+ * Magic Queue, and today's Artist and Genre mixes. Offline, the mixes become the quiet line.
+ * Home's Discover section is `HomeDiscover`.
  */
 
 type Run = (action: Promise<unknown>) => void;
@@ -20,7 +22,7 @@ const startFrom = (run: Run, id: number) =>
   );
 
 /** Nine Library songs at random, drawn again each time the row shows. */
-export function MagicQueueRow({ run }: { readonly run: Run }) {
+export const useMagicQueuePicks = () => {
   const [picks, setPicks] = useState<readonly BrowseRow[]>([]);
   useEffect(() => {
     let current = true;
@@ -34,23 +36,43 @@ export function MagicQueueRow({ run }: { readonly run: Run }) {
       current = false;
     };
   }, []);
+  return picks;
+};
+
+export function MagicQueueRow({
+  picks,
+  run,
+  nested,
+}: {
+  readonly picks: readonly BrowseRow[];
+  readonly run: Run;
+  readonly nested?: boolean;
+}) {
   return (
     <Shelf
       title={text.discover.rows["magic-queue"]}
+      nested={nested}
       items={picks.map((row) => ({
         key: String(row.id),
         title: row.title,
-        caption: row.artist,
+        caption: artistName(row.artist),
         artworkHash: row.artworkHash,
-        label: text.discover.startMagicQueue(row.title, row.artist, row.album || null),
+        label: text.discover.startMagicQueue(
+          row.title,
+          artistName(row.artist),
+          albumName(row.album) || null,
+        ),
       }))}
       onOpen={(index) => startFrom(run, picks[index]!.id)}
     />
   );
 }
 
-/** Today's Artist mixes, read once the page opens; undefined while they're built. */
-const useMixes = () => {
+/**
+ * Today's mixes, read again when [revision] changes or the window comes back [online]; undefined
+ * while they're first built.
+ */
+export const useMixes = (revision = 0, online = true) => {
   const [mixes, setMixes] = useState<DiscoverMixesView>();
   useEffect(() => {
     let current = true;
@@ -63,11 +85,11 @@ const useMixes = () => {
     return () => {
       current = false;
     };
-  }, []);
+  }, [revision, online]);
   return mixes;
 };
 
-const playMix = (run: Run, id: string, index: number) =>
+export const playMix = (run: Run, id: string, index: number) =>
   run(
     window.wave.discover.playMix(id, index).then((played) => {
       // A mix rebuilt for a new day under the window's feet.
@@ -75,7 +97,9 @@ const playMix = (run: Run, id: string, index: number) =>
     }),
   );
 
-/** Discover's page: the Magic Queue row, then each Artist mix as a list of its songs. */
+const MIX_ROWS: readonly MixRowId[] = ["artist-mixes", "genre-mixes"];
+
+/** Discover's page: the Magic Queue row, then each Artist and Genre mix as a list of its songs. */
 export function DiscoverPage({
   run,
   onSongMenu,
@@ -84,10 +108,10 @@ export function DiscoverPage({
   readonly onSongMenu: (row: BrowseRow, event: MouseEvent<HTMLElement>) => void;
 }) {
   const mixes = useMixes();
+  const picks = useMagicQueuePicks();
   return (
     <div className="yt-page" data-testid="discover">
-      <MagicQueueRow run={run} />
-      <h2>{text.discover.rows["artist-mixes"]}</h2>
+      <MagicQueueRow picks={picks} run={run} />
       {mixes === undefined ? (
         <p className="yt-quiet secondary" role="status">
           {text.discover.buildingMixes}
@@ -95,45 +119,36 @@ export function DiscoverPage({
       ) : (
         <>
           <YtQuiet status={mixes.status} />
-          {mixes.mixes.map((mix) => (
-            <section key={mix.id} className="yt-mix" aria-label={text.discover.mixTitle(mix.name)}>
-              <h3>
-                {text.discover.mixTitle(mix.name)}
-                <span className="secondary"> · {text.discover.songs(mix.songs.total)}</span>
-              </h3>
-              <YtSongList
-                songs={mix.songs.items}
-                label={text.discover.mixTitle(mix.name)}
-                onPlay={(index) => playMix(run, mix.id, index)}
-                onMenu={onSongMenu}
-              />
-            </section>
-          ))}
+          {MIX_ROWS.map((row) => {
+            const shown = mixes.mixes.filter((mix) => mix.row === row);
+            return (
+              shown.length > 0 && (
+                <section key={row} aria-label={text.discover.rows[row]}>
+                  <h2>{text.discover.rows[row]}</h2>
+                  {shown.map((mix) => (
+                    <section
+                      key={mix.id}
+                      className="yt-mix"
+                      aria-label={text.discover.mixTitle(mix.name)}
+                    >
+                      <h3>
+                        {text.discover.mixTitle(mix.name)}
+                        <span className="secondary"> · {text.discover.songs(mix.songs.total)}</span>
+                      </h3>
+                      <YtSongList
+                        songs={mix.songs.items}
+                        label={text.discover.mixTitle(mix.name)}
+                        onPlay={(index) => playMix(run, mix.id, index)}
+                        onMenu={onSongMenu}
+                      />
+                    </section>
+                  ))}
+                </section>
+              )
+            );
+          })}
         </>
       )}
     </div>
-  );
-}
-
-/** Home's Discover section: the Magic Queue row and a tile per mix, which plays it. */
-export function DiscoverSection({ run }: { readonly run: Run }) {
-  const mixes = useMixes();
-  return (
-    <section className="home-discover" aria-label={text.desktopLayout.discover}>
-      <MagicQueueRow run={run} />
-      {mixes !== undefined && <YtQuiet status={mixes.status} />}
-      {mixes !== undefined && (
-        <Shelf
-          title={text.discover.rows["artist-mixes"]}
-          items={mixes.mixes.map((mix) => ({
-            key: mix.id,
-            title: text.discover.mixTitle(mix.name),
-            caption: text.discover.songs(mix.songs.total),
-            artworkUrl: mix.songs.items[0]?.artworkUrl ?? null,
-          }))}
-          onOpen={(index) => playMix(run, mixes.mixes[index]!.id, 0)}
-        />
-      )}
-    </section>
   );
 }

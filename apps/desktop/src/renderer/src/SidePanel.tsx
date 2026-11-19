@@ -47,7 +47,7 @@ export function SidePanel({
   readonly ytMusic: boolean;
   /** Opens one of Related's similar artists. */
   readonly onArtist: (artist: YtArtistCandidate) => void;
-  /** Opens the menu of one of Related's songs. */
+  /** Opens the menu of one of Related's songs, or of a Queue row. */
   readonly onSongMenu: (row: BrowseRow, event: MouseEvent<HTMLElement>) => void;
   readonly view: PlayerView | undefined;
   readonly run: (action: Promise<unknown>) => void;
@@ -114,7 +114,7 @@ export function SidePanel({
             onSongMenu={onSongMenu}
           />
         ) : view === undefined ? null : (
-          <QueuePanel view={view} command={command} onError={onError} />
+          <QueuePanel view={view} command={command} onError={onError} onMenu={onSongMenu} />
         )}
       </div>
     </aside>

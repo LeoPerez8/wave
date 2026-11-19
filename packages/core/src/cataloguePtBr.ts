@@ -38,6 +38,8 @@ import type { Catalogue } from "./catalogueEn.ts";
 export const ptBR: Catalogue = {
   desktopWindow: desktopWindowPtBr,
   desktopLayout: {
+    language: "Idioma",
+    languages: { system: "Sistema", en: "English", "pt-BR": "Português (Brasil)" },
     brand: "Wave",
     home: "Início",
     search: "Buscar",
@@ -135,6 +137,7 @@ export const ptBR: Catalogue = {
     chooseArtist: "Escolha um Artista",
     noPlaylists: "Nenhuma playlist ainda",
     checkSong: (title: string) => `Selecionar “${title}”`,
+    showMoreSongs: "Mostrar mais músicas",
   },
   desktopAccount: {
     finishInBrowser: "Termine de iniciar sessão no navegador.",

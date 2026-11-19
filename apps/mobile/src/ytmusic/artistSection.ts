@@ -45,11 +45,10 @@ import { online } from "@/native/waveNative";
 import { searchOnlineAlwaysNow, useSearchOnlineAlways } from "@/settings/searchOnline";
 import { useYtMusicEnabled } from "@/settings/ytMusic";
 
-import { fetchArtistAnswer } from "./artistFetch";
+import { artistOpeningRequest, fetchArtistAnswer } from "@wave/client/ytArtistFetch";
 import { readArtistPage } from "./candidateCatalog";
 import { artistPopularSongs, createArtistOpeningRead } from "./artistOpeningRead";
 import { searchAllowanceSnapshot, withSearchTurn } from "./searchAllowance";
-import { artistOpeningRequest } from "./artistOpeningRequest";
 import { libraryFinderForRows, useLoadedLibraryFinder, type FindInLibrary } from "./libraryFinder";
 import { useLineToggle } from "./OnlineToggle";
 import { YtMusic, YtMusicError } from "./YtMusic";
