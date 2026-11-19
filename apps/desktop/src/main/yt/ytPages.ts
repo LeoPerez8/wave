@@ -124,7 +124,8 @@ const BROWSE_ID = /^[A-Za-z0-9_-]{2,128}$/;
 
 const coded = (code: string) => Object.assign(new Error(code), { code });
 
-const statusOf = (error: unknown): YtStatus => {
+/** Why a read failed; never "ok". */
+const statusOf = (error: unknown): Exclude<YtStatus, "ok"> => {
   const code = (error as { code?: unknown } | null)?.code;
   return code === "ERR_YT_OFFLINE" ? "offline" : code === "ERR_YT_DISABLED" ? "disabled" : "failed";
 };
@@ -230,8 +231,7 @@ export const createYtPages = (deps: YtPagesDeps): YtPagesShape => {
           );
           read = { status: "read", songs: playlist.songs, truncated: playlist.truncated };
         } catch (error) {
-          const status = statusOf(error);
-          read = { status: "failed", reason: status === "ok" ? "failed" : status, pagesRead };
+          read = { status: "failed", reason: statusOf(error), pagesRead };
         }
       }
       const full = ytArtistFullPage(page, read);
