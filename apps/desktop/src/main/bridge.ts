@@ -49,6 +49,7 @@ import { searchLibrary } from "./library/search.ts";
 import { validWindowSettings } from "../shared/windowSettings.ts";
 import { readWindowSettings, changeWindowSettings } from "./system/windowSettings.ts";
 import { homeHandlers } from "./homeHandlers.ts";
+import { lyricsAndTagsHandlers } from "./lyricsAndTagsHandlers.ts";
 import { streamedHandlers } from "./yt/streamedHandlers.ts";
 import {
   clearRecentSearches,
@@ -568,6 +569,7 @@ const createHandlers = (
     },
     ...playlistHandlers(validTarget),
     ...homeHandlers,
+    ...lyricsAndTagsHandlers,
     "search.library": ([query]) =>
       searchQuery(query)
         ? Effect.gen(function* () {

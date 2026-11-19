@@ -39,8 +39,8 @@ import {
 import { appearance } from "./preferences.ts";
 import { artworkStore } from "./library/artwork.ts";
 import { createLibraryArtwork } from "./library/onlineArtwork.ts";
-import { syncedPreference } from "./sync/desktopSync.ts";
 import { lookupsEnabled } from "./lookupSettings.ts";
+import { artistPhotosEnabled } from "./library/lyricsAndTags.ts";
 import { ytMusicLayer } from "./yt/ytMusic.ts";
 import { desktopLinksLayer } from "./links/layer.ts";
 import { downloadsLayer } from "./downloads/downloadsLayer.ts";
@@ -255,7 +255,7 @@ else {
           ytMusicOn: ytMusic.on,
           videoCover: ytMusic.videoCover,
           directory: cacheFolder("online-artwork"),
-          photosEnabled: () => syncedPreference(db, "settings.downloadArtistPhotos") !== "off",
+          photosEnabled: () => artistPhotosEnabled(db),
           process: (bytes) => {
             const image = nativeImage.createFromBuffer(bytes);
             if (image.isEmpty()) return undefined;

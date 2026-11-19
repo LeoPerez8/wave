@@ -255,7 +255,8 @@ export const createLibraryArtwork = (options: {
     }
   };
 
-  const folderOf = (cache: string) => join(directory, createHash("sha1").update(cache).digest("hex"));
+  const folderOf = (cache: string) =>
+    join(directory, createHash("sha1").update(cache).digest("hex"));
 
   /** The folders artists' photos are kept in, whether or not one was found yet. */
   const artistFolders = (): string[] =>

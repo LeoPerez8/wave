@@ -97,7 +97,9 @@ test("Cancel stops the run, and the next start runs afresh", async () => {
     songs: () => [1],
     fix: async (_ids, given) => {
       options = given;
-      await new Promise<void>((resolve) => given.signal?.addEventListener("abort", () => resolve()));
+      await new Promise<void>((resolve) =>
+        given.signal?.addEventListener("abort", () => resolve()),
+      );
       return { results: [], skipped: 0, stop: { stopped: "cancelled", left: 1 } };
     },
   });

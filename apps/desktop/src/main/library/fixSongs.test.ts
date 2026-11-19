@@ -155,7 +155,11 @@ test("Fix Songs tells its progress and stops when cancelled, counting the songs 
     db,
     platform: process.platform,
     musicFolder: music,
-    readTags: async (path) => ({ title: path.slice(-5, -4), artist: "Nick Drake", durationMs: 1000 }),
+    readTags: async (path) => ({
+      title: path.slice(-5, -4),
+      artist: "Nick Drake",
+      durationMs: 1000,
+    }),
   });
   const controller = new AbortController();
   const progress: [number, number][] = [];
@@ -167,7 +171,14 @@ test("Fix Songs tells its progress and stops when cancelled, counting the songs 
         db,
         lookUp: async () => {
           if (progress.length === 3) controller.abort();
-          return { ...FOUND, lyrics: null, genre: null, trackNumber: null, year: null, explicit: "unknown" };
+          return {
+            ...FOUND,
+            lyrics: null,
+            genre: null,
+            trackNumber: null,
+            year: null,
+            explicit: "unknown",
+          };
         },
         writeSong: async () => assert.fail("nothing found, nothing written"),
         reimport: async () => {},
