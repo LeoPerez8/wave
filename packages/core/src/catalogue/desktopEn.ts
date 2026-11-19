@@ -60,6 +60,8 @@ export const desktopEn = {
     },
     howMuchOfAStreamedSongWave:
       "How much of a streamed song Wave loads ahead, carrying on into the next songs in Up Next, so playback keeps going through a dead zone. Longer uses more memory: about 50 MB at 30 minutes. Downloaded songs play from this computer either way.",
+    waveLooksUpAPhotoOfEach:
+      "Wave looks up a photo of each artist on Deezer, which means sending artist names to it, and keeps the photos on this computer. Off, artists show their album artwork and Wave makes no requests.",
   },
   itemActions: {
     labels: {

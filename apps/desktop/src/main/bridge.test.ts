@@ -51,6 +51,45 @@ import { editHomeArrangement, parseHomeArrangement, storedHomeArrangement } from
 
 const trusted = { senderFrame: "window" };
 
+test("Lyrics and tags keeps the account's switches, refuses other keys and runs Fix Songs", async () => {
+  await withFile(async (file) => {
+    const first = connect(file);
+    const wave = first.exposed.get("wave") as WaveBridge;
+    try {
+      assert.deepEqual(await wave.lyricsAndTags.view(), {
+        fixSongsOnline: true,
+        downloadArtistPhotos: true,
+        fixRun: null,
+        artistPhotos: 0,
+      });
+      assert.deepEqual(await wave.lyricsAndTags.fixLibrary(), { results: [], skipped: 0 });
+      const off = await wave.lyricsAndTags.set({
+        fixSongsOnline: false,
+        downloadArtistPhotos: false,
+      });
+      assert.equal(off.fixSongsOnline, false);
+      assert.equal(off.downloadArtistPhotos, false);
+      await assert.rejects(
+        first.handlers.get("lyricsAndTags.set")!(trusted, { genius: true }),
+        /refused/i,
+      );
+      await assert.rejects(wave.lyricsAndTags.fixLibrary(), /lookups-off/);
+      await wave.lyricsAndTags.cancelFix();
+      assert.equal((await wave.lyricsAndTags.clearArtistPhotos()).artistPhotos, 0);
+    } finally {
+      await first.runtime.dispose();
+    }
+    const second = connect(file);
+    try {
+      const reopened = (second.exposed.get("wave") as WaveBridge).lyricsAndTags;
+      assert.equal((await reopened.view()).downloadArtistPhotos, false);
+      assert.equal((await reopened.set({ fixSongsOnline: true })).fixSongsOnline, true);
+    } finally {
+      await second.runtime.dispose();
+    }
+  });
+});
+
 test("the language choice is validated, resolves once in main and survives reopening", async () => {
   await withFile(async (file) => {
     const first = connect(file);

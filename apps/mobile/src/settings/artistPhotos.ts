@@ -1,11 +1,17 @@
+import {
+  DOWNLOAD_ARTIST_PHOTOS_SETTING,
+  readDownloadArtistPhotos,
+  writeDownloadArtistPhotos,
+} from "@wave/core";
+
 import { persistedSetting } from "@/lib/persistedSetting";
 
 /** Whether Wave downloads artist photos (on unless the owner turned it off). */
 const downloadArtistPhotos = persistedSetting<boolean>({
-  key: "settings.downloadArtistPhotos",
+  key: DOWNLOAD_ARTIST_PHOTOS_SETTING,
   synced: true,
-  read: (stored) => stored !== "off",
-  write: (on) => (on ? null : "off"),
+  read: readDownloadArtistPhotos,
+  write: writeDownloadArtistPhotos,
 });
 
 export const artistPhotosEnabled = downloadArtistPhotos.get;

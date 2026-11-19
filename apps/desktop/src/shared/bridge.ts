@@ -48,6 +48,12 @@ import type {
   SongRunResult,
   SongTarget,
 } from "./songActions.ts";
+import {
+  LYRICS_AND_TAGS_CALLS,
+  lyricsAndTagsBridge,
+  type LyricsAndTagsBridge,
+  type LyricsAndTagsContract,
+} from "./lyricsAndTags.ts";
 import { LINK_CALLS, linkBridge, type LinkContract } from "./links.ts";
 import { ARTIST_PAGE_CALLS, artistPageBridge, type ArtistPageContract } from "./artistPage.ts";
 import { STREAMED_CALLS, streamedBridge, type StreamedContract } from "./streamedSongs.ts";
@@ -63,7 +69,12 @@ export interface Page<T> {
 
 /** Each call's arguments and result. Arguments reach main as untrusted data. */
 export interface BridgeContract
-  extends PlaylistContract, LinkContract, ArtistPageContract, StreamedContract {
+  extends
+    PlaylistContract,
+    LinkContract,
+    ArtistPageContract,
+    StreamedContract,
+    LyricsAndTagsContract {
   readonly "system.mediaBackend": {
     readonly args: readonly [];
     readonly result: "native" | "chromium";
@@ -409,6 +420,7 @@ export const BRIDGE_CALLS = [
   "account.deleteAccount",
   "account.answerInvitation",
   ...PLAYLIST_CALLS,
+  ...LYRICS_AND_TAGS_CALLS,
   "search.library",
   "search.recent",
   "search.remember",
@@ -569,6 +581,8 @@ export interface WaveBridge {
   };
   /** Playlists' edits, images, Graveyard and M3U import. */
   readonly playlists: PlaylistBridge;
+  /** Settings › Lyrics and tags. */
+  readonly lyricsAndTags: LyricsAndTagsBridge;
   /** Search over the Library, and its recent searches. */
   readonly search: {
     readonly library: (query: string) => Promise<LibrarySearchView>;
@@ -690,6 +704,7 @@ export const createBridge = (invoke: Invoke): WaveBridge => ({
     answerInvitation: () => invoke("account.answerInvitation"),
   },
   playlists: playlistBridge(invoke),
+  lyricsAndTags: lyricsAndTagsBridge(invoke),
   search: {
     library: (query) => invoke("search.library", query),
     recent: () => invoke("search.recent"),
