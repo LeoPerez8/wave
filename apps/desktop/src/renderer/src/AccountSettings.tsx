@@ -1,8 +1,4 @@
-import {
-  confirmWaveAccountDeletion,
-  waveAccountActionNotes,
-  waveAccountNotes,
-} from "@wave/core";
+import { confirmWaveAccountDeletion, waveAccountActionNotes, waveAccountNotes } from "@wave/core";
 import { useState } from "react";
 import type { AccountView } from "../../shared/account.ts";
 import { text } from "./text.ts";
@@ -113,8 +109,8 @@ export function AccountSettings({
             {account.busy === "deleting"
               ? text.desktopAccount.confirmDeletionInBrowser
               : account.note === null
-              ? text.settings.waveAccountSignOutNote
-              : waveAccountActionNotes(text)[account.note]}
+                ? text.settings.waveAccountSignOutNote
+                : waveAccountActionNotes(text)[account.note]}
           </p>
         </>
       )}

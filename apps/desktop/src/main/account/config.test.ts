@@ -12,6 +12,7 @@ test("a build with the service's URL and the Desktop client has Sign In", () => 
     syncUrl: "https://sync.wave.test",
     clientId: "desktop-client",
     clientSecret: undefined,
+    tokenUrl: "https://oauth2.googleapis.com/token",
   });
 });
 
@@ -50,10 +51,34 @@ test("an unpackaged run may point at another service and client; a packaged one 
     syncUrl: "https://staging.wave.test",
     clientId: "staging-client",
     clientSecret: "staging-secret",
+    tokenUrl: "https://oauth2.googleapis.com/token",
   });
   assert.deepEqual(accountConfig(BUILT, runtime, true), {
     syncUrl: "https://sync.wave.test",
     clientId: "desktop-client",
     clientSecret: undefined,
+    tokenUrl: "https://oauth2.googleapis.com/token",
   });
+});
+
+test("an unpackaged run may trade Google's code at a local stand-in, and nowhere else", () => {
+  const GOOGLE = "https://oauth2.googleapis.com/token";
+  assert.equal(accountConfig(BUILT, {}, true).tokenUrl, GOOGLE);
+  const local = { WAVE_GOOGLE_TOKEN_URL: "http://127.0.0.1:4000/token" };
+  assert.equal(accountConfig(BUILT, local, false).tokenUrl, "http://127.0.0.1:4000/token");
+  assert.equal(accountConfig(BUILT, local, true).tokenUrl, GOOGLE);
+  for (const elsewhere of ["https://tokens.example.com/token", "http://tokens.example.com/", "x"])
+    assert.equal(
+      accountConfig(BUILT, { WAVE_GOOGLE_TOKEN_URL: elsewhere }, false).tokenUrl,
+      GOOGLE,
+    );
+  // A build can't carry one either.
+  assert.equal(
+    accountConfig(
+      { ...BUILT, MAIN_VITE_WAVE_GOOGLE_TOKEN_URL: local.WAVE_GOOGLE_TOKEN_URL },
+      {},
+      false,
+    ).tokenUrl,
+    GOOGLE,
+  );
 });

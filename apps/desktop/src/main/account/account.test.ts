@@ -213,7 +213,11 @@ test("Delete Account confirms with Google, deletes the account on the service an
   // The tab Google sends back to says Wave is deleting, not signing in.
   assert.deepEqual(purposes, ["confirmDeletion"]);
 
-  assert.deepEqual(account.view().account, { kind: "signedOut", action: "signIn", note: "deleted" });
+  assert.deepEqual(account.view().account, {
+    kind: "signedOut",
+    action: "signIn",
+    note: "deleted",
+  });
   assert.deepEqual(heard, [{ status: "signedOut" }]);
   assert.equal(app.disk.size, 0);
   assert.equal((await app.service.request("GET", PULL, { session: phone })).status, 401);

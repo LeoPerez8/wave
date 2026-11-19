@@ -142,18 +142,24 @@ client: `MAIN_VITE_WAVE_SYNC_URL` and `MAIN_VITE_WAVE_GOOGLE_DESKTOP_CLIENT_ID`,
 them. Without them Settings › Accounts says accounts aren't set up. An unpackaged run may point
 elsewhere with `WAVE_SYNC_URL`, `WAVE_GOOGLE_DESKTOP_CLIENT_ID` and
 `WAVE_GOOGLE_DESKTOP_CLIENT_SECRET`, and only there may the service be `http://127.0.0.1`.
-Never commit their values.
+Never commit their values. An unpackaged run may also name a stand-in for Google's token
+endpoint with `WAVE_GOOGLE_TOKEN_URL`, taken only when it is `http://` on this computer.
 
 Main holds the session in `wave-session.bin` under the data folder, sealed by `safeStorage`. With
 no keyring (Linux without a Secret Service, or `basic_text`) nothing is written: the session
 lasts until Wave quits and Settings › Accounts says so. The window reads it all through
-`wave.account.view()`, and Sign In, Cancel, Sign Out, Sign Out on All Devices and the
-invitation's Not Now are the other `wave.account.*` calls.
+`wave.account.view()`, and Sign In, Cancel, Sign Out, Sign Out on All Devices, Delete Account
+and the invitation's Not Now are the other `wave.account.*` calls.
 
 The sync (`src/main/sync/desktopSync.ts`) pulls on opening, on focus after five minutes away and
 every 15 minutes, and pushes after a scan, a play that ended or a star. `bridge.test.ts` signs in
 through a fake browser against the real sync service in memory (`src/main/account/testAccount.ts`
 and `apps/sync/src/testing.ts`); real Google sign-in needs the owner's client.
+
+`e2e/accountDeletion.spec.ts` runs Delete Account in the real window: it serves that sync service
+and a fake token endpoint on `127.0.0.1`, answers the browser's redirect itself, and uses a
+temporary data and music folder. Check Delete Account only this way, never on a real account or
+the deployed service. `WAVE_SHOTS_DIR` says where its screenshots go.
 
 ## Song menus and keys
 

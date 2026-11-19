@@ -11,7 +11,14 @@ export interface AccountConfig {
   readonly clientId: string | null;
   /** The Desktop client's secret, if Google asks for one; Google doesn't treat it as confidential. */
   readonly clientSecret: string | undefined;
+  /**
+   * Where Google's code is traded for the ID token: Google's, or for an unpackaged run a
+   * stand-in on this computer (`WAVE_GOOGLE_TOKEN_URL`), so a check signs in without Google.
+   */
+  readonly tokenUrl: string;
 }
+
+const GOOGLE_TOKEN_URL = "https://oauth2.googleapis.com/token";
 
 type Env = Readonly<Record<string, string | undefined>>;
 
@@ -36,6 +43,17 @@ const serviceOrigin = (text: string | undefined, packaged: boolean): string | nu
   }
 };
 
+/** [text] as a token endpoint on this computer, for an unpackaged run; Google's otherwise. */
+const tokenUrl = (text: string | undefined, packaged: boolean): string => {
+  if (packaged || text === undefined) return GOOGLE_TOKEN_URL;
+  try {
+    const url = new URL(text);
+    return url.protocol === "http:" && LOCAL.has(url.hostname) ? url.href : GOOGLE_TOKEN_URL;
+  } catch {
+    return GOOGLE_TOKEN_URL;
+  }
+};
+
 export const accountConfig = (built: Env, runtime: Env, packaged: boolean): AccountConfig => {
   const pick = (name: string) =>
     (packaged ? undefined : value(runtime[`WAVE_${name}`])) ??
@@ -46,5 +64,6 @@ export const accountConfig = (built: Env, runtime: Env, packaged: boolean): Acco
     syncUrl: clientId === null ? null : syncUrl,
     clientId,
     clientSecret: pick("GOOGLE_DESKTOP_CLIENT_SECRET"),
+    tokenUrl: tokenUrl(value(runtime["WAVE_GOOGLE_TOKEN_URL"]), packaged),
   };
 };

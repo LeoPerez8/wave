@@ -267,6 +267,12 @@ ADR: `docs/adr/0004-kotlin-on-a-bundled-jvm.md`.
 - The sync Worker accepts the Desktop client id beside the phone's. That Worker change is
   deployed by hand before the desktop release that needs it.
 - Sign out and Sign Out on All Devices use the Worker's existing routes.
+- Delete Account shows only when signed in and asks first, with the phone's confirmation in the
+  computer's words. The Worker's `DELETE /v1/account` wants a fresh Google sign-in to the
+  account's own Google account, so the browser opens once more; Cancel stops that wait. Then the
+  service deletes the account and the desktop signs out, keeping its songs, files and plays. A
+  different Google account, no network or a service error says so and leaves the account
+  signed in.
 - YouTube sign-in is separate: a visible Electron window shows YouTube's sign-in, as the phone's
   `YtSignInActivity` does, and the main process reads the session cookies from it. Google may
   refuse an embedded window; the first YT ticket signs in with a real account before anything

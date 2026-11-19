@@ -302,7 +302,10 @@ test("deleting the account keeps the desktop's songs, playlists and stars, and s
   await desktop.pass(DESKTOP_SYNC_PERIOD_MS * 2);
   await desktop.sync.idle();
   assert.equal(desktop.requests(), sent);
-  assert.equal((await desktop.service.request("GET", "/v1/pull", { session: desktop.phoneSession })).status, 401);
+  assert.equal(
+    (await desktop.service.request("GET", "/v1/pull", { session: desktop.phoneSession })).status,
+    401,
+  );
 });
 
 test("a desktop opened signed in syncs at once", async () => {

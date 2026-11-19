@@ -346,7 +346,7 @@ else {
           ? Promise.reject(new Error("This build has no Google client."))
           : signInWithBrowser({
               authUrl: "https://accounts.google.com/o/oauth2/v2/auth",
-              tokenUrl: "https://oauth2.googleapis.com/token",
+              tokenUrl: config.tokenUrl,
               clientId,
               ...(config.clientSecret === undefined ? {} : { clientSecret: config.clientSecret }),
               openExternal: (url) => shell.openExternal(url),
