@@ -78,7 +78,7 @@ export interface YtBrowserSignIn {
 /** The cookies innertubex signs requests with: one of them means a signed-in session. */
 const SESSION_COOKIES = ["SAPISID", "__Secure-3PAPISID", "__Secure-1PAPISID"];
 
-const forYtMusic = (cookie: CdpCookie): boolean => {
+export const forYtMusic = (cookie: CdpCookie): boolean => {
   if (cookie.partitionKey !== undefined) return false;
   const domain = cookie.domain.replace(/^\./, "");
   return YT_MUSIC_HOST === domain || YT_MUSIC_HOST.endsWith(`.${domain}`);
@@ -92,7 +92,7 @@ export const ytCookieHeader = (cookies: readonly CdpCookie[]): string => {
   return [...values].map(([name, value]) => `${name}=${value}`).join("; ");
 };
 
-const isSignedIn = (cookies: readonly CdpCookie[]): boolean =>
+export const isSignedIn = (cookies: readonly CdpCookie[]): boolean =>
   cookies.some((cookie) => forYtMusic(cookie) && SESSION_COOKIES.includes(cookie.name));
 
 /**

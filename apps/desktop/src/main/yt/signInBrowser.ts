@@ -58,6 +58,39 @@ export const defaultBrowserCommand = (desktopEntry: string | undefined): string 
   }
 };
 
+/** A Linux browser command (as {@link defaultBrowserCommand} gives it) to its user-data folder
+ *  name under `~/.config`, and the keyring "application" its Safe Storage secret is stored under. */
+const LINUX_COOKIE_BROWSERS: Readonly<
+  Record<string, { readonly config: string; readonly keyringApp: string }>
+> = {
+  "google-chrome": { config: "google-chrome", keyringApp: "chrome" },
+  "microsoft-edge": { config: "microsoft-edge", keyringApp: "chromium" },
+  "brave-browser": { config: "BraveSoftware/Brave-Browser", keyringApp: "brave" },
+  chromium: { config: "chromium", keyringApp: "chromium" },
+};
+
+/** The keyring "application" a Linux browser's Safe Storage secret is stored under, or undefined. */
+export const linuxKeyringApp = (command: string | undefined): string | undefined =>
+  command === undefined ? undefined : LINUX_COOKIE_BROWSERS[command]?.keyringApp;
+
+/**
+ * The cookie-store paths to try for a Linux browser command, most likely first. Both the plain
+ * `~/.config` install and the Snap layout are covered; the first that exists is the store to read.
+ */
+export const linuxCookieDbCandidates = (
+  command: string | undefined,
+  home: string,
+): readonly string[] => {
+  if (command === undefined) return [];
+  const browser = LINUX_COOKIE_BROWSERS[command];
+  if (browser === undefined) return [];
+  const leaf = ["Default", "Cookies"];
+  return [
+    posix.join(home, ".config", browser.config, ...leaf),
+    posix.join(home, "snap", command, "common", ".config", browser.config, ...leaf),
+  ];
+};
+
 const SNAP_BINS = ["/snap/bin", "/var/lib/snapd/snap/bin"];
 
 const signInSnap = (browser: string): string | undefined =>
