@@ -11,6 +11,12 @@ export interface BrowserSearch {
   /** Whether [path] is a file that can be started. */
   readonly exists: (path: string) => boolean;
   readonly isChromiumSnapWrapper?: (path: string) => boolean;
+  /**
+   * The user's default browser as a Linux package command (from `defaultBrowserCommand`), tried
+   * before the rest when it is a Chromium-family one, so the sign-in opens where the user is
+   * already signed in to Google. Ignored on other platforms and when it names no known browser.
+   */
+  readonly preferred?: string;
 }
 
 /** Each browser's place under an install root, Chrome first. */
@@ -32,6 +38,26 @@ const LINUX_BROWSERS = [
   ["chromium", "chromium-browser"],
 ] as const;
 
+/** A default-browser `.desktop` name (as `xdg-settings get default-web-browser` gives it) to its
+ * {@link LINUX_BROWSERS} command, or undefined when it is not a Chromium-family browser Wave signs
+ * in with. Both the plain packages and their Snap ids (`brave_brave`, `chromium_chromium`) map. */
+export const defaultBrowserCommand = (desktopEntry: string | undefined): string | undefined => {
+  switch (desktopEntry?.trim()) {
+    case "google-chrome.desktop":
+      return "google-chrome";
+    case "microsoft-edge.desktop":
+      return "microsoft-edge";
+    case "brave-browser.desktop":
+    case "brave_brave.desktop":
+      return "brave-browser";
+    case "chromium.desktop":
+    case "chromium_chromium.desktop":
+      return "chromium";
+    default:
+      return undefined;
+  }
+};
+
 const SNAP_BINS = ["/snap/bin", "/var/lib/snapd/snap/bin"];
 
 const signInSnap = (browser: string): string | undefined =>
@@ -49,6 +75,7 @@ export const findSignInBrowser = ({
   env,
   exists,
   isChromiumSnapWrapper,
+  preferred,
 }: BrowserSearch): string | null => {
   if (platform === "win32") {
     for (const browser of WINDOWS_BROWSERS)
@@ -62,7 +89,15 @@ export const findSignInBrowser = ({
   }
   if (platform !== "linux") return null;
   const folders = (env["PATH"] ?? "").split(":").filter(posix.isAbsolute);
-  for (const commands of LINUX_BROWSERS) {
+  // The default browser's family goes first when it is one Wave knows; the rest keep their order.
+  const preferredFamily =
+    preferred === undefined
+      ? undefined
+      : LINUX_BROWSERS.find((commands) => (commands as readonly string[]).includes(preferred));
+  const families = preferredFamily
+    ? [preferredFamily, ...LINUX_BROWSERS.filter((commands) => commands !== preferredFamily)]
+    : LINUX_BROWSERS;
+  for (const commands of families) {
     let snap: string | undefined;
     for (const folder of folders) {
       for (const command of commands) {

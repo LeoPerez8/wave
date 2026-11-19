@@ -278,10 +278,12 @@ ADR: `docs/adr/0004-kotlin-on-a-bundled-jvm.md`.
   of Wave's. Google refused the sign-in both in an embedded Electron window and in a browser
   started with a debugging port (checked with a real account on 2026-11-18, #1141), so neither
   is used.
-  1. Sign In starts the installed Chromium-family browser (Chrome, Edge, Brave or Chromium, in
-     that order) as an ordinary window on Google's sign-in, on a profile folder Wave makes for
-     this one sign-in, with no debugging flag. Settings tells the user to close that window when
-     they're done, and offers Cancel.
+  1. Sign In starts the installed Chromium-family browser as an ordinary window on Google's
+     sign-in, on a profile folder Wave makes for this one sign-in, with no debugging flag. It
+     uses the user's default browser when that is Chromium-family (on Linux, from `xdg-settings`),
+     so the sign-in page opens where they already trust it, and otherwise the first installed of
+     Chrome, Edge, Brave or Chromium, in that order. Settings tells the user to close that window
+     when they're done, and offers Cancel.
   2. Once that browser has exited, Wave starts it again on the same profile, headless and with a
      debugging port, and the main process reads the session cookies and YouTube's page
      configuration from it. Then it closes the browser and deletes the profile folder, however

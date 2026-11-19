@@ -3,7 +3,7 @@
  * installed browser started as its own process, a temporary profile that lasts
  * only as long as the sign-in, and Node's `WebSocket` to the headless browser's DevTools.
  */
-import { spawn } from "node:child_process";
+import { execFileSync, spawn } from "node:child_process";
 import {
   accessSync,
   closeSync,
@@ -19,7 +19,7 @@ import {
 import { rm } from "node:fs/promises";
 import { join } from "node:path";
 import type { CdpSocket } from "./cdp.ts";
-import { findSignInBrowser, signInProfileRoot } from "./signInBrowser.ts";
+import { defaultBrowserCommand, findSignInBrowser, signInProfileRoot } from "./signInBrowser.ts";
 import {
   startYtBrowserSignIn,
   type BrowserProcess,
@@ -55,6 +55,25 @@ const isChromiumSnapWrapper = (path: string): boolean => {
     }
   } catch {
     return false;
+  }
+};
+
+/**
+ * The Linux desktop's default web browser as a sign-in command, or undefined when there is none,
+ * it cannot be read, or it is not a Chromium-family browser. `xdg-settings` prints a `.desktop`
+ * name like `brave-browser.desktop`, which {@link defaultBrowserCommand} maps.
+ */
+const linuxDefaultBrowser = (platform: NodeJS.Platform): string | undefined => {
+  if (platform !== "linux") return undefined;
+  try {
+    const entry = execFileSync("xdg-settings", ["get", "default-web-browser"], {
+      encoding: "utf8",
+      timeout: 2_000,
+      stdio: ["ignore", "pipe", "ignore"],
+    });
+    return defaultBrowserCommand(entry);
+  } catch {
+    return undefined;
   }
 };
 
@@ -94,6 +113,7 @@ export const ytSignInSystem = (options: YtSignInSystemOptions): YtSignInSystem =
         platform,
         env,
         isChromiumSnapWrapper,
+        preferred: linuxDefaultBrowser(platform),
         exists: (path) => {
           try {
             if (platform === "linux") accessSync(path, constants.X_OK);
