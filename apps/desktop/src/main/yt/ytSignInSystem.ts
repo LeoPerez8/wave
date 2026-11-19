@@ -8,6 +8,8 @@ import {
   accessSync,
   closeSync,
   constants,
+  copyFileSync,
+  existsSync,
   mkdirSync,
   mkdtempSync,
   openSync,
@@ -17,14 +19,24 @@ import {
   statSync,
 } from "node:fs";
 import { rm } from "node:fs/promises";
+import { tmpdir } from "node:os";
 import { join } from "node:path";
+import Database from "better-sqlite3";
 import type { CdpSocket } from "./cdp.ts";
-import { defaultBrowserCommand, findSignInBrowser, signInProfileRoot } from "./signInBrowser.ts";
+import {
+  defaultBrowserCommand,
+  findSignInBrowser,
+  linuxCookieDbCandidates,
+  linuxKeyringApp,
+  signInProfileRoot,
+} from "./signInBrowser.ts";
 import {
   startYtBrowserSignIn,
   type BrowserProcess,
   type YtBrowserSignIn,
 } from "./ytBrowserSignIn.ts";
+import { readBrowserSession, type SealedCookieRow } from "./ytCookieSession.ts";
+import { startYtSignIn } from "./ytSignIn.ts";
 
 /** What a sign-in's profile folder is called, so one left by a crash is found and deleted. */
 const PROFILE_PREFIX = "yt-sign-in-";
@@ -81,6 +93,59 @@ const linuxDefaultBrowser = (platform: NodeJS.Platform): string | undefined => {
 const removeFolder = (folder: string) =>
   rm(folder, { recursive: true, force: true, maxRetries: 20, retryDelay: 250 });
 
+/**
+ * The YouTube and Google cookie rows of the default browser's store, hot-copied and read read-only,
+ * or null when there is no such store or it cannot be read. The live store may be write-locked, so
+ * it is copied first; the values stay sealed — {@link readBrowserSession} decrypts them.
+ */
+const readDefaultBrowserCookies = (
+  command: string | undefined,
+  home: string,
+): readonly SealedCookieRow[] | null => {
+  const dbPath = linuxCookieDbCandidates(command, home).find(existsSync);
+  if (dbPath === undefined) return null;
+  let scratch: string | undefined;
+  try {
+    scratch = mkdtempSync(join(tmpdir(), "wave-yt-cookies-"));
+    const copy = join(scratch, "Cookies");
+    copyFileSync(dbPath, copy);
+    const db = new Database(copy, { readonly: true, fileMustExist: true });
+    try {
+      return db
+        .prepare(
+          "select host_key as host, name, encrypted_value as encrypted from cookies " +
+            "where host_key like '%youtube.com' or host_key like '%google.com'",
+        )
+        .all() as SealedCookieRow[];
+    } finally {
+      db.close();
+    }
+  } catch {
+    return null;
+  } finally {
+    if (scratch !== undefined) void rm(scratch, { recursive: true, force: true }).catch(() => {});
+  }
+};
+
+/**
+ * The default browser's "Safe Storage" keyring password through libsecret's `secret-tool`, or null
+ * when the tool is absent or the keyring holds no entry for it — the sign-in then opens the window.
+ */
+const readKeyringSecret = (command: string | undefined): string | null => {
+  const app = linuxKeyringApp(command);
+  if (app === undefined) return null;
+  try {
+    const secret = execFileSync("secret-tool", ["lookup", "application", app], {
+      encoding: "utf8",
+      timeout: 3_000,
+      stdio: ["ignore", "pipe", "ignore"],
+    });
+    return secret === "" ? null : secret;
+  } catch {
+    return null;
+  }
+};
+
 export interface YtSignInSystemOptions {
   /** Wave's data folder. */
   readonly userData: string;
@@ -109,44 +174,60 @@ export const ytSignInSystem = (options: YtSignInSystemOptions): YtSignInSystem =
   };
   return {
     start: () => {
-      const browser = findSignInBrowser({
-        platform,
-        env,
-        isChromiumSnapWrapper,
-        preferred: linuxDefaultBrowser(platform),
-        exists: (path) => {
-          try {
-            if (platform === "linux") accessSync(path, constants.X_OK);
-            return statSync(path).isFile();
-          } catch {
-            return false;
-          }
-        },
-      });
-      return startYtBrowserSignIn({
-        browser,
-        spawn: startBrowser,
-        files: {
-          makeProfile: () => {
-            const root =
-              platform === "linux" && browser
-                ? signInProfileRoot(browser, home, userData)
-                : userData;
-            mkdirSync(root, { recursive: true });
-            return mkdtempSync(join(root, PROFILE_PREFIX));
-          },
-          read: (path) => {
+      const command = linuxDefaultBrowser(platform);
+      const startWindow = (): YtBrowserSignIn => {
+        const browser = findSignInBrowser({
+          platform,
+          env,
+          isChromiumSnapWrapper,
+          preferred: command,
+          exists: (path) => {
             try {
-              return readFileSync(path, "utf8");
+              if (platform === "linux") accessSync(path, constants.X_OK);
+              return statSync(path).isFile();
             } catch {
-              return undefined;
+              return false;
             }
           },
-          remove: removeFolder,
-          join,
-        },
-        connect: (url) => new WebSocket(url) as unknown as CdpSocket,
-        ...(options.log === undefined ? {} : { log: options.log }),
+        });
+        return startYtBrowserSignIn({
+          browser,
+          spawn: startBrowser,
+          files: {
+            makeProfile: () => {
+              const root =
+                platform === "linux" && browser
+                  ? signInProfileRoot(browser, home, userData)
+                  : userData;
+              mkdirSync(root, { recursive: true });
+              return mkdtempSync(join(root, PROFILE_PREFIX));
+            },
+            read: (path) => {
+              try {
+                return readFileSync(path, "utf8");
+              } catch {
+                return undefined;
+              }
+            },
+            remove: removeFolder,
+            join,
+          },
+          connect: (url) => new WebSocket(url) as unknown as CdpSocket,
+          ...(options.log === undefined ? {} : { log: options.log }),
+        });
+      };
+      return startYtSignIn({
+        // Linux only: on other platforms the browser cookie store is sealed in a way another app
+        // cannot open, so the sign-in goes straight to the window.
+        readExistingSession: () =>
+          platform === "linux"
+            ? readBrowserSession({
+                readCookieRows: () => readDefaultBrowserCookies(command, home),
+                secret: () => readKeyringSecret(command),
+                ...(options.log === undefined ? {} : { log: options.log }),
+              })
+            : null,
+        startWindow,
       });
     },
     sweep: async () => {

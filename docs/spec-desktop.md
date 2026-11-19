@@ -288,6 +288,17 @@ ADR: `docs/adr/0004-kotlin-on-a-bundled-jvm.md`.
      debugging port, and the main process reads the session cookies and YouTube's page
      configuration from it. Then it closes the browser and deletes the profile folder, however
      the sign-in ended; a folder a crash left behind is deleted at the next start.
+- On Linux, Sign In first tries the default browser's own session, so someone already signed in
+  to Google there signs in to Wave with no window and no second step. The main process reads that
+  browser's cookie store (a read-only copy, since the live one is write-locked) and unseals its
+  `v11` cookies with the browser's "Safe Storage" key, which it gets from the Secret Service
+  through `secret-tool`; a signed-in `music.youtube.com` session among them is used as is. This
+  reuse has no page configuration, so the account and channel stay at their defaults
+  (`sessionIndex` 0, no `dataSyncId`), which a later full sign-in replaces. Anything missing — no
+  Chromium-family default browser, no `secret-tool`, a locked or absent store, or no session in
+  it — just falls through to the two steps above, so the fast path never narrows what already
+  works. Other platforms seal the store so another app cannot open it (Windows ties the key to the
+  browser binary), and there Sign In always opens the window.
 - A window closed without signing in leaves the account as it was. The page's channel id can be
   slow to appear; Wave waits for it and signs in without it when it never comes, as the phone
   does.
