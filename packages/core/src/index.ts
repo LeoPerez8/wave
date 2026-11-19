@@ -893,6 +893,7 @@ export { artistPageItems } from "./artistPage.ts";
 export type { ArtistPageItem, ArtistPageShelf } from "./artistPage.ts";
 export type { SheetEvent, SheetPhase, SheetStep } from "./sheetLifecycle.ts";
 export {
+  artistSeparator,
   joinArtists,
   libraryFinder,
   libraryFinderSteps,

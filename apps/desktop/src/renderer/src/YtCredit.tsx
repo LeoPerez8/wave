@@ -1,3 +1,4 @@
+import { artistSeparator } from "@wave/core";
 import { Fragment, type MouseEvent } from "react";
 import type { BrowseRow } from "../../shared/browse.ts";
 import { albumName, artistName, text } from "./text.ts";
@@ -18,7 +19,7 @@ const only = (open: () => void) => (event: MouseEvent) => {
 
 /**
  * A song's artists: for a YouTube Music song with [links], each name opens that artist's page,
- * joined as Core's `joinArtists` joins them; otherwise the credit as text.
+ * joined by Core's `artistSeparator`; otherwise the credit as text.
  */
 export function ArtistCredit({
   row,
@@ -36,7 +37,7 @@ export function ArtistCredit({
     <span className={className}>
       {names.map((name, index) => (
         <Fragment key={`${index}-${name}`}>
-          {index > 0 && (index === names.length - 1 ? " & " : ", ")}
+          {artistSeparator(index, names.length)}
           <button
             className="credit-link"
             title={text.itemActions.labels.goToArtist}

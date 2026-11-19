@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import { describe, test } from "node:test";
 
 import {
+  artistSeparator,
   libraryFinder,
   libraryMatcher,
   parseTrackId,
@@ -204,6 +205,16 @@ describe("ytSongArtist", () => {
       album: "Random Access Memories",
     });
     assert.equal(ytSongArtist(song), "Daft Punk, Pharrell Williams & Nile Rodgers");
+  });
+});
+
+describe("artistSeparator", () => {
+  test("puts nothing before the first name, a comma between names and an ampersand before the last", () => {
+    const before = (count: number) =>
+      Array.from({ length: count }, (_, index) => artistSeparator(index, count));
+    assert.deepEqual(before(1), [""]);
+    assert.deepEqual(before(2), ["", " & "]);
+    assert.deepEqual(before(4), ["", ", ", ", ", " & "]);
   });
 });
 

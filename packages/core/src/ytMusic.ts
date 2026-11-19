@@ -26,11 +26,13 @@ export interface YtSong {
   readonly explicit: boolean;
 }
 
+/** What stands before the name at [index] in a credit of [count] artists: "A", "A & B", "A, B & C". */
+export const artistSeparator = (index: number, count: number): string =>
+  index === 0 ? "" : index === count - 1 ? " & " : ", ";
+
 /** The artists as one credit: "A", "A & B", "A, B & C". */
 export const joinArtists = (artists: readonly string[]): string =>
-  artists.length <= 1
-    ? (artists[0] ?? "")
-    : `${artists.slice(0, -1).join(", ")} & ${artists[artists.length - 1]}`;
+  artists.map((name, index) => artistSeparator(index, artists.length) + name).join("");
 
 /** A YT Music song's artists as one credit, as the player shows it in place of a track's artist. */
 export const ytSongArtist = (song: Pick<YtSong, "artists">): string => joinArtists(song.artists);
