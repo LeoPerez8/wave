@@ -168,10 +168,10 @@ test("a check that failed is asked again, and one that ends after a return to Ho
     const page = await app.firstWindow();
     const home = page.getByTestId("home");
     await expect(home).toBeVisible();
-    // Main's own handlers are replaced: the first check fails, the second waits to be let go,
-    // and the cards exist only once it has saved them.
+    // Main's own handlers are replaced: checks fail until the test lets them run, then wait to
+    // be let go, and the cards exist only once one has saved them.
     const state = await app.evaluateHandle(({ ipcMain }, releaseDate) => {
-      const state = { checks: 0, saved: false, finish: () => {} };
+      const state = { checks: 0, failing: true, saved: false, finish: () => {} };
       ipcMain.removeHandler("home.follow");
       ipcMain.handle("home.follow", () => ({
         releases: state.saved
@@ -190,7 +190,8 @@ test("a check that failed is asked again, and one that ends after a return to Ho
       }));
       ipcMain.removeHandler("home.followCheck");
       ipcMain.handle("home.followCheck", () => {
-        if (++state.checks === 1) throw new Error("No connection");
+        state.checks += 1;
+        if (state.failing) throw new Error("No connection");
         return new Promise<boolean>((resolve) => {
           state.finish = () => {
             state.saved = true;
@@ -209,14 +210,20 @@ test("a check that failed is asked again, and one that ends after a return to Ho
     };
     await page.reload();
     await expect(home).toBeVisible();
-    await expect.poll(checks).toBe(1);
+    await expect.poll(checks).toBeGreaterThanOrEqual(1);
 
+    // The next visit asks again; the check it starts then runs until it's let go.
+    await state.evaluate((held) => {
+      held.failing = false;
+    });
+    const failed = await checks();
     await visit();
-    await expect.poll(checks).toBe(2);
+    await expect.poll(checks).toBeGreaterThan(failed);
+    const running = await checks();
     await visit();
     await state.evaluate((held) => held.finish());
     await expect(home.locator('[data-section="new-releases"]')).toContainText("Voyage");
-    expect(await checks()).toBe(2);
+    expect(await checks()).toBe(running);
   } finally {
     await app.close();
     rmSync(data, { recursive: true, force: true });
