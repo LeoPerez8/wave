@@ -47,6 +47,8 @@ export const desktopPtBr = {
     },
     howMuchOfAStreamedSongWave:
       "Quanto de uma música online o Wave carrega com antecedência, incluindo as próximas músicas em A Seguir, para continuar tocando sem sinal. Períodos maiores usam mais memória: cerca de 50 MB para 30 minutos. Músicas baixadas tocam do computador.",
+    waveLooksUpAPhotoOfEach:
+      "O Wave busca uma foto de cada artista no Deezer, enviando os nomes dos artistas, e guarda as fotos neste computador. Desativado, os artistas mostram as capas dos álbuns e o Wave não faz solicitações.",
   },
   itemActions: {
     labels: {

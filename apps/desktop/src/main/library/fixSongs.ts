@@ -132,18 +132,31 @@ const fixSong = async (ports: FixSongsPorts, song: FixableSong): Promise<SongTag
   return songTagOutcome(found, written);
 };
 
+/** A run's way to be followed and stopped (Settings › Lyrics and tags). */
+export interface FixSongsRunOptions {
+  /** Aborted, the run stops after the song under way; the songs left are counted. */
+  readonly signal?: AbortSignal;
+  /** [done] of the [total] songs that lack something, before the first and after each. */
+  readonly progress?: (done: number, total: number) => void;
+}
+
 /** Fix Song on [ids], one after another; what each came to, for the toast. */
 export const fixSongs = async (
   ports: FixSongsPorts,
   ids: readonly number[],
+  { signal, progress }: FixSongsRunOptions = {},
 ): Promise<FixSongsResult> => {
   const { fix, skipped } = songsToFix(fixableSongs(ports.db, ids));
   const minMs = ports.minMs ?? SONG_MIN_MS;
   const results: { title: string; outcome: SongTagOutcome }[] = [];
+  progress?.(0, fix.length);
   for (const [index, song] of fix.entries()) {
+    if (signal?.aborted)
+      return { results, skipped, stop: { stopped: "cancelled", left: fix.length - index } };
     const startedAt = Date.now();
     const outcome = await fixSong(ports, song);
     results.push({ title: song.title, outcome });
+    progress?.(results.length, fix.length);
     if (lookupsUnreachable(results.map((result) => result.outcome)))
       return {
         results,

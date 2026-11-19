@@ -7,13 +7,14 @@ import { createScanner } from "./scanner.ts";
 import { browseLibrary } from "./browse.ts";
 import type { BrowseScope } from "../../shared/browse.ts";
 import { preference, savePreference } from "../preferences.ts";
-import type { ArtworkKind } from "./onlineArtwork.ts";
+import type { LibraryArtwork } from "./onlineArtwork.ts";
 import { missingSongCover } from "@wave/client/artworkLookup";
 import type { YtAlbum } from "@wave/core";
 import { YtMusic } from "../yt/ytMusic.ts";
 
 export interface DesktopLibraryShape extends ReturnType<typeof createScanner> {
-  readonly cover?: (kind: ArtworkKind, id: number, large: boolean) => Promise<string | null>;
+  /** Pictures found online, and the artist photos kept (Settings › Lyrics and tags). */
+  readonly cover?: LibraryArtwork;
   readonly browse: (
     scope: BrowseScope,
     offset: number,
@@ -39,7 +40,7 @@ export const desktopLibraryLayer = (options: {
       /** The cover of a video's album on YouTube Music, as a phone download takes it. */
       readonly videoCover: (videoId: string) => Promise<string | null>;
     },
-  ) => (kind: ArtworkKind, id: number, large: boolean) => Promise<string | null>;
+  ) => LibraryArtwork;
 }) =>
   Layer.effect(
     DesktopLibrary,

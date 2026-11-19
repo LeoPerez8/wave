@@ -238,3 +238,22 @@ test("with both sources switched off nothing is asked and nothing is remembered"
     await done();
   }
 });
+
+test("Clear artist photos deletes the photos downloaded, keeping album covers", async () => {
+  const { db, song, album, artist, directory, done } = await library();
+  const service = deezer();
+  try {
+    const cover = createLibraryArtwork({ db, directory, fetch: service.fetch, process: codec });
+    assert.equal(await cover.artistPhotos.count(), 0);
+    assert.equal(await cover("artist", artist, false), THUMB);
+    assert.equal(await cover("song", song, false), THUMB);
+    assert.equal(await cover.artistPhotos.count(), 1);
+    await cover.artistPhotos.clear();
+    assert.equal(await cover.artistPhotos.count(), 0);
+    const offlineCover = createLibraryArtwork({ db, directory, fetch: offline, process: codec });
+    assert.equal(await offlineCover("album", album, false), THUMB, "the album's cover stays");
+    assert.equal(await offlineCover("artist", artist, false), null, "asked again, offline");
+  } finally {
+    await done();
+  }
+});

@@ -24,7 +24,8 @@ import type { FixSongsResult } from "../../shared/songActions.ts";
 import { Kotlin } from "../kotlin/kotlin.ts";
 import type { KotlinEvent } from "../kotlin/protocol.ts";
 import { browseRows, browseTrackIds } from "../library/browse.ts";
-import { fixSongs } from "../library/fixSongs.ts";
+import { fixSongs, type FixSongsRunOptions } from "../library/fixSongs.ts";
+import { createLibraryFixRun, type LibraryFixRun } from "../library/lyricsAndTags.ts";
 import { DesktopLibrary } from "../library/library.ts";
 import { preference, savePreference } from "../preferences.ts";
 import { YtMusic } from "../yt/ytMusic.ts";
@@ -44,6 +45,8 @@ export interface DesktopDownloadsShape extends DownloadsShape {
   readonly pickFolder: () => Promise<string | null>;
   /** Fix Songs on Tracks [ids]: the lookups' tags written into their files. */
   readonly fixSongs: (ids: readonly number[]) => Promise<FixSongsResult>;
+  /** Fix songs in the whole Library (Settings › Lyrics and tags). */
+  readonly libraryFix: LibraryFixRun;
 }
 
 export class Downloads extends Context.Service<Downloads, DesktopDownloadsShape>()(
@@ -183,6 +186,25 @@ export const downloadsLayer = (options: DownloadsLayerOptions) =>
         }),
       );
 
+      const runFix = async (
+        ids: readonly number[],
+        run?: FixSongsRunOptions,
+      ): Promise<FixSongsResult> => {
+        if (!lookupsEnabled(db)) throw new Error("[lookups-off] Online lookups are off");
+        return fixSongs(
+          {
+            db,
+            lookUp,
+            writeSong: async (params) =>
+              (await Effect.runPromise(kotlin.call("tags.writeSong", params))) as
+                TagWriteReport | { readonly failed: unknown },
+            reimport: (path) => library.importFile(path),
+          },
+          ids,
+          run,
+        );
+      };
+
       return {
         ...downloads,
         folder,
@@ -195,20 +217,14 @@ export const downloadsLayer = (options: DownloadsLayerOptions) =>
           await policy().catch(() => null);
           return path;
         },
-        fixSongs: async (ids) => {
-          if (!lookupsEnabled(db)) throw new Error("[lookups-off] Online lookups are off");
-          return fixSongs(
-            {
-              db,
-              lookUp,
-              writeSong: async (params) =>
-                (await Effect.runPromise(kotlin.call("tags.writeSong", params))) as
-                  TagWriteReport | { readonly failed: unknown },
-              reimport: (path) => library.importFile(path),
-            },
-            ids,
-          );
-        },
+        fixSongs: (ids) => runFix(ids),
+        libraryFix: createLibraryFixRun({
+          songs: () =>
+            db
+              .all<{ id: number }>(sql`SELECT id FROM tracks WHERE path IS NOT NULL ORDER BY id`)
+              .map(({ id }) => id),
+          fix: runFix,
+        }),
       } satisfies DesktopDownloadsShape;
     }),
   );

@@ -38,6 +38,7 @@ import { usePlaylistEdits } from "./Playlists.tsx";
 import { Graveyard } from "./Graveyard.tsx";
 import { applyLanguage, labels, text, useLanguage, tagTitle, artistName } from "./text.ts";
 import { LanguageSettings } from "./LanguageSettings.tsx";
+import { LyricsAndTagsSettings } from "./LyricsAndTagsSettings.tsx";
 import { Home } from "./Home.tsx";
 import { isYtRoute, YtPage, type YtRoute } from "./YtPages.tsx";
 import { AlbumArtistLink, ArtistPage, ArtistToggle, useArtistSection } from "./ArtistPage.tsx";
@@ -843,6 +844,8 @@ export function App() {
                 <WindowSettings onError={failed} />
               ) : setting === "downloads" ? (
                 <DownloadSettings onError={failed} />
+              ) : setting === "lyricsAndTags" ? (
+                <LyricsAndTagsSettings onError={failed} notify={notify} />
               ) : (
                 <p className="secondary">{labels.unavailableSection}</p>
               )}

@@ -939,6 +939,11 @@ export {
   readFindLyricsAndGenre,
   writeFindLyricsAndGenre,
 } from "./lookupsSetting.ts";
+export {
+  DOWNLOAD_ARTIST_PHOTOS_SETTING,
+  readDownloadArtistPhotos,
+  writeDownloadArtistPhotos,
+} from "./artistPhotosSetting.ts";
 export type { AccountSession, AccountSignInEvent, AccountSignInState } from "./accountSignIn.ts";
 export {
   SPOTIFY_ACCOUNT_SIGNED_OUT,
