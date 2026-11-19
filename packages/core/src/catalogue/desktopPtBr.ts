@@ -53,6 +53,11 @@ export const desktopPtBr = {
       share: "Copiar Link",
     },
   },
+  library: {
+    offlineTapOnline:
+      "Você está offline. Clique em Online para tentar de novo quando estiver online.",
+    noAnswerTapOnline: "Sem resposta online. Clique em Online para tentar de novo.",
+  },
   songDeletion: {
     removeMessage: {
       one: "O arquivo dela continua neste computador. Para trazê-la de volta, inclua-o de novo em Ajustes › Biblioteca.",

@@ -6,7 +6,7 @@
 import { artistAlbums, artistArtwork, type ArtistAlbumLink } from "@wave/core";
 import { eq, inArray, or, sql, type SQL } from "drizzle-orm";
 
-import type { ArtistDetail, ArtistRow } from "../types.ts";
+import type { AlbumRow, ArtistDetail, ArtistRow } from "../types.ts";
 import { selectAlbums } from "./albums.ts";
 import type { LibraryDatabase, RowPage } from "./database.ts";
 import * as schema from "./schema.ts";
@@ -172,32 +172,17 @@ export const selectArtistSongs = (
 };
 
 /**
- * An artist's page: their row, their songs in [scope] (`selectArtistSongs`)
- * and the albums with songs in [scope] they're credited on, split into
+ * The albums with songs in [scope] the artist [id] is credited on, split into
  * Albums (filed under them: its first credited album artist) and Appears on
- * (Core's `artistAlbums`). Null when the artist is no longer in the library.
+ * (Core's `artistAlbums`), each newest first.
  */
-export const selectArtistDetail = (
+export const selectArtistAlbums = (
   db: LibraryDatabase,
   id: number,
   scope: TrackScope = "library",
-): ArtistDetail | null => {
-  const { artists, albums, artwork } = schema;
-  const artist = db
-    .select({
-      id: artists.id,
-      name: artists.name,
-      sort: artists.sort,
-      thumbPath: artwork.thumbPath,
-      artworkPath: artwork.path,
-    })
-    .from(artists)
-    .leftJoin(artwork, eq(artists.artworkHash, artwork.hash))
-    .where(eq(artists.id, id))
-    .get();
-  if (artist === undefined) return null;
-  const songs = selectArtistSongs(db, id, undefined, scope);
-  const split = artistAlbums(
+): { readonly albums: readonly AlbumRow[]; readonly appearsOn: readonly AlbumRow[] } => {
+  const { albums } = schema;
+  return artistAlbums(
     id,
     selectAlbums(
       db,
@@ -214,6 +199,35 @@ export const selectArtistDetail = (
       scope,
     ),
   );
+};
+
+/**
+ * An artist's page: their row, their songs in [scope] (`selectArtistSongs`)
+ * and the albums with songs in [scope] they're credited on, split into
+ * Albums (filed under them: its first credited album artist) and Appears on
+ * (Core's `artistAlbums`). Null when the artist is no longer in the library.
+ */
+export const selectArtistDetail = (
+  db: LibraryDatabase,
+  id: number,
+  scope: TrackScope = "library",
+): ArtistDetail | null => {
+  const { artists, artwork } = schema;
+  const artist = db
+    .select({
+      id: artists.id,
+      name: artists.name,
+      sort: artists.sort,
+      thumbPath: artwork.thumbPath,
+      artworkPath: artwork.path,
+    })
+    .from(artists)
+    .leftJoin(artwork, eq(artists.artworkHash, artwork.hash))
+    .where(eq(artists.id, id))
+    .get();
+  if (artist === undefined) return null;
+  const songs = selectArtistSongs(db, id, undefined, scope);
+  const split = selectArtistAlbums(db, id, scope);
   return {
     artist: { ...artist, albumCount: split.albums.length, trackCount: songs.length },
     albums: split.albums,

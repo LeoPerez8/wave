@@ -49,6 +49,7 @@ import type {
   SongTarget,
 } from "./songActions.ts";
 import { LINK_CALLS, linkBridge, type LinkContract } from "./links.ts";
+import { ARTIST_PAGE_CALLS, artistPageBridge, type ArtistPageContract } from "./artistPage.ts";
 import { STREAMED_CALLS, streamedBridge, type StreamedContract } from "./streamedSongs.ts";
 export type Appearance = "system" | "light" | "dark";
 
@@ -61,7 +62,8 @@ export interface Page<T> {
 }
 
 /** Each call's arguments and result. Arguments reach main as untrusted data. */
-export interface BridgeContract extends PlaylistContract, LinkContract, StreamedContract {
+export interface BridgeContract
+  extends PlaylistContract, LinkContract, ArtistPageContract, StreamedContract {
   readonly "system.mediaBackend": {
     readonly args: readonly [];
     readonly result: "native" | "chromium";
@@ -412,6 +414,7 @@ export const BRIDGE_CALLS = [
   "home.view",
   "home.play",
   ...LINK_CALLS,
+  ...ARTIST_PAGE_CALLS,
   ...STREAMED_CALLS,
 ] as const satisfies readonly BridgeCall[] &
   (BridgeContract extends PagedLists<BridgeContract> ? unknown : never);
@@ -424,6 +427,7 @@ export type Invoke = <C extends BridgeCall>(
 /** `window.wave`. */
 export interface WaveBridge {
   readonly links: ReturnType<typeof linkBridge>;
+  readonly artistPage: ReturnType<typeof artistPageBridge>;
   /** A streamed YouTube Music song's menu. */
   readonly streamed: ReturnType<typeof streamedBridge>;
   readonly system: { readonly mediaBackend: () => Promise<"native" | "chromium"> };
@@ -692,5 +696,6 @@ export const createBridge = (invoke: Invoke): WaveBridge => ({
     play: (section, index) => invoke("home.play", section, index),
   },
   links: linkBridge(invoke),
+  artistPage: artistPageBridge(invoke),
   streamed: streamedBridge(invoke),
 });

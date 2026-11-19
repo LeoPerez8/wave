@@ -43,6 +43,7 @@ import type { YtFeatures } from "./yt/ytServices.ts";
 import { Lyrics } from "./lyrics/lyrics.ts";
 import { DesktopLinks } from "./links/layer.ts";
 import { linkHandlers } from "./links/handlers.ts";
+import { artistPageHandlers } from "./artistPageHandlers.ts";
 import { DesktopPlaylists } from "./library/playlists.ts";
 import { playlistHandlers } from "./playlistHandlers.ts";
 import { searchLibrary } from "./library/search.ts";
@@ -265,6 +266,7 @@ const createHandlers = (
         : refuse("settings.setWindow", "invalid window setting"),
     ...createYtFeatureHandlers(validTarget),
     ...linkHandlers(validTarget),
+    ...artistPageHandlers(),
     ...streamed.handlers,
     "playback.view": () => playbackCall((p) => p.view()),
     "playback.start": ([scope, index, shuffle]) =>
