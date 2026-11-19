@@ -7,10 +7,12 @@
   "exports": {
     ".": "./src/index.ts",
     "./db/*": "./src/db/*.ts",
+    "./follows/*": "./src/follows/*.ts",
     "./testing": "./src/db/testDatabase.ts",
     "./testing/fastAgainFixture": "./src/db/fastAgainFixture.ts",
     "./songLinkEnding": "./src/songLinkEnding.ts",
     "./serviceTransport": "./src/serviceTransport.ts",
+    "./askWaveService": "./src/askWaveService.ts",
     "./downloads/lookups": "./src/downloads/lookups.ts",
     "./artworkUri": "./src/artworkUri.ts",
     "./artworkLookup": "./src/artworkLookup.ts",

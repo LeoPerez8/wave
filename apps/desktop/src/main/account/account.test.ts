@@ -344,6 +344,36 @@ test("only pushes and pulls go out with the session", async () => {
     });
 });
 
+test("a show check's Ticketmaster routes go out with the session, and nothing else of theirs", async () => {
+  const app = await desktop();
+  const asked: string[] = [];
+  const account = app.open({
+    fetch: async (input, init) => {
+      const url = String(input);
+      if (!url.includes("/v1/ticketmaster/")) return app.fetch(input, init);
+      asked.push(new URL(url).pathname + new URL(url).search);
+      return new Response("{}", { status: 200 });
+    },
+  });
+  await account.signIn();
+  const routes = [
+    "/v1/ticketmaster/attractions?keyword=Sigur%20R%C3%B3s",
+    "/v1/ticketmaster/events?attractionId=K8vZ9171o-f&countryCode=BR",
+  ];
+  for (const path of routes)
+    assert.deepEqual(await account.request("GET", path, null), { status: 200, body: "{}" });
+  assert.deepEqual(asked, routes);
+  for (const [method, path] of [
+    ["POST", routes[0]!],
+    ["GET", "/v1/ticketmaster/events?attractionId=../x&countryCode=BR"],
+    ["GET", "/v1/ticketmaster/events?attractionId=K1&countryCode=BR&size=9"],
+    ["GET", "/v1/ticketmaster/venues?keyword=x"],
+  ] as const)
+    await assert.rejects(account.request(method, path, null), {
+      code: "ERR_WAVE_FORBIDDEN_REQUEST",
+    });
+});
+
 test("without a keyring, Settings says the session lasts until Wave quits", async () => {
   const app = await desktop();
   const account = app.open({

@@ -7,6 +7,7 @@
  */
 import {
   stepWaveAccount,
+  ticketmasterUpstreamUrl,
   waveAccountView,
   WAVE_ACCOUNT_SIGNED_OUT,
   type WaveAccountEvent,
@@ -85,7 +86,7 @@ export interface WaveAccountService {
    * keeps the account and the session. Resolves when it ended, however it did.
    */
   readonly deleteAccount: () => Promise<void>;
-  /** A push or a pull with the session; a 401 ends it. */
+  /** A push, a pull or a show check's Ticketmaster request with the session; a 401 ends it. */
   readonly request: (
     method: "GET" | "POST",
     path: string,
@@ -102,6 +103,14 @@ const refusesIdToken = async (response: Response): Promise<boolean> => {
 };
 
 const PULL = /^\/v1\/pull(\?since=[0-9A-Za-z_-]*)?$/;
+/** A show check's request, exactly as the service's Ticketmaster routes take it. */
+const ticketmaster = (path: string): boolean => {
+  const at = path.indexOf("?");
+  if (at < 0 || path.includes("#")) return false;
+  return (
+    ticketmasterUpstreamUrl(path.slice(0, at), new URLSearchParams(path.slice(at + 1))) !== null
+  );
+};
 
 const publicSession = (stored: StoredSession | null): WaveSession =>
   stored === null
@@ -354,7 +363,8 @@ export const createWaveAccount = (deps: WaveAccountDeps): WaveAccountService => 
     },
     request: async (method, path, body) => {
       const allowed =
-        (method === "POST" && path === "/v1/push") || (method === "GET" && PULL.test(path));
+        (method === "POST" && path === "/v1/push") ||
+        (method === "GET" && (PULL.test(path) || ticketmaster(path)));
       if (!allowed) throw new WaveAccountError("ERR_WAVE_FORBIDDEN_REQUEST");
       const response = await send(method, path, body);
       return { status: response.status, body: await response.text() };

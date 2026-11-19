@@ -917,6 +917,7 @@ export function App() {
             run={playback.run}
             go={go}
             onError={failed}
+            notify={notify}
             onMenu={(row, at) =>
               actions.openMenu({ scope: { kind: "songs" }, ids: [row.id] }, row.title, at)
             }

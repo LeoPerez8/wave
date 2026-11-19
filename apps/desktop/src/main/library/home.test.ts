@@ -47,6 +47,8 @@ test("Home lists local shelves and counted rankings in the phone's order", async
   assert.deepEqual(
     home.items.map((s) => s.id),
     [
+      "new-releases",
+      "upcoming-shows",
       "discover",
       "recently-added",
       "recently-played",

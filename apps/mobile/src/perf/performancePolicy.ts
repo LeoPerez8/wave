@@ -524,14 +524,17 @@ export const WHOLE_LIBRARY: Record<string, WholeLibraryException> = {
   },
 };
 export const OPENING_REQUESTS: Record<string, Exception> = {
-  "home/followShows.ts#request": {
+  "sync/askWaveService.ts#askWaveService": {
     kind: "opening",
     reason:
-      "Home and a followed artist's page start the Ticketmaster shows check only when one is due (checkDue). Each call waits for a settled turn, re-checks the switch and country, goes to the sync service's Ticketmaster routes only with a Wave account signed in, and fails without asking when Android says the phone is offline. A check costs at most two calls per artist (showsCheck.ts).",
+      "Home and a followed artist's page start the Ticketmaster shows check only when one is due (checkDue). Each call waits for a settled turn, re-checks the switch and country, goes to the sync service's Ticketmaster routes only with a Wave account signed in, and fails without asking when Android says the phone is offline. A check costs at most two calls per artist (@wave/client's followShowsCheck.ts, which the phone gives this ask).",
     deferred: {
       settlement: "screen",
       connectivity: "android",
-      tests: ["apps/mobile/src/home/showsCheck.test.ts"],
+      tests: [
+        "packages/client/src/follows/followChecks.test.ts",
+        "packages/client/src/follows/showsCheck.test.ts",
+      ],
     },
   },
   "stats/PlayedEntityViews.tsx#openOnlineAlbum": {

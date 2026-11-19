@@ -1,0 +1,76 @@
+.release-tile {
+  position: relative;
+}
+.release-type {
+  position: absolute;
+  top: 6px;
+  left: 6px;
+  padding: 2px 6px;
+  border-radius: 4px;
+  background: var(--color-scrim);
+  color: #fff;
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+.release-tile[aria-busy="true"] {
+  opacity: 0.6;
+}
+.show-card {
+  display: flex;
+  align-items: stretch;
+  width: 264px;
+  height: 84px;
+  flex-shrink: 0;
+  border-radius: 8px;
+  background: var(--color-fill);
+  color: inherit;
+  text-decoration: none;
+  overflow: hidden;
+}
+.show-card:focus-visible {
+  outline: 2px solid var(--color-accent);
+  outline-offset: 2px;
+}
+a.show-card:hover {
+  background: var(--color-highlight);
+}
+.show-date {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  width: 84px;
+  flex-shrink: 0;
+  border-right: 1px dashed var(--color-separator);
+}
+.show-month {
+  font-size: 11px;
+  font-weight: 600;
+  text-transform: uppercase;
+  color: var(--color-accent);
+}
+.show-day {
+  font-size: 24px;
+  line-height: 1.1;
+  font-weight: 600;
+}
+.show-weekday {
+  font-size: 11px;
+}
+.show-facts {
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  min-width: 0;
+  padding: 0 14px;
+}
+.show-artist {
+  font-size: 14px;
+  font-weight: 600;
+}
+.show-place {
+  font-size: 12px;
+  margin-top: 2px;
+}
