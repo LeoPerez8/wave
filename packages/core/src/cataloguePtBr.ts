@@ -147,6 +147,7 @@ export const ptBR: Catalogue = {
     browserMessage: "Você pode fechar esta aba. O Wave termina de iniciar sessão.",
     confirmDeletionInBrowser: "Inicie sessão no Google no navegador para confirmar que é você.",
     browserDeletionMessage: "Você pode fechar esta aba. O Wave termina de apagar a conta.",
+    deletionSent: "O Wave está apagando a conta. Não dá mais para cancelar.",
   },
   desktopShortcuts: desktopShortcutsPtBr,
   downloadNotice: downloadNoticePtBr,

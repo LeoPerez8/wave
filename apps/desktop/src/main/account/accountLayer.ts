@@ -121,10 +121,11 @@ export const accountLayer = (options: {
         },
         settingsEdited: () => sync.edited({ songs: false }),
         view: () => {
-          const { account: view, keyringMissing } = account.view();
+          const { account: view, keyringMissing, deletionSent } = account.view();
           return {
             account: view,
             keyringMissing,
+            deletionSent,
             invitation:
               scanned &&
               view.kind === "signedOut" &&

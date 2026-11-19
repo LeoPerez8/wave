@@ -153,6 +153,8 @@ export const en = {
     /** Delete Account's fresh Google sign-in: while the browser has it, and the tab once it's done. */
     confirmDeletionInBrowser: "Sign in to Google in your browser to confirm it's you.",
     browserDeletionMessage: "You can close this tab. Wave finishes deleting the account.",
+    /** The request went to Wave's server: there is no Cancel any more. */
+    deletionSent: "Wave is deleting the account. It can't be cancelled now.",
   },
   desktopShortcuts: desktopShortcutsEn,
   downloadNotice: downloadNoticeEn,

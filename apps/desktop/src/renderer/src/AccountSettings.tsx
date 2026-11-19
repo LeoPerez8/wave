@@ -56,9 +56,11 @@ export function AccountSettings({
           {account.busy === "deleting" ? (
             <div className="account-actions">
               <button disabled>{text.settings.deleting}</button>
-              <button onClick={() => run(window.wave.account.cancelSignIn)}>
-                {text.alert.cancel}
-              </button>
+              {!view?.deletionSent && (
+                <button onClick={() => run(window.wave.account.cancelSignIn)}>
+                  {text.alert.cancel}
+                </button>
+              )}
             </div>
           ) : confirmingDeletion ? (
             <DeletionConfirmation
@@ -107,7 +109,9 @@ export function AccountSettings({
           )}
           <p className="secondary" data-testid="account-note">
             {account.busy === "deleting"
-              ? text.desktopAccount.confirmDeletionInBrowser
+              ? view?.deletionSent
+                ? text.desktopAccount.deletionSent
+                : text.desktopAccount.confirmDeletionInBrowser
               : account.note === null
                 ? text.settings.waveAccountSignOutNote
                 : waveAccountActionNotes(text)[account.note]}

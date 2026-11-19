@@ -20,7 +20,12 @@ const shots = process.env["WAVE_SHOTS_DIR"] ?? join(appFolder, "test-results");
  */
 const fakeService = async () => {
   const service: Harness = await harness({ googleDesktopClientId: CLIENT });
-  const state = { googleSubject: "google-sub-1", down: false };
+  const state = {
+    googleSubject: "google-sub-1",
+    down: false,
+    /** Delete Account's request waits for this before the service answers it. */
+    hold: Promise.resolve(),
+  };
   const server: Server = createServer((request, response) => {
     void (async () => {
       const chunks: Buffer[] = [];
@@ -40,6 +45,7 @@ const fakeService = async () => {
         response.writeHead(503).end();
         return;
       }
+      if (request.method === "DELETE" && request.url === "/v1/account") await state.hold;
       const headers: Record<string, string> = {};
       for (const name of ["authorization", "content-type"]) {
         const value = request.headers[name];
@@ -156,9 +162,16 @@ test("Delete Account asks first, says when it fails, then deletes the account an
     await page.screenshot({ path: join(shots, "delete-account-5-service-failed.png") });
 
     // It works: the account is gone from the service, Wave is signed out, the Library stays.
+    // Once the request is with the service there is no Cancel, and the note says so.
     service.state.down = false;
+    let answer = () => {};
+    service.state.hold = new Promise((resolve) => (answer = resolve));
     await deleteAccount.click();
     await confirmation.getByRole("button", { name: "Delete Account" }).click();
+    await expect(page.getByTestId("account-note")).toHaveText(text.desktopAccount.deletionSent);
+    await expect(settings.getByRole("button", { name: "Cancel" })).toHaveCount(0);
+    await page.screenshot({ path: join(shots, "delete-account-5b-on-its-way.png") });
+    answer();
     await expect(settings.getByRole("button", { name: "Sign In with Google" })).toBeVisible();
     await expect(settings).toContainText(text.settings.yourWaveAccountWasDeletedEverythingOn);
     await expect(deleteAccount).toHaveCount(0);
