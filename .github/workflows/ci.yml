@@ -53,13 +53,13 @@ jobs:
       nativeTests: ${{ steps.rule.outputs.nativeTests }}
       desktopChecks: ${{ steps.rule.outputs.desktopChecks }}
     steps:
-      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.1.0
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           ref: ${{ github.event.pull_request.head.sha || github.sha }}
           sparse-checkout: scripts/ci
           persist-credentials: false
 
-      - uses: actions/setup-node@a0853c24544627f65ddf259abe73b1d18a591444 # v5.0.0
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with:
           node-version: 22
           # Only node runs here; without this, setup-node looks for pnpm to cache.
@@ -92,7 +92,7 @@ jobs:
 
       - name: Keep the report
         if: always() && env.IS_SAME_REPO_PR == 'true' && job.status != 'cancelled'
-        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: ci-report-changes
           path: ${{ runner.temp }}/ci-report
@@ -116,7 +116,7 @@ jobs:
       source: ${{ steps.scan.outputs.source }}
       range: ${{ steps.scan.outputs.range }}
     steps:
-      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.1.0
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           ref: ${{ needs.source.outputs.sha }}
           # The source's history and the release tags its range starts from.
@@ -124,7 +124,7 @@ jobs:
           persist-credentials: false
 
       # For the report's step timings; the scan itself needs no Node.
-      - uses: actions/setup-node@a0853c24544627f65ddf259abe73b1d18a591444 # v5.0.0
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with:
           node-version: 22
           package-manager-cache: false
@@ -145,7 +145,7 @@ jobs:
 
       - name: Keep the report
         if: always() && env.IS_SAME_REPO_PR == 'true' && job.status != 'cancelled'
-        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: ci-report-secret-scan
           path: ${{ runner.temp }}/ci-report
@@ -169,12 +169,12 @@ jobs:
       # v<version>, already on that commit, or empty.
       tag: ${{ steps.bump.outputs.tag }}
     steps:
-      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.1.0
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         if: env.IS_BUMP == 'true'
         with:
           ref: ${{ github.ref }}
 
-      - uses: actions/setup-node@a0853c24544627f65ddf259abe73b1d18a591444 # v5.0.0
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         if: env.IS_BUMP == 'true'
         with:
           node-version: 22
@@ -207,7 +207,7 @@ jobs:
       outcome: ${{ steps.notes.outcome }}
       source: ${{ steps.checked.outputs.source }}
     steps:
-      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.1.0
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           ref: ${{ needs.source.outputs.sha }}
           # The previous version's tag and every commit since it; file contents on demand.
@@ -220,7 +220,7 @@ jobs:
         id: checked
         run: echo "source=$(git rev-parse HEAD)" | tee -a "$GITHUB_OUTPUT"
 
-      - uses: actions/setup-node@a0853c24544627f65ddf259abe73b1d18a591444 # v5.0.0
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with:
           node-version: 22
           package-manager-cache: false
@@ -254,16 +254,16 @@ jobs:
     outputs:
       patch: ${{ steps.fix.outputs.patch }}
     steps:
-      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.1.0
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         if: env.IS_SAME_REPO_PR == 'true'
         with:
           ref: ${{ github.event.pull_request.head.sha }}
           persist-credentials: false
 
-      - uses: pnpm/action-setup@b906affcce14559ad1aafd4ab0e942779e9f58b1 # v4.3.0
+      - uses: pnpm/action-setup@73e46992e05b19abd31f2f3c20e0e7370d762115 # v6.1.1
         if: env.IS_SAME_REPO_PR == 'true'
 
-      - uses: actions/setup-node@a0853c24544627f65ddf259abe73b1d18a591444 # v5.0.0
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         if: env.IS_SAME_REPO_PR == 'true'
         with:
           node-version: 22
@@ -278,7 +278,7 @@ jobs:
 
       - name: Keep the patch
         if: steps.fix.outputs.patch == 'true'
-        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: autofix-patch
           path: ${{ runner.temp }}/autofix/autofix.patch
@@ -300,7 +300,7 @@ jobs:
 
       - name: Keep the report
         if: always() && env.IS_SAME_REPO_PR == 'true' && job.status != 'cancelled'
-        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: ci-report-autofix
           path: ${{ runner.temp }}/ci-report
@@ -322,23 +322,23 @@ jobs:
     env:
       PATCHED: ${{ needs.autofix.outputs.patch == 'true' }}
     steps:
-      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.1.0
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         if: env.PATCHED == 'true'
         with:
           ref: ${{ github.event.pull_request.base.sha }}
           persist-credentials: false
 
-      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.1.0
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         if: env.PATCHED == 'true'
         with:
           ref: ${{ github.event.pull_request.head.sha }}
           path: pr
 
-      - uses: pnpm/action-setup@b906affcce14559ad1aafd4ab0e942779e9f58b1 # v4.3.0
+      - uses: pnpm/action-setup@73e46992e05b19abd31f2f3c20e0e7370d762115 # v6.1.1
         if: env.PATCHED == 'true'
 
       # No dependency cache: the PR's own jobs can write one.
-      - uses: actions/setup-node@a0853c24544627f65ddf259abe73b1d18a591444 # v5.0.0
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         if: env.PATCHED == 'true'
         with:
           node-version: 22
@@ -349,7 +349,7 @@ jobs:
         if: env.PATCHED == 'true'
         run: pnpm install --frozen-lockfile --ignore-scripts --filter wave
 
-      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
         if: env.PATCHED == 'true'
         with:
           name: autofix-patch
@@ -385,7 +385,7 @@ jobs:
 
       - name: Keep the report
         if: always() && env.PATCHED == 'true' && job.status != 'cancelled'
-        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: ci-report-autofix-apply
           path: ${{ runner.temp }}/ci-report
@@ -432,7 +432,7 @@ jobs:
       # checked.
       release_tag: ${{ needs.version.outputs.tag || (startsWith(github.ref, 'refs/tags/v') && github.ref_name) || '' }}
     steps:
-      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.1.0
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           ref: ${{ needs.source.outputs.sha }}
           persist-credentials: false
@@ -442,9 +442,9 @@ jobs:
         id: checked
         run: echo "source=$(git rev-parse HEAD)" | tee -a "$GITHUB_OUTPUT"
 
-      - uses: pnpm/action-setup@b906affcce14559ad1aafd4ab0e942779e9f58b1 # v4.3.0
+      - uses: pnpm/action-setup@73e46992e05b19abd31f2f3c20e0e7370d762115 # v6.1.1
 
-      - uses: actions/setup-node@a0853c24544627f65ddf259abe73b1d18a591444 # v5.0.0
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with:
           node-version: 22
           # setup-node v5 caches automatically when package.json has packageManager,
@@ -498,7 +498,7 @@ jobs:
 
       - name: Keep the report
         if: always() && env.IS_SAME_REPO_PR == 'true' && job.status != 'cancelled'
-        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: ci-report-checks
           path: ${{ runner.temp }}/ci-report
@@ -523,7 +523,7 @@ jobs:
     env:
       HEAD_SHA: ${{ needs.source.outputs.sha }}
     steps:
-      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.1.0
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           ref: ${{ needs.source.outputs.sha }}
           persist-credentials: false
@@ -533,19 +533,19 @@ jobs:
         id: checked
         run: echo "source=$(git rev-parse HEAD)" | tee -a "$GITHUB_OUTPUT"
 
-      - uses: pnpm/action-setup@b906affcce14559ad1aafd4ab0e942779e9f58b1 # v4.3.0
+      - uses: pnpm/action-setup@73e46992e05b19abd31f2f3c20e0e7370d762115 # v6.1.1
 
-      - uses: actions/setup-node@a0853c24544627f65ddf259abe73b1d18a591444 # v5.0.0
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with:
           node-version: 22
           cache: pnpm
 
-      - uses: actions/setup-java@b6effb05e454b25005698d916606bdc6ffcbf961 # v5.7.0
+      - uses: actions/setup-java@d1374f8ac74474200d16ef8ecee22c7ae7a51880 # v6.3.0
         with:
           distribution: temurin
           java-version: 17
 
-      - uses: gradle/actions/setup-gradle@0723195856401067f7a2779048b490ace7a47d7c # v5.0.2
+      - uses: gradle/actions/setup-gradle@8da46b539cd8fe6ab27ca75128919a18d757604c # v6.4.1
 
       # The Kotlin the phone shares with the desktop builds and tests on its own, with no Android
       # dependency (#1144), and so does the desktop's JVM entry point in it.
@@ -583,7 +583,7 @@ jobs:
 
       - name: Keep the report
         if: always() && env.IS_SAME_REPO_PR == 'true' && job.status != 'cancelled'
-        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: ci-report-native-tests
           path: ${{ runner.temp }}/ci-report
@@ -640,7 +640,7 @@ jobs:
       KEPT_APK: ${{ github.workspace }}/.cache/kept-apk
       WAVE_CI_BUNDLE_MANIFEST: ${{ github.workspace }}/../wave-ci-bundle.json
     steps:
-      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.1.0
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           ref: ${{ needs.source.outputs.sha }}
           persist-credentials: false
@@ -650,9 +650,9 @@ jobs:
         id: checked
         run: echo "source=$(git rev-parse HEAD)" | tee -a "$GITHUB_OUTPUT"
 
-      - uses: pnpm/action-setup@b906affcce14559ad1aafd4ab0e942779e9f58b1 # v4.3.0
+      - uses: pnpm/action-setup@73e46992e05b19abd31f2f3c20e0e7370d762115 # v6.1.1
 
-      - uses: actions/setup-node@a0853c24544627f65ddf259abe73b1d18a591444 # v5.0.0
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with:
           node-version: 22
           cache: pnpm
@@ -678,7 +678,7 @@ jobs:
       # over when dependencies change. The path is uniwind's cache store (os.tmpdir()), which
       # replaces Expo's in metro.config.js.
       - name: Restore Metro's cache
-        uses: actions/cache/restore@0057852bfaa89a56745cba8c7296529d2fc39830 # v4.3.0
+        uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
           path: /tmp/metro-cache
           key: metro-${{ runner.os }}-${{ hashFiles('pnpm-lock.yaml') }}-${{ github.sha }}
@@ -735,7 +735,7 @@ jobs:
       - name: Keep the over-the-air update
         if: steps.export_update.outcome == 'success'
         continue-on-error: true
-        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: update-${{ needs.checks.outputs.release_tag }}
           path: ${{ runner.temp }}/update
@@ -743,7 +743,7 @@ jobs:
 
       - name: Restore the kept APK
         id: kept
-        uses: actions/cache/restore@0057852bfaa89a56745cba8c7296529d2fc39830 # v4.3.0
+        uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
           path: ${{ env.KEPT_APK }}
           key: ${{ steps.key.outputs.key }}
@@ -763,7 +763,7 @@ jobs:
         id: kept_download
         if: steps.kept_artifact.outputs.runId != ''
         continue-on-error: true
-        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
         with:
           github-token: ${{ github.token }}
           run-id: ${{ steps.kept_artifact.outputs.runId }}
@@ -791,13 +791,13 @@ jobs:
           scripts/ci/step.sh "Repack the kept APK" scripts/ci/repack.sh "$KEPT_APK" "$RUNNER_TEMP/repacked.apk"
           echo "BUILT_APK=$RUNNER_TEMP/repacked.apk" >> "$GITHUB_ENV"
 
-      - uses: actions/setup-java@b6effb05e454b25005698d916606bdc6ffcbf961 # v5.7.0
+      - uses: actions/setup-java@d1374f8ac74474200d16ef8ecee22c7ae7a51880 # v6.3.0
         if: env.APK_BUILD == 'full'
         with:
           distribution: temurin
           java-version: 17
 
-      - uses: gradle/actions/setup-gradle@0723195856401067f7a2779048b490ace7a47d7c # v5.0.2
+      - uses: gradle/actions/setup-gradle@8da46b539cd8fe6ab27ca75128919a18d757604c # v6.4.1
         if: env.APK_BUILD == 'full'
         with:
           cache-read-only: ${{ github.ref != 'refs/heads/main' }}
@@ -807,7 +807,7 @@ jobs:
       - name: Restore ccache
         id: ccache
         if: env.APK_BUILD == 'full'
-        uses: actions/cache/restore@0057852bfaa89a56745cba8c7296529d2fc39830 # v4.3.0
+        uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
           path: ~/.cache/ccache
           key: ccache-android-v2-${{ hashFiles('pnpm-lock.yaml') }}-${{ github.sha }}
@@ -821,7 +821,7 @@ jobs:
 
       - name: Save Metro's cache
         if: github.ref == 'refs/heads/main'
-        uses: actions/cache/save@0057852bfaa89a56745cba8c7296529d2fc39830 # v4.3.0
+        uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
           path: /tmp/metro-cache
           key: metro-${{ runner.os }}-${{ hashFiles('pnpm-lock.yaml') }}-${{ github.sha }}
@@ -864,7 +864,7 @@ jobs:
 
       - name: Save ccache
         if: github.ref == 'refs/heads/main' && steps.ccache.outputs.cache-hit != 'true'
-        uses: actions/cache/save@0057852bfaa89a56745cba8c7296529d2fc39830 # v4.3.0
+        uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
           path: ~/.cache/ccache
           key: ${{ steps.ccache.outputs.cache-primary-key }}
@@ -884,14 +884,14 @@ jobs:
 
       - name: Save the kept APK
         if: env.APK_BUILD == 'full' && steps.kept.outputs.cache-hit != 'true'
-        uses: actions/cache/save@0057852bfaa89a56745cba8c7296529d2fc39830 # v4.3.0
+        uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
           path: ${{ env.KEPT_APK }}
           key: ${{ steps.key.outputs.key }}
 
       - name: Keep main's full APK for when the cache misses
         if: github.ref == 'refs/heads/main' && env.APK_BUILD == 'full'
-        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: kept-${{ steps.key.outputs.key }}
           path: ${{ env.KEPT_APK }}
@@ -935,7 +935,7 @@ jobs:
           cat "$RUNNER_TEMP/app-size.md" >> "$GITHUB_STEP_SUMMARY"
 
       # For the release job to sign. No phone installs it as it is.
-      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: ${{ steps.apk.outputs.artifact }}
           path: ${{ steps.apk.outputs.path }}
@@ -943,7 +943,7 @@ jobs:
 
       - name: Keep the report
         if: always() && env.IS_SAME_REPO_PR == 'true' && job.status != 'cancelled'
-        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: ci-report-android
           path: ${{ runner.temp }}/ci-report
@@ -982,14 +982,14 @@ jobs:
       DESKTOP_RELEASE: ${{ needs.checks.result == 'success' && needs.checks.outputs.release_tag != '' && (endsWith(needs.checks.outputs.release_tag, '-ti') || vars.RELEASE_DESKTOP_MAIN == 'on') }}
       HEAD_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
     steps:
-      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.1.0
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           ref: ${{ needs.source.outputs.sha }}
           persist-credentials: false
 
-      - uses: pnpm/action-setup@b906affcce14559ad1aafd4ab0e942779e9f58b1 # v4.3.0
+      - uses: pnpm/action-setup@73e46992e05b19abd31f2f3c20e0e7370d762115 # v6.1.1
 
-      - uses: actions/setup-node@a0853c24544627f65ddf259abe73b1d18a591444 # v5.0.0
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with:
           node-version: 22
           cache: pnpm
@@ -1013,7 +1013,7 @@ jobs:
         run: scripts/ci/step.sh "Install the audio headers" bash -c "sudo apt-get update && sudo apt-get install -y --no-install-recommends libasound2-dev libdbus-1-dev libfuse2 playerctl"
 
       - name: Restore the audio engine's build
-        uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830 # v4.3.0
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
           path: |
             ~/.cargo/registry/index
@@ -1031,12 +1031,12 @@ jobs:
 
       # The shared Kotlin runs in a JVM the app ships: its JAR and a runtime jlink trims from
       # this JDK (#1147).
-      - uses: actions/setup-java@b6effb05e454b25005698d916606bdc6ffcbf961 # v5.7.0
+      - uses: actions/setup-java@d1374f8ac74474200d16ef8ecee22c7ae7a51880 # v6.3.0
         with:
           distribution: temurin
           java-version: 21
 
-      - uses: gradle/actions/setup-gradle@0723195856401067f7a2779048b490ace7a47d7c # v5.0.2
+      - uses: gradle/actions/setup-gradle@8da46b539cd8fe6ab27ca75128919a18d757604c # v6.4.1
 
       - name: Build the JVM
         run: scripts/ci/step.sh "Build the JVM" pnpm --filter @wave/desktop build:jvm
@@ -1062,7 +1062,7 @@ jobs:
 
       - name: Keep the desktop installers and build evidence
         if: env.DESKTOP_RELEASE == 'true'
-        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: desktop-release-${{ matrix.platform }}
           path: |
@@ -1099,7 +1099,7 @@ jobs:
       # holds its memory at rest. The measurements are kept even when a target fails.
       - name: Keep desktop performance and memory
         if: always() && (steps.performance.outcome == 'success' || steps.performance.outcome == 'failure')
-        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: desktop-performance-${{ matrix.report }}
           path: apps/desktop/perf-results
@@ -1108,7 +1108,7 @@ jobs:
 
       - name: Keep the smoke test's screenshots
         if: failure()
-        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: desktop-smoke-${{ matrix.report }}
           path: |
@@ -1125,7 +1125,7 @@ jobs:
 
       - name: Keep the report
         if: always() && env.IS_SAME_REPO_PR == 'true' && job.status != 'cancelled'
-        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: ci-report-${{ matrix.report }}
           path: ${{ runner.temp }}/ci-report
@@ -1143,13 +1143,13 @@ jobs:
       contents: read
       pull-requests: write
     steps:
-      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.1.0
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           ref: ${{ github.event.pull_request.base.sha }}
           sparse-checkout: scripts/ci
           persist-credentials: false
 
-      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
         continue-on-error: true
         with:
           pattern: ci-report-*
@@ -1190,7 +1190,7 @@ jobs:
     env:
       DESKTOP_RELEASE: ${{ needs.checks.outputs.release_tag != '' && (endsWith(needs.checks.outputs.release_tag, '-ti') || vars.RELEASE_DESKTOP_MAIN == 'on') }}
     steps:
-      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.1.0
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           ref: ${{ needs.source.outputs.sha }}
           sparse-checkout: |
@@ -1198,7 +1198,7 @@ jobs:
             apps/updates
           persist-credentials: false
 
-      - uses: actions/setup-node@a0853c24544627f65ddf259abe73b1d18a591444 # v5.0.0
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with:
           node-version: 22
           package-manager-cache: false
@@ -1227,7 +1227,7 @@ jobs:
 
       - name: Get both desktop installers
         if: env.DESKTOP_RELEASE == 'true'
-        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
         with:
           pattern: desktop-release-*
           path: ${{ runner.temp }}/desktop
@@ -1251,7 +1251,7 @@ jobs:
           if [ "$WINDOWS_SIGNPATH" = on ]; then echo "sign_windows=true" >> "$GITHUB_OUTPUT"; fi
           echo "admitted=true" >> "$GITHUB_OUTPUT"
 
-      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: release-provenance
           path: ${{ runner.temp }}/provenance.json
@@ -1281,24 +1281,24 @@ jobs:
       WAVE_DESKTOP_UPDATE_PUBLIC_KEY: ${{ vars.WAVE_DESKTOP_UPDATE_PUBLIC_KEY }}
       SIGNPATH_CERTIFICATE_SHA256: ${{ vars.SIGNPATH_CERTIFICATE_SHA256 }}
     steps:
-      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.1.0
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           ref: ${{ needs.release-gate.outputs.sha }}
           persist-credentials: false
 
-      - uses: pnpm/action-setup@b906affcce14559ad1aafd4ab0e942779e9f58b1 # v4.3.0
+      - uses: pnpm/action-setup@73e46992e05b19abd31f2f3c20e0e7370d762115 # v6.1.1
 
-      - uses: actions/setup-node@a0853c24544627f65ddf259abe73b1d18a591444 # v5.0.0
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with:
           node-version: 22
           cache: pnpm
 
-      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
         with:
           name: release-provenance
           path: ${{ runner.temp }}/provenance
 
-      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
         with:
           pattern: desktop-release-*
           path: ${{ runner.temp }}/desktop
@@ -1327,7 +1327,7 @@ jobs:
 
       - name: Upload the admitted Wave.exe for signing
         id: unsigned-app
-        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: signpath-unsigned-app-${{ github.run_attempt }}
           path: ${{ runner.temp }}/windows-work/win-unpacked/Wave.exe
@@ -1356,7 +1356,7 @@ jobs:
 
       - name: Upload the NSIS installer for signing
         id: unsigned-installer
-        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: signpath-unsigned-installer-${{ github.run_attempt }}
           path: ${{ runner.temp }}/windows-work/${{ steps.installer.outputs.name }}
@@ -1385,7 +1385,7 @@ jobs:
 
       - name: Keep the signed Windows release
         id: signed-windows
-        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: signed-desktop-windows-${{ github.run_attempt }}
           path: |
@@ -1432,7 +1432,7 @@ jobs:
             exit 1
           fi
 
-      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.1.0
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           ref: ${{ needs.release-gate.outputs.sha }}
           persist-credentials: false
@@ -1440,18 +1440,18 @@ jobs:
             scripts/ci
             apps/updates
 
-      - uses: actions/setup-node@a0853c24544627f65ddf259abe73b1d18a591444 # v5.0.0
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with:
           node-version: 22
           package-manager-cache: false
 
       # The gate's provenance record (docs/release-provenance.md).
-      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
         with:
           name: release-provenance
           path: ${{ runner.temp }}/provenance
 
-      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
         with:
           name: ${{ needs.android.outputs.artifact }}
           path: ${{ runner.temp }}/unsigned
@@ -1464,14 +1464,14 @@ jobs:
 
       - name: Get the admitted desktop installers
         if: needs.release-gate.outputs.desktop == 'true'
-        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
         with:
           pattern: desktop-release-*
           path: ${{ runner.temp }}/desktop
 
       - name: Get the signed Windows release
         if: needs.release-gate.outputs.sign_windows == 'true' && needs.sign-windows.outputs.artifact_id != ''
-        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
         with:
           artifact-ids: ${{ needs.sign-windows.outputs.artifact_id }}
           path: ${{ runner.temp }}/desktop/desktop-release-win32
@@ -1507,7 +1507,7 @@ jobs:
           node scripts/ci/release-gate.ts seal "$RUNNER_TEMP/provenance/provenance.json"             "$RUNNER_TEMP/release/$APK_NAME" > "$RUNNER_TEMP/provenance/sealed.json"
           cat "$RUNNER_TEMP/provenance/sealed.json"
 
-      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: release-provenance-sealed
           path: ${{ runner.temp }}/provenance/sealed.json
@@ -1516,7 +1516,7 @@ jobs:
       # Where this release's source is (docs/release-source.md). Off until the owner sets the
       # repository variable RELEASE_SOURCE_DELIVERY to `on`. Once on, a manifest that doesn't
       # check out against the tag stops the release before anything is published.
-      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.1.0
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         if: vars.RELEASE_SOURCE_DELIVERY == 'on' && needs.checks.outputs.release_tag != ''
         with:
           ref: ${{ needs.release-gate.outputs.sha }}
@@ -1536,7 +1536,7 @@ jobs:
           echo "SOURCE_MANIFEST_FILE=$out/manifest.json" >> "$GITHUB_ENV"
           echo "SOURCE_DIRECTIONS_FILE=$out/directions.md" >> "$GITHUB_ENV"
 
-      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: ${{ needs.android.outputs.apk }}
           path: ${{ runner.temp }}/release/${{ needs.android.outputs.apk }}
@@ -1627,7 +1627,7 @@ jobs:
       - name: Fetch the over-the-air update
         if: env.UPDATES_CONFIGURED == 'true' && steps.published.outputs.url != ''
         continue-on-error: true
-        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
         with:
           name: update-${{ needs.checks.outputs.release_tag }}
           path: ${{ runner.temp }}/update
