@@ -49,6 +49,8 @@ import { searchLibrary } from "./library/search.ts";
 import { validWindowSettings } from "../shared/windowSettings.ts";
 import { readWindowSettings, changeWindowSettings } from "./system/windowSettings.ts";
 import { homeHandlers } from "./homeHandlers.ts";
+import { HomeFollow } from "./follows/homeFollow.ts";
+import { homeFollowHandlers } from "./follows/homeFollowHandlers.ts";
 import { streamedHandlers } from "./yt/streamedHandlers.ts";
 import {
   clearRecentSearches,
@@ -126,7 +128,8 @@ export type BridgeServices =
   | Account
   | Lyrics
   | DesktopPlaylists
-  | DesktopLinks;
+  | DesktopLinks
+  | HomeFollow;
 
 const refuse = (call: BridgeCall, why: string) => Effect.fail(new Error(`Refused ${call}: ${why}`));
 
@@ -568,6 +571,7 @@ const createHandlers = (
     },
     ...playlistHandlers(validTarget),
     ...homeHandlers,
+    ...homeFollowHandlers,
     "search.library": ([query]) =>
       searchQuery(query)
         ? Effect.gen(function* () {

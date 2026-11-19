@@ -41,6 +41,7 @@ import {
 } from "./playlists.ts";
 import type { LibrarySearchView } from "./search.ts";
 import type { HomeView } from "./home.ts";
+import type { HomeFollowView, HomeReleaseOpening } from "./homeFollow.ts";
 import type {
   ActionSurface,
   SongMenu,
@@ -309,6 +310,16 @@ export interface BridgeContract extends PlaylistContract, LinkContract, Streamed
     readonly args: readonly [section: "most-played" | "favorites", index: number];
     readonly result: void;
   };
+  readonly "home.follow": { readonly args: readonly []; readonly result: HomeFollowView };
+  readonly "home.followCheck": { readonly args: readonly []; readonly result: boolean };
+  readonly "home.openRelease": {
+    readonly args: readonly [key: string];
+    readonly result: HomeReleaseOpening;
+  };
+  readonly "home.releaseArtwork": {
+    readonly args: readonly [key: string];
+    readonly result: string | null;
+  };
 }
 
 export type BridgeCall = keyof BridgeContract;
@@ -411,6 +422,10 @@ export const BRIDGE_CALLS = [
   "search.clearRecent",
   "home.view",
   "home.play",
+  "home.follow",
+  "home.followCheck",
+  "home.openRelease",
+  "home.releaseArtwork",
   ...LINK_CALLS,
   ...STREAMED_CALLS,
 ] as const satisfies readonly BridgeCall[] &
@@ -430,6 +445,13 @@ export interface WaveBridge {
   readonly home: {
     readonly view: () => Promise<HomeView>;
     readonly play: (section: "most-played" | "favorites", index: number) => Promise<void>;
+    /** New from Artists You Follow and Upcoming Shows, from what the last check saved. */
+    readonly follow: () => Promise<HomeFollowView>;
+    /** Checks followed artists' releases and shows that are due; true when the cards changed. */
+    readonly followCheck: () => Promise<boolean>;
+    readonly openRelease: (key: string) => Promise<HomeReleaseOpening>;
+    /** A release card's cover as a data URL, or null. */
+    readonly releaseArtwork: (key: string) => Promise<string | null>;
   };
   readonly playback: {
     readonly view: () => Promise<PlayerView>;
@@ -690,6 +712,10 @@ export const createBridge = (invoke: Invoke): WaveBridge => ({
   home: {
     view: () => invoke("home.view"),
     play: (section, index) => invoke("home.play", section, index),
+    follow: () => invoke("home.follow"),
+    followCheck: () => invoke("home.followCheck"),
+    openRelease: (key) => invoke("home.openRelease", key),
+    releaseArtwork: (key) => invoke("home.releaseArtwork", key),
   },
   links: linkBridge(invoke),
   streamed: streamedBridge(invoke),

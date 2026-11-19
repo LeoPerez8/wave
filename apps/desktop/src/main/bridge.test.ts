@@ -39,6 +39,7 @@ import { desktopLinksLayer } from "./links/layer.ts";
 import { ytFeaturesLayer } from "./yt/ytServices.ts";
 import { lyricsLayer } from "./lyrics/lyrics.ts";
 import { accountLayer } from "./account/accountLayer.ts";
+import { withHomeFollow } from "./follows/homeFollow.ts";
 import { downloadsLayer } from "./downloads/downloadsLayer.ts";
 import { desktopPlaylistsLayer } from "./library/playlists.ts";
 import { createWaveAccount, type WaveAccountService } from "./account/account.ts";
@@ -137,6 +138,13 @@ test("Home follows the account's arrangement and plays its ranked list with Home
       await assert.rejects(call("recently-added", 0), /refused/i);
       await assert.rejects(call("favorites", -1), /refused/i);
       await assert.rejects(call("favorites", 10), /refused/i);
+      // Nobody followed: both follow sections have no card, and a card is named by a key.
+      assert.deepEqual(await wave.home.follow(), { releases: [], shows: [] });
+      assert.equal(await wave.home.followCheck(), false);
+      assert.deepEqual(await wave.home.openRelease("deezer:1"), { kind: "notFound" });
+      assert.equal(await wave.home.releaseArtwork("deezer:1"), null);
+      await assert.rejects(handlers.get("home.openRelease")!(trusted, 7), /refused/i);
+      await assert.rejects(handlers.get("home.releaseArtwork")!(trusted, ""), /refused/i);
     } finally {
       await runtime.dispose();
     }
@@ -427,6 +435,14 @@ const connect = (
           ),
         ),
       ),
+      withHomeFollow({
+        request: account.service.request,
+        configured: true,
+        signedIn: () => account.service.session().status === "signedIn",
+        online: () => true,
+        country: () => "BR",
+        fetch: () => Promise.reject(new Error("no network")),
+      }),
     ),
   );
   const handlers = new Map<string, IpcHandler>();

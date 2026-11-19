@@ -51,6 +51,7 @@ import { lyricsLayer } from "./lyrics/lyrics.ts";
 import { botguardPost, createPoTokens, poTokenHost } from "./yt/poTokens.ts";
 import { openPoTokenPage } from "./yt/poTokenWindow.ts";
 import { createWaveAccount } from "./account/account.ts";
+import { withHomeFollow } from "./follows/homeFollow.ts";
 import { Account, accountLayer } from "./account/accountLayer.ts";
 import { signInWithBrowser } from "./account/browserSignIn.ts";
 import { accountConfig } from "./account/config.ts";
@@ -414,6 +415,15 @@ else {
             ),
           ),
         ),
+        withHomeFollow({
+          request: account.request,
+          configured: config.syncUrl !== null,
+          signedIn: () => account.session().status === "signedIn",
+          online: () => net.isOnline(),
+          // Shows are looked up in the system's region; the phone's country choice isn't synced.
+          country: () => app.getLocaleCountryCode(),
+          fetch,
+        }),
       ),
     );
     const readTheme = () =>
