@@ -3,7 +3,13 @@
  * object as `window.wave`; main answers each call in `BridgeContract` and nothing else.
  * A call that reads a list returns a `Page`, never the whole list.
  */
-import type { PlayerView, PlaybackCommand, PlayStart, QueueRow } from "./playerView.ts";
+import type {
+  PlayerView,
+  PlaybackCommand,
+  PlaybackTransport,
+  PlayStart,
+  QueueRow,
+} from "./playerView.ts";
 import type { WindowSettings } from "./windowSettings.ts";
 import type { LanguageChoice } from "@wave/core";
 import type { LanguageView } from "./language.ts";
@@ -471,15 +477,9 @@ export interface WaveBridge {
     /** A release card's cover as a data URL, or null. */
     readonly releaseArtwork: (key: string) => Promise<string | null>;
   };
-  readonly playback: {
+  readonly playback: PlaybackTransport & {
     readonly view: () => Promise<PlayerView>;
     readonly start: (scope: BrowseScope, index?: number, shuffle?: boolean) => Promise<PlayStart>;
-    readonly startYt: (videoIds: readonly string[], index: number) => Promise<void>;
-    readonly command: (command: PlaybackCommand) => Promise<void>;
-    readonly play: () => Promise<void>;
-    readonly pause: () => Promise<void>;
-    readonly seek: (positionMs: number) => Promise<void>;
-    readonly undo: () => Promise<void>;
     readonly dismissUndo: () => Promise<void>;
     readonly favorite: () => Promise<void>;
     readonly volume: (volume: number, muted: boolean) => Promise<void>;

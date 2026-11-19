@@ -32,7 +32,12 @@ import * as Layer from "effect/Layer";
 
 import type { Page } from "../../shared/bridge.ts";
 import type { BrowseRow, BrowseScope } from "../../shared/browse.ts";
-import type { PlaybackCommand, PlayerView, PlayStart, QueueRow } from "../../shared/playerView.ts";
+import type {
+  PlaybackTransport,
+  PlayerView,
+  PlayStart,
+  QueueRow,
+} from "../../shared/playerView.ts";
 import { ytRow } from "../../shared/yt.ts";
 import type { PlaybackSettings } from "../../shared/playbackSettings.ts";
 import { Player } from "../audio/player.ts";
@@ -46,7 +51,7 @@ import { readPlaybackSettings, savePlaybackSettings } from "./playbackSettings.t
 import { createSleepTimer } from "./sleepTimer.ts";
 import { Downloads } from "../downloads/downloadsLayer.ts";
 
-export interface PlaybackShape {
+export interface PlaybackShape extends PlaybackTransport {
   readonly fileFailed: (id: number) => boolean;
   /** What the player bar shows; cheap enough to poll. */
   readonly view: () => PlayerView;
@@ -65,15 +70,6 @@ export interface PlaybackShape {
     context: NonNullable<QueueState["context"]>,
     shuffle?: boolean,
   ) => Promise<PlayStart>;
-  /** Plays YouTube Music songs a search found, from [index], as a new queue. */
-  readonly startYt: (videoIds: readonly string[], index: number) => Promise<void>;
-  /** A queue command: Next, Previous, shuffle, repeat, and the Queue's edits. */
-  readonly command: (command: PlaybackCommand) => Promise<void>;
-  readonly play: () => Promise<void>;
-  readonly pause: () => Promise<void>;
-  readonly seek: (positionMs: number) => Promise<void>;
-  /** Back to the queue the last `start` replaced, where it was. */
-  readonly undo: () => Promise<void>;
   readonly dismissUndo: () => void;
   /** Stars or unstars the current song. */
   readonly favorite: () => void;

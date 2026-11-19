@@ -12,6 +12,13 @@ export interface MenuItem {
   readonly submenu?: string;
 }
 
+/** A menu that's open: its name, its entries and where it shows. */
+export interface OpenMenu {
+  readonly label: string;
+  readonly items: Promise<readonly MenuItem[]> | readonly MenuItem[];
+  readonly at: { readonly x: number; readonly y: number };
+}
+
 interface Level {
   readonly label: string;
   readonly items: readonly MenuItem[];

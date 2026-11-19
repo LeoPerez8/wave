@@ -29,8 +29,8 @@ import type { ImageEdit, ImportAnswer } from "../../shared/playlists.ts";
 import type { SongTarget } from "../../shared/songActions.ts";
 import "./playlists.css";
 import { copyLink } from "./copyLink.ts";
-import { Menu, type MenuItem } from "./Menu.tsx";
-import { ConfirmDialog, Toast, trapTab } from "./SongActions.tsx";
+import type { MenuItem } from "./Menu.tsx";
+import { ConfirmDialog, trapTab, useMenuAndToast } from "./SongActions.tsx";
 import { language, text } from "./text.ts";
 
 type Point = { readonly x: number; readonly y: number };
@@ -56,18 +56,13 @@ export function usePlaylistEdits({ go, deleted, failed, changed }: Options) {
   /** Counts edits the player's revision misses (a playlist's image), for whatever shows them. */
   const [edits, setEdits] = useState(0);
   const [naming, setNaming] = useState<Naming>();
-  const [menu, setMenu] = useState<{
-    readonly label: string;
-    readonly items: Promise<readonly MenuItem[]>;
-    readonly at: Point;
-  }>();
+  const { menu, setMenu, setToast, menuAndToast } = useMenuAndToast();
   const [confirm, setConfirm] = useState<{
     readonly spec: AlertSpec;
     readonly onChoose: (yes: boolean) => void;
   }>();
   const [crop, setCrop] = useState<{ readonly playlistId: number; readonly edit: ImageEdit }>();
   const [summary, setSummary] = useState<M3uImportSummary>();
-  const [toast, setToast] = useState<{ readonly message: string; readonly id: number }>();
 
   const edited = useCallback(() => {
     setEdits((n) => n + 1);
@@ -246,12 +241,9 @@ export function usePlaylistEdits({ go, deleted, failed, changed }: Options) {
     }
   };
 
-  const closeMenu = useCallback(() => setMenu(undefined), []);
-  const hideToast = useCallback(() => setToast(undefined), []);
   const overlays = (
     <>
-      {menu && <Menu label={menu.label} items={menu.items} at={menu.at} onClose={closeMenu} />}
-      {toast && <Toast key={toast.id} message={toast.message} onDone={hideToast} />}
+      {menuAndToast}
       {naming && (
         <NameDialog
           naming={naming}

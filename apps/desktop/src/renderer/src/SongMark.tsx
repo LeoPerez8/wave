@@ -1,11 +1,9 @@
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import type { BrowseRow } from "../../shared/browse.ts";
 import { songRowMark, type SongRowMark, type SongState } from "../../shared/songState.ts";
 import { Icon } from "./Icon.tsx";
 import { text } from "./text.ts";
-
-/** How often a list asks main for its visible songs' downloads and failed files. */
-const EVERY_MS = 1_000;
+import { useEverySecond } from "./useEverySecond.ts";
 
 /**
  * The session state of the Library songs [ids] (the rows a list shows), read again each second
@@ -17,32 +15,15 @@ export function useSongStates(ids: readonly number[]): ReadonlyMap<number, SongS
     .filter((id) => id > 0)
     .slice(0, 200)
     .join(",");
-  useEffect(() => {
-    let current = true;
-    let timer: ReturnType<typeof setTimeout>;
-    const asked = key === "" ? [] : key.split(",").map(Number);
-    const poll = async () => {
-      try {
-        if (asked.length > 0 && !document.hidden) {
-          const page = await window.wave.songs.states(asked);
-          if (current)
-            setStates((previous) => {
-              const next = new Map(page.items.map((state) => [state.id, state]));
-              return JSON.stringify([...previous]) === JSON.stringify([...next]) ? previous : next;
-            });
-        }
-      } catch {
-        // The next read answers.
-      } finally {
-        if (current) timer = setTimeout(() => void poll(), EVERY_MS);
-      }
-    };
-    void poll();
-    return () => {
-      current = false;
-      clearTimeout(timer);
-    };
-  }, [key]);
+  useEverySecond(
+    () => (key === "" ? null : window.wave.songs.states(key.split(",").map(Number))),
+    (page) =>
+      setStates((previous) => {
+        const next = new Map(page.items.map((state) => [state.id, state]));
+        return JSON.stringify([...previous]) === JSON.stringify([...next]) ? previous : next;
+      }),
+    key,
+  );
   return states;
 }
 

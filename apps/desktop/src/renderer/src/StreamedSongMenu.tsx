@@ -3,13 +3,7 @@
  * it: Play Next, Add to Queue, the Magic Queue, Add to Playlist, the star, Go to Album and Go to
  * Artist, Copy Link and its download. Now Playing's Add to Playlist and Download buttons too.
  */
-import {
-  describePlaylistAdd,
-  favoriteToast,
-  queuedToast,
-  type ActionSurface,
-  type StreamedArtistTarget,
-} from "@wave/core";
+import type { ActionSurface, StreamedArtistTarget } from "@wave/core";
 import { useCallback, useEffect, useState } from "react";
 import type { BrowseRow } from "../../shared/browse.ts";
 import type {
@@ -21,7 +15,8 @@ import type {
 import { Icon } from "./Icon.tsx";
 import type { MenuItem } from "./Menu.tsx";
 import { copyLink } from "./copyLink.ts";
-import { language, text } from "./text.ts";
+import { songActionToast } from "./songActionToast.ts";
+import { text } from "./text.ts";
 
 /** The pages a streamed song's menu leads to. */
 export type StreamedRoute =
@@ -70,22 +65,9 @@ export function useStreamedSongs({ go, failed, notify, changed }: StreamedMenuOp
         changed();
         switch (result.kind) {
           case "queued":
-            return notify(
-              queuedToast(
-                {
-                  type: action === "playNext" ? "playNext" : "addToQueue",
-                  trackIds: [videoId],
-                },
-                undefined,
-                text,
-              ),
-            );
           case "favorite":
-            return notify(favoriteToast(surface, result.on, result.count, language));
           case "playlist":
-            return notify(
-              describePlaylistAdd(result.name, result.added, result.alreadyIn, language),
-            );
+            return notify(songActionToast(result, action === "playNext", surface, 1));
           case "downloaded":
             // The window says a download started once the Downloads page hears of it.
             return;

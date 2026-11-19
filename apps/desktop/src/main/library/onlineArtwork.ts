@@ -23,7 +23,7 @@ import {
 import { readArtwork } from "./artwork.ts";
 import { slots } from "./slots.ts";
 
-export type ArtworkKind = "song" | "album" | "artist";
+type ArtworkKind = "song" | "album" | "artist";
 
 /** What a lookup is for: where its files go, the local cover it has, and how to find one online. */
 interface Subject {

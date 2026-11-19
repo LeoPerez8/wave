@@ -266,7 +266,7 @@ export class HomeFollow extends Context.Service<HomeFollow, HomeFollowShape>()(
 ) {}
 
 /** HomeFollow over the Library and YT Music's pages; shows are asked with the account's session. */
-export const homeFollowLayer = (options: {
+const homeFollowLayer = (options: {
   readonly request: WaveServiceRequest;
   readonly configured: boolean;
   readonly signedIn: () => boolean;
