@@ -1,4 +1,5 @@
 import {
+  SYNCED_STARS_SETTING,
   pendingFavorite,
   readSyncedStars,
   starredHere,
@@ -48,7 +49,7 @@ export interface SongsToStar {
  * their stars have asked for their downloads already. Kept on this phone, never synced.
  */
 const seenStars = persistedSetting<ReadonlySet<number>>({
-  key: "downloads.syncedStars",
+  key: SYNCED_STARS_SETTING,
   read: readSyncedStars,
   write: writeSyncedStars,
 });

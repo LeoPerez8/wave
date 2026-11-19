@@ -7,6 +7,8 @@
  * their `…Sliders`) are left unread, so every value starts at its default.
  */
 import {
+  DISCOVER_LEVEL_SETTING,
+  DISCOVER_SLIDERS_SETTING,
   readDiscoverMixLevel,
   readMixSliders,
   storedMixSliders,
@@ -26,7 +28,7 @@ const SLIDERS_PERSIST_MS = 500;
  * Home or any long-press menu.
  */
 export const discoverLevel = persistedSetting<DiscoverMixLevel>({
-  key: "home.discoverLevel",
+  key: DISCOVER_LEVEL_SETTING,
   read: readDiscoverMixLevel,
   write: String,
 });
@@ -37,7 +39,7 @@ export const discoverLevel = persistedSetting<DiscoverMixLevel>({
  * Queue's YouTube Music candidates, read again for each batch.
  */
 export const discoverSliders = persistedSetting<MixSliders>({
-  key: "home.discoverSliders",
+  key: DISCOVER_SLIDERS_SETTING,
   read: readMixSliders,
   write: storedMixSliders,
   equals: (a, b) => a.faithfulness === b.faithfulness && a.popularity === b.popularity,

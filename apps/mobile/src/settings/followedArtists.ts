@@ -1,6 +1,8 @@
+import { FOLLOWED_ARTISTS_SETTING } from "@wave/core";
+
 import { persistedSetting } from "@/lib/persistedSetting";
 const followedArtists = persistedSetting<boolean>({
-  key: "settings.followedArtists",
+  key: FOLLOWED_ARTISTS_SETTING,
   synced: true,
   read: (stored) => stored !== "off",
   write: (on) => (on ? null : "off"),

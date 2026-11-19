@@ -21,6 +21,9 @@ export type YtPick = "library" | "online";
  */
 export type SearchOnline = "always" | "wifi" | "onDemand";
 
+/** Where Search online is kept, on the phone and the computer alike; each device keeps its own. */
+export const SEARCH_ONLINE_SETTING = "settings.searchOnline";
+
 /** The saved preference (what `writeSearchOnline` keeps); Only on demand unless another was chosen. */
 export const readSearchOnline = (stored: string | null): SearchOnline =>
   stored === "always" || stored === "wifi" ? stored : "onDemand";
