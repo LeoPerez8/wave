@@ -2545,6 +2545,36 @@ test("Play streams the missing songs YouTube Music has and counts the ones it le
   });
 });
 
+test("a missing song streamed from a list keeps the YouTube Music album Wave knows it by", async () => {
+  await withFile(async (file) => {
+    const { runtime, exposed } = connect(file);
+    const wave = exposed.get("wave") as WaveBridge;
+    try {
+      await runtime.runPromise(
+        Effect.gen(function* () {
+          const db = (yield* Database) as unknown as TestDatabase;
+          addTrack(db, { title: "Pink Moon", album: "Pink Moon", trackNumber: 1 });
+          addTrack(db, { title: "Unseen", album: "Pink Moon", trackNumber: 2 });
+          db.run(sql`UPDATE tracks SET path = NULL`);
+          db.run(sql`UPDATE tracks SET video_id = 'abcdefghijk' WHERE title = 'Pink Moon'`);
+          db.run(sql`UPDATE tracks SET video_id = 'unseenvideo' WHERE title = 'Unseen'`);
+        }),
+      );
+      await wave.yt.search("pink moon");
+      const album = (await wave.library.browse({ kind: "albums" }, 0, 1)).items[0]!;
+      await wave.playback.start({ kind: "album", id: album.id }, undefined, false);
+      const albumOf = async (videoId: string) =>
+        (await wave.streamed.menu(videoId)).entries.flatMap((entry) =>
+          entry.action === "goToAlbum" ? [entry.album] : [],
+        );
+      assert.deepEqual(await albumOf("abcdefghijk"), ["MPREb_pinkmoon"]);
+      assert.deepEqual(await albumOf("unseenvideo"), []);
+    } finally {
+      await runtime.dispose();
+    }
+  });
+});
+
 test("playlist, artist and genre pages download their missing songs in page order", async () => {
   await withFile(async (file) => {
     const { runtime, exposed, downloads } = connect(file);
