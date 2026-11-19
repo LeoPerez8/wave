@@ -232,6 +232,41 @@ describe("a rollback", () => {
 });
 
 describe("desktop release publication", () => {
+  it("signs the admitted app before NSIS, then signs the installer before publication", () => {
+    const signer = job("sign-windows");
+    assert.deepEqual(needsOf("sign-windows"), ["release-gate", "checks"]);
+    assert.match(signer, /needs\.release-gate\.result == 'success'/);
+    assert.match(signer, /needs\.release-gate\.outputs\.sign_windows == 'true'/);
+    assert.match(signer, /github\.event_name == 'push'/);
+    assert.match(signer, /ref: \$\{\{ needs\.release-gate\.outputs\.sha \}\}/);
+    const steps = stepsOf("sign-windows");
+    const names = steps.map((step) => step.name);
+    const ordered = [
+      "Verify the admitted Windows app payload",
+      "Sign Wave.exe",
+      "Build NSIS with the signed Wave.exe",
+      "Sign the NSIS installer",
+      "Verify the signed installer and generate its blockmap",
+    ].map((name) => names.indexOf(name));
+    assert.ok(ordered[0]! >= 0);
+    assert.deepEqual(
+      ordered,
+      [...new Set(ordered)].sort((a, b) => a - b),
+    );
+    for (const [name, upload] of [
+      ["Sign Wave.exe", "unsigned-app"],
+      ["Sign the NSIS installer", "unsigned-installer"],
+    ]) {
+      const text = steps.find((step) => step.name === name)!.text;
+      assert.match(text, /SignPath\/github-action-submit-signing-request@[0-9a-f]{40}/);
+      assert.ok(text.includes(`steps.${upload}.outputs.artifact-id`));
+      assert.match(text, /wait-for-completion: true/);
+    }
+    assert.ok(needsOf("release").includes("sign-windows"));
+    assert.match(job("release"), /needs\.sign-windows\.result == 'success'/);
+    assert.match(job("release"), /desktop-release\.ts finalize-windows/);
+  });
+
   it("builds on the release source and keeps stable desktop publication behind its switch", () => {
     const desktop = job("desktop");
     const gate = job("release-gate");

@@ -9,6 +9,7 @@ const workflowsDir = fileURLToPath(new URL("../../.github/workflows/", import.me
 const RELEASE_SECRETS = [
   "UPDATES_SIGNING_KEY",
   "WAVE_DESKTOP_UPDATE_SIGNING_KEY",
+  "SIGNPATH_API_TOKEN",
   "CLOUDFLARE_API_TOKEN",
   "CLOUDFLARE_ACCOUNT_ID",
   // The APK's release key and its rotation proof (scripts/ci/sign-apk.sh).
@@ -44,7 +45,7 @@ describe("release secrets", () => {
     );
     assert.deepEqual(
       readers.map(({ job }) => job),
-      ["ci.yml › release", "rollback.yml › rollback"],
+      ["ci.yml › sign-windows", "ci.yml › release", "rollback.yml › rollback"],
     );
     for (const { job, environment } of readers) {
       assert.ok(environment, `${job} reads a release secret without an Environment`);
