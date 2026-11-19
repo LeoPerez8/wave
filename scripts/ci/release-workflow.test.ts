@@ -291,6 +291,19 @@ describe("desktop release publication", () => {
     assert.match(job("release"), /desktop-release\.ts verify/);
   });
 
+  it("builds the Wave account into the desktop release, and the packager refuses one without it", () => {
+    const pack = stepsOf("desktop").find(
+      (step) => step.name === "Package the desktop release",
+    )!.text;
+    for (const name of ["SYNC_URL", "GOOGLE_DESKTOP_CLIENT_ID", "GOOGLE_DESKTOP_CLIENT_SECRET"])
+      assert.ok(pack.includes(`MAIN_VITE_WAVE_${name}: \${{ vars.WAVE_${name} }}`), name);
+    const packager = readFileSync(
+      new URL("../../apps/desktop/scripts/package-release.ts", import.meta.url),
+      "utf8",
+    );
+    assert.match(packager, /Desktop release has no Wave account/);
+  });
+
   it("attaches the admitted installers and blockmap to the versioned release", () => {
     const publish = stepsOf("release").find((step) => step.name === "Publish the release")!.text;
     assert.match(publish, /DESKTOP_ADMITTED: \$\{\{ needs\.release-gate\.outputs\.desktop \}\}/);

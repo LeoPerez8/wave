@@ -142,7 +142,10 @@ client: `MAIN_VITE_WAVE_SYNC_URL` and `MAIN_VITE_WAVE_GOOGLE_DESKTOP_CLIENT_ID`,
 them. Without them Settings › Accounts says accounts aren't set up. An unpackaged run may point
 elsewhere with `WAVE_SYNC_URL`, `WAVE_GOOGLE_DESKTOP_CLIENT_ID` and
 `WAVE_GOOGLE_DESKTOP_CLIENT_SECRET`, and only there may the service be `http://127.0.0.1`.
-Never commit their values. An unpackaged run may also name a stand-in for Google's token
+Release builds take them from the repository variables `WAVE_SYNC_URL`,
+`WAVE_GOOGLE_DESKTOP_CLIENT_ID` and `WAVE_GOOGLE_DESKTOP_CLIENT_SECRET` (CI's "Package the desktop
+release"), and `scripts/package-release.ts` refuses a release without the first two. Never commit
+their values. An unpackaged run may also name a stand-in for Google's token
 endpoint with `WAVE_GOOGLE_TOKEN_URL`, taken only when it is `http://` on this computer.
 
 Main holds the session in `wave-session.bin` under the data folder, sealed by `safeStorage`. With

@@ -1048,6 +1048,12 @@ jobs:
           RELEASE_TAG: ${{ needs.checks.outputs.release_tag }}
           WAVE_DESKTOP_CHANNEL: ${{ endsWith(needs.checks.outputs.release_tag, '-ti') && 'ti' || 'main' }}
           WAVE_DESKTOP_UPDATE_PUBLIC_KEY: ${{ vars.WAVE_DESKTOP_UPDATE_PUBLIC_KEY }}
+          # The Wave account: the sync service and Google's Desktop client, built into main
+          # (docs/agents/desktop-checks.md, Wave account). Google doesn't treat a Desktop client's
+          # secret as confidential, and every installer carries it, so it is a variable.
+          MAIN_VITE_WAVE_SYNC_URL: ${{ vars.WAVE_SYNC_URL }}
+          MAIN_VITE_WAVE_GOOGLE_DESKTOP_CLIENT_ID: ${{ vars.WAVE_GOOGLE_DESKTOP_CLIENT_ID }}
+          MAIN_VITE_WAVE_GOOGLE_DESKTOP_CLIENT_SECRET: ${{ vars.WAVE_GOOGLE_DESKTOP_CLIENT_SECRET }}
         run: |
           pnpm --filter @wave/desktop build
           mode=()

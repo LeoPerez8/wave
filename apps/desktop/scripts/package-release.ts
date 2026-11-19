@@ -40,6 +40,19 @@ if (mobile.version !== `${version.replace(/-ti$/, "")}-ti` && mobile.version !==
 }
 if (process.env["WAVE_DESKTOP_CHANNEL"] !== channel)
   throw new Error("Desktop release channel differs from tag");
+// A build without the sync service and Google's Desktop client has no Sign In (#1158), so a
+// release refuses it rather than ship an installer with no Wave account. The SignPath steps reuse
+// the app the first step built.
+if (mode === undefined || mode === "prepare") {
+  const sync = process.env["MAIN_VITE_WAVE_SYNC_URL"]?.trim() ?? "";
+  if (
+    !sync.startsWith("https://") ||
+    !process.env["MAIN_VITE_WAVE_GOOGLE_DESKTOP_CLIENT_ID"]?.trim()
+  )
+    throw new Error(
+      "Desktop release has no Wave account: set the WAVE_SYNC_URL and WAVE_GOOGLE_DESKTOP_CLIENT_ID repository variables",
+    );
+}
 
 const windows = platform === "win32";
 const prepare = mode === "prepare";
