@@ -98,6 +98,7 @@ export interface SessionSnapshot {
   readonly status: AudioStatus;
   /** "New queue playing" offers Undo. */
   readonly canUndo: boolean;
+  readonly undoQueue?: QueueState;
 }
 
 /**
@@ -382,7 +383,12 @@ export const createPlaybackSession = async (
   }
 
   return {
-    snapshot: () => ({ queue, status, canUndo: takeBack !== null }),
+    snapshot: () => ({
+      queue,
+      status,
+      canUndo: takeBack !== null,
+      ...(takeBack ? { undoQueue: takeBack.state } : {}),
+    }),
     dispatch: (given) =>
       serial(async () => {
         const before = queue;

@@ -1,6 +1,8 @@
 import { sql, type SQL } from "drizzle-orm";
 import type { LibraryDatabase } from "@wave/client/db/database";
+import { readPlaylistYtSong, type YtAlbumSong } from "@wave/core";
 import type { BrowsePage, BrowseRow, BrowseScope } from "../../shared/browse.ts";
+import { ytRow } from "../../shared/yt.ts";
 import { searchSongIds } from "./search.ts";
 
 const SONGS = sql`SELECT t.id, t.title, t.artist_credit AS artist, a.title AS album,
@@ -95,24 +97,93 @@ const row = (value: Partial<BrowseRow> & Pick<BrowseRow, "id" | "title">): Brows
   favorite: Boolean(value.favorite),
 });
 
+type PlaylistSong =
+  { readonly trackId: number } | { readonly itemId: number; readonly song: YtAlbumSong };
+
+const hasStoredEntries = (db: LibraryDatabase, id: number) =>
+  db.get(sql`SELECT 1 FROM playlist_items WHERE playlist_id=${id}
+    AND deleted=0 AND yt_song IS NOT NULL LIMIT 1`) !== undefined;
+
+// Match Core's readPlaylistYtSong shape so malformed, unsearched and unavailable entries
+// do not occupy positions. Decode full song metadata only for rows returned by SQLite.
+const storedStream = sql`CASE WHEN json_valid(i.yt_song) THEN
+  json_type(i.yt_song, '$.videoId') = 'text' AND json_extract(i.yt_song, '$.videoId') <> ''
+  AND json_type(i.yt_song, '$.title') = 'text'
+  AND json_type(i.yt_song, '$.artists') = 'array'
+  AND NOT EXISTS (SELECT 1 FROM json_each(i.yt_song, '$.artists') WHERE type <> 'text')
+  AND json_type(i.yt_song, '$.album') IN ('null', 'text')
+  AND json_type(i.yt_song, '$.artworkUrl') IN ('null', 'text')
+  AND json_type(i.yt_song, '$.durationMs') IN ('null', 'integer', 'real')
+  END`;
+
+const listableEntries = (id: number) => sql`
+  FROM playlist_items i
+  LEFT JOIN tracks t ON t.id=i.track_id
+  LEFT JOIN artists p ON p.id=t.artist_id
+  LEFT JOIN albums a ON a.id=t.album_id
+  WHERE i.playlist_id=${id} AND i.deleted=0 AND
+    (CASE WHEN i.yt_song IS NULL THEN a.id IS NOT NULL AND p.id IS NOT NULL
+      ELSE ${storedStream} END)`;
+
+const orderedEntries = (db: LibraryDatabase, source: SQL, page = sql``): PlaylistSong[] =>
+  db
+    .all<{ itemId: number; trackId: number | null; stored: string | null }>(
+      sql`SELECT i.id AS itemId, i.track_id AS trackId, i.yt_song AS stored
+      ${source} ORDER BY i.order_key, i.sync_id ${page}`,
+    )
+    .flatMap(({ itemId, trackId, stored }): PlaylistSong[] => {
+      if (stored === null) return trackId === null ? [] : [{ trackId }];
+      const song = readPlaylistYtSong(stored);
+      return song === null ? [] : [{ itemId, song }];
+    });
+
+/** Reads the full mixed order only when starting playback. */
+export const playlistSongs = (db: LibraryDatabase, id: number): PlaylistSong[] | undefined =>
+  hasStoredEntries(db, id) ? orderedEntries(db, listableEntries(id)) : undefined;
+
+const playlistRows = (
+  db: LibraryDatabase,
+  songs: readonly PlaylistSong[],
+  keepStreams?: (songs: readonly YtAlbumSong[]) => void,
+): BrowseRow[] => {
+  keepStreams?.(songs.flatMap((entry) => ("song" in entry ? [entry.song] : [])));
+  const tracks = new Map(
+    browseSongs(
+      db,
+      songs.flatMap((song) => ("trackId" in song ? [song.trackId] : [])),
+    ).map((track) => [track.id, track]),
+  );
+  return songs.flatMap((song) =>
+    "trackId" in song
+      ? (tracks.get(song.trackId) ?? [])
+      : [{ ...ytRow(song.song), id: -song.itemId }],
+  );
+};
+
 /** SQLite limits the read before rows cross IPC. No whole-library materialisation. */
 export const browseLibrary = (
   db: LibraryDatabase,
   scope: BrowseScope,
   offset: number,
   limit: number,
+  keepStreams?: (songs: readonly YtAlbumSong[]) => void,
 ): BrowsePage => {
   if (scope.kind === "search") {
     const ids = searchSongIds(db, scope.query ?? "");
     return { items: browseSongs(db, ids.slice(offset, offset + limit)), offset, total: ids.length };
   }
   const { source, order } = listing(scope);
-  const total = db.get<{ count: number }>(sql`SELECT count(*) AS count FROM (${source})`)!.count;
-  const items = db
-    .all<BrowseRow>(
-      sql`SELECT * FROM (${source}) ORDER BY ${order} LIMIT ${limit} OFFSET ${offset}`,
-    )
-    .map(row);
+  const mixed =
+    scope.kind === "playlist" && scope.id !== undefined && hasStoredEntries(db, scope.id)
+      ? listableEntries(scope.id)
+      : undefined;
+  const total = db.get<{ count: number }>(
+    mixed ? sql`SELECT count(*) AS count ${mixed}` : sql`SELECT count(*) AS count FROM (${source})`,
+  )!.count;
+  const page = sql`LIMIT ${limit} OFFSET ${offset}`;
+  const items = mixed
+    ? playlistRows(db, orderedEntries(db, mixed, page), keepStreams)
+    : db.all<BrowseRow>(sql`SELECT * FROM (${source}) ORDER BY ${order} ${page}`).map(row);
   const parentKind = {
     album: "albums",
     artist: "artists",
@@ -153,7 +224,10 @@ export const browseLetter = (db: LibraryDatabase, scope: BrowseScope, letter: st
   );
 };
 
-/** The ids of [scope]'s songs, in the order its list shows them; none for a list of lists. */
+/**
+ * The ids of [scope]'s Library songs, in the order its list shows them; none for a list of lists.
+ * A playlist's YT Music songs aren't among them (`playlistSongs` has those).
+ */
 export const browseTrackIds = (db: LibraryDatabase, scope: BrowseScope): string[] => {
   if (["albums", "artists", "playlists", "genres"].includes(scope.kind)) return [];
   if (scope.kind === "search") return searchSongIds(db, scope.query ?? "").map(String);

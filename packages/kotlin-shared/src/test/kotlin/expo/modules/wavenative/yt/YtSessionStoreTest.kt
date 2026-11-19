@@ -15,24 +15,24 @@ class YtSessionStoreTest {
   @Test
   fun aSignedInSessionSurvivesRestarting() {
     val file = file()
-    YtSessionStore(file).save(YtSessionState.SignedIn(credentials, leo))
-    assertEquals(YtSessionState.SignedIn(credentials, leo), YtSessionStore(file).load())
+    YtSessionFile(file).save(YtSessionState.SignedIn(credentials, leo))
+    assertEquals(YtSessionState.SignedIn(credentials, leo), YtSessionFile(file).load())
   }
 
   @Test
   fun anExpiredSessionIsRememberedWithoutItsCookie() {
     val file = file()
-    val store = YtSessionStore(file)
+    val store = YtSessionFile(file)
     store.save(YtSessionState.SignedIn(credentials, leo))
     store.save(YtSessionState.Expired(leo))
-    assertEquals(YtSessionState.Expired(leo), YtSessionStore(file).load())
+    assertEquals(YtSessionState.Expired(leo), YtSessionFile(file).load())
     assertFalse(file.readText().contains("sap/123"))
   }
 
   @Test
   fun signingOutLeavesNothingBehind() {
     val file = file()
-    val store = YtSessionStore(file)
+    val store = YtSessionFile(file)
     store.save(YtSessionState.SignedIn(credentials, leo))
     store.save(YtSessionState.SignedOut)
     assertFalse(file.exists())
@@ -42,10 +42,10 @@ class YtSessionStoreTest {
   @Test
   fun aMissingOrDamagedFileIsSignedOut() {
     val file = file()
-    assertEquals(YtSessionState.SignedOut, YtSessionStore(file).load())
+    assertEquals(YtSessionState.SignedOut, YtSessionFile(file).load())
     for (damaged in listOf("", "{", "[]", """{"cookie":"SAPISID=x"}""", """{"expired":"yes"}""")) {
       file.writeText(damaged)
-      assertEquals(damaged, YtSessionState.SignedOut, YtSessionStore(file).load())
+      assertEquals(damaged, YtSessionState.SignedOut, YtSessionFile(file).load())
     }
   }
 }

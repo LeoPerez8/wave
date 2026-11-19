@@ -6,7 +6,7 @@
 import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 
-import { isDesktopChange, reachesUsers } from "./changes.ts";
+import { isDesktopChange, reachesDesktop, reachesUsers } from "./changes.ts";
 
 export type MergedPr = {
   number: number;
@@ -100,30 +100,33 @@ const section = (heading: string, prs: readonly MergedPr[]) =>
  * users can't see and a feature branch's PR when its tickets' PRs are there. The version
  * bump counts the same ones.
  */
-export const listedPullRequests = ({
-  commits,
-  pullRequests,
-}: Pick<PatchNotesInput, "commits" | "pullRequests">): MergedPr[] => {
+export const listedPullRequests = (
+  { commits, pullRequests }: Pick<PatchNotesInput, "commits" | "pullRequests">,
+  target: "android" | "desktop" | "release" = "android",
+): MergedPr[] => {
   const inRelease = new Set(commits);
   const merged = pullRequests.filter((pr) => inRelease.has(pr.mergeCommit));
   // A feature built on its own branch reaches main as one PR, and its tickets' PRs
   // into that branch already say what it brings.
   const featureBranches = new Set(merged.map((pr) => pr.base));
+  const visible = (pr: MergedPr) => {
+    if (target !== "desktop" && isListed(pr)) return true;
+    return target !== "android" && (pr.files === null || reachesDesktop(pr.files));
+  };
   return merged
-    .filter((pr) => !featureBranches.has(pr.branch) && isListed(pr))
+    .filter((pr) => !featureBranches.has(pr.branch) && visible(pr))
     .toSorted((a, b) => a.number - b.number);
 };
 
 /** The listed PRs, sorted into the notes' two sections. */
-export const notesSections = ({
-  commits,
-  bugIssues,
-  pullRequests,
-}: PatchNotesInput): { new: MergedPr[]; fixes: MergedPr[] } => {
+export const notesSections = (
+  { commits, bugIssues, pullRequests }: PatchNotesInput,
+  target: "android" | "desktop" = "android",
+): { new: MergedPr[]; fixes: MergedPr[] } => {
   const bugs = new Set(bugIssues);
   const isFix = (pr: MergedPr) =>
     pr.branch.startsWith("fix/") || closedIssues(pr).some((issue) => bugs.has(issue));
-  const listed = listedPullRequests({ commits, pullRequests });
+  const listed = listedPullRequests({ commits, pullRequests }, target);
   return { new: listed.filter((pr) => !isFix(pr)), fixes: listed.filter(isFix) };
 };
 

@@ -155,6 +155,10 @@ export const en = {
     browserDeletionMessage: "You can close this tab. Wave finishes deleting the account.",
     /** The request went to Wave's server: there is no Cancel any more. */
     deletionSent: "Wave is deleting the account. It can't be cancelled now.",
+    closeBrowserWhenDone:
+      "Sign in in the browser window that opened, then close it. Wave picks up the session once the window is closed.",
+    noBrowser:
+      "Signing in to YouTube needs Chrome, Edge, Brave or Chromium on this computer. Install one and try again.",
   },
   desktopShortcuts: desktopShortcutsEn,
   downloadNotice: downloadNoticeEn,

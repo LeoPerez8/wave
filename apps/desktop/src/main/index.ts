@@ -16,6 +16,8 @@ import * as Layer from "effect/Layer";
 import * as ManagedRuntime from "effect/ManagedRuntime";
 import { forkAudio } from "./audio/fork.ts";
 import { streamingPlayerLayer } from "./audio/player.ts";
+import { desktopBuild, startDesktopUpdates } from "./updates/updater.ts";
+import { createDesktopVersionHistory } from "./updates/history.ts";
 import { registerBridge } from "./bridge.ts";
 import { playbackLayer } from "./playback/playback.ts";
 import { libraryLayer } from "./database.ts";
@@ -61,6 +63,9 @@ import { configureAutostart } from "./system/autostart.ts";
 import { followStart } from "./system/startup.ts";
 import { Playback } from "./playback/playback.ts";
 import { YtMusic } from "./yt/ytMusic.ts";
+import { ytAccountLayer } from "./yt/ytAccountLayer.ts";
+import { createYtSessions, ytSessionStore } from "./yt/ytSessionStore.ts";
+import { ytSignInSystem } from "./yt/ytSignInSystem.ts";
 
 // %APPDATA%\Wave or ~/.config/Wave, from the product name; tests point it at a folder of their own.
 const dataFolder = process.env["WAVE_DATA_DIR"];
@@ -201,6 +206,8 @@ else {
   app.on("window-all-closed", () => app.quit());
   // Utility processes start only once the app is ready, so the services wait for it too.
   void app.whenReady().then(async () => {
+    const installUpdate = startDesktopUpdates();
+    const resources = app.isPackaged ? process.resourcesPath : app.getAppPath();
     const preferredLanguages = () => {
       const launchLanguage = app.commandLine.getSwitchValue("lang");
       return launchLanguage ? [launchLanguage] : app.getPreferredSystemLanguages();
@@ -209,22 +216,52 @@ else {
     let language = chosenAppLanguage("system", preferredLanguages());
     let text = catalogueOf(language, "desktop");
     // The engine built by `pnpm build:native`; tests may point at another build.
-    const addon =
-      process.env["WAVE_AUDIO_ADDON"] ?? join(app.getAppPath(), "native", "wave-audio.node");
+    const addon = process.env["WAVE_AUDIO_ADDON"] ?? join(resources, "native", "wave-audio.node");
     // The runtime and JAR from `pnpm build:jvm`; tests may point at others.
     const jvm = jvmCommand({
-      runtime: process.env["WAVE_JVM_RUNTIME"] ?? join(app.getAppPath(), "jvm", "runtime"),
-      jar: process.env["WAVE_KOTLIN_JAR"] ?? join(app.getAppPath(), "jvm", "wave-kotlin.jar"),
+      runtime: process.env["WAVE_JVM_RUNTIME"] ?? join(resources, "jvm", "runtime"),
+      jar: process.env["WAVE_KOTLIN_JAR"] ?? join(resources, "jvm", "wave-kotlin.jar"),
       dataDir: join(app.getPath("userData"), "kotlin"),
       platform: process.platform,
     });
     // What the JVM tells main unasked (`ready`, `downloadsChanged`), for whoever listens.
     const kotlinListeners = new Set<(event: KotlinEvent) => void>();
+    const sealedFiles = {
+      read: (path: string) => {
+        try {
+          return readFileSync(path);
+        } catch {
+          return undefined;
+        }
+      },
+      write: (path: string, bytes: Buffer) => writeFileSync(path, bytes, { mode: 0o600 }),
+      remove: (path: string) => rmSync(path, { force: true }),
+    };
+    // The YouTube session stays in main, sealed by the system's keyring, and the JVM asks for it
+    // each time it starts; without a keyring it is never written.
+    const ytSessions = createYtSessions(
+      ytSessionStore({
+        box: safeStorage,
+        file: join(app.getPath("userData"), "yt-session.bin"),
+        files: sealedFiles,
+        platform: process.platform,
+      }),
+    );
+    const ytSignIn = ytSignInSystem({
+      userData: app.getPath("userData"),
+      home: app.getPath("home"),
+      platform: process.platform,
+      env: process.env,
+      log: (line) =>
+        process.stderr.write(`[yt] ${line}
+`),
+    });
+    void ytSignIn.sweep();
     const base = Layer.mergeAll(
       libraryLayer(join(app.getPath("userData"), "wave.db")),
       kotlinLayer({
         spawn: spawnLines(jvm, (text) => process.stderr.write(`[jvm] ${text}`)),
-        host: { poToken: poTokenHost(poTokens), ...keyringHost(safeStorage) },
+        host: { poToken: poTokenHost(poTokens), ...keyringHost(safeStorage), ...ytSessions.host },
         onEvent: (event) => {
           for (const listener of kotlinListeners) listener(event);
         },
@@ -328,17 +365,7 @@ else {
       store: sessionStore({
         box: safeStorage,
         file: join(app.getPath("userData"), "wave-session.bin"),
-        files: {
-          read: (path) => {
-            try {
-              return readFileSync(path);
-            } catch {
-              return undefined;
-            }
-          },
-          write: (path, bytes) => writeFileSync(path, bytes, { mode: 0o600 }),
-          remove: (path) => rmSync(path, { force: true }),
-        },
+        files: sealedFiles,
         platform: process.platform,
       }),
       syncUrl: config.syncUrl,
@@ -399,10 +426,17 @@ else {
         focused: () => BrowserWindow.getFocusedWindow() !== null,
       }).pipe(
         Layer.provideMerge(
-          desktopLinksLayer({
-            online: () => net.isOnline(),
-            writeClipboard: (text) => clipboard.writeText(text),
-          }).pipe(
+          Layer.mergeAll(
+            desktopLinksLayer({
+              online: () => net.isOnline(),
+              writeClipboard: (text) => clipboard.writeText(text),
+            }),
+            ytAccountLayer({
+              sessions: ytSessions,
+              online: () => net.isOnline(),
+              startSignIn: ytSignIn.start,
+            }),
+          ).pipe(
             Layer.provideMerge(
               ytFeaturesLayer({ online: () => net.isOnline() }).pipe(
                 Layer.provideMerge(
@@ -462,9 +496,15 @@ else {
           on,
         ),
       () => system?.mediaBackend ?? (process.platform === "win32" ? "chromium" : "native"),
+      createDesktopVersionHistory({
+        version: app.getVersion(),
+        channel: desktopBuild?.channel ?? null,
+        folder: app.getPath("userData"),
+      }),
     );
     // The queue's position and the play so far are saved before the app exits.
     let quitting = false;
+    let quitReady = false;
     const closeServices = () => {
       let timer: ReturnType<typeof setTimeout> | undefined;
       return Promise.race([
@@ -473,14 +513,20 @@ else {
       ]).finally(() => clearTimeout(timer));
     };
     app.on("before-quit", (event) => {
-      if (quitting) return;
+      if (quitReady) return;
       event.preventDefault();
+      if (quitting) return;
       quitting = true;
       system?.beginQuit();
       system?.close();
       poTokens.close();
       // Services that hang as they close don't keep a process nobody can see.
-      void closeServices().finally(() => app.quit());
+      void closeServices()
+        .then(() => installUpdate?.())
+        .finally(() => {
+          quitReady = true;
+          app.quit();
+        });
     });
     createWindow(
       () => {
@@ -527,8 +573,7 @@ else {
       yt,
       text: () => text,
       language: () => language,
-      mediaAddon:
-        process.env["WAVE_MEDIA_ADDON"] ?? join(app.getAppPath(), "native", "wave-media.node"),
+      mediaAddon: process.env["WAVE_MEDIA_ADDON"] ?? join(resources, "native", "wave-media.node"),
       cache: cacheFolder("system-media"),
       show: showWindow,
     });

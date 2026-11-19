@@ -11,7 +11,8 @@ import type {
   QueueRow,
 } from "./playerView.ts";
 import type { WindowSettings } from "./windowSettings.ts";
-import type { LanguageChoice } from "@wave/core";
+import type { DatedRelease, LanguageChoice } from "@wave/core";
+
 import type { LanguageView } from "./language.ts";
 import type { LibraryCounts } from "@wave/client/db/counts";
 import type { PlaybackStatus } from "./playback.ts";
@@ -64,6 +65,7 @@ import {
 import { LINK_CALLS, linkBridge, type LinkContract } from "./links.ts";
 import { ARTIST_PAGE_CALLS, artistPageBridge, type ArtistPageContract } from "./artistPage.ts";
 import { STREAMED_CALLS, streamedBridge, type StreamedContract } from "./streamedSongs.ts";
+import { YT_ACCOUNT_CALLS, ytAccountBridge, type YtAccountContract } from "./ytAccount.ts";
 export type Appearance = "system" | "light" | "dark";
 
 /** One window of a list, as a list call returns it. */
@@ -74,6 +76,15 @@ export interface Page<T> {
   readonly total: number;
 }
 
+export const VERSION_HISTORY_PAGE_SIZE = 20;
+
+export interface DesktopVersionHistory {
+  readonly version: string;
+  readonly channel: "ti" | "main" | null;
+  readonly currentListed: boolean;
+  readonly releases: Page<DatedRelease> | null;
+}
+
 /** Each call's arguments and result. Arguments reach main as untrusted data. */
 export interface BridgeContract
   extends
@@ -81,10 +92,15 @@ export interface BridgeContract
     LinkContract,
     ArtistPageContract,
     StreamedContract,
-    LyricsAndTagsContract {
+    LyricsAndTagsContract,
+    YtAccountContract {
   readonly "system.mediaBackend": {
     readonly args: readonly [];
     readonly result: "native" | "chromium";
+  };
+  readonly "settings.versionHistory": {
+    readonly args: readonly [offset: number, reload: boolean];
+    readonly result: DesktopVersionHistory;
   };
   readonly "settings.window": { readonly args: readonly []; readonly result: WindowSettings };
   readonly "settings.setWindow": {
@@ -391,6 +407,7 @@ export const BRIDGE_CALLS = [
   "settings.appearance",
   "settings.language",
   "settings.setLanguage",
+  "settings.versionHistory",
   "settings.window",
   "settings.setWindow",
   "settings.setAppearance",
@@ -451,6 +468,7 @@ export const BRIDGE_CALLS = [
   ...LINK_CALLS,
   ...ARTIST_PAGE_CALLS,
   ...STREAMED_CALLS,
+  ...YT_ACCOUNT_CALLS,
 ] as const satisfies readonly BridgeCall[] &
   (BridgeContract extends PagedLists<BridgeContract> ? unknown : never);
 
@@ -465,6 +483,8 @@ export interface WaveBridge {
   readonly artistPage: ReturnType<typeof artistPageBridge>;
   /** A streamed YouTube Music song's menu. */
   readonly streamed: ReturnType<typeof streamedBridge>;
+  /** The YouTube account: its session never reaches the window. */
+  readonly ytAccount: ReturnType<typeof ytAccountBridge>;
   readonly system: { readonly mediaBackend: () => Promise<"native" | "chromium"> };
   readonly home: {
     readonly view: () => Promise<HomeView>;
@@ -531,6 +551,7 @@ export interface WaveBridge {
     readonly read: (path: string) => Promise<SongTags>;
   };
   readonly settings: {
+    readonly versionHistory: (offset: number, reload: boolean) => Promise<DesktopVersionHistory>;
     readonly window: () => Promise<WindowSettings>;
     readonly setWindow: (change: Partial<WindowSettings>) => Promise<WindowSettings>;
     readonly appearance: () => Promise<Appearance>;
@@ -669,6 +690,7 @@ export const createBridge = (invoke: Invoke): WaveBridge => ({
     appearance: () => invoke("settings.appearance"),
     language: () => invoke("settings.language"),
     setLanguage: (choice) => invoke("settings.setLanguage", choice),
+    versionHistory: (offset, reload) => invoke("settings.versionHistory", offset, reload),
     window: () => invoke("settings.window"),
     setWindow: (change) => invoke("settings.setWindow", change),
     setAppearance: (appearance) => invoke("settings.setAppearance", appearance),
@@ -744,4 +766,5 @@ export const createBridge = (invoke: Invoke): WaveBridge => ({
   links: linkBridge(invoke),
   artistPage: artistPageBridge(invoke),
   streamed: streamedBridge(invoke),
+  ytAccount: ytAccountBridge(invoke),
 });

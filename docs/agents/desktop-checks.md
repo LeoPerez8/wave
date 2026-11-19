@@ -142,7 +142,10 @@ client: `MAIN_VITE_WAVE_SYNC_URL` and `MAIN_VITE_WAVE_GOOGLE_DESKTOP_CLIENT_ID`,
 them. Without them Settings › Accounts says accounts aren't set up. An unpackaged run may point
 elsewhere with `WAVE_SYNC_URL`, `WAVE_GOOGLE_DESKTOP_CLIENT_ID` and
 `WAVE_GOOGLE_DESKTOP_CLIENT_SECRET`, and only there may the service be `http://127.0.0.1`.
-Never commit their values. An unpackaged run may also name a stand-in for Google's token
+Release builds take them from the repository variables `WAVE_SYNC_URL`,
+`WAVE_GOOGLE_DESKTOP_CLIENT_ID` and `WAVE_GOOGLE_DESKTOP_CLIENT_SECRET` (CI's "Package the desktop
+release"), and `scripts/package-release.ts` refuses a release without the first two. Never commit
+their values. An unpackaged run may also name a stand-in for Google's token
 endpoint with `WAVE_GOOGLE_TOKEN_URL`, taken only when it is `http://` on this computer.
 
 Main holds the session in `wave-session.bin` under the data folder, sealed by `safeStorage`. With
@@ -265,3 +268,20 @@ silently. Without sudo, unpack `libasound2-dev` with `dpkg -x` and point `PKG_CO
 `alsa.pc`. Electron's binary downloads on the first run. CI runs
 the same set on `ubuntu-22.04` under `xvfb-run` and on `windows-latest` (the Desktop jobs in
 `.github/workflows/ci.yml`).
+
+## Packaging a release locally
+
+Build the native addon and JVM as above on the target OS. Set `WAVE_DESKTOP_CHANNEL` to the
+release channel and `WAVE_DESKTOP_UPDATE_PUBLIC_KEY` to a test Ed25519 public key in PEM form.
+Keep the test key separate from keys used for distribution. The version must match Android's
+version in the checkout. Use the stable tag without the `-ti` suffix for a promotion build.
+
+```sh
+pnpm --filter @wave/desktop build
+pnpm --filter @wave/desktop exec node scripts/package-release.ts v0.72.0-ti /tmp/wave-desktop
+```
+
+The output contains the installer, the Windows blockmap on Windows, and `build.json` with
+the release evidence. Linux packaging uses Ubuntu 22.04 with the ALSA and D-Bus headers
+and the FUSE 2 runtime.
+See [Release provenance](../release-provenance.md#desktop-installers) for publication and rollback.

@@ -44,4 +44,9 @@ if [ -n "${LOCALIZED_NOTES_FILE:-}" ]; then
     echo "::warning::Couldn't build the notes in each language; the release goes without them." >&2
 fi
 
+if [ -n "${DESKTOP_NOTES_FILE:-}" ]; then
+  node "$here/localized-notes.ts" "$tmp/commits.txt" "$tmp/bugs.txt" desktop < "$tmp/prs.jsonl" \
+    > "$DESKTOP_NOTES_FILE"
+fi
+
 node "$here/patch-notes.ts" "$tmp/commits.txt" "$tmp/bugs.txt" < "$tmp/prs.jsonl"

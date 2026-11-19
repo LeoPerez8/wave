@@ -37,12 +37,19 @@ export const memoryStorage = ({
         ? { objects: page, truncated: true, cursor: String(end) }
         : { objects: page, truncated: false };
     },
-    get: async (key) => {
+    get: async (key, options) => {
       const object = objects.get(key);
       if (!object) return null;
       const { data, contentType } = object;
       return {
-        body: new Blob([new Uint8Array(data)]).stream(),
+        size: data.length,
+        body: new Blob([
+          new Uint8Array(
+            options
+              ? data.slice(options.range.offset, options.range.offset + options.range.length)
+              : data,
+          ),
+        ]).stream(),
         text: async () => new TextDecoder().decode(data),
         httpMetadata: { contentType },
       };

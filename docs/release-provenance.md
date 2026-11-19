@@ -125,6 +125,36 @@ as it is and the step fails. So does a release from before records that holds an
 shows that APK came from this run's source, so the step says so and replaces nothing. A listing
 or download GitHub can't answer fails the step too.
 
+## Desktop installers
+
+A versioned ti release also admits the Windows x64 NSIS installer and the Linux x64
+AppImage, built on Windows and Ubuntu 22.04. The desktop jobs check out the same release
+source as Android and report their actual checkout, tag, update public key fingerprint and file
+digests. The gate checks both jobs and rehashes the Linux installer and the Windows build output.
+Before SignPath is enabled, that Windows output is the unsigned ti installer and its blockmap.
+With SignPath enabled, the gate admits the unpacked Windows app archive. The Windows signing job
+verifies it against the gate record, signs `Wave.exe` before building NSIS, then signs the installer
+and builds its blockmap. Publication verifies both installers and the blockmap, including the
+Windows signing job's final build evidence, before signing the APK.
+See [Windows code signing](windows-code-signing.md) for owner setup.
+The sealed record carries the evidence under `desktop`. A stable release includes the desktop
+when the repository variable `RELEASE_DESKTOP_MAIN` is `on`. The usual stable approval still applies.
+
+Android's existing update key is RSA. Desktop uses an Ed25519 PEM public key in the
+`WAVE_DESKTOP_UPDATE_PUBLIC_KEY` repository variable and the matching PEM private key in
+`WAVE_DESKTOP_UPDATE_SIGNING_KEY` in the release Environments. Only the public key reaches the
+packaging jobs. The private key must match the fingerprint in the admitted record.
+
+The owner deploys `apps/updates` by hand. After GitHub publishes a release, CI uploads the desktop
+files and notes to R2, then updates one signed channel pointer covering both installers. The app
+checks the signature, channel, platform and installer digest before installation. It applies the
+update on quit. On Linux, the installed AppImage must be writable by the user.
+
+In **Roll back an update**, choose the `desktop` target, channel and earlier version. The job
+verifies the tagged GitHub Release and both installers against its sealed record. The publisher
+also checks the original signed desktop manifests in R2 and signs a fresh channel pointer that
+allows the downgrade. Desktop has no transition for releases without provenance.
+
 ## Trusting a published release
 
 `scripts/ci/verified-release.sh <tag> <dir>` is how promotion and rollback trust a release. It

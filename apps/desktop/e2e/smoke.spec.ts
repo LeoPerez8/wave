@@ -110,6 +110,7 @@ test("the page has no Node and only the typed bridge", async () => {
       "wave.settings.appearance",
       "wave.settings.language",
       "wave.settings.setLanguage",
+      "wave.settings.versionHistory",
       "wave.settings.window",
       "wave.settings.setWindow",
       "wave.settings.setAppearance",
@@ -201,8 +202,23 @@ test("the page has no Node and only the typed bridge", async () => {
       "wave.streamed.menu",
       "wave.streamed.artist",
       "wave.streamed.run",
+      "wave.ytAccount.view",
+      "wave.ytAccount.signIn",
+      "wave.ytAccount.cancelSignIn",
+      "wave.ytAccount.signOut",
+      "wave.ytAccount.playlists",
     ],
   });
+});
+
+test("Version History shows the running version on a local build", async () => {
+  const text = catalogueOf("en", "desktop");
+  await page.getByRole("button", { name: text.desktopLayout.settings, exact: true }).click();
+  await page.getByRole("button", { name: text.desktopLayout.versionHistory, exact: true }).click();
+  await expect(
+    page.getByRole("heading", { name: text.settings.pages.versionHistory }),
+  ).toBeVisible();
+  await expect(page.getByText("0.0.0 Current", { exact: true })).toBeVisible();
 });
 
 test("Settings › Playback keeps a change to Crossfade, Normalize Volume and Buffer", async () => {

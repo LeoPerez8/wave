@@ -6,6 +6,7 @@
  * (limits.ts). See README.md.
  */
 
+import { desktopRouteOf, serveDesktop } from "./desktopRoute.ts";
 import { versionOrder } from "@wave/core";
 
 import {
@@ -36,7 +37,11 @@ import {
 } from "./limits.ts";
 
 export interface UpdateStorage {
-  get(key: string): Promise<{
+  get(
+    key: string,
+    options?: { range: { offset: number; length: number } },
+  ): Promise<{
+    readonly size?: number;
     readonly body: ReadableStream;
     text(): Promise<string>;
     readonly httpMetadata?: { readonly contentType?: string };
@@ -308,10 +313,15 @@ export const createUpdateService = (
       if (request.method !== "GET") return new Response("Method not allowed", { status: 405 });
       const url = new URL(request.url);
       const { pathname } = url;
-      const route = routeOf(pathname);
+      const desktop = desktopRouteOf(pathname);
+      const route = desktop?.kind ?? routeOf(pathname);
       if (route === null) return notFound();
       if (!(await withinLimit(request, route, pathname))) return pastLimit(route, now());
+      if (desktop) return serveDesktop(storage, desktop, request.headers.get("range"));
       switch (route) {
+        case "desktop":
+        case "desktop-file":
+          return notFound();
         case "manifest":
           return manifestRoute(request, storage);
         case "notes":

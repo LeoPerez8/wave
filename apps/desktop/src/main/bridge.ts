@@ -29,7 +29,7 @@ import {
   type SongTarget,
 } from "../shared/songActions.ts";
 import { runSongAction, songMenu } from "./library/songActions.ts";
-import type { Appearance } from "../shared/bridge.ts";
+import type { Appearance, DesktopVersionHistory } from "../shared/bridge.ts";
 import { VIDEO_ID, YtMusic } from "./yt/ytMusic.ts";
 import { Downloads } from "./downloads/downloadsLayer.ts";
 import {
@@ -44,6 +44,7 @@ import { Lyrics } from "./lyrics/lyrics.ts";
 import { DesktopLinks } from "./links/layer.ts";
 import { linkHandlers } from "./links/handlers.ts";
 import { artistPageHandlers } from "./artistPageHandlers.ts";
+import { YtAccount } from "./yt/ytAccountLayer.ts";
 import { DesktopPlaylists } from "./library/playlists.ts";
 import { playlistHandlers } from "./playlistHandlers.ts";
 import { searchLibrary } from "./library/search.ts";
@@ -131,7 +132,8 @@ export type BridgeServices =
   | Lyrics
   | DesktopPlaylists
   | DesktopLinks
-  | HomeFollow;
+  | HomeFollow
+  | YtAccount;
 
 const refuse = (call: BridgeCall, why: string) => Effect.fail(new Error(`Refused ${call}: ${why}`));
 
@@ -238,6 +240,12 @@ const accountCall = <A>(run: (account: Account["Service"]) => A | Promise<A>) =>
     return yield* Effect.tryPromise({ try: async () => run(account), catch: (error) => error });
   });
 
+const ytAccountCall = <A>(run: (account: YtAccount["Service"]) => A | Promise<A>) =>
+  Effect.gen(function* () {
+    const account = yield* YtAccount;
+    return yield* Effect.tryPromise({ try: async () => run(account), catch: (error) => error });
+  });
+
 /** What each call does; `args` come from the window and are checked here before use. */
 type Handlers = {
   readonly [C in BridgeCall]: (
@@ -249,6 +257,7 @@ const createHandlers = (
   onAppearance: (mode: Appearance) => void,
   setLogin: (on: boolean) => Promise<void>,
   mediaBackend: () => "native" | "chromium",
+  versionHistory: (offset: number, reload: boolean) => Promise<DesktopVersionHistory>,
 ): Handlers => {
   let loadedPath: string | undefined;
   const streamed = streamedHandlers();
@@ -260,6 +269,10 @@ const createHandlers = (
     });
   return {
     "system.mediaBackend": () => Effect.sync(mediaBackend),
+    "settings.versionHistory": ([offset, reload]) =>
+      typeof offset === "number" && validPage(offset, 1) && typeof reload === "boolean"
+        ? Effect.promise(() => versionHistory(offset, reload))
+        : refuse("settings.versionHistory", "invalid page"),
     "settings.window": () => Effect.map(Database, readWindowSettings),
     "settings.setWindow": ([change]) =>
       validWindowSettings(change)
@@ -432,6 +445,14 @@ const createHandlers = (
     "account.signOutEverywhere": () => accountCall((a) => a.signOutEverywhere()),
     "account.deleteAccount": () => accountCall((a) => a.deleteAccount()),
     "account.answerInvitation": () => accountCall((a) => a.answerInvitation()),
+    "ytAccount.view": () => ytAccountCall((a) => a.view()),
+    "ytAccount.signIn": () => ytAccountCall((a) => a.signIn()),
+    "ytAccount.cancelSignIn": () => ytAccountCall((a) => a.cancelSignIn()),
+    "ytAccount.signOut": () => ytAccountCall((a) => a.signOut()),
+    "ytAccount.playlists": ([language]) =>
+      language === "en" || language === "pt-BR"
+        ? ytAccountCall((a) => a.playlists(language))
+        : refuse("ytAccount.playlists", "invalid language"),
     "library.artwork": ([hash, large]) =>
       typeof hash === "string" && /^[a-f0-9]{40}$/.test(hash) && typeof large === "boolean"
         ? Effect.gen(function* () {
@@ -610,8 +631,17 @@ export const registerBridge = (
     throw new Error("Login registration unavailable");
   },
   mediaBackend: () => "native" | "chromium" = () => "native",
+  versionHistory: (
+    offset: number,
+    reload: boolean,
+  ) => Promise<DesktopVersionHistory> = async () => ({
+    version: "",
+    channel: null,
+    currentListed: false,
+    releases: { items: [], offset: 0, total: 0 },
+  }),
 ): void => {
-  const handlers = createHandlers(onAppearance, setLogin, mediaBackend);
+  const handlers = createHandlers(onAppearance, setLogin, mediaBackend, versionHistory);
   for (const call of BRIDGE_CALLS) {
     const handler: (args: readonly unknown[]) => Effect.Effect<unknown, unknown, BridgeServices> =
       handlers[call];

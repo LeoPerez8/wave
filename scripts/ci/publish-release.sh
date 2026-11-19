@@ -15,12 +15,13 @@
 set -euo pipefail
 
 apk="$1"
+shift
 tag="${RELEASE_TAG:-${GITHUB_REF_NAME:?}}"
 version="${tag#v}"
 dir="${RUNNER_TEMP:-/tmp}"
 asset="$dir/wave-$version.apk"
 cp "$apk" "$asset"
-assets=("$asset")
+assets=("$asset" "$@")
 if [ -n "${PROVENANCE_FILE:-}" ]; then
   cp "$PROVENANCE_FILE" "$dir/wave-$version.provenance.json"
   assets+=("$dir/wave-$version.provenance.json")

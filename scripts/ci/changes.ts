@@ -35,8 +35,7 @@ const AREAS = {
     "apps/mobile/plugins/",
     "apps/mobile/package.json",
   ],
-  // What the desktop app is built from, with the Kotlin its JVM runs (#1147). It isn't
-  // released yet, so a change to it alone releases nothing.
+  // What the desktop app is built from, with the Kotlin its JVM runs (#1147).
   desktop: [
     "apps/desktop/",
     "packages/client/",
@@ -48,8 +47,7 @@ const AREAS = {
 
 type Area = keyof typeof AREAS;
 
-// What only the desktop app is built from, inside or beside an area the phone shares. The
-// desktop isn't released yet, so a change to these alone is no `app` change: it releases nothing.
+// What only the desktop app is built from, inside or beside an area the phone shares.
 const DESKTOP_ONLY = ["apps/desktop/", "packages/kotlin-shared/stdio/"];
 
 // A change to these areas can break any package, so Checks then typechecks and tests
@@ -97,6 +95,11 @@ export const changes = (paths: readonly string[]): Changes =>
 export const reachesUsers = (paths: readonly string[]): boolean => {
   const touched = changes(paths);
   return touched.app || touched.core || touched.sync || touched.workspace;
+};
+
+export const reachesDesktop = (paths: readonly string[]): boolean => {
+  const touched = changes(paths);
+  return touched.desktop || touched.sync || touched.workspace;
 };
 
 // What only the desktop is made of, by prefix: its app, its JVM's entry point and its own UI text.

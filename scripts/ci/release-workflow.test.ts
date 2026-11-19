@@ -67,6 +67,7 @@ describe("the release gate", () => {
       "android",
       "changes",
       "checks",
+      "desktop",
       "native-tests",
       "notes",
       "secret-scan",
@@ -218,7 +219,7 @@ describe("a rollback", () => {
     );
     assert.match(
       named("Check the release's provenance"),
-      /if \[ "\$ALLOW_UNRECORDED" = "true" \]; then flags=\(--allow-unrecorded\); fi/,
+      /if \[ "\$TARGET" = android \] && \[ "\$ALLOW_UNRECORDED" = "true" \]; then flags=\(--allow-unrecorded\); fi/,
     );
   });
 
@@ -227,5 +228,87 @@ describe("a rollback", () => {
     assert.match(rollback, /^ {6}contents: read$/m);
     assert.doesNotMatch(rollback, /: write$/m);
     assert.match(rollback, /sparse-checkout: \|\n\s+apps\/updates\n\s+scripts\/ci/);
+  });
+});
+
+describe("desktop release publication", () => {
+  it("signs the admitted app before NSIS, then signs the installer before publication", () => {
+    const signer = job("sign-windows");
+    assert.deepEqual(needsOf("sign-windows"), ["release-gate", "checks"]);
+    assert.match(signer, /needs\.release-gate\.result == 'success'/);
+    assert.match(signer, /needs\.release-gate\.outputs\.sign_windows == 'true'/);
+    assert.match(signer, /github\.event_name == 'push'/);
+    assert.match(signer, /ref: \$\{\{ needs\.release-gate\.outputs\.sha \}\}/);
+    const steps = stepsOf("sign-windows");
+    const names = steps.map((step) => step.name);
+    const ordered = [
+      "Verify the admitted Windows app payload",
+      "Sign Wave.exe",
+      "Build NSIS with the signed Wave.exe",
+      "Sign the NSIS installer",
+      "Verify the signed installer and generate its blockmap",
+    ].map((name) => names.indexOf(name));
+    assert.ok(ordered[0]! >= 0);
+    assert.deepEqual(
+      ordered,
+      [...new Set(ordered)].sort((a, b) => a - b),
+    );
+    for (const [name, upload] of [
+      ["Sign Wave.exe", "unsigned-app"],
+      ["Sign the NSIS installer", "unsigned-installer"],
+    ]) {
+      const text = steps.find((step) => step.name === name)!.text;
+      assert.match(text, /SignPath\/github-action-submit-signing-request@[0-9a-f]{40}/);
+      assert.ok(text.includes(`steps.${upload}.outputs.artifact-id`));
+      assert.match(text, /wait-for-completion: true/);
+    }
+    assert.ok(needsOf("release").includes("sign-windows"));
+    assert.match(job("release"), /needs\.sign-windows\.result == 'success'/);
+    assert.match(job("release"), /desktop-release\.ts finalize-windows/);
+
+    const packager = readFileSync(
+      new URL("../../apps/desktop/scripts/package-release.ts", import.meta.url),
+      "utf8",
+    );
+    assert.match(packager, /differentialPackage: true/);
+  });
+
+  it("builds on the release source and keeps stable desktop publication behind its switch", () => {
+    const desktop = job("desktop");
+    const gate = job("release-gate");
+    assert.ok(desktop.includes(`ref: ${SOURCE}`));
+    assert.match(desktop, /ubuntu-22\.04/);
+    assert.match(desktop, /windows-latest/);
+    for (const text of [desktop, gate]) {
+      assert.match(
+        text,
+        /endsWith\(needs\.checks\.outputs\.release_tag, '-ti'\) \|\| vars\.RELEASE_DESKTOP_MAIN == 'on'/,
+      );
+      assert.doesNotMatch(text, /environment:|secrets\./);
+    }
+    assert.match(gate, /test "\$DESKTOP_RESULT" = success/);
+    assert.match(gate, /desktop-release\.ts admit/);
+    assert.match(job("release"), /desktop-release\.ts verify/);
+  });
+
+  it("builds the Wave account into the desktop release, and the packager refuses one without it", () => {
+    const pack = stepsOf("desktop").find(
+      (step) => step.name === "Package the desktop release",
+    )!.text;
+    for (const name of ["SYNC_URL", "GOOGLE_DESKTOP_CLIENT_ID", "GOOGLE_DESKTOP_CLIENT_SECRET"])
+      assert.ok(pack.includes(`MAIN_VITE_WAVE_${name}: \${{ vars.WAVE_${name} }}`), name);
+    const packager = readFileSync(
+      new URL("../../apps/desktop/scripts/package-release.ts", import.meta.url),
+      "utf8",
+    );
+    assert.match(packager, /Desktop release has no Wave account/);
+  });
+
+  it("attaches the admitted installers and blockmap to the versioned release", () => {
+    const publish = stepsOf("release").find((step) => step.name === "Publish the release")!.text;
+    assert.match(publish, /DESKTOP_ADMITTED: \$\{\{ needs\.release-gate\.outputs\.desktop \}\}/);
+    assert.match(publish, /if \[ "\$DESKTOP_ADMITTED" = "true" \]; then/);
+    assert.match(publish, /desktop-release\.ts names "\$RELEASE_TAG" "\$RUNNER_TEMP\/desktop"/);
+    assert.match(publish, /publish-release\.sh.*"\$\{desktop\[@\]\}"/);
   });
 });

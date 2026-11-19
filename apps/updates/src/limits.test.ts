@@ -42,6 +42,8 @@ const PATHS: Record<CountedRoute, string> = {
   notes: "/v1/notes?channel=ti",
   apk: "/v1/apk?channel=ti",
   assets: `/v1/assets/${ASSET}`,
+  desktop: "/v1/desktop/ti/latest.json",
+  "desktop-file": `/v1/desktop/ti/files/0.71.0-ti/${"a".repeat(128)}/wave-0.71.0-ti-win-x64.exe`,
 };
 
 const setup = async (start = "2026-11-18T09:30:00.000Z") => {

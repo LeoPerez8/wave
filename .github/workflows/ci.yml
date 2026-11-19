@@ -201,6 +201,7 @@ jobs:
       notes: ${{ steps.notes.outputs.notes }}
       # The same notes in each language, as one line of JSON, for the update service.
       localized: ${{ steps.notes.outputs.localized }}
+      desktop_localized: ${{ steps.notes.outputs.desktop_localized }}
       # 'success' when they were built. A branch push only learns in Checks whether it
       # releases, so the release gate checks this instead of this job failing.
       outcome: ${{ steps.notes.outcome }}
@@ -231,11 +232,13 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
           LOCALIZED_NOTES_FILE: ${{ runner.temp }}/localized-notes.json
+          DESKTOP_NOTES_FILE: ${{ runner.temp }}/desktop-notes.json
         run: |
           notes="$(scripts/ci/patch-notes.sh)"
           echo "$notes"
           { echo "notes<<WAVE_PATCH_NOTES"; echo "$notes"; echo "WAVE_PATCH_NOTES"; } >> "$GITHUB_OUTPUT"
           if [ -s "$LOCALIZED_NOTES_FILE" ]; then echo "localized=$(cat "$LOCALIZED_NOTES_FILE")" >> "$GITHUB_OUTPUT"; fi
+          if [ -s "$DESKTOP_NOTES_FILE" ]; then echo "desktop_localized=$(cat "$DESKTOP_NOTES_FILE")" >> "$GITHUB_OUTPUT"; fi
           { echo "# Patch notes"; echo; echo "${notes:-Nothing to list: no PR since the last version changes the app.}"; } >> "$GITHUB_STEP_SUMMARY"
 
   # The lockfile and format autofix, in two jobs. This one runs the PR's install and format
@@ -952,9 +955,9 @@ jobs:
   # builds no installer and needs no secret.
   desktop:
     name: ${{ matrix.name }}
-    needs: [changes]
+    needs: [changes, source, checks]
     # Only PRs can skip: on main and release tags every area counts as changed.
-    if: needs.changes.outputs.desktopChecks == 'true'
+    if: ${{ !cancelled() && needs.source.result == 'success' && needs.changes.outputs.desktopChecks == 'true' }}
     strategy:
       fail-fast: false
       matrix:
@@ -963,9 +966,11 @@ jobs:
           - os: ubuntu-22.04
             name: Desktop (Linux)
             report: desktop-linux
+            platform: linux
           - os: windows-latest
             name: Desktop (Windows)
             report: desktop-windows
+            platform: win32
     runs-on: ${{ matrix.os }}
     permissions:
       contents: read
@@ -974,11 +979,12 @@ jobs:
       run:
         shell: bash
     env:
+      DESKTOP_RELEASE: ${{ needs.checks.result == 'success' && needs.checks.outputs.release_tag != '' && (endsWith(needs.checks.outputs.release_tag, '-ti') || vars.RELEASE_DESKTOP_MAIN == 'on') }}
       HEAD_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
     steps:
       - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.1.0
         with:
-          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+          ref: ${{ needs.source.outputs.sha }}
           persist-credentials: false
 
       - uses: pnpm/action-setup@b906affcce14559ad1aafd4ab0e942779e9f58b1 # v4.3.0
@@ -1004,7 +1010,7 @@ jobs:
       # those controls. Windows needs nothing more than the runner's MSVC.
       - name: Install the audio headers
         if: runner.os == 'Linux'
-        run: scripts/ci/step.sh "Install the audio headers" bash -c "sudo apt-get update && sudo apt-get install -y --no-install-recommends libasound2-dev libdbus-1-dev playerctl"
+        run: scripts/ci/step.sh "Install the audio headers" bash -c "sudo apt-get update && sudo apt-get install -y --no-install-recommends libasound2-dev libdbus-1-dev libfuse2 playerctl"
 
       - name: Restore the audio engine's build
         uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830 # v4.3.0
@@ -1034,6 +1040,39 @@ jobs:
 
       - name: Build the JVM
         run: scripts/ci/step.sh "Build the JVM" pnpm --filter @wave/desktop build:jvm
+
+      - name: Package the desktop release
+        if: env.DESKTOP_RELEASE == 'true'
+        env:
+          PREPARE_WINDOWS: ${{ matrix.platform == 'win32' && vars.WAVE_WINDOWS_SIGNPATH == 'on' }}
+          RELEASE_TAG: ${{ needs.checks.outputs.release_tag }}
+          WAVE_DESKTOP_CHANNEL: ${{ endsWith(needs.checks.outputs.release_tag, '-ti') && 'ti' || 'main' }}
+          WAVE_DESKTOP_UPDATE_PUBLIC_KEY: ${{ vars.WAVE_DESKTOP_UPDATE_PUBLIC_KEY }}
+          # The Wave account: the sync service and Google's Desktop client, built into main
+          # (docs/agents/desktop-checks.md, Wave account). Google doesn't treat a Desktop client's
+          # secret as confidential, and every installer carries it, so it is a variable.
+          MAIN_VITE_WAVE_SYNC_URL: ${{ vars.WAVE_SYNC_URL }}
+          MAIN_VITE_WAVE_GOOGLE_DESKTOP_CLIENT_ID: ${{ vars.WAVE_GOOGLE_DESKTOP_CLIENT_ID }}
+          MAIN_VITE_WAVE_GOOGLE_DESKTOP_CLIENT_SECRET: ${{ vars.WAVE_GOOGLE_DESKTOP_CLIENT_SECRET }}
+        run: |
+          pnpm --filter @wave/desktop build
+          mode=()
+          if [ "$PREPARE_WINDOWS" = true ]; then mode=(prepare); fi
+          pnpm --filter @wave/desktop exec node scripts/package-release.ts "$RELEASE_TAG" "$RUNNER_TEMP/desktop-release" "${mode[@]}"
+
+      - name: Keep the desktop installers and build evidence
+        if: env.DESKTOP_RELEASE == 'true'
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: desktop-release-${{ matrix.platform }}
+          path: |
+            ${{ runner.temp }}/desktop-release/*.exe
+            ${{ runner.temp }}/desktop-release/*.blockmap
+            ${{ runner.temp }}/desktop-release/*.AppImage
+            ${{ runner.temp }}/desktop-release/windows-app.tar
+            ${{ runner.temp }}/desktop-release/build.json
+          if-no-files-found: error
+          retention-days: 14
 
       # Linux runners have no display, so the window opens on a virtual one.
       - name: Smoke test
@@ -1136,7 +1175,7 @@ jobs:
   # It holds no secret and opens no Environment, so a healthy ti release still needs no approval.
   release-gate:
     name: Release gate
-    needs: [source, changes, secret-scan, checks, native-tests, notes, android]
+    needs: [source, changes, secret-scan, checks, native-tests, notes, android, desktop]
     if: >-
       ${{ !cancelled() && (needs.checks.outputs.release_tag != '' ||
       startsWith(github.ref, 'refs/tags/v') ||
@@ -1146,11 +1185,17 @@ jobs:
       contents: read
     outputs:
       sha: ${{ steps.admit.outputs.sha }}
+      desktop: ${{ steps.desktop.outputs.admitted }}
+      sign_windows: ${{ steps.desktop.outputs.sign_windows }}
+    env:
+      DESKTOP_RELEASE: ${{ needs.checks.outputs.release_tag != '' && (endsWith(needs.checks.outputs.release_tag, '-ti') || vars.RELEASE_DESKTOP_MAIN == 'on') }}
     steps:
       - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.1.0
         with:
           ref: ${{ needs.source.outputs.sha }}
-          sparse-checkout: scripts/ci
+          sparse-checkout: |
+            scripts/ci
+            apps/updates
           persist-credentials: false
 
       - uses: actions/setup-node@a0853c24544627f65ddf259abe73b1d18a591444 # v5.0.0
@@ -1180,10 +1225,174 @@ jobs:
           node -e 'console.log(`sha=${JSON.parse(require("fs").readFileSync(process.argv[1], "utf8")).source}`)' \
             "$RUNNER_TEMP/provenance.json" | tee -a "$GITHUB_OUTPUT"
 
+      - name: Get both desktop installers
+        if: env.DESKTOP_RELEASE == 'true'
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
+        with:
+          pattern: desktop-release-*
+          path: ${{ runner.temp }}/desktop
+
+      - name: Admit the desktop installers
+        id: desktop
+        if: env.DESKTOP_RELEASE == 'true'
+        env:
+          DESKTOP_RESULT: ${{ needs.desktop.result }}
+          WINDOWS_SIGNPATH: ${{ vars.WAVE_WINDOWS_SIGNPATH }}
+          RELEASE_TAG: ${{ needs.checks.outputs.release_tag }}
+        run: |
+          test "$DESKTOP_RESULT" = success
+          options=()
+          case "$WINDOWS_SIGNPATH" in
+            on) options=(--pending-windows) ;;
+            ''|off) [[ "$RELEASE_TAG" == *-ti ]] || { echo "::error::Stable desktop requires SignPath."; exit 1; } ;;
+            *) echo "::error::Set WAVE_WINDOWS_SIGNPATH to on or off."; exit 1 ;;
+          esac
+          node apps/updates/scripts/desktop-release.ts admit "$RUNNER_TEMP/provenance.json" "$RUNNER_TEMP/desktop" "${options[@]}"
+          if [ "$WINDOWS_SIGNPATH" = on ]; then echo "sign_windows=true" >> "$GITHUB_OUTPUT"; fi
+          echo "admitted=true" >> "$GITHUB_OUTPUT"
+
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:
           name: release-provenance
           path: ${{ runner.temp }}/provenance.json
+          retention-days: 14
+
+  sign-windows:
+    name: Sign the Windows release
+    needs: [release-gate, checks]
+    if: >-
+      ${{ needs.release-gate.result == 'success' && needs.release-gate.outputs.sign_windows == 'true' &&
+      ((github.event_name == 'push' && github.ref == 'refs/heads/main') ||
+      ((github.event_name == 'push' || github.event_name == 'workflow_dispatch') && startsWith(github.ref, 'refs/tags/v'))) }}
+    runs-on: windows-latest
+    environment: ${{ github.ref == 'refs/heads/main' && 'ti' || 'main' }}
+    permissions:
+      actions: read
+      contents: read
+    defaults:
+      run:
+        shell: bash
+    outputs:
+      build_sha256: ${{ steps.final.outputs.build_sha256 }}
+      artifact_id: ${{ steps.signed-windows.outputs.artifact-id }}
+    env:
+      RELEASE_TAG: ${{ needs.checks.outputs.release_tag }}
+      WAVE_DESKTOP_CHANNEL: ${{ endsWith(needs.checks.outputs.release_tag, '-ti') && 'ti' || 'main' }}
+      WAVE_DESKTOP_UPDATE_PUBLIC_KEY: ${{ vars.WAVE_DESKTOP_UPDATE_PUBLIC_KEY }}
+      SIGNPATH_CERTIFICATE_SHA256: ${{ vars.SIGNPATH_CERTIFICATE_SHA256 }}
+    steps:
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.1.0
+        with:
+          ref: ${{ needs.release-gate.outputs.sha }}
+          persist-credentials: false
+
+      - uses: pnpm/action-setup@b906affcce14559ad1aafd4ab0e942779e9f58b1 # v4.3.0
+
+      - uses: actions/setup-node@a0853c24544627f65ddf259abe73b1d18a591444 # v5.0.0
+        with:
+          node-version: 22
+          cache: pnpm
+
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
+        with:
+          name: release-provenance
+          path: ${{ runner.temp }}/provenance
+
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
+        with:
+          pattern: desktop-release-*
+          path: ${{ runner.temp }}/desktop
+
+      - name: Verify the admitted Windows app payload
+        env:
+          SIGNPATH_ORGANIZATION_ID: ${{ vars.SIGNPATH_ORGANIZATION_ID }}
+          SIGNPATH_PROJECT_SLUG: ${{ vars.SIGNPATH_PROJECT_SLUG }}
+          SIGNPATH_SIGNING_POLICY_SLUG: ${{ vars.SIGNPATH_SIGNING_POLICY_SLUG }}
+        run: |
+          node apps/updates/scripts/desktop-release.ts verify "$RUNNER_TEMP/provenance/provenance.json" "$RUNNER_TEMP/desktop" --pending-windows
+          for setting in SIGNPATH_ORGANIZATION_ID SIGNPATH_PROJECT_SLUG SIGNPATH_SIGNING_POLICY_SLUG; do
+            test -n "${!setting}" || { echo "::error::Missing $setting"; exit 1; }
+          done
+          [[ "$SIGNPATH_CERTIFICATE_SHA256" =~ ^[A-Fa-f0-9]{64}$ ]] || { echo "::error::Invalid SIGNPATH_CERTIFICATE_SHA256"; exit 1; }
+
+      - name: Extract the admitted Windows app
+        shell: pwsh
+        run: |
+          New-Item -ItemType Directory "$env:RUNNER_TEMP/windows-work" | Out-Null
+          & "$env:SystemRoot/System32/tar.exe" -xf "$env:RUNNER_TEMP/desktop/desktop-release-win32/windows-app.tar" -C "$env:RUNNER_TEMP/windows-work"
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+
+      - name: Install the Windows packager
+        run: pnpm install --frozen-lockfile --filter "@wave/desktop..."
+
+      - name: Upload the admitted Wave.exe for signing
+        id: unsigned-app
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: signpath-unsigned-app-${{ github.run_attempt }}
+          path: ${{ runner.temp }}/windows-work/win-unpacked/Wave.exe
+          if-no-files-found: error
+          retention-days: 14
+
+      - name: Sign Wave.exe
+        uses: SignPath/github-action-submit-signing-request@4a84eb4ad763290f059275786f2deed97c2c672b # v3.1
+        with:
+          api-token: ${{ secrets.SIGNPATH_API_TOKEN }}
+          organization-id: ${{ vars.SIGNPATH_ORGANIZATION_ID }}
+          project-slug: ${{ vars.SIGNPATH_PROJECT_SLUG }}
+          signing-policy-slug: ${{ vars.SIGNPATH_SIGNING_POLICY_SLUG }}
+          artifact-configuration-slug: wave-exe
+          github-artifact-id: ${{ steps.unsigned-app.outputs.artifact-id }}
+          wait-for-completion: true
+          wait-for-completion-timeout-in-seconds: 3600
+          output-artifact-directory: ${{ runner.temp }}/signpath-app
+
+      - name: Build NSIS with the signed Wave.exe
+        id: installer
+        run: |
+          pnpm --filter @wave/desktop exec node scripts/package-release.ts "$RELEASE_TAG" "$RUNNER_TEMP/windows-work" installer "$RUNNER_TEMP/signpath-app"
+          name="$(node --input-type=module -e 'import { artifactName } from "./apps/updates/src/desktopProtocol.ts"; console.log(artifactName("win32", process.argv[1]));' -- "${RELEASE_TAG#v}")"
+          echo "name=$name" >> "$GITHUB_OUTPUT"
+
+      - name: Upload the NSIS installer for signing
+        id: unsigned-installer
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: signpath-unsigned-installer-${{ github.run_attempt }}
+          path: ${{ runner.temp }}/windows-work/${{ steps.installer.outputs.name }}
+          if-no-files-found: error
+          retention-days: 14
+
+      - name: Sign the NSIS installer
+        uses: SignPath/github-action-submit-signing-request@4a84eb4ad763290f059275786f2deed97c2c672b # v3.1
+        with:
+          api-token: ${{ secrets.SIGNPATH_API_TOKEN }}
+          organization-id: ${{ vars.SIGNPATH_ORGANIZATION_ID }}
+          project-slug: ${{ vars.SIGNPATH_PROJECT_SLUG }}
+          signing-policy-slug: ${{ vars.SIGNPATH_SIGNING_POLICY_SLUG }}
+          artifact-configuration-slug: wave-nsis
+          github-artifact-id: ${{ steps.unsigned-installer.outputs.artifact-id }}
+          wait-for-completion: true
+          wait-for-completion-timeout-in-seconds: 3600
+          output-artifact-directory: ${{ runner.temp }}/signpath-installer
+
+      - name: Verify the signed installer and generate its blockmap
+        id: final
+        run: |
+          pnpm --filter @wave/desktop exec node scripts/package-release.ts "$RELEASE_TAG" "$RUNNER_TEMP/windows-work" finalize "$RUNNER_TEMP/signpath-installer"
+          hash=$(sha256sum "$RUNNER_TEMP/windows-work/build.json")
+          echo "build_sha256=${hash%% *}" >> "$GITHUB_OUTPUT"
+
+      - name: Keep the signed Windows release
+        id: signed-windows
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: signed-desktop-windows-${{ github.run_attempt }}
+          path: |
+            ${{ runner.temp }}/windows-work/${{ steps.installer.outputs.name }}
+            ${{ runner.temp }}/windows-work/${{ steps.installer.outputs.name }}.blockmap
+            ${{ runner.temp }}/windows-work/build.json
+          if-no-files-found: error
           retention-days: 14
 
   # Signs the APK and publishes the release the Checks job decided on: a hand-pushed tag, or a
@@ -1194,14 +1403,19 @@ jobs:
   # before the native tests pass, and the stable path keeps its full APK build policy.
   release:
     name: Publish versioned release
-    needs: [release-gate, checks, android, notes]
+    needs: [release-gate, checks, android, notes, sign-windows]
     if: >-
-      ${{ needs.release-gate.result == 'success' && (needs.checks.outputs.release_tag != '' ||
+      ${{ !cancelled() && needs.release-gate.result == 'success' &&
+      (needs.release-gate.outputs.sign_windows != 'true' || needs.sign-windows.result == 'success') &&
+      (needs.checks.outputs.release_tag != '' ||
       (github.event_name == 'push' && github.ref == 'refs/heads/main')) }}
     # The release secrets, the APK's release key among them, live only in the release
     # Environments (docs/spec.md, Release secrets). ti opens to pushes to main with no approval; every tag run, a promotion's or a
     # hand-pushed -ti tag's, takes main and waits for the owner. The channel stays the run's.
     environment: ${{ github.ref == 'refs/heads/main' && 'ti' || 'main' }}
+    concurrency:
+      group: ${{ needs.release-gate.outputs.desktop == 'true' && format('desktop-release-{0}', endsWith(needs.checks.outputs.release_tag, '-ti') && 'ti' || 'main') || format('release-{0}', github.run_id) }}
+      cancel-in-progress: false
     runs-on: ubuntu-latest
     permissions:
       contents: write
@@ -1247,6 +1461,32 @@ jobs:
         env:
           UNSIGNED: ${{ needs.android.outputs.artifact }}
         run: node scripts/ci/release-gate.ts verify "$RUNNER_TEMP/provenance/provenance.json" "$RUNNER_TEMP/unsigned/$UNSIGNED"
+
+      - name: Get the admitted desktop installers
+        if: needs.release-gate.outputs.desktop == 'true'
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
+        with:
+          pattern: desktop-release-*
+          path: ${{ runner.temp }}/desktop
+
+      - name: Get the signed Windows release
+        if: needs.release-gate.outputs.sign_windows == 'true' && needs.sign-windows.outputs.artifact_id != ''
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
+        with:
+          artifact-ids: ${{ needs.sign-windows.outputs.artifact_id }}
+          path: ${{ runner.temp }}/desktop/desktop-release-win32
+
+      - name: Check the desktop installers against the gate's record
+        if: needs.release-gate.outputs.desktop == 'true'
+        env:
+          SIGN_WINDOWS: ${{ needs.release-gate.outputs.sign_windows }}
+          WINDOWS_BUILD_SHA256: ${{ needs.sign-windows.outputs.build_sha256 }}
+        run: |
+          if [ "$SIGN_WINDOWS" = true ]; then
+            node apps/updates/scripts/desktop-release.ts finalize-windows "$RUNNER_TEMP/provenance/provenance.json" "$RUNNER_TEMP/desktop" "$WINDOWS_BUILD_SHA256"
+          else
+            node apps/updates/scripts/desktop-release.ts verify "$RUNNER_TEMP/provenance/provenance.json" "$RUNNER_TEMP/desktop"
+          fi
 
       # Every APK a phone installs carries the release key and its rotation proof from the old
       # key, full builds and repacks alike, on both channels (docs/spec.md, APK signing).
@@ -1325,6 +1565,7 @@ jobs:
         if: needs.checks.outputs.release_tag != ''
         env:
           GH_TOKEN: ${{ github.token }}
+          DESKTOP_ADMITTED: ${{ needs.release-gate.outputs.desktop }}
           RELEASE_TAG: ${{ needs.checks.outputs.release_tag }}
           RELEASE_SHA: ${{ needs.release-gate.outputs.sha }}
           PATCH_NOTES: ${{ needs.notes.outputs.notes }}
@@ -1335,7 +1576,12 @@ jobs:
             export RELEASE_NOTES_FILE="$RUNNER_TEMP/patch-notes.md"
             printf '%s\n' "$PATCH_NOTES" > "$RELEASE_NOTES_FILE"
           fi
-          scripts/ci/publish-release.sh "$RUNNER_TEMP/release/$APK_NAME"
+          desktop=()
+          if [ "$DESKTOP_ADMITTED" = "true" ]; then
+            assets="$(node apps/updates/scripts/desktop-release.ts names "$RELEASE_TAG" "$RUNNER_TEMP/desktop")"
+            mapfile -t desktop <<< "$assets"
+          fi
+          scripts/ci/publish-release.sh "$RUNNER_TEMP/release/$APK_NAME" "${desktop[@]}"
 
       # The rolling link to what's on the main channel.
       - name: Move the latest build
@@ -1403,3 +1649,12 @@ jobs:
           WAVE_UPDATE_CHANNEL: ${{ needs.android.outputs.update_channel }}
           WAVE_RUNTIME_VERSION: ${{ needs.android.outputs.runtime_version }}
         run: node apps/updates/scripts/publish.ts "$RUNNER_TEMP/update"
+
+      - name: Publish the desktop update
+        if: steps.published.outputs.url != '' && needs.release-gate.outputs.desktop == 'true'
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          WAVE_DESKTOP_UPDATE_SIGNING_KEY: ${{ secrets.WAVE_DESKTOP_UPDATE_SIGNING_KEY }}
+          WAVE_DESKTOP_NOTES: ${{ needs.notes.outputs.desktop_localized }}
+        run: node apps/updates/scripts/desktop-release.ts publish "$RUNNER_TEMP/provenance/sealed.json" "$RUNNER_TEMP/desktop"

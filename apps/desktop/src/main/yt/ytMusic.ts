@@ -6,7 +6,7 @@
  * A stream address and its headers are the session's: they go to the audio process and are
  * never logged or shown.
  */
-import { queuedYtTracks, ytTrackId, type QueueEntry, type YtAlbumSong } from "@wave/core";
+import { parseTrackId, type QueueEntry, type YtAlbumSong } from "@wave/core";
 import { Database } from "@wave/client";
 import * as Context from "effect/Context";
 import * as Effect from "effect/Effect";
@@ -55,10 +55,12 @@ export interface YtMusicShape {
   readonly song: (videoId: string) => YtAlbumSong | undefined;
   /** Remembers songs another page brought (artist pages, radios, Related), so they can play. */
   readonly keep: (songs: readonly YtAlbumSong[]) => void;
+  /** Keeps a large batch available until the play request has settled. */
+  readonly withSongs: <A>(songs: readonly YtAlbumSong[], play: () => Promise<A>) => Promise<A>;
   /** Where the engine fetches `videoId` from; `fresh` skips the JVM's cached address. */
   readonly resolve: (videoId: string, fresh: boolean) => Promise<ResolvedStream>;
   /** Keeps the details of the YT Music songs in `entries` (a queue's) for the next launch. */
-  readonly keepQueued: (entries: readonly QueueEntry[]) => void;
+  readonly keepQueued: (entries: readonly QueueEntry[], undo?: readonly QueueEntry[]) => void;
   /** A cover from YouTube's image hosts as a data URL, or null. */
   readonly artwork: (url: string) => Promise<string | null>;
 }
@@ -127,29 +129,48 @@ export const createYtMusic = (deps: YtMusicDeps): YtMusicShape => {
   const fetchImage = deps.fetch ?? globalThis.fetch;
   const maxArtworkBytes = deps.maxArtworkBytes ?? 2_000_000;
   const known = new Map<string, YtAlbumSong>();
-  /**
-   * Keeps [song] for playback. A later answer can know less about it (a radio's first item has
-   * no album line), so what it leaves out is taken from what Wave knew already.
-   */
+  let queued = new Map<string, YtAlbumSong>();
+  const batches = new Set<ReadonlyMap<string, YtAlbumSong>>();
+  const songOf = (videoId: string): YtAlbumSong | undefined => {
+    for (const batch of batches) {
+      const song = batch.get(videoId);
+      if (song !== undefined) return song;
+    }
+    return queued.get(videoId) ?? known.get(videoId);
+  };
+  // A later search can know less about a song already seen (a radio often omits its album).
+  const withDetails = (song: YtAlbumSong): YtAlbumSong => {
+    const before = songOf(song.videoId);
+    return before === undefined
+      ? song
+      : {
+          ...song,
+          album: song.album ?? before.album,
+          albumId: song.albumId ?? before.albumId,
+          artworkUrl: song.artworkUrl ?? before.artworkUrl,
+          durationMs: song.durationMs ?? before.durationMs,
+        };
+  };
   const remember = (song: YtAlbumSong) => {
-    const before = known.get(song.videoId);
+    const updated = withDetails(song);
     known.delete(song.videoId);
-    known.set(
-      song.videoId,
-      before === undefined
-        ? song
-        : {
-            ...song,
-            album: song.album ?? before.album,
-            albumId: song.albumId ?? before.albumId,
-            artworkUrl: song.artworkUrl ?? before.artworkUrl,
-            durationMs: song.durationMs ?? before.durationMs,
-          },
-    );
+    known.set(song.videoId, updated);
+    if (queued.has(song.videoId)) queued.set(song.videoId, updated);
     if (known.size > KNOWN_LIMIT) known.delete(known.keys().next().value!);
   };
+  const songsFor = (entries: readonly QueueEntry[]) => {
+    const songs = new Map<string, YtAlbumSong>();
+    for (const { trackId } of entries) {
+      const ref = parseTrackId(trackId);
+      if (ref?.kind !== "yt" || songs.has(ref.videoId)) continue;
+      const song = songOf(ref.videoId);
+      if (song) songs.set(ref.videoId, song);
+    }
+    return songs;
+  };
   try {
-    for (const song of ytSongs(JSON.parse(deps.read(QUEUED_YT_TRACKS) ?? "[]"))) remember(song);
+    for (const song of ytSongs(JSON.parse(deps.read(QUEUED_YT_TRACKS) ?? "[]")))
+      queued.set(song.videoId, song);
   } catch {
     // A queue saved by a broken build: its songs are skipped like any unknown song.
   }
@@ -201,9 +222,18 @@ export const createYtMusic = (deps: YtMusicDeps): YtMusicShape => {
         return { status, songs: [] };
       }
     },
-    song: (videoId) => known.get(videoId),
+    song: songOf,
     keep: (songs) => {
       for (const song of songs) remember(song);
+    },
+    withSongs: async (songs, play) => {
+      const batch = new Map(songs.map((song) => [song.videoId, withDetails(song)]));
+      batches.add(batch);
+      try {
+        return await play();
+      } finally {
+        batches.delete(batch);
+      }
     },
     resolve: async (videoId, fresh) => {
       if (!enabled()) throw coded("ERR_YT_DISABLED", "YT Music is off");
@@ -230,9 +260,10 @@ export const createYtMusic = (deps: YtMusicDeps): YtMusicShape => {
             : null,
       };
     },
-    keepQueued: (entries) => {
-      const byTrack = new Map([...known.values()].map((song) => [ytTrackId(song.videoId), song]));
-      deps.save(QUEUED_YT_TRACKS, JSON.stringify(queuedYtTracks(entries, byTrack)));
+    keepQueued: (entries, undo = []) => {
+      const current = songsFor(entries);
+      queued = new Map([...songsFor(undo), ...current]);
+      deps.save(QUEUED_YT_TRACKS, JSON.stringify([...current.values()]));
     },
     artwork: (url) => {
       if (!artworkAllowed(url)) return Promise.resolve(null);
