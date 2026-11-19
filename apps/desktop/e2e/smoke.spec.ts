@@ -199,6 +199,7 @@ test("the page has no Node and only the typed bridge", async () => {
       "wave.artistPage.ask",
       "wave.artistPage.play",
       "wave.streamed.menu",
+      "wave.streamed.artist",
       "wave.streamed.run",
     ],
   });

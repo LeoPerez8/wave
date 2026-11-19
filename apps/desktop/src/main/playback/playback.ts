@@ -372,9 +372,12 @@ export const playbackLayer = Layer.effect(
         }
         return { kind: "downloading" };
       }
-      if (index === undefined) return playList(ids, context, shuffle, hasFile, isMissing);
+      /** The listed songs whose drive is disconnected. */
+      const unavailable = ids.filter((id) => songs.get(id)?.unavailable === true).length;
+      if (index === undefined)
+        return playList(ids, context, shuffle, hasFile, isMissing, unavailable);
       const play = skipMissingSongs(ids, index, hasFile);
-      if (play === null) return { kind: "nothing", missing: 0 };
+      if (play === null) return { kind: "nothing", missing: 0, unavailable };
       await moved(
         session.dispatch({
           type: "play",
@@ -397,6 +400,7 @@ export const playbackLayer = Layer.effect(
       shuffle: boolean | undefined,
       hasFile: (id: string) => boolean,
       isMissing: (id: string) => boolean,
+      unavailable: number,
     ): Promise<PlayStart> => {
       const listed = ids.filter((id) => hasFile(id) || isMissing(id));
       const streams = new Map<string, YtAlbumSong>();
@@ -406,7 +410,8 @@ export const playbackLayer = Layer.effect(
           if (song !== null) streams.set(String(track.id), { ...song, albumId: null });
         }
       const play = listPlay(listed, { hasFile, streams: (id) => streams.has(id) });
-      if (play.kind === "nothing") return { kind: "nothing", missing: play.missing.length };
+      if (play.kind === "nothing")
+        return { kind: "nothing", missing: play.missing.length, unavailable };
       yt.keep(play.streamed.map((id) => streams.get(id)!));
       await moved(
         session.dispatch({
@@ -475,7 +480,8 @@ export const playbackLayer = Layer.effect(
         const ids = browseTrackIds(db, scope);
         const chosen = index === undefined ? undefined : ids[index];
         if (index !== undefined && chosen === undefined) throw new Error("Invalid song position");
-        // A song from Search plays alone, as on the phone with YT Music off.
+        // A song from Search plays alone; with YT Music on, main starts its Magic Queue instead
+        // (`playSearchSong` in ytServices.ts).
         const alone = scope.kind === "search" && chosen !== undefined;
         return activate(
           alone ? [chosen] : ids,

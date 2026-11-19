@@ -1186,6 +1186,44 @@ test("a YouTube Music song found in Search plays alone and starts a Magic Queue"
   });
 });
 
+test("a Library song clicked in Search starts a faithful Magic Queue, and plays alone with YT Music off", async () => {
+  await withFile(async (file) => {
+    const { runtime, exposed } = connect(file);
+    try {
+      const wave = exposed.get("wave") as WaveBridge;
+      const db = await runtime.runPromise(
+        Effect.gen(function* () {
+          const db = (yield* Database) as unknown as TestDatabase;
+          for (const title of ["Pink Moon", "Pink Road"])
+            addTrack(db, { title, artist: "Nick Drake", album: "Pink Moon", durationMs: 124_000 });
+          return db;
+        }),
+      );
+      const scope = { kind: "search", query: "pink" } as const;
+      const tapped = (await wave.library.browse(scope, 0, 10)).items[1]!;
+      assert.deepEqual(await wave.playback.start(scope, 1), {
+        kind: "playing",
+        streamed: 0,
+        leftOut: 0,
+      });
+      assert.equal((await wave.playback.view()).current?.title, tapped.title);
+      assert.equal((await wave.magicQueue.view()).title, tapped.title);
+      const session = JSON.parse(preference(db, "playback.magicQueue")!) as { faithful?: boolean };
+      assert.equal(session.faithful, true);
+      await until(async () => (await wave.playback.view()).length > 1);
+      const queue = await wave.playback.queue(0, 20);
+      assert.equal(queue.items[0]!.title, tapped.title, "the Magic Queue goes on from the song");
+
+      await wave.settings.setYtMusic(false);
+      await wave.playback.start(scope, 0);
+      assert.equal((await wave.playback.view()).length, 1, "alone, in a queue of one");
+      assert.equal((await wave.magicQueue.view()).title, null);
+    } finally {
+      await runtime.dispose();
+    }
+  });
+});
+
 test("Search finds YouTube Music songs and one plays from the results as a new queue", async () => {
   await withFile(async (file) => {
     const { runtime, exposed, engineCalls, yt } = connect(file);
@@ -1230,6 +1268,57 @@ test("Search finds YouTube Music songs and one plays from the results as a new q
       assert.equal((await wave.playback.view()).current?.favorite, true, "its star waits for it");
       await wave.playback.favorite();
       assert.equal((await wave.playback.view()).current?.favorite, false);
+    } finally {
+      await runtime.dispose();
+    }
+  });
+});
+
+test("a streamed song's artist name leads to the Library's artist when it has that name", async () => {
+  await withFile(async (file) => {
+    const { runtime, exposed, handlers } = connect(file);
+    try {
+      const wave = exposed.get("wave") as WaveBridge;
+      await runtime.runPromise(
+        Effect.gen(function* () {
+          addTrack((yield* Database) as unknown as TestDatabase, {
+            title: "Road",
+            artist: "Nick Drake",
+          });
+        }),
+      );
+      const mine = await wave.streamed.artist("nick drake");
+      assert.equal(mine.kind, "library");
+      assert.equal(mine.kind === "library" && mine.artist.name, "Nick Drake");
+      assert.deepEqual(await wave.streamed.artist("John Martyn"), {
+        kind: "yt",
+        name: "John Martyn",
+      });
+      await assert.rejects(handlers.get("streamed.artist")!(trusted, 7));
+    } finally {
+      await runtime.dispose();
+    }
+  });
+});
+
+test("Discover's Magic Queue row draws from the playlists' YouTube Music entries too", async () => {
+  await withFile(async (file) => {
+    const { runtime, exposed } = connect(file);
+    try {
+      const wave = exposed.get("wave") as WaveBridge;
+      await wave.yt.search("pink moon");
+      const made = await wave.playlists.create("Evening");
+      await wave.streamed.run("bcdefghijkl", "addToPlaylist", made.id);
+      const picks = await wave.discover.picks();
+      assert.deepEqual(
+        picks.items.map((row) => [row.videoId, row.title]),
+        [["bcdefghijkl", "Road"]],
+      );
+      await wave.magicQueue.startStreamed("bcdefghijkl");
+      assert.equal((await wave.playback.view()).current?.videoId, "bcdefghijkl");
+
+      await wave.settings.setYtMusic(false);
+      assert.deepEqual((await wave.discover.picks()).items, []);
     } finally {
       await runtime.dispose();
     }
@@ -2422,16 +2511,52 @@ test("Play and Shuffle on a list where nothing can play say so, with its missing
       assert.deepEqual(await wave.playback.start(scope, undefined, false), {
         kind: "nothing",
         missing: 2,
+        unavailable: 0,
       });
       assert.deepEqual(await wave.playback.start(scope, undefined, true), {
         kind: "nothing",
         missing: 2,
+        unavailable: 0,
       });
       assert.equal((await wave.playback.view()).current, null);
       assert.ok(
         !downloads.some((line) => line.startsWith("downloads.enqueueAll ")),
         "Play downloads nothing by itself",
       );
+    } finally {
+      await runtime.dispose();
+    }
+  });
+});
+
+test("Play on a list where nothing can play counts the songs on a disconnected drive, none for an empty playlist", async () => {
+  await withFile(async (file) => {
+    const music = join(dirname(file), "Music");
+    mkdirSync(music);
+    writeFileSync(join(music, "One.flac"), "music");
+    const { runtime, exposed } = connect(file);
+    const wave = exposed.get("wave") as WaveBridge;
+    try {
+      const library = await runtime.runPromise(DesktopLibrary);
+      await library.refresh();
+      const playlistId = await runtime.runPromise(
+        Effect.gen(function* () {
+          const db = (yield* Database) as unknown as TestDatabase;
+          return createPlaylist(db, "Evening", [], 1000).playlistId;
+        }),
+      );
+      assert.deepEqual(await wave.playback.start({ kind: "playlist", id: playlistId }), {
+        kind: "nothing",
+        missing: 0,
+        unavailable: 0,
+      });
+      rmSync(music, { recursive: true });
+      await library.refresh();
+      assert.deepEqual(await wave.playback.start({ kind: "songs" }), {
+        kind: "nothing",
+        missing: 0,
+        unavailable: 1,
+      });
     } finally {
       await runtime.dispose();
     }
@@ -2477,6 +2602,36 @@ test("Play streams the missing songs YouTube Music has and counts the ones it le
       });
       assert.equal((await wave.playback.view()).current?.title, "Here");
       assert.equal((await wave.playback.queue(0, 10)).total, 1);
+    } finally {
+      await runtime.dispose();
+    }
+  });
+});
+
+test("a missing song streamed from a list keeps the YouTube Music album Wave knows it by", async () => {
+  await withFile(async (file) => {
+    const { runtime, exposed } = connect(file);
+    const wave = exposed.get("wave") as WaveBridge;
+    try {
+      await runtime.runPromise(
+        Effect.gen(function* () {
+          const db = (yield* Database) as unknown as TestDatabase;
+          addTrack(db, { title: "Pink Moon", album: "Pink Moon", trackNumber: 1 });
+          addTrack(db, { title: "Unseen", album: "Pink Moon", trackNumber: 2 });
+          db.run(sql`UPDATE tracks SET path = NULL`);
+          db.run(sql`UPDATE tracks SET video_id = 'abcdefghijk' WHERE title = 'Pink Moon'`);
+          db.run(sql`UPDATE tracks SET video_id = 'unseenvideo' WHERE title = 'Unseen'`);
+        }),
+      );
+      await wave.yt.search("pink moon");
+      const album = (await wave.library.browse({ kind: "albums" }, 0, 1)).items[0]!;
+      await wave.playback.start({ kind: "album", id: album.id }, undefined, false);
+      const albumOf = async (videoId: string) =>
+        (await wave.streamed.menu(videoId)).entries.flatMap((entry) =>
+          entry.action === "goToAlbum" ? [entry.album] : [],
+        );
+      assert.deepEqual(await albumOf("abcdefghijk"), ["MPREb_pinkmoon"]);
+      assert.deepEqual(await albumOf("unseenvideo"), []);
     } finally {
       await runtime.dispose();
     }

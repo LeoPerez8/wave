@@ -400,15 +400,11 @@ export function App() {
             run: () => download(window.wave.downloads.missingAction("downloadAll", list)),
           };
     const said = (start: PlayStart) => {
-      if (start.kind === "nothing")
-        notify(
-          start.missing === 0
-            ? text.desktopLibrary.driveDisconnected
-            : text.desktopLibrary.nothingToPlay,
-          undefined,
-          start.missing === 0 ? undefined : offer,
-        );
-      else if (start.kind === "playing" && start.leftOut > 0)
+      if (start.kind === "nothing") {
+        // An empty list says nothing; the drive is named only when a listed song is on it.
+        if (start.missing > 0) notify(text.desktopLibrary.nothingToPlay, undefined, offer);
+        else if (start.unavailable > 0) notify(text.desktopLibrary.driveDisconnected);
+      } else if (start.kind === "playing" && start.leftOut > 0)
         notify(text.desktopLibrary.leftOut(start.leftOut), undefined, offer);
     };
     // An artist's page with Online takes YouTube Music's songs too.
@@ -427,14 +423,20 @@ export function App() {
       );
   };
   /**
-   * Where a streamed song's artist and album names lead (docs/spec-desktop.md, story 41): their
-   * YouTube Music pages, over whatever shows, Now Playing included; Back comes back here.
+   * Where a streamed song's artist and album names lead (docs/spec-desktop.md, story 41): the
+   * Library's artist page for a name it has, as Go to Artist does, else their YouTube Music
+   * pages, over whatever shows, Now Playing included; Back comes back here.
    */
   const ytLinks = {
     onArtist: (name: string) => {
-      void window.wave.yt
-        .findArtist(name)
-        .then(({ browseId }) => {
+      void window.wave.streamed
+        .artist(name)
+        .then(async (target) => {
+          if (target.kind === "library") {
+            setNowPlaying(false);
+            return go({ kind: "artist", id: target.artist.id });
+          }
+          const { browseId } = await window.wave.yt.findArtist(name);
           if (browseId === null) return setError(text.library.couldntOpenArtist);
           setNowPlaying(false);
           go({ kind: "ytArtist", id: browseId });

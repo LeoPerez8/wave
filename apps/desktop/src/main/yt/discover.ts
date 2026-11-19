@@ -22,6 +22,7 @@ import {
   libraryMixProfilesSteps,
   mixSeedArtists,
   randomMagicQueuePicks,
+  type MagicQueueSeedId,
   rankedDiscoverMixes,
   type BlendedDiscoverMix,
   type DiscoverLibraryArtist,
@@ -51,6 +52,11 @@ export interface DiscoverDeps {
     readonly songs?: readonly DiscoverLibrarySong[];
     readonly plays?: readonly DiscoverSongPlays[];
   };
+  /**
+   * The YT Music entries of the owner's playlists, by video id, each once and none the Library
+   * has as a file (Core's `MagicQueuePool`); absent, none.
+   */
+  readonly entryVideoIds?: () => readonly string[];
   /** Whether the owner knows [song]: the Library has it. */
   readonly known: (song: YtSong) => boolean;
   readonly pages: Pick<YtPagesShape, "findArtist" | "artistRadio">;
@@ -84,8 +90,11 @@ export interface DiscoverShape {
   readonly settings: () => DiscoverSettings;
   /** Keeps [value]; the next `mixes` blends and ranks by it. */
   readonly setSettings: (value: DiscoverSettings) => void;
-  /** The Magic Queue row: nine Library songs at random, by id. */
-  readonly picks: () => readonly number[];
+  /**
+   * The Magic Queue row: nine seeds at random from the Library's songs (ids) and, with YT Music
+   * on, the playlists' YT Music entries (video ids).
+   */
+  readonly picks: () => readonly MagicQueueSeedId[];
   /**
    * Today's mixes of the rows Home shows, Artist mixes first, built on the first call of the
    * day. A row Home doesn't show isn't built and reads no radio.
@@ -222,8 +231,12 @@ export const createDiscover = (deps: DiscoverDeps): DiscoverShape => {
       deps.saveSettings?.(value);
     },
     picks: () =>
-      randomMagicQueuePicks({ trackIds: deps.library().trackIds, videoIds: [] }, random).filter(
-        (id): id is number => typeof id === "number",
+      randomMagicQueuePicks(
+        {
+          trackIds: deps.library().trackIds,
+          videoIds: deps.enabled?.() === false ? [] : (deps.entryVideoIds?.() ?? []),
+        },
+        random,
       ),
     mixes: async () => {
       for (;;) {

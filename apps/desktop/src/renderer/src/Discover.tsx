@@ -21,7 +21,11 @@ const startFrom = (run: Run, id: number) =>
     }),
   );
 
-/** Nine Library songs at random, drawn again each time the row shows. */
+/** Starts a Magic Queue from a playlist's YT Music entry, streamed. */
+const startFromStreamed = (run: Run, videoId: string) =>
+  run(window.wave.magicQueue.startStreamed(videoId));
+
+/** Nine songs at random, Library songs and the playlists' YT Music entries, drawn each time the row shows. */
 export const useMagicQueuePicks = () => {
   const [picks, setPicks] = useState<readonly BrowseRow[]>([]);
   useEffect(() => {
@@ -53,17 +57,23 @@ export function MagicQueueRow({
       title={text.discover.rows["magic-queue"]}
       nested={nested}
       items={picks.map((row) => ({
-        key: String(row.id),
+        key: row.videoId ?? String(row.id),
         title: row.title,
         caption: artistName(row.artist),
         artworkHash: row.artworkHash,
+        artworkUrl: row.artworkUrl,
         label: text.discover.startMagicQueue(
           row.title,
           artistName(row.artist),
           albumName(row.album) || null,
         ),
       }))}
-      onOpen={(index) => startFrom(run, picks[index]!.id)}
+      onOpen={(index) => {
+        const row = picks[index]!;
+        return row.videoId === undefined
+          ? startFrom(run, row.id)
+          : startFromStreamed(run, row.videoId);
+      }}
     />
   );
 }

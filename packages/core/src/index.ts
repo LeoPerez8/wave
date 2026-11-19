@@ -1279,6 +1279,7 @@ export type { LibraryLookupProgress, LibraryLookupSummary } from "./libraryLooku
 export {
   YT_ARTIST_FRESH_MS,
   YT_ARTIST_SECTION_START,
+  artistPopularSongs,
   libraryAlbumFinder,
   libraryArtistFinder,
   libraryReleaseFinder,

@@ -38,7 +38,7 @@ import {
   type MissingSongsList,
 } from "../shared/downloads.ts";
 import type { MissingSongsDownloadAction } from "@wave/core";
-import { createYtFeatureHandlers } from "./yt/ytBridge.ts";
+import { createYtFeatureHandlers, playSearchSong } from "./yt/ytBridge.ts";
 import type { YtFeatures } from "./yt/ytServices.ts";
 import { Lyrics } from "./lyrics/lyrics.ts";
 import { DesktopLinks } from "./links/layer.ts";
@@ -279,9 +279,11 @@ const createHandlers = (
       (index === undefined ||
         (typeof index === "number" && Number.isSafeInteger(index) && index >= 0)) &&
       (shuffle === undefined || typeof shuffle === "boolean")
-        ? playbackCall((p) =>
-            p.start(scope, index as number | undefined, shuffle as boolean | undefined),
-          )
+        ? scope.kind === "search" && typeof index === "number"
+          ? playSearchSong(scope, index)
+          : playbackCall((p) =>
+              p.start(scope, index as number | undefined, shuffle as boolean | undefined),
+            )
         : refuse("playback.start", "invalid play context"),
     "playback.startYt": ([ids, index]) => {
       const songs = videoIds(ids);

@@ -170,8 +170,7 @@ export function Home({
                       label: [tagTitle(row.title, section.kind), artistName(row.artist)]
                         .filter(Boolean)
                         .join(", "),
-                      missing:
-                        section.kind === "song" && row.path === null && row.videoId === undefined,
+                      ...(section.kind === "song" ? { song: row } : {}),
                     }))}
                     onOpen={(index) => open(section, index)}
                     onMenu={

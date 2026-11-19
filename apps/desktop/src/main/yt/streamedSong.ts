@@ -19,6 +19,7 @@ import {
   ytSongActions,
   ytTrackId,
   type PlaylistSong,
+  type StreamedArtistTarget,
   type YtAlbumSong,
 } from "@wave/core";
 import { sql } from "drizzle-orm";
@@ -69,6 +70,19 @@ const libraryArtist =
         .find((artist) => artistPhotoName(artist.name) === key) ?? null
     );
   };
+
+/** Where the artist [name] of a streamed song leads, by the rule Go to Artist follows. */
+export const streamedArtistTarget = (
+  db: LibraryDatabase,
+  name: string,
+): StreamedArtistTarget<StreamedArtist> => {
+  const link = streamedArtistLink([name], {
+    libraryArtist: libraryArtist(db),
+    enabled: true,
+    here: "/",
+  });
+  return link?.kind === "open" ? link.target : { kind: "yt", name };
+};
 
 /** Whether [song] is starred: a pending favorite, or the Library's song for it starred. */
 export const streamedStarred = (db: LibraryDatabase, song: YtAlbumSong): boolean => {

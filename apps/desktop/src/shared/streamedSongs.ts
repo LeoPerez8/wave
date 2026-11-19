@@ -57,16 +57,22 @@ export interface StreamedContract {
     readonly args: readonly [videoId: string, playing: boolean];
     readonly result: StreamedSongMenu;
   };
+  /** Where a streamed song's artist name leads: the Library's artist with that name, or YT Music. */
+  readonly "streamed.artist": {
+    readonly args: readonly [name: string];
+    readonly result: StreamedArtistTarget<StreamedArtist>;
+  };
   readonly "streamed.run": {
     readonly args: readonly [videoId: string, action: StreamedRunAction, playlistId?: number];
     readonly result: StreamedRunResult;
   };
 }
 
-export const STREAMED_CALLS = ["streamed.menu", "streamed.run"] as const;
+export const STREAMED_CALLS = ["streamed.menu", "streamed.artist", "streamed.run"] as const;
 
 export const streamedBridge = (invoke: Invoke) => ({
   menu: (videoId: string, playing = false) => invoke("streamed.menu", videoId, playing),
+  artist: (name: string) => invoke("streamed.artist", name),
   run: (videoId: string, action: StreamedRunAction, playlistId?: number) =>
     invoke("streamed.run", videoId, action, playlistId),
 });

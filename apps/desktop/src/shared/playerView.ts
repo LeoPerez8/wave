@@ -57,10 +57,11 @@ export type PlaybackCommand =
 
 /**
  * What a list's Play, Shuffle or a tap did (Core's `listPlay`): it plays, streaming [streamed]
- * missing songs and leaving [leftOut] out; nothing can play, with [missing] songs to download;
+ * missing songs and leaving [leftOut] out; nothing can play, with [missing] songs to download
+ * and [unavailable] on a disconnected drive;
  * or the tapped missing song downloads, to play once it's in.
  */
 export type PlayStart =
   | { readonly kind: "playing"; readonly streamed: number; readonly leftOut: number }
-  | { readonly kind: "nothing"; readonly missing: number }
+  | { readonly kind: "nothing"; readonly missing: number; readonly unavailable: number }
   | { readonly kind: "downloading" };

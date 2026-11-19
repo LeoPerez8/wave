@@ -62,15 +62,17 @@ export const artistPageHandlers = (): Handlers => ({
           const { artistSection } = yield* YtFeatures;
           const playback = yield* Playback;
           const db = yield* Database;
-          const ids = artistSection.queue(artistId, picked);
-          const libraryCount = browseTrackIds(db, { kind: "artist", id: artistId }).length;
+          const { ids, listStart } = artistSection.queue(artistId, picked);
           const at =
             from === null
               ? undefined
               : "library" in from
-                ? from.library
-                : libraryCount + from.streamed;
-          if (at !== undefined && at >= ids.length)
+                ? // A Library row keeps its song wherever the Popular list puts it.
+                  ids.indexOf(
+                    browseTrackIds(db, { kind: "artist", id: artistId })[from.library] ?? "",
+                  )
+                : listStart + from.streamed;
+          if (at !== undefined && (at < 0 || at >= ids.length))
             return yield* Effect.fail(new Error("Invalid song position"));
           return yield* Effect.tryPromise({
             try: () =>

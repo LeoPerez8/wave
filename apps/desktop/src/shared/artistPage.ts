@@ -32,7 +32,15 @@ export interface ArtistSectionView {
   readonly note: YtArtistSectionNote | null;
   /** Whether YouTube Music should be asked now (`ytArtistSectionAsks`): call `ask`. */
   readonly asks: boolean;
-  /** Every song of the artist the Library doesn't have, in YouTube Music's order. */
+  /**
+   * Whether [songs] is the page's whole Popular list (Online, with the artist's list known):
+   * the Library's files and the songs YouTube Music adds, in its order. The window then shows
+   * it in place of the Library's songs table.
+   */
+  readonly popular: boolean;
+  /** Under [popular], how many of the list's first songs carry a rank (1, 2, 3…). */
+  readonly ranked: number;
+  /** The Popular list; without it, the songs the Library doesn't have, in YouTube Music's order. */
   readonly songs: Page<BrowseRow>;
   /** Their releases the Library lacks: Albums, then Singles & EPs, each newest first. */
   readonly albums: readonly YtArtistAlbum[];

@@ -216,7 +216,7 @@ export interface BridgeContract
     readonly args: readonly [type: "playNow" | "addToQueue", videoId: string];
     readonly result: void;
   };
-  /** Discover's Magic Queue row: nine Library songs at random. */
+  /** Discover's Magic Queue row: nine songs at random, the playlists' YT Music entries among them. */
   readonly "discover.picks": { readonly args: readonly []; readonly result: Page<BrowseRow> };
   /** Discover's Artist mixes, built once a day. */
   readonly "discover.mixes": { readonly args: readonly []; readonly result: DiscoverMixesView };
