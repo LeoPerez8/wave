@@ -148,8 +148,8 @@ test("the frame: scrollbars, sidebar room and icons, the narrow window and the p
     const settings = await box(page, ".settings-link");
     expect(settings.y + settings.height).toBeLessThanOrEqual(bar.y);
     await expect(page.locator(".settings-link")).toBeInViewport({ ratio: 1 });
-    // Its scrollbar doesn't push the icons off centre.
-    expect(settings.x + settings.width / 2).toBeCloseTo(32, 0);
+    // Its scrollbar doesn't push the icons off centre (the sidebar's border takes half a pixel).
+    expect(Math.abs(settings.x + settings.width / 2 - 32)).toBeLessThanOrEqual(1);
     // The playlists show as their own entries, not as a bare scrollbar.
     const firstPlaylist = playlists.getByRole("button", { name: PLAYLISTS[0], exact: true });
     await firstPlaylist.scrollIntoViewIfNeeded();
@@ -169,7 +169,11 @@ test("the frame: scrollbars, sidebar room and icons, the narrow window and the p
     expect(overlaps(field, title)).toBe(false);
     expect(overlaps(field, await box(page, ".sidebar nav .nav-item"))).toBe(false);
     await page.screenshot({ path: join(shots, "frame-dark-960-search.png") });
-    await page.keyboard.press("Escape");
+    // Leaving the open field by a click on an entry opens that entry; the entries don't move.
+    await page.keyboard.type("Song");
+    await sidebar.getByRole("button", { name: labels.albums, exact: true }).click();
+    await expect(page.locator(".content h1")).toHaveText(labels.albums);
+    await expect(page.getByRole("searchbox")).toHaveValue("");
 
     // The side panel closes from inside on every tab, and focus goes back to the bar.
     await resize(1440, 1000);

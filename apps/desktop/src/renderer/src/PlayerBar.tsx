@@ -160,10 +160,17 @@ export function PlayerBar({
   const song = view?.current ?? null;
   const playing = view?.status.state === "playing";
   const duration = view?.status.durationMs ?? song?.durationMs ?? 0;
-  const position = Math.min(drag ?? view?.status.positionMs ?? 0, Math.max(duration, 0));
+  const reported = view?.status.positionMs;
+  // A seek shows where it went until playback reports a new position, so the next arrow
+  // press moves on from there rather than from where the song was.
+  const [seek, setSeek] = useState<{ readonly to: number; readonly from: number | undefined }>();
+  if (seek !== undefined && seek.from !== reported) setSeek(undefined);
+  const held = seek !== undefined && seek.from === reported ? seek.to : undefined;
+  const position = Math.min(drag ?? held ?? reported ?? 0, Math.max(duration, 0));
   const command = (next: PlaybackCommand) => run(window.wave.playback.command(next));
   const seekTo = (positionMs: number) => {
     setDrag(undefined);
+    setSeek({ to: positionMs, from: reported });
     run(window.wave.playback.seek(positionMs));
   };
   const button = (
