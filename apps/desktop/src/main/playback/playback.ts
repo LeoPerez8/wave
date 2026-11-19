@@ -302,7 +302,10 @@ export const playbackLayer = Layer.effect(
       });
     };
     /** Keeps the queue's YT Music songs for the next launch, after anything that changes it. */
-    const keepQueued = () => yt.keepQueued(session.snapshot().queue.entries);
+    const keepQueued = () => {
+      const { queue, undoQueue } = session.snapshot();
+      yt.keepQueued(queue.entries, undoQueue?.entries);
+    };
     /**
      * Follows a queue change the session was asked for, [replaced] when it plays a new queue.
      * The queue changes even when its song then won't load, so a failure is followed too.
@@ -333,9 +336,20 @@ export const playbackLayer = Layer.effect(
       }
     };
     let pending:
-      | { ids: readonly string[]; index: number; context: NonNullable<QueueState["context"]> }
+      | {
+          ids: readonly string[];
+          index: number;
+          context: NonNullable<QueueState["context"]>;
+          streams: readonly YtAlbumSong[] | undefined;
+        }
       | undefined;
-    const activate: PlaybackShape["activate"] = async (ids, index, context, shuffle) => {
+    const activate = async (
+      ids: readonly string[],
+      index: number | undefined,
+      context: NonNullable<QueueState["context"]>,
+      shuffle?: boolean,
+      streams?: readonly YtAlbumSong[],
+    ): Promise<PlayStart> => {
       pending = undefined;
       error = null;
       const songs = new Map(
@@ -358,7 +372,7 @@ export const playbackLayer = Layer.effect(
       };
       const missing = tappedMissingSong(ids, index, (id) => !isMissing(id));
       if (missing !== null) {
-        const request = { ids, index: index!, context };
+        const request = { ids, index: index!, context, streams };
         pending = request;
         try {
           await downloads.missing([Number(missing)]);
@@ -408,18 +422,21 @@ export const playbackLayer = Layer.effect(
       const play = listPlay(listed, { hasFile, streams: (id) => streams.has(id) });
       if (play.kind === "nothing")
         return { kind: "nothing", missing: play.missing.length, unavailable };
-      yt.keep(play.streamed.map((id) => streams.get(id)!));
-      await moved(
-        session.dispatch({
-          type: "play",
-          trackIds: play.songs.map((id) => {
-            const stream = streams.get(id);
-            return stream === undefined ? id : ytTrackId(stream.videoId);
-          }),
-          context,
-          shuffle,
-        }),
-        true,
+      await yt.withSongs(
+        play.streamed.map((id) => streams.get(id)!),
+        () =>
+          moved(
+            session.dispatch({
+              type: "play",
+              trackIds: play.songs.map((id) => {
+                const stream = streams.get(id);
+                return stream === undefined ? id : ytTrackId(stream.videoId);
+              }),
+              context,
+              shuffle,
+            }),
+            true,
+          ),
       );
       return { kind: "playing", streamed: play.streamed.length, leftOut: play.leftOut.length };
     };
@@ -429,7 +446,9 @@ export const playbackLayer = Layer.effect(
       const row = rowsOf([request.ids[request.index]!])[0];
       if (row?.path == null || row.unavailable) return;
       pending = undefined;
-      void activate(request.ids, request.index, request.context).catch(failed);
+      const resume = () =>
+        activate(request.ids, request.index, request.context, undefined, request.streams);
+      void (request.streams ? yt.withSongs(request.streams, resume) : resume()).catch(failed);
     });
     yield* Effect.addFinalizer(() => Effect.sync(stopImports));
     /** The current song's row, read again only when the queue or a star changed. */
@@ -479,8 +498,6 @@ export const playbackLayer = Layer.effect(
           scope.kind === "playlist" && scope.id !== undefined
             ? playlistSongs(db, scope.id)
             : undefined;
-        if (mixed !== undefined)
-          yt.keep(mixed.flatMap((song) => ("song" in song ? [song.song] : [])));
         const ids =
           mixed?.map((song) =>
             "song" in song ? ytTrackId(song.song.videoId) : String(song.trackId),
@@ -490,14 +507,18 @@ export const playbackLayer = Layer.effect(
         // A song from Search plays alone; with YT Music on, main starts its Magic Queue instead
         // (`playSearchSong` in ytServices.ts).
         const alone = scope.kind === "search" && chosen !== undefined;
-        return activate(
-          alone ? [chosen] : ids,
-          alone ? 0 : index,
-          scope.kind === "search"
-            ? { kind: "search", id: null }
-            : { kind: scope.kind, id: scope.id === undefined ? null : String(scope.id) },
-          shuffle,
-        );
+        const streams = mixed?.flatMap((entry) => ("song" in entry ? [entry.song] : []));
+        const play = () =>
+          activate(
+            alone ? [chosen] : ids,
+            alone ? 0 : index,
+            scope.kind === "search"
+              ? { kind: "search", id: null }
+              : { kind: scope.kind, id: scope.id === undefined ? null : String(scope.id) },
+            shuffle,
+            streams,
+          );
+        return streams ? yt.withSongs(streams, play) : play();
       },
       startYt: async (videoIds, index) => {
         pending = undefined;

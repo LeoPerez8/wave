@@ -1,15 +1,16 @@
 import { useEffect, useState } from "react";
 import { versionHistoryEntries } from "@wave/core";
-import type { DesktopVersionHistory } from "../../shared/bridge.ts";
+import { VERSION_HISTORY_PAGE_SIZE, type DesktopVersionHistory } from "../../shared/bridge.ts";
+import { Pager } from "./Pager.tsx";
 import { language, text } from "./text.ts";
 
 export function VersionHistory() {
   const [history, setHistory] = useState<DesktopVersionHistory>();
   const [failed, setFailed] = useState(false);
-  const [attempt, retry] = useState(0);
+  const [request, setRequest] = useState({ offset: 0, reload: true });
   useEffect(() => {
     let active = true;
-    void window.wave.settings.versionHistory().then(
+    void window.wave.settings.versionHistory(request.offset, request.reload).then(
       (answer) => {
         if (active) setHistory(answer);
       },
@@ -20,12 +21,13 @@ export function VersionHistory() {
     return () => {
       active = false;
     };
-  }, [attempt]);
+  }, [request]);
   const labels = text.versionHistory;
+  const page = history?.releases;
   const entries =
-    history?.releases && history.channel
+    page && history?.channel
       ? versionHistoryEntries({
-          releases: history.releases,
+          releases: page.items,
           runningVersion: history.version,
           channel: history.channel,
           language,
@@ -34,7 +36,7 @@ export function VersionHistory() {
   return (
     <>
       <h2>{text.settings.pages.versionHistory}</h2>
-      {history && !entries.some((entry) => entry.current) && (
+      {history && !history.currentListed && (
         <p>
           {history.version} <small>{labels.current}</small>
         </p>
@@ -46,7 +48,7 @@ export function VersionHistory() {
             onClick={() => {
               setHistory(undefined);
               setFailed(false);
-              retry(attempt + 1);
+              setRequest({ offset: 0, reload: true });
             }}
           >
             {labels.tryAgain}
@@ -73,6 +75,24 @@ export function VersionHistory() {
             ))}
           </article>
         ))
+      )}
+      {!failed && page && (
+        <Pager
+          page={page}
+          pageSize={VERSION_HISTORY_PAGE_SIZE}
+          previous={() =>
+            setRequest({
+              offset: Math.max(0, page.offset - VERSION_HISTORY_PAGE_SIZE),
+              reload: false,
+            })
+          }
+          next={() =>
+            setRequest({
+              offset: page.offset + VERSION_HISTORY_PAGE_SIZE,
+              reload: false,
+            })
+          }
+        />
       )}
     </>
   );

@@ -4,7 +4,11 @@ import { mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { test } from "node:test";
-import { desktopFileDigest, signDesktopUpdate } from "../../../../updates/src/desktopSignature.ts";
+import {
+  desktopFileDigest,
+  signDesktopUpdate,
+  verifiedDesktopUpdate,
+} from "../../../../updates/src/desktopSignature.ts";
 import { authorizeUpdate, verifyInstaller } from "./policy.ts";
 
 test("only an explicit, fresh signed rollback may downgrade and changed installer bytes are refused", async () => {
@@ -24,10 +28,12 @@ test("only an explicit, fresh signed rollback may downgrade and changed installe
     } as const;
     const check = (rollback: boolean, floor: number) =>
       authorizeUpdate(
-        signDesktopUpdate({ ...manifest, rollback }, privateKey),
-        publicKey,
-        "ti",
-        "linux",
+        verifiedDesktopUpdate(
+          signDesktopUpdate({ ...manifest, rollback }, privateKey),
+          publicKey,
+          "ti",
+          "linux",
+        ),
         "0.72.0-ti",
         20,
         floor,

@@ -249,3 +249,24 @@ test("a song known with its album keeps it when a later answer leaves the album 
   yt.keep([{ ...songOf("abcdefghijk", "Pink Moon"), album: "Bryter Layter" }] as never);
   assert.equal(yt.song("abcdefghijk")?.album, "Bryter Layter");
 });
+
+test("large batches stay available to playback and only queued songs survive the batch", async () => {
+  const { yt, settings } = setup();
+  const batch = Array.from({ length: 2500 }, (_, i) => songOf(String(i).padStart(11, "0")));
+  const first = batch[0]!;
+  const last = batch.at(-1)!;
+  const entries = [{ key: "1", trackId: ytTrackId(first.videoId) }] as QueueEntry[];
+  await yt.withSongs(batch, async () => {
+    assert.equal(yt.song(first.videoId)?.title, first.title);
+    assert.equal(yt.song(last.videoId)?.title, last.title);
+    yt.keepQueued(entries);
+  });
+  assert.equal(yt.song(first.videoId)?.title, first.title);
+  assert.equal(yt.song(last.videoId), undefined);
+  const restored = setup(() => null, Object.fromEntries(settings)).yt;
+  assert.equal(restored.song(first.videoId)?.title, first.title);
+  yt.keepQueued([], entries);
+  assert.equal(yt.song(first.videoId)?.title, first.title);
+  yt.keepQueued([]);
+  assert.equal(yt.song(first.videoId), undefined);
+});

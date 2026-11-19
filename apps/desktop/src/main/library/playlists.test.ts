@@ -318,3 +318,44 @@ test("the image call reads only Wave's own image files", async () => {
     assert.ok(existsSync(outside), "a file outside Wave's folder is never deleted");
   });
 });
+
+test("mixed pages count only listable entries and keep the visible stream metadata", async () => {
+  await setUp(async ({ db }) => {
+    const [road] = songs(db, "Road");
+    const stream = {
+      videoId: "abcdefghijk",
+      title: "Pink Moon",
+      artists: ["Nick Drake"],
+      album: "Pink Moon",
+      albumId: "MPREb_pinkmoon",
+      durationMs: 124_000,
+      artworkUrl: null,
+      explicit: false,
+    };
+    const { playlistId: id } = storePlaylist(
+      db,
+      "Mixed",
+      [
+        { source: "unsearched", song: { ...stream, title: "Still searching" } },
+        { source: "library", trackId: road! },
+        { source: "stream", song: stream },
+      ],
+      0,
+    );
+    const scope = { kind: "playlist", id } as const;
+    const visible: string[] = [];
+    const page = browseLibrary(db, scope, 1, 1, (songs) =>
+      visible.push(...songs.map((song) => song.albumId!)),
+    );
+    assert.equal(page.total, 2);
+    assert.deepEqual(
+      page.items.map((row) => row.title),
+      ["Pink Moon"],
+    );
+    assert.deepEqual(visible, ["MPREb_pinkmoon"]);
+    assert.deepEqual(
+      browseLibrary(db, scope, 0, 1).items.map((row) => row.id),
+      [road],
+    );
+  });
+});

@@ -1,14 +1,25 @@
 /**
  * The real browser, files and socket under YouTube's sign-in (`ytBrowserSignIn.ts`): the
- * installed browser started as its own process, a profile folder under Wave's data that lasts
+ * installed browser started as its own process, a temporary profile that lasts
  * only as long as the sign-in, and Node's `WebSocket` to the headless browser's DevTools.
  */
 import { spawn } from "node:child_process";
-import { existsSync, mkdirSync, mkdtempSync, readFileSync, readdirSync } from "node:fs";
+import {
+  accessSync,
+  closeSync,
+  constants,
+  mkdirSync,
+  mkdtempSync,
+  openSync,
+  readFileSync,
+  readSync,
+  readdirSync,
+  statSync,
+} from "node:fs";
 import { rm } from "node:fs/promises";
-import { basename, join } from "node:path";
+import { join } from "node:path";
 import type { CdpSocket } from "./cdp.ts";
-import { findSignInBrowser } from "./signInBrowser.ts";
+import { findSignInBrowser, signInProfileRoot } from "./signInBrowser.ts";
 import {
   startYtBrowserSignIn,
   type BrowserProcess,
@@ -29,6 +40,22 @@ const startBrowser = (path: string, args: readonly string[]): BrowserProcess => 
       if (child.exitCode === null && child.signalCode === null) child.kill();
     },
   };
+};
+
+const isChromiumSnapWrapper = (path: string): boolean => {
+  try {
+    const file = openSync(path, "r");
+    try {
+      const header = Buffer.alloc(4096);
+      const length = readSync(file, header);
+      const script = header.toString("utf8", 0, length);
+      return script.startsWith("#!") && script.includes("/snap/bin/chromium");
+    } finally {
+      closeSync(file);
+    }
+  } catch {
+    return false;
+  }
 };
 
 /** A browser holds its profile's files for a moment after it exits, so the delete retries. */
@@ -53,18 +80,6 @@ export interface YtSignInSystem {
 
 export const ytSignInSystem = (options: YtSignInSystemOptions): YtSignInSystem => {
   const { userData, home, platform, env } = options;
-  /**
-   * Where [browser]'s profile folder goes: Wave's data folder, except for a browser installed as
-   * a snap, which sees neither hidden folders nor the system's temporary one and gets its own
-   * folder under `~/snap`.
-   */
-  const profileRoot = (browser: string): string => {
-    if (platform === "linux" && browser.startsWith("/snap/")) {
-      const own = join(home, "snap", basename(browser), "common");
-      if (existsSync(own)) return own;
-    }
-    return userData;
-  };
   const snapRoots = (): string[] => {
     if (platform !== "linux") return [];
     try {
@@ -75,13 +90,28 @@ export const ytSignInSystem = (options: YtSignInSystemOptions): YtSignInSystem =
   };
   return {
     start: () => {
-      const browser = findSignInBrowser({ platform, env, exists: existsSync });
+      const browser = findSignInBrowser({
+        platform,
+        env,
+        isChromiumSnapWrapper,
+        exists: (path) => {
+          try {
+            if (platform === "linux") accessSync(path, constants.X_OK);
+            return statSync(path).isFile();
+          } catch {
+            return false;
+          }
+        },
+      });
       return startYtBrowserSignIn({
         browser,
         spawn: startBrowser,
         files: {
           makeProfile: () => {
-            const root = profileRoot(browser ?? "");
+            const root =
+              platform === "linux" && browser
+                ? signInProfileRoot(browser, home, userData)
+                : userData;
             mkdirSync(root, { recursive: true });
             return mkdtempSync(join(root, PROFILE_PREFIX));
           },

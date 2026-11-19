@@ -13,11 +13,6 @@ import type {
 import type { WindowSettings } from "./windowSettings.ts";
 import type { DatedRelease, LanguageChoice } from "@wave/core";
 
-export interface DesktopVersionHistory {
-  readonly version: string;
-  readonly channel: "ti" | "main" | null;
-  readonly releases: readonly DatedRelease[] | null;
-}
 import type { LanguageView } from "./language.ts";
 import type { LibraryCounts } from "@wave/client/db/counts";
 import type { PlaybackStatus } from "./playback.ts";
@@ -81,6 +76,15 @@ export interface Page<T> {
   readonly total: number;
 }
 
+export const VERSION_HISTORY_PAGE_SIZE = 20;
+
+export interface DesktopVersionHistory {
+  readonly version: string;
+  readonly channel: "ti" | "main" | null;
+  readonly currentListed: boolean;
+  readonly releases: Page<DatedRelease> | null;
+}
+
 /** Each call's arguments and result. Arguments reach main as untrusted data. */
 export interface BridgeContract
   extends
@@ -95,7 +99,7 @@ export interface BridgeContract
     readonly result: "native" | "chromium";
   };
   readonly "settings.versionHistory": {
-    readonly args: readonly [];
+    readonly args: readonly [offset: number, reload: boolean];
     readonly result: DesktopVersionHistory;
   };
   readonly "settings.window": { readonly args: readonly []; readonly result: WindowSettings };
@@ -547,7 +551,7 @@ export interface WaveBridge {
     readonly read: (path: string) => Promise<SongTags>;
   };
   readonly settings: {
-    readonly versionHistory: () => Promise<DesktopVersionHistory>;
+    readonly versionHistory: (offset: number, reload: boolean) => Promise<DesktopVersionHistory>;
     readonly window: () => Promise<WindowSettings>;
     readonly setWindow: (change: Partial<WindowSettings>) => Promise<WindowSettings>;
     readonly appearance: () => Promise<Appearance>;
@@ -686,7 +690,7 @@ export const createBridge = (invoke: Invoke): WaveBridge => ({
     appearance: () => invoke("settings.appearance"),
     language: () => invoke("settings.language"),
     setLanguage: (choice) => invoke("settings.setLanguage", choice),
-    versionHistory: () => invoke("settings.versionHistory"),
+    versionHistory: (offset, reload) => invoke("settings.versionHistory", offset, reload),
     window: () => invoke("settings.window"),
     setWindow: (change) => invoke("settings.setWindow", change),
     setAppearance: (appearance) => invoke("settings.setAppearance", appearance),

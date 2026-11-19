@@ -1345,7 +1345,8 @@ jobs:
         id: installer
         run: |
           pnpm --filter @wave/desktop exec node scripts/package-release.ts "$RELEASE_TAG" "$RUNNER_TEMP/windows-work" installer "$RUNNER_TEMP/signpath-app"
-          echo "name=wave-${RELEASE_TAG#v}-win-x64.exe" >> "$GITHUB_OUTPUT"
+          name="$(node --input-type=module -e 'import { artifactName } from "./apps/updates/src/desktopProtocol.ts"; console.log(artifactName("win32", process.argv[1]));' -- "${RELEASE_TAG#v}")"
+          echo "name=$name" >> "$GITHUB_OUTPUT"
 
       - name: Upload the NSIS installer for signing
         id: unsigned-installer
@@ -1571,10 +1572,8 @@ jobs:
           fi
           desktop=()
           if [ "$DESKTOP_ADMITTED" = "true" ]; then
-            version="${RELEASE_TAG#v}"
-            desktop=("$RUNNER_TEMP/desktop/desktop-release-win32/wave-$version-win-x64.exe"
-                     "$RUNNER_TEMP/desktop/desktop-release-win32/wave-$version-win-x64.exe.blockmap"
-                     "$RUNNER_TEMP/desktop/desktop-release-linux/wave-$version-linux-x64.AppImage")
+            assets="$(node apps/updates/scripts/desktop-release.ts names "$RELEASE_TAG" "$RUNNER_TEMP/desktop")"
+            mapfile -t desktop <<< "$assets"
           fi
           scripts/ci/publish-release.sh "$RUNNER_TEMP/release/$APK_NAME" "${desktop[@]}"
 

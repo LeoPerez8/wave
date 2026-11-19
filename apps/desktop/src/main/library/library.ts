@@ -78,7 +78,7 @@ export const desktopLibraryLayer = (options: {
             ...scanner,
             cover: options.onlineArtwork?.(db, ytMusic),
             browse: (scope: BrowseScope, offset: number, limit: number) => {
-              const page = browseLibrary(db, scope, offset, limit);
+              const page = browseLibrary(db, scope, offset, limit, yt.keep);
               return {
                 ...page,
                 items: page.items.map((row) => ({

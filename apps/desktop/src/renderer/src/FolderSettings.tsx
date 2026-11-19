@@ -1,6 +1,7 @@
 import { useEffect, useState, type ButtonHTMLAttributes } from "react";
 import type { Page } from "../../shared/bridge.ts";
 import type { DesktopFolder } from "../../shared/library.ts";
+import { Pager } from "./Pager.tsx";
 import { text } from "./text.ts";
 const PAGE_SIZE = 100;
 function Button(props: ButtonHTMLAttributes<HTMLButtonElement>) {
@@ -86,6 +87,7 @@ export function FolderSettings({
         ))}
       </ul>
       <Pager
+        pageSize={PAGE_SIZE}
         page={roots}
         previous={() => setRootOffset(Math.max(0, rootOffset - PAGE_SIZE))}
         next={() => setRootOffset(rootOffset + PAGE_SIZE)}
@@ -117,36 +119,11 @@ export function FolderSettings({
         ))}
       </ul>
       <Pager
+        pageSize={PAGE_SIZE}
         page={exclusions}
         previous={() => setExcludedOffset(Math.max(0, excludedOffset - PAGE_SIZE))}
         next={() => setExcludedOffset(excludedOffset + PAGE_SIZE)}
       />
-    </div>
-  );
-}
-function Pager({
-  page,
-  previous,
-  next,
-}: {
-  readonly page:
-    | { readonly offset: number; readonly total: number; readonly items: readonly unknown[] }
-    | undefined;
-  readonly previous: () => void;
-  readonly next: () => void;
-}) {
-  if (page === undefined || page.total <= PAGE_SIZE) return null;
-  return (
-    <div className="mt-4 flex items-center justify-end gap-3 text-sm text-secondary">
-      <Button disabled={page.offset === 0} onClick={previous}>
-        {text.desktopLibrary.previous}
-      </Button>
-      <span className="tabular-nums">
-        {text.desktopLibrary.page(page.offset + 1, page.offset + page.items.length, page.total)}
-      </span>
-      <Button disabled={page.offset + page.items.length >= page.total} onClick={next}>
-        {text.desktopLibrary.next}
-      </Button>
     </div>
   );
 }

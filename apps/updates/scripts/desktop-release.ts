@@ -1,7 +1,11 @@
 import { createPrivateKey } from "node:crypto";
 import { readFile, writeFile } from "node:fs/promises";
+import { join } from "node:path";
+import { desktopPlatforms } from "../src/desktopProtocol.ts";
 import {
   admitDesktop,
+  desktopArtifact,
+  desktopReleaseFiles,
   finalizeWindowsDesktop,
   verifyDesktopFiles,
   type DesktopEvidence,
@@ -10,9 +14,16 @@ import { publishDesktop } from "../src/desktopPublish.ts";
 import { wranglerBucket } from "./bucket.ts";
 
 const [command, path, root, option] = process.argv.slice(2);
+if (command === "names") {
+  if (!path) throw new Error("Expected a desktop release tag");
+  for (const platform of desktopPlatforms)
+    for (const name of desktopReleaseFiles(platform, path))
+      console.log(root ? join(root, desktopArtifact(platform), name) : name);
+  process.exit(0);
+}
 if (!path || !root)
   throw new Error(
-    "usage: desktop-release.ts <admit|verify|finalize-windows|verify-published|publish|rollback> <provenance.json> <installer directory> [--pending-windows|<signed build digest>]",
+    "usage: desktop-release.ts <admit|verify|finalize-windows|verify-published|publish|rollback> <provenance.json> <installer directory> [--pending-windows|<signed build digest>]\n       desktop-release.ts names <tag> [installer directory]",
   );
 const record = JSON.parse(await readFile(path, "utf8"));
 if (command === "admit") {

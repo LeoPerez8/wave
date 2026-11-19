@@ -18,7 +18,7 @@ import { DesktopLibrary } from "./library/library.ts";
 import { Account } from "./account/accountLayer.ts";
 import type { Page } from "../shared/bridge.ts";
 import { BROWSE_KINDS, type BrowseScope } from "../shared/browse.ts";
-import { browseLetter, playlistSongs } from "./library/browse.ts";
+import { browseLetter } from "./library/browse.ts";
 import { readArtwork } from "./library/artwork.ts";
 import { appearance, preference, savePreference } from "./preferences.ts";
 import { SEARCH_ONLINE_SETTING, readSearchOnline, writeSearchOnline } from "@wave/core";
@@ -257,7 +257,7 @@ const createHandlers = (
   onAppearance: (mode: Appearance) => void,
   setLogin: (on: boolean) => Promise<void>,
   mediaBackend: () => "native" | "chromium",
-  versionHistory: () => Promise<DesktopVersionHistory>,
+  versionHistory: (offset: number, reload: boolean) => Promise<DesktopVersionHistory>,
 ): Handlers => {
   let loadedPath: string | undefined;
   const streamed = streamedHandlers();
@@ -269,7 +269,10 @@ const createHandlers = (
     });
   return {
     "system.mediaBackend": () => Effect.sync(mediaBackend),
-    "settings.versionHistory": () => Effect.promise(versionHistory),
+    "settings.versionHistory": ([offset, reload]) =>
+      typeof offset === "number" && validPage(offset, 1) && typeof reload === "boolean"
+        ? Effect.promise(() => versionHistory(offset, reload))
+        : refuse("settings.versionHistory", "invalid page"),
     "settings.window": () => Effect.map(Database, readWindowSettings),
     "settings.setWindow": ([change]) =>
       validWindowSettings(change)
@@ -470,24 +473,9 @@ const createHandlers = (
         : refuse("library.cover", "invalid identity"),
     "library.browse": ([scope, offset, limit]) =>
       validScope(scope)
-        ? Effect.gen(function* () {
-            const page = yield* pageCall(
-              "library.browse",
-              [offset, limit],
-              (library, offset, limit) => library.browse(scope, offset, limit),
-            );
-            // A playlist's YT Music songs are known from here on, so their menus can queue them.
-            if (scope.kind === "playlist" && scope.id !== undefined) {
-              const shown = new Set(page.items.flatMap((row) => row.videoId ?? []));
-              if (shown.size > 0)
-                (yield* YtMusic).keep(
-                  (playlistSongs(yield* Database, scope.id) ?? []).flatMap((song) =>
-                    "song" in song && shown.has(song.song.videoId) ? [song.song] : [],
-                  ),
-                );
-            }
-            return page;
-          })
+        ? pageCall("library.browse", [offset, limit], (library, offset, limit) =>
+            library.browse(scope, offset, limit),
+          )
         : refuse("library.browse", "invalid scope"),
     "library.letter": ([scope, letter]) =>
       validScope(scope) && typeof letter === "string" && /^[a-z0-9]$/i.test(letter)
@@ -643,10 +631,14 @@ export const registerBridge = (
     throw new Error("Login registration unavailable");
   },
   mediaBackend: () => "native" | "chromium" = () => "native",
-  versionHistory: () => Promise<DesktopVersionHistory> = async () => ({
+  versionHistory: (
+    offset: number,
+    reload: boolean,
+  ) => Promise<DesktopVersionHistory> = async () => ({
     version: "",
     channel: null,
-    releases: [],
+    currentListed: false,
+    releases: { items: [], offset: 0, total: 0 },
   }),
 ): void => {
   const handlers = createHandlers(onAppearance, setLogin, mediaBackend, versionHistory);
