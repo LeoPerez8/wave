@@ -7,6 +7,7 @@ import { Database } from "@wave/client";
 import { desktopRoots } from "@wave/client/db/desktopFolders";
 import { excludedFolders } from "@wave/client/db/libraryQueries";
 import { selectAlbumsMissingSongs, selectMissingSongs } from "@wave/client/db/missingSongs";
+import { selectFavoriteTrackIds } from "@wave/client/db/playHistory";
 import {
   albumDownloadOrigin,
   playlistDownloadOrigin,
@@ -15,6 +16,7 @@ import {
   type TagWriteReport,
   type YtAlbum,
 } from "@wave/core";
+import { sql } from "drizzle-orm";
 import * as Context from "effect/Context";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
@@ -145,12 +147,22 @@ export const downloadsLayer = (options: DownloadsLayerOptions) =>
         get catalogue() {
           return options.catalogue;
         },
+        favorites: () => new Set(selectFavoriteTrackIds(db)),
+        store: {
+          read: (key) => preference(db, key) ?? null,
+          write: (key, value) => {
+            if (value === null) db.run(sql`DELETE FROM desktop_settings WHERE key = ${key}`);
+            else savePreference(db, key, value);
+          },
+        },
       });
 
       const started = () => {
         void policy()
           .catch(() => null)
           .then(() => downloads.start(options.online()))
+          // Stars kept while Wave was closed, or pulled before the journal was up, ask now.
+          .then(() => downloads.syncStars())
           .catch((error) => options.log?.("warn", `Downloads didn't start: ${String(error)}`));
       };
       // A restarted JVM says it's ready again; its journal was read back from disk.

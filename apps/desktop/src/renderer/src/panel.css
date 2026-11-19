@@ -72,10 +72,20 @@
   border-left: 1px solid var(--color-separator);
   background: var(--color-grouped);
 }
+.panel-head {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin: 12px 8px 4px 14px;
+}
+.panel-close {
+  width: 28px;
+  height: 28px;
+}
 .panel-tabs {
+  flex: 1;
   display: flex;
   gap: 4px;
-  margin: 12px 14px 4px;
   padding: 2px;
   border-radius: 7px;
   background: var(--color-fill);
@@ -104,6 +114,24 @@
 }
 .panel-body > .related-panel h2 {
   margin-top: 10px;
+}
+/* Its rows fit the panel: title and artist only, the add button beside them, no sideways scroll. */
+.panel-body > .related-panel {
+  overflow-x: hidden;
+}
+.related-panel .yt-row {
+  grid-template-columns: minmax(0, 1.4fr) minmax(0, 1fr);
+  gap: 10px;
+  padding: 0 6px;
+}
+.related-panel .yt-row > .album-column,
+.related-panel .yt-row > .star-column,
+.related-panel .yt-row > .time-column {
+  display: none;
+}
+.related-panel .related-add {
+  width: 28px;
+  height: 28px;
 }
 
 /* Lyrics, in the panel and in Now Playing. */
@@ -282,6 +310,10 @@
   background: var(--color-background);
   color: var(--color-foreground);
 }
+/* It takes focus as it opens, as a dialog does; the ring belongs to its controls. */
+.now-playing:focus {
+  outline: none;
+}
 .now-playing .now-playing-close {
   position: absolute;
   top: 12px;
@@ -310,6 +342,7 @@
 }
 .now-playing-copy h1 {
   font-size: 24px;
+  font-weight: 600;
 }
 .now-playing-copy > span {
   font-size: 15px;

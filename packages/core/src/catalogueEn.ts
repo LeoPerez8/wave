@@ -110,6 +110,7 @@ export const en = {
     youMightAlsoLike: "You might also like",
     magicQueueIdle: "Start a Magic Queue from one of these songs, or from any song's menu.",
     sidePanel: "Side panel",
+    closeSidePanel: "Close side panel",
     removeFromQueue: (title: string) => `Remove “${title}” from the Queue`,
   },
   desktopLibrary: {
@@ -139,6 +140,8 @@ export const en = {
     chooseArtist: "Choose an Artist",
     noPlaylists: "No playlists yet",
     checkSong: (title: string) => `Select “${title}”`,
+    /** An artist page's songs from YouTube Music, a page at a time. */
+    showMoreSongs: "Show more songs",
   },
   /** The desktop's Wave account: what the phone's Settings › Accounts has no need to say. */
   desktopAccount: {

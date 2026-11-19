@@ -109,6 +109,7 @@ export const ptBR: Catalogue = {
     magicQueueIdle:
       "Comece uma Fila Mágica com uma destas músicas ou pelo menu de qualquer música.",
     sidePanel: "Painel lateral",
+    closeSidePanel: "Fechar painel lateral",
     removeFromQueue: (title: string) => `Remover “${title}” da Fila`,
   },
   desktopLibrary: {
@@ -136,6 +137,7 @@ export const ptBR: Catalogue = {
     chooseArtist: "Escolha um Artista",
     noPlaylists: "Nenhuma playlist ainda",
     checkSong: (title: string) => `Selecionar “${title}”`,
+    showMoreSongs: "Mostrar mais músicas",
   },
   desktopAccount: {
     finishInBrowser: "Termine de iniciar sessão no navegador.",

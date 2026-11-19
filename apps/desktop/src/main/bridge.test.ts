@@ -1208,7 +1208,10 @@ test("a streamed song has the phone's menu: star, playlist, download, its album 
           ),
         );
       assert.deepEqual(await pending(), [{ videoId: "abcdefghijk" }]);
-      assert.ok(downloads.some((call) => call.includes('"abcdefghijk"')), downloads.join(", "));
+      assert.ok(
+        downloads.some((call) => call.includes('"abcdefghijk"')),
+        downloads.join(", "),
+      );
       const starred = await wave.streamed.menu("abcdefghijk");
       assert.equal(starred.favorite, true);
       assert.ok(starred.entries.some((entry) => entry.action === "unfavorite"));
@@ -1236,7 +1239,10 @@ test("a streamed song has the phone's menu: star, playlist, download, its album 
       );
       assert.equal(entries.length, 1);
       assert.match(entries[0]!.ytSong ?? "", /bcdefghijkl/);
-      assert.ok(downloads.some((call) => call.includes('"bcdefghijkl"')), "its download is asked");
+      assert.ok(
+        downloads.some((call) => call.includes('"bcdefghijkl"')),
+        "its download is asked",
+      );
 
       assert.deepEqual(await wave.streamed.run("bcdefghijkl", "playNext"), {
         kind: "queued",

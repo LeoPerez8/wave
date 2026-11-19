@@ -42,3 +42,20 @@ export const formatRemaining = (positionMs: number, durationMs: number): string 
   const remaining = Math.max(0, toWholeSeconds(durationMs) - toWholeSeconds(positionMs));
   return `-${formatDuration(remaining * MS_PER_SECOND)}`;
 };
+
+/** The words a list's length is read in: Core's catalogue `library`. */
+export interface ListDurationText {
+  readonly minutes: (count: number) => string;
+  readonly hours: (hours: number, minutes: number) => string;
+}
+
+/**
+ * A list's length on its opening line, as an album's, a playlist's or a genre's: "33 min" below
+ * an hour (at least 1 min), "36 h 43 min" from an hour up, rounded to the minute. Null when the
+ * list has no known length.
+ */
+export const listDuration = (ms: number, text: ListDurationText): string | null => {
+  if (!Number.isFinite(ms) || ms <= 0) return null;
+  const minutes = Math.max(1, Math.round(ms / 60_000));
+  return minutes < 60 ? text.minutes(minutes) : text.hours(Math.floor(minutes / 60), minutes % 60);
+};

@@ -89,6 +89,9 @@ export const libraryEn = {
   albumCount: (count: number): string =>
     plural("en", count, { one: `${n(count)} album`, other: `${n(count)} albums` }),
   minutes: (count: number): string => `${n(count)} min`,
+  /** A list an hour or longer ("36 h 43 min"); Core's `listDuration` picks it. */
+  hours: (hours: number, minutes: number): string =>
+    minutes === 0 ? `${n(hours)} h` : `${n(hours)} h ${n(minutes)} min`,
   disc: (disc: number): string => `Disc ${n(disc)}`,
   goTo: (name: string): string => `Go to ${name}`,
   goToArtist: "Go to Artist",

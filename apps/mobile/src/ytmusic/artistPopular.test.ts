@@ -95,7 +95,7 @@ test("leaving or changing artists aborts the request and an uncooperative late a
 });
 
 test("actual fetch/save workflow uses the saved match and keeps a full answer saved meanwhile", async () => {
-  const { fetchArtistAnswer } = await import("./artistFetch.ts");
+  const { fetchArtistAnswer } = await import("@wave/client/ytArtistFetch");
   const Effect = await import("effect/Effect");
   const { resolve } = await import("node:path");
   const { createFastAgainFixture } = await import("@wave/client/testing/fastAgainFixture");
@@ -246,8 +246,8 @@ test("a settled offline Online page shows the offline note without entering the 
 
 test("real-store opening keeps local order offline, then saves one fake-YT answer and reuses its Popular order offline", async () => {
   const { artistPopularSongs } = await import("./artistOpeningRead.ts");
-  const { fetchArtistAnswer } = await import("./artistFetch.ts");
-  const { artistOpeningRequest } = await import("./artistOpeningRequest.ts");
+  const { fetchArtistAnswer } = await import("@wave/client/ytArtistFetch");
+  const { artistOpeningRequest } = await import("@wave/client/ytArtistFetch");
   const Effect = await import("effect/Effect");
   const { rankPopular, sortSongs } = await import("@wave/core");
   const { resolve } = await import("node:path");
@@ -371,8 +371,8 @@ test("real-store opening keeps local order offline, then saves one fake-YT answe
 });
 
 test("execution-time loss of usable connectivity sends no fake-YT request and saves nothing", async () => {
-  const { fetchArtistAnswer } = await import("./artistFetch.ts");
-  const { artistOpeningRequest } = await import("./artistOpeningRequest.ts");
+  const { fetchArtistAnswer } = await import("@wave/client/ytArtistFetch");
+  const { artistOpeningRequest } = await import("@wave/client/ytArtistFetch");
   const Effect = await import("effect/Effect");
   const Result = await import("effect/Result");
   let connected = true;
@@ -503,8 +503,8 @@ test("a failed read is not repeated by rerenders, toggles or artist reuse; anoth
 });
 
 test("canceling a fake-YT page interrupts the actual fetch/save workflow before it writes the real store", async () => {
-  const { fetchArtistAnswer } = await import("./artistFetch.ts");
-  const { artistOpeningRequest } = await import("./artistOpeningRequest.ts");
+  const { fetchArtistAnswer } = await import("@wave/client/ytArtistFetch");
+  const { artistOpeningRequest } = await import("@wave/client/ytArtistFetch");
   const Effect = await import("effect/Effect");
   const { resolve } = await import("node:path");
   const { createFastAgainFixture } = await import("@wave/client/testing/fastAgainFixture");
@@ -659,7 +659,7 @@ test("losing screen visibility or YT consent aborts one attempt and cannot auto-
 });
 
 test("the fetch workflow rechecks connectivity after search before browsing or saving an unmatched answer", async () => {
-  const { fetchArtistAnswer } = await import("./artistFetch.ts");
+  const { fetchArtistAnswer } = await import("@wave/client/ytArtistFetch");
   const Effect = await import("effect/Effect");
   const Result = await import("effect/Result");
   for (const matched of [true, false]) {

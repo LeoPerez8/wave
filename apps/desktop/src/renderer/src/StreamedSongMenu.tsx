@@ -119,8 +119,7 @@ export function useStreamedSongs({ go, failed, notify, changed }: StreamedMenuOp
           return {
             key,
             label: text.itemActions.labels.addToPlaylist,
-            open: () =>
-              playlistItems((id) => void run(videoId, "addToPlaylist", "menu", id)),
+            open: () => playlistItems((id) => void run(videoId, "addToPlaylist", "menu", id)),
           };
         case "magicQueue":
           return {
@@ -149,8 +148,7 @@ export function useStreamedSongs({ go, failed, notify, changed }: StreamedMenuOp
         case "goToArtist": {
           const { artists } = entry;
           const label = text.itemActions.labels.goToArtist;
-          if (artists.kind === "open")
-            return { key, label, run: () => goToArtist(artists.target) };
+          if (artists.kind === "open") return { key, label, run: () => goToArtist(artists.target) };
           return {
             key,
             label,

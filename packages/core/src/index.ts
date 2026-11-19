@@ -28,7 +28,8 @@ export type {
   PlaysToMerge,
   StreamedPlaySums,
 } from "./countedPlays.ts";
-export { formatDuration, formatRemaining } from "./time.ts";
+export { formatDuration, formatRemaining, listDuration } from "./time.ts";
+export type { ListDurationText } from "./time.ts";
 export { recommendationDeadline, recommendationFrameBudget } from "./recommendationWork.ts";
 export {
   ANCHOR_UNMEASURED,
