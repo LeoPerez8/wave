@@ -2,6 +2,7 @@ import { useEffect, useState, type MouseEvent } from "react";
 import type { BrowseRow } from "../../shared/browse.ts";
 import type { YtAlbumView, YtArtistAlbum, YtArtistView } from "../../shared/ytPages.ts";
 import { Icon } from "./Icon.tsx";
+import { listDuration } from "@wave/core";
 import { labels, text } from "./text.ts";
 import { Artwork } from "./VirtualTable.tsx";
 import { Shelf, YtQuiet, YtSongList } from "./YtLists.tsx";
@@ -143,7 +144,10 @@ export function YtAlbumPage({
   const { album } = read;
   if (album === null) return <YtQuiet status={read.status === "ok" ? "failed" : read.status} />;
   const songs = album.songs.items;
-  const minutes = Math.round(songs.reduce((sum, row) => sum + row.durationMs, 0) / 60000);
+  const length = listDuration(
+    songs.reduce((sum, row) => sum + row.durationMs, 0),
+    text.library,
+  );
   return (
     <div className="yt-page" data-testid="yt-album">
       <div className="hero">
@@ -152,7 +156,7 @@ export function YtAlbumPage({
           <h1>{album.title}</h1>
           {album.artists.length > 0 && <p className="hero-artist">{album.artists.join(", ")}</p>}
           <p className="hero-meta">
-            {[labels.album, album.year, labels.songCount(songs.length), labels.minutes(minutes)]
+            {[labels.album, album.year, labels.songCount(songs.length), length]
               .filter(Boolean)
               .join(" · ")}
           </p>

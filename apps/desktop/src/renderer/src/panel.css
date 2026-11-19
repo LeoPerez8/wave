@@ -300,6 +300,10 @@
   background: var(--color-background);
   color: var(--color-foreground);
 }
+/* It takes focus as it opens, as a dialog does; the ring belongs to its controls. */
+.now-playing:focus {
+  outline: none;
+}
 .now-playing .now-playing-close {
   position: absolute;
   top: 12px;

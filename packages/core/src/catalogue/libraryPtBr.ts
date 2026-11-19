@@ -80,6 +80,8 @@ export const libraryPtBr: typeof libraryEn = {
       other: `${n(count)} álbuns`,
     }),
   minutes: (count: number): string => `${n(count)} min`,
+  hours: (hours: number, minutes: number): string =>
+    minutes === 0 ? `${n(hours)} h` : `${n(hours)} h ${n(minutes)} min`,
   disc: (disc: number): string => `Disco ${n(disc)}`,
   goTo: (name: string): string => `Ir para ${name}`,
   goToArtist: "Ir para o Artista",
