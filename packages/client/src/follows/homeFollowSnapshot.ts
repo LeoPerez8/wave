@@ -5,11 +5,14 @@ import {
   type HomeFollowSnapshot,
 } from "@wave/core";
 import * as Effect from "effect/Effect";
-import type { LibraryStore } from "../library/LibraryStore.ts";
+import type { FollowStore } from "./followStore.ts";
 
 /** Read both the next opening and this visit from the same saved feed. */
-export const readHomeFollowSnapshot = (
-  store: LibraryStore["Service"],
+export const readHomeFollowSnapshot = <E>(
+  store: Pick<
+    FollowStore<E>,
+    "listFollows" | "followReleaseCache" | "followShowCache" | "followReleaseListening"
+  >,
   country: string,
   now: number,
   admitted?: HomeFollowSnapshot,

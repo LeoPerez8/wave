@@ -8,7 +8,7 @@ import { LibraryStore } from "@/library/LibraryStore";
 
 import { appRuntime } from "@/library/runtime";
 import { persistedSetting } from "@/lib/persistedSetting";
-import { readHomeFollowSnapshot } from "./readHomeFollowSnapshot";
+import { readHomeFollowSnapshot } from "@wave/client/follows/homeFollowSnapshot";
 import { createHomeFollowReader } from "./homeFollowReader";
 import { currentFollowCountry } from "@/settings/followCountry";
 
