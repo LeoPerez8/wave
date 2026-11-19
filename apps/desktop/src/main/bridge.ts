@@ -29,7 +29,7 @@ import {
   type SongTarget,
 } from "../shared/songActions.ts";
 import { runSongAction, songMenu } from "./library/songActions.ts";
-import type { Appearance } from "../shared/bridge.ts";
+import type { Appearance, DesktopVersionHistory } from "../shared/bridge.ts";
 import { VIDEO_ID, YtMusic } from "./yt/ytMusic.ts";
 import { Downloads } from "./downloads/downloadsLayer.ts";
 import {
@@ -257,6 +257,7 @@ const createHandlers = (
   onAppearance: (mode: Appearance) => void,
   setLogin: (on: boolean) => Promise<void>,
   mediaBackend: () => "native" | "chromium",
+  versionHistory: () => Promise<DesktopVersionHistory>,
 ): Handlers => {
   let loadedPath: string | undefined;
   const streamed = streamedHandlers();
@@ -268,6 +269,7 @@ const createHandlers = (
     });
   return {
     "system.mediaBackend": () => Effect.sync(mediaBackend),
+    "settings.versionHistory": () => Effect.promise(versionHistory),
     "settings.window": () => Effect.map(Database, readWindowSettings),
     "settings.setWindow": ([change]) =>
       validWindowSettings(change)
@@ -641,8 +643,13 @@ export const registerBridge = (
     throw new Error("Login registration unavailable");
   },
   mediaBackend: () => "native" | "chromium" = () => "native",
+  versionHistory: () => Promise<DesktopVersionHistory> = async () => ({
+    version: "",
+    channel: null,
+    releases: [],
+  }),
 ): void => {
-  const handlers = createHandlers(onAppearance, setLogin, mediaBackend);
+  const handlers = createHandlers(onAppearance, setLogin, mediaBackend, versionHistory);
   for (const call of BRIDGE_CALLS) {
     const handler: (args: readonly unknown[]) => Effect.Effect<unknown, unknown, BridgeServices> =
       handlers[call];

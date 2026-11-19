@@ -17,6 +17,12 @@ on:
         description: The version to go back to, such as 0.46.1-ti
         required: true
         type: string
+      target:
+        description: The app to roll back
+        required: true
+        type: choice
+        options: [android, desktop]
+        default: android
       allow_unrecorded:
         description: Owner's transition. Allow a release published before provenance records, checked on its runtime version alone
         required: false
@@ -27,7 +33,7 @@ permissions: {}
 
 # Two runs on a channel would each read its history and lose the other's line.
 concurrency:
-  group: rollback-${{ inputs.channel }}
+  group: ${{ inputs.target == 'desktop' && format('desktop-release-{0}', inputs.channel) || format('rollback-{0}', inputs.channel) }}
   cancel-in-progress: false
 
 jobs:
@@ -58,15 +64,30 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
           VERSION: ${{ inputs.version }}
+          TARGET: ${{ inputs.target }}
           ALLOW_UNRECORDED: ${{ inputs.allow_unrecorded }}
         run: |
           version="$(echo "$VERSION" | tr -d '[:space:]')"
           version="${version#v}"
           flags=()
-          if [ "$ALLOW_UNRECORDED" = "true" ]; then flags=(--allow-unrecorded); fi
+          if [ "$TARGET" = android ] && [ "$ALLOW_UNRECORDED" = "true" ]; then flags=(--allow-unrecorded); fi
           scripts/ci/verified-release.sh "v$version" "$RUNNER_TEMP/release" "${flags[@]}"
 
+      - name: Verify the published desktop installers
+        if: inputs.target == 'desktop'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          PROVENANCE: ${{ steps.provenance.outputs.file }}
+        run: |
+          tag="$(node -p 'JSON.parse(require("node:fs").readFileSync(process.argv[1], "utf8")).releaseTag' "$PROVENANCE")"
+          version="${tag#v}"
+          gh release download "$tag" --dir "$RUNNER_TEMP/release" \
+            --pattern "wave-$version-win-x64.exe" --pattern "wave-$version-win-x64.exe.blockmap" \
+            --pattern "wave-$version-linux-x64.AppImage"
+          node apps/updates/scripts/desktop-release.ts verify-published "$PROVENANCE" "$RUNNER_TEMP/release"
+
       - name: Promote the update
+        if: inputs.target == 'android'
         env:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
@@ -76,3 +97,13 @@ jobs:
           WAVE_PROVENANCE_FILE: ${{ steps.provenance.outputs.file }}
           WAVE_ALLOW_UNRECORDED: ${{ inputs.allow_unrecorded }}
         run: node apps/updates/scripts/promote.ts
+
+      - name: Roll back both desktop installers
+        if: inputs.target == 'desktop'
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          WAVE_DESKTOP_UPDATE_SIGNING_KEY: ${{ secrets.WAVE_DESKTOP_UPDATE_SIGNING_KEY }}
+          WAVE_UPDATE_CHANNEL: ${{ inputs.channel }}
+          PROVENANCE: ${{ steps.provenance.outputs.file }}
+        run: node apps/updates/scripts/desktop-release.ts rollback "$PROVENANCE" "$RUNNER_TEMP/release"

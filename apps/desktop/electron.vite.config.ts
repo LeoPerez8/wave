@@ -1,3 +1,4 @@
+import { createPublicKey } from "node:crypto";
 import tailwindcss from "@tailwindcss/vite";
 import react from "@vitejs/plugin-react";
 import { defineConfig } from "electron-vite";
@@ -19,10 +20,22 @@ const csp = (): Plugin => ({
   ],
 });
 
+const channel = process.env["WAVE_DESKTOP_CHANNEL"];
+const publicKey = process.env["WAVE_DESKTOP_UPDATE_PUBLIC_KEY"];
+const release = channel === "ti" || channel === "main";
+if (release && (!publicKey || createPublicKey(publicKey).asymmetricKeyType !== "ed25519")) {
+  throw new Error("A desktop release needs the Ed25519 update public key");
+}
+
 export default defineConfig({
   main: {
-    // Workspace packages are TypeScript source, so they go in the bundle; better-sqlite3 stays
-    // outside it with its native binding.
+    define: {
+      WAVE_DESKTOP_BUILD: JSON.stringify(
+        release ? { channel, publicKey, builtAt: Date.now() } : null,
+      ),
+    },
+    // Only the SQLite binding and updater are runtime dependencies. Workspace code, Drizzle,
+    // and Effect are bundled, so electron-builder does not walk Drizzle's optional peers.
     // The audio process is a second entry, forked from main as a utility process.
     build: {
       externalizeDeps: { exclude: ["@wave/client", "@wave/core"] },

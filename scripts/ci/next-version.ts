@@ -14,7 +14,7 @@ import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { isDeepStrictEqual, parseArgs } from "node:util";
 
-import { reachesUsers } from "./changes.ts";
+import { reachesDesktop, reachesUsers } from "./changes.ts";
 import { listedPullRequests, parseMergedPr, type PatchNotesInput } from "./patch-notes.ts";
 
 type Version = readonly [major: number, minor: number, patch: number];
@@ -70,7 +70,7 @@ export const bumpFor = (
   },
 ): Bump => {
   const unreleased = new Set(release.unreleased);
-  const feature = listedPullRequests(release).find(
+  const feature = listedPullRequests(release, "release").find(
     (pr) => unreleased.has(pr.mergeCommit) && pr.branch.startsWith("feat/"),
   );
   return feature
@@ -107,6 +107,8 @@ export type NextVersionInput = {
  * same tags; ti's version gets the -ti suffix. A pushed commit that already carries its
  * channel's tag for package.json's version is released as it is.
  */
+const changesRelease = (paths: readonly string[]) => reachesUsers(paths) || reachesDesktop(paths);
+
 export const nextVersion = (push: NextVersionInput): NextVersion => {
   const suffix = push.channel === "ti" ? "-ti" : "";
   // A run whose bump was pushed and tagged but not published (or a re-run of one).
@@ -118,14 +120,14 @@ export const nextVersion = (push: NextVersionInput): NextVersion => {
     };
   if (push.changed?.length === 0)
     return { reason: "Nothing changed since the previous release, so nothing is released." };
-  if (push.changed && !reachesUsers(push.changed))
+  if (push.changed && !changesRelease(push.changed))
     return {
       reason:
         "Only CI, docs or specs changed since the previous release, so nothing is bumped or released.",
     };
   if (push.changed && push.appPackage && versionOnly(push.appPackage)) {
     const others = push.changed.filter((path) => path !== APP_PACKAGE);
-    if (!reachesUsers(others))
+    if (!changesRelease(others))
       return {
         reason:
           "Only CI, docs, specs or the app's version changed since the previous release so nothing is bumped or released.",

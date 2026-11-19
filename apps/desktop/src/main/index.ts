@@ -16,6 +16,8 @@ import * as Layer from "effect/Layer";
 import * as ManagedRuntime from "effect/ManagedRuntime";
 import { forkAudio } from "./audio/fork.ts";
 import { streamingPlayerLayer } from "./audio/player.ts";
+import { startDesktopUpdates } from "./updates/updater.ts";
+import { loadVersionHistory } from "./updates/history.ts";
 import { registerBridge } from "./bridge.ts";
 import { playbackLayer } from "./playback/playback.ts";
 import { libraryLayer } from "./database.ts";
@@ -204,6 +206,8 @@ else {
   app.on("window-all-closed", () => app.quit());
   // Utility processes start only once the app is ready, so the services wait for it too.
   void app.whenReady().then(async () => {
+    const installUpdate = startDesktopUpdates();
+    const resources = app.isPackaged ? process.resourcesPath : app.getAppPath();
     const preferredLanguages = () => {
       const launchLanguage = app.commandLine.getSwitchValue("lang");
       return launchLanguage ? [launchLanguage] : app.getPreferredSystemLanguages();
@@ -212,12 +216,11 @@ else {
     let language = chosenAppLanguage("system", preferredLanguages());
     let text = catalogueOf(language, "desktop");
     // The engine built by `pnpm build:native`; tests may point at another build.
-    const addon =
-      process.env["WAVE_AUDIO_ADDON"] ?? join(app.getAppPath(), "native", "wave-audio.node");
+    const addon = process.env["WAVE_AUDIO_ADDON"] ?? join(resources, "native", "wave-audio.node");
     // The runtime and JAR from `pnpm build:jvm`; tests may point at others.
     const jvm = jvmCommand({
-      runtime: process.env["WAVE_JVM_RUNTIME"] ?? join(app.getAppPath(), "jvm", "runtime"),
-      jar: process.env["WAVE_KOTLIN_JAR"] ?? join(app.getAppPath(), "jvm", "wave-kotlin.jar"),
+      runtime: process.env["WAVE_JVM_RUNTIME"] ?? join(resources, "jvm", "runtime"),
+      jar: process.env["WAVE_KOTLIN_JAR"] ?? join(resources, "jvm", "wave-kotlin.jar"),
       dataDir: join(app.getPath("userData"), "kotlin"),
       platform: process.platform,
     });
@@ -493,6 +496,7 @@ else {
           on,
         ),
       () => system?.mediaBackend ?? (process.platform === "win32" ? "chromium" : "native"),
+      loadVersionHistory,
     );
     // The queue's position and the play so far are saved before the app exits.
     let quitting = false;
@@ -511,7 +515,9 @@ else {
       system?.close();
       poTokens.close();
       // Services that hang as they close don't keep a process nobody can see.
-      void closeServices().finally(() => app.quit());
+      void closeServices()
+        .then(() => installUpdate?.())
+        .finally(() => app.quit());
     });
     createWindow(
       () => {
@@ -558,8 +564,7 @@ else {
       yt,
       text: () => text,
       language: () => language,
-      mediaAddon:
-        process.env["WAVE_MEDIA_ADDON"] ?? join(app.getAppPath(), "native", "wave-media.node"),
+      mediaAddon: process.env["WAVE_MEDIA_ADDON"] ?? join(resources, "native", "wave-media.node"),
       cache: cacheFolder("system-media"),
       show: showWindow,
     });

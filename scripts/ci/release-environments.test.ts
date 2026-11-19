@@ -8,6 +8,7 @@ const workflowsDir = fileURLToPath(new URL("../../.github/workflows/", import.me
 /** The secrets that publish to phones; they live only in the `ti` and `main` Environments. */
 const RELEASE_SECRETS = [
   "UPDATES_SIGNING_KEY",
+  "WAVE_DESKTOP_UPDATE_SIGNING_KEY",
   "CLOUDFLARE_API_TOKEN",
   "CLOUDFLARE_ACCOUNT_ID",
   // The APK's release key and its rotation proof (scripts/ci/sign-apk.sh).

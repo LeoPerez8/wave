@@ -67,6 +67,7 @@ describe("the release gate", () => {
       "android",
       "changes",
       "checks",
+      "desktop",
       "native-tests",
       "notes",
       "secret-scan",
@@ -218,7 +219,7 @@ describe("a rollback", () => {
     );
     assert.match(
       named("Check the release's provenance"),
-      /if \[ "\$ALLOW_UNRECORDED" = "true" \]; then flags=\(--allow-unrecorded\); fi/,
+      /if \[ "\$TARGET" = android \] && \[ "\$ALLOW_UNRECORDED" = "true" \]; then flags=\(--allow-unrecorded\); fi/,
     );
   });
 
@@ -227,5 +228,25 @@ describe("a rollback", () => {
     assert.match(rollback, /^ {6}contents: read$/m);
     assert.doesNotMatch(rollback, /: write$/m);
     assert.match(rollback, /sparse-checkout: \|\n\s+apps\/updates\n\s+scripts\/ci/);
+  });
+});
+
+describe("desktop release publication", () => {
+  it("builds on the release source and keeps stable desktop publication behind its switch", () => {
+    const desktop = job("desktop");
+    const gate = job("release-gate");
+    assert.ok(desktop.includes(`ref: ${SOURCE}`));
+    assert.match(desktop, /ubuntu-22\.04/);
+    assert.match(desktop, /windows-latest/);
+    for (const text of [desktop, gate]) {
+      assert.match(
+        text,
+        /endsWith\(needs\.checks\.outputs\.release_tag, '-ti'\) \|\| vars\.RELEASE_DESKTOP_MAIN == 'on'/,
+      );
+      assert.doesNotMatch(text, /environment:|secrets\./);
+    }
+    assert.match(gate, /test "\$DESKTOP_RESULT" = success/);
+    assert.match(gate, /desktop-release\.ts admit/);
+    assert.match(job("release"), /desktop-release\.ts verify/);
   });
 });

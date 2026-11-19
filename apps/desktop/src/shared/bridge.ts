@@ -11,7 +11,13 @@ import type {
   QueueRow,
 } from "./playerView.ts";
 import type { WindowSettings } from "./windowSettings.ts";
-import type { LanguageChoice } from "@wave/core";
+import type { DatedRelease, LanguageChoice } from "@wave/core";
+
+export interface DesktopVersionHistory {
+  readonly version: string;
+  readonly channel: "ti" | "main" | null;
+  readonly releases: readonly DatedRelease[] | null;
+}
 import type { LanguageView } from "./language.ts";
 import type { LibraryCounts } from "@wave/client/db/counts";
 import type { PlaybackStatus } from "./playback.ts";
@@ -87,6 +93,10 @@ export interface BridgeContract
   readonly "system.mediaBackend": {
     readonly args: readonly [];
     readonly result: "native" | "chromium";
+  };
+  readonly "settings.versionHistory": {
+    readonly args: readonly [];
+    readonly result: DesktopVersionHistory;
   };
   readonly "settings.window": { readonly args: readonly []; readonly result: WindowSettings };
   readonly "settings.setWindow": {
@@ -393,6 +403,7 @@ export const BRIDGE_CALLS = [
   "settings.appearance",
   "settings.language",
   "settings.setLanguage",
+  "settings.versionHistory",
   "settings.window",
   "settings.setWindow",
   "settings.setAppearance",
@@ -536,6 +547,7 @@ export interface WaveBridge {
     readonly read: (path: string) => Promise<SongTags>;
   };
   readonly settings: {
+    readonly versionHistory: () => Promise<DesktopVersionHistory>;
     readonly window: () => Promise<WindowSettings>;
     readonly setWindow: (change: Partial<WindowSettings>) => Promise<WindowSettings>;
     readonly appearance: () => Promise<Appearance>;
@@ -674,6 +686,7 @@ export const createBridge = (invoke: Invoke): WaveBridge => ({
     appearance: () => invoke("settings.appearance"),
     language: () => invoke("settings.language"),
     setLanguage: (choice) => invoke("settings.setLanguage", choice),
+    versionHistory: () => invoke("settings.versionHistory"),
     window: () => invoke("settings.window"),
     setWindow: (change) => invoke("settings.setWindow", change),
     setAppearance: (appearance) => invoke("settings.setAppearance", appearance),

@@ -209,7 +209,7 @@ describe("the release job", () => {
     assert.match(steps[prepare]!, /SOURCE_DIRECTIONS_FILE=.*>> "\$GITHUB_ENV"/);
   });
 
-  it("publishes nothing to phones unless the Release was published", () => {
+  it("publishes updates only after the GitHub Release exists", () => {
     const workflow = readFileSync(repoFile(".github/workflows/ci.yml"), "utf8");
     const afterRelease = workflow.slice(workflow.indexOf("- name: Publish the release\n"));
     const steps = afterRelease.split(/\n(?= {6}- )/).slice(1);
@@ -221,6 +221,7 @@ describe("the release job", () => {
       "Fetch the over-the-air update",
       "Check the update against the gate's record",
       "Publish the over-the-air update",
+      "Publish the desktop update",
     ]);
     for (const [index, step] of steps.entries()) {
       assert.match(step, /if: .*steps\.published\.outputs\.url != ''/, names[index]);
