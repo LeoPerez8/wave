@@ -12,6 +12,7 @@ import type { DiscoverSettings } from "../../shared/ytPages.ts";
 import { ytRow } from "../../shared/yt.ts";
 import { browseSongs } from "../library/browse.ts";
 import { Database } from "@wave/client";
+import { selectPlaylistEntrySongs } from "@wave/client/db/playlists";
 import { Playback } from "../playback/playback.ts";
 import { VIDEO_ID, YtMusic } from "./ytMusic.ts";
 import { YtFeatures } from "./ytServices.ts";
@@ -136,7 +137,19 @@ export const createYtFeatureHandlers = (
   "discover.picks": () =>
     Effect.gen(function* () {
       const features = yield* YtFeatures;
-      const items = browseSongs(yield* Database, features.discover.picks());
+      const db = yield* Database;
+      const picked = features.discover.picks();
+      const entries = selectPlaylistEntrySongs(
+        db,
+        picked.filter((id): id is string => typeof id === "string"),
+      );
+      // An entry's tile can start its Magic Queue and open its menu once Wave holds the song.
+      (yield* YtMusic).keep(entries);
+      const items = picked.flatMap((id) =>
+        typeof id === "number"
+          ? browseSongs(db, [id])
+          : entries.flatMap((song) => (song.videoId === id ? [ytRow(song)] : [])),
+      );
       return { items, offset: 0, total: items.length };
     }),
   "discover.mixes": () =>

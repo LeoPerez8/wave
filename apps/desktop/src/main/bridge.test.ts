@@ -1268,6 +1268,30 @@ test("a streamed song's artist name leads to the Library's artist when it has th
   });
 });
 
+test("Discover's Magic Queue row draws from the playlists' YouTube Music entries too", async () => {
+  await withFile(async (file) => {
+    const { runtime, exposed } = connect(file);
+    try {
+      const wave = exposed.get("wave") as WaveBridge;
+      await wave.yt.search("pink moon");
+      const made = await wave.playlists.create("Evening");
+      await wave.streamed.run("bcdefghijkl", "addToPlaylist", made.id);
+      const picks = await wave.discover.picks();
+      assert.deepEqual(
+        picks.items.map((row) => [row.videoId, row.title]),
+        [["bcdefghijkl", "Road"]],
+      );
+      await wave.magicQueue.startStreamed("bcdefghijkl");
+      assert.equal((await wave.playback.view()).current?.videoId, "bcdefghijkl");
+
+      await wave.settings.setYtMusic(false);
+      assert.deepEqual((await wave.discover.picks()).items, []);
+    } finally {
+      await runtime.dispose();
+    }
+  });
+});
+
 test("a streamed song has the phone's menu: star, playlist, download, its album and artist", async () => {
   await withFile(async (file) => {
     const { runtime, exposed, downloads, handlers } = connect(file);

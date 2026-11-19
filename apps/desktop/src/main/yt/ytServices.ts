@@ -9,6 +9,7 @@ import { selectAlbums } from "@wave/client/db/albums";
 import { listArtistsSync } from "@wave/client/db/libraryQueries";
 import { mixSongsPage } from "@wave/client/db/mixInputs";
 import { selectCountedPlays } from "@wave/client/db/playTotals";
+import { selectPlaylistEntryVideoIdsPage } from "@wave/client/db/playlists";
 import { selectVideoIds, trackQuery } from "@wave/client/db/tracks";
 import {
   libraryArtistFinder,
@@ -251,6 +252,15 @@ export const ytFeaturesLayer = (options: { readonly online: () => boolean }) =>
             songCount: artist.songs,
           })),
         }),
+        entryVideoIds: () => {
+          const videos = new Set<string>();
+          for (let after: number | null = 0; after !== null;) {
+            const page = selectPlaylistEntryVideoIdsPage(db, after);
+            for (const video of page.videos) videos.add(video);
+            after = page.next;
+          }
+          return [...videos];
+        },
         known: (song) => current().known(song),
         pages,
         today: () => localDay(Date.now()),
