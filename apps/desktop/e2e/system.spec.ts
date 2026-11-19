@@ -219,6 +219,11 @@ test("close keeps playing, the tray notice appears once, relaunch shows Wave, an
       control("next");
       await expect.poll(playing).toBe("Tray Song 2");
       await songStarted();
+      // Paused near its start, the song can't pass three seconds before Previous arrives.
+      control("pause");
+      await expect.poll(() => control("status").trim()).toBe("Paused");
+      control("position", "1");
+      await songStarted();
       control("previous");
       await expect.poll(playing).toBe("Tray Song 1");
       execFileSync("dbus-send", [
