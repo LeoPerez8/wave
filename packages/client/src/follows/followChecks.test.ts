@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import * as Effect from "effect/Effect";
+import { WaveServiceRefusal } from "../askWaveService.ts";
 import { readFollowReleases } from "../db/followReleases.ts";
 import { readFollowShows } from "../db/followShows.ts";
 import { selectFollow } from "../db/follows.ts";
@@ -48,7 +49,6 @@ const shows = (
       calls.push(path);
       return answer(path);
     },
-    stops: () => false,
     pause: "0 millis",
     ...over,
   });
@@ -97,13 +97,9 @@ test("a show check asks nothing signed out, offline or with the switch off, and 
       assert.equal(await run(), false);
       assert.deepEqual(calls, []);
     }
-    const refused = shows(
-      store,
-      () => {
-        throw new Error("limit");
-      },
-      { stops: () => true },
-    );
+    const refused = shows(store, () => {
+      throw new WaveServiceRefusal(429, "ticketmaster");
+    });
     assert.equal(await refused.run(), false);
     assert.equal(refused.calls.length, 1, "the second artist isn't asked about");
   } finally {

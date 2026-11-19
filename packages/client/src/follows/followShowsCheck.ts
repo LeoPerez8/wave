@@ -31,10 +31,12 @@ export interface FollowShowsPorts {
     readonly get: () => { readonly day: number; readonly count: number } | null;
     readonly set: (value: { readonly day: number; readonly count: number }) => void;
   };
-  /** One GET to the service with the account's session; rejects on any refusal. */
+  /**
+   * One GET to the service with the account's session (`askWaveService`); rejects on any
+   * refusal. A session that is gone (`ERR_WAVE_SIGNED_OUT`, `ERR_WAVE_SESSION_ENDED`) or a
+   * limit the service answers ends the whole check.
+   */
   readonly ask: (path: string) => Promise<unknown>;
-  /** Whether [cause] ends the whole check: the session is gone, or the service answered a limit. */
-  readonly stops: (cause: unknown) => boolean;
   /** Waits for a quiet moment before each request. */
   readonly settle?: Effect.Effect<void>;
   /** The gap before each request; 250 ms unless a test shortens it. */
@@ -50,6 +52,14 @@ export interface FollowShowsPorts {
 
 /** A refusal that stops the whole check, so no other artist is asked. */
 class CheckStops extends Error {}
+const stops = (cause: unknown): boolean => {
+  const { code, status, limit } = (cause ?? {}) as Record<string, unknown>;
+  return (
+    code === "ERR_WAVE_SIGNED_OUT" ||
+    code === "ERR_WAVE_SESSION_ENDED" ||
+    (status === 429 && typeof limit === "string")
+  );
+};
 
 /**
  * Signed out it asks nothing; a session that ends meanwhile or a limit the service answers
@@ -64,7 +74,7 @@ export const followShowsCheck = (ports: FollowShowsPorts) => {
   const request = (path: string) =>
     Effect.tryPromise({
       try: () => ports.ask(path),
-      catch: (cause) => (ports.stops(cause) ? new CheckStops() : cause),
+      catch: (cause) => (stops(cause) ? new CheckStops() : cause),
     }).pipe(Effect.timeout("20 seconds"), Effect.delay(ports.pause ?? "250 millis"));
   const count = Effect.sync(() => {
     const day = showCheckDay(Date.now());
@@ -88,7 +98,7 @@ export const followShowsCheck = (ports: FollowShowsPorts) => {
                 const country = ports.country();
                 if (!country || !allowed(country)) return;
                 if (!(yield* Effect.promise(ports.signedIn))) return;
-                let stops = false;
+                let stopped = false;
                 const follows = yield* store.listFollows;
                 const cache = yield* store.followShowCache;
                 const due = dueShowChecks({
@@ -99,7 +109,7 @@ export const followShowsCheck = (ports: FollowShowsPorts) => {
                   context,
                 });
                 for (const follow of due) {
-                  if (!allowed(country) || stops) return;
+                  if (!allowed(country) || stopped) return;
                   if (showChecksLeftToday(ports.checksToday.get(), Date.now()) === 0) return;
                   const previous = cache.artists.find((a) => a.key === follow.key);
                   let counted = false;
@@ -126,7 +136,7 @@ export const followShowsCheck = (ports: FollowShowsPorts) => {
                             return yield* request(path).pipe(
                               Effect.tapError((error) =>
                                 Effect.sync(() => {
-                                  if (error instanceof CheckStops) stops = true;
+                                  if (error instanceof CheckStops) stopped = true;
                                 }),
                               ),
                             );

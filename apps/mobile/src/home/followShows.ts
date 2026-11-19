@@ -9,8 +9,7 @@ import { currentFollowCountry } from "@/settings/followCountry";
 import { showsConfigured, showsNotificationsEnabled } from "@/library/showNotifications";
 import { showChecksToday } from "@/library/showChecksToday";
 import { WaveNative, online } from "@/native/waveNative";
-import { waveAccountErrorCode } from "@/native/waveAccount";
-import { askWaveService, WaveServiceRefusal } from "@/sync/askWaveService";
+import { askWaveService } from "@/sync/askWaveService";
 import { waveSignedIn } from "@/sync/waveSignedIn";
 import { currentLocalisation } from "@/localisation/localisation";
 import { settledTurnEffect } from "@/lib/backgroundWork";
@@ -34,14 +33,6 @@ const check = followShowsCheck({
   online,
   checksToday: showChecksToday,
   ask: askWaveService,
-  stops: (cause) => {
-    const code = waveAccountErrorCode(cause);
-    return (
-      code === "ERR_WAVE_SIGNED_OUT" ||
-      code === "ERR_WAVE_SESSION_ENDED" ||
-      (cause instanceof WaveServiceRefusal && cause.status === 429 && cause.limit !== null)
-    );
-  },
   settle: settledTurnEffect,
   saved: () => {
     for (const listener of savedListeners) listener();
