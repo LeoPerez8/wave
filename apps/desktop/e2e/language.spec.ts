@@ -4,9 +4,47 @@ import { join } from "node:path";
 import { _electron as electron, expect, test } from "@playwright/test";
 import { Database } from "@wave/client";
 import { addTrack, type TestDatabase } from "@wave/client/testing";
+import { catalogueOf } from "@wave/core";
 import * as Effect from "effect/Effect";
 import { libraryLayer } from "../src/main/database.ts";
 import type { WaveBridge } from "../src/shared/bridge.ts";
+import { stubDiscover } from "./discoverFixture.ts";
+
+test("Discover's sliders are named in the language chosen, and follow a change", async () => {
+  const data = mkdtempSync(join(tmpdir(), "wave-language-discover-"));
+  const app = await electron.launch({
+    args: [join(import.meta.dirname, ".."), "--lang=pt-BR"],
+    env: { ...process.env, WAVE_DATA_DIR: data, WAVE_MUSIC_DIR: join(data, "Absent") },
+  });
+  try {
+    const page = await app.firstWindow();
+    await stubDiscover(app);
+    await page.evaluate(() =>
+      (window as unknown as { wave: WaveBridge }).wave.settings.setYtMusic(true),
+    );
+    await page.reload();
+    for (const language of ["pt-BR", "en"] as const) {
+      const text = catalogueOf(language, "desktop");
+      await page.evaluate(
+        (choice) => (window as unknown as { wave: WaveBridge }).wave.settings.setLanguage(choice),
+        language,
+      );
+      await page.getByRole("button", { name: text.discover.settings, exact: true }).click();
+      const card = page.getByRole("dialog", { name: text.home.sections.discover });
+      for (const name of [
+        text.discover.newMusic,
+        text.discover.genreFaithfulness,
+        text.discover.popularity,
+      ])
+        await expect(card.getByRole("slider", { name, exact: true })).toBeVisible();
+      await page.keyboard.press("Escape");
+      await expect(card).toBeHidden();
+    }
+  } finally {
+    await app.close();
+    rmSync(data, { recursive: true, force: true });
+  }
+});
 
 test("language applies live to Settings, missing album names, tray and native dialogs, then persists", async () => {
   const data = mkdtempSync(join(tmpdir(), "wave-language-"));

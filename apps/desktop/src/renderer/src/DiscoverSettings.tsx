@@ -19,24 +19,25 @@ import { text } from "./text.ts";
 
 type Slider = keyof DiscoverSettings;
 
+/** Labels are read at render: `text` follows the language, which is applied after this loads. */
 const SLIDERS: readonly {
   readonly key: Slider;
-  readonly label: string;
+  readonly label: () => string;
   readonly step: (value: MixSliderStep) => string;
 }[] = [
   {
     key: "level",
-    label: text.discover.newMusic,
+    label: () => text.discover.newMusic,
     step: (value) => discoverLevelLabel(value, text),
   },
   {
     key: "faithfulness",
-    label: text.discover.genreFaithfulness,
+    label: () => text.discover.genreFaithfulness,
     step: (value) => text.discover.faithfulnessSteps[value],
   },
   {
     key: "popularity",
-    label: text.discover.popularity,
+    label: () => text.discover.popularity,
     step: (value) => text.discover.popularitySteps[value],
   },
 ];
@@ -97,7 +98,7 @@ function DiscoverCard({
         {settings !== undefined &&
           SLIDERS.map(({ key: id, label, step }) => (
             <div key={id} className="discover-slider">
-              <label htmlFor={`discover-${id}`}>{label}</label>
+              <label htmlFor={`discover-${id}`}>{label()}</label>
               <output htmlFor={`discover-${id}`} className="secondary">
                 {step(settings[id])}
               </output>
