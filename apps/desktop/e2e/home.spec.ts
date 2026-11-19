@@ -185,6 +185,8 @@ test("a Home read that fails offers Try Again and recovers", async () => {
   });
   try {
     const page = await app.firstWindow();
+    // The first load finishes before the reload, so it can't land after it and replace its page.
+    await expect(page.getByTestId("home")).toBeVisible();
     await app.evaluate(({ ipcMain }) => {
       ipcMain.removeHandler("home.view");
       ipcMain.handle("home.view", () => {
