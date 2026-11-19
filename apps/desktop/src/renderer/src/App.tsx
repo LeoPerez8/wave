@@ -58,8 +58,8 @@ type Route =
 const sections = ["playlists", "artists", "albums", "songs", "genres", "favorites"] as const;
 /** YT Music's sidebar pages; Downloads comes with its ticket. */
 const ytPages = [
-  ["discover", "home"],
-  ["magicQueue", "queue"],
+  ["discover", "discover"],
+  ["magicQueue", "magicQueue"],
   ["downloads", "download"],
 ] as const;
 const settings = [
@@ -602,7 +602,10 @@ export function App() {
                 playlistEdits.openMenu(row.id, { x: event.clientX, y: event.clientY });
               }}
             >
-              <Icon name="playlists" />
+              <Icon name="playlist" />
+              <span className="nav-monogram" aria-hidden="true">
+                {Array.from(row.title.trim())[0]?.toLocaleUpperCase()}
+              </span>
               <span className="truncate">{row.title}</span>
             </button>
           ))}
@@ -966,6 +969,14 @@ export function App() {
           run={playback.run}
           onError={failed}
           hidden={nowPlaying}
+          onClose={() => {
+            // Focus goes back to the bar's button for this tab; Related opens from Queue's.
+            const opener = panel.tab === "lyrics" ? labels.lyrics : labels.queue;
+            panel.show(null);
+            document
+              .querySelector<HTMLElement>(`.player-bar [aria-label="${CSS.escape(opener)}"]`)
+              ?.focus();
+          }}
         />
       )}
       {nowPlaying && (

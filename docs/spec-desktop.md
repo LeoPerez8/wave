@@ -289,16 +289,20 @@ The prototype was approved on 2026-11-18 after an Impeccable critique; its decis
 - Sidebar: Search field (Ctrl+F) and Home; Library (Playlists, Artists, Albums, Songs, Genres,
   Favorites); YT Music (Discover, Magic Queue, Downloads, whose count shows the download
   percentage); the user's playlists with New Playlist; Settings pinned at the bottom. Back and
-  forward arrows sit in the title bar.
-- Lyrics and the Queue share the side panel, toggled from the player bar. Now Playing (artwork,
+  forward arrows sit in the title bar. Every entry has its own icon. The sidebar scrolls as one
+  when the window is short, keeping the Search field and Settings in view.
+- Lyrics and the Queue share the side panel, toggled from the player bar and closed by the
+  panel's own control on every tab. Now Playing (artwork,
   title, lyrics) opens from the bar's artwork or title and closes with Esc. Focus lands on Now
   Playing itself, so Space still plays and pauses; Tab reaches its close button.
-- Minimum window 960×600. Below 1120 px wide the sidebar shows icons only. When the content is
+- Minimum window 960×600. Below 1120 px wide the sidebar shows icons only, a playlist as
+  its first letter, and Ctrl+F opens the Search field in the title bar. When the content is
   narrower than 760 px, tables drop the Album column, the search top result stacks and hero
   artwork shrinks to 168 px.
 - Title bar: on Windows Wave draws its own with Electron's `titleBarOverlay`, which keeps the
   native window buttons and Snap Layouts. On Linux the system frame stays and Wave's bar sits
   under it.
+- Scrollbars are Wave's own everywhere: an 8 px rounded thumb with no track and no arrow buttons.
 - Theme: the phone's tokens, light and dark following the system or the Appearance setting. The
   accent follows the synced theme, so the default theme gives a white accent in dark and the ink
   colour in light, as on the phone.

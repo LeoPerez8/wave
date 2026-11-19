@@ -109,6 +109,7 @@ export const ptBR: Catalogue = {
     magicQueueIdle:
       "Comece uma Fila Mágica com uma destas músicas ou pelo menu de qualquer música.",
     sidePanel: "Painel lateral",
+    closeSidePanel: "Fechar painel lateral",
     removeFromQueue: (title: string) => `Remover “${title}” da Fila`,
   },
   desktopLibrary: {
