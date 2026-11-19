@@ -21,7 +21,9 @@ import {
   readSyncedStars,
   soulseekRecording,
   starAskedAfter,
+  STAR_ASKED_SETTING as STAR_ASKED,
   starredDownload,
+  SYNCED_STARS_SETTING as SEEN_STARS,
   syncedStarDownloads,
   unstarredDownload,
   writeStarDownloads,
@@ -140,11 +142,6 @@ export interface StarStore {
   /** Null forgets [key]. */
   readonly write: (key: string, value: string | null) => void;
 }
-
-/** The starred missing songs seen (Core's `syncedStarDownloads`), as the phone keys them. */
-const SEEN_STARS = "downloads.syncedStars";
-/** The downloads only a star asked for (Core's `readStarDownloads`), as the phone keys them. */
-const STAR_ASKED = "downloads.starAsked";
 
 /** A job as the journal hands it over: Core's journal job, with the YT Music song it was asked as. */
 type Job = YtDownloadJournalJob<YtSong>;

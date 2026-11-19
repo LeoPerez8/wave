@@ -57,6 +57,9 @@ export const sliderStepLabel = (
   value: number,
 ): string => stepOf(steps, sliderStep(value)).label;
 
+/** Where Discover's two sliders are kept, on the phone and the computer alike (not synced). */
+export const DISCOVER_SLIDERS_SETTING = "home.discoverSliders";
+
 /** A section's sliders as kept on the phone ([stored], null for none): the middle for any that isn't a step. */
 export const readMixSliders = (stored: string | null): MixSliders => {
   const { faithfulness, popularity } = readStoredRecord(stored);

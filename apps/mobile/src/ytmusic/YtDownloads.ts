@@ -11,6 +11,7 @@ import {
   qualityDirection,
   applyJournalChanges,
   readStarDownloads,
+  STAR_ASKED_SETTING,
   starAskedAfter,
   starredDownload,
   unstarredDownload,
@@ -1258,7 +1259,7 @@ let requests = Promise.resolve();
  * so it survives Wave closing; the owner asking for one of them (`ownerAsked`) takes it out.
  */
 const starAsked = persistedSetting<ReadonlySet<string>>({
-  key: "downloads.starAsked",
+  key: STAR_ASKED_SETTING,
   read: readStarDownloads,
   write: writeStarDownloads,
 });

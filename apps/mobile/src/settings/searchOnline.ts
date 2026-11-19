@@ -1,5 +1,6 @@
 import { currentLocalisation } from "@/localisation/localisation";
 import {
+  SEARCH_ONLINE_SETTING,
   readSearchOnline,
   searchOnlineAlways,
   writeSearchOnline,
@@ -21,7 +22,7 @@ import type { ChoiceSetting } from "./ChoiceRow";
  * is tapped, except in integrated views.
  */
 export const searchOnline = persistedSetting<SearchOnline>({
-  key: "settings.searchOnline",
+  key: SEARCH_ONLINE_SETTING,
   read: readSearchOnline,
   write: writeSearchOnline,
 });

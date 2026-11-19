@@ -125,6 +125,9 @@ export const DISCOVER_MIX_LEVELS: readonly {
 export const discoverLevelLabel = (level: DiscoverMixLevel, strings: Catalogue = en): string =>
   `${strings.discover.levels[level]} · ${strings.discover.newShare((level * 100) / LEVELS)}`;
 
+/** Where Discover's New music level is kept, on the phone and the computer alike (not synced). */
+export const DISCOVER_LEVEL_SETTING = "home.discoverLevel";
+
 /** The level kept on the phone ([stored], null for none): 3 for anything that isn't one. */
 export const readDiscoverMixLevel = (stored: string | null): DiscoverMixLevel =>
   DISCOVER_MIX_LEVELS.find((entry) => String(entry.level) === stored)?.level ??
