@@ -37,7 +37,7 @@ test("YT Music: the setting, the sidebar, Search's results, and a song that play
     await expect(sidebar.getByRole("button", { name: "Magic Queue" })).toBeEnabled();
     await expect(sidebar.getByRole("button", { name: "Downloads" })).toBeEnabled();
 
-    await page.getByRole("button", { name: "Settings" }).click();
+    await page.getByRole("button", { name: "Settings", exact: true }).click();
     await page.getByRole("button", { name: "Accounts" }).click();
     const toggle = page.getByRole("checkbox", { name: "Use YT Music" });
     await expect(toggle).toBeChecked();
@@ -48,7 +48,7 @@ test("YT Music: the setting, the sidebar, Search's results, and a song that play
     await expect(page.getByTestId("yt-results")).toHaveCount(0);
     await expect(page.getByTestId("yt-status")).toHaveCount(0);
 
-    await page.getByRole("button", { name: "Settings" }).click();
+    await page.getByRole("button", { name: "Settings", exact: true }).click();
     await page.getByRole("button", { name: "Accounts" }).click();
     await page.getByRole("checkbox", { name: "Use YT Music" }).check();
     // The field kept the text, so it changes to bring Search back.

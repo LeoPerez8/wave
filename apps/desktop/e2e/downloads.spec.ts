@@ -250,7 +250,7 @@ test("a YouTube Music song downloads into the Library with its tags", async () =
   });
   try {
     const page = await app.firstWindow();
-    await page.getByRole("button", { name: "Settings" }).click();
+    await page.getByRole("button", { name: "Settings", exact: true }).click();
     await page.getByRole("button", { name: "Downloads", exact: true }).last().click();
     // The Library keeps its folders as resolved paths with forward slashes.
     await expect(page.getByTestId("downloads-folder")).toHaveText(
