@@ -1,3 +1,5 @@
+import { DONT_PLAY_EXPLICIT_SETTING } from "@wave/core";
+
 import { persistedSetting } from "@/lib/persistedSetting";
 
 /**
@@ -6,7 +8,7 @@ import { persistedSetting } from "@/lib/persistedSetting";
  * Discover mixes leave them out (`discoverMixKeep`). Lists still show them.
  */
 const dontPlayExplicitSetting = persistedSetting<boolean>({
-  key: "settings.dontPlayExplicit",
+  key: DONT_PLAY_EXPLICIT_SETTING,
   synced: true,
   read: (stored) => stored === "on",
   write: (on) => (on ? "on" : null),

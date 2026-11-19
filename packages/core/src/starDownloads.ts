@@ -72,6 +72,9 @@ export const unstarredDownload = (
   }
 };
 
+/** Where the downloads only a star asked for are kept (`readStarDownloads`); each device keeps its own. */
+export const STAR_ASKED_SETTING = "downloads.starAsked";
+
 /**
  * The downloads only a star asked for, by job id (a YT Music song's video id,
  * a missing song's `missing:<id>`), as the key-value store keeps them on this
@@ -184,6 +187,9 @@ export const starredHere = (
   }
   return next;
 };
+
+/** Where the starred missing songs seen are kept (`readSyncedStars`); each device keeps its own. */
+export const SYNCED_STARS_SETTING = "downloads.syncedStars";
 
 /**
  * The starred missing songs this phone has seen (`syncedStarDownloads`'s

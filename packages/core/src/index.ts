@@ -1658,6 +1658,7 @@ export type {
   MissingTrack,
 } from "./missingSongDownload.ts";
 export {
+  HOME_ARRANGEMENT_SETTING,
   HOME_SECTIONS,
   editHomeArrangement,
   hiddenHomeSections,
@@ -1893,6 +1894,7 @@ export { advisoryTag, explicitFromAdvisory, isExplicit, showsExplicitBadge } fro
 export type { ExplicitFlag } from "./explicit.ts";
 export {
   DEFAULT_DISCOVER_MIX_LEVEL,
+  DISCOVER_LEVEL_SETTING,
   DISCOVER_MIX_LEVELS,
   blendDiscoverMix,
   discoverMixFamiliarPool,
@@ -1960,6 +1962,7 @@ export type { JournalChanges } from "./journalChanges.ts";
 export { PLAY_ACTION_LABELS, menuLayout } from "./menuLayout.ts";
 export type { MenuLayout, MenuSubject, PlayAction, PlayCard } from "./menuLayout.ts";
 export {
+  DONT_PLAY_EXPLICIT_SETTING,
   explicitPassOver,
   explicitPlayNotice,
   explicitSkipNotice,
@@ -1992,6 +1995,8 @@ export type {
 } from "./onlineLyrics.ts";
 export {
   FAVORITES_DOWNLOAD_ORIGIN,
+  STAR_ASKED_SETTING,
+  SYNCED_STARS_SETTING,
   readStarDownloads,
   starredDownload,
   unstarredDownload,
@@ -2053,6 +2058,7 @@ export type {
 } from "./genreAffinity.ts";
 export type { SearchOnline, YtPick } from "./onlineToggle.ts";
 export {
+  SEARCH_ONLINE_SETTING,
   releaseBackgroundAllowed,
   readSearchOnline,
   searchOnlineAlways,
@@ -2352,6 +2358,7 @@ export {
 export type { SimilarArtistsKept } from "./similarArtistsKept.ts";
 export {
   DEFAULT_MIX_SLIDERS,
+  DISCOVER_SLIDERS_SETTING,
   GENRE_FAITHFULNESS_STEPS,
   POPULARITY_STEPS,
   readMixSliders,

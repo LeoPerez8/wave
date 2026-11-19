@@ -1,3 +1,5 @@
+import { SHOW_CHECKS_TODAY_SETTING } from "@wave/core";
+
 import { persistedSetting } from "@/lib/persistedSetting";
 
 /**
@@ -7,7 +9,7 @@ import { persistedSetting } from "@/lib/persistedSetting";
  * service counts per account, and a second phone only finds its limit sooner.
  */
 export const showChecksToday = persistedSetting<{ day: number; count: number } | null>({
-  key: "shows.checksToday",
+  key: SHOW_CHECKS_TODAY_SETTING,
   read: (stored) => {
     if (stored === null) return null;
     try {
