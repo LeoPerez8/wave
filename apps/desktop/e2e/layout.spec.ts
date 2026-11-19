@@ -193,7 +193,9 @@ test("every Library page is reachable using only the keyboard on an empty Librar
       await expect(page.getByRole("heading", { level: 1 })).toHaveText(name);
       if (name === "Home") {
         // Home is shelves, not a grid; an empty Library shows its invitation.
-        await expect(page.getByTestId("home").getByRole("heading", { level: 2 })).toBeVisible();
+        await expect(
+          page.getByTestId("home").locator(".home-empty").getByRole("heading", { level: 2 }),
+        ).toBeVisible();
       } else if (name !== "Settings") {
         await expect(page.getByRole("grid")).toBeFocused();
         await expect(page.getByRole("grid").getByRole("status")).not.toHaveText("Loading…");
