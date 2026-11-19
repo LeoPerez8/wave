@@ -105,6 +105,27 @@ describe("patchNotes", () => {
     );
   });
 
+  it("leaves the desktop's PRs out of the phone's notes, shared code and all", () => {
+    const notes = patchNotes({
+      commits: [40, 41, 42, 43].map((n) => `commit-${n}`),
+      bugIssues: [],
+      pullRequests: [
+        pr(40, { files: ["apps/desktop/src/renderer/src/App.tsx"], branch: "feat/40-desktop" }),
+        pr(41, {
+          files: [
+            "apps/desktop/src/main/index.ts",
+            "packages/core/src/catalogueEn.ts",
+            "packages/kotlin-shared/src/main/kotlin/expo/modules/wavenative/yt/YtClient.kt",
+            "apps/mobile/src/settings/YtMusicSettingsSection.tsx",
+          ],
+        }),
+        pr(42, { files: ["packages/core/src/catalogue/desktopEn.ts"], branch: "fix/42-desktop" }),
+        pr(43, { files: ["apps/mobile/src/app/_layout.tsx"] }),
+      ],
+    });
+    assert.equal(notes, "## New\n\n- [PR 43](https://github.com/LeoPerez8/wave/pull/43)\n");
+  });
+
   it("lists a PR that changes only the sync service", () => {
     const notes = patchNotes({
       commits: ["commit-37"],
