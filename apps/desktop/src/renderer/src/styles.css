@@ -847,6 +847,10 @@ h2 {
   .search-field:focus-within::before {
     display: none;
   }
+  /* Its slot stays, so a click on an entry isn't lost when leaving the field moves them. */
+  .sidebar:has(> .search-field:focus-within) {
+    padding-top: calc(18px + 34px + 14px);
+  }
   .search-field:focus-within input {
     outline: none;
     position: static;
