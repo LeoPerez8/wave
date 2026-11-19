@@ -31,7 +31,6 @@ import { preference, savePreference } from "../preferences.ts";
 import { YtMusic } from "../yt/ytMusic.ts";
 import { createAnswers } from "./decisions.ts";
 import { createDownloads, type DownloadCall, type DownloadsShape } from "./downloads.ts";
-import { sql } from "drizzle-orm";
 import { createLookups } from "@wave/client/downloads/lookups";
 import { lookupsEnabled } from "../lookupSettings.ts";
 
