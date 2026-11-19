@@ -118,6 +118,9 @@ interface MethodCall {
   readonly path: string;
   readonly iface?: string;
   readonly member: string;
+  /** The bus name the call is addressed to; the Secret Service for every call but the first Hello,
+   *  which must go to the bus daemon itself. */
+  readonly dest?: string;
   readonly signature?: string;
   readonly body?: Buffer;
 }
@@ -141,7 +144,7 @@ export const message = (serial: number, m: MethodCall): Buffer => {
   field(1, "o", (x) => x.string(m.path));
   if (m.iface !== undefined) field(2, "s", (x) => x.string(m.iface as string));
   field(3, "s", (x) => x.string(m.member));
-  field(6, "s", (x) => x.string(SECRETS));
+  field(6, "s", (x) => x.string(m.dest ?? SECRETS));
   if (m.signature !== undefined) field(8, "g", (x) => x.signature(m.signature as string));
   w.uint32(fields.length);
   w.raw(fields.bytes);
@@ -232,6 +235,7 @@ class DbusSession {
       path: "/org/freedesktop/DBus",
       iface: "org.freedesktop.DBus",
       member: "Hello",
+      dest: "org.freedesktop.DBus",
     });
     return session;
   }

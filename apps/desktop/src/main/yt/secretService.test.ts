@@ -2,6 +2,49 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 import { message, parseMessage, stringDict } from "./secretService.ts";
 
+/** Reads the DESTINATION (header field 6) out of a built method-call message. */
+const destinationOf = (buf: Buffer): string | null => {
+  const fieldsLen = buf.readUInt32LE(12);
+  let o = 16;
+  const end = 16 + fieldsLen;
+  let dest: string | null = null;
+  while (o < end) {
+    o = Math.ceil(o / 8) * 8; // struct alignment
+    const code = buf[o++];
+    const sigLen = buf[o++] as number;
+    const sig = buf.toString("ascii", o, o + sigLen);
+    o += sigLen + 1;
+    if (sig === "s" || sig === "o") {
+      o = Math.ceil(o / 4) * 4;
+      const len = buf.readUInt32LE(o);
+      o += 4;
+      const s = buf.toString("utf8", o, o + len);
+      o += len + 1;
+      if (code === 6) dest = s;
+    } else if (sig === "g") {
+      const len = buf[o++] as number;
+      o += len + 1;
+    } else throw new Error(`unexpected header sig ${sig}`);
+  }
+  return dest;
+};
+
+test("Hello is addressed to the bus daemon; other calls default to the Secret Service", () => {
+  const hello = message(1, {
+    path: "/org/freedesktop/DBus",
+    iface: "org.freedesktop.DBus",
+    member: "Hello",
+    dest: "org.freedesktop.DBus",
+  });
+  assert.equal(destinationOf(hello), "org.freedesktop.DBus");
+  const getSecret = message(2, {
+    path: "/item",
+    iface: "org.freedesktop.Secret.Item",
+    member: "GetSecret",
+  });
+  assert.equal(destinationOf(getSecret), "org.freedesktop.secrets");
+});
+
 test("a method call is a well-formed little-endian D-Bus header padded to 8", () => {
   const m = message(1, {
     path: "/org/freedesktop/DBus",
