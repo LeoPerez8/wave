@@ -3,7 +3,7 @@
  * the playlist's image, Move Up and Move Down, Undo of a removal, the Graveyard and the M3U
  * import. Main does the work; the window asks and shows.
  */
-import type { AppLanguage, ImageFraming, M3uImportOutcome, PlaylistNameCheck } from "@wave/core";
+import type { ImageFraming, M3uImportOutcome, PlaylistNameCheck } from "@wave/core";
 import type { BridgeContract, Invoke, Page } from "./bridge.ts";
 import type { BrowseRow } from "./browse.ts";
 import type { SongTarget } from "./songActions.ts";
@@ -57,7 +57,7 @@ export interface PlaylistContract {
   };
   /** New Playlist's suggestion: New Playlist, then New Playlist 2, 3… */
   readonly "playlists.newName": {
-    readonly args: readonly [language: AppLanguage];
+    readonly args: readonly [];
     readonly result: string;
   };
   /** Makes a playlist, holding [target]'s songs when given; its id. */
@@ -185,7 +185,7 @@ export interface PlaylistBridge {
 
 export const playlistBridge = (invoke: Invoke): PlaylistBridge => ({
   checkName: (name, playlistId) => invoke("playlists.checkName", name, playlistId),
-  newName: (language) => invoke("playlists.newName", language),
+  newName: () => invoke("playlists.newName"),
   create: (name, target) => invoke("playlists.create", name, target),
   rename: (playlistId, name) => invoke("playlists.rename", playlistId, name),
   delete: (playlistId) => invoke("playlists.delete", playlistId),

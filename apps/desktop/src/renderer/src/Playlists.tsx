@@ -88,7 +88,7 @@ export function usePlaylistEdits({ go, deleted, failed, changed }: Options) {
   const newPlaylist = useCallback(
     (target?: SongTarget) => {
       void window.wave.playlists
-        .newName(language)
+        .newName()
         .then((initial) => setNaming({ kind: "create", initial, ...(target ? { target } : {}) }))
         .catch(() => failed(text.playlists.couldntCreate));
     },
@@ -186,7 +186,7 @@ export function usePlaylistEdits({ go, deleted, failed, changed }: Options) {
               key: "copyLink",
               label: text.share.copyLink,
               run: () => {
-                void copyLink(window.wave.links.copyPlaylist(playlistId, language));
+                void copyLink(window.wave.links.copyPlaylist(playlistId));
               },
             },
           ]

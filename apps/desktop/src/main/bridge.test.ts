@@ -2084,7 +2084,7 @@ test("New Playlist, Remove from Playlist and an M3U import show in the playlists
         (await wave.library.browse({ kind: "playlists" }, 0, 50)).items.map((row) => row.title);
       const songs = { kind: "songs" } as const;
       const before = (await wave.playback.view()).revision;
-      const made = await wave.playlists.create(await wave.playlists.newName("en"), {
+      const made = await wave.playlists.create(await wave.playlists.newName(), {
         scope: songs,
         ids,
       });
@@ -2178,7 +2178,6 @@ test("main refuses playlist calls with a bad playlist, name, page, answer or fra
         /refused/i,
       );
       await assert.rejects(call("playlists.rename", 0, "A"), /refused/i);
-      await assert.rejects(call("playlists.newName", "fr"), /refused/i);
       await assert.rejects(call("playlists.move", 1, 1, "left"), /refused/i);
       await assert.rejects(call("playlists.graveyard", 1, 0, 201), /refused/i);
       await assert.rejects(call("playlists.forget", 1, "all"), /refused/i);
@@ -2206,20 +2205,27 @@ test("Copy Link puts a song's share link on the clipboard, and pasted text that 
     const wave = exposed.get("wave") as WaveBridge;
     const call = (channel: string, ...args: unknown[]) => handlers.get(channel)!(trusted, ...args);
     try {
-      assert.deepEqual(await wave.links.copySong("abcdefghijk", "en"), {
+      assert.deepEqual(await wave.links.copySong("abcdefghijk"), {
         kind: "copied",
         message: "Link copied",
       });
       assert.deepEqual(copied, ["https://song.link/y/abcdefghijk"]);
       const before = engineCalls.length;
-      assert.deepEqual(await wave.links.open("Pink Moon by Nick Drake", "en"), { kind: "ignored" });
+      assert.deepEqual(await wave.links.open("Pink Moon by Nick Drake"), { kind: "ignored" });
       assert.equal(engineCalls.length, before);
       assert.equal(copied.length, 1);
-      await assert.rejects(call("links.open", 7, "en"), /refused/i);
-      await assert.rejects(call("links.open", "x".repeat(16_385), "en"), /refused/i);
-      await assert.rejects(call("links.copySong", "not a video", "en"), /refused/i);
-      await assert.rejects(call("links.copyPlaylist", 0, "en"), /refused/i);
+      await assert.rejects(call("links.open", 7), /refused/i);
+      await assert.rejects(call("links.open", "x".repeat(16_385)), /refused/i);
+      await assert.rejects(call("links.copySong", "not a video"), /refused/i);
+      await assert.rejects(call("links.copyPlaylist", 0), /refused/i);
       await assert.rejects(call("links.importPlaylist", "token", "yes"), /refused/i);
+      // Main answers in the language it resolved, whatever the window believes.
+      await wave.settings.setLanguage("pt-BR");
+      assert.deepEqual(await wave.links.copySong("abcdefghijk"), {
+        kind: "copied",
+        message: "Link copiado",
+      });
+      assert.equal(await wave.playlists.newName(), "Nova Playlist");
     } finally {
       await runtime.dispose();
     }
