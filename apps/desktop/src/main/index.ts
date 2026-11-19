@@ -341,7 +341,7 @@ else {
         platform: process.platform,
       }),
       syncUrl: config.syncUrl,
-      signInWithBrowser: (signal) =>
+      signInWithBrowser: (signal, purpose) =>
         clientId === null
           ? Promise.reject(new Error("This build has no Google client."))
           : signInWithBrowser({
@@ -353,7 +353,10 @@ else {
               fetch,
               page: {
                 title: text.desktopAccount.browserTitle,
-                message: text.desktopAccount.browserMessage,
+                message:
+                  purpose === "confirmDeletion"
+                    ? text.desktopAccount.browserDeletionMessage
+                    : text.desktopAccount.browserMessage,
               },
               signal,
             }),

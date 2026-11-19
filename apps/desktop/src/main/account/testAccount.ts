@@ -1,7 +1,7 @@
 /** The desktop's Wave account over the sync Worker's test harness, for the account and sync tests. */
 import assert from "node:assert/strict";
 import { harness, type Harness, type HarnessOptions } from "../../../../sync/src/testing.ts";
-import { createWaveAccount, type WaveAccountDeps } from "./account.ts";
+import { createWaveAccount, type BrowserSignInPurpose, type WaveAccountDeps } from "./account.ts";
 import type { BrowserIdentity } from "./browserSignIn.ts";
 import { sessionStore, type SecretBox, type SessionFiles } from "./sessionStore.ts";
 
@@ -37,7 +37,10 @@ export const desktop = async (options: HarnessOptions = {}) => {
     write: (path, bytes) => void disk.set(path, bytes),
     remove: (path) => void disk.delete(path),
   };
-  let browser = async (_signal: AbortSignal): Promise<BrowserIdentity> => ({
+  let browser = async (
+    _signal: AbortSignal,
+    _purpose: BrowserSignInPurpose,
+  ): Promise<BrowserIdentity> => ({
     idToken: await service.google.idToken({ aud: DESKTOP_CLIENT, name: "Ana" }),
     email: "ana@example.com",
     name: "Ana",
@@ -49,7 +52,7 @@ export const desktop = async (options: HarnessOptions = {}) => {
     createWaveAccount({
       store: sessionStore({ box: keyring, file: "session.bin", files, platform: "win32" }),
       syncUrl: SYNC_URL,
-      signInWithBrowser: (signal) => browser(signal),
+      signInWithBrowser: (signal, purpose) => browser(signal, purpose),
       fetch: (input, init) => fetch(input, init),
       online: () => online,
       ...overrides,
@@ -60,7 +63,9 @@ export const desktop = async (options: HarnessOptions = {}) => {
     open,
     /** The service's answer to a request, for a test that puts something in its way. */
     fetch: ((input, init) => fetch(input, init)) as typeof globalThis.fetch,
-    browser: (next: (signal: AbortSignal) => Promise<BrowserIdentity>) => void (browser = next),
+    browser: (
+      next: (signal: AbortSignal, purpose: BrowserSignInPurpose) => Promise<BrowserIdentity>,
+    ) => void (browser = next),
     offline: () => {
       online = false;
       fetch = async () => {

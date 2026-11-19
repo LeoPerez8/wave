@@ -27,6 +27,7 @@ export interface AccountShape {
   readonly cancelSignIn: () => void;
   readonly signOut: () => Promise<void>;
   readonly signOutEverywhere: () => Promise<void>;
+  readonly deleteAccount: () => Promise<void>;
   /** Not Now or Sign In on the invitation: it never shows again. */
   readonly answerInvitation: () => void;
   /** A Wave window got focus. */
@@ -138,6 +139,7 @@ export const accountLayer = (options: {
         cancelSignIn: account.cancelSignIn,
         signOut: account.signOut,
         signOutEverywhere: account.signOutEverywhere,
+        deleteAccount: account.deleteAccount,
         answerInvitation: () => savePreference(db, INVITATION, "answered"),
         foreground: sync.foreground,
       };

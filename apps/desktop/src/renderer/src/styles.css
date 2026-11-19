@@ -606,6 +606,7 @@ h2 {
   margin: 8px 0;
 }
 .account-actions {
+  flex-wrap: wrap;
   display: flex;
   gap: 8px;
   margin: 12px 0 4px;
