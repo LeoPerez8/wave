@@ -13,8 +13,11 @@ import "./homeFollow.css";
 
 const NONE: HomeFollowView = { releases: [], shows: [] };
 
-/** One check per window: a second visit to Home reads what the first one saved. */
-let checked = false;
+/**
+ * One check per window, shared by every visit to Home: a visit made while it runs still hears
+ * what it saved, and a check that failed is asked again on the next visit.
+ */
+let check: Promise<boolean> | undefined;
 
 /** Both sections' cards, read again when the Library changes or a check saved something. */
 export function useHomeFollow(revision: number): HomeFollowView {
@@ -33,15 +36,16 @@ export function useHomeFollow(revision: number): HomeFollowView {
     };
   }, [revision, saved]);
   useEffect(() => {
-    if (checked) return;
-    checked = true;
     let current = true;
-    void window.wave.home
-      .followCheck()
-      .then((changed) => {
+    const asked = (check ??= window.wave.home.followCheck());
+    void asked.then(
+      (changed) => {
         if (changed && current) setSaved((value) => value + 1);
-      })
-      .catch(() => {});
+      },
+      () => {
+        if (check === asked) check = undefined;
+      },
+    );
     return () => {
       current = false;
     };

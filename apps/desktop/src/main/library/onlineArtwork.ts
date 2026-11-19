@@ -21,6 +21,7 @@ import {
   type SongLookup,
 } from "@wave/core";
 import { readArtwork } from "./artwork.ts";
+import { slots } from "./slots.ts";
 
 export type ArtworkKind = "song" | "album" | "artist";
 
@@ -65,8 +66,7 @@ export const createLibraryArtwork = (options: {
   const { db, directory } = options;
   const fetch = options.fetch ?? globalThis.fetch;
   const pending = new Map<string, Promise<void>>();
-  const waiting: (() => void)[] = [];
-  let running = 0;
+  const slot = slots(CONCURRENT);
   let failures = 0;
   let unreachableUntil = 0;
   let saves = 0;
@@ -207,10 +207,8 @@ export const createLibraryArtwork = (options: {
   };
 
   /** Looks [subject] up when Core says it is due, and records how it went. */
-  const lookUp = async (subject: Subject, folder: string): Promise<void> => {
-    if (running >= CONCURRENT) await new Promise<void>((resolve) => waiting.push(resolve));
-    running++;
-    try {
+  const lookUp = (subject: Subject, folder: string): Promise<void> =>
+    slot(async () => {
       const check = await readCheck(folder);
       const due = artistPhotoLookups(
         [{ key: folder, name: subject.name }],
@@ -240,11 +238,7 @@ export const createLibraryArtwork = (options: {
       await mkdir(folder, { recursive: true });
       await atomic(join(folder, "check.json"), JSON.stringify({ outcome, checkedAt: Date.now() }));
       if (++saves % 50 === 1) await prune();
-    } finally {
-      running--;
-      waiting.shift()?.();
-    }
-  };
+    });
 
   const saved = async (folder: string, large: boolean): Promise<string | null> => {
     try {

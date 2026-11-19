@@ -102,10 +102,15 @@ export interface DownloadsShape {
   readonly rows: (offset: number, limit: number) => Page<DownloadRow>;
   /** A page's missing songs and their downloads; null for no such page. */
   readonly listView: (list: MissingSongsList) => MissingSongsView | null;
-  /** Downloads YT Music songs a search found. */
-  readonly yt: (videoIds: readonly string[]) => Promise<void>;
-  /** Downloads missing songs, each into its Track (a missing song's click). */
-  readonly missing: (trackIds: readonly number[]) => Promise<void>;
+  /**
+   * Downloads YT Music songs a search found. With [by] `star`, a star asked rather than the
+   * owner, so [unstarred] takes the download back.
+   */
+  readonly yt: (videoIds: readonly string[], by?: "star") => Promise<void>;
+  /** Downloads missing songs, each into its Track (a missing song's click, or its star with [by]). */
+  readonly missing: (trackIds: readonly number[], by?: "star") => Promise<void>;
+  /** The stars of the jobs [ids] came off: each download only its star asked for is taken back. */
+  readonly unstarred: (ids: readonly string[]) => Promise<void>;
   /** Download All, Retry Failed or Cancel on every missing song, or [list]'s, in its order. */
   readonly missingAction: (
     action: MissingSongsDownloadAction,
@@ -308,6 +313,14 @@ export const createDownloads = (deps: DownloadsDeps): DownloadsShape => {
     if (after !== asked) store.write(STAR_ASKED, writeStarDownloads(after));
   };
 
+  /** A star asked for [ids], or with no [by] the owner did. */
+  const askedBy = (by: "star" | undefined, ids: readonly string[]) => {
+    if (by === undefined) return ownerAsked(ids);
+    const asked = readStarDownloads(store.read(STAR_ASKED));
+    const after = starAskedAfter(asked, { kind: "starred", queued: ids });
+    if (after !== asked) store.write(STAR_ASKED, writeStarDownloads(after));
+  };
+
   const failedJobs = () =>
     followed.filter(
       (job) =>
@@ -386,9 +399,10 @@ export const createDownloads = (deps: DownloadsDeps): DownloadsShape => {
       const found = deps.list(list);
       return found === null ? null : missingView(missingJobs(found.ids));
     },
-    yt: (videoIds) =>
+    yt: (videoIds, by) =>
       queued(async () => {
         const current = await session();
+        askedBy(by, videoIds);
         const asked = videoIds.flatMap((videoId): JobRequest[] => {
           const song = deps.ytSong(videoId);
           return song === undefined
@@ -405,10 +419,10 @@ export const createDownloads = (deps: DownloadsDeps): DownloadsShape => {
         });
         await enqueue(asked);
       }),
-    missing: (trackIds) =>
+    missing: (trackIds, by) =>
       queued(async () => {
         const current = await session();
-        ownerAsked(trackIds.map(missingSongJobId));
+        askedBy(by, trackIds.map(missingSongJobId));
         await enqueue(missingJobs(trackIds).map((job) => missingSongRequest(job, current)));
       }),
     missingAction: (action, list) =>
@@ -458,6 +472,23 @@ export const createDownloads = (deps: DownloadsDeps): DownloadsShape => {
     cancel: (ids) =>
       queued(async () => {
         for (const id of ids) await deps.call("downloads.cancel", { id });
+        // Cancelled by the owner: no star has a download left to take back.
+        ownerAsked(ids);
+        await refresh();
+      }),
+    unstarred: (ids) =>
+      queued(async () => {
+        const asked = readStarDownloads(store.read(STAR_ASKED));
+        const theirs = ids.filter((id) => asked.has(id));
+        if (theirs.length === 0) return;
+        await refresh();
+        for (const id of theirs)
+          if (unstarredDownload(statuses.get(id) ?? null, { starAsked: true }) === "cancel")
+            await deps.call("downloads.cancel", { id });
+        store.write(
+          STAR_ASKED,
+          writeStarDownloads(starAskedAfter(asked, { kind: "unstarred", ids: theirs })),
+        );
         await refresh();
       }),
     clearFailed: () =>

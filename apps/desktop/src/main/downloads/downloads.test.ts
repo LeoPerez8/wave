@@ -413,6 +413,42 @@ test("an owner's Download takes a star's download from the star", async () => {
   downloads.dispose();
 });
 
+test("a star on a song being listened to asks for it; taking the star back before the file arrives cancels", async () => {
+  const { journal, downloads } = starSetup([]);
+  await downloads.yt([song.videoId], "star");
+  assert.deepEqual(
+    requests(journal).map((request) => request.song.videoId),
+    [song.videoId],
+  );
+  await downloads.unstarred([song.videoId]);
+  assert.deepEqual(journal.asked("downloads.cancel"), [{ id: song.videoId }]);
+  // Taken back once: a second unstar has nothing left to cancel.
+  await downloads.unstarred([song.videoId]);
+  assert.equal(journal.asked("downloads.cancel").length, 1);
+  downloads.dispose();
+});
+
+test("a star taken back keeps a download the owner then asked for themselves", async () => {
+  const { journal, downloads } = starSetup([]);
+  await downloads.yt([song.videoId], "star");
+  await downloads.yt([song.videoId]);
+  await downloads.unstarred([song.videoId]);
+  assert.deepEqual(journal.asked("downloads.cancel"), []);
+  downloads.dispose();
+});
+
+test("a missing song starred while listened to is cancelled when its star comes off anywhere", async () => {
+  const { journal, downloads, stars } = starSetup([]);
+  stars.add(41);
+  await downloads.missing([41], "star");
+  await downloads.syncStars();
+  assert.equal(requests(journal).length, 1);
+  stars.delete(41);
+  await downloads.syncStars();
+  assert.deepEqual(journal.asked("downloads.cancel"), [{ id: "missing:41" }]);
+  downloads.dispose();
+});
+
 test("what the stars asked is kept, so a restart neither asks again nor forgets to cancel", async () => {
   const first = starSetup([42]);
   await first.downloads.syncStars();

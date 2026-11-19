@@ -1,11 +1,10 @@
 import type { ImportNotice, LinkImportView, SongLinkNotFound } from "@wave/core";
-import type { AppLanguage } from "@wave/core";
 import type { SongTarget } from "./songActions.ts";
 import type { Invoke } from "./bridge.ts";
 
 export interface LinkContract {
   readonly "links.open": {
-    readonly args: readonly [text: string, language: AppLanguage];
+    readonly args: readonly [text: string];
     readonly result: OpenLinkResult;
   };
   readonly "links.importPlaylist": {
@@ -13,11 +12,11 @@ export interface LinkContract {
     readonly result: { readonly playlistId: number; readonly name: string };
   };
   readonly "links.copySong": {
-    readonly args: readonly [target: SongTarget | string, language: AppLanguage];
+    readonly args: readonly [target: SongTarget | string];
     readonly result: CopyLinkResult;
   };
   readonly "links.copyPlaylist": {
-    readonly args: readonly [playlistId: number, language: AppLanguage];
+    readonly args: readonly [playlistId: number];
     readonly result: CopyLinkResult;
   };
 }
@@ -28,12 +27,11 @@ export const LINK_CALLS = [
   "links.copyPlaylist",
 ] as const;
 export const linkBridge = (invoke: Invoke) => ({
-  open: (text: string, language: AppLanguage) => invoke("links.open", text, language),
+  open: (text: string) => invoke("links.open", text),
   importPlaylist: (token: string, replace: boolean) =>
     invoke("links.importPlaylist", token, replace),
-  copySong: (target: SongTarget | string, language: AppLanguage) =>
-    invoke("links.copySong", target, language),
-  copyPlaylist: (id: number, language: AppLanguage) => invoke("links.copyPlaylist", id, language),
+  copySong: (target: SongTarget | string) => invoke("links.copySong", target),
+  copyPlaylist: (id: number) => invoke("links.copyPlaylist", id),
 });
 
 export type OpenLinkResult =

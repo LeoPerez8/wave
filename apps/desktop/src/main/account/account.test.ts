@@ -299,6 +299,51 @@ test("Cancel while Delete Account waits for the browser sends nothing", async ()
   await accountKept(app);
 });
 
+test("once the browser returns, Settings hears the deletion is on its way and Cancel changes nothing", async () => {
+  const app = await desktop();
+  let reached = () => {};
+  const atService = new Promise<void>((resolve) => (reached = resolve));
+  let release = () => {};
+  const held = new Promise<void>((resolve) => (release = resolve));
+  const account = app.open({
+    fetch: async (input, init) => {
+      if (init?.method === "DELETE") {
+        reached();
+        await held;
+      }
+      return app.fetch(input, init);
+    },
+  });
+  await account.signIn();
+  let answer = () => {};
+  const browser = new Promise<void>((resolve) => (answer = resolve));
+  app.browser(async () => {
+    await browser;
+    return {
+      idToken: await app.service.google.idToken({ aud: DESKTOP_CLIENT }),
+      email: "ana@example.com",
+      name: "Ana",
+      photoUrl: null,
+    };
+  });
+
+  const deleting = account.deleteAccount();
+  assert.equal(account.view().deletionSent, false);
+  answer();
+  await atService;
+  assert.equal(account.view().deletionSent, true);
+  account.cancelSignIn();
+  release();
+  await deleting;
+
+  assert.equal(account.view().deletionSent, false);
+  assert.deepEqual(account.view().account, {
+    kind: "signedOut",
+    action: "signIn",
+    note: "deleted",
+  });
+});
+
 test("Delete Account on a session the service ended says the session ended", async () => {
   const app = await desktop();
   const account = app.open();

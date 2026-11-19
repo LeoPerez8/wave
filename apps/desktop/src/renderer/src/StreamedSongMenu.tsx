@@ -135,7 +135,7 @@ export function useStreamedSongs({ go, failed, notify, changed }: StreamedMenuOp
           return {
             key,
             label: text.share.copyLink,
-            run: () => void copyLink(window.wave.links.copySong(videoId, language)),
+            run: () => void copyLink(window.wave.links.copySong(videoId)),
           };
         case "goToAlbum": {
           const album = entry.album;

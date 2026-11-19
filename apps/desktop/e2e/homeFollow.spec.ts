@@ -157,3 +157,68 @@ test("Home shows followed artists' new releases and shows, and neither section w
     rmSync(data, { recursive: true, force: true });
   }
 });
+
+test("a check that failed is asked again, and one that ends after a return to Home still shows what it saved", async () => {
+  const data = mkdtempSync(join(tmpdir(), "wave-home-follow-check-"));
+  const app = await electron.launch({
+    args: [appFolder, "--lang=en-US"],
+    env: { ...process.env, WAVE_DATA_DIR: data, WAVE_MUSIC_DIR: join(data, "Absent") },
+  });
+  try {
+    const page = await app.firstWindow();
+    const home = page.getByTestId("home");
+    await expect(home).toBeVisible();
+    // Main's own handlers are replaced: the first check fails, the second waits to be let go,
+    // and the cards exist only once it has saved them.
+    const state = await app.evaluateHandle(({ ipcMain }, releaseDate) => {
+      const state = { checks: 0, saved: false, finish: () => {} };
+      ipcMain.removeHandler("home.follow");
+      ipcMain.handle("home.follow", () => ({
+        releases: state.saved
+          ? [
+              {
+                key: "k",
+                title: "Voyage",
+                artist: "ABBA",
+                type: "album",
+                releaseDate,
+                hasArtwork: false,
+              },
+            ]
+          : [],
+        shows: [],
+      }));
+      ipcMain.removeHandler("home.followCheck");
+      ipcMain.handle("home.followCheck", () => {
+        if (++state.checks === 1) throw new Error("No connection");
+        return new Promise<boolean>((resolve) => {
+          state.finish = () => {
+            state.saved = true;
+            resolve(true);
+          };
+        });
+      });
+      return state;
+    }, day(1));
+    const checks = () => state.evaluate((held) => held.checks);
+    const visit = async () => {
+      await page.locator(".sidebar").getByRole("button", { name: "Songs", exact: true }).click();
+      await expect(home).toHaveCount(0);
+      await page.locator(".sidebar").getByRole("button", { name: "Home", exact: true }).click();
+      await expect(home).toBeVisible();
+    };
+    await page.reload();
+    await expect(home).toBeVisible();
+    await expect.poll(checks).toBe(1);
+
+    await visit();
+    await expect.poll(checks).toBe(2);
+    await visit();
+    await state.evaluate((held) => held.finish());
+    await expect(home.locator('[data-section="new-releases"]')).toContainText("Voyage");
+    expect(await checks()).toBe(2);
+  } finally {
+    await app.close();
+    rmSync(data, { recursive: true, force: true });
+  }
+});

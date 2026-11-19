@@ -3,6 +3,7 @@ import assert from "node:assert/strict";
 import {
   DEFAULT_MIX_SLIDERS,
   GENRE_FAITHFULNESS_STEPS,
+  isSliderStep,
   POPULARITY_STEPS,
   readMixSliders,
   sliderStep,
@@ -57,5 +58,20 @@ describe("A level card slider's position", () => {
   test("reads as its step's label", () => {
     assert.equal(sliderStepLabel(GENRE_FAITHFULNESS_STEPS, 1.2), "Same genres");
     assert.equal(sliderStepLabel(POPULARITY_STEPS, 4.8), "Deep cuts");
+  });
+
+  test("is a step only when it is one of the five whole numbers", () => {
+    assert.deepEqual([1, 3, 5, 0, 6, 2.5, "3", null, undefined, Number.NaN].map(isSliderStep), [
+      true,
+      true,
+      true,
+      false,
+      false,
+      false,
+      false,
+      false,
+      false,
+      false,
+    ]);
   });
 });

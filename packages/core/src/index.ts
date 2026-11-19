@@ -893,6 +893,7 @@ export { artistPageItems } from "./artistPage.ts";
 export type { ArtistPageItem, ArtistPageShelf } from "./artistPage.ts";
 export type { SheetEvent, SheetPhase, SheetStep } from "./sheetLifecycle.ts";
 export {
+  artistSeparator,
   joinArtists,
   libraryFinder,
   libraryFinderSteps,
@@ -2369,7 +2370,7 @@ export { seededRandom } from "./weightedPick.ts";
 export type { DiscoverMixesBuild } from "./discoverMixes.ts";
 export { discoverMixesRerun, rerankedDiscoverMixes } from "./mixRerank.ts";
 export type { DiscoverMixesRerun } from "./mixRerank.ts";
-export { sliderStep, sliderStepLabel } from "./mixSliders.ts";
+export { isSliderStep, sliderStep, sliderStepLabel } from "./mixSliders.ts";
 export { DOUBLE_TAP_MS, coverDoubleTap, createCoverTaps } from "./coverGestures.ts";
 export type { CoverDoubleTap, CoverTaps } from "./coverGestures.ts";
 export { createStarPop } from "./starPop.ts";

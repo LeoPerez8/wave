@@ -44,6 +44,8 @@ export interface DesktopAccountView {
   readonly account: WaveAccountView;
   /** No keyring: the session lasts until Wave quits. */
   readonly keyringMissing: boolean;
+  /** Delete Account's request went to the service: Cancel no longer stops it. */
+  readonly deletionSent: boolean;
 }
 
 /** Why a request with the session didn't go: its code is the native module's. */
@@ -138,6 +140,8 @@ export const createWaveAccount = (deps: WaveAccountDeps): WaveAccountService => 
   let signingIn: AbortController | null = null;
   /** Delete Account waiting for Google's sign-in in the browser. */
   let confirmingDeletion: AbortController | null = null;
+  /** Delete Account sent its request and waits for the answer. */
+  let deletionSent = false;
 
   const step = (event: WaveAccountEvent): void => {
     state = stepWaveAccount(state, event);
@@ -268,6 +272,7 @@ export const createWaveAccount = (deps: WaveAccountDeps): WaveAccountService => 
     view: () => ({
       account: waveAccountView(state, syncUrl !== null),
       keyringMissing: store.keyringMissing(),
+      deletionSent,
     }),
     session: () => state.session,
     subscribe: (listener) => {
@@ -324,6 +329,7 @@ export const createWaveAccount = (deps: WaveAccountDeps): WaveAccountService => 
           step({ type: "deleteCancelled" });
           return;
         }
+        deletionSent = true;
         const response = await exchange(
           "DELETE",
           `${session.serviceUrl}/v1/account`,
@@ -357,6 +363,7 @@ export const createWaveAccount = (deps: WaveAccountDeps): WaveAccountService => 
         return;
       } finally {
         confirmingDeletion = null;
+        deletionSent = false;
       }
       change(null);
       step({ type: "accountDeleted" });

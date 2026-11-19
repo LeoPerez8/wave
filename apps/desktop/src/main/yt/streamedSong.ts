@@ -15,7 +15,6 @@ import {
   nowPlayingDownload,
   pendingFavorite,
   streamedArtistLink,
-  unstarredDownload,
   ytDownloadActions,
   ytSongActions,
   ytTrackId,
@@ -37,13 +36,11 @@ export interface StreamedSongPorts {
   readonly ytMusic: () => boolean;
   readonly downloads: Pick<
     DownloadsShape,
-    "yt" | "missing" | "cancel" | "retry" | "status" | "ytStatus"
+    "yt" | "missing" | "cancel" | "retry" | "status" | "ytStatus" | "unstarred"
   >;
   readonly queue: (type: "playNext" | "addToQueue", videoId: string) => Promise<void>;
   /** The rows changed (a star, a playlist): the window reads them again and the account hears. */
   readonly changed: () => void;
-  /** The downloads only a star asked for, by job id, so taking the star back cancels them. */
-  readonly starAsked: Set<string>;
 }
 
 /** The entries the desktop offers; Select, Release Date and the playing card's are the phone's. */
@@ -136,8 +133,11 @@ export const runStreamedAction = async (
 ): Promise<StreamedRunResult> => {
   const { db, downloads } = ports;
   const { track, hasFile, jobId, status } = libraryFacts(ports, song);
-  const download = () =>
-    track !== null && !hasFile ? downloads.missing([track.id]) : downloads.yt([song.videoId]);
+  /** Asks for the song; [by] a star, taking the star back takes the download back too. */
+  const download = (by?: "star") =>
+    track !== null && !hasFile
+      ? downloads.missing([track.id], by)
+      : downloads.yt([song.videoId], by);
   switch (action) {
     case "playNext":
     case "addToQueue":
@@ -152,14 +152,8 @@ export const runStreamedAction = async (
       if (on && track === null) addPendingFavorites(db, [pendingFavorite(song)], now);
       if (!on) removePendingFavorites(db, [song.videoId]);
       ports.changed();
-      if (on && !hasFile && status === null) {
-        ports.starAsked.add(jobId);
-        await download();
-      }
-      if (!on && ports.starAsked.delete(jobId)) {
-        if (unstarredDownload(status, { starAsked: true }) === "cancel")
-          await downloads.cancel([jobId]);
-      }
+      if (on && !hasFile && status === null) await download("star");
+      if (!on) await downloads.unstarred([jobId]);
       return { kind: "favorite", on, count: 1 };
     }
     case "addToPlaylist": {
@@ -184,7 +178,6 @@ export const runStreamedAction = async (
       await downloads.retry([jobId]);
       return { kind: "downloaded", count: 1 };
     case "cancelDownload":
-      ports.starAsked.delete(jobId);
       await downloads.cancel([jobId]);
       return { kind: "downloaded", count: 0 };
   }

@@ -39,7 +39,7 @@ export function Links({
       setBusy(true);
       setToast(text.imports.findingSong);
       void window.wave.links
-        .open(value, language)
+        .open(value)
         .then((result) => {
           if (!active || serial !== request) return;
           if (result.kind === "playing") onPlaying();

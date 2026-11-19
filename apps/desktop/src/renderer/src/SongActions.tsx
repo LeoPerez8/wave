@@ -275,7 +275,7 @@ export function useSongActions({ go, select, failed, changed, newPlaylist }: Opt
             ...base,
             run: () => {
               finish();
-              void copyLink(window.wave.links.copySong(target, language));
+              void copyLink(window.wave.links.copySong(target));
             },
           };
         case "magicQueue":

@@ -26,9 +26,8 @@ const refuse = (call: Call, why: string) => Effect.fail(new Error(`Refused ${cal
 const playlistId = (value: unknown): value is number =>
   typeof value === "number" && Number.isSafeInteger(value) && value > 0;
 
-/** The handlers, with the downloads only a star asked for kept across calls. */
+/** The handlers; the downloads only a star asked for are the downloads service's to keep. */
 export const streamedHandlers = () => {
-  const starAsked = new Set<string>();
   /** [videoId]'s song, which a page or the queue brought, and the ports its menu runs on. */
   const withSong = <A>(
     videoId: unknown,
@@ -46,7 +45,6 @@ export const streamedHandlers = () => {
         downloads: yield* Downloads,
         queue: (type, id) => playback.dispatch({ type, trackIds: [ytTrackId(id)] }),
         changed: playback.refresh,
-        starAsked,
       };
       return yield* Effect.tryPromise({
         try: async () => act(ports, song),
