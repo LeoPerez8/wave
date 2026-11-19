@@ -1,8 +1,10 @@
 import { useState, type MouseEvent, type ReactNode } from "react";
 import type { BrowseRow } from "../../shared/browse.ts";
 import type { YtStatus } from "../../shared/yt.ts";
+import { songRowMark } from "../../shared/songState.ts";
 import { Icon } from "./Icon.tsx";
-import { labels } from "./text.ts";
+import { markClass, SongMark, useSongStates } from "./SongMark.tsx";
+import { labels, albumName, artistName } from "./text.ts";
 import { Artwork, time } from "./VirtualTable.tsx";
 
 /**
@@ -34,12 +36,15 @@ export function YtSongList({
   onPlay,
   onMenu,
   accessory,
+  ranked = 0,
 }: {
   readonly songs: readonly BrowseRow[];
   readonly label: string;
   readonly onPlay: (index: number) => void;
   readonly onMenu?: (row: BrowseRow, event: MouseEvent<HTMLElement>) => void;
   readonly accessory?: (row: BrowseRow) => ReactNode;
+  /** How many of the first songs lead with their rank (1, 2, 3…) in place of the cover. */
+  readonly ranked?: number;
 }) {
   const [selected, setSelected] = useState<number>();
   return (
@@ -50,7 +55,7 @@ export function YtSongList({
             role="listitem"
             className="table-row table-columns yt-row"
             aria-selected={selected === index}
-            aria-label={[row.title, row.artist].filter(Boolean).join(", ")}
+            aria-label={[row.title, artistName(row.artist)].filter(Boolean).join(", ")}
             onClick={() => setSelected(index)}
             onDoubleClick={() => onPlay(index)}
             onContextMenu={
@@ -70,15 +75,19 @@ export function YtSongList({
           >
             <span className="title-cell">
               <span className="row-picture">
-                <Artwork hash={row.artworkHash} url={row.artworkUrl} />
+                {index < ranked ? (
+                  <span className="row-rank secondary">{index + 1}</span>
+                ) : (
+                  <Artwork hash={row.artworkHash} url={row.artworkUrl} />
+                )}
                 <span className="row-play">
                   <Icon name="play" size={16} />
                 </span>
               </span>
               <span className="truncate">{row.title}</span>
             </span>
-            <span className="truncate secondary">{row.artist}</span>
-            <span className="album-column truncate secondary">{row.album}</span>
+            <span className="truncate secondary">{artistName(row.artist)}</span>
+            <span className="album-column truncate secondary">{albumName(row.album)}</span>
             <span className="star-column" />
             <span className="time-column secondary">
               {row.durationMs > 0 ? time(row.durationMs) : ""}
@@ -97,8 +106,12 @@ export interface TileItem {
   readonly caption?: string | null;
   readonly artworkUrl?: string | null;
   readonly artworkHash?: string | null;
+  readonly artworkKind?: "song" | "album" | "artist" | undefined;
+  readonly artworkId?: number | undefined;
   /** What a screen reader says, when the title alone doesn't say what a click does. */
   readonly label?: string;
+  /** A song's tile names its song: it then shows the song's state, as its row does. */
+  readonly song?: Pick<BrowseRow, "id" | "path" | "unavailable" | "videoId">;
 }
 
 /** A row of tiles that scrolls sideways; artists' tiles are round. */
@@ -106,24 +119,32 @@ export function Shelf({
   title,
   items,
   artists = false,
+  nested = false,
   onOpen,
   onMenu,
 }: {
   readonly title: string;
   readonly items: readonly TileItem[];
   readonly artists?: boolean;
+  /** Its title is a level lower: a row of a section with its own title (Home's Discover). */
+  readonly nested?: boolean;
   readonly onOpen: (index: number) => void;
   readonly onMenu?: (index: number, at: { readonly x: number; readonly y: number }) => void;
 }) {
+  const states = useSongStates(items.flatMap((item) => (item.song ? [item.song.id] : [])));
   if (items.length === 0) return null;
+  const Heading = nested ? "h3" : "h2";
+  const marks = items.map((item) =>
+    item.song ? songRowMark(item.song, states.get(item.song.id)) : undefined,
+  );
   return (
     <section className="shelf" aria-label={title}>
-      <h2>{title}</h2>
+      <Heading>{title}</Heading>
       <div className="shelf-row" role="list">
         {items.map((item, index) => (
           <div key={item.key} role="listitem">
             <button
-              className="tile"
+              className={`tile ${marks[index] ? markClass(marks[index]) : ""}`.trimEnd()}
               aria-label={item.label ?? item.title}
               title={item.title}
               onClick={() => onOpen(index)}
@@ -145,7 +166,19 @@ export function Shelf({
                 })
               }
             >
-              <Artwork hash={item.artworkHash} url={item.artworkUrl} artist={artists} large />
+              <Artwork
+                kind={item.artworkKind}
+                id={item.artworkId}
+                hash={item.artworkHash}
+                url={item.artworkUrl}
+                artist={artists}
+                large
+              />
+              {marks[index] && marks[index].kind !== "play" && (
+                <span className="tile-mark" data-testid="tile-mark">
+                  <SongMark mark={marks[index]} title={item.title} />
+                </span>
+              )}
               <span className="tile-title truncate">{item.title}</span>
               {item.caption && (
                 <span className="tile-caption truncate secondary">{item.caption}</span>

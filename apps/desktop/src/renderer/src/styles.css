@@ -48,8 +48,27 @@ body {
 }
 * {
   box-sizing: border-box;
-  scrollbar-width: thin;
-  scrollbar-color: var(--color-tertiary) transparent;
+}
+/* Wave's own scrollbar: a thin rounded thumb, no track and no arrow buttons, in every scroller. */
+::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+::-webkit-scrollbar-track,
+::-webkit-scrollbar-corner {
+  background: transparent;
+}
+::-webkit-scrollbar-thumb {
+  min-height: 32px;
+  border: 2px solid transparent;
+  border-radius: 4px;
+  background: var(--color-tertiary) padding-box;
+}
+::-webkit-scrollbar-thumb:hover {
+  background-color: var(--color-secondary);
+}
+::-webkit-scrollbar-button {
+  display: none;
 }
 ::selection {
   background: var(--color-fill);
@@ -134,9 +153,42 @@ input::placeholder {
   border-right: 1px solid var(--color-separator);
   display: flex;
   flex-direction: column;
-  padding: 18px 12px 12px;
+  /* The right padding leaves room for the scrollbar's gutter, so entries never shift. */
+  padding: 18px 4px 12px 12px;
   gap: 14px;
-  overflow: hidden;
+  /* One scroller for the whole sidebar; the search field and Settings stay in view. */
+  overflow: hidden auto;
+  scrollbar-gutter: stable;
+}
+.sidebar > .search-field,
+.sidebar > .settings-link {
+  position: sticky;
+  z-index: 1;
+  flex-shrink: 0;
+  background: var(--color-grouped);
+}
+.sidebar > .search-field {
+  top: 0;
+}
+.sidebar > .settings-link {
+  bottom: 0;
+}
+/* Covers the sidebar's padding beyond them, so entries scrolled past don't show there. */
+.sidebar > .search-field::before,
+.sidebar > .settings-link::after {
+  content: "";
+  position: absolute;
+  left: -12px;
+  right: -12px;
+  background: var(--color-grouped);
+}
+.sidebar > .search-field::before {
+  bottom: 100%;
+  height: 18px;
+}
+.sidebar > .settings-link::after {
+  top: 100%;
+  height: 12px;
 }
 .search-field {
   display: flex;
@@ -184,9 +236,10 @@ input::placeholder {
   padding: 18px 10px 8px;
 }
 .sidebar-playlists {
-  flex: 1;
-  min-height: 0;
-  overflow: auto;
+  flex-shrink: 0;
+}
+.nav-monogram {
+  display: none;
 }
 .sidebar-playlists .nav-heading {
   padding-top: 0;
@@ -203,9 +256,10 @@ input::placeholder {
   flex-direction: column;
   padding: 26px 32px 0;
 }
+/* One light title for list pages and heroes, as the phone's large title (story 63). */
 h1 {
-  font-size: 30px;
-  font-weight: 600;
+  font-size: 36px;
+  font-weight: 300;
   line-height: 1.2;
   letter-spacing: -0.025em;
   overflow-wrap: anywhere;
@@ -443,12 +497,6 @@ h2 {
   color: var(--color-accent);
   margin-left: 6px;
 }
-.home-discover {
-  flex-shrink: 0;
-  max-height: 46%;
-  overflow: auto;
-  padding: 0 22px 12px 0;
-}
 .shelf-row {
   display: flex;
   gap: 18px;
@@ -470,6 +518,21 @@ h2 {
 }
 .tile > .artist-image {
   border-radius: 50%;
+}
+/* A song tile's state, at the corner of its cover (SongMark, as a row's picture carries it). */
+.tile {
+  position: relative;
+}
+.tile-mark {
+  position: absolute;
+  top: 100px;
+  left: 100px;
+  width: 26px;
+  height: 26px;
+}
+.tile-mark > .row-play {
+  display: flex;
+  background: var(--color-background);
 }
 .tile:focus-visible {
   outline: 2px solid var(--color-accent);
@@ -522,7 +585,6 @@ h2 {
 }
 .hero h1 {
   font-size: 36px;
-  font-weight: 350;
 }
 .hero-artist {
   font-size: 16px;
@@ -612,6 +674,7 @@ h2 {
   margin: 8px 0;
 }
 .account-actions {
+  flex-wrap: wrap;
   display: flex;
   gap: 8px;
   margin: 12px 0 4px;
@@ -674,6 +737,13 @@ h2 {
 .player-song .icon-button {
   margin-left: auto;
 }
+/* The bar's star is the secondary colour, as the rows' are: an outline, filled once starred. */
+.player-bar .player-song > .icon-button {
+  color: var(--color-highlight);
+}
+.player-bar .player-song > .icon-button[aria-pressed="true"] svg {
+  fill: currentColor;
+}
 .transport {
   display: flex;
   align-items: center;
@@ -724,7 +794,7 @@ h2 {
     font-size: 13px;
   }
   .sidebar {
-    padding-inline: 8px;
+    padding-inline: 8px 0;
   }
   .nav-item {
     justify-content: center;
@@ -734,12 +804,26 @@ h2 {
   .nav-heading {
     display: none;
   }
+  /* A playlist shows its first letter, so the icon-only sidebar tells playlists apart. */
+  .nav-item > .nav-monogram {
+    display: grid;
+    place-items: center;
+    width: 22px;
+    height: 22px;
+    border-radius: 5px;
+    background: var(--color-fill);
+    color: var(--color-secondary);
+    font-size: 11px;
+    font-weight: 600;
+  }
+  .nav-item:has(> .nav-monogram) svg {
+    display: none;
+  }
   .search-field {
     border: 0;
     padding: 0;
     height: 34px;
     justify-content: center;
-    position: relative;
   }
   .search-field input {
     position: absolute;
@@ -748,16 +832,23 @@ h2 {
     inset: 0;
     cursor: text;
   }
+  /* Ctrl+F opens the field in the title bar, after Back and Forward, over no page title. */
   .search-field:focus-within {
     position: fixed;
-    left: 8px;
-    top: 65px;
-    width: 220px;
+    left: calc(var(--sidebar-width) + 116px);
+    top: 7px;
+    width: 260px;
+    app-region: no-drag;
+    outline: 2px solid var(--color-accent);
     background: var(--color-surface);
     z-index: 5;
     padding: 0 8px;
   }
+  .search-field:focus-within::before {
+    display: none;
+  }
   .search-field:focus-within input {
+    outline: none;
     position: static;
     opacity: 1;
     width: 100%;
@@ -789,6 +880,7 @@ h2 {
     width: 168px;
     height: 168px;
   }
+  h1,
   .hero h1 {
     font-size: 30px;
   }
@@ -884,6 +976,9 @@ h2 {
 .action-toast {
   top: auto;
   bottom: 112px;
+}
+.action-toast > button {
+  white-space: nowrap;
 }
 button.accent {
   color: var(--color-on-accent);
@@ -1036,6 +1131,36 @@ kbd {
 .yt-item {
   position: relative;
 }
+/* Search's YouTube Music rows: the row's button under its artist and album names, which open their
+   pages; a click anywhere else in the row reaches the row. */
+.yt-item > .yt-row {
+  grid-column: 1 / -1;
+  grid-row: 1;
+  width: auto;
+  margin-inline: -12px;
+}
+.yt-credit {
+  grid-row: 1;
+  grid-column: 2;
+  min-width: 0;
+  pointer-events: none;
+}
+.yt-credit-album {
+  grid-column: 3;
+}
+.credit-link {
+  pointer-events: auto;
+  padding: 0;
+  font: inherit;
+  color: inherit;
+  text-align: left;
+}
+.credit-link:not(:disabled):hover,
+.credit-link:focus-visible {
+  color: var(--color-foreground);
+  text-decoration: underline;
+  background: none;
+}
 .yt-download {
   position: absolute;
   top: 6px;
@@ -1095,6 +1220,26 @@ kbd {
 }
 
 /* Search: the top result, the Songs table, lyrics hits and the shelves, scrolling together. */
+.search-online-toggle {
+  display: flex;
+  gap: 4px;
+  padding-block: 8px;
+}
+.search-online-toggle button {
+  padding: 8px 16px;
+  color: var(--color-secondary);
+}
+.search-online-toggle button[aria-pressed="true"] {
+  color: var(--color-accent);
+  background: var(--color-fill);
+}
+.search-online-setting {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 16px;
+  margin-top: 16px;
+}
 .search-page {
   flex: 1;
   min-height: 0;
@@ -1113,7 +1258,7 @@ kbd {
 .search-empty h2 {
   font-size: 15px;
   font-weight: 600;
-  padding: 0 12px 8px;
+  padding: 0 0 8px;
 }
 .search-heading {
   display: flex;
@@ -1168,9 +1313,6 @@ kbd {
 .search-row:focus-visible .row-play {
   display: flex;
 }
-.search-row[data-missing] {
-  color: var(--color-secondary);
-}
 .search-row-title {
   display: flex;
   flex-direction: column;
@@ -1196,8 +1338,18 @@ kbd {
   min-width: 0;
 }
 .search-tile > :first-child {
+  display: block;
   aspect-ratio: 1;
+  min-width: 0;
+  min-height: 0;
+  overflow: hidden;
   margin-bottom: 6px;
+}
+.search-tile > :first-child > .artwork {
+  display: flex;
+}
+.search-tile .artwork img {
+  display: block;
 }
 .search-tile > .artist-image .artwork {
   border-radius: 50%;
@@ -1220,4 +1372,31 @@ kbd {
   border-radius: 6px;
   color: inherit;
   text-align: left;
+}
+
+/* A missing song (the account has it, this computer has no file) is dimmed; a click downloads it. */
+.missing-row {
+  color: var(--color-secondary);
+}
+.missing-row .artwork {
+  opacity: 0.45;
+}
+/* A song's state over its picture: a download on its way, or a file that failed to play. */
+.row-mark {
+  display: flex;
+}
+.failed-row .row-mark {
+  color: var(--color-destructive);
+}
+.row-progress {
+  width: 20px;
+  height: 4px;
+  border-radius: 2px;
+  background: var(--color-separator);
+  overflow: hidden;
+}
+.row-progress > span {
+  display: block;
+  height: 100%;
+  background: var(--color-accent);
 }

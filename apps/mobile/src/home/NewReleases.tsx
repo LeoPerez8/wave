@@ -4,12 +4,12 @@ import { openAlbumActions } from "@/playback/ActionsMenu";
 import { useState } from "react";
 import { Text, View } from "react-native";
 import {
-  followReleaseOpening,
   releaseDateLine,
   type FollowRelease,
   type FollowReleaseOpening,
   type FollowedArtist,
 } from "@wave/core";
+import { openFollowRelease } from "@wave/client/follows/followReleaseOpen";
 import * as Effect from "effect/Effect";
 import * as Result from "effect/Result";
 import { Artwork } from "@/catalog/Artwork";
@@ -39,49 +39,30 @@ const guardedRequest = <A,>(read: Effect.Effect<A, YtMusicError>) =>
       return yield* Effect.fail(new YtMusicError({ reason: "disabled" }));
     return yield* read;
   });
-/** Where a release the Library lacks opens (Core's `followReleaseOpening`), after an Albums search when unmatched. */
-const resolve = async (release: FollowRelease, artist: string): Promise<FollowReleaseOpening> => {
-  const ytMusic = () => followedArtistsEnabled() && ytMusicEnabled();
-  const opening = followReleaseOpening(release, { ytMusic: ytMusic() });
-  if (opening.kind !== "search") return opening;
-  const result = await askYtMusic((yt) =>
-    withSearchTurn(
-      "search",
-      release.title,
-      guardedRequest(yt.searchAlbums(`${artist} ${release.title}`)),
+/** Where a release the Library lacks opens, after an Albums search when unmatched (`openFollowRelease`). */
+const resolve = (release: FollowRelease, artist: string): Promise<FollowReleaseOpening> => {
+  const read = async <A,>(ask: Parameters<typeof askYtMusic<A, YtMusicError>>[0]) => {
+    const result = await askYtMusic(ask);
+    return Result.isSuccess(result) ? result.success : null;
+  };
+  return appRuntime.runPromise(
+    Effect.flatMap(LibraryStore, (store) =>
+      openFollowRelease(store, release, artist, {
+        ytMusic: () => followedArtistsEnabled() && ytMusicEnabled(),
+        keep: followedArtistsEnabled,
+        searchAlbums: (query) =>
+          read((yt) =>
+            withSearchTurn("search", release.title, guardedRequest(yt.searchAlbums(query))),
+          ),
+        albumVideoIds: async (browseId) => {
+          const album = await read((yt) =>
+            withSearchTurn("search", release.title, guardedRequest(yt.album(browseId))),
+          );
+          return album === null ? null : album.tracks.map((t) => t.videoId);
+        },
+      }),
     ),
   );
-  const found = followReleaseOpening(release, {
-    ytMusic: ytMusic(),
-    found: Result.isSuccess(result) ? result.success : null,
-  });
-  if (found.kind !== "open") return found;
-  const album = await askYtMusic((yt) =>
-    withSearchTurn("search", release.title, guardedRequest(yt.album(found.browseId))),
-  );
-  if (Result.isSuccess(album) && followedArtistsEnabled())
-    await appRuntime.runPromise(
-      Effect.gen(function* () {
-        const store = yield* LibraryStore;
-        const cache = yield* store.followReleaseCache;
-        const artistCache = cache.artists.find((a) => a.key === release.artistKey);
-        if (artistCache)
-          yield* store.saveFollowReleases(
-            release.artistKey,
-            artistCache.releases.map((r) =>
-              r.key === release.key
-                ? {
-                    ...r,
-                    browseId: found.browseId,
-                    videoIds: album.success.tracks.map((t) => t.videoId),
-                  }
-                : r,
-            ),
-            artistCache.checkedAt,
-          );
-      }),
-    );
-  return found;
 };
 
 function ReleaseTile({

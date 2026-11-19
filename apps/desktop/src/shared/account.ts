@@ -5,6 +5,8 @@ export interface AccountView {
   readonly account: WaveAccountView;
   /** No keyring: the session lasts until Wave quits, and Settings says so. */
   readonly keyringMissing: boolean;
+  /** Delete Account's request went to the service: Cancel no longer stops it. */
+  readonly deletionSent: boolean;
   /** The invitation to sign in is due: the first scan finished and it wasn't answered. */
   readonly invitation: boolean;
   /** Goes up when the account changed the Library: the window reads its lists again. */

@@ -57,6 +57,67 @@ const playing = (page: Page) =>
     return { title: view.current?.title, length: view.length };
   });
 
+test("Search starts in the Library, offers Online and honours Always", async () => {
+  test.setTimeout(150_000);
+  const data = mkdtempSync(join(tmpdir(), "wave-e2e-search-policy-"));
+  await Effect.runPromise(
+    Effect.gen(function* () {
+      const db = (yield* Database) as unknown as TestDatabase;
+      const id = addTrack(db, { title: "Pink Moon", artist: "Nick Drake", album: "Pink Moon" });
+      db.run(sql`UPDATE tracks SET path=NULL WHERE id=${id}`);
+      createPlaylist(db, "Nick Drake favorites", [], 1);
+    }).pipe(Effect.provide(libraryLayer(join(data, "wave.db")))),
+  );
+  const app = await electron.launch({
+    args: [appFolder, "--lang=en-US"],
+    env: { ...process.env, WAVE_DATA_DIR: data, WAVE_MUSIC_DIR: join(data, "Absent") },
+  });
+  try {
+    const page = await app.firstWindow();
+    const field = page.getByRole("searchbox", { name: text.desktopLayout.search });
+    const library = page.getByRole("button", { name: text.library.library, exact: true });
+    const online = page.getByRole("button", { name: text.library.online, exact: true });
+    await field.fill("Nick Drake");
+    await expect(page.getByTestId("search-song")).toHaveCount(1);
+    await expect(library).toHaveAttribute("aria-pressed", "true");
+    await page.waitForTimeout(800);
+    await expect(page.getByTestId("yt-results")).toHaveCount(0);
+    await expect(page.getByTestId("yt-status")).toHaveCount(0);
+    await page.screenshot({ path: "test-results/search-library-first.png" });
+    await online.click();
+    await expect(page.getByTestId("yt-results").or(page.getByTestId("yt-status"))).toBeVisible({
+      timeout: 45_000,
+    });
+    await library.click();
+    await field.fill("no-library-match-1178");
+    await expect(library).toHaveAttribute("aria-pressed", "true");
+    await expect(page.getByTestId("yt-results")).toHaveCount(0);
+    await field.fill("");
+    await field.fill("radiohead karma police");
+    await expect(online).toHaveAttribute("aria-pressed", "true");
+    await expect(page.getByTestId("yt-results").or(page.getByTestId("yt-status"))).toBeVisible({
+      timeout: 45_000,
+    });
+    await page.screenshot({ path: "test-results/search-online-fallback.png" });
+    await page.getByRole("button", { name: text.desktopLayout.settings, exact: true }).click();
+    await page.getByRole("button", { name: text.desktopLayout.accounts, exact: true }).click();
+    await page
+      .getByRole("combobox", { name: text.settings.searchOnline, exact: true })
+      .selectOption("always");
+    await field.fill("");
+    await field.fill("Nick Drake");
+    await expect(page.getByTestId("search-song")).toHaveCount(1);
+    await expect(online).toHaveAttribute("aria-pressed", "true");
+    await expect(page.getByTestId("yt-results").or(page.getByTestId("yt-status"))).toBeVisible({
+      timeout: 45_000,
+    });
+    await page.screenshot({ path: "test-results/search-always.png" });
+  } finally {
+    await app.close();
+    rmSync(data, { recursive: true, force: true });
+  }
+});
+
 test("Search finds, plays and remembers as on the phone", async () => {
   const data = mkdtempSync(join(tmpdir(), "wave-e2e-search-"));
   await Effect.runPromise(

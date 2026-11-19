@@ -4,24 +4,32 @@
  * finished, a play ended or a star changed, and the invitation to sign in after the first scan.
  */
 import { Database } from "@wave/client";
-import type { SyncClock } from "@wave/core";
+import { LANGUAGE_PREFERENCE, type LanguageChoice, type SyncClock } from "@wave/core";
 import * as Context from "effect/Context";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import type { AccountView } from "../../shared/account.ts";
+import { Downloads } from "../downloads/downloadsLayer.ts";
 import { DesktopLibrary } from "../library/library.ts";
 import { Playback } from "../playback/playback.ts";
 import { changesPlaybackSettings } from "../playback/playbackSettings.ts";
 import { preference, savePreference } from "../preferences.ts";
 import { createDesktopSync, syncedPreference } from "../sync/desktopSync.ts";
 import type { WaveAccountService } from "./account.ts";
+import type { LanguageView } from "../../shared/language.ts";
+import { readDesktopLanguage, saveDesktopLanguage } from "../language.ts";
 
 export interface AccountShape {
+  readonly language: () => LanguageView;
+  readonly setLanguage: (choice: LanguageChoice) => void;
+  /** A synced setting was saved and stamped here: it goes up without waiting for the timed sync. */
+  readonly settingsEdited: () => void;
   readonly view: () => AccountView;
   readonly signIn: () => Promise<void>;
   readonly cancelSignIn: () => void;
   readonly signOut: () => Promise<void>;
   readonly signOutEverywhere: () => Promise<void>;
+  readonly deleteAccount: () => Promise<void>;
   /** Not Now or Sign In on the invitation: it never shows again. */
   readonly answerInvitation: () => void;
   /** A Wave window got focus. */
@@ -39,6 +47,8 @@ export const accountLayer = (options: {
   readonly focused: () => boolean;
   /** The time and timers; the system's by default. */
   readonly clock?: SyncClock;
+  readonly preferredLanguages?: () => readonly string[];
+  readonly languageChanged?: (view: LanguageView) => void;
 }) =>
   Layer.effect(
     Account,
@@ -46,7 +56,16 @@ export const accountLayer = (options: {
       const db = yield* Database;
       const library = yield* DesktopLibrary;
       const playback = yield* Playback;
+      const downloads = yield* Downloads;
+      // A star means downloaded: a missing song's star, set here or pulled, asks for its file.
+      const syncStars = () =>
+        void downloads
+          .syncStars()
+          .catch((error: unknown) => console.warn("[wave] The stars' downloads failed", error));
       const { account } = options;
+      const language = () => readDesktopLanguage(db, options.preferredLanguages?.() ?? []);
+      const languageChanged = () => options.languageChanged?.(language());
+      languageChanged();
       const sync = createDesktopSync({
         db,
         account,
@@ -54,6 +73,7 @@ export const accountLayer = (options: {
         // The account's Crossfade, Normalize Volume or Buffer apply from the next song, as a
         // change in Settings › Playback does.
         preferencesPulled: (keys) => {
+          if (keys.includes(LANGUAGE_PREFERENCE)) languageChanged();
           if (changesPlaybackSettings(keys))
             playback
               .applySettings()
@@ -61,6 +81,7 @@ export const accountLayer = (options: {
                 console.warn("[wave] The account's playback settings didn't apply", error),
               );
         },
+        starsPulled: syncStars,
         ...(options.clock === undefined ? {} : { clock: options.clock }),
       });
       // A scan that ended before this layer was built counts as the first.
@@ -71,7 +92,10 @@ export const accountLayer = (options: {
       });
       const stopPlayback = playback.subscribe((change) => {
         if (change === "played") sync.played("ended");
-        else sync.edited({ songs: false });
+        else {
+          sync.edited({ songs: false });
+          syncStars();
+        }
       });
       sync.start();
       yield* Effect.addFinalizer(() =>
@@ -89,11 +113,19 @@ export const accountLayer = (options: {
         }),
       );
       return {
+        language,
+        setLanguage: (choice) => {
+          saveDesktopLanguage(db, choice);
+          languageChanged();
+          sync.edited({ songs: false });
+        },
+        settingsEdited: () => sync.edited({ songs: false }),
         view: () => {
-          const { account: view, keyringMissing } = account.view();
+          const { account: view, keyringMissing, deletionSent } = account.view();
           return {
             account: view,
             keyringMissing,
+            deletionSent,
             invitation:
               scanned &&
               view.kind === "signedOut" &&
@@ -111,6 +143,7 @@ export const accountLayer = (options: {
         cancelSignIn: account.cancelSignIn,
         signOut: account.signOut,
         signOutEverywhere: account.signOutEverywhere,
+        deleteAccount: account.deleteAccount,
         answerInvitation: () => savePreference(db, INVITATION, "answered"),
         foreground: sync.foreground,
       };

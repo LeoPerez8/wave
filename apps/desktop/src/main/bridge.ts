@@ -20,7 +20,8 @@ import type { Page } from "../shared/bridge.ts";
 import { BROWSE_KINDS, type BrowseScope } from "../shared/browse.ts";
 import { browseLetter } from "./library/browse.ts";
 import { readArtwork } from "./library/artwork.ts";
-import { appearance, savePreference } from "./preferences.ts";
+import { appearance, preference, savePreference } from "./preferences.ts";
+import { SEARCH_ONLINE_SETTING, readSearchOnline, writeSearchOnline } from "@wave/core";
 import {
   MAX_TARGET_IDS,
   SONG_RUN_ACTIONS,
@@ -29,22 +30,30 @@ import {
 } from "../shared/songActions.ts";
 import { runSongAction, songMenu } from "./library/songActions.ts";
 import type { Appearance } from "../shared/bridge.ts";
-import { ytRow } from "../shared/yt.ts";
 import { VIDEO_ID, YtMusic } from "./yt/ytMusic.ts";
 import { Downloads } from "./downloads/downloadsLayer.ts";
-import { MISSING_SONGS_ACTIONS } from "../shared/downloads.ts";
+import {
+  MISSING_SONGS_ACTIONS,
+  MISSING_SONGS_LISTS,
+  type MissingSongsList,
+} from "../shared/downloads.ts";
 import type { MissingSongsDownloadAction } from "@wave/core";
-import { createYtFeatureHandlers } from "./yt/ytBridge.ts";
+import { createYtFeatureHandlers, playSearchSong } from "./yt/ytBridge.ts";
 import type { YtFeatures } from "./yt/ytServices.ts";
 import { Lyrics } from "./lyrics/lyrics.ts";
 import { DesktopLinks } from "./links/layer.ts";
 import { linkHandlers } from "./links/handlers.ts";
+import { artistPageHandlers } from "./artistPageHandlers.ts";
 import { DesktopPlaylists } from "./library/playlists.ts";
 import { playlistHandlers } from "./playlistHandlers.ts";
 import { searchLibrary } from "./library/search.ts";
 import { validWindowSettings } from "../shared/windowSettings.ts";
 import { readWindowSettings, changeWindowSettings } from "./system/windowSettings.ts";
 import { homeHandlers } from "./homeHandlers.ts";
+import { lyricsAndTagsHandlers } from "./lyricsAndTagsHandlers.ts";
+import { HomeFollow } from "./follows/homeFollow.ts";
+import { homeFollowHandlers } from "./follows/homeFollowHandlers.ts";
+import { streamedHandlers } from "./yt/streamedHandlers.ts";
 import {
   clearRecentSearches,
   listRecentSearchesSync,
@@ -63,6 +72,13 @@ const validScope = (value: unknown): value is BrowseScope => {
 };
 
 const LIST_OF_LISTS = ["albums", "artists", "playlists", "genres"];
+
+/** A page whose missing songs download together, and only that. */
+const missingSongsList = (value: unknown): MissingSongsList | undefined => {
+  if (typeof value !== "object" || value === null) return undefined;
+  const { kind, id } = value as MissingSongsList;
+  return MISSING_SONGS_LISTS.includes(kind) && songId(id) ? { kind, id } : undefined;
+};
 
 const songId = (value: unknown): boolean =>
   typeof value === "number" && Number.isSafeInteger(value) && value > 0;
@@ -114,7 +130,8 @@ export type BridgeServices =
   | Account
   | Lyrics
   | DesktopPlaylists
-  | DesktopLinks;
+  | DesktopLinks
+  | HomeFollow;
 
 const refuse = (call: BridgeCall, why: string) => Effect.fail(new Error(`Refused ${call}: ${why}`));
 
@@ -234,6 +251,7 @@ const createHandlers = (
   mediaBackend: () => "native" | "chromium",
 ): Handlers => {
   let loadedPath: string | undefined;
+  const streamed = streamedHandlers();
   const checkAvailable = (path: string | undefined) =>
     Effect.gen(function* () {
       const library = yield* DesktopLibrary;
@@ -252,6 +270,8 @@ const createHandlers = (
         : refuse("settings.setWindow", "invalid window setting"),
     ...createYtFeatureHandlers(validTarget),
     ...linkHandlers(validTarget),
+    ...artistPageHandlers(),
+    ...streamed.handlers,
     "playback.view": () => playbackCall((p) => p.view()),
     "playback.start": ([scope, index, shuffle]) =>
       validScope(scope) &&
@@ -259,9 +279,11 @@ const createHandlers = (
       (index === undefined ||
         (typeof index === "number" && Number.isSafeInteger(index) && index >= 0)) &&
       (shuffle === undefined || typeof shuffle === "boolean")
-        ? playbackCall((p) =>
-            p.start(scope, index as number | undefined, shuffle as boolean | undefined),
-          )
+        ? scope.kind === "search" && typeof index === "number"
+          ? playSearchSong(scope, index)
+          : playbackCall((p) =>
+              p.start(scope, index as number | undefined, shuffle as boolean | undefined),
+            )
         : refuse("playback.start", "invalid play context"),
     "playback.startYt": ([ids, index]) => {
       const songs = videoIds(ids);
@@ -285,7 +307,7 @@ const createHandlers = (
         : refuse("playback.seek", "invalid time"),
     "playback.undo": () => playbackCall((p) => p.undo()),
     "playback.dismissUndo": () => playbackCall((p) => p.dismissUndo()),
-    "playback.favorite": () => playbackCall((p) => p.favorite()),
+    "playback.favorite": () => streamed.favoritePlaying,
     "playback.volume": ([value, muted]) =>
       typeof value === "number" &&
       Number.isFinite(value) &&
@@ -319,6 +341,11 @@ const createHandlers = (
       Effect.gen(function* () {
         return appearance(yield* Database);
       }),
+    "settings.language": () => Effect.map(Account, (it) => it.language()),
+    "settings.setLanguage": ([choice]) =>
+      choice === "system" || choice === "en" || choice === "pt-BR"
+        ? Effect.map(Account, (it) => it.setLanguage(choice))
+        : refuse("settings.setLanguage", "invalid language"),
     "settings.setAppearance": ([mode]) =>
       mode === "light" || mode === "dark" || mode === "system"
         ? Effect.gen(function* () {
@@ -332,18 +359,18 @@ const createHandlers = (
         ? playbackCall((p) => p.setSettings(change))
         : refuse("settings.setPlayback", "invalid playback settings"),
     "settings.ytMusic": () => ytCall((yt) => yt.enabled()),
+    "settings.searchOnline": () =>
+      Effect.map(Database, (db) => readSearchOnline(preference(db, SEARCH_ONLINE_SETTING) ?? null)),
+    "settings.setSearchOnline": ([value]) =>
+      value === "always" || value === "onDemand"
+        ? Effect.map(Database, (db) =>
+            savePreference(db, SEARCH_ONLINE_SETTING, writeSearchOnline(value) ?? ""),
+          )
+        : refuse("settings.setSearchOnline", "invalid setting"),
     "settings.setYtMusic": ([on]) =>
       typeof on === "boolean"
         ? ytCall((yt) => yt.setEnabled(on))
         : refuse("settings.setYtMusic", "invalid setting"),
-    "yt.search": ([query]) =>
-      typeof query === "string" && query.length <= 500
-        ? ytCall(async (yt) => {
-            const found = await yt.search(query);
-            const items = found.songs.map(ytRow);
-            return { status: found.status, songs: { items, offset: 0, total: items.length } };
-          })
-        : refuse("yt.search", "invalid query"),
     "yt.artwork": ([url]) =>
       typeof url === "string" && url.length <= 2_000
         ? ytCall((yt) => yt.artwork(url))
@@ -353,10 +380,12 @@ const createHandlers = (
       validPage(offset, limit)
         ? downloadsCall((d) => d.rows(offset as number, limit as number))
         : refuse("downloads.rows", "invalid page"),
-    "downloads.album": ([albumId]) =>
-      songId(albumId)
-        ? downloadsCall((d) => d.albumView(albumId as number))
-        : refuse("downloads.album", "invalid album"),
+    "downloads.list": ([value]) => {
+      const list = missingSongsList(value);
+      return list === undefined
+        ? refuse("downloads.list", "invalid list")
+        : downloadsCall((d) => d.listView(list));
+    },
     "downloads.yt": ([ids]) => {
       const asked = videoIds(ids);
       return asked === undefined
@@ -369,13 +398,13 @@ const createHandlers = (
         ? refuse("downloads.missing", "invalid songs")
         : downloadsCall((d) => d.missing(asked));
     },
-    "downloads.missingAction": ([action, albumId]) =>
-      MISSING_SONGS_ACTIONS.includes(action as MissingSongsDownloadAction) &&
-      (albumId === undefined || songId(albumId))
-        ? downloadsCall((d) =>
-            d.missingAction(action as MissingSongsDownloadAction, albumId as number | undefined),
-          )
-        : refuse("downloads.missingAction", "invalid action or album"),
+    "downloads.missingAction": ([action, value]) => {
+      const list = value === undefined ? undefined : missingSongsList(value);
+      return MISSING_SONGS_ACTIONS.includes(action as MissingSongsDownloadAction) &&
+        (value === undefined || list !== undefined)
+        ? downloadsCall((d) => d.missingAction(action as MissingSongsDownloadAction, list))
+        : refuse("downloads.missingAction", "invalid action or list");
+    },
     "downloads.retry": ([ids]) => {
       const asked = ids === undefined ? undefined : downloadIds(ids);
       return ids !== undefined && asked === undefined
@@ -401,6 +430,7 @@ const createHandlers = (
     "account.cancelSignIn": () => accountCall((a) => a.cancelSignIn()),
     "account.signOut": () => accountCall((a) => a.signOut()),
     "account.signOutEverywhere": () => accountCall((a) => a.signOutEverywhere()),
+    "account.deleteAccount": () => accountCall((a) => a.deleteAccount()),
     "account.answerInvitation": () => accountCall((a) => a.answerInvitation()),
     "library.artwork": ([hash, large]) =>
       typeof hash === "string" && /^[a-f0-9]{40}$/.test(hash) && typeof large === "boolean"
@@ -409,6 +439,17 @@ const createHandlers = (
             return yield* Effect.promise(() => readArtwork(db, hash, large));
           })
         : refuse("library.artwork", "invalid artwork"),
+    "library.cover": ([kind, id, large]) =>
+      (kind === "song" || kind === "album" || kind === "artist") &&
+      songId(id) &&
+      typeof large === "boolean"
+        ? Effect.gen(function* () {
+            const library = yield* DesktopLibrary;
+            return yield* Effect.promise(
+              () => library.cover?.(kind, id as number, large) ?? Promise.resolve(null),
+            );
+          })
+        : refuse("library.cover", "invalid identity"),
     "library.browse": ([scope, offset, limit]) =>
       validScope(scope)
         ? pageCall("library.browse", [offset, limit], (library, offset, limit) =>
@@ -448,6 +489,24 @@ const createHandlers = (
       typeof path === "string" && isAbsolute(path)
         ? libraryCall((library) => library.include(path))
         : refuse("library.include", "invalid folder"),
+    "songs.states": ([ids]) => {
+      const asked = trackIds(ids);
+      return asked === undefined || asked.length > 200
+        ? refuse("songs.states", "invalid songs")
+        : Effect.gen(function* () {
+            const downloads = yield* Downloads;
+            const playback = yield* Playback;
+            return {
+              offset: 0,
+              total: asked.length,
+              items: asked.map((id) => ({
+                id,
+                download: downloads.status(id),
+                failed: playback.fileFailed(id),
+              })),
+            };
+          });
+    },
     "songs.actions": ([target, surface]) =>
       validTarget(target) && (surface === "menu" || surface === "selection")
         ? Effect.gen(function* () {
@@ -470,6 +529,7 @@ const createHandlers = (
                 runSongAction(
                   {
                     db,
+                    download: downloads.missing,
                     queue: (type, trackIds) => playback.command({ type, trackIds: [...trackIds] }),
                     removeSongs: (trackIds) => library.removeSongs(trackIds),
                     fixSongs: (trackIds) => downloads.fixSongs(trackIds),
@@ -515,6 +575,8 @@ const createHandlers = (
     },
     ...playlistHandlers(validTarget),
     ...homeHandlers,
+    ...lyricsAndTagsHandlers,
+    ...homeFollowHandlers,
     "search.library": ([query]) =>
       searchQuery(query)
         ? Effect.gen(function* () {

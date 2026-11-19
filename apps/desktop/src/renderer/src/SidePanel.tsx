@@ -8,6 +8,7 @@ import { useState, type KeyboardEvent, type MouseEvent } from "react";
 import type { BrowseRow } from "../../shared/browse.ts";
 import type { PlaybackCommand, PlayerView } from "../../shared/playerView.ts";
 import type { YtArtistCandidate } from "../../shared/ytPages.ts";
+import { Icon } from "./Icon.tsx";
 import { LyricsView, trackIdOf } from "./LyricsView.tsx";
 import { panelTabs, shownPanelTab, stepPanelTab, type PanelTab } from "../../shared/panelTabs.ts";
 import { QueuePanel } from "./QueuePanel.tsx";
@@ -38,6 +39,7 @@ export function SidePanel({
   run,
   onError,
   hidden,
+  onClose,
 }: {
   readonly tab: PanelTab;
   readonly onTab: (tab: PanelTab) => void;
@@ -45,13 +47,15 @@ export function SidePanel({
   readonly ytMusic: boolean;
   /** Opens one of Related's similar artists. */
   readonly onArtist: (artist: YtArtistCandidate) => void;
-  /** Opens the menu of one of Related's songs. */
+  /** Opens the menu of one of Related's songs, or of a Queue row. */
   readonly onSongMenu: (row: BrowseRow, event: MouseEvent<HTMLElement>) => void;
   readonly view: PlayerView | undefined;
   readonly run: (action: Promise<unknown>) => void;
   readonly onError: () => void;
   /** Now Playing covers it: out of reach until that closes. */
   readonly hidden: boolean;
+  /** The panel's own close control, on every tab. */
+  readonly onClose: () => void;
 }) {
   const tab = shownPanelTab(asked, ytMusic);
   const command = (next: PlaybackCommand) => run(window.wave.playback.command(next));
@@ -65,20 +69,30 @@ export function SidePanel({
   };
   return (
     <aside className="side-panel" aria-label={labels.sidePanel} inert={hidden}>
-      <div className="panel-tabs" role="tablist" onKeyDown={key}>
-        {panelTabs(ytMusic).map((name) => (
-          <button
-            key={name}
-            id={`panel-tab-${name}`}
-            role="tab"
-            aria-selected={tab === name}
-            aria-controls="panel-body"
-            tabIndex={tab === name ? 0 : -1}
-            onClick={() => onTab(name)}
-          >
-            {name === "related" ? text.playbackText.related : labels[name]}
-          </button>
-        ))}
+      <div className="panel-head">
+        <div className="panel-tabs" role="tablist" onKeyDown={key}>
+          {panelTabs(ytMusic).map((name) => (
+            <button
+              key={name}
+              id={`panel-tab-${name}`}
+              role="tab"
+              aria-selected={tab === name}
+              aria-controls="panel-body"
+              tabIndex={tab === name ? 0 : -1}
+              onClick={() => onTab(name)}
+            >
+              {name === "related" ? text.playbackText.related : labels[name]}
+            </button>
+          ))}
+        </div>
+        <button
+          className="icon-button panel-close"
+          aria-label={labels.closeSidePanel}
+          title={labels.closeSidePanel}
+          onClick={onClose}
+        >
+          <Icon name="close" size={16} />
+        </button>
       </div>
       <div
         id="panel-body"
@@ -100,7 +114,7 @@ export function SidePanel({
             onSongMenu={onSongMenu}
           />
         ) : view === undefined ? null : (
-          <QueuePanel view={view} command={command} onError={onError} />
+          <QueuePanel view={view} command={command} onError={onError} onMenu={onSongMenu} />
         )}
       </div>
     </aside>

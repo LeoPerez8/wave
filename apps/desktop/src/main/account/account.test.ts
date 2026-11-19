@@ -190,6 +190,183 @@ test("Sign Out on All Devices offline keeps the session and says why", async () 
   });
 });
 
+test("Delete Account confirms with Google, deletes the account on the service and signs out", async () => {
+  const app = await desktop();
+  const account = app.open();
+  await account.signIn();
+  const phone = await app.service.signIn({ aud: DESKTOP_CLIENT });
+  const heard: WaveSession[] = [];
+  account.subscribe((session) => heard.push(session));
+  const purposes: string[] = [];
+  app.browser(async (_signal, purpose) => {
+    purposes.push(purpose);
+    return {
+      idToken: await app.service.google.idToken({ aud: DESKTOP_CLIENT }),
+      email: "ana@example.com",
+      name: "Ana",
+      photoUrl: null,
+    };
+  });
+
+  await account.deleteAccount();
+
+  // The tab Google sends back to says Wave is deleting, not signing in.
+  assert.deepEqual(purposes, ["confirmDeletion"]);
+
+  assert.deepEqual(account.view().account, {
+    kind: "signedOut",
+    action: "signIn",
+    note: "deleted",
+  });
+  assert.deepEqual(heard, [{ status: "signedOut" }]);
+  assert.equal(app.disk.size, 0);
+  assert.equal((await app.service.request("GET", PULL, { session: phone })).status, 401);
+  const accounts = await app.service.db.execute("SELECT COUNT(*) AS n FROM accounts");
+  assert.equal(Number(accounts.rows[0]?.["n"]), 0);
+});
+
+const SIGNED_IN = {
+  kind: "account",
+  account: { email: "ana@example.com", name: "Ana", photoUrl: null },
+  busy: null,
+} as const;
+
+/** The service still holds the account, and the desktop's session still works. */
+const accountKept = async (app: Awaited<ReturnType<typeof desktop>>): Promise<void> => {
+  const accounts = await app.service.db.execute("SELECT COUNT(*) AS n FROM accounts");
+  assert.equal(Number(accounts.rows[0]?.["n"]), 1);
+  assert.equal((await app.open().request("GET", PULL, null)).status, 200);
+};
+
+test("Delete Account with another Google account deletes nothing and says which to pick", async () => {
+  const app = await desktop();
+  const account = app.open();
+  await account.signIn();
+  app.browser(async () => ({
+    idToken: await app.service.google.idToken({ aud: DESKTOP_CLIENT, sub: "google-sub-2" }),
+    email: "bo@example.com",
+    name: "Bo",
+    photoUrl: null,
+  }));
+
+  await account.deleteAccount();
+
+  assert.deepEqual(account.view().account, { ...SIGNED_IN, note: "wrongGoogleAccount" });
+  await accountKept(app);
+});
+
+test("Delete Account offline keeps the account signed in and says why", async () => {
+  const app = await desktop();
+  const account = app.open();
+  await account.signIn();
+  app.offline();
+  await account.deleteAccount();
+  assert.deepEqual(account.view().account, { ...SIGNED_IN, note: "offline" });
+  assert.equal(app.disk.size, 1);
+});
+
+test("Delete Account the service doesn't carry out keeps the account signed in and says so", async () => {
+  const app = await desktop();
+  const account = app.open({
+    fetch: (input, init) =>
+      init?.method === "DELETE"
+        ? Promise.resolve(new Response("down", { status: 503 }))
+        : app.fetch(input, init),
+  });
+  await account.signIn();
+  await account.deleteAccount();
+  assert.deepEqual(account.view().account, { ...SIGNED_IN, note: "failed" });
+  await accountKept(app);
+});
+
+test("Cancel while Delete Account waits for the browser sends nothing", async () => {
+  const app = await desktop();
+  const account = app.open();
+  await account.signIn();
+  app.browser(
+    (signal) =>
+      new Promise((_, reject) =>
+        signal.addEventListener("abort", () => reject(new BrowserSignInError("cancelled"))),
+      ),
+  );
+
+  const deleting = account.deleteAccount();
+  assert.deepEqual(account.view().account, { ...SIGNED_IN, busy: "deleting", note: null });
+  account.cancelSignIn();
+  await deleting;
+
+  assert.deepEqual(account.view().account, { ...SIGNED_IN, note: null });
+  await accountKept(app);
+});
+
+test("once the browser returns, Settings hears the deletion is on its way and Cancel changes nothing", async () => {
+  const app = await desktop();
+  let reached = () => {};
+  const atService = new Promise<void>((resolve) => (reached = resolve));
+  let release = () => {};
+  const held = new Promise<void>((resolve) => (release = resolve));
+  const account = app.open({
+    fetch: async (input, init) => {
+      if (init?.method === "DELETE") {
+        reached();
+        await held;
+      }
+      return app.fetch(input, init);
+    },
+  });
+  await account.signIn();
+  let answer = () => {};
+  const browser = new Promise<void>((resolve) => (answer = resolve));
+  app.browser(async () => {
+    await browser;
+    return {
+      idToken: await app.service.google.idToken({ aud: DESKTOP_CLIENT }),
+      email: "ana@example.com",
+      name: "Ana",
+      photoUrl: null,
+    };
+  });
+
+  const deleting = account.deleteAccount();
+  assert.equal(account.view().deletionSent, false);
+  answer();
+  await atService;
+  assert.equal(account.view().deletionSent, true);
+  account.cancelSignIn();
+  release();
+  await deleting;
+
+  assert.equal(account.view().deletionSent, false);
+  assert.deepEqual(account.view().account, {
+    kind: "signedOut",
+    action: "signIn",
+    note: "deleted",
+  });
+});
+
+test("Delete Account on a session the service ended says the session ended", async () => {
+  const app = await desktop();
+  const account = app.open();
+  await account.signIn();
+  await app.service.db.execute("DELETE FROM sessions");
+
+  await account.deleteAccount();
+
+  assert.deepEqual(account.view().account, {
+    kind: "signedOut",
+    action: "signInAgain",
+    note: "ended",
+  });
+});
+
+test("signed out, Delete Account opens no browser and sends nothing", async () => {
+  const app = await desktop();
+  app.browser(() => assert.fail("the browser opened"));
+  const account = app.open();
+  await account.deleteAccount();
+  assert.deepEqual(account.view().account, { kind: "signedOut", action: "signIn", note: "about" });
+});
+
 test("a build with no sync service has no Sign In, and sends nothing", async () => {
   const app = await desktop();
   const account = app.open({ syncUrl: null });
@@ -206,6 +383,36 @@ test("only pushes and pulls go out with the session", async () => {
     ["GET", "/v1/soulseek"],
     ["POST", "/v1/pull"],
     ["GET", "/v1/pull?since=../x"],
+  ] as const)
+    await assert.rejects(account.request(method, path, null), {
+      code: "ERR_WAVE_FORBIDDEN_REQUEST",
+    });
+});
+
+test("a show check's Ticketmaster routes go out with the session, and nothing else of theirs", async () => {
+  const app = await desktop();
+  const asked: string[] = [];
+  const account = app.open({
+    fetch: async (input, init) => {
+      const url = String(input);
+      if (!url.includes("/v1/ticketmaster/")) return app.fetch(input, init);
+      asked.push(new URL(url).pathname + new URL(url).search);
+      return new Response("{}", { status: 200 });
+    },
+  });
+  await account.signIn();
+  const routes = [
+    "/v1/ticketmaster/attractions?keyword=Sigur%20R%C3%B3s",
+    "/v1/ticketmaster/events?attractionId=K8vZ9171o-f&countryCode=BR",
+  ];
+  for (const path of routes)
+    assert.deepEqual(await account.request("GET", path, null), { status: 200, body: "{}" });
+  assert.deepEqual(asked, routes);
+  for (const [method, path] of [
+    ["POST", routes[0]!],
+    ["GET", "/v1/ticketmaster/events?attractionId=../x&countryCode=BR"],
+    ["GET", "/v1/ticketmaster/events?attractionId=K1&countryCode=BR&size=9"],
+    ["GET", "/v1/ticketmaster/venues?keyword=x"],
   ] as const)
     await assert.rejects(account.request(method, path, null), {
       code: "ERR_WAVE_FORBIDDEN_REQUEST",

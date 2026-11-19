@@ -5,19 +5,13 @@
  * is Core's (`artistPhotoLookups`, `pickArtistPhoto`, `artistPhotosUnreachable`);
  * this file fetches and saves.
  */
-import {
-  artistPhotosUnreachable,
-  deezerArtistCandidates,
-  deezerArtistSearchUrl,
-  failuresInARow,
-  identityKey,
-  pickArtistPhoto,
-} from "@wave/core";
+import { artistPhotosUnreachable, failuresInARow, identityKey } from "@wave/core";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import { useSyncExternalStore } from "react";
 
 import { makeExternalStore } from "@wave/client/externalStore";
+import { findArtistPhoto } from "@wave/client/artworkLookup";
 import { WaveNative, type ArtistPhotoFiles } from "@/native/waveNative";
 import { artistPhotosEnabled, useArtistPhotosEnabled } from "@/settings/artistPhotos";
 
@@ -51,12 +45,8 @@ class Offline extends Data.TaggedError("Offline")<{}> {}
 /** Searches [artist], picks the confident match and saves its photo. */
 const lookUp = (artist: ArtistPhotoLookup) =>
   Effect.tryPromise(async (signal): Promise<ArtistPhotoRecord> => {
-    const response = await fetch(deezerArtistSearchUrl(artist.query), { signal });
-    if (!response.ok) throw new Error(`HTTP ${response.status}`);
-    const candidates = deezerArtistCandidates(await response.json());
-    if (candidates === null) throw new Error("Not a search result");
+    const photo = await findArtistPhoto(artist.name, artist.query, signal);
     const checkedAt = Date.now();
-    const photo = pickArtistPhoto(artist.name, candidates);
     if (photo === null) return { outcome: "unmatched", checkedAt };
     const files = await WaveNative.saveArtistPhoto(artist.key, photo.thumbUrl, photo.largeUrl);
     return { outcome: "found", checkedAt, ...files };

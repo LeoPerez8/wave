@@ -11,6 +11,7 @@ import {
   qualityDirection,
   applyJournalChanges,
   readStarDownloads,
+  STAR_ASKED_SETTING,
   starAskedAfter,
   starredDownload,
   unstarredDownload,
@@ -136,6 +137,7 @@ import { downloadReleaseDate } from "@/library/releaseAnswers";
 import { streamedReleaseSong } from "@/library/releaseSong";
 import { appRuntime } from "@/library/runtime";
 import { settleUnsearchedSong } from "@/library/unsearchedEntries";
+import { missingSongCover } from "@wave/client/artworkLookup";
 import { makeExternalStore } from "@wave/client/externalStore";
 import { useSightedStore } from "@/lib/screenSight";
 import { WaveNative } from "@/native/waveNative";
@@ -494,23 +496,15 @@ const searchFailure = (error: YtMusicError): DownloadFailed =>
   });
 
 /**
- * The cover of the album YouTube Music files video [videoId] under, read as a YT Music song's
- * download reads its album (the watch page, then the album page); null when it has none, or
- * YouTube Music doesn't answer in time.
+ * [video], a missing song's own video, with its cover (`missingSongCover`): its album's when it
+ * came without one, and none when YouTube Music doesn't answer in time.
  */
-const videoCover = (videoId: string) =>
-  optional(
-    Effect.gen(function* () {
-      const { albumId } = yield* native(() => WaveYtDownloads.watchSong(videoId));
-      return albumId === null ? null : (yield* native(() => readYtAlbum(albumId))).artworkUrl;
-    }),
-  );
-
-/** [video] with its album's cover (`videoCover`) when it came without one: a missing song's own video. */
 const withCover = (video: MissingSongVideo | null) =>
-  video === null || video.artworkUrl !== null
+  video === null
     ? Effect.succeed(video)
-    : videoCover(video.videoId).pipe(Effect.map((artworkUrl) => ({ ...video, artworkUrl })));
+    : optional(native(() => missingSongCover(video, WaveYtDownloads.watchSong, readYtAlbum))).pipe(
+        Effect.map((artworkUrl) => ({ ...video, artworkUrl })),
+      );
 
 /**
  * The journal's "prepare" decision for missing song [trackId] (job `missing:<id>`), read from
@@ -1265,7 +1259,7 @@ let requests = Promise.resolve();
  * so it survives Wave closing; the owner asking for one of them (`ownerAsked`) takes it out.
  */
 const starAsked = persistedSetting<ReadonlySet<string>>({
-  key: "downloads.starAsked",
+  key: STAR_ASKED_SETTING,
   read: readStarDownloads,
   write: writeStarDownloads,
 });

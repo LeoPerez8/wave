@@ -38,6 +38,8 @@ import type { Catalogue } from "./catalogueEn.ts";
 export const ptBR: Catalogue = {
   desktopWindow: desktopWindowPtBr,
   desktopLayout: {
+    language: "Idioma",
+    languages: { system: "Sistema", en: "English", "pt-BR": "Português (Brasil)" },
     brand: "Wave",
     home: "Início",
     search: "Buscar",
@@ -107,6 +109,7 @@ export const ptBR: Catalogue = {
     magicQueueIdle:
       "Comece uma Fila Mágica com uma destas músicas ou pelo menu de qualquer música.",
     sidePanel: "Painel lateral",
+    closeSidePanel: "Fechar painel lateral",
     removeFromQueue: (title: string) => `Remover “${title}” da Fila`,
   },
   desktopLibrary: {
@@ -115,6 +118,15 @@ export const ptBR: Catalogue = {
     unavailableFolder: "Pasta indisponível",
     driveDisconnected: "A unidade não está conectada. Reconecte e tente de novo.",
     actionFailed: "Não foi possível concluir essa ação. Tente de novo.",
+    downloadStarted: (count) => (count === 1 ? "Baixando a música" : `Baixando ${count} músicas`),
+    downloading: (title) => `Baixando ${title}`,
+    nothingToPlay:
+      "Nenhuma destas músicas está neste computador ainda. Baixe-as para tocá-las aqui.",
+    leftOut: (count) =>
+      count === 1
+        ? "1 música não está neste computador, então ficou de fora."
+        : `${count} músicas não estão neste computador, então ficaram de fora.`,
+    fileFailed: "Não foi possível reproduzir este arquivo",
     titleColumn: "Título",
     artistColumn: "Artista",
     albumColumn: "Álbum",
@@ -125,6 +137,7 @@ export const ptBR: Catalogue = {
     chooseArtist: "Escolha um Artista",
     noPlaylists: "Nenhuma playlist ainda",
     checkSong: (title: string) => `Selecionar “${title}”`,
+    showMoreSongs: "Mostrar mais músicas",
   },
   desktopAccount: {
     finishInBrowser: "Termine de iniciar sessão no navegador.",
@@ -132,6 +145,9 @@ export const ptBR: Catalogue = {
       "Este computador não tem um chaveiro, então a sessão dura até o Wave fechar. Inicie sessão novamente na próxima vez.",
     browserTitle: "Volte ao Wave",
     browserMessage: "Você pode fechar esta aba. O Wave termina de iniciar sessão.",
+    confirmDeletionInBrowser: "Inicie sessão no Google no navegador para confirmar que é você.",
+    browserDeletionMessage: "Você pode fechar esta aba. O Wave termina de apagar a conta.",
+    deletionSent: "O Wave está apagando a conta. Não dá mais para cancelar.",
   },
   desktopShortcuts: desktopShortcutsPtBr,
   downloadNotice: downloadNoticePtBr,

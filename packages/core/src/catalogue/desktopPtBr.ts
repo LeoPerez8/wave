@@ -22,7 +22,16 @@ export const desktopPtBr = {
       "computador compartilham tudo. Áudio e caminhos de arquivos nunca vão.",
     waveAccountSignOutNote:
       "Finalizar sessão mantém seus arquivos de música e ouvidas neste computador. Músicas da " +
-      "conta sem arquivo aqui saem da Biblioteca.",
+      "conta sem arquivo aqui saem da Biblioteca. Apagar a conta remove o que o servidor do " +
+      "Wave guarda, sem apagar nada deste computador.",
+    deleteWaveAccount: {
+      message:
+        "O servidor do Wave apaga tudo o que tem da conta, e a sessão deste computador é " +
+        "finalizada. Nada neste computador é apagado. Depois, seu navegador abre o início de " +
+        "sessão do Google, para confirmar que é você.",
+    },
+    yourWaveAccountWasDeletedEverythingOn:
+      "Sua Conta Wave foi apagada. Seus arquivos de música e ouvidas neste computador permanecem.",
     yourWaveSessionEndedSoThisPhone:
       "Sua sessão do Wave terminou, então a sessão deste computador foi finalizada. Inicie sessão novamente para manter seu backup.",
     addAGoogleAccountToThisPhone: "Não foi possível iniciar sessão. Tente novamente.",
@@ -47,11 +56,18 @@ export const desktopPtBr = {
     },
     howMuchOfAStreamedSongWave:
       "Quanto de uma música online o Wave carrega com antecedência, incluindo as próximas músicas em A Seguir, para continuar tocando sem sinal. Períodos maiores usam mais memória: cerca de 50 MB para 30 minutos. Músicas baixadas tocam do computador.",
+    waveLooksUpAPhotoOfEach:
+      "O Wave busca uma foto de cada artista no Deezer, enviando os nomes dos artistas, e guarda as fotos neste computador. Desativado, os artistas mostram as capas dos álbuns e o Wave não faz solicitações.",
   },
   itemActions: {
     labels: {
       share: "Copiar Link",
     },
+  },
+  library: {
+    offlineTapOnline:
+      "Você está offline. Clique em Online para tentar de novo quando estiver online.",
+    noAnswerTapOnline: "Sem resposta online. Clique em Online para tentar de novo.",
   },
   songDeletion: {
     removeMessage: {

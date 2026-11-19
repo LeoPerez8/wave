@@ -21,7 +21,20 @@ export interface DownloadRunCounts {
   readonly total: number;
 }
 
-/** Where downloading missing songs stands (Core's `missingSongsDownload`), all or one album's. */
+/** A page whose missing songs download together: an album, artist, genre or playlist. */
+export interface MissingSongsList {
+  readonly kind: "album" | "artist" | "genre" | "playlist";
+  readonly id: number;
+}
+
+export const MISSING_SONGS_LISTS: readonly MissingSongsList["kind"][] = [
+  "album",
+  "artist",
+  "genre",
+  "playlist",
+];
+
+/** Where downloading missing songs stands (Core's `missingSongsDownload`), all or one list's. */
 export interface MissingSongsView {
   /** The songs still missing. */
   readonly count: number;
@@ -33,6 +46,8 @@ export interface MissingSongsView {
 }
 
 export interface DownloadsView {
+  /** Latest accepted request, for the window's start notice; repeated reads keep its id. */
+  readonly notice: { readonly id: number; readonly count: number } | null;
   /** Downloads pause while the computer is offline, and go on once it's back. */
   readonly online: boolean;
   /** How far the run has come, 0 to 1 (the sidebar's percentage); null with no run. */

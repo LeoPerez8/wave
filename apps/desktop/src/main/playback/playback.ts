@@ -7,13 +7,19 @@
  */
 import { Database } from "@wave/client";
 import { saveMeasurement, selectSongsToMeasure } from "@wave/client/db/loudness";
+import { selectMissingSongs } from "@wave/client/db/missingSongs";
 import { setFavorites } from "@wave/client/db/playHistory";
 import { createPlaybackSession, type AudioPort } from "@wave/client/playbackSession";
 import { createQueueGains, queueAlbum } from "@wave/client/queueGains";
 import { createSongMeasurements } from "@wave/client/songMeasurements";
 import {
+  listPlay,
+  missingSongYtSong,
   parseTrackId,
+  tappedMissingSong,
+  skipMissingSongs,
   ytTrackId,
+  type YtAlbumSong,
   type PlayEvent,
   type QueueCommand,
   type QueueState,
@@ -26,7 +32,12 @@ import * as Layer from "effect/Layer";
 
 import type { Page } from "../../shared/bridge.ts";
 import type { BrowseRow, BrowseScope } from "../../shared/browse.ts";
-import type { PlaybackCommand, PlayerView, QueueRow } from "../../shared/playerView.ts";
+import type {
+  PlaybackTransport,
+  PlayerView,
+  PlayStart,
+  QueueRow,
+} from "../../shared/playerView.ts";
 import { ytRow } from "../../shared/yt.ts";
 import type { PlaybackSettings } from "../../shared/playbackSettings.ts";
 import { Player } from "../audio/player.ts";
@@ -34,27 +45,31 @@ import { browseSongs, browseTrackIds } from "../library/browse.ts";
 import { DesktopLibrary } from "../library/library.ts";
 import { preference, savePreference } from "../preferences.ts";
 import { YtMusic } from "../yt/ytMusic.ts";
+import { streamedStarred } from "../yt/streamedSong.ts";
 import { streamedWithinBuffer } from "./bufferAhead.ts";
 import { readPlaybackSettings, savePlaybackSettings } from "./playbackSettings.ts";
 import { createSleepTimer } from "./sleepTimer.ts";
+import { Downloads } from "../downloads/downloadsLayer.ts";
 
-export interface PlaybackShape {
+export interface PlaybackShape extends PlaybackTransport {
+  readonly fileFailed: (id: number) => boolean;
   /** What the player bar shows; cheap enough to poll. */
   readonly view: () => PlayerView;
   /**
    * Plays [scope]'s songs as a new queue: from row [index], or shuffled when [shuffle] is
    * true, or from the first song. A queue it replaces can come back with `undo`.
    */
-  readonly start: (scope: BrowseScope, index?: number, shuffle?: boolean) => Promise<void>;
-  /** Plays YouTube Music songs a search found, from [index], as a new queue. */
-  readonly startYt: (videoIds: readonly string[], index: number) => Promise<void>;
-  /** A queue command: Next, Previous, shuffle, repeat, and the Queue's edits. */
-  readonly command: (command: PlaybackCommand) => Promise<void>;
-  readonly play: () => Promise<void>;
-  readonly pause: () => Promise<void>;
-  readonly seek: (positionMs: number) => Promise<void>;
-  /** Back to the queue the last `start` replaced, where it was. */
-  readonly undo: () => Promise<void>;
+  readonly start: (scope: BrowseScope, index?: number, shuffle?: boolean) => Promise<PlayStart>;
+  /**
+   * Activates a song in a resolved list; missing songs download, then play after import. With
+   * no [index] (Play, Shuffle), missing songs YouTube Music has stream while it's on.
+   */
+  readonly activate: (
+    ids: readonly string[],
+    index: number | undefined,
+    context: NonNullable<QueueState["context"]>,
+    shuffle?: boolean,
+  ) => Promise<PlayStart>;
   readonly dismissUndo: () => void;
   /** Stars or unstars the current song. */
   readonly favorite: () => void;
@@ -121,6 +136,7 @@ export const playbackLayer = Layer.effect(
     const player = yield* Player;
     const library = yield* DesktopLibrary;
     const yt = yield* YtMusic;
+    const downloads = yield* Downloads;
     const run = Effect.runPromise;
     const audio: AudioPort = {
       load: (path, key, options) => run(player.load(path, key, options?.gainDb)),
@@ -280,7 +296,9 @@ export const playbackLayer = Layer.effect(
       return refs.map((ref) => {
         if (ref?.kind === "library") return songs.get(ref.id);
         const song = ref?.kind === "yt" ? yt.song(ref.videoId) : undefined;
-        return song === undefined ? undefined : ytRow(song);
+        return song === undefined
+          ? undefined
+          : { ...ytRow(song), favorite: streamedStarred(db, song) };
       });
     };
     /** Keeps the queue's YT Music songs for the next launch, after anything that changes it. */
@@ -289,10 +307,24 @@ export const playbackLayer = Layer.effect(
      * Follows a queue change the session was asked for, [replaced] when it plays a new queue.
      * The queue changes even when its song then won't load, so a failure is followed too.
      */
+    const failedFiles = new Set<number>();
     const moved = async (change: Promise<void>, replaced = false) => {
       const before = session.snapshot().queue;
       try {
         await change;
+        // A song counts as fixed once it loads again, not when Repeat or the like goes through.
+        const queue = session.snapshot().queue;
+        const current = queue.entries[queue.index];
+        if (replaced || current !== before.entries[before.index])
+          failedFiles.delete(Number(current?.trackId));
+      } catch (cause) {
+        const queue = session.snapshot().queue;
+        const id = Number(queue.entries[queue.index]?.trackId);
+        if (Number.isSafeInteger(id) && id > 0) {
+          failedFiles.add(id);
+          if (failedFiles.size > 200) failedFiles.delete(failedFiles.values().next().value!);
+        }
+        throw cause;
       } finally {
         const { queue, canUndo } = session.snapshot();
         if (replaced && canUndo && queue !== before) undoOffer++;
@@ -300,6 +332,106 @@ export const playbackLayer = Layer.effect(
         queueChanged();
       }
     };
+    let pending:
+      | { ids: readonly string[]; index: number; context: NonNullable<QueueState["context"]> }
+      | undefined;
+    const activate: PlaybackShape["activate"] = async (ids, index, context, shuffle) => {
+      pending = undefined;
+      error = null;
+      const songs = new Map(
+        rowsOf(ids).flatMap((row, at) => (row ? [[ids[at]!, row] as const] : [])),
+      );
+      const chosen = index === undefined ? undefined : songs.get(ids[index]!);
+      if (chosen?.unavailable) throw new Error("[folder-unavailable] Drive is not connected");
+      const hasFile = (id: string) => {
+        const song = songs.get(id);
+        return (
+          song !== undefined &&
+          (song.videoId !== undefined || song.path !== null) &&
+          !song.unavailable
+        );
+      };
+      // A missing song: the account has it and this computer has no file (docs/spec.md).
+      const isMissing = (id: string) => {
+        const song = songs.get(id);
+        return song !== undefined && song.path === null && song.videoId === undefined;
+      };
+      const missing = tappedMissingSong(ids, index, (id) => !isMissing(id));
+      if (missing !== null) {
+        const request = { ids, index: index!, context };
+        pending = request;
+        try {
+          await downloads.missing([Number(missing)]);
+        } catch (cause) {
+          if (pending === request) pending = undefined;
+          throw cause;
+        }
+        return { kind: "downloading" };
+      }
+      /** The listed songs whose drive is disconnected. */
+      const unavailable = ids.filter((id) => songs.get(id)?.unavailable === true).length;
+      if (index === undefined)
+        return playList(ids, context, shuffle, hasFile, isMissing, unavailable);
+      const play = skipMissingSongs(ids, index, hasFile);
+      if (play === null) return { kind: "nothing", missing: 0, unavailable };
+      await moved(
+        session.dispatch({
+          type: "play",
+          trackIds: [...play.songs],
+          startIndex: play.startIndex,
+          context,
+          shuffle,
+        }),
+        true,
+      );
+      return { kind: "playing", streamed: 0, leftOut: 0 };
+    };
+    /**
+     * A list's Play or Shuffle (Core's `listPlay`): its songs with a file and, with YT Music on,
+     * its missing songs YouTube Music has, streamed in their place; the others are counted.
+     */
+    const playList = async (
+      ids: readonly string[],
+      context: NonNullable<QueueState["context"]>,
+      shuffle: boolean | undefined,
+      hasFile: (id: string) => boolean,
+      isMissing: (id: string) => boolean,
+      unavailable: number,
+    ): Promise<PlayStart> => {
+      const listed = ids.filter((id) => hasFile(id) || isMissing(id));
+      const streams = new Map<string, YtAlbumSong>();
+      if (yt.enabled())
+        for (const track of selectMissingSongs(db, listed.filter(isMissing).map(Number))) {
+          const song = missingSongYtSong(track);
+          if (song !== null) streams.set(String(track.id), { ...song, albumId: null });
+        }
+      const play = listPlay(listed, { hasFile, streams: (id) => streams.has(id) });
+      if (play.kind === "nothing")
+        return { kind: "nothing", missing: play.missing.length, unavailable };
+      yt.keep(play.streamed.map((id) => streams.get(id)!));
+      await moved(
+        session.dispatch({
+          type: "play",
+          trackIds: play.songs.map((id) => {
+            const stream = streams.get(id);
+            return stream === undefined ? id : ytTrackId(stream.videoId);
+          }),
+          context,
+          shuffle,
+        }),
+        true,
+      );
+      return { kind: "playing", streamed: play.streamed.length, leftOut: play.leftOut.length };
+    };
+    const stopImports = library.subscribe(() => {
+      const request = pending;
+      if (!request) return;
+      const row = rowsOf([request.ids[request.index]!])[0];
+      if (row?.path == null || row.unavailable) return;
+      pending = undefined;
+      void activate(request.ids, request.index, request.context).catch(failed);
+    });
+    yield* Effect.addFinalizer(() => Effect.sync(stopImports));
     /** The current song's row, read again only when the queue or a star changed. */
     let currentRow: { readonly revision: number; readonly row: BrowseRow | null } | undefined;
     /** The last finished scan seen: it can bring tag values, and files to try measuring again. */
@@ -337,28 +469,27 @@ export const playbackLayer = Layer.effect(
     };
 
     return {
+      fileFailed: (id) => failedFiles.has(id),
       view,
+      activate,
       start: async (scope, index, shuffle) => {
-        error = null;
         const ids = browseTrackIds(db, scope);
         const chosen = index === undefined ? undefined : ids[index];
-        if (chosen !== undefined && rows([Number(chosen)])[0]?.unavailable)
-          throw new Error("[folder-unavailable] Drive is not connected");
-        // A song from Search plays alone, as on the phone with YT Music off.
+        if (index !== undefined && chosen === undefined) throw new Error("Invalid song position");
+        // A song from Search plays alone; with YT Music on, main starts its Magic Queue instead
+        // (`playSearchSong` in ytServices.ts).
         const alone = scope.kind === "search" && chosen !== undefined;
-        const playing = session.dispatch({
-          type: "play",
-          trackIds: alone ? [chosen] : ids,
-          ...(index === undefined ? {} : { startIndex: alone ? 0 : index }),
-          ...(shuffle === undefined ? {} : { shuffle }),
-          context:
-            scope.kind === "search"
-              ? { kind: "search", id: null }
-              : { kind: scope.kind, id: scope.id === undefined ? null : String(scope.id) },
-        });
-        await moved(playing, true);
+        return activate(
+          alone ? [chosen] : ids,
+          alone ? 0 : index,
+          scope.kind === "search"
+            ? { kind: "search", id: null }
+            : { kind: scope.kind, id: scope.id === undefined ? null : String(scope.id) },
+          shuffle,
+        );
       },
       startYt: async (videoIds, index) => {
+        pending = undefined;
         error = null;
         if (videoIds.some((videoId) => yt.song(videoId) === undefined))
           throw new Error("[yt-unknown] That song isn't in the search results anymore");
@@ -371,6 +502,7 @@ export const playbackLayer = Layer.effect(
         await moved(playing, true);
       },
       command: async (command) => {
+        pending = undefined;
         error = null;
         // Previous goes by the position the session holds when its turn comes.
         await moved(session.dispatch(command));
@@ -379,9 +511,15 @@ export const playbackLayer = Layer.effect(
         await session.play();
         await sleep.resumed();
       },
-      pause: session.pause,
+      pause: () => {
+        pending = undefined;
+        return session.pause();
+      },
       seek: session.seek,
-      undo: () => moved(session.undo()),
+      undo: () => {
+        pending = undefined;
+        return moved(session.undo());
+      },
       dismissUndo: session.dismissUndo,
       favorite: () => {
         const current = view().current;
@@ -441,6 +579,7 @@ export const playbackLayer = Layer.effect(
       queueState: () => session.snapshot().queue,
       playing: () => session.snapshot().status.state === "playing",
       dispatch: async (command) => {
+        pending = undefined;
         error = null;
         await moved(session.dispatch(command), command.type === "play");
       },

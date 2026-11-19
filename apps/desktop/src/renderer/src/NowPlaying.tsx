@@ -10,7 +10,15 @@ import {
   type ArtworkPalette,
   type Gradient,
 } from "@wave/core";
-import { useEffect, useLayoutEffect, useMemo, useRef, useState, type CSSProperties } from "react";
+import {
+  useEffect,
+  useLayoutEffect,
+  useMemo,
+  useRef,
+  useState,
+  type CSSProperties,
+  type ReactNode,
+} from "react";
 
 import type { BrowseRow } from "../../shared/browse.ts";
 import type { PlayerView } from "../../shared/playerView.ts";
@@ -18,6 +26,7 @@ import { Icon } from "./Icon.tsx";
 import { LyricsView } from "./LyricsView.tsx";
 import { text } from "./text.ts";
 import { Artwork } from "./VirtualTable.tsx";
+import { AlbumCredit, ArtistCredit, type YtCreditLinks } from "./YtCredit.tsx";
 import "./panel.css";
 
 /** The artwork is sampled this small: plenty for a palette. */
@@ -45,12 +54,19 @@ const paletteOf = (src: string) =>
 function usePalette(song: BrowseRow | null) {
   const hash = song?.artworkHash ?? null;
   const url = song?.artworkUrl ?? null;
-  const key = hash ?? url;
+  const id = song?.id;
+  const key = hash ?? url ?? (id ? `song:${id}` : null);
   const [palette, setPalette] = useState<{ key: string; palette: ArtworkPalette | null }>();
   useEffect(() => {
     if (key === null) return;
     let current = true;
-    void (hash !== null ? window.wave.library.artwork(hash, false) : window.wave.yt.artwork(url!))
+    void (
+      hash !== null
+        ? window.wave.library.artwork(hash, false)
+        : url !== null
+          ? window.wave.yt.artwork(url)
+          : window.wave.library.cover("song", id!, false)
+    )
       .then((image) => (image === null ? null : paletteOf(image)))
       .catch(() => null)
       .then((found) => {
@@ -59,7 +75,7 @@ function usePalette(song: BrowseRow | null) {
     return () => {
       current = false;
     };
-  }, [key, hash, url]);
+  }, [key, hash, url, id]);
   return key !== null && palette?.key === key ? palette.palette : null;
 }
 
@@ -92,11 +108,17 @@ function useShellColours() {
 export function NowPlaying({
   view,
   run,
+  links,
   onClose,
+  actions,
 }: {
   readonly view: PlayerView | undefined;
   readonly run: (action: Promise<unknown>) => void;
+  /** Where a streamed song's artist and album names lead; opening one closes Now Playing. */
+  readonly links: YtCreditLinks;
   readonly onClose: () => void;
+  /** Add to Playlist and Download for the song playing. */
+  readonly actions?: ReactNode;
 }) {
   const song = view?.current ?? null;
   const palette = usePalette(song);
@@ -108,10 +130,11 @@ export function NowPlaying({
     const gradient = paletteGradient(palette, theme);
     return { gradient, dim: lyricsDimOpacity(gradient, theme.ink[0]!) };
   }, [palette, theme]);
-  // Focus moves in, and back to the bar's artwork or title once it closes.
+  // Focus moves in, and back to the bar's artwork or title once it closes. It lands on Now
+  // Playing itself, not on Close, so Space still plays and pauses; Tab reaches Close next.
   useLayoutEffect(() => {
     opener.current = document.activeElement;
-    root.current?.querySelector<HTMLElement>(".now-playing-close")?.focus();
+    root.current?.focus();
     return () => {
       const element = opener.current;
       if (element instanceof HTMLElement && element.isConnected) element.focus();
@@ -130,6 +153,7 @@ export function NowPlaying({
       ref={root}
       className="now-playing"
       role="dialog"
+      tabIndex={-1}
       aria-label={text.playbackText.nowPlaying}
       style={style}
       data-testid="now-playing"
@@ -143,11 +167,19 @@ export function NowPlaying({
         <Icon name="back" />
       </button>
       <div className="now-playing-song">
-        <Artwork large hash={song?.artworkHash} url={song?.artworkUrl} />
+        <Artwork
+          large
+          full
+          kind="song"
+          id={song?.id}
+          hash={song?.artworkHash}
+          url={song?.artworkUrl}
+        />
         <div className="now-playing-copy">
           <h1 className="truncate">{song?.title ?? text.desktopLayout.nothingPlaying}</h1>
-          {song && <p className="truncate secondary">{song.artist}</p>}
-          {song?.album && <p className="truncate tertiary">{song.album}</p>}
+          {song && <ArtistCredit row={song} links={links} className="truncate secondary" />}
+          {song?.album && <AlbumCredit row={song} links={links} className="truncate tertiary" />}
+          {song && actions}
         </div>
       </div>
       <div className="now-playing-lyrics">

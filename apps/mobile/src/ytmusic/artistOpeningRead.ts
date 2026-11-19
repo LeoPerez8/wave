@@ -12,14 +12,6 @@ import {
   type YtSong,
 } from "@wave/core";
 
-/** Saved Popular is local, even offline, with YT Music off or Library selected. */
-export const artistPopularSongs = <S extends YtSong>(
-  state: YtArtistSection<S>,
-): readonly S[] | null => {
-  const saved = state.status === "reading" ? null : state.saved;
-  return saved?.outcome === "found" ? (saved.page.allSongs ?? null) : null;
-};
-
 export interface ArtistOpeningContext {
   readonly enabled: boolean;
   readonly settled: boolean;

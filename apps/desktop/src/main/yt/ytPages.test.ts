@@ -148,3 +148,110 @@ test("a song without a video id is found by its title and artists, the same reco
   );
   assert.deepEqual(calls, [`search ${JSON.stringify({ query: "Get Lucky Daft Punk" })}`]);
 });
+
+test("an artist read whole has every song of theirs, from the Songs shelf's playlist", async () => {
+  const { pages, calls, kept } = setup((method, params) => {
+    if (method === "artist")
+      return {
+        name: "Daft Punk",
+        songs: [songOf("khnokW3Mw24", "Instant Crush")],
+        songsPlaylistId: "OLAK5uy_all",
+        albums: [],
+        singles: [],
+      };
+    if (method === "playlist")
+      return {
+        title: "Daft Punk songs",
+        songs: [songOf("khnokW3Mw24", "Instant Crush")],
+        continuation: "next",
+      };
+    if (method === "playlistMore" && (params as { continuation: string }).continuation === "next")
+      return { songs: [songOf("5NV6Rdv1a3I", "Get Lucky")], continuation: null };
+    throw new Error(`unexpected ${method}`);
+  });
+  const page = await pages.artistWhole("UC_kRDKYrUlrbtrSiyu5Tflg");
+  assert.deepEqual(
+    page.allSongs?.map((song) => song.title),
+    ["Instant Crush", "Get Lucky"],
+  );
+  assert.equal(page.allSongsCut, undefined);
+  assert.deepEqual(calls, [
+    'artist {"browseId":"UC_kRDKYrUlrbtrSiyu5Tflg"}',
+    'playlist {"playlistId":"OLAK5uy_all"}',
+    'playlistMore {"continuation":"next"}',
+  ]);
+  assert.ok(
+    kept.some((song) => song.videoId === "5NV6Rdv1a3I"),
+    "its songs can stream",
+  );
+});
+
+test("an artist read whole without a songs playlist keeps its top songs; offline it fails", async () => {
+  const whole = setup(() => ({ name: "Daft Punk", songs: [songOf("khnokW3Mw24")], albums: [] }));
+  assert.deepEqual(
+    (await whole.pages.artistWhole("UCdaft")).allSongs?.map((song) => song.videoId),
+    ["khnokW3Mw24"],
+  );
+  const offline = setup((method) => {
+    if (method === "artist")
+      return { name: "Daft Punk", songs: [], songsPlaylistId: "OLAK5uy_all", albums: [] };
+    throw coded("ERR_YT_OFFLINE");
+  });
+  await assert.rejects(offline.pages.artistWhole("UCdaft"), { code: "ERR_YT_OFFLINE" });
+  const off = setup(() => ({}), false);
+  await assert.rejects(off.pages.artistWhole("UCdaft"), { code: "ERR_YT_DISABLED" });
+});
+
+test("an Artists search lists the artists it found", async () => {
+  const { pages, calls } = setup(() => [
+    { name: "Justice", browseId: "UCjustice", audience: 536_000, artworkUrl: null },
+    { name: "no browse id" },
+  ]);
+  assert.deepEqual(
+    (await pages.searchArtists("Justice")).map((artist) => artist.browseId),
+    ["UCjustice"],
+  );
+  assert.deepEqual(calls, ['searchArtists {"query":"Justice"}']);
+});
+
+test("Search's artists and albums come from one Artists and one Albums search, checked", async () => {
+  const { pages, calls } = setup((method) =>
+    method === "searchArtists"
+      ? [
+          { name: "Daft Punk", browseId: "UCdaft", audience: 9_000_000, artworkUrl: null },
+          { name: "no browse id" },
+        ]
+      : [
+          { kind: "album", browseId: "MPREb_ram", title: "Random Access Memories" },
+          { kind: "album", browseId: "../x", title: "a bad id" },
+        ],
+  );
+  const read = await pages.catalog("daft punk");
+  assert.equal(read.status, "ok");
+  assert.deepEqual(
+    read.artists.map((artist) => artist.browseId),
+    ["UCdaft"],
+  );
+  assert.deepEqual(
+    read.albums.map((album) => album.browseId),
+    ["MPREb_ram"],
+  );
+  assert.deepEqual(calls.sort(), [
+    'searchAlbums {"query":"daft punk"}',
+    'searchArtists {"query":"daft punk"}',
+  ]);
+});
+
+test("Search's artists and albums are nothing offline, and nothing is asked with YT Music off", async () => {
+  const offline = setup(() => {
+    throw coded("ERR_YT_OFFLINE");
+  });
+  assert.deepEqual(await offline.pages.catalog("daft punk"), {
+    status: "offline",
+    artists: [],
+    albums: [],
+  });
+  const off = setup(() => [], false);
+  assert.equal((await off.pages.catalog("daft punk")).status, "disabled");
+  assert.deepEqual(off.calls, []);
+});

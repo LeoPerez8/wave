@@ -126,6 +126,9 @@ const DEFAULT_HOME_ARRANGEMENT: HomeArrangement = {
 const sameOrder = (a: readonly string[], b: readonly string[]): boolean =>
   a.length === b.length && a.every((id, index) => id === b[index]);
 
+/** Where Home's arrangement is kept, on the phone and the computer alike. */
+export const HOME_ARRANGEMENT_SETTING = "settings.homeArrangement";
+
 /**
  * The arrangement a stored value holds: the sections it shows, in its order,
  * those this Wave doesn't know left out (the Magic Queue, Artist mixes and

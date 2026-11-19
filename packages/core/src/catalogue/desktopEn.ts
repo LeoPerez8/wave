@@ -25,7 +25,17 @@ export const desktopEn = {
       "paths never do.",
     waveAccountSignOutNote:
       "Signing out keeps your music files and plays on this computer. Songs from the account " +
-      "with no file here leave the Library.",
+      "with no file here leave the Library. Deleting the account deletes what Wave's server " +
+      "has of it, not what's on this computer.",
+    // The fresh Google sign-in opens in the browser, where the phone has Google's picker.
+    deleteWaveAccount: {
+      message:
+        "Wave's server deletes everything it has of the account, and this computer signs out. " +
+        "Nothing on this computer is deleted. Your browser then opens Google's sign-in, to " +
+        "confirm it's you.",
+    },
+    yourWaveAccountWasDeletedEverythingOn:
+      "Your Wave account was deleted. Your music files and plays on this computer stay.",
     yourWaveSessionEndedSoThisPhone:
       "Your Wave session ended, so this computer is signed out. Sign in again to keep your backup.",
     // The browser has its own Google sign-in, so there's no account to add to the system.
@@ -50,12 +60,19 @@ export const desktopEn = {
     },
     howMuchOfAStreamedSongWave:
       "How much of a streamed song Wave loads ahead, carrying on into the next songs in Up Next, so playback keeps going through a dead zone. Longer uses more memory: about 50 MB at 30 minutes. Downloaded songs play from this computer either way.",
+    waveLooksUpAPhotoOfEach:
+      "Wave looks up a photo of each artist on Deezer, which means sending artist names to it, and keeps the photos on this computer. Off, artists show their album artwork and Wave makes no requests.",
   },
   itemActions: {
     labels: {
       // A song's link is copied rather than sent from a share sheet.
       share: "Copy Link",
     },
+  },
+  library: {
+    // The artist page's quiet lines: Online is clicked, not tapped.
+    offlineTapOnline: "You're offline. Click Online to try again when you're back online.",
+    noAnswerTapOnline: "No answer online. Click Online to try again.",
   },
   songDeletion: {
     // The file stays on the computer, excluded from the Library (Settings › Library includes it again).

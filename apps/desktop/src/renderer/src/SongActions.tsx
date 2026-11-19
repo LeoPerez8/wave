@@ -5,11 +5,8 @@
 import {
   actionBarLabel,
   confirmSongRemoval,
-  describePlaylistAdd,
-  favoriteToast,
   isDestructiveAction,
   planAlert,
-  queuedToast,
   splitActionBar,
   tagLookupsToast,
   toastDuration,
@@ -20,8 +17,9 @@ import {
 import { useCallback, useEffect, useState, type KeyboardEvent } from "react";
 import type { BrowseScope } from "../../shared/browse.ts";
 import type { SongMenu, SongRunAction, SongTarget } from "../../shared/songActions.ts";
-import { Menu, type MenuItem } from "./Menu.tsx";
+import { Menu, type MenuItem, type OpenMenu } from "./Menu.tsx";
 import { copyLink } from "./copyLink.ts";
+import { songActionToast } from "./songActionToast.ts";
 import { language, text } from "./text.ts";
 
 /** Checked songs: the ones in [ids], or with [all] every song of the list but those. */
@@ -73,21 +71,21 @@ const playlists = async () =>
 
 /** The menus, toasts and question an entry can show, and how to open them. */
 export function useSongActions({ go, select, failed, changed, newPlaylist }: Options) {
-  const [menu, setMenu] = useState<{
-    readonly label: string;
-    readonly items: Promise<readonly MenuItem[]> | readonly MenuItem[];
-    readonly at: { readonly x: number; readonly y: number };
-  }>();
-  const [toast, setToast] = useState<{
-    readonly message: string;
-    readonly id: number;
-    readonly undo?: () => void;
-  }>();
+  const { menu, setMenu, setToast, menuAndToast } = useMenuAndToast();
   const [confirm, setConfirm] = useState<Confirm>();
 
-  const notify = useCallback((message: string | null, undo?: () => void) => {
-    if (message !== null) setToast({ message, id: Date.now(), ...(undo ? { undo } : {}) });
-  }, []);
+  const notify = useCallback(
+    (message: string | null, undo?: () => void, action?: ToastAction) => {
+      if (message !== null)
+        setToast({
+          message,
+          id: Date.now(),
+          ...(undo ? { undo } : {}),
+          ...(action ? { action } : {}),
+        });
+    },
+    [setToast],
+  );
 
   const run = useCallback(
     async (target: SongTarget, action: SongRunAction, surface: ActionSurface, id?: number) => {
@@ -97,23 +95,13 @@ export function useSongActions({ go, select, failed, changed, newPlaylist }: Opt
         const result = await window.wave.songs.run(target, action, id);
         changed();
         switch (result.kind) {
+          case "downloaded":
+            return;
           case "queued":
-            return notify(
-              queuedToast(
-                {
-                  type: action === "playNext" ? "playNext" : "addToQueue",
-                  trackIds: Array.from({ length: result.count }, (_, n) => String(n)),
-                },
-                undefined,
-                text,
-              ),
-            );
+            return notify(songActionToast(result, action === "playNext", surface, result.count));
           case "favorite":
-            return notify(favoriteToast(surface, result.on, result.count, language));
           case "playlist":
-            return notify(
-              describePlaylistAdd(result.name, result.added, result.alreadyIn, language),
-            );
+            return notify(songActionToast(result, false, surface, 0));
           case "removed":
             return;
           case "fixed":
@@ -152,6 +140,7 @@ export function useSongActions({ go, select, failed, changed, newPlaylist }: Opt
         case "playNext":
         case "addToQueue":
         case "favorite":
+        case "download":
         case "unfavorite":
         case "fixSong":
         case "fixSongs":
@@ -265,7 +254,7 @@ export function useSongActions({ go, select, failed, changed, newPlaylist }: Opt
             ...base,
             run: () => {
               finish();
-              void copyLink(window.wave.links.copySong(target, language));
+              void copyLink(window.wave.links.copySong(target));
             },
           };
         case "magicQueue":
@@ -309,7 +298,7 @@ export function useSongActions({ go, select, failed, changed, newPlaylist }: Opt
             ...extra,
           ]),
       }),
-    [itemFor],
+    [itemFor, setMenu],
   );
 
   /** Opens a menu of [items] under [element] (the selection bar's More and submenus). */
@@ -322,17 +311,12 @@ export function useSongActions({ go, select, failed, changed, newPlaylist }: Opt
       const rect = element.getBoundingClientRect();
       setMenu({ label, items, at: { x: rect.left, y: rect.bottom + 4 } });
     },
-    [],
+    [setMenu],
   );
 
-  const closeMenu = useCallback(() => setMenu(undefined), []);
-  const hideToast = useCallback(() => setToast(undefined), []);
   const overlays = (
     <>
-      {menu && <Menu label={menu.label} items={menu.items} at={menu.at} onClose={closeMenu} />}
-      {toast && (
-        <Toast key={toast.id} message={toast.message} onDone={hideToast} onUndo={toast.undo} />
-      )}
+      {menuAndToast}
       {confirm && (
         <ConfirmDialog
           spec={confirm.spec}
@@ -349,6 +333,8 @@ export function useSongActions({ go, select, failed, changed, newPlaylist }: Opt
     openItems,
     itemFor,
     overlays,
+    /** Shows [message] as the window's toast, with Undo or another [action] to offer. */
+    notify,
     /** Closes the open menu, if one is; false when none was. */
     closeMenu: () => {
       if (menu === undefined) return false;
@@ -358,15 +344,54 @@ export function useSongActions({ go, select, failed, changed, newPlaylist }: Opt
   };
 }
 
-/** A toast for the phone's time; with [onUndo], an Undo button too. */
+/** A button a toast offers besides Undo, such as Download Missing Songs. */
+/** A toast that shows: [id] tells one from the next, so each gets its own time. */
+interface ShownToast {
+  readonly message: string;
+  readonly id: number;
+  readonly undo?: () => void;
+  readonly action?: ToastAction;
+}
+
+/** A page's open menu and its toast, with [menuAndToast] to draw them over it. */
+export function useMenuAndToast() {
+  const [menu, setMenu] = useState<OpenMenu>();
+  const [toast, setToast] = useState<ShownToast>();
+  const closeMenu = useCallback(() => setMenu(undefined), []);
+  const hideToast = useCallback(() => setToast(undefined), []);
+  const menuAndToast = (
+    <>
+      {menu && <Menu label={menu.label} items={menu.items} at={menu.at} onClose={closeMenu} />}
+      {toast && (
+        <Toast
+          key={toast.id}
+          message={toast.message}
+          onDone={hideToast}
+          onUndo={toast.undo}
+          action={toast.action}
+        />
+      )}
+    </>
+  );
+  return { menu, setMenu, setToast, menuAndToast };
+}
+
+export interface ToastAction {
+  readonly label: string;
+  readonly run: () => void;
+}
+
+/** A toast for the phone's time; with [onUndo], an Undo button too, or [action]'s. */
 export function Toast({
   message,
   onDone,
   onUndo,
+  action,
 }: {
   readonly message: string;
   readonly onDone: () => void;
   readonly onUndo?: (() => void) | undefined;
+  readonly action?: ToastAction | undefined;
 }) {
   useEffect(() => {
     const timer = setTimeout(onDone, toastDuration(message));
@@ -384,6 +409,17 @@ export function Toast({
           }}
         >
           {text.playlists.undo}
+        </button>
+      )}
+      {action && (
+        <button
+          className="toast-action"
+          onClick={() => {
+            onDone();
+            action.run();
+          }}
+        >
+          {action.label}
         </button>
       )}
     </div>

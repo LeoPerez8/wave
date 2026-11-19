@@ -8,7 +8,7 @@ import {
   YT_ARTIST_SECTION_START,
 } from "@wave/core";
 import { artistPageOpening } from "./artistPageOpening.ts";
-import { artistOpeningRequest } from "./artistOpeningRequest.ts";
+import { artistOpeningRequest } from "@wave/client/ytArtistFetch";
 
 for (const page of ["artist", "album", "named YT artist"] as const) {
   test(`${page} shows offline before settlement and bypasses a YouTube API that never answers`, async () => {

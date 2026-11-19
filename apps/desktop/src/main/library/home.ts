@@ -12,7 +12,7 @@ const page = <T>(items: readonly T[]) => ({ items, offset: 0, total: items.lengt
 /** A bounded Home read: the same 12-album shelves and 10-song previews as the phone. */
 export const readHome = (db: LibraryDatabase, stored: string | null): HomeView => {
   const arrangement = parseHomeArrangement(stored);
-  // This ticket covers the Library. The YT services own streamed rows and followed artists.
+  // The Library's shelves. Discover and the followed artists' sections fill their own places.
   const home = homeSections(db);
   const totals = playedEntityTotals(db, statsWindow("all", Date.now()));
   const ranked = (kind: "albums" | "artists", limit: number): HomeRow[] => {
@@ -58,6 +58,8 @@ export const readHome = (db: LibraryDatabase, stored: string | null): HomeView =
   } as const;
   const items = arrangement.sections.flatMap((id): HomeSectionView[] => {
     if (id === "discover") return [{ id, kind: "discover", rows: page([]) }];
+    if (id === "new-releases" || id === "upcoming-shows")
+      return [{ id, kind: "follow", rows: page([]) }];
     if (!(id in rows)) return [];
     const local = id as LocalHomeSectionId;
     return rows[local].length === 0
@@ -68,6 +70,7 @@ export const readHome = (db: LibraryDatabase, stored: string | null): HomeView =
   const nothingPlayed = home.recentlyPlayed.length === 0 && home.mostPlayed.length === 0;
   return {
     ...page(items),
+    discoverRows: arrangement.discoverRows,
     hint: empty
       ? "empty"
       : arrangement.sections.length === 0

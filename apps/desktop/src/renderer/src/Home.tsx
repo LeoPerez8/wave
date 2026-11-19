@@ -2,10 +2,12 @@ import { homeSectionTitle } from "@wave/core";
 import { useEffect, useMemo, useState } from "react";
 import type { BrowseRow, BrowseScope } from "../../shared/browse.ts";
 import type { HomeSectionView, HomeView } from "../../shared/home.ts";
-import { DiscoverSection } from "./Discover.tsx";
+import { HomeDiscover } from "./HomeDiscover.tsx";
+import { HomeNewReleases, HomeUpcomingShows, useHomeFollow } from "./HomeFollow.tsx";
 import { Shelf } from "./YtLists.tsx";
+import type { YtRoute } from "./YtPages.tsx";
 import { VirtualTable } from "./VirtualTable.tsx";
-import { text, labels } from "./text.ts";
+import { text, labels, tagTitle, artistName } from "./text.ts";
 import "./home.css";
 
 const SONGS: BrowseScope = { kind: "favorites" };
@@ -21,16 +23,18 @@ function MostPlayed({
   readonly onError: () => void;
   readonly onMenu: (row: BrowseRow, at: { readonly x: number; readonly y: number }) => void;
 }) {
+  // The current language's text, so the labels follow a change of language.
+  const strings = text;
   const preview = useMemo(
     () => ({
       id: "home-most-played",
-      label: text.home.sections["most-played"],
+      label: strings.home.sections["most-played"],
       page: section.rows,
       trailing: (row: BrowseRow) =>
-        text.stats.plays(section.rows.items.find((r) => r.id === row.id)?.playCount ?? 0),
-      trailingHeading: text.stats.facts.plays,
+        strings.stats.plays(section.rows.items.find((r) => r.id === row.id)?.playCount ?? 0),
+      trailingHeading: strings.stats.facts.plays,
     }),
-    [section],
+    [section, strings],
   );
   return (
     <div className="home-table" style={{ height: section.rows.total * 40 + 30 }}>
@@ -54,17 +58,20 @@ export function Home({
   go,
   onError,
   onMenu,
+  notify,
 }: {
   readonly revision: number;
   readonly ytMusic: boolean;
+  readonly notify: (message: string) => void;
   readonly run: (action: Promise<unknown>) => void;
-  readonly go: (scope: BrowseScope) => void;
+  readonly go: (scope: BrowseScope | YtRoute) => void;
   readonly onError: () => void;
   readonly onMenu: (row: BrowseRow, at: { readonly x: number; readonly y: number }) => void;
 }) {
   const [view, setView] = useState<HomeView>();
   const [readFailed, setReadFailed] = useState(false);
   const [attempt, setAttempt] = useState(0);
+  const follow = useHomeFollow(revision);
   useEffect(() => {
     let current = true;
     void window.wave.home
@@ -122,7 +129,11 @@ export function Home({
           {view.hint === "none" && <p className="home-hint secondary">{text.home.noSections}</p>}
           {view.items.map((section) =>
             section.id === "discover" ? (
-              ytMusic && <DiscoverSection key={section.id} run={run} />
+              ytMusic && <HomeDiscover key={section.id} rows={view.discoverRows} run={run} />
+            ) : section.id === "new-releases" ? (
+              <HomeNewReleases key={section.id} cards={follow.releases} go={go} notify={notify} />
+            ) : section.id === "upcoming-shows" ? (
+              <HomeUpcomingShows key={section.id} cards={follow.shows} />
             ) : (
               <div key={section.id} data-section={section.id}>
                 {section.id === "most-played" ? (
@@ -141,11 +152,25 @@ export function Home({
                     artists={section.kind === "artist"}
                     items={section.rows.items.map((row) => ({
                       key: String(row.id),
-                      title: row.title,
+                      title: tagTitle(row.title, section.kind),
                       artworkHash: row.artworkHash,
+                      artworkKind:
+                        section.kind === "artist"
+                          ? "artist"
+                          : section.kind === "album"
+                            ? "album"
+                            : section.kind === "song"
+                              ? "song"
+                              : undefined,
+                      artworkId: row.id,
                       caption:
-                        row.playCount === undefined ? row.artist : text.stats.plays(row.playCount),
-                      label: [row.title, row.artist].filter(Boolean).join(", "),
+                        row.playCount === undefined
+                          ? artistName(row.artist)
+                          : text.stats.plays(row.playCount),
+                      label: [tagTitle(row.title, section.kind), artistName(row.artist)]
+                        .filter(Boolean)
+                        .join(", "),
+                      ...(section.kind === "song" ? { song: row } : {}),
                     }))}
                     onOpen={(index) => open(section, index)}
                     onMenu={

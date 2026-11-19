@@ -11,6 +11,9 @@ import { en, type Catalogue } from "./catalogueEn.ts";
 import { isExplicit, type ExplicitFlag } from "./explicit.ts";
 import type { PassOver, QueueCommand, QueueState } from "./queue.ts";
 
+/** Where Don't play explicit keeps its switch; the account syncs it. */
+export const DONT_PLAY_EXPLICIT_SETTING = "settings.dontPlayExplicit";
+
 /** What Don't play explicit goes by. */
 export interface ExplicitPlayback {
   /** Whether the switch is on. */

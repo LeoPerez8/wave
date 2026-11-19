@@ -54,3 +54,27 @@ export type PlaybackCommand =
       readonly before: string | null;
       readonly after: string | null;
     };
+
+/**
+ * What a list's Play, Shuffle or a tap did (Core's `listPlay`): it plays, streaming [streamed]
+ * missing songs and leaving [leftOut] out; nothing can play, with [missing] songs to download
+ * and [unavailable] on a disconnected drive;
+ * or the tapped missing song downloads, to play once it's in.
+ */
+export type PlayStart =
+  | { readonly kind: "playing"; readonly streamed: number; readonly leftOut: number }
+  | { readonly kind: "nothing"; readonly missing: number; readonly unavailable: number }
+  | { readonly kind: "downloading" };
+
+/** The transport calls main's playback and the window's bridge share. */
+export interface PlaybackTransport {
+  /** Plays YouTube Music songs a search found, from [index], as a new queue. */
+  readonly startYt: (videoIds: readonly string[], index: number) => Promise<void>;
+  /** A queue command: Next, Previous, shuffle, repeat, and the Queue's edits. */
+  readonly command: (command: PlaybackCommand) => Promise<void>;
+  readonly play: () => Promise<void>;
+  readonly pause: () => Promise<void>;
+  readonly seek: (positionMs: number) => Promise<void>;
+  /** Back to the queue the last `start` replaced, where it was. */
+  readonly undo: () => Promise<void>;
+}

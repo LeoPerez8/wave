@@ -89,6 +89,7 @@ test("Go to leaves out the page you're on and offers a choice of several artists
 
 test("a missing song can't be queued but can leave the Library, as on the phone", () => {
   assert.deepEqual(actions({ items: [{ ...song, missing: true }] }), [
+    "download",
     "addToPlaylist",
     "favorite",
     "goToAlbum",
@@ -118,4 +119,11 @@ test("a playlist's songs can leave it, from their menu or the selection bar", ()
     actions({ items: [listed, listed], surface: "selection" }).includes("removeFromPlaylist"),
   );
   assert.ok(!actions({ items: [song] }).includes("removeFromPlaylist"));
+});
+
+test("missing songs offer Download individually and together, including beside a local song", () => {
+  const missing = { ...song, missing: true };
+  assert.equal(actions({ items: [missing] })[0], "download");
+  assert.ok(actions({ items: [missing, missing], surface: "selection" }).includes("download"));
+  assert.ok(actions({ items: [missing, song], surface: "selection" }).includes("download"));
 });

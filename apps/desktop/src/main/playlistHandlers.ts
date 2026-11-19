@@ -4,6 +4,7 @@ import * as Effect from "effect/Effect";
 import type { BridgeContract } from "../shared/bridge.ts";
 import type { ImportAnswer, PLAYLIST_CALLS } from "../shared/playlists.ts";
 import type { SongTarget } from "../shared/songActions.ts";
+import { Account } from "./account/accountLayer.ts";
 import { DesktopPlaylists, type PlaylistsShape } from "./library/playlists.ts";
 
 type PlaylistCall = (typeof PLAYLIST_CALLS)[number];
@@ -11,7 +12,7 @@ type PlaylistCall = (typeof PLAYLIST_CALLS)[number];
 export type PlaylistHandlers = {
   readonly [C in PlaylistCall]: (
     args: readonly unknown[],
-  ) => Effect.Effect<BridgeContract[C]["result"], unknown, DesktopPlaylists>;
+  ) => Effect.Effect<BridgeContract[C]["result"], unknown, Account | DesktopPlaylists>;
 };
 
 const refuse = (call: PlaylistCall, why: string) =>
@@ -56,10 +57,11 @@ export const playlistHandlers = (
     name(text) && (playlistId === undefined || id(playlistId))
       ? playlistsCall((p) => p.checkName(text, playlistId))
       : refuse("playlists.checkName", "invalid name"),
-  "playlists.newName": ([language]) =>
-    language === "en" || language === "pt-BR"
-      ? playlistsCall((p) => p.newName(language))
-      : refuse("playlists.newName", "invalid language"),
+  // In the language main resolved: the window's own idea of it is never asked.
+  "playlists.newName": () =>
+    Effect.flatMap(Account, (account) =>
+      playlistsCall((p) => p.newName(account.language().language)),
+    ),
   "playlists.create": ([text, target]) =>
     name(text) && (target === undefined || validTarget(target))
       ? playlistsCall((p) => p.create(text, target))

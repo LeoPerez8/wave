@@ -32,12 +32,15 @@ import {
   catalogueOf,
   desktopKey,
   readThemeChoice,
-  resolveAppLanguage,
+  chosenAppLanguage,
   themeFor,
   type ThemeChoice,
 } from "@wave/core";
 import { appearance } from "./preferences.ts";
 import { artworkStore } from "./library/artwork.ts";
+import { createLibraryArtwork } from "./library/onlineArtwork.ts";
+import { lookupsEnabled } from "./lookupSettings.ts";
+import { artistPhotosEnabled } from "./library/lyricsAndTags.ts";
 import { ytMusicLayer } from "./yt/ytMusic.ts";
 import { desktopLinksLayer } from "./links/layer.ts";
 import { downloadsLayer } from "./downloads/downloadsLayer.ts";
@@ -48,6 +51,7 @@ import { lyricsLayer } from "./lyrics/lyrics.ts";
 import { botguardPost, createPoTokens, poTokenHost } from "./yt/poTokens.ts";
 import { openPoTokenPage } from "./yt/poTokenWindow.ts";
 import { createWaveAccount } from "./account/account.ts";
+import { withHomeFollow } from "./follows/homeFollow.ts";
 import { Account, accountLayer } from "./account/accountLayer.ts";
 import { signInWithBrowser } from "./account/browserSignIn.ts";
 import { accountConfig } from "./account/config.ts";
@@ -197,6 +201,13 @@ else {
   app.on("window-all-closed", () => app.quit());
   // Utility processes start only once the app is ready, so the services wait for it too.
   void app.whenReady().then(async () => {
+    const preferredLanguages = () => {
+      const launchLanguage = app.commandLine.getSwitchValue("lang");
+      return launchLanguage ? [launchLanguage] : app.getPreferredSystemLanguages();
+    };
+    // Until the database opens, the system's language; then the choice the account layer reads.
+    let language = chosenAppLanguage("system", preferredLanguages());
+    let text = catalogueOf(language, "desktop");
     // The engine built by `pnpm build:native`; tests may point at another build.
     const addon =
       process.env["WAVE_AUDIO_ADDON"] ?? join(app.getAppPath(), "native", "wave-audio.node");
@@ -228,12 +239,39 @@ else {
     // Electron resolves Windows' Music known folder and Linux's XDG user directory.
     const musicFolder = process.env["WAVE_MUSIC_DIR"] ?? app.getPath("music");
     const pickFolder = async () => {
-      const result = await dialog.showOpenDialog({ properties: ["openDirectory"] });
+      const result = await dialog.showOpenDialog({
+        title: text.settings.addFolder,
+        buttonLabel: text.desktopLayout.open,
+        properties: ["openDirectory"],
+      });
       return result.canceled ? undefined : result.filePaths[0];
     };
     const library = desktopLibraryLayer({
       musicFolder,
       platform: process.platform,
+      onlineArtwork: (db, ytMusic) =>
+        createLibraryArtwork({
+          db,
+          coversEnabled: () => lookupsEnabled(db),
+          ytMusicOn: ytMusic.on,
+          videoCover: ytMusic.videoCover,
+          directory: cacheFolder("online-artwork"),
+          photosEnabled: () => artistPhotosEnabled(db),
+          process: (bytes) => {
+            const image = nativeImage.createFromBuffer(bytes);
+            if (image.isEmpty()) return undefined;
+            const { width, height } = image.getSize();
+            const resized = (side: number) =>
+              image
+                .resize(
+                  width >= height
+                    ? { width: Math.min(side, width), quality: "good" }
+                    : { height: Math.min(side, height), quality: "good" },
+                )
+                .toJPEG(90);
+            return { thumb: resized(300), medium: resized(640) };
+          },
+        }),
       cacheArtwork: (() => {
         let store: ReturnType<typeof artworkStore> | undefined;
         return (db, encoded) => {
@@ -256,9 +294,10 @@ else {
       })(),
       pickFolder,
     }).pipe(Layer.provideMerge(services));
-    const text = catalogueOf(resolveAppLanguage(app.getPreferredSystemLanguages()), "desktop");
     const downloads = downloadsLayer({
-      catalogue: text,
+      get catalogue() {
+        return text;
+      },
       platform: process.platform,
       musicFolder,
       pickFolder,
@@ -303,19 +342,22 @@ else {
         platform: process.platform,
       }),
       syncUrl: config.syncUrl,
-      signInWithBrowser: (signal) =>
+      signInWithBrowser: (signal, purpose) =>
         clientId === null
           ? Promise.reject(new Error("This build has no Google client."))
           : signInWithBrowser({
               authUrl: "https://accounts.google.com/o/oauth2/v2/auth",
-              tokenUrl: "https://oauth2.googleapis.com/token",
+              tokenUrl: config.tokenUrl,
               clientId,
               ...(config.clientSecret === undefined ? {} : { clientSecret: config.clientSecret }),
               openExternal: (url) => shell.openExternal(url),
               fetch,
               page: {
                 title: text.desktopAccount.browserTitle,
-                message: text.desktopAccount.browserMessage,
+                message:
+                  purpose === "confirmDeletion"
+                    ? text.desktopAccount.browserDeletionMessage
+                    : text.desktopAccount.browserMessage,
               },
               signal,
             }),
@@ -329,6 +371,7 @@ else {
       pickImage: async () => {
         const result = await dialog.showOpenDialog({
           title: text.itemActions.labels.changeImage,
+          buttonLabel: text.desktopLayout.open,
           properties: ["openFile"],
           // Format names, which read the same in every language.
           filters: [{ name: "JPEG, PNG", extensions: ["jpg", "jpeg", "png"] }],
@@ -338,6 +381,7 @@ else {
       pickPlaylists: async () => {
         const result = await dialog.showOpenDialog({
           title: text.playlists.importPlaylists,
+          buttonLabel: text.desktopLayout.open,
           properties: ["openFile", "multiSelections"],
           filters: [{ name: "M3U", extensions: ["m3u", "m3u8"] }],
         });
@@ -347,6 +391,11 @@ else {
     const runtime = ManagedRuntime.make(
       accountLayer({
         account,
+        preferredLanguages,
+        languageChanged: (view) => {
+          language = view.language;
+          text = catalogueOf(language, "desktop");
+        },
         focused: () => BrowserWindow.getFocusedWindow() !== null,
       }).pipe(
         Layer.provideMerge(
@@ -369,6 +418,15 @@ else {
             ),
           ),
         ),
+        withHomeFollow({
+          request: account.request,
+          configured: config.syncUrl !== null,
+          signedIn: () => account.session().status === "signedIn",
+          online: () => net.isOnline(),
+          // Shows are looked up in the system's region; the phone's country choice isn't synced.
+          country: () => app.getLocaleCountryCode(),
+          fetch,
+        }),
       ),
     );
     const readTheme = () =>
@@ -467,7 +525,8 @@ else {
       db,
       playback,
       yt,
-      text,
+      text: () => text,
+      language: () => language,
       mediaAddon:
         process.env["WAVE_MEDIA_ADDON"] ?? join(app.getAppPath(), "native", "wave-media.node"),
       cache: cacheFolder("system-media"),

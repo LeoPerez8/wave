@@ -83,7 +83,7 @@ export type SearchExpansion = ReadonlySet<SearchKind | "lyrics">;
 
 /**
  * The desktop's Search page: the top result, the Songs table, then the other groups as shelves
- * in Core's order (the phone lists every group in Core's order). A group shows a preview with "Show all",
+ * in Albums, Artists, Playlists, Genres order. A group shows a preview with "Show all",
  * unless it's opened or the only one. Lyrics follow Songs, follow the top result when no song
  * matches, and lead when the query has three or more words.
  */
@@ -111,8 +111,9 @@ export const searchSections = (
       },
     ];
   };
-  // The desktop puts Songs' table first; the shelves keep Core's order.
-  const groups = [...(songs ? [songs] : []), ...view.groups.filter((group) => group !== songs)];
+  const groups = (["song", "album", "artist", "playlist", "genre"] as const).flatMap((kind) =>
+    view.groups.filter((group) => group.kind === kind),
+  );
   for (const group of groups) {
     const open = expanded.has(group.kind) || view.groups.length === 1;
     const rows = open ? group.items : group.items.slice(0, SEARCH_PREVIEW[group.kind]);

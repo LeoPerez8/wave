@@ -10,6 +10,7 @@ import {
   type YtLibraryAlbumNote,
   type YtSong,
   albumDownloadOrigin,
+  listDuration,
 } from "@wave/core";
 import { useLocalSearchParams } from "expo-router";
 import { useCallback, useEffect, useMemo } from "react";
@@ -181,7 +182,7 @@ function AlbumHead({
     genre,
     album.year,
     songCount(songTotal, strings),
-    strings.library.minutes(Math.max(1, Math.round(album.durationMs / 60_000))),
+    listDuration(album.durationMs, strings.library) ?? strings.library.minutes(1),
   ]
     .filter((part) => part !== null)
     .join(" · ");

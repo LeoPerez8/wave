@@ -28,6 +28,7 @@ import { lookupsEnabled } from "../lookupSettings.ts";
 
 /** What main needs to run the entries. */
 export interface SongActionPorts {
+  readonly download: (trackIds: readonly number[]) => Promise<void>;
   readonly db: LibraryDatabase;
   /** Queues songs, as the Queue's Play Next and Add to Queue do. */
   readonly queue: (type: "playNext" | "addToQueue", trackIds: readonly string[]) => Promise<void>;
@@ -165,6 +166,13 @@ export const runSongAction = async (
   const { db } = ports;
   const ids = targetSongs(db, target);
   switch (action) {
+    case "download": {
+      const missing = songFacts(db, ids)
+        .filter((song) => song.missing === true)
+        .map((song) => song.id);
+      await ports.download(missing);
+      return { kind: "downloaded", count: missing.length };
+    }
     case "playNext":
     case "addToQueue": {
       // A missing song has no file to play, as the phone's menu says by leaving these out.

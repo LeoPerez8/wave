@@ -100,7 +100,8 @@ export type YtSectionEvent<S extends YtSong = YtSong> =
       readonly type: "typed";
       readonly query: string;
       readonly enabled: boolean;
-      readonly libraryHasResults: boolean;
+      /** Undefined while the Library lookup is pending. */
+      readonly libraryHasResults: boolean | undefined;
       /**
        * Whether Search online acts as Always (`searchOnlineAlways`): with nothing
        * picked since the field was last cleared, Online is, and every query
@@ -407,7 +408,7 @@ export const stepYtSection = <S extends YtSong>(
         return state.status === "idle" && state.pick === pick ? state : { status: "idle", pick };
       if (pick === "library") return offered(state, query, true);
       // Picked Online, it follows the query; on its own, only while the Library has nothing.
-      const by = pick === "online" ? "user" : event.libraryHasResults ? null : "auto";
+      const by = pick === "online" ? "user" : event.libraryHasResults === false ? "auto" : null;
       if (by === null) return offered(state, query, false);
       if (askedBy(state) === by && "query" in state && state.query === query) return state;
       return { status: "loading", query, by, delayMs: YT_SEARCH_DEBOUNCE_MS };

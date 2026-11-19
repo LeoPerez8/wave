@@ -44,6 +44,9 @@ const stepOf = <T extends { readonly step: MixSliderStep }>(steps: readonly T[],
 const readStep = (value: unknown): MixSliderStep | null =>
   value === 1 || value === 2 || value === 3 || value === 4 || value === 5 ? value : null;
 
+/** Whether [value], from outside (a saved setting, another process), is one of the five steps. */
+export const isSliderStep = (value: unknown): value is MixSliderStep => readStep(value) !== null;
+
 /** A level card slider at [value] (where a drag left it) as the nearest of its five steps. */
 export const sliderStep = (value: number): MixSliderStep =>
   readStep(Math.min(5, Math.max(1, Math.round(value)))) ?? DEFAULT_MIX_SLIDERS.faithfulness;
@@ -53,6 +56,9 @@ export const sliderStepLabel = (
   steps: readonly { readonly step: MixSliderStep; readonly label: string }[],
   value: number,
 ): string => stepOf(steps, sliderStep(value)).label;
+
+/** Where Discover's two sliders are kept, on the phone and the computer alike (not synced). */
+export const DISCOVER_SLIDERS_SETTING = "home.discoverSliders";
 
 /** A section's sliders as kept on the phone ([stored], null for none): the middle for any that isn't a step. */
 export const readMixSliders = (stored: string | null): MixSliders => {

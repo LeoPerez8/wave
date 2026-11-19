@@ -236,8 +236,18 @@ ADR: `docs/adr/0004-kotlin-on-a-bundled-jvm.md`.
 - The desktop is one more device with its own device id. A synced entry is the local Track with
   the same recording key, as between phones.
 - An account song with no file here is a missing song, as on the phone: dimmed, a click
-  downloads it through Core's `downloadSource`, with Download All and an album's Download
-  Missing Songs.
+  downloads it through Core's `downloadSource`, with Download All and Download Missing Songs on
+  album, artist, genre and playlist pages, with how many are missing (an album's in album order
+  and under the album, a playlist's in playlist order and under the playlist).
+- A star means downloaded, as on the phone (`docs/spec.md`, A star means downloaded): a missing
+  song with a star downloads on its own under Favorites, when it is starred here, after a sync
+  that brought stars or songs, and as Wave starts. Unstarring it before the file arrives cancels
+  the download only the star asked for. What the stars asked is kept on this computer
+  (`downloads.syncedStars`, `downloads.starAsked`), never synced.
+- Play and Shuffle on a list with missing songs play what can play (Core's `listPlay`): the
+  songs with a file and, with YT Music on, the missing songs downloaded from a YouTube Music
+  video, streamed in their place. A toast counts the ones left out and offers Download Missing
+  Songs; when nothing can play, it says so and offers the same.
 - Plays on the computer count in the account's history and stats with a new play `source` value,
   `desktop`. A phone release and a sync Worker that accept `desktop` go out first; the desktop
   sends plays only after that. Older phones that drop an unknown source must already accept it.
@@ -257,6 +267,12 @@ ADR: `docs/adr/0004-kotlin-on-a-bundled-jvm.md`.
 - The sync Worker accepts the Desktop client id beside the phone's. That Worker change is
   deployed by hand before the desktop release that needs it.
 - Sign out and Sign Out on All Devices use the Worker's existing routes.
+- Delete Account shows only when signed in and asks first, with the phone's confirmation in the
+  computer's words. The Worker's `DELETE /v1/account` wants a fresh Google sign-in to the
+  account's own Google account, so the browser opens once more; Cancel stops that wait. Then the
+  service deletes the account and the desktop signs out, keeping its songs, files and plays. A
+  different Google account, no network or a service error says so and leaves the account
+  signed in.
 - YouTube sign-in is separate: a visible Electron window shows YouTube's sign-in, as the phone's
   `YtSignInActivity` does, and the main process reads the session cookies from it. Google may
   refuse an embedded window; the first YT ticket signs in with a real account before anything
@@ -273,15 +289,20 @@ The prototype was approved on 2026-11-18 after an Impeccable critique; its decis
 - Sidebar: Search field (Ctrl+F) and Home; Library (Playlists, Artists, Albums, Songs, Genres,
   Favorites); YT Music (Discover, Magic Queue, Downloads, whose count shows the download
   percentage); the user's playlists with New Playlist; Settings pinned at the bottom. Back and
-  forward arrows sit in the title bar.
-- Lyrics and the Queue share the side panel, toggled from the player bar. Now Playing (artwork,
-  title, lyrics) opens from the bar's artwork or title and closes with Esc.
-- Minimum window 960×600. Below 1120 px wide the sidebar shows icons only. When the content is
+  forward arrows sit in the title bar. Every entry has its own icon. The sidebar scrolls as one
+  when the window is short, keeping the Search field and Settings in view.
+- Lyrics and the Queue share the side panel, toggled from the player bar and closed by the
+  panel's own control on every tab. Now Playing (artwork,
+  title, lyrics) opens from the bar's artwork or title and closes with Esc. Focus lands on Now
+  Playing itself, so Space still plays and pauses; Tab reaches its close button.
+- Minimum window 960×600. Below 1120 px wide the sidebar shows icons only, a playlist as
+  its first letter, and Ctrl+F opens the Search field in the title bar. When the content is
   narrower than 760 px, tables drop the Album column, the search top result stacks and hero
   artwork shrinks to 168 px.
 - Title bar: on Windows Wave draws its own with Electron's `titleBarOverlay`, which keeps the
   native window buttons and Snap Layouts. On Linux the system frame stays and Wave's bar sits
   under it.
+- Scrollbars are Wave's own everywhere: an 8 px rounded thumb with no track and no arrow buttons.
 - Theme: the phone's tokens, light and dark following the system or the Appearance setting. The
   accent follows the synced theme, so the default theme gives a white accent in dark and the ink
   colour in light, as on the phone.
@@ -294,15 +315,23 @@ The prototype was approved on 2026-11-18 after an Impeccable critique; its decis
   Artist, Start Magic Queue, Copy Link, Select, Fix Song and Remove from Library.
 - Home shows the phone's sections in the phone's order, following the account's synced
   arrangement: shelves of tiles, Most played as a table.
+- Home's New from Artists You Follow and Upcoming Shows use the phone's rules and the account's
+  follows, hidden releases and switches. Each computer runs its own checks, looks shows up in the
+  system's region and posts no show notification. A release opens its Library album or its
+  YT Music page; a show opens its ticket page in the browser. Following, unfollowing and hiding a
+  release stay on the phone.
 - Album, artist and playlist pages have a hero: artwork, a light title, and the kind in the line
-  under it ("Album · Indie Folk · 1995 · 7 songs · 33 min"), with no label above the title. Play
+  under it ("Album · Indie Folk · 1995 · 7 songs · 33 min", or "36 h 43 min" from an hour up, Core's `listDuration`; a table's Time
+  column reads "36:43:09"), with no label above the title. Play
   and Shuffle are text buttons in the accent, without a filled box.
 - Search: a top result (artwork and name, no card), a Songs table, then Albums, Artists and
   Playlists shelves, then YouTube Music results. An empty field lists recent searches.
 - Settings is a page with its own side list: Library, Appearance, Window, Playback, Lyrics and
   tags, Downloads, Accounts, Version History.
 - Offline, the YT Music parts of Home, Search, artist pages, Discover and Magic Queue become one
-  quiet line saying they come back online, and downloads pause. A missing file shows an × glyph.
+  quiet line saying they come back online, and downloads pause. A missing song is dimmed, with
+  no × (a download on its way shows its progress on the row); the × marks only a file that failed
+  to play.
 - No chips, no filled Play button, no card around the top result (Quiet Catalog, as on the
   phone).
 
@@ -315,8 +344,8 @@ The prototype was approved on 2026-11-18 after an Impeccable critique; its decis
 - Space plays or pauses unless focus is on a button, link, switch or field. ↑/↓ move between rows
   when a list has focus and change the volume elsewhere.
 - Each list (table, queue, lyrics) is one tab stop with roving focus; Home, End, Page Up and Page
-  Down work in it. The scrubber is a slider: ←/→ seek 5 seconds, Home and End go to the start and
-  the end.
+  Down work in it. The scrubber is a slider: ←/→ and ↓/↑ seek 5 seconds back and forward, Home
+  and End go to the start and the end.
 - Every icon button has an accessible name.
 
 ### System integration
@@ -356,6 +385,17 @@ The prototype was approved on 2026-11-18 after an Impeccable critique; its decis
   on Wi-Fi") gets a desktop variant ("This computer") in both languages, and strings about Wi-Fi
   and mobile data don't show on the desktop. New strings follow the glossary in `docs/spec.md` ›
   Language.
+- Settings › Appearance has Language: System, English or Português (Brasil), each language under
+  its own name (#1186). It is the account-wide synced setting `settings.language` (`en`,
+  `pt-BR` or `system`, kept as a value so it replaces an earlier choice); signed out it stays on
+  this computer. System follows the computer's preferred languages by Core's
+  `resolveAppLanguage` (`--lang` overrides them for checks). Main decides the language once
+  (Core's `chosenAppLanguage`) and the window asks it, so the window, the tray menu, native
+  dialogs and the close-to-tray notice always agree, and a change or a pulled value applies
+  without a restart. The phone doesn't read the setting yet; it follows Android's language.
+- The Library stores "Unknown Album" and "Unknown Artist" for a missing tag; every list, the bar,
+  Now Playing, the tray and the system media controls show them in the current language (Core's
+  `displayTag`), and Library identity keeps the stored value.
 
 ### Build, release and updates
 

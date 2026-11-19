@@ -1,4 +1,5 @@
 import { Database } from "@wave/client";
+import { HOME_ARRANGEMENT_SETTING } from "@wave/core";
 import * as Effect from "effect/Effect";
 import { readHome } from "./library/home.ts";
 import { DesktopLibrary } from "./library/library.ts";
@@ -8,7 +9,7 @@ import { syncedPreference } from "./sync/desktopSync.ts";
 const view = Effect.gen(function* () {
   const db = yield* Database;
   const library = yield* DesktopLibrary;
-  const home = readHome(db, syncedPreference(db, "settings.homeArrangement"));
+  const home = readHome(db, syncedPreference(db, HOME_ARRANGEMENT_SETTING));
   return {
     ...home,
     items: home.items.map((section) => ({
@@ -46,13 +47,11 @@ export const homeHandlers = {
       const playback = yield* Playback;
       yield* Effect.tryPromise({
         try: () =>
-          playback.dispatch({
-            type: "play",
-            trackIds: rows.map((row) => String(row.id)),
-            startIndex: index,
-            shuffle: false,
-            context: { kind: "home", id: section },
-          }),
+          playback.activate(
+            rows.map((row) => String(row.id)),
+            index,
+            { kind: "home", id: section },
+          ),
         catch: (error) => error,
       });
     }),

@@ -73,6 +73,8 @@ export interface MagicQueueInput {
   readonly seed: MagicSeed;
   readonly songs: readonly MagicQueueSong[];
   readonly streamed: readonly YtAlbumSong[];
+  /** A faithful session (Same genres, Balanced popularity), as a song clicked in Search starts. */
+  readonly faithful?: boolean;
 }
 
 export interface MagicQueueDeps {
@@ -371,7 +373,10 @@ export const createMagicQueue = (deps: MagicQueueDeps): MagicQueueShape => {
   };
 
   /** A session of [input]; with [from], one that continues that queue rather than replacing it. */
-  const startOf = async ({ seed, songs, streamed }: MagicQueueInput, from?: QueueState) => {
+  const startOf = async (
+    { seed, songs, streamed, faithful }: MagicQueueInput,
+    from?: QueueState,
+  ) => {
     const { artists } = deps.library();
     const names = new Map(artists.map((artist) => [artist.id, artist.name]));
     const credited = (song: MagicQueueSong) => song.artistIds.flatMap((id) => names.get(id) ?? []);
@@ -439,7 +444,7 @@ export const createMagicQueue = (deps: MagicQueueDeps): MagicQueueShape => {
         ].slice(0, SEED_VIDEO_IDS),
       },
       ytShare: magicQueueShare(DEFAULT_DISCOVER_MIX_LEVEL),
-      faithful: from !== undefined,
+      faithful: from !== undefined || faithful === true,
     });
     if (started === null) return false;
     if (from !== undefined) {

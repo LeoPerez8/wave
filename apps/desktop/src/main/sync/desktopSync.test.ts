@@ -12,7 +12,7 @@ import { createPlaylist } from "@wave/client/db/playlists";
 import { countedListening } from "@wave/client/db/stats";
 import { stampPreference } from "@wave/client/db/sync";
 import { syncCycle, type SyncTransport } from "@wave/client/sync/syncCycle";
-import { addTrack, openTestDatabase, type TestDatabase } from "@wave/client/testing";
+import { addTrack, openTestDatabase, star, type TestDatabase } from "@wave/client/testing";
 import { DESKTOP_SYNC_PERIOD_MS, type PlayEvent } from "@wave/core";
 import { sql } from "drizzle-orm";
 import * as Effect from "effect/Effect";
@@ -71,7 +71,7 @@ const phoneOn = async (transport: SyncTransport) => {
 };
 
 /** The desktop app (its Library, account and sync) and a phone on the same account. */
-const desktopApp = async () => {
+const desktopApp = async (deps: { readonly starsPulled?: () => void } = {}) => {
   const app = await desktop();
   const signedIn = app.open();
   let requests = 0;
@@ -84,7 +84,14 @@ const desktopApp = async () => {
   };
   const db = await desktopLibrary();
   const { clock, pass } = fakeClock();
-  const sync = createDesktopSync({ db, account, clock, focused: () => true, wait: async () => {} });
+  const sync = createDesktopSync({
+    db,
+    account,
+    clock,
+    focused: () => true,
+    wait: async () => {},
+    ...deps,
+  });
   after(() => sync.dispose());
   const phoneSession = await app.service.signIn();
   const phone = await phoneOn({
@@ -154,6 +161,18 @@ test("a phone's playlist shows on the desktop, its songs matched by recording ke
   // Account-wide settings apply on the desktop; the phone's own UI ones don't.
   assert.equal(syncedPreference(desktop.db, "settings.theme"), '{"light":"white"}');
   assert.equal(syncedPreference(desktop.db, "settings.tabBar"), null);
+});
+
+test("a star pulled from the account tells the desktop, so a missing song's star can download", async () => {
+  let told = 0;
+  const desktop = await desktopApp({ starsPulled: () => void told++ });
+  const { phone } = desktop;
+  star(phone.db, addTrack(phone.db, { title: "Lucky", ...OK_COMPUTER }), Date.now());
+  await phone.sync();
+  desktop.sync.start();
+  await desktop.account.signIn();
+  await desktop.sync.idle();
+  assert.ok(told > 0, "a pull with stars tells");
 });
 
 test("a play on the desktop goes up with source desktop and shows in the phone's history and stats", async () => {
@@ -254,6 +273,39 @@ test("signing out leaves the account: its missing songs go, the desktop's files 
   await desktop.pass(DESKTOP_SYNC_PERIOD_MS * 2);
   await desktop.sync.idle();
   assert.equal(desktop.requests(), sent);
+});
+
+test("deleting the account keeps the desktop's songs, playlists and stars, and stops syncing", async () => {
+  const desktop = await desktopApp();
+  const airbag = addTrack(desktop.db, { title: "Airbag", ...OK_COMPUTER });
+  createPlaylist(desktop.db, "Mine", [{ source: "library", trackId: airbag }], Date.now());
+  const lucky = addTrack(desktop.phone.db, { title: "Lucky", ...OK_COMPUTER });
+  createPlaylist(desktop.phone.db, "Drive", [{ source: "library", trackId: lucky }], Date.now());
+  await desktop.phone.sync();
+  desktop.sync.start();
+  await desktop.account.signIn();
+  await desktop.sync.idle();
+  assert.equal(browseLibrary(desktop.db, { kind: "songs" }, 0, 50).total, 2);
+
+  await desktop.account.deleteAccount();
+  await desktop.sync.idle();
+
+  assert.equal(desktop.account.view().account.kind, "signedOut");
+  // As signing out: the account's song with no file here goes, what has a file stays.
+  assert.deepEqual(
+    browseLibrary(desktop.db, { kind: "songs" }, 0, 50).items.map((row) => row.title),
+    ["Airbag"],
+  );
+  assert.deepEqual(playlistSongs(desktop.db, "Mine"), [{ title: "Airbag", missing: false }]);
+  const sent = desktop.requests();
+  desktop.sync.edited({ songs: true });
+  await desktop.pass(DESKTOP_SYNC_PERIOD_MS * 2);
+  await desktop.sync.idle();
+  assert.equal(desktop.requests(), sent);
+  assert.equal(
+    (await desktop.service.request("GET", "/v1/pull", { session: desktop.phoneSession })).status,
+    401,
+  );
 });
 
 test("a desktop opened signed in syncs at once", async () => {

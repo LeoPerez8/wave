@@ -97,6 +97,26 @@ describe("catalogueOf", () => {
     );
   });
 
+  test("the desktop's Delete Account names the computer and the browser", () => {
+    const en = catalogueOf("en", "desktop").settings;
+    const pt = catalogueOf("pt-BR", "desktop").settings;
+    for (const text of [
+      en.deleteWaveAccount.message,
+      en.yourWaveAccountWasDeletedEverythingOn,
+      en.waveAccountSignOutNote,
+      pt.deleteWaveAccount.message,
+      pt.yourWaveAccountWasDeletedEverythingOn,
+      pt.waveAccountSignOutNote,
+    ])
+      assert.doesNotMatch(text, /phone|celular|telefone/i);
+    assert.match(en.deleteWaveAccount.message, /this computer signs out/);
+    assert.match(en.deleteWaveAccount.message, /browser/);
+    assert.match(pt.deleteWaveAccount.message, /navegador/);
+    assert.match(en.waveAccountSignOutNote, /Deleting the account/);
+    assert.match(pt.waveAccountSignOutNote, /Apagar a conta/);
+    assert.equal(en.deleteWaveAccount.title, catalogueOf("en").settings.deleteWaveAccount.title);
+  });
+
   test("each desktop variant reads in both languages", () => {
     const changed = (language: "en" | "pt-BR"): string[] => {
       const paths: string[] = [];

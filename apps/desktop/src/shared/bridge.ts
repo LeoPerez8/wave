@@ -3,17 +3,28 @@
  * object as `window.wave`; main answers each call in `BridgeContract` and nothing else.
  * A call that reads a list returns a `Page`, never the whole list.
  */
-import type { PlayerView, PlaybackCommand, QueueRow } from "./playerView.ts";
+import type {
+  PlayerView,
+  PlaybackCommand,
+  PlaybackTransport,
+  PlayStart,
+  QueueRow,
+} from "./playerView.ts";
 import type { WindowSettings } from "./windowSettings.ts";
+import type { LanguageChoice } from "@wave/core";
+import type { LanguageView } from "./language.ts";
 import type { LibraryCounts } from "@wave/client/db/counts";
 import type { PlaybackStatus } from "./playback.ts";
+import type { SongState } from "./songState.ts";
 import type { PlaybackSettings } from "./playbackSettings.ts";
 import type { SongTags } from "./tags.ts";
 import type { DesktopFolder, DesktopSong, ScanStatus } from "./library.ts";
 import type { BrowseScope, BrowsePage, BrowseRow } from "./browse.ts";
 import type { YtSearchPage, YtStatus } from "./yt.ts";
+import type { SearchOnline } from "@wave/core";
 import type {
   DiscoverMixesView,
+  DiscoverSettings,
   MagicQueueView,
   YtAlbumView,
   YtArtistView,
@@ -21,7 +32,12 @@ import type {
 } from "./ytPages.ts";
 import type { AccountView } from "./account.ts";
 import type { MissingSongsDownloadAction, SleepTimer, SleepTimerChoice } from "@wave/core";
-import type { DownloadRow, DownloadsView, MissingSongsView } from "./downloads.ts";
+import type {
+  DownloadRow,
+  DownloadsView,
+  MissingSongsList,
+  MissingSongsView,
+} from "./downloads.ts";
 import type { SongLyrics } from "./lyrics.ts";
 import {
   PLAYLIST_CALLS,
@@ -31,6 +47,7 @@ import {
 } from "./playlists.ts";
 import type { LibrarySearchView } from "./search.ts";
 import type { HomeView } from "./home.ts";
+import type { HomeFollowView, HomeReleaseOpening } from "./homeFollow.ts";
 import type {
   ActionSurface,
   SongMenu,
@@ -38,7 +55,15 @@ import type {
   SongRunResult,
   SongTarget,
 } from "./songActions.ts";
+import {
+  LYRICS_AND_TAGS_CALLS,
+  lyricsAndTagsBridge,
+  type LyricsAndTagsBridge,
+  type LyricsAndTagsContract,
+} from "./lyricsAndTags.ts";
 import { LINK_CALLS, linkBridge, type LinkContract } from "./links.ts";
+import { ARTIST_PAGE_CALLS, artistPageBridge, type ArtistPageContract } from "./artistPage.ts";
+import { STREAMED_CALLS, streamedBridge, type StreamedContract } from "./streamedSongs.ts";
 export type Appearance = "system" | "light" | "dark";
 
 /** One window of a list, as a list call returns it. */
@@ -50,7 +75,13 @@ export interface Page<T> {
 }
 
 /** Each call's arguments and result. Arguments reach main as untrusted data. */
-export interface BridgeContract extends PlaylistContract, LinkContract {
+export interface BridgeContract
+  extends
+    PlaylistContract,
+    LinkContract,
+    ArtistPageContract,
+    StreamedContract,
+    LyricsAndTagsContract {
   readonly "system.mediaBackend": {
     readonly args: readonly [];
     readonly result: "native" | "chromium";
@@ -63,7 +94,7 @@ export interface BridgeContract extends PlaylistContract, LinkContract {
   readonly "playback.view": { readonly args: readonly []; readonly result: PlayerView };
   readonly "playback.start": {
     readonly args: readonly [scope: BrowseScope, index?: number, shuffle?: boolean];
-    readonly result: void;
+    readonly result: PlayStart;
   };
   readonly "playback.startYt": {
     readonly args: readonly [videoIds: readonly string[], index: number];
@@ -104,9 +135,15 @@ export interface BridgeContract extends PlaylistContract, LinkContract {
   readonly "account.cancelSignIn": { readonly args: readonly []; readonly result: void };
   readonly "account.signOut": { readonly args: readonly []; readonly result: void };
   readonly "account.signOutEverywhere": { readonly args: readonly []; readonly result: void };
+  readonly "account.deleteAccount": { readonly args: readonly []; readonly result: void };
   readonly "account.answerInvitation": { readonly args: readonly []; readonly result: void };
 
   readonly "settings.appearance": { readonly args: readonly []; readonly result: Appearance };
+  readonly "settings.language": { readonly args: readonly []; readonly result: LanguageView };
+  readonly "settings.setLanguage": {
+    readonly args: readonly [choice: LanguageChoice];
+    readonly result: void;
+  };
   readonly "settings.setAppearance": {
     readonly args: readonly [appearance: Appearance];
     readonly result: void;
@@ -117,6 +154,11 @@ export interface BridgeContract extends PlaylistContract, LinkContract {
     readonly result: PlaybackSettings;
   };
   readonly "settings.ytMusic": { readonly args: readonly []; readonly result: boolean };
+  readonly "settings.searchOnline": { readonly args: readonly []; readonly result: SearchOnline };
+  readonly "settings.setSearchOnline": {
+    readonly args: readonly [value: SearchOnline];
+    readonly result: void;
+  };
   readonly "settings.setYtMusic": { readonly args: readonly [on: boolean]; readonly result: void };
   /** YouTube Music's songs for a query; never fails, `status` says why there are none. */
   readonly "yt.search": { readonly args: readonly [query: string]; readonly result: YtSearchPage };
@@ -127,9 +169,9 @@ export interface BridgeContract extends PlaylistContract, LinkContract {
     readonly args: readonly [offset: number, limit: number];
     readonly result: Page<DownloadRow>;
   };
-  /** An album's missing songs and their downloads; null for no such album. */
-  readonly "downloads.album": {
-    readonly args: readonly [albumId: number];
+  /** A page's missing songs and their downloads; null for no such page. */
+  readonly "downloads.list": {
+    readonly args: readonly [list: MissingSongsList];
     readonly result: MissingSongsView | null;
   };
   readonly "downloads.yt": {
@@ -141,7 +183,7 @@ export interface BridgeContract extends PlaylistContract, LinkContract {
     readonly result: void;
   };
   readonly "downloads.missingAction": {
-    readonly args: readonly [action: MissingSongsDownloadAction, albumId?: number];
+    readonly args: readonly [action: MissingSongsDownloadAction, list?: MissingSongsList];
     readonly result: void;
   };
   readonly "downloads.retry": {
@@ -180,10 +222,15 @@ export interface BridgeContract extends PlaylistContract, LinkContract {
     readonly args: readonly [type: "playNow" | "addToQueue", videoId: string];
     readonly result: void;
   };
-  /** Discover's Magic Queue row: nine Library songs at random. */
+  /** Discover's Magic Queue row: nine songs at random, the playlists' YT Music entries among them. */
   readonly "discover.picks": { readonly args: readonly []; readonly result: Page<BrowseRow> };
   /** Discover's Artist mixes, built once a day. */
   readonly "discover.mixes": { readonly args: readonly []; readonly result: DiscoverMixesView };
+  readonly "discover.settings": { readonly args: readonly []; readonly result: DiscoverSettings };
+  readonly "discover.setSettings": {
+    readonly args: readonly [DiscoverSettings];
+    readonly result: DiscoverSettings;
+  };
   /** Plays today's mix [id] from its song [index]; false when the mix is gone. */
   readonly "discover.playMix": {
     readonly args: readonly [id: string, index: number];
@@ -204,6 +251,10 @@ export interface BridgeContract extends PlaylistContract, LinkContract {
   readonly "magicQueue.retry": { readonly args: readonly []; readonly result: void };
   readonly "library.artwork": {
     readonly args: readonly [hash: string, large: boolean];
+    readonly result: string | null;
+  };
+  readonly "library.cover": {
+    readonly args: readonly [kind: "song" | "album" | "artist", id: number, large: boolean];
     readonly result: string | null;
   };
   readonly "library.browse": {
@@ -234,6 +285,10 @@ export interface BridgeContract extends PlaylistContract, LinkContract {
   readonly "library.removeRoot": { readonly args: readonly [path: string]; readonly result: void };
   readonly "library.include": { readonly args: readonly [path: string]; readonly result: void };
   /** The entries a song's menu (or the selection bar) offers for [target]. */
+  readonly "songs.states": {
+    readonly args: readonly [ids: readonly number[]];
+    readonly result: Page<SongState>;
+  };
   readonly "songs.actions": {
     readonly args: readonly [target: SongTarget, surface: ActionSurface];
     readonly result: SongMenu;
@@ -275,6 +330,16 @@ export interface BridgeContract extends PlaylistContract, LinkContract {
     readonly args: readonly [section: "most-played" | "favorites", index: number];
     readonly result: void;
   };
+  readonly "home.follow": { readonly args: readonly []; readonly result: HomeFollowView };
+  readonly "home.followCheck": { readonly args: readonly []; readonly result: boolean };
+  readonly "home.openRelease": {
+    readonly args: readonly [key: string];
+    readonly result: HomeReleaseOpening;
+  };
+  readonly "home.releaseArtwork": {
+    readonly args: readonly [key: string];
+    readonly result: string | null;
+  };
 }
 
 export type BridgeCall = keyof BridgeContract;
@@ -301,6 +366,7 @@ export const BRIDGE_CALLS = [
   "lyrics.song",
 
   "library.artwork",
+  "library.cover",
   "library.browse",
   "library.letter",
   "library.counts",
@@ -313,6 +379,7 @@ export const BRIDGE_CALLS = [
   "library.exclude",
   "library.removeRoot",
   "library.include",
+  "songs.states",
   "songs.actions",
   "songs.run",
   "player.load",
@@ -322,12 +389,16 @@ export const BRIDGE_CALLS = [
   "player.status",
   "tags.read",
   "settings.appearance",
+  "settings.language",
+  "settings.setLanguage",
   "settings.window",
   "settings.setWindow",
   "settings.setAppearance",
   "settings.playback",
   "settings.setPlayback",
   "settings.ytMusic",
+  "settings.searchOnline",
+  "settings.setSearchOnline",
   "settings.setYtMusic",
   "yt.search",
   "yt.artwork",
@@ -338,6 +409,8 @@ export const BRIDGE_CALLS = [
   "yt.queue",
   "discover.picks",
   "discover.mixes",
+  "discover.settings",
+  "discover.setSettings",
   "discover.playMix",
   "magicQueue.start",
   "magicQueue.startStreamed",
@@ -345,7 +418,7 @@ export const BRIDGE_CALLS = [
   "magicQueue.retry",
   "downloads.view",
   "downloads.rows",
-  "downloads.album",
+  "downloads.list",
   "downloads.yt",
   "downloads.missing",
   "downloads.missingAction",
@@ -361,15 +434,23 @@ export const BRIDGE_CALLS = [
   "account.cancelSignIn",
   "account.signOut",
   "account.signOutEverywhere",
+  "account.deleteAccount",
   "account.answerInvitation",
   ...PLAYLIST_CALLS,
+  ...LYRICS_AND_TAGS_CALLS,
   "search.library",
   "search.recent",
   "search.remember",
   "search.clearRecent",
   "home.view",
   "home.play",
+  "home.follow",
+  "home.followCheck",
+  "home.openRelease",
+  "home.releaseArtwork",
   ...LINK_CALLS,
+  ...ARTIST_PAGE_CALLS,
+  ...STREAMED_CALLS,
 ] as const satisfies readonly BridgeCall[] &
   (BridgeContract extends PagedLists<BridgeContract> ? unknown : never);
 
@@ -381,20 +462,24 @@ export type Invoke = <C extends BridgeCall>(
 /** `window.wave`. */
 export interface WaveBridge {
   readonly links: ReturnType<typeof linkBridge>;
+  readonly artistPage: ReturnType<typeof artistPageBridge>;
+  /** A streamed YouTube Music song's menu. */
+  readonly streamed: ReturnType<typeof streamedBridge>;
   readonly system: { readonly mediaBackend: () => Promise<"native" | "chromium"> };
   readonly home: {
     readonly view: () => Promise<HomeView>;
     readonly play: (section: "most-played" | "favorites", index: number) => Promise<void>;
+    /** New from Artists You Follow and Upcoming Shows, from what the last check saved. */
+    readonly follow: () => Promise<HomeFollowView>;
+    /** Checks followed artists' releases and shows that are due; true when the cards changed. */
+    readonly followCheck: () => Promise<boolean>;
+    readonly openRelease: (key: string) => Promise<HomeReleaseOpening>;
+    /** A release card's cover as a data URL, or null. */
+    readonly releaseArtwork: (key: string) => Promise<string | null>;
   };
-  readonly playback: {
+  readonly playback: PlaybackTransport & {
     readonly view: () => Promise<PlayerView>;
-    readonly start: (scope: BrowseScope, index?: number, shuffle?: boolean) => Promise<void>;
-    readonly startYt: (videoIds: readonly string[], index: number) => Promise<void>;
-    readonly command: (command: PlaybackCommand) => Promise<void>;
-    readonly play: () => Promise<void>;
-    readonly pause: () => Promise<void>;
-    readonly seek: (positionMs: number) => Promise<void>;
-    readonly undo: () => Promise<void>;
+    readonly start: (scope: BrowseScope, index?: number, shuffle?: boolean) => Promise<PlayStart>;
     readonly dismissUndo: () => Promise<void>;
     readonly favorite: () => Promise<void>;
     readonly volume: (volume: number, muted: boolean) => Promise<void>;
@@ -406,6 +491,11 @@ export interface WaveBridge {
   };
   readonly library: {
     readonly artwork: (hash: string, large: boolean) => Promise<string | null>;
+    readonly cover: (
+      kind: "song" | "album" | "artist",
+      id: number,
+      large: boolean,
+    ) => Promise<string | null>;
     readonly browse: (scope: BrowseScope, offset: number, limit: number) => Promise<BrowsePage>;
     readonly letter: (scope: BrowseScope, letter: string) => Promise<number>;
     readonly counts: () => Promise<LibraryCounts>;
@@ -420,6 +510,8 @@ export interface WaveBridge {
     readonly include: (path: string) => Promise<void>;
   };
   readonly songs: {
+    /** Where each song's download is and whether its file failed to play; 200 songs at most. */
+    readonly states: (ids: readonly number[]) => Promise<Page<SongState>>;
     readonly actions: (target: SongTarget, surface: ActionSurface) => Promise<SongMenu>;
     readonly run: (
       target: SongTarget,
@@ -442,12 +534,16 @@ export interface WaveBridge {
     readonly window: () => Promise<WindowSettings>;
     readonly setWindow: (change: Partial<WindowSettings>) => Promise<WindowSettings>;
     readonly appearance: () => Promise<Appearance>;
+    readonly language: () => Promise<LanguageView>;
+    readonly setLanguage: (choice: LanguageChoice) => Promise<void>;
     readonly setAppearance: (appearance: Appearance) => Promise<void>;
     /** Settings › Playback: Crossfade, Normalize Volume and Buffer, synced with the account. */
     readonly playback: () => Promise<PlaybackSettings>;
     /** Keeps a change to Settings › Playback; it applies from the next song. */
     readonly setPlayback: (change: Partial<PlaybackSettings>) => Promise<PlaybackSettings>;
     readonly ytMusic: () => Promise<boolean>;
+    readonly searchOnline: () => Promise<SearchOnline>;
+    readonly setSearchOnline: (value: SearchOnline) => Promise<void>;
     readonly setYtMusic: (on: boolean) => Promise<void>;
   };
   readonly yt: {
@@ -464,6 +560,8 @@ export interface WaveBridge {
   readonly discover: {
     readonly picks: () => Promise<Page<BrowseRow>>;
     readonly mixes: () => Promise<DiscoverMixesView>;
+    readonly settings: () => Promise<DiscoverSettings>;
+    readonly setSettings: (value: DiscoverSettings) => Promise<DiscoverSettings>;
     readonly playMix: (id: string, index: number) => Promise<boolean>;
   };
   readonly magicQueue: {
@@ -476,11 +574,14 @@ export interface WaveBridge {
   readonly downloads: {
     readonly view: () => Promise<DownloadsView>;
     readonly rows: (offset: number, limit: number) => Promise<Page<DownloadRow>>;
-    readonly album: (albumId: number) => Promise<MissingSongsView | null>;
+    readonly list: (list: MissingSongsList) => Promise<MissingSongsView | null>;
     readonly yt: (videoIds: readonly string[]) => Promise<void>;
     readonly missing: (trackIds: readonly number[]) => Promise<void>;
-    /** Download All, Retry Failed or Cancel on every missing song, or one album's. */
-    readonly missingAction: (action: MissingSongsDownloadAction, albumId?: number) => Promise<void>;
+    /** Download All, Retry Failed or Cancel on every missing song, or one page's. */
+    readonly missingAction: (
+      action: MissingSongsDownloadAction,
+      list?: MissingSongsList,
+    ) => Promise<void>;
     readonly retry: (ids?: readonly string[]) => Promise<void>;
     readonly cancel: (ids: readonly string[]) => Promise<void>;
     readonly clearFailed: () => Promise<void>;
@@ -496,10 +597,14 @@ export interface WaveBridge {
     readonly cancelSignIn: () => Promise<void>;
     readonly signOut: () => Promise<void>;
     readonly signOutEverywhere: () => Promise<void>;
+    /** Delete Account, once confirmed: resolves when it ended, however it did. */
+    readonly deleteAccount: () => Promise<void>;
     readonly answerInvitation: () => Promise<void>;
   };
   /** Playlists' edits, images, Graveyard and M3U import. */
   readonly playlists: PlaylistBridge;
+  /** Settings › Lyrics and tags. */
+  readonly lyricsAndTags: LyricsAndTagsBridge;
   /** Search over the Library, and its recent searches. */
   readonly search: {
     readonly library: (query: string) => Promise<LibrarySearchView>;
@@ -531,6 +636,7 @@ export const createBridge = (invoke: Invoke): WaveBridge => ({
   },
   library: {
     artwork: (hash, large) => invoke("library.artwork", hash, large),
+    cover: (kind, id, large) => invoke("library.cover", kind, id, large),
     browse: (scope, offset, limit) => invoke("library.browse", scope, offset, limit),
     letter: (scope, letter) => invoke("library.letter", scope, letter),
     counts: () => invoke("library.counts"),
@@ -545,6 +651,7 @@ export const createBridge = (invoke: Invoke): WaveBridge => ({
     include: (path) => invoke("library.include", path),
   },
   songs: {
+    states: (ids) => invoke("songs.states", ids),
     actions: (target, surface) => invoke("songs.actions", target, surface),
     run: (target, action, playlistId) => invoke("songs.run", target, action, playlistId),
   },
@@ -560,12 +667,16 @@ export const createBridge = (invoke: Invoke): WaveBridge => ({
   },
   settings: {
     appearance: () => invoke("settings.appearance"),
+    language: () => invoke("settings.language"),
+    setLanguage: (choice) => invoke("settings.setLanguage", choice),
     window: () => invoke("settings.window"),
     setWindow: (change) => invoke("settings.setWindow", change),
     setAppearance: (appearance) => invoke("settings.setAppearance", appearance),
     playback: () => invoke("settings.playback"),
     setPlayback: (change) => invoke("settings.setPlayback", change),
     ytMusic: () => invoke("settings.ytMusic"),
+    searchOnline: () => invoke("settings.searchOnline"),
+    setSearchOnline: (value) => invoke("settings.setSearchOnline", value),
     setYtMusic: (on) => invoke("settings.setYtMusic", on),
   },
   yt: {
@@ -580,6 +691,8 @@ export const createBridge = (invoke: Invoke): WaveBridge => ({
   discover: {
     picks: () => invoke("discover.picks"),
     mixes: () => invoke("discover.mixes"),
+    settings: () => invoke("discover.settings"),
+    setSettings: (value) => invoke("discover.setSettings", value),
     playMix: (id, index) => invoke("discover.playMix", id, index),
   },
   magicQueue: {
@@ -591,10 +704,10 @@ export const createBridge = (invoke: Invoke): WaveBridge => ({
   downloads: {
     view: () => invoke("downloads.view"),
     rows: (offset, limit) => invoke("downloads.rows", offset, limit),
-    album: (albumId) => invoke("downloads.album", albumId),
+    list: (list) => invoke("downloads.list", list),
     yt: (videoIds) => invoke("downloads.yt", videoIds),
     missing: (trackIds) => invoke("downloads.missing", trackIds),
-    missingAction: (action, albumId) => invoke("downloads.missingAction", action, albumId),
+    missingAction: (action, list) => invoke("downloads.missingAction", action, list),
     retry: (ids) => invoke("downloads.retry", ids),
     cancel: (ids) => invoke("downloads.cancel", ids),
     clearFailed: () => invoke("downloads.clearFailed"),
@@ -609,9 +722,11 @@ export const createBridge = (invoke: Invoke): WaveBridge => ({
     cancelSignIn: () => invoke("account.cancelSignIn"),
     signOut: () => invoke("account.signOut"),
     signOutEverywhere: () => invoke("account.signOutEverywhere"),
+    deleteAccount: () => invoke("account.deleteAccount"),
     answerInvitation: () => invoke("account.answerInvitation"),
   },
   playlists: playlistBridge(invoke),
+  lyricsAndTags: lyricsAndTagsBridge(invoke),
   search: {
     library: (query) => invoke("search.library", query),
     recent: () => invoke("search.recent"),
@@ -621,6 +736,12 @@ export const createBridge = (invoke: Invoke): WaveBridge => ({
   home: {
     view: () => invoke("home.view"),
     play: (section, index) => invoke("home.play", section, index),
+    follow: () => invoke("home.follow"),
+    followCheck: () => invoke("home.followCheck"),
+    openRelease: (key) => invoke("home.openRelease", key),
+    releaseArtwork: (key) => invoke("home.releaseArtwork", key),
   },
   links: linkBridge(invoke),
+  artistPage: artistPageBridge(invoke),
+  streamed: streamedBridge(invoke),
 });

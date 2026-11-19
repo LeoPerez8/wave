@@ -28,7 +28,8 @@ export type {
   PlaysToMerge,
   StreamedPlaySums,
 } from "./countedPlays.ts";
-export { formatDuration, formatRemaining } from "./time.ts";
+export { formatDuration, formatRemaining, listDuration } from "./time.ts";
+export type { ListDurationText } from "./time.ts";
 export { recommendationDeadline, recommendationFrameBudget } from "./recommendationWork.ts";
 export {
   ANCHOR_UNMEASURED,
@@ -892,6 +893,7 @@ export { artistPageItems } from "./artistPage.ts";
 export type { ArtistPageItem, ArtistPageShelf } from "./artistPage.ts";
 export type { SheetEvent, SheetPhase, SheetStep } from "./sheetLifecycle.ts";
 export {
+  artistSeparator,
   joinArtists,
   libraryFinder,
   libraryFinderSteps,
@@ -938,6 +940,11 @@ export {
   readFindLyricsAndGenre,
   writeFindLyricsAndGenre,
 } from "./lookupsSetting.ts";
+export {
+  DOWNLOAD_ARTIST_PHOTOS_SETTING,
+  readDownloadArtistPhotos,
+  writeDownloadArtistPhotos,
+} from "./artistPhotosSetting.ts";
 export type { AccountSession, AccountSignInEvent, AccountSignInState } from "./accountSignIn.ts";
 export {
   SPOTIFY_ACCOUNT_SIGNED_OUT,
@@ -1272,6 +1279,7 @@ export type { LibraryLookupProgress, LibraryLookupSummary } from "./libraryLooku
 export {
   YT_ARTIST_FRESH_MS,
   YT_ARTIST_SECTION_START,
+  artistPopularSongs,
   libraryAlbumFinder,
   libraryArtistFinder,
   libraryReleaseFinder,
@@ -1339,7 +1347,13 @@ export type {
   StreamedArtistLink,
   StreamedArtistTarget,
 } from "./streamedArtist.ts";
-export { pagePlayback, skipMissingSongs, tappedMissingSong } from "./pagePlayback.ts";
+export {
+  listPlay,
+  pagePlayback,
+  skipMissingSongs,
+  tappedMissingSong,
+  type ListPlay,
+} from "./pagePlayback.ts";
 export type { PagePlayback, PlayableSongs } from "./pagePlayback.ts";
 export {
   planPlaylistSongs,
@@ -1646,6 +1660,7 @@ export type {
   MissingTrack,
 } from "./missingSongDownload.ts";
 export {
+  HOME_ARRANGEMENT_SETTING,
   HOME_SECTIONS,
   editHomeArrangement,
   hiddenHomeSections,
@@ -1714,6 +1729,7 @@ export type {
 export {
   discoverMix,
   discoverMixCaption,
+  discoverMixName,
   discoverMixSongs,
   discoverMixesBuilt,
   discoverMixesDue,
@@ -1880,6 +1896,7 @@ export { advisoryTag, explicitFromAdvisory, isExplicit, showsExplicitBadge } fro
 export type { ExplicitFlag } from "./explicit.ts";
 export {
   DEFAULT_DISCOVER_MIX_LEVEL,
+  DISCOVER_LEVEL_SETTING,
   DISCOVER_MIX_LEVELS,
   blendDiscoverMix,
   discoverMixFamiliarPool,
@@ -1947,6 +1964,7 @@ export type { JournalChanges } from "./journalChanges.ts";
 export { PLAY_ACTION_LABELS, menuLayout } from "./menuLayout.ts";
 export type { MenuLayout, MenuSubject, PlayAction, PlayCard } from "./menuLayout.ts";
 export {
+  DONT_PLAY_EXPLICIT_SETTING,
   explicitPassOver,
   explicitPlayNotice,
   explicitSkipNotice,
@@ -1979,6 +1997,8 @@ export type {
 } from "./onlineLyrics.ts";
 export {
   FAVORITES_DOWNLOAD_ORIGIN,
+  STAR_ASKED_SETTING,
+  SYNCED_STARS_SETTING,
   readStarDownloads,
   starredDownload,
   unstarredDownload,
@@ -2040,6 +2060,7 @@ export type {
 } from "./genreAffinity.ts";
 export type { SearchOnline, YtPick } from "./onlineToggle.ts";
 export {
+  SEARCH_ONLINE_SETTING,
   releaseBackgroundAllowed,
   readSearchOnline,
   searchOnlineAlways,
@@ -2339,6 +2360,7 @@ export {
 export type { SimilarArtistsKept } from "./similarArtistsKept.ts";
 export {
   DEFAULT_MIX_SLIDERS,
+  DISCOVER_SLIDERS_SETTING,
   GENRE_FAITHFULNESS_STEPS,
   POPULARITY_STEPS,
   readMixSliders,
@@ -2349,7 +2371,7 @@ export { seededRandom } from "./weightedPick.ts";
 export type { DiscoverMixesBuild } from "./discoverMixes.ts";
 export { discoverMixesRerun, rerankedDiscoverMixes } from "./mixRerank.ts";
 export type { DiscoverMixesRerun } from "./mixRerank.ts";
-export { sliderStep, sliderStepLabel } from "./mixSliders.ts";
+export { isSliderStep, sliderStep, sliderStepLabel } from "./mixSliders.ts";
 export { DOUBLE_TAP_MS, coverDoubleTap, createCoverTaps } from "./coverGestures.ts";
 export type { CoverDoubleTap, CoverTaps } from "./coverGestures.ts";
 export { createStarPop } from "./starPop.ts";
@@ -2438,7 +2460,7 @@ export type { LostLinkTap, LostTapReason } from "./lostTap.ts";
 export { createArtistGraphBuild, type ArtistGraphCatalogEntry } from "./artistGraphBuild.ts";
 export { mixKnownSongsSteps } from "./mixKnownSongs.ts";
 export { genreMixSeedsSteps } from "./genreMixes.ts";
-export { mapSteps, sortSteps } from "./buildSteps.ts";
+export { mapSteps, sortSteps, finishSteps } from "./buildSteps.ts";
 export { libraryMixProfilesSteps } from "./genreAffinity.ts";
 export { rankPlaysSteps } from "./stats.ts";
 
@@ -2497,6 +2519,7 @@ export {
 } from "./radioRanking.ts";
 
 export { rankedDiscoverMixRead } from "./radioMixes.ts";
+export { rankedDiscoverMixes, rankedDiscoverMixesSteps } from "./rankedDiscoverMixes.ts";
 export { RADIO_CACHE_FRESH_MS, radioCacheFresh } from "./radioCache.ts";
 export {
   listeningHistoryDays,
@@ -2836,3 +2859,10 @@ export type {
   ShortcutId,
   ShortcutKey,
 } from "./desktopKeys.ts";
+export {
+  LANGUAGE_PREFERENCE,
+  readLanguageChoice,
+  chosenAppLanguage,
+  type LanguageChoice,
+} from "./languageChoice.ts";
+export { displayTag } from "./displayTag.ts";

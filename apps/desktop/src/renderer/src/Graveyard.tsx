@@ -7,7 +7,7 @@ import { useEffect, useRef, useState } from "react";
 import type { Page } from "../../shared/bridge.ts";
 import type { GraveyardRow } from "../../shared/playlists.ts";
 import { ConfirmDialog } from "./SongActions.tsx";
-import { language, text } from "./text.ts";
+import { artistName, language, text } from "./text.ts";
 import { Artwork } from "./VirtualTable.tsx";
 
 const SIZE = 100;
@@ -70,7 +70,7 @@ export function Graveyard({
               <span className="graveyard-copy">
                 <span className="truncate">{row.title}</span>
                 <span className="secondary truncate">
-                  {[row.artist, removed].filter(Boolean).join(" · ")}
+                  {[artistName(row.artist), removed].filter(Boolean).join(" · ")}
                 </span>
               </span>
               <button

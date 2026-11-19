@@ -14,6 +14,7 @@ import {
 
 /** The entries a desktop song menu can hold; Share is its Copy Link. A playlist's songs can leave it. */
 const OFFERED: ReadonlySet<ItemAction> = new Set<ItemAction>([
+  "download",
   "playNext",
   "addToQueue",
   "magicQueue",

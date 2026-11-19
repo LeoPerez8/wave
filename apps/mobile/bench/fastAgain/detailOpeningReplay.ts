@@ -4,7 +4,7 @@ import type * as Core from "@wave/core";
 import type { TestDatabase } from "@wave/client/testing";
 import type { SongRow } from "@wave/client";
 import type { NativeYtSong } from "../../src/native/waveYtMusic.ts";
-import { artistOpeningRequest } from "../../src/ytmusic/artistOpeningRequest.ts";
+import type { artistOpeningRequest } from "@wave/client/ytArtistFetch";
 import { albumOpening } from "../../src/ytmusic/albumOpening.ts";
 import { loadLibraryStore, loadWorktreeModule } from "./store.ts";
 
@@ -16,7 +16,13 @@ export const loadDetailOpening = async (root: string, db: TestDatabase) => {
     ? (
         await loadWorktreeModule<{ artistOpeningRequest: typeof artistOpeningRequest }>(
           root,
-          "apps/mobile/src/ytmusic/artistOpeningRequest.ts",
+          "packages/client/src/ytArtistFetch.ts",
+        ).catch(() =>
+          // Commits before the move kept it in the phone's code.
+          loadWorktreeModule<{ artistOpeningRequest: typeof artistOpeningRequest }>(
+            root,
+            "apps/mobile/src/ytmusic/artistOpeningRequest.ts",
+          ),
         )
       ).artistOpeningRequest
     : <A, E, R>(_online: () => boolean, effect: Effect.Effect<A, E, R>) => effect;

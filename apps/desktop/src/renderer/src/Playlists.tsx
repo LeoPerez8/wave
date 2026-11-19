@@ -29,8 +29,8 @@ import type { ImageEdit, ImportAnswer } from "../../shared/playlists.ts";
 import type { SongTarget } from "../../shared/songActions.ts";
 import "./playlists.css";
 import { copyLink } from "./copyLink.ts";
-import { Menu, type MenuItem } from "./Menu.tsx";
-import { ConfirmDialog, Toast, trapTab } from "./SongActions.tsx";
+import type { MenuItem } from "./Menu.tsx";
+import { ConfirmDialog, trapTab, useMenuAndToast } from "./SongActions.tsx";
 import { language, text } from "./text.ts";
 
 type Point = { readonly x: number; readonly y: number };
@@ -56,18 +56,13 @@ export function usePlaylistEdits({ go, deleted, failed, changed }: Options) {
   /** Counts edits the player's revision misses (a playlist's image), for whatever shows them. */
   const [edits, setEdits] = useState(0);
   const [naming, setNaming] = useState<Naming>();
-  const [menu, setMenu] = useState<{
-    readonly label: string;
-    readonly items: Promise<readonly MenuItem[]>;
-    readonly at: Point;
-  }>();
+  const { menu, setMenu, setToast, menuAndToast } = useMenuAndToast();
   const [confirm, setConfirm] = useState<{
     readonly spec: AlertSpec;
     readonly onChoose: (yes: boolean) => void;
   }>();
   const [crop, setCrop] = useState<{ readonly playlistId: number; readonly edit: ImageEdit }>();
   const [summary, setSummary] = useState<M3uImportSummary>();
-  const [toast, setToast] = useState<{ readonly message: string; readonly id: number }>();
 
   const edited = useCallback(() => {
     setEdits((n) => n + 1);
@@ -88,7 +83,7 @@ export function usePlaylistEdits({ go, deleted, failed, changed }: Options) {
   const newPlaylist = useCallback(
     (target?: SongTarget) => {
       void window.wave.playlists
-        .newName(language)
+        .newName()
         .then((initial) => setNaming({ kind: "create", initial, ...(target ? { target } : {}) }))
         .catch(() => failed(text.playlists.couldntCreate));
     },
@@ -186,7 +181,7 @@ export function usePlaylistEdits({ go, deleted, failed, changed }: Options) {
               key: "copyLink",
               label: text.share.copyLink,
               run: () => {
-                void copyLink(window.wave.links.copyPlaylist(playlistId, language));
+                void copyLink(window.wave.links.copyPlaylist(playlistId));
               },
             },
           ]
@@ -246,12 +241,9 @@ export function usePlaylistEdits({ go, deleted, failed, changed }: Options) {
     }
   };
 
-  const closeMenu = useCallback(() => setMenu(undefined), []);
-  const hideToast = useCallback(() => setToast(undefined), []);
   const overlays = (
     <>
-      {menu && <Menu label={menu.label} items={menu.items} at={menu.at} onClose={closeMenu} />}
-      {toast && <Toast key={toast.id} message={toast.message} onDone={hideToast} />}
+      {menuAndToast}
       {naming && (
         <NameDialog
           naming={naming}
@@ -303,11 +295,12 @@ const dialogKeys = (close: () => void) => (event: KeyboardEvent<HTMLElement>) =>
   } else trapTab(event);
 };
 
-const problems = {
-  empty: text.playlists.nameEmpty,
-  taken: text.playlists.nameTaken,
-  tooLong: text.playlists.nameTooLong,
-} as const;
+const problems = () =>
+  ({
+    empty: text.playlists.nameEmpty,
+    taken: text.playlists.nameTaken,
+    tooLong: text.playlists.nameTooLong,
+  }) as const;
 
 /** New Playlist and Rename: the name, checked as it is typed by Core's rules. */
 function NameDialog({
@@ -337,7 +330,8 @@ function NameDialog({
   }, [name, playlistId]);
   const result = check?.name === name ? check.check : undefined;
   // The suggested name is shown without a complaint until it is edited.
-  const problem = result?.ok === false && name !== naming.initial ? problems[result.problem] : null;
+  const problem =
+    result?.ok === false && name !== naming.initial ? problems()[result.problem] : null;
   const title =
     naming.kind === "create" ? text.playlists.newPlaylistTitle : text.playlists.renamePlaylist;
   const submit = () => {

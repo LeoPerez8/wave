@@ -16,6 +16,7 @@ import { catalogueOf } from "@wave/core";
 import * as Effect from "effect/Effect";
 import { libraryLayer } from "../src/main/database.ts";
 import type { WaveBridge } from "../src/shared/bridge.ts";
+import { DISCOVER_FIXTURE, stubDiscover } from "./discoverFixture.ts";
 
 const appFolder = join(import.meta.dirname, "..");
 /** From Node, the electron package is the path of its executable. */
@@ -84,6 +85,7 @@ test("the page has no Node and only the typed bridge", async () => {
       "wave.playback.setSleepTimer",
       "wave.lyrics.song",
       "wave.library.artwork",
+      "wave.library.cover",
       "wave.library.browse",
       "wave.library.letter",
       "wave.library.counts",
@@ -96,6 +98,7 @@ test("the page has no Node and only the typed bridge", async () => {
       "wave.library.exclude",
       "wave.library.removeRoot",
       "wave.library.include",
+      "wave.songs.states",
       "wave.songs.actions",
       "wave.songs.run",
       "wave.player.load",
@@ -105,12 +108,16 @@ test("the page has no Node and only the typed bridge", async () => {
       "wave.player.status",
       "wave.tags.read",
       "wave.settings.appearance",
+      "wave.settings.language",
+      "wave.settings.setLanguage",
       "wave.settings.window",
       "wave.settings.setWindow",
       "wave.settings.setAppearance",
       "wave.settings.playback",
       "wave.settings.setPlayback",
       "wave.settings.ytMusic",
+      "wave.settings.searchOnline",
+      "wave.settings.setSearchOnline",
       "wave.settings.setYtMusic",
       "wave.yt.search",
       "wave.yt.artwork",
@@ -121,6 +128,8 @@ test("the page has no Node and only the typed bridge", async () => {
       "wave.yt.queue",
       "wave.discover.picks",
       "wave.discover.mixes",
+      "wave.discover.settings",
+      "wave.discover.setSettings",
       "wave.discover.playMix",
       "wave.magicQueue.start",
       "wave.magicQueue.startStreamed",
@@ -128,7 +137,7 @@ test("the page has no Node and only the typed bridge", async () => {
       "wave.magicQueue.retry",
       "wave.downloads.view",
       "wave.downloads.rows",
-      "wave.downloads.album",
+      "wave.downloads.list",
       "wave.downloads.yt",
       "wave.downloads.missing",
       "wave.downloads.missingAction",
@@ -144,6 +153,7 @@ test("the page has no Node and only the typed bridge", async () => {
       "wave.account.cancelSignIn",
       "wave.account.signOut",
       "wave.account.signOutEverywhere",
+      "wave.account.deleteAccount",
       "wave.account.answerInvitation",
       "wave.playlists.checkName",
       "wave.playlists.newName",
@@ -164,16 +174,33 @@ test("the page has no Node and only the typed bridge", async () => {
       "wave.playlists.cancelImage",
       "wave.playlists.removeImage",
       "wave.playlists.image",
+      "wave.lyricsAndTags.view",
+      "wave.lyricsAndTags.set",
+      "wave.lyricsAndTags.fixLibrary",
+      "wave.lyricsAndTags.cancelFix",
+      "wave.lyricsAndTags.clearArtistPhotos",
       "wave.search.library",
       "wave.search.recent",
       "wave.search.remember",
       "wave.search.clearRecent",
       "wave.home.view",
       "wave.home.play",
+      "wave.home.follow",
+      "wave.home.followCheck",
+      "wave.home.openRelease",
+      "wave.home.releaseArtwork",
       "wave.links.open",
       "wave.links.importPlaylist",
       "wave.links.copySong",
       "wave.links.copyPlaylist",
+      "wave.artistPage.albums",
+      "wave.artistPage.albumArtists",
+      "wave.artistPage.section",
+      "wave.artistPage.ask",
+      "wave.artistPage.play",
+      "wave.streamed.menu",
+      "wave.streamed.artist",
+      "wave.streamed.run",
     ],
   });
 });
@@ -244,13 +271,26 @@ test("a second launch shows and focuses the running window, then quits", async (
 
 test("with YouTube Music on, Discover and the Magic Queue open from the sidebar", async () => {
   const text = catalogueOf("en", "desktop");
+  await stubDiscover(app);
   await page.evaluate(() =>
     (window as unknown as { wave: WaveBridge }).wave.settings.setYtMusic(true),
   );
   await page.reload();
   await page.getByRole("button", { name: text.desktopLayout.discover, exact: true }).click();
-  await expect(page.getByTestId("discover")).toBeVisible();
-  await expect(page.getByTestId("discover").locator(".tile")).toHaveCount(3);
+  const discover = page.getByTestId("discover");
+  await expect(discover).toBeVisible();
+  // The Magic Queue row's Library songs, then the fixture's mixes under their rows.
+  const picks = await page.evaluate(() =>
+    (window as unknown as { wave: WaveBridge }).wave.discover.picks(),
+  );
+  expect(picks.total).toBeGreaterThan(0);
+  await expect(discover.locator(".tile")).toHaveCount(picks.total);
+  for (const mix of DISCOVER_FIXTURE.mixes) {
+    const row = discover.getByRole("region", { name: text.discover.rows[mix.row], exact: true });
+    await expect(
+      row.getByRole("heading", { name: text.discover.mixTitle(mix.name) }),
+    ).toContainText(text.discover.songs(mix.songs.total));
+  }
   await page.getByRole("button", { name: text.desktopLayout.magicQueue, exact: true }).click();
   await expect(page.getByTestId("magic-queue")).toContainText(text.desktopLayout.magicQueueIdle);
 });

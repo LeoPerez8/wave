@@ -18,7 +18,7 @@ test("paste and drop open supported links, ignore ordinary text and preserve tex
     await page.evaluate(async () => {
       const wave = (window as unknown as { wave: WaveBridge }).wave;
       await wave.settings.setYtMusic(true);
-      await wave.links.copySong("abcdefghijk", "en");
+      await wave.links.copySong("abcdefghijk");
       // Off from here on, so the links below ask no service anything.
       await wave.settings.setYtMusic(false);
     });

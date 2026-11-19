@@ -6,7 +6,7 @@ import { typedReleaseDates } from "@/library/typedReleaseDates";
 import { useScreenContent } from "@/lib/screenTiming";
 import { useLocalisation } from "@/localisation/localisation";
 import { IconDots } from "@tabler/icons-react-native";
-import { playlistDownloadOrigin, playlistSongsLine } from "@wave/core";
+import { listDuration, playlistDownloadOrigin, playlistSongsLine } from "@wave/core";
 import { useLocalSearchParams } from "expo-router";
 import { useEffect, useMemo } from "react";
 import { Text, useWindowDimensions, View } from "react-native";
@@ -86,7 +86,7 @@ function PlaylistHead({ shown }: { shown: Shown }) {
   const furniture =
     count === 0
       ? songCount(0, strings)
-      : `${playlistSongsLine(playlist.trackCount, playlist.unavailableCount, language)} · ${strings.library.minutes(Math.max(1, Math.round(playlist.durationMs / 60_000)))}`;
+      : `${playlistSongsLine(playlist.trackCount, playlist.unavailableCount, language)} · ${listDuration(playlist.durationMs, strings.library) ?? strings.library.minutes(1)}`;
   const menu = (
     // Its glyph sits on the right margin, like Back on the left.
     <View style={{ marginRight: -12 }}>

@@ -92,7 +92,7 @@ test("saved Popular stays local before settlement; integrated additions wait, th
 });
 
 test("the artist section checks Android connectivity when its deferred request actually runs", async () => {
-  const { artistOpeningRequest } = await import("./artistOpeningRequest.ts");
+  const { artistOpeningRequest } = await import("@wave/client/ytArtistFetch");
   let online = true;
   let requests = 0;
   // Network and Android connectivity are system boundaries; Library reads above stay real.

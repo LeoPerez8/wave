@@ -11,6 +11,9 @@ const paths: Record<string, string> = {
   settings:
     "M12 8a4 4 0 1 1 0 8 4 4 0 0 1 0-8M10 2h4l1 3 3 1 3-1 2 4-2 3 1 3-2 4-3-1-3 2-1 3h-4l-1-3-3-1-3 1-2-4 2-3-1-3 2-4 3 1 3-2Z",
   back: "m15 5-7 7 7 7",
+  /** Tabler's horizontal sliders, as the phone's Discover header has. */
+  adjustments:
+    "M12 6a2 2 0 1 0 4 0 2 2 0 1 0-4 0M4 6h8m4 0h4M6 12a2 2 0 1 0 4 0 2 2 0 1 0-4 0M4 12h2m4 0h10M15 18a2 2 0 1 0 4 0 2 2 0 1 0-4 0M4 18h11m4 0h1",
   forward: "m9 5 7 7-7 7",
   pause: "M8 4v16M16 4v16",
   mute: "M3 9h4l5-5v16l-5-5H3ZM16 9l6 6m0-6-6 6",
@@ -27,6 +30,11 @@ const paths: Record<string, string> = {
   folder: "M3 7V4h6l3 3h9v14H3Z",
   add: "M12 4v16M4 12h16",
   download: "M12 3v12m-5-5 5 5 5-5M4 21h16",
+  discover: "M21 12a9 9 0 1 1-18 0 9 9 0 0 1 18 0M16 8l-2 6-6 2 2-6Z",
+  magicQueue:
+    "M3 6h10M3 11h10M3 16h7M18 3l1 3 3 1-3 1-1 3-1-3-3-1 3-1ZM17 14l.8 2.2 2.2.8-2.2.8L17 20l-.8-2.2-2.2-.8 2.2-.8Z",
+  playlist: "M3 4h12M3 9h12M3 14h6M15 20V9l6-1M15 20c0 2.7-4 2.7-4 0s4-2.7 4 0",
+  close: "M6 6l12 12M6 18 18 6",
 };
 export function Icon({ name, size = 20 }: { readonly name: string; readonly size?: number }) {
   return (

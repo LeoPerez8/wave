@@ -39,6 +39,9 @@ import type { TabBarTab } from "./tabBar.ts";
 export const en = {
   desktopWindow: desktopWindowEn,
   desktopLayout: {
+    language: "Language",
+    // Each language under its own name, so it can be found from the other one.
+    languages: { system: "System", en: "English", "pt-BR": "Português (Brasil)" },
     brand: "Wave",
     home: "Home",
     search: "Search",
@@ -107,6 +110,7 @@ export const en = {
     youMightAlsoLike: "You might also like",
     magicQueueIdle: "Start a Magic Queue from one of these songs, or from any song's menu.",
     sidePanel: "Side panel",
+    closeSidePanel: "Close side panel",
     removeFromQueue: (title: string) => `Remove “${title}” from the Queue`,
   },
   desktopLibrary: {
@@ -115,6 +119,17 @@ export const en = {
     unavailableFolder: "Unavailable folder",
     driveDisconnected: "The drive isn't connected. Reconnect it and try again.",
     actionFailed: "Couldn't complete that action. Try again.",
+    downloadStarted: (count: number) =>
+      count === 1 ? "Download started" : `Downloading ${count} songs`,
+    downloading: (title: string) => `Downloading ${title}`,
+    /** Play or Shuffle on a list none of whose songs can play here (Core's `listPlay`). */
+    nothingToPlay: "None of these songs are on this computer yet. Download them to play them here.",
+    /** Play or Shuffle left out [count] missing songs it couldn't stream. */
+    leftOut: (count: number) =>
+      count === 1
+        ? "1 song isn't on this computer, so it was left out."
+        : `${count} songs aren't on this computer, so they were left out.`,
+    fileFailed: "Couldn't play this file",
     titleColumn: "Title",
     artistColumn: "Artist",
     albumColumn: "Album",
@@ -125,6 +140,8 @@ export const en = {
     chooseArtist: "Choose an Artist",
     noPlaylists: "No playlists yet",
     checkSong: (title: string) => `Select “${title}”`,
+    /** An artist page's songs from YouTube Music, a page at a time. */
+    showMoreSongs: "Show more songs",
   },
   /** The desktop's Wave account: what the phone's Settings › Accounts has no need to say. */
   desktopAccount: {
@@ -133,6 +150,11 @@ export const en = {
       "This computer has no keyring, so the session lasts until Wave quits. Sign in again next time.",
     browserTitle: "Back to Wave",
     browserMessage: "You can close this tab. Wave finishes signing in.",
+    /** Delete Account's fresh Google sign-in: while the browser has it, and the tab once it's done. */
+    confirmDeletionInBrowser: "Sign in to Google in your browser to confirm it's you.",
+    browserDeletionMessage: "You can close this tab. Wave finishes deleting the account.",
+    /** The request went to Wave's server: there is no Cancel any more. */
+    deletionSent: "Wave is deleting the account. It can't be cancelled now.",
   },
   desktopShortcuts: desktopShortcutsEn,
   downloadNotice: downloadNoticeEn,

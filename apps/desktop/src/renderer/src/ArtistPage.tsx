@@ -1,0 +1,287 @@
+import type { YtPick } from "@wave/core";
+import { useEffect, useState, type MouseEvent, type ReactNode } from "react";
+import type { ArtistAlbums, ArtistSectionView, CreditedArtist } from "../../shared/artistPage.ts";
+import type { BrowseRow } from "../../shared/browse.ts";
+import type { MenuItem } from "./Menu.tsx";
+import { labels, text } from "./text.ts";
+import { Shelf, YtSongList, type TileItem } from "./YtLists.tsx";
+import "./artist.css";
+
+/**
+ * A Library artist's page beyond its hero and songs table (docs/spec.md, "Artist page"): the
+ * album shelves, the Library | Online toggle and, with Online, the songs and releases of the
+ * artist YouTube Music has and the Library lacks. Also the album hero's artist link.
+ */
+
+/** How many of YouTube Music's songs the page reads at a time. */
+const SONGS_PAGE = 100;
+
+export interface ArtistSection {
+  /** The section, or null without one (YT Music off, a name that isn't an artist's). */
+  readonly view: ArtistSectionView | null;
+  /** The toggle's segment picked on this visit; null: none yet. */
+  readonly pick: YtPick | null;
+  readonly setPick: (pick: YtPick) => void;
+  /** Reads the next page of YouTube Music's songs. */
+  readonly more: () => void;
+}
+
+/**
+ * The YouTube Music section of the artist [artistId] (undefined: no artist page). It asks
+ * YouTube Music only when Core says so: Online picked, or Search online set to Always, with no
+ * saved answer standing.
+ */
+export const useArtistSection = (
+  artistId: number | undefined,
+  ytMusic: boolean,
+  revision: number,
+  onError: () => void,
+): ArtistSection => {
+  const [picked, setPicked] = useState<{ id: number | undefined; pick: YtPick | null }>({
+    id: artistId,
+    pick: null,
+  });
+  const pick = picked.id === artistId ? picked.pick : null;
+  const [limit, setLimit] = useState(SONGS_PAGE);
+  const [read, setRead] = useState<{ key: string; view: ArtistSectionView | null }>();
+  const [asked, setAsked] = useState(0);
+  const key = `${artistId}:${pick}:${limit}:${ytMusic}:${revision}:${asked}`;
+  useEffect(() => {
+    if (artistId === undefined) return;
+    let current = true;
+    void window.wave.artistPage
+      .section(artistId, pick, 0, limit)
+      .then((view) => {
+        if (!current) return;
+        setRead({ key, view });
+        if (view?.asks)
+          void window.wave.artistPage
+            .ask(artistId)
+            .then(() => current && setAsked((n) => n + 1))
+            .catch(onError);
+      })
+      .catch(onError);
+    return () => {
+      current = false;
+    };
+  }, [artistId, pick, limit, key, onError]);
+  // While another artist's answer is read, keep the toggle where it was; then show this one's.
+  const view = read?.key.startsWith(`${artistId}:`) ? read.view : null;
+  return {
+    view: view === null ? null : view.asks ? { ...view, note: "loading" } : view,
+    pick,
+    setPick: (next) => {
+      setPicked({ id: artistId, pick: next });
+      setLimit(SONGS_PAGE);
+      // Online after a failure asks again.
+      const failed = view?.note === "offline" || view?.note === "failed";
+      if (next === "online" && artistId !== undefined && failed)
+        void window.wave.artistPage
+          .ask(artistId)
+          .then(() => setAsked((n) => n + 1))
+          .catch(onError);
+    },
+    more: () => setLimit((n) => n + SONGS_PAGE),
+  };
+};
+
+/** The Library | Online toggle at the end of the hero's Play and Shuffle. */
+export function ArtistToggle({ section }: { readonly section: ArtistSection }) {
+  const { view } = section;
+  if (view === null) return null;
+  return (
+    <div className="search-online-toggle artist-toggle" role="group" aria-label={labels.ytMusic}>
+      {(["library", "online"] as const).map((value) => (
+        <button
+          key={value}
+          aria-pressed={view.toggle === value}
+          title={value === "library" ? text.library.libraryHint : text.library.onlineHint}
+          onClick={() => section.setPick(value)}
+        >
+          {text.library[value]}
+        </button>
+      ))}
+    </div>
+  );
+}
+
+const noteText = (note: NonNullable<ArtistSectionView["note"]>): string => {
+  switch (note) {
+    case "loading":
+      return labels.loading;
+    case "allInLibrary":
+      return text.library.allInLibrary;
+    case "noSongs":
+      return text.library.noSongsOnline;
+    case "notFound":
+      return text.library.notFoundOnline;
+    case "offline":
+      return text.library.offlineTapOnline;
+    case "failed":
+      return text.library.noAnswerTapOnline;
+  }
+};
+
+const libraryTiles = (rows: readonly BrowseRow[]): TileItem[] =>
+  rows.map((row) => ({
+    key: `album-${row.id}`,
+    title: row.title,
+    caption: row.artist,
+    artworkHash: row.artworkHash,
+    artworkKind: "album",
+    artworkId: row.id,
+  }));
+
+const releaseTiles = (releases: ArtistSectionView["albums"]): TileItem[] =>
+  releases.map((release) => ({
+    key: release.browseId,
+    title: release.title,
+    caption: release.artists.join(", "),
+    artworkUrl: release.artworkUrl,
+  }));
+
+/**
+ * The artist page's content: the album shelves (Albums, with the releases YouTube Music adds
+ * after the Library's; Singles & EPs; Appears on), the Library's songs ([children], the songs
+ * table) and, with Online, the songs YouTube Music adds. Once the artist's list is known,
+ * Online shows them all as one Popular list in YouTube Music's order, each ranked song led by
+ * its rank, in place of the table. The page scrolls as one.
+ */
+export function ArtistPage({
+  artistId,
+  revision,
+  section,
+  onAlbum,
+  onYtAlbum,
+  onPlayStreamed,
+  onSongMenu,
+  onError,
+  children,
+}: {
+  readonly artistId: number;
+  readonly revision: number;
+  readonly section: ArtistSection;
+  readonly onAlbum: (id: number) => void;
+  readonly onYtAlbum: (browseId: string) => void;
+  readonly onPlayStreamed: (index: number) => void;
+  readonly onSongMenu: (row: BrowseRow, event: MouseEvent<HTMLElement>) => void;
+  readonly onError: () => void;
+  readonly children: ReactNode;
+}) {
+  const [albums, setAlbums] = useState<{ id: number; albums: ArtistAlbums }>();
+  useEffect(() => {
+    let current = true;
+    void window.wave.artistPage
+      .albums(artistId)
+      .then((read) => current && setAlbums({ id: artistId, albums: read }))
+      .catch(onError);
+    return () => {
+      current = false;
+    };
+  }, [artistId, revision, onError]);
+  const library = albums?.id === artistId ? albums.albums : { albums: [], appearsOn: [] };
+  const { view } = section;
+  const online = view?.toggle === "online" ? view : null;
+  const added = online?.albums ?? [];
+  const singles = online?.singles ?? [];
+  const songs = online?.songs.items ?? [];
+  return (
+    <div className="artist-page" data-testid="artist-page">
+      <Shelf
+        title={text.library.albums}
+        items={[...libraryTiles(library.albums), ...releaseTiles(added)]}
+        onOpen={(index) =>
+          index < library.albums.length
+            ? onAlbum(library.albums[index]!.id)
+            : onYtAlbum(added[index - library.albums.length]!.browseId)
+        }
+      />
+      <Shelf
+        title={text.library.singlesAndEps}
+        items={releaseTiles(singles)}
+        onOpen={(index) => onYtAlbum(singles[index]!.browseId)}
+      />
+      <Shelf
+        title={text.library.appearsOn}
+        items={libraryTiles(library.appearsOn)}
+        onOpen={(index) => onAlbum(library.appearsOn[index]!.id)}
+      />
+      <h2 className="artist-songs-heading">
+        {online?.popular ? text.library.popular : text.library.songs}
+      </h2>
+      {/* The table stays mounted under Popular: it reads the page's hero. */}
+      {online?.popular ? <div hidden>{children}</div> : children}
+      {songs.length > 0 && (
+        <YtSongList
+          songs={songs}
+          ranked={online?.popular ? online.ranked : 0}
+          label={online?.popular ? text.library.popular : labels.youTubeMusic}
+          onPlay={onPlayStreamed}
+          onMenu={onSongMenu}
+        />
+      )}
+      {online !== null && online.songs.total > songs.length && (
+        <button className="artist-more" onClick={section.more}>
+          {text.desktopLibrary.showMoreSongs}
+        </button>
+      )}
+      {online?.note && (
+        <p className="yt-quiet secondary" role="status" data-testid="artist-online-note">
+          {noteText(online.note)}
+        </p>
+      )}
+    </div>
+  );
+}
+
+/**
+ * An album hero's artist line: a link to the artist's page, or with several credited, to a
+ * choice of them. Plain text while the credit names no Library artist.
+ */
+export function AlbumArtistLink({
+  albumId,
+  credit,
+  onArtist,
+  onChoose,
+}: {
+  readonly albumId: number;
+  readonly credit: string;
+  readonly onArtist: (id: number) => void;
+  readonly onChoose: (items: readonly MenuItem[], element: Element) => void;
+}) {
+  const [read, setRead] = useState<{ id: number; artists: readonly CreditedArtist[] }>();
+  useEffect(() => {
+    let current = true;
+    void window.wave.artistPage
+      .albumArtists(albumId)
+      .then(({ artists }) => current && setRead({ id: albumId, artists }))
+      .catch(() => current && setRead({ id: albumId, artists: [] }));
+    return () => {
+      current = false;
+    };
+  }, [albumId]);
+  const artists = read?.id === albumId ? read.artists : [];
+  if (artists.length === 0) return <p className="hero-artist">{credit}</p>;
+  return (
+    <p className="hero-artist">
+      <button
+        className="hero-artist-link"
+        title={text.itemActions.labels.goToArtist}
+        onClick={(event) =>
+          artists.length === 1
+            ? onArtist(artists[0]!.id)
+            : onChoose(
+                artists.map((artist) => ({
+                  key: `artist-${artist.id}`,
+                  label: artist.name,
+                  run: () => onArtist(artist.id),
+                })),
+                event.currentTarget,
+              )
+        }
+      >
+        {credit}
+      </button>
+    </p>
+  );
+}

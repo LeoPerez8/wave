@@ -16,7 +16,7 @@ import { LibraryStore } from "@/library/LibraryStore";
 import { appRuntime } from "@/library/runtime";
 import { online } from "@/native/waveNative";
 import type { NativeYtRelated, NativeYtSong } from "@/native/waveYtMusic";
-import { artistOpeningRequest } from "@/ytmusic/artistOpeningRequest";
+import { artistOpeningRequest } from "@wave/client/ytArtistFetch";
 import { askYtMusic } from "@/ytmusic/askYtMusic";
 import { withSearchTurn } from "@/ytmusic/searchAllowance";
 

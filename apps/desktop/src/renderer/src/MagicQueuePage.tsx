@@ -2,8 +2,9 @@ import { useEffect, useState, type MouseEvent } from "react";
 import type { BrowseRow } from "../../shared/browse.ts";
 import type { QueueRow } from "../../shared/playerView.ts";
 import type { MagicQueueView } from "../../shared/ytPages.ts";
-import { MagicQueueRow } from "./Discover.tsx";
+import { MagicQueueRow, useMagicQueuePicks } from "./Discover.tsx";
 import { labels, text } from "./text.ts";
+import { useOnline } from "./useOnline.ts";
 import { YtQuiet, YtSongList } from "./YtLists.tsx";
 
 type Run = (action: Promise<unknown>) => void;
@@ -12,21 +13,6 @@ type Run = (action: Promise<unknown>) => void;
 const LOADING_POLL_MS = 1000;
 /** Up Next as the page lists it. */
 const UP_NEXT = 200;
-
-/** Whether the computer is online, as Chromium sees it. */
-export const useOnline = () => {
-  const [online, setOnline] = useState(navigator.onLine);
-  useEffect(() => {
-    const update = () => setOnline(navigator.onLine);
-    addEventListener("online", update);
-    addEventListener("offline", update);
-    return () => {
-      removeEventListener("online", update);
-      removeEventListener("offline", update);
-    };
-  }, []);
-  return online;
-};
 
 /**
  * The Magic Queue (story 29a): what it grows from, Up Next with its recommendations, and how
@@ -44,6 +30,7 @@ export function MagicQueuePage({
   readonly onSongMenu: (row: BrowseRow, event: MouseEvent<HTMLElement>) => void;
 }) {
   const online = useOnline();
+  const picks = useMagicQueuePicks();
   const [view, setView] = useState<MagicQueueView>();
   const [upNext, setUpNext] = useState<readonly QueueRow[]>([]);
   const [tick, setTick] = useState(0);
@@ -86,7 +73,7 @@ export function MagicQueuePage({
         </p>
       ) : null}
       {title === null ? (
-        <MagicQueueRow run={run} />
+        <MagicQueueRow picks={picks} run={run} />
       ) : (
         <>
           <h2>{text.playbackText.upNext}</h2>
