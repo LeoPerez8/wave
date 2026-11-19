@@ -20,13 +20,8 @@
     "lint": "oxlint --quiet ."
   },
   "dependencies": {
-    "@wave/client": "workspace:*",
-    "@wave/core": "workspace:*",
     "better-sqlite3": "13.2.0",
-    "drizzle-orm": "0.45.4",
-    "effect": "4.0.2",
-    "react": "19.3.0",
-    "react-dom": "19.3.0"
+    "electron-updater": "6.8.11"
   },
   "devDependencies": {
     "@playwright/test": "1.65.1",
@@ -36,9 +31,16 @@
     "@types/react": "19.3.0",
     "@types/react-dom": "19.3.0",
     "@vitejs/plugin-react": "6.3.0",
+    "@wave/client": "workspace:*",
+    "@wave/core": "workspace:*",
+    "drizzle-orm": "0.45.4",
+    "effect": "4.0.2",
     "electron": "45.3.4",
+    "electron-builder": "26.18.0",
     "electron-vite": "6.0.0",
     "oxlint": "^1.0.0",
+    "react": "19.3.0",
+    "react-dom": "19.3.0",
     "tailwindcss": "4.3.5",
     "typescript": "catalog:",
     "vite": "8.3.8"

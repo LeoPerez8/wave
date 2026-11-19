@@ -1,3 +1,4 @@
+import { VersionHistory } from "./VersionHistory.tsx";
 import { Links } from "./Links.tsx";
 import { listDuration, readThemeChoice, themeFor, type SearchOnline } from "@wave/core";
 import {
@@ -853,6 +854,8 @@ export function App() {
                 <PlaybackSettings onError={failed} />
               ) : setting === "window" ? (
                 <WindowSettings onError={failed} />
+              ) : setting === "versionHistory" ? (
+                <VersionHistory />
               ) : setting === "downloads" ? (
                 <DownloadSettings onError={failed} />
               ) : setting === "lyricsAndTags" ? (

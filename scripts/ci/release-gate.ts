@@ -41,6 +41,7 @@ const EVIDENCE = ["secret-scan", "checks", "native-tests", "notes", "android"] a
 type Outputs = Record<string, string>;
 
 export type Provenance = {
+  desktop?: import("../../apps/updates/src/desktopEvidence.ts").DesktopEvidence;
   schema: "wave-release-provenance/1";
   /** The commit everything below was checked, scanned and built from. */
   source: string;

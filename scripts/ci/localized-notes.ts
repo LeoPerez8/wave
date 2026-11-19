@@ -25,8 +25,11 @@ const PORTUGUESE_LINE = /^[ \t]*pt-BR:[ \t]*(\S.*?)[ \t]*$/m;
 export const portugueseNote = (body: string): string | null =>
   PORTUGUESE_LINE.exec(body)?.[1] ?? null;
 
-export const localizedNotes = (input: PatchNotesInput): { en: Sections; "pt-BR": Sections } => {
-  const sections = notesSections(input);
+export const localizedNotes = (
+  input: PatchNotesInput,
+  target: "android" | "desktop" = "android",
+): { en: Sections; "pt-BR": Sections } => {
+  const sections = notesSections(input, target);
   const inLanguage = (note: (pr: MergedPr) => string): Sections => ({
     new: sections.new.map(note),
     fixes: sections.fixes.map(note),
@@ -44,18 +47,21 @@ export const needsPortugueseNote = (pr: Pick<MergedPr, "body" | "files">): boole
 if (process.argv[1] === fileURLToPath(import.meta.url)) {
   const lines = (text: string) => text.split(/\r?\n/).filter(Boolean);
   const stdin = readFileSync(0, "utf8");
-  const [first = "", second = ""] = process.argv.slice(2);
+  const [first = "", second = "", target] = process.argv.slice(2);
   if (first === "--needs-note") {
     const files = lines(readFileSync(second, "utf8"));
     console.log(needsPortugueseNote({ body: stdin, files }) ? "yes" : "no");
   } else {
     console.log(
       JSON.stringify(
-        localizedNotes({
-          commits: lines(readFileSync(first, "utf8")),
-          bugIssues: lines(readFileSync(second, "utf8")).map(Number),
-          pullRequests: lines(stdin).map(parseMergedPr),
-        }),
+        localizedNotes(
+          {
+            commits: lines(readFileSync(first, "utf8")),
+            bugIssues: lines(readFileSync(second, "utf8")).map(Number),
+            pullRequests: lines(stdin).map(parseMergedPr),
+          },
+          target === "desktop" ? "desktop" : "android",
+        ),
       ),
     );
   }

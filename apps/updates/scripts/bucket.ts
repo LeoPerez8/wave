@@ -5,12 +5,12 @@ import { execFileSync } from "node:child_process";
 import { mkdtempSync, readFileSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import type { UpdateBucket } from "../src/release.ts";
+import type { DesktopBucket } from "../src/desktopPublish.ts";
 
 const BUCKET = "wave-updates";
 
 const wrangler = (...args: readonly string[]) => {
-  const { UPDATES_SIGNING_KEY: _, ...env } = process.env;
+  const { UPDATES_SIGNING_KEY: _, WAVE_DESKTOP_UPDATE_SIGNING_KEY: _desktop, ...env } = process.env;
   return execFileSync("npx", ["--yes", "wrangler@4", "r2", "object", ...args, "--remote"], {
     env,
     stdio: ["ignore", "ignore", "pipe"],
@@ -18,9 +18,13 @@ const wrangler = (...args: readonly string[]) => {
   });
 };
 
-export const wranglerBucket = (): UpdateBucket => {
+export const wranglerBucket = (): DesktopBucket => {
   const temp = join(mkdtempSync(join(tmpdir(), "wave-updates-")), "object");
   return {
+    putFile: async (key: string, path: string, contentType: string) => {
+      console.log(`Uploading ${key}`);
+      wrangler("put", `${BUCKET}/${key}`, "--file", path, "--content-type", contentType);
+    },
     put: async (key, data, contentType) => {
       writeFileSync(temp, data);
       console.log(`Uploading ${key} (${data.length} bytes)`);

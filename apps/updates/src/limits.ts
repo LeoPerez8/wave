@@ -7,7 +7,7 @@
 import { sha256Hex } from "@wave/core";
 
 /** The routes counted, each on its own. */
-export type CountedRoute = "manifest" | "notes" | "apk" | "assets";
+export type CountedRoute = "manifest" | "notes" | "apk" | "assets" | "desktop" | "desktop-file";
 
 /**
  * Answers per address, route and UTC day. The app checks at most once every 15 minutes, 96 times
@@ -19,6 +19,8 @@ export const DAILY_LIMITS: Readonly<Record<CountedRoute, number>> = {
   notes: 30,
   apk: 100,
   assets: 30,
+  desktop: 100,
+  "desktop-file": 2000,
 };
 
 /**
