@@ -33,6 +33,10 @@ shape='{
   issues: [.closingIssuesReferences.nodes[].number]
 }'
 
+# A PR with more files than the query lists comes with files null; merged-prs.ts asks GitHub's
+# REST API for them all, to tell a desktop PR (patch-notes.ts).
+complete_files() { node "$here/merged-prs.ts" --complete-files "$repo"; }
+
 found="$(gh api graphql --paginate -f q="repo:$repo is:pr is:merged merged:>=$from" -f query="
   query(\$q: String!, \$endCursor: String) {
     search(query: \$q, type: ISSUE, first: 50, after: \$endCursor) {
@@ -42,7 +46,8 @@ found="$(gh api graphql --paginate -f q="repo:$repo is:pr is:merged merged:>=$fr
   }" --jq ".data.search.nodes[] | $shape")"
 tmp="$(mktemp -d)"
 trap 'rm -rf "$tmp"' EXIT
-if [ -n "$found" ]; then printf '%s\n' "$found" | tee "$tmp/found.jsonl"; else : > "$tmp/found.jsonl"; fi
+if [ -n "$found" ]; then printf '%s\n' "$found" > "$tmp/found.jsonl"; else : > "$tmp/found.jsonl"; fi
+complete_files < "$tmp/found.jsonl"
 
 # The search can lag a minute or more behind a merge, so it may not have the PR this push
 # merged yet. Every PR merged into <head>'s branch lands on its first-parent line: ask
@@ -60,6 +65,6 @@ while read -r sha; do
     gh api graphql -f owner="$owner" -f name="$name" -F number="$number" -f query="
       query(\$owner: String!, \$name: String!, \$number: Int!) {
         repository(owner: \$owner, name: \$name) { pullRequest(number: \$number) { $fields } }
-      }" --jq ".data.repository.pullRequest | $shape"
+      }" --jq ".data.repository.pullRequest | $shape" | complete_files
   done
 done < "$tmp/unclaimed.txt"

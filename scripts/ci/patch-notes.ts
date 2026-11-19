@@ -6,7 +6,7 @@
 import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 
-import { reachesUsers } from "./changes.ts";
+import { isDesktopChange, reachesUsers } from "./changes.ts";
 
 export type MergedPr = {
   number: number;
@@ -76,10 +76,11 @@ const closedIssues = (pr: MergedPr) => [
 ];
 
 // Users see what changes the APK or the sync service. A PR that changes only CI, docs or
-// specs (by the change rule) isn't news to them. `files` is null when GitHub couldn't list
+// specs (by the change rule) isn't news to them, and the desktop's PRs aren't the phone's
+// news, even with the shared code they change. `files` is null when GitHub couldn't list
 // them all.
 export const isListed = (pr: Pick<MergedPr, "files">) =>
-  pr.files === null || reachesUsers(pr.files);
+  pr.files === null || (!isDesktopChange(pr.files) && reachesUsers(pr.files));
 
 // A title is plain text with `code` in it: Markdown would drop "<version>" as an HTML
 // tag and let brackets end the link early.

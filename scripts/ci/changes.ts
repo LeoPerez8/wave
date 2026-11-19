@@ -99,6 +99,16 @@ export const reachesUsers = (paths: readonly string[]): boolean => {
   return touched.app || touched.core || touched.sync || touched.workspace;
 };
 
+// What only the desktop is made of, by prefix: its app, its JVM's entry point and its own UI text.
+const DESKTOP_PREFIXES = [...DESKTOP_ONLY, "packages/core/src/catalogue/desktop"];
+
+/**
+ * Whether a change is the desktop's: it touches something only the desktop is made of. Shared
+ * code it changes along the way is there for the desktop, so the phone's notes leave it out.
+ */
+export const isDesktopChange = (paths: readonly string[]): boolean =>
+  paths.some((path) => DESKTOP_PREFIXES.some((prefix) => path.startsWith(prefix)));
+
 if (process.argv[1] === fileURLToPath(import.meta.url)) {
   const result = process.argv.includes("--all")
     ? decide(() => true)
