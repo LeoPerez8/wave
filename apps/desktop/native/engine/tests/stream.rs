@@ -363,6 +363,8 @@ struct Gated {
     inner: Memory,
     held: Mutex<Vec<String>>,
     released: std::sync::Condvar,
+    asked: Mutex<Vec<String>>,
+    was_asked: std::sync::Condvar,
 }
 
 impl Gated {
@@ -371,6 +373,19 @@ impl Gated {
             inner,
             held: Mutex::new(held.iter().map(|key| (*key).to_owned()).collect()),
             released: std::sync::Condvar::new(),
+            asked: Mutex::new(Vec::new()),
+            was_asked: std::sync::Condvar::new(),
+        }
+    }
+
+    /// Waits until a fetch of `key` has been asked for.
+    fn wait_asked(&self, key: &str) {
+        let mut asked = self.asked.lock().unwrap();
+        while !asked.iter().any(|it| it == key) {
+            let (next, timeout) =
+                self.was_asked.wait_timeout(asked, Duration::from_secs(10)).unwrap();
+            assert!(!timeout.timed_out(), "{key} was never asked for");
+            asked = next;
         }
     }
 
@@ -383,6 +398,8 @@ impl Gated {
 impl Fetcher for Gated {
     fn fetch(&self, address: &StreamAddress, start: u64, end: u64) -> Result<Fetched, FetchError> {
         let key = format!("{}@{start}", address.url);
+        self.asked.lock().unwrap().push(key.clone());
+        self.was_asked.notify_all();
         let mut held = self.held.lock().unwrap();
         while held.contains(&key) {
             held = self.released.wait(held).unwrap();
@@ -404,6 +421,7 @@ fn a_stopped_download_leaves_the_file_of_the_one_started_after_it() {
     let length = Some(song().len() as u64);
     // Two newer songs stop the first one's download while its fetch is still out.
     streams.start(ID, address("old", length));
+    fetcher.wait_asked("old@0");
     streams.start("bbbbbbbbbbb", address("b", length));
     streams.start("ccccccccccc", address("c", length));
     assert_eq!(streams.state(ID), StreamState::Failed);
