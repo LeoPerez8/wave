@@ -26,6 +26,8 @@ const appFolder = join(import.meta.dirname, "..");
 type Wave = { wave: WaveBridge & { tags: { read: (path: string) => Promise<SongTags> } } };
 const downloads = (page: Page) =>
   page.evaluate(() => (window as unknown as Wave).wave.downloads.view()) as Promise<DownloadsView>;
+/** Main checks the connection every 3 s, once its services are up; a slow runner needs more. */
+const ONLINE_WAIT = { timeout: 15_000 };
 
 /** The audio files under [folder], at any depth. */
 const audioFiles = (folder: string): string[] =>
@@ -55,7 +57,7 @@ test("a missing Search song waits offline and resumes its download instead of pl
     await app.evaluate(({ net }) => {
       net.isOnline = () => false;
     });
-    await expect.poll(async () => (await downloads(page)).online).toBe(false);
+    await expect.poll(async () => (await downloads(page)).online, ONLINE_WAIT).toBe(false);
     await page.getByRole("searchbox", { name: "Search" }).fill("Missing Road");
     const row = page.getByTestId("search-song");
     // A missing song is dimmed, not marked as broken, and a double-click downloads it.
@@ -91,7 +93,7 @@ test("a missing Search song waits offline and resumes its download instead of pl
     await app.evaluate(({ net }) => {
       net.isOnline = () => true;
     });
-    await expect.poll(async () => (await downloads(page)).online).toBe(true);
+    await expect.poll(async () => (await downloads(page)).online, ONLINE_WAIT).toBe(true);
     // With no source enabled, the resumed job fails and remains available to retry.
     await expect.poll(async () => (await downloads(page)).failed).toBe(1);
   } finally {
@@ -120,7 +122,7 @@ test("a missing song's tile on Home shows its state and its download, as its row
     await app.evaluate(({ net }) => {
       net.isOnline = () => false;
     });
-    await expect.poll(async () => (await downloads(page)).online).toBe(false);
+    await expect.poll(async () => (await downloads(page)).online, ONLINE_WAIT).toBe(false);
     const tile = page
       .getByTestId("home")
       .locator('[data-section="favorites"]')
@@ -211,7 +213,7 @@ test("missing favorites queue at startup and when starred from Songs", async () 
     await app.evaluate(({ net }) => {
       net.isOnline = () => false;
     });
-    await expect.poll(async () => (await downloads(page)).online).toBe(false);
+    await expect.poll(async () => (await downloads(page)).online, ONLINE_WAIT).toBe(false);
     const titles = () =>
       page.evaluate(async () =>
         (await (window as unknown as Wave).wave.downloads.rows(0, 10)).items.map(
