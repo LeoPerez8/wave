@@ -133,8 +133,8 @@ test("with YT Music on, an artist's page offers Online and shows what YouTube Mu
           : await note.innerText(),
     });
     await page.screenshot({ path: "test-results/artist-page-online.png" });
-    // The Library's own shelves and songs stay.
-    await expect(artist.getByRole("row", { name: /Hazey Jane II/ })).toBeVisible();
+    // The Library's own shelves and songs stay: in the table, or in the Popular list.
+    await expect(artist.getByText("Hazey Jane II").locator("visible=true").first()).toBeVisible();
     await library.click();
     await expect(artist.locator(".yt-list")).toHaveCount(0);
   } finally {

@@ -143,7 +143,9 @@ const releaseTiles = (releases: ArtistSectionView["albums"]): TileItem[] =>
 /**
  * The artist page's content: the album shelves (Albums, with the releases YouTube Music adds
  * after the Library's; Singles & EPs; Appears on), the Library's songs ([children], the songs
- * table) and, with Online, the songs YouTube Music adds. The page scrolls as one.
+ * table) and, with Online, the songs YouTube Music adds. Once the artist's list is known,
+ * Online shows them all as one Popular list in YouTube Music's order, each ranked song led by
+ * its rank, in place of the table. The page scrolls as one.
  */
 export function ArtistPage({
   artistId,
@@ -204,12 +206,16 @@ export function ArtistPage({
         items={libraryTiles(library.appearsOn)}
         onOpen={(index) => onAlbum(library.appearsOn[index]!.id)}
       />
-      <h2 className="artist-songs-heading">{text.library.songs}</h2>
-      {children}
+      <h2 className="artist-songs-heading">
+        {online?.popular ? text.library.popular : text.library.songs}
+      </h2>
+      {/* The table stays mounted under Popular: it reads the page's hero. */}
+      {online?.popular ? <div hidden>{children}</div> : children}
       {songs.length > 0 && (
         <YtSongList
           songs={songs}
-          label={labels.youTubeMusic}
+          ranked={online?.popular ? online.ranked : 0}
+          label={online?.popular ? text.library.popular : labels.youTubeMusic}
           onPlay={onPlayStreamed}
           onMenu={onSongMenu}
         />

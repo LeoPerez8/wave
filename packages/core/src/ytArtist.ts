@@ -1006,3 +1006,15 @@ export function* libraryArtistFinderSteps<A extends { readonly name: string }>(
   return (name) =>
     ytArtistQuery(name) === null ? null : (byName.get(artistPhotoName(name)) ?? null);
 }
+
+/**
+ * The artist's saved Popular list: every song of theirs in YouTube Music's order, or null
+ * while it's being read or when no answer with the full list is saved. It is local, so it
+ * holds offline, with YT Music off or with Library selected.
+ */
+export const artistPopularSongs = <S extends YtSong>(
+  state: YtArtistSection<S>,
+): readonly S[] | null => {
+  const saved = state.status === "reading" ? null : state.saved;
+  return saved?.outcome === "found" ? (saved.page.allSongs ?? null) : null;
+};

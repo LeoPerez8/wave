@@ -128,6 +128,7 @@ test("Online shows every song and release of the artist the Library lacks, saved
     assert.deepEqual(
       view.songs.items.map((row) => [row.title, row.videoId]),
       [
+        ["Glory Box", undefined],
         ["Roads", "roads00001"],
         ["Machine Gun", "machinegun"],
       ],
@@ -149,9 +150,9 @@ test("Online shows every song and release of the artist the Library lacks, saved
     assert.equal(reopened.toggle, "online");
     assert.deepEqual(
       reopened.songs.items.map((row) => row.title),
-      ["Roads"],
+      ["Glory Box"],
     );
-    assert.equal(reopened.songs.total, 2);
+    assert.equal(reopened.songs.total, 3);
     assert.deepEqual(again.asked, []);
     assert.ok(again.kept.includes("machinegun"));
   }));
@@ -207,18 +208,57 @@ test("with YT Music off, or for Unknown Artist, the page has no section", () =>
     assert.equal(sectionOver(db).section.view(unknown, null, 0, 50), null);
   }));
 
-test("Play takes the Library's songs, then, with Online, the ones YouTube Music adds", () =>
+test("with Online the songs are one Popular list in YouTube Music's order, and Play follows it", () =>
   inLibrary(async (db) => {
+    // Sour Times isn't on YouTube Music's list; Machine Gun is its third song and a Library file.
+    addTrack(db, {
+      title: "Sour Times",
+      artist: "Portishead",
+      album: "Dummy",
+      durationMs: 250_000,
+    });
+    addTrack(db, {
+      title: "Machine Gun",
+      artist: "Portishead",
+      album: "Third",
+      durationMs: 240_000,
+    });
     const id = seedPortishead(db);
     const { section } = sectionOver(db);
-    const glory = browseLibrary(db, { kind: "artist", id }, 0, 10).items[0]!.id;
+    const libraryIds = new Map(
+      browseLibrary(db, { kind: "artist", id }, 0, 10).items.map((row) => [row.title, row.id]),
+    );
+    const inLibraryOrder = browseLibrary(db, { kind: "artist", id }, 0, 10).items.map((row) =>
+      String(row.id),
+    );
 
-    assert.deepEqual(section.queue(id, "library"), [String(glory)]);
+    const before = section.view(id, "library", 0, 50)!;
+    assert.equal(before.popular, false);
+    assert.equal(before.songs.total, 0);
+    assert.deepEqual(section.queue(id, "library"), { ids: inLibraryOrder, listStart: 3 });
+
     await section.ask(id);
-    assert.deepEqual(section.queue(id, "online"), [
-      String(glory),
-      "yt:roads00001",
-      "yt:machinegun",
-    ]);
-    assert.deepEqual(section.queue(id, "library"), [String(glory)]);
+    const view = section.view(id, "online", 0, 50)!;
+
+    assert.equal(view.popular, true);
+    assert.deepEqual(
+      view.songs.items.map((row) => [row.title, row.videoId ?? row.id]),
+      [
+        ["Glory Box", libraryIds.get("Glory Box")],
+        ["Roads", "roads00001"],
+        ["Machine Gun", libraryIds.get("Machine Gun")],
+        ["Sour Times", libraryIds.get("Sour Times")],
+      ],
+    );
+    assert.equal(view.ranked, 3, "Sour Times follows the ranked songs with no rank");
+    assert.deepEqual(section.queue(id, "online"), {
+      ids: [
+        String(libraryIds.get("Glory Box")),
+        "yt:roads00001",
+        String(libraryIds.get("Machine Gun")),
+        String(libraryIds.get("Sour Times")),
+      ],
+      listStart: 0,
+    });
+    assert.deepEqual(section.queue(id, "library"), { ids: inLibraryOrder, listStart: 3 });
   }));

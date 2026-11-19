@@ -13,6 +13,8 @@ import { selectYtArtist, saveYtArtist } from "@wave/client/db/ytArtists";
 import { fetchArtistAnswer } from "@wave/client/ytArtistFetch";
 import {
   YT_ARTIST_SECTION_START,
+  artistPopularSongs,
+  artistSongOrder,
   identityKey,
   libraryAlbumFinder,
   libraryMatcher,
@@ -34,7 +36,7 @@ import * as Result from "effect/Result";
 
 import type { ArtistSectionView } from "../../shared/artistPage.ts";
 import { ytRow } from "../../shared/yt.ts";
-import { browseTrackIds } from "../library/browse.ts";
+import { browseSongs, browseTrackIds } from "../library/browse.ts";
 
 export interface ArtistSectionDeps {
   readonly db: LibraryDatabase;
@@ -63,8 +65,14 @@ export interface ArtistSectionShape {
   ) => ArtistSectionView | null;
   /** Asks YouTube Music for the artist and saves the answer; never rejects. */
   readonly ask: (artistId: number) => Promise<void>;
-  /** The queue Play makes: the Library's songs, then with Online the songs it adds. */
-  readonly queue: (artistId: number, pick: YtPick | null) => string[];
+  /**
+   * The queue Play makes: the Library's songs, or with Online the page's Popular list.
+   * `listStart` is where the section's `songs` begin in it.
+   */
+  readonly queue: (
+    artistId: number,
+    pick: YtPick | null,
+  ) => { readonly ids: string[]; readonly listStart: number };
 }
 
 type Section = YtArtistSection<YtAlbumSong>;
@@ -120,6 +128,28 @@ export const createArtistSection = (deps: ArtistSectionDeps): ArtistSectionShape
     return view === null ? null : { name, state, context, view };
   };
 
+  /**
+   * With Online and the artist's full list saved, the page's songs as one list: the Library's
+   * files and the songs YouTube Music adds, in its order (`artistSongOrder`). Null otherwise.
+   */
+  const popularList = (artistId: number, found: NonNullable<ReturnType<typeof shown>>) => {
+    if (found.view.toggle !== "online") return null;
+    const popular = artistPopularSongs(found.state);
+    if (popular === null) return null;
+    const library = browseSongs(
+      db,
+      browseTrackIds(db, { kind: "artist", id: artistId }).map(Number),
+    );
+    return artistSongOrder(
+      [
+        ...library.map((track) => ({ source: "library" as const, track })),
+        ...found.view.songs.map((song) => ({ source: "stream" as const, song })),
+      ],
+      popular,
+      { sort: "popular", online: true },
+    );
+  };
+
   return {
     view: (artistId, pick, offset, limit) => {
       const found = shown(artistId, pick);
@@ -133,15 +163,17 @@ export const createArtistSection = (deps: ArtistSectionDeps): ArtistSectionShape
           .flatMap((shelf) => shelf.releases)
           .filter((release) => release.library === null)
           .map((release) => release.album);
+      const list = popularList(artistId, found);
+      const rows =
+        list?.map((row) => (row.source === "library" ? row.track : ytRow(row.song))) ??
+        view.songs.map(ytRow);
       return {
         toggle: view.toggle,
         note: view.note,
         asks: ytArtistSectionAsks(state, context),
-        songs: {
-          items: view.songs.slice(offset, offset + limit).map(ytRow),
-          offset,
-          total: view.songs.length,
-        },
+        popular: list !== null,
+        ranked: list?.filter((row) => row.popularRank !== undefined).length ?? 0,
+        songs: { items: rows.slice(offset, offset + limit), offset, total: rows.length },
         albums: lacking("albums"),
         singles: lacking("singles"),
       };
@@ -177,8 +209,19 @@ export const createArtistSection = (deps: ArtistSectionDeps): ArtistSectionShape
     queue: (artistId, pick) => {
       const library = browseTrackIds(db, { kind: "artist", id: artistId });
       const found = shown(artistId, pick);
-      if (found?.view.toggle !== "online") return library;
-      return [...library, ...found.view.songs.map((song) => ytTrackId(song.videoId))];
+      if (found?.view.toggle !== "online") return { ids: library, listStart: library.length };
+      const list = popularList(artistId, found);
+      if (list !== null)
+        return {
+          ids: list.map((row) =>
+            row.source === "library" ? String(row.track.id) : ytTrackId(row.song.videoId),
+          ),
+          listStart: 0,
+        };
+      return {
+        ids: [...library, ...found.view.songs.map((song) => ytTrackId(song.videoId))],
+        listStart: library.length,
+      };
     },
   };
 };

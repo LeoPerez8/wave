@@ -245,7 +245,7 @@ test("a settled offline Online page shows the offline note without entering the 
 });
 
 test("real-store opening keeps local order offline, then saves one fake-YT answer and reuses its Popular order offline", async () => {
-  const { artistPopularSongs } = await import("./artistOpeningRead.ts");
+  const { artistPopularSongs } = await import("@wave/core");
   const { fetchArtistAnswer } = await import("@wave/client/ytArtistFetch");
   const { artistOpeningRequest } = await import("@wave/client/ytArtistFetch");
   const Effect = await import("effect/Effect");

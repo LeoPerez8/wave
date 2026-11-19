@@ -1,4 +1,5 @@
 import {
+  artistPopularSongs,
   YT_ARTIST_SECTION_START,
   identityKey,
   inLibraryUnlessHeld,
@@ -47,7 +48,7 @@ import { useYtMusicEnabled } from "@/settings/ytMusic";
 
 import { artistOpeningRequest, fetchArtistAnswer } from "@wave/client/ytArtistFetch";
 import { readArtistPage } from "./candidateCatalog";
-import { artistPopularSongs, createArtistOpeningRead } from "./artistOpeningRead";
+import { createArtistOpeningRead } from "./artistOpeningRead";
 import { searchAllowanceSnapshot, withSearchTurn } from "./searchAllowance";
 import { libraryFinderForRows, useLoadedLibraryFinder, type FindInLibrary } from "./libraryFinder";
 import { useLineToggle } from "./OnlineToggle";

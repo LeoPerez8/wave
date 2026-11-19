@@ -34,12 +34,15 @@ export function YtSongList({
   onPlay,
   onMenu,
   accessory,
+  ranked = 0,
 }: {
   readonly songs: readonly BrowseRow[];
   readonly label: string;
   readonly onPlay: (index: number) => void;
   readonly onMenu?: (row: BrowseRow, event: MouseEvent<HTMLElement>) => void;
   readonly accessory?: (row: BrowseRow) => ReactNode;
+  /** How many of the first songs lead with their rank (1, 2, 3…) in place of the cover. */
+  readonly ranked?: number;
 }) {
   const [selected, setSelected] = useState<number>();
   return (
@@ -70,7 +73,11 @@ export function YtSongList({
           >
             <span className="title-cell">
               <span className="row-picture">
-                <Artwork hash={row.artworkHash} url={row.artworkUrl} />
+                {index < ranked ? (
+                  <span className="row-rank secondary">{index + 1}</span>
+                ) : (
+                  <Artwork hash={row.artworkHash} url={row.artworkUrl} />
+                )}
                 <span className="row-play">
                   <Icon name="play" size={16} />
                 </span>
