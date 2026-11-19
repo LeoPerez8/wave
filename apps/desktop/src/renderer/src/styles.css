@@ -48,8 +48,27 @@ body {
 }
 * {
   box-sizing: border-box;
-  scrollbar-width: thin;
-  scrollbar-color: var(--color-tertiary) transparent;
+}
+/* Wave's own scrollbar: a thin rounded thumb, no track and no arrow buttons, in every scroller. */
+::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+::-webkit-scrollbar-track,
+::-webkit-scrollbar-corner {
+  background: transparent;
+}
+::-webkit-scrollbar-thumb {
+  min-height: 32px;
+  border: 2px solid transparent;
+  border-radius: 4px;
+  background: var(--color-tertiary) padding-box;
+}
+::-webkit-scrollbar-thumb:hover {
+  background-color: var(--color-secondary);
+}
+::-webkit-scrollbar-button {
+  display: none;
 }
 ::selection {
   background: var(--color-fill);
@@ -134,9 +153,42 @@ input::placeholder {
   border-right: 1px solid var(--color-separator);
   display: flex;
   flex-direction: column;
-  padding: 18px 12px 12px;
+  /* The right padding leaves room for the scrollbar's gutter, so entries never shift. */
+  padding: 18px 4px 12px 12px;
   gap: 14px;
-  overflow: hidden;
+  /* One scroller for the whole sidebar; the search field and Settings stay in view. */
+  overflow: hidden auto;
+  scrollbar-gutter: stable;
+}
+.sidebar > .search-field,
+.sidebar > .settings-link {
+  position: sticky;
+  z-index: 1;
+  flex-shrink: 0;
+  background: var(--color-grouped);
+}
+.sidebar > .search-field {
+  top: 0;
+}
+.sidebar > .settings-link {
+  bottom: 0;
+}
+/* Covers the sidebar's padding beyond them, so entries scrolled past don't show there. */
+.sidebar > .search-field::before,
+.sidebar > .settings-link::after {
+  content: "";
+  position: absolute;
+  left: -12px;
+  right: -12px;
+  background: var(--color-grouped);
+}
+.sidebar > .search-field::before {
+  bottom: 100%;
+  height: 18px;
+}
+.sidebar > .settings-link::after {
+  top: 100%;
+  height: 12px;
 }
 .search-field {
   display: flex;
@@ -184,9 +236,10 @@ input::placeholder {
   padding: 18px 10px 8px;
 }
 .sidebar-playlists {
-  flex: 1;
-  min-height: 0;
-  overflow: auto;
+  flex-shrink: 0;
+}
+.nav-monogram {
+  display: none;
 }
 .sidebar-playlists .nav-heading {
   padding-top: 0;
@@ -725,7 +778,7 @@ h2 {
     font-size: 13px;
   }
   .sidebar {
-    padding-inline: 8px;
+    padding-inline: 8px 0;
   }
   .nav-item {
     justify-content: center;
@@ -735,12 +788,26 @@ h2 {
   .nav-heading {
     display: none;
   }
+  /* A playlist shows its first letter, so the icon-only sidebar tells playlists apart. */
+  .nav-item > .nav-monogram {
+    display: grid;
+    place-items: center;
+    width: 22px;
+    height: 22px;
+    border-radius: 5px;
+    background: var(--color-fill);
+    color: var(--color-secondary);
+    font-size: 11px;
+    font-weight: 600;
+  }
+  .nav-item:has(> .nav-monogram) svg {
+    display: none;
+  }
   .search-field {
     border: 0;
     padding: 0;
     height: 34px;
     justify-content: center;
-    position: relative;
   }
   .search-field input {
     position: absolute;
@@ -749,16 +816,23 @@ h2 {
     inset: 0;
     cursor: text;
   }
+  /* Ctrl+F opens the field in the title bar, after Back and Forward, over no page title. */
   .search-field:focus-within {
     position: fixed;
-    left: 8px;
-    top: 65px;
-    width: 220px;
+    left: calc(var(--sidebar-width) + 116px);
+    top: 7px;
+    width: 260px;
+    app-region: no-drag;
+    outline: 2px solid var(--color-accent);
     background: var(--color-surface);
     z-index: 5;
     padding: 0 8px;
   }
+  .search-field:focus-within::before {
+    display: none;
+  }
   .search-field:focus-within input {
+    outline: none;
     position: static;
     opacity: 1;
     width: 100%;
