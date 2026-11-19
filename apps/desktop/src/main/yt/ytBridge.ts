@@ -2,7 +2,7 @@
  * Main's side of the bridge for YouTube Music's pages, Discover and the Magic Queue
  * (`YtFeatures`): each call's arguments are checked before use, and songs go back as rows.
  */
-import { discoverMixCaption, ytTrackId, type YtAlbumSong } from "@wave/core";
+import { discoverMixCaption, isSliderStep, ytTrackId, type YtAlbumSong } from "@wave/core";
 import * as Effect from "effect/Effect";
 
 import type { BridgeCall, BridgeContract, Page } from "../../shared/bridge.ts";
@@ -60,12 +60,10 @@ const rows = (songs: readonly YtAlbumSong[]): Page<BrowseRow> => {
   return { items, offset: 0, total: items.length };
 };
 
-const sliderStep = (value: unknown): boolean =>
-  typeof value === "number" && Number.isInteger(value) && value >= 1 && value <= 5;
 const discoverSettings = (value: unknown): value is DiscoverSettings => {
   if (typeof value !== "object" || value === null) return false;
   const { level, faithfulness, popularity } = value as Record<string, unknown>;
-  return sliderStep(level) && sliderStep(faithfulness) && sliderStep(popularity);
+  return isSliderStep(level) && isSliderStep(faithfulness) && isSliderStep(popularity);
 };
 
 export const createYtFeatureHandlers = (
