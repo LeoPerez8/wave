@@ -265,6 +265,12 @@ describe("desktop release publication", () => {
     assert.ok(needsOf("release").includes("sign-windows"));
     assert.match(job("release"), /needs\.sign-windows\.result == 'success'/);
     assert.match(job("release"), /desktop-release\.ts finalize-windows/);
+
+    const packager = readFileSync(
+      new URL("../../apps/desktop/scripts/package-release.ts", import.meta.url),
+      "utf8",
+    );
+    assert.match(packager, /differentialPackage: true/);
   });
 
   it("builds on the release source and keeps stable desktop publication behind its switch", () => {

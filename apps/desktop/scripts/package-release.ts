@@ -114,8 +114,8 @@ await build({
     nsis: {
       oneClick: true,
       perMachine: false,
-      // NSIS must leave the installer bytes alone until SignPath returns them.
-      ...(mode === "installer" ? { differentialPackage: false } : {}),
+      // Keep differential-friendly compression. Finalization replaces the unsigned blockmap.
+      differentialPackage: true,
     },
     linux: { category: "AudioVideo" },
     publish: { provider: "generic", url: UPDATES_ORIGIN, channel },
