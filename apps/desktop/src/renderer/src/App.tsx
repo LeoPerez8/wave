@@ -423,14 +423,20 @@ export function App() {
       );
   };
   /**
-   * Where a streamed song's artist and album names lead (docs/spec-desktop.md, story 41): their
-   * YouTube Music pages, over whatever shows, Now Playing included; Back comes back here.
+   * Where a streamed song's artist and album names lead (docs/spec-desktop.md, story 41): the
+   * Library's artist page for a name it has, as Go to Artist does, else their YouTube Music
+   * pages, over whatever shows, Now Playing included; Back comes back here.
    */
   const ytLinks = {
     onArtist: (name: string) => {
-      void window.wave.yt
-        .findArtist(name)
-        .then(({ browseId }) => {
+      void window.wave.streamed
+        .artist(name)
+        .then(async (target) => {
+          if (target.kind === "library") {
+            setNowPlaying(false);
+            return go({ kind: "artist", id: target.artist.id });
+          }
+          const { browseId } = await window.wave.yt.findArtist(name);
           if (browseId === null) return setError(text.library.couldntOpenArtist);
           setNowPlaying(false);
           go({ kind: "ytArtist", id: browseId });

@@ -1241,6 +1241,33 @@ test("Search finds YouTube Music songs and one plays from the results as a new q
   });
 });
 
+test("a streamed song's artist name leads to the Library's artist when it has that name", async () => {
+  await withFile(async (file) => {
+    const { runtime, exposed, handlers } = connect(file);
+    try {
+      const wave = exposed.get("wave") as WaveBridge;
+      await runtime.runPromise(
+        Effect.gen(function* () {
+          addTrack((yield* Database) as unknown as TestDatabase, {
+            title: "Road",
+            artist: "Nick Drake",
+          });
+        }),
+      );
+      const mine = await wave.streamed.artist("nick drake");
+      assert.equal(mine.kind, "library");
+      assert.equal(mine.kind === "library" && mine.artist.name, "Nick Drake");
+      assert.deepEqual(await wave.streamed.artist("John Martyn"), {
+        kind: "yt",
+        name: "John Martyn",
+      });
+      await assert.rejects(handlers.get("streamed.artist")!(trusted, 7));
+    } finally {
+      await runtime.dispose();
+    }
+  });
+});
+
 test("a streamed song has the phone's menu: star, playlist, download, its album and artist", async () => {
   await withFile(async (file) => {
     const { runtime, exposed, downloads, handlers } = connect(file);

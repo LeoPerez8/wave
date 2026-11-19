@@ -10,7 +10,12 @@ import {
 } from "../../shared/streamedSongs.ts";
 import { Downloads } from "../downloads/downloadsLayer.ts";
 import { Playback } from "../playback/playback.ts";
-import { runStreamedAction, streamedSongMenu, type StreamedSongPorts } from "./streamedSong.ts";
+import {
+  runStreamedAction,
+  streamedArtistTarget,
+  streamedSongMenu,
+  type StreamedSongPorts,
+} from "./streamedSong.ts";
 import { VIDEO_ID, YtMusic } from "./ytMusic.ts";
 
 type Call = (typeof STREAMED_CALLS)[number];
@@ -59,6 +64,10 @@ export const streamedHandlers = () => {
       typeof videoId === "string" && VIDEO_ID.test(videoId) && typeof playing === "boolean"
         ? withSong(videoId, (ports, song) => streamedSongMenu(ports, song, playing))
         : refuse("streamed.menu", "invalid song"),
+    "streamed.artist": ([name]) =>
+      typeof name === "string" && name.trim() !== ""
+        ? Effect.map(Database, (db) => streamedArtistTarget(db, name))
+        : refuse("streamed.artist", "invalid name"),
     "streamed.run": ([videoId, action, playlist]) =>
       typeof videoId === "string" &&
       VIDEO_ID.test(videoId) &&
