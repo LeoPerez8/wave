@@ -344,8 +344,8 @@ The prototype was approved on 2026-11-18 after an Impeccable critique; its decis
 - Space plays or pauses unless focus is on a button, link, switch or field. ↑/↓ move between rows
   when a list has focus and change the volume elsewhere.
 - Each list (table, queue, lyrics) is one tab stop with roving focus; Home, End, Page Up and Page
-  Down work in it. The scrubber is a slider: ←/→ seek 5 seconds, Home and End go to the start and
-  the end.
+  Down work in it. The scrubber is a slider: ←/→ and ↓/↑ seek 5 seconds back and forward, Home
+  and End go to the start and the end.
 - Every icon button has an accessible name.
 
 ### System integration
