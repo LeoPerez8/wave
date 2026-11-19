@@ -7,6 +7,7 @@ import {
   type QueueCommand,
   type QueueState,
   type SleepTimer,
+  type SongSearchKey,
   type YtAlbumSong,
 } from "@wave/core";
 import { createMagicQueue, type MagicQueueInput, type MagicQueueSong } from "./magicQueue.ts";
@@ -46,11 +47,13 @@ const radioPage = (page: number, size = 12): YtRadioRead => ({
 const setup = ({
   library = [getLucky, librarySong(2, "Instant Crush")],
   songRadio = async (): Promise<YtRadioRead> => radioPage(0),
+  findSong = async (): Promise<string | null> => null,
   online = true,
   continuation = (): MagicQueueInput | null => null,
 }: {
   readonly library?: readonly MagicQueueSong[];
   readonly songRadio?: (videoId: string) => Promise<YtRadioRead>;
+  readonly findSong?: (song: SongSearchKey) => Promise<string | null>;
   readonly online?: boolean;
   readonly continuation?: () => MagicQueueInput | null;
 } = {}) => {
@@ -73,7 +76,10 @@ const setup = ({
         return radioPage(Number(continuation.slice("more-".length)));
       },
       artistRadio: async () => radioPage(50),
-      findSong: async () => null,
+      findSong: (song) => {
+        asked.push(`findSong ${song.title}`);
+        return findSong(song);
+      },
       findArtist: async () => ({ status: "ok", browseId: null }),
     },
     ytMusic: () => true,
@@ -162,6 +168,25 @@ test("a YT Music song starts a Magic Queue of its own radio", async () => {
   assert.equal(queue().entries[0]?.trackId, ytTrackId(song.videoId));
   assert.equal(queue().entries.length, 1 + 9);
   assert.equal(asked[0], `songRadio ${song.videoId}`);
+});
+
+test("an official video (OMV) seed with an empty radio falls back to the searched song's radio", async () => {
+  const { magic, queue, asked } = setup({
+    // The OMV id's own radio comes back with just the seed; the searched recording's fills.
+    songRadio: async (videoId) =>
+      videoId === "omv1" ? { status: "ok", songs: [], continuation: null } : radioPage(0),
+    findSong: async () => "atv1",
+  });
+  const omv = { ...radioSong(900), videoId: "omv1", title: "Stressed Out" };
+  await magic.startStreamed(omv);
+  await magic.settled();
+  assert.equal(queue().entries[0]?.trackId, ytTrackId("omv1"));
+  assert.equal(queue().entries.length, 1 + 9);
+  assert.deepEqual(
+    asked,
+    ["songRadio omv1", "findSong Stressed Out", "songRadio atv1"],
+    asked.join(", "),
+  );
 });
 
 test("a queue at its last song goes on only once that song plays, as on the phone", async () => {

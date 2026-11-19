@@ -186,15 +186,29 @@ export const createMagicQueue = (deps: MagicQueueDeps): MagicQueueShape => {
         ? { status: artist.status, songs: [], continuation: null }
         : deps.pages.artistRadio(artist.browseId);
     };
-    if (seed.kind === "artist") return byArtist(seed.artists[0] ?? seed.title);
-    const videoId =
-      seed.videoId ??
-      (await deps.pages.findSong({
+    const search = (): Promise<string | null> =>
+      deps.pages.findSong({
         title: seed.title,
         artists: seed.artists,
         durationMs: seed.durationMs,
-      }));
-    return videoId === null ? byArtist(seed.artists[0]) : deps.pages.songRadio(videoId);
+      });
+    /** A read whose only song is the seed (or none) is no radio: nothing similar to play. */
+    const filled = (read: YtRadioRead): boolean => read.songs.length > 1;
+    if (seed.kind === "artist") return byArtist(seed.artists[0] ?? seed.title);
+    // The seed's own video is the best radio, but an official music video (OMV) id often has
+    // no song radio on YouTube Music: its RDAMVM… queue comes back with just the seed. When
+    // the video's radio is empty, fall back to the catalogue recording a search finds, then to
+    // the artist, so a magic queue still fills from an OMV seed.
+    const direct = seed.videoId === undefined ? null : await deps.pages.songRadio(seed.videoId);
+    if (direct !== null && (direct.status !== "ok" || filled(direct))) return direct;
+    const found = await search();
+    if (found !== null && found !== seed.videoId) {
+      const viaSearch = await deps.pages.songRadio(found);
+      if (viaSearch.status !== "ok" || filled(viaSearch)) return viaSearch;
+    }
+    const artist = await byArtist(seed.artists[0]);
+    if (artist.status !== "ok" || filled(artist)) return artist;
+    return direct ?? artist;
   };
 
   /**
