@@ -129,7 +129,6 @@ export const installDesktopSystem = (options: {
     process.platform === "win32" ? `file://${path}` : pathToFileURL(path).href;
   const refresh = () => {
     if (closed) return;
-    const text = options.text();
     const { current, status } = playback.view();
     const signature = JSON.stringify([
       status.key,
@@ -177,6 +176,13 @@ export const installDesktopSystem = (options: {
     }
     media.update();
     for (const command of native?.drain() ?? []) run(command);
+  };
+  // The tray menu is rebuilt apart from the media controls, so a failing system media service
+  // (no session bus, a broken MPRIS host) can't leave the tray stale or in the wrong language.
+  const refreshTray = () => {
+    if (closed) return;
+    const text = options.text();
+    const { current, status } = playback.view();
     const artist = current ? displayTag(current.artist, "artist", options.language()) : "";
     const menuKey = JSON.stringify([current?.title, artist, status.state, options.language()]);
     if (tray && menuKey !== lastMenu) {
@@ -209,6 +215,11 @@ export const installDesktopSystem = (options: {
       refresh();
     } catch {
       failed();
+    }
+    try {
+      refreshTray();
+    } catch {
+      console.warn("[system] Tray menu update failed.");
     }
   };
   const timer = setInterval(tick, 500);
