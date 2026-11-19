@@ -97,9 +97,9 @@ test("the frame: scrollbars, sidebar room and icons, the narrow window and the p
     await expect(playlists.getByRole("button", { name: labels.newPlaylist })).toBeInViewport({
       ratio: 1,
     });
-    expect(
-      await sidebar.evaluate((element) => element.scrollHeight - element.clientHeight),
-    ).toBe(0);
+    expect(await sidebar.evaluate((element) => element.scrollHeight - element.clientHeight)).toBe(
+      0,
+    );
 
     // Every page in the sidebar has its own icon, and playlists have theirs.
     await expect(sidebar.getByRole("button", { name: labels.discover, exact: true })).toBeVisible();
