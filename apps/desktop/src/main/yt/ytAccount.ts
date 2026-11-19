@@ -67,7 +67,7 @@ const libraryPlaylists = (value: unknown): YtLibraryPlaylist[] =>
   });
 
 /** The JVM's answer to a session call (`YtSessionState.toMap`), as Core's session. */
-export const readYtSession = (value: unknown): YtSession => {
+const readYtSession = (value: unknown): YtSession => {
   if (typeof value !== "object" || value === null) return { status: "signedOut" };
   const { status } = value as Record<string, unknown>;
   const account = readYtAccount((value as Record<string, unknown>)["account"]);

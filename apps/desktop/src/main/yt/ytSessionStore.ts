@@ -41,7 +41,7 @@ const stored = (value: unknown): StoredYtSession | null => {
 };
 
 /** Who [session] is signed in as, without its credentials. */
-export const ytSessionOf = (session: StoredYtSession | null): YtSession => {
+const ytSessionOf = (session: StoredYtSession | null): YtSession => {
   if (session === null) return { status: "signedOut" };
   const account = readYtAccount(session["account"]);
   if (session["expired"] === true) return { status: "expired", account };

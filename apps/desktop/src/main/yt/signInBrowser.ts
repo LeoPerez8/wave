@@ -35,7 +35,7 @@ const LINUX_COMMANDS = [
 ] as const;
 
 /** Where snaps put their commands; a snap is confined, so it is the last choice. */
-export const SNAP_BIN = "/snap/bin";
+const SNAP_BIN = "/snap/bin";
 
 /** The path of the browser to sign in with, or null when none is installed. */
 export const findSignInBrowser = ({ platform, env, exists }: BrowserSearch): string | null => {

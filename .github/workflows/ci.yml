@@ -1558,6 +1558,7 @@ jobs:
         if: needs.checks.outputs.release_tag != ''
         env:
           GH_TOKEN: ${{ github.token }}
+          DESKTOP_ADMITTED: ${{ needs.release-gate.outputs.desktop }}
           RELEASE_TAG: ${{ needs.checks.outputs.release_tag }}
           RELEASE_SHA: ${{ needs.release-gate.outputs.sha }}
           PATCH_NOTES: ${{ needs.notes.outputs.notes }}

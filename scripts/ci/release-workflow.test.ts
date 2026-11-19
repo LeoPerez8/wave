@@ -284,4 +284,12 @@ describe("desktop release publication", () => {
     assert.match(gate, /desktop-release\.ts admit/);
     assert.match(job("release"), /desktop-release\.ts verify/);
   });
+
+  it("attaches the admitted installers and blockmap to the versioned release", () => {
+    const publish = stepsOf("release").find((step) => step.name === "Publish the release")!.text;
+    assert.match(publish, /DESKTOP_ADMITTED: \$\{\{ needs\.release-gate\.outputs\.desktop \}\}/);
+    assert.match(publish, /if \[ "\$DESKTOP_ADMITTED" = "true" \]; then/);
+    assert.match(publish, /wave-\$version-win-x64\.exe\.blockmap/);
+    assert.match(publish, /wave-\$version-linux-x64\.AppImage/);
+  });
 });
