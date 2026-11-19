@@ -145,6 +145,8 @@ export const ptBR: Catalogue = {
       "Este computador não tem um chaveiro, então a sessão dura até o Wave fechar. Inicie sessão novamente na próxima vez.",
     browserTitle: "Volte ao Wave",
     browserMessage: "Você pode fechar esta aba. O Wave termina de iniciar sessão.",
+    confirmDeletionInBrowser: "Inicie sessão no Google no navegador para confirmar que é você.",
+    browserDeletionMessage: "Você pode fechar esta aba. O Wave termina de apagar a conta.",
   },
   desktopShortcuts: desktopShortcutsPtBr,
   downloadNotice: downloadNoticePtBr,

@@ -128,6 +128,7 @@ export interface BridgeContract
   readonly "account.cancelSignIn": { readonly args: readonly []; readonly result: void };
   readonly "account.signOut": { readonly args: readonly []; readonly result: void };
   readonly "account.signOutEverywhere": { readonly args: readonly []; readonly result: void };
+  readonly "account.deleteAccount": { readonly args: readonly []; readonly result: void };
   readonly "account.answerInvitation": { readonly args: readonly []; readonly result: void };
 
   readonly "settings.appearance": { readonly args: readonly []; readonly result: Appearance };
@@ -416,6 +417,7 @@ export const BRIDGE_CALLS = [
   "account.cancelSignIn",
   "account.signOut",
   "account.signOutEverywhere",
+  "account.deleteAccount",
   "account.answerInvitation",
   ...PLAYLIST_CALLS,
   ...LYRICS_AND_TAGS_CALLS,
@@ -573,6 +575,8 @@ export interface WaveBridge {
     readonly cancelSignIn: () => Promise<void>;
     readonly signOut: () => Promise<void>;
     readonly signOutEverywhere: () => Promise<void>;
+    /** Delete Account, once confirmed: resolves when it ended, however it did. */
+    readonly deleteAccount: () => Promise<void>;
     readonly answerInvitation: () => Promise<void>;
   };
   /** Playlists' edits, images, Graveyard and M3U import. */
@@ -696,6 +700,7 @@ export const createBridge = (invoke: Invoke): WaveBridge => ({
     cancelSignIn: () => invoke("account.cancelSignIn"),
     signOut: () => invoke("account.signOut"),
     signOutEverywhere: () => invoke("account.signOutEverywhere"),
+    deleteAccount: () => invoke("account.deleteAccount"),
     answerInvitation: () => invoke("account.answerInvitation"),
   },
   playlists: playlistBridge(invoke),

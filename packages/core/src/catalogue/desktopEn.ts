@@ -25,7 +25,17 @@ export const desktopEn = {
       "paths never do.",
     waveAccountSignOutNote:
       "Signing out keeps your music files and plays on this computer. Songs from the account " +
-      "with no file here leave the Library.",
+      "with no file here leave the Library. Deleting the account deletes what Wave's server " +
+      "has of it, not what's on this computer.",
+    // The fresh Google sign-in opens in the browser, where the phone has Google's picker.
+    deleteWaveAccount: {
+      message:
+        "Wave's server deletes everything it has of the account, and this computer signs out. " +
+        "Nothing on this computer is deleted. Your browser then opens Google's sign-in, to " +
+        "confirm it's you.",
+    },
+    yourWaveAccountWasDeletedEverythingOn:
+      "Your Wave account was deleted. Your music files and plays on this computer stay.",
     yourWaveSessionEndedSoThisPhone:
       "Your Wave session ended, so this computer is signed out. Sign in again to keep your backup.",
     // The browser has its own Google sign-in, so there's no account to add to the system.

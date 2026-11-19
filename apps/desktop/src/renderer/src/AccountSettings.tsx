@@ -1,9 +1,9 @@
-import { waveAccountActionNotes, waveAccountNotes } from "@wave/core";
+import { confirmWaveAccountDeletion, waveAccountActionNotes, waveAccountNotes } from "@wave/core";
 import { useState } from "react";
 import type { AccountView } from "../../shared/account.ts";
 import { text } from "./text.ts";
 
-/** Sign In, waiting on the browser, or the signed-in account with its sign-outs. */
+/** Sign In, waiting on the browser, or the signed-in account with its sign-outs and Delete Account. */
 export function AccountSettings({
   view,
   onError,
@@ -12,6 +12,7 @@ export function AccountSettings({
   readonly onError: () => void;
 }) {
   const [confirming, setConfirming] = useState(false);
+  const [confirmingDeletion, setConfirmingDeletion] = useState(false);
   const run = (call: () => Promise<void>) => void call().catch(onError);
   const account = view?.account;
   return (
@@ -52,7 +53,22 @@ export function AccountSettings({
               account.account.name === null ? null : account.account.email,
             )}
           </p>
-          {confirming ? (
+          {account.busy === "deleting" ? (
+            <div className="account-actions">
+              <button disabled>{text.settings.deleting}</button>
+              <button onClick={() => run(window.wave.account.cancelSignIn)}>
+                {text.alert.cancel}
+              </button>
+            </div>
+          ) : confirmingDeletion ? (
+            <DeletionConfirmation
+              onCancel={() => setConfirmingDeletion(false)}
+              onConfirm={() => {
+                setConfirmingDeletion(false);
+                run(window.wave.account.deleteAccount);
+              }}
+            />
+          ) : confirming ? (
             <div className="account-confirm" role="alertdialog" aria-labelledby="sign-out-all">
               <h3 id="sign-out-all">{text.settings.signOutEverywhere.title}</h3>
               <p className="secondary">{text.settings.signOutEverywhere.message}</p>
@@ -80,12 +96,21 @@ export function AccountSettings({
               <button disabled={account.busy !== null} onClick={() => setConfirming(true)}>
                 {text.settings.signOutOnAllPhones}
               </button>
+              <button
+                className="destructive"
+                disabled={account.busy !== null}
+                onClick={() => setConfirmingDeletion(true)}
+              >
+                {text.settings.deleteAccount}
+              </button>
             </div>
           )}
-          <p className="secondary">
-            {account.note === null
-              ? text.settings.waveAccountSignOutNote
-              : waveAccountActionNotes(text)[account.note]}
+          <p className="secondary" data-testid="account-note">
+            {account.busy === "deleting"
+              ? text.desktopAccount.confirmDeletionInBrowser
+              : account.note === null
+                ? text.settings.waveAccountSignOutNote
+                : waveAccountActionNotes(text)[account.note]}
           </p>
         </>
       )}
@@ -94,6 +119,29 @@ export function AccountSettings({
           {text.desktopAccount.keyringMissing}
         </p>
       )}
+    </div>
+  );
+}
+
+/** Delete Account asks first, with the phone's confirmation (Core's `confirmWaveAccountDeletion`). */
+function DeletionConfirmation({
+  onConfirm,
+  onCancel,
+}: {
+  readonly onConfirm: () => void;
+  readonly onCancel: () => void;
+}) {
+  const confirmation = confirmWaveAccountDeletion(text);
+  return (
+    <div className="account-confirm" role="alertdialog" aria-labelledby="delete-account">
+      <h3 id="delete-account">{confirmation.title}</h3>
+      <p className="secondary">{confirmation.message}</p>
+      <div className="account-actions">
+        <button className="destructive" onClick={onConfirm}>
+          {confirmation.action.label}
+        </button>
+        <button onClick={onCancel}>{text.alert.cancel}</button>
+      </div>
     </div>
   );
 }

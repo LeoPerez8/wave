@@ -341,19 +341,22 @@ else {
         platform: process.platform,
       }),
       syncUrl: config.syncUrl,
-      signInWithBrowser: (signal) =>
+      signInWithBrowser: (signal, purpose) =>
         clientId === null
           ? Promise.reject(new Error("This build has no Google client."))
           : signInWithBrowser({
               authUrl: "https://accounts.google.com/o/oauth2/v2/auth",
-              tokenUrl: "https://oauth2.googleapis.com/token",
+              tokenUrl: config.tokenUrl,
               clientId,
               ...(config.clientSecret === undefined ? {} : { clientSecret: config.clientSecret }),
               openExternal: (url) => shell.openExternal(url),
               fetch,
               page: {
                 title: text.desktopAccount.browserTitle,
-                message: text.desktopAccount.browserMessage,
+                message:
+                  purpose === "confirmDeletion"
+                    ? text.desktopAccount.browserDeletionMessage
+                    : text.desktopAccount.browserMessage,
               },
               signal,
             }),

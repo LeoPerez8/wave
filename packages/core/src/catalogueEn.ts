@@ -150,6 +150,9 @@ export const en = {
       "This computer has no keyring, so the session lasts until Wave quits. Sign in again next time.",
     browserTitle: "Back to Wave",
     browserMessage: "You can close this tab. Wave finishes signing in.",
+    /** Delete Account's fresh Google sign-in: while the browser has it, and the tab once it's done. */
+    confirmDeletionInBrowser: "Sign in to Google in your browser to confirm it's you.",
+    browserDeletionMessage: "You can close this tab. Wave finishes deleting the account.",
   },
   desktopShortcuts: desktopShortcutsEn,
   downloadNotice: downloadNoticeEn,

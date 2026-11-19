@@ -1360,6 +1360,26 @@ test("a build with no sync service shows no Sign In and no invitation", async ()
   });
 });
 
+test("Delete Account from the window deletes the account and leaves Wave signed out", async () => {
+  await withFile(async (file) => {
+    const app = await desktop();
+    const { runtime, exposed } = connect(file, undefined, { service: app.open() });
+    const wave = exposed.get("wave") as WaveBridge;
+    try {
+      await wave.account.signIn();
+      assert.equal((await wave.account.view()).account.kind, "account");
+      await wave.account.deleteAccount();
+      const view = await wave.account.view();
+      assert.deepEqual(view.account, { kind: "signedOut", action: "signIn", note: "deleted" });
+      assert.equal(view.invitation, false);
+      const accounts = await app.service.db.execute("SELECT COUNT(*) AS n FROM accounts");
+      assert.equal(Number(accounts.rows[0]?.["n"]), 0);
+    } finally {
+      await runtime.dispose();
+    }
+  });
+});
+
 test("the invitation to sign in shows once the first scan finished, until it's answered", async () => {
   await withFile(async (file) => {
     mkdirSync(join(dirname(file), "Music"));

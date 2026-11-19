@@ -18,12 +18,21 @@ import {
 import { BrowserSignInError, type BrowserIdentity } from "./browserSignIn.ts";
 import type { SessionStore, StoredSession } from "./sessionStore.ts";
 
+/** Why the browser opens Google's sign-in: to sign in, or as Delete Account's fresh sign-in. */
+export type BrowserSignInPurpose = "signIn" | "confirmDeletion";
+
 export interface WaveAccountDeps {
   readonly store: SessionStore;
   /** The sync service's origin; null when this build has none, so there's no Sign In. */
   readonly syncUrl: string | null;
-  /** Google's sign-in in the browser (`signInWithBrowser`); [signal] is Cancel. */
-  readonly signInWithBrowser: (signal: AbortSignal) => Promise<BrowserIdentity>;
+  /**
+   * Google's sign-in in the browser (`signInWithBrowser`); [signal] is Cancel, and [purpose]
+   * is what the tab says Wave finishes.
+   */
+  readonly signInWithBrowser: (
+    signal: AbortSignal,
+    purpose: BrowserSignInPurpose,
+  ) => Promise<BrowserIdentity>;
   readonly fetch: typeof fetch;
   /** Whether the system has a network, to tell offline from a service out of reach. */
   readonly online: () => boolean;
@@ -60,12 +69,22 @@ export interface WaveAccountService {
   readonly subscribe: (listener: (session: WaveSession) => void) => () => void;
   /** Opens Google's sign-in in the browser; resolves when it ended, however it did. */
   readonly signIn: () => Promise<void>;
-  /** Stops the sign-in, in the browser or at the service: nobody is signed in. */
+  /**
+   * Stops waiting for Google's sign-in in the browser. For Sign In, also at the service: nobody
+   * is signed in. For Delete Account: nothing is sent.
+   */
   readonly cancelSignIn: () => void;
   /** Tells the service, and forgets the session either way. */
   readonly signOut: () => Promise<void>;
   /** Ends every session of the account, this one's too. */
   readonly signOutEverywhere: () => Promise<void>;
+  /**
+   * Deletes the account and everything the service has of it, then signs out; the computer
+   * keeps its own. The service needs a fresh Google sign-in to the account's own Google
+   * account besides the session, so the browser opens first; one the service doesn't take
+   * keeps the account and the session. Resolves when it ended, however it did.
+   */
+  readonly deleteAccount: () => Promise<void>;
   /** A push or a pull with the session; a 401 ends it. */
   readonly request: (
     method: "GET" | "POST",
@@ -73,6 +92,14 @@ export interface WaveAccountService {
     body: string | null,
   ) => Promise<{ readonly status: number; readonly body: string }>;
 }
+
+/** The service's 401s for Delete Account's ID token, not for the session. */
+const ID_TOKEN_REFUSALS: ReadonlySet<unknown> = new Set(["invalid_id_token", "id_token_required"]);
+
+const refusesIdToken = async (response: Response): Promise<boolean> => {
+  const answer = (await response.json().catch(() => ({}))) as { error?: unknown } | null;
+  return ID_TOKEN_REFUSALS.has(answer?.error);
+};
 
 const PULL = /^\/v1\/pull(\?since=[0-9A-Za-z_-]*)?$/;
 
@@ -100,6 +127,8 @@ export const createWaveAccount = (deps: WaveAccountDeps): WaveAccountService => 
   };
   const listeners = new Set<(session: WaveSession) => void>();
   let signingIn: AbortController | null = null;
+  /** Delete Account waiting for Google's sign-in in the browser. */
+  let confirmingDeletion: AbortController | null = null;
 
   const step = (event: WaveAccountEvent): void => {
     state = stepWaveAccount(state, event);
@@ -169,7 +198,7 @@ export const createWaveAccount = (deps: WaveAccountDeps): WaveAccountService => 
     signingIn = controller;
     step({ type: "signInStarted" });
     try {
-      const identity = await deps.signInWithBrowser(controller.signal);
+      const identity = await deps.signInWithBrowser(controller.signal, "signIn");
       const response = await exchange(
         "POST",
         `${syncUrl}/v1/session`,
@@ -237,7 +266,10 @@ export const createWaveAccount = (deps: WaveAccountDeps): WaveAccountService => 
       return () => void listeners.delete(listener);
     },
     signIn,
-    cancelSignIn: () => signingIn?.abort(),
+    cancelSignIn: () => {
+      signingIn?.abort();
+      confirmingDeletion?.abort();
+    },
     signOut: async () => {
       const session = signedIn();
       if (session !== null) {
@@ -268,6 +300,57 @@ export const createWaveAccount = (deps: WaveAccountDeps): WaveAccountService => 
       }
       change(null);
       step({ type: "signedOutEverywhere" });
+    },
+    deleteAccount: async () => {
+      const session = signedIn();
+      if (session === null || state.busy !== null) return;
+      const controller = new AbortController();
+      confirmingDeletion = controller;
+      step({ type: "deleteStarted" });
+      try {
+        const identity = await deps.signInWithBrowser(controller.signal, "confirmDeletion");
+        // From here the request is on its way: Cancel no longer stops it.
+        confirmingDeletion = null;
+        if (controller.signal.aborted || signedIn()?.token !== session.token) {
+          step({ type: "deleteCancelled" });
+          return;
+        }
+        const response = await exchange(
+          "DELETE",
+          `${session.serviceUrl}/v1/account`,
+          session.token,
+          JSON.stringify({ idToken: identity.idToken }),
+        );
+        if (response.status === 401) {
+          if (await refusesIdToken(response))
+            step({ type: "deleteFailed", reason: "wrongGoogleAccount" });
+          // Already ended: Settings shows so.
+          else end(session);
+          return;
+        }
+        if (!response.ok) throw unreachable();
+      } catch (error) {
+        if (
+          controller.signal.aborted ||
+          (error instanceof BrowserSignInError && error.reason === "cancelled")
+        )
+          step({ type: "deleteCancelled" });
+        else if (error instanceof BrowserSignInError && error.reason === "network")
+          step({ type: "deleteFailed", reason: deps.online() ? "failed" : "offline" });
+        else
+          step({
+            type: "deleteFailed",
+            reason:
+              error instanceof WaveAccountError && error.code === "ERR_WAVE_OFFLINE"
+                ? "offline"
+                : "failed",
+          });
+        return;
+      } finally {
+        confirmingDeletion = null;
+      }
+      change(null);
+      step({ type: "accountDeleted" });
     },
     request: async (method, path, body) => {
       const allowed =

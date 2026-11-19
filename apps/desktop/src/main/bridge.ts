@@ -427,6 +427,7 @@ const createHandlers = (
     "account.cancelSignIn": () => accountCall((a) => a.cancelSignIn()),
     "account.signOut": () => accountCall((a) => a.signOut()),
     "account.signOutEverywhere": () => accountCall((a) => a.signOutEverywhere()),
+    "account.deleteAccount": () => accountCall((a) => a.deleteAccount()),
     "account.answerInvitation": () => accountCall((a) => a.answerInvitation()),
     "library.artwork": ([hash, large]) =>
       typeof hash === "string" && /^[a-f0-9]{40}$/.test(hash) && typeof large === "boolean"
