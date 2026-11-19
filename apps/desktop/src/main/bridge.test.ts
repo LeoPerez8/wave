@@ -463,7 +463,7 @@ const connect = (
   const browser = { outcome: { kind: "noBrowser" } as YtBrowserOutcome };
   const ytSessions = createYtSessions(
     ytSessionStore({
-      box: keyring,
+      box: { ...keyring, getSelectedStorageBackend: () => "gnome_libsecret" },
       file: "yt-session.bin",
       files: { read: () => undefined, write: () => {}, remove: () => {} },
       platform: process.platform,
@@ -2355,6 +2355,17 @@ test("YouTube's sign-in shows the account, and one of its playlists is imported 
     const call = (channel: string, ...args: unknown[]) => handlers.get(channel)!(trusted, ...args);
     const account = { name: "Ana", email: "ana@example.com", photoUrl: null };
     try {
+      const localId = await runtime.runPromise(
+        Effect.gen(function* () {
+          const db = (yield* Database) as unknown as TestDatabase;
+          return addTrack(db, {
+            title: "Pink Moon",
+            artist: "Nick Drake",
+            album: "Pink Moon",
+            durationMs: 124_000,
+          });
+        }),
+      );
       await wave.settings.setYtMusic(true);
       assert.deepEqual(await wave.ytAccount.view(), {
         account: { kind: "signedOut", action: "signIn", note: "optional" },
@@ -2396,29 +2407,29 @@ test("YouTube's sign-in shows the account, and one of its playlists is imported 
           { playlistId: "PLroad", title: "Road", artworkUrl: null, line: "2 songs" },
         ],
       });
-      const opened = await wave.links.open("https://music.youtube.com/playlist?list=PLroad", "en");
+      const opened = await wave.links.open("https://music.youtube.com/playlist?list=PLroad");
       assert.equal(opened.kind, "playlist");
       if (opened.kind !== "playlist") return;
       assert.equal(opened.view.canImport, true);
       const saved = await wave.links.importPlaylist(opened.token, false);
       const songs = await wave.library.browse({ kind: "playlist", id: saved.playlistId }, 0, 10);
       assert.deepEqual(
-        songs.items.map((row) => [row.title, row.videoId]),
+        songs.items.map((row) => [row.title, row.videoId ?? row.id]),
         [
-          ["Pink Moon", "abcdefghijk"],
+          ["Pink Moon", localId],
           ["Road", "bcdefghijkl"],
         ],
       );
       assert.equal(songs.total, 2);
       assert.equal(new Set(songs.items.map((row) => row.id)).size, 2, "each row has its own id");
 
-      // The playlist plays its YT songs from the one clicked.
+      // The playlist keeps the Library song and starts playback at the clicked YT song.
       await wave.playback.start({ kind: "playlist", id: saved.playlistId }, 1);
       assert.equal((await wave.playback.view()).current?.videoId, "bcdefghijkl");
       assert.deepEqual(
-        (await wave.playback.queue(0, 10)).items.map((row) => [row.videoId, row.current]),
+        (await wave.playback.queue(0, 10)).items.map((row) => [row.videoId ?? row.id, row.current]),
         [
-          ["abcdefghijk", false],
+          [localId, false],
           ["bcdefghijkl", true],
         ],
       );

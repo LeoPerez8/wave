@@ -266,6 +266,20 @@ test("a second Sign In while the browser is open opens no second browser", async
   await Promise.all([first, second]);
 });
 
+test("turning YT Music off blocks sign-in and discards a session returned by an open browser", async () => {
+  const { account, world, calls } = desktop({});
+  const signingIn = account.signIn();
+  world.enabled = false;
+  world.closeWindow(READ);
+  await signingIn;
+
+  const disabled = account.signIn();
+  world.closeWindow({ kind: "closed" });
+  await disabled;
+  assert.equal(world.browsers, 1);
+  assert.deepEqual(calls, []);
+});
+
 test("Sign Out forgets the session, here and in the file", async () => {
   const { account, world, disk } = desktop({});
   const signingIn = account.signIn();

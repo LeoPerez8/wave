@@ -296,9 +296,9 @@ export const startYtBrowserSignIn = (options: YtBrowserSignInOptions): YtBrowser
         return { kind: "failed" };
       }
       return await readSession(profile);
-    } catch (error) {
+    } catch {
       if (cancelled) return { kind: "cancelled" };
-      log(`YouTube sign-in failed: ${error instanceof Error ? error.message : "unknown error"}`);
+      log("YouTube sign-in failed");
       return { kind: "failed" };
     } finally {
       running?.kill();

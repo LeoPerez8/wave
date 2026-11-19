@@ -332,6 +332,26 @@ test("a browser that doesn't start fails", async () => {
   assert.deepEqual(removed, [PROFILE]);
 });
 
+test("browser errors report failure without logging details from the browser", async () => {
+  const logs: string[] = [];
+  const run = startYtBrowserSignIn({
+    browser: BROWSER,
+    spawn: () => {
+      throw new Error("browser returned a private account detail");
+    },
+    files: {
+      makeProfile: () => PROFILE,
+      read: () => undefined,
+      remove: async () => {},
+      join: (...parts) => parts.join("/"),
+    },
+    connect: () => assert.fail("nothing to connect to"),
+    log: (line) => logs.push(line),
+  });
+  assert.deepEqual(await run.outcome, { kind: "failed" });
+  assert.deepEqual(logs, ["YouTube sign-in failed"]);
+});
+
 test("the cookie header holds what music.youtube.com gets, each name once", () => {
   assert.equal(
     ytCookieHeader([

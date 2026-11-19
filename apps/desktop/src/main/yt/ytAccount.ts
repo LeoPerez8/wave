@@ -106,6 +106,7 @@ export const createYtAccount = (deps: YtAccountDeps): YtAccountShape => {
   };
 
   const signIn = async (): Promise<void> => {
+    if (!deps.enabled()) return;
     noBrowser = false;
     dispatch({ type: "signInStarted" });
     if (!deps.online()) {
@@ -121,7 +122,8 @@ export const createYtAccount = (deps: YtAccountDeps): YtAccountShape => {
     }
     const done = (async () => {
       const outcome = await browser.outcome;
-      if (outcome.kind === "noBrowser") {
+      if (!deps.enabled()) dispatch({ type: "signInCancelled" });
+      else if (outcome.kind === "noBrowser") {
         noBrowser = true;
         dispatch({ type: "signInCancelled" });
       } else if (outcome.kind === "cancelled" || outcome.kind === "closed")

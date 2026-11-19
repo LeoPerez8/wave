@@ -959,20 +959,20 @@ export function App() {
                   selection
                     ? undefined
                     : (row, at) =>
-                      row.videoId !== undefined
-                        ? actions.openItems(
-                            text.desktopLibrary.songMenu(row.title),
-                            streamed.items(row.videoId),
-                            at,
-                          )
-                        : actions.openMenu(
-                          { scope, ids: [row.id] },
-                          row.title,
-                          at,
-                          scope.kind === "playlist" && scope.id !== undefined
-                            ? playlistEdits.moveItems(scope.id, row.id)
-                            : [],
-                        )
+                        row.videoId !== undefined
+                          ? actions.openItems(
+                              text.desktopLibrary.songMenu(row.title),
+                              streamed.items(row.videoId),
+                              at,
+                            )
+                          : actions.openMenu(
+                              { scope, ids: [row.id] },
+                              row.title,
+                              at,
+                              scope.kind === "playlist" && scope.id !== undefined
+                                ? playlistEdits.moveItems(scope.id, row.id)
+                                : [],
+                            )
                 }
               />,
             )}
