@@ -62,26 +62,29 @@ test("a store with no session cookie yields null", () => {
   assert.equal(sessionFromCookieRows([], PASSWORD), null);
 });
 
-test("readBrowserSession falls back (null) when the store or the keyring secret is missing", () => {
-  assert.equal(readBrowserSession({ readCookieRows: () => null, secret: () => PASSWORD }), null);
+test("readBrowserSession falls back (null) when the store or the keyring secret is missing", async () => {
   assert.equal(
-    readBrowserSession({ readCookieRows: () => [row("SAPISID", "x")], secret: () => null }),
+    await readBrowserSession({ readCookieRows: () => null, secret: () => PASSWORD }),
+    null,
+  );
+  assert.equal(
+    await readBrowserSession({ readCookieRows: () => [row("SAPISID", "x")], secret: () => null }),
     null,
   );
 });
 
-test("readBrowserSession reuses the session when the store carries one", () => {
-  const session = readBrowserSession({
+test("readBrowserSession reuses the session when the store carries one (async secret)", async () => {
+  const session = await readBrowserSession({
     readCookieRows: () => [row("SAPISID", "api-sid")],
-    secret: () => PASSWORD,
+    secret: () => Promise.resolve(PASSWORD),
   });
   assert.equal(session?.kind, "signedIn");
   assert.match(session?.cookie ?? "", /SAPISID=api-sid/);
 });
 
-test("readBrowserSession swallows a throwing reader or secret and falls back", () => {
+test("readBrowserSession swallows a throwing reader or rejected secret and falls back", async () => {
   assert.equal(
-    readBrowserSession({
+    await readBrowserSession({
       readCookieRows: () => {
         throw new Error("locked");
       },
@@ -90,11 +93,9 @@ test("readBrowserSession swallows a throwing reader or secret and falls back", (
     null,
   );
   assert.equal(
-    readBrowserSession({
+    await readBrowserSession({
       readCookieRows: () => [row("SAPISID", "x")],
-      secret: () => {
-        throw new Error("no keyring");
-      },
+      secret: () => Promise.reject(new Error("no keyring")),
     }),
     null,
   );

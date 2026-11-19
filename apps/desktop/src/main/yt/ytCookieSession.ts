@@ -88,8 +88,9 @@ export interface BrowserSessionDeps {
   /** The YouTube/Google cookie rows of the default browser's store, or null when it cannot be read
    *  (no such browser, a locked or missing store, or a platform without this path). */
   readonly readCookieRows: () => readonly SealedCookieRow[] | null;
-  /** The browser's "Safe Storage" keyring password, or null when the keyring has none for it. */
-  readonly secret: () => string | null;
+  /** The browser's "Safe Storage" keyring password, or null when the keyring has none for it.
+   *  Reading it talks to the Secret Service, so it may be async. */
+  readonly secret: () => string | null | Promise<string | null>;
   readonly log?: (line: string) => void;
 }
 
@@ -97,7 +98,9 @@ export interface BrowserSessionDeps {
  * The existing signed-in session read from the default browser, or null to fall back to the sign-in
  * window. Only the count of cookies and whether a session was found reach the log, never a value.
  */
-export const readBrowserSession = (deps: BrowserSessionDeps): SignedInSession | null => {
+export const readBrowserSession = async (
+  deps: BrowserSessionDeps,
+): Promise<SignedInSession | null> => {
   const log = deps.log ?? (() => {});
   let rows: readonly SealedCookieRow[] | null;
   try {
@@ -111,7 +114,7 @@ export const readBrowserSession = (deps: BrowserSessionDeps): SignedInSession | 
   );
   let secret: string | null;
   try {
-    secret = deps.secret();
+    secret = await deps.secret();
   } catch {
     secret = null;
   }

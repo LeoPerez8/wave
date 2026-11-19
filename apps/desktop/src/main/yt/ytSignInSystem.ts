@@ -36,6 +36,7 @@ import {
   type YtBrowserSignIn,
 } from "./ytBrowserSignIn.ts";
 import { readBrowserSession, type SealedCookieRow } from "./ytCookieSession.ts";
+import { readSafeStorageSecret } from "./secretService.ts";
 import { startYtSignIn } from "./ytSignIn.ts";
 
 /** What a sign-in's profile folder is called, so one left by a crash is found and deleted. */
@@ -128,22 +129,14 @@ const readDefaultBrowserCookies = (
 };
 
 /**
- * The default browser's "Safe Storage" keyring password through libsecret's `secret-tool`, or null
- * when the tool is absent or the keyring holds no entry for it — the sign-in then opens the window.
+ * The default browser's "Safe Storage" keyring password from the Secret Service, or null when it
+ * has no entry for the browser or cannot be reached — the sign-in then opens the window. This reads
+ * the keyring directly over D-Bus, so it needs no `secret-tool` on the system.
  */
-const readKeyringSecret = (command: string | undefined): string | null => {
+const readKeyringSecret = (command: string | undefined): Promise<string | null> => {
   const app = linuxKeyringApp(command);
-  if (app === undefined) return null;
-  try {
-    const secret = execFileSync("secret-tool", ["lookup", "application", app], {
-      encoding: "utf8",
-      timeout: 3_000,
-      stdio: ["ignore", "pipe", "ignore"],
-    });
-    return secret === "" ? null : secret;
-  } catch {
-    return null;
-  }
+  if (app === undefined) return Promise.resolve(null);
+  return readSafeStorageSecret(app);
 };
 
 export interface YtSignInSystemOptions {
@@ -226,7 +219,7 @@ export const ytSignInSystem = (options: YtSignInSystemOptions): YtSignInSystem =
                 secret: () => readKeyringSecret(command),
                 ...(options.log === undefined ? {} : { log: options.log }),
               })
-            : null,
+            : Promise.resolve(null),
         startWindow,
       });
     },
