@@ -519,6 +519,21 @@ h2 {
 .tile > .artist-image {
   border-radius: 50%;
 }
+/* A song tile's state, at the corner of its cover (SongMark, as a row's picture carries it). */
+.tile {
+  position: relative;
+}
+.tile-mark {
+  position: absolute;
+  top: 100px;
+  left: 100px;
+  width: 26px;
+  height: 26px;
+}
+.tile-mark > .row-play {
+  display: flex;
+  background: var(--color-background);
+}
 .tile:focus-visible {
   outline: 2px solid var(--color-accent);
   outline-offset: 2px;

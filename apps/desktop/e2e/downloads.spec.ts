@@ -100,6 +100,45 @@ test("a missing Search song waits offline and resumes its download instead of pl
   }
 });
 
+test("a missing song's tile on Home shows its state and its download, as its row does", async () => {
+  const data = mkdtempSync(join(tmpdir(), "wave-e2e-tile-"));
+  await Effect.runPromise(
+    Effect.gen(function* () {
+      const db = (yield* Database) as unknown as TestDatabase;
+      const id = addTrack(db, { title: "Missing Road", artist: "Nick Drake", album: "Pink Moon" });
+      db.run(sql`UPDATE tracks SET path = NULL WHERE id = ${id}`);
+      star(db, id, 1000);
+      db.run(sql`INSERT INTO desktop_settings (key, value) VALUES ('settings.ytMusic', 'off')`);
+    }).pipe(Effect.provide(libraryLayer(join(data, "wave.db")))),
+  );
+  const app = await electron.launch({
+    args: [appFolder, "--lang=en-US"],
+    env: { ...process.env, WAVE_DATA_DIR: data, WAVE_MUSIC_DIR: join(data, "Absent") },
+  });
+  try {
+    const page = await app.firstWindow();
+    await app.evaluate(({ net }) => {
+      net.isOnline = () => false;
+    });
+    await expect.poll(async () => (await downloads(page)).online).toBe(false);
+    const tile = page
+      .getByTestId("home")
+      .locator('[data-section="favorites"]')
+      .getByRole("button", { name: /Missing Road/ });
+    await expect(tile).toHaveClass(/missing-row/);
+    await expect(tile.getByTestId("tile-mark")).toBeVisible();
+    await expect(tile.getByRole("progressbar")).toHaveCount(0);
+    // Its download, asked for from its menu, shows on the tile while it waits.
+    await tile.click({ button: "right" });
+    await page.getByRole("menuitem", { name: "Download", exact: true }).click();
+    await expect(tile.getByRole("progressbar")).toBeVisible();
+    await page.screenshot({ path: test.info().outputPath(`missing-tile-${process.platform}.png`) });
+  } finally {
+    await app.close();
+    rmSync(data, { recursive: true, force: true });
+  }
+});
+
 test("Play on a playlist of missing songs says so and offers to download them", async () => {
   const data = mkdtempSync(join(tmpdir(), "wave-e2e-list-"));
   await Effect.runPromise(

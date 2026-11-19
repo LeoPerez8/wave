@@ -1,7 +1,9 @@
 import { useState, type MouseEvent, type ReactNode } from "react";
 import type { BrowseRow } from "../../shared/browse.ts";
 import type { YtStatus } from "../../shared/yt.ts";
+import { songRowMark } from "../../shared/songState.ts";
 import { Icon } from "./Icon.tsx";
+import { markClass, SongMark, useSongStates } from "./SongMark.tsx";
 import { labels, albumName, artistName } from "./text.ts";
 import { Artwork, time } from "./VirtualTable.tsx";
 
@@ -108,8 +110,8 @@ export interface TileItem {
   readonly artworkId?: number | undefined;
   /** What a screen reader says, when the title alone doesn't say what a click does. */
   readonly label?: string;
-  /** A missing song: dimmed, as its row is. */
-  readonly missing?: boolean;
+  /** A song's tile names its song: it then shows the song's state, as its row does. */
+  readonly song?: Pick<BrowseRow, "id" | "path" | "unavailable" | "videoId">;
 }
 
 /** A row of tiles that scrolls sideways; artists' tiles are round. */
@@ -129,8 +131,12 @@ export function Shelf({
   readonly onOpen: (index: number) => void;
   readonly onMenu?: (index: number, at: { readonly x: number; readonly y: number }) => void;
 }) {
+  const states = useSongStates(items.flatMap((item) => (item.song ? [item.song.id] : [])));
   if (items.length === 0) return null;
   const Heading = nested ? "h3" : "h2";
+  const marks = items.map((item) =>
+    item.song ? songRowMark(item.song, states.get(item.song.id)) : undefined,
+  );
   return (
     <section className="shelf" aria-label={title}>
       <Heading>{title}</Heading>
@@ -138,7 +144,7 @@ export function Shelf({
         {items.map((item, index) => (
           <div key={item.key} role="listitem">
             <button
-              className={item.missing ? "tile missing-row" : "tile"}
+              className={`tile ${marks[index] ? markClass(marks[index]) : ""}`.trimEnd()}
               aria-label={item.label ?? item.title}
               title={item.title}
               onClick={() => onOpen(index)}
@@ -168,6 +174,11 @@ export function Shelf({
                 artist={artists}
                 large
               />
+              {marks[index] && marks[index].kind !== "play" && (
+                <span className="tile-mark" data-testid="tile-mark">
+                  <SongMark mark={marks[index]} title={item.title} />
+                </span>
+              )}
               <span className="tile-title truncate">{item.title}</span>
               {item.caption && (
                 <span className="tile-caption truncate secondary">{item.caption}</span>
