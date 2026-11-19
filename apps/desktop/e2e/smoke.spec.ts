@@ -201,6 +201,11 @@ test("the page has no Node and only the typed bridge", async () => {
       "wave.streamed.menu",
       "wave.streamed.artist",
       "wave.streamed.run",
+      "wave.ytAccount.view",
+      "wave.ytAccount.signIn",
+      "wave.ytAccount.cancelSignIn",
+      "wave.ytAccount.signOut",
+      "wave.ytAccount.playlists",
     ],
   });
 });

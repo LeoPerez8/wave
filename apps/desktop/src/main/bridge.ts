@@ -18,7 +18,7 @@ import { DesktopLibrary } from "./library/library.ts";
 import { Account } from "./account/accountLayer.ts";
 import type { Page } from "../shared/bridge.ts";
 import { BROWSE_KINDS, type BrowseScope } from "../shared/browse.ts";
-import { browseLetter } from "./library/browse.ts";
+import { browseLetter, playlistSongs } from "./library/browse.ts";
 import { readArtwork } from "./library/artwork.ts";
 import { appearance, preference, savePreference } from "./preferences.ts";
 import { SEARCH_ONLINE_SETTING, readSearchOnline, writeSearchOnline } from "@wave/core";
@@ -44,6 +44,7 @@ import { Lyrics } from "./lyrics/lyrics.ts";
 import { DesktopLinks } from "./links/layer.ts";
 import { linkHandlers } from "./links/handlers.ts";
 import { artistPageHandlers } from "./artistPageHandlers.ts";
+import { YtAccount } from "./yt/ytAccountLayer.ts";
 import { DesktopPlaylists } from "./library/playlists.ts";
 import { playlistHandlers } from "./playlistHandlers.ts";
 import { searchLibrary } from "./library/search.ts";
@@ -131,7 +132,8 @@ export type BridgeServices =
   | Lyrics
   | DesktopPlaylists
   | DesktopLinks
-  | HomeFollow;
+  | HomeFollow
+  | YtAccount;
 
 const refuse = (call: BridgeCall, why: string) => Effect.fail(new Error(`Refused ${call}: ${why}`));
 
@@ -235,6 +237,12 @@ const pageCall = <T>(
 const accountCall = <A>(run: (account: Account["Service"]) => A | Promise<A>) =>
   Effect.gen(function* () {
     const account = yield* Account;
+    return yield* Effect.tryPromise({ try: async () => run(account), catch: (error) => error });
+  });
+
+const ytAccountCall = <A>(run: (account: YtAccount["Service"]) => A | Promise<A>) =>
+  Effect.gen(function* () {
+    const account = yield* YtAccount;
     return yield* Effect.tryPromise({ try: async () => run(account), catch: (error) => error });
   });
 
@@ -432,6 +440,14 @@ const createHandlers = (
     "account.signOutEverywhere": () => accountCall((a) => a.signOutEverywhere()),
     "account.deleteAccount": () => accountCall((a) => a.deleteAccount()),
     "account.answerInvitation": () => accountCall((a) => a.answerInvitation()),
+    "ytAccount.view": () => ytAccountCall((a) => a.view()),
+    "ytAccount.signIn": () => ytAccountCall((a) => a.signIn()),
+    "ytAccount.cancelSignIn": () => ytAccountCall((a) => a.cancelSignIn()),
+    "ytAccount.signOut": () => ytAccountCall((a) => a.signOut()),
+    "ytAccount.playlists": ([language]) =>
+      language === "en" || language === "pt-BR"
+        ? ytAccountCall((a) => a.playlists(language))
+        : refuse("ytAccount.playlists", "invalid language"),
     "library.artwork": ([hash, large]) =>
       typeof hash === "string" && /^[a-f0-9]{40}$/.test(hash) && typeof large === "boolean"
         ? Effect.gen(function* () {
@@ -452,9 +468,24 @@ const createHandlers = (
         : refuse("library.cover", "invalid identity"),
     "library.browse": ([scope, offset, limit]) =>
       validScope(scope)
-        ? pageCall("library.browse", [offset, limit], (library, offset, limit) =>
-            library.browse(scope, offset, limit),
-          )
+        ? Effect.gen(function* () {
+            const page = yield* pageCall(
+              "library.browse",
+              [offset, limit],
+              (library, offset, limit) => library.browse(scope, offset, limit),
+            );
+            // A playlist's YT Music songs are known from here on, so their menus can queue them.
+            if (scope.kind === "playlist" && scope.id !== undefined) {
+              const shown = new Set(page.items.flatMap((row) => row.videoId ?? []));
+              if (shown.size > 0)
+                (yield* YtMusic).keep(
+                  (playlistSongs(yield* Database, scope.id) ?? []).flatMap((song) =>
+                    "song" in song && shown.has(song.song.videoId) ? [song.song] : [],
+                  ),
+                );
+            }
+            return page;
+          })
         : refuse("library.browse", "invalid scope"),
     "library.letter": ([scope, letter]) =>
       validScope(scope) && typeof letter === "string" && /^[a-z0-9]$/i.test(letter)

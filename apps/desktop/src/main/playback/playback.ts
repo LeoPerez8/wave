@@ -41,7 +41,7 @@ import type {
 import { ytRow } from "../../shared/yt.ts";
 import type { PlaybackSettings } from "../../shared/playbackSettings.ts";
 import { Player } from "../audio/player.ts";
-import { browseSongs, browseTrackIds } from "../library/browse.ts";
+import { browseSongs, browseTrackIds, playlistSongs } from "../library/browse.ts";
 import { DesktopLibrary } from "../library/library.ts";
 import { preference, savePreference } from "../preferences.ts";
 import { YtMusic } from "../yt/ytMusic.ts";
@@ -473,7 +473,18 @@ export const playbackLayer = Layer.effect(
       view,
       activate,
       start: async (scope, index, shuffle) => {
-        const ids = browseTrackIds(db, scope);
+        error = null;
+        // A playlist with YT Music songs plays them in their places, as its page lists them.
+        const mixed =
+          scope.kind === "playlist" && scope.id !== undefined
+            ? playlistSongs(db, scope.id)
+            : undefined;
+        if (mixed !== undefined)
+          yt.keep(mixed.flatMap((song) => ("song" in song ? [song.song] : [])));
+        const ids =
+          mixed?.map((song) =>
+            "song" in song ? ytTrackId(song.song.videoId) : String(song.trackId),
+          ) ?? browseTrackIds(db, scope);
         const chosen = index === undefined ? undefined : ids[index];
         if (index !== undefined && chosen === undefined) throw new Error("Invalid song position");
         // A song from Search plays alone; with YT Music on, main starts its Magic Queue instead

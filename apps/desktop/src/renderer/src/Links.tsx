@@ -4,7 +4,7 @@ import type { OpenLinkResult, CopyLinkResult } from "../../shared/links.ts";
 import { ConfirmDialog, Toast, trapTab } from "./SongActions.tsx";
 import { language, text } from "./text.ts";
 
-import { COPIED } from "./copyLink.ts";
+import { COPIED, OPENED } from "./copyLink.ts";
 
 const editing = (target: EventTarget | null) =>
   target instanceof Element &&
@@ -92,13 +92,16 @@ export function Links({
     document.addEventListener("paste", paste);
     document.addEventListener("dragover", drag);
     document.addEventListener("drop", drop);
+    const asked = (event: Event) => void open((event as CustomEvent<string>).detail);
     document.addEventListener(COPIED, copied);
+    document.addEventListener(OPENED, asked);
     return () => {
       active = false;
       document.removeEventListener("paste", paste);
       document.removeEventListener("dragover", drag);
       document.removeEventListener("drop", drop);
       document.removeEventListener(COPIED, copied);
+      document.removeEventListener(OPENED, asked);
     };
   }, [onPlaying]);
   const save = async (token: string, replace: boolean) => {

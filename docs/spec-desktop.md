@@ -178,7 +178,8 @@ ADR: `docs/adr/0004-kotlin-on-a-bundled-jvm.md`.
 - Both apps use innertubex 0.11.9 or later. On the JVM it needs no QuickJS natives, so one JAR
   serves every OS, and its first web lookup takes 0.5 s instead of 5 to 7 s.
 - Per platform, outside the shared module: `YtClient`'s HTTP, the proof-of-origin token
-  provider, the YouTube sign-in window, the player's stream source and cache.
+  provider, the YouTube sign-in (Sign-in), where the session is kept (Security), the player's
+  stream source and cache.
 - Protocol: a child process speaking JSON lines over stdio, with requests both ways (the JVM
   asks the host for tokens) and the phone's error codes in `error.code`. The main process
   supervises it and restarts it after a crash. Audio bytes never cross the pipe.
@@ -273,10 +274,26 @@ ADR: `docs/adr/0004-kotlin-on-a-bundled-jvm.md`.
   service deletes the account and the desktop signs out, keeping its songs, files and plays. A
   different Google account, no network or a service error says so and leaves the account
   signed in.
-- YouTube sign-in is separate: a visible Electron window shows YouTube's sign-in, as the phone's
-  `YtSignInActivity` does, and the main process reads the session cookies from it. Google may
-  refuse an embedded window; the first YT ticket signs in with a real account before anything
-  depends on it.
+- YouTube sign-in is separate, and runs in the installed browser in two steps, not in a window
+  of Wave's. Google refused the sign-in both in an embedded Electron window and in a browser
+  started with a debugging port (checked with a real account on 2026-11-18, #1141), so neither
+  is used.
+  1. Sign In starts the installed Chromium-family browser (Chrome, Edge, Brave or Chromium, in
+     that order) as an ordinary window on Google's sign-in, on a profile folder Wave makes for
+     this one sign-in, with no debugging flag. Settings tells the user to close that window when
+     they're done, and offers Cancel.
+  2. Once that browser has exited, Wave starts it again on the same profile, headless and with a
+     debugging port, and the main process reads the session cookies and YouTube's page
+     configuration from it. Then it closes the browser and deletes the profile folder, however
+     the sign-in ended; a folder a crash left behind is deleted at the next start.
+- A window closed without signing in leaves the account as it was. The page's channel id can be
+  slow to appear; Wave waits for it and signs in without it when it never comes, as the phone
+  does.
+- With no Chromium-family browser installed, Sign In opens nothing and Settings › Accounts says
+  which browsers work. Windows always has Edge; a Linux desktop may have none. A browser
+  installed as a snap gets its profile folder under `~/snap`, the only place it can write.
+- The shared Kotlin `YtClient` accepts the session, and the account's YT Music playlists show
+  under it in Settings › Accounts; one opens the same import card as its pasted link.
 
 ### Window and layout
 
@@ -428,7 +445,9 @@ The threat model in `docs/spec.md` › Security applies. The desktop adds:
 - The Wave session and the YouTube session cookies are encrypted with Electron's `safeStorage`
   (DPAPI on Windows, the Secret Service on Linux) and stay in the main process, never in the
   renderer. With no Secret Service, Wave writes neither: they live in memory until Wave quits,
-  and Settings › Accounts says a keyring is missing. Never plain text.
+  and Settings › Accounts says a keyring is missing. Never plain text. The JVM uses the YouTube
+  session but writes it nowhere: main hands it over each time that process starts and takes each
+  change back.
 - An update installs only with Wave's Ed25519 signature (Build, release and updates).
 - Out of scope: another program running as the same user. DPAPI doesn't protect against it.
 - No installer holds a credential. A provider key a feature needs stays a secret of the sync
@@ -491,8 +510,11 @@ Folder, file associations, a floating mini player, picking an output device.
 
 ### Risks
 
-- Google may refuse YouTube's sign-in in an embedded Electron window. The first YT ticket proves
-  it with a real account. A refusal affects a TypeScript client the same way.
+- Google refused YouTube's sign-in in an embedded Electron window and in a browser started with
+  a debugging port (#1141), so it runs in the installed browser (Sign-in). Google can change
+  what it accepts again; the sign-in then fails with a message and nothing else depends on it.
+  A computer with no Chromium-family browser can't sign in to YouTube; the rest of YT Music
+  works signed out.
 - YouTube changes break the resolver now and then; the shared Kotlin module means one fix for
   both apps.
 - The repo has no licence yet. GPL-3.0-only is the owner's direction (#1122); innertubex is GPL-3.0

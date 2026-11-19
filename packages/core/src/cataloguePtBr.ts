@@ -148,6 +148,10 @@ export const ptBR: Catalogue = {
     confirmDeletionInBrowser: "Inicie sessão no Google no navegador para confirmar que é você.",
     browserDeletionMessage: "Você pode fechar esta aba. O Wave termina de apagar a conta.",
     deletionSent: "O Wave está apagando a conta. Não dá mais para cancelar.",
+    closeBrowserWhenDone:
+      "Inicie sessão na janela do navegador que abriu e depois feche a janela. O Wave recebe a sessão quando ela é fechada.",
+    noBrowser:
+      "Iniciar sessão no YouTube precisa do Chrome, Edge, Brave ou Chromium neste computador. Instale um deles e tente novamente.",
   },
   desktopShortcuts: desktopShortcutsPtBr,
   downloadNotice: downloadNoticePtBr,

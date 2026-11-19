@@ -8,13 +8,20 @@ import expo.modules.wavenative.log.WaveLog
 import expo.modules.wavenative.net.NetworkMeters
 import expo.modules.wavenative.yt.YtLookupAttempts
 import expo.modules.wavenative.yt.YtPlatform
+import expo.modules.wavenative.yt.YtSessionJson
+import expo.modules.wavenative.yt.YtSessionState
+import expo.modules.wavenative.yt.YtSessionStore
 import expo.modules.wavenative.yt.YtVisitorStore
 import expo.modules.wavenative.yt.ytHttpClient
 import io.ktor.client.HttpClient
 import java.io.File
 import java.net.InetAddress
 import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.runBlocking
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
 import kotlinx.serialization.json.JsonArray
+import kotlinx.serialization.json.JsonNull
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.JsonPrimitive
 import kotlinx.serialization.json.buildJsonArray
@@ -25,9 +32,9 @@ import kotlinx.serialization.json.contentOrNull
 typealias YtHttp = (YtLookupAttempts, NetworkMeters) -> HttpClient
 
 /**
- * What the shared YouTube Music client takes from the desktop: the session and the visitor data
- * in Wave's data folder ([dataDir]), tokens from the host ([HostTokens]). YT Music stays on until
- * the desktop has Settings; the device counts as online when YouTube's name resolves.
+ * What the shared YouTube Music client takes from the desktop: the visitor data in Wave's data
+ * folder ([dataDir]), the session and tokens from the host ([HostSessionStore], [HostTokens]).
+ * The device counts as online when YouTube's name resolves.
  */
 class DesktopYtPlatform(
   private val dataDir: File,
@@ -44,11 +51,55 @@ class DesktopYtPlatform(
 
   override fun online(): Boolean = isOnline()
 
-  override val sessionFile: File get() = File(dataDir, "yt-session.json")
+  override val sessionStore = HostSessionStore(host)
 
   override val visitorData: YtVisitorStore = FileVisitorStore(File(dataDir, "yt-visitor-data"))
 
   override fun tokens(): TokenProvider = HostTokens(host)
+}
+
+/**
+ * The YouTube session as the host keeps it: the cookie is a credential, and only the host can
+ * seal it with the system's keyring, so this process writes it nowhere. `ytSession.load` answers
+ * `{"session": {...} | null}` ([YtSessionJson]) once per run, before the first request
+ * ([restore]); `ytSession.save` `{"session"}` hands each change back.
+ */
+class HostSessionStore(private val host: JsonLines) : YtSessionStore {
+  @Volatile private var held: YtSessionState? = null
+  private val restoring = Mutex()
+
+  /** Takes the session the host kept, once; without an answer this run starts signed out. */
+  suspend fun restore() {
+    if (held != null) return
+    restoring.withLock {
+      if (held != null) return
+      held = try {
+        val answer = host.ask("ytSession.load", JsonObject(emptyMap())) as? JsonObject
+        YtSessionJson.decode(answer?.get("session") as? JsonObject)
+      } catch (e: HostError) {
+        WaveLog.w(SESSION_TAG, "The host handed over no YouTube session (${e.code}); starting signed out")
+        YtSessionState.SignedOut
+      }
+    }
+  }
+
+  override fun load(): YtSessionState = held ?: YtSessionState.SignedOut
+
+  /** A change the host doesn't take lasts until this process ends. */
+  override fun save(state: YtSessionState) {
+    held = state
+    try {
+      runBlocking {
+        host.ask("ytSession.save", buildJsonObject { put("session", YtSessionJson.encode(state) ?: JsonNull) })
+      }
+    } catch (e: HostError) {
+      WaveLog.w(SESSION_TAG, "The host didn't keep the YouTube session (${e.code})")
+    }
+  }
+
+  private companion object {
+    const val SESSION_TAG = "WaveYtSession"
+  }
 }
 
 /** The visitor data in a file of its own. */

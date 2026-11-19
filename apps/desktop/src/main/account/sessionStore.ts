@@ -33,13 +33,7 @@ export interface SessionFiles {
   readonly remove: (path: string) => void;
 }
 
-export interface SessionStore {
-  /** True when the system has no keyring, so the session stays in memory only. */
-  readonly keyringMissing: () => boolean;
-  readonly load: () => StoredSession | null;
-  readonly save: (session: StoredSession) => void;
-  readonly clear: () => void;
-}
+export type SessionStore = SealedStore<StoredSession>;
 
 /** Chromium's Linux backends that store in plain text or found none. */
 export const NO_KEYRING: ReadonlySet<string> = new Set(["basic_text", "unknown"]);
@@ -70,23 +64,38 @@ const parsed = (text: string): StoredSession | null => {
   return null;
 };
 
-export const sessionStore = ({
+/** What `sealedStore` keeps: one value, sealed by the keyring or in memory without one. */
+export interface SealedStore<T> {
+  /** True when the system has no keyring, so the value stays in memory only. */
+  readonly keyringMissing: () => boolean;
+  readonly load: () => T | null;
+  readonly save: (value: T) => void;
+  readonly clear: () => void;
+}
+
+/**
+ * A value kept as JSON in [file], sealed by [box]; [parse] reads it back, null for anything that
+ * isn't one. Without a keyring it is held in memory and nothing is written.
+ */
+export const sealedStore = <T>({
   box,
   file,
   files,
   platform,
+  parse,
 }: {
   readonly box: SecretBox;
   readonly file: string;
   readonly files: SessionFiles;
   readonly platform: NodeJS.Platform;
-}): SessionStore => {
+  readonly parse: (text: string) => T | null;
+}): SealedStore<T> => {
   // Asked lazily: safeStorage answers only once the app is ready.
   const keyringMissing = () =>
     !box.isEncryptionAvailable() ||
     (platform === "linux" && NO_KEYRING.has(box.getSelectedStorageBackend?.() ?? "unknown"));
-  /** The session while there is no keyring. */
-  let inMemory: StoredSession | null = null;
+  /** The value while there is no keyring. */
+  let inMemory: T | null = null;
   return {
     keyringMissing,
     load: () => {
@@ -94,17 +103,17 @@ export const sessionStore = ({
       const bytes = files.read(file);
       if (bytes === undefined) return null;
       try {
-        return parsed(box.decryptString(bytes));
+        return parse(box.decryptString(bytes));
       } catch {
         return null;
       }
     },
-    save: (session) => {
+    save: (value) => {
       if (keyringMissing()) {
-        inMemory = session;
+        inMemory = value;
         return;
       }
-      files.write(file, box.encryptString(JSON.stringify(session)));
+      files.write(file, box.encryptString(JSON.stringify(value)));
     },
     clear: () => {
       inMemory = null;
@@ -112,3 +121,10 @@ export const sessionStore = ({
     },
   };
 };
+
+export const sessionStore = (options: {
+  readonly box: SecretBox;
+  readonly file: string;
+  readonly files: SessionFiles;
+  readonly platform: NodeJS.Platform;
+}): SessionStore => sealedStore({ ...options, parse: parsed });

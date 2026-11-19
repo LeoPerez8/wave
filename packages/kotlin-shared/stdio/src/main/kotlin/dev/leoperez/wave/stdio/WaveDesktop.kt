@@ -10,6 +10,7 @@ import expo.modules.wavenative.yt.YtPlaylistWrites
 import expo.modules.wavenative.yt.YtPlaylistEdit
 import expo.modules.wavenative.yt.YtPages
 import expo.modules.wavenative.yt.YtRadioStart
+import expo.modules.wavenative.yt.YtSignInPage
 import expo.modules.wavenative.yt.ytHttpClient
 import java.io.File
 import kotlinx.serialization.json.JsonArray
@@ -50,8 +51,14 @@ import expo.modules.wavenative.yt.YtAudioStreams
  *   Queue and Related).
  * - `readLyrics` `{path}`: a track's lyrics as found, `{embedded, sidecar}`, either null (`LyricsReader`).
  * - `ytLyrics` `{videoId}`: YT Music's lyrics for a song (plain text), or null when it has none.
+ * - `ytSignIn` `{cookie, dataSyncId?, sessionIndex?}`: signs in with what the host read from its
+ *   sign-in browser, once YouTube Music says whose account it is; `ytSignOut`, `ytSession` and
+ *   `ytCheckSession` are the phone's `signOut`, `getSession` and `checkSession`. Each answers
+ *   Core's `YtSession`: who is signed in, never the cookie.
+ * - `libraryPlaylists`: the account's YouTube Music playlists (`YtLibraryPlaylist.toMap`).
  *
- * Wave's data (the YouTube session and visitor data) lives in [dataDir].
+ * The visitor data lives in [dataDir]; the YouTube session is the host's to keep
+ * ([HostSessionStore]).
  */
 class WaveDesktop(
   host: JsonLines,
@@ -60,13 +67,20 @@ class WaveDesktop(
   online: () -> Boolean = ::reachesYouTube,
   audioStreams: (YtClient) -> YtAudioStreams = ::JvmYtAudioStreams,
 ) : java.io.Closeable {
-  val yt = YtClient(DesktopYtPlatform(dataDir, host, http, online))
+  private val platform = DesktopYtPlatform(dataDir, host, http, online)
+  val yt = YtClient(platform)
   private val tags = AudioTagReader(primary = JAudioTaggerReader())
   val downloads = DesktopDownloads(host, dataDir, yt, online, audioStreams(yt))
   private val pages = YtPages(yt)
   private val playlists = YtPlaylistWrites(yt)
 
-  suspend fun handle(method: String, params: JsonObject): JsonElement =
+  suspend fun handle(method: String, params: JsonObject): JsonElement {
+    // Before anything asks YouTube: the account the host kept from the last run.
+    platform.sessionStore.restore()
+    return answer(method, params)
+  }
+
+  private suspend fun answer(method: String, params: JsonObject): JsonElement =
     when (method) {
       "search" -> jsonOf(yt.searchSongs(params.string("query")).toMap())
       "readTags" -> {
@@ -104,6 +118,19 @@ class WaveDesktop(
         playlists.edit(params.string("playlistId"), edits)
         JsonNull
       }
+      "ytSignIn" -> {
+        val credentials = YtSignInPage.credentials(
+          params.string("cookie"), params.optionalString("dataSyncId"), params.optionalString("sessionIndex"),
+        ) ?: throw YtException(YtFailure.FAILED)
+        jsonOf(yt.signIn(credentials).toMap())
+      }
+      "ytSignOut" -> {
+        yt.session.signOut()
+        jsonOf(yt.session.state.toMap())
+      }
+      "ytSession" -> jsonOf(yt.session.state.toMap())
+      "ytCheckSession" -> jsonOf(yt.checkSession().toMap())
+      "libraryPlaylists" -> jsonOf(pages.libraryPlaylists().map { it.toMap() })
       "playlist" -> jsonOf(pages.playlist(params.string("playlistId")).toMap())
       "playlistMore" -> jsonOf(pages.playlistMore(params.string("continuation")).toMap())
       "tags.writeSong" -> withContext(Dispatchers.IO) { writeSong(params) }

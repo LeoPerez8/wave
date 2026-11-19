@@ -108,7 +108,9 @@ export const createDesktopLinks = (options: LinksOptions) => {
   });
   /** The import card for [link], read; a playlist that can't be read shows the phone's line for why. */
   const preview = async (link: PlaylistLink, language: AppLanguage): Promise<OpenLinkResult> => {
-    const signal = AbortSignal.timeout(20_000);
+    const signal = AbortSignal.timeout(
+      link.service === "ytMusic" && link.playlistId === "LM" ? 120_000 : 20_000,
+    );
     if (link.service === "spotifyShort") {
       try {
         const landed = await followShortLink(link.url, { body: true }, signal, options.fetch);
@@ -157,7 +159,8 @@ export const createDesktopLinks = (options: LinksOptions) => {
               continuation: typeof page["continuation"] === "string" ? page["continuation"] : null,
             };
           },
-          { signal },
+          // Liked Songs is read to its last song, as the phone reads it.
+          { signal, uncapped: link.playlistId === "LM" },
         );
         read = playlist;
         source = { service: "ytMusic", playlist };

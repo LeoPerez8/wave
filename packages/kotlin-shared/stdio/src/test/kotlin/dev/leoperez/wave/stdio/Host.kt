@@ -7,7 +7,10 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.launch
 import kotlinx.serialization.json.Json
+import kotlinx.serialization.json.JsonNull
 import kotlinx.serialization.json.JsonObject
+import kotlinx.serialization.json.JsonPrimitive
+import kotlinx.serialization.json.buildJsonObject
 import kotlinx.serialization.json.jsonObject
 
 /**
@@ -25,9 +28,31 @@ class Host {
 
   fun write(line: String) = toJvm.put(line)
 
+  /** The YouTube session main keeps for the JVM, as `ytSession.save` last left it; null signed out. */
+  @Volatile var ytSession: JsonObject? = null
+
+  /** How many times the JVM saved the session. */
+  @Volatile var ytSessionSaves = 0
+
+  /**
+   * The JVM's next line. Its `ytSession.load` and `ytSession.save` asks are answered on the way,
+   * as main does from its own store, so a test reads the answer to what it wrote.
+   */
   fun next(): JsonObject {
-    val line = fromJvm.poll(20, TimeUnit.SECONDS) ?: error("The JVM sent nothing")
-    return Json.parseToJsonElement(line).jsonObject
+    while (true) {
+      val text = fromJvm.poll(20, TimeUnit.SECONDS) ?: error("The JVM sent nothing")
+      val line = Json.parseToJsonElement(text).jsonObject
+      val result = when ((line["method"] as? JsonPrimitive)?.content) {
+        "ytSession.load" -> buildJsonObject { put("session", ytSession ?: JsonNull) }
+        "ytSession.save" -> {
+          ytSession = line["params"]!!.jsonObject["session"] as? JsonObject
+          ytSessionSaves += 1
+          JsonNull
+        }
+        else -> return line
+      }
+      write(buildJsonObject { put("id", line["id"]!!); put("result", result) }.toString())
+    }
   }
 
   /** Ends the JVM's input, as the host closing stdin does. */
