@@ -1,4 +1,4 @@
-import { desktopKey, streamedCoverUrls } from "@wave/core";
+import { desktopKey, formatDuration, streamedCoverUrls } from "@wave/core";
 import { useEffect, useRef, useState, type KeyboardEvent, type MouseEvent } from "react";
 import type { BrowsePage, BrowseRow, BrowseScope } from "../../shared/browse.ts";
 import { Icon } from "./Icon.tsx";
@@ -11,8 +11,8 @@ import "./tables.css";
 
 const SIZE = 100;
 const HEIGHT = 40;
-export const time = (ms: number) =>
-  `${Math.floor(ms / 60000)}:${String(Math.floor(ms / 1000) % 60).padStart(2, "0")}`;
+/** A song's or a list's length, "3:07" or "36:43:09": Core's, as the phone's. */
+export const time = formatDuration;
 const images = new Map<string, Promise<string | null>>();
 /** A streamed cover at the largest size YouTube has (Core's `streamedCoverUrls`), else [url] itself. */
 const largestCover = async (url: string): Promise<string | null> => {

@@ -25,6 +25,7 @@ import {
   type YtListDownloadButtonState,
   type YtPlaylistRest,
   type YtQuietReason,
+  listDuration,
 } from "@wave/core";
 import { useLocalisation } from "@/localisation/localisation";
 import type { DownloadOrigin } from "@wave/core";
@@ -240,7 +241,7 @@ const totalMinutes = (songs: readonly Song[], strings: Catalogue): string | null
       total + ((song.source === "library" ? song.track.durationMs : song.song.durationMs) ?? 0),
     0,
   );
-  return ms === 0 ? null : strings.library.minutes(Math.max(1, Math.round(ms / 60_000)));
+  return listDuration(ms, strings.library);
 };
 
 /** What a list's download button can show: an entry to act on, or that every song is downloaded. */

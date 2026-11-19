@@ -130,10 +130,11 @@ export function NowPlaying({
     const gradient = paletteGradient(palette, theme);
     return { gradient, dim: lyricsDimOpacity(gradient, theme.ink[0]!) };
   }, [palette, theme]);
-  // Focus moves in, and back to the bar's artwork or title once it closes.
+  // Focus moves in, and back to the bar's artwork or title once it closes. It lands on Now
+  // Playing itself, not on Close, so Space still plays and pauses; Tab reaches Close next.
   useLayoutEffect(() => {
     opener.current = document.activeElement;
-    root.current?.querySelector<HTMLElement>(".now-playing-close")?.focus();
+    root.current?.focus();
     return () => {
       const element = opener.current;
       if (element instanceof HTMLElement && element.isConnected) element.focus();
@@ -152,6 +153,7 @@ export function NowPlaying({
       ref={root}
       className="now-playing"
       role="dialog"
+      tabIndex={-1}
       aria-label={text.playbackText.nowPlaying}
       style={style}
       data-testid="now-playing"
