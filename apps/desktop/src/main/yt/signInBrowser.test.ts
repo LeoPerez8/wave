@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { findSignInBrowser, signInProfileRoot } from "./signInBrowser.ts";
+import { defaultBrowserCommand, findSignInBrowser, signInProfileRoot } from "./signInBrowser.ts";
 
 const windows = (installed: readonly string[]) =>
   findSignInBrowser({
@@ -33,12 +33,14 @@ const linux = (
   installed: readonly string[],
   path = "/usr/local/bin:/usr/bin:/snap/bin",
   wrappers: readonly string[] = [],
+  preferred?: string,
 ) =>
   findSignInBrowser({
     platform: "linux",
     env: { PATH: path },
     exists: (file) => installed.includes(file),
     isChromiumSnapWrapper: (file) => wrappers.includes(file),
+    ...(preferred === undefined ? {} : { preferred }),
   });
 
 test("on Linux the sign-in browser is an installed Chromium-family browser", () => {
@@ -77,4 +79,28 @@ test("Linux prefers browser family across PATH and treats a Chromium Snap wrappe
     signInProfileRoot(wrapper, "/home/ana", "/home/ana/.config/Wave"),
     "/home/ana/.config/Wave",
   );
+});
+
+test("the default browser's family is tried first on Linux when it is Chromium-family", () => {
+  const chrome = "/usr/bin/google-chrome";
+  const brave = "/usr/bin/brave-browser";
+  // Chrome wins by default, but the user's Brave default moves Brave ahead of it.
+  assert.equal(linux([chrome, brave]), chrome);
+  assert.equal(linux([chrome, brave], undefined, [], "brave-browser"), brave);
+  // A default that isn't installed just leaves the normal order.
+  assert.equal(linux([chrome, brave], undefined, [], "chromium"), chrome);
+  // A default Wave doesn't know (undefined from the mapping) changes nothing.
+  assert.equal(linux([chrome, brave], undefined, [], undefined), chrome);
+});
+
+test("defaultBrowserCommand maps a .desktop name to a sign-in command, else undefined", () => {
+  assert.equal(defaultBrowserCommand("brave-browser.desktop"), "brave-browser");
+  assert.equal(defaultBrowserCommand("brave_brave.desktop"), "brave-browser");
+  assert.equal(defaultBrowserCommand("google-chrome.desktop"), "google-chrome");
+  assert.equal(defaultBrowserCommand("microsoft-edge.desktop"), "microsoft-edge");
+  assert.equal(defaultBrowserCommand("chromium_chromium.desktop"), "chromium");
+  assert.equal(defaultBrowserCommand("chromium.desktop\n"), "chromium");
+  assert.equal(defaultBrowserCommand("firefox.desktop"), undefined);
+  assert.equal(defaultBrowserCommand(undefined), undefined);
+  assert.equal(defaultBrowserCommand(""), undefined);
 });
