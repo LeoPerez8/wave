@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { findSignInBrowser } from "./signInBrowser.ts";
+import { findSignInBrowser, signInProfileRoot } from "./signInBrowser.ts";
 
 const windows = (installed: readonly string[]) =>
   findSignInBrowser({
@@ -29,14 +29,19 @@ test("on Windows a browser installed for one user only is found too", () => {
   assert.equal(windows([chromium]), chromium);
 });
 
-const linux = (installed: readonly string[], path = "/usr/local/bin:/usr/bin:/snap/bin") =>
+const linux = (
+  installed: readonly string[],
+  path = "/usr/local/bin:/usr/bin:/snap/bin",
+  wrappers: readonly string[] = [],
+) =>
   findSignInBrowser({
     platform: "linux",
     env: { PATH: path },
     exists: (file) => installed.includes(file),
+    isChromiumSnapWrapper: (file) => wrappers.includes(file),
   });
 
-test("on Linux the sign-in browser is the first Chromium-family one on the PATH", () => {
+test("on Linux the sign-in browser is an installed Chromium-family browser", () => {
   assert.equal(linux(["/usr/bin/chromium", "/usr/bin/firefox"]), "/usr/bin/chromium");
   assert.equal(linux(["/usr/bin/microsoft-edge"]), "/usr/bin/microsoft-edge");
   assert.equal(linux(["/usr/bin/brave-browser"]), "/usr/bin/brave-browser");
@@ -51,5 +56,25 @@ test("without a Chromium-family browser there is none", () => {
     findSignInBrowser({ platform: "linux", env: {}, exists: () => true }),
     null,
     "no PATH, nowhere to look",
+  );
+});
+
+test("Linux prefers browser family across PATH and treats a Chromium Snap wrapper as confined", () => {
+  assert.equal(
+    linux(["/usr/local/bin/chromium", "/usr/bin/google-chrome"]),
+    "/usr/bin/google-chrome",
+  );
+  const wrapper = "/usr/bin/chromium-browser";
+  const snap = "/var/lib/snapd/snap/bin/chromium";
+  assert.equal(linux([wrapper, snap], "/usr/bin", [wrapper]), snap);
+  assert.equal(linux([wrapper], "/usr/bin", [wrapper]), null);
+  assert.equal(linux([wrapper, snap], "/usr/bin"), wrapper);
+  assert.equal(
+    signInProfileRoot(snap, "/home/ana", "/home/ana/.config/Wave"),
+    "/home/ana/snap/chromium/common",
+  );
+  assert.equal(
+    signInProfileRoot(wrapper, "/home/ana", "/home/ana/.config/Wave"),
+    "/home/ana/.config/Wave",
   );
 });

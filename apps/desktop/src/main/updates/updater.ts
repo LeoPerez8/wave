@@ -17,10 +17,13 @@ import { dirname, isAbsolute, join } from "node:path";
 import {
   artifactName,
   desktopFileKey,
+  desktopLatestKey,
   type DesktopChannel,
   type DesktopManifest,
 } from "../../../../updates/src/desktopProtocol.ts";
 import { UPDATES_ORIGIN } from "../../../../updates/src/layout.ts";
+import { verifiedDesktopUpdate } from "../../../../updates/src/desktopSignature.ts";
+import { desktopUpdateLifecycle } from "./lifecycle.ts";
 import { authorizeUpdate, verifyInstaller } from "./policy.ts";
 
 declare const WAVE_DESKTOP_BUILD: {
@@ -49,23 +52,18 @@ export const startDesktopUpdates = () => {
   const fileUrl = (target: string, name: string, digest?: string) =>
     new URL(`/v1/${desktopFileKey(channel, target, name, digest)}`, UPDATES_ORIGIN);
   let admitted: DesktopManifest | null = null;
-  let ready: { file: string; manifest: DesktopManifest } | undefined;
-  let checking = false;
   let closing = false;
   let timer: ReturnType<typeof setTimeout>;
-
-  class WaveProvider extends Provider<UpdateInfo> {
-    constructor(_options: unknown, _updater: unknown, runtime: ProviderRuntimeOptions) {
-      super({ ...runtime, isUseMultipleRangeRequest: false });
-    }
-
-    override async getLatestVersion(): Promise<UpdateInfo> {
-      const current = { version, files: [], path: "", sha512: "", releaseDate: "" };
-      const response = await fetch(`${UPDATES_ORIGIN}/v1/desktop/${channel}/latest.json`, {
+  // Check and quit share a single serial-file writer, without waiting for an in-flight download.
+  let lastLookup: Promise<unknown> = Promise.resolve();
+  const latest = () => {
+    const lookup = lastLookup.then(async () => {
+      const response = await fetch(`${UPDATES_ORIGIN}/v1/${desktopLatestKey(channel)}`, {
         redirect: "error",
+        cache: "no-store",
         signal: AbortSignal.timeout(15_000),
       });
-      if (response.status === 404) return current;
+      if (response.status === 404) return null;
       if (!response.ok) throw new Error(`Desktop update check failed (${response.status})`);
       const answer = (await response.json()) as Record<string, unknown>;
       const accepted = Number(
@@ -76,15 +74,31 @@ export const startDesktopUpdates = () => {
       );
       if (!Number.isSafeInteger(accepted) || accepted < 0)
         throw new Error("Invalid desktop update serial");
-      admitted = authorizeUpdate(
+      const manifest = verifiedDesktopUpdate(
         answer[targetPlatform],
         publicKey,
         channel,
         targetPlatform,
-        version,
-        builtAt,
-        accepted,
       );
+      if (manifest.serial > accepted) {
+        // Remember signed recalls even when they point to the version already running.
+        await writeFile(`${serialFile}.tmp`, String(manifest.serial), { mode: 0o600 });
+        await rename(`${serialFile}.tmp`, serialFile);
+      }
+      return authorizeUpdate(manifest, version, builtAt, accepted);
+    });
+    lastLookup = lookup.catch(() => {});
+    return lookup;
+  };
+
+  class WaveProvider extends Provider<UpdateInfo> {
+    constructor(_options: unknown, _updater: unknown, runtime: ProviderRuntimeOptions) {
+      super({ ...runtime, isUseMultipleRangeRequest: false });
+    }
+
+    override async getLatestVersion(): Promise<UpdateInfo> {
+      const current = { version, files: [], path: "", sha512: "", releaseDate: "" };
+      admitted = closing ? null : await latest();
       if (!admitted) return current;
       const path = artifactName(targetPlatform, admitted.version);
       return {
@@ -121,39 +135,24 @@ export const startDesktopUpdates = () => {
   updater.allowDowngrade = true;
 
   const report = (error: unknown) => console.error("[desktop update]", error);
-  const check = async () => {
-    if (checking || ready || closing) return;
-    checking = true;
-    try {
+  const updates = desktopUpdateLifecycle({
+    report,
+    latest,
+    check: async () => {
       admitted = null;
       const result = await updater.checkForUpdates();
-      const manifest = admitted as DesktopManifest | null;
-      if (!result?.isUpdateAvailable || !manifest || closing) return;
+      return result?.isUpdateAvailable ? admitted : null;
+    },
+    download: async (manifest) => {
       const [file] = await updater.downloadUpdate();
-      if (!file || closing) return;
-      await verifyInstaller(file, manifest);
-      // Persist before handing the installer to the OS. Equal serials can retry a failed install.
-      await writeFile(`${serialFile}.tmp`, String(manifest.serial), { mode: 0o600 });
-      await rename(`${serialFile}.tmp`, serialFile);
-      ready = { file, manifest };
-    } catch (error) {
-      report(error);
-    } finally {
-      checking = false;
-      if (!closing && !ready) timer = setTimeout(() => void check(), CHECK_INTERVAL);
-    }
-  };
-  timer = setTimeout(() => void check(), 30_000);
-
-  return async () => {
-    closing = true;
-    clearTimeout(timer);
-    if (!ready) return;
-    try {
+      if (file) await verifyInstaller(file, manifest);
+      return file;
+    },
+    install: async ({ file: installerFile, manifest }) => {
       if (platform === "win32") {
-        await verifyInstaller(ready.file, ready.manifest);
+        await verifyInstaller(installerFile, manifest);
         await new Promise<void>((resolve, reject) => {
-          const installer = spawn(ready!.file, ["/S", "--updated"], {
+          const installer = spawn(installerFile, ["/S", "--updated"], {
             detached: true,
             stdio: "ignore",
           });
@@ -170,16 +169,25 @@ export const startDesktopUpdates = () => {
         const staging = await mkdtemp(join(dirname(destination), ".wave-update-"));
         try {
           const file = join(staging, "Wave.AppImage");
-          await copyFile(ready.file, file);
-          await verifyInstaller(file, ready.manifest);
+          await copyFile(installerFile, file);
+          await verifyInstaller(file, manifest);
           await chmod(file, 0o755);
           await rename(file, destination);
         } finally {
           await rm(staging, { recursive: true, force: true });
         }
       }
-    } catch (error) {
-      report(error);
-    }
+    },
+  });
+  const check = async () => {
+    await updates.check();
+    if (!closing) timer = setTimeout(() => void check(), CHECK_INTERVAL);
+  };
+  timer = setTimeout(() => void check(), 30_000);
+
+  return () => {
+    closing = true;
+    clearTimeout(timer);
+    return updates.quit();
   };
 };

@@ -29,7 +29,11 @@ export const desktopKeyDigest = (key: string | KeyObject): string => {
     .digest("hex");
 };
 
-const filesFor = (platform: DesktopPlatform, tag: string, pendingWindows = false): string[] => {
+export const desktopReleaseFiles = (
+  platform: DesktopPlatform,
+  tag: string,
+  pendingWindows = false,
+): string[] => {
   const version = tag.slice(1);
   if (!tag.startsWith("v") || !desktopVersion(version, tag.endsWith("-ti") ? "ti" : "main")) {
     throw new Error("Invalid desktop release tag");
@@ -55,7 +59,7 @@ export const recordDesktopBuild = async (
   pendingWindows = false,
 ) => {
   const files = await Promise.all(
-    filesFor(platform, tag, pendingWindows).map((name) => evidenceOf(dir, name)),
+    desktopReleaseFiles(platform, tag, pendingWindows).map((name) => evidenceOf(dir, name)),
   );
   await writeFile(
     join(dir, "build.json"),
@@ -70,7 +74,7 @@ const checkFiles = async (
   files: readonly FileEvidence[],
   pendingWindows = false,
 ) => {
-  const names = filesFor(platform, tag, pendingWindows);
+  const names = desktopReleaseFiles(platform, tag, pendingWindows);
   if (!Array.isArray(files) || files.length !== names.length)
     throw new Error(`Incomplete desktop evidence for ${platform}`);
   for (const [index, name] of names.entries()) {

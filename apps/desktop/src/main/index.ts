@@ -16,8 +16,8 @@ import * as Layer from "effect/Layer";
 import * as ManagedRuntime from "effect/ManagedRuntime";
 import { forkAudio } from "./audio/fork.ts";
 import { streamingPlayerLayer } from "./audio/player.ts";
-import { startDesktopUpdates } from "./updates/updater.ts";
-import { loadVersionHistory } from "./updates/history.ts";
+import { desktopBuild, startDesktopUpdates } from "./updates/updater.ts";
+import { createDesktopVersionHistory } from "./updates/history.ts";
 import { registerBridge } from "./bridge.ts";
 import { playbackLayer } from "./playback/playback.ts";
 import { libraryLayer } from "./database.ts";
@@ -496,10 +496,15 @@ else {
           on,
         ),
       () => system?.mediaBackend ?? (process.platform === "win32" ? "chromium" : "native"),
-      loadVersionHistory,
+      createDesktopVersionHistory({
+        version: app.getVersion(),
+        channel: desktopBuild?.channel ?? null,
+        folder: app.getPath("userData"),
+      }),
     );
     // The queue's position and the play so far are saved before the app exits.
     let quitting = false;
+    let quitReady = false;
     const closeServices = () => {
       let timer: ReturnType<typeof setTimeout> | undefined;
       return Promise.race([
@@ -508,8 +513,9 @@ else {
       ]).finally(() => clearTimeout(timer));
     };
     app.on("before-quit", (event) => {
-      if (quitting) return;
+      if (quitReady) return;
       event.preventDefault();
+      if (quitting) return;
       quitting = true;
       system?.beginQuit();
       system?.close();
@@ -517,7 +523,10 @@ else {
       // Services that hang as they close don't keep a process nobody can see.
       void closeServices()
         .then(() => installUpdate?.())
-        .finally(() => app.quit());
+        .finally(() => {
+          quitReady = true;
+          app.quit();
+        });
     });
     createWindow(
       () => {
