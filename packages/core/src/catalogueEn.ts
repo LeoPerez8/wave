@@ -107,6 +107,7 @@ export const en = {
     youMightAlsoLike: "You might also like",
     magicQueueIdle: "Start a Magic Queue from one of these songs, or from any song's menu.",
     sidePanel: "Side panel",
+    closeSidePanel: "Close side panel",
     removeFromQueue: (title: string) => `Remove “${title}” from the Queue`,
   },
   desktopLibrary: {

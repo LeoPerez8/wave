@@ -72,10 +72,20 @@
   border-left: 1px solid var(--color-separator);
   background: var(--color-grouped);
 }
+.panel-head {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin: 12px 8px 4px 14px;
+}
+.panel-close {
+  width: 28px;
+  height: 28px;
+}
 .panel-tabs {
+  flex: 1;
   display: flex;
   gap: 4px;
-  margin: 12px 14px 4px;
   padding: 2px;
   border-radius: 7px;
   background: var(--color-fill);

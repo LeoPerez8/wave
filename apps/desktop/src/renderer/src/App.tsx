@@ -823,6 +823,14 @@ export function App() {
           run={playback.run}
           onError={failed}
           hidden={nowPlaying}
+          onClose={() => {
+            // Focus goes back to the bar's button for this tab; Related opens from Queue's.
+            const opener = panel.tab === "lyrics" ? labels.lyrics : labels.queue;
+            panel.show(null);
+            document
+              .querySelector<HTMLElement>(`.player-bar [aria-label="${CSS.escape(opener)}"]`)
+              ?.focus();
+          }}
         />
       )}
       {nowPlaying && (
