@@ -22,6 +22,10 @@ import {
   readDiscoverMixLevel,
   readMixSliders,
   parseHomeArrangement,
+  DISCOVER_LEVEL_SETTING as DISCOVER_LEVEL,
+  DISCOVER_SLIDERS_SETTING as DISCOVER_SLIDERS,
+  HOME_ARRANGEMENT_SETTING,
+  SEARCH_ONLINE_SETTING as SEARCH_ONLINE,
   ytTrackId,
   type PlayedSeedArtist,
   type QueueContinuationSeed,
@@ -61,8 +65,6 @@ import { YtMusic } from "./ytMusic.ts";
 export const MAGIC_QUEUE_SESSION = "playback.magicQueue";
 /** Settings › Playback › Continue with Magic Queue, as the account syncs it. */
 const CONTINUE_QUEUE = "settings.continueQueue";
-/** Settings › Accounts › Search online, kept on this computer. */
-const SEARCH_ONLINE = "settings.searchOnline";
 
 export interface YtFeaturesShape {
   readonly pages: YtPagesShape;
@@ -165,10 +167,6 @@ const playedArtists = (db: LibraryDatabase, library: LibraryRead): PlayedSeedArt
     .sort((a, b) => b.countedPlays - a.countedPlays);
 };
 
-/** Discover's sliders, kept on this computer under the phone's names (not synced). */
-const DISCOVER_LEVEL = "home.discoverLevel";
-const DISCOVER_SLIDERS = "home.discoverSliders";
-
 /** A song of a mix as the queue names it. */
 const mixTrackId = (song: DiscoverMixSong): string =>
   song.source === "stream" ? ytTrackId(song.song.videoId) : String(song.track.id);
@@ -259,7 +257,7 @@ export const ytFeaturesLayer = (options: { readonly online: () => boolean }) =>
           savePreference(db, DISCOVER_SLIDERS, JSON.stringify({ faithfulness, popularity }));
         },
         rows: () =>
-          parseHomeArrangement(syncedPreference(db, "settings.homeArrangement")).discoverRows,
+          parseHomeArrangement(syncedPreference(db, HOME_ARRANGEMENT_SETTING)).discoverRows,
       });
 
       /** [ids]' Library songs, in order; ids no longer playable are left out. */

@@ -5,6 +5,9 @@ import { en, type Catalogue } from "./catalogueEn.ts";
 import { deezerFollowArtists } from "./followArtistSearch.ts";
 import { artistPhotoName } from "./artistPhoto.ts";
 
+/** Where Settings › Followed artists keeps its switch; the account syncs it. */
+export const FOLLOWED_ARTISTS_SETTING = "settings.followedArtists";
+
 /** One follow across Library and online pages; namesakes share this name key. */
 export const followArtistKey = artistPhotoName;
 
@@ -386,6 +389,8 @@ export const followCheckDue = (input: {
  * lookups a day, and an artist costs at most one of each.
  */
 export const TICKETMASTER_ARTISTS_PER_DAY = 200;
+/** Where a device keeps the artists it asked about today (`showChecksLeftToday`'s [asked]); never synced. */
+export const SHOW_CHECKS_TODAY_SETTING = "shows.checksToday";
 /** The UTC day [now] falls in, as the sync service counts its daily limits. */
 export const showCheckDay = (now: number): number => Math.floor(now / (24 * 3_600_000));
 /**

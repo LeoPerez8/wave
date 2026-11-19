@@ -21,7 +21,7 @@ import { BROWSE_KINDS, type BrowseScope } from "../shared/browse.ts";
 import { browseLetter } from "./library/browse.ts";
 import { readArtwork } from "./library/artwork.ts";
 import { appearance, preference, savePreference } from "./preferences.ts";
-import { readSearchOnline, writeSearchOnline } from "@wave/core";
+import { SEARCH_ONLINE_SETTING, readSearchOnline, writeSearchOnline } from "@wave/core";
 import {
   MAX_TARGET_IDS,
   SONG_RUN_ACTIONS,
@@ -358,13 +358,11 @@ const createHandlers = (
         : refuse("settings.setPlayback", "invalid playback settings"),
     "settings.ytMusic": () => ytCall((yt) => yt.enabled()),
     "settings.searchOnline": () =>
-      Effect.map(Database, (db) =>
-        readSearchOnline(preference(db, "settings.searchOnline") ?? null),
-      ),
+      Effect.map(Database, (db) => readSearchOnline(preference(db, SEARCH_ONLINE_SETTING) ?? null)),
     "settings.setSearchOnline": ([value]) =>
       value === "always" || value === "onDemand"
         ? Effect.map(Database, (db) =>
-            savePreference(db, "settings.searchOnline", writeSearchOnline(value) ?? ""),
+            savePreference(db, SEARCH_ONLINE_SETTING, writeSearchOnline(value) ?? ""),
           )
         : refuse("settings.setSearchOnline", "invalid setting"),
     "settings.setYtMusic": ([on]) =>

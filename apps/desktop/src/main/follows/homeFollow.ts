@@ -14,7 +14,13 @@ import { openFollowRelease } from "@wave/client/follows/followReleaseOpen";
 import { followShowsCheck } from "@wave/client/follows/followShowsCheck";
 import { databaseFollowStore } from "@wave/client/follows/followStore";
 import { readHomeFollowSnapshot } from "@wave/client/follows/homeFollowSnapshot";
-import { homeFollowCards, type FollowRelease } from "@wave/core";
+import {
+  DONT_PLAY_EXPLICIT_SETTING as DONT_PLAY_EXPLICIT,
+  FOLLOWED_ARTISTS_SETTING as FOLLOWED_ARTISTS,
+  SHOW_CHECKS_TODAY_SETTING as CHECKS_TODAY,
+  homeFollowCards,
+  type FollowRelease,
+} from "@wave/core";
 import * as Context from "effect/Context";
 import type * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
@@ -27,12 +33,6 @@ import type { YtPagesShape } from "../yt/ytPages.ts";
 import { YtMusic } from "../yt/ytMusic.ts";
 import { YtFeatures } from "../yt/ytServices.ts";
 
-/** Settings › Followed artists, as the account syncs it. */
-const FOLLOWED_ARTISTS = "settings.followedArtists";
-/** Settings › Don't Play Explicit, as the account syncs it. */
-const DONT_PLAY_EXPLICIT = "settings.dontPlayExplicit";
-/** Artists asked about today, toward the service's daily limit; kept on this computer. */
-const CHECKS_TODAY = "shows.checksToday";
 /** A cover larger than this isn't one. */
 const MAX_ARTWORK_BYTES = 2_000_000;
 const MAX_ARTWORK_KEPT = 300;
