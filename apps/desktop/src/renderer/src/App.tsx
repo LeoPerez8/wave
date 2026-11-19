@@ -400,15 +400,11 @@ export function App() {
             run: () => download(window.wave.downloads.missingAction("downloadAll", list)),
           };
     const said = (start: PlayStart) => {
-      if (start.kind === "nothing")
-        notify(
-          start.missing === 0
-            ? text.desktopLibrary.driveDisconnected
-            : text.desktopLibrary.nothingToPlay,
-          undefined,
-          start.missing === 0 ? undefined : offer,
-        );
-      else if (start.kind === "playing" && start.leftOut > 0)
+      if (start.kind === "nothing") {
+        // An empty list says nothing; the drive is named only when a listed song is on it.
+        if (start.missing > 0) notify(text.desktopLibrary.nothingToPlay, undefined, offer);
+        else if (start.unavailable > 0) notify(text.desktopLibrary.driveDisconnected);
+      } else if (start.kind === "playing" && start.leftOut > 0)
         notify(text.desktopLibrary.leftOut(start.leftOut), undefined, offer);
     };
     // An artist's page with Online takes YouTube Music's songs too.

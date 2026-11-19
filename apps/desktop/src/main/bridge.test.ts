@@ -2383,16 +2383,52 @@ test("Play and Shuffle on a list where nothing can play say so, with its missing
       assert.deepEqual(await wave.playback.start(scope, undefined, false), {
         kind: "nothing",
         missing: 2,
+        unavailable: 0,
       });
       assert.deepEqual(await wave.playback.start(scope, undefined, true), {
         kind: "nothing",
         missing: 2,
+        unavailable: 0,
       });
       assert.equal((await wave.playback.view()).current, null);
       assert.ok(
         !downloads.some((line) => line.startsWith("downloads.enqueueAll ")),
         "Play downloads nothing by itself",
       );
+    } finally {
+      await runtime.dispose();
+    }
+  });
+});
+
+test("Play on a list where nothing can play counts the songs on a disconnected drive, none for an empty playlist", async () => {
+  await withFile(async (file) => {
+    const music = join(dirname(file), "Music");
+    mkdirSync(music);
+    writeFileSync(join(music, "One.flac"), "music");
+    const { runtime, exposed } = connect(file);
+    const wave = exposed.get("wave") as WaveBridge;
+    try {
+      const library = await runtime.runPromise(DesktopLibrary);
+      await library.refresh();
+      const playlistId = await runtime.runPromise(
+        Effect.gen(function* () {
+          const db = (yield* Database) as unknown as TestDatabase;
+          return createPlaylist(db, "Evening", [], 1000).playlistId;
+        }),
+      );
+      assert.deepEqual(await wave.playback.start({ kind: "playlist", id: playlistId }), {
+        kind: "nothing",
+        missing: 0,
+        unavailable: 0,
+      });
+      rmSync(music, { recursive: true });
+      await library.refresh();
+      assert.deepEqual(await wave.playback.start({ kind: "songs" }), {
+        kind: "nothing",
+        missing: 0,
+        unavailable: 1,
+      });
     } finally {
       await runtime.dispose();
     }
