@@ -488,7 +488,9 @@ export const createDownloads = (deps: DownloadsDeps): DownloadsShape => {
         let asked = readStarDownloads(store.read(STAR_ASKED));
         const cancelled = cancel.map(missingSongJobId);
         for (const id of cancelled)
-          if (unstarredDownload(statuses.get(id) ?? null, { starAsked: asked.has(id) }) === "cancel")
+          if (
+            unstarredDownload(statuses.get(id) ?? null, { starAsked: asked.has(id) }) === "cancel"
+          )
             await deps.call("downloads.cancel", { id });
         const current = await session();
         const requests: JobRequest[] = [];
