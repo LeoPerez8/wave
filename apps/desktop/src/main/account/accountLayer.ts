@@ -22,6 +22,8 @@ import { readDesktopLanguage, saveDesktopLanguage } from "../language.ts";
 export interface AccountShape {
   readonly language: () => LanguageView;
   readonly setLanguage: (choice: LanguageChoice) => void;
+  /** A synced setting was saved and stamped here: it goes up without waiting for the timed sync. */
+  readonly settingsEdited: () => void;
   readonly view: () => AccountView;
   readonly signIn: () => Promise<void>;
   readonly cancelSignIn: () => void;
@@ -117,6 +119,7 @@ export const accountLayer = (options: {
           languageChanged();
           sync.edited({ songs: false });
         },
+        settingsEdited: () => sync.edited({ songs: false }),
         view: () => {
           const { account: view, keyringMissing } = account.view();
           return {

@@ -8,6 +8,7 @@ import {
   type LYRICS_AND_TAGS_CALLS,
   type LyricsAndTagsView,
 } from "../shared/lyricsAndTags.ts";
+import { Account } from "./account/accountLayer.ts";
 import { Downloads } from "./downloads/downloadsLayer.ts";
 import { DesktopLibrary } from "./library/library.ts";
 import { readLyricsAndTags, saveLyricsAndTags } from "./library/lyricsAndTags.ts";
@@ -17,7 +18,11 @@ type LyricsAndTagsCall = (typeof LYRICS_AND_TAGS_CALLS)[number];
 export type LyricsAndTagsHandlers = {
   readonly [C in LyricsAndTagsCall]: (
     args: readonly unknown[],
-  ) => Effect.Effect<BridgeContract[C]["result"], unknown, Database | DesktopLibrary | Downloads>;
+  ) => Effect.Effect<
+    BridgeContract[C]["result"],
+    unknown,
+    Account | Database | DesktopLibrary | Downloads
+  >;
 };
 
 const view = Effect.gen(function* () {
@@ -43,6 +48,7 @@ export const lyricsAndTagsHandlers: LyricsAndTagsHandlers = {
           const saved = saveLyricsAndTags(yield* Database, change, Date.now());
           // Off means no more requests, the whole-Library run's too.
           if (!saved.fixSongsOnline) (yield* Downloads).libraryFix.cancel();
+          (yield* Account).settingsEdited();
           return yield* view;
         })
       : Effect.fail(new Error("Refused lyricsAndTags.set: invalid settings")),

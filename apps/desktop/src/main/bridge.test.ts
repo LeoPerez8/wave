@@ -48,7 +48,12 @@ import { desktop, keyring } from "./account/testAccount.ts";
 import { pullAll } from "../../../sync/src/testing.ts";
 import { fakeClock } from "../../../../packages/core/src/testSyncClock.ts";
 import { recordPlay } from "@wave/client/db/playHistory";
-import { editHomeArrangement, parseHomeArrangement, storedHomeArrangement } from "@wave/core";
+import {
+  DOWNLOAD_ARTIST_PHOTOS_SETTING,
+  editHomeArrangement,
+  parseHomeArrangement,
+  storedHomeArrangement,
+} from "@wave/core";
 
 const trusted = { senderFrame: "window" };
 
@@ -87,6 +92,34 @@ test("Lyrics and tags keeps the account's switches, refuses other keys and runs 
       assert.equal((await reopened.set({ fixSongsOnline: true })).fixSongsOnline, true);
     } finally {
       await second.runtime.dispose();
+    }
+  });
+});
+
+test("a Lyrics and tags switch goes up to the account without waiting for the timed sync", async () => {
+  await withFile(async (file) => {
+    const app = await desktop();
+    const phone = await app.service.signIn();
+    const { clock, pass } = fakeClock();
+    const { runtime, exposed } = connect(file, undefined, { service: app.open(), clock });
+    const wave = exposed.get("wave") as WaveBridge;
+    try {
+      await wave.account.signIn();
+      // The sync that signing in starts ends before the switch moves.
+      await pass(10_000);
+      await new Promise((resolve) => setTimeout(resolve, 300));
+      await wave.lyricsAndTags.set({ downloadArtistPhotos: false });
+      await pass(10_000);
+      let pushed: readonly unknown[] = [];
+      for (let tries = 0; tries < 10 && pushed.length === 0; tries++) {
+        await new Promise((resolve) => setTimeout(resolve, 100));
+        pushed = (await pullAll(app.service, phone)).preferences.filter(
+          (row) => (row as { id?: unknown }).id === DOWNLOAD_ARTIST_PHOTOS_SETTING,
+        );
+      }
+      assert.equal(pushed.length, 1);
+    } finally {
+      await runtime.dispose();
     }
   });
 });
