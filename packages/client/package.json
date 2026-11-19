@@ -14,6 +14,7 @@
     "./downloads/lookups": "./src/downloads/lookups.ts",
     "./artworkUri": "./src/artworkUri.ts",
     "./artworkLookup": "./src/artworkLookup.ts",
+    "./ytArtistFetch": "./src/ytArtistFetch.ts",
     "./playlistRecommendationTracks": "./src/playlistRecommendationTracks.ts",
     "./playbackSession": "./src/playbackSession.ts",
     "./queueGains": "./src/queueGains.ts",

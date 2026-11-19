@@ -17,6 +17,8 @@ import {
   localDay,
   parseTrackId,
   readContinueQueue,
+  readSearchOnline,
+  searchOnlineAlways,
   readDiscoverMixLevel,
   readMixSliders,
   parseHomeArrangement,
@@ -52,17 +54,22 @@ import {
   type MagicQueueSong,
 } from "./magicQueue.ts";
 import { createYtPages, type YtPagesShape, type YtRelatedRead } from "./ytPages.ts";
+import { createArtistSection, type ArtistSectionShape } from "./artistSection.ts";
 import { YtMusic } from "./ytMusic.ts";
 
 /** Where the Magic Queue's session is kept across launches. */
 export const MAGIC_QUEUE_SESSION = "playback.magicQueue";
 /** Settings › Playback › Continue with Magic Queue, as the account syncs it. */
 const CONTINUE_QUEUE = "settings.continueQueue";
+/** Settings › Accounts › Search online, kept on this computer. */
+const SEARCH_ONLINE = "settings.searchOnline";
 
 export interface YtFeaturesShape {
   readonly pages: YtPagesShape;
   readonly discover: DiscoverShape;
   readonly magicQueue: MagicQueueShape;
+  /** A Library artist page's YouTube Music section. */
+  readonly artistSection: ArtistSectionShape;
   /**
    * Search's YouTube Music answer for [query]: its songs, artists and albums, and which of them
    * the Library already has. One search that fails fails them all, as on the phone.
@@ -354,12 +361,28 @@ export const ytFeaturesLayer = (options: { readonly online: () => boolean }) =>
         }),
       );
 
+      const artistSection = createArtistSection({
+        db,
+        enabled: yt.enabled,
+        online: options.online,
+        // The desktop has no mobile data: Always on Wi-Fi is Always.
+        always: () =>
+          searchOnlineAlways(readSearchOnline(preference(db, SEARCH_ONLINE) ?? null), {
+            onMobileData: false,
+          }),
+        now: Date.now,
+        keep: yt.keep,
+        search: pages.searchArtists,
+        page: pages.artistWhole,
+      });
+
       let related: { readonly videoId: string; readonly read: Promise<YtRelatedRead> } | undefined;
 
       return {
         pages,
         discover,
         magicQueue,
+        artistSection,
         search: async (query) => {
           const [found, catalog] = await Promise.all([yt.search(query), pages.catalog(query)]);
           const status = found.status !== "ok" ? found.status : catalog.status;

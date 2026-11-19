@@ -59,6 +59,11 @@ export const desktopEn = {
       share: "Copy Link",
     },
   },
+  library: {
+    // The artist page's quiet lines: Online is clicked, not tapped.
+    offlineTapOnline: "You're offline. Click Online to try again when you're back online.",
+    noAnswerTapOnline: "No answer online. Click Online to try again.",
+  },
   songDeletion: {
     // The file stays on the computer, excluded from the Library (Settings › Library includes it again).
     removeMessage: {
