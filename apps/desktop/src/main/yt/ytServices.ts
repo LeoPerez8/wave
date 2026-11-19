@@ -17,6 +17,7 @@ import {
   localDay,
   parseTrackId,
   readContinueQueue,
+  searchSongTap,
   readSearchOnline,
   searchOnlineAlways,
   readDiscoverMixLevel,
@@ -36,11 +37,12 @@ import * as Context from "effect/Context";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 
-import type { BrowseKind } from "../../shared/browse.ts";
+import type { BrowseKind, BrowseScope } from "../../shared/browse.ts";
+import type { PlayStart } from "../../shared/playerView.ts";
 import { ytRow, type YtSearchPage } from "../../shared/yt.ts";
 import type { SongTarget } from "../../shared/songActions.ts";
 import { Kotlin } from "../kotlin/kotlin.ts";
-import { browseLibrary, browseTrackIds } from "../library/browse.ts";
+import { browseLibrary, browseSongs, browseTrackIds } from "../library/browse.ts";
 import { DesktopLibrary } from "../library/library.ts";
 import { targetSongs } from "../library/songActions.ts";
 import { Playback } from "../playback/playback.ts";
@@ -79,6 +81,11 @@ export interface YtFeaturesShape {
   readonly related: () => Promise<YtRelatedRead>;
   /** Plays a Magic Queue of [target]'s songs; false when none of them can play. */
   readonly startMagicQueue: (target: SongTarget) => Promise<boolean>;
+  /**
+   * Plays the Library song at [index] of Search's songs for [scope] (Core's `searchSongTap`):
+   * its faithful Magic Queue with YT Music on, the song alone with it off, or its download.
+   */
+  readonly playSearchSong: (scope: BrowseScope, index: number) => Promise<PlayStart>;
   /** Plays today's mix [id] from its song [index], as a queue that goes on from the mix. */
   readonly playMix: (id: string, index: number) => Promise<boolean>;
 }
@@ -463,6 +470,30 @@ export const ytFeaturesLayer = (options: { readonly online: () => boolean }) =>
             songs,
             streamed: [],
           });
+        },
+        playSearchSong: async (scope, index) => {
+          const id = Number(browseTrackIds(db, scope)[index]);
+          const track = browseSongs(db, [id])[0];
+          const tap =
+            track === undefined
+              ? undefined
+              : searchSongTap({ source: "library", track }, { ytMusic: yt.enabled() });
+          const seeded = tap?.play === "magicQueue" ? songsOf([id]) : [];
+          // A song whose drive is disconnected says so, as it does played alone.
+          if (
+            tap?.play === "magicQueue" &&
+            tap.from === "library" &&
+            seeded.length > 0 &&
+            !library.unavailable(tap.track.path!) &&
+            (await magicQueue.start({
+              seed: tap.seed,
+              songs: seeded,
+              streamed: [],
+              faithful: true,
+            }))
+          )
+            return { kind: "playing", streamed: 0, leftOut: 0 };
+          return playback.start(scope, index);
         },
         playMix: async (id, index) => {
           const mix = discover.mix(id);

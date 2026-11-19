@@ -480,7 +480,8 @@ export const playbackLayer = Layer.effect(
         const ids = browseTrackIds(db, scope);
         const chosen = index === undefined ? undefined : ids[index];
         if (index !== undefined && chosen === undefined) throw new Error("Invalid song position");
-        // A song from Search plays alone, as on the phone with YT Music off.
+        // A song from Search plays alone; with YT Music on, main starts its Magic Queue instead
+        // (`playSearchSong` in ytServices.ts).
         const alone = scope.kind === "search" && chosen !== undefined;
         return activate(
           alone ? [chosen] : ids,

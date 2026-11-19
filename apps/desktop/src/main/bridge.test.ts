@@ -1153,6 +1153,44 @@ test("a YouTube Music song found in Search plays alone and starts a Magic Queue"
   });
 });
 
+test("a Library song clicked in Search starts a faithful Magic Queue, and plays alone with YT Music off", async () => {
+  await withFile(async (file) => {
+    const { runtime, exposed } = connect(file);
+    try {
+      const wave = exposed.get("wave") as WaveBridge;
+      const db = await runtime.runPromise(
+        Effect.gen(function* () {
+          const db = (yield* Database) as unknown as TestDatabase;
+          for (const title of ["Pink Moon", "Pink Road"])
+            addTrack(db, { title, artist: "Nick Drake", album: "Pink Moon", durationMs: 124_000 });
+          return db;
+        }),
+      );
+      const scope = { kind: "search", query: "pink" } as const;
+      const tapped = (await wave.library.browse(scope, 0, 10)).items[1]!;
+      assert.deepEqual(await wave.playback.start(scope, 1), {
+        kind: "playing",
+        streamed: 0,
+        leftOut: 0,
+      });
+      assert.equal((await wave.playback.view()).current?.title, tapped.title);
+      assert.equal((await wave.magicQueue.view()).title, tapped.title);
+      const session = JSON.parse(preference(db, "playback.magicQueue")!) as { faithful?: boolean };
+      assert.equal(session.faithful, true);
+      await until(async () => (await wave.playback.view()).length > 1);
+      const queue = await wave.playback.queue(0, 20);
+      assert.equal(queue.items[0]!.title, tapped.title, "the Magic Queue goes on from the song");
+
+      await wave.settings.setYtMusic(false);
+      await wave.playback.start(scope, 0);
+      assert.equal((await wave.playback.view()).length, 1, "alone, in a queue of one");
+      assert.equal((await wave.magicQueue.view()).title, null);
+    } finally {
+      await runtime.dispose();
+    }
+  });
+});
+
 test("Search finds YouTube Music songs and one plays from the results as a new queue", async () => {
   await withFile(async (file) => {
     const { runtime, exposed, engineCalls, yt } = connect(file);

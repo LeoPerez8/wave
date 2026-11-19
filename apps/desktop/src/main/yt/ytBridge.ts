@@ -6,7 +6,7 @@ import { discoverMixCaption, ytTrackId, type YtAlbumSong } from "@wave/core";
 import * as Effect from "effect/Effect";
 
 import type { BridgeCall, BridgeContract, Page } from "../../shared/bridge.ts";
-import type { BrowseRow } from "../../shared/browse.ts";
+import type { BrowseRow, BrowseScope } from "../../shared/browse.ts";
 import type { SongTarget } from "../../shared/songActions.ts";
 import type { DiscoverSettings } from "../../shared/ytPages.ts";
 import { ytRow } from "../../shared/yt.ts";
@@ -44,6 +44,10 @@ export type YtFeatureHandlers = {
 };
 
 const refuse = (call: BridgeCall, why: string) => Effect.fail(new Error(`Refused ${call}: ${why}`));
+
+/** A Library song clicked in Search (docs/spec.md, story 47). */
+export const playSearchSong = (scope: BrowseScope, index: number) =>
+  featuresCall(({ playSearchSong }) => playSearchSong(scope, index));
 
 const featuresCall = <A>(run: (features: YtFeatures["Service"]) => A | Promise<A>) =>
   Effect.gen(function* () {
