@@ -143,7 +143,7 @@ export const settingsPtBr: typeof settingsEn = {
   tint: "Tonalidade",
   rim: "Borda",
   howTheTabBarMiniPlayerMenus:
-    "Como a barra de abas, o miniplayer, os menus e os diálogos mostram o que está atrás. O desfoque suaviza, a refração curva as bordas, a tonalidade mantém o texto legível e a borda dá brilho ao contorno. Desativar a refração mantém os outros efeitos. A amostra mostra cada alteração; o vidro do app muda quando você sai de Aparência.",
+    "Como a barra de abas, o miniplayer, os menus e os diálogos mostram o que está atrás. O desfoque suaviza, a refração curva as bordas, a tonalidade mantém o texto legível e a borda dá brilho ao contorno. Desativar a refração mantém os outros efeitos; desativar a borda remove o contorno. A amostra mostra cada alteração; o vidro do app muda quando você sai de Aparência.",
   resetToDefaults: "Restaurar padrões",
   sampleSong: "Música de exemplo",
   sampleSongRow: "Linha de música de exemplo",
