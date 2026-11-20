@@ -100,4 +100,78 @@ class AutoModesTest {
 
     assertEquals(emptyList<PlaybackModes>(), published)
   }
+
+  @Test
+  fun `a press on Favorite shows the new star before JS answers`() {
+    val state = PlaybackModesState()
+    val shown = mutableListOf<PlaybackModes>()
+    state.listen { shown += it }
+
+    state.pressStar()
+
+    assertEquals(listOf(PlaybackModes(starred = true)), shown)
+    assertEquals(PlaybackModes(starred = true), state.shown)
+    assertEquals(PlaybackModes(starred = false), state.current)
+  }
+
+  @Test
+  fun `a press JS couldn't save goes back to the star it had`() {
+    val state = PlaybackModesState()
+    state.publish(PlaybackModes(starred = true))
+    val shown = mutableListOf<PlaybackModes>()
+    state.listen { shown += it }
+
+    state.pressStar()
+    state.starAnswered()
+
+    assertEquals(listOf(PlaybackModes(starred = false), PlaybackModes(starred = true)), shown)
+    assertEquals(PlaybackModes(starred = true), state.shown)
+  }
+
+  @Test
+  fun `a press JS saved changes nothing more on the buttons`() {
+    val state = PlaybackModesState()
+    val shown = mutableListOf<PlaybackModes>()
+    state.listen { shown += it }
+
+    state.pressStar()
+    state.publish(PlaybackModes(starred = true))
+    state.starAnswered()
+
+    assertEquals(listOf(PlaybackModes(starred = true)), shown)
+    assertEquals(PlaybackModes(starred = true), state.shown)
+  }
+
+  @Test
+  fun `two presses in a row end on the last press`() {
+    val state = PlaybackModesState()
+    val shown = mutableListOf<PlaybackModes>()
+    state.listen { shown += it }
+
+    state.pressStar()
+    state.pressStar()
+    // JS takes the presses in turn: it reports each toggle, then answers its press.
+    state.publish(PlaybackModes(starred = true))
+    state.starAnswered()
+    state.publish(PlaybackModes(starred = false))
+    state.starAnswered()
+
+    assertEquals(listOf(PlaybackModes(starred = true), PlaybackModes(starred = false)), shown)
+    assertEquals(PlaybackModes(starred = false), state.shown)
+  }
+
+  @Test
+  fun `a star whose write fails after JS answered goes back when JS reports it`() {
+    val state = PlaybackModesState()
+    val shown = mutableListOf<PlaybackModes>()
+    state.listen { shown += it }
+
+    state.pressStar()
+    state.publish(PlaybackModes(starred = true))
+    state.starAnswered()
+    state.publish(PlaybackModes(starred = false))
+
+    assertEquals(listOf(PlaybackModes(starred = true), PlaybackModes(starred = false)), shown)
+    assertEquals(PlaybackModes(starred = false), state.shown)
+  }
 }
