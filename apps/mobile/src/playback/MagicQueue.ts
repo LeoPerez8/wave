@@ -24,12 +24,15 @@ import {
   magicQueueLabel,
   magicQueueKeepsPlayingSong,
   magicQueueShare,
+  magicSessionSliders,
   magicSignal,
   parseMagicSession,
   sliderStepLabel,
+  startDjQueue as startDjSession,
   startMagicQueue as startSession,
   startStreamedMagicQueue as startStreamedSession,
   wantsMagicBatch,
+  type DjTile,
   type MagicBatchOutcome,
   type MagicSeed,
   type MagicSeedSong,
@@ -476,6 +479,100 @@ const begin = (session: MagicSession, startedAt: number, track: QueueTrack) =>
     );
   });
 
+/** A picked batch's songs as queue tracks, in its order: [library]'s files and the batch's own streams. */
+const batchQueueTracks = (
+  batch: ReturnType<typeof completeMagicRadioBatch>,
+  library: readonly SongRow[],
+): QueueTrack[] => {
+  const tracks = new Map<string, QueueTrack>(
+    library.filter(songHasFile).map((song) => [String(song.id), toQueueTrack(song)]),
+  );
+  // The batch's own songs, so a stream that only the Close fill ranked has its track too.
+  for (const candidate of batch.songs)
+    if (candidate.source === "stream" && candidate.song !== null)
+      tracks.set(candidate.trackId, toYtQueueTrack(candidate.song, null));
+  return batch.trackIds.flatMap((id) => tracks.get(id) ?? []);
+};
+
+/** A picked batch's streamed songs, whose covers are cached once it's queued. */
+const batchStreams = (batch: ReturnType<typeof completeMagicRadioBatch>): YtSong[] =>
+  batch.songs.flatMap((candidate) =>
+    candidate.source === "stream" && candidate.song !== null ? [candidate.song] : [],
+  );
+
+/**
+ * How Done in DJ ended: the queue is playing, the seed's radios gave no song
+ * to play, or none of them could be read.
+ */
+export type DjStart = "started" | "empty" | "failed";
+
+/**
+ * Starts a Magic Queue from a DJ seed, the selected [tiles] (Core's
+ * `startDjQueue`). No seed song plays first: the session's first batch of 10
+ * is read, from the radios of up to 3 of the selected artists, and replaces
+ * the queue (with Undo, as any play does), its first song playing. It ranks
+ * with DJ's own choices, not Discover's sliders. Nothing is waited for but
+ * the radios: the Library, catalog, graph and taste profile are the last
+ * ones derived. The queue that's playing is left alone unless it starts.
+ */
+export const startDjMagicQueue = (tiles: readonly DjTile[]) =>
+  Effect.gen(function* () {
+    if (!ytMusicEnabled()) return "failed" satisfies DjStart;
+    const startedAt = Date.now();
+    const latest = recommendationSnapshot.peek();
+    const library = latest.library ?? { songs: [], artists: [] };
+    const started = startDjSession(tiles, {
+      id: String(startedAt),
+      played: latest.library?.topArtists ?? [],
+    });
+    if (started === null) return "empty" satisfies DjStart;
+    const drawn = magicBatchRadios(started, Math.random);
+    const yt = yield* magicQueueYtCandidates(drawn.session, drawn.seeds, library, {
+      catalog: latest.catalog ?? [],
+      graph: latest.graph,
+      taste: latestTasteProfile(),
+      sliders: magicSessionSliders(drawn.session, discoverSliders.get()),
+      profileOf: magicProfileOf(library),
+    });
+    const batch = completeMagicRadioBatch(
+      drawn.session,
+      yt.candidates,
+      yt.likedCandidates,
+      yt.fallback,
+    );
+    const songs = batchQueueTracks(batch, library.songs);
+    appLog(
+      "info",
+      "WaveTiming",
+      magicBatchLine({
+        first: true,
+        ms: Date.now() - startedAt,
+        outcome:
+          songs.length > 0
+            ? { kind: "appended", songs: songs.length }
+            : { kind: "failed", reason: yt.refilled === null ? "no radio read" : "no songs" },
+      }),
+    );
+    if (songs.length === 0) return (yt.refilled === null ? "failed" : "empty") satisfies DjStart;
+    startingLibrary = { songs: library.songs.filter(songHasFile), artists: library.artists };
+    save(batch.session);
+    failedBatch.set(null);
+    emptyBatch.set(null);
+    const queue = yield* Queue;
+    yield* queue.dispatch(
+      {
+        type: "play",
+        trackIds: songs.map((song) => song.id),
+        startIndex: 0,
+        context: { kind: MAGIC_QUEUE_CONTEXT, id: batch.session.id },
+        shuffle: false,
+      },
+      songs,
+    );
+    yield* cacheYtCoversInBackground(batchStreams(batch));
+    return "started" satisfies DjStart;
+  });
+
 /** Runs [effect] on its own; the Magic Queue is best effort and never disturbs playback. */
 const fork = (effect: Effect.Effect<void, unknown>): void => {
   Effect.runFork(Effect.ignore(effect));
@@ -567,7 +664,8 @@ export const layer = Layer.effectDiscard(
         const catalog = latest.catalog ?? [];
         const graph = latest.graph;
         const taste = latestTasteProfile();
-        const sliders = discoverSliders.get();
+        // A DJ session ranks with its own choices, whatever Discover's sliders say.
+        const sliders = magicSessionSliders(wanted, discoverSliders.get());
         const profileOf = magicProfileOf(library);
         // This batch's radios, drawn once for it and saved before they're read.
         const live = activeMagicSession();
@@ -611,21 +709,13 @@ export const layer = Layer.effectDiscard(
             refill: yt.refilled,
           } satisfies MagicBatchOutcome;
         save(batch.session);
-        const tracks = new Map<string, QueueTrack>(
-          playable.map((song) => [String(song.id), toQueueTrack(song)]),
-        );
-        // The batch's own songs, so a stream that only the Close fill ranked has its track too.
-        for (const candidate of batch.songs)
-          if (candidate.source === "stream" && candidate.song !== null)
-            tracks.set(candidate.trackId, toYtQueueTrack(candidate.song, null));
-        const songs = batch.trackIds.flatMap((id) => tracks.get(id) ?? []);
+        const songs = batchQueueTracks(batch, library.songs);
         yield* queue.dispatch({ type: "append", trackIds: songs.map((song) => song.id) }, songs);
         appended(songs.length);
-        yield* cacheYtCoversInBackground(
-          batch.songs.flatMap((candidate) =>
-            candidate.source === "stream" && candidate.song !== null ? [candidate.song] : [],
-          ),
-        ).pipe(Effect.provideService(YtMusic, ytMusic), Effect.provideService(Player, player));
+        yield* cacheYtCoversInBackground(batchStreams(batch)).pipe(
+          Effect.provideService(YtMusic, ytMusic),
+          Effect.provideService(Player, player),
+        );
         return { kind: "appended", songs: songs.length } satisfies MagicBatchOutcome;
       });
 
