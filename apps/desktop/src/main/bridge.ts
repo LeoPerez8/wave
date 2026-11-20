@@ -51,6 +51,7 @@ import { searchLibrary } from "./library/search.ts";
 import { validWindowSettings } from "../shared/windowSettings.ts";
 import { readWindowSettings, changeWindowSettings } from "./system/windowSettings.ts";
 import { homeHandlers } from "./homeHandlers.ts";
+import { statsHandlers } from "./statsHandlers.ts";
 import { lyricsAndTagsHandlers } from "./lyricsAndTagsHandlers.ts";
 import { HomeFollow } from "./follows/homeFollow.ts";
 import { homeFollowHandlers } from "./follows/homeFollowHandlers.ts";
@@ -596,6 +597,7 @@ const createHandlers = (
     },
     ...playlistHandlers(validTarget),
     ...homeHandlers,
+    ...statsHandlers,
     ...lyricsAndTagsHandlers,
     ...homeFollowHandlers,
     "search.library": ([query]) =>

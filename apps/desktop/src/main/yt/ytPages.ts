@@ -101,6 +101,7 @@ export interface YtPagesShape {
   readonly artistWhole: (browseId: string) => Promise<YtArtistPage<YtAlbumSong>>;
   /** An Artists search; rejects as [artistWhole]. */
   readonly searchArtists: (query: string) => Promise<readonly YtArtistCandidate[]>;
+  readonly searchAlbums: (query: string) => Promise<readonly YtArtistAlbum[]>;
   readonly album: (browseId: string) => Promise<YtAlbumRead>;
   /** YouTube Music's artists and albums for [query], as Search shows them with its songs. */
   readonly catalog: (query: string) => Promise<YtCatalogRead>;
@@ -248,6 +249,10 @@ export const createYtPages = (deps: YtPagesDeps): YtPagesShape => {
     searchArtists: async (query) => {
       if (!deps.enabled()) throw coded("ERR_YT_DISABLED");
       return artists(await deps.call("searchArtists", { query }));
+    },
+    searchAlbums: async (query) => {
+      if (!deps.enabled()) throw coded("ERR_YT_DISABLED");
+      return albums(await deps.call("searchAlbums", { query }));
     },
     artist: (browseId) =>
       read<YtArtistRead>({ page: null }, async () => ({ page: await artistPage(browseId) })),

@@ -49,6 +49,8 @@ import {
 import type { LibrarySearchView } from "./search.ts";
 import type { HomeView } from "./home.ts";
 import type { HomeFollowView, HomeReleaseOpening } from "./homeFollow.ts";
+import type { StatsPeriod, StatsRanking } from "@wave/core";
+import type { StatsOverview, StatsRow } from "./stats.ts";
 import type {
   ActionSurface,
   SongMenu,
@@ -356,6 +358,27 @@ export interface BridgeContract
     readonly args: readonly [key: string];
     readonly result: string | null;
   };
+  readonly "stats.overview": {
+    readonly args: readonly [period: StatsPeriod];
+    readonly result: StatsOverview;
+  };
+  readonly "stats.ranking": {
+    readonly args: readonly [ranking: StatsRanking, period: StatsPeriod];
+    readonly result: Page<StatsRow>;
+  };
+  readonly "stats.play": {
+    readonly args: readonly [period: StatsPeriod, key: string, full: boolean];
+    readonly result: void;
+  };
+  readonly "stats.open": {
+    readonly args: readonly [
+      ranking: "albums" | "artists",
+      period: StatsPeriod,
+      key: string,
+      full: boolean,
+    ];
+    readonly result: string | null;
+  };
 }
 
 export type BridgeCall = keyof BridgeContract;
@@ -469,6 +492,10 @@ export const BRIDGE_CALLS = [
   ...ARTIST_PAGE_CALLS,
   ...STREAMED_CALLS,
   ...YT_ACCOUNT_CALLS,
+  "stats.overview",
+  "stats.ranking",
+  "stats.play",
+  "stats.open",
 ] as const satisfies readonly BridgeCall[] &
   (BridgeContract extends PagedLists<BridgeContract> ? unknown : never);
 
@@ -485,6 +512,17 @@ export interface WaveBridge {
   readonly streamed: ReturnType<typeof streamedBridge>;
   /** The YouTube account: its session never reaches the window. */
   readonly ytAccount: ReturnType<typeof ytAccountBridge>;
+  readonly stats: {
+    readonly overview: (period: StatsPeriod) => Promise<StatsOverview>;
+    readonly ranking: (ranking: StatsRanking, period: StatsPeriod) => Promise<Page<StatsRow>>;
+    readonly play: (period: StatsPeriod, key: string, full: boolean) => Promise<void>;
+    readonly open: (
+      ranking: "albums" | "artists",
+      period: StatsPeriod,
+      key: string,
+      full: boolean,
+    ) => Promise<string | null>;
+  };
   readonly system: { readonly mediaBackend: () => Promise<"native" | "chromium"> };
   readonly home: {
     readonly view: () => Promise<HomeView>;
@@ -767,4 +805,10 @@ export const createBridge = (invoke: Invoke): WaveBridge => ({
   artistPage: artistPageBridge(invoke),
   streamed: streamedBridge(invoke),
   ytAccount: ytAccountBridge(invoke),
+  stats: {
+    overview: (period) => invoke("stats.overview", period),
+    ranking: (ranking, period) => invoke("stats.ranking", ranking, period),
+    play: (period, key, full) => invoke("stats.play", period, key, full),
+    open: (ranking, period, key, full) => invoke("stats.open", ranking, period, key, full),
+  },
 });
