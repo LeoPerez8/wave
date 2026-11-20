@@ -249,6 +249,8 @@ export const playbackTextEn = {
   ofTime: "of",
   couldntLoadRecommendations: "Couldn't load recommendations.",
   magicQueueFrom: (title: string) => `Magic Queue · from ${title}`,
+  /** Up Next's heading over the queue a song played from Search or a link fills. */
+  relatedFrom: (title: string) => `Related · from ${title}`,
   newQueuePlaying: "New queue playing",
   undo: "Undo",
   actions: "Actions",
