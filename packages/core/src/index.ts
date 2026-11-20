@@ -2377,6 +2377,8 @@ export { DOUBLE_TAP_MS, coverDoubleTap, createCoverTaps } from "./coverGestures.
 export type { CoverDoubleTap, CoverTaps } from "./coverGestures.ts";
 export { createStarPop } from "./starPop.ts";
 export type { StarPop } from "./starPop.ts";
+export { playingStarSubject } from "./playingStar.ts";
+export type { PlayingStarAnswer, PlayingStarSubject } from "./playingStar.ts";
 export { discoverLevelLabel } from "./discoverMixLevels.ts";
 export {
   DISCOVER_ROWS,
