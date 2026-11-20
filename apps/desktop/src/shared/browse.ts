@@ -1,5 +1,7 @@
 import type { Page } from "./bridge.ts";
 
+export const MAX_ROW_IDS_PAGE = 1000;
+
 export const BROWSE_KINDS = [
   "songs",
   "albums",

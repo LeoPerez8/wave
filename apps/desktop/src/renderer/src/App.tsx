@@ -1,6 +1,14 @@
 import { VersionHistory } from "./VersionHistory.tsx";
 import { Links } from "./Links.tsx";
-import { listDuration, readThemeChoice, themeFor, type SearchOnline } from "@wave/core";
+import {
+  checkedTableRow,
+  listDuration,
+  readThemeChoice,
+  tableSelectionOf,
+  themeFor,
+  type SearchOnline,
+  type TableSelection,
+} from "@wave/core";
 import {
   useCallback,
   useEffect,
@@ -36,7 +44,12 @@ import { DownloadsPage } from "./DownloadsPage.tsx";
 import { downloadPercent, useDownloads } from "./useDownloads.ts";
 import { useDesktopKeys } from "./keys.ts";
 import { ShortcutsSheet } from "./Shortcuts.tsx";
-import { SelectionBar, useSongActions, type Selection } from "./SongActions.tsx";
+import {
+  openTableSongMenu,
+  SelectionBar,
+  useSongActions,
+  type SongSelectionControls,
+} from "./SongActions.tsx";
 import { usePlaylistEdits } from "./Playlists.tsx";
 import { Graveyard } from "./Graveyard.tsx";
 import { applyLanguage, labels, text, useLanguage, tagTitle, artistName } from "./text.ts";
@@ -131,7 +144,7 @@ export function App() {
   /** Selection mode, for the list it was turned on in. */
   const [selecting, setSelecting] = useState<{
     readonly list: string;
-    readonly selection: Selection;
+    readonly selection: TableSelection;
   }>();
   const playlistEdits = usePlaylistEdits({
     go: (next) => go(next),
@@ -166,16 +179,19 @@ export function App() {
   }, [appearance, theme]);
 
   const go = (next: Route) => {
+    setSelecting(undefined);
     setHistory((previous) => [...previous.slice(0, position + 1), next]);
     setPosition(position + 1);
     setHero(undefined);
     setError(undefined);
   };
   const back = useCallback(() => {
+    setSelecting(undefined);
     setHero(undefined);
     setPosition((p) => Math.max(0, p - 1));
   }, []);
   const forward = useCallback(() => {
+    setSelecting(undefined);
     setHero(undefined);
     setPosition((p) => Math.min(history.length - 1, p + 1));
   }, [history.length]);
@@ -256,19 +272,26 @@ export function App() {
     [route],
   );
   const list = JSON.stringify(scope);
-  const selection = selecting?.list === list ? selecting.selection : undefined;
-  const setSelection = (selection: Selection | undefined) =>
-    setSelecting(selection && { list, selection });
+  const setSelection = (owner: string, selection: TableSelection | undefined) =>
+    setSelecting((current) =>
+      selection ? { list: owner, selection } : current?.list === owner ? undefined : current,
+    );
   const actions = useSongActions({
     go,
     select: (ids) => {
       if (route.kind === "home") go({ kind: "songs" });
-      setSelection({ all: false, ids: new Set(ids) });
+      setSelection(list, tableSelectionOf(ids, true));
     },
     failed: (message) => setError(message ?? text.desktopLibrary.actionFailed),
     changed: playback.refresh,
     newPlaylist: playlistEdits.newPlaylist,
   });
+  const selectionFor = (owner: string): SongSelectionControls => ({
+    selection: selecting?.list === owner ? selecting.selection : undefined,
+    onSelection: (selection) => setSelection(owner, selection),
+    actions,
+  });
+  const table = selectionFor(list);
   // Says a download began, wherever it was asked for; a notice from before the window opened isn't news.
   const noticeSeen = useRef<number | null | undefined>(undefined);
   const notice = downloads?.notice;
@@ -290,7 +313,7 @@ export function App() {
       if (actions.closeMenu() || playlistEdits.closeMenu()) return;
       if (shortcuts) return setShortcuts(false);
       if (nowPlaying) return setNowPlaying(false);
-      if (selection) return setSelection(undefined);
+      if (selecting) return setSelecting(undefined);
       return false;
     },
   });
@@ -424,6 +447,7 @@ export function App() {
     playback.run(started.then(said));
   };
   const searchFor = (query: string) => {
+    setSelecting(undefined);
     setQuery(query);
     if (route.kind !== "search") go({ kind: "search", query });
     else
@@ -916,7 +940,7 @@ export function App() {
               rememberSearch();
               playback.run(window.wave.playback.start(scope, index));
             }}
-            onMenu={(row, at) => actions.openMenu({ scope, ids: [row.id] }, row.title, at)}
+            selectionFor={selectionFor}
             onUnavailable={() => setError(text.desktopLibrary.driveDisconnected)}
             onPick={(picked) => {
               searchFor(picked);
@@ -932,20 +956,21 @@ export function App() {
             go={go}
             onError={failed}
             notify={notify}
+            selectionFor={selectionFor}
             onMenu={(row, at) =>
               actions.openMenu({ scope: { kind: "songs" }, ids: [row.id] }, row.title, at)
             }
           />
         ) : (
           <>
-            {selection && (
+            {table.selection && (
               <SelectionBar
                 scope={scope}
-                selection={selection}
+                selection={table.selection}
                 revision={revision}
                 actions={actions}
-                onChange={setSelection}
-                onDone={() => setSelection(undefined)}
+                onChange={(selection) => setSelection(list, selection)}
+                onDone={() => setSelection(list, undefined)}
               />
             )}
             {artistPage(
@@ -956,27 +981,35 @@ export function App() {
                 onHero={setHero}
                 onOpen={open}
                 onError={failed}
-                selection={selection}
-                onSelection={setSelection}
-                onMenu={
-                  selection
-                    ? undefined
-                    : (row, at) =>
-                        row.videoId !== undefined
-                          ? actions.openItems(
-                              text.desktopLibrary.songMenu(row.title),
-                              streamed.items(row.videoId),
-                              at,
-                            )
-                          : actions.openMenu(
-                              { scope, ids: [row.id] },
-                              row.title,
-                              at,
-                              scope.kind === "playlist" && scope.id !== undefined
-                                ? playlistEdits.moveItems(scope.id, row.id)
-                                : [],
-                            )
-                }
+                selection={table.selection}
+                onSelection={table.onSelection}
+                onMenu={(row, at) => {
+                  if (
+                    row.videoId !== undefined &&
+                    !(table.selection && checkedTableRow(table.selection, row.id))
+                  )
+                    return actions.openItems(
+                      text.desktopLibrary.songMenu(row.title),
+                      streamed.items(row.videoId).then((items) => [
+                        ...items,
+                        {
+                          key: "select",
+                          label: text.itemActions.labels.select,
+                          run: () => table.onSelection?.(tableSelectionOf([row.id], true)),
+                        },
+                      ]),
+                      at,
+                    );
+                  openTableSongMenu(
+                    table,
+                    scope,
+                    row,
+                    at,
+                    scope.kind === "playlist" && scope.id !== undefined
+                      ? playlistEdits.moveItems(scope.id, row.id)
+                      : [],
+                  );
+                }}
               />,
             )}
           </>

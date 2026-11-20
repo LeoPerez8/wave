@@ -2852,6 +2852,15 @@ export type { MarqueeLine, MarqueeLineSize, MarqueePlan } from "./marquee.ts";
 export { desktopSongActions } from "./desktopSongMenu.ts";
 export type { DesktopSongSubject } from "./desktopSongMenu.ts";
 export { DESKTOP_SHORTCUTS, desktopKey, shortcutKeys } from "./desktopKeys.ts";
+export {
+  allTableRows,
+  checkedTableRow,
+  extendTableRange,
+  tableRange,
+  tableSelectionOf,
+  toggleTableRow,
+  type TableSelection,
+} from "./tableSelection.ts";
 export type {
   DesktopCommand,
   DesktopFocus,

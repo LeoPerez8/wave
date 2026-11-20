@@ -1,12 +1,17 @@
-import { desktopKey, formatDuration, streamedCoverUrls } from "@wave/core";
+import { checkedTableRow, desktopKey, formatDuration, streamedCoverUrls } from "@wave/core";
 import { useEffect, useRef, useState, type KeyboardEvent, type MouseEvent } from "react";
-import type { BrowsePage, BrowseRow, BrowseScope } from "../../shared/browse.ts";
+import {
+  MAX_ROW_IDS_PAGE,
+  type BrowsePage,
+  type BrowseRow,
+  type BrowseScope,
+} from "../../shared/browse.ts";
 import { Icon } from "./Icon.tsx";
 import { pressOf } from "./keys.ts";
-import { isChecked, toggled, type Selection } from "./SongActions.tsx";
 import { markClass, rowMark, SongMark, useSongStates } from "./SongMark.tsx";
 import { labels, text, albumName, artistName, tagTitle } from "./text.ts";
 import { tableColumns } from "../../shared/tableColumns.ts";
+import { useTableSelection, type TableSelectionProps } from "./useTableSelection.ts";
 import "./tables.css";
 
 const SIZE = 100;
@@ -108,8 +113,9 @@ export function VirtualTable({
   onMenu,
   selection,
   onSelection,
+  selectAll,
   preview,
-}: {
+}: TableSelectionProps & {
   readonly scope: BrowseScope;
   readonly revision: number;
   readonly onOpen: (row: BrowseRow, index: number) => void;
@@ -117,9 +123,7 @@ export function VirtualTable({
   readonly onError: () => void;
   /** Opens [row]'s menu at [at] (right-click, Shift+F10 or the Menu key). */
   readonly onMenu?: (row: BrowseRow, at: { readonly x: number; readonly y: number }) => void;
-  /** Selection mode's checked songs, while it is on. */
-  readonly selection?: Selection | undefined;
-  readonly onSelection?: (selection: Selection) => void;
+  readonly selectAll?: Parameters<typeof useTableSelection>[0]["selectAll"];
   /** A bounded Home preview uses these rows with the same table, focus and menus. */
   readonly preview?: {
     readonly id: string;
@@ -136,7 +140,6 @@ export function VirtualTable({
   const [top, setTop] = useState(0);
   const [height, setHeight] = useState(400);
   const [active, setActive] = useState(0);
-  const [selected, setSelected] = useState<number>();
   const [ready, setReady] = useState(false);
   const start = Math.max(0, Math.floor(top / HEIGHT) - 5);
   const end = Math.min(total, start + Math.ceil(height / HEIGHT) + 10);
@@ -209,6 +212,38 @@ export function VirtualTable({
     };
   }, [scope, revision, firstPage, lastPage, onHero, onError, preview]);
   const get = (index: number) => pages.get(Math.floor(index / SIZE))?.items[index % SIZE];
+  const rows = useTableSelection({
+    selection,
+    ...(songList && onSelection ? { onSelection } : {}),
+    ...(selectAll ? { selectAll } : {}),
+    total,
+    order: preview ?? scope,
+    revision,
+    onError,
+    read: async (start, end, signal) => {
+      if (preview) return preview.page.items.slice(start, end + 1).map((row) => row.id);
+      const ids = new Set<number>();
+      for (let at = start; at <= end && !signal.aborted;) {
+        const page = get(at);
+        if (page) {
+          ids.add(page.id);
+          at++;
+          continue;
+        }
+        const limit = Math.min(end + 1 - at, MAX_ROW_IDS_PAGE);
+        const { items: keys, total: readTotal } = await window.wave.library.rowIds(
+          scope,
+          at,
+          limit,
+        );
+        if (readTotal !== total || keys.length !== limit)
+          throw new Error("Table changed during selection");
+        for (const id of keys) ids.add(id);
+        at += limit;
+      }
+      return ids;
+    },
+  });
   const states = useSongStates(
     songList
       ? Array.from({ length: Math.max(0, end - start) }, (_, i) => get(start + i)?.id ?? 0)
@@ -249,8 +284,7 @@ export function VirtualTable({
     onMenu(row, at ?? { x: (rect?.left ?? 0) + 48, y: rect?.bottom ?? 0 });
   };
   const choose = (row: BrowseRow, index: number) => {
-    if (selection !== undefined && onSelection !== undefined)
-      onSelection(toggled(selection, row.id));
+    if (selection?.checkboxes) rows.toggle(row.id);
     else onOpen(row, index);
   };
   const key = (event: KeyboardEvent) => {
@@ -265,6 +299,10 @@ export function VirtualTable({
     };
     const command = desktopKey(pressOf(event), "list");
     if (command === undefined) return;
+    if (rows.key(command, active, move)) {
+      event.preventDefault();
+      return;
+    }
     const to = moves[command];
     if (to !== undefined) {
       event.preventDefault();
@@ -286,7 +324,8 @@ export function VirtualTable({
     const row = (event.target as Element).closest<HTMLElement>("[data-row]");
     if (row === null) return;
     const index = Number(row.dataset["row"]);
-    setSelected(index);
+    const song = get(index);
+    if (song) rows.point(song.id);
     setActive(index);
     viewport.current!.parentElement!.focus();
     menu(index, { x: event.clientX, y: event.clientY });
@@ -302,6 +341,7 @@ export function VirtualTable({
           : labels.songs)
       }
       aria-rowcount={total + 1}
+      aria-multiselectable={songList && onSelection !== undefined ? true : undefined}
       aria-colcount={3 + (columns.third === null ? 0 : 1) + (columns.star ? 1 : 0)}
       tabIndex={0}
       aria-activedescendant={
@@ -348,25 +388,37 @@ export function VirtualTable({
                   aria-rowindex={index + 2}
                   data-row={index}
                   aria-selected={
-                    selection === undefined ? selected === index : isChecked(selection, row.id)
+                    selection === undefined
+                      ? rows.ordinary === row.id
+                      : checkedTableRow(selection, row.id)
                   }
                   aria-disabled={songList && row.unavailable}
                   className={`table-row table-columns ${active === index ? "active-row" : ""} ${mark ? markClass(mark) : ""}`}
                   style={{ top: index * HEIGHT }}
-                  onClick={() => {
-                    setSelected(index);
+                  onMouseDown={(event) => {
+                    if (songList && event.shiftKey) event.preventDefault();
+                  }}
+                  onClick={(event) => {
                     setActive(index);
                     viewport.current!.parentElement!.focus();
-                    if (selection !== undefined) choose(row, index);
+                    rows.click(index, row.id, event);
                   }}
-                  onDoubleClick={() => selection === undefined && onOpen(row, index)}
+                  onDoubleClick={(event) => {
+                    if (
+                      !selection?.checkboxes &&
+                      !event.shiftKey &&
+                      !event.ctrlKey &&
+                      !event.metaKey
+                    )
+                      onOpen(row, index);
+                  }}
                 >
                   <div role="gridcell" className="title-cell">
-                    {selection !== undefined && (
+                    {selection?.checkboxes && (
                       <span
                         className="row-check"
                         role="checkbox"
-                        aria-checked={isChecked(selection, row.id)}
+                        aria-checked={checkedTableRow(selection, row.id)}
                         aria-label={text.desktopLibrary.checkSong(row.title)}
                       />
                     )}
