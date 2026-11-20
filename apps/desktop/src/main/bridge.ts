@@ -21,7 +21,12 @@ import { BROWSE_KINDS, type BrowseScope } from "../shared/browse.ts";
 import { browseLetter } from "./library/browse.ts";
 import { readArtwork } from "./library/artwork.ts";
 import { appearance, preference, savePreference } from "./preferences.ts";
-import { SEARCH_ONLINE_SETTING, readSearchOnline, writeSearchOnline } from "@wave/core";
+import {
+  SEARCH_ONLINE_SETTING,
+  readSearchOnline,
+  readThemeEdit,
+  writeSearchOnline,
+} from "@wave/core";
 import {
   MAX_TARGET_IDS,
   SONG_RUN_ACTIONS,
@@ -402,6 +407,12 @@ const createHandlers = (
             onAppearance(mode);
           })
         : refuse("settings.setAppearance", "invalid appearance"),
+    "settings.editTheme": ([raw]) => {
+      const edit = readThemeEdit(raw);
+      return edit === null
+        ? refuse("settings.editTheme", "invalid theme edit")
+        : Effect.map(Account, (it) => it.editTheme(edit));
+    },
     "settings.playback": () => playbackCall((p) => p.settings()),
     "settings.setPlayback": ([change]) =>
       validPlaybackSettings(change)
