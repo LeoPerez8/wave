@@ -67,6 +67,7 @@ export const homePlaceholderHeight = (id: HomeSectionId, fontScale: number): num
     case "most-played-albums":
       return CELL * 19 + CELL + 40 * Math.max(1, fontScale);
     case "most-played-artists":
+    case "in-your-orbit":
       return CELL * 19 + CELL + 22 * Math.max(1, fontScale);
     case "stats":
       return homeStatsRowLayout(fontScale).minHeight * STATS_FACT_LABELS.length;

@@ -2,8 +2,14 @@
 import type { LibraryDatabase } from "@wave/client/db/database";
 import { libraryCounts } from "@wave/client/db/counts";
 import { homeSections } from "@wave/client/db/playHistory";
-import { playedEntityTotals } from "@wave/client/db/playedEntities";
-import { parseHomeArrangement, STATS_TOP, statsWindow } from "@wave/core";
+import { playedArtistTotals, playedEntityTotals } from "@wave/client/db/playedEntities";
+import {
+  inYourOrbit,
+  inYourOrbitWindow,
+  parseHomeArrangement,
+  STATS_TOP,
+  statsWindow,
+} from "@wave/core";
 import type { HomeRow, HomeSectionView, HomeView, LocalHomeSectionId } from "../../shared/home.ts";
 import { browseRows, browseSongs } from "./browse.ts";
 
@@ -14,7 +20,8 @@ export const readHome = (db: LibraryDatabase, stored: string | null): HomeView =
   const arrangement = parseHomeArrangement(stored);
   // The Library's shelves. Discover and the followed artists' sections fill their own places.
   const home = homeSections(db);
-  const totals = playedEntityTotals(db, statsWindow("all", Date.now()));
+  const now = Date.now();
+  const totals = playedEntityTotals(db, statsWindow("all", now));
   const ranked = (kind: "albums" | "artists", limit: number): HomeRow[] => {
     const top = totals[kind].filter((r) => typeof r.item.id === "number").slice(0, limit);
     const counts = new Map(top.map((r) => [r.item.id, r.countedPlays]));
@@ -24,9 +31,16 @@ export const readHome = (db: LibraryDatabase, stored: string | null): HomeView =
       top.map((r) => Number(r.item.id)),
     ).map((row) => ({ ...row, playCount: counts.get(row.id)! }));
   };
+  // In your orbit, the Library's artists of it: the desktop has no online artist page to open.
+  const orbit = inYourOrbit(playedArtistTotals(db, inYourOrbitWindow(now)));
   const played = home.mostPlayed.filter((r) => r.source === "library");
   const counts = new Map(played.map((r) => [r.track.id, r.playCount]));
   const rows: Record<LocalHomeSectionId, readonly HomeRow[]> = {
+    "in-your-orbit": browseRows(
+      db,
+      "artists",
+      orbit.flatMap((r) => (typeof r.item.id === "number" ? [r.item.id] : [])),
+    ),
     "recently-added": browseRows(
       db,
       "albums",
@@ -49,6 +63,7 @@ export const readHome = (db: LibraryDatabase, stored: string | null): HomeView =
     ),
   };
   const kinds = {
+    "in-your-orbit": "artist",
     "recently-added": "album",
     "recently-played": "album",
     "most-played": "song",
@@ -78,6 +93,7 @@ export const readHome = (db: LibraryDatabase, stored: string | null): HomeView =
         : nothingPlayed &&
             arrangement.sections.some((id) =>
               [
+                "in-your-orbit",
                 "recently-played",
                 "most-played",
                 "most-played-albums",

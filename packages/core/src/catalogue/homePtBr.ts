@@ -3,6 +3,7 @@ import type { homeEn } from "./homeEn.ts";
 export const homePtBr: typeof homeEn = {
   sections: {
     discover: "Descobrir",
+    "in-your-orbit": "Na sua órbita",
     "recently-added": "Adicionadas recentemente",
     "recently-played": "Tocadas recentemente",
     "most-played": "Mais tocadas",
