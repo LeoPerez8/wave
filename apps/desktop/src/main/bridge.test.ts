@@ -16,7 +16,7 @@ import * as Layer from "effect/Layer";
 import * as ManagedRuntime from "effect/ManagedRuntime";
 import { exposeBridge } from "../preload/expose.ts";
 import { BRIDGE_CALLS, type WaveBridge } from "../shared/bridge.ts";
-import type { PlaybackStatus } from "../shared/playback.ts";
+import type { OutputDevice, PlaybackStatus } from "../shared/playback.ts";
 import type { LanguageView } from "../shared/language.ts";
 import {
   answer,
@@ -261,13 +261,21 @@ const audioInMemory = () => {
     measure: (path) => void measured.push(path),
     cancelMeasurements: () => undefined,
     measurements: () => [],
+    setOutput: (id) => void engineCalls.push(`settings output ${id}`),
   };
+  let report: AudioEvents["message"] | undefined;
+  /** The system's outputs change to [outputs], as the audio process reports it. */
+  const plug = (outputs: readonly OutputDevice[]) => report?.({ event: "outputs", outputs });
   const fork = (events: AudioEvents) => ({
     send: (request: AudioRequest | ResolveAnswer) =>
       "resolved" in request || queueMicrotask(() => events.message(answer(engine, request))),
     kill: () => setImmediate(events.exit),
   });
-  return { layer: playerLayer({ fork }), engineCalls, gains, measured, broken };
+  const listening = (events: AudioEvents) => {
+    report = events.message;
+    return fork(events);
+  };
+  return { layer: playerLayer({ fork: listening }), engineCalls, gains, measured, broken, plug };
 };
 
 /** Tags as the shared Kotlin reads them, for a song titled `title`. */
@@ -582,6 +590,7 @@ const connect = (
     exposed,
     sent,
     engineCalls: audio.engineCalls,
+    plug: audio.plug,
     gains: audio.gains,
     measured: audio.measured,
     broken: audio.broken,
@@ -1173,6 +1182,69 @@ test("Settings › Playback is kept for the account and reaches the engine at on
         );
     } finally {
       await runtime.dispose();
+    }
+  });
+});
+
+test("Settings › Playback lists the outputs, and the one picked is kept and played on", async () => {
+  await withFile(async (file) => {
+    const speakers = { id: "wasapi:speakers", name: "Speakers" };
+    const headphones = { id: "wasapi:headphones", name: "Headphones" };
+    const first = connect(file);
+    const wave = first.exposed.get("wave") as WaveBridge;
+    const call = (channel: string, ...args: unknown[]) =>
+      first.handlers.get(channel)!(trusted, ...args);
+    try {
+      assert.deepEqual(await wave.settings.outputs(), { outputs: [], chosen: null });
+      first.plug([speakers, headphones]);
+      assert.deepEqual(await wave.settings.outputs(), {
+        outputs: [speakers, headphones],
+        chosen: null,
+      });
+      assert.ok(
+        !first.engineCalls.some((c) => c.startsWith("settings output")),
+        "nothing picked: the engine stays on the system's default",
+      );
+
+      const picked = { ...headphones, connected: true };
+      assert.deepEqual(await wave.settings.setOutput(headphones.id), {
+        outputs: [speakers, headphones],
+        chosen: picked,
+      });
+      assert.equal(first.engineCalls.at(-1), "settings output wasapi:headphones");
+
+      // Unplugged: still the choice, shown as away, for when it comes back.
+      first.plug([speakers]);
+      assert.deepEqual(await wave.settings.outputs(), {
+        outputs: [speakers],
+        chosen: { ...headphones, connected: false },
+      });
+
+      for (const id of ["wasapi:unknown", "", 7, {}, undefined])
+        await assert.rejects(call("settings.setOutput", id), /refused/i, JSON.stringify(id));
+    } finally {
+      await first.runtime.dispose();
+    }
+
+    const second = connect(file);
+    const again = second.exposed.get("wave") as WaveBridge;
+    try {
+      assert.deepEqual((await again.settings.outputs()).chosen, {
+        ...headphones,
+        connected: false,
+      });
+      assert.ok(
+        second.engineCalls.includes("settings output wasapi:headphones"),
+        "a restart plays on the output picked before it",
+      );
+      second.plug([speakers, headphones]);
+      assert.deepEqual(await again.settings.setOutput(null), {
+        outputs: [speakers, headphones],
+        chosen: null,
+      });
+      assert.equal(second.engineCalls.at(-1), "settings output undefined");
+    } finally {
+      await second.runtime.dispose();
     }
   });
 });

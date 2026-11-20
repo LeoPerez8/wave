@@ -17,7 +17,7 @@ import type { LanguageView } from "./language.ts";
 import type { LibraryCounts } from "@wave/client/db/counts";
 import type { PlaybackStatus } from "./playback.ts";
 import type { SongState } from "./songState.ts";
-import type { PlaybackSettings } from "./playbackSettings.ts";
+import type { OutputSettings, PlaybackSettings } from "./playbackSettings.ts";
 import type { SongTags } from "./tags.ts";
 import type { DesktopFolder, DesktopSong, ScanStatus } from "./library.ts";
 import type { BrowseScope, BrowsePage, BrowseRow } from "./browse.ts";
@@ -183,6 +183,11 @@ export interface BridgeContract
   readonly "settings.setPlayback": {
     readonly args: readonly [change: Partial<PlaybackSettings>];
     readonly result: PlaybackSettings;
+  };
+  readonly "settings.outputs": { readonly args: readonly []; readonly result: OutputSettings };
+  readonly "settings.setOutput": {
+    readonly args: readonly [id: string | null];
+    readonly result: OutputSettings;
   };
   readonly "settings.ytMusic": { readonly args: readonly []; readonly result: boolean };
   readonly "settings.searchOnline": { readonly args: readonly []; readonly result: SearchOnline };
@@ -461,6 +466,8 @@ export const BRIDGE_CALLS = [
   "settings.setAppearance",
   "settings.playback",
   "settings.setPlayback",
+  "settings.outputs",
+  "settings.setOutput",
   "settings.ytMusic",
   "settings.searchOnline",
   "settings.setSearchOnline",
@@ -629,6 +636,10 @@ export interface WaveBridge {
     readonly playback: () => Promise<PlaybackSettings>;
     /** Keeps a change to Settings › Playback; it applies from the next song. */
     readonly setPlayback: (change: Partial<PlaybackSettings>) => Promise<PlaybackSettings>;
+    /** The system's outputs and the one this computer plays on. */
+    readonly outputs: () => Promise<OutputSettings>;
+    /** Moves playback to the output with `id`, or to the system's default with null. */
+    readonly setOutput: (id: string | null) => Promise<OutputSettings>;
     readonly ytMusic: () => Promise<boolean>;
     readonly searchOnline: () => Promise<SearchOnline>;
     readonly setSearchOnline: (value: SearchOnline) => Promise<void>;
@@ -774,6 +785,8 @@ export const createBridge = (invoke: Invoke): WaveBridge => ({
     setAppearance: (appearance) => invoke("settings.setAppearance", appearance),
     playback: () => invoke("settings.playback"),
     setPlayback: (change) => invoke("settings.setPlayback", change),
+    outputs: () => invoke("settings.outputs"),
+    setOutput: (id) => invoke("settings.setOutput", id),
     ytMusic: () => invoke("settings.ytMusic"),
     searchOnline: () => invoke("settings.searchOnline"),
     setSearchOnline: (value) => invoke("settings.setSearchOnline", value),

@@ -116,6 +116,8 @@ test("the page has no Node and only the typed bridge", async () => {
       "wave.settings.setAppearance",
       "wave.settings.playback",
       "wave.settings.setPlayback",
+      "wave.settings.outputs",
+      "wave.settings.setOutput",
       "wave.settings.ytMusic",
       "wave.settings.searchOnline",
       "wave.settings.setSearchOnline",

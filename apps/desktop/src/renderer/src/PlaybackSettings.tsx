@@ -1,6 +1,7 @@
 import { CROSSFADE, STREAM_BUFFER_MINUTES } from "@wave/core";
 import { useEffect, useState } from "react";
 import type { PlaybackSettings as Settings } from "../../shared/playbackSettings.ts";
+import { OutputSetting } from "./OutputSetting.tsx";
 import { labels, text } from "./text.ts";
 
 /**
@@ -84,6 +85,7 @@ export function PlaybackSettings({ onError }: { readonly onError: () => void }) 
         </label>
       </section>
       <p className="mt-2 text-sm text-secondary">{text.settings.howMuchOfAStreamedSongWave}</p>
+      <OutputSetting onError={onError} />
     </div>
   );
 }
