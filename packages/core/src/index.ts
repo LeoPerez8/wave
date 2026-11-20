@@ -1375,6 +1375,7 @@ export {
   queueSongTrackId,
   readUnsearchedTrackId,
   unsearchedTrackId,
+  toPlaylistSongs,
   writePlaylistEntrySong,
   writePlaylistYtSong,
 } from "./playlistEntries.ts";

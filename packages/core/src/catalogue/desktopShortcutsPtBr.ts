@@ -20,7 +20,7 @@ export const desktopShortcutsPtBr: typeof desktopShortcutsEn = {
     pageUp: "Página acima",
     pageDown: "Página abaixo",
     jump: "Ir para uma letra",
-    songMenu: "Abrir o menu da música",
+    songMenu: "Abrir o menu do item",
     rescan: "Escanear a Biblioteca de novo",
     close: "Fechar um menu, a seleção ou um painel",
     shortcuts: "Listar os atalhos",

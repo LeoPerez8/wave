@@ -6,6 +6,7 @@ import type { ImportAnswer, PLAYLIST_CALLS } from "../shared/playlists.ts";
 import type { SongTarget } from "../shared/songActions.ts";
 import { Account } from "./account/accountLayer.ts";
 import { DesktopPlaylists, type PlaylistsShape } from "./library/playlists.ts";
+import { validCollectionTarget } from "./library/collectionActions.ts";
 
 type PlaylistCall = (typeof PLAYLIST_CALLS)[number];
 
@@ -63,7 +64,7 @@ export const playlistHandlers = (
       playlistsCall((p) => p.newName(account.language().language)),
     ),
   "playlists.create": ([text, target]) =>
-    name(text) && (target === undefined || validTarget(target))
+    name(text) && (target === undefined || validTarget(target) || validCollectionTarget(target))
       ? playlistsCall((p) => p.create(text, target))
       : refuse("playlists.create", "invalid name or songs"),
   "playlists.rename": ([playlistId, text]) =>

@@ -44,6 +44,7 @@ import {
   planM3uImport,
   readFraming,
   resolveDesktopM3uPath,
+  toPlaylistSongs,
   type AppLanguage,
   type FramingSquare,
   type ImageFraming,
@@ -65,11 +66,12 @@ import type {
   ImportResult,
   MoveDirection,
   PlaylistInfo,
+  PlaylistCreateTarget,
 } from "../../shared/playlists.ts";
-import type { SongTarget } from "../../shared/songActions.ts";
 import { Playback } from "../playback/playback.ts";
 import { browseSongs } from "./browse.ts";
 import { targetSongs } from "./songActions.ts";
+import { collectionSongs } from "./collectionActions.ts";
 
 /** Reads and cuts photos for a playlist's image (Electron's `nativeImage` in the app). */
 export interface PlaylistImageCodec {
@@ -189,8 +191,13 @@ export const createPlaylists = (options: PlaylistOptions) => {
         livePlaylists().map((playlist) => playlist.name),
         language,
       ),
-    create: (name: string, target?: SongTarget) => {
-      const songs = target === undefined ? [] : songsOf(targetSongs(db, target));
+    create: (name: string, target?: PlaylistCreateTarget) => {
+      const songs =
+        target === undefined
+          ? []
+          : "scope" in target
+            ? songsOf(targetSongs(db, target))
+            : toPlaylistSongs(collectionSongs(db, target));
       const made = createPlaylist(db, name, songs, now());
       changed();
       return { id: made.playlistId, name: made.name, added: made.added };

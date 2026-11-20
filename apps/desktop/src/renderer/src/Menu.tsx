@@ -1,4 +1,33 @@
-import { useEffect, useLayoutEffect, useRef, useState, type KeyboardEvent } from "react";
+import { desktopKey } from "@wave/core";
+import {
+  useEffect,
+  useLayoutEffect,
+  useRef,
+  useState,
+  type KeyboardEvent,
+  type MouseEvent,
+} from "react";
+import { pressOf } from "./keys.ts";
+
+export interface MenuPoint {
+  readonly x: number;
+  readonly y: number;
+}
+
+/** A button's context menu opens at the pointer or just below the focused button. */
+export const itemMenuEvents = (open: (at: MenuPoint) => void) => ({
+  onContextMenu: (event: MouseEvent<HTMLElement>) => {
+    event.preventDefault();
+    event.currentTarget.focus();
+    open({ x: event.clientX, y: event.clientY });
+  },
+  onKeyDown: (event: KeyboardEvent<HTMLElement>) => {
+    if (desktopKey(pressOf(event), "list") !== "songMenu") return;
+    event.preventDefault();
+    const { left, bottom } = event.currentTarget.getBoundingClientRect();
+    open({ x: left, y: bottom });
+  },
+});
 
 export interface MenuItem {
   readonly key: string;

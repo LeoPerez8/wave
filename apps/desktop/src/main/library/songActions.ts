@@ -58,7 +58,7 @@ interface SongFacts extends ActionItem {
   readonly title: string;
 }
 
-const songFacts = (db: LibraryDatabase, ids: readonly number[]): SongFacts[] => {
+export const songFacts = (db: LibraryDatabase, ids: readonly number[]): SongFacts[] => {
   const found = new Map<number, SongFacts>();
   for (const part of chunks(ids)) {
     const list = sql.join(

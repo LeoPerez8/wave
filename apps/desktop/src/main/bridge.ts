@@ -29,6 +29,16 @@ import {
   type SongTarget,
 } from "../shared/songActions.ts";
 import { runSongAction, songMenu } from "./library/songActions.ts";
+import {
+  collectionMenu,
+  runCollectionAction,
+  validCollectionTarget,
+} from "./library/collectionActions.ts";
+import {
+  COLLECTION_RUN_ACTIONS,
+  type CollectionActionOptions,
+  type CollectionRunAction,
+} from "../shared/collectionActions.ts";
 import type { Appearance, DesktopVersionHistory } from "../shared/bridge.ts";
 import { VIDEO_ID, YtMusic } from "./yt/ytMusic.ts";
 import { Downloads } from "./downloads/downloadsLayer.ts";
@@ -106,6 +116,16 @@ const validTarget = (value: unknown): value is SongTarget => {
 /** What Search takes: typed text, as long as a query gets. */
 const searchQuery = (value: unknown): value is string =>
   typeof value === "string" && value.length <= 500;
+
+const validCollectionOptions = (value: unknown): value is CollectionActionOptions => {
+  if (typeof value !== "object" || value === null) return false;
+  const { here, selectable, surface } = value as CollectionActionOptions;
+  return (
+    (here === undefined || searchQuery(here)) &&
+    (selectable === undefined || typeof selectable === "boolean") &&
+    (surface === undefined || surface === "menu" || surface === "selection")
+  );
+};
 
 /** A short list, whole, as a page. */
 const allOf = <T>(items: readonly T[]): Page<T> => ({ items, offset: 0, total: items.length });
@@ -544,6 +564,35 @@ const createHandlers = (
             };
           });
     },
+    "collections.actions": ([target, options]) =>
+      validCollectionTarget(target) && (options === undefined || validCollectionOptions(options))
+        ? Effect.gen(function* () {
+            const db = yield* Database;
+            const yt = yield* YtMusic;
+            const downloads = yield* Downloads;
+            return collectionMenu(db, target, options ?? {}, yt.enabled(), downloads.status);
+          })
+        : refuse("collections.actions", "invalid collection or options"),
+    "collections.run": ([target, action, playlistId]) =>
+      validCollectionTarget(target) &&
+      COLLECTION_RUN_ACTIONS.includes(action as CollectionRunAction) &&
+      (action === "addToPlaylist" ? songId(playlistId) : playlistId === undefined)
+        ? Effect.gen(function* () {
+            const db = yield* Database;
+            const playback = yield* Playback;
+            const downloads = yield* Downloads;
+            const yt = yield* YtMusic;
+            const library = yield* DesktopLibrary;
+            return yield* Effect.tryPromise(() =>
+              runCollectionAction(
+                { db, playback, downloads, yt, unavailable: library.unavailable },
+                target,
+                action as CollectionRunAction,
+                playlistId as number | undefined,
+              ),
+            );
+          })
+        : refuse("collections.run", "invalid collection, action or playlist"),
     "songs.actions": ([target, surface]) =>
       validTarget(target) && (surface === "menu" || surface === "selection")
         ? Effect.gen(function* () {
