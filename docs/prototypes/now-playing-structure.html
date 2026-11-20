@@ -1,0 +1,210 @@
+<!doctype html>
+<!--
+  PROTOTYPE, throwaway. Three structures for the Now Playing redo, side by side,
+  each phone clickable. Question: how the player reaches Queue and Related, and
+  where Lyrics sits. Not production code.
+-->
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Now Playing: estrutura</title>
+<style>
+  :root { --ink:#fff; --dim:rgba(255,255,255,.62); --faint:rgba(255,255,255,.34); --line:rgba(255,255,255,.14); --ember:#f5b83d; }
+  * { box-sizing:border-box; margin:0; padding:0; }
+  body { font-family:Inter,"Segoe UI",system-ui,sans-serif; }
+  h1 { font-size:18px; font-weight:500; }
+  .lead { color:var(--muted-foreground); font-size:13px; margin-top:4px; max-width:70ch; line-height:1.45; }
+  .ctl { display:flex; flex-wrap:wrap; align-items:center; gap:10px; margin:16px 0 20px; font-size:13px; color:var(--muted-foreground); }
+  .seg { display:inline-flex; background:var(--secondary); border:1px solid var(--border); border-radius:999px; padding:3px; }
+  .seg button { all:unset; cursor:pointer; padding:6px 14px; border-radius:999px; font-size:13px; color:var(--muted-foreground); }
+  .seg button.on { background:var(--foreground); color:var(--background); }
+  .row { display:flex; flex-wrap:wrap; gap:14px; justify-content:center; }
+  .col { width:300px; zoom:.76; }
+  .cap { margin-top:12px; }
+  .cap b { display:block; font-size:17px; font-weight:600; }
+  .cap span { display:block; font-size:15.5px; color:var(--muted-foreground); line-height:1.45; margin-top:3px; }
+
+  .phone { width:300px; height:640px; border-radius:34px; overflow:hidden; position:relative; color:var(--ink);
+    background:linear-gradient(170deg,#5a3b63 0%,#2a2144 34%,#0d0b16 70%,#000 100%); border:1px solid #2a3338; user-select:none; }
+  .phone svg { display:block; fill:none; stroke:currentColor; stroke-width:1.6; stroke-linecap:round; stroke-linejoin:round; }
+  [data-go],[data-inl] { cursor:pointer; }
+  .col-flex { display:flex; flex-direction:column; height:100%; }
+  .pad { padding:0 16px; }
+  .hdr { height:44px; display:flex; align-items:center; justify-content:space-between; padding:6px 14px 0; flex:none; }
+  .main { flex:1; min-height:0; display:flex; flex-direction:column; gap:14px; }
+  .coverbox { flex:1; min-height:0; display:flex; align-items:center; justify-content:center; }
+  .cover { height:100%; max-width:100%; aspect-ratio:1; border-radius:4px;
+    background:radial-gradient(circle at 30% 25%,#f3c98b 0 12%,transparent 13%),linear-gradient(140deg,#c86b7a,#5b3f8f 55%,#1d2b55); }
+  .meta { display:flex; align-items:center; gap:8px; flex:none; }
+  .meta .t { font-size:18px; font-weight:500; }
+  .meta .s { font-size:13.5px; color:var(--dim); margin-top:3px; }
+  .star { color:var(--ember); margin-left:auto; }
+  .scrub { flex:none; padding-top:14px; }
+  .bar { height:3px; border-radius:2px; background:var(--line); position:relative; }
+  .bar i { position:absolute; left:0; top:0; bottom:0; width:38%; background:#fff; border-radius:2px; }
+  .bar b { position:absolute; left:38%; top:50%; width:12px; height:12px; margin:-6px 0 0 -6px; border-radius:50%; background:#fff; }
+  .times { display:flex; justify-content:space-between; font-size:11px; color:var(--dim); margin-top:7px; font-variant-numeric:tabular-nums; }
+  .transport { flex:none; height:66px; display:flex; align-items:center; justify-content:center; gap:34px; }
+  .slots { flex:none; height:44px; display:flex; align-items:center; justify-content:space-between; padding:0 6px; color:var(--dim); }
+  .slots .on { color:#fff; }
+  .tabs { flex:none; height:46px; display:flex; align-items:center; border-top:1px solid var(--line); }
+  .tab { flex:1; text-align:center; font-size:11px; letter-spacing:.09em; text-transform:uppercase; color:var(--dim); padding:14px 0; position:relative; }
+  .phone[data-screen=queue] .tab[data-go=queue], .phone[data-screen=lyrics] .tab[data-go=lyrics], .phone[data-screen=related] .tab[data-go=related] { color:#fff; }
+  .phone[data-screen=queue] .tab[data-go=queue]::after, .phone[data-screen=lyrics] .tab[data-go=lyrics]::after, .phone[data-screen=related] .tab[data-go=related]::after {
+    content:""; position:absolute; left:22%; right:22%; bottom:0; height:2px; background:#fff; border-radius:2px; }
+  .grab { width:32px; height:4px; border-radius:2px; background:var(--faint); margin:7px auto 0; }
+
+  .mini { flex:none; display:flex; align-items:center; gap:10px; padding:10px 16px; }
+  .mini .c { width:40px; height:40px; border-radius:3px; background:linear-gradient(140deg,#c86b7a,#5b3f8f 55%,#1d2b55); flex:none; }
+  .mini .t { font-size:14px; font-weight:500; }
+  .mini .s { font-size:12px; color:var(--dim); margin-top:2px; }
+  .mini .x { margin-left:auto; color:var(--dim); }
+
+  .pane { display:none; flex:1; min-height:0; overflow:hidden; padding:4px 16px 0; }
+  .pane.show { display:block; }
+  .phone[data-screen=queue] .pane.queue, .phone[data-screen=lyrics] .pane.lyrics, .phone[data-screen=related] .pane.related { display:block; }
+  .sec { display:flex; align-items:center; gap:14px; height:40px; font-size:11px; letter-spacing:.09em; text-transform:uppercase; color:var(--dim); }
+  .sec .sp { margin-left:auto; }
+  .song { display:flex; align-items:center; gap:10px; height:50px; }
+  .song .c { width:38px; height:38px; border-radius:3px; flex:none; }
+  .song .t { font-size:13.5px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+  .song .s { font-size:11.5px; color:var(--dim); margin-top:2px; }
+  .song .tx { min-width:0; flex:1; }
+  .song .e { color:var(--faint); flex:none; }
+  .artists { display:flex; gap:14px; margin-top:12px; }
+  .artists div { width:64px; text-align:center; font-size:11px; color:var(--dim); }
+  .artists i { display:block; width:64px; height:64px; border-radius:50%; margin-bottom:6px; }
+  .ly { font-size:19px; line-height:1.3; font-weight:500; color:var(--faint); margin:0 0 14px; }
+  .ly.now { color:#fff; }
+
+  .inl { display:none; flex:1; min-height:0; flex-direction:column; }
+  .inl .pane { display:block; padding:4px 0 0; }
+  .phone[data-inline="1"] .main { display:none; }
+  .phone[data-inline="1"] .inl { display:flex; }
+  .phone[data-inline="1"] [data-inl] { color:#fff; }
+
+  /* A: pull-up panel */
+  .vA .panel { position:absolute; inset:0; transform:translateY(100%); transition:transform .34s cubic-bezier(.2,.8,.2,1);
+    background:linear-gradient(170deg,#3a2947 0%,#1a152c 40%,#06050b 100%); }
+  .vA:not([data-screen=player]) .panel { transform:none; }
+  .vA .panel .tabs { border-top:0; border-bottom:1px solid var(--line); }
+  /* B: swap in place */
+  .vB .bscreen { display:none; flex:1; min-height:0; flex-direction:column; }
+  .vB:not([data-screen=player]) .bplayer { display:none; }
+  .vB:not([data-screen=player]) .bscreen { display:flex; }
+  .vB[data-screen=queue] .slots [data-go=queue], .vB[data-screen=lyrics] .slots [data-go=lyrics], .vB[data-screen=related] .slots [data-go=related] { color:#fff; }
+  .bplayer { flex:1; min-height:0; display:flex; flex-direction:column; }
+  /* C: pages */
+  .vC .pages { flex:1; min-height:0; display:flex; transition:transform .34s cubic-bezier(.2,.8,.2,1); transform:translateX(calc(var(--i) * -300px)); }
+  .vC .page { width:300px; flex:none; display:flex; flex-direction:column; min-height:0; }
+  .dots { flex:none; height:40px; display:flex; align-items:center; justify-content:center; gap:16px; font-size:10.5px; letter-spacing:.09em; text-transform:uppercase; color:var(--faint); }
+  .vC[data-screen=player] .dots [data-go=player], .vC[data-screen=queue] .dots [data-go=queue], .vC[data-screen=lyrics] .dots [data-go=lyrics], .vC[data-screen=related] .dots [data-go=related] { color:#fff; }
+</style>
+</head>
+<body>
+<h1>Now Playing: como chegar na Fila, nas Relacionadas e na Letra</h1>
+<p class="lead">Três estruturas, com o visual do Wave. Os três telefones funcionam: toque nas abas, nos botões e no cabeçalho pequeno para ir e voltar. O seletor abaixo muda onde a Letra mora nos três ao mesmo tempo.</p>
+<div class="ctl">
+  <span>Letra:</span>
+  <div class="seg" id="seg">
+    <button data-m="tab" class="on">Tela, como a Fila</button>
+    <button data-m="btn">Botão no player</button>
+    <button data-m="both">As duas coisas</button>
+  </div>
+  <span id="mhint"></span>
+</div>
+<div class="row" id="row"></div>
+
+<script>
+const P = {
+  down:'M6 9l6 6 6-6', share:'M13 4v4c-6.6 1-9 5.7-10 11 2.5-3.5 5-5.1 10-5v4l8-7-8-7z',
+  prev:'M19 5v14l-10-7zM6 5v14', next:'M5 5v14l10-7zM18 5v14', pause:'M9 5v14M15 5v14',
+  star:'M12 3.5l2.7 5.5 6 .9-4.4 4.2 1 6-5.3-2.8-5.3 2.8 1-6L3.3 9.9l6-.9z',
+  lyr:'M4 6h16M4 12h10M4 18h13', plus:'M12 5v14M5 12h14', pl:'M4 7h11M4 12h11M4 17h6M17 14v6M14 17h6',
+  dl:'M12 4v11M7 11l5 5 5-5M5 20h14', more:'M5 12h.01M12 12h.01M19 12h.01',
+  queue:'M9 6h11M9 12h11M9 18h11M4 6h1M4 12h1M4 18h1', rel:'M4 5h7v7H4zM13 12h7v7h-7zM14 5h6M14 8h4M4 16h6M4 19h4',
+  shuf:'M4 7h3l10 10h3M17 14l3 3-3 3M4 17h3l3-3M14 10l3-3h3M17 4l3 3-3 3', rep:'M5 12V9a3 3 0 013-3h11M16 3l3 3-3 3M19 12v3a3 3 0 01-3 3H5M8 21l-3-3 3-3',
+  grip:'M5 9h14M5 15h14', x:'M6 6l12 12M18 6L6 18'
+};
+const ic = (n, s=22, fill=false) => `<svg width="${s}" height="${s}" viewBox="0 0 24 24"${fill?' style="fill:currentColor"':''}><path d="${P[n]}"/></svg>`;
+const art = ['#7a4b9a,#243a7a','#c7774f,#5a2334','#3f8f86,#16324a','#b9a14a,#4a3b1e','#8a5a6a,#2a2140','#4f6fb0,#1b2440','#a35a8a,#33204a','#5e8f5a,#1f3323'];
+const songs = [['Vidro Fosco','Lume'],['Maré Baixa','Os Navegantes'],['Quarto Azul','Íris Mota'],['Linha do Trem','Cais 9'],['Antes da Chuva','Lume'],['Farol','Tereza Nunes'],['Estação Norte','Cais 9'],['Papel de Parede','Íris Mota']];
+const song = (i, end) => `<div class="song"><div class="c" style="background:linear-gradient(140deg,${art[i%8]})"></div><div class="tx"><div class="t">${songs[i%8][0]}</div><div class="s">${songs[i%8][1]}</div></div><div class="e">${end}</div></div>`;
+
+const hdr = `<div class="hdr">${ic('down',24)}${ic('share',20)}</div>`;
+const main = `<div class="main pad"><div class="coverbox"><div class="cover"></div></div>
+  <div class="meta"><div><div class="t">Cidade Submersa</div><div class="s">Lume</div><div class="s">Águas Paradas</div></div><div class="star">${ic('star',24,true)}</div></div></div>`;
+const scrub = `<div class="scrub pad"><div class="bar"><i></i><b></b></div><div class="times"><span>1:24</span><span>-2:17</span></div></div>`;
+const transport = `<div class="transport">${ic('prev',28)}${ic('pause',38)}${ic('next',28)}</div>`;
+const mini = (back) => `<div class="mini" data-go="player"><div class="c"></div><div><div class="t">Cidade Submersa</div><div class="s">Lume</div></div>${back?`<div class="x">${ic('down',20)}</div>`:''}</div>`;
+const lines = ['A cidade dorme embaixo d\'água','e eu conto as luzes do fundo','ninguém atende o telefone','o rádio toca a mesma canção','eu fico mais um pouco aqui'];
+const lyricsBody = lines.map((l,i)=>`<p class="ly${i===1?' now':''}">${l}</p>`).join('');
+const paneQueue = (cls='') => `<div class="pane queue ${cls}"><div class="sec"><span>A seguir · 12 músicas</span><span class="sp">${ic('shuf',18)}</span>${ic('rep',18)}</div>${[0,1,2,3,4,5,6,7].map(i=>song(i,ic('grip',18))).join('')}</div>`;
+const paneLyrics = (cls='') => `<div class="pane lyrics ${cls}" style="padding-top:18px">${lyricsBody}${lyricsBody}</div>`;
+const paneRelated = (cls='') => `<div class="pane related ${cls}"><div class="sec"><span>Você também pode gostar</span></div>${[3,5,7,1,6].map(i=>song(i,ic('plus',20))).join('')}
+  <div class="sec" style="margin-top:6px"><span>Artistas parecidos</span></div><div class="artists">${[0,2,4,6].map(i=>`<div><i style="background:linear-gradient(140deg,${art[i]})"></i>${songs[i][1].split(' ')[0]}</div>`).join('')}</div></div>`;
+const inl = `<div class="inl pad">${mini(false).replace('data-go="player"','data-inl="1"')}${paneLyrics('show')}</div>`;
+
+// The Lyrics button of the slot row: nothing, an in-place toggle, or a jump to the Lyrics screen.
+const lyrBtn = (m) => m==='tab' ? '' : m==='btn' ? `<span data-inl="1">${ic('lyr')}</span>` : `<span data-go="lyrics">${ic('lyr')}</span>`;
+const slots = (m, extra='') => `<div class="slots pad">${lyrBtn(m)}${ic('pl')}${ic('dl')}${ic('shuf')}${ic('more')}${extra}</div>`;
+const tabs = (m) => `<div class="tabs"><div class="tab" data-go="queue">A seguir</div>${m==='btn'?'':'<div class="tab" data-go="lyrics">Letra</div>'}<div class="tab" data-go="related">Relacionadas</div></div>`;
+
+const A = (m) => `<div class="phone vA" data-screen="player"><div class="col-flex">${hdr}${main}${inl}${scrub}${transport}${slots(m)}${tabs(m)}</div>
+  <div class="panel"><div class="col-flex"><div class="grab"></div>${mini(true)}${tabs(m)}${paneQueue()}${m==='btn'?'':paneLyrics()}${paneRelated()}</div></div></div>`;
+
+const B = (m) => {
+  const lyr = m==='btn' ? `<span data-inl="1">${ic('lyr')}</span>` : `<span data-go="lyrics">${ic('lyr')}</span>`;
+  return `<div class="phone vB" data-screen="player"><div class="col-flex">${hdr}
+    <div class="bplayer">${main}${inl}${scrub}${transport}</div>
+    <div class="bscreen">${mini(false)}${paneQueue()}${paneLyrics()}${paneRelated()}</div>
+    <div class="slots pad">${lyr}${ic('pl')}${ic('dl')}${ic('more')}<span data-go="related">${ic('rel')}</span><span data-go="queue">${ic('queue')}</span></div><div style="height:14px"></div></div></div>`;
+};
+
+const C = (m) => {
+  const order = m==='btn' ? ['queue','player','related'] : ['queue','player','lyrics','related'];
+  const name = {queue:'Fila',player:'Tocando',lyrics:'Letra',related:'Relacionadas'};
+  const page = { queue:`<div class="page">${mini(false)}${paneQueue('show')}</div>`,
+    player:`<div class="page">${main}${inl}${scrub}${transport}${slots(m)}</div>`,
+    lyrics:`<div class="page">${mini(false)}${paneLyrics('show')}</div>`,
+    related:`<div class="page">${mini(false)}${paneRelated('show')}</div>` };
+  return `<div class="phone vC" data-screen="player" data-order="${order.join(',')}" style="--i:1"><div class="col-flex">${hdr}
+    <div class="pages">${order.map(k=>page[k]).join('')}</div>
+    <div class="dots">${order.map(k=>`<span data-go="${k}">${name[k]}</span>`).join('')}</div></div></div>`;
+};
+
+const caps = [
+  ['A · Abas no rodapé','Toque numa aba do rodapé: um painel sobe e cobre o player inteiro, sem play/pause nem tempo. O cabeçalho pequeno ou puxar para baixo volta ao player.'],
+  ['B · Troca no lugar','Os botões da direita trocam o player pela lista na altura toda; a fileira de botões continua embaixo. Toque no mesmo botão ou no cabeçalho pequeno para voltar.'],
+  ['C · Páginas lado a lado','Fila à esquerda e Relacionadas à direita do player. No telefone seria deslizando; aqui, toque nos nomes embaixo.']
+];
+const hints = { tab:'A Letra é uma tela inteira, igual à Fila.', btn:'A Letra troca só com a capa; progresso e transporte continuam visíveis.', both:'Tela inteira, e o player ganha um botão que leva direto a ela.' };
+
+let mode = 'tab';
+const render = () => {
+  document.getElementById('row').innerHTML = [A,B,C].map((v,i)=>`<div class="col">${v(mode)}<div class="cap"><b>${caps[i][0]}</b><span>${caps[i][1]}</span></div></div>`).join('');
+  document.getElementById('mhint').textContent = hints[mode];
+};
+document.getElementById('seg').addEventListener('click', e => {
+  const b = e.target.closest('button'); if (!b) return;
+  mode = b.dataset.m;
+  document.querySelectorAll('#seg button').forEach(x => x.classList.toggle('on', x === b));
+  render();
+});
+document.getElementById('row').addEventListener('click', e => {
+  const phone = e.target.closest('.phone'); if (!phone) return;
+  const inlEl = e.target.closest('[data-inl]');
+  if (inlEl) { phone.dataset.inline = phone.dataset.inline === '1' ? '0' : '1'; return; }
+  const go = e.target.closest('[data-go]'); if (!go) return;
+  let to = go.dataset.go;
+  // B's buttons are toggles: the lit one goes back to the player.
+  if (phone.classList.contains('vB') && go.closest('.slots') && phone.dataset.screen === to) to = 'player';
+  phone.dataset.screen = to;
+  phone.dataset.inline = '0';
+  if (phone.dataset.order) phone.style.setProperty('--i', phone.dataset.order.split(',').indexOf(to));
+});
+render();
+</script>
+</body>
+</html>

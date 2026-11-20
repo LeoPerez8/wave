@@ -1,0 +1,122 @@
+<!doctype html>
+<!--
+  PROTOTYPE, throwaway. The owner's layout for the Now Playing redo, as four
+  still states: player, player being edited, Queue (a swipe away), Related
+  (the chevron beside the title). Not production code.
+-->
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Now Playing: desenho novo</title>
+<style>
+  :root { --ink:#fff; --dim:rgba(255,255,255,.62); --faint:rgba(255,255,255,.34); --line:rgba(255,255,255,.14); --ember:#f5b83d; }
+  * { box-sizing:border-box; margin:0; padding:0; }
+  body { font-family:Inter,"Segoe UI",system-ui,sans-serif; }
+  .row { display:flex; flex-wrap:wrap; gap:28px 40px; justify-content:center; }
+  .col { width:300px; }
+  .cap { margin-top:12px; }
+  .cap b { display:block; font-size:14px; font-weight:600; }
+  .cap span { display:block; font-size:12.5px; color:var(--muted-foreground); line-height:1.45; margin-top:3px; }
+
+  .phone { width:300px; height:640px; border-radius:34px; overflow:hidden; position:relative; color:var(--ink);
+    background:linear-gradient(170deg,#5a3b63 0%,#2a2144 34%,#0d0b16 70%,#000 100%); border:1px solid #2a3338;
+    display:flex; flex-direction:column; }
+  .phone svg { display:block; fill:none; stroke:currentColor; stroke-width:1.6; stroke-linecap:round; stroke-linejoin:round; }
+  .pad { padding:0 16px; }
+  .hdr { height:44px; display:flex; align-items:center; justify-content:space-between; padding:6px 14px 0; flex:none; font-size:13px; }
+  .hdr .done { font-weight:600; }
+  .main { flex:1; min-height:0; display:flex; flex-direction:column; gap:14px; }
+  .coverbox { flex:1; min-height:0; display:flex; align-items:center; justify-content:center; }
+  .cover { height:100%; max-width:100%; aspect-ratio:1; border-radius:4px;
+    background:radial-gradient(circle at 30% 25%,#f3c98b 0 12%,transparent 13%),linear-gradient(140deg,#c86b7a,#5b3f8f 55%,#1d2b55); }
+  .meta { display:flex; align-items:center; gap:8px; flex:none; }
+  .meta .t { font-size:18px; font-weight:500; display:flex; align-items:center; gap:4px; }
+  .meta .t svg { color:var(--dim); }
+  .meta .s { font-size:13.5px; color:var(--dim); margin-top:3px; }
+  .star { color:var(--ember); margin-left:auto; }
+  .scrub { flex:none; padding-top:14px; }
+  .bar { height:3px; border-radius:2px; background:var(--line); position:relative; }
+  .bar i { position:absolute; left:0; top:0; bottom:0; width:38%; background:#fff; border-radius:2px; }
+  .bar b { position:absolute; left:38%; top:50%; width:12px; height:12px; margin:-6px 0 0 -6px; border-radius:50%; background:#fff; }
+  .times { display:flex; justify-content:space-between; font-size:11px; color:var(--dim); margin-top:7px; font-variant-numeric:tabular-nums; }
+  .transport { flex:none; height:66px; display:flex; align-items:center; justify-content:space-between; padding:0 12px; }
+  .transport .mid { display:flex; align-items:center; gap:30px; }
+  .side { width:36px; height:36px; display:flex; align-items:center; justify-content:center; }
+  .slots { flex:none; height:48px; display:flex; align-items:center; justify-content:space-between; padding:0 12px 6px; color:var(--dim); }
+  .slots span { width:36px; height:36px; display:flex; align-items:center; justify-content:center; }
+  .edit .side, .edit .slots span { border:1.5px dashed var(--faint); border-radius:10px; color:#fff; }
+  .edit .side { color:var(--faint); }
+  .edit .cover { opacity:.45; } .edit .meta, .edit .scrub, .edit .mid { opacity:.45; }
+  .note { font-size:11px; color:var(--dim); text-align:center; padding:0 16px 4px; flex:none; }
+  .swipe { position:absolute; right:0; top:44%; width:4px; height:56px; border-radius:2px 0 0 2px; background:var(--faint); }
+
+  .mini { flex:none; display:flex; align-items:center; gap:10px; padding:6px 16px 10px; }
+  .mini .c { width:40px; height:40px; border-radius:3px; background:linear-gradient(140deg,#c86b7a,#5b3f8f 55%,#1d2b55); flex:none; }
+  .mini .t { font-size:14px; font-weight:500; }
+  .mini .s { font-size:12px; color:var(--dim); margin-top:2px; }
+  .pane { flex:1; min-height:0; overflow:hidden; padding:0 16px; }
+  .sec { display:flex; align-items:center; gap:14px; height:40px; font-size:11px; letter-spacing:.09em; text-transform:uppercase; color:var(--dim); }
+  .sec .sp { margin-left:auto; }
+  .song { display:flex; align-items:center; gap:10px; height:50px; }
+  .song .c { width:38px; height:38px; border-radius:3px; flex:none; }
+  .song .t { font-size:13.5px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+  .song .s { font-size:11.5px; color:var(--dim); margin-top:2px; }
+  .song .tx { min-width:0; flex:1; }
+  .song .e { color:var(--faint); flex:none; }
+  .artists { display:flex; gap:14px; margin-top:8px; }
+  .artists div { width:56px; text-align:center; font-size:11px; color:var(--dim); }
+  .artists i { display:block; width:56px; height:56px; border-radius:50%; margin-bottom:6px; }
+  .car { overflow:hidden; padding-left:16px; }
+  .trk { display:flex; gap:14px; }
+  .pg { width:240px; flex:none; }
+  .dots { display:flex; justify-content:center; gap:6px; height:22px; align-items:center; }
+  .dots i { width:6px; height:6px; border-radius:50%; background:var(--faint); }
+  .dots i.on { background:#fff; }
+  .artists.pad { padding:0 16px; }
+</style>
+</head>
+<body>
+<div class="row" id="row"></div>
+<script>
+const P = {
+  down:'M6 9l6 6 6-6', left:'M15 6l-6 6 6 6', right:'M9 6l6 6-6 6',
+  prev:'M19 5v14l-10-7zM6 5v14', next:'M5 5v14l10-7zM18 5v14', pause:'M9 5v14M15 5v14',
+  star:'M12 3.5l2.7 5.5 6 .9-4.4 4.2 1 6-5.3-2.8-5.3 2.8 1-6L3.3 9.9l6-.9z',
+  lyr:'M4 6h16M4 12h10M4 18h13', plus:'M12 5v14M5 12h14', pl:'M4 7h11M4 12h11M4 17h6M17 14v6M14 17h6',
+  dl:'M12 4v11M7 11l5 5 5-5M5 20h14', more:'M5 12h.01M12 12h.01M19 12h.01',
+  shuf:'M4 7h3l10 10h3M17 14l3 3-3 3M4 17h3l3-3M14 10l3-3h3M17 4l3 3-3 3', rep:'M5 12V9a3 3 0 013-3h11M16 3l3 3-3 3M19 12v3a3 3 0 01-3 3H5M8 21l-3-3 3-3',
+  grip:'M5 9h14M5 15h14'
+};
+const ic = (n, s=22, fill=false) => `<svg width="${s}" height="${s}" viewBox="0 0 24 24"${fill?' style="fill:currentColor"':''}><path d="${P[n]}"/></svg>`;
+const art = ['#7a4b9a,#243a7a','#c7774f,#5a2334','#3f8f86,#16324a','#b9a14a,#4a3b1e','#8a5a6a,#2a2140','#4f6fb0,#1b2440','#a35a8a,#33204a','#5e8f5a,#1f3323'];
+const songs = [['Vidro Fosco','Lume'],['Maré Baixa','Os Navegantes'],['Quarto Azul','Íris Mota'],['Linha do Trem','Cais 9'],['Antes da Chuva','Lume'],['Farol','Tereza Nunes'],['Estação Norte','Cais 9'],['Papel de Parede','Íris Mota']];
+const song = (i, end) => `<div class="song"><div class="c" style="background:linear-gradient(140deg,${art[i%8]})"></div><div class="tx"><div class="t">${songs[i%8][0]}</div><div class="s">${songs[i%8][1]}</div></div><div class="e">${end}</div></div>`;
+
+const main = `<div class="main pad"><div class="coverbox"><div class="cover"></div></div>
+  <div class="meta"><div><div class="t">Cidade Submersa ${ic('right',20)}</div><div class="s">Lume</div><div class="s">Águas Paradas</div></div><div class="star">${ic('star',24,true)}</div></div></div>`;
+const scrub = `<div class="scrub pad"><div class="bar"><i></i><b></b></div><div class="times"><span>1:24</span><span>-2:17</span></div></div>`;
+const transport = (edit) => `<div class="transport"><div class="side">${edit?ic('plus',18):''}</div><div class="mid">${ic('prev',28)}${ic('pause',38)}${ic('next',28)}</div><div class="side">${edit?ic('plus',18):''}</div></div>`;
+const slots = `<div class="slots">${['lyr','pl','dl','shuf','rep'].map(n=>`<span>${ic(n)}</span>`).join('')}</div>`;
+const mini = (lead) => `<div class="mini">${lead}<div class="c"></div><div><div class="t">Cidade Submersa</div><div class="s">Lume</div></div></div>`;
+
+const player = `<div class="phone"><div class="hdr">${ic('down',24)}${ic('more',22)}</div>${main}${scrub}${transport(false)}${slots}<div class="swipe"></div></div>`;
+const editing = `<div class="phone edit"><div class="hdr"><span></span><span class="done">Concluir</span></div>${main}${scrub}${transport(true)}${slots}<div class="note">Toque num espaço para escolher a ação</div></div>`;
+const queue = `<div class="phone"><div class="hdr">${ic('down',24)}<span></span></div>${mini('')}
+  <div class="pane"><div class="sec"><span>A seguir · 12 músicas</span><span class="sp">${ic('shuf',18)}</span>${ic('rep',18)}</div>${[0,1,2,3,4,5,6,7,0].map(i=>song(i,ic('grip',18))).join('')}</div></div>`;
+const order=[3,5,7,1,6,2,0,4,3,6,1,5];
+const pageOf=(k)=>`<div class="pg">${order.slice(k*6,k*6+6).map(i=>song(i,ic('plus',20))).join('')}</div>`;
+const relatedAt=(k)=>`<div class="phone"><div class="hdr">${ic('left',24)}<span></span></div>${mini('')}
+  <div class="pane" style="padding:0"><div class="sec pad"><span>Você também pode gostar</span></div>
+  <div class="car"><div class="trk" style="transform:translateX(${k?-254:0}px)">${pageOf(0)}${pageOf(1)}</div></div>
+  <div class="dots"><i class="${k?'':'on'}"></i><i class="${k?'on':''}"></i></div>
+  <div class="sec pad"><span>Artistas parecidos</span></div><div class="artists pad">${[0,2,4,6].map(i=>`<div><i style="background:linear-gradient(140deg,${art[i]})"></i>${songs[i][1].split(' ')[0]}</div>`).join('')}</div></div></div>`;
+const related = relatedAt(0);
+const cols = [
+  [relatedAt(0),'Relacionadas · página 1 de 2','12 músicas vieram, então são duas páginas de 6. A ponta da página seguinte aparece à direita, e os artistas já estão na tela sem rolar.'],
+  [relatedAt(1),'Relacionadas · página 2 de 2','Deslizando a tabela para o lado. A última página está cheia como a primeira; a tela em si não rola.']
+];
+document.getElementById('row').innerHTML = cols.map(([p,t,d])=>`<div class="col">${p}<div class="cap"><b>${t}</b><span>${d}</span></div></div>`).join('');
+</script>
+</body>
+</html>
