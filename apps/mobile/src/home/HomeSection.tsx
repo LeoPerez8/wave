@@ -29,11 +29,11 @@ import { PullRefreshRow } from "@/catalog/PullRefreshRow";
 import { SkeletonGroup, SongCardSkeleton } from "@/catalog/Skeletons";
 import { TitledSection } from "@/catalog/TitledSection";
 import { RecommendationsFailed } from "@/components/RecommendationsFailed";
+import { TextButton } from "@/components/TextButton";
 import { openDj } from "@/dj/routes";
 import { openStatsSeeAll } from "@/library/routes";
 import type { PlayableSongRow } from "@wave/client";
 import { Crossfade } from "@/motion/Crossfade";
-import { Press } from "@/motion/Press";
 import { openTrackActions } from "@/playback/ActionsMenu";
 import { useYtMusicEnabled } from "@/settings/ytMusic";
 import { useThemeColor } from "@/theme/useThemeColor";
@@ -159,11 +159,10 @@ function DjCard() {
   const { strings } = useLocalisation();
   const [foreground, secondary] = useThemeColor(["foreground", "secondary"]);
   return (
-    <Press
-      accessibilityRole="button"
+    <TextButton
+      label={strings.dj.title}
       accessibilityLabel={`${strings.dj.title}, ${strings.dj.cardDetail}`}
       onPress={openDj}
-      haptic="selection"
       depth={0.015}
       className="flex-row items-center rounded-2xl bg-fill"
       style={{ minHeight: CELL * 9, paddingHorizontal: CELL * 2, gap: CELL * 1.5 }}
@@ -174,7 +173,7 @@ function DjCard() {
         <Text className="font-sans text-footnote text-secondary">{strings.dj.cardDetail}</Text>
       </View>
       <IconChevronRight size={20} color={secondary} strokeWidth={1.5} />
-    </Press>
+    </TextButton>
   );
 }
 

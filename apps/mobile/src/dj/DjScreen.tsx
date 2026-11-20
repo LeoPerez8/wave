@@ -16,7 +16,7 @@ import { ActivityIndicator, ScrollView, Text, View, useWindowDimensions } from "
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import { ArtistImage } from "@/catalog/ArtistImage";
-import { CardTitle } from "@/catalog/cards/CardParts";
+import { CardTile, CardTitle } from "@/catalog/cards/CardParts";
 import { TileCheck } from "@/catalog/CheckCell";
 import { CELL, grid, widthOf } from "@/catalog/grid";
 import { IconButton } from "@/components/IconButton";
@@ -29,7 +29,6 @@ import { useScreenContent } from "@/lib/screenTiming";
 import { router } from "@/lib/timingRouter";
 import { appRuntime } from "@/library/runtime";
 import { useLocalisation } from "@/localisation/localisation";
-import { Press } from "@/motion/Press";
 import { startDjMagicQueue } from "@/playback/MagicQueue";
 import { latestTasteProfile } from "@/playback/TasteProfile";
 import { usePlayedArtist } from "@/stats/PlayedEntityViews";
@@ -114,24 +113,26 @@ function ArtistTile({
     artist ?? { id: tile.key, online: true, name: tile.name, thumbPath: null, artworkPath: null },
   );
   return (
-    <Press
-      accessibilityRole="checkbox"
-      accessibilityLabel={strings.dj.artistTile(tile.name)}
-      accessibilityState={{ checked: selected, disabled: !selectable }}
-      disabled={!selectable}
-      onPress={onPress}
-      haptic="selection"
-      depth={0.02}
-      style={{ width: size, opacity: selectable ? 1 : 0.4 }}
+    <View
+      style={{ opacity: selectable ? 1 : 0.4 }}
+      pointerEvents={selectable ? "auto" : "none"}
+      accessibilityState={{ disabled: !selectable }}
     >
-      <View style={{ width: size, height: size }}>
-        <ArtistImage artist={image} size={size} large />
-        {selected && <TileCheck checked />}
-      </View>
-      <View style={{ paddingTop: CELL }}>
-        <CardTitle centred>{tile.name}</CardTitle>
-      </View>
-    </Press>
+      <CardTile
+        width={size}
+        label={strings.dj.artistTile(tile.name)}
+        checked={selected}
+        onPress={onPress}
+      >
+        <View style={{ width: size, height: size }}>
+          <ArtistImage artist={image} size={size} large />
+          {selected && <TileCheck checked />}
+        </View>
+        <View style={{ paddingTop: CELL }}>
+          <CardTitle centred>{tile.name}</CardTitle>
+        </View>
+      </CardTile>
+    </View>
   );
 }
 
