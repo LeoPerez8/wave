@@ -37,7 +37,7 @@ import type { ResultRow, ResultSong } from "./rows";
 import type { SearchHit } from "./searchIndex";
 import { useListScrollable } from "@/motion/heldTouch";
 import type { ListSelection } from "@/selection/useListSelection";
-import { openYtAlbum, openYtArtist } from "@/ytmusic/routes";
+import { openYtAlbum, openYtArtist, openYtPlaylist } from "@/ytmusic/routes";
 import { openYtAlbumActions } from "@/ytmusic/YtAlbumActions";
 import { openYtArtistActions } from "@/ytmusic/YtArtistActions";
 import {
@@ -64,9 +64,13 @@ const HEIGHT: Readonly<Record<ResultRow["type"], number>> = {
   ytSong: grid.row,
   ytArtist: grid.row,
   ytAlbum: grid.row,
+  ytPlaylist: grid.row,
   note: CELL * 6,
   skeleton: grid.row * SKELETON_ROWS,
 };
+
+/** A community playlist YouTube Music lists no cover for. */
+const NO_COVERS: readonly string[] = [];
 
 /** Non-song results stay in place while selecting. */
 const ignore = (): void => undefined;
@@ -351,6 +355,31 @@ export function SearchResultsList({
                     }
               }
               onLongPress={selection.selecting ? ignore : () => openYtAlbumActions(head)}
+            />
+          );
+        }
+        case "ytPlaylist": {
+          const { playlist } = item;
+          const { author } = playlist;
+          // Reads "Playlist · <author>", as a Library playlist's row does; TalkBack says title and author.
+          return (
+            <PlaylistCardRow
+              name={playlist.title}
+              detail={author ?? strings.library.pageKind.playlist}
+              plainDetail={author === null}
+              paths={playlist.artworkUrl === null ? NO_COVERS : [playlist.artworkUrl]}
+              onPress={
+                selection.selecting
+                  ? ignore
+                  : () => {
+                      onOpen();
+                      openYtPlaylist(playlist.playlistId, {
+                        title: playlist.title,
+                        line: author ?? "",
+                        artworkUrl: playlist.artworkUrl,
+                      });
+                    }
+              }
             />
           );
         }

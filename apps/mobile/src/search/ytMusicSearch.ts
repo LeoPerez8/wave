@@ -2,6 +2,7 @@ import {
   YT_SECTION_HIDDEN,
   stepYtSection,
   ytSearchAsksVideos,
+  type YtCommunityPlaylist,
   type YtPick,
   type YtSection,
 } from "@wave/core";
@@ -27,8 +28,8 @@ const inTurn = <A, R>(
 ): Effect.Effect<A, YtMusicError, R> => (always ? withSearchTurn("search", query, search) : search);
 
 /**
- * What Search has asked YT Music for [query] (its songs, artists and albums,
- * asked together), and what picking a segment of the Library | Online toggle
+ * What Search has asked YT Music for [query] (its songs, artists, albums and
+ * community playlists, asked together), and what picking a segment of the Library | Online toggle
  * does. Typing alone asks only when the Library has nothing for the query
  * ([libraryHasResults] false) and Library wasn't picked, once typing pauses;
  * Online asks at once (or shows again what it already has for the query),
@@ -39,7 +40,8 @@ const inTurn = <A, R>(
  * so every query is asked once typing pauses, each search taking its turn in
  * the shared search allowance (`withSearchTurn`). When no song result matches
  * the query (Core's `ytSearchAsksVideos`), one Videos search follows, and its
- * matching official music videos show among the songs; a failed one shows none.
+ * matching official music videos show among the songs; a failed one shows none,
+ * as a failed Community playlists search does.
  * Off in Settings, it stays hidden and nothing is asked.
  */
 export const useYtMusicSection = (
@@ -70,6 +72,10 @@ export const useYtMusicSection = (
               songs: inTurn(always, loading, ytMusic.searchSongs(loading)),
               artists: inTurn(always, loading, ytMusic.searchArtists(loading)),
               albums: inTurn(always, loading, ytMusic.searchAlbums(loading)),
+              // The shelf is an extra: a failed read shows none and leaves the rest.
+              playlists: inTurn(always, loading, ytMusic.searchCommunityPlaylists(loading)).pipe(
+                Effect.orElseSucceed((): readonly YtCommunityPlaylist[] => []),
+              ),
             },
             { concurrency: "unbounded" },
           );
@@ -84,8 +90,16 @@ export const useYtMusicSection = (
       );
       void search.then((result) => {
         if (Result.isSuccess(result)) {
-          const { songs, artists, albums, videos } = result.success;
-          dispatch({ type: "found", query: loading, songs: songs.songs, artists, albums, videos });
+          const { songs, artists, albums, playlists, videos } = result.success;
+          dispatch({
+            type: "found",
+            query: loading,
+            songs: songs.songs,
+            artists,
+            albums,
+            playlists,
+            videos,
+          });
         }
         // Turned off meanwhile: the section is already hidden.
         else if (result.failure.reason !== "disabled")

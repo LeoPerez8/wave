@@ -48,7 +48,29 @@ data class YtSearchPage(val songs: List<YtSong>, val continuation: String?) {
 }
 
 /**
- * Reads YouTube Music's (WEB_REMIX) search answers into songs and albums.
+ * A community playlist (docs/spec.md, Language) as YouTube Music's search
+ * lists it: a playlist one of its users made.
+ */
+data class YtCommunityPlaylist(
+  /** Without the `VL` its page's browse id adds. */
+  val playlistId: String,
+  val title: String,
+  /** Who made it, or null when the row doesn't say. */
+  val author: String?,
+  /** The largest cover YT Music lists for the row. */
+  val artworkUrl: String?,
+) {
+  fun toMap(): Map<String, Any?> =
+    mapOf(
+      "playlistId" to playlistId,
+      "title" to title,
+      "author" to author,
+      "artworkUrl" to artworkUrl,
+    )
+}
+
+/**
+ * Reads YouTube Music's (WEB_REMIX) search answers into songs, albums and community playlists.
  * innertubex only sends the request; the walk over the renderer tree follows
  * Metrolist's `SearchPage`/`PageHelper` (GPL-3.0), simplified to the "Songs"
  * and "Albums" filters.
@@ -57,7 +79,9 @@ data class YtSearchPage(val songs: List<YtSong>, val continuation: String?) {
  * the title, the second is "Artist, Artist & Artist • Album • 3:45", with the
  * artists and the album linked to their pages. An album row links to the
  * album's page, and its second column is "Album • Artist & Artist • 2011"
- * ("Single", "EP" for those).
+ * ("Single", "EP" for those). A community playlist row links to the playlist's
+ * page, and its second column is "Author • 341K views", the author linked to
+ * their channel.
  */
 object YtSearchParser {
   private val json = Json { ignoreUnknownKeys = true }
@@ -97,6 +121,44 @@ object YtSearchParser {
       .flatMap { it["contents"].arr.orEmpty() }
       .mapNotNull { it.path("musicResponsiveListItemRenderer").obj?.let(::albumRow) }
       .distinctBy { it.browseId }
+  }
+
+  /**
+   * The playlists of a Community playlists search answer, in its order, each once. Rows that
+   * aren't a playlist page (a podcast show) and unreadable ones are skipped.
+   */
+  fun communityPlaylists(body: String): List<YtCommunityPlaylist> {
+    val root = json.parseToJsonElement(body).obj ?: return emptyList()
+    return root.path("contents", "tabbedSearchResultsRenderer", "tabs").arr
+      ?.firstOrNull()?.path("tabRenderer", "content", "sectionListRenderer", "contents").arr.orEmpty()
+      .mapNotNull { it.path("musicShelfRenderer").obj }
+      .flatMap { it["contents"].arr.orEmpty() }
+      .mapNotNull { it.path("musicResponsiveListItemRenderer").obj?.let(::communityPlaylistRow) }
+      .distinctBy { it.playlistId }
+  }
+
+  /** A Community playlists search row (`musicResponsiveListItemRenderer` linking to a playlist page), or null. */
+  private fun communityPlaylistRow(row: JsonObject): YtCommunityPlaylist? {
+    val playlistId = YtHomeParser.playlistId(row["navigationEndpoint"]) ?: return null
+    val columns = row["flexColumns"].arr.orEmpty().map {
+      it.path("musicResponsiveListItemFlexColumnRenderer", "text", "runs").arr.orEmpty()
+        .mapNotNull { run -> run.obj }
+    }
+    val title = columns.firstOrNull()?.joinToString("") { it["text"].string.orEmpty() }?.trim()
+      ?.takeIf(String::isNotEmpty) ?: return null
+    val details = columns.getOrNull(1).orEmpty()
+    // Unlinked, the author is the line's first part, when a second one (the views) follows it.
+    val author = details.firstOrNull { pageType(it) in ARTIST_PAGES || isChannelLink(it) }
+      ?.get("text").string?.trim()?.takeIf(String::isNotEmpty)
+      ?: details.joinToString("") { it["text"].string.orEmpty() }.split(SEPARATOR)
+        .takeIf { it.size > 1 }?.first()?.trim()?.takeIf(String::isNotEmpty)
+    return YtCommunityPlaylist(
+      playlistId = playlistId,
+      title = title,
+      author = author,
+      artworkUrl = row.path("thumbnail", "musicThumbnailRenderer", "thumbnail", "thumbnails").arr
+        ?.lastOrNull()?.path("url").string,
+    )
   }
 
   /** An Albums search row (`musicResponsiveListItemRenderer` linking to an album page), or null. */
