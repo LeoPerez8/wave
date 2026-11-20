@@ -7,7 +7,7 @@ import { PixelRatio, Text, View } from "react-native";
 import { CELL, grid } from "@/catalog/grid";
 import { addScreenBackHandler } from "@/overlay/back";
 import { ImageCaptureContext, type ImageCapture } from "@/share/imageCapture";
-import { WaveMark } from "@/share/LyricCardArtwork";
+import { WaveMark } from "@/components/WaveMark";
 import { ShareDestinations } from "@/share/ShareDestinations";
 import { SharePreviewFrame } from "@/share/SharePreviewFrame";
 import type { ImageSource } from "@/share/shareImage";

@@ -1,6 +1,7 @@
 import type { homeEn } from "./homeEn.ts";
 
 export const homePtBr: typeof homeEn = {
+  title: "Wave",
   sections: {
     discover: "Descobrir",
     "recently-added": "Adicionadas recentemente",
