@@ -49,6 +49,8 @@ import {
 import type { LibrarySearchView } from "./search.ts";
 import type { HomeView } from "./home.ts";
 import type { HomeFollowView, HomeReleaseOpening } from "./homeFollow.ts";
+import type { StatsPeriod, StatsRanking } from "@wave/core";
+import type { StatsOverview, StatsRow } from "./stats.ts";
 import type {
   ActionSurface,
   SongMenu,
@@ -56,6 +58,13 @@ import type {
   SongRunResult,
   SongTarget,
 } from "./songActions.ts";
+import type {
+  CollectionActionOptions,
+  CollectionMenu,
+  CollectionRunAction,
+  CollectionRunResult,
+  CollectionTarget,
+} from "./collectionActions.ts";
 import {
   LYRICS_AND_TAGS_CALLS,
   lyricsAndTagsBridge,
@@ -66,6 +75,11 @@ import { LINK_CALLS, linkBridge, type LinkContract } from "./links.ts";
 import { ARTIST_PAGE_CALLS, artistPageBridge, type ArtistPageContract } from "./artistPage.ts";
 import { STREAMED_CALLS, streamedBridge, type StreamedContract } from "./streamedSongs.ts";
 import { YT_ACCOUNT_CALLS, ytAccountBridge, type YtAccountContract } from "./ytAccount.ts";
+import {
+  SPOTIFY_ACCOUNT_CALLS,
+  spotifyAccountBridge,
+  type SpotifyAccountContract,
+} from "./spotifyAccount.ts";
 export type Appearance = "system" | "light" | "dark";
 
 /** One window of a list, as a list call returns it. */
@@ -93,7 +107,8 @@ export interface BridgeContract
     ArtistPageContract,
     StreamedContract,
     LyricsAndTagsContract,
-    YtAccountContract {
+    YtAccountContract,
+    SpotifyAccountContract {
   readonly "system.mediaBackend": {
     readonly args: readonly [];
     readonly result: "native" | "chromium";
@@ -314,6 +329,18 @@ export interface BridgeContract
     readonly result: SongMenu;
   };
   /** Runs one of the entries main runs; Add to Playlist names the playlist. */
+  readonly "collections.actions": {
+    readonly args: readonly [target: CollectionTarget, options?: CollectionActionOptions];
+    readonly result: CollectionMenu;
+  };
+  readonly "collections.run": {
+    readonly args: readonly [
+      target: CollectionTarget,
+      action: CollectionRunAction,
+      playlistId?: number,
+    ];
+    readonly result: CollectionRunResult;
+  };
   readonly "songs.run": {
     readonly args: readonly [target: SongTarget, action: SongRunAction, playlistId?: number];
     readonly result: SongRunResult;
@@ -358,6 +385,27 @@ export interface BridgeContract
   };
   readonly "home.releaseArtwork": {
     readonly args: readonly [key: string];
+    readonly result: string | null;
+  };
+  readonly "stats.overview": {
+    readonly args: readonly [period: StatsPeriod];
+    readonly result: StatsOverview;
+  };
+  readonly "stats.ranking": {
+    readonly args: readonly [ranking: StatsRanking, period: StatsPeriod];
+    readonly result: Page<StatsRow>;
+  };
+  readonly "stats.play": {
+    readonly args: readonly [period: StatsPeriod, key: string, full: boolean];
+    readonly result: void;
+  };
+  readonly "stats.open": {
+    readonly args: readonly [
+      ranking: "albums" | "artists",
+      period: StatsPeriod,
+      key: string,
+      full: boolean,
+    ];
     readonly result: string | null;
   };
 }
@@ -458,6 +506,8 @@ export const BRIDGE_CALLS = [
   "account.signOutEverywhere",
   "account.deleteAccount",
   "account.answerInvitation",
+  "collections.actions",
+  "collections.run",
   ...PLAYLIST_CALLS,
   ...LYRICS_AND_TAGS_CALLS,
   "search.library",
@@ -474,6 +524,11 @@ export const BRIDGE_CALLS = [
   ...ARTIST_PAGE_CALLS,
   ...STREAMED_CALLS,
   ...YT_ACCOUNT_CALLS,
+  ...SPOTIFY_ACCOUNT_CALLS,
+  "stats.overview",
+  "stats.ranking",
+  "stats.play",
+  "stats.open",
 ] as const satisfies readonly BridgeCall[] &
   (BridgeContract extends PagedLists<BridgeContract> ? unknown : never);
 
@@ -490,6 +545,18 @@ export interface WaveBridge {
   readonly streamed: ReturnType<typeof streamedBridge>;
   /** The YouTube account: its session never reaches the window. */
   readonly ytAccount: ReturnType<typeof ytAccountBridge>;
+  readonly spotifyAccount: ReturnType<typeof spotifyAccountBridge>;
+  readonly stats: {
+    readonly overview: (period: StatsPeriod) => Promise<StatsOverview>;
+    readonly ranking: (ranking: StatsRanking, period: StatsPeriod) => Promise<Page<StatsRow>>;
+    readonly play: (period: StatsPeriod, key: string, full: boolean) => Promise<void>;
+    readonly open: (
+      ranking: "albums" | "artists",
+      period: StatsPeriod,
+      key: string,
+      full: boolean,
+    ) => Promise<string | null>;
+  };
   readonly system: { readonly mediaBackend: () => Promise<"native" | "chromium"> };
   readonly home: {
     readonly view: () => Promise<HomeView>;
@@ -629,6 +696,17 @@ export interface WaveBridge {
     readonly answerInvitation: () => Promise<void>;
   };
   /** Playlists' edits, images, Graveyard and M3U import. */
+  readonly collections: {
+    readonly actions: (
+      target: CollectionTarget,
+      options?: CollectionActionOptions,
+    ) => Promise<CollectionMenu>;
+    readonly run: (
+      target: CollectionTarget,
+      action: CollectionRunAction,
+      playlistId?: number,
+    ) => Promise<CollectionRunResult>;
+  };
   readonly playlists: PlaylistBridge;
   /** Settings › Lyrics and tags. */
   readonly lyricsAndTags: LyricsAndTagsBridge;
@@ -754,6 +832,10 @@ export const createBridge = (invoke: Invoke): WaveBridge => ({
     deleteAccount: () => invoke("account.deleteAccount"),
     answerInvitation: () => invoke("account.answerInvitation"),
   },
+  collections: {
+    actions: (target, options) => invoke("collections.actions", target, options),
+    run: (target, action, playlistId) => invoke("collections.run", target, action, playlistId),
+  },
   playlists: playlistBridge(invoke),
   lyricsAndTags: lyricsAndTagsBridge(invoke),
   search: {
@@ -774,4 +856,11 @@ export const createBridge = (invoke: Invoke): WaveBridge => ({
   artistPage: artistPageBridge(invoke),
   streamed: streamedBridge(invoke),
   ytAccount: ytAccountBridge(invoke),
+  spotifyAccount: spotifyAccountBridge(invoke),
+  stats: {
+    overview: (period) => invoke("stats.overview", period),
+    ranking: (ranking, period) => invoke("stats.ranking", ranking, period),
+    play: (period, key, full) => invoke("stats.play", period, key, full),
+    open: (ranking, period, key, full) => invoke("stats.open", ranking, period, key, full),
+  },
 });

@@ -3,7 +3,8 @@ import type { LibraryDatabase } from "@wave/client/db/database";
 import { libraryCounts } from "@wave/client/db/counts";
 import { homeSections } from "@wave/client/db/playHistory";
 import { playedEntityTotals } from "@wave/client/db/playedEntities";
-import { parseHomeArrangement, STATS_TOP, statsWindow } from "@wave/core";
+import { listeningSums } from "@wave/client/db/playTotals";
+import { parseHomeArrangement, STATS_TOP, statsWindow, summedListeningTotals } from "@wave/core";
 import type { HomeRow, HomeSectionView, HomeView, LocalHomeSectionId } from "../../shared/home.ts";
 import { browseRows, browseSongs } from "./browse.ts";
 
@@ -56,21 +57,30 @@ export const readHome = (db: LibraryDatabase, stored: string | null): HomeView =
     "most-played-artists": "artist",
     favorites: "song",
   } as const;
+  const { songs, albums, artists } = libraryCounts(db);
+  const empty = songs === 0;
+  const showStats = !empty && arrangement.sections.includes("stats");
   const items = arrangement.sections.flatMap((id): HomeSectionView[] => {
     if (id === "discover") return [{ id, kind: "discover", rows: page([]) }];
     if (id === "new-releases" || id === "upcoming-shows")
       return [{ id, kind: "follow", rows: page([]) }];
+    if (id === "stats" && showStats) return [{ id, kind: "stats", rows: page([]) }];
     if (!(id in rows)) return [];
     const local = id as LocalHomeSectionId;
     return rows[local].length === 0
       ? []
       : [{ id: local, kind: kinds[local], rows: page(rows[local]) }];
   });
-  const empty = libraryCounts(db).songs === 0;
   const nothingPlayed = home.recentlyPlayed.length === 0 && home.mostPlayed.length === 0;
   return {
     ...page(items),
     discoverRows: arrangement.discoverRows,
+    ...(showStats && {
+      stats: {
+        library: { songs, albums, artists },
+        listening: summedListeningTotals(listeningSums(db)),
+      },
+    }),
     hint: empty
       ? "empty"
       : arrangement.sections.length === 0

@@ -685,14 +685,16 @@ h2 {
 .account-actions .destructive {
   color: var(--color-destructive);
 }
-.yt-account {
+.yt-account,
+.account-profile {
   display: flex;
   align-items: center;
   gap: 12px;
   margin-top: 16px;
 }
 .yt-account-photo,
-.yt-account-cover {
+.yt-account-cover,
+.account-profile-photo {
   width: 40px;
   height: 40px;
   flex-shrink: 0;
@@ -703,7 +705,8 @@ h2 {
   min-width: 0;
   text-align: left;
 }
-.yt-account-names > span {
+.yt-account-names > span,
+.account-profile-name {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;

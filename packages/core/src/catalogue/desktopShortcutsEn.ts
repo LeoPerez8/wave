@@ -22,7 +22,7 @@ export const desktopShortcutsEn = {
     pageUp: "Page up",
     pageDown: "Page down",
     jump: "Jump to a letter",
-    songMenu: "Open the song's menu",
+    songMenu: "Open the item's menu",
     rescan: "Rescan the Library",
     close: "Close a menu, selection or sheet",
     shortcuts: "List the shortcuts",

@@ -1,4 +1,4 @@
-import { readFileSync, rmSync, writeFileSync } from "node:fs";
+import { readFileSync, renameSync, rmSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import {
   BrowserWindow,
@@ -66,6 +66,8 @@ import { YtMusic } from "./yt/ytMusic.ts";
 import { ytAccountLayer } from "./yt/ytAccountLayer.ts";
 import { createYtSessions, ytSessionStore } from "./yt/ytSessionStore.ts";
 import { ytSignInSystem } from "./yt/ytSignInSystem.ts";
+import { spotifySessionStore } from "./spotify/spotifyAccount.ts";
+import { spotifyAccountLayer } from "./spotify/spotifyAccountLayer.ts";
 
 // %APPDATA%\Wave or ~/.config/Wave, from the product name; tests point it at a folder of their own.
 const dataFolder = process.env["WAVE_DATA_DIR"];
@@ -360,6 +362,9 @@ else {
       app.isPackaged,
     );
     const { clientId } = config;
+    const spotifyClientId =
+      (app.isPackaged ? undefined : process.env["WAVE_SPOTIFY_CLIENT_ID"]?.trim() || undefined) ??
+      (import.meta.env.MAIN_VITE_WAVE_SPOTIFY_CLIENT_ID?.trim() || null);
     const account = createWaveAccount({
       // The session stays in main, sealed by the system's keyring; without one it isn't written.
       store: sessionStore({
@@ -435,6 +440,38 @@ else {
               sessions: ytSessions,
               online: () => net.isOnline(),
               startSignIn: ytSignIn.start,
+            }),
+            spotifyAccountLayer({
+              clientId: spotifyClientId,
+              store: spotifySessionStore({
+                box: safeStorage,
+                file: join(app.getPath("userData"), "spotify-session.bin"),
+                files: {
+                  ...sealedFiles,
+                  // A refresh can rotate the token. An interrupted write leaves the old file readable.
+                  write: (file, bytes) => {
+                    const temp = `${file}.tmp`;
+                    try {
+                      sealedFiles.write(temp, bytes);
+                      renameSync(temp, file);
+                    } finally {
+                      sealedFiles.remove(temp);
+                    }
+                  },
+                  remove: (file) => {
+                    sealedFiles.remove(`${file}.tmp`);
+                    sealedFiles.remove(file);
+                  },
+                },
+                platform: process.platform,
+              }),
+              openExternal: (url) => shell.openExternal(url),
+              online: () => net.isOnline(),
+              fetch: (input, init) => globalThis.fetch(input, init),
+              page: () => ({
+                title: text.desktopAccount.browserTitle,
+                message: text.desktopAccount.browserMessage,
+              }),
             }),
           ).pipe(
             Layer.provideMerge(

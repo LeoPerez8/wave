@@ -38,6 +38,7 @@ import { ytMusicLayer } from "./yt/ytMusic.ts";
 import { desktopLinksLayer } from "./links/layer.ts";
 import { ytFeaturesLayer } from "./yt/ytServices.ts";
 import { ytAccountLayer } from "./yt/ytAccountLayer.ts";
+import { spotifyAccountLayer } from "./spotify/spotifyAccountLayer.ts";
 import type { YtBrowserOutcome } from "./yt/ytBrowserSignIn.ts";
 import { createYtSessions, ytSessionStore } from "./yt/ytSessionStore.ts";
 import { lyricsLayer } from "./lyrics/lyrics.ts";
@@ -510,6 +511,19 @@ const connect = (
             online: () => true,
             startSignIn: () => ({ outcome: Promise.resolve(browser.outcome), cancel: () => {} }),
           }),
+          spotifyAccountLayer({
+            clientId: null,
+            store: {
+              keyringMissing: () => true,
+              load: () => null,
+              save: () => {},
+              clear: () => {},
+            },
+            fetch: () => Promise.reject(new Error("no network")),
+            online: () => true,
+            openExternal: async () => {},
+            page: () => ({ title: "", message: "" }),
+          }),
         ).pipe(
           Layer.provideMerge(
             ytFeaturesLayer({ online: () => true }).pipe(
@@ -784,6 +798,22 @@ test("main refuses a call from a frame other than Wave's window", async () => {
     assert.ok(counts !== undefined);
     await assert.rejects(async () => counts({ senderFrame: "an embedded page" }), /untrusted/i);
     await runtime.dispose();
+  });
+});
+
+test("the Spotify account bridge refuses extra arguments and exposes no authorized request call", async () => {
+  await withFile(async (file) => {
+    const { runtime, handlers, exposed } = connect(file);
+    try {
+      const wave = exposed.get("wave") as WaveBridge;
+      assert.equal((await wave.spotifyAccount.view()).configured, false);
+      assert.equal("request" in wave.spotifyAccount, false);
+      const photo = handlers.get("spotifyAccount.photo");
+      assert.ok(photo);
+      await assert.rejects(async () => photo(trusted, "https://elsewhere.test/image"), /Refused/);
+    } finally {
+      await runtime.dispose();
+    }
   });
 });
 
@@ -1988,6 +2018,90 @@ test("a Magic Queue, an artist page and Discover's row come through the bridge, 
         faithfulness: 1,
         popularity: 4,
       });
+    } finally {
+      await runtime.dispose();
+    }
+  });
+});
+
+test("collection actions queue and copy every song in collection order", async () => {
+  await withFile(async (file) => {
+    const { runtime, exposed, handlers } = connect(file);
+    const wave = exposed.get("wave") as WaveBridge;
+    const call = (channel: string, ...args: unknown[]) => handlers.get(channel)!(trusted, ...args);
+    try {
+      const { seed, source, destination } = await runtime.runPromise(
+        Effect.gen(function* () {
+          const db = (yield* Database) as unknown as TestDatabase;
+          const seed = addTrack(db, { title: "Seed", album: "Elsewhere" });
+          const tracks = ["Zulu", "Alpha"].map((title, index) => ({
+            source: "library" as const,
+            trackId: addTrack(db, {
+              title,
+              artist: "Wave",
+              album: "Disc",
+              genre: "Rock",
+              trackNumber: index + 1,
+            }),
+          }));
+          const source = createPlaylist(db, "Source", tracks, 1000).playlistId;
+          const destination = createPlaylist(db, "Destination", [], 1000).playlistId;
+          return { seed, source, destination };
+        }),
+      );
+      const album = (await wave.library.browse({ kind: "albums" }, 0, 10)).items.find(
+        (row) => row.title === "Disc",
+      )!;
+      const target = { kind: "album", id: album.id } as const;
+      const playlist = { kind: "playlist", id: source } as const;
+      const titles = async () => (await wave.playback.queue(0, 20)).items.map((row) => row.title);
+      const start = () => wave.playback.start({ kind: "search", query: "Seed" }, 0);
+      await wave.settings.setYtMusic(false);
+      assert.deepEqual(
+        (
+          await wave.collections.actions(target, { here: "/library", selectable: true })
+        ).entries.map((entry) => entry.action),
+        ["playNext", "addToQueue", "addToPlaylist", "goToArtist", "fixSongs", "select"],
+      );
+      assert.equal(
+        (await wave.library.browse({ kind: "search", query: "Seed" }, 0, 1)).items[0]?.id,
+        seed,
+      );
+      await start();
+      assert.deepEqual(await wave.collections.run(target, "playNext"), {
+        kind: "queued",
+        count: 2,
+      });
+      assert.deepEqual(await titles(), ["Seed", "Zulu", "Alpha"]);
+      await start();
+      assert.deepEqual(await wave.collections.run(playlist, "addToQueue"), {
+        kind: "queued",
+        count: 2,
+      });
+      assert.deepEqual(await titles(), ["Seed", "Zulu", "Alpha"]);
+      assert.deepEqual(await wave.collections.run(playlist, "addToPlaylist", destination), {
+        kind: "playlist",
+        name: "Destination",
+        added: 2,
+        alreadyIn: 0,
+      });
+      assert.deepEqual(
+        (await wave.library.browse({ kind: "playlist", id: destination }, 0, 10)).items.map(
+          (row) => row.title,
+        ),
+        ["Zulu", "Alpha"],
+      );
+      await wave.settings.setYtMusic(true);
+      assert.ok(
+        (await wave.collections.actions(playlist)).entries.some(
+          (entry) => entry.action === "magicQueue",
+        ),
+      );
+      await assert.rejects(
+        call("collections.run", { kind: "songs", id: 1 }, "playNext"),
+        /refused/i,
+      );
+      await assert.rejects(call("collections.run", target, "deletePlaylist"), /refused/i);
     } finally {
       await runtime.dispose();
     }

@@ -159,6 +159,9 @@ export const en = {
       "Sign in in the browser window that opened, then close it. Wave picks up the session once the window is closed.",
     noBrowser:
       "Signing in to YouTube needs Chrome, Edge, Brave or Chromium on this computer. Install one and try again.",
+    spotifyUnavailable: "Spotify sign-in isn't set up in this build of Wave.",
+    spotifyNote:
+      "Signing in lets Wave read your Spotify playlists and share your Wave playlists there.",
   },
   desktopShortcuts: desktopShortcutsEn,
   downloadNotice: downloadNoticeEn,

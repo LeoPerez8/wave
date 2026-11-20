@@ -7,6 +7,9 @@ import type { ImageFraming, M3uImportOutcome, PlaylistNameCheck } from "@wave/co
 import type { BridgeContract, Invoke, Page } from "./bridge.ts";
 import type { BrowseRow } from "./browse.ts";
 import type { SongTarget } from "./songActions.ts";
+import type { CollectionTarget } from "./collectionActions.ts";
+
+export type PlaylistCreateTarget = SongTarget | CollectionTarget;
 
 /** What a playlist's menu needs to know. */
 export interface PlaylistInfo {
@@ -62,7 +65,7 @@ export interface PlaylistContract {
   };
   /** Makes a playlist, holding [target]'s songs when given; its id. */
   readonly "playlists.create": {
-    readonly args: readonly [name: string, target?: SongTarget];
+    readonly args: readonly [name: string, target?: PlaylistCreateTarget];
     readonly result: { readonly id: number; readonly name: string; readonly added: number };
   };
   readonly "playlists.rename": {

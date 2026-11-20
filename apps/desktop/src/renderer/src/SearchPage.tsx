@@ -15,6 +15,7 @@ import {
   type ReactNode,
 } from "react";
 import type { BrowseRow, BrowseScope } from "../../shared/browse.ts";
+import type { CollectionTarget } from "../../shared/collectionActions.ts";
 import {
   searchSections,
   type LibrarySearchView,
@@ -24,6 +25,7 @@ import {
   type SearchSection,
 } from "../../shared/search.ts";
 import { Icon } from "./Icon.tsx";
+import { itemMenuEvents, type MenuPoint } from "./Menu.tsx";
 import { language, labels, text, albumName, artistName, tagTitle } from "./text.ts";
 import type { SongState } from "../../shared/songState.ts";
 import { markClass, rowMark, SongMark, useSongStates } from "./SongMark.tsx";
@@ -246,6 +248,7 @@ export interface SearchPageProps {
   /** Plays song [index] of the songs Search lists (its Songs group, then its lyrics hits). */
   readonly onPlay: (index: number, row: BrowseRow) => void;
   readonly selectionFor: (owner: string) => SongSelectionControls;
+  readonly onCollectionMenu: (target: CollectionTarget, title: string, at: MenuPoint) => void;
   /** A song on a drive that isn't connected was asked to play. */
   readonly onUnavailable: () => void;
   /** A recent search was picked. */
@@ -307,6 +310,7 @@ function LibraryResults({
   onOpen,
   onPlay,
   selectionFor,
+  onCollectionMenu,
   onUnavailable,
   onPick,
   onError,
@@ -345,6 +349,10 @@ function LibraryResults({
   const render = (section: SearchSection) => {
     if (section.type === "top") {
       const { kind, row } = section.result;
+      const menu =
+        kind === "song"
+          ? undefined
+          : itemMenuEvents((at) => onCollectionMenu({ kind, id: row.id }, row.title, at));
       return (
         <section key="top" className="search-section">
           <h2>{text.playbackText.topResult}</h2>
@@ -354,7 +362,9 @@ function LibraryResults({
             aria-label={[tagTitle(row.title, kind), kindLabel()[kind]].join(", ")}
             onDoubleClick={() => openRow(kind, row)}
             onClick={() => kind !== "song" && openRow(kind, row)}
+            onContextMenu={menu?.onContextMenu}
             onKeyDown={(event) => {
+              menu?.onKeyDown(event);
               if (event.key === "Enter") {
                 event.preventDefault();
                 openRow(kind, row);
@@ -418,6 +428,7 @@ function LibraryResults({
         </section>
       );
     }
+    const { kind } = section;
     return (
       <section
         key={section.kind}
@@ -435,6 +446,8 @@ function LibraryResults({
                 .filter(Boolean)
                 .join(", ")}
               onClick={() => openRow(section.kind, row)}
+              {...(kind !== "song" &&
+                itemMenuEvents((at) => onCollectionMenu({ kind, id: row.id }, row.title, at)))}
             >
               <span className={section.kind === "artist" ? "artist-image" : undefined}>
                 <Artwork

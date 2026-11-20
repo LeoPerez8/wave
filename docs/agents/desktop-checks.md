@@ -164,6 +164,19 @@ and a fake token endpoint on `127.0.0.1`, answers the browser's redirect itself,
 temporary data and music folder. Check Delete Account only this way, never on a real account or
 the deployed service. `WAVE_SHOTS_DIR` says where its screenshots go.
 
+## Spotify account
+
+Register `http://127.0.0.1/spotify/callback` in Spotify's app dashboard. Wave adds a random
+port at sign-in. Set the public client ID in the `WAVE_SPOTIFY_CLIENT_ID` repository variable
+for releases, or in the same environment variable for an unpackaged run. Release builds pass
+that ID to main as `MAIN_VITE_WAVE_SPOTIFY_CLIENT_ID`. Spotify PKCE needs only the client ID.
+See [Spotify's redirect URI rules](https://developer.spotify.com/documentation/web-api/concepts/redirect_uri)
+and [Development Mode requirements](https://developer.spotify.com/documentation/web-api/concepts/quota-modes).
+
+`e2e/spotifyAccount.spec.ts` fakes Spotify's browser and API responses and uses a separate data
+folder for each test. It checks the profile, restart, Sign Out, Sign In Again, and the no-keyring
+notice. The owner can verify the system browser and consent screen with a registered Spotify app.
+
 ## Song menus and keys
 
 `e2e/songMenus.spec.ts` opens a song's menu by right-click, Shift+F10 and the Menu key, queues

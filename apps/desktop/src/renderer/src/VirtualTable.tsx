@@ -124,13 +124,14 @@ export function VirtualTable({
   /** Opens [row]'s menu at [at] (right-click, Shift+F10 or the Menu key). */
   readonly onMenu?: (row: BrowseRow, at: { readonly x: number; readonly y: number }) => void;
   readonly selectAll?: Parameters<typeof useTableSelection>[0]["selectAll"];
-  /** A bounded Home preview uses these rows with the same table, focus and menus. */
+  /** A bounded ranking uses these rows with the same table, focus and menus. */
   readonly preview?: {
     readonly id: string;
     readonly label: string;
     readonly page: BrowsePage;
     readonly trailing: (row: BrowseRow) => string;
     readonly trailingHeading: string;
+    readonly ranked?: boolean;
   };
 }) {
   const viewport = useRef<HTMLDivElement>(null);
@@ -214,7 +215,8 @@ export function VirtualTable({
   const get = (index: number) => pages.get(Math.floor(index / SIZE))?.items[index % SIZE];
   const rows = useTableSelection({
     selection,
-    ...(songList && onSelection ? { onSelection } : {}),
+    // A group table selects only through its menu's Select: one collection, cleared by a click.
+    ...((songList || selection !== undefined) && onSelection ? { onSelection } : {}),
     ...(selectAll ? { selectAll } : {}),
     total,
     order: preview ?? scope,
@@ -278,7 +280,7 @@ export function VirtualTable({
   /** Opens the menu of row [index], at [at] or under the row. */
   const menu = (index: number, at?: { readonly x: number; readonly y: number }) => {
     const row = get(index);
-    if (row === undefined || onMenu === undefined || !songList) return;
+    if (row === undefined || onMenu === undefined) return;
     const element = document.getElementById(rowId(index));
     const rect = element?.getBoundingClientRect();
     onMenu(row, at ?? { x: (rect?.left ?? 0) + 48, y: rect?.bottom ?? 0 });
@@ -392,7 +394,7 @@ export function VirtualTable({
                       ? rows.ordinary === row.id
                       : checkedTableRow(selection, row.id)
                   }
-                  aria-disabled={songList && row.unavailable}
+                  aria-disabled={row.unavailable}
                   className={`table-row table-columns ${active === index ? "active-row" : ""} ${mark ? markClass(mark) : ""}`}
                   style={{ top: index * HEIGHT }}
                   onMouseDown={(event) => {
@@ -402,10 +404,12 @@ export function VirtualTable({
                     setActive(index);
                     viewport.current!.parentElement!.focus();
                     rows.click(index, row.id, event);
+                    if (preview?.ranked && selection === undefined) onOpen(row, index);
                   }}
                   onDoubleClick={(event) => {
                     if (
                       !selection?.checkboxes &&
+                      !preview?.ranked &&
                       !event.shiftKey &&
                       !event.ctrlKey &&
                       !event.metaKey
@@ -414,6 +418,7 @@ export function VirtualTable({
                   }}
                 >
                   <div role="gridcell" className="title-cell">
+                    {preview?.ranked && <span className="stats-rank secondary">{index + 1}</span>}
                     {selection?.checkboxes && (
                       <span
                         className="row-check"
@@ -428,6 +433,7 @@ export function VirtualTable({
                       ) : (
                         <Artwork
                           hash={row.artworkHash}
+                          url={row.artworkUrl}
                           kind={
                             scope.kind === "artists"
                               ? "artist"
@@ -452,7 +458,11 @@ export function VirtualTable({
                     <span className="truncate">{tagTitle(row.title, scope.kind)}</span>
                   </div>
                   <div role="gridcell" className="truncate secondary">
-                    {songList ? artistName(row.artist) : labels.songCount(row.count)}
+                    {songList
+                      ? artistName(row.artist)
+                      : preview?.ranked && row.id === 0
+                        ? null
+                        : labels.songCount(row.count)}
                   </div>
                   {columns.third !== null && (
                     <div role="gridcell" className="album-column truncate secondary">
@@ -478,7 +488,7 @@ export function VirtualTable({
           </p>
         )}
       </div>
-      {scope.kind === "songs" && (
+      {scope.kind === "songs" && preview === undefined && (
         <nav className="letter-spine" aria-label={labels.jump}>
           {Array.from("ABCDEFGHIJKLMNOPQRSTUVWXYZ").map((letter) => (
             <button

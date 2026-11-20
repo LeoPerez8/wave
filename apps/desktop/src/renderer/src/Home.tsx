@@ -1,14 +1,16 @@
-import { homeSectionTitle, tableSelectionOf } from "@wave/core";
+import { homeSectionTitle, statsFacts, tableSelectionOf } from "@wave/core";
 import { useEffect, useMemo, useState } from "react";
 import type { BrowseRow, BrowseScope } from "../../shared/browse.ts";
 import type { HomeSectionView, HomeView } from "../../shared/home.ts";
+import type { CollectionTarget } from "../../shared/collectionActions.ts";
+import type { MenuPoint } from "./Menu.tsx";
 import { HomeDiscover } from "./HomeDiscover.tsx";
 import { HomeNewReleases, HomeUpcomingShows, useHomeFollow } from "./HomeFollow.tsx";
 import { Shelf } from "./YtLists.tsx";
 import type { YtRoute } from "./YtPages.tsx";
 import { VirtualTable } from "./VirtualTable.tsx";
 import { openTableSongMenu, SelectionBar, type SongSelectionControls } from "./SongActions.tsx";
-import { text, labels, tagTitle, artistName } from "./text.ts";
+import { text, labels, tagTitle, artistName, language } from "./text.ts";
 import "./home.css";
 
 const SONGS: BrowseScope = { kind: "songs" };
@@ -80,19 +82,23 @@ export function Home({
   ytMusic,
   run,
   go,
+  onStats,
   onError,
   onMenu,
   selectionFor,
   notify,
+  onCollectionMenu,
 }: {
   readonly revision: number;
   readonly ytMusic: boolean;
   readonly notify: (message: string) => void;
   readonly run: (action: Promise<unknown>) => void;
   readonly go: (scope: BrowseScope | YtRoute) => void;
+  readonly onStats: () => void;
   readonly onError: () => void;
   readonly onMenu: (row: BrowseRow, at: { readonly x: number; readonly y: number }) => void;
   readonly selectionFor: (owner: string) => SongSelectionControls;
+  readonly onCollectionMenu: (target: CollectionTarget, title: string, at: MenuPoint) => void;
 }) {
   const [view, setView] = useState<HomeView>();
   const [readFailed, setReadFailed] = useState(false);
@@ -160,6 +166,8 @@ export function Home({
               <HomeNewReleases key={section.id} cards={follow.releases} go={go} notify={notify} />
             ) : section.id === "upcoming-shows" ? (
               <HomeUpcomingShows key={section.id} cards={follow.shows} />
+            ) : section.id === "stats" ? (
+              view.stats && <HomeStats key={section.id} stats={view.stats} onOpen={onStats} />
             ) : (
               <div key={section.id} data-section={section.id}>
                 {section.id === "most-played" ? (
@@ -200,11 +208,12 @@ export function Home({
                       ...(section.kind === "song" ? { song: row } : {}),
                     }))}
                     onOpen={(index) => open(section, index)}
-                    onMenu={
-                      section.kind === "song"
-                        ? (index, at) => onMenu(section.rows.items[index]!, at)
-                        : undefined
-                    }
+                    onMenu={(index, at) => {
+                      const row = section.rows.items[index]!;
+                      if (section.kind === "song") onMenu(row, at);
+                      else if (section.kind === "album" || section.kind === "artist")
+                        onCollectionMenu({ kind: section.kind, id: row.id }, row.title, at);
+                    }}
                   />
                 )}
               </div>
@@ -213,5 +222,30 @@ export function Home({
         </>
       )}
     </div>
+  );
+}
+
+function HomeStats({
+  stats,
+  onOpen,
+}: {
+  readonly stats: NonNullable<HomeView["stats"]>;
+  readonly onOpen: () => void;
+}) {
+  return (
+    <section className="home-stats" data-section="stats" aria-labelledby="home-stats-title">
+      <div className="stats-section-heading">
+        <h2 id="home-stats-title">{text.home.sections.stats}</h2>
+        <button onClick={onOpen}>{text.home.seeAll}</button>
+      </div>
+      <dl>
+        {statsFacts(stats.library, stats.listening, language).map(({ label, value }) => (
+          <div key={label}>
+            <dt>{label}</dt>
+            <dd className="secondary">{value}</dd>
+          </div>
+        ))}
+      </dl>
+    </section>
   );
 }

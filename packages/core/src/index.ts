@@ -952,6 +952,7 @@ export {
   SPOTIFY_SIGN_IN_FAILURE_LINES,
   spotifySignInFailureLines,
   spotifyAccountView,
+  readSpotifyWebProfile,
   stepSpotifyAccount,
 } from "./spotifyAccount.ts";
 export type {
@@ -1374,6 +1375,7 @@ export {
   queueSongTrackId,
   readUnsearchedTrackId,
   unsearchedTrackId,
+  toPlaylistSongs,
   writePlaylistEntrySong,
   writePlaylistYtSong,
 } from "./playlistEntries.ts";

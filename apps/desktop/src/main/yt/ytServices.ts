@@ -47,7 +47,7 @@ import type { PlayStart } from "../../shared/playerView.ts";
 import { ytRow, type YtSearchPage } from "../../shared/yt.ts";
 import type { SongTarget } from "../../shared/songActions.ts";
 import { Kotlin } from "../kotlin/kotlin.ts";
-import { browseLibrary, browseSongs, browseTrackIds } from "../library/browse.ts";
+import { browseLibrary, browseSongs, browseTrackIds, playlistSongs } from "../library/browse.ts";
 import { DesktopLibrary } from "../library/library.ts";
 import { targetSongs } from "../library/songActions.ts";
 import { Playback } from "../playback/playback.ts";
@@ -453,10 +453,8 @@ export const ytFeaturesLayer = (options: { readonly online: () => boolean }) =>
           return related.read;
         },
         startMagicQueue: async (target) => {
-          const ids = targetSongs(db, target);
-          const songs = songsOf(ids);
-          const first = songs[0];
-          if (first === undefined) return false;
+          if (!yt.enabled()) return false;
+          const songs = songsOf(targetSongs(db, target));
           const { scope } = target;
           const whole =
             "all" in target &&
@@ -464,17 +462,32 @@ export const ytFeaturesLayer = (options: { readonly online: () => boolean }) =>
             scope.id !== undefined &&
             LISTS.includes(scope.kind);
           const title = whole ? browseLibrary(db, scope, 0, 1).hero?.title : undefined;
+          if (whole && title !== undefined) {
+            const streamed =
+              scope.kind === "playlist"
+                ? (playlistSongs(db, scope.id!) ?? []).flatMap((entry) =>
+                    "song" in entry ? [entry.song] : [],
+                  )
+                : [];
+            if (songs.length === 0 && streamed.length === 0) return false;
+            return magicQueue.start({
+              seed: {
+                kind: scope.kind as "album" | "artist" | "playlist",
+                id: String(scope.id),
+                title,
+              },
+              songs,
+              streamed,
+            });
+          }
+          const first = songs[0];
+          if (first === undefined) return false;
           return magicQueue.start({
-            seed:
-              whole && title !== undefined
-                ? {
-                    kind: scope.kind as "album" | "artist" | "playlist",
-                    id: String(scope.id),
-                    title,
-                  }
-                : songs.length === 1
-                  ? { kind: "track", id: String(first.id), title: first.title }
-                  : { kind: "list", id: String(first.id), title: first.title },
+            seed: {
+              kind: songs.length === 1 ? "track" : "list",
+              id: String(first.id),
+              title: first.title,
+            },
             songs,
             streamed: [],
           });

@@ -29,6 +29,16 @@ import {
   type SongTarget,
 } from "../shared/songActions.ts";
 import { runSongAction, songMenu } from "./library/songActions.ts";
+import {
+  collectionMenu,
+  runCollectionAction,
+  validCollectionTarget,
+} from "./library/collectionActions.ts";
+import {
+  COLLECTION_RUN_ACTIONS,
+  type CollectionActionOptions,
+  type CollectionRunAction,
+} from "../shared/collectionActions.ts";
 import type { Appearance, DesktopVersionHistory } from "../shared/bridge.ts";
 import { VIDEO_ID, YtMusic } from "./yt/ytMusic.ts";
 import { Downloads } from "./downloads/downloadsLayer.ts";
@@ -45,12 +55,14 @@ import { DesktopLinks } from "./links/layer.ts";
 import { linkHandlers } from "./links/handlers.ts";
 import { artistPageHandlers } from "./artistPageHandlers.ts";
 import { YtAccount } from "./yt/ytAccountLayer.ts";
+import { SpotifyAccount } from "./spotify/spotifyAccountLayer.ts";
 import { DesktopPlaylists } from "./library/playlists.ts";
 import { playlistHandlers } from "./playlistHandlers.ts";
 import { searchLibrary } from "./library/search.ts";
 import { validWindowSettings } from "../shared/windowSettings.ts";
 import { readWindowSettings, changeWindowSettings } from "./system/windowSettings.ts";
 import { homeHandlers } from "./homeHandlers.ts";
+import { statsHandlers } from "./statsHandlers.ts";
 import { lyricsAndTagsHandlers } from "./lyricsAndTagsHandlers.ts";
 import { HomeFollow } from "./follows/homeFollow.ts";
 import { homeFollowHandlers } from "./follows/homeFollowHandlers.ts";
@@ -103,6 +115,16 @@ const validTarget = (value: unknown): value is SongTarget => {
 const searchQuery = (value: unknown): value is string =>
   typeof value === "string" && value.length <= 500;
 
+const validCollectionOptions = (value: unknown): value is CollectionActionOptions => {
+  if (typeof value !== "object" || value === null) return false;
+  const { here, selectable, surface } = value as CollectionActionOptions;
+  return (
+    (here === undefined || searchQuery(here)) &&
+    (selectable === undefined || typeof selectable === "boolean") &&
+    (surface === undefined || surface === "menu" || surface === "selection")
+  );
+};
+
 /** A short list, whole, as a page. */
 const allOf = <T>(items: readonly T[]): Page<T> => ({ items, offset: 0, total: items.length });
 
@@ -131,7 +153,8 @@ export type BridgeServices =
   | DesktopPlaylists
   | DesktopLinks
   | HomeFollow
-  | YtAccount;
+  | YtAccount
+  | SpotifyAccount;
 
 const refuse = (call: BridgeCall, why: string) => Effect.fail(new Error(`Refused ${call}: ${why}`));
 
@@ -243,6 +266,19 @@ const ytAccountCall = <A>(run: (account: YtAccount["Service"]) => A | Promise<A>
     const account = yield* YtAccount;
     return yield* Effect.tryPromise({ try: async () => run(account), catch: (error) => error });
   });
+
+const spotifyAccountCall =
+  <A>(call: BridgeCall, run: (account: SpotifyAccount["Service"]) => A | Promise<A>) =>
+  (args: readonly unknown[]) =>
+    args.length === 0
+      ? Effect.gen(function* () {
+          const account = yield* SpotifyAccount;
+          return yield* Effect.tryPromise({
+            try: async () => run(account),
+            catch: () => new Error("Spotify account operation failed"),
+          });
+        })
+      : refuse(call, "expected no arguments");
 
 /** What each call does; `args` come from the window and are checked here before use. */
 type Handlers = {
@@ -532,6 +568,35 @@ const createHandlers = (
             };
           });
     },
+    "collections.actions": ([target, options]) =>
+      validCollectionTarget(target) && (options === undefined || validCollectionOptions(options))
+        ? Effect.gen(function* () {
+            const db = yield* Database;
+            const yt = yield* YtMusic;
+            const downloads = yield* Downloads;
+            return collectionMenu(db, target, options ?? {}, yt.enabled(), downloads.status);
+          })
+        : refuse("collections.actions", "invalid collection or options"),
+    "collections.run": ([target, action, playlistId]) =>
+      validCollectionTarget(target) &&
+      COLLECTION_RUN_ACTIONS.includes(action as CollectionRunAction) &&
+      (action === "addToPlaylist" ? songId(playlistId) : playlistId === undefined)
+        ? Effect.gen(function* () {
+            const db = yield* Database;
+            const playback = yield* Playback;
+            const downloads = yield* Downloads;
+            const yt = yield* YtMusic;
+            const library = yield* DesktopLibrary;
+            return yield* Effect.tryPromise(() =>
+              runCollectionAction(
+                { db, playback, downloads, yt, unavailable: library.unavailable },
+                target,
+                action as CollectionRunAction,
+                playlistId as number | undefined,
+              ),
+            );
+          })
+        : refuse("collections.run", "invalid collection, action or playlist"),
     "songs.actions": ([target, surface]) =>
       validTarget(target) && (surface === "menu" || surface === "selection")
         ? Effect.gen(function* () {
@@ -617,6 +682,7 @@ const createHandlers = (
     },
     ...playlistHandlers(validTarget),
     ...homeHandlers,
+    ...statsHandlers,
     ...lyricsAndTagsHandlers,
     ...homeFollowHandlers,
     "search.library": ([query]) =>
@@ -639,6 +705,14 @@ const createHandlers = (
       Effect.gen(function* () {
         clearRecentSearches(yield* Database);
       }),
+    "spotifyAccount.view": spotifyAccountCall("spotifyAccount.view", (a) => a.view()),
+    "spotifyAccount.signIn": spotifyAccountCall("spotifyAccount.signIn", (a) => a.signIn()),
+    "spotifyAccount.cancelSignIn": spotifyAccountCall("spotifyAccount.cancelSignIn", (a) =>
+      a.cancelSignIn(),
+    ),
+    "spotifyAccount.signOut": spotifyAccountCall("spotifyAccount.signOut", (a) => a.signOut()),
+    "spotifyAccount.check": spotifyAccountCall("spotifyAccount.check", (a) => a.check()),
+    "spotifyAccount.photo": spotifyAccountCall("spotifyAccount.photo", (a) => a.photo()),
   };
 };
 
