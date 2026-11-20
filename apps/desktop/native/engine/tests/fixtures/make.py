@@ -4,7 +4,9 @@ The left channel is an exponential sweep from 110 Hz to 3,520 Hz, the right a ch
 800 Hz, so no two windows look alike and a misplaced sample shows up as a lag. The Rust tests
 compute the same signal (`tests/common/mod.rs`) and compare what the engine decodes with it.
 
-Usage: python -I make.py <ffmpeg> <this folder>
+Usage: python -I make.py <ffmpeg> <this folder> [fdkaac]
+
+The optional fdkaac binary regenerates the HE-AAC fixtures and their FFmpeg PCM references.
 """
 import math, os, struct, subprocess, sys, tempfile, wave
 
@@ -42,6 +44,7 @@ def encode(source, target, *codec):
 
 write_wav(os.path.join(out, "tone.wav"), 22050)
 encode(os.path.join(out, "tone.wav"), "tone.flac", "-c:a", "flac")
+encode(os.path.join(out, "tone.wav"), "tone-alac.m4a", "-c:a", "alac")
 with tempfile.TemporaryDirectory() as scratch:
     cd = os.path.join(scratch, "44100.wav")
     write_wav(cd, 44100)
@@ -85,3 +88,35 @@ def smpb_only(source, target):
 
 
 smpb_only(os.path.join(out, "tone.m4a"), os.path.join(out, "tone-smpb.m4a"))
+
+
+def make_he_aac(fdkaac):
+    # Separate low and high tones in each channel. The high tones are above the 24 kHz core's
+    # Nyquist frequency, so the PCM reference catches a decoder that drops SBR.
+    signal = (
+        "aevalsrc=0.25*sin(2*PI*440*t)+0.1*sin(2*PI*13000*t)"
+        "|0.24*sin(2*PI*660*t)+0.09*sin(2*PI*14500*t):s=48000:d=1"
+    )
+    with tempfile.TemporaryDirectory() as scratch:
+        source = os.path.join(scratch, "he-source.wav")
+        adts = os.path.join(scratch, "audio.aac")
+        subprocess.run([ffmpeg, "-v", "error", "-f", "lavfi", "-i", signal,
+                        "-c:a", "pcm_s16le", source], check=True)
+        # fdkaac 1.0.0 with FDK AAC 2.0.3 reports 0x9e1 and 0xde1 core priming frames.
+        for version, profile, bitrate, delay in [("v1", 5, 48000, 5058), ("v2", 29, 32000, 7106)]:
+            target = os.path.join(out, f"tone-he-aac-{version}")
+            subprocess.run([fdkaac, "-S", "-p", str(profile), "-b", str(bitrate), "-G", "2",
+                            "--include-sbr-delay", "--title", f"HE-AAC {version} Tone",
+                            "-o", target + ".m4a", source], check=True)
+            # Use ADTS to compare the same raw access units without the container applying
+            # its own trim. Save only the reference window used by the Rust test.
+            subprocess.run([ffmpeg, "-v", "error", "-y", "-ignore_editlist", "1", "-i",
+                            target + ".m4a", "-c:a", "copy", "-f", "adts", adts], check=True)
+            pcm = subprocess.check_output([ffmpeg, "-v", "error", "-i", adts, "-f", "f32le", "-"])
+            first = (delay + 12000) * 8
+            with open(target + ".f32le", "wb") as golden:
+                golden.write(pcm[first:first + 512 * 8])
+
+
+if len(sys.argv) > 3:
+    make_he_aac(sys.argv[3])

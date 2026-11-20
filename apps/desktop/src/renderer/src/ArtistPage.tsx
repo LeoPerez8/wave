@@ -2,7 +2,7 @@ import type { YtPick } from "@wave/core";
 import { useEffect, useState, type MouseEvent, type ReactNode } from "react";
 import type { ArtistAlbums, ArtistSectionView, CreditedArtist } from "../../shared/artistPage.ts";
 import type { BrowseRow } from "../../shared/browse.ts";
-import type { MenuItem } from "./Menu.tsx";
+import type { MenuItem, MenuPoint } from "./Menu.tsx";
 import { labels, text } from "./text.ts";
 import { Shelf, YtSongList, type TileItem } from "./YtLists.tsx";
 import "./artist.css";
@@ -152,6 +152,7 @@ export function ArtistPage({
   revision,
   section,
   onAlbum,
+  onAlbumMenu,
   onYtAlbum,
   onPlayStreamed,
   onSongMenu,
@@ -162,6 +163,7 @@ export function ArtistPage({
   readonly revision: number;
   readonly section: ArtistSection;
   readonly onAlbum: (id: number) => void;
+  readonly onAlbumMenu: (row: BrowseRow, at: MenuPoint) => void;
   readonly onYtAlbum: (browseId: string) => void;
   readonly onPlayStreamed: (index: number) => void;
   readonly onSongMenu: (row: BrowseRow, event: MouseEvent<HTMLElement>) => void;
@@ -195,6 +197,10 @@ export function ArtistPage({
             ? onAlbum(library.albums[index]!.id)
             : onYtAlbum(added[index - library.albums.length]!.browseId)
         }
+        onMenu={(index, at) => {
+          const row = library.albums[index];
+          if (row) onAlbumMenu(row, at);
+        }}
       />
       <Shelf
         title={text.library.singlesAndEps}
@@ -205,6 +211,7 @@ export function ArtistPage({
         title={text.library.appearsOn}
         items={libraryTiles(library.appearsOn)}
         onOpen={(index) => onAlbum(library.appearsOn[index]!.id)}
+        onMenu={(index, at) => onAlbumMenu(library.appearsOn[index]!, at)}
       />
       <h2 className="artist-songs-heading">
         {online?.popular ? text.library.popular : text.library.songs}

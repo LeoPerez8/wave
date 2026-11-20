@@ -25,15 +25,13 @@ import {
   type KeyboardEvent,
   type PointerEvent,
 } from "react";
-import type { ImageEdit, ImportAnswer } from "../../shared/playlists.ts";
-import type { SongTarget } from "../../shared/songActions.ts";
+import type { ImageEdit, ImportAnswer, PlaylistCreateTarget } from "../../shared/playlists.ts";
 import "./playlists.css";
 import { copyLink } from "./copyLink.ts";
-import type { MenuItem } from "./Menu.tsx";
+import type { MenuItem, MenuPoint } from "./Menu.tsx";
 import { ConfirmDialog, trapTab, useMenuAndToast } from "./SongActions.tsx";
 import { language, text } from "./text.ts";
 
-type Point = { readonly x: number; readonly y: number };
 type FramingAdjustment = Parameters<typeof adjustFraming>[2];
 
 interface Options {
@@ -48,7 +46,7 @@ interface Options {
 }
 
 type Naming =
-  | { readonly kind: "create"; readonly initial: string; readonly target?: SongTarget }
+  | { readonly kind: "create"; readonly initial: string; readonly target?: PlaylistCreateTarget }
   | { readonly kind: "rename"; readonly initial: string; readonly playlistId: number };
 
 /** The dialogs, menu and toast playlist edits show, and how to open them. */
@@ -56,7 +54,7 @@ export function usePlaylistEdits({ go, deleted, failed, changed }: Options) {
   /** Counts edits the player's revision misses (a playlist's image), for whatever shows them. */
   const [edits, setEdits] = useState(0);
   const [naming, setNaming] = useState<Naming>();
-  const { menu, setMenu, setToast, menuAndToast } = useMenuAndToast();
+  const { setToast, menuAndToast } = useMenuAndToast();
   const [confirm, setConfirm] = useState<{
     readonly spec: AlertSpec;
     readonly onChoose: (yes: boolean) => void;
@@ -81,7 +79,7 @@ export function usePlaylistEdits({ go, deleted, failed, changed }: Options) {
 
   /** New Playlist: asks for a name; with [target], the new playlist holds its songs. */
   const newPlaylist = useCallback(
-    (target?: SongTarget) => {
+    (target?: PlaylistCreateTarget) => {
       void window.wave.playlists
         .newName()
         .then((initial) => setNaming({ kind: "create", initial, ...(target ? { target } : {}) }))
@@ -129,7 +127,7 @@ export function usePlaylistEdits({ go, deleted, failed, changed }: Options) {
     const labels = text.itemActions.labels;
     return [
       {
-        key: "rename",
+        key: "renamePlaylist",
         label: labels.renamePlaylist,
         run: () => setNaming({ kind: "rename", initial: info.name, playlistId }),
       },
@@ -178,7 +176,7 @@ export function usePlaylistEdits({ go, deleted, failed, changed }: Options) {
       ...((await window.wave.settings.ytMusic())
         ? [
             {
-              key: "copyLink",
+              key: "share",
               label: text.share.copyLink,
               run: () => {
                 void copyLink(window.wave.links.copyPlaylist(playlistId));
@@ -187,7 +185,7 @@ export function usePlaylistEdits({ go, deleted, failed, changed }: Options) {
           ]
         : []),
       {
-        key: "delete",
+        key: "deletePlaylist",
         label: labels.deletePlaylist,
         destructive: true,
         run: () =>
@@ -204,10 +202,6 @@ export function usePlaylistEdits({ go, deleted, failed, changed }: Options) {
       },
     ];
   };
-
-  /** Opens a playlist's menu at [at] (right-click in the sidebar, its page's ⋯). */
-  const openMenu = (playlistId: number, at: Point) =>
-    setMenu({ label: text.playlists.playlistActions, at, items: playlistItems(playlistId) });
 
   /** Move Up and Move Down, for a song's menu on its playlist's page. */
   const moveItems = (playlistId: number, trackId: number): readonly MenuItem[] =>
@@ -273,16 +267,10 @@ export function usePlaylistEdits({ go, deleted, failed, changed }: Options) {
   return {
     edits,
     newPlaylist,
-    openMenu,
+    playlistItems,
     moveItems,
     importPlaylists: () => void importPlaylists(),
     overlays,
-    /** Closes the open menu, if one is; false when none was. */
-    closeMenu: () => {
-      if (menu === undefined) return false;
-      setMenu(undefined);
-      return true;
-    },
   };
 }
 
@@ -401,7 +389,7 @@ function CropDialog({
 }) {
   const size = { width: edit.width, height: edit.height };
   const [framing, setFraming] = useState(edit.framing);
-  const drag = useRef<Point | undefined>(undefined);
+  const drag = useRef<MenuPoint | undefined>(undefined);
   const view = framingView(size, VIEW, framing);
   const adjust = (action: FramingAdjustment) => setFraming((f) => adjustFraming(size, f, action));
   const library = text.library;

@@ -604,6 +604,24 @@
       "status": "compatible",
       "evidence": "Every v* release tag from v0.5.0 (the first) to v0.68.0-ti contains a3f085e9, which added innertubex and the Metrolist/NewPipe ports. Those APKs, OTA bundles and repacks were conveyed without a licence for the combined work, a notices file or source access tied to each release. The repository at each tag is public, which alone isn't a compliance finding. Owner exception, 2026-11-18: the owner declares GPL-3.0-only (LICENSE, NOTICE.md) and accepts the risk for the third-party GPL code those releases conveyed without notices or per-release source access; that has been the status quo of every release. The owner turns on RELEASE_SOURCE_DELIVERY and backfills source access for the published releases as docs/release-source.md describes (legacy manifests for the releases before the gate); GPLv3 section 8 reinstates rights once a violation is cured.",
       "resolution": "owner exception, 2026-11-18"
+    },
+    {
+      "id": "crate:symphonia-codec-alac",
+      "kind": "native-library",
+      "status": "compatible",
+      "licence": "MPL-2.0",
+      "evidence": "Version 0.6.1, enabled by Symphonia's alac feature. The crate's source carries the MPL-2.0 Exhibit A notice with no Exhibit B notice. Section 3.3 allows it in the GPL-3.0-only desktop engine. The covered files stay under MPL-2.0.",
+      "correspondingSource": "https://docs.rs/crate/symphonia-codec-alac/0.6.1/source/",
+      "notice": "Copyright (c) 2019-2026 The Project Symphonia Developers. See NOTICE.md for the licence and exact source."
+    },
+    {
+      "id": "crate:oxideav-aac",
+      "kind": "native-library",
+      "status": "compatible",
+      "licence": "MIT",
+      "evidence": "oxideav-aac 0.1.7 decodes HE-AAC v1 and v2. It depends on oxideav-core 0.1.43 in Cargo.lock. Both published crates declare MIT and carry the same copyright and licence text.",
+      "correspondingSource": "https://docs.rs/crate/oxideav-aac/0.1.7/source/ and https://docs.rs/crate/oxideav-core/0.1.43/source/",
+      "notice": "The desktop installer carries the MIT licence and copyright notice for both crates in NOTICE.md."
     }
   ]
 }

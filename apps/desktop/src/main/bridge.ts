@@ -19,9 +19,15 @@ import { Account } from "./account/accountLayer.ts";
 import type { Page } from "../shared/bridge.ts";
 import { BROWSE_KINDS, type BrowseScope } from "../shared/browse.ts";
 import { browseLetter } from "./library/browse.ts";
+import { toggleBrowseSort } from "./library/browseSort.ts";
 import { readArtwork } from "./library/artwork.ts";
 import { appearance, preference, savePreference } from "./preferences.ts";
-import { SEARCH_ONLINE_SETTING, readSearchOnline, writeSearchOnline } from "@wave/core";
+import {
+  SEARCH_ONLINE_SETTING,
+  libraryTableSortsFor,
+  readSearchOnline,
+  writeSearchOnline,
+} from "@wave/core";
 import {
   MAX_TARGET_IDS,
   SONG_RUN_ACTIONS,
@@ -29,6 +35,16 @@ import {
   type SongTarget,
 } from "../shared/songActions.ts";
 import { runSongAction, songMenu } from "./library/songActions.ts";
+import {
+  collectionMenu,
+  runCollectionAction,
+  validCollectionTarget,
+} from "./library/collectionActions.ts";
+import {
+  COLLECTION_RUN_ACTIONS,
+  type CollectionActionOptions,
+  type CollectionRunAction,
+} from "../shared/collectionActions.ts";
 import type { Appearance, DesktopVersionHistory } from "../shared/bridge.ts";
 import { VIDEO_ID, YtMusic } from "./yt/ytMusic.ts";
 import { Downloads } from "./downloads/downloadsLayer.ts";
@@ -112,6 +128,15 @@ const lyricTrackId = (value: unknown): value is string =>
 
 const geniusRequestId = (value: unknown): value is string =>
   typeof value === "string" && /^[0-9a-f-]{36}$/.test(value);
+const validCollectionOptions = (value: unknown): value is CollectionActionOptions => {
+  if (typeof value !== "object" || value === null) return false;
+  const { here, selectable, surface } = value as CollectionActionOptions;
+  return (
+    (here === undefined || searchQuery(here)) &&
+    (selectable === undefined || typeof selectable === "boolean") &&
+    (surface === undefined || surface === "menu" || surface === "selection")
+  );
+};
 
 /** A short list, whole, as a page. */
 const allOf = <T>(items: readonly T[]): Page<T> => ({ items, offset: 0, total: items.length });
@@ -521,6 +546,12 @@ const createHandlers = (
             return browseLetter(yield* Database, scope, letter);
           })
         : refuse("library.letter", "invalid letter or scope"),
+    "library.sortBy": ([kind, key]) =>
+      typeof kind === "string" &&
+      typeof key === "string" &&
+      libraryTableSortsFor(kind).some((sort) => sort.key === key)
+        ? Effect.map(Database, (db) => toggleBrowseSort(db, kind, key))
+        : refuse("library.sortBy", "sort is not offered for this list"),
     "library.counts": () =>
       Effect.gen(function* () {
         return libraryCounts(yield* Database);
@@ -566,6 +597,35 @@ const createHandlers = (
             };
           });
     },
+    "collections.actions": ([target, options]) =>
+      validCollectionTarget(target) && (options === undefined || validCollectionOptions(options))
+        ? Effect.gen(function* () {
+            const db = yield* Database;
+            const yt = yield* YtMusic;
+            const downloads = yield* Downloads;
+            return collectionMenu(db, target, options ?? {}, yt.enabled(), downloads.status);
+          })
+        : refuse("collections.actions", "invalid collection or options"),
+    "collections.run": ([target, action, playlistId]) =>
+      validCollectionTarget(target) &&
+      COLLECTION_RUN_ACTIONS.includes(action as CollectionRunAction) &&
+      (action === "addToPlaylist" ? songId(playlistId) : playlistId === undefined)
+        ? Effect.gen(function* () {
+            const db = yield* Database;
+            const playback = yield* Playback;
+            const downloads = yield* Downloads;
+            const yt = yield* YtMusic;
+            const library = yield* DesktopLibrary;
+            return yield* Effect.tryPromise(() =>
+              runCollectionAction(
+                { db, playback, downloads, yt, unavailable: library.unavailable },
+                target,
+                action as CollectionRunAction,
+                playlistId as number | undefined,
+              ),
+            );
+          })
+        : refuse("collections.run", "invalid collection, action or playlist"),
     "songs.actions": ([target, surface]) =>
       validTarget(target) && (surface === "menu" || surface === "selection")
         ? Effect.gen(function* () {

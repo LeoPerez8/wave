@@ -694,6 +694,10 @@ export {
   songSpineKeys,
   sortSongs,
   writeSongSort,
+  libraryTableSortsFor,
+  readLibraryTableSort,
+  nextHeaderSort,
+  songSortHasSpine,
 } from "./songSort.ts";
 export type {
   LibrarySongSort,
@@ -1380,6 +1384,7 @@ export {
   queueSongTrackId,
   readUnsearchedTrackId,
   unsearchedTrackId,
+  toPlaylistSongs,
   writePlaylistEntrySong,
   writePlaylistYtSong,
 } from "./playlistEntries.ts";

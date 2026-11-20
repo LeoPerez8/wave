@@ -1,4 +1,4 @@
-import { mkdtempSync, rmSync } from "node:fs";
+import { copyFileSync, mkdirSync, mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import {
@@ -20,11 +20,20 @@ let dataFolder: string;
 let app: ElectronApplication;
 let page: Page;
 
+const libraryFiles = [
+  ["tone-alac.m4a", /tone-alac/i],
+  ["tone-he-aac-v1.m4a", /HE-AAC v1 Tone/],
+  ["tone-he-aac-v2.m4a", /HE-AAC v2 Tone/],
+] as const;
+
 test.beforeAll(async () => {
   dataFolder = mkdtempSync(join(tmpdir(), "wave-e2e-audio-"));
+  const musicFolder = join(dataFolder, "music");
+  mkdirSync(musicFolder);
+  for (const [file] of libraryFiles) copyFileSync(join(fixtures, file), join(musicFolder, file));
   app = await electron.launch({
     args: [appFolder, "--lang=en-US"],
-    env: { ...process.env, WAVE_DATA_DIR: dataFolder },
+    env: { ...process.env, WAVE_DATA_DIR: dataFolder, WAVE_MUSIC_DIR: musicFolder },
   });
   page = await app.firstWindow();
 });
@@ -53,9 +62,19 @@ const audioPid = () =>
     ({ app }) => app.getAppMetrics().find((metric) => metric.name === "Wave audio")?.pid,
   );
 
-for (const format of ["wav", "flac", "mp3", "m4a", "ogg", "opus"])
+for (const [format, file] of [
+  ["wav", "tone.wav"],
+  ["flac", "tone.flac"],
+  ["mp3", "tone.mp3"],
+  ["m4a", "tone.m4a"],
+  ["ogg", "tone.ogg"],
+  ["opus", "tone.opus"],
+  ["ALAC", "tone-alac.m4a"],
+  ["HE-AAC v1", "tone-he-aac-v1.m4a"],
+  ["HE-AAC v2", "tone-he-aac-v2.m4a"],
+] as const)
   test(`a ${format} file plays, pauses, seeks and reports its position`, async () => {
-    const loaded = await player("load", join(fixtures, `tone.${format}`));
+    const loaded = await player("load", join(fixtures, file));
     expect(loaded.state).toBe("paused");
     expect(loaded.positionMs).toBe(0);
     expect(loaded.durationMs).toBeGreaterThan(950);
@@ -100,4 +119,15 @@ test("killing the audio process leaves the window up, and playback starts again"
 test("a file the engine can't read is refused with its code", async () => {
   await expect(player("load", join(fixtures, "missing.flac"))).rejects.toThrow(/\[not-found\]/);
   await expect(player("load", "relative/tone.flac")).rejects.toThrow(/Refused player\.load/);
+});
+
+test("ALAC and both HE-AAC profiles play from the Songs table", async () => {
+  await page.getByRole("button", { name: "Songs", exact: true }).click();
+  const pause = page.getByRole("button", { name: "Pause", exact: true });
+  for (const [, title] of libraryFiles) {
+    await page.getByRole("row", { name: title }).dblclick();
+    await expect(pause).toBeEnabled();
+    await expect.poll(async () => (await player("status")).positionMs).toBeGreaterThan(100);
+  }
+  await page.screenshot({ path: test.info().outputPath(`audio-codecs-${process.platform}.png`) });
 });

@@ -11,7 +11,7 @@ import type {
   QueueRow,
 } from "./playerView.ts";
 import type { WindowSettings } from "./windowSettings.ts";
-import type { DatedRelease, LanguageChoice } from "@wave/core";
+import type { DatedRelease, LanguageChoice, SongSortKey } from "@wave/core";
 
 import type { LanguageView } from "./language.ts";
 import type { LibraryCounts } from "@wave/client/db/counts";
@@ -20,7 +20,7 @@ import type { SongState } from "./songState.ts";
 import type { PlaybackSettings } from "./playbackSettings.ts";
 import type { SongTags } from "./tags.ts";
 import type { DesktopFolder, DesktopSong, ScanStatus } from "./library.ts";
-import type { BrowseScope, BrowsePage, BrowseRow } from "./browse.ts";
+import type { BrowseKind, BrowseScope, BrowsePage, BrowseRow } from "./browse.ts";
 import type { YtSearchPage, YtStatus } from "./yt.ts";
 import type { SearchOnline } from "@wave/core";
 import type {
@@ -58,6 +58,13 @@ import type {
   SongRunResult,
   SongTarget,
 } from "./songActions.ts";
+import type {
+  CollectionActionOptions,
+  CollectionMenu,
+  CollectionRunAction,
+  CollectionRunResult,
+  CollectionTarget,
+} from "./collectionActions.ts";
 import {
   LYRICS_AND_TAGS_CALLS,
   lyricsAndTagsBridge,
@@ -295,9 +302,13 @@ export interface BridgeContract
   };
   readonly "library.letter": {
     readonly args: readonly [scope: BrowseScope, letter: string];
-    readonly result: number;
+    readonly result: number | null;
   };
   readonly "library.counts": { readonly args: readonly []; readonly result: LibraryCounts };
+  readonly "library.sortBy": {
+    readonly args: readonly [kind: BrowseKind, key: SongSortKey];
+    readonly result: void;
+  };
   readonly "library.scanStatus": { readonly args: readonly []; readonly result: ScanStatus };
   readonly "library.refresh": { readonly args: readonly []; readonly result: void };
   readonly "library.songs": {
@@ -326,6 +337,18 @@ export interface BridgeContract
     readonly result: SongMenu;
   };
   /** Runs one of the entries main runs; Add to Playlist names the playlist. */
+  readonly "collections.actions": {
+    readonly args: readonly [target: CollectionTarget, options?: CollectionActionOptions];
+    readonly result: CollectionMenu;
+  };
+  readonly "collections.run": {
+    readonly args: readonly [
+      target: CollectionTarget,
+      action: CollectionRunAction,
+      playlistId?: number,
+    ];
+    readonly result: CollectionRunResult;
+  };
   readonly "songs.run": {
     readonly args: readonly [target: SongTarget, action: SongRunAction, playlistId?: number];
     readonly result: SongRunResult;
@@ -434,6 +457,7 @@ export const BRIDGE_CALLS = [
   "library.exclude",
   "library.removeRoot",
   "library.include",
+  "library.sortBy",
   "songs.states",
   "songs.actions",
   "songs.run",
@@ -492,6 +516,8 @@ export const BRIDGE_CALLS = [
   "account.signOutEverywhere",
   "account.deleteAccount",
   "account.answerInvitation",
+  "collections.actions",
+  "collections.run",
   ...PLAYLIST_CALLS,
   ...LYRICS_AND_TAGS_CALLS,
   "search.library",
@@ -579,7 +605,7 @@ export interface WaveBridge {
       large: boolean,
     ) => Promise<string | null>;
     readonly browse: (scope: BrowseScope, offset: number, limit: number) => Promise<BrowsePage>;
-    readonly letter: (scope: BrowseScope, letter: string) => Promise<number>;
+    readonly letter: (scope: BrowseScope, letter: string) => Promise<number | null>;
     readonly counts: () => Promise<LibraryCounts>;
     readonly scanStatus: () => Promise<ScanStatus>;
     readonly refresh: () => Promise<void>;
@@ -590,6 +616,7 @@ export interface WaveBridge {
     readonly exclude: () => Promise<void>;
     readonly removeRoot: (path: string) => Promise<void>;
     readonly include: (path: string) => Promise<void>;
+    readonly sortBy: (kind: BrowseKind, key: SongSortKey) => Promise<void>;
   };
   readonly songs: {
     /** Where each song's download is and whether its file failed to play; 200 songs at most. */
@@ -685,6 +712,17 @@ export interface WaveBridge {
     readonly answerInvitation: () => Promise<void>;
   };
   /** Playlists' edits, images, Graveyard and M3U import. */
+  readonly collections: {
+    readonly actions: (
+      target: CollectionTarget,
+      options?: CollectionActionOptions,
+    ) => Promise<CollectionMenu>;
+    readonly run: (
+      target: CollectionTarget,
+      action: CollectionRunAction,
+      playlistId?: number,
+    ) => Promise<CollectionRunResult>;
+  };
   readonly playlists: PlaylistBridge;
   /** Settings › Lyrics and tags. */
   readonly lyricsAndTags: LyricsAndTagsBridge;
@@ -734,6 +772,7 @@ export const createBridge = (invoke: Invoke): WaveBridge => ({
     exclude: () => invoke("library.exclude"),
     removeRoot: (path) => invoke("library.removeRoot", path),
     include: (path) => invoke("library.include", path),
+    sortBy: (kind, key) => invoke("library.sortBy", kind, key),
   },
   songs: {
     states: (ids) => invoke("songs.states", ids),
@@ -810,6 +849,10 @@ export const createBridge = (invoke: Invoke): WaveBridge => ({
     signOutEverywhere: () => invoke("account.signOutEverywhere"),
     deleteAccount: () => invoke("account.deleteAccount"),
     answerInvitation: () => invoke("account.answerInvitation"),
+  },
+  collections: {
+    actions: (target, options) => invoke("collections.actions", target, options),
+    run: (target, action, playlistId) => invoke("collections.run", target, action, playlistId),
   },
   playlists: playlistBridge(invoke),
   lyricsAndTags: lyricsAndTagsBridge(invoke),
