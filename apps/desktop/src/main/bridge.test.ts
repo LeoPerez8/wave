@@ -817,6 +817,25 @@ test("the Spotify account bridge refuses extra arguments and exposes no authoriz
   });
 });
 
+test("Share to Spotify asks for the sign-in when signed out, and takes only a playlist", async () => {
+  await withFile(async (file) => {
+    const { runtime, handlers, exposed, copied } = connect(file);
+    try {
+      const wave = exposed.get("wave") as WaveBridge;
+      const { id } = await wave.playlists.create("Viagem");
+      assert.deepEqual(await wave.spotifyShare.playlist(id), { kind: "signIn", again: false });
+      assert.deepEqual(copied, []);
+      const share = handlers.get("spotifyShare.playlist");
+      assert.ok(share);
+      await assert.rejects(async () => share(trusted, "1"), /Refused/);
+      await assert.rejects(async () => share(trusted, id, "https://elsewhere.test"), /Refused/);
+      await assert.rejects(wave.spotifyShare.playlist(id + 1000));
+    } finally {
+      await runtime.dispose();
+    }
+  });
+});
+
 const song = join(tmpdir(), "Pink Moon.flac");
 
 test("the window plays, pauses and seeks a song through the bridge", async () => {

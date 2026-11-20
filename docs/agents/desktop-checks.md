@@ -177,6 +177,18 @@ and [Development Mode requirements](https://developer.spotify.com/documentation/
 folder for each test. It checks the profile, restart, Sign Out, Sign In Again, and the no-keyring
 notice. The owner can verify the system browser and consent screen with a registered Spotify app.
 
+## Share to Spotify
+
+A playlist's menu has Share to Spotify when the build names a Spotify client ID. Main matches the
+songs with Spotify's search (Core's `spotifyWebShareMatch`), makes a public playlist or updates
+the one it made before, and copies its link (`src/main/spotify/playlistShare.ts`). The window
+calls `wave.spotifyShare.playlist(id)` and hears only how it went. The Spotify playlist made for
+each Wave playlist is remembered in `desktop_settings` as `share.spotify.<playlist id>`.
+
+`e2e/spotifyShare.spec.ts` fakes Spotify's sign-in and Web API in main. It checks the sign-in
+question, the playlist Spotify got, the toast, the clipboard, a second share and a failure. The
+owner can verify a real account: the playlist appears public in Spotify with the matched songs.
+
 ## Song menus and keys
 
 `e2e/songMenus.spec.ts` opens a song's menu by right-click, Shift+F10 and the Menu key, queues

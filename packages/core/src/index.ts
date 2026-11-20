@@ -2199,6 +2199,7 @@ export {
   sharedEditBatches,
   sharedPlaylistChanges,
   sharedPlaylistMoves,
+  sharedSongsCopiedLine,
   sharedSongsLine,
   spotifyPlaylistUrl,
   syncSharedPlaylist,
@@ -2234,6 +2235,7 @@ export {
   spotifyLibraryHas,
   spotifyShareMatch,
   spotifyShareSong,
+  spotifyWebShareMatch,
 } from "./spotifyShare.ts";
 export type { SpotifyPageRead, SpotifyShareItem } from "./spotifyShare.ts";
 export type {
