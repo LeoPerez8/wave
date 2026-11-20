@@ -420,7 +420,7 @@ export const settingsPtBr: typeof settingsEn = {
     "Uma seção do Início, mostrada abaixo das linhas da Biblioteca quando há conteúdo.",
   everyShuffleUsesItALongPress:
     "Vale para todos os botões Aleatório. Mantenha um botão pressionado para escolher; em uma posição de Tocando Agora, isso altera o botão.",
-  pressBackAgainWithin2SecondsTo: "Pressione Voltar novamente em até 2 segundos para sair",
+  backAgainToExit: "Voltar de novo para sair",
   dismisses: "Fecha",
   close: "Fechar",
   selectionActions: "Ações de seleção",
