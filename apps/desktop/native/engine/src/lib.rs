@@ -5,6 +5,7 @@ pub mod decode;
 pub mod engine;
 mod error;
 mod gapless;
+mod he_aac;
 pub mod loudness;
 pub mod output;
 pub mod player;
