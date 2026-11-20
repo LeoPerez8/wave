@@ -32,12 +32,18 @@ fn boxes(mut d: &[u8]) -> impl Iterator<Item = (&[u8], &[u8])> {
 fn child<'a>(d: &'a [u8], kind: &[u8]) -> Option<&'a [u8]> {
     boxes(d).find(|(k, _)| *k == kind).map(|(_, v)| v)
 }
-pub fn smpb(text: &str) -> Option<Trim> {
+pub fn smpb(text: &str, encoded_frames: Option<u64>, scale: u64) -> Option<Trim> {
     let mut fields = text.split_whitespace().skip(1);
     let delay = u64::from_str_radix(fields.next()?, 16).ok()?;
     let padding = u64::from_str_radix(fields.next()?, 16).ok()?;
     let frames = u64::from_str_radix(fields.next()?, 16).ok()?;
-    delay.checked_add(frames)?.checked_add(padding)?;
+    let total = delay.checked_add(frames)?.checked_add(padding)?;
+    // HE-AAC tags usually count core samples. A tag that already accounts for every
+    // output frame uses output samples.
+    let scale = if encoded_frames == Some(total) { 1 } else { scale };
+    total.checked_mul(scale)?;
+    let frames = frames * scale;
+    let delay = delay * scale;
     (frames > 0).then_some(Trim { delay, frames })
 }
 fn timescale(d: &[u8]) -> Option<u64> {
