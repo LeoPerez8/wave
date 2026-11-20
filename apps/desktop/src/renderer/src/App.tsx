@@ -544,6 +544,16 @@ export function App() {
           )
         }
         onSongMenu={ytSongMenu}
+        onStatsPlay={(row) => playback.run(window.wave.stats.artistPlay(route.id!, row.key))}
+        onStatsMenu={(row, at, element) =>
+          row.videoId !== undefined
+            ? actions.openItems(
+                text.desktopLibrary.songMenu(row.title),
+                streamed.items(row.videoId),
+                element as HTMLElement,
+              )
+            : actions.openMenu({ scope: { kind: "songs" }, ids: [row.id] }, row.title, at)
+        }
         onError={failed}
       >
         {table}
