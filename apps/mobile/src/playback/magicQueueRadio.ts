@@ -22,6 +22,7 @@ import {
 import * as Effect from "effect/Effect";
 
 import { lookedUpProfileOf } from "@/home/artistGenres";
+import { dislikedSongsNow, loadDislikes } from "@/library/dislikes";
 import { type LibraryStore } from "@/library/LibraryStore";
 import { songHasFile, type SongRow, type ArtistRow } from "@wave/client";
 import { online } from "@/native/waveNative";
@@ -118,6 +119,8 @@ export const magicQueueYtCandidates = (
             Effect.map((ids) => new Set(ids)),
             Effect.orElseSucceed(() => new Set<string>()),
           );
+    // Read before the first ranking; each ranking takes the dislikes as they are by then.
+    yield* Effect.promise(loadDislikes);
     const rank = (group: readonly SongRadioSeed[], original: boolean, faithfulFallback = false) => {
       const current = sessionNow?.() ?? session;
       const read = readers.current(session.id, group);
@@ -161,6 +164,8 @@ export const magicQueueYtCandidates = (
             },
             signals: current.radioSignals ?? [],
             popularityOf: (id) => popularity.get(id) ?? 0,
+            // A disliked song never enters a batch, from the radios or the Library.
+            disliked: dislikedSongsNow(),
           },
           {
             ...sliders,
