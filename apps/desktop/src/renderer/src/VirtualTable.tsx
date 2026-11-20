@@ -1,16 +1,39 @@
-import { desktopKey, formatDuration, streamedCoverUrls } from "@wave/core";
+import {
+  desktopKey,
+  formatDuration,
+  libraryTableSortsFor,
+  songSortHasSpine,
+  songSortLabelFor,
+  streamedCoverUrls,
+  type AppLanguage,
+  type SongSort,
+  type SongSortKey,
+} from "@wave/core";
 import { useEffect, useRef, useState, type KeyboardEvent, type MouseEvent } from "react";
 import type { BrowsePage, BrowseRow, BrowseScope } from "../../shared/browse.ts";
 import { Icon } from "./Icon.tsx";
 import { pressOf } from "./keys.ts";
 import { isChecked, toggled, type Selection } from "./SongActions.tsx";
 import { markClass, rowMark, SongMark, useSongStates } from "./SongMark.tsx";
-import { labels, text, albumName, artistName, tagTitle } from "./text.ts";
+import { labels, language, text, albumName, artistName, tagTitle } from "./text.ts";
 import { tableColumns } from "../../shared/tableColumns.ts";
+import { TableSortHeader } from "./TableSortHeader.tsx";
 import "./tables.css";
 
 const SIZE = 100;
 const HEIGHT = 40;
+const dateFormats = new Map<AppLanguage, Intl.DateTimeFormat>();
+const rowDate = (date: number | undefined) => {
+  if (date === undefined) return "";
+  let format = dateFormats.get(language);
+  if (format === undefined) {
+    format = new Intl.DateTimeFormat(language === "en" ? "en-US" : language, {
+      dateStyle: "short",
+    });
+    dateFormats.set(language, format);
+  }
+  return format.format(date);
+};
 /** A song's or a list's length, "3:07" or "36:43:09": Core's, as the phone's. */
 export const time = formatDuration;
 const images = new Map<string, Promise<string | null>>();
@@ -139,12 +162,21 @@ export function VirtualTable({
   const [active, setActive] = useState(0);
   const [selected, setSelected] = useState<number>();
   const [ready, setReady] = useState(false);
+  const [sort, setSort] = useState<SongSort>();
+  const [changingSort, setChangingSort] = useState(false);
+  const sortVersion = useRef(0);
   const start = Math.max(0, Math.floor(top / HEIGHT) - 5);
   const end = Math.min(total, start + Math.ceil(height / HEIGHT) + 10);
   const firstPage = Math.floor(start / SIZE);
   const lastPage = Math.floor(Math.max(start, end - 1) / SIZE);
   const songList = !["albums", "artists", "playlists", "genres"].includes(scope.kind);
   const columns = tableColumns(scope.kind);
+  const sorts = preview ? [] : libraryTableSortsFor(scope.kind);
+  const added = sorts.some(({ key }) => key === "added");
+  const starred = sorts.some(({ key }) => key === "starred");
+  const spine = sort !== undefined && songSortHasSpine(sort);
+  const jumpByName =
+    !preview && !changingSort && (spine || ["artist", "genre", "playlists"].includes(scope.kind));
   const emptyMessage =
     scope.kind in text.library.sectionEmpty
       ? text.library.sectionEmpty[scope.kind as keyof typeof text.library.sectionEmpty]
@@ -161,6 +193,7 @@ export function VirtualTable({
     cache.current.clear();
   }, [scope, revision]);
   useEffect(() => {
+    if (changingSort) return;
     let current = true;
     const read = async () => {
       try {
@@ -183,11 +216,11 @@ export function VirtualTable({
         setPages(new Map(cache.current));
         setTotal(results[0]![1].total);
         setReady(true);
+        setSort(results[0]![1].sort);
         setActive((index) => Math.max(0, Math.min(index, results[0]![1].total - 1)));
         onHero?.(results[0]![1].hero);
-        // Read the pages on either side too, so a scroll that crosses into one finds its rows
-        // already here rather than drawing a gap while the read is on its way.
-        const near = [firstPage - 1, lastPage + 1].filter(
+        // Read both pages ahead so a quick scroll has time to fetch its next rows.
+        const near = [firstPage - 1, lastPage + 1, lastPage + 2].filter(
           (index) => index >= 0 && index * SIZE < results[0]![1].total && !cache.current.has(index),
         );
         if (near.length === 0) return;
@@ -208,8 +241,9 @@ export function VirtualTable({
     return () => {
       current = false;
     };
-  }, [scope, revision, firstPage, lastPage, onHero, onError, preview]);
-  const get = (index: number) => pages.get(Math.floor(index / SIZE))?.items[index % SIZE];
+  }, [scope, revision, firstPage, lastPage, onHero, onError, preview, changingSort]);
+  const get = (index: number) =>
+    changingSort ? undefined : pages.get(Math.floor(index / SIZE))?.items[index % SIZE];
   const states = useSongStates(
     songList
       ? Array.from({ length: Math.max(0, end - start) }, (_, i) => get(start + i)?.id ?? 0)
@@ -225,22 +259,44 @@ export function VirtualTable({
     setTop(element.scrollTop);
   };
   const jump = async (letter: string) => {
+    const version = sortVersion.current;
     try {
-      move(
-        preview
-          ? Math.max(
-              0,
-              preview.page.items.findIndex((row) =>
-                row.title.toLocaleLowerCase().startsWith(letter.toLocaleLowerCase()),
-              ),
-            )
-          : await window.wave.library.letter(scope, letter),
-      );
-      viewport.current?.parentElement?.focus();
+      const position = await window.wave.library.letter(scope, letter);
+      if (position === null || version !== sortVersion.current || !viewport.current) return;
+      move(position);
+      viewport.current.parentElement?.focus();
     } catch {
       onError();
     }
   };
+  const sortBy = async (key: SongSortKey) => {
+    const version = ++sortVersion.current;
+    setChangingSort(true);
+    try {
+      await window.wave.library.sortBy(scope.kind, key);
+    } catch {
+      onError();
+    } finally {
+      if (version === sortVersion.current && viewport.current) {
+        cache.current.clear();
+        setPages(new Map());
+        setSort(undefined);
+        viewport.current.scrollTop = 0;
+        setTop(0);
+        setActive(0);
+        setSelected(undefined);
+        setChangingSort(false);
+      }
+    }
+  };
+  const heading = (key: SongSortKey, label: string, className?: string) => (
+    <TableSortHeader
+      label={label}
+      className={className}
+      direction={sort?.key === key ? (sort.descending ? "descending" : "ascending") : undefined}
+      onSort={sorts.some((sort) => sort.key === key) ? () => void sortBy(key) : undefined}
+    />
+  );
   /** Opens the menu of row [index], at [at] or under the row. */
   const menu = (index: number, at?: { readonly x: number; readonly y: number }) => {
     const row = get(index);
@@ -255,6 +311,7 @@ export function VirtualTable({
     else onOpen(row, index);
   };
   const key = (event: KeyboardEvent) => {
+    if (event.target !== event.currentTarget) return;
     const page = Math.max(1, Math.floor(height / HEIGHT));
     const moves: Partial<Record<string, number>> = {
       rowDown: active + 1,
@@ -274,7 +331,7 @@ export function VirtualTable({
       event.preventDefault();
       const row = get(active);
       if (row) choose(row, active);
-    } else if (command === "jump") {
+    } else if (command === "jump" && jumpByName) {
       event.preventDefault();
       void jump(event.key);
     } else if (command === "songMenu") {
@@ -294,7 +351,7 @@ export function VirtualTable({
   };
   return (
     <div
-      className={`table-area ${songList ? "song-table" : "group-table"} ${columns.third === null ? "no-third" : ""} ${columns.star ? "" : "no-star"}`}
+      className={`table-area ${songList ? "song-table" : "group-table"} ${columns.third === null ? "no-third" : ""} ${columns.star ? "" : "no-star"} ${added ? "with-added" : ""} ${starred ? "with-starred" : ""}`}
       role="grid"
       aria-label={
         preview?.label ??
@@ -303,7 +360,13 @@ export function VirtualTable({
           : labels.songs)
       }
       aria-rowcount={total + 1}
-      aria-colcount={3 + (columns.third === null ? 0 : 1) + (columns.star ? 1 : 0)}
+      aria-colcount={
+        3 +
+        (columns.third === null ? 0 : 1) +
+        Number(columns.star) +
+        Number(added) +
+        Number(starred)
+      }
       tabIndex={0}
       aria-activedescendant={
         total && active >= start && active < end && get(active) ? rowId(active) : undefined
@@ -312,17 +375,18 @@ export function VirtualTable({
       onContextMenu={contextMenu}
     >
       <div className="table-head table-columns" role="row" aria-rowindex={1}>
-        <span role="columnheader">{text.desktopLibrary.titleColumn}</span>
-        <span role="columnheader">
-          {columns.second === "artist" ? text.desktopLibrary.artistColumn : labels.songs}
-        </span>
-        {columns.third !== null && (
-          <span role="columnheader" className="album-column">
-            {columns.third === "album"
-              ? text.desktopLibrary.albumColumn
-              : text.desktopLibrary.artistColumn}
-          </span>
+        {heading("title", text.desktopLibrary.titleColumn)}
+        {columns.second === "artist" ? (
+          heading("artist", text.desktopLibrary.artistColumn)
+        ) : (
+          <span role="columnheader">{labels.songs}</span>
         )}
+        {columns.third === "album" &&
+          heading("album", text.desktopLibrary.albumColumn, "album-column")}
+        {columns.third === "artist" &&
+          heading("artist", text.desktopLibrary.artistColumn, "album-column")}
+        {added && heading("added", text.library.songSorts.added)}
+        {starred && heading("starred", text.library.songSorts.starred)}
         {columns.star && (
           <span role="columnheader" className="star-column" aria-label={labels.favorite}>
             <Icon name="favorites" size={14} />
@@ -416,6 +480,16 @@ export function VirtualTable({
                       {columns.third === "album" ? albumName(row.album) : artistName(row.artist)}
                     </div>
                   )}
+                  {added && (
+                    <div role="gridcell" className="table-date secondary">
+                      {rowDate(row.addedAt)}
+                    </div>
+                  )}
+                  {starred && (
+                    <div role="gridcell" className="table-date secondary">
+                      {rowDate(row.starredAt)}
+                    </div>
+                  )}
                   {columns.star && (
                     <div role="gridcell" className="star-column">
                       {row.favorite && <Icon name="favorites" size={14} />}
@@ -435,7 +509,18 @@ export function VirtualTable({
           </p>
         )}
       </div>
-      {scope.kind === "songs" && preview === undefined && (
+      {sorts.length !== 0 && (
+        <span className="sr-only" aria-live="polite">
+          {sort &&
+            (songList
+              ? songSortLabelFor(language)(sort)
+              : text.library.sortLabel(
+                  text.desktopLibrary.titleColumn,
+                  text.library.sortDirections[sort.descending ? "zToA" : "aToZ"],
+                ))}
+        </span>
+      )}
+      {jumpByName && (
         <nav className="letter-spine" aria-label={labels.jump}>
           {Array.from("ABCDEFGHIJKLMNOPQRSTUVWXYZ").map((letter) => (
             <button
