@@ -38,6 +38,7 @@ import { ytMusicLayer } from "./yt/ytMusic.ts";
 import { desktopLinksLayer } from "./links/layer.ts";
 import { ytFeaturesLayer } from "./yt/ytServices.ts";
 import { ytAccountLayer } from "./yt/ytAccountLayer.ts";
+import { spotifyAccountLayer } from "./spotify/spotifyAccountLayer.ts";
 import type { YtBrowserOutcome } from "./yt/ytBrowserSignIn.ts";
 import { createYtSessions, ytSessionStore } from "./yt/ytSessionStore.ts";
 import { lyricsLayer } from "./lyrics/lyrics.ts";
@@ -510,6 +511,19 @@ const connect = (
             online: () => true,
             startSignIn: () => ({ outcome: Promise.resolve(browser.outcome), cancel: () => {} }),
           }),
+          spotifyAccountLayer({
+            clientId: null,
+            store: {
+              keyringMissing: () => true,
+              load: () => null,
+              save: () => {},
+              clear: () => {},
+            },
+            fetch: () => Promise.reject(new Error("no network")),
+            online: () => true,
+            openExternal: async () => {},
+            page: () => ({ title: "", message: "" }),
+          }),
         ).pipe(
           Layer.provideMerge(
             ytFeaturesLayer({ online: () => true }).pipe(
@@ -784,6 +798,22 @@ test("main refuses a call from a frame other than Wave's window", async () => {
     assert.ok(counts !== undefined);
     await assert.rejects(async () => counts({ senderFrame: "an embedded page" }), /untrusted/i);
     await runtime.dispose();
+  });
+});
+
+test("the Spotify account bridge refuses extra arguments and exposes no authorized request call", async () => {
+  await withFile(async (file) => {
+    const { runtime, handlers, exposed } = connect(file);
+    try {
+      const wave = exposed.get("wave") as WaveBridge;
+      assert.equal((await wave.spotifyAccount.view()).configured, false);
+      assert.equal("request" in wave.spotifyAccount, false);
+      const photo = handlers.get("spotifyAccount.photo");
+      assert.ok(photo);
+      await assert.rejects(async () => photo(trusted, "https://elsewhere.test/image"), /Refused/);
+    } finally {
+      await runtime.dispose();
+    }
   });
 });
 

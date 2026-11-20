@@ -12,6 +12,7 @@ import {
 } from "react";
 import type { AccountView } from "../../shared/account.ts";
 import type { YtAccountPanel } from "../../shared/ytAccount.ts";
+import { SpotifyAccountSettings } from "./SpotifyAccountSettings.tsx";
 import type { BrowseRow, BrowseScope } from "../../shared/browse.ts";
 import type { ScanStatus } from "../../shared/library.ts";
 import { PlayerBar, usePlayback } from "./PlayerBar.tsx";
@@ -868,6 +869,7 @@ export function App() {
                     />
                   )}
                   <YtAccountSettings view={ytAccount} onError={failed} />
+                  <SpotifyAccountSettings onError={failed} />
                 </>
               ) : setting === "playback" ? (
                 <PlaybackSettings onError={failed} />

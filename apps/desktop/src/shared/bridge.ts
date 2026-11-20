@@ -68,6 +68,11 @@ import { LINK_CALLS, linkBridge, type LinkContract } from "./links.ts";
 import { ARTIST_PAGE_CALLS, artistPageBridge, type ArtistPageContract } from "./artistPage.ts";
 import { STREAMED_CALLS, streamedBridge, type StreamedContract } from "./streamedSongs.ts";
 import { YT_ACCOUNT_CALLS, ytAccountBridge, type YtAccountContract } from "./ytAccount.ts";
+import {
+  SPOTIFY_ACCOUNT_CALLS,
+  spotifyAccountBridge,
+  type SpotifyAccountContract,
+} from "./spotifyAccount.ts";
 export type Appearance = "system" | "light" | "dark";
 
 /** One window of a list, as a list call returns it. */
@@ -95,7 +100,8 @@ export interface BridgeContract
     ArtistPageContract,
     StreamedContract,
     LyricsAndTagsContract,
-    YtAccountContract {
+    YtAccountContract,
+    SpotifyAccountContract {
   readonly "system.mediaBackend": {
     readonly args: readonly [];
     readonly result: "native" | "chromium";
@@ -492,6 +498,7 @@ export const BRIDGE_CALLS = [
   ...ARTIST_PAGE_CALLS,
   ...STREAMED_CALLS,
   ...YT_ACCOUNT_CALLS,
+  ...SPOTIFY_ACCOUNT_CALLS,
   "stats.overview",
   "stats.ranking",
   "stats.play",
@@ -512,6 +519,7 @@ export interface WaveBridge {
   readonly streamed: ReturnType<typeof streamedBridge>;
   /** The YouTube account: its session never reaches the window. */
   readonly ytAccount: ReturnType<typeof ytAccountBridge>;
+  readonly spotifyAccount: ReturnType<typeof spotifyAccountBridge>;
   readonly stats: {
     readonly overview: (period: StatsPeriod) => Promise<StatsOverview>;
     readonly ranking: (ranking: StatsRanking, period: StatsPeriod) => Promise<Page<StatsRow>>;
@@ -805,6 +813,7 @@ export const createBridge = (invoke: Invoke): WaveBridge => ({
   artistPage: artistPageBridge(invoke),
   streamed: streamedBridge(invoke),
   ytAccount: ytAccountBridge(invoke),
+  spotifyAccount: spotifyAccountBridge(invoke),
   stats: {
     overview: (period) => invoke("stats.overview", period),
     ranking: (ranking, period) => invoke("stats.ranking", ranking, period),

@@ -152,6 +152,9 @@ export const ptBR: Catalogue = {
       "Inicie sessão na janela do navegador que abriu e depois feche a janela. O Wave recebe a sessão quando ela é fechada.",
     noBrowser:
       "Iniciar sessão no YouTube precisa do Chrome, Edge, Brave ou Chromium neste computador. Instale um deles e tente novamente.",
+    spotifyUnavailable: "O início de sessão no Spotify não está configurado nesta versão do Wave.",
+    spotifyNote:
+      "Inicie sessão para o Wave ler suas playlists do Spotify e compartilhar as que você criou no Wave.",
   },
   desktopShortcuts: desktopShortcutsPtBr,
   downloadNotice: downloadNoticePtBr,
