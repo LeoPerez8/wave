@@ -4,12 +4,14 @@ import {
   GENIUS_LYRICS_SEARCH_PREVIEW,
   joinArtists,
   normalizeSearchText,
+  searchKindOrder,
   uniqueGeniusLyricsHits,
   type AppLanguage,
 } from "@wave/core";
 import type {
   DiscoverSong,
   MixedSong,
+  SearchEntry,
   SearchGroup,
   SearchKind,
   SearchResults,
@@ -216,12 +218,15 @@ const ytAlbumRow = (album: YtArtistAlbum, top: boolean): ResultRow => ({
 });
 
 /**
- * Lays out results: the top result, then each group (in Core's order) with a
- * preview of its best matches and "Show all". A group the owner expanded, or
+ * Lays out results: the top result, then each group with a preview of its best
+ * matches and "Show all", the groups ordered by their best match for [query],
+ * the Library's or YT Music's (Core's `searchKindOrder`). A group the owner expanded, or
  * the only group, shows everything search returned. The songs, artists and
  * albums YT Music found that the Library lacks ([yt], Core's `ytSectionView`)
  * follow the Library's in the Songs, Artists and Albums groups, making the
- * group when the Library has nothing of its kind; groups count them too. The
+ * group when the Library has nothing of its kind; groups count them too. A
+ * group nothing in which matches the query (YT Music's artists for a song
+ * title) comes after those that match. The
  * top result is the Library's best match, else YT Music's best. [placed] are
  * YT Music's songs kept in place for the visit: one whose download finished
  * shows as the Library's song in its row (and [results] leave it out), and
@@ -344,10 +349,33 @@ export const resultRows = (
     );
   }
   const afterTopResult = rows.length;
-  const groups: SearchGroup<SearchHit>[] = [...results.groups];
+  const found: SearchGroup<SearchHit>[] = [...results.groups];
   for (const kind of YT_KINDS)
-    if (ytRows(kind).length > 0 && !groups.some((group) => group.kind === kind))
-      groups.push({ kind, items: [], total: 0 });
+    if (ytRows(kind).length > 0 && !found.some((group) => group.kind === kind))
+      found.push({ kind, items: [], total: 0 });
+  // Groups go by their best match, the Library's or YT Music's (Core's `searchKindOrder`).
+  const candidates: SearchEntry[] = [
+    ...results.groups.flatMap((group) => group.items.slice(0, 1)),
+    ...ytArtists.map((artist) => ({ kind: "artist" as const, name: artist.name })),
+    ...ytAlbums.map((album) => ({
+      kind: "album" as const,
+      name: album.title,
+      also: album.artists,
+    })),
+    ...placed.map((row) =>
+      row.source === "library"
+        ? songHit(row.track)
+        : {
+            kind: "song" as const,
+            name: row.song.title,
+            also:
+              row.song.album === null ? row.song.artists : [...row.song.artists, row.song.album],
+          },
+    ),
+  ];
+  const groups = searchKindOrder(query, candidates).flatMap((kind) =>
+    found.filter((group) => group.kind === kind),
+  );
   for (const group of groups) {
     const extra = ytRows(group.kind);
     const total = group.total + extra.length;

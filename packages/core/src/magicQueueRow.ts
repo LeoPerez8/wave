@@ -78,7 +78,7 @@ const sameMixes = (a: readonly BlendedDiscoverMix[], b: readonly BlendedDiscover
 
 /**
  * What the row draws for [row] (`magicQueueRow`), given the songs it last
- * picked from the mixes ([picked], null for a fresh draw: a new visit). The
+ * picked from the mixes ([picked], null for a fresh draw: Home's first). The
  * same picks while the mixes are the same ones; mixes rebuilt or re-ranked
  * keep the songs still in them in their places and fill the others
  * (`magicQueueMixPicks`, [random]). Hidden when the mixes give no song.
