@@ -166,6 +166,7 @@ export {
   findLyricMatch,
   normalizeSearchText,
   rememberSearch,
+  searchKindOrder,
 } from "./search.ts";
 export type {
   LyricSearchMatch,
