@@ -24,6 +24,7 @@ import type { BrowseRow } from "../../shared/browse.ts";
 import type { PlayerView } from "../../shared/playerView.ts";
 import { Icon } from "./Icon.tsx";
 import { LyricsView } from "./LyricsView.tsx";
+import type { GeniusAccess } from "./useSongGenius.ts";
 import { text } from "./text.ts";
 import { Artwork } from "./VirtualTable.tsx";
 import { AlbumCredit, ArtistCredit, type YtCreditLinks } from "./YtCredit.tsx";
@@ -111,6 +112,8 @@ export function NowPlaying({
   links,
   onClose,
   actions,
+  geniusAccess,
+  onGeniusSignIn,
 }: {
   readonly view: PlayerView | undefined;
   readonly run: (action: Promise<unknown>) => void;
@@ -119,6 +122,8 @@ export function NowPlaying({
   readonly onClose: () => void;
   /** Add to Playlist and Download for the song playing. */
   readonly actions?: ReactNode;
+  readonly geniusAccess: GeniusAccess;
+  readonly onGeniusSignIn: () => void;
 }) {
   const song = view?.current ?? null;
   const palette = usePalette(song);
@@ -187,6 +192,9 @@ export function NowPlaying({
           song={song}
           positionMs={view?.status.positionMs ?? 0}
           onSeek={(positionMs) => run(window.wave.playback.seek(positionMs))}
+          geniusAccess={geniusAccess}
+          onGeniusSignIn={onGeniusSignIn}
+          lineIdPrefix="now-playing-lyric"
         />
       </div>
     </section>

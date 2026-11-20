@@ -16,7 +16,7 @@ import {
   translateGenius,
   type GeniusAsk,
   type GeniusService,
-} from "./geniusSource.ts";
+} from "@wave/client/geniusSource";
 
 const fixture = (name: string) =>
   JSON.parse(

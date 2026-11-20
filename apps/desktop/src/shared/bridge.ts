@@ -39,7 +39,7 @@ import type {
   MissingSongsList,
   MissingSongsView,
 } from "./downloads.ts";
-import type { SongLyrics } from "./lyrics.ts";
+import type { GeniusPhase, SongGenius, SongLyrics } from "./lyrics.ts";
 import {
   PLAYLIST_CALLS,
   playlistBridge,
@@ -154,6 +154,14 @@ export interface BridgeContract
   readonly "lyrics.song": {
     readonly args: readonly [trackId: string];
     readonly result: SongLyrics;
+  };
+  readonly "lyrics.genius": {
+    readonly args: readonly [trackId: string, requestId: string, phase: GeniusPhase];
+    readonly result: SongGenius;
+  };
+  readonly "lyrics.cancelGenius": {
+    readonly args: readonly [requestId: string];
+    readonly result: void;
   };
   readonly "playback.setSleepTimer": {
     readonly args: readonly [choice: SleepTimerChoice | null];
@@ -440,6 +448,8 @@ export const BRIDGE_CALLS = [
   "playback.queue",
   "playback.setSleepTimer",
   "lyrics.song",
+  "lyrics.genius",
+  "lyrics.cancelGenius",
 
   "library.artwork",
   "library.cover",
@@ -592,6 +602,12 @@ export interface WaveBridge {
   };
   readonly lyrics: {
     readonly song: (trackId: string) => Promise<SongLyrics>;
+    readonly genius: (
+      trackId: string,
+      requestId: string,
+      phase: GeniusPhase,
+    ) => Promise<SongGenius>;
+    readonly cancelGenius: (requestId: string) => Promise<void>;
   };
   readonly library: {
     readonly artwork: (hash: string, large: boolean) => Promise<string | null>;
@@ -750,6 +766,8 @@ export const createBridge = (invoke: Invoke): WaveBridge => ({
   },
   lyrics: {
     song: (trackId) => invoke("lyrics.song", trackId),
+    genius: (trackId, requestId, phase) => invoke("lyrics.genius", trackId, requestId, phase),
+    cancelGenius: (requestId) => invoke("lyrics.cancelGenius", requestId),
   },
   library: {
     artwork: (hash, large) => invoke("library.artwork", hash, large),
