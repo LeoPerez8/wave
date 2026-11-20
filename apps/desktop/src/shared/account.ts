@@ -13,4 +13,6 @@ export interface AccountView {
   readonly revision: number;
   /** The account's theme choice (the phone's `settings.theme` value), or null. */
   readonly theme: string | null;
+  /** Whether Lyrics may show Genius insights, as the account holds the switch. */
+  readonly geniusInsights: boolean;
 }

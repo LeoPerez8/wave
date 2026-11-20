@@ -1,29 +1,32 @@
-import { sql, type SQL } from "drizzle-orm";
+import { asc, desc, sql, type SQL } from "drizzle-orm";
 import type { LibraryDatabase } from "@wave/client/db/database";
-import { readPlaylistYtSong, type YtAlbumSong } from "@wave/core";
+import { defaultSongSort, readPlaylistYtSong, type SongSort, type YtAlbumSong } from "@wave/core";
 import type { BrowsePage, BrowseRow, BrowseScope } from "../../shared/browse.ts";
 import { ytRow } from "../../shared/yt.ts";
 import { searchSongIds } from "./search.ts";
+import { readBrowseSort, songBrowseOrder, songBrowseSpine } from "./browseSort.ts";
 
 const SONGS = sql`SELECT t.id, t.title, t.artist_credit AS artist, a.title AS album,
   t.artwork_hash AS artworkHash, t.duration_ms AS durationMs, 1 AS count,
   t.year, g.name AS genre, t.track_number AS trackNumber, t.path,
   EXISTS(SELECT 1 FROM favorites f WHERE f.track_id=t.id AND f.deleted=0) AS favorite,
-  t.title_sort AS sort, p.sort AS artistSort, t.disc_number AS disc, t.album_id AS albumId
+  t.title_sort AS sort, p.sort AS artistSort, a.title_sort AS albumSort, t.added_at AS addedAt,
+  t.disc_number AS disc, t.album_id AS albumId
   FROM tracks t JOIN artists p ON p.id=t.artist_id JOIN albums a ON a.id=t.album_id LEFT JOIN genres g ON g.id=t.genre_id`;
 
-const listing = (scope: BrowseScope): { source: SQL; order: SQL } => {
-  const order = sql`sort, id`;
+const listing = (scope: BrowseScope, sort?: SongSort): { source: SQL; order: SQL } => {
+  const name = sort?.descending ? desc(sql`sort`) : asc(sql`sort`);
+  const order = sql`${name}, id`;
   switch (scope.kind) {
     case "albums":
       return {
         source: sql`SELECT a.id, a.title, a.album_artist_credit AS artist,
-      '' AS album, a.title_sort AS sort, a.artwork_hash AS artworkHash, coalesce(sum(t.duration_ms),0) AS durationMs,
+      '' AS album, a.title_sort AS sort, ar.sort AS artistSort, a.artwork_hash AS artworkHash, coalesce(sum(t.duration_ms),0) AS durationMs,
       count(t.id) AS count, a.year,
       (SELECT g.name FROM tracks gt JOIN genres g ON g.id=gt.genre_id WHERE gt.album_id=a.id GROUP BY g.id ORDER BY count(*) DESC, g.sort LIMIT 1) AS genre
-      FROM albums a JOIN tracks t ON t.album_id=a.id
-      LEFT JOIN genres g ON g.id=t.genre_id GROUP BY a.id`,
-        order: sql`sort, wave_sort_key(artist), id`,
+      FROM albums a JOIN tracks t ON t.album_id=a.id JOIN artists ar ON ar.id=a.album_artist_id
+      GROUP BY a.id`,
+        order: sql`${name}, artistSort, id`,
       };
     case "artists":
       return {
@@ -74,8 +77,14 @@ const listing = (scope: BrowseScope): { source: SQL; order: SQL } => {
       };
     case "favorites":
       return {
-        source: sql`SELECT songs.* FROM (${SONGS}) songs JOIN favorites f ON f.track_id=songs.id WHERE f.deleted=0`,
-        order: sql`(SELECT added_at FROM favorites WHERE track_id=id) DESC, sort, id`,
+        source: sql`SELECT songs.*, f.added_at AS starredAt FROM (${SONGS}) songs
+          JOIN favorites f ON f.track_id=songs.id WHERE f.deleted=0`,
+        order: songBrowseOrder(sort ?? defaultSongSort("favorites")),
+      };
+    case "songs":
+      return {
+        source: SONGS,
+        order: songBrowseOrder(sort ?? defaultSongSort("songs")),
       };
     default:
       return { source: SONGS, order: sql`sort, artistSort, coalesce(path,''), id` };
@@ -172,7 +181,8 @@ export const browseLibrary = (
     const ids = searchSongIds(db, scope.query ?? "");
     return { items: browseSongs(db, ids.slice(offset, offset + limit)), offset, total: ids.length };
   }
-  const { source, order } = listing(scope);
+  const sort = readBrowseSort(db, scope.kind);
+  const { source, order } = listing(scope, sort);
   const mixed =
     scope.kind === "playlist" && scope.id !== undefined && hasStoredEntries(db, scope.id)
       ? listableEntries(scope.id)
@@ -210,17 +220,29 @@ export const browseLibrary = (
       }
     }
   }
-  return { items, offset, total, ...(hero ? { hero } : {}) };
+  return { items, offset, total, ...(hero ? { hero } : {}), ...(sort ? { sort } : {}) };
 };
 
-export const browseLetter = (db: LibraryDatabase, scope: BrowseScope, letter: string): number => {
-  // Search's songs are in rank order, not by letter.
-  if (scope.kind === "search") return 0;
-  const { source, order } = listing(scope);
+export const browseLetter = (
+  db: LibraryDatabase,
+  scope: BrowseScope,
+  letter: string,
+): number | null => {
+  const sort = readBrowseSort(db, scope.kind);
+  const spine =
+    scope.kind === "songs" || scope.kind === "favorites"
+      ? sort && songBrowseSpine(sort)
+      : scope.kind === "album" || scope.kind === "playlist" || scope.kind === "search"
+        ? undefined
+        : sql`sort`;
+  if (spine === undefined) return null;
+  const { source, order } = listing(scope, sort);
+  const comparison = sort?.descending ? sql`<=` : sql`>=`;
   return (
     db.get<{ position: number }>(sql`SELECT position FROM (
-    SELECT sort, row_number() OVER (ORDER BY ${order}) - 1 AS position FROM (${source})
-    ) WHERE substr(sort,1,1) >= wave_sort_key(${letter}) ORDER BY position LIMIT 1`)?.position ?? 0
+    SELECT ${spine} AS nameKey, row_number() OVER (ORDER BY ${order}) - 1 AS position FROM (${source})
+    ) WHERE substr(nameKey,1,1) ${comparison} wave_sort_key(${letter}) ORDER BY position LIMIT 1`)
+      ?.position ?? 0
   );
 };
 
@@ -231,7 +253,7 @@ export const browseLetter = (db: LibraryDatabase, scope: BrowseScope, letter: st
 export const browseTrackIds = (db: LibraryDatabase, scope: BrowseScope): string[] => {
   if (["albums", "artists", "playlists", "genres"].includes(scope.kind)) return [];
   if (scope.kind === "search") return searchSongIds(db, scope.query ?? "").map(String);
-  const { source, order } = listing(scope);
+  const { source, order } = listing(scope, readBrowseSort(db, scope.kind));
   return db
     .all<{ id: number }>(sql`SELECT id FROM (${source}) ORDER BY ${order}`)
     .map((song) => String(song.id));

@@ -25,7 +25,9 @@
     "./playCheckpoints": "./src/playCheckpoints.ts",
     "./queueSaves": "./src/queueSaves.ts",
     "./sync/syncCycle": "./src/sync/syncCycle.ts",
-    "./testing/syncService": "./src/sync/testSyncService.ts"
+    "./testing/syncService": "./src/sync/testSyncService.ts",
+    "./geniusSource": "./src/geniusSource.ts",
+    "./geniusStorage": "./src/geniusStorage.ts"
   },
   "scripts": {
     "test": "node --test \"src/**/*.test.ts\"",

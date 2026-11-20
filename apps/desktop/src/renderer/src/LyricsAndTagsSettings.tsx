@@ -12,16 +12,17 @@ const RUN_EVERY_MS = 1000;
 
 /**
  * Settings › Lyrics and tags: Fix songs online with Fix songs in the whole Library, and Download
- * artist photos with Clear artist photos. Both switches are the account's values. Genius isn't in
- * desktop v1, so the phone's Genius section isn't here.
+ * artist photos with Clear artist photos, and Genius insights. The switches are account-wide.
  */
 export function LyricsAndTagsSettings({
   onError,
   notify,
+  onGeniusChanged,
 }: {
   readonly onError: () => void;
   /** Shows the window's toast: how a whole-Library run went. */
   readonly notify: (message: string) => void;
+  readonly onGeniusChanged: (enabled: boolean) => void;
 }) {
   const [view, setView] = useState<LyricsAndTagsView>();
   const [clearing, setClearing] = useState(false);
@@ -44,7 +45,10 @@ export function LyricsAndTagsSettings({
     setView({ ...view, ...next });
     void window.wave.lyricsAndTags
       .set(next)
-      .then(setView)
+      .then((saved) => {
+        setView(saved);
+        if (next.geniusInsights !== undefined) onGeniusChanged(saved.geniusInsights);
+      })
       .catch(() => {
         onError();
         void read();
@@ -122,6 +126,19 @@ export function LyricsAndTagsSettings({
           {text.settings.clearArtistPhotosText}
         </button>
       </div>
+      <section className="mt-10 border-y border-separator py-3">
+        <label className="flex items-center justify-between gap-4">
+          <span>{text.settings.geniusInsights}</span>
+          <input
+            type="checkbox"
+            role="switch"
+            className="size-4 accent-accent"
+            checked={view.geniusInsights}
+            onChange={(event) => change({ geniusInsights: event.target.checked })}
+          />
+        </label>
+      </section>
+      <p className="mt-2 text-sm text-secondary">{text.settings.openingLyricsOnASongWithLyrics}</p>
       {clearing && (
         <ConfirmDialog
           spec={{
