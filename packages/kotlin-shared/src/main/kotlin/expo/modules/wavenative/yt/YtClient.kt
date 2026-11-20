@@ -185,6 +185,19 @@ class YtClient(private val platform: YtPlatform) {
   }
 
   /**
+   * Community playlists on YT Music for [query]: YouTube Music's "Community playlists" search,
+   * the first page. A failure is logged.
+   */
+  suspend fun searchCommunityPlaylists(query: String): List<YtCommunityPlaylist> =
+    logged("Community playlists search \"$query\"") {
+      request {
+        val response =
+          innerTube.search(YouTubeClient.WEB_REMIX, query, params = FILTER_COMMUNITY_PLAYLISTS)
+        YtSearchParser.communityPlaylists(response.bodyAsText())
+      }
+    }
+
+  /**
    * Signs in with [credentials] from the sign-in page, once YouTube Music
    * says whose account they are. A session it doesn't accept fails.
    */
@@ -285,5 +298,8 @@ class YtClient(private val platform: YtPlatform) {
 
     /** YouTube Music's "Albums" search filter (as Metrolist's `SearchFilter.FILTER_ALBUM`). */
     const val FILTER_ALBUMS = "EgWKAQIYAWoKEAkQChAFEAMQBA%3D%3D"
+
+    /** YouTube Music's "Community playlists" search filter (as Metrolist's `SearchFilter.FILTER_COMMUNITY_PLAYLIST`). */
+    const val FILTER_COMMUNITY_PLAYLISTS = "EgeKAQQoAEABagoQAxAEEAoQCRAF"
   }
 }
