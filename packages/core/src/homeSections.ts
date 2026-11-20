@@ -14,6 +14,7 @@ export type HomeSectionId =
   | "new-releases"
   | "upcoming-shows"
   | "discover"
+  | "in-your-orbit"
   | "recently-added"
   | "recently-played"
   | "most-played"
@@ -37,11 +38,13 @@ export interface HomeSection {
  * existed (see `parseHomeArrangement`). Discover holds the Magic Queue,
  * Artist mixes and Genre mixes rows (`DISCOVER_ROWS`); it took the place of
  * their three sections, so it joins every Home arranged before it on top.
+ * In your orbit follows it, so it joins those Homes right after Discover.
  */
 export const HOME_SECTIONS: readonly HomeSection[] = [
   { id: "new-releases", title: en.newReleases.title, fromPlays: false },
   { id: "upcoming-shows", title: en.upcomingShows.title, fromPlays: false },
   { id: "discover", title: en.home.sections.discover, fromPlays: false },
+  { id: "in-your-orbit", title: en.home.sections["in-your-orbit"], fromPlays: true },
   { id: "recently-added", title: en.home.sections["recently-added"], fromPlays: false },
   { id: "recently-played", title: en.home.sections["recently-played"], fromPlays: true },
   { id: "most-played", title: en.home.sections["most-played"], fromPlays: true },

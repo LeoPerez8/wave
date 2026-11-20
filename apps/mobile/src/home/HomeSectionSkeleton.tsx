@@ -48,7 +48,7 @@ export function HomeSectionSkeleton({ id }: { id: HomeSectionId }) {
   const { strings } = useLocalisation();
   const { fontScale } = useWindowDimensions();
   const songs = id === "most-played" || id === "favorites";
-  const artists = id === "most-played-artists";
+  const artists = id === "most-played-artists" || id === "in-your-orbit";
   return (
     <TitledSection
       title={homeSectionTitle(id, strings)}

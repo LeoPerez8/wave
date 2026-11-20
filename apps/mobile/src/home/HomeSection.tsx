@@ -54,6 +54,7 @@ import {
   type MagicQueueSection,
 } from "./magicQueueSection";
 import { useHomeArrangement } from "./homeArrangement";
+import { useInYourOrbit } from "./inYourOrbit";
 import { useMostPlayedOfAllTime } from "./mostPlayedOfAllTime";
 
 import { AlbumShelf, ArtistShelf, MostPlayedRows, SongRows } from "./HomeSections";
@@ -413,12 +414,29 @@ function MostPlayedArtists({ title }: SectionProps) {
 }
 
 /**
+ * In your orbit: the artists played most in the last 14 days, as circles in
+ * one row. A tap opens the artist's page, the Library's or the online one by
+ * name (`PlayedArtistCard`).
+ */
+function InYourOrbit({ title }: SectionProps) {
+  const artists = useInYourOrbit();
+  if (artists === undefined) return <HomeSectionSkeleton id="in-your-orbit" />;
+  if (artists.length === 0) return null;
+  return (
+    <TitledSection title={title}>
+      <ArtistShelf artists={artists} />
+    </TitledSection>
+  );
+}
+
+/**
  * How each section of Core's catalogue (`HOME_SECTIONS`) is drawn: nothing
  * when it has nothing to show. A section added to the catalogue needs its
  * entry here (the type insists).
  */
 const SECTIONS: Record<HomeSectionId, ComponentType<SectionProps>> = {
   discover: Discover,
+  "in-your-orbit": InYourOrbit,
   "new-releases": NewReleases,
   "upcoming-shows": UpcomingShows,
   "recently-added": ({ home, title }) =>

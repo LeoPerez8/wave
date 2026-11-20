@@ -5,6 +5,7 @@ export const homeEn = {
   /** Each section's title, in sentence case as Home heads it (followed artists' have their own). */
   sections: {
     discover: "Discover",
+    "in-your-orbit": "In your orbit",
     "recently-added": "Recently added",
     "recently-played": "Recently played",
     "most-played": "Most played",
