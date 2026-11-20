@@ -19,9 +19,15 @@ import { Account } from "./account/accountLayer.ts";
 import type { Page } from "../shared/bridge.ts";
 import { BROWSE_KINDS, type BrowseScope } from "../shared/browse.ts";
 import { browseLetter } from "./library/browse.ts";
+import { toggleBrowseSort } from "./library/browseSort.ts";
 import { readArtwork } from "./library/artwork.ts";
 import { appearance, preference, savePreference } from "./preferences.ts";
-import { SEARCH_ONLINE_SETTING, readSearchOnline, writeSearchOnline } from "@wave/core";
+import {
+  SEARCH_ONLINE_SETTING,
+  libraryTableSortsFor,
+  readSearchOnline,
+  writeSearchOnline,
+} from "@wave/core";
 import {
   MAX_TARGET_IDS,
   SONG_RUN_ACTIONS,
@@ -484,6 +490,12 @@ const createHandlers = (
             return browseLetter(yield* Database, scope, letter);
           })
         : refuse("library.letter", "invalid letter or scope"),
+    "library.sortBy": ([kind, key]) =>
+      typeof kind === "string" &&
+      typeof key === "string" &&
+      libraryTableSortsFor(kind).some((sort) => sort.key === key)
+        ? Effect.map(Database, (db) => toggleBrowseSort(db, kind, key))
+        : refuse("library.sortBy", "sort is not offered for this list"),
     "library.counts": () =>
       Effect.gen(function* () {
         return libraryCounts(yield* Database);
