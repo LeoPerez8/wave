@@ -98,6 +98,7 @@ test("the page has no Node and only the typed bridge", async () => {
       "wave.library.exclude",
       "wave.library.removeRoot",
       "wave.library.include",
+      "wave.library.sortBy",
       "wave.songs.states",
       "wave.songs.actions",
       "wave.songs.run",
@@ -207,6 +208,10 @@ test("the page has no Node and only the typed bridge", async () => {
       "wave.ytAccount.cancelSignIn",
       "wave.ytAccount.signOut",
       "wave.ytAccount.playlists",
+      "wave.stats.overview",
+      "wave.stats.ranking",
+      "wave.stats.play",
+      "wave.stats.open",
     ],
   });
 });

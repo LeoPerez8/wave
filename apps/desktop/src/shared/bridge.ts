@@ -11,7 +11,7 @@ import type {
   QueueRow,
 } from "./playerView.ts";
 import type { WindowSettings } from "./windowSettings.ts";
-import type { DatedRelease, LanguageChoice } from "@wave/core";
+import type { DatedRelease, LanguageChoice, SongSortKey } from "@wave/core";
 
 import type { LanguageView } from "./language.ts";
 import type { LibraryCounts } from "@wave/client/db/counts";
@@ -20,7 +20,7 @@ import type { SongState } from "./songState.ts";
 import type { PlaybackSettings } from "./playbackSettings.ts";
 import type { SongTags } from "./tags.ts";
 import type { DesktopFolder, DesktopSong, ScanStatus } from "./library.ts";
-import type { BrowseScope, BrowsePage, BrowseRow } from "./browse.ts";
+import type { BrowseKind, BrowseScope, BrowsePage, BrowseRow } from "./browse.ts";
 import type { YtSearchPage, YtStatus } from "./yt.ts";
 import type { SearchOnline } from "@wave/core";
 import type {
@@ -300,9 +300,13 @@ export interface BridgeContract
   };
   readonly "library.letter": {
     readonly args: readonly [scope: BrowseScope, letter: string];
-    readonly result: number;
+    readonly result: number | null;
   };
   readonly "library.counts": { readonly args: readonly []; readonly result: LibraryCounts };
+  readonly "library.sortBy": {
+    readonly args: readonly [kind: BrowseKind, key: SongSortKey];
+    readonly result: void;
+  };
   readonly "library.scanStatus": { readonly args: readonly []; readonly result: ScanStatus };
   readonly "library.refresh": { readonly args: readonly []; readonly result: void };
   readonly "library.songs": {
@@ -449,6 +453,7 @@ export const BRIDGE_CALLS = [
   "library.exclude",
   "library.removeRoot",
   "library.include",
+  "library.sortBy",
   "songs.states",
   "songs.actions",
   "songs.run",
@@ -593,7 +598,7 @@ export interface WaveBridge {
       large: boolean,
     ) => Promise<string | null>;
     readonly browse: (scope: BrowseScope, offset: number, limit: number) => Promise<BrowsePage>;
-    readonly letter: (scope: BrowseScope, letter: string) => Promise<number>;
+    readonly letter: (scope: BrowseScope, letter: string) => Promise<number | null>;
     readonly counts: () => Promise<LibraryCounts>;
     readonly scanStatus: () => Promise<ScanStatus>;
     readonly refresh: () => Promise<void>;
@@ -604,6 +609,7 @@ export interface WaveBridge {
     readonly exclude: () => Promise<void>;
     readonly removeRoot: (path: string) => Promise<void>;
     readonly include: (path: string) => Promise<void>;
+    readonly sortBy: (kind: BrowseKind, key: SongSortKey) => Promise<void>;
   };
   readonly songs: {
     /** Where each song's download is and whether its file failed to play; 200 songs at most. */
@@ -757,6 +763,7 @@ export const createBridge = (invoke: Invoke): WaveBridge => ({
     exclude: () => invoke("library.exclude"),
     removeRoot: (path) => invoke("library.removeRoot", path),
     include: (path) => invoke("library.include", path),
+    sortBy: (kind, key) => invoke("library.sortBy", kind, key),
   },
   songs: {
     states: (ids) => invoke("songs.states", ids),
