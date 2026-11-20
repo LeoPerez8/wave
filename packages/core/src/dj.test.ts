@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import { describe, test } from "node:test";
 
+import { catalogueOf } from "./localisation.ts";
 import {
   artistGraph,
   DJ_GRID_TILES,
@@ -10,6 +11,16 @@ import {
   djOpened,
   djReduce,
   djSelected,
+  startDjQueue,
+  DEFAULT_DJ_SETTINGS,
+  magicBatchRadios,
+  magicQueueLabel,
+  magicSessionSliders,
+  parseMagicSession,
+  completeMagicRadioBatch,
+  startStreamedMagicQueue,
+  ytTrackId,
+  type RankedRadioSong,
   djCanStart,
   djSeedTiles,
   djSelectable,
@@ -172,7 +183,8 @@ describe("DJ's selection", () => {
   test("a 31st tile can't be selected, and unselecting one frees its place", () => {
     const tiles = artistTiles(32);
     let state = djOpened(tiles);
-    for (const tile of tiles.slice(0, 30)) state = djReduce(state, { type: "toggle", key: tile.key });
+    for (const tile of tiles.slice(0, 30))
+      state = djReduce(state, { type: "toggle", key: tile.key });
     assert.equal(state.selected.length, DJ_MAX_SELECTED);
     assert.equal(DJ_MAX_SELECTED, 30);
     assert.equal(djSelectable(state, tiles[30]!.key), false);
@@ -215,5 +227,129 @@ describe("DJ's selection", () => {
       djSeedTiles(state).map((tile) => tile.name),
       ["Artist 2", "Artist 0"],
     );
+  });
+});
+
+/** A ranked radio song by [artist]. */
+const rankedSong = (videoId: string, artist: string): RankedRadioSong => ({
+  trackId: ytTrackId(videoId),
+  artists: [magicArtistKey(artist)],
+  genre: null,
+  style: null,
+  source: "stream",
+  song: {
+    videoId,
+    title: `Song ${videoId}`,
+    artists: [artist],
+    album: null,
+    albumId: null,
+    durationMs: 200_000,
+    artworkUrl: null,
+    explicit: false,
+  },
+  radio: { id: "artist:artist 0", position: 0 },
+  score: 10,
+});
+
+describe("a Magic Queue with a DJ seed", () => {
+  const tiles = artistTiles(5);
+  const started = () => startDjQueue(tiles, { id: "dj1" })!;
+
+  test("starts with no song played, at DJ's default ranking choices", () => {
+    const session = started();
+    assert.deepEqual(session.seed, { kind: "dj", id: "dj1", title: "DJ" });
+    assert.deepEqual(session.used, []);
+    assert.equal(session.batches, 0);
+    assert.equal(session.ytShare, 0.6);
+    assert.deepEqual(session.dj, DEFAULT_DJ_SETTINGS);
+    assert.deepEqual(DEFAULT_DJ_SETTINGS, {
+      variety: "medium",
+      discovery: "blend",
+      popularity: "balanced",
+      newReleases: false,
+    });
+    assert.equal(session.faithful, undefined);
+  });
+
+  test("needs a selected tile", () => {
+    assert.equal(startDjQueue([], { id: "dj1" }), null);
+  });
+
+  test("each batch reads the radios of up to 3 different selected artists", () => {
+    const { session, seeds } = magicBatchRadios(started(), () => 0);
+    assert.equal(seeds.length, 3);
+    assert.equal(new Set(seeds.map((seed) => seed.artists[0])).size, 3);
+    for (const seed of seeds) {
+      assert.equal(seed.kind, "artist");
+      assert.ok(tiles.some((tile) => tile.name === seed.title && seed.artists[0] === tile.name));
+    }
+    // The draw is saved with the session: asked again for the same batch, it stands.
+    assert.deepEqual(magicBatchRadios(session, () => 0.9).seeds, seeds);
+    assert.deepEqual(parseMagicSession(JSON.parse(JSON.stringify(session))), session);
+  });
+
+  test("the next batch reads the artists the last one left out", () => {
+    const first = magicBatchRadios(started(), () => 0);
+    const second = magicBatchRadios({ ...first.session, batches: 1 }, () => 0);
+    const before = new Set(first.seeds.map((seed) => seed.id));
+    const fresh = second.seeds.filter((seed) => !before.has(seed.id));
+    assert.equal(second.seeds.length, 3);
+    assert.equal(fresh.length, 2);
+  });
+
+  test("a single selected artist's radio is every batch's", () => {
+    const session = startDjQueue(tiles.slice(0, 1), { id: "dj1" })!;
+    const first = magicBatchRadios(session, () => 0);
+    assert.deepEqual(
+      first.seeds.map((seed) => seed.title),
+      ["Artist 0"],
+    );
+    assert.deepEqual(
+      magicBatchRadios({ ...first.session, batches: 1 }, () => 0).seeds.map((seed) => seed.title),
+      ["Artist 0"],
+    );
+  });
+
+  test("the most played selected artists are drawn most often", () => {
+    const session = startDjQueue(tiles, {
+      id: "dj1",
+      played: [{ id: 4, name: "ARTIST 4", countedPlays: 400 }],
+    })!;
+    let leading = 0;
+    for (let draw = 0; draw < 50; draw++) {
+      const random = () => (draw + 0.5) / 50;
+      if (magicBatchRadios(session, random).seeds[0]!.title === "Artist 4") leading += 1;
+    }
+    assert.ok(leading > 25, `Artist 4 led ${leading} of 50 draws`);
+  });
+
+  test("survives a restart with its seed and its ranking choices", () => {
+    const session = started();
+    const read = parseMagicSession(JSON.parse(JSON.stringify(session)));
+    assert.deepEqual(read, session);
+    assert.equal(read!.seed.kind, "dj");
+  });
+
+  test("Up Next says it came from DJ", () => {
+    assert.equal(magicQueueLabel(started()), "Magic Queue · from DJ");
+    assert.equal(magicQueueLabel(started(), catalogueOf("pt-BR")), "Fila Mágica · de DJ");
+  });
+
+  test("its first batch is the whole queue: 10 songs, none played before it", () => {
+    const candidates = Array.from({ length: 14 }, (_, at) =>
+      rankedSong(`v${at}`, `Artist ${at % 5}`),
+    );
+    const batch = completeMagicRadioBatch(started(), candidates, []);
+    assert.equal(batch.trackIds.length, 10);
+    assert.equal(batch.trackIds[0], ytTrackId("v0"));
+    assert.equal(batch.session.batches, 1);
+    assert.equal(completeMagicRadioBatch(batch.session, candidates, []).trackIds.length, 4);
+  });
+
+  test("ranks at its own choices, whatever Discover's sliders say", () => {
+    const discover = { faithfulness: 1, popularity: 5 } as const;
+    assert.deepEqual(magicSessionSliders(started(), discover), { faithfulness: 3, popularity: 3 });
+    const ordinary = startStreamedMagicQueue(rankedSong("v1", "Artist 1").song!, { id: "m1" });
+    assert.deepEqual(magicSessionSliders(ordinary.session, discover), discover);
   });
 });

@@ -6,6 +6,7 @@ import { importsEn } from "./catalogue/importsEn.ts";
 import { homeEn } from "./catalogue/homeEn.ts";
 import { arrangementEn } from "./catalogue/arrangementEn.ts";
 import { discoverEn } from "./catalogue/discoverEn.ts";
+import { djEn } from "./catalogue/djEn.ts";
 import { statsEn } from "./catalogue/statsEn.ts";
 import { recapEn } from "./catalogue/recapEn.ts";
 import { listeningHistoryEn } from "./catalogue/listeningHistoryEn.ts";
@@ -178,6 +179,7 @@ export const en = {
   home: homeEn,
   arrangement: arrangementEn,
   discover: discoverEn,
+  dj: djEn,
   stats: statsEn,
   recap: recapEn,
   listeningHistory: listeningHistoryEn,

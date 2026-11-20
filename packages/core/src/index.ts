@@ -2878,5 +2878,14 @@ export {
   djSeedTiles,
   djSelectable,
   djSelected,
+  startDjQueue,
 } from "./dj.ts";
+export {
+  DEFAULT_DJ_SETTINGS,
+  djMixSliders,
+  djNewMusicShare,
+  parseDjSettings,
+} from "./djSettings.ts";
+export type { DjDiscovery, DjPopularity, DjSettings, DjVariety } from "./djSettings.ts";
+export { magicSessionSliders } from "./magicQueue.ts";
 export type { DjAction, DjState, DjArtistTile, DjGridSources, DjTile, DjTileKey } from "./dj.ts";

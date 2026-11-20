@@ -6,6 +6,8 @@
 import type { PlayedSeedArtist } from "./artistMixes.ts";
 import { artistNeighbours, type ArtistGraph } from "./artistGraph.ts";
 import { catalogSeedKey } from "./candidateCatalog.ts";
+import { DEFAULT_DJ_SETTINGS, djNewMusicShare, type DjSettings } from "./djSettings.ts";
+import type { MagicSeedSong, MagicSession } from "./magicQueue.ts";
 import type { TasteProfile } from "./tasteProfile.ts";
 
 /** A tile as the grid tells tiles apart: its kind and what that kind compares by. */
@@ -28,9 +30,14 @@ export type DjTile = DjArtistTile;
  * The artist tile of [name], the Library's artist [libraryId] when it has
  * them; null for a name that isn't an artist's ("Various Artists").
  */
-export const djArtistTile = (name: string, libraryId: number | null = null): DjArtistTile | null => {
+export const djArtistTile = (
+  name: string,
+  libraryId: number | null = null,
+): DjArtistTile | null => {
   const key = catalogSeedKey(name);
-  return key === null ? null : { kind: "artist", key: `artist:${key}` as DjTileKey, name, libraryId };
+  return key === null
+    ? null
+    : { kind: "artist", key: `artist:${key}` as DjTileKey, name, libraryId };
 };
 
 /** What DJ's grid is built from, all of it already on the phone. */
@@ -144,4 +151,59 @@ export const djReduce = (state: DjState, action: DjAction): DjState => {
   if (!djSelectable(state, action.key) || !state.tiles.some((tile) => tile.key === action.key))
     return state;
   return { ...state, selected: [...state.selected, action.key] };
+};
+
+/** What a DJ seed is called; Up Next's label comes from the catalogue (`magicQueueLabel`). */
+const DJ_SEED_TITLE = "DJ";
+
+/** [tile] as a seed whose radio a batch may read: an artist tile reads that artist's radio. */
+const seedSongOf = (tile: DjTile, plays: number): MagicSeedSong => ({
+  id: tile.key,
+  title: tile.name,
+  artists: [tile.name],
+  durationMs: null,
+  kind: "artist",
+  plays,
+});
+
+/**
+ * Starts a Magic Queue from a DJ seed, the selected [tiles] (`djSeedTiles`):
+ * no seed song plays first, so the session has queued nothing and its first
+ * batch of 10 is its whole queue. Each batch reads the radios of up to 3 of
+ * the selected artists (`magicBatchRadios`), those with more counted plays
+ * in [played] most often. It ranks with [settings], DJ's own, and starts at
+ * their New music share. Null with no tile.
+ */
+export const startDjQueue = (
+  tiles: readonly DjTile[],
+  {
+    id,
+    played = [],
+    settings = DEFAULT_DJ_SETTINGS,
+  }: {
+    readonly id: string;
+    readonly played?: readonly PlayedSeedArtist[];
+    readonly settings?: DjSettings;
+  },
+): MagicSession | null => {
+  if (tiles.length === 0) return null;
+  const plays = new Map<string, number>();
+  for (const artist of played) {
+    const tile = djArtistTile(artist.name);
+    if (tile !== null) plays.set(tile.key, (plays.get(tile.key) ?? 0) + artist.countedPlays);
+  }
+  return {
+    id,
+    seed: { kind: "dj", id, title: DJ_SEED_TITLE },
+    dj: settings,
+    seedSongs: tiles.map((tile) => seedSongOf(tile, plays.get(tile.key) ?? 0)),
+    seedDraws: [],
+    used: [],
+    batches: 0,
+    ytShare: djNewMusicShare(settings),
+    radioArtists: tiles.map((tile) => tile.name),
+    seedProfile: null,
+    seedStyle: null,
+    seedVideoIds: [],
+  };
 };
