@@ -1,15 +1,12 @@
 import type { PlayedAlbum, PlayedArtist } from "@wave/client/db/playedEntities";
 import {
-  statsWindow,
   type ArtistStats as ArtistStatsLines,
   type Catalogue,
   type GenreFamily,
   type RecapGenre,
-  type MixedSong,
   type RecapPeriod,
   type RecapSlide,
   type StatsPeriod,
-  type YtAlbumSong,
 } from "@wave/core";
 import * as Context from "effect/Context";
 import * as Effect from "effect/Effect";
@@ -17,19 +14,13 @@ import * as Effect from "effect/Effect";
 import { lazyService } from "@/lib/lazyService";
 import type { RecapHistoryVersion } from "./recapAvailability";
 
-import type { LibraryStore, LibraryStoreError } from "@/library/LibraryStore";
-import type { SongRow } from "@wave/client";
+import type { LibraryStoreError } from "@/library/LibraryStore";
+import type { Ranked, StatsSong } from "@wave/client/db/statsQueries";
 
 import { make } from "./statsLive";
 
-/** A ranked entity with its counted plays in the period. */
-export interface Ranked<A> {
-  readonly item: A;
-  readonly countedPlays: number;
-}
-
-/** A song in Stats' song ranking: a Library song, or a streamed one the Library hasn't. */
-export type StatsSong = MixedSong<YtAlbumSong, SongRow>;
+export type { Ranked, StatsSong } from "@wave/client/db/statsQueries";
+export { topAlbumsAndArtists } from "@wave/client/db/statsQueries";
 
 /** An artist page's stats block, its most played songs loaded. */
 export type ArtistStats =
@@ -111,31 +102,6 @@ export class Stats extends Context.Service<
     readonly recap: (period: RecapPeriod) => Effect.Effect<LoadedRecap | null, LibraryStoreError>;
   }
 >()("@wave/mobile/stats/Stats") {}
-
-/** The albums and the artists played most in a period, ranked from one read. */
-export interface TopAlbumsAndArtists {
-  readonly albums: readonly Ranked<PlayedAlbum>[];
-  readonly artists: readonly Ranked<PlayedArtist>[];
-}
-
-/**
- * The top [albumLimit] albums and [artistLimit] artists of `period`, as
- * Stats' `topAlbums` and `topArtists` rank them, from one read of the
- * credited totals: Home's Most played albums and artists, which show together.
- */
-export const topAlbumsAndArtists = (
-  store: LibraryStore["Service"],
-  period: StatsPeriod,
-  albumLimit: number,
-  artistLimit: number,
-): Effect.Effect<TopAlbumsAndArtists, LibraryStoreError> =>
-  Effect.map(
-    Effect.suspend(() => store.playedEntityTotals(statsWindow(period, Date.now()))),
-    (totals) => ({
-      albums: totals.albums.slice(0, albumLimit),
-      artists: totals.artists.slice(0, artistLimit),
-    }),
-  );
 
 /** Built on first use (`lazyService`): the launch never reads Stats. */
 export const layer = lazyService(Stats, () => make);
