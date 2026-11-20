@@ -952,6 +952,7 @@ export {
   SPOTIFY_SIGN_IN_FAILURE_LINES,
   spotifySignInFailureLines,
   spotifyAccountView,
+  readSpotifyWebProfile,
   stepSpotifyAccount,
 } from "./spotifyAccount.ts";
 export type {

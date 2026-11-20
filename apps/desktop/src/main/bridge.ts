@@ -45,6 +45,7 @@ import { DesktopLinks } from "./links/layer.ts";
 import { linkHandlers } from "./links/handlers.ts";
 import { artistPageHandlers } from "./artistPageHandlers.ts";
 import { YtAccount } from "./yt/ytAccountLayer.ts";
+import { SpotifyAccount } from "./spotify/spotifyAccountLayer.ts";
 import { DesktopPlaylists } from "./library/playlists.ts";
 import { playlistHandlers } from "./playlistHandlers.ts";
 import { searchLibrary } from "./library/search.ts";
@@ -133,7 +134,8 @@ export type BridgeServices =
   | DesktopPlaylists
   | DesktopLinks
   | HomeFollow
-  | YtAccount;
+  | YtAccount
+  | SpotifyAccount;
 
 const refuse = (call: BridgeCall, why: string) => Effect.fail(new Error(`Refused ${call}: ${why}`));
 
@@ -245,6 +247,19 @@ const ytAccountCall = <A>(run: (account: YtAccount["Service"]) => A | Promise<A>
     const account = yield* YtAccount;
     return yield* Effect.tryPromise({ try: async () => run(account), catch: (error) => error });
   });
+
+const spotifyAccountCall =
+  <A>(call: BridgeCall, run: (account: SpotifyAccount["Service"]) => A | Promise<A>) =>
+  (args: readonly unknown[]) =>
+    args.length === 0
+      ? Effect.gen(function* () {
+          const account = yield* SpotifyAccount;
+          return yield* Effect.tryPromise({
+            try: async () => run(account),
+            catch: () => new Error("Spotify account operation failed"),
+          });
+        })
+      : refuse(call, "expected no arguments");
 
 /** What each call does; `args` come from the window and are checked here before use. */
 type Handlers = {
@@ -618,6 +633,14 @@ const createHandlers = (
       Effect.gen(function* () {
         clearRecentSearches(yield* Database);
       }),
+    "spotifyAccount.view": spotifyAccountCall("spotifyAccount.view", (a) => a.view()),
+    "spotifyAccount.signIn": spotifyAccountCall("spotifyAccount.signIn", (a) => a.signIn()),
+    "spotifyAccount.cancelSignIn": spotifyAccountCall("spotifyAccount.cancelSignIn", (a) =>
+      a.cancelSignIn(),
+    ),
+    "spotifyAccount.signOut": spotifyAccountCall("spotifyAccount.signOut", (a) => a.signOut()),
+    "spotifyAccount.check": spotifyAccountCall("spotifyAccount.check", (a) => a.check()),
+    "spotifyAccount.photo": spotifyAccountCall("spotifyAccount.photo", (a) => a.photo()),
   };
 };
 
