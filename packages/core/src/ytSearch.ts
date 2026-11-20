@@ -1,6 +1,7 @@
 /**
- * What Search has asked YouTube Music: the songs, artists and albums it found
- * for what's typed, which join the Library's results (the integrated view).
+ * What Search has asked YouTube Music: the songs, artists, albums and
+ * community playlists it found for what's typed, which join the Library's
+ * results (the integrated view).
  * The Library | Online toggle at the end of the search field's row picks it.
  * Typing alone asks only when the Library has nothing for the query (and
  * Library wasn't picked); once Online is picked the view follows the query
@@ -34,14 +35,31 @@ export type YtQuietReason = "offline" | "failed";
  */
 export type YtAskedBy = "user" | "auto";
 
-/** What YT Music found for a query: its songs, artists and albums, each in its order. */
+/**
+ * A community playlist (docs/spec.md, Language) as YouTube Music's search
+ * lists it: a playlist one of its users made.
+ */
+export interface YtCommunityPlaylist {
+  /** The playlist's id, without the `VL` its page adds. */
+  readonly playlistId: string;
+  readonly title: string;
+  /** Who made it, or null when YouTube Music doesn't say. */
+  readonly author: string | null;
+  readonly artworkUrl: string | null;
+}
+
+/**
+ * What YT Music found for a query: its songs, artists, albums and community
+ * playlists, each in its order.
+ */
 export interface YtSearchAnswer<S extends YtSong = YtSong> {
   readonly songs: readonly S[];
   readonly artists: readonly YtArtistCandidate[];
   readonly albums: readonly YtArtistAlbum[];
+  readonly playlists: readonly YtCommunityPlaylist[];
 }
 
-const NO_ANSWER: YtSearchAnswer<never> = { songs: [], artists: [], albums: [] };
+const NO_ANSWER: YtSearchAnswer<never> = { songs: [], artists: [], albums: [], playlists: [] };
 
 /** YT Music's answer to [query], kept while Library shows, for Online to show again. */
 export type YtKeptAnswer<S extends YtSong = YtSong> = {
@@ -114,12 +132,14 @@ export type YtSectionEvent<S extends YtSong = YtSong> =
   /**
    * YT Music answered [query]. [videos] is its Videos search, asked only when
    * `ytSearchAsksVideos` says so; its matching official music videos join the songs.
+   * [playlists] is its Community playlists search, where the caller asks it.
    */
   | ({
       readonly type: "found";
       readonly query: string;
       readonly videos?: readonly S[] | undefined;
-    } & YtSearchAnswer<S>)
+      readonly playlists?: readonly YtCommunityPlaylist[] | undefined;
+    } & Omit<YtSearchAnswer<S>, "playlists">)
   | { readonly type: "failed"; readonly query: string; readonly reason: YtQuietReason };
 
 export const YT_SECTION_HIDDEN: { readonly status: "hidden" } = { status: "hidden" };
@@ -303,6 +323,7 @@ export const ytSectionView = <S extends YtSong>(
         songs: section.songs.filter((song) => !library.hasSong(song)),
         artists: section.artists.filter((artist) => !library.hasArtist(artist)),
         albums: section.albums.filter((album) => !library.hasAlbum(album)),
+        playlists: section.playlists,
       };
       const top = ytTop(section.query, shown);
       const note = !isEmpty(shown) ? null : isEmpty(section) ? "noMatches" : "allInLibrary";
@@ -312,7 +333,10 @@ export const ytSectionView = <S extends YtSong>(
 };
 
 const isEmpty = (answer: YtSearchAnswer<YtSong>): boolean =>
-  answer.songs.length === 0 && answer.artists.length === 0 && answer.albums.length === 0;
+  answer.songs.length === 0 &&
+  answer.artists.length === 0 &&
+  answer.albums.length === 0 &&
+  answer.playlists.length === 0;
 
 /** Who asked YT Music, or null when it isn't asked (hidden, idle, or the Library's alone). */
 const askedBy = <S extends YtSong>(state: YtSection<S>): YtAskedBy | null =>
@@ -338,8 +362,8 @@ const pickOf = <S extends YtSong>(state: YtSection<S>): YtPick | null => {
 const keptOf = <S extends YtSong>(state: YtSection<S>): YtKeptAnswer<S> | null => {
   if (state.status === "offered") return state.kept;
   if (state.status !== "results") return null;
-  const { query, songs, artists, albums } = state;
-  return { query, songs, artists, albums };
+  const { query, songs, artists, albums, playlists } = state;
+  return { query, songs, artists, albums, playlists };
 };
 
 /** The Library's results for [query] alone; [picked] when Library is the user's pick. */
@@ -423,6 +447,7 @@ export const stepYtSection = <S extends YtSong>(
         songs: withVideos(event.query, event.songs, event.videos),
         artists: event.artists,
         albums: event.albums,
+        playlists: event.playlists ?? [],
         by: state.by,
       };
     case "failed":
