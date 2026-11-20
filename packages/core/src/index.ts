@@ -764,6 +764,7 @@ export { leavingSongEntry, songsLeaving } from "./songsLeaving.ts";
 export type { LeavingSong, LeavingTrack, SongsLeaving } from "./songsLeaving.ts";
 export { artistArtwork, artistInitial } from "./artistImage.ts";
 export type { ArtistAlbumLink } from "./artistImage.ts";
+export { isRecent, RECENT_WINDOW_DAYS, recentWindowStart } from "./recentWindow.ts";
 export { rowWindow, windowRows } from "./rowWindow.ts";
 export type { RowView, RowWindow } from "./rowWindow.ts";
 export {
