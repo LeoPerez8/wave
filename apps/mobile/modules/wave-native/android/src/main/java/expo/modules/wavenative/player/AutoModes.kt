@@ -34,8 +34,10 @@ data class AutoCommandRequest(val type: String, val payload: String)
  * commands (the player's own shuffle stays off): a tap is forwarded to JS,
  * whose queue engine toggles shuffle, or which toggles the playing song's star,
  * exactly as the app's buttons do, and JS reports the resulting
- * [PlaybackModes] back, which the buttons then show. Plain Kotlin, so it is
- * JVM-testable; [PlaybackService] turns it into Media3 commands and buttons.
+ * [PlaybackModes] back, which the buttons then show. The star doesn't wait
+ * for that: a tap flips it at once ([PlaybackModesState.pressStar]). Plain
+ * Kotlin, so it is JVM-testable; [PlaybackService] turns it into Media3
+ * commands and buttons.
  */
 object AutoModes {
   const val SHUFFLE_ACTION = "expo.modules.wavenative.AUTO_SHUFFLE"
@@ -85,14 +87,44 @@ class PlaybackModesState {
   var current = PlaybackModes()
     private set
 
-  /** Records [modes] and tells the listeners when they changed. */
-  fun publish(modes: PlaybackModes) {
-    if (modes == current) return
-    current = modes
-    listeners.toList().forEach { it(modes) }
+  /** The star the last press on Favorite asked for, while JS hasn't answered every press. */
+  private var pressed: Boolean? = null
+
+  /** Presses on Favorite JS hasn't answered yet. */
+  private var unanswered = 0
+
+  /** What the buttons show: [current], with a pressed star ahead of JS's answer. */
+  val shown: PlaybackModes
+    get() = pressed?.let { current.copy(starred = it) } ?: current
+
+  /** Records [modes] and tells the listeners when what the buttons show changed. */
+  fun publish(modes: PlaybackModes) = change { current = modes }
+
+  /** A press on Favorite: the star flips at once, before JS toggles and saves it. */
+  fun pressStar() = change {
+    pressed = !shown.starred
+    unanswered++
   }
 
-  /** Calls [listener] on every change; the returned function stops it. */
+  /**
+   * JS answered a press, or never did. Once it has answered them all the buttons show what
+   * JS reports again. It reports a toggled star before it answers, so a press that worked
+   * changes nothing here; one that failed, and a star whose write fails later, go back to
+   * the star JS holds.
+   */
+  fun starAnswered() = change {
+    if (unanswered > 0) unanswered--
+    if (unanswered == 0) pressed = null
+  }
+
+  private inline fun change(block: () -> Unit) {
+    val before = shown
+    block()
+    val after = shown
+    if (after != before) listeners.toList().forEach { it(after) }
+  }
+
+  /** Calls [listener] whenever what the buttons show changes; the returned function stops it. */
   fun listen(listener: (PlaybackModes) -> Unit): () -> Unit {
     listeners += listener
     return { listeners -= listener }
