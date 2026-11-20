@@ -56,8 +56,13 @@ test("Home lists local shelves and counted rankings in the phone's order", async
       "most-played-albums",
       "most-played-artists",
       "favorites",
+      "stats",
     ],
   );
+  assert.deepEqual(home.stats, {
+    library: { songs: 3, albums: 2, artists: 2 },
+    listening: { minutesListened: 0, plays: 3, songsListened: 2, lastPlayedAt: 400 },
+  });
   const rows = (id: string) => home.items.find((s) => s.id === id)!.rows.items;
   assert.deepEqual(
     rows("recently-added").map((r) => r.title),

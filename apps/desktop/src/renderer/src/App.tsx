@@ -44,6 +44,8 @@ import { applyLanguage, labels, text, useLanguage, tagTitle, artistName } from "
 import { LanguageSettings } from "./LanguageSettings.tsx";
 import { LyricsAndTagsSettings } from "./LyricsAndTagsSettings.tsx";
 import { Home } from "./Home.tsx";
+import { Stats } from "./Stats.tsx";
+import type { StatsRoute } from "../../shared/stats.ts";
 import { isYtRoute, YtPage, type YtRoute } from "./YtPages.tsx";
 import { AlbumArtistLink, ArtistPage, ArtistToggle, useArtistSection } from "./ArtistPage.tsx";
 import {
@@ -59,7 +61,9 @@ type Route =
   | { readonly kind: "settings" }
   | { readonly kind: "downloads" }
   | { readonly kind: "graveyard"; readonly id: number }
+  | StatsRoute
   | YtRoute;
+const defaultStats: StatsRoute = { kind: "stats", period: "month" };
 const sections = ["playlists", "artists", "albums", "songs", "genres", "favorites"] as const;
 /** YT Music's sidebar pages; Downloads comes with its ticket. */
 const ytPages = [
@@ -251,6 +255,7 @@ export function App() {
       route.kind === "settings" ||
       route.kind === "downloads" ||
       route.kind === "graveyard" ||
+      route.kind === "stats" ||
       isYtRoute(route)
         ? { kind: "songs" }
         : route,
@@ -466,10 +471,14 @@ export function App() {
   const title =
     route.kind === "graveyard"
       ? text.playlists.graveyard
-      : ((hero && tagTitle(hero.title, route.kind)) ??
-        (route.kind in labels
-          ? (labels[route.kind as keyof typeof labels] as string)
-          : labels.library));
+      : route.kind === "stats"
+        ? route.ranking === undefined
+          ? text.home.sections.stats
+          : text.stats.rankings[route.ranking]
+        : ((hero && tagTitle(hero.title, route.kind)) ??
+          (route.kind in labels
+            ? (labels[route.kind as keyof typeof labels] as string)
+            : labels.library));
   const playlistId = route.kind === "playlist" ? route.id : undefined;
   const scanning = scan?.status === "scanning";
   // A playlist's image is an edit none of the three counts, and its page shows it.
@@ -563,6 +572,16 @@ export function App() {
               <span>{labels[kind]}</span>
             </button>
           ))}
+          <button
+            className="nav-item"
+            aria-label={text.home.sections.stats}
+            title={text.home.sections.stats}
+            aria-current={route.kind === "stats" ? "page" : undefined}
+            onClick={() => go(defaultStats)}
+          >
+            <Icon name="stats" />
+            <span>{text.home.sections.stats}</span>
+          </button>
           {(ytMusic || (downloads?.rows ?? 0) > 0) && (
             <>
               <p className="nav-heading">{labels.ytMusic}</p>
@@ -932,11 +951,43 @@ export function App() {
             ytMusic={ytMusic}
             run={playback.run}
             go={go}
+            onStats={() => go(defaultStats)}
             onError={failed}
             notify={notify}
             onMenu={(row, at) =>
               actions.openMenu({ scope: { kind: "songs" }, ids: [row.id] }, row.title, at)
             }
+          />
+        ) : route.kind === "stats" ? (
+          <Stats
+            route={route}
+            revision={revision}
+            ytMusic={ytMusic}
+            onPeriod={(period) => {
+              if (period !== route.period) {
+                setHistory((previous) =>
+                  previous.map((entry, index) =>
+                    index === position ? { ...route, period } : entry,
+                  ),
+                );
+              }
+            }}
+            run={playback.run}
+            go={go}
+            onError={failed}
+            notify={notify}
+            onMenu={(row, at) => {
+              if (row.unavailable) return;
+              if (row.videoId === undefined) {
+                actions.openMenu({ scope: { kind: "songs" }, ids: [row.id] }, row.title, at);
+              } else {
+                actions.openItems(
+                  text.desktopLibrary.songMenu(row.title),
+                  streamed.items(row.videoId),
+                  at,
+                );
+              }
+            }}
           />
         ) : (
           <>

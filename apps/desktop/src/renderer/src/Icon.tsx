@@ -35,6 +35,7 @@ const paths: Record<string, string> = {
     "M3 6h10M3 11h10M3 16h7M18 3l1 3 3 1-3 1-1 3-1-3-3-1 3-1ZM17 14l.8 2.2 2.2.8-2.2.8L17 20l-.8-2.2-2.2-.8 2.2-.8Z",
   playlist: "M3 4h12M3 9h12M3 14h6M15 20V9l6-1M15 20c0 2.7-4 2.7-4 0s4-2.7 4 0",
   close: "M6 6l12 12M6 18 18 6",
+  stats: "M4 20h16M6 16v-4m6 4V5m6 11V9",
 };
 export function Icon({ name, size = 20 }: { readonly name: string; readonly size?: number }) {
   return (

@@ -120,13 +120,14 @@ export function VirtualTable({
   /** Selection mode's checked songs, while it is on. */
   readonly selection?: Selection | undefined;
   readonly onSelection?: (selection: Selection) => void;
-  /** A bounded Home preview uses these rows with the same table, focus and menus. */
+  /** A bounded ranking uses these rows with the same table, focus and menus. */
   readonly preview?: {
     readonly id: string;
     readonly label: string;
     readonly page: BrowsePage;
     readonly trailing: (row: BrowseRow) => string;
     readonly trailingHeading: string;
+    readonly ranked?: boolean;
   };
 }) {
   const viewport = useRef<HTMLDivElement>(null);
@@ -350,18 +351,21 @@ export function VirtualTable({
                   aria-selected={
                     selection === undefined ? selected === index : isChecked(selection, row.id)
                   }
-                  aria-disabled={songList && row.unavailable}
+                  aria-disabled={row.unavailable}
                   className={`table-row table-columns ${active === index ? "active-row" : ""} ${mark ? markClass(mark) : ""}`}
                   style={{ top: index * HEIGHT }}
                   onClick={() => {
                     setSelected(index);
                     setActive(index);
                     viewport.current!.parentElement!.focus();
-                    if (selection !== undefined) choose(row, index);
+                    if (selection !== undefined || preview?.ranked) choose(row, index);
                   }}
-                  onDoubleClick={() => selection === undefined && onOpen(row, index)}
+                  onDoubleClick={() =>
+                    selection === undefined && !preview?.ranked && onOpen(row, index)
+                  }
                 >
                   <div role="gridcell" className="title-cell">
+                    {preview?.ranked && <span className="stats-rank secondary">{index + 1}</span>}
                     {selection !== undefined && (
                       <span
                         className="row-check"
@@ -376,6 +380,7 @@ export function VirtualTable({
                       ) : (
                         <Artwork
                           hash={row.artworkHash}
+                          url={row.artworkUrl}
                           kind={
                             scope.kind === "artists"
                               ? "artist"
@@ -400,7 +405,11 @@ export function VirtualTable({
                     <span className="truncate">{tagTitle(row.title, scope.kind)}</span>
                   </div>
                   <div role="gridcell" className="truncate secondary">
-                    {songList ? artistName(row.artist) : labels.songCount(row.count)}
+                    {songList
+                      ? artistName(row.artist)
+                      : preview?.ranked && row.id === 0
+                        ? null
+                        : labels.songCount(row.count)}
                   </div>
                   {columns.third !== null && (
                     <div role="gridcell" className="album-column truncate secondary">
@@ -426,7 +435,7 @@ export function VirtualTable({
           </p>
         )}
       </div>
-      {scope.kind === "songs" && (
+      {scope.kind === "songs" && preview === undefined && (
         <nav className="letter-spine" aria-label={labels.jump}>
           {Array.from("ABCDEFGHIJKLMNOPQRSTUVWXYZ").map((letter) => (
             <button

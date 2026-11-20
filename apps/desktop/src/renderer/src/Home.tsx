@@ -1,4 +1,4 @@
-import { homeSectionTitle } from "@wave/core";
+import { homeSectionTitle, statsFacts } from "@wave/core";
 import { useEffect, useMemo, useState } from "react";
 import type { BrowseRow, BrowseScope } from "../../shared/browse.ts";
 import type { HomeSectionView, HomeView } from "../../shared/home.ts";
@@ -7,7 +7,7 @@ import { HomeNewReleases, HomeUpcomingShows, useHomeFollow } from "./HomeFollow.
 import { Shelf } from "./YtLists.tsx";
 import type { YtRoute } from "./YtPages.tsx";
 import { VirtualTable } from "./VirtualTable.tsx";
-import { text, labels, tagTitle, artistName } from "./text.ts";
+import { text, labels, tagTitle, artistName, language } from "./text.ts";
 import "./home.css";
 
 const SONGS: BrowseScope = { kind: "favorites" };
@@ -56,6 +56,7 @@ export function Home({
   ytMusic,
   run,
   go,
+  onStats,
   onError,
   onMenu,
   notify,
@@ -65,6 +66,7 @@ export function Home({
   readonly notify: (message: string) => void;
   readonly run: (action: Promise<unknown>) => void;
   readonly go: (scope: BrowseScope | YtRoute) => void;
+  readonly onStats: () => void;
   readonly onError: () => void;
   readonly onMenu: (row: BrowseRow, at: { readonly x: number; readonly y: number }) => void;
 }) {
@@ -134,6 +136,8 @@ export function Home({
               <HomeNewReleases key={section.id} cards={follow.releases} go={go} notify={notify} />
             ) : section.id === "upcoming-shows" ? (
               <HomeUpcomingShows key={section.id} cards={follow.shows} />
+            ) : section.id === "stats" ? (
+              view.stats && <HomeStats key={section.id} stats={view.stats} onOpen={onStats} />
             ) : (
               <div key={section.id} data-section={section.id}>
                 {section.id === "most-played" ? (
@@ -186,5 +190,30 @@ export function Home({
         </>
       )}
     </div>
+  );
+}
+
+function HomeStats({
+  stats,
+  onOpen,
+}: {
+  readonly stats: NonNullable<HomeView["stats"]>;
+  readonly onOpen: () => void;
+}) {
+  return (
+    <section className="home-stats" data-section="stats" aria-labelledby="home-stats-title">
+      <div className="stats-section-heading">
+        <h2 id="home-stats-title">{text.home.sections.stats}</h2>
+        <button onClick={onOpen}>{text.home.seeAll}</button>
+      </div>
+      <dl>
+        {statsFacts(stats.library, stats.listening, language).map(({ label, value }) => (
+          <div key={label}>
+            <dt>{label}</dt>
+            <dd className="secondary">{value}</dd>
+          </div>
+        ))}
+      </dl>
+    </section>
   );
 }
