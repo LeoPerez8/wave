@@ -2,7 +2,7 @@
 import assert from "node:assert/strict";
 import { describe, test } from "node:test";
 
-import type { GeniusLyricsHit, SearchResults } from "@wave/core";
+import type { GeniusLyricsHit, SearchResults, YtArtistCandidate, YtSectionView } from "@wave/core";
 import type { SongRow } from "@wave/client";
 import type { NativeYtSong } from "@/native/waveYtMusic";
 import type { LocalLyricsHit } from "./lyricsSearch.ts";
@@ -456,5 +456,84 @@ describe("Search lyric section", () => {
       deduplicated.some((row) => row.type === "lyric"),
       false,
     );
+  });
+});
+
+describe("Search groups", () => {
+  const ytSong = (videoId: string, title: string, artist: string): NativeYtSong => ({
+    videoId,
+    title,
+    artists: [artist],
+    album: null,
+    albumId: null,
+    durationMs: 200_000,
+    artworkUrl: null,
+    explicit: false,
+  });
+  const ytArtist = (name: string): YtArtistCandidate => ({
+    name,
+    browseId: `UC-${name}`,
+    audience: null,
+  });
+  const online = (
+    songs: readonly NativeYtSong[],
+    artists: readonly YtArtistCandidate[],
+  ): YtSectionView<NativeYtSong> => ({
+    songs,
+    artists,
+    albums: [],
+    top: songs[0] === undefined ? null : { kind: "song", song: songs[0] },
+    note: null,
+    loading: false,
+    integrated: true,
+  });
+  const placedOf = (songs: readonly NativeYtSong[]): PlacedYtSongs => ({
+    songs: songs.map((song) => ({ source: "stream", song })),
+    rowOf: new Map(songs.map((song, index) => [song.videoId, index])),
+  });
+  const headings = (rows: ReturnType<typeof resultRows>): string[] =>
+    rows.flatMap((row) => (row.type === "heading" ? [row.key] : []));
+
+  const songs = [
+    ytSong("a", "Faixa Amarela", "Zeca Pagodinho"),
+    ytSong("b", "Faixa Amarela (Ao Vivo)", "Zeca Pagodinho"),
+  ];
+  const artists = [ytArtist("Zeca Pagodinho"), ytArtist("Grupo Revelação")];
+
+  test('"faixa amarela" online: the songs with that title come before artists not named so', () => {
+    const rows = resultRows(
+      empty,
+      new Set(),
+      online(songs, artists),
+      placedOf(songs),
+      null,
+      "en",
+      [],
+      false,
+      "faixa amarela",
+    );
+    assert.deepEqual(headings(rows), ["heading:top", "heading:song", "heading:artist"]);
+  });
+
+  test("an online artist named as the query comes before the Library's songs that only contain it", () => {
+    const song = { id: 1, title: "Zeca Pagodinho Medley", artist: "Various", album: "Samba" };
+    const hit: SearchHit = {
+      kind: "song",
+      name: song.title,
+      also: [song.artist, song.album],
+      song: song as SongRow,
+    };
+    const rows = resultRows(
+      { top: hit, groups: [{ kind: "song", items: [hit], total: 1 }] },
+      new Set(),
+      online([], artists),
+      noPlaced,
+      null,
+      "en",
+      [],
+      false,
+      "zeca pagodinho",
+    );
+    assert.deepEqual(headings(rows), ["heading:top", "heading:artist", "heading:song"]);
   });
 });
