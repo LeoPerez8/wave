@@ -1,5 +1,6 @@
 /** Shared radio ranking for Magic Queue, mixes and playlist suggestions. */
 import { artistNeighbourhood, type ArtistGraph } from "./artistGraph.ts";
+import { NO_DISLIKES, withoutDisliked, type DislikedSongs } from "./dislikes.ts";
 import {
   GENRE_AFFINITY_THRESHOLD,
   genreAffinity,
@@ -34,6 +35,11 @@ export interface RadioRankingSources {
   readonly library?: readonly MagicSong[];
   /** Resolve radio recordings with libraryFinder; return null for a song without a local file. */
   readonly inLibrary?: (song: YtAlbumSong) => MagicSong | null;
+  /**
+   * The disliked songs (`dislikes.ts`): none is ranked, whether the radio or
+   * the Library brought it. Every caller that picks songs on its own passes them.
+   */
+  readonly disliked?: DislikedSongs;
 }
 export interface RadioRankingOptions {
   /** A continued queue without online radios also weighs the rest of the Library. */
@@ -141,7 +147,14 @@ export const rankRadioSongs = (
     }
   }
   // oxlint-disable-next-line unicorn/no-array-sort -- fresh array; Hermes lacks toSorted
-  const sorted = [...ranked.values()].sort((a, b) => b.score - a.score);
+  const sorted = withoutDisliked(
+    [...ranked.values()].sort((a, b) => b.score - a.score),
+    sources.disliked ?? NO_DISLIKES,
+    (candidate) => ({
+      id: candidate.source === "library" ? candidate.trackId : null,
+      videoId: candidate.song?.videoId,
+    }),
+  );
   const recordings = new Map<string, YtAlbumSong[]>();
   return sorted.filter((candidate) => {
     if (candidate.song === null) return true;

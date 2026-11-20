@@ -26,6 +26,7 @@ import { ofGenreFamily } from "./genreMixes.ts";
 import { identityKey } from "./library.ts";
 import type { MixKnownSongs } from "./mixKnownSongs.ts";
 import type { MixedSong, YtAlbumSong } from "./ytDiscover.ts";
+import { NO_DISLIKES, withoutDisliked, type DislikedSongs, type SongIdentity } from "./dislikes.ts";
 
 /** How much of each mix is new: 1 = 20% new songs, up to 5 = all new. */
 export type DiscoverMixLevel = 1 | 2 | 3 | 4 | 5;
@@ -61,6 +62,10 @@ export interface DiscoverMixBlend {
   readonly keep?: (song: DiscoverMixSong) => boolean;
 }
 
+/** A mix's song as dislikes tell songs apart: the Library's Track, or the video that streams. */
+const discoverMixSongIdentity = (song: DiscoverMixSong): SongIdentity =>
+  song.source === "stream" ? { videoId: song.song.videoId } : { id: song.track.id };
+
 /** What a mix may play of its stored songs. */
 export interface DiscoverMixKeep {
   /** Don't play explicit is on: explicit songs (new or the Library's) are left out. */
@@ -77,18 +82,24 @@ export interface DiscoverMixKeep {
    * left out. Absent: none.
    */
   readonly knownVideos?: ReadonlySet<string>;
+  /**
+   * The disliked songs (`dislikes.ts`): a mix plays none, new or familiar,
+   * so one disliked since the build leaves at once. Absent: none.
+   */
+  readonly disliked?: DislikedSongs;
 }
 
 /**
- * The songs a mix keeps (`DiscoverMixBlend.keep`): Library songs still in
- * the Library, new songs the owner hasn't streamed or put in a playlist
- * since the build ([knownVideos]), and, while Don't play explicit is on,
+ * The songs a mix keeps (`DiscoverMixBlend.keep`): none the owner disliked
+ * ([disliked]), Library songs still in the Library, new songs the owner
+ * hasn't streamed or put in a playlist since the build ([knownVideos]), and, while Don't play explicit is on,
  * clean ones alone (unknown counts as clean). Turning the switch over
  * re-blends the saved mixes; nothing is built again.
  */
 export const discoverMixKeep =
-  ({ dontPlayExplicit, library, knownVideos }: DiscoverMixKeep) =>
+  ({ dontPlayExplicit, library, knownVideos, disliked = NO_DISLIKES }: DiscoverMixKeep) =>
   (song: DiscoverMixSong): boolean => {
+    if (withoutDisliked([song], disliked, discoverMixSongIdentity).length === 0) return false;
     if (song.source === "stream") {
       if (song.familiar !== true && knownVideos?.has(song.song.videoId) === true) return false;
       return !(dontPlayExplicit && isExplicit(song.song.explicit));
