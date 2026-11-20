@@ -1,4 +1,5 @@
 import type { Page } from "./bridge.ts";
+import type { SongSort } from "@wave/core";
 
 export const MAX_ROW_IDS_PAGE = 1000;
 
@@ -33,6 +34,8 @@ export interface BrowseRow {
   readonly genre: string | null;
   readonly trackNumber: number | null;
   readonly favorite: boolean;
+  readonly addedAt?: number;
+  readonly starredAt?: number;
   readonly path: string | null;
   readonly unavailable: boolean;
   /**
@@ -51,4 +54,5 @@ export interface BrowseRow {
 }
 export interface BrowsePage extends Page<BrowseRow> {
   readonly hero?: BrowseRow;
+  readonly sort?: SongSort;
 }
