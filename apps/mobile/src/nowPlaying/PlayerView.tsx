@@ -2,7 +2,7 @@ import { playerNotice } from "@wave/core";
 import { useLocalisation } from "@/localisation/localisation";
 import { beginTiming, activeTiming, noteTimingLinkFailure } from "@/lib/timing";
 import { IconMusic, IconStar, IconStarFilled } from "@tabler/icons-react-native";
-import { artistLink, createStarPop, parseTrackId } from "@wave/core";
+import { artistLink, createStarPop, parseTrackId, playingStarSubject } from "@wave/core";
 import { Image } from "expo-image";
 import { useEffect, useLayoutEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
 import { Text, View } from "react-native";
@@ -42,7 +42,7 @@ import { MarqueeText, useMarqueeGroup, type MarqueeGroup } from "./Marquee";
 import {
   nowPlayingSongActions,
   songActionFailed,
-  usePlayingSongAnswer,
+  usePlayingStarAnswer,
   usePlayingSongTarget,
 } from "./playingSong";
 import {
@@ -216,8 +216,9 @@ function MetaLink({
 const starPop = createStarPop();
 
 /**
- * The star observes the shared answer; an early toggle acquires the actual
- * saved state. A star that fills here (a tap on the empty star, or the
+ * The star shows the song's stars as this phone holds them, on its first frame
+ * too (Core's `playingStarSubject`); an early toggle acquires the actual saved
+ * state. A star that fills here (a tap on the empty star, or the
  * cover's double-tap adding the song) asks for the star's pop.
  */
 function useNowPlayingStar(): {
@@ -229,12 +230,8 @@ function useNowPlayingStar(): {
   const trackId = useCurrentTrackId();
   const ytSong = usePlayingYtSong(trackId);
   const target = usePlayingSongTarget(trackId, ytSong);
-  const answer = usePlayingSongAnswer(target);
-  const favorite = useScopedSongStarred(
-    answer?.track?.id ?? null,
-    ytSong?.videoId ?? null,
-    answer ?? { favorite: false, pendingFavorite: false },
-  );
+  const subject = playingStarSubject(trackId, usePlayingStarAnswer(target));
+  const favorite = useScopedSongStarred(subject.track, subject.video, subject.saved);
   const star = (addOnly = false): void => {
     if (target === null) return;
     if (addOnly || !favorite) starPop.ask(target.trackId);
