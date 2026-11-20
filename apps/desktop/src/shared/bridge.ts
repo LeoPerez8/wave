@@ -56,6 +56,13 @@ import type {
   SongRunResult,
   SongTarget,
 } from "./songActions.ts";
+import type {
+  CollectionActionOptions,
+  CollectionMenu,
+  CollectionRunAction,
+  CollectionRunResult,
+  CollectionTarget,
+} from "./collectionActions.ts";
 import {
   LYRICS_AND_TAGS_CALLS,
   lyricsAndTagsBridge,
@@ -310,6 +317,18 @@ export interface BridgeContract
     readonly result: SongMenu;
   };
   /** Runs one of the entries main runs; Add to Playlist names the playlist. */
+  readonly "collections.actions": {
+    readonly args: readonly [target: CollectionTarget, options?: CollectionActionOptions];
+    readonly result: CollectionMenu;
+  };
+  readonly "collections.run": {
+    readonly args: readonly [
+      target: CollectionTarget,
+      action: CollectionRunAction,
+      playlistId?: number,
+    ];
+    readonly result: CollectionRunResult;
+  };
   readonly "songs.run": {
     readonly args: readonly [target: SongTarget, action: SongRunAction, playlistId?: number];
     readonly result: SongRunResult;
@@ -453,6 +472,8 @@ export const BRIDGE_CALLS = [
   "account.signOutEverywhere",
   "account.deleteAccount",
   "account.answerInvitation",
+  "collections.actions",
+  "collections.run",
   ...PLAYLIST_CALLS,
   ...LYRICS_AND_TAGS_CALLS,
   "search.library",
@@ -623,6 +644,17 @@ export interface WaveBridge {
     readonly answerInvitation: () => Promise<void>;
   };
   /** Playlists' edits, images, Graveyard and M3U import. */
+  readonly collections: {
+    readonly actions: (
+      target: CollectionTarget,
+      options?: CollectionActionOptions,
+    ) => Promise<CollectionMenu>;
+    readonly run: (
+      target: CollectionTarget,
+      action: CollectionRunAction,
+      playlistId?: number,
+    ) => Promise<CollectionRunResult>;
+  };
   readonly playlists: PlaylistBridge;
   /** Settings › Lyrics and tags. */
   readonly lyricsAndTags: LyricsAndTagsBridge;
@@ -746,6 +778,10 @@ export const createBridge = (invoke: Invoke): WaveBridge => ({
     signOutEverywhere: () => invoke("account.signOutEverywhere"),
     deleteAccount: () => invoke("account.deleteAccount"),
     answerInvitation: () => invoke("account.answerInvitation"),
+  },
+  collections: {
+    actions: (target, options) => invoke("collections.actions", target, options),
+    run: (target, action, playlistId) => invoke("collections.run", target, action, playlistId),
   },
   playlists: playlistBridge(invoke),
   lyricsAndTags: lyricsAndTagsBridge(invoke),

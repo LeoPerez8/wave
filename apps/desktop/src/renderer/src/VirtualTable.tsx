@@ -243,7 +243,7 @@ export function VirtualTable({
   /** Opens the menu of row [index], at [at] or under the row. */
   const menu = (index: number, at?: { readonly x: number; readonly y: number }) => {
     const row = get(index);
-    if (row === undefined || onMenu === undefined || !songList) return;
+    if (row === undefined || onMenu === undefined) return;
     const element = document.getElementById(rowId(index));
     const rect = element?.getBoundingClientRect();
     onMenu(row, at ?? { x: (rect?.left ?? 0) + 48, y: rect?.bottom ?? 0 });

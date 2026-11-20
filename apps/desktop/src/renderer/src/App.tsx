@@ -13,6 +13,7 @@ import {
 import type { AccountView } from "../../shared/account.ts";
 import type { YtAccountPanel } from "../../shared/ytAccount.ts";
 import type { BrowseRow, BrowseScope } from "../../shared/browse.ts";
+import type { CollectionTarget } from "../../shared/collectionActions.ts";
 import type { ScanStatus } from "../../shared/library.ts";
 import { PlayerBar, usePlayback } from "./PlayerBar.tsx";
 import { NowPlaying } from "./NowPlaying.tsx";
@@ -37,6 +38,8 @@ import { downloadPercent, useDownloads } from "./useDownloads.ts";
 import { useDesktopKeys } from "./keys.ts";
 import { ShortcutsSheet } from "./Shortcuts.tsx";
 import { SelectionBar, useSongActions, type Selection } from "./SongActions.tsx";
+import { collectionActions, CollectionSelectionBar } from "./CollectionActions.tsx";
+import { itemMenuEvents, type MenuPoint } from "./Menu.tsx";
 import { usePlaylistEdits } from "./Playlists.tsx";
 import { Graveyard } from "./Graveyard.tsx";
 import { applyLanguage, labels, text, useLanguage, tagTitle, artistName } from "./text.ts";
@@ -60,6 +63,12 @@ type Route =
   | { readonly kind: "graveyard"; readonly id: number }
   | YtRoute;
 const sections = ["playlists", "artists", "albums", "songs", "genres", "favorites"] as const;
+const collectionKinds = {
+  albums: "album",
+  artists: "artist",
+  playlists: "playlist",
+  genres: "genre",
+} as const;
 /** YT Music's sidebar pages; Downloads comes with its ticket. */
 const ytPages = [
   ["discover", "discover"],
@@ -133,6 +142,11 @@ export function App() {
     readonly list: string;
     readonly selection: Selection;
   }>();
+  const [selectedItem, setSelectedItem] = useState<{
+    readonly route: Route;
+    readonly target: CollectionTarget;
+  }>();
+  const collectionSelection = selectedItem?.route === route ? selectedItem.target : undefined;
   const playlistEdits = usePlaylistEdits({
     go: (next) => go(next),
     deleted: (id) => {
@@ -287,10 +301,11 @@ export function App() {
     rescan: () => void window.wave.library.refresh().catch(failed),
     shortcuts: () => setShortcuts((open) => !open),
     close: () => {
-      if (actions.closeMenu() || playlistEdits.closeMenu()) return;
+      if (actions.closeMenu()) return;
       if (shortcuts) return setShortcuts(false);
       if (nowPlaying) return setNowPlaying(false);
       if (selection) return setSelection(undefined);
+      if (collectionSelection) return setSelectedItem(undefined);
       return false;
     },
   });
@@ -375,14 +390,9 @@ export function App() {
       }}
     />
   );
+  const collectionKind = collectionKinds[scope.kind as keyof typeof collectionKinds];
   const open = (row: BrowseRow, index: number) => {
-    const detail = {
-      albums: "album",
-      artists: "artist",
-      playlists: "playlist",
-      genres: "genre",
-    } as const;
-    if (scope.kind in detail) go({ kind: detail[scope.kind as keyof typeof detail], id: row.id });
+    if (collectionKind) go({ kind: collectionKind, id: row.id });
     else if (row.unavailable) setError(text.desktopLibrary.driveDisconnected);
     else if (scope.kind === "artist" && scope.id !== undefined)
       // With Online, the page plays its Library songs and the ones YouTube Music adds.
@@ -399,8 +409,11 @@ export function App() {
       ? { kind: scope.kind as MissingSongsList["kind"], id: scope.id }
       : undefined;
   /** Play or Shuffle from the hero; says what it couldn't play, and offers the download. */
-  const playList = (shuffle: boolean) => {
-    const list = missingList;
+  const playList = (shuffle: boolean, target: BrowseScope = scope) => {
+    const list =
+      target.id !== undefined && (MISSING_SONGS_LISTS as readonly string[]).includes(target.kind)
+        ? { kind: target.kind as MissingSongsList["kind"], id: target.id }
+        : undefined;
     const offer =
       list === undefined
         ? undefined
@@ -418,11 +431,33 @@ export function App() {
     };
     // An artist's page with Online takes YouTube Music's songs too.
     const started =
-      scope.kind === "artist" && scope.id !== undefined
+      target === scope && scope.kind === "artist" && scope.id !== undefined
         ? window.wave.artistPage.play(scope.id, artistSection.pick, null, shuffle)
-        : window.wave.playback.start(scope, undefined, shuffle);
+        : window.wave.playback.start(target, undefined, shuffle);
     playback.run(started.then(said));
   };
+  const here = `/library/${scope.kind}/${scope.id ?? ""}`;
+  const collections = collectionActions({
+    actions,
+    play: (target, shuffle) => playList(shuffle, target),
+    goToArtist: (id) => go({ kind: "artist", id }),
+    select: (target) => {
+      setSelection(undefined);
+      setSelectedItem({ route, target });
+    },
+    newPlaylist: playlistEdits.newPlaylist,
+    playlistEdits: playlistEdits.playlistItems,
+    changed: playback.refresh,
+    failed: (message) => setError(message ?? text.desktopLibrary.actionFailed),
+  });
+  const openCollectionMenu = (target: CollectionTarget, title: string, at: MenuPoint) =>
+    actions.openItems(
+      text.desktopLibrary.songMenu(tagTitle(title, target.kind)),
+      window.wave.collections
+        .actions(target, { here, selectable: true })
+        .then((about) => collections.itemsFor(target, about)),
+      at,
+    );
   const searchFor = (query: string) => {
     setQuery(query);
     if (route.kind !== "search") go({ kind: "search", query });
@@ -491,6 +526,7 @@ export function App() {
         revision={revision}
         section={artistSection}
         onAlbum={(id) => go({ kind: "album", id })}
+        onAlbumMenu={(row, at) => openCollectionMenu({ kind: "album", id: row.id }, row.title, at)}
         onYtAlbum={(id) => go({ kind: "ytAlbum", id })}
         onPlayStreamed={(index) =>
           playback.run(
@@ -609,10 +645,9 @@ export function App() {
               title={row.title}
               aria-current={route.kind === "playlist" && route.id === row.id ? "page" : undefined}
               onClick={() => go({ kind: "playlist", id: row.id })}
-              onContextMenu={(event) => {
-                event.preventDefault();
-                playlistEdits.openMenu(row.id, { x: event.clientX, y: event.clientY });
-              }}
+              {...itemMenuEvents((at) =>
+                openCollectionMenu({ kind: "playlist", id: row.id }, row.title, at),
+              )}
             >
               <Icon name="playlist" />
               <span className="nav-monogram" aria-hidden="true">
@@ -723,7 +758,10 @@ export function App() {
                     aria-haspopup="menu"
                     onClick={(event) => {
                       const rect = event.currentTarget.getBoundingClientRect();
-                      playlistEdits.openMenu(playlistId, { x: rect.left, y: rect.bottom + 4 });
+                      openCollectionMenu({ kind: "playlist", id: playlistId }, hero.title, {
+                        x: rect.left,
+                        y: rect.bottom + 4,
+                      });
                     }}
                   >
                     <Icon name="menu" size={16} />
@@ -775,6 +813,17 @@ export function App() {
           </p>
         )}
         {account?.invitation && <SignInInvitation onError={failed} />}
+        {collectionSelection && (
+          <CollectionSelectionBar
+            key={`${collectionSelection.kind}:${collectionSelection.id}`}
+            target={collectionSelection}
+            here={here}
+            itemsFor={collections.itemsFor}
+            openItems={actions.openItems}
+            done={() => setSelectedItem(undefined)}
+            failed={failed}
+          />
+        )}
         {route.kind === "settings" ? (
           <div className="settings-page">
             <nav aria-label={labels.settings}>
@@ -917,6 +966,7 @@ export function App() {
               playback.run(window.wave.playback.start(scope, index));
             }}
             onMenu={(row, at) => actions.openMenu({ scope, ids: [row.id] }, row.title, at)}
+            onCollectionMenu={openCollectionMenu}
             onUnavailable={() => setError(text.desktopLibrary.driveDisconnected)}
             onPick={(picked) => {
               searchFor(picked);
@@ -932,6 +982,7 @@ export function App() {
             go={go}
             onError={failed}
             notify={notify}
+            onCollectionMenu={openCollectionMenu}
             onMenu={(row, at) =>
               actions.openMenu({ scope: { kind: "songs" }, ids: [row.id] }, row.title, at)
             }
@@ -956,26 +1007,36 @@ export function App() {
                 onHero={setHero}
                 onOpen={open}
                 onError={failed}
-                selection={selection}
-                onSelection={setSelection}
+                selection={
+                  collectionSelection && collectionSelection.kind === collectionKind
+                    ? { all: false, ids: new Set([collectionSelection.id]) }
+                    : selection
+                }
+                onSelection={
+                  collectionSelection && collectionSelection.kind === collectionKind
+                    ? () => setSelectedItem(undefined)
+                    : setSelection
+                }
                 onMenu={
-                  selection
+                  selection || collectionSelection
                     ? undefined
                     : (row, at) =>
-                        row.videoId !== undefined
-                          ? actions.openItems(
-                              text.desktopLibrary.songMenu(row.title),
-                              streamed.items(row.videoId),
-                              at,
-                            )
-                          : actions.openMenu(
-                              { scope, ids: [row.id] },
-                              row.title,
-                              at,
-                              scope.kind === "playlist" && scope.id !== undefined
-                                ? playlistEdits.moveItems(scope.id, row.id)
-                                : [],
-                            )
+                        collectionKind !== undefined
+                          ? openCollectionMenu({ kind: collectionKind, id: row.id }, row.title, at)
+                          : row.videoId !== undefined
+                            ? actions.openItems(
+                                text.desktopLibrary.songMenu(row.title),
+                                streamed.items(row.videoId),
+                                at,
+                              )
+                            : actions.openMenu(
+                                { scope, ids: [row.id] },
+                                row.title,
+                                at,
+                                scope.kind === "playlist" && scope.id !== undefined
+                                  ? playlistEdits.moveItems(scope.id, row.id)
+                                  : [],
+                              )
                 }
               />,
             )}

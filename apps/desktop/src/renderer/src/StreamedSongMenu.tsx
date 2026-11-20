@@ -40,15 +40,19 @@ const playlistRows = async () =>
 /** Add to Playlist's submenu: the playlists, each adding the song with [add]. */
 export const playlistItems = async (
   add: (playlistId: number) => void,
+  create?: () => void,
 ): Promise<readonly MenuItem[]> => {
   const rows = await playlistRows();
-  return rows.length === 0
-    ? [{ key: "none", label: text.desktopLibrary.noPlaylists, disabled: true }]
-    : rows.map((row: BrowseRow) => ({
-        key: `playlist-${row.id}`,
-        label: row.title,
-        run: () => add(row.id),
-      }));
+  return [
+    ...(create ? [{ key: "new-playlist", label: text.playlists.newPlaylist, run: create }] : []),
+    ...(rows.length === 0
+      ? [{ key: "none", label: text.desktopLibrary.noPlaylists, disabled: true }]
+      : rows.map((row: BrowseRow) => ({
+          key: `playlist-${row.id}`,
+          label: row.title,
+          run: () => add(row.id),
+        }))),
+  ];
 };
 
 /** Runs [action] on a streamed song and says what it did, as a Library song's menu does. */

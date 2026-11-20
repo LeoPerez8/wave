@@ -2,6 +2,8 @@ import { homeSectionTitle } from "@wave/core";
 import { useEffect, useMemo, useState } from "react";
 import type { BrowseRow, BrowseScope } from "../../shared/browse.ts";
 import type { HomeSectionView, HomeView } from "../../shared/home.ts";
+import type { CollectionTarget } from "../../shared/collectionActions.ts";
+import type { MenuPoint } from "./Menu.tsx";
 import { HomeDiscover } from "./HomeDiscover.tsx";
 import { HomeNewReleases, HomeUpcomingShows, useHomeFollow } from "./HomeFollow.tsx";
 import { Shelf } from "./YtLists.tsx";
@@ -59,6 +61,7 @@ export function Home({
   onError,
   onMenu,
   notify,
+  onCollectionMenu,
 }: {
   readonly revision: number;
   readonly ytMusic: boolean;
@@ -67,6 +70,7 @@ export function Home({
   readonly go: (scope: BrowseScope | YtRoute) => void;
   readonly onError: () => void;
   readonly onMenu: (row: BrowseRow, at: { readonly x: number; readonly y: number }) => void;
+  readonly onCollectionMenu: (target: CollectionTarget, title: string, at: MenuPoint) => void;
 }) {
   const [view, setView] = useState<HomeView>();
   const [readFailed, setReadFailed] = useState(false);
@@ -173,11 +177,12 @@ export function Home({
                       ...(section.kind === "song" ? { song: row } : {}),
                     }))}
                     onOpen={(index) => open(section, index)}
-                    onMenu={
-                      section.kind === "song"
-                        ? (index, at) => onMenu(section.rows.items[index]!, at)
-                        : undefined
-                    }
+                    onMenu={(index, at) => {
+                      const row = section.rows.items[index]!;
+                      if (section.kind === "song") onMenu(row, at);
+                      else if (section.kind === "album" || section.kind === "artist")
+                        onCollectionMenu({ kind: section.kind, id: row.id }, row.title, at);
+                    }}
                   />
                 )}
               </div>

@@ -3,6 +3,7 @@ import type { BrowseRow } from "../../shared/browse.ts";
 import type { YtStatus } from "../../shared/yt.ts";
 import { songRowMark } from "../../shared/songState.ts";
 import { Icon } from "./Icon.tsx";
+import { itemMenuEvents } from "./Menu.tsx";
 import { markClass, SongMark, useSongStates } from "./SongMark.tsx";
 import { labels, albumName, artistName } from "./text.ts";
 import { Artwork, time } from "./VirtualTable.tsx";
@@ -148,23 +149,7 @@ export function Shelf({
               aria-label={item.label ?? item.title}
               title={item.title}
               onClick={() => onOpen(index)}
-              onContextMenu={
-                onMenu &&
-                ((event) => {
-                  event.preventDefault();
-                  onMenu(index, { x: event.clientX, y: event.clientY });
-                })
-              }
-              onKeyDown={
-                onMenu &&
-                ((event) => {
-                  if (event.key === "ContextMenu" || (event.key === "F10" && event.shiftKey)) {
-                    event.preventDefault();
-                    const rect = event.currentTarget.getBoundingClientRect();
-                    onMenu(index, { x: rect.left, y: rect.bottom });
-                  }
-                })
-              }
+              {...(onMenu && itemMenuEvents((at) => onMenu(index, at)))}
             >
               <Artwork
                 kind={item.artworkKind}
