@@ -3,14 +3,23 @@
  * and a click (or Enter on the focused line) seeks to one. Main decides what shows
  * (`window.wave.lyrics.song`): the file's own, else LRCLIB's or YT Music's.
  */
-import { currentLyricIndex, desktopKey, ytTrackId } from "@wave/core";
-import { useEffect, useRef, useState, type KeyboardEvent } from "react";
+import {
+  currentLyricIndex,
+  desktopKey,
+  geniusLineReferents,
+  geniusLineSegments,
+  placeGeniusReferents,
+  ytTrackId,
+} from "@wave/core";
+import { useEffect, useMemo, useRef, useState, type KeyboardEvent } from "react";
 
 import type { BrowseRow } from "../../shared/browse.ts";
 import type { SongLyrics } from "../../shared/lyrics.ts";
+import { GeniusAbout, GeniusAnnotations, MoreInsights } from "./GeniusInsights.tsx";
 import { pressOf } from "./keys.ts";
 import { rovingTarget, scrollToRow } from "./rovingList.ts";
 import { labels, text } from "./text.ts";
+import { useSongGenius, type GeniusAccess } from "./useSongGenius.ts";
 
 /** The queue track id main knows a song by (`QueueEntry.trackId`). */
 export const trackIdOf = (song: BrowseRow): string =>
@@ -57,19 +66,52 @@ function LyricLines({
   lines,
   current,
   onSeek,
+  genius,
+  onGeniusSignIn,
+  lineIdPrefix,
 }: {
   readonly lines: readonly { readonly text: string; readonly timeMs?: number }[];
   /** The line being sung, or -1 (before the first line, or unsynced lyrics). */
   readonly current: number;
   readonly onSeek?: ((positionMs: number) => void) | undefined;
+  readonly genius: ReturnType<typeof useSongGenius>;
+  readonly onGeniusSignIn: () => void;
+  readonly lineIdPrefix: string;
 }) {
-  const list = useRef<HTMLDivElement>(null);
+  const scroll = useRef<HTMLDivElement>(null);
   /** The keyboard's line, or null while it follows the sung one. */
   const [active, setActive] = useState<number | null>(null);
+  const [annotations, setAnnotations] = useState<{
+    readonly placement: NonNullable<ReturnType<typeof placeGeniusReferents>>;
+    readonly selection:
+      | { readonly kind: "line"; readonly index: number }
+      | { readonly kind: "referent"; readonly id: number };
+  }>();
+  const referents = genius.state.kind === "answer" ? genius.state.referents : undefined;
+  const placement = useMemo(
+    () =>
+      referents?.length
+        ? placeGeniusReferents(
+            lines.map((line) => line.text),
+            referents,
+          )
+        : undefined,
+    [lines, referents],
+  );
+  const selection =
+    annotations !== undefined && annotations.placement === placement
+      ? annotations.selection
+      : undefined;
+  const opened =
+    selection?.kind === "referent" && placement !== undefined
+      ? placement.unplaced.filter(({ id }) => id === selection.id)
+      : selection?.kind === "line" && placement !== undefined
+        ? geniusLineReferents(placement.lines[selection.index] ?? [])
+        : [];
   const scrolled = useRef(0);
   const focused = active ?? Math.max(0, current);
   useEffect(() => {
-    const element = list.current;
+    const element = scroll.current;
     const row = element?.querySelector<HTMLElement>(`[data-line="${current}"]`);
     if (!element || !row || active !== null) return;
     if (Date.now() - scrolled.current < HOLD_AFTER_SCROLL_MS) return;
@@ -77,7 +119,7 @@ function LyricLines({
   }, [current, active]);
   useEffect(() => {
     if (active === null) return;
-    const element = list.current;
+    const element = scroll.current;
     const row = element?.querySelector<HTMLElement>(`[data-line="${active}"]`);
     if (element && row) scrollToRow(element, row, false);
   }, [active]);
@@ -89,8 +131,9 @@ function LyricLines({
     scrolled.current = 0;
   };
   const key = (event: KeyboardEvent) => {
+    if (event.target !== event.currentTarget) return;
     const command = desktopKey(pressOf(event), "list");
-    const page = Math.floor((list.current?.clientHeight ?? 400) / 40);
+    const page = Math.floor((scroll.current?.clientHeight ?? 400) / 40);
     const to = rovingTarget(command, focused, lines.length, page);
     if (to !== undefined) {
       event.preventDefault();
@@ -98,36 +141,79 @@ function LyricLines({
     } else if (command === "playRow") {
       event.preventDefault();
       seek(focused);
+    } else if (command === "songMenu" && placement?.lines[focused]?.length) {
+      event.preventDefault();
+      setAnnotations({ placement, selection: { kind: "line", index: focused } });
     }
   };
   return (
-    <div
-      ref={list}
-      className="lyric-lines"
-      role="listbox"
-      aria-label={labels.lyrics}
-      tabIndex={0}
-      aria-activedescendant={lines.length > 0 ? `lyric-${focused}` : undefined}
-      onKeyDown={key}
-      onWheel={() => (scrolled.current = Date.now())}
-      onBlur={() => setActive(null)}
-    >
-      {lines.map((line, index) => (
-        <div
-          key={index}
-          id={`lyric-${index}`}
-          role="option"
-          data-line={index}
-          aria-selected={index === focused}
-          aria-current={index === current ? "true" : undefined}
-          className={`lyric-line ${line.timeMs === undefined ? "unsynced" : ""} ${
-            index === current ? "sung" : index < current ? "past" : ""
-          } ${active === index ? "keyboard" : ""}`}
-          onClick={() => seek(index)}
-        >
-          {line.text || "♪"}
-        </div>
-      ))}
+    <div ref={scroll} className="lyrics-scroll" onWheel={() => (scrolled.current = Date.now())}>
+      <GeniusAbout state={genius.state} onRetry={genius.retry} onSignIn={onGeniusSignIn} />
+      <div
+        className="lyric-lines"
+        role="listbox"
+        aria-label={labels.lyrics}
+        tabIndex={0}
+        aria-activedescendant={lines.length > 0 ? `${lineIdPrefix}-${focused}` : undefined}
+        onKeyDown={key}
+        onBlur={(event) => {
+          if (!event.currentTarget.contains(event.relatedTarget)) setActive(null);
+        }}
+      >
+        {lines.map((line, index) => {
+          const highlights = placement?.lines[index];
+          const annotated = highlights !== undefined && highlights.length > 0;
+          return (
+            <div
+              key={index}
+              id={`${lineIdPrefix}-${index}`}
+              role="option"
+              data-line={index}
+              aria-label={annotated ? line.text : undefined}
+              aria-keyshortcuts={annotated ? "Shift+F10" : undefined}
+              aria-selected={index === focused}
+              aria-current={index === current ? "true" : undefined}
+              className={`lyric-line ${line.timeMs === undefined ? "unsynced" : ""} ${
+                index === current ? "sung" : index < current ? "past" : ""
+              } ${active === index ? "keyboard" : ""}`}
+              onClick={() => seek(index)}
+            >
+              {annotated
+                ? geniusLineSegments(line.text, highlights).map(({ start, end, referents }) => {
+                    const fragment = line.text.slice(start, end);
+                    return referents.length === 0 ? (
+                      <span key={start}>{fragment}</span>
+                    ) : (
+                      <button
+                        key={start}
+                        className="genius-highlight"
+                        aria-label={text.playbackText.annotationOn(fragment)}
+                        onClick={(event) => {
+                          event.stopPropagation();
+                          setAnnotations({
+                            placement: placement!,
+                            selection: { kind: "line", index },
+                          });
+                        }}
+                      >
+                        {fragment}
+                      </button>
+                    );
+                  })
+                : line.text || "♪"}
+            </div>
+          );
+        })}
+      </div>
+      {placement && (
+        <MoreInsights
+          referents={placement.unplaced}
+          onOpen={(id) => setAnnotations({ placement, selection: { kind: "referent", id } })}
+        />
+      )}
+      {opened.length > 0 && (
+        <GeniusAnnotations referents={opened} onClose={() => setAnnotations(undefined)} />
+      )}
     </div>
   );
 }
@@ -137,12 +223,31 @@ export function LyricsView({
   song,
   positionMs,
   onSeek,
+  geniusAccess,
+  onGeniusSignIn,
+  foreground = true,
+  lineIdPrefix = "lyric",
 }: {
   readonly song: BrowseRow | null;
   readonly positionMs: number;
   readonly onSeek: (positionMs: number) => void;
+  readonly geniusAccess: GeniusAccess;
+  readonly onGeniusSignIn: () => void;
+  readonly foreground?: boolean;
+  readonly lineIdPrefix?: string;
 }) {
-  const { lyrics, retry } = useSongLyrics(song === null ? null : trackIdOf(song));
+  const trackId = song === null ? null : trackIdOf(song);
+  const { lyrics, retry } = useSongLyrics(trackId);
+  const lines = useMemo(
+    () =>
+      lyrics?.kind === "synced"
+        ? lyrics.lines
+        : lyrics?.kind === "unsynced"
+          ? lyrics.lines.map((line) => ({ text: line }))
+          : undefined,
+    [lyrics],
+  );
+  const genius = useSongGenius(lines?.length ? trackId : null, song, geniusAccess, foreground);
   const words = text.playbackText;
   if (song === null) return <p className="lyrics-note">{labels.nothingPlaying}</p>;
   if (lyrics === undefined)
@@ -168,13 +273,15 @@ export function LyricsView({
         {words.noLyrics}
       </p>
     );
-  if (lyrics.kind === "unsynced")
-    return <LyricLines lines={lyrics.lines.map((line) => ({ text: line }))} current={-1} />;
   return (
     <LyricLines
-      lines={lyrics.lines}
-      current={currentLyricIndex(lyrics.lines, positionMs)}
+      key={trackId}
+      lines={lines ?? []}
+      current={lyrics.kind === "synced" ? currentLyricIndex(lyrics.lines, positionMs) : -1}
       onSeek={onSeek}
+      genius={genius}
+      onGeniusSignIn={onGeniusSignIn}
+      lineIdPrefix={lineIdPrefix}
     />
   );
 }

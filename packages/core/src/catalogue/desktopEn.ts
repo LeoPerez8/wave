@@ -15,6 +15,8 @@ export const desktopEn = {
     thisPhone: "This computer",
   },
   settings: {
+    openingLyricsOnASongWithLyrics:
+      "Opening Lyrics on a song with lyrics shows Genius's description and highlights the fragments it annotates. Turn this off to stop all Genius requests.",
     missingSongs: {
       missing: (n: number) =>
         `${formatNumber("en", n)} ${plural("en", n, { one: "song isn't", other: "songs aren't" })} on this computer`,
