@@ -62,6 +62,11 @@ import { searchLibrary } from "./library/search.ts";
 import { validWindowSettings } from "../shared/windowSettings.ts";
 import { readWindowSettings, changeWindowSettings } from "./system/windowSettings.ts";
 import { homeHandlers } from "./homeHandlers.ts";
+import {
+  miniPlayerHandlers,
+  noMiniPlayer,
+  type MiniPlayerCalls,
+} from "./system/miniPlayerHandlers.ts";
 import { statsHandlers } from "./statsHandlers.ts";
 import { lyricsAndTagsHandlers } from "./lyricsAndTagsHandlers.ts";
 import { HomeFollow } from "./follows/homeFollow.ts";
@@ -294,6 +299,7 @@ const createHandlers = (
   setLogin: (on: boolean) => Promise<void>,
   mediaBackend: () => "native" | "chromium",
   versionHistory: (offset: number, reload: boolean) => Promise<DesktopVersionHistory>,
+  miniPlayer: MiniPlayerCalls,
 ): Handlers => {
   let loadedPath: string | undefined;
   const streamed = streamedHandlers();
@@ -664,6 +670,7 @@ const createHandlers = (
     ...statsHandlers,
     ...lyricsAndTagsHandlers,
     ...homeFollowHandlers,
+    ...miniPlayerHandlers(miniPlayer),
     "search.library": ([query]) =>
       searchQuery(query)
         ? Effect.gen(function* () {
@@ -714,8 +721,15 @@ export const registerBridge = (
     currentListed: false,
     releases: { items: [], offset: 0, total: 0 },
   }),
+  miniPlayer: MiniPlayerCalls = noMiniPlayer,
 ): void => {
-  const handlers = createHandlers(onAppearance, setLogin, mediaBackend, versionHistory);
+  const handlers = createHandlers(
+    onAppearance,
+    setLogin,
+    mediaBackend,
+    versionHistory,
+    miniPlayer,
+  );
   for (const call of BRIDGE_CALLS) {
     const handler: (args: readonly unknown[]) => Effect.Effect<unknown, unknown, BridgeServices> =
       handlers[call];

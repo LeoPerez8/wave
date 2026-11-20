@@ -72,6 +72,7 @@ import {
   type LyricsAndTagsContract,
 } from "./lyricsAndTags.ts";
 import { LINK_CALLS, linkBridge, type LinkContract } from "./links.ts";
+import { MINI_PLAYER_CALLS, miniPlayerBridge, type MiniPlayerContract } from "./miniPlayer.ts";
 import { ARTIST_PAGE_CALLS, artistPageBridge, type ArtistPageContract } from "./artistPage.ts";
 import { STREAMED_CALLS, streamedBridge, type StreamedContract } from "./streamedSongs.ts";
 import { YT_ACCOUNT_CALLS, ytAccountBridge, type YtAccountContract } from "./ytAccount.ts";
@@ -108,7 +109,8 @@ export interface BridgeContract
     StreamedContract,
     LyricsAndTagsContract,
     YtAccountContract,
-    SpotifyAccountContract {
+    SpotifyAccountContract,
+    MiniPlayerContract {
   readonly "system.mediaBackend": {
     readonly args: readonly [];
     readonly result: "native" | "chromium";
@@ -520,6 +522,7 @@ export const BRIDGE_CALLS = [
   ...STREAMED_CALLS,
   ...YT_ACCOUNT_CALLS,
   ...SPOTIFY_ACCOUNT_CALLS,
+  ...MINI_PLAYER_CALLS,
   "stats.overview",
   "stats.ranking",
   "stats.play",
@@ -535,6 +538,8 @@ export type Invoke = <C extends BridgeCall>(
 /** `window.wave`. */
 export interface WaveBridge {
   readonly links: ReturnType<typeof linkBridge>;
+  /** The floating mini player's window. */
+  readonly miniPlayer: ReturnType<typeof miniPlayerBridge>;
   readonly artistPage: ReturnType<typeof artistPageBridge>;
   /** A streamed YouTube Music song's menu. */
   readonly streamed: ReturnType<typeof streamedBridge>;
@@ -846,6 +851,7 @@ export const createBridge = (invoke: Invoke): WaveBridge => ({
     releaseArtwork: (key) => invoke("home.releaseArtwork", key),
   },
   links: linkBridge(invoke),
+  miniPlayer: miniPlayerBridge(invoke),
   artistPage: artistPageBridge(invoke),
   streamed: streamedBridge(invoke),
   ytAccount: ytAccountBridge(invoke),
