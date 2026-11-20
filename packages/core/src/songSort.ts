@@ -202,6 +202,10 @@ export const songSpineKeys = (
   return spineKey === undefined ? undefined : songs.map(spineKey);
 };
 
+/** Whether the list is filed under names for letter jumps. */
+export const songSortHasSpine = (sort: SongSort): boolean =>
+  ORDERS[sort.key].spineKey !== undefined;
+
 /** A song field a list's order compares, as the Library's tables hold it (`id` is the Track's). */
 export type SongOrderField =
   | "titleSort"
@@ -279,7 +283,7 @@ export const songOrderTerms = (sort: LibrarySongSort): readonly SongOrderTerm[] 
 
 /** The field [sort] files a song under on the A–Z spine (`songSpineKeys`); none for the date sorts. */
 export const songSpineField = (sort: LibrarySongSort): SongOrderField | undefined =>
-  ORDERS[sort.key].spineKey === undefined ? undefined : ORDER_TERMS[sort.key][0];
+  songSortHasSpine(sort) ? ORDER_TERMS[sort.key][0] : undefined;
 
 /** [sort] as a string to save. */
 export const writeSongSort = (sort: SongSort): string =>
@@ -289,10 +293,32 @@ export const writeSongSort = (sort: SongSort): string =>
  * A [kind] list's sort saved by `writeSongSort`; the kind's default when nothing
  * (readable, and on offer for the kind) was saved.
  */
-export const readSongSort = (saved: string | null, kind: SongListKind = "songs"): SongSort => {
-  const { key, descending } = readStoredRecord(saved);
-  return (
-    songSortsFor(kind).find((sort) => sort.key === key && sort.descending === descending) ??
-    defaultSongSort(kind)
-  );
+export const readSongSort = (saved: string | null, kind: SongListKind = "songs"): SongSort =>
+  readLibraryTableSort(songSortsFor(kind), saved) ?? defaultSongSort(kind);
+
+const NAME_SORTS = SONG_SORTS.filter(({ key }) => key === "title");
+
+/** The top-level Library lists with sortable desktop headers. */
+export const libraryTableSortsFor = (kind: string): readonly SongSort[] => {
+  switch (kind) {
+    case "songs":
+    case "favorites":
+      return songSortsFor(kind);
+    case "albums":
+    case "artists":
+    case "genres":
+      return NAME_SORTS;
+    default:
+      return [];
+  }
 };
+
+/** Read a table's saved choice, or its default when the choice is missing or no longer offered. */
+export const readLibraryTableSort = (choices: readonly SongSort[], saved: string | null) => {
+  const { key, descending } = readStoredRecord(saved);
+  return choices.find((sort) => sort.key === key && sort.descending === descending) ?? choices[0];
+};
+
+/** A new header starts in its first offered direction. The current one reverses when possible. */
+export const nextHeaderSort = (choices: readonly SongSort[], current: SongSort, key: string) =>
+  choices.find((sort) => sort.key === key && !sameSongSort(sort, current));

@@ -8,7 +8,48 @@
 .table-area.no-third.no-star .table-columns {
   grid-template-columns: minmax(180px, 1.5fr) minmax(110px, 1fr) 54px;
 }
+.table-area.with-added {
+  --table-dates: minmax(76px, 0.6fr);
+}
+.table-area.with-starred {
+  --table-dates: repeat(2, minmax(76px, 0.6fr));
+}
+.table-area.with-added .table-columns {
+  grid-template-columns:
+    minmax(180px, 1.5fr) minmax(110px, 1fr) minmax(100px, 1fr) var(--table-dates)
+    28px 54px;
+}
+.table-date {
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
+}
+.table-sort {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  width: 100%;
+  min-height: 24px;
+  padding: 2px 0;
+  line-height: 1.15;
+  text-align: left;
+  cursor: pointer;
+}
+.table-sort svg {
+  flex: none;
+  transform: rotate(90deg);
+}
+[aria-sort="descending"] > .table-sort svg {
+  transform: rotate(-90deg);
+}
+.table-sort:hover,
+[aria-sort] > .table-sort {
+  color: var(--color-foreground);
+}
 @container (width < 760px) {
+  .table-area.with-added .table-columns {
+    grid-template-columns: minmax(0, 1.5fr) minmax(0, 1fr) var(--table-dates) 22px 48px;
+    gap: 8px;
+  }
   .table-area.no-third .table-columns {
     grid-template-columns: minmax(160px, 1.5fr) minmax(110px, 1fr) 28px 54px;
   }
