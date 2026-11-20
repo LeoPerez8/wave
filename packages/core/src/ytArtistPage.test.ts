@@ -226,7 +226,7 @@ describe("what a YouTube Music artist page shows", () => {
     assert.deepEqual(view(restored(found(NOW))).similar, []);
   });
 
-  test("when asking again fails, the similar artists saved before still show under the quiet line", () => {
+  test("when asking again fails, the similar artists saved before still show with the quiet line", () => {
     const listed = [similar("Justice")];
     const failed = step(
       restored(found(NOW - 8 * DAY, [song("a")], { similar: listed })),

@@ -11,7 +11,7 @@ import type { YtSong } from "./ytMusic.ts";
 /**
  * Remote-only pages can show an offline result without acquiring the Library
  * finder. Offline, a page seen before keeps its similar artists (Fans might
- * also like) under the offline line, however old it is.
+ * also like) with the offline line, however old it is.
  */
 export const ytArtistPageOpening = <S extends YtSong, L, A>(
   state: YtArtistSection<S>,

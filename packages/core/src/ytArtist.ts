@@ -945,7 +945,7 @@ export interface YtArtistPageView<S extends YtSong, L, A> {
   readonly shelves: readonly YtArtistShelf<A>[];
   /**
    * Fans might also like: the similar artists the page lists, in its order
-   * (Core's `similarArtistLinks` says which page each opens). Under a quiet
+   * (Core's `similarArtistLinks` says which page each opens). With a quiet
    * line for a read that failed, the ones saved before still show.
    */
   readonly similar: readonly YtArtistCandidate[];
@@ -968,7 +968,7 @@ export interface YtArtistPageViewContext<S extends YtSong, L, A> extends YtArtis
  * opened by name) as a quiet Not found line; a match saved without the
  * artist's full list doesn't stand. Without one the page is looking
  * (it asks on its own, `ytArtistPageAsks`) or, after a failure, a quiet line
- * with Try Again over the similar artists saved before, if any. With YT
+ * with Try Again and the similar artists saved before, if any. With YT
  * Music off it says so.
  */
 export const ytArtistPageView = <S extends YtSong, L, A>(

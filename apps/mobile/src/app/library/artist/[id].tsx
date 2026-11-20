@@ -159,6 +159,8 @@ const itemKey = (item: Item): string => {
       return `section-${item.label}`;
     case "shelf":
       return `shelf-${item.label}`;
+    case "similar":
+      return "similar";
     case "song":
       return item.song.source === "library"
         ? String(item.song.track.id)

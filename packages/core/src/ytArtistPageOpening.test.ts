@@ -72,7 +72,7 @@ const seen = (checkedAt: number) => ({
   },
 });
 
-test("offline, a page seen before still shows its similar artists under the offline line", () => {
+test("offline, a page seen before still shows its similar artists with the offline line", () => {
   const YEAR = 365 * 24 * 60 * 60 * 1000;
   for (const state of [seen(1000), seen(1000 - YEAR)]) {
     const { view, finder } = ytArtistPageOpening(state, { ...context, settled: true });

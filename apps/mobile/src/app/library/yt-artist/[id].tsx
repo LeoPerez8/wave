@@ -9,6 +9,7 @@ import {
   type ArtistPageItem,
   type Catalogue,
   type DiscoverSong,
+  type SimilarArtistLink,
   type YtArtistPageNote,
   type YtArtistRelease,
   type YtArtistShelf,
@@ -20,6 +21,8 @@ import { Text, useWindowDimensions, View } from "react-native";
 
 import { AlbumTile } from "@/catalog/AlbumTile";
 import { SECTION_HEAD, SectionHead } from "@/catalog/CatalogLine";
+import { ArtistCard } from "@/catalog/cards/ArtistCard";
+import { CAPTION_TOP, titleLineHeight } from "@/catalog/cards/CardParts";
 import { COVER_ROW_TILE, CoverRow } from "@/catalog/CoverRow";
 import { CELL, grid } from "@/catalog/grid";
 import { PlayShuffle, ListAction } from "@/catalog/PlayShuffle";
@@ -39,11 +42,11 @@ import {
 import { ScreenHeader } from "@/components/ScreenHeader";
 import { TextButton } from "@/components/TextButton";
 import { albumRowHeight, toAlbumSummary } from "@/library/AlbumGrid";
-import type { AlbumRow, SongRow } from "@wave/client";
-import { openAlbum } from "@/library/routes";
+import type { AlbumRow, ArtistRow, SongRow } from "@wave/client";
+import { openAlbum, openArtist } from "@/library/routes";
 import { useListScrollable } from "@/motion/heldTouch";
 import type { NativeYtSong } from "@/native/waveYtMusic";
-import { openAlbumActions } from "@/playback/ActionsMenu";
+import { openAlbumActions, openArtistActions } from "@/playback/ActionsMenu";
 import { playPage } from "@/playback/actions";
 import {
   artistSelectionItems,
@@ -62,7 +65,8 @@ import { SongList } from "@/songs/SongList";
 import { occurrenceKeys } from "@/songs/songRowState";
 import { ytArtistNote, YtReleaseTile } from "@/ytmusic/YtArtistSection";
 import { useLocalisation } from "@/localisation/localisation";
-import { YT_ARTIST_BY_NAME } from "@/ytmusic/routes";
+import { openYtArtist, YT_ARTIST_BY_NAME } from "@/ytmusic/routes";
+import { openYtArtistActions } from "@/ytmusic/YtArtistActions";
 
 type Song = DiscoverSong<NativeYtSong, SongRow>;
 type Release = YtArtistRelease<AlbumRow>;
@@ -73,10 +77,19 @@ interface Cover {
   readonly release: Release;
 }
 
-type Item = ArtistPageItem<Cover, Song>;
+type Similar = SimilarArtistLink<ArtistRow>;
+
+type Item = ArtistPageItem<Cover, Song, Similar>;
 
 /** Height of a shelf's row, the gap under it included. */
 const SHELF_ROW = albumRowHeight(COVER_ROW_TILE);
+
+/**
+ * Height of the Fans might also like row at [fontScale], the gap under it
+ * included: an artist's circle, then their name on one line.
+ */
+const similarRowHeight = (fontScale: number): number =>
+  COVER_ROW_TILE + CAPTION_TOP + titleLineHeight(fontScale) + CELL * 3;
 
 const NO_SONGS: readonly Song[] = [];
 
@@ -84,10 +97,14 @@ const NO_SONGS: readonly Song[] = [];
 const pageNote = (note: Exclude<YtArtistPageNote, "loading">, strings: Catalogue): string =>
   note === "off" ? strings.library.ytArtistOff : ytArtistNote(note, strings);
 
-/** As the integrated Library artist page lays it out: the releases, then the songs. */
+/**
+ * As the integrated Library artist page lays it out: the releases, then the
+ * songs, then Fans might also like.
+ */
 const pageItems = (
   shelves: readonly YtArtistShelf<AlbumRow>[],
   songs: readonly Song[],
+  similar: readonly Similar[],
   { library }: Catalogue,
 ): Item[] =>
   artistPageItems(
@@ -96,10 +113,14 @@ const pageItems = (
       covers: shelf.releases.map((release): Cover => ({ kind: shelf.kind, release })),
     })),
     songs,
+    undefined,
+    null,
+    { similar: { label: library.fansAlsoLike, artists: similar } },
   );
 
 const itemType = (item: Item): Item["type"] => item.type;
-const slotSize = (item: Item): number => (item.type === "section" ? SECTION_HEAD : SHELF_ROW);
+
+const ignore = (): void => {};
 
 /**
  * A shelf as one row of covers that scrolls sideways: a release the Library
@@ -138,6 +159,55 @@ function ReleaseRow({
                 () => openAlbum(library.id, library, { integrated: true }),
                 (options) => openAlbumActions(library, options),
               )}
+            />
+          ),
+        )}
+      </CoverRow>
+    </View>
+  );
+}
+
+/**
+ * Fans might also like as one row of artists that scrolls sideways, laid out
+ * as Home's artists are: a similar artist the Library has is its artist and
+ * opens the Library's page; the others open their YouTube Music page. While
+ * the page selects, they hold still.
+ */
+function SimilarRow({
+  artists,
+  height,
+  selecting,
+}: {
+  artists: readonly Similar[];
+  height: number;
+  selecting: boolean;
+}) {
+  return (
+    <View style={{ height }}>
+      <CoverRow>
+        {artists.map(({ artist, library }) =>
+          library === null ? (
+            <ArtistCard
+              key={artist.browseId}
+              name={artist.name}
+              artist={{
+                name: artist.name,
+                thumbPath: null,
+                artworkPath: null,
+                imageUrl: artist.artworkUrl,
+              }}
+              size={COVER_ROW_TILE}
+              onPress={selecting ? ignore : () => openYtArtist(artist.browseId, artist.name)}
+              onLongPress={selecting ? ignore : () => openYtArtistActions(artist)}
+            />
+          ) : (
+            <ArtistCard
+              key={artist.browseId}
+              name={library.name}
+              artist={library}
+              size={COVER_ROW_TILE}
+              onPress={selecting ? ignore : () => openArtist(library.id, library)}
+              onLongPress={selecting ? ignore : () => openArtistActions(library)}
             />
           ),
         )}
@@ -268,7 +338,7 @@ function QuietLine({
 
 /** The page's list, inside the screen's `CompactTitleFrame`. */
 function YtArtistList({
-  page: { view, retry, browseId, name, contextId },
+  page: { view, similar, retry, browseId, name, contextId },
 }: {
   page: ReturnType<typeof useYtArtistPage>;
 }) {
@@ -276,6 +346,8 @@ function YtArtistList({
   const scrollable = useListScrollable();
   const bottomInset = useChromeInset();
   const { list, listProps } = useCompactTitleTopList();
+  const { fontScale } = useWindowDimensions();
+  const similarRow = similarRowHeight(fontScale);
   const songs = view?.songs ?? NO_SONGS;
   const selectable = useMemo(
     () => (view === null ? [] : artistSelectionItems(view.shelves, view.songs)),
@@ -294,8 +366,8 @@ function YtArtistList({
     [selection],
   );
   const items = useMemo(
-    () => (view === null ? [] : pageItems(view.shelves, view.songs, strings)),
-    [view, strings],
+    () => (view === null ? [] : pageItems(view.shelves, view.songs, similar, strings)),
+    [view, similar, strings],
   );
   // Songs key by id, a real duplicate by its occurrence, never by place.
   const songKeys = useMemo(() => occurrenceKeys(songs, discoverTrackId), [songs]);
@@ -305,7 +377,9 @@ function YtArtistList({
         ? `section-${item.label}`
         : item.type === "shelf"
           ? `shelf-${item.label}`
-          : (songKeys.get(item.song) ?? discoverTrackId(item.song)),
+          : item.type === "similar"
+            ? "similar"
+            : (songKeys.get(item.song) ?? discoverTrackId(item.song)),
     [songKeys],
   );
   const context = useMemo(() => ({ kind: "ytArtist", id: contextId }) as const, [contextId]);
@@ -354,9 +428,18 @@ function YtArtistList({
       // Keyed by shelf, so a recycled row doesn't keep another shelf's scroll position.
       if (item.type === "shelf")
         return <ReleaseRow key={item.label} covers={item.covers} selection={selection} />;
+      if (item.type === "similar")
+        return (
+          <SimilarRow artists={item.artists} height={similarRow} selecting={selection.selecting} />
+        );
       return null;
     },
-    [selection],
+    [selection, similarRow],
+  );
+  const slotSize = useCallback(
+    (item: Item): number =>
+      item.type === "section" ? SECTION_HEAD : item.type === "similar" ? similarRow : SHELF_ROW,
+    [similarRow],
   );
 
   return (
@@ -396,9 +479,12 @@ function YtArtistList({
  * name (`/library/yt-artist/by-name?name=<name>`, found with an Artists
  * search; "Not found online." when nobody matches): their image and
  * name, Play and Shuffle, their Albums and Singles & EPs (a release the Library has opens
- * the Library album) and every song of theirs, their songs playlist read
- * whole (the Library's play its files, the rest stream). It's read as it opens and saved for a week; offline or
- * failing, a quiet line with Try Again; with YT Music off, it says so.
+ * the Library album), every song of theirs, their songs playlist read
+ * whole (the Library's play its files, the rest stream), and Fans might also
+ * like, the similar artists YouTube Music lists for them (one the Library has
+ * opens the Library's page). It's read as it opens and saved for a week; offline or
+ * failing, a quiet line with Try Again, under the similar artists of a page
+ * seen before; with YT Music off, it says so.
  */
 export default function YtArtistScreen() {
   useScreenContent(true);
