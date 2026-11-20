@@ -1,5 +1,8 @@
 import {
   SYNCED_STARS_SETTING,
+  dislikeKeys,
+  favoriteSongs,
+  isDisliked,
   pendingFavorite,
   readSyncedStars,
   starredHere,
@@ -15,6 +18,7 @@ import { showFavoriteToast } from "@/overlay/favoriteToast";
 import type { FindInLibrary } from "@/ytmusic/libraryFinder";
 import { cancelUnstarredDownloads, downloadStarredSongs } from "@/ytmusic/YtDownloads";
 
+import { dislikedSongsNow, forgetDislikes, loadDislikes } from "./dislikes";
 import { currentFavoriteIds, setFavorites, setPendingFavorites } from "./favorites";
 import { publishUnstarred, publishYtSongSignal } from "./libraryChanges";
 import { LibraryStore } from "./LibraryStore";
@@ -36,6 +40,9 @@ import { appRuntime } from "./runtime";
  *
  * Unstarring one before its file arrives takes the star back and cancels the
  * download when only the star asked for it (Core's `unstarredDownload`).
+ *
+ * A favorite isn't disliked: starring a disliked song removes its dislike
+ * (Core's `favoriteSongs`).
  */
 export interface SongsToStar {
   /** Library songs, with a file or missing. */
@@ -84,6 +91,24 @@ export const starSongs = (
     );
   // The Library's unstars say it themselves (`setFavorites`).
   else publishUnstarred(streamed.map((song) => ytTrackId(song.videoId)));
+  // A favorite isn't disliked (Core's `favoriteSongs`): starring a disliked song removes its dislike.
+  // A YT Music song the Library has may have been disliked by its video, before its file came.
+  const identities = [
+    ...tracks.map(({ id }) => ({ id })),
+    ...ytSongs.map((song) => ({ id: find(song)?.id, videoId: song.videoId })),
+  ];
+  const undisliked = loadDislikes().then(() => {
+    const disliked = dislikedSongsNow();
+    const { changes } = favoriteSongs(
+      identities.map((song) => ({
+        song,
+        favorite: false,
+        disliked: isDisliked(disliked, song),
+      })),
+      on,
+    );
+    return forgetDislikes(changes.removeDislike.flatMap(dislikeKeys));
+  });
   const stars = setFavorites([...library.keys()], on);
   // Unstarring takes back the songs' pending favorites too, the ones the Library has by now
   // included, so none stars them later.
@@ -109,7 +134,7 @@ export const starSongs = (
       .then(() => stars)
       .then(() => seenStars.set(starredHere(seenStars.get(), missing, on)))
       .catch(() => undefined);
-  return Promise.all([stars, pending]).then(() => undefined);
+  return Promise.all([stars, pending, undisliked]).then(() => undefined);
 };
 
 /**

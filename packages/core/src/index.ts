@@ -2413,6 +2413,26 @@ export {
 export type { RowMenuAction, RowSwipeActions, SwipeChoice, SwipeSettings } from "./swipeActions.ts";
 export { BACK_EXIT_WINDOW_MS, createBackExitConfirmation } from "./backExit.ts";
 export { favoriteToast } from "./favoriteToast.ts";
+export {
+  NO_DISLIKES,
+  dislikeKey,
+  dislikeKeys,
+  dislikeSongs,
+  dislikeToast,
+  favoriteSongs,
+  isDisliked,
+  noMarkChanges,
+  withoutDisliked,
+} from "./dislikes.ts";
+export type {
+  DislikedSong,
+  DislikedSongs,
+  MarkChange,
+  MarkChanges,
+  MarkedSong,
+  SongIdentity,
+  SongMarks,
+} from "./dislikes.ts";
 export { queuedToast } from "./queuedToast.ts";
 export type { FavoriteSource } from "./favoriteToast.ts";
 

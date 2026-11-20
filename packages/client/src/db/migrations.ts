@@ -1462,6 +1462,17 @@ CREATE TABLE saved_lyrics_search_words (
 --> statement-breakpoint
 CREATE INDEX saved_lyrics_search_word_idx ON saved_lyrics_search_words (word, video_id, position);`;
 
+// Disliked songs, by the identity favorites use (\`schema.ts\`'s \`dislikes\`).
+const m0062 = `CREATE TABLE dislikes (
+  song_key text PRIMARY KEY NOT NULL,
+  title text NOT NULL,
+  artists text NOT NULL,
+  duration_ms integer,
+  disliked_at integer NOT NULL
+);
+--> statement-breakpoint
+CREATE INDEX dislikes_disliked_at_idx ON dislikes (disliked_at);`;
+
 export default {
   journal: {
     entries: [
@@ -1552,6 +1563,7 @@ export default {
         tag: "0061_saved_lyrics_search_index",
         breakpoints: true,
       },
+      { idx: 62, when: 1_797_163_200_000, tag: "0062_dislikes", breakpoints: true },
     ],
   },
   migrations: {
@@ -1617,5 +1629,6 @@ export default {
     m0059,
     m0060,
     m0061,
+    m0062,
   },
 };

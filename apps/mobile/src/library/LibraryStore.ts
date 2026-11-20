@@ -174,6 +174,7 @@ import {
   type PlaylistSong,
   type MissingTrack,
   type PendingFavorite,
+  type DislikedSong,
   type CountedListening,
   type RecapSongGenre,
   type CreditedPlayTotals,
@@ -320,6 +321,7 @@ import {
   removePendingFavorites,
   selectPendingFavorites,
 } from "@wave/client/db/pendingFavorites";
+import { removeDislikes, selectDislikes, setDislikes } from "@wave/client/db/dislikes";
 import {
   forgetSavedLyrics,
   indexSavedLyrics,
@@ -1009,6 +1011,17 @@ export class LibraryStore extends Context.Service<
     readonly removePendingFavorites: (
       videoIds: readonly string[],
     ) => Effect.Effect<void, LibraryStoreError>;
+    /**
+     * Keeps [songs] as disliked (Core's `DislikedSong`), each by its
+     * `dislikeKey`; one disliked already keeps when it was.
+     */
+    readonly setDislikes: (
+      songs: readonly Omit<DislikedSong, "dislikedAt">[],
+    ) => Effect.Effect<void, LibraryStoreError>;
+    /** Forgets the dislikes kept under [keys]. */
+    readonly removeDislikes: (keys: readonly string[]) => Effect.Effect<void, LibraryStoreError>;
+    /** Every dislike kept, the newest first. */
+    readonly listDislikes: Effect.Effect<readonly DislikedSong[], LibraryStoreError>;
     /** Every Library file with its length, bitrate and size (Core's `qualityUpgradeSongs` weighs them). */
     readonly qualityFiles: Effect.Effect<readonly QualityFile[], LibraryStoreError>;
     /** The Tracks recorded as having no better copy in [direction]. This phone only. */
@@ -1881,6 +1894,12 @@ const make = Effect.gen(function* () {
 
     removePendingFavorites: (videoIds) =>
       writeAttempt("forget pending favorites", () => removePendingFavorites(db, videoIds)),
+
+    setDislikes: (songs) => writeAttempt("keep dislikes", () => setDislikes(db, songs, Date.now())),
+
+    removeDislikes: (keys) => writeAttempt("forget dislikes", () => removeDislikes(db, keys)),
+
+    listDislikes: attempt("read dislikes", () => selectDislikes(db)),
 
     qualityFiles: attempt("read the files' quality", () => selectQualityFiles(db)),
     noBetterCopies: (direction) =>

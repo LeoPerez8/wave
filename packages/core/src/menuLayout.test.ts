@@ -72,6 +72,7 @@ describe("menuLayout", () => {
       "magicQueue",
       "addToPlaylist",
       "favorite",
+      "dislike",
       "goToAlbum",
       "goToArtist",
       "releaseDate",
