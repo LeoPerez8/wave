@@ -4,7 +4,12 @@
  * finished, a play ended or a star changed, and the invitation to sign in after the first scan.
  */
 import { Database } from "@wave/client";
-import { LANGUAGE_PREFERENCE, type LanguageChoice, type SyncClock } from "@wave/core";
+import {
+  GENIUS_INSIGHTS_SETTING,
+  LANGUAGE_PREFERENCE,
+  type LanguageChoice,
+  type SyncClock,
+} from "@wave/core";
 import * as Context from "effect/Context";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
@@ -18,6 +23,8 @@ import { createDesktopSync, syncedPreference } from "../sync/desktopSync.ts";
 import type { WaveAccountService } from "./account.ts";
 import type { LanguageView } from "../../shared/language.ts";
 import { readDesktopLanguage, saveDesktopLanguage } from "../language.ts";
+import { geniusInsightsEnabled } from "../library/lyricsAndTags.ts";
+import { createDesktopGenius, type DesktopGenius } from "../lyrics/genius.ts";
 
 export interface AccountShape {
   readonly language: () => LanguageView;
@@ -25,6 +32,7 @@ export interface AccountShape {
   /** A synced setting was saved and stamped here: it goes up without waiting for the timed sync. */
   readonly settingsEdited: () => void;
   readonly view: () => AccountView;
+  readonly genius: DesktopGenius;
   readonly signIn: () => Promise<void>;
   readonly cancelSignIn: () => void;
   readonly signOut: () => Promise<void>;
@@ -49,6 +57,7 @@ export const accountLayer = (options: {
   readonly clock?: SyncClock;
   readonly preferredLanguages?: () => readonly string[];
   readonly languageChanged?: (view: LanguageView) => void;
+  readonly fetch?: typeof globalThis.fetch;
 }) =>
   Layer.effect(
     Account,
@@ -64,7 +73,18 @@ export const accountLayer = (options: {
           .catch((error: unknown) => console.warn("[wave] The stars' downloads failed", error));
       const { account } = options;
       const language = () => readDesktopLanguage(db, options.preferredLanguages?.() ?? []);
-      const languageChanged = () => options.languageChanged?.(language());
+      const genius = createDesktopGenius({
+        db,
+        account,
+        playback,
+        language: () => language().language,
+        fetch: options.fetch ?? globalThis.fetch,
+      });
+      const stopSession = account.subscribe(() => genius.cancel());
+      const languageChanged = () => {
+        genius.cancel();
+        options.languageChanged?.(language());
+      };
       languageChanged();
       const sync = createDesktopSync({
         db,
@@ -74,6 +94,7 @@ export const accountLayer = (options: {
         // change in Settings › Playback does.
         preferencesPulled: (keys) => {
           if (keys.includes(LANGUAGE_PREFERENCE)) languageChanged();
+          if (keys.includes(GENIUS_INSIGHTS_SETTING) && !geniusInsightsEnabled(db)) genius.cancel();
           if (changesPlaybackSettings(keys))
             playback
               .applySettings()
@@ -100,6 +121,8 @@ export const accountLayer = (options: {
       sync.start();
       yield* Effect.addFinalizer(() =>
         Effect.promise(async () => {
+          stopSession();
+          genius.cancel();
           stopScans();
           stopPlayback();
           sync.dispose();
@@ -113,13 +136,17 @@ export const accountLayer = (options: {
         }),
       );
       return {
+        genius,
         language,
         setLanguage: (choice) => {
           saveDesktopLanguage(db, choice);
           languageChanged();
           sync.edited({ songs: false });
         },
-        settingsEdited: () => sync.edited({ songs: false }),
+        settingsEdited: () => {
+          if (!geniusInsightsEnabled(db)) genius.cancel();
+          sync.edited({ songs: false });
+        },
         view: () => {
           const { account: view, keyringMissing, deletionSent } = account.view();
           return {
@@ -133,6 +160,7 @@ export const accountLayer = (options: {
               preference(db, INVITATION) === undefined,
             revision: sync.revision(),
             theme: syncedPreference(db, "settings.theme"),
+            geniusInsights: geniusInsightsEnabled(db),
           };
         },
         // Signing in from Settings answers the invitation too.
