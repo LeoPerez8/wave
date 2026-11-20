@@ -17,6 +17,7 @@ import type {
   GeniusLyricsHit,
   YtArtistAlbum,
   YtArtistCandidate,
+  YtCommunityPlaylist,
   YtSearchTop,
   YtSectionNote,
   YtSectionView,
@@ -96,6 +97,8 @@ export type ResultRow =
       readonly album: YtArtistAlbum;
       readonly top: boolean;
     }
+  /** A community playlist YT Music found: opens its YT Music playlist page. */
+  | { readonly type: "ytPlaylist"; readonly key: string; readonly playlist: YtCommunityPlaylist }
   /** A quiet line in place of results: nothing in the library, YT Music offline… */
   | { readonly type: "note"; readonly key: string; readonly text: string }
   /** Skeleton rows where online results will go, while they load. */
@@ -216,6 +219,29 @@ const ytAlbumRow = (album: YtArtistAlbum, top: boolean): ResultRow => ({
 });
 
 /**
+ * The Community playlists shelf: its head with their count, then every one YT
+ * Music found, in its order. Nothing when it found none.
+ */
+const communityPlaylistRows = (
+  playlists: readonly YtCommunityPlaylist[],
+  language: AppLanguage,
+): ResultRow[] =>
+  playlists.length === 0
+    ? []
+    : [
+        {
+          type: "heading",
+          key: "heading:community-playlists",
+          label: `${catalogueOf(language).playbackText.communityPlaylists} · ${formatNumber(language, playlists.length)}`,
+        },
+        ...playlists.map((playlist) => ({
+          type: "ytPlaylist" as const,
+          key: `yt-playlist:${playlist.playlistId}`,
+          playlist,
+        })),
+      ];
+
+/**
  * Lays out results: the top result, then each group (in Core's order) with a
  * preview of its best matches and "Show all". A group the owner expanded, or
  * the only group, shows everything search returned. The songs, artists and
@@ -227,6 +253,7 @@ const ytAlbumRow = (album: YtArtistAlbum, top: boolean): ResultRow => ({
  * shows as the Library's song in its row (and [results] leave it out), and
  * one shown as an earlier row's Library file plays from that row.
  * [topArtist] is the top-hit Library artist's merged song count, for their rows.
+ * The community playlists YT Music found come last, as a shelf of their own.
  */
 export const resultRows = (
   results: SearchResults<SearchHit>,
@@ -368,6 +395,7 @@ export const resultRows = (
   }
   if (!lyricsFirst && !groups.some((group) => group.kind === "song"))
     rows.splice(afterTopResult, 0, ...lyricSection());
+  rows.push(...communityPlaylistRows(yt?.playlists ?? [], language));
   return rows;
 };
 

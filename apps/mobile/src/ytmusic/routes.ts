@@ -24,6 +24,10 @@ const open = (screen: YtListScreen, id: string, head: YtListHead): void => {
 export const openYtAlbum = (browseId: string, head: YtListHead): void =>
   open("yt-album", browseId, head);
 
+/** Opens a YT Music playlist's songs ([playlistId], without the `VL` its page adds), on the Library stack. */
+export const openYtPlaylist = (playlistId: string, head: YtListHead): void =>
+  open("yt-playlist", playlistId, head);
+
 /**
  * The browse id of the YT Music album page at [pathname], or null when it
  * isn't one, so a YT Music song's Go to Album leaves it out (Core's
