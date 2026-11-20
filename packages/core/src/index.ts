@@ -890,7 +890,9 @@ export { artistSongOrder } from "./artistSongOrder.ts";
 export type { RankedArtistSong } from "./artistSongOrder.ts";
 export { ytArtistOpening, ytArtistOpeningState } from "./ytArtistOpening.ts";
 export { artistPageItems } from "./artistPage.ts";
-export type { ArtistPageItem, ArtistPageShelf } from "./artistPage.ts";
+export type { ArtistPageAfter, ArtistPageItem, ArtistPageShelf } from "./artistPage.ts";
+export { similarArtistLinks } from "./similarArtistLinks.ts";
+export type { SimilarArtistLink } from "./similarArtistLinks.ts";
 export type { SheetEvent, SheetPhase, SheetStep } from "./sheetLifecycle.ts";
 export {
   artistSeparator,

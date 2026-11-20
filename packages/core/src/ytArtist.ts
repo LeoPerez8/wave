@@ -104,7 +104,8 @@ export interface YtArtistPage<S extends YtSong = YtSong> {
   readonly singles: readonly YtArtistAlbum[];
   /**
    * The artists the page lists as similar ("Fans might also like"), in its
-   * order, for Discover mixes. Pages saved before it was read have none.
+   * order: the page's shelf of them, Discover mixes and the Artist graph read
+   * it. Pages saved before it was read have none.
    */
   readonly similar?: readonly YtArtistCandidate[];
 }
@@ -942,6 +943,12 @@ export interface YtArtistPageView<S extends YtSong, L, A> {
   readonly songs: readonly DiscoverSong<S, L>[];
   /** Their Albums, then Singles & EPs, newest first, each with the Library's album for it. */
   readonly shelves: readonly YtArtistShelf<A>[];
+  /**
+   * Fans might also like: the similar artists the page lists, in its order
+   * (Core's `similarArtistLinks` says which page each opens). Under a quiet
+   * line for a read that failed, the ones saved before still show.
+   */
+  readonly similar: readonly YtArtistCandidate[];
   readonly note: YtArtistPageNote | null;
   /** Whether Try Again is offered. */
   readonly retry: boolean;
@@ -961,7 +968,8 @@ export interface YtArtistPageViewContext<S extends YtSong, L, A> extends YtArtis
  * opened by name) as a quiet Not found line; a match saved without the
  * artist's full list doesn't stand. Without one the page is looking
  * (it asks on its own, `ytArtistPageAsks`) or, after a failure, a quiet line
- * with Try Again. With YT Music off it says so.
+ * with Try Again over the similar artists saved before, if any. With YT
+ * Music off it says so.
  */
 export const ytArtistPageView = <S extends YtSong, L, A>(
   state: YtArtistSection<S>,
@@ -970,13 +978,11 @@ export const ytArtistPageView = <S extends YtSong, L, A>(
   const saved = state.status === "reading" ? null : state.saved;
   const page = saved?.outcome === "found" ? saved.page : null;
   const head = { name: page?.name ?? null, artworkUrl: page?.artworkUrl ?? null };
-  const quiet = (note: YtArtistPageNote | null, retry = false): YtArtistPageView<S, L, A> => ({
-    ...head,
-    songs: [],
-    shelves: [],
-    note,
-    retry,
-  });
+  const quiet = (
+    note: YtArtistPageNote | null,
+    retry = false,
+    similar: readonly YtArtistCandidate[] = [],
+  ): YtArtistPageView<S, L, A> => ({ ...head, songs: [], shelves: [], similar, note, retry });
   if (!context.enabled) return quiet("off");
   // Reading what was saved is part of the wait: it looks the same as asking.
   if (state.status === "reading" || state.status === "loading") return quiet("loading");
@@ -986,12 +992,15 @@ export const ytArtistPageView = <S extends YtSong, L, A>(
       ...head,
       songs: discoverSongs(saved.page.allSongs ?? [], context.librarySong),
       shelves: pageShelves(saved.page, context.libraryAlbum),
+      similar: saved.page.similar ?? [],
       note: null,
       retry: false,
     };
   }
   // Nothing standing: it asks on its own (`ytArtistPageAsks`) unless the last ask failed.
-  return state.failure === null ? quiet("loading") : quiet(state.failure, true);
+  return state.failure === null
+    ? quiet("loading")
+    : quiet(state.failure, true, page?.similar ?? []);
 };
 
 export function* libraryArtistFinderSteps<A extends { readonly name: string }>(

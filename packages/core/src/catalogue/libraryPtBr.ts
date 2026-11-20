@@ -88,6 +88,7 @@ export const libraryPtBr: typeof libraryEn = {
   albums: "Álbuns",
   singlesAndEps: "Singles e EPs",
   appearsOn: "Aparece em",
+  fansAlsoLike: "Fãs também curtem",
   popular: "Populares",
   songs: "Músicas",
   loadingAlbums: "Carregando álbuns",

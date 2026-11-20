@@ -98,6 +98,7 @@ export const libraryEn = {
   albums: "Albums",
   singlesAndEps: "Singles & EPs",
   appearsOn: "Appears on",
+  fansAlsoLike: "Fans might also like",
   popular: "Popular",
   songs: "Songs",
   loadingAlbums: "Loading albums",

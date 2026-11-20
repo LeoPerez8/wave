@@ -9,6 +9,7 @@ import {
 } from "./index.ts";
 import type {
   YtArtistAlbum,
+  YtArtistCandidate,
   YtArtistSaved,
   YtArtistSection,
   YtArtistSectionEvent,
@@ -44,7 +45,12 @@ const release = (browseId: string, year: number | null): YtArtistAlbum => ({
 const found = (
   checkedAt: number,
   allSongs: YtSong[] = [song("a")],
-  parts: { top?: YtSong[]; albums?: YtArtistAlbum[]; singles?: YtArtistAlbum[] } = {},
+  parts: {
+    top?: YtSong[];
+    albums?: YtArtistAlbum[];
+    singles?: YtArtistAlbum[];
+    similar?: YtArtistCandidate[];
+  } = {},
 ): YtArtistSaved => ({
   outcome: "found",
   checkedAt,
@@ -56,7 +62,14 @@ const found = (
     allSongs,
     albums: parts.albums ?? [],
     singles: parts.singles ?? [],
+    ...(parts.similar === undefined ? {} : { similar: parts.similar }),
   },
+});
+
+const similar = (name: string): YtArtistCandidate => ({
+  name,
+  browseId: `UC${name}`,
+  audience: null,
 });
 
 /** A page saved before the artist's songs playlist was read: it has no full list. */
@@ -200,10 +213,36 @@ describe("what a YouTube Music artist page shows", () => {
         artworkUrl: null,
         songs: [],
         shelves: [],
+        similar: [],
         note: reason,
         retry: true,
       });
     }
+  });
+
+  test("the similar artists the page lists, in its order; none for a page saved before they were read", () => {
+    const listed = [similar("Justice"), similar("Air")];
+    assert.deepEqual(view(restored(found(NOW, [song("a")], { similar: listed }))).similar, listed);
+    assert.deepEqual(view(restored(found(NOW))).similar, []);
+  });
+
+  test("when asking again fails, the similar artists saved before still show under the quiet line", () => {
+    const listed = [similar("Justice")];
+    const failed = step(
+      restored(found(NOW - 8 * DAY, [song("a")], { similar: listed })),
+      { type: "requested" },
+      { type: "failed", reason: "failed" },
+    );
+    const shown = view(failed);
+    assert.equal(shown.note, "failed");
+    assert.deepEqual(shown.songs, []);
+    assert.deepEqual(shown.similar, listed);
+  });
+
+  test("while it's looking or with YT Music off, no similar artists show", () => {
+    const old = restored(found(NOW - 8 * DAY, [song("a")], { similar: [similar("Justice")] }));
+    assert.deepEqual(view(old).similar, []);
+    assert.deepEqual(view(old, { enabled: false }).similar, []);
   });
 
   test("with YT Music off it says so instead of asking, saved answer or not", () => {
