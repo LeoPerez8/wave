@@ -17,6 +17,13 @@ export const discoverEn = {
     "artist-mixes": "Get new artist mixes",
     "genre-mixes": "Get new genre mixes",
   } satisfies Record<MixRowId, string>,
+  /** The Magic Queue carousel's pages beside the Magic Queue one, which is named as its row. */
+  pages: {
+    "most-listened-recently": "Most listened recently",
+  },
+  /** A carousel page as TalkBack hears it: its name and its place. */
+  pageOf: (name: string, page: number, pages: number) =>
+    `${name}, page ${formatNumber("en", page)} of ${formatNumber("en", pages)}`,
   otherSongs: "Get other songs",
   updating: "Updating…",
   buildingMixes: "Building your mixes",
