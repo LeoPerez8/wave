@@ -430,7 +430,7 @@ export const settingsEn = {
     "One of Home's sections, shown under the Library's rows while it has something to show.",
   everyShuffleUsesItALongPress:
     "Every shuffle uses it. A long press on a shuffle button picks it too, but in a Now Playing slot it changes the button.",
-  pressBackAgainWithin2SecondsTo: "Press Back again within 2 seconds to exit",
+  backAgainToExit: "Back again to exit",
   dismisses: "Dismisses",
   close: "Close",
   selectionActions: "Selection actions",

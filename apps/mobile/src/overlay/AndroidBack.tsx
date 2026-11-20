@@ -47,7 +47,7 @@ export function AndroidBack(): null {
         return false;
       }
       if (confirmation.press(performance.now())) BackHandler.exitApp();
-      else void showToast(currentLocalisation().strings.settings.pressBackAgainWithin2SecondsTo);
+      else void showToast(currentLocalisation().strings.settings.backAgainToExit);
       return true;
     });
     return () => {
