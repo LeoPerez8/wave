@@ -9,6 +9,7 @@ import { Playback } from "./playback/playback.ts";
 import {
   validPlaybackCommand,
   validPlaybackSettings,
+  validQueuePlace,
   validSleepTimerChoice,
 } from "./playback/validation.ts";
 import { Player } from "./audio/player.ts";
@@ -67,7 +68,7 @@ import {
   YT_SONGS_DOWNLOAD_ACTIONS,
   type YtSongsList,
 } from "../shared/downloads.ts";
-import type { MissingSongsDownloadAction, YtSongsDownloadAction } from "@wave/core";
+import type { MissingSongsDownloadAction, UpNextPlace, YtSongsDownloadAction } from "@wave/core";
 import { createYtFeatureHandlers, playSearchSong } from "./yt/ytBridge.ts";
 import { YtFeatures } from "./yt/ytServices.ts";
 import type { YtListSongs } from "./downloads/downloads.ts";
@@ -830,10 +831,11 @@ const createHandlers = (
             return selectionMenu(yield* Database, target, (yield* YtMusic).enabled());
           })
         : refuse("collections.selectionActions", "invalid selection"),
-    "collections.runSelection": ([target, action, playlistId]) =>
+    "collections.runSelection": ([target, action, playlistId, at]) =>
       validSelectionTarget(target, validTarget) &&
       SELECTION_RUN_ACTIONS.includes(action as SelectionRunAction) &&
-      (action === "addToPlaylist" ? songId(playlistId) : playlistId === undefined)
+      (action === "addToPlaylist" ? songId(playlistId) : playlistId === undefined) &&
+      validQueuePlace(action, at)
         ? Effect.gen(function* () {
             const db = yield* Database;
             const playback = yield* Playback;
@@ -866,6 +868,7 @@ const createHandlers = (
                 target,
                 action as SelectionRunAction,
                 playlistId as number | undefined,
+                at as UpNextPlace | undefined,
               ),
             );
           })
@@ -876,10 +879,11 @@ const createHandlers = (
             return songMenu(yield* Database, target, surface, (yield* YtMusic).enabled());
           })
         : refuse("songs.actions", "invalid songs or surface"),
-    "songs.run": ([target, action, playlistId]) =>
+    "songs.run": ([target, action, playlistId, at]) =>
       validTarget(target) &&
       SONG_RUN_ACTIONS.includes(action as SongRunAction) &&
       (action === "addToPlaylist" ? songId(playlistId) : playlistId === undefined) &&
+      validQueuePlace(action, at) &&
       (action !== "removeFromPlaylist" || target.scope.kind === "playlist")
         ? Effect.gen(function* () {
             const db = yield* Database;
@@ -896,7 +900,11 @@ const createHandlers = (
                     download: downloads.missing,
                     queue: (type, trackIds, songs) =>
                       yt.withSongs(songs, () =>
-                        playback.command({ type, trackIds: [...trackIds] }),
+                        playback.command(
+                          type === "addToQueue" && at !== undefined
+                            ? { type, trackIds: [...trackIds], at: at as UpNextPlace }
+                            : { type, trackIds: [...trackIds] },
+                        ),
                       ),
                     runStreamed: (song, action) =>
                       runStreamedAction(

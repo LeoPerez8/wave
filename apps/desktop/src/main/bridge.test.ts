@@ -2777,6 +2777,77 @@ test("a selection of songs and collections acts on every song they hold, once ea
   });
 });
 
+test("songs dropped in Up Next go where they were dropped", async () => {
+  await withFile(async (file) => {
+    const { runtime, exposed, handlers } = connect(file);
+    const wave = exposed.get("wave") as WaveBridge;
+    const call = (channel: string, ...args: unknown[]) => handlers.get(channel)!(trusted, ...args);
+    try {
+      const ids = await runtime.runPromise(
+        Effect.gen(function* () {
+          const db = (yield* Database) as unknown as TestDatabase;
+          return ["One", "Two", "Three", "Four"].map((title, n) =>
+            addTrack(db, { title, artist: "Wave", album: "Disc", trackNumber: n + 1 }),
+          );
+        }),
+      );
+      await wave.settings.setYtMusic(false);
+      const album = (await wave.library.browse({ kind: "albums" }, 0, 1)).items[0]!.id;
+      const songs = { kind: "album", id: album } as const;
+      await wave.playback.start(songs, 0);
+      const titles = async () => (await wave.playback.queue(0, 20)).items.map((row) => row.title);
+      const keyOf = async (title: string) =>
+        (await wave.playback.queue(0, 20)).items.find((row) => row.title === title)!.key;
+      const at = { after: await keyOf("Two"), before: await keyOf("Three") };
+      assert.deepEqual(
+        await wave.songs.run(
+          { scope: songs, ids: [ids[3]!, ids[0]!] },
+          "addToQueue",
+          undefined,
+          at,
+        ),
+        { kind: "queued", count: 2 },
+      );
+      // In the order the list shows them.
+      assert.deepEqual(await titles(), ["One", "Two", "One", "Four", "Three", "Four"]);
+      const top = { after: null, before: await keyOf("Two") };
+      assert.deepEqual(
+        await wave.collections.runSelection(
+          { collections: [{ kind: "album", ids: [album] }] },
+          "addToQueue",
+          undefined,
+          { after: null, before: top.before },
+        ),
+        { kind: "queued", count: 4 },
+      );
+      assert.deepEqual((await titles()).slice(0, 6), ["One", "One", "Two", "Three", "Four", "Two"]);
+      const target = { scope: songs, ids: [ids[0]!] };
+      for (const refused of [
+        [target, "playNext", undefined, top],
+        [target, "addToQueue", undefined, { after: "x", before: null }],
+        [target, "addToQueue", undefined, { after: null }],
+      ])
+        await assert.rejects(call("songs.run", ...refused), /refused/i);
+      await assert.rejects(
+        call(
+          "collections.runSelection",
+          { collections: [{ kind: "album", ids: [album] }] },
+          "playNext",
+          undefined,
+          top,
+        ),
+        /refused/i,
+      );
+      await assert.rejects(
+        call("streamed.run", "abcdefghijk", "playNext", undefined, top),
+        /refused/i,
+      );
+    } finally {
+      await runtime.dispose();
+    }
+  });
+});
+
 test("a song's menu and the selection bar offer and run the phone's actions through the bridge", async () => {
   await withFile(async (file) => {
     const { runtime, exposed } = connect(file);

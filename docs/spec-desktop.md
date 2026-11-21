@@ -367,6 +367,13 @@ The prototype was approved on 2026-11-18 after an Impeccable critique; its decis
   songs has no file; Fix Songs when the checked items are one kind of collection. Favorite and
   the other song entries show only while songs alone are checked (Core's
   `desktopSelectionActions`, the phone's mixed selection rules).
+- A song row drags onto a playlist in the sidebar, wide or collapsed to icons, to add it there;
+  onto an Up Next row, the playing row or the end of the Queue tab, to go in Up Next at that
+  place (#1217); or onto the player bar's Queue button, for Add to Queue. A checked row brings
+  every checked song, and on Search the collections checked with them, in the order shown.
+  Streamed songs drag the same way. A target is highlighted only while it can take the drop,
+  dragging over the Queue tab opens it, and the toasts are the menu entries' own. Add to
+  Playlist and Add to Queue stay in the menus for the keyboard.
 - Home shows the phone's sections in the phone's order, following the account's synced
   arrangement: shelves of tiles, Most played as a table. Edit Home, on Home and under Settings ›
   Home, is the phone's editor: the sections shown, Discover's rows under Discover, then the ones

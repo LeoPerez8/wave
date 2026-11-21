@@ -229,6 +229,13 @@ input::placeholder {
 .nav-item[aria-current="page"] svg {
   color: var(--color-accent);
 }
+/* A sidebar playlist or the Queue button while songs dragged over it can drop there. */
+.nav-item.drop-over,
+.icon-button.drop-over {
+  background: var(--color-fill);
+  box-shadow: inset 0 0 0 2px var(--color-accent);
+  border-radius: 6px;
+}
 .nav-heading {
   font-size: 11px;
   font-weight: 600;

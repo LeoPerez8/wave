@@ -3,7 +3,7 @@
  * it: Play Next, Add to Queue, the Magic Queue, Add to Playlist, the star, Go to Album and Go to
  * Artist, Copy Link and its download. Now Playing's Add to Playlist and Download buttons too.
  */
-import type { ActionSurface, StreamedArtistTarget } from "@wave/core";
+import type { ActionSurface, StreamedArtistTarget, UpNextPlace } from "@wave/core";
 import { useCallback, useEffect, useState } from "react";
 import type { BrowseRow } from "../../shared/browse.ts";
 import type {
@@ -63,9 +63,10 @@ export function useStreamedSongs({ go, failed, notify, changed }: StreamedMenuOp
       action: StreamedRunAction,
       surface: ActionSurface = "menu",
       playlistId?: number,
+      at?: UpNextPlace,
     ) => {
       try {
-        const result = await window.wave.streamed.run(videoId, action, playlistId);
+        const result = await window.wave.streamed.run(videoId, action, playlistId, at);
         changed();
         switch (result.kind) {
           case "queued":
