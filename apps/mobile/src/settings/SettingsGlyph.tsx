@@ -1,5 +1,6 @@
 import {
   IconBooks,
+  IconCircleMinus,
   IconHistory,
   IconCode,
   IconDownload,
@@ -28,6 +29,7 @@ export const SETTINGS_GLYPH_GAP = CELL * 2;
 const GLYPHS: Readonly<Record<SettingsIcon, Icon>> = {
   books: IconBooks,
   userCheck: IconUserCheck,
+  circleMinus: IconCircleMinus,
   history: IconHistory,
   palette: IconPalette,
   layout: IconLayoutGrid,

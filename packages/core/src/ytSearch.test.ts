@@ -3,6 +3,7 @@ import { describe, test } from "node:test";
 
 import {
   YT_SEARCH_DEBOUNCE_MS,
+  YT_SEARCH_NO_LIBRARY,
   YT_SECTION_HIDDEN,
   libraryArtistFinder,
   libraryReleaseFinder,
@@ -107,6 +108,17 @@ describe("ytSectionView", () => {
     );
     assert.deepEqual(view?.artists, [artist("Daft Punk"), artist("Justice")]);
     assert.deepEqual(view?.albums, [album("Discovery", "Daft Punk"), album("Cross", "Justice")]);
+    assert.equal(view?.note, null);
+  });
+
+  test("with no Library to check against, shows everything YT Music found", () => {
+    const view = ytSectionView(
+      results([song("mine")], [artist("Mine")], [album("Mine", "Me")]),
+      YT_SEARCH_NO_LIBRARY,
+    );
+    assert.deepEqual(view?.songs, [song("mine")]);
+    assert.deepEqual(view?.artists, [artist("Mine")]);
+    assert.deepEqual(view?.albums, [album("Mine", "Me")]);
     assert.equal(view?.note, null);
   });
 

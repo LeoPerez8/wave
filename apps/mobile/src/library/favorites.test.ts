@@ -28,10 +28,14 @@ const openFavorites = async () => {
   // Screen sight is navigation and React Native; the hooks that follow it aren't run here.
   const sightUrl = `data:text/javascript,${encodeURIComponent("export const useSightedStore = () => { throw new Error('not in a screen'); };")}`;
   const favoritesUrl = import.meta.url.replace("favorites.test.ts", "favorites.ts");
+  // The disliked set, which a star changes, reaches the store through the same runtime.
+  const dislikesUrl = import.meta.url.replace("favorites.test.ts", "dislikes.ts");
+  const usesRuntime = (parent: string | undefined): boolean =>
+    parent === favoritesUrl || parent === dislikesUrl;
   const hooks = registerHooks({
     resolve(specifier, context, nextResolve) {
       if (
-        context.parentURL === favoritesUrl &&
+        usesRuntime(context.parentURL) &&
         (specifier === "./runtime" || specifier === new URL("./runtime.ts", import.meta.url).href)
       )
         return { url: runtimeUrl, shortCircuit: true };
@@ -81,7 +85,7 @@ const openFavorites = async () => {
       root,
       "apps/mobile/src/library/favorites.ts",
     );
-    return { store, LibraryStoreError, track, provide: runtime.provide, favorites, close };
+    return { root, store, LibraryStoreError, track, provide: runtime.provide, favorites, close };
   } catch (error) {
     close();
     throw error;
@@ -89,7 +93,8 @@ const openFavorites = async () => {
 };
 
 test("cold scoped stars follow optimistic gestures and restore the saved star after a failed write without loading global lists", async () => {
-  const { store, LibraryStoreError, track, provide, favorites, close } = await openFavorites();
+  const { root, store, LibraryStoreError, track, provide, favorites, close } =
+    await openFavorites();
   try {
     Effect.runSync(store.setFavorites([track.id], true));
     let globalReads = 0;
@@ -154,6 +159,29 @@ test("cold scoped stars follow optimistic gestures and restore the saved star af
       false,
     );
     assert.equal(globalReads, 0);
+
+    // A star set straight through here (an import does) removes the song's dislike: the
+    // store's, the set's that menus and pickers read, and the taste profile hears of it.
+    const dislikes = await loadWorktreeModule<typeof import("./dislikes.ts")>(
+      root,
+      "apps/mobile/src/library/dislikes.ts",
+    );
+    const changes = await loadWorktreeModule<typeof import("./libraryChanges.ts")>(
+      root,
+      "apps/mobile/src/library/libraryChanges.ts",
+    );
+    const undisliked: string[] = [];
+    const stop = changes.onUndisliked((keys) => undisliked.push(...keys));
+    await dislikes.keepDislikes([
+      { key: String(track.id), title: "One", artists: ["Artist"], durationMs: 180000 },
+    ]);
+    assert.deepEqual([...dislikes.dislikedSongsNow()], [String(track.id)]);
+    await favorites.setFavorites([track.id], true);
+    stop();
+    assert.deepEqual([...dislikes.dislikedSongsNow()], []);
+    assert.deepEqual(undisliked, [String(track.id)]);
+    assert.deepEqual(Effect.runSync(store.listDislikes), []);
+    assert.equal(favorites.isFavorite(track.id), true);
   } finally {
     close();
   }

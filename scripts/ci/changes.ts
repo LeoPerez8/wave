@@ -105,12 +105,20 @@ export const reachesDesktop = (paths: readonly string[]): boolean => {
 // What only the desktop is made of, by prefix: its app, its JVM's entry point and its own UI text.
 const DESKTOP_PREFIXES = [...DESKTOP_ONLY, "packages/core/src/catalogue/desktop"];
 
+const isDesktopOnly = (path: string) => DESKTOP_PREFIXES.some((prefix) => path.startsWith(prefix));
+
 /**
- * Whether a change is the desktop's: it touches something only the desktop is made of. Shared
- * code it changes along the way is there for the desktop, so the phone's notes leave it out.
+ * Whether the phone's users can see a change (`reachesUsers`), leaving out what only the desktop
+ * is made of. A change that also touches the APK, Core or the sync service is the phone's too,
+ * whatever it changes in the desktop; one that is otherwise only the desktop's isn't, with the
+ * lockfile and workspace files it changes along the way.
  */
-export const isDesktopChange = (paths: readonly string[]): boolean =>
-  paths.some((path) => DESKTOP_PREFIXES.some((prefix) => path.startsWith(prefix)));
+export const reachesPhone = (paths: readonly string[]): boolean => {
+  const phone = paths.filter((path) => !isDesktopOnly(path));
+  if (phone.length === paths.length) return reachesUsers(paths);
+  const touched = changes(phone);
+  return touched.app || touched.core || touched.sync;
+};
 
 if (process.argv[1] === fileURLToPath(import.meta.url)) {
   const result = process.argv.includes("--all")

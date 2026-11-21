@@ -497,6 +497,7 @@ export {
   LAYOUT_PAGES,
   SETTINGS_PAGES,
   accountsSummary,
+  dislikedSongsSummary,
   downloadsSummary,
   visibleSettingsPages,
 } from "./settingsPages.ts";
@@ -791,6 +792,21 @@ export {
   type PlaylistPlayEvent,
   type PlaylistPlays,
 } from "./fromYourLibrary.ts";
+export {
+  HOME_COMMUNITY_PLAYLISTS,
+  HOME_COMMUNITY_PLAYLISTS_RETRY_MS,
+  communityPlaylistsAccount,
+  homeCommunityPlaylists,
+  homeCommunityPlaylistsDue,
+  homeCommunityPlaylistsShown,
+  keptCommunityPlaylists,
+  newCommunityPlaylistsSalt,
+  parseKeptCommunityPlaylists,
+  storedKeptCommunityPlaylists,
+  type KeptCommunityPlaylists,
+  type YtAccountHome,
+  type YtPlaylistShelf,
+} from "./homeCommunityPlaylists.ts";
 export { rowWindow, windowRows } from "./rowWindow.ts";
 export type { RowView, RowWindow } from "./rowWindow.ts";
 export {
@@ -883,6 +899,7 @@ export {
   magicFaithfulGenreProfile,
   magicYtSong,
   magicPlaySignal,
+  magicQueueDislikedEntries,
   magicQueueEdits,
   magicQueueLabel,
   magicQueueKeepsPlayingSong,
@@ -1041,6 +1058,7 @@ export type {
 } from "./ytAccount.ts";
 export {
   YT_SEARCH_DEBOUNCE_MS,
+  YT_SEARCH_NO_LIBRARY,
   YT_SECTION_HIDDEN,
   stepYtSection,
   ytSearchAsksVideos,
@@ -1688,7 +1706,10 @@ export {
   readPullPage,
   syncFieldFits,
 } from "./syncWire.ts";
+export { settleMarks } from "./syncMarks.ts";
+export type { MarkStamp, SettledMarks } from "./syncMarks.ts";
 export type {
+  SyncDislike,
   SyncDismissedSuggestion,
   SyncFavorite,
   SyncFieldKind,
@@ -2504,6 +2525,31 @@ export {
 export type { RowMenuAction, RowSwipeActions, SwipeChoice, SwipeSettings } from "./swipeActions.ts";
 export { BACK_EXIT_WINDOW_MS, createBackExitConfirmation } from "./backExit.ts";
 export { favoriteToast } from "./favoriteToast.ts";
+export {
+  NO_DISLIKES,
+  dislikeKey,
+  dislikeKeys,
+  dislikedSongs,
+  dislikesToForget,
+  dislikeSongs,
+  dislikeToast,
+  favoriteSongs,
+  isDisliked,
+  noMarkChanges,
+  withoutDisliked,
+} from "./dislikes.ts";
+export type {
+  DislikedSong,
+  DislikedSongs,
+  MarkChange,
+  MarkChanges,
+  MarkedSong,
+  SongIdentity,
+  SongMarks,
+} from "./dislikes.ts";
+export { dislikeSkipsPlaying } from "./dislikeSkip.ts";
+export { dislikedSongRows } from "./dislikedSongsPage.ts";
+export type { DislikedSongRow } from "./dislikedSongsPage.ts";
 export { queuedToast } from "./queuedToast.ts";
 export type { FavoriteSource } from "./favoriteToast.ts";
 
@@ -2970,3 +3016,63 @@ export {
   type LanguageChoice,
 } from "./languageChoice.ts";
 export { displayTag } from "./displayTag.ts";
+export {
+  DJ_GRID_TILES,
+  DJ_MAX_SELECTED,
+  djArtistTile,
+  djCanStart,
+  djGrid,
+  djOpened,
+  djReduce,
+  djSeedTiles,
+  djSelectable,
+  djSelected,
+  startDjQueue,
+} from "./dj.ts";
+export {
+  DEFAULT_DJ_SETTINGS,
+  DJ_DISCOVERIES,
+  DJ_VARIETIES,
+  djDiscoveryLabel,
+  djMixSliders,
+  djNewMusicShare,
+  parseDjSettings,
+} from "./djSettings.ts";
+export type { DjDiscovery, DjPopularity, DjSettings, DjVariety } from "./djSettings.ts";
+export { djVarietyCandidates } from "./djVariety.ts";
+export type { DjCandidatePools } from "./djVariety.ts";
+export {
+  DJ_REMEMBERED_SETTING,
+  djReopened,
+  readDjRemembered,
+  storedDjRemembered,
+} from "./djRemembered.ts";
+export type { DjRemembered } from "./djRemembered.ts";
+export { DJ_FILTERS, djFilterOn, djToggleFilter } from "./djSettings.ts";
+export type { DjFilter } from "./djSettings.ts";
+export {
+  DJ_NEW_RELEASE_BOOST,
+  DJ_RELEASE_PAGES,
+  djNewReleasesRanked,
+  djReleaseArtists,
+} from "./djNewReleases.ts";
+export type { DjReleasePage } from "./djNewReleases.ts";
+export { magicSessionSliders } from "./magicQueue.ts";
+export type {
+  DjAction,
+  DjState,
+  DjArtistTile,
+  DjGridSources,
+  DjPageNeeded,
+  DjTile,
+  DjTileKey,
+} from "./dj.ts";
+export { djOpeningGrid } from "./djOpening.ts";
+export type { DjOpeningGrid, DjOpeningSources } from "./djOpening.ts";
+export { DJ_OPENED_TILES, djCells, djPageRead, djPagesNeeded } from "./dj.ts";
+export { djAlbumTile, djTileArtist } from "./dj.ts";
+export type { DjAlbum, DjAlbumTile } from "./dj.ts";
+export type { DjCell, DjPageRead, DjRow, DjSavedPage } from "./dj.ts";
+export { djSearchTiles } from "./djSearch.ts";
+export { djSeedFull } from "./dj.ts";
+export type { DjSearchFound } from "./djSearch.ts";

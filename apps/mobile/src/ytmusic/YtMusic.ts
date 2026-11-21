@@ -1,4 +1,5 @@
 import {
+  type YtAccountHome,
   type YtArtistAlbum,
   type YtCommunityPlaylist,
   type YtArtistCandidate,
@@ -93,6 +94,13 @@ export class YtMusic extends Context.Service<
      * signed out and without a country (YouTube Music picks one).
      */
     readonly chartArtists: Effect.Effect<readonly YtArtistCandidate[], YtMusicError>;
+    /**
+     * The shelves of playlists on the connected account's YouTube Music home,
+     * in its order, for Home's Community playlists, with the account they
+     * were read as. Nothing else of that home is read. Fails without a
+     * session YouTube accepts, and past its deadline (native, 30 s).
+     */
+    readonly homePlaylistShelves: Effect.Effect<YtAccountHome, YtMusicError>;
     /** The album page [browseId] (`MPREb_…`) and its tracklist. */
     readonly album: (browseId: string) => Effect.Effect<NativeYtAlbum, YtMusicError>;
     /**
@@ -194,6 +202,7 @@ export const layer = Layer.succeed(YtMusic, {
     }),
   artist: (browseId) => metered((meter) => WaveYtMusic.artist(browseId, meter)),
   chartArtists: metered((meter) => WaveYtMusic.chartArtists(meter)),
+  homePlaylistShelves: metered((meter) => WaveYtMusic.homePlaylistShelves(meter)),
   // Album pages are read by the downloads module (a download's tags come from them), once a session.
   album: (browseId) => Effect.tryPromise({ try: () => readYtAlbum(browseId), catch: fromNative }),
   playlist: (playlistId, options = {}) =>

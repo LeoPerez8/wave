@@ -3,6 +3,7 @@ import { useEffect, useMemo, useSyncExternalStore } from "react";
 import { scopedSongStarredNow, rememberSongFavorite } from "@/library/favorites";
 import { onDownloadedRecording, onLibraryChange } from "@/library/libraryChanges";
 import { confirmDeleteSongs } from "@/library/deleteSongs";
+import { dislikeSongs } from "@/library/dislikeSongs";
 import { LibraryStore } from "@/library/LibraryStore";
 import { type SongRow } from "@wave/client";
 import { subscribeAll } from "@wave/client/externalStore";
@@ -92,6 +93,16 @@ export const nowPlayingSongActions = createNowPlayingSongActions(nowPlayingSongL
       "nowPlaying",
     ).catch(songActionFailed);
   },
+  // As the song's menu dislikes it; disliking the song that plays skips it (`dislikeSongs`).
+  dislike: (target, answer, on) =>
+    dislikeSongs(
+      {
+        tracks: answer.track === null ? [] : [answer.track],
+        ytSongs: target.song === null ? [] : [target.song as NativeYtSong],
+      },
+      on,
+      () => answer.track,
+    ),
 });
 export const songActionFailed = (error: unknown): void => {
   void showError(currentLocalisation().strings.playbackText.couldntUpdateTheSong, error);

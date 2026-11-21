@@ -4,7 +4,7 @@ import type { HomeSectionId } from "../homeSections.ts";
 export const homeEn = {
   /** Home's large title, after the two waves: Wave's name, the same in every language. */
   title: "Wave",
-  /** Each section's title, in sentence case as Home heads it (followed artists' have their own). */
+  /** Each section's title, in sentence case as Home heads it (the followed artists' sections and Community playlists have their own). */
   sections: {
     discover: "Discover",
     "in-your-orbit": "In your orbit",
@@ -16,7 +16,10 @@ export const homeEn = {
     "most-played-artists": "Most played artists",
     favorites: "Favorites",
     stats: "Stats",
-  } satisfies Record<Exclude<HomeSectionId, "new-releases" | "upcoming-shows">, string>,
+  } satisfies Record<
+    Exclude<HomeSectionId, "new-releases" | "upcoming-shows" | "community-playlists">,
+    string
+  >,
   settings: "Settings",
   seeAll: "See all",
   emptyTitle: "Nothing here yet",

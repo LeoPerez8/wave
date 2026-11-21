@@ -5,7 +5,7 @@ import {
   type DesktopFocus,
   type DesktopKeyPress,
 } from "@wave/core";
-import { useEffect, useRef } from "react";
+import { useEffect, useLayoutEffect, useRef } from "react";
 
 const FIELD =
   "input:not([type=range]):not([type=checkbox]):not([type=radio]), textarea, select, [contenteditable=true]";
@@ -45,7 +45,9 @@ export type KeyHandlers = Partial<Record<DesktopCommand, () => boolean | void>>;
 /** Runs [handlers] for the window's keys, wherever focus is. */
 export function useDesktopKeys(handlers: KeyHandlers) {
   const latest = useRef(handlers);
-  useEffect(() => {
+  // Before paint: a key pressed once the window shows a change must reach the handlers that
+  // saw it, or Space pauses twice instead of pausing and then playing.
+  useLayoutEffect(() => {
     latest.current = handlers;
   });
   useEffect(() => {

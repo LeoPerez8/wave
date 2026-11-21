@@ -68,7 +68,7 @@ test("current use is counted, tombstones included, without naming or changing an
     limit: 200,
     headroom: 200,
   });
-  assert.equal(Object.keys(first?.retained ?? {}).length, 10);
+  assert.equal(Object.keys(first?.retained ?? {}).length, 11);
   // Nothing in the way, but the installed app hasn't been seen to work yet.
   assert.equal(report.result, "insufficient-evidence");
   assert.ok(!report.findings.some((finding) => finding.code === "inventory-unavailable"));

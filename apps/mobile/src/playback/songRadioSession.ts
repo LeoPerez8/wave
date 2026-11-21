@@ -12,7 +12,8 @@ export interface SongRadioPage {
   readonly songs: readonly (YtAlbumSong & { readonly video?: boolean })[];
   readonly continuation: string | null;
 }
-const MAGIC_RADIO_DEADLINE_MS = 8000;
+/** How long a radio read waited for may take. */
+export const MAGIC_RADIO_DEADLINE_MS = 8000;
 
 /** Network/database dependencies stay at this boundary; no graph or genre reads belong here. */
 export const createSongRadioSession = <E, R>(
@@ -63,10 +64,11 @@ export const createSongRadioSession = <E, R>(
     deps.fallback(artist);
     return yield* deps.artist(artist);
   });
-  const load = (read: Effect.Effect<SongRadioPage | null, E, R>) =>
-    (deps.measure ?? ((effect) => effect))(
-      read.pipe(Effect.timeout(deps.deadlineMs ?? MAGIC_RADIO_DEADLINE_MS)),
-    ).pipe(
+  const load = (
+    read: Effect.Effect<SongRadioPage | null, E, R>,
+    deadlineMs = deps.deadlineMs ?? MAGIC_RADIO_DEADLINE_MS,
+  ) =>
+    (deps.measure ?? ((effect) => effect))(read.pipe(Effect.timeout(deadlineMs))).pipe(
       Effect.flatMap((received) => {
         if (received === null) {
           if (page === null) started = false;
@@ -86,15 +88,34 @@ export const createSongRadioSession = <E, R>(
     );
   return {
     current: () => page,
-    read: ({ online, low }: { readonly online: boolean; readonly low: boolean }) =>
+    /**
+     * A read waited for stops at [deadlineAt] (epoch ms) when given, so it
+     * shares a deadline that started before it; a refresh in the background
+     * keeps its own.
+     */
+    read: ({
+      online,
+      low,
+      deadlineAt,
+    }: {
+      readonly online: boolean;
+      readonly low: boolean;
+      readonly deadlineAt?: number;
+    }) =>
       Effect.gen(function* () {
         if (!online || reading) return page;
+        const left =
+          deadlineAt === undefined
+            ? undefined
+            : Math.max(
+                0,
+                Math.min(deps.deadlineMs ?? MAGIC_RADIO_DEADLINE_MS, deadlineAt - Date.now()),
+              );
         if (!started) {
           started = true;
           reading = true;
-          const refresh = load(first);
-          if (page === null) return yield* refresh;
-          yield* Effect.forkDetach(refresh);
+          if (page === null) return yield* load(first, left);
+          yield* Effect.forkDetach(load(first));
           return page;
         }
         if (!low || page?.continuation == null) return page;
@@ -105,6 +126,7 @@ export const createSongRadioSession = <E, R>(
             songs: [...before.songs, ...next.songs],
             continuation: next.continuation,
           })),
+          left,
         );
       }),
   };

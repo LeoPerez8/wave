@@ -13,11 +13,14 @@ import {
   creditSplitter,
   leavingSongEntry,
   mergeRows,
+  parseTrackId,
   planSongSync,
+  settleMarks,
   songsLeaving,
   syncsPreference,
   type AccountSongState,
   type PhoneSong,
+  type SyncDislike,
   type SyncDismissedSuggestion,
   type SyncFavorite,
   type SyncFollow,
@@ -34,7 +37,19 @@ import {
   UNKNOWN_SONG_TITLE,
   writePlaylistEntrySong,
 } from "@wave/core";
-import { and, asc, eq, getTableColumns, inArray, isNotNull, isNull, or, sql } from "drizzle-orm";
+import {
+  and,
+  asc,
+  eq,
+  getTableColumns,
+  inArray,
+  isNotNull,
+  isNull,
+  like,
+  notLike,
+  or,
+  sql,
+} from "drizzle-orm";
 
 import { chunks } from "./chunks.ts";
 import type { LibraryDatabase } from "./database.ts";
@@ -57,8 +72,8 @@ const state = (db: LibraryDatabase) =>
  * or another account). Joining starts from nothing on the account's side
  * (the whole account is pulled again, what the phone knew of another
  * account's songs goes) and sends every playlist, entry, star, preference
- * play, follow, hidden release, notified show and dismissed follow
- * suggestion up again: the two Libraries are joined, never replaced.
+ * play, follow, hidden release, notified show, dismissed follow
+ * suggestion and dislike up again: the two Libraries are joined, never replaced.
  */
 export const joinAccount = (db: LibraryDatabase, account: string): boolean => {
   if (state(db).account === account) return false;
@@ -79,6 +94,7 @@ export const joinAccount = (db: LibraryDatabase, account: string): boolean => {
       hiddenFollowReleases,
       notifiedFollowShows,
       dismissedFollowSuggestions,
+      schema.dislikes,
     ]) {
       tx.update(table).set({ pushed: false }).where(eq(table.pushed, true)).run();
     }
@@ -154,7 +170,12 @@ type PushMark =
   | { readonly table: "favorites"; readonly trackId: number; readonly changedAt: number }
   | {
       readonly table:
-        "preferences" | "follows" | "hiddenReleases" | "notifiedShows" | "dismissedSuggestions";
+        | "preferences"
+        | "follows"
+        | "hiddenReleases"
+        | "notifiedShows"
+        | "dismissedSuggestions"
+        | "dislikes";
       readonly key: string;
       readonly changedAt: number;
     }
@@ -238,8 +259,10 @@ const leftSong = (row: {
  * Up to [limit] rows of each table that changed here and aren't on the
  * account yet, as the service's rows: songs by recording key, entries,
  * stars and plays pointing at recording keys, preferences with the value
- * [preferenceValue] gives, follows by their name key. A star of two Tracks with one key goes up once,
- * the later change. The play going on now waits until it ends.
+ * [preferenceValue] gives, follows by their name key, dislikes by recording
+ * key or, for a YT Music song, as they're kept. A star or a dislike of two
+ * Tracks with one key goes up once, the later change. The play going on now
+ * waits until it ends.
  */
 export const selectUnpushed = (
   db: LibraryDatabase,
@@ -547,6 +570,48 @@ export const selectUnpushed = (
         : { id: row.key, ...stamp(row), deleted: false, dismissedAt: row.dismissedAt };
     });
 
+  const { dislikes } = schema;
+  const dislikeRows = db
+    .select({
+      key: dislikes.songKey,
+      recordingKey: tracks.recordingKey,
+      title: dislikes.title,
+      artists: dislikes.artists,
+      durationMs: dislikes.durationMs,
+      dislikedAt: dislikes.dislikedAt,
+      changedAt: dislikes.changedAt,
+      phoneId: dislikes.phoneId,
+      deleted: dislikes.deleted,
+    })
+    .from(dislikes)
+    .leftJoin(tracks, libraryDislike)
+    // A Library song's dislike is named by its Track's recording key: one whose
+    // Track is gone or not keyed yet waits. A YT Music song's goes up as it's kept.
+    .where(
+      and(
+        eq(dislikes.pushed, false),
+        or(like(dislikes.songKey, YT_DISLIKES), isNotNull(tracks.recordingKey)),
+      ),
+    )
+    .orderBy(asc(dislikes.songKey))
+    .limit(limit)
+    .all()
+    .map((row): SyncDislike => {
+      const id = row.recordingKey ?? row.key;
+      mark("dislikes", id, { table: "dislikes", key: row.key, changedAt: row.changedAt });
+      return row.deleted
+        ? { id, ...stamp(row), deleted: true }
+        : {
+            id,
+            ...stamp(row),
+            deleted: false,
+            title: row.title,
+            artists: row.artists,
+            durationMs: row.durationMs,
+            dislikedAt: row.dislikedAt,
+          };
+    });
+
   return {
     rows: {
       songs,
@@ -560,12 +625,21 @@ export const selectUnpushed = (
       hiddenReleases,
       notifiedShows,
       dismissedSuggestions,
+      // As stars: two Tracks with one key are one song for the account.
+      dislikes: mergeRows([], dislikeRows).rows,
     },
     marks,
   };
 };
 
-/** The follow tables a push mark names, each row found by one text key. */
+/** The dislikes of YT Music songs, by how their key starts (Core's `ytTrackId`). */
+const YT_DISLIKES = "yt:%";
+
+/** A Library song's dislike and its Track: the dislike is kept under the Track's id as text. */
+const libraryDislike = sql`${schema.tracks.id} = CAST(${schema.dislikes.songKey} AS INTEGER)
+  AND ${schema.dislikes.songKey} NOT LIKE ${YT_DISLIKES}`;
+
+/** The tables a push mark names by one text key: the follow tables and the dislikes. */
 const followRows = {
   follows: { table: schema.follows, key: schema.follows.key },
   hiddenReleases: { table: schema.hiddenFollowReleases, key: schema.hiddenFollowReleases.key },
@@ -574,6 +648,7 @@ const followRows = {
     table: schema.dismissedFollowSuggestions,
     key: schema.dismissedFollowSuggestions.key,
   },
+  dislikes: { table: schema.dislikes, key: schema.dislikes.songKey },
 } as const;
 
 /**
@@ -633,7 +708,8 @@ export const markPushed = (db: LibraryDatabase, marks: readonly PushMark[]): voi
         case "follows":
         case "hiddenReleases":
         case "notifiedShows":
-        case "dismissedSuggestions": {
+        case "dismissedSuggestions":
+        case "dislikes": {
           const { table, key } = followRows[from.table];
           tx.update(table)
             .set({ pushed: true })
@@ -853,6 +929,13 @@ export const leaveKeys = (
       .set(stamped(playlistItems, now))
       .where(and(inArray(playlistItems.trackId, some), eq(playlistItems.deleted, false)))
       .run();
+    // So does the dislike, kept under the Track's id.
+    tx.update(schema.dislikes)
+      .set(stamped(schema.dislikes, now))
+      .where(
+        and(inArray(schema.dislikes.songKey, some.map(String)), eq(schema.dislikes.deleted, false)),
+      )
+      .run();
   }
 };
 
@@ -868,6 +951,8 @@ export interface PulledChanges {
   readonly follows: boolean;
   /** Dismissed follow suggestions changed (a dismissal or its Undo). */
   readonly dismissedSuggestions: boolean;
+  /** Dislikes changed (one set or removed). */
+  readonly dislikes: boolean;
   /** The synced preferences whose value changed, with the value (null: none, its default). */
   readonly preferences: readonly { readonly key: string; readonly value: string | null }[];
 }
@@ -879,6 +964,7 @@ interface Changed {
   plays: boolean;
   follows: boolean;
   dismissedSuggestions: boolean;
+  dislikes: boolean;
   preferences: { key: string; value: string | null }[];
 }
 
@@ -889,6 +975,7 @@ const nothingChanged = (): Changed => ({
   plays: false,
   follows: false,
   dismissedSuggestions: false,
+  dislikes: false,
   preferences: [],
 });
 
@@ -896,7 +983,7 @@ const nothingChanged = (): Changed => ({
 const wins = (row: SyncRow, held: Omit<SyncRow, "id"> | undefined): boolean =>
   held === undefined || mergeRows([{ ...held, id: row.id }], [row]).accepted.length > 0;
 
-type PendingKind = "playlistEntries" | "favorites" | "plays";
+type PendingKind = "playlistEntries" | "favorites" | "plays" | "dislikes";
 
 const pendingRow = (tx: LibraryDatabase, kind: PendingKind, id: string) => {
   const { syncPending } = schema;
@@ -1067,6 +1154,100 @@ const applyFavorite = (
   return true;
 };
 
+/**
+ * A dislike from the account: a YT Music song's is kept as it comes, a
+ * Library song's under the phone's Track of its recording key, waiting in
+ * `sync_pending` until the phone has one.
+ */
+const applyDislike = (
+  tx: LibraryDatabase,
+  row: SyncDislike,
+  trackIds: ReadonlyMap<string, number>,
+): boolean => {
+  const { dislikes } = schema;
+  if (!beatsPending(tx, "dislikes", row)) return false;
+  const trackId = trackIds.get(row.id);
+  if (trackId === undefined && parseTrackId(row.id)?.kind !== "yt") {
+    pend(tx, "dislikes", row, { songKey: row.id });
+    return false;
+  }
+  const songKey = trackId === undefined ? row.id : String(trackId);
+  const held = tx.select().from(dislikes).where(eq(dislikes.songKey, songKey)).get();
+  if (held !== undefined && !wins(row, held)) return false;
+  if (row.deleted) {
+    // A removal of a dislike this phone never had has nothing to remove.
+    if (held === undefined) return false;
+    tx.update(dislikes)
+      .set({ ...stamp(row), pushed: true })
+      .where(eq(dislikes.songKey, songKey))
+      .run();
+    return true;
+  }
+  const values = {
+    title: row.title,
+    artists: row.artists,
+    durationMs: row.durationMs,
+    dislikedAt: row.dislikedAt,
+    ...stamp(row),
+    pushed: true,
+  };
+  tx.insert(dislikes)
+    .values({ songKey, ...values })
+    .onConflictDoUpdate({ target: dislikes.songKey, set: values })
+    .run();
+  return true;
+};
+
+/**
+ * Settles the songs a pull left both starred and disliked (a star set on
+ * one device, a dislike on another): the later mark stays (Core's
+ * `settleMarks`), and the other is removed with a stamp every device gives
+ * it alike, which goes up with the next push. A YT Music song's dislike
+ * meets the star of the Track downloaded from its video.
+ */
+const settlePulledMarks = (tx: LibraryDatabase, changed: Changed): void => {
+  if (!changed.favorites && !changed.dislikes) return;
+  const { dislikes, favorites, tracks } = schema;
+  const pair = {
+    songKey: dislikes.songKey,
+    trackId: favorites.trackId,
+    dislikedAt: dislikes.changedAt,
+    dislikedBy: dislikes.phoneId,
+    starredAt: favorites.changedAt,
+    starredBy: favorites.phoneId,
+  };
+  const bothLive = and(eq(dislikes.deleted, false), eq(favorites.deleted, false));
+  const both = [
+    ...tx
+      .select(pair)
+      .from(dislikes)
+      .innerJoin(favorites, sql`${favorites.trackId} = CAST(${dislikes.songKey} AS INTEGER)`)
+      .where(and(bothLive, notLike(dislikes.songKey, YT_DISLIKES)))
+      .all(),
+    ...tx
+      .select(pair)
+      .from(favorites)
+      .innerJoin(tracks, eq(tracks.id, favorites.trackId))
+      .innerJoin(dislikes, sql`${dislikes.songKey} = 'yt:' || ${tracks.videoId}`)
+      .where(and(bothLive, isNotNull(tracks.videoId)))
+      .all(),
+  ];
+  for (const marks of both) {
+    const { removed, removal } = settleMarks(
+      { changedAt: marks.starredAt, phoneId: marks.starredBy },
+      { changedAt: marks.dislikedAt, phoneId: marks.dislikedBy },
+    );
+    const values = { ...removal, deleted: true, pushed: false };
+    if (removed === "favorite") {
+      tx.update(favorites).set(values).where(eq(favorites.trackId, marks.trackId)).run();
+      changed.favorites = true;
+    } else {
+      tx.update(dislikes).set(values).where(eq(dislikes.songKey, marks.songKey)).run();
+      changed.dislikes = true;
+    }
+  }
+};
+
 /** The tables whose synced rows are kept by their id alone, and that id's column. */
 type IdTable =
   | { readonly table: typeof schema.follows; readonly field: "key" }
@@ -1235,7 +1416,7 @@ const applyPlay = (
 
 const applyRows = (
   tx: LibraryDatabase,
-  rows: Pick<SyncTables, "playlistEntries" | "favorites" | "plays">,
+  rows: Pick<SyncTables, "playlistEntries" | "favorites" | "plays" | "dislikes">,
   trackIds: ReadonlyMap<string, number>,
   changed: Changed,
 ): void => {
@@ -1245,6 +1426,10 @@ const applyRows = (
   for (const row of rows.favorites) {
     if (applyFavorite(tx, row, trackIds)) changed.favorites = true;
   }
+  for (const row of rows.dislikes) {
+    if (applyDislike(tx, row, trackIds)) changed.dislikes = true;
+  }
+  settlePulledMarks(tx, changed);
   if (rows.plays.length > 0) {
     const split = creditSplitter(
       tx
@@ -1262,7 +1447,8 @@ const applyRows = (
 /**
  * Applies a page the account sent: each row merged with the phone's by
  * Core's rules (`mergeRows`, plays by id only), recording keys turned into
- * the phone's Tracks by [trackIds] (`selectAccountTrackIds`). Streamed plays
+ * the phone's Tracks by [trackIds] (`selectAccountTrackIds`). A song left
+ * both starred and disliked keeps the later mark (`settleMarks`). Streamed plays
  * and Library plays with snapshots show immediately; other rows whose
  * song or playlist the phone lacks wait in `sync_pending`. The page's
  * cursor is kept for the next pull, in the same transaction.
@@ -1342,6 +1528,7 @@ export const applyPending = (
       playlistEntries: [] as SyncPlaylistEntry[],
       favorites: [] as SyncFavorite[],
       plays: [] as SyncPlayRow[],
+      dislikes: [] as SyncDislike[],
     };
     for (const row of ready) {
       unpend(tx, row.kind as PendingKind, row.id);

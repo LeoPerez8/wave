@@ -66,6 +66,7 @@ describe("retained sync rows", () => {
         maxHiddenReleases: SYNC_LIMITS.maxHiddenReleases,
         maxNotifiedShows: SYNC_LIMITS.maxNotifiedShows,
         maxDismissedSuggestions: SYNC_LIMITS.maxDismissedSuggestions,
+        maxDislikes: SYNC_LIMITS.maxDislikes,
       },
       {
         maxSongs: 100_000,
@@ -78,6 +79,7 @@ describe("retained sync rows", () => {
         maxHiddenReleases: 50_000,
         maxNotifiedShows: 50_000,
         maxDismissedSuggestions: 50_000,
+        maxDislikes: 50_000,
       },
     );
   });
@@ -95,6 +97,7 @@ describe("retained sync rows", () => {
         maxHiddenReleases: 2,
         maxNotifiedShows: 2,
         maxDismissedSuggestions: 2,
+        maxDislikes: 2,
       },
     });
     const session = await service.signIn();
@@ -108,6 +111,7 @@ describe("retained sync rows", () => {
       ["hiddenReleases", "maxHiddenReleases"],
       ["notifiedShows", "maxNotifiedShows"],
       ["dismissedSuggestions", "maxDismissedSuggestions"],
+      ["dislikes", "maxDislikes"],
     ] as const) {
       await push(service, session, { [table]: [tombstone(`${table}-1`), tombstone(`${table}-2`)] });
       await refusedPush(service, session, { [table]: [tombstone(`${table}-3`)] }, limit);

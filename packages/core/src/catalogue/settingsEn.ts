@@ -16,6 +16,7 @@ export const settingsEn = {
     playback: "Playback",
     history: "Listening History",
     followedArtists: "Followed Artists",
+    dislikedSongs: "Disliked songs",
     lyricsAndTags: "Lyrics and tags",
     downloads: "Downloads",
     accounts: "Accounts",
@@ -404,6 +405,12 @@ export const settingsEn = {
     "Songs in excluded folders, and the folders inside them, leave your library. The files stay on your phone.",
   followedArtists: "Followed artists",
   youArentFollowingAnyArtistsYet: "You aren't following any artists yet.",
+  /** Settings › Disliked songs: what a dislike does, over the list. */
+  dislikedSongsAreLeftOut:
+    "Wave leaves these songs out of what it picks on its own. They still play when you choose them.",
+  youHaventDislikedAnySongs: "You haven't disliked any songs.",
+  /** A disliked song's Remove button, to a screen reader ("Remove dislike, Pink Moon"). */
+  removeDislikeOf: (title: string) => `Remove dislike, ${title}`,
   developerIsOn: "Developer is on",
   developerHidden: "Developer hidden",
   settings: "Settings",

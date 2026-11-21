@@ -1,10 +1,18 @@
-import { ytTrackId, type TasteHistory } from "@wave/core";
+import { ytTrackId, type MagicSong, type TasteHistory } from "@wave/core";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 
 import { recommendationTurnEffect } from "@/lib/recommendationWork";
 
-import { onLibraryChange, onStarred, onUnstarred, onYtSongSignal } from "@/library/libraryChanges";
+import {
+  onDisliked,
+  onLibraryChange,
+  onStarred,
+  onUndisliked,
+  onUnstarred,
+  onYtSongSignal,
+  type DislikedChange,
+} from "@/library/libraryChanges";
 import { LibraryStore } from "@/library/LibraryStore";
 import { type SongRow, type ArtistRow } from "@wave/client";
 
@@ -22,7 +30,7 @@ import { onPlayEnded } from "./PlayHistory";
  * first time it's asked for, and keeps it up to date as signals come from
  * playback anywhere in the app (`makeLiveTaste`): plays ending (streamed ones
  * too, weighed as `magicSongsOf` weighs them live), stars and unstars, YT
- * Music stars and downloads.
+ * Music stars and downloads, dislikes and their removal.
  */
 const derive = (snapshotTaken: (history: TasteHistory) => void) =>
   Effect.gen(function* () {
@@ -65,6 +73,22 @@ export const tasteProfileForRecommendation = (library: {
     }),
   );
 
+/**
+ * The songs just disliked as the profile weighs them: the Library's and the
+ * queue's as `magicSongsOf` tells them, any other (a YT Music song disliked
+ * from a search) by the artists its dislike keeps, as a derivation weighs it.
+ */
+const dislikedSongs = (songs: readonly DislikedChange[]) =>
+  magicSongsOf(songs.map((song) => song.key)).pipe(
+    Effect.orElseSucceed((): readonly MagicSong[] => []),
+    Effect.map((known) => {
+      const byId = new Map(known.map((song) => [song.trackId, song]));
+      return songs.map(
+        ({ key, artists }) => byId.get(key) ?? magicStreamedSong({ id: key, artists }),
+      );
+    }),
+  );
+
 /** Last derived taste, available while a refresh runs. */
 export const latestTasteProfile = live.peek;
 
@@ -81,6 +105,11 @@ export const layer = Layer.effectDiscard(
         onPlayEnded(({ play }) => run(live.played(play))),
         onStarred((trackIds) => run(live.marked("favorite", trackIds.map(String), Date.now()))),
         onUnstarred((ids) => live.unstarred(ids)),
+        onDisliked((songs) => {
+          const at = Date.now();
+          run(Effect.flatMap(dislikedSongs(songs), (disliked) => live.disliked(disliked, at)));
+        }),
+        onUndisliked((keys) => live.undisliked(keys)),
         onLibraryChange((change) => {
           if (change.kind === "tracks") live.invalidate();
         }),

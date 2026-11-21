@@ -225,6 +225,17 @@ export interface YtSearchLibrary<S extends YtSong> {
   readonly hasAlbum: (album: YtArtistAlbum) => boolean;
 }
 
+/**
+ * A Library that holds nothing, for a search whose Library isn't read yet
+ * (DJ's, while the Library's search index loads): every result YT Music
+ * found shows.
+ */
+export const YT_SEARCH_NO_LIBRARY: YtSearchLibrary<YtSong> = {
+  hasSong: () => false,
+  hasArtist: () => false,
+  hasAlbum: () => false,
+};
+
 /** YT Music's best result: an artist, an album or a song it found that the Library lacks. */
 export type YtSearchTop<S extends YtSong> =
   | { readonly kind: "artist"; readonly artist: YtArtistCandidate }

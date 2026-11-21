@@ -70,6 +70,9 @@ const ACTION_LABELS: Readonly<Record<NowPlayingAction, string>> = {
   get share() {
     return currentLocalisation().strings.playbackText.share;
   },
+  get dislike() {
+    return currentLocalisation().strings.itemActions.labels.dislike;
+  },
 };
 
 /** A slot's name for what it holds: its action's, or None. */
