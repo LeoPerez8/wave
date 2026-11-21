@@ -292,6 +292,8 @@ test("the page has no Node and only the typed bridge", async () => {
       "wave.playlistSuggestions.refresh",
       "wave.playlistSuggestions.retry",
       "wave.playlistSuggestions.close",
+      "wave.releaseDates.view",
+      "wave.releaseDates.save",
     ],
   });
 });

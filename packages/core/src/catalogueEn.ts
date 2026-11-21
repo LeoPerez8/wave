@@ -121,6 +121,9 @@ export const en = {
     unavailableFolder: "Unavailable folder",
     driveDisconnected: "The drive isn't connected. Reconnect it and try again.",
     actionFailed: "Couldn't complete that action. Try again.",
+    /** Release Date's dialog: the date the song has ([date], `formatReleaseDate`'s), or none. */
+    releaseDateKnown: (date: string) => `Released ${date}`,
+    releaseDateUnknown: "No release date is known.",
     downloadStarted: (count: number) =>
       count === 1 ? "Download started" : `Downloading ${count} songs`,
     downloading: (title: string) => `Downloading ${title}`,

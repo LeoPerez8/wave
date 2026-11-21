@@ -105,6 +105,7 @@ import { ARTIST_PAGE_CALLS, artistPageBridge, type ArtistPageContract } from "./
 import { STREAMED_CALLS, streamedBridge, type StreamedContract } from "./streamedSongs.ts";
 import { HISTORY_CALLS, historyBridge, type HistoryContract } from "./history.ts";
 import { RECOGNIZE_CALLS, recognizeBridge, type RecognizeContract } from "./recognize.ts";
+import { RELEASE_DATE_CALLS, releaseDateBridge, type ReleaseDateContract } from "./releaseDates.ts";
 import { YT_ACCOUNT_CALLS, ytAccountBridge, type YtAccountContract } from "./ytAccount.ts";
 import {
   SPOTIFY_ACCOUNT_CALLS,
@@ -161,7 +162,8 @@ export interface BridgeContract
     SpotifyImportContract,
     MiniPlayerContract,
     SpotifyShareContract,
-    PlaylistSuggestionsContract {
+    PlaylistSuggestionsContract,
+    ReleaseDateContract {
   readonly "system.mediaBackend": {
     readonly args: readonly [];
     readonly result: "native" | "chromium";
@@ -761,6 +763,7 @@ export const BRIDGE_CALLS = [
   ...HISTORY_CALLS,
   ...RECOGNIZE_CALLS,
   ...PLAYLIST_SUGGESTIONS_CALLS,
+  ...RELEASE_DATE_CALLS,
 ] as const satisfies readonly BridgeCall[] &
   (BridgeContract extends PagedLists<BridgeContract> ? unknown : never);
 
@@ -782,6 +785,8 @@ export interface WaveBridge {
   readonly recognize: ReturnType<typeof recognizeBridge>;
   /** A playlist page's Recommended songs: main holds the visit, the page reads its view. */
   readonly playlistSuggestions: ReturnType<typeof playlistSuggestionsBridge>;
+  /** A song's Release Date: the date Wave has, and the one the owner types. */
+  readonly releaseDates: ReturnType<typeof releaseDateBridge>;
   /** The YouTube account: its session never reaches the window. */
   readonly ytAccount: ReturnType<typeof ytAccountBridge>;
   readonly spotifyAccount: ReturnType<typeof spotifyAccountBridge>;
@@ -1223,4 +1228,5 @@ export const createBridge = (invoke: Invoke): WaveBridge => ({
   history: historyBridge(invoke),
   recognize: recognizeBridge(invoke),
   playlistSuggestions: playlistSuggestionsBridge(invoke),
+  releaseDates: releaseDateBridge(invoke),
 });

@@ -15,7 +15,10 @@ import {
   type ItemActionEntry,
 } from "./itemActions.ts";
 
-/** The entries a desktop song menu can hold; Share opens its submenu. A playlist's songs can leave it. */
+/**
+ * The entries a desktop song menu can hold; Share opens its submenu, Release Date its dialog. A
+ * playlist's songs can leave it.
+ */
 const OFFERED: ReadonlySet<ItemAction> = new Set<ItemAction>([
   "download",
   "playNext",
@@ -29,6 +32,7 @@ const OFFERED: ReadonlySet<ItemAction> = new Set<ItemAction>([
   "goToArtist",
   "fixSong",
   "fixSongs",
+  "releaseDate",
   "share",
   "select",
 ]);

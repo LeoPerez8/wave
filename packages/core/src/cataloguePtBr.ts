@@ -120,6 +120,8 @@ export const ptBR: Catalogue = {
     unavailableFolder: "Pasta indisponível",
     driveDisconnected: "A unidade não está conectada. Reconecte e tente de novo.",
     actionFailed: "Não foi possível concluir essa ação. Tente de novo.",
+    releaseDateKnown: (date) => `Lançada em ${date}`,
+    releaseDateUnknown: "Nenhuma data de lançamento conhecida.",
     downloadStarted: (count) => (count === 1 ? "Baixando a música" : `Baixando ${count} músicas`),
     downloading: (title) => `Baixando ${title}`,
     nothingToPlay:

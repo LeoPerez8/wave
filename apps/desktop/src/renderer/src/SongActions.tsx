@@ -28,6 +28,7 @@ import {
   type SongTarget,
 } from "../../shared/songActions.ts";
 import { Menu, type MenuItem, type OpenMenu } from "./Menu.tsx";
+import { ReleaseDateDialog, type ReleaseDateSong } from "./ReleaseDate.tsx";
 import { songShareItems } from "./SongShare.tsx";
 import { songActionToast } from "./songActionToast.ts";
 import { language, text } from "./text.ts";
@@ -70,6 +71,8 @@ const playlists = async () =>
 export function useSongActions({ go, select, failed, changed, newPlaylist }: Options) {
   const { menu, setMenu, setToast, menuAndToast } = useMenuAndToast();
   const [confirm, setConfirm] = useState<Confirm>();
+  /** The song whose Release Date is open. */
+  const [releaseDate, setReleaseDate] = useState<ReleaseDateSong>();
 
   const notify = useCallback(
     (message: string | null, undo?: () => void, action?: ToastAction) => {
@@ -252,6 +255,8 @@ export function useSongActions({ go, select, failed, changed, newPlaylist }: Opt
                 },
               }),
           };
+        case "releaseDate":
+          return { ...base, run: () => setReleaseDate(target) };
         case "share":
           return {
             ...base,
@@ -334,6 +339,17 @@ export function useSongActions({ go, select, failed, changed, newPlaylist }: Opt
   const overlays = (
     <>
       {menuAndToast}
+      {releaseDate !== undefined && (
+        <ReleaseDateDialog
+          song={releaseDate}
+          failed={failed}
+          onClose={(saved) => {
+            setReleaseDate(undefined);
+            // A playlist sorted by release date places the song again.
+            if (saved) changed();
+          }}
+        />
+      )}
       {confirm && (
         <ConfirmDialog
           spec={confirm.spec}
@@ -352,6 +368,8 @@ export function useSongActions({ go, select, failed, changed, newPlaylist }: Opt
     /** Runs an entry on [target] with its toast, as a drop onto a playlist or the Queue does. */
     run,
     overlays,
+    /** Opens Release Date for a Library song's target or a streamed song's video id. */
+    openReleaseDate: setReleaseDate,
     /** Shows [message] as the window's toast, with Undo or another [action] to offer. */
     notify,
     /** Closes the open menu, if one is; false when none was. */

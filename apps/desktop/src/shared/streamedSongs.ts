@@ -30,9 +30,9 @@ export const STREAMED_RUN_ACTIONS = [
 ] as const;
 export type StreamedRunAction = (typeof STREAMED_RUN_ACTIONS)[number];
 
-/** One entry, in the phone's order; the window opens pages, the Magic Queue and Copy Link. */
+/** One entry, in the phone's order; the window opens pages, the Magic Queue, Release Date and Share. */
 export type StreamedEntry =
-  | { readonly action: StreamedRunAction | "magicQueue" | "share" }
+  | { readonly action: StreamedRunAction | "magicQueue" | "releaseDate" | "share" }
   | { readonly action: "goToAlbum"; readonly album: string }
   | { readonly action: "goToArtist"; readonly artists: StreamedArtistChoice };
 
