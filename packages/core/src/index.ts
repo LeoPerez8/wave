@@ -70,8 +70,8 @@ export type {
 } from "./listActions.ts";
 export { describeFolder, filesLeavingWithRoot, isWithin, planAddRoot } from "./scanRoots.ts";
 export type { AddRootPlan, FolderLabel, ScanRootState } from "./scanRoots.ts";
-export { resolveSkipSwipe } from "./swipe.ts";
-export type { SkipDirection, SkipSwipe } from "./swipe.ts";
+export { resolveSkipSwipe, settleScreenSwipe } from "./swipe.ts";
+export type { ScreenSwipe, SkipDirection, SkipSwipe } from "./swipe.ts";
 export { toastDuration, toastSwipeDismisses } from "./toast.ts";
 export type { ToastSwipe } from "./toast.ts";
 export {
@@ -845,6 +845,19 @@ export type {
 export { pendingWriteDelay } from "./writePacing.ts";
 export type { WritePacing } from "./writePacing.ts";
 export { stepNowPlayingSheet } from "./sheetLifecycle.ts";
+export { NOW_PLAYING_OPENS_ON, stepNowPlayingScreens } from "./nowPlayingScreens.ts";
+export {
+  nowPlayingEditHintDue,
+  readNowPlayingEditHintShown,
+  storedNowPlayingEditHintShown,
+} from "./nowPlayingEditHint.ts";
+export type {
+  NowPlayingPage,
+  NowPlayingScreen,
+  NowPlayingScreens,
+  NowPlayingScreensEvent,
+  NowPlayingScreensStep,
+} from "./nowPlayingScreens.ts";
 export {
   QUEUE_COVER_FLUSH_MS,
   createQueueCoverBatcher,
@@ -2776,6 +2789,8 @@ export {
   type SampleTouchEvent,
 } from "./touchSample.ts";
 export type { LongPressFill, SampleMenuEntry } from "./touchSample.ts";
+export { RELATED_PAGE_ROWS, relatedPages, relatedRowsThatFit } from "./relatedPages.ts";
+export type { RelatedPages } from "./relatedPages.ts";
 export {
   createRelatedSearches,
   createRelatedSongsSession,
@@ -2793,9 +2808,16 @@ export type {
 export {
   NOW_PLAYING_ACTIONS,
   NOW_PLAYING_BUTTONS_KEY,
+  NOW_PLAYING_FOOTER_SLOTS,
+  NOW_PLAYING_PREVIOUS_ROW_KEY,
+  NOW_PLAYING_TRANSPORT_SLOTS,
   editNowPlayingButtons,
+  nowPlayingButtonsAreDefault,
+  nowPlayingRelatedChevronShown,
+  nowPlayingSlotRoute,
   nowPlayingSlotChoices,
   nowPlayingSlotShow,
+  nowPlayingSongMenuShow,
   readNowPlayingButtons,
   readNowPlayingSlotRoute,
   storedNowPlayingButtons,

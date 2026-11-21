@@ -5,8 +5,9 @@ import { useScreenContent } from "@/lib/screenTiming";
 import { NowPlayingSlotPickerScreen } from "@/settings/NowPlayingSlots";
 
 /**
- * Settings › Layout › Now Playing › Slot <n>: what that slot of Now Playing's
- * row holds. A link naming no slot (`1` to `4`) opens the Now Playing page instead.
+ * Settings › Layout › Now Playing › Slot <n>: what that slot of Now Playing
+ * holds. A link naming no slot (`1` to `5` for the footer's, `left` and
+ * `right` for the transport's) opens the Now Playing page instead.
  */
 export default function NowPlayingSlotSettingsScreen() {
   useScreenContent(true);
