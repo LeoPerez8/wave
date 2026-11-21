@@ -359,7 +359,11 @@ The prototype was approved on 2026-11-18 after an Impeccable critique; its decis
 - The song menu holds Play Next, Add to Queue, Add to Playlist, Favorite, Go to Album, Go to
   Artist, Start Magic Queue, Copy Link, Select, Fix Song and Remove from Library.
 - Home shows the phone's sections in the phone's order, following the account's synced
-  arrangement: shelves of tiles, Most played as a table.
+  arrangement: shelves of tiles, Most played as a table. Edit Home, on Home and under Settings ›
+  Home, is the phone's editor: the sections shown, Discover's rows under Discover, then the ones
+  not on Home. A row is dragged to its place or moved with Move Up and Move Down, removed, or
+  added back at the bottom. Each change is kept and synced as it is made. A section or row the
+  stored arrangement names that this Wave doesn't have stays in it, in its place.
 - Home's New from Artists You Follow and Upcoming Shows use the phone's rules and the account's
   follows, hidden releases and switches. Each computer runs its own checks, looks shows up in the
   country chosen in Settings › Followed artists (the system's region until one is chosen) and
