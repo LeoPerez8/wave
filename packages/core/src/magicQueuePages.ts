@@ -122,11 +122,26 @@ const fillPage = (
   return [...placed, ...added.slice(next)].slice(0, room);
 };
 
-/** [pages] without a page after the first that has fewer than three songs. */
-const shown = (pages: readonly MagicQueueSeedId[][]): MagicQueueSeedId[][] =>
-  pages.filter(
-    (page, place) => page.length > 0 && (place === 0 || page.length >= CAROUSEL_PAGE_MIN_SONGS),
-  );
+/** Whether the row leaves out the page at [place]: empty, or after the first and under three. */
+const leftOut = (page: readonly MagicQueueSeedId[], place: number): boolean =>
+  page.length === 0 || (place > 0 && page.length < CAROUSEL_PAGE_MIN_SONGS);
+
+/**
+ * [pages] (changed in place) with each page the row would leave out filled
+ * up to nine from the ends of the pages after it, the last first, so only
+ * the last pages can be short; then without the pages still left out. A page
+ * the row shows keeps its place.
+ */
+const shown = (pages: MagicQueueSeedId[][]): MagicQueueSeedId[][] => {
+  pages.forEach((page, place) => {
+    if (!leftOut(page, place)) return;
+    for (let from = pages.length - 1; from > place && page.length < MAGIC_QUEUE_PICKS; from--) {
+      const donor = pages[from]!;
+      page.push(...donor.splice(Math.max(0, donor.length - (MAGIC_QUEUE_PICKS - page.length))));
+    }
+  });
+  return pages.filter((page, place) => !leftOut(page, place));
+};
 
 /**
  * The row's pages from [pool]: up to three of nine, no song twice, each page
@@ -136,7 +151,9 @@ const shown = (pages: readonly MagicQueueSeedId[][]): MagicQueueSeedId[][] =>
  * pool too small for three fills the pages in order, and a page after the
  * first with fewer than three songs is left out. Pass the pages the row shows
  * ([kept]) to keep their songs still in the pool in their places, refilling
- * the others by the same rule; omit it for a fresh draw.
+ * the others by the same rule; omit it for a fresh draw. A kept page the pool
+ * no longer fills takes the later pages' songs before any page is left out,
+ * so the pages that stay keep their places.
  */
 export const magicQueuePages = (
   pool: MagicQueuePagesPool,
