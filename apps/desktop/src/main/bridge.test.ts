@@ -1,5 +1,5 @@
 ﻿import assert from "node:assert/strict";
-import { mkdtempSync, rmSync, mkdirSync, writeFileSync } from "node:fs";
+import { mkdtempSync, realpathSync, rmSync, mkdirSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { basename, dirname, join } from "node:path";
 import { test } from "node:test";
@@ -37,7 +37,7 @@ import { kotlinLayer } from "./kotlin/kotlin.ts";
 import type { KotlinEvents } from "./kotlin/supervisor.ts";
 import type { SongTags } from "../shared/tags.ts";
 import { libraryLayer } from "./database.ts";
-import { playbackLayer } from "./playback/playback.ts";
+import { Playback, playbackLayer } from "./playback/playback.ts";
 import { registerBridge, type IpcHandler } from "./bridge.ts";
 import { DesktopLibrary, desktopLibraryLayer } from "./library/library.ts";
 import { preference, savePreference } from "./preferences.ts";
@@ -131,6 +131,79 @@ test("a Lyrics and tags switch goes up to the account without waiting for the ti
         );
       }
       assert.equal(pushed.length, 1);
+    } finally {
+      await runtime.dispose();
+    }
+  });
+});
+
+test("following an artist is asked through the bridge, which refuses what isn't a follow", async () => {
+  await withFile(async (file) => {
+    const { runtime, exposed, handlers } = connect(file);
+    const wave = exposed.get("wave") as WaveBridge;
+    try {
+      // This build's account isn't signed in: New music only, and shows after signing in.
+      assert.deepEqual(await wave.follows.state("ABBA"), {
+        enabled: true,
+        level: null,
+        showsAvailable: false,
+        signInForShows: true,
+        country: "BR",
+      });
+      assert.equal((await wave.follows.set({ name: "ABBA" }, "releases")).level, "releases");
+      const view = await wave.follows.view();
+      assert.deepEqual(view.follows, [
+        { key: "abba", name: "ABBA", level: "releases", artistId: null, ytBrowseId: null },
+      ]);
+      assert.equal((await wave.follows.set({ name: "ABBA" }, null)).level, null);
+      assert.equal(await wave.follows.restore("abba"), true);
+      assert.equal((await wave.follows.state("ABBA")).level, "releases");
+      // The test's network answers nothing: no answer, which isn't "no matches".
+      assert.deepEqual(await wave.follows.search("abba"), { results: [], answered: false });
+      assert.equal((await wave.follows.setCountry("PT")).country, "PT");
+      assert.equal((await wave.follows.setEnabled(false)).enabled, false);
+      assert.equal((await wave.follows.state("ABBA")).level, null);
+      await assert.rejects(wave.follows.set({ name: "Moby" }, "releases"), /off/);
+
+      const call = (name: string, ...args: unknown[]) => handlers.get(name)!(trusted, ...args);
+      await assert.rejects(call("follows.state", ""), /refused/i);
+      await assert.rejects(call("follows.set", { name: "ABBA", path: "x" }, "shows"), /refused/i);
+      await assert.rejects(call("follows.set", { name: "ABBA" }, "all"), /refused/i);
+      await assert.rejects(call("follows.set", { name: "ABBA", deezerId: -1 }, null), /refused/i);
+      await assert.rejects(call("follows.restore", 7), /refused/i);
+      await assert.rejects(call("follows.setEnabled", "off"), /refused/i);
+      await assert.rejects(call("follows.setCountry", 55), /refused/i);
+      await assert.rejects(call("follows.setCountry", "Brazil"), /country/i);
+      await assert.rejects(call("follows.search", ""), /refused/i);
+    } finally {
+      await runtime.dispose();
+    }
+  });
+});
+
+test("an artist followed here goes up to the account, for the phones signed in to it", async () => {
+  await withFile(async (file) => {
+    const app = await desktop();
+    const phone = await app.service.signIn();
+    const { clock, pass } = fakeClock();
+    const { runtime, exposed } = connect(file, undefined, { service: app.open(), clock });
+    const wave = exposed.get("wave") as WaveBridge;
+    try {
+      await wave.account.signIn();
+      // The sync that signing in starts ends before the follow is made.
+      await pass(10_000);
+      await new Promise((resolve) => setTimeout(resolve, 300));
+      // Signed in, shows can be followed too.
+      assert.equal((await wave.follows.state("ABBA")).showsAvailable, true);
+      await wave.follows.set({ name: "ABBA", ytBrowseId: "UCabba" }, "shows");
+      await pass(10_000);
+      let pushed: readonly Record<string, unknown>[] = [];
+      for (let tries = 0; tries < 10 && pushed.length === 0; tries++) {
+        await new Promise((resolve) => setTimeout(resolve, 100));
+        pushed = (await pullAll(app.service, phone)).follows as readonly Record<string, unknown>[];
+      }
+      assert.equal(pushed.length, 1);
+      assert.equal(pushed[0]?.["id"], "abba");
     } finally {
       await runtime.dispose();
     }
@@ -3299,6 +3372,73 @@ test("playlist, artist and genre pages download their missing songs in page orde
       assert.equal(await wave.downloads.list({ kind: "playlist", id: 999 }), null);
     } finally {
       await runtime.dispose();
+    }
+  });
+});
+
+test("files opened with Wave play as a new queue: a Library file as its song, another without joining the Library", async () => {
+  await withAlbum(async (wave, _album, { runtime, engineCalls }) => {
+    const folder = mkdtempSync(join(tmpdir(), "wave-opened-"));
+    try {
+      writeFileSync(join(folder, "Demo Tape.mp3"), "");
+      const outside = scanPath(
+        realpathSync.native(join(folder, "Demo Tape.mp3")),
+        process.platform,
+      );
+      writeFileSync(join(folder, "notes.txt"), "");
+      const playback = await runtime.runPromise(Playback);
+      const counts = () =>
+        runtime.runPromise(
+          Effect.map(Database, (db) =>
+            db.get<{ tracks: number; plays: number }>(
+              sql`SELECT (SELECT count(*) FROM tracks) AS tracks, (SELECT count(*) FROM play_events) AS plays`,
+            ),
+          ),
+        );
+      const before = await counts();
+      assert.equal(
+        await playback.openFiles([
+          join(folder, "Demo Tape.mp3"),
+          join(folder, "notes.txt"),
+          join(folder, "Deleted.mp3"),
+          "/Music/Pink Moon/Road.mp3",
+        ]),
+        true,
+      );
+      let view = await wave.playback.view();
+      assert.equal(view.status.state, "playing");
+      assert.equal(engineCalls.includes(`load ${outside}`), true);
+      assert.equal(view.length, 2, "the text file and the file that is gone are ignored");
+      assert.equal(view.undoOffer, null, "nothing was playing before");
+      assert.equal(view.current?.outside, true);
+      assert.equal(view.current?.title, "Demo Tape", "its name, until its tags are read");
+      await new Promise((resolve) => setImmediate(resolve));
+      view = await wave.playback.view();
+      assert.equal(view.current?.title, "Demo Tape.mp3", "the title its tags give");
+      assert.equal(view.current?.artist, "Nick Drake");
+      // Starring is the Library's: the file outside it takes none.
+      await wave.playback.favorite();
+      assert.equal((await wave.playback.view()).current?.favorite, false);
+      assert.deepEqual(await counts(), before, "the file joined nothing and its play isn't kept");
+      await wave.playback.command({ type: "next" });
+      view = await wave.playback.view();
+      assert.equal(view.current?.title, "Road");
+      assert.equal(view.current?.outside, undefined);
+      assert.deepEqual(await counts(), { tracks: before!.tracks, plays: before!.plays + 1 });
+      assert.deepEqual(
+        (await wave.playback.queue(0, 10)).items.map((row) => row.title),
+        ["Demo Tape.mp3", "Road"],
+      );
+      assert.equal(await playback.openFiles(["/Music/Pink Moon/Parasite.mp3"]), true);
+      view = await wave.playback.view();
+      assert.equal(view.current?.title, "Parasite");
+      assert.notEqual(view.undoOffer, null, "opening files over a queue offers Undo");
+      assert.equal(await playback.openFiles([join(folder, "notes.txt")]), false);
+      assert.equal((await wave.playback.view()).current?.title, "Parasite", "nothing changed");
+      await wave.playback.undo();
+      assert.equal((await wave.playback.view()).current?.title, "Road");
+    } finally {
+      rmSync(folder, { recursive: true, force: true });
     }
   });
 });

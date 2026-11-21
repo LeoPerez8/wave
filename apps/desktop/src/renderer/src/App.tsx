@@ -62,6 +62,8 @@ import { applyLanguage, labels, text, useLanguage, tagTitle, artistName } from "
 import { LanguageSettings } from "./LanguageSettings.tsx";
 import { ThemeSettings } from "./ThemeSettings.tsx";
 import { LyricsAndTagsSettings } from "./LyricsAndTagsSettings.tsx";
+import { FollowButton } from "./FollowButton.tsx";
+import { FollowedArtistsSettings } from "./FollowedArtistsSettings.tsx";
 import { geniusAccess } from "./useSongGenius.ts";
 import { Home } from "./Home.tsx";
 import { Stats } from "./Stats.tsx";
@@ -106,6 +108,7 @@ const settings = [
   "window",
   "playback",
   "lyricsAndTags",
+  "followedArtists",
   "downloads",
   "accounts",
   "versionHistory",
@@ -389,20 +392,24 @@ export function App() {
   });
   /** A YouTube Music page's or the Queue's song menu: a streamed song's, or a Library song's. */
   const ytSongMenu = (row: BrowseRow, event: MouseEvent<HTMLElement>) =>
-    row.videoId !== undefined
-      ? actions.openItems(
-          text.desktopLibrary.songMenu(row.title),
-          streamed.items(row.videoId),
-          event.currentTarget,
-        )
-      : actions.openMenu({ scope: { kind: "songs" }, ids: [row.id] }, row.title, {
-          x: event.clientX,
-          y: event.clientY,
-        });
+    // A file outside the Library has none of a song's actions.
+    row.outside
+      ? undefined
+      : row.videoId !== undefined
+        ? actions.openItems(
+            text.desktopLibrary.songMenu(row.title),
+            streamed.items(row.videoId),
+            event.currentTarget,
+          )
+        : actions.openMenu({ scope: { kind: "songs" }, ids: [row.id] }, row.title, {
+            x: event.clientX,
+            y: event.clientY,
+          });
   /** The song playing's menu, from the player bar. */
   const playingMenu = (element: HTMLElement) => {
     const song = playback.view?.current;
-    if (song === null || song === undefined) return;
+    // A file outside the Library has none of a song's actions.
+    if (song === null || song === undefined || song.outside) return;
     if (song.videoId !== undefined)
       return actions.openItems(
         text.desktopLibrary.songMenu(song.title),
@@ -423,7 +430,7 @@ export function App() {
     Math.floor((playback.view?.status.positionMs ?? 0) / 2000),
   );
   /** Now Playing's Add to Playlist and Download, for a streamed song or a Library one. */
-  const nowPlayingActions = playingSong && (
+  const nowPlayingActions = playingSong && !playingSong.outside && (
     <NowPlayingSongActions
       download={
         playingSong.videoId !== undefined
@@ -853,6 +860,13 @@ export function App() {
                   {labels.shuffle}
                 </button>
                 {route.kind === "artist" && <ArtistToggle section={artistSection} />}
+                {route.kind === "artist" && (
+                  <FollowButton
+                    artist={{ name: hero.title }}
+                    revision={account?.revision}
+                    onError={setError}
+                  />
+                )}
                 {missingList !== undefined && (
                   <ListDownloadButton
                     list={missingList}
@@ -964,7 +978,11 @@ export function App() {
                   aria-current={setting === key ? "page" : undefined}
                   onClick={() => setSetting(key)}
                 >
-                  {key === "appearance" ? text.settings.appearance : labels[key]}
+                  {key === "appearance"
+                    ? text.settings.appearance
+                    : key === "followedArtists"
+                      ? text.settings.followedArtists
+                      : labels[key]}
                 </button>
               ))}
               <button onClick={() => go({ kind: "history" })}>{text.settings.pages.history}</button>
@@ -1048,6 +1066,20 @@ export function App() {
                 <VersionHistory />
               ) : setting === "downloads" ? (
                 <DownloadSettings onError={failed} />
+              ) : setting === "followedArtists" ? (
+                <FollowedArtistsSettings
+                  revision={account?.revision}
+                  notify={notify}
+                  onError={(message) => setError(message ?? text.desktopLibrary.actionFailed)}
+                  online={ytMusic}
+                  onOpen={(artist) =>
+                    artist.artistId !== null
+                      ? go({ kind: "artist", id: artist.artistId })
+                      : artist.ytBrowseId !== null
+                        ? go({ kind: "ytArtist", id: artist.ytBrowseId })
+                        : ytLinks.onArtist(artist.name)
+                  }
+                />
               ) : setting === "lyricsAndTags" ? (
                 <LyricsAndTagsSettings
                   onError={failed}
@@ -1070,6 +1102,7 @@ export function App() {
             revision={playback.view?.revision ?? 0}
             go={go}
             onSongMenu={ytSongMenu}
+            onError={setError}
           />
         ) : route.kind === "graveyard" ? (
           <Graveyard
@@ -1155,7 +1188,7 @@ export function App() {
             onError={failed}
             notify={notify}
             onMenu={(row, at) => {
-              if (row.unavailable) return;
+              if (row.unavailable || row.outside) return;
               if (row.videoId === undefined) {
                 actions.openMenu({ scope: { kind: "songs" }, ids: [row.id] }, row.title, at);
               } else {

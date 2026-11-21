@@ -290,6 +290,17 @@ and by Move Up, and the failed section. Its screenshots are `downloads-<step>-<p
 JVM, and a live YouTube download with its tags read back and its Library entry visible. The live
 check stops after search on CI; inspect its annotations if YouTube refuses the machine.
 
+## Lyrics translation
+
+`e2e/lyricsTranslation.spec.ts` turns Translate on in the Lyrics tab and Now Playing against a
+stand-in for Google Translate (it replaces `globalThis.fetch` in main, which the translation
+reads at call time). It checks the skeleton, each line's translation, the sung line, the
+"already in" line, a failed request with Try Again, that nothing is sent while Translate is off,
+and that a restart keeps the switch and shows the saved translation with Google out of reach.
+The real endpoint is an owner check. `wave.lyrics.translateOn`, `setTranslateOn` and
+`translation(trackId, language)` are the calls; main reads the lyrics itself
+(`src/main/lyrics/translation.ts`).
+
 ## Theme editor
 
 `e2e/themeEditor.spec.ts` edits the theme in Settings › Appearance: a background in each mode, a
@@ -310,6 +321,17 @@ the same card and no service is asked anything. It also checks that pasted text 
 does nothing, that a paste into the search field stays a paste, and that Copy Link reaches the
 system clipboard. What a link opens with YT Music on is tested in
 `src/main/links/links.test.ts`, against a fake JVM and `fetch`.
+
+## Opening files
+
+`e2e/openFiles.spec.ts` starts Wave with a file outside the Library as its argument, then launches
+it again with more files while it runs: they play in the running window as a new queue with
+Undo, a text file among them is ignored, and only the Library's song leaves a counted play. The
+screenshot is `open-files-<platform>.png`. `Playback.openFiles` is main's entry
+(`src/main/playback/playback.ts`); `src/main/system/openedFiles.ts` gathers the files of
+launches that come close together. What the installer registers and the AppImage declares is
+`scripts/file-types.ts`, tested in `src/fileTypes.test.ts` without building an installer; "Open
+with" after a real install is an owner check.
 
 ## The dev window
 
