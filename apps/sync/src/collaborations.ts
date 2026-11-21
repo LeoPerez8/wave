@@ -167,7 +167,7 @@ export const makeCollaboration = async (
 ): Promise<Collaboration | "no_playlist" | "taken"> => {
   const held = `EXISTS (SELECT 1 FROM playlists
                         WHERE account_id = ? AND id = ? AND deleted = 0)`;
-  const [, , playlist, members] = await db.batch(
+  const [, , playlist, , members] = await db.batch(
     [
       {
         sql: `INSERT INTO collaborations (playlist_id, owner_id, created_at)
@@ -183,6 +183,13 @@ export const makeCollaboration = async (
         args: [at, playlistId, accountId, accountId, playlistId],
       },
       { sql: `SELECT ${held} AS held`, args: [accountId, playlistId] },
+      // Entries stored before the service named who added them are the owner's.
+      {
+        sql: `UPDATE playlist_entries SET added_by = ?
+              WHERE account_id = ? AND playlist_id = ? AND added_by IS NULL
+                AND EXISTS (SELECT 1 FROM collaborations WHERE playlist_id = ? AND owner_id = ?)`,
+        args: [accountId, accountId, playlistId, playlistId, accountId],
+      },
       membersSeenBy(playlistId, accountId),
     ],
     "write",
@@ -400,6 +407,8 @@ export const passCollaboration = (playlistId: string, heir: string): InStatement
  * link it made goes too, those of the playlists that passed on included.
  */
 export const forgetAccountStatements = (accountId: string): InStatement[] => [
+  // Its entries stay in the playlists they are in and name no one.
+  { sql: "UPDATE playlist_entries SET added_by = NULL WHERE added_by = ?", args: [accountId] },
   {
     sql: `DELETE FROM collaboration_members
           WHERE account_id = ?

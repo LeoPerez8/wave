@@ -14,6 +14,14 @@ export const SYNC_LIMITS = {
   maxSongs: 100_000,
   maxPlaylists: 5_000,
   maxPlaylistEntries: 250_000,
+  /**
+   * A collaborative playlist's entries, counted in its owner's account and
+   * also in `maxPlaylistEntries`: songs in its list, and entries with the
+   * removed ones. A push that takes a playlist past one is refused (413) only
+   * when it raises that count.
+   */
+  maxCollaborativeSongs: 2_000,
+  maxCollaborativeEntries: 10_000,
   maxFavorites: 100_000,
   maxPreferences: 200,
   maxPlays: 1_000_000,

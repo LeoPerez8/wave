@@ -948,6 +948,11 @@ export {
 export type { AccountSession, AccountSignInEvent, AccountSignInState } from "./accountSignIn.ts";
 export { ACCOUNT_NAME_MAX_LENGTH, accountName } from "./accountName.ts";
 export {
+  COLLABORATIVE_TEXT_MAX_LENGTH,
+  collaborativeRow,
+  isCollaborativeCoverUrl,
+} from "./collaborativeRows.ts";
+export {
   SPOTIFY_ACCOUNT_SIGNED_OUT,
   SPOTIFY_CHANGED_LINE,
   SPOTIFY_SIGN_IN_FAILURE_LINES,

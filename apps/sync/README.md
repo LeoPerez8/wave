@@ -157,18 +157,18 @@ Each pushed row is merged with the stored one by `mergeRows`: the later `changed
 the greater `phoneId` breaks a tie. Plays are merged by `mergePlays`: a play whose `id` is
 already held is ignored.
 
-| Table                  | `id`                         | Fields (`?` may be `null`)                                                                                                                                                                                                                                    |
-| ---------------------- | ---------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `songs`                | recording key                | `title`, `credit`, `album?`, `albumArtist`, `discNumber?`, `trackNumber?`, `durationMs`, `year?`, `genre?`, `videoId?`, `addedAt`                                                                                                                             |
-| `playlists`            | playlist id                  | `name`, `createdAt`                                                                                                                                                                                                                                           |
-| `playlistEntries`      | entry id                     | `playlistId`, `orderKey` (Core's `orderKeyBetween`), `songId?` (recording key), `ytSong?` (the YT Music song as the app stores it, text), `addedAt`. Exactly one of `songId` and `ytSong` is set.                                                             |
-| `favorites`            | recording key                | `addedAt`                                                                                                                                                                                                                                                     |
-| `preferences`          | preference key               | `value?` (text: what the app's key-value store holds, `null` for nothing)                                                                                                                                                                                     |
-| `plays`                | play id (made on the device) | `songId` (recording key), `startedAt`, `listenedMs`, `durationMs?`, `endReason` (`completed`, `skipped`, `stopped`, `interrupted`), `counted` (boolean), `contextType?`, `contextId?`, `source` (`phone`, `auto`, `desktop`), `importedFrom?` (`blackplayer`) |
-| `follows`              | artist name key              | `name`, `level` (`releases`, `shows`), `followedAt`, `deezerId?`, `ytBrowseId?`                                                                                                                                                                               |
-| `hiddenReleases`       | release key                  | none                                                                                                                                                                                                                                                          |
-| `notifiedShows`        | Ticketmaster event id        | none                                                                                                                                                                                                                                                          |
-| `dismissedSuggestions` | artist name key              | `dismissedAt` (when the follow suggestion was dismissed; Undo is a tombstone)                                                                                                                                                                                 |
+| Table                  | `id`                         | Fields (`?` may be `null`)                                                                                                                                                                                                                                                                                        |
+| ---------------------- | ---------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `songs`                | recording key                | `title`, `credit`, `album?`, `albumArtist`, `discNumber?`, `trackNumber?`, `durationMs`, `year?`, `genre?`, `videoId?`, `addedAt`                                                                                                                                                                                 |
+| `playlists`            | playlist id                  | `name`, `createdAt`                                                                                                                                                                                                                                                                                               |
+| `playlistEntries`      | entry id                     | `playlistId`, `orderKey` (Core's `orderKeyBetween`), `songId?` (recording key), `ytSong?` (the YT Music song as the app stores it, text), `addedAt`, `title?`, `credit?`, `album?`, `durationMs?`, `videoId?` (a Library song's own fields), `addedBy?` (see below). Exactly one of `songId` and `ytSong` is set. |
+| `favorites`            | recording key                | `addedAt`                                                                                                                                                                                                                                                                                                         |
+| `preferences`          | preference key               | `value?` (text: what the app's key-value store holds, `null` for nothing)                                                                                                                                                                                                                                         |
+| `plays`                | play id (made on the device) | `songId` (recording key), `startedAt`, `listenedMs`, `durationMs?`, `endReason` (`completed`, `skipped`, `stopped`, `interrupted`), `counted` (boolean), `contextType?`, `contextId?`, `source` (`phone`, `auto`, `desktop`), `importedFrom?` (`blackplayer`)                                                     |
+| `follows`              | artist name key              | `name`, `level` (`releases`, `shows`), `followedAt`, `deezerId?`, `ytBrowseId?`                                                                                                                                                                                                                                   |
+| `hiddenReleases`       | release key                  | none                                                                                                                                                                                                                                                                                                              |
+| `notifiedShows`        | Ticketmaster event id        | none                                                                                                                                                                                                                                                                                                              |
+| `dismissedSuggestions` | artist name key              | `dismissedAt` (when the follow suggestion was dismissed; Undo is a tombstone)                                                                                                                                                                                                                                     |
 
 Times are ms since the epoch; numbers are integers. Ids and text are at most 16,384
 characters. The tables and their fields are Core's wire (`SYNC_TABLE_NAMES`, `SYNC_FIELDS` in
@@ -322,8 +322,10 @@ playlist it owns passes to the member who joined first, who becomes its owner: t
 row and every entry that names its id, Graveyard ones included, move to that account as its
 next changes, so its ordinary pull carries them, and they count in its caps from then on,
 even past them. A row that account held with the same id is replaced. The other members stay
-in it and get no end record. A playlist with no other member goes with the account. A plain
-entry tombstone stores no playlist id, so it can't move and goes with the account too.
+in it and get no end record. A playlist with no other member goes with the account. An entry
+tombstone keeps its playlist id, so it moves with it; one stored before migration
+`0017_collaborative_entries` has none and goes with the account. The entries the account
+added stay and name no one (`addedBy` becomes `null`).
 
 Migration `0016_collaborations` adds `collaborations`, `collaboration_members` and
 `collaboration_ends`, and changes no table there was. Deploy it before an app that calls
@@ -367,6 +369,57 @@ Refusals, besides the owner routes' `403 not_member` and `403 not_owner` and `40
 
 Migration `0017_collaboration_invites` adds `collaboration_invites`, and changes no table
 there was.
+
+#### A member's push and pull of one playlist
+
+A member who isn't the owner syncs each collaborative playlist with two requests of its own,
+in the same cycle as its account's push and pull. Both write and read the rows in the owner's
+account, so the owner's ordinary push and pull carry the members' changes, and both check
+membership first. The owner may call them too.
+
+- `POST /v1/collaboration/push?playlist=<id>`: the body and answer of `POST /v1/push`,
+  holding only that playlist's row and entries. The rows merge into the owner's as any push
+  merges (Core's `mergeTableRows`, a change time ahead of the service's clock corrected) and
+  count in the owner's caps. A removal of an entry the service never held is dropped: nothing
+  says which playlist it was in.
+- `GET /v1/collaboration/pull?playlist=<id>&since=<cursor>`: `{ "playlists": [Playlist],
+"playlistEntries": [PlaylistEntry], "cursor": "<n>", "more": false }`, every change of the
+  playlist's row and entries after the cursor, whoever made it, oldest first and paged as
+  `GET /v1/pull`. The cursor is per playlist; start with none. Core's `readPullPage` reads it.
+
+Refusals, besides those of `POST /v1/push`:
+
+- `403 { "error": "not_member" }`: the playlist isn't collaborative (never was, or it ended)
+  or the account isn't in it.
+- `403 { "error": "deleted" }`: a push to a playlist the owner deleted. Its pull still
+  answers, with the playlist's tombstone.
+- `403 { "error": "not_owner" }`: a push that deletes the playlist.
+- `400 { "error": "bad_request", "detail": "…" }`: a push with another table, another
+  playlist's row, or an entry of another playlist (one the owner holds in another playlist
+  included); no `playlist`; a cursor that isn't one.
+- `413 { "error": "limit", "limit": "maxCollaborativeSongs" }` or `"maxCollaborativeEntries"`.
+
+What the service keeps of a collaborative playlist's rows, whoever pushes them, the owner's
+ordinary push included:
+
+- **Who added an entry.** `addedBy` is the account id (the `accountId` of the member list) of
+  the session that first stored the entry; what an app sends is ignored, and later changes keep
+  it. Every new entry of any playlist gets it; making a playlist collaborative names its owner on
+  the entries stored before the field. An entry of a deleted account has `null`.
+- **A Library song's own fields** (`title`, `credit`, `album`, `durationMs`, `videoId`), for
+  the other members to match their Tracks by. An app from before them leaves them out, and a
+  row it pushes keeps what's stored; a Library entry it adds to a collaborative playlist, with
+  its recording key alone, is filled from the owner's `songs` row.
+- **Bounds** (Core's `collaborativeRow`): the playlist's name, an entry's `title`, `credit` and
+  `album`, and the title, artists and album inside `ytSong` are cut to 300 characters; a cover
+  in `ytSong` (`artworkUrl`) that isn't an https address on YouTube's or Google's image hosts
+  (`ytimg.com`, `googleusercontent.com`, `ggpht.com`) becomes `null`.
+- **Size.** At most `maxCollaborativeSongs` live entries and `maxCollaborativeEntries` with
+  the removed ones, as well as the owner's `maxPlaylistEntries`. A push past one is refused only
+  when it raises that count, so a playlist already past it still takes moves and removals.
+
+Migration `0018_collaborative_entries` adds those entry columns and an index for the
+per-playlist pull. Deploy it before an app that sends them.
 
 ### `PUT /v1/soulseek`
 
@@ -528,6 +581,8 @@ answer (its over-quota error names the key), nothing cached, and a log line that
 | `maxSongs`                                | 100,000   | rows per account, tombstones included                |
 | `maxPlaylists`                            | 5,000     |                                                      |
 | `maxPlaylistEntries`                      | 250,000   |                                                      |
+| `maxCollaborativeSongs`                   | 2,000     | live entries of one collaborative playlist           |
+| `maxCollaborativeEntries`                 | 10,000    | its entries with the removed ones                    |
 | `maxFavorites`                            | 100,000   |                                                      |
 | `maxPreferences`                          | 200       |                                                      |
 | `maxPlays`                                | 1,000,000 |                                                      |

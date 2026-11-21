@@ -596,10 +596,26 @@ describe("the migration", () => {
     const db = await freshDatabase({ until: "0015_account_name" });
     const before = await harness({}, db);
     const ana = await before.signIn({ name: "Ana Souza" });
-    await push(before, ana, {
-      playlists: [playlist("list-1")],
-      playlistEntries: [entry("entry-1", "list-1")],
-    });
+    // Rows as that database held them: today's push needs the later migrations.
+    const id = await accountId(before, "google-sub-1");
+    await db.batch(
+      [
+        {
+          sql: `INSERT INTO playlists (account_id, id, change_no, changed_at, phone_id, deleted,
+                                       name, created_at)
+                VALUES (?, 'list-1', 1, 1, 'phone-a', 0, 'Road trip', 1)`,
+          args: [id],
+        },
+        {
+          sql: `INSERT INTO playlist_entries (account_id, id, change_no, changed_at, phone_id,
+                                              deleted, playlist_id, order_key, yt_song, added_at)
+                VALUES (?, 'entry-1', 2, 1, 'phone-a', 0, 'list-1', 'a0', '{"videoId":"e"}', 100)`,
+          args: [id],
+        },
+        { sql: "UPDATE accounts SET change_seq = 2 WHERE id = ?", args: [id] },
+      ],
+      "write",
+    );
     const schema = async () =>
       (await db.execute("SELECT name, sql FROM sqlite_master ORDER BY name")).rows.map((row) => [
         row.name,
