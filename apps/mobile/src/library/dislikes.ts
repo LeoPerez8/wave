@@ -65,6 +65,15 @@ onUndisliked((keys) => {
   if (!announcing) dislikes.dropped(keys);
 });
 
+/**
+ * The store removed the dislikes kept under [keys] itself, with the stars that replace them
+ * (`setFavorites`, whoever set the star): the set loses them, with nothing left to write, and
+ * what follows the dislikes hears of it.
+ */
+export const dislikesRemovedByStars = (keys: readonly string[]): void => {
+  if (keys.length > 0) publishUndisliked(keys);
+};
+
 // A download or scan that stars a pending favorite as it saves the song changes the marks in
 // the store: the set is read again.
 onSavedStars(() => void dislikes.reload());

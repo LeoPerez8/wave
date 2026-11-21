@@ -5,6 +5,7 @@ import { beforeEach, describe, test } from "node:test";
 import { eq } from "drizzle-orm";
 
 import { removeDislikes, selectDislikedTracks, selectDislikes, setDislikes } from "./dislikes.ts";
+import { selectFavoriteTrackIds, setFavorites } from "./playHistory.ts";
 import * as schema from "./schema.ts";
 import { addTrack, openTestDatabase, type TestDatabase } from "./testDatabase.ts";
 
@@ -53,6 +54,59 @@ describe("dislikes", () => {
     removeDislikes(db, ["7"], 2_000);
     setDislikes(db, [song("7", "Get Lucky")], 3_000);
     assert.deepEqual(selectDislikes(db), [{ ...song("7", "Get Lucky"), dislikedAt: 3_000 }]);
+  });
+
+  test("a star removes its song's dislike, kept under the Track or under its video, and names it", () => {
+    const lucky = addTrack(db, { title: "Get Lucky" });
+    const contact = addTrack(db, { title: "Contact" });
+    const other = addTrack(db, { title: "Motherboard" });
+    db.update(schema.tracks).set({ videoId: "abc" }).where(eq(schema.tracks.id, contact)).run();
+    setDislikes(
+      db,
+      [
+        song(String(lucky), "Get Lucky"),
+        song("yt:abc", "Contact"),
+        song(String(other), "Motherboard"),
+        song("yt:streamed", "Beyond"),
+      ],
+      1_000,
+    );
+
+    const removed = setFavorites(db, [lucky, contact], true, 2_000);
+
+    assert.deepEqual(removed.toSorted(), [String(lucky), "yt:abc"].toSorted());
+    assert.deepEqual(selectFavoriteTrackIds(db).toSorted(), [lucky, contact].toSorted());
+    assert.deepEqual(
+      selectDislikes(db).map((dislike) => dislike.title),
+      ["Beyond", "Motherboard"],
+    );
+    // The removals wait to go up, as Remove dislike's do.
+    assert.deepEqual(
+      db
+        .select({ key: schema.dislikes.songKey, pushed: schema.dislikes.pushed })
+        .from(schema.dislikes)
+        .where(eq(schema.dislikes.deleted, true))
+        .all()
+        .toSorted((a, b) => a.key.localeCompare(b.key)),
+      [
+        { key: String(lucky), pushed: false },
+        { key: "yt:abc", pushed: false },
+      ],
+    );
+  });
+
+  test("unstarring, and starring a song that isn't disliked, leave the dislikes alone", () => {
+    const lucky = addTrack(db, { title: "Get Lucky" });
+    const contact = addTrack(db, { title: "Contact" });
+    setFavorites(db, [lucky], true, 1_000);
+    setDislikes(db, [song(String(contact), "Contact")], 2_000);
+
+    assert.deepEqual(setFavorites(db, [lucky], false, 3_000), []);
+    assert.deepEqual(setFavorites(db, [lucky], true, 4_000), []);
+    assert.deepEqual(
+      selectDislikes(db).map((dislike) => dislike.title),
+      ["Contact"],
+    );
   });
 });
 

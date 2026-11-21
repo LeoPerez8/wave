@@ -1489,6 +1489,12 @@ ALTER TABLE dislikes ADD COLUMN pushed integer DEFAULT false NOT NULL;
 --> statement-breakpoint
 CREATE INDEX dislikes_pushed_idx ON dislikes (pushed);`;
 
+// A Wave from before dislikes read past the dislikes other devices had sent and kept the
+// cursor after them: the account is pulled from the start once, so they arrive. What the
+// Library holds merges row by row, as at a sign-in, so nothing else changes. A migration
+// that makes a table sync does the same.
+const m0064 = `UPDATE sync_state SET cursor = NULL;`;
+
 export default {
   journal: {
     entries: [
@@ -1581,6 +1587,7 @@ export default {
       },
       { idx: 62, when: 1_797_163_200_000, tag: "0062_dislikes", breakpoints: true },
       { idx: 63, when: 1_797_249_600_000, tag: "0063_dislike_sync", breakpoints: true },
+      { idx: 64, when: 1_797_336_000_000, tag: "0064_pull_dislikes", breakpoints: true },
     ],
   },
   migrations: {
@@ -1648,5 +1655,6 @@ export default {
     m0061,
     m0062,
     m0063,
+    m0064,
   },
 };
