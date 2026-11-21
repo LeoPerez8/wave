@@ -226,7 +226,9 @@ export const settingsEn = {
   sampleGlassCardOverColouredStripesDrawn:
     "Sample glass card over coloured stripes, drawn with the settings below",
   nowPlayingsBottomRowLeftToRight:
-    "Now Playing's bottom row, left to right, with Queue always on the right. A slot set to None leaves the row, and the other buttons spread out.",
+    "Slots 1 to 5 are Now Playing's footer, left to right; the other two sit beside Previous and Next. A slot set to None shows no button, and the footer's buttons spread out.",
+  slotLeftOfPrevious: "Left of Previous",
+  slotRightOfNext: "Right of Next",
   resetToDefault: "Reset to Default",
   aButtonAnotherSlotHoldsSwapsPlaces: "A button another slot holds swaps places with this slot's.",
   signIn: "Sign In",

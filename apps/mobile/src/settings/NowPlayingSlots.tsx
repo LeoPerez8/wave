@@ -1,6 +1,12 @@
 import { currentLocalisation } from "@/localisation/localisation";
 import { useLocalisation } from "@/localisation/localisation";
-import { nowPlayingSlotChoices, storedNowPlayingButtons, type NowPlayingSlot } from "@wave/core";
+import {
+  NOW_PLAYING_TRANSPORT_SLOTS,
+  nowPlayingButtonsAreDefault,
+  nowPlayingSlotChoices,
+  nowPlayingSlotRoute,
+  type NowPlayingSlot,
+} from "@wave/core";
 import { Text, View } from "react-native";
 
 import { Hairline } from "@/catalog/Hairline";
@@ -15,16 +21,28 @@ import {
 } from "./nowPlayingButtons";
 import { SettingsPageRow, SettingsPageScreen } from "./SettingsPage";
 
-/** A slot's name on its row and its picker's header: "Slot 1" for the leftmost. */
-const slotTitle = (slot: number): string => currentLocalisation().strings.settings.slot(slot + 1);
+/**
+ * A slot's name on its row and its picker's header: "Slot 1" to "Slot 5" for
+ * the footer's, left to right, and the transport's two by their side.
+ */
+const slotTitle = (slot: number): string => {
+  const { settings } = currentLocalisation().strings;
+  if (slot === NOW_PLAYING_TRANSPORT_SLOTS.left) return settings.slotLeftOfPrevious;
+  if (slot === NOW_PLAYING_TRANSPORT_SLOTS.right) return settings.slotRightOfNext;
+  return settings.slot(slot + 1);
+};
 
-/** Where slot [slot]'s picker is (also `wave://settings/layout/now-playing/<n>`). */
-const pickerRoute = (slot: number) => `/settings/layout/now-playing/${slot + 1}` as const;
+/**
+ * Where slot [slot]'s picker is (also `wave://settings/layout/now-playing/<n>`,
+ * `left` and `right` for the transport's).
+ */
+const pickerRoute = (slot: number) =>
+  `/settings/layout/now-playing/${nowPlayingSlotRoute(slot) ?? ""}` as const;
 
 /**
  * Settings › Layout › Now Playing's buttons: a row per slot saying what it
- * holds, each opening its picker, then Reset to Default (off while the row is
- * the default).
+ * holds (the footer's five, then the transport's two), each opening its
+ * picker, then Reset to Default (off while the slots are the default).
  */
 export function NowPlayingSlotsSection() {
   const { strings } = useLocalisation();
@@ -46,7 +64,7 @@ export function NowPlayingSlotsSection() {
       <View className="mt-4 items-start">
         <TextButton
           label={strings.settings.resetToDefault}
-          disabled={storedNowPlayingButtons(buttons) === null}
+          disabled={nowPlayingButtonsAreDefault(buttons)}
           onPress={() => editSavedNowPlayingButtons("reset")}
         />
       </View>

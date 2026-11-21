@@ -5,8 +5,8 @@ import { test } from "node:test";
 
 // Exercise the actual setting and persistence. Only the SQLite key-value store,
 // React Native and the native module are replaced at their platform boundaries.
-const OLD_KEY = "settings.nowPlayingButtons";
-const KEY = "settings.nowPlayingRow";
+const ROW_KEY = "settings.nowPlayingRow";
+const KEY = "settings.nowPlayingSlots";
 
 let fixtureId = 0;
 /** Loads Now Playing's buttons on a phone whose key-value store holds `stored`. */
@@ -60,24 +60,32 @@ const loadPhone = async (stored: Record<string, string> = {}) => {
   }
 };
 
-test("a row edited before the update is left under the old key, and the phone shows the default row", async () => {
-  const { settings, Storage } = await loadPhone({
-    [OLD_KEY]: JSON.stringify(["shuffle", "repeat", "share", null]),
-  });
-  // Nothing under the new key is the default row.
+const ROW = JSON.stringify(["shuffle", "repeat", "share", null]);
+const CONVERTED = ["shuffle", "repeat", "share", null, "queue", null, null];
+const DEFAULT = ["lyrics", "addToPlaylist", "download", "shuffle", "repeat", null, null];
+
+test("a phone that never edited the row shows the default, with nothing stored", async () => {
+  const { buttons, settings, Storage } = await loadPhone();
+  assert.deepEqual(buttons.savedNowPlayingButtons(), DEFAULT);
   assert.equal(settings.syncedSettingValue(KEY), null);
   assert.equal(Storage.getItemSync(KEY), null);
 });
 
-test("an edit is stored under the new key, kept across a restart, and synced", async () => {
-  const phone = await loadPhone();
-  phone.buttons.editSavedNowPlayingButtons({ slot: 1, action: "sleepTimer" });
-  const edited = JSON.stringify(["lyrics", "sleepTimer", "download", "shuffle"]);
+test("a row edited before the update shows as seven slots with Queue fifth, and stays as it was under its key", async () => {
+  const { buttons, Storage } = await loadPhone({ [ROW_KEY]: ROW });
+  assert.deepEqual(buttons.savedNowPlayingButtons(), CONVERTED);
+  assert.equal(Storage.getItemSync(ROW_KEY), ROW);
+});
+
+test("an edit is stored under the new key, kept across a restart, and synced; the row's key is not written", async () => {
+  const phone = await loadPhone({ [ROW_KEY]: ROW });
+  phone.buttons.editSavedNowPlayingButtons({ slot: 6, action: "sleepTimer" });
+  const edited = JSON.stringify(["shuffle", "repeat", "share", null, "queue", null, "sleepTimer"]);
   assert.equal(phone.Storage.getItemSync(KEY), edited);
-  assert.equal(phone.Storage.getItemSync(OLD_KEY), null);
+  assert.equal(phone.Storage.getItemSync(ROW_KEY), ROW);
   assert.deepEqual(phone.changed, [KEY]);
 
-  const restarted = await loadPhone({ [KEY]: edited });
+  const restarted = await loadPhone({ [ROW_KEY]: ROW, [KEY]: edited });
   assert.equal(restarted.settings.syncedSettingValue(KEY), edited);
 
   const other = await loadPhone();
@@ -86,22 +94,31 @@ test("an edit is stored under the new key, kept across a restart, and synced", a
   assert.equal(other.settings.syncedSettingValue(KEY), edited);
 });
 
-test("a row pulled under the old key, from a phone still on an older Wave, is left alone", async () => {
+test("a row pulled under its old key, from a phone still on an older Wave, is left alone", async () => {
   const { settings, Storage } = await loadPhone();
-  assert.equal(
-    settings.applySyncedSetting(OLD_KEY, JSON.stringify(["shuffle", "repeat", "share", null])),
-    false,
-  );
-  assert.equal(settings.syncedSettingValue(KEY), null);
+  assert.equal(settings.applySyncedSetting(ROW_KEY, ROW), false);
+  assert.equal(Storage.getItemSync(ROW_KEY), null);
   assert.equal(Storage.getItemSync(KEY), null);
 });
 
-test("Reset to Default clears the new key, so the row reads as the default again", async () => {
+test("Reset to Default clears the new key, so the slots read as the default again", async () => {
   const phone = await loadPhone({
-    [KEY]: JSON.stringify(["shuffle", "repeat", "share", null]),
+    [KEY]: JSON.stringify(["shuffle", "repeat", "share", null, null, "queue", null]),
   });
   phone.buttons.editSavedNowPlayingButtons("reset");
   assert.equal(phone.Storage.getItemSync(KEY), null);
   assert.equal(phone.settings.syncedSettingValue(KEY), null);
   assert.deepEqual(phone.changed, [KEY]);
+});
+
+test("Reset to Default over a row edited before the update holds across a restart", async () => {
+  const phone = await loadPhone({ [ROW_KEY]: ROW });
+  phone.buttons.editSavedNowPlayingButtons("reset");
+  assert.deepEqual(phone.buttons.savedNowPlayingButtons(), DEFAULT);
+  const stored = phone.Storage.getItemSync(KEY);
+  assert.equal(stored, JSON.stringify(DEFAULT));
+  assert.equal(phone.Storage.getItemSync(ROW_KEY), ROW);
+
+  const restarted = await loadPhone({ [ROW_KEY]: ROW, [KEY]: JSON.stringify(DEFAULT) });
+  assert.deepEqual(restarted.buttons.savedNowPlayingButtons(), DEFAULT);
 });

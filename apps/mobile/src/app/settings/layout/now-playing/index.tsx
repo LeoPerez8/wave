@@ -7,8 +7,9 @@ import { SettingsPageScreen } from "@/settings/SettingsPage";
 import { useShuffleKind } from "@/settings/shuffleKind";
 
 /**
- * Settings › Layout › Now Playing: the four button slots left of Queue, each
- * opening its picker (`now-playing/<n>`), with Reset to Default; then the
+ * Settings › Layout › Now Playing: the seven slots (the footer's five, then
+ * the transport's two), each opening its picker (`now-playing/<n>`), with
+ * Reset to Default; then the
  * kind of shuffle, the same preference the shuffle card sets. Each change is
  * saved as it's made.
  */

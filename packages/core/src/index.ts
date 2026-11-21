@@ -2720,8 +2720,13 @@ export type {
 export {
   NOW_PLAYING_ACTIONS,
   NOW_PLAYING_BUTTONS_KEY,
+  NOW_PLAYING_FOOTER_SLOTS,
+  NOW_PLAYING_PREVIOUS_ROW_KEY,
+  NOW_PLAYING_TRANSPORT_SLOTS,
   editNowPlayingButtons,
+  nowPlayingButtonsAreDefault,
   nowPlayingRelatedChevronShown,
+  nowPlayingSlotRoute,
   nowPlayingSlotChoices,
   nowPlayingSlotShow,
   nowPlayingSongMenuShow,
