@@ -2892,5 +2892,12 @@ export {
 export type { DjDiscovery, DjPopularity, DjSettings, DjVariety } from "./djSettings.ts";
 export { djVarietyCandidates } from "./djVariety.ts";
 export type { DjCandidatePools } from "./djVariety.ts";
+export {
+  DJ_REMEMBERED_SETTING,
+  djReopened,
+  readDjRemembered,
+  storedDjRemembered,
+} from "./djRemembered.ts";
+export type { DjRemembered } from "./djRemembered.ts";
 export { magicSessionSliders } from "./magicQueue.ts";
 export type { DjAction, DjState, DjArtistTile, DjGridSources, DjTile, DjTileKey } from "./dj.ts";
