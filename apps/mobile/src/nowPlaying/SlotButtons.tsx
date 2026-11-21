@@ -254,7 +254,8 @@ const SLOT = CELL * 6;
 /**
  * Slot [slot] in edit mode: outlined, with the glyph of the action it holds
  * ([action]) or a plus while it's empty. A tap opens the card that changes
- * it, anchored here; the action itself doesn't run.
+ * it, anchored here; the action itself doesn't run. The release that drops
+ * a drag of it opens nothing.
  */
 export function EditSlot({
   slot,
@@ -281,7 +282,10 @@ export function EditSlot({
       >
         <IconButton
           label={`${nowPlayingSlotTitle(slot)}, ${nowPlayingSlotLabel(action)}`}
-          onPress={() => openChangeSlotMenu(slot)}
+          onPressIn={drag.touched}
+          onPress={() => {
+            if (drag.tapped(slot)) openChangeSlotMenu(slot);
+          }}
           opensMenu
           haptic="selection"
           size={SLOT}

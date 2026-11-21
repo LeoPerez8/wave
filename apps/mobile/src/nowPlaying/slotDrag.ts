@@ -6,6 +6,8 @@ import { scheduleOnRN } from "react-native-worklets";
 import type { Measurable } from "@/motion/measureRect";
 import { handleHold } from "@/motion/handleHold";
 
+import { slotTapGuard } from "./slotTapGuard";
+
 type Rect = {
   readonly x: number;
   readonly y: number;
@@ -29,6 +31,8 @@ export function useNowPlayingSlotDrag(onDrop: (from: number, to: number) => void
   const target = useSharedValue(-1);
   const [dragging, setDragging] = useState<number | null>(null);
   const [dropTarget, setDropTarget] = useState<number | null>(null);
+  // The release that ends a drag doesn't also open the slot's card.
+  const [tap] = useState(slotTapGuard);
 
   const register = useCallback(
     (slot: number, view: Measurable | null) => {
@@ -41,9 +45,13 @@ export function useNowPlayingSlotDrag(onDrop: (from: number, to: number) => void
     },
     [rects],
   );
-  const began = useCallback((slot: number) => {
-    setDragging(slot);
-  }, []);
+  const began = useCallback(
+    (slot: number) => {
+      tap.dragged(slot);
+      setDragging(slot);
+    },
+    [tap],
+  );
   const hovered = useCallback((slot: number) => setDropTarget(slot < 0 ? null : slot), []);
   const dropped = useCallback(
     (from: number, to: number, canceled: boolean) => {
@@ -58,7 +66,19 @@ export function useNowPlayingSlotDrag(onDrop: (from: number, to: number) => void
     () => ({ rects, x, y, source, target }),
     [rects, x, y, source, target],
   );
-  return { state, dragging, dropTarget, register, began, hovered, dropped };
+  return {
+    state,
+    dragging,
+    dropTarget,
+    register,
+    began,
+    hovered,
+    dropped,
+    /** A finger came down on a slot's button. */
+    touched: tap.touched,
+    /** The button's tap ended on [slot]: whether its card opens (not after a drag of it). */
+    tapped: tap.tapped,
+  };
 }
 
 /** A held edit slot follows the finger until it lands on one of the seven slots. */
