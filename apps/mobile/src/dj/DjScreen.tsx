@@ -1,4 +1,5 @@
 import {
+  DEFAULT_DJ_SETTINGS,
   djCanStart,
   djGrid,
   djOpened,
@@ -10,7 +11,7 @@ import {
   type DjState,
   type DjTileKey,
 } from "@wave/core";
-import { IconX } from "@tabler/icons-react-native";
+import { IconArrowLeft, IconX } from "@tabler/icons-react-native";
 import { useEffect, useMemo, useState } from "react";
 import { ActivityIndicator, ScrollView, Text, View, useWindowDimensions } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
@@ -29,12 +30,14 @@ import { useScreenContent } from "@/lib/screenTiming";
 import { router } from "@/lib/timingRouter";
 import { appRuntime } from "@/library/runtime";
 import { useLocalisation } from "@/localisation/localisation";
+import { addScreenBackHandler } from "@/overlay/back";
 import { startDjMagicQueue } from "@/playback/MagicQueue";
 import { latestTasteProfile } from "@/playback/TasteProfile";
 import { usePlayedArtist } from "@/stats/PlayedEntityViews";
 import { useThemeColor } from "@/theme/useThemeColor";
 import type { ArtistRow } from "@wave/client";
 
+import { DjAdjust } from "./DjAdjust";
 import { runDjDone, type DjDone } from "./djDone";
 
 /** The Library's artists by id, for the tiles that show one's image. */
@@ -139,7 +142,10 @@ function ArtistTile({
 /**
  * DJ (docs/spec.md, DJ): the owner picks the artists a Magic Queue starts
  * from. A tap selects or unselects a tile; Done reads the session's first
- * batch and plays it, then closes; Close leaves the queue as it is.
+ * batch and plays it, then closes; Close leaves the queue as it is. Adjust,
+ * beside Done, shows the Adjust screen in the grid's place: its back arrow
+ * (and Android's Back) returns to the grid, which stayed as it was, and Done
+ * starts the queue from either with the choices made there.
  */
 export function DjScreen() {
   const { strings } = useLocalisation();
@@ -150,6 +156,15 @@ export function DjScreen() {
   const { size } = magicQueueGrid(available, fontScale);
   const { opened, toggle } = useDjGrid();
   const [done, setDone] = useState<DjDone>("idle");
+  const [settings, setSettings] = useState(DEFAULT_DJ_SETTINGS);
+  const [adjusting, setAdjusting] = useState(false);
+  useEffect(() => {
+    if (!adjusting) return;
+    return addScreenBackHandler(() => {
+      setAdjusting(false);
+      return true;
+    });
+  }, [adjusting]);
   useScreenContent(opened !== null);
   const state = opened?.state;
   const seed = useMemo(() => (state === undefined ? [] : djSeedTiles(state)), [state]);
@@ -158,16 +173,37 @@ export function DjScreen() {
   const start = (): void =>
     void runDjDone(
       done,
-      () => appRuntime.runPromise(startDjMagicQueue(seed)),
+      () => appRuntime.runPromise(startDjMagicQueue(seed, settings)),
       setDone,
       () => router.back(),
     );
   return (
     <View className="flex-1 bg-background" style={{ paddingTop: insets.top + 4 }}>
       <View style={{ paddingHorizontal: grid.margin - 12 }}>
-        <IconButton icon={IconX} label={strings.dj.close} onPress={() => router.back()} />
+        {adjusting ? (
+          <IconButton
+            icon={IconArrowLeft}
+            label={strings.dj.backToGrid}
+            onPress={() => setAdjusting(false)}
+          />
+        ) : (
+          <IconButton icon={IconX} label={strings.dj.close} onPress={() => router.back()} />
+        )}
       </View>
+      {adjusting && (
+        <DjAdjust
+          settings={settings}
+          onChange={(next) => {
+            // The choices can't change while their first batch is read.
+            if (loading) return;
+            setDone("idle");
+            setSettings(next);
+          }}
+        />
+      )}
       <ScrollView
+        // Kept under Adjust, so the grid is where it was left on the way back.
+        style={adjusting ? { display: "none" } : undefined}
         contentContainerStyle={{ paddingHorizontal: grid.margin, paddingBottom: CELL * 3 }}
       >
         <Text
@@ -226,29 +262,42 @@ export function DjScreen() {
             {...(done === "empty" ? { message: strings.dj.noSongsFound } : {})}
           />
         )}
-        <TextButton
-          variant="pill"
-          label={strings.dj.done}
-          accessibilityLabel={loading ? strings.dj.starting : strings.dj.done}
-          accessibilityState={{ selected: false, busy: loading }}
-          selected={canStart}
-          disabled={!canStart || loading}
-          onPress={start}
-          className="flex-row items-center justify-center"
-          style={{ gap: CELL }}
-        >
-          {(color) => (
-            <>
-              {loading && <ActivityIndicator size="small" color={onAccent} />}
-              <Text
-                className="font-sans text-body font-semibold"
-                style={{ color: loading ? onAccent : color }}
-              >
-                {strings.dj.done}
-              </Text>
-            </>
+        <View className="flex-row" style={{ gap: CELL }}>
+          {!adjusting && (
+            <TextButton
+              variant="pill"
+              tone="primary"
+              label={strings.dj.adjust}
+              disabled={loading}
+              onPress={() => setAdjusting(true)}
+              className="items-center"
+              style={{ paddingHorizontal: CELL * 3 }}
+            />
           )}
-        </TextButton>
+          <TextButton
+            variant="pill"
+            label={strings.dj.done}
+            accessibilityLabel={loading ? strings.dj.starting : strings.dj.done}
+            accessibilityState={{ selected: false, busy: loading }}
+            selected={canStart}
+            disabled={!canStart || loading}
+            onPress={start}
+            className="flex-1 flex-row items-center justify-center"
+            style={{ gap: CELL }}
+          >
+            {(color) => (
+              <>
+                {loading && <ActivityIndicator size="small" color={onAccent} />}
+                <Text
+                  className="font-sans text-body font-semibold"
+                  style={{ color: loading ? onAccent : color }}
+                >
+                  {strings.dj.done}
+                </Text>
+              </>
+            )}
+          </TextButton>
+        </View>
       </View>
     </View>
   );

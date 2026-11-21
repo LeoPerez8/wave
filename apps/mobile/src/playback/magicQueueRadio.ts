@@ -1,6 +1,7 @@
 /** Magic Queue reads its seed's radio and ranks it with the last available Wave signals. */
 import {
   catalogSeedKey,
+  djVarietyCandidates,
   recordingMatches,
   type MixKnownSongs,
   magicLibrarySongs,
@@ -174,12 +175,20 @@ export const magicQueueYtCandidates = (
         { online: online(), ytMusic: ytMusicEnabled(), cachedVideos },
       );
     };
-    const originalBefore = rank(seeds, true);
-    const likedBefore = rank(liked, false);
+    // A DJ session's Artist variety limits who a batch may hold; any other keeps every song.
+    const allowed = (size: number) =>
+      djVarietyCandidates(
+        sessionNow?.() ?? session,
+        graph,
+        { seed: rank(seeds, true), liked: rank(liked, false) },
+        size,
+      );
+    // Unfilled, so a radio short of allowed songs reads its continuations.
+    const before = allowed(0);
     const plan = magicRadioReadPlan(
       sessionNow?.() ?? session,
-      originalBefore,
-      likedBefore,
+      before.seed,
+      before.liked,
       liked.length > 0,
     );
     const originalIds = new Set(seeds.map((seed) => seed.id));
@@ -187,8 +196,7 @@ export const magicQueueYtCandidates = (
       online: connected,
       low: (seed) => (originalIds.has(seed.id) ? plan.seedLow : plan.likedLow),
     });
-    const candidates = rank(seeds, true);
-    const likedCandidates = rank(liked, false);
+    const { seed: candidates, liked: likedCandidates } = allowed(plan.size);
     // Ranked again at Close only when the faithful batch comes up short (`completeMagicRadioBatch`).
     const fallback = session.faithful
       ? () => ({ seed: rank(seeds, true, true), liked: rank(liked, false, true) })
