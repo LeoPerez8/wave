@@ -447,6 +447,7 @@ else {
         languageChanged: (view) => {
           language = view.language;
           text = catalogueOf(language, "desktop");
+          system?.languageChanged();
         },
         // An edit in Settings › Appearance, or a pull: the window's frame follows at once.
         themeChanged: (stored) => {
