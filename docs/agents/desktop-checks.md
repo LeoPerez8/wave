@@ -41,6 +41,18 @@ Build the addon before `test:e2e`: without it the app runs, but every player cal
 fixture in `native/engine/tests/fixtures`; its `device` annotation (`--reporter=json`) names the
 output that played it, or `none` when the engine kept time without one, as on CI.
 
+### Output device
+
+`settings.outputs()` answers `{outputs, chosen}`: the system's outputs as the engine last listed
+them and the one picked (`connected` false while it is away). `settings.setOutput(id | null)`
+takes an id from that list, or null for System default. The engine decides where to play
+(`target_device` in `native/engine/src/output.rs`); the audio process pushes the list as an
+`outputs` event and takes the choice as the `setOutput` call, which a restarted process gets
+again. `e2e/outputDevice.spec.ts` picks one of the machine's real outputs with a paused song and
+checks the position and a restart; its `outputs` annotation is 0 on a machine without one, where
+it stops after the list. Its screenshot is `output-device-<platform>.png`. Unplugging is checked
+against a fake in `src/main/bridge.test.ts`, and on real hardware by the owner.
+
 ## The JVM
 
 The shared Kotlin (`packages/kotlin-shared`) runs in a JVM main starts with the app
@@ -177,6 +189,18 @@ and [Development Mode requirements](https://developer.spotify.com/documentation/
 folder for each test. It checks the profile, restart, Sign Out, Sign In Again, and the no-keyring
 notice. The owner can verify the system browser and consent screen with a registered Spotify app.
 
+## Share to Spotify
+
+A playlist's menu has Share to Spotify when the build names a Spotify client ID. Main matches the
+songs with Spotify's search (Core's `spotifyWebShareMatch`), makes a public playlist or updates
+the one it made before, and copies its link (`src/main/spotify/playlistShare.ts`). The window
+calls `wave.spotifyShare.playlist(id)` and hears only how it went. The Spotify playlist made for
+each Wave playlist is remembered in `desktop_settings` as `share.spotify.<playlist id>`.
+
+`e2e/spotifyShare.spec.ts` fakes Spotify's sign-in and Web API in main. It checks the sign-in
+question, the playlist Spotify got, the toast, the clipboard, a second share and a failure. The
+owner can verify a real account: the playlist appears public in Spotify with the matched songs.
+
 ## Song menus and keys
 
 `e2e/songMenus.spec.ts` opens a song's menu by right-click, Shift+F10 and the Menu key, queues
@@ -219,6 +243,15 @@ The JVM adds `downloads.*`, `download.album/watchSong/lyrics`, `soulseek.session
 and `tags.writeSong`. Its `downloadsChanged` events trigger journal reads. Soulseek credentials
 are sealed by main's `seal/unseal` host calls through Electron's keyring; without a keyring they
 stay in memory. Rebuild the JAR with `pnpm --filter @wave/desktop build:jvm` after Kotlin changes.
+
+The Downloads page reads `downloads.rows(offset, limit, failedShown)`: Core's `downloadListRows`
+then `failedDownloadRows`, the failed songs only while shown. `downloads.move` takes a waiting
+song or a group onto another's place (`to`) or one step (`step`), and `downloads.failedReason`
+retries or removes every song that failed for one reason. `downloads.view()` carries the run's
+`panel`, the `summary` line and `pauseNotice`; main follows Core's `ytThrottle` and has the JVM
+pause YouTube's jobs (`downloads.pauseYoutube`). `e2e/downloadsPage.spec.ts` checks the page
+offline with 1,205 queued songs: the groups, a bounded list, a group and a song moved by drag
+and by Move Up, and the failed section. Its screenshots are `downloads-<step>-<platform>.png`.
 
 `e2e/downloads.spec.ts` checks a missing Search song waiting offline and resuming through the real
 JVM, and a live YouTube download with its tags read back and its Library entry visible. The live

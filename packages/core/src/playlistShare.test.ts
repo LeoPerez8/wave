@@ -9,6 +9,7 @@ import {
   syncSharedPlaylist,
   sharedPlaylistChanges,
   sharedPlaylistMoves,
+  sharedSongsCopiedLine,
   sharedSongsLine,
   PLAYLIST_SHARE_LABELS,
   playlistShareServices,
@@ -177,6 +178,20 @@ describe("matchSharedSongs", () => {
     await assert.rejects(
       matchSharedSongs([{ id: null, search: "x" }], () => Promise.reject(new Error("offline"))),
       /offline/u,
+    );
+  });
+});
+
+describe("sharedSongsCopiedLine", () => {
+  test("says how many songs were found and that the link is on the clipboard", () => {
+    assert.equal(
+      sharedSongsCopiedLine({ found: 12, total: 15 }),
+      "12 of 15 songs found. Link copied.",
+    );
+    assert.equal(sharedSongsCopiedLine({ found: 1, total: 1 }), "1 of 1 song found. Link copied.");
+    assert.equal(
+      sharedSongsCopiedLine({ found: 12, total: 15 }, catalogueOf("pt-BR")),
+      "12 de 15 músicas encontradas. Link copiado.",
     );
   });
 });

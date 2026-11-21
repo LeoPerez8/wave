@@ -1,9 +1,10 @@
-//! Sends the player's frames to the system's default output device, and follows it when it
-//! changes. Without a device the song keeps time on a silent clock, so position still moves.
+//! Sends the player's frames to an output device: the one chosen while the system has it, else
+//! the system's default, followed when it changes. Without a device the song keeps time on a
+//! silent clock, so position still moves.
 
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::mpsc::{self, RecvTimeoutError};
-use std::sync::{Arc, Mutex};
+use std::sync::{Arc, Mutex, MutexGuard};
 use std::thread;
 use std::time::{Duration, Instant};
 
@@ -14,7 +15,7 @@ use crate::player::Player;
 
 /// How often the output thread looks at the device and the song's rate.
 const TICK: Duration = Duration::from_millis(50);
-/// How often it asks the system which device is the default.
+/// How often it asks the system which devices it has and which is the default.
 const DEVICE_CHECK: Duration = Duration::from_secs(1);
 
 /// The callback period asked of devices that buffer deeply by default, in seconds. PulseAudio
@@ -52,18 +53,35 @@ pub struct Opened {
     pub rate: u32,
 }
 
+/// An output the system has: `id` stays the same across restarts, `name` is what the system
+/// calls it.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct OutputDevice {
+    pub id: String,
+    pub name: String,
+}
+
+/// The device to play on: the chosen one while it is among `present`, else the system's default.
+pub fn target_device<'a>(
+    chosen: Option<&'a str>,
+    present: &[OutputDevice],
+    default_id: Option<&'a str>,
+) -> Option<&'a str> {
+    chosen.filter(|id| present.iter().any(|device| device.id == *id)).or(default_id)
+}
+
 /// Whether the stream must be built again: none is open, it broke, the song's rate changed, or
-/// the system moved its default output to another device.
+/// the device to play on (`target_id`) is another one.
 pub fn needs_rebuild(
     opened: Option<&Opened>,
     broken: bool,
     rate: u32,
-    default_id: Option<&str>,
+    target_id: Option<&str>,
 ) -> bool {
     match opened {
         None => true,
         Some(opened) => {
-            broken || opened.rate != rate || default_id.is_some_and(|id| id != opened.device_id)
+            broken || opened.rate != rate || target_id.is_some_and(|id| id != opened.device_id)
         }
     }
 }
@@ -130,35 +148,64 @@ impl Adapter {
     }
 }
 
+/// What the output thread hears from the engine.
+enum Control {
+    Stop,
+    /// Play on the device with this id; `None` follows the system's default.
+    Choose(Option<String>),
+}
+
+#[derive(Default)]
+struct Shown {
+    /// The device playing, by the name the system gives it.
+    device: Option<String>,
+    outputs: Vec<OutputDevice>,
+}
+
 /// The output thread and what the engine reads from it.
 pub struct Output {
-    stop: mpsc::Sender<()>,
-    device: Arc<Mutex<Option<String>>>,
+    control: mpsc::Sender<Control>,
+    shown: Arc<Mutex<Shown>>,
     worker: Option<thread::JoinHandle<()>>,
 }
 
 impl Output {
     /// Starts playing `player` on the default device; `silent` keeps time without a device.
     pub fn start(player: Arc<Player>, silent: bool) -> Output {
-        let (stop, stopped) = mpsc::channel();
-        let device = Arc::new(Mutex::new(None));
-        let shown = Arc::clone(&device);
+        let (control, controls) = mpsc::channel();
+        let shown = Arc::new(Mutex::new(Shown::default()));
+        let shared = Arc::clone(&shown);
         let worker = thread::Builder::new()
             .name("wave-output".into())
-            .spawn(move || run(&player, silent, &stopped, &shown))
+            .spawn(move || run(&player, silent, &controls, &shared))
             .expect("starts the output thread");
-        Output { stop, device, worker: Some(worker) }
+        Output { control, shown, worker: Some(worker) }
+    }
+
+    fn shown(&self) -> MutexGuard<'_, Shown> {
+        self.shown.lock().unwrap_or_else(|poisoned| poisoned.into_inner())
     }
 
     /// The device playing, by the name the system gives it.
     pub fn device(&self) -> Option<String> {
-        self.device.lock().ok().and_then(|name| name.clone())
+        self.shown().device.clone()
+    }
+
+    /// The outputs the system had at the last look, a second ago at most.
+    pub fn outputs(&self) -> Vec<OutputDevice> {
+        self.shown().outputs.clone()
+    }
+
+    /// Moves playback to the device with `id` while the system has it; `None`, or a device
+    /// that is away, plays on the system's default. The song goes on from where it is.
+    pub fn choose(&self, id: Option<String>) {
+        let _ = self.control.send(Control::Choose(id));
     }
 }
 
 impl Drop for Output {
     fn drop(&mut self) {
-        let _ = self.stop.send(());
+        let _ = self.control.send(Control::Stop);
         if let Some(worker) = self.worker.take() {
             let _ = worker.join();
         }
@@ -168,42 +215,84 @@ impl Drop for Output {
 struct Playing {
     _stream: cpal::Stream,
     opened: Opened,
+    name: Option<String>,
     broken: Arc<AtomicBool>,
+}
+
+/// The system's outputs with the devices behind them.
+fn present(host: &cpal::Host) -> Vec<(OutputDevice, cpal::Device)> {
+    let Ok(devices) = host.output_devices() else {
+        return Vec::new();
+    };
+    devices
+        .filter_map(|device| {
+            let id = device.id().ok()?.to_string();
+            let name = device.description().ok()?.name().to_string();
+            Some((OutputDevice { id, name }, device))
+        })
+        .collect()
 }
 
 fn run(
     player: &Arc<Player>,
     silent: bool,
-    stopped: &mpsc::Receiver<()>,
-    shown: &Mutex<Option<String>>,
+    controls: &mpsc::Receiver<Control>,
+    shown: &Mutex<Shown>,
 ) {
     let host = cpal::default_host();
     let mut playing: Option<Playing> = None;
     let mut last_check: Option<Instant> = None;
     let mut clock = Instant::now();
     let mut silence = Vec::new();
+    let mut chosen: Option<String> = None;
+    // A chosen device that wouldn't open counts as away until it leaves or the choice changes.
+    let mut refused: Option<String> = None;
     loop {
-        match stopped.recv_timeout(TICK) {
-            Ok(()) | Err(RecvTimeoutError::Disconnected) => return,
+        match controls.recv_timeout(TICK) {
+            Ok(Control::Stop) | Err(RecvTimeoutError::Disconnected) => return,
+            Ok(Control::Choose(id)) => {
+                chosen = id;
+                refused = None;
+                // The move shouldn't wait for the next device check.
+                last_check = None;
+            }
             Err(RecvTimeoutError::Timeout) => {}
         }
         let rate = player.progress().track.map_or(44_100, |track| track.sample_rate);
         if !silent && last_check.is_none_or(|at| at.elapsed() >= DEVICE_CHECK) {
             last_check = Some(Instant::now());
+            let mut devices = present(&host);
+            let outputs: Vec<OutputDevice> =
+                devices.iter().map(|(output, _)| output.clone()).collect();
+            if refused.as_ref().is_some_and(|id| outputs.iter().all(|output| output.id != *id)) {
+                refused = None;
+            }
             let default_id =
                 host.default_output_device().and_then(|d| d.id().ok()).map(|id| id.to_string());
+            let wanted = chosen.as_deref().filter(|id| refused.as_deref() != Some(*id));
+            let target = target_device(wanted, &outputs, default_id.as_deref());
             let opened = playing.as_ref().map(|p| &p.opened);
             let broken = playing.as_ref().is_some_and(|p| p.broken.load(Ordering::Relaxed));
-            if needs_rebuild(opened, broken, rate, default_id.as_deref()) {
+            let rebuilt = needs_rebuild(opened, broken, rate, target);
+            if rebuilt {
                 drop(playing.take());
-                playing = open(&host, player, rate);
-                *shown.lock().unwrap_or_else(|p| p.into_inner()) = playing
-                    .as_ref()
-                    .and_then(|_| host.default_output_device())
-                    .and_then(|d| d.description().ok())
-                    .map(|d| d.name().to_string());
+                let at = wanted
+                    .filter(|id| target == Some(*id))
+                    .and_then(|id| devices.iter().position(|(output, _)| output.id == id));
+                playing = at.and_then(|at| open(devices.swap_remove(at).1, player, rate));
+                if playing.is_none() {
+                    if at.is_some() {
+                        refused = chosen.clone();
+                    }
+                    playing = host.default_output_device().and_then(|d| open(d, player, rate));
+                }
                 clock = Instant::now();
             }
+            let mut shown = shown.lock().unwrap_or_else(|p| p.into_inner());
+            if rebuilt {
+                shown.device = playing.as_ref().and_then(|p| p.name.clone());
+            }
+            shown.outputs = outputs;
         } else if let Some(current) = playing.as_ref() {
             // A broken stream or a new rate shouldn't wait for the next device check.
             if current.broken.load(Ordering::Relaxed) || current.opened.rate != rate {
@@ -225,9 +314,9 @@ fn run(
     }
 }
 
-fn open(host: &cpal::Host, player: &Arc<Player>, rate: u32) -> Option<Playing> {
-    let device = host.default_output_device()?;
+fn open(device: cpal::Device, player: &Arc<Player>, rate: u32) -> Option<Playing> {
     let device_id = device.id().ok()?.to_string();
+    let name = device.description().ok().map(|d| d.name().to_string());
     let broken = Arc::new(AtomicBool::new(false));
     let wanted =
         StreamConfig { channels: 2, sample_rate: rate, buffer_size: buffer_on(&device, rate) };
@@ -238,7 +327,7 @@ fn open(host: &cpal::Host, player: &Arc<Player>, rate: u32) -> Option<Playing> {
         build(&device, own, rate, player, &broken)
     })?;
     stream.play().ok()?;
-    Some(Playing { _stream: stream, opened: Opened { device_id, rate }, broken })
+    Some(Playing { _stream: stream, opened: Opened { device_id, rate }, name, broken })
 }
 
 fn build(
@@ -296,6 +385,34 @@ mod tests {
     #[test]
     fn the_stream_follows_a_new_default_device() {
         assert!(needs_rebuild(Some(&opened()), false, 44_100, Some("wasapi:headphones")));
+    }
+
+    fn outputs() -> Vec<OutputDevice> {
+        ["wasapi:speakers", "wasapi:headphones"]
+            .map(|id| OutputDevice { id: id.into(), name: id.into() })
+            .to_vec()
+    }
+
+    #[test]
+    fn playback_goes_to_the_chosen_device_while_the_system_has_it() {
+        let default = Some("wasapi:speakers");
+        assert_eq!(target_device(None, &outputs(), default), default);
+        assert_eq!(
+            target_device(Some("wasapi:headphones"), &outputs(), default),
+            Some("wasapi:headphones")
+        );
+    }
+
+    #[test]
+    fn a_chosen_device_that_went_away_falls_back_to_the_default_and_returns() {
+        let default = Some("wasapi:speakers");
+        let unplugged = &outputs()[..1];
+        assert_eq!(target_device(Some("wasapi:headphones"), unplugged, default), default);
+        let opened = opened();
+        assert!(!needs_rebuild(Some(&opened), false, 44_100, default));
+        let back = target_device(Some("wasapi:headphones"), &outputs(), default);
+        assert!(needs_rebuild(Some(&opened), false, 44_100, back), "plugged back: return to it");
+        assert_eq!(target_device(Some("wasapi:headphones"), &[], None), None);
     }
 
     #[test]

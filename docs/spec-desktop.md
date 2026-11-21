@@ -210,7 +210,12 @@ ADR: `docs/adr/0004-kotlin-on-a-bundled-jvm.md`.
 - The PCM carries its song's identity up to the gain stage, so a per-song gain switches on the
   first frame of the song. Measured: no mismatching sample across 619,534 frames.
 - Loudness measurement for Normalize Volume runs in the engine, which already decodes.
-- Output device: the system default, following changes. Picking a device is later.
+- Output device: the system default, following changes, unless Settings › Playback › Output
+  picks another (#1230). The list is the system's outputs, System default first, read again
+  every second. Picking one moves the stream to it and the song goes on from where it is. While
+  the picked device is away the engine plays on the system default and returns to the device
+  when the system lists it again; the same holds for a device that won't open. The choice is
+  this computer's: its id and name are in `desktop_settings` (`outputDevice`), never synced.
 - Streaming: the Kotlin resolver returns the stream address and its headers. The engine fetches
   the bytes by range, writes them to the bounded audio cache (1 GB, as on the phone) and asks the
   main process to resolve again on a 403 or 410.
@@ -245,6 +250,12 @@ ADR: `docs/adr/0004-kotlin-on-a-bundled-jvm.md`.
   that brought stars or songs, and as Wave starts. Unstarring it before the file arrives cancels
   the download only the star asked for. What the stars asked is kept on this computer
   (`downloads.syncedStars`, `downloads.starAsked`), never synced.
+- The Downloads page is the phone's (`docs/spec.md`, Downloads): the line counting the songs
+  downloading and waiting, the run's panel with the paused line while YouTube limits downloads,
+  the waiting songs under their source's header, and the failed section folded until shown,
+  grouped by reason. It is one virtual list. A group's header drags among the groups and a
+  waiting song among its group's songs, with the mouse or with Move Up and Move Down on the row,
+  and the queue downloads in the order shown.
 - Play and Shuffle on a list with missing songs play what can play (Core's `listPlay`): the
   songs with a file and, with YT Music on, the missing songs downloaded from a YouTube Music
   video, streamed in their place. A toast counts the ones left out and offers Download Missing
