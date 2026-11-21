@@ -628,6 +628,12 @@ export const creditedTotals = (
   kind: CreditKind,
   plan: KeptTotalsPlan,
 ): KeptTotal[] => {
+  const totals = creditedTotalsSql(kind, plan);
+  return totals === null ? [] : db.all<KeptTotal>(totals);
+};
+
+/** `creditedTotals`' statement, for a reader that joins more to it; null when [plan] reads nothing. */
+const creditedTotalsSql = (kind: CreditKind, plan: KeptTotalsPlan): SQL | null => {
   const parts: SQL[] = [];
   const kept = (span: number, from: number, to: number) =>
     sql`SELECT entity, counted_plays, listened_ms, latest_play_at FROM credited_buckets
@@ -640,12 +646,12 @@ export const creditedTotals = (
       -- The partial days' plays lead: each finds its song's credits by key.
       CROSS JOIN play_credits AS c ON c.song = ${sql.raw(songKeySql("e"))} AND c.kind = ${kind}
       WHERE e.counted AND e.started_at BETWEEN ${plays.from} AND ${plays.to}`);
-  if (parts.length === 0) return [];
-  return db.all<KeptTotal>(sql`WITH totals (entity, plays, listened, latest) AS (
+  if (parts.length === 0) return null;
+  return sql`WITH totals (entity, plays, listened, latest) AS (
       ${sql.join(parts, sql` UNION ALL `)})
     SELECT entity, sum(plays) AS "countedPlays", sum(listened) AS "listenedMs",
       max(latest) AS "latestPlayAt"
-    FROM totals GROUP BY entity HAVING sum(plays) > 0`);
+    FROM totals GROUP BY entity HAVING sum(plays) > 0`;
 };
 
 const LIBRARY_ID = /^\d+$/u;
@@ -749,37 +755,37 @@ export const keptSongPlayTotals = (
   window: StatsWindow,
 ): SongPlayTotals[] | null => {
   if (!keptTotalsSettled(db)) return null;
-  const totals = creditedTotals(db, "song", keptTotalsPlan(window));
-  const tracks = totals.flatMap((total) =>
-    total.entity.startsWith("t:") ? [Number(total.entity.slice(2))] : [],
-  );
-  const titles = new Map(
-    tracks.length === 0
-      ? []
-      : db
-          .all<{ id: number; titleSort: string }>(
-            sql`SELECT id, title_sort AS "titleSort" FROM tracks
-            WHERE id IN (SELECT value FROM json_each(${JSON.stringify(tracks)}))`,
-          )
-          .map((row) => [row.id, row.titleSort]),
-  );
-  const online = onlineEntities<unknown>(db, "song", totals);
-  return totals.flatMap((total): SongPlayTotals[] => {
-    const sums = {
-      countedPlays: total.countedPlays,
-      listenedMs: total.listenedMs,
-      latestPlayAt: total.latestPlayAt,
-    };
-    if (total.entity.startsWith("t:")) {
-      const id = Number(total.entity.slice(2));
-      const titleSort = titles.get(id);
-      return titleSort === undefined
-        ? []
-        : [{ song: { kind: "library", id }, sortKey: titleSort, ...sums }];
-    }
-    const videoId = total.entity.slice(3);
-    return [{ song: { kind: "yt", videoId }, sortKey: online.get(total.entity)?.sortKey ?? "", ...sums }];
-  });
+  const totals = creditedTotalsSql("song", keptTotalsPlan(window));
+  if (totals === null) return [];
+  // A Library song is listed while it is in the Library, with its title's sort key.
+  return db
+    .all<{
+      trackId: number | null;
+      entity: string;
+      sortKey: string | null;
+      countedPlays: number;
+      listenedMs: number;
+      latestPlayAt: number;
+    }>(
+      sql`WITH song_totals AS (${totals})
+      SELECT tracks.id AS "trackId", song_totals.entity,
+        coalesce(tracks.title_sort, played_entities.sort_key) AS "sortKey",
+        song_totals."countedPlays", song_totals."listenedMs", song_totals."latestPlayAt"
+      FROM song_totals
+      LEFT JOIN tracks ON song_totals.entity LIKE 't:%'
+        AND tracks.id = CAST(substr(song_totals.entity, 3) AS integer)
+      LEFT JOIN played_entities ON played_entities.kind = 'song'
+        AND played_entities.entity = song_totals.entity
+      WHERE tracks.id IS NOT NULL OR song_totals.entity LIKE 'yt:%'`,
+    )
+    .map(({ trackId, entity, sortKey, ...sums }) => ({
+      song:
+        trackId === null
+          ? { kind: "yt" as const, videoId: entity.slice(3) }
+          : { kind: "library" as const, id: trackId },
+      sortKey: sortKey ?? "",
+      ...sums,
+    }));
 };
 
 /**
