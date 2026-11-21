@@ -35,21 +35,21 @@
 
 ## Callers
 
-| Work                                    | Before                                                       | Now                                                                                                                         |
-| --------------------------------------- | ------------------------------------------------------------ | --------------------------------------------------------------------------------------------------------------------------- |
-| Magic Queue batch, DJ batch             | Ranking (`rankRadioSongs`) and Library mapping in one block  | `rankRadioSongsSteps` and the Library mapping in slices; the radios' answer and the batch's completion on free turns        |
-| Scan                                    | Slices of 4 ms + one step                                    | The scheduler's slices; named                                                                                               |
-| Sync                                    | A free turn before each database step                        | The same, named, so a long step is put down to sync                                                                         |
-| Home mixes, snapshot, taste             | Frame-paced turns, blind to taps                             | Frame-paced turns that wait out a tap's transition                                                                          |
-| Home Magic Queue carousel picks         | Free turns and slices                                        | The same through the one scheduler; named                                                                                   |
-| New-release check (`followReleases`)    | A settled turn before each request; answers parsed at once   | Each answer (Deezer, YT Music) handled on a free turn (`answered` port in `@wave/client`)                                   |
-| New-release play (`playNewReleases`)    | Every release after the first added as its answer came       | Each release after the first on a free turn                                                                                 |
-| Update check (`updateRunner`)           | Each step's answer handled at once                           | On a free turn (`answered` option)                                                                                          |
-| Community playlists refresh             | A settled turn, then the answer handled at once              | The answer handled on a free turn                                                                                           |
-| Search index preparation                | `setTimeout(…, 0)` slices of its own                         | The scheduler's free turns                                                                                                  |
-| In your orbit, From your library        | Library queries; the ranking sorts the played totals         | Unchanged: screen reads, not background work. Their reads move with #1348/#1349                                             |
-| Download bookkeeping (`followDownloadRun`) | Per journal change, O(jobs)                               | Unchanged: it must see each journal snapshot, or a song that finishes and leaves the journal between two is lost to the run. #1360 measures it with 100+ downloads |
-| Invite join, shared-row sync (#1299)    | Not on `main`                                                | Joins when #1299 lands                                                                                                      |
+| Work                                       | Before                                                      | Now                                                                                                                                                                |
+| ------------------------------------------ | ----------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| Magic Queue batch, DJ batch                | Ranking (`rankRadioSongs`) and Library mapping in one block | `rankRadioSongsSteps` and the Library mapping in slices; the radios' answer and the batch's completion on free turns                                               |
+| Scan                                       | Slices of 4 ms + one step                                   | The scheduler's slices; named                                                                                                                                      |
+| Sync                                       | A free turn before each database step                       | The same, named, so a long step is put down to sync                                                                                                                |
+| Home mixes, snapshot, taste                | Frame-paced turns, blind to taps                            | Frame-paced turns that wait out a tap's transition                                                                                                                 |
+| Home Magic Queue carousel picks            | Free turns and slices                                       | The same through the one scheduler; named                                                                                                                          |
+| New-release check (`followReleases`)       | A settled turn before each request; answers parsed at once  | Each answer (Deezer, YT Music) handled on a free turn (`answered` port in `@wave/client`)                                                                          |
+| New-release play (`playNewReleases`)       | Every release after the first added as its answer came      | Each release after the first on a free turn                                                                                                                        |
+| Update check (`updateRunner`)              | Each step's answer handled at once                          | On a free turn (`answered` option)                                                                                                                                 |
+| Community playlists refresh                | A settled turn, then the answer handled at once             | The answer handled on a free turn                                                                                                                                  |
+| Search index preparation                   | `setTimeout(…, 0)` slices of its own                        | The scheduler's free turns                                                                                                                                         |
+| In your orbit, From your library           | Library queries; the ranking sorts the played totals        | Unchanged: screen reads, not background work. Their reads move with #1348/#1349                                                                                    |
+| Download bookkeeping (`followDownloadRun`) | Per journal change, O(jobs)                                 | Unchanged: it must see each journal snapshot, or a song that finishes and leaves the journal between two is lost to the run. #1360 measures it with 100+ downloads |
+| Invite join, shared-row sync (#1299)       | Not on `main`                                               | Joins when #1299 lands                                                                                                                                             |
 
 A network wait is not a slice: only the JS that handles its answer takes a turn.
 
@@ -71,11 +71,11 @@ Run on the development PC (Windows, AMD Ryzen 7 5700X, Node 24.19.0), not the em
 phone. Core's functions on synthetic inputs: one block is the function run whole (before); sliced
 runs it through `createBackgroundWork`'s `runSlice` on `performance.now()`. Three runs each.
 
-| Work                                              | One block (before) | Sliced at 6 ms, longest slice (after) |
-| ------------------------------------------------- | ------------------ | ------------------------------------- |
-| Rank 6 radios × 100 songs, 10,000 Library songs   | 39–48 ms           | 6.0, 6.1 and 8.2 ms (a 2 ms GC pause) |
-| Rank 6 radios × 100 songs, 727 Library songs      | 3.4–7.2 ms         | under 2 ms (512-step cap)             |
-| Scan reconciliation, 10,000 read and 1,000 missing | 6.0–13.8 ms       | 5.9–6.0 ms                            |
+| Work                                               | One block (before) | Sliced at 6 ms, longest slice (after) |
+| -------------------------------------------------- | ------------------ | ------------------------------------- |
+| Rank 6 radios × 100 songs, 10,000 Library songs    | 39–48 ms           | 6.0, 6.1 and 8.2 ms (a 2 ms GC pause) |
+| Rank 6 radios × 100 songs, 727 Library songs       | 3.4–7.2 ms         | under 2 ms (512-step cap)             |
+| Scan reconciliation, 10,000 read and 1,000 missing | 6.0–13.8 ms        | 5.9–6.0 ms                            |
 
 The reference phone is several times slower than this PC, so its one-block numbers are larger
 and the slices' 6 ms time check, not the step cap, ends them there. Tests through the scheduler's

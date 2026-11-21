@@ -94,7 +94,10 @@ export const followReleasesCheck = <Y = unknown, R = never>(ports: FollowRelease
       const answer = await (ports.fetch ?? fetch)(url, { signal });
       if (!answer.ok) throw new Error(`HTTP ${answer.status}`);
       return (await answer.json()) as unknown;
-    }).pipe(Effect.timeout("20 seconds"), Effect.tap(() => answered));
+    }).pipe(
+      Effect.timeout("20 seconds"),
+      Effect.tap(() => answered),
+    );
   const allowed = () => ports.enabled();
   const ytAllowed = () => allowed() && ports.ytEnabled();
   const ytRead = <A>(query: string, read: Effect.Effect<A, Y>) =>

@@ -172,39 +172,39 @@ export const magicQueueYtCandidates = (
       );
       // Ranked in background slices (#1350): a batch never holds the JS thread past 8 ms at a time.
       const ranked = rankRadioSongsSteps(
-          {
-            artists,
-            profile: session.faithful
-              ? magicFaithfulGenreProfile(session, profileOf)
-              : magicSeedProfile(session, profileOf),
+        {
+          artists,
+          profile: session.faithful
+            ? magicFaithfulGenreProfile(session, profileOf)
+            : magicSeedProfile(session, profileOf),
+        },
+        {
+          // Several radios interleave by position before ranking.
+          pages: radios.map((radio) => ({
+            ...radio,
+            songs: radio.songs.filter((song) => !("video" in song && song.video === true)),
+          })),
+          graph,
+          taste,
+          profileOf,
+          library: original ? playableMagic : [],
+          inLibrary: (song) => {
+            const local = find(song);
+            return local === null || !songHasFile(local) ? null : mapLibrary(local);
           },
-          {
-            // Several radios interleave by position before ranking.
-            pages: radios.map((radio) => ({
-              ...radio,
-              songs: radio.songs.filter((song) => !("video" in song && song.video === true)),
-            })),
-            graph,
-            taste,
-            profileOf,
-            library: original ? playableMagic : [],
-            inLibrary: (song) => {
-              const local = find(song);
-              return local === null || !songHasFile(local) ? null : mapLibrary(local);
-            },
-            signals: current.radioSignals ?? [],
-            popularityOf: (id) => popularity.get(id) ?? 0,
-            // A disliked song never enters a batch, from the radios or the Library.
-            disliked: dislikedSongsNow(),
-          },
-          {
-            ...sliders,
-            faithfulness: current.faithful ? (faithfulFallback ? 2 : 1) : sliders.faithfulness,
-            popularity: current.faithful ? 3 : sliders.popularity,
-            excludeIncompatible: current.faithful && !faithfulFallback,
-            exclude,
-            libraryFallback: session.continuation === true && !connected,
-          },
+          signals: current.radioSignals ?? [],
+          popularityOf: (id) => popularity.get(id) ?? 0,
+          // A disliked song never enters a batch, from the radios or the Library.
+          disliked: dislikedSongsNow(),
+        },
+        {
+          ...sliders,
+          faithfulness: current.faithful ? (faithfulFallback ? 2 : 1) : sliders.faithfulness,
+          popularity: current.faithful ? 3 : sliders.popularity,
+          excludeIncompatible: current.faithful && !faithfulFallback,
+          exclude,
+          libraryFallback: session.continuation === true && !connected,
+        },
       );
       return Effect.map(runSteps(ranked, freeTurnEffect), (songs) =>
         availableMagicSongs(current, songs, {

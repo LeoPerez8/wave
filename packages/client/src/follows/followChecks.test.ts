@@ -226,15 +226,23 @@ test("a Follows check handles each answer on a turn of its own, after the networ
     const store = databaseFollowStore(db);
     await Effect.runPromise(store.setFollow({ name: "ABBA" }, "releases"));
     const events: string[] = [];
-    const { check } = releasesCheck([{ id: 1, title: "Voyage", release_date: daysAgo(0) }], () => true, {
-      settle: Effect.sync(() => events.push("settle")),
-      answered: Effect.sync(() => events.push("answered")),
-    });
+    const { check } = releasesCheck(
+      [{ id: 1, title: "Voyage", release_date: daysAgo(0) }],
+      () => true,
+      {
+        settle: Effect.sync(() => events.push("settle")),
+        answered: Effect.sync(() => events.push("answered")),
+      },
+    );
     const { yt, searches } = albumsYt({ Voyage: "MPRE1" });
     assert.equal(await Effect.runPromise(check(store, yt, "home")), true);
     assert.deepEqual(searches, ["ABBA Voyage"]);
     // The Deezer artist search, its releases page and the YT Music search: each answer then a turn.
-    assert.equal(events.filter((event) => event === "answered").length >= 3, true, events.join(" "));
+    assert.equal(
+      events.filter((event) => event === "answered").length >= 3,
+      true,
+      events.join(" "),
+    );
     for (const [at, event] of events.entries())
       if (event === "answered") assert.notEqual(events[at + 1], "answered");
   } finally {

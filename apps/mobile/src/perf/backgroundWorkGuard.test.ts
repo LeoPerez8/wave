@@ -49,7 +49,13 @@ test("each background job the ticket names takes its turns from the scheduler", 
     const text = sources[path];
     assert.ok(text !== undefined, `${path} is gone: update BACKGROUND_JOBS`);
     const name = turns.replace("lib/", "");
-    const imports = [`"@/${turns}"`, `"../${turns}"`, `"../${turns}.ts"`, `"./${name}"`, `"./${name}.ts"`];
+    const imports = [
+      `"@/${turns}"`,
+      `"../${turns}"`,
+      `"../${turns}.ts"`,
+      `"./${name}"`,
+      `"./${name}.ts"`,
+    ];
     assert.ok(
       imports.some((source) => text.includes(`from ${source}`)),
       `${path} must take its turns from ${turns}`,

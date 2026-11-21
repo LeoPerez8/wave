@@ -74,12 +74,10 @@ if (Observer?.supportedEntryTypes?.includes("longtask")) {
 }
 
 /** Gives [name] its free turn, marked for the block log (what runs on it may be awaited code). */
-const named =
-  (name: string, run: () => void) =>
-  (): void => {
-    blocks.turnTaken(name, performance.now());
-    run();
-  };
+const named = (name: string, run: () => void) => (): void => {
+  blocks.turnTaken(name, performance.now());
+  run();
+};
 
 // Back in the foreground, the owner is about to tap: work waits as after a touch. Gone to the
 // background, no finger is on Wave, whatever touch end went unheard.

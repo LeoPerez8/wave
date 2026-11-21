@@ -201,10 +201,7 @@ export const createBackgroundWork = ({
    * never while a tap's transition is in flight.
    */
   const dueAt = (waiter: Waiter): number =>
-    Math.max(
-      transitionUntil ?? -Infinity,
-      Math.min(waiter.askedAt + limits.maxWaitMs, quietAt()),
-    );
+    Math.max(transitionUntil ?? -Infinity, Math.min(waiter.askedAt + limits.maxWaitMs, quietAt()));
 
   /** Sets the one timer, for the first waiter. */
   const arm = (): void => {
