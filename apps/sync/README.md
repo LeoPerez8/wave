@@ -262,8 +262,7 @@ them whole, as they are when the pull is answered (see
 [Collaborative playlists](#collaborative-playlists)). `collaborations` lists each
 collaborative playlist the account is in. `endedCollaborations` lists the playlists the
 account was in and isn't any more, each with `reason`: `left` when the account left, `ended`
-when the owner removed it, ended the collaboration or deleted their account (the answer
-doesn't say which). An end stays in every pull until the account joins that playlist again.
+when the owner removed it or ended the collaboration (the answer doesn't say which). An end stays in every pull until the account joins that playlist again.
 A playlist the account owned and ended is in neither list. An app from before these two keys
 reads the rest of the page as before (Core's `readPullPage` takes the tables it knows).
 
@@ -318,7 +317,13 @@ Refusals:
 - `403 { "error": "owner_cannot_leave" }`: the owner leaving, or removing itself.
 - `400 { "error": "bad_request" }`: no `playlistId`, `playlist` or `account`.
 
-Deleting an account takes it out of the playlists it is in and ends the ones it owns.
+Deleting an account (`DELETE /v1/account`) takes it out of the playlists it is in. Each
+playlist it owns passes to the member who joined first, who becomes its owner: the playlist
+row and every entry that names its id, Graveyard ones included, move to that account as its
+next changes, so its ordinary pull carries them, and they count in its caps from then on,
+even past them. A row that account held with the same id is replaced. The other members stay
+in it and get no end record. A playlist with no other member goes with the account. A plain
+entry tombstone stores no playlist id, so it can't move and goes with the account too.
 
 Migration `0016_collaborations` adds `collaborations`, `collaboration_members` and
 `collaboration_ends`, and changes no table there was. Deploy it before an app that calls

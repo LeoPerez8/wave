@@ -5,6 +5,7 @@ import { addMember } from "./collaborations.ts";
 import { migrate } from "./migrations.ts";
 import {
   type Harness,
+  type HarnessOptions,
   type Pulled,
   freshDatabase,
   harness,
@@ -84,8 +85,8 @@ const namesIn = (pulled: Pulled, id: string): (string | null)[] | null =>
  * one entry; Bo and Cy joined it, in that order. Joining is the invite's
  * route, so the members are added straight to the record here.
  */
-const shared = async () => {
-  const service = await harness();
+const shared = async (options: HarnessOptions = {}) => {
+  const service = await harness(options);
   const ana = await service.signIn({ name: "Ana Souza" });
   const anaOtherPhone = await service.signIn();
   const bo = await service.signIn(BO);
@@ -456,15 +457,136 @@ describe("deleting an account", () => {
     assert.deepEqual([back.collaborations, back.endedCollaborations], [[], []]);
   });
 
-  test("the playlists it owned end for their other members", async () => {
-    const { service, ana, bo, cy } = await shared();
+  test("a playlist it owned passes to the member who joined first, rows and all", async () => {
+    const { service, ana, bo, cy, ids } = await shared();
+    await push(service, ana, {
+      playlistEntries: [entry("entry-2", "list-1"), entry("entry-gone", "list-1")],
+    });
+    await push(service, ana, {
+      playlistEntries: [
+        { ...entry("entry-gone", "list-1"), changedAt: 2, deleted: true, removedAt: 2 },
+      ],
+    });
+    const before = await pullAll(service, bo);
+    assert.deepEqual(before.playlists, []);
+
     assert.equal((await requestAccountDeletion(service, ana)).status, 204);
+
+    // Bo's ordinary pull, from where it stopped, carries the playlist and every entry.
+    const after = await pullAll(service, bo, String(before.cursor));
+    assert.deepEqual(
+      after.playlists.map((row) => [row.id, row.name]),
+      [["list-1", "Road trip"]],
+    );
+    assert.deepEqual(after.playlistEntries.map((row) => [row.id, row.deleted]).toSorted(), [
+      ["entry-1", false],
+      ["entry-2", false],
+      ["entry-gone", true],
+    ]);
+    const owner = { accountId: ids.bo, name: "Bo Lima", owner: true };
+    const member = { accountId: ids.cy, name: "Cy Reis", owner: false };
+    for (const [session, self] of [
+      [bo, ids.bo],
+      [cy, ids.cy],
+    ] as const) {
+      const pulled = await pull(service, session);
+      assert.deepEqual(
+        pulled.collaborations.map((collaboration) => ({
+          playlistId: collaboration.playlistId,
+          members: collaboration.members.map(({ accountId, name, owner }) => ({
+            accountId,
+            name,
+            owner,
+          })),
+          self: collaboration.members.find((one) => one.self)?.accountId,
+        })),
+        [{ playlistId: "list-1", members: [owner, member], self }],
+      );
+      assert.deepEqual(pulled.endedCollaborations, []);
+      assert.equal((await members(service, session, "list-1")).status, 200);
+    }
+    // Bo now has what only the owner has.
+    assert.equal((await remove(service, bo, "list-1", ids.cy)).status, 204);
+  });
+
+  test("the playlist passes over a member who left or was removed", async () => {
+    const { service, ana, bo, cy, ids } = await shared();
+    assert.equal((await leave(service, bo, "list-1")).status, 204);
+    assert.equal((await requestAccountDeletion(service, ana)).status, 204);
+    assert.deepEqual(namesIn(await pull(service, cy), "list-1"), ["Cy Reis"]);
+    assert.deepEqual(
+      (await pull(service, cy)).playlists.map((row) => row.id),
+      ["list-1"],
+    );
+    const bosPull = await pull(service, bo);
+    assert.deepEqual([bosPull.collaborations, bosPull.playlists], [[], []]);
+    assert.equal(
+      (await service.db.execute({ sql: "SELECT owner_id FROM collaborations", args: [] })).rows[0]
+        ?.owner_id,
+      ids.cy,
+    );
+  });
+
+  test("the moved rows count in the new owner's caps", async () => {
+    const { service, ana, bo } = await shared({ limits: { maxPlaylistEntries: 2 } });
+    await push(service, bo, {
+      playlists: [playlist("bos-own")],
+      playlistEntries: [entry("bos-entry", "bos-own")],
+    });
+    await push(service, ana, { playlistEntries: [entry("entry-2", "list-1")] });
+
+    // The move happens even when it takes Bo past the cap.
+    assert.equal((await requestAccountDeletion(service, ana)).status, 204);
+    assert.equal((await pullAll(service, bo)).playlistEntries.length, 3);
+    const response = await service.request("POST", "/v1/push", {
+      session: bo,
+      json: { playlistEntries: [entry("bos-next", "bos-own")] },
+    });
+    assert.equal(response.status, 413);
+    assert.deepEqual(await response.json(), { error: "limit", limit: "maxPlaylistEntries" });
+  });
+
+  test("nothing of the deleted owner remains in the playlist it passed on", async () => {
+    const { service, ana, bo, ids } = await shared();
+    assert.equal((await requestAccountDeletion(service, ana)).status, 204);
+    for (const table of ["playlists", "playlist_entries", "collaboration_members"]) {
+      const held = await service.db.execute({
+        sql: `SELECT count(*) AS n FROM ${table} WHERE account_id = ?`,
+        args: [ids.ana],
+      });
+      assert.equal(Number(held.rows[0]?.n), 0, table);
+    }
+    const owners = await service.db.execute({
+      sql: "SELECT count(*) AS n FROM collaborations WHERE owner_id = ?",
+      args: [ids.ana],
+    });
+    assert.equal(Number(owners.rows[0]?.n), 0);
+    assert.deepEqual(namesIn(await pull(service, bo), "list-1"), ["Bo Lima", "Cy Reis"]);
+  });
+
+  test("a playlist with no other member is gone", async () => {
+    const { service, ana, bo, cy } = await shared();
+    await push(service, ana, {
+      playlists: [playlist("solo")],
+      playlistEntries: [entry("solo-1", "solo")],
+    });
+    assert.equal((await make(service, ana, { playlistId: "solo" })).status, 200);
+    for (const session of [bo, cy])
+      assert.equal((await leave(service, session, "list-1")).status, 204);
+
+    assert.equal((await requestAccountDeletion(service, ana)).status, 204);
+    for (const table of [
+      "collaborations",
+      "collaboration_members",
+      "playlists",
+      "playlist_entries",
+    ]) {
+      const left = await service.db.execute(`SELECT count(*) AS n FROM ${table}`);
+      assert.equal(Number(left.rows[0]?.n), 0, table);
+    }
     for (const session of [bo, cy]) {
       const pulled = await pull(service, session);
-      assert.deepEqual(pulled.collaborations, []);
-      assert.deepEqual(pulled.endedCollaborations, [
-        { playlistId: "list-1", reason: "ended", endedAt: service.now },
-      ]);
+      assert.deepEqual([pulled.collaborations, pulled.playlists], [[], []]);
     }
   });
 });

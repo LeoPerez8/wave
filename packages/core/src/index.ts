@@ -2876,3 +2876,5 @@ export {
   type LanguageChoice,
 } from "./languageChoice.ts";
 export { displayTag } from "./displayTag.ts";
+export { duplicatePlaylistEntries, playlistEntrySong, sameEntrySong } from "./oneEntryPerSong.ts";
+export type { DuplicateCandidate, EntrySong } from "./oneEntryPerSong.ts";
