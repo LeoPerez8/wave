@@ -2951,3 +2951,19 @@ export type {
   EntryTrack,
   LibraryEntryFields,
 } from "./collaborativeEntry.ts";
+export {
+  collaborationFailure,
+  collaborativeMemberRows,
+  collaborativeSignInAlert,
+  confirmEndCollaboration,
+  confirmLeavePlaylist,
+  confirmMakeCollaborative,
+  confirmRemoveMember,
+  inviteView,
+} from "./collaborativeMenu.ts";
+export type {
+  CollaborativeAction,
+  CollaborativeConfirmation,
+  CollaborativeMemberRow,
+  InviteView,
+} from "./collaborativeMenu.ts";

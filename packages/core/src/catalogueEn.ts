@@ -23,6 +23,7 @@ import { alertEn } from "./catalogue/alertEn.ts";
 import { fixSongsEn } from "./catalogue/fixSongsEn.ts";
 import { downloadsEn } from "./catalogue/downloadsEn.ts";
 import { itemActionsEn } from "./catalogue/itemActionsEn.ts";
+import { collaborativeMenuEn } from "./catalogue/collaborativeMenuEn.ts";
 import { songDeletionEn } from "./catalogue/songDeletionEn.ts";
 import { appUpdatesEn } from "./catalogue/appUpdatesEn.ts";
 import { inviteJoinEn } from "./catalogue/inviteJoinEn.ts";
@@ -197,6 +198,7 @@ export const en = {
   fixSongs: fixSongsEn,
   downloads: downloadsEn,
   itemActions: itemActionsEn,
+  collaborativeMenu: collaborativeMenuEn,
   songDeletion: songDeletionEn,
   whatsNew: whatsNewEn,
   versionHistory: versionHistoryEn,
