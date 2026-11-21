@@ -76,13 +76,24 @@ test("Home's shelves open their full lists, Back keeps the scroll, and Most play
     // See all, by keyboard, opens the whole list; Back returns to the same place.
     const recentlyAdded = home.locator('[data-section="recently-added"]');
     await expect(recentlyAdded.getByRole("button", { name: /Album/ })).toHaveCount(12);
-    await page.locator(".content").evaluate((el) => {
-      el.scrollTop = 120;
-    });
+    const albumsSeeAll = home
+      .locator('[data-section="most-played-albums"]')
+      .getByRole("button", { name: "See all", exact: true });
+    await albumsSeeAll.scrollIntoViewIfNeeded();
+    await albumsSeeAll.focus();
     const kept = await scrollTop(page);
     expect(kept).toBeGreaterThan(0);
-    await recentlyAdded.getByRole("button", { name: "See all", exact: true }).focus();
     await page.keyboard.press("Enter");
+    await expect(heading).toHaveText("Top albums");
+    await expect(page.getByRole("grid", { name: "Top albums" })).toHaveAttribute(
+      "aria-rowcount",
+      "17",
+    );
+    await page.keyboard.press("Alt+ArrowLeft");
+    await expect(mostPlayed).toBeVisible();
+    await expect.poll(() => scrollTop(page)).toBe(kept);
+
+    await recentlyAdded.getByRole("button", { name: "See all", exact: true }).click();
     await expect(heading).toHaveText("Recently added");
     const added = page.getByRole("grid", { name: "Recently added" });
     await expect(added).toHaveAttribute("aria-rowcount", "16");
@@ -90,11 +101,9 @@ test("Home's shelves open their full lists, Back keeps the scroll, and Most play
     await page.screenshot({ path: join(appFolder, "test-results", "home-see-all.png") });
     await page.keyboard.press("Alt+ArrowLeft");
     await expect(mostPlayed).toBeVisible();
-    await expect.poll(() => scrollTop(page)).toBe(kept);
 
     for (const [section, title, grid] of [
       ["recently-played", "Recently played", "Recently played"],
-      ["most-played-albums", "Top albums", "Top albums"],
       ["most-played-artists", "Top artists", "Top artists"],
       ["favorites", "Favorites", "Favorites"],
     ] as const) {

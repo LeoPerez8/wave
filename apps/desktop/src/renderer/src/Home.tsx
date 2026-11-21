@@ -177,7 +177,11 @@ export function Home({
   /** Each shelf's See all: the phone's page for it, or the desktop's own table. */
   const seeAll = (id: HomeSectionView["id"]) => {
     if (id === "most-played-albums" || id === "most-played-artists")
-      go({ kind: "stats", period: "all", ranking: id === "most-played-albums" ? "albums" : "artists" });
+      go({
+        kind: "stats",
+        period: "all",
+        ranking: id === "most-played-albums" ? "albums" : "artists",
+      });
     else if (id === "favorites") go({ kind: "favorites" });
     else if (id === "recently-added" || id === "recently-played")
       go({ kind: "homeSeeAll", section: id });

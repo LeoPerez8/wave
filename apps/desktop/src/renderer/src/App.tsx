@@ -698,9 +698,9 @@ export function App() {
           : route.kind === "homeSeeAll"
             ? homeSectionTitle(route.section, text)
             : ((hero && tagTitle(hero.title, route.kind)) ??
-            (route.kind in labels
-              ? (labels[route.kind as keyof typeof labels] as string)
-              : labels.library));
+              (route.kind in labels
+                ? (labels[route.kind as keyof typeof labels] as string)
+                : labels.library));
   const playlistId = route.kind === "playlist" ? route.id : undefined;
   const scanning = scan?.status === "scanning";
   // A playlist's image is an edit none of the three counts, and its page shows it.

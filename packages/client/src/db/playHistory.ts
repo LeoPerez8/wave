@@ -211,11 +211,7 @@ const albumsInOrder = (
   return ids.flatMap((id) => byId.get(id) ?? []);
 };
 
-const recentlyAddedAlbums = (
-  db: LibraryDatabase,
-  scope: TrackScope,
-  limit = SHELF,
-): AlbumRow[] => {
+const recentlyAddedAlbums = (db: LibraryDatabase, scope: TrackScope, limit = SHELF): AlbumRow[] => {
   const { tracks } = schema;
   const ids = db
     .select({ id: tracks.albumId })
