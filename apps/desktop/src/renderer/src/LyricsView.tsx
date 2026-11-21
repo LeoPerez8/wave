@@ -17,8 +17,14 @@ import type { BrowseRow } from "../../shared/browse.ts";
 import type { SongLyrics } from "../../shared/lyrics.ts";
 import { GeniusAbout, GeniusAnnotations, MoreInsights } from "./GeniusInsights.tsx";
 import { pressOf } from "./keys.ts";
+import { LineTranslation, TranslateButton, TranslationNote } from "./LyricsTranslation.tsx";
 import { rovingTarget, scrollToRow } from "./rovingList.ts";
 import { labels, text } from "./text.ts";
+import {
+  useLyricsTranslation,
+  useTranslateOn,
+  type LyricsTranslationView,
+} from "./useLyricsTranslation.ts";
 import { useSongGenius, type GeniusAccess } from "./useSongGenius.ts";
 
 /** The queue track id main knows a song by (`QueueEntry.trackId`). */
@@ -67,6 +73,7 @@ function LyricLines({
   current,
   onSeek,
   genius,
+  translation,
   onGeniusSignIn,
   lineIdPrefix,
 }: {
@@ -75,6 +82,7 @@ function LyricLines({
   readonly current: number;
   readonly onSeek?: ((positionMs: number) => void) | undefined;
   readonly genius: ReturnType<typeof useSongGenius>;
+  readonly translation: LyricsTranslationView;
   readonly onGeniusSignIn: () => void;
   readonly lineIdPrefix: string;
 }) {
@@ -149,6 +157,7 @@ function LyricLines({
   return (
     <div ref={scroll} className="lyrics-scroll" onWheel={() => (scrolled.current = Date.now())}>
       <GeniusAbout state={genius.state} onRetry={genius.retry} onSignIn={onGeniusSignIn} />
+      <TranslationNote {...translation} />
       <div
         className="lyric-lines"
         role="listbox"
@@ -201,6 +210,8 @@ function LyricLines({
                     );
                   })
                 : line.text || "♪"}
+              {/* What sits under a line's words goes here. */}
+              <LineTranslation shown={translation.shown} index={index} line={line.text} />
             </div>
           );
         })}
@@ -248,6 +259,8 @@ export function LyricsView({
     [lyrics],
   );
   const genius = useSongGenius(lines?.length ? trackId : null, song, geniusAccess, foreground);
+  const [translateOn, setTranslateOn] = useTranslateOn();
+  const translation = useLyricsTranslation(trackId, lines, translateOn);
   const words = text.playbackText;
   if (song === null) return <p className="lyrics-note">{labels.nothingPlaying}</p>;
   if (lyrics === undefined)
@@ -274,14 +287,21 @@ export function LyricsView({
       </p>
     );
   return (
-    <LyricLines
-      key={trackId}
-      lines={lines ?? []}
-      current={lyrics.kind === "synced" ? currentLyricIndex(lyrics.lines, positionMs) : -1}
-      onSeek={onSeek}
-      genius={genius}
-      onGeniusSignIn={onGeniusSignIn}
-      lineIdPrefix={lineIdPrefix}
-    />
+    <div className="lyrics-view">
+      {/* The Lyrics view's buttons, for a song with lyrics. */}
+      <div className="lyrics-header">
+        <TranslateButton on={translateOn} onChange={setTranslateOn} />
+      </div>
+      <LyricLines
+        key={trackId}
+        lines={lines ?? []}
+        current={lyrics.kind === "synced" ? currentLyricIndex(lyrics.lines, positionMs) : -1}
+        onSeek={onSeek}
+        genius={genius}
+        translation={translation}
+        onGeniusSignIn={onGeniusSignIn}
+        lineIdPrefix={lineIdPrefix}
+      />
+    </div>
   );
 }

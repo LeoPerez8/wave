@@ -290,6 +290,17 @@ and by Move Up, and the failed section. Its screenshots are `downloads-<step>-<p
 JVM, and a live YouTube download with its tags read back and its Library entry visible. The live
 check stops after search on CI; inspect its annotations if YouTube refuses the machine.
 
+## Lyrics translation
+
+`e2e/lyricsTranslation.spec.ts` turns Translate on in the Lyrics tab and Now Playing against a
+stand-in for Google Translate (it replaces `globalThis.fetch` in main, which the translation
+reads at call time). It checks the skeleton, each line's translation, the sung line, the
+"already in" line, a failed request with Try Again, that nothing is sent while Translate is off,
+and that a restart keeps the switch and shows the saved translation with Google out of reach.
+The real endpoint is an owner check. `wave.lyrics.translateOn`, `setTranslateOn` and
+`translation(trackId, language)` are the calls; main reads the lyrics itself
+(`src/main/lyrics/translation.ts`).
+
 ## Theme editor
 
 `e2e/themeEditor.spec.ts` edits the theme in Settings › Appearance: a background in each mode, a

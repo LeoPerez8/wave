@@ -41,7 +41,7 @@ import type {
   MissingSongsList,
   MissingSongsView,
 } from "./downloads.ts";
-import type { GeniusPhase, SongGenius, SongLyrics } from "./lyrics.ts";
+import type { GeniusPhase, SongGenius, SongLyrics, SongTranslation } from "./lyrics.ts";
 import {
   PLAYLIST_CALLS,
   playlistBridge,
@@ -180,6 +180,17 @@ export interface BridgeContract
   readonly "lyrics.cancelGenius": {
     readonly args: readonly [requestId: string];
     readonly result: void;
+  };
+  /** Whether the Lyrics view's Translate button is on; kept on this computer. */
+  readonly "lyrics.translateOn": { readonly args: readonly []; readonly result: boolean };
+  readonly "lyrics.setTranslateOn": {
+    readonly args: readonly [on: boolean];
+    readonly result: boolean;
+  };
+  /** A queue track's lyrics translated into the app's `language`; `off` while Translate is off. */
+  readonly "lyrics.translation": {
+    readonly args: readonly [trackId: string, language: LanguageView["language"]];
+    readonly result: SongTranslation;
   };
   readonly "playback.setSleepTimer": {
     readonly args: readonly [choice: SleepTimerChoice | null];
@@ -492,6 +503,9 @@ export const BRIDGE_CALLS = [
   "lyrics.song",
   "lyrics.genius",
   "lyrics.cancelGenius",
+  "lyrics.translateOn",
+  "lyrics.setTranslateOn",
+  "lyrics.translation",
 
   "library.artwork",
   "library.cover",
@@ -667,6 +681,12 @@ export interface WaveBridge {
       phase: GeniusPhase,
     ) => Promise<SongGenius>;
     readonly cancelGenius: (requestId: string) => Promise<void>;
+    readonly translateOn: () => Promise<boolean>;
+    readonly setTranslateOn: (on: boolean) => Promise<boolean>;
+    readonly translation: (
+      trackId: string,
+      language: LanguageView["language"],
+    ) => Promise<SongTranslation>;
   };
   readonly library: {
     readonly artwork: (hash: string, large: boolean) => Promise<string | null>;
@@ -843,6 +863,9 @@ export const createBridge = (invoke: Invoke): WaveBridge => ({
     song: (trackId) => invoke("lyrics.song", trackId),
     genius: (trackId, requestId, phase) => invoke("lyrics.genius", trackId, requestId, phase),
     cancelGenius: (requestId) => invoke("lyrics.cancelGenius", requestId),
+    translateOn: () => invoke("lyrics.translateOn"),
+    setTranslateOn: (on) => invoke("lyrics.setTranslateOn", on),
+    translation: (trackId, language) => invoke("lyrics.translation", trackId, language),
   },
   library: {
     artwork: (hash, large) => invoke("library.artwork", hash, large),
