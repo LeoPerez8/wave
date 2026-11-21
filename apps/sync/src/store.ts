@@ -10,6 +10,7 @@ import type { Client, InStatement, InValue, Transaction } from "@libsql/client";
 import { collaborativeRow, mergePlays, mergeTableRows, withinServiceClock } from "@wave/core";
 import {
   type Membership,
+  endOwnedCollaboration,
   forgetAccountStatements,
   membershipStatements,
   ownedCollaborations,
@@ -211,6 +212,24 @@ const ownedCollaborative = async (tx: Transaction, accountId: string): Promise<S
   return new Set(result.rows.map((row) => String(row.playlist_id)));
 };
 
+/** Those of [ids] that [accountId] holds as a deleted playlist. */
+const deletedPlaylists = async (
+  tx: Transaction,
+  accountId: string,
+  ids: readonly string[],
+): Promise<Set<string>> => {
+  const deleted = new Set<string>();
+  for (const chunk of chunks(ids, IDS_PER_QUERY)) {
+    const result = await tx.execute({
+      sql: `SELECT id FROM playlists WHERE account_id = ? AND deleted = 1
+              AND id IN (${chunk.map(() => "?").join(", ")})`,
+      args: [accountId, ...chunk],
+    });
+    for (const row of result.rows) deleted.add(String(row.id));
+  }
+  return deleted;
+};
+
 /** The playlist a pushed entry names, when it carries its fields. */
 const entryPlaylist = (row: IncomingRow): string | null => {
   const playlistId = row.values === null ? null : rowFields(ENTRIES, row).playlistId;
@@ -344,7 +363,25 @@ const mergeAndStore = async (
       : new Set<string>();
   // The collaborative playlists an accepted entry with its fields goes into.
   const touched = new Set<string>();
-  for (const [table, given] of batch) {
+  // The owner's collaborative playlists this push deletes: their collaboration ends with it.
+  const ending = new Set<string>();
+  // Collaborative playlists the owner deleted, held or in this push: they take no live entry.
+  const deleted =
+    batch.has(ENTRIES) && collaborative.size > 0
+      ? await deletedPlaylists(tx, accountId, [...collaborative])
+      : new Set<string>();
+  // The playlists first, so the entries know which of them this push deletes.
+  const tables = [...batch].toSorted(
+    ([a], [b]) => Number(b === PLAYLISTS) - Number(a === PLAYLISTS),
+  );
+  for (const [table, rows] of tables) {
+    const given =
+      table === ENTRIES && deleted.size > 0
+        ? rows.filter((row) => {
+            const playlistId = entryPlaylist(row);
+            return row.deleted || playlistId === null || !deleted.has(playlistId);
+          })
+        : rows;
     if (given.length === 0) continue;
     const pushed = await asCollaborative(
       tx,
@@ -369,6 +406,14 @@ const mergeAndStore = async (
     }
     const heldIds = new Set(held.map((row) => row.id));
     if (merged.some((row) => !heldIds.has(row.id))) growing.add(table);
+    if (table === PLAYLISTS && writerId === accountId) {
+      for (const row of merged) {
+        if (row.deleted && collaborative.has(row.id)) {
+          ending.add(row.id);
+          deleted.add(row.id);
+        }
+      }
+    }
     if (table === ENTRIES) {
       for (const row of merged) {
         const playlistId = entryPlaylist(row);
@@ -393,6 +438,8 @@ const mergeAndStore = async (
   for (const [table, rows] of accepted) {
     for (const row of rows) writes.push(upsert(table, accountId, row, ++changeNo, writerId));
   }
+  for (const playlistId of ending)
+    writes.push(...endOwnedCollaboration(playlistId, accountId, now));
   await tx.batch(writes);
 
   for (const table of growing) {
@@ -600,6 +647,8 @@ export interface PulledPlaylistPage {
   };
   /** The owner's change number of the page's last row: the next pull's cursor. */
   readonly cursor: number;
+  /** The owner the change numbers are of, whom the next pull's cursor names. */
+  readonly ownerId: string;
   /** Whether more rows changed after it. */
   readonly more: boolean;
 }
@@ -607,37 +656,44 @@ export interface PulledPlaylistPage {
 /**
  * For [accountId], a member of collaborative playlist [playlistId], up to
  * [pageSize] of the playlist's row and entries changed after the owner's
- * change number [since], oldest change first, whoever wrote them. Null when
- * the playlist isn't collaborative or the account isn't in it.
+ * change number [since], oldest change first, whoever wrote them. A cursor
+ * taken under another owner ([sinceOwner], when it names one) starts from the
+ * beginning, as the change numbers are another account's. Null when the
+ * playlist isn't collaborative or the account isn't in it.
  */
 export const pullPlaylistRows = async (
   db: Client,
   playlistId: string,
   accountId: string,
   since: number,
+  sinceOwner: string | null,
   pageSize: number,
 ): Promise<PulledPlaylistPage | null> => {
   const owner = `(SELECT c.owner_id FROM collaborations c
                   JOIN collaboration_members m ON m.playlist_id = c.playlist_id
                   WHERE c.playlist_id = ? AND m.account_id = ?)`;
+  const ownerArgs = [playlistId, accountId];
+  const after = `(CASE WHEN coalesce(?, ${owner}) = ${owner} THEN ? ELSE 0 END)`;
+  const afterArgs = [sinceOwner, ...ownerArgs, ...ownerArgs, since];
   // One read transaction: the membership and the rows in the same snapshot.
   const [membership, playlists, entries] = await db.batch(
     [
-      { sql: `SELECT ${owner} AS owner_id`, args: [playlistId, accountId] },
+      { sql: `SELECT ${owner} AS owner_id, ${after} AS since`, args: [...ownerArgs, ...afterArgs] },
       {
-        sql: `SELECT * FROM playlists WHERE account_id = ${owner} AND id = ? AND change_no > ?`,
-        args: [playlistId, accountId, playlistId, since],
+        sql: `SELECT * FROM playlists WHERE account_id = ${owner} AND id = ? AND change_no > ${after}`,
+        args: [...ownerArgs, playlistId, ...afterArgs],
       },
       {
         sql: `SELECT * FROM playlist_entries
-              WHERE account_id = ${owner} AND playlist_id = ? AND change_no > ?
+              WHERE account_id = ${owner} AND playlist_id = ? AND change_no > ${after}
               ORDER BY change_no LIMIT ?`,
-        args: [playlistId, accountId, playlistId, since, pageSize + 1],
+        args: [...ownerArgs, playlistId, ...afterArgs, pageSize + 1],
       },
     ],
     "read",
   );
-  if (typeof membership?.rows[0]?.owner_id !== "string") return null;
+  const ownerId = membership?.rows[0]?.owner_id;
+  if (typeof ownerId !== "string") return null;
   const changed = [
     ...(playlists?.rows ?? []).map((row) => ({ table: PLAYLISTS, row })),
     ...(entries?.rows ?? []).map((row) => ({ table: ENTRIES, row })),
@@ -649,7 +705,8 @@ export const pullPlaylistRows = async (
     page.filter((change) => change.table === table).map((change) => wireRow(table, change.row));
   return {
     rows: { playlists: of(PLAYLISTS), playlistEntries: of(ENTRIES) },
-    cursor: Number(page.at(-1)?.row.change_no ?? since),
+    cursor: Number(page.at(-1)?.row.change_no ?? membership?.rows[0]?.since ?? since),
+    ownerId,
     more: changed.length > pageSize,
   };
 };
