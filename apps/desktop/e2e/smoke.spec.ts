@@ -89,6 +89,8 @@ test("the page has no Node and only the typed bridge", async () => {
       "wave.lyrics.translateOn",
       "wave.lyrics.setTranslateOn",
       "wave.lyrics.translation",
+      "wave.lyrics.searchOnline",
+      "wave.lyrics.openOnlineHit",
       "wave.library.artwork",
       "wave.library.cover",
       "wave.library.browse",

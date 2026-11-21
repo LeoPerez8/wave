@@ -50,6 +50,7 @@ import { keyringHost } from "./downloads/keyring.ts";
 import type { KotlinEvent } from "./kotlin/protocol.ts";
 import { ytFeaturesLayer } from "./yt/ytServices.ts";
 import { lyricsLayer } from "./lyrics/lyrics.ts";
+import { geniusLyricsSearchLayer } from "./lyrics/geniusLyricsSearchLayer.ts";
 import { botguardPost, createPoTokens, poTokenHost } from "./yt/poTokens.ts";
 import { openPoTokenPage } from "./yt/poTokenWindow.ts";
 import { createWaveAccount } from "./account/account.ts";
@@ -453,6 +454,11 @@ else {
             desktopLinksLayer({
               online: () => net.isOnline(),
               writeClipboard: (text) => clipboard.writeText(text),
+            }),
+            geniusLyricsSearchLayer({
+              account,
+              online: () => net.isOnline(),
+              openExternal: (url) => shell.openExternal(url),
             }),
             ytAccountLayer({
               sessions: ytSessions,

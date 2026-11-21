@@ -346,6 +346,20 @@ launches that come close together. What the installer registers and the AppImage
 `scripts/file-types.ts`, tested in `src/fileTypes.test.ts` without building an installer; "Open
 with" after a real install is an owner check.
 
+## Online lyrics search
+
+`lyrics.searchOnline(query)` asks Genius through the sync service with the Wave session
+(`src/main/lyrics/geniusLyricsSearch.ts`, the phone's `requestGeniusLyricsSearch` from
+`@wave/client/geniusLyricsSearch`), and `lyrics.openOnlineHit(id)` plays or opens a hit of the
+last answer. The window waits for the typing pause and lists the hits (`OnlineLyrics.tsx`).
+
+`e2e/geniusLyricsSearch.spec.ts` runs it against the sync service in memory and a fake Genius
+(`e2e/geniusFixture.ts`), with YT Music off: the three-word rule, the signed-out, failed and
+offline lines, five hits then twenty, the hit a Library Lyrics row hides, a Library song that
+plays and a Genius page that opens. A hit that plays from YT Music is tested in
+`src/main/lyrics/geniusLyricsSearch.test.ts` against a fake search; the live one is an owner
+check.
+
 ## The dev window
 
 To look at `pnpm dev` from an agent, start it in the background with a debugging port and a

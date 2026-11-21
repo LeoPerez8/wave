@@ -43,6 +43,7 @@ import { DesktopLibrary, desktopLibraryLayer } from "./library/library.ts";
 import { preference } from "./preferences.ts";
 import { ytMusicLayer } from "./yt/ytMusic.ts";
 import { desktopLinksLayer } from "./links/layer.ts";
+import { geniusLyricsSearchLayer } from "./lyrics/geniusLyricsSearchLayer.ts";
 import { ytFeaturesLayer } from "./yt/ytServices.ts";
 import { ytAccountLayer } from "./yt/ytAccountLayer.ts";
 import { spotifyAccountLayer } from "./spotify/spotifyAccountLayer.ts";
@@ -68,6 +69,26 @@ import {
 } from "@wave/core";
 
 const trusted = { senderFrame: "window" };
+
+test("Search's online lyrics take a query and a hit's id, and ask nothing without an account", async () => {
+  await withFile(async (file) => {
+    const bridge = connect(file);
+    const wave = bridge.exposed.get("wave") as WaveBridge;
+    try {
+      assert.deepEqual(await wave.lyrics.searchOnline("wait for the water"), {
+        status: "disabled",
+      });
+      assert.equal(await wave.lyrics.openOnlineHit(8), "failed");
+      const search = bridge.handlers.get("lyrics.searchOnline")!;
+      await assert.rejects(search(trusted, 5), /refused/i);
+      await assert.rejects(search(trusted, "a".repeat(501)), /refused/i);
+      const open = bridge.handlers.get("lyrics.openOnlineHit")!;
+      for (const id of ["8", 0, 1.5, -3]) await assert.rejects(open(trusted, id), /refused/i);
+    } finally {
+      await bridge.runtime.dispose();
+    }
+  });
+});
 
 test("Lyrics and tags keeps the account's switches, refuses other keys and runs Fix Songs", async () => {
   await withFile(async (file) => {
@@ -597,6 +618,11 @@ const connect = (
             writeClipboard: (text) => {
               copied.push(text);
             },
+          }),
+          geniusLyricsSearchLayer({
+            account: account.service,
+            online: () => true,
+            openExternal: async () => {},
           }),
           ytAccountLayer({
             sessions: ytSessions,

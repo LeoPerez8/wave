@@ -12,7 +12,7 @@ import { searchRecordingInTurn } from "@/ytmusic/askYtMusic";
 
 import { microphonePermission } from "./microphone";
 import type { RecognizeDeps, RecognizeNative } from "@wave/client/recognizeSession";
-import { resolveRecognition } from "./resolveRecognition";
+import { resolveRecognition } from "@wave/client/resolveRecognition";
 
 /** What a Recognize session runs on, from the card or the tile. */
 export const recognizeDeps = (native: RecognizeNative): RecognizeDeps<SongRow, NativeYtSong> => ({
