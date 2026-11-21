@@ -34,8 +34,8 @@ export interface DjAlbum {
   readonly libraryId?: number | null;
   /** Its YT Music page (`MPREb_…`), or none. */
   readonly browseId?: string | null;
-  /** Its cover on YouTube Music, for an album the Library doesn't have. */
-  readonly artworkUrl?: string | null;
+  /** Its cover: the Library's cached file, or its address on YouTube Music. */
+  readonly cover?: string | null;
 }
 
 /** An album tile: a square cover with the album's title and artist. */
@@ -51,7 +51,8 @@ export interface DjAlbumTile {
   readonly libraryId: number | null;
   /** Its YT Music page, where the songs of an album the Library doesn't have are read; null without. */
   readonly browseId: string | null;
-  readonly artworkUrl: string | null;
+  /** Its cover as the tile draws it (`DjAlbum.cover`); null without. */
+  readonly cover: string | null;
 }
 
 /** One selectable item of DJ's grid. */
@@ -92,7 +93,7 @@ export const djAlbumTile = (album: DjAlbum): DjAlbumTile | null => {
     artist: album.artist,
     libraryId: album.libraryId ?? null,
     browseId: album.browseId ?? null,
-    artworkUrl: album.artworkUrl ?? null,
+    cover: album.cover ?? null,
   };
 };
 

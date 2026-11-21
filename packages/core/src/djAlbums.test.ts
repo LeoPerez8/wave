@@ -58,7 +58,7 @@ describe("albums in DJ's grid", () => {
         artist: "Portishead",
         libraryId: 7,
         browseId: "MPREb_dummy",
-        artworkUrl: "https://covers/dummy",
+        cover: "https://covers/dummy",
       }),
       {
         kind: "album",
@@ -67,7 +67,7 @@ describe("albums in DJ's grid", () => {
         artist: "Portishead",
         libraryId: 7,
         browseId: "MPREb_dummy",
-        artworkUrl: "https://covers/dummy",
+        cover: "https://covers/dummy",
       },
     );
     assert.equal(djAlbumTile({ title: "  ", artist: "Portishead" }), null);
@@ -211,18 +211,25 @@ describe("selecting an album in DJ", () => {
   test("unselecting it keeps the tiles it opened", () => {
     const state = tap(tap(djOpened([dummy]), dummy.key), dummy.key);
     assert.equal(djSelected(state, dummy.key), false);
-    assert.deepEqual(drawn(state), ["[Dummy / Portishead]", "Portishead", "Tricky", "Massive Attack"]);
+    assert.deepEqual(drawn(state), [
+      "[Dummy / Portishead]",
+      "Portishead",
+      "Tricky",
+      "Massive Attack",
+    ]);
   });
 
   test("the same album never joins the grid twice", () => {
-    const state = djOpened([dummy, djAlbumTile({ title: "dummy (Remastered)", artist: "PORTISHEAD" })!]);
+    const state = djOpened([
+      dummy,
+      djAlbumTile({ title: "dummy (Remastered)", artist: "PORTISHEAD" })!,
+    ]);
     assert.deepEqual(drawn(state), ["[Dummy / Portishead]"]);
   });
 
   test("albums count toward the 30 tiles a seed holds", () => {
-    const albums = Array.from(
-      { length: DJ_MAX_SELECTED },
-      (_, at) => djAlbumTile({ title: `Record ${at}`, artist: "Various Artists" })!,
+    const albums = Array.from({ length: DJ_MAX_SELECTED }, (_, at) =>
+      djAlbumTile({ title: `Record ${at}`, artist: "Various Artists" })!,
     );
     const air = djArtistTile("Air")!;
     let state = djOpened([...albums, air]);
@@ -306,7 +313,10 @@ describe("an album in the DJ seed", () => {
   });
 
   test("an album whose songs couldn't be read stands for its album artist's radio", () => {
-    const session = startDjQueue([dummy], { id: "s", played: [{ name: "Portishead", countedPlays: 6 }] })!;
+    const session = startDjQueue([dummy], {
+      id: "s",
+      played: [{ id: 4, name: "Portishead", countedPlays: 6 }],
+    })!;
     assert.deepEqual(session.seedSongs, [
       {
         id: djArtistTile("Portishead")!.key,
@@ -329,7 +339,12 @@ describe("an album in the DJ seed", () => {
     const hits = djAlbumTile({ title: "Trip Hop Hits", artist: "Various Artists" })!;
     const session = startDjQueue([hits], {
       id: "s",
-      albumSongs: new Map([[hits.key, [song(5, "Teardrop", "Massive Attack"), song(6, "6 Underground", "Sneaker Pimps")]]]),
+      albumSongs: new Map([
+        [
+          hits.key,
+          [song(5, "Teardrop", "Massive Attack"), song(6, "6 Underground", "Sneaker Pimps")],
+        ],
+      ]),
     })!;
     assert.deepEqual(session.radioArtists, ["Massive Attack", "Sneaker Pimps"]);
   });

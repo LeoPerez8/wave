@@ -9,10 +9,12 @@ export const djEn = {
   starting: "Starting your queue",
   /** An artist tile's name for screen readers: its kind, then the artist. */
   artistTile: (name: string) => `Artist, ${name}`,
+  /** An album tile's name for screen readers: its kind, then the album and its artist. */
+  albumTile: (title: string, artist: string) => `Album, ${title}, ${artist}`,
   /** The placeholder tiles' name for screen readers while the chart's artists are on their way. */
   loadingArtists: "Loading artists",
   nothingToPick: "Nothing to pick from yet. Play some music and come back.",
-  noSongsFound: "No songs found for these artists.",
+  noSongsFound: "No songs found for what you picked.",
   /** The button beside Done, and the title of the screen it opens. */
   adjust: "Adjust",
   /** Adjust's back arrow, which returns to the grid. */
