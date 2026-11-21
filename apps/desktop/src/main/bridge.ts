@@ -439,7 +439,12 @@ const createHandlers = (
     "settings.playback": () => playbackCall((p) => p.settings()),
     "settings.setPlayback": ([change]) =>
       validPlaybackSettings(change)
-        ? playbackCall((p) => p.setSettings(change))
+        ? Effect.gen(function* () {
+            const after = yield* playbackCall((p) => p.setSettings(change));
+            // The change goes up to the account without waiting for the timed sync.
+            (yield* Account).settingsEdited();
+            return after;
+          })
         : refuse("settings.setPlayback", "invalid playback settings"),
     "settings.ytMusic": () => ytCall((yt) => yt.enabled()),
     "settings.searchOnline": () =>

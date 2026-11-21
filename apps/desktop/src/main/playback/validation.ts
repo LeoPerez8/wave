@@ -1,6 +1,7 @@
 import {
   CROSSFADE,
   CUSTOM_SLEEP_MINUTES,
+  SHUFFLE_KINDS,
   STREAM_BUFFER_MINUTES,
   type SleepTimerChoice,
 } from "@wave/core";
@@ -16,6 +17,7 @@ export const validPlaybackSettings = (value: unknown): value is Partial<Playback
       typeof x === "number" && Number.isFinite(x) && x >= CROSSFADE.min && x <= CROSSFADE.max,
     normalizeVolume: (x) => typeof x === "boolean",
     bufferMinutes: (x) => (STREAM_BUFFER_MINUTES as readonly unknown[]).includes(x),
+    shuffleKind: (x) => (SHUFFLE_KINDS as readonly unknown[]).includes(x),
   };
   return Object.entries(value).every(
     ([name, x]) => Object.hasOwn(checks, name) && checks[name as keyof PlaybackSettings](x),
@@ -30,6 +32,7 @@ export const validPlaybackCommand = (value: unknown): value is PlaybackCommand =
   switch (v.type) {
     case "next":
     case "previous":
+    case "reshuffle":
       return true;
     case "setShuffle":
       return typeof v.on === "boolean";

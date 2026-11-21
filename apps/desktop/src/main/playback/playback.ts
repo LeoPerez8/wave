@@ -10,6 +10,7 @@ import { saveMeasurement, selectSongsToMeasure } from "@wave/client/db/loudness"
 import { selectMissingSongs } from "@wave/client/db/missingSongs";
 import { setFavorites } from "@wave/client/db/playHistory";
 import { createPlaybackSession, type AudioPort } from "@wave/client/playbackSession";
+import { queueShuffle } from "@wave/client/queueShuffle";
 import { createQueueGains, queueAlbum } from "@wave/client/queueGains";
 import { createSongMeasurements } from "@wave/client/songMeasurements";
 import {
@@ -173,6 +174,7 @@ export const playbackLayer = Layer.effect(
         source: "desktop",
         available: (path) => !library.unavailable(path),
         streamed: yt.song,
+        shuffle: queueShuffle({ db, kind: () => settings.shuffleKind, streamed: yt.song }),
         playEnded: (play, byNext) => {
           tell("played");
           for (const watcher of watchers) watcher.playEnded(play, byNext);

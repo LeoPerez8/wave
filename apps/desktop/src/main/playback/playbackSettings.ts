@@ -8,10 +8,12 @@
 import {
   readCrossfade,
   readNormalizeVolume,
+  readShuffleKind,
   readStreamBuffer,
   snapCrossfade,
   STREAM_BUFFER_DEFAULT,
   writeNormalizeVolume,
+  writeShuffleKind,
   type StreamBufferMinutes,
 } from "@wave/core";
 import type { LibraryDatabase } from "@wave/client/db/database";
@@ -25,6 +27,7 @@ export const PLAYBACK_SETTING_KEYS = {
   crossfadeSeconds: "settings.crossfadeSeconds",
   normalizeVolume: "settings.normalizeVolume",
   bufferMinutes: "settings.streamBufferMinutes",
+  shuffleKind: "settings.shuffleKind",
 } as const;
 
 /** Whether a pull that changed the synced settings [keys] changed Settings › Playback. */
@@ -51,6 +54,7 @@ export const readPlaybackSettings = (db: LibraryDatabase): PlaybackSettings => (
   crossfadeSeconds: readCrossfade(stored(db, PLAYBACK_SETTING_KEYS.crossfadeSeconds)),
   normalizeVolume: readNormalizeVolume(stored(db, PLAYBACK_SETTING_KEYS.normalizeVolume)),
   bufferMinutes: readStreamBuffer(stored(db, PLAYBACK_SETTING_KEYS.bufferMinutes)),
+  shuffleKind: readShuffleKind(stored(db, PLAYBACK_SETTING_KEYS.shuffleKind)),
 });
 
 const writeBuffer = (minutes: StreamBufferMinutes): string | null =>
@@ -70,11 +74,13 @@ export const savePlaybackSettings = (
     crossfadeSeconds: snapCrossfade(change.crossfadeSeconds ?? before.crossfadeSeconds),
     normalizeVolume: change.normalizeVolume ?? before.normalizeVolume,
     bufferMinutes: readStreamBuffer(String(change.bufferMinutes ?? before.bufferMinutes)),
+    shuffleKind: change.shuffleKind ?? before.shuffleKind,
   };
   const writes: [keyof PlaybackSettings, string | null][] = [
     ["crossfadeSeconds", String(after.crossfadeSeconds)],
     ["normalizeVolume", writeNormalizeVolume(after.normalizeVolume)],
     ["bufferMinutes", writeBuffer(after.bufferMinutes)],
+    ["shuffleKind", writeShuffleKind(after.shuffleKind)],
   ];
   for (const [name, value] of writes) {
     if (after[name] === before[name]) continue;
