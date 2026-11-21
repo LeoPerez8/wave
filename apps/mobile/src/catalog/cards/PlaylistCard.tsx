@@ -8,22 +8,20 @@ import { TileCheck } from "../CheckCell";
 import { useLocalisation } from "@/localisation/localisation";
 
 import { CAPTION_TOP, CardDetail, CardRow, CardTile, CardTitle } from "./CardParts";
+import { coverTop, ROW_SLEEVES, TILE_SLEEVES } from "./sleeves";
 
 /** The playlist's mosaic in a row: 40dp. */
 const THUMB = CELL * 5;
 
-/** A sleeve is a bar of this height and the gap after it: a tile's, then a row's (smaller). */
-const TILE_SLEEVES = { edge: 3, gap: 2 } as const;
-const ROW_SLEEVES = { edge: 2, gap: 1 } as const;
-
 /** The room a tile's sleeves take above its cover: two bars, each with its gap. */
-export const SLEEVE_ROOM = (TILE_SLEEVES.edge + TILE_SLEEVES.gap) * 2;
+export const SLEEVE_ROOM = coverTop({ sleeves: true });
 
 /**
  * A playlist's mosaic with two sleeves behind it, showing as edges above: the
  * nearer one 88% of the cover's width, the farther 76%, each a tone quieter.
- * A row's sleeves are smaller than a tile's. A tile's [checked] puts a check
- * over the cover's corner, and an importing playlist's [ring] shows over it.
+ * A row's sleeves are smaller than a tile's, and without [sleeves] the cover
+ * shows alone. A tile's [checked] puts a check over the cover's corner, and an
+ * importing playlist's [ring] shows over it.
  */
 function StackedMosaic({
   paths,
@@ -31,6 +29,7 @@ function StackedMosaic({
   size,
   radius,
   small = false,
+  sleeves,
   checked,
   ring,
 }: {
@@ -39,6 +38,7 @@ function StackedMosaic({
   size: number;
   radius: number;
   small?: boolean;
+  sleeves: boolean;
   checked?: boolean | undefined;
   ring?: ImportRing | null | undefined;
 }) {
@@ -62,9 +62,9 @@ function StackedMosaic({
     );
   };
   return (
-    <View style={{ paddingTop: (edge + gap) * 2 }}>
-      {sleeve(size * 0.76, 0, true)}
-      {sleeve(size * 0.88, edge + gap, false)}
+    <View style={{ paddingTop: coverTop({ sleeves, small }) }}>
+      {sleeves && sleeve(size * 0.76, 0, true)}
+      {sleeves && sleeve(size * 0.88, edge + gap, false)}
       <View>
         <Mosaic paths={paths} tints={tints} size={size} radius={radius} />
         {checked !== undefined && <TileCheck checked={checked} />}
@@ -93,11 +93,13 @@ type Props = {
   /** Actions for screen readers beyond a tap and a long press (Move up, Move down). */
   accessibilityActions?: PressableProps["accessibilityActions"];
   onAccessibilityAction?: PressableProps["onAccessibilityAction"];
+  /** Whether sleeves show above the cover: on Home and in Search, not on the Playlists page. */
+  sleeves?: boolean | undefined;
 };
 
 /**
- * A playlist on a shelf or in a grid: its mosaic at [size] with sleeves above,
- * the name and song count under. [nameInset] keeps the caption clear of what
+ * A playlist on a shelf or in a grid: its mosaic at [size] with sleeves above
+ * (unless [sleeves] is false), the name and song count under. [nameInset] keeps the caption clear of what
  * sits over its end (a drag handle).
  */
 export function PlaylistCard({
@@ -113,6 +115,7 @@ export function PlaylistCard({
   ring,
   accessibilityActions,
   onAccessibilityAction,
+  sleeves = true,
   nameInset,
 }: Props & { size: number; nameInset?: number | undefined }) {
   const { strings } = useLocalisation();
@@ -131,6 +134,7 @@ export function PlaylistCard({
         tints={tints}
         size={size}
         radius={CELL * 0.75}
+        sleeves={sleeves}
         checked={checked}
         ring={ring}
       />
@@ -142,7 +146,10 @@ export function PlaylistCard({
   );
 }
 
-/** A playlist in a list: a 40dp mosaic with 3dp corners and smaller sleeves, then "Playlist · <count>". */
+/**
+ * A playlist in a list: a 40dp mosaic with 3dp corners and smaller sleeves
+ * (unless [sleeves] is false), then "Playlist · <count>".
+ */
 export function PlaylistCardRow({
   name,
   detail,
@@ -155,6 +162,7 @@ export function PlaylistCardRow({
   ring,
   accessibilityActions,
   onAccessibilityAction,
+  sleeves = true,
 }: Props & { plainDetail?: boolean }) {
   const { strings } = useLocalisation();
   return (
@@ -166,6 +174,7 @@ export function PlaylistCardRow({
           size={THUMB}
           radius={CELL * 0.375}
           small
+          sleeves={sleeves}
           ring={ring}
         />
       }
