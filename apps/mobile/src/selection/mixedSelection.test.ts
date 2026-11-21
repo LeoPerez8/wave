@@ -37,6 +37,7 @@ test("release tiles and song rows share marks, and selecting taps check instead 
       if (checked.has(key)) checked.delete(key);
       else checked.add(key);
     },
+    end: () => undefined,
   };
   const open = () => assert.fail("selecting must not open or load the item");
   const row = () => selectableRow(release, ytAlbumSelectionOf(page), open, open);

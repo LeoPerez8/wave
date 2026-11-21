@@ -23,6 +23,29 @@ const library = (track: Track): QueueSong<YtSong, Track> => ({ source: "library"
 const stream = (song: YtSong): QueueSong<YtSong, Track> => ({ source: "stream", song });
 
 describe("the songs a selection bar action reads for its checked items", () => {
+  test("Home reads checked songs, albums and playlists only when an action runs, in checked order", async () => {
+    const calls: string[] = [];
+    const entries = await selectionEntries(["song", "album", "playlist"], {
+      entries: async (item) => {
+        calls.push(item);
+        if (item === "song") return [library(filed)];
+        if (item === "album") return [library(filed), stream(yt("album"))];
+        return [stream(yt("playlist-2")), stream(yt("playlist-1"))];
+      },
+      finder: async () => {
+        calls.push("finder");
+        return () => null;
+      },
+    });
+    assert.deepEqual(calls, ["song", "album", "playlist", "finder"]);
+    assert.deepEqual(entries, [
+      library(filed),
+      stream(yt("album")),
+      stream(yt("playlist-2")),
+      stream(yt("playlist-1")),
+    ]);
+  });
+
   test("items come in page order, a song two of them hold once", async () => {
     const lists = new Map([
       ["album", [library(filed), stream(yt("b"))]],
