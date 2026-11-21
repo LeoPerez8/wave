@@ -304,6 +304,10 @@ export interface BridgeContract
     readonly args: readonly [scope: BrowseScope, offset: number, limit: number];
     readonly result: BrowsePage;
   };
+  readonly "library.rowIds": {
+    readonly args: readonly [scope: BrowseScope, offset: number, limit: number];
+    readonly result: Page<number>;
+  };
   readonly "library.letter": {
     readonly args: readonly [scope: BrowseScope, letter: string];
     readonly result: number | null;
@@ -458,6 +462,7 @@ export const BRIDGE_CALLS = [
   "library.artwork",
   "library.cover",
   "library.browse",
+  "library.rowIds",
   "library.letter",
   "library.counts",
   "library.scanStatus",
@@ -622,6 +627,7 @@ export interface WaveBridge {
       large: boolean,
     ) => Promise<string | null>;
     readonly browse: (scope: BrowseScope, offset: number, limit: number) => Promise<BrowsePage>;
+    readonly rowIds: (scope: BrowseScope, offset: number, limit: number) => Promise<Page<number>>;
     readonly letter: (scope: BrowseScope, letter: string) => Promise<number | null>;
     readonly counts: () => Promise<LibraryCounts>;
     readonly scanStatus: () => Promise<ScanStatus>;
@@ -783,6 +789,7 @@ export const createBridge = (invoke: Invoke): WaveBridge => ({
     artwork: (hash, large) => invoke("library.artwork", hash, large),
     cover: (kind, id, large) => invoke("library.cover", kind, id, large),
     browse: (scope, offset, limit) => invoke("library.browse", scope, offset, limit),
+    rowIds: (scope, offset, limit) => invoke("library.rowIds", scope, offset, limit),
     letter: (scope, letter) => invoke("library.letter", scope, letter),
     counts: () => invoke("library.counts"),
     scanStatus: () => invoke("library.scanStatus"),
