@@ -976,6 +976,7 @@ export type {
 } from "./ytAccount.ts";
 export {
   YT_SEARCH_DEBOUNCE_MS,
+  YT_SEARCH_NO_LIBRARY,
   YT_SECTION_HIDDEN,
   stepYtSection,
   ytSearchAsksVideos,

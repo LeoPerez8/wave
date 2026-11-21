@@ -1,5 +1,6 @@
 import {
   DJ_MAX_SELECTED,
+  YT_SEARCH_NO_LIBRARY,
   djSeedFull,
   djSelectable,
   ytSectionView,
@@ -17,7 +18,6 @@ import { CatalogLine } from "@/catalog/CatalogLine";
 import { CELL, grid } from "@/catalog/grid";
 import { TrackSkeletons } from "@/catalog/Skeletons";
 import { useLocalisation } from "@/localisation/localisation";
-import { online } from "@/native/waveNative";
 import { SearchField } from "@/search/SearchField";
 import { useSearchIndex } from "@/search/searchIndex";
 import { useYtMusicSection, type YtSearchScope } from "@/search/ytMusicSearch";
@@ -28,7 +28,7 @@ import { djSearchResults, type DjSearchResult } from "./djSearchResults";
 const LIBRARY_LIMIT = 20;
 
 /** DJ asks YouTube Music for artists and albums as the owner types, while the phone is online. */
-const SCOPE: YtSearchScope = { artistsAndAlbums: true, online };
+const SCOPE: YtSearchScope = { artistsAndAlbums: true };
 
 const NO_YT_ARTISTS: readonly YtArtistCandidate[] = [];
 const NO_YT_ALBUMS: readonly YtArtistAlbum[] = [];
@@ -37,9 +37,9 @@ const NO_YT_ALBUMS: readonly YtArtistAlbum[] = [];
  * The search in DJ's grid (docs/spec.md, DJ): the Search tab's Library index
  * and YouTube Music search, limited to artists and albums. Results follow
  * the field as it's typed in, the Library's at once and YouTube Music's once
- * typing pauses (never offline or with YouTube Music off). A tap on a result
- * hands its tile to [onPick], which adds it to the selection and returns to
- * the grid. With the selection full ([state] holds `DJ_MAX_SELECTED` tiles),
+ * typing pauses (never offline or with YouTube Music off), even while the
+ * Library's index loads. A tap on a result hands its tile to [onPick], which
+ * adds it to the selection and returns to the grid. With the selection full ([state] holds `DJ_MAX_SELECTED` tiles),
  * a line says why and only results already selected can be tapped.
  */
 export function DjSearch({
@@ -65,19 +65,18 @@ export function DjSearch({
   // Every query is asked, whatever the Library has for it: the grid's search is for
   // someone the grid doesn't show, who is often not in the Library either.
   const [section] = useYtMusicSection(deferredQuery, true, SCOPE);
-  const inLibrary = library?.library;
-  const yt = useMemo(
-    () => (inLibrary === undefined ? null : ytSectionView(section, inLibrary)),
-    [section, inLibrary],
-  );
+  // While the Library's index loads, YouTube Music's results show alone.
+  const inLibrary = library?.library ?? YT_SEARCH_NO_LIBRARY;
+  const yt = useMemo(() => ytSectionView(section, inLibrary), [section, inLibrary]);
   const results = useMemo((): DjSearchResult[] => {
-    if (found === null) return [];
-    const hits = found.groups.flatMap((group) => group.items);
+    const hits = found?.groups.flatMap((group) => group.items);
     return djSearchResults(
-      {
-        artists: hits.flatMap((hit) => (hit.kind === "artist" ? [hit.artist] : [])),
-        albums: hits.flatMap((hit) => (hit.kind === "album" ? [hit.album] : [])),
-      },
+      hits === undefined
+        ? null
+        : {
+            artists: hits.flatMap((hit) => (hit.kind === "artist" ? [hit.artist] : [])),
+            albums: hits.flatMap((hit) => (hit.kind === "album" ? [hit.album] : [])),
+          },
       { artists: yt?.artists ?? NO_YT_ARTISTS, albums: yt?.albums ?? NO_YT_ALBUMS },
     );
   }, [found, yt]);

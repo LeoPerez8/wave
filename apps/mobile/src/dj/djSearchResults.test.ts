@@ -67,3 +67,29 @@ test("the Library's artists and albums come first, then the ones YouTube Music a
     "MPREb_kindred",
   ]);
 });
+
+test("while the Library's index loads, YouTube Music's results show alone", () => {
+  const results = djSearchResults(null, {
+    artists: [
+      { name: "Burial", browseId: "UCburial", audience: null, artworkUrl: "https://yt/b.jpg" },
+    ],
+    albums: [
+      {
+        kind: "album",
+        browseId: "MPREb_untrue",
+        title: "Untrue",
+        artists: ["Burial"],
+        year: 2007,
+        artworkUrl: "https://yt/u.jpg",
+      },
+    ],
+  });
+  assert.deepEqual(
+    results.map(({ tile }) => [tile.kind, tile.name, tile.libraryId]),
+    [
+      ["artist", "Burial", null],
+      ["album", "Untrue", null],
+    ],
+  );
+  assert.equal(results[0]?.image?.imageUrl, "https://yt/b.jpg");
+});
