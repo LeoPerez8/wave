@@ -25,7 +25,7 @@ const STEPS: SliderRange = { min: 1, max: 3, step: 1 };
 const choiceAt = <T,>(choices: readonly T[], value: number): T => choices[value - 1] ?? choices[1]!;
 
 /**
- * DJ's Adjust screen (docs/spec.md, DJ): how the queue Done starts should
+ * DJ's Adjust screen (docs/spec.md, DJ): how the queue Play starts should
  * behave. Artist variety is how far it strays from the selected artists and
  * Music discovery how much of it is new. Under them, the Filters chips:
  * Trending and Lesser-known songs lean it to hits or to deep cuts, one at a

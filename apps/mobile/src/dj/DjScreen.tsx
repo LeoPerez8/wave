@@ -11,6 +11,8 @@ import {
   djSeedTiles,
   djSelectable,
   djSelected,
+  djSettingsSummary,
+  djNewToYou,
   djTileArtist,
   genreMixDjCandidates,
   type DjAlbum,
@@ -24,7 +26,13 @@ import {
   type GenreMixDjCandidate,
   identityKey,
 } from "@wave/core";
-import { IconArrowLeft, IconSearch, IconX } from "@tabler/icons-react-native";
+import {
+  IconAdjustmentsHorizontal,
+  IconArrowLeft,
+  IconPlayerPlayFilled,
+  IconSearch,
+  IconX,
+} from "@tabler/icons-react-native";
 import * as Effect from "effect/Effect";
 import { type ComponentRef, useEffect, useMemo, useRef, useState } from "react";
 import { ActivityIndicator, ScrollView, Text, View, useWindowDimensions } from "react-native";
@@ -33,7 +41,6 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { ArtistImage } from "@/catalog/ArtistImage";
 import { Artwork } from "@/catalog/Artwork";
 import { CardDetail, CardTile, CardTitle, titleLineHeight } from "@/catalog/cards/CardParts";
-import { TileCheck } from "@/catalog/CheckCell";
 import { CELL, grid, widthOf } from "@/catalog/grid";
 import { SkeletonGroup } from "@/catalog/Skeletons";
 import { SkeletonLine } from "@/catalog/SkeletonLine";
@@ -51,6 +58,7 @@ import { router } from "@/lib/timingRouter";
 import { LibraryStore } from "@/library/LibraryStore";
 import { appRuntime } from "@/library/runtime";
 import { useLocalisation } from "@/localisation/localisation";
+import { Press } from "@/motion/Press";
 import { addScreenBackHandler } from "@/overlay/back";
 import { online } from "@/native/waveNative";
 import { startDjMagicQueue } from "@/playback/MagicQueue";
@@ -66,6 +74,7 @@ import { readDjAlbums } from "./djAlbums";
 import { DjSearch } from "./DjSearch";
 import { djDone, type DjDone, type DjDoneRunner } from "./djDone";
 import { djRemembered } from "./djRemembered";
+import { DJ_TILE_RADIUS, DjSelectionRow, DjTilePicture } from "./DjSelection";
 import { readDjSimilar } from "./djSimilar";
 
 /** The Library's artists by id, for the tiles that show one's image. */
@@ -316,9 +325,11 @@ function TilesSkeleton({ size, fontScale }: { size: number; fontScale: number })
 }
 
 /**
- * An artist tile: a circle with the artist's image, the name under it, and a
- * check over the circle once selected. A screen reader hears its kind, its
- * name and whether it's selected. A tile the seed has no room for is dimmed.
+ * An artist tile: a circle with the artist's image and the name under it,
+ * with "New to you" under the name for an artist the Library doesn't have
+ * (Core's `djNewToYou`). Once selected, the circle is ringed and checked
+ * (`DjTilePicture`). A screen reader hears its kind, its name and whether
+ * it's selected. A tile the seed has no room for is dimmed.
  */
 function ArtistTile({
   tile,
@@ -351,12 +362,15 @@ function ArtistTile({
         checked={selected}
         onPress={onPress}
       >
-        <View style={{ width: size, height: size }}>
-          <ArtistImage artist={image} size={size} large />
-          {selected && <TileCheck checked />}
-        </View>
-        <View style={{ paddingTop: CELL }}>
+        <DjTilePicture
+          size={size}
+          round
+          selected={selected}
+          picture={(inner) => <ArtistImage artist={image} size={inner} large />}
+        />
+        <View className="items-center" style={{ paddingTop: CELL }}>
           <CardTitle centred>{tile.name}</CardTitle>
+          {djNewToYou(tile) && <CardDetail size="footnote">{strings.dj.newToYou}</CardDetail>}
         </View>
       </CardTile>
     </View>
@@ -364,8 +378,8 @@ function ArtistTile({
 }
 
 /**
- * An album tile: a square cover, the album's title and artist under it, and
- * a check over the cover once selected. A screen reader hears its kind, its
+ * An album tile: a square cover and the album's title and artist under it;
+ * once selected, the cover is ringed and checked (`DjTilePicture`). A screen reader hears its kind, its
  * title and artist and whether it's selected. A tile the seed has no room
  * for is dimmed.
  */
@@ -395,10 +409,14 @@ function AlbumTile({
         checked={selected}
         onPress={onPress}
       >
-        <View style={{ width: size, height: size }}>
-          <Artwork uri={tile.cover ?? undefined} size={size} radius={CELL * 0.75} />
-          {selected && <TileCheck checked />}
-        </View>
+        <DjTilePicture
+          size={size}
+          round={false}
+          selected={selected}
+          picture={(inner) => (
+            <Artwork uri={tile.cover ?? undefined} size={inner} radius={DJ_TILE_RADIUS} />
+          )}
+        />
         <View style={{ paddingTop: CELL }}>
           <CardTitle>{tile.name}</CardTitle>
           <CardDetail size="footnote">{tile.artist}</CardDetail>
@@ -408,7 +426,7 @@ function AlbumTile({
   );
 }
 
-/** A family tile: a square named for its family, with a check when selected. */
+/** A family tile: a square named for its family, ringed and checked once selected. */
 function GenreTile({
   tile,
   size,
@@ -435,13 +453,24 @@ function GenreTile({
         checked={selected}
         onPress={onPress}
       >
-        <View
-          className="bg-fill items-center justify-center"
-          style={{ width: size, height: size, borderRadius: CELL * 0.75, padding: CELL * 2 }}
-        >
-          <CardTitle centred>{tile.name}</CardTitle>
-          {selected && <TileCheck checked />}
-        </View>
+        <DjTilePicture
+          size={size}
+          round={false}
+          selected={selected}
+          picture={(inner) => (
+            <View
+              className="bg-fill items-center justify-center"
+              style={{
+                width: inner,
+                height: inner,
+                borderRadius: DJ_TILE_RADIUS,
+                padding: CELL * 2,
+              }}
+            >
+              <CardTitle centred>{tile.name}</CardTitle>
+            </View>
+          )}
+        />
       </CardTile>
     </View>
   );
@@ -473,11 +502,15 @@ function PlaceholderTile({ size, fontScale }: { size: number; fontScale: number 
  * queue was started with, kept on this phone (`djRemembered`). A tap selects
  * or unselects a tile, and a tile selected for the first time in an opening
  * opens up to 3 tiles right after it (an artist's similar artists; an
- * album's artist, then theirs); Done reads a new session's
- * first batch and plays it, then closes; Close leaves the queue as it is.
- * Adjust, beside Done, shows the Adjust screen in the grid's place: its back
- * arrow (and Android's Back) returns to the grid, which stayed as it was, and
- * Done starts the queue from either with the choices made there. The search
+ * album's artist, then theirs). The Your selection row under the title
+ * shows the selected tiles in selection order, a tap on one unselecting it
+ * (`DjSelectionRow`). Play ("Play · 3", counting the selection) reads a new
+ * session's first batch and plays it, then closes; Close leaves the queue as
+ * it is. Over Play, the summary of the Adjust choices (Core's
+ * `djSettingsSummary`) and the adjustments icon show the Adjust screen in
+ * the grid's place: its back arrow (and Android's Back) returns to the grid,
+ * which stayed as it was, and Play starts the queue from either with the
+ * choices made there. The search
  * button beside Close shows the search in the grid's place (`DjSearch`): a
  * tapped result joins the grid selected and the grid comes back, at its top
  * when the result is a new first tile.
@@ -486,7 +519,7 @@ export function DjScreen() {
   const { strings } = useLocalisation();
   const insets = useSafeAreaInsets();
   const { width, fontScale } = useWindowDimensions();
-  const onAccent = useThemeColor("on-accent");
+  const [onAccent, accent] = useThemeColor(["on-accent", "accent"]);
   const [available, setAvailable] = useState(width - grid.margin * 2);
   const { size } = magicQueueGrid(available, fontScale);
   const { state: picked, opening, artists, toggle, add } = useDjGrid();
@@ -510,7 +543,9 @@ export function DjScreen() {
   const cells = useMemo(() => (state === undefined ? [] : djCells(state)), [state]);
   const loading = done === "loading";
   const canStart = state !== undefined && djCanStart(state);
-  // Done for this opening; leaving DJ (Close, Android's Back) cancels a start
+  const play = seed.length > 0 ? strings.dj.playCount(seed.length) : strings.dj.play;
+  const summary = djSettingsSummary(settings, strings);
+  // Play for this opening; leaving DJ (Close, Android's Back) cancels a start
   // still loading, so it never replaces the queue nor closes another screen.
   const doneRunner = useRef<DjDoneRunner | null>(null);
   useEffect(() => {
@@ -592,6 +627,20 @@ export function DjScreen() {
         >
           {strings.dj.title}
         </Text>
+        {state !== undefined && (
+          <View style={{ paddingBottom: CELL * 3 }}>
+            <DjSelectionRow
+              tiles={seed}
+              artists={artists}
+              // A selection can't change while its first batch is read.
+              disabled={loading}
+              onRemove={(key) => {
+                setDone("idle");
+                toggle(key);
+              }}
+            />
+          </View>
+        )}
         <View onLayout={(event) => setAvailable(widthOf(event))}>
           {state === undefined && opening?.kind === "skeleton" ? (
             <TilesSkeleton size={size} fontScale={fontScale} />
@@ -657,42 +706,51 @@ export function DjScreen() {
             {...(done === "empty" ? { message: strings.dj.noSongsFound } : {})}
           />
         )}
-        <View className="flex-row" style={{ gap: CELL }}>
-          {!adjusting && (
-            <TextButton
-              variant="pill"
-              tone="primary"
-              label={strings.dj.adjust}
-              disabled={loading}
-              onPress={() => setAdjusting(true)}
-              className="items-center"
-              style={{ paddingHorizontal: CELL * 3 }}
-            />
-          )}
-          <TextButton
-            variant="pill"
-            label={strings.dj.done}
-            accessibilityLabel={loading ? strings.dj.starting : strings.dj.done}
-            accessibilityState={{ selected: false, busy: loading }}
-            selected={canStart}
-            disabled={!canStart || loading}
-            onPress={start}
-            className="flex-1 flex-row items-center justify-center"
-            style={{ gap: CELL }}
+        {!adjusting && (
+          <Press
+            accessibilityRole="button"
+            accessibilityLabel={strings.dj.adjustSummary(summary)}
+            accessibilityState={{ disabled: loading }}
+            disabled={loading}
+            onPress={() => setAdjusting(true)}
+            className="flex-row items-center justify-between"
+            style={{ paddingLeft: CELL, marginRight: -CELL * 1.5, opacity: loading ? 0.4 : 1 }}
           >
-            {(color) => (
-              <>
-                {loading && <ActivityIndicator size="small" color={onAccent} />}
-                <Text
-                  className="font-sans text-body font-semibold"
-                  style={{ color: loading ? onAccent : color }}
-                >
-                  {strings.dj.done}
-                </Text>
-              </>
-            )}
-          </TextButton>
-        </View>
+            <Text numberOfLines={1} className="flex-1 font-sans text-footnote text-secondary">
+              {summary}
+            </Text>
+            <View className="items-center justify-center" style={{ width: CELL * 6, height: CELL * 6 }}>
+              <IconAdjustmentsHorizontal size={CELL * 3} color={accent} strokeWidth={1.5} />
+            </View>
+          </Press>
+        )}
+        <TextButton
+          variant="pill"
+          label={play}
+          accessibilityLabel={loading ? strings.dj.starting : play}
+          accessibilityState={{ selected: false, busy: loading }}
+          selected={canStart}
+          disabled={!canStart || loading}
+          onPress={start}
+          className="flex-row items-center justify-center"
+          style={{ gap: CELL }}
+        >
+          {(color) => (
+            <>
+              {loading ? (
+                <ActivityIndicator size="small" color={onAccent} />
+              ) : (
+                <IconPlayerPlayFilled size={CELL * 2.5} color={color} />
+              )}
+              <Text
+                className="font-sans text-body font-semibold"
+                style={{ color: loading ? onAccent : color }}
+              >
+                {play}
+              </Text>
+            </>
+          )}
+        </TextButton>
       </View>
     </View>
   );
