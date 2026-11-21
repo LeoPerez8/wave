@@ -27,8 +27,8 @@ account and sync", "Genius About" and "Followed artists" in `docs/spec.md`.
 
 ## API
 
-Every body is JSON. Every route but `POST /v1/session` and the invite page (`GET /invite`)
-needs the session token as
+Every body is JSON. Every route but `POST /v1/session`, the invite page (`GET /invite`) and
+`GET /.well-known/assetlinks.json` needs the session token as
 `Authorization: Bearer <sessionToken>`. Only `POST /v1/session` ever answers a session token,
 and nothing logs a session token, an ID token, an address or a Soulseek password.
 
@@ -381,6 +381,14 @@ Refusals, besides the owner routes' `403 not_member` and `403 not_owner` and `40
 Migration `0018_collaboration_invites` adds `collaboration_invites`, and changes no table
 there was.
 
+`GET /.well-known/assetlinks.json`, with no session, is Android's App Link check: it names
+Wave's package (`dev.leoperez.wave`) and the SHA-256 of the release key's certificate, the
+one `scripts/ci/sign-apk.sh` pins (`docs/spec.md`, APK signing). With it the phone's `/invite`
+filter (`autoVerify: true` in `apps/mobile/app.config.ts`) is verified, and a tapped link
+opens a released Wave with nothing to turn on in Open by default. A build signed with another
+key, a local debug build included, isn't verified. A change to the release key changes the
+constant in `src/service.ts` and needs a deploy.
+
 #### A member's push and pull of one playlist
 
 A member who isn't the owner syncs each collaborative playlist with two requests of its own,
@@ -391,8 +399,11 @@ membership first. The owner may call them too.
 - `POST /v1/collaboration/push?playlist=<id>`: the body and answer of `POST /v1/push`,
   holding only that playlist's row and entries. The rows merge into the owner's as any push
   merges (Core's `mergeTableRows`, a change time ahead of the service's clock corrected) and
-  count in the owner's caps. A removal of an entry the service never held is dropped: nothing
-  says which playlist it was in.
+  count in the owner's caps. An entry the owner holds in another playlist, or in none (a
+  removal stored before entries kept their playlist), is dropped and the rest is stored, so
+  the push is still done and the app stops sending it. So is a removal of an entry the service
+  never held: nothing says which playlist it was in. The playlist's row takes the member's
+  `name` alone; `createdAt` stays as stored.
 - `GET /v1/collaboration/pull?playlist=<id>&since=<cursor>`: `{ "playlists": [Playlist],
 "playlistEntries": [PlaylistEntry], "cursor": "<n>", "more": false }`, every change of the
   playlist's row and entries after the cursor, whoever made it, oldest first and paged as
@@ -406,8 +417,8 @@ Refusals, besides those of `POST /v1/push`:
   answers, with the playlist's tombstone.
 - `403 { "error": "not_owner" }`: a push that deletes the playlist.
 - `400 { "error": "bad_request", "detail": "…" }`: a push with another table, another
-  playlist's row, or an entry of another playlist (one the owner holds in another playlist
-  included); no `playlist`; a cursor that isn't one.
+  playlist's row, or an entry that names another playlist; no `playlist`; a cursor that isn't
+  one.
 - `413 { "error": "limit", "limit": "maxCollaborativeSongs" }` or `"maxCollaborativeEntries"`.
 
 What the service keeps of a collaborative playlist's rows, whoever pushes them, the owner's

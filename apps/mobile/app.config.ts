@@ -82,11 +82,12 @@ const config: ExpoConfig = {
       },
       // A collaborative playlist's invite link, `https://<sync service>/invite#<token>`, opens its
       // join screen (docs/spec.md, Collaborative playlists, Invite link). A filter of its own, so
-      // only that path is Wave's on the sync service's host. Not verified: like the song links,
-      // it is turned on in Open by default; until then the link opens the service's page.
+      // only that path is Wave's on the sync service's host. Verified as an App Link: the sync
+      // service answers `/.well-known/assetlinks.json` with the release key's certificate, so a
+      // released APK opens the link with nothing to turn on in Open by default.
       {
         action: "VIEW",
-        autoVerify: false,
+        autoVerify: true,
         category: ["BROWSABLE", "DEFAULT"],
         data: [{ scheme: "https", host: new URL(SYNC_URL).host, pathPrefix: "/invite" }],
       },
