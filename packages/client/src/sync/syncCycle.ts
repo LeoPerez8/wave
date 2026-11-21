@@ -6,13 +6,26 @@
  * this drives it through the service. Kept free of Expo and React Native so
  * the store tests run it against a fake service (`testSyncService.ts`).
  */
-import { pushBatches, pushBody, readPullPage, readPushAnswer, type SyncTables } from "@wave/core";
+import {
+  pushBatches,
+  pushBody,
+  readPullMembership,
+  readPullPage,
+  readPushAnswer,
+  refusalEndsMembership,
+  type CollaborationResult,
+  type PullMembership,
+  type SyncPushAnswer,
+  type SyncTables,
+} from "@wave/core";
 
+import { applyMembership, makePrivateCopy, selectMemberPlaylists } from "../db/collaborations.ts";
 import type { CreditSplits } from "../db/credits.ts";
 import type { LibraryDatabase } from "../db/database.ts";
 import { syncMissingSongs } from "../db/missingSongs.ts";
 import {
   applyPending,
+  applyPlaylistPage,
   applyPulledPage,
   joinAccount,
   markPushed,
@@ -22,9 +35,12 @@ import {
   selectJoinedAccount,
   selectSyncCursor,
   selectUnpushed,
+  selectUnpushedPlaylist,
   type PulledChanges,
   type PushMark,
+  type UnpushedRows,
 } from "../db/syncRows.ts";
+import type { CollaborationService } from "./collaborationService.ts";
 
 /** Sends a push or a pull with the session (`WaveAccount.request`). */
 export interface SyncTransport {
@@ -65,6 +81,15 @@ export interface SyncCycleInput {
    * thread while the owner taps. Absent: no wait.
    */
   readonly turn?: () => Promise<void>;
+  /**
+   * The collaborative playlists' requests (`collaborationService`), given while their switch
+   * is on (Settings › Developer): each cycle then keeps the account's collaborative playlists
+   * as its pull states them, and syncs each one the account doesn't own with its own pull and
+   * push. Absent: nothing of them changes.
+   */
+  readonly collaboration?: CollaborationService;
+  /** A member's changes go up (the phone); false only pulls them (the desktop). Default true. */
+  readonly pushCollaborative?: boolean;
 }
 
 /** What a sync changed on the phone. */
@@ -161,6 +186,11 @@ const take = (seen: Seen, changes: PulledChanges): void => {
   seen.preferences.push(...changes.preferences);
 };
 
+/** The account's collaborative playlists as a pull page states them (`applyMembership`). */
+const keepMembership = (input: SyncCycleInput, seen: Seen, membership: PullMembership): void => {
+  seen.playlists ||= applyMembership(input.db, membership);
+};
+
 /** Pulls every page changed after the cursor kept, applying each; true when any row came. */
 const pullAll = async (input: SyncCycleInput, seen: Seen): Promise<boolean> => {
   const { db } = input;
@@ -168,9 +198,13 @@ const pullAll = async (input: SyncCycleInput, seen: Seen): Promise<boolean> => {
   let pulledAny = false;
   for (let round = 0; round < MAX_ROUNDS; round++) {
     const since = encodeURIComponent(selectSyncCursor(db) ?? "0");
-    const page = readPullPage(await send(input, "GET", `/v1/pull?since=${since}`, null));
+    const body = await send(input, "GET", `/v1/pull?since=${since}`, null);
+    const page = readPullPage(body);
     if (page === null) throw new SyncRequestFailed(200, "not a pull page");
     await freeTurn(input);
+    // Before the page's rows, so a collaborative playlist's entries find their songs by their fields.
+    const membership = input.collaboration === undefined ? null : readPullMembership(body);
+    if (membership !== null) keepMembership(input, seen, membership);
     const changes = applyPulledPage(db, page, trackIds, input.now());
     take(seen, changes);
     if (changes.plays) input.historyChanged?.();
@@ -207,6 +241,28 @@ const settle = (
 const rowCount = (rows: SyncTables): number =>
   Object.values(rows).reduce((sum: number, table: readonly unknown[]) => sum + table.length, 0);
 
+/** Marks the rows of [unpushed] a push of [batch] took, with the change times the service stored. */
+const markBatch = (
+  db: LibraryDatabase,
+  unpushed: UnpushedRows,
+  batch: SyncTables,
+  answer: SyncPushAnswer,
+): void => {
+  const storedAt = new Map<PushMark, number>();
+  for (const { table, id, changedAt } of answer.corrected) {
+    for (const mark of unpushed.marks.get(pushMarkKey(table, id)) ?? []) {
+      storedAt.set(mark, changedAt);
+    }
+  }
+  markPushed(
+    db,
+    (Object.keys(batch) as (keyof SyncTables)[]).flatMap((table) =>
+      batch[table].flatMap((row) => unpushed.marks.get(pushMarkKey(table, row.id)) ?? []),
+    ),
+    storedAt,
+  );
+};
+
 /**
  * Pushes every row that waits, in batches; each batch is marked as soon as
  * the service has it, with the change time the service stored for a row
@@ -222,19 +278,7 @@ const pushAll = async (input: SyncCycleInput): Promise<number> => {
     for (const batch of pushBatches(unpushed.rows)) {
       const answer = readPushAnswer(await send(input, "POST", "/v1/push", pushBody(batch)));
       await freeTurn(input);
-      const storedAt = new Map<PushMark, number>();
-      for (const { table, id, changedAt } of answer.corrected) {
-        for (const mark of unpushed.marks.get(pushMarkKey(table, id)) ?? []) {
-          storedAt.set(mark, changedAt);
-        }
-      }
-      markPushed(
-        db,
-        (Object.keys(batch) as (keyof SyncTables)[]).flatMap((table) =>
-          batch[table].flatMap((row) => unpushed.marks.get(pushMarkKey(table, row.id)) ?? []),
-        ),
-        storedAt,
-      );
+      markBatch(db, unpushed, batch, answer);
       pushed += rowCount(batch);
     }
   }
@@ -267,7 +311,7 @@ export const syncCycle = async (input: SyncCycleInput): Promise<SyncCycleResult>
   const pulled = await pullAll(input, seen);
   await freeTurn(input);
   settle(input, seen, { pulled, songs: joined || input.songsChanged || seen.songs, plan: true });
-  const pushed = await pushAll(input);
+  let pushed = await pushAll(input);
   if (pushed > 0) {
     const songsBefore = seen.songs;
     seen.songs = false;
@@ -276,5 +320,113 @@ export const syncCycle = async (input: SyncCycleInput): Promise<SyncCycleResult>
     settle(input, seen, { pulled: again, songs: seen.songs, plan: false });
     seen.songs ||= songsBefore;
   }
+  if (input.collaboration !== undefined) {
+    let copied = false;
+    for (const { syncId } of selectMemberPlaylists(input.db)) {
+      if ((await syncMemberPlaylist(input, input.collaboration, seen, syncId)) === "ended")
+        copied = true;
+    }
+    // A private copy is a playlist of the account's own: it goes up in this cycle.
+    if (copied) pushed += await pushAll(input);
+  }
   return { pulled: seen, pushed };
+};
+
+/** How a member's requests of one playlist went: on, stopped until the next cycle, or ended. */
+type MemberStep = "done" | "stopped" | "ended";
+
+/**
+ * What a collaboration request came to for the cycle. Signed out meanwhile stops the whole
+ * sync, as an account request does; a refusal that ends the membership (Core's
+ * `refusalEndsMembership`) keeps the playlist as the member's private copy; any other
+ * refusal or failure stops only this playlist, its changes still waiting.
+ */
+const memberStep = <T>(
+  input: SyncCycleInput,
+  seen: Seen,
+  syncId: string,
+  result: CollaborationResult<T>,
+): { readonly value: T } | MemberStep => {
+  if (selectJoinedAccount(input.db) !== input.account) throw new SyncSignedOut();
+  if (result.type === "done") return { value: result.value };
+  if (result.type === "refused" && refusalEndsMembership(result.refusal)) {
+    makePrivateCopy(input.db, syncId);
+    seen.playlists = true;
+    return "ended";
+  }
+  return "stopped";
+};
+
+/** Pulls every page of the member's playlist [syncId] after its own cursor. */
+const pullMemberPlaylist = async (
+  input: SyncCycleInput,
+  service: CollaborationService,
+  seen: Seen,
+  syncId: string,
+): Promise<MemberStep> => {
+  for (let round = 0; round < MAX_ROUNDS; round++) {
+    const cursor =
+      selectMemberPlaylists(input.db).find((each) => each.syncId === syncId)?.cursor ?? null;
+    const step = memberStep(input, seen, syncId, await service.pull(syncId, cursor));
+    if (typeof step === "string") return step;
+    await freeTurn(input);
+    const page = step.value;
+    const applied = applyPlaylistPage(
+      input.db,
+      syncId,
+      page,
+      selectAccountTrackIds(input.db),
+      input.now(),
+    );
+    if (applied.deleted) {
+      // The owner deleted it: what the member had stays theirs.
+      makePrivateCopy(input.db, syncId);
+      seen.playlists = true;
+      return "ended";
+    }
+    seen.playlists ||= applied.changed;
+    if (!page.more) break;
+  }
+  return "done";
+};
+
+/** Pushes the member's changes to the playlist [syncId]. */
+const pushMemberPlaylist = async (
+  input: SyncCycleInput,
+  service: CollaborationService,
+  seen: Seen,
+  syncId: string,
+): Promise<MemberStep | "pushed"> => {
+  let pushed = false;
+  for (let round = 0; round < MAX_ROUNDS; round++) {
+    await freeTurn(input);
+    const unpushed = selectUnpushedPlaylist(input.db, syncId, READ_AT_ONCE);
+    if (rowCount(unpushed.rows) === 0) break;
+    for (const batch of pushBatches(unpushed.rows)) {
+      const step = memberStep(input, seen, syncId, await service.push(syncId, pushBody(batch)));
+      if (typeof step === "string") return step;
+      await freeTurn(input);
+      markBatch(input.db, unpushed, batch, step.value);
+      pushed = true;
+    }
+  }
+  return pushed ? "pushed" : "done";
+};
+
+/**
+ * Syncs the collaborative playlist [syncId] of another account: pulls what changed after its
+ * own cursor, pushes what the member changed here, and pulls again after a push. A refusal or
+ * a failure stops this playlist only (`memberStep`).
+ */
+const syncMemberPlaylist = async (
+  input: SyncCycleInput,
+  service: CollaborationService,
+  seen: Seen,
+  syncId: string,
+): Promise<MemberStep> => {
+  const pulled = await pullMemberPlaylist(input, service, seen, syncId);
+  if (pulled !== "done" || input.pushCollaborative === false) return pulled;
+  const pushed = await pushMemberPlaylist(input, service, seen, syncId);
+  if (pushed !== "pushed") return pushed;
+  return pullMemberPlaylist(input, service, seen, syncId);
 };

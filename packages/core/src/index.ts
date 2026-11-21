@@ -970,6 +970,20 @@ export {
   removeMemberCall,
   turnOffInviteCall,
 } from "./collaborationRequests.ts";
+export {
+  membershipChanges,
+  privateCopyId,
+  readPullMembership,
+  refusalEndsMembership,
+} from "./collaborativeSync.ts";
+export type {
+  CollaborationEndReason,
+  EndedCollaboration,
+  HeldCollaboration,
+  KeptCollaboration,
+  MembershipChanges,
+  PullMembership,
+} from "./collaborativeSync.ts";
 export type {
   ActiveInvite,
   Collaboration,
