@@ -383,12 +383,16 @@ Migration `0018_collaboration_invites` adds `collaboration_invites`, and changes
 there was.
 
 `GET /.well-known/assetlinks.json`, with no session, is Android's App Link check: it names
-Wave's package (`dev.leoperez.wave`) and the SHA-256 of the release key's certificate, the
-one `scripts/ci/sign-apk.sh` pins (`docs/spec.md`, APK signing). With it the phone's `/invite`
-filter (`autoVerify: true` in `apps/mobile/app.config.ts`) is verified, and a tapped link
-opens a released Wave with nothing to turn on in Open by default. A build signed with another
-key, a local debug build included, isn't verified. A change to the release key changes the
-constant in `src/service.ts` and needs a deploy.
+Wave's package (`dev.leoperez.wave`) and the SHA-256 of both certificates in the release APK's
+rotation proof, the two `scripts/ci/sign-apk.sh` pins (`docs/spec.md`, APK signing): the release
+key's and Expo's public debug key's. Android's verifier checks a rotated APK by the first
+certificate of its proof, the debug key's, so with the release key's alone the phone's
+`/invite` filter (`autoVerify: true` in `apps/mobile/app.config.ts`) stays unverified (#1417).
+With both, a tapped link opens a released Wave with nothing to turn on in Open by default. A
+build signed with the debug key alone, a local build included, is verified too; one signed with
+any other key isn't. A change to either pinned key changes the constants in `src/service.ts` and
+needs a deploy. Android checks the host when an APK is installed or updated, so a phone that
+installed Wave before the deploy gets the host verified with its next APK update.
 
 #### A member's push and pull of one playlist
 

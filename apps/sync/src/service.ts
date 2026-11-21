@@ -257,11 +257,19 @@ const SESSION_TOKEN = /^[A-Za-z0-9_-]{43}$/;
  */
 const RELEASE_CERTIFICATE_SHA256 =
   "80cee0c33afc558f4b130433c78035bba0f966f1c8f0fce422f587e245fcde65";
+/**
+ * The SHA-256 of Expo's public debug key, the first signer in the release APK's rotation proof
+ * (pinned in scripts/ci/sign-apk.sh).
+ */
+const PREVIOUS_RELEASE_CERTIFICATE_SHA256 =
+  "fac61745dc0903786fb9ede62a962b399f7348f0bb6f899b8332667591033b9c";
 
 /**
  * `GET /.well-known/assetlinks.json`: Android's App Link check, so an invite link opens Wave
  * (the `/invite` filter in apps/mobile/app.config.ts) with nothing to turn on in Open by default.
- * Only an APK signed with the release key passes it.
+ * Android's verifier checks a rotated APK by the first certificate of its rotation proof, the
+ * debug key's, so the file names it beside the release key's (#1417); with the release key's
+ * alone the host stays unverified.
  */
 const assetLinks = (): Response =>
   new Response(
@@ -272,8 +280,9 @@ const assetLinks = (): Response =>
           namespace: "android_app",
           package_name: "dev.leoperez.wave",
           sha256_cert_fingerprints: [
-            RELEASE_CERTIFICATE_SHA256.toUpperCase().replaceAll(/(..)(?!$)/g, "$1:"),
-          ],
+            RELEASE_CERTIFICATE_SHA256,
+            PREVIOUS_RELEASE_CERTIFICATE_SHA256,
+          ].map((fingerprint) => fingerprint.toUpperCase().replaceAll(/(..)(?!$)/g, "$1:")),
         },
       },
     ]),
