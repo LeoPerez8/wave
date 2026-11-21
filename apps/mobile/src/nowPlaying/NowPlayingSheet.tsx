@@ -1,7 +1,12 @@
 import { useLocalisation } from "@/localisation/localisation";
 import { activeTiming, beginTiming, timingSurfaceCommitted } from "@/lib/timing";
-import { IconChevronDown, IconListNumbers, IconShare3 } from "@tabler/icons-react-native";
-import { isUnsearchedTrackId, nowPlayingSlotShow, type NowPlayingSlotSong } from "@wave/core";
+import { IconChevronDown, IconDotsVertical, IconListNumbers } from "@tabler/icons-react-native";
+import {
+  isUnsearchedTrackId,
+  nowPlayingSlotShow,
+  nowPlayingSongMenuShow,
+  type NowPlayingSlotSong,
+} from "@wave/core";
 import type { ReactNode } from "react";
 import {
   Activity,
@@ -23,6 +28,7 @@ import { CoveredByNowPlaying } from "@/lib/screenSight";
 import { addScreenBackHandler } from "@/overlay/back";
 import { useRenderCount } from "@/perf/perf";
 import type { TrackDetails } from "@wave/client";
+import { openPlayingActions } from "@/playback/ActionsMenu";
 import { useCurrentTrackId } from "@/playback/hooks";
 import { playbackState, type PlaybackState } from "@/playback/Player";
 import { LyricCardLayer } from "@/share/LyricCardLayer";
@@ -271,7 +277,6 @@ export function NowPlayingSheet() {
       void nowPlayingSongLookup.acquire(songTarget).catch(songActionFailed);
     setView((current) => (current === "lyrics" ? "player" : "lyrics"));
   };
-  const toggleRelated = () => setView(view === "related" ? "player" : "related");
   const share = () => {
     if (item === null) return;
     shareNowPlaying(
@@ -291,8 +296,6 @@ export function NowPlayingSheet() {
     title: item?.title ?? strings.playbackText.unknownTitle,
     lyricsShown: view === "lyrics",
     toggleLyrics,
-    relatedShown: view === "related",
-    toggleRelated,
     share,
   };
   const slotSong: NowPlayingSlotSong =
@@ -304,9 +307,9 @@ export function NowPlayingSheet() {
   // The slots that aren't None and show for what's on, spread evenly left of Queue.
   const slots = useNowPlayingButtons().flatMap((action, slot) => {
     if (action === null) return [];
-    const show = nowPlayingSlotShow(action, slotSong, ytMusic);
-    return show === "hidden" ? [] : [{ action, slot, off: show === "off" }];
+    return nowPlayingSlotShow(action, slotSong) === "hidden" ? [] : [{ action, slot }];
   });
+  const songMenu = nowPlayingSongMenuShow(slotSong);
 
   return (
     <Animated.View
@@ -342,11 +345,14 @@ export function NowPlayingSheet() {
               label={strings.playbackText.closeNowPlaying}
               onPress={close}
             />
-            {item !== null && (
+            {/* The playing song's card, anchored here; off while an unsearched entry's search runs. */}
+            {songMenu !== "hidden" && (
               <IconButton
-                icon={IconShare3}
-                label={strings.playbackText.shareSong}
-                onPress={share}
+                icon={IconDotsVertical}
+                label={strings.playbackText.songMenu}
+                disabled={songMenu === "off"}
+                opensMenu
+                onPress={openPlayingActions}
               />
             )}
           </View>
@@ -414,14 +420,8 @@ export function NowPlayingSheet() {
               <View
                 className={`flex-row items-center ${slots.length === 0 ? "justify-end" : "justify-between"}`}
               >
-                {slots.map(({ action, slot, off }) => (
-                  <SlotButton
-                    key={slot}
-                    slot={slot}
-                    action={action}
-                    off={off}
-                    context={slotContext}
-                  />
+                {slots.map(({ action, slot }) => (
+                  <SlotButton key={slot} slot={slot} action={action} context={slotContext} />
                 ))}
                 <ViewToggle
                   icon={IconListNumbers}

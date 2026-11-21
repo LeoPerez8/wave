@@ -16,7 +16,6 @@ import {
   nowPlayingSlotLabel,
   useNowPlayingButtons,
 } from "@/settings/nowPlayingButtons";
-import { useYtMusicEnabled } from "@/settings/ytMusic";
 
 /** What a slot's button takes so a long press, or the screen reader's action, changes it. */
 export type SlotChange = Required<
@@ -28,15 +27,14 @@ export type SlotChange = Required<
 
 /**
  * The card that changes slot [slot]'s button (0 for the first): the actions
- * (Related only with YouTube Music on, Core's `nowPlayingSlotChoices`), the
- * one it holds checked. Opened by a long press, the finger can
+ * a slot can hold (Core's `nowPlayingSlotChoices`), the one it holds checked. Opened by a long press, the finger can
  * slide onto an entry and lift to pick it, or tap one after lifting. An
  * action another slot holds swaps the two (Core's `editNowPlayingButtons`).
  * None is only offered in Settings.
  */
 function ChangeSlotMenu({ slot, close }: { slot: number; close: () => void }) {
   const held = useNowPlayingButtons()[slot];
-  const choices = nowPlayingSlotChoices(useYtMusicEnabled());
+  const choices = nowPlayingSlotChoices();
   const flow = useOverlayFlow();
   const choose = (index: number) => {
     const action = choices[index];

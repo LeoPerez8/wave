@@ -72,7 +72,7 @@ test("a row edited before the update is left under the old key, and the phone sh
 test("an edit is stored under the new key, kept across a restart, and synced", async () => {
   const phone = await loadPhone();
   phone.buttons.editSavedNowPlayingButtons({ slot: 1, action: "sleepTimer" });
-  const edited = JSON.stringify(["lyrics", "sleepTimer", "download", "songMenu"]);
+  const edited = JSON.stringify(["lyrics", "sleepTimer", "download", "shuffle"]);
   assert.equal(phone.Storage.getItemSync(KEY), edited);
   assert.equal(phone.Storage.getItemSync(OLD_KEY), null);
   assert.deepEqual(phone.changed, [KEY]);
