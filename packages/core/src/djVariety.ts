@@ -3,10 +3,19 @@
  * by how far their artists are from the selected ones in the artist graph.
  */
 import { artistNeighbourhood, type ArtistGraph } from "./artistGraph.ts";
+import { djRadioSongAllowed } from "./dj.ts";
 import type { DjVariety } from "./djSettings.ts";
+import { isDisliked, NO_DISLIKES, type DislikedSongs } from "./dislikes.ts";
+import type { GenreProfileOf } from "./genreAffinity.ts";
 import { magicArtistKey, type MagicSession } from "./magicQueue.ts";
-import { magicLearnedExtras, magicRadioEligible } from "./magicRadioLearning.ts";
+import {
+  magicLearnedExtras,
+  magicRadioEligible,
+  magicRadioExclusions,
+} from "./magicRadioLearning.ts";
 import type { RankedRadioSong } from "./radioRanking.ts";
+import type { YtAlbumSong } from "./ytDiscover.ts";
+import { ytTrackId } from "./ytMusic.ts";
 
 /** The candidates a batch is picked from: the seed's radios' and the learned radios'. */
 export interface DjCandidatePools<S> {
@@ -19,6 +28,25 @@ const REACH: { readonly [K in DjVariety]: number } = { low: 0, medium: 1, high: 
 
 /** Where an artist the graph doesn't reach within two hops stands. */
 const OUTSIDE = 3;
+
+/**
+ * How far the closest of [artists] (Magic Queue keys) is from [session]'s
+ * selected artists in [graph]: 0 for a selected one, `OUTSIDE` for one the
+ * graph doesn't reach within two hops.
+ */
+const djArtistHops = (
+  session: MagicSession,
+  graph: ArtistGraph | null,
+): ((artists: readonly string[]) => number) => {
+  const hops = new Map<string, number>();
+  for (const name of session.radioArtists) hops.set(magicArtistKey(name), 0);
+  if (graph !== null)
+    for (const neighbour of artistNeighbourhood(graph, session.radioArtists)) {
+      const key = magicArtistKey(neighbour.name);
+      if (!hops.has(key)) hops.set(key, neighbour.hops);
+    }
+  return (artists) => Math.min(OUTSIDE, ...artists.map((artist) => hops.get(artist) ?? OUTSIDE));
+};
 
 /**
  * The candidates a batch of [session] may hold, each pool in its ranked
@@ -49,15 +77,8 @@ export const djVarietyCandidates = <S extends RankedRadioSong>(
   size = 0,
 ): DjCandidatePools<S> => {
   if (session.dj === undefined) return pools;
-  const hops = new Map<string, number>();
-  for (const name of session.radioArtists) hops.set(magicArtistKey(name), 0);
-  if (graph !== null)
-    for (const neighbour of artistNeighbourhood(graph, session.radioArtists)) {
-      const key = magicArtistKey(neighbour.name);
-      if (!hops.has(key)) hops.set(key, neighbour.hops);
-    }
-  const distance = (song: S): number =>
-    Math.min(OUTSIDE, ...song.artists.map((artist) => hops.get(artist) ?? OUTSIDE));
+  const hopsOf = djArtistHops(session, graph);
+  const distance = (song: S): number => hopsOf(song.artists);
   const eligible = magicRadioEligible(session, [...pools.seed, ...pools.liked]);
   const extras = new Set(magicLearnedExtras(pools.seed, pools.liked));
   const reach = REACH[session.dj.variety];
@@ -95,4 +116,47 @@ export const djVarietyCandidates = <S extends RankedRadioSong>(
       .sort(([a, passA], [b, passB]) => passA - passB || a - b)
       .map(([at]) => each.songs[at]!);
   return { seed: kept(seed), liked: kept(liked) };
+};
+
+/**
+ * The song of the radio [radioId]'s page [songs] that starts a DJ queue
+ * before its first batch is read: the first one that batch could take. Not a
+ * video, not [disliked], not played or learned from yet
+ * (`magicRadioEligible`), on a family tile's radio of its family
+ * (`djRadioSongAllowed`), and within the Artist variety's reach of the
+ * selected artists in [graph] (Low: a selected artist's song). With none in
+ * reach, the nearest, as the batch fills (`djVarietyCandidates`). Null when
+ * the page has no song the batch could take.
+ */
+export const djFirstRadioSong = <S extends YtAlbumSong & { readonly video?: boolean }>(
+  session: MagicSession,
+  radioId: string,
+  songs: readonly S[],
+  {
+    profileOf,
+    graph = null,
+    disliked = NO_DISLIKES,
+  }: {
+    readonly profileOf: GenreProfileOf;
+    readonly graph?: ArtistGraph | null;
+    readonly disliked?: DislikedSongs;
+  },
+): S | null => {
+  const exclude = magicRadioExclusions(session, songs);
+  const reach = session.dj === undefined ? OUTSIDE : REACH[session.dj.variety];
+  const hopsOf = djArtistHops(session, graph);
+  let nearest: { readonly song: S; readonly hops: number } | null = null;
+  for (const song of songs) {
+    if (
+      song.video === true ||
+      exclude.has(ytTrackId(song.videoId)) ||
+      isDisliked(disliked, { videoId: song.videoId }) ||
+      !djRadioSongAllowed(session, radioId, song.artists, profileOf, graph)
+    )
+      continue;
+    const hops = hopsOf(song.artists.map(magicArtistKey));
+    if (hops <= reach) return song;
+    if (nearest === null || hops < nearest.hops) nearest = { song, hops };
+  }
+  return nearest?.song ?? null;
 };

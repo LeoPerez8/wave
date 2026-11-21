@@ -3341,7 +3341,7 @@ export {
 export type { DjDiscovery, DjPopularity, DjSettings, DjVariety } from "./djSettings.ts";
 export { djAdjustGroups, djAdjustSheetHeight, djAdjustSheetSwipeCloses } from "./djAdjust.ts";
 export type { DjAdjustGroup, DjAdjustOption, DjAdjustSheetSwipe } from "./djAdjust.ts";
-export { djVarietyCandidates } from "./djVariety.ts";
+export { djFirstRadioSong, djVarietyCandidates } from "./djVariety.ts";
 export type { DjCandidatePools } from "./djVariety.ts";
 export {
   DJ_REMEMBERED_SETTING,
@@ -3389,7 +3389,7 @@ export { djAlbumTile, djTileArtist } from "./dj.ts";
 export type { DjAlbum, DjAlbumTile, DjGenreTile } from "./dj.ts";
 export type { DjCell, DjPageRead, DjRow, DjSavedPage } from "./dj.ts";
 export { djSearchTiles } from "./djSearch.ts";
-export { djSeedFull } from "./dj.ts";
+export { djSeedFull, djSessionWithAlbumSongs } from "./dj.ts";
 export type { DjSearchFound } from "./djSearch.ts";
 
 export {
