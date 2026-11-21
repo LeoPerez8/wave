@@ -5,6 +5,7 @@ import {
   type RecognizeResult,
   type RecognizeCard,
   type RecognizeSource,
+  type RecognizeTileFavorite,
   type RecognizeTileNotice,
   type RecognizeTrack,
   type YtSong,
@@ -24,7 +25,11 @@ export interface RecognizeTileNative {
   readonly listeningEnded: (tap: number) => void;
   /** No session has work left, so native lets go of the service holding JS. */
   readonly finished: () => void;
-  readonly matchSaved: (line: string, match: string) => void;
+  /**
+   * The match [match] was saved, as [line] says; [favorite] is its star button, or null for
+   * a song Wave can't play. Both join the match's notification in one silent update.
+   */
+  readonly matchSaved: (line: string, match: string, favorite: RecognizeTileFavorite | null) => void;
   readonly notify: (notice: RecognizeTileNotice) => void;
 }
 
@@ -34,6 +39,8 @@ export interface RecognizeTileDeps<
 > extends RecognizeDeps<L, S> {
   readonly save: (result: RecognizeResult<L, S>) => Promise<string>;
   readonly couldntSave: () => string;
+  /** The match notification's star button for [result], as the song's star reads now. */
+  readonly favorite: (result: RecognizeResult<L, S>) => Promise<RecognizeTileFavorite | null>;
   readonly library: () => Promise<readonly L[]>;
 }
 
@@ -90,15 +97,19 @@ export const followRecognizeTile = <L extends RecognizeTrack, S extends YtSong>(
         if (card.kind === "resolved" && song !== null) {
           deliver(card.result);
           const kept = writeRecognizeMatch(song, card.result);
-          saved = Promise.resolve()
+          const line = Promise.resolve()
             .then(() => deps.save(card.result))
             .catch(() => {
               deps.log("warn", "Recognize tile: playlist save failed");
               return deps.couldntSave();
-            })
-            .then((line) => {
-              if (latest === match) tile.matchSaved(line, kept);
             });
+          // A star that can't be read leaves the button out; the save line still shows.
+          const favorite = Promise.resolve()
+            .then(() => deps.favorite(card.result))
+            .catch(() => null);
+          saved = Promise.all([line, favorite]).then(([said, star]) => {
+            if (latest === match) tile.matchSaved(said, kept, star);
+          });
         }
         const shown = notice(card);
         if (shown !== null) tile.notify(shown);
