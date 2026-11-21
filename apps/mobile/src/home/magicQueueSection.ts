@@ -1,9 +1,9 @@
 import { currentLocalisation } from "@/localisation/localisation";
 /**
- * Home draws nine random seeds when it first opens, from the Library's playable
- * songs and the playlists' YT Music entries together, independently of
- * recommendations; with neither, nine streamed songs of the Artist mixes
- * (Core's `magicQueueRow`).
+ * Home draws the Magic Queue row's three pages when it first opens, from the
+ * Library's playable songs and the playlists' YT Music entries together, by
+ * Discover's New music and Popularity (Core's `magicQueuePages`); with
+ * neither, nine streamed songs of the Artist mixes (Core's `magicQueueRow`).
  */
 import {
   magicQueueMixPicks,
@@ -21,6 +21,8 @@ import * as Effect from "effect/Effect";
 import { useMemo, useState } from "react";
 
 import { freeTurnEffect } from "@/lib/backgroundWork";
+import { discoverLevel, discoverSliders } from "@/lib/discoverSettings";
+import { recommendationTurnEffect } from "@/lib/recommendationWork";
 import { currentDislikedSongs, useDislikedSongs } from "@/library/dislikes";
 import { onLibraryChange } from "@/library/libraryChanges";
 import { LibraryStore } from "@/library/LibraryStore";
@@ -31,8 +33,10 @@ import { startMagicQueue } from "@/playback/MagicQueue";
 import { runMagicQueueStart, startMagicQueueFromStream } from "@/playback/magicQueueStart";
 import { appRuntime } from "@/library/runtime";
 
+import { magicQueuePagesRead, type MagicQueuePagesPlan } from "./magicQueuePagesRead";
+import { magicQueuePopularity } from "./magicQueuePopularity";
 import { createPlaylistSeedIdsRead, readPlaylistSeedIds } from "./playlistSeedIds";
-import { randomMagicQueueRead } from "./randomMagicQueueRead";
+import { recommendationSnapshot } from "./recommendationSnapshot";
 import { startFromLibraryMatch } from "./streamedMagicQueueStart";
 
 /** What the row draws (Core's `magicQueueShown`), its mixes' songs picked. */
@@ -40,8 +44,11 @@ export type MagicQueueShown = CoreMagicQueueShown<PlayableSongRow>;
 
 export interface MagicQueueSection {
   readonly shown: MagicQueueShown;
-  /** Brings another random set, with Undo. */
-  readonly refresh: () => void;
+  /**
+   * Draws the page at [index] again (the mixes' songs, with an empty pool),
+   * with a "New songs" toast and Undo.
+   */
+  readonly refresh: (index: number) => void;
 }
 
 /** The row's playlist entries, read in pages between free turns: it's waiting to be shown. */
@@ -55,64 +62,78 @@ const videoIdsOf = (songs: readonly YtAlbumSong[]): string[] => songs.map((song)
 /** A seed of the row: a Library song, or a playlist's YT Music entry. */
 type Seed = MagicQueueSeed<PlayableSongRow>;
 
+/** How much of a hit each song of the pool is, kept per snapshot Library and catalog. */
+const popularity = magicQueuePopularity({
+  library: recommendationSnapshot.library,
+  catalog: recommendationSnapshot.catalog,
+  between: recommendationTurnEffect,
+});
+
+/** What each draw reads beside the store, Discover's levels as they are at that draw. */
+const sources = {
+  entryVideoIds: seedIds.get.pipe(Effect.orDie),
+  disliked: Effect.promise(currentDislikedSongs),
+  popularity,
+  levels: () => ({ level: discoverLevel.get(), popularity: discoverSliders.get().popularity }),
+};
+
 /**
- * Nine random seeds (Library songs and playlist entries) through the same
- * immediate local-query path as the rest of Home: no saved daily picks,
- * taste profile, recommendation deadline, settlement or free turns. Null
- * until they're first read. Only the owner's refresh draws again: re-renders,
- * Now Playing covering the screen, and leaving Home for another screen and
- * coming back keep the seeds (#1251).
+ * The row's pages (Core's `magicQueuePages`) through Home's local-query path:
+ * no saved picks or taste profile. Null until they're first read. Only the
+ * owner's refresh draws again: re-renders, Now Playing covering the screen,
+ * and leaving Home for another screen and coming back keep the pages
+ * (#1251).
  */
-const usePoolPicks = (enabled: boolean) => {
-  const [read, setRead] = useState(() => randomMagicQueueRead(Math.random));
+const usePoolPages = (enabled: boolean) => {
+  const [read, setRead] = useState(() => magicQueuePagesRead(Math.random, { kind: "fresh" }));
   const query = useMemo(
     () =>
       libraryQuery(
         read.key,
         read.reads,
-        Effect.flatMap(LibraryStore, (store) =>
-          read.read(store, seedIds.get.pipe(Effect.orDie), Effect.promise(currentDislikedSongs)),
-        ),
+        Effect.flatMap(LibraryStore, (store) => read.read(store, sources)),
       ),
     [read],
   );
-  const answer = useLibraryQuery<readonly Seed[] | null>(enabled ? query : null, null);
-  const [shown, setShown] = useState<readonly Seed[] | null>(null);
+  const answer = useLibraryQuery<readonly (readonly Seed[])[] | null>(enabled ? query : null, null);
+  const [shown, setShown] = useState<readonly (readonly Seed[])[] | null>(null);
   if (answer !== null && answer !== shown) setShown(answer);
   // A seed disliked while the row shows leaves it at once; the next draw fills its place.
   const disliked = useDislikedSongs(enabled);
   const drawn = answer ?? shown;
-  const seeds = useMemo(
+  const pages = useMemo(
     () =>
       drawn === null
         ? null
-        : withoutDisliked(drawn, disliked, (seed) =>
-            seed.source === "library" ? { id: seed.song.id } : { videoId: seed.song.videoId },
+        : drawn.map((page) =>
+            withoutDisliked(page, disliked, (seed) =>
+              seed.source === "library" ? { id: seed.song.id } : { videoId: seed.song.videoId },
+            ),
           ),
     [drawn, disliked],
   );
-  return { seeds, setRead };
+  return { pages, setRead };
 };
 
 /**
- * The row's songs and their refresh: nine seeds of the Library's songs with
- * a file and the playlists' YT Music entries when there are any, else nine
- * of [artistMixes]' streamed songs (what the Artist mixes row shows), drawn
- * once when Home first opens and kept in their places while the mixes
- * rebuild or re-rank. Hidden while [ytMusic] is off.
+ * The row's songs and their refresh: three pages of nine of the Library's
+ * songs with a file and the playlists' YT Music entries when there are any,
+ * else nine of [artistMixes]' streamed songs (what the Artist mixes row
+ * shows), drawn once when Home first opens and kept in their places while
+ * the mixes rebuild or re-rank. Hidden while [ytMusic] is off.
  */
 export const useMagicQueueSection = (
   ytMusic: boolean,
   artistMixes: DiscoverMixesSection,
 ): MagicQueueSection => {
-  const { seeds, setRead } = usePoolPicks(ytMusic);
+  const { pages, setRead } = usePoolPages(ytMusic);
   // Null until the mixes are first drawn from.
   const [mixPicks, setMixPicks] = useState<MagicQueueMixPicks | null>(null);
-  const row = magicQueueRow({ ytMusic, seeds, artistMixes });
+  const row = magicQueueRow({ ytMusic, pages, artistMixes });
   const { shown, picks } = magicQueueShown(row, mixPicks, Math.random);
   // Kept for the next render: the same mixes keep these songs.
   if (picks !== mixPicks) setMixPicks(picks);
-  const refresh = () => {
+  const refresh = (index: number) => {
     const { strings } = currentLocalisation();
     if (row.kind === "mixes") {
       const { mixes } = row;
@@ -130,14 +151,17 @@ export const useMagicQueueSection = (
       });
       return;
     }
-    const previous = (seeds ?? []).map(magicQueueSeedId);
-    const next = randomMagicQueueRead(Math.random);
+    const previous = (pages ?? []).map((page) => page.map(magicQueueSeedId));
+    const plan: MagicQueuePagesPlan = { kind: "redraw", pages: previous, index };
+    const next = magicQueuePagesRead(Math.random, plan);
     setRead(next);
     void showToast(strings.discover.newSongs, {
       label: strings.discover.undo,
       run: () => {
         setRead((current) =>
-          current === next ? randomMagicQueueRead(Math.random, previous) : current,
+          current === next
+            ? magicQueuePagesRead(Math.random, { kind: "keep", pages: previous })
+            : current,
         );
       },
     });

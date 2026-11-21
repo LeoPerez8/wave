@@ -230,6 +230,9 @@ export const settingsEn = {
     "Slots 1 to 5 are Now Playing's footer, left to right; the other two sit beside Previous and Next. A slot set to None shows no button, and the footer's buttons spread out.",
   slotLeftOfPrevious: "Left of Previous",
   slotRightOfNext: "Right of Next",
+  slotInFooter: "In the footer",
+  slotBesidePrevious: "Beside Previous",
+  slotBesideNext: "Beside Next",
   resetToDefault: "Reset to Default",
   aButtonAnotherSlotHoldsSwapsPlaces: "A button another slot holds swaps places with this slot's.",
   signIn: "Sign In",
@@ -464,8 +467,7 @@ export const settingsEn = {
   retryLine: (line: string) => `Retry ${line}`,
   removeFailure: (line: string) => `Remove ${line} from failed downloads`,
   slot: (n: number) => `Slot ${n}`,
-  swapSlot: (label: string, title: string, holder: string) =>
-    `${label}, ${title}, swaps with ${holder}`,
+  moveButtonToSlot: (slot: string) => `Move button to ${slot}`,
   swipeHint: (side: "left" | "right") => `Chooses what swiping ${side} runs`,
   minutes: (n: number) =>
     `${formatNumber("en", n)} ${plural("en", n, { one: "minute", other: "minutes" })}`,

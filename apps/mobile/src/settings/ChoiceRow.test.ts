@@ -45,6 +45,18 @@ const stubs: Record<string, string> = {
       return { get: () => value, set: next => { value = next; } };
     })[0];
   `),
+  // Now Playing's slot picker, drawn without its screen chrome or the router, in English.
+  "@/native/waveNative": stubModule(`
+    export const phoneLanguages = () => [];
+    export const subscribePhoneLanguages = () => () => {};
+  `),
+  "./SettingsPage": stubModule(`
+    export const SettingsPageScreen = ({ children }) => children;
+    export const SettingsPageRow = () => null;
+  `),
+  "@/lib/timingRouter": stubModule(
+    "export const router = { canGoBack: () => true, back() {}, push() {}, replace() {} };",
+  ),
 };
 const expoRequire = createRequire(createRequire(import.meta.url).resolve("expo/package.json"));
 const presetRequire = createRequire(expoRequire.resolve("babel-preset-expo"));
@@ -86,10 +98,15 @@ const hooks = registerHooks({
   },
 });
 let ChoiceSection: (typeof import("./ChoiceRow.tsx"))["ChoiceSection"];
+let ChoiceRow: (typeof import("./ChoiceRow.tsx"))["ChoiceRow"];
 let persistedSetting: (typeof import("../lib/persistedSetting.ts"))["persistedSetting"];
+let NowPlayingSlotPickerScreen: (typeof import("./NowPlayingSlots.tsx"))["NowPlayingSlotPickerScreen"];
+let editSavedNowPlayingButtons: (typeof import("./nowPlayingButtons.ts"))["editSavedNowPlayingButtons"];
 try {
-  ({ ChoiceSection } = await import("./ChoiceRow.tsx"));
+  ({ ChoiceSection, ChoiceRow } = await import("./ChoiceRow.tsx"));
   ({ persistedSetting } = await import("../lib/persistedSetting.ts"));
+  ({ NowPlayingSlotPickerScreen } = await import("./NowPlayingSlots.tsx"));
+  ({ editSavedNowPlayingButtons } = await import("./nowPlayingButtons.ts"));
 } finally {
   hooks.deregister();
 }
@@ -178,6 +195,55 @@ test("choices without descriptions keep their label and selection behavior", asy
         .map((node) => node.props.children),
       ["List"],
     );
+  } finally {
+    await act(() => renderer?.unmount());
+  }
+});
+
+test("a choice whose line says where it already sits is heard with its name, not as a hint", async () => {
+  let renderer: ReactTestRenderer | undefined;
+  try {
+    await act(() => {
+      renderer = create(
+        createElement(ChoiceRow, {
+          label: "Lyrics",
+          line: "In the footer",
+          lineRead: "label",
+          accessibilityLabel: "Lyrics, Slot 6",
+          chosen: false,
+          onPress: () => {},
+        }),
+      );
+    });
+    const row = renderer!.root.find(
+      (node) => typeof node.type === "string" && node.type === "button",
+    );
+    assert.equal(row.props.accessibilityLabel, "Lyrics, Slot 6, In the footer");
+    assert.equal(row.props.accessibilityHint, undefined);
+    assert.ok(
+      row
+        .findAll((node) => typeof node.type === "string" && node.type === "span")
+        .some((node) => node.props.children === "In the footer"),
+      "the caption is visible",
+    );
+  } finally {
+    await act(() => renderer?.unmount());
+  }
+});
+
+test("the slot picker names where another slot holds a choice once, after its name", async () => {
+  editSavedNowPlayingButtons("reset");
+  let renderer: ReactTestRenderer | undefined;
+  try {
+    await act(() => {
+      renderer = create(createElement(NowPlayingSlotPickerScreen, { slot: 6 }));
+    });
+    const heard = renderer!.root
+      .findAll((node) => typeof node.type === "string" && node.type === "button")
+      .map((node) => node.props.accessibilityLabel as string);
+    // Lyrics sits in the footer by default; Queue sits nowhere.
+    assert.ok(heard.includes("Lyrics, Right of Next, In the footer"), heard.join(" | "));
+    assert.ok(heard.includes("Queue, Right of Next"), heard.join(" | "));
   } finally {
     await act(() => renderer?.unmount());
   }

@@ -32,7 +32,6 @@ import {
   useMemo,
   useRef,
   useState,
-  type ComponentType,
 } from "react";
 import { Text, View, useWindowDimensions } from "react-native";
 import { GestureDetector } from "react-native-gesture-handler";
@@ -68,6 +67,7 @@ import {
   useMagicBatchEmptySeed,
   useMagicBatchFailed,
   useMagicBatchLoading,
+  useMagicQueueFootnote,
   useMagicQueueLabel,
 } from "@/playback/MagicQueue";
 import { queueState } from "@/playback/Queue";
@@ -84,41 +84,6 @@ import { TrackHeader } from "./TrackHeader";
 import { ROW, useDraggedRow, useRowDrag, type DragRows } from "@/catalog/rowDrag";
 import { backToCurrentSong, upNextEndSpace, upNextScroll } from "./upNextScroll";
 
-type IconProps = { size?: number; color?: string; strokeWidth?: number };
-
-type ToggleProps = {
-  icon: ComponentType<IconProps>;
-  label: string;
-  on: boolean;
-  onPress: () => void;
-  /** Opens the toggle's card of choices, where it has one. */
-  onLongPress?: (() => void) | undefined;
-  accessibilityHint?: string | undefined;
-};
-
-/** A labelled toggle: teal while it's on, graphite while it's off. */
-function Toggle({ icon: Icon, label, on, onPress, onLongPress, accessibilityHint }: ToggleProps) {
-  return (
-    <IconButton
-      icon={Icon}
-      label={label}
-      caption={label}
-      layout="horizontal"
-      iconSize={20}
-      tone={on ? "accent" : "secondary"}
-      accessibilityRole="switch"
-      accessibilityState={{ checked: on }}
-      accessibilityHint={accessibilityHint}
-      onPress={onPress}
-      onLongPress={onLongPress}
-      depth={0.04}
-      className="flex-1"
-      style={{ width: undefined, height: CELL * 6, gap: CELL }}
-      captionProps={{ className: `font-sans text-body ${on ? "font-semibold" : ""}` }}
-    />
-  );
-}
-
 /** What the repeat toggles say for [mode], in [strings]' language. */
 export const repeatLabel = (mode: RepeatMode, strings: Catalogue): string =>
   mode === "one" ? strings.playbackText.repeatOne : strings.playbackText.repeat;
@@ -134,16 +99,48 @@ export function QueueHeader({
   item: NonNullable<PlaybackState["item"]>;
   onShowPlayer: () => void;
 }) {
+  const { strings } = useLocalisation();
+  const queue = useQueue();
+  const shuffle = useShuffleControl();
   return (
     <View>
-      <TrackHeader item={item} onShowPlayer={onShowPlayer} />
+      <TrackHeader
+        item={item}
+        onShowPlayer={onShowPlayer}
+        trailing={
+          <View className="flex-row">
+            <IconButton
+              icon={shuffle.icon}
+              iconSize={24}
+              size={48}
+              tone={queue.shuffle ? "accent" : "secondary"}
+              label={shuffle.label}
+              accessibilityRole="switch"
+              accessibilityState={{ checked: queue.shuffle }}
+              accessibilityHint={shuffle.accessibilityHint}
+              onPress={toggleShuffle}
+              onLongPress={shuffle.onLongPress}
+            />
+            <IconButton
+              icon={queue.repeat === "one" ? IconRepeatOnce : IconRepeat}
+              iconSize={24}
+              size={48}
+              tone={queue.repeat !== "off" ? "accent" : "secondary"}
+              label={repeatLabel(queue.repeat, strings)}
+              accessibilityRole="switch"
+              accessibilityState={{ checked: queue.repeat !== "off" }}
+              onPress={cycleRepeat}
+            />
+          </View>
+        }
+      />
       <Hairline />
     </View>
   );
 }
 
-/** The sticky bar's height: the toggles, a hairline and the Up Next heading. */
-const BAR = CELL * 11;
+/** The sticky bar's height: a hairline and the Up Next heading. */
+const BAR = CELL * 7;
 
 /** What the sticky bar draws its slice of the Now Playing ground from. */
 type Ground = {
@@ -187,9 +184,7 @@ function BarGround({ colors, top, scroll, start }: Ground) {
 }
 
 /**
- * The Queue list's sticky bar, between History and Up Next: the shuffle and
- * repeat toggles (a long press on shuffle opens the shuffle card; it reads
- * Smart Shuffle or Even Shuffle, each with its own icon, while that's chosen), then the Up Next
+ * The Queue list's sticky bar, between History and Up Next: the Up Next
  * heading ("Magic Queue · from <seed>" over a Magic Queue, "Up next · from <section>" over
  * one Home's New from Artists You Follow played).
  */
@@ -197,21 +192,11 @@ function UpNextBar() {
   const { strings } = useLocalisation();
   const ground = use(BarGroundContext);
   const queue = useQueue();
-  const shuffle = useShuffleControl();
   const count = queue.entries.length - queue.index - 1;
   const magic = useMagicQueueLabel();
   return (
     <View className="overflow-hidden" style={{ height: BAR }}>
       {ground !== null && <BarGround {...ground} />}
-      <View className="flex-row" style={{ gap: CELL }}>
-        <Toggle {...shuffle} on={queue.shuffle} onPress={toggleShuffle} />
-        <Toggle
-          icon={queue.repeat === "one" ? IconRepeatOnce : IconRepeat}
-          label={repeatLabel(queue.repeat, strings)}
-          on={queue.repeat !== "off"}
-          onPress={cycleRepeat}
-        />
-      </View>
       <Hairline />
       <View className="flex-1 flex-row items-end justify-between" style={{ paddingBottom: CELL }}>
         <CatalogLine className="shrink">
@@ -451,7 +436,8 @@ const barOffset = (history: number): number => (history === 0 ? 0 : SECTION_HEAD
  *
  * While a Magic Queue picks its next batch, skeleton rows stand where it will
  * land: in place of "Nothing up next.", or under the songs already in Up
- * Next, which stay put (docs/spec.md, Skeletons).
+ * Next, which stay put (docs/spec.md, Skeletons). Once its songs are in, a
+ * footnote under the last one says more arrive as it learns (#1376).
  *
  * [ground] is the sheet's ground, and [paneTop] where the Queue view sits on
  * the sheet: the sticky bar draws its slice of the ground.
@@ -483,6 +469,7 @@ export function UpNextList({
   const batchLoading = useMagicBatchLoading();
   const batchFailed = useMagicBatchFailed();
   const emptySeed = useMagicBatchEmptySeed();
+  const footnote = useMagicQueueFootnote();
 
   const rows = useMemo(
     (): QueueRow[] => [
@@ -664,10 +651,16 @@ export function UpNextList({
     />
   ) : null;
 
+  const footnoteLine = footnote ? (
+    <Text className="font-sans text-footnote text-secondary" style={{ paddingTop: CELL * 2 }}>
+      {strings.playbackText.moreSongsArriveAsTheMagicQueueLearns}
+    </Text>
+  ) : null;
+
   const footer = batchLoading ? (
     <UpNextSkeletons />
   ) : entries.length > 0 ? (
-    failure
+    (failure ?? footnoteLine)
   ) : (
     <View style={{ paddingTop: CELL * 2 }}>
       {failure ?? (

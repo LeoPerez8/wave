@@ -12,11 +12,16 @@ import {
   IconZzz,
 } from "@tabler/icons-react-native";
 import type { NowPlayingAction, NowPlayingSlot } from "@wave/core";
-import type { ComponentType } from "react";
+import { useCallback, type ComponentType } from "react";
+import { View, type AccessibilityActionEvent } from "react-native";
+import { GestureDetector } from "react-native-gesture-handler";
+import Animated, { useAnimatedStyle } from "react-native-reanimated";
 
 import { CELL } from "@/catalog/grid";
 import { IconButton } from "@/components/IconButton";
+import type { Measurable } from "@/motion/measureRect";
 import type { NativeYtSong } from "@/native/waveYtMusic";
+import { ACTION_ICONS } from "@/playback/actionIcons";
 import { cycleRepeat, toggleShuffle } from "@/playback/actions";
 import { useQueue } from "@/playback/hooks";
 import { nowPlayingSlotLabel, nowPlayingSlotTitle } from "@/settings/nowPlayingButtons";
@@ -27,6 +32,8 @@ import { repeatLabel } from "./QueueView";
 import { useShuffleControl } from "./ShuffleMenu";
 import { SleepTimerButton } from "./SleepTimer";
 import { AddToPlaylistButton, DislikeButton, DownloadButton } from "./SongButtons";
+import { useSlotDragGesture, type useNowPlayingSlotDrag } from "./slotDrag";
+import type { SongMenuSlotAction } from "./songMenuSlots";
 
 type IconProps = { size?: number; color?: string; strokeWidth?: number };
 
@@ -75,6 +82,11 @@ export interface SlotContext {
   readonly share: () => void;
   /** Starts edit mode, as a long press on any slot does. */
   readonly edit: () => void;
+  /**
+   * Runs the playing song's card's Magic Queue, Go to Artist or Go to Album,
+   * as the card does (`usePlayingSongMenu`).
+   */
+  readonly runSongMenu: (action: SongMenuSlotAction) => void;
 }
 
 /** Shuffle: teal while on, with the icon and name of the chosen kind of shuffle. */
@@ -108,10 +120,40 @@ function RepeatSlot({ change }: { change: SlotChange }) {
 }
 
 /**
+ * Magic Queue, Go to Artist or Go to Album: the playing song's card's entry
+ * of the same name, with its icon and label. [off] shows it disabled, where
+ * the card doesn't offer it (Core's `nowPlayingSlotShow`).
+ */
+function SongMenuSlot({
+  action,
+  off,
+  context,
+  change,
+}: {
+  action: SongMenuSlotAction;
+  off: boolean;
+  context: SlotContext;
+  change: SlotChange;
+}) {
+  const { strings } = useLocalisation();
+  return (
+    <IconButton
+      {...change}
+      icon={ACTION_ICONS[action]}
+      label={strings.itemActions.labels[action]}
+      tone="secondary"
+      disabledTone="tertiary"
+      disabled={off}
+      onPress={() => context.runSongMenu(action)}
+    />
+  );
+}
+
+/**
  * The button slot [slot] of Now Playing holds (0 to 4 for the footer's, then
  * the transport's left and right), for [action]. A tap runs it; a long press
  * starts edit mode. [off] shows it disabled (Dislike while an unsearched
- * entry's search runs).
+ * entry's search runs, Go to Album on a song without an album).
  */
 export function SlotButton({
   action,
@@ -181,10 +223,17 @@ export function SlotButton({
           change={change}
         />
       );
+    case "magicQueue":
+    case "goToArtist":
+    case "goToAlbum":
+      return <SongMenuSlot action={action} off={off} context={context} change={change} />;
   }
 }
 
-/** Each action's glyph on its slot in edit mode; Shuffle's is the chosen kind's. */
+/**
+ * Each action's glyph on its slot in edit mode; Shuffle's is the chosen
+ * kind's, and the song menu's entries have the card's icons.
+ */
 const EDIT_ICONS: Readonly<Record<Exclude<NowPlayingAction, "shuffle">, ComponentType<IconProps>>> =
   {
     lyrics: IconQuote,
@@ -195,6 +244,9 @@ const EDIT_ICONS: Readonly<Record<Exclude<NowPlayingAction, "shuffle">, Componen
     repeat: IconRepeat,
     share: IconShare3,
     dislike: IconCircleMinus,
+    magicQueue: ACTION_ICONS.magicQueue,
+    goToArtist: ACTION_ICONS.goToArtist,
+    goToAlbum: ACTION_ICONS.goToAlbum,
   };
 
 /** A slot's place: the size of its button. */
@@ -203,32 +255,110 @@ const SLOT = CELL * 6;
 /**
  * Slot [slot] in edit mode: outlined, with the glyph of the action it holds
  * ([action]) or a plus while it's empty. A tap opens the card that changes
- * it, anchored here; the action itself doesn't run.
+ * it, anchored here; the action itself doesn't run. The release that drops
+ * a drag of it opens nothing.
  */
-export function EditSlot({ slot, action }: { slot: number; action: NowPlayingSlot }) {
+export function EditSlot({
+  slot,
+  action,
+  drag,
+}: {
+  slot: number;
+  action: NowPlayingSlot;
+  drag: ReturnType<typeof useNowPlayingSlotDrag>;
+}) {
   const shuffle = useShuffleControl();
-  const [foreground, tertiary] = useThemeColor(["foreground", "tertiary"]);
+  const [foreground, tertiary, accent] = useThemeColor(["foreground", "tertiary", "accent"]);
+  // Measured as a drag begins, with the other slots and the sheet.
+  const { register } = drag;
+  const place = useCallback((view: Measurable | null) => register(slot, view), [register, slot]);
+  const gesture = useSlotDragGesture(drag, slot);
+  const strings = useLocalisation().strings;
   const Icon =
     action === null ? IconPlus : action === "shuffle" ? shuffle.icon : EDIT_ICONS[action];
   return (
-    <IconButton
-      label={`${nowPlayingSlotTitle(slot)}, ${nowPlayingSlotLabel(action)}`}
-      onPress={() => openChangeSlotMenu(slot)}
-      opensMenu
-      haptic="selection"
-      size={SLOT}
-      style={{
-        borderWidth: 1.5,
-        borderStyle: "dashed",
-        borderColor: tertiary,
-        borderRadius: CELL * 1.25,
-      }}
-    >
-      <Icon
-        size={action === null ? 20 : 24}
-        color={action === null ? tertiary : foreground}
-        strokeWidth={1.5}
-      />
-    </IconButton>
+    <GestureDetector gesture={gesture}>
+      <Animated.View ref={place} style={{ opacity: drag.dragging === slot ? 0 : 1 }}>
+        <IconButton
+          label={`${nowPlayingSlotTitle(slot)}, ${nowPlayingSlotLabel(action)}`}
+          onPressIn={drag.touched}
+          onPress={() => {
+            if (drag.tapped(slot)) openChangeSlotMenu(slot);
+          }}
+          opensMenu
+          haptic="selection"
+          size={SLOT}
+          accessibilityActions={
+            action === null
+              ? []
+              : Array.from({ length: 7 }, (_, destination) => destination)
+                  .filter((destination) => destination !== slot)
+                  .map((destination) => ({
+                    name: `moveToSlot${destination}`,
+                    label: strings.settings.moveButtonToSlot(nowPlayingSlotTitle(destination)),
+                  }))
+          }
+          onAccessibilityAction={(event: AccessibilityActionEvent) => {
+            const destination = Number(event.nativeEvent.actionName.replace("moveToSlot", ""));
+            if (Number.isInteger(destination) && destination >= 0 && destination < 7)
+              drag.dropped(slot, destination, false);
+          }}
+          style={{
+            borderWidth: 1.5,
+            borderStyle: "dashed",
+            borderColor: drag.dropTarget === slot ? accent : tertiary,
+            borderRadius: CELL * 1.25,
+          }}
+        >
+          <Icon
+            size={action === null ? 20 : 24}
+            color={action === null ? tertiary : foreground}
+            strokeWidth={1.5}
+          />
+        </IconButton>
+      </Animated.View>
+    </GestureDetector>
+  );
+}
+
+/** The held button, rendered above the sheet while its source slot stays outlined. */
+export function SlotDragPreview({
+  drag,
+  action,
+}: {
+  drag: ReturnType<typeof useNowPlayingSlotDrag>;
+  action: NowPlayingSlot;
+}) {
+  const shuffle = useShuffleControl();
+  const [foreground, ground] = useThemeColor(["foreground", "background"]);
+  const Icon =
+    action === null ? IconPlus : action === "shuffle" ? shuffle.icon : EDIT_ICONS[action];
+  const style = useAnimatedStyle(() => ({
+    position: "absolute",
+    left: 0,
+    top: 0,
+    width: SLOT,
+    height: SLOT,
+    transform: [
+      { translateX: drag.state.x.get() - SLOT / 2 },
+      { translateY: drag.state.y.get() - SLOT / 2 },
+    ],
+  }));
+  return (
+    <Animated.View pointerEvents="none" style={[style, { zIndex: 20 }]}>
+      <View
+        className="items-center justify-center rounded-xl"
+        style={{
+          width: SLOT,
+          height: SLOT,
+          backgroundColor: ground,
+          borderColor: foreground,
+          borderWidth: 1.5,
+          opacity: 0.9,
+        }}
+      >
+        <Icon size={action === null ? 20 : 24} color={foreground} strokeWidth={1.5} />
+      </View>
+    </Animated.View>
   );
 }
