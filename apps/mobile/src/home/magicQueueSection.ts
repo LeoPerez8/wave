@@ -7,7 +7,6 @@ import { currentLocalisation } from "@/localisation/localisation";
  */
 import {
   magicQueueMixPicks,
-  magicQueuePopularitySteps,
   magicQueueRow,
   magicQueueSeedId,
   magicQueueShown,
@@ -15,7 +14,6 @@ import {
   type DiscoverMixesSection,
   type MagicQueueMixPicks,
   type MagicQueueSeed,
-  type MagicQueueSeedId,
   type MagicQueueShown as CoreMagicQueueShown,
   type YtAlbumSong,
 } from "@wave/core";
@@ -25,7 +23,6 @@ import { useMemo, useState } from "react";
 import { freeTurnEffect } from "@/lib/backgroundWork";
 import { discoverLevel, discoverSliders } from "@/lib/discoverSettings";
 import { recommendationTurnEffect } from "@/lib/recommendationWork";
-import { runSteps } from "@/lib/stepped";
 import { currentDislikedSongs, useDislikedSongs } from "@/library/dislikes";
 import { onLibraryChange } from "@/library/libraryChanges";
 import { LibraryStore } from "@/library/LibraryStore";
@@ -37,6 +34,7 @@ import { runMagicQueueStart, startMagicQueueFromStream } from "@/playback/magicQ
 import { appRuntime } from "@/library/runtime";
 
 import { magicQueuePagesRead, type MagicQueuePagesPlan } from "./magicQueuePagesRead";
+import { magicQueuePopularity } from "./magicQueuePopularity";
 import { createPlaylistSeedIdsRead, readPlaylistSeedIds } from "./playlistSeedIds";
 import { recommendationSnapshot } from "./recommendationSnapshot";
 import { startFromLibraryMatch } from "./streamedMagicQueueStart";
@@ -64,29 +62,12 @@ const videoIdsOf = (songs: readonly YtAlbumSong[]): string[] => songs.map((song)
 /** A seed of the row: a Library song, or a playlist's YT Music entry. */
 type Seed = MagicQueueSeed<PlayableSongRow>;
 
-/** The lookup each catalog read gave, so a redraw doesn't walk the catalog again. */
-const popularities = new WeakMap<object, (id: MagicQueueSeedId) => number>();
-
-const deepCuts = (): number => 0;
-
-/**
- * How much of a hit each song of the pool is (Core's
- * `magicQueuePopularitySteps`), from the recommendation snapshot's catalog
- * and Library, which the phone keeps; every song a deep cut when they can't
- * be read.
- */
-const popularity = Effect.gen(function* () {
-  const library = yield* recommendationSnapshot.library;
-  const catalog = yield* recommendationSnapshot.catalog;
-  const known = popularities.get(catalog);
-  if (known !== undefined) return known;
-  const lookup = yield* runSteps(
-    magicQueuePopularitySteps(catalog, library.known.inLibrary),
-    recommendationTurnEffect,
-  );
-  popularities.set(catalog, lookup);
-  return lookup;
-}).pipe(Effect.orElseSucceed(() => deepCuts));
+/** How much of a hit each song of the pool is, kept per snapshot Library and catalog. */
+const popularity = magicQueuePopularity({
+  library: recommendationSnapshot.library,
+  catalog: recommendationSnapshot.catalog,
+  between: recommendationTurnEffect,
+});
 
 /** What each draw reads beside the store, Discover's levels as they are at that draw. */
 const sources = {

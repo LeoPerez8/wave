@@ -96,8 +96,8 @@ const layoutBeside = ({ capHeight, height, baseline }: TitleLine): TitleMarkLayo
 
 /**
  * The waves beside a title set in Inter at `fontSize`, from the font's own
- * metrics: as tall as its capitals and resting on its baseline, so they read
- * as the word's first letter. Right where the phone draws the type at that
+ * metrics: 60% of its capitals' height and resting on its baseline, so they
+ * read as part of the word. Right where the phone draws the type at that
  * size, as it does at the standard font scale.
  */
 export const titleMarkLayout = ({ fontSize, lineHeight }: TitleMarkType): TitleMarkLayout => {

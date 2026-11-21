@@ -101,7 +101,10 @@ const builds = await reactCompilerBuilds<Section>(
     ),
     "@/lib/backgroundWork": stubModule(`export const freeTurnEffect = undefined;`),
     "@/lib/recommendationWork": stubModule(`export const recommendationTurnEffect = undefined;`),
-    "@/lib/stepped": unused("runSteps"),
+    "./magicQueuePopularity": stubModule(
+      `import * as Effect from ${effect};
+       export const magicQueuePopularity = () => Effect.die("unused");`,
+    ),
     "@/lib/discoverSettings": stubModule(
       `export const discoverLevel = { get: () => 3 };
        export const discoverSliders = { get: () => ({ faithfulness: 3, popularity: 3 }) };`,
