@@ -9,6 +9,9 @@ export type LocalHomeSectionId =
   | "most-played-albums"
   | "most-played-artists"
   | "favorites";
+/** The shelves whose See all opens their own page (`home.seeAll`). */
+export const HOME_SEE_ALL_SECTIONS = ["recently-added", "recently-played"] as const;
+export type HomeSeeAllSection = (typeof HOME_SEE_ALL_SECTIONS)[number];
 export interface HomeRow extends BrowseRow {
   readonly playCount?: number;
 }

@@ -5,7 +5,7 @@ import { songRowMark } from "../../shared/songState.ts";
 import { Icon } from "./Icon.tsx";
 import { itemMenuEvents } from "./Menu.tsx";
 import { markClass, SongMark, useSongStates } from "./SongMark.tsx";
-import { labels, albumName, artistName } from "./text.ts";
+import { labels, albumName, artistName, text } from "./text.ts";
 import { Artwork, time } from "./VirtualTable.tsx";
 
 /**
@@ -123,6 +123,7 @@ export function Shelf({
   nested = false,
   onOpen,
   onMenu,
+  onSeeAll,
 }: {
   readonly title: string;
   readonly items: readonly TileItem[];
@@ -131,6 +132,8 @@ export function Shelf({
   readonly nested?: boolean;
   readonly onOpen: (index: number) => void;
   readonly onMenu?: (index: number, at: { readonly x: number; readonly y: number }) => void;
+  /** Its heading's See all, opening the whole list (Home's shelves). */
+  readonly onSeeAll?: () => void;
 }) {
   const states = useSongStates(items.flatMap((item) => (item.song ? [item.song.id] : [])));
   if (items.length === 0) return null;
@@ -140,7 +143,14 @@ export function Shelf({
   );
   return (
     <section className="shelf" aria-label={title}>
-      <Heading>{title}</Heading>
+      {onSeeAll ? (
+        <div className="stats-section-heading">
+          <Heading>{title}</Heading>
+          <button onClick={onSeeAll}>{text.home.seeAll}</button>
+        </div>
+      ) : (
+        <Heading>{title}</Heading>
+      )}
       <div className="shelf-row" role="list">
         {items.map((item, index) => (
           <div key={item.key} role="listitem">

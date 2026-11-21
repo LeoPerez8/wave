@@ -4,14 +4,17 @@ import {
   statsFacts,
   tableSelectionOf,
   type RecapPeriod,
+  type TableSelection,
 } from "@wave/core";
 import { useEffect, useMemo, useState } from "react";
 import type { BrowseRow, BrowseScope } from "../../shared/browse.ts";
-import type { HomeSectionView, HomeView } from "../../shared/home.ts";
+import type { HomeRow, HomeSectionView, HomeView } from "../../shared/home.ts";
+import type { StatsRoute } from "../../shared/stats.ts";
 import type { CollectionTarget } from "../../shared/collectionActions.ts";
 import type { MenuPoint } from "./Menu.tsx";
 import { HomeDiscover } from "./HomeDiscover.tsx";
 import { HomeEditButton } from "./HomeEditor.tsx";
+import type { HomeSeeAllRoute } from "./HomeSeeAll.tsx";
 import { HomeNewReleases, HomeUpcomingShows, useHomeFollow } from "./HomeFollow.tsx";
 import { recapColour } from "./RecapViewer.tsx";
 import { Shelf } from "./YtLists.tsx";
@@ -19,21 +22,37 @@ import type { YtRoute } from "./YtPages.tsx";
 import { VirtualTable } from "./VirtualTable.tsx";
 import { openTableSongMenu, SelectionBar, type SongSelectionControls } from "./SongActions.tsx";
 import { text, labels, tagTitle, artistName, language } from "./text.ts";
+import { useKeptScroll } from "./useKeptScroll.ts";
 import "./home.css";
 
 const SONGS: BrowseScope = { kind: "songs" };
+
+/** A streamed song has no Library id: its row takes a negative one of its own, out of selections. */
+const rowsOf = (section: HomeSectionView) =>
+  section.rows.items.map((row, index) =>
+    row.videoId === undefined ? row : { ...row, id: -(index + 1) },
+  );
+/** Most played lists at most this many songs: their negative ids, unchecked under Select All. */
+const STREAMED_IDS = Array.from({ length: 10 }, (_, index) => -(index + 1));
+/** Song actions take Library songs: a streamed row never stays checked. */
+const librarySongs = (selection: TableSelection): TableSelection => {
+  const ids = [...selection.ids].filter((id) => id > 0);
+  return { ...selection, ids: new Set(selection.all ? [...ids, ...STREAMED_IDS] : ids) };
+};
 
 function MostPlayed({
   section,
   onPlay,
   onError,
   controls,
+  onStreamedMenu,
   revision,
 }: {
   readonly section: HomeSectionView;
   readonly onPlay: (index: number) => void;
   readonly onError: () => void;
   readonly controls: SongSelectionControls;
+  readonly onStreamedMenu: (row: BrowseRow, at: MenuPoint) => void;
   readonly revision: number;
 }) {
   // The current language's text, so the labels follow a change of language.
@@ -42,18 +61,19 @@ function MostPlayed({
     () => ({
       id: "home-most-played",
       label: strings.home.sections["most-played"],
-      page: section.rows,
-      trailing: (row: BrowseRow) =>
-        strings.stats.plays(section.rows.items.find((r) => r.id === row.id)?.playCount ?? 0),
+      page: { ...section.rows, items: rowsOf(section) },
+      trailing: (row: BrowseRow) => strings.stats.plays((row as HomeRow).playCount ?? 0),
       trailingHeading: strings.stats.facts.plays,
     }),
     [section, strings],
   );
   const selectAll = () =>
     tableSelectionOf(
-      section.rows.items.map((row) => row.id),
+      section.rows.items.flatMap((row) => (row.videoId === undefined ? [row.id] : [])),
       controls.selection?.checkboxes,
     );
+  const select = (selection: TableSelection | undefined) =>
+    controls.onSelection?.(selection && librarySongs(selection));
   return (
     <>
       {controls.selection && (
@@ -72,11 +92,16 @@ function MostPlayed({
           scope={SONGS}
           revision={0}
           preview={preview}
-          onOpen={(_, index) => onPlay(index)}
+          onOpen={(row, index) => {
+            if (row.videoId === undefined || !row.unavailable) onPlay(index);
+          }}
           onError={onError}
-          onMenu={(row, at) => openTableSongMenu(controls, SONGS, row, at)}
+          onMenu={(row, at) => {
+            if (row.videoId === undefined) openTableSongMenu(controls, SONGS, row, at);
+            else if (!row.unavailable) onStreamedMenu(row, at);
+          }}
           selection={controls.selection}
-          onSelection={controls.onSelection}
+          onSelection={select}
           selectAll={selectAll}
         />
       </div>
@@ -98,8 +123,12 @@ export function Home({
   selectionFor,
   notify,
   onCollectionMenu,
+  onStreamedMenu,
+  entry,
 }: {
   readonly revision: number;
+  /** The history entry showing Home: Back to it returns to where Home was scrolled. */
+  readonly entry: object;
   /** Opens a Recap's stories. */
   readonly onRecap: (period: RecapPeriod) => void;
   /** Changes when a Recap was opened: its card leaves Home. */
@@ -107,14 +136,17 @@ export function Home({
   readonly ytMusic: boolean;
   readonly notify: (message: string) => void;
   readonly run: (action: Promise<unknown>) => void;
-  readonly go: (scope: BrowseScope | YtRoute) => void;
+  readonly go: (scope: BrowseScope | YtRoute | StatsRoute | HomeSeeAllRoute) => void;
   readonly onStats: () => void;
   readonly onError: () => void;
   readonly onMenu: (row: BrowseRow, at: { readonly x: number; readonly y: number }) => void;
   readonly selectionFor: (owner: string) => SongSelectionControls;
   readonly onCollectionMenu: (target: CollectionTarget, title: string, at: MenuPoint) => void;
+  /** A streamed Most played song's menu. */
+  readonly onStreamedMenu: (row: BrowseRow, at: MenuPoint) => void;
 }) {
   const [view, setView] = useState<HomeView>();
+  const page = useKeptScroll<HTMLDivElement>(entry, view !== undefined);
   const [readFailed, setReadFailed] = useState(false);
   const [attempt, setAttempt] = useState(0);
   const follow = useHomeFollow(revision);
@@ -142,8 +174,16 @@ export function Home({
     else if (section.id === "favorites" || section.id === "most-played")
       run(window.wave.home.play(section.id, index));
   };
+  /** Each shelf's See all: the phone's page for it, or the desktop's own table. */
+  const seeAll = (id: HomeSectionView["id"]) => {
+    if (id === "most-played-albums" || id === "most-played-artists")
+      go({ kind: "stats", period: "all", ranking: id === "most-played-albums" ? "albums" : "artists" });
+    else if (id === "favorites") go({ kind: "favorites" });
+    else if (id === "recently-added" || id === "recently-played")
+      go({ kind: "homeSeeAll", section: id });
+  };
   return (
-    <div className="home-page" data-testid="home">
+    <div ref={page} className="home-page" data-testid="home">
       <HomeEditButton
         revision={revision}
         onChanged={() => setAttempt((value) => value + 1)}
@@ -208,6 +248,7 @@ export function Home({
                       onPlay={(index) => open(section, index)}
                       onError={onError}
                       controls={selectionFor("home-most-played")}
+                      onStreamedMenu={onStreamedMenu}
                       revision={revision}
                     />
                   </section>
@@ -238,6 +279,7 @@ export function Home({
                       ...(section.kind === "song" ? { song: row } : {}),
                     }))}
                     onOpen={(index) => open(section, index)}
+                    onSeeAll={() => seeAll(section.id)}
                     onMenu={(index, at) => {
                       const row = section.rows.items[index]!;
                       if (section.kind === "song") onMenu(row, at);
