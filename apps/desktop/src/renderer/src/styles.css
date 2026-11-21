@@ -924,6 +924,11 @@ h2 {
     inset: 0;
     cursor: text;
   }
+  /* Recognize sits beside Search's icon, above the invisible field, so a click reaches it. */
+  .sidebar > .search-field .search-recognize {
+    position: relative;
+    z-index: 1;
+  }
   /* Ctrl+F opens the field in the title bar, after Back and Forward, over no page title. */
   .sidebar > .search-field:focus-within {
     position: fixed;
