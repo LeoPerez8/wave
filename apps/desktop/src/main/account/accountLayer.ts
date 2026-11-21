@@ -9,6 +9,7 @@ import {
   LANGUAGE_PREFERENCE,
   type LanguageChoice,
   type SyncClock,
+  type ThemeEdit,
 } from "@wave/core";
 import * as Context from "effect/Context";
 import * as Effect from "effect/Effect";
@@ -23,12 +24,15 @@ import { createDesktopSync, syncedPreference } from "../sync/desktopSync.ts";
 import type { WaveAccountService } from "./account.ts";
 import type { LanguageView } from "../../shared/language.ts";
 import { readDesktopLanguage, saveDesktopLanguage } from "../language.ts";
+import { editDesktopTheme, THEME_PREFERENCE } from "../theme.ts";
 import { geniusInsightsEnabled } from "../library/lyricsAndTags.ts";
 import { createDesktopGenius, type DesktopGenius } from "../lyrics/genius.ts";
 
 export interface AccountShape {
   readonly language: () => LanguageView;
   readonly setLanguage: (choice: LanguageChoice) => void;
+  /** Makes [edit] to the account's theme and gives it as it is kept then. */
+  readonly editTheme: (edit: ThemeEdit) => string;
   /** A synced setting was saved and stamped here: it goes up without waiting for the timed sync. */
   readonly settingsEdited: () => void;
   readonly view: () => AccountView;
@@ -57,6 +61,8 @@ export const accountLayer = (options: {
   readonly clock?: SyncClock;
   readonly preferredLanguages?: () => readonly string[];
   readonly languageChanged?: (view: LanguageView) => void;
+  /** The account's theme changed, here or in a pull: its stored value. */
+  readonly themeChanged?: (stored: string | null) => void;
   readonly fetch?: typeof globalThis.fetch;
 }) =>
   Layer.effect(
@@ -94,6 +100,8 @@ export const accountLayer = (options: {
         // change in Settings › Playback does.
         preferencesPulled: (keys) => {
           if (keys.includes(LANGUAGE_PREFERENCE)) languageChanged();
+          if (keys.includes(THEME_PREFERENCE))
+            options.themeChanged?.(syncedPreference(db, THEME_PREFERENCE));
           if (keys.includes(GENIUS_INSIGHTS_SETTING) && !geniusInsightsEnabled(db)) genius.cancel();
           if (changesPlaybackSettings(keys))
             playback
@@ -143,6 +151,12 @@ export const accountLayer = (options: {
           languageChanged();
           sync.edited({ songs: false });
         },
+        editTheme: (edit) => {
+          const stored = editDesktopTheme(db, edit);
+          options.themeChanged?.(stored);
+          sync.edited({ songs: false });
+          return stored;
+        },
         settingsEdited: () => {
           if (!geniusInsightsEnabled(db)) genius.cancel();
           sync.edited({ songs: false });
@@ -159,7 +173,7 @@ export const accountLayer = (options: {
               account.session().status === "signedOut" &&
               preference(db, INVITATION) === undefined,
             revision: sync.revision(),
-            theme: syncedPreference(db, "settings.theme"),
+            theme: syncedPreference(db, THEME_PREFERENCE),
             geniusInsights: geniusInsightsEnabled(db),
           };
         },

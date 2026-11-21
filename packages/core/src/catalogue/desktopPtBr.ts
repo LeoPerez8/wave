@@ -21,6 +21,10 @@ export const desktopPtBr = {
       missing: (n: number) =>
         `${formatNumber("pt-BR", n)} ${plural("pt-BR", n, { one: "música não está", other: "músicas não estão" })} neste computador`,
     },
+    cardsGroupsSeparatorsAndTextFollowThe:
+      "Cartões, grupos, separadores e texto seguem o fundo escolhido para cada modo. A cor primária aparece no progresso, nos controles e no que está ativo; a secundária marca favoritas e a reprodução atual. Padrão usa branco no modo escuro e a cor do texto no claro. A última amostra aceita qualquer cor. Salvar guarda até quatro cores na linha; o botão ao lado de uma cor salva a remove. Cores sem contraste suficiente são ajustadas.",
+    fourColoursAreSavedToSaveThis:
+      "Já há quatro cores salvas. Para salvar esta, remova antes uma cor salva.",
     waveAccountNote:
       "Opcional. Com a sessão iniciada, sua lista de músicas, playlists, favoritas, histórico " +
       "de ouvidas e preferências vão para o servidor do Wave, e seus celulares e este " +

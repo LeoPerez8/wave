@@ -24,6 +24,11 @@ export const desktopEn = {
       missing: (n: number) =>
         `${formatNumber("en", n)} ${plural("en", n, { one: "song isn't", other: "songs aren't" })} on this computer`,
     },
+    // The desktop removes a saved colour with its own button and has no app icon to recolour.
+    cardsGroupsSeparatorsAndTextFollowThe:
+      "Cards, groups, separators and text follow the background you choose for each mode. Primary colours progress, toggles and what's active; secondary marks favorites and what's playing. Default is white in dark mode and the text colour in light. The last swatch of each takes any colour, and Save in its picker keeps up to four colours in the row; the button beside a saved colour removes it. A colour that wouldn't read on your background is deepened or brightened until it does.",
+    fourColoursAreSavedToSaveThis:
+      "Four colours are saved. To save this one, remove a saved colour first.",
     waveAccountNote:
       "Optional. Signed in, your song list, playlists, favorites, play history and preferences " +
       "go up to Wave's server, so your phones and this computer share them. Audio and file " +

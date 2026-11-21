@@ -605,6 +605,8 @@ export type {
   ThemeSwatchOption,
   ThemeSwatchRow,
 } from "./themeChoice.ts";
+export { editThemeChoice, readThemeEdit } from "./themeEdit.ts";
+export type { ThemeEdit } from "./themeEdit.ts";
 export {
   LAUNCHER_ICONS,
   LAUNCHER_ICON_ART,
