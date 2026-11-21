@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { execFileSync, spawnSync } from "node:child_process";
-import { mkdtempSync, writeFileSync } from "node:fs";
+import { mkdtempSync, readFileSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { describe, it } from "node:test";
@@ -306,5 +306,62 @@ describe("patch-notes.ts as a command", () => {
       }),
       "## New\n\n- [PR 91](https://github.com/LeoPerez8/wave/pull/91)\n\n## Fixes\n\n- [PR 90](https://github.com/LeoPerez8/wave/pull/90)\n",
     );
+  });
+});
+
+describe("patch-notes.sh for the desktop", () => {
+  const shell = fileURLToPath(new URL("./patch-notes.sh", import.meta.url));
+  const firstNotes = fileURLToPath(
+    new URL("../../docs/desktop-first-release-notes.md", import.meta.url),
+  );
+  /** A repo with a tagged ti release and one commit after it, and a `gh` that finds no PR. */
+  const notes = (desktopSince: string) => {
+    const dir = mkdtempSync(join(tmpdir(), "wave-patch-notes-"));
+    const git = (...args: string[]) => execFileSync("git", ["-C", dir, ...args], { encoding: "utf8" });
+    git("init", "-q");
+    for (const name of ["one", "two"]) {
+      writeFileSync(join(dir, `${name}.txt`), `${name}\n`);
+      git("add", `${name}.txt`);
+      git("-c", "user.name=ci", "-c", "user.email=ci@localhost", "commit", "-q", "-m", name);
+      if (name === "one") git("tag", "v1.0.0-ti");
+    }
+    const bin = join(dir, "bin");
+    execFileSync("mkdir", ["-p", bin]);
+    writeFileSync(join(bin, "gh"), "#!/bin/sh\nexit 0\n", { mode: 0o755 });
+    const [localized, release] = [join(dir, "desktop.json"), join(dir, "desktop.md")];
+    const result = spawnSync("bash", [shell], {
+      cwd: dir,
+      encoding: "utf8",
+      env: {
+        ...process.env,
+        PATH: `${bin}:${process.env.PATH}`,
+        GITHUB_REPOSITORY: "o/r",
+        IS_TI: "true",
+        DESKTOP_NOTES_FILE: localized,
+        DESKTOP_RELEASE_NOTES_FILE: release,
+        DESKTOP_NOTES_SINCE: desktopSince,
+      },
+    });
+    const read = (path: string) => {
+      try {
+        return readFileSync(path, "utf8");
+      } catch {
+        return "";
+      }
+    };
+    return { ...result, localized: read(localized), release: read(release) };
+  };
+
+  it("gives the desktop's first release the hand-written notes, as the phone's first has", () => {
+    const { status, stderr, localized, release } = notes("none");
+    assert.equal(status, 0, stderr);
+    assert.equal(release, readFileSync(firstNotes, "utf8"));
+    assert.equal(localized, "");
+  });
+
+  it("counts from the channel's previous tag when the desktop's own release is unknown", () => {
+    const { status, stderr, release } = notes("");
+    assert.equal(status, 0, stderr);
+    assert.notEqual(release, readFileSync(firstNotes, "utf8"));
   });
 });

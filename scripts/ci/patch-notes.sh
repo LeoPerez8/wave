@@ -11,7 +11,8 @@
 # release's notes in each language there, as localized-notes.ts prints them),
 # DESKTOP_NOTES_FILE and DESKTOP_RELEASE_NOTES_FILE (optional: the desktop's notes there, in each
 # language as JSON and in Markdown for its GitHub Release), DESKTOP_NOTES_SINCE (optional: the
-# desktop's own previous release, which its notes count from instead).
+# desktop's own previous release, which its notes count from instead, or `none` when it never
+# released on the channel: its notes are then the hand-written docs/desktop-first-release-notes.md).
 set -euo pipefail
 
 here="$(dirname "$0")"
@@ -47,9 +48,18 @@ if [ -n "${LOCALIZED_NOTES_FILE:-}" ]; then
     echo "::warning::Couldn't build the notes in each language; the release goes without them." >&2
 fi
 
-if [ -n "${DESKTOP_NOTES_FILE:-}" ] || [ -n "${DESKTOP_RELEASE_NOTES_FILE:-}" ]; then
+if [ "${DESKTOP_NOTES_SINCE:-}" = none ]; then
+  # The desktop's first release on the channel: hand-written notes, as the phone's first has, and
+  # none in each language.
+  echo "The desktop never released on this channel, so its notes are its first release's." >&2
+  if [ -n "${DESKTOP_NOTES_FILE:-}" ]; then : > "$DESKTOP_NOTES_FILE"; fi
+  if [ -n "${DESKTOP_RELEASE_NOTES_FILE:-}" ]; then
+    cp "$here/../../docs/desktop-first-release-notes.md" "$DESKTOP_RELEASE_NOTES_FILE"
+  fi
+elif [ -n "${DESKTOP_NOTES_FILE:-}" ] || [ -n "${DESKTOP_RELEASE_NOTES_FILE:-}" ]; then
   # The desktop's notes count from its own previous release when it has one: a version only the
-  # phone released, or whose desktop never published, is no desktop release.
+  # phone released, or whose desktop never published, is no desktop release. Unknown (no list of
+  # releases), they count from the channel's previous tag.
   desktop_since="${DESKTOP_NOTES_SINCE:-$since}"
   if ! [[ "$desktop_since" =~ ^v[0-9]+\.[0-9]+\.[0-9]+(-ti)?$ ]] \
     || ! git rev-parse -q --verify "refs/tags/$desktop_since^{commit}" > /dev/null; then
