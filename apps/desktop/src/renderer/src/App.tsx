@@ -172,7 +172,10 @@ export function App() {
   const [account, setAccount] = useState<AccountView>();
   const [ytAccount, setYtAccount] = useState<YtAccountPanel>();
   const theme = account?.theme;
-  const [count, setCount] = useState(0);
+  const [counts, setCounts] = useState<{ songs: number; favorites: number }>({
+    songs: 0,
+    favorites: 0,
+  });
   const [error, setError] = useState<string>();
   const [query, setQuery] = useState("");
   const [setting, setSetting] = useState<(typeof settings)[number]>("library");
@@ -318,7 +321,12 @@ export function App() {
             JSON.stringify(previous) === JSON.stringify(next) ? previous : next,
           );
           const counts = await window.wave.library.counts();
-          if (current) setCount(counts.songs);
+          if (current)
+            setCounts((previous) =>
+              previous.songs === counts.songs && previous.favorites === counts.favorites
+                ? previous
+                : { songs: counts.songs, favorites: counts.favorites },
+            );
           // A sync may have pulled the account's language.
           const spoken = await window.wave.settings.language();
           if (current) applyLanguage(spoken);
@@ -1062,10 +1070,23 @@ export function App() {
           route.kind === "discoverMix" ? null : (
           <div className="page-heading">
             <h1>{title}</h1>
-            {(route.kind === "home" || route.kind === "songs") && (
+            {(route.kind === "home" || route.kind === "songs" || route.kind === "favorites") && (
               <p className="secondary" data-testid="song-count">
-                {labels.songCount(count)}
+                {labels.songCount(route.kind === "favorites" ? counts.favorites : counts.songs)}
               </p>
+            )}
+            {/* Main plays the list as its table is sorted (browseTrackIds). */}
+            {(route.kind === "songs" || route.kind === "favorites") && counts[route.kind] > 0 && (
+              <div className="hero-actions">
+                <button onClick={() => playList(false)}>
+                  <Icon name="play" size={16} />
+                  {labels.play}
+                </button>
+                <button onClick={() => playList(true)} {...shuffleMenu}>
+                  <Icon name="shuffle" size={16} />
+                  {labels.shuffle}
+                </button>
+              </div>
             )}
             {route.kind === "playlists" && (
               <div className="hero-actions">
@@ -1458,6 +1479,15 @@ export function App() {
                 revision={revision}
                 onHero={setHero}
                 onSort={setShownSort}
+                // A playlist's rows drag to a new place only where it shows its own order.
+                onPlace={
+                  !picks &&
+                  scope.kind === "playlist" &&
+                  scope.id !== undefined &&
+                  shownSort?.key === "custom"
+                    ? (target, before) => playlistEdits.place(scope.id!, target, before)
+                    : undefined
+                }
                 onOpen={open}
                 onError={failed}
                 selection={collectionKind ? picks?.[collectionKind] : table.selection}
