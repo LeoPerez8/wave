@@ -16,7 +16,6 @@ import * as Effect from "effect/Effect";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 import { useAlbums, useArtists, useLoadedArtists } from "@/library/hooks";
-import { LibraryStore } from "@/library/LibraryStore";
 import { type AlbumRow, type ArtistRow, type SongRow } from "@wave/client";
 import { useSettledOnce } from "@/lib/screenTiming";
 import { online } from "@/native/waveNative";
@@ -24,7 +23,11 @@ import type { NativeYtSong } from "@/native/waveYtMusic";
 
 import { useArtistPageOpening } from "./artistPageOpening";
 import { artistOpeningRequest } from "@wave/client/ytArtistFetch";
-import { fetchArtist, readArtist, useSavedYtArtist } from "./artistSection";
+import {
+  fetchArtist,
+  readArtist,
+  readSaved,
+  saveYtArtistAnswer, useSavedYtArtist } from "./artistSection";
 import { YtMusicError } from "./YtMusic";
 import { useLoadedLibraryFinder, type FindInLibrary } from "./libraryFinder";
 
@@ -43,11 +46,10 @@ const savedKey = (browseId: string): string => `yt:${browseId}`;
  */
 const fetchPage = (browseId: string) =>
   Effect.gen(function* () {
-    const store = yield* LibraryStore;
     const page = yield* readArtist(browseId);
     const answer: Saved = { outcome: "found", checkedAt: Date.now(), browseId, page };
     // Not saved, it's still shown; the next opening asks again.
-    yield* store.saveYtArtist(savedKey(browseId), answer).pipe(Effect.ignore);
+    yield* saveYtArtistAnswer(savedKey(browseId), answer).pipe(Effect.ignore);
     return answer;
   });
 
@@ -61,11 +63,8 @@ const nowhere = (): null => null;
  */
 export const ytArtistPageSongs = (browseId: string, find: FindInLibrary) =>
   Effect.gen(function* () {
-    const store = yield* LibraryStore;
     const now = Date.now();
-    const saved = yield* store
-      .ytArtist(savedKey(browseId))
-      .pipe(Effect.orElseSucceed((): Saved | null => null));
+    const saved = yield* readSaved(savedKey(browseId));
     const context = { enabled: true, now };
     const answer = ytArtistSavedStands(saved, now) ? saved : yield* fetchPage(browseId);
     return ytArtistPageView(
