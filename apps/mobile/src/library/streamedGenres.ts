@@ -39,7 +39,7 @@ export const startStreamedGenres = (): (() => void) => {
         await fillStreamedGenres({
           enabled,
           failed: (_videoId, cause) => logLookupFailure("Streamed genre lookup", "Deezer", cause),
-          turn: freeTurn,
+          turn: () => freeTurn("streamed genres"),
           page: (after) => appRuntime.runPromise(store.pendingStreamedGenres(after)),
           lookup: async (videoId) => {
             const songs = await appRuntime.runPromise(store.streamedSongsByIds([videoId]));

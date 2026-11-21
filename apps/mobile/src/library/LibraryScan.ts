@@ -17,7 +17,7 @@ import { refreshDownloadPolicy } from "./downloadPolicy";
 import { finishFileDeletions } from "./fileDeletions";
 import * as Stream from "effect/Stream";
 
-import { runSteps } from "@/lib/stepped";
+import { namedWork, runSteps } from "@/lib/stepped";
 import {
   readScanIndex,
   saveScanBatch,
@@ -417,7 +417,7 @@ const scanFolders = (roots: readonly string[]) =>
     }
     scanState.set({ status: "done", filesFound: completed.filesFound });
     publishScanFinished();
-  });
+  }).pipe(namedWork("scan"));
 
 /** Scans every scan root: in full the first time, incrementally afterwards. */
 export const runRescan = Effect.gen(function* () {

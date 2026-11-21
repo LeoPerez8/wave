@@ -1097,3 +1097,59 @@ export const OWN_PRESS: Record<string, Exception> = {
     reason: "Developer Design preview's light and dark switch.",
   },
 };
+
+/**
+ * #1350: background work takes its turns from the one scheduler (`lib/backgroundWork.ts`, with
+ * `lib/stepped.ts`'s slices and `lib/recommendationWork.ts`'s frame-paced turns over it), which
+ * keeps slices within 8 ms and holds them while a tap's transition runs. These modules defer work
+ * on their own, by file, and say why that isn't background work or why it can't move yet.
+ */
+export const OWN_DEFERRALS: Record<string, { readonly reason: string }> = {
+  "lib/recommendationWork.ts": {
+    reason:
+      "The recommendation scheduler's own frame request: with Wave in the background, Android stops frames, so a zero timer stands in for the next one.",
+  },
+  "library/artistLookup.ts": {
+    reason:
+      "A tapped artist link's or menu's own lookup: the owner waits for it, so it yields between pages without queuing behind background work.",
+  },
+  "library/listeningHistoryReads.ts": {
+    reason:
+      "An open list revalidating its pages after a Library edit: the screen's own read, which yields between pages for the owner's touches.",
+  },
+  "nowPlaying/SleepTimer.tsx": {
+    reason: "The sleep timer card's label clock: a UI timer reading the time, not work.",
+  },
+  "ytmusic/listDownloadProgressStore.ts": {
+    reason:
+      "Coalesces a list's download progress into one update per microtask for its rows: UI state, no work of its own.",
+  },
+  "@wave/client/db/matchingSong.ts": {
+    reason:
+      "The one-time recording-title backfill the Library store starts; its turn moves to the scheduler with the store's asynchronous reads (#1348), which own that file's caller.",
+  },
+};
+
+/**
+ * The background jobs the ticket names (#1350), each of which must take its turns from the
+ * scheduler: these modules import it, or are handed its turns by a caller that does.
+ */
+export const BACKGROUND_JOBS: Record<string, { readonly turns: string }> = {
+  "playback/MagicQueue.ts": { turns: "lib/backgroundWork" },
+  "playback/magicQueueRadio.ts": { turns: "lib/backgroundWork" },
+  "library/LibraryScan.ts": { turns: "lib/backgroundWork" },
+  "library/runtime.ts": { turns: "lib/backgroundWork" },
+  "sync/waveSyncLive.ts": { turns: "lib/backgroundWork" },
+  "home/communityPlaylists.ts": { turns: "lib/backgroundWork" },
+  "home/followReleases.ts": { turns: "lib/backgroundWork" },
+  "home/playNewReleases.ts": { turns: "lib/backgroundWork" },
+  "home/magicQueueSection.ts": { turns: "lib/backgroundWork" },
+  "home/discoverMixes.ts": { turns: "lib/recommendationWork" },
+  "home/recommendationSnapshot.ts": { turns: "lib/recommendationWork" },
+  "playback/TasteProfile.ts": { turns: "lib/recommendationWork" },
+  "updates/appUpdates.ts": { turns: "lib/backgroundWork" },
+  "search/searchIndex.ts": { turns: "lib/backgroundWork" },
+  "library/ytLibraryImport.ts": { turns: "lib/backgroundWork" },
+  "library/playlistImports.ts": { turns: "lib/backgroundWork" },
+  "library/lyricsSearchIndex.ts": { turns: "lib/backgroundWork" },
+};

@@ -25,7 +25,10 @@ const noteCandidates = (page: CatalogPage): Effect.Effect<void, never, LibrarySt
     if (page.songs.length === 0) return;
     const store = yield* LibraryStore;
     const at = Date.now();
-    whenFree(() => Effect.runFork(store.addCandidates(page, at).pipe(Effect.ignore)));
+    whenFree(
+      () => Effect.runFork(store.addCandidates(page, at).pipe(Effect.ignore)),
+      "candidate catalog",
+    );
   });
 
 /**
