@@ -89,6 +89,24 @@ const searchAll = (
     ),
   );
 
+/** Add Songs has no category picker: after the shared section settles, ask only Songs. */
+const searchSongsOnly = (query: string, step: (event: YtSectionStep) => void) =>
+  askYtMusic((ytMusic) =>
+    inTurn(true, query, ytMusic.searchSongs(query)).pipe(
+      Effect.map((found) => {
+        step({
+          type: "found",
+          query,
+          songs: found.songs,
+          artists: [],
+          albums: [],
+          videos: undefined,
+        });
+        return { playlists: [] as readonly YtCommunityPlaylist[] };
+      }),
+    ),
+  );
+
 /**
  * What a search embedded in another flow asks YT Music for, in place of the
  * Search tab's. It asks only while the phone is online (offline, the
@@ -136,6 +154,7 @@ export const useYtMusicSection = (
   const preferred = useSearchOnlineAlways(query === "");
   const always = scope === undefined ? preferred : true;
   const songless = scope !== undefined;
+  const searchKind = songless ? "artistsAlbums" : "all";
   const [section, dispatch] = useReducer(stepYtSection<NativeYtSong>, YT_SECTION_HIDDEN);
 
   // Choosing Always asks for what's typed now; On demand leaves what shows until the field is cleared.
@@ -149,12 +168,12 @@ export const useYtMusicSection = (
   // A query answered this session shows its answer before the frame is drawn, with no request.
   useLayoutEffect(() => {
     if (loading === null) return;
-    const kept = keptYtSearch(loading, songless);
+    const kept = keptYtSearch(loading, searchKind);
     if (kept === undefined) return;
     dispatch({ type: "found", query: loading, ...kept });
-  }, [loading, songless]);
+  }, [loading, searchKind]);
   useEffect(() => {
-    if (loading === null || keptYtSearch(loading, songless) !== undefined) return undefined;
+    if (loading === null || keptYtSearch(loading, searchKind) !== undefined) return undefined;
     const timer = setTimeout(() => {
       let found: Extract<YtSectionStep, { type: "found" }> | null = null;
       const step = (event: YtSectionStep) => {
@@ -167,7 +186,7 @@ export const useYtMusicSection = (
         if (Result.isSuccess(result)) {
           if (found !== null) {
             const { songs, artists, albums, videos } = found;
-            keepYtSearch(loading, songless, {
+            keepYtSearch(loading, searchKind, {
               songs,
               artists,
               albums,
@@ -183,8 +202,64 @@ export const useYtMusicSection = (
       });
     }, delayMs);
     return () => clearTimeout(timer);
-  }, [loading, delayMs, always, songless]);
+  }, [loading, delayMs, always, songless, searchKind]);
 
   const pick = useCallback((picked: YtPick) => dispatch({ type: "picked", pick: picked }), []);
   return [section, pick] as const;
+};
+
+/**
+ * Add Songs' song-only online search. Shares the Search section's settling,
+ * connectivity, answer retention and stale-query rules without asking its
+ * artist, album, video or community-playlist endpoints.
+ */
+export const useYtMusicSongsSection = (
+  query: string,
+): YtSection<NativeYtSong> => {
+  const on = useYtMusicEnabled();
+  const isOnline = useSyncExternalStore(subscribeConnectivity, online);
+  const enabled = on && isOnline;
+  const [section, dispatch] = useReducer(stepYtSection<NativeYtSong>, YT_SECTION_HIDDEN);
+
+  useEffect(
+    () => dispatch({ type: "typed", query, enabled, libraryHasResults: false, always: true }),
+    [query, enabled],
+  );
+
+  const loading = section.status === "loading" ? section.query : null;
+  const delayMs = section.status === "loading" ? section.delayMs : 0;
+  useLayoutEffect(() => {
+    if (loading === null) return;
+    const kept = keptYtSearch(loading, "songs");
+    if (kept !== undefined) dispatch({ type: "found", query: loading, ...kept });
+  }, [loading]);
+  useEffect(() => {
+    if (loading === null || keptYtSearch(loading, "songs") !== undefined) return undefined;
+    const timer = setTimeout(() => {
+      let found: Extract<YtSectionStep, { type: "found" }> | null = null;
+      const step = (event: YtSectionStep) => {
+        if (event.type === "found") found = event;
+        dispatch(event);
+      };
+      void searchSongsOnly(loading, step).then((result) => {
+        if (Result.isSuccess(result)) {
+          if (found !== null) {
+            const { songs, artists, albums, videos } = found;
+            keepYtSearch(loading, "songs", {
+              songs,
+              artists,
+              albums,
+              videos,
+              playlists: [],
+            });
+          }
+          dispatch({ type: "playlistsFound", query: loading, playlists: [] });
+        } else if (result.failure.reason !== "disabled")
+          dispatch({ type: "failed", query: loading, reason: result.failure.reason });
+      });
+    }, delayMs);
+    return () => clearTimeout(timer);
+  }, [loading, delayMs]);
+
+  return section;
 };

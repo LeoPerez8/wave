@@ -571,6 +571,16 @@ export const WHOLE_LIBRARY: Record<string, WholeLibraryException> = {
   },
 };
 export const OPENING_REQUESTS: Record<string, Exception> = {
+  "search/ytMusicSearch.ts#searchSongsOnly": {
+    kind: "opening",
+    reason:
+      "Add Songs asks only YT Music's Songs endpoint after the query settles. Its hook checks Android connectivity before asking and waits for the shared Search allowance.",
+    deferred: {
+      settlement: "screen",
+      connectivity: "android",
+      tests: ["apps/mobile/src/search/ytMusicSearch.test.ts"],
+    },
+  },
   "sync/askWaveService.ts#askWaveService": {
     kind: "opening",
     reason:
@@ -972,6 +982,9 @@ export const OWN_PRESS: Record<string, Exception> = {
   "songs/SongRow.tsx#SongRow": {
     reason: "The one song row: row press, long-press menu, selection and swipe.",
   },
+  "library/PlaylistItems.tsx#AddSongsTile": {
+    reason: "Its own face: a cover-sized square plus an Add Songs row label.",
+  },
   "catalog/cards/CardParts.tsx#CardRow": {
     reason: "A card's whole row is the target, with selection and its long-press menu.",
   },
@@ -1174,6 +1187,12 @@ export const BACKGROUND_JOBS: Record<string, { readonly turns: string }> = {
 export const MODULE_COLLECTIONS: Record<string, { readonly bound: string }> = {
   "home/mixPreDownload.ts#shown": { bound: "one entry per Home mix section, a fixed few" },
   "lib/networkMeter.ts#timingRuns": { bound: "runs being metered now, removed when each ends" },
+  "motion/menuRequest.ts#armed": {
+    bound: "one id per anchored editor declared in code, removed when its screen opens it",
+  },
+  "motion/menuRequest.ts#pending": {
+    bound: "one id per anchored editor declared in code, removed when its screen listens",
+  },
   "lib/persistedSetting.ts#syncedSettings": {
     bound: "one per synced setting declared in code, a fixed few dozen",
   },
