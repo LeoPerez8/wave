@@ -130,6 +130,36 @@ class YtSearchParserTest {
     assertEquals("Giai Điệu Xưa", playlists.first().author)
   }
 
+  /** A hand-made Community playlists answer (not a recorded one): one row per unlinked second line. */
+  private fun handMadePlaylistRows(vararg details: String): String =
+    details.withIndex().joinToString(
+      prefix = """{"contents":{"tabbedSearchResultsRenderer":{"tabs":[{"tabRenderer":{"content":{"sectionListRenderer":{"contents":[{"musicShelfRenderer":{"contents":[""",
+      postfix = """]}}]}}}}]}}}""",
+      separator = ",",
+    ) { (index, line) ->
+      """{"musicResponsiveListItemRenderer":{"flexColumns":[
+        {"musicResponsiveListItemFlexColumnRenderer":{"text":{"runs":[{"text":"Playlist $index"}]}}},
+        {"musicResponsiveListItemFlexColumnRenderer":{"text":{"runs":[{"text":"$line"}]}}}],
+        "navigationEndpoint":{"browseEndpoint":{"browseId":"VLPLhandmade$index","browseEndpointContextSupportedConfigs":
+        {"browseEndpointContextMusicConfig":{"pageType":"MUSIC_PAGE_TYPE_PLAYLIST"}}}}}}"""
+    }
+
+  @Test
+  fun anUnlinkedAuthorIsNeverTheRowsTypeOrACount_handMadeRows() {
+    val authors = YtSearchParser.communityPlaylists(
+      handMadePlaylistRows(
+        "Some User • 12K views",
+        "Playlist • Some User • 12K views",
+        "120 songs • 12K views",
+        "Playlist • 120 songs",
+        "100 gecs • 1.5M views",
+        "Playlist • 2024",
+        "Some User",
+      ),
+    ).map { it.author }
+    assertEquals(listOf("Some User", "Some User", null, null, "100 gecs", null, null), authors)
+  }
+
   @Test
   fun aSearchWithoutCommunityPlaylistsHasNone() {
     assertTrue(YtSearchParser.communityPlaylists(Fixtures.file("yt/search-artists-none.json").readText()).isEmpty())

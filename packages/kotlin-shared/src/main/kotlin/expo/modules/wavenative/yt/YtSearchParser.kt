@@ -72,8 +72,8 @@ data class YtCommunityPlaylist(
 /**
  * Reads YouTube Music's (WEB_REMIX) search answers into songs, albums and community playlists.
  * innertubex only sends the request; the walk over the renderer tree follows
- * Metrolist's `SearchPage`/`PageHelper` (GPL-3.0), simplified to the "Songs"
- * and "Albums" filters.
+ * Metrolist's `SearchPage`/`PageHelper` (GPL-3.0), simplified to the "Songs",
+ * "Albums" and "Community playlists" filters.
  *
  * A song row is a `musicResponsiveListItemRenderer`: the first flex column is
  * the title, the second is "Artist, Artist & Artist • Album • 3:45", with the
@@ -81,7 +81,8 @@ data class YtCommunityPlaylist(
  * album's page, and its second column is "Album • Artist & Artist • 2011"
  * ("Single", "EP" for those). A community playlist row links to the playlist's
  * page, and its second column is "Author • 341K views", the author linked to
- * their channel.
+ * their channel; unlinked, the author is the first part that isn't the row's
+ * type ("Playlist") or a count ("120 songs").
  */
 object YtSearchParser {
   private val json = Json { ignoreUnknownKeys = true }
@@ -94,6 +95,14 @@ object YtSearchParser {
   private const val ALBUM_PAGE = "MUSIC_PAGE_TYPE_ALBUM"
   private const val SEPARATOR = " • "
   private val YEAR = Regex("""^\d{4}$""")
+  /** What a search row's second line calls the row itself (the answers are asked in English). */
+  private val ROW_TYPES =
+    setOf("playlist", "album", "single", "ep", "song", "video", "artist", "podcast", "episode", "profile", "station")
+  /** "12K views", "120 songs", "1.5M plays", or a number alone: a count, not a name ("100 gecs"). */
+  private val COUNT = Regex(
+    """^\d[\d.,]*\s?[KMB]?\+?(?:\s+(?:views?|songs?|tracks?|videos?|plays?|likes?|episodes?|subscribers?))?$""",
+    RegexOption.IGNORE_CASE,
+  )
 
   /** The songs of a search answer, first page or continuation. Unreadable rows are skipped. */
   fun songs(body: String): YtSearchPage {
@@ -147,11 +156,13 @@ object YtSearchParser {
     val title = columns.firstOrNull()?.joinToString("") { it["text"].string.orEmpty() }?.trim()
       ?.takeIf(String::isNotEmpty) ?: return null
     val details = columns.getOrNull(1).orEmpty()
-    // Unlinked, the author is the line's first part, when a second one (the views) follows it.
+    // Unlinked, the author is the first part of a line of several ("Author • 12K views",
+    // "Playlist • Author • 12K views") that isn't the row's type or a count.
     val author = details.firstOrNull { pageType(it) in ARTIST_PAGES || isChannelLink(it) }
       ?.get("text").string?.trim()?.takeIf(String::isNotEmpty)
       ?: details.joinToString("") { it["text"].string.orEmpty() }.split(SEPARATOR)
-        .takeIf { it.size > 1 }?.first()?.trim()?.takeIf(String::isNotEmpty)
+        .takeIf { it.size > 1 }?.map(String::trim)
+        ?.firstOrNull { it.isNotEmpty() && it.lowercase() !in ROW_TYPES && !COUNT.matches(it) }
     return YtCommunityPlaylist(
       playlistId = playlistId,
       title = title,
