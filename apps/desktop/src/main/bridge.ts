@@ -440,6 +440,11 @@ const createHandlers = (
       validPlaybackSettings(change)
         ? playbackCall((p) => p.setSettings(change))
         : refuse("settings.setPlayback", "invalid playback settings"),
+    "settings.outputs": () => playbackCall((p) => p.outputs()),
+    "settings.setOutput": ([id]) =>
+      id === null || (typeof id === "string" && id !== "" && id.length <= 1_000)
+        ? playbackCall((p) => p.setOutput(id))
+        : refuse("settings.setOutput", "invalid output"),
     "settings.ytMusic": () => ytCall((yt) => yt.enabled()),
     "settings.searchOnline": () =>
       Effect.map(Database, (db) => readSearchOnline(preference(db, SEARCH_ONLINE_SETTING) ?? null)),

@@ -9,13 +9,19 @@
  * through `options.resolve`. A load that fetches a song may take as long as the network does.
  */
 import type { AudioMeasurement } from "@wave/client/songMeasurements";
-import type { LoudnessResult, PlaybackStatus, PlaybackEvent } from "../../shared/playback.ts";
+import type {
+  LoudnessResult,
+  OutputDevice,
+  PlaybackStatus,
+  PlaybackEvent,
+} from "../../shared/playback.ts";
 import {
   failure,
   streamedVideoId,
   type AudioCall,
   type AudioRequest,
   type AudioResponse,
+  type OutputsEvent,
   type ResolveAnswer,
   type ResolveEvent,
   type ResolvedStream,
@@ -23,7 +29,7 @@ import {
 
 /** What a forked process reports back. */
 export interface AudioEvents {
-  readonly message: (response: AudioResponse | PlaybackEvent | ResolveEvent) => void;
+  readonly message: (response: AudioResponse | PlaybackEvent | ResolveEvent | OutputsEvent) => void;
   readonly exit: () => void;
 }
 
@@ -67,6 +73,8 @@ export interface AudioSupervisor {
    * those asked before; rejects when the process goes before it answers.
    */
   readonly measure: (path: string) => Promise<AudioMeasurement>;
+  /** The outputs the system has, as the process last reported them. */
+  readonly outputs: () => readonly OutputDevice[];
   readonly dispose: () => void;
   readonly subscribe: (listener: (event: PlaybackEvent) => void) => () => void;
 }
@@ -120,6 +128,9 @@ export const superviseAudio = (options: AudioSupervisorOptions): AudioSupervisor
   let volume: number | undefined;
   let crossfade: number | undefined;
   let normalize: boolean | undefined;
+  /** The output picked, by id; `null` once the system's default was picked back. */
+  let output: string | null | undefined;
+  let outputs: readonly OutputDevice[] = [];
   /** The songs the Buffer reaches, which a new process fetches ahead again. */
   let buffered: readonly unknown[] | undefined;
   /** Measurements asked of the process running, by id. */
@@ -164,6 +175,7 @@ export const superviseAudio = (options: AudioSupervisorOptions): AudioSupervisor
     if (call === "setVolume") volume = Number(args[0]);
     if (call === "setCrossfade") crossfade = Number(args[0]);
     if (call === "setNormalize") normalize = args[0] === true;
+    if (call === "setOutput") output = typeof args[0] === "string" ? args[0] : null;
     if (call === "buffer") buffered = Array.isArray(args[0]) ? args[0] : undefined;
     if (song !== undefined && status.state !== "idle") song.positionMs = status.positionMs;
   };
@@ -251,8 +263,13 @@ export const superviseAudio = (options: AudioSupervisorOptions): AudioSupervisor
   };
 
   const onMessage =
-    (owner: AudioProcess) => (response: AudioResponse | PlaybackEvent | ResolveEvent) => {
+    (owner: AudioProcess) =>
+    (response: AudioResponse | PlaybackEvent | ResolveEvent | OutputsEvent) => {
       if (owner !== current) return;
+      if ("event" in response && response.event === "outputs") {
+        outputs = response.outputs;
+        return;
+      }
       if ("event" in response && response.event === "resolve") {
         resolveFor(owner, response);
         return;
@@ -307,6 +324,7 @@ export const superviseAudio = (options: AudioSupervisorOptions): AudioSupervisor
     if (volume !== undefined) settings.push(["setVolume", [volume]]);
     if (crossfade !== undefined) settings.push(["setCrossfade", [crossfade]]);
     if (normalize !== undefined) settings.push(["setNormalize", [normalize]]);
+    if (typeof output === "string") settings.push(["setOutput", [output]]);
     if (buffered !== undefined) settings.push(["buffer", [buffered]]);
     const restoreSettings = () =>
       settings.reduce<Promise<unknown>>(
@@ -341,6 +359,7 @@ export const superviseAudio = (options: AudioSupervisorOptions): AudioSupervisor
 
   return {
     call: (call, args) => send(call, args),
+    outputs: () => outputs,
     measure: (path) =>
       new Promise((resolve, reject) => {
         const id = `m${nextMeasurement++}`;

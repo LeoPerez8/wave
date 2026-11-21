@@ -41,6 +41,18 @@ Build the addon before `test:e2e`: without it the app runs, but every player cal
 fixture in `native/engine/tests/fixtures`; its `device` annotation (`--reporter=json`) names the
 output that played it, or `none` when the engine kept time without one, as on CI.
 
+### Output device
+
+`settings.outputs()` answers `{outputs, chosen}`: the system's outputs as the engine last listed
+them and the one picked (`connected` false while it is away). `settings.setOutput(id | null)`
+takes an id from that list, or null for System default. The engine decides where to play
+(`target_device` in `native/engine/src/output.rs`); the audio process pushes the list as an
+`outputs` event and takes the choice as the `setOutput` call, which a restarted process gets
+again. `e2e/outputDevice.spec.ts` picks one of the machine's real outputs with a paused song and
+checks the position and a restart; its `outputs` annotation is 0 on a machine without one, where
+it stops after the list. Its screenshot is `output-device-<platform>.png`. Unplugging is checked
+against a fake in `src/main/bridge.test.ts`, and on real hardware by the owner.
+
 ## The JVM
 
 The shared Kotlin (`packages/kotlin-shared`) runs in a JVM main starts with the app
