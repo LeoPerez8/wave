@@ -537,10 +537,6 @@ test("without an opened-file reader, a file entry is skipped as unplayable", asy
   });
   const { queue } = session.snapshot();
   assert.equal(queue.entries[queue.index]?.trackId, String(a));
-    } finally {
-      await runtime.dispose();
-    }
-  });
 });
 
 test("with Don't play explicit on, explicit Library and YT Music songs stay out of the queue, and turning it on takes them out", async (t) => {

@@ -3386,8 +3386,6 @@ test("files opened with Wave play as a new queue: a Library file as its song, an
       assert.equal((await wave.playback.view()).current?.title, "Road");
     } finally {
       rmSync(folder, { recursive: true, force: true });
-    } finally {
-      await runtime.dispose();
     }
   });
 });
