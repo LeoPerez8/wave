@@ -87,8 +87,8 @@ const KIND_BY_NAME = new Map(
 );
 
 const firstFrameBudget = (kind: TimingKind): number | null => {
-  const budget: { readonly firstFrameMs?: number } = TIMING_BUDGETS[kind];
-  return budget.firstFrameMs ?? null;
+  const budget = TIMING_BUDGETS[kind];
+  return "firstFrameMs" in budget ? budget.firstFrameMs : null;
 };
 
 const summaryKinds = (message: string, noiseMs: number): TapKindP90[] =>
