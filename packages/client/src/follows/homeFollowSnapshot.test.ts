@@ -24,7 +24,7 @@ test("Home keeps its first and second follow changes for the next visit, includi
       releaseDate: new Date(now).toISOString().slice(0, 10),
       artworkUrl: null,
       explicit: false,
-      browseId: null,
+      browseId: "MPREb_r",
       videoIds: [],
       recordingKeys: [],
     };
