@@ -158,13 +158,12 @@ test("a release's search asks for its artist and title", () => {
   assert.equal(followReleaseQuery(release("Voyage", 1), "ABBA"), "ABBA Voyage");
 });
 
-test("a matched release opens when its album reads with songs; offline is no answer, otherwise it's gone", () => {
-  assert.deepEqual(followAlbumOpening("MPREb_v", { videoIds: ["a"] }), {
-    kind: "open",
-    browseId: "MPREb_v",
-  });
-  assert.deepEqual(followAlbumOpening("MPREb_v", "offline"), { kind: "noAnswer" });
-  assert.deepEqual(followAlbumOpening("MPREb_v", "failed"), { kind: "gone" });
+test("a matched release is gone only when YT Music answers without its album or songs; otherwise it opens", () => {
+  const open = { kind: "open", browseId: "MPREb_v" };
+  assert.deepEqual(followAlbumOpening("MPREb_v", { videoIds: ["a"] }), open);
+  // No answer (offline, a passing error) opens the page, which says why itself; the match stays.
+  assert.deepEqual(followAlbumOpening("MPREb_v", "noAnswer"), open);
+  assert.deepEqual(followAlbumOpening("MPREb_v", "missing"), { kind: "gone" });
   assert.deepEqual(followAlbumOpening("MPREb_v", { videoIds: [] }), { kind: "gone" });
 });
 

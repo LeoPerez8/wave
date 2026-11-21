@@ -395,22 +395,24 @@ export const followReleaseOpening = (
   );
   return match === null ? { kind: "notFound" } : { kind: "open", browseId: match.browseId };
 };
-/** What reading a matched release's album page said: its songs, or why it has none. */
-export type FollowAlbumRead = { readonly videoIds: readonly string[] } | "offline" | "failed";
 /**
- * Opening a matched release on its album [browseId], by what reading the page said ([read]): it
- * opens with songs; offline is no answer; a page YT Music doesn't give, or one with no songs, is
- * gone, and the release then loses its match (`unmatchFollowRelease`).
+ * What reading a matched release's album page said: its songs; `missing` when YT Music answered
+ * without the album; `noAnswer` for anything else (offline, switched off, a passing error).
+ */
+export type FollowAlbumRead = { readonly videoIds: readonly string[] } | "missing" | "noAnswer";
+/**
+ * Opening a matched release on its album [browseId], by what reading the page said ([read]): only
+ * an album YT Music answers without, or with no songs, is gone, and the release then loses its
+ * match (`unmatchFollowRelease`). No answer still opens the page, which says why itself, and the
+ * match stays.
  */
 export const followAlbumOpening = (
   browseId: string,
   read: FollowAlbumRead,
-): Extract<FollowReleaseOpening, { kind: "open" | "noAnswer" | "gone" }> =>
-  read === "offline"
-    ? { kind: "noAnswer" }
-    : read === "failed" || read.videoIds.length === 0
-      ? { kind: "gone" }
-      : { kind: "open", browseId };
+): Extract<FollowReleaseOpening, { kind: "open" | "gone" }> =>
+  read === "missing" || (typeof read === "object" && read.videoIds.length === 0)
+    ? { kind: "gone" }
+    : { kind: "open", browseId };
 /**
  * [releases] with [key]'s YT Music match and songs dropped: it hides until a later check's
  * search finds it again (`followReleasesToSearch`).
