@@ -257,8 +257,7 @@ export function VirtualTable({
   );
   const rows = useTableSelection({
     selection,
-    // A group table selects only through its menu's Select: one collection, cleared by a click.
-    ...((songList || selection !== undefined) && onSelection ? { onSelection } : {}),
+    ...(onSelection ? { onSelection } : {}),
     ...(selectAll ? { selectAll } : {}),
     total,
     order,
@@ -407,7 +406,7 @@ export function VirtualTable({
           : labels.songs)
       }
       aria-rowcount={total + 1}
-      aria-multiselectable={songList && onSelection !== undefined ? true : undefined}
+      aria-multiselectable={onSelection !== undefined ? true : undefined}
       aria-colcount={
         3 +
         (columns.third === null ? 0 : 1) +
@@ -469,7 +468,7 @@ export function VirtualTable({
                   className={`table-row table-columns ${active === index ? "active-row" : ""} ${mark ? markClass(mark) : ""}`}
                   style={{ top: index * HEIGHT }}
                   onMouseDown={(event) => {
-                    if (songList && event.shiftKey) event.preventDefault();
+                    if (onSelection && event.shiftKey) event.preventDefault();
                   }}
                   onClick={(event) => {
                     setActive(index);

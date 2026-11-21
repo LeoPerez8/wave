@@ -23,6 +23,7 @@ import type { DesktopFolder, DesktopSong, ScanStatus } from "./library.ts";
 import type { BrowseKind, BrowseScope, BrowsePage, BrowseRow } from "./browse.ts";
 import type { YtSearchPage, YtStatus } from "./yt.ts";
 import type { SearchOnline } from "@wave/core";
+import type { HomeArrangement, HomeArrangementEdit } from "@wave/core";
 import type {
   DiscoverMixesView,
   DiscoverSettings,
@@ -72,6 +73,10 @@ import type {
   CollectionRunAction,
   CollectionRunResult,
   CollectionTarget,
+  SelectionMenu,
+  SelectionRunAction,
+  SelectionRunResult,
+  SelectionTarget,
 } from "./collectionActions.ts";
 import {
   LYRICS_AND_TAGS_CALLS,
@@ -415,6 +420,18 @@ export interface BridgeContract
     ];
     readonly result: CollectionRunResult;
   };
+  readonly "collections.selectionActions": {
+    readonly args: readonly [target: SelectionTarget];
+    readonly result: SelectionMenu;
+  };
+  readonly "collections.runSelection": {
+    readonly args: readonly [
+      target: SelectionTarget,
+      action: SelectionRunAction,
+      playlistId?: number,
+    ];
+    readonly result: SelectionRunResult;
+  };
   readonly "songs.run": {
     readonly args: readonly [target: SongTarget, action: SongRunAction, playlistId?: number];
     readonly result: SongRunResult;
@@ -460,6 +477,11 @@ export interface BridgeContract
   readonly "home.releaseArtwork": {
     readonly args: readonly [key: string];
     readonly result: string | null;
+  };
+  readonly "home.arrangement": { readonly args: readonly []; readonly result: HomeArrangement };
+  readonly "home.edit": {
+    readonly args: readonly [edit: HomeArrangementEdit];
+    readonly result: HomeArrangement;
   };
   readonly "stats.overview": {
     readonly args: readonly [period: StatsPeriod];
@@ -603,6 +625,8 @@ export const BRIDGE_CALLS = [
   "account.answerInvitation",
   "collections.actions",
   "collections.run",
+  "collections.selectionActions",
+  "collections.runSelection",
   ...PLAYLIST_CALLS,
   ...LYRICS_AND_TAGS_CALLS,
   "search.library",
@@ -615,6 +639,8 @@ export const BRIDGE_CALLS = [
   "home.followCheck",
   "home.openRelease",
   "home.releaseArtwork",
+  "home.arrangement",
+  "home.edit",
   ...FOLLOWS_CALLS,
   ...LINK_CALLS,
   ...ARTIST_PAGE_CALLS,
@@ -679,6 +705,10 @@ export interface WaveBridge {
     readonly openRelease: (key: string) => Promise<HomeReleaseOpening>;
     /** A release card's cover as a data URL, or null. */
     readonly releaseArtwork: (key: string) => Promise<string | null>;
+    /** Home's sections and Discover rows as the account arranges them, for Home's editor. */
+    readonly arrangement: () => Promise<HomeArrangement>;
+    /** Makes one change of Home's editor to the synced arrangement and gives it as it is then. */
+    readonly edit: (edit: HomeArrangementEdit) => Promise<HomeArrangement>;
   };
   /** An artist page's Follow button and Settings › Followed artists. */
   readonly follows: FollowsBridge;
@@ -849,6 +879,13 @@ export interface WaveBridge {
       action: CollectionRunAction,
       playlistId?: number,
     ) => Promise<CollectionRunResult>;
+    /** The selection bar's entries for songs and collections checked together. */
+    readonly selectionActions: (target: SelectionTarget) => Promise<SelectionMenu>;
+    readonly runSelection: (
+      target: SelectionTarget,
+      action: SelectionRunAction,
+      playlistId?: number,
+    ) => Promise<SelectionRunResult>;
   };
   readonly playlists: PlaylistBridge;
   /** Settings › Lyrics and tags. */
@@ -991,6 +1028,9 @@ export const createBridge = (invoke: Invoke): WaveBridge => ({
   collections: {
     actions: (target, options) => invoke("collections.actions", target, options),
     run: (target, action, playlistId) => invoke("collections.run", target, action, playlistId),
+    selectionActions: (target) => invoke("collections.selectionActions", target),
+    runSelection: (target, action, playlistId) =>
+      invoke("collections.runSelection", target, action, playlistId),
   },
   playlists: playlistBridge(invoke),
   lyricsAndTags: lyricsAndTagsBridge(invoke),
@@ -1007,6 +1047,8 @@ export const createBridge = (invoke: Invoke): WaveBridge => ({
     followCheck: () => invoke("home.followCheck"),
     openRelease: (key) => invoke("home.openRelease", key),
     releaseArtwork: (key) => invoke("home.releaseArtwork", key),
+    arrangement: () => invoke("home.arrangement"),
+    edit: (edit) => invoke("home.edit", edit),
   },
   follows: followsBridge(invoke),
   links: linkBridge(invoke),
