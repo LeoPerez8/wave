@@ -84,6 +84,7 @@ import {
 import { onRelatedOpened } from "./openRelated";
 import { EditSlot, SlotButton, SlotDragPreview, type SlotContext } from "./SlotButtons";
 import { useNowPlayingSlotDrag } from "./slotDrag";
+import { useWarmPanes } from "./useWarmPanes";
 import { usePlayingSongMenu } from "./songMenuSlots";
 import { EDITING_OPACITY, Transport } from "./Transport";
 import {
@@ -243,7 +244,7 @@ export function NowPlayingSheet() {
   const [view, setView] = useState<NowPlayingView>("player");
   const ytMusic = useYtMusicEnabled();
   const showPlayer = useCallback(() => setView("player"), []);
-  // The player and the Queue, side by side; the Queue stays mounted once shown (`QueuePane`).
+  // The player and the Queue, side by side; the Queue mounts as `useWarmPanes` says.
   // Related rises over them.
   const pages = useScreenPages();
   const { screen, editing, page, turning, send } = pages;
@@ -269,10 +270,11 @@ export function NowPlayingSheet() {
   );
   const { videoId, findAgain } = usePlayingVideoId(relatedMounted ? trackId : null, ytSong);
   // Once Now Playing has settled open, the Queue and Related's panel mount hidden (`Activity`,
-  // drawn at low priority), so a first swipe or rise finds them drawn (#1380).
-  const [warm, setWarm] = useState(false);
-  if (settled && !warm) setWarm(true);
-  const queueMounted = pages.queueMounted || warm;
+  // drawn at low priority), so a first swipe or rise finds them drawn (#1380). Closed, they
+  // unmount a few seconds later, or at a memory warning, so track changes don't re-render them.
+  const warm = useWarmPanes(shown, settled);
+  // Before then, only a Queue that is showing, or a swipe toward it, mounts it.
+  const queueMounted = warm || (shown && (screen === "queue" || page === "queue" || turning));
   // Related opens fresh each time, as when it mounted on opening: a panel that has left is
   // replaced, hidden, by a new one.
   const [relatedGeneration, setRelatedGeneration] = useState(0);
