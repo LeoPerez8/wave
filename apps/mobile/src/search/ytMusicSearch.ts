@@ -29,8 +29,9 @@ const inTurn = <A, R>(
 
 /**
  * What Search has asked YT Music for [query] (its songs, artists, albums and
- * community playlists, asked together), and what picking a segment of the Library | Online toggle
- * does. Typing alone asks only when the Library has nothing for the query
+ * community playlists, asked together; the first three show as soon as they
+ * are in, and the Community playlists shelf joins them when it arrives), and
+ * what picking a segment of the Library | Online toggle does. Typing alone asks only when the Library has nothing for the query
  * ([libraryHasResults] false) and Library wasn't picked, once typing pauses;
  * Online asks at once (or shows again what it already has for the query),
  * and the view then follows the query until the field is cleared. Library
@@ -64,43 +65,47 @@ export const useYtMusicSection = (
   useEffect(() => {
     if (loading === null) return undefined;
     const timer = setTimeout(() => {
-      // Only the query is sent. One that fails fails them all: one quiet line.
+      // Only the query is sent. A failed Songs, Artists or Albums search fails the three: one quiet line.
       const search = askYtMusic((ytMusic) =>
-        Effect.gen(function* () {
-          const found = yield* Effect.all(
-            {
-              songs: inTurn(always, loading, ytMusic.searchSongs(loading)),
-              artists: inTurn(always, loading, ytMusic.searchArtists(loading)),
-              albums: inTurn(always, loading, ytMusic.searchAlbums(loading)),
-              // The shelf is an extra: a failed read shows none and leaves the rest.
-              playlists: inTurn(always, loading, ytMusic.searchCommunityPlaylists(loading)).pipe(
-                Effect.orElseSucceed((): readonly YtCommunityPlaylist[] => []),
-              ),
-            },
-            { concurrency: "unbounded" },
-          );
-          const videos = ytSearchAsksVideos(loading, found.songs.songs)
-            ? yield* inTurn(always, loading, ytMusic.searchVideos(loading)).pipe(
-                Effect.map((page) => page.songs),
-                Effect.orElseSucceed(() => []),
-              )
-            : undefined;
-          return { ...found, videos };
-        }),
+        Effect.all(
+          {
+            found: Effect.gen(function* () {
+              const found = yield* Effect.all(
+                {
+                  songs: inTurn(always, loading, ytMusic.searchSongs(loading)),
+                  artists: inTurn(always, loading, ytMusic.searchArtists(loading)),
+                  albums: inTurn(always, loading, ytMusic.searchAlbums(loading)),
+                },
+                { concurrency: "unbounded" },
+              );
+              const videos = ytSearchAsksVideos(loading, found.songs.songs)
+                ? yield* inTurn(always, loading, ytMusic.searchVideos(loading)).pipe(
+                    Effect.map((page) => page.songs),
+                    Effect.orElseSucceed(() => []),
+                  )
+                : undefined;
+              // Shown as soon as they are in, without waiting for the shelf.
+              dispatch({
+                type: "found",
+                query: loading,
+                songs: found.songs.songs,
+                artists: found.artists,
+                albums: found.albums,
+                videos,
+              });
+            }),
+            // The shelf is an extra, asked alongside: a failed read shows none and leaves the rest.
+            playlists: inTurn(always, loading, ytMusic.searchCommunityPlaylists(loading)).pipe(
+              Effect.orElseSucceed((): readonly YtCommunityPlaylist[] => []),
+            ),
+          },
+          { concurrency: "unbounded" },
+        ),
       );
       void search.then((result) => {
-        if (Result.isSuccess(result)) {
-          const { songs, artists, albums, playlists, videos } = result.success;
-          dispatch({
-            type: "found",
-            query: loading,
-            songs: songs.songs,
-            artists,
-            albums,
-            playlists,
-            videos,
-          });
-        }
+        // The shelf joins the answer shown, if it is still this query's (Core's `stepYtSection`).
+        if (Result.isSuccess(result))
+          dispatch({ type: "playlistsFound", query: loading, playlists: result.success.playlists });
         // Turned off meanwhile: the section is already hidden.
         else if (result.failure.reason !== "disabled")
           dispatch({ type: "failed", query: loading, reason: result.failure.reason });

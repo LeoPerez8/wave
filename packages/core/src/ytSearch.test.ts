@@ -810,4 +810,63 @@ describe("community playlists in Search", () => {
     assert.equal(again.status, "results");
     assert.deepEqual(ytSectionView(again, library)?.playlists, [playlist("a")]);
   });
+
+  describe("arriving after the songs, artists and albums", () => {
+    /** "lofi" asked with Online, and answered with one song and no shelf yet. */
+    const asked = stepYtSection(typed(YT_SECTION_HIDDEN, "lofi"), ONLINE);
+    const answered = stepYtSection(asked, {
+      type: "found",
+      query: "lofi",
+      songs: [song("a")],
+      artists: [],
+      albums: [],
+    });
+    const shelf = (query: string, ...ids: string[]) =>
+      ({ type: "playlistsFound", query, playlists: ids.map(playlist) }) as const;
+
+    test("the songs show without them, and they join when they arrive", () => {
+      const before = ytSectionView(answered, library);
+      assert.deepEqual(before?.songs, [song("a")]);
+      assert.deepEqual(before?.playlists, []);
+      assert.equal(before?.loading, false);
+      const after = ytSectionView(stepYtSection(answered, shelf("lofi", "a", "b")), library);
+      assert.deepEqual(after?.songs, [song("a")]);
+      assert.deepEqual(after?.playlists, [playlist("a"), playlist("b")]);
+    });
+
+    test("ones found for an older query never join a newer query's results", () => {
+      const newer = stepYtSection(typed(answered, "lofi beats"), {
+        type: "found",
+        query: "lofi beats",
+        songs: [song("b")],
+        artists: [],
+        albums: [],
+      });
+      assert.equal(stepYtSection(newer, shelf("lofi", "a")), newer);
+      const loading = typed(answered, "lofi beats");
+      assert.equal(stepYtSection(loading, shelf("lofi", "a")), loading);
+    });
+
+    test("they don't stand in for an answer that hasn't come or that failed", () => {
+      assert.equal(stepYtSection(asked, shelf("lofi", "a")), asked);
+      const failed = stepYtSection(asked, { type: "failed", query: "lofi", reason: "failed" });
+      assert.equal(stepYtSection(failed, shelf("lofi", "a")), failed);
+      assert.equal(ytSectionView(failed, library)?.note, "failed");
+    });
+
+    test("arriving while Library shows, they are there when Online shows the answer again", () => {
+      const hidden = stepYtSection(answered, { type: "picked", pick: "library" });
+      const late = stepYtSection(hidden, shelf("lofi", "a"));
+      assert.deepEqual(ytSectionView(late, library)?.playlists, []);
+      const again = stepYtSection(late, ONLINE);
+      assert.equal(again.status, "results");
+      assert.deepEqual(ytSectionView(again, library)?.playlists, [playlist("a")]);
+      // Kept for another query, the answer is left alone.
+      assert.equal(stepYtSection(hidden, shelf("other", "a")), hidden);
+    });
+
+    test("none found changes nothing", () => {
+      assert.equal(stepYtSection(answered, shelf("lofi")), answered);
+    });
+  });
 });

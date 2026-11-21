@@ -132,7 +132,8 @@ export type YtSectionEvent<S extends YtSong = YtSong> =
   /**
    * YT Music answered [query]. [videos] is its Videos search, asked only when
    * `ytSearchAsksVideos` says so; its matching official music videos join the songs.
-   * [playlists] is its Community playlists search, where the caller asks it.
+   * [playlists] is its Community playlists search, where the caller has it by
+   * then; one still on its way follows as `playlistsFound`.
    */
   | ({
       readonly type: "found";
@@ -140,6 +141,16 @@ export type YtSectionEvent<S extends YtSong = YtSong> =
       readonly videos?: readonly S[] | undefined;
       readonly playlists?: readonly YtCommunityPlaylist[] | undefined;
     } & Omit<YtSearchAnswer<S>, "playlists">)
+  /**
+   * YT Music's Community playlists search answered [query], after its songs,
+   * artists and albums (`found`), which don't wait for it. They join that
+   * answer while it is still the one shown or kept; any other is left alone.
+   */
+  | {
+      readonly type: "playlistsFound";
+      readonly query: string;
+      readonly playlists: readonly YtCommunityPlaylist[];
+    }
   | { readonly type: "failed"; readonly query: string; readonly reason: YtQuietReason };
 
 export const YT_SECTION_HIDDEN: { readonly status: "hidden" } = { status: "hidden" };
@@ -455,6 +466,15 @@ export const stepYtSection = <S extends YtSong>(
         playlists: event.playlists ?? [],
         by: state.by,
       };
+    case "playlistsFound": {
+      const { query, playlists } = event;
+      if (playlists.length === 0) return state;
+      if (state.status === "results" && state.query === query) return { ...state, playlists };
+      // Library is picked: the answer Online would show again takes them.
+      if (state.status === "offered" && state.kept?.query === query)
+        return { ...state, kept: { ...state.kept, playlists } };
+      return state;
+    }
     case "failed":
       if (state.status !== "loading" || state.query !== event.query) return state;
       return { status: "quiet", query: event.query, reason: event.reason, by: state.by };
