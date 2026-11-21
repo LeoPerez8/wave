@@ -138,7 +138,9 @@ test("playlist, artist and genre pages sort their songs and play in the order sh
     ];
     // The song table's own headers: an artist's listening stats have a Title column too.
     const header = (name: string) =>
-      page.getByRole("grid").getByRole("columnheader", { name, exact: true });
+      page
+        .getByRole("columnheader", { name, exact: true })
+        .and(page.locator(':not([data-testid="artist-listening-stats"] *)'));
     const sort = (name: string) => header(name).getByRole("button");
     const play = () =>
       page.getByTestId("hero").getByRole("button", { name: "Play", exact: true }).click();

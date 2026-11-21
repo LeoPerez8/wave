@@ -7,7 +7,7 @@ import {
   type LyricsTranslation,
 } from "@wave/core";
 
-/** What a translation needs from the phone: its key-value store, and a POST to Google. */
+/** What a translation needs from the device: its key-value store, and a POST to Google. */
 export interface TranslationService {
   readonly read: (key: string) => Promise<string | null>;
   readonly keep: (key: string, value: string) => Promise<void>;

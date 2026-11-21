@@ -61,10 +61,14 @@ import { applyLanguage, labels, text, useLanguage, tagTitle, artistName } from "
 import { LanguageSettings } from "./LanguageSettings.tsx";
 import { ThemeSettings } from "./ThemeSettings.tsx";
 import { LyricsAndTagsSettings } from "./LyricsAndTagsSettings.tsx";
+import { FollowButton } from "./FollowButton.tsx";
+import { FollowedArtistsSettings } from "./FollowedArtistsSettings.tsx";
 import { geniusAccess } from "./useSongGenius.ts";
 import { Home } from "./Home.tsx";
 import { Stats } from "./Stats.tsx";
 import type { StatsRoute } from "../../shared/stats.ts";
+import { ListeningHistory } from "./ListeningHistory.tsx";
+import type { HistoryRoute } from "../../shared/history.ts";
 import { isYtRoute, YtPage, type YtRoute } from "./YtPages.tsx";
 import { AlbumArtistLink, ArtistPage, ArtistToggle, useArtistSection } from "./ArtistPage.tsx";
 import {
@@ -81,6 +85,7 @@ type Route =
   | { readonly kind: "downloads" }
   | { readonly kind: "graveyard"; readonly id: number }
   | StatsRoute
+  | HistoryRoute
   | YtRoute;
 const defaultStats: StatsRoute = { kind: "stats", period: "month" };
 const sections = ["playlists", "artists", "albums", "songs", "genres", "favorites"] as const;
@@ -102,6 +107,7 @@ const settings = [
   "window",
   "playback",
   "lyricsAndTags",
+  "followedArtists",
   "downloads",
   "accounts",
   "versionHistory",
@@ -296,6 +302,7 @@ export function App() {
       route.kind === "downloads" ||
       route.kind === "graveyard" ||
       route.kind === "stats" ||
+      route.kind === "history" ||
       isYtRoute(route)
         ? { kind: "songs" }
         : route,
@@ -544,10 +551,12 @@ export function App() {
         ? route.ranking === undefined
           ? text.home.sections.stats
           : text.stats.rankings[route.ranking]
-        : ((hero && tagTitle(hero.title, route.kind)) ??
-          (route.kind in labels
-            ? (labels[route.kind as keyof typeof labels] as string)
-            : labels.library));
+        : route.kind === "history"
+          ? text.settings.pages.history
+          : ((hero && tagTitle(hero.title, route.kind)) ??
+            (route.kind in labels
+              ? (labels[route.kind as keyof typeof labels] as string)
+              : labels.library));
   const playlistId = route.kind === "playlist" ? route.id : undefined;
   const scanning = scan?.status === "scanning";
   // A playlist's image is an edit none of the three counts, and its page shows it.
@@ -661,6 +670,16 @@ export function App() {
           >
             <Icon name="stats" />
             <span>{text.home.sections.stats}</span>
+          </button>
+          <button
+            className="nav-item"
+            aria-label={text.settings.pages.history}
+            title={text.settings.pages.history}
+            aria-current={route.kind === "history" ? "page" : undefined}
+            onClick={() => go({ kind: "history" })}
+          >
+            <Icon name="history" />
+            <span>{text.settings.pages.history}</span>
           </button>
           {(ytMusic || (downloads?.rows ?? 0) > 0) && (
             <>
@@ -808,6 +827,13 @@ export function App() {
                   {labels.shuffle}
                 </button>
                 {route.kind === "artist" && <ArtistToggle section={artistSection} />}
+                {route.kind === "artist" && (
+                  <FollowButton
+                    artist={{ name: hero.title }}
+                    revision={account?.revision}
+                    onError={setError}
+                  />
+                )}
                 {missingList !== undefined && (
                   <ListDownloadButton
                     list={missingList}
@@ -908,9 +934,14 @@ export function App() {
                   aria-current={setting === key ? "page" : undefined}
                   onClick={() => setSetting(key)}
                 >
-                  {key === "appearance" ? text.settings.appearance : labels[key]}
+                  {key === "appearance"
+                    ? text.settings.appearance
+                    : key === "followedArtists"
+                      ? text.settings.followedArtists
+                      : labels[key]}
                 </button>
               ))}
+              <button onClick={() => go({ kind: "history" })}>{text.settings.pages.history}</button>
             </nav>
             <section className="settings-body">
               {setting === "library" ? (
@@ -991,6 +1022,20 @@ export function App() {
                 <VersionHistory />
               ) : setting === "downloads" ? (
                 <DownloadSettings onError={failed} />
+              ) : setting === "followedArtists" ? (
+                <FollowedArtistsSettings
+                  revision={account?.revision}
+                  notify={notify}
+                  onError={(message) => setError(message ?? text.desktopLibrary.actionFailed)}
+                  online={ytMusic}
+                  onOpen={(artist) =>
+                    artist.artistId !== null
+                      ? go({ kind: "artist", id: artist.artistId })
+                      : artist.ytBrowseId !== null
+                        ? go({ kind: "ytArtist", id: artist.ytBrowseId })
+                        : ytLinks.onArtist(artist.name)
+                  }
+                />
               ) : setting === "lyricsAndTags" ? (
                 <LyricsAndTagsSettings
                   onError={failed}
@@ -1013,6 +1058,7 @@ export function App() {
             revision={playback.view?.revision ?? 0}
             go={go}
             onSongMenu={ytSongMenu}
+            onError={setError}
           />
         ) : route.kind === "graveyard" ? (
           <Graveyard
@@ -1108,6 +1154,26 @@ export function App() {
                   at,
                 );
               }
+            }}
+          />
+        ) : route.kind === "history" ? (
+          <ListeningHistory
+            route={route}
+            revision={revision}
+            ytMusic={ytMusic}
+            go={go}
+            run={playback.run}
+            onMenu={(row, at, extra) => {
+              if (row.id > 0)
+                actions.openMenu({ scope: { kind: "songs" }, ids: [row.id] }, row.title, at, extra);
+              else if (row.videoId !== undefined || extra.length > 0)
+                actions.openItems(
+                  text.desktopLibrary.songMenu(row.title),
+                  row.videoId === undefined
+                    ? extra
+                    : streamed.items(row.videoId).then((items) => [...items, ...extra]),
+                  at,
+                );
             }}
           />
         ) : (
