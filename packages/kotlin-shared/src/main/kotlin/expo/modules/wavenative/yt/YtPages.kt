@@ -2,6 +2,13 @@ package expo.modules.wavenative.yt
 
 import com.metrolist.innertubex.models.YouTubeClient
 import io.ktor.client.statement.bodyAsText
+import kotlinx.coroutines.withTimeoutOrNull
+
+/** The playlist shelves of an account's home ([YtPages.homePlaylistShelves]) and the account they were read as. */
+data class YtAccountHome(val account: YtAccountInfo, val shelves: List<YtPlaylistShelf>) {
+  fun toMap(): Map<String, Any?> =
+    mapOf("account" to account.toMap(), "shelves" to shelves.map(YtPlaylistShelf::toMap))
+}
 
 /**
  * YT Music pages beyond search: an album, an artist, a playlist, a song's
@@ -140,16 +147,36 @@ class YtPages(private val client: YtClient) {
   /**
    * The shelves of playlists on the signed-in account's YouTube Music home,
    * over its first pages ([YtHomeParser.readPlaylistShelves]), for Home's
-   * Community playlists. Everything else in the answers is discarded as they
-   * are read. Needs the session: signed out, it fails with
-   * [YtFailure.SIGNED_OUT] and nothing is asked.
+   * Community playlists, with the account they were read as. Everything else
+   * in the answers is discarded as they are read. Needs the session: signed
+   * out, it fails with [YtFailure.SIGNED_OUT] and nothing is asked; answered
+   * as to someone signed out, the session is expired and it fails the same
+   * way. A session that changed during the read fails it ([YtFailure.FAILED]),
+   * so no account's list holds another's home. The read gets [HOME_DEADLINE_MS]
+   * in all, then stops asking and fails.
    */
-  suspend fun homePlaylistShelves(): List<YtPlaylistShelf> = client.request {
-    if (client.session.state !is YtSessionState.SignedIn) throw YtException(YtFailure.SIGNED_OUT)
-    YtHomeParser.readPlaylistShelves(
-      first = { client.innerTube.browse(YouTubeClient.WEB_REMIX, HOME).bodyAsText() },
-      next = { token -> client.innerTube.browse(YouTubeClient.WEB_REMIX, continuation = token).bodyAsText() },
-    )
+  suspend fun homePlaylistShelves(): YtAccountHome = client.request {
+    val session = client.session.state as? YtSessionState.SignedIn
+      ?: throw YtException(YtFailure.SIGNED_OUT)
+    val read = withTimeoutOrNull(HOME_DEADLINE_MS) {
+      YtHomeParser.readPlaylistShelves(
+        first = { client.innerTube.browse(YouTubeClient.WEB_REMIX, HOME).bodyAsText() },
+        next = { token -> client.innerTube.browse(YouTubeClient.WEB_REMIX, continuation = token).bodyAsText() },
+      )
+    } ?: throw YtException(YtFailure.FAILED, IllegalStateException("The home took over $HOME_DEADLINE_MS ms"))
+    when (read) {
+      is YtHomePlaylistsRead.Shelves -> {
+        val now = client.session.state as? YtSessionState.SignedIn
+        if (now?.credentials != session.credentials) {
+          throw YtException(YtFailure.FAILED, IllegalStateException("The session changed during the read"))
+        }
+        YtAccountHome(session.account, read.shelves)
+      }
+      YtHomePlaylistsRead.SignedOut -> {
+        client.session.checked(session.credentials, YtAccountMenu.SignedOut)
+        throw YtException(YtFailure.SIGNED_OUT)
+      }
+    }
   }
 
   private companion object {
@@ -161,6 +188,9 @@ class YtPages(private val client: YtClient) {
 
     /** The account's home, read for its shelves of playlists only ([homePlaylistShelves]). */
     const val HOME = "FEmusic_home"
+
+    /** How long [homePlaylistShelves] gets for all its pages: it runs in the background, nothing waits on it. */
+    const val HOME_DEADLINE_MS = 30_000L
 
     /** YouTube Music's charts page (not the account's home). */
     const val CHARTS = "FEmusic_charts"

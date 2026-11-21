@@ -77,6 +77,13 @@ data class YtPlaylistShelf(val title: String, val playlists: List<YtCommunityPla
 /** The playlist shelves of one page of the home, and the token that asks for the next. */
 data class YtHomePlaylists(val shelves: List<YtPlaylistShelf>, val continuation: String?)
 
+/** The home's playlist shelves as read, or YouTube Music answering as to someone signed out. */
+sealed interface YtHomePlaylistsRead {
+  data class Shelves(val shelves: List<YtPlaylistShelf>) : YtHomePlaylistsRead
+
+  data object SignedOut : YtHomePlaylistsRead
+}
+
 /**
  * Reads YouTube Music's (WEB_REMIX) home, the answer to `browse` with
  * `FEmusic_home` and its continuations. The walk follows Metrolist's
@@ -139,24 +146,43 @@ object YtHomeParser {
   /**
    * The home's playlist shelves over its first pages: the page [first]
    * answers, then each page a token leads to ([next]), up to [pages] pages,
-   * in YouTube Music's order.
+   * in YouTube Music's order. Any page answered as to someone signed out
+   * ([answeredSignedOut]) makes it [YtHomePlaylistsRead.SignedOut]: that's
+   * the anonymous home, not the account's.
    */
   inline fun readPlaylistShelves(
     first: () -> String,
     next: (String) -> String,
     pages: Int = PLAYLIST_PAGES,
-  ): List<YtPlaylistShelf> {
-    var page = playlistShelves(first())
+  ): YtHomePlaylistsRead {
+    val body = first()
+    if (answeredSignedOut(body)) return YtHomePlaylistsRead.SignedOut
+    var page = playlistShelves(body)
     val shelves = page.shelves.toMutableList()
     val asked = mutableSetOf<String>()
     var read = 1
     while (read < pages) {
       val token = page.continuation?.takeIf(asked::add) ?: break
-      page = playlistShelves(next(token))
+      val more = next(token)
+      if (answeredSignedOut(more)) return YtHomePlaylistsRead.SignedOut
+      page = playlistShelves(more)
       shelves += page.shelves
       read += 1
     }
-    return shelves
+    return YtHomePlaylistsRead.Shelves(shelves)
+  }
+
+  /**
+   * Whether YouTube Music says it answered [body] as to someone signed out
+   * (its `responseContext` reports `logged_in` 0): asked with the account's
+   * cookie, YouTube has quietly stopped accepting it. An answer that doesn't
+   * say isn't taken as signed out.
+   */
+  fun answeredSignedOut(body: String): Boolean {
+    val root = json.parseToJsonElement(body).obj ?: return false
+    return root.path("responseContext", "serviceTrackingParams").arr.orEmpty()
+      .flatMap { it.path("params").arr.orEmpty() }
+      .any { it.path("key").string == "logged_in" && it.path("value").string == "0" }
   }
 
   private fun sectionList(body: String): JsonObject? {
