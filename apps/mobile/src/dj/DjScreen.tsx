@@ -490,8 +490,8 @@ function PlaceholderTile({ size, fontScale }: { size: number; fontScale: number 
  * the grid, dimmed behind a scrim (`DjAdjustSheet`): Android's Back, a tap
  * on the scrim or a swipe down on its handle closes it over the grid as it
  * was left, and the sheet's own Play starts the queue as the bar's does,
- * with the choices made there. The search
- * button beside Close shows the search in the grid's place (`DjSearch`): a
+ * with the choices made there. The bottom bar's search button shows the
+ * search in the grid's place (`DjSearch`): a
  * tapped result joins the grid selected and the grid comes back, at its top
  * when the result is a new first tile.
  */
@@ -632,15 +632,6 @@ export function DjScreen() {
             ) : (
               <IconButton icon={IconX} label={strings.dj.close} onPress={() => router.back()} />
             )}
-            {/* With the grid, or over one with nothing to pick; not while placeholders stand for it. */}
-            {!searching && (state !== undefined || opening?.kind === "nothing") && (
-              <IconButton
-                icon={IconSearch}
-                label={strings.dj.search}
-                disabled={loading}
-                onPress={() => setSearching(true)}
-              />
-            )}
           </View>
           {searching && (
             <DjSearch
@@ -741,25 +732,39 @@ export function DjScreen() {
             }}
           >
             {!adjusting && failed}
-            <Press
-              accessibilityRole="button"
-              accessibilityLabel={strings.dj.adjustSummary(summary)}
-              accessibilityState={{ disabled: loading }}
-              disabled={loading}
-              onPress={() => setAdjusting(true)}
-              className="flex-row items-center justify-between"
-              style={{ paddingLeft: CELL, marginRight: -CELL * 1.5, opacity: loading ? 0.4 : 1 }}
-            >
-              <Text numberOfLines={1} className="flex-1 font-sans text-footnote text-secondary">
-                {summary}
-              </Text>
-              <View
-                className="items-center justify-center"
-                style={{ width: CELL * 6, height: CELL * 6 }}
+            <View className="flex-row items-center" style={{ gap: CELL / 2 }}>
+              {/* With the grid, or over one with nothing to pick; not while placeholders stand for it. */}
+              {(state !== undefined || opening?.kind === "nothing") && (
+                <IconButton
+                  icon={IconSearch}
+                  label={strings.dj.search}
+                  size={CELL * 6}
+                  iconSize={CELL * 3}
+                  strokeWidth={1.5}
+                  disabled={loading}
+                  onPress={() => setSearching(true)}
+                />
+              )}
+              <Press
+                accessibilityRole="button"
+                accessibilityLabel={strings.dj.adjustSummary(summary)}
+                accessibilityState={{ disabled: loading }}
+                disabled={loading}
+                onPress={() => setAdjusting(true)}
+                className="flex-1 flex-row items-center justify-between"
+                style={{ paddingLeft: CELL, marginRight: -CELL * 1.5, opacity: loading ? 0.4 : 1 }}
               >
-                <IconAdjustmentsHorizontal size={CELL * 3} color={accent} strokeWidth={1.5} />
-              </View>
-            </Press>
+                <Text numberOfLines={1} className="flex-1 font-sans text-footnote text-secondary">
+                  {summary}
+                </Text>
+                <View
+                  className="items-center justify-center"
+                  style={{ width: CELL * 6, height: CELL * 6 }}
+                >
+                  <IconAdjustmentsHorizontal size={CELL * 3} color={accent} strokeWidth={1.5} />
+                </View>
+              </Press>
+            </View>
             {playPill}
           </View>
         </View>
