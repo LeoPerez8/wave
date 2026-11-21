@@ -426,6 +426,13 @@ The prototype was approved on 2026-11-18 after an Impeccable critique; its decis
   as one album, tagged from its page. A page YT Music didn't answer has Try Again on its quiet
   line. On an artist page's Albums and Singles & EPs, a release the Library has opens the
   Library's album page.
+- A Library album with more than one disc heads each disc's songs "Disc n", its track numbers
+  starting again on each (#1221). With YT Music on, its hero has the phone's Library | Online
+  toggle; Online asks for the album artist and the release only when picked, then lists the whole
+  tracklist in the release's order, the songs the Library lacks streamed among its own (each
+  Library song once, as the Library's), with the release's Download in place of Download Missing
+  Songs. Play plays that list. Offline or after a failure Online is the quiet line, and picking it
+  again asks again.
 - No chips, no filled Play button, no card around the top result (Quiet Catalog, as on the
   phone).
 

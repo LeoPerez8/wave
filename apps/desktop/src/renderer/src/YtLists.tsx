@@ -39,6 +39,7 @@ export function YtSongList({
   onMenu,
   accessory,
   ranked = 0,
+  numbered = false,
 }: {
   readonly songs: readonly BrowseRow[];
   readonly label: string;
@@ -47,6 +48,8 @@ export function YtSongList({
   readonly accessory?: (row: BrowseRow) => ReactNode;
   /** How many of the first songs lead with their rank (1, 2, 3…) in place of the cover. */
   readonly ranked?: number;
+  /** Each song leads with its track number in place of the cover (an album's tracklist). */
+  readonly numbered?: boolean;
 }) {
   const [selected, setSelected] = useState<number>();
   return (
@@ -78,7 +81,9 @@ export function YtSongList({
           >
             <span className="title-cell">
               <span className="row-picture">
-                {index < ranked ? (
+                {numbered ? (
+                  <span className="track-number">{row.trackNumber}</span>
+                ) : index < ranked ? (
                   <span className="row-rank secondary">{index + 1}</span>
                 ) : (
                   <Artwork hash={row.artworkHash} url={row.artworkUrl} />

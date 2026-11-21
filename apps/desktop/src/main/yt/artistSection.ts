@@ -74,6 +74,8 @@ export interface ArtistSectionShape {
     artistId: number,
     pick: YtPick | null,
   ) => { readonly ids: string[]; readonly listStart: number };
+  /** What stands for the artist [name], what was saved for them read on first sight. */
+  readonly state: (name: string) => YtArtistSection<YtAlbumSong>;
 }
 
 type Section = YtArtistSection<YtAlbumSong>;
@@ -227,5 +229,6 @@ export const createArtistSection = (deps: ArtistSectionDeps): ArtistSectionShape
         listStart: library.length,
       };
     },
+    state: sectionOf,
   };
 };
