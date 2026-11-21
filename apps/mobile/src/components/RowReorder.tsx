@@ -16,7 +16,9 @@ import { useThemeColor } from "@/theme/useThemeColor";
  * rows it passes step aside, and the drop hands its move to the list (Core's
  * `reorderTarget` / `reorderShift` decide where it lands). Rows may be of
  * different heights (large text): each reports its own. The drag lives in
- * shared values, so a long list doesn't render again as it passes rows.
+ * shared values, so a long list doesn't render again as it passes rows, and
+ * the gesture finds its landing place on the UI thread, calling JS only when
+ * that changes.
  */
 
 /** A 48dp target for a row's handle. */
@@ -34,6 +36,10 @@ export interface RowReorder<Id> {
   readonly height: SharedValue<number>;
   /** Its travel since it was picked up. */
   readonly travel: SharedValue<number>;
+  /** Every row's height in list order, as the drag picked up, for finding its place on the UI thread. */
+  readonly rowHeights: SharedValue<readonly number[]>;
+  /** The place the gesture last told JS of, so it calls JS only when that changes. */
+  readonly told: SharedValue<number>;
   /** Reports a row's laid-out height. */
   readonly measure: (id: Id, height: number) => void;
   readonly pickUp: (index: number) => void;
@@ -72,6 +78,8 @@ export const useRowReorder = <Id,>({
   const to = useSharedValue(-1);
   const height = useSharedValue(0);
   const travel = useSharedValue(0);
+  const rowHeights = useSharedValue<readonly number[]>([]);
+  const told = useSharedValue(-1);
   const dragNow = useRef<Dragging<Id> | null>(null);
   const latest = useRef({ ids, move, assumed });
   useLayoutEffect(() => {
@@ -104,11 +112,12 @@ export const useRowReorder = <Id,>({
       void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
       dragNow.current = { from: index, to: index, id, over: id };
       height.set(heightOf(id));
+      rowHeights.set(latest.current.ids.map(heightOf));
       to.set(index);
       from.set(index);
       setDragging(true);
     },
-    [from, to, height, heightOf],
+    [from, to, height, rowHeights, heightOf],
   );
   const dragTo = useCallback(
     (distance: number) => {
@@ -141,8 +150,20 @@ export const useRowReorder = <Id,>({
   }, []);
 
   return useMemo(
-    () => ({ dragging, from, to, height, travel, measure, pickUp, dragTo, drop }),
-    [dragging, from, to, height, travel, measure, pickUp, dragTo, drop],
+    () => ({
+      dragging,
+      from,
+      to,
+      height,
+      travel,
+      rowHeights,
+      told,
+      measure,
+      pickUp,
+      dragTo,
+      drop,
+    }),
+    [dragging, from, to, height, travel, rowHeights, told, measure, pickUp, dragTo, drop],
   );
 };
 
@@ -153,7 +174,7 @@ export const useRowReorder = <Id,>({
  */
 export const useReorderRow = <Id,>({
   index,
-  reorder: { from, to, height, travel, pickUp, dragTo, drop },
+  reorder: { from, to, height, travel, rowHeights, told, pickUp, dragTo, drop },
 }: {
   index: number;
   reorder: RowReorder<Id>;
@@ -184,11 +205,25 @@ export const useReorderRow = <Id,>({
         onActivate: () => {
           "worklet";
           travel.set(0);
+          told.set(index);
+          // Until JS picks the row up and hands over the heights, the place isn't known.
+          rowHeights.set([]);
           scheduleOnRN(pickUp, index);
         },
         onUpdate: (event: { translationY: number }) => {
           "worklet";
           travel.set(event.translationY);
+          // JS hears of the drag only when its landing place changes (Performance rule 7).
+          const heights = rowHeights.get();
+          if (heights.length === 0) return;
+          const place = reorderTarget({
+            from: index,
+            distance: event.translationY,
+            rowHeight: heights,
+            count: heights.length,
+          });
+          if (place === told.get()) return;
+          told.set(place);
           scheduleOnRN(dragTo, event.translationY);
         },
         onDeactivate: (event: { canceled: boolean }) => {
@@ -196,7 +231,7 @@ export const useReorderRow = <Id,>({
           scheduleOnRN(drop, event.canceled);
         },
       }),
-      [travel, pickUp, dragTo, drop, index],
+      [travel, rowHeights, told, pickUp, dragTo, drop, index],
     ),
   );
 
