@@ -1,3 +1,5 @@
+import { useMemo } from "react";
+
 import { useHomeContent } from "@/library/hooks";
 
 import { homeOpeningState, type HomeContent } from "./homeOpening";
@@ -13,5 +15,6 @@ export const useHomeScreenContent = (): HomeContent => {
   const read = useHomeContent();
   const cold = snapshotSection("content");
   useSnapshotted("content", homeOpeningState(read).settled ? read : undefined);
-  return cold === undefined ? read : { ...cold, ...read };
+  // The same object while neither changes: Home's sections take it (#1423).
+  return useMemo(() => (cold === undefined ? read : { ...cold, ...read }), [cold, read]);
 };

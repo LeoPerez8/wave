@@ -1,4 +1,4 @@
-import { useCallback, useRef } from "react";
+import { useCallback, useMemo, useRef } from "react";
 
 import type { ActionItems } from "@/playback/actionTargets";
 import { mixedItemKey, type MixedItem } from "@/playback/mixedItems";
@@ -33,7 +33,8 @@ export function useHomeSelection() {
     lookup,
   });
 
-  return { ...selection, remember, enabled: true };
+  // One object while nothing selected changes: every Home section takes it (#1423).
+  return useMemo(() => ({ ...selection, remember, enabled: true }), [selection, remember]);
 }
 
 export type HomeSelection = ReturnType<typeof useHomeSelection>;

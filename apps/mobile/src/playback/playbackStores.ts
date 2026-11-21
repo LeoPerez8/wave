@@ -23,6 +23,19 @@ interface PositionState extends PositionReport {
   readonly item: { readonly id: string } | null;
 }
 
+type ReportedItem = NativePlayerState["item"];
+
+/** Whether two reports show the same song alike: each report brings a new item object (#1423). */
+const sameItemShown = (a: ReportedItem, b: ReportedItem): boolean =>
+  a === b ||
+  (a !== null &&
+    b !== null &&
+    a.id === b.id &&
+    a.title === b.title &&
+    a.artist === b.artist &&
+    a.album === b.album &&
+    a.artworkUri === b.artworkUri);
+
 export const makePlaybackStores = (setReportingRequested: (requested: boolean) => void) => {
   const playbackState = makeExternalStore<PlaybackState>({
     status: "idle",
@@ -86,6 +99,7 @@ export const makePlaybackStores = (setReportingRequested: (requested: boolean) =
         const errorStands = sameItem && !state.isPlaying;
         return {
           ...playback,
+          item: sameItemShown(previous.item, playback.item) ? previous.item : playback.item,
           error: errorStands ? previous.error : null,
           errorCode: errorStands ? (errorCode ?? previous.errorCode) : errorCode,
         };

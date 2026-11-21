@@ -1,5 +1,6 @@
 import { inYourOrbitSongs, inYourOrbitTap, type MagicQueueSeed } from "@wave/core";
 import type { PlayableSongRow } from "@wave/client";
+import { useMemo } from "react";
 
 import { playSongs } from "@/playback/actions";
 import { ytMusicEnabled } from "@/settings/ytMusic";
@@ -19,7 +20,9 @@ const IN_YOUR_ORBIT_CONTEXT = { kind: "home", id: "in-your-orbit" } as const;
  */
 export const useInYourOrbit = (): readonly MagicQueueSeed<PlayableSongRow>[] | undefined => {
   const songs = useMostListenedRecently(true);
-  return useSnapshotted("orbit", songs === undefined ? undefined : inYourOrbitSongs(songs));
+  // The same tiles until the songs change: the grid takes them (#1423).
+  const tiles = useMemo(() => (songs === undefined ? undefined : inYourOrbitSongs(songs)), [songs]);
+  return useSnapshotted("orbit", tiles);
 };
 
 /**
