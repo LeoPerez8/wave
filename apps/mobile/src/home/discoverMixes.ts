@@ -46,6 +46,7 @@ import { recommendationTurnEffect } from "@/lib/recommendationWork";
 import { makeExternalStore, type ExternalStore } from "@wave/client/externalStore";
 import { withNetworkLog } from "@/lib/networkMeter";
 import { persistedSetting, type PersistedSetting } from "@/lib/persistedSetting";
+import { currentDislikedSongs, useDislikedSongs } from "@/library/dislikes";
 import { libraryListQueries } from "@/library/hooks";
 import { LibraryStore } from "@/library/LibraryStore";
 import { type SongRow } from "@wave/client";
@@ -104,6 +105,8 @@ const radioMixes = (
       inputs.catalog.map((entry) => [entry.song.videoId, 1 - 0.5 ** entry.radios.length]),
     );
     const profileOf = (name: string) => inputs.profiles.profileOf(name) ?? lookedUpProfileOf(name);
+    // A mix never brings a disliked song; one disliked after the build leaves as it's blended (`useBlend`).
+    const disliked = yield* Effect.promise(currentDislikedSongs);
     const mixes = yield* runSteps(
       rankedDiscoverMixesSteps(
         seeds.map((seed, i) => ({ seed, pages: pages[i] ?? [] })),
@@ -113,6 +116,7 @@ const radioMixes = (
           taste: inputs.taste,
           profileOf,
           popularityOf: (videoId) => popularity.get(videoId) ?? 0,
+          disliked,
         },
         sliders,
         avoid,
@@ -553,7 +557,7 @@ export const refreshMixes = (id: MixSectionId): void => {
  * How [id]'s saved mixes are blended now: its level, leaving out Library
  * songs [tracks] (the Library's songs by id) doesn't have, new songs the
  * owner streamed or put in a playlist since the build (as of the last
- * re-blend, `refreshKnownVideos`), and explicit songs while Don't play
+ * re-blend, `refreshKnownVideos`), songs the owner disliked, and explicit songs while Don't play
  * explicit is on (Core's `discoverMixKeep`). Without [tracks] (Home, which
  * doesn't read every song; or the Library not read yet), every one counts
  * as there, flagged as the build saw it.
@@ -565,16 +569,18 @@ const useBlend = (
   const level = useDiscoverLevel();
   const dontPlayExplicit = useDontPlayExplicit();
   const knownVideos = useKnownVideos();
+  const disliked = useDislikedSongs();
   return useMemo(
     () => ({
       level,
       keep: discoverMixKeep({
         dontPlayExplicit,
         library: tracks,
+        disliked,
         ...(knownVideos === null ? {} : { knownVideos }),
       }),
     }),
-    [level, tracks, dontPlayExplicit, knownVideos],
+    [level, tracks, dontPlayExplicit, knownVideos, disliked],
   );
 };
 
@@ -607,6 +613,18 @@ export const useDiscoverMixes = (
   active = true,
   drawn = active,
 ): DiscoverMixesSection => {
+  const shown = useMixesSection(id, empty, active);
+  // The start of what Home shows is fetched ahead on Wi-Fi.
+  useEffect(() => noteMixesShown(id, shown, drawn), [id, shown, drawn]);
+  return shown;
+};
+
+/** What the mix section [id] shows (`useDiscoverMixes`), read without fetching anything ahead. */
+const useMixesSection = (
+  id: MixSectionId,
+  empty: boolean,
+  active: boolean,
+): DiscoverMixesSection => {
   const { saved, nothingToBuildFrom, building, failed } = SECTIONS[id];
   const enabled = useYtMusicEnabled();
   const mixes = saved.useValue();
@@ -614,7 +632,7 @@ export const useDiscoverMixes = (
   const nothing = nothingToBuildFrom.useValue();
   const rebuilding = useSyncExternalStore(building.subscribe, building.get);
   const buildFailed = useSyncExternalStore(failed.subscribe, failed.get);
-  const shown = useMemo(
+  return useMemo(
     () =>
       discoverMixesSection(mixes, {
         ytMusic: enabled && active,
@@ -626,10 +644,16 @@ export const useDiscoverMixes = (
       }),
     [id, mixes, enabled, active, nothing, blend, rebuilding, buildFailed, empty],
   );
-  // The start of what Home shows is fetched ahead on Wi-Fi.
-  useEffect(() => noteMixesShown(id, shown, drawn), [id, shown, drawn]);
-  return shown;
 };
+
+/**
+ * The Artist mixes as DJ reads them for its grid (Core's `djOpeningGrid`):
+ * what their row would show, or nothing while the arrangement doesn't build
+ * them (their row removed, and no empty Library's Magic Queue row to feed).
+ * It starts no build and leaves what Home fetches ahead as it is.
+ */
+export const useBuiltArtistMixes = (): DiscoverMixesSection =>
+  useMixesSection("artist-mixes", false, buildableRows().includes("artist-mixes"));
 
 /**
  * The mix [id] as last built (an artist or a genre mix), blended by its

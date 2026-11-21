@@ -94,6 +94,9 @@ const STORAGE: { readonly [K in TableName]: TableStorage } = {
   notifiedShows: { limit: "maxNotifiedShows" },
   // The id is the artist's normalised name (Core's `followArtistKey`); Undo leaves a tombstone.
   dismissedSuggestions: { limit: "maxDismissedSuggestions" },
+  // The id is the song's recording key, or `yt:<video>` for a YT Music song; `artists` is
+  // a JSON array of names, kept as the text the app sends.
+  dislikes: { limit: "maxDislikes" },
 };
 
 export const column = (field: string): string =>

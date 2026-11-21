@@ -6,6 +6,7 @@ import { importsPtBr } from "./catalogue/importsPtBr.ts";
 import { homePtBr } from "./catalogue/homePtBr.ts";
 import { arrangementPtBr } from "./catalogue/arrangementPtBr.ts";
 import { discoverPtBr } from "./catalogue/discoverPtBr.ts";
+import { djPtBr } from "./catalogue/djPtBr.ts";
 import { statsPtBr } from "./catalogue/statsPtBr.ts";
 import { recapPtBr } from "./catalogue/recapPtBr.ts";
 import { listeningHistoryPtBr } from "./catalogue/listeningHistoryPtBr.ts";
@@ -175,6 +176,7 @@ export const ptBR: Catalogue = {
   home: homePtBr,
   arrangement: arrangementPtBr,
   discover: discoverPtBr,
+  dj: djPtBr,
   stats: statsPtBr,
   recap: recapPtBr,
   listeningHistory: listeningHistoryPtBr,
@@ -211,6 +213,7 @@ export const ptBR: Catalogue = {
   },
   newReleases: {
     title: "Novidades dos Artistas que Você Segue",
+    playSection: (title: string) => `Reproduzir ${title}`,
     single: "Single",
     ep: "EP",
     album: "Álbum",

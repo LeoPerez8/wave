@@ -49,6 +49,7 @@ describe("itemActions", () => {
       "magicQueue",
       "addToPlaylist",
       "favorite",
+      "dislike",
       "goToAlbum",
       "goToArtist",
       "releaseDate",
@@ -146,6 +147,7 @@ describe("itemActions", () => {
         "download",
         "addToPlaylist",
         "favorite",
+        "dislike",
         "goToAlbum",
         "goToArtist",
         "releaseDate",
@@ -182,7 +184,7 @@ describe("itemActions", () => {
   test("missing songs checked together offer Download; a song with a file offers no download entries", () => {
     const missing = { ...song(), missing: true };
     const bar = names(itemActions(tracks([missing, missing], { surface: "selection" })));
-    assert.deepEqual(bar.slice(0, 3), ["addToPlaylist", "favorite", "download"]);
+    assert.deepEqual(bar.slice(0, 4), ["addToPlaylist", "favorite", "dislike", "download"]);
     assert.ok(!names(itemActions(tracks([song()]))).includes("download"));
     assert.ok(
       !names(itemActions(tracks([song(), song()], { surface: "selection" }))).includes("download"),
@@ -203,6 +205,7 @@ describe("itemActions", () => {
       "addToQueue",
       "addToPlaylist",
       "favorite",
+      "dislike",
       "download",
       "goToAlbum",
       "goToArtist",
@@ -387,6 +390,7 @@ describe("itemActions", () => {
         "addToQueue",
         "addToPlaylist",
         "favorite",
+        "dislike",
         "goToArtist",
         "delete",
       ]);
@@ -792,6 +796,7 @@ describe("itemActions on YT Music songs checked with the Library's", () => {
       "addToQueue",
       "addToPlaylist",
       "favorite",
+      "dislike",
       "download",
     ]);
   });
@@ -822,6 +827,7 @@ describe("itemActions on YT Music songs checked with the Library's", () => {
       "addToQueue",
       "addToPlaylist",
       "favorite",
+      "dislike",
       "removeFromPlaylist",
       "download",
     ]);
@@ -836,6 +842,7 @@ describe("itemActions on YT Music songs checked with the Library's", () => {
       "addToQueue",
       "addToPlaylist",
       "favorite",
+      "dislike",
       "download",
     ]);
   });
@@ -1380,5 +1387,50 @@ describe("Release Date", () => {
       catalogueOf("pt-BR").itemActions.releaseDateIs("junho de 1985"),
       "Data de Lançamento · junho de 1985",
     );
+  });
+});
+
+describe("Dislike", () => {
+  const after = (entries: readonly string[], action: string): string | undefined =>
+    entries[entries.indexOf(action) + 1];
+
+  test("a Library song's menu offers it after Favorite, by its state", () => {
+    assert.equal(after(names(itemActions(tracks([song()]))), "favorite"), "dislike");
+    assert.equal(
+      after(names(itemActions(tracks([{ ...song(), disliked: true }]))), "favorite"),
+      "removeDislike",
+    );
+    for (const item of [{ missing: true }, { streamed: true }])
+      assert.ok(names(itemActions(tracks([item]))).includes("dislike"), JSON.stringify(item));
+  });
+
+  test("checked songs offer Remove dislike only when all are disliked", () => {
+    const disliked = { ...song(), disliked: true };
+    const bar = (...items: ActionSubject["items"]) =>
+      names(itemActions(tracks(items, { surface: "selection" })));
+    assert.ok(bar(disliked, disliked).includes("removeDislike"));
+    assert.ok(bar(disliked, song()).includes("dislike"));
+    assert.ok(!bar(disliked, song()).includes("removeDislike"));
+  });
+
+  test("an unsearched entry has no song to dislike yet, and collections have none", () => {
+    assert.ok(!names(itemActions(tracks([{ unsearched: true }]))).includes("dislike"));
+    assert.ok(!names(itemActions(albums([1]))).includes("dislike"));
+  });
+
+  test("a YT Music song's menu offers it after Favorite, by its state", () => {
+    const yt = (disliked: boolean | undefined) =>
+      ytSongActions(undefined, { favorite: false, disliked }).map((entry) => entry.action);
+    assert.equal(after(yt(false), "favorite"), "dislike");
+    assert.equal(after(yt(true), "favorite"), "removeDislike");
+    assert.ok(!yt(undefined).includes("dislike"));
+    assert.ok(!yt(undefined).includes("removeDislike"));
+  });
+
+  test("says so in both languages", () => {
+    assert.equal(ITEM_ACTION_LABELS.dislike, "Dislike");
+    assert.equal(ITEM_ACTION_LABELS.removeDislike, "Remove dislike");
+    assert.equal(catalogueOf("pt-BR").itemActions.labels.dislike, "Não gostei");
+    assert.equal(catalogueOf("pt-BR").itemActions.labels.removeDislike, "Remover não gostei");
   });
 });

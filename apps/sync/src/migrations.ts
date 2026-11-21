@@ -268,21 +268,48 @@ const MIGRATIONS: readonly Migration[] = [
     ],
   },
   {
+    // Disliked songs, by recording key or, for a YT Music song, `yt:<video>`, with the song
+    // as it was listed when disliked and when that was.
+    id: "0014_dislikes",
+    statements: [
+      `CREATE TABLE dislikes (
+        account_id TEXT NOT NULL,
+        id TEXT NOT NULL,
+        change_no INTEGER NOT NULL,
+        changed_at INTEGER NOT NULL,
+        phone_id TEXT NOT NULL,
+        deleted INTEGER NOT NULL,
+        title TEXT,
+        artists TEXT,
+        duration_ms INTEGER,
+        disliked_at INTEGER,
+        PRIMARY KEY (account_id, id)
+      )`,
+      `CREATE INDEX dislikes_change_idx ON dislikes (account_id, change_no)`,
+    ],
+  },
+  {
+    // A playlist play's playlist by its sync id: `context_id` holds the number the playlist
+    // has on the device that recorded the play, which is another playlist's elsewhere.
+    id: "0014_play_context_playlist",
+    statements: ["ALTER TABLE plays ADD COLUMN context_playlist_id TEXT"],
+  },
+  {
     // When Restore or Undo last brought an entry back (Core's `mergePlaylistEntries`).
-    id: "0014_playlist_entry_restores",
+    id: "0015_playlist_entry_restores",
     statements: ["ALTER TABLE playlist_entries ADD COLUMN restored_at INTEGER"],
   },
   {
     // The Google account's name, as the members of a collaborative playlist see the account
     // (`@wave/core`'s `accountName`); null until a sign-in or `PUT /v1/account/name` gives one.
-    id: "0015_account_name",
+    id: "0016_account_name",
     statements: ["ALTER TABLE accounts ADD COLUMN name TEXT"],
   },
   {
     // A collaborative playlist's record (src/collaborations.ts): its owner, in whose account
     // the playlist's rows stay, its members with when each joined (the owner is one), and, for
     // an account that left or for which it ended, why and when.
-    id: "0016_collaborations",
+    id: "0017_collaborations",
     statements: [
       `CREATE TABLE collaborations (
         playlist_id TEXT PRIMARY KEY,
@@ -310,7 +337,7 @@ const MIGRATIONS: readonly Migration[] = [
     // A collaborative playlist's invite links (src/invites.ts): a hash of each token, never the
     // token, with its owner, expiry and state (`active`, `off`, `replaced`, or `ended` by a
     // member's removal). A playlist has at most one active link.
-    id: "0017_collaboration_invites",
+    id: "0018_collaboration_invites",
     statements: [
       `CREATE TABLE collaboration_invites (
         token_hash TEXT PRIMARY KEY,
@@ -330,7 +357,7 @@ const MIGRATIONS: readonly Migration[] = [
     // A collaborative playlist's entries (Core's `SyncPlaylistEntry`): a Library song's own
     // fields, which other members match their Tracks by, and the account that added it. The
     // index serves a member's pull of one playlist.
-    id: "0018_collaborative_entries",
+    id: "0019_collaborative_entries",
     statements: [
       "ALTER TABLE playlist_entries ADD COLUMN title TEXT",
       "ALTER TABLE playlist_entries ADD COLUMN credit TEXT",

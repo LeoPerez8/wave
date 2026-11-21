@@ -1,4 +1,4 @@
-import type { QueueState } from "./queue.ts";
+import type { QueueContext, QueueState } from "./queue.ts";
 import { MAGIC_QUEUE_CONTEXT, type MagicSession } from "./magicQueue.ts";
 import { RECAP_PLAY_CONTEXT } from "./recapMusic.ts";
 import type { SleepTimer } from "./sleepTimer.ts";
@@ -89,7 +89,10 @@ export const queueLengthsToRead = (
  * songs ahead: when a song starts and the songs after it play for less than
  * the Buffer, which is the song during which the time left goes under it.
  * Where that song is playing doesn't count, so the answer only changes with
- * the queue, the Buffer and the settings, never with the clock.
+ * the queue, the Buffer and the settings, never with the clock. While a play
+ * is still adding its songs ([filling], its queue context, such as New from
+ * Artists You Follow's Play reading its releases one by one), a queue that is
+ * still that play's waits: it continues once the play has added its last.
  */
 export const queueContinuation = (
   state: QueueState,
@@ -97,10 +100,12 @@ export const queueContinuation = (
     enabled = true,
     sleepTimer = null,
     ahead = null,
+    filling = null,
   }: {
     readonly enabled?: boolean;
     readonly sleepTimer?: SleepTimer | null;
     readonly ahead?: QueueTimeAhead | null;
+    readonly filling?: QueueContext | null;
   } = {},
 ): QueueContinuationSeed | null => {
   if (
@@ -109,7 +114,8 @@ export const queueContinuation = (
     sleepTimer?.type === "endOfTrack" ||
     state.repeat !== "off" ||
     state.context?.kind === MAGIC_QUEUE_CONTEXT ||
-    state.context?.kind === RECAP_PLAY_CONTEXT.kind
+    state.context?.kind === RECAP_PLAY_CONTEXT.kind ||
+    (filling !== null && state.context?.kind === filling.kind && state.context.id === filling.id)
   )
     return null;
   const last = state.entries.at(-1);

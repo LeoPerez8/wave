@@ -129,6 +129,65 @@ describe("Starting a Magic Queue", () => {
     delete (old as { faithful?: boolean }).faithful;
     assert.equal(parseMagicSession(old)?.faithful, undefined);
   });
+  test("a song played from Search or a link is headed Related, in both languages", () => {
+    const { session } = startMagicQueue(SONG_SEED, [song("s1", "Seed Artist")], {
+      id: "search",
+      random: first,
+      faithful: true,
+      plainPlay: true,
+    })!;
+    assert.equal(magicQueueLabel(session), "Related · from Seed Song");
+    assert.equal(magicQueueLabel(session, catalogueOf("pt-BR")), "Relacionadas · de Seed Song");
+  });
+
+  test("a streamed song played from Search or a link is headed Related too", () => {
+    const { session } = startStreamedMagicQueue(
+      {
+        videoId: "vid1",
+        title: "Midnight City",
+        artists: ["M83"],
+        album: null,
+        durationMs: 244_000,
+        artworkUrl: null,
+        explicit: false,
+      },
+      { id: "link", plainPlay: true },
+    );
+    assert.equal(magicQueueLabel(session), "Related · from Midnight City");
+    assert.equal(magicQueueLabel(session, catalogueOf("pt-BR")), "Relacionadas · de Midnight City");
+  });
+
+  test("the Related heading survives saving; a session saved before it keeps Magic Queue", () => {
+    const { session } = startMagicQueue(SONG_SEED, [song("s1", "Seed Artist")], {
+      id: "search",
+      random: first,
+      faithful: true,
+      plainPlay: true,
+    })!;
+    const saved = JSON.parse(JSON.stringify(session)) as Record<string, unknown>;
+    assert.equal(magicQueueLabel(parseMagicSession(saved)!), "Related · from Seed Song");
+    // Faithful sessions saved before the mark came from Search too, and can't be told apart.
+    delete saved["plainPlay"];
+    assert.equal(magicQueueLabel(parseMagicSession(saved)!), "Magic Queue · from Seed Song");
+  });
+
+  test("a Magic Queue the owner asked for, or a continuation, keeps its heading", () => {
+    const seed = song("s1", "Seed Artist");
+    const asked = startMagicQueue(SONG_SEED, [seed], { id: "menu", random: first })!.session;
+    assert.equal(magicQueueLabel(asked), "Magic Queue · from Seed Song");
+    // A continuation is faithful, as a Search tap is, yet the owner's setting asked for it.
+    const continued = startMagicQueue(SONG_SEED, [seed], {
+      id: "continued",
+      random: first,
+      faithful: true,
+    })!.session;
+    assert.equal(magicQueueLabel(continued), "Magic Queue · from Seed Song");
+    assert.equal(
+      magicQueueLabel(parseMagicSession(JSON.parse(JSON.stringify(continued)))!),
+      "Magic Queue · from Seed Song",
+    );
+  });
+
   test("a faithful list seed keeps families at 10% of songs with known genres", () => {
     const profile = genreProfile([
       ...Array.from({ length: 9 }, () => ({ genre: "Rock" })),

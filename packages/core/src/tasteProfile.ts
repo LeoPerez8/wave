@@ -3,7 +3,8 @@
  * beyond one Magic Queue session, derived from what Wave keeps already (the
  * play history, favorites and downloads), so it needs no state of its own
  * and syncs with the history. Each signal loses half its weight every 30
- * days. It scores songs, artists and genre families.
+ * days. It scores songs, artists and genre families. A dislike (docs/spec.md,
+ * Dislike) counts against its song's artists.
  */
 
 import { indexSteps } from "./buildSteps.ts";
@@ -13,8 +14,11 @@ import type { PlayEvent } from "./playEvents.ts";
 /** A play skipped before this much of it played is a skip; later, it's neutral. */
 export const MAGIC_SKIP_MS = 30_000;
 
-/** What the owner did to a song that tells their taste, strongest last. */
-export type TasteSignalKind = "skip" | "playedThrough" | "download" | "favorite";
+/**
+ * What the owner did to a song that tells their taste: the positive ones
+ * strongest last, then a dislike, which counts against the song's artists alone.
+ */
+export type TasteSignalKind = "skip" | "playedThrough" | "download" | "favorite" | "dislike";
 
 /** What each signal adds to its song's score, when it just happened. */
 const POINTS: { readonly [K in TasteSignalKind]: number } = {
@@ -22,6 +26,7 @@ const POINTS: { readonly [K in TasteSignalKind]: number } = {
   playedThrough: 1,
   download: 2,
   favorite: 3,
+  dislike: -3,
 };
 
 /** How long a signal takes to lose half its weight: 30 days. */
@@ -44,6 +49,8 @@ export interface TasteHistory {
   readonly favorites: readonly { readonly trackId: string; readonly changedAt: number }[];
   /** Every downloaded song, with its file's date. */
   readonly downloads: readonly { readonly trackId: string; readonly downloadedAt: number }[];
+  /** Every disliked song, by its dislike's key (a queue track id), with when it was disliked. */
+  readonly dislikes?: readonly { readonly trackId: string; readonly dislikedAt: number }[];
 }
 
 /**
@@ -96,10 +103,15 @@ interface Scores {
   readonly genres: Map<string, number>;
 }
 
-/** Adds [points] to [song]'s score, each of its artists' and its genre family's. */
-const score = (scores: Scores, song: MagicSong, points: number): void => {
-  add(scores.songs, song.trackId, points);
+/**
+ * Adds [points] to [song]'s score, each of its artists' and its genre family's.
+ * A dislike ([kind]) counts for its artists alone: the song is kept out of
+ * what Wave picks anyway, and one song says little of a whole genre family.
+ */
+const score = (scores: Scores, kind: TasteSignalKind, song: MagicSong, points: number): void => {
   for (const artist of new Set(song.artists)) add(scores.artists, artist, points);
+  if (kind === "dislike") return;
+  add(scores.songs, song.trackId, points);
   const genre = genreKey(song.genre);
   if (genre !== null) add(scores.genres, genre, points);
 };
@@ -107,8 +119,10 @@ const score = (scores: Scores, song: MagicSong, points: number): void => {
 /**
  * The taste profile [history] makes at [now]: a favorite weighs most, then a
  * download, then a song played to the end; a song skipped within its first
- * 30 s weighs against it. Each signal loses half its weight every 30 days
- * from when it happened: the play's start, the star's change, the file's date.
+ * 30 s weighs against it, and a dislike against the song's artists as much
+ * as a favorite weighs for them. Each signal loses half its weight every 30 days
+ * from when it happened: the play's start, the star's change, the file's
+ * date, the dislike's.
  * An artist's score, and a genre family's, add up their songs' signals;
  * [songOf] tells each song's ([trackId]'s), and a song it doesn't know (gone
  * from the Library) scores nothing.
@@ -127,10 +141,12 @@ export const tasteProfile = (
     signals.push({ kind: "favorite", trackId, at: changedAt });
   for (const { trackId, downloadedAt } of history.downloads)
     signals.push({ kind: "download", trackId, at: downloadedAt });
+  for (const { trackId, dislikedAt } of history.dislikes ?? [])
+    signals.push({ kind: "dislike", trackId, at: dislikedAt });
   const scores: Scores = { songs: new Map(), artists: new Map(), genres: new Map() };
   for (const signal of signals) {
     const song = songOf(signal.trackId);
-    if (song !== undefined) score(scores, song, weightAt(signal, now));
+    if (song !== undefined) score(scores, signal.kind, song, weightAt(signal, now));
   }
   return { at: now, ...scores };
 };
@@ -144,7 +160,7 @@ export function* tasteProfileSteps(
   const scores: Scores = { songs: new Map(), artists: new Map(), genres: new Map() };
   const apply = (signal: HistorySignal): void => {
     const song = songOf(signal.trackId);
-    if (song !== undefined) score(scores, song, weightAt(signal, now));
+    if (song !== undefined) score(scores, signal.kind, song, weightAt(signal, now));
   };
   for (const play of history.plays) {
     const kind = tastePlaySignal(play);
@@ -157,6 +173,10 @@ export function* tasteProfileSteps(
   }
   for (const { trackId, downloadedAt } of history.downloads) {
     apply({ kind: "download", trackId, at: downloadedAt });
+    yield;
+  }
+  for (const { trackId, dislikedAt } of history.dislikes ?? []) {
+    apply({ kind: "dislike", trackId, at: dislikedAt });
     yield;
   }
   return { at: now, ...scores };
@@ -182,7 +202,7 @@ export const tasteLearned = (
     artists: new Map(profile.artists),
     genres: new Map(profile.genres),
   };
-  score(scores, song, weightAt({ kind, at }, profile.at));
+  score(scores, kind, song, weightAt({ kind, at }, profile.at));
   return { at: profile.at, ...scores };
 };
 
@@ -199,7 +219,7 @@ export function* tasteLearnedSteps(
     genres: yield* indexSteps(profile.genres, (entry) => entry),
   };
   for (const signal of signals) {
-    if (signal !== undefined) score(scores, signal.song, weightAt(signal, profile.at));
+    if (signal !== undefined) score(scores, signal.kind, signal.song, weightAt(signal, profile.at));
     yield;
   }
   return { at: profile.at, ...scores };

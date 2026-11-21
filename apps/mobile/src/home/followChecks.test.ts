@@ -46,6 +46,7 @@ const boundary = `data:text/javascript,${encodeURIComponent(`
     typeof error?.code === "string" && error.code.startsWith("ERR_WAVE_") ? error.code : null;
   export const showsNotificationsEnabled = () => false;
   export const ytMusicEnabled = () => false;
+  export const dontPlayExplicit = () => false;
   export const online = () => true;
   export const WaveNative = {};
   export const currentLocalisation = () => ({});

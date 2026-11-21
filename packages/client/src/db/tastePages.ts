@@ -89,7 +89,7 @@ const SAYS_NOTHING = (row: "OLD" | "NEW") => `${row}.end_reason NOT IN ('complet
 
 /**
  * What moves the taste revision: a write to what the taste pages and the songs page read
- * (songs, their credits, artists, albums, genres, plays, stars). Playback's own saves (the
+ * (songs, their credits, artists, albums, genres, plays, stars, dislikes). Playback's own saves (the
  * position, the queue, an unfinished play's progress) and sync's pushed flags don't, so a
  * derivation that walks pages on free turns isn't restarted by music playing.
  */
@@ -106,6 +106,9 @@ const TASTE_WRITES: readonly string[] = [
   "INSERT ON favorites",
   "DELETE ON favorites",
   "UPDATE OF track_id, changed_at, deleted ON favorites",
+  "INSERT ON dislikes",
+  "DELETE ON dislikes",
+  "UPDATE OF song_key, artists, disliked_at, deleted ON dislikes",
   "INSERT ON play_events",
   "DELETE ON play_events",
   // Progress of a play that says nothing either side reads the same profile, whichever

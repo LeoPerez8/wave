@@ -3,6 +3,7 @@ import type { Page } from "./bridge.ts";
 import type { BrowseRow } from "./browse.ts";
 
 export type LocalHomeSectionId =
+  | "in-your-orbit"
   | "recently-added"
   | "recently-played"
   | "most-played"

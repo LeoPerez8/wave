@@ -5,7 +5,7 @@
 
 import { formatDate } from "./formatting.ts";
 import { catalogueOf, type AppLanguage } from "./localisation.ts";
-import { channelServiceUrl, versionOrder } from "./updatePolicy.ts";
+import { channelServiceUrl, versionOrder, type UpdateButtonLook } from "./updatePolicy.ts";
 import { answerReleases, readPublishedRelease, type PublishedRelease } from "./whatsNew.ts";
 
 /** One release from `GET /v1/notes`, with when its notes were published. */
@@ -143,18 +143,21 @@ export const versionHistoryEntries = ({
 };
 
 /**
- * The Settings row's line: the running version's date. Null until the history is read, or when the
- * running version has no notes or no date, which leaves the row with its title alone.
+ * The Settings row's line: the running version, or how far an APK's download is while one runs,
+ * whoever started it. Null in a build that doesn't know its version, which leaves the row with its
+ * title alone.
  */
-export const versionHistorySummary = ({
-  releases,
-  ...asked
+export const versionHistoryRowLine = ({
+  runningVersion,
+  look,
+  language,
 }: {
-  readonly releases: readonly DatedRelease[] | null;
   readonly runningVersion: string | null;
-  readonly channel: string | null;
+  /** What the update action shows (`updateButtonLook`). */
+  readonly look: UpdateButtonLook;
   readonly language: AppLanguage;
-}): string | null =>
-  releases === null
-    ? null
-    : (versionHistoryEntries({ releases, ...asked }).find(({ current }) => current)?.date ?? null);
+}): string | null => {
+  const strings = catalogueOf(language).appUpdates;
+  if (typeof look === "object") return strings.downloading(look.downloading);
+  return runningVersion === null ? null : strings.version(runningVersion);
+};

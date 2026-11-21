@@ -1,3 +1,4 @@
+import { NO_DISLIKES, withoutDisliked, type DislikedSongs } from "./dislikes.ts";
 import { MAGIC_QUEUE_PICKS } from "./magicQueueSection.ts";
 import type { RandomSource } from "./weightedPick.ts";
 
@@ -6,11 +7,14 @@ import type { RandomSource } from "./weightedPick.ts";
  * file, by id, and the YT Music entries of the owner's playlists, by video
  * id, each video once and none the Library already has as a file (that
  * song counts once, as the Library's). Unsearched and unavailable entries
- * have no video id and stay out.
+ * have no video id and stay out. Disliked songs ([disliked], `dislikes.ts`,
+ * which holds a Library song's Track id and its video alike) are never
+ * drawn, and one the row showed leaves it.
  */
 export interface MagicQueuePool {
   readonly trackIds: readonly number[];
   readonly videoIds: readonly string[];
+  readonly disliked?: DislikedSongs;
 }
 
 /** A seed the row shows: a Library song's id (a number) or a YT Music entry's video id (a string). */
@@ -27,8 +31,13 @@ export const randomMagicQueuePicks = (
   random: RandomSource,
   previous: readonly MagicQueueSeedId[] = [],
 ): MagicQueueSeedId[] => {
-  const available = new Set<MagicQueueSeedId>(pool.trackIds);
-  for (const videoId of pool.videoIds) available.add(videoId);
+  const available = new Set<MagicQueueSeedId>(
+    withoutDisliked<MagicQueueSeedId>(
+      [...pool.trackIds, ...pool.videoIds],
+      pool.disliked ?? NO_DISLIKES,
+      (id) => (typeof id === "number" ? { id } : { videoId: id }),
+    ),
+  );
   const before = [...new Set(previous)].slice(0, MAGIC_QUEUE_PICKS);
   const kept = new Set(before.filter((id) => available.has(id)));
   const ids = [...available].filter((id) => !kept.has(id));

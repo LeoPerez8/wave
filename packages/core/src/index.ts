@@ -70,8 +70,8 @@ export type {
 } from "./listActions.ts";
 export { describeFolder, filesLeavingWithRoot, isWithin, planAddRoot } from "./scanRoots.ts";
 export type { AddRootPlan, FolderLabel, ScanRootState } from "./scanRoots.ts";
-export { resolveSkipSwipe } from "./swipe.ts";
-export type { SkipDirection, SkipSwipe } from "./swipe.ts";
+export { resolveSkipSwipe, settleScreenSwipe } from "./swipe.ts";
+export type { ScreenSwipe, SkipDirection, SkipSwipe } from "./swipe.ts";
 export { toastDuration, toastSwipeDismisses } from "./toast.ts";
 export type { ToastSwipe } from "./toast.ts";
 export {
@@ -166,6 +166,7 @@ export {
   findLyricMatch,
   normalizeSearchText,
   rememberSearch,
+  searchKindOrder,
 } from "./search.ts";
 export type {
   LyricSearchMatch,
@@ -317,7 +318,7 @@ export {
   readKeptVersionHistory,
   readVersionHistory,
   versionHistoryEntries,
-  versionHistorySummary,
+  versionHistoryRowLine,
   versionHistoryUrl,
 } from "./versionHistory.ts";
 export type { DatedRelease, VersionHistoryEntry, VersionHistorySection } from "./versionHistory.ts";
@@ -496,6 +497,7 @@ export {
   LAYOUT_PAGES,
   SETTINGS_PAGES,
   accountsSummary,
+  dislikedSongsSummary,
   downloadsSummary,
   visibleSettingsPages,
 } from "./settingsPages.ts";
@@ -652,6 +654,7 @@ export {
   glassTintAlpha,
   isDefaultGlassSettings,
   readGlassSettings,
+  writeGlassSettings,
 } from "./glassSettings.ts";
 export type { GlassLevelSetting, GlassSettings } from "./glassSettings.ts";
 export {
@@ -747,6 +750,21 @@ export { concentricRadius } from "./corners.ts";
 export type { InsetSquare } from "./corners.ts";
 export { LOGO_WAVES, logoIconPaths, logoWaveY } from "./logo.ts";
 export type { LogoIconBox, LogoIconPaths, LogoWave } from "./logo.ts";
+export {
+  TITLE_MARK_TOKENS,
+  titleMarkColours,
+  titleMarkFontScale,
+  titleMarkLayout,
+  titleMarkPlacement,
+} from "./titleMark.ts";
+export type {
+  TitleLine,
+  TitleMarkColours,
+  TitleMarkDrawn,
+  TitleMarkLayout,
+  TitleMarkRoom,
+  TitleMarkType,
+} from "./titleMark.ts";
 export { LISTENING_WAVE, UNDERLINE_WAVE, underlineMotion, wavePath } from "./wavyUnderline.ts";
 export type { UnderlineMotion, UnderlineMotionInput, WaveShape } from "./wavyUnderline.ts";
 export {
@@ -764,6 +782,31 @@ export { leavingSongEntry, songsLeaving } from "./songsLeaving.ts";
 export type { LeavingSong, LeavingTrack, SongsLeaving } from "./songsLeaving.ts";
 export { artistArtwork, artistInitial } from "./artistImage.ts";
 export type { ArtistAlbumLink } from "./artistImage.ts";
+export { isRecent, RECENT_WINDOW_DAYS, recentWindowStart } from "./recentWindow.ts";
+export { IN_YOUR_ORBIT_ARTISTS, inYourOrbit, inYourOrbitWindow } from "./inYourOrbit.ts";
+export {
+  FROM_YOUR_LIBRARY_PLAYLISTS,
+  fromYourLibrary,
+  playlistOfContextId,
+  playlistPlays,
+  type PlaylistPlayEvent,
+  type PlaylistPlays,
+} from "./fromYourLibrary.ts";
+export {
+  HOME_COMMUNITY_PLAYLISTS,
+  HOME_COMMUNITY_PLAYLISTS_RETRY_MS,
+  communityPlaylistsAccount,
+  homeCommunityPlaylists,
+  homeCommunityPlaylistsDue,
+  homeCommunityPlaylistsShown,
+  keptCommunityPlaylists,
+  newCommunityPlaylistsSalt,
+  parseKeptCommunityPlaylists,
+  storedKeptCommunityPlaylists,
+  type KeptCommunityPlaylists,
+  type YtAccountHome,
+  type YtPlaylistShelf,
+} from "./homeCommunityPlaylists.ts";
 export { rowWindow, windowRows } from "./rowWindow.ts";
 export type { RowView, RowWindow } from "./rowWindow.ts";
 export {
@@ -818,6 +861,19 @@ export type {
 export { pendingWriteDelay } from "./writePacing.ts";
 export type { WritePacing } from "./writePacing.ts";
 export { stepNowPlayingSheet } from "./sheetLifecycle.ts";
+export { NOW_PLAYING_OPENS_ON, stepNowPlayingScreens } from "./nowPlayingScreens.ts";
+export {
+  nowPlayingEditHintDue,
+  readNowPlayingEditHintShown,
+  storedNowPlayingEditHintShown,
+} from "./nowPlayingEditHint.ts";
+export type {
+  NowPlayingPage,
+  NowPlayingScreen,
+  NowPlayingScreens,
+  NowPlayingScreensEvent,
+  NowPlayingScreensStep,
+} from "./nowPlayingScreens.ts";
 export {
   QUEUE_COVER_FLUSH_MS,
   createQueueCoverBatcher,
@@ -843,6 +899,7 @@ export {
   magicFaithfulGenreProfile,
   magicYtSong,
   magicPlaySignal,
+  magicQueueDislikedEntries,
   magicQueueEdits,
   magicQueueLabel,
   magicQueueKeepsPlayingSong,
@@ -890,7 +947,32 @@ export { artistSongOrder } from "./artistSongOrder.ts";
 export type { RankedArtistSong } from "./artistSongOrder.ts";
 export { ytArtistOpening, ytArtistOpeningState } from "./ytArtistOpening.ts";
 export { artistPageItems } from "./artistPage.ts";
-export type { ArtistPageItem, ArtistPageShelf } from "./artistPage.ts";
+export type {
+  ArtistPageAbout,
+  ArtistPageAfter,
+  ArtistPageItem,
+  ArtistPageShelf,
+} from "./artistPage.ts";
+export {
+  ARTIST_PAGE_KEPT_MS,
+  NO_ARTIST_PAGE_LOOKUP_FAILURES,
+  artistPageKept,
+  artistPageLookupDue,
+  artistPageLookupFailedAt,
+  artistPageLookupLine,
+  artistPageLookupReads,
+  parseArtistPageLookupFailures,
+  storedArtistPageLookupFailures,
+  withArtistPageLookupEnded,
+} from "./artistPageLookup.ts";
+export type {
+  ArtistPageKept,
+  ArtistPageLookupContext,
+  ArtistPageLookupEnd,
+  ArtistPageLookupFailures,
+} from "./artistPageLookup.ts";
+export { similarArtistLinks } from "./similarArtistLinks.ts";
+export type { SimilarArtistLink } from "./similarArtistLinks.ts";
 export type { SheetEvent, SheetPhase, SheetStep } from "./sheetLifecycle.ts";
 export {
   artistSeparator,
@@ -1055,6 +1137,7 @@ export type {
 } from "./ytAccount.ts";
 export {
   YT_SEARCH_DEBOUNCE_MS,
+  YT_SEARCH_NO_LIBRARY,
   YT_SECTION_HIDDEN,
   stepYtSection,
   ytSearchAsksVideos,
@@ -1372,7 +1455,9 @@ export {
   ytArtistPageAsks,
   ytArtistSavedStands,
   ytArtistPageView,
+  ytArtistPageWaiting,
   ytArtistQuery,
+  ytArtistAbout,
   ytArtistRelease,
   ytArtistIntegrated,
   ytArtistSectionAsks,
@@ -1392,6 +1477,7 @@ export type {
   YtArtistShelvesContext,
   YtArtistAlbum,
   YtArtistCandidate,
+  YtArtistAbout,
   YtArtistFullPage,
   YtArtistLookup,
   YtArtistPageContext,
@@ -1704,8 +1790,11 @@ export {
   readPushAnswer,
   syncFieldFits,
 } from "./syncWire.ts";
+export { settleMarks } from "./syncMarks.ts";
+export type { MarkStamp, SettledMarks } from "./syncMarks.ts";
 export type {
   CorrectedChangeTime,
+  SyncDislike,
   SyncDismissedSuggestion,
   SyncFavorite,
   SyncFieldKind,
@@ -2393,6 +2482,26 @@ export type {
   MagicQueueSeed,
   MagicQueueShown,
 } from "./magicQueueRow.ts";
+export {
+  CAROUSEL_PAGE_MIN_SONGS,
+  carouselPageSongs,
+  MAGIC_QUEUE_CAROUSEL_PAGES,
+  magicQueueCarouselKeptPage,
+  magicQueueCarouselPage,
+  magicQueueCarouselPageLabel,
+  magicQueueCarouselPageTitle,
+  magicQueueCarouselPages,
+  magicQueueCarouselRestarts,
+  mostListenedRecently,
+  recentPlaysWindow,
+} from "./magicQueueCarousel.ts";
+export type { MagicQueueCarouselPageId, MagicQueueCarouselRow } from "./magicQueueCarousel.ts";
+export { discoveries } from "./discoveries.ts";
+export type {
+  DiscoveriesInput,
+  DiscoveryCatalogSong,
+  DiscoveryLibrarySong,
+} from "./discoveries.ts";
 export { magicQueueShare } from "./magicQueue.ts";
 export { discoverMixesOfRadios, discoverMixesOfRadiosSteps } from "./discoverMixRadios.ts";
 export type { DiscoverMixRead } from "./discoverMixRadios.ts";
@@ -2464,6 +2573,8 @@ export { DOUBLE_TAP_MS, coverDoubleTap, createCoverTaps } from "./coverGestures.
 export type { CoverDoubleTap, CoverTaps } from "./coverGestures.ts";
 export { createStarPop } from "./starPop.ts";
 export type { StarPop } from "./starPop.ts";
+export { playingStarSubject } from "./playingStar.ts";
+export type { PlayingStarAnswer, PlayingStarSubject } from "./playingStar.ts";
 export { discoverLevelLabel } from "./discoverMixLevels.ts";
 export {
   DISCOVER_ROWS,
@@ -2500,6 +2611,31 @@ export {
 export type { RowMenuAction, RowSwipeActions, SwipeChoice, SwipeSettings } from "./swipeActions.ts";
 export { BACK_EXIT_WINDOW_MS, createBackExitConfirmation } from "./backExit.ts";
 export { favoriteToast } from "./favoriteToast.ts";
+export {
+  NO_DISLIKES,
+  dislikeKey,
+  dislikeKeys,
+  dislikedSongs,
+  dislikesToForget,
+  dislikeSongs,
+  dislikeToast,
+  favoriteSongs,
+  isDisliked,
+  noMarkChanges,
+  withoutDisliked,
+} from "./dislikes.ts";
+export type {
+  DislikedSong,
+  DislikedSongs,
+  MarkChange,
+  MarkChanges,
+  MarkedSong,
+  SongIdentity,
+  SongMarks,
+} from "./dislikes.ts";
+export { dislikeSkipsPlaying } from "./dislikeSkip.ts";
+export { dislikedSongRows } from "./dislikedSongsPage.ts";
+export type { DislikedSongRow } from "./dislikedSongsPage.ts";
 export { queuedToast } from "./queuedToast.ts";
 export type { FavoriteSource } from "./favoriteToast.ts";
 
@@ -2756,6 +2892,7 @@ export type {
 export {
   resolveRecognizedSong,
   recognizeResultActions,
+  recognizeTileFavorite,
   geniusLyricsResultActions,
   geniusLyricsResultActionLabels,
   recognizePlaylistSong,
@@ -2767,6 +2904,7 @@ export type {
   RecognizeResult,
   RecognizeResultAction,
   RecognizeResultOptions,
+  RecognizeTileFavorite,
   RecognizeTrack,
   GeniusLyricsResultAction,
 } from "./recognition.ts";
@@ -2783,6 +2921,8 @@ export {
   type SampleTouchEvent,
 } from "./touchSample.ts";
 export type { LongPressFill, SampleMenuEntry } from "./touchSample.ts";
+export { RELATED_PAGE_ROWS, relatedPages, relatedRowsThatFit } from "./relatedPages.ts";
+export type { RelatedPages } from "./relatedPages.ts";
 export {
   createRelatedSearches,
   createRelatedSongsSession,
@@ -2800,9 +2940,16 @@ export type {
 export {
   NOW_PLAYING_ACTIONS,
   NOW_PLAYING_BUTTONS_KEY,
+  NOW_PLAYING_FOOTER_SLOTS,
+  NOW_PLAYING_PREVIOUS_ROW_KEY,
+  NOW_PLAYING_TRANSPORT_SLOTS,
   editNowPlayingButtons,
+  nowPlayingButtonsAreDefault,
+  nowPlayingRelatedChevronShown,
+  nowPlayingSlotRoute,
   nowPlayingSlotChoices,
   nowPlayingSlotShow,
+  nowPlayingSongMenuShow,
   readNowPlayingButtons,
   readNowPlayingSlotRoute,
   storedNowPlayingButtons,
@@ -2816,6 +2963,7 @@ export type {
 } from "./nowPlayingButtons.ts";
 
 export * from "./followedArtists.ts";
+export * from "./followPlay.ts";
 export * from "./followArtistSearch.ts";
 export * from "./followSuggestions.ts";
 
@@ -2979,3 +3127,63 @@ export type {
   CollaborativeMemberRow,
   InviteView,
 } from "./collaborativeMenu.ts";
+export {
+  DJ_GRID_TILES,
+  DJ_MAX_SELECTED,
+  djArtistTile,
+  djCanStart,
+  djGrid,
+  djOpened,
+  djReduce,
+  djSeedTiles,
+  djSelectable,
+  djSelected,
+  startDjQueue,
+} from "./dj.ts";
+export {
+  DEFAULT_DJ_SETTINGS,
+  DJ_DISCOVERIES,
+  DJ_VARIETIES,
+  djDiscoveryLabel,
+  djMixSliders,
+  djNewMusicShare,
+  parseDjSettings,
+} from "./djSettings.ts";
+export type { DjDiscovery, DjPopularity, DjSettings, DjVariety } from "./djSettings.ts";
+export { djVarietyCandidates } from "./djVariety.ts";
+export type { DjCandidatePools } from "./djVariety.ts";
+export {
+  DJ_REMEMBERED_SETTING,
+  djReopened,
+  readDjRemembered,
+  storedDjRemembered,
+} from "./djRemembered.ts";
+export type { DjRemembered } from "./djRemembered.ts";
+export { DJ_FILTERS, djFilterOn, djToggleFilter } from "./djSettings.ts";
+export type { DjFilter } from "./djSettings.ts";
+export {
+  DJ_NEW_RELEASE_BOOST,
+  DJ_RELEASE_PAGES,
+  djNewReleasesRanked,
+  djReleaseArtists,
+} from "./djNewReleases.ts";
+export type { DjReleasePage } from "./djNewReleases.ts";
+export { magicSessionSliders } from "./magicQueue.ts";
+export type {
+  DjAction,
+  DjState,
+  DjArtistTile,
+  DjGridSources,
+  DjPageNeeded,
+  DjTile,
+  DjTileKey,
+} from "./dj.ts";
+export { djOpeningGrid } from "./djOpening.ts";
+export type { DjOpeningGrid, DjOpeningSources } from "./djOpening.ts";
+export { DJ_OPENED_TILES, djCells, djPageRead, djPagesNeeded } from "./dj.ts";
+export { djAlbumTile, djTileArtist } from "./dj.ts";
+export type { DjAlbum, DjAlbumTile } from "./dj.ts";
+export type { DjCell, DjPageRead, DjRow, DjSavedPage } from "./dj.ts";
+export { djSearchTiles } from "./djSearch.ts";
+export { djSeedFull } from "./dj.ts";
+export type { DjSearchFound } from "./djSearch.ts";

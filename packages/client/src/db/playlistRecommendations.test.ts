@@ -1,6 +1,6 @@
 import { eq, sql } from "drizzle-orm";
 import * as schema from "./schema.ts";
-import { setFavorites } from "./playHistory.ts";
+import { setFavorites, writeFavorites } from "./playHistory.ts";
 import { addPendingFavorites } from "./pendingFavorites.ts";
 import assert from "node:assert/strict";
 import { test } from "node:test";
@@ -320,7 +320,8 @@ test("playlist dismissals upgrade, persist across database restart, and stay wit
   let db = await openTestDatabase({ through: "0035_candidate_catalog" });
   const seed = addTrack(db, { title: "Green Light", artist: "Lorde", genre: "Pop" });
   const favorite = addTrack(db, { title: "Style", artist: "Taylor Swift", genre: "Pop" });
-  setFavorites(db, [favorite], true, 1);
+  // A database from before dislikes: the star alone, as that version wrote it.
+  writeFavorites(db, [favorite], true, 1);
   // Seed what 0035 could write; today's writer also names Graveyard's removed_at.
   const first = 1;
   const other = 2;

@@ -291,3 +291,84 @@ test("metadata changing during every derivation can't keep the profile from comi
   await Effect.runPromise(live.profile);
   assert.equal(derivations, 4);
 });
+
+describe("A dislike in the live taste profile", () => {
+  const artistScore = async (live: ReturnType<typeof makeLiveTaste<never>>, trackId: string) =>
+    (await Effect.runPromise(live.profile))?.artists.get(magicArtistKey(`artist of ${trackId}`)) ??
+    0;
+  const dislikedAt = (trackId: string): TasteHistory => ({
+    ...NO_HISTORY,
+    dislikes: [{ trackId, dislikedAt: NOW }],
+  });
+
+  test("counts against the song's artists the moment it's set, a streamed song's too", async () => {
+    const { live } = liveTaste();
+    await Effect.runPromise(live.profile);
+    const streamed = ytTrackId("abc");
+    await Effect.runPromise(live.disliked([songOf("7"), songOf(streamed)], NOW));
+    assert.equal(await artistScore(live, "7"), -3);
+    assert.equal(await artistScore(live, streamed), -3);
+  });
+
+  test("is on record: derived again, it counts once", async () => {
+    const streamed = ytTrackId("abc");
+    let history = NO_HISTORY;
+    const { live } = liveTaste(() => history);
+    await Effect.runPromise(live.profile);
+    await Effect.runPromise(live.disliked([songOf(streamed)], NOW));
+    history = dislikedAt(streamed);
+    live.invalidate();
+    assert.equal(await artistScore(live, streamed), -3);
+  });
+
+  test("set while the profile is being derived, it counts once, in the history read or not", async () => {
+    for (const landed of [true, false]) {
+      let takeSnapshot: (() => void) | undefined;
+      const read = (snapshotTaken: (history: TasteHistory) => void) =>
+        Effect.callback<ReturnType<typeof tasteProfile>>((resume) => {
+          takeSnapshot = () => {
+            const history = landed ? dislikedAt("7") : NO_HISTORY;
+            snapshotTaken(history);
+            resume(Effect.succeed(tasteProfile(history, songOf, NOW)));
+          };
+        });
+      const live = makeLiveTaste({
+        derive: read(() => {}),
+        deriveWithSnapshot: read,
+        songsOf: (ids) => Effect.succeed(ids.map(songOf)),
+      });
+      const first = Effect.runPromise(live.profile);
+      await Effect.runPromise(live.disliked([songOf("7")], NOW));
+      takeSnapshot!();
+      await first;
+      assert.equal(await artistScore(live, "7"), -3, String(landed));
+    }
+  });
+
+  test("set before the profile was first asked for is left to the history", async () => {
+    const { live } = liveTaste(() => dislikedAt("7"));
+    await Effect.runPromise(live.disliked([songOf("7")], NOW));
+    assert.equal(await artistScore(live, "7"), -3);
+  });
+
+  test("removed, it no longer counts", async () => {
+    let history = dislikedAt("7");
+    const { live } = liveTaste(() => history);
+    assert.equal(await artistScore(live, "7"), -3);
+    history = NO_HISTORY;
+    live.undisliked(["7"]);
+    assert.equal(await artistScore(live, "7"), 0);
+  });
+
+  test("removed while the profile is being derived, it isn't learned after all", async () => {
+    const { live, holdDerivation } = liveTaste();
+    const release = holdDerivation();
+    const first = Effect.runPromise(live.profile);
+    await Effect.runPromise(live.disliked([songOf("7"), songOf("8")], NOW));
+    live.undisliked(["7"]);
+    release();
+    await first;
+    assert.equal(await artistScore(live, "7"), 0);
+    assert.equal(await artistScore(live, "8"), -3);
+  });
+});

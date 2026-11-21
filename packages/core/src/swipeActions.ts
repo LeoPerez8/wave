@@ -48,7 +48,8 @@ export const swipeActionLabels = (
  * the entry of their name; `remove` is the row's way out (Remove from
  * Playlist inside a playlist, Delete or Remove from Library elsewhere),
  * `favorite` the star either way (Favorite, or Remove from Favorites on a
- * starred song) and `download` the song's download (Download, or Retry
+ * starred song), `dislike` the dislike either way (Dislike, or Remove dislike
+ * on a disliked song) and `download` the song's download (Download, or Retry
  * Download after a failure), as the row's menu offers them.
  */
 export const SWIPE_CHOICES = [
@@ -57,6 +58,7 @@ export const SWIPE_CHOICES = [
   "magicQueue",
   "addToPlaylist",
   "favorite",
+  "dislike",
   "download",
   "goToAlbum",
   "goToArtist",
@@ -125,6 +127,7 @@ export const storedSwipeSettings = ({ enabled, right, left }: SwipeSettings): st
 const CHOICE_ACTIONS: { readonly [C in SwipeChoice]?: readonly RowMenuAction[] } = {
   remove: ["removeFromPlaylist", "delete", "removeFromLibrary"],
   favorite: ["favorite", "unfavorite"],
+  dislike: ["dislike", "removeDislike"],
   download: ["download", "retryDownload"],
 };
 

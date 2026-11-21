@@ -213,6 +213,18 @@ describe("DELETE /v1/account", () => {
       dismissedSuggestions: [
         { id: "tricky", changedAt: 1, phoneId: "phone-a", deleted: false, dismissedAt: 1 },
       ],
+      dislikes: [
+        {
+          id: "yt:u7K72X4eo_s",
+          changedAt: 1,
+          phoneId: "phone-a",
+          deleted: false,
+          title: "Teardrop",
+          artists: '["Massive Attack"]',
+          durationMs: null,
+          dislikedAt: 1,
+        },
+      ],
     };
     await push(service, ana, everything);
     await push(service, bo, everything);

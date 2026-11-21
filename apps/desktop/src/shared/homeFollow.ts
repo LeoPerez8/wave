@@ -1,5 +1,6 @@
 /** Home's two sections for followed artists, as the window draws them. */
 import type { ReleaseType } from "@wave/core";
+import type { YtAlbumView } from "./ytPages.ts";
 
 /** A new release of a followed artist. Its cover comes by `home.releaseArtwork`. */
 export interface HomeReleaseCard {
@@ -31,5 +32,6 @@ export interface HomeFollowView {
 /** Where a release card opens, or why it can't. */
 export type HomeReleaseOpening =
   | { readonly kind: "album"; readonly id: number }
-  | { readonly kind: "ytAlbum"; readonly browseId: string }
+  /** [album]: the page as read on the tap, for the album's page to show without asking again. */
+  | { readonly kind: "ytAlbum"; readonly browseId: string; readonly album?: YtAlbumView }
   | { readonly kind: "ytMusicOff" | "noAnswer" | "notFound" };

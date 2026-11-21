@@ -104,6 +104,8 @@ export interface GeniusHitEffects<L extends RecognizeTrack, S extends YtSong> {
   readonly play: (song: GeniusHitPlayable<L, S>) => void;
   readonly playNext: (song: GeniusHitPlayable<L, S>) => void;
   readonly addToPlaylist: (result: RecognizeResult<L, S>) => void;
+  /** Stars ([on]) or unstars the song, with the toast a menu's star shows. */
+  readonly favorite: (song: GeniusHitPlayable<L, S>, on: boolean) => void;
   readonly goToAlbum: (track: L) => void;
   readonly download: (song: S) => void;
   readonly cancelDownload: (song: S) => void;
@@ -136,6 +138,10 @@ export const geniusHitMenu = <L extends RecognizeTrack, S extends YtSong>(
         return;
       case "addToPlaylist":
         effects.addToPlaylist(result);
+        return;
+      case "favorite":
+      case "unfavorite":
+        if (playable !== null) effects.favorite(playable, action === "favorite");
         return;
       case "goToAlbum":
         if (result.kind === "library") effects.goToAlbum(result.track);

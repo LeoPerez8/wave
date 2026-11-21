@@ -172,9 +172,11 @@ import {
   type TasteHistory,
   type IndexedFile,
   type LibrarySongSort,
+  type PlaylistPlays,
   type PlaylistSong,
   type MissingTrack,
   type PendingFavorite,
+  type DislikedSong,
   type CountedListening,
   type RecapSongGenre,
   type CreditedPlayTotals,
@@ -319,6 +321,7 @@ import {
   selectPlaylistEntrySongs,
   selectPlaylistEntryVideoIdsPage,
   selectPlaylists,
+  selectPlaylistPlays,
   selectPlaylistsLastPlayed,
   selectTrackPaths,
   selectUnsearchedEntries,
@@ -332,6 +335,13 @@ import {
   removePendingFavorites,
   selectPendingFavorites,
 } from "@wave/client/db/pendingFavorites";
+import {
+  removeDislikes,
+  selectDislikedTracks,
+  selectDislikes,
+  setDislikes,
+  type DislikedTrack,
+} from "@wave/client/db/dislikes";
 import {
   forgetSavedLyrics,
   indexSavedLyrics,
@@ -879,6 +889,13 @@ export class LibraryStore extends Context.Service<
     readonly listPlaylists: Effect.Effect<readonly PlaylistRow[], LibraryStoreError>;
     /** When a song last played from each playlist, by playlist id (never played: absent). */
     readonly playlistsLastPlayed: Effect.Effect<ReadonlyMap<number, number>, LibraryStoreError>;
+    /**
+     * Each playlist's counted plays, those of the 14 days up to [now] apart
+     * (never played: absent), for Core's `fromYourLibrary`.
+     */
+    readonly playlistPlays: (
+      now: number,
+    ) => Effect.Effect<readonly PlaylistPlays[], LibraryStoreError>;
     /** Every playlist's unsearched songs, top to bottom, for the background fill. */
     readonly unsearchedEntries: Effect.Effect<readonly PlaylistUnsearched[], LibraryStoreError>;
     /** A playlist with its YT Music entries and its Library songs in [scope]. */
@@ -1000,11 +1017,14 @@ export class LibraryStore extends Context.Service<
     readonly tasteRevision: Effect.Effect<string, LibraryStoreError>;
     /** The ids of every starred track. */
     readonly favoriteTrackIds: Effect.Effect<readonly number[], LibraryStoreError>;
-    /** Stars (or unstars) the tracks; those starred already keep when they were starred. */
+    /**
+     * Stars (or unstars) the tracks; those starred already keep when they were starred.
+     * A star removes its song's dislike: the keys of the dislikes removed come back.
+     */
     readonly setFavorites: (
       trackIds: readonly number[],
       on: boolean,
-    ) => Effect.Effect<void, LibraryStoreError>;
+    ) => Effect.Effect<readonly string[], LibraryStoreError>;
     /** Starred tracks, most recently starred first, for Library › Favorites. */
     readonly listFavorites: Effect.Effect<readonly FavoriteRow[], LibraryStoreError>;
     /**
@@ -1021,6 +1041,19 @@ export class LibraryStore extends Context.Service<
     readonly removePendingFavorites: (
       videoIds: readonly string[],
     ) => Effect.Effect<void, LibraryStoreError>;
+    /**
+     * Keeps [songs] as disliked (Core's `DislikedSong`), each by its
+     * `dislikeKey`; one disliked already keeps when it was.
+     */
+    readonly setDislikes: (
+      songs: readonly Omit<DislikedSong, "dislikedAt">[],
+    ) => Effect.Effect<void, LibraryStoreError>;
+    /** Forgets the dislikes kept under [keys]. */
+    readonly removeDislikes: (keys: readonly string[]) => Effect.Effect<void, LibraryStoreError>;
+    /** Every dislike kept, the newest first. */
+    readonly listDislikes: Effect.Effect<readonly DislikedSong[], LibraryStoreError>;
+    /** The Library's songs the dislikes are about, each with its video (Core's `dislikedSongs` reads them). */
+    readonly dislikedTracks: Effect.Effect<readonly DislikedTrack[], LibraryStoreError>;
     /** Every Library file with its length, bitrate and size (Core's `qualityUpgradeSongs` weighs them). */
     readonly qualityFiles: Effect.Effect<readonly QualityFile[], LibraryStoreError>;
     /** The Tracks recorded as having no better copy in [direction]. This phone only. */
@@ -1799,6 +1832,9 @@ const make = Effect.gen(function* () {
       selectPlaylistsLastPlayed(db),
     ),
 
+    playlistPlays: (now) =>
+      attempt("count the playlists' plays", () => selectPlaylistPlays(db, now)),
+
     unsearchedEntries: attempt("read the playlists' unsearched songs", () =>
       selectUnsearchedEntries(db),
     ),
@@ -1916,6 +1952,14 @@ const make = Effect.gen(function* () {
 
     removePendingFavorites: (videoIds) =>
       writeAttempt("forget pending favorites", () => removePendingFavorites(db, videoIds)),
+
+    setDislikes: (songs) => writeAttempt("keep dislikes", () => setDislikes(db, songs, Date.now())),
+
+    removeDislikes: (keys) =>
+      writeAttempt("forget dislikes", () => removeDislikes(db, keys, Date.now())),
+
+    listDislikes: attempt("read dislikes", () => selectDislikes(db)),
+    dislikedTracks: attempt("read the disliked songs' tracks", () => selectDislikedTracks(db)),
 
     qualityFiles: attempt("read the files' quality", () => selectQualityFiles(db)),
     noBetterCopies: (direction) =>

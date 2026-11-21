@@ -52,6 +52,8 @@ export interface ActionItem {
    * download asked for: a star means downloaded).
    */
   readonly favorite?: boolean | undefined;
+  /** A disliked song (Core's `dislikes.ts`): its entry reads Remove dislike. */
+  readonly disliked?: boolean | undefined;
   /** A track shown in a playlist, which it can be removed from. */
   readonly inPlaylist?: boolean | undefined;
   /**
@@ -162,6 +164,8 @@ export type ItemAction =
   | "addToPlaylist"
   | "favorite"
   | "unfavorite"
+  | "dislike"
+  | "removeDislike"
   | "removeFromPlaylist"
   | "goToAlbum"
   | "goToArtist"
@@ -413,8 +417,12 @@ export const itemActions = <A extends LibraryArtistRef = LibraryArtistRef>(
       ),
     );
   if (kind === "track") {
+    // An unsearched entry has no video yet: nothing to star or dislike it by.
     if (!items.some((item) => item.unsearched === true))
-      entries.push({ action: items.every((item) => item.favorite) ? "unfavorite" : "favorite" });
+      entries.push(
+        { action: items.every((item) => item.favorite) ? "unfavorite" : "favorite" },
+        { action: items.every((item) => item.disliked) ? "removeDislike" : "dislike" },
+      );
     if (items.every((item) => item.inPlaylist)) entries.push({ action: "removeFromPlaylist" });
   }
   // In selection, Download fetches the checked songs that aren't the Library's files yet.
@@ -494,6 +502,8 @@ export type YtSongActionEntry<A> =
         | "addToPlaylist"
         | "favorite"
         | "unfavorite"
+        | "dislike"
+        | "removeDislike"
         | "removeFromPlaylist"
         | "releaseDate"
         | "share"
@@ -518,6 +528,12 @@ export interface YtSongActionOptions {
    * downloads it. Absent, it offers neither.
    */
   readonly favorite?: boolean | undefined;
+  /**
+   * Whether the song is disliked (by its video, or as the Library's song it
+   * is by now): it offers Remove dislike, else Dislike. Absent, it offers
+   * neither.
+   */
+  readonly disliked?: boolean | undefined;
   /** The browse id (`MPREb_…`) of the song's YT Music album, when it has one. */
   readonly album?: string | null | undefined;
   /** The browse id of the YT Music album page you're on, so Go to Album doesn't lead to it. */
@@ -541,7 +557,8 @@ export interface YtSongActionOptions {
  * The entries a YT Music song's long-press menu offers: it can join the
  * queue and playlists beside the Library's songs; it can be starred as a
  * Library song is ([favorite]), the star downloading it; shown in a playlist
- * ([inPlaylist]), it can leave it too; with YT Music on, Go to Album opens
+ * ([inPlaylist]), it can leave it too; it can be disliked ([disliked]), which
+ * keeps it out of what Wave picks on its own; with YT Music on, Go to Album opens
  * its YT Music [album] page (none on that page, or for a song without an
  * album); and, given where its [artists] link leads (Core's
  * `streamedArtistLink`), Go to Artist opens them integrated (none when its
@@ -559,6 +576,7 @@ export const ytSongActions = <A>(
   {
     inPlaylist = false,
     favorite,
+    disliked,
     album,
     ytAlbumHere,
     ytMusic = false,
@@ -572,6 +590,7 @@ export const ytSongActions = <A>(
   ...(ytMusic ? [{ action: "magicQueue" } as const] : []),
   { action: "addToPlaylist" },
   ...(favorite === undefined ? [] : [{ action: favorite ? "unfavorite" : "favorite" } as const]),
+  ...(disliked === undefined ? [] : [{ action: disliked ? "removeDislike" : "dislike" } as const]),
   ...(inPlaylist ? [{ action: "removeFromPlaylist" } as const] : []),
   ...(ytMusic && album !== undefined && album !== null && album !== "" && album !== ytAlbumHere
     ? [{ action: "goToAlbum", album } as const]

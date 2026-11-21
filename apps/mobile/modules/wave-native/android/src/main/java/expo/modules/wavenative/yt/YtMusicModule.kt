@@ -29,8 +29,8 @@ import kotlin.coroutines.resume
  * [YtFailure]. Nothing returned carries cookies or stream addresses: the
  * account is `{ status, account: { name, email, photoUrl } }`.
  *
- * The reads mixes and the Magic Queue make (artist search, artist page,
- * radios) take an optional meter (`startNetworkMeter`): their requests count
+ * The reads mixes, the Magic Queue and Home's Community playlists make
+ * (artist search, artist page, radios, the home's playlist shelves) take an optional meter (`startNetworkMeter`): their requests count
  * on it, and `takeNetworkUse` says what it counted ([expo.modules.wavenative.net.NetworkMeters]).
  */
 class YtMusicModule : Module() {
@@ -154,6 +154,18 @@ class YtMusicModule : Module() {
      */
     AsyncFunction("libraryPlaylists") Coroutine { ->
       coded { YtPages(client).libraryPlaylists().map(YtLibraryPlaylist::toMap) }
+    }
+
+    /**
+     * The shelves of playlists on the signed-in account's YouTube Music home,
+     * its first pages, and the account they were read as: `{ account: { name,
+     * email, photoUrl }, shelves: [{ title, playlists: [{ playlistId, title,
+     * author, artworkUrl }] }] }`, or an `ERR_YT_*` rejection
+     * (`ERR_YT_SIGNED_OUT` without a session YouTube accepts; `ERR_YT_FAILED`
+     * past its deadline). Nothing else of the home reaches JS.
+     */
+    AsyncFunction("homePlaylistShelves") Coroutine { meter: String? ->
+      coded(meter) { YtPages(client).homePlaylistShelves().toMap() }
     }
 
     /**

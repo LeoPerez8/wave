@@ -24,6 +24,11 @@ export const playbackTextEn = {
   backToCurrentSong: "Back to Current Song",
   cancel: "Cancel",
   changeButton: "Change Button",
+  /** Now Playing's edit mode: the screen reader's action on a slot, the header's button, the line under the slots and the first open's toast. */
+  editButtons: "Edit Buttons",
+  doneEditing: "Done",
+  tapASlotToChooseItsAction: "Tap a slot to choose its action",
+  holdAButtonToEditThisScreen: "Hold a button to edit this screen",
   checkYourConnectionAndTryAgain: "Check your connection and try again.",
   clear: "Clear",
   clearSearch: "Clear search",
@@ -216,6 +221,8 @@ export const playbackTextEn = {
     `These lyrics are already in ${value0}.`,
   selectUpToValueLines: (value0: string | number) => `Select up to ${value0} lines`,
   valueOfValue: (value0: string | number, value1: string | number) => `${value0} of ${value1}`,
+  pageValueOfValue: (value0: string | number, value1: string | number) =>
+    `Page ${value0} of ${value1}`,
   removeValueFromFavorites: (value0: string | number) => `Remove ${value0} from Favorites`,
   favoriteValue: (value0: string | number) => `Favorite ${value0}`,
   removeValueFromUpNext: (value0: string | number) => `Remove ${value0} from Up Next`,
@@ -251,6 +258,10 @@ export const playbackTextEn = {
   ofTime: "of",
   couldntLoadRecommendations: "Couldn't load recommendations.",
   magicQueueFrom: (title: string) => `Magic Queue · from ${title}`,
+  /** Up Next's heading over the queue a song played from Search or a link fills. */
+  relatedFrom: (title: string) => `Related · from ${title}`,
+  /** Up Next's heading over a queue a section of Home played (New from Artists You Follow). */
+  upNextFrom: (title: string) => `Up next · from ${title}`,
   newQueuePlaying: "New queue playing",
   undo: "Undo",
   actions: "Actions",

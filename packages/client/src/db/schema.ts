@@ -857,6 +857,32 @@ export const pendingFavorites = sqliteTable("pending_favorites", {
 });
 
 /**
+ * Disliked songs (Core's `DislikedSong`, `dislikes.ts`): each by the identity
+ * favorites use, as its queue track id (a Library song's Track id as text, a
+ * YT Music song's `yt:` video), with the song as it was listed when disliked,
+ * so the list of them needs no other read. A dislike outlives its song's
+ * file. They sync with the Wave account (`db/syncRows.ts`), a removed one
+ * staying as a tombstone (`deleted`).
+ */
+export const dislikes = sqliteTable(
+  "dislikes",
+  {
+    songKey: text("song_key").primaryKey(),
+    title: text("title").notNull(),
+    /** The song's artists, a JSON array of names. */
+    artists: text("artists").notNull(),
+    durationMs: integer("duration_ms"),
+    /** When the song was disliked (the Disliked songs list is newest first). */
+    dislikedAt: integer("disliked_at").notNull(),
+    ...changeStamp(),
+  },
+  (t) => [
+    index("dislikes_disliked_at_idx").on(t.dislikedAt),
+    index("dislikes_pushed_idx").on(t.pushed),
+  ],
+);
+
+/**
  * Lyrics the Lyrics view found online for non-D songs (Core's `SavedLyrics`),
  * by YouTube video: the lyrics, or a miss ([lyrics] null) remembered for a
  * week (`LYRICS_MISS_RETRY_MS`). Reopening one shows them at once, offline

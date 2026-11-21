@@ -105,25 +105,64 @@ describe("patchNotes", () => {
     );
   });
 
-  it("leaves the desktop's PRs out of the phone's notes, shared code and all", () => {
+  it("leaves out of the phone's notes a PR that changes only the desktop", () => {
     const notes = patchNotes({
-      commits: [40, 41, 42, 43].map((n) => `commit-${n}`),
+      commits: [40, 41, 42, 43, 44].map((n) => `commit-${n}`),
       bugIssues: [],
       pullRequests: [
         pr(40, { files: ["apps/desktop/src/renderer/src/App.tsx"], branch: "feat/40-desktop" }),
         pr(41, {
           files: [
             "apps/desktop/src/main/index.ts",
-            "packages/core/src/catalogueEn.ts",
-            "packages/kotlin-shared/src/main/kotlin/expo/modules/wavenative/yt/YtClient.kt",
-            "apps/mobile/src/settings/YtMusicSettingsSection.tsx",
+            "packages/kotlin-shared/stdio/src/main/kotlin/dev/leoperez/wave/stdio/WaveDesktop.kt",
+            "docs/spec-desktop.md",
           ],
         }),
         pr(42, { files: ["packages/core/src/catalogue/desktopEn.ts"], branch: "fix/42-desktop" }),
-        pr(43, { files: ["apps/mobile/src/app/_layout.tsx"] }),
+        // A desktop dependency changes the shared lockfile along the way.
+        pr(43, {
+          files: ["apps/desktop/package.json", "pnpm-lock.yaml", ".github/workflows/ci.yml"],
+        }),
+        pr(44, { files: ["apps/mobile/src/app/_layout.tsx"] }),
       ],
     });
-    assert.equal(notes, "## New\n\n- [PR 43](https://github.com/LeoPerez8/wave/pull/43)\n");
+    assert.equal(notes, "## New\n\n- [PR 44](https://github.com/LeoPerez8/wave/pull/44)\n");
+  });
+
+  it("lists a PR that changes the desktop and something the phone ships", () => {
+    const notes = patchNotes({
+      commits: [45, 46, 47, 48].map((n) => `commit-${n}`),
+      bugIssues: [],
+      pullRequests: [
+        pr(45, {
+          files: [
+            "apps/desktop/src/main/index.ts",
+            "apps/mobile/src/home/MagicQueueCard.tsx",
+            "pnpm-lock.yaml",
+          ],
+        }),
+        pr(46, { files: ["apps/desktop/src/main/index.ts", "packages/core/src/catalogueEn.ts"] }),
+        pr(47, {
+          files: [
+            "apps/desktop/src/main/index.ts",
+            "packages/kotlin-shared/src/main/kotlin/expo/modules/wavenative/yt/YtClient.kt",
+          ],
+        }),
+        pr(48, { files: ["apps/desktop/src/main/index.ts", "apps/sync/src/worker.ts"] }),
+      ],
+    });
+    assert.equal(
+      notes,
+      [
+        "## New",
+        "",
+        "- [PR 45](https://github.com/LeoPerez8/wave/pull/45)",
+        "- [PR 46](https://github.com/LeoPerez8/wave/pull/46)",
+        "- [PR 47](https://github.com/LeoPerez8/wave/pull/47)",
+        "- [PR 48](https://github.com/LeoPerez8/wave/pull/48)",
+        "",
+      ].join("\n"),
+    );
   });
 
   it("lists a PR that changes only the sync service", () => {

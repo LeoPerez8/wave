@@ -70,6 +70,8 @@ const trackDirection = <A extends LibraryArtistRef>(
       return choice;
     case "favorite":
       return item.unsearched === true ? null : item.favorite ? "unfavorite" : "favorite";
+    case "dislike":
+      return item.unsearched === true ? null : item.disliked ? "removeDislike" : "dislike";
     case "remove":
       return item.inPlaylist
         ? "removeFromPlaylist"
@@ -113,6 +115,8 @@ const direction = <A extends LibraryArtistRef>(
       return choice;
     case "favorite":
       return options.favorite === undefined ? null : options.favorite ? "unfavorite" : "favorite";
+    case "dislike":
+      return options.disliked === undefined ? null : options.disliked ? "removeDislike" : "dislike";
     case "remove":
       return options.inPlaylist === true ? "removeFromPlaylist" : null;
     case "download":

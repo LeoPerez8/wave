@@ -12,6 +12,8 @@ export const itemActionsEn = {
     addToPlaylist: "Add to Playlist",
     favorite: "Favorite",
     unfavorite: "Remove from Favorites",
+    dislike: "Dislike",
+    removeDislike: "Remove dislike",
     removeFromPlaylist: "Remove from Playlist",
     goToAlbum: "Go to Album",
     goToArtist: "Go to Artist",
@@ -68,6 +70,9 @@ export const itemActionsEn = {
   /** A song's star toggled from a swipe, a menu or the selection bar. */
   addedToFavorites: "Added to Favorites",
   addedSongsToFavorites: (count: number): string => `Added ${count} songs to Favorites`,
+  /** A song disliked from a menu or the selection bar; the toast offers Undo. */
+  dislikedSong: "Song disliked",
+  dislikedSongsCount: (count: number): string => `${count} songs disliked`,
   /** An Add to Queue or a Play Next started on the phone ([count]: the songs that went in). */
   addedToQueue: "Added to Queue",
   addedSongsToQueue: (count: number): string => `Added ${count} songs to Queue`,

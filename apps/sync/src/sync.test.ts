@@ -47,6 +47,7 @@ const play = (id: string, overrides: Readonly<Record<string, unknown>> = {}) => 
   counted: true,
   contextType: "album",
   contextId: "Mezzanine",
+  contextPlaylistId: null,
   source: "phone",
   importedFrom: null,
   ...overrides,
@@ -137,6 +138,28 @@ describe("POST /v1/push and GET /v1/pull", () => {
       });
     }
     assert.deepEqual((await pull(service, session)).plays, []);
+  });
+
+  test("a playlist play keeps its playlist's sync id, and one pushed without it has none", async () => {
+    const service = await harness();
+    const session = await service.signIn();
+    const fromPlaylist = play("playlist-play", {
+      contextType: "playlist",
+      contextId: "7",
+      contextPlaylistId: "playlist-sync-id",
+    });
+    const { contextPlaylistId: _, ...older } = play("older-playlist-play", {
+      contextType: "playlist",
+      contextId: "7",
+    });
+    await push(service, session, { plays: [fromPlaylist, older] });
+
+    const page = await pull(service, session);
+    assert.deepEqual(page.plays, [
+      { ...fromPlaylist, snapshot: null, videoId: null },
+      { ...older, contextPlaylistId: null, snapshot: null, videoId: null },
+    ]);
+    assert.deepEqual(readPullPage(JSON.stringify(page))?.plays, page.plays);
   });
 
   test("an older client can push and pull plays without snapshot or video id", async () => {
@@ -247,6 +270,7 @@ describe("POST /v1/push and GET /v1/pull", () => {
         hiddenReleases: 0,
         notifiedShows: 0,
         dismissedSuggestions: 0,
+        dislikes: 0,
       },
       corrected: {},
     });
@@ -616,6 +640,58 @@ describe("POST /v1/push and GET /v1/pull", () => {
     assert.deepEqual(second.dismissedSuggestions, [undo]);
   });
 
+  test("a dislike reaches the other phone with the song as it was listed, and so does its removal", async () => {
+    const service = await harness();
+    const phoneA = await service.signIn();
+    const phoneB = await service.signIn();
+    const dislike = {
+      id: "yt:4D7u5KF7SP8",
+      changedAt: 10,
+      phoneId: "phone-a",
+      deleted: false,
+      title: "Teardrop",
+      artists: '["Massive Attack"]',
+      durationMs: null,
+      dislikedAt: 10,
+    };
+    await push(service, phoneA, { dislikes: [dislike] });
+    const first = await pull(service, phoneB);
+    assert.deepEqual(first.dislikes, [dislike]);
+
+    // An older change arriving late doesn't bring it back.
+    const removal = { id: "yt:4D7u5KF7SP8", changedAt: 12, phoneId: "phone-b", deleted: true };
+    await push(service, phoneB, { dislikes: [removal] });
+    await push(service, phoneA, { dislikes: [{ ...dislike, changedAt: 11, dislikedAt: 11 }] });
+    const second = await pull(service, phoneA, first.cursor);
+    assert.deepEqual(second.dislikes, [removal]);
+  });
+
+  test("a dislike without the song's title is refused", async () => {
+    const service = await harness();
+    const session = await service.signIn();
+    const response = await service.request("POST", "/v1/push", {
+      session,
+      json: {
+        dislikes: [
+          {
+            id: "yt:4D7u5KF7SP8",
+            changedAt: 1,
+            phoneId: "phone-a",
+            deleted: false,
+            artists: "[]",
+            durationMs: null,
+            dislikedAt: 1,
+          },
+        ],
+      },
+    });
+    assert.equal(response.status, 400);
+    assert.deepEqual(await response.json(), {
+      error: "bad_request",
+      detail: "dislikes[0].title is missing",
+    });
+  });
+
   test("a dismissal without when it was dismissed is refused", async () => {
     const service = await harness();
     const session = await service.signIn();
@@ -690,6 +766,18 @@ describe("POST /v1/push and GET /v1/pull", () => {
       dismissedSuggestions: [
         { id: "bjork", changedAt: 11, phoneId: "phone-a", deleted: true },
         { id: "tricky", changedAt: 10, phoneId: "phone-a", deleted: false, dismissedAt: 10 },
+      ],
+      dislikes: [
+        {
+          id: "yt:4D7u5KF7SP8",
+          changedAt: 10,
+          phoneId: "phone-a",
+          deleted: false,
+          title: "Teardrop",
+          artists: '["Massive Attack"]',
+          durationMs: 330_000,
+          dislikedAt: 10,
+        },
       ],
     };
     await push(service, session, rows);
@@ -889,15 +977,15 @@ describe("a removed playlist entry stays removed", () => {
     const service = await harness();
     const session = await service.signIn();
     await push(service, session, { playlistEntries: [entry(100, "phone-a")] });
-    // Recreate the deployed schema with an existing entry, before migration 0014.
+    // Recreate the deployed schema with an existing entry, before migration 0015.
     await service.db.batch(
       [
         "ALTER TABLE playlist_entries DROP COLUMN restored_at",
-        "DELETE FROM migrations WHERE id = '0014_playlist_entry_restores'",
+        "DELETE FROM migrations WHERE id = '0015_playlist_entry_restores'",
       ],
       "write",
     );
-    assert.deepEqual(await migrate(service.db), ["0014_playlist_entry_restores"]);
+    assert.deepEqual(await migrate(service.db), ["0015_playlist_entry_restores"]);
     assert.deepEqual(await held(service, session), [entry(100, "phone-a")]);
   });
 });

@@ -178,6 +178,7 @@ interface Seen {
   plays: boolean;
   follows: boolean;
   dismissedSuggestions: boolean;
+  dislikes: boolean;
   preferences: { key: string; value: string | null }[];
 }
 
@@ -189,6 +190,7 @@ const nothingSeen = (): Seen => ({
   plays: false,
   follows: false,
   dismissedSuggestions: false,
+  dislikes: false,
   preferences: [],
 });
 
@@ -199,6 +201,7 @@ const take = (seen: Seen, changes: PulledChanges): void => {
   seen.plays ||= changes.plays;
   seen.follows ||= changes.follows;
   seen.dismissedSuggestions ||= changes.dismissedSuggestions;
+  seen.dislikes ||= changes.dislikes;
   seen.preferences.push(...changes.preferences);
 };
 

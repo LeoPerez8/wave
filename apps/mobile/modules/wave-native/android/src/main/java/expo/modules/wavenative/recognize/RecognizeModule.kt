@@ -40,6 +40,7 @@ class RecognizeModule : Module() {
   private var pending: PendingStart? = null
   private var foreground = true
   private val tile = RecognizeTileRun.shared
+  private val favorites = RecognizeFavoriteInbox.shared
 
   private class PendingStart(val request: Int, val code: Int, val promise: Promise, val detached: Boolean) {
     var cancelConsent: (() -> Unit)? = null
@@ -49,13 +50,14 @@ class RecognizeModule : Module() {
 
   override fun definition() = ModuleDefinition {
     Name("WaveRecognize")
-    Events("onRecognizeMatchRequested", HEARD, CAPTURE_FAILED, "onRecognizeRequested", TILE_REQUESTED, TILE_CANCELLED)
+    Events("onRecognizeMatchRequested", HEARD, CAPTURE_FAILED, "onRecognizeRequested", TILE_REQUESTED, TILE_CANCELLED, TILE_FAVORITE)
 
     OnCreate {
       RecognizeInbox.onMatchReceived = { sendEvent("onRecognizeMatchRequested") }
       RecognizeInbox.onReceived = { sendEvent("onRecognizeRequested") }
       tile.onRequested = { sendEvent(TILE_REQUESTED) }
       tile.onCancelled = { tap -> sendEvent(TILE_CANCELLED, mapOf("tap" to tap)) }
+      favorites.onRequested = { sendEvent(TILE_FAVORITE) }
     }
     Function("takeMatchRequest") { RecognizeInbox.takeMatch() }
     Function("takeRequest") { RecognizeInbox.take() }
@@ -70,8 +72,16 @@ class RecognizeModule : Module() {
     Function("notifyTileMatch") { title: String, text: String, coverUrl: String?, match: String? ->
       RecognizeNotifications.postMatch(context, title, text, coverUrl, match)
     }
-    Function("tileMatchSaved") { line: String, match: String ->
-      RecognizeNotifications.saved(context, line, match)
+    // An older JS bundle passes the line and the match only: no star button.
+    Function("tileMatchSaved") { line: String, match: String, favoriteLabel: String?, favoriteOn: Boolean? ->
+      RecognizeNotifications.saved(context, line, match, favoriteLabel, favoriteOn ?: true)
+    }
+    Function("takeTileFavorite") {
+      favorites.take()?.let { mapOf<String, Any>("tap" to it.id, "match" to it.match, "on" to it.on) }
+    }
+    Function("tileFavoriteDone") { tap: Int, match: String, label: String?, on: Boolean ->
+      RecognizeNotifications.favorited(context, match, label, on)
+      RecognizeFavoriteService.done(tap)
     }
     Function("notifyTileFailure") { title: String, text: String, actionLabel: String, microphone: Boolean ->
       RecognizeNotifications.postFailure(context, title, text, actionLabel, microphone)
@@ -142,6 +152,7 @@ class RecognizeModule : Module() {
       RecognizeInbox.onReceived = null
       tile.onRequested = null
       tile.onCancelled = null
+      favorites.onRequested = null
       tile.cardRunning = false
       main.post { cancelPending() }
       sessions.stopAll()
@@ -241,6 +252,7 @@ class RecognizeModule : Module() {
     const val CAPTURE_FAILED = "onRecognizeCaptureFailed"
     const val TILE_REQUESTED = "onRecognizeTileRequested"
     const val TILE_CANCELLED = "onRecognizeTileCancelled"
+    const val TILE_FAVORITE = "onRecognizeTileFavorite"
     val MEDIA_USAGES = setOf(AudioAttributes.USAGE_MEDIA, AudioAttributes.USAGE_GAME, AudioAttributes.USAGE_UNKNOWN)
   }
 }

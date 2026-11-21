@@ -1,7 +1,14 @@
 import { useLocalisation } from "@/localisation/localisation";
 import { activeTiming, beginTiming, timingSurfaceCommitted } from "@/lib/timing";
-import { IconChevronDown, IconListNumbers, IconShare3 } from "@tabler/icons-react-native";
-import { isUnsearchedTrackId, nowPlayingSlotShow, type NowPlayingSlotSong } from "@wave/core";
+import { IconChevronDown, IconDotsVertical } from "@tabler/icons-react-native";
+import {
+  NOW_PLAYING_FOOTER_SLOTS,
+  NOW_PLAYING_TRANSPORT_SLOTS,
+  isUnsearchedTrackId,
+  nowPlayingSlotShow,
+  nowPlayingSongMenuShow,
+  type NowPlayingSlotSong,
+} from "@wave/core";
 import type { ReactNode } from "react";
 import {
   Activity,
@@ -18,11 +25,13 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import { CELL, grid } from "@/catalog/grid";
 import { IconButton } from "@/components/IconButton";
+import { TextButton } from "@/components/TextButton";
 import { NativeCover } from "@/glass/waveGlass";
 import { CoveredByNowPlaying } from "@/lib/screenSight";
 import { addScreenBackHandler } from "@/overlay/back";
 import { useRenderCount } from "@/perf/perf";
 import type { TrackDetails } from "@wave/client";
+import { openPlayingActions } from "@/playback/ActionsMenu";
 import { useCurrentTrackId } from "@/playback/hooks";
 import { playbackState, type PlaybackState } from "@/playback/Player";
 import { LyricCardLayer } from "@/share/LyricCardLayer";
@@ -30,6 +39,7 @@ import { useLyricCardShown } from "@/share/lyricCard";
 import { useSongShareShown } from "@/share/songShare";
 import { shareNowPlaying } from "@/share/songShare";
 import { useNowPlayingButtons } from "@/settings/nowPlayingButtons";
+import { showNowPlayingEditHint } from "@/settings/nowPlayingEditHint";
 import { useYtMusicEnabled } from "@/settings/ytMusic";
 
 import { Background, useBackgroundColors, type GroundColors } from "./Background";
@@ -46,7 +56,9 @@ import { LyricsView } from "./LyricsView";
 import { PlayerView } from "./PlayerView";
 import { QueueHeader, UpNextList } from "./QueueView";
 import { usePlayingVideoId } from "./relatedSongs";
+import { RelatedPanel } from "./RelatedPanel";
 import { RelatedView } from "./RelatedView";
+import { QueueEdgeMark, ScreenPage, useScreenPages } from "./ScreenPages";
 import { Scrubber } from "./Scrubber";
 import { usePlayheadSource } from "./playhead";
 import {
@@ -59,8 +71,8 @@ import {
   useNowPlayingSettled,
 } from "./sheet";
 import { onRelatedOpened } from "./openRelated";
-import { SlotButton, ViewToggle, type SlotContext } from "./SlotButtons";
-import { Transport } from "./Transport";
+import { EditSlot, SlotButton, type SlotContext } from "./SlotButtons";
+import { EDITING_OPACITY, Transport } from "./Transport";
 import {
   nowPlayingSongLookup,
   songActionFailed,
@@ -68,17 +80,17 @@ import {
   usePreparePlayingSong,
 } from "./playingSong";
 
-/** What fills the space above the controls. */
-export type NowPlayingView = "player" | "queue" | "lyrics" | "related";
+/** What fills the player's space above the controls. The Queue and Related are screens of their own. */
+export type NowPlayingView = "player" | "lyrics";
 
 const close = (): void => closeNowPlaying(undefined, "chevron");
 
 type Item = NonNullable<PlaybackState["item"]>;
 
 /**
- * The Queue view: what's playing and the toggles in the drag-to-dismiss
- * area, then Up Next. Once shown it stays mounted, hidden (`Activity`) while
- * the player or Lyrics shows and while Now Playing is closed: coming back
+ * The Queue screen: what's playing in the drag-to-dismiss area, then the
+ * list, at the page's full height. Once shown it stays mounted, hidden
+ * (`Activity`) while the player shows and while Now Playing is closed: coming back
  * shows its rows as they were, re-rendering only what changed meanwhile.
  * Hidden, it follows nothing (its store subscriptions, gestures and frame
  * callbacks are effects, which `Activity` tears down) and holds only the
@@ -90,16 +102,17 @@ type Item = NonNullable<PlaybackState["item"]>;
 const QueuePane = memo(function QueuePane({
   item,
   ground,
+  top,
   onShowPlayer,
 }: {
   item: Item;
   ground: GroundColors;
+  /** Where the page sits on the sheet: the list's sticky bar draws the ground there. */
+  top: number;
   onShowPlayer: () => void;
 }) {
-  // Where the pane sits on the sheet: the list's sticky bar draws the ground there.
-  const [top, setTop] = useState(0);
   return (
-    <View className="flex-1" onLayout={(event) => setTop(event.nativeEvent.layout.y)}>
+    <View className="flex-1">
       <DismissArea>
         <QueueHeader item={item} onShowPlayer={onShowPlayer} />
       </DismissArea>
@@ -112,7 +125,7 @@ const PLAYER_AREA = { flex: 1, paddingTop: CELL } as const;
 
 /**
  * The player view. It stays mounted, hidden (`Activity`) while the Queue or
- * Lyrics shows, so coming back to it draws the artwork straight away; hidden,
+ * Lyrics shows or Related covers it, so coming back to it draws the artwork straight away; hidden,
  * it follows nothing (links, the route, the star). While Now Playing is
  * closed it shows (out of sight) and follows the playing track, so an open's
  * first frame is right.
@@ -132,6 +145,22 @@ const PlayerPane = memo(function PlayerPane({
     </DismissArea>
   );
 });
+
+/** Edit mode's look for everything but the slots and Done. */
+const DIMMED = { opacity: EDITING_OPACITY } as const;
+
+/** Done sits on the side margin, where the header's icons draw their glyphs. */
+const DONE = { marginRight: 12 } as const;
+
+/** Edit mode's line under the footer. */
+const EDIT_NOTE = {
+  position: "absolute",
+  left: 0,
+  right: 0,
+  top: "100%",
+  marginTop: CELL / 2,
+  textAlign: "center",
+} as const;
 
 /** `nativeID` of the screens under Now Playing, which the sheet's cover hides (`NativeCover`). */
 const UNDER_NOW_PLAYING = "wave-under-now-playing";
@@ -159,10 +188,15 @@ export function UnderNowPlaying({ children }: { children: ReactNode }) {
 
 /**
  * Now Playing: a sheet over the app, tinted by the artwork. The player view
- * (artwork, title, artist and album), the Queue view, the Lyrics view or the
- * Related view sits
- * above the scrubber and transport. Drag it down, tap the chevron or press Back to
- * dismiss it.
+ * (artwork, title, artist and album) or the Lyrics view sits above the
+ * scrubber and transport; the Queue is a screen of its own, a swipe to the
+ * right of them (`ScreenPages`), and Related a panel that rises over all of
+ * it (`RelatedPanel`). Drag it down or tap the chevron to dismiss it; Back
+ * leaves edit mode first, then the Queue or Related.
+ *
+ * A long press on a slot starts edit mode: all seven slots show outlined
+ * (`EditSlot`), a tap on one opens the card that changes it, the rest of the
+ * player dims and takes no touches, and the header shows Done.
  *
  * It stays mounted out of sight below the screen, following the playing track
  * (its colours, artwork and links) while closed, so opening it only starts the
@@ -191,22 +225,34 @@ export function NowPlayingSheet() {
   const palette = useNowPlayingPalette(trackId, details);
   const gradient = useNowPlayingGradient(palette);
   const ground = useBackgroundColors(gradient, shown);
-  const [chosenView, setView] = useState<NowPlayingView>("player");
+  const [view, setView] = useState<NowPlayingView>("player");
   const ytMusic = useYtMusicEnabled();
-  // Related needs YouTube Music: turned off, the player shows in its place.
-  const view = chosenView === "related" && !ytMusic ? "player" : chosenView;
-  const { videoId, findAgain } = usePlayingVideoId(view === "related" ? trackId : null, ytSong);
   const showPlayer = useCallback(() => setView("player"), []);
-  // The Queue, once shown, stays mounted while another view shows (`QueuePane`).
-  const [queueWarm, setQueueWarm] = useState(false);
+  // The player and the Queue, side by side; the Queue stays mounted once shown (`QueuePane`).
+  // Related rises over them.
+  const pages = useScreenPages();
+  const { screen, editing, page, turning, send } = pages;
+  // Related needs YouTube Music: turned off, it goes in this render, ahead of
+  // the effect that takes the screens back to the player.
+  // Settled, Related covers the pages: what is under it rests until it moves.
+  const covered = ytMusic && screen === "related" && !pages.relatedMoving;
+  // Related stays drawn, with its songs, while its panel leaves.
+  const relatedMounted = ytMusic && (screen === "related" || pages.relatedMoving);
+  const { videoId, findAgain } = usePlayingVideoId(relatedMounted ? trackId : null, ytSong);
+  const playerPageInSight = (page === "player" || turning) && !covered;
+  const leaveQueue = useCallback(() => void send({ type: "headerTap" }), [send]);
+  // Where the pages sit on the sheet, for the Queue's sticky bar.
+  const [pagesTop, setPagesTop] = useState(0);
   useLayoutEffect(() => {
     if (shown) nowPlayingContentCommitted();
   }, [shown]);
+  // The first open on this phone says the screen is editable.
+  useEffect(() => showNowPlayingEditHint(shown), [shown]);
   useLayoutEffect(() => {
-    if (view !== "queue") return;
+    if (screen !== "queue") return;
     const active = activeTiming();
     if (active?.kind === "queue") timingSurfaceCommitted(active.id);
-  }, [view]);
+  }, [screen]);
   // A streamed song downloaded since it was queued: Lyrics reads its file, as for a Library song.
   const downloaded = useDownloadedFile(ytSong);
   const lyricsFile: LibraryFile | null =
@@ -217,33 +263,52 @@ export function NowPlayingSheet() {
   useEffect(() => resizeNowPlaying(height), [height]);
 
   // Every open starts on the player, unless the playing song's card asked for Related.
-  useEffect(() => onNowPlayingHidden(() => setView("player")), []);
-  useEffect(() => onRelatedOpened(() => setView("related")), []);
+  useEffect(
+    () =>
+      onNowPlayingHidden(() => {
+        setView("player");
+        send({ type: "closed" });
+      }),
+    [send],
+  );
+  // The chevron, the playing song's card and the mini player's card ask for Related.
+  useEffect(() => onRelatedOpened(() => void send({ type: "show", screen: "related" })), [send]);
+  // Related needs YouTube Music: turned off, the player comes back.
+  useEffect(() => {
+    if (!ytMusic && screen === "related") send({ type: "ytMusicOff" });
+  }, [ytMusic, screen, send]);
+  // The Queue is the playing song's: with nothing playing, the player shows.
+  const nothingPlaying = item === null;
+  useEffect(() => {
+    if (nothingPlaying) send({ type: "show", screen: "player" });
+  }, [nothingPlaying, send]);
 
-  // Back slides the sheet away instead of leaving the screen under it.
+  // Back leaves edit mode, then the Queue or Related; on the player it slides the sheet
+  // away instead of leaving the screen under it (Core's `stepNowPlayingScreens`).
   useEffect(() => {
     if (!shown) return undefined;
     return addScreenBackHandler(() => {
-      closeNowPlaying(undefined, "Back");
+      if (send({ type: "back" })) closeNowPlaying(undefined, "Back");
       return true;
     });
-  }, [shown]);
+  }, [shown, send]);
 
   const sheetStyle = useAnimatedStyle(() => ({
     transform: [{ translateY: sheetOffset.get() }],
   }));
 
-  const toggleQueue = () => {
-    if (view !== "queue") beginTiming("queue", "Queue");
-    setQueueWarm(true);
-    setView((current) => (current === "queue" ? "player" : "queue"));
+  // The Queue slot's button and the edge mark open the Queue screen (a swipe times its own open).
+  const openQueue = () => {
+    if (item === null) return;
+    if (screen !== "queue") beginTiming("queue", "Queue");
+    send({ type: "show", screen: "queue" });
   };
+  const startEditing = useCallback(() => void send({ type: "edit" }), [send]);
   const toggleLyrics = () => {
     if (view !== "lyrics" && songTarget !== null)
       void nowPlayingSongLookup.acquire(songTarget).catch(songActionFailed);
     setView((current) => (current === "lyrics" ? "player" : "lyrics"));
   };
-  const toggleRelated = () => setView(view === "related" ? "player" : "related");
   const share = () => {
     if (item === null) return;
     shareNowPlaying(
@@ -263,9 +328,10 @@ export function NowPlayingSheet() {
     title: item?.title ?? strings.playbackText.unknownTitle,
     lyricsShown: view === "lyrics",
     toggleLyrics,
-    relatedShown: view === "related",
-    toggleRelated,
+    queueShown: screen === "queue",
+    openQueue,
     share,
+    edit: startEditing,
   };
   const slotSong: NowPlayingSlotSong =
     item === null
@@ -273,12 +339,28 @@ export function NowPlayingSheet() {
       : trackId !== null && isUnsearchedTrackId(trackId)
         ? "unsearched"
         : "song";
-  // The slots that aren't None and show for what's on, spread evenly left of Queue.
-  const slots = useNowPlayingButtons().flatMap((action, slot) => {
-    if (action === null) return [];
-    const show = nowPlayingSlotShow(action, slotSong, ytMusic);
-    return show === "hidden" ? [] : [{ action, slot, off: show === "off" }];
-  });
+  const buttons = useNowPlayingButtons();
+  // A slot's button; null while the slot is None or its action hides for what's on.
+  // In edit mode every slot shows, outlined, and opens its card instead.
+  const slotButton = (slot: number) => {
+    const action = buttons[slot] ?? null;
+    if (editing) return <EditSlot key={slot} slot={slot} action={action} />;
+    const show = action === null ? "hidden" : nowPlayingSlotShow(action, slotSong);
+    if (action === null || show === "hidden") return null;
+    return <SlotButton key={slot} action={action} off={show === "off"} context={slotContext} />;
+  };
+  // What edit mode dims: it shows through, takes no touches and screen readers skip it.
+  const dimmed = {
+    style: editing ? DIMMED : undefined,
+    pointerEvents: editing ? "none" : "auto",
+    importantForAccessibility: editing ? "no-hide-descendants" : "auto",
+    accessibilityElementsHidden: editing,
+  } as const;
+  // The footer's buttons, spread evenly; an empty slot leaves the row.
+  const footer = Array.from({ length: NOW_PLAYING_FOOTER_SLOTS }, (_, slot) =>
+    slotButton(slot),
+  ).filter((button) => button !== null);
+  const songMenu = nowPlayingSongMenuShow(slotSong);
 
   return (
     <Animated.View
@@ -298,7 +380,10 @@ export function NowPlayingSheet() {
       />
       <View
         className="flex-1"
-        importantForAccessibility={lyricSharing ? "no-hide-descendants" : "auto"}
+        importantForAccessibility={
+          lyricSharing || screen === "related" ? "no-hide-descendants" : "auto"
+        }
+        accessibilityElementsHidden={screen === "related"}
         style={{
           paddingTop: insets.top,
           paddingBottom: insets.bottom + CELL * 2,
@@ -309,85 +394,132 @@ export function NowPlayingSheet() {
           style={{ marginHorizontal: -grid.margin, paddingHorizontal: grid.margin - 12 }}
         >
           <View className="flex-row items-center justify-between" style={{ height: CELL * 7 }}>
-            <IconButton
-              icon={IconChevronDown}
-              label={strings.playbackText.closeNowPlaying}
-              onPress={close}
-            />
-            {item !== null && (
+            {/* In edit mode the header holds only Done, at the right; a drag down still closes. */}
+            {editing ? (
+              <View />
+            ) : (
               <IconButton
-                icon={IconShare3}
-                label={strings.playbackText.shareSong}
-                onPress={share}
+                icon={IconChevronDown}
+                label={strings.playbackText.closeNowPlaying}
+                onPress={close}
+              />
+            )}
+            {editing && (
+              <TextButton
+                label={strings.playbackText.doneEditing}
+                onPress={() => void send({ type: "done" })}
+                style={DONE}
+              />
+            )}
+            {/* The playing song's card, anchored here; off while an unsearched entry's search runs. */}
+            {!editing && songMenu !== "hidden" && (
+              <IconButton
+                icon={IconDotsVertical}
+                label={strings.playbackText.songMenu}
+                disabled={songMenu === "off"}
+                opensMenu
+                onPress={openPlayingActions}
               />
             )}
           </View>
         </DismissArea>
 
-        {item === null ? (
-          <DismissArea style={{ flex: 1 }}>
-            <View className="flex-1 items-center justify-center">
-              <Text className="font-sans text-subheadline text-secondary">
-                {strings.playbackText.nothingIsPlaying}
-              </Text>
-            </View>
-          </DismissArea>
-        ) : (
-          <>
-            {queueWarm && (
+        <View className="flex-1" onLayout={(event) => setPagesTop(event.nativeEvent.layout.y)}>
+          {item !== null && pages.queueMounted && (
+            <ScreenPage screen="queue" pages={pages}>
               <Activity
-                mode={view === "queue" ? "visible" : "hidden"}
+                mode={(page === "queue" || turning) && !covered ? "visible" : "hidden"}
                 name={strings.playbackText.queue}
               >
-                <QueuePane item={item} ground={ground} onShowPlayer={showPlayer} />
+                <QueuePane item={item} ground={ground} top={pagesTop} onShowPlayer={leaveQueue} />
               </Activity>
-            )}
-            {view === "lyrics" && (
-              <LyricsView
-                file={lyricsFile}
-                nonDTrackId={nonDTrackId}
-                item={item}
-                palette={palette}
-                gradient={gradient}
-                onShowPlayer={showPlayer}
-              />
-            )}
-            {view === "related" && (
-              <RelatedView
-                item={item}
-                videoId={videoId}
-                findAgain={findAgain}
-                onShowPlayer={showPlayer}
-              />
-            )}
-            <Activity mode={view === "player" ? "visible" : "hidden"} name="Player">
-              <PlayerPane item={item} details={details} playing={playing} />
-            </Activity>
-          </>
-        )}
+            </ScreenPage>
+          )}
+          {/* The player's page: a swipe to the left anywhere but the scrubber brings the Queue. */}
+          <ScreenPage screen="player" pages={pages} swipes={item !== null && !editing}>
+            <View className="flex-1" {...dimmed}>
+              {item === null ? (
+                <DismissArea style={{ flex: 1 }}>
+                  <View className="flex-1 items-center justify-center">
+                    <Text className="font-sans text-subheadline text-secondary">
+                      {strings.playbackText.nothingIsPlaying}
+                    </Text>
+                  </View>
+                </DismissArea>
+              ) : (
+                <>
+                  {/*
+                   * Hidden while the Queue or Related covers it, Lyrics stays open but follows
+                   * no playhead, and Back goes to the screens first.
+                   */}
+                  {view === "lyrics" && (
+                    <Activity
+                      mode={playerPageInSight ? "visible" : "hidden"}
+                      name={strings.playbackText.lyrics}
+                    >
+                      <LyricsView
+                        file={lyricsFile}
+                        nonDTrackId={nonDTrackId}
+                        item={item}
+                        palette={palette}
+                        gradient={gradient}
+                        onShowPlayer={showPlayer}
+                      />
+                    </Activity>
+                  )}
+                  <Activity
+                    mode={view === "player" && playerPageInSight ? "visible" : "hidden"}
+                    name="Player"
+                  >
+                    <PlayerPane item={item} details={details} playing={playing} />
+                  </Activity>
+                </>
+              )}
+            </View>
 
-        <DismissArea style={{ paddingTop: CELL * 3, gap: CELL * 2 }}>
-          <Scrubber />
-          <Transport />
-          {/*
-           * The four slots (Settings › Layout › Now Playing), then Queue on the right. The
-           * song controls share one lookup after settlement or their own early tap.
-           */}
-          <View
-            className={`flex-row items-center ${slots.length === 0 ? "justify-end" : "justify-between"}`}
-          >
-            {slots.map(({ action, slot, off }) => (
-              <SlotButton key={slot} slot={slot} action={action} off={off} context={slotContext} />
-            ))}
-            <ViewToggle
-              icon={IconListNumbers}
-              label={strings.playbackText.queue}
-              on={view === "queue"}
-              onPress={toggleQueue}
-            />
-          </View>
-        </DismissArea>
+            <DismissArea style={{ paddingTop: CELL * 3, gap: CELL * 2 }}>
+              <View {...dimmed}>
+                <Scrubber />
+              </View>
+              <Transport
+                left={slotButton(NOW_PLAYING_TRANSPORT_SLOTS.left)}
+                right={slotButton(NOW_PLAYING_TRANSPORT_SLOTS.right)}
+                editing={editing}
+              />
+              {/*
+               * The five footer slots (Settings › Layout › Now Playing). Empty, the row keeps
+               * its height, so the transport stays put. The song controls share one lookup
+               * after settlement or their own early tap.
+               */}
+              <View>
+                <View
+                  className={`flex-row items-center ${footer.length === 1 ? "justify-center" : "justify-between"}`}
+                  style={{ minHeight: CELL * 6 }}
+                >
+                  {footer}
+                </View>
+                {/* Under the slots, in the sheet's bottom margin, so nothing above it moves. */}
+                {editing && (
+                  <Text
+                    className="font-sans text-caption text-secondary"
+                    style={EDIT_NOTE}
+                    numberOfLines={1}
+                  >
+                    {strings.playbackText.tapASlotToChooseItsAction}
+                  </Text>
+                )}
+              </View>
+            </DismissArea>
+            {item !== null && !editing && <QueueEdgeMark onPress={openQueue} />}
+          </ScreenPage>
+        </View>
       </View>
+      {/* Related, over the header, the pages and the controls; mounted while it shows or moves. */}
+      {item !== null && relatedMounted && (
+        <RelatedPanel pages={pages} ground={ground}>
+          <RelatedView item={item} videoId={videoId} findAgain={findAgain} pages={pages} />
+        </RelatedPanel>
+      )}
       {/* The lyrics card's preview, over the whole sheet (Share in the Lyrics view). */}
       <LyricCardLayer />
     </Animated.View>

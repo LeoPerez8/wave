@@ -110,6 +110,19 @@ export type SyncNotifiedShow = SyncedRow<Readonly<Record<never, never>>>;
  */
 export type SyncDismissedSuggestion = SyncedRow<{ readonly dismissedAt: number }>;
 
+/**
+ * A dislike; its id is the song's recording key, or a YT Music song's queue
+ * track id (`yt:<video>`) when the Library has no file of it. It carries the
+ * song as it was listed when disliked, for the Disliked songs list.
+ */
+export type SyncDislike = SyncedRow<{
+  readonly title: string;
+  /** Who it's credited to, primary first: a JSON array of names. */
+  readonly artists: string;
+  readonly durationMs: number | null;
+  readonly dislikedAt: number;
+}>;
+
 /** How a play ended (Core's `PlayEndReason`). */
 export type SyncPlayEnd = "completed" | "skipped" | "stopped" | "interrupted";
 
@@ -125,6 +138,12 @@ export interface SyncPlayRow {
   readonly counted: boolean;
   readonly contextType: string | null;
   readonly contextId: string | null;
+  /**
+   * The playlist's sync id when the play context is a playlist: `contextId`
+   * is then the playlist's number on the device that recorded the play, which
+   * names another playlist elsewhere. Absent on older clients.
+   */
+  readonly contextPlaylistId?: string | null;
   readonly source: PlaySource;
   readonly importedFrom: "blackplayer" | null;
   /** What the play showed when it started; absent on older clients. */
@@ -145,6 +164,7 @@ export interface SyncTables {
   readonly hiddenReleases: readonly SyncHiddenRelease[];
   readonly notifiedShows: readonly SyncNotifiedShow[];
   readonly dismissedSuggestions: readonly SyncDismissedSuggestion[];
+  readonly dislikes: readonly SyncDislike[];
 }
 
 export const EMPTY_SYNC_TABLES: SyncTables = {
@@ -158,6 +178,7 @@ export const EMPTY_SYNC_TABLES: SyncTables = {
   hiddenReleases: [],
   notifiedShows: [],
   dismissedSuggestions: [],
+  dislikes: [],
 };
 
 /**
@@ -175,6 +196,7 @@ export const SYNC_TABLE_NAMES = [
   "hiddenReleases",
   "notifiedShows",
   "dismissedSuggestions",
+  "dislikes",
 ] as const satisfies readonly (keyof SyncTables)[];
 
 /** What one field holds: text, a whole number, a boolean, or one of a few values; `?` allows null. */
@@ -231,6 +253,7 @@ export const SYNC_FIELDS: {
     counted: "bool",
     contextType: "text?",
     contextId: "text?",
+    contextPlaylistId: "text?",
     source: ["phone", "auto", "desktop"],
     importedFrom: ["blackplayer", null],
     snapshot: "snapshot?",
@@ -246,6 +269,8 @@ export const SYNC_FIELDS: {
   hiddenReleases: {},
   notifiedShows: {},
   dismissedSuggestions: { dismissedAt: "int" },
+  // not UI text: wire field kinds
+  dislikes: { title: "text", artists: "text", durationMs: "int?", dislikedAt: "int" },
 };
 
 const isRecord = (value: unknown): value is Readonly<Record<string, unknown>> =>
