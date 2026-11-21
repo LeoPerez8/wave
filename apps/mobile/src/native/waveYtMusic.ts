@@ -9,6 +9,7 @@ import type {
   YtPlaylistFirstPage,
   YtPlaylistPage,
   YtPlaylistPrivacy,
+  YtAccountHome,
   YtLibraryPlaylist,
   YtRadioStart,
   YtSession,
@@ -151,6 +152,14 @@ declare class WaveYtMusicModule extends NativeModule<WaveYtMusicEvents> {
    * read signed out, without a country, so YouTube Music picks one.
    */
   chartArtists(meter?: string): Promise<readonly YtArtistCandidate[]>;
+  /**
+   * The shelves of playlists on the signed-in account's YouTube Music home
+   * (`FEmusic_home`, its first pages), in its order, and the account they
+   * were read as; songs, albums, mixes and artists are discarded natively.
+   * Rejects with `ERR_YT_SIGNED_OUT` without a session YouTube accepts, and
+   * with `ERR_YT_FAILED` past its deadline (natively, so no page is read after).
+   */
+  homePlaylistShelves(meter?: string): Promise<YtAccountHome>;
   /** The playlist [playlistId] (without `VL`): its head and its first page of songs. */
   playlist(playlistId: string): Promise<NativeYtPlaylistPage>;
   /** The playlist page a first page's (or a later page's) [continuation] leads to. */

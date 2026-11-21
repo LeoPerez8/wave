@@ -13,6 +13,7 @@ import {
   homeOpeningState,
   homeSectionWaiting,
   homePlaceholderHeight,
+  homePlaceholderSkeleton,
   magicQueueGrid,
 } from "./homeOpening.ts";
 import type { HomeContent } from "./homeOpening.ts";
@@ -271,6 +272,14 @@ test("Home reserves matching shelf, list and adaptive Magic Queue dimensions at 
   assert.equal(magicQueueGrid(312, 1).columns, 3);
   assert.equal(magicQueueGrid(312, Math.fround(1.3)).columns, 2);
   assert.equal(magicQueueGrid(312, 2).columns, 1);
+});
+
+test("sections with nothing kept to show draw themselves before Home paints, never a skeleton", () => {
+  // Left out signed out or with nothing kept: a skeleton would flash its header and go.
+  for (const id of ["community-playlists", "new-releases", "upcoming-shows"] as const)
+    assert.equal(homePlaceholderSkeleton(id), false, id);
+  for (const id of ["recently-added", "from-your-library", "favorites", "stats"] as const)
+    assert.equal(homePlaceholderSkeleton(id), true, id);
 });
 
 test("the Magic Queue reserves all nine tile places before its saved picks answer", () => {
