@@ -11,7 +11,13 @@ import type {
   QueueRow,
 } from "./playerView.ts";
 import type { WindowSettings } from "./windowSettings.ts";
-import type { DatedRelease, LanguageChoice, SongSortKey, ThemeEdit } from "@wave/core";
+import type {
+  DatedRelease,
+  LanguageChoice,
+  PlaylistSongSort,
+  SongSortKey,
+  ThemeEdit,
+} from "@wave/core";
 
 import type { LanguageView } from "./language.ts";
 import type { LibraryCounts } from "@wave/client/db/counts";
@@ -382,7 +388,11 @@ export interface BridgeContract
   };
   readonly "library.counts": { readonly args: readonly []; readonly result: LibraryCounts };
   readonly "library.sortBy": {
-    readonly args: readonly [kind: BrowseKind, key: SongSortKey];
+    readonly args: readonly [
+      kind: BrowseKind,
+      key: SongSortKey | PlaylistSongSort["key"],
+      playlistId?: number,
+    ];
     readonly result: void;
   };
   readonly "library.scanStatus": { readonly args: readonly []; readonly result: ScanStatus };
@@ -763,7 +773,16 @@ export interface WaveBridge {
     readonly exclude: () => Promise<void>;
     readonly removeRoot: (path: string) => Promise<void>;
     readonly include: (path: string) => Promise<void>;
-    readonly sortBy: (kind: BrowseKind, key: SongSortKey) => Promise<void>;
+    /**
+     * A click on a table's [key] header: starts that sort or reverses it. A playlist's page
+     * ([kind] `playlist`, with its [playlistId]) keeps its own sort; the other tables share one
+     * per kind.
+     */
+    readonly sortBy: (
+      kind: BrowseKind,
+      key: SongSortKey | PlaylistSongSort["key"],
+      playlistId?: number,
+    ) => Promise<void>;
   };
   readonly songs: {
     /** Where each song's download is and whether its file failed to play; 200 songs at most. */
@@ -947,7 +966,10 @@ export const createBridge = (invoke: Invoke): WaveBridge => ({
     exclude: () => invoke("library.exclude"),
     removeRoot: (path) => invoke("library.removeRoot", path),
     include: (path) => invoke("library.include", path),
-    sortBy: (kind, key) => invoke("library.sortBy", kind, key),
+    sortBy: (kind, key, playlistId) =>
+      playlistId === undefined
+        ? invoke("library.sortBy", kind, key)
+        : invoke("library.sortBy", kind, key, playlistId),
   },
   songs: {
     states: (ids) => invoke("songs.states", ids),

@@ -236,6 +236,20 @@ to Playlist and Remove from Library. A target is `{scope, ids}` or `{scope, all:
 until Settings includes it again; the file stays on disk. The renderer's keys go through Core's
 `desktopKey`, with focus read by `keys.ts`.
 
+## Sorting a page's songs
+
+`e2e/pageSort.spec.ts` sorts a playlist's, an artist's and a genre's songs from their headers,
+checks that Move Up and Move Down show only in a playlist's Custom order, that Play queues the
+order shown, and that each choice survives a restart. Screenshots are
+`page-sort-<page>-<platform>.png`.
+
+`library.sortBy(kind, key, playlistId?)` takes a playlist's id for its own sort, which is kept
+in the synced `settings.playlistSongs.<n>` preferences as the phone keeps it; artists and genres
+share `tableSort.artist` and `tableSort.genre` on this computer. `BrowsePage.sort` is the order
+shown, and a row's `order` is its place in the playlist's own order or its Popular rank. A
+sorted playlist and an artist's Popular are ordered by Core in main, which reads the whole list
+for each page. The Release date sort reads the file's date tag, else its Year.
+
 ## Listening History
 
 `e2e/listeningHistory.spec.ts` seeds 3,000 counted plays, a streamed play with YT Music off, a

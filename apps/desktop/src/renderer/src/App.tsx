@@ -22,7 +22,7 @@ import type { AccountView } from "../../shared/account.ts";
 import type { YtAccountPanel } from "../../shared/ytAccount.ts";
 import { SpotifyAccountSettings } from "./SpotifyAccountSettings.tsx";
 import { PlaylistMissingSongs } from "./SpotifyImport.tsx";
-import type { BrowseRow, BrowseScope } from "../../shared/browse.ts";
+import type { BrowsePage, BrowseRow, BrowseScope } from "../../shared/browse.ts";
 import type { CollectionTarget } from "../../shared/collectionActions.ts";
 import type { ScanStatus } from "../../shared/library.ts";
 import { PlayerBar, usePlayback } from "./PlayerBar.tsx";
@@ -151,6 +151,8 @@ export function App() {
   const [position, setPosition] = useState(0);
   const route = history[position]!;
   const [hero, setHero] = useState<BrowseRow>();
+  /** The order the page's table shows: a playlist offers Move Up and Move Down only in Custom. */
+  const [shownSort, setShownSort] = useState<BrowsePage["sort"]>();
   const [scan, setScan] = useState<ScanStatus>();
   const [account, setAccount] = useState<AccountView>();
   const [ytAccount, setYtAccount] = useState<YtAccountPanel>();
@@ -1265,6 +1267,7 @@ export function App() {
                 scope={scope}
                 revision={revision}
                 onHero={setHero}
+                onSort={setShownSort}
                 onOpen={open}
                 onError={failed}
                 selection={collectionKind ? picks?.[collectionKind] : table.selection}
@@ -1305,7 +1308,10 @@ export function App() {
                           scope,
                           row,
                           at,
-                          scope.kind === "playlist" && scope.id !== undefined
+                          // Move Up and Move Down only where the playlist shows its own order.
+                          scope.kind === "playlist" &&
+                            scope.id !== undefined &&
+                            shownSort?.key === "custom"
                             ? playlistEdits.moveItems(scope.id, row.id)
                             : [],
                         );
