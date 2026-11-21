@@ -1478,6 +1478,7 @@ export function App() {
           geniusAccess={geniusAccess(account)}
           onGeniusSignIn={openGeniusSignIn}
           onSongDrop={(songs, at) => dropSongs(songs, { queue: at })}
+          shuffleMenu={shuffleMenu}
           notify={notify}
           onClose={() => {
             // Focus goes back to the bar's button for this tab; Related opens from Queue's.
