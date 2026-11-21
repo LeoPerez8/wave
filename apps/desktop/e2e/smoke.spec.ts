@@ -165,6 +165,8 @@ test("the page has no Node and only the typed bridge", async () => {
       "wave.downloads.setBestQuality",
       "wave.downloads.move",
       "wave.downloads.failedReason",
+      "wave.downloads.ytList",
+      "wave.downloads.ytListAction",
       "wave.account.view",
       "wave.account.signIn",
       "wave.account.cancelSignIn",
@@ -268,6 +270,12 @@ test("the page has no Node and only the typed bridge", async () => {
       "wave.cards.copyImage",
       "wave.history.page",
       "wave.history.play",
+      "wave.recognize.start",
+      "wave.recognize.view",
+      "wave.recognize.close",
+      "wave.recognize.audio",
+      "wave.recognize.captureEnded",
+      "wave.recognize.run",
     ],
   });
 });

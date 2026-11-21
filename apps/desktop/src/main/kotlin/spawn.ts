@@ -17,6 +17,8 @@ export interface JvmPaths {
   /** Where the Kotlin keeps its own data, such as the YouTube session. */
   readonly dataDir: string;
   readonly platform: NodeJS.Platform;
+  /** A fake Shazam's origin, for a development build's tests; never set when packaged. */
+  readonly shazamUrl?: string | undefined;
 }
 
 /**
@@ -37,7 +39,14 @@ const JVM_FLAGS = [
 
 export const jvmCommand = (paths: JvmPaths): Command => ({
   file: join(paths.runtime, "bin", paths.platform === "win32" ? "java.exe" : "java"),
-  args: [...JVM_FLAGS, "-jar", paths.jar, "--data", paths.dataDir],
+  args: [
+    ...JVM_FLAGS,
+    "-jar",
+    paths.jar,
+    "--data",
+    paths.dataDir,
+    ...(paths.shazamUrl ? ["--shazam-url", paths.shazamUrl] : []),
+  ],
 });
 
 /**

@@ -28,6 +28,8 @@ import { labels, language, text, albumName, artistName, tagTitle } from "./text.
 import { tableColumns } from "../../shared/tableColumns.ts";
 import { useTableSelection, type TableSelectionProps } from "./useTableSelection.ts";
 import { TableSortHeader } from "./TableSortHeader.tsx";
+import { rowDrag } from "./SongActions.tsx";
+import { songDragProps } from "./songDrag.ts";
 import "./tables.css";
 
 const SIZE = 100;
@@ -507,6 +509,10 @@ export function VirtualTable({
                   aria-disabled={row.unavailable}
                   className={`table-row table-columns ${active === index ? "active-row" : ""} ${mark ? markClass(mark) : ""}`}
                   style={{ top: index * HEIGHT }}
+                  // A song row drags onto a playlist or the Queue; a ranking's rows only with selection.
+                  {...(songList && (preview === undefined || onSelection !== undefined)
+                    ? songDragProps(() => rowDrag({ selection }, scope, row))
+                    : {})}
                   onMouseDown={(event) => {
                     if (onSelection && event.shiftKey) event.preventDefault();
                   }}

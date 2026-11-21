@@ -15,6 +15,7 @@ import {
   type CollectionKind,
   type DesktopSelectionItem,
   type QueueSong,
+  type UpNextPlace,
   type YtAlbumSong,
   type YtDownloadStatus,
 } from "@wave/core";
@@ -145,6 +146,8 @@ const runOnSongs = async (
   songs: readonly CollectionSong[],
   action: CollectionRunAction,
   destination?: number,
+  /** Add to Queue dropped in Up Next, between those neighbours. */
+  at?: UpNextPlace,
 ): Promise<CollectionRunResult> => {
   switch (action) {
     case "playNext":
@@ -176,7 +179,13 @@ const runOnSongs = async (
       const streams = queued.flatMap((entry) => (entry.source === "stream" ? [entry.song] : []));
       const trackIds = queued.map(queueSongTrackId);
       if (trackIds.length > 0)
-        await yt.withSongs(streams, () => playback.command({ type: action, trackIds }));
+        await yt.withSongs(streams, () =>
+          playback.command(
+            action === "addToQueue" && at !== undefined
+              ? { type: action, trackIds, at }
+              : { type: action, trackIds },
+          ),
+        );
       return { kind: "queued", count: trackIds.length };
     }
     case "addToPlaylist": {
@@ -301,11 +310,12 @@ export const runSelectionAction = async (
   target: SelectionTarget,
   action: SelectionRunAction,
   destination?: number,
+  at?: UpNextPlace,
 ): Promise<SelectionRunResult> => {
   const { db } = ports;
   const { songs, collections } = selectionItems(db, target);
   const held = groupSongs([songs, ...collections.map((item) => item.songs)], queueSongTrackId);
-  if (action !== "download") return runOnSongs(ports, held, action, destination);
+  if (action !== "download") return runOnSongs(ports, held, action, destination, at);
   const missing = libraryIds(
     held.filter((entry) => entry.source === "library" && entry.track.path === null),
   );

@@ -9,6 +9,7 @@ import { Playback } from "./playback/playback.ts";
 import {
   validPlaybackCommand,
   validPlaybackSettings,
+  validQueuePlace,
   validSleepTimerChoice,
 } from "./playback/validation.ts";
 import { Player } from "./audio/player.ts";
@@ -64,10 +65,13 @@ import {
   type FailedReasonAction,
   MISSING_SONGS_LISTS,
   type MissingSongsList,
+  YT_SONGS_DOWNLOAD_ACTIONS,
+  type YtSongsList,
 } from "../shared/downloads.ts";
-import type { MissingSongsDownloadAction } from "@wave/core";
+import type { MissingSongsDownloadAction, UpNextPlace, YtSongsDownloadAction } from "@wave/core";
 import { createYtFeatureHandlers, playSearchSong } from "./yt/ytBridge.ts";
-import type { YtFeatures } from "./yt/ytServices.ts";
+import { YtFeatures } from "./yt/ytServices.ts";
+import type { YtListSongs } from "./downloads/downloads.ts";
 import { Lyrics } from "./lyrics/lyrics.ts";
 import { GeniusLyricsSearch } from "./lyrics/geniusLyricsSearchLayer.ts";
 import { DesktopLinks } from "./links/layer.ts";
@@ -97,6 +101,8 @@ import { homeFollowHandlers } from "./follows/homeFollowHandlers.ts";
 import { FollowedArtists } from "./follows/followedArtists.ts";
 import { followsHandlers } from "./follows/followsHandlers.ts";
 import { streamedHandlers } from "./yt/streamedHandlers.ts";
+import { recognizeHandlers } from "./recognize/recognizeHandlers.ts";
+import { Recognize } from "./recognize/recognizeLayer.ts";
 import { runStreamedAction } from "./yt/streamedSong.ts";
 import {
   clearRecentSearches,
@@ -193,7 +199,8 @@ export type BridgeServices =
   | YtAccount
   | SpotifyAccount
   | CardImages
-  | SpotifyImport;
+  | SpotifyImport
+  | Recognize;
 
 const refuse = (call: BridgeCall, why: string) => Effect.fail(new Error(`Refused ${call}: ${why}`));
 
@@ -255,6 +262,33 @@ const downloadsCall = <A>(run: (downloads: Downloads["Service"]) => A | Promise<
   Effect.gen(function* () {
     const downloads = yield* Downloads;
     return yield* Effect.tryPromise({ try: async () => run(downloads), catch: (error) => error });
+  });
+
+/** A YT Music list as a page names it: an album's page by its browse id. */
+const ytSongsList = (value: unknown): YtSongsList | undefined => {
+  if (typeof value !== "object" || value === null) return undefined;
+  const { kind, id } = value as YtSongsList;
+  return kind === "album" && typeof id === "string" && /^[A-Za-z0-9_-]{2,128}$/.test(id)
+    ? { kind, id }
+    : undefined;
+};
+
+/** [run] on [list]'s songs as its page last read them; [unread] when it wasn't read. */
+const ytListCall = <A, B>(
+  list: YtSongsList,
+  unread: B,
+  run: (downloads: Downloads["Service"], found: YtListSongs) => A | Promise<A>,
+) =>
+  Effect.gen(function* () {
+    const features = yield* YtFeatures;
+    const downloads = yield* Downloads;
+    return yield* Effect.tryPromise({
+      try: async () => {
+        const found = features.ytList(list);
+        return found === null ? unread : await run(downloads, found);
+      },
+      catch: (error) => error,
+    });
   });
 
 /** A journal job's id: a video id, or a missing song's `missing:<trackId>`. */
@@ -409,14 +443,15 @@ const createHandlers = (
               p.start(scope, index as number | undefined, shuffle as boolean | undefined),
             )
         : refuse("playback.start", "invalid play context"),
-    "playback.startYt": ([ids, index]) => {
+    "playback.startYt": ([ids, index, shuffle]) => {
       const songs = videoIds(ids);
       return songs !== undefined &&
         typeof index === "number" &&
         Number.isSafeInteger(index) &&
         index >= 0 &&
-        index < songs.length
-        ? playbackCall((p) => p.startYt(songs, index))
+        index < songs.length &&
+        (shuffle === undefined || typeof shuffle === "boolean")
+        ? playbackCall((p) => p.startYt(songs, index, shuffle as boolean | undefined))
         : refuse("playback.startYt", "invalid songs");
     },
     "playback.command": ([command]) =>
@@ -589,6 +624,21 @@ const createHandlers = (
       FAILED_REASON_ACTIONS.includes(action as FailedReasonAction)
         ? downloadsCall((d) => d.failedReason(reason, action as FailedReasonAction))
         : refuse("downloads.failedReason", "invalid reason or action"),
+    "downloads.ytList": ([value]) => {
+      const list = ytSongsList(value);
+      return list === undefined
+        ? refuse("downloads.ytList", "invalid list")
+        : ytListCall(list, null, (d, found) => d.ytListView(found));
+    },
+    "downloads.ytListAction": ([action, value]) => {
+      const list = ytSongsList(value);
+      return list === undefined ||
+        !YT_SONGS_DOWNLOAD_ACTIONS.includes(action as YtSongsDownloadAction)
+        ? refuse("downloads.ytListAction", "invalid action or list")
+        : ytListCall(list, undefined, (d, found) =>
+            d.ytListAction(action as YtSongsDownloadAction, found),
+          );
+    },
     "downloads.list": ([value]) => {
       const list = missingSongsList(value);
       return list === undefined
@@ -784,10 +834,11 @@ const createHandlers = (
             return selectionMenu(yield* Database, target, (yield* YtMusic).enabled());
           })
         : refuse("collections.selectionActions", "invalid selection"),
-    "collections.runSelection": ([target, action, playlistId]) =>
+    "collections.runSelection": ([target, action, playlistId, at]) =>
       validSelectionTarget(target, validTarget) &&
       SELECTION_RUN_ACTIONS.includes(action as SelectionRunAction) &&
-      (action === "addToPlaylist" ? songId(playlistId) : playlistId === undefined)
+      (action === "addToPlaylist" ? songId(playlistId) : playlistId === undefined) &&
+      validQueuePlace(action, at)
         ? Effect.gen(function* () {
             const db = yield* Database;
             const playback = yield* Playback;
@@ -820,6 +871,7 @@ const createHandlers = (
                 target,
                 action as SelectionRunAction,
                 playlistId as number | undefined,
+                at as UpNextPlace | undefined,
               ),
             );
           })
@@ -830,10 +882,11 @@ const createHandlers = (
             return songMenu(yield* Database, target, surface, (yield* YtMusic).enabled());
           })
         : refuse("songs.actions", "invalid songs or surface"),
-    "songs.run": ([target, action, playlistId]) =>
+    "songs.run": ([target, action, playlistId, at]) =>
       validTarget(target) &&
       SONG_RUN_ACTIONS.includes(action as SongRunAction) &&
       (action === "addToPlaylist" ? songId(playlistId) : playlistId === undefined) &&
+      validQueuePlace(action, at) &&
       (action !== "removeFromPlaylist" || target.scope.kind === "playlist")
         ? Effect.gen(function* () {
             const db = yield* Database;
@@ -850,7 +903,11 @@ const createHandlers = (
                     download: downloads.missing,
                     queue: (type, trackIds, songs) =>
                       yt.withSongs(songs, () =>
-                        playback.command({ type, trackIds: [...trackIds] }),
+                        playback.command(
+                          type === "addToQueue" && at !== undefined
+                            ? { type, trackIds: [...trackIds], at: at as UpNextPlace }
+                            : { type, trackIds: [...trackIds] },
+                        ),
                       ),
                     runStreamed: (song, action) =>
                       runStreamedAction(
@@ -916,6 +973,7 @@ const createHandlers = (
     ...homeFollowHandlers,
     ...followsHandlers,
     ...miniPlayerHandlers(miniPlayer),
+    ...recognizeHandlers,
     "search.library": ([query]) =>
       searchQuery(query)
         ? Effect.gen(function* () {

@@ -1,9 +1,10 @@
 /**
  * The Queue tab: History, the playing song and Up Next, as on the phone. It is one tab stop with
  * roving focus; Enter or a double-click plays a row, Delete removes it, Alt+↑/↓ or a drag moves
- * an Up Next row. Rows load a page at a time, so a queue of a whole Library stays quick.
+ * an Up Next row. Songs dragged from a list drop into Up Next where they land. Rows load a page
+ * at a time, so a queue of a whole Library stays quick.
  */
-import { desktopKey } from "@wave/core";
+import { desktopKey, type UpNextPlace } from "@wave/core";
 import {
   useEffect,
   useRef,
@@ -20,6 +21,7 @@ import { Icon } from "./Icon.tsx";
 import { pressOf } from "./keys.ts";
 import { queueRowAt } from "./queueRows.ts";
 import { rovingTarget } from "./rovingList.ts";
+import { useSongDrop, type DraggedSongs } from "./songDrag.ts";
 import { labels, text, artistName } from "./text.ts";
 import { Artwork, time } from "./VirtualTable.tsx";
 
@@ -58,12 +60,15 @@ export function QueuePanel({
   command,
   onError,
   onMenu,
+  onSongDrop,
 }: {
   readonly view: PlayerView;
   readonly command: (next: PlaybackCommand) => void;
   readonly onError: () => void;
   /** Opens a row's song menu (a right-click). */
   readonly onMenu?: ((row: QueueRow, event: MouseEvent<HTMLElement>) => void) | undefined;
+  /** Songs dragged from a list, dropped in Up Next [at] (none: an empty queue takes them). */
+  readonly onSongDrop?: ((songs: DraggedSongs, at: UpNextPlace | undefined) => void) | undefined;
 }) {
   const list = useRef<HTMLDivElement>(null);
   const [pages, setPages] = useState<{
@@ -74,6 +79,7 @@ export function QueuePanel({
   const [height, setHeight] = useState(400);
   const [active, setActive] = useState(view.index);
   const [dragging, setDragging] = useState<number>();
+  const songDrop = useSongDrop<number | "top" | "end">();
   const { index, length, revision } = view;
   const slots = slotsOf(index, length);
   const first = Math.max(0, Math.floor(top / ROW) - OVERSCAN);
@@ -172,6 +178,29 @@ export function QueuePanel({
     }
     if (handled) event.preventDefault();
   };
+  /** Where songs dropped on [on] go: before an Up Next row, at the top, or at the end. */
+  const placeOf = (on: number | "top" | "end"): UpNextPlace | undefined => {
+    if (length === 0) return undefined;
+    if (on === "top") return { after: null, before: null };
+    if (on === "end") return { after: length - 1 > index ? keyAt(length - 1) : null, before: null };
+    return { after: on - 1 > index ? keyAt(on - 1) : null, before: keyAt(on) };
+  };
+  /** The drop events of [on], for songs dragged from a list. */
+  const songDropProps = (on: number | "top" | "end", takes = true) => {
+    const props = songDrop.props(
+      on,
+      (songs) => onSongDrop?.(songs, placeOf(on)),
+      takes && onSongDrop !== undefined,
+    );
+    return {
+      ...props,
+      onDragOver: (event: DragEvent) => {
+        props.onDragOver(event);
+        // The row takes it, not the list around it.
+        if (event.defaultPrevented) event.stopPropagation();
+      },
+    };
+  };
   const drop = (at: number) => (event: DragEvent) => {
     event.preventDefault();
     if (dragging !== undefined) move(dragging, at);
@@ -184,12 +213,15 @@ export function QueuePanel({
     if (item === undefined) continue;
     const style = { top: slot * ROW };
     if (item.kind !== "row") {
+      // History's heading leads the list when there is one.
+      const history = index > 0 && slot === 0;
       drawn.push(
         <div
           key={`slot-${slot}`}
           role="presentation"
           className={item.kind === "heading" ? "queue-heading" : "queue-note"}
           style={style}
+          {...songDropProps("top", !history)}
         >
           {item.label}
         </div>,
@@ -198,6 +230,8 @@ export function QueuePanel({
     }
     const { at } = item;
     const row = rowAt(at);
+    const songTarget = songDropProps(at === index ? "top" : at, at >= index);
+    const songOver = songDrop.over === (at === index ? "top" : at);
     drawn.push(
       <div
         key={`row-${at}`}
@@ -208,7 +242,7 @@ export function QueuePanel({
         aria-label={row && `${row.title}, ${artistName(row.artist)}`}
         className={`queue-row ${at < index ? "history" : ""} ${at === index ? "playing" : ""} ${
           active === at ? "active-row" : ""
-        } ${dragging === at ? "dragging" : ""}`}
+        } ${dragging === at ? "dragging" : ""} ${songOver ? "drop-over" : ""}`}
         style={style}
         draggable={row !== undefined && upNext(at)}
         onDragStart={(event) => {
@@ -218,8 +252,13 @@ export function QueuePanel({
         onDragEnd={() => setDragging(undefined)}
         onDragOver={(event) => {
           if (dragging !== undefined && upNext(at)) event.preventDefault();
+          else songTarget.onDragOver(event);
         }}
-        onDrop={drop(at)}
+        onDragLeave={songTarget.onDragLeave}
+        onDrop={(event) => {
+          if (dragging !== undefined) drop(at)(event);
+          else songTarget.onDrop(event);
+        }}
         onClick={() => {
           setActive(at);
           list.current?.focus();
@@ -263,13 +302,14 @@ export function QueuePanel({
   return (
     <div
       ref={list}
-      className="queue-list"
+      className={`queue-list ${songDrop.over === "end" ? "drop-over" : ""}`}
       role="listbox"
       aria-label={labels.queue}
       tabIndex={0}
       aria-activedescendant={length > 0 && rowAt(active) ? `queue-row-${active}` : undefined}
       onKeyDown={key}
       onScroll={(event) => setTop(event.currentTarget.scrollTop)}
+      {...songDropProps("end")}
     >
       <div className="queue-space" style={{ height: slots.length * ROW }}>
         {drawn}
