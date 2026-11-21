@@ -2,11 +2,14 @@ import assert from "node:assert/strict";
 import { describe, test } from "node:test";
 
 import {
+  withinServiceClock,
   fillMissingSongs,
   findRecording,
   joinLibraries,
   mergePlays,
+  mergePlaylistEntries,
   mergeRows,
+  mergeTableRows,
   normalizeTrack,
   recordingKey,
   signOutPlan,
@@ -247,6 +250,27 @@ describe("mergeRows", () => {
 
 const play = (id: string, listenedMs: number) => ({ id, recordingKey: "k", listenedMs });
 
+describe("withinServiceClock", () => {
+  const row = (id: string, changedAt: number) => ({ id, changedAt, phoneId: "a", deleted: false });
+
+  test("a change time ahead of the service's clock becomes the service's time", () => {
+    assert.deepEqual(withinServiceClock([row("p1", 9_000)], 5_000), [row("p1", 5_000)]);
+  });
+
+  test("a change time that isn't ahead stays as it is, the same row", () => {
+    const rows = [row("p1", 4_999), row("p2", 5_000)];
+    const stored = withinServiceClock(rows, 5_000);
+    assert.equal(stored[0], rows[0]);
+    assert.equal(stored[1], rows[1]);
+  });
+
+  test("a change corrected to the service's time loses to a later change by another phone", () => {
+    const ahead = withinServiceClock([{ ...row("p1", 99_000), phoneId: "z" }], 5_000);
+    const later = { ...row("p1", 6_000), phoneId: "a" };
+    assert.deepEqual(mergeRows(ahead, [later]).accepted, [later]);
+  });
+});
+
 describe("mergePlays", () => {
   test("a play is added once, and a play already held is never changed", () => {
     const first = play("pixel-1", 120_000);
@@ -423,3 +447,137 @@ const permutationsOf = <T>(items: readonly T[], count: number): T[][] => {
   }
   return orders;
 };
+
+interface EntryRow {
+  readonly id: string;
+  readonly changedAt: number;
+  readonly phoneId: string;
+  readonly deleted: boolean;
+  readonly orderKey: string;
+  readonly restoredAt: number | null;
+}
+
+const entry = (
+  changedAt: number,
+  phoneId: string,
+  orderKey: string,
+  restoredAt: number | null = null,
+): EntryRow => ({ id: "e1", changedAt, phoneId, deleted: false, orderKey, restoredAt });
+
+const removedEntry = (changedAt: number, phoneId: string): EntryRow => ({
+  ...entry(changedAt, phoneId, "a"),
+  deleted: true,
+});
+
+describe("mergePlaylistEntries", () => {
+  test("a move stamped after a removal doesn't bring the entry back", () => {
+    const removed = removedEntry(3_000, "pixel");
+    const move = entry(4_000, "galaxy", "b");
+    assert.deepEqual(mergePlaylistEntries([removed], [move]), { rows: [removed], accepted: [] });
+    assert.deepEqual(mergePlaylistEntries([move], [removed]), {
+      rows: [removed],
+      accepted: [removed],
+    });
+  });
+
+  test("an older edit that arrives after a removal doesn't bring the entry back", () => {
+    const removed = removedEntry(3_000, "pixel");
+    const lateEdit = entry(2_000, "galaxy", "b");
+    assert.deepEqual(mergePlaylistEntries([removed], [lateEdit]).rows, [removed]);
+  });
+
+  test("a restore made after the removal brings the same entry back", () => {
+    const removed = removedEntry(3_000, "pixel");
+    const restored = entry(4_000, "pixel", "a", 4_000);
+    assert.deepEqual(mergePlaylistEntries([removed], [restored]), {
+      rows: [restored],
+      accepted: [restored],
+    });
+    assert.deepEqual(mergePlaylistEntries([restored], [removed]).rows, [restored]);
+  });
+
+  test("a restored entry stays back when it is edited afterwards", () => {
+    const removed = removedEntry(3_000, "pixel");
+    const movedAfterRestore = entry(6_000, "galaxy", "c", 4_000);
+    assert.deepEqual(mergePlaylistEntries([removed], [movedAfterRestore]).rows, [
+      movedAfterRestore,
+    ]);
+    assert.deepEqual(
+      mergePlaylistEntries([entry(4_000, "pixel", "a", 4_000)], [movedAfterRestore]).rows,
+      [movedAfterRestore],
+    );
+  });
+
+  test("a removal made after a restore removes the entry again", () => {
+    const restored = entry(4_000, "pixel", "a", 4_000);
+    const removedAgain = removedEntry(5_000, "galaxy");
+    assert.deepEqual(mergePlaylistEntries([restored], [removedAgain]).rows, [removedAgain]);
+    assert.deepEqual(mergePlaylistEntries([removedAgain], [restored]).rows, [removedAgain]);
+    // An edit of the restored entry stamped after that removal doesn't undo it either.
+    const move = entry(9_000, "pixel", "d", 4_000);
+    assert.deepEqual(mergePlaylistEntries([removedAgain], [move]).rows, [removedAgain]);
+  });
+
+  test("a restore made before the removal it meets loses to it", () => {
+    const removedLater = removedEntry(5_000, "galaxy");
+    const restoredEarlier = entry(4_000, "pixel", "a", 4_000);
+    assert.deepEqual(mergePlaylistEntries([restoredEarlier], [removedLater]).rows, [removedLater]);
+  });
+
+  test("a removal and a restore stamped with the same time leave the entry removed", () => {
+    const removed = removedEntry(4_000, "a-phone");
+    const restored = entry(4_000, "b-phone", "a", 4_000);
+    assert.deepEqual(mergePlaylistEntries([removed], [restored]).rows, [removed]);
+    assert.deepEqual(mergePlaylistEntries([restored], [removed]).rows, [removed]);
+  });
+
+  test("a restore time ahead of its own change counts as that change's time", () => {
+    const claimsLater = entry(4_000, "pixel", "a", 99_000);
+    const removedAfter = removedEntry(5_000, "galaxy");
+    assert.deepEqual(mergePlaylistEntries([claimsLater], [removedAfter]).rows, [removedAfter]);
+  });
+
+  test("live changes of an entry never removed merge as any row does", () => {
+    const older = entry(1_000, "pixel", "a");
+    const newer = entry(2_000, "galaxy", "b");
+    assert.deepEqual(mergePlaylistEntries([newer], [older]).rows, [newer]);
+    assert.deepEqual(mergePlaylistEntries([older], [newer]).rows, [newer]);
+  });
+
+  test("the same changes merged in any order give the same entry", () => {
+    const changes = [
+      entry(1_000, "pixel", "a"),
+      removedEntry(2_000, "pixel"),
+      entry(2_500, "galaxy", "b"),
+      entry(3_000, "pixel", "a", 3_000),
+      entry(3_500, "tablet", "c"),
+      entry(4_000, "galaxy", "d", 3_000),
+      removedEntry(5_000, "galaxy"),
+      entry(6_000, "tablet", "e"),
+      entry(7_000, "pixel", "a", 7_000),
+      entry(8_000, "tablet", "f", 3_000),
+    ];
+    const expected = [changes[8]];
+    assert.deepEqual(mergePlaylistEntries([], changes).rows, expected);
+    for (const order of permutationsOf(changes, 60)) {
+      let rows: readonly EntryRow[] = [];
+      for (const change of order) rows = mergePlaylistEntries(rows, [change]).rows;
+      assert.deepEqual(rows, expected);
+    }
+  });
+});
+
+describe("mergeTableRows", () => {
+  const removed = removedEntry(3_000, "pixel");
+  const edit = entry(4_000, "galaxy", "b");
+
+  test("playlist entries keep a removed entry removed", () => {
+    assert.deepEqual(mergeTableRows("playlistEntries", [removed], [edit]).rows, [removed]);
+  });
+
+  test("every other table merges as before: an edit after a removal brings the row back", () => {
+    for (const table of ["songs", "playlists", "favorites", "preferences", "follows"]) {
+      assert.deepEqual(mergeTableRows(table, [removed], [edit]).rows, [edit]);
+    }
+  });
+});

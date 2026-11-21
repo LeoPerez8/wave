@@ -50,6 +50,7 @@ const graveyardEntry = (id: string, changedAt: number) => ({
   ytSong: JSON.stringify({ videoId: id }),
   addedAt: 100,
   removedAt: changedAt,
+  restoredAt: null,
 });
 
 describe("retained sync rows", () => {

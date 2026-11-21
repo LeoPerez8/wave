@@ -206,6 +206,8 @@ export interface MagicSession {
    * in place of Discover's sliders (`magicSessionSliders`); none otherwise.
    */
   readonly dj?: DjSettings;
+  /** Family constraints for radios contributed by selected DJ family tiles. */
+  readonly djGenreRadios?: readonly { readonly id: string; readonly families: readonly string[] }[];
   /** Signals consumed by the shared radio ranking. Old sessions have none. */
   readonly radioSignals?: readonly MagicSignal[];
   /** Tells this session apart from the others: its queue's context id. */
@@ -972,6 +974,12 @@ export const parseMagicSession = (value: unknown): MagicSession | null => {
   const radioSeed = value["radioSeed"];
   const likedRadios = value["likedRadios"];
   const radioSignals = value["radioSignals"];
+  const djGenreRadios = value["djGenreRadios"];
+  const validDjGenreRadios =
+    Array.isArray(djGenreRadios) &&
+    djGenreRadios.every(
+      (radio) => isRecord(radio) && typeof radio["id"] === "string" && isStrings(radio["families"]),
+    );
   const validSeed = isRadioSeed(radioSeed);
   const seedSongs = value["seedSongs"];
   const seedDraws = value["seedDraws"];
@@ -1007,6 +1015,11 @@ export const parseMagicSession = (value: unknown): MagicSession | null => {
       ? { likedRadios: likedRadios as unknown as readonly MagicSongRadioSeed[] }
       : {}),
     ...(seed["kind"] === "dj" ? { dj: parseDjSettings(value["dj"]) } : {}),
+    ...(validDjGenreRadios
+      ? {
+          djGenreRadios: djGenreRadios as unknown as NonNullable<MagicSession["djGenreRadios"]>,
+        }
+      : {}),
     ...(validSignals ? { radioSignals: radioSignals as unknown as readonly MagicSignal[] } : {}),
     // A list session saved before its seed songs were kept reads its old radio, if any.
     ...(validSeedSongs

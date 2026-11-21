@@ -558,6 +558,9 @@ export const restorePlaylistItems = (
       .map((entry) =>
         entry.source === "library" ? { source: "library", trackId: entry.track.id } : entry,
       );
+    // The restore's time is the change's own: what lets it win over the removal (Core's merge).
+    const stampedNow = stamped(playlistItems, now);
+    const restoreStamp = { ...stampedNow, restoredAt: stampedNow.changedAt };
     for (const { itemId, changedAt } of removal.entries) {
       const row = tx
         .select()
@@ -580,7 +583,7 @@ export const restorePlaylistItems = (
             : decode(playlistId, row.ytSong);
       if (song === null || planPlaylistSongs(held, [song]).add.length === 0) continue;
       tx.update(playlistItems)
-        .set({ deleted: false, removedAt: null, ...stamped(playlistItems, now) })
+        .set({ deleted: false, removedAt: null, ...restoreStamp })
         .where(eq(playlistItems.id, itemId))
         .run();
     }
