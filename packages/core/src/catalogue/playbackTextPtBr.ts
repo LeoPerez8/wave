@@ -91,6 +91,8 @@ export const playbackTextPtBr: typeof playbackTextEn = {
   geniusLyricsResult: (title: string, artist: string) => `${title}, ${artist}, no Genius`,
   openInGenius: "Abrir no Genius",
   more: "Mais",
+  moreSongsArriveAsTheMagicQueueLearns:
+    "Mais músicas chegam conforme a Fila Mágica aprende o que você curte nesta sessão.",
   moreInsights: "Mais informações",
   moveDown: "Mover para baixo",
   moveUp: "Mover para cima",

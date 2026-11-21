@@ -87,6 +87,9 @@ export const playbackTextEn = {
   longPressForGeniussAnnotations: "Long press for Genius's annotations",
   longer: "Longer",
   more: "More",
+  /** The footnote under a Magic Queue's last song (#1376). */
+  moreSongsArriveAsTheMagicQueueLearns:
+    "More songs arrive as the Magic Queue learns what you like this session.",
   moreInsights: "More insights",
   moveDown: "Move down",
   moveUp: "Move up",
