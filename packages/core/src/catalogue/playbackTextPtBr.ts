@@ -274,4 +274,5 @@ export const playbackTextPtBr: typeof playbackTextEn = {
   allExplicitNotAdded: "Nada foi adicionado: todas as músicas são explícitas.",
   sleepDuration: (hours: number, minutes: number) =>
     hours === 0 ? `${minutes} min` : minutes === 0 ? `${hours} h` : `${hours} h ${minutes} min`,
+  lyricsOnline: "Letras online",
 };

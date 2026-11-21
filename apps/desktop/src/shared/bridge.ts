@@ -40,6 +40,7 @@ import type {
   MissingSongsView,
 } from "./downloads.ts";
 import type { GeniusPhase, SongGenius, SongLyrics } from "./lyrics.ts";
+import type { GeniusHitOpened, GeniusLyricsSearchView } from "./geniusLyricsSearch.ts";
 import {
   PLAYLIST_CALLS,
   playlistBridge,
@@ -162,6 +163,16 @@ export interface BridgeContract
   readonly "lyrics.cancelGenius": {
     readonly args: readonly [requestId: string];
     readonly result: void;
+  };
+  /** Search's online lyrics for a query: Genius's songs, or the line to show instead. */
+  readonly "lyrics.searchOnline": {
+    readonly args: readonly [query: string];
+    readonly result: GeniusLyricsSearchView;
+  };
+  /** A click on a hit of the last answer, by Genius's song id. */
+  readonly "lyrics.openOnlineHit": {
+    readonly args: readonly [id: number];
+    readonly result: GeniusHitOpened;
   };
   readonly "playback.setSleepTimer": {
     readonly args: readonly [choice: SleepTimerChoice | null];
@@ -442,6 +453,8 @@ export const BRIDGE_CALLS = [
   "lyrics.song",
   "lyrics.genius",
   "lyrics.cancelGenius",
+  "lyrics.searchOnline",
+  "lyrics.openOnlineHit",
 
   "library.artwork",
   "library.cover",
@@ -596,6 +609,8 @@ export interface WaveBridge {
       phase: GeniusPhase,
     ) => Promise<SongGenius>;
     readonly cancelGenius: (requestId: string) => Promise<void>;
+    readonly searchOnline: (query: string) => Promise<GeniusLyricsSearchView>;
+    readonly openOnlineHit: (id: number) => Promise<GeniusHitOpened>;
   };
   readonly library: {
     readonly artwork: (hash: string, large: boolean) => Promise<string | null>;
@@ -756,6 +771,8 @@ export const createBridge = (invoke: Invoke): WaveBridge => ({
     song: (trackId) => invoke("lyrics.song", trackId),
     genius: (trackId, requestId, phase) => invoke("lyrics.genius", trackId, requestId, phase),
     cancelGenius: (requestId) => invoke("lyrics.cancelGenius", requestId),
+    searchOnline: (query) => invoke("lyrics.searchOnline", query),
+    openOnlineHit: (id) => invoke("lyrics.openOnlineHit", id),
   },
   library: {
     artwork: (hash, large) => invoke("library.artwork", hash, large),

@@ -57,6 +57,7 @@ import type { MissingSongsDownloadAction } from "@wave/core";
 import { createYtFeatureHandlers, playSearchSong } from "./yt/ytBridge.ts";
 import type { YtFeatures } from "./yt/ytServices.ts";
 import { Lyrics } from "./lyrics/lyrics.ts";
+import { GeniusLyricsSearch } from "./lyrics/geniusLyricsSearchLayer.ts";
 import { DesktopLinks } from "./links/layer.ts";
 import { linkHandlers } from "./links/handlers.ts";
 import { artistPageHandlers } from "./artistPageHandlers.ts";
@@ -163,6 +164,7 @@ export type BridgeServices =
   | YtFeatures
   | Account
   | Lyrics
+  | GeniusLyricsSearch
   | DesktopPlaylists
   | DesktopLinks
   | HomeFollow
@@ -413,6 +415,20 @@ const createHandlers = (
       geniusRequestId(requestId)
         ? Effect.map(Account, (account) => account.genius.cancel(requestId))
         : refuse("lyrics.cancelGenius", "invalid request id"),
+    "lyrics.searchOnline": ([query]) =>
+      searchQuery(query)
+        ? Effect.gen(function* () {
+            const online = yield* GeniusLyricsSearch;
+            return yield* Effect.tryPromise({ try: () => online.search(query), catch: (e) => e });
+          })
+        : refuse("lyrics.searchOnline", "invalid query"),
+    "lyrics.openOnlineHit": ([id]) =>
+      typeof id === "number" && Number.isSafeInteger(id) && id > 0
+        ? Effect.gen(function* () {
+            const online = yield* GeniusLyricsSearch;
+            return yield* Effect.tryPromise({ try: () => online.open(id), catch: (e) => e });
+          })
+        : refuse("lyrics.openOnlineHit", "invalid hit"),
     "settings.appearance": () =>
       Effect.gen(function* () {
         return appearance(yield* Database);

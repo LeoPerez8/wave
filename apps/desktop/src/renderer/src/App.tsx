@@ -969,6 +969,11 @@ export function App() {
             query={route.query ?? ""}
             ytMusic={ytMusic}
             searchOnline={searchOnline}
+            onlineLyrics={{
+              access: geniusAccess(account),
+              onSignIn: openGeniusSignIn,
+              onOpen: rememberSearch,
+            }}
             onYtPlay={(videoId) => {
               rememberSearch();
               playback.run(window.wave.magicQueue.startStreamed(videoId));

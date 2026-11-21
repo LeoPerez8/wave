@@ -11,6 +11,7 @@ import {
   type SearchSection,
 } from "../../shared/search.ts";
 import { Icon } from "./Icon.tsx";
+import { OnlineLyrics, type OnlineLyricsProps } from "./OnlineLyrics.tsx";
 import { itemMenuEvents, type MenuPoint } from "./Menu.tsx";
 import { language, labels, text, albumName, artistName, tagTitle } from "./text.ts";
 import type { SongState } from "../../shared/songState.ts";
@@ -221,6 +222,8 @@ export interface SearchPageProps {
   readonly onYtMenu?: (row: BrowseRow, event: MouseEvent<HTMLElement>) => void;
   /** Where YouTube Music's artists, albums and song credits lead. */
   readonly ytLinks: YtSearchLinks;
+  /** Search's online lyrics: the account's access, Sign In and a clicked hit. */
+  readonly onlineLyrics: Pick<OnlineLyricsProps, "access" | "onSignIn" | "onOpen">;
 }
 
 /**
@@ -258,6 +261,13 @@ export function SearchPage(props: SearchPageProps) {
         links={props.ytLinks}
       >
         <LibraryResults {...props} view={current} />
+        <OnlineLyrics
+          {...props.onlineLyrics}
+          query={trimmed}
+          ready={current !== undefined}
+          shown={(current?.lyrics ?? []).map((hit) => hit.row)}
+          onError={onError}
+        />
       </YtResults>
     </div>
   );
