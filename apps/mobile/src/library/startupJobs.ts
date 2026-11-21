@@ -8,7 +8,6 @@ import {
   replacementDuplicatesSteps,
   replacementDuplicateFixSteps,
   scanSaveSlices,
-  SCAN_SAVE_SLICE,
   type ScanReconcileInput,
   type DuplicateOutcome,
   type PendingFavorite,
@@ -25,11 +24,8 @@ import type { LibraryStore } from "./LibraryStore.ts";
 import type { IndexedArtwork, IndexedKnownFile, IndexedTrack } from "@wave/client";
 import type { KnownFile } from "./NativeScanner.ts";
 
-/**
- * Rows one startup write takes: ti's scan save slice. A turn holds one such
- * transaction, so a long list costs a turn per hundred rows, not per row.
- */
-const STARTUP_WRITE_ROWS = SCAN_SAVE_SLICE;
+/** Other startup writes stay at 100 rows per transaction; scan saves use SCAN_SAVE_SLICE. */
+const STARTUP_WRITE_ROWS = 100;
 
 const slices = <A>(rows: readonly A[]): A[][] => {
   const parts: A[][] = [];

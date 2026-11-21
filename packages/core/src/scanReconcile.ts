@@ -98,12 +98,8 @@ export const scanEnd = ({
   announce: gone > 0 ? "removed" : saved > 0 ? "added" : firstScan ? "scanned" : null,
 });
 
-/**
- * Files a scan batch's slice saves per transaction: the scanner hands over
- * up to 500 at once, and saving them in one go holds the JavaScript thread
- * for as long. Measured in docs/performance/315-startup-scheduling.md.
- */
-export const SCAN_SAVE_SLICE = 100;
+/** Caps tracks in one synchronous scan-save transaction; see #1423's measurements. */
+export const SCAN_SAVE_SLICE = 4;
 
 /** One transaction's worth of a scan batch: its files, and the moves to them. */
 export interface ScanSaveSlice<T> {
