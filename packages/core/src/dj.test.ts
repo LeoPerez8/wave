@@ -202,7 +202,9 @@ describe("DJ's grid", () => {
     );
     assert.deepEqual(result.seen, [
       ...current.map((tile) => tile.key),
-      ...result.tiles.filter((tile) => !current.includes(tile)).map((tile) => tile.key),
+      ...result.tiles
+        .filter((tile) => !current.some((shown) => shown.key === tile.key))
+        .map((tile) => tile.key),
     ]);
     assert.deepEqual(
       djGridRefresh(candidates, result.tiles, [current[1]!.key, current[4]!.key], result.seen),
