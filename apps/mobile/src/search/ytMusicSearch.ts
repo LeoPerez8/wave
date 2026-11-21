@@ -8,7 +8,7 @@ import {
 } from "@wave/core";
 import * as Effect from "effect/Effect";
 import * as Result from "effect/Result";
-import { useCallback, useEffect, useReducer, useSyncExternalStore } from "react";
+import { useCallback, useEffect, useLayoutEffect, useReducer, useSyncExternalStore } from "react";
 
 import { online, subscribeConnectivity } from "@/native/waveNative";
 import type { NativeYtSong } from "@/native/waveYtMusic";
@@ -17,6 +17,8 @@ import { useYtMusicEnabled } from "@/settings/ytMusic";
 import { askYtMusic } from "@/ytmusic/askYtMusic";
 import { withSearchTurn } from "@/ytmusic/searchAllowance";
 import type { YtMusicError } from "@/ytmusic/YtMusic";
+
+import { keepYtSearch, keptYtSearch } from "./knownYtSearches";
 
 /**
  * [search] for [query]: asked as you type ([always], Search online set to
@@ -144,14 +146,37 @@ export const useYtMusicSection = (
 
   const loading = section.status === "loading" ? section.query : null;
   const delayMs = section.status === "loading" ? section.delayMs : 0;
+  // A query answered this session shows its answer before the frame is drawn, with no request.
+  useLayoutEffect(() => {
+    if (loading === null) return;
+    const kept = keptYtSearch(loading, songless);
+    if (kept === undefined) return;
+    dispatch({ type: "found", query: loading, ...kept });
+  }, [loading, songless]);
   useEffect(() => {
-    if (loading === null) return undefined;
+    if (loading === null || keptYtSearch(loading, songless) !== undefined) return undefined;
     const timer = setTimeout(() => {
-      const search = searchAll(loading, always, songless, dispatch);
+      let found: Extract<YtSectionStep, { type: "found" }> | null = null;
+      const step = (event: YtSectionStep) => {
+        if (event.type === "found") found = event;
+        dispatch(event);
+      };
+      const search = searchAll(loading, always, songless, step);
       void search.then((result) => {
         // The shelf joins the answer shown, if it is still this query's (Core's `stepYtSection`).
-        if (Result.isSuccess(result))
+        if (Result.isSuccess(result)) {
+          if (found !== null) {
+            const { songs, artists, albums, videos } = found;
+            keepYtSearch(loading, songless, {
+              songs,
+              artists,
+              albums,
+              videos,
+              playlists: result.success.playlists,
+            });
+          }
           dispatch({ type: "playlistsFound", query: loading, playlists: result.success.playlists });
+        }
         // Turned off meanwhile: the section is already hidden.
         else if (result.failure.reason !== "disabled")
           dispatch({ type: "failed", query: loading, reason: result.failure.reason });

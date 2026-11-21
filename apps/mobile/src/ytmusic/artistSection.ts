@@ -54,15 +54,31 @@ import { searchAllowanceSnapshot, withSearchTurn } from "./searchAllowance";
 import { libraryFinderForRows, useLoadedLibraryFinder, type FindInLibrary } from "./libraryFinder";
 import { useLineToggle } from "./OnlineToggle";
 import { YtMusic, YtMusicError } from "./YtMusic";
+import { keepYtArtist, keptYtArtist, ytArtistSectionStart } from "./knownYtArtists";
 
 type Saved = YtArtistSaved<NativeYtSong>;
 
-/** What was saved for the artist; nothing when it can't be read. */
+/**
+ * What was saved for the artist; nothing when it can't be read. An answer
+ * this session already read or saved comes from memory (`knownYtArtists`).
+ */
 export const readSaved = (artistKey: string) =>
   Effect.gen(function* () {
+    const kept = keptYtArtist<NativeYtSong>(artistKey);
+    if (kept !== undefined) return kept;
     const store = yield* LibraryStore;
-    return yield* store.ytArtist(artistKey);
+    const saved = yield* store.ytArtist(artistKey);
+    keepYtArtist(artistKey, saved);
+    return saved;
   }).pipe(Effect.orElseSucceed(() => null));
+
+/** Saves [answer] for [artistKey] and keeps it for the artist's next opening. */
+export const saveYtArtistAnswer = (artistKey: string, answer: Saved) =>
+  Effect.gen(function* () {
+    keepYtArtist(artistKey, answer);
+    const store = yield* LibraryStore;
+    yield* store.saveYtArtist(artistKey, answer);
+  });
 
 /**
  * The artist page [browseId] with every song of the artist (`allSongs`): the
@@ -127,7 +143,6 @@ export const fetchArtist = (
 ) =>
   Effect.gen(function* () {
     const ytMusic = yield* YtMusic;
-    const store = yield* LibraryStore;
     const canSend = reads.canSend ?? online;
     return yield* fetchArtistAnswer(name, saved, {
       canSend,
@@ -144,7 +159,7 @@ export const fetchArtist = (
       page: (browseId) =>
         reads.allSongs ? readArtist(browseId, canSend) : readArtistPage(browseId),
       saved: readSaved(artistKey),
-      save: (answer) => store.saveYtArtist(artistKey, answer).pipe(Effect.ignore),
+      save: (answer) => saveYtArtistAnswer(artistKey, answer).pipe(Effect.ignore),
     }).pipe(Effect.mapError((error) => new YtMusicError({ reason: error.reason })));
   });
 
@@ -192,10 +207,11 @@ export interface YtArtistAnswer {
  */
 export const useSavedYtArtist = (artistKey: string, ask: AskArtist): YtArtistAnswer => {
   const enabled = useYtMusicEnabled();
-  const [keyed, dispatch] = useReducer(stepKeyed, {
-    key: artistKey,
-    state: YT_ARTIST_SECTION_START,
-  });
+  // An artist seen this session starts with their answer, so the first frame draws it.
+  const [keyed, dispatch] = useReducer(stepKeyed, artistKey, (key) => ({
+    key,
+    state: ytArtistSectionStart<NativeYtSong>(key),
+  }));
   // A page whose artist is read later (an album's) starts over once it is.
   const state = keyed.key === artistKey ? keyed.state : YT_ARTIST_SECTION_START;
   // Whether a saved answer still stands is decided as the page opens (an answer
