@@ -578,9 +578,16 @@ const djAlbumSeedSongs = (tiles: readonly DjTile[], deadlineAt: number) =>
  * its Artist variety limits who each batch may hold (`magicQueueYtCandidates`). Nothing is waited for but
  * the album pages and the radios, under one deadline from the tap
  * (`MAGIC_RADIO_DEADLINE_MS`): the radios get what the album pages leave of
- * it. The Library, catalog, graph and taste profile are the last ones derived. The queue that's playing is left alone unless it starts.
+ * it. The Library, catalog, graph and taste profile are the last ones
+ * derived. The queue that's playing is left alone unless it starts, and once
+ * [closed] aborts (DJ closed while the batch was read) it never starts: the
+ * batch is dropped as "failed", before anything is saved.
  */
-export const startDjMagicQueue = (tiles: readonly DjTile[], settings: DjSettings) =>
+export const startDjMagicQueue = (
+  tiles: readonly DjTile[],
+  settings: DjSettings,
+  closed?: AbortSignal,
+) =>
   Effect.gen(function* () {
     if (!ytMusicEnabled()) return "failed" satisfies DjStart;
     const startedAt = Date.now();
@@ -623,6 +630,7 @@ export const startDjMagicQueue = (tiles: readonly DjTile[], settings: DjSettings
       }),
     );
     if (songs.length === 0) return (yt.refilled === null ? "failed" : "empty") satisfies DjStart;
+    if (closed?.aborted) return "failed" satisfies DjStart;
     startingLibrary = { songs: library.songs.filter(songHasFile), artists: library.artists };
     save(batch.session);
     failedBatch.set(null);

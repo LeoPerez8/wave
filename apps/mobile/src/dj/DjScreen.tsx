@@ -60,7 +60,7 @@ import type { ArtistRow } from "@wave/client";
 import { DjAdjust } from "./DjAdjust";
 import { readDjAlbums } from "./djAlbums";
 import { DjSearch } from "./DjSearch";
-import { runDjDone, type DjDone } from "./djDone";
+import { djDone, type DjDone, type DjDoneRunner } from "./djDone";
 import { djRemembered } from "./djRemembered";
 import { readDjSimilar } from "./djSimilar";
 
@@ -99,8 +99,9 @@ const gridSources = (library: MixIndexes) => ({
 
 /**
  * The albums DJ's grid may show over [library] (`readDjAlbums`), all read on
- * the phone: the Library's albums that aren't compilations, each under its
- * album artist's name and with its cached cover, then the albums the saved
+ * the phone: the Library's albums, each under its album artist's name and
+ * with its cached cover (a compilation marked, so the grid leaves it out and
+ * only a remembered one is found again among them), then the albums the saved
  * YT Music pages of the grid's artists list (the grid as it is without
  * albums, which holds every artist the one with albums shows).
  */
@@ -111,18 +112,13 @@ const albumsOver = (library: MixIndexes): Promise<DjAlbum[]> => {
       appRuntime.runPromise(
         Effect.gen(function* () {
           const albums = yield* (yield* LibraryStore).listAlbums;
-          return albums.flatMap((album): DjAlbum[] =>
-            album.compilation
-              ? []
-              : [
-                  {
-                    title: album.title,
-                    artist: names.get(album.albumArtistId) ?? album.albumArtist,
-                    libraryId: album.id,
-                    cover: album.artworkPath ?? album.thumbPath,
-                  },
-                ],
-          );
+          return albums.map((album): DjAlbum => ({
+            title: album.title,
+            artist: names.get(album.albumArtistId) ?? album.albumArtist,
+            libraryId: album.id,
+            cover: album.artworkPath ?? album.thumbPath,
+            compilation: album.compilation,
+          }));
         }),
       ),
     saved: async (artist) => {
@@ -153,8 +149,8 @@ const albumsOver = (library: MixIndexes): Promise<DjAlbum[]> => {
  * `djReopened`), a remembered album as the albums read here know it. The first tiles stay for the whole opening. A tile
  * selected for the first time, whichever source it came from, opens its
  * similar artists from the last artist graph; a row that isn't full reads the
- * artist's page once (Core's `djPagesNeeded`), and whatever comes of it
- * settles the row. A result of the grid's search joins the grid selected
+ * artist's page once (Core's `djPagesNeeded`), one read at a time per
+ * artist, and whatever comes of it settles every row waiting for it. A result of the grid's search joins the grid selected
  * ([add]), opening its row the same way; over a grid that has nothing to
  * pick, it's the first tile.
  */
@@ -231,24 +227,27 @@ const useDjGrid = () => {
         library: libraryArtists,
       }),
     );
-  const asked = useRef(new Set<DjTileKey>());
+  // The artists whose page is being read, by `identityKey`: one read at a time per artist.
+  const asked = useRef(new Set<string>());
   useEffect(() => {
     if (state === null) return;
-    for (const tile of djPagesNeeded(state)) {
-      if (asked.current.has(tile.key)) continue;
-      asked.current.add(tile.key);
-      const settle = (similar: Awaited<ReturnType<typeof similarOf>>): void =>
+    for (const page of djPagesNeeded(state)) {
+      if (asked.current.has(page.key)) continue;
+      asked.current.add(page.key);
+      const settle = (similar: Awaited<ReturnType<typeof similarOf>>): void => {
+        asked.current.delete(page.key);
         setState(
           (current) =>
             current &&
             djReduce(current, {
               type: "similar",
-              key: tile.key,
+              artist: page.artist,
               artists: similar,
               library: libraryArtists,
             }),
         );
-      void similarOf(djTileArtist(tile)).then(settle, () => settle(null));
+      };
+      void similarOf(page.artist).then(settle, () => settle(null));
     }
   }, [state, libraryArtists]);
   return { state, opening, artists, toggle, add };
@@ -436,17 +435,26 @@ export function DjScreen() {
   const cells = useMemo(() => (state === undefined ? [] : djCells(state)), [state]);
   const loading = done === "loading";
   const canStart = state !== undefined && djCanStart(state);
+  // Done for this opening; leaving DJ (Close, Android's Back) cancels a start
+  // still loading, so it never replaces the queue nor closes another screen.
+  const doneRunner = useRef<DjDoneRunner | null>(null);
+  useEffect(() => {
+    const runner = djDone(setDone, () => router.back());
+    doneRunner.current = runner;
+    return () => {
+      runner.cancel();
+      doneRunner.current = null;
+    };
+  }, []);
   const start = (): void =>
-    void runDjDone(
-      done,
-      () => appRuntime.runPromise(startDjMagicQueue(seed, settings)),
-      setDone,
-      () => {
-        // The queue started: this DJ is the one the next opening shows.
-        djRemembered.set({ tiles: seed, settings });
-        router.back();
-      },
-    );
+    void doneRunner.current?.run(async (closed) => {
+      const outcome = await appRuntime.runPromise(startDjMagicQueue(seed, settings, closed), {
+        signal: closed,
+      });
+      // The queue started: this DJ is the one the next opening shows.
+      if (outcome === "started") djRemembered.set({ tiles: seed, settings });
+      return outcome;
+    });
   return (
     <View className="flex-1 bg-background" style={{ paddingTop: insets.top + 4 }}>
       <View className="flex-row justify-between" style={{ paddingHorizontal: grid.margin - 12 }}>

@@ -101,8 +101,8 @@ export const readDjRemembered = (stored: string | null): DjRemembered => {
  * in the order they were selected. A remembered tile the fresh grid wouldn't
  * show is in it anyway, ahead of the grid's own tiles, so the selection is
  * the first thing seen; it shows the Library's artist when [artists] (the
- * Library's) has them, and an album as [albums] (the ones the grid may show)
- * know it, the first of two alike. A tile remembered twice is selected once, and no more
+ * Library's) has them, and an album as [albums] know it (the ones the grid
+ * may show and the Library's compilations, which it never shows), the first of two alike. A tile remembered twice is selected once, and no more
  * are selected than a DJ seed holds. Nothing remembered is the grid as it
  * opens (`djOpened`).
  */
