@@ -11,7 +11,7 @@ export const djEn = {
   play: "Play",
   playCount: (count: number) => `Play · ${count}`,
   close: "Close",
-  /** Done's name for screen readers while the first batch is read. */
+  /** Play's name for screen readers while the first batch is read. */
   starting: "Starting your queue",
   /** An artist tile's name for screen readers: its kind, then the artist. */
   artistTile: (name: string) => `Artist, ${name}`,
