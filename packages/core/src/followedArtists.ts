@@ -159,7 +159,14 @@ export interface FollowRelease {
   readonly libraryAlbumId?: number | null;
 }
 const DAY = 86_400_000;
-/** Played and hidden releases never return; show notification receipts survive country changes. */
+/** Whether the owner can play [release]: it's in the Library, or matched on YT Music while it's on. */
+const playable = (release: FollowRelease, ytMusic: boolean): boolean =>
+  Boolean(release.libraryAlbumId) || (ytMusic && release.browseId !== null);
+/**
+ * Played and hidden releases never return; show notification receipts survive country changes.
+ * Only a release the owner can play is a card (`ytMusic`, on unless false, is YT Music's switch);
+ * `followReleasesToSearch` names the others a check looks for.
+ */
 export const followFeed = (input: {
   readonly follows: readonly FollowedArtist[];
   readonly releases: readonly FollowRelease[];
@@ -167,6 +174,7 @@ export const followFeed = (input: {
   readonly countedPlays: readonly string[];
   readonly now: number;
   readonly enabled?: boolean;
+  readonly ytMusic?: boolean;
   readonly blockExplicit?: boolean;
   readonly shows?: readonly FollowShow[];
   readonly country?: string;
@@ -204,6 +212,7 @@ export const followFeed = (input: {
     return true;
   });
   const notified = new Set(input.notified);
+  const ytMusic = input.ytMusic !== false;
   return {
     showCards,
     artistShows,
@@ -223,7 +232,8 @@ export const followFeed = (input: {
                 date >= Math.floor(follow.followedAt / DAY) * DAY - 30 * DAY &&
                 !hidden.has(r.key) &&
                 !(input.blockExplicit && r.explicit) &&
-                ![...r.videoIds, ...r.recordingKeys].some((id) => played.has(id));
+                ![...r.videoIds, ...r.recordingKeys].some((id) => played.has(id)) &&
+                playable(r, ytMusic);
               if (shown) seen.add(r.key);
               return shown;
             })

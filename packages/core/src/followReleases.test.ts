@@ -25,8 +25,8 @@ const release = (key: string, days: number): FollowRelease => ({
 test("new releases start at the follow window and stay until played or hidden, newest first", () => {
   const releases = [
     release("old", 31),
-    release("boundary", 30),
-    release("new", 1),
+    { ...release("boundary", 30), browseId: "MPREb_boundary" },
+    { ...release("new", 1), browseId: "MPREb_new" },
     release("hidden", 2),
     { ...release("played", 3), videoIds: ["video"] },
   ];
@@ -51,7 +51,7 @@ test("Library counted recordings, disabled follows and explicit filtering clear 
 });
 
 test("a collaboration release followed through both artists has one cover", () => {
-  const r = release("shared", 0);
+  const r = { ...release("shared", 0), browseId: "MPREb_shared" };
   const other = { ...follow, key: "other", name: "Other" };
   assert.deepEqual(
     followFeed({
@@ -101,4 +101,21 @@ test("opening a release the Library lacks says why it can't, never 'not on YouTu
   assert.deepEqual(followReleaseOpening(unmatched, { ytMusic: false, found: null }), {
     kind: "ytMusicOff",
   });
+});
+
+test("only a release the owner can play shows: in the Library, or matched on YT Music while it's on", () => {
+  const releases = [
+    { ...release("matched", 1), browseId: "MPREb_matched" },
+    release("unmatched", 2),
+    { ...release("owned", 3), libraryAlbumId: 4 },
+  ];
+  const input = { follows: [follow], releases, hidden: [], countedPlays: [], now };
+  assert.deepEqual(
+    followFeed({ ...input, ytMusic: true }).releaseCards.map((card) => card.key),
+    ["matched", "owned"],
+  );
+  assert.deepEqual(
+    followFeed({ ...input, ytMusic: false }).releaseCards.map((card) => card.key),
+    ["owned"],
+  );
 });
