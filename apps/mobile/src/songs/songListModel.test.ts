@@ -8,6 +8,7 @@ import {
   songRowPresentation,
   type SongRowPresentation,
 } from "./songListModel.ts";
+import { librarySongEntry } from "./songListSources.ts";
 
 Object.assign(globalThis, { IS_REACT_ACT_ENVIRONMENT: true });
 const sources: SongListRowSource[] = [1, 2, 3].map((id) => ({
@@ -176,4 +177,35 @@ test("a song row's cover follows the artwork helper's order: the thumbnail deriv
     },
   });
   assert.equal(presented.artworkUri, `content://dev.leoperez.wave.artwork/thumbnail/${hash}`);
+});
+
+test("a matched playlist Library row passes the Track's cached thumbnail into its row", () => {
+  const hash = "0123456789abcdef0123456789abcdef01234567";
+  const entry = librarySongEntry({
+    id: 7,
+    path: "/music/song.flac",
+    title: "Song",
+    artist: "Artist",
+    album: "Album",
+    durationMs: 180_000,
+    thumbPath: `/data/files/artwork/${hash}_thumb.jpg`,
+    artworkPath: `/data/files/artwork/${hash}.jpg`,
+    titleSort: "song",
+    artistSort: "artist",
+    albumSort: "album",
+    addedAt: 0,
+    albumId: 1,
+    artistId: 1,
+    artistIds: [1],
+    discNumber: null,
+    trackNumber: null,
+    year: null,
+    genre: null,
+    hasLyrics: false,
+    explicit: "clean",
+  });
+  assert.equal(
+    songRowPresentation(entry.source).artworkUri,
+    `file:///data/files/artwork/${hash}_thumb.jpg`,
+  );
 });

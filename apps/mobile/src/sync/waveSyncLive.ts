@@ -9,6 +9,7 @@ import { WaveAccount, waveAccountErrorCode, type WaveAccountErrorCode } from "@/
 import { perfCount } from "@/perf/perf";
 
 import { collaborations } from "./collaborations";
+import { accountNameBeforePull } from "./accountNameBeforePull";
 import type { WaveSync, WaveSyncPorts } from "./WaveSync";
 
 /** Offline or signed out: a sync stops, and tries again at the next chance, with nothing to warn of. */
@@ -118,7 +119,11 @@ export const make = Effect.gen(function* () {
       const signedIn = session.account.email;
       const changedAccount = account !== signedIn;
       account = signedIn;
-      if (changedAccount) signedInTriggers().now();
+      if (changedAccount) {
+        void accountNameBeforePull(session, collaborations.setAccountName, () => {
+          if (account === signedIn) signedInTriggers().now();
+        });
+      }
       return;
     }
     account = null;
