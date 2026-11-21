@@ -27,19 +27,23 @@ const text = catalogueOf("en", "desktop");
 const words = text.playbackText;
 const layout = text.desktopLayout;
 
-/** A one-second stereo WAV of silence. */
+/**
+ * A minute of mono 8 kHz silence, as long as the songs' 1:00: a shorter file ends on its own
+ * on a slow runner before the spec pauses it, and the queue moves on.
+ */
 const silence = (path: string) => {
-  const data = Buffer.alloc(44_100 * 4);
+  const rate = 8_000;
+  const data = Buffer.alloc(rate * 2 * 60);
   const header = Buffer.alloc(44);
   header.write("RIFF", 0);
   header.writeUInt32LE(36 + data.length, 4);
   header.write("WAVEfmt ", 8);
   header.writeUInt32LE(16, 16);
   header.writeUInt16LE(1, 20);
-  header.writeUInt16LE(2, 22);
-  header.writeUInt32LE(44_100, 24);
-  header.writeUInt32LE(44_100 * 4, 28);
-  header.writeUInt16LE(4, 32);
+  header.writeUInt16LE(1, 22);
+  header.writeUInt32LE(rate, 24);
+  header.writeUInt32LE(rate * 2, 28);
+  header.writeUInt16LE(2, 32);
   header.writeUInt16LE(16, 34);
   header.write("data", 36);
   header.writeUInt32LE(data.length, 40);
