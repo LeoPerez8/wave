@@ -212,6 +212,13 @@ export const installDesktopSystem = (options: {
       );
     }
   };
+  const trayTick = () => {
+    try {
+      refreshTray();
+    } catch {
+      console.warn("[system] Tray menu update failed.");
+    }
+  };
   // OS controls stay active while the window is hidden. No renderer work is needed.
   const tick = () => {
     try {
@@ -219,17 +226,16 @@ export const installDesktopSystem = (options: {
     } catch {
       failed();
     }
-    try {
-      refreshTray();
-    } catch {
-      console.warn("[system] Tray menu update failed.");
-    }
+    trayTick();
   };
   const timer = setInterval(tick, 500);
   tick();
   return {
     mediaBackend,
     beginQuit: lifecycle.beginQuit,
+    // A language change rebuilds the tray menu at once: on the next poll, a change and its undo
+    // between two ticks would look like no change.
+    languageChanged: trayTick,
     close: () => {
       closed = true;
       clearInterval(timer);
