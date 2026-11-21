@@ -52,6 +52,9 @@ import { VIDEO_ID, YtMusic } from "./yt/ytMusic.ts";
 import { Downloads } from "./downloads/downloadsLayer.ts";
 import {
   MISSING_SONGS_ACTIONS,
+  FAILED_REASON_ACTIONS,
+  type DownloadMove,
+  type FailedReasonAction,
   MISSING_SONGS_LISTS,
   type MissingSongsList,
 } from "../shared/downloads.ts";
@@ -241,6 +244,22 @@ const downloadIds = (value: unknown): readonly string[] | undefined =>
   value.every((id) => typeof id === "string" && DOWNLOAD_ID.test(id))
     ? (value as string[])
     : undefined;
+
+/**
+ * A move on the Downloads page: a waiting song (a job id) or a group (its key), onto another's
+ * place or one step up or down.
+ */
+const downloadMove = (value: unknown): DownloadMove | undefined => {
+  if (typeof value !== "object" || value === null) return undefined;
+  const { kind, from, to, step } = value as Record<string, unknown>;
+  if (kind !== "song" && kind !== "group") return undefined;
+  const named = (name: unknown): name is string =>
+    typeof name === "string" &&
+    (kind === "song" ? DOWNLOAD_ID.test(name) : name.length > 0 && name.length <= 300);
+  if (!named(from)) return undefined;
+  if (step === undefined) return named(to) ? { kind, from, to } : undefined;
+  return to === undefined && (step === -1 || step === 1) ? { kind, from, step } : undefined;
+};
 
 /** At most a queue's worth of Track ids. */
 const trackIds = (value: unknown): readonly number[] | undefined =>
@@ -463,10 +482,23 @@ const createHandlers = (
         ? ytCall((yt) => yt.artwork(url))
         : refuse("yt.artwork", "invalid address"),
     "downloads.view": () => downloadsCall((d) => d.view()),
-    "downloads.rows": ([offset, limit]) =>
-      validPage(offset, limit)
-        ? downloadsCall((d) => d.rows(offset as number, limit as number))
+    "downloads.rows": ([offset, limit, failedShown]) =>
+      validPage(offset, limit) && (failedShown === undefined || typeof failedShown === "boolean")
+        ? downloadsCall((d) => d.rows(offset as number, limit as number, failedShown === true))
         : refuse("downloads.rows", "invalid page"),
+    "downloads.move": ([value]) => {
+      const move = downloadMove(value);
+      return move === undefined
+        ? refuse("downloads.move", "invalid move")
+        : downloadsCall((d) => d.move(move));
+    },
+    "downloads.failedReason": ([reason, action]) =>
+      typeof reason === "string" &&
+      reason.length > 0 &&
+      reason.length <= 500 &&
+      FAILED_REASON_ACTIONS.includes(action as FailedReasonAction)
+        ? downloadsCall((d) => d.failedReason(reason, action as FailedReasonAction))
+        : refuse("downloads.failedReason", "invalid reason or action"),
     "downloads.list": ([value]) => {
       const list = missingSongsList(value);
       return list === undefined

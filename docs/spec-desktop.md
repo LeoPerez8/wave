@@ -250,6 +250,12 @@ ADR: `docs/adr/0004-kotlin-on-a-bundled-jvm.md`.
   that brought stars or songs, and as Wave starts. Unstarring it before the file arrives cancels
   the download only the star asked for. What the stars asked is kept on this computer
   (`downloads.syncedStars`, `downloads.starAsked`), never synced.
+- The Downloads page is the phone's (`docs/spec.md`, Downloads): the line counting the songs
+  downloading and waiting, the run's panel with the paused line while YouTube limits downloads,
+  the waiting songs under their source's header, and the failed section folded until shown,
+  grouped by reason. It is one virtual list. A group's header drags among the groups and a
+  waiting song among its group's songs, with the mouse or with Move Up and Move Down on the row,
+  and the queue downloads in the order shown.
 - Play and Shuffle on a list with missing songs play what can play (Core's `listPlay`): the
   songs with a file and, with YT Music on, the missing songs downloaded from a YouTube Music
   video, streamed in their place. A toast counts the ones left out and offers Download Missing

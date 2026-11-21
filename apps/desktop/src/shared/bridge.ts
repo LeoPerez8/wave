@@ -34,8 +34,10 @@ import type {
 import type { AccountView } from "./account.ts";
 import type { MissingSongsDownloadAction, SleepTimer, SleepTimerChoice } from "@wave/core";
 import type {
+  DownloadMove,
   DownloadRow,
   DownloadsView,
+  FailedReasonAction,
   MissingSongsList,
   MissingSongsView,
 } from "./downloads.ts";
@@ -219,8 +221,9 @@ export interface BridgeContract
   /** A YouTube Music cover as a data URL, or null. */
   readonly "yt.artwork": { readonly args: readonly [url: string]; readonly result: string | null };
   readonly "downloads.view": { readonly args: readonly []; readonly result: DownloadsView };
+  /** The Downloads page's rows; the failed songs only while [failedShown]. */
   readonly "downloads.rows": {
-    readonly args: readonly [offset: number, limit: number];
+    readonly args: readonly [offset: number, limit: number, failedShown?: boolean];
     readonly result: Page<DownloadRow>;
   };
   /** A page's missing songs and their downloads; null for no such page. */
@@ -256,6 +259,16 @@ export interface BridgeContract
   readonly "downloads.setBestQuality": {
     readonly args: readonly [on: boolean];
     readonly result: boolean;
+  };
+  /** Moves a waiting song within its group, or a group among the groups that wait. */
+  readonly "downloads.move": {
+    readonly args: readonly [move: DownloadMove];
+    readonly result: void;
+  };
+  /** Retry or Remove on every song that failed for one reason. */
+  readonly "downloads.failedReason": {
+    readonly args: readonly [reason: string, action: FailedReasonAction];
+    readonly result: void;
   };
   /** A YouTube Music artist page, by its browse id. */
   readonly "yt.artist": {
@@ -540,6 +553,8 @@ export const BRIDGE_CALLS = [
   "downloads.pickFolder",
   "downloads.bestQuality",
   "downloads.setBestQuality",
+  "downloads.move",
+  "downloads.failedReason",
   "account.view",
   "account.signIn",
   "account.cancelSignIn",
@@ -731,7 +746,11 @@ export interface WaveBridge {
   /** Downloads into the Library: YT Music songs and missing songs, from YouTube Music or Soulseek. */
   readonly downloads: {
     readonly view: () => Promise<DownloadsView>;
-    readonly rows: (offset: number, limit: number) => Promise<Page<DownloadRow>>;
+    readonly rows: (
+      offset: number,
+      limit: number,
+      failedShown?: boolean,
+    ) => Promise<Page<DownloadRow>>;
     readonly list: (list: MissingSongsList) => Promise<MissingSongsView | null>;
     readonly yt: (videoIds: readonly string[]) => Promise<void>;
     readonly missing: (trackIds: readonly number[]) => Promise<void>;
@@ -747,6 +766,8 @@ export interface WaveBridge {
     readonly pickFolder: () => Promise<string | null>;
     readonly bestQuality: () => Promise<boolean>;
     readonly setBestQuality: (on: boolean) => Promise<boolean>;
+    readonly move: (move: DownloadMove) => Promise<void>;
+    readonly failedReason: (reason: string, action: FailedReasonAction) => Promise<void>;
   };
   /** The Wave account: the session itself never reaches the window. */
   readonly account: {
@@ -880,7 +901,7 @@ export const createBridge = (invoke: Invoke): WaveBridge => ({
   },
   downloads: {
     view: () => invoke("downloads.view"),
-    rows: (offset, limit) => invoke("downloads.rows", offset, limit),
+    rows: (offset, limit, failedShown) => invoke("downloads.rows", offset, limit, failedShown),
     list: (list) => invoke("downloads.list", list),
     yt: (videoIds) => invoke("downloads.yt", videoIds),
     missing: (trackIds) => invoke("downloads.missing", trackIds),
@@ -892,6 +913,8 @@ export const createBridge = (invoke: Invoke): WaveBridge => ({
     pickFolder: () => invoke("downloads.pickFolder"),
     bestQuality: () => invoke("downloads.bestQuality"),
     setBestQuality: (on) => invoke("downloads.setBestQuality", on),
+    move: (move) => invoke("downloads.move", move),
+    failedReason: (reason, action) => invoke("downloads.failedReason", reason, action),
   },
   account: {
     view: () => invoke("account.view"),
