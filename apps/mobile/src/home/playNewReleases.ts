@@ -3,7 +3,8 @@
  * one's songs in album order, the Library's songs playing their files. The first release read
  * replaces the queue ("New queue playing", with Undo); the others join its end, in order, as
  * they're read, and one that couldn't be read is left out (Core's `followPlaySources`,
- * `followPlayStep`).
+ * `followPlayStep`). The queue doesn't continue into a Magic Queue until the last one is added
+ * (`fillingPlay`).
  */
 import {
   FOLLOW_PLAY_CONTEXT,
@@ -22,6 +23,7 @@ import * as Result from "effect/Result";
 import { LibraryStore } from "@/library/LibraryStore";
 import { appRuntime } from "@/library/runtime";
 import { appendDiscoverSongs, playDiscoverSongs } from "@/playback/actions";
+import { fillingPlay } from "@/playback/fillingPlay";
 import { queueState } from "@/playback/Queue";
 import { followedArtistsEnabled } from "@/settings/followedArtists";
 import { ytMusicEnabled } from "@/settings/ytMusic";
@@ -66,14 +68,35 @@ const playableCount = (songs: readonly Listed[] | null): number | null =>
 
 let plays = 0;
 
-/** Plays [cards] (the section's, newest first); resolves false when none of them could play. */
-export const playNewReleases = async (cards: readonly FollowRelease[]): Promise<boolean> => {
+/**
+ * Plays [cards] (the section's, newest first); resolves false when none of them could play.
+ * [onPlaying] runs once its first release plays, while the rest are still being added.
+ */
+export const playNewReleases = async (
+  cards: readonly FollowRelease[],
+  onPlaying: () => void = () => {},
+): Promise<boolean> => {
   plays += 1;
   const id = `${Date.now()}-${plays}`;
   const context = { kind: FOLLOW_PLAY_CONTEXT, id };
   const sources = followPlaySources(cards, {
     ytMusic: followedArtistsEnabled() && ytMusicEnabled(),
   });
+  fillingPlay.set(context);
+  try {
+    return await addReleases(cards, sources, context, onPlaying);
+  } finally {
+    if (fillingPlay.get() === context) fillingPlay.set(null);
+  }
+};
+
+const addReleases = async (
+  cards: readonly FollowRelease[],
+  sources: readonly FollowPlaySource[],
+  context: { readonly kind: string; readonly id: string },
+  onPlaying: () => void,
+): Promise<boolean> => {
+  const { id } = context;
   let started = false;
   for (const source of sources) {
     const title = cards.find((r) => r.key === source.key)?.title ?? "";
@@ -87,6 +110,7 @@ export const playNewReleases = async (cards: readonly FollowRelease[]): Promise<
     if (step === "play") {
       await playDiscoverSongs(songs, undefined, context, { shuffle: false });
       started = true;
+      onPlaying();
     } else await appendDiscoverSongs(songs);
   }
   return started;
