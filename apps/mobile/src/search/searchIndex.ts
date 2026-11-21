@@ -1,5 +1,8 @@
 import {
+  compareSongReadOrder,
   createSearchCatalog,
+  createSearchIndexFollower,
+  LIBRARY_QUERY_LIMITS,
   libraryArtistFinder,
   libraryReleaseFinder,
   type SearchIndex,
@@ -12,10 +15,12 @@ import { useEffect, useMemo, useSyncExternalStore } from "react";
 
 import { whenFree } from "@/lib/backgroundWork";
 import { libraryListQueries } from "@/library/hooks";
+import { onLibraryChange } from "@/library/libraryChanges";
+import { LibraryStore } from "@/library/LibraryStore";
+import { appRuntime } from "@/library/runtime";
 import type { AlbumRow, ArtistRow, GenreRow, PlaylistRow, SongRow } from "@wave/client";
-import { useLibraryQuery } from "@/library/sharedQueries";
 import { perfMark, registerPerfMeta } from "@/perf/perf";
-import { useLoadedLibraryFinder, type FindInLibrary } from "@/ytmusic/libraryFinder";
+import { libraryFinderOver, type FindInLibrary } from "@/ytmusic/libraryFinder";
 
 /** Something search found, with the row the screens need to show and open it. */
 export type SearchHit =
@@ -57,24 +62,95 @@ const playlistHit = (playlist: PlaylistRow): SearchHit => ({
 });
 const genreHit = (genre: GenreRow): SearchHit => ({ kind: "genre", name: genre.name, genre });
 
+type Source = "artists" | "albums" | "songs" | "playlists" | "genres";
+
 /**
- * One catalog for the app, so the index outlives the screen: each source is
- * prepared once per read of it (Core's `createSearchCatalog`), and a change
- * reaching one source (a playlist edit, an import filling a playlist)
- * prepares that source again, not the whole Library.
+ * One catalog for the app, kept for the whole session (#1354): opening Search
+ * and typing read nothing from the Library. Each source is prepared once, and
+ * a change prepares only the rows whose search text it changed (Core's
+ * `createSearchCatalog`, rows given with their ids). Its sources keep the
+ * order they always had, which ranks ties.
  */
-const catalog = createSearchCatalog<
-  "artists" | "albums" | "songs" | "playlists" | "genres",
-  SearchHit
->(["artists", "albums", "songs", "playlists", "genres"]);
+const catalog = createSearchCatalog<Source, SearchHit>([
+  "artists",
+  "albums",
+  "songs",
+  "playlists",
+  "genres",
+]);
+
+/** How each source is read whole (the Library tabs' reads, off the JS thread since #1348) and found. */
+const SOURCES = {
+  songs: { query: libraryListQueries.songs, hit: songHit },
+  albums: { query: libraryListQueries.albums, hit: albumHit },
+  artists: { query: libraryListQueries.artists, hit: artistHit },
+  genres: { query: libraryListQueries.genres, hit: genreHit },
+  playlists: { query: libraryListQueries.playlists, hit: playlistHit },
+} as const satisfies Record<Source, unknown>;
+
+const idOf = (row: { readonly id: number }): number => row.id;
+
+/**
+ * When the index reads (Core's `createSearchIndexFollower`): every source
+ * once, then each edit's sources at once; a scan batch's or a download's
+ * songs patched in by id, the rest of a burst at most once per throttle.
+ * Songs are read first, so a search finds songs soonest.
+ */
+const follower = createSearchIndexFollower<Source>({
+  sources: {
+    songs: SOURCES.songs.query.reads,
+    artists: SOURCES.artists.query.reads,
+    albums: SOURCES.albums.query.reads,
+    playlists: SOURCES.playlists.query.reads,
+    genres: SOURCES.genres.query.reads,
+  },
+  patchable: "songs",
+  throttleMs: LIBRARY_QUERY_LIMITS.throttleMs,
+});
 
 /** Entries prepared per step, and how long a run of steps may hold the JS thread. */
 const STEP_ENTRIES = 250;
 const SLICE_MS = 6;
 
+/** What screens are shown: the index, and the rows it was built from. */
+interface Shown {
+  readonly index: SearchIndex<SearchHit>;
+  readonly songs: readonly SongRow[];
+  readonly artists: readonly ArtistRow[];
+  readonly albums: readonly AlbumRow[];
+}
+
+const NO_SONGS: readonly SongRow[] = [];
+const NO_ARTISTS: readonly ArtistRow[] = [];
+const NO_ALBUMS: readonly AlbumRow[] = [];
+
 const listeners = new Set<() => void>();
-let shownIndex: SearchIndex<SearchHit> | null = null;
-let scheduled = false;
+let shown: Shown | null = null;
+let preparingScheduled = false;
+let followScheduled = false;
+let followTimer: ReturnType<typeof setTimeout> | null = null;
+let started = false;
+
+const rowsOf = <R>(source: Source, none: readonly R[]): readonly R[] =>
+  (catalog.rows(source) as readonly R[] | null) ?? none;
+
+/** Shows the catalog's index as it is now, telling the screens when it changed. */
+const showIndex = (): void => {
+  const index = catalog.index();
+  if (index === (shown?.index ?? null)) return;
+  shown =
+    index === null
+      ? null
+      : {
+          index,
+          songs: rowsOf("songs", NO_SONGS),
+          artists: rowsOf("artists", NO_ARTISTS),
+          albums: rowsOf("albums", NO_ALBUMS),
+        };
+  if (index !== null)
+    perfMark("search.index", `${catalog.stats().entries}${catalog.complete() ? "" : " partial"}`);
+  for (const listener of listeners) listener();
+};
 
 /**
  * Prepares what changed a slice at a time, each slice a free turn of the
@@ -82,27 +158,89 @@ let scheduled = false;
  * waiting on the JS thread goes first.
  */
 const prepareSlice = (): void => {
-  scheduled = false;
-  const started = performance.now();
+  preparingScheduled = false;
+  const sliceStart = performance.now();
   let more = true;
-  while (more && performance.now() - started < SLICE_MS) more = catalog.work(STEP_ENTRIES);
+  while (more && performance.now() - sliceStart < SLICE_MS) more = catalog.work(STEP_ENTRIES);
   showIndex();
   if (more) schedulePreparing();
 };
 
-/** Shows the catalog's index as it is now, telling the screen when it changed. */
-const showIndex = (): void => {
-  const index = catalog.index();
-  if (index === shownIndex) return;
-  shownIndex = index;
-  if (index !== null) perfMark("search.index", String(catalog.stats().entries));
-  for (const listener of listeners) listener();
+const schedulePreparing = (): void => {
+  if (preparingScheduled) return;
+  preparingScheduled = true;
+  whenFree(prepareSlice, "Search index");
 };
 
-const schedulePreparing = (): void => {
-  if (scheduled) return;
-  scheduled = true;
-  whenFree(prepareSlice, "Search index");
+/** Reads [source] whole and gives the catalog its rows. */
+const readSource = async (source: Source): Promise<void> => {
+  const { query, hit } = SOURCES[source];
+  const rows = (await appRuntime.runPromise(query.read)) as readonly { readonly id: number }[];
+  catalog.update(source, rows, hit as (row: { readonly id: number }) => SearchHit, idOf);
+};
+
+/** Reads the songs [ids] and puts them in their place: a burst asks no whole read of the songs. */
+const patchSongs = async (ids: readonly number[]): Promise<void> => {
+  const rows = await appRuntime.runPromise(
+    // oxlint-disable-next-line react/rules-of-hooks -- Effect Service.use resolves a service; it is not a React Hook.
+    LibraryStore.use((store) => store.songsWithIds(ids)),
+  );
+  catalog.patch("songs", rows, compareSongReadOrder);
+};
+
+const scheduleFollow = (): void => {
+  if (followScheduled || !started) return;
+  followScheduled = true;
+  whenFree(follow, "Search index reads");
+};
+
+/** Runs the follower's next job on a free turn, then the one after; waits when the next is due later. */
+const follow = (): void => {
+  followScheduled = false;
+  if (!started) return;
+  const job = follower.next(Date.now());
+  if (job === null) return;
+  if ("wait" in job) {
+    if (followTimer === null)
+      followTimer = setTimeout(() => {
+        followTimer = null;
+        scheduleFollow();
+      }, job.wait);
+    return;
+  }
+  const run = job.kind === "read" ? readSource(job.source) : patchSongs(job.ids);
+  void run.then(
+    () => {
+      follower.done(job, Date.now(), true);
+      schedulePreparing();
+      scheduleFollow();
+    },
+    () => {
+      follower.done(job, Date.now(), false);
+      scheduleFollow();
+    },
+  );
+};
+
+/**
+ * Builds the index and keeps it current with the Library from then on: a
+ * startup job after the first screen settles (`app/_layout.tsx`); Search
+ * wanted before that starts it at once. Returns how to stop following.
+ */
+export const startSearchIndex = (): (() => void) => {
+  if (started) return () => {};
+  started = true;
+  const stop = onLibraryChange((change) => {
+    follower.change(change, Date.now());
+    scheduleFollow();
+  });
+  scheduleFollow();
+  return () => {
+    stop();
+    started = false;
+    if (followTimer !== null) clearTimeout(followTimer);
+    followTimer = null;
+  };
 };
 
 const subscribeIndex = (listener: () => void): (() => void) => {
@@ -111,9 +249,13 @@ const subscribeIndex = (listener: () => void): (() => void) => {
     listeners.delete(listener);
   };
 };
-const currentIndex = (): SearchIndex<SearchHit> | null => shownIndex;
+const currentShown = (): Shown | null => shown;
 
-registerPerfMeta("search", () => ({ ...catalog.stats() }));
+registerPerfMeta("search", () => ({
+  ...catalog.stats(),
+  complete: catalog.complete(),
+  read: follower.ready(),
+}));
 
 /**
  * What Search looks things up in: the library's index, and what the library
@@ -148,65 +290,44 @@ const releasesOf = (
 };
 
 /**
- * The search index over the whole library, or null until it's built over
- * what the Library holds now.
+ * The search index over the library, kept in memory for the session
+ * (#1354), or null until its first source is read and prepared.
  *
- * - Its five sources are the Library's shared queries (the Library tabs'
- *   reads): asked only once [active] (Search wants them; the screen keeps
- *   asking for as long as it is mounted), re-read only when a Library change
- *   reaches them (a scan or an edit for every source, a playlist edit for
- *   the playlists alone), and while Search is out of sight only for edits.
- * - The index is prepared in short slices between other work, and source by
- *   source: a changed source alone is prepared again. While it is, searches
- *   use the last index; but once Search stops asking, nothing follows the
- *   Library, so when it asks again there is no index until every source is
- *   read and prepared again (the same rows again need no preparing).
- * - Whether a YT Music song is in the Library is the shared finder
- *   (`useLoadedLibraryFinder`), over the same songs read.
+ * - Opening Search and typing read nothing from the Library: the index
+ *   follows the Library itself from startup (`startSearchIndex`). [active]
+ *   only starts it early, when Search is wanted before startup work began.
+ * - Until every source is prepared it finds what the prepared ones hold, and
+ *   fills in.
+ * - Whether a YT Music song is in the Library is the shared finder over the
+ *   index's songs; whether it has an artist or album, lookups over its
+ *   artists and albums, each built on first use.
  * - Typing only ever runs the (prepared, narrowing) search itself.
  */
 export const useSearchIndex = (active: boolean): LibrarySearch | null => {
-  const queries = active ? libraryListQueries : null;
-  const songs = useLibraryQuery(queries?.songs ?? null, null);
-  const albums = useLibraryQuery(queries?.albums ?? null, null);
-  const artists = useLibraryQuery(queries?.artists ?? null, null);
-  const genres = useLibraryQuery(queries?.genres ?? null, null);
-  const playlists = useLibraryQuery(queries?.playlists ?? null, null);
-
   useEffect(() => {
-    if (!active) return undefined;
-    return () => {
-      catalog.unfollowed();
-      showIndex();
-    };
+    if (active && !started) startSearchIndex();
   }, [active]);
 
-  useEffect(() => {
-    if (songs !== null) catalog.update("songs", songs, songHit);
-    if (albums !== null) catalog.update("albums", albums, albumHit);
-    if (artists !== null) catalog.update("artists", artists, artistHit);
-    if (genres !== null) catalog.update("genres", genres, genreHit);
-    if (playlists !== null) catalog.update("playlists", playlists, playlistHit);
-    schedulePreparing();
-  }, [songs, albums, artists, genres, playlists]);
-
-  const index = useSyncExternalStore(subscribeIndex, currentIndex);
-  const find = useLoadedLibraryFinder(active);
+  const current = useSyncExternalStore(subscribeIndex, currentShown);
+  const songs = current?.songs;
+  const artists = current?.artists;
+  const albums = current?.albums;
+  const find = useMemo(() => (songs === undefined ? null : libraryFinderOver(songs)), [songs]);
   const releases = useMemo(
-    () => (artists === null || albums === null ? null : releasesOf(artists, albums)),
+    () => (artists === undefined || albums === undefined ? null : releasesOf(artists, albums)),
     [artists, albums],
   );
 
   return useMemo(
     () =>
-      index === null || find === null || releases === null
+      current === null || find === null || releases === null
         ? null
         : {
-            index,
-            songs: songs ?? [],
+            index: current.index,
+            songs: current.songs,
             library: { hasSong: (song: YtSong) => find(song) !== null, ...releases },
             find,
           },
-    [index, find, releases, songs],
+    [current, find, releases],
   );
 };
