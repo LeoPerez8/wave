@@ -171,6 +171,7 @@ import {
   type TasteHistory,
   type IndexedFile,
   type LibrarySongSort,
+  type PlaylistPlays,
   type PlaylistSong,
   type MissingTrack,
   type PendingFavorite,
@@ -307,6 +308,7 @@ import {
   selectPlaylistEntrySongs,
   selectPlaylistEntryVideoIdsPage,
   selectPlaylists,
+  selectPlaylistPlays,
   selectPlaylistsLastPlayed,
   selectTrackPaths,
   selectUnsearchedEntries,
@@ -867,6 +869,13 @@ export class LibraryStore extends Context.Service<
     readonly listPlaylists: Effect.Effect<readonly PlaylistRow[], LibraryStoreError>;
     /** When a song last played from each playlist, by playlist id (never played: absent). */
     readonly playlistsLastPlayed: Effect.Effect<ReadonlyMap<number, number>, LibraryStoreError>;
+    /**
+     * Each playlist's counted plays, those of the 14 days up to [now] apart
+     * (never played: absent), for Core's `fromYourLibrary`.
+     */
+    readonly playlistPlays: (
+      now: number,
+    ) => Effect.Effect<readonly PlaylistPlays[], LibraryStoreError>;
     /** Every playlist's unsearched songs, top to bottom, for the background fill. */
     readonly unsearchedEntries: Effect.Effect<readonly PlaylistUnsearched[], LibraryStoreError>;
     /** A playlist with its YT Music entries and its Library songs in [scope]. */
@@ -1763,6 +1772,9 @@ const make = Effect.gen(function* () {
     playlistsLastPlayed: attempt("read when playlists last played", () =>
       selectPlaylistsLastPlayed(db),
     ),
+
+    playlistPlays: (now) =>
+      attempt("count the playlists' plays", () => selectPlaylistPlays(db, now)),
 
     unsearchedEntries: attempt("read the playlists' unsearched songs", () =>
       selectUnsearchedEntries(db),

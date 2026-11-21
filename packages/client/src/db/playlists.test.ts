@@ -6,8 +6,11 @@ import {
   normalizeTrack,
   writePlaylistEntrySong,
   orderKeyBetween,
+  playlistPlays,
+  RECENT_WINDOW_DAYS,
   tryAgainSearches,
   type PlayContext,
+  type PlayEvent,
   type PlaylistSong,
   type UnavailableSong,
   type UnsearchedSong,
@@ -36,6 +39,7 @@ import {
   selectPlaylistGraveyard,
   selectPlaylistEntriesRevision,
   selectPlaylists,
+  selectPlaylistPlays,
   selectPlaylistsLastPlayed,
   selectPlaylistTotals,
   selectTrackPaths,
@@ -1082,6 +1086,86 @@ describe("sorting the Playlists list", () => {
     assert.equal(plans.length, 1);
     for (const plan of plans) {
       assert.match(plan, /SEARCH play_events USING COVERING INDEX play_events_context_idx/);
+      assert.doesNotMatch(plan, /TEMP B-TREE/);
+    }
+  });
+});
+
+describe("From your library's plays", () => {
+  const DAY_MS = 86_400_000;
+  const NOW = 100 * DAY_MS;
+  /** Plays as Core's `playlistPlays` takes them, each also recorded in the database. */
+  const recorded: PlayEvent[] = [];
+  const play = (
+    startedAt: number,
+    context: PlayContext | null,
+    { counted = true, trackId = String(ids.Airbag) } = {},
+  ) => {
+    const event: PlayEvent = {
+      trackId,
+      context,
+      startedAt,
+      listenedMs: 60_000,
+      durationMs: 180_000,
+      endReason: "completed",
+      counted,
+      source: "phone",
+    };
+    recorded.push(event);
+    if (!trackId.startsWith("yt:")) return recordPlay(db, event);
+    recordPlay(db, event, false, {
+      videoId: trackId.slice(3),
+      title: "Lucky",
+      artists: ["Radiohead"],
+      album: "OK Computer",
+      durationMs: 260_000,
+      artworkUrl: null,
+      explicit: false,
+      albumId: null,
+    });
+  };
+
+  test("each playlist's counted plays, those of the last 14 days apart, as Core counts them", () => {
+    recorded.length = 0;
+    const other = newPlaylist("Other");
+    newPlaylist("Never played");
+    const edge = NOW - RECENT_WINDOW_DAYS * DAY_MS;
+    play(NOW - DAY_MS, fromPlaylist(playlistId));
+    play(NOW - 2 * DAY_MS, fromPlaylist(playlistId), { trackId: "yt:v-lucky" });
+    play(edge, fromPlaylist(playlistId));
+    play(edge - 1, fromPlaylist(playlistId));
+    play(NOW - 3 * DAY_MS, fromPlaylist(playlistId), { counted: false });
+    play(NOW - 40 * DAY_MS, fromPlaylist(other));
+    play(NOW - 41 * DAY_MS, fromPlaylist(other));
+    // Played from elsewhere: an album with the playlist's number, Play Next.
+    play(NOW - DAY_MS, { kind: "album", id: String(other) });
+    play(NOW - DAY_MS, null);
+    const plays = selectPlaylistPlays(db, NOW);
+    assert.deepEqual(plays, [
+      { id: playlistId, recentPlays: 3, plays: 4, latestPlayAt: NOW - DAY_MS },
+      { id: other, recentPlays: 0, plays: 2, latestPlayAt: NOW - 40 * DAY_MS },
+    ]);
+    assert.deepEqual(plays, playlistPlays(recorded, NOW));
+  });
+
+  test("a playlist with only uncounted plays has none", () => {
+    recorded.length = 0;
+    play(NOW - DAY_MS, fromPlaylist(playlistId), { counted: false });
+    assert.deepEqual(selectPlaylistPlays(db, NOW), []);
+  });
+
+  test("the plays are read from the play contexts' index, never the whole play history", () => {
+    recorded.length = 0;
+    for (let at = 1; at <= 200; at += 1)
+      play(at * 1_000, at % 4 === 0 ? fromPlaylist(playlistId) : { kind: "album", id: "1" });
+    const { result, queries } = traceQueries(db, () => selectPlaylistPlays(db, NOW));
+    assert.deepEqual(result, playlistPlays(recorded, NOW));
+    const plans = queries
+      .filter((query) => query.sql.includes("play_events"))
+      .map((query) => query.plan.join("; "));
+    assert.equal(plans.length, 1);
+    for (const plan of plans) {
+      assert.match(plan, /SEARCH play_events USING INDEX play_events_context_idx/);
       assert.doesNotMatch(plan, /TEMP B-TREE/);
     }
   });

@@ -57,6 +57,8 @@ export function HomeSectionSkeleton({ id }: { id: HomeSectionId }) {
       <View style={{ minHeight: homePlaceholderHeight(id, fontScale) }}>
         {id === "discover" ? (
           <DiscoverSkeleton />
+        ) : id === "from-your-library" ? (
+          <DiscoverMixesSkeleton label={strings.home.loadingPlaylists} />
         ) : songs ? (
           <TrackSkeletons count={10} leading="card" />
         ) : id === "stats" ? (
