@@ -3118,6 +3118,7 @@ export {
   djRadioSongAllowed,
   djGenreTiles,
   djGenreTile,
+  djNewToYou,
   DJ_MAX_SELECTED,
   djArtistTile,
   djCanStart,

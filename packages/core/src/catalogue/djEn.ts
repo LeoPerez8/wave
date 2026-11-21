@@ -3,7 +3,9 @@ export const djEn = {
   title: "DJ",
   /** The line under the title on Discover's DJ card. */
   cardDetail: "Pick the artists your queue starts from",
-  done: "Done",
+  /** The pill that starts the queue: "Play", then "Play · 3" with 3 tiles selected. */
+  play: "Play",
+  playCount: (count: number) => `Play · ${count}`,
   close: "Close",
   /** Done's name for screen readers while the first batch is read. */
   starting: "Starting your queue",
@@ -17,7 +19,7 @@ export const djEn = {
   loadingArtists: "Loading artists",
   nothingToPick: "Nothing to pick from yet. Play some music and come back.",
   noSongsFound: "No songs found for what you picked.",
-  /** The button beside Done, and the title of the screen it opens. */
+  /** The title of the Adjust screen, which the bottom bar's summary of it opens. */
   adjust: "Adjust",
   /** Adjust's back arrow, which returns to the grid. */
   backToGrid: "Back to DJ",
@@ -53,6 +55,16 @@ export const djEn = {
   /** Why no result can be added: the selection holds its most ([max]) tiles. */
   searchFull: (max: number) =>
     `You've picked ${max}, the most a queue can start from. Unselect one to add another.`,
+  /** The catalog line over the grid's selection row, with how many tiles are selected. */
+  selection: (count: number) => `Your selection · ${count}`,
+  /** The selection row's line while nothing is selected. */
+  selectionEmpty: "Tap artists to start",
+  /** A mark of the selection row for screen readers: a tap takes [name] out of the selection. */
+  removeFromSelection: (name: string) => `Remove ${name}`,
+  /** Under an artist tile whose artist the Library doesn't have. */
+  newToYou: "New to you",
+  /** The bottom bar's summary of Adjust and its icon for screen readers: they open Adjust. */
+  adjustSummary: (summary: string) => `Adjust, ${summary}`,
   /** What Up Next says over a queue started from DJ. */
   magicQueueFromDj: "Magic Queue · from DJ",
 };

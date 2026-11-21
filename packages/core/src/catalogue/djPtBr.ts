@@ -3,7 +3,8 @@ import type { djEn } from "./djEn.ts";
 export const djPtBr: typeof djEn = {
   title: "DJ",
   cardDetail: "Escolha os artistas que iniciam sua fila",
-  done: "Concluído",
+  play: "Reproduzir",
+  playCount: (count: number) => `Reproduzir · ${count}`,
   close: "Fechar",
   starting: "Iniciando sua fila",
   artistTile: (name: string) => `Artista, ${name}`,
@@ -37,5 +38,10 @@ export const djPtBr: typeof djEn = {
   searchNoMatches: "Nenhum artista ou álbum encontrado.",
   searchFull: (max: number) =>
     `Você escolheu ${max}, o máximo para iniciar uma fila. Desmarque um para adicionar outro.`,
+  selection: (count: number) => `Sua seleção · ${count}`,
+  selectionEmpty: "Toque em artistas para começar",
+  removeFromSelection: (name: string) => `Remover ${name}`,
+  newToYou: "Novo para você",
+  adjustSummary: (summary: string) => `Ajustar, ${summary}`,
   magicQueueFromDj: "Fila Mágica · de DJ",
 };
