@@ -2452,11 +2452,13 @@ export {
   magicQueueCarouselPageLabel,
   magicQueueCarouselRestarts,
   inYourOrbitSongs,
+  inYourOrbitTap,
+  inYourOrbitTileUnavailable,
   IN_YOUR_ORBIT_SONGS,
   mostListenedRecently,
   recentPlaysWindow,
 } from "./magicQueueCarousel.ts";
-export type { MagicQueueCarouselRow } from "./magicQueueCarousel.ts";
+export type { InYourOrbitTap, MagicQueueCarouselRow } from "./magicQueueCarousel.ts";
 export { magicQueueShare } from "./magicQueue.ts";
 export { discoverMixesOfRadios, discoverMixesOfRadiosSteps } from "./discoverMixRadios.ts";
 export type { DiscoverMixRead } from "./discoverMixRadios.ts";
