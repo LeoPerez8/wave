@@ -283,7 +283,10 @@ describe("previousAppRelease", () => {
         tagName: "v0.6.0",
         assets: ["wave-0.6.0.apk", "wave-0.6.0-win-x64.exe", "wave-0.6.0-linux-x64.AppImage"],
       },
-      { tagName: "v0.6.0-ti", assets: ["wave-0.6.0-ti-win-x64.exe", "wave-0.6.0-ti-linux-x64.AppImage"] },
+      {
+        tagName: "v0.6.0-ti",
+        assets: ["wave-0.6.0-ti-win-x64.exe", "wave-0.6.0-ti-linux-x64.AppImage"],
+      },
       { tagName: "v0.5.9-ti", assets: ["wave-0.5.9-ti.apk"] },
       {
         tagName: "v0.5.8-ti",

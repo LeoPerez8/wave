@@ -317,7 +317,8 @@ describe("patch-notes.sh for the desktop", () => {
   /** A repo with a tagged ti release and one commit after it, and a `gh` that finds no PR. */
   const notes = (desktopSince: string) => {
     const dir = mkdtempSync(join(tmpdir(), "wave-patch-notes-"));
-    const git = (...args: string[]) => execFileSync("git", ["-C", dir, ...args], { encoding: "utf8" });
+    const git = (...args: string[]) =>
+      execFileSync("git", ["-C", dir, ...args], { encoding: "utf8" });
     git("init", "-q");
     for (const name of ["one", "two"]) {
       writeFileSync(join(dir, `${name}.txt`), `${name}\n`);
