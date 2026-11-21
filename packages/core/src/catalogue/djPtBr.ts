@@ -1,3 +1,4 @@
+import { formatNumber } from "../formatting.ts";
 import type { djEn } from "./djEn.ts";
 
 export const djPtBr: typeof djEn = {
@@ -26,6 +27,8 @@ export const djPtBr: typeof djEn = {
   },
   musicDiscovery: "Descoberta de música",
   discoverySteps: { familiar: "Conhecidas", blend: "Misturar", discover: "Descobrir" },
+  discoveryNote: (percent: number) =>
+    `${formatNumber("pt-BR", percent)}% de músicas que você ainda não ouviu.`,
   filters: "Filtros",
   mood: "Humor",
   moodNames: { energetic: "Agitada", relaxing: "Relaxante", upbeat: "Animada" },
