@@ -22,7 +22,7 @@ import { tabLook } from "./tabs";
  * can't be removed), Search last while it's on, then
  * the tabs off the bar (a button adds one, until five fit). The caller keeps
  * [bar] and applies each [edit]; given [onDone] it's the card's, with Done,
- * and without it Settings › Layout › Tab bar's page.
+ * and without it Settings › Layout's Tab bar row opens Home and this card.
  */
 export function TabBarEditor({
   bar,

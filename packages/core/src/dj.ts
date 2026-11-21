@@ -391,10 +391,10 @@ export const djGenreTiles = (
  * that is theirs and isn't a compilation, when one is known. Before the profile's first derivation the most
  * played artists stand in for it, in their order. An artist the Library
  * doesn't have shows by the name the plays or the graph know. No tile
- * appears twice, and the grid holds `DJ_GRID_TILES` at most; it's empty with
- * no taste signal and no plays.
+ * appears twice. This is the complete ordered candidate list; `djGrid` is
+ * its opening page. It's empty with no taste signal and no plays.
  */
-export const djGrid = ({
+export const djGridCandidates = ({
   artists,
   taste,
   played = [],
@@ -438,17 +438,16 @@ export const djGrid = ({
     genreCandidates: genreCandidates ?? null,
   }).slice(0, DJ_GENRE_TILES);
   let nextGenre = 0;
-  /** Shows [artist], then the album of theirs while the grid has room for it. */
+  /** Shows [artist], then the first album of theirs when one is known. */
   const show = (artist: DjArtistTile): void => {
     grid.set(artist.key, artist);
     const record = records.get(artist.key);
-    if (record !== undefined && grid.size < DJ_GRID_TILES) grid.set(record.key, record);
+    if (record !== undefined) grid.set(record.key, record);
   };
   for (const favourite of favourites) {
-    if (grid.size >= DJ_GRID_TILES) break;
     if (favourite === null || grid.has(favourite.key)) continue;
     show(favourite);
-    if (graph !== null && grid.size < DJ_GRID_TILES) {
+    if (graph !== null) {
       for (const neighbour of artistNeighbours(graph, favourite.name)) {
         const tile = djArtistTile(neighbour.name);
         if (tile === null || library.has(tile.key) || grid.has(tile.key)) continue;
@@ -457,16 +456,63 @@ export const djGrid = ({
       }
     }
     const genre = genreTiles[nextGenre];
-    if (genre !== undefined && grid.size < DJ_GRID_TILES) {
+    if (genre !== undefined) {
       grid.set(genre.key, genre);
       nextGenre += 1;
     }
   }
-  while (nextGenre < genreTiles.length && grid.size < DJ_GRID_TILES) {
+  while (nextGenre < genreTiles.length) {
     const genre = genreTiles[nextGenre++]!;
     grid.set(genre.key, genre);
   }
   return [...grid.values()];
+};
+
+/** DJ's opening page of the complete grid candidate list. */
+export const djGrid = (sources: DjGridSources): DjTile[] =>
+  djGridCandidates(sources).slice(0, DJ_GRID_TILES);
+
+/** The next [limit] candidates not already shown in this DJ visit. */
+export const djGridPage = (
+  candidates: readonly DjTile[],
+  seen: readonly DjTileKey[],
+  limit = DJ_GRID_TILES,
+): DjTile[] => {
+  const shown = new Set(seen);
+  return candidates.filter((tile) => !shown.has(tile.key)).slice(0, Math.max(0, limit));
+};
+
+/** Append one page without changing [tiles]' existing positions. */
+export const djGridLoadMore = (
+  candidates: readonly DjTile[],
+  tiles: readonly DjTile[],
+  seen: readonly DjTileKey[],
+  limit = DJ_GRID_TILES,
+): { readonly tiles: DjTile[]; readonly page: DjTile[]; readonly seen: DjTileKey[] } => {
+  const shown = new Set([...seen, ...tiles.map((tile) => tile.key)]);
+  const page = djGridPage(candidates, [...shown], limit);
+  for (const tile of page) shown.add(tile.key);
+  return { tiles: [...tiles, ...page], page, seen: [...shown] };
+};
+
+/** Refresh [tiles] in place around selected indices using candidates not yet shown this visit. */
+export const djGridRefresh = (
+  candidates: readonly DjTile[],
+  tiles: readonly DjTile[],
+  selected: readonly DjTileKey[],
+  seen: readonly DjTileKey[],
+): { readonly tiles: DjTile[]; readonly seen: DjTileKey[] } => {
+  const selectedKeys = new Set(selected);
+  const seenKeys = new Set(seen);
+  const fresh = candidates.filter((tile) => !seenKeys.has(tile.key));
+  let next = 0;
+  const refreshed = tiles.map((tile) => {
+    if (selectedKeys.has(tile.key) || fresh[next] === undefined) return tile;
+    const replacement = fresh[next++]!;
+    seenKeys.add(replacement.key);
+    return replacement;
+  });
+  return { tiles: refreshed, seen: [...seenKeys] };
 };
 
 /** How many similar artists a selected tile opens at most. */
@@ -853,6 +899,9 @@ export const startDjQueue = (
     id,
     seed: { kind: "dj", id, title: DJ_SEED_TITLE },
     dj: settings,
+    djArtistSeeds: tiles
+      .filter((tile): tile is DjArtistTile => tile.kind === "artist")
+      .map((tile) => tile.name),
     seedSongs: [...seeds.values()],
     seedDraws: [],
     used: [],

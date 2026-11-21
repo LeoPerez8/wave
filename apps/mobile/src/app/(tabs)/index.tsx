@@ -3,10 +3,8 @@ import { useLocalisation } from "@/localisation/localisation";
 import { useScreenContent } from "@/lib/screenTiming";
 import { IconMusic, IconSettings } from "@tabler/icons-react-native";
 import { homeItems, type RecapPeriod } from "@wave/core";
-import { Link } from "expo-router";
-import { useEffect, useState } from "react";
-import { useCallback } from "react";
-import { useFocusEffect } from "expo-router";
+import { Link, useFocusEffect } from "expo-router";
+import { useCallback, useEffect, useState } from "react";
 import { router } from "@/lib/timingRouter";
 import { Pressable, Text, View, useWindowDimensions } from "react-native";
 
@@ -25,6 +23,7 @@ import { useHomeSelection } from "@/selection/useHomeSelection";
 import { useRenderCount } from "@/perf/perf";
 import { useRecapToAnnounce } from "@/stats/hooks";
 import { RecapCard } from "@/stats/StatsViews";
+import { openArmedAnchoredMenu } from "@/motion/menuRequest";
 
 /** The first section sits a cell under the large title, not a section's gap. */
 const FIRST_SECTION = { marginTop: CELL - SECTION_GAP } as const;
@@ -57,6 +56,12 @@ startSavingHomeSnapshot();
 
 export default function HomeScreen() {
   const { strings } = useLocalisation();
+  useFocusEffect(
+    useCallback(() => {
+      openArmedAnchoredMenu("layout-home");
+      openArmedAnchoredMenu("layout-tab-bar");
+    }, []),
+  );
   useRenderCount("HomeScreen");
   // Home's mixes and sections build only while Home is in sight (#1351).
   useHomeWorkSight();

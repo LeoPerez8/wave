@@ -1,6 +1,6 @@
 /** Magic Queue keeps its seed in the lead while learning from liked-song radios. */
 import { radioRankingBatch, type RankedRadioSong } from "./radioRanking.ts";
-import type { MagicSession, MagicSongRadioSeed } from "./magicQueue.ts";
+import { magicArtistKey, type MagicSession, type MagicSongRadioSeed } from "./magicQueue.ts";
 import type { YtAlbumSong } from "./ytDiscover.ts";
 import { recordingMatches, recordingMatchTitle, ytTrackId } from "./ytMusic.ts";
 
@@ -194,10 +194,56 @@ export const completeMagicRadioBatch = (
   readonly songs: readonly RankedRadioSong[];
 } => {
   const eligible = magicRadioEligible(session, [...seed, ...liked]);
-  const primary = magicRadioBatch(seed.filter(eligible), liked.filter(eligible), {
+  let primary = magicRadioBatch(seed.filter(eligible), liked.filter(eligible), {
     size: batchSize(session),
     newMusicShare: session.ytShare,
   });
+  if (
+    session.seed.kind === "dj" &&
+    session.batches === 0 &&
+    (session.djArtistSeeds?.length ?? 0) > 1
+  ) {
+    const startedArtists = new Set(session.djStartedArtists ?? []);
+    const selectedArtists = (session.djArtistSeeds ?? []).filter(
+      (name) => !startedArtists.has(magicArtistKey(name)),
+    );
+    const byArtist = new Map<string, RankedRadioSong[]>();
+    for (const song of [...seed.filter(eligible), ...liked.filter(eligible)])
+      for (const artist of song.artists) {
+        if (!selectedArtists.some((name) => magicArtistKey(name) === artist)) continue;
+        const songs = byArtist.get(artist) ?? [];
+        if (!songs.some((candidate) => candidate.trackId === song.trackId)) songs.push(song);
+        byArtist.set(artist, songs);
+      }
+    const chosen: RankedRadioSong[] = [];
+    const limit = batchSize(session);
+    for (const name of selectedArtists) {
+      if (chosen.length >= limit) break;
+      const key = magicArtistKey(name);
+      const song = byArtist
+        .get(key)
+        ?.find((candidate) => !chosen.some((item) => item.trackId === candidate.trackId));
+      if (song !== undefined) {
+        chosen.push(song);
+      }
+    }
+    const remaining = primary;
+    while (chosen.length < limit) {
+      const lastArtists = new Set(chosen.at(-1)?.artists ?? []);
+      const at = remaining.findIndex(
+        (song) =>
+          !chosen.some((item) => item.trackId === song.trackId) &&
+          !song.artists.some((artist) => lastArtists.has(artist)),
+      );
+      const fallbackAt =
+        at < 0
+          ? remaining.findIndex((song) => !chosen.some((item) => item.trackId === song.trackId))
+          : at;
+      if (fallbackAt < 0) break;
+      chosen.push(remaining[fallbackAt]!);
+    }
+    primary = chosen;
+  }
   const primaryIds = new Set(primary.map((song) => song.trackId));
   const remaining = batchSize(session) - primary.length;
   const isNewRecording = (song: RankedRadioSong): boolean =>
