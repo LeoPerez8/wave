@@ -161,4 +161,8 @@ export const playlistHandlers = (
     id(playlistId) && typeof to === "number" && Number.isSafeInteger(to)
       ? playlistsCall((p) => p.moveInList(playlistId, to))
       : refuse("playlists.moveInList", "invalid playlist or place"),
+  "playlists.playGraveyard": ([playlistId, itemId]) =>
+    id(playlistId) && id(itemId)
+      ? playlistsCall((p) => p.playGraveyard(playlistId, itemId))
+      : refuse("playlists.playGraveyard", "invalid playlist or song"),
 });

@@ -203,6 +203,7 @@ test("the page has no Node and only the typed bridge", async () => {
       "wave.playlists.sortList",
       "wave.playlists.showListAs",
       "wave.playlists.moveInList",
+      "wave.playlists.playGraveyard",
       "wave.lyricsAndTags.view",
       "wave.lyricsAndTags.set",
       "wave.lyricsAndTags.fixLibrary",
