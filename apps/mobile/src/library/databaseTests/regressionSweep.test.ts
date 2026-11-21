@@ -211,7 +211,7 @@ test("a genre opening replaces full hydration with a header and 50 indexed summa
   }
 });
 
-test("the shared Artist graph bounds every graph input segment instead of materializing history/Library", async () => {
+test("the shared Artist graph reads each source once and yields through its CPU work", async () => {
   const fixture = await createFastAgainFixture();
   try {
     const store = await loadLibraryStore(CURRENT_ROOT, fixture.db);
@@ -230,13 +230,12 @@ test("the shared Artist graph bounds every graph input segment instead of materi
       ),
     );
     assert.deepEqual(traced.result, Effect.runSync(readArtistGraph(store)));
-    assert.ok(yields > 100);
-    assert.ok(traced.queries.every((query) => query.rows <= 128));
+    assert.ok(yields > fixture.playEvents / 512, `only ${yields} yields`);
+    // One read a source, whatever the Library's size (#1351); the build's steps still yield.
     assert.ok(traced.queries.every((query) => !/OFFSET/.test(query.sql)));
-    assert.equal(
-      traced.queries.reduce((sum, query) => sum + query.rows, 0),
-      fixture.playEvents,
-    );
+    const history = traced.queries.filter((query) => query.sql.includes("FROM play_events"));
+    assert.equal(history.length, 1);
+    assert.equal(history[0]!.rows, fixture.playEvents);
   } finally {
     fixture.close();
   }
