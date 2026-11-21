@@ -11,8 +11,12 @@ export interface StepPace {
   readonly maxSteps: number;
 }
 
-/** Eight-ms slices (the scheduler's most), stopped before a step would overrun; 512 operations. */
-export const GENTLE_STEPS = { sliceMs: 8, maxSteps: 512 };
+/**
+ * Six ms of work, stopped before a step would overrun it, and two ms of
+ * headroom for what no step foresees (a GC pause): within the scheduler's
+ * 8 ms slice. 512 operations at most.
+ */
+export const GENTLE_STEPS = { sliceMs: 6, maxSteps: 512 };
 
 /**
  * The background work a fiber runs, for its slices' perf stats and for the

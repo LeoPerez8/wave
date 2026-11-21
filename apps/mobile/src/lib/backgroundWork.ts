@@ -207,7 +207,10 @@ registerPerfMeta("backgroundWork", () => {
     longestWaitMs: Math.round(longestWaitMs),
     forcedSlices,
     longestSliceMs: Math.round(longestSliceMs),
-    overBudget,
+    // "scan 2, sync 1": the slices past 8 ms, by work (a step too long to split).
+    overBudget: Object.entries(overBudget)
+      .map(([name, count]) => `${name} ${count}`)
+      .join(", "),
   };
 });
 

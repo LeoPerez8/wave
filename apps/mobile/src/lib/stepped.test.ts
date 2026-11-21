@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 import * as Effect from "effect/Effect";
 import { namedWork, runSteps, shareSlicesWith } from "./stepped.ts";
-test("CPU work stays within the 8 ms slice and operation cap with an explicit scheduler", () => {
+test("CPU work stays within its 6 ms of the 8 ms slice and operation cap with an explicit scheduler", () => {
   let clock = 0,
     work = 0,
     previous = 0,
