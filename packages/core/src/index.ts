@@ -2916,6 +2916,7 @@ export {
   nowPlayingButtonsAreDefault,
   nowPlayingRelatedChevronShown,
   nowPlayingSlotRoute,
+  nowPlayingSlotChoiceHolder,
   nowPlayingSlotChoices,
   nowPlayingSlotShow,
   nowPlayingSongMenuShow,
@@ -2928,6 +2929,7 @@ export type {
   NowPlayingButtons,
   NowPlayingButtonsEdit,
   NowPlayingSlot,
+  NowPlayingSlotPlace,
   NowPlayingSlotSong,
 } from "./nowPlayingButtons.ts";
 
