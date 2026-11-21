@@ -65,6 +65,7 @@ import { FollowButton } from "./FollowButton.tsx";
 import { FollowedArtistsSettings } from "./FollowedArtistsSettings.tsx";
 import { geniusAccess } from "./useSongGenius.ts";
 import { Home } from "./Home.tsx";
+import { HomeSettings } from "./HomeEditor.tsx";
 import { Stats } from "./Stats.tsx";
 import type { StatsRoute } from "../../shared/stats.ts";
 import { ListeningHistory } from "./ListeningHistory.tsx";
@@ -104,6 +105,7 @@ const ytPages = [
 const settings = [
   "library",
   "appearance",
+  "home",
   "window",
   "playback",
   "lyricsAndTags",
@@ -1022,6 +1024,8 @@ export function App() {
                 <WindowSettings onError={failed} />
               ) : setting === "versionHistory" ? (
                 <VersionHistory />
+              ) : setting === "home" ? (
+                <HomeSettings revision={revision} onError={failed} />
               ) : setting === "downloads" ? (
                 <DownloadSettings onError={failed} />
               ) : setting === "followedArtists" ? (

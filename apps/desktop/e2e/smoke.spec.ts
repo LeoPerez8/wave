@@ -202,6 +202,8 @@ test("the page has no Node and only the typed bridge", async () => {
       "wave.home.followCheck",
       "wave.home.openRelease",
       "wave.home.releaseArtwork",
+      "wave.home.arrangement",
+      "wave.home.edit",
       "wave.follows.state",
       "wave.follows.set",
       "wave.follows.restore",
