@@ -958,6 +958,7 @@ export {
   magicBatchFailed,
   magicBatchLoading,
   magicPickDue,
+  magicQueueFootnote,
 } from "./magicQueue.ts";
 export { magicPickEnded } from "./magicQueue.ts";
 export { magicBatchLine } from "./magicBatchReport.ts";

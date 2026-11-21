@@ -12,6 +12,7 @@ import {
   magicBatchFailed,
   magicBatchLoading,
   magicPickDue,
+  magicQueueFootnote,
   magicPickEnded,
   magicBatchRadios,
   magicLibrarySongs,
@@ -501,6 +502,61 @@ describe("A Magic Queue in the queue", () => {
       assert.equal(magicPickDue(session, null, seedOnly, other), true);
       assert.equal(magicPickEnded("m0", "m1", session, seedOnly, other).again, true);
     }
+  });
+
+  test("a footnote sits under its songs once they're loaded (#1376)", () => {
+    const none = { picking: null, failed: null, empty: null };
+    assert.equal(magicQueueFootnote(session, none, playing), true);
+    // Songs lined up by hand count as songs under which it sits.
+    const last = run(playing, { type: "next" }, { type: "next" });
+    assert.equal(magicQueueFootnote(session, none, last), false);
+    assert.equal(
+      magicQueueFootnote(session, none, run(last, { type: "addToQueue", trackIds: ["q"] })),
+      true,
+    );
+  });
+
+  test("the footnote gives way to loading rows, a failure or an empty result (#1376)", () => {
+    const lined = run(
+      playing,
+      { type: "next" },
+      { type: "next" },
+      {
+        type: "addToQueue",
+        trackIds: ["q"],
+      },
+    );
+    const none = { picking: null, failed: null, empty: null };
+    assert.equal(magicQueueFootnote(session, { ...none, picking: "m1" }, lined), false);
+    assert.equal(magicQueueFootnote(session, { ...none, failed: "m1" }, lined), false);
+    assert.equal(magicQueueFootnote(session, { ...none, empty: "m1" }, lined), false);
+    // Another session's marks don't hide it.
+    assert.equal(
+      magicQueueFootnote(session, { picking: "m0", failed: "m0", empty: "m0" }, lined),
+      true,
+    );
+  });
+
+  test("no footnote once something else plays, or while no batch can come (#1376)", () => {
+    const none = { picking: null, failed: null, empty: null };
+    const other = run(playing, {
+      type: "play",
+      trackIds: ["x", "y"],
+      startIndex: 0,
+      context: { kind: "album", id: "4" },
+    });
+    assert.equal(magicQueueFootnote(session, none, other), false);
+    assert.equal(magicQueueFootnote(null, none, playing), false);
+    // An End of Queue sleep timer holds the batches back: no more songs arrive.
+    assert.equal(magicQueueFootnote(session, none, playing, { type: "endOfQueue" }), false);
+    assert.equal(magicQueueFootnote(session, none, playing, { type: "endOfTrack" }), true);
+    // A continuation under Repeat adds no batch.
+    const continued: MagicSession = { ...session, continuation: true };
+    assert.equal(magicQueueFootnote(continued, none, playing), true);
+    assert.equal(
+      magicQueueFootnote(continued, none, run(playing, { type: "setRepeat", mode: "all" })),
+      false,
+    );
   });
 
   test("Up Next names the seed", () => {
