@@ -13,6 +13,7 @@ import {
   ytArtistSectionView,
   ytArtistShelves,
   type HeldSongs,
+  type SearchAsker,
   type YtArtistCounts,
   type YtArtistSaved,
   type YtArtistSection,
@@ -104,6 +105,8 @@ export interface ArtistReads {
   readonly allSongs: boolean;
   /** The deferred artist boundary shares the search allowance and rechecks consent after a wait. */
   readonly canSend?: () => boolean;
+  /** Whose turn in the search allowance the Artists search takes with [canSend]: Search's unless given. */
+  readonly asker?: SearchAsker;
 }
 
 /**
@@ -132,7 +135,7 @@ export const fetchArtist = (
         reads.canSend === undefined
           ? ytMusic.searchArtists(query)
           : withSearchTurn(
-              "search",
+              reads.asker ?? "search",
               query,
               artistOpeningRequest(reads.canSend, ytMusic.searchArtists(query)).pipe(
                 Effect.mapError((error) => new YtMusicError({ reason: error.reason })),
@@ -288,6 +291,14 @@ export interface YtArtistSectionShown {
    * Online and a match standing, what the page draws (Core's `ytArtistCounts`).
    */
   readonly counts: (local: YtArtistCounts) => YtArtistCounts;
+  /**
+   * What's saved for the artist, the section's own answer included once it
+   * comes; undefined while it's read. The page's Fans might also like and
+   * About read it (`useArtistKeptPage`).
+   */
+  readonly saved: Saved | null | undefined;
+  /** Whether the section is asking YouTube Music right now, read live. */
+  readonly asking: () => boolean;
 }
 
 /**
@@ -316,7 +327,7 @@ export const useYtArtistSection = (
   const always = useSearchOnlineAlways();
   // The toggle's segment picked while the page is open; null until one is.
   const [pick, setPick] = useState<YtPick | null>(null);
-  const { state, enabled, openedAt, show, find, select } = useDeferredArtistSection(
+  const { state, enabled, openedAt, show, find, select, asking } = useDeferredArtistSection(
     name,
     contentReady,
     openedIntegrated,
@@ -384,7 +395,8 @@ export const useYtArtistSection = (
           }),
     [find, state, name, enabled, openedAt, openedIntegrated, always, pick, findAlbum],
   );
-  return { view, shelves, popular, integrated, toggle, counts, find };
+  const saved = state.status === "reading" ? undefined : state.saved;
+  return { view, shelves, popular, integrated, toggle, counts, find, saved, asking };
 };
 
 /**
@@ -442,7 +454,12 @@ const useDeferredArtistSection = (
   const work = ytArtistOpening(state, { ...context, name, now: openedAt });
   const needsFinder = work.finder && online();
   const loadedFind = useLoadedLibraryFinder(needsFinder);
+  const asking = useCallback(() => {
+    const live = reader.snapshot();
+    return live.key === artistKey && live.state.status === "loading";
+  }, [reader, artistKey]);
   return {
+    asking,
     state,
     enabled,
     openedAt,

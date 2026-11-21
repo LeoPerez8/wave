@@ -98,11 +98,11 @@ const NO_SIMILAR: readonly YtArtistCandidate[] = [];
 /**
  * Fans might also like: [listed] (the page's similar artists), each with the
  * Library artist of that name, whose page a tap opens (Core's
- * `similarArtistLinks`). The Library's artists are read only once the screen
- * has settled ([settled]) and only for a page that lists some; until then the
- * shelf waits.
+ * `similarArtistLinks`), on the YT Music artist page and the Library's alike.
+ * The Library's artists are read only once the screen has settled ([settled])
+ * and only for a page that lists some; until then the shelf waits.
  */
-const useSimilarArtists = (
+export const useSimilarArtists = (
   listed: readonly YtArtistCandidate[],
   settled: boolean,
 ): readonly SimilarArtistLink<ArtistRow>[] => {
