@@ -949,6 +949,11 @@ export {
   readDownloadArtistPhotos,
   writeDownloadArtistPhotos,
 } from "./artistPhotosSetting.ts";
+export {
+  GENIUS_INSIGHTS_SETTING,
+  readGeniusInsights,
+  writeGeniusInsights,
+} from "./geniusSetting.ts";
 export type { AccountSession, AccountSignInEvent, AccountSignInState } from "./accountSignIn.ts";
 export {
   SPOTIFY_ACCOUNT_SIGNED_OUT,

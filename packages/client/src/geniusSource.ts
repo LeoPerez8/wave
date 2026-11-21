@@ -17,9 +17,8 @@ import {
 } from "@wave/core";
 
 /**
- * What Genius insights need from the phone: its key-value store, a GET to
- * the Wave account's Genius routes (Core's `geniusProxy.ts`), which the
- * native module sends with the session, a POST to Google Translate, and
+ * The device's key-value store, a GET to the Wave account's Genius routes
+ * with its session, a POST to Google Translate, and
  * whether asking is still allowed (the switch on, the Lyrics view still
  * showing).
  */
@@ -34,6 +33,9 @@ export interface GeniusService {
   readonly enabled: () => boolean;
 }
 
+/** A Genius or translation request that takes longer counts as failed. */
+export const GENIUS_REQUEST_TIMEOUT_MS = 15_000;
+
 /**
  * Which song to ask about: its saved answer's [key] (a Library track by its
  * id, a non-D song by its track id), whether a Wave account is signed in
@@ -47,7 +49,7 @@ export interface GeniusAsk {
   readonly target: string | null;
 }
 
-/** Where the phone keeps [song]'s Genius answer (`geniusStorage`'s keys all start so). */
+/** Where the device keeps [song]'s Genius answer. */
 export const geniusStorageKey = (song: string): string => `genius.v1:${song}`;
 
 /** Saves [ask]'s song's [answer]; a failed write only costs the next opening a request. */
@@ -91,7 +93,7 @@ const loadReferents = async (
 
 /**
  * [ask]'s song as Genius knows it (docs/spec.md, "Genius About" and "Genius
- * annotations"): the answer saved on the phone, with no request, or Genius's
+ * annotations"): the answer saved on the device, with no request, or Genius's
  * search and then its song and annotations, saved for next time (a miss
  * too, for a week). A saved match whose annotations were never had asks for
  * them alone. Signed out, only what's saved shows, with no request. Null
