@@ -1,7 +1,9 @@
 /** Magic Queue reads its seed's radio and ranks it with the last available Wave signals. */
 import {
   catalogSeedKey,
+  djNewReleasesRanked,
   djVarietyCandidates,
+  identityKey,
   recordingMatches,
   type MixKnownSongs,
   magicLibrarySongs,
@@ -19,11 +21,13 @@ import {
   type MagicSong,
   type MixSliders,
   type TasteProfile,
+  type YtArtistSaved,
 } from "@wave/core";
 import * as Effect from "effect/Effect";
 
 import { lookedUpProfileOf } from "@/home/artistGenres";
-import { type LibraryStore } from "@/library/LibraryStore";
+import { djReleasePagesReader } from "@/dj/djReleases";
+import { LibraryStore } from "@/library/LibraryStore";
 import { songHasFile, type SongRow, type ArtistRow } from "@wave/client";
 import { online } from "@/native/waveNative";
 import { WaveYtMusic } from "@/native/waveYtMusic";
@@ -34,6 +38,11 @@ import { createAppSongRadioReaders } from "./songRadioSetup";
 
 let found: readonly MagicSong[] = [];
 const radioReaders = createAppSongRadioReaders("Magic Queue");
+
+/** What's saved for an artist's page, read from the Library's store once a batch has it. */
+let savedPage: (name: string) => Promise<YtArtistSaved | null> = () => Promise.resolve(null);
+/** The saved pages of a DJ session's artists, for its New releases filter. */
+const releasePages = djReleasePagesReader((name) => savedPage(name));
 
 /**
  * The radio an old session reads when it saved none (`magicBatchRadios`
@@ -89,6 +98,10 @@ export const magicQueueYtCandidates = (
         refilled: null,
       };
     const context = yield* Effect.context<LibraryStore>();
+    // A DJ session's New releases ranks with its artists' saved pages; none is asked for.
+    const store = yield* LibraryStore;
+    savedPage = (name) => Effect.runPromise(store.ytArtist(identityKey(name)));
+    const releases = yield* Effect.promise(() => releasePages(sessionNow?.() ?? session, graph));
     const seeds = drawn.length > 0 ? drawn : [legacySeed(session)];
     const liked = ((sessionNow?.() ?? session).likedRadios ?? []).filter(
       (radio) =>
@@ -119,7 +132,19 @@ export const magicQueueYtCandidates = (
             Effect.map((ids) => new Set(ids)),
             Effect.orElseSucceed(() => new Set<string>()),
           );
-    const rank = (group: readonly SongRadioSeed[], original: boolean, faithfulFallback = false) => {
+    // A DJ session's New releases raises the songs on its artists' recent releases; any other keeps the order.
+    const rank = (group: readonly SongRadioSeed[], original: boolean, faithfulFallback = false) =>
+      djNewReleasesRanked(
+        sessionNow?.() ?? session,
+        radioRanked(group, original, faithfulFallback),
+        releases,
+        Date.now(),
+      );
+    const radioRanked = (
+      group: readonly SongRadioSeed[],
+      original: boolean,
+      faithfulFallback: boolean,
+    ) => {
       const current = sessionNow?.() ?? session;
       const read = readers.current(session.id, group);
       // Old artist radios still provide an offline fallback until an ordered page is saved.

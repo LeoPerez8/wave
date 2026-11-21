@@ -71,6 +71,27 @@ export const djMixSliders = (settings: DjSettings): MixSliders => ({
   popularity: POPULARITY_STEP[settings.popularity],
 });
 
+/** A filter of Adjust: a chip that is on or off. */
+export type DjFilter = "trending" | "lesserKnown" | "newReleases";
+
+/** Adjust's filters, in the order their chips stand. */
+export const DJ_FILTERS: readonly DjFilter[] = ["trending", "lesserKnown", "newReleases"];
+
+/** Whether [filter] is on in [settings]. */
+export const djFilterOn = (settings: DjSettings, filter: DjFilter): boolean =>
+  filter === "newReleases" ? settings.newReleases : settings.popularity === filter;
+
+/**
+ * [settings] after a tap on [filter]'s chip. Trending and Lesser-known songs
+ * are the two ends of one choice, so turning one on turns the other off and
+ * a tap on the one that's on leaves popularity balanced. New releases turns
+ * on and off by itself.
+ */
+export const djToggleFilter = (settings: DjSettings, filter: DjFilter): DjSettings =>
+  filter === "newReleases"
+    ? { ...settings, newReleases: !settings.newReleases }
+    : { ...settings, popularity: settings.popularity === filter ? "balanced" : filter };
+
 const oneOf = <T extends string>(
   value: unknown,
   choices: { readonly [K in T]: unknown },
