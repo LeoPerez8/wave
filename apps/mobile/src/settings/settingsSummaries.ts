@@ -75,8 +75,8 @@ const useAccountsSummary = (): string | null => {
  * Each Settings row's line on its page, live: a rescan or the whole-Library
  * lookup while it runs, how many music folders there are, how many songs are
  * downloading and waiting and how many songs' downloads failed, the accounts
- * signed into, the running version's date. Null leaves a row with its title
- * alone.
+ * signed into, the running version or how far its update's download is. Null
+ * leaves a row with its title alone.
  */
 export const useSettingsSummaries = (): Record<SettingsPage, string | null> => {
   const { strings } = useLocalisation();

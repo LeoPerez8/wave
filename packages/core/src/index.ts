@@ -318,7 +318,7 @@ export {
   readKeptVersionHistory,
   readVersionHistory,
   versionHistoryEntries,
-  versionHistorySummary,
+  versionHistoryRowLine,
   versionHistoryUrl,
 } from "./versionHistory.ts";
 export type { DatedRelease, VersionHistoryEntry, VersionHistorySection } from "./versionHistory.ts";
