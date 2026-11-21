@@ -820,6 +820,7 @@ export type { WritePacing } from "./writePacing.ts";
 export { stepNowPlayingSheet } from "./sheetLifecycle.ts";
 export { NOW_PLAYING_OPENS_ON, stepNowPlayingScreens } from "./nowPlayingScreens.ts";
 export type {
+  NowPlayingPage,
   NowPlayingScreen,
   NowPlayingScreens,
   NowPlayingScreensEvent,

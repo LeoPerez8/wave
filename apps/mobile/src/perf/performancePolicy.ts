@@ -164,7 +164,7 @@ export const WHOLE_LIBRARY: Record<string, WholeLibraryException> = {
   "nowPlaying/RelatedView.tsx#RelatedView": {
     howOften: FOLLOWED_FINDER,
     reason:
-      "Now Playing's Related view, opened by its slot's tap, lists a related song the Library has as the Library song (#971); it follows the finder only while the view shows its answer.",
+      "Now Playing's Related screen, opened by the title's chevron or the playing song's card, lists a related song the Library has as the Library song (#971); it follows the finder only while the screen shows its answer.",
     capabilities: ["ytmusic/libraryFinder.ts#useLibraryFinder"],
   },
   "home/DiscoverMixActions.tsx#DiscoverMixActionsMenu": {

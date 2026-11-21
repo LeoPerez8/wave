@@ -1,4 +1,4 @@
-import { IconPlus } from "@tabler/icons-react-native";
+import { IconChevronLeft, IconPlus } from "@tabler/icons-react-native";
 
 import { currentLocalisation, useLocalisation } from "@/localisation/localisation";
 import {
@@ -14,7 +14,7 @@ import { Text, View } from "react-native";
 
 import { ArtistCard } from "@/catalog/cards/ArtistCard";
 import { CoverRow } from "@/catalog/CoverRow";
-import { CELL } from "@/catalog/grid";
+import { CELL, grid } from "@/catalog/grid";
 import { Hairline } from "@/catalog/Hairline";
 import { TrackSkeletons } from "@/catalog/Skeletons";
 import { IconButton } from "@/components/IconButton";
@@ -36,8 +36,9 @@ import { openFollowedArtist } from "@/library/openFollowedArtist";
 import { showError } from "@/overlay/alert";
 import { useLibraryFinder } from "@/ytmusic/libraryFinder";
 
-import { DismissArea } from "./DismissArea";
+import { RelatedDragArea } from "./RelatedPanel";
 import { useRelatedSongs } from "./relatedSongs";
+import type { ScreenPages } from "./ScreenPages";
 import { closeNowPlayingForLink, failNowPlayingLink } from "./sheet";
 import { TrackHeader } from "./TrackHeader";
 
@@ -58,9 +59,14 @@ const addToQueue = (song: ListedSong): void => runMixedSongSwipe(song, "addToQue
 const titleOf = (song: ListedSong): string =>
   song.source === "library" ? song.track.title : song.song.title;
 
+/** The header's drag area reaches the screen's sides; its arrow lines up with the sheet's chevron. */
+const HEADER = { marginHorizontal: -grid.margin, paddingHorizontal: grid.margin } as const;
+const ARROW_ROW = { height: CELL * 7, marginLeft: -12 } as const;
+
 /**
- * Now Playing's Related view, in place of the cover: the playing song's
- * header (a tap returns to the player), then the songs YouTube Music's
+ * Now Playing's Related screen, inside its panel (`RelatedPanel`): an arrow
+ * and the playing song's header (a tap on either, or a drag down on them,
+ * returns to the player), then the songs YouTube Music's
  * Related tab gives for it ([videoId]; null for a song without one, undefined
  * while it isn't known; [findAgain] is Try Again's search for a Library song
  * none was found for, `usePlayingVideoId`), without the playing song in any version (Core's
@@ -75,14 +81,17 @@ export function RelatedView({
   item,
   videoId,
   findAgain,
-  onShowPlayer,
+  pages,
 }: {
   item: NonNullable<PlaybackState["item"]>;
   videoId: string | null | undefined;
   findAgain: () => void;
-  onShowPlayer: () => void;
+  pages: ScreenPages;
 }) {
   const { strings } = useLocalisation();
+  const { send } = pages;
+  const arrowBack = useCallback(() => void send({ type: "show", screen: "player" }), [send]);
+  const headerTap = useCallback(() => void send({ type: "headerTap" }), [send]);
   const { shown, retry } = useRelatedSongs(videoId, findAgain);
   const find = useLibraryFinder(shown.status === "loaded");
   const answered = shown.status === "loaded" ? shown.answer.songs : NO_SONGS;
@@ -127,10 +136,17 @@ export function RelatedView({
   );
   return (
     <View className="flex-1">
-      <DismissArea>
-        <TrackHeader item={item} onShowPlayer={onShowPlayer} />
+      <RelatedDragArea pages={pages} style={HEADER}>
+        <View className="flex-row items-center" style={ARROW_ROW}>
+          <IconButton
+            icon={IconChevronLeft}
+            label={strings.playbackText.showPlayer}
+            onPress={arrowBack}
+          />
+        </View>
+        <TrackHeader item={item} onShowPlayer={headerTap} />
         <Hairline />
-      </DismissArea>
+      </RelatedDragArea>
       {shown.status === "loading" ? (
         <TrackSkeletons />
       ) : shown.status === "failed" ? (
