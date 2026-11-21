@@ -51,6 +51,7 @@ describe("desktopUsesPreference", () => {
       "settings.longPressDelayMs",
       "settings.glass",
       "settings.nowPlayingRow",
+      "settings.nowPlayingSlots",
       "settings.bounceAmount",
     ])
       assert.equal(desktopUsesPreference(key), false, key);

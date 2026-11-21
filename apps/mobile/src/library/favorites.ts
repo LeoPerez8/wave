@@ -341,6 +341,18 @@ export const useLivePendingFavoriteVideos = (active = true): ReadonlySet<string>
 };
 
 /**
+ * The pending favorites' videos: as held in memory once read, else as the store holds them
+ * now (for a star read outside any screen, the match notification's).
+ */
+export const currentPendingFavoriteVideos = (): Promise<ReadonlySet<string>> =>
+  pendingFavorites.get().loaded
+    ? Promise.resolve(pendingVideosNow())
+    : appRuntime
+        // oxlint-disable-next-line react/rules-of-hooks -- Effect Service.use resolves a service; it is not a React Hook.
+        .runPromise(LibraryStore.use((store) => store.listPendingFavorites))
+        .then((songs) => new Set(songs.map((song) => song.videoId)));
+
+/**
  * Whether YT Music song [videoId] shows starred (Core's `ytSongStarred`): its pending favorite,
  * or [track]'s star, the Library song it is by now. The one rule for every star a YT Music
  * song shows (Now Playing, its menu).

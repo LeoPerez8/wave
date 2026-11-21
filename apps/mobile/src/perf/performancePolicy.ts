@@ -167,7 +167,7 @@ export const WHOLE_LIBRARY: Record<string, WholeLibraryException> = {
   "nowPlaying/RelatedView.tsx#RelatedView": {
     howOften: FOLLOWED_FINDER,
     reason:
-      "Now Playing's Related view, opened by its slot's tap, lists a related song the Library has as the Library song (#971); it follows the finder only while the view shows its answer.",
+      "Now Playing's Related screen, opened by the title's chevron or the playing song's card, lists a related song the Library has as the Library song (#971); it follows the finder only while the screen shows its answer.",
     capabilities: ["ytmusic/libraryFinder.ts#useLibraryFinder"],
   },
   "home/DiscoverMixActions.tsx#DiscoverMixActionsMenu": {
@@ -472,6 +472,26 @@ export const WHOLE_LIBRARY: Record<string, WholeLibraryException> = {
     reason:
       "The explicitly opened result card follows download membership only for a streamed result and rechecks identity before saving, so a completed download is not offered again or saved as a streamed duplicate.",
     capabilities: ["ytmusic/libraryFinder.ts#useLoadedInLibrary"],
+  },
+  "recognize/recognizedStar.ts#useRecognizedStarred": {
+    howOften: FOLLOWED_FINDER,
+    reason:
+      "The explicitly opened result card and Genius result menu read a streamed song's star as Now Playing does, Library copy first, so the star shows what a tap would change.",
+    capabilities: ["ytmusic/libraryFinder.ts#useLibraryFinder"],
+  },
+  "recognize/recognizedStar.ts#currentRecognizedStarred": {
+    howOften:
+      "Once per tile match settled and per star button tap on its notification; never while listening.",
+    reason:
+      "The notification's star button reads the song's star once, as its label, without a screen to follow the finder; finder reads are shared per Library version.",
+    capabilities: ["ytmusic/libraryFinder.ts#currentLibraryFinder"],
+  },
+  "recognize/recognizedStar.ts#starRecognized": {
+    howOften:
+      "Once per explicit star tap on the card, the Genius result menu or the match notification.",
+    reason:
+      "A streamed song with a Library copy stars that copy, so the star write resolves Library identity at tap time as starSongs does elsewhere.",
+    capabilities: ["ytmusic/libraryFinder.ts#currentLibraryFinder"],
   },
   "recognize/resolveRecognitionSave.ts#resolveRecognitionSave": {
     howOften:
@@ -1027,6 +1047,10 @@ export const OWN_PRESS: Record<string, Exception> = {
   },
   "nowPlaying/TrackHeader.tsx#TrackHeader": {
     reason: "The Queue's playing-song header (artwork, title, artist) returns to the player.",
+  },
+  "nowPlaying/ScreenPages.tsx#QueueEdgeMark": {
+    reason:
+      "The mark on the player's right edge that opens the Queue (#1292): its face is a thin bar, not a glyph or text.",
   },
   "playback/MiniPlayer.tsx#MiniPlayer": {
     reason: "The whole mini player opens Now Playing, with its accessibility actions.",

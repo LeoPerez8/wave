@@ -9,6 +9,7 @@ import android.content.Context
 import android.graphics.Bitmap
 import android.graphics.BitmapFactory
 import android.graphics.drawable.Icon
+import android.os.Bundle
 import android.os.Handler
 import android.os.Looper
 import expo.modules.wavenative.R
@@ -29,6 +30,8 @@ object RecognizeNotifications {
   private const val FAILURE = 773
   private const val COVER_PX = 256
   private const val COVER_TIMEOUT_MS = 5_000
+  /** The kept match a match notification is about, so its star button's answer finds it. */
+  private const val KEPT_EXTRA = "expo.modules.wavenative.recognize.KEPT"
 
   private val main = Handler(Looper.getMainLooper())
   private var latestMatch = 0
@@ -60,7 +63,7 @@ object RecognizeNotifications {
     val manager = app.getSystemService(NotificationManager::class.java)
     val match = synchronized(this) { ++latestMatch }
     val builder = result(app, title, text)
-    if (kept != null) builder.setContentIntent(openMatch(app, kept, match))
+    if (kept != null) builder.setContentIntent(openMatch(app, kept, match)).keep(kept)
     matchBuilder = builder
     manager.notify(MATCH, builder.build())
     if (coverUrl == null) return
@@ -76,16 +79,51 @@ object RecognizeNotifications {
     }
   }
 
-  /** Updating the same builder keeps a late cover from restoring the old tap or save line. */
-  fun saved(context: Context, line: String, kept: String) {
+  /**
+   * Updating the same builder keeps a late cover from restoring the old tap or save line. The
+   * star button ([favoriteLabel], none when null) joins in the same silent update.
+   */
+  fun saved(context: Context, line: String, kept: String, favoriteLabel: String?, favoriteOn: Boolean) {
     main.post {
       val manager = context.getSystemService(NotificationManager::class.java)
       val builder = matchBuilder ?: return@post
       if (manager.activeNotifications.none { it.id == MATCH }) return@post
-      builder.setSubText(line).setContentIntent(openMatch(context, kept, latestMatch))
+      builder.setSubText(line).setContentIntent(openMatch(context, kept, latestMatch)).keep(kept)
+      builder.setActions(*listOfNotNull(favoriteLabel?.let { favorite(context, kept, it, favoriteOn) }).toTypedArray())
       manager.notify(MATCH, builder.build())
     }
   }
+
+  /**
+   * The star button's tap on [kept] is done: it now reads [label], or stays as it was when
+   * null. Only while the match notification still shows that match; after Wave's process
+   * went, the notification itself gives back its builder.
+   */
+  fun favorited(context: Context, kept: String, label: String?, on: Boolean) {
+    if (label == null) return
+    main.post {
+      val app = context.applicationContext
+      val manager = app.getSystemService(NotificationManager::class.java)
+      val shown = manager.activeNotifications.firstOrNull { it.id == MATCH } ?: return@post
+      if (shown.notification.extras.getString(KEPT_EXTRA) != kept) return@post
+      val builder = matchBuilder ?: Notification.Builder.recoverBuilder(app, shown.notification).also { matchBuilder = it }
+      builder.setActions(favorite(app, kept, label, on))
+      manager.notify(MATCH, builder.build())
+    }
+  }
+
+  private fun Notification.Builder.keep(kept: String): Notification.Builder =
+    addExtras(Bundle().apply { putString(KEPT_EXTRA, kept) })
+
+  /** Stars or unstars without opening Wave (RecognizeFavoriteService). */
+  private fun favorite(context: Context, kept: String, label: String, on: Boolean): Notification.Action =
+    Notification.Action.Builder(
+      Icon.createWithResource(context, R.drawable.wave_notification),
+      label,
+      RecognizeFavoriteService.tap(context, kept, on, latestMatch),
+    )
+      .setAuthenticationRequired(true)
+      .build()
 
   private fun openMatch(context: Context, kept: String, generation: Int): PendingIntent {
     val intent = recognizeIntent(context).setAction(RecognizeInbox.MATCH_ACTION)

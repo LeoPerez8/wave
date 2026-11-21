@@ -18,6 +18,11 @@ describe("favoriteToast", () => {
     assert.equal(favoriteToast("nowPlaying", true, 1), null);
   });
 
+  test("Recognize's star and the match notification's button confirm themselves", () => {
+    assert.equal(favoriteToast("recognize", true, 1), null);
+    assert.equal(favoriteToast("notification", true, 1), null);
+  });
+
   test("a selection of several songs says how many were added", () => {
     assert.equal(favoriteToast("selection", true, 2), "Added 2 songs to Favorites");
     assert.equal(favoriteToast("selection", true, 12), "Added 12 songs to Favorites");
