@@ -2700,6 +2700,7 @@ export type {
 export {
   resolveRecognizedSong,
   recognizeResultActions,
+  recognizeTileFavorite,
   geniusLyricsResultActions,
   geniusLyricsResultActionLabels,
   recognizePlaylistSong,
@@ -2711,6 +2712,7 @@ export type {
   RecognizeResult,
   RecognizeResultAction,
   RecognizeResultOptions,
+  RecognizeTileFavorite,
   RecognizeTrack,
   GeniusLyricsResultAction,
 } from "./recognition.ts";

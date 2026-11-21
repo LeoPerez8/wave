@@ -8,6 +8,7 @@ import {
   writePlaylistEntrySong,
   recognizePlaylistSong,
   recognizeResultActions,
+  recognizeTileFavorite,
   geniusLyricsResultActions,
   geniusLyricsResultActionLabels,
   catalogueOf,
@@ -148,13 +149,22 @@ test("each result offers its useful actions and Listen Again, with online action
       "playNext",
       "addToShazam",
       "addToPlaylist",
+      "favorite",
       "goToAlbum",
       "listenAgain",
     ]);
     assert.deepEqual(
       recognizeResultActions(stream, { ytMusic }),
       ytMusic
-        ? ["play", "playNext", "addToShazam", "addToPlaylist", "download", "listenAgain"]
+        ? [
+            "play",
+            "playNext",
+            "addToShazam",
+            "addToPlaylist",
+            "favorite",
+            "download",
+            "listenAgain",
+          ]
         : ["addToShazam", "addToPlaylist", "listenAgain"],
     );
     for (const result of [unavailable, unsearched]) {
@@ -181,6 +191,7 @@ test("recognized downloads offer cancel or retry from the existing queue status 
       "playNext",
       "addToShazam",
       "addToPlaylist",
+      "favorite",
       ...(action === null ? [] : [action]),
       "listenAgain",
     ]);
@@ -196,13 +207,15 @@ test("a Genius result menu uses the resolved song actions and always ends with O
     "play",
     "playNext",
     "addToPlaylist",
+    "favorite",
     "goToAlbum",
     "openInGenius",
   ]);
-  assert.deepEqual(geniusLyricsResultActions(stream, { ytMusic: true }), [
+  assert.deepEqual(geniusLyricsResultActions(stream, { ytMusic: true, starred: true }), [
     "play",
     "playNext",
     "addToPlaylist",
+    "unfavorite",
     "download",
     "openInGenius",
   ]);
@@ -224,6 +237,55 @@ test("a Genius result menu reads its entries in the app language", () => {
   assert.equal(portuguese.openInGenius, "Abrir no Genius");
   assert.equal(portuguese.play, "Reproduzir");
   assert.equal(portuguese.goToAlbum, "Ir para o Álbum");
+  assert.equal(english.favorite, "Favorite");
+  assert.equal(english.unfavorite, "Remove from Favorites");
+  assert.equal(portuguese.favorite, "Favoritar");
+  assert.equal(portuguese.unfavorite, "Remover das Favoritas");
+});
+
+test("a song Wave can play offers Favorite after Add to Playlist, or Remove from Favorites once starred", () => {
+  const library = resolved(undefined, [track]);
+  const stream = resolved({ ok: true, songs: [onlineSong] });
+  const unavailable = resolved({ ok: true, songs: [] });
+  const unsearched = resolved("disabled");
+  const offered = (result: typeof library, ytMusic: boolean, starred: boolean) =>
+    recognizeResultActions(result, { ytMusic, starred }).filter(
+      (action) => action === "favorite" || action === "unfavorite",
+    );
+  for (const ytMusic of [true, false]) {
+    assert.deepEqual(offered(library, ytMusic, false), ["favorite"]);
+    assert.deepEqual(offered(library, ytMusic, true), ["unfavorite"]);
+    for (const starred of [true, false]) {
+      assert.deepEqual(offered(unavailable, ytMusic, starred), []);
+      assert.deepEqual(offered(unsearched, ytMusic, starred), []);
+    }
+  }
+  assert.deepEqual(offered(stream, true, false), ["favorite"]);
+  assert.deepEqual(offered(stream, true, true), ["unfavorite"]);
+  assert.deepEqual(offered(stream, false, false), []);
+  assert.deepEqual(offered(stream, false, true), []);
+  const actions = recognizeResultActions(stream, { ytMusic: true, starred: true });
+  assert.equal(actions[actions.indexOf("addToPlaylist") + 1], "unfavorite");
+});
+
+test("the tile's match notification offers the star of a song Wave can play, labelled by what a tap does", () => {
+  const library = resolved(undefined, [track]);
+  const stream = resolved({ ok: true, songs: [onlineSong] });
+  assert.deepEqual(recognizeTileFavorite(library, { ytMusic: false }), {
+    label: "Favorite",
+    on: true,
+  });
+  assert.deepEqual(recognizeTileFavorite(stream, { ytMusic: true, starred: true }), {
+    label: "Remove from Favorites",
+    on: false,
+  });
+  assert.deepEqual(
+    recognizeTileFavorite(library, { ytMusic: true, starred: true }, catalogueOf("pt-BR")),
+    { label: "Remover das Favoritas", on: false },
+  );
+  assert.equal(recognizeTileFavorite(stream, { ytMusic: false }), null);
+  assert.equal(recognizeTileFavorite(resolved({ ok: true, songs: [] }), { ytMusic: true }), null);
+  assert.equal(recognizeTileFavorite(resolved("disabled"), { ytMusic: true }), null);
 });
 
 test("each recognized kind saves as its existing playlist entry and round-trips without new columns", () => {
@@ -281,7 +343,15 @@ test("the result card shows the resolved song without a source label and every r
     cover: true,
     coverUrl: "https://youtube/cover",
     listening: false,
-    actions: ["play", "playNext", "addToShazam", "addToPlaylist", "download", "listenAgain"],
+    actions: [
+      "play",
+      "playNext",
+      "addToShazam",
+      "addToPlaylist",
+      "favorite",
+      "download",
+      "listenAgain",
+    ],
   });
   assert.equal(RECOGNIZE_CARD_ACTION_LABELS.listenAgain, "Listen Again");
 });
@@ -314,6 +384,6 @@ test("a finished download stops offering Download once its song is in the Librar
       status: { kind: "done", path: "/music/song.m4a" },
       inLibrary: true,
     }),
-    ["play", "playNext", "addToShazam", "addToPlaylist", "listenAgain"],
+    ["play", "playNext", "addToShazam", "addToPlaylist", "favorite", "listenAgain"],
   );
 });
