@@ -73,14 +73,10 @@ const owedSongs = (db: LibraryDatabase, state: 0 | 1, limit: number): string[] =
  * Whether the kept totals hold every play: seeded, summed and credited. While
  * they don't, readers sum from the history and the startup job settles them.
  */
-export const keptTotalsSettled = (db: LibraryDatabase): boolean => {
-  const kept = keptState(db);
-  return (
-    kept.seededThrough >= kept.seedUntil &&
-    db.get<{ owed: number }>(sql`SELECT EXISTS (SELECT 1 FROM played_songs WHERE state < 2) AS owed`)
-      .owed === 0
-  );
-};
+export const keptTotalsSettled = (db: LibraryDatabase): boolean =>
+  db.get<{ settled: number }>(sql`SELECT seeded_through >= seed_until
+      AND NOT EXISTS (SELECT 1 FROM played_songs WHERE state < 2) AS settled
+    FROM kept_totals_state WHERE id = 1`).settled === 1;
 
 /** Names the songs of the plays after the last one seeded, up to [rows] plays (an upgrade's history). */
 const seed = (db: LibraryDatabase, kept: KeptState, rows: number) => {

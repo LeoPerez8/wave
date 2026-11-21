@@ -270,6 +270,7 @@ import {
   type RecordedPlay,
 } from "@wave/client/db/playHistory";
 import { listeningSums, selectCountedPlays, songCountedPlays } from "@wave/client/db/playTotals";
+import { settleKeptTotals } from "@wave/client/db/keptPlayTotals";
 import { loadPlayback, savePlayback, type SavedPlayback } from "@wave/client/db/playback";
 import { shuffleSongs } from "@wave/client/db/shuffleSongs";
 import {
@@ -1179,6 +1180,11 @@ export class LibraryStore extends Context.Service<
     readonly creditedPlayTotals: (
       window: StatsWindow,
     ) => Effect.Effect<readonly CreditedPlayTotals[], LibraryStoreError>;
+    /**
+     * One bounded step of what the kept play totals owe (#1349: an upgrade's
+     * history, a changed Library's credits); true once nothing is owed.
+     */
+    readonly settleKeptTotals: Effect.Effect<boolean, LibraryStoreError>;
     /** The albums with these ids, in no particular order; albums no longer in the library are left out. */
     readonly albumsByIds: (
       ids: readonly number[],
@@ -1432,6 +1438,12 @@ export class LibraryStore extends Context.Service<
     readonly ytArtistSimilar: Effect.Effect<readonly YtArtistSimilar[], LibraryStoreError>;
   }
 >()("@wave/mobile/library/LibraryStore") {}
+
+/**
+ * A settle step's size: summing or crediting 16 songs, or seeding 1,000 of an
+ * upgrade's plays, one transaction each.
+ */
+const KEPT_TOTALS_STEP = { songs: 16, plays: 1_000 };
 
 const writeAttempt = <A>(operation: string, run: () => A): Effect.Effect<A, LibraryStoreError> =>
   Effect.try({ try: run, catch: (cause) => new LibraryStoreError({ operation, cause }) });
@@ -2014,6 +2026,9 @@ const make = Effect.gen(function* () {
       attempt("sum up a Recap's plays", () => recapPlays(db, window, includeStreamedGenres)),
     creditedPlayTotals: (window) =>
       attempt("sum up album and artist plays", () => creditedPlayTotals(db, window)),
+    settleKeptTotals: writeAttempt("settle the kept play totals", () =>
+      settleKeptTotals(db, KEPT_TOTALS_STEP),
+    ),
 
     albumsByIds: (ids) => attempt("read ranked albums", () => albumsByIds(db, ids)),
 
