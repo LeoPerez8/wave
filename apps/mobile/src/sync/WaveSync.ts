@@ -43,6 +43,12 @@ export class WaveSync extends Context.Service<
     readonly changed: (what: { readonly songs: boolean }) => Effect.Effect<void>;
     /** A play started or ended here: its play goes up in the next batch of play ends. */
     readonly played: (step: "started" | "ended") => Effect.Effect<void>;
+    /**
+     * Pulls the collaborative playlist [playlistId] alone, for its page in sight (docs/spec.md,
+     * "Collaborative playlists", Refreshing), after the sync running if one is. Nothing for an
+     * ordinary playlist, signed out or with the switch off; a failure only waits for the next.
+     */
+    readonly syncPlaylist: (playlistId: number) => Effect.Effect<void>;
   }
 >()("@wave/mobile/sync/WaveSync") {}
 

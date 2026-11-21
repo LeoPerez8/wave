@@ -9,6 +9,7 @@ import { discoverEn } from "./catalogue/discoverEn.ts";
 import { statsEn } from "./catalogue/statsEn.ts";
 import { recapEn } from "./catalogue/recapEn.ts";
 import { listeningHistoryEn } from "./catalogue/listeningHistoryEn.ts";
+import { collaborativePageEn } from "./catalogue/collaborativePageEn.ts";
 import { shareEn } from "./catalogue/shareEn.ts";
 import { downloadNoticeEn } from "./catalogue/downloadNoticeEn.ts";
 import { nativeEn } from "./catalogue/nativeEn.ts";
@@ -188,6 +189,7 @@ export const en = {
     heading: "This is a Wave invite",
     body: "Open this link on your phone with an up-to-date Wave.",
   },
+  collaborativePage: collaborativePageEn,
   settings: settingsEn,
   downloadStatus: downloadStatusEn,
   alert: alertEn,

@@ -94,6 +94,33 @@ export const testCollaborationWorld = (): TestCollaborationWorld => {
       return of === playlistId;
     };
 
+  /**
+   * [pushed] with each entry of a collaborative playlist carrying the account that added it,
+   * as the service writes it from the session: the first push of an entry, kept after.
+   */
+  const withAdders = (
+    pushed: Partial<SyncTables>,
+    accountId: string,
+    held: TestSyncService,
+  ): Partial<SyncTables> => {
+    const entries = pushed.playlistEntries;
+    if (entries === undefined) return pushed;
+    const stored = new Map(held.rows().playlistEntries.map((row) => [row.id, row]));
+    return {
+      ...pushed,
+      playlistEntries: entries.map((row) => {
+        const of = "playlistId" in row ? row.playlistId : entryPlaylist.get(row.id);
+        if (typeof of !== "string" || !collaborations.has(of)) return row;
+        const before = stored.get(row.id);
+        const addedBy =
+          before !== undefined && "addedBy" in before && typeof before.addedBy === "string"
+            ? before.addedBy
+            : accountId;
+        return { ...row, addedBy };
+      }),
+    };
+  };
+
   const json = (status: number, body: unknown) => ({ status, body: JSON.stringify(body) });
 
   const leaveAs = (accountId: string, playlistId: string): void => {
@@ -154,14 +181,17 @@ export const testCollaborationWorld = (): TestCollaborationWorld => {
             const playlist = owner.service.rows().playlists.find((row) => row.id === playlistId);
             if (playlist?.deleted === true) return json(403, { error: "deleted" });
             noteEntries(pushed);
-            const stored = owner.service.pushTables(pushed);
+            const stored = owner.service.pushTables(withAdders(pushed, id, owner.service));
             if ("limit" in stored) return json(413, { error: "limit", limit: stored.limit });
             return json(200, stored);
           }
           return json(404, { error: "not_found" });
         }
         if (method === "POST" && path === "/v1/push" && body !== null) {
-          noteEntries(JSON.parse(body) as Partial<SyncTables>);
+          const pushed = JSON.parse(body) as Partial<SyncTables>;
+          noteEntries(pushed);
+          const stamped = JSON.stringify(withAdders(pushed, id, service));
+          return service.request("POST", path, stamped);
         }
         return service.request(method as "GET" | "POST", path, body);
       },

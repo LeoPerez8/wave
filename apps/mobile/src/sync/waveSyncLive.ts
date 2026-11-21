@@ -23,8 +23,18 @@ export const make = Effect.gen(function* () {
   /** The account signed in (its email), or null. */
   let account: string | null = null;
 
+  /** The sync running or the last one, so the account's and a page's never overlap. */
+  let queue: Promise<unknown> = Promise.resolve();
+  const inTurn = <A>(work: () => Promise<A>): Promise<A> => {
+    const next = queue.then(work, work);
+    queue = next.catch(() => {});
+    return next;
+  };
+
   /** One sync; resolves whether it finished. */
-  const run = async (songs: boolean): Promise<boolean> => {
+  const run = (songs: boolean): Promise<boolean> => inTurn(() => runCycle(songs));
+
+  const runCycle = async (songs: boolean): Promise<boolean> => {
     if (account === null || ports === null) return false;
     perfCount("sync.run");
     const { preferences, pulled, soulseek } = ports;
@@ -65,6 +75,34 @@ export const make = Effect.gen(function* () {
     }
     return finished;
   };
+
+  /** The page of the collaborative playlist [playlistId] pulls it, while the switch is on. */
+  const syncPlaylist = (playlistId: number): Promise<void> =>
+    inTurn(async () => {
+      if (account === null || ports === null || !collaborativePlaylistsOn()) return;
+      const { preferences, pulled } = ports;
+      const result = await Effect.runPromise(
+        store.syncCollaborativePlaylist(
+          {
+            transport: WaveAccount,
+            preferences,
+            account,
+            now: Date.now,
+            songsChanged: false,
+            wait: (ms) => new Promise((resolve) => setTimeout(resolve, ms)),
+            turn: freeTurn,
+            collaboration: collaborations,
+          },
+          playlistId,
+        ),
+      ).catch((error: unknown) => {
+        if (!expected(waveAccountErrorCode((error as { cause?: unknown }).cause))) {
+          console.warn("[wave] Syncing a collaborative playlist didn't finish", error);
+        }
+        return null;
+      });
+      if (result !== null) pulled(result.pulled);
+    });
 
   /** Made at the first sign-in: signed out, nothing loads or times a sync. */
   let triggers: SyncTriggers | null = null;
@@ -125,6 +163,7 @@ export const make = Effect.gen(function* () {
       Effect.sync(() => {
         if (account !== null) signedInTriggers().played(step);
       }),
+    syncPlaylist: (playlistId) => Effect.promise(() => syncPlaylist(playlistId)),
   };
   return sync;
 });
