@@ -75,6 +75,15 @@ export const magicQueueCarouselRestarts = (
 export const mostListenedRecently = (totals: readonly SongPlayTotals[]): TrackRef[] =>
   rankSongPlays(totals, totals.length).map((entry) => entry.song);
 
+/** How many recently played songs In your orbit needs to show. */
+export const IN_YOUR_ORBIT_SONGS = 9;
+
+/** The nine most listened songs for Home's In your orbit, or none until nine rank. */
+export const inYourOrbitSongs = (totals: readonly SongPlayTotals[]): TrackRef[] => {
+  const ranked = mostListenedRecently(totals);
+  return ranked.length < IN_YOUR_ORBIT_SONGS ? [] : ranked.slice(0, IN_YOUR_ORBIT_SONGS);
+};
+
 /**
  * What a page of the carousel shows of its [songs], in their order: the first
  * nine, or none when there are fewer than three (the page is left out).

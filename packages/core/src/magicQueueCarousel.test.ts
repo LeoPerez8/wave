@@ -12,6 +12,7 @@ import {
   magicQueueCarouselPages,
   magicQueueCarouselRestarts,
   mostListenedRecently,
+  inYourOrbitSongs,
   recentPlaysWindow,
   type SongPlayTotals,
   type TrackRef,
@@ -76,6 +77,34 @@ describe("mostListenedRecently", () => {
       mostListenedRecently([plays(library(1), 3, NOW - DAY), plays(library(2), 3, NOW)]),
       [library(2), library(1)],
     );
+  });
+
+  test("breaks tied play counts by time listened before the latest play", () => {
+    const longer = { ...plays(library(1), 3, NOW - DAY), listenedMs: 600_000 };
+    const newer = { ...plays(library(2), 3, NOW), listenedMs: 300_000 };
+    assert.deepEqual(mostListenedRecently([newer, longer]), [library(1), library(2)]);
+  });
+});
+
+describe("inYourOrbitSongs", () => {
+  test("shows the nine most listened songs when at least nine have counted plays", () => {
+    const totals = Array.from({ length: 10 }, (_, index) => plays(library(index + 1), index + 1));
+    assert.deepEqual(inYourOrbitSongs(totals), [
+      library(10),
+      library(9),
+      library(8),
+      library(7),
+      library(6),
+      library(5),
+      library(4),
+      library(3),
+      library(2),
+    ]);
+  });
+
+  test("leaves the section out when fewer than nine songs have counted plays", () => {
+    const totals = Array.from({ length: 8 }, (_, index) => plays(library(index + 1), index + 1));
+    assert.deepEqual(inYourOrbitSongs(totals), []);
   });
 });
 
