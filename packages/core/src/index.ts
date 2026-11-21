@@ -70,8 +70,8 @@ export type {
 } from "./listActions.ts";
 export { describeFolder, filesLeavingWithRoot, isWithin, planAddRoot } from "./scanRoots.ts";
 export type { AddRootPlan, FolderLabel, ScanRootState } from "./scanRoots.ts";
-export { resolveSkipSwipe } from "./swipe.ts";
-export type { SkipDirection, SkipSwipe } from "./swipe.ts";
+export { resolveSkipSwipe, settleScreenSwipe } from "./swipe.ts";
+export type { ScreenSwipe, SkipDirection, SkipSwipe } from "./swipe.ts";
 export { toastDuration, toastSwipeDismisses } from "./toast.ts";
 export type { ToastSwipe } from "./toast.ts";
 export {
@@ -818,6 +818,13 @@ export type {
 export { pendingWriteDelay } from "./writePacing.ts";
 export type { WritePacing } from "./writePacing.ts";
 export { stepNowPlayingSheet } from "./sheetLifecycle.ts";
+export { NOW_PLAYING_OPENS_ON, stepNowPlayingScreens } from "./nowPlayingScreens.ts";
+export type {
+  NowPlayingScreen,
+  NowPlayingScreens,
+  NowPlayingScreensEvent,
+  NowPlayingScreensStep,
+} from "./nowPlayingScreens.ts";
 export {
   QUEUE_COVER_FLUSH_MS,
   createQueueCoverBatcher,
