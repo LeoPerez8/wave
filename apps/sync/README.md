@@ -13,6 +13,7 @@ account and sync", "Genius About" and "Followed artists" in `docs/spec.md`.
 | `src/google.ts`         | Checking a Google ID token (RS256 against Google's JWKS)                |
 | `src/store.ts`          | Push (merge and number changes), pull (pages) and account deletion      |
 | `src/collaborations.ts` | A collaborative playlist's record: owner, members, leaving and removal  |
+| `src/invites.ts`        | A collaborative playlist's invite link: create, read, turn off, join    |
 | `src/soulseek.ts`       | The account's Soulseek account, its password encrypted (`SOULSEEK_KEY`) |
 | `src/proxy.ts`          | A provider's fixed requests: the cache, the provider call, its failures |
 | `src/tables.ts`         | The synced tables: wire fields, checks and columns                      |
@@ -26,7 +27,8 @@ account and sync", "Genius About" and "Followed artists" in `docs/spec.md`.
 
 ## API
 
-Every body is JSON. Every route but `POST /v1/session` needs the session token as
+Every body is JSON. Every route but `POST /v1/session` and the invite page (`GET /invite`)
+needs the session token as
 `Authorization: Bearer <sessionToken>`. Only `POST /v1/session` ever answers a session token,
 and nothing logs a session token, an ID token, an address or a Soulseek password.
 
@@ -40,8 +42,9 @@ names in `CF-Connecting-IP` (kept only as a SHA-256):
   that puts many phones behind one address.
 - A token that isn't the shape `POST /v1/session` gives (43 base64url characters) answers
   `401 { "error": "unauthorized" }` without a lookup.
-- Past `maxFailedLookupsPerAddressPerMinute` lookups that find no session, the address's
-  session routes answer `429` with
+- Past `maxFailedLookupsPerAddressPerMinute` lookups that find no session, or no invite (a
+  wrong invite token, see [Invite links](#invite-links)), the address's session routes answer
+  `429` with
   `{ "error": "limit", "limit": "maxFailedLookupsPerAddressPerMinute" }` for
   `failedLookupBlockSeconds`, valid sessions included. Requests that find their session never
   count toward it, and other addresses aren't affected.
@@ -321,6 +324,45 @@ Migration `0016_collaborations` adds `collaborations`, `collaboration_members` a
 `collaboration_ends`, and changes no table there was. Deploy it before an app that calls
 these routes.
 
+### Invite links
+
+The only way into a collaborative playlist (`docs/spec.md`, Collaborative playlists, Invite
+link). A playlist has at most one active link: an https address on this service,
+`https://<service>/invite#<token>`, valid for 7 days, for any number of people. The token is
+32 random bytes in base64url, as a session token is, and goes after `#`, so a browser never
+sends it. The service keeps only its SHA-256, with the link's expiry and state
+(`collaboration_invites`); it can tell the owner when the current link ends, but not the link,
+which the app that created it holds.
+
+| Route                                                         | Who        | What it does                                                                                                                                                      |
+| ------------------------------------------------------------- | ---------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `POST /v1/collaboration/invite`, body `{ "playlistId": "…" }` | owner      | Creates a link and ends the active one. `200 { "url": "https://…/invite#…", "expiresAt": 1761048000000 }`                                                         |
+| `GET /v1/collaboration/invite?playlist=<id>`                  | owner      | `200 { "invite": { "createdAt": …, "expiresAt": … } }`, or `{ "invite": null }` when none lets people in                                                          |
+| `DELETE /v1/collaboration/invite?playlist=<id>`               | owner      | Turns the active link off. `204`, also when there's none                                                                                                          |
+| `POST /v1/invite`, body `{ "token": "…" }`                    | anyone     | `200 { "playlistId": "…", "playlistName": "Road trip", "ownerName": "Ana Souza" }`; joins nothing                                                                 |
+| `POST /v1/invite/join`, body `{ "token": "…" }`               | anyone     | Makes the session's account a member. `200` the `Collaboration`                                                                                                   |
+| `GET /invite`                                                 | no session | The page a browser shows: that this is a Wave invite and to open it in an up-to-date Wave, in the browser's language (`Accept-Language`). Nothing of the playlist |
+
+"Anyone" is any signed-in account. A token goes in the body, never in a URL. Creating a new
+link marks the earlier one `replaced`, turning it off marks it `off`, and removing a member
+marks it `ended`; a member leaving leaves it as it is. People who joined stay members when
+the link ends. Joining again, as a member or the owner, answers the collaboration and keeps
+when the account joined; one that left or was ended joins again and loses its end record.
+Ending the collaboration, and deleting the owner's account, delete its links.
+
+Refusals, besides the owner routes' `403 not_member` and `403 not_owner` and `400 bad_request`
+(no `playlistId` or `playlist`):
+
+- `404 { "error": "not_found" }`: the token names no link, or isn't the shape of one. It counts
+  as a failed lookup of the address (`maxFailedLookupsPerAddressPerMinute`), as an unknown
+  session does.
+- `410 { "error": "invite_ended" }`: the link expired, was turned off or replaced, ended with a
+  removal, or its playlist was deleted. A finished link is kept until a new link of its
+  playlist is created after its expiry; then its token answers `404`.
+
+Migration `0017_collaboration_invites` adds `collaboration_invites`, and changes no table
+there was.
+
 ### `PUT /v1/soulseek`
 
 Keeps the Soulseek account Download in best quality uses as the account's, replacing the one
@@ -495,7 +537,7 @@ answer (its over-quota error names the key), nothing cached, and a log line that
 | `maxNewAccountsPerDay`                    | 10        | new accounts in any 24 hours                         |
 | `maxSessionsPerAccount`                   | 10        | valid sessions per account, for a new sign-in        |
 | `maxRequestsPerAddressPerMinute`          | 600       | every route, per address                             |
-| `maxFailedLookupsPerAddressPerMinute`     | 20        | lookups that find no session, per address            |
+| `maxFailedLookupsPerAddressPerMinute`     | 20        | lookups that find no session or invite, per address  |
 | `failedLookupBlockSeconds`                | 300       | how long an address past the line above is held back |
 | `maxGeniusRequestsPerMinute`              | 30        | the Genius routes, per account                       |
 | `maxGeniusRequestsPerDay`                 | 1,000     | Genius requests the cache didn't answer, per account |

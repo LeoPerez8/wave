@@ -175,6 +175,11 @@ export const ptBR: Catalogue = {
   recap: recapPtBr,
   listeningHistory: listeningHistoryPtBr,
   share: sharePtBr,
+  invitePage: {
+    title: "Convite do Wave",
+    heading: "Este é um convite do Wave",
+    body: "Abra este link no seu celular com o Wave atualizado.",
+  },
   settings: settingsPtBr,
   downloadStatus: downloadStatusPtBr,
   alert: alertPtBr,

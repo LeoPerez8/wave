@@ -125,8 +125,11 @@ export const readMembership = (
   })),
 });
 
-/** [accountId]'s part in [playlistId]: one row with `owner` when it's a member. */
-const role = (playlistId: string, accountId: string): InStatement => ({
+/**
+ * [accountId]'s part in [playlistId]: one row with `owner` when it's a member.
+ * `roleOf` reads it.
+ */
+export const role = (playlistId: string, accountId: string): InStatement => ({
   sql: `SELECT c.owner_id = m.account_id AS owner
         FROM collaborations c
         JOIN collaboration_members m ON m.playlist_id = c.playlist_id
@@ -134,7 +137,7 @@ const role = (playlistId: string, accountId: string): InStatement => ({
   args: [playlistId, accountId],
 });
 
-const roleOf = (result: ResultSet | undefined): "owner" | "member" | null => {
+export const roleOf = (result: ResultSet | undefined): "owner" | "member" | null => {
   const row = result?.rows[0];
   return row === undefined ? null : Number(row.owner) === 1 ? "owner" : "member";
 };
@@ -230,6 +233,11 @@ export const endCollaboration = async (
         args: [playlistId, accountId],
       },
       {
+        sql: `DELETE FROM collaboration_invites
+              WHERE playlist_id IN (SELECT c.playlist_id FROM collaborations c WHERE ${owned})`,
+        args: [playlistId, accountId],
+      },
+      {
         sql: "DELETE FROM collaborations WHERE playlist_id = ? AND owner_id = ?",
         args: [playlistId, accountId],
       },
@@ -271,7 +279,7 @@ const takeOut = (
   ];
 };
 
-/** Removes [memberId] from [playlistId], for its owner [accountId]. */
+/** Removes [memberId] from [playlistId], for its owner [accountId], and ends its active invite link. */
 export const removeMember = async (
   db: Client,
   playlistId: string,
@@ -279,9 +287,18 @@ export const removeMember = async (
   memberId: string,
   at: number,
 ): Promise<CollaborationRefusal | null> => {
-  const [asked, , removed] = await db.batch(
+  const [asked, , , removed] = await db.batch(
     [
       role(playlistId, accountId),
+      {
+        sql: `UPDATE collaboration_invites SET state = 'ended'
+              WHERE playlist_id = ? AND state = 'active'
+                AND EXISTS (SELECT 1 FROM collaborations c
+                            JOIN collaboration_members m ON m.playlist_id = c.playlist_id
+                            WHERE c.playlist_id = ? AND c.owner_id = ?
+                              AND m.account_id = ? AND m.account_id <> c.owner_id)`,
+        args: [playlistId, playlistId, accountId, memberId],
+      },
       ...takeOut(playlistId, memberId, "ended", at, "c.owner_id = ?", [accountId]),
     ],
     "write",
@@ -343,13 +360,19 @@ export const addMember = async (
 /**
  * What deleting [accountId] does to the collaborations, as statements for
  * the deletion's transaction: the ones it owns end for their other members,
- * and it goes from the ones it is in.
+ * with their invite links, and it goes from the ones it is in.
  */
 export const forgetAccountStatements = (accountId: string, at: number): InStatement[] => [
   endForOthers("c.owner_id = ?", [accountId], at),
   {
     sql: `DELETE FROM collaboration_members
           WHERE account_id = ?
+             OR playlist_id IN (SELECT playlist_id FROM collaborations WHERE owner_id = ?)`,
+    args: [accountId, accountId],
+  },
+  {
+    sql: `DELETE FROM collaboration_invites
+          WHERE owner_id = ?
              OR playlist_id IN (SELECT playlist_id FROM collaborations WHERE owner_id = ?)`,
     args: [accountId, accountId],
   },
