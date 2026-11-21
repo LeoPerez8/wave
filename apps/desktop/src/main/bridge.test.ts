@@ -8,7 +8,14 @@ import { addTrack, openTestDatabase, star, type TestDatabase } from "@wave/clien
 import { creditSplits } from "@wave/client/db/credits";
 import { stampPreference } from "@wave/client/db/sync";
 import { syncCycle } from "@wave/client/sync/syncCycle";
-import { catalogueOf, recordingMatchTitle, scanPath, type SyncClock } from "@wave/core";
+import {
+  catalogueOf,
+  readThemeChoice,
+  recordingMatchTitle,
+  scanPath,
+  themeFor,
+  type SyncClock,
+} from "@wave/core";
 import { sql } from "drizzle-orm";
 import { createPlaylist } from "@wave/client/db/playlists";
 import * as Effect from "effect/Effect";
@@ -513,10 +520,12 @@ const connect = (
     fetch: () => Promise.reject(new Error("no network")),
   }).pipe(Layer.provideMerge(library));
   const languages: LanguageView[] = [];
+  const themes: (string | null)[] = [];
   const runtime = ManagedRuntime.make(
     accountLayer({
       account: account.service,
       languageChanged: (view) => languages.push(view),
+      themeChanged: (stored) => themes.push(stored),
       focused: () => true,
       ...(account.clock === undefined ? {} : { clock: account.clock }),
     }).pipe(
@@ -619,6 +628,7 @@ const connect = (
     picked,
     copied,
     languages,
+    themes,
     browser,
   };
 };
@@ -1682,6 +1692,111 @@ test("the account's language applies on sign-in and later pulls, and desktop cha
       await pass(15 * 60_000);
       await until(async () => (await wave.settings.language()).choice === "system");
       assert.deepEqual(languages.at(-1), { choice: "system", language: "en" });
+    } finally {
+      await runtime.dispose();
+    }
+  });
+});
+
+test("a theme edit is validated, changes the theme at once and survives reopening", async () => {
+  await withFile(async (file) => {
+    const first = connect(file);
+    const wave = first.exposed.get("wave") as WaveBridge;
+    try {
+      assert.equal((await wave.account.view()).theme, null);
+      const stored = await wave.settings.editTheme({ kind: "swatch", group: "dark", id: "navy" });
+      assert.equal(themeFor(readThemeChoice(stored)).dark.background, "#0a0f1f");
+      assert.equal((await wave.account.view()).theme, stored);
+      assert.equal(first.themes.at(-1), stored);
+      await assert.rejects(
+        first.handlers.get("settings.editTheme")!(trusted, {
+          kind: "swatch",
+          group: "dark",
+          id: "sand",
+        }),
+        /refused/i,
+      );
+      assert.equal((await wave.account.view()).theme, stored);
+    } finally {
+      await first.runtime.dispose();
+    }
+    const second = connect(file);
+    try {
+      const reopened = second.exposed.get("wave") as WaveBridge;
+      await reopened.settings.editTheme({ kind: "save", group: "primary", hex: "#7aaef5" });
+      const custom = await reopened.settings.editTheme({
+        kind: "saved",
+        group: "primary",
+        hex: "#7aaef5",
+      });
+      const theme = themeFor(readThemeChoice(custom));
+      assert.equal(theme.dark.background, "#0a0f1f");
+      assert.equal(theme.dark.accent, "#7aaef5");
+      const reset = readThemeChoice(await reopened.settings.editTheme({ kind: "reset" }));
+      assert.deepEqual(themeFor(reset), themeFor(readThemeChoice(null)));
+      assert.deepEqual(reset.savedPrimary, ["#7aaef5"]);
+    } finally {
+      await second.runtime.dispose();
+    }
+  });
+});
+
+test("the account's theme reaches the desktop on a pull, and a desktop edit reaches the phone", async () => {
+  await withFile(async (file) => {
+    const app = await desktop();
+    const phone = await app.service.signIn();
+    const phoneDb = await openTestDatabase();
+    const values = new Map<string, string>([
+      ["settings.theme", JSON.stringify({ light: "sage", dark: "plum" })],
+    ]);
+    const phoneSync = () =>
+      syncCycle({
+        db: phoneDb,
+        splits: creditSplits(),
+        account: "ana@example.com",
+        transport: {
+          request: async (method, path, body) => {
+            const response = await app.service.request(method, path, {
+              session: phone,
+              ...(body === null ? {} : { body, headers: { "content-type": "application/json" } }),
+            });
+            return { status: response.status, body: await response.text() };
+          },
+        },
+        preferences: {
+          value: (key) => values.get(key) ?? null,
+          apply: (key, value) => {
+            if (value === null) values.delete(key);
+            else values.set(key, value);
+          },
+        },
+        now: Date.now,
+        songsChanged: false,
+        wait: async () => {},
+      });
+    const phoneTheme = () => themeFor(readThemeChoice(values.get("settings.theme") ?? null));
+    stampPreference(phoneDb, "settings.theme", Date.now());
+    await phoneSync();
+    const { clock, pass } = fakeClock();
+    const { runtime, exposed, themes } = connect(file, undefined, {
+      service: app.open(),
+      clock,
+    });
+    const wave = exposed.get("wave") as WaveBridge;
+    try {
+      await wave.account.signIn();
+      await until(async () => (await wave.account.view()).theme !== null);
+      // Main hears of a pulled theme, for the window's frame.
+      assert.equal(themeFor(readThemeChoice(themes.at(-1) ?? null)).dark.background, "#140c17");
+      // The edit is made to the theme the phone pushed: its light background stays.
+      await wave.settings.editTheme({ kind: "custom", group: "secondary", hex: "#e8c454" });
+      await pass(10_000);
+      await until(async () => {
+        await phoneSync();
+        return phoneTheme().dark.highlight === "#e8c454";
+      });
+      assert.equal(phoneTheme().light.background, "#e1eadc");
+      assert.equal(phoneTheme().dark.background, "#140c17");
     } finally {
       await runtime.dispose();
     }

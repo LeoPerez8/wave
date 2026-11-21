@@ -26,6 +26,7 @@ import {
   SEARCH_ONLINE_SETTING,
   libraryTableSortsFor,
   readSearchOnline,
+  readThemeEdit,
   writeSearchOnline,
 } from "@wave/core";
 import {
@@ -445,6 +446,12 @@ const createHandlers = (
             onAppearance(mode);
           })
         : refuse("settings.setAppearance", "invalid appearance"),
+    "settings.editTheme": ([raw]) => {
+      const edit = readThemeEdit(raw);
+      return edit === null
+        ? refuse("settings.editTheme", "invalid theme edit")
+        : Effect.map(Account, (it) => it.editTheme(edit));
+    },
     "settings.playback": () => playbackCall((p) => p.settings()),
     "settings.setPlayback": ([change]) =>
       validPlaybackSettings(change)
