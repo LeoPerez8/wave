@@ -20,6 +20,7 @@ import Animated, { useAnimatedStyle } from "react-native-reanimated";
 import { CELL } from "@/catalog/grid";
 import { IconButton } from "@/components/IconButton";
 import type { NativeYtSong } from "@/native/waveYtMusic";
+import { ACTION_ICONS } from "@/playback/actionIcons";
 import { cycleRepeat, toggleShuffle } from "@/playback/actions";
 import { useQueue } from "@/playback/hooks";
 import { nowPlayingSlotLabel, nowPlayingSlotTitle } from "@/settings/nowPlayingButtons";
@@ -31,6 +32,7 @@ import { useShuffleControl } from "./ShuffleMenu";
 import { SleepTimerButton } from "./SleepTimer";
 import { AddToPlaylistButton, DislikeButton, DownloadButton } from "./SongButtons";
 import { useSlotDragGesture, type useNowPlayingSlotDrag } from "./slotDrag";
+import type { SongMenuSlotAction } from "./songMenuSlots";
 
 type IconProps = { size?: number; color?: string; strokeWidth?: number };
 
@@ -79,6 +81,11 @@ export interface SlotContext {
   readonly share: () => void;
   /** Starts edit mode, as a long press on any slot does. */
   readonly edit: () => void;
+  /**
+   * Runs the playing song's card's Magic Queue, Go to Artist or Go to Album,
+   * as the card does (`usePlayingSongMenu`).
+   */
+  readonly runSongMenu: (action: SongMenuSlotAction) => void;
 }
 
 /** Shuffle: teal while on, with the icon and name of the chosen kind of shuffle. */
@@ -112,10 +119,40 @@ function RepeatSlot({ change }: { change: SlotChange }) {
 }
 
 /**
+ * Magic Queue, Go to Artist or Go to Album: the playing song's card's entry
+ * of the same name, with its icon and label. [off] shows it disabled, where
+ * the card doesn't offer it (Core's `nowPlayingSlotShow`).
+ */
+function SongMenuSlot({
+  action,
+  off,
+  context,
+  change,
+}: {
+  action: SongMenuSlotAction;
+  off: boolean;
+  context: SlotContext;
+  change: SlotChange;
+}) {
+  const { strings } = useLocalisation();
+  return (
+    <IconButton
+      {...change}
+      icon={ACTION_ICONS[action]}
+      label={strings.itemActions.labels[action]}
+      tone="secondary"
+      disabledTone="tertiary"
+      disabled={off}
+      onPress={() => context.runSongMenu(action)}
+    />
+  );
+}
+
+/**
  * The button slot [slot] of Now Playing holds (0 to 4 for the footer's, then
  * the transport's left and right), for [action]. A tap runs it; a long press
  * starts edit mode. [off] shows it disabled (Dislike while an unsearched
- * entry's search runs).
+ * entry's search runs, Go to Album on a song without an album).
  */
 export function SlotButton({
   action,
@@ -185,10 +222,17 @@ export function SlotButton({
           change={change}
         />
       );
+    case "magicQueue":
+    case "goToArtist":
+    case "goToAlbum":
+      return <SongMenuSlot action={action} off={off} context={context} change={change} />;
   }
 }
 
-/** Each action's glyph on its slot in edit mode; Shuffle's is the chosen kind's. */
+/**
+ * Each action's glyph on its slot in edit mode; Shuffle's is the chosen
+ * kind's, and the song menu's entries have the card's icons.
+ */
 const EDIT_ICONS: Readonly<Record<Exclude<NowPlayingAction, "shuffle">, ComponentType<IconProps>>> =
   {
     lyrics: IconQuote,
@@ -199,6 +243,9 @@ const EDIT_ICONS: Readonly<Record<Exclude<NowPlayingAction, "shuffle">, Componen
     repeat: IconRepeat,
     share: IconShare3,
     dislike: IconCircleMinus,
+    magicQueue: ACTION_ICONS.magicQueue,
+    goToArtist: ACTION_ICONS.goToArtist,
+    goToAlbum: ACTION_ICONS.goToAlbum,
   };
 
 /** A slot's place: the size of its button. */

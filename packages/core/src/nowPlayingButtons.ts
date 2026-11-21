@@ -3,8 +3,8 @@
  * Settings › Layout › Now Playing): five footer slots under the transport,
  * then one on each side of it, left of Previous and right of Next. Related
  * and Song menu have places of their own (the chevron beside the title, the
- * header's button), so no slot holds them. Dislike is offered, in no slot by
- * default.
+ * header's button), so no slot holds them. Dislike, Magic Queue, Go to
+ * Artist and Go to Album are offered, in no slot by default.
  */
 
 /** What a slot can hold. */
@@ -17,7 +17,10 @@ export type NowPlayingAction =
   | "shuffle"
   | "repeat"
   | "share"
-  | "dislike";
+  | "dislike"
+  | "magicQueue"
+  | "goToArtist"
+  | "goToAlbum";
 
 /** A slot: an action, or null for None (no button). */
 export type NowPlayingSlot = NowPlayingAction | null;
@@ -61,10 +64,15 @@ export const NOW_PLAYING_ACTIONS: readonly NowPlayingAction[] = [
   "repeat",
   "share",
   "dislike",
+  "magicQueue",
+  "goToArtist",
+  "goToAlbum",
 ];
 
-const isSlot = (value: unknown): value is NowPlayingSlot =>
-  value === null || NOW_PLAYING_ACTIONS.some((action) => action === value);
+const isAction = (value: unknown): value is NowPlayingAction =>
+  NOW_PLAYING_ACTIONS.some((action) => action === value);
+
+const isSlot = (value: unknown): value is NowPlayingSlot => value === null || isAction(value);
 
 /** [count] slots, each an action or None, no action twice. */
 const isSlots = (value: unknown, count: number): value is readonly NowPlayingSlot[] => {
@@ -74,6 +82,16 @@ const isSlots = (value: unknown, count: number): value is readonly NowPlayingSlo
 };
 
 const isButtons = (value: unknown): value is NowPlayingButtons => isSlots(value, 7);
+
+/**
+ * [value] with each slot holding a name this Wave doesn't know (a newer
+ * Wave's action, or one no slot holds any more) read as empty, so the slot
+ * shows nothing and the others read as saved; anything else as it is.
+ */
+const withUnknownEmpty = (value: unknown): unknown =>
+  Array.isArray(value)
+    ? value.map((slot: unknown) => (typeof slot === "string" && !isAction(slot) ? null : slot))
+    : value;
 
 /** What [stored] holds as JSON; undefined when it isn't JSON. */
 const parsed = (stored: string): unknown => {
@@ -156,15 +174,16 @@ const convertedRow = (previousRow: string | null): NowPlayingButtons | null => {
 /**
  * The slots a stored value holds. With nothing stored, an edited row from
  * before ([previousRow]) is kept, converted to seven slots; with none, the
- * default shows. Unreadable JSON or anything but seven slots of known
- * actions, each once (a newer Wave's action included), reads as the default.
+ * default shows. A slot holding an action this Wave doesn't know (a newer
+ * Wave's) reads as empty. Unreadable JSON or anything but seven slots, each
+ * action once, reads as the default.
  */
 export const readNowPlayingButtons = (
   stored: string | null,
   previousRow: string | null = null,
 ): NowPlayingButtons => {
   if (stored === null) return convertedRow(previousRow) ?? DEFAULT_BUTTONS;
-  const slots = parsed(stored);
+  const slots = withUnknownEmpty(parsed(stored));
   return isButtons(slots) ? slots : DEFAULT_BUTTONS;
 };
 
@@ -250,6 +269,16 @@ export const moveNowPlayingButton = (
 export type NowPlayingSlotSong = "nothing" | "unsearched" | "song";
 
 /**
+ * The actions that run the entry of the same name on the playing song's card
+ * (its menu, Core's `itemActions` or `ytSongActions` with `playing` set).
+ */
+const SONG_MENU_ACTIONS: ReadonlySet<NowPlayingAction> = new Set([
+  "magicQueue",
+  "goToArtist",
+  "goToAlbum",
+]);
+
+/**
  * The actions that need a song on to show: with nothing playing their slots
  * stay empty. Queue is one, its screen being the playing song's.
  */
@@ -259,20 +288,37 @@ const NEEDS_SONG: ReadonlySet<NowPlayingAction> = new Set([
   "download",
   "share",
   "dislike",
+  ...SONG_MENU_ACTIONS,
 ]);
 
 /**
  * How slot [action]'s button shows with [song] on: hidden (its slot stays
  * empty), off (it shows disabled) or on. Dislike is off while an unsearched
  * entry's search runs, since there is no song yet to keep a dislike under.
+ * Magic Queue, Go to Artist and Go to Album run the playing song's card's
+ * entry of the same name, so each is on only while that card offers it
+ * ([menu], the card's actions): off while an unsearched entry's search runs,
+ * which has no card yet, and off for a song the entry doesn't apply to (Go to
+ * Album on a song without an album, Magic Queue with YT Music off on a
+ * streamed song).
  */
 export const nowPlayingSlotShow = (
   action: NowPlayingAction,
   song: NowPlayingSlotSong,
+  menu: readonly string[] = [],
 ): "hidden" | "off" | "on" => {
   if (song === "nothing") return NEEDS_SONG.has(action) ? "hidden" : "on";
+  if (SONG_MENU_ACTIONS.has(action)) return song === "song" && menu.includes(action) ? "on" : "off";
   return song === "unsearched" && action === "dislike" ? "off" : "on";
 };
+
+/**
+ * Whether slot [action] runs the playing song's card's entry of the same name
+ * (Magic Queue, Go to Artist, Go to Album), which `nowPlayingSlotShow` needs
+ * the card's actions for.
+ */
+export const nowPlayingSlotRunsSongMenu = (action: NowPlayingAction): boolean =>
+  SONG_MENU_ACTIONS.has(action);
 
 /**
  * How the song menu button (⋯) in Now Playing's header shows with [song] on:
