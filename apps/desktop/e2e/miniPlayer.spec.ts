@@ -121,11 +121,29 @@ test("the mini player opens from the player bar and the tray, controls playback 
     await mini.screenshot({ path: join(shots, `mini-player-${process.platform}.png`) });
 
     // Its buttons skip, pause, play and star, and both windows follow.
+    const view = () =>
+      page.evaluate(() =>
+        (window as unknown as { wave: WaveBridge }).wave.playback
+          .view()
+          .then((v) => ({ title: v.current?.title, state: v.status.state, at: v.status.positionMs })),
+      );
+    const t0 = Date.now();
+    console.log("DIAG before-next", JSON.stringify(await view()));
     await mini.getByRole("button", { name: "Next", exact: true }).click();
+    const t1 = Date.now();
     await expect(mini.getByText("Mini Song 2", { exact: true })).toBeVisible();
     await expect(page.locator(".player-bar .player-title").first()).toHaveText("Mini Song 2");
+    const t2 = Date.now();
+    const pre = await view();
     await mini.getByRole("button", { name: "Previous", exact: true }).click();
-    await expect(mini.getByText("Mini Song 1", { exact: true })).toBeVisible();
+    const t3 = Date.now();
+    console.log("DIAG timing", JSON.stringify({ nextClick: t1 - t0, checks: t2 - t1, previousClick: t3 - t2, pre }));
+    try {
+      await expect(mini.getByText("Mini Song 1", { exact: true })).toBeVisible();
+    } catch (e) {
+      console.log("DIAG FAIL", JSON.stringify({ after: await view(), mini: await mini.locator("body").innerText() }));
+      throw e;
+    }
     await mini.getByRole("button", { name: "Pause", exact: true }).click();
     await expect.poll(() => playerState(page)).toBe("paused");
     await mini.getByRole("button", { name: "Play", exact: true }).click();
