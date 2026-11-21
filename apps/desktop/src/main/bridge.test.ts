@@ -3168,7 +3168,10 @@ test("main refuses download calls with bad songs, actions, ids or pages", async 
       // An album page main hasn't read has no download to show or start.
       assert.equal(await call("downloads.ytList", { kind: "album", id: "MPREb_unread" }), null);
       // A mix that's gone (Home rebuilt its mixes) has no download either.
-      assert.equal(await call("downloads.ytList", { kind: "discoverMix", id: "artist:gone" }), null);
+      assert.equal(
+        await call("downloads.ytList", { kind: "discoverMix", id: "artist:gone" }),
+        null,
+      );
       await assert.rejects(
         call("downloads.ytList", { kind: "discoverMix", id: "x".repeat(201) }),
         /Refused/,

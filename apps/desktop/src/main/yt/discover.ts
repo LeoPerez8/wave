@@ -281,9 +281,8 @@ export const createDiscover = (deps: DiscoverDeps): DiscoverShape => {
     placed: (id) => {
       const mix = built?.mixes.find((found) => found.id === id);
       if (mix === undefined) return undefined;
-      const has =
-        deps.track ??
-        ((ids) => (trackId: number) => ids.has(trackId))(new Set(deps.library().trackIds));
+      const ids = deps.track === undefined ? new Set(deps.library().trackIds) : undefined;
+      const has = (trackId: number) => deps.track?.(trackId) ?? ids?.has(trackId) === true;
       return placeDiscoverMixSongs(mix, {
         find: (song) => deps.find?.(song) ?? null,
         track: (trackId) => (has(trackId) ? trackId : null),

@@ -55,7 +55,9 @@ test("a Discover mix opens its page from Home and Discover, plays, shuffles, dow
     const page = await app.firstWindow();
     await expect(page.getByTestId("home")).toBeVisible();
     // The Library's song as main's rows carry it: Discover's Magic Queue row reads it.
-    const library = (await page.evaluate(() => (window as unknown as { wave: WaveBridge }).wave.discover.picks())).items[0]!;
+    const library = (
+      await page.evaluate(() => (window as unknown as { wave: WaveBridge }).wave.discover.picks())
+    ).items[0]!;
     expect(library.title).toBe("Pink Moon");
     // Placed as Core places it: the Library song among the new ones.
     const fixture: DiscoverMixesView = {
