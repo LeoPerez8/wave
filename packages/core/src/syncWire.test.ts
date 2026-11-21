@@ -22,6 +22,7 @@ const play = (n: number): SyncPlayRow => ({
   counted: true,
   contextType: null,
   contextId: null,
+  contextPlaylistId: null,
   source: "phone",
   importedFrom: "blackplayer",
 });
@@ -64,10 +65,11 @@ describe("readPullPage", () => {
       { ...snapshot, artworkPath: 42 },
       { ...snapshot, thumbPath: {} },
     ];
+    const { contextPlaylistId: _, ...oldest } = play(1);
     const page = readPullPage(
       JSON.stringify({
         plays: [
-          play(1),
+          oldest,
           { ...play(2), snapshot: null, videoId: null },
           ...invalidSnapshots.map((invalidSnapshot, n) => ({
             ...play(n + 3),

@@ -160,6 +160,24 @@ test("a catalog song the Library has a file of shows as the Library song, once",
   }
 });
 
+test("a catalog song stays out when the Library has its recording under no video id", async () => {
+  const db = await openTestDatabase();
+  try {
+    // A CD rip: the same recording as the catalog's "v-rip", with no video id.
+    const rip = addTrack(db, { title: "Streamed v-rip", artist: "Someone" });
+    const unplayed = addTrack(db, { title: "Unplayed" });
+    const store = await loadLibraryStore(root, db);
+    keep(store, [streamedSong("v-rip"), streamedSong("v1"), streamedSong("v2")]);
+    Effect.runSync(store.recordPlay(play(rip), false));
+    assert.deepEqual(
+      shown(page(store)).map(String).toSorted(),
+      ["v1", "v2", String(unplayed)].toSorted(),
+    );
+  } finally {
+    closeTestDatabase(db);
+  }
+});
+
 test("explicit catalog songs stay out while Don't play explicit is on", async () => {
   const db = await openTestDatabase();
   try {

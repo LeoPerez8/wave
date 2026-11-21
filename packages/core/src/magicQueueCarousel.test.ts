@@ -6,9 +6,11 @@ import {
   catalogueOf,
   isRecent,
   magicQueueCarouselPage,
+  magicQueueCarouselKeptPage,
   magicQueueCarouselPageLabel,
   magicQueueCarouselPageTitle,
   magicQueueCarouselPages,
+  magicQueueCarouselRestarts,
   mostListenedRecently,
   recentPlaysWindow,
   type SongPlayTotals,
@@ -141,6 +143,64 @@ describe("magicQueueCarouselPage", () => {
 
   test("falls back to the first page when the kept one is left out", () => {
     assert.equal(magicQueueCarouselPage(["magic-queue"], "most-listened-recently"), 0);
+  });
+});
+
+describe("magicQueueCarouselKeptPage", () => {
+  test("remembers the first page drawn when none is kept", () => {
+    assert.equal(magicQueueCarouselKeptPage(["magic-queue", "discoveries"], null), "magic-queue");
+    assert.equal(magicQueueCarouselKeptPage([], null), null);
+  });
+
+  test("a page joining before the one in sight leaves that page in sight", () => {
+    const first = magicQueueCarouselKeptPage(["magic-queue"], null);
+    const joined = ["most-listened-recently", "magic-queue"] as const;
+    assert.equal(magicQueueCarouselPage(joined, magicQueueCarouselKeptPage(joined, first)), 1);
+  });
+
+  test("keeps a page that is missing, so the row returns to it", () => {
+    assert.equal(magicQueueCarouselKeptPage(["magic-queue"], "discoveries"), "discoveries");
+  });
+});
+
+describe("magicQueueCarouselRestarts", () => {
+  const row = (pages: readonly string[], index: number, width = 400) => ({ width, pages, index });
+
+  test("a swipe to another page leaves the row as it is", () => {
+    const pages = ["recent", "queue", "discoveries"];
+    assert.equal(magicQueueCarouselRestarts(row(pages, 0), row(pages, 1)), false);
+    assert.equal(magicQueueCarouselRestarts(row(pages, 2), row(pages, 1)), false);
+  });
+
+  test("a page joining or leaving after the one in sight leaves the row as it is", () => {
+    const before = row(["recent", "queue"], 1);
+    assert.equal(
+      magicQueueCarouselRestarts(before, row(["recent", "queue", "discoveries"], 1)),
+      false,
+    );
+    assert.equal(
+      magicQueueCarouselRestarts(row(["recent", "queue", "discoveries"], 1), before),
+      false,
+    );
+  });
+
+  test("a page joining or leaving before the one in sight starts the row over", () => {
+    assert.equal(magicQueueCarouselRestarts(row(["queue"], 0), row(["recent", "queue"], 1)), true);
+    assert.equal(magicQueueCarouselRestarts(row(["recent", "queue"], 1), row(["queue"], 0)), true);
+    assert.equal(
+      magicQueueCarouselRestarts(row(["recent", "queue"], 1), row(["other", "queue"], 1)),
+      true,
+    );
+  });
+
+  test("a change of width starts the row over", () => {
+    const pages = ["recent", "queue"];
+    assert.equal(magicQueueCarouselRestarts(row(pages, 1), row(pages, 1, 401)), true);
+  });
+
+  test("the same row doesn't start over", () => {
+    const pages = ["recent", "queue"];
+    assert.equal(magicQueueCarouselRestarts(row(pages, 1), row([...pages], 1)), false);
   });
 });
 
