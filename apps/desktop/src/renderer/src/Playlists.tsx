@@ -46,6 +46,8 @@ interface Options {
   readonly failed: (message: string) => void;
   /** Reads the player, the rows and the sidebar again once an edit changed them. */
   readonly changed: () => void;
+  /** From Spotify's import started: Bring your music marks the source. */
+  readonly importStarted?: (source: "spotify") => void;
 }
 
 type Naming =
@@ -53,7 +55,7 @@ type Naming =
   | { readonly kind: "rename"; readonly initial: string; readonly playlistId: number };
 
 /** The dialogs, menu and toast playlist edits show, and how to open them. */
-export function usePlaylistEdits({ go, deleted, failed, changed }: Options) {
+export function usePlaylistEdits({ go, deleted, failed, changed, importStarted }: Options) {
   /** Counts edits the player's revision misses (a playlist's image), for whatever shows them. */
   const [edits, setEdits] = useState(0);
   const [naming, setNaming] = useState<Naming>();
@@ -313,6 +315,7 @@ export function usePlaylistEdits({ go, deleted, failed, changed }: Options) {
       {summary && <SummaryDialog summary={summary} onClose={() => setSummary(undefined)} />}
       {fromSpotify && (
         <SpotifyImportDialog
+          onStarted={() => importStarted?.("spotify")}
           onImported={importedFromSpotify}
           onClose={() => setFromSpotify(false)}
         />

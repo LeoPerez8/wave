@@ -9,6 +9,8 @@ export interface AccountView {
   readonly deletionSent: boolean;
   /** The invitation to sign in is due: the first scan finished and it wasn't answered. */
   readonly invitation: boolean;
+  /** The Bring your music card is due: it follows the invitation and wasn't answered. */
+  readonly bringYourMusic: boolean;
   /** Goes up when the account changed the Library: the window reads its lists again. */
   readonly revision: number;
   /** The account's theme choice (the phone's `settings.theme` value), or null. */

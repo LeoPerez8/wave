@@ -37,6 +37,7 @@ import { FolderSettings } from "./FolderSettings.tsx";
 import { SearchOnlineSetting } from "./SearchOnlineSetting.tsx";
 import { SearchPage } from "./SearchPage.tsx";
 import { AccountSettings, SignInInvitation } from "./AccountSettings.tsx";
+import { BringYourMusic, type MusicSource } from "./BringYourMusic.tsx";
 import { YtAccountSettings } from "./YtAccountSettings.tsx";
 import { PlaybackSettings } from "./PlaybackSettings.tsx";
 import { WindowSettings } from "./WindowSettings.tsx";
@@ -210,6 +211,8 @@ export function App() {
   /** One collection checked through its menu's Select keeps its own bar. */
   const collectionSelection =
     pickedSongs === undefined && pickCheckboxes(picks) ? onlyCollection(picks) : undefined;
+  /** The sources Bring your music started an import from; the marks last for this launch. */
+  const [bringing, setBringing] = useState<ReadonlySet<MusicSource>>(new Set());
   const playlistEdits = usePlaylistEdits({
     go: (next) => go(next),
     deleted: (id) => {
@@ -218,6 +221,7 @@ export function App() {
     },
     failed: (message) => setError(message),
     changed: playback.refresh,
+    importStarted: (source) => setBringing((previous) => new Set(previous).add(source)),
   });
   const search = useRef<HTMLInputElement>(null);
   const content = useRef<HTMLDivElement>(null);
@@ -253,6 +257,33 @@ export function App() {
     setNowPlaying(false);
     setSetting("accounts");
     if (route.kind !== "settings") go({ kind: "settings" });
+  };
+  const turnOnYtMusic = () => {
+    setYtMusic(true);
+    void window.wave.settings.setYtMusic(true).catch(() => {
+      setYtMusic(false);
+      failed();
+    });
+  };
+  /**
+   * From YT Music on Bring your music. The desktop has no YT Music playlist picker yet: what
+   * exists is YouTube's sign-in and the account's playlists in Settings › Accounts, so this
+   * opens them, signing in first when signed out. Nothing here starts an import, so the source
+   * never reads as importing. The picker, once there is one, replaces this body and says its
+   * import started with `setBringing`, as From Spotify does through `importStarted`.
+   */
+  const importFromYtMusic = () => {
+    setSetting("accounts");
+    if (route.kind !== "settings") go({ kind: "settings" });
+    // Read now: the polled view is still empty right after Turn On YT Music.
+    void window.wave.ytAccount
+      .view()
+      .then(({ account }) =>
+        account?.kind === "signedOut" && account.action !== "signingIn"
+          ? window.wave.ytAccount.signIn()
+          : undefined,
+      )
+      .catch(failed);
   };
   const back = useCallback(() => {
     setSelecting(undefined);
@@ -984,6 +1015,17 @@ export function App() {
           </p>
         )}
         {account?.invitation && <SignInInvitation onError={failed} />}
+        {account?.bringYourMusic && (
+          <BringYourMusic
+            ytMusic={ytMusic}
+            importing={bringing}
+            onImport={(source) =>
+              source === "spotify" ? playlistEdits.importFromSpotify() : importFromYtMusic()
+            }
+            onTurnOnYtMusic={turnOnYtMusic}
+            onError={failed}
+          />
+        )}
         {collectionSelection ? (
           <CollectionSelectionBar
             key={`${collectionSelection.kind}:${collectionSelection.id}`}

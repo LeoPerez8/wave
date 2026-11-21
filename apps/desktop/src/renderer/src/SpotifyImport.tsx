@@ -51,9 +51,12 @@ const readLibrary = async (signIn: boolean, signingIn: () => void): Promise<Stat
 };
 
 export function SpotifyImportDialog({
+  onStarted,
   onImported,
   onClose,
 }: {
+  /** Import or Import & Download was pressed with playlists ticked. */
+  readonly onStarted: () => void;
   /** Import ended: the playlists it made, and what it left out. */
   readonly onImported: (result: SpotifyImportResult) => void;
   readonly onClose: () => void;
@@ -105,6 +108,7 @@ export function SpotifyImportDialog({
 
   const run = async (picker: YtLibraryPicker, download: boolean) => {
     setState({ kind: "picking", picker, importing: true });
+    onStarted();
     try {
       const result = await bridge.run(
         picker.rows.flatMap((row) => (row.ticked ? [row.playlistId] : [])),

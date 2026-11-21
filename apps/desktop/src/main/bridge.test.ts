@@ -40,7 +40,7 @@ import { libraryLayer } from "./database.ts";
 import { Playback, playbackLayer } from "./playback/playback.ts";
 import { registerBridge, type IpcHandler } from "./bridge.ts";
 import { DesktopLibrary, desktopLibraryLayer } from "./library/library.ts";
-import { preference } from "./preferences.ts";
+import { preference, savePreference } from "./preferences.ts";
 import { ytMusicLayer } from "./yt/ytMusic.ts";
 import { desktopLinksLayer } from "./links/layer.ts";
 import { cardImagesLayer } from "./cards/cardImages.ts";
@@ -1948,7 +1948,7 @@ const until = async (ready: () => Promise<boolean>): Promise<void> => {
   assert.fail("never ready");
 };
 
-test("a build with no sync service shows no Sign In and no invitation", async () => {
+test("a build with no sync service shows no Sign In, no invitation and no Bring your music", async () => {
   await withFile(async (file) => {
     mkdirSync(join(dirname(file), "Music"));
     const { runtime, exposed } = connect(file);
@@ -1958,6 +1958,7 @@ test("a build with no sync service shows no Sign In and no invitation", async ()
       const view = await wave.account.view();
       assert.deepEqual(view.account, { kind: "unavailable" });
       assert.equal(view.invitation, false);
+      assert.equal(view.bringYourMusic, false);
       assert.equal(view.theme, null);
     } finally {
       await runtime.dispose();
@@ -2006,6 +2007,58 @@ test("the invitation to sign in shows once the first scan finished, until it's a
       assert.equal((await reopened.account.view()).invitation, false, "answered for good");
     } finally {
       await second.runtime.dispose();
+    }
+  });
+});
+
+test("Bring your music shows after the invitation, again on the next start, until it's answered", async () => {
+  await withFile(async (file) => {
+    mkdirSync(join(dirname(file), "Music"));
+    const app = await desktop();
+    const launch = async (check: (wave: WaveBridge) => Promise<void>) => {
+      const { runtime, exposed } = connect(file, undefined, { service: app.open() });
+      const wave = exposed.get("wave") as WaveBridge;
+      try {
+        await until(async () => (await wave.library.scanStatus()).status === "done");
+        await check(wave);
+      } finally {
+        await runtime.dispose();
+      }
+    };
+    await launch(async (wave) => {
+      assert.equal((await wave.account.view()).bringYourMusic, false, "the invitation is first");
+      await wave.account.answerInvitation();
+      assert.equal((await wave.account.view()).bringYourMusic, true);
+    });
+    await launch(async (wave) => {
+      const view = await wave.account.view();
+      assert.equal(view.invitation, false);
+      assert.equal(view.bringYourMusic, true, "Wave closed before the card was answered");
+      await wave.account.answerBringYourMusic();
+      assert.equal((await wave.account.view()).bringYourMusic, false);
+    });
+    await launch(async (wave) => {
+      assert.equal((await wave.account.view()).bringYourMusic, false, "answered for good");
+    });
+  });
+});
+
+test("a computer that answered the invitation before Bring your music existed never gets the card", async () => {
+  await withFile(async (file) => {
+    mkdirSync(join(dirname(file), "Music"));
+    const app = await desktop();
+    const { runtime, exposed } = connect(file, undefined, { service: app.open() });
+    const wave = exposed.get("wave") as WaveBridge;
+    try {
+      await runtime.runPromise(
+        Effect.map(Database, (db) => savePreference(db, "firstRun.signInInvitation", "answered")),
+      );
+      await until(async () => (await wave.library.scanStatus()).status === "done");
+      const view = await wave.account.view();
+      assert.equal(view.invitation, false);
+      assert.equal(view.bringYourMusic, false);
+    } finally {
+      await runtime.dispose();
     }
   });
 });

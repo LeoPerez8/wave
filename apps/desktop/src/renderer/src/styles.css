@@ -763,6 +763,15 @@ h2 {
   padding: 7px 10px;
   color: var(--color-accent);
 }
+.bring-your-music-sources {
+  margin-top: 12px;
+  list-style: none;
+}
+.bring-your-music-sources li {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
 .player-bar {
   grid-column: 1/-1;
   display: grid;
