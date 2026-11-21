@@ -1344,6 +1344,19 @@ The mechanical checks are `apps/mobile/src/perf/performanceGuards.test.ts` (#729
 
 **React Compiler: off, the comparison is ready (#728).** Builds don't use the React Compiler until a phone comparison shows it helps; `docs/performance/728-react-compiler.md` holds the two runs (the same scenarios with the compiler off and on), what decides it and the behaviour checks. A perf build bundled with `EXPO_PUBLIC_WAVE_REACT_COMPILER=1` has it on and says so in its runs. Either way, a `useMemo` or `useCallback` reads every dependency it lists (the compiler drops the ones it doesn't, and a desktop guard checks it), and a hook that must read a changing outside value again on some change keeps that value in state rather than caching a call in render. If it is adopted, hand-written `useMemo` and `useCallback` the compiler covers are left to it and the rules above still apply.
 
+### Fluidity
+
+Wave has to feel instant on the weakest phone it serves (#1346). The **reference phone** is a Xiaomi 25118PC98G on Android 15, whose app log (0.72.0-ti and 0.74.0-ti, 2026-11-19 to 2026-11-21) showed every timed tap over budget and 142 freezes of 3 s or more, with a Library of only 727 songs. A goal is met when it holds on that phone.
+
+- **Tap budget.** Tap to first frame has a p90 within 50 ms, timed from the native touch, so a tap that waits behind a busy JS thread counts the wait. It covers tab switches, push and pop of every local screen (Home, Library and its pages, playlists, albums, artists, genres, Settings and its pages), Search, Now Playing open and close, and the Queue. Core's `TIMING_BUDGETS` hold these numbers.
+- **Real content in that frame.** A local screen draws its own data in its first frame, from memory. It never shows a skeleton that gets swapped out. A cold start draws the Home the user last saw, then updates it in place.
+- **Online screens** (online Search, YT Music artist and album pages, shared playlists) open within the same budget with what Wave already knows: the cache, and the tapped item's name and cover. What the network adds fades in without moving what's drawn.
+- **No JS block over 50 ms while a screen is shown**, also with downloads or a scan running. Library reads run off the JS thread. Play totals are kept up to date rather than summed on each read. Background JS work (Magic Queue, mixes, startup jobs, sync, scan reconciliation, download bookkeeping) runs in slices of at most 8 ms and pauses during a tap or a transition. A block over 50 ms writes an app log line naming the work. Download and scan work moves into the native module only if a run with them going shows taps past budget.
+- **Memory.** PSS stays under 500 MB on the reference phone. The data kept ready for screens, the Search index and the frozen hidden tabs are paid for by cuts elsewhere.
+- **Weak phones get simpler heavy effects.** The glass's blur and refraction, Now Playing's animated background and shadows get simpler where the phone's measured frame times say it can't keep up. A strong phone looks the same, and no feature is removed.
+- **Size.** The APK and bundle may grow when it buys speed.
+- **Evidence.** Each ticket's before and after runs go in `docs/performance/<issue>-<slug>.md` (Performance rules, 13). The goal is met when the reference phone's "Speed since" summary, after normal use on a release with all of #1346, gives every tap kind a p90 within 50 ms, with no freeze line and no low-memory kill. An emulator check fails on a JS block over 50 ms between phone runs.
+
 ## Testing Decisions
 
 - A good test exercises a module only through its public interface and asserts observable behaviour (resulting queue, counted/not counted, search results order, reconciled changes) — never internals. Tests should survive refactors of the implementation.
