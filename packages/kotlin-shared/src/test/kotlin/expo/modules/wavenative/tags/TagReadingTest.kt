@@ -252,6 +252,30 @@ class TagReadingTest {
     }
   }
 
+  /** A copy of the fixture [name] with an ISRC tag, as jaudiotagger writes one for its format. */
+  private fun withIsrc(name: String): java.io.File {
+    val file = Fixtures.tempDir().resolve(name)
+    Fixtures.file(name).copyTo(file)
+    val audio = AudioFileIO.read(file)
+    audio.tagOrCreateAndSetDefault.setField(FieldKey.ISRC, "USRC17607839")
+    AudioFileIO.write(audio)
+    return file
+  }
+
+  @Test
+  fun isrcTagInEveryFormat() {
+    for (name in listOf("tagged.mp3", "tagged.flac", "tagged.ogg", "tagged-aac.m4a")) {
+      assertEquals(name, "USRC17607839", reader.read(withIsrc(name)).isrc)
+    }
+  }
+
+  @Test
+  fun noIsrcWhenNoneIsTagged() {
+    for (name in listOf("tagged.mp3", "tagged.flac", "tagged.ogg", "tagged-aac.m4a", "tagged.opus", "untagged.mp3")) {
+      assertNull(name, reader.read(Fixtures.file(name)).isrc)
+    }
+  }
+
   private companion object {
     /** What every `lyrics.*` fixture carries (see `generate.sh`). */
     const val FIXTURE_LYRICS = "[00:00.50]Olá, onda\n[00:01.00]Second line"

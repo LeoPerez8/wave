@@ -389,6 +389,7 @@ export const saveBatch = (
             artworkHash: track.artworkHash,
             hasLyrics: track.hasLyrics,
             explicit: track.explicit,
+            isrc: track.isrc ?? null,
             ...loudnessColumns(track),
             addedAt: now,
             scannedAt: now,
@@ -430,6 +431,7 @@ export const saveBatch = (
             tagTrackPeak: excluded(t.tagTrackPeak),
             tagAlbumGain: excluded(t.tagAlbumGain),
             tagAlbumPeak: excluded(t.tagAlbumPeak),
+            isrc: excluded(t.isrc),
             // Wave's measurement stays only while the file is the one it was made of.
             measuredLoudness: keptMeasurement(t.measuredLoudness),
             measuredPeak: keptMeasurement(t.measuredPeak),

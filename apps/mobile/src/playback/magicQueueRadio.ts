@@ -113,6 +113,10 @@ export const magicQueueYtCandidates = (
       mood === null
         ? new Map()
         : yield* store.djMoodFeatures(catalogVideos).pipe(Effect.orElseSucceed(() => new Map()));
+    const libraryMoodFeatures =
+      mood === null
+        ? new Map()
+        : yield* store.djLibraryMoodFeatures().pipe(Effect.orElseSucceed(() => new Map()));
     const genreRows =
       mood === null
         ? []
@@ -163,6 +167,7 @@ export const magicQueueYtCandidates = (
         mood,
         moodFeatures,
         moodGenres,
+        libraryMoodFeatures,
       );
     const radioRanked = (
       group: readonly SongRadioSeed[],
