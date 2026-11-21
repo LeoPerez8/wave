@@ -1,6 +1,5 @@
 import {
   ARTIST_MIX_COUNT,
-  DEFAULT_DJ_SETTINGS,
   djCanStart,
   djCells,
   djGrid,
@@ -8,6 +7,7 @@ import {
   djOpeningGrid,
   djPagesNeeded,
   djReduce,
+  djReopened,
   djSeedTiles,
   djSelectable,
   djSelected,
@@ -61,6 +61,7 @@ import { DjAdjust } from "./DjAdjust";
 import { readDjAlbums } from "./djAlbums";
 import { DjSearch } from "./DjSearch";
 import { runDjDone, type DjDone } from "./djDone";
+import { djRemembered } from "./djRemembered";
 import { readDjSimilar } from "./djSimilar";
 
 /** The Library's artists by id, for the tiles that show one's image. */
@@ -147,7 +148,9 @@ const albumsOver = (library: MixIndexes): Promise<DjAlbum[]> => {
  * the last taste profile and artist graph, or with no taste signal the chart
  * artists of the Artist mixes. [state] is null until the grid has tiles;
  * until then [opening] says what stands in their place (null while the
- * Library part is read). The first tiles stay for the whole opening. A tile
+ * Library part is read). The tiles the last DJ was started from are selected
+ * in it, and are in it whether or not it would show them (Core's
+ * `djReopened`), a remembered album as the albums read here know it. The first tiles stay for the whole opening. A tile
  * selected for the first time, whichever source it came from, opens its
  * similar artists from the last artist graph; a row that isn't full reads the
  * artist's page once (Core's `djPagesNeeded`), and whatever comes of it
@@ -192,8 +195,18 @@ const useDjGrid = () => {
     if (albums === null) return null;
     return djOpeningGrid({ ...gridSources(library), albums, artistMixes });
   }, [library, albums, artistMixes]);
-  if (state === null && opening?.kind === "tiles") setState(djOpened(opening.tiles));
   const libraryArtists = library === null || library === "failed" ? NO_ARTISTS : library.artists;
+  if (state === null && opening !== null && opening.kind !== "skeleton") {
+    // The tiles the last DJ was started from are selected, and in the grid
+    // even when it has nothing else to show.
+    const reopened = djReopened({
+      grid: opening.kind === "tiles" ? opening.tiles : [],
+      remembered: djRemembered.get().tiles,
+      artists: libraryArtists,
+      albums: albums ?? [],
+    });
+    if (reopened.tiles.length > 0) setState(reopened);
+  }
   const artists = useMemo(
     (): LibraryArtists => new Map(libraryArtists.map((artist) => [artist.id, artist])),
     [libraryArtists],
@@ -382,9 +395,11 @@ function PlaceholderTile({ size, fontScale }: { size: number; fontScale: number 
 
 /**
  * DJ (docs/spec.md, DJ): the owner picks the artists and albums a Magic
- * Queue starts from. A tap selects or unselects a tile, and a tile selected
- * for the first time opens up to 3 tiles right after it (an artist's similar
- * artists; an album's artist, then theirs); Done reads the session's
+ * Queue starts from. DJ opens with the selection and the choices its last
+ * queue was started with, kept on this phone (`djRemembered`). A tap selects
+ * or unselects a tile, and a tile selected for the first time in an opening
+ * opens up to 3 tiles right after it (an artist's similar artists; an
+ * album's artist, then theirs); Done reads a new session's
  * first batch and plays it, then closes; Close leaves the queue as it is.
  * Adjust, beside Done, shows the Adjust screen in the grid's place: its back
  * arrow (and Android's Back) returns to the grid, which stayed as it was, and
@@ -402,7 +417,7 @@ export function DjScreen() {
   const { size } = magicQueueGrid(available, fontScale);
   const { state: picked, opening, artists, toggle, add } = useDjGrid();
   const [done, setDone] = useState<DjDone>("idle");
-  const [settings, setSettings] = useState(DEFAULT_DJ_SETTINGS);
+  const [settings, setSettings] = useState(() => djRemembered.get().settings);
   const [adjusting, setAdjusting] = useState(false);
   const [searching, setSearching] = useState(false);
   const gridScroll = useRef<ComponentRef<typeof ScrollView>>(null);
@@ -426,7 +441,11 @@ export function DjScreen() {
       done,
       () => appRuntime.runPromise(startDjMagicQueue(seed, settings)),
       setDone,
-      () => router.back(),
+      () => {
+        // The queue started: this DJ is the one the next opening shows.
+        djRemembered.set({ tiles: seed, settings });
+        router.back();
+      },
     );
   return (
     <View className="flex-1 bg-background" style={{ paddingTop: insets.top + 4 }}>

@@ -1,7 +1,10 @@
 import {
   DJ_DISCOVERIES,
+  DJ_FILTERS,
   DJ_VARIETIES,
   djDiscoveryLabel,
+  djFilterOn,
+  djToggleFilter,
   type DjSettings,
   type SliderRange,
 } from "@wave/core";
@@ -10,6 +13,7 @@ import { ScrollView, Text, View } from "react-native";
 import { CELL, grid } from "@/catalog/grid";
 import { Hairline } from "@/catalog/Hairline";
 import { SettingsSlider } from "@/components/SettingsSlider";
+import { TextButton } from "@/components/TextButton";
 import { useLocalisation } from "@/localisation/localisation";
 
 /** Both sliders: three steps, from the left end to the right one. */
@@ -21,8 +25,11 @@ const choiceAt = <T,>(choices: readonly T[], value: number): T => choices[value 
 /**
  * DJ's Adjust screen (docs/spec.md, DJ): how the queue Done starts should
  * behave. Artist variety is how far it strays from the selected artists and
- * Music discovery how much of it is new. The choices are DJ's own: they
- * move no slider of Discover's and change no other queue or mix.
+ * Music discovery how much of it is new. Under them, the Filters chips:
+ * Trending and Lesser-known songs lean it to hits or to deep cuts, one at a
+ * time (Core's `djToggleFilter`), and New releases to recent records. The
+ * choices are DJ's own: they move no slider of Discover's and change no
+ * other queue or mix.
  */
 export function DjAdjust({
   settings,
@@ -66,6 +73,31 @@ export function DjAdjust({
             onChange({ ...settings, discovery: choiceAt(DJ_DISCOVERIES, value) })
           }
         />
+      </View>
+      <Hairline />
+      <Text
+        accessibilityRole="header"
+        className="pt-3 font-sans text-title3 font-normal text-foreground"
+      >
+        {strings.dj.filters}
+      </Text>
+      <View className="flex-row flex-wrap" style={{ gap: CELL, paddingVertical: CELL * 1.5 }}>
+        {DJ_FILTERS.map((filter) => {
+          const on = djFilterOn(settings, filter);
+          return (
+            <TextButton
+              key={filter}
+              variant="pill"
+              tone="secondary"
+              label={strings.dj.filterNames[filter]}
+              selected={on}
+              accessibilityRole="checkbox"
+              accessibilityState={{ checked: on }}
+              onPress={() => onChange(djToggleFilter(settings, filter))}
+              style={{ paddingHorizontal: CELL * 2 }}
+            />
+          );
+        })}
       </View>
       <Hairline />
     </ScrollView>

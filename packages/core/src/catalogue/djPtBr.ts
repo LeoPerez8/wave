@@ -22,6 +22,12 @@ export const djPtBr: typeof djEn = {
   },
   musicDiscovery: "Descoberta de música",
   discoverySteps: { familiar: "Conhecidas", blend: "Misturar", discover: "Descobrir" },
+  filters: "Filtros",
+  filterNames: {
+    trending: "Em alta",
+    lesserKnown: "Músicas pouco conhecidas",
+    newReleases: "Lançamentos",
+  },
   search: "Buscar artistas e álbuns",
   searchPlaceholder: "Artistas, álbuns",
   searchNoMatches: "Nenhum artista ou álbum encontrado.",

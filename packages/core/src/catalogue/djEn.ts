@@ -30,6 +30,14 @@ export const djEn = {
   musicDiscovery: "Music discovery",
   /** Music discovery's steps: how much of the queue is new to the owner. */
   discoverySteps: { familiar: "Familiar", blend: "Blend", discover: "Discover" },
+  /** The group of chips under Adjust's sliders. */
+  filters: "Filters",
+  /** Adjust's filters: Trending and Lesser-known songs lean the queue to hits or deep cuts, New releases to recent records. */
+  filterNames: {
+    trending: "Trending",
+    lesserKnown: "Lesser-known songs",
+    newReleases: "New releases",
+  },
   /** The grid's search button, and what a screen reader calls its field. */
   search: "Search artists and albums",
   /** What the empty search field says. */
