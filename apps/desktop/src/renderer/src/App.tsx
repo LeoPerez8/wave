@@ -1,9 +1,11 @@
 import { VersionHistory } from "./VersionHistory.tsx";
 import { Links } from "./Links.tsx";
+import { FindField, findableList } from "./FindField.tsx";
 import {
   DESKTOP_PLAYLIST_LAYOUTS,
   PLAYLIST_SORTS,
   checkedTableRow,
+  hasFindQuery,
   homeSectionTitle,
   listDuration,
   readThemeChoice,
@@ -206,16 +208,33 @@ export function App() {
     readonly list: string;
     readonly selection: TableSelection;
   }>();
+  /** What the page's Find field holds, for the page it was typed on. */
+  const [finding, setFinding] = useState<{ readonly route: Route; readonly text: string }>();
+  const findList = findableList(route.kind);
+  const findText = finding?.route === route ? finding.text : "";
+  // The table reads again once typing pauses, as Listening History's Find does.
+  const [found, setFound] = useState(finding);
+  useEffect(() => {
+    const timer = setTimeout(() => setFound(finding), finding?.text === "" ? 0 : 200);
+    return () => clearTimeout(timer);
+  }, [finding]);
+  const foundText = found?.route === route ? found.text : "";
+  /** The Find the page's table, Play, Shuffle and Select All go by, when it finds by anything. */
+  const activeFind = findList !== undefined && hasFindQuery(foundText) ? foundText : undefined;
   /** The albums, artists, genres and playlists checked on a page, alone or with its songs. */
   const [picked, setPicked] = useState<{
     readonly route: Route;
+    readonly find: string | undefined;
     readonly picks: CollectionPicks;
   }>();
-  const picks = picked?.route === route ? picked.picks : undefined;
+  // A new Find lists other rows: what was checked under the last one is let go.
+  const picks = picked?.route === route && picked.find === activeFind ? picked.picks : undefined;
   const setPicks = (change: (picks: CollectionPicks | undefined) => CollectionPicks | undefined) =>
     setPicked((current) => {
-      const next = change(current?.route === route ? current.picks : undefined);
-      return next && { route, picks: next };
+      const next = change(
+        current?.route === route && current.find === activeFind ? current.picks : undefined,
+      );
+      return next && { route, find: activeFind, picks: next };
     });
   // Search lists songs beside collections: its checked songs act with them, under one bar.
   const searched = route.kind === "search" ? (route.query ?? "").trim() : undefined;
@@ -408,9 +427,21 @@ export function App() {
       route.kind === "homeSeeAll" ||
       isYtRoute(route)
         ? { kind: "songs" }
-        : route,
-    [route],
+        : activeFind === undefined
+          ? route
+          : { ...route, find: activeFind },
+    [route, activeFind],
   );
+  const focusList = () => content.current?.querySelector<HTMLElement>("[role=grid]")?.focus();
+  // Esc in the Find field gives the focus to the list, and again to the one the cleared Find lists.
+  const leftFind = useRef(false);
+  useEffect(() => {
+    if (!leftFind.current) return;
+    leftFind.current = false;
+    focusList();
+  }, [scope]);
+  /** How many rows the page's table lists, for the list it read them for. */
+  const [listed, setListed] = useState<{ readonly scope: BrowseScope; readonly total: number }>();
   const list = JSON.stringify(scope);
   const setSelection = (owner: string, selection: TableSelection | undefined) =>
     setSelecting((current) =>
@@ -444,6 +475,26 @@ export function App() {
     };
   };
   const table = selectionFor(list);
+  /** Songs and Favorites count the rows the Find finds while it narrows them. */
+  const songCount =
+    route.kind !== "songs" && route.kind !== "favorites"
+      ? counts.songs
+      : activeFind === undefined
+        ? counts[route.kind]
+        : listed?.scope === scope
+          ? listed.total
+          : undefined;
+  const findField = findList !== undefined && (
+    <FindField
+      list={findList}
+      value={findText}
+      onChange={(text) => setFinding({ route, text })}
+      onLeave={() => {
+        leftFind.current = true;
+        focusList();
+      }}
+    />
+  );
   // Says a download began, wherever it was asked for; a notice from before the window opened isn't news.
   const noticeSeen = useRef<number | null | undefined>(undefined);
   const notice = downloads?.notice;
@@ -612,7 +663,7 @@ export function App() {
   const open = (row: BrowseRow, index: number) => {
     if (collectionKind) go({ kind: collectionKind, id: row.id });
     else if (row.unavailable) setError(text.desktopLibrary.driveDisconnected);
-    else if (scope.kind === "artist" && scope.id !== undefined)
+    else if (scope.kind === "artist" && scope.id !== undefined && scope.find === undefined)
       // With Online, the page plays its Library songs and the ones YouTube Music adds.
       playback.run(
         window.wave.artistPage.play(scope.id, artistSection.pick, { library: index }, false),
@@ -649,7 +700,8 @@ export function App() {
     };
     // An artist's page with Online takes YouTube Music's songs too, and an album's its release's.
     const started =
-      target === scope && scope.kind === "artist" && scope.id !== undefined
+      // With a Find, the page plays the Library songs it finds.
+      target === scope && scope.kind === "artist" && scope.id !== undefined && !scope.find
         ? window.wave.artistPage.play(scope.id, artistSection.pick, null, shuffle)
         : target === scope && scope.kind === "album" && scope.id !== undefined && albumTracklist
           ? window.wave.artistPage.albumPlay(scope.id, albumSection.pick, null, shuffle)
@@ -687,9 +739,12 @@ export function App() {
   /** Sorts or arranges the Playlists list, then reads the window again. */
   const arrangePlaylists = (change: Promise<unknown>) =>
     void change.then(playback.refresh).catch(failed);
-  /** A playlist's Move Up and Move Down where the Playlists list shows it: in Custom only. */
+  /**
+   * A playlist's Move Up and Move Down where the Playlists list shows it: in Custom only, and not
+   * while a Find hides some of its neighbours.
+   */
   const playlistMoves = (playlistId: number): readonly MenuItem[] => {
-    const ids = playlistList?.sort === "custom" ? playlistList.ids : [];
+    const ids = playlistList?.sort === "custom" && activeFind === undefined ? playlistList.ids : [];
     const at = ids.indexOf(playlistId);
     if (at === -1) return [];
     // From the list as it is when chosen, not as the menu found it.
@@ -708,9 +763,15 @@ export function App() {
         : []),
     ];
   };
-  /** The Playlists page's rows drag into place in Custom, and not while playlists are checked. */
+  /**
+   * The Playlists page's rows drag into place in Custom, and not while playlists are checked or a
+   * Find narrows the list (a place among the rows found isn't one in the whole list).
+   */
   const reorderPlaylists =
-    route.kind === "playlists" && playlistList?.sort === "custom" && picks === undefined
+    route.kind === "playlists" &&
+    playlistList?.sort === "custom" &&
+    picks === undefined &&
+    activeFind === undefined
       ? (row: BrowseRow, to: number) =>
           arrangePlaylists(window.wave.playlists.moveInList(row.id, to))
       : undefined;
@@ -1122,6 +1183,7 @@ export function App() {
                   </button>
                 )}
               </div>
+              {findField}
             </div>
           </div>
         ) : route.kind === "ytArtist" ||
@@ -1131,11 +1193,11 @@ export function App() {
             <h1>{title}</h1>
             {(route.kind === "home" || route.kind === "songs" || route.kind === "favorites") && (
               <p className="secondary" data-testid="song-count">
-                {labels.songCount(route.kind === "favorites" ? counts.favorites : counts.songs)}
+                {songCount !== undefined && labels.songCount(songCount)}
               </p>
             )}
-            {/* Main plays the list as its table is sorted (browseTrackIds). */}
-            {(route.kind === "songs" || route.kind === "favorites") && counts[route.kind] > 0 && (
+            {/* Main plays the list as its table is sorted and found (browseTrackIds). */}
+            {(route.kind === "songs" || route.kind === "favorites") && (songCount ?? 0) > 0 && (
               <div className="hero-actions">
                 <button onClick={() => playList(false)}>
                   <Icon name="play" size={16} />
@@ -1149,7 +1211,13 @@ export function App() {
             )}
             {route.kind === "playlists" && (
               <p className="secondary" data-testid="playlist-count">
-                {text.playlists.playlistCount(playlistTotal)}
+                {text.playlists.playlistCount(
+                  activeFind === undefined
+                    ? playlistTotal
+                    : listed?.scope === scope
+                      ? listed.total
+                      : 0,
+                )}
               </p>
             )}
             {route.kind === "playlists" && (
@@ -1203,6 +1271,7 @@ export function App() {
                 </div>
               </div>
             )}
+            {findField}
           </div>
         )}
         {scanning && (
@@ -1255,6 +1324,7 @@ export function App() {
           picks && (
             <MixedSelectionBar
               picks={picks}
+              find={activeFind}
               songs={pickedSongs}
               revision={revision}
               actions={actions}
@@ -1583,6 +1653,8 @@ export function App() {
             {route.kind === "playlists" && playlistList?.layout === "grid" && !picks ? (
               <PlaylistGrid
                 revision={revision}
+                scope={scope}
+                onTotal={setListed}
                 onOpen={(row) => go({ kind: "playlist", id: row.id })}
                 onMenu={(row, at) =>
                   openCollectionMenu(
@@ -1603,6 +1675,7 @@ export function App() {
                   revision={revision}
                   onHero={setHero}
                   onSort={setShownSort}
+                  onTotal={setListed}
                   // A playlist's rows drag to a new place only where it shows its own order.
                   onPlace={
                     !picks &&

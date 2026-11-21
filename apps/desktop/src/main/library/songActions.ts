@@ -60,7 +60,9 @@ const rowKey = (song: ListedSong) => ("trackId" in song ? song.trackId : -song.i
 export const targetEntries = (db: LibraryDatabase, target: SongTarget): ListedSong[] => {
   const { scope } = target;
   const mixed =
-    scope.kind === "playlist" && scope.id !== undefined ? playlistSongs(db, scope.id) : undefined;
+    scope.kind === "playlist" && scope.id !== undefined
+      ? playlistSongs(db, scope.id, scope.find)
+      : undefined;
   const named = new Set("all" in target ? target.except : target.ids);
   const seen = new Set<number>();
   return (mixed ?? browseTrackIds(db, scope).map((id) => ({ trackId: Number(id) }))).filter(

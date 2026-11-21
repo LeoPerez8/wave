@@ -131,3 +131,17 @@ test("the page shows as a table until the grid is chosen, and keeps it", async (
     assert.equal(playlistListView(db).layout, "list");
   });
 });
+
+test("a Find narrows the list in the order chosen, and its total and ids follow it", async () => {
+  await withLibrary((db) => {
+    const [roadTrip, , roadWork] = make(db, "Road Trip", "Autumn", "Road Work");
+    sortPlaylistList(db, "added");
+    const found = { kind: "playlists", find: "road" } as const;
+    const page = browseLibrary(db, found, 0, 50);
+    assert.deepEqual(
+      [page.total, page.items.map((row) => row.title)],
+      [2, ["Road Work", "Road Trip"]],
+    );
+    assert.deepEqual(browseRowIds(db, found, 0, 10).items, [roadWork, roadTrip]);
+  });
+});

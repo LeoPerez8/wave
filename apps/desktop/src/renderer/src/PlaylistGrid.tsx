@@ -4,7 +4,8 @@
  * to another's place.
  */
 import { useEffect, useState } from "react";
-import type { BrowseRow } from "../../shared/browse.ts";
+import type { BrowseRow, BrowseScope } from "../../shared/browse.ts";
+import { findNoMatchFor } from "./FindField.tsx";
 import { itemMenuEvents, type MenuPoint } from "./Menu.tsx";
 import { useRowReorder } from "./rowReorder.ts";
 import { labels, text } from "./text.ts";
@@ -14,12 +15,17 @@ const PAGE = 200;
 
 export function PlaylistGrid({
   revision,
+  scope,
+  onTotal,
   onOpen,
   onMenu,
   onReorder,
   onError,
 }: {
   readonly revision: number;
+  /** The Playlists list, with the page's Find when it has one. */
+  readonly scope: BrowseScope;
+  readonly onTotal?: (listed: { readonly scope: BrowseScope; readonly total: number }) => void;
   readonly onOpen: (row: BrowseRow) => void;
   readonly onMenu: (row: BrowseRow, at: MenuPoint) => void;
   /** In Custom: moves [row] to place [to] (from 0). */
@@ -33,12 +39,14 @@ export function PlaylistGrid({
     const read = async () => {
       const read: BrowseRow[] = [];
       for (let total = 1; read.length < total;) {
-        const page = await window.wave.library.browse({ kind: "playlists" }, read.length, PAGE);
+        const page = await window.wave.library.browse(scope, read.length, PAGE);
         total = page.total;
         read.push(...page.items);
         if (page.items.length === 0) break;
       }
-      if (current) setRows(read);
+      if (!current) return;
+      setRows(read);
+      onTotal?.({ scope, total: read.length });
     };
     read().catch(() => {
       if (current) onError();
@@ -46,12 +54,13 @@ export function PlaylistGrid({
     return () => {
       current = false;
     };
-  }, [revision, onError]);
+  }, [revision, scope, onTotal, onError]);
   if (rows === undefined) return <p className="empty secondary">{labels.loading}</p>;
   if (rows.length === 0)
     return (
       <p className="empty" role="status">
-        {text.library.sectionEmpty.playlists}
+        {(scope.find !== undefined && findNoMatchFor("playlists")) ||
+          text.library.sectionEmpty.playlists}
       </p>
     );
   return (

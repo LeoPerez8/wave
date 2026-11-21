@@ -184,6 +184,7 @@ export {
   FIND_IN_PLAYLIST_NO_MATCH,
   FIND_IN_PLAYLIST_PLACEHOLDER,
   createPlaylistFinder,
+  createFindMatcher,
   findInPlaylistHead,
   foundInPlaylist,
   hasFindQuery,
