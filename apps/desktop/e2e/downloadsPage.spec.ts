@@ -2,7 +2,7 @@ import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
-import { _electron as electron, expect, test, type Page } from "@playwright/test";
+import { _electron as electron, expect, test, type Locator, type Page } from "@playwright/test";
 
 import type { WaveBridge } from "../src/shared/bridge.ts";
 import type { DownloadRow } from "../src/shared/downloads.ts";
@@ -42,6 +42,27 @@ const listed = async (page: Page, limit: number) => {
 };
 /** A song's title or a group's name. */
 const named = (row: DownloadRow) => ("title" in row ? row.title : "name" in row ? row.name : "");
+/**
+ * Drags [from] onto [to] with both in the list's view. A short window can't show them where a
+ * plain `dragTo` scrolls each into view in turn, and the drag never reaches [to]: the list scrolls
+ * to [top]'s row, the drag starts, then it goes over [to] (a synthetic drag gets one event per move).
+ */
+const dragWithin = async (page: Page, top: Locator, from: Locator, to: Locator) => {
+  await page.locator(".downloads-scroll").evaluate(
+    (element, at) => {
+      element.scrollTop = at;
+    },
+    await top.evaluate((row) => parseFloat((row as HTMLElement).style.top)),
+  );
+  await expect(from).toBeInViewport({ ratio: 1 });
+  await expect(to).toBeInViewport({ ratio: 1 });
+  await from.hover();
+  const source = (await from.boundingBox())!;
+  await page.mouse.down();
+  await page.mouse.move(source.x + source.width / 2 + 10, source.y + source.height / 2);
+  for (const x of [100, 104, 108]) await to.hover({ position: { x, y: 20 } });
+  await page.mouse.up();
+};
 const shot = (page: Page, name: string) =>
   page.screenshot({ path: test.info().outputPath(`downloads-${name}-${process.platform}.png`) });
 
@@ -144,7 +165,7 @@ test("the Downloads page groups the queue, reorders it by drag and folds the fai
 
     // Dragging a group's header onto another group moves the whole group ahead of it.
     const head = async () => (await listed(page, 4)).slice(0, 4);
-    await group("Songs").dragTo(group("Pink Moon"));
+    await dragWithin(page, group("Pink Moon"), group("Songs"), group("Pink Moon"));
     await expect
       .poll(async () => {
         const all = await page.evaluate(() =>
@@ -172,7 +193,7 @@ test("the Downloads page groups the queue, reorders it by drag and folds the fai
       element.scrollTop = element.scrollHeight;
     });
     const song = (title: string) => rows.filter({ hasText: title });
-    await song("Pink 3").dragTo(song("Pink 1"));
+    await dragWithin(page, group("Pink Moon"), song("Pink 3"), song("Pink 1"));
     const pink = async () => {
       const all = await page.evaluate(() =>
         (window as unknown as Wave).wave.downloads.rows(1_204, 10),
