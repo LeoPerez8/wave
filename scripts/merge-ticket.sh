@@ -29,8 +29,9 @@ if ! git merge -q --no-ff --no-verify -m "$message" "origin/$ticket"; then
   exit 2
 fi
 
-pnpm install -s --frozen-lockfile --prefer-offline
-pnpm -s typecheck
+app="$("$here/install-for.sh" --print)"
+"$here/install-for.sh" "$app"
+pnpm -s --filter "@wave/$app..." typecheck
 "$here/check-guards.sh"
 git push -q origin "HEAD:refs/heads/$integration"
 echo "$integration is at $(git rev-parse HEAD)"
