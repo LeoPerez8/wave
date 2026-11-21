@@ -312,7 +312,10 @@ jobs:
         if: env.IS_SAME_REPO_PR == 'true'
         with:
           node-version: 22
-          cache: pnpm
+          package-manager-cache: false
+
+      - uses: ./.github/actions/pnpm-store
+        if: env.IS_SAME_REPO_PR == 'true'
 
       # A failure here doesn't stop the run: Checks then checks the PR as it is.
       - name: Update the lockfile and format
@@ -509,12 +512,18 @@ jobs:
       - uses: actions/setup-node@a0853c24544627f65ddf259abe73b1d18a591444 # v5.0.0
         with:
           node-version: 22
-          # setup-node v5 caches automatically when package.json has packageManager,
-          # and fails without a lockfile, which only exists after the first autofix.
-          package-manager-cache: ${{ hashFiles('pnpm-lock.yaml') != '' }}
+          # The pnpm store is the workflows' own cache (.github/actions/pnpm-store).
+          package-manager-cache: false
+
+      - uses: ./.github/actions/pnpm-store
 
       - name: Install
         run: scripts/ci/step.sh "Install" pnpm install --frozen-lockfile
+
+      # Checks keeps Linux's store: its install is the whole workspace's.
+      - uses: ./.github/actions/pnpm-store
+        with:
+          save: true
 
       # Fails a tag that isn't v<app version> before the APK job starts. A promotion's tag may
       # name a newer version than the ti release it builds (promoted_from).

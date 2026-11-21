@@ -85,10 +85,17 @@ jobs:
       - uses: actions/setup-node@a0853c24544627f65ddf259abe73b1d18a591444 # v5.0.0
         with:
           node-version: 22
-          cache: pnpm
+          package-manager-cache: false
+
+      - uses: ./.github/actions/pnpm-store
 
       - name: Install
         run: scripts/ci/step.sh "Install" pnpm install --frozen-lockfile --filter "@wave/desktop..." --filter "@wave/sync..."
+
+      # Windows' store is this job's: no other job installs there. Linux's is Checks'.
+      - uses: ./.github/actions/pnpm-store
+        with:
+          save: ${{ runner.os == 'Windows' }}
 
       - name: Typecheck
         run: scripts/ci/step.sh "Typecheck" pnpm --filter @wave/desktop typecheck
@@ -105,8 +112,11 @@ jobs:
         if: runner.os == 'Linux'
         run: scripts/ci/step.sh "Install the audio headers" bash -c "sudo apt-get update && sudo apt-get install -y --no-install-recommends libasound2-dev libdbus-1-dev libfuse2 playerctl"
 
+      # Keyed by the crates' lockfile. Main saves a new key's entry after the build (docs/spec.md,
+      # Build and CI › Caches); PRs and tags only read it.
       - name: Restore the audio engine's build
-        uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830 # v4.3.0
+        id: native_cache
+        uses: actions/cache/restore@0057852bfaa89a56745cba8c7296529d2fc39830 # v4.3.0
         with:
           path: |
             ~/.cargo/registry/index
@@ -122,6 +132,16 @@ jobs:
       - name: Build the audio addon
         run: scripts/ci/step.sh "Build the audio addon" pnpm --filter @wave/desktop build:native
 
+      - name: Save the audio engine's build
+        if: github.ref == 'refs/heads/main' && steps.native_cache.outputs.cache-hit != 'true'
+        uses: actions/cache/save@0057852bfaa89a56745cba8c7296529d2fc39830 # v4.3.0
+        with:
+          path: |
+            ~/.cargo/registry/index
+            ~/.cargo/registry/cache
+            apps/desktop/native/target
+          key: ${{ steps.native_cache.outputs.cache-primary-key }}
+
       # The shared Kotlin runs in a JVM the app ships: its JAR and a runtime jlink trims from
       # this JDK (#1147).
       - uses: actions/setup-java@b6effb05e454b25005698d916606bdc6ffcbf961 # v5.7.0
@@ -130,9 +150,32 @@ jobs:
           java-version: 21
 
       - uses: gradle/actions/setup-gradle@0723195856401067f7a2779048b490ace7a47d7c # v5.0.2
+        with:
+          cache-disabled: true
+
+      # Gradle's caches for the shared Kotlin's JAR, keyed by its Gradle files. Main saves a new
+      # key's entry after the build; PRs and tags only read it.
+      - name: Restore Gradle's caches
+        id: gradle_cache
+        uses: actions/cache/restore@0057852bfaa89a56745cba8c7296529d2fc39830 # v4.3.0
+        with:
+          path: |
+            ~/.gradle/caches
+            ~/.gradle/wrapper
+          key: desktop-gradle-${{ runner.os }}-${{ hashFiles('packages/kotlin-shared/**/*.gradle*', 'packages/kotlin-shared/**/gradle*.properties') }}
+          restore-keys: desktop-gradle-${{ runner.os }}-
 
       - name: Build the JVM
         run: scripts/ci/step.sh "Build the JVM" pnpm --filter @wave/desktop build:jvm
+
+      - name: Save Gradle's caches
+        if: github.ref == 'refs/heads/main' && steps.gradle_cache.outputs.cache-hit != 'true'
+        uses: actions/cache/save@0057852bfaa89a56745cba8c7296529d2fc39830 # v4.3.0
+        with:
+          path: |
+            ~/.gradle/caches
+            ~/.gradle/wrapper
+          key: ${{ steps.gradle_cache.outputs.cache-primary-key }}
 
       - name: Package the desktop release
         if: env.DESKTOP_RELEASE == 'true'
@@ -386,7 +429,9 @@ jobs:
       - uses: actions/setup-node@a0853c24544627f65ddf259abe73b1d18a591444 # v5.0.0
         with:
           node-version: 22
-          cache: pnpm
+          package-manager-cache: false
+
+      - uses: ./.github/actions/pnpm-store
 
       - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
         with:

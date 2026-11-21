@@ -83,7 +83,9 @@ jobs:
       - uses: actions/setup-node@a0853c24544627f65ddf259abe73b1d18a591444 # v5.0.0
         with:
           node-version: 22
-          cache: pnpm
+          package-manager-cache: false
+
+      - uses: ./.github/actions/pnpm-store
 
       - uses: actions/setup-java@b6effb05e454b25005698d916606bdc6ffcbf961 # v5.7.0
         with:
@@ -91,6 +93,21 @@ jobs:
           java-version: 17
 
       - uses: gradle/actions/setup-gradle@0723195856401067f7a2779048b490ace7a47d7c # v5.0.2
+        with:
+          cache-disabled: true
+
+      # Gradle's caches, keyed by what decides the build's dependencies: the lockfile, the app
+      # config and plugins prebuild reads, and the Gradle files in the repo (docs/spec.md, Build
+      # and CI › Caches). Main saves a new key's entry after the build; PRs only read it.
+      - name: Restore Gradle's caches
+        id: gradle_cache
+        uses: actions/cache/restore@0057852bfaa89a56745cba8c7296529d2fc39830 # v4.3.0
+        with:
+          path: |
+            ~/.gradle/caches
+            ~/.gradle/wrapper
+          key: mobile-gradle-tests-${{ hashFiles('pnpm-lock.yaml', 'apps/mobile/app.config.ts', 'apps/mobile/plugins/**', 'apps/mobile/modules/*/android/**/*.gradle*', 'packages/kotlin-shared/**/*.gradle*', 'packages/kotlin-shared/**/gradle*.properties', 'scripts/ci/prebuilt-bundle.gradle') }}
+          restore-keys: mobile-gradle-tests-
 
       # The Kotlin the phone shares with the desktop builds and tests on its own, with no Android
       # dependency (#1144), and so does the desktop's JVM entry point in it.
@@ -119,6 +136,15 @@ jobs:
         if: github.event_name == 'pull_request'
         working-directory: apps/mobile/android
         run: ../../../scripts/ci/step.sh "Compile the app's native code" ./gradlew :app:compileDebugJavaWithJavac --no-daemon --console=plain
+
+      - name: Save Gradle's caches
+        if: github.ref == 'refs/heads/main' && steps.gradle_cache.outputs.cache-hit != 'true'
+        uses: actions/cache/save@0057852bfaa89a56745cba8c7296529d2fc39830 # v4.3.0
+        with:
+          path: |
+            ~/.gradle/caches
+            ~/.gradle/wrapper
+          key: ${{ steps.gradle_cache.outputs.cache-primary-key }}
 
       - name: Report
         if: always() && env.IS_SAME_REPO_PR == 'true' && job.status != 'cancelled'
@@ -200,7 +226,9 @@ jobs:
       - uses: actions/setup-node@a0853c24544627f65ddf259abe73b1d18a591444 # v5.0.0
         with:
           node-version: 22
-          cache: pnpm
+          package-manager-cache: false
+
+      - uses: ./.github/actions/pnpm-store
 
       - name: Install
         run: scripts/ci/step.sh "Install" pnpm install --frozen-lockfile
@@ -219,15 +247,17 @@ jobs:
           EXPO_NO_GIT_STATUS: "1"
         run: ../../scripts/ci/step.sh "Prebuild" pnpm exec expo prebuild --platform android --no-install
 
-      # Main saves Metro's cache; tags only read it. The key starts
-      # over when dependencies change. The path is uniwind's cache store (os.tmpdir()), which
-      # replaces Expo's in metro.config.js.
+      # Main saves Metro's cache; tags only read it. Its input is the JS, so each push's entry
+      # replaces the one before (scripts/ci/cache-budget.ts), and the key starts over when
+      # dependencies change. The path is uniwind's cache store (os.tmpdir()), which replaces
+      # Expo's in metro.config.js.
       - name: Restore Metro's cache
+        id: metro_cache
         uses: actions/cache/restore@0057852bfaa89a56745cba8c7296529d2fc39830 # v4.3.0
         with:
           path: /tmp/metro-cache
-          key: metro-${{ runner.os }}-${{ hashFiles('pnpm-lock.yaml') }}-${{ github.sha }}
-          restore-keys: metro-${{ runner.os }}-${{ hashFiles('pnpm-lock.yaml') }}-
+          key: mobile-metro-${{ hashFiles('pnpm-lock.yaml') }}-${{ github.sha }}
+          restore-keys: mobile-metro-${{ hashFiles('pnpm-lock.yaml') }}-
 
       # The label the app log names this build by, next to its version: `PR #<n> @ <commit>`,
       # or the branch or tag and the commit (scripts/ci/build-label.ts). Metro inlines it into
@@ -345,20 +375,32 @@ jobs:
       - uses: gradle/actions/setup-gradle@0723195856401067f7a2779048b490ace7a47d7c # v5.0.2
         if: env.APK_BUILD == 'full'
         with:
-          cache-read-only: ${{ github.ref != 'refs/heads/main' }}
+          cache-disabled: true
 
-      # Main saves its compiled objects; tags only restore them. Prefer
-      # the same lockfile's latest entry, then seed new dependencies from an older one.
+      # Gradle's caches for the release build, keyed as the native tests' are. Main saves a new
+      # key's entry after the build; tags only read it.
+      - name: Restore Gradle's caches
+        id: gradle_cache
+        if: env.APK_BUILD == 'full'
+        uses: actions/cache/restore@0057852bfaa89a56745cba8c7296529d2fc39830 # v4.3.0
+        with:
+          path: |
+            ~/.gradle/caches
+            ~/.gradle/wrapper
+          key: mobile-gradle-android-${{ hashFiles('pnpm-lock.yaml', 'apps/mobile/app.config.ts', 'apps/mobile/plugins/**', 'apps/mobile/modules/*/android/**/*.gradle*', 'packages/kotlin-shared/**/*.gradle*', 'packages/kotlin-shared/**/gradle*.properties', 'scripts/ci/prebuilt-bundle.gradle') }}
+          restore-keys: mobile-gradle-android-
+
+      # Main saves its compiled objects; tags only restore them. The repo has no C or C++ of its
+      # own, so what ccache compiles comes from the lockfile: one entry per lockfile, seeded from
+      # an older one when dependencies change. CCACHE_MAXSIZE bounds what it carries over.
       - name: Restore ccache
         id: ccache
         if: env.APK_BUILD == 'full'
         uses: actions/cache/restore@0057852bfaa89a56745cba8c7296529d2fc39830 # v4.3.0
         with:
           path: ~/.cache/ccache
-          key: ccache-android-v2-${{ hashFiles('pnpm-lock.yaml') }}-${{ github.sha }}
-          restore-keys: |
-            ccache-android-v2-${{ hashFiles('pnpm-lock.yaml') }}-
-            ccache-android-v2-
+          key: mobile-ccache-${{ hashFiles('pnpm-lock.yaml') }}
+          restore-keys: mobile-ccache-
 
       - name: Set up ccache
         if: env.APK_BUILD == 'full'
@@ -369,7 +411,7 @@ jobs:
         uses: actions/cache/save@0057852bfaa89a56745cba8c7296529d2fc39830 # v4.3.0
         with:
           path: /tmp/metro-cache
-          key: metro-${{ runner.os }}-${{ hashFiles('pnpm-lock.yaml') }}-${{ github.sha }}
+          key: ${{ steps.metro_cache.outputs.cache-primary-key }}
 
       - name: Build release APK
         if: env.APK_BUILD == 'full'
@@ -408,15 +450,24 @@ jobs:
         run: scripts/ci/ccache.sh stats
 
       - name: Save ccache
-        if: github.ref == 'refs/heads/main' && steps.ccache.outputs.cache-hit != 'true'
+        if: github.ref == 'refs/heads/main' && env.APK_BUILD == 'full' && steps.ccache.outputs.cache-hit != 'true'
         uses: actions/cache/save@0057852bfaa89a56745cba8c7296529d2fc39830 # v4.3.0
         with:
           path: ~/.cache/ccache
           key: ${{ steps.ccache.outputs.cache-primary-key }}
 
+      - name: Save Gradle's caches
+        if: github.ref == 'refs/heads/main' && env.APK_BUILD == 'full' && steps.gradle_cache.outputs.cache-hit != 'true'
+        uses: actions/cache/save@0057852bfaa89a56745cba8c7296529d2fc39830 # v4.3.0
+        with:
+          path: |
+            ~/.gradle/caches
+            ~/.gradle/wrapper
+          key: ${{ steps.gradle_cache.outputs.cache-primary-key }}
+
       # A full build keeps its APK for later runs with the same native side to repack: unsigned,
-      # with its record and no key beside it. Gradle and Metro cache writes above stay limited
-      # to main.
+      # with its record and no key beside it. Like every cache write, the entry is main's: a tag
+      # reads main's entries, and one saved in a tag's scope no other run reads.
       - name: Keep the full build for repacks
         if: env.APK_BUILD == 'full' && steps.kept.outputs.cache-hit != 'true'
         env:
@@ -428,7 +479,7 @@ jobs:
           test "$(ls -A "$KEPT_APK" | sort | tr '\n' ' ')" = "app-release.apk kept-build.json "
 
       - name: Save the kept APK
-        if: env.APK_BUILD == 'full' && steps.kept.outputs.cache-hit != 'true'
+        if: github.ref == 'refs/heads/main' && env.APK_BUILD == 'full' && steps.kept.outputs.cache-hit != 'true'
         uses: actions/cache/save@0057852bfaa89a56745cba8c7296529d2fc39830 # v4.3.0
         with:
           path: ${{ env.KEPT_APK }}
