@@ -1,17 +1,37 @@
 import { asc, desc, sql, type SQL } from "drizzle-orm";
 import type { LibraryDatabase } from "@wave/client/db/database";
-import { defaultSongSort, readPlaylistYtSong, type SongSort, type YtAlbumSong } from "@wave/core";
+import { selectYtArtist } from "@wave/client/db/ytArtists";
+import {
+  artistPopularSongs,
+  artistSongOrder,
+  defaultSongSort,
+  identityKey,
+  joinArtists,
+  readPlaylistYtSong,
+  sortPlaylistSongs,
+  stepYtArtistSection,
+  YT_ARTIST_SECTION_START,
+  type PlaylistSongSort,
+  type SongSort,
+  type YtAlbumSong,
+  type YtSong,
+} from "@wave/core";
 import type { BrowsePage, BrowseRow, BrowseScope } from "../../shared/browse.ts";
 import { ytRow } from "../../shared/yt.ts";
 import { searchSongIds } from "./search.ts";
-import { readBrowseSort, songBrowseOrder, songBrowseSpine } from "./browseSort.ts";
+import {
+  playlistSongSort,
+  readBrowseSort,
+  songBrowseOrder,
+  songBrowseSpine,
+} from "./browseSort.ts";
 
 const SONGS = sql`SELECT t.id, t.title, t.artist_credit AS artist, a.title AS album,
   t.artwork_hash AS artworkHash, t.duration_ms AS durationMs, 1 AS count,
   t.year, g.name AS genre, t.track_number AS trackNumber, t.path,
   EXISTS(SELECT 1 FROM favorites f WHERE f.track_id=t.id AND f.deleted=0) AS favorite,
   t.title_sort AS sort, p.sort AS artistSort, a.title_sort AS albumSort, t.added_at AS addedAt,
-  t.disc_number AS disc, t.album_id AS albumId
+  t.disc_number AS disc, t.album_id AS albumId, t.release_date AS releaseDate
   FROM tracks t JOIN artists p ON p.id=t.artist_id JOIN albums a ON a.id=t.album_id LEFT JOIN genres g ON g.id=t.genre_id`;
 
 const listing = (scope: BrowseScope, sort?: SongSort): { source: SQL; order: SQL } => {
@@ -62,16 +82,16 @@ const listing = (scope: BrowseScope, sort?: SongSort): { source: SQL; order: SQL
     case "artist":
       return {
         source: sql`${SONGS} WHERE EXISTS(SELECT 1 FROM track_artists ta WHERE ta.track_id=t.id AND ta.artist_id=${scope.id})`,
-        order: sql`sort, artistSort, coalesce(path,''), id`,
+        order: songBrowseOrder(sort ?? defaultSongSort("artist")),
       };
     case "genre":
       return {
         source: sql`${SONGS} WHERE t.genre_id=${scope.id}`,
-        order: sql`sort, artistSort, coalesce(path,''), id`,
+        order: songBrowseOrder(sort ?? defaultSongSort("genre")),
       };
     case "playlist":
       return {
-        source: sql`SELECT songs.*, i.order_key AS position FROM (${SONGS}) songs
+        source: sql`SELECT songs.*, i.order_key AS position, i.added_at AS entryAddedAt FROM (${SONGS}) songs
       JOIN playlist_items i ON i.track_id=songs.id WHERE i.playlist_id=${scope.id} AND i.deleted=0`,
         order: sql`position, id`,
       };
@@ -106,8 +126,13 @@ const row = (value: Partial<BrowseRow> & Pick<BrowseRow, "id" | "title">): Brows
   favorite: Boolean(value.favorite),
 });
 
-type PlaylistSong =
-  { readonly trackId: number } | { readonly itemId: number; readonly song: YtAlbumSong };
+type PlaylistSong = (
+  { readonly trackId: number } | { readonly itemId: number; readonly song: YtAlbumSong }
+) & {
+  /** When the entry joined the playlist, and its place (from 1) in the playlist's own order. */
+  readonly addedAt?: number;
+  readonly order?: number;
+};
 
 const hasStoredEntries = (db: LibraryDatabase, id: number) =>
   db.get(sql`SELECT 1 FROM playlist_items WHERE playlist_id=${id}
@@ -136,19 +161,121 @@ const listableEntries = (id: number) => sql`
 
 const orderedEntries = (db: LibraryDatabase, source: SQL, page = sql``): PlaylistSong[] =>
   db
-    .all<{ itemId: number; trackId: number | null; stored: string | null }>(
-      sql`SELECT i.id AS itemId, i.track_id AS trackId, i.yt_song AS stored
+    .all<{ itemId: number; trackId: number | null; stored: string | null; addedAt: number }>(
+      sql`SELECT i.id AS itemId, i.track_id AS trackId, i.yt_song AS stored, i.added_at AS addedAt
       ${source} ORDER BY i.order_key, i.sync_id ${page}`,
     )
-    .flatMap(({ itemId, trackId, stored }): PlaylistSong[] => {
-      if (stored === null) return trackId === null ? [] : [{ trackId }];
+    .flatMap(({ itemId, trackId, stored, addedAt }): PlaylistSong[] => {
+      if (stored === null) return trackId === null ? [] : [{ trackId, addedAt }];
       const song = readPlaylistYtSong(stored);
-      return song === null ? [] : [{ itemId, song }];
+      return song === null ? [] : [{ itemId, song, addedAt }];
     });
 
-/** Reads the full mixed order only when starting playback. */
-export const playlistSongs = (db: LibraryDatabase, id: number): PlaylistSong[] | undefined =>
-  hasStoredEntries(db, id) ? orderedEntries(db, listableEntries(id)) : undefined;
+/** The date a playlist's Release date sort reads for a Library song: its date tag, else its Year. */
+const released = (song: { readonly releaseDate?: string | null; readonly year: number | null }) =>
+  song.releaseDate || (song.year ? String(song.year) : undefined);
+
+/**
+ * The playlist's every entry in [sort]'s order (Core's `sortPlaylistSongs`), each with its place
+ * in the playlist's own order. A sort reads the whole playlist: SQLite can't page Core's order.
+ */
+const sortedEntries = (db: LibraryDatabase, id: number, sort: PlaylistSongSort): PlaylistSong[] => {
+  const entries = db
+    .all<{
+      itemId: number;
+      trackId: number | null;
+      stored: string | null;
+      addedAt: number;
+      title: string | null;
+      artist: string | null;
+      album: string | null;
+      releaseDate: string | null;
+      year: number | null;
+      discNumber: number | null;
+      trackNumber: number | null;
+    }>(
+      sql`SELECT i.id AS itemId, i.track_id AS trackId, i.yt_song AS stored, i.added_at AS addedAt,
+      t.title, t.artist_credit AS artist, a.title AS album, t.release_date AS releaseDate, t.year,
+      t.disc_number AS discNumber, t.track_number AS trackNumber
+      ${listableEntries(id)} ORDER BY i.order_key, i.sync_id`,
+    )
+    .flatMap((entry) => {
+      const { itemId, trackId, stored, addedAt } = entry;
+      if (stored === null)
+        return trackId === null
+          ? []
+          : [
+              {
+                title: entry.title ?? "",
+                artist: entry.artist ?? "",
+                album: entry.album ?? "",
+                addedAt,
+                releaseDate: released(entry) ?? null,
+                discNumber: entry.discNumber,
+                trackNumber: entry.trackNumber,
+                song: { trackId, addedAt } as PlaylistSong,
+              },
+            ];
+      const song = readPlaylistYtSong(stored);
+      return song === null
+        ? []
+        : [
+            {
+              title: song.title,
+              artist: joinArtists(song.artists),
+              album: song.album ?? "",
+              addedAt,
+              song: { itemId, song, addedAt } as PlaylistSong,
+            },
+          ];
+    })
+    .map((entry, index) => ({ ...entry, song: { ...entry.song, order: index + 1 } }));
+  return sortPlaylistSongs(entries, sort).map((entry) => entry.song);
+};
+
+/** The sort the playlist's page shows in, when it isn't the playlist's own order. */
+const chosenSort = (db: LibraryDatabase, id: number): PlaylistSongSort | undefined => {
+  const sort = playlistSongSort(db, id);
+  return sort.key === "custom" ? undefined : sort;
+};
+
+/**
+ * The playlist's songs as its page shows them, YT Music songs in their places, for starting
+ * playback; undefined when `browseTrackIds` gives the same (a playlist of files in its own order).
+ */
+export const playlistSongs = (db: LibraryDatabase, id: number): PlaylistSong[] | undefined => {
+  const sort = chosenSort(db, id);
+  if (sort !== undefined) return sortedEntries(db, id, sort);
+  return hasStoredEntries(db, id) ? orderedEntries(db, listableEntries(id)) : undefined;
+};
+
+/** The saved list an artist's Popular sort ranks by: YouTube Music's order of their songs. */
+const popularSongs = (db: LibraryDatabase, artistId: number): readonly YtSong[] | null => {
+  const name = db.get<{ name: string }>(sql`SELECT name FROM artists WHERE id=${artistId}`)?.name;
+  if (name === undefined) return null;
+  return artistPopularSongs(
+    stepYtArtistSection<YtAlbumSong>(YT_ARTIST_SECTION_START, {
+      type: "restored",
+      saved: selectYtArtist<YtAlbumSong>(db, identityKey(name)),
+    }),
+  );
+};
+
+/**
+ * [songs] (an artist's, in song name order) as Popular shows them (Core's `artistSongOrder`),
+ * each with its rank in `order`. Other sorts read the ranks of a page of rows the same way: a
+ * song's rank doesn't depend on the songs around it.
+ */
+const ranked = (songs: readonly BrowseRow[], popular: readonly YtSong[]): BrowseRow[] =>
+  artistSongOrder(
+    songs.map((track) => ({ source: "library" as const, track })),
+    popular,
+    { sort: "popular", online: false },
+  ).flatMap((song) =>
+    song.source !== "library"
+      ? []
+      : [song.popularRank === undefined ? song.track : { ...song.track, order: song.popularRank }],
+  );
 
 const playlistRows = (
   db: LibraryDatabase,
@@ -162,11 +289,18 @@ const playlistRows = (
       songs.flatMap((song) => ("trackId" in song ? [song.trackId] : [])),
     ).map((track) => [track.id, track]),
   );
-  return songs.flatMap((song) =>
-    "trackId" in song
-      ? (tracks.get(song.trackId) ?? [])
-      : [{ ...ytRow(song.song), id: -song.itemId }],
-  );
+  return songs.flatMap((song): BrowseRow[] => {
+    const found =
+      "trackId" in song ? tracks.get(song.trackId) : { ...ytRow(song.song), id: -song.itemId };
+    if (found === undefined) return [];
+    return [
+      {
+        ...found,
+        ...(song.addedAt === undefined ? {} : { addedAt: song.addedAt }),
+        ...(song.order === undefined ? {} : { order: song.order }),
+      },
+    ];
+  });
 };
 
 /** SQLite limits the read before rows cross IPC. No whole-library materialisation. */
@@ -183,17 +317,58 @@ export const browseLibrary = (
   }
   const sort = readBrowseSort(db, scope.kind);
   const { source, order } = listing(scope, sort);
-  const mixed =
-    scope.kind === "playlist" && scope.id !== undefined && hasStoredEntries(db, scope.id)
-      ? listableEntries(scope.id)
-      : undefined;
-  const total = db.get<{ count: number }>(
-    mixed ? sql`SELECT count(*) AS count ${mixed}` : sql`SELECT count(*) AS count FROM (${source})`,
-  )!.count;
-  const page = sql`LIMIT ${limit} OFFSET ${offset}`;
-  const items = mixed
-    ? playlistRows(db, orderedEntries(db, mixed, page), keepStreams)
-    : db.all<BrowseRow>(sql`SELECT * FROM (${source}) ORDER BY ${order} ${page}`).map(row);
+  const playlist = scope.kind === "playlist" ? scope.id : undefined;
+  const ownSort = playlist === undefined ? undefined : playlistSongSort(db, playlist);
+  const popular =
+    scope.kind === "artist" && scope.id !== undefined ? popularSongs(db, scope.id) : null;
+  let total: number;
+  let items: BrowseRow[];
+  if (playlist !== undefined && ownSort !== undefined && ownSort.key !== "custom") {
+    const sorted = sortedEntries(db, playlist, ownSort);
+    total = sorted.length;
+    items = playlistRows(db, sorted.slice(offset, offset + limit), keepStreams);
+  } else if (popular !== null && sort?.key === "popular") {
+    // Popular isn't an order SQLite has: the artist's songs are read whole and ranked.
+    const songs = ranked(
+      db.all<BrowseRow>(sql`SELECT * FROM (${source}) ORDER BY ${order}`).map(row),
+      popular,
+    );
+    total = songs.length;
+    items = songs.slice(offset, offset + limit);
+  } else {
+    const mixed =
+      playlist !== undefined && hasStoredEntries(db, playlist)
+        ? listableEntries(playlist)
+        : undefined;
+    total = db.get<{ count: number }>(
+      mixed
+        ? sql`SELECT count(*) AS count ${mixed}`
+        : sql`SELECT count(*) AS count FROM (${source})`,
+    )!.count;
+    const page = sql`LIMIT ${limit} OFFSET ${offset}`;
+    items = mixed
+      ? playlistRows(db, orderedEntries(db, mixed, page), keepStreams)
+      : db.all<BrowseRow>(sql`SELECT * FROM (${source}) ORDER BY ${order} ${page}`).map(row);
+    // A playlist in its own order: each row's place is where it shows.
+    if (playlist !== undefined)
+      items = items.map((item, index) => ({
+        ...item,
+        order: offset + index + 1,
+        addedAt: (item as { entryAddedAt?: number }).entryAddedAt ?? item.addedAt,
+      }));
+    else if (popular !== null) {
+      const ranks = new Map(ranked(items, popular).map((song) => [song.id, song.order]));
+      items = items.map((item) => {
+        const rank = ranks.get(item.id);
+        return rank === undefined ? item : { ...item, order: rank };
+      });
+    }
+  }
+  if (playlist !== undefined)
+    items = items.map((item) => {
+      const date = released(item as { releaseDate?: string | null; year: number | null });
+      return date === undefined ? item : { ...item, released: date };
+    });
   const parentKind = {
     album: "albums",
     artist: "artists",
@@ -220,7 +395,8 @@ export const browseLibrary = (
       }
     }
   }
-  return { items, offset, total, ...(hero ? { hero } : {}), ...(sort ? { sort } : {}) };
+  const shown = ownSort ?? sort;
+  return { items, offset, total, ...(hero ? { hero } : {}), ...(shown ? { sort: shown } : {}) };
 };
 
 export const browseLetter = (
@@ -230,7 +406,8 @@ export const browseLetter = (
 ): number | null => {
   const sort = readBrowseSort(db, scope.kind);
   const spine =
-    scope.kind === "songs" || scope.kind === "favorites"
+    // A song list files under what it's sorted by; Popular and the dates have no letters.
+    ["songs", "favorites", "artist", "genre"].includes(scope.kind)
       ? sort && songBrowseSpine(sort)
       : scope.kind === "album" || scope.kind === "playlist" || scope.kind === "search"
         ? undefined
@@ -253,7 +430,24 @@ export const browseLetter = (
 export const browseTrackIds = (db: LibraryDatabase, scope: BrowseScope): string[] => {
   if (["albums", "artists", "playlists", "genres"].includes(scope.kind)) return [];
   if (scope.kind === "search") return searchSongIds(db, scope.query ?? "").map(String);
-  const { source, order } = listing(scope, readBrowseSort(db, scope.kind));
+  if (scope.kind === "playlist" && scope.id !== undefined) {
+    const sort = chosenSort(db, scope.id);
+    if (sort !== undefined)
+      return sortedEntries(db, scope.id, sort).flatMap((entry) =>
+        "trackId" in entry ? [String(entry.trackId)] : [],
+      );
+  }
+  const sort = readBrowseSort(db, scope.kind);
+  const { source, order } = listing(scope, sort);
+  const popular =
+    scope.kind === "artist" && scope.id !== undefined && sort?.key === "popular"
+      ? popularSongs(db, scope.id)
+      : null;
+  if (popular !== null)
+    return ranked(
+      db.all<BrowseRow>(sql`SELECT * FROM (${source}) ORDER BY ${order}`).map(row),
+      popular,
+    ).map((song) => String(song.id));
   return db
     .all<{ id: number }>(sql`SELECT id FROM (${source}) ORDER BY ${order}`)
     .map((song) => String(song.id));

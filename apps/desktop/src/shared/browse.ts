@@ -1,5 +1,5 @@
 import type { Page } from "./bridge.ts";
-import type { SongSort } from "@wave/core";
+import type { PlaylistSongSort, SongSort } from "@wave/core";
 
 export const BROWSE_KINDS = [
   "songs",
@@ -34,6 +34,13 @@ export interface BrowseRow {
   readonly favorite: boolean;
   readonly addedAt?: number;
   readonly starredAt?: number;
+  /**
+   * On a playlist's page, the song's place (from 1) in the playlist's own order; on an artist's,
+   * its rank in their Popular list, when the list holds it.
+   */
+  readonly order?: number;
+  /** On a playlist's page, the date its Release date sort reads: `1985`, `1985-06` or `1985-06-21`. */
+  readonly released?: string;
   readonly path: string | null;
   readonly unavailable: boolean;
   /**
@@ -52,5 +59,6 @@ export interface BrowseRow {
 }
 export interface BrowsePage extends Page<BrowseRow> {
   readonly hero?: BrowseRow;
-  readonly sort?: SongSort;
+  /** The order shown: the list's sort, or on a playlist's page that playlist's own. */
+  readonly sort?: SongSort | PlaylistSongSort;
 }

@@ -401,6 +401,12 @@ describe("desktop Library table sorts", () => {
     assert.deepEqual(libraryTableSortsFor("playlist"), []);
   });
 
+  test("offers an artist's and a genre's songs the phone's sorts, Popular leading an artist's", () => {
+    assert.deepEqual(libraryTableSortsFor("artist"), songSortsFor("artist"));
+    assert.deepEqual(libraryTableSortsFor("artist")[0], { key: "popular", descending: false });
+    assert.deepEqual(libraryTableSortsFor("genre"), SONG_SORTS);
+  });
+
   test("starts a header in its offered direction, reverses it, and marks date sorts without a spine", () => {
     const choices = libraryTableSortsFor("songs");
     assert.deepEqual(nextHeaderSort(choices, DEFAULT_SONG_SORT, "artist"), {

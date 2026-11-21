@@ -133,6 +133,9 @@ export const en = {
     titleColumn: "Title",
     artistColumn: "Artist",
     albumColumn: "Album",
+    /** The column of a playlist's own order and of an artist's Popular ranks. */
+    orderColumn: "#",
+    releaseDateColumn: "Release date",
     previous: "Previous page",
     next: "Next page",
     page: (first: number, last: number, total: number) => `${first}–${last} of ${total}`,
