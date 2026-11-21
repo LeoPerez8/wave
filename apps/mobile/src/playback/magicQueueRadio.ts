@@ -77,6 +77,7 @@ export const magicQueueYtCandidates = (
     profileOf,
     sliders,
     sessionNow,
+    deadlineAt,
   }: {
     readonly catalog: readonly CatalogSong[];
     readonly graph: ArtistGraph | null;
@@ -84,6 +85,8 @@ export const magicQueueYtCandidates = (
     readonly profileOf: GenreProfileOf;
     readonly sliders: MixSliders;
     readonly sessionNow?: () => MagicSession;
+    /** When the radio reads stop (epoch ms), if they share a deadline with what came before them. */
+    readonly deadlineAt?: number;
   },
 ) =>
   Effect.gen(function* () {
@@ -219,6 +222,7 @@ export const magicQueueYtCandidates = (
     const originalIds = new Set(seeds.map((seed) => seed.id));
     const read = yield* readers.read(session.id, [...seeds, ...liked], {
       online: connected,
+      ...(deadlineAt === undefined ? {} : { deadlineAt }),
       low: (seed) => (originalIds.has(seed.id) ? plan.seedLow : plan.likedLow),
     });
     const { seed: candidates, liked: likedCandidates } = allowed(plan.size);

@@ -9,6 +9,7 @@ export interface SongRadioReader<R> {
   readonly read: (when: {
     readonly online: boolean;
     readonly low: boolean;
+    readonly deadlineAt?: number;
   }) => Effect.Effect<SongRadioPage | null, never, R>;
 }
 
@@ -57,6 +58,8 @@ export const createSongRadioReaders = <R>(create: (seed: SongRadioSeed) => SongR
       when: {
         readonly online: boolean;
         readonly low: boolean | ((seed: SongRadioSeed) => boolean);
+        /** When the reads waited for stop (epoch ms), a deadline shared with what came before them. */
+        readonly deadlineAt?: number;
       },
     ): Effect.Effect<SongRadioRead[], never, R> =>
       Effect.gen(function* () {
@@ -69,6 +72,7 @@ export const createSongRadioReaders = <R>(create: (seed: SongRadioSeed) => SongR
               reader.read({
                 online: when.online,
                 low: typeof when.low === "boolean" ? when.low : when.low(seed),
+                ...(when.deadlineAt === undefined ? {} : { deadlineAt: when.deadlineAt }),
               }),
               (page) => ({ seed, page }),
             ),
