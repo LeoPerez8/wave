@@ -109,6 +109,11 @@ class YtMusicModule : Module() {
       coded { client.searchAlbums(query).map(YtShelfItem.Album::toMap) }
     }
 
+    // Community playlists on YT Music for [query] ("Community playlists" filter), in its order.
+    AsyncFunction("searchCommunityPlaylists") Coroutine { query: String ->
+      coded { client.searchCommunityPlaylists(query).map(YtCommunityPlaylist::toMap) }
+    }
+
     /**
      * The artist page [browseId] (`UC…`): `{ name, songs, albums, singles }`,
      * or an `ERR_YT_*` rejection.
