@@ -7,6 +7,7 @@ export const djPtBr: typeof djEn = {
   close: "Fechar",
   starting: "Iniciando sua fila",
   artistTile: (name: string) => `Artista, ${name}`,
+  loadingArtists: "Carregando artistas",
   nothingToPick: "Nada para escolher ainda. Ouça algumas músicas e volte depois.",
   noSongsFound: "Nenhuma música encontrada para esses artistas.",
   magicQueueFromDj: "Fila Mágica · de DJ",
