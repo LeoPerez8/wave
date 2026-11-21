@@ -23,7 +23,7 @@ export const settingsEn = {
     developer: "Developer",
     versionHistory: "Version History",
   },
-  /** Settings › Layout's pages, by `LayoutPage` id. */
+  /** Settings › Layout's editor rows, by `LayoutPage` id. */
   layoutPages: {
     home: "Home",
     library: "Library",

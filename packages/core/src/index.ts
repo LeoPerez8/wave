@@ -3090,14 +3090,12 @@ export {
   moveNowPlayingButton,
   nowPlayingButtonsAreDefault,
   nowPlayingRelatedChevronShown,
-  nowPlayingSlotRoute,
   nowPlayingSlotChoiceHolder,
   nowPlayingSlotChoices,
   nowPlayingSlotShow,
   nowPlayingSlotRunsSongMenu,
   nowPlayingSongMenuShow,
   readNowPlayingButtons,
-  readNowPlayingSlotRoute,
   storedNowPlayingButtons,
 } from "./nowPlayingButtons.ts";
 export type {

@@ -8,14 +8,30 @@ import { Hairline } from "@/catalog/Hairline";
 import { SettingsSwitch } from "@/components/SettingsSwitch";
 import { setKeepFindVisible, useKeepFindVisible } from "@/settings/keepFindVisible";
 import { SettingsPageRow, SettingsPageScreen } from "@/settings/SettingsPage";
-import { openNowPlaying } from "@/nowPlaying/sheet";
+import { openNowPlayingForLayout } from "@/nowPlaying/sheet";
+import { armAnchoredMenu } from "@/motion/menuRequest";
+import { shuffleKindChoice } from "@/nowPlaying/ShuffleMenu";
+import { ChoiceSection } from "@/settings/ChoiceRow";
+import { useShuffleKind } from "@/settings/shuffleKind";
 
 const layoutDestinations = {
-  home: () => router.push("/"),
-  library: () => router.push("/library"),
-  playlists: () => router.push("/playlists"),
-  tabBar: () => router.push("/"),
-  nowPlaying: openNowPlaying,
+  home: () => {
+    armAnchoredMenu("layout-home");
+    router.push("/");
+  },
+  library: () => {
+    armAnchoredMenu("layout-library");
+    router.push("/library");
+  },
+  playlists: () => {
+    armAnchoredMenu("layout-playlists");
+    router.push("/playlists");
+  },
+  tabBar: () => {
+    armAnchoredMenu("layout-tab-bar");
+    router.push("/");
+  },
+  nowPlaying: openNowPlayingForLayout,
 } as const;
 
 /**
@@ -28,6 +44,7 @@ export default function LayoutSettingsScreen() {
   const { strings } = useLocalisation();
   useScreenContent(true);
   const keepFindVisible = useKeepFindVisible();
+  const shuffleKind = useShuffleKind();
   return (
     <SettingsPageScreen page="layout">
       <View>
@@ -40,6 +57,14 @@ export default function LayoutSettingsScreen() {
             onPress={layoutDestinations[page]}
           />
         ))}
+      </View>
+      <View>
+        <Hairline />
+        <ChoiceSection
+          choice={shuffleKindChoice}
+          current={shuffleKind}
+          note={strings.settings.everyShuffleUsesItALongPress}
+        />
       </View>
       <View>
         <Hairline />

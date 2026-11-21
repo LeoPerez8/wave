@@ -46,6 +46,7 @@ export const libraryShelfChoice: ChoiceSetting<LibraryShelf> = {
  * once and keeps it across restarts.
  */
 export const libraryShelfTitleLongPress: TitleLongPress = {
+  requestId: "layout-library",
   get label() {
     return currentLocalisation().strings.library.chooseShelf;
   },

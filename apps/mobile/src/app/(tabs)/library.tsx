@@ -1,4 +1,6 @@
 import { useScreenContent } from "@/lib/screenTiming";
+import { useFocusEffect } from "expo-router";
+import { useCallback } from "react";
 import { IconStack2 } from "@tabler/icons-react-native";
 import type { HomeSectionId } from "@wave/core";
 import { router } from "@/lib/timingRouter";
@@ -25,6 +27,7 @@ import { RescanRefreshControl } from "@/library/RescanRefreshControl";
 import { useLocalisation } from "@/localisation/localisation";
 import { useRenderCount } from "@/perf/perf";
 import { openLibrarySectionActions } from "@/playback/ActionsMenu";
+import { openArmedAnchoredMenu } from "@/motion/menuRequest";
 
 /** The shelf under the Library's rows: Home's section [id] with Home's data, nothing while it's empty. */
 function LibraryShelfSection({ id }: { id: HomeSectionId }) {
@@ -33,6 +36,7 @@ function LibraryShelfSection({ id }: { id: HomeSectionId }) {
 }
 
 export default function LibraryScreen() {
+  useFocusEffect(useCallback(() => openArmedAnchoredMenu("layout-library"), []));
   useScreenContent(true);
   useRenderCount("LibraryScreen");
   const { strings } = useLocalisation();
