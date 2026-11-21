@@ -41,7 +41,12 @@ import { streamedLibraryFacts } from "../yt/streamedSong.ts";
 import { browseRowIds, browseRows, browseSongs, browseTrackIds } from "./browse.ts";
 import { songFacts, targetEntries } from "./songActions.ts";
 
-const lists = { album: "albums", artist: "artists", genre: "genres", playlist: "playlists" } as const;
+const lists = {
+  album: "albums",
+  artist: "artists",
+  genre: "genres",
+  playlist: "playlists",
+} as const;
 
 export const validCollectionTarget = (value: unknown): value is CollectionTarget => {
   if (typeof value !== "object" || value === null || "scope" in value) return false;
@@ -56,7 +61,10 @@ const header = (db: LibraryDatabase, target: CollectionTarget) =>
   browseRows(db, lists[target.kind], [target.id])[0];
 
 /** The listed songs in their collection's order, with a playlist's stored entries in place. */
-export const collectionSongs = (db: LibraryDatabase, target: CollectionTarget): CollectionSong[] => {
+export const collectionSongs = (
+  db: LibraryDatabase,
+  target: CollectionTarget,
+): CollectionSong[] => {
   if (header(db, target) === undefined) throw new Error("Collection no longer exists");
   return target.kind === "playlist"
     ? selectPlaylistEntries(db, target.id).flatMap((entry) =>
@@ -81,20 +89,24 @@ export const collectionMenu = (
   const row = header(db, target);
   if (row === undefined) return { entries: [], play: [], artists: [] };
   const onlineLookups = lookupsEnabled(db);
-  const songs = onlineLookups || target.kind === "album"
-    ? songFacts(db, browseTrackIds(db, target).map(Number))
-    : [];
+  const songs =
+    onlineLookups || target.kind === "album"
+      ? songFacts(db, browseTrackIds(db, target).map(Number))
+      : [];
   const artists = target.kind === "album" ? albumArtists(db, target.id) : [];
   const entries = itemActions({
     kind: target.kind,
-    items: [{
-      artistIds: artists.map((artist) => artist.id),
-      hasImage: row.imageKey != null,
-      songs,
-      missingSongs: target.kind === "album"
-        ? songs.filter((song) => song.missing).map((song) => status(song.id))
-        : undefined,
-    }],
+    items: [
+      {
+        artistIds: artists.map((artist) => artist.id),
+        hasImage: row.imageKey != null,
+        songs,
+        missingSongs:
+          target.kind === "album"
+            ? songs.filter((song) => song.missing).map((song) => status(song.id))
+            : undefined,
+      },
+    ],
     here,
     selectable,
     surface,
@@ -104,7 +116,10 @@ export const collectionMenu = (
   const { cards, list } = menuLayout(target.kind, entries);
   return {
     entries,
-    play: surface === "menu" ? [...cards, ...list.flatMap(({ action }) => action === "shuffle" ? [action] : [])] : [],
+    play:
+      surface === "menu"
+        ? [...cards, ...list.flatMap(({ action }) => (action === "shuffle" ? [action] : []))]
+        : [],
     artists,
   };
 };
@@ -122,7 +137,8 @@ export const runCollectionAction = async (
   target: CollectionTarget,
   action: CollectionRunAction,
   destination?: number,
-): Promise<CollectionRunResult> => runOnSongs(ports, collectionSongs(ports.db, target), action, destination);
+): Promise<CollectionRunResult> =>
+  runOnSongs(ports, collectionSongs(ports.db, target), action, destination);
 
 const runOnSongs = async (
   { db, playback, downloads, yt, unavailable }: CollectionActionPorts,
@@ -133,13 +149,19 @@ const runOnSongs = async (
   switch (action) {
     case "playNext":
     case "addToQueue": {
-      const play = playlistPlayback(songs.filter((entry) =>
-        entry.source !== "library" || (entry.track.path !== null && !unavailable(entry.track.path)),
-      ), { ytMusic: yt.enabled() });
+      const play = playlistPlayback(
+        songs.filter(
+          (entry) =>
+            entry.source !== "library" ||
+            (entry.track.path !== null && !unavailable(entry.track.path)),
+        ),
+        { ytMusic: yt.enabled() },
+      );
       if (play === null) return { kind: "queued", count: 0 };
-      const listed: readonly CollectionSong[] = play.playback.kind === "mixed"
-        ? play.playback.songs
-        : play.playback.tracks.map((track) => ({ source: "library", track }));
+      const listed: readonly CollectionSong[] =
+        play.playback.kind === "mixed"
+          ? play.playback.songs
+          : play.playback.tracks.map((track) => ({ source: "library", track }));
       const queued: CollectionSong[] = [];
       for (const entry of listed) {
         if (entry.source !== "unsearched") {
@@ -159,7 +181,12 @@ const runOnSongs = async (
     }
     case "addToPlaylist": {
       if (destination === undefined) throw new Error("No playlist to add to");
-      const { name, added, alreadyIn } = addToPlaylist(db, destination, toPlaylistSongs(songs), Date.now());
+      const { name, added, alreadyIn } = addToPlaylist(
+        db,
+        destination,
+        toPlaylistSongs(songs),
+        Date.now(),
+      );
       playback.refresh();
       return { kind: "playlist", name, added, alreadyIn };
     }

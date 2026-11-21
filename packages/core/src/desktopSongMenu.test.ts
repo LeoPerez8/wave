@@ -187,7 +187,12 @@ test("Download shows when a checked item holds a song without a file", () => {
 
 test("checked songs alone keep the song selection's entries", () => {
   assert.deepEqual(
-    selection({ items: [{ kind: "track", ...song }, { kind: "track", ...song }] }),
+    selection({
+      items: [
+        { kind: "track", ...song },
+        { kind: "track", ...song },
+      ],
+    }),
     actions({ items: [song, song], surface: "selection" }),
   );
 });

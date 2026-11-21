@@ -97,7 +97,10 @@ test("albums, artists, genres and playlists check together and with Search's son
       path: test.info().outputPath(`mixed-selection-${process.platform}.png`),
     });
     await action("addToPlaylist").click();
-    await page.getByRole("menu").getByRole("menuitem", { name: "Destination", exact: true }).click();
+    await page
+      .getByRole("menu")
+      .getByRole("menuitem", { name: "Destination", exact: true })
+      .click();
     await expect(
       page.getByRole("status").filter({ hasText: describePlaylistAdd("Destination", 3, 0, "en") }),
     ).toBeVisible();

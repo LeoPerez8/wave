@@ -74,7 +74,9 @@ const picked = (picks: CollectionPicks): CollectionPick[] =>
   });
 
 /** The one collection checked on its own, which keeps its own bar. */
-export const onlyCollection = (picks: CollectionPicks | undefined): CollectionTarget | undefined => {
+export const onlyCollection = (
+  picks: CollectionPicks | undefined,
+): CollectionTarget | undefined => {
   const [only, ...rest] = picks === undefined ? [] : picked(picks);
   if (only === undefined || rest.length > 0 || "all" in only || only.ids.length !== 1)
     return undefined;

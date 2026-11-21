@@ -2554,12 +2554,18 @@ test("a selection of songs and collections acts on every song they hold, once ea
       const all = { collections: [{ kind: "album", all: true, except: [lost] }] } as const;
       assert.equal((await wave.collections.selectionActions(all)).count, 2);
       assert.ok(!(await actions(all)).includes("download"));
+      assert.deepEqual(await actions({ collections: [{ kind: "album", ids: [disc, lost] }] }), [
+        "playNext",
+        "addToQueue",
+        "addToPlaylist",
+        "download",
+        "fixSongs",
+      ]);
       assert.deepEqual(
-        await actions({ collections: [{ kind: "album", ids: [disc, lost] }] }),
-        ["playNext", "addToQueue", "addToPlaylist", "download", "fixSongs"],
-      );
-      assert.deepEqual(
-        await actions({ songs: { scope: { kind: "songs" }, ids: [missing] }, collections: [{ kind: "artist", all: true, except: [] }] }),
+        await actions({
+          songs: { scope: { kind: "songs" }, ids: [missing] },
+          collections: [{ kind: "artist", all: true, except: [] }],
+        }),
         ["playNext", "addToQueue", "addToPlaylist", "download"],
       );
       for (const refused of [
@@ -2567,7 +2573,10 @@ test("a selection of songs and collections acts on every song they hold, once ea
         { collections: [{ kind: "songs", ids: [1] }] },
         { collections: [{ kind: "album", ids: [] }] },
         { collections: [{ kind: "album", ids: [0] }] },
-        { songs: { scope: { kind: "albums" }, ids: [1] }, collections: [{ kind: "album", ids: [1] }] },
+        {
+          songs: { scope: { kind: "albums" }, ids: [1] },
+          collections: [{ kind: "album", ids: [1] }],
+        },
       ])
         await assert.rejects(call("collections.selectionActions", refused), /refused/i);
       await assert.rejects(call("collections.runSelection", target, "favorite"), /refused/i);
