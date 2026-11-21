@@ -46,8 +46,11 @@ interface StatsReading<A> {
 const useStatsRead = <A>(
   read: (stats: Stats["Service"]) => Effect.Effect<A, LibraryStoreError>,
   sources: unknown = null,
+  /** What the reading is kept under for the session (`STATS_KEPT`), or none. */
+  keptAs?: string,
 ): A | undefined => {
   const { language } = useLocalisation();
+  const kept = keptAs === undefined ? undefined : `${keptAs}:${language}`;
   const plays = useFocusedVersion(playHistoryVersion);
   const [reading, setReading] = useState<StatsReading<A> | undefined>(undefined);
 
@@ -58,6 +61,7 @@ const useStatsRead = <A>(
         // oxlint-disable-next-line react/rules-of-hooks -- Effect Service.use resolves a service; it is not a React Hook.
         .runPromise(Stats.use(read))
         .then((value) => {
+          if (kept !== undefined) keepReading(kept, value);
           if (current) setReading({ value, plays, sources, language });
         })
         .catch(() => {
@@ -66,11 +70,32 @@ const useStatsRead = <A>(
       return () => {
         current = false;
       };
-    }, [read, plays, sources, language]),
+    }, [read, plays, sources, language, kept]),
   );
 
-  return reading?.value;
+  // Until this visit's reading arrives, the last one kept: the screen opens on it (#1352).
+  return reading?.value ?? (kept === undefined ? undefined : (keptReadings.get(kept) as A));
 };
+
+/**
+ * How many Stats readings are kept for the session: each a ranking's top or a
+ * genre podium (a few dozen rows), so Stats and its See all open on them and
+ * update in place when the visit's own reading arrives.
+ */
+export const STATS_KEPT = 32;
+const keptReadings = new Map<string, unknown>();
+
+const keepReading = (key: string, value: unknown): void => {
+  keptReadings.delete(key);
+  keptReadings.set(key, value);
+  while (keptReadings.size > STATS_KEPT) {
+    const oldest = keptReadings.keys().next().value as string;
+    keptReadings.delete(oldest);
+  }
+};
+
+const rankingKey = (name: string, period: StatsPeriod, limit: number): string =>
+  `${name}:${period}:${limit}`;
 
 type ReadRanking<A> = (
   stats: Stats["Service"],
@@ -80,11 +105,16 @@ type ReadRanking<A> = (
 
 /** The top `limit` of a ranking for `period`, or undefined while it first loads. `read` must be stable. */
 const useRanking = <A>(
+  name: string,
   period: StatsPeriod,
   limit: number,
   read: ReadRanking<A>,
 ): readonly Ranked<A>[] | undefined =>
-  useStatsRead(useCallback((stats) => read(stats, period, limit), [read, period, limit]));
+  useStatsRead(
+    useCallback((stats) => read(stats, period, limit), [read, period, limit]),
+    null,
+    rankingKey(name, period, limit),
+  );
 
 const readTopSongs: ReadRanking<StatsSong> = (stats, period, limit) =>
   stats.topSongs(period, limit);
@@ -114,19 +144,21 @@ export const useArtistStats = (
 export const useTopSongs = (
   period: StatsPeriod,
   limit: number = STATS_TOP,
-): readonly Ranked<StatsSong>[] | undefined => useRanking(period, limit, readTopSongs);
+): readonly Ranked<StatsSong>[] | undefined => useRanking("topSongs", period, limit, readTopSongs);
 
 /** Top albums: the `limit` albums played most in `period`. */
 export const useTopAlbums = (
   period: StatsPeriod,
   limit: number = STATS_TOP,
-): readonly Ranked<PlayedAlbum>[] | undefined => useRanking(period, limit, readTopAlbums);
+): readonly Ranked<PlayedAlbum>[] | undefined =>
+  useRanking("topAlbums", period, limit, readTopAlbums);
 
 /** Top artists: the `limit` artists played most in `period`, credited by track artist. */
 export const useTopArtists = (
   period: StatsPeriod,
   limit: number = STATS_TOP,
-): readonly Ranked<PlayedArtist>[] | undefined => useRanking(period, limit, readTopArtists);
+): readonly Ranked<PlayedArtist>[] | undefined =>
+  useRanking("topArtists", period, limit, readTopArtists);
 
 /** Every period with a Recap, newest first, or undefined while it first loads. */
 export const useRecaps = useRecapAvailability;
@@ -183,4 +215,44 @@ export const useRecap = (id: string): LoadedRecap | null | undefined =>
 
 /** The period's top five genre shares, refreshed with Stats' other readings. */
 export const useTopGenres = (period: StatsPeriod): readonly RecapGenre[] | undefined =>
-  useStatsRead(useCallback((stats: Stats["Service"]) => stats.topGenres(period), [period]));
+  useStatsRead(
+    useCallback((stats: Stats["Service"]) => stats.topGenres(period), [period]),
+    null,
+    `topGenres:${period}`,
+  );
+
+/** The period Stats opens on. */
+export const STATS_OPENING_PERIOD: StatsPeriod = "month";
+
+/**
+ * Reads what Stats opens on (its opening period's rankings and genres) into
+ * the kept readings, one read per free turn, so its first frame draws them
+ * (`readyScreens.ts`, #1352).
+ */
+export const readStatsOpening = async (
+  language: string,
+  turn: () => Promise<void>,
+): Promise<void> => {
+  const period = STATS_OPENING_PERIOD;
+  const reads: readonly (readonly [
+    string,
+    (stats: Stats["Service"]) => Effect.Effect<unknown, LibraryStoreError>,
+  ])[] = [
+    [rankingKey("topSongs", period, STATS_TOP), (stats) => readTopSongs(stats, period, STATS_TOP)],
+    [
+      rankingKey("topAlbums", period, STATS_TOP),
+      (stats) => readTopAlbums(stats, period, STATS_TOP),
+    ],
+    [
+      rankingKey("topArtists", period, STATS_TOP),
+      (stats) => readTopArtists(stats, period, STATS_TOP),
+    ],
+    [`topGenres:${period}`, (stats) => stats.topGenres(period)],
+  ];
+  for (const [key, read] of reads) {
+    await turn();
+    // oxlint-disable-next-line react/rules-of-hooks -- Effect Service.use resolves a service; it is not a React Hook.
+    const value = await appRuntime.runPromise(Stats.use(read)).catch(() => undefined);
+    if (value !== undefined) keepReading(`${key}:${language}`, value);
+  }
+};

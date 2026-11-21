@@ -27,7 +27,8 @@ import { libraryQuery, useLibraryQuery } from "./sharedQueries";
 const readNotices = LibraryStore.use((store) => store.privateCopyNotices);
 
 /** A pull that brings a change, or a membership change, is a playlists change. */
-const noticesQuery = libraryQuery("privateCopyNotices", { playlists: true }, readNotices);
+/** The private copies owing their notice, which `readyScreens.ts` keeps for playlist pages (#1352). */
+export const noticesQuery = libraryQuery("privateCopyNotices", { playlists: true }, readNotices);
 
 const NO_NOTICES: readonly number[] = [];
 const EMPTY = new Map<number, CollaborativePlaylist>();

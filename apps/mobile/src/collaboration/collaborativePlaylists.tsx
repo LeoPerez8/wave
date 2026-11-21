@@ -63,7 +63,8 @@ const store = <A,>(
   // oxlint-disable-next-line react/rules-of-hooks -- Effect Service.use resolves a service; it is not a React Hook.
   appRuntime.runPromise(LibraryStore.use((library) => run(library.collaborations)));
 
-const listCollaborations = libraryQuery(
+/** The collaborative playlists here, which `readyScreens.ts` keeps for their pages (#1352). */
+export const listCollaborations = libraryQuery(
   "collaborations",
   { playlists: true },
   // oxlint-disable-next-line react/rules-of-hooks -- Effect Service.use resolves a service; it is not a React Hook.

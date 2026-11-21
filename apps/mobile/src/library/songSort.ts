@@ -65,5 +65,8 @@ export function useSortedSongs<S extends SortableSong>(
   return { sort, songs: sorted };
 }
 
+/** [kind]'s saved sort, for code outside React (what `readyScreens.ts` keeps ahead). */
+export const settingSongSortNow = (kind: SongListKind): SongSort => setting(kind).get();
+
 /** The Songs tab's saved SQL sort, also used by its Queue section action. */
 export const songsSortNow = (): LibrarySongSort => setting("songs").get() as LibrarySongSort;

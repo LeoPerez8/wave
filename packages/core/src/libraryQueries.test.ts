@@ -546,4 +546,42 @@ describe("kept queries (#1352)", () => {
     assert.deepEqual(queries.current("albums"), { value: "A" });
     assert.equal(queries.stats().evicted, 0);
   });
+
+  // Each kind of Library write, as its writer announces it (the app's `publishLibraryChange`).
+  const WRITES = [
+    {
+      write: "a scan's batch",
+      reads: SONGS,
+      change: { kind: "tracks", ids: [4], burst: true, scanned: true },
+    },
+    { write: "a scan's end dropping gone files", reads: SONGS, change: { kind: "tracks" } },
+    {
+      write: "an import filling a playlist",
+      reads: { playlists: [7] },
+      change: { kind: "playlists", ids: [7], burst: true },
+    },
+    { write: "a sync pull", reads: { playlists: [7] }, change: { kind: "playlists", ids: [7] } },
+    {
+      write: "a counted play",
+      reads: { plays: true },
+      change: { kind: "plays", ids: [4], burst: true },
+    },
+    { write: "a star", reads: { favorites: true }, change: { kind: "favorites", ids: [4] } },
+    { write: "a tag edit", reads: SONGS, change: { kind: "tracks", ids: [4] } },
+  ] as const;
+
+  for (const { write, reads, change } of WRITES) {
+    test(`after ${write}, the next open of a kept query nobody showed draws the new data`, () => {
+      const { queries, answer, advance } = setup({ throttleMs: 1000, keptThrottleMs: 5000 });
+      queries.keep("kept", reads);
+      answer("kept", "before");
+      queries.change(change);
+      advance(5000);
+      answer("kept", "after");
+      const before = queries.stats().reads;
+      queries.attach("kept", reads, { visible: true, onChange: () => {} });
+      assert.deepEqual(queries.current("kept"), { value: "after" });
+      assert.equal(queries.stats().reads, before);
+    });
+  }
 });
