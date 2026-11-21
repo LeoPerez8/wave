@@ -41,6 +41,7 @@ import { findNoMatchFor } from "./FindField.tsx";
 import { rowDrag } from "./SongActions.tsx";
 import { songDragProps } from "./songDrag.ts";
 import type { SongTarget } from "../../shared/songActions.ts";
+import { useRowReorder } from "./rowReorder.ts";
 import "./tables.css";
 
 const SIZE = 100;
@@ -159,6 +160,7 @@ export function VirtualTable({
   selectAll,
   preview,
   onPlace,
+  onReorder,
 }: TableSelectionProps & {
   readonly scope: BrowseScope;
   readonly revision: number;
@@ -186,6 +188,8 @@ export function VirtualTable({
     readonly trailingHeading: string;
     readonly ranked?: boolean;
   };
+  /** Rows drag into place: [row] moves to place [to] (from 0). The Playlists list in Custom. */
+  readonly onReorder?: ((row: BrowseRow, to: number) => void) | undefined;
 }) {
   const viewport = useRef<HTMLDivElement>(null);
   const cache = useRef(new Map<number, BrowsePage>());
@@ -199,6 +203,8 @@ export function VirtualTable({
   const [changingSort, setChangingSort] = useState(false);
   /** An album's "Disc n" heads: each takes a row's height before its disc's first song. */
   const [discs, setDiscs] = useState<readonly DiscHead[]>([]);
+  const [listSort, setListSort] = useState<BrowsePage["listSort"]>();
+  const reorder = useRowReorder<BrowseRow>((row, to) => onReorder?.(row, to));
   const sortVersion = useRef(0);
   // A drag of this table's own rows to a new place: what it carries, where it started, and the
   // gap between rows it would land in.
@@ -234,7 +240,10 @@ export function VirtualTable({
     sort.key !== "custom" &&
     sort.key !== "releaseDate" &&
     songSortHasSpine(sort as SongSort);
-  const jumpByName = !preview && !changingSort && (spine || scope.kind === "playlists");
+  const jumpByName =
+    !preview &&
+    !changingSort &&
+    (spine || (scope.kind === "playlists" && (listSort === undefined || listSort === "name")));
   const emptyMessage =
     scope.find !== undefined
       ? (findNoMatchFor(scope.kind) ?? labels.noResults)
@@ -279,6 +288,7 @@ export function VirtualTable({
         setDiscs(results[0]![1].discs ?? []);
         setReady(true);
         setSort(results[0]![1].sort);
+        setListSort(results[0]![1].listSort);
         onSort?.(results[0]![1].sort);
         onTotal?.({ scope, total: results[0]![1].total });
         setActive((index) => Math.max(0, Math.min(index, results[0]![1].total - 1)));
@@ -704,12 +714,13 @@ export function VirtualTable({
                       : checkedTableRow(selection, row.id)
                   }
                   aria-disabled={row.unavailable}
-                  className={`table-row table-columns ${active === index ? "active-row" : ""} ${mark ? markClass(mark) : ""} ${placing?.from === index ? "dragging" : ""}`}
+                  className={`table-row table-columns ${active === index ? "active-row" : ""} ${mark ? markClass(mark) : ""} ${placing?.from === index ? "dragging" : ""} ${onReorder && reorder.dragging?.id === row.id ? "dragging" : ""} ${onReorder && reorder.over === index && reorder.dragging?.id !== row.id ? "drop-over" : ""}`}
                   style={{ top: slotOf(index) * HEIGHT }}
                   // A song row drags onto a playlist or the Queue; a ranking's rows only with selection.
                   {...(songList && (preview === undefined || onSelection !== undefined)
                     ? rowDragProps(row, index)
                     : {})}
+                  {...(onReorder ? reorder.props(row, index) : {})}
                   onMouseDown={(event) => {
                     if (onSelection && event.shiftKey) event.preventDefault();
                   }}

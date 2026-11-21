@@ -527,15 +527,24 @@ export type {
   SongLinkSetup,
   SongLinkTurnOff,
 } from "./songLinkHandling.ts";
-export { PLAYLIST_LAYOUTS, parsePlaylistLayout, storedPlaylistLayout } from "./playlistLayout.ts";
+export {
+  DESKTOP_PLAYLIST_LAYOUTS,
+  PLAYLIST_LAYOUTS,
+  PLAYLIST_LAYOUT_SETTING,
+  desktopPlaylistLayout,
+  parsePlaylistLayout,
+  storedPlaylistLayout,
+} from "./playlistLayout.ts";
 export type { PlaylistLayout } from "./playlistLayout.ts";
 export { keepAddToPlaylistOrder, sortPlaylistsForAdd } from "./addToPlaylistOrder.ts";
 export type { AddToPlaylistChoice } from "./addToPlaylistOrder.ts";
 export {
+  PLAYLIST_ORDER_SETTING,
   PLAYLIST_SORTS,
   choosePlaylistSort,
   movePlaylist,
   parsePlaylistOrder,
+  samePlaylistOrder,
   sortPlaylists,
   storedPlaylistOrder,
 } from "./playlistSort.ts";

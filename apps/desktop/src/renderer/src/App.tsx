@@ -2,6 +2,8 @@ import { VersionHistory } from "./VersionHistory.tsx";
 import { Links } from "./Links.tsx";
 import { FindField, findableList } from "./FindField.tsx";
 import {
+  DESKTOP_PLAYLIST_LAYOUTS,
+  PLAYLIST_SORTS,
   checkedTableRow,
   hasFindQuery,
   homeSectionTitle,
@@ -72,9 +74,11 @@ import {
 } from "./MixedSelection.tsx";
 import { useSongDrop, type DraggedSongs } from "./songDrag.ts";
 import { songActionToast } from "./songActionToast.ts";
-import { itemMenuEvents, type MenuPoint } from "./Menu.tsx";
+import { itemMenuEvents, type MenuItem, type MenuPoint } from "./Menu.tsx";
 import { shuffleMenuEvents } from "./ShuffleKinds.tsx";
 import { usePlaylistEdits } from "./Playlists.tsx";
+import { PlaylistGrid } from "./PlaylistGrid.tsx";
+import type { PlaylistListView } from "../../shared/playlists.ts";
 import { Graveyard } from "./Graveyard.tsx";
 import { applyLanguage, labels, text, useLanguage, tagTitle, artistName } from "./text.ts";
 import { LanguageSettings } from "./LanguageSettings.tsx";
@@ -187,6 +191,8 @@ export function App() {
   const [playlists, setPlaylists] = useState<readonly BrowseRow[]>([]);
   const [playlistOffset, setPlaylistOffset] = useState(0);
   const [playlistTotal, setPlaylistTotal] = useState(0);
+  /** How the Playlists list shows and orders playlists, its page and the sidebar alike. */
+  const [playlistList, setPlaylistList] = useState<PlaylistListView>();
   const failed = useCallback(() => setError(text.desktopLibrary.actionFailed), []);
   const playback = usePlayback(failed);
   const downloads = useDownloads();
@@ -394,6 +400,18 @@ export function App() {
     playlistOffset,
     failed,
   ]);
+  useEffect(() => {
+    let current = true;
+    void window.wave.playlists
+      .listView()
+      .then((view) => {
+        if (current) setPlaylistList(view);
+      })
+      .catch(failed);
+    return () => {
+      current = false;
+    };
+  }, [scan?.revision, account?.revision, playback.view?.revision, playlistEdits.edits, failed]);
   useEffect(() => {
     if (route.kind !== "search")
       content.current?.querySelector<HTMLElement>("[role=grid]")?.focus();
@@ -704,14 +722,59 @@ export function App() {
     changed: playback.refresh,
     failed: (message) => setError(message ?? text.desktopLibrary.actionFailed),
   });
-  const openCollectionMenu = (target: CollectionTarget, title: string, at: MenuPoint) =>
+  const openCollectionMenu = (
+    target: CollectionTarget,
+    title: string,
+    at: MenuPoint,
+    extra: readonly MenuItem[] = [],
+  ) =>
     actions.openItems(
       text.desktopLibrary.songMenu(tagTitle(title, target.kind)),
       window.wave.collections
         .actions(target, { here, selectable: true })
-        .then((about) => collections.itemsFor(target, about)),
+        .then((about) => collections.itemsFor(target, about))
+        .then((items) => [...items, ...extra]),
       at,
     );
+  /** Sorts or arranges the Playlists list, then reads the window again. */
+  const arrangePlaylists = (change: Promise<unknown>) =>
+    void change.then(playback.refresh).catch(failed);
+  /**
+   * A playlist's Move Up and Move Down where the Playlists list shows it: in Custom only, and not
+   * while a Find hides some of its neighbours.
+   */
+  const playlistMoves = (playlistId: number): readonly MenuItem[] => {
+    const ids = playlistList?.sort === "custom" && activeFind === undefined ? playlistList.ids : [];
+    const at = ids.indexOf(playlistId);
+    if (at === -1) return [];
+    // From the list as it is when chosen, not as the menu found it.
+    const step = (by: number) => () =>
+      arrangePlaylists(
+        window.wave.playlists
+          .listView()
+          .then((view) =>
+            window.wave.playlists.moveInList(playlistId, view.ids.indexOf(playlistId) + by),
+          ),
+      );
+    return [
+      ...(at > 0 ? [{ key: "move-up", label: text.playlists.moveUp, run: step(-1) }] : []),
+      ...(at < ids.length - 1
+        ? [{ key: "move-down", label: text.playlists.moveDown, run: step(1) }]
+        : []),
+    ];
+  };
+  /**
+   * The Playlists page's rows drag into place in Custom, and not while playlists are checked or a
+   * Find narrows the list (a place among the rows found isn't one in the whole list).
+   */
+  const reorderPlaylists =
+    route.kind === "playlists" &&
+    playlistList?.sort === "custom" &&
+    picks === undefined &&
+    activeFind === undefined
+      ? (row: BrowseRow, to: number) =>
+          arrangePlaylists(window.wave.playlists.moveInList(row.id, to))
+      : undefined;
   const searchFor = (query: string) => {
     setSelecting(undefined);
     setQuery(query);
@@ -973,7 +1036,12 @@ export function App() {
               onClick={() => go({ kind: "playlist", id: row.id })}
               {...playlistDrop.props(row.id, (songs) => dropSongs(songs, { playlist: row.id }))}
               {...itemMenuEvents((at) =>
-                openCollectionMenu({ kind: "playlist", id: row.id }, row.title, at),
+                openCollectionMenu(
+                  { kind: "playlist", id: row.id },
+                  row.title,
+                  at,
+                  playlistMoves(row.id),
+                ),
               )}
             >
               <Icon name="playlist" />
@@ -1142,6 +1210,17 @@ export function App() {
               </div>
             )}
             {route.kind === "playlists" && (
+              <p className="secondary" data-testid="playlist-count">
+                {text.playlists.playlistCount(
+                  activeFind === undefined
+                    ? playlistTotal
+                    : listed?.scope === scope
+                      ? listed.total
+                      : 0,
+                )}
+              </p>
+            )}
+            {route.kind === "playlists" && (
               <div className="hero-actions">
                 <button
                   onClick={(event) => {
@@ -1152,6 +1231,44 @@ export function App() {
                   <Icon name="folder" size={16} />
                   {text.playlists.importPlaylists}
                 </button>
+                <label className="playlist-sort">
+                  <span className="secondary">{text.playlists.sortBy}</span>
+                  <select
+                    value={playlistList?.sort ?? "name"}
+                    onChange={(event) =>
+                      arrangePlaylists(
+                        window.wave.playlists.sortList(
+                          event.target.value as PlaylistListView["sort"],
+                        ),
+                      )
+                    }
+                  >
+                    {PLAYLIST_SORTS.map(({ sort }) => (
+                      <option key={sort} value={sort}>
+                        {text.playlists.sorts[sort]}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+                <div
+                  className="search-online-toggle artist-toggle"
+                  role="group"
+                  aria-label={text.playlists.showAs}
+                >
+                  {DESKTOP_PLAYLIST_LAYOUTS.map((layout) => (
+                    <button
+                      key={layout}
+                      aria-pressed={(playlistList?.layout ?? "list") === layout}
+                      onClick={() => {
+                        setPlaylistList((view) => view && { ...view, layout });
+                        arrangePlaylists(window.wave.playlists.showListAs(layout));
+                      }}
+                    >
+                      <Icon name={layout === "list" ? "playlists" : "grid"} size={16} />
+                      {text.playlists.layouts[layout]}
+                    </button>
+                  ))}
+                </div>
               </div>
             )}
             {findField}
@@ -1364,6 +1481,29 @@ export function App() {
             revision={revision}
             changed={playback.refresh}
             failed={(message) => setError(message ?? text.desktopLibrary.actionFailed)}
+            onPlay={(row) =>
+              row.unavailable
+                ? setError(text.desktopLibrary.driveDisconnected)
+                : playback.run(window.wave.playlists.playGraveyard(route.id, row.itemId))
+            }
+            onMenu={(row, at, extra) =>
+              row.videoId !== undefined
+                ? actions.openItems(
+                    text.desktopLibrary.songMenu(row.title),
+                    streamed.items(row.videoId).then((items) => [...items, ...extra]),
+                    at,
+                  )
+                : // Its own menu, without Select: the Graveyard selects nothing.
+                  actions.openMenu(
+                    { scope: { kind: "songs" }, ids: [row.id] },
+                    row.title,
+                    at,
+                    extra,
+                    {
+                      done: () => {},
+                    },
+                  )
+            }
           />
         ) : route.kind === "search" ? (
           <SearchPage
@@ -1510,73 +1650,94 @@ export function App() {
                 onDone={() => setSelection(list, undefined)}
               />
             )}
-            {artistPage(
-              <VirtualTable
-                key={list}
-                scope={scope}
+            {route.kind === "playlists" && playlistList?.layout === "grid" && !picks ? (
+              <PlaylistGrid
                 revision={revision}
-                onHero={setHero}
-                onSort={setShownSort}
+                scope={scope}
                 onTotal={setListed}
-                // A playlist's rows drag to a new place only where it shows its own order.
-                onPlace={
-                  !picks &&
-                  scope.kind === "playlist" &&
-                  scope.id !== undefined &&
-                  shownSort?.key === "custom"
-                    ? (target, before) => playlistEdits.place(scope.id!, target, before)
-                    : undefined
+                onOpen={(row) => go({ kind: "playlist", id: row.id })}
+                onMenu={(row, at) =>
+                  openCollectionMenu(
+                    { kind: "playlist", id: row.id },
+                    row.title,
+                    at,
+                    playlistMoves(row.id),
+                  )
                 }
-                onOpen={open}
+                onReorder={reorderPlaylists}
                 onError={failed}
-                selection={collectionKind ? picks?.[collectionKind] : table.selection}
-                onSelection={
-                  collectionKind
-                    ? (selection) =>
-                        setPicks((current) => withPick(current, collectionKind, selection))
-                    : table.onSelection
-                }
-                {...(picks
-                  ? {}
-                  : {
-                      onMenu: (row: BrowseRow, at: MenuPoint) => {
-                        if (collectionKind !== undefined)
-                          return openCollectionMenu(
-                            { kind: collectionKind, id: row.id },
-                            row.title,
+              />
+            ) : (
+              artistPage(
+                <VirtualTable
+                  key={list}
+                  scope={scope}
+                  revision={revision}
+                  onHero={setHero}
+                  onSort={setShownSort}
+                  onTotal={setListed}
+                  // A playlist's rows drag to a new place only where it shows its own order.
+                  onPlace={
+                    !picks &&
+                    scope.kind === "playlist" &&
+                    scope.id !== undefined &&
+                    shownSort?.key === "custom"
+                      ? (target, before) => playlistEdits.place(scope.id!, target, before)
+                      : undefined
+                  }
+                  onReorder={reorderPlaylists}
+                  onOpen={open}
+                  onError={failed}
+                  selection={collectionKind ? picks?.[collectionKind] : table.selection}
+                  onSelection={
+                    collectionKind
+                      ? (selection) =>
+                          setPicks((current) => withPick(current, collectionKind, selection))
+                      : table.onSelection
+                  }
+                  {...(picks
+                    ? {}
+                    : {
+                        onMenu: (row: BrowseRow, at: MenuPoint) => {
+                          if (collectionKind !== undefined)
+                            return openCollectionMenu(
+                              { kind: collectionKind, id: row.id },
+                              row.title,
+                              at,
+                              collectionKind === "playlist" ? playlistMoves(row.id) : [],
+                            );
+                          if (
+                            row.videoId !== undefined &&
+                            !(table.selection && checkedTableRow(table.selection, row.id))
+                          )
+                            return actions.openItems(
+                              text.desktopLibrary.songMenu(row.title),
+                              streamed.items(row.videoId).then((items) => [
+                                ...items,
+                                {
+                                  key: "select",
+                                  label: text.itemActions.labels.select,
+                                  run: () => table.onSelection?.(tableSelectionOf([row.id], true)),
+                                },
+                              ]),
+                              at,
+                            );
+                          openTableSongMenu(
+                            table,
+                            scope,
+                            row,
                             at,
+                            // Move Up and Move Down only where the playlist shows its own order.
+                            scope.kind === "playlist" &&
+                              scope.id !== undefined &&
+                              shownSort?.key === "custom"
+                              ? playlistEdits.moveItems(scope.id, row.id)
+                              : [],
                           );
-                        if (
-                          row.videoId !== undefined &&
-                          !(table.selection && checkedTableRow(table.selection, row.id))
-                        )
-                          return actions.openItems(
-                            text.desktopLibrary.songMenu(row.title),
-                            streamed.items(row.videoId).then((items) => [
-                              ...items,
-                              {
-                                key: "select",
-                                label: text.itemActions.labels.select,
-                                run: () => table.onSelection?.(tableSelectionOf([row.id], true)),
-                              },
-                            ]),
-                            at,
-                          );
-                        openTableSongMenu(
-                          table,
-                          scope,
-                          row,
-                          at,
-                          // Move Up and Move Down only where the playlist shows its own order.
-                          scope.kind === "playlist" &&
-                            scope.id !== undefined &&
-                            shownSort?.key === "custom"
-                            ? playlistEdits.moveItems(scope.id, row.id)
-                            : [],
-                        );
-                      },
-                    })}
-              />,
+                        },
+                      })}
+                />,
+              )
             )}
           </>
         )}

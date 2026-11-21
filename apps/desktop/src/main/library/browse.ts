@@ -23,6 +23,7 @@ import type { Page } from "../../shared/bridge.ts";
 import type { BrowsePage, BrowseRow, BrowseScope } from "../../shared/browse.ts";
 import { ytRow } from "../../shared/yt.ts";
 import { searchSongIds } from "./search.ts";
+import { playlistListSort, sortedPlaylistIds } from "./playlistList.ts";
 import {
   playlistSongSort,
   readBrowseSort,
@@ -305,6 +306,19 @@ export const playlistSongs = (
     findOf({ kind: "playlist", id, ...(find === undefined ? {} : { find }) }),
   ) ?? (hasStoredEntries(db, id) ? orderedEntries(db, listableEntries(id)) : undefined);
 
+/**
+ * The Playlists list's ids in its chosen order (`sortedPlaylistIds`); with a Find, only the
+ * playlists it finds, each in its place.
+ */
+const playlistListIds = (db: LibraryDatabase, scope: BrowseScope): number[] => {
+  const ids = sortedPlaylistIds(db);
+  if (findOf(scope) === undefined) return ids;
+  const found = new Set(
+    db.all<{ id: number }>(sql`SELECT id FROM (${listing(scope).source})`).map((row) => row.id),
+  );
+  return ids.filter((id) => found.has(id));
+};
+
 /** The saved list an artist's Popular sort ranks by: YouTube Music's order of their songs. */
 const popularSongs = (db: LibraryDatabase, artistId: number): readonly YtSong[] | null => {
   const name = db.get<{ name: string }>(sql`SELECT name FROM artists WHERE id=${artistId}`)?.name;
@@ -381,7 +395,12 @@ export const browseLibrary = (
   let items: BrowseRow[];
   const arranged =
     playlist === undefined ? undefined : arrangedEntries(db, playlist, findOf(scope));
-  if (arranged !== undefined) {
+  if (scope.kind === "playlists") {
+    // The Playlists list's order is Core's (`sortPlaylists`), not one SQLite has.
+    const ids = playlistListIds(db, scope);
+    total = ids.length;
+    items = rowsById(db, source, ids.slice(offset, offset + limit));
+  } else if (arranged !== undefined) {
     const sorted = arranged;
     total = sorted.length;
     items = playlistRows(db, sorted.slice(offset, offset + limit), keepStreams);
@@ -463,6 +482,7 @@ export const browseLibrary = (
     ...(hero ? { hero } : {}),
     ...(shown ? { sort: shown } : {}),
     ...(discs.length > 0 ? { discs } : {}),
+    ...(scope.kind === "playlists" ? { listSort: playlistListSort(db) } : {}),
   };
 };
 
@@ -471,6 +491,8 @@ export const browseLetter = (
   scope: BrowseScope,
   letter: string,
 ): number | null => {
+  // The Playlists list files under its names only while it's sorted by them.
+  if (scope.kind === "playlists" && playlistListSort(db) !== "name") return null;
   const sort = readBrowseSort(db, scope.kind);
   const spine =
     // A song list files under what it's sorted by; Popular and the dates have no letters.
@@ -520,11 +542,12 @@ export const browseRowIds = (
 };
 
 /**
- * The row ids of a page whose order SQLite can't give (a sorted playlist, an artist's Popular),
- * as the page shows them: a streamed entry's is its entry id negated. Undefined when the list's
- * own query orders it.
+ * The row ids of a page whose order SQLite can't give (a sorted playlist, an artist's Popular,
+ * the Playlists list), as the page shows them: a streamed entry's is its entry id negated.
+ * Undefined when the list's own query orders it.
  */
 export const arrangedRowIds = (db: LibraryDatabase, scope: BrowseScope): number[] | undefined => {
+  if (scope.kind === "playlists") return playlistListIds(db, scope);
   if (scope.id === undefined) return undefined;
   if (scope.kind === "playlist")
     return arrangedEntries(db, scope.id, findOf(scope))?.map((entry) =>
