@@ -3,11 +3,22 @@
  * are unchanged; open/drizzle hand it the already migrated sql.js database.
  * Only LibraryStore's platform imports resolve here (never testDatabase's).
  */
-import type { TestDatabase } from "@wave/client/testing";
+import { asyncReadClient, type TestDatabase } from "@wave/client/testing";
+import type { AsyncSqlite } from "@wave/client/db/offThreadReads";
 
 let database: TestDatabase | undefined;
-export const setDesktopDatabase = (db: TestDatabase): void => {
+/**
+ * expo-sqlite's asynchronous opener, when the bench asks for off-thread reads:
+ * they then replay against the same fixture (#1348). Without it, every read
+ * runs synchronously on the fixture, as the store's tests expect.
+ */
+export let openDatabaseAsync: (() => Promise<AsyncSqlite>) | undefined;
+export const setDesktopDatabase = (
+  db: TestDatabase,
+  options: { readonly offThreadReads?: boolean } = {},
+): void => {
   database = db;
+  openDatabaseAsync = options.offThreadReads ? async () => asyncReadClient(db) : undefined;
 };
 export const openDatabaseSync = () => {
   if (database === undefined) throw new Error("no desktop fixture database selected");

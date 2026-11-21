@@ -83,12 +83,13 @@ export const loadWorktreeModule = async <A = Record<string, unknown>>(
 export const loadLibraryStore = async (
   root: string,
   db: TestDatabase,
+  options: { readonly offThreadReads?: boolean } = {},
 ): Promise<LibraryStore["Service"]> => {
   const module = await loadWorktreeModule<typeof import("../../src/library/LibraryStore.ts")>(
     root,
     "apps/mobile/src/library/LibraryStore.ts",
   );
-  setDesktopDatabase(db);
+  setDesktopDatabase(db, options);
   return Effect.runPromise(
     Effect.gen(function* () {
       return yield* module.LibraryStore;
