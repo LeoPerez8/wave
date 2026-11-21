@@ -20,7 +20,8 @@ export interface TabScreens {
    */
   readonly keepLayout: boolean;
   /**
-   * Freeze a hidden tab's React tree: no renders until it shows again. Only
+   * Freeze a hidden tab's React tree: no renders until it shows again, when
+   * the updates it missed render once (#1358, Performance rules 1 and 2). Only
    * with `detach`: react-native-screens freezes only the screens it manages.
    */
   readonly freeze: boolean;
@@ -34,18 +35,21 @@ export interface TabScreens {
   readonly retain: number;
 }
 
-/** expo-router's defaults, every tab on the bar kept (#304); hidden screens pause (#722). */
+/**
+ * expo-router's defaults, every tab on the bar kept (#304); hidden screens
+ * pause (#722) and hidden tabs freeze (#1358).
+ */
 const DEFAULT_TAB_SCREENS: TabScreens = {
   detach: true,
   keepLayout: false,
-  freeze: false,
+  freeze: true,
   followHidden: false,
   retain: MAX_TABS,
 };
 
 /**
  * The choices [value] names, separated by commas or spaces: `detach` or
- * `attach`, `keep-layout` or `display-none`, `freeze`, `follow` or `pause`,
+ * `attach`, `keep-layout` or `display-none`, `freeze` or `thaw`, `follow` or `pause`,
  * `retain=<n>`. Anything not named, unknown or out of range stays at its default.
  */
 export const parseTabScreens = (value: string | undefined): TabScreens => {
@@ -56,7 +60,8 @@ export const parseTabScreens = (value: string | undefined): TabScreens => {
       screens = { ...screens, detach: token === "detach" };
     else if (token === "keep-layout" || token === "display-none") {
       screens = { ...screens, keepLayout: token === "keep-layout" };
-    } else if (token === "freeze") screens = { ...screens, freeze: true };
+    } else if (token === "freeze" || token === "thaw")
+      screens = { ...screens, freeze: token === "freeze" };
     else if (token === "follow" || token === "pause")
       screens = { ...screens, followHidden: token === "follow" };
     else if (retain !== undefined && Number(retain) >= 1)
@@ -70,7 +75,7 @@ export const describeTabScreens = (screens: TabScreens): string =>
   [
     screens.detach ? "detach" : "attach",
     screens.keepLayout ? "keep-layout" : "display-none",
-    ...(screens.freeze ? ["freeze"] : []),
+    ...(screens.detach ? [screens.freeze ? "freeze" : "thaw"] : []),
     ...(screens.followHidden ? ["follow"] : []),
     `retain=${screens.retain}`,
   ].join(",");

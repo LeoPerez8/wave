@@ -11,7 +11,12 @@ import {
 } from "@wave/core";
 import * as Effect from "effect/Effect";
 import { runSteps } from "@/lib/stepped";
-import { recommendationTurnEffect } from "@/lib/recommendationWork";
+import { recommendationTurnEffect as recommendationTurn } from "@/lib/recommendationWork";
+
+import { homeTurnOf } from "./homeWork";
+
+/** Home's mix build takes no step while Home is out of sight (#1351). */
+const recommendationTurnEffect = homeTurnOf(recommendationTurn);
 
 import { persistedSetting } from "@/lib/persistedSetting";
 import type { LibraryStore } from "@/library/LibraryStore";

@@ -37,3 +37,9 @@ export const handBuiltArtwork: (files: Readonly<Record<string, string>>) => Sour
 export const unreadMemoDependencies: (files: Readonly<Record<string, string>>) => string[];
 /** Every `<Text>` given a press prop, owned by its declaration (`capability` `react-native#Text`). */
 export const pressedText: (files: Readonly<Record<string, string>>) => SourceUse[];
+/**
+ * Every `scheduleOnRN`/`runOnJS` a gesture's `onUpdate`/`onChange`, an animated scroll handler
+ * or an animated reaction's callback makes whatever the outcome, as
+ * `file#owner: handler call(args)` (Performance rule 7).
+ */
+export const gestureJsCalls: (files: Readonly<Record<string, string>>) => string[];

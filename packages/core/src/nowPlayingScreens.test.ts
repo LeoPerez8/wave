@@ -3,6 +3,7 @@ import { describe, test } from "node:test";
 
 import {
   NOW_PLAYING_OPENS_ON,
+  relatedTimingKind,
   nowPlayingPageSwipesEnabled,
   nowPlayingRelatedSwipeEnabled,
   settleRelatedRise,
@@ -201,6 +202,30 @@ describe("stepNowPlayingScreens", () => {
       { type: "edit" },
     ] as const)
       assert.deepEqual(stepNowPlayingScreens(editing, event), { screens: editing, close: false });
+  });
+});
+
+describe("relatedTimingKind", () => {
+  test("opening Related, by its chevron or over the Queue, is a Related open", () => {
+    assert.equal(relatedTimingKind(player, { type: "show", screen: "related" }), "relatedOpen");
+    assert.equal(relatedTimingKind(queue, { type: "toggle", screen: "related" }), "relatedOpen");
+  });
+
+  test("leaving Related by its arrow, the header, a drag or Back is a Related close", () => {
+    for (const event of [
+      { type: "show", screen: "player" },
+      { type: "headerTap" },
+      { type: "dragDown" },
+      { type: "back" },
+    ] as const)
+      assert.equal(relatedTimingKind(related, event), "relatedClose");
+  });
+
+  test("nothing the user did, and no move to or from Related, is timed", () => {
+    assert.equal(relatedTimingKind(related, { type: "closed" }), null);
+    assert.equal(relatedTimingKind(related, { type: "ytMusicOff" }), null);
+    assert.equal(relatedTimingKind(related, { type: "show", screen: "related" }), null);
+    assert.equal(relatedTimingKind(player, { type: "show", screen: "queue" }), null);
   });
 });
 

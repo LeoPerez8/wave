@@ -22,8 +22,11 @@ import { libraryQuery, useLibraryQuery } from "./sharedQueries";
 /** How the Playlists list is sorted (by name until changed); re-renders when it changes. */
 export const usePlaylistSort = (): PlaylistSort => playlistOrder.useValue().sort;
 
-/** Re-read after plays, which move playlists under Recently Played, and playlist edits. */
-const readLastPlayed = libraryQuery(
+/**
+ * Re-read after plays, which move playlists under Recently Played, and playlist edits;
+ * `readyScreens.ts` keeps it from startup.
+ */
+export const playlistsLastPlayedQuery = libraryQuery(
   "playlistsLastPlayed",
   { playlists: true, plays: true },
   Effect.gen(function* () {
@@ -40,7 +43,10 @@ const readLastPlayed = libraryQuery(
 export const useSortedPlaylists = (): readonly PlaylistRow[] => {
   const playlists = usePlaylists();
   const { sort, order } = playlistOrder.useValue();
-  const lastPlayed = useLibraryQuery(sort === "played" ? readLastPlayed : null, NEVER_PLAYED);
+  const lastPlayed = useLibraryQuery(
+    sort === "played" ? playlistsLastPlayedQuery : null,
+    NEVER_PLAYED,
+  );
   return useMemo(
     () => sortPlaylists(playlists, { sort, order, lastPlayed }),
     [playlists, sort, order, lastPlayed],

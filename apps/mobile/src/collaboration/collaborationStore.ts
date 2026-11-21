@@ -27,16 +27,20 @@ export interface CollaborationStore<E> {
   readonly keepInviteLink: (syncId: string, invite: CreatedInvite | null) => Effect.Effect<void, E>;
 }
 
-/** The calls over [db], each failing with what it was doing. */
+/**
+ * The calls over [db], each failing with what it was doing. Reads go through [read], the
+ * Library store's read boundary, which runs them off the JS thread (#1348).
+ */
 export const collaborationStore = <E>(
   db: LibraryDatabase,
   fail: (operation: string, cause: unknown) => E,
+  read: <A>(operation: string, run: (db: LibraryDatabase) => A) => Effect.Effect<A, E>,
 ): CollaborationStore<E> => {
   const run = <A>(operation: string, call: () => A) =>
     Effect.try({ try: call, catch: (cause) => fail(operation, cause) });
   return {
     list: Effect.suspend(() =>
-      run("read the collaborative playlists", () => selectCollaborations(db)),
+      read("read the collaborative playlists", (db) => selectCollaborations(db)),
     ),
     convert: (playlistId, collaboration) =>
       run("make the playlist collaborative", () =>
@@ -46,7 +50,7 @@ export const collaborationStore = <E>(
       run("keep the members", () => keepCollaborationMembers(db, collaboration)),
     forget: (syncId) => run("end the collaboration", () => forgetCollaboration(db, syncId)),
     leave: (syncId) => run("leave the playlist", () => leaveCollaborativePlaylist(db, syncId)),
-    inviteLink: (syncId) => run("read the invite link", () => selectInviteLink(db, syncId)),
+    inviteLink: (syncId) => read("read the invite link", (db) => selectInviteLink(db, syncId)),
     keepInviteLink: (syncId, invite) =>
       run("keep the invite link", () => keepInviteLink(db, syncId, invite)),
   };

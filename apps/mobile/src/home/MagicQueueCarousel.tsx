@@ -1,9 +1,16 @@
-import { useEffect, useRef, useState, type ReactNode } from "react";
-import { ScrollView, View, type ScrollViewInstance } from "react-native";
+import { useEffect, useState, type ReactNode } from "react";
+import { View } from "react-native";
+import Animated, {
+  useAnimatedRef,
+  useAnimatedScrollHandler,
+  useSharedValue,
+} from "react-native-reanimated";
+import { scheduleOnRN } from "react-native-worklets";
 
 import { CELL, grid } from "@/catalog/grid";
+import { useStagedCount } from "@/lib/stagedCount";
 import { useListScrollable } from "@/motion/heldTouch";
-import { magicQueueCarouselRestarts, type MagicQueueCarouselRow } from "@wave/core";
+import { magicQueueCarouselRestarts, pagerMounts, type MagicQueueCarouselRow } from "@wave/core";
 
 /** A page of the carousel: what it draws, under a [key] that stays its own. */
 export interface CarouselPage {
@@ -21,7 +28,10 @@ export interface CarouselPage {
  * TalkBack adjust) moves the row there with no animation. A page added or
  * removed before the one in sight starts the row over at that page; one after
  * it changes nothing in sight. Pages out of sight are hidden from screen
- * readers.
+ * readers. The page in sight mounts in the row's first frame and the others
+ * in the frames after, nearest first (Core's `pagerMounts`, #1380), so they
+ * are there before a swipe reaches them. A swipe is followed on the UI
+ * thread and calls JS only when the page it is on changes.
  */
 export function MagicQueueCarousel({
   pages,
@@ -75,19 +85,33 @@ function CarouselScrollView({
   pageWidth: number;
 }) {
   const scrollable = useListScrollable();
-  const row = useRef<ScrollViewInstance>(null);
+  const row = useAnimatedRef<Animated.ScrollView>();
   // Where the row starts, fixed at mount: Android scrolls to a changed `contentOffset`, which
   // would pull a swipe to the page it is only halfway to.
   const [start] = useState(() => ({ x: index * pageWidth, y: 0 }));
+  // The page the row opened on mounts first, then its neighbours, a frame at a time.
+  const [first] = useState(index);
+  const { order, counts } = pagerMounts({ count: pages.length, index: first });
+  const mounted = new Set(order.slice(0, useStagedCount(counts)));
   // The page the row itself last scrolled to: a swipe needs no move back to where it already is.
-  const at = useRef(index);
+  const at = useSharedValue(index);
+  const count = pages.length;
+  const onScroll = useAnimatedScrollHandler(
+    (event) => {
+      const now = Math.round(event.contentOffset.x / pageWidth);
+      if (now === at.get() || now < 0 || now >= count) return;
+      at.set(now);
+      scheduleOnRN(onIndex, now);
+    },
+    [pageWidth, count, onIndex],
+  );
   useEffect(() => {
-    if (at.current === index) return;
-    at.current = index;
+    if (at.get() === index) return;
+    at.set(index);
     row.current?.scrollTo({ x: index * pageWidth, animated: false });
-  }, [index, pageWidth]);
+  }, [at, row, index, pageWidth]);
   return (
-    <ScrollView
+    <Animated.ScrollView
       ref={row}
       horizontal
       pagingEnabled
@@ -98,14 +122,10 @@ function CarouselScrollView({
       contentOffset={start}
       // Android can drop the offset of a row not laid out yet: go there once its pages are.
       onContentSizeChange={() => {
-        if (at.current > 0) row.current?.scrollTo({ x: at.current * pageWidth, animated: false });
+        const page = at.get();
+        if (page > 0) row.current?.scrollTo({ x: page * pageWidth, animated: false });
       }}
-      onScroll={(event) => {
-        const now = Math.round(event.nativeEvent.contentOffset.x / pageWidth);
-        if (now === at.current || now < 0 || now >= pages.length) return;
-        at.current = now;
-        onIndex(now);
-      }}
+      onScroll={onScroll}
     >
       {pages.map((page, place) => (
         <View
@@ -113,10 +133,10 @@ function CarouselScrollView({
           importantForAccessibility={place === index ? "auto" : "no-hide-descendants"}
           style={{ width: pageWidth, paddingHorizontal: grid.margin }}
         >
-          {page.content}
+          {mounted.has(place) || place === index ? page.content : null}
         </View>
       ))}
-    </ScrollView>
+    </Animated.ScrollView>
   );
 }
 

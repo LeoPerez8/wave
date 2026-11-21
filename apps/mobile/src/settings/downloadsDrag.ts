@@ -34,6 +34,7 @@ import {
 import { scheduleOnRN } from "react-native-worklets";
 
 import { CELL, grid } from "@/catalog/grid";
+import { useResetAfterRender } from "@/components/resetAfterRender";
 import { handleHold } from "@/motion/handleHold";
 import { measureRect, type Measurable } from "@/motion/measureRect";
 import type { NativeYtSong } from "@/native/waveYtMusic";
@@ -98,6 +99,11 @@ export type DownloadRowDrag = {
   readonly startScroll: SharedValue<number>;
   readonly begin: (target: DownloadDrag, view: Measurable | null) => void;
   readonly dragTo: (distance: number) => void;
+  /**
+   * The gesture's travel, on the UI thread: finds where the row would land and
+   * calls `dragTo` only when that changes (Performance rule 7).
+   */
+  readonly report: (distance: number) => void;
   readonly drop: (canceled: boolean) => void;
 };
 
@@ -173,6 +179,11 @@ export function useDownloadsDrag({
   // The dragged row's top in the list's viewport when it was picked up, and its height.
   const anchor = useSharedValue(0);
   const lifted = useSharedValue(0);
+  // The scope's row heights while a row is lifted, the place the UI thread last told JS of,
+  // and the content length it last asked JS to read again.
+  const scopeHeights = useSharedValue<readonly number[]>([]);
+  const told = useSharedValue(-1);
+  const askedContent = useSharedValue(-1);
 
   const [drag, setDrag] = useState<DownloadDrag | null>(null);
   const session = useRef<Session | null>(null);
@@ -224,6 +235,8 @@ export function useDownloadsDrag({
         over: id,
       };
       session.current = started;
+      scopeHeights.set(scope.heights);
+      told.set(index);
       content.set(listRef.current?.getState().contentLength ?? 0);
       step.set(scope.heights[index] ?? 0);
       to.set(index);
@@ -235,6 +248,7 @@ export function useDownloadsDrag({
         if (box === undefined || row === undefined) {
           // Not laid out: no lifted copy to show, so no drag.
           session.current = null;
+          scopeHeights.set([]);
           from.set(-1);
           to.set(-1);
           return;
@@ -244,7 +258,7 @@ export function useDownloadsDrag({
         setDrag(started.drag);
       });
     },
-    [listRef, content, step, to, from, anchor, lifted],
+    [listRef, scopeHeights, told, content, step, to, from, anchor, lifted],
   );
 
   const dragTo = useCallback(
@@ -268,22 +282,38 @@ export function useDownloadsDrag({
     },
     [content, listRef, to],
   );
+  const report = useCallback(
+    (distance: number) => {
+      "worklet";
+      const heights = scopeHeights.get();
+      const start = from.get();
+      if (start === -1 || heights.length === 0) return;
+      const place = reorderTarget({
+        from: start,
+        distance,
+        rowHeight: heights,
+        count: heights.length,
+      });
+      if (place === told.get()) return;
+      told.set(place);
+      scheduleOnRN(dragTo, distance);
+    },
+    [scopeHeights, from, told, dragTo],
+  );
+  const readContent = useCallback(
+    () => content.set(listRef.current?.getState().contentLength ?? content.get()),
+    [content, listRef],
+  );
 
   // Rows drop into place in the same frame the new order renders.
-  const resetAfterRender = useRef(false);
-  useLayoutEffect(() => {
-    if (!resetAfterRender.current) return;
-    resetAfterRender.current = false;
-    from.set(-1);
-    to.set(-1);
-    travel.set(0);
-  });
+  const resetAfterRender = useResetAfterRender(from, to, travel);
 
   const drop = useCallback(
     (canceled: boolean) => {
       const current = session.current;
       session.current = null;
-      resetAfterRender.current = true;
+      scopeHeights.set([]);
+      resetAfterRender();
       setDrag(null);
       if (current === null || canceled) return;
       const from = current.ids[current.from] ?? "";
@@ -293,7 +323,7 @@ export function useDownloadsDrag({
           : { kind: "group", from, to: current.over },
       );
     },
-    [land],
+    [land, scopeHeights, resetAfterRender],
   );
 
   // The dragged row left the list under the drag (its song started, or was cancelled): its
@@ -318,10 +348,17 @@ export function useDownloadsDrag({
     const max = Math.max(0, content.get() - viewport.get());
     const now = scroll.get();
     const next = Math.min(max, Math.max(0, now + speed * seconds));
-    if (next === now) return;
+    if (next === now) {
+      // Held at the end it knows of: the list may have measured more since, so JS reads it once.
+      if (speed > 0 && askedContent.get() !== content.get()) {
+        askedContent.set(content.get());
+        scheduleOnRN(readContent);
+      }
+      return;
+    }
     scrollTo(scrollRef, 0, next, false);
     scroll.set(next);
-    scheduleOnRN(dragTo, travel.get() + next - startScroll.get());
+    report(travel.get() + next - startScroll.get());
   }, false);
   // Only while a row is lifted, so an idle page doesn't run a callback every frame.
   useEffect(() => {
@@ -349,8 +386,8 @@ export function useDownloadsDrag({
   }));
 
   const rowDrag = useMemo<DownloadRowDrag>(
-    () => ({ from, to, step, travel, scroll, startScroll, begin, dragTo, drop }),
-    [from, to, step, travel, scroll, startScroll, begin, dragTo, drop],
+    () => ({ from, to, step, travel, scroll, startScroll, begin, dragTo, report, drop }),
+    [from, to, step, travel, scroll, startScroll, begin, dragTo, report, drop],
   );
 
   return {
@@ -375,7 +412,7 @@ export function useDragGrip(
   target: DownloadDrag,
   view: RefObject<Measurable | null>,
 ) {
-  const { travel, scroll, startScroll, begin, dragTo, drop } = rowDrag;
+  const { travel, scroll, startScroll, begin, report, drop } = rowDrag;
   const latest = useRef(target);
   useLayoutEffect(() => {
     latest.current = target;
@@ -395,14 +432,14 @@ export function useDragGrip(
         onUpdate: (event: { translationY: number }) => {
           "worklet";
           travel.set(event.translationY);
-          scheduleOnRN(dragTo, event.translationY + scroll.get() - startScroll.get());
+          report(event.translationY + scroll.get() - startScroll.get());
         },
         onDeactivate: (event: { canceled: boolean }) => {
           "worklet";
           scheduleOnRN(drop, event.canceled);
         },
       }),
-      [travel, scroll, startScroll, pickUp, dragTo, drop],
+      [travel, scroll, startScroll, pickUp, report, drop],
     ),
   );
 }

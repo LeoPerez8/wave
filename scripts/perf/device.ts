@@ -308,7 +308,10 @@ export const threadSwitchesCommand = (pkg: string): string =>
 
 /** What the runner taps, found in a `uiautomator dump`. */
 export type Target =
-  { readonly desc: string } | { readonly descPrefix: string } | { readonly text: string };
+  | { readonly desc: string }
+  | { readonly descPrefix: string }
+  | { readonly descSuffix: string }
+  | { readonly text: string };
 
 const decode = (value: string): string =>
   value
@@ -328,6 +331,8 @@ const matches = (node: string, target: Target): boolean => {
   if ("desc" in target) return attribute(node, "content-desc") === target.desc;
   if ("descPrefix" in target)
     return attribute(node, "content-desc")?.startsWith(target.descPrefix) ?? false;
+  if ("descSuffix" in target)
+    return attribute(node, "content-desc")?.endsWith(target.descSuffix) ?? false;
   return attribute(node, "text") === target.text;
 };
 

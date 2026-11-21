@@ -5,13 +5,14 @@ import type { LibraryStore } from "../library/LibraryStore.ts";
 
 import { readCatalogInputs } from "./catalogInputs.ts";
 export const readMixCatalog = (
-  store: Pick<LibraryStore["Service"], "mixCatalogPage" | "graphRadioPage">,
+  store: Pick<LibraryStore["Service"], "mixCatalog" | "graphRadios">,
   between: Effect.Effect<void>,
 ) =>
   Effect.gen(function* () {
+    // The catalog and its radios, each as one page: two reads, whatever their size (#1351).
     const catalog = yield* readCatalogInputs(
-      store.mixCatalogPage,
-      store.graphRadioPage,
+      () => store.mixCatalog,
+      () => store.graphRadios,
       between,
       (entry) => entry.videoId,
     );

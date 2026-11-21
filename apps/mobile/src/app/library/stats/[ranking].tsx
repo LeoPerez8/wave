@@ -6,7 +6,6 @@ import { View } from "react-native";
 
 import { CatalogLine } from "@/catalog/CatalogLine";
 import { CELL, grid } from "@/catalog/grid";
-import { TrackSkeletons } from "@/catalog/Skeletons";
 import { EmptyState } from "@/components/EmptyState";
 import { ScreenHeader } from "@/components/ScreenHeader";
 import { useLocalisation } from "@/localisation/localisation";
@@ -36,19 +35,11 @@ function NothingPlayedHere({ period }: { period: StatsPeriod }) {
   );
 }
 
-function LoadingRanking() {
-  const { strings } = useLocalisation();
-  return (
-    <View style={{ paddingHorizontal: grid.margin }}>
-      <TrackSkeletons label={strings.stats.loadingRanking} />
-    </View>
-  );
-}
-
 function AllTopSongs({ period }: { period: StatsPeriod }) {
   const ranking = useTopSongs(period, STATS_SEE_ALL);
   useScreenContent(ranking !== undefined);
-  if (ranking === undefined) return <LoadingRanking />;
+  // Drawn from memory (`statsOpeningQueries`, or Stats' top for the period chosen there).
+  if (ranking === undefined) return null;
   if (ranking.length === 0) return <NothingPlayedHere period={period} />;
   return (
     <RankedSongList ranking={ranking} period={period} header={<PeriodLine period={period} />} />
@@ -58,7 +49,8 @@ function AllTopSongs({ period }: { period: StatsPeriod }) {
 function AllTopAlbums({ period }: { period: StatsPeriod }) {
   const ranking = useTopAlbums(period, STATS_SEE_ALL);
   useScreenContent(ranking !== undefined);
-  if (ranking === undefined) return <LoadingRanking />;
+  // Drawn from memory (`statsOpeningQueries`, or Stats' top for the period chosen there).
+  if (ranking === undefined) return null;
   if (ranking.length === 0) return <NothingPlayedHere period={period} />;
   return <RankedAlbumList ranking={ranking} header={<PeriodLine period={period} />} />;
 }
@@ -66,7 +58,8 @@ function AllTopAlbums({ period }: { period: StatsPeriod }) {
 function AllTopArtists({ period }: { period: StatsPeriod }) {
   const ranking = useTopArtists(period, STATS_SEE_ALL);
   useScreenContent(ranking !== undefined);
-  if (ranking === undefined) return <LoadingRanking />;
+  // Drawn from memory (`statsOpeningQueries`, or Stats' top for the period chosen there).
+  if (ranking === undefined) return null;
   if (ranking.length === 0) return <NothingPlayedHere period={period} />;
   return <RankedArtistList ranking={ranking} header={<PeriodLine period={period} />} />;
 }

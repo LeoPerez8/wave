@@ -72,6 +72,8 @@ export interface UpdateRunnerOptions {
   readonly log: (level: LogLevel, message: string) => void;
   /** Tells the person something they asked about, or an install, came to this. */
   readonly report: (notice: UpdateNotice) => void;
+  /** Waits for a free turn before handling a step's answer: its network wait isn't a slice (#1350). */
+  readonly answered?: Effect.Effect<void>;
 }
 
 const reason = (error: unknown): string => (error instanceof Error ? error.message : String(error));
@@ -89,6 +91,7 @@ export const createUpdateRunner = ({
   lastApkAttempt,
   log,
   report,
+  answered = Effect.void,
 }: UpdateRunnerOptions) => {
   let bundleAvailable = false;
   let bundleDownloaded = false;
@@ -381,7 +384,7 @@ export const createUpdateRunner = ({
         }),
       ),
     );
-    void Effect.runPromise(guarded).then((goOn) => {
+    void Effect.runPromise(Effect.tap(guarded, () => answered)).then((goOn) => {
       running = null;
       notify();
       // A tap made while the step ran is owed its answer now, whatever the step would do next.

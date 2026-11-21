@@ -12,7 +12,11 @@ import { useLastDefined, useLocalDay } from "./useLocalDay";
 
 const NONE: readonly MagicQueueSeed<PlayableSongRow>[] = [];
 
-const read = (day: string, explicit: boolean) =>
+/**
+ * In your orbit's read for the local [day], with explicit streamed songs
+ * passed over when [explicit]; kept ready from startup (`homeReady.ts`).
+ */
+export const mostListenedRecentlyQuery = (day: string, explicit: boolean) =>
   libraryQuery(
     `home:mostListenedRecently:${day}:${explicit ? "clean" : "all"}`,
     { tracks: true, plays: true },
@@ -39,7 +43,7 @@ export const useMostListenedRecently = (
 ): readonly MagicQueueSeed<PlayableSongRow>[] | undefined => {
   const day = useLocalDay();
   const explicit = useDontPlayExplicit();
-  const query = useMemo(() => read(day, explicit), [day, explicit]);
+  const query = useMemo(() => mostListenedRecentlyQuery(day, explicit), [day, explicit]);
   const songs = useLastDefined(
     useLibraryQuery<readonly MagicQueueSeed<PlayableSongRow>[] | undefined>(
       enabled ? query : null,

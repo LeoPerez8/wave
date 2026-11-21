@@ -15,7 +15,8 @@ import {
   magicSeedProfile,
   magicYtSong,
   availableMagicSongs,
-  rankRadioSongs,
+  mapSteps,
+  rankRadioSongsSteps,
   type ArtistGraph,
   type CatalogSong,
   type GenreProfileOf,
@@ -28,6 +29,8 @@ import {
 import * as Effect from "effect/Effect";
 
 import { lookedUpProfileOf } from "@/home/artistGenres";
+import { freeTurnEffect } from "@/lib/backgroundWork";
+import { runSteps } from "@/lib/stepped";
 import { djReleasePagesReader } from "@/dj/djReleases";
 import { dislikedSongsNow, loadDislikes } from "@/library/dislikes";
 import { LibraryStore } from "@/library/LibraryStore";
@@ -138,6 +141,8 @@ export const magicQueueYtCandidates = (
     const readers = radioReaders(yt, context);
     const playable = library.songs.filter(songHasFile);
     const mapLibrary = magicLibrarySongs(library.artists);
+    // Mapped once, in slices: every original ranking weighs the whole playable Library.
+    const playableMagic = yield* runSteps(mapSteps(playable, mapLibrary), freeTurnEffect);
     // The snapshot already indexed recordings. A cold session has only its seed songs.
     const find: MixKnownSongs<SongRow>["inLibrary"] =
       library.known?.inLibrary ??
@@ -157,17 +162,14 @@ export const magicQueueYtCandidates = (
     yield* Effect.promise(loadDislikes);
     // A DJ session's New releases raises the songs on its artists' recent releases; any other keeps the order.
     const rank = (group: readonly SongRadioSeed[], original: boolean, faithfulFallback = false) =>
-      djMoodRanked(
-        djNewReleasesRanked(
-          sessionNow?.() ?? session,
-          radioRanked(group, original, faithfulFallback),
-          releases,
-          Date.now(),
+      Effect.map(radioRanked(group, original, faithfulFallback), (ranked) =>
+        djMoodRanked(
+          djNewReleasesRanked(sessionNow?.() ?? session, ranked, releases, Date.now()),
+          mood,
+          moodFeatures,
+          moodGenres,
+          libraryMoodFeatures,
         ),
-        mood,
-        moodFeatures,
-        moodGenres,
-        libraryMoodFeatures,
       );
     const radioRanked = (
       group: readonly SongRadioSeed[],
@@ -203,56 +205,65 @@ export const magicQueueYtCandidates = (
         current,
         radios.flatMap((radio) => radio.songs),
       );
-      return availableMagicSongs(
-        current,
-        rankRadioSongs(
-          {
-            artists,
-            profile: session.faithful
-              ? magicFaithfulGenreProfile(session, profileOf)
-              : magicSeedProfile(session, profileOf),
+      // Ranked in background slices (#1350): a batch never holds the JS thread past 8 ms at a time.
+      const ranked = rankRadioSongsSteps(
+        {
+          artists,
+          profile: session.faithful
+            ? magicFaithfulGenreProfile(session, profileOf)
+            : magicSeedProfile(session, profileOf),
+        },
+        {
+          // Several radios interleave by position before ranking.
+          pages: radios.map((radio) => ({
+            ...radio,
+            songs: radio.songs.filter((song) => !("video" in song && song.video === true)),
+          })),
+          graph,
+          taste,
+          profileOf,
+          library: original ? playableMagic : [],
+          inLibrary: (song) => {
+            const local = find(song);
+            return local === null || !songHasFile(local) ? null : mapLibrary(local);
           },
-          {
-            // Several radios interleave by position before ranking.
-            pages: radios.map((radio) => ({
-              ...radio,
-              songs: radio.songs.filter((song) => !("video" in song && song.video === true)),
-            })),
-            graph,
-            taste,
-            profileOf,
-            library: original ? playable.map(mapLibrary) : [],
-            inLibrary: (song) => {
-              const local = find(song);
-              return local === null || !songHasFile(local) ? null : mapLibrary(local);
-            },
-            signals: current.radioSignals ?? [],
-            popularityOf: (id) => popularity.get(id) ?? 0,
-            // A disliked song never enters a batch, from the radios or the Library.
-            disliked: dislikedSongsNow(),
-          },
-          {
-            ...sliders,
-            faithfulness: current.faithful ? (faithfulFallback ? 2 : 1) : sliders.faithfulness,
-            popularity: current.faithful ? 3 : sliders.popularity,
-            excludeIncompatible: current.faithful && !faithfulFallback,
-            exclude,
-            libraryFallback: session.continuation === true && !connected,
-          },
-        ),
-        { online: online(), ytMusic: ytMusicEnabled(), cachedVideos },
+          signals: current.radioSignals ?? [],
+          popularityOf: (id) => popularity.get(id) ?? 0,
+          // A disliked song never enters a batch, from the radios or the Library.
+          disliked: dislikedSongsNow(),
+        },
+        {
+          ...sliders,
+          faithfulness: current.faithful ? (faithfulFallback ? 2 : 1) : sliders.faithfulness,
+          popularity: current.faithful ? 3 : sliders.popularity,
+          excludeIncompatible: current.faithful && !faithfulFallback,
+          exclude,
+          libraryFallback: session.continuation === true && !connected,
+        },
+      );
+      return Effect.map(runSteps(ranked, freeTurnEffect), (songs) =>
+        availableMagicSongs(current, songs, {
+          online: online(),
+          ytMusic: ytMusicEnabled(),
+          cachedVideos,
+        }),
       );
     };
     // A DJ session's Artist variety limits who a batch may hold; any other keeps every song.
     const allowed = (size: number) =>
-      djVarietyCandidates(
-        sessionNow?.() ?? session,
-        graph,
-        { seed: rank(seeds, true), liked: rank(liked, false) },
-        size,
-      );
+      Effect.gen(function* () {
+        const seed = yield* rank(seeds, true);
+        const likedRanked = yield* rank(liked, false);
+        yield* freeTurnEffect;
+        return djVarietyCandidates(
+          sessionNow?.() ?? session,
+          graph,
+          { seed, liked: likedRanked },
+          size,
+        );
+      });
     // Unfilled, so a radio short of allowed songs reads its continuations.
-    const before = allowed(0);
+    const before = yield* allowed(0);
     const plan = magicRadioReadPlan(
       sessionNow?.() ?? session,
       before.seed,
@@ -265,10 +276,16 @@ export const magicQueueYtCandidates = (
       ...(deadlineAt === undefined ? {} : { deadlineAt }),
       low: (seed) => (originalIds.has(seed.id) ? plan.seedLow : plan.likedLow),
     });
-    const { seed: candidates, liked: likedCandidates } = allowed(plan.size);
+    // The radios' answers are handled in slices too: the network wait itself isn't one.
+    const { seed: candidates, liked: likedCandidates } = yield* allowed(plan.size);
     // Ranked again at Close only when the faithful batch comes up short (`completeMagicRadioBatch`).
+    // Done now, in slices, so Close never ranks in one block.
     const fallback = session.faithful
-      ? () => ({ seed: rank(seeds, true, true), liked: rank(liked, false, true) })
+      ? yield* Effect.map(
+          Effect.all([rank(seeds, true, true), rank(liked, false, true)]),
+          ([seed, likedRanked]) =>
+            () => ({ seed, liked: likedRanked }),
+        )
       : undefined;
     found = [...candidates, ...likedCandidates];
     const songs = read.reduce((sum, { page }) => sum + (page?.songs.length ?? 0), 0);

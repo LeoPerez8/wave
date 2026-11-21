@@ -6,17 +6,19 @@ import { homeItems, type RecapPeriod } from "@wave/core";
 import { Link } from "expo-router";
 import { useEffect, useState } from "react";
 import { router } from "@/lib/timingRouter";
-import { Pressable, Text, View } from "react-native";
+import { Pressable, Text, View, useWindowDimensions } from "react-native";
 
 import { CELL } from "@/catalog/grid";
 import { EmptyState } from "@/components/EmptyState";
 import { IconButton } from "@/components/IconButton";
 import { LargeTitleScreen } from "@/components/LargeTitleScreen";
+import { StagedSections } from "@/components/StagedSections";
 import { useHomeArrangement, homeTitleLongPress } from "@/home/homeArrangement";
 import { HomeSection, SECTION_GAP } from "@/home/HomeSection";
-import { HomeSectionSkeleton } from "@/home/HomeSectionSkeleton";
-import { afterHomeFrame, homeOpeningState, homePlaceholderSkeleton } from "@/home/homeOpening";
-import { useHomeContent } from "@/library/hooks";
+import { useHomeScreenContent } from "@/home/homeContent";
+import { afterHomeFrame, homeItemEstimate, homeOpeningState } from "@/home/homeOpening";
+import { startSavingHomeSnapshot } from "@/home/homeSnapshot";
+import { useHomeWorkSight } from "@/home/useHomeWorkSight";
 import { useRenderCount } from "@/perf/perf";
 import { useRecapToAnnounce } from "@/stats/hooks";
 import { RecapCard } from "@/stats/StatsViews";
@@ -47,9 +49,14 @@ function HomeLine({ children, top }: { children: string; top: number }) {
   );
 }
 
+/** From Home's first render on, the app leaving saves what Home shows for the next cold start. */
+startSavingHomeSnapshot();
+
 export default function HomeScreen() {
   const { strings } = useLocalisation();
   useRenderCount("HomeScreen");
+  // Home's mixes and sections build only while Home is in sight (#1351).
+  useHomeWorkSight();
   const [painted, setPainted] = useState(false);
   const newRecap = useRecapToAnnounce(painted);
   useEffect(
@@ -60,7 +67,8 @@ export default function HomeScreen() {
       }),
     [],
   );
-  // Even focus effects in Discover or Recap cannot read before the shell has painted.
+  // The first frame draws Home's sections from memory or the cold-start snapshot (#1353);
+  // the follow cards' and Recap's reads wait until it has painted.
   return (
     <HomeFollowProvider reading={painted}>
       <LargeTitleScreen
@@ -75,37 +83,22 @@ export default function HomeScreen() {
           />
         }
       >
-        {painted ? <HomeContent newRecap={newRecap} /> : <HomePlaceholders newRecap={newRecap} />}
+        <HomeContent newRecap={newRecap} />
       </LargeTitleScreen>
     </HomeFollowProvider>
   );
 }
 
-function HomePlaceholders({ newRecap }: { newRecap: RecapPeriod | null }) {
-  useScreenContent(false);
-  const arrangement = useHomeArrangement();
-  return (
-    <>
-      <HomeRecap period={newRecap} />
-      <View style={newRecap === null ? FIRST_SECTION : undefined}>
-        {arrangement.sections.map((id) =>
-          homePlaceholderSkeleton(id) ? (
-            <HomeSectionSkeleton key={id} id={id} />
-          ) : (
-            <HomeSection key={id} id={id} home={{}} />
-          ),
-        )}
-      </View>
-    </>
-  );
-}
-
 function HomeContent({ newRecap }: { newRecap: RecapPeriod | null }) {
   const { strings } = useLocalisation();
-  const home = useHomeContent();
+  const home = useHomeScreenContent();
   const { empty, nothingPlayed, ready } = homeOpeningState(home);
   useScreenContent(ready);
   const arrangement = useHomeArrangement();
+  const { fontScale, width } = useWindowDimensions();
+  // The first frame mounts the sections that start on screen; the rest follow a screen a
+  // frame, before a scroll can reach them (#1380).
+  const shown = homeItems(arrangement, { nothingPlayed });
 
   return (
     <>
@@ -129,19 +122,21 @@ function HomeContent({ newRecap }: { newRecap: RecapPeriod | null }) {
           <HomeRecap period={newRecap} />
           {/* Sections with nothing to show draw nothing, so whichever shows first is pulled up. */}
           <View style={newRecap === null ? FIRST_SECTION : undefined}>
-            {homeItems(arrangement, { nothingPlayed }).map((item, index) =>
-              item === "no-sections" ? (
-                <HomeLine key={item} top={SECTION_GAP}>
-                  {strings.home.noSections}
-                </HomeLine>
-              ) : item === "play-hint" ? (
-                <HomeLine key={item} top={index === 0 ? SECTION_GAP : CELL * 3}>
-                  {strings.home.playHint}
-                </HomeLine>
-              ) : (
-                <HomeSection key={item.section} id={item.section} home={home} />
-              ),
-            )}
+            <StagedSections estimate={(index) => homeItemEstimate(shown[index]!, fontScale, width)}>
+              {shown.map((item, index) =>
+                item === "no-sections" ? (
+                  <HomeLine key={item} top={SECTION_GAP}>
+                    {strings.home.noSections}
+                  </HomeLine>
+                ) : item === "play-hint" ? (
+                  <HomeLine key={item} top={index === 0 ? SECTION_GAP : CELL * 3}>
+                    {strings.home.playHint}
+                  </HomeLine>
+                ) : (
+                  <HomeSection key={item.section} id={item.section} home={home} />
+                ),
+              )}
+            </StagedSections>
           </View>
           {/* Temporary entry to the glass spike (#4), kept until its numbers confirm the technique. */}
           {__DEV__ && (

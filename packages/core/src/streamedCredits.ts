@@ -1,9 +1,10 @@
 import { artistPhotoName } from "./artistPhoto.ts";
-import { creditSplitter } from "./credits.ts";
+import { finishSteps } from "./buildSteps.ts";
+import { creditSplitterSteps } from "./credits.ts";
 
 import {
-  libraryArtistFinder,
-  libraryReleaseFinder,
+  libraryArtistFinderSteps,
+  libraryReleaseFinderSteps,
   releaseTitle,
   type LibraryAlbumKey,
 } from "./ytArtist.ts";
@@ -21,7 +22,7 @@ export interface PlayedAlbumKey {
   readonly artworkUrl: string | null;
 }
 
-interface StreamedRelease {
+export interface StreamedRelease {
   readonly artists: readonly string[];
   readonly album: string | null;
   readonly albumId?: string | null;
@@ -50,29 +51,54 @@ export const pickStreamedAlbum = (
 const releaseKey = (title: string, name: string) =>
   `${releaseTitle(title)}:${artistPhotoName(name)}`;
 
+/** A streamed song's credits: the artists it names and the album it is on. */
+export interface StreamedSongCredits {
+  readonly artists: readonly PlayedArtistKey[];
+  readonly album: PlayedAlbumKey | null;
+}
+
+/** Core's credit resolver over one Library, which can learn more releases' ids as it goes. */
+export interface StreamedCreditResolver {
+  readonly resolve: (song: StreamedRelease) => StreamedSongCredits;
+  /** Learns [songs]' release ids: it then resolves as one built with them. */
+  readonly learn: (songs: Iterable<StreamedRelease>) => void;
+}
+
 /** Resolve streamed credits with the same artist and release matchers as online pages. */
-export const streamedCredits = (library: {
+export const streamedCredits = (library: StreamedCreditLibrary) =>
+  finishSteps(streamedCreditResolverSteps(library)).resolve;
+
+interface StreamedCreditLibrary {
   readonly artists: readonly { readonly id: number; readonly name: string }[];
   readonly albums: readonly (LibraryAlbumKey & { readonly id: number })[];
   readonly credits: Iterable<string>;
   readonly releases?: Iterable<StreamedRelease>;
-}) => {
-  const split = creditSplitter(library.credits);
-  const artistNamed = libraryArtistFinder(library.artists);
-  const release = libraryReleaseFinder(artistNamed, library.albums);
-  const releaseIds = new Map<string, string>();
+}
 
-  for (const song of library.releases ?? []) {
-    if (song.album === null || song.albumId == null) continue;
+/**
+ * `streamedCredits` built a step per credit, artist, album and release, so
+ * work that runs in slices never builds it for the whole Library at once.
+ */
+export function* streamedCreditResolverSteps(
+  library: StreamedCreditLibrary,
+): Generator<void, StreamedCreditResolver> {
+  const split = yield* creditSplitterSteps(library.credits);
+  const artistNamed = yield* libraryArtistFinderSteps(library.artists);
+  const release = yield* libraryReleaseFinderSteps(artistNamed, library.albums);
+  const releaseIds = new Map<string, string>();
+  const learnOne = (song: StreamedRelease) => {
+    if (song.album === null || song.albumId == null) return;
     for (const name of split(song.artists)) {
       const key = releaseKey(song.album, name);
       const previous = releaseIds.get(key);
       if (previous === undefined || song.albumId < previous) releaseIds.set(key, song.albumId);
     }
+  };
+  for (const song of library.releases ?? []) {
+    learnOne(song);
+    yield;
   }
-  return (
-    song: StreamedRelease,
-  ): { readonly artists: readonly PlayedArtistKey[]; readonly album: PlayedAlbumKey | null } => {
+  const resolve = (song: StreamedRelease): StreamedSongCredits => {
     const artists = new Map<number | string, PlayedArtistKey>();
     for (const name of split(song.artists)) {
       const found = artistNamed(name);
@@ -104,4 +130,10 @@ export const streamedCredits = (library: {
             },
     };
   };
-};
+  return {
+    resolve,
+    learn: (songs) => {
+      for (const song of songs) learnOne(song);
+    },
+  };
+}

@@ -65,8 +65,8 @@ for (const cachedFinder of [false, true])
       readMixBuildLibrary(
         null,
         {
-          mixSongsPage: (after) => Effect.succeed(after === 0 ? songs : []),
-          mixArtistsPage: (after) => Effect.succeed(after === 0 ? [artist] : []),
+          mixSongs: Effect.succeed(songs),
+          mixArtists: Effect.succeed([artist]),
           countedPlays: () => Effect.succeed(new Map([[1, 10]])),
           streamedLibraryPlays: Effect.succeed(new Map()),
           playedEntityTotals: () =>
@@ -83,11 +83,11 @@ for (const cachedFinder of [false, true])
                 },
               ],
             }),
-          knownVideosPage: () => Effect.succeed({ videos: ["v1"], next: null }),
-          matchingSong: (song) =>
+          knownVideos: Effect.succeed(["v1"]),
+          matchingSongs: (asked) =>
             cachedFinder
               ? Effect.die("the completed finder already resolves Library recordings")
-              : Effect.succeed(song.title === "Known 0" ? songs[0]! : null),
+              : Effect.succeed(asked.map((song) => (song.title === "Known 0" ? songs[0]! : null))),
         },
         Effect.void,
         cachedFinder ? (song) => (song.title === "Known 0" ? songs[0]! : null) : null,
@@ -160,8 +160,8 @@ test("a cold build seeds from streamed plays as Stats ranks them", async () => {
     readMixBuildLibrary(
       null,
       {
-        mixSongsPage: (after) => Effect.succeed(after === 0 ? [song] : []),
-        mixArtistsPage: (after) => Effect.succeed(after === 0 ? [artist] : []),
+        mixSongs: Effect.succeed([song]),
+        mixArtists: Effect.succeed([artist]),
         countedPlays: () => Effect.succeed(new Map([[1, 2]])),
         // Granite's downloaded video was streamed three times.
         streamedLibraryPlays: Effect.succeed(new Map([[1, 3]])),
@@ -184,8 +184,8 @@ test("a cold build seeds from streamed plays as Stats ranks them", async () => {
               { id: 1, item: artist, sortKey: "sleep token", ...totals(5) },
             ],
           }),
-        knownVideosPage: () => Effect.succeed({ videos: [], next: null }),
-        matchingSong: () => Effect.succeed(null),
+        knownVideos: Effect.succeed([]),
+        matchingSongs: (asked) => Effect.succeed(asked.map(() => null)),
       },
       Effect.void,
     ),

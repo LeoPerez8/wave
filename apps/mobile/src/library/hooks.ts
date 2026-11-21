@@ -15,6 +15,7 @@ import { AppState } from "react-native";
 
 import { WaveNative } from "@/native/waveNative";
 import { homeContent, type HomeContent } from "@/home/homeOpening";
+import { useSnapshotted } from "@/home/homeSnapshot";
 import { useSightedStore } from "@/lib/screenSight";
 import { createAllFilesAccess, type AllFilesAccessState } from "./allFilesAccess";
 
@@ -38,7 +39,18 @@ import {
 } from "@wave/client";
 import { knownPlaylists, listPlaylistsRemembered } from "./playlists";
 import { appRuntime } from "./runtime";
-import { libraryQuery, useLibraryQuery, type LibraryQuery } from "./sharedQueries";
+import {
+  useMemoryAlbum,
+  useMemoryAlbumRow,
+  useMemoryArtist,
+  useMemoryArtistRow,
+} from "./libraryMemory";
+import {
+  keepRecentlyOpened,
+  libraryQuery,
+  useLibraryQuery,
+  type LibraryQuery,
+} from "./sharedQueries";
 
 export { libraryQuery, useLibraryQuery } from "./sharedQueries";
 
@@ -256,12 +268,18 @@ const useDetail = <A>(
   kind: string,
   id: number,
   get: (store: LibraryStore["Service"], id: number) => Effect.Effect<A | null, LibraryStoreError>,
+  /** The page from memory (`libraryMemory.ts`): while there is one, the Library isn't asked. */
+  inMemory?: A,
 ): A | null | undefined => {
   const query = useMemo(
     () => storeQuery(`${kind}:${id}`, TRACKS, (store) => get(store, id)),
     [kind, get, id],
   );
-  return useLibraryQuery<A | null | undefined>(query, undefined);
+  const read = useLibraryQuery<A | null | undefined>(
+    inMemory === undefined ? query : null,
+    undefined,
+  );
+  return inMemory ?? read;
 };
 
 const getAlbum = (store: LibraryStore["Service"], id: number) => store.getAlbum(id);
@@ -288,13 +306,25 @@ export const useLinkRows = (
       ),
     [albumId, artistId],
   );
-  return useLibraryQuery(active ? query : null, NO_LINKS);
+  // From memory when its pages hold both (#1352): a link draws without a read.
+  const album = useMemoryAlbumRow(albumId);
+  const artist = useMemoryArtistRow(artistId);
+  const known =
+    (albumId === undefined || album !== undefined) &&
+    (artistId === undefined || artist !== undefined);
+  const read = useLibraryQuery(active && !known ? query : null, NO_LINKS);
+  return useMemo(
+    () => (known ? { album: album ?? null, artist: artist ?? null } : read),
+    [known, album, artist, read],
+  );
 };
 
+/** An album's page: from memory once Search's index holds the Library's lists (#1352). */
 export const useAlbum = (id: number): AlbumDetail | null | undefined =>
-  useDetail("album", id, getAlbum);
+  useDetail("album", id, getAlbum, useMemoryAlbum(id));
+/** An artist's page: from memory once Search's index holds the Library's lists (#1352). */
 export const useArtist = (id: number): ArtistDetail | null | undefined =>
-  useDetail("artist", id, getArtist);
+  useDetail("artist", id, getArtist, useMemoryArtist(id));
 
 const listExcludedFolders = storeQuery(
   "excludedFolders",
@@ -354,22 +384,24 @@ const playlistHoldsTrack = (detail: PlaylistDetail | null, trackId: number): boo
  * costs, and showing a long one far more.
  */
 export const usePlaylist = (id: number): PlaylistDetail | null | undefined => {
-  const query = useMemo(
-    () =>
-      libraryQuery<PlaylistDetail | null>(
-        `playlist:${id}`,
-        { playlists: [id], tracks: true },
-        // oxlint-disable-next-line react/rules-of-hooks -- Effect Service.use resolves a service; it is not a React Hook.
-        LibraryStore.use((store) => store.getPlaylist(id)),
-        {
-          holdsTrack: playlistHoldsTrack,
-          burstPace: (detail) => longListBurstPace(detail?.items.length ?? 0),
-        },
-      ),
-    [id],
-  );
+  const query = useMemo(() => playlistQuery(id), [id]);
+  // Kept for a quick return among the screens opened last (#1352).
+  useEffect(() => keepRecentlyOpened(query), [query]);
   return useLibraryQuery<PlaylistDetail | null | undefined>(query, undefined);
 };
+
+/** Playlist [id]'s screen's query (`usePlaylist`), which `readyScreens.ts` keeps ahead too. */
+export const playlistQuery = (id: number): LibraryQuery<PlaylistDetail | null> =>
+  libraryQuery<PlaylistDetail | null>(
+    `playlist:${id}`,
+    { playlists: [id], tracks: true },
+    // oxlint-disable-next-line react/rules-of-hooks -- Effect Service.use resolves a service; it is not a React Hook.
+    LibraryStore.use((store) => store.getPlaylist(id)),
+    {
+      holdsTrack: playlistHoldsTrack,
+      burstPace: (detail) => longListBurstPace(detail?.items.length ?? 0),
+    },
+  );
 
 const listFavorites = storeQuery(
   "favorites",
@@ -436,18 +468,28 @@ const readListeningSums = storeQuery(
  * undefined while loading. The library totals are Library's counts; the
  * listening totals one row of the all-time play totals, re-read after plays
  * (at most every 1.5 s while Home is in sight, else when it comes back) and
- * scan batches.
+ * scan batches. Kept ready from startup (`readListeningSums`, and Library's counts).
  */
 export const useStatsFacts = (): StatsFacts | undefined => {
   const { language } = useLocalisation();
   const counts = useLibraryCounts();
   const sums = useLibraryQuery<ListeningSums | undefined>(readListeningSums, undefined);
-  return useMemo(
+  const read = useMemo(
     () =>
       counts === undefined || sums === undefined
         ? undefined
-        : statsFacts(counts, summedListeningTotals(sums), language),
-    [counts, sums, language],
+        : {
+            library: { songs: counts.songs, albums: counts.albums, artists: counts.artists },
+            listening: summedListeningTotals(sums),
+          },
+    [counts, sums],
+  );
+  // At a cold start, Home's snapshot's totals until both reads answer (#1353), drawn in the
+  // language of the moment: a language changed since the save still reads right.
+  const totals = useSnapshotted("stats", read);
+  return useMemo(
+    () => totals && statsFacts(totals.library, totals.listening, language),
+    [totals, language],
   );
 };
 
@@ -462,5 +504,32 @@ export const usePlaylistGraveyard = (id: number) => {
       ),
     [id],
   );
+  // Kept for a quick return among the screens opened last (#1352).
+  useEffect(() => keepRecentlyOpened(query), [query]);
   return useLibraryQuery(query, undefined);
 };
+
+/**
+ * What the Library's pages and Settings › Library open on, kept in memory from
+ * startup (`readyScreens.ts`, #1352): each is one list or count, the same
+ * query its screen shows.
+ */
+export const readyLibraryQueries: readonly LibraryQuery<unknown>[] = [
+  countLibrary,
+  countSectionSongs,
+  listPlaylists,
+  listFavorites,
+  listAlbums,
+  listArtists,
+  listGenres,
+  listMissingSongs,
+  listRoots,
+  listExcludedFolders,
+  countTracks,
+  // The Library's shelf shows Home's sections from Home's reads (#1353 keeps Home's own).
+  readHomeAdded,
+  readHomePlays,
+  readHomeFavorites,
+  // Home's Stats facts (#1353).
+  readListeningSums,
+] as readonly LibraryQuery<unknown>[];

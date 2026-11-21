@@ -845,6 +845,130 @@ export const streamedTotals = sqliteTable(
 );
 
 /**
+ * The kept play totals (#1349, migration `0069_kept_play_totals`, which says
+ * what each table holds and which triggers keep it). Read through raw SQL in
+ * `keptPlayTotals.ts`; declared here so the schema matches the migrations.
+ */
+export const playedSongs = sqliteTable(
+  "played_songs",
+  {
+    song: text("song").primaryKey(),
+    trackId: integer("track_id"),
+    videoId: text("video_id"),
+    recordingKey: text("recording_key"),
+    /** 0: its days and blocks owed; 1: its credits owed; 2: settled. */
+    state: integer("state").notNull(),
+    songTrack: integer("song_track"),
+    online: integer("online").notNull().default(0),
+    albumHint: text("album_hint"),
+  },
+  (t) => [
+    index("played_songs_state_idx").on(t.state),
+    index("played_songs_track_idx").on(t.trackId),
+    index("played_songs_video_idx").on(t.videoId),
+    index("played_songs_recording_idx").on(t.recordingKey),
+    index("played_songs_song_track_idx").on(t.songTrack),
+    index("played_songs_online_idx").on(t.online, t.state),
+    index("played_songs_album_hint_idx").on(t.albumHint),
+  ],
+);
+
+const keptSums = {
+  span: integer("span").notNull(),
+  bucket: integer("bucket").notNull(),
+  countedPlays: integer("counted_plays").notNull(),
+};
+
+export const playBuckets = sqliteTable(
+  "play_buckets",
+  {
+    song: text("song").notNull(),
+    ...keptSums,
+    listenedMs: integer("listened_ms").notNull(),
+    latestPlayAt: integer("latest_play_at").notNull(),
+  },
+  (t) => [primaryKey({ columns: [t.song, t.span, t.bucket] })],
+);
+
+/** Days of a song's `play_buckets` a write to the history changed, to count again. */
+export const owedDays = sqliteTable(
+  "owed_days",
+  {
+    song: text("song").notNull(),
+    day: integer("day").notNull(),
+  },
+  (t) => [primaryKey({ columns: [t.song, t.day] })],
+);
+
+export const playCredits = sqliteTable(
+  "play_credits",
+  {
+    song: text("song").notNull(),
+    kind: text("kind", { enum: ["album", "artist", "credit", "song"] }).notNull(),
+    entity: text("entity").notNull(),
+    weight: integer("weight").notNull(),
+    albumId: integer("album_id"),
+    artistId: integer("artist_id"),
+  },
+  (t) => [
+    primaryKey({ columns: [t.song, t.kind, t.entity] }),
+    index("play_credits_entity_idx").on(t.kind, t.entity),
+    index("play_credits_album_idx").on(t.albumId),
+    index("play_credits_artist_idx").on(t.artistId),
+  ],
+);
+
+export const creditedBuckets = sqliteTable(
+  "credited_buckets",
+  {
+    kind: text("kind").notNull(),
+    entity: text("entity").notNull(),
+    ...keptSums,
+    listenedMs: integer("listened_ms").notNull(),
+    latestPlayAt: integer("latest_play_at").notNull(),
+  },
+  (t) => [primaryKey({ columns: [t.kind, t.span, t.bucket, t.entity] })],
+);
+
+export const playedEntities = sqliteTable(
+  "played_entities",
+  {
+    kind: text("kind").notNull(),
+    entity: text("entity").notNull(),
+    sortKey: text("sort_key").notNull(),
+    item: text("item").notNull(),
+    playedAt: integer("played_at").notNull(),
+  },
+  (t) => [primaryKey({ columns: [t.kind, t.entity] })],
+);
+
+export const playedRecordings = sqliteTable("played_recordings", {
+  recordingKey: text("recording_key").primaryKey(),
+  countedPlays: integer("counted_plays").notNull(),
+});
+
+export const playlistPlayBuckets = sqliteTable(
+  "playlist_play_buckets",
+  {
+    contextId: text("context_id").notNull(),
+    ...keptSums,
+    latestPlayAt: integer("latest_play_at"),
+  },
+  (t) => [
+    primaryKey({ columns: [t.contextId, t.span, t.bucket] }),
+    index("playlist_play_buckets_bucket_idx").on(t.span, t.bucket),
+  ],
+);
+
+export const keptTotalsState = sqliteTable("kept_totals_state", {
+  id: integer("id").primaryKey(),
+  /** Bumped when what Core matches streamed songs against changes. */
+  generation: integer("generation").notNull(),
+  seededThrough: integer("seeded_through").notNull(),
+  seedUntil: integer("seed_until").notNull(),
+});
+
+/**
  * Pending favorites (Core's `PendingFavorite`): liked songs Also add to
  * Favorites couldn't star because the Library didn't have them, and YT Music
  * songs starred anywhere (a star means downloaded), each by its

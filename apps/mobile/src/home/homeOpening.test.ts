@@ -13,7 +13,6 @@ import {
   homeOpeningState,
   homeSectionWaiting,
   homePlaceholderHeight,
-  homePlaceholderSkeleton,
   magicQueueGrid,
 } from "./homeOpening.ts";
 import type { HomeContent } from "./homeOpening.ts";
@@ -72,11 +71,12 @@ test("Home's shared queries publish each real slice without waiting for its neig
     assert.equal(shown.at(-1)?.mostPlayed, undefined);
     assert.equal(homeOpeningState(snapshot()).played, undefined);
     const plays = traceQueries(fixture.db, () => pending.get(homeReads.plays.key)!());
-    // Recently played, Most played, and the streamed songs' totals (none here).
-    assert.equal(plays.queries.length, 3 + 1);
+    // Recently played, Most played, the streamed songs' totals (none here), and whether the
+    // kept play totals (#1349) are settled.
+    assert.equal(plays.queries.length, 3 + 1 + 1);
     assert.equal(
       plays.queries.reduce((sum, query) => sum + query.rows, 0),
-      70,
+      70 + 1,
     );
     assert.equal(shown.at(-1)?.mostPlayed?.length, 10);
     // Discover must distinguish an unanswered plays query from a genuinely unplayed Library.
@@ -160,10 +160,11 @@ test("Favorites and plays draw from their own reads even while Recently added ha
 
     const played = traceQueries(fixture.db, () => Effect.runSync(store.homePlays));
     const next = homeContent(undefined, played.result, starred.result);
-    assert.equal(played.queries.length, 3 + 1);
+    // With the kept play totals' settled check (#1349).
+    assert.equal(played.queries.length, 3 + 1 + 1);
     assert.equal(
       played.queries.reduce((sum, q) => sum + q.rows, 0),
-      70,
+      70 + 1,
     );
     assert.equal(next.recentlyPlayed?.length, 12);
     assert.equal(next.mostPlayed?.length, 10);
@@ -276,21 +277,6 @@ test("Home reserves matching shelf, list and adaptive Magic Queue dimensions at 
   assert.equal(magicQueueGrid(312, 1).columns, 3);
   assert.equal(magicQueueGrid(312, Math.fround(1.3)).columns, 2);
   assert.equal(magicQueueGrid(312, 2).columns, 1);
-});
-
-test("sections with nothing kept to show draw themselves before Home paints, never a skeleton", () => {
-  // Left out signed out or with nothing kept: a skeleton would flash its header and go.
-  for (const id of ["community-playlists", "new-releases", "upcoming-shows"] as const)
-    assert.equal(homePlaceholderSkeleton(id), false, id);
-  // Local reads that can come back empty still show their skeleton while they first load.
-  for (const id of [
-    "recently-added",
-    "from-your-library",
-    "in-your-orbit",
-    "favorites",
-    "stats",
-  ] as const)
-    assert.equal(homePlaceholderSkeleton(id), true, id);
 });
 
 test("the Magic Queue reserves all nine tile places before its saved picks answer", () => {

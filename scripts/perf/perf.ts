@@ -3,9 +3,12 @@
 //   node scripts/perf/perf.ts doctor [--serial <s>] [--dry-run]
 //   node scripts/perf/perf.ts run [--scenario all|<a,b>] [--variant idle|import|idle,import]
 //        [--label <l>] [--iterations <n>] [--commit <sha>] [--apk <file>] [--import-link <url>]
-//        [--artist <name>] [--playlist <name>] [--compile <filter>] [--glass <probe>] [--perfetto] [--meta key=value]...
+//        [--artist <name>] [--playlist <name>] [--album <name>] [--yt-artist <name>] [--compile <filter>] [--glass <probe>] [--perfetto] [--meta key=value]...
 //        [--out <file>] [--serial <s>] [--dry-run]
 //        (--scenario glass runs the glass comparison's scenarios; --glass needs a perf build)
+//   node scripts/perf/perf.ts emulator-check [--noise-ms <ms>] [--iterations <n>] [--apk <file>]
+//        [--artist <name>] [--playlist <name>] [--album <name>] [--yt-artist <name>] [--serial <s>]
+//        (reference-taps, then fails on a JS block over 50 ms or a tap kind's p90 past its budget)
 //   node scripts/perf/perf.ts summary <results.jsonl>
 //   node scripts/perf/perf.ts compare <before.jsonl> <after.jsonl>
 //   node scripts/perf/perf.ts profile generate --apk <unminified release APK> [--commit <sha>]
@@ -47,6 +50,7 @@ import {
 } from "./metrics.ts";
 import { compareMemory, formatGrowth, formatMemoryComparison, memoryGrowth } from "./memory.ts";
 import { compileWithBaseline, generateProfiles, readProfileState } from "./profileDevice.ts";
+import { DEFAULT_NOISE_MS, formatVerdict, runEmulatorCheck } from "./emulatorCheck.ts";
 import { comparability, reactCompilerOf, readResults, type Results } from "./results.ts";
 import { runPerf, type Device } from "./runner.ts";
 import { ALL_SCENARIOS, GLASS_SCENARIOS, SCENARIOS, VARIANTS, type Variant } from "./scenarios.ts";
@@ -62,6 +66,10 @@ interface Fixture {
   readonly artist: string | null;
   /** The playlist push-playlist opens (`ScenarioConfig.playlist`). */
   readonly playlist: string | null;
+  /** The album reference-taps opens (`ScenarioConfig.album`). */
+  readonly album?: string | null;
+  /** The YT Music artist reference-taps opens (`ScenarioConfig.ytArtist`). */
+  readonly ytArtist?: string | null;
   readonly settleMs: number;
   readonly windowMs: number;
   readonly launchSettleMs: number;
@@ -84,6 +92,8 @@ const { values, positionals } = parseArgs({
     "import-link": { type: "string" },
     artist: { type: "string" },
     playlist: { type: "string" },
+    album: { type: "string" },
+    "yt-artist": { type: "string" },
     compile: { type: "string" },
     glass: { type: "string" },
     perfetto: { type: "boolean", default: false },
@@ -93,6 +103,7 @@ const { values, positionals } = parseArgs({
     "min-coverage": { type: "string", default: "0.9" },
     install: { type: "boolean", default: false },
     "dry-run": { type: "boolean", default: false },
+    "noise-ms": { type: "string" },
   },
 });
 
@@ -479,7 +490,13 @@ const commands: Record<string, () => Promise<void>> = {
       scenarios,
       variants,
       ...(values.iterations === undefined ? {} : { iterations: Number(values.iterations) }),
-      config: { tabs: fixture.tabs, artist: artist(), playlist: playlist() },
+      config: {
+        tabs: fixture.tabs,
+        artist: artist(),
+        playlist: playlist(),
+        album: values.album ?? fixture.album ?? null,
+        ytArtist: values["yt-artist"] ?? fixture.ytArtist ?? null,
+      },
       importLink: values["import-link"] ?? fixture.importLink,
       settleMs: fixture.settleMs,
       windowMs: fixture.windowMs,
@@ -505,6 +522,72 @@ const commands: Record<string, () => Promise<void>> = {
     });
     console.log(`\nResults: ${result.out}\n`);
     printSummary(read(result.out));
+  },
+
+  "emulator-check": async () => {
+    if (values["dry-run"])
+      fail("The emulator check reads the app log on a real device: it has no dry run.");
+    const noiseMs =
+      values["noise-ms"] === undefined ? DEFAULT_NOISE_MS : Number(values["noise-ms"]);
+    if (!Number.isFinite(noiseMs) || noiseMs < 0)
+      fail(`--noise-ms takes milliseconds, not ${values["noise-ms"]}`);
+    if (artist() === null || playlist() === null)
+      fail(
+        "reference-taps needs --artist and --playlist (on Artists' and Playlists' first screens).",
+      );
+    const device = await pickDevice();
+    if (values.apk !== undefined) await installApk(device.serial, values.apk);
+    const stamp = new Date().toISOString().slice(0, 19).replace(/[:T]/g, "-");
+    const out = values.out ?? join(root, "perf-results", `emulator-check-${stamp}.jsonl`);
+    const result = await runEmulatorCheck(device, {
+      package: fixture.package,
+      noiseMs,
+      runScenario: async () => {
+        await runPerf(device, {
+          package: fixture.package,
+          label: values.label === "run" ? "emulator-check" : values.label,
+          scenarios: ["reference-taps"],
+          variants: ["idle"],
+          ...(values.iterations === undefined ? {} : { iterations: Number(values.iterations) }),
+          config: {
+            tabs: fixture.tabs,
+            artist: artist(),
+            playlist: playlist(),
+            album: values.album ?? fixture.album ?? null,
+            ytArtist: values["yt-artist"] ?? fixture.ytArtist ?? null,
+          },
+          importLink: null,
+          settleMs: fixture.settleMs,
+          windowMs: fixture.windowMs,
+          launchSettleMs: fixture.launchSettleMs,
+          memoryIdleMs: fixture.memoryIdleMs,
+          flushTimeoutMs: fixture.flushTimeoutMs,
+          commit: values.commit ?? null,
+          runnerCommit: gitCommit(),
+          apkFile: null,
+          manual: {},
+          compile: null,
+          glass: null,
+          perfetto: null,
+          out,
+          dryRun: false,
+          log: (line) => console.log(line),
+          now: () => new Date(),
+        });
+      },
+    });
+    const results = read(out);
+    console.log(`
+Results: ${out}
+${describeRun(results)}`);
+    console.log(
+      `${result.avd === null ? "Not an emulator" : `Emulator ${result.avd}`}; app log judged from ${result.since}
+`,
+    );
+    for (const error of results.errors)
+      console.log(`Not measured: ${error.scenario} (${error.variant}): ${error.message}`);
+    console.log(formatVerdict(result.verdict, noiseMs));
+    if (!result.verdict.ok) process.exit(1);
   },
 
   summary: async () => printSummary(read(positionals[1])),
@@ -589,6 +672,6 @@ const printSummary = (results: Results): void => {
 const action = commands[positionals[0] ?? ""];
 if (action === undefined)
   fail(
-    `Usage: node scripts/perf/perf.ts scenarios|doctor|run|summary|compare|profile (see the header of ${fileURLToPath(import.meta.url)})`,
+    `Usage: node scripts/perf/perf.ts scenarios|doctor|run|emulator-check|summary|compare|profile (see the header of ${fileURLToPath(import.meta.url)})`,
   );
 else await action();

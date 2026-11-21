@@ -5,6 +5,7 @@ import { useAppliedGlassSettings } from "@/settings/glass";
 import { useThemeColor } from "@/theme/useThemeColor";
 
 import { glassProbe } from "./glassProbe";
+import { phoneEffects } from "./phoneEffects";
 import { NativeGlassView } from "./waveGlass";
 
 /**
@@ -16,7 +17,9 @@ import { NativeGlassView } from "./waveGlass";
  * card draws the settings as they change (`GlassSurface`). Refraction 0 is the
  * blur + tint + rim fallback. Below API 33 the native view drops the
  * refraction shader by itself. A perf build launched with a glass probe drops
- * the layers the probe names (Core `glassLayers`, issue #316).
+ * the layers the probe names (Core `glassLayers`, issue #316). A phone whose
+ * frame times measured weak draws it simpler: half the blur, no refraction
+ * (`./phoneEffects`, #1357).
  */
 
 type Props = {
@@ -44,7 +47,7 @@ export function GlassSurface({
       />
     );
   }
-  const layers = glassLayers(glass, glassProbe());
+  const layers = glassLayers(glass, glassProbe(), phoneEffects());
   return (
     <NativeGlassView
       pointerEvents="none"

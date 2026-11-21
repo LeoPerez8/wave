@@ -148,11 +148,14 @@ test("graph pages bound returned work, seek an index, and preserve the complete 
       [...traced.result.edges].map(([k, v]) => [k, [...v]]),
       [...expected.edges].map(([k, v]) => [k, [...v]]),
     );
-    assert.ok(yields > 100, `only ${yields} yields`);
-    assert.ok(traced.queries.every((q) => q.rows <= 128));
+    // The plays' CPU work yields at least once every 512 steps, though each source is one read.
+    assert.ok(yields > fixture.playEvents / 512, `only ${yields} yields`);
+    // Each graph source is one read, whatever its size (#1351); the CPU work still yields.
     const history = traced.queries.filter((q) => q.sql.includes("FROM play_events"));
-    assert.ok(history.length > 70);
-    assert.ok(history.every((q) => q.plan.some((p) => /SEARCH.*play_events.*started_at/.test(p))));
+    assert.equal(history.length, 1);
+    assert.equal(history[0]!.rows, fixture.playEvents);
+    assert.ok(history.every((q) => q.plan.some((p) => /play_events_started_at_idx/.test(p))));
+    assert.equal(traced.queries.filter((q) => q.sql.includes("yt_artists")).length, 1);
     assert.ok(
       traced.queries
         .filter((q) => q.sql.includes("FROM candidate_radios"))
@@ -164,7 +167,7 @@ test("graph pages bound returned work, seek an index, and preserve the complete 
   }
 });
 
-test("cold playlist and Magic Queue share real paged graph work; warm reads are free and disposal releases waiters", async () => {
+test("cold playlist and Magic Queue share real graph work; warm reads are free and disposal releases waiters", async () => {
   const { shareArtistGraph } = await import("../../home/sharedArtistGraph.ts");
   const fixture = await createFastAgainFixture();
   try {
@@ -182,11 +185,10 @@ test("cold playlist and Magic Queue share real paged graph work; warm reads are 
     const shared = shareArtistGraph(
       Effect.succeed({
         ...store,
-        graphPlayPage: (after) =>
-          Effect.suspend(() => {
-            pages++;
-            return store.graphPlayPage(after);
-          }),
+        graphPlays: Effect.suspend(() => {
+          pages++;
+          return store.graphPlays;
+        }),
       }),
       gate,
       Effect.void,
@@ -198,7 +200,7 @@ test("cold playlist and Magic Queue share real paged graph work; warm reads are 
     release!();
     const [a, b] = await Promise.all([playlist, magicQueue]);
     assert.equal(a, b);
-    assert.equal(pages, Math.ceil(fixture.playEvents / 128) + 1);
+    assert.equal(pages, 1, "the plays are one read");
     const before = pages;
     assert.equal(await Effect.runPromise(shared.get), a);
     assert.equal(pages, before);
@@ -220,7 +222,7 @@ test("a song ending mid-build doesn't rebuild the graph for its waiters; the ask
   try {
     const store = await loadLibraryStore(root, fixture.db);
     let builds = 0,
-      pages = 0;
+      plays = 0;
     let versions: SnapshotVersions = {};
     const changed = Promise.withResolvers<void>();
     const shared = shareArtistGraph(
@@ -228,11 +230,10 @@ test("a song ending mid-build doesn't rebuild the graph for its waiters; the ask
         builds++;
         return {
           ...store,
-          graphPlayPage: (after: Parameters<typeof store.graphPlayPage>[0]) =>
-            Effect.suspend(() => {
-              if (++pages === 2) changed.resolve();
-              return store.graphPlayPage(after);
-            }),
+          graphPlays: Effect.suspend(() => {
+            if (++plays === 1) changed.resolve();
+            return store.graphPlays;
+          }),
         };
       }),
       Effect.void,
@@ -336,7 +337,13 @@ test("empty decoded pages advance every source cursor and attach radios by their
       [...traced.result.edges].map(([key, edges]) => [key, [...edges]]),
       [...expected.edges].map(([key, edges]) => [key, [...edges]]),
     );
-    assert.ok(traced.queries.every((query) => query.rows <= 128));
+    // The catalog still pages when none is given; similar artists and plays are one read each (#1351).
+    assert.ok(
+      traced.queries
+        .filter((query) => query.sql.includes("FROM candidate_"))
+        .every((query) => query.rows <= 128),
+    );
+    assert.equal(traced.queries.filter((query) => query.sql.includes("yt_artists")).length, 1);
     for (const table of ["candidate_songs", "candidate_radios", "yt_artists"])
       assert.ok(
         traced.queries

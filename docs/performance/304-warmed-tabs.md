@@ -59,9 +59,11 @@ will choose how hidden tabs are kept. Nothing below is a phone measurement.
   | `display-none` (default)    | `display: none`: showing it lays the subtree out again                                             |
   | `keep-layout` (with detach) | keeps its layout, every tab filling the slot (`position: absolute`): showing it lays nothing out   |
   | `freeze` (with detach)      | its React tree is frozen (`freezeOnBlur`): no renders while hidden, pending ones run when it shows |
+  | `thaw`                      | not frozen (the default before #1358)                                                              |
   | `retain=<n>`                | at most n tabs kept mounted, the shown one included                                                |
 
-  **The default is unchanged** (`detach,display-none,retain=5`): the ticket asks to measure before
+  **Since #1358 the default freezes** (`detach,display-none,freeze,retain=5`; see
+  `docs/performance/1358-frozen-tabs-memory.md`). Before it, the default was unchanged: the ticket asks to measure before
   choosing, and no phone was attached. A perf build reports its choice in `tabs.screens`.
 
 ### Instrumentation

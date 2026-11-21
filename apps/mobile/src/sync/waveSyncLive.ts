@@ -46,7 +46,7 @@ export const make = Effect.gen(function* () {
         songsChanged: songs,
         wait: (ms) => new Promise((resolve) => setTimeout(resolve, ms)),
         // Each database step waits until the owner's taps are through.
-        turn: freeTurn,
+        turn: () => freeTurn("sync"),
         collaboration: collaborations,
       }),
     ).then(
@@ -88,7 +88,7 @@ export const make = Effect.gen(function* () {
             now: Date.now,
             songsChanged: false,
             wait: (ms) => new Promise((resolve) => setTimeout(resolve, ms)),
-            turn: freeTurn,
+            turn: () => freeTurn("collaborative playlist sync"),
             collaboration: collaborations,
           },
           playlistId,

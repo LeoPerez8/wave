@@ -6,15 +6,20 @@ import * as Layer from "effect/Layer";
 import { configureConnection } from "./db/connection.ts";
 import type { LibraryDatabase } from "./db/database.ts";
 import migrations from "./db/migrations.ts";
+import type { ReadConnection } from "./db/offThreadReads.ts";
 
 export type { LibraryDatabase, RowPage } from "./db/database.ts";
 
-/** Each app owns its connection's lifetime and supplies its synchronous Drizzle driver. */
+/**
+ * Each app owns its connection's lifetime and supplies its synchronous Drizzle driver,
+ * and, where reads can leave the JS thread, the read connections they use (#1348).
+ */
 export class SqliteDriver extends Context.Service<
   SqliteDriver,
   {
     readonly db: LibraryDatabase;
     readonly exec: (statements: string) => void;
+    readonly reads?: ReadConnection;
   }
 >()("@wave/client/SqliteDriver") {}
 

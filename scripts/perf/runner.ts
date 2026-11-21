@@ -191,15 +191,50 @@ export const runPerf = async (
   /** The glass probe on every launch intent, so a process started anew keeps it. */
   const launchExtras = options.glass === null ? "" : ` --es ${GLASS_PROBE_EXTRA} ${options.glass}`;
 
+  let launcher: string | null = null;
+  /**
+   * The launcher activity, by component: on an emulator whose data has several
+   * launcher-icon aliases enabled, `am start -p` resolves none. The package when
+   * nothing resolves.
+   */
+  const launcherTarget = async (): Promise<string> => {
+    if (launcher === null) {
+      const resolved = await shell(
+        `cmd package resolve-activity --brief -a android.intent.action.MAIN -c android.intent.category.LAUNCHER ${pkg}`,
+      );
+      const component = resolved
+        .split(/\r?\n/)
+        .map((line) => line.trim())
+        .find((line) => line.startsWith(`${pkg}/`));
+      launcher = component === undefined ? `-p ${pkg}` : `-n ${component}`;
+    }
+    return launcher;
+  };
+
   const launch = async (): Promise<AmStart> => {
+    const target = await launcherTarget();
     await shell(`am force-stop ${pkg}`);
     await device.sleep(options.settleMs);
     await shell("logcat -c");
     const result = parseAmStart(
       await shell(
-        `am start -W -S -a android.intent.action.MAIN -c android.intent.category.LAUNCHER -p ${pkg}${launchExtras}`,
+        `am start -W -S -a android.intent.action.MAIN -c android.intent.category.LAUNCHER ${target}${launchExtras}`,
       ),
     );
+    // A slow cold start (an emulator under load) outlasts am start's wait, yet Wave comes up:
+    // the run goes on once it's in front, with no launch time.
+    if (result.status === "timeout") {
+      for (let waited = 0; waited <= options.launchSettleMs; waited += POLL_MS) {
+        const top = await shell(
+          "dumpsys activity activities | grep -E 'topResumedActivity|mResumedActivity'",
+        );
+        if (top.includes(`${pkg}/`)) {
+          log(`  the launch outlasted am start's wait (${ms(result.waitTimeMs)}); Wave is up`);
+          return result;
+        }
+        await device.sleep(POLL_MS);
+      }
+    }
     if (result.status !== "ok")
       throw new ScenarioError(`Couldn't launch ${pkg} (${result.status ?? "no status"}).`);
     return result;
@@ -426,7 +461,7 @@ export const runPerf = async (
       await shell("logcat -c");
       launched = parseAmStart(
         await shell(
-          `am start -W -a android.intent.action.MAIN -c android.intent.category.LAUNCHER -p ${pkg}${launchExtras}`,
+          `am start -W -a android.intent.action.MAIN -c android.intent.category.LAUNCHER ${await launcherTarget()}${launchExtras}`,
         ),
       );
       if (launched.status !== "ok")

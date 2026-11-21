@@ -1,6 +1,7 @@
 import { useLocalisation } from "@/localisation/localisation";
 import {
   NOW_PLAYING_OPENS_ON,
+  relatedTimingKind,
   settleRelatedRise,
   settleScreenSwipe,
   settleSheet,
@@ -65,8 +66,6 @@ export type ScreenPages = {
   readonly page: NowPlayingPage;
   /** A swipe or its settle is under way: both pages are in sight. */
   readonly turning: boolean;
-  /** The Queue was shown once, so it stays mounted. */
-  readonly queueMounted: boolean;
   /** Where the pages are: 0 on the player, 1 on the Queue. */
   readonly position: SharedValue<number>;
   /** Where Related's panel is: 0 below the screen, 1 risen over the pages. */
@@ -101,7 +100,6 @@ export const useScreenPages = (): ScreenPages => {
   const still = useReducedMotion();
   const [screens, setScreens] = useState(NOW_PLAYING_OPENS_ON);
   const [turning, setTurning] = useState(false);
-  const [queueMounted, setQueueMounted] = useState(false);
   const [page, setPage] = useState<NowPlayingPage>("player");
   const [relatedMoving, setRelatedMoving] = useState(false);
   const position = useSharedValue(0);
@@ -161,12 +159,14 @@ export const useScreenPages = (): ScreenPages => {
     (event: NowPlayingScreensEvent, velocity = 0): boolean => {
       const before = latest.current;
       const step = stepNowPlayingScreens(before, event);
+      // Asked for with Now Playing closed, Related rises with the sheet: Now Playing open's tap.
+      const timed = isNowPlayingShown() ? relatedTimingKind(before, event) : null;
+      if (timed !== null) beginTiming(timed, timed === "relatedOpen" ? "Related" : "player");
       latest.current = step.screens;
       setScreens(step.screens);
       const { screen } = step.screens;
       // Ahead of the panel's own move, so a finger still on it stops moving it.
       relatedHere.set(screen === "related");
-      if (screen === "queue") setQueueMounted(true);
       if (screen === "related") {
         // Asked for with Now Playing closed, the sheet rises already on it. A released
         // rise carries its speed, so a flick up keeps moving into the open panel.
@@ -187,7 +187,6 @@ export const useScreenPages = (): ScreenPages => {
   );
 
   const swipeBegan = useCallback(() => {
-    setQueueMounted(true);
     setTurning(true);
   }, []);
 
@@ -249,7 +248,6 @@ export const useScreenPages = (): ScreenPages => {
       editing: screens.editing,
       page,
       turning,
-      queueMounted,
       position,
       related,
       relatedMoving,
@@ -267,7 +265,6 @@ export const useScreenPages = (): ScreenPages => {
       screens.editing,
       page,
       turning,
-      queueMounted,
       position,
       related,
       relatedMoving,

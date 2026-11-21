@@ -20,13 +20,13 @@ export const readMixBuildLibrary = (
   latest: MixIndexes | null,
   store: Pick<
     LibraryStore["Service"],
-    | "mixSongsPage"
-    | "mixArtistsPage"
+    | "mixSongs"
+    | "mixArtists"
     | "countedPlays"
     | "streamedLibraryPlays"
     | "playedEntityTotals"
-    | "knownVideosPage"
-    | "matchingSong"
+    | "knownVideos"
+    | "matchingSongs"
   >,
   between: Effect.Effect<void>,
   find: ((song: YtSong) => SongRow | null) | null = null,
@@ -34,24 +34,10 @@ export const readMixBuildLibrary = (
   Effect.gen(function* () {
     if (latest !== null)
       return { library: latest, matchRadios: (_songs: readonly YtAlbumSong[]) => Effect.void };
-    const songs: MixSong[] = [];
-    let after = 0;
-    for (;;) {
-      yield* between;
-      const page = yield* store.mixSongsPage(after);
-      if (page.length === 0) break;
-      songs.push(...page);
-      after = page.at(-1)!.id;
-    }
-    const artists: ArtistRow[] = [];
-    after = 0;
-    for (;;) {
-      yield* between;
-      const page = yield* store.mixArtistsPage(after);
-      if (page.length === 0) break;
-      artists.push(...page);
-      after = page.at(-1)!.id;
-    }
+    yield* between;
+    const songs: readonly MixSong[] = yield* store.mixSongs;
+    yield* between;
+    const artists: readonly ArtistRow[] = yield* store.mixArtists;
     const ids = songs.map((song) => song.id);
     const counts = new Map(yield* store.countedPlays(ids));
     // A Library song's streamed plays are its own (`streamedTrack`), as Stats counts them.
@@ -62,7 +48,8 @@ export const readMixBuildLibrary = (
     const played = yield* store.playedEntityTotals({ from: null, to: Date.now() });
     const ranked = yield* runSteps(rankEntityPlaysSteps(played.artists, 20), between);
     const byId = new Map(artists.map((artist) => [artist.id, artist]));
-    const videos = new Set(yield* readKnownVideos(store, between));
+    yield* between;
+    const videos = new Set(yield* readKnownVideos(store));
     const matches = new Map<string, SongRow | null>();
     const inLibrary: MixIndexes["known"]["inLibrary"] = (song) =>
       matches.get(radioSongKey(song)) ?? null;
@@ -92,18 +79,29 @@ export const readMixBuildLibrary = (
     };
     return {
       library,
-      // Reuse the completed finder, or match only radio songs through indexed
-      // SQL lookups. No full-Library recording index is needed.
+      // Reuse the completed finder, or match only radio songs through one
+      // indexed SQL read for all of them. No full-Library recording index is needed.
       matchRadios: (radio: readonly YtAlbumSong[]) =>
         Effect.gen(function* () {
-          for (const song of radio) {
-            if (matches.has(radioSongKey(song))) continue;
-            yield* between;
-            matches.set(
-              radioSongKey(song),
-              find === null ? yield* store.matchingSong(song) : find(song),
+          const wanted = new Map<string, YtAlbumSong>();
+          for (const song of radio)
+            if (!matches.has(radioSongKey(song))) wanted.set(radioSongKey(song), song);
+          if (wanted.size === 0) return;
+          const songs = [...wanted.values()];
+          yield* between;
+          if (find === null) {
+            const found = yield* store.matchingSongs(songs);
+            songs.forEach((song, i) => matches.set(radioSongKey(song), found[i] ?? null));
+          } else
+            yield* runSteps(
+              (function* () {
+                for (const song of songs) {
+                  matches.set(radioSongKey(song), find(song));
+                  yield;
+                }
+              })(),
+              between,
             );
-          }
         }),
     };
   });

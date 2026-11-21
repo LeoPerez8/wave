@@ -26,10 +26,6 @@ export const homeEn = {
   emptyMessage: "Your recently added, recently played and most played music will show up here.",
   noSections: "Long-press Home to add sections back.",
   playHint: "Play something, and what you listen to will show up here.",
-  loadingStats: "Loading Stats",
-  loadingArtists: "Loading artists",
-  loadingAlbums: "Loading albums",
-  loadingPlaylists: "Loading playlists",
   edit: "Edit Home",
   notOnHome: "Not on Home",
 };
