@@ -5,7 +5,7 @@ import BetterSqlite3 from "better-sqlite3";
 import { drizzle } from "drizzle-orm/better-sqlite3";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
-import { createFindMatcher, sortKey } from "@wave/core";
+import { createFindMatcher, scanPathKey, sortKey } from "@wave/core";
 
 /**
  * SQLite's `wave_finds(query, title, artist, album)`: 1 when a list's Find [query] finds the row
@@ -36,6 +36,9 @@ export const sqliteDriverLayer = (file: string) =>
             sortKey(String(value)),
           );
           client.function("wave_finds", { deterministic: true }, findsRows());
+          client.function("wave_scan_path_key", { deterministic: true }, (path) =>
+            typeof path === "string" ? scanPathKey(path, process.platform) : null,
+          );
           client.exec(
             "CREATE TABLE IF NOT EXISTS desktop_settings (key TEXT PRIMARY KEY, value TEXT NOT NULL)",
           );

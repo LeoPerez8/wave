@@ -53,8 +53,8 @@ const playing = (page: Page) =>
 test("files opened with Wave play: at launch, and handed to the running window with Undo", async () => {
   const data = mkdtempSync(join(tmpdir(), "wave-e2e-open-"));
   const elsewhere = mkdtempSync(join(tmpdir(), "wave-e2e-open-files-"));
-  mkdirSync(join(data, "Music"));
-  const inLibrary = join(data, "Music", "library-song.wav");
+  mkdirSync(join(data, "Música"));
+  const inLibrary = join(data, "Música", "library-song.wav");
   const loose = join(elsewhere, "Loose Tape.wav");
   const other = join(elsewhere, "Second Tape.wav");
   const notes = join(elsewhere, "notes.txt");
@@ -67,8 +67,9 @@ test("files opened with Wave play: at launch, and handed to the running window w
     Effect.gen(function* () {
       const db = (yield* Database) as unknown as TestDatabase;
       const id = addTrack(db, { title: "Library Song", artist: "Wave Test", album: "Opened" });
-      // As a scan stores it: the real path, with slashes.
-      const stored = scanPath(realpathSync.native(inLibrary), process.platform);
+      // On Windows a case-only rename can leave the scan's previous spelling in the Library.
+      const path = scanPath(realpathSync.native(inLibrary), process.platform);
+      const stored = process.platform === "win32" ? path.replace("/Música/", "/MÚSICA/") : path;
       db.run(sql`UPDATE tracks SET path=${stored} WHERE id=${id}`);
     }).pipe(Effect.provide(libraryLayer(join(data, "wave.db")))),
   );

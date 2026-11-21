@@ -26,6 +26,7 @@ import {
   openedFilesQueue,
   parseTrackId,
   scanPath,
+  scanPathKey,
   tappedMissingSong,
   skipMissingSongs,
   ytTrackId,
@@ -409,11 +410,13 @@ export const playbackLayer = Layer.effect(
     };
     /** The Library song whose file is [path] (as `scanPath` spells it), when it can play. */
     const librarySong = (path: string): number | null => {
-      const row = db.get<{ id: number }>(
-        process.platform === "win32"
-          ? sql`SELECT id FROM tracks WHERE lower(path) = lower(${path}) LIMIT 1`
-          : sql`SELECT id FROM tracks WHERE path = ${path} LIMIT 1`,
-      );
+      let row = db.get<{ id: number }>(sql`SELECT id FROM tracks WHERE path = ${path}`);
+      if (row === undefined && process.platform === "win32") {
+        const key = scanPathKey(path, process.platform);
+        row = db.get<{ id: number }>(
+          sql`SELECT id FROM tracks WHERE wave_scan_path_key(path) = ${key} LIMIT 1`,
+        );
+      }
       return row !== undefined && browseSongs(db, [row.id])[0]?.path != null ? row.id : null;
     };
     /** Each entry's row, Library songs read in one go; songs nothing knows are left out. */

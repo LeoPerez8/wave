@@ -679,6 +679,7 @@ export const createDownloads = (deps: DownloadsDeps): DownloadsShape => {
         const download = ytAlbumDownload(songs, { inLibrary, jobs: followed });
         if (action === "cancel") {
           for (const id of download.toCancel) await deps.call("downloads.cancel", { id });
+          ownerAsked(download.toCancel);
           await refresh();
           return;
         }
