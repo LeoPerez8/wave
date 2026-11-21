@@ -4,12 +4,15 @@ import { describe, test } from "node:test";
 import {
   HOME_COMMUNITY_PLAYLISTS,
   HOME_COMMUNITY_PLAYLISTS_RETRY_MS,
+  communityPlaylistsAccount,
   homeCommunityPlaylists,
   homeCommunityPlaylistsDue,
   homeCommunityPlaylistsShown,
   keptCommunityPlaylists,
+  newCommunityPlaylistsSalt,
   parseKeptCommunityPlaylists,
   storedKeptCommunityPlaylists,
+  type YtAccount,
   type YtCommunityPlaylist,
   type YtPlaylistShelf,
 } from "./index.ts";
@@ -67,8 +70,47 @@ describe("the playlists Home takes from YouTube Music's home", () => {
 const at = (day: number, hour: number, minute = 0) =>
   new Date(2026, 10, day, hour, minute).getTime();
 
-const LEO = "leo@gmail.com";
-const ANA = "ana@gmail.com";
+/** This phone's salt, as `newCommunityPlaylistsSalt` makes one. */
+const SALT = "5f1c9a07d3e2b864";
+
+const account = (email: string | null, name = "Leo"): YtAccount => ({
+  name,
+  email,
+  photoUrl: null,
+});
+
+const LEO = communityPlaylistsAccount(account("leo@gmail.com"), SALT);
+const ANA = communityPlaylistsAccount(account("ana@gmail.com", "Ana"), SALT);
+
+describe("whose list it is", () => {
+  test("an account is known by its email, whatever its case or spaces", () => {
+    assert.equal(communityPlaylistsAccount(account(" Leo@Gmail.com"), SALT), LEO);
+    assert.notEqual(LEO, ANA);
+  });
+
+  test("an account without an email is known by its name", () => {
+    const named = (name: string) => communityPlaylistsAccount(account(null, name), SALT);
+    assert.equal(named("Leo"), named("Leo"));
+    assert.notEqual(named("Leo"), named("Ana"));
+    assert.notEqual(named("Leo"), LEO);
+  });
+
+  test("the key is salted with the phone's own salt: a guessed email alone doesn't give it", () => {
+    const elsewhere = communityPlaylistsAccount(account("leo@gmail.com"), "0123456789abcdef");
+    assert.notEqual(elsewhere, LEO);
+    assert.equal(LEO.includes("leo"), false);
+  });
+
+  test("each phone makes its own salt", () => {
+    let seed = 0;
+    const random = () => ((seed = (seed * 7 + 3) % 11) + 0.5) / 11;
+    const first = newCommunityPlaylistsSalt(random);
+    const second = newCommunityPlaylistsSalt(random);
+    assert.match(first, /^[0-9a-f]{16}$/);
+    assert.notEqual(first, second);
+    assert.match(newCommunityPlaylistsSalt(), /^[0-9a-f]{16}$/);
+  });
+});
 
 /** What the phone keeps after reading [shelves] at [now] as [account]. */
 const readAs = (account: string, now: number, ...shelves: YtPlaylistShelf[]) =>
@@ -103,7 +145,11 @@ describe("when YouTube Music's home is read", () => {
       true,
     );
     assert.equal(
-      homeCommunityPlaylistsDue(kept, { ...idle, account: " Leo@Gmail.com", now: at(20, 9, 1) }),
+      homeCommunityPlaylistsDue(kept, {
+        ...idle,
+        account: communityPlaylistsAccount(account(" Leo@Gmail.com"), SALT),
+        now: at(20, 9, 1),
+      }),
       false,
     );
   });
@@ -182,16 +228,18 @@ describe("the list the phone keeps", () => {
       "not json",
       "[]",
       "{}",
-      '{"version":1,"readAt":"x","account":"a","playlists":[]}',
-      '{"version":1,"readAt":1,"playlists":[]}',
-      '{"version":2,"readAt":1,"account":"a","playlists":[]}',
+      '{"version":2,"readAt":"x","account":"a","playlists":[]}',
+      '{"version":2,"readAt":1,"playlists":[]}',
+      // A list kept before keys were salted: its home is read again.
+      '{"version":1,"readAt":1,"account":"a","playlists":[]}',
+      '{"version":3,"readAt":1,"account":"a","playlists":[]}',
     ])
       assert.equal(parseKeptCommunityPlaylists(stored), null, String(stored));
   });
 
   test("stored entries that aren't playlists are left out", () => {
     const stored = JSON.stringify({
-      version: 1,
+      version: 2,
       readAt: 7,
       account: "abc",
       playlists: [playlist("a"), null, "b", { title: "No id" }, { playlistId: "c", title: "C" }],

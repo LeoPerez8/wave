@@ -158,12 +158,14 @@ class YtMusicModule : Module() {
 
     /**
      * The shelves of playlists on the signed-in account's YouTube Music home,
-     * its first pages: `[{ title, playlists: [{ playlistId, title, author,
-     * artworkUrl }] }]`, or an `ERR_YT_*` rejection (`ERR_YT_SIGNED_OUT`
-     * without a session). Nothing else of the home reaches JS.
+     * its first pages, and the account they were read as: `{ account: { name,
+     * email, photoUrl }, shelves: [{ title, playlists: [{ playlistId, title,
+     * author, artworkUrl }] }] }`, or an `ERR_YT_*` rejection
+     * (`ERR_YT_SIGNED_OUT` without a session YouTube accepts; `ERR_YT_FAILED`
+     * past its deadline). Nothing else of the home reaches JS.
      */
     AsyncFunction("homePlaylistShelves") Coroutine { meter: String? ->
-      coded(meter) { YtPages(client).homePlaylistShelves().map(YtPlaylistShelf::toMap) }
+      coded(meter) { YtPages(client).homePlaylistShelves().toMap() }
     }
 
     /**

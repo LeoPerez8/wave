@@ -8,12 +8,19 @@
 
 import { localDay } from "./discoverMixes.ts";
 import { isRecord, readStoredRecord } from "./storedJson.ts";
+import type { YtAccount } from "./ytAccount.ts";
 import type { YtCommunityPlaylist } from "./ytSearch.ts";
 
 /** A shelf of YouTube Music's home that holds playlists and nothing else. */
 export interface YtPlaylistShelf {
   readonly title: string;
   readonly playlists: readonly YtCommunityPlaylist[];
+}
+
+/** The playlist shelves of an account's home and the account they were read as. */
+export interface YtAccountHome {
+  readonly account: YtAccount;
+  readonly shelves: readonly YtPlaylistShelf[];
 }
 
 /** The most playlists Home's Community playlists shows. */
@@ -43,12 +50,21 @@ export const homeCommunityPlaylists = (
 };
 
 /**
- * Whose list it is, as the phone keeps it: a fingerprint of the account's
- * [email] (its FNV-1a hash), so the kept list names no one.
+ * A new salt for `communityPlaylistsAccount`: 16 hex digits from [random],
+ * made once on a phone and kept there, beside the list.
  */
-const accountKey = (email: string): string => {
+export const newCommunityPlaylistsSalt = (random: () => number = Math.random): string =>
+  Array.from({ length: 16 }, () => Math.floor(random() * 16).toString(16)).join("");
+
+/**
+ * Whose list it is, as the phone keeps it: the FNV-1a hash of the phone's
+ * [salt] and the [account]'s email (its name when it has none), whatever its
+ * case or spaces. The kept list holds no email or name, and a guessed email
+ * gives its key only with this phone's salt.
+ */
+export const communityPlaylistsAccount = (account: YtAccount, salt: string): string => {
   let hash = 0x811c9dc5;
-  for (const char of email.trim().toLowerCase()) {
+  for (const char of `${salt}\n${(account.email ?? account.name).trim().toLowerCase()}`) {
     hash ^= char.codePointAt(0)!;
     hash = Math.imul(hash, 0x01000193) >>> 0;
   }
@@ -59,7 +75,7 @@ const accountKey = (email: string): string => {
 export interface KeptCommunityPlaylists {
   /** When YouTube Music's home was last read (ms since the epoch). */
   readonly readAt: number;
-  /** The account it was read as (a fingerprint, never its email). */
+  /** The account it was read as (`communityPlaylistsAccount`, never its email). */
   readonly account: string;
   readonly playlists: readonly YtCommunityPlaylist[];
 }
@@ -68,13 +84,13 @@ const keptFor = (
   kept: KeptCommunityPlaylists | null,
   account: string | null,
 ): KeptCommunityPlaylists | null =>
-  kept !== null && account !== null && kept.account === accountKey(account) ? kept : null;
+  kept !== null && account !== null && kept.account === account ? kept : null;
 
 /**
- * What to keep after the home was read at [now] as [account] (its email)
- * and gave [shelves]. A home with no playlist shelves that day keeps the
- * playlists [previous] holds for that account, and still counts as the
- * day's read.
+ * What to keep after the home was read at [now] as [account] (its
+ * `communityPlaylistsAccount`) and gave [shelves]. A home with no playlist
+ * shelves that day keeps the playlists [previous] holds for that account,
+ * and still counts as the day's read.
  */
 export const keptCommunityPlaylists = (
   previous: KeptCommunityPlaylists | null,
@@ -84,14 +100,14 @@ export const keptCommunityPlaylists = (
   const playlists = homeCommunityPlaylists(shelves);
   return {
     readAt: now,
-    account: accountKey(account),
+    account,
     playlists: playlists.length > 0 ? playlists : (keptFor(previous, account)?.playlists ?? []),
   };
 };
 
 /**
  * Whether to read YouTube Music's home at [now]: only with a connected
- * [account] (its email, null without one), never while a read is going
+ * [account] (its `communityPlaylistsAccount`, null without one), never while a read is going
  * ([reading]) or before a failed one may be tried again ([retryAt]), and at
  * most once a day, from the next day on the phone's calendar after the last
  * read ([kept], null for never). A list kept for another account doesn't
@@ -116,7 +132,8 @@ const NONE: readonly YtCommunityPlaylist[] = [];
 
 /**
  * The playlists Home's Community playlists shows, none for a section left
- * out: it needs a connected [account] (its email, null without one) and a
+ * out: it needs a connected [account] (its `communityPlaylistsAccount`, null
+ * without one) and a
  * list kept for it that isn't empty.
  */
 export const homeCommunityPlaylistsShown = (
@@ -139,7 +156,8 @@ export const parseKeptCommunityPlaylists = (
   stored: string | null,
 ): KeptCommunityPlaylists | null => {
   const { version, readAt, account, playlists } = readStoredRecord(stored);
-  if (version !== 1 || typeof readAt !== "number" || !Array.isArray(playlists)) return null;
+  // Version 1 kept unsalted keys: such a list is dropped and the home read again.
+  if (version !== 2 || typeof readAt !== "number" || !Array.isArray(playlists)) return null;
   if (typeof account !== "string") return null;
   return {
     readAt,
@@ -156,7 +174,7 @@ export const storedKeptCommunityPlaylists = (kept: KeptCommunityPlaylists | null
   kept === null
     ? null
     : JSON.stringify({
-        version: 1,
+        version: 2,
         readAt: kept.readAt,
         account: kept.account,
         playlists: kept.playlists,

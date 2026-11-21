@@ -191,7 +191,7 @@ class YtHomeParserTest {
     val first = Fixtures.file("yt/home-playlists-signed-out.json").readText()
     val more = Fixtures.file("yt/home-playlists-continuation.json").readText()
     val asked = mutableListOf<String>()
-    val shelves = YtHomeParser.readPlaylistShelves({ first }, { token -> asked += token; more }, pages = 2)
+    val shelves = shelvesOf(YtHomeParser.readPlaylistShelves({ first }, { token -> asked += token; more }, pages = 2))
     assertEquals(
       listOf("Late night classics", "Viva a sexta-feira", "Trending community playlists", "Today's biggest hits"),
       shelves.map { it.title },
@@ -203,8 +203,47 @@ class YtHomeParserTest {
       "continuations":[{"nextContinuationData":{"continuation":"token${continuations++}"}}]}}}""" }
     YtHomeParser.readPlaylistShelves({ first }, { endless() })
     assertEquals(2, continuations)
-    val onePage = YtHomeParser.readPlaylistShelves({ first }, { error("no second page is asked") }, pages = 1)
+    val onePage = shelvesOf(YtHomeParser.readPlaylistShelves({ first }, { error("no second page is asked") }, pages = 1))
     assertEquals(listOf("Late night classics"), onePage.map { it.title })
+  }
+
+  private fun shelvesOf(read: YtHomePlaylistsRead): List<YtPlaylistShelf> =
+    (read as YtHomePlaylistsRead.Shelves).shelves
+
+  /**
+   * [body] with the `responseContext` YouTube Music sends, saying whether it answered as to
+   * someone signed in ([loggedIn]). The `home-playlists-*` fixtures were trimmed of it; this is
+   * its shape in a signed-out `FEmusic_home` answer recorded on 2026-11-21 (and its continuation's).
+   */
+  private fun answered(body: String, loggedIn: Boolean) =
+    """{"responseContext":{"serviceTrackingParams":[{"service":"GFEEDBACK","params":[
+      {"key":"browse_id","value":"FEmusic_home"},{"key":"browse_id_prefix","value":""},
+      {"key":"logged_in","value":"${if (loggedIn) 1 else 0}"}]}]},""" + body.trim().removePrefix("{")
+
+  @Test
+  fun aHomeAnsweredAsToSomeoneSignedOutIsNoReadOfTheAccount_recordedHome() {
+    // YouTube stopped taking the cookie: it answers with the anonymous home, which isn't the account's.
+    val first = Fixtures.file("yt/home-playlists-signed-out.json").readText()
+    val more = Fixtures.file("yt/home-playlists-continuation.json").readText()
+    assertEquals(
+      YtHomePlaylistsRead.SignedOut,
+      YtHomeParser.readPlaylistShelves({ answered(first, loggedIn = false) }, { error("no second page is asked") }),
+    )
+    // A continuation answered signed out spoils the read too.
+    assertEquals(
+      YtHomePlaylistsRead.SignedOut,
+      YtHomeParser.readPlaylistShelves({ answered(first, loggedIn = true) }, { answered(more, loggedIn = false) }),
+    )
+    // Answered signed in, it's the account's home.
+    val read = YtHomeParser.readPlaylistShelves(
+      { answered(first, loggedIn = true) },
+      { answered(more, loggedIn = true) },
+      pages = 2,
+    )
+    assertEquals(
+      listOf("Late night classics", "Viva a sexta-feira", "Trending community playlists", "Today's biggest hits"),
+      shelvesOf(read).map { it.title },
+    )
   }
 
   @Test
