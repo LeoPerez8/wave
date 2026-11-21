@@ -832,6 +832,7 @@ test("From Spotify's bridge checks what the window sends and answers without the
         "artwork",
         "cancel",
         "library",
+        "missing",
         "run",
       ]);
       // This build names no Spotify client, so there is nothing to read.
@@ -850,6 +851,12 @@ test("From Spotify's bridge checks what the window sends and answers without the
       await assert.rejects(call("spotifyImport.run", ["spotify:collection"], "yes"), /Refused/);
       await assert.rejects(call("spotifyImport.artwork", "https://i.scdn.co/image/a"), /Refused/);
       await assert.rejects(call("spotifyImport.cancel", 1), /Refused/);
+      await assert.rejects(call("spotifyImport.missing", -1), /Refused/);
+      assert.deepEqual(await wave.spotifyImport.missing(7), {
+        total: 0,
+        songs: [],
+        finding: false,
+      });
       // Nothing was listed, so Import has nothing to name; the window learns no more than that.
       await assert.rejects(
         call("spotifyImport.run", ["spotify:collection"], false),
