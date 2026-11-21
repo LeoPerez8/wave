@@ -52,7 +52,7 @@ import {
   keepDjMoodFeatures,
   selectDjMoodFeatures,
   type DjMoodFeatureWrite,
-  type DjMoodLookupSong,
+  type DjMoodLookupPage,
 } from "@wave/client/db/djMoodFeatures";
 import {
   readFollowShows,
@@ -1228,7 +1228,7 @@ export class LibraryStore extends Context.Service<
     readonly pendingDjMoodSongs: (
       after: string,
       now: number,
-    ) => Effect.Effect<readonly DjMoodLookupSong[], LibraryStoreError>;
+    ) => Effect.Effect<DjMoodLookupPage, LibraryStoreError>;
     /** Keeps feature matches permanently and misses for their retry window. */
     readonly keepDjMoodFeatures: (
       writes: readonly DjMoodFeatureWrite[],

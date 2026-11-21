@@ -65,13 +65,16 @@ const featureRows = async (ids: readonly string[]): Promise<readonly Record<stri
   return (body as { content: Record<string, unknown>[] }).content;
 };
 
-/** The exact Deezer track Wave's title, artist and duration matcher selects, including its ISRC. */
+/**
+ * The exact Deezer track Wave's title, artist and duration matcher selects, including its ISRC.
+ * A song Deezer is never asked about (no title, or an artist like "Various Artists") has none, so
+ * it goes on to the ReccoBeats search.
+ */
 const deezerIsrc = async (song: {
   readonly title: string;
   readonly artists: readonly string[];
   readonly durationMs: number | null;
 }): Promise<string | null> => {
-  await paceLookup();
   const lookup = songLookup({
     title: song.title,
     artist: song.artists.join(", "),
@@ -79,6 +82,7 @@ const deezerIsrc = async (song: {
     durationMs: song.durationMs ?? 0,
   });
   if (lookup === null) return null;
+  await paceLookup();
   const response = await fetch(deezerTrackSearchUrl(lookup));
   if (!response.ok) throw new Error(`Deezer HTTP ${response.status}`);
   const body: unknown = await response.json();
@@ -161,9 +165,10 @@ export const startDjMoodLookup = (): (() => void) => {
         while (enabled()) {
           await freeTurn();
           if (!enabled()) break;
-          const page = await appRuntime.runPromise(store.pendingDjMoodSongs(after, Date.now()));
-          if (page.length === 0) break;
-          after = page[page.length - 1]!.videoId;
+          const pending = await appRuntime.runPromise(store.pendingDjMoodSongs(after, Date.now()));
+          if (pending.last === null) break;
+          after = pending.last;
+          const page = pending.songs;
           const isrcs = new Map<string, string>();
           const unavailable = new Set<string>();
           for (const song of page) {
@@ -217,14 +222,23 @@ export const startDjMoodLookup = (): (() => void) => {
             if (typeof row?.isrc === "string") fallbackIsrcs.set(videoId, row.isrc.toUpperCase());
           }
           if (!enabled()) break;
-          const writes = page
-            .filter(({ videoId }) => !unavailable.has(videoId))
-            .map((song) => ({
-              videoId: song.videoId,
-              isrc: isrcs.get(song.videoId) ?? fallbackIsrcs.get(song.videoId) ?? null,
-              features: featureByVideo.get(song.videoId) ?? null,
+          // A stored entry that no longer reads can't be looked up: it waits as a miss.
+          const writes = [
+            ...page
+              .filter(({ videoId }) => !unavailable.has(videoId))
+              .map((song) => ({
+                videoId: song.videoId,
+                isrc: isrcs.get(song.videoId) ?? fallbackIsrcs.get(song.videoId) ?? null,
+                features: featureByVideo.get(song.videoId) ?? null,
+                checkedAt: Date.now(),
+              })),
+            ...pending.unreadable.map((videoId) => ({
+              videoId,
+              isrc: null,
+              features: null,
               checkedAt: Date.now(),
-            }));
+            })),
+          ];
           if (writes.length > 0) await appRuntime.runPromise(store.keepDjMoodFeatures(writes));
           totalChecked += writes.length;
           totalMatched += writes.filter(({ features }) => features !== null).length;
