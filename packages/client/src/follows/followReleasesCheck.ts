@@ -15,10 +15,13 @@ import {
   followReleaseQuery,
   followReleasesToSearch,
   keepFollowReleases,
+  pickYtArtist,
   resolveDeezerFollowArtist,
   type FollowCheckContext,
+  type FollowedArtist,
   type FollowRelease,
   type ReleaseType,
+  type YtArtistCandidate,
 } from "@wave/core";
 import * as Effect from "effect/Effect";
 import type { FollowStore } from "./followStore.ts";
@@ -37,6 +40,8 @@ export interface FollowYt<E = unknown> {
   readonly album: (
     browseId: string,
   ) => Effect.Effect<{ readonly tracks: readonly { readonly videoId: string }[] }, E>;
+  /** Artists on YT Music named like [name], for a follow without its artist page. */
+  readonly searchArtists: (name: string) => Effect.Effect<readonly YtArtistCandidate[], E>;
 }
 
 /** [Y] is what a YT Music read fails with; [R] is what the show check needs to run. */
@@ -45,6 +50,10 @@ export interface FollowReleasesPorts<Y = unknown, R = never> {
   readonly enabled: () => boolean;
   /** YT Music's switch, read again before each read. */
   readonly ytEnabled: () => boolean;
+  /** Don't play explicit: an explicit release is never a card, so it's never searched. */
+  readonly blockExplicit?: () => boolean;
+  /** Whether a YT Music read failed for no connection; the round's searches stop there. */
+  readonly offline?: (error: Y) => boolean;
   /** The country shows are looked up in; "" for none. */
   readonly country: () => string;
   /** Whether shows can be checked now: the service is configured and the account signed in. */
@@ -67,11 +76,13 @@ export interface FollowReleasesPorts<Y = unknown, R = never> {
 /**
  * The check on Home opening and in the phone's daily background task; the context picks the due
  * window. Failed artists retain their last successful answers and due time. With the switch
- * off, nothing followed or nothing due, it sends no request. After Deezer, with YT Music on, it
- * searches every release Core's `followReleasesToSearch` names, newest first and one at a time,
- * with no cap: the match is the tap's (`followReleaseOpening`), saved with the album's songs; a
- * miss or a failed read is searched again at the next check. Succeeds with whether it saved
- * anything.
+ * off, nothing followed or nothing due, it sends no request. With YT Music on, a checked follow
+ * without its YT Music artist looks it up (`pickYtArtist`). After Deezer, it searches every
+ * release Core's `followReleasesToSearch` names (with the Library, counted plays and Don't play
+ * explicit, as the feed decides), newest first and one at a time, with no cap: the match is the
+ * tap's (`followReleaseOpening`), saved with the album's songs when it has some; a miss or a
+ * failed read is searched again at the next check, and no connection ends the round. Succeeds
+ * with whether it saved anything.
  */
 export const followReleasesCheck = <Y = unknown, R = never>(ports: FollowReleasesPorts<Y, R>) => {
   const settle = ports.settle ?? Effect.void;
@@ -93,17 +104,50 @@ export const followReleasesCheck = <Y = unknown, R = never>(ports: FollowRelease
       });
       return yield* ports.ytTurn ? ports.ytTurn(query, guarded) : guarded;
     });
+  /** A YT Music read; failing for no connection it gives "offline", otherwise undefined. */
+  const ytAnswer = <A>(query: string, read: Effect.Effect<A, Y>) =>
+    ytRead(query, read).pipe(
+      Effect.catch((error) =>
+        Effect.succeed(ports.offline?.(error) ? ("offline" as const) : undefined),
+      ),
+    );
+  /** Saves [follow]'s YT Music artist when it has none and a search finds them. */
+  const findYtArtist = <E>(store: FollowStore<E>, yt: FollowYt<Y>, follow: FollowedArtist) =>
+    Effect.gen(function* () {
+      if (follow.ytBrowseId !== null) return false;
+      const candidates = yield* ytAnswer(follow.name, yt.searchArtists(follow.name));
+      if (candidates === undefined || candidates === "offline") return false;
+      const browseId = pickYtArtist(follow.name, candidates);
+      if (browseId === null || !allowed()) return false;
+      // Do not resurrect a follow removed while the search ran.
+      const current = yield* store.getFollow(follow.name);
+      if (current === null || current.followedAt !== follow.followedAt) return false;
+      if (current.ytBrowseId !== null) return false;
+      yield* store.setFollow({ ...current, ytBrowseId: browseId }, current.level);
+      return true;
+    }).pipe(Effect.orElseSucceed(() => false));
   /** Searches the releases Core names, saving each match found; true when one was saved. */
   const matchReleases = <E>(store: FollowStore<E>, yt: FollowYt<Y>) =>
     Effect.gen(function* () {
       const follows = yield* store.listFollows;
       const cache = yield* store.followReleaseCache;
-      const toSearch = followReleasesToSearch({
+      const feed = {
         follows,
-        releases: cache.artists.flatMap((a) => a.releases),
         hidden: cache.hidden,
-        countedPlays: [],
         now: Date.now(),
+        blockExplicit: ports.blockExplicit?.() ?? false,
+      };
+      // Only the listening read knows which are in the Library or played.
+      const unmatched = followReleasesToSearch({
+        ...feed,
+        releases: cache.artists.flatMap((a) => a.releases),
+        countedPlays: [],
+      });
+      const listening = yield* store.followReleaseListening(unmatched);
+      const toSearch = followReleasesToSearch({
+        ...feed,
+        releases: listening.releases,
+        countedPlays: listening.countedPlays,
       });
       let matched = false;
       for (const release of toSearch) {
@@ -112,12 +156,14 @@ export const followReleasesCheck = <Y = unknown, R = never>(ports: FollowRelease
         if (follow === undefined) continue;
         const saved = yield* Effect.gen(function* () {
           const query = followReleaseQuery(release, follow.name);
-          const found = yield* ytRead(query, yt.searchAlbums(query));
-          if (found === undefined) return false;
+          const found = yield* ytAnswer(query, yt.searchAlbums(query));
+          if (found === undefined || found === "offline") return found ?? false;
           const opening = followReleaseOpening(release, { ytMusic: true, found });
           if (opening.kind !== "open") return false;
-          const album = yield* ytRead(opening.browseId, yt.album(opening.browseId));
-          if (album === undefined || !allowed()) return false;
+          const album = yield* ytAnswer(opening.browseId, yt.album(opening.browseId));
+          if (album === undefined || album === "offline") return album ?? false;
+          // An album with no songs can't play: its tap would call it gone.
+          if (album.tracks.length === 0 || !allowed()) return false;
           // Do not resurrect a follow removed while the search ran.
           const current = yield* store.getFollow(follow.name);
           if (current === null || current.followedAt !== follow.followedAt) return false;
@@ -139,7 +185,8 @@ export const followReleasesCheck = <Y = unknown, R = never>(ports: FollowRelease
             kept.checkedAt,
           );
           return true;
-        }).pipe(Effect.orElseSucceed(() => false));
+        }).pipe(Effect.orElseSucceed(() => false as const));
+        if (saved === "offline") break;
         if (saved) matched = true;
       }
       return matched;
@@ -207,6 +254,8 @@ export const followReleasesCheck = <Y = unknown, R = never>(ports: FollowRelease
           yield* store.saveFollowReleases(follow.key, releases, Date.now());
           changed = true;
         }).pipe(Effect.ignore);
+        if (youtubeEnabled && ytAllowed() && (yield* findYtArtist(store, yt, follow)))
+          changed = true;
       }
       if (youtubeEnabled && ytAllowed() && (yield* matchReleases(store, yt))) changed = true;
       return changed;
