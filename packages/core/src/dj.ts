@@ -156,6 +156,29 @@ export const djFamilyRadioAllowed = (
   return true;
 };
 
+/**
+ * Whether a song by [artists] on the radio [radioId] (a seed's id, or
+ * `artist:` and a catalog seed key) stays in [session]'s batch. A radio a
+ * family tile alone brought keeps the songs that fit any of its families
+ * (`djFamilyRadioAllowed`); any other radio keeps every song.
+ */
+export const djRadioSongAllowed = (
+  session: Pick<MagicSession, "djGenreRadios">,
+  radioId: string,
+  artists: readonly string[],
+  profileOf: GenreProfileOf,
+  graph: ArtistGraph | null = null,
+): boolean => {
+  const families = session.djGenreRadios?.find(
+    (radio) => radio.id === radioId || `artist:${radio.id}` === radioId,
+  )?.families;
+  return (
+    families === undefined ||
+    families.length === 0 ||
+    families.some((family) => djFamilyRadioAllowed(family, artists, profileOf, graph))
+  );
+};
+
 /** What DJ's grid is built from, all of it already on the phone. */
 export interface DjGridSources {
   /** The Library's artists. */
@@ -651,7 +674,9 @@ const artistSeed = (artist: DjArtistTile, plays: number): MagicSeedSong => ({
  * could be read. Each batch reads up to 3 of those radios by different
  * artists (`magicBatchRadios`), artists and albums in one draw: the artists
  * with more counted plays in [played], and the songs with more of their own,
- * most often. It ranks with [settings], DJ's own, and starts at their New
+ * most often. A family tile contributes its seed artists' radios, whose songs
+ * keep to the family (`djRadioSongAllowed`) unless that artist was also
+ * picked as an artist tile or as a selected album's artist. It ranks with [settings], DJ's own, and starts at their New
  * music share. Null when the tiles give no radio to read.
  */
 export const startDjQueue = (
@@ -677,6 +702,8 @@ export const startDjQueue = (
   const seeds = new Map<string, MagicSeedSong>();
   const artists = new Map<string, string>();
   const genreRadios = new Map<string, Set<string>>();
+  // Artists picked as an artist tile or as a selected album's artist: their radios stay open.
+  const picked = new Set<string>();
   const credit = (name: string): void => {
     const key = djArtistTile(name)?.key;
     if (key !== undefined && !artists.has(key)) artists.set(key, name);
@@ -697,7 +724,10 @@ export const startDjQueue = (
     }
     const songs = tile.kind === "album" ? (albumSongs.get(tile.key) ?? []) : [];
     const artist = tile.kind === "album" ? djArtistTile(tile.artist) : tile;
-    if (artist !== null) credit(artist.name);
+    if (artist !== null) {
+      picked.add(artist.key);
+      credit(artist.name);
+    }
     // A compilation is nobody's: its songs' own artists are the session's.
     else for (const song of songs) if (song.artists[0] !== undefined) credit(song.artists[0]);
     if (songs.length === 0 && artist !== null && !seeds.has(artist.key))
@@ -705,6 +735,7 @@ export const startDjQueue = (
     for (const song of songs) if (!seeds.has(song.id)) seeds.set(song.id, song);
   }
   if (seeds.size === 0) return null;
+  for (const key of picked) genreRadios.delete(key);
   return {
     id,
     seed: { kind: "dj", id, title: DJ_SEED_TITLE },

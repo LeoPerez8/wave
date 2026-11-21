@@ -7,7 +7,10 @@ import {
   DJ_GRID_TILES,
   DJ_MAX_SELECTED,
   djArtistTile,
+  djAlbumTile,
   djFamilyRadioAllowed,
+  djGenreTile,
+  djRadioSongAllowed,
   djGrid,
   djOpened,
   djReduce,
@@ -413,6 +416,65 @@ describe("a Magic Queue with a DJ seed", () => {
         graphOf({ "Untagged Artist": ["Pop Neighbour"] }),
       ),
       false,
+    );
+  });
+
+  const familyProfileOf = (artist: string) =>
+    artist === "Metal Band"
+      ? new Map([["metal", 1]])
+      : artist === "Pop Band"
+        ? new Map([["pop", 1]])
+        : artist === "Jazz Band"
+          ? new Map([["jazz", 1]])
+          : null;
+  const familyTile = (name: string, artist: string): DjTile => ({
+    ...djGenreTile(name)!,
+    artists: [{ id: 1, name: artist }],
+  });
+
+  test("a song on a radio two families share passes when it fits either family", () => {
+    const session = startDjQueue([familyTile("Metal", "Shared Artist"), familyTile("Pop", "Shared Artist")], {
+      id: "dj-two-families",
+    })!;
+    const radio = "artist:shared artist";
+    assert.equal(djRadioSongAllowed(session, radio, ["Metal Band"], familyProfileOf), true);
+    assert.equal(djRadioSongAllowed(session, radio, ["Pop Band"], familyProfileOf), true);
+    assert.equal(djRadioSongAllowed(session, radio, ["Jazz Band"], familyProfileOf), false);
+    assert.equal(djRadioSongAllowed(session, radio, ["Unknown"], familyProfileOf), true);
+  });
+
+  test("a radio no family brought keeps every song", () => {
+    const session = startDjQueue([familyTile("Metal", "Metal Seed"), djArtistTile("Other Artist")!], {
+      id: "dj-mixed",
+    })!;
+    assert.equal(
+      djRadioSongAllowed(session, "artist:other artist", ["Jazz Band"], familyProfileOf),
+      true,
+    );
+    assert.equal(
+      djRadioSongAllowed(session, "artist:metal seed", ["Jazz Band"], familyProfileOf),
+      false,
+    );
+  });
+
+  test("an artist selected on its own keeps an open radio when a family also picks it", () => {
+    const session = startDjQueue([familyTile("Metal", "Shared Artist"), djArtistTile("Shared Artist")!], {
+      id: "dj-artist-and-family",
+    })!;
+    assert.equal(
+      djRadioSongAllowed(session, "artist:shared artist", ["Jazz Band"], familyProfileOf),
+      true,
+    );
+  });
+
+  test("a selected album's artist keeps an open radio when a family also picks it", () => {
+    const album = djAlbumTile({ title: "Record", artist: "Shared Artist" })!;
+    const session = startDjQueue([familyTile("Metal", "Shared Artist"), album], {
+      id: "dj-album-and-family",
+    })!;
+    assert.equal(
+      djRadioSongAllowed(session, "artist:shared artist", ["Jazz Band"], familyProfileOf),
+      true,
     );
   });
 
