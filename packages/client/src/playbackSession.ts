@@ -445,7 +445,7 @@ export const createPlaybackSession = async (
     }
   }
 
-  const applyCommand = async (given: QueueCommand) => {
+  const applyCommand = async (given: SessionCommand) => {
     const before = queue;
     const previous = currentEntry(queue);
     const latest = await audio.status();
