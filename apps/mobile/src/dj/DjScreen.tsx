@@ -20,6 +20,7 @@ import {
   type DjArtistTile,
   type DjGenreTile,
   type DjOpeningGrid,
+  type DjSettings,
   type DjState,
   type DjTile,
   type DjTileKey,
@@ -44,6 +45,7 @@ import { CardDetail, CardTile, CardTitle, titleLineHeight } from "@/catalog/card
 import { CELL, grid, widthOf } from "@/catalog/grid";
 import { SkeletonGroup } from "@/catalog/Skeletons";
 import { SkeletonLine } from "@/catalog/SkeletonLine";
+import { BACKDROP } from "@/chrome/chrome";
 import { IconButton } from "@/components/IconButton";
 import { RecommendationsFailed } from "@/components/RecommendationsFailed";
 import { TextButton } from "@/components/TextButton";
@@ -69,7 +71,7 @@ import { useThemeColor } from "@/theme/useThemeColor";
 import { fetchArtist } from "@/ytmusic/artistSection";
 import type { ArtistRow } from "@wave/client";
 
-import { DjAdjust } from "./DjAdjust";
+import { DjAdjustScrim, DjAdjustSheet, useDjAdjustSheet } from "./DjAdjust";
 import { readDjAlbums } from "./djAlbums";
 import { DjSearch } from "./DjSearch";
 import { djDone, type DjDone, type DjDoneRunner } from "./djDone";
@@ -507,10 +509,11 @@ function PlaceholderTile({ size, fontScale }: { size: number; fontScale: number 
  * (`DjSelectionRow`). Play ("Play · 3", counting the selection) reads a new
  * session's first batch and plays it, then closes; Close leaves the queue as
  * it is. Over Play, the summary of the Adjust choices (Core's
- * `djSettingsSummary`) and the adjustments icon show the Adjust screen in
- * the grid's place: its back arrow (and Android's Back) returns to the grid,
- * which stayed as it was, and Play starts the queue from either with the
- * choices made there. The search
+ * `djSettingsSummary`) and the adjustments icon open the Adjust sheet over
+ * the grid, dimmed behind a scrim (`DjAdjustSheet`): Android's Back, a tap
+ * on the scrim or a swipe down on its handle closes it over the grid as it
+ * was left, and the sheet's own Play starts the queue as the bar's does,
+ * with the choices made there. The search
  * button beside Close shows the search in the grid's place (`DjSearch`): a
  * tapped result joins the grid selected and the grid comes back, at its top
  * when the result is a new first tile.
@@ -527,16 +530,17 @@ export function DjScreen() {
   const [settings, setSettings] = useState(() => djRemembered.get().settings);
   const [adjusting, setAdjusting] = useState(false);
   const [searching, setSearching] = useState(false);
+  const sheet = useDjAdjustSheet(adjusting);
   const gridScroll = useRef<ComponentRef<typeof ScrollView>>(null);
-  const aside = adjusting || searching;
   useEffect(() => {
-    if (!aside) return;
+    if (!adjusting && !searching) return;
     return addScreenBackHandler(() => {
-      setAdjusting(false);
-      setSearching(false);
+      // The sheet opens over the grid, never over the search: Back closes whichever shows.
+      if (adjusting) setAdjusting(false);
+      else setSearching(false);
       return true;
     });
-  }, [aside]);
+  }, [adjusting, searching]);
   useScreenContent(opening !== null);
   const state = picked ?? undefined;
   const seed = useMemo(() => (state === undefined ? [] : djSeedTiles(state)), [state]);
@@ -565,196 +569,221 @@ export function DjScreen() {
       if (outcome === "started") djRemembered.set({ tiles: seed, settings });
       return outcome;
     });
+  // The failure line, over the Play that was tapped: the bar's, or the sheet's while it's up.
+  const failed = (done === "failed" || done === "empty") && (
+    <RecommendationsFailed
+      onRetry={start}
+      {...(done === "empty" ? { message: strings.dj.noSongsFound } : {})}
+    />
+  );
+  // The bar's Play and the sheet's: one pill, one start.
+  const playPill = (
+    <TextButton
+      variant="pill"
+      label={play}
+      accessibilityLabel={loading ? strings.dj.starting : play}
+      accessibilityState={{ selected: false, busy: loading }}
+      selected={canStart}
+      disabled={!canStart || loading}
+      onPress={start}
+      className="flex-row items-center justify-center"
+      style={{ gap: CELL }}
+    >
+      {(color) => (
+        <>
+          {loading ? (
+            <ActivityIndicator size="small" color={onAccent} />
+          ) : (
+            <IconPlayerPlayFilled size={CELL * 2.5} color={color} />
+          )}
+          <Text
+            className="font-sans text-body font-semibold"
+            style={{ color: loading ? onAccent : color }}
+          >
+            {play}
+          </Text>
+        </>
+      )}
+    </TextButton>
+  );
+  const changeSettings = (next: DjSettings): void => {
+    // The choices can't change while their first batch is read.
+    if (loading) return;
+    setDone("idle");
+    setSettings(next);
+  };
   return (
-    <View className="flex-1 bg-background" style={{ paddingTop: insets.top + 4 }}>
-      <View className="flex-row justify-between" style={{ paddingHorizontal: grid.margin - 12 }}>
-        {aside ? (
-          <IconButton
-            icon={IconArrowLeft}
-            label={strings.dj.backToGrid}
-            onPress={() => {
-              setAdjusting(false);
-              setSearching(false);
-            }}
-          />
-        ) : (
-          <IconButton icon={IconX} label={strings.dj.close} onPress={() => router.back()} />
-        )}
-        {/* With the grid, or over one with nothing to pick; not while placeholders stand for it. */}
-        {!aside && (state !== undefined || opening?.kind === "nothing") && (
-          <IconButton
-            icon={IconSearch}
-            label={strings.dj.search}
-            disabled={loading}
-            onPress={() => setSearching(true)}
-          />
-        )}
-      </View>
-      {searching && (
-        <DjSearch
-          state={state}
-          onPick={(tile) => {
-            // A result the grid lacks becomes its first tile: the grid comes back there.
-            if (state?.tiles.every((each) => each.key !== tile.key) ?? true)
-              gridScroll.current?.scrollTo({ y: 0, animated: false });
-            setDone("idle");
-            add(tile);
-            setSearching(false);
-          }}
-        />
-      )}
-      {adjusting && (
-        <DjAdjust
-          settings={settings}
-          onChange={(next) => {
-            // The choices can't change while their first batch is read.
-            if (loading) return;
-            setDone("idle");
-            setSettings(next);
-          }}
-        />
-      )}
-      <ScrollView
-        ref={gridScroll}
-        // Kept under Adjust and the search, so the grid is where it was left on the way back.
-        style={aside ? { display: "none" } : undefined}
-        contentContainerStyle={{ paddingHorizontal: grid.margin, paddingBottom: CELL * 3 }}
+    <View className="flex-1 bg-background">
+      <View
+        // What the Adjust sheet's glass shows through, its scrim drawn last.
+        nativeID={BACKDROP.dj}
+        collapsable={false}
+        className="flex-1 bg-background"
+        style={{ paddingTop: insets.top + 4 }}
       >
-        <Text
-          accessibilityRole="header"
-          className="font-sans text-title1 font-light text-foreground"
-          style={{ paddingBottom: CELL * 2 }}
+        <View
+          className="flex-1"
+          // Screen readers stay in the sheet while it's up.
+          importantForAccessibility={adjusting ? "no-hide-descendants" : "auto"}
+          accessibilityElementsHidden={adjusting}
         >
-          {strings.dj.title}
-        </Text>
-        {state !== undefined && (
-          <View style={{ paddingBottom: CELL * 3 }}>
-            <DjSelectionRow
-              tiles={seed}
-              artists={artists}
-              // A selection can't change while its first batch is read.
-              disabled={loading}
-              onRemove={(key) => {
+          <View
+            className="flex-row justify-between"
+            style={{ paddingHorizontal: grid.margin - 12 }}
+          >
+            {searching ? (
+              <IconButton
+                icon={IconArrowLeft}
+                label={strings.dj.backToGrid}
+                onPress={() => setSearching(false)}
+              />
+            ) : (
+              <IconButton icon={IconX} label={strings.dj.close} onPress={() => router.back()} />
+            )}
+            {/* With the grid, or over one with nothing to pick; not while placeholders stand for it. */}
+            {!searching && (state !== undefined || opening?.kind === "nothing") && (
+              <IconButton
+                icon={IconSearch}
+                label={strings.dj.search}
+                disabled={loading}
+                onPress={() => setSearching(true)}
+              />
+            )}
+          </View>
+          {searching && (
+            <DjSearch
+              state={state}
+              onPick={(tile) => {
+                // A result the grid lacks becomes its first tile: the grid comes back there.
+                if (state?.tiles.every((each) => each.key !== tile.key) ?? true)
+                  gridScroll.current?.scrollTo({ y: 0, animated: false });
                 setDone("idle");
-                toggle(key);
+                add(tile);
+                setSearching(false);
               }}
             />
-          </View>
-        )}
-        <View onLayout={(event) => setAvailable(widthOf(event))}>
-          {state === undefined && opening?.kind === "skeleton" ? (
-            <TilesSkeleton size={size} fontScale={fontScale} />
-          ) : state === undefined && opening?.kind === "nothing" ? (
-            <Text className="font-sans text-subheadline text-secondary">
-              {strings.dj.nothingToPick}
-            </Text>
-          ) : (
-            <View
-              style={{
-                width: available,
-                flexDirection: "row",
-                flexWrap: "wrap",
-                columnGap: CELL,
-                rowGap: CELL * 2,
-              }}
-            >
-              {cells.map((cell) => {
-                if (cell.kind === "placeholder" || state === undefined)
-                  return <PlaceholderTile key={cell.key} size={size} fontScale={fontScale} />;
-                const { tile } = cell;
-                const picking = {
-                  size,
-                  selected: djSelected(state, tile.key),
-                  // A selection can't change while its first batch is read.
-                  selectable: !loading && djSelectable(state, tile.key),
-                  onPress: () => {
-                    setDone("idle");
-                    toggle(tile.key);
-                  },
-                };
-                return tile.kind === "album" ? (
-                  <AlbumTile key={cell.key} tile={tile} {...picking} />
-                ) : tile.kind === "genre" ? (
-                  <GenreTile key={cell.key} tile={tile} {...picking} />
-                ) : (
-                  <ArtistTile
-                    key={cell.key}
-                    tile={tile}
-                    artist={tile.libraryId === null ? undefined : artists.get(tile.libraryId)}
-                    {...picking}
-                  />
-                );
-              })}
-            </View>
           )}
-        </View>
-      </ScrollView>
-      <View
-        className="bg-background"
-        style={{
-          // The search has the screen to itself, above the keyboard.
-          display: searching ? "none" : "flex",
-          paddingHorizontal: grid.margin,
-          paddingTop: CELL,
-          paddingBottom: insets.bottom + CELL * 2,
-          gap: CELL,
-        }}
-      >
-        {(done === "failed" || done === "empty") && (
-          <RecommendationsFailed
-            onRetry={start}
-            {...(done === "empty" ? { message: strings.dj.noSongsFound } : {})}
-          />
-        )}
-        {!adjusting && (
-          <Press
-            accessibilityRole="button"
-            accessibilityLabel={strings.dj.adjustSummary(summary)}
-            accessibilityState={{ disabled: loading }}
-            disabled={loading}
-            onPress={() => setAdjusting(true)}
-            className="flex-row items-center justify-between"
-            style={{ paddingLeft: CELL, marginRight: -CELL * 1.5, opacity: loading ? 0.4 : 1 }}
+          <ScrollView
+            ref={gridScroll}
+            // Kept under the search, so the grid is where it was left on the way back.
+            style={searching ? { display: "none" } : undefined}
+            contentContainerStyle={{ paddingHorizontal: grid.margin, paddingBottom: CELL * 3 }}
           >
-            <Text numberOfLines={1} className="flex-1 font-sans text-footnote text-secondary">
-              {summary}
-            </Text>
-            <View
-              className="items-center justify-center"
-              style={{ width: CELL * 6, height: CELL * 6 }}
+            <Text
+              accessibilityRole="header"
+              className="font-sans text-title1 font-light text-foreground"
+              style={{ paddingBottom: CELL * 2 }}
             >
-              <IconAdjustmentsHorizontal size={CELL * 3} color={accent} strokeWidth={1.5} />
-            </View>
-          </Press>
-        )}
-        <TextButton
-          variant="pill"
-          label={play}
-          accessibilityLabel={loading ? strings.dj.starting : play}
-          accessibilityState={{ selected: false, busy: loading }}
-          selected={canStart}
-          disabled={!canStart || loading}
-          onPress={start}
-          className="flex-row items-center justify-center"
-          style={{ gap: CELL }}
-        >
-          {(color) => (
-            <>
-              {loading ? (
-                <ActivityIndicator size="small" color={onAccent} />
+              {strings.dj.title}
+            </Text>
+            {state !== undefined && (
+              <View style={{ paddingBottom: CELL * 3 }}>
+                <DjSelectionRow
+                  tiles={seed}
+                  artists={artists}
+                  // A selection can't change while its first batch is read.
+                  disabled={loading}
+                  onRemove={(key) => {
+                    setDone("idle");
+                    toggle(key);
+                  }}
+                />
+              </View>
+            )}
+            <View onLayout={(event) => setAvailable(widthOf(event))}>
+              {state === undefined && opening?.kind === "skeleton" ? (
+                <TilesSkeleton size={size} fontScale={fontScale} />
+              ) : state === undefined && opening?.kind === "nothing" ? (
+                <Text className="font-sans text-subheadline text-secondary">
+                  {strings.dj.nothingToPick}
+                </Text>
               ) : (
-                <IconPlayerPlayFilled size={CELL * 2.5} color={color} />
+                <View
+                  style={{
+                    width: available,
+                    flexDirection: "row",
+                    flexWrap: "wrap",
+                    columnGap: CELL,
+                    rowGap: CELL * 2,
+                  }}
+                >
+                  {cells.map((cell) => {
+                    if (cell.kind === "placeholder" || state === undefined)
+                      return <PlaceholderTile key={cell.key} size={size} fontScale={fontScale} />;
+                    const { tile } = cell;
+                    const picking = {
+                      size,
+                      selected: djSelected(state, tile.key),
+                      // A selection can't change while its first batch is read.
+                      selectable: !loading && djSelectable(state, tile.key),
+                      onPress: () => {
+                        setDone("idle");
+                        toggle(tile.key);
+                      },
+                    };
+                    return tile.kind === "album" ? (
+                      <AlbumTile key={cell.key} tile={tile} {...picking} />
+                    ) : tile.kind === "genre" ? (
+                      <GenreTile key={cell.key} tile={tile} {...picking} />
+                    ) : (
+                      <ArtistTile
+                        key={cell.key}
+                        tile={tile}
+                        artist={tile.libraryId === null ? undefined : artists.get(tile.libraryId)}
+                        {...picking}
+                      />
+                    );
+                  })}
+                </View>
               )}
-              <Text
-                className="font-sans text-body font-semibold"
-                style={{ color: loading ? onAccent : color }}
-              >
-                {play}
+            </View>
+          </ScrollView>
+          <View
+            className="bg-background"
+            style={{
+              // The search has the screen to itself, above the keyboard.
+              display: searching ? "none" : "flex",
+              paddingHorizontal: grid.margin,
+              paddingTop: CELL,
+              paddingBottom: insets.bottom + CELL * 2,
+              gap: CELL,
+            }}
+          >
+            {!adjusting && failed}
+            <Press
+              accessibilityRole="button"
+              accessibilityLabel={strings.dj.adjustSummary(summary)}
+              accessibilityState={{ disabled: loading }}
+              disabled={loading}
+              onPress={() => setAdjusting(true)}
+              className="flex-row items-center justify-between"
+              style={{ paddingLeft: CELL, marginRight: -CELL * 1.5, opacity: loading ? 0.4 : 1 }}
+            >
+              <Text numberOfLines={1} className="flex-1 font-sans text-footnote text-secondary">
+                {summary}
               </Text>
-            </>
-          )}
-        </TextButton>
+              <View
+                className="items-center justify-center"
+                style={{ width: CELL * 6, height: CELL * 6 }}
+              >
+                <IconAdjustmentsHorizontal size={CELL * 3} color={accent} strokeWidth={1.5} />
+              </View>
+            </Press>
+            {playPill}
+          </View>
+        </View>
+        <DjAdjustScrim sheet={sheet} onClose={() => setAdjusting(false)} />
       </View>
+      <DjAdjustSheet
+        sheet={sheet}
+        settings={settings}
+        disabled={loading}
+        onChange={changeSettings}
+        onClose={() => setAdjusting(false)}
+      >
+        {adjusting && failed}
+        {playPill}
+      </DjAdjustSheet>
     </View>
   );
 }

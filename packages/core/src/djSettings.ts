@@ -70,10 +70,6 @@ const NEW_MUSIC_SHARE: { readonly [K in DjDiscovery]: number } = {
 export const djNewMusicShare = (settings: DjSettings): number =>
   NEW_MUSIC_SHARE[settings.discovery];
 
-/** A Music discovery step as Adjust shows it: its name and the share it starts at ("Blend · 60% new"). */
-export const djDiscoveryLabel = (discovery: DjDiscovery, strings: Catalogue = en): string =>
-  `${strings.dj.discoverySteps[discovery]} · ${strings.discover.newShare(NEW_MUSIC_SHARE[discovery] * 100)}`;
-
 const POPULARITY_STEP: { readonly [K in DjPopularity]: MixSliderStep } = {
   trending: 1,
   balanced: DEFAULT_MIX_SLIDERS.popularity,

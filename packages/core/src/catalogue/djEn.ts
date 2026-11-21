@@ -1,3 +1,5 @@
+import { formatNumber } from "../formatting.ts";
+
 /** DJ: the screen where the owner picks the artists a Magic Queue starts from. */
 export const djEn = {
   title: "DJ",
@@ -9,7 +11,7 @@ export const djEn = {
   play: "Play",
   playCount: (count: number) => `Play · ${count}`,
   close: "Close",
-  /** Done's name for screen readers while the first batch is read. */
+  /** Play's name for screen readers while the first batch is read. */
   starting: "Starting your queue",
   /** An artist tile's name for screen readers: its kind, then the artist. */
   artistTile: (name: string) => `Artist, ${name}`,
@@ -21,9 +23,9 @@ export const djEn = {
   loadingArtists: "Loading artists",
   nothingToPick: "Nothing to pick from yet. Play some music and come back.",
   noSongsFound: "No songs found for what you picked.",
-  /** The title of the Adjust screen, which the bottom bar's summary of it opens. */
+  /** The title of the Adjust sheet, which the bottom bar's summary of it opens. */
   adjust: "Adjust",
-  /** Adjust's back arrow, which returns to the grid. */
+  /** The search's back arrow, which returns to the grid. */
   backToGrid: "Back to DJ",
   artistVariety: "Artist variety",
   /** Artist variety's steps: how far the queue strays from the selected artists. */
@@ -38,7 +40,10 @@ export const djEn = {
   musicDiscovery: "Music discovery",
   /** Music discovery's steps: how much of the queue is new to the owner. */
   discoverySteps: { familiar: "Familiar", blend: "Blend", discover: "Discover" },
-  /** The group of chips under Adjust's sliders. */
+  /** The note under Music discovery: the share of new songs the chosen step starts at. */
+  discoveryNote: (percent: number) =>
+    `${formatNumber("en", percent)}% of the songs are new to you.`,
+  /** The group of chips under Adjust's option groups. */
   filters: "Filters",
   mood: "Mood",
   moodNames: { energetic: "Energetic", relaxing: "Relaxing", upbeat: "Upbeat" },
