@@ -1569,6 +1569,8 @@ export type {
   SpotifyLibraryPlaylist,
   SpotifyLibraryRead,
 } from "./spotifyLibrary.ts";
+export { readSpotifyWebLibrary, readSpotifyWebPlaylist } from "./spotifyWebLibrary.ts";
+export type { SpotifyWebAnswer, SpotifyWebAsk } from "./spotifyWebLibrary.ts";
 export { compareOrderKeys, orderKeyBetween, placeEntries } from "./orderKey.ts";
 export type { EntryPlacement, OrderedEntry } from "./orderKey.ts";
 export { graveyardRemovalsOf, graveyardRestoreIndex, graveyardSongs } from "./playlistGraveyard.ts";
@@ -1983,6 +1985,8 @@ export {
   explicitPlayNotice,
   explicitSkipNotice,
   queuedPassedOver,
+  readDontPlayExplicit,
+  writeDontPlayExplicit,
 } from "./explicitPlayback.ts";
 export type { ExplicitPlayback } from "./explicitPlayback.ts";
 export type { PassOver } from "./queue.ts";
@@ -2898,3 +2902,9 @@ export {
   openedFileTrackId,
   openedFilesQueue,
 } from "./openedFiles.ts";
+import {
+  floatingWindowPosition,
+  readFloatingWindowPosition,
+  storedFloatingWindowPosition,
+} from "./floatingWindow.ts";
+export type { ScreenArea, WindowPosition, WindowSize } from "./floatingWindow.ts";

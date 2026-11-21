@@ -21,6 +21,7 @@ import {
 import type { AccountView } from "../../shared/account.ts";
 import type { YtAccountPanel } from "../../shared/ytAccount.ts";
 import { SpotifyAccountSettings } from "./SpotifyAccountSettings.tsx";
+import { PlaylistMissingSongs } from "./SpotifyImport.tsx";
 import type { BrowseRow, BrowseScope } from "../../shared/browse.ts";
 import type { CollectionTarget } from "../../shared/collectionActions.ts";
 import type { ScanStatus } from "../../shared/library.ts";
@@ -817,6 +818,12 @@ export function App() {
                   />
                 )}
                 {playlistId !== undefined && (
+                  <PlaylistMissingSongs
+                    playlistId={playlistId}
+                    revision={`${playback.view?.revision}:${playlistEdits.edits}`}
+                  />
+                )}
+                {playlistId !== undefined && (
                   <button
                     aria-label={text.playlists.playlistActions}
                     title={text.playlists.playlistActions}
@@ -845,7 +852,12 @@ export function App() {
             )}
             {route.kind === "playlists" && (
               <div className="hero-actions">
-                <button onClick={playlistEdits.importPlaylists}>
+                <button
+                  onClick={(event) => {
+                    const rect = event.currentTarget.getBoundingClientRect();
+                    playlistEdits.importPlaylists({ x: rect.left, y: rect.bottom + 4 });
+                  }}
+                >
                   <Icon name="folder" size={16} />
                   {text.playlists.importPlaylists}
                 </button>

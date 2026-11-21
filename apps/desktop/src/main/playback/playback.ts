@@ -217,6 +217,7 @@ export const playbackLayer = Layer.effect(
         },
         stopped: (why) => stoppedBy(why),
         gainDb: gains.gainDb,
+        dontPlayExplicit: () => settings.dontPlayExplicit,
       }),
     );
     const sleep = createSleepTimer({
@@ -282,13 +283,21 @@ export const playbackLayer = Layer.effect(
       await run(player.setCrossfade(settings.crossfadeSeconds));
       await run(player.setNormalize(settings.normalizeVolume));
     };
-    /** Plays by [next] from here, measuring or not as its Normalize Volume says. */
+    /**
+     * Plays by [next] from here, measuring or not as its Normalize Volume says. Don't Play
+     * Explicit turning on takes the queue's explicit songs out, and the Magic Queue hears
+     * Continue with Magic Queue change.
+     */
     const playBySettings = async (next: typeof settings) => {
       const switched = next.normalizeVolume !== settings.normalizeVolume;
+      const explicitOff = next.dontPlayExplicit && !settings.dontPlayExplicit;
+      const continues = next.continueQueue !== settings.continueQueue;
       settings = next;
       await sendSettings();
       sendBuffer();
       if (switched) measurements.switched();
+      if (explicitOff) await moved(session.dropExplicit());
+      else if (continues) queueChanged();
     };
     yield* Effect.promise(() => run(player.setVolume(muted ? 0 : volume)).catch(failed));
     yield* Effect.promise(() => sendSettings().catch(failed));

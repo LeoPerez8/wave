@@ -110,7 +110,7 @@ D16. As a user, I want Space to press a focused button instead of pausing, and â
 
 D17. As a user, I want my keyboard's media keys and the system's media controls (Windows' media flyout, the Linux desktop's media controls) to show the song and play, pause, skip and seek it, so that I control Wave from anywhere.
 D18. As a user, I want closing the window to keep Wave playing in the tray, with a one-time notice saying so and how to change it, and a setting that makes closing quit, so that music doesn't stop when I close a window.
-D19. As a user, I want the tray icon to show or hide the window on click, and its menu to show the playing song with Play/Pause, Next, Previous, Show Wave and Quit, so that I can control playback without the window.
+D19. As a user, I want the tray icon to show or hide the window on click, and its menu to show the playing song with Play/Pause, Next, Previous, Show Wave, Mini Player and Quit, so that I can control playback without the window.
 D20. As a Linux user without a tray, I want the desktop's media controls and launching Wave again to bring it back, so that a hidden Wave is never lost.
 D21. As a user, I want launching Wave while it runs to show the running window, so that I never get two players.
 D22. As a user, I want to choose in Settings whether Wave starts with the system, hidden in the tray and not playing, off by default, so that it is ready when I want it.
@@ -429,6 +429,24 @@ The prototype was approved on 2026-11-18 after an Impeccable critique; its decis
   there, is ignored. A file left in the queue plays again after a restart while it still exists.
 - No `https` link handler and no floating mini player in v1. Windows lets an app own `https`
   links only for a domain it proves it owns.
+
+- No file associations and no `https` link handler in v1. Windows lets an app own `https` links
+  only for a domain it proves it owns.
+- The mini player (#1232) is a small frameless window that stays above other windows: artwork,
+  title and artists, Previous, Play or Pause, Next, the star and a thin progress line. The player
+  bar's Mini Player button and the tray menu's Mini Player entry open it, or show the one already
+  open. Show Wave on it brings the main window back and leaves it open; Close Mini Player closes
+  it, and Wave keeps running. The main window can be hidden while it is open. It drags from
+  anywhere but its buttons. Space, the other player keys and Ctrl+Q work in it, and the media keys
+  reach Wave as they do with the main window hidden. Its position is a device-local setting
+  (`miniPlayer.position`), saved when it is moved and when it closes. It opens where it was left
+  while the screens show all of it, else moved whole onto the screen showing most of it, or onto
+  the primary screen when its own is gone, also when a monitor goes while it is open; never
+  placed, it opens in the primary screen's bottom right corner (Core's `floatingWindowPosition`).
+  It is a second page of the same renderer (`mini.html`) on the same preload, web preferences
+  (`windowWebPreferences`), navigation guard and CSP as the main window, and main answers bridge
+  calls from those two pages only. It adds `miniPlayer.open`, `close` and `showMain`, which take
+  no arguments.
 
 ### Local data
 

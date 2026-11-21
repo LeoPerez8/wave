@@ -8,17 +8,20 @@ import {
   EMPTY_QUEUE,
   REAL_SHUFFLE,
   currentEntry,
+  explicitPassOver,
   movedToFollowing,
   openedFilePath,
   parseTrackId,
   playSoFar,
   queueUndo,
   queueWrite,
+  queuedPassedOver,
   reduceQueue,
   restorePlayback,
   savedQueueState,
   trackPlays,
   undoneQueue,
+  type PassOver,
   type PlayEvent,
   type PlaySource,
   type PlaybackSignal,
@@ -131,6 +134,8 @@ export interface PlaybackSession {
    * it, and the current one from its next start.
    */
   readonly gainsChanged: () => Promise<void>;
+  /** Don't play explicit turned on: the queue's explicit songs leave it, the playing one too. */
+  readonly dropExplicit: () => Promise<void>;
   /**
    * While on, each song ends paused: nothing is lined up after it, and once it ends the next
    * song waits paused at its start (the sleep timer's End of track).
@@ -173,6 +178,11 @@ export interface PlaybackSessionDeps {
   readonly stopped?: (why: "trackEnd" | "queueEnd") => void;
   /** Normalize Volume's gain in dB for [entry] of [queue] (Core's `entryGain`, or typical gain). */
   readonly gainDb?: (queue: QueueState, entry: QueueEntry) => number | undefined;
+  /**
+   * Whether Don't play explicit is on (docs/spec.md, "Explicit songs"): the queue then passes
+   * over the songs marked explicit, Library and YT Music ones alike (Core's `explicitPassOver`).
+   */
+  readonly dontPlayExplicit?: () => boolean;
 }
 
 const unavailable = () => new Error("[folder-unavailable] Song is unavailable");
@@ -214,6 +224,16 @@ export const createPlaybackSession = async (
     return path && available(path) ? path : undefined;
   };
   const playable = (id: string) => pathOf(id) !== undefined;
+  /** The songs Don't play explicit keeps out of the queue now. */
+  const explicit: PassOver = (id) =>
+    explicitPassOver({
+      on: deps.dontPlayExplicit?.() ?? false,
+      flagOf: (trackId) =>
+        parseTrackId(trackId)?.kind === "yt"
+          ? streamedSong(trackId)?.explicit
+          : selectPlayableSongs(db, [Number(trackId)])[0]?.explicit,
+    })(id);
+  const passOver: PassOver = (id) => !playable(id) || explicit(id);
   const currentKey = () => currentEntry(queue)?.key;
   const plannedKey = () =>
     planned === null || planned.playback === "stop" ? undefined : currentEntry(planned.state)?.key;
@@ -293,7 +313,7 @@ export const createPlaybackSession = async (
       command,
       Math.random,
       deps.shuffle?.(queue, command) ?? REAL_SHUFFLE,
-      (id) => !playable(id),
+      passOver,
     );
   /** Works out the song that follows and has the audio process preload it. */
   const prepare = async () => {
@@ -393,7 +413,7 @@ export const createPlaybackSession = async (
     }
   }
 
-  return {
+  const session: PlaybackSession = {
     snapshot: () => ({
       queue,
       status,
@@ -418,6 +438,7 @@ export const createPlaybackSession = async (
             command,
             { key: previous?.key ?? null, positionMs: status.positionMs },
             result,
+            passOver,
           );
         }
         const entry = currentEntry(result.state);
@@ -547,6 +568,13 @@ export const createPlaybackSession = async (
       serial(async () => {
         if (planned !== null) await prepare();
       }),
+    dropExplicit: () =>
+      lane.then(() => {
+        const trackIds = queuedPassedOver(queue, explicit);
+        return trackIds.length === 0 || closed
+          ? undefined
+          : session.dispatch({ type: "removeTracks", trackIds });
+      }),
     flush: () =>
       serial(async () => {
         const latest = await audio.status();
@@ -575,4 +603,5 @@ export const createPlaybackSession = async (
         closed = true;
       }),
   };
+  return session;
 };

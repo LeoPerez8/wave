@@ -74,6 +74,7 @@ import {
   type LyricsAndTagsContract,
 } from "./lyricsAndTags.ts";
 import { LINK_CALLS, linkBridge, type LinkContract } from "./links.ts";
+import { MINI_PLAYER_CALLS, miniPlayerBridge, type MiniPlayerContract } from "./miniPlayer.ts";
 import { ARTIST_PAGE_CALLS, artistPageBridge, type ArtistPageContract } from "./artistPage.ts";
 import { STREAMED_CALLS, streamedBridge, type StreamedContract } from "./streamedSongs.ts";
 import { YT_ACCOUNT_CALLS, ytAccountBridge, type YtAccountContract } from "./ytAccount.ts";
@@ -82,6 +83,11 @@ import {
   spotifyAccountBridge,
   type SpotifyAccountContract,
 } from "./spotifyAccount.ts";
+import {
+  SPOTIFY_IMPORT_CALLS,
+  spotifyImportBridge,
+  type SpotifyImportContract,
+} from "./spotifyImport.ts";
 import {
   SPOTIFY_SHARE_CALLS,
   spotifyShareBridge,
@@ -116,6 +122,8 @@ export interface BridgeContract
     LyricsAndTagsContract,
     YtAccountContract,
     SpotifyAccountContract,
+    SpotifyImportContract,
+    MiniPlayerContract,
     SpotifyShareContract {
   readonly "system.mediaBackend": {
     readonly args: readonly [];
@@ -581,6 +589,8 @@ export const BRIDGE_CALLS = [
   ...STREAMED_CALLS,
   ...YT_ACCOUNT_CALLS,
   ...SPOTIFY_ACCOUNT_CALLS,
+  ...SPOTIFY_IMPORT_CALLS,
+  ...MINI_PLAYER_CALLS,
   ...SPOTIFY_SHARE_CALLS,
   "stats.overview",
   "stats.artist",
@@ -599,12 +609,16 @@ export type Invoke = <C extends BridgeCall>(
 /** `window.wave`. */
 export interface WaveBridge {
   readonly links: ReturnType<typeof linkBridge>;
+  /** The floating mini player's window. */
+  readonly miniPlayer: ReturnType<typeof miniPlayerBridge>;
   readonly artistPage: ReturnType<typeof artistPageBridge>;
   /** A streamed YouTube Music song's menu. */
   readonly streamed: ReturnType<typeof streamedBridge>;
   /** The YouTube account: its session never reaches the window. */
   readonly ytAccount: ReturnType<typeof ytAccountBridge>;
   readonly spotifyAccount: ReturnType<typeof spotifyAccountBridge>;
+  /** Import Playlists › From Spotify: main reads the account, the window never sees a token. */
+  readonly spotifyImport: ReturnType<typeof spotifyImportBridge>;
   /** Share to Spotify: main asks Spotify and copies the link. */
   readonly spotifyShare: ReturnType<typeof spotifyShareBridge>;
   readonly stats: {
@@ -950,6 +964,8 @@ export const createBridge = (invoke: Invoke): WaveBridge => ({
   streamed: streamedBridge(invoke),
   ytAccount: ytAccountBridge(invoke),
   spotifyAccount: spotifyAccountBridge(invoke),
+  spotifyImport: spotifyImportBridge(invoke),
+  miniPlayer: miniPlayerBridge(invoke),
   spotifyShare: spotifyShareBridge(invoke),
   stats: {
     overview: (period) => invoke("stats.overview", period),
