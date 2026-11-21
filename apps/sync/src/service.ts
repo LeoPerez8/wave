@@ -705,17 +705,21 @@ export const createSyncService = (options: SyncServiceOptions): SyncService => {
   /** A member's pull of one collaborative playlist, after the cursor the last one gave. */
   const pullPlaylist = withSession(async ({ url }, session) => {
     const playlistId = playlistAsked(url);
-    const since = url.searchParams.get("since") ?? "0";
-    if (!/^\d{1,15}$/.test(since)) throw failure(400, "bad_request");
+    // A cursor is the owner's change number and the owner it is of (one from before names none).
+    const since = /^(\d{1,15})(?:_([0-9A-Za-z-]{1,64}))?$/.exec(
+      url.searchParams.get("since") ?? "0",
+    );
+    if (since === null) throw failure(400, "bad_request");
     const page = await pullPlaylistRows(
       db,
       playlistId,
       session.accountId,
-      Number(since),
+      Number(since[1]),
+      since[2] ?? null,
       pullPageSize,
     );
     if (page === null) throw failure(403, "not_member");
-    return json({ ...page.rows, cursor: String(page.cursor), more: page.more });
+    return json({ ...page.rows, cursor: `${page.cursor}_${page.ownerId}`, more: page.more });
   });
 
   const leaveCollaborative = withSession(async ({ url }, session) =>

@@ -596,6 +596,27 @@ describe("the page's own pull", () => {
     assert.equal(world.account("bea").service.rows().playlists.length, 1);
   });
 
+  test("a page whose playlist the member left on another device takes it off, with no copy", async () => {
+    const { world, drive } = await shared();
+    const bea = await phone(world.account("bea"), [AIRBAG_RETAGGED, KARMA]);
+    const beaTablet = await phone(world.account("bea"), [AIRBAG_RETAGGED]);
+    await bea.sync();
+    await beaTablet.sync();
+    const left = await collaborationService(world.account("bea")).leave(drive.syncId);
+    assert.equal(left.type, "done");
+    leaveCollaborativePlaylist(bea.db, drive.syncId);
+
+    const result = await beaTablet.syncPage(beaTablet.playlist("Drive").id);
+    assert.equal(result.pulled.playlists, true);
+    assert.deepEqual(playlists(beaTablet), []);
+    assert.deepEqual(selectPrivateCopyNotices(beaTablet.db), []);
+    assert.deepEqual(selectCollaborations(beaTablet.db), []);
+    // Nothing of it went up to Bea's account, so her phone gets no copy either.
+    assert.deepEqual(world.account("bea").service.rows().playlists, []);
+    await bea.sync();
+    assert.deepEqual(playlists(bea), []);
+  });
+
   test("an ordinary playlist, or no collaboration service, sends nothing", async () => {
     const world = testCollaborationWorld();
     const ana = await phone(world.account("ana"), [AIRBAG]);
