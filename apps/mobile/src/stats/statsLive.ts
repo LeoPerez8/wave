@@ -1,18 +1,14 @@
 import type { PlayedAlbum, PlayedArtist } from "@wave/client/db/playedEntities";
-import { rankSongs, statsQueries } from "@wave/client/db/statsQueries";
+import { artistListeningStats, rankSongs, statsQueries } from "@wave/client/db/statsQueries";
 import {
-  ARTIST_MOST_PLAYED,
-  artistStats,
   availableRecaps,
   createRecapAvailability,
-  rankSongPlays,
   recap,
   recapId,
   recapSlides,
   recapWindow,
   type EntityPlayTotals,
   type CountedListening,
-  type SongPlayTotals,
   type RecapPeriod,
   type RecapSlide,
 } from "@wave/core";
@@ -21,7 +17,7 @@ import * as Effect from "effect/Effect";
 import { runSteps } from "@/lib/stepped";
 import { LibraryStore, type LibraryStoreError } from "@/library/LibraryStore";
 
-import type { ArtistStats, LoadedRecap, LoadedRecapSlide, Ranked, Stats, StatsSong } from "./Stats";
+import type { LoadedRecap, LoadedRecapSlide, Ranked, Stats, StatsSong } from "./Stats";
 
 /** How many discovered artists a Recap's slide names. */
 const DISCOVERED_SHOWN = 5;
@@ -189,30 +185,7 @@ export const make = Effect.gen(function* () {
         return lyricsAndGenreLookupsEnabled();
       }),
     ),
-    artist: (artistId, strings) => {
-      const now = Date.now();
-      return Effect.flatMap(
-        store.playedArtistSongs(artistId, now),
-        (plays): Effect.Effect<ArtistStats, LibraryStoreError> => {
-          const stats = artistStats({ artistId, now, ...plays }, strings);
-          if (!stats.played) return Effect.succeed(stats);
-          const ranking = rankSongPlays(
-            [
-              ...stats.mostPlayed.map(({ id, ...totals }): SongPlayTotals => ({
-                ...totals,
-                song: { kind: "library", id },
-              })),
-              ...plays.streamedSongPlays,
-            ],
-            ARTIST_MOST_PLAYED,
-          );
-          return Effect.map(rankSongs(store, ranking), (mostPlayed) => ({
-            ...stats,
-            mostPlayed,
-          }));
-        },
-      );
-    },
+    artist: (artistId, strings) => artistListeningStats(store, artistId, strings),
     recaps: (now, between) => readRecapAvailability(store, now, between),
     recapHistoryVersion: store.listeningHistoryVersion,
     recap: (period) => Effect.suspend(() => loadRecap(store, period, Date.now())),

@@ -2,6 +2,7 @@ import { CROSSFADE, STREAM_BUFFER_MINUTES } from "@wave/core";
 import { useEffect, useState } from "react";
 import type { PlaybackSettings as Settings } from "../../shared/playbackSettings.ts";
 import { ShuffleKindSetting } from "./ShuffleKinds.tsx";
+import { OutputSetting } from "./OutputSetting.tsx";
 import { labels, text } from "./text.ts";
 
 /**
@@ -89,6 +90,7 @@ export function PlaybackSettings({ onError }: { readonly onError: () => void }) 
         kind={settings.shuffleKind}
         onChange={(shuffleKind) => change({ shuffleKind })}
       />
+      <OutputSetting onError={onError} />
     </div>
   );
 }

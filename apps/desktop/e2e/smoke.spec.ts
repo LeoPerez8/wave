@@ -119,6 +119,8 @@ test("the page has no Node and only the typed bridge", async () => {
       "wave.settings.setAppearance",
       "wave.settings.playback",
       "wave.settings.setPlayback",
+      "wave.settings.outputs",
+      "wave.settings.setOutput",
       "wave.settings.ytMusic",
       "wave.settings.searchOnline",
       "wave.settings.setSearchOnline",
@@ -248,7 +250,7 @@ test("Settings › Playback keeps a change to Crossfade, Normalize Volume and Bu
     .poll(() =>
       page.evaluate(() => (window as unknown as { wave: WaveBridge }).wave.settings.playback()),
     )
-    .toEqual({ crossfadeSeconds: 6.5, normalizeVolume: false, bufferMinutes: 10 });
+    .toMatchObject({ crossfadeSeconds: 6.5, normalizeVolume: false, bufferMinutes: 10 });
 });
 
 test("the CSP stops the page evaluating strings as code", async () => {

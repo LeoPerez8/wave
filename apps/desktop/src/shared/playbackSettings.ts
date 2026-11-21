@@ -1,4 +1,5 @@
 import type { ShuffleKind } from "@wave/core";
+import type { OutputDevice } from "./playback.ts";
 
 /**
  * Settings › Playback as the window shows it: the account-wide synced Crossfade, Normalize
@@ -12,4 +13,17 @@ export interface PlaybackSettings {
   readonly bufferMinutes: 1 | 2 | 5 | 10 | 15 | 30;
   /** The kind of shuffle every shuffle uses (story 25a): Real, Smart or Even Shuffle. */
   readonly shuffleKind: ShuffleKind;
+}
+
+/**
+ * Settings › Playback › Output: where this computer plays. Kept on the desktop, never synced.
+ */
+export interface OutputSettings {
+  /** The outputs the system has now. */
+  readonly outputs: readonly OutputDevice[];
+  /**
+   * The output picked, or null for the system's default. While it isn't `connected` Wave plays
+   * on the system's default, and goes back to it when it returns.
+   */
+  readonly chosen: (OutputDevice & { readonly connected: boolean }) | null;
 }
