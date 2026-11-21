@@ -56,6 +56,14 @@ export const inSlice = <A>(name: string, run: () => A): A => {
   }
 };
 
+/**
+ * A screen or section rendered from [startedAt] until its commit's layout effects (#1423): a
+ * long task meanwhile names it ("rendering Settings") when it held more of the task than any
+ * slice. Writes nothing by itself.
+ */
+export const renderRan = (name: string, startedAt: number, durationMs: number): void =>
+  blocks.renderRan(name, startedAt, durationMs);
+
 // An off-thread read's replay maps its rows on the JS thread once its last answer is in.
 runReplayPassesWith((run) => inSlice("Library read replay", run));
 

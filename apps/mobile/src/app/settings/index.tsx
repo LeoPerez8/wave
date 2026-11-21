@@ -1,3 +1,4 @@
+import { useRenderCost } from "@/lib/renderCost";
 import { useScreenContent } from "@/lib/screenTiming";
 import { useLocalisation } from "@/localisation/localisation";
 import {
@@ -92,6 +93,7 @@ export default function SettingsScreen() {
   const { strings } = useLocalisation();
   useScreenContent(true);
   useRenderCount("SettingsScreen");
+  useRenderCost("SettingsScreen");
   const summaries = useSettingsSummaries();
   const developerVisible = useDeveloperSettingsVisible();
   const [titleTaps] = useState(createDeveloperTitleTaps);

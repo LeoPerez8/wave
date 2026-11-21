@@ -1,3 +1,4 @@
+import { useRenderCost } from "@/lib/renderCost";
 import { useLocalisation } from "@/localisation/localisation";
 import { useScreenContent } from "@/lib/screenTiming";
 import { IconSearch } from "@tabler/icons-react-native";
@@ -120,6 +121,7 @@ export default function SearchScreen() {
   const { strings } = useLocalisation();
   useScreenContent(true);
   useRenderCount("SearchScreen");
+  useRenderCost("SearchScreen");
   const insets = useSafeAreaInsets();
   const [query, setQuery] = useState("");
   const [expansion, setExpansion] = useState(NO_EXPANSION);

@@ -1,3 +1,4 @@
+import { RenderCost } from "@/lib/renderCost";
 import { HomeFollowProvider, useHomeFollowPresence } from "./useHomeFollow";
 import { useLocalisation } from "@/localisation/localisation";
 import { NewReleases } from "./NewReleases";
@@ -980,5 +981,9 @@ export function HomeSection({
     );
   if (homeSectionWaiting(id, home)) return <HomeSectionSpace id={id} />;
   const Section = SECTIONS[id];
-  return <Section home={home} title={homeSectionTitle(id, strings)} selection={selection} />;
+  return (
+    <RenderCost name={`HomeSection(${id})`}>
+      <Section home={home} title={homeSectionTitle(id, strings)} selection={selection} />
+    </RenderCost>
+  );
 }

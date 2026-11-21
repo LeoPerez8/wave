@@ -1,3 +1,4 @@
+import { useRenderCost } from "@/lib/renderCost";
 import type { TabBarTab } from "@wave/core";
 import { useTabTrigger } from "expo-router/ui";
 import { memo } from "react";
@@ -91,6 +92,7 @@ const RADIUS = chrome.tabBar / 2;
  */
 export const TabBar = memo(function TabBar({ onTabTap }: { onTabTap: TabTap }) {
   useRenderCount("TabBar");
+  useRenderCost("TabBar");
   const insets = useSafeAreaInsets();
   const bar = useTabBar();
   return (

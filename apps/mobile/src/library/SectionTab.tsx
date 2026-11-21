@@ -1,4 +1,5 @@
 import { timingStackListeners } from "@/lib/timing";
+import { screenCostLayout } from "@/lib/renderCost";
 import type { LibrarySectionSlug } from "@wave/core";
 import { Stack, useFocusEffect } from "expo-router";
 import { useCallback } from "react";
@@ -23,6 +24,7 @@ export function SectionTabStack() {
   return (
     <Stack
       screenListeners={timingStackListeners}
+      screenLayout={screenCostLayout}
       screenOptions={{ headerShown: false, contentStyle: { backgroundColor: background } }}
     />
   );

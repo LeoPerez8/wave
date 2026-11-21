@@ -1,3 +1,4 @@
+import { useRenderCost } from "@/lib/renderCost";
 import { useLocalisation } from "@/localisation/localisation";
 import type { LegendListRef } from "@legendapp/list/react-native";
 import { AnimatedLegendList } from "@legendapp/list/reanimated";
@@ -453,6 +454,7 @@ export function UpNextList({
 }) {
   const { language, strings } = useLocalisation();
   useRenderCount("UpNextList");
+  useRenderCost("UpNextList");
   usePerfVisible("queue");
   const queue = useQueue();
   const [pending, setPending] = useState<readonly PendingMove[]>([]);

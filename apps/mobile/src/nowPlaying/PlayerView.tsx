@@ -1,3 +1,4 @@
+import { useRenderCost } from "@/lib/renderCost";
 import { nowPlayingRelatedChevronShown, playerNotice } from "@wave/core";
 import { useLocalisation } from "@/localisation/localisation";
 import { beginTiming, activeTiming, noteTimingLinkFailure } from "@/lib/timing";
@@ -343,6 +344,7 @@ const CHEVRON_SLOP = (48 - CHEVRON) / 2;
 export function PlayerView({ item, details, playing }: Props) {
   const { strings } = useLocalisation();
   useRenderCount("PlayerView");
+  useRenderCost("PlayerView");
   const title = item.title ?? strings.playbackText.unknownTitle;
   const artist = details?.artist ?? item.artist ?? strings.playbackText.unknownArtist;
   const album = details?.album ?? item.album ?? strings.playbackText.unknownAlbum;
