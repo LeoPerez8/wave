@@ -4,12 +4,22 @@ import {
   type PagedRows,
   type PlaylistFindText,
 } from "@wave/core";
-import { useCallback, useEffect, useRef, useState, useSyncExternalStore } from "react";
+import {
+  useCallback,
+  useEffect,
+  useLayoutEffect,
+  useRef,
+  useState,
+  useSyncExternalStore,
+} from "react";
 
 import { registerPerfMeta } from "@/perf/perf";
 
 import { LibraryStore } from "./LibraryStore";
 import { type SongOrder, type SongSummary } from "@wave/client";
+import { useSightedStore } from "@/lib/screenSight";
+import { songSummariesInMemory } from "./libraryMemory";
+import { libraryRows, subscribeLibraryRows } from "./libraryRows";
 import { appRuntime } from "./runtime";
 import { libraryQuery, useLibraryQuery, type LibraryQuery } from "./sharedQueries";
 
@@ -20,7 +30,8 @@ export const songOrderQueryKey = (sort: LibrarySongSort): string =>
 /** One shared query per sort: every screen showing Songs in it shares one read. */
 const orderQueries = new Map<string, LibraryQuery<SongOrder>>();
 
-const orderQuery = (sort: LibrarySongSort): LibraryQuery<SongOrder> => {
+/** Library › Songs' query in [sort], which `readyScreens.ts` keeps for the saved sort. */
+export const songOrderQuery = (sort: LibrarySongSort): LibraryQuery<SongOrder> => {
   const key = songOrderQueryKey(sort);
   let query = orderQueries.get(key);
   if (query === undefined) {
@@ -42,7 +53,7 @@ const orderQuery = (sort: LibrarySongSort): LibraryQuery<SongOrder> => {
  * shared Library query is.
  */
 export const useSongOrder = (sort: LibrarySongSort): SongOrder | null =>
-  useLibraryQuery<SongOrder | null>(orderQuery(sort), null);
+  useLibraryQuery<SongOrder | null>(songOrderQuery(sort), null);
 
 /** What finds each Library song: a tag edit or a scan may change any of them. */
 const findTextsQuery = libraryQuery(
@@ -65,6 +76,12 @@ const readSummaries = (
   ids: readonly number[],
   settle: (rows: readonly SongSummary[] | null) => void,
 ): void => {
+  // From the Library's rows in memory when they hold them all (#1352): no read.
+  const inMemory = songSummariesInMemory(ids);
+  if (inMemory !== null) {
+    settle(inMemory);
+    return;
+  }
   setTimeout(() => {
     appRuntime
       // oxlint-disable-next-line react/rules-of-hooks -- Effect Service.use resolves a service; it is not a React Hook.
@@ -112,9 +129,12 @@ export const usePagedSongs = (
   );
   const version = useSyncExternalStore(subscribe, () => arrived.current);
   // Subscribe before seeding: a known first page may need no asynchronous read
-  // whose answer would otherwise trigger the first redraw.
-  useEffect(() => {
+  // whose answer would otherwise trigger the first redraw. Seeded before the
+  // frame is drawn, so rows from memory are in the first one (#1352).
+  // A change to the rows in memory (an edit the index followed) draws the rows again from them.
+  const inMemory = useSightedStore(subscribeLibraryRows, libraryRows);
+  useLayoutEffect(() => {
     if (ids !== null) pages.setOrder(ids, known);
-  }, [pages, ids, known]);
+  }, [pages, ids, known, inMemory]);
   return { pages, version };
 };

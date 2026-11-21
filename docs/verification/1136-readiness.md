@@ -259,6 +259,10 @@ maintenance deleted after 90 days unused (they already answered 401) and warning
 ### 3. Promotion to `main` (stable)
 
 1. Only a `ti` release with a sealed record can be promoted. The first one comes from step 2.
+   Before promoting, run the emulator check on that release's commit
+   (`node scripts/perf/perf.ts emulator-check`, `docs/agents/emulator-checks.md`) and record its
+   verdict here. A JS block over 50 ms it names is a bug to fix or to accept by name. It informs
+   the decision and gates nothing.
 2. The owner runs Promote to main for it, then approves the `main` Environment run.
 3. Observe: the gate admits the stable tag with `promotedFrom` naming the `ti` release and the same
    source, then a full build. Record the run here.

@@ -36,6 +36,7 @@ import { YtLibraryPickerHost } from "@/library/YtLibraryPickerHost";
 import { launchScanDone } from "@/library/replacementDuplicates";
 import { optimizeLibraryDatabase, startInitialScan } from "@/library/runtime";
 import { ErrorScreen } from "@/log/ErrorScreen";
+import { startPhoneEffects } from "@/glass/phoneEffects";
 import { NowPlayingSheet, UnderNowPlaying } from "@/nowPlaying/NowPlayingSheet";
 import { PERF_ENABLED, perfTouch, useRenderCount } from "@/perf/perf";
 import { PerfProbe } from "@/perf/PerfProbe";
@@ -105,9 +106,16 @@ export default function RootLayout() {
           if (!disposed) stopSearch = startSearchIndex();
         });
       });
+      // The local screens' data, kept in memory before they're opened (#1352).
+      const stopReadyStart = afterFirstSettled("readyScreens", () => {
+        void import("@/library/readyScreens").then(({ startReadyScreens }) => {
+          if (!disposed) stopReady = startReadyScreens();
+        });
+      });
       let disposed = false;
       let stopLyrics: (() => void) | undefined;
       let stopSearch: (() => void) | undefined;
+      let stopReady: (() => void) | undefined;
       // Link imports kept when Wave last closed go on filling their playlists.
       const stopImports = afterFirstSettled("imports", resumePlaylistImports);
       // A From YT Music batch Android stopped reads the playlists it hadn't, in order.
@@ -118,6 +126,8 @@ export default function RootLayout() {
         stopLyrics?.();
         stopSearchIndexStart();
         stopSearch?.();
+        stopReadyStart();
+        stopReady?.();
         stopScan();
         stopImports();
         stopYtImport();
@@ -188,6 +198,10 @@ export default function RootLayout() {
       stop?.();
     };
   }, []);
+
+  // This session's heavy effects, logged once; a session drawing the full ones measures its
+  // frame times after startup settles, for the next start (src/glass/phoneEffects.ts, #1357).
+  useEffect(() => startPhoneEffects(), []);
 
   // SQLite gathers the planner statistics the Library database lacks (src/library/db/connection.ts).
   useEffect(() => afterFirstSettled("optimize", optimizeLibraryDatabase), []);

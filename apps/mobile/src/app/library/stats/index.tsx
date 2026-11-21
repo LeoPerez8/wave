@@ -12,7 +12,14 @@ import { ScreenHeader } from "@/components/ScreenHeader";
 import { StagedSections } from "@/components/StagedSections";
 import { openStatsSeeAll } from "@/library/routes";
 import { useListScrollable } from "@/motion/heldTouch";
-import { useRecaps, useTopAlbums, useTopArtists, useTopSongs, useTopGenres } from "@/stats/hooks";
+import {
+  STATS_OPENING_PERIOD,
+  useRecaps,
+  useTopAlbums,
+  useTopArtists,
+  useTopGenres,
+  useTopSongs,
+} from "@/stats/hooks";
 import { GenrePodium } from "@/stats/GenrePodium";
 import {
   NothingPlayed,
@@ -33,7 +40,7 @@ const STATS_SECTION_ESTIMATE = grid.row * 3;
 /** Stats: what was played most over a rolling period ending now. */
 export default function StatsScreen() {
   const { strings } = useLocalisation();
-  const [period, setPeriod] = useState<StatsPeriod>("month");
+  const [period, setPeriod] = useState<StatsPeriod>(STATS_OPENING_PERIOD);
   const topSongs = useTopSongs(period);
   useScreenContent(topSongs !== undefined);
   const topAlbums = useTopAlbums(period);
