@@ -60,27 +60,42 @@ export const createSongRadioReaders = <R>(create: (seed: SongRadioSeed) => SongR
         readonly low: boolean | ((seed: SongRadioSeed) => boolean);
         /** When the reads waited for stop (epoch ms), a deadline shared with what came before them. */
         readonly deadlineAt?: number;
+        /** Notifies as each radio answers, without waiting for the other radios. */
+        readonly onPage?: (read: SongRadioRead) => Effect.Effect<void>;
       },
     ): Effect.Effect<SongRadioRead[], never, R> =>
       Effect.gen(function* () {
         const readers = readersOf(sessionId, seeds);
         const cached = readers.map(({ seed, reader }) => ({ seed, page: reader.current() }));
+        if (when.onPage !== undefined)
+          yield* Effect.forEach(
+            cached.filter(({ page }) => page !== null),
+            (entry) => when.onPage!(entry),
+            { concurrency: "unbounded" },
+          );
         const read = Effect.forEach(
           readers,
           ({ seed, reader }) =>
-            Effect.map(
+            Effect.flatMap(
               reader.read({
                 online: when.online,
                 low: typeof when.low === "boolean" ? when.low : when.low(seed),
                 ...(when.deadlineAt === undefined ? {} : { deadlineAt: when.deadlineAt }),
               }),
-              (page) => ({ seed, page }),
+              (page) => {
+                const result = { seed, page };
+                return when.onPage === undefined
+                  ? Effect.succeed(result)
+                  : Effect.as(when.onPage(result), result);
+              },
             ),
           { concurrency: "unbounded" },
         );
         if (cached.some(({ page }) => page !== null) && cached.some(({ page }) => page === null)) {
-          yield* Effect.forkDetach(read);
-          return cached;
+          if (when.onPage === undefined) {
+            yield* Effect.forkDetach(read);
+            return cached;
+          }
         }
         return yield* read;
       }),

@@ -12,6 +12,7 @@ import {
   djGenreTile,
   djNewToYou,
   djRadioSongAllowed,
+  djFirstLibrarySong,
   djGrid,
   djOpened,
   djReduce,
@@ -35,6 +36,35 @@ import {
   type DjTile,
   type TasteProfile,
 } from "./index.ts";
+
+test("DJ can take its first playable Library song from the selected artist or album", () => {
+  const artist = djArtistTile("Portishead")!;
+  const album = djAlbumTile({ title: "Dummy", artist: "Portishead", libraryId: 42 })!;
+  const songs = [
+    { id: 1, path: null, albumId: 2, artistIds: [7], artistNames: ["Portishead"], genre: null },
+    {
+      id: 2,
+      path: "song.flac",
+      albumId: 2,
+      artistIds: [7],
+      artistNames: ["Portishead"],
+      genre: null,
+    },
+    { id: 3, path: "album.flac", albumId: 42, artistIds: [9], artistNames: ["Other"], genre: null },
+    {
+      id: 4,
+      path: "family.flac",
+      albumId: 2,
+      artistIds: [10],
+      artistNames: ["Metal Act"],
+      genre: "Metal",
+    },
+  ];
+  assert.equal(djFirstLibrarySong([artist], songs)?.id, 2);
+  assert.equal(djFirstLibrarySong([album], songs)?.id, 3);
+  const family = { ...djGenreTile("Metal")!, artists: [{ id: 10, name: "Metal Act" }] };
+  assert.equal(djFirstLibrarySong([family], songs)?.id, 4);
+});
 
 /** A taste profile scoring [artists] by name. */
 const tasteOf = (artists: Record<string, number>): TasteProfile => ({
@@ -635,6 +665,15 @@ describe("a Magic Queue with a DJ seed", () => {
     assert.equal(batch.trackIds[0], ytTrackId("v0"));
     assert.equal(batch.session.batches, 1);
     assert.equal(completeMagicRadioBatch(batch.session, candidates, []).trackIds.length, 4);
+  });
+
+  test("the batch appends nine after a Library song already started", () => {
+    const candidates = Array.from({ length: 14 }, (_, at) =>
+      rankedSong(`v${at}`, `Artist ${at % 5}`),
+    );
+    const batch = completeMagicRadioBatch({ ...started(), used: ["42"] }, candidates, []);
+    assert.equal(batch.trackIds.length, 9);
+    assert.equal(batch.session.batches, 1);
   });
 
   test("ranks at its own choices, whatever Discover's sliders say", () => {
