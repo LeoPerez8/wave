@@ -51,6 +51,8 @@ const queue = (page: Page) =>
   });
 
 test("playlist, artist and genre pages sort their songs and play in the order shown", async () => {
+  // Three pages, six Plays and a relaunch: more than the default minute on a busy machine.
+  test.setTimeout(180_000);
   const data = mkdtempSync(join(tmpdir(), "wave-page-sort-"));
   const launch = () =>
     electron.launch({
