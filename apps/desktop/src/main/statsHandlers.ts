@@ -2,6 +2,7 @@ import { Database } from "@wave/client";
 import type { LibraryDatabase } from "@wave/client/db/database";
 import type { PlayedAlbum, PlayedArtist } from "@wave/client/db/playedEntities";
 import {
+  artistListeningStats,
   statsDatabaseReads,
   statsQueries,
   type Ranked,
@@ -9,6 +10,7 @@ import {
 } from "@wave/client/db/statsQueries";
 import {
   discoverTrackId,
+  catalogueOf,
   pickStreamedAlbum,
   STATS_SEE_ALL,
   STATS_TOP,
@@ -17,7 +19,7 @@ import {
   type StatsPeriod,
 } from "@wave/core";
 import * as Effect from "effect/Effect";
-import type { StatsOverview, StatsRow } from "../shared/stats.ts";
+import type { ArtistStatsPage, StatsOverview, StatsRow } from "../shared/stats.ts";
 import { ytRow } from "../shared/yt.ts";
 import { browseSongs } from "./library/browse.ts";
 import { DesktopLibrary } from "./library/library.ts";
@@ -125,6 +127,71 @@ export const statsHandlers = {
         albums: entityRows(ranking.albums, enabled),
         artists: entityRows(ranking.artists, enabled),
       } satisfies StatsOverview;
+    }),
+  "stats.artist": ([artistIdValue, languageValue]: readonly unknown[]) =>
+    Effect.gen(function* () {
+      if (
+        typeof artistIdValue !== "number" ||
+        !Number.isSafeInteger(artistIdValue) ||
+        artistIdValue < 1 ||
+        (languageValue !== "en" && languageValue !== "pt-BR")
+      )
+        return yield* Effect.fail(new Error("Refused stats.artist: invalid artist or language"));
+      const db = yield* Database;
+      const library = yield* DesktopLibrary;
+      const yt = yield* YtMusic;
+      const stats = yield* artistListeningStats(
+        statsDatabaseReads(db),
+        artistIdValue,
+        catalogueOf(languageValue, "desktop"),
+      );
+      if (!stats.played) return stats satisfies ArtistStatsPage;
+      return {
+        ...stats,
+        mostPlayed: songRows(db, stats.mostPlayed, library, yt),
+      } satisfies ArtistStatsPage;
+    }),
+  "stats.artistPlay": ([artistIdValue, key]: readonly unknown[]) =>
+    Effect.gen(function* () {
+      if (
+        typeof artistIdValue !== "number" ||
+        !Number.isSafeInteger(artistIdValue) ||
+        artistIdValue < 1 ||
+        !entryKey(key)
+      )
+        return yield* Effect.fail(new Error("Refused stats.artistPlay: invalid artist or song"));
+      const db = yield* Database;
+      const yt = yield* YtMusic;
+      const library = yield* DesktopLibrary;
+      const playback = yield* Playback;
+      const stats = yield* artistListeningStats(
+        statsDatabaseReads(db),
+        artistIdValue,
+        catalogueOf("en", "desktop"),
+      );
+      if (!stats.played)
+        return yield* Effect.fail(new Error("Refused stats.artistPlay: artist has no plays"));
+      const ranking = stats.mostPlayed.filter(
+        ({ item }) => yt.enabled() || item.source === "library",
+      );
+      const ids = ranking.map(({ item }) => discoverTrackId(item));
+      const index = ids.indexOf(key);
+      const chosen = ranking[index]?.item;
+      if (chosen === undefined)
+        return yield* Effect.fail(new Error("Refused stats.artistPlay: song outside ranking"));
+      if (
+        chosen.source === "library" &&
+        chosen.track.path !== null &&
+        library.unavailable(chosen.track.path)
+      )
+        return yield* Effect.fail(new Error("[folder-unavailable] Drive is not connected"));
+      const streams = ranking.flatMap(({ item }) => (item.source === "stream" ? [item.song] : []));
+      const play = () =>
+        playback.activate(ids, index, { kind: "artist-stats", id: String(artistIdValue) });
+      yield* Effect.tryPromise({
+        try: () => (streams.length === 0 ? play() : yt.withSongs(streams, play)),
+        catch: (error) => error,
+      });
     }),
   "stats.ranking": ([kind, periodValue]: readonly unknown[]) =>
     Effect.gen(function* () {

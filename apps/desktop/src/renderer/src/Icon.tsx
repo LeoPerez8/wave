@@ -37,6 +37,12 @@ const paths: Record<string, string> = {
   close: "M6 6l12 12M6 18 18 6",
   stats: "M4 20h16M6 16v-4m6 4V5m6 11V9",
   history: "M3 12a9 9 0 1 0 3-6.7L3 8M3 3v5h5M12 7v5l4 2",
+  /** A small window over a large one. */
+  miniPlayer: "M3 4h18v16H3ZM12 12h6v5h-6Z",
+  /** Out to the corners: back to the main window. */
+  showMain: "M14 4h6v6M20 4l-7 7M10 20H4v-6M4 20l7-7",
+  up: "m5 15 7-7 7 7",
+  down: "m5 9 7 7 7-7",
 };
 export function Icon({ name, size = 20 }: { readonly name: string; readonly size?: number }) {
   return (

@@ -55,6 +55,8 @@ import type { OpenLinkResult, CopyLinkResult } from "../../shared/links.ts";
 import type { SongTarget } from "../../shared/songActions.ts";
 import { preference, savePreference } from "../preferences.ts";
 import { targetSongs } from "../library/songActions.ts";
+import { shareLibraryPlaylist } from "../spotify/playlistShare.ts";
+import type { SpotifyAccountService } from "../spotify/spotifyAccount.ts";
 
 export interface LinksOptions {
   readonly db: LibraryDatabase;
@@ -181,6 +183,9 @@ export const createDesktopLinks = (options: LinksOptions) => {
     };
   };
   return {
+    /** Share to Spotify: [account] asks Spotify, and the playlist's link goes to the clipboard. */
+    shareToSpotify: (id: number, account: Pick<SpotifyAccountService, "session" | "request">) =>
+      shareLibraryPlaylist({ db: options.db, account, writeClipboard: options.writeClipboard }, id),
     copyPlaylist: async (id: number, language: AppLanguage): Promise<CopyLinkResult> => {
       const strings = catalogueOf(language, "desktop");
       const fail = (message: string): CopyLinkResult => ({
