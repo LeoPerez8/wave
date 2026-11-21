@@ -2894,6 +2894,13 @@ export { djVarietyCandidates } from "./djVariety.ts";
 export type { DjCandidatePools } from "./djVariety.ts";
 export { DJ_FILTERS, djFilterOn, djToggleFilter } from "./djSettings.ts";
 export type { DjFilter } from "./djSettings.ts";
+export {
+  DJ_NEW_RELEASE_BOOST,
+  DJ_RELEASE_PAGES,
+  djNewReleasesRanked,
+  djReleaseArtists,
+} from "./djNewReleases.ts";
+export type { DjReleasePage } from "./djNewReleases.ts";
 export { magicSessionSliders } from "./magicQueue.ts";
 export type { DjAction, DjState, DjArtistTile, DjGridSources, DjTile, DjTileKey } from "./dj.ts";
 export { DJ_OPENED_TILES, djCells, djPageRead, djPagesNeeded } from "./dj.ts";
