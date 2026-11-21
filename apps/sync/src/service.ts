@@ -555,7 +555,7 @@ export const createSyncService = (options: SyncServiceOptions): SyncService => {
     ) {
       throw failure(401, "invalid_id_token");
     }
-    await deleteAccount(db, session.accountId, now());
+    await deleteAccount(db, session.accountId);
     return new Response(null, { status: 204 });
   });
 
