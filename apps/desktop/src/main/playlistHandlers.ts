@@ -135,4 +135,8 @@ export const playlistHandlers = (
     id(playlistId) && typeof large === "boolean"
       ? playlistsCall((p) => p.image(playlistId, large))
       : refuse("playlists.image", "invalid playlist"),
+  "playlists.playGraveyard": ([playlistId, itemId]) =>
+    id(playlistId) && id(itemId)
+      ? playlistsCall((p) => p.playGraveyard(playlistId, itemId))
+      : refuse("playlists.playGraveyard", "invalid playlist or song"),
 });

@@ -56,7 +56,12 @@ import { PLAYABLE_EXTENSIONS } from "../../shared/playback.ts";
 import type { OutputSettings, PlaybackSettings } from "../../shared/playbackSettings.ts";
 import { Player } from "../audio/player.ts";
 import { Kotlin } from "../kotlin/kotlin.ts";
-import { browseSongs, browseTrackIds, playlistSongs } from "../library/browse.ts";
+import {
+  browseSongs,
+  browseTrackIds,
+  playlistSongs,
+  type PlaylistSong,
+} from "../library/browse.ts";
 import { DesktopLibrary } from "../library/library.ts";
 import { preference, savePreference } from "../preferences.ts";
 import { YtMusic } from "../yt/ytMusic.ts";
@@ -85,6 +90,15 @@ export interface PlaybackShape extends PlaybackTransport {
     index: number | undefined,
     context: NonNullable<QueueState["context"]>,
     shuffle?: boolean,
+  ) => Promise<PlayStart>;
+  /**
+   * Activates the song at [index] of [songs], Library songs and streamed ones mixed, as a
+   * playlist's page lists them: a Graveyard's songs.
+   */
+  readonly playEntries: (
+    songs: readonly PlaylistSong[],
+    index: number,
+    context: NonNullable<QueueState["context"]>,
   ) => Promise<PlayStart>;
   /**
    * Plays the audio files among [paths] (absolute), in order, as a new queue: files opened with
@@ -650,6 +664,16 @@ export const playbackLayer = Layer.effect(
       fileFailed: (id) => failedFiles.has(id),
       view,
       activate,
+      playEntries: (songs, index, context) => {
+        error = null;
+        const ids = songs.map((song) =>
+          "song" in song ? ytTrackId(song.song.videoId) : String(song.trackId),
+        );
+        const streams = songs.flatMap((entry) => ("song" in entry ? [entry.song] : []));
+        return yt.withSongs(streams, () =>
+          activate(ids, index, context, undefined, streams.length > 0 ? streams : undefined),
+        );
+      },
       start: async (scope, index, shuffle) => {
         error = null;
         // A playlist with YT Music songs plays them in their places, as its page lists them.
