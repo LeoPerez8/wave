@@ -7,6 +7,7 @@ import {
   discoverMixRowsToBuild,
   discoverRowTitle,
   homeSectionTitle,
+  inYourOrbitTileUnavailable,
   MAGIC_QUEUE_PICKS,
   magicQueueCarouselPage,
   magicQueueCarouselPageLabel,
@@ -66,7 +67,7 @@ import { useCommunityPlaylists } from "./communityPlaylists";
 import { useFromYourLibrary } from "./fromYourLibrary";
 import { CarouselPageDots, MagicQueueCarousel } from "./MagicQueueCarousel";
 import { useHomeArrangement } from "./homeArrangement";
-import { useInYourOrbit } from "./inYourOrbit";
+import { tapInYourOrbit, useInYourOrbit } from "./inYourOrbit";
 import { useMostPlayedOfAllTime } from "./mostPlayedOfAllTime";
 
 import { AlbumShelf, ArtistShelf, MostPlayedRows, SongRows } from "./HomeSections";
@@ -546,23 +547,75 @@ function MostPlayedArtists({ title }: SectionProps) {
   );
 }
 
-/** Home's nine most played recent songs as a Magic Queue seed grid. */
+/**
+ * One of In your orbit's songs as a song card: a tap starts a Magic Queue
+ * from it, or with YT Music off plays the grid's Library songs from it
+ * (`tapInYourOrbit`); a streamed song shows unavailable then. A long press
+ * opens its menu.
+ */
+function OrbitTile({
+  seed,
+  size,
+  ytMusic,
+  onPress,
+}: {
+  seed: MagicQueueSeed<PlayableSongRow>;
+  size: number;
+  ytMusic: boolean;
+  onPress: () => void;
+}) {
+  const { strings } = useLocalisation();
+  const { title, album } = seed.song;
+  const artist = seed.source === "library" ? seed.song.artist : ytSongArtist(seed.song);
+  return (
+    <SongCard
+      title={title}
+      artist={artist}
+      artworkUri={
+        seed.source === "library"
+          ? artworkUri(seed.song, "medium")
+          : ytMusic
+            ? (seed.song.artworkUrl ?? undefined)
+            : undefined
+      }
+      size={size}
+      label={ytMusic ? strings.discover.startMagicQueue(title, artist, album) : undefined}
+      unavailable={inYourOrbitTileUnavailable(seed, ytMusic)}
+      onPress={onPress}
+      onLongPress={() =>
+        seed.source === "library" ? openTrackActions(seed.song) : openYtSongActions(seed.song)
+      }
+    />
+  );
+}
+
+/** Home's nine most played recent songs as a grid laid out as the Magic Queue's is. */
 function InYourOrbit({ title }: SectionProps) {
   const songs = useInYourOrbit();
-  const { width } = useWindowDimensions();
+  const ytMusic = useYtMusicEnabled();
+  const { width, fontScale } = useWindowDimensions();
   const [available, setAvailable] = useState(width - grid.margin * 2);
   if (songs === undefined) return <HomeSectionSkeleton id="in-your-orbit" />;
   if (songs.length === 0) return null;
-  const size = (available - CELL * 2) / 3;
+  const { size } = magicQueueGrid(available, fontScale);
   return (
     <TitledSection title={title}>
       <View onLayout={(event) => setAvailable(event.nativeEvent.layout.width)}>
         <MagicQueueGrid width={available}>
-          {seedTiles(songs, size).map(({ key, tile }) => (
-            <Crossfade key={key} swapKey={key}>
-              {tile}
-            </Crossfade>
-          ))}
+          {songs.map((seed, index) => {
+            const key =
+              seed.source === "library" ? String(seed.song.id) : ytTrackId(seed.song.videoId);
+            return (
+              <Crossfade key={key} swapKey={key}>
+                <OrbitTile
+                  seed={seed}
+                  size={size}
+                  ytMusic={ytMusic}
+                  onPress={() => tapInYourOrbit(songs, index)}
+                />
+              </Crossfade>
+            );
+          })}
         </MagicQueueGrid>
       </View>
     </TitledSection>
