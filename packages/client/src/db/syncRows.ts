@@ -12,6 +12,7 @@ import {
   accountTrackIds,
   creditSplitter,
   leavingSongEntry,
+  mergePlaylistEntries,
   mergeRows,
   planSongSync,
   songsLeaving,
@@ -27,6 +28,7 @@ import {
   type SyncPreference,
   type PlaySnapshot,
   type SyncPullPage,
+  type SyncEntryRow,
   type SyncRow,
   type SyncSong,
   type SyncSongFields,
@@ -148,7 +150,7 @@ const wireSnapshot = (snapshot: PlaySnapshot | null): PlaySnapshot | null =>
       };
 
 /** A local row a pushed row was read from, and the change it had then. */
-type PushMark =
+export type PushMark =
   | { readonly table: "songs"; readonly key: string; readonly changedAt: number }
   | { readonly table: "playlists" | "entries"; readonly id: number; readonly changedAt: number }
   | { readonly table: "favorites"; readonly trackId: number; readonly changedAt: number }
@@ -321,6 +323,7 @@ export const selectUnpushed = (
       songId: tracks.recordingKey,
       ytSong: playlistItems.ytSong,
       removedAt: playlistItems.removedAt,
+      restoredAt: playlistItems.restoredAt,
       addedAt: playlistItems.addedAt,
       changedAt: playlistItems.changedAt,
       phoneId: playlistItems.phoneId,
@@ -359,6 +362,7 @@ export const selectUnpushed = (
         songId: left === null ? row.songId : null,
         ytSong: left ?? (row.songId === null ? row.ytSong : null),
         addedAt: row.addedAt,
+        restoredAt: row.restoredAt,
       };
       if (!row.deleted) return { ...fields, deleted: false, removedAt: null };
       return row.removedAt === null
@@ -574,9 +578,22 @@ const followRows = {
 
 /**
  * Records that the account has the changes behind [marks] (`selectUnpushed`).
- * A row changed again since it was read keeps waiting.
+ * A row changed again since it was read keeps waiting. A row the service
+ * stored with its own time, because the one pushed was ahead of its clock
+ * ([storedAt], by mark), takes that time, so the phone and the service agree.
  */
-export const markPushed = (db: LibraryDatabase, marks: readonly PushMark[]): void => {
+export const markPushed = (
+  db: LibraryDatabase,
+  marks: readonly PushMark[],
+  storedAt: ReadonlyMap<PushMark, number> = new Map(),
+): void => {
+  /** What a pushed row behind [from] becomes. */
+  const pushedAs = (from: PushMark & { readonly changedAt: number }) => {
+    const at = storedAt.get(from);
+    return at === undefined || at >= from.changedAt
+      ? { pushed: true }
+      : { pushed: true, changedAt: at };
+  };
   const { accountSongs, playlists, playlistItems, favorites, preferenceChanges, playEvents } =
     schema;
   const { syncRemovals } = schema;
@@ -586,7 +603,7 @@ export const markPushed = (db: LibraryDatabase, marks: readonly PushMark[]): voi
       switch (from.table) {
         case "songs":
           tx.update(accountSongs)
-            .set({ pushed: true })
+            .set(pushedAs(from))
             .where(
               and(
                 eq(accountSongs.recordingKey, from.key),
@@ -597,19 +614,19 @@ export const markPushed = (db: LibraryDatabase, marks: readonly PushMark[]): voi
           break;
         case "playlists":
           tx.update(playlists)
-            .set({ pushed: true })
+            .set(pushedAs(from))
             .where(and(eq(playlists.id, from.id), eq(playlists.changedAt, from.changedAt)))
             .run();
           break;
         case "entries":
           tx.update(playlistItems)
-            .set({ pushed: true })
+            .set(pushedAs(from))
             .where(and(eq(playlistItems.id, from.id), eq(playlistItems.changedAt, from.changedAt)))
             .run();
           break;
         case "favorites":
           tx.update(favorites)
-            .set({ pushed: true })
+            .set(pushedAs(from))
             .where(
               and(eq(favorites.trackId, from.trackId), eq(favorites.changedAt, from.changedAt)),
             )
@@ -617,7 +634,7 @@ export const markPushed = (db: LibraryDatabase, marks: readonly PushMark[]): voi
           break;
         case "preferences":
           tx.update(preferenceChanges)
-            .set({ pushed: true })
+            .set(pushedAs(from))
             .where(
               and(
                 eq(preferenceChanges.key, from.key),
@@ -632,7 +649,7 @@ export const markPushed = (db: LibraryDatabase, marks: readonly PushMark[]): voi
         case "dismissedSuggestions": {
           const { table, key } = followRows[from.table];
           tx.update(table)
-            .set({ pushed: true })
+            .set(pushedAs(from))
             .where(and(eq(key, from.key), eq(table.changedAt, from.changedAt)))
             .run();
           break;
@@ -892,6 +909,10 @@ const nothingChanged = (): Changed => ({
 const wins = (row: SyncRow, held: Omit<SyncRow, "id"> | undefined): boolean =>
   held === undefined || mergeRows([{ ...held, id: row.id }], [row]).accepted.length > 0;
 
+/** Whether an entry's change [row] wins over the [held] one (Core's `mergePlaylistEntries`). */
+const entryWins = (row: SyncEntryRow, held: Omit<SyncEntryRow, "id"> | undefined): boolean =>
+  held === undefined || mergePlaylistEntries([{ ...held, id: row.id }], [row]).accepted.length > 0;
+
 type PendingKind = "playlistEntries" | "favorites" | "plays";
 
 const pendingRow = (tx: LibraryDatabase, kind: PendingKind, id: string) => {
@@ -937,7 +958,8 @@ const pend = (
 const beatsPending = (tx: LibraryDatabase, kind: PendingKind, row: SyncRow): boolean => {
   const waiting = pendingRow(tx, kind, row.id);
   if (waiting === undefined) return true;
-  if (!wins(row, waiting)) return false;
+  const beats = kind === "playlistEntries" ? entryWins(row, waiting) : wins(row, waiting);
+  if (!beats) return false;
   unpend(tx, kind, row.id);
   return true;
 };
@@ -987,7 +1009,7 @@ const applyEntry = (
   const { playlists, playlistItems } = schema;
   if (!beatsPending(tx, "playlistEntries", row)) return false;
   const held = tx.select().from(playlistItems).where(eq(playlistItems.syncId, row.id)).get();
-  if (held !== undefined && !wins(row, held)) return false;
+  if (held !== undefined && !entryWins(row, held)) return false;
   if (row.deleted && !("removedAt" in row && typeof row.removedAt === "number")) {
     if (held === undefined) return false;
     tx.update(playlistItems)
@@ -1015,6 +1037,7 @@ const applyEntry = (
     trackId,
     ytSong: trackId === null ? row.ytSong : null,
     removedAt: row.removedAt ?? null,
+    restoredAt: row.restoredAt ?? null,
     orderKey: row.orderKey,
     addedAt: row.addedAt,
     ...stamp(row),
