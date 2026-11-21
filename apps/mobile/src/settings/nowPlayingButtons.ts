@@ -3,6 +3,7 @@ import {
   NOW_PLAYING_BUTTONS_KEY,
   NOW_PLAYING_PREVIOUS_ROW_KEY,
   NOW_PLAYING_TRANSPORT_SLOTS,
+  nowPlayingSlotChoiceHolder,
   editNowPlayingButtons,
   moveNowPlayingButton,
   readNowPlayingButtons,
@@ -94,4 +95,28 @@ export const nowPlayingSlotTitle = (slot: number): string => {
   if (slot === NOW_PLAYING_TRANSPORT_SLOTS.left) return settings.slotLeftOfPrevious;
   if (slot === NOW_PLAYING_TRANSPORT_SLOTS.right) return settings.slotRightOfNext;
   return settings.slot(slot + 1);
+};
+
+/**
+ * The quiet caption under [action] in slot [slot]'s choices, naming where
+ * another slot already holds it ("In the footer", "Beside Next"), or
+ * undefined for the slot's own action, a free one and None (Core's
+ * `nowPlayingSlotChoiceHolder`).
+ */
+export const nowPlayingSlotCaption = (
+  buttons: readonly NowPlayingSlot[],
+  slot: number,
+  action: NowPlayingSlot,
+): string | undefined => {
+  const { settings } = currentLocalisation().strings;
+  switch (nowPlayingSlotChoiceHolder(buttons, slot, action)) {
+    case "footer":
+      return settings.slotInFooter;
+    case "previous":
+      return settings.slotBesidePrevious;
+    case "next":
+      return settings.slotBesideNext;
+    case null:
+      return undefined;
+  }
 };
