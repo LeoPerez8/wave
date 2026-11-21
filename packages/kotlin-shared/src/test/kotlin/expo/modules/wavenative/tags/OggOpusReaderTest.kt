@@ -65,6 +65,13 @@ class OggOpusReaderTest {
   }
 
   @Test
+  fun isrcComment() {
+    val block = vorbisComments("isrc=USRC17607839")
+    val tags = with(OggOpusReader) { parseComments(block, 0).toRawTags(durationMs = 0, sampleRate = null) }
+    assertEquals("USRC17607839", tags.isrc)
+  }
+
+  @Test
   fun everyGenreValueIsKept() {
     val block = vorbisComments("GENRE=Metalcore", "GENRE=Electronic", "GENRE= ")
     val tags = with(OggOpusReader) { parseComments(block, 0).toRawTags(durationMs = 0, sampleRate = null) }
