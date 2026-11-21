@@ -5,13 +5,15 @@ import type { LINK_CALLS } from "../../shared/links.ts";
 import type { SongTarget } from "../../shared/songActions.ts";
 import { Account } from "../account/accountLayer.ts";
 import { DesktopLinks } from "./layer.ts";
+import { isShareLink } from "./links.ts";
+import { SpotifyAccount } from "../spotify/spotifyAccountLayer.ts";
 import { VIDEO_ID } from "../yt/ytMusic.ts";
 
 type Call = (typeof LINK_CALLS)[number];
 type Handlers = {
   readonly [C in Call]: (
     args: readonly unknown[],
-  ) => Effect.Effect<BridgeContract[C]["result"], unknown, Account | DesktopLinks>;
+  ) => Effect.Effect<BridgeContract[C]["result"], unknown, Account | DesktopLinks | SpotifyAccount>;
 };
 /** Runs [call] with the language main resolved: the window's own idea of it is never asked. */
 const run = <A>(call: (links: DesktopLinks["Service"], language: AppLanguage) => Promise<A>) =>
@@ -38,5 +40,15 @@ export const linkHandlers = (validTarget: (value: unknown) => value is SongTarge
   "links.copyPlaylist": ([id]) =>
     typeof id === "number" && Number.isSafeInteger(id) && id > 0
       ? run((links, language) => links.copyPlaylist(id, language))
+      : refuse(),
+  "links.songShare": ([target]) =>
+    validTarget(target) || (typeof target === "string" && VIDEO_ID.test(target))
+      ? Effect.flatMap(SpotifyAccount, (account) =>
+          run((links, language) => links.songShare(target, language, account)),
+        )
+      : refuse(),
+  "links.copyShareLink": ([url]) =>
+    isShareLink(url)
+      ? run(async (links, language) => links.copyShareLink(url, language))
       : refuse(),
 });

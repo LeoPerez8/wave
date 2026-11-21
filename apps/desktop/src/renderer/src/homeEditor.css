@@ -1,0 +1,88 @@
+/* Home's Edit control sits at the top right of Home, above its first section. */
+.home-edit {
+  display: flex;
+  justify-content: flex-end;
+  margin-bottom: -20px;
+}
+.home-edit > button {
+  padding: 6px 10px;
+  font-size: 13px;
+  color: var(--color-accent);
+}
+.home-editor {
+  max-width: 480px;
+}
+.home-editor-dialog {
+  width: min(480px, calc(100vw - 32px));
+}
+.home-editor-dialog .home-editor {
+  min-height: 0;
+  overflow-y: auto;
+}
+.home-editor-list {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+/* Discover's rows, indented under Discover. */
+.home-editor-list .home-editor-list {
+  padding-left: 28px;
+}
+.home-editor-heading {
+  margin: 16px 0 4px;
+  font-size: 12px;
+  line-height: 16px;
+  font-weight: 600;
+  letter-spacing: 1.4px;
+  text-transform: uppercase;
+  color: var(--color-secondary);
+}
+.home-editor-row {
+  border-radius: 6px;
+}
+.home-editor-row.dragging {
+  opacity: 0.4;
+}
+.home-editor-row.drop-before {
+  box-shadow: 0 -2px 0 var(--color-accent);
+}
+.home-editor-row.drop-after {
+  box-shadow: 0 2px 0 var(--color-accent);
+}
+.home-editor-line {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  min-height: 40px;
+  font-size: 13px;
+}
+.home-editor-title {
+  flex: 1;
+}
+.home-editor-grip {
+  width: 24px;
+  display: inline-flex;
+  flex-shrink: 0;
+  color: var(--color-tertiary);
+  cursor: grab;
+}
+.home-editor .icon-button {
+  padding: 0;
+  border-radius: 6px;
+  color: var(--color-secondary);
+}
+.home-editor .icon-button:hover {
+  color: var(--color-foreground);
+}
+.home-editor .icon-button[aria-disabled="true"] {
+  color: var(--color-tertiary);
+  opacity: 0.5;
+  cursor: default;
+}
+.home-editor [data-action="add"] {
+  color: var(--color-accent);
+}
+/* Home stays visible behind its editor, so each change shows as it is made. */
+.home-edit .dialog-backdrop {
+  background: color-mix(in srgb, var(--color-scrim) 60%, transparent);
+}

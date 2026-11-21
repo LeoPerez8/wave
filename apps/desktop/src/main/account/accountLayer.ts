@@ -4,7 +4,14 @@
  * finished, a play ended or a star changed, and the invitation to sign in after the first scan.
  */
 import { Database } from "@wave/client";
-import { LANGUAGE_PREFERENCE, type LanguageChoice, type SyncClock } from "@wave/core";
+import {
+  GENIUS_INSIGHTS_SETTING,
+  LANGUAGE_PREFERENCE,
+  type LanguageChoice,
+  type SyncClock,
+  type ThemeEdit,
+  desktopBringYourMusic,
+} from "@wave/core";
 import * as Context from "effect/Context";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
@@ -18,13 +25,19 @@ import { createDesktopSync, syncedPreference } from "../sync/desktopSync.ts";
 import type { WaveAccountService } from "./account.ts";
 import type { LanguageView } from "../../shared/language.ts";
 import { readDesktopLanguage, saveDesktopLanguage } from "../language.ts";
+import { editDesktopTheme, THEME_PREFERENCE } from "../theme.ts";
+import { geniusInsightsEnabled } from "../library/lyricsAndTags.ts";
+import { createDesktopGenius, type DesktopGenius } from "../lyrics/genius.ts";
 
 export interface AccountShape {
   readonly language: () => LanguageView;
   readonly setLanguage: (choice: LanguageChoice) => void;
+  /** Makes [edit] to the account's theme and gives it as it is kept then. */
+  readonly editTheme: (edit: ThemeEdit) => string;
   /** A synced setting was saved and stamped here: it goes up without waiting for the timed sync. */
   readonly settingsEdited: () => void;
   readonly view: () => AccountView;
+  readonly genius: DesktopGenius;
   readonly signIn: () => Promise<void>;
   readonly cancelSignIn: () => void;
   readonly signOut: () => Promise<void>;
@@ -32,6 +45,8 @@ export interface AccountShape {
   readonly deleteAccount: () => Promise<void>;
   /** Not Now or Sign In on the invitation: it never shows again. */
   readonly answerInvitation: () => void;
+  /** Continue, Not Now or Escape on Bring your music: it never shows again on this computer. */
+  readonly answerBringYourMusic: () => void;
   /** A Wave window got focus. */
   readonly foreground: () => void;
 }
@@ -40,6 +55,8 @@ export class Account extends Context.Service<Account, AccountShape>()("@wave/des
 
 /** The invitation's answer, kept with the desktop's own settings. */
 const INVITATION = "firstRun.signInInvitation";
+/** Bring your music's answer, kept on this computer and never synced: `due`, then `answered`. */
+const BRING_YOUR_MUSIC = "firstRun.bringYourMusic";
 
 export const accountLayer = (options: {
   readonly account: WaveAccountService;
@@ -49,6 +66,9 @@ export const accountLayer = (options: {
   readonly clock?: SyncClock;
   readonly preferredLanguages?: () => readonly string[];
   readonly languageChanged?: (view: LanguageView) => void;
+  /** The account's theme changed, here or in a pull: its stored value. */
+  readonly themeChanged?: (stored: string | null) => void;
+  readonly fetch?: typeof globalThis.fetch;
 }) =>
   Layer.effect(
     Account,
@@ -64,7 +84,18 @@ export const accountLayer = (options: {
           .catch((error: unknown) => console.warn("[wave] The stars' downloads failed", error));
       const { account } = options;
       const language = () => readDesktopLanguage(db, options.preferredLanguages?.() ?? []);
-      const languageChanged = () => options.languageChanged?.(language());
+      const genius = createDesktopGenius({
+        db,
+        account,
+        playback,
+        language: () => language().language,
+        fetch: options.fetch ?? globalThis.fetch,
+      });
+      const stopSession = account.subscribe(() => genius.cancel());
+      const languageChanged = () => {
+        genius.cancel();
+        options.languageChanged?.(language());
+      };
       languageChanged();
       const sync = createDesktopSync({
         db,
@@ -74,6 +105,9 @@ export const accountLayer = (options: {
         // change in Settings › Playback does.
         preferencesPulled: (keys) => {
           if (keys.includes(LANGUAGE_PREFERENCE)) languageChanged();
+          if (keys.includes(THEME_PREFERENCE))
+            options.themeChanged?.(syncedPreference(db, THEME_PREFERENCE));
+          if (keys.includes(GENIUS_INSIGHTS_SETTING) && !geniusInsightsEnabled(db)) genius.cancel();
           if (changesPlaybackSettings(keys))
             playback
               .applySettings()
@@ -100,6 +134,8 @@ export const accountLayer = (options: {
       sync.start();
       yield* Effect.addFinalizer(() =>
         Effect.promise(async () => {
+          stopSession();
+          genius.cancel();
           stopScans();
           stopPlayback();
           sync.dispose();
@@ -112,14 +148,31 @@ export const accountLayer = (options: {
           clearTimeout(timer);
         }),
       );
+      /** The invitation's first answer makes Bring your music due: the card follows it. */
+      const answerInvitation = (): void => {
+        if (preference(db, INVITATION) !== undefined) return;
+        savePreference(db, INVITATION, "answered");
+        if (preference(db, BRING_YOUR_MUSIC) === undefined)
+          savePreference(db, BRING_YOUR_MUSIC, "due");
+      };
       return {
+        genius,
         language,
         setLanguage: (choice) => {
           saveDesktopLanguage(db, choice);
           languageChanged();
           sync.edited({ songs: false });
         },
-        settingsEdited: () => sync.edited({ songs: false }),
+        editTheme: (edit) => {
+          const stored = editDesktopTheme(db, edit);
+          options.themeChanged?.(stored);
+          sync.edited({ songs: false });
+          return stored;
+        },
+        settingsEdited: () => {
+          if (!geniusInsightsEnabled(db)) genius.cancel();
+          sync.edited({ songs: false });
+        },
         view: () => {
           const { account: view, keyringMissing, deletionSent } = account.view();
           return {
@@ -131,20 +184,24 @@ export const accountLayer = (options: {
               view.kind === "signedOut" &&
               account.session().status === "signedOut" &&
               preference(db, INVITATION) === undefined,
+            bringYourMusic:
+              scanned && desktopBringYourMusic(preference(db, BRING_YOUR_MUSIC) ?? null) === "due",
             revision: sync.revision(),
-            theme: syncedPreference(db, "settings.theme"),
+            theme: syncedPreference(db, THEME_PREFERENCE),
+            geniusInsights: geniusInsightsEnabled(db),
           };
         },
         // Signing in from Settings answers the invitation too.
         signIn: () => {
-          savePreference(db, INVITATION, "answered");
+          answerInvitation();
           return account.signIn();
         },
         cancelSignIn: account.cancelSignIn,
         signOut: account.signOut,
         signOutEverywhere: account.signOutEverywhere,
         deleteAccount: account.deleteAccount,
-        answerInvitation: () => savePreference(db, INVITATION, "answered"),
+        answerInvitation,
+        answerBringYourMusic: () => savePreference(db, BRING_YOUR_MUSIC, "answered"),
         foreground: sync.foreground,
       };
     }),

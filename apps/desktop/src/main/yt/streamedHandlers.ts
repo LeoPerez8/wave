@@ -1,6 +1,6 @@
 /** Main's side of `window.wave.streamed`: a streamed song's menu, checked before use. */
 import { Database } from "@wave/client";
-import { ytTrackId, type YtAlbumSong } from "@wave/core";
+import { ytTrackId, type UpNextPlace, type YtAlbumSong } from "@wave/core";
 import * as Effect from "effect/Effect";
 import type { BridgeContract } from "../../shared/bridge.ts";
 import {
@@ -10,6 +10,7 @@ import {
 } from "../../shared/streamedSongs.ts";
 import { Downloads } from "../downloads/downloadsLayer.ts";
 import { Playback } from "../playback/playback.ts";
+import { validQueuePlace } from "../playback/validation.ts";
 import {
   runStreamedAction,
   streamedArtistTarget,
@@ -37,6 +38,7 @@ export const streamedHandlers = () => {
   const withSong = <A>(
     videoId: unknown,
     act: (ports: StreamedSongPorts, song: YtAlbumSong) => A | Promise<A>,
+    at?: UpNextPlace,
   ) =>
     Effect.gen(function* () {
       const yt = yield* YtMusic;
@@ -48,7 +50,12 @@ export const streamedHandlers = () => {
         db: yield* Database,
         ytMusic: yt.enabled,
         downloads: yield* Downloads,
-        queue: (type, id) => playback.dispatch({ type, trackIds: [ytTrackId(id)] }),
+        queue: (type, id) =>
+          playback.dispatch(
+            type === "addToQueue" && at !== undefined
+              ? { type, trackIds: [ytTrackId(id)], at }
+              : { type, trackIds: [ytTrackId(id)] },
+          ),
         changed: playback.refresh,
       };
       return yield* Effect.tryPromise({
@@ -66,13 +73,17 @@ export const streamedHandlers = () => {
       typeof name === "string" && name.trim() !== ""
         ? Effect.map(Database, (db) => streamedArtistTarget(db, name))
         : refuse("streamed.artist", "invalid name"),
-    "streamed.run": ([videoId, action, playlist]) =>
+    "streamed.run": ([videoId, action, playlist, at]) =>
       typeof videoId === "string" &&
       VIDEO_ID.test(videoId) &&
       STREAMED_RUN_ACTIONS.includes(action as StreamedRunAction) &&
-      (action === "addToPlaylist" ? playlistId(playlist) : playlist === undefined)
-        ? withSong(videoId, (ports, song) =>
-            runStreamedAction(ports, song, action as StreamedRunAction, playlist as number),
+      (action === "addToPlaylist" ? playlistId(playlist) : playlist === undefined) &&
+      validQueuePlace(action, at)
+        ? withSong(
+            videoId,
+            (ports, song) =>
+              runStreamedAction(ports, song, action as StreamedRunAction, playlist as number),
+            at as UpNextPlace | undefined,
           )
         : refuse("streamed.run", "invalid song, action or playlist"),
   };

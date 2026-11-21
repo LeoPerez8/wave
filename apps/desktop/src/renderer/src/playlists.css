@@ -102,3 +102,71 @@
 .graveyard-copy .secondary {
   font-size: 12px;
 }
+.spotify-import {
+  width: min(480px, calc(100vw - 32px));
+  overflow: hidden;
+}
+.spotify-import .account-actions {
+  margin: 0;
+}
+.spotify-import-rows {
+  min-height: 0;
+  overflow: auto;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.spotify-import-rows label {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 6px;
+  border-radius: 6px;
+}
+.spotify-import-rows label:hover {
+  background: var(--color-fill);
+}
+.spotify-import-rows .yt-account-names {
+  flex: 1;
+}
+.spotify-import-imported {
+  flex-shrink: 0;
+  font-size: 12px;
+}
+.missing-songs li {
+  padding: 6px;
+}
+/* The Playlists page: its Sort by and Show as controls, and its grid of covers (PlaylistGrid.tsx). */
+.playlist-sort {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+}
+.playlist-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
+  gap: 24px 18px;
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  padding-bottom: 24px;
+}
+.playlist-grid .tile {
+  width: 100%;
+}
+.playlist-grid .tile > .artwork {
+  width: 100%;
+  height: auto;
+  aspect-ratio: 1;
+}
+/* In Custom a playlist drags into another's place: the table's rows and the grid's covers. */
+.playlist-grid .tile.dragging,
+.table-row.dragging {
+  opacity: 0.4;
+}
+.playlist-grid .tile.drop-over,
+.table-row.drop-over {
+  background: var(--color-fill);
+  box-shadow: inset 0 0 0 2px var(--color-accent);
+  border-radius: 6px;
+}

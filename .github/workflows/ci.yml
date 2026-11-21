@@ -1064,6 +1064,7 @@ jobs:
           MAIN_VITE_WAVE_SYNC_URL: ${{ vars.WAVE_SYNC_URL }}
           MAIN_VITE_WAVE_GOOGLE_DESKTOP_CLIENT_ID: ${{ vars.WAVE_GOOGLE_DESKTOP_CLIENT_ID }}
           MAIN_VITE_WAVE_GOOGLE_DESKTOP_CLIENT_SECRET: ${{ vars.WAVE_GOOGLE_DESKTOP_CLIENT_SECRET }}
+          MAIN_VITE_WAVE_SPOTIFY_CLIENT_ID: ${{ vars.WAVE_SPOTIFY_CLIENT_ID }}
         run: |
           pnpm --filter @wave/desktop build
           mode=()

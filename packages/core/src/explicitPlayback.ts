@@ -14,6 +14,12 @@ import type { PassOver, QueueCommand, QueueState } from "./queue.ts";
 /** Where Don't play explicit keeps its switch; the account syncs it. */
 export const DONT_PLAY_EXPLICIT_SETTING = "settings.dontPlayExplicit";
 
+/** Whether the stored switch is on: off unless the owner turned it on. */
+export const readDontPlayExplicit = (stored: string | null): boolean => stored === "on";
+
+/** What the key-value store keeps for the switch: null at its default, off. */
+export const writeDontPlayExplicit = (on: boolean): string | null => (on ? "on" : null);
+
 /** What Don't play explicit goes by. */
 export interface ExplicitPlayback {
   /** Whether the switch is on. */

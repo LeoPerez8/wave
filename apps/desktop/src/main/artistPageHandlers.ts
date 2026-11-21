@@ -81,4 +81,35 @@ export const artistPageHandlers = (): Handlers => ({
           });
         })
       : refuse("artistPage.play"),
+  "artistPage.albumSection": ([albumId, picked]) =>
+    id(albumId) && pick(picked)
+      ? Effect.map(YtFeatures, ({ albumSection }) => albumSection.view(albumId, picked))
+      : refuse("artistPage.albumSection"),
+  "artistPage.albumAsk": ([albumId, picked, again]) =>
+    id(albumId) && pick(picked) && typeof again === "boolean"
+      ? Effect.gen(function* () {
+          const { albumSection } = yield* YtFeatures;
+          yield* Effect.promise(() => albumSection.ask(albumId, picked, again));
+        })
+      : refuse("artistPage.albumAsk"),
+  "artistPage.albumPlay": ([albumId, picked, from, shuffle]) =>
+    id(albumId) && pick(picked) && (from === null || index(from)) && typeof shuffle === "boolean"
+      ? Effect.gen(function* () {
+          const { albumSection } = yield* YtFeatures;
+          const playback = yield* Playback;
+          const ids = albumSection.queue(albumId, picked);
+          if (from !== null && from >= ids.length)
+            return yield* Effect.fail(new Error("Invalid song position"));
+          return yield* Effect.tryPromise({
+            try: () =>
+              playback.activate(
+                ids,
+                from ?? undefined,
+                { kind: "album", id: String(albumId) },
+                shuffle,
+              ),
+            catch: (error) => error,
+          });
+        })
+      : refuse("artistPage.albumPlay"),
 });

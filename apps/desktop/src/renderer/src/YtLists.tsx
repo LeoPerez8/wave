@@ -3,8 +3,10 @@ import type { BrowseRow } from "../../shared/browse.ts";
 import type { YtStatus } from "../../shared/yt.ts";
 import { songRowMark } from "../../shared/songState.ts";
 import { Icon } from "./Icon.tsx";
+import { itemMenuEvents } from "./Menu.tsx";
+import { listRowDrag, songDragProps } from "./songDrag.ts";
 import { markClass, SongMark, useSongStates } from "./SongMark.tsx";
-import { labels, albumName, artistName } from "./text.ts";
+import { labels, albumName, artistName, text } from "./text.ts";
 import { Artwork, time } from "./VirtualTable.tsx";
 
 /**
@@ -37,6 +39,7 @@ export function YtSongList({
   onMenu,
   accessory,
   ranked = 0,
+  numbered = false,
 }: {
   readonly songs: readonly BrowseRow[];
   readonly label: string;
@@ -45,6 +48,8 @@ export function YtSongList({
   readonly accessory?: (row: BrowseRow) => ReactNode;
   /** How many of the first songs lead with their rank (1, 2, 3…) in place of the cover. */
   readonly ranked?: number;
+  /** Each song leads with its track number in place of the cover (an album's tracklist). */
+  readonly numbered?: boolean;
 }) {
   const [selected, setSelected] = useState<number>();
   return (
@@ -56,6 +61,7 @@ export function YtSongList({
             className="table-row table-columns yt-row"
             aria-selected={selected === index}
             aria-label={[row.title, artistName(row.artist)].filter(Boolean).join(", ")}
+            {...songDragProps(() => listRowDrag(row))}
             onClick={() => setSelected(index)}
             onDoubleClick={() => onPlay(index)}
             onContextMenu={
@@ -75,7 +81,9 @@ export function YtSongList({
           >
             <span className="title-cell">
               <span className="row-picture">
-                {index < ranked ? (
+                {numbered ? (
+                  <span className="track-number">{row.trackNumber}</span>
+                ) : index < ranked ? (
                   <span className="row-rank secondary">{index + 1}</span>
                 ) : (
                   <Artwork hash={row.artworkHash} url={row.artworkUrl} />
@@ -122,6 +130,8 @@ export function Shelf({
   nested = false,
   onOpen,
   onMenu,
+  onSeeAll,
+  onPlay,
 }: {
   readonly title: string;
   readonly items: readonly TileItem[];
@@ -130,6 +140,10 @@ export function Shelf({
   readonly nested?: boolean;
   readonly onOpen: (index: number) => void;
   readonly onMenu?: (index: number, at: { readonly x: number; readonly y: number }) => void;
+  /** Its heading's See all, opening the whole list (Home's shelves). */
+  readonly onSeeAll?: () => void;
+  /** A tile that opens a page gets a play glyph on its cover, which plays it without opening. */
+  readonly onPlay?: (index: number) => void;
 }) {
   const states = useSongStates(items.flatMap((item) => (item.song ? [item.song.id] : [])));
   if (items.length === 0) return null;
@@ -139,32 +153,23 @@ export function Shelf({
   );
   return (
     <section className="shelf" aria-label={title}>
-      <Heading>{title}</Heading>
+      {onSeeAll ? (
+        <div className="stats-section-heading">
+          <Heading>{title}</Heading>
+          <button onClick={onSeeAll}>{text.home.seeAll}</button>
+        </div>
+      ) : (
+        <Heading>{title}</Heading>
+      )}
       <div className="shelf-row" role="list">
         {items.map((item, index) => (
-          <div key={item.key} role="listitem">
+          <div key={item.key} role="listitem" className={onPlay ? "tile-playable" : undefined}>
             <button
               className={`tile ${marks[index] ? markClass(marks[index]) : ""}`.trimEnd()}
               aria-label={item.label ?? item.title}
               title={item.title}
               onClick={() => onOpen(index)}
-              onContextMenu={
-                onMenu &&
-                ((event) => {
-                  event.preventDefault();
-                  onMenu(index, { x: event.clientX, y: event.clientY });
-                })
-              }
-              onKeyDown={
-                onMenu &&
-                ((event) => {
-                  if (event.key === "ContextMenu" || (event.key === "F10" && event.shiftKey)) {
-                    event.preventDefault();
-                    const rect = event.currentTarget.getBoundingClientRect();
-                    onMenu(index, { x: rect.left, y: rect.bottom });
-                  }
-                })
-              }
+              {...(onMenu && itemMenuEvents((at) => onMenu(index, at)))}
             >
               <Artwork
                 kind={item.artworkKind}
@@ -184,6 +189,18 @@ export function Shelf({
                 <span className="tile-caption truncate secondary">{item.caption}</span>
               )}
             </button>
+            {onPlay && (
+              <span className="tile-play-area">
+                <button
+                  className="tile-play"
+                  aria-label={text.playbackText.playValue(item.title)}
+                  title={text.playbackText.playValue(item.title)}
+                  onClick={() => onPlay(index)}
+                >
+                  <Icon name="play" size={16} />
+                </button>
+              </span>
+            )}
           </div>
         ))}
       </div>

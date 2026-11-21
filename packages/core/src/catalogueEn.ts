@@ -1,5 +1,6 @@
 import { desktopShortcutsEn } from "./catalogue/desktopShortcutsEn.ts";
 import { desktopWindowEn } from "./catalogue/desktopWindowEn.ts";
+import { desktopOutputEn } from "./catalogue/desktopOutputEn.ts";
 import { libraryEn } from "./catalogue/libraryEn.ts";
 import { playlistsEn } from "./catalogue/playlistsEn.ts";
 import { importsEn } from "./catalogue/importsEn.ts";
@@ -39,6 +40,7 @@ import type { TabBarTab } from "./tabBar.ts";
 
 export const en = {
   desktopWindow: desktopWindowEn,
+  desktopOutput: desktopOutputEn,
   desktopLayout: {
     language: "Language",
     // Each language under its own name, so it can be found from the other one.
@@ -120,6 +122,12 @@ export const en = {
     unavailableFolder: "Unavailable folder",
     driveDisconnected: "The drive isn't connected. Reconnect it and try again.",
     actionFailed: "Couldn't complete that action. Try again.",
+    /** Release Date's dialog: the date the song has ([date], `formatReleaseDate`'s), or none. */
+    releaseDateKnown: (date: string) => `Released ${date}`,
+    releaseDateUnknown: "No release date is known.",
+    /** A song menu's Show in Folder (Core's `desktopSongActions`), and its song's file gone. */
+    showInFolder: "Show in Folder",
+    fileGone: "The song's file isn't there anymore. Refresh the Library to find it again.",
     downloadStarted: (count: number) =>
       count === 1 ? "Download started" : `Downloading ${count} songs`,
     downloading: (title: string) => `Downloading ${title}`,
@@ -134,6 +142,9 @@ export const en = {
     titleColumn: "Title",
     artistColumn: "Artist",
     albumColumn: "Album",
+    /** The column of a playlist's own order and of an artist's Popular ranks. */
+    orderColumn: "#",
+    releaseDateColumn: "Release date",
     previous: "Previous page",
     next: "Next page",
     page: (first: number, last: number, total: number) => `${first}–${last} of ${total}`,
@@ -160,6 +171,9 @@ export const en = {
       "Sign in in the browser window that opened, then close it. Wave picks up the session once the window is closed.",
     noBrowser:
       "Signing in to YouTube needs Chrome, Edge, Brave or Chromium on this computer. Install one and try again.",
+    spotifyUnavailable: "Spotify sign-in isn't set up in this build of Wave.",
+    spotifyNote:
+      "Signing in lets Wave read your Spotify playlists and share your Wave playlists there.",
   },
   desktopShortcuts: desktopShortcutsEn,
   downloadNotice: downloadNoticeEn,
