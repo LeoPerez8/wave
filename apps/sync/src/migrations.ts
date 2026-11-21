@@ -306,6 +306,26 @@ const MIGRATIONS: readonly Migration[] = [
       )`,
     ],
   },
+  {
+    // A collaborative playlist's invite links (src/invites.ts): a hash of each token, never the
+    // token, with its owner, expiry and state (`active`, `off`, `replaced`, or `ended` by a
+    // member's removal). A playlist has at most one active link.
+    id: "0017_collaboration_invites",
+    statements: [
+      `CREATE TABLE collaboration_invites (
+        token_hash TEXT PRIMARY KEY,
+        playlist_id TEXT NOT NULL,
+        owner_id TEXT NOT NULL,
+        created_at INTEGER NOT NULL,
+        expires_at INTEGER NOT NULL,
+        state TEXT NOT NULL
+      )`,
+      `CREATE UNIQUE INDEX collaboration_invites_active_idx
+        ON collaboration_invites (playlist_id) WHERE state = 'active'`,
+      `CREATE INDEX collaboration_invites_playlist_idx ON collaboration_invites (playlist_id)`,
+      `CREATE INDEX collaboration_invites_owner_idx ON collaboration_invites (owner_id)`,
+    ],
+  },
 ];
 
 /**

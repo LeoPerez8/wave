@@ -8,7 +8,15 @@
  */
 
 import type { Client } from "@libsql/client";
-import { accountName, geniusUpstreamUrl, sha256Hex, ticketmasterUpstreamUrl } from "@wave/core";
+import {
+  acceptedLanguages,
+  accountName,
+  catalogueOf,
+  geniusUpstreamUrl,
+  resolveAppLanguage,
+  sha256Hex,
+  ticketmasterUpstreamUrl,
+} from "@wave/core";
 import {
   type CollaborationRefusal,
   collaborationMembers,
@@ -18,6 +26,14 @@ import {
   removeMember,
 } from "./collaborations.ts";
 import { type GoogleKeys, googleKeys, verifyGoogleIdToken } from "./google.ts";
+import {
+  type InviteOwnerRefusal,
+  createInvite,
+  currentInvite,
+  joinInvite,
+  readInvite,
+  turnOffInvite,
+} from "./invites.ts";
 import { type SyncLimitName, type SyncLimits, SYNC_LIMITS } from "./limits.ts";
 import {
   type SoulseekKeys,
@@ -215,12 +231,55 @@ const tooMany = (limit: SyncLimitName, at: number): Answer =>
   );
 
 /** Why a request was refused before reaching a route, in the order the log lists them. */
-const REFUSALS = ["malformed_token", "unknown_session", "held_address", "address_limit"] as const;
+const REFUSALS = [
+  "malformed_token",
+  "unknown_session",
+  "unknown_invite",
+  "held_address",
+  "address_limit",
+] as const;
 
 type Refusal = (typeof REFUSALS)[number];
 
 /** What `POST /v1/session` gives: base64url of 32 random bytes. */
 const SESSION_TOKEN = /^[A-Za-z0-9_-]{43}$/;
+
+/** The page an invite link opens in a browser: nothing of the playlist, and no script. */
+const invitePage = (acceptLanguage: string | null): Response => {
+  const language = resolveAppLanguage(acceptedLanguages(acceptLanguage));
+  const text = catalogueOf(language).invitePage;
+  const escape = (value: string): string =>
+    value.replaceAll("&", "&amp;").replaceAll("<", "&lt;").replaceAll(">", "&gt;");
+  const html = `<!doctype html>
+<html lang="${language}">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="robots" content="noindex">
+<title>${escape(text.title)}</title>
+<style>
+body{margin:0;min-height:100vh;display:flex;align-items:center;justify-content:center;
+font-family:system-ui,sans-serif;background:#fff;color:#1c1c1e;text-align:center;padding:0 16px}
+@media (prefers-color-scheme:dark){body{background:#000;color:#f2f2f7}}
+h1{font-size:1.5rem;margin:0 0 .5rem}p{margin:0;opacity:.7}
+</style>
+</head>
+<body><main><h1>${escape(text.heading)}</h1><p>${escape(text.body)}</p></main></body>
+</html>
+`;
+  return new Response(html, {
+    headers: {
+      "content-type": "text/html; charset=utf-8",
+      "content-language": language,
+      vary: "accept-language",
+      "cache-control": "public, max-age=3600",
+      "content-security-policy": "default-src 'none'; style-src 'unsafe-inline'",
+      "referrer-policy": "no-referrer",
+      "x-robots-tag": "noindex",
+      "x-content-type-options": "nosniff",
+    },
+  });
+};
 
 const base64url = (bytes: Uint8Array): string =>
   btoa(String.fromCharCode(...bytes))
@@ -623,6 +682,90 @@ export const createSyncService = (options: SyncServiceOptions): SyncService => {
     settled(await leaveCollaboration(db, playlistAsked(url), session.accountId, now())),
   );
 
+  /** What an owner's request about the invite link answers when it's refused: 403. */
+  const ownerOnly = (refusal: InviteOwnerRefusal | null): Response => {
+    if (refusal === null) return new Response(null, { status: 204 });
+    throw failure(403, refusal);
+  };
+
+  /**
+   * Creates the playlist's invite link, ending the active one. Answers the
+   * link, an https address on this service with the token after `#` (so a
+   * browser never sends it), and its expiry.
+   */
+  const createInviteLink = withSession(async ({ request, url }, session) => {
+    const body = await readJson(request);
+    const playlistId =
+      typeof body === "object" && body !== null && "playlistId" in body
+        ? body.playlistId
+        : undefined;
+    if (typeof playlistId !== "string" || playlistId === "") throw failure(400, "bad_request");
+    const token = base64url(crypto.getRandomValues(new Uint8Array(32)));
+    const made = await createInvite(
+      db,
+      playlistId,
+      session.accountId,
+      await sha256Hex(token),
+      now(),
+    );
+    if (typeof made === "string") throw failure(403, made);
+    return json({ url: `${url.origin}/invite#${token}`, expiresAt: made.expiresAt });
+  });
+
+  const readInviteLink = withSession(async ({ url }, session) => {
+    const current = await currentInvite(db, playlistAsked(url), session.accountId, now());
+    if (typeof current === "string") throw failure(403, current);
+    return json(current);
+  });
+
+  const turnOffInviteLink = withSession(async ({ url }, session) =>
+    ownerOnly(await turnOffInvite(db, playlistAsked(url), session.accountId)),
+  );
+
+  /**
+   * The hash of the body's invite token. A token that can't be one counts
+   * as a wrong one: 404, in the address's failed lookups.
+   */
+  const inviteTokenHash = async ({ request, addressKey }: RouteContext): Promise<string> => {
+    const body = await readJson(request);
+    const token =
+      typeof body === "object" && body !== null && "token" in body ? body.token : undefined;
+    if (typeof token !== "string" || !SESSION_TOKEN.test(token)) {
+      return wrongInvite(addressKey);
+    }
+    return sha256Hex(token);
+  };
+
+  /** Refuses a token that names no invite, counting it as a failed lookup of the address. */
+  const wrongInvite = async (addressKey: string | null): Promise<never> => {
+    refused("unknown_invite");
+    if (addressKey !== null) await countFailedLookup(addressKey);
+    throw failure(404, "not_found");
+  };
+
+  /** 410 for an invite that no longer lets anyone in, and a wrong token's 404. */
+  const inviteRefused = async (
+    refusal: "unknown" | "ended",
+    { addressKey }: RouteContext,
+  ): Promise<never> => {
+    if (refusal === "unknown") return wrongInvite(addressKey);
+    throw failure(410, "invite_ended");
+  };
+
+  /** The playlist's and the owner's names, for the app to ask before joining. */
+  const lookUpInvite = withSession(async (context) => {
+    const summary = await readInvite(db, await inviteTokenHash(context), now());
+    if (typeof summary === "string") return inviteRefused(summary, context);
+    return json(summary);
+  });
+
+  /** Makes the session's account a member; answers the playlist's collaboration. */
+  const joinWithInvite = withSession(async (context, session) => {
+    const joined = await joinInvite(db, await inviteTokenHash(context), session.accountId, now());
+    if (typeof joined === "string") return inviteRefused(joined, context);
+    return json(joined);
+  });
+
   // Imported at the first Soulseek request, and again after a failed import.
   let soulseekKeys: Promise<SoulseekKeys> | null = null;
   const soulseekCipherKeys = (): Promise<SoulseekKeys> => {
@@ -820,6 +963,12 @@ export const createSyncService = (options: SyncServiceOptions): SyncService => {
     "GET /v1/collaboration/members": listMembers,
     "DELETE /v1/collaboration/members": removeOneMember,
     "DELETE /v1/collaboration/membership": leaveCollaborative,
+    "POST /v1/collaboration/invite": createInviteLink,
+    "GET /v1/collaboration/invite": readInviteLink,
+    "DELETE /v1/collaboration/invite": turnOffInviteLink,
+    "POST /v1/invite": lookUpInvite,
+    "POST /v1/invite/join": joinWithInvite,
+    "GET /invite": async ({ request }) => invitePage(request.headers.get("accept-language")),
     "PUT /v1/soulseek": putSoulseek,
     "GET /v1/soulseek": getSoulseek,
     "GET /v1/genius/search": genius,

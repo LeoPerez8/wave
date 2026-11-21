@@ -182,6 +182,12 @@ export const en = {
   recap: recapEn,
   listeningHistory: listeningHistoryEn,
   share: shareEn,
+  /** The page an invite link opens in a browser (the sync service's `GET /invite`): nothing of the playlist. */
+  invitePage: {
+    title: "Wave invite",
+    heading: "This is a Wave invite",
+    body: "Open this link on your phone with an up-to-date Wave.",
+  },
   settings: settingsEn,
   downloadStatus: downloadStatusEn,
   alert: alertEn,

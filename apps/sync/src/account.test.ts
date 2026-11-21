@@ -229,7 +229,8 @@ describe("DELETE /v1/account", () => {
     const boId = (
       await service.db.execute("SELECT id FROM accounts WHERE google_sub = 'google-sub-2'")
     ).rows[0]?.id;
-    // Each owns a collaborative playlist the other is in, and left one of a third account.
+    // Each owns a collaborative playlist the other is in, with an invite link, and left one of a
+    // third account.
     for (const [session, playlistId, other] of [
       [ana, "anas-list", boId],
       [bo, "bos-list", anaId],
@@ -248,6 +249,7 @@ describe("DELETE /v1/account", () => {
       });
       await service.request("POST", "/v1/collaboration", { session, json: { playlistId } });
       await addMember(service.db, playlistId, String(other), service.now);
+      await service.request("POST", "/v1/collaboration/invite", { session, json: { playlistId } });
       await service.db.execute({
         sql: "INSERT INTO collaboration_ends VALUES (?, 'someone-elses-list', 'left', 1)",
         args: [String(session === ana ? anaId : boId)],
@@ -267,6 +269,7 @@ describe("DELETE /v1/account", () => {
     const owners: Readonly<Record<string, string>> = {
       accounts: "google_sub",
       collaborations: "owner_id",
+      collaboration_invites: "owner_id",
       sign_in_windows: "substr(key, length('sub:') + 1)",
     };
     for (const { name } of left.rows) {
