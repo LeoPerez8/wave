@@ -51,11 +51,7 @@ export const mixSongsPage = (
 /** Every Library song, as `mixSongsPage` gives them page by page. */
 export const mixSongs = (db: LibraryDatabase, options: { readonly genres?: boolean } = {}) =>
   mixSongsPage(db, 0, options, null);
-export const mixArtistsPage = (
-  db: LibraryDatabase,
-  after: number,
-  rows: Rows = 128,
-): ArtistRow[] =>
+export const mixArtistsPage = (db: LibraryDatabase, after: number, rows: Rows = 128): ArtistRow[] =>
   db.all<ArtistRow>(sql`
   SELECT a.id, a.name, a.sort,
     (SELECT count(*) FROM albums WHERE album_artist_id = a.id) AS albumCount,

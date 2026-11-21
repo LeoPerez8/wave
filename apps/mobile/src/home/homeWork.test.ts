@@ -59,7 +59,10 @@ test("leaving Home stops a build after the slice that was running; coming back r
   const home = sightOf(true);
   work.follow(home.sight);
   const count = { steps: 0 };
-  const between = Effect.andThen(work.turn, Effect.promise(() => setImmediate()));
+  const between = Effect.andThen(
+    work.turn,
+    Effect.promise(() => setImmediate()),
+  );
   const built = Effect.runPromise(
     Effect.suspend(() => runStepsOneAtATime(counted(count, 20), between)),
   );
@@ -81,7 +84,10 @@ test("someone off Home waiting for the work lets it run while they wait", async 
   const home = sightOf(false);
   work.follow(home.sight);
   const count = { steps: 0 };
-  const between = Effect.andThen(work.turn, Effect.promise(() => setImmediate()));
+  const between = Effect.andThen(
+    work.turn,
+    Effect.promise(() => setImmediate()),
+  );
   // A Magic Queue started from Search waits for the snapshot Home's build reads.
   const result = await Effect.runPromise(
     work.wanted(Effect.suspend(() => runStepsOneAtATime(counted(count, 5), between))),
@@ -108,4 +114,8 @@ test("a Home screen that unmounts stops holding the gate open", async () => {
 
 /** Stepped work with one step a slice, as a long build's slices go. */
 const runStepsOneAtATime = <A>(steps: Generator<void, A>, between: Effect.Effect<void>) =>
-  pacedSteps(steps, () => ({ between, sliceMs: 1_000, maxSteps: 1 }), () => 0);
+  pacedSteps(
+    steps,
+    () => ({ between, sliceMs: 1_000, maxSteps: 1 }),
+    () => 0,
+  );

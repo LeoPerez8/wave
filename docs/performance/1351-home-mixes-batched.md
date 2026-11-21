@@ -37,10 +37,10 @@ build: the mix inputs, the catalog, a cold build's Library and its radio matches
 and the carousel's playlist seeds, on the fast-again fixture with streamed plays, YT Music
 playlist entries and catalog songs a tenth of the Library each, and radio songs as many.
 
-| Library | Reads before | Reads after | Statements after |
-| --- | --- | --- | --- |
-| 1,000 songs, 10,000 plays | 250 | 20 | 37 |
-| 12,000 songs, 54,000 plays | 2,133 | 20 | 37 |
+| Library                    | Reads before | Reads after | Statements after |
+| -------------------------- | ------------ | ----------- | ---------------- |
+| 1,000 songs, 10,000 plays  | 250          | 20          | 37               |
+| 12,000 songs, 54,000 plays | 2,133        | 20          | 37               |
 
 Before, by read at 1,000 songs: `mixHistoryPage` 80, `matchingSong` 100, `mixSongsPage` 18,
 `knownVideosPage` 16, `mixCreditPage` 9, `mixCreditNamesPage` 9, `mixArtistsPage` 4, the

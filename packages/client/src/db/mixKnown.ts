@@ -96,7 +96,10 @@ const KNOWN_SOURCES: readonly {
   },
   {
     start: "",
-    page: (after, limit) => sql`SELECT DISTINCT video_id AS key, video_id AS videoId FROM streamed_totals
+    page: (
+      after,
+      limit,
+    ) => sql`SELECT DISTINCT video_id AS key, video_id AS videoId FROM streamed_totals
       WHERE video_id > ${after} ORDER BY video_id ${limit}`,
   },
   {

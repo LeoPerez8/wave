@@ -75,4 +75,4 @@ export const homeWork = createHomeWork();
 
 /** [turn] (a frame's or a free turn), then Home's gate, so no slice starts off Home. */
 export const homeTurnOf = (turn: Effect.Effect<void>): Effect.Effect<void> =>
-    Effect.andThen(turn, homeWork.turn);
+  Effect.andThen(turn, homeWork.turn);
