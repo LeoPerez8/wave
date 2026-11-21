@@ -112,10 +112,8 @@ test("Home shows followed artists' new releases and shows, and neither section w
       await expect(releases.locator("h2")).toHaveText("New from Artists You Follow");
       await expect(shows.locator("h2")).toHaveText("Upcoming Shows");
       await expect(home.locator("h2").first()).toHaveText("New from Artists You Follow");
-      await expect(releases.getByRole("button")).toHaveText([
-        /EP.*Voyage.*ABBA.*Today/,
-        /Waterloo/,
-      ]);
+      // YT Music is off: only the release the Library has can play, so only it shows.
+      await expect(releases.getByRole("button")).toHaveText([/Waterloo/]);
       const ticket = shows.getByRole("link", {
         name: /ABBA.*Recife · Arena. Opens the ticket page/,
       });
@@ -127,9 +125,6 @@ test("Home shows followed artists' new releases and shows, and neither section w
         });
       }
 
-      // YT Music is off: a release the Library lacks says so, one it has opens its album.
-      await releases.getByRole("button", { name: /Voyage/ }).click();
-      await expect(page.getByText("YT Music is off in Settings")).toBeVisible();
       await releases.getByRole("button", { name: /Waterloo/ }).click();
       await expect(page.getByTestId("hero")).toContainText("Waterloo");
     } finally {
