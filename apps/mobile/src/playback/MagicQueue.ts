@@ -18,6 +18,7 @@ import {
   magicLibrarySongs,
   magicListSeedSongs,
   completeMagicRadioBatch,
+  djSessionWithAlbumSongs,
   continueMagicQueue,
   queueContinuation,
   queueLengthsToRead,
@@ -729,7 +730,7 @@ export const startDjMagicQueue = (
                   settings,
                   albumSongs,
                 });
-                if (refreshed !== null) save({ ...refreshed, used: current.used });
+                if (refreshed !== null) save(djSessionWithAlbumSongs(current, refreshed));
               }),
             ),
             Effect.catchCause(() => Effect.void),
@@ -747,12 +748,11 @@ export const startDjMagicQueue = (
     if (started === null) return "empty" satisfies DjStart;
     const drawn = magicBatchRadios(started, Math.random);
     pendingDjFirstBatch = drawn.session.id;
-    const firstRadioSong = yield* magicQueueFirstRadioSong(
-      drawn.session.id,
-      drawn.seeds,
-      deadlineAt,
-      () => finishDjFirstBatch(drawn.session.id),
-    );
+    const firstRadioSong = yield* magicQueueFirstRadioSong(drawn.session, drawn.seeds, deadlineAt, {
+      graph: latest.graph,
+      profileOf: magicProfileOf(library),
+      onSettled: () => finishDjFirstBatch(drawn.session.id),
+    });
     if (firstRadioSong !== null) {
       const firstId = ytTrackId(firstRadioSong.videoId);
       startingLibrary = { songs: library.songs.filter(songHasFile), artists: library.artists };
