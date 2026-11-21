@@ -5,7 +5,7 @@
  * after startup; DJ opened first prepares it itself.
  */
 import {
-  djGrid,
+  djGridCandidates,
   djTileArtist,
   genreMixDjCandidates,
   type DjAlbum,
@@ -66,7 +66,7 @@ const albumsOver = (
 ): Promise<DjAlbum[]> => {
   const names = new Map(library.artists.map((artist) => [artist.id, artist.name]));
   const artists = new Set(
-    djGrid(gridSources(library, families)).flatMap((tile) =>
+    djGridCandidates(gridSources(library, families)).flatMap((tile) =>
       tile.kind === "genre" ? tile.opens.map(djTileArtist) : [djTileArtist(tile)],
     ),
   );

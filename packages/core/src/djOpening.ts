@@ -21,9 +21,8 @@ export type DjOpeningGrid =
   /** A line saying there's nothing to pick yet; Done stays disabled. */
   | { readonly kind: "nothing" };
 
-/** Work a DJ opening still needs, keeping a stored grid out of rebuild work. */
+/** Work a DJ opening needs; a stored grid renders while its full candidates are read. */
 export const djOpeningWork = ({
-  keptGrid,
   libraryReady,
 }: {
   readonly keptGrid: boolean;
@@ -34,8 +33,8 @@ export const djOpeningWork = ({
   readonly prepareStartup: boolean;
 } => ({
   readLibrary: !libraryReady,
-  buildGrid: !keptGrid && libraryReady,
-  prepareStartup: !keptGrid,
+  buildGrid: libraryReady,
+  prepareStartup: true,
 });
 
 /**

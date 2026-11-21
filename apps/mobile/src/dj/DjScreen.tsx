@@ -2,6 +2,9 @@ import {
   ARTIST_MIX_COUNT,
   djCanStart,
   djCells,
+  djGridCandidates,
+  djGridPage,
+  djGridRefresh,
   djOpened,
   djOpeningGrid,
   djOpeningWork,
@@ -41,7 +44,16 @@ import {
   useRef,
   useState,
 } from "react";
-import { ActivityIndicator, ScrollView, Text, View, useWindowDimensions } from "react-native";
+import {
+  ActivityIndicator,
+  RefreshControl,
+  ScrollView,
+  Text,
+  View,
+  useWindowDimensions,
+  type NativeScrollEvent,
+  type NativeSyntheticEvent,
+} from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import { ArtistImage } from "@/catalog/ArtistImage";
@@ -135,6 +147,8 @@ const useDjGrid = () => {
   const [state, setState] = useState<DjState | null>(() =>
     keptGrid === null ? null : djRestoredGrid(keptGrid, djRemembered.get().tiles),
   );
+  const seen = useRef(new Set<DjTileKey>(keptGrid?.map((tile) => tile.key) ?? []));
+  const paging = useRef(false);
   const waiting = library === null;
   const work = djOpeningWork({ keptGrid: keptGrid !== null, libraryReady: !waiting });
   useEffect(() => {
@@ -178,6 +192,14 @@ const useDjGrid = () => {
       artistMixes,
     });
   }, [library, ready, artistMixes]);
+  const candidates = useMemo(() => {
+    if (ready === null) return [];
+    const full = djGridCandidates({
+      ...gridSources(ready.library, ready.families),
+      albums: ready.albums,
+    });
+    return full.length > 0 ? full : opening?.kind === "tiles" ? [...opening.tiles] : [];
+  }, [ready, opening]);
   const libraryArtists = library === null || library === "failed" ? NO_ARTISTS : library.artists;
   if (state === null && opening !== null && opening.kind !== "skeleton") {
     // The tiles the last DJ was started from are selected, and in the grid
@@ -198,7 +220,10 @@ const useDjGrid = () => {
       skipInitialGridWrite.current = false;
       return;
     }
-    if (state !== null) djGridMemory.set(state.tiles);
+    if (state !== null) {
+      for (const tile of state.tiles) seen.current.add(tile.key);
+      djGridMemory.set(state.tiles);
+    }
   }, [state]);
   const artists = useMemo(
     (): LibraryArtists => new Map(libraryArtists.map((artist) => [artist.id, artist])),
@@ -227,6 +252,25 @@ const useDjGrid = () => {
         library: libraryArtists,
       }),
     );
+  const loadMore = useCallback((): void => {
+    if (paging.current || state === null) return;
+    paging.current = true;
+    const known = new Set([...seen.current, ...state.tiles.map((tile) => tile.key)]);
+    const page = djGridPage(candidates, [...known]);
+    for (const tile of page) seen.current.add(tile.key);
+    if (page.length > 0)
+      setState((current) =>
+        current === null ? current : { ...current, tiles: [...current.tiles, ...page] },
+      );
+    paging.current = false;
+  }, [candidates, state]);
+  const refresh = useCallback((): void => {
+    if (state === null) return;
+    const known = new Set([...seen.current, ...state.tiles.map((tile) => tile.key)]);
+    const result = djGridRefresh(candidates, state.tiles, state.selected, [...known]);
+    seen.current = new Set(result.seen);
+    setState((current) => (current === null ? current : { ...current, tiles: result.tiles }));
+  }, [candidates, state]);
   // The artists whose page is being read, by `identityKey`: one read at a time per artist.
   const asked = useRef(new Set<string>());
   const skipInitialPages = useRef(keptGrid !== null);
@@ -256,7 +300,7 @@ const useDjGrid = () => {
     }
   }, [state, libraryArtists]);
   const visibleOpening = state === null ? opening : { kind: "tiles" as const, tiles: state.tiles };
-  return { state, opening: visibleOpening, artists, toggle, add };
+  return { state, opening: visibleOpening, artists, toggle, add, loadMore, refresh };
 };
 
 /**
@@ -502,11 +546,12 @@ export function DjScreen() {
   const [onAccent, accent] = useThemeColor(["on-accent", "accent"]);
   const [available, setAvailable] = useState(width - grid.margin * 2);
   const { size } = magicQueueGrid(available, fontScale);
-  const { state: picked, opening, artists, toggle, add } = useDjGrid();
+  const { state: picked, opening, artists, toggle, add, loadMore, refresh } = useDjGrid();
   const [done, setDone] = useState<DjDone>("idle");
   const [settings, setSettings] = useState(() => djRemembered.get().settings);
   const [adjusting, setAdjusting] = useState(false);
   const [searching, setSearching] = useState(false);
+  const [refreshing, setRefreshing] = useState(false);
   const sheet = useDjAdjustSheet(adjusting);
   const gridScroll = useRef<ComponentRef<typeof ScrollView>>(null);
   useEffect(() => {
@@ -526,6 +571,10 @@ export function DjScreen() {
     if (state !== undefined) djRemembered.set({ tiles: seed, settings });
   }, [state, seed, settings]);
   const cells = useMemo(() => (state === undefined ? [] : djCells(state)), [state]);
+  const onGridScroll = (event: NativeSyntheticEvent<NativeScrollEvent>): void => {
+    const { contentOffset, contentSize, layoutMeasurement } = event.nativeEvent;
+    if (contentOffset.y + layoutMeasurement.height >= contentSize.height - size * 3) loadMore();
+  };
   const loading = done === "loading";
   // One stable handler for every tile, so a tap redraws only the tiles whose selection changed.
   const onToggle = useCallback(
@@ -657,6 +706,18 @@ export function DjScreen() {
           )}
           <ScrollView
             ref={gridScroll}
+            onScroll={onGridScroll}
+            scrollEventThrottle={100}
+            refreshControl={
+              <RefreshControl
+                refreshing={refreshing}
+                onRefresh={() => {
+                  setRefreshing(true);
+                  refresh();
+                  setTimeout(() => setRefreshing(false), 250);
+                }}
+              />
+            }
             // Kept under the search, so the grid is where it was left on the way back.
             style={searching ? { display: "none" } : undefined}
             contentContainerStyle={{ paddingHorizontal: grid.margin, paddingBottom: CELL * 3 }}
