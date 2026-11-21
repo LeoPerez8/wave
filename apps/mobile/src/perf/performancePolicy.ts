@@ -999,6 +999,10 @@ export const OWN_PRESS: Record<string, Exception> = {
   "nowPlaying/TrackHeader.tsx#TrackHeader": {
     reason: "The Queue's playing-song header (artwork, title, artist) returns to the player.",
   },
+  "nowPlaying/ScreenPages.tsx#QueueEdgeMark": {
+    reason:
+      "The mark on the player's right edge that opens the Queue (#1292): its face is a thin bar, not a glyph or text.",
+  },
   "playback/MiniPlayer.tsx#MiniPlayer": {
     reason: "The whole mini player opens Now Playing, with its accessibility actions.",
   },
