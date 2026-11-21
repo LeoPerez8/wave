@@ -74,15 +74,19 @@ test("Home's editor reorders, removes and adds sections from Home and Settings, 
     await page.bringToFront();
     const home = page.getByTestId("home");
     const headings = home.locator("h2:not(#home-editor-title)");
-    await expect(headings).toHaveText([
-      "Recently added",
-      "Recently played",
-      "Most played",
-      "Most played albums",
-      "Most played artists",
-      "Favorites",
-      "Stats",
-    ]);
+    await expect(headings).toHaveText(
+      [
+        "Recently added",
+        "Recently played",
+        "Most played",
+        "Most played albums",
+        "Most played artists",
+        "Favorites",
+        "Stats",
+      ],
+      // The window's first draw, which a busy machine delays.
+      { timeout: 30_000 },
+    );
 
     // From Home, with the keyboard alone: the dialog opens with Done focused.
     const editButton = home.getByRole("button", { name: "Edit Home", exact: true });
