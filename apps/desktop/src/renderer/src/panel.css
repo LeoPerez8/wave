@@ -213,6 +213,18 @@
 .lyric-line.unsynced {
   opacity: 1;
 }
+/* Karaoke: in the sung line the words still to sing and its translation are dim as the other lines. */
+.karaoke-word {
+  opacity: var(--lyrics-dim, 0.38);
+  transition: opacity 0.2s;
+}
+.karaoke-word.lit {
+  opacity: 1;
+}
+.lyric-line.karaoke .lyric-translation {
+  color: var(--color-foreground);
+  opacity: var(--lyrics-dim, 0.38);
+}
 .lyric-lines:focus-visible .lyric-line[aria-selected="true"] {
   outline: 2px solid var(--color-accent);
   outline-offset: -2px;
@@ -353,7 +365,8 @@
   .lyrics-skeleton span {
     animation: none;
   }
-  .lyric-line {
+  .lyric-line,
+  .karaoke-word {
     transition: none;
   }
 }
