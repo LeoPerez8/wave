@@ -248,7 +248,28 @@ test("Settings › Playback keeps a change to Crossfade, Normalize Volume and Bu
     .poll(() =>
       page.evaluate(() => (window as unknown as { wave: WaveBridge }).wave.settings.playback()),
     )
-    .toEqual({ crossfadeSeconds: 6.5, normalizeVolume: false, bufferMinutes: 10 });
+    .toMatchObject({ crossfadeSeconds: 6.5, normalizeVolume: false, bufferMinutes: 10 });
+});
+
+test("Settings › Playback has Don't Play Explicit and Continue with Magic Queue, each with its line, and keeps them", async () => {
+  const text = catalogueOf("en", "desktop");
+  await page.getByRole("button", { name: text.desktopLayout.settings, exact: true }).click();
+  await page.getByRole("button", { name: text.desktopLayout.playback, exact: true }).click();
+  const explicit = page.getByRole("switch", { name: text.settings.dontPlayExplicit });
+  const continues = page.getByRole("switch", { name: text.settings.continueWithMagicQueue });
+  await expect(explicit).not.toBeChecked();
+  await expect(continues).toBeChecked();
+  await expect(page.getByText(text.settings.skipsSongsMarkedExplicitByYouTubeMusic)).toBeVisible();
+  await expect(page.getByText(text.settings.whenAQueueRunsOutWaveContinues)).toBeVisible();
+  await explicit.check();
+  await continues.uncheck();
+  const stored = () =>
+    page.evaluate(() => (window as unknown as { wave: WaveBridge }).wave.settings.playback());
+  await expect.poll(stored).toMatchObject({ dontPlayExplicit: true, continueQueue: false });
+  // Back as they were, for the tests that follow.
+  await explicit.uncheck();
+  await continues.check();
+  await expect.poll(stored).toMatchObject({ dontPlayExplicit: false, continueQueue: true });
 });
 
 test("the CSP stops the page evaluating strings as code", async () => {

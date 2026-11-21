@@ -1981,6 +1981,8 @@ export {
   explicitPlayNotice,
   explicitSkipNotice,
   queuedPassedOver,
+  readDontPlayExplicit,
+  writeDontPlayExplicit,
 } from "./explicitPlayback.ts";
 export type { ExplicitPlayback } from "./explicitPlayback.ts";
 export type { PassOver } from "./queue.ts";

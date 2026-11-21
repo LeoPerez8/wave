@@ -4,8 +4,8 @@ import type { PlaybackSettings as Settings } from "../../shared/playbackSettings
 import { labels, text } from "./text.ts";
 
 /**
- * Settings › Playback: Crossfade, Normalize Volume and Buffer, the account's values when signed
- * in. A change applies from the next song.
+ * Settings › Playback: Crossfade, Normalize Volume, Buffer, Don't Play Explicit and Continue with
+ * Magic Queue, the account's values when signed in. A change applies from the next song.
  */
 export function PlaybackSettings({ onError }: { readonly onError: () => void }) {
   const [settings, setSettings] = useState<Settings>();
@@ -84,6 +84,34 @@ export function PlaybackSettings({ onError }: { readonly onError: () => void }) 
         </label>
       </section>
       <p className="mt-2 text-sm text-secondary">{text.settings.howMuchOfAStreamedSongWave}</p>
+      <section className="mt-6 border-y border-separator py-3">
+        <label className="flex items-center justify-between gap-4">
+          <span>{text.settings.dontPlayExplicit}</span>
+          <input
+            type="checkbox"
+            role="switch"
+            className="size-4 accent-accent"
+            checked={settings.dontPlayExplicit}
+            onChange={(event) => change({ dontPlayExplicit: event.target.checked })}
+          />
+        </label>
+      </section>
+      <p className="mt-2 text-sm text-secondary">
+        {text.settings.skipsSongsMarkedExplicitByYouTubeMusic}
+      </p>
+      <section className="mt-6 border-y border-separator py-3">
+        <label className="flex items-center justify-between gap-4">
+          <span>{text.settings.continueWithMagicQueue}</span>
+          <input
+            type="checkbox"
+            role="switch"
+            className="size-4 accent-accent"
+            checked={settings.continueQueue}
+            onChange={(event) => change({ continueQueue: event.target.checked })}
+          />
+        </label>
+      </section>
+      <p className="mt-2 text-sm text-secondary">{text.settings.whenAQueueRunsOutWaveContinues}</p>
     </div>
   );
 }

@@ -1142,6 +1142,8 @@ test("Settings › Playback is kept for the account and reaches the engine at on
         crossfadeSeconds: 0,
         normalizeVolume: true,
         bufferMinutes: 2,
+        dontPlayExplicit: false,
+        continueQueue: true,
       });
       assert.ok(engineCalls.includes("settings crossfade 0"), "the engine starts with them");
       assert.ok(engineCalls.includes("settings normalize true"));
@@ -1149,13 +1151,21 @@ test("Settings › Playback is kept for the account and reaches the engine at on
         crossfadeSeconds: 4,
         normalizeVolume: false,
       });
-      assert.deepEqual(after, { crossfadeSeconds: 4, normalizeVolume: false, bufferMinutes: 2 });
+      assert.deepEqual(after, {
+        crossfadeSeconds: 4,
+        normalizeVolume: false,
+        bufferMinutes: 2,
+        dontPlayExplicit: false,
+        continueQueue: true,
+      });
       assert.deepEqual(engineCalls.slice(-2), ["settings crossfade 4", "settings normalize false"]);
       await wave.settings.setPlayback({ bufferMinutes: 15 });
       assert.deepEqual(await wave.settings.playback(), {
         crossfadeSeconds: 4,
         normalizeVolume: false,
         bufferMinutes: 15,
+        dontPlayExplicit: false,
+        continueQueue: true,
       });
 
       for (const change of [
@@ -1163,6 +1173,8 @@ test("Settings › Playback is kept for the account and reaches the engine at on
         { crossfadeSeconds: Number.NaN },
         { normalizeVolume: "off" },
         { bufferMinutes: 3 },
+        { dontPlayExplicit: "on" },
+        { continueQueue: 1 },
         { volume: 1 },
         null,
         "fast",
@@ -1218,6 +1230,43 @@ test("Search online is kept on this computer, starts as Only on demand and takes
       await assert.rejects(handlers.get("settings.setSearchOnline")!(trusted, "wifi"), /refused/i);
       await wave.settings.setSearchOnline("onDemand");
       assert.equal(await wave.settings.searchOnline(), "onDemand");
+    } finally {
+      await runtime.dispose();
+    }
+  });
+});
+
+test("Don't Play Explicit keeps explicit songs out of the queue and takes them out as it turns on", async () => {
+  await withFile(async (file) => {
+    const { runtime, exposed } = connect(file);
+    try {
+      const wave = exposed.get("wave") as WaveBridge;
+      await runtime.runPromise(
+        Effect.gen(function* () {
+          const db = (yield* Database) as unknown as TestDatabase;
+          addTrack(db, { title: "A Clean" });
+          addTrack(db, { title: "B Explicit", explicit: "explicit" });
+          addTrack(db, { title: "C Clean" });
+        }),
+      );
+      const scope = { kind: "songs" } as const;
+      const queued = async () => (await wave.playback.queue(0, 10)).items.map((row) => row.title);
+      await wave.playback.start(scope, 1);
+      assert.deepEqual(await queued(), ["A Clean", "B Explicit", "C Clean"]);
+      assert.equal((await wave.playback.view()).current?.title, "B Explicit");
+
+      const after = await wave.settings.setPlayback({ dontPlayExplicit: true });
+      assert.equal(after.dontPlayExplicit, true);
+      assert.deepEqual(await queued(), ["A Clean", "C Clean"], "the playing one goes too");
+      assert.equal((await wave.playback.view()).current?.title, "C Clean");
+
+      await wave.playback.start(scope, 1);
+      assert.deepEqual(await queued(), ["A Clean", "C Clean"]);
+      assert.equal(
+        (await wave.playback.view()).current?.title,
+        "C Clean",
+        "a clicked explicit song gives way to the next clean one",
+      );
     } finally {
       await runtime.dispose();
     }
@@ -1674,6 +1723,8 @@ test("a phone's Settings › Playback reaches the desktop's engine when a sync p
       const values = new Map([
         ["settings.crossfadeSeconds", "6"],
         ["settings.normalizeVolume", "off"],
+        ["settings.dontPlayExplicit", "on"],
+        ["settings.continueQueue", "off"],
       ]);
       for (const key of values.keys()) stampPreference(phoneDb, key, Date.now());
       await syncCycle({
@@ -1706,6 +1757,8 @@ test("a phone's Settings › Playback reaches the desktop's engine when a sync p
         crossfadeSeconds: 6,
         normalizeVolume: false,
         bufferMinutes: 2,
+        dontPlayExplicit: true,
+        continueQueue: false,
       });
       await until(async () => engineCalls.includes("settings normalize false"));
       assert.deepEqual(engineCalls.slice(-2), ["settings crossfade 6", "settings normalize false"]);
