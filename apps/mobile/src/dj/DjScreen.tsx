@@ -7,6 +7,7 @@ import {
   djPagesNeeded,
   djReduce,
   djReopened,
+  djRestoredGrid,
   djSeedTiles,
   djSelectable,
   djSelected,
@@ -78,6 +79,7 @@ import { gridSources, preparedDjOpening, readDjOpening, type DjOpeningRead } fro
 import { DjSearch } from "./DjSearch";
 import { djDone, type DjDone, type DjDoneRunner } from "./djDone";
 import { djRemembered } from "./djRemembered";
+import { djGridMemory } from "./djGridMemory";
 import { DJ_TILE_RADIUS, DjSelectionRow, DjTilePicture } from "./DjSelection";
 import { readDjSimilar } from "./djSimilar";
 
@@ -127,10 +129,16 @@ const similarOf = (name: string) =>
  */
 const useDjGrid = () => {
   const artistMixes = useBuiltArtistMixes();
-  const [library, setLibrary] = useState<DjLibrary>(() => recommendationSnapshot.peek().library);
-  const [state, setState] = useState<DjState | null>(null);
+  const [keptGrid] = useState(() => djGridMemory.get());
+  const [library, setLibrary] = useState<DjLibrary>(() =>
+    keptGrid === null ? recommendationSnapshot.peek().library : "failed",
+  );
+  const [state, setState] = useState<DjState | null>(() =>
+    keptGrid === null ? null : djRestoredGrid(keptGrid, djRemembered.get().tiles),
+  );
   const waiting = library === null;
   useEffect(() => {
+    if (keptGrid !== null) return;
     if (!waiting) return;
     let current = true;
     void appRuntime
@@ -144,13 +152,14 @@ const useDjGrid = () => {
     return () => {
       current = false;
     };
-  }, [waiting]);
+  }, [waiting, keptGrid]);
   // The Library snapshot's families and albums, read once per snapshot outside render; the
   // one startup prepared opens DJ on its tiles (`djOpening.ts`, #1352).
   const [read, setRead] = useState<DjOpeningRead | null>(() =>
     library === null || library === "failed" ? null : preparedDjOpening(library),
   );
   useEffect(() => {
+    if (keptGrid !== null) return;
     if (library === null || library === "failed") return;
     let current = true;
     void readDjOpening(library).then((opening) => {
@@ -159,7 +168,7 @@ const useDjGrid = () => {
     return () => {
       current = false;
     };
-  }, [library]);
+  }, [library, keptGrid]);
   const ready = read !== null && read.library === library ? read : null;
   const opening = useMemo((): DjOpeningGrid | null => {
     if (library === null) return null;
@@ -185,6 +194,14 @@ const useDjGrid = () => {
     });
     if (reopened.tiles.length > 0) setState(reopened);
   }
+  const skipInitialGridWrite = useRef(keptGrid !== null);
+  useEffect(() => {
+    if (skipInitialGridWrite.current) {
+      skipInitialGridWrite.current = false;
+      return;
+    }
+    if (state !== null) djGridMemory.set(state.tiles);
+  }, [state]);
   const artists = useMemo(
     (): LibraryArtists => new Map(libraryArtists.map((artist) => [artist.id, artist])),
     [libraryArtists],
@@ -214,8 +231,13 @@ const useDjGrid = () => {
     );
   // The artists whose page is being read, by `identityKey`: one read at a time per artist.
   const asked = useRef(new Set<string>());
+  const skipInitialPages = useRef(keptGrid !== null);
   useEffect(() => {
     if (state === null) return;
+    if (skipInitialPages.current) {
+      skipInitialPages.current = false;
+      return;
+    }
     for (const page of djPagesNeeded(state)) {
       if (asked.current.has(page.key)) continue;
       asked.current.add(page.key);
@@ -235,7 +257,8 @@ const useDjGrid = () => {
       void similarOf(page.artist).then(settle, () => settle(null));
     }
   }, [state, libraryArtists]);
-  return { state, opening, artists, toggle, add };
+  const visibleOpening = state === null ? opening : { kind: "tiles" as const, tiles: state.tiles };
+  return { state, opening: visibleOpening, artists, toggle, add };
 };
 
 /**
@@ -500,6 +523,10 @@ export function DjScreen() {
   useScreenContent(opening !== null);
   const state = picked ?? undefined;
   const seed = useMemo(() => (state === undefined ? [] : djSeedTiles(state)), [state]);
+  // Keep the visit's selection and choices so closing DJ and reopening it restores the same view.
+  useEffect(() => {
+    if (state !== undefined) djRemembered.set({ tiles: seed, settings });
+  }, [state, seed, settings]);
   const cells = useMemo(() => (state === undefined ? [] : djCells(state)), [state]);
   const loading = done === "loading";
   // One stable handler for every tile, so a tap redraws only the tiles whose selection changed.
