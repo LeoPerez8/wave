@@ -142,8 +142,6 @@ export const en = {
     songMenu: (title: string) => `Actions for “${title}”`,
     chooseArtist: "Choose an Artist",
     noPlaylists: "No playlists yet",
-    /** A collaborative playlist's mark, before its song count (docs/spec.md › Collaborative playlists). */
-    collaborative: "Collaborative",
     /** Its menu, where the edits would be: the desktop shows and plays it and edits none of it. */
     collaborativeOnPhone: "Edit collaborative playlists in Wave on your phone",
     checkSong: (title: string) => `Select “${title}”`,

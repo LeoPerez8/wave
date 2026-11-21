@@ -606,7 +606,9 @@ export function App() {
               key={row.id}
               className="nav-item"
               aria-label={
-                row.collaborative ? `${row.title}, ${text.desktopLibrary.collaborative}` : row.title
+                row.collaborative
+                  ? `${row.title}, ${text.collaborativePage.libraryDetail(labels.songCount(row.count))}`
+                  : row.title
               }
               title={row.title}
               aria-current={route.kind === "playlist" && route.id === row.id ? "page" : undefined}
@@ -693,10 +695,11 @@ export function App() {
               <p className="hero-meta">
                 {[
                   labels[route.kind as "album" | "artist" | "playlist" | "genre"],
-                  hero.collaborative ? text.desktopLibrary.collaborative : null,
                   hero.genre,
                   hero.year,
-                  labels.songCount(hero.count),
+                  hero.collaborative
+                    ? text.collaborativePage.libraryDetail(labels.songCount(hero.count))
+                    : labels.songCount(hero.count),
                   listDuration(hero.durationMs, text.library),
                 ]
                   .filter(Boolean)

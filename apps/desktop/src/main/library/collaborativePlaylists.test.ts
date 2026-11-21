@@ -140,7 +140,7 @@ test("Rename, Delete, Move, Restore, Remove from Graveyard and Remove from Playl
       ["empty graveyard", () => playlists.forget(drive)],
       ["remove songs", () => playlists.removeSongs(drive, [tracks.airbag])],
     ];
-    for (const [what, edit] of refusals) assert.throws(edit, undefined, what);
+    for (const [what, edit] of refusals) assert.throws(edit, Error, what);
     assert.deepEqual(shared(db, drive), before);
     assert.equal(changes(), 0);
   });

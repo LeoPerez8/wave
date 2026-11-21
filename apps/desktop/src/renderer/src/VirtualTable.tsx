@@ -403,7 +403,7 @@ export function VirtualTable({
                     {songList
                       ? artistName(row.artist)
                       : row.collaborative
-                        ? `${text.desktopLibrary.collaborative} · ${labels.songCount(row.count)}`
+                        ? text.collaborativePage.libraryDetail(labels.songCount(row.count))
                         : labels.songCount(row.count)}
                   </div>
                   {columns.third !== null && (

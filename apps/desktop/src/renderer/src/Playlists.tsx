@@ -132,7 +132,7 @@ export function usePlaylistEdits({ go, deleted, failed, changed }: Options) {
   const playlistItems = async (playlistId: number): Promise<readonly MenuItem[]> => {
     const info = await window.wave.playlists.info(playlistId);
     if (info === null) return [{ key: "deleted", label: text.playlists.deleted, disabled: true }];
-    const items = allPlaylistItems(playlistId, info);
+    const items = allPlaylistItems(playlistId, info, await window.wave.settings.ytMusic());
     return info.collaborative
       ? [
           {
@@ -145,7 +145,11 @@ export function usePlaylistEdits({ go, deleted, failed, changed }: Options) {
       : items;
   };
 
-  const allPlaylistItems = (playlistId: number, info: PlaylistInfo): readonly MenuItem[] => {
+  const allPlaylistItems = (
+    playlistId: number,
+    info: PlaylistInfo,
+    ytMusic: boolean,
+  ): readonly MenuItem[] => {
     const labels = text.itemActions.labels;
     return [
       {
@@ -195,7 +199,7 @@ export function usePlaylistEdits({ go, deleted, failed, changed }: Options) {
             },
           ]
         : []),
-      ...((await window.wave.settings.ytMusic())
+      ...(ytMusic
         ? [
             {
               key: "copyLink",
