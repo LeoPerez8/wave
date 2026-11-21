@@ -13,6 +13,7 @@ import { Text, View } from "react-native";
 
 import { CELL } from "@/catalog/grid";
 import { MemberInitial } from "@/catalog/MemberInitial";
+import { useCollaborations } from "@/collaboration/collaborativePlaylists";
 import { TextButton } from "@/components/TextButton";
 import { useScreenSight } from "@/lib/screenSight";
 import { useLocalisation } from "@/localisation/localisation";
@@ -25,15 +26,11 @@ import { appRuntime } from "./runtime";
 import { libraryQuery, useLibraryQuery } from "./sharedQueries";
 
 // oxlint-disable-next-line react/rules-of-hooks -- Effect Service.use resolves a service; it is not a React Hook.
-const read = LibraryStore.use((store) => store.collaborations);
-// oxlint-disable-next-line react/rules-of-hooks -- Effect Service.use resolves a service; it is not a React Hook.
 const readNotices = LibraryStore.use((store) => store.privateCopyNotices);
 
 /** A pull that brings a change, or a membership change, is a playlists change. */
-const collaborationsQuery = libraryQuery("collaborations", { playlists: true }, read);
 const noticesQuery = libraryQuery("privateCopyNotices", { playlists: true }, readNotices);
 
-const NONE: readonly CollaborativePlaylist[] = [];
 const NO_NOTICES: readonly number[] = [];
 const EMPTY = new Map<number, CollaborativePlaylist>();
 
@@ -57,14 +54,16 @@ const keptMembers = (held: readonly CollaborativePlaylist[]): CollaborativePlayl
   });
 };
 
-/** The collaborative playlists here, by local id; none while the switch is off. */
-export const useCollaborations = (): ReadonlyMap<number, CollaborativePlaylist> => {
-  const on = useCollaborativePlaylists();
-  const held = useLibraryQuery(on ? collaborationsQuery : null, NONE);
+/**
+ * The collaborative playlists here, by local id (the menu's `useCollaborations`), each one's
+ * members kept as they were shown while they don't change; none while the switch is off.
+ */
+export const useShownCollaborations = (): ReadonlyMap<number, CollaborativePlaylist> => {
+  const held = useCollaborations(useCollaborativePlaylists());
   return useMemo(() => {
-    if (held.length === 0) return EMPTY;
+    if (held.size === 0) return EMPTY;
     const byId = new Map<number, CollaborativePlaylist>();
-    for (const each of keptMembers(held)) {
+    for (const each of keptMembers([...held.values()])) {
       if (each.playlistId !== null) byId.set(each.playlistId, each);
     }
     return byId;

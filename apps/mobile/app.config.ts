@@ -34,6 +34,9 @@ const SONG_LINK_HOSTS = [
   "dzr.page.link",
 ];
 
+/** The sync service (the Wave account); its `/invite` links open Wave (the second VIEW filter). */
+const SYNC_URL = "https://wave-sync.leonardolp2424.workers.dev";
+
 const config: ExpoConfig = {
   name: "Wave",
   slug: "wave",
@@ -77,6 +80,16 @@ const config: ExpoConfig = {
           ...SONG_LINK_HOSTS.map((host) => ({ host })),
         ],
       },
+      // A collaborative playlist's invite link, `https://<sync service>/invite#<token>`, opens its
+      // join screen (docs/spec.md, Collaborative playlists, Invite link). A filter of its own, so
+      // only that path is Wave's on the sync service's host. Not verified: like the song links,
+      // it is turned on in Open by default; until then the link opens the service's page.
+      {
+        action: "VIEW",
+        autoVerify: false,
+        category: ["BROWSABLE", "DEFAULT"],
+        data: [{ scheme: "https", host: new URL(SYNC_URL).host, pathPrefix: "/invite" }],
+      },
     ],
   },
   experiments: {
@@ -90,7 +103,7 @@ const config: ExpoConfig = {
   // web OAuth client id, the audience of the Google ID tokens it accepts. Neither is a secret.
   // Empty, Settings says the account isn't set up on this build.
   extra: {
-    syncUrl: "https://wave-sync.leonardolp2424.workers.dev",
+    syncUrl: SYNC_URL,
     googleWebClientId: "334515982590-tq2ks7u11rt4708ifaotkumjfakgodk8.apps.googleusercontent.com",
     // The Facebook App ID Instagram's Stories intent requires as its source application (a Meta
     // app's id from developers.facebook.com; not a secret). Empty, the lyrics card has no

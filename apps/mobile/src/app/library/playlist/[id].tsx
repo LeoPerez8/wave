@@ -23,7 +23,7 @@ import { playlistOpened } from "@/library/backgroundFill";
 import {
   CollaborativeMembers,
   PrivateCopyNotice,
-  useCollaborations,
+  useShownCollaborations,
   useCollaborativePage,
   usePrivateCopyNotice,
 } from "@/library/collaborativePlaylists";
@@ -222,7 +222,7 @@ export default function PlaylistScreen() {
   const shown: Shown | null | undefined =
     detail === undefined && known !== undefined ? { playlist: known, items: undefined } : detail;
   // A collaborative playlist (the switch on): its members, who added each song, its own pull.
-  const collaboration = useCollaborations().get(playlistId);
+  const collaboration = useShownCollaborations().get(playlistId);
   useCollaborativePage(playlistId, collaboration);
   return (
     <DetailFrame

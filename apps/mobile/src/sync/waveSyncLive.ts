@@ -164,6 +164,9 @@ export const make = Effect.gen(function* () {
         if (account !== null) signedInTriggers().played(step);
       }),
     syncPlaylist: (playlistId) => Effect.promise(() => syncPlaylist(playlistId)),
+    now: Effect.sync(() => {
+      if (account !== null) signedInTriggers().now();
+    }),
   };
   return sync;
 });

@@ -23,6 +23,7 @@ import {
 } from "@wave/client/db/libraryQueries";
 import { songHasFile, Database as ClientDatabase, databaseLayer } from "@wave/client";
 import { sqliteDriverLayer } from "./sqliteDriver.ts";
+import { collaborationStore, type CollaborationStore } from "@/collaboration/collaborationStore";
 import type {
   AlbumDetail,
   AlbumRow,
@@ -220,7 +221,6 @@ import {
   markCollaborationSeen,
   selectCollaborations,
   selectPrivateCopyNotices,
-  type CollaborativePlaylist,
 } from "@wave/client/db/collaborations";
 
 import { selectAlbumDetail, selectAlbums } from "@wave/client/db/albums";
@@ -1261,8 +1261,6 @@ export class LibraryStore extends Context.Service<
       input: Omit<SyncCycleInput, "db" | "splits" | "historyChanged">,
       playlistId: number,
     ) => Effect.Effect<SyncCycleResult, LibraryStoreError>;
-    /** The account's collaborative playlists as this device last heard (`selectCollaborations`). */
-    readonly collaborations: Effect.Effect<readonly CollaborativePlaylist[], LibraryStoreError>;
     /** The playlist [playlistId] was opened: its changed mark goes, on this device. */
     readonly markCollaborationSeen: (playlistId: number) => Effect.Effect<void, LibraryStoreError>;
     /** The playlists that became the member's own copy and whose page hasn't said so yet. */
@@ -1271,6 +1269,11 @@ export class LibraryStore extends Context.Service<
     readonly dismissPrivateCopyNotice: (
       playlistId: number,
     ) => Effect.Effect<void, LibraryStoreError>;
+    /**
+     * The playlist here of the collaborative playlist [syncId] (an invite just joined); null
+     * while no pull has brought it.
+     */
+    readonly joinedPlaylistId: (syncId: string) => Effect.Effect<number | null, LibraryStoreError>;
     /**
      * What the Lyrics view saved for a non-D song's video (Core's
      * `SavedLyrics`): lyrics it found online, or a miss; null for nothing.
@@ -1427,6 +1430,8 @@ export class LibraryStore extends Context.Service<
      * like", in the page's order (the artist graph's similar artists).
      */
     readonly ytArtistSimilar: Effect.Effect<readonly YtArtistSimilar[], LibraryStoreError>;
+    /** The account's collaborative playlists on this device, as their menu reads and writes them. */
+    readonly collaborations: CollaborationStore<LibraryStoreError>;
   }
 >()("@wave/mobile/library/LibraryStore") {}
 
@@ -2080,8 +2085,6 @@ const make = Effect.gen(function* () {
           new LibraryStoreError({ operation: "sync a collaborative playlist", cause }),
       }),
 
-    collaborations: attempt("read the collaborative playlists", () => selectCollaborations(db)),
-
     markCollaborationSeen: (playlistId) =>
       writeAttempt("mark a collaborative playlist seen", () =>
         markCollaborationSeen(db, playlistId),
@@ -2093,6 +2096,12 @@ const make = Effect.gen(function* () {
 
     dismissPrivateCopyNotice: (playlistId) =>
       writeAttempt("dismiss a private copy notice", () => dismissPrivateCopyNotice(db, playlistId)),
+
+    joinedPlaylistId: (syncId) =>
+      attempt(
+        "read a joined playlist",
+        () => selectCollaborations(db).find((held) => held.syncId === syncId)?.playlistId ?? null,
+      ),
 
     savedLyrics: (videoId) => attempt("read saved lyrics", () => selectSavedLyrics(db, videoId)),
 
@@ -2188,6 +2197,10 @@ const make = Effect.gen(function* () {
 
     ytArtistSimilar: attempt("read the saved artist pages' similar artists", () =>
       selectYtArtistSimilar(db),
+    ),
+    collaborations: collaborationStore(
+      db,
+      (operation, cause) => new LibraryStoreError({ operation, cause }),
     ),
   });
 });

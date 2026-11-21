@@ -19,7 +19,7 @@ import { useListSelection, type ListSelection } from "@/selection/useListSelecti
 import { LibraryReadFeedback } from "./LibraryReadFeedback";
 import { ArrangeablePlaylists, TILE_GRIP_INSET } from "./ArrangeablePlaylists";
 import { FavoritesExportLine } from "./FavoritesExportLine";
-import { useCollaborations } from "./collaborativePlaylists";
+import { useShownCollaborations } from "./collaborativePlaylists";
 import { ImportBatchLine } from "./ImportBatchLine";
 import { openPlaylistImport } from "./importPlaylistLink";
 import { useImportProgress } from "./importProgress";
@@ -195,7 +195,7 @@ export function PlaylistsList({ empty }: { empty: string }) {
   const { fontScale } = useWindowDimensions();
   const selection = useListSelection({ items: playlists, keyOf, target: playlistsOf });
   const ids = useMemo(() => playlists.map((playlist) => playlist.id), [playlists]);
-  const collaborations = useCollaborations();
+  const collaborations = useShownCollaborations();
   const renderPlaylist = useCallback(
     (playlist: PlaylistRow, index: number, arrangeable: boolean) => (
       <PlaylistView
