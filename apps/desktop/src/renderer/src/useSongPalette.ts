@@ -8,7 +8,7 @@ import type { BrowseRow } from "../../shared/browse.ts";
 const SAMPLE = 48;
 
 /** The palette of the image at [src] (a data URL), or null when it can't be read. */
-const paletteOf = (src: string) =>
+export const paletteOf = (src: string) =>
   new Promise<ArtworkPalette | null>((resolve) => {
     const image = new Image();
     image.onload = () => {

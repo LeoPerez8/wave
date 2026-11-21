@@ -364,7 +364,13 @@ The prototype was approved on 2026-11-18 after an Impeccable critique; its decis
   the keyboard focus ring. Songs keeps the A–Z spine.
 - Artwork has 6 px corners on tiles and heroes, 4 px on row thumbnails, circles for artists.
 - The song menu holds Play Next, Add to Queue, Add to Playlist, Favorite, Go to Album, Go to
-  Artist, Start Magic Queue, Copy Link, Select, Fix Song and Remove from Library.
+  Artist, Start Magic Queue, Share, Select, Fix Song and Remove from Library.
+- Share, on a Library song and on a streamed song (#1209), is a submenu in place of the phone's
+  share sheet: Copy Link (song.link), Copy Spotify Link (Spotify's own search as #1201's
+  account), Copy YT Music Link, then Save Image (the system's save dialog) and Copy Image, which
+  draw the phone's song card 1080 px wide. A link that can't work is disabled and says why under
+  its label (No Match, Signed Out, Offline, Unavailable); offline every link reads Offline. With
+  YT Music off the submenu holds the two image items only.
 - Selection takes albums, artists, genres and playlists too (#1216): Select, Ctrl+click and
   Shift+click check their rows in the tables and their tiles in Search, where they check together
   with the songs. One collection checked alone keeps its menu's entries. Several, or collections
