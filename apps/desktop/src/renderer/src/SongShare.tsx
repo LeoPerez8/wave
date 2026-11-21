@@ -12,7 +12,7 @@ import { cardPng } from "./cardImage.ts";
 import { Icon } from "./Icon.tsx";
 import { copyLink } from "./copyLink.ts";
 import type { MenuItem } from "./Menu.tsx";
-import { paletteOf } from "./NowPlaying.tsx";
+import { paletteOf } from "./useSongPalette.ts";
 import { text } from "./text.ts";
 import { largestCover } from "./VirtualTable.tsx";
 
