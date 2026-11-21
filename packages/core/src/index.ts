@@ -777,13 +777,16 @@ export {
 export {
   HOME_COMMUNITY_PLAYLISTS,
   HOME_COMMUNITY_PLAYLISTS_RETRY_MS,
+  communityPlaylistsAccount,
   homeCommunityPlaylists,
   homeCommunityPlaylistsDue,
   homeCommunityPlaylistsShown,
   keptCommunityPlaylists,
+  newCommunityPlaylistsSalt,
   parseKeptCommunityPlaylists,
   storedKeptCommunityPlaylists,
   type KeptCommunityPlaylists,
+  type YtAccountHome,
   type YtPlaylistShelf,
 } from "./homeCommunityPlaylists.ts";
 export { rowWindow, windowRows } from "./rowWindow.ts";

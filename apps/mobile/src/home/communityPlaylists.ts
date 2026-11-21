@@ -8,25 +8,28 @@
  */
 import {
   HOME_COMMUNITY_PLAYLISTS_RETRY_MS,
+  communityPlaylistsAccount,
   homeCommunityPlaylistsDue,
   homeCommunityPlaylistsShown,
   keptCommunityPlaylists,
+  newCommunityPlaylistsSalt,
   parseKeptCommunityPlaylists,
   storedKeptCommunityPlaylists,
   type KeptCommunityPlaylists,
+  type YtAccount,
   type YtCommunityPlaylist,
   type YtSession,
 } from "@wave/core";
-import { makeExternalStore } from "@wave/client/externalStore";
 import * as Effect from "effect/Effect";
 import * as Result from "effect/Result";
 import { useFocusEffect } from "expo-router";
-import { useCallback, useMemo, useSyncExternalStore } from "react";
+import { useCallback, useMemo } from "react";
 
 import { settledTurnEffect } from "@/lib/backgroundWork";
 import { withNetworkLog } from "@/lib/networkMeter";
 import { persistedSetting } from "@/lib/persistedSetting";
 import { appRuntime } from "@/library/runtime";
+import { WaveYtMusic } from "@/native/waveYtMusic";
 import { useYtMusicEnabled } from "@/settings/ytMusic";
 import { askYtMusic } from "@/ytmusic/askYtMusic";
 import { YtMusic } from "@/ytmusic/YtMusic";
@@ -38,11 +41,25 @@ const kept = persistedSetting<KeptCommunityPlaylists | null>({
   write: storedKeptCommunityPlaylists,
 });
 
+const storedText = (stored: string | null): string | null => stored;
+
+/** This phone's salt for the accounts' keys (`communityPlaylistsAccount`), kept beside the list. */
+const saltSetting = persistedSetting<string | null>({
+  key: "home.communityPlaylistsSalt",
+  read: storedText,
+  write: storedText,
+});
+
 /**
- * The connected account as Home last saw it (its email, or its name when
- * YouTube Music gives none); null signed out, expired, or not asked yet.
+ * The connected account as Home last saw it (its key, never its email); null
+ * signed out, expired or never seen. Kept on the phone, so Home's first frame
+ * shows the list of the account it belongs to without waiting for the session.
  */
-const account = makeExternalStore<string | null>(null);
+const reader = persistedSetting<string | null>({
+  key: "home.communityPlaylistsReader",
+  read: storedText,
+  write: storedText,
+});
 
 /** A read going on: Home coming back into focus meanwhile doesn't start another. */
 let reading = false;
@@ -50,21 +67,36 @@ let reading = false;
 /** After a read that failed: no read before then (ms since the epoch). */
 let retryAt: number | null = null;
 
-/** The home's first pages get this long: the read is in the background, nothing waits on it. */
-const READ_TIMEOUT = "30 seconds";
+/** Whether Home follows the session's changes (from its first answer on). */
+let following = false;
 
-const accountOf = (session: YtSession): string | null =>
-  session.status === "signedIn" ? (session.account.email ?? session.account.name) : null;
+/** The phone's salt, made the first time it's needed. */
+const salt = (): string => {
+  const stored = saltSetting.get();
+  if (stored !== null) return stored;
+  const made = newCommunityPlaylistsSalt();
+  saltSetting.set(made);
+  return made;
+};
+
+const keyOf = (account: YtAccount): string => communityPlaylistsAccount(account, salt());
+
+const readerOf = (session: YtSession): string | null =>
+  session.status === "signedIn" ? keyOf(session.account) : null;
 
 /** What a read gave, for its line in the app log. */
 const readOutcome = (count: number): string =>
   count === 0 ? "no playlist" : count === 1 ? "1 playlist" : `${count} playlists`;
 
-/** Reads the home as [reader] when a read is due, keeping what it gives. */
-const refresh = (reader: string): void => {
+/**
+ * Reads the home when a read is due for [current] (the connected account's
+ * key). What it gives is kept for the account native says it was read as,
+ * whoever is connected by the time it answers. Native gives it its deadline.
+ */
+const refresh = (current: string): void => {
   const due = homeCommunityPlaylistsDue(kept.get(), {
     now: Date.now(),
-    account: reader,
+    account: current,
     reading,
     retryAt,
   });
@@ -74,8 +106,11 @@ const refresh = (reader: string): void => {
     "Community playlists read",
     Effect.gen(function* () {
       const ytMusic = yield* YtMusic;
-      const shelves = yield* ytMusic.homePlaylistShelves.pipe(Effect.timeout(READ_TIMEOUT));
-      return keptCommunityPlaylists(kept.get(), shelves, { now: Date.now(), account: reader });
+      const home = yield* ytMusic.homePlaylistShelves;
+      return keptCommunityPlaylists(kept.get(), home.shelves, {
+        now: Date.now(),
+        account: keyOf(home.account),
+      });
     }),
     (list) => readOutcome(list.playlists.length),
   );
@@ -95,15 +130,24 @@ const refresh = (reader: string): void => {
     });
 };
 
-/** Home came into focus: who is connected is read from the saved session (YouTube isn't asked). */
+/**
+ * Home came into focus: who is connected is read from the saved session
+ * (YouTube isn't asked). From then on a sign-in, sign-out or expiry changes
+ * who Home shows the list to as it happens; the session is loaded by then, so
+ * following it costs Wave's start nothing.
+ */
 const focus = (enabled: boolean): void => {
   if (!enabled) return;
   void askYtMusic((ytMusic) => ytMusic.session)
     .then((session) => {
       if (!Result.isSuccess(session)) return;
-      const reader = accountOf(session.success);
-      account.set(reader);
-      if (reader !== null) refresh(reader);
+      const current = readerOf(session.success);
+      reader.set(current);
+      if (!following) {
+        following = true;
+        WaveYtMusic.addListener("onSessionChanged", (changed) => reader.set(readerOf(changed)));
+      }
+      if (current !== null) refresh(current);
     })
     .catch(() => {});
 };
@@ -117,10 +161,10 @@ const focus = (enabled: boolean): void => {
 export const useCommunityPlaylists = (): readonly YtCommunityPlaylist[] => {
   const enabled = useYtMusicEnabled();
   const list = kept.useValue();
-  const reader = useSyncExternalStore(account.subscribe, account.get);
+  const current = reader.useValue();
   useFocusEffect(useCallback(() => focus(enabled), [enabled]));
   return useMemo(
-    () => homeCommunityPlaylistsShown(list, { account: enabled ? reader : null }),
-    [list, enabled, reader],
+    () => homeCommunityPlaylistsShown(list, { account: enabled ? current : null }),
+    [list, enabled, current],
   );
 };
