@@ -45,7 +45,7 @@ case "$app" in
 esac
 
 if [ "$app" = desktop ]; then
-  pnpm install --frozen-lockfile --filter "@wave/desktop..." --filter "@wave/sync..."
+  pnpm install --frozen-lockfile --filter wave --filter "@wave/desktop..." --filter "@wave/sync..."
 else
-  pnpm install --frozen-lockfile --filter "@wave/mobile..."
+  pnpm install --frozen-lockfile --filter wave --filter "@wave/mobile..."
 fi
