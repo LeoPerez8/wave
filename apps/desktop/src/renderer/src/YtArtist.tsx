@@ -3,6 +3,7 @@ import type { BrowseRow } from "../../shared/browse.ts";
 import type { YtAlbumView, YtArtistAlbum, YtArtistView } from "../../shared/ytPages.ts";
 import { Icon } from "./Icon.tsx";
 import { listDuration } from "@wave/core";
+import { FollowButton } from "./FollowButton.tsx";
 import { labels, text } from "./text.ts";
 import { Artwork } from "./VirtualTable.tsx";
 import { Shelf, YtQuiet, YtSongList } from "./YtLists.tsx";
@@ -64,12 +65,15 @@ export function YtArtistPage({
   onSongMenu,
   onAlbum,
   onArtist,
+  onError,
 }: {
   readonly id: string;
   readonly run: Run;
   readonly onSongMenu: Menu;
   readonly onAlbum: (browseId: string) => void;
   readonly onArtist: (browseId: string) => void;
+  /** Shows that following the artist didn't work. */
+  readonly onError: (message: string) => void;
 }) {
   const read = useRead(id, readArtist, noArtist);
   if (read === undefined) return <Loading />;
@@ -83,14 +87,15 @@ export function YtArtistPage({
         <div className="hero-copy">
           <h1>{page.name}</h1>
           <p className="hero-meta">{[labels.artist, labels.youTubeMusic].join(" · ")}</p>
-          {songs.length > 0 && (
-            <div className="hero-actions">
+          <div className="hero-actions">
+            {songs.length > 0 && (
               <button onClick={() => playFrom(run, songs, 0)}>
                 <Icon name="play" size={16} />
                 {labels.play}
               </button>
-            </div>
-          )}
+            )}
+            <FollowButton artist={{ name: page.name, ytBrowseId: id }} onError={onError} />
+          </div>
         </div>
       </div>
       {songs.length > 0 && (

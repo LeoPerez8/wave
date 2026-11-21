@@ -1,18 +1,16 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 
-import type { ListeningHistoryPage, ListeningHistoryRow } from "@wave/client/db/listeningHistory";
-import { listeningHistoryReads, type ListeningHistoryFrom } from "./listeningHistoryReads.ts";
+import {
+  listeningHistoryReads,
+  type ListeningHistoryCursor,
+  type ListeningHistoryFrom,
+  type ListeningHistoryPageOf,
+} from "./listeningHistoryReads.ts";
 
-const row = (id: number): ListeningHistoryRow => ({
-  id,
-  startedAt: id * 1000,
-  snapshot: { title: `Song ${id}`, artist: "", album: null, artworkPath: null, thumbPath: null },
-  videoId: null,
-  recordingKey: null,
-  streamedSong: null,
-  song: null,
-});
+type ListeningHistoryPage = ListeningHistoryPageOf<ListeningHistoryCursor>;
+
+const row = (id: number): ListeningHistoryCursor => ({ id, startedAt: id * 1000 });
 
 /** Reads that resolve when the test says so, in the order asked. */
 const heldReads = () => {

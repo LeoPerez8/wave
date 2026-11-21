@@ -11,7 +11,13 @@ import type {
   QueueRow,
 } from "./playerView.ts";
 import type { WindowSettings } from "./windowSettings.ts";
-import type { DatedRelease, LanguageChoice, SongSortKey, ThemeEdit } from "@wave/core";
+import type {
+  DatedRelease,
+  LanguageChoice,
+  PlaylistSongSort,
+  SongSortKey,
+  ThemeEdit,
+} from "@wave/core";
 
 import type { LanguageView } from "./language.ts";
 import type { LibraryCounts } from "@wave/client/db/counts";
@@ -23,6 +29,7 @@ import type { DesktopFolder, DesktopSong, ScanStatus } from "./library.ts";
 import type { BrowseKind, BrowseScope, BrowsePage, BrowseRow } from "./browse.ts";
 import type { YtSearchPage, YtStatus } from "./yt.ts";
 import type { SearchOnline } from "@wave/core";
+import type { HomeArrangement, HomeArrangementEdit } from "@wave/core";
 import type {
   DiscoverMixesView,
   DiscoverSettings,
@@ -41,7 +48,8 @@ import type {
   MissingSongsList,
   MissingSongsView,
 } from "./downloads.ts";
-import type { GeniusPhase, SongGenius, SongLyrics } from "./lyrics.ts";
+import type { GeniusHitOpened, GeniusLyricsSearchView } from "./geniusLyricsSearch.ts";
+import type { GeniusPhase, SongGenius, SongLyrics, SongTranslation } from "./lyrics.ts";
 import {
   PLAYLIST_CALLS,
   playlistBridge,
@@ -51,6 +59,12 @@ import {
 import type { LibrarySearchView } from "./search.ts";
 import type { HomeView } from "./home.ts";
 import type { HomeFollowView, HomeReleaseOpening } from "./homeFollow.ts";
+import {
+  FOLLOWS_CALLS,
+  followsBridge,
+  type FollowsBridge,
+  type FollowsContract,
+} from "./follows.ts";
 import type { StatsPeriod, StatsRanking } from "@wave/core";
 import type { ArtistStatsPage, StatsOverview, StatsRow } from "./stats.ts";
 import type {
@@ -66,6 +80,10 @@ import type {
   CollectionRunAction,
   CollectionRunResult,
   CollectionTarget,
+  SelectionMenu,
+  SelectionRunAction,
+  SelectionRunResult,
+  SelectionTarget,
 } from "./collectionActions.ts";
 import {
   LYRICS_AND_TAGS_CALLS,
@@ -77,6 +95,7 @@ import { LINK_CALLS, linkBridge, type LinkContract } from "./links.ts";
 import { MINI_PLAYER_CALLS, miniPlayerBridge, type MiniPlayerContract } from "./miniPlayer.ts";
 import { ARTIST_PAGE_CALLS, artistPageBridge, type ArtistPageContract } from "./artistPage.ts";
 import { STREAMED_CALLS, streamedBridge, type StreamedContract } from "./streamedSongs.ts";
+import { HISTORY_CALLS, historyBridge, type HistoryContract } from "./history.ts";
 import { YT_ACCOUNT_CALLS, ytAccountBridge, type YtAccountContract } from "./ytAccount.ts";
 import {
   SPOTIFY_ACCOUNT_CALLS,
@@ -120,8 +139,10 @@ export interface BridgeContract
     ArtistPageContract,
     StreamedContract,
     LyricsAndTagsContract,
+    FollowsContract,
     YtAccountContract,
     SpotifyAccountContract,
+    HistoryContract,
     SpotifyImportContract,
     MiniPlayerContract,
     SpotifyShareContract {
@@ -178,6 +199,27 @@ export interface BridgeContract
   readonly "lyrics.cancelGenius": {
     readonly args: readonly [requestId: string];
     readonly result: void;
+  };
+  /** Search's online lyrics for a query: Genius's songs, or the line to show instead. */
+  readonly "lyrics.searchOnline": {
+    readonly args: readonly [query: string];
+    readonly result: GeniusLyricsSearchView;
+  };
+  /** A click on a hit of the last answer, by Genius's song id. */
+  readonly "lyrics.openOnlineHit": {
+    readonly args: readonly [id: number];
+    readonly result: GeniusHitOpened;
+  };
+  /** Whether the Lyrics view's Translate button is on; kept on this computer. */
+  readonly "lyrics.translateOn": { readonly args: readonly []; readonly result: boolean };
+  readonly "lyrics.setTranslateOn": {
+    readonly args: readonly [on: boolean];
+    readonly result: boolean;
+  };
+  /** A queue track's lyrics translated into the app's `language`; `off` while Translate is off. */
+  readonly "lyrics.translation": {
+    readonly args: readonly [trackId: string, language: LanguageView["language"]];
+    readonly result: SongTranslation;
   };
   readonly "playback.setSleepTimer": {
     readonly args: readonly [choice: SleepTimerChoice | null];
@@ -346,7 +388,11 @@ export interface BridgeContract
   };
   readonly "library.counts": { readonly args: readonly []; readonly result: LibraryCounts };
   readonly "library.sortBy": {
-    readonly args: readonly [kind: BrowseKind, key: SongSortKey];
+    readonly args: readonly [
+      kind: BrowseKind,
+      key: SongSortKey | PlaylistSongSort["key"],
+      playlistId?: number,
+    ];
     readonly result: void;
   };
   readonly "library.scanStatus": { readonly args: readonly []; readonly result: ScanStatus };
@@ -388,6 +434,18 @@ export interface BridgeContract
       playlistId?: number,
     ];
     readonly result: CollectionRunResult;
+  };
+  readonly "collections.selectionActions": {
+    readonly args: readonly [target: SelectionTarget];
+    readonly result: SelectionMenu;
+  };
+  readonly "collections.runSelection": {
+    readonly args: readonly [
+      target: SelectionTarget,
+      action: SelectionRunAction,
+      playlistId?: number,
+    ];
+    readonly result: SelectionRunResult;
   };
   readonly "songs.run": {
     readonly args: readonly [target: SongTarget, action: SongRunAction, playlistId?: number];
@@ -434,6 +492,11 @@ export interface BridgeContract
   readonly "home.releaseArtwork": {
     readonly args: readonly [key: string];
     readonly result: string | null;
+  };
+  readonly "home.arrangement": { readonly args: readonly []; readonly result: HomeArrangement };
+  readonly "home.edit": {
+    readonly args: readonly [edit: HomeArrangementEdit];
+    readonly result: HomeArrangement;
   };
   readonly "stats.overview": {
     readonly args: readonly [period: StatsPeriod];
@@ -490,6 +553,11 @@ export const BRIDGE_CALLS = [
   "lyrics.song",
   "lyrics.genius",
   "lyrics.cancelGenius",
+  "lyrics.searchOnline",
+  "lyrics.openOnlineHit",
+  "lyrics.translateOn",
+  "lyrics.setTranslateOn",
+  "lyrics.translation",
 
   "library.artwork",
   "library.cover",
@@ -572,6 +640,8 @@ export const BRIDGE_CALLS = [
   "account.answerInvitation",
   "collections.actions",
   "collections.run",
+  "collections.selectionActions",
+  "collections.runSelection",
   ...PLAYLIST_CALLS,
   ...LYRICS_AND_TAGS_CALLS,
   "search.library",
@@ -584,6 +654,9 @@ export const BRIDGE_CALLS = [
   "home.followCheck",
   "home.openRelease",
   "home.releaseArtwork",
+  "home.arrangement",
+  "home.edit",
+  ...FOLLOWS_CALLS,
   ...LINK_CALLS,
   ...ARTIST_PAGE_CALLS,
   ...STREAMED_CALLS,
@@ -598,6 +671,7 @@ export const BRIDGE_CALLS = [
   "stats.ranking",
   "stats.play",
   "stats.open",
+  ...HISTORY_CALLS,
 ] as const satisfies readonly BridgeCall[] &
   (BridgeContract extends PagedLists<BridgeContract> ? unknown : never);
 
@@ -614,6 +688,7 @@ export interface WaveBridge {
   readonly artistPage: ReturnType<typeof artistPageBridge>;
   /** A streamed YouTube Music song's menu. */
   readonly streamed: ReturnType<typeof streamedBridge>;
+  readonly history: ReturnType<typeof historyBridge>;
   /** The YouTube account: its session never reaches the window. */
   readonly ytAccount: ReturnType<typeof ytAccountBridge>;
   readonly spotifyAccount: ReturnType<typeof spotifyAccountBridge>;
@@ -645,7 +720,13 @@ export interface WaveBridge {
     readonly openRelease: (key: string) => Promise<HomeReleaseOpening>;
     /** A release card's cover as a data URL, or null. */
     readonly releaseArtwork: (key: string) => Promise<string | null>;
+    /** Home's sections and Discover rows as the account arranges them, for Home's editor. */
+    readonly arrangement: () => Promise<HomeArrangement>;
+    /** Makes one change of Home's editor to the synced arrangement and gives it as it is then. */
+    readonly edit: (edit: HomeArrangementEdit) => Promise<HomeArrangement>;
   };
+  /** An artist page's Follow button and Settings › Followed artists. */
+  readonly follows: FollowsBridge;
   readonly playback: PlaybackTransport & {
     readonly view: () => Promise<PlayerView>;
     readonly start: (scope: BrowseScope, index?: number, shuffle?: boolean) => Promise<PlayStart>;
@@ -663,6 +744,14 @@ export interface WaveBridge {
       phase: GeniusPhase,
     ) => Promise<SongGenius>;
     readonly cancelGenius: (requestId: string) => Promise<void>;
+    readonly searchOnline: (query: string) => Promise<GeniusLyricsSearchView>;
+    readonly openOnlineHit: (id: number) => Promise<GeniusHitOpened>;
+    readonly translateOn: () => Promise<boolean>;
+    readonly setTranslateOn: (on: boolean) => Promise<boolean>;
+    readonly translation: (
+      trackId: string,
+      language: LanguageView["language"],
+    ) => Promise<SongTranslation>;
   };
   readonly library: {
     readonly artwork: (hash: string, large: boolean) => Promise<string | null>;
@@ -684,7 +773,16 @@ export interface WaveBridge {
     readonly exclude: () => Promise<void>;
     readonly removeRoot: (path: string) => Promise<void>;
     readonly include: (path: string) => Promise<void>;
-    readonly sortBy: (kind: BrowseKind, key: SongSortKey) => Promise<void>;
+    /**
+     * A click on a table's [key] header: starts that sort or reverses it. A playlist's page
+     * ([kind] `playlist`, with its [playlistId]) keeps its own sort; the other tables share one
+     * per kind.
+     */
+    readonly sortBy: (
+      kind: BrowseKind,
+      key: SongSortKey | PlaylistSongSort["key"],
+      playlistId?: number,
+    ) => Promise<void>;
   };
   readonly songs: {
     /** Where each song's download is and whether its file failed to play; 200 songs at most. */
@@ -805,6 +903,13 @@ export interface WaveBridge {
       action: CollectionRunAction,
       playlistId?: number,
     ) => Promise<CollectionRunResult>;
+    /** The selection bar's entries for songs and collections checked together. */
+    readonly selectionActions: (target: SelectionTarget) => Promise<SelectionMenu>;
+    readonly runSelection: (
+      target: SelectionTarget,
+      action: SelectionRunAction,
+      playlistId?: number,
+    ) => Promise<SelectionRunResult>;
   };
   readonly playlists: PlaylistBridge;
   /** Settings › Lyrics and tags. */
@@ -839,6 +944,11 @@ export const createBridge = (invoke: Invoke): WaveBridge => ({
     song: (trackId) => invoke("lyrics.song", trackId),
     genius: (trackId, requestId, phase) => invoke("lyrics.genius", trackId, requestId, phase),
     cancelGenius: (requestId) => invoke("lyrics.cancelGenius", requestId),
+    searchOnline: (query) => invoke("lyrics.searchOnline", query),
+    openOnlineHit: (id) => invoke("lyrics.openOnlineHit", id),
+    translateOn: () => invoke("lyrics.translateOn"),
+    setTranslateOn: (on) => invoke("lyrics.setTranslateOn", on),
+    translation: (trackId, language) => invoke("lyrics.translation", trackId, language),
   },
   library: {
     artwork: (hash, large) => invoke("library.artwork", hash, large),
@@ -856,7 +966,10 @@ export const createBridge = (invoke: Invoke): WaveBridge => ({
     exclude: () => invoke("library.exclude"),
     removeRoot: (path) => invoke("library.removeRoot", path),
     include: (path) => invoke("library.include", path),
-    sortBy: (kind, key) => invoke("library.sortBy", kind, key),
+    sortBy: (kind, key, playlistId) =>
+      playlistId === undefined
+        ? invoke("library.sortBy", kind, key)
+        : invoke("library.sortBy", kind, key, playlistId),
   },
   songs: {
     states: (ids) => invoke("songs.states", ids),
@@ -942,6 +1055,9 @@ export const createBridge = (invoke: Invoke): WaveBridge => ({
   collections: {
     actions: (target, options) => invoke("collections.actions", target, options),
     run: (target, action, playlistId) => invoke("collections.run", target, action, playlistId),
+    selectionActions: (target) => invoke("collections.selectionActions", target),
+    runSelection: (target, action, playlistId) =>
+      invoke("collections.runSelection", target, action, playlistId),
   },
   playlists: playlistBridge(invoke),
   lyricsAndTags: lyricsAndTagsBridge(invoke),
@@ -958,7 +1074,10 @@ export const createBridge = (invoke: Invoke): WaveBridge => ({
     followCheck: () => invoke("home.followCheck"),
     openRelease: (key) => invoke("home.openRelease", key),
     releaseArtwork: (key) => invoke("home.releaseArtwork", key),
+    arrangement: () => invoke("home.arrangement"),
+    edit: (edit) => invoke("home.edit", edit),
   },
+  follows: followsBridge(invoke),
   links: linkBridge(invoke),
   artistPage: artistPageBridge(invoke),
   streamed: streamedBridge(invoke),
@@ -975,4 +1094,5 @@ export const createBridge = (invoke: Invoke): WaveBridge => ({
     play: (period, key, full) => invoke("stats.play", period, key, full),
     open: (ranking, period, key, full) => invoke("stats.open", ranking, period, key, full),
   },
+  history: historyBridge(invoke),
 });

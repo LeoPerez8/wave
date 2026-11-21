@@ -6,10 +6,13 @@ import { plural } from "../plural.ts";
 export const desktopPtBr = {
   home: {
     noSections:
-      "As seções do Início estão ocultas. Organize o Início no celular para adicioná-las de volta.",
+      "As seções do Início estão ocultas. Escolha Editar Início para adicioná-las de volta.",
   },
   playbackText: {
     thisPhone: "Este computador",
+  },
+  shows: {
+    phoneRegion: "Região deste computador",
   },
   settings: {
     openingLyricsOnASongWithLyrics:

@@ -1688,6 +1688,7 @@ export {
   parseHomeArrangement,
   storedHomeArrangement,
 } from "./homeSections.ts";
+export { editStoredHomeArrangement, readHomeArrangementEdit } from "./homeArrangementEdit.ts";
 export type {
   HomeArrangement,
   HomeArrangementEdit,
@@ -1988,6 +1989,8 @@ export {
   explicitPlayNotice,
   explicitSkipNotice,
   queuedPassedOver,
+  readDontPlayExplicit,
+  writeDontPlayExplicit,
 } from "./explicitPlayback.ts";
 export type { ExplicitPlayback } from "./explicitPlayback.ts";
 export type { PassOver } from "./queue.ts";
@@ -2545,9 +2548,20 @@ export { RADIO_CACHE_FRESH_MS, radioCacheFresh } from "./radioCache.ts";
 export {
   listeningHistoryDays,
   findListeningHistory,
+  listeningHistoryRowState,
   type ListeningHistoryDay,
+  type ListeningHistoryRowState,
   type PlaySnapshot,
 } from "./listeningHistory.ts";
+export {
+  listeningHistoryReads,
+  startingAt,
+  type ListeningHistoryCursor,
+  type ListeningHistoryFrom,
+  type ListeningHistoryPageOf,
+  type ListeningHistoryRead,
+  type ListeningHistoryReads,
+} from "./listeningHistoryReads.ts";
 export {
   readShuffleCardOpenings,
   shuffleCardOpened,
@@ -2774,6 +2788,9 @@ export {
   readPlaylistSongSorts,
   sortPlaylistSongs,
   storedPlaylistSongSort,
+  PLAYLIST_SONG_SORTS,
+  playlistReorders,
+  playlistSongSortLabelFor,
 } from "./playlistSongSort.ts";
 export type { PlaylistSongSort, PlaylistSortableSong } from "./playlistSongSort.ts";
 
@@ -2869,8 +2886,8 @@ export { MARQUEE, marqueeOffset, marqueePlan, marqueeStill, readsRightToLeft } f
 export { scanPath, scanPathKey, scanPathWithin, scanFileState } from "./desktopScan.ts";
 export type { ScanFolder } from "./desktopScan.ts";
 export type { MarqueeLine, MarqueeLineSize, MarqueePlan } from "./marquee.ts";
-export { desktopSongActions } from "./desktopSongMenu.ts";
-export type { DesktopSongSubject } from "./desktopSongMenu.ts";
+export { desktopSelectionActions, desktopSongActions } from "./desktopSongMenu.ts";
+export type { DesktopSelectionItem, DesktopSongSubject } from "./desktopSongMenu.ts";
 export { DESKTOP_SHORTCUTS, desktopKey, shortcutKeys } from "./desktopKeys.ts";
 export {
   allTableRows,
@@ -2896,6 +2913,13 @@ export {
   type LanguageChoice,
 } from "./languageChoice.ts";
 export { displayTag } from "./displayTag.ts";
+export {
+  openedAudioFiles,
+  openedFilePath,
+  openedFileTitle,
+  openedFileTrackId,
+  openedFilesQueue,
+} from "./openedFiles.ts";
 export {
   floatingWindowPosition,
   readFloatingWindowPosition,

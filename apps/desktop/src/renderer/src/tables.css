@@ -14,10 +14,27 @@
 .table-area.with-starred {
   --table-dates: repeat(2, minmax(76px, 0.6fr));
 }
+.table-area.with-released {
+  --table-dates: repeat(2, minmax(76px, 0.6fr));
+}
 .table-area.with-added .table-columns {
   grid-template-columns:
     minmax(180px, 1.5fr) minmax(110px, 1fr) minmax(100px, 1fr) var(--table-dates)
     28px 54px;
+}
+/* A playlist's own order and an artist's Popular ranks lead the row. */
+.table-area.with-order.with-added .table-columns {
+  grid-template-columns:
+    30px minmax(180px, 1.5fr) minmax(110px, 1fr) minmax(100px, 1fr) var(--table-dates)
+    28px 54px;
+}
+.order-column {
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
+  text-align: right;
+}
+.order-column > .table-sort {
+  justify-content: flex-end;
 }
 .table-date {
   font-size: 12px;
@@ -49,6 +66,9 @@
   .table-area.with-added .table-columns {
     grid-template-columns: minmax(0, 1.5fr) minmax(0, 1fr) var(--table-dates) 22px 48px;
     gap: 8px;
+  }
+  .table-area.with-order.with-added .table-columns {
+    grid-template-columns: 30px minmax(0, 1.5fr) minmax(0, 1fr) var(--table-dates) 22px 48px;
   }
   .table-area.no-third .table-columns {
     grid-template-columns: minmax(160px, 1.5fr) minmax(110px, 1fr) 28px 54px;

@@ -18,6 +18,8 @@ export const validPlaybackSettings = (value: unknown): value is Partial<Playback
     normalizeVolume: (x) => typeof x === "boolean",
     bufferMinutes: (x) => (STREAM_BUFFER_MINUTES as readonly unknown[]).includes(x),
     shuffleKind: (x) => (SHUFFLE_KINDS as readonly unknown[]).includes(x),
+    dontPlayExplicit: (x) => typeof x === "boolean",
+    continueQueue: (x) => typeof x === "boolean",
   };
   return Object.entries(value).every(
     ([name, x]) => Object.hasOwn(checks, name) && checks[name as keyof PlaybackSettings](x),

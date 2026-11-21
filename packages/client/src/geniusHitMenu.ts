@@ -17,7 +17,7 @@ import {
   type YtSong,
 } from "@wave/core";
 
-import { resolveRecognition, type RecognitionLookup } from "../recognize/resolveRecognition.ts";
+import { resolveRecognition, type RecognitionLookup } from "./resolveRecognition.ts";
 
 /** What Recognize's resolver hears for a Genius hit: its title and credit, with its cover. */
 export const geniusHitSong = (hit: GeniusLyricsHit): RecognizedSong => ({

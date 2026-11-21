@@ -35,7 +35,12 @@ const paths: Record<string, string> = {
     "M3 6h10M3 11h10M3 16h7M18 3l1 3 3 1-3 1-1 3-1-3-3-1 3-1ZM17 14l.8 2.2 2.2.8-2.2.8L17 20l-.8-2.2-2.2-.8 2.2-.8Z",
   playlist: "M3 4h12M3 9h12M3 14h6M15 20V9l6-1M15 20c0 2.7-4 2.7-4 0s4-2.7 4 0",
   close: "M6 6l12 12M6 18 18 6",
+  minus: "M4 12h16",
+  grip: "M4 9h16M4 15h16",
   stats: "M4 20h16M6 16v-4m6 4V5m6 11V9",
+  /** Tabler's language glyph, as the phone's Translate button has. */
+  translate: "M4 5h7M9 3v2c0 4.4-2.2 8-5 8M5 9c0 2.1 3 3.9 6.7 4M12 20l4-9 4 9M19.1 18h-6.2",
+  history: "M3 12a9 9 0 1 0 3-6.7L3 8M3 3v5h5M12 7v5l4 2",
   /** A small window over a large one. */
   miniPlayer: "M3 4h18v16H3ZM12 12h6v5h-6Z",
   /** Out to the corners: back to the main window. */

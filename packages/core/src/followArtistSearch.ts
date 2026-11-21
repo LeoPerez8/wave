@@ -79,3 +79,47 @@ export const mergeFollowArtistSearch = <A extends { readonly name: string }>(
   for (const artist of remote.values()) add(artist.name);
   return [...results.values()];
 };
+
+/**
+ * The one line under Find artists to follow: searching, no answer from Deezer
+ * (the Library's matches stay), or an answer with no matches. Null with no
+ * query, or with matches to show and nothing else to say.
+ */
+export const followSearchLine = (
+  state: {
+    readonly query: string;
+    /** Deezer hasn't answered this query yet. */
+    readonly pending: boolean;
+    /** Deezer gave no answer. */
+    readonly failed: boolean;
+    /** How many artists are listed. */
+    readonly results: number;
+  },
+  strings: {
+    readonly searching: string;
+    readonly unavailable: string;
+    readonly empty: string;
+  },
+): string | null => {
+  if (state.query.trim() === "") return null;
+  if (state.pending) return strings.searching;
+  if (state.failed) return strings.unavailable;
+  return state.results === 0 ? strings.empty : null;
+};
+
+/** ISO 3166's countries by two-letter code, as the Country choice for shows lists them. */
+export const SHOW_COUNTRY_CODES: readonly string[] = (
+  "AD AE AF AG AI AL AM AO AQ AR AS AT AU AW AX AZ BA BB BD BE BF BG BH BI BJ BL BM BN BO BQ " +
+  "BR BS BT BV BW BY BZ CA CC CD CF CG CH CI CK CL CM CN CO CR CU CV CW CX CY CZ DE DJ DK DM " +
+  "DO DZ EC EE EG EH ER ES ET FI FJ FK FM FO FR GA GB GD GE GF GG GH GI GL GM GN GP GQ GR GS " +
+  "GT GU GW GY HK HM HN HR HT HU ID IE IL IM IN IO IQ IR IS IT JE JM JO JP KE KG KH KI KM KN " +
+  "KP KR KW KY KZ LA LB LC LI LK LR LS LT LU LV LY MA MC MD ME MF MG MH MK ML MM MN MO MP MQ " +
+  "MR MS MT MU MV MW MX MY MZ NA NC NE NF NG NI NL NO NP NR NU NZ OM PA PE PF PG PH PK PL PM " +
+  "PN PR PS PT PW PY QA RE RO RS RU RW SA SB SC SD SE SG SH SI SJ SK SL SM SN SO SR SS ST SV " +
+  "SX SY SZ TC TD TF TG TH TJ TK TL TM TN TO TR TT TV TW TZ UA UG UM US UY UZ VA VC VE VG VI " +
+  "VN VU WF WS YE YT ZA ZM ZW"
+).split(" ");
+const showCountries = new Set(SHOW_COUNTRY_CODES);
+/** Whether [value] is a country shows can be looked up in. */
+export const isShowCountry = (value: unknown): value is string =>
+  typeof value === "string" && showCountries.has(value);

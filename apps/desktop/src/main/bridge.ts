@@ -19,7 +19,7 @@ import { Account } from "./account/accountLayer.ts";
 import type { Page } from "../shared/bridge.ts";
 import { BROWSE_KINDS, MAX_ROW_IDS_PAGE, type BrowseScope } from "../shared/browse.ts";
 import { browseLetter, browseRowIds } from "./library/browse.ts";
-import { toggleBrowseSort } from "./library/browseSort.ts";
+import { toggleBrowseSort, togglePlaylistSort } from "./library/browseSort.ts";
 import { readArtwork } from "./library/artwork.ts";
 import { appearance, preference, savePreference } from "./preferences.ts";
 import {
@@ -42,12 +42,17 @@ import { runSongAction, songMenu } from "./library/songActions.ts";
 import {
   collectionMenu,
   runCollectionAction,
+  runSelectionAction,
+  selectionMenu,
   validCollectionTarget,
+  validSelectionTarget,
 } from "./library/collectionActions.ts";
 import {
   COLLECTION_RUN_ACTIONS,
+  SELECTION_RUN_ACTIONS,
   type CollectionActionOptions,
   type CollectionRunAction,
+  type SelectionRunAction,
 } from "../shared/collectionActions.ts";
 import type { Appearance, DesktopVersionHistory } from "../shared/bridge.ts";
 import { VIDEO_ID, YtMusic } from "./yt/ytMusic.ts";
@@ -64,6 +69,7 @@ import type { MissingSongsDownloadAction } from "@wave/core";
 import { createYtFeatureHandlers, playSearchSong } from "./yt/ytBridge.ts";
 import type { YtFeatures } from "./yt/ytServices.ts";
 import { Lyrics } from "./lyrics/lyrics.ts";
+import { GeniusLyricsSearch } from "./lyrics/geniusLyricsSearchLayer.ts";
 import { DesktopLinks } from "./links/layer.ts";
 import { linkHandlers } from "./links/handlers.ts";
 import { artistPageHandlers } from "./artistPageHandlers.ts";
@@ -83,9 +89,12 @@ import {
   type MiniPlayerCalls,
 } from "./system/miniPlayerHandlers.ts";
 import { statsHandlers } from "./statsHandlers.ts";
+import { historyHandlers } from "./historyHandlers.ts";
 import { lyricsAndTagsHandlers } from "./lyricsAndTagsHandlers.ts";
 import { HomeFollow } from "./follows/homeFollow.ts";
 import { homeFollowHandlers } from "./follows/homeFollowHandlers.ts";
+import { FollowedArtists } from "./follows/followedArtists.ts";
+import { followsHandlers } from "./follows/followsHandlers.ts";
 import { streamedHandlers } from "./yt/streamedHandlers.ts";
 import { runStreamedAction } from "./yt/streamedSong.ts";
 import {
@@ -175,9 +184,11 @@ export type BridgeServices =
   | YtFeatures
   | Account
   | Lyrics
+  | GeniusLyricsSearch
   | DesktopPlaylists
   | DesktopLinks
   | HomeFollow
+  | FollowedArtists
   | YtAccount
   | SpotifyAccount
   | SpotifyImport;
@@ -464,6 +475,38 @@ const createHandlers = (
       geniusRequestId(requestId)
         ? Effect.map(Account, (account) => account.genius.cancel(requestId))
         : refuse("lyrics.cancelGenius", "invalid request id"),
+    "lyrics.searchOnline": ([query]) =>
+      searchQuery(query)
+        ? Effect.gen(function* () {
+            const online = yield* GeniusLyricsSearch;
+            return yield* Effect.tryPromise({ try: () => online.search(query), catch: (e) => e });
+          })
+        : refuse("lyrics.searchOnline", "invalid query"),
+    "lyrics.openOnlineHit": ([id]) =>
+      typeof id === "number" && Number.isSafeInteger(id) && id > 0
+        ? Effect.gen(function* () {
+            const online = yield* GeniusLyricsSearch;
+            return yield* Effect.tryPromise({ try: () => online.open(id), catch: (e) => e });
+          })
+        : refuse("lyrics.openOnlineHit", "invalid hit"),
+    "lyrics.translateOn": () => Effect.map(Lyrics, ({ translation }) => translation.on()),
+    "lyrics.setTranslateOn": ([on]) =>
+      typeof on === "boolean"
+        ? Effect.map(Lyrics, ({ translation }) => {
+            translation.setOn(on);
+            return translation.on();
+          })
+        : refuse("lyrics.setTranslateOn", "invalid switch"),
+    "lyrics.translation": ([trackId, language]) =>
+      lyricTrackId(trackId) && (language === "en" || language === "pt-BR")
+        ? Effect.gen(function* () {
+            const { translation } = yield* Lyrics;
+            return yield* Effect.tryPromise({
+              try: () => translation.song(trackId, language),
+              catch: (error) => error,
+            });
+          })
+        : refuse("lyrics.translation", "invalid request"),
     "settings.appearance": () =>
       Effect.gen(function* () {
         return appearance(yield* Database);
@@ -632,12 +675,24 @@ const createHandlers = (
             return browseLetter(yield* Database, scope, letter);
           })
         : refuse("library.letter", "invalid letter or scope"),
-    "library.sortBy": ([kind, key]) =>
-      typeof kind === "string" &&
+    "library.sortBy": ([kind, key, playlistId]) =>
+      kind === "playlist" &&
       typeof key === "string" &&
-      libraryTableSortsFor(kind).some((sort) => sort.key === key)
-        ? Effect.map(Database, (db) => toggleBrowseSort(db, kind, key))
-        : refuse("library.sortBy", "sort is not offered for this list"),
+      typeof playlistId === "number" &&
+      Number.isSafeInteger(playlistId) &&
+      playlistId > 0
+        ? Effect.gen(function* () {
+            // A playlist's sort is the account's: the phone shows the same one.
+            if (!togglePlaylistSort(yield* Database, playlistId, key))
+              return yield* refuse("library.sortBy", "sort is not offered for this playlist");
+            (yield* Account).settingsEdited();
+          })
+        : typeof kind === "string" &&
+            typeof key === "string" &&
+            playlistId === undefined &&
+            libraryTableSortsFor(kind).some((sort) => sort.key === key)
+          ? Effect.map(Database, (db) => toggleBrowseSort(db, kind, key))
+          : refuse("library.sortBy", "sort is not offered for this list"),
     "library.counts": () =>
       Effect.gen(function* () {
         return libraryCounts(yield* Database);
@@ -712,6 +767,52 @@ const createHandlers = (
             );
           })
         : refuse("collections.run", "invalid collection, action or playlist"),
+    "collections.selectionActions": ([target]) =>
+      validSelectionTarget(target, validTarget)
+        ? Effect.gen(function* () {
+            return selectionMenu(yield* Database, target, (yield* YtMusic).enabled());
+          })
+        : refuse("collections.selectionActions", "invalid selection"),
+    "collections.runSelection": ([target, action, playlistId]) =>
+      validSelectionTarget(target, validTarget) &&
+      SELECTION_RUN_ACTIONS.includes(action as SelectionRunAction) &&
+      (action === "addToPlaylist" ? songId(playlistId) : playlistId === undefined)
+        ? Effect.gen(function* () {
+            const db = yield* Database;
+            const playback = yield* Playback;
+            const downloads = yield* Downloads;
+            const yt = yield* YtMusic;
+            const library = yield* DesktopLibrary;
+            return yield* Effect.tryPromise(() =>
+              runSelectionAction(
+                {
+                  db,
+                  playback,
+                  downloads,
+                  yt,
+                  unavailable: library.unavailable,
+                  download: downloads.missing,
+                  downloadStreamed: (song) =>
+                    runStreamedAction(
+                      {
+                        db,
+                        ytMusic: yt.enabled,
+                        downloads,
+                        queue: async (type, id) =>
+                          playback.command({ type, trackIds: [ytTrackId(id)] }),
+                        changed: playback.refresh,
+                      },
+                      song,
+                      "download",
+                    ),
+                },
+                target,
+                action as SelectionRunAction,
+                playlistId as number | undefined,
+              ),
+            );
+          })
+        : refuse("collections.runSelection", "invalid selection, action or playlist"),
     "songs.actions": ([target, surface]) =>
       validTarget(target) && (surface === "menu" || surface === "selection")
         ? Effect.gen(function* () {
@@ -798,8 +899,10 @@ const createHandlers = (
     ...playlistHandlers(validTarget),
     ...homeHandlers,
     ...statsHandlers,
+    ...historyHandlers,
     ...lyricsAndTagsHandlers,
     ...homeFollowHandlers,
+    ...followsHandlers,
     ...miniPlayerHandlers(miniPlayer),
     "search.library": ([query]) =>
       searchQuery(query)

@@ -1,5 +1,5 @@
 import type { Page } from "./bridge.ts";
-import type { SongSort } from "@wave/core";
+import type { PlaylistSongSort, SongSort } from "@wave/core";
 
 export const MAX_ROW_IDS_PAGE = 1000;
 
@@ -36,6 +36,13 @@ export interface BrowseRow {
   readonly favorite: boolean;
   readonly addedAt?: number;
   readonly starredAt?: number;
+  /**
+   * On a playlist's page, the song's place (from 1) in the playlist's own order; on an artist's,
+   * its rank in their Popular list, when the list holds it.
+   */
+  readonly order?: number;
+  /** On a playlist's page, the date its Release date sort reads: `1985`, `1985-06` or `1985-06-21`. */
+  readonly released?: string;
   readonly path: string | null;
   readonly unavailable: boolean;
   /**
@@ -51,8 +58,14 @@ export interface BrowseRow {
   readonly artworkUrl?: string | null;
   /** A playlist's own image, fetched through `playlists.image`; changes when the image does. */
   readonly imageKey?: string | null;
+  /**
+   * A file opened with Wave that the Library doesn't hold: its `id` is 0, its `path` the file,
+   * and nothing of the Library's (a star, a playlist, counted plays) applies to it.
+   */
+  readonly outside?: true;
 }
 export interface BrowsePage extends Page<BrowseRow> {
   readonly hero?: BrowseRow;
-  readonly sort?: SongSort;
+  /** The order shown: the list's sort, or on a playlist's page that playlist's own. */
+  readonly sort?: SongSort | PlaylistSongSort;
 }

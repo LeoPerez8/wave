@@ -50,6 +50,7 @@ import { keyringHost } from "./downloads/keyring.ts";
 import type { KotlinEvent } from "./kotlin/protocol.ts";
 import { ytFeaturesLayer } from "./yt/ytServices.ts";
 import { lyricsLayer } from "./lyrics/lyrics.ts";
+import { geniusLyricsSearchLayer } from "./lyrics/geniusLyricsSearchLayer.ts";
 import { botguardPost, createPoTokens, poTokenHost } from "./yt/poTokens.ts";
 import { openPoTokenPage } from "./yt/poTokenWindow.ts";
 import { createWaveAccount } from "./account/account.ts";
@@ -62,6 +63,7 @@ import { installDesktopSystem } from "./system/desktopSystem.ts";
 import { installMiniPlayer } from "./system/miniPlayerWindow.ts";
 import { configureAutostart } from "./system/autostart.ts";
 import { followStart } from "./system/startup.ts";
+import { createOpenedFiles, launchFiles } from "./system/openedFiles.ts";
 import { Playback } from "./playback/playback.ts";
 import { YtMusic } from "./yt/ytMusic.ts";
 import { ytAccountLayer } from "./yt/ytAccountLayer.ts";
@@ -197,9 +199,18 @@ const createWindow = (
   });
 };
 
+/** Plays the files Wave was opened with, once the services are up; set as they start. */
+let playOpenedFiles: (paths: readonly string[]) => void = () => {};
+const openedFiles = createOpenedFiles({ play: (paths) => playOpenedFiles(paths) });
+
 if (!app.requestSingleInstanceLock()) app.quit();
 else {
-  app.on("second-instance", showWindow);
+  // A launch while Wave runs hands its files to this window, which comes forward either way.
+  app.on("second-instance", (_event, argv, workingDirectory) => {
+    openedFiles.opened(launchFiles(argv, workingDirectory));
+    showWindow();
+  });
+  openedFiles.opened(launchFiles(process.argv, process.cwd()));
   app.on("window-all-closed", () => app.quit());
   // Utility processes start only once the app is ready, so the services wait for it too.
   void app.whenReady().then(async () => {
@@ -444,6 +455,11 @@ else {
               online: () => net.isOnline(),
               writeClipboard: (text) => clipboard.writeText(text),
             }),
+            geniusLyricsSearchLayer({
+              account,
+              online: () => net.isOnline(),
+              openExternal: (url) => shell.openExternal(url),
+            }),
             ytAccountLayer({
               sessions: ytSessions,
               online: () => net.isOnline(),
@@ -637,6 +653,9 @@ else {
     ]);
     // Closed while the services started: Wave is quitting.
     if (window === undefined || quitting) return;
+    // A file that won't open leaves its queue showing, stopped, as any such song does.
+    playOpenedFiles = (paths) => void playback.openFiles(paths).catch(() => {});
+    openedFiles.ready();
     system = installDesktopSystem({
       window,
       db,
