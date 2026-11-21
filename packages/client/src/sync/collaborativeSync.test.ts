@@ -17,7 +17,7 @@ import {
   selectPrivateCopyNotices,
 } from "../db/collaborations.ts";
 import { creditSplits } from "../db/credits.ts";
-import { signOut } from "../db/missingSongs.ts";
+import { removeTracks, signOut } from "../db/missingSongs.ts";
 import {
   addToPlaylist,
   deletePlaylist,
@@ -29,7 +29,12 @@ import {
   selectPlaylists,
 } from "../db/playlists.ts";
 import * as schema from "../db/schema.ts";
-import { addTrack, openTestDatabase, type FixtureTrack } from "../db/testDatabase.ts";
+import {
+  addTrack,
+  openTestDatabase,
+  traceQueriesAsync,
+  type FixtureTrack,
+} from "../db/testDatabase.ts";
 import { collaborationService } from "./collaborationService.ts";
 import { syncCollaborativePlaylist, syncCycle, type SyncPreferences } from "./syncCycle.ts";
 import { testCollaborationWorld, type TestAccount } from "./testCollaborationService.ts";
@@ -134,8 +139,8 @@ const playlists = (device: Phone) =>
   }));
 
 /** Ana's phone owns "Drive" (Airbag, Lucky), made collaborative; Bea joined it. */
-const shared = async () => {
-  const world = testCollaborationWorld();
+const shared = async ({ pageSize }: { readonly pageSize?: number } = {}) => {
+  const world = testCollaborationWorld(pageSize === undefined ? {} : { pageSize });
   const ana = await phone(world.account("ana"), [AIRBAG, LUCKY]);
   const bea = await phone(world.account("bea"), [AIRBAG_RETAGGED, KARMA]);
   createPlaylist(
@@ -634,5 +639,97 @@ describe("who added each entry", () => {
     await ana.sync();
     assert.deepEqual(adders(ana), ["ana", "ana", "bea"]);
     assert.deepEqual(adders(bea), ["ana", "ana", "bea"]);
+  });
+});
+
+describe("a member's Library song leaving", () => {
+  test("its entry in the owner's playlist stays, on the member's device and for the others", async () => {
+    const { world, ana, bea } = await shared();
+    await bea.sync();
+    assert.deepEqual(playlists(bea), [{ name: "Drive", songs: ["Airbag", "unsearched:Lucky"] }]);
+
+    // A file the scan now skips takes its own entries along (`removeTracks`, "leave").
+    bea.db.transaction((tx) =>
+      removeTracks(tx, creditSplits(), [bea.track("Airbag")], bea.now(), "leave"),
+    );
+    assert.deepEqual(playlists(bea), [
+      { name: "Drive", songs: ["unsearched:Airbag", "unsearched:Lucky"] },
+    ]);
+    await bea.sync();
+    await ana.sync();
+    assert.deepEqual(playlists(ana), [{ name: "Drive", songs: ["Airbag", "Lucky"] }]);
+    assert.deepEqual(playlists(bea), [
+      { name: "Drive", songs: ["unsearched:Airbag", "unsearched:Lucky"] },
+    ]);
+    // Nothing of the owner's playlist went to the member's own account.
+    assert.deepEqual(world.account("bea").service.rows().playlistEntries, []);
+  });
+});
+
+describe("a member's first pull of a long playlist", () => {
+  test("entries on pages before the playlist's row are placed once the row arrives", async () => {
+    const { ana, bea } = await shared({ pageSize: 1 });
+    // The rename puts the playlist's row after its entries.
+    renamePlaylist(ana.db, ana.playlist("Drive").id, "Night Drive", ana.now());
+    await ana.sync();
+
+    await bea.sync();
+    assert.deepEqual(playlists(bea), [
+      { name: "Night Drive", songs: ["Airbag", "unsearched:Lucky"] },
+    ]);
+    assert.deepEqual(bea.db.select().from(schema.syncPending).all(), []);
+  });
+});
+
+/** The statements of [queries] that read every Track. */
+const wholeLibraryReads = (queries: readonly { sql: string; plan: readonly string[] }[]) =>
+  queries.filter((query) => query.plan.some((step) => /^SCAN tracks\b/.test(step)));
+
+describe("a page's pull every 15 seconds", () => {
+  test("a member's pull reads only the Tracks its entries need", async () => {
+    const { ana, bea } = await shared();
+    await bea.sync();
+    const drive = bea.playlist("Drive").id;
+
+    const idle = await traceQueriesAsync(bea.db, () => bea.syncPage(drive));
+    assert.deepEqual(wholeLibraryReads(idle.queries), []);
+
+    const id = addTrack(ana.db, KARMA);
+    addToPlaylist(
+      ana.db,
+      ana.playlist("Drive").id,
+      [{ source: "library", trackId: id }],
+      ana.now(),
+    );
+    await ana.sync();
+    const changed = await traceQueriesAsync(bea.db, () => bea.syncPage(drive));
+    assert.equal(changed.result.pulled.playlists, true);
+    assert.deepEqual(wholeLibraryReads(changed.queries), []);
+    assert.deepEqual(playlists(bea), [
+      { name: "Drive", songs: ["Airbag", "unsearched:Lucky", "Karma Police"] },
+    ]);
+  });
+
+  test("the owner's pull reads no Tracks when nothing changed", async () => {
+    const { ana } = await shared();
+    await ana.sync();
+    const idle = await traceQueriesAsync(ana.db, () => ana.syncPage(ana.playlist("Drive").id));
+    assert.deepEqual(wholeLibraryReads(idle.queries), []);
+  });
+});
+
+describe("the owner's own entries", () => {
+  test("the pull that brings who added them reports a playlist change", async () => {
+    const { ana } = await shared();
+    const id = addTrack(ana.db, KARMA);
+    addToPlaylist(
+      ana.db,
+      ana.playlist("Drive").id,
+      [{ source: "library", trackId: id }],
+      ana.now(),
+    );
+    const result = await ana.sync();
+    assert.equal(result.pulled.playlists, true);
+    assert.deepEqual(adders(ana), ["ana", "ana", "ana"]);
   });
 });

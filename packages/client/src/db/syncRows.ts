@@ -25,6 +25,7 @@ import {
   parseTrackId,
   planSongSync,
   playlistEntrySong,
+  recordingMatchTitle,
   settleMarks,
   songsLeaving,
   syncsPreference,
@@ -60,6 +61,7 @@ import {
   notLike,
   or,
   sql,
+  type SQL,
 } from "drizzle-orm";
 
 import { chunks } from "./chunks.ts";
@@ -142,10 +144,13 @@ export const selectSyncCursor = (db: LibraryDatabase): string | null => state(db
 /**
  * Which of the phone's Tracks each recording key is (Core's
  * `accountTrackIds`): the account song's length breaks a tie between Tracks
- * with one key.
+ * with one key. Given [keys], it reads only the Tracks with those keys.
  */
-export const selectAccountTrackIds = (db: LibraryDatabase): Map<string, number> => {
-  const tracks = selectTrackIdentities(db);
+export const selectAccountTrackIds = (
+  db: LibraryDatabase,
+  keys?: readonly string[],
+): Map<string, number> => {
+  const tracks = keys === undefined ? selectTrackIdentities(db) : selectKeyedTracks(db, keys);
   const seen = new Set<string>();
   const shared = new Set<string>();
   for (const track of tracks) {
@@ -165,6 +170,27 @@ export const selectAccountTrackIds = (db: LibraryDatabase): Map<string, number> 
       .all(),
   );
   return accountTrackIds(tracks, lengths);
+};
+
+/** The Tracks with the recording keys [keys], as `selectTrackIdentities` reads them. */
+const selectKeyedTracks = (db: LibraryDatabase, keys: readonly string[]) => {
+  const { tracks } = schema;
+  return (
+    chunks([...new Set(keys)])
+      .flatMap((some) =>
+        db
+          .select({
+            id: tracks.id,
+            recordingKey: tracks.recordingKey,
+            durationMs: tracks.durationMs,
+          })
+          .from(tracks)
+          .where(inArray(tracks.recordingKey, some))
+          .all(),
+      )
+      // oxlint-disable-next-line unicorn/no-array-sort -- sorts a fresh array; Hermes lacks toSorted
+      .sort((a, b) => a.id - b.id)
+  );
 };
 
 // --- What goes up ------------------------------------------------------------
@@ -964,7 +990,8 @@ export const planSongs = (db: LibraryDatabase, now: number): void => {
  * account (Core's `songsLeaving`): a song no Track keeps leaves the account,
  * its star with it, as tombstones the next push sends. [removed] Tracks
  * leave the Library, with the playlist entries still holding them (kept
- * ones, `keepPlaylistEntries`, hold none by then); retagged ones keep
+ * ones, `keepPlaylistEntries`, hold none by then), except those of another
+ * account's collaborative playlist, which stay; retagged ones keep
  * theirs. Run it in the transaction that removes the Tracks, after it keeps
  * their entries and before it deletes them, or that retags them, after.
  */
@@ -999,7 +1026,15 @@ export const leaveKeys = (
         changedAt: playlistItems.changedAt,
       })
       .from(playlistItems)
-      .where(and(inArray(playlistItems.trackId, some), onAccount(playlistItems)))
+      .innerJoin(schema.playlists, eq(playlistItems.playlistId, schema.playlists.id))
+      .where(
+        and(
+          inArray(playlistItems.trackId, some),
+          onAccount(playlistItems),
+          // Another account's collaborative playlist keeps its entries (`deleteTracksById`).
+          notMemberPlaylist(schema.playlists.syncId),
+        ),
+      )
       .all();
     for (const { trackId, ...entry } of rows) {
       const held = entries.get(trackId);
@@ -1141,8 +1176,79 @@ interface Placing {
   readonly changedElsewhere: Set<number>;
 }
 
-const placing = (tx: LibraryDatabase, trackIds: ReadonlyMap<string, number>): Placing => {
-  const { collaborations, playlists, tracks, albums } = schema;
+/** The Library entries among [entries]: those naming a song by its recording key. */
+const libraryEntries = (entries: readonly SyncPlaylistEntry[]) =>
+  entries.flatMap((row) =>
+    "playlistId" in row && row.songId !== null
+      ? [{ songId: row.songId, title: row.title ?? null, videoId: row.videoId ?? null }]
+      : [],
+  );
+
+/**
+ * The Tracks Core's `collaborativeEntryMatcher` could pick for [entries]: those with one of
+ * their recording keys or video ids, or a title that matches as theirs does (`matchTitle`, and
+ * any Track not given one yet). The matcher finds among them what it would among every Track.
+ */
+const entryCandidates = (
+  tx: LibraryDatabase,
+  entries: readonly SyncPlaylistEntry[],
+): MatchTrack[] => {
+  const { tracks, albums } = schema;
+  const wanted = libraryEntries(entries);
+  const read = (where: SQL) =>
+    tx
+      .select({
+        id: tracks.id,
+        recordingKey: sql<string>`${tracks.recordingKey}`,
+        title: tracks.title,
+        artist: tracks.artistCredit,
+        album: albums.title,
+        durationMs: tracks.durationMs,
+        videoId: tracks.videoId,
+      })
+      .from(tracks)
+      .innerJoin(albums, eq(tracks.albumId, albums.id))
+      .where(and(isNotNull(tracks.recordingKey), where))
+      .all();
+  const found = new Map<number, MatchTrack>();
+  const by = (
+    column: typeof tracks.recordingKey | typeof tracks.videoId | typeof tracks.matchTitle,
+    values: readonly (string | null)[],
+  ) => {
+    const some = [...new Set(values.filter((value): value is string => value !== null))];
+    for (const chunk of chunks(some)) {
+      for (const row of read(inArray(column, chunk))) found.set(row.id, row);
+    }
+  };
+  by(
+    tracks.recordingKey,
+    wanted.map((entry) => entry.songId),
+  );
+  by(
+    tracks.videoId,
+    wanted.map((entry) => entry.videoId),
+  );
+  by(
+    tracks.matchTitle,
+    wanted.map((entry) => (entry.title === null ? null : recordingMatchTitle(entry.title))),
+  );
+  if (wanted.some((entry) => entry.title !== null)) {
+    for (const row of read(isNull(tracks.matchTitle))) found.set(row.id, row);
+  }
+  // oxlint-disable-next-line unicorn/no-array-sort -- sorts a fresh array; Hermes lacks toSorted
+  return [...found.values()].sort((a, b) => a.id - b.id);
+};
+
+/**
+ * How [tx] places pulled rows: [trackIds] for recording keys, and for a collaborative
+ * playlist's Library entries a matcher over the Tracks the pulled [entries] could be.
+ */
+const placing = (
+  tx: LibraryDatabase,
+  trackIds: ReadonlyMap<string, number>,
+  entries: readonly SyncPlaylistEntry[],
+): Placing => {
+  const { collaborations, playlists } = schema;
   const held = tx
     .select({ syncId: collaborations.playlistSyncId, id: playlists.id })
     .from(collaborations)
@@ -1154,23 +1260,7 @@ const placing = (tx: LibraryDatabase, trackIds: ReadonlyMap<string, number>): Pl
     collaborative: new Set(held.map((row) => row.syncId)),
     collaborativeIds: new Set(held.flatMap((row) => (row.id === null ? [] : [row.id]))),
     match: (entry) => {
-      matcher ??= collaborativeEntryMatcher(
-        tx
-          .select({
-            id: tracks.id,
-            recordingKey: sql<string>`${tracks.recordingKey}`,
-            title: tracks.title,
-            artist: tracks.artistCredit,
-            album: albums.title,
-            durationMs: tracks.durationMs,
-            videoId: tracks.videoId,
-          })
-          .from(tracks)
-          .innerJoin(albums, eq(tracks.albumId, albums.id))
-          .where(isNotNull(tracks.recordingKey))
-          .orderBy(asc(tracks.id))
-          .all(),
-      );
+      matcher ??= collaborativeEntryMatcher(entryCandidates(tx, entries));
       return matcher(entry);
     },
     phoneId: selectPhoneId(tx),
@@ -1298,10 +1388,6 @@ const applyPlaylist = (
 };
 
 /**
- * Applies a pulled entry; true when it changed the phone's. A live entry it
- * places adds its playlist to [placed], for `keepOneEntryPerSong`.
- */
-/**
  * Where a pulled Library entry ([row], of a song with the recording key [songId]) lands
  * here: the Track the key names, or for a collaborative playlist's entry the one Core's
  * `collaborativeEntryMatcher` finds by its fields, else the song streamed or searched for
@@ -1335,6 +1421,10 @@ const placeLibraryEntry = (
   return { trackId: null, ytSong: writeEntrySong(match), libraryEntry };
 };
 
+/**
+ * Applies a pulled entry; true when it changed the phone's. A live entry it
+ * places adds its playlist to [placed], for `keepOneEntryPerSong`.
+ */
 const applyEntry = (
   tx: LibraryDatabase,
   row: SyncPlaylistEntry,
@@ -1345,12 +1435,12 @@ const applyEntry = (
   if (!beatsPending(tx, "playlistEntries", row)) return false;
   const held = tx.select().from(playlistItems).where(eq(playlistItems.syncId, row.id)).get();
   if (held !== undefined && !entryWins(row, held)) {
-    // The device's own entry back from the service, which wrote who added it.
+    // The device's own entry back from the service, which wrote who added it: the page
+    // shows the initial at once.
     const addedBy = "addedBy" in row ? row.addedBy : undefined;
-    if (typeof addedBy === "string" && held.addedBy === null) {
-      tx.update(playlistItems).set({ addedBy }).where(eq(playlistItems.id, held.id)).run();
-    }
-    return false;
+    if (typeof addedBy !== "string" || held.addedBy !== null) return false;
+    tx.update(playlistItems).set({ addedBy }).where(eq(playlistItems.id, held.id)).run();
+    return true;
   }
   const elsewhere = (playlistId: number): void => {
     if (place.collaborativeIds.has(playlistId) && row.phoneId !== place.phoneId)
@@ -1803,7 +1893,7 @@ export const applyPulledPage = (
 ): PulledChanges =>
   db.transaction((tx) => {
     const changed = nothingChanged();
-    const place = placing(tx, trackIds);
+    const place = placing(tx, trackIds, page.playlistEntries);
     for (const row of page.songs) {
       if (applySong(tx, row)) changed.songs = true;
     }
@@ -1888,7 +1978,7 @@ export const applyPending = (
       (rows[row.kind as PendingKind] as unknown[]).push(JSON.parse(row.row));
     }
     const changed = nothingChanged();
-    const place = placing(tx, trackIds);
+    const place = placing(tx, trackIds, rows.playlistEntries);
     applyRows(tx, rows, place, changed, now);
     markUnseen(tx, place);
     // A snapshot-only Library play is already visible; attach it once its
@@ -1929,27 +2019,56 @@ export interface PlaylistPageResult {
  * Applies a page of a member's pull of the collaborative playlist [playlistSyncId]: its row
  * and entries merged as an account page's are, a Library entry matched to this device's
  * Tracks by its fields (`placeLibraryEntry`), and the page's cursor kept as the playlist's
- * own, in the same transaction. A page that deletes the playlist applies nothing: the
+ * own, in the same transaction. Once the playlist is here, the entries an earlier page left
+ * waiting for its row (`sync_pending`) are placed with the page's. It reads only the Tracks
+ * those entries name or could match. A page that deletes the playlist applies nothing: the
  * caller keeps it as the member's private copy.
  */
 export const applyPlaylistPage = (
   db: LibraryDatabase,
   playlistSyncId: string,
   page: SyncPullPage,
-  trackIds: ReadonlyMap<string, number>,
   now: number,
 ): PlaylistPageResult =>
   db.transaction((tx) => {
+    const { playlists, syncPending } = schema;
     const own = page.playlists.filter((row) => row.id === playlistSyncId);
     if (own.some((row) => row.deleted)) return { changed: false, deleted: true };
-    const place = placing(tx, trackIds);
+    const pulled = page.playlistEntries.filter(
+      (row) => !("playlistId" in row) || row.playlistId === playlistSyncId,
+    );
     const changed = nothingChanged();
+    // Entries an earlier page left waiting for the playlist's row (`sync_pending`).
+    const waiting = tx
+      .select({ id: syncPending.id, row: syncPending.row })
+      .from(syncPending)
+      .where(
+        and(eq(syncPending.kind, "playlistEntries"), eq(syncPending.playlistKey, playlistSyncId)),
+      )
+      .all()
+      .map((row) => JSON.parse(row.row) as SyncPlaylistEntry);
+    const named = [...waiting, ...pulled];
+    // Placed before the playlist's row, so a playlist new here isn't marked changed elsewhere.
+    const place = placing(
+      tx,
+      selectAccountTrackIds(
+        tx,
+        libraryEntries(named).map((entry) => entry.songId),
+      ),
+      named,
+    );
     for (const row of own) {
       if (applyPlaylist(tx, row, now, place)) changed.playlists = true;
     }
-    const entries = page.playlistEntries.filter(
-      (row) => !("playlistId" in row) || row.playlistId === playlistSyncId,
-    );
+    const here =
+      tx
+        .select({ id: playlists.id })
+        .from(playlists)
+        .where(eq(playlists.syncId, playlistSyncId))
+        .get() !== undefined;
+    const ready = here ? waiting : [];
+    for (const row of ready) unpend(tx, "playlistEntries", row.id);
+    const entries = [...ready, ...pulled];
     applyRows(
       tx,
       { playlistEntries: entries, favorites: [], plays: [], dislikes: [] },
