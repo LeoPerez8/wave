@@ -209,6 +209,35 @@ describe("releaseChanges", () => {
   });
 });
 
+describe("releaseChanges over several merged changes", () => {
+  const workspace = ["pnpm-workspace.yaml", "pnpm-lock.yaml"];
+  const desktop = ["apps/desktop/src/main/index.ts"];
+
+  it("releases the phone for a workspace change merged beside a desktop-only one", () => {
+    // A catalog bump in one PR and a desktop-only PR after it: the APK's dependencies changed.
+    assert.deepEqual(releaseChanges([...workspace, ...desktop], undefined, [workspace, desktop]), {
+      phoneRelease: true,
+      desktopRelease: true,
+    });
+  });
+
+  it("leaves out the workspace files a desktop-only change changed along the way", () => {
+    const desktopWithLockfile = [...desktop, "pnpm-lock.yaml"];
+    assert.deepEqual(
+      releaseChanges(desktopWithLockfile, undefined, [desktopWithLockfile, ["docs/spec.md"]]),
+      { phoneRelease: false, desktopRelease: true },
+    );
+  });
+
+  it("counts only what the paths still change, whatever a merged change touched", () => {
+    // A change and its revert since the previous release leave nothing new.
+    assert.equal(
+      releaseChanges(desktop, undefined, [["packages/core/src/queue.ts"], desktop]).phoneRelease,
+      false,
+    );
+  });
+});
+
 describe("releaseChanges with the app's package.json", () => {
   const appPackage = (version: string, extra = {}) =>
     `${JSON.stringify({ name: "@wave/mobile", version, dependencies: { expo: "58.0.7" }, ...extra }, null, 2)}\n`;
@@ -363,6 +392,18 @@ describe("changes.ts as a command", () => {
     assert.match(run([], "apps/mobile/package.json\n"), /^phoneRelease=true$/m);
   });
 
+  it("reads each merged change from git log's file lists with --merged", () => {
+    const dir = mkdtempSync(join(tmpdir(), "changes-"));
+    const log = join(dir, "merged.txt");
+    writeFileSync(
+      log,
+      "commit 1111\n\npnpm-workspace.yaml\npnpm-lock.yaml\ncommit 2222\n\napps/desktop/src/main/index.ts\n",
+    );
+    const paths = "pnpm-workspace.yaml\npnpm-lock.yaml\napps/desktop/src/main/index.ts\n";
+    assert.match(run(["--merged", log], paths), /^phoneRelease=true$/m);
+    assert.match(run([], paths), /^phoneRelease=false$/m);
+  });
+
   it("counts every area as changed with --all, as on pushes to main", () => {
     assert.equal(
       run(["--all"], ""),
@@ -430,5 +471,84 @@ describe("changes.sh on a promotion's run", () => {
     const unlisted = promotion("refs/heads/main", "", "exit 1");
     assert.equal(unlisted.status, 0, unlisted.stderr);
     assert.doesNotMatch(unlisted.output, /^desktopSince=./m);
+  });
+});
+
+describe("changes.sh on main", () => {
+  const shell = fileURLToPath(new URL("./changes.sh", import.meta.url));
+  /**
+   * A repo whose first commit is v1.0.0-ti, which published both apps, then one commit per
+   * change; `gh` lists that one release. What changes.sh writes for a push to main.
+   */
+  const pushed = (changes: ((dir: string, git: (...args: string[]) => string) => void)[]) => {
+    const dir = mkdtempSync(join(tmpdir(), "wave-changes-"));
+    const git = (...args: string[]) =>
+      execFileSync("git", ["-C", dir, "-c", "core.autocrlf=false", ...args], { encoding: "utf8" });
+    const commit = (message: string) => {
+      git("add", "-A");
+      git("-c", "user.name=ci", "-c", "user.email=ci@localhost", "commit", "-q", "-m", message);
+    };
+    const write = (path: string, text: string) => {
+      execFileSync("mkdir", ["-p", join(dir, path, "..")]);
+      writeFileSync(join(dir, path), text);
+    };
+    git("init", "-q");
+    write("packages/client/src/foo.ts", "export const foo = 1;\n".repeat(20));
+    write("pnpm-workspace.yaml", "catalog:\n  effect: 3.0.0\n");
+    write("apps/desktop/src/main/index.ts", "export {};\n");
+    commit("one");
+    git("tag", "v1.0.0-ti");
+    changes.forEach((change, index) => {
+      change(dir, git);
+      commit(`change ${index}`);
+    });
+    // Outside the repo, so the commits above don't hold it.
+    const bin = mkdtempSync(join(tmpdir(), "wave-changes-bin-"));
+    const release = JSON.stringify({
+      tagName: "v1.0.0-ti",
+      assets: ["wave-1.0.0-ti.apk", "wave-1.0.0-ti-win-x64.exe"],
+    });
+    writeFileSync(join(bin, "gh"), `#!/bin/sh\necho '${release}'\n`, { mode: 0o755 });
+    const output = join(bin, "output");
+    writeFileSync(output, "");
+    const result = spawnSync("bash", [shell], {
+      cwd: dir,
+      encoding: "utf8",
+      env: {
+        ...process.env,
+        PATH: `${bin}:${process.env.PATH}`,
+        GITHUB_REPOSITORY: "o/r",
+        GITHUB_REF: "refs/heads/main",
+        GITHUB_OUTPUT: output,
+        PR_NUMBER: "",
+        PROMOTED_APP: "",
+      },
+    });
+    assert.equal(result.status, 0, result.stderr);
+    return readFileSync(output, "utf8");
+  };
+
+  it("releases the phone for a file moved out of the phone's code into the desktop's", () => {
+    const output = pushed([
+      (_dir, git) => git("mv", "packages/client/src/foo.ts", "apps/desktop/src/foo.ts"),
+    ]);
+    assert.match(output, /^phoneRelease=true$/m);
+    assert.match(output, /^desktopRelease=true$/m);
+  });
+
+  it("releases the phone for a workspace change merged before a desktop-only one", () => {
+    const output = pushed([
+      (dir) => writeFileSync(join(dir, "pnpm-workspace.yaml"), "catalog:\n  effect: 3.1.0\n"),
+      (dir) => writeFileSync(join(dir, "apps/desktop/src/main/index.ts"), "export const a = 1;\n"),
+    ]);
+    assert.match(output, /^phoneRelease=true$/m);
+  });
+
+  it("releases only the desktop for a desktop-only change", () => {
+    const output = pushed([
+      (dir) => writeFileSync(join(dir, "apps/desktop/src/main/index.ts"), "export const a = 1;\n"),
+    ]);
+    assert.match(output, /^phoneRelease=false$/m);
+    assert.match(output, /^desktopRelease=true$/m);
   });
 });

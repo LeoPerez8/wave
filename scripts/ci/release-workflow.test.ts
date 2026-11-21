@@ -97,6 +97,12 @@ describe("the split", () => {
       assert.ok(job("changes").includes(`${output}: \${{ steps.rule.outputs.${output} }}`));
   });
 
+  it("decides each app's release on the release source, not on the pushed commit", () => {
+    // The Version job's bump may sit on a newer tip of main than the pushed commit.
+    assert.ok(needsOf("changes").includes("source"));
+    assert.ok(step("changes", "actions/checkout").includes(`ref: ${SOURCE}`));
+  });
+
   it("grants each app's workflow no more than its jobs ask for, and secrets only from Environments", () => {
     for (const app of ["mobile", "desktop"]) {
       assert.match(
