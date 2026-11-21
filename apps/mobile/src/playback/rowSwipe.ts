@@ -1,5 +1,6 @@
 import { currentLocalisation } from "@/localisation/localisation";
 import {
+  isDisliked,
   itemActions,
   shownSwipeEntry,
   swipesChoose,
@@ -9,6 +10,7 @@ import {
   type RowMenuAction,
   type SwipeSettings,
 } from "@wave/core";
+import { dislikedSongsNow } from "@/library/dislikes";
 import { favoriteIdsNow } from "@/library/favorites";
 import type { ArtistRow } from "@wave/client";
 import { currentPath } from "@/library/routes";
@@ -20,7 +22,13 @@ import { currentLibraryFinder, type FindInLibrary } from "@/ytmusic/libraryFinde
 import { streamedArtistContextNow } from "@/ytmusic/streamedArtist";
 import { missingSongDownloadStatusNow } from "@/ytmusic/YtDownloads";
 
-import { hasStreamedSongs, isLibraryTrack, targetFacts, type ActionItems } from "./actionTargets";
+import {
+  hasStreamedSongs,
+  isLibraryTrack,
+  isUnsearchedTrack,
+  targetFacts,
+  type ActionItems,
+} from "./actionTargets";
 import { itemActionPress } from "./itemActions";
 
 /**
@@ -47,7 +55,8 @@ const findNothing: FindInLibrary = () => null;
 
 /**
  * [target]'s menu entries as its long-press menu plans them on the screen at
- * [here] (Core's `itemActions`), the stars as they are now. What only some
+ * [here] (Core's `itemActions`), the stars and the dislikes as they are now
+ * (the rows of a list set to Dislike have read them). What only some
  * swipe choices need is read only while [settings] choose them: a missing
  * song's download (Download), a streamed song's artists (Go to Artist, once
  * the Library's artists are read).
@@ -58,9 +67,23 @@ const planTrack = (
   find: FindInLibrary,
   settings: SwipeSettings,
 ): readonly ItemActionEntry<ArtistRow>[] => {
-  const facts = targetFacts(target, favoriteIdsNow(), find);
   const downloads = swipesChoose(settings, "download");
   const items = target.kind === "track" ? target.items : [];
+  const disliked = dislikedSongsNow();
+  // As the menu plans it (`usePlan`): a YT Music song the Library has is its song.
+  const facts = targetFacts(target, favoriteIdsNow(), find).map((fact, index): ActionItem => {
+    const item = items[index];
+    if (item === undefined || isUnsearchedTrack(item)) return fact;
+    return {
+      ...fact,
+      disliked: isDisliked(
+        disliked,
+        isLibraryTrack(item)
+          ? { id: item.song.id }
+          : { id: find(item.ytSong)?.id, videoId: item.ytSong.videoId },
+      ),
+    };
+  });
   return itemActions<ArtistRow>({
     kind: "track",
     items: downloads
