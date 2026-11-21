@@ -12,10 +12,6 @@ export const discoverPtBr: typeof discoverEn = {
     "artist-mixes": "Gerar novos mixes de artistas",
     "genre-mixes": "Gerar novos mixes de gêneros",
   },
-  pages: {
-    "most-listened-recently": "Mais ouvidas recentemente",
-    discoveries: "Descobertas",
-  },
   pageOf: (name: string, page: number, pages: number) =>
     `${name}, página ${formatNumber("pt-BR", page)} de ${formatNumber("pt-BR", pages)}`,
   otherSongs: "Mostrar outras músicas",
