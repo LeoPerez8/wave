@@ -12,7 +12,7 @@ import {
   type QueueContext,
 } from "@wave/core";
 import { useLocalSearchParams } from "expo-router";
-import { useCallback, useDeferredValue, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useDeferredValue, useMemo, useRef, useState } from "react";
 import { Text, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
@@ -22,7 +22,7 @@ import { CELL, grid } from "@/catalog/grid";
 import { SearchField } from "@/search/SearchField";
 import { songResults } from "@/search/rows";
 import { useSearchIndex } from "@/search/searchIndex";
-import { useYtMusicSection } from "@/search/ytMusicSearch";
+import { useYtMusicSongsSection } from "@/search/ytMusicSearch";
 import { useHeldSongs, useSongsInPlace } from "@/ytmusic/songsInPlace";
 import { usePlaylist } from "@/library/hooks";
 import { parseId } from "@/library/routes";
@@ -86,11 +86,7 @@ export default function AddPlaylistSongsScreen() {
           }),
     [index, query, downloads],
   );
-  const libraryEmpty = results !== null && results.groups.length === 0;
-  const [ytSection, pickYtSection] = useYtMusicSection(query, !libraryEmpty);
-  useEffect(() => {
-    if (query.trim() !== "") pickYtSection("online");
-  }, [query, pickYtSection]);
+  const ytSection = useYtMusicSongsSection(query);
   const inLibrary = library?.library;
   const ytView = useMemo(
     () =>
