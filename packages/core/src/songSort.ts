@@ -202,6 +202,10 @@ export const songSpineKeys = (
   return spineKey === undefined ? undefined : songs.map(spineKey);
 };
 
+/** Whether the list is filed under names for letter jumps. */
+export const songSortHasSpine = (sort: SongSort): boolean =>
+  ORDERS[sort.key].spineKey !== undefined;
+
 /** A song field a list's order compares, as the Library's tables hold it (`id` is the Track's). */
 export type SongOrderField =
   | "titleSort"
@@ -215,8 +219,8 @@ export type SongOrderField =
   | "id";
 
 /** One step of an order the database runs (an `ORDER BY` term). */
-export interface SongOrderTerm {
-  readonly field: SongOrderField;
+export interface SongOrderTerm<Field extends string = SongOrderField> {
+  readonly field: Field;
   readonly descending: boolean;
   /** What a null compares as (a missing disc is disc 1); absent where the field is never null. */
   readonly nullAs?: number | string;
@@ -277,9 +281,22 @@ export const songOrderTerms = (sort: LibrarySongSort): readonly SongOrderTerm[] 
   return [{ field: primary, descending: sort.descending }, ...ties];
 };
 
-/** The field [sort] files a song under on the A–Z spine (`songSpineKeys`); none for the date sorts. */
-export const songSpineField = (sort: LibrarySongSort): SongOrderField | undefined =>
-  ORDERS[sort.key].spineKey === undefined ? undefined : ORDER_TERMS[sort.key][0];
+/** The browse query has the date starred in Favorites and uses song name order until Popular is ranked. */
+export const songBrowseOrderTerms = (
+  sort: SongSort,
+): readonly SongOrderTerm<SongOrderField | "starredAt">[] => {
+  const seen = new Set<SongOrderField>();
+  const terms = songOrderTerms(librarySongSort(sort)).filter(
+    ({ field }) => !seen.has(field) && seen.add(field),
+  );
+  return sort.key === "starred"
+    ? [{ field: "starredAt", descending: sort.descending }, ...terms]
+    : terms;
+};
+
+/** The field [sort] files a song under on the A–Z spine (`songSpineKeys`), when it has one. */
+export const songSpineField = (sort: SongSort): SongOrderField | undefined =>
+  songSortHasSpine(sort) ? ORDER_TERMS[librarySongSort(sort).key][0] : undefined;
 
 /** [sort] as a string to save. */
 export const writeSongSort = (sort: SongSort): string =>
@@ -289,10 +306,44 @@ export const writeSongSort = (sort: SongSort): string =>
  * A [kind] list's sort saved by `writeSongSort`; the kind's default when nothing
  * (readable, and on offer for the kind) was saved.
  */
-export const readSongSort = (saved: string | null, kind: SongListKind = "songs"): SongSort => {
-  const { key, descending } = readStoredRecord(saved);
-  return (
-    songSortsFor(kind).find((sort) => sort.key === key && sort.descending === descending) ??
-    defaultSongSort(kind)
-  );
+export const readSongSort = (saved: string | null, kind: SongListKind = "songs"): SongSort =>
+  readLibraryTableSort(songSortsFor(kind), saved) ?? defaultSongSort(kind);
+
+const NAME_SORTS = SONG_SORTS.filter(({ key }) => key === "title");
+
+/**
+ * The desktop tables with sortable headers that share one sort per kind: the top-level Library
+ * lists, and an artist's and a genre's songs. A playlist keeps its own (`PLAYLIST_SONG_SORTS`).
+ */
+export const libraryTableSortsFor = (kind: string): readonly SongSort[] => {
+  switch (kind) {
+    case "songs":
+    case "favorites":
+    case "artist":
+    case "genre":
+      return songSortsFor(kind);
+    case "albums":
+    case "artists":
+    case "genres":
+      return NAME_SORTS;
+    default:
+      return [];
+  }
 };
+
+/** Read a table's saved choice, or its default when the choice is missing or no longer offered. */
+export const readLibraryTableSort = (choices: readonly SongSort[], saved: string | null) => {
+  const { key, descending } = readStoredRecord(saved);
+  return choices.find((sort) => sort.key === key && sort.descending === descending) ?? choices[0];
+};
+
+/** A new header starts in its first offered direction. The current one reverses when possible. */
+export const nextHeaderSort = <S extends { readonly key: string; readonly descending: boolean }>(
+  choices: readonly S[],
+  current: S,
+  key: string,
+): S | undefined =>
+  choices.find(
+    (sort) =>
+      sort.key === key && !(sort.key === current.key && sort.descending === current.descending),
+  );

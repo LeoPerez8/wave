@@ -19,6 +19,7 @@ import {
   FOLLOWED_ARTISTS_SETTING as FOLLOWED_ARTISTS,
   SHOW_CHECKS_TODAY_SETTING as CHECKS_TODAY,
   homeFollowCards,
+  type FollowAlbumRead,
   type FollowRelease,
 } from "@wave/core";
 import * as Context from "effect/Context";
@@ -27,8 +28,13 @@ import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 
 import type { HomeFollowView, HomeReleaseOpening } from "../../shared/homeFollow.ts";
+import { stampPreference } from "@wave/client/db/sync";
+import { sql } from "drizzle-orm";
+import { ytRow } from "../../shared/yt.ts";
+import type { YtAlbumView } from "../../shared/ytPages.ts";
 import { preference, savePreference } from "../preferences.ts";
-import { syncedPreference } from "../sync/desktopSync.ts";
+import { keepPreference, syncedPreference } from "../sync/desktopSync.ts";
+import { createFollowedArtists, FollowedArtists } from "./followedArtists.ts";
 import type { YtPagesShape } from "../yt/ytPages.ts";
 import { YtMusic } from "../yt/ytMusic.ts";
 import { YtFeatures } from "../yt/ytServices.ts";
@@ -55,7 +61,7 @@ export interface HomeFollowDeps {
     readonly set: (key: string, value: string) => void;
   };
   readonly ytEnabled: () => boolean;
-  readonly pages: Pick<YtPagesShape, "findArtist" | "artist" | "album" | "catalog">;
+  readonly pages: Pick<YtPagesShape, "album" | "catalog" | "searchArtists">;
   /** Deezer's releases and covers. */
   readonly fetch: typeof fetch;
   /** The gap before each show request; a test shortens it. */
@@ -100,25 +106,17 @@ export const createHomeFollow = (deps: HomeFollowDeps): HomeFollowShape => {
     );
   /** The check's YT Music reads over the desktop's pages; anything but an answer fails. */
   const yt: FollowYt<YtReadFailed> = {
-    searchArtists: (name) =>
+    searchAlbums: (query) =>
       read(async () => {
-        const found = await pages.findArtist(name);
-        if (found.status !== "ok") return null;
-        // Already picked as the check picks (`pickYtArtist`), so it comes back named as asked.
-        return found.browseId === null ? [] : [{ name, browseId: found.browseId, audience: null }];
-      }),
-    artist: (browseId) =>
-      read(async () => {
-        const found = await pages.artist(browseId);
-        return found.status === "ok" && found.page !== null
-          ? { albums: found.page.albums, singles: found.page.singles }
-          : null;
+        const found = await pages.catalog(query);
+        return found.status === "ok" ? found.albums : null;
       }),
     album: (browseId) =>
       read(async () => {
         const found = await pages.album(browseId);
         return found.status === "ok" && found.album !== null ? { tracks: found.album.songs } : null;
       }),
+    searchArtists: (name) => read(() => pages.searchArtists(name)),
   };
 
   const checksToday = {
@@ -151,6 +149,9 @@ export const createHomeFollow = (deps: HomeFollowDeps): HomeFollowShape => {
   const checkReleases = followReleasesCheck<YtReadFailed>({
     enabled,
     ytEnabled: deps.ytEnabled,
+    blockExplicit: () => deps.setting(DONT_PLAY_EXPLICIT) === "on",
+    // A read that fails with the computer offline ends the round.
+    offline: () => !deps.online(),
     country: deps.country,
     showsCheckable: async () => deps.configured && deps.signedIn(),
     checkShows: (context) => checkShows(store, context),
@@ -165,6 +166,7 @@ export const createHomeFollow = (deps: HomeFollowDeps): HomeFollowShape => {
     const shown = homeFollowCards(known, {
       now,
       enabled: enabled(),
+      ytMusic: ytMusic(),
       blockExplicit: deps.setting(DONT_PLAY_EXPLICIT) === "on",
       country,
     });
@@ -233,6 +235,8 @@ export const createHomeFollow = (deps: HomeFollowDeps): HomeFollowShape => {
       const release: FollowRelease | undefined = releaseCards.find((r) => r.key === key);
       if (release === undefined) return { kind: "notFound" };
       if (release.libraryAlbumId) return { kind: "album", id: release.libraryAlbumId };
+      // The album read here is the one its page shows, so the page doesn't ask again.
+      let shown: YtAlbumView | undefined;
       const opening = await Effect.runPromise(
         openFollowRelease(store, release, artist(release.artistKey), {
           ytMusic,
@@ -241,18 +245,32 @@ export const createHomeFollow = (deps: HomeFollowDeps): HomeFollowShape => {
             const found = await pages.catalog(query);
             return found.status === "ok" ? found.albums : null;
           },
-          albumVideoIds: async (browseId) => {
+          album: async (browseId): Promise<FollowAlbumRead> => {
             const found = await pages.album(browseId);
-            return found.status === "ok" && found.album !== null
-              ? found.album.songs.map((song) => song.videoId)
-              : null;
+            if (found.status !== "ok") return "noAnswer";
+            if (found.album === null) return "missing";
+            const songs = found.album.songs.map(ytRow);
+            shown = {
+              status: "ok",
+              album: { ...found.album, songs: { items: songs, offset: 0, total: songs.length } },
+            };
+            return { videoIds: found.album.songs.map((song) => song.videoId) };
           },
         }),
       );
-      // "search" never leaves `openFollowRelease`.
+      // "search" and "gone" never leave `openFollowRelease`.
       return opening.kind === "open"
-        ? { kind: "ytAlbum", browseId: opening.browseId }
-        : { kind: opening.kind === "search" ? "noAnswer" : opening.kind };
+        ? shown === undefined
+          ? { kind: "ytAlbum", browseId: opening.browseId }
+          : { kind: "ytAlbum", browseId: opening.browseId, album: shown }
+        : {
+            kind:
+              opening.kind === "search"
+                ? "noAnswer"
+                : opening.kind === "gone"
+                  ? "notFound"
+                  : opening.kind,
+          };
     },
     artwork: async (key) => {
       const url = (await cards()).releaseCards.find((r) => r.key === key)?.artworkUrl ?? null;
@@ -265,28 +283,50 @@ export class HomeFollow extends Context.Service<HomeFollow, HomeFollowShape>()(
   "@wave/desktop/HomeFollow",
 ) {}
 
-/** HomeFollow over the Library and YT Music's pages; shows are asked with the account's session. */
+/**
+ * HomeFollow over the Library and YT Music's pages, and FollowedArtists beside it; shows are
+ * asked with the account's session.
+ */
 const homeFollowLayer = (options: {
   readonly request: WaveServiceRequest;
   readonly configured: boolean;
   readonly signedIn: () => boolean;
   readonly online: () => boolean;
+  /** The system's region; the owner's Country choice in Settings comes first. */
   readonly country: () => string;
   readonly fetch: typeof fetch;
 }) =>
-  Layer.effect(
-    HomeFollow,
+  Layer.effectContext(
     Effect.gen(function* () {
       const db = yield* Database;
       const yt = yield* YtMusic;
       const features = yield* YtFeatures;
-      return createHomeFollow({
+      const followed = createFollowedArtists({
+        db,
+        configured: options.configured,
+        signedIn: options.signedIn,
+        systemCountry: options.country,
+        setting: (key) => syncedPreference(db, key),
+        saveSetting: (key, value) => {
+          keepPreference(db, key, value);
+          stampPreference(db, key, Date.now());
+        },
+        local: {
+          get: (key) => preference(db, key),
+          set: (key, value) => {
+            if (value === null) db.run(sql`DELETE FROM desktop_settings WHERE key = ${key}`);
+            else savePreference(db, key, value);
+          },
+        },
+        fetch: options.fetch,
+      });
+      const home = createHomeFollow({
         db,
         configured: options.configured,
         signedIn: options.signedIn,
         ask: (path) => askWaveService(options.request, path),
         online: options.online,
-        country: options.country,
+        country: followed.country,
         setting: (key) => syncedPreference(db, key),
         local: {
           get: (key) => preference(db, key),
@@ -296,10 +336,11 @@ const homeFollowLayer = (options: {
         pages: features.pages,
         fetch: options.fetch,
       });
+      return Context.make(HomeFollow, home).pipe(Context.add(FollowedArtists, followed));
     }),
   );
 
-/** [base] with HomeFollow over it. */
+/** [base] with HomeFollow and FollowedArtists over it. */
 export const withHomeFollow =
   (options: Parameters<typeof homeFollowLayer>[0]) =>
   <A, E, R>(base: Layer.Layer<A, E, R>) =>

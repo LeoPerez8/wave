@@ -4,6 +4,9 @@
  * SQLite in plain Node (`testDatabase.ts`); `LibraryStore` calls them.
  */
 import {
+  dislikeKeys,
+  favoriteSongs,
+  isDisliked,
   rankMostPlayed,
   recentlyPlayedAlbums,
   parseTrackId,
@@ -18,6 +21,7 @@ import { and, desc, eq, gt, inArray, isNotNull, isNull, max, sql } from "drizzle
 
 import type { AlbumRow, SongRow } from "../types.ts";
 import type { LibraryDatabase } from "./database.ts";
+import { removeDislikes } from "./dislikes.ts";
 import * as schema from "./schema.ts";
 import { playRecordingKey, stamped } from "./sync.ts";
 import { selectAlbums } from "./albums.ts";
@@ -211,14 +215,14 @@ const albumsInOrder = (
   return ids.flatMap((id) => byId.get(id) ?? []);
 };
 
-const recentlyAddedAlbums = (db: LibraryDatabase, scope: TrackScope): AlbumRow[] => {
+const recentlyAddedAlbums = (db: LibraryDatabase, scope: TrackScope, limit = SHELF): AlbumRow[] => {
   const { tracks } = schema;
   const ids = db
     .select({ id: tracks.albumId })
     .from(tracks)
     .groupBy(tracks.albumId)
     .orderBy(desc(max(tracks.addedAt)), desc(tracks.albumId))
-    .limit(SHELF)
+    .limit(limit)
     .all()
     .map((row) => row.id);
   return albumsInOrder(db, ids, scope);
@@ -233,9 +237,10 @@ const recentlyPlayedShelf = (
   db: LibraryDatabase,
   scope: TrackScope,
   streamed: readonly StreamedListeningTotal[],
+  limit = SHELF,
 ): PlayedAlbum[] => {
   const { playTotals, tracks } = schema;
-  for (let page = SHELF * PAGE_GROWTH; ; page *= PAGE_GROWTH) {
+  for (let page = Math.min(limit, SHELF) * PAGE_GROWTH; ; page *= PAGE_GROWTH) {
     const songs = db
       .select({ albumId: tracks.albumId, lastPlayedAt: playTotals.lastPlayedAt })
       .from(playTotals)
@@ -243,10 +248,10 @@ const recentlyPlayedShelf = (
       .orderBy(desc(playTotals.lastPlayedAt))
       .limit(page)
       .all();
-    const ids = recentlyPlayedAlbums(songs, SHELF, songs.length < page);
+    const ids = recentlyPlayedAlbums(songs, limit, songs.length < page);
     if (ids !== null) {
       const local = albumsInOrder(db, ids, scope);
-      return scope === "files" ? local : recentlyPlayedEntities(db, local, SHELF, streamed);
+      return scope === "files" ? local : recentlyPlayedEntities(db, local, limit, streamed);
     }
   }
 };
@@ -401,39 +406,95 @@ export const playedRecordingKeys = (db: LibraryDatabase): string[] =>
 /** SQLite caps the variables in one statement; batches stay well under it. */
 const BATCH = 500;
 
+/** The stars alone, as [setFavorites] writes them, in [tx]. */
+export const writeFavorites = (
+  tx: LibraryDatabase,
+  trackIds: readonly number[],
+  on: boolean,
+  now: number,
+): void => {
+  const { favorites } = schema;
+  for (let start = 0; start < trackIds.length; start += BATCH) {
+    const batch = trackIds.slice(start, start + BATCH);
+    if (on)
+      tx.insert(favorites)
+        .values(batch.map((trackId) => ({ trackId, addedAt: now, changedAt: now })))
+        .onConflictDoUpdate({
+          target: favorites.trackId,
+          set: { addedAt: now, deleted: false, ...stamped(favorites, now) },
+          setWhere: eq(favorites.deleted, true),
+        })
+        .run();
+    else
+      tx.update(favorites)
+        .set({ deleted: true, ...stamped(favorites, now) })
+        .where(and(inArray(favorites.trackId, batch), eq(favorites.deleted, false)))
+        .run();
+  }
+};
+
+/**
+ * Removes the dislikes of the tracks just starred, in [tx]: a favorite isn't
+ * disliked (Core's `favoriteSongs`). A track's dislike is kept under its id
+ * or, set while the song was streamed, under its video. Returns the keys of
+ * the dislikes removed.
+ */
+const removeStarredDislikes = (
+  tx: LibraryDatabase,
+  trackIds: readonly number[],
+  now: number,
+): string[] => {
+  const { dislikes, tracks } = schema;
+  const disliked = new Set(
+    tx
+      .select({ key: dislikes.songKey })
+      .from(dislikes)
+      .where(eq(dislikes.deleted, false))
+      .all()
+      .map((row) => row.key),
+  );
+  if (disliked.size === 0) return [];
+  const videos = new Map<number, string | null>();
+  for (let start = 0; start < trackIds.length; start += BATCH) {
+    const rows = tx
+      .select({ id: tracks.id, videoId: tracks.videoId })
+      .from(tracks)
+      .where(inArray(tracks.id, trackIds.slice(start, start + BATCH)))
+      .all();
+    for (const row of rows) videos.set(row.id, row.videoId);
+  }
+  const { changes } = favoriteSongs(
+    trackIds.map((id) => {
+      const song = { id, videoId: videos.get(id) };
+      return { song, favorite: false, disliked: isDisliked(disliked, song) };
+    }),
+    true,
+  );
+  const keys = [
+    ...new Set(changes.removeDislike.flatMap(dislikeKeys).filter((key) => disliked.has(key))),
+  ];
+  removeDislikes(tx, keys, now);
+  return keys;
+};
+
 /**
  * Stars ([on]) or unstars many tracks in one transaction, stamping each star
  * that changes (`changeStamp`). Tracks starred already keep when they were
  * starred; unstarring leaves the star as a tombstone, and starring again
- * brings it back.
+ * brings it back. A star removes its song's dislike, whoever sets it (a menu,
+ * an import, a download settling a pending favorite); unstarring leaves the
+ * dislikes alone. Returns the keys of the dislikes removed.
  */
 export const setFavorites = (
   db: LibraryDatabase,
   trackIds: readonly number[],
   on: boolean,
   now: number,
-): void => {
-  const { favorites } = schema;
+): string[] =>
   db.transaction((tx) => {
-    for (let start = 0; start < trackIds.length; start += BATCH) {
-      const batch = trackIds.slice(start, start + BATCH);
-      if (on)
-        tx.insert(favorites)
-          .values(batch.map((trackId) => ({ trackId, addedAt: now, changedAt: now })))
-          .onConflictDoUpdate({
-            target: favorites.trackId,
-            set: { addedAt: now, deleted: false, ...stamped(favorites, now) },
-            setWhere: eq(favorites.deleted, true),
-          })
-          .run();
-      else
-        tx.update(favorites)
-          .set({ deleted: true, ...stamped(favorites, now) })
-          .where(and(inArray(favorites.trackId, batch), eq(favorites.deleted, false)))
-          .run();
-    }
+    writeFavorites(tx, trackIds, on, now);
+    return on ? removeStarredDislikes(tx, trackIds, now) : [];
   });
-};
 
 /** Home's sections that follow plays: they change as songs are played, nothing else does. */
 export type HomePlays = Pick<HomeSections, "recentlyPlayed" | "mostPlayed">;
@@ -452,6 +513,17 @@ export const homePlays = (db: LibraryDatabase, scope: TrackScope = "library"): H
     mostPlayed: mostPlayedSongs(db, scope, streamed),
   };
 };
+
+/** How many albums a Home shelf's See all lists. */
+const SEE_ALL = 1_000;
+
+/** Recently Added's See all: the shelf's order, past its 12 albums. */
+export const recentlyAddedList = (db: LibraryDatabase): AlbumRow[] =>
+  recentlyAddedAlbums(db, "library", SEE_ALL);
+
+/** Recently Played's See all: the shelf's order, past its 12 albums, streamed ones included. */
+export const recentlyPlayedList = (db: LibraryDatabase): PlayedAlbum[] =>
+  recentlyPlayedShelf(db, "library", streamedListeningTotals(db), SEE_ALL);
 
 /** Favorites, which stars change. */
 export const homeFavorites = (

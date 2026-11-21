@@ -284,6 +284,23 @@ export const createSearchIndex = <E extends SearchEntry>(entries: readonly E[]):
   );
 };
 
+/**
+ * Whether one entry matches [text], as an index's search would find it, for
+ * matching rows one at a time (a database's query); null for a query with
+ * nothing to match by. Each call normalizes the entry's text again.
+ */
+export const searchMatcher = (text: string): ((entry: SearchEntry) => boolean) | null => {
+  const normalized = normalizeSearchText(text);
+  if (normalized === "") return null;
+  const words = normalized.split(" ");
+  const query: Query = {
+    text: normalized,
+    compact: words.join(""),
+    wordStarts: words.map((word) => ` ${word}`),
+  };
+  return (entry) => tierOf(prepareSearchEntry(entry, 0, 0, normalizeSearchText), query) !== null;
+};
+
 /** A search index over entries already prepared (`prepareSearchEntry`). */
 export const searchIndexOver = <E extends SearchEntry>(
   indexed: readonly Indexed<E>[],
@@ -347,6 +364,22 @@ export const searchIndexOver = <E extends SearchEntry>(
       };
     },
   };
+};
+
+/**
+ * The kinds of [candidates], each once, in the order their groups show for
+ * [query]: by each kind's best match, as `search` orders its groups. Kinds
+ * none of whose candidates match come after, in the order given (YT Music's
+ * artists for a song title, say).
+ */
+export const searchKindOrder = (
+  query: string,
+  candidates: readonly SearchEntry[],
+): SearchKind[] => {
+  const matched = createSearchIndex(candidates)
+    .search(query, { limit: 1 })
+    .groups.map((group) => group.kind);
+  return [...new Set([...matched, ...candidates.map((candidate) => candidate.kind)])];
 };
 
 /** How many recent searches are kept. */

@@ -82,8 +82,9 @@ test("a row plays its list; the keys pause and skip; a relaunch restores it paus
   let app = await launch();
   try {
     let page = await app.firstWindow();
-    const pause = () => page.getByRole("button", { name: "Pause", exact: true });
-    const play = () => page.getByRole("button", { name: "Play", exact: true });
+    const player = () => page.locator(".player-bar");
+    const pause = () => player().getByRole("button", { name: "Pause", exact: true });
+    const play = () => player().getByRole("button", { name: "Play", exact: true });
     await page.getByRole("button", { name: "Songs", exact: true }).click();
     await page.getByRole("row", { name: /Song 1/ }).dblclick();
     await expect(pause()).toBeEnabled();

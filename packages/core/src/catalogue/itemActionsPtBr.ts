@@ -10,6 +10,8 @@ export const itemActionsPtBr: typeof itemActionsEn = {
     addToPlaylist: "Adicionar à Playlist",
     favorite: "Favoritar",
     unfavorite: "Remover das Favoritas",
+    dislike: "Não gostei",
+    removeDislike: "Remover não gostei",
     removeFromPlaylist: "Remover da Playlist",
     goToAlbum: "Ir para o Álbum",
     goToArtist: "Ir para o Artista",
@@ -51,6 +53,8 @@ export const itemActionsPtBr: typeof itemActionsEn = {
   addedToFavorites: "Adicionada às Favoritas",
   addedSongsToFavorites: (count) =>
     `${formatNumber("pt-BR", count)} músicas adicionadas às Favoritas`,
+  dislikedSong: "Marcada como não gostei",
+  dislikedSongsCount: (count) => `${formatNumber("pt-BR", count)} músicas marcadas como não gostei`,
   addedToQueue: "Adicionada à Fila",
   addedSongsToQueue: (count) => `${formatNumber("pt-BR", count)} músicas adicionadas à Fila`,
   playingNext: "Será reproduzida a seguir",

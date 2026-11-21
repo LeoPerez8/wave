@@ -125,6 +125,20 @@ describe("needsPortugueseNote", () => {
       assert.equal(needsPortugueseNote({ body: "", files }), false);
   });
 
+  it("wants it from a PR that changes the desktop and the phone, but not from a desktop-only one", () => {
+    assert.equal(
+      needsPortugueseNote({ body: "", files: ["apps/desktop/src/main/index.ts", ...app] }),
+      true,
+    );
+    assert.equal(
+      needsPortugueseNote({
+        body: "",
+        files: ["apps/desktop/src/main/index.ts", "pnpm-lock.yaml"],
+      }),
+      false,
+    );
+  });
+
   it("wants it when GitHub couldn't list every file, as the notes list that PR", () => {
     assert.equal(needsPortugueseNote({ body: "", files: null }), true);
   });

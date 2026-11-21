@@ -1,35 +1,69 @@
 import { useEffect, useState, type MouseEvent } from "react";
 import type { BrowseRow } from "../../shared/browse.ts";
-import type { YtAlbumView, YtArtistAlbum, YtArtistView } from "../../shared/ytPages.ts";
+import type { YtStatus } from "../../shared/yt.ts";
+import type { YtAlbumView, YtArtistRelease, YtArtistView } from "../../shared/ytPages.ts";
 import { Icon } from "./Icon.tsx";
 import { listDuration } from "@wave/core";
+import { FollowButton } from "./FollowButton.tsx";
 import { labels, text } from "./text.ts";
 import { Artwork } from "./VirtualTable.tsx";
 import { Shelf, YtQuiet, YtSongList } from "./YtLists.tsx";
+import { YtListDownloadButton } from "./YtListDownloadButton.tsx";
 
 type Run = (action: Promise<unknown>) => void;
 type Menu = (row: BrowseRow, event: MouseEvent<HTMLElement>) => void;
 
-/** Reads [key]'s page once; undefined while it reads, [failed] when the call fails. */
+/**
+ * Reads [key]'s page; undefined while it reads, [failed] when the call fails. `again` reads it
+ * once more (Try Again on the quiet line).
+ */
 const useRead = <T,>(key: string, load: (key: string) => Promise<T>, failed: T) => {
-  const [read, setRead] = useState<{ key: string; value: T }>();
+  const [attempt, setAttempt] = useState(0);
+  const [read, setRead] = useState<{ key: string; attempt: number; value: T }>();
   useEffect(() => {
     let current = true;
     void load(key)
       .catch(() => failed)
       .then((value) => {
-        if (current) setRead({ key, value });
+        if (current) setRead({ key, attempt, value });
       });
     return () => {
       current = false;
     };
-  }, [key, load, failed]);
-  return read?.key === key ? read.value : undefined;
+  }, [key, attempt, load, failed]);
+  const again = () => setAttempt((count) => count + 1);
+  return {
+    value: read?.key === key && read.attempt === attempt ? read.value : undefined,
+    again,
+  };
 };
+
+/** The quiet line of a page YT Music didn't answer, with Try Again, which reads it again. */
+function YtPageQuiet({ status, again }: { readonly status: YtStatus; readonly again: () => void }) {
+  return (
+    <YtQuiet status={status === "ok" ? "failed" : status}>
+      {status !== "disabled" && (
+        <button className="yt-quiet-again" onClick={again}>
+          {text.library.tryAgain}
+        </button>
+      )}
+    </YtQuiet>
+  );
+}
 
 const readArtist = (id: string) => window.wave.yt.artist(id);
 const noArtist: YtArtistView = { status: "failed", page: null };
-const readAlbum = (id: string) => window.wave.yt.album(id);
+/** An album page its opener already read (a new release's tap), shown once instead of asking again. */
+let held: { readonly id: string; readonly view: YtAlbumView } | undefined;
+/** Hands the album page [id] the read [view], for the page about to open. */
+export const holdYtAlbum = (id: string, view: YtAlbumView): void => {
+  held = { id, view };
+};
+const readAlbum = (id: string) => {
+  const given = held?.id === id ? held.view : undefined;
+  held = undefined;
+  return given === undefined ? window.wave.yt.album(id) : Promise.resolve(given);
+};
 const noAlbum: YtAlbumView = { status: "failed", album: null };
 
 const videoIds = (songs: readonly BrowseRow[]) =>
@@ -41,7 +75,29 @@ const playFrom = (run: Run, songs: readonly BrowseRow[], index: number) => {
   if (ids.length > 0) run(window.wave.playback.startYt(ids, Math.min(index, ids.length - 1)));
 };
 
-const releaseTiles = (releases: readonly YtArtistAlbum[]) =>
+/** Plays [songs] shuffled, as a Library album's Shuffle does. */
+const shuffle = (run: Run, songs: readonly BrowseRow[]) => {
+  const ids = videoIds(songs);
+  if (ids.length > 0) run(window.wave.playback.startYt(ids, 0, true));
+};
+
+/** Play and Shuffle, a page head's first two buttons. */
+function PlayButtons({ run, songs }: { readonly run: Run; readonly songs: readonly BrowseRow[] }) {
+  return (
+    <>
+      <button onClick={() => playFrom(run, songs, 0)}>
+        <Icon name="play" size={16} />
+        {labels.play}
+      </button>
+      <button onClick={() => shuffle(run, songs)}>
+        <Icon name="shuffle" size={16} />
+        {labels.shuffle}
+      </button>
+    </>
+  );
+}
+
+const releaseTiles = (releases: readonly YtArtistRelease[]) =>
   releases.map((release) => ({
     key: release.browseId,
     title: release.title,
@@ -63,19 +119,27 @@ export function YtArtistPage({
   run,
   onSongMenu,
   onAlbum,
+  onLibraryAlbum,
   onArtist,
+  onError,
 }: {
   readonly id: string;
   readonly run: Run;
   readonly onSongMenu: Menu;
   readonly onAlbum: (browseId: string) => void;
+  /** Opens the Library's album page: a release the Library already has. */
+  readonly onLibraryAlbum: (albumId: number) => void;
   readonly onArtist: (browseId: string) => void;
+  /** Shows that following the artist didn't work. */
+  readonly onError: (message: string) => void;
 }) {
-  const read = useRead(id, readArtist, noArtist);
+  const { value: read, again } = useRead(id, readArtist, noArtist);
   if (read === undefined) return <Loading />;
   const { page } = read;
-  if (page === null) return <YtQuiet status={read.status === "ok" ? "failed" : read.status} />;
+  if (page === null) return <YtPageQuiet status={read.status} again={again} />;
   const songs = page.songs.items;
+  const open = (release: YtArtistRelease) =>
+    release.libraryId === null ? onAlbum(release.browseId) : onLibraryAlbum(release.libraryId);
   return (
     <div className="yt-page" data-testid="yt-artist">
       <div className="hero">
@@ -83,14 +147,10 @@ export function YtArtistPage({
         <div className="hero-copy">
           <h1>{page.name}</h1>
           <p className="hero-meta">{[labels.artist, labels.youTubeMusic].join(" · ")}</p>
-          {songs.length > 0 && (
-            <div className="hero-actions">
-              <button onClick={() => playFrom(run, songs, 0)}>
-                <Icon name="play" size={16} />
-                {labels.play}
-              </button>
-            </div>
-          )}
+          <div className="hero-actions">
+            {songs.length > 0 && <PlayButtons run={run} songs={songs} />}
+            <FollowButton artist={{ name: page.name, ytBrowseId: id }} onError={onError} />
+          </div>
         </div>
       </div>
       {songs.length > 0 && (
@@ -107,12 +167,12 @@ export function YtArtistPage({
       <Shelf
         title={text.library.albums}
         items={releaseTiles(page.albums)}
-        onOpen={(index) => onAlbum(page.albums[index]!.browseId)}
+        onOpen={(index) => open(page.albums[index]!)}
       />
       <Shelf
         title={text.library.singlesAndEps}
         items={releaseTiles(page.singles)}
-        onOpen={(index) => onAlbum(page.singles[index]!.browseId)}
+        onOpen={(index) => open(page.singles[index]!)}
       />
       <Shelf
         title={labels.similarArtists}
@@ -134,15 +194,18 @@ export function YtAlbumPage({
   id,
   run,
   onSongMenu,
+  onError,
 }: {
   readonly id: string;
   readonly run: Run;
   readonly onSongMenu: Menu;
+  /** Shows that the album's download didn't start or stop. */
+  readonly onError: (message: string) => void;
 }) {
-  const read = useRead(id, readAlbum, noAlbum);
+  const { value: read, again } = useRead(id, readAlbum, noAlbum);
   if (read === undefined) return <Loading />;
   const { album } = read;
-  if (album === null) return <YtQuiet status={read.status === "ok" ? "failed" : read.status} />;
+  if (album === null) return <YtPageQuiet status={read.status} again={again} />;
   const songs = album.songs.items;
   const length = listDuration(
     songs.reduce((sum, row) => sum + row.durationMs, 0),
@@ -162,10 +225,11 @@ export function YtAlbumPage({
           </p>
           {songs.length > 0 && (
             <div className="hero-actions">
-              <button onClick={() => playFrom(run, songs, 0)}>
-                <Icon name="play" size={16} />
-                {labels.play}
-              </button>
+              <PlayButtons run={run} songs={songs} />
+              <YtListDownloadButton
+                list={{ kind: "album", id }}
+                onError={() => onError(text.desktopLibrary.actionFailed)}
+              />
             </div>
           )}
         </div>

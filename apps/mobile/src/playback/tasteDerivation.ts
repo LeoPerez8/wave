@@ -222,8 +222,18 @@ export const readTasteHistory = (store: LibraryStore["Service"], turn: Effect.Ef
       if (page.next === null) break;
       after = page.next;
     }
-    return { plays, favorites, downloads };
+    yield* turn;
+    // A dislike keeps its song's artists, for a song neither the Library nor a play tells.
+    const dislikes = (yield* store.listDislikes).map(({ key, dislikedAt, artists }) => ({
+      trackId: key,
+      dislikedAt,
+      artists,
+    }));
+    return { plays, favorites, downloads, dislikes };
   });
+
+/** What `readTasteHistory` reads: the history, each dislike with its song's artists as listed. */
+type ReadTasteHistory = Effect.Success<ReturnType<typeof readTasteHistory>>;
 
 /** A streamed song as the profile weighs it, from its queue id and its artists. */
 export type StreamedTasteSong = (track: {
@@ -242,10 +252,12 @@ const STREAMED_PAGE = 128;
  * The streamed songs [history]'s plays are, by queue id, as [streamedSong]
  * weighs them: each as its latest play had it (`streamedSongsByIds`), read
  * a page at a time on free turns. One the store has no song for is left out.
+ * A disliked song no play tells is weighed by the artists its dislike keeps,
+ * so a dislike counts for a song never played, or gone from the Library.
  */
 const readStreamedSongs = (
   store: LibraryStore["Service"],
-  history: TasteHistory,
+  history: ReadTasteHistory,
   streamedSong: StreamedTasteSong,
   pace: Effect.Effect<void>,
 ) =>
@@ -267,6 +279,8 @@ const readStreamedSongs = (
         songs.set(id, streamedSong({ id, artists: song.artists }));
       }
     }
+    for (const { trackId, artists } of history.dislikes)
+      if (!songs.has(trackId)) songs.set(trackId, streamedSong({ id: trackId, artists }));
     return songs;
   });
 

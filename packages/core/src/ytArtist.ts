@@ -8,6 +8,7 @@
  * module asks and reads; the app saves and lays out.
  */
 
+import type { ArtistPageAbout } from "./artistPage.ts";
 import type { YtPick } from "./onlineToggle.ts";
 import { artistPhotoName, artistPhotoQuery } from "./artistPhoto.ts";
 import { finishSteps } from "./buildSteps.ts";
@@ -104,10 +105,40 @@ export interface YtArtistPage<S extends YtSong = YtSong> {
   readonly singles: readonly YtArtistAlbum[];
   /**
    * The artists the page lists as similar ("Fans might also like"), in its
-   * order, for Discover mixes. Pages saved before it was read have none.
+   * order: the page's shelf of them, Discover mixes and the Artist graph read
+   * it. Pages saved before it was read have none.
    */
   readonly similar?: readonly YtArtistCandidate[];
+  /**
+   * The artist's description as the page gives it (About), null or absent
+   * when it has none. Pages saved before it was read have none.
+   */
+  readonly description?: string | null;
+  /** The subscriber count as YouTube Music writes it ("7.19M"), without its unit. */
+  readonly subscribers?: string | null;
+  /** The view count as YouTube Music writes it ("6,030,217,324"), without its unit. */
+  readonly views?: string | null;
 }
+
+/** What the About part of an artist page shows, from a YouTube Music artist page. */
+export type YtArtistAbout = ArtistPageAbout;
+
+/**
+ * A page's About: its description with whichever counts came with it, each
+ * count null when YouTube Music gave none. Null without a description, so a
+ * count alone shows no About.
+ */
+export const ytArtistAbout = (
+  page: Pick<YtArtistPage, "description" | "subscribers" | "views">,
+): YtArtistAbout | null => {
+  const description = page.description?.trim();
+  if (!description) return null;
+  return {
+    description,
+    subscribers: page.subscribers?.trim() || null,
+    views: page.views?.trim() || null,
+  };
+};
 
 /** How reading an artist's songs playlist (`readYtPlaylist`) went. */
 export type YtArtistSongsRead<S extends YtSong = YtSong> =
@@ -210,21 +241,45 @@ export const ytArtistSavedStands = <S extends YtSong>(
   now: number,
 ): saved is YtArtistSaved<S> => saved !== null && standsOnArtistPage(saved, now);
 
+/** [saved] with its page saying whether it has a description: null for none, never absent. */
+const withDescriptionRead = <S extends YtSong>(saved: YtArtistSaved<S>): YtArtistSaved<S> =>
+  saved.outcome !== "found" || saved.page.description !== undefined
+    ? saved
+    : { ...saved, page: { ...saved.page, description: null } };
+
 /**
- * What's saved for the artist once [answer] comes at [now], given what's
+ * What to save for the artist once [answer] comes at [now], given what's
  * saved meanwhile ([current]): the answer, unless it was read without the
- * artist's full list (a Library album's ask reads their page only) while
- * [current] stands on the artist page with it. Then [current] stays, and
- * the album finds its release in it all the same.
+ * artist's full list (a Library album's ask, or a Library artist's lookup,
+ * reads their page only) while [current] stands on the artist page with it.
+ * Then [current] stays, and the album finds its release in it all the same;
+ * when the answer is the same artist's page, its description, counts and
+ * similar artists join [current], which keeps what the answer leaves out.
+ * A page kept here always says whether it has a description (null for none),
+ * which tells it from one saved before the About was read. [current] itself
+ * comes back when nothing changes, so there is nothing to save.
  */
 export const ytArtistAnswerKept = <S extends YtSong>(
   current: YtArtistSaved<S> | null,
   answer: YtArtistSaved<S>,
   now: number,
-): YtArtistSaved<S> =>
-  current !== null && standsOnArtistPage(current, now) && !standsOnArtistPage(answer, now)
-    ? current
-    : answer;
+): YtArtistSaved<S> => {
+  if (current === null || !standsOnArtistPage(current, now) || standsOnArtistPage(answer, now))
+    return withDescriptionRead(answer);
+  if (current.outcome !== "found" || answer.outcome !== "found") return current;
+  if (current.browseId !== answer.browseId) return current;
+  const { description, subscribers, views, similar } = answer.page;
+  return {
+    ...current,
+    page: {
+      ...current.page,
+      description: description ?? current.page.description ?? null,
+      ...(subscribers == null ? {} : { subscribers }),
+      ...(views == null ? {} : { views }),
+      ...(similar === undefined ? {} : { similar }),
+    },
+  };
+};
 
 /** A Library album as matching a release to it sees it. */
 export interface LibraryAlbumKey {
@@ -942,6 +997,17 @@ export interface YtArtistPageView<S extends YtSong, L, A> {
   readonly songs: readonly DiscoverSong<S, L>[];
   /** Their Albums, then Singles & EPs, newest first, each with the Library's album for it. */
   readonly shelves: readonly YtArtistShelf<A>[];
+  /**
+   * Fans might also like: the similar artists the page lists, in its order
+   * (Core's `similarArtistLinks` says which page each opens). With a quiet
+   * line for a read that failed, the ones saved before still show.
+   */
+  readonly similar: readonly YtArtistCandidate[];
+  /**
+   * About: the artist's description and whichever counts YouTube Music
+   * supplied; null without a description. Shown wherever [similar] is.
+   */
+  readonly about: YtArtistAbout | null;
   readonly note: YtArtistPageNote | null;
   /** Whether Try Again is offered. */
   readonly retry: boolean;
@@ -961,7 +1027,8 @@ export interface YtArtistPageViewContext<S extends YtSong, L, A> extends YtArtis
  * opened by name) as a quiet Not found line; a match saved without the
  * artist's full list doesn't stand. Without one the page is looking
  * (it asks on its own, `ytArtistPageAsks`) or, after a failure, a quiet line
- * with Try Again. With YT Music off it says so.
+ * with Try Again and the similar artists saved before, if any. With YT
+ * Music off it says so.
  */
 export const ytArtistPageView = <S extends YtSong, L, A>(
   state: YtArtistSection<S>,
@@ -970,10 +1037,17 @@ export const ytArtistPageView = <S extends YtSong, L, A>(
   const saved = state.status === "reading" ? null : state.saved;
   const page = saved?.outcome === "found" ? saved.page : null;
   const head = { name: page?.name ?? null, artworkUrl: page?.artworkUrl ?? null };
-  const quiet = (note: YtArtistPageNote | null, retry = false): YtArtistPageView<S, L, A> => ({
+  const quiet = (
+    note: YtArtistPageNote | null,
+    retry = false,
+    similar: readonly YtArtistCandidate[] = [],
+    about: YtArtistAbout | null = null,
+  ): YtArtistPageView<S, L, A> => ({
     ...head,
     songs: [],
     shelves: [],
+    similar,
+    about,
     note,
     retry,
   });
@@ -986,13 +1060,33 @@ export const ytArtistPageView = <S extends YtSong, L, A>(
       ...head,
       songs: discoverSongs(saved.page.allSongs ?? [], context.librarySong),
       shelves: pageShelves(saved.page, context.libraryAlbum),
+      similar: saved.page.similar ?? [],
+      about: ytArtistAbout(saved.page),
       note: null,
       retry: false,
     };
   }
   // Nothing standing: it asks on its own (`ytArtistPageAsks`) unless the last ask failed.
-  return state.failure === null ? quiet("loading") : quiet(state.failure, true);
+  return state.failure === null
+    ? quiet("loading")
+    : quiet(state.failure, true, page?.similar ?? [], page === null ? null : ytArtistAbout(page));
 };
+
+/**
+ * [view] while the page waits (for the screen to settle, or for the Library
+ * to say which of its songs it has): its name and image over the loading
+ * rows, with nothing that would move once the songs arrive.
+ */
+export const ytArtistPageWaiting = <S extends YtSong, L, A>(
+  view: YtArtistPageView<S, L, A>,
+): YtArtistPageView<S, L, A> => ({
+  ...view,
+  songs: [],
+  shelves: [],
+  similar: [],
+  about: null,
+  note: "loading",
+});
 
 export function* libraryArtistFinderSteps<A extends { readonly name: string }>(
   artists: readonly A[],

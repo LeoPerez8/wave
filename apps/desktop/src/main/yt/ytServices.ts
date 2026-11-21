@@ -12,8 +12,11 @@ import { selectCountedPlays } from "@wave/client/db/playTotals";
 import { selectPlaylistEntryVideoIdsPage } from "@wave/client/db/playlists";
 import { selectVideoIds, trackQuery } from "@wave/client/db/tracks";
 import {
+  catalogueOf,
+  discoverMixCaption,
   libraryArtistFinder,
   libraryFinder,
+  libraryAlbumFinder,
   libraryReleaseFinder,
   localDay,
   parseTrackId,
@@ -27,8 +30,10 @@ import {
   DISCOVER_LEVEL_SETTING as DISCOVER_LEVEL,
   DISCOVER_SLIDERS_SETTING as DISCOVER_SLIDERS,
   HOME_ARRANGEMENT_SETTING,
+  hasFindQuery,
   SEARCH_ONLINE_SETTING as SEARCH_ONLINE,
   ytTrackId,
+  type AppLanguage,
   type PlayedSeedArtist,
   type QueueContinuationSeed,
   type DiscoverLibrarySong,
@@ -46,14 +51,16 @@ import type { BrowseKind, BrowseScope } from "../../shared/browse.ts";
 import type { PlayStart } from "../../shared/playerView.ts";
 import { ytRow, type YtSearchPage } from "../../shared/yt.ts";
 import type { SongTarget } from "../../shared/songActions.ts";
+import type { YtSongsList } from "../../shared/downloads.ts";
+import type { YtListSongs } from "../downloads/downloads.ts";
 import { Kotlin } from "../kotlin/kotlin.ts";
-import { browseLibrary, browseSongs, browseTrackIds } from "../library/browse.ts";
+import { browseLibrary, browseSongs, browseTrackIds, playlistSongs } from "../library/browse.ts";
 import { DesktopLibrary } from "../library/library.ts";
 import { targetSongs } from "../library/songActions.ts";
 import { Playback } from "../playback/playback.ts";
 import { preference, savePreference } from "../preferences.ts";
 import { syncedPreference } from "../sync/desktopSync.ts";
-import { createDiscover, type DiscoverShape } from "./discover.ts";
+import { createDiscover, type DiscoverShape, type PlacedMixSong } from "./discover.ts";
 import {
   createMagicQueue,
   type MagicQueueInput,
@@ -62,6 +69,8 @@ import {
 } from "./magicQueue.ts";
 import { createYtPages, type YtPagesShape, type YtRelatedRead } from "./ytPages.ts";
 import { createArtistSection, type ArtistSectionShape } from "./artistSection.ts";
+import { createPlaylistSuggestions, type PlaylistSuggestionsShape } from "./playlistSuggestions.ts";
+import { createAlbumSection, type AlbumSectionShape } from "./albumSection.ts";
 import { YtMusic } from "./ytMusic.ts";
 
 /** Where the Magic Queue's session is kept across launches. */
@@ -75,11 +84,28 @@ export interface YtFeaturesShape {
   readonly magicQueue: MagicQueueShape;
   /** A Library artist page's YouTube Music section. */
   readonly artistSection: ArtistSectionShape;
+  /** A playlist page's Recommended songs. */
+  readonly playlistSuggestions: PlaylistSuggestionsShape;
+  /** A Library album page's YouTube Music section. */
+  readonly albumSection: AlbumSectionShape;
   /**
    * Search's YouTube Music answer for [query]: its songs, artists and albums, and which of them
    * the Library already has. One search that fails fails them all, as on the phone.
    */
   readonly search: (query: string) => Promise<YtSearchPage>;
+  /**
+   * The Library album each of the YT Music artist [name]'s [releases] is, by browse id; a
+   * release the Library doesn't have is left out.
+   */
+  readonly libraryReleases: (
+    name: string,
+    releases: readonly YtArtistAlbum[],
+  ) => ReadonlyMap<string, number>;
+  /**
+   * A YT Music list's songs as its page last read them, what the Library has of them and the
+   * source their downloads group under; null when its page wasn't read this session.
+   */
+  readonly ytList: (list: YtSongsList) => YtListSongs | null;
   /** The Related tab of the song playing; nothing when no song plays. */
   readonly related: () => Promise<YtRelatedRead>;
   /** Plays a Magic Queue of [target]'s songs; false when none of them can play. */
@@ -89,8 +115,11 @@ export interface YtFeaturesShape {
    * its faithful Magic Queue with YT Music on, the song alone with it off, or its download.
    */
   readonly playSearchSong: (scope: BrowseScope, index: number) => Promise<PlayStart>;
-  /** Plays today's mix [id] from its song [index], as a queue that goes on from the mix. */
-  readonly playMix: (id: string, index: number) => Promise<boolean>;
+  /**
+   * Plays today's mix [id] from its song [index] as its page lists them, as a queue that goes on
+   * from the mix; with [shuffle], its songs shuffled. False for a mix that's gone.
+   */
+  readonly playMix: (id: string, index: number, shuffle?: boolean) => Promise<boolean>;
 }
 
 export class YtFeatures extends Context.Service<YtFeatures, YtFeaturesShape>()(
@@ -106,10 +135,17 @@ interface LibraryRead {
     readonly songs: number;
   }[];
   readonly known: (song: YtSong) => boolean;
+  /** The Library song with a file [song] is, by id (Core's `libraryFinder`); else null. */
+  readonly find: (song: YtSong) => number | null;
   /** Whether the Library has the YT Music artist [name] (Core's `libraryArtistFinder`). */
   readonly hasArtist: (name: string) => boolean;
   /** Whether the Library has [release] (Core's `libraryReleaseFinder`). */
   readonly hasAlbum: (release: YtArtistAlbum) => boolean;
+  /**
+   * The Library album the YT Music artist [name]'s [release] is, by its id: an album of the
+   * Library artist that name is (Core's `libraryArtistFinder`, `libraryAlbumFinder`); else null.
+   */
+  readonly artistAlbum: (name: string, release: { readonly title: string }) => number | null;
 }
 
 /** Built on first use: most reads never ask about artists or albums. */
@@ -144,14 +180,30 @@ const readLibrary = (db: LibraryDatabase): LibraryRead => {
     songs: artist.trackCount,
   }));
   const artistNamed = lazily(() => libraryArtistFinder(artists));
-  const releaseOf = lazily(() => libraryReleaseFinder(artistNamed(), selectAlbums(db, undefined)));
+  const albums = lazily(() => selectAlbums(db, undefined));
+  const releaseOf = lazily(() => libraryReleaseFinder(artistNamed(), albums()));
+  const albumFinders = new Map<
+    number,
+    (release: { readonly title: string }) => { id: number } | null
+  >();
   return {
     songs,
     byId: new Map(songs.map((song) => [song.id, song])),
     artists,
     known: (song) => find(song) !== null,
+    find: (song) => find(song)?.id ?? null,
     hasArtist: (name) => artistNamed()(name) !== null,
     hasAlbum: (release) => releaseOf()(release) !== null,
+    artistAlbum: (name, release) => {
+      const artist = artistNamed()(name);
+      if (artist === null) return null;
+      let find = albumFinders.get(artist.id);
+      if (find === undefined) {
+        find = libraryAlbumFinder(artist.id, albums());
+        albumFinders.set(artist.id, find);
+      }
+      return find(release)?.id ?? null;
+    },
   };
 };
 
@@ -179,10 +231,18 @@ const playedArtists = (db: LibraryDatabase, library: LibraryRead): PlayedSeedArt
 const mixTrackId = (song: DiscoverMixSong): string =>
   song.source === "stream" ? ytTrackId(song.song.videoId) : String(song.track.id);
 
+/** A song of a mix's page as the queue names it. */
+const placedTrackId = (song: PlacedMixSong): string =>
+  song.source === "stream" ? ytTrackId(song.song.videoId) : String(song.track);
+
 const LISTS: readonly BrowseKind[] = ["album", "artist", "playlist"];
 
 /** YtFeatures over the Library, playback and the JVM; [online] is the system's connection. */
-export const ytFeaturesLayer = (options: { readonly online: () => boolean }) =>
+export const ytFeaturesLayer = (options: {
+  readonly online: () => boolean;
+  /** The app's language, for the name a mix's downloads group under; absent, English. */
+  readonly language?: () => AppLanguage;
+}) =>
   Layer.effect(
     YtFeatures,
     Effect.gen(function* () {
@@ -260,6 +320,8 @@ export const ytFeaturesLayer = (options: { readonly online: () => boolean }) =>
           return [...videos];
         },
         known: (song) => current().known(song),
+        track: (id) => current().byId.has(id),
+        find: (song) => current().find(song),
         pages,
         today: () => localDay(Date.now()),
         online: options.online,
@@ -390,6 +452,27 @@ export const ytFeaturesLayer = (options: { readonly online: () => boolean }) =>
         search: pages.searchArtists,
         page: pages.artistWhole,
       });
+      const albumSection = createAlbumSection({
+        db,
+        enabled: yt.enabled,
+        online: options.online,
+        always: () =>
+          searchOnlineAlways(readSearchOnline(preference(db, SEARCH_ONLINE) ?? null), {
+            onMobileData: false,
+          }),
+        now: Date.now,
+        artist: artistSection,
+        release: pages.album,
+      });
+
+      const playlistSuggestions = createPlaylistSuggestions({
+        db,
+        pages,
+        ytMusic: yt.enabled,
+        online: options.online,
+        changed: playback.refresh,
+        log: (line) => process.stderr.write(`[WaveTiming] ${line}\n`),
+      });
 
       let related: { readonly videoId: string; readonly read: Promise<YtRelatedRead> } | undefined;
 
@@ -398,6 +481,8 @@ export const ytFeaturesLayer = (options: { readonly online: () => boolean }) =>
         discover,
         magicQueue,
         artistSection,
+        playlistSuggestions,
+        albumSection,
         search: async (query) => {
           const [found, catalog] = await Promise.all([yt.search(query), pages.catalog(query)]);
           const status = found.status !== "ok" ? found.status : catalog.status;
@@ -424,6 +509,36 @@ export const ytFeaturesLayer = (options: { readonly online: () => boolean }) =>
               albums: catalog.albums.filter(library.hasAlbum).map((album) => album.browseId),
             },
           };
+        },
+        libraryReleases: (name, releases) => {
+          const library = current();
+          return new Map(
+            releases.flatMap((release) => {
+              const id = library.artistAlbum(name, release);
+              return id === null ? [] : [[release.browseId, id] as const];
+            }),
+          );
+        },
+        ytList: (list) => {
+          if (list.kind === "discoverMix") {
+            const mix = discover.mix(list.id);
+            if (mix === undefined) return null;
+            // Every song it streams, new or familiar, as the phone's mix page downloads.
+            const strings = catalogueOf(options.language?.() ?? "en", "desktop");
+            return {
+              songs: mix.songs.flatMap((song) => (song.source === "stream" ? [song.song] : [])),
+              inLibrary: current().known,
+              origin: { kind: "mix", id: mix.id, name: discoverMixCaption(mix, strings).title },
+            };
+          }
+          const album = pages.albumSongs(list.id);
+          return album === null
+            ? null
+            : {
+                songs: album.songs,
+                inLibrary: current().known,
+                origin: { kind: "album", id: list.id, name: album.title },
+              };
         },
         related: async () => {
           const song = playback.view().current;
@@ -453,28 +568,42 @@ export const ytFeaturesLayer = (options: { readonly online: () => boolean }) =>
           return related.read;
         },
         startMagicQueue: async (target) => {
-          const ids = targetSongs(db, target);
-          const songs = songsOf(ids);
-          const first = songs[0];
-          if (first === undefined) return false;
+          if (!yt.enabled()) return false;
+          const songs = songsOf(targetSongs(db, target));
           const { scope } = target;
           const whole =
             "all" in target &&
             target.except.length === 0 &&
             scope.id !== undefined &&
+            !hasFindQuery(scope.find ?? "") &&
             LISTS.includes(scope.kind);
           const title = whole ? browseLibrary(db, scope, 0, 1).hero?.title : undefined;
+          if (whole && title !== undefined) {
+            const streamed =
+              scope.kind === "playlist"
+                ? (playlistSongs(db, scope.id!) ?? []).flatMap((entry) =>
+                    "song" in entry ? [entry.song] : [],
+                  )
+                : [];
+            if (songs.length === 0 && streamed.length === 0) return false;
+            return magicQueue.start({
+              seed: {
+                kind: scope.kind as "album" | "artist" | "playlist",
+                id: String(scope.id),
+                title,
+              },
+              songs,
+              streamed,
+            });
+          }
+          const first = songs[0];
+          if (first === undefined) return false;
           return magicQueue.start({
-            seed:
-              whole && title !== undefined
-                ? {
-                    kind: scope.kind as "album" | "artist" | "playlist",
-                    id: String(scope.id),
-                    title,
-                  }
-                : songs.length === 1
-                  ? { kind: "track", id: String(first.id), title: first.title }
-                  : { kind: "list", id: String(first.id), title: first.title },
+            seed: {
+              kind: songs.length === 1 ? "track" : "list",
+              id: String(first.id),
+              title: first.title,
+            },
             songs,
             streamed: [],
           });
@@ -503,14 +632,16 @@ export const ytFeaturesLayer = (options: { readonly online: () => boolean }) =>
             return { kind: "playing", streamed: 0, leftOut: 0 };
           return playback.start(scope, index);
         },
-        playMix: async (id, index) => {
-          const mix = discover.mix(id);
-          if (mix === undefined || index < 0 || index >= mix.songs.length) return false;
+        playMix: async (id, index, shuffle) => {
+          const songs = discover.placed(id);
+          if (songs === undefined || index < 0 || index >= songs.length) return false;
           await playback.dispatch({
             type: "play",
-            trackIds: mix.songs.map(mixTrackId),
-            startIndex: index,
+            trackIds: songs.map(placedTrackId),
+            // Shuffle starts anywhere among them, as a Library list's does.
+            startIndex: shuffle === true ? undefined : index,
             context: { kind: "discoverMix", id },
+            ...(shuffle === true ? { shuffle } : {}),
           });
           return true;
         },

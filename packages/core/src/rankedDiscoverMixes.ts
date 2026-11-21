@@ -15,7 +15,7 @@ export interface DiscoverSeedPages {
 export const rankedDiscoverMixes = <L extends DiscoverLibrarySong>(
   reads: readonly DiscoverSeedPages[],
   sources: Pick<DiscoverMixPoolSources<L>, "known" | "library"> &
-    Pick<RadioRankingSources, "taste" | "profileOf" | "popularityOf">,
+    Pick<RadioRankingSources, "taste" | "profileOf" | "popularityOf" | "disliked">,
   sliders: MixSliders,
   avoid?: ReadonlySet<string>,
 ) => finishSteps(rankedDiscoverMixesSteps(reads, sources, sliders, avoid));
@@ -23,7 +23,7 @@ export const rankedDiscoverMixes = <L extends DiscoverLibrarySong>(
 export function* rankedDiscoverMixesSteps<L extends DiscoverLibrarySong>(
   reads: readonly DiscoverSeedPages[],
   sources: Pick<DiscoverMixPoolSources<L>, "known" | "library"> &
-    Pick<RadioRankingSources, "taste" | "profileOf" | "popularityOf">,
+    Pick<RadioRankingSources, "taste" | "profileOf" | "popularityOf" | "disliked">,
   sliders: MixSliders,
   avoid?: ReadonlySet<string>,
 ) {

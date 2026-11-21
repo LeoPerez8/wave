@@ -122,9 +122,12 @@ test("lyrics follow and seek, the queue moves by keyboard, Now Playing tints, th
     await expect(page.locator(".desktop-shell")).toHaveAttribute("data-panel", "lyrics");
     const lyrics = page.getByRole("listbox", { name: "Lyrics" });
     await expect(lyrics.getByRole("option", { name: "The tide comes in" })).toBeVisible();
+    await expect(lyrics.locator("[aria-current=true]")).toHaveText("The tide comes in");
+    // Paused, the click's seek stays where it landed: playing on, the position passes 6.0 s
+    // within one tick of the clock, before a slow machine reads it.
+    await pause(page);
     await page.getByRole("option", { name: "And the shore stays" }).click();
     await expect.poll(async () => Math.round((await read(page)).status.positionMs / 100)).toBe(60);
-    await pause(page);
     await expect(lyrics.locator("[aria-current=true]")).toHaveText("And the shore stays");
     // The keyboard: one tab stop, ↑ and Home move, Enter seeks.
     await lyrics.focus();

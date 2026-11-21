@@ -1,15 +1,19 @@
 import { useLocalisation } from "@/localisation/localisation";
 import {
   IconCircleDashed,
+  IconCircleMinus,
   IconDownload,
   IconPlaylistAdd,
   IconRefreshAlert,
 } from "@tabler/icons-react-native";
-import { nowPlayingDownload } from "@wave/core";
+import { isDisliked, nowPlayingDownload } from "@wave/core";
+import { useState } from "react";
 import { View } from "react-native";
 import Svg, { Circle } from "react-native-svg";
 
 import { CELL } from "@/catalog/grid";
+import { DislikedIcon } from "@/components/DislikedIcon";
+import { useDislikedSongs } from "@/library/dislikes";
 import { openAddToPlaylist } from "@/library/PlaylistSheets";
 import { songHasFile } from "@wave/client";
 import { IconButton } from "@/components/IconButton";
@@ -43,7 +47,7 @@ export function AddToPlaylistButton({
   trackId: string | null;
   ytSong: NativeYtSong | null;
   title: string;
-  /** In a slot, a long press changes it, while it waits for the song included. */
+  /** In a slot, a long press starts edit mode, while it waits for the song included. */
   change?: SlotChange | undefined;
 }) {
   const { strings } = useLocalisation();
@@ -115,7 +119,7 @@ export function DownloadButton({
 }: {
   trackId: string | null;
   ytSong: NativeYtSong | null;
-  /** In a slot, a long press changes it, waiting and downloading included. */
+  /** In a slot, a long press starts edit mode, waiting and downloading included. */
   change?: SlotChange | undefined;
 }) {
   const { strings } = useLocalisation();
@@ -183,6 +187,67 @@ export function DownloadButton({
       accessibilityHint={failed ? strings.playbackText.triesTheDownloadAgain : undefined}
       tone="secondary"
       onPress={download}
+    />
+  );
+}
+
+/**
+ * Dislike, for the song playing (docs/spec.md, story 55b): the circle with a
+ * minus, outlined, and filled once the song is disliked, in the secondary
+ * colour either way. A tap dislikes the song as its menu's Dislike does, which
+ * skips to the next one; on a disliked song it removes the dislike and the
+ * song plays on. The icon changes with the tap, before the change is saved.
+ * Screen readers hear a switch, on while the song is disliked.
+ */
+export function DislikeButton({
+  trackId,
+  ytSong,
+  off,
+  change,
+}: {
+  trackId: string | null;
+  ytSong: NativeYtSong | null;
+  /** Off for an unsearched entry, which has no song to dislike yet. */
+  off: boolean;
+  /** In a slot, a long press changes it. */
+  change?: SlotChange | undefined;
+}) {
+  const { strings } = useLocalisation();
+  const target = usePlayingSongTarget(trackId, ytSong);
+  const answer = usePlayingSongAnswer(target);
+  const dislikes = useDislikedSongs();
+  // A tap not saved yet: what the icon shows for that song meanwhile.
+  const [tapped, setTapped] = useState<{ trackId: string; on: boolean } | null>(null);
+  // Kept under the queue track id, or as the Library's song a streamed one is by now.
+  const saved =
+    trackId !== null &&
+    (dislikes.has(trackId) ||
+      isDisliked(dislikes, { id: answer?.track?.id, videoId: ytSong?.videoId }));
+  const waiting = tapped !== null && tapped.trackId === trackId;
+  const disliked = waiting ? tapped.on : saved;
+  const press = (): void => {
+    // One change at a time, so a second tap never runs against the state the first is saving.
+    if (target === null || waiting) return;
+    const tap = { trackId: target.trackId, on: !disliked };
+    setTapped(tap);
+    void nowPlayingSongActions
+      .dislike(target, tap.on)
+      .catch(songActionFailed)
+      .finally(() => setTapped((current) => (current === tap ? null : current)));
+  };
+  return (
+    <IconButton
+      {...change}
+      icon={disliked ? DislikedIcon : IconCircleMinus}
+      label={strings.itemActions.labels.dislike}
+      accessibilityRole="switch"
+      accessibilityState={{ checked: disliked }}
+      tone="secondary"
+      // Waiting for the song's details it keeps its ink, as Add to Playlist does.
+      disabledTone={off ? "tertiary" : "secondary"}
+      disabled={off || target === null}
+      haptic="impact"
+      onPress={press}
     />
   );
 }

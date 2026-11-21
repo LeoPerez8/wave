@@ -202,6 +202,9 @@ jobs:
       # The same notes in each language, as one line of JSON, for the update service.
       localized: ${{ steps.notes.outputs.localized }}
       desktop_localized: ${{ steps.notes.outputs.desktop_localized }}
+      # The notes of the versions before it that never published (scripts/ci/earlier-notes.sh),
+      # which the release publishes too, each under its own version.
+      earlier: ${{ steps.notes.outputs.earlier }}
       # 'success' when they were built. A branch push only learns in Checks whether it
       # releases, so the release gate checks this instead of this job failing.
       outcome: ${{ steps.notes.outcome }}
@@ -240,6 +243,13 @@ jobs:
           if [ -s "$LOCALIZED_NOTES_FILE" ]; then echo "localized=$(cat "$LOCALIZED_NOTES_FILE")" >> "$GITHUB_OUTPUT"; fi
           if [ -s "$DESKTOP_NOTES_FILE" ]; then echo "desktop_localized=$(cat "$DESKTOP_NOTES_FILE")" >> "$GITHUB_OUTPUT"; fi
           { echo "# Patch notes"; echo; echo "${notes:-Nothing to list: no PR since the last version changes the app.}"; } >> "$GITHUB_STEP_SUMMARY"
+          if [ "$IS_BUMP" = "true" ] || [ "$IS_RELEASE" = "true" ]; then
+            if earlier="$(scripts/ci/earlier-notes.sh)"; then
+              echo "earlier=$earlier" >> "$GITHUB_OUTPUT"
+            else
+              echo "::warning::Couldn't build the notes of the versions that never published; the release goes without them."
+            fi
+          fi
 
   # The lockfile and format autofix, in two jobs. This one runs the PR's install and format
   # with a read-only token and hands the result over as a patch; Apply autofix commits it only
@@ -1054,6 +1064,7 @@ jobs:
           MAIN_VITE_WAVE_SYNC_URL: ${{ vars.WAVE_SYNC_URL }}
           MAIN_VITE_WAVE_GOOGLE_DESKTOP_CLIENT_ID: ${{ vars.WAVE_GOOGLE_DESKTOP_CLIENT_ID }}
           MAIN_VITE_WAVE_GOOGLE_DESKTOP_CLIENT_SECRET: ${{ vars.WAVE_GOOGLE_DESKTOP_CLIENT_SECRET }}
+          MAIN_VITE_WAVE_SPOTIFY_CLIENT_ID: ${{ vars.WAVE_SPOTIFY_CLIENT_ID }}
         run: |
           pnpm --filter @wave/desktop build
           mode=()
@@ -1607,6 +1618,7 @@ jobs:
           WAVE_UPDATE_CHANNEL: ${{ needs.android.outputs.update_channel }}
           WAVE_RELEASE_TAG: ${{ needs.checks.outputs.release_tag }}
           WAVE_RELEASE_NOTES: ${{ needs.notes.outputs.localized }}
+          WAVE_EARLIER_NOTES: ${{ needs.notes.outputs.earlier }}
         run: node apps/updates/scripts/publish-notes.ts
 
       # The APK phones on another native side install (docs/spec.md, Build and CI).

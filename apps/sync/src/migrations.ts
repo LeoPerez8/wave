@@ -268,8 +268,35 @@ const MIGRATIONS: readonly Migration[] = [
     ],
   },
   {
+    // Disliked songs, by recording key or, for a YT Music song, `yt:<video>`, with the song
+    // as it was listed when disliked and when that was.
+    id: "0014_dislikes",
+    statements: [
+      `CREATE TABLE dislikes (
+        account_id TEXT NOT NULL,
+        id TEXT NOT NULL,
+        change_no INTEGER NOT NULL,
+        changed_at INTEGER NOT NULL,
+        phone_id TEXT NOT NULL,
+        deleted INTEGER NOT NULL,
+        title TEXT,
+        artists TEXT,
+        duration_ms INTEGER,
+        disliked_at INTEGER,
+        PRIMARY KEY (account_id, id)
+      )`,
+      `CREATE INDEX dislikes_change_idx ON dislikes (account_id, change_no)`,
+    ],
+  },
+  {
+    // A playlist play's playlist by its sync id: `context_id` holds the number the playlist
+    // has on the device that recorded the play, which is another playlist's elsewhere.
+    id: "0014_play_context_playlist",
+    statements: ["ALTER TABLE plays ADD COLUMN context_playlist_id TEXT"],
+  },
+  {
     // When Restore or Undo last brought an entry back (Core's `mergePlaylistEntries`).
-    id: "0014_playlist_entry_restores",
+    id: "0015_playlist_entry_restores",
     statements: ["ALTER TABLE playlist_entries ADD COLUMN restored_at INTEGER"],
   },
 ];

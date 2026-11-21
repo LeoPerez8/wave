@@ -34,6 +34,9 @@ const TODAYS_HOME = [
   "new-releases",
   "upcoming-shows",
   "discover",
+  "in-your-orbit",
+  "from-your-library",
+  "community-playlists",
   "recently-added",
   "recently-played",
   "most-played",
@@ -53,6 +56,9 @@ describe("Home's section catalogue", () => {
         ["new-releases", "New from Artists You Follow"],
         ["upcoming-shows", "Upcoming Shows"],
         ["discover", "Discover"],
+        ["in-your-orbit", "In your orbit"],
+        ["from-your-library", "From your library"],
+        ["community-playlists", "Community playlists"],
         ["recently-added", "Recently added"],
         ["recently-played", "Recently played"],
         ["most-played", "Most played"],
@@ -65,6 +71,15 @@ describe("Home's section catalogue", () => {
   });
 
   test("a section's title is found by its id", () => {
+    assert.equal(homeSectionTitle("in-your-orbit"), "In your orbit");
+    assert.equal(homeSectionTitle("in-your-orbit", catalogueOf("pt-BR")), "Na sua órbita");
+    assert.equal(homeSectionTitle("from-your-library"), "From your library");
+    assert.equal(homeSectionTitle("from-your-library", catalogueOf("pt-BR")), "Da sua biblioteca");
+    assert.equal(homeSectionTitle("community-playlists"), "Community playlists");
+    assert.equal(
+      homeSectionTitle("community-playlists", catalogueOf("pt-BR")),
+      "Playlists da comunidade",
+    );
     assert.equal(homeSectionTitle("most-played-albums"), "Most played albums");
   });
 
@@ -125,6 +140,9 @@ describe("Home's arrangement", () => {
         "recently-played",
         "most-played-albums",
         "discover",
+        "in-your-orbit",
+        "from-your-library",
+        "community-playlists",
         "stats",
       ],
     });
@@ -158,15 +176,28 @@ describe("Home's arrangement", () => {
       parseHomeArrangement(
         arranged(["favorites", "artist-mixes", "recently-added", "magic-queue"]),
       ),
-      ["discover", "favorites", "recently-added"],
+      [
+        "discover",
+        "in-your-orbit",
+        "from-your-library",
+        "community-playlists",
+        "favorites",
+        "recently-added",
+      ],
     );
     assert.deepEqual(parseHomeArrangement(arranged(["stats", "favorites"])), [
       "discover",
+      "in-your-orbit",
+      "from-your-library",
+      "community-playlists",
       "stats",
       "favorites",
     ]);
     assert.deepEqual(parseHomeArrangement(arranged(["recently-added", "genre-mixes"])), [
       "discover",
+      "in-your-orbit",
+      "from-your-library",
+      "community-playlists",
       "recently-added",
     ]);
   });
@@ -184,7 +215,14 @@ describe("Home's arrangement", () => {
         "stats",
       ],
     });
-    assert.deepEqual(parseHomeArrangement(stored), ["discover", "favorites", "recently-added"]);
+    assert.deepEqual(parseHomeArrangement(stored), [
+      "discover",
+      "in-your-orbit",
+      "from-your-library",
+      "community-playlists",
+      "favorites",
+      "recently-added",
+    ]);
   });
 
   test("once Discover is on a Home, it stays where the owner moved it, or off when hidden", () => {
@@ -205,6 +243,199 @@ describe("Home's arrangement", () => {
   test("a section the owner removed stays off Home", () => {
     const stored = storedHomeArrangement(["stats"]);
     assert.deepEqual(parseHomeArrangement(stored), ["stats"]);
+  });
+
+  describe("In your orbit joining a Home arranged before it", () => {
+    // Saved by a Wave whose catalogue had no In your orbit.
+    const before = TODAYS_HOME.filter((id) => id !== "in-your-orbit");
+    const arranged = (shown: string[]) =>
+      JSON.stringify({ shown, hidden: before.filter((id) => !shown.includes(id)) });
+
+    test("it shows right after Discover, wherever the owner put Discover", () => {
+      assert.deepEqual(parseHomeArrangement(arranged(["favorites", "discover", "stats"])), [
+        "favorites",
+        "discover",
+        "in-your-orbit",
+        "stats",
+      ]);
+    });
+
+    test("with Discover removed, it follows the followed artists' sections, or goes on top", () => {
+      assert.deepEqual(parseHomeArrangement(arranged(["stats", "upcoming-shows", "favorites"])), [
+        "stats",
+        "upcoming-shows",
+        "in-your-orbit",
+        "favorites",
+      ]);
+      assert.deepEqual(parseHomeArrangement(arranged(["stats"])), ["in-your-orbit", "stats"]);
+    });
+
+    test("it joins once: moved, it stays where it was dropped, and removed, it stays off", () => {
+      const joined = parseArrangement(arranged(["favorites", "discover", "stats"]));
+      const moved = editArrangement(joined, { move: { from: 2, to: 0 } });
+      assert.deepEqual(parseArrangement(storeArrangement(moved)).sections, [
+        "in-your-orbit",
+        "favorites",
+        "discover",
+        "stats",
+      ]);
+      const removed = editArrangement(joined, { remove: "in-your-orbit" });
+      assert.deepEqual(hiddenSections(removed).includes("in-your-orbit"), true);
+      const stored = storeArrangement(removed);
+      assert.deepEqual(parseArrangement(stored).sections, ["favorites", "discover", "stats"]);
+      // Read and stored again, as on every later launch, it is still not added back.
+      assert.deepEqual(parseArrangement(storeArrangement(parseArrangement(stored))).sections, [
+        "favorites",
+        "discover",
+        "stats",
+      ]);
+    });
+  });
+
+  describe("From your library joining a Home arranged before it", () => {
+    // Saved by a Wave whose catalogue had In your orbit and no From your library.
+    const before = TODAYS_HOME.filter((id) => id !== "from-your-library");
+    const arranged = (shown: string[], known: string[] = before) =>
+      JSON.stringify({ shown, hidden: known.filter((id) => !shown.includes(id)) });
+
+    test("it shows right after In your orbit, wherever the owner put In your orbit", () => {
+      assert.deepEqual(
+        parseHomeArrangement(arranged(["favorites", "in-your-orbit", "discover", "stats"])),
+        ["favorites", "in-your-orbit", "from-your-library", "discover", "stats"],
+      );
+    });
+
+    test("with In your orbit removed, it follows Discover, or the nearest section before it", () => {
+      assert.deepEqual(parseHomeArrangement(arranged(["favorites", "discover", "stats"])), [
+        "favorites",
+        "discover",
+        "from-your-library",
+        "stats",
+      ]);
+      assert.deepEqual(parseHomeArrangement(arranged(["stats", "upcoming-shows"])), [
+        "stats",
+        "upcoming-shows",
+        "from-your-library",
+      ]);
+      assert.deepEqual(parseHomeArrangement(arranged(["stats"])), ["from-your-library", "stats"]);
+    });
+
+    test("a Home arranged before both sections gets them after Discover, In your orbit first", () => {
+      const older = before.filter((id) => id !== "in-your-orbit");
+      assert.deepEqual(parseHomeArrangement(arranged(["favorites", "discover", "stats"], older)), [
+        "favorites",
+        "discover",
+        "in-your-orbit",
+        "from-your-library",
+        "stats",
+      ]);
+    });
+
+    test("it joins once: moved, it stays where it was dropped, and removed, it stays off", () => {
+      const joined = parseArrangement(arranged(["favorites", "in-your-orbit", "stats"]));
+      assert.deepEqual(joined.sections, [
+        "favorites",
+        "in-your-orbit",
+        "from-your-library",
+        "stats",
+      ]);
+      const moved = editArrangement(joined, { move: { from: 2, to: 0 } });
+      assert.deepEqual(parseArrangement(storeArrangement(moved)).sections, [
+        "from-your-library",
+        "favorites",
+        "in-your-orbit",
+        "stats",
+      ]);
+      const removed = editArrangement(joined, { remove: "from-your-library" });
+      assert.deepEqual(hiddenSections(removed).includes("from-your-library"), true);
+      const stored = storeArrangement(removed);
+      assert.deepEqual(parseArrangement(stored).sections, ["favorites", "in-your-orbit", "stats"]);
+      // Read and stored again, as on every later launch, it is still not added back.
+      assert.deepEqual(parseArrangement(storeArrangement(parseArrangement(stored))).sections, [
+        "favorites",
+        "in-your-orbit",
+        "stats",
+      ]);
+      // Added back in Home's editor, it joins at the bottom like any other section.
+      assert.deepEqual(editArrangement(removed, { add: "from-your-library" }).sections, [
+        "favorites",
+        "in-your-orbit",
+        "stats",
+        "from-your-library",
+      ]);
+    });
+  });
+
+  describe("Community playlists joining a Home arranged before it", () => {
+    // Saved by a Wave whose catalogue had From your library and no Community playlists.
+    const before = TODAYS_HOME.filter((id) => id !== "community-playlists");
+    const arranged = (shown: string[], known: string[] = before) =>
+      JSON.stringify({ shown, hidden: known.filter((id) => !shown.includes(id)) });
+
+    test("it shows right after From your library, wherever the owner put From your library", () => {
+      assert.deepEqual(
+        parseHomeArrangement(arranged(["favorites", "from-your-library", "discover", "stats"])),
+        ["favorites", "from-your-library", "community-playlists", "discover", "stats"],
+      );
+    });
+
+    test("with From your library removed, it follows Discover, not In your orbit", () => {
+      assert.deepEqual(
+        parseHomeArrangement(arranged(["discover", "favorites", "in-your-orbit", "stats"])),
+        ["discover", "community-playlists", "favorites", "in-your-orbit", "stats"],
+      );
+    });
+
+    test("with Discover removed too, it follows the nearest section before it, or goes on top", () => {
+      assert.deepEqual(parseHomeArrangement(arranged(["stats", "in-your-orbit", "favorites"])), [
+        "stats",
+        "in-your-orbit",
+        "community-playlists",
+        "favorites",
+      ]);
+      assert.deepEqual(parseHomeArrangement(arranged(["stats", "upcoming-shows"])), [
+        "stats",
+        "upcoming-shows",
+        "community-playlists",
+      ]);
+      assert.deepEqual(parseHomeArrangement(arranged(["stats"])), ["community-playlists", "stats"]);
+    });
+
+    test("a Home arranged before all three gets them after Discover, in catalogue order", () => {
+      const older = before.filter((id) => id !== "in-your-orbit" && id !== "from-your-library");
+      assert.deepEqual(parseHomeArrangement(arranged(["favorites", "discover", "stats"], older)), [
+        "favorites",
+        "discover",
+        "in-your-orbit",
+        "from-your-library",
+        "community-playlists",
+        "stats",
+      ]);
+    });
+
+    test("it joins once: moved, it stays where it was dropped, and removed, it stays off", () => {
+      const joined = parseArrangement(arranged(["favorites", "from-your-library", "stats"]));
+      assert.deepEqual(joined.sections, [
+        "favorites",
+        "from-your-library",
+        "community-playlists",
+        "stats",
+      ]);
+      const moved = editArrangement(joined, { move: { from: 2, to: 0 } });
+      assert.deepEqual(parseArrangement(storeArrangement(moved)).sections, [
+        "community-playlists",
+        "favorites",
+        "from-your-library",
+        "stats",
+      ]);
+      const removed = editArrangement(joined, { remove: "community-playlists" });
+      assert.deepEqual(hiddenSections(removed).includes("community-playlists"), true);
+      const stored = storeArrangement(removed);
+      const kept = ["favorites", "from-your-library", "stats"];
+      assert.deepEqual(parseArrangement(stored).sections, kept);
+      // Read and stored again, as on every later launch, it is still not added back.
+      assert.deepEqual(parseArrangement(storeArrangement(parseArrangement(stored))).sections, kept);
+    });
   });
 
   test("anything unreadable stored reads as today's Home", () => {
@@ -228,9 +459,13 @@ describe("what Home lists", () => {
 
   test("with nothing played, the line asking for a play comes before the first section plays fill", () => {
     assert.deepEqual(homeItems(TODAYS_HOME as HomeArrangement, { nothingPlayed: true }), [
-      ...sections("new-releases", "upcoming-shows", "discover", "recently-added"),
+      ...sections("new-releases", "upcoming-shows", "discover"),
       "play-hint",
       ...sections(
+        "in-your-orbit",
+        "from-your-library",
+        "community-playlists",
+        "recently-added",
         "recently-played",
         "most-played",
         "most-played-albums",
@@ -249,7 +484,7 @@ describe("what Home lists", () => {
     const empty = { nothingPlayed: true, empty: true };
     assert.deepEqual(
       homeItems(TODAYS_HOME as HomeArrangement, empty),
-      sections("new-releases", "upcoming-shows", "discover"),
+      sections("new-releases", "upcoming-shows", "discover", "community-playlists"),
     );
     assert.deepEqual(homeItems(["favorites", "stats"], empty), []);
     assert.deepEqual(homeItems([], empty), []);
@@ -287,6 +522,9 @@ describe("Home's editor", () => {
       "new-releases",
       "upcoming-shows",
       "discover",
+      "in-your-orbit",
+      "from-your-library",
+      "community-playlists",
       "recently-played",
       "most-played-albums",
       "most-played-artists",
@@ -339,6 +577,9 @@ describe("merging Home's Stats and Listening overview", () => {
       "new-releases",
       "upcoming-shows",
       "discover",
+      "in-your-orbit",
+      "from-your-library",
+      "community-playlists",
       "recently-played",
       "most-played",
       "most-played-albums",

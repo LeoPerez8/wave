@@ -1462,7 +1462,40 @@ CREATE TABLE saved_lyrics_search_words (
 --> statement-breakpoint
 CREATE INDEX saved_lyrics_search_word_idx ON saved_lyrics_search_words (word, video_id, position);`;
 
-const m0062 = `ALTER TABLE playlist_items ADD COLUMN restored_at integer;`;
+// Disliked songs, by the identity favorites use (\`schema.ts\`'s \`dislikes\`).
+const m0062 = `CREATE TABLE dislikes (
+  song_key text PRIMARY KEY NOT NULL,
+  title text NOT NULL,
+  artists text NOT NULL,
+  duration_ms integer,
+  disliked_at integer NOT NULL
+);
+--> statement-breakpoint
+CREATE INDEX dislikes_disliked_at_idx ON dislikes (disliked_at);`;
+
+// Dislikes sync with the Wave account (#1286): each gets Core's SyncRow stamp, made
+// here when it was disliked, waiting to go up. A removed one stays as a tombstone.
+const m0063 = `ALTER TABLE dislikes ADD COLUMN changed_at integer DEFAULT 0 NOT NULL;
+--> statement-breakpoint
+UPDATE dislikes SET changed_at = disliked_at;
+--> statement-breakpoint
+ALTER TABLE dislikes ADD COLUMN phone_id text DEFAULT '' NOT NULL;
+--> statement-breakpoint
+UPDATE dislikes SET phone_id = (SELECT phone_id FROM phone);
+--> statement-breakpoint
+ALTER TABLE dislikes ADD COLUMN deleted integer DEFAULT false NOT NULL;
+--> statement-breakpoint
+ALTER TABLE dislikes ADD COLUMN pushed integer DEFAULT false NOT NULL;
+--> statement-breakpoint
+CREATE INDEX dislikes_pushed_idx ON dislikes (pushed);`;
+
+// A Wave from before dislikes read past the dislikes other devices had sent and kept the
+// cursor after them: the account is pulled from the start once, so they arrive. What the
+// Library holds merges row by row, as at a sign-in, so nothing else changes. A migration
+// that makes a table sync does the same.
+const m0064 = `UPDATE sync_state SET cursor = NULL;`;
+
+const m0065 = `ALTER TABLE playlist_items ADD COLUMN restored_at integer;`;
 
 export default {
   journal: {
@@ -1554,10 +1587,13 @@ export default {
         tag: "0061_saved_lyrics_search_index",
         breakpoints: true,
       },
+      { idx: 62, when: 1_797_163_200_000, tag: "0062_dislikes", breakpoints: true },
+      { idx: 63, when: 1_797_249_600_000, tag: "0063_dislike_sync", breakpoints: true },
+      { idx: 64, when: 1_797_336_000_000, tag: "0064_pull_dislikes", breakpoints: true },
       {
-        idx: 62,
-        when: 1_797_163_200_000,
-        tag: "0062_playlist_entry_restores",
+        idx: 65,
+        when: 1_797_422_400_000,
+        tag: "0065_playlist_entry_restores",
         breakpoints: true,
       },
     ],
@@ -1626,5 +1662,8 @@ export default {
     m0060,
     m0061,
     m0062,
+    m0063,
+    m0064,
+    m0065,
   },
 };

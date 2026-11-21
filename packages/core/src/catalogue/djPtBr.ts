@@ -1,0 +1,37 @@
+import type { djEn } from "./djEn.ts";
+
+export const djPtBr: typeof djEn = {
+  title: "DJ",
+  cardDetail: "Escolha os artistas que iniciam sua fila",
+  done: "Concluído",
+  close: "Fechar",
+  starting: "Iniciando sua fila",
+  artistTile: (name: string) => `Artista, ${name}`,
+  albumTile: (title: string, artist: string) => `Álbum, ${title}, ${artist}`,
+  loadingArtists: "Carregando artistas",
+  nothingToPick: "Nada para escolher ainda. Ouça algumas músicas e volte depois.",
+  noSongsFound: "Nenhuma música encontrada para o que você escolheu.",
+  adjust: "Ajustar",
+  backToGrid: "Voltar para DJ",
+  artistVariety: "Variedade de artistas",
+  varietySteps: { low: "Baixa", medium: "Média", high: "Alta" },
+  varietyNotes: {
+    low: "Quase só os artistas que você escolheu.",
+    medium: "Os artistas que você escolheu e os próximos deles.",
+    high: "Um círculo maior de artistas, cada um aparecendo menos.",
+  },
+  musicDiscovery: "Descoberta de música",
+  discoverySteps: { familiar: "Conhecidas", blend: "Misturar", discover: "Descobrir" },
+  filters: "Filtros",
+  filterNames: {
+    trending: "Em alta",
+    lesserKnown: "Músicas pouco conhecidas",
+    newReleases: "Lançamentos",
+  },
+  search: "Buscar artistas e álbuns",
+  searchPlaceholder: "Artistas, álbuns",
+  searchNoMatches: "Nenhum artista ou álbum encontrado.",
+  searchFull: (max: number) =>
+    `Você escolheu ${max}, o máximo para iniciar uma fila. Desmarque um para adicionar outro.`,
+  magicQueueFromDj: "Fila Mágica · de DJ",
+};

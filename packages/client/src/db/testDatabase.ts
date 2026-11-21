@@ -13,7 +13,7 @@ import initSqlJs from "sql.js";
 import { configureConnection } from "./connection.ts";
 import { creditSplits, relinkCreditsIfUnlinked } from "./credits.ts";
 import migrations from "./migrations.ts";
-import { setFavorites, type MostPlayedRow } from "./playHistory.ts";
+import { setFavorites, writeFavorites, type MostPlayedRow } from "./playHistory.ts";
 import * as schema from "./schema.ts";
 import { keyRecordings } from "./sync.ts";
 
@@ -411,7 +411,9 @@ export interface FixtureTrack {
 
 /** Stars a track at `addedAt` (as the Wave of the database's schema did). */
 export const star = (db: TestDatabase, trackId: number, addedAt: number): void => {
-  if (hasColumn(db, "favorites", "changed_at")) setFavorites(db, [trackId], true, addedAt);
+  // A star removes the song's dislike, in databases that sync dislikes (migration 0063).
+  if (hasColumn(db, "dislikes", "deleted")) setFavorites(db, [trackId], true, addedAt);
+  else if (hasColumn(db, "favorites", "changed_at")) writeFavorites(db, [trackId], true, addedAt);
   else db.run(sql`INSERT INTO favorites (track_id, added_at) VALUES (${trackId}, ${addedAt})`);
 };
 

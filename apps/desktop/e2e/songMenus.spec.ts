@@ -4,6 +4,7 @@ import { join } from "node:path";
 
 import { _electron as electron, expect, test, type Page } from "@playwright/test";
 import { Database } from "@wave/client";
+import { createPlaylist } from "@wave/client/db/playlists";
 import { addTrack, type TestDatabase } from "@wave/client/testing";
 import { actionBarLabel, catalogueOf } from "@wave/core";
 import { sql } from "drizzle-orm";
@@ -152,8 +153,10 @@ test("song menus, selection and the window's shortcuts", async () => {
     await page.keyboard.press("Control+/");
     const sheet = page.getByRole("dialog", { name: text.desktopShortcuts.title });
     await expect(sheet).toBeVisible();
-    await expect(sheet.locator(".shortcut-row")).toHaveCount(21);
+    await expect(sheet.locator(".shortcut-row")).toHaveCount(25);
     await expect(sheet).toContainText(text.desktopShortcuts.labels.quit);
+    for (const shortcut of ["Ctrl+Click", "Shift+Click", "Shift+↑", "Shift+↓", "Ctrl+A"])
+      await expect(sheet.getByText(shortcut, { exact: true })).toBeVisible();
     await page.screenshot({ path: test.info().outputPath(`song-menus-${process.platform}.png`) });
     // Tab reaches the list, whose keys scroll it rather than change the volume.
     const volume = await page.evaluate(
@@ -186,6 +189,156 @@ test("song menus, selection and the window's shortcuts", async () => {
     closed = true;
   } finally {
     if (!closed) await app.close();
+    rmSync(data, { recursive: true, force: true });
+  }
+});
+
+test("table gestures select off-screen songs and right-click uses the clicked row's selection", async () => {
+  const data = mkdtempSync(join(tmpdir(), "wave-e2e-table-selection-"));
+  const title = (index: number) => `Selection ${String(index).padStart(5, "0")}`;
+  const total = 10_250;
+  await Effect.runPromise(
+    Effect.gen(function* () {
+      const db = (yield* Database) as unknown as TestDatabase;
+      const first = addTrack(db, { title: title(0), album: "Selection", artist: "Wave" });
+      db.run(sql`WITH RECURSIVE n(x) AS (VALUES(1) UNION ALL SELECT x+1 FROM n WHERE x<${total - 1})
+        INSERT INTO tracks (path,folder_id,file_name,size_bytes,modified_at,title,title_sort,artist_id,artist_credit,album_id,duration_ms,added_at,scanned_at)
+        SELECT '/Music/selection/'||x||'.flac',folder_id,x||'.flac',1,1,printf('Selection %05d',x),printf('selection %05d',x),artist_id,artist_credit,album_id,180000,1,1
+        FROM tracks,n WHERE tracks.id=${first}`);
+      createPlaylist(
+        db,
+        "Mixed selection",
+        [
+          { source: "library", trackId: first },
+          {
+            source: "stream",
+            song: {
+              videoId: "abcdefghijk",
+              title: "Online selection",
+              artists: ["Wave"],
+              album: null,
+              artworkUrl: null,
+              durationMs: null,
+              explicit: false,
+            },
+          },
+        ],
+        1000,
+      );
+    }).pipe(Effect.provide(libraryLayer(join(data, "wave.db")))),
+  );
+  const app = await electron.launch({
+    args: [appFolder, "--lang=en-US"],
+    env: { ...process.env, WAVE_DATA_DIR: data, WAVE_MUSIC_DIR: join(data, "Absent") },
+  });
+  try {
+    const page = await app.firstWindow();
+    const grid = page.getByRole("grid");
+    const bar = page.getByRole("toolbar", { name: text.library.selectionActions });
+
+    await page.getByRole("button", { name: "Favorites", exact: true }).click();
+    await expect(grid).toHaveAttribute("aria-rowcount", "1");
+    await grid.press("Shift+ArrowDown");
+    await grid.press("Shift+ArrowUp");
+    await expect(grid).toBeFocused();
+    await expect(grid).not.toHaveAttribute("aria-activedescendant", /.+/);
+    await expect(bar).toBeHidden();
+
+    await page.getByRole("button", { name: "Songs", exact: true }).click();
+    const row = (index: number) => grid.getByRole("row", { name: new RegExp(title(index)) });
+    const count = (n: number) => bar.getByText(text.library.selected(n));
+    const favorited = (index: number) =>
+      expect.poll(
+        async () => (await wave(page)).songs.find((song) => song.title === title(index))?.favorite,
+      );
+
+    await row(0).click();
+    await row(2).click({ modifiers: ["Control"] });
+    await expect(count(2)).toBeVisible();
+    await expect(row(0)).toHaveAttribute("aria-selected", "true");
+    await expect(row(1)).toHaveAttribute("aria-selected", "false");
+    await row(2).click({ modifiers: ["Control"] });
+    await expect(bar).toBeHidden();
+    await expect(row(2)).toHaveAttribute("aria-selected", "false");
+    await row(2).click({ modifiers: ["Control"] });
+    await expect(count(2)).toBeVisible();
+
+    await row(1).click({ button: "right" });
+    await page
+      .getByRole("menu", { name: text.desktopLibrary.songMenu(title(1)) })
+      .getByRole("menuitem", { name: text.itemActions.labels.favorite })
+      .click();
+    await favorited(1).toBe(true);
+    await favorited(0).toBe(false);
+    await expect(count(2)).toBeVisible();
+    await row(2).click({ button: "right" });
+    await page
+      .getByRole("menu", { name: text.desktopLibrary.songMenu(text.library.selected(2)) })
+      .getByRole("menuitem", { name: text.itemActions.labels.favorite })
+      .click();
+    await favorited(0).toBe(true);
+    await favorited(2).toBe(true);
+    await expect(bar).toBeHidden();
+
+    await row(0).click();
+    await page.keyboard.press("End");
+    // The middle pages have never been in the viewport or its overscan.
+    await row(total - 1).click({ modifiers: ["Shift"] });
+    await expect(count(total)).toBeVisible();
+    await expect(
+      bar.getByRole("button", { name: actionBarLabel("favorite", "en"), exact: true }),
+    ).toBeVisible();
+    await page.keyboard.press("Escape");
+    await expect(bar).toBeHidden();
+    await expect(row(total - 1)).toHaveAttribute("aria-selected", "false");
+
+    await page.keyboard.press("Home");
+    await page.keyboard.press("Shift+ArrowDown");
+    await page.keyboard.press("Shift+ArrowDown");
+    await expect(count(3)).toBeVisible();
+    await page.keyboard.press("Shift+ArrowUp");
+    await expect(count(2)).toBeVisible();
+    await expect(row(2)).toHaveAttribute("aria-selected", "false");
+    await page.keyboard.press("Control+a");
+    await expect(count(total)).toBeVisible();
+    await row(1).click({ modifiers: ["Control"] });
+    await expect(count(total - 1)).toBeVisible();
+    await page.screenshot({
+      path: test.info().outputPath(`table-selection-${process.platform}.png`),
+    });
+    await page.keyboard.press("Escape");
+    await expect(bar).toBeHidden();
+
+    const search = page.getByRole("searchbox");
+    await search.fill(title(0));
+    await search.press("Control+a");
+    await expect(search).toBeFocused();
+    await expect(bar).toBeHidden();
+    await search.fill("Selection");
+    const searchSongs = page.getByTestId("search-song");
+    await searchSongs.first().click();
+    await page.keyboard.press("Shift+ArrowDown");
+    await expect(count(2)).toBeVisible();
+    await expect(searchSongs.nth(1)).toBeFocused();
+    await page.keyboard.press("Escape");
+    await expect(bar).toBeHidden();
+
+    await page.getByRole("button", { name: "Mixed selection", exact: true }).click();
+    const online = grid.getByRole("row", { name: /Online selection/ });
+    await online.click({ button: "right" });
+    await page.getByRole("menuitem", { name: text.itemActions.labels.select, exact: true }).click();
+    await expect(count(1)).toBeVisible();
+    await row(0).click({ modifiers: ["Control"] });
+    await expect(count(2)).toBeVisible();
+    await online.click({ button: "right" });
+    await page.getByRole("menuitem", { name: text.itemActions.labels.removeFromPlaylist }).click();
+    await expect(online).toHaveCount(0);
+    await expect(row(0)).toHaveCount(0);
+    await page.getByRole("button", { name: text.playlists.undo, exact: true }).click();
+    await expect(online).toBeVisible();
+    await expect(row(0)).toBeVisible();
+  } finally {
+    await app.close();
     rmSync(data, { recursive: true, force: true });
   }
 });

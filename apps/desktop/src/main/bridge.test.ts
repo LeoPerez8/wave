@@ -1,5 +1,5 @@
 ﻿import assert from "node:assert/strict";
-import { mkdtempSync, rmSync, mkdirSync, writeFileSync } from "node:fs";
+import { mkdtempSync, realpathSync, rmSync, mkdirSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { basename, dirname, join } from "node:path";
 import { test } from "node:test";
@@ -8,7 +8,14 @@ import { addTrack, openTestDatabase, star, type TestDatabase } from "@wave/clien
 import { creditSplits } from "@wave/client/db/credits";
 import { stampPreference } from "@wave/client/db/sync";
 import { syncCycle } from "@wave/client/sync/syncCycle";
-import { catalogueOf, recordingMatchTitle, scanPath, type SyncClock } from "@wave/core";
+import {
+  catalogueOf,
+  readThemeChoice,
+  recordingMatchTitle,
+  scanPath,
+  themeFor,
+  type SyncClock,
+} from "@wave/core";
 import { sql } from "drizzle-orm";
 import { createPlaylist } from "@wave/client/db/playlists";
 import * as Effect from "effect/Effect";
@@ -16,7 +23,7 @@ import * as Layer from "effect/Layer";
 import * as ManagedRuntime from "effect/ManagedRuntime";
 import { exposeBridge } from "../preload/expose.ts";
 import { BRIDGE_CALLS, type WaveBridge } from "../shared/bridge.ts";
-import type { PlaybackStatus } from "../shared/playback.ts";
+import type { OutputDevice, PlaybackStatus } from "../shared/playback.ts";
 import type { LanguageView } from "../shared/language.ts";
 import {
   answer,
@@ -30,14 +37,19 @@ import { kotlinLayer } from "./kotlin/kotlin.ts";
 import type { KotlinEvents } from "./kotlin/supervisor.ts";
 import type { SongTags } from "../shared/tags.ts";
 import { libraryLayer } from "./database.ts";
-import { playbackLayer } from "./playback/playback.ts";
+import { Playback, playbackLayer } from "./playback/playback.ts";
 import { registerBridge, type IpcHandler } from "./bridge.ts";
 import { DesktopLibrary, desktopLibraryLayer } from "./library/library.ts";
-import { preference } from "./preferences.ts";
+import { preference, savePreference } from "./preferences.ts";
 import { ytMusicLayer } from "./yt/ytMusic.ts";
 import { desktopLinksLayer } from "./links/layer.ts";
+import { cardImagesLayer } from "./cards/cardImages.ts";
+import { geniusLyricsSearchLayer } from "./lyrics/geniusLyricsSearchLayer.ts";
+import { recognizeLayer } from "./recognize/recognizeLayer.ts";
 import { ytFeaturesLayer } from "./yt/ytServices.ts";
 import { ytAccountLayer } from "./yt/ytAccountLayer.ts";
+import { spotifyAccountLayer } from "./spotify/spotifyAccountLayer.ts";
+import { spotifyImportLayer } from "./spotify/spotifyImportLayer.ts";
 import type { YtBrowserOutcome } from "./yt/ytBrowserSignIn.ts";
 import { createYtSessions, ytSessionStore } from "./yt/ytSessionStore.ts";
 import { lyricsLayer } from "./lyrics/lyrics.ts";
@@ -60,6 +72,26 @@ import {
 
 const trusted = { senderFrame: "window" };
 
+test("Search's online lyrics take a query and a hit's id, and ask nothing without an account", async () => {
+  await withFile(async (file) => {
+    const bridge = connect(file);
+    const wave = bridge.exposed.get("wave") as WaveBridge;
+    try {
+      assert.deepEqual(await wave.lyrics.searchOnline("wait for the water"), {
+        status: "disabled",
+      });
+      assert.equal(await wave.lyrics.openOnlineHit(8), "failed");
+      const search = bridge.handlers.get("lyrics.searchOnline")!;
+      await assert.rejects(search(trusted, 5), /refused/i);
+      await assert.rejects(search(trusted, "a".repeat(501)), /refused/i);
+      const open = bridge.handlers.get("lyrics.openOnlineHit")!;
+      for (const id of ["8", 0, 1.5, -3]) await assert.rejects(open(trusted, id), /refused/i);
+    } finally {
+      await bridge.runtime.dispose();
+    }
+  });
+});
+
 test("Lyrics and tags keeps the account's switches, refuses other keys and runs Fix Songs", async () => {
   await withFile(async (file) => {
     const first = connect(file);
@@ -68,6 +100,7 @@ test("Lyrics and tags keeps the account's switches, refuses other keys and runs 
       assert.deepEqual(await wave.lyricsAndTags.view(), {
         fixSongsOnline: true,
         downloadArtistPhotos: true,
+        geniusInsights: true,
         fixRun: null,
         artistPhotos: 0,
       });
@@ -121,6 +154,79 @@ test("a Lyrics and tags switch goes up to the account without waiting for the ti
         );
       }
       assert.equal(pushed.length, 1);
+    } finally {
+      await runtime.dispose();
+    }
+  });
+});
+
+test("following an artist is asked through the bridge, which refuses what isn't a follow", async () => {
+  await withFile(async (file) => {
+    const { runtime, exposed, handlers } = connect(file);
+    const wave = exposed.get("wave") as WaveBridge;
+    try {
+      // This build's account isn't signed in: New music only, and shows after signing in.
+      assert.deepEqual(await wave.follows.state("ABBA"), {
+        enabled: true,
+        level: null,
+        showsAvailable: false,
+        signInForShows: true,
+        country: "BR",
+      });
+      assert.equal((await wave.follows.set({ name: "ABBA" }, "releases")).level, "releases");
+      const view = await wave.follows.view();
+      assert.deepEqual(view.follows, [
+        { key: "abba", name: "ABBA", level: "releases", artistId: null, ytBrowseId: null },
+      ]);
+      assert.equal((await wave.follows.set({ name: "ABBA" }, null)).level, null);
+      assert.equal(await wave.follows.restore("abba"), true);
+      assert.equal((await wave.follows.state("ABBA")).level, "releases");
+      // The test's network answers nothing: no answer, which isn't "no matches".
+      assert.deepEqual(await wave.follows.search("abba"), { results: [], answered: false });
+      assert.equal((await wave.follows.setCountry("PT")).country, "PT");
+      assert.equal((await wave.follows.setEnabled(false)).enabled, false);
+      assert.equal((await wave.follows.state("ABBA")).level, null);
+      await assert.rejects(wave.follows.set({ name: "Moby" }, "releases"), /off/);
+
+      const call = (name: string, ...args: unknown[]) => handlers.get(name)!(trusted, ...args);
+      await assert.rejects(call("follows.state", ""), /refused/i);
+      await assert.rejects(call("follows.set", { name: "ABBA", path: "x" }, "shows"), /refused/i);
+      await assert.rejects(call("follows.set", { name: "ABBA" }, "all"), /refused/i);
+      await assert.rejects(call("follows.set", { name: "ABBA", deezerId: -1 }, null), /refused/i);
+      await assert.rejects(call("follows.restore", 7), /refused/i);
+      await assert.rejects(call("follows.setEnabled", "off"), /refused/i);
+      await assert.rejects(call("follows.setCountry", 55), /refused/i);
+      await assert.rejects(call("follows.setCountry", "Brazil"), /country/i);
+      await assert.rejects(call("follows.search", ""), /refused/i);
+    } finally {
+      await runtime.dispose();
+    }
+  });
+});
+
+test("an artist followed here goes up to the account, for the phones signed in to it", async () => {
+  await withFile(async (file) => {
+    const app = await desktop();
+    const phone = await app.service.signIn();
+    const { clock, pass } = fakeClock();
+    const { runtime, exposed } = connect(file, undefined, { service: app.open(), clock });
+    const wave = exposed.get("wave") as WaveBridge;
+    try {
+      await wave.account.signIn();
+      // The sync that signing in starts ends before the follow is made.
+      await pass(10_000);
+      await new Promise((resolve) => setTimeout(resolve, 300));
+      // Signed in, shows can be followed too.
+      assert.equal((await wave.follows.state("ABBA")).showsAvailable, true);
+      await wave.follows.set({ name: "ABBA", ytBrowseId: "UCabba" }, "shows");
+      await pass(10_000);
+      let pushed: readonly Record<string, unknown>[] = [];
+      for (let tries = 0; tries < 10 && pushed.length === 0; tries++) {
+        await new Promise((resolve) => setTimeout(resolve, 100));
+        pushed = (await pullAll(app.service, phone)).follows as readonly Record<string, unknown>[];
+      }
+      assert.equal(pushed.length, 1);
+      assert.equal(pushed[0]?.["id"], "abba");
     } finally {
       await runtime.dispose();
     }
@@ -260,13 +366,21 @@ const audioInMemory = () => {
     measure: (path) => void measured.push(path),
     cancelMeasurements: () => undefined,
     measurements: () => [],
+    setOutput: (id) => void engineCalls.push(`settings output ${id}`),
   };
+  let report: AudioEvents["message"] | undefined;
+  /** The system's outputs change to [outputs], as the audio process reports it. */
+  const plug = (outputs: readonly OutputDevice[]) => report?.({ event: "outputs", outputs });
   const fork = (events: AudioEvents) => ({
     send: (request: AudioRequest | ResolveAnswer) =>
       "resolved" in request || queueMicrotask(() => events.message(answer(engine, request))),
     kill: () => setImmediate(events.exit),
   });
-  return { layer: playerLayer({ fork }), engineCalls, gains, measured, broken };
+  const listening = (events: AudioEvents) => {
+    report = events.message;
+    return fork(events);
+  };
+  return { layer: playerLayer({ fork: listening }), engineCalls, gains, measured, broken, plug };
 };
 
 /** Tags as the shared Kotlin reads them, for a song titled `title`. */
@@ -458,6 +572,8 @@ const connect = (
   const jvm = jvmInMemory();
   /** What the M3U picker answers. */
   const copied: string[] = [];
+  /** The card images main saved (by file name) and copied; `save` is the dialog's answer. */
+  const cards = { save: true, saved: [] as string[], copied: [] as number[] };
   const picked = { playlists: [] as string[] };
   /** How the browser's YouTube sign-in ends. */
   const browser = { outcome: { kind: "noBrowser" } as YtBrowserOutcome };
@@ -490,26 +606,68 @@ const connect = (
     fetch: () => Promise.reject(new Error("no network")),
   }).pipe(Layer.provideMerge(library));
   const languages: LanguageView[] = [];
+  const themes: (string | null)[] = [];
   const runtime = ManagedRuntime.make(
     accountLayer({
       account: account.service,
       languageChanged: (view) => languages.push(view),
+      themeChanged: (stored) => themes.push(stored),
       focused: () => true,
       ...(account.clock === undefined ? {} : { clock: account.clock }),
     }).pipe(
       Layer.provideMerge(
         Layer.mergeAll(
+          cardImagesLayer({
+            save: async (fileName, png) => {
+              if (cards.save) cards.saved.push(`${fileName} ${png.length}`);
+              return cards.save;
+            },
+            copy: async (png) => void cards.copied.push(png.length),
+          }),
           desktopLinksLayer({
             online: () => true,
             writeClipboard: (text) => {
               copied.push(text);
             },
           }),
+          geniusLyricsSearchLayer({
+            account: account.service,
+            online: () => true,
+            openExternal: async () => {},
+          }),
+          recognizeLayer({
+            online: () => true,
+            microphone: () => "granted",
+            systemAudio: "loopback",
+            catalogue: () => catalogueOf("en", "desktop"),
+            language: () => "en",
+            events: () => () => {},
+            openPrivacySettings: null,
+            fetchCover: async () => null,
+            log: () => {},
+          }),
           ytAccountLayer({
             sessions: ytSessions,
             online: () => true,
             startSignIn: () => ({ outcome: Promise.resolve(browser.outcome), cancel: () => {} }),
           }),
+          spotifyImportLayer({ fetch: () => Promise.reject(new Error("no network")) }).pipe(
+            Layer.provideMerge(
+              spotifyAccountLayer({
+                clientId: null,
+                store: {
+                  keyringMissing: () => true,
+                  load: () => null,
+                  save: () => {},
+                  clear: () => {},
+                },
+                fetch: () => Promise.reject(new Error("no network")),
+                online: () => true,
+                openExternal: async () => {},
+                page: () => ({ title: "", message: "" }),
+              }),
+            ),
+          ),
         ).pipe(
           Layer.provideMerge(
             ytFeaturesLayer({ online: () => true }).pipe(
@@ -568,6 +726,7 @@ const connect = (
     exposed,
     sent,
     engineCalls: audio.engineCalls,
+    plug: audio.plug,
     gains: audio.gains,
     measured: audio.measured,
     broken: audio.broken,
@@ -577,7 +736,9 @@ const connect = (
     jvm: jvm.state,
     picked,
     copied,
+    cards,
     languages,
+    themes,
     browser,
   };
 };
@@ -784,6 +945,87 @@ test("main refuses a call from a frame other than Wave's window", async () => {
     assert.ok(counts !== undefined);
     await assert.rejects(async () => counts({ senderFrame: "an embedded page" }), /untrusted/i);
     await runtime.dispose();
+  });
+});
+
+test("the Spotify account bridge refuses extra arguments and exposes no authorized request call", async () => {
+  await withFile(async (file) => {
+    const { runtime, handlers, exposed } = connect(file);
+    try {
+      const wave = exposed.get("wave") as WaveBridge;
+      assert.equal((await wave.spotifyAccount.view()).configured, false);
+      assert.equal("request" in wave.spotifyAccount, false);
+      const photo = handlers.get("spotifyAccount.photo");
+      assert.ok(photo);
+      await assert.rejects(async () => photo(trusted, "https://elsewhere.test/image"), /Refused/);
+    } finally {
+      await runtime.dispose();
+    }
+  });
+});
+
+test("From Spotify's bridge checks what the window sends and answers without the account", async () => {
+  await withFile(async (file) => {
+    const { runtime, handlers, exposed } = connect(file);
+    try {
+      const wave = exposed.get("wave") as WaveBridge;
+      assert.deepEqual(Object.keys(wave.spotifyImport).sort(), [
+        "artwork",
+        "cancel",
+        "library",
+        "missing",
+        "run",
+      ]);
+      // This build names no Spotify client, so there is nothing to read.
+      const library = await wave.spotifyImport.library(false);
+      assert.equal(library.status, "failed");
+      assert.equal(library.status === "failed" && library.action, null);
+      const call = (name: string, ...args: unknown[]) => handlers.get(name)!(trusted, ...args);
+      await assert.rejects(call("spotifyImport.library", "yes"), /Refused/);
+      await assert.rejects(call("spotifyImport.library", false, 1), /Refused/);
+      await assert.rejects(call("spotifyImport.run", [], false), /Refused/);
+      await assert.rejects(call("spotifyImport.run", ["PLnotspotify"], false), /Refused/);
+      await assert.rejects(
+        call("spotifyImport.run", ["spotify:collection", "spotify:collection"], false),
+        /Refused/,
+      );
+      await assert.rejects(call("spotifyImport.run", ["spotify:collection"], "yes"), /Refused/);
+      await assert.rejects(call("spotifyImport.artwork", "https://i.scdn.co/image/a"), /Refused/);
+      await assert.rejects(call("spotifyImport.cancel", 1), /Refused/);
+      await assert.rejects(call("spotifyImport.missing", -1), /Refused/);
+      assert.deepEqual(await wave.spotifyImport.missing(7), {
+        total: 0,
+        songs: [],
+        finding: false,
+      });
+      // Nothing was listed, so Import has nothing to name; the window learns no more than that.
+      await assert.rejects(
+        call("spotifyImport.run", ["spotify:collection"], false),
+        /^Error: Spotify import failed$/,
+      );
+      assert.equal(await wave.spotifyImport.artwork("spotify:collection"), null);
+    } finally {
+      await runtime.dispose();
+    }
+  });
+});
+
+test("Share to Spotify asks for the sign-in when signed out, and takes only a playlist", async () => {
+  await withFile(async (file) => {
+    const { runtime, handlers, exposed, copied } = connect(file);
+    try {
+      const wave = exposed.get("wave") as WaveBridge;
+      const { id } = await wave.playlists.create("Viagem");
+      assert.deepEqual(await wave.spotifyShare.playlist(id), { kind: "signIn", again: false });
+      assert.deepEqual(copied, []);
+      const share = handlers.get("spotifyShare.playlist");
+      assert.ok(share);
+      await assert.rejects(async () => share(trusted, "1"), /Refused/);
+      await assert.rejects(async () => share(trusted, id, "https://elsewhere.test"), /Refused/);
+      await assert.rejects(wave.spotifyShare.playlist(id + 1000));
+    } finally {
+      await runtime.dispose();
+    }
   });
 });
 
@@ -1111,6 +1353,9 @@ test("Settings › Playback is kept for the account and reaches the engine at on
         crossfadeSeconds: 0,
         normalizeVolume: true,
         bufferMinutes: 2,
+        shuffleKind: "real",
+        dontPlayExplicit: false,
+        continueQueue: true,
       });
       assert.ok(engineCalls.includes("settings crossfade 0"), "the engine starts with them");
       assert.ok(engineCalls.includes("settings normalize true"));
@@ -1118,13 +1363,23 @@ test("Settings › Playback is kept for the account and reaches the engine at on
         crossfadeSeconds: 4,
         normalizeVolume: false,
       });
-      assert.deepEqual(after, { crossfadeSeconds: 4, normalizeVolume: false, bufferMinutes: 2 });
+      assert.deepEqual(after, {
+        crossfadeSeconds: 4,
+        normalizeVolume: false,
+        bufferMinutes: 2,
+        shuffleKind: "real",
+        dontPlayExplicit: false,
+        continueQueue: true,
+      });
       assert.deepEqual(engineCalls.slice(-2), ["settings crossfade 4", "settings normalize false"]);
       await wave.settings.setPlayback({ bufferMinutes: 15 });
       assert.deepEqual(await wave.settings.playback(), {
         crossfadeSeconds: 4,
         normalizeVolume: false,
         bufferMinutes: 15,
+        shuffleKind: "real",
+        dontPlayExplicit: false,
+        continueQueue: true,
       });
 
       for (const change of [
@@ -1132,6 +1387,9 @@ test("Settings › Playback is kept for the account and reaches the engine at on
         { crossfadeSeconds: Number.NaN },
         { normalizeVolume: "off" },
         { bufferMinutes: 3 },
+        { shuffleKind: "random" },
+        { dontPlayExplicit: "on" },
+        { continueQueue: 1 },
         { volume: 1 },
         null,
         "fast",
@@ -1143,6 +1401,166 @@ test("Settings › Playback is kept for the account and reaches the engine at on
         );
     } finally {
       await runtime.dispose();
+    }
+  });
+});
+
+test("the kind of shuffle chosen orders a list's Shuffle, the bar's shuffle and a kind picked", async () => {
+  await withFile(async (file) => {
+    const { runtime, exposed } = connect(file);
+    const wave = exposed.get("wave") as WaveBridge;
+    try {
+      await runtime.runPromise(
+        Effect.gen(function* () {
+          const db = (yield* Database) as unknown as TestDatabase;
+          for (const artist of ["Nick Drake", "Vashti Bunyan"])
+            for (const n of [1, 2, 3])
+              addTrack(db, { title: `${artist} ${n}`, artist, album: artist, trackNumber: n });
+        }),
+      );
+      /** The queue's artists from the current song on, which Even Shuffle never repeats in a row. */
+      const artists = async () => {
+        const view = await wave.playback.view();
+        const rows = (await wave.playback.queue(0, 10)).items;
+        return rows.slice(view.index).map((row) => row.artist);
+      };
+      const takesTurns = (names: readonly (string | null)[]) =>
+        names.length === 6 && names.every((name, at) => at === 0 || name !== names[at - 1]);
+      assert.equal((await wave.settings.setPlayback({ shuffleKind: "even" })).shuffleKind, "even");
+      // Real Shuffle leaves two songs by one artist together nine times in ten; six in a row
+      // that take turns are Even Shuffle's.
+      for (let round = 0; round < 6; round++) {
+        await wave.playback.start({ kind: "songs" }, undefined, true);
+        assert.ok(takesTurns(await artists()), "a list's Shuffle");
+        await wave.playback.command({ type: "setShuffle", on: false });
+        await wave.playback.command({ type: "setShuffle", on: true });
+        assert.ok(takesTurns(await artists()), "the bar's shuffle");
+      }
+      // A kind picked on the menu shuffles Up Next by it, turning shuffle on.
+      await wave.playback.command({ type: "setShuffle", on: false });
+      await wave.playback.command({ type: "reshuffle" });
+      assert.equal((await wave.playback.view()).shuffle, true);
+      assert.ok(takesTurns(await artists()), "a kind picked");
+    } finally {
+      await runtime.dispose();
+    }
+  });
+});
+
+test("the kind of shuffle syncs with the phone in both directions", async () => {
+  await withFile(async (file) => {
+    const app = await desktop();
+    // Both stamp their edits with the wall clock; the service's runs ahead of it, so it keeps
+    // the times they send (a time ahead of its own it stores as its own).
+    app.service.now = Date.now() + 86_400_000;
+    const phone = await app.service.signIn();
+    const phoneDb = await openTestDatabase();
+    const values = new Map<string, string>([["settings.shuffleKind", "smart"]]);
+    const phoneSync = () =>
+      syncCycle({
+        db: phoneDb,
+        splits: creditSplits(),
+        account: "ana@example.com",
+        transport: {
+          request: async (method, path, body) => {
+            const response = await app.service.request(method, path, {
+              session: phone,
+              ...(body === null ? {} : { body, headers: { "content-type": "application/json" } }),
+            });
+            return { status: response.status, body: await response.text() };
+          },
+        },
+        preferences: {
+          value: (key) => values.get(key) ?? null,
+          apply: (key, value) => {
+            if (value === null) values.delete(key);
+            else values.set(key, value);
+          },
+        },
+        now: Date.now,
+        songsChanged: false,
+        wait: async () => {},
+      });
+    stampPreference(phoneDb, "settings.shuffleKind", Date.now());
+    await phoneSync();
+    const { clock, pass } = fakeClock();
+    const { runtime, exposed } = connect(file, undefined, { service: app.open(), clock });
+    const wave = exposed.get("wave") as WaveBridge;
+    try {
+      assert.equal((await wave.settings.playback()).shuffleKind, "real");
+      await wave.account.signIn();
+      await until(async () => (await wave.settings.playback()).shuffleKind === "smart");
+      await wave.settings.setPlayback({ shuffleKind: "even" });
+      await pass(10_000);
+      await until(async () => {
+        await phoneSync();
+        return values.get("settings.shuffleKind") === "even";
+      });
+    } finally {
+      await runtime.dispose();
+    }
+  });
+});
+
+test("Settings › Playback lists the outputs, and the one picked is kept and played on", async () => {
+  await withFile(async (file) => {
+    const speakers = { id: "wasapi:speakers", name: "Speakers" };
+    const headphones = { id: "wasapi:headphones", name: "Headphones" };
+    const first = connect(file);
+    const wave = first.exposed.get("wave") as WaveBridge;
+    const call = (channel: string, ...args: unknown[]) =>
+      first.handlers.get(channel)!(trusted, ...args);
+    try {
+      assert.deepEqual(await wave.settings.outputs(), { outputs: [], chosen: null });
+      first.plug([speakers, headphones]);
+      assert.deepEqual(await wave.settings.outputs(), {
+        outputs: [speakers, headphones],
+        chosen: null,
+      });
+      assert.ok(
+        !first.engineCalls.some((c) => c.startsWith("settings output")),
+        "nothing picked: the engine stays on the system's default",
+      );
+
+      const picked = { ...headphones, connected: true };
+      assert.deepEqual(await wave.settings.setOutput(headphones.id), {
+        outputs: [speakers, headphones],
+        chosen: picked,
+      });
+      assert.equal(first.engineCalls.at(-1), "settings output wasapi:headphones");
+
+      // Unplugged: still the choice, shown as away, for when it comes back.
+      first.plug([speakers]);
+      assert.deepEqual(await wave.settings.outputs(), {
+        outputs: [speakers],
+        chosen: { ...headphones, connected: false },
+      });
+
+      for (const id of ["wasapi:unknown", "", 7, {}, undefined])
+        await assert.rejects(call("settings.setOutput", id), /refused/i, JSON.stringify(id));
+    } finally {
+      await first.runtime.dispose();
+    }
+
+    const second = connect(file);
+    const again = second.exposed.get("wave") as WaveBridge;
+    try {
+      assert.deepEqual((await again.settings.outputs()).chosen, {
+        ...headphones,
+        connected: false,
+      });
+      assert.ok(
+        second.engineCalls.includes("settings output wasapi:headphones"),
+        "a restart plays on the output picked before it",
+      );
+      second.plug([speakers, headphones]);
+      assert.deepEqual(await again.settings.setOutput(null), {
+        outputs: [speakers, headphones],
+        chosen: null,
+      });
+      assert.equal(second.engineCalls.at(-1), "settings output undefined");
+    } finally {
+      await second.runtime.dispose();
     }
   });
 });
@@ -1187,6 +1605,43 @@ test("Search online is kept on this computer, starts as Only on demand and takes
       await assert.rejects(handlers.get("settings.setSearchOnline")!(trusted, "wifi"), /refused/i);
       await wave.settings.setSearchOnline("onDemand");
       assert.equal(await wave.settings.searchOnline(), "onDemand");
+    } finally {
+      await runtime.dispose();
+    }
+  });
+});
+
+test("Don't Play Explicit keeps explicit songs out of the queue and takes them out as it turns on", async () => {
+  await withFile(async (file) => {
+    const { runtime, exposed } = connect(file);
+    try {
+      const wave = exposed.get("wave") as WaveBridge;
+      await runtime.runPromise(
+        Effect.gen(function* () {
+          const db = (yield* Database) as unknown as TestDatabase;
+          addTrack(db, { title: "A Clean" });
+          addTrack(db, { title: "B Explicit", explicit: "explicit" });
+          addTrack(db, { title: "C Clean" });
+        }),
+      );
+      const scope = { kind: "songs" } as const;
+      const queued = async () => (await wave.playback.queue(0, 10)).items.map((row) => row.title);
+      await wave.playback.start(scope, 1);
+      assert.deepEqual(await queued(), ["A Clean", "B Explicit", "C Clean"]);
+      assert.equal((await wave.playback.view()).current?.title, "B Explicit");
+
+      const after = await wave.settings.setPlayback({ dontPlayExplicit: true });
+      assert.equal(after.dontPlayExplicit, true);
+      assert.deepEqual(await queued(), ["A Clean", "C Clean"], "the playing one goes too");
+      assert.equal((await wave.playback.view()).current?.title, "C Clean");
+
+      await wave.playback.start(scope, 1);
+      assert.deepEqual(await queued(), ["A Clean", "C Clean"]);
+      assert.equal(
+        (await wave.playback.view()).current?.title,
+        "C Clean",
+        "a clicked explicit song gives way to the next clean one",
+      );
     } finally {
       await runtime.dispose();
     }
@@ -1370,6 +1825,7 @@ test("a streamed song has the phone's menu: star, playlist, download, its album 
           "favorite",
           "goToAlbum",
           "goToArtist",
+          "releaseDate",
           "share",
           "download",
         ],
@@ -1508,7 +1964,7 @@ const until = async (ready: () => Promise<boolean>): Promise<void> => {
   assert.fail("never ready");
 };
 
-test("a build with no sync service shows no Sign In and no invitation", async () => {
+test("a build with no sync service shows no Sign In, no invitation and no Bring your music", async () => {
   await withFile(async (file) => {
     mkdirSync(join(dirname(file), "Music"));
     const { runtime, exposed } = connect(file);
@@ -1518,6 +1974,7 @@ test("a build with no sync service shows no Sign In and no invitation", async ()
       const view = await wave.account.view();
       assert.deepEqual(view.account, { kind: "unavailable" });
       assert.equal(view.invitation, false);
+      assert.equal(view.bringYourMusic, false);
       assert.equal(view.theme, null);
     } finally {
       await runtime.dispose();
@@ -1570,9 +2027,63 @@ test("the invitation to sign in shows once the first scan finished, until it's a
   });
 });
 
+test("Bring your music shows after the invitation, again on the next start, until it's answered", async () => {
+  await withFile(async (file) => {
+    mkdirSync(join(dirname(file), "Music"));
+    const app = await desktop();
+    const launch = async (check: (wave: WaveBridge) => Promise<void>) => {
+      const { runtime, exposed } = connect(file, undefined, { service: app.open() });
+      const wave = exposed.get("wave") as WaveBridge;
+      try {
+        await until(async () => (await wave.library.scanStatus()).status === "done");
+        await check(wave);
+      } finally {
+        await runtime.dispose();
+      }
+    };
+    await launch(async (wave) => {
+      assert.equal((await wave.account.view()).bringYourMusic, false, "the invitation is first");
+      await wave.account.answerInvitation();
+      assert.equal((await wave.account.view()).bringYourMusic, true);
+    });
+    await launch(async (wave) => {
+      const view = await wave.account.view();
+      assert.equal(view.invitation, false);
+      assert.equal(view.bringYourMusic, true, "Wave closed before the card was answered");
+      await wave.account.answerBringYourMusic();
+      assert.equal((await wave.account.view()).bringYourMusic, false);
+    });
+    await launch(async (wave) => {
+      assert.equal((await wave.account.view()).bringYourMusic, false, "answered for good");
+    });
+  });
+});
+
+test("a computer that answered the invitation before Bring your music existed never gets the card", async () => {
+  await withFile(async (file) => {
+    mkdirSync(join(dirname(file), "Music"));
+    const app = await desktop();
+    const { runtime, exposed } = connect(file, undefined, { service: app.open() });
+    const wave = exposed.get("wave") as WaveBridge;
+    try {
+      await runtime.runPromise(
+        Effect.map(Database, (db) => savePreference(db, "firstRun.signInInvitation", "answered")),
+      );
+      await until(async () => (await wave.library.scanStatus()).status === "done");
+      const view = await wave.account.view();
+      assert.equal(view.invitation, false);
+      assert.equal(view.bringYourMusic, false);
+    } finally {
+      await runtime.dispose();
+    }
+  });
+});
+
 test("the account's language applies on sign-in and later pulls, and desktop changes sync back", async () => {
   await withFile(async (file) => {
     const app = await desktop();
+    // Both apps stamp a change with the real time, which the service's clock mustn't be behind.
+    app.service.now = Math.max(app.service.now, Date.now() + 60 * 60_000);
     const phone = await app.service.signIn();
     const phoneDb = await openTestDatabase();
     const values = new Map<string, string>([["settings.language", "pt-BR"]]);
@@ -1631,6 +2142,114 @@ test("the account's language applies on sign-in and later pulls, and desktop cha
   });
 });
 
+test("a theme edit is validated, changes the theme at once and survives reopening", async () => {
+  await withFile(async (file) => {
+    const first = connect(file);
+    const wave = first.exposed.get("wave") as WaveBridge;
+    try {
+      assert.equal((await wave.account.view()).theme, null);
+      const stored = await wave.settings.editTheme({ kind: "swatch", group: "dark", id: "navy" });
+      assert.equal(themeFor(readThemeChoice(stored)).dark.background, "#0a0f1f");
+      assert.equal((await wave.account.view()).theme, stored);
+      assert.equal(first.themes.at(-1), stored);
+      await assert.rejects(
+        first.handlers.get("settings.editTheme")!(trusted, {
+          kind: "swatch",
+          group: "dark",
+          id: "sand",
+        }),
+        /refused/i,
+      );
+      assert.equal((await wave.account.view()).theme, stored);
+    } finally {
+      await first.runtime.dispose();
+    }
+    const second = connect(file);
+    try {
+      const reopened = second.exposed.get("wave") as WaveBridge;
+      await reopened.settings.editTheme({ kind: "save", group: "primary", hex: "#7aaef5" });
+      const custom = await reopened.settings.editTheme({
+        kind: "saved",
+        group: "primary",
+        hex: "#7aaef5",
+      });
+      const theme = themeFor(readThemeChoice(custom));
+      assert.equal(theme.dark.background, "#0a0f1f");
+      assert.equal(theme.dark.accent, "#7aaef5");
+      const reset = readThemeChoice(await reopened.settings.editTheme({ kind: "reset" }));
+      assert.deepEqual(themeFor(reset), themeFor(readThemeChoice(null)));
+      assert.deepEqual(reset.savedPrimary, ["#7aaef5"]);
+    } finally {
+      await second.runtime.dispose();
+    }
+  });
+});
+
+test("the account's theme reaches the desktop on a pull, and a desktop edit reaches the phone", async () => {
+  await withFile(async (file) => {
+    const app = await desktop();
+    // Both stamp their edits with the wall clock; the service's runs ahead of it, so it keeps
+    // the times they send (a time ahead of its own it stores as its own).
+    app.service.now = Date.now() + 86_400_000;
+    const phone = await app.service.signIn();
+    const phoneDb = await openTestDatabase();
+    const values = new Map<string, string>([
+      ["settings.theme", JSON.stringify({ light: "sage", dark: "plum" })],
+    ]);
+    const phoneSync = () =>
+      syncCycle({
+        db: phoneDb,
+        splits: creditSplits(),
+        account: "ana@example.com",
+        transport: {
+          request: async (method, path, body) => {
+            const response = await app.service.request(method, path, {
+              session: phone,
+              ...(body === null ? {} : { body, headers: { "content-type": "application/json" } }),
+            });
+            return { status: response.status, body: await response.text() };
+          },
+        },
+        preferences: {
+          value: (key) => values.get(key) ?? null,
+          apply: (key, value) => {
+            if (value === null) values.delete(key);
+            else values.set(key, value);
+          },
+        },
+        now: Date.now,
+        songsChanged: false,
+        wait: async () => {},
+      });
+    const phoneTheme = () => themeFor(readThemeChoice(values.get("settings.theme") ?? null));
+    stampPreference(phoneDb, "settings.theme", Date.now());
+    await phoneSync();
+    const { clock, pass } = fakeClock();
+    const { runtime, exposed, themes } = connect(file, undefined, {
+      service: app.open(),
+      clock,
+    });
+    const wave = exposed.get("wave") as WaveBridge;
+    try {
+      await wave.account.signIn();
+      await until(async () => (await wave.account.view()).theme !== null);
+      // Main hears of a pulled theme, for the window's frame.
+      assert.equal(themeFor(readThemeChoice(themes.at(-1) ?? null)).dark.background, "#140c17");
+      // The edit is made to the theme the phone pushed: its light background stays.
+      await wave.settings.editTheme({ kind: "custom", group: "secondary", hex: "#e8c454" });
+      await pass(10_000);
+      await until(async () => {
+        await phoneSync();
+        return phoneTheme().dark.highlight === "#e8c454";
+      });
+      assert.equal(phoneTheme().light.background, "#e1eadc");
+      assert.equal(phoneTheme().dark.background, "#140c17");
+    } finally {
+      await runtime.dispose();
+    }
+  });
+});
+
 test("a phone's Settings › Playback reaches the desktop's engine when a sync pulls it", async () => {
   await withFile(async (file) => {
     const app = await desktop();
@@ -1643,6 +2262,8 @@ test("a phone's Settings › Playback reaches the desktop's engine when a sync p
       const values = new Map([
         ["settings.crossfadeSeconds", "6"],
         ["settings.normalizeVolume", "off"],
+        ["settings.dontPlayExplicit", "on"],
+        ["settings.continueQueue", "off"],
       ]);
       for (const key of values.keys()) stampPreference(phoneDb, key, Date.now());
       await syncCycle({
@@ -1675,6 +2296,9 @@ test("a phone's Settings › Playback reaches the desktop's engine when a sync p
         crossfadeSeconds: 6,
         normalizeVolume: false,
         bufferMinutes: 2,
+        shuffleKind: "real",
+        dontPlayExplicit: true,
+        continueQueue: false,
       });
       await until(async () => engineCalls.includes("settings normalize false"));
       assert.deepEqual(engineCalls.slice(-2), ["settings crossfade 6", "settings normalize false"]);
@@ -1858,6 +2482,7 @@ test("main refuses YT Music calls with bad songs, settings, queries or covers", 
       await assert.rejects(call("playback.startYt", ["../etc/passwd"], 0), /Refused/);
       await assert.rejects(call("playback.startYt", ["abcdefghijk"], 1), /Refused/);
       await assert.rejects(call("playback.startYt", [], 0), /Refused/);
+      await assert.rejects(call("playback.startYt", ["abcdefghijk"], 0, "yes"), /Refused/);
       await assert.rejects(call("settings.setYtMusic", "off"), /Refused/);
       await assert.rejects(call("yt.search", { query: "a" }), /Refused/);
       await assert.rejects(call("yt.artwork", 7), /Refused/);
@@ -1968,9 +2593,17 @@ test("a Magic Queue, an artist page and Discover's row come through the bridge, 
       );
       await assert.rejects(call("magicQueue.startStreamed", "nope"), /Refused/);
       await assert.rejects(call("discover.playMix", "mix", -1), /Refused/);
+      await assert.rejects(call("discover.playMix", "mix", 0, "yes"), /Refused/);
       await assert.rejects(call("yt.queue", "shuffle", "mayyounever"), /Refused/);
+      await assert.rejects(call("playlistSuggestions.view", -1, "1"), /Refused/);
+      await assert.rejects(call("playlistSuggestions.view", 1, 2), /Refused/);
+      await assert.rejects(call("playlistSuggestions.add", 1, ""), /Refused/);
+      await assert.rejects(call("playlistSuggestions.retry", 1, "yes"), /Refused/);
+      assert.equal(await call("playlistSuggestions.add", 999, "gone"), false);
+      assert.equal(await call("playlistSuggestions.refresh", 999), null);
       await assert.rejects(call("yt.queue", "playNow", "unknownsong"), /yt-unknown/);
       assert.equal(await call("discover.playMix", "gone", 0), false);
+      assert.equal(await call("discover.playMix", "gone", 0, true), false);
       await assert.rejects(
         call("discover.setSettings", { level: 6, faithfulness: 3, popularity: 3 }),
         /Refused/,
@@ -1988,6 +2621,256 @@ test("a Magic Queue, an artist page and Discover's row come through the bridge, 
         faithfulness: 1,
         popularity: 4,
       });
+    } finally {
+      await runtime.dispose();
+    }
+  });
+});
+
+test("collection actions queue and copy every song in collection order", async () => {
+  await withFile(async (file) => {
+    const { runtime, exposed, handlers } = connect(file);
+    const wave = exposed.get("wave") as WaveBridge;
+    const call = (channel: string, ...args: unknown[]) => handlers.get(channel)!(trusted, ...args);
+    try {
+      const { seed, source, destination } = await runtime.runPromise(
+        Effect.gen(function* () {
+          const db = (yield* Database) as unknown as TestDatabase;
+          const seed = addTrack(db, { title: "Seed", album: "Elsewhere" });
+          const tracks = ["Zulu", "Alpha"].map((title, index) => ({
+            source: "library" as const,
+            trackId: addTrack(db, {
+              title,
+              artist: "Wave",
+              album: "Disc",
+              genre: "Rock",
+              trackNumber: index + 1,
+            }),
+          }));
+          const source = createPlaylist(db, "Source", tracks, 1000).playlistId;
+          const destination = createPlaylist(db, "Destination", [], 1000).playlistId;
+          return { seed, source, destination };
+        }),
+      );
+      const album = (await wave.library.browse({ kind: "albums" }, 0, 10)).items.find(
+        (row) => row.title === "Disc",
+      )!;
+      const target = { kind: "album", id: album.id } as const;
+      const playlist = { kind: "playlist", id: source } as const;
+      const titles = async () => (await wave.playback.queue(0, 20)).items.map((row) => row.title);
+      const start = () => wave.playback.start({ kind: "search", query: "Seed" }, 0);
+      await wave.settings.setYtMusic(false);
+      assert.deepEqual(
+        (
+          await wave.collections.actions(target, { here: "/library", selectable: true })
+        ).entries.map((entry) => entry.action),
+        ["playNext", "addToQueue", "addToPlaylist", "goToArtist", "fixSongs", "select"],
+      );
+      assert.equal(
+        (await wave.library.browse({ kind: "search", query: "Seed" }, 0, 1)).items[0]?.id,
+        seed,
+      );
+      await start();
+      assert.deepEqual(await wave.collections.run(target, "playNext"), {
+        kind: "queued",
+        count: 2,
+      });
+      assert.deepEqual(await titles(), ["Seed", "Zulu", "Alpha"]);
+      await start();
+      assert.deepEqual(await wave.collections.run(playlist, "addToQueue"), {
+        kind: "queued",
+        count: 2,
+      });
+      assert.deepEqual(await titles(), ["Seed", "Zulu", "Alpha"]);
+      assert.deepEqual(await wave.collections.run(playlist, "addToPlaylist", destination), {
+        kind: "playlist",
+        name: "Destination",
+        added: 2,
+        alreadyIn: 0,
+      });
+      assert.deepEqual(
+        (await wave.library.browse({ kind: "playlist", id: destination }, 0, 10)).items.map(
+          (row) => row.title,
+        ),
+        ["Zulu", "Alpha"],
+      );
+      await wave.settings.setYtMusic(true);
+      assert.ok(
+        (await wave.collections.actions(playlist)).entries.some(
+          (entry) => entry.action === "magicQueue",
+        ),
+      );
+      await assert.rejects(
+        call("collections.run", { kind: "songs", id: 1 }, "playNext"),
+        /refused/i,
+      );
+      await assert.rejects(call("collections.run", target, "deletePlaylist"), /refused/i);
+    } finally {
+      await runtime.dispose();
+    }
+  });
+});
+
+test("a selection of songs and collections acts on every song they hold, once each", async () => {
+  await withFile(async (file) => {
+    const { runtime, exposed, handlers } = connect(file);
+    const wave = exposed.get("wave") as WaveBridge;
+    const call = (channel: string, ...args: unknown[]) => handlers.get(channel)!(trusted, ...args);
+    try {
+      const { loose, missing, destination } = await runtime.runPromise(
+        Effect.gen(function* () {
+          const db = (yield* Database) as unknown as TestDatabase;
+          const loose = addTrack(db, { title: "Loose", album: "Elsewhere", artist: "Solo" });
+          for (const [index, title] of ["Zulu", "Alpha"].entries())
+            addTrack(db, { title, artist: "Wave", album: "Disc", trackNumber: index + 1 });
+          const missing = addTrack(db, { title: "Gone", artist: "Away", album: "Lost" });
+          db.run(sql`UPDATE tracks SET path=NULL WHERE id=${missing}`);
+          const destination = createPlaylist(db, "Destination", [], 1000).playlistId;
+          return { loose, missing, destination };
+        }),
+      );
+      await wave.settings.setYtMusic(false);
+      const albums = (await wave.library.browse({ kind: "albums" }, 0, 10)).items;
+      const disc = albums.find((row) => row.title === "Disc")!.id;
+      const lost = albums.find((row) => row.title === "Lost")!.id;
+      const songs = { scope: { kind: "songs" }, ids: [loose] } as const;
+      const target = { songs, collections: [{ kind: "album", ids: [disc] }] } as const;
+      const actions = async (asked: Parameters<typeof wave.collections.selectionActions>[0]) =>
+        (await wave.collections.selectionActions(asked)).entries.map((entry) => entry.action);
+      assert.deepEqual(await wave.collections.selectionActions(target), {
+        entries: [{ action: "playNext" }, { action: "addToQueue" }, { action: "addToPlaylist" }],
+        count: 2,
+      });
+      assert.deepEqual(await wave.collections.runSelection(target, "addToPlaylist", destination), {
+        kind: "playlist",
+        name: "Destination",
+        added: 3,
+        alreadyIn: 0,
+      });
+      assert.deepEqual(
+        (await wave.library.browse({ kind: "playlist", id: destination }, 0, 10)).items.map(
+          (row) => row.title,
+        ),
+        ["Loose", "Zulu", "Alpha"],
+      );
+      // The playlist holds the album's songs: checked with the album, each still acts once.
+      const overlap = {
+        collections: [
+          { kind: "album", ids: [disc] },
+          { kind: "playlist", ids: [destination] },
+        ],
+      } as const;
+      await wave.playback.start({ kind: "search", query: "Loose" }, 0);
+      assert.deepEqual(await wave.collections.runSelection(overlap, "addToQueue"), {
+        kind: "queued",
+        count: 3,
+      });
+      assert.deepEqual(
+        (await wave.playback.queue(0, 20)).items.map((row) => row.title),
+        ["Loose", "Zulu", "Alpha", "Loose"],
+      );
+      // Every album but the unchecked ones, as Select All leaves them.
+      const all = { collections: [{ kind: "album", all: true, except: [lost] }] } as const;
+      assert.equal((await wave.collections.selectionActions(all)).count, 2);
+      assert.ok(!(await actions(all)).includes("download"));
+      assert.deepEqual(await actions({ collections: [{ kind: "album", ids: [disc, lost] }] }), [
+        "playNext",
+        "addToQueue",
+        "addToPlaylist",
+        "download",
+        "fixSongs",
+      ]);
+      assert.deepEqual(
+        await actions({
+          songs: { scope: { kind: "songs" }, ids: [missing] },
+          collections: [{ kind: "artist", all: true, except: [] }],
+        }),
+        ["playNext", "addToQueue", "addToPlaylist", "download"],
+      );
+      for (const refused of [
+        { collections: [] },
+        { collections: [{ kind: "songs", ids: [1] }] },
+        { collections: [{ kind: "album", ids: [] }] },
+        { collections: [{ kind: "album", ids: [0] }] },
+        {
+          songs: { scope: { kind: "albums" }, ids: [1] },
+          collections: [{ kind: "album", ids: [1] }],
+        },
+      ])
+        await assert.rejects(call("collections.selectionActions", refused), /refused/i);
+      await assert.rejects(call("collections.runSelection", target, "favorite"), /refused/i);
+      await assert.rejects(call("collections.runSelection", target, "addToPlaylist"), /refused/i);
+    } finally {
+      await runtime.dispose();
+    }
+  });
+});
+
+test("songs dropped in Up Next go where they were dropped", async () => {
+  await withFile(async (file) => {
+    const { runtime, exposed, handlers } = connect(file);
+    const wave = exposed.get("wave") as WaveBridge;
+    const call = (channel: string, ...args: unknown[]) => handlers.get(channel)!(trusted, ...args);
+    try {
+      const ids = await runtime.runPromise(
+        Effect.gen(function* () {
+          const db = (yield* Database) as unknown as TestDatabase;
+          return ["One", "Two", "Three", "Four"].map((title, n) =>
+            addTrack(db, { title, artist: "Wave", album: "Disc", trackNumber: n + 1 }),
+          );
+        }),
+      );
+      await wave.settings.setYtMusic(false);
+      const album = (await wave.library.browse({ kind: "albums" }, 0, 1)).items[0]!.id;
+      const songs = { kind: "album", id: album } as const;
+      await wave.playback.start(songs, 0);
+      const titles = async () => (await wave.playback.queue(0, 20)).items.map((row) => row.title);
+      const keyOf = async (title: string) =>
+        (await wave.playback.queue(0, 20)).items.find((row) => row.title === title)!.key;
+      const at = { after: await keyOf("Two"), before: await keyOf("Three") };
+      assert.deepEqual(
+        await wave.songs.run(
+          { scope: songs, ids: [ids[3]!, ids[0]!] },
+          "addToQueue",
+          undefined,
+          at,
+        ),
+        { kind: "queued", count: 2 },
+      );
+      // In the order the list shows them.
+      assert.deepEqual(await titles(), ["One", "Two", "One", "Four", "Three", "Four"]);
+      const top = { after: null, before: await keyOf("Two") };
+      assert.deepEqual(
+        await wave.collections.runSelection(
+          { collections: [{ kind: "album", ids: [album] }] },
+          "addToQueue",
+          undefined,
+          { after: null, before: top.before },
+        ),
+        { kind: "queued", count: 4 },
+      );
+      assert.deepEqual((await titles()).slice(0, 6), ["One", "One", "Two", "Three", "Four", "Two"]);
+      const target = { scope: songs, ids: [ids[0]!] };
+      for (const refused of [
+        [target, "playNext", undefined, top],
+        [target, "addToQueue", undefined, { after: "x", before: null }],
+        [target, "addToQueue", undefined, { after: null }],
+      ])
+        await assert.rejects(call("songs.run", ...refused), /refused/i);
+      await assert.rejects(
+        call(
+          "collections.runSelection",
+          { collections: [{ kind: "album", ids: [album] }] },
+          "playNext",
+          undefined,
+          top,
+        ),
+        /refused/i,
+      );
+      await assert.rejects(
+        call("streamed.run", "abcdefghijk", "playNext", undefined, top),
+        /refused/i,
+      );
     } finally {
       await runtime.dispose();
     }
@@ -2024,7 +2907,9 @@ test("a song's menu and the selection bar offer and run the phone's actions thro
         { action: "goToArtist", artists: { kind: "open", artistId: menu.artists[0]!.id } },
         // It has no lyrics, genre or year to fix yet.
         { action: "fixSong" },
+        { action: "releaseDate" },
         { action: "share" },
+        { action: "showInFolder" },
         { action: "select" },
         { action: "removeFromLibrary" },
       ]);
@@ -2032,6 +2917,28 @@ test("a song's menu and the selection bar offer and run the phone's actions thro
         menu.artists.map((artist) => artist.name),
         ["Nick Drake"],
       );
+      // Release Date reads and keeps one song's date; the fields are checked before use.
+      const one = { scope: songs, ids: [ids[0]!] };
+      assert.deepEqual(await wave.releaseDates.view(one), {
+        title: "Parasite",
+        date: null,
+        typed: false,
+      });
+      assert.deepEqual(await wave.releaseDates.save(one, { year: "1972", month: "2", day: "" }), {
+        ok: true,
+      });
+      assert.equal((await wave.releaseDates.view(one)).date, "1972-02");
+      assert.deepEqual(await wave.releaseDates.save(one, { year: "1972", month: "", day: "9" }), {
+        ok: false,
+        problem: "impossible",
+      });
+      await assert.rejects(wave.releaseDates.save(one, { year: 1972 } as never));
+      await assert.rejects(wave.releaseDates.view({ scope: songs, ids: [ids[0]!, ids[1]!] }));
+      assert.deepEqual(await wave.releaseDates.save(one, null), { ok: true });
+      // Show in Folder names a song by its id alone: main finds its file, here none on disk.
+      assert.equal(await wave.songs.showInFolder(ids[0]!), "gone");
+      for (const song of ["C:/Music/Road.flac", -1, 1.5, { id: ids[0] }])
+        await assert.rejects(wave.songs.showInFolder(song as never));
       const onAlbum = await wave.songs.actions(
         { scope: { kind: "album", id: album.id }, ids: [ids[0]!] },
         "selection",
@@ -2276,6 +3183,42 @@ test("main refuses download calls with bad songs, actions, ids or pages", async 
       await assert.rejects(call("downloads.retry", [7]), /Refused/);
       await assert.rejects(call("downloads.cancel", "abcdefghijk"), /Refused/);
       await assert.rejects(call("downloads.rows", 0, 10_000), /Refused/);
+      await assert.rejects(call("downloads.rows", 0, 10, "yes"), /Refused/);
+      await assert.rejects(
+        call("downloads.move", { kind: "song", from: "../journal", step: 1 }),
+        /Refused/,
+      );
+      await assert.rejects(
+        call("downloads.move", { kind: "group", from: "songs", step: 2 }),
+        /Refused/,
+      );
+      await assert.rejects(call("downloads.move", { kind: "group", from: "songs" }), /Refused/);
+      await assert.rejects(
+        call("downloads.move", { kind: "group", from: "songs", to: "album:7", step: 1 }),
+        /Refused/,
+      );
+      await assert.rejects(call("downloads.failedReason", "Not found online", "delete"), /Refused/);
+      await assert.rejects(call("downloads.ytList", { kind: "album", id: "../x" }), /Refused/);
+      await assert.rejects(call("downloads.ytList", { kind: "artist", id: "MPREb_x" }), /Refused/);
+      await assert.rejects(
+        call("downloads.ytListAction", "downloadAll", { kind: "album", id: "MPREb_x" }),
+        /Refused/,
+      );
+      // An album page main hasn't read has no download to show or start.
+      assert.equal(await call("downloads.ytList", { kind: "album", id: "MPREb_unread" }), null);
+      // A mix that's gone (Home rebuilt its mixes) has no download either.
+      assert.equal(
+        await call("downloads.ytList", { kind: "discoverMix", id: "artist:gone" }),
+        null,
+      );
+      await assert.rejects(
+        call("downloads.ytList", { kind: "discoverMix", id: "x".repeat(201) }),
+        /Refused/,
+      );
+      await call("downloads.ytListAction", "download", { kind: "album", id: "MPREb_unread" });
+      // A move that names nothing waiting is taken and does nothing.
+      await call("downloads.move", { kind: "group", from: "songs", step: 1 });
+      await call("downloads.failedReason", "Not found online", "retry");
       await assert.rejects(call("downloads.setBestQuality", "on"), /Refused/);
     } finally {
       await runtime.dispose();
@@ -2297,6 +3240,7 @@ test("main refuses playlist calls with a bad playlist, name, page, answer or fra
       await assert.rejects(call("playlists.move", 1, 1, "left"), /refused/i);
       await assert.rejects(call("playlists.graveyard", 1, 0, 201), /refused/i);
       await assert.rejects(call("playlists.forget", 1, "all"), /refused/i);
+      await assert.rejects(call("playlists.playGraveyard", 1, -3), /refused/i);
       await assert.rejects(call("playlists.runImport", ["delete"]), /refused/i);
       await assert.rejects(
         call("playlists.saveImage", 1, { zoom: Number.NaN, centerX: 0.5, centerY: 0.5 }),
@@ -2333,6 +3277,16 @@ test("Copy Link puts a song's share link on the clipboard, and pasted text that 
       await assert.rejects(call("links.open", 7), /refused/i);
       await assert.rejects(call("links.open", "x".repeat(16_385)), /refused/i);
       await assert.rejects(call("links.copySong", "not a video"), /refused/i);
+      await assert.rejects(call("links.songShare", "not a video"), /refused/i);
+      await assert.rejects(call("links.copyShareLink", "https://example.com/"), /refused/i);
+      assert.deepEqual(
+        await wave.links.copyShareLink("https://music.youtube.com/watch?v=abcdefghijk"),
+        {
+          kind: "copied",
+          message: "Link copied",
+        },
+      );
+      copied.pop();
       await assert.rejects(call("links.copyPlaylist", 0), /refused/i);
       await assert.rejects(call("links.importPlaylist", "token", "yes"), /refused/i);
       // Main answers in the language it resolved, whatever the window believes.
@@ -2801,6 +3755,576 @@ test("playlist, artist and genre pages download their missing songs in page orde
       const genre = (await wave.library.browse({ kind: "genres" }, 0, 1)).items[0]!;
       assert.equal((await wave.downloads.list({ kind: "genre", id: genre.id }))?.count, 2);
       assert.equal(await wave.downloads.list({ kind: "playlist", id: 999 }), null);
+    } finally {
+      await runtime.dispose();
+    }
+  });
+});
+
+/** The first day of the month [back] months before this one, local time. */
+const monthBack = (back: number) => {
+  const now = new Date();
+  return new Date(now.getFullYear(), now.getMonth() - back, 1);
+};
+const monthPeriod = (start: Date) =>
+  ({ kind: "month", year: start.getFullYear(), month: start.getMonth() + 1 }) as const;
+const monthId = (start: Date) =>
+  `${start.getFullYear()}-${String(start.getMonth() + 1).padStart(2, "0")}`;
+
+/** [count] counted plays of six minutes in the month that starts at [month]. */
+const playInMonth = (db: TestDatabase, trackId: number, month: Date, count: number) => {
+  for (let n = 0; n < count; n++)
+    recordPlay(db, {
+      trackId: String(trackId),
+      startedAt: month.getTime() + (n % 20) * 24 * 60 * 60_000 + 20 * 60 * 60_000 + n * 1000,
+      counted: true,
+      listenedMs: 6 * 60_000,
+      durationMs: 6 * 60_000,
+      source: "phone",
+      endReason: "completed",
+      context: null,
+    });
+};
+
+test("a month with three hours listened has a Recap on Home and Stats until it is opened; a month with less has none", async () => {
+  await withFile(async (file) => {
+    const { runtime, exposed, handlers } = connect(file);
+    const wave = exposed.get("wave") as WaveBridge;
+    const [last, before, older] = [monthBack(1), monthBack(2), monthBack(3)];
+    try {
+      await runtime.runPromise(
+        Effect.gen(function* () {
+          const db = (yield* Database) as unknown as TestDatabase;
+          const moon = addTrack(db, { title: "Pink Moon", artist: "Nick Drake", genre: "Folk" });
+          const road = addTrack(db, { title: "Road", artist: "Nick Drake", album: "Pink Moon" });
+          // Last month: 3 hours exactly. The month before: 2 h 54 min. The one before that: 4 hours.
+          playInMonth(db, moon, last, 20);
+          playInMonth(db, road, last, 10);
+          playInMonth(db, moon, before, 29);
+          playInMonth(db, road, older, 40);
+        }),
+      );
+      const listed = (await wave.stats.recaps()).items.filter((period) => period.kind === "month");
+      assert.deepEqual(listed, [monthPeriod(last), monthPeriod(older)]);
+      assert.deepEqual((await wave.home.view()).recap, monthPeriod(last));
+
+      const recap = await wave.stats.recap(monthId(last));
+      assert.deepEqual(recap?.period, monthPeriod(last));
+      assert.deepEqual(
+        recap?.slides.map((slide) => slide.kind),
+        ["minutes", "topSongs", "topArtists", "topAlbum", "topGenres", "habits", "summary"],
+      );
+      const [minutes, songs] = recap!.slides;
+      assert.ok(minutes?.kind === "minutes" && minutes.minutes === 180);
+      assert.ok(songs?.kind === "topSongs");
+      assert.deepEqual(
+        songs.songs.map((row) => [row.title, row.artist, row.countedPlays]),
+        [
+          ["Pink Moon", "Nick Drake", 20],
+          ["Road", "Nick Drake", 10],
+        ],
+      );
+      await wave.stats.recapClosed();
+
+      // Opened: Home stops announcing it, and Stats still lists it.
+      assert.equal((await wave.home.view()).recap, null);
+      assert.equal(
+        (await wave.stats.recaps()).items.filter((period) => period.kind === "month").length,
+        2,
+      );
+
+      assert.equal(await wave.stats.recap(monthId(before)), null);
+      for (const bad of ["2026-13", "../2026-01", 202601, ""])
+        await assert.rejects(handlers.get("stats.recap")!(trusted, bad), /refused/i);
+      for (const bad of [-1, 1.5, "0", 99])
+        await assert.rejects(handlers.get("stats.recapStory")!(trusted, bad), /refused/i);
+    } finally {
+      await runtime.dispose();
+    }
+  });
+});
+
+test("Home's Most played streams a streamed song, and See all reads only its own shelves", async () => {
+  await withFile(async (file) => {
+    const { runtime, exposed, handlers } = connect(file);
+    const wave = exposed.get("wave") as WaveBridge;
+    try {
+      await runtime.runPromise(
+        Effect.gen(function* () {
+          const db = (yield* Database) as unknown as TestDatabase;
+          const local = addTrack(db, { title: "Pink Moon", album: "Pink Moon", addedAt: 1 });
+          const song = {
+            videoId: "bcdefghijkl",
+            title: "Streamed Road",
+            artists: ["Streamed Artist"],
+            album: "Streamed Album",
+            albumId: null,
+            artworkUrl: null,
+            durationMs: 180000,
+            explicit: false,
+          };
+          for (const [trackId, at] of [
+            [String(local), 100],
+            ["yt:bcdefghijkl", 200],
+            ["yt:bcdefghijkl", 300],
+          ] as const)
+            recordPlay(
+              db,
+              {
+                trackId,
+                startedAt: at,
+                counted: true,
+                listenedMs: 180000,
+                durationMs: 180000,
+                source: "desktop",
+                endReason: "completed",
+                context: null,
+              },
+              false,
+              trackId === "yt:bcdefghijkl" ? song : undefined,
+            );
+        }),
+      );
+      const mostPlayed = async () =>
+        (await wave.home.view()).items.find((s) => s.id === "most-played")!.rows.items;
+      await wave.settings.setYtMusic(false);
+      const [off] = await mostPlayed();
+      assert.deepEqual([off?.videoId, off?.playCount, off?.unavailable], ["bcdefghijkl", 2, true]);
+      await assert.rejects(wave.home.play("most-played", 0));
+      await wave.settings.setYtMusic(true);
+      assert.deepEqual(
+        (await mostPlayed()).map((row) => [row.title, row.playCount, row.unavailable]),
+        [
+          ["Streamed Road", 2, false],
+          ["Pink Moon", 1, false],
+        ],
+      );
+      await wave.home.play("most-played", 0);
+      assert.equal((await wave.playback.view()).current?.videoId, "bcdefghijkl");
+      assert.deepEqual(
+        (await wave.playback.queue(0, 10)).items.map((row) => row.videoId ?? row.title),
+        ["bcdefghijkl", "Pink Moon"],
+      );
+
+      assert.deepEqual(
+        (await wave.home.seeAll("recently-added")).items.map((row) => row.title),
+        ["Pink Moon"],
+      );
+      assert.equal((await wave.home.seeAll("recently-played")).total, 1);
+      for (const bad of ["favorites", "stats", 1, undefined])
+        await assert.rejects(handlers.get("home.seeAll")!(trusted, bad), /refused/i);
+    } finally {
+      await runtime.dispose();
+    }
+  });
+});
+
+test("Home's editor reorders, removes and adds sections at once, and main refuses a bad edit", async () => {
+  await withFile(async (file) => {
+    const first = connect(file);
+    const wave = first.exposed.get("wave") as WaveBridge;
+    try {
+      const start = await wave.home.arrangement();
+      assert.deepEqual(start.sections.slice(0, 3), ["new-releases", "upcoming-shows", "discover"]);
+      const removed = await wave.home.edit({ remove: "stats" });
+      assert.ok(!removed.sections.includes("stats"));
+      const moved = await wave.home.edit({
+        move: { from: removed.sections.indexOf("favorites"), to: 0 },
+      });
+      assert.equal(moved.sections[0], "favorites");
+      assert.deepEqual(await wave.home.arrangement(), moved);
+      // Home reads the same arrangement: with no songs it lists the sections that need none.
+      assert.deepEqual(
+        (await wave.home.view()).items.map((section) => section.id),
+        ["new-releases", "upcoming-shows", "discover"],
+      );
+      await wave.home.edit({ remove: "discover" });
+      assert.deepEqual(
+        (await wave.home.view()).items.map((section) => section.id),
+        ["new-releases", "upcoming-shows"],
+      );
+      const rows = await wave.home.edit({ discover: { remove: "genre-mixes" } });
+      assert.deepEqual(rows.discoverRows, ["magic-queue", "artist-mixes"]);
+      for (const bad of [{ remove: "karaoke" }, { move: { from: -1, to: 0 } }, "stats", null])
+        await assert.rejects(first.handlers.get("home.edit")!(trusted, bad), /refused/i);
+      assert.deepEqual(await wave.home.arrangement(), rows);
+    } finally {
+      await first.runtime.dispose();
+    }
+    const second = connect(file);
+    try {
+      const reopened = second.exposed.get("wave") as WaveBridge;
+      const kept = await reopened.home.arrangement();
+      assert.equal(kept.sections[0], "favorites");
+      assert.ok(!kept.sections.includes("stats"));
+      const added = await reopened.home.edit({ add: "stats" });
+      assert.equal(added.sections.at(-1), "stats");
+    } finally {
+      await second.runtime.dispose();
+    }
+  });
+});
+
+test("Home's arrangement syncs with a phone both ways, and an edit keeps a section only the phone draws", async () => {
+  await withFile(async (file) => {
+    const app = await desktop();
+    // Both stamp their edits with the wall clock; the service's runs ahead of it, so it keeps
+    // the times they send (a time ahead of its own it stores as its own).
+    app.service.now = Date.now() + 86_400_000;
+    const phone = await app.service.signIn();
+    const phoneDb = await openTestDatabase();
+    const KEY = "settings.homeArrangement";
+    // A newer phone shows a section this Wave doesn't have, between Favorites and Stats.
+    const values = new Map<string, string>([
+      [
+        KEY,
+        JSON.stringify({
+          shown: ["favorites", "karaoke", "stats", "most-played"],
+          hidden: [
+            "new-releases",
+            "upcoming-shows",
+            "discover",
+            "in-your-orbit",
+            "from-your-library",
+            "community-playlists",
+            "recently-added",
+            "recently-played",
+            "most-played-albums",
+            "most-played-artists",
+          ],
+        }),
+      ],
+    ]);
+    const phoneSync = () =>
+      syncCycle({
+        db: phoneDb,
+        splits: creditSplits(),
+        account: "ana@example.com",
+        transport: {
+          request: async (method, path, body) => {
+            const response = await app.service.request(method, path, {
+              session: phone,
+              ...(body === null ? {} : { body, headers: { "content-type": "application/json" } }),
+            });
+            return { status: response.status, body: await response.text() };
+          },
+        },
+        preferences: {
+          value: (key) => values.get(key) ?? null,
+          apply: (key, value) => {
+            if (value === null) values.delete(key);
+            else values.set(key, value);
+          },
+        },
+        now: Date.now,
+        songsChanged: false,
+        wait: async () => {},
+      });
+    const phoneShown = () =>
+      (JSON.parse(values.get(KEY) ?? "{}") as { shown?: string[] }).shown ?? [];
+    stampPreference(phoneDb, KEY, Date.now());
+    await phoneSync();
+    const { clock, pass } = fakeClock();
+    const { runtime, exposed } = connect(file, undefined, { service: app.open(), clock });
+    const wave = exposed.get("wave") as WaveBridge;
+    try {
+      await wave.account.signIn();
+      await until(async () => (await wave.home.arrangement()).sections[0] === "favorites");
+      assert.deepEqual((await wave.home.arrangement()).sections, [
+        "favorites",
+        "stats",
+        "most-played",
+      ]);
+      await wave.home.edit({ move: { from: 2, to: 0 } });
+      await pass(10_000);
+      await until(async () => {
+        await phoneSync();
+        return phoneShown()[0] === "most-played";
+      });
+      assert.deepEqual(phoneShown(), ["most-played", "favorites", "karaoke", "stats"]);
+      // The phone removes a section; the desktop's Home follows on the next timed pull.
+      values.set(
+        KEY,
+        JSON.stringify({
+          shown: ["most-played", "karaoke", "stats"],
+          hidden: [
+            "new-releases",
+            "upcoming-shows",
+            "discover",
+            "in-your-orbit",
+            "from-your-library",
+            "community-playlists",
+            "recently-added",
+            "recently-played",
+            "most-played-albums",
+            "most-played-artists",
+            "favorites",
+          ],
+        }),
+      );
+      stampPreference(phoneDb, KEY, Date.now() + 1000);
+      await phoneSync();
+      await pass(15 * 60_000);
+      await until(async () => (await wave.home.arrangement()).sections.length === 2);
+      assert.deepEqual((await wave.home.arrangement()).sections, ["most-played", "stats"]);
+    } finally {
+      await runtime.dispose();
+    }
+  });
+});
+
+test("a Recap opened with nothing playing plays its top song, counts no play and gives the queue back", async () => {
+  await withFile(async (file) => {
+    const { runtime, exposed } = connect(file);
+    const wave = exposed.get("wave") as WaveBridge;
+    const last = monthBack(1);
+    const plays = () =>
+      runtime.runPromise(
+        Effect.gen(function* () {
+          const db = yield* Database;
+          return db.get<{ n: number }>(sql`SELECT count(*) AS n FROM play_events`)!.n;
+        }),
+      );
+    try {
+      await runtime.runPromise(
+        Effect.gen(function* () {
+          const db = (yield* Database) as unknown as TestDatabase;
+          const moon = addTrack(db, { title: "Pink Moon", artist: "Nick Drake" });
+          const road = addTrack(db, { title: "Road", artist: "Nick Drake" });
+          addTrack(db, { title: "Parasite", artist: "Nick Drake" });
+          playInMonth(db, moon, last, 10);
+          playInMonth(db, road, last, 25);
+        }),
+      );
+      // A queue waits paused on its first song.
+      await wave.playback.start({ kind: "songs" }, 0);
+      await wave.playback.seek(400);
+      await wave.playback.pause();
+      const queued = (await wave.playback.queue(0, 10)).items.map((row) => row.title);
+      const waiting = (await wave.playback.view()).current?.title;
+      const before = await plays();
+
+      const recap = await wave.stats.recap(monthId(last));
+      await wave.stats.recapStory(0);
+      let view = await wave.playback.view();
+      assert.equal(view.current?.title, "Road", "the Recap's #1 song plays");
+      assert.equal(view.status.state, "playing");
+      assert.equal(view.undoOffer, null);
+      // Its top songs story features the same song: it goes on playing.
+      await wave.stats.recapStory(recap!.slides.findIndex((slide) => slide.kind === "topSongs"));
+      assert.equal((await wave.playback.view()).current?.title, "Road");
+
+      await wave.stats.recapClosed();
+      view = await wave.playback.view();
+      assert.equal(view.status.state, "paused");
+      assert.equal(view.status.positionMs, 400);
+      assert.deepEqual(
+        (await wave.playback.queue(0, 10)).items.map((row) => row.title),
+        queued,
+      );
+      assert.equal(view.current?.title, waiting);
+      assert.equal(await plays(), before, "a Recap's music is never on record");
+
+      // With a song playing, the Recap leaves it alone.
+      await wave.playback.play();
+      await wave.stats.recap(monthId(last));
+      await wave.stats.recapStory(0);
+      view = await wave.playback.view();
+      assert.equal(view.current?.title, waiting);
+      assert.equal(view.status.state, "playing");
+      await wave.stats.recapClosed();
+      assert.equal((await wave.playback.view()).status.state, "playing");
+    } finally {
+      await runtime.dispose();
+    }
+  });
+});
+
+/** A PNG's first bytes: its signature and an IHDR chunk of [width] by [height]. */
+const pngHeader = (width: number, height: number) => {
+  const bytes = Buffer.alloc(33);
+  Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]).copy(bytes);
+  bytes.writeUInt32BE(13, 8);
+  bytes.write("IHDR", 12, "latin1");
+  bytes.writeUInt32BE(width, 16);
+  bytes.writeUInt32BE(height, 20);
+  return bytes.toString("base64");
+};
+
+test("Save Image and Copy Image take only a PNG no larger than a card and a card's file name", async () => {
+  await withFile(async (file) => {
+    const { runtime, exposed, handlers, cards } = connect(file);
+    const wave = exposed.get("wave") as WaveBridge;
+    const name = "Wave - Recap October 2026 - 20261120-101500.png";
+    const card = pngHeader(1080, 1920);
+    try {
+      assert.equal(await wave.cards.saveImage(name, card), true);
+      assert.deepEqual(cards.saved, [`${name} 33`]);
+      cards.save = false;
+      assert.equal(await wave.cards.saveImage(name, card), false, "the dialog was cancelled");
+      await wave.cards.copyImage(card);
+      // A lyrics or song card is as tall as its content.
+      await wave.cards.copyImage(pngHeader(1080, 1350));
+      assert.deepEqual(cards.copied, [33, 33]);
+
+      const save = (...args: unknown[]) => handlers.get("cards.saveImage")!(trusted, ...args);
+      const copy = (...args: unknown[]) => handlers.get("cards.copyImage")!(trusted, ...args);
+      for (const bad of [
+        String.raw`C:\Users\me\Wave - Recap 2026 - 20261120-101500.png`,
+        "../Wave - Recap 2026 - 20261120-101500.png",
+        "Wave - Recap 2026 - 20261120-101500.exe",
+        String.raw`Wave - ..\Recap 2026 - 20261120-101500.png`,
+        "recap.png",
+        7,
+      ])
+        await assert.rejects(save(bad, card), /refused/i);
+      for (const bad of [
+        pngHeader(1081, 1920),
+        pngHeader(1080, 1921),
+        pngHeader(0, 10),
+        "not base64!",
+        "",
+        7,
+      ]) {
+        await assert.rejects(save(name, bad), /refused/i);
+        await assert.rejects(copy(bad), /refused/i);
+      }
+      assert.deepEqual(cards.copied, [33, 33]);
+    } finally {
+      await runtime.dispose();
+    }
+  });
+});
+
+test("files opened with Wave play as a new queue: a Library file as its song, another without joining the Library", async () => {
+  await withAlbum(async (wave, _album, { runtime, engineCalls }) => {
+    const folder = mkdtempSync(join(tmpdir(), "wave-opened-"));
+    try {
+      writeFileSync(join(folder, "Demo Tape.mp3"), "");
+      const outside = scanPath(
+        realpathSync.native(join(folder, "Demo Tape.mp3")),
+        process.platform,
+      );
+      writeFileSync(join(folder, "notes.txt"), "");
+      const playback = await runtime.runPromise(Playback);
+      const counts = () =>
+        runtime.runPromise(
+          Effect.map(Database, (db) =>
+            db.get<{ tracks: number; plays: number }>(
+              sql`SELECT (SELECT count(*) FROM tracks) AS tracks, (SELECT count(*) FROM play_events) AS plays`,
+            ),
+          ),
+        );
+      const before = await counts();
+      assert.equal(
+        await playback.openFiles([
+          join(folder, "Demo Tape.mp3"),
+          join(folder, "notes.txt"),
+          join(folder, "Deleted.mp3"),
+          "/Music/Pink Moon/Road.mp3",
+        ]),
+        true,
+      );
+      let view = await wave.playback.view();
+      assert.equal(view.status.state, "playing");
+      assert.equal(engineCalls.includes(`load ${outside}`), true);
+      assert.equal(view.length, 2, "the text file and the file that is gone are ignored");
+      assert.equal(view.undoOffer, null, "nothing was playing before");
+      assert.equal(view.current?.outside, true);
+      assert.equal(view.current?.title, "Demo Tape", "its name, until its tags are read");
+      await new Promise((resolve) => setImmediate(resolve));
+      view = await wave.playback.view();
+      assert.equal(view.current?.title, "Demo Tape.mp3", "the title its tags give");
+      assert.equal(view.current?.artist, "Nick Drake");
+      // Starring is the Library's: the file outside it takes none.
+      await wave.playback.favorite();
+      assert.equal((await wave.playback.view()).current?.favorite, false);
+      assert.deepEqual(await counts(), before, "the file joined nothing and its play isn't kept");
+      await wave.playback.command({ type: "next" });
+      view = await wave.playback.view();
+      assert.equal(view.current?.title, "Road");
+      assert.equal(view.current?.outside, undefined);
+      assert.deepEqual(await counts(), { tracks: before!.tracks, plays: before!.plays + 1 });
+      assert.deepEqual(
+        (await wave.playback.queue(0, 10)).items.map((row) => row.title),
+        ["Demo Tape.mp3", "Road"],
+      );
+      assert.equal(await playback.openFiles(["/Music/Pink Moon/Parasite.mp3"]), true);
+      view = await wave.playback.view();
+      assert.equal(view.current?.title, "Parasite");
+      assert.notEqual(view.undoOffer, null, "opening files over a queue offers Undo");
+      assert.equal(await playback.openFiles([join(folder, "notes.txt")]), false);
+      assert.equal((await wave.playback.view()).current?.title, "Parasite", "nothing changed");
+      await wave.playback.undo();
+      assert.equal((await wave.playback.view()).current?.title, "Road");
+    } finally {
+      rmSync(folder, { recursive: true, force: true });
+    }
+  });
+});
+
+test("the window reads Listening History in pages and main refuses a malformed read", async () => {
+  await withFile(async (file) => {
+    const { runtime, exposed, engineCalls } = connect(file);
+    try {
+      const play = await runtime.runPromise(
+        Effect.gen(function* () {
+          const db = (yield* Database) as unknown as TestDatabase;
+          const id = addTrack(db, { title: "Pink Moon", artist: "Nick Drake" });
+          const play = recordPlay(db, {
+            trackId: String(id),
+            startedAt: 1000,
+            counted: true,
+            listenedMs: 16000,
+            durationMs: 180000,
+            source: "desktop",
+            endReason: "skipped",
+            context: null,
+          });
+          db.run(sql`DELETE FROM tracks WHERE id = ${id}`);
+          return play;
+        }),
+      );
+      const wave = exposed.get("wave") as WaveBridge;
+      const page = await wave.history.page({ before: undefined }, "");
+      assert.deepEqual(
+        page.rows.map(({ id, song, replays }) => [id, song.title, song.unavailable, replays]),
+        [[play, "Pink Moon", true, null]],
+      );
+      assert.equal((await wave.history.page({ around: play }, "")).rows.length, 1);
+      assert.equal((await wave.history.page({ before: undefined }, "harvest")).rows.length, 0);
+      // A song removed since replays nothing.
+      const calls = engineCalls.length;
+      await wave.history.play(play);
+      assert.equal(engineCalls.length, calls);
+      const refused = [
+        () => wave.history.page({ before: { startedAt: 1.5, id: 1 } }, ""),
+        () => wave.history.page({ after: "1" } as never, ""),
+        () => wave.history.page({ around: -1 }, ""),
+        () => wave.history.page(null as never, ""),
+        () => wave.history.page({ before: undefined }, "x".repeat(501)),
+        () => wave.history.play("1" as never),
+      ];
+      for (const call of refused) await assert.rejects(call, /Refused history\./);
+    } finally {
+      await runtime.dispose();
+    }
+  });
+});
+
+test("the window turns Karaoke on and off, and anything but a switch is refused", async () => {
+  await withFile(async (file) => {
+    const { runtime, exposed, handlers } = connect(file);
+    const wave = exposed.get("wave") as WaveBridge;
+    const call = (channel: string, ...args: unknown[]) => handlers.get(channel)!(trusted, ...args);
+    try {
+      assert.equal(await wave.lyrics.karaokeOn(), false);
+      assert.equal(await wave.lyrics.setKaraokeOn(true), true);
+      assert.equal(await wave.lyrics.karaokeOn(), true);
+      assert.equal(await wave.lyrics.setKaraokeOn(false), false);
+      for (const bad of ["on", 1, null, undefined])
+        await assert.rejects(call("lyrics.setKaraokeOn", bad), /refused/i);
+      assert.equal(await wave.lyrics.karaokeOn(), false);
     } finally {
       await runtime.dispose();
     }

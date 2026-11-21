@@ -3,7 +3,7 @@ import { describe, test } from "node:test";
 
 import { DEFAULT_GLASS_SETTINGS, GLASS_PROBES, glassLayers, readGlassProbe } from "./index.ts";
 
-const TUNED = { blur: 30, refraction: 6, tint: 90, rim: false };
+const TUNED = { blur: 30, refraction: 6, tint: 90, rim: 50 };
 
 describe("glassLayers", () => {
   test("without a probe, the glass is what Settings says: live backdrop, blur and refraction", () => {

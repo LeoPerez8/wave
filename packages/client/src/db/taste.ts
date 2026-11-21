@@ -1,6 +1,6 @@
 /**
  * What Core's taste profile (`tasteProfile`) is derived from: the play
- * history, the favorites and the downloads, as the library database keeps
+ * history, the favorites, the downloads and the dislikes, as the library database keeps
  * them. Kept free of Expo so the store tests run it in plain Node;
  * `LibraryStore` calls it.
  */
@@ -8,6 +8,7 @@ import { ytTrackId, type TasteHistory } from "@wave/core";
 import { and, eq, isNotNull, sql } from "drizzle-orm";
 
 import type { LibraryDatabase } from "./database.ts";
+import { selectDislikes } from "./dislikes.ts";
 import * as schema from "./schema.ts";
 import { tasteSong } from "./tastePages.ts";
 
@@ -16,7 +17,8 @@ import { tasteSong } from "./tastePages.ts";
  * genre left to weigh) or streamed (`tasteSong`), every song starred with when its star changed, and
  * every song downloaded from YouTube Music, dated by its file: when it
  * entered the Library, or the file's own date when that's older (a Library
- * scanned afresh), so editing its tags later doesn't make it new.
+ * scanned afresh), so editing its tags later doesn't make it new. Every
+ * dislike too, by its key.
  */
 export const tasteHistory = (db: LibraryDatabase): TasteHistory => {
   const { favorites, tracks } = schema;
@@ -55,5 +57,6 @@ export const tasteHistory = (db: LibraryDatabase): TasteHistory => {
     .orderBy(tracks.id)
     .all()
     .map((download) => ({ ...download, trackId: String(download.trackId) }));
-  return { plays, favorites: starred, downloads };
+  const dislikes = selectDislikes(db).map(({ key, dislikedAt }) => ({ trackId: key, dislikedAt }));
+  return { plays, favorites: starred, downloads, dislikes };
 };

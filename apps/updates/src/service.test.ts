@@ -17,7 +17,7 @@ import { fileURLToPath } from "node:url";
 import { digestOf } from "../../../scripts/ci/release-gate.ts";
 import { type StoredUpdate, UPDATES_ORIGIN, latestKey, updateKey } from "./layout.ts";
 import { promoteUpdate } from "./promote.ts";
-import { publishLatestApk, publishNotes, publishUpdate } from "./publish.ts";
+import { publishEarlierNotes, publishLatestApk, publishNotes, publishUpdate } from "./publish.ts";
 import { createUpdateService } from "./service.ts";
 import { memoryStorage } from "./testing.ts";
 
@@ -454,6 +454,38 @@ describe("GET /v1/notes", () => {
     assert.deepEqual(await versions(await askForNotes(storage, "channel=ti&to=0.48.0-ti")), [
       "0.48.0-ti",
       "0.47.0-ti",
+    ]);
+  });
+
+  it("adds the versions that never published, each under its own version and date", async () => {
+    const storage = memoryStorage({ clock: () => new Date("2026-11-21T12:00:00.000Z") });
+    await release(storage, "0.72.0-ti");
+    // The service builds the history from the notes files, dated by their upload.
+    await askForNotes(storage, "channel=ti");
+    const published = await publishEarlierNotes({
+      channel: "ti",
+      releases: [
+        { version: "0.72.0-ti", date: "2026-11-19T00:00:00.000Z", notes: notes("again") },
+        { version: "0.73.0-ti", date: "2026-11-19T21:13:50.000Z", notes: notes("0.73.0-ti") },
+        {
+          version: "0.73.1-ti",
+          date: "2026-11-20T00:00:00.000Z",
+          notes: { en: { new: [], fixes: [] }, "pt-BR": { new: [], fixes: [] } },
+        },
+      ],
+      put: storage.put,
+      read: storage.read,
+    });
+    await release(storage, "0.74.0-ti", "ti", new Date("2026-11-21T02:09:00.000Z"));
+
+    assert.deepEqual(published, ["0.73.0-ti"]);
+    const answer = (await (await askForNotes(storage, "channel=ti")).json()) as {
+      releases: { version: string; date: string; notes: unknown }[];
+    };
+    assert.deepEqual(answer.releases, [
+      { version: "0.74.0-ti", date: "2026-11-21T02:09:00.000Z", notes: notes("0.74.0-ti") },
+      { version: "0.73.0-ti", date: "2026-11-19T21:13:50.000Z", notes: notes("0.73.0-ti") },
+      { version: "0.72.0-ti", date: "2026-11-21T12:00:00.000Z", notes: notes("0.72.0-ti") },
     ]);
   });
 
@@ -1249,6 +1281,30 @@ esac
       });
       assert.match(output, /Published the notes/);
       assert.match(calls, /notes\/ti\/1\.0\.0-ti\.json key=none/);
+    });
+
+    it("publishes the versions that never published before the release, once each", () => {
+      const lines = (word: string) => ({
+        en: { new: [word], fixes: [] },
+        "pt-BR": { new: [word], fixes: [] },
+      });
+      const r2 = bucket();
+      const env = {
+        WAVE_RELEASE_TAG: "v1.0.2-ti",
+        WAVE_RELEASE_NOTES: JSON.stringify(lines("Two")),
+        WAVE_EARLIER_NOTES: JSON.stringify([
+          { version: "1.0.1-ti", date: "2026-11-20T10:00:00.000Z", notes: lines("One") },
+        ]),
+      };
+      const first = r2.run("publish-notes.ts", [], env);
+      assert.match(first.output, /Published the notes of 1\.0\.1-ti, which never published/);
+      assert.match(first.output, /Published the notes of 1\.0\.2-ti to ti/);
+      assert.ok(first.calls.indexOf("1.0.1-ti.json") < first.calls.indexOf("1.0.2-ti.json"));
+      assert.deepEqual(JSON.parse(r2.stored("notes/ti/1.0.1-ti.json")), lines("One"));
+
+      const again = r2.run("publish-notes.ts", [], env);
+      assert.doesNotMatch(again.output, /1\.0\.1-ti, which never published/);
+      assert.doesNotMatch(again.calls, /put notes\/ti\/1\.0\.1-ti/);
     });
   });
 });

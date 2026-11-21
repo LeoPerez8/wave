@@ -40,6 +40,7 @@ test("Settings' pages and Layout's pages read in Portuguese; Developer stays Eng
       "Reprodução",
       "Histórico de Ouvidas",
       "Artistas Seguidos",
+      "Músicas de que não gostei",
       "Letras e tags",
       "Downloads",
       "Contas",

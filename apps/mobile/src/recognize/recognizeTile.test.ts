@@ -11,10 +11,11 @@ import {
   type RecognizeResolution,
   type RecognizeResult,
   type RecognizeSource,
+  type RecognizeTileFavorite,
   type RecognizeTrack,
 } from "@wave/core";
 
-import { startRecognizeSession, type RecognizeNative } from "./recognizeSession.ts";
+import { startRecognizeSession, type RecognizeNative } from "@wave/client/recognizeSession";
 import {
   followRecognizeTile,
   trackCardSessions,
@@ -55,8 +56,9 @@ const fakeTile = () => {
     listeningEnded: (tap: number) => void tile.calls.push(`ended ${tap}`),
     finished: () => void tile.calls.push("finished"),
     notify: (notice) => void tile.calls.push(`notify ${notice.kind} ${notice.title}`),
-    saved: [] as { line: string; match: string }[],
-    matchSaved: (line: string, match: string) => void tile.saved.push({ line, match }),
+    saved: [] as { line: string; match: string; favorite: RecognizeTileFavorite | null }[],
+    matchSaved: (line: string, match: string, favorite: RecognizeTileFavorite | null) =>
+      void tile.saved.push({ line, match, favorite }),
     /** A tap reaches JS, which is already running. */
     tap: (id: number, microphone = false) => {
       taps.push({ tap: id, microphone });
@@ -74,6 +76,7 @@ const setup = (
   options: {
     resolve?: () => Promise<RecognizeResolution>;
     save?: (result: RecognizeResult) => Promise<string>;
+    favorite?: (result: RecognizeResult) => Promise<RecognizeTileFavorite | null>;
     library?: () => Promise<readonly RecognizeTrack[]>;
     otherPlaying?: boolean;
     offline?: boolean;
@@ -146,6 +149,7 @@ const setup = (
       return options.save?.(result) ?? Promise.resolve("Added to Shazam");
     },
     couldntSave: () => "Couldn't add to Shazam",
+    favorite: options.favorite ?? (async () => null),
     library: options.library ?? (async () => []),
   };
   return {
@@ -327,8 +331,47 @@ test("a match goes to the Shazam playlist on its own, and the notification says 
   await settle();
   assert.deepEqual(world.saves, [resolved().result]);
   assert.deepEqual(tile.saved, [
-    { line: "Added to Shazam", match: writeRecognizeMatch(SONG, resolved().result) },
+    {
+      line: "Added to Shazam",
+      match: writeRecognizeMatch(SONG, resolved().result),
+      favorite: null,
+    },
   ]);
+});
+
+test("the star button joins the notification with the save line, as the song's star reads", async () => {
+  const asked: RecognizeResult[] = [];
+  const world = setup({
+    favorite: async (result) => {
+      asked.push(result);
+      return { label: "Remove from Favorites", on: false };
+    },
+  });
+  const tile = fakeTile();
+  followRecognizeTile(tile, world.deps, recognizeTileNotice);
+  await matched(world, tile, 1);
+  await settle();
+  assert.deepEqual(asked, [resolved().result]);
+  assert.deepEqual(tile.saved, [
+    {
+      line: "Added to Shazam",
+      match: writeRecognizeMatch(SONG, resolved().result),
+      favorite: { label: "Remove from Favorites", on: false },
+    },
+  ]);
+});
+
+test("a star that can't be read leaves the button out and still says what the save did", async () => {
+  const world = setup({ favorite: () => Promise.reject(new Error("closed")) });
+  const tile = fakeTile();
+  followRecognizeTile(tile, world.deps, recognizeTileNotice);
+  await matched(world, tile, 1);
+  await settle();
+  assert.deepEqual(
+    tile.saved.map(({ line, favorite }) => ({ line, favorite })),
+    [{ line: "Added to Shazam", favorite: null }],
+  );
+  assert.equal(tile.calls.at(-1), "finished");
 });
 
 test("the notification says what the save said", async () => {

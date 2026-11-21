@@ -56,6 +56,17 @@ export const homeSectionWaiting = (id: HomeSectionId, home: HomeContent): boolea
   }
 };
 
+/**
+ * Whether the section [id] shows a skeleton before Home paints. The followed
+ * artists' sections and Community playlists draw themselves instead: each is
+ * left out with nothing to show, so a skeleton would flash its header and go.
+ */
+export const homePlaceholderSkeleton = (id: HomeSectionId): boolean =>
+  id !== "new-releases" && id !== "upcoming-shows" && id !== "community-playlists";
+
+/** The room a playlist card's sleeves take above its cover (`SLEEVE_ROOM` in `PlaylistCard`). */
+const PLAYLIST_SLEEVE_ROOM = 10;
+
 /** Only placeholders reserve space; answered sections use their content's height. */
 export const homePlaceholderHeight = (id: HomeSectionId, fontScale: number): number => {
   switch (id) {
@@ -66,7 +77,10 @@ export const homePlaceholderHeight = (id: HomeSectionId, fontScale: number): num
     case "recently-played":
     case "most-played-albums":
       return CELL * 19 + CELL + 40 * Math.max(1, fontScale);
+    case "from-your-library":
+      return PLAYLIST_SLEEVE_ROOM + CELL * 19 + CELL + 40 * Math.max(1, fontScale);
     case "most-played-artists":
+    case "in-your-orbit":
       return CELL * 19 + CELL + 22 * Math.max(1, fontScale);
     case "stats":
       return homeStatsRowLayout(fontScale).minHeight * STATS_FACT_LABELS.length;

@@ -208,7 +208,8 @@ test("taste paging preserves ti history order, end reasons, favorites/downloads 
         downloads = collect(store.tasteDownloadsPage);
       return { plays, favorites, downloads };
     });
-    assert.deepEqual(traced.result, expected);
+    // Dislikes are read whole (the owner's own marks, few): none in this fixture.
+    assert.deepEqual({ ...traced.result, dislikes: [] }, expected);
     assert.ok(traced.queries.every((query) => query.rows <= 128 && !/OFFSET/.test(query.sql)));
     assert.ok(
       traced.queries.some((query) =>

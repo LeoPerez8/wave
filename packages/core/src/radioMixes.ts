@@ -11,7 +11,7 @@ import type { YtAlbumSong } from "./ytDiscover.ts";
 
 export const rankedDiscoverMixRead = (
   seed: DiscoverMixSeed,
-  sources: Pick<RadioRankingSources, "pages" | "taste" | "profileOf" | "popularityOf">,
+  sources: Pick<RadioRankingSources, "pages" | "taste" | "profileOf" | "popularityOf" | "disliked">,
   options: RadioRankingOptions & { readonly profile?: GenreProfile | null } = {},
 ): DiscoverMixRead<YtAlbumSong & { readonly video: boolean }> => ({
   seed,
@@ -31,6 +31,7 @@ export const rankedDiscoverMixRead = (
       ...(sources.taste === undefined ? {} : { taste: sources.taste }),
       ...(sources.profileOf === undefined ? {} : { profileOf: sources.profileOf }),
       ...(sources.popularityOf === undefined ? {} : { popularityOf: sources.popularityOf }),
+      ...(sources.disliked === undefined ? {} : { disliked: sources.disliked }),
     },
     options,
   ).flatMap((candidate) => (candidate.song === null ? [] : [{ ...candidate.song, video: false }])),

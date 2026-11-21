@@ -243,6 +243,9 @@ export const useAlbums = (active = true): readonly AlbumRow[] =>
   useLibraryQuery(active ? listAlbums : null, NO_ALBUMS);
 export const useArtists = (active = true): readonly ArtistRow[] =>
   useLibraryQuery(active ? listArtists : null, NO_ARTISTS);
+/** The Library's artists, or null until they're first read: none read isn't none in the Library. */
+export const useLoadedArtists = (active = true): readonly ArtistRow[] | null =>
+  useLibraryQuery<readonly ArtistRow[] | null>(active ? listArtists : null, null);
 export const useGenres = (): readonly GenreRow[] => useLibraryQuery(listGenres, NO_GENRES);
 
 /**

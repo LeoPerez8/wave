@@ -16,14 +16,15 @@ import { CardHeading } from "@/overlay/CardHeading";
 import { MenuChoices, type MenuChoice } from "@/overlay/MenuChoices";
 import { followUp, openOverlay } from "@/overlay/overlay";
 import { playNext, playSongs, playYtNext, playYtSongs } from "@/playback/actions";
-import type { RecognitionLookup } from "@/recognize/resolveRecognition";
+import type { RecognitionLookup } from "@wave/client/resolveRecognition";
+import { recognizedSong, starRecognized, useRecognizedStarred } from "@/recognize/recognizedStar";
 import { resolveRecognitionSave } from "@/recognize/resolveRecognitionSave";
 import { useYtMusicEnabled, ytMusicEnabled } from "@/settings/ytMusic";
 import { searchRecordingInTurn } from "@/ytmusic/askYtMusic";
 import { useLoadedInLibrary } from "@/ytmusic/libraryFinder";
 import { cancelYtDownload, downloadYtSong, useYtDownloadStatus } from "@/ytmusic/YtDownloads";
 
-import { geniusHitMenu, resolveGeniusHit, type GeniusHitEffects } from "./geniusHitMenu";
+import { geniusHitMenu, resolveGeniusHit, type GeniusHitEffects } from "@wave/client/geniusHitMenu";
 
 type Result = RecognizeResult<SongRow, NativeYtSong>;
 
@@ -74,6 +75,7 @@ function GeniusHitActionsMenu({
   const streamed = result.kind === "stream";
   const status = useYtDownloadStatus(streamed ? result.song.videoId : "");
   const inLibrary = useLoadedInLibrary(streamed);
+  const starred = useRecognizedStarred(recognizedSong(result));
   const text = strings.playbackText;
   const effects: GeniusHitEffects<SongRow, NativeYtSong> = {
     play: (song) => {
@@ -93,6 +95,10 @@ function GeniusHitActionsMenu({
         songs: async () => [await resolveRecognitionSave(picked)],
       }),
     goToAlbum: (track) => openAlbum(track.albumId),
+    favorite: (song, on) =>
+      void starRecognized(song, on, "menu").catch((error: unknown) =>
+        showError(text.couldntUpdateTheSong, error),
+      ),
     download: downloadYtSong,
     cancelDownload: (song) => cancelYtDownload(song.videoId),
     openUrl: (url) => void Linking.openURL(url).catch(() => undefined),
@@ -100,7 +106,7 @@ function GeniusHitActionsMenu({
   const entries = geniusHitMenu(
     hit,
     result,
-    { ytMusic, status, inLibrary: streamed && inLibrary(result.song) },
+    { ytMusic, status, inLibrary: streamed && inLibrary(result.song), starred },
     strings,
     effects,
   ).map((entry): MenuChoice => ({

@@ -42,10 +42,9 @@ const home = async (over: Partial<HomeFollowDeps> = {}) => {
     local: { get: (key) => local.get(key), set: (key, value) => void local.set(key, value) },
     ytEnabled: () => true,
     pages: {
-      findArtist: notAsked,
-      artist: notAsked,
       album: notAsked,
       catalog: notAsked,
+      searchArtists: notAsked,
     },
     fetch: notAsked as unknown as typeof fetch,
     pause: "0 millis",
@@ -63,10 +62,11 @@ test("Home's follow cards are the saved releases and the country's shows, as the
     store.saveFollowReleases(
       "abba",
       [
-        release("deezer:1", "Voyage", { type: "ep", releaseDate: day(2) }),
-        release("deezer:2", "Hidden"),
-        release("deezer:3", "Loud", { explicit: true, artworkUrl: null }),
-        release("deezer:4", "Tomorrow", { releaseDate: day(-1) }),
+        release("deezer:1", "Voyage", { type: "ep", releaseDate: day(2), browseId: "MPRE1" }),
+        release("deezer:2", "Hidden", { browseId: "MPRE2" }),
+        release("deezer:3", "Loud", { explicit: true, artworkUrl: null, browseId: "MPRE3" }),
+        release("deezer:4", "Tomorrow", { releaseDate: day(-1), browseId: "MPRE4" }),
+        release("deezer:5", "Unmatched"),
       ],
       Date.now(),
     ),
@@ -114,6 +114,13 @@ test("Home's follow cards are the saved releases and the country's shows, as the
     },
   ]);
 
+  const ytOff = await home({ db, ytEnabled: () => false });
+  assert.deepEqual(
+    (await ytOff.service.view()).releases,
+    [],
+    "with YT Music off only the Library's releases show",
+  );
+
   settings.set("settings.dontPlayExplicit", "on");
   assert.deepEqual(
     (await service.view()).releases.map((r) => r.title),
@@ -124,34 +131,20 @@ test("Home's follow cards are the saved releases and the country's shows, as the
   assert.deepEqual(await service.view(), { releases: [], shows: [] });
 });
 
-test("a release card opens the Library's album, or YT Music's after one Albums search", async () => {
-  const searches: string[] = [];
+test("a release card opens the Library's album, or its YT Music album with the read it took", async () => {
+  let album: Awaited<ReturnType<HomeFollowDeps["pages"]["album"]>> = {
+    status: "ok",
+    album: { title: "Voyage", artists: ["ABBA"], year: null, artworkUrl: null, songs: [] },
+  };
+  const reads: string[] = [];
   const { db, service } = await home({
     pages: {
-      findArtist: notAsked,
-      artist: notAsked,
-      catalog: async (query) => {
-        searches.push(query);
-        return {
-          status: "ok",
-          artists: [],
-          albums: [
-            {
-              kind: "album",
-              title: "Voyage",
-              browseId: "MPRE1",
-              artists: ["ABBA"],
-              artworkUrl: null,
-              year: null,
-              releaseType: "album",
-            },
-          ],
-        };
+      catalog: notAsked,
+      album: async (browseId) => {
+        reads.push(browseId);
+        return album;
       },
-      album: async () =>
-        ({ status: "ok", album: { songs: [{ videoId: "v1" }] } }) as unknown as Awaited<
-          ReturnType<HomeFollowDeps["pages"]["album"]>
-        >,
+      searchArtists: notAsked,
     },
   });
   saveFollow(db, { name: "ABBA" }, "releases", Date.now());
@@ -162,16 +155,51 @@ test("a release card opens the Library's album, or YT Music's after one Albums s
   await Effect.runPromise(
     databaseFollowStore(db).saveFollowReleases(
       "abba",
-      [release("deezer:1", "Voyage"), release("deezer:2", "Waterloo")],
+      [release("deezer:1", "Voyage", { browseId: "MPRE1" }), release("deezer:2", "Waterloo")],
       Date.now(),
     ),
   );
   assert.deepEqual(await service.open("deezer:2"), { kind: "album", id: albumId?.id });
-  assert.deepEqual(await service.open("deezer:1"), { kind: "ytAlbum", browseId: "MPRE1" });
-  assert.deepEqual(searches, ["ABBA Voyage"]);
-  assert.equal(readFollowReleases(db).artists[0]!.releases[0]!.browseId, "MPRE1");
-  assert.deepEqual(await service.open("deezer:1"), { kind: "ytAlbum", browseId: "MPRE1" });
-  assert.equal(searches.length, 1, "the kept match opens without a search");
+  const song = {
+    videoId: "v1",
+    title: "Don't Shut Me Down",
+    artists: ["ABBA"],
+    album: "Voyage",
+    albumId: "MPRE1",
+    durationMs: 1000,
+    artworkUrl: null,
+    explicit: false,
+  };
+  album = { status: "ok", album: { ...album.album!, songs: [song] } };
+  const opened = await service.open("deezer:1");
+  // The album's page shows this read rather than asking again.
+  assert.deepEqual(
+    opened.kind === "ytAlbum"
+      ? [opened.browseId, opened.album?.album?.songs.items.map((row) => row.videoId)]
+      : opened,
+    ["MPRE1", ["v1"]],
+  );
+  assert.deepEqual(reads, ["MPRE1"]);
+  // No answer opens the page, which reads it itself and says why; the match stays.
+  for (const status of ["offline", "failed"] as const) {
+    album = { status, album: null };
+    assert.deepEqual(await service.open("deezer:1"), { kind: "ytAlbum", browseId: "MPRE1" });
+  }
+  assert.equal(readFollowReleases(db).artists[0]!.releases[0]!.browseId, "MPRE1", "still matched");
+  album = {
+    status: "ok",
+    album: {
+      ...album.album!,
+      title: "Voyage",
+      artists: [],
+      year: null,
+      artworkUrl: null,
+      songs: [],
+    },
+  };
+  assert.deepEqual(await service.open("deezer:1"), { kind: "notFound" });
+  assert.equal(readFollowReleases(db).artists[0]!.releases[0]!.browseId, null, "gone: unmatched");
+  assert.deepEqual(await service.open("deezer:1"), { kind: "notFound" }, "and hidden");
   assert.deepEqual(await service.open("deezer:404"), { kind: "notFound" });
 });
 
@@ -190,8 +218,11 @@ test("a release's cover is read only from Deezer, by the card's key", async () =
     databaseFollowStore(db).saveFollowReleases(
       "abba",
       [
-        release("deezer:1", "Voyage"),
-        release("deezer:2", "Elsewhere", { artworkUrl: "https://images.example/cover.jpg" }),
+        release("deezer:1", "Voyage", { browseId: "MPRE1" }),
+        release("deezer:2", "Elsewhere", {
+          artworkUrl: "https://images.example/cover.jpg",
+          browseId: "MPRE2",
+        }),
       ],
       Date.now(),
     ),
@@ -248,11 +279,16 @@ test("Home's check asks Deezer and the service's Ticketmaster routes, and saves 
   });
   saveFollow(db, { name: "ABBA" }, "shows", Date.now());
   assert.equal(await service.check(), true);
+  assert.deepEqual(
+    readFollowReleases(db).artists[0]!.releases.map((r) => [r.title, r.browseId]),
+    [["Voyage", null]],
+    "saved, unmatched: YT Music is off",
+  );
   assert.equal(asked.filter((path) => path.startsWith("/v1/ticketmaster/")).length, 2);
   const view = await service.view();
   assert.deepEqual(
     [view.releases.map((r) => r.title), view.shows.map((s) => s.city)],
-    [["Voyage"], ["Recife"]],
+    [[], ["Recife"]],
   );
   const count = asked.length;
   assert.equal(await service.check(), false, "checked a moment ago: nothing is due");

@@ -1,117 +1,179 @@
 /**
- * Now Playing's bottom row: four slots the owner fills (Settings › Layout ›
- * Now Playing), then Queue, fixed on the right. Related is only offered,
- * and only shows, with YouTube Music on.
+ * Now Playing's seven slots, which the owner fills (on the player in edit mode, and in
+ * Settings › Layout › Now Playing): five footer slots under the transport,
+ * then one on each side of it, left of Previous and right of Next. Related
+ * and Song menu have places of their own (the chevron beside the title, the
+ * header's button), so no slot holds them. Dislike is offered, in no slot by
+ * default.
  */
 
 /** What a slot can hold. */
 export type NowPlayingAction =
   | "lyrics"
-  | "related"
+  | "queue"
   | "sleepTimer"
   | "addToPlaylist"
   | "download"
   | "shuffle"
   | "repeat"
   | "share"
-  | "songMenu";
+  | "dislike";
 
 /** A slot: an action, or null for None (no button). */
 export type NowPlayingSlot = NowPlayingAction | null;
 
-/** The four slots, left to right. */
+/** The seven slots: footer 1 to 5, left to right, then the transport's left and right. */
 export type NowPlayingButtons = readonly [
+  NowPlayingSlot,
+  NowPlayingSlot,
+  NowPlayingSlot,
   NowPlayingSlot,
   NowPlayingSlot,
   NowPlayingSlot,
   NowPlayingSlot,
 ];
 
+/** How many of the slots are the footer's: slots 0 to 4. */
+export const NOW_PLAYING_FOOTER_SLOTS = 5;
+
+/** The transport's slots: left of Previous and right of Next. */
+export const NOW_PLAYING_TRANSPORT_SLOTS = { left: 5, right: 6 } as const;
+
+/** The synced preference the seven slots are stored under. */
+export const NOW_PLAYING_BUTTONS_KEY = "settings.nowPlayingSlots";
+
 /**
- * The synced preference the slots are stored under. The default row changed
- * with this key, and the key the slots were kept under before
- * (`settings.nowPlayingButtons`) is no longer read, locally or from the Wave
- * account, so every phone moved to the new default once, edited rows
- * included.
+ * The synced preference the row of four slots was stored under, before there
+ * were seven. It is read while nothing is stored under the new key, to keep
+ * an edited row (`readNowPlayingButtons`), and never written, so a phone on
+ * an older Wave keeps its row.
  */
-export const NOW_PLAYING_BUTTONS_KEY = "settings.nowPlayingRow";
+export const NOW_PLAYING_PREVIOUS_ROW_KEY = "settings.nowPlayingRow";
 
 /** Every action, in the order a slot's choices list them. */
 export const NOW_PLAYING_ACTIONS: readonly NowPlayingAction[] = [
   "lyrics",
-  "related",
+  "queue",
   "sleepTimer",
   "addToPlaylist",
   "download",
   "shuffle",
   "repeat",
   "share",
-  "songMenu",
+  "dislike",
 ];
 
 const isSlot = (value: unknown): value is NowPlayingSlot =>
   value === null || NOW_PLAYING_ACTIONS.some((action) => action === value);
 
-/** Four slots, each an action or None, no action twice. */
-const isButtons = (value: unknown): value is NowPlayingButtons => {
-  if (!Array.isArray(value) || value.length !== 4 || !value.every(isSlot)) return false;
+/** [count] slots, each an action or None, no action twice. */
+const isSlots = (value: unknown, count: number): value is readonly NowPlayingSlot[] => {
+  if (!Array.isArray(value) || value.length !== count || !value.every(isSlot)) return false;
   const actions = value.filter((slot) => slot !== null);
   return new Set(actions).size === actions.length;
 };
 
-/** The actions that read YouTube Music, offered and shown only with it on. */
-const NEEDS_YT_MUSIC: ReadonlySet<NowPlayingAction> = new Set(["related"]);
+const isButtons = (value: unknown): value is NowPlayingButtons => isSlots(value, 7);
 
-/**
- * The actions a slot's choices list (its picker in Settings, its long-press
- * card), in order: every one, but Related only with YouTube Music on.
- */
-export const nowPlayingSlotChoices = (ytMusic: boolean): readonly NowPlayingAction[] =>
-  ytMusic
-    ? NOW_PLAYING_ACTIONS
-    : NOW_PLAYING_ACTIONS.filter((action) => !NEEDS_YT_MUSIC.has(action));
-
-/**
- * The default row: Lyrics, Add to Playlist, Download, Song menu. It replaced
- * Lyrics, Sleep timer, Add to Playlist, Download, Sleep timer moving into the
- * playing song's card (docs/spec.md, story 46b).
- */
-const DEFAULT_BUTTONS: NowPlayingButtons = ["lyrics", "addToPlaylist", "download", "songMenu"];
-
-/**
- * The slots a stored value holds. Nothing stored, unreadable JSON or anything
- * but four slots of known actions, each once (a newer Wave's action
- * included), reads as the default row.
- */
-export const readNowPlayingButtons = (stored: string | null): NowPlayingButtons => {
-  if (stored === null) return DEFAULT_BUTTONS;
-  let raw: unknown;
+/** What [stored] holds as JSON; undefined when it isn't JSON. */
+const parsed = (stored: string): unknown => {
   try {
-    raw = JSON.parse(stored);
+    return JSON.parse(stored);
   } catch {
-    return DEFAULT_BUTTONS;
+    return undefined;
   }
-  return isButtons(raw) ? raw : DEFAULT_BUTTONS;
+};
+
+/**
+ * The actions a slot's choices list (its picker in Settings, its card in
+ * edit mode), in order; both put None before them.
+ */
+export const nowPlayingSlotChoices = (): readonly NowPlayingAction[] => NOW_PLAYING_ACTIONS;
+
+/**
+ * The default: Lyrics, Add to Playlist, Download, Shuffle and Repeat in the
+ * footer, and both transport slots empty.
+ */
+const DEFAULT_BUTTONS: NowPlayingButtons = [
+  "lyrics",
+  "addToPlaylist",
+  "download",
+  "shuffle",
+  "repeat",
+  null,
+  null,
+];
+
+/** Whether [buttons] are the default, which is what turns Reset to Default off. */
+export const nowPlayingButtonsAreDefault = (buttons: NowPlayingButtons): boolean =>
+  buttons.every((slot, index) => slot === DEFAULT_BUTTONS[index]);
+
+/**
+ * The actions a slot of the row from before could hold and no slot holds
+ * now: they read as empty.
+ */
+const RETIRED_ACTIONS: readonly unknown[] = ["related", "songMenu"];
+
+/**
+ * The seven slots an edited row from before ([previousRow], as stored under
+ * `NOW_PLAYING_PREVIOUS_ROW_KEY`) becomes: its four slots in footer 1 to 4,
+ * Related and Song menu as empty, then Queue, which was a fixed button on
+ * their right, and empty transport slots. Null when nothing is stored there
+ * or it isn't four slots of that row's actions, each once.
+ */
+const convertedRow = (previousRow: string | null): NowPlayingButtons | null => {
+  if (previousRow === null) return null;
+  const raw = parsed(previousRow);
+  if (!Array.isArray(raw)) return null;
+  const slots: unknown[] = raw.map((slot: unknown) =>
+    RETIRED_ACTIONS.includes(slot) ? null : slot,
+  );
+  // Queue was no slot's action then, so a row holding it isn't one Wave stored.
+  if (!isSlots(slots, 4) || slots.includes("queue")) return null;
+  const [a, b, c, d] = slots;
+  return [a ?? null, b ?? null, c ?? null, d ?? null, "queue", null, null];
+};
+
+/**
+ * The slots a stored value holds. With nothing stored, an edited row from
+ * before ([previousRow]) is kept, converted to seven slots; with none, the
+ * default shows. Unreadable JSON or anything but seven slots of known
+ * actions, each once (a newer Wave's action included), reads as the default.
+ */
+export const readNowPlayingButtons = (
+  stored: string | null,
+  previousRow: string | null = null,
+): NowPlayingButtons => {
+  if (stored === null) return convertedRow(previousRow) ?? DEFAULT_BUTTONS;
+  const slots = parsed(stored);
+  return isButtons(slots) ? slots : DEFAULT_BUTTONS;
 };
 
 /**
  * What to store for [buttons]; `readNowPlayingButtons` reads it back as those
- * slots. The default row stores as nothing (null).
+ * slots. The default stores as nothing (null), unless an edited row from
+ * before ([previousRow]) would be read in its place: then the default is
+ * stored as itself, so Reset to Default holds.
  */
-export const storedNowPlayingButtons = (buttons: NowPlayingButtons): string | null =>
-  buttons.every((slot, index) => slot === DEFAULT_BUTTONS[index]) ? null : JSON.stringify(buttons);
+export const storedNowPlayingButtons = (
+  buttons: NowPlayingButtons,
+  previousRow: string | null = null,
+): string | null =>
+  nowPlayingButtonsAreDefault(buttons) && convertedRow(previousRow) === null
+    ? null
+    : JSON.stringify(buttons);
 
 /**
- * A change made to the slots: one slot (0 to 3) set to an action or None, or
+ * A change made to the slots: one slot (0 to 6) set to an action or None, or
  * Reset to Default.
  */
 export type NowPlayingButtonsEdit =
   { readonly slot: number; readonly action: NowPlayingSlot } | "reset";
 
 /**
- * [buttons] after [edit]. An action another slot holds swaps places with what
- * the edited slot held (None included), so no action shows twice. Reset
- * brings back the default row.
+ * [buttons] after [edit]. An action another slot holds, in the footer or
+ * beside the transport, swaps places with what the edited slot held (None
+ * included), so no action shows twice. Reset brings back the default.
  */
 export const editNowPlayingButtons = (
   buttons: NowPlayingButtons,
@@ -120,11 +182,11 @@ export const editNowPlayingButtons = (
   if (edit === "reset") return DEFAULT_BUTTONS;
   const previous = buttons[edit.slot];
   if (previous === undefined) return buttons;
-  const [a, b, c, d] = buttons.map((slot, index) => {
+  const [a, b, c, d, e, f, g] = buttons.map((slot, index) => {
     if (index === edit.slot) return edit.action;
     return slot !== null && slot === edit.action ? previous : slot;
   });
-  return [a ?? null, b ?? null, c ?? null, d ?? null];
+  return [a ?? null, b ?? null, c ?? null, d ?? null, e ?? null, f ?? null, g ?? null];
 };
 
 /**
@@ -133,40 +195,63 @@ export const editNowPlayingButtons = (
  */
 export type NowPlayingSlotSong = "nothing" | "unsearched" | "song";
 
-/** The actions that need a song on to show: with nothing playing their slots stay empty. */
+/**
+ * The actions that need a song on to show: with nothing playing their slots
+ * stay empty. Queue is one, its screen being the playing song's.
+ */
 const NEEDS_SONG: ReadonlySet<NowPlayingAction> = new Set([
-  "related",
+  "queue",
   "addToPlaylist",
   "download",
   "share",
-  "songMenu",
+  "dislike",
 ]);
 
 /**
- * How slot [action]'s button shows with [song] on and YouTube Music on or
- * off ([ytMusic]): hidden, off (it shows disabled and only long-presses to
- * change the slot), or on. Song menu is off while an unsearched entry's
- * search runs, since the song has no menu yet. Related is hidden with
- * YouTube Music off, so its slot stays empty.
+ * How slot [action]'s button shows with [song] on: hidden (its slot stays
+ * empty), off (it shows disabled) or on. Dislike is off while an unsearched
+ * entry's search runs, since there is no song yet to keep a dislike under.
  */
 export const nowPlayingSlotShow = (
   action: NowPlayingAction,
   song: NowPlayingSlotSong,
-  ytMusic: boolean,
 ): "hidden" | "off" | "on" => {
-  if (!ytMusic && NEEDS_YT_MUSIC.has(action)) return "hidden";
   if (song === "nothing") return NEEDS_SONG.has(action) ? "hidden" : "on";
-  return song === "unsearched" && action === "songMenu" ? "off" : "on";
+  return song === "unsearched" && action === "dislike" ? "off" : "on";
 };
 
-/** The slot pickers' routes, `1` to `4`, left to right. */
-const SLOT_ROUTES = ["1", "2", "3", "4"];
+/**
+ * How the song menu button (⋯) in Now Playing's header shows with [song] on:
+ * hidden with nothing playing, off (disabled) while an unsearched entry's
+ * search runs, since the song has no card yet, else on.
+ */
+export const nowPlayingSongMenuShow = (song: NowPlayingSlotSong): "hidden" | "off" | "on" =>
+  song === "nothing" ? "hidden" : song === "unsearched" ? "off" : "on";
 
 /**
- * The slot (0 to 3) a slot picker's route param names, `1` to `4`; null for
- * anything else, so an old or mistyped link edits no slot.
+ * Whether the chevron beside the title, which opens Related, shows: with
+ * something on and YouTube Music on ([ytMusic]), which Related reads.
+ */
+export const nowPlayingRelatedChevronShown = (
+  song: NowPlayingSlotSong,
+  ytMusic: boolean,
+): boolean => ytMusic && song !== "nothing";
+
+/** The slot pickers' routes: `1` to `5` for the footer, left to right, then the transport's two. */
+const SLOT_ROUTES = ["1", "2", "3", "4", "5", "left", "right"];
+
+/**
+ * The slot (0 to 6) a slot picker's route param names: `1` to `5` for the
+ * footer's, `left` and `right` for the transport's; null for anything else,
+ * so an old or mistyped link edits no slot.
  */
 export const readNowPlayingSlotRoute = (param: string | string[] | undefined): number | null => {
   const index = typeof param === "string" ? SLOT_ROUTES.indexOf(param) : -1;
   return index === -1 ? null : index;
 };
+
+/**
+ * The route param of slot [slot]'s picker, which `readNowPlayingSlotRoute`
+ * reads back; null for no slot.
+ */
+export const nowPlayingSlotRoute = (slot: number): string | null => SLOT_ROUTES[slot] ?? null;

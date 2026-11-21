@@ -14,6 +14,9 @@ export type HomeSectionId =
   | "new-releases"
   | "upcoming-shows"
   | "discover"
+  | "in-your-orbit"
+  | "from-your-library"
+  | "community-playlists"
   | "recently-added"
   | "recently-played"
   | "most-played"
@@ -29,6 +32,11 @@ export interface HomeSection {
   readonly title: string;
   /** It fills from the owner's plays: empty until something is played. */
   readonly fromPlays: boolean;
+  /**
+   * Where it joins a Home arranged before it, when that isn't after the
+   * section before it in the catalogue: after the first of these that Home shows.
+   */
+  readonly joinsAfter?: readonly HomeSectionId[];
 }
 
 /**
@@ -37,11 +45,22 @@ export interface HomeSection {
  * existed (see `parseHomeArrangement`). Discover holds the Magic Queue,
  * Artist mixes and Genre mixes rows (`DISCOVER_ROWS`); it took the place of
  * their three sections, so it joins every Home arranged before it on top.
+ * In your orbit follows it, so it joins those Homes right after Discover,
+ * and From your library follows In your orbit the same way. Community
+ * playlists follows From your library, or Discover on a Home without it.
  */
 export const HOME_SECTIONS: readonly HomeSection[] = [
   { id: "new-releases", title: en.newReleases.title, fromPlays: false },
   { id: "upcoming-shows", title: en.upcomingShows.title, fromPlays: false },
   { id: "discover", title: en.home.sections.discover, fromPlays: false },
+  { id: "in-your-orbit", title: en.home.sections["in-your-orbit"], fromPlays: true },
+  { id: "from-your-library", title: en.home.sections["from-your-library"], fromPlays: true },
+  {
+    id: "community-playlists",
+    title: en.playbackText.communityPlaylists,
+    fromPlays: false,
+    joinsAfter: ["from-your-library", "discover"],
+  },
   { id: "recently-added", title: en.home.sections["recently-added"], fromPlays: false },
   { id: "recently-played", title: en.home.sections["recently-played"], fromPlays: true },
   { id: "most-played", title: en.home.sections["most-played"], fromPlays: true },
@@ -60,7 +79,9 @@ export const homeSectionTitle = (id: HomeSectionId, strings: Catalogue = en): st
     ? strings.newReleases.title
     : id === "upcoming-shows"
       ? strings.upcomingShows.title
-      : strings.home.sections[id];
+      : id === "community-playlists"
+        ? strings.playbackText.communityPlaylists
+        : strings.home.sections[id];
 
 /** A row of Home's Discover section. */
 export type DiscoverRowId = "magic-queue" | "artist-mixes" | "genre-mixes";
@@ -91,22 +112,29 @@ export type HomeItem = { readonly section: HomeSectionId } | "play-hint" | "no-s
  * line saying how to add them back. With an [empty] Library, Home shows its
  * empty state and, under it, only the sections that need no Library (when
  * arranged): Discover, whose Artist mixes can grow from YouTube Music's
- * chart, and the followed artists' New releases and Upcoming Shows.
+ * chart, the followed artists' New releases and Upcoming Shows, and the
+ * account's Community playlists.
  */
 export const homeItems = (
   { sections: arrangement }: HomeArrangement,
   { nothingPlayed, empty = false }: { readonly nothingPlayed: boolean; readonly empty?: boolean },
 ): readonly HomeItem[] => {
   if (empty)
-    return arrangement
-      .filter((id) => id === "discover" || id === "new-releases" || id === "upcoming-shows")
-      .map((section) => ({ section }));
+    return arrangement.filter((id) => NEEDS_NO_LIBRARY.has(id)).map((section) => ({ section }));
   if (arrangement.length === 0) return ["no-sections"];
   const items: HomeItem[] = arrangement.map((id) => ({ section: id }));
   const hintAt = nothingPlayed ? arrangement.findIndex((id) => sectionOf(id)?.fromPlays) : -1;
   if (hintAt !== -1) items.splice(hintAt, 0, "play-hint");
   return items;
 };
+
+/** The sections an empty Library's Home still lists. */
+const NEEDS_NO_LIBRARY: ReadonlySet<HomeSectionId> = new Set([
+  "discover",
+  "new-releases",
+  "upcoming-shows",
+  "community-playlists",
+]);
 
 /** Home's shown sections and Discover rows, each in the owner's order. */
 export interface HomeArrangement {
@@ -136,7 +164,8 @@ export const HOME_ARRANGEMENT_SETTING = "settings.homeArrangement";
  * neither shows nor hides is newer than the arrangement. It shows after the
  * shown section it follows in the catalogue, on top when none does (so
  * Discover, first in the catalogue, is first on every Home arranged before
- * it). Stats and Listening overview merge at the first shown one's place,
+ * it), unless the catalogue names where it joins (`joinsAfter`) and Home
+ * shows one of those. Stats and Listening overview merge at the first shown one's place,
  * visible if either was shown. Nothing stored, or anything unreadable, is the default.
  */
 export const parseHomeArrangement = (stored: string | null): HomeArrangement => {
@@ -146,11 +175,11 @@ export const parseHomeArrangement = (stored: string | null): HomeArrangement => 
   const arrangement = knownSections(shown);
   const known = new Set([...arrangement, ...knownSections(Array.isArray(hidden) ? hidden : [])]);
   const newer = HOME_SECTIONS.filter(({ id }) => !known.has(id));
-  for (const { id } of newer) {
+  for (const { id, joinsAfter = [] } of newer) {
     const place = DEFAULT_SECTIONS.indexOf(id);
-    const before = DEFAULT_SECTIONS.slice(0, place).findLast((earlier) =>
-      arrangement.includes(earlier),
-    );
+    const before =
+      joinsAfter.find((anchor) => arrangement.includes(anchor)) ??
+      DEFAULT_SECTIONS.slice(0, place).findLast((earlier) => arrangement.includes(earlier));
     arrangement.splice(before === undefined ? 0 : arrangement.indexOf(before) + 1, 0, id);
   }
   return { sections: arrangement, discoverRows: parseDiscoverRows(discover) };

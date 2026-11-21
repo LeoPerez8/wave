@@ -4,9 +4,11 @@ import {
   confirmsFirst,
   isDestructiveAction,
   isDetailPath,
+  isDisliked,
   itemActions,
   playlistPlayback,
   playlistRemovals,
+  toPlaylistSongs,
   unsearchedSongJob,
   type ActionSurface,
   type FavoriteSource,
@@ -26,6 +28,8 @@ import { confirmDeleteSongs, confirmRemoveSongs } from "@/library/deleteSongs";
 import type { LinkRows } from "@wave/client/db/links";
 import { songHasFile, type ArtistRow, type SongRow } from "@wave/client";
 import { useLiveFavoriteIds, useLivePendingFavoriteVideos } from "@/library/favorites";
+import { useDislikedSongs } from "@/library/dislikes";
+import { dislikeFailed, dislikeSongs } from "@/library/dislikeSongs";
 import { starSongs } from "@/library/starSongs";
 import { fixSongs } from "@/library/findLyricsAndGenre";
 import {
@@ -82,7 +86,6 @@ import {
   targetEntries,
   targetFacts,
   targetHeading,
-  toPlaylistSongs,
   hasStreamedSongs,
   targetStreamedArtistNames,
   isLibraryTrack,
@@ -258,7 +261,21 @@ function usePlan(
   };
   // Starred YT Music songs waiting for their files: their Favorite reads Remove from Favorites.
   const pending = useLivePendingFavoriteVideos(!deferred);
-  const facts = targetFacts(target, favorites, find, pending);
+  // Disliked songs: their Dislike reads Remove dislike. A YT Music song the Library has is its song.
+  const disliked = useDislikedSongs(!deferred && target.kind === "track");
+  const facts = targetFacts(target, favorites, find, pending).map((fact, index) => {
+    const item = target.kind === "track" ? target.items[index] : undefined;
+    if (item === undefined || isUnsearchedTrack(item)) return fact;
+    return {
+      ...fact,
+      disliked: isDisliked(
+        disliked,
+        isLibraryTrack(item)
+          ? { id: item.song.id }
+          : { id: find(item.ytSong)?.id, videoId: item.ytSong.videoId },
+      ),
+    };
+  });
   const planned = itemActions({
     kind: target.kind,
     ytMusic,
@@ -392,6 +409,8 @@ const SONG_ACTIONS: ReadonlySet<ItemAction> = new Set([
   "addToPlaylist",
   "favorite",
   "unfavorite",
+  "dislike",
+  "removeDislike",
   "download",
   "retryDownload",
 ]);
@@ -518,6 +537,20 @@ export const itemActionPress = ({
       );
     });
 
+  // What the dislike changes besides (the star, the toast with Undo) is `dislikeSongs`'s.
+  const dislike = (on: boolean) =>
+    run(() => {
+      void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+      void dislikeSongs(
+        {
+          tracks: tracks.map(({ song }) => song),
+          ytSongs: allTracks.flatMap((item) => ("ytSong" in item ? [item.ytSong] : [])),
+        },
+        on,
+        find,
+      ).catch(dislikeFailed);
+    });
+
   const playlist = target.kind === "playlist" ? target.items[0] : undefined;
   const addTitle =
     surface === "menu"
@@ -555,6 +588,10 @@ export const itemActionPress = ({
         return star(true);
       case "unfavorite":
         return star(false);
+      case "dislike":
+        return dislike(true);
+      case "removeDislike":
+        return dislike(false);
       case "removeFromPlaylist":
         return run(() => {
           const places = allTracks.flatMap(({ playlistItem }) => playlistItem ?? []);
