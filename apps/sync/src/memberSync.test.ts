@@ -260,9 +260,6 @@ describe("a member's push of a collaborative playlist", () => {
       { playlists: [playlist("own-1", { name: "Taken" })] },
       { playlists: [playlist("other")] },
       { playlistEntries: [entry("bo-1", "own-1")] },
-      // An id the owner holds in another playlist.
-      { playlistEntries: [entry("own-entry", "list-1")] },
-      { playlistEntries: [{ id: "own-entry", changedAt: 9, phoneId: "p", deleted: true }] },
       {
         playlistEntries: [entry("bo-2", "list-1")],
         preferences: [{ id: "x", changedAt: 1, phoneId: "p", deleted: false, value: null }],
@@ -277,6 +274,48 @@ describe("a member's push of a collaborative playlist", () => {
     }
     assert.equal((await pull(service, ana, before)).playlistEntries.length, 0);
     assert.equal((await pull(service, ana, before)).playlists.length, 0);
+  });
+
+  test("an entry the owner holds outside the playlist is dropped, and the rest is stored", async () => {
+    const { service, ana, bo } = await shared();
+    // A removal stored before removals kept their playlist: held in no playlist.
+    await push(service, ana, {
+      playlistEntries: [{ id: "old-1", changedAt: 2, phoneId: "phone-a", deleted: true }],
+    });
+    const before = (await pullAll(service, ana)).cursor;
+    const answer = await accepted(
+      await memberPush(service, bo, "list-1", {
+        playlistEntries: [
+          entry("old-1", "list-1", { changedAt: 5 }),
+          // An id the owner holds in another playlist.
+          entry("own-entry", "list-1", { changedAt: 5 }),
+          { id: "own-entry", changedAt: 9, phoneId: "p", deleted: true },
+          entry("bo-1", "list-1", { changedAt: 5 }),
+        ],
+      }),
+    );
+    assert.equal((answer.accepted as Record<string, number>).playlistEntries, 1);
+    const stored = (await pull(service, ana, before)).playlistEntries;
+    assert.deepEqual(
+      stored.map((row) => row.id),
+      ["bo-1"],
+    );
+    const owners = await pullAll(service, ana);
+    assert.equal(byId(owners.playlistEntries, "own-entry")?.playlistId, "own-1");
+    assert.equal(byId(owners.playlistEntries, "own-entry")?.deleted, false);
+    assert.equal(byId(owners.playlistEntries, "old-1")?.deleted, true);
+  });
+
+  test("a member's rename keeps when the playlist was made", async () => {
+    const { service, ana, bo } = await shared();
+    await accepted(
+      await memberPush(service, bo, "list-1", {
+        playlists: [playlist("list-1", { changedAt: 5, name: "Road trip 2", createdAt: 7 })],
+      }),
+    );
+    const held = byId((await pullAll(service, ana)).playlists, "list-1");
+    assert.equal(held?.name, "Road trip 2");
+    assert.equal(held?.createdAt, 1_700_000_000_000);
   });
 
   test("a member can't delete the playlist", async () => {
