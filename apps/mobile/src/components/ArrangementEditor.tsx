@@ -185,12 +185,13 @@ function ShownRow<Id>({
         style={ROW_LINE}
       >
         <RowLabel title={title} detail={detail} />
-        <RowButton
-          icon={IconMinus}
-          label={strings.arrangement.remove(title, place.from)}
-          disabled={!canRemove}
-          onPress={() => edit({ remove: id })}
-        />
+        {canRemove && (
+          <RowButton
+            icon={IconMinus}
+            label={strings.arrangement.remove(title, place.from)}
+            onPress={() => edit({ remove: id })}
+          />
+        )}
         <ReorderHandle gesture={handle} />
       </View>
       {children}
@@ -255,7 +256,7 @@ export type ArrangementEditorProps<Id extends string> = {
   edit: (edit: ArrangementEdit<Id>) => void;
   /** Whether another item fits; while it doesn't, the add buttons are off. */
   canAdd?: boolean;
-  canRemove?: boolean;
+  canRemove?: boolean | ((id: Id) => boolean);
   /** Content grouped with its parent row; it moves with that row. */
   renderNested?: (id: Id, dragging: (value: boolean) => void) => ReactNode;
   /** Rows only, inside an existing editor's ScrollView. */
@@ -331,7 +332,7 @@ export function ArrangementEditor<Id extends string>({
           divideLast={last !== undefined}
           reorder={reorder}
           edit={edit}
-          canRemove={canRemove}
+          canRemove={typeof canRemove === "function" ? canRemove(id) : canRemove}
         >
           {renderNested?.(id, setNestedDragging)}
         </ShownRow>
