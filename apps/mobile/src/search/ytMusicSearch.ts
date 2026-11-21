@@ -28,6 +28,65 @@ const inTurn = <A, R>(
   search: Effect.Effect<A, YtMusicError, R>,
 ): Effect.Effect<A, YtMusicError, R> => (always ? withSearchTurn("search", query, search) : search);
 
+/** What `useYtMusicSection` steps its section with (Core's `stepYtSection`). */
+type YtSectionStep = Parameters<typeof stepYtSection<NativeYtSong>>[1];
+
+/**
+ * YT Music's songs (unless [songless]), artists and albums for [query], and
+ * its matching official music videos when no song matches (Core's
+ * `ytSearchAsksVideos`), handed to [step] as soon as they are in; then the
+ * Community playlists shelf (none when [songless]), which the answer carries.
+ * Kept out of the hook, so the React Compiler builds the hook.
+ */
+const searchAll = (
+  query: string,
+  always: boolean,
+  songless: boolean,
+  step: (event: YtSectionStep) => void,
+) =>
+  // Only the query is sent. A failed Songs, Artists or Albums search fails the three: one quiet line.
+  askYtMusic((ytMusic) =>
+    Effect.all(
+      {
+        found: Effect.gen(function* () {
+          const found = yield* Effect.all(
+            {
+              songs: songless
+                ? Effect.succeed({ songs: [] as NativeYtSong[] })
+                : inTurn(always, query, ytMusic.searchSongs(query)),
+              artists: inTurn(always, query, ytMusic.searchArtists(query)),
+              albums: inTurn(always, query, ytMusic.searchAlbums(query)),
+            },
+            { concurrency: "unbounded" },
+          );
+          const videos =
+            !songless && ytSearchAsksVideos(query, found.songs.songs)
+              ? yield* inTurn(always, query, ytMusic.searchVideos(query)).pipe(
+                  Effect.map((page) => page.songs),
+                  Effect.orElseSucceed(() => []),
+                )
+              : undefined;
+          // Shown as soon as they are in, without waiting for the shelf.
+          step({
+            type: "found",
+            query,
+            songs: found.songs.songs,
+            artists: found.artists,
+            albums: found.albums,
+            videos,
+          });
+        }),
+        // The shelf is an extra, asked alongside: a failed read shows none and leaves the rest.
+        playlists: songless
+          ? Effect.succeed([] as readonly YtCommunityPlaylist[])
+          : inTurn(always, query, ytMusic.searchCommunityPlaylists(query)).pipe(
+              Effect.orElseSucceed((): readonly YtCommunityPlaylist[] => []),
+            ),
+      },
+      { concurrency: "unbounded" },
+    ),
+  );
+
 /**
  * What a search embedded in another flow asks YT Music for, in place of the
  * Search tab's. It asks only while the phone is online (offline, the
@@ -88,48 +147,7 @@ export const useYtMusicSection = (
   useEffect(() => {
     if (loading === null) return undefined;
     const timer = setTimeout(() => {
-      // Only the query is sent. A failed Songs, Artists or Albums search fails the three: one quiet line.
-      const search = askYtMusic((ytMusic) =>
-        Effect.all(
-          {
-            found: Effect.gen(function* () {
-              const found = yield* Effect.all(
-                {
-                  songs: songless
-                    ? Effect.succeed({ songs: [] as NativeYtSong[] })
-                    : inTurn(always, loading, ytMusic.searchSongs(loading)),
-                  artists: inTurn(always, loading, ytMusic.searchArtists(loading)),
-                  albums: inTurn(always, loading, ytMusic.searchAlbums(loading)),
-                },
-                { concurrency: "unbounded" },
-              );
-              const videos =
-                !songless && ytSearchAsksVideos(loading, found.songs.songs)
-                  ? yield* inTurn(always, loading, ytMusic.searchVideos(loading)).pipe(
-                      Effect.map((page) => page.songs),
-                      Effect.orElseSucceed(() => []),
-                    )
-                  : undefined;
-              // Shown as soon as they are in, without waiting for the shelf.
-              dispatch({
-                type: "found",
-                query: loading,
-                songs: found.songs.songs,
-                artists: found.artists,
-                albums: found.albums,
-                videos,
-              });
-            }),
-            // The shelf is an extra, asked alongside: a failed read shows none and leaves the rest.
-            playlists: songless
-              ? Effect.succeed([] as readonly YtCommunityPlaylist[])
-              : inTurn(always, loading, ytMusic.searchCommunityPlaylists(loading)).pipe(
-                  Effect.orElseSucceed((): readonly YtCommunityPlaylist[] => []),
-                ),
-          },
-          { concurrency: "unbounded" },
-        ),
-      );
+      const search = searchAll(loading, always, songless, dispatch);
       void search.then((result) => {
         // The shelf joins the answer shown, if it is still this query's (Core's `stepYtSection`).
         if (Result.isSuccess(result))
