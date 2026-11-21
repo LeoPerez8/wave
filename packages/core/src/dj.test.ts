@@ -16,6 +16,10 @@ import {
   djRadioSongAllowed,
   djFirstLibrarySong,
   djGrid,
+  djGridCandidates,
+  djGridPage,
+  djGridLoadMore,
+  djGridRefresh,
   djOpened,
   djReduce,
   djReopened,
@@ -131,6 +135,113 @@ const graphOf = (pages: Record<string, string[]>) =>
 const names = (tiles: readonly DjTile[]): string[] => tiles.map((tile) => tile.name);
 
 describe("DJ's grid", () => {
+  test("pages through all grid candidates once without moving earlier tiles", () => {
+    const sources = {
+      artists: Array.from({ length: 40 }, (_, i) => ({ id: i + 1, name: `Artist ${i}` })),
+      taste: tasteOf(
+        Object.fromEntries(Array.from({ length: 40 }, (_, i) => [`Artist ${i}`, 100 - i])),
+      ),
+      played: [],
+      graph: graphOf({}),
+    };
+    const candidates = djGridCandidates(sources);
+    const first = candidates.slice(0, DJ_GRID_TILES);
+    const seen = first.map((tile) => tile.key);
+    const second = djGridPage(candidates, seen, 10);
+    const third = djGridPage(candidates, [...seen, ...second.map((tile) => tile.key)], 10);
+
+    assert.equal(first.length, DJ_GRID_TILES);
+    assert.deepEqual(
+      second.map((tile) => tile.name),
+      candidates.slice(24, 34).map((tile) => tile.name),
+    );
+    assert.deepEqual(
+      third.map((tile) => tile.key),
+      candidates.slice(34).map((tile) => tile.key),
+    );
+    assert.deepEqual(
+      djGridPage(candidates, [
+        ...seen,
+        ...second.map((tile) => tile.key),
+        ...third.map((tile) => tile.key),
+      ]),
+      [],
+    );
+    assert.equal(
+      new Set([...first, ...second, ...third].map((tile) => tile.key)).size,
+      candidates.length,
+    );
+  });
+
+  test("loading more appends a page without changing any tile already shown", () => {
+    const candidates = Array.from({ length: 8 }, (_, i) => djArtistTile(`Artist ${i}`)!);
+    const current = candidates.slice(0, 3);
+    const result = djGridLoadMore(
+      candidates,
+      current,
+      current.map((tile) => tile.key),
+      2,
+    );
+
+    assert.deepEqual(result.tiles, [...current, ...candidates.slice(3, 5)]);
+    assert.deepEqual(result.tiles.slice(0, current.length), current);
+  });
+
+  test("refresh fills unselected positions with unseen candidates and keeps selected tiles in place", () => {
+    const candidates = Array.from({ length: 8 }, (_, i) => djArtistTile(`Artist ${i}`)!);
+    const current = candidates.slice(0, 5);
+    const result = djGridRefresh(
+      candidates,
+      current,
+      [current[1]!.key, current[4]!.key],
+      current.map((tile) => tile.key),
+    );
+
+    assert.deepEqual(
+      result.tiles.map((tile) => tile.name),
+      ["Artist 5", "Artist 1", "Artist 6", "Artist 7", "Artist 4"],
+    );
+    assert.deepEqual(result.seen, [
+      ...current.map((tile) => tile.key),
+      ...result.tiles
+        .filter((tile) => !current.some((shown) => shown.key === tile.key))
+        .map((tile) => tile.key),
+    ]);
+    assert.deepEqual(
+      djGridRefresh(candidates, result.tiles, [current[1]!.key, current[4]!.key], result.seen),
+      result,
+    );
+  });
+
+  test("refresh leaves the grid unchanged when no unseen candidates remain", () => {
+    const tiles = Array.from({ length: 3 }, (_, i) => djArtistTile(`Artist ${i}`)!);
+    assert.deepEqual(
+      djGridRefresh(
+        tiles,
+        tiles,
+        [],
+        tiles.map((tile) => tile.key),
+      ),
+      {
+        tiles,
+        seen: tiles.map((tile) => tile.key),
+      },
+    );
+  });
+
+  test("refresh keeps the remaining unselected tiles when too few new candidates remain", () => {
+    const tiles = Array.from({ length: 5 }, (_, i) => djArtistTile(`Artist ${i}`)!);
+    const candidate = djArtistTile("New artist")!;
+    const refreshed = djGridRefresh(
+      [...tiles, candidate],
+      tiles,
+      [tiles[1]!.key],
+      tiles.map((tile) => tile.key),
+    );
+
+    assert.deepEqual(refreshed.tiles, [candidate, tiles[1], tiles[2], tiles[3], tiles[4]]);
+  });
+
   test("offers up to four known genre families in taste order among its artist tiles", () => {
     const artists = [
       { id: 1, name: "Metal Artist" },
