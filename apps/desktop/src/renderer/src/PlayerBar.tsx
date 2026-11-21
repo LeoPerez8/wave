@@ -10,6 +10,7 @@ import {
 
 import type { PlaybackCommand, PlayerView } from "../../shared/playerView.ts";
 import { Icon } from "./Icon.tsx";
+import type { shuffleMenuEvents } from "./ShuffleKinds.tsx";
 import type { PanelTab } from "./SidePanel.tsx";
 import { SleepTimer } from "./SleepTimer.tsx";
 import { useDesktopKeys } from "./keys.ts";
@@ -142,6 +143,7 @@ export function PlayerBar({
   onPanel,
   onNowPlaying,
   onMenu,
+  shuffleMenu,
   links,
 }: {
   readonly playback: ReturnType<typeof usePlayback>;
@@ -151,6 +153,8 @@ export function PlayerBar({
   readonly onNowPlaying: () => void;
   /** Opens the song playing's menu under [element]. */
   readonly onMenu: (element: HTMLElement) => void;
+  /** What opens the kinds of shuffle from the shuffle button (`shuffleMenuEvents`). */
+  readonly shuffleMenu: ReturnType<typeof shuffleMenuEvents>;
   /** Where a streamed song's artist and album names lead. */
   readonly links: YtCreditLinks;
 }) {
@@ -180,8 +184,10 @@ export function PlayerBar({
     pressed?: boolean,
     disabled = song === null,
     badge?: string,
+    menu?: ReturnType<typeof shuffleMenuEvents>,
   ) => (
     <button
+      {...menu}
       className="icon-button"
       aria-label={label}
       title={label}
@@ -239,7 +245,7 @@ export function PlayerBar({
             labels.favorite,
             () => run(window.wave.playback.favorite()),
             song?.favorite,
-            song === null,
+            song === null || song.outside,
           )}
         </div>
         <div className="player-center">
@@ -249,6 +255,9 @@ export function PlayerBar({
               labels.shuffle,
               () => command({ type: "setShuffle", on: !view?.shuffle }),
               view?.shuffle,
+              undefined,
+              undefined,
+              shuffleMenu,
             )}
             {button("previous", labels.previous, () => command({ type: "previous" }))}
             {button(playing ? "pause" : "play", playing ? labels.pause : labels.play, () =>

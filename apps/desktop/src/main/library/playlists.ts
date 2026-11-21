@@ -25,6 +25,7 @@ import {
   selectTrackPaths,
   type PlaylistRemoval,
 } from "@wave/client/db/playlists";
+import { playlistSongSort } from "./browseSort.ts";
 import {
   removePlaylistImage,
   selectPlaylistImageOriginal,
@@ -42,6 +43,7 @@ import {
   libraryPathIndex,
   nextPlaylistName,
   planM3uImport,
+  playlistReorders,
   readFraming,
   resolveDesktopM3uPath,
   toPlaylistSongs,
@@ -244,6 +246,8 @@ export const createPlaylists = (options: PlaylistOptions) => {
       changed();
     },
     move: (playlistId: number, trackId: number, direction: MoveDirection): void => {
+      // Only the playlist's own order moves; a sorted page offers no Move Up or Move Down.
+      if (!playlistReorders(playlistSongSort(db, playlistId))) return;
       const shown = libraryEntries(playlistId);
       const at = shown.findIndex((entry) => entry.trackId === trackId);
       const neighbour = shown[direction === "up" ? at - 1 : at + 1];

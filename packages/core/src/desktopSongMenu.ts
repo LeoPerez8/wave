@@ -5,9 +5,12 @@
  */
 
 import {
+  commonKind,
   itemActions,
+  needsDownload,
   type ActionItem,
   type ActionSurface,
+  type CollectionKind,
   type ItemAction,
   type ItemActionEntry,
 } from "./itemActions.ts";
@@ -66,4 +69,48 @@ export const desktopSongActions = (subject: DesktopSongSubject): ItemActionEntry
   return items.some((item) => item.streamed === true)
     ? entries
     : [...entries, { action: "removeFromLibrary" }];
+};
+
+/** A checked item of a desktop selection: a song, or a collection with its songs' facts. */
+export interface DesktopSelectionItem extends ActionItem {
+  readonly kind: "track" | CollectionKind;
+}
+
+/** The entries the desktop runs on collections checked together, or with songs. */
+const SELECTION_OFFERED: ReadonlySet<ItemAction> = new Set<ItemAction>([
+  "playNext",
+  "addToQueue",
+  "addToPlaylist",
+  "fixSongs",
+]);
+
+/**
+ * The selection bar's entries for songs, albums, artists, genres and playlists checked together,
+ * by the phone's rules (`itemActions`): songs alone keep theirs, one kind of collection offers
+ * what that kind does, and mixed kinds only what every kind shares. Download joins them while
+ * a song they hold has no file yet.
+ */
+export const desktopSelectionActions = (subject: {
+  /** The checked items, in page order. */
+  readonly items: readonly DesktopSelectionItem[];
+  readonly onlineLookups?: boolean | undefined;
+  readonly ytMusic?: boolean | undefined;
+}): ItemActionEntry[] => {
+  const { items } = subject;
+  const kind = commonKind(items.map((item) => item.kind));
+  if (kind === "track") return desktopSongActions({ ...subject, surface: "selection" });
+  const entries = itemActions({
+    kind,
+    items,
+    surface: "selection",
+    ytMusic: subject.ytMusic === true,
+    onlineLookups: subject.onlineLookups,
+    here: "/library",
+  }).filter((entry) => SELECTION_OFFERED.has(entry.action));
+  const download = items.some((item) =>
+    item.kind === "track" ? needsDownload(item) : (item.songs ?? []).some(needsDownload),
+  );
+  if (!download) return entries;
+  const at = entries.findIndex((entry) => entry.action === "addToPlaylist") + 1;
+  return [...entries.slice(0, at), { action: "download" }, ...entries.slice(at)];
 };
