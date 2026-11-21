@@ -1,6 +1,6 @@
 # Shazam fixtures
 
-Used by the tests in `src/test/java/expo/modules/wavenative/recognize`.
+Used by the tests in `src/test/kotlin/expo/modules/wavenative/recognize`.
 
 ## Signatures
 
@@ -16,7 +16,7 @@ They were made with, from the repository root:
 
 ```sh
 python -m venv venv && venv/bin/pip install shazamio-core==2.0.0 numpy
-venv/bin/python apps/mobile/modules/wave-native/android/src/test/fixtures-src/shazam/make_fixtures.py
+venv/bin/python packages/kotlin-shared/src/testFixtures/fixtures-src/shazam/make_fixtures.py
 ```
 
 It needs git and a Rust toolchain too. `make_fixtures.py` says how it works: the wheel

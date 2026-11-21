@@ -392,6 +392,24 @@ launches that come close together. What the installer registers and the AppImage
 `scripts/file-types.ts`, tested in `src/fileTypes.test.ts` without building an installer; "Open
 with" after a real install is an owner check.
 
+## Recognize
+
+Main runs the phone's session (`@wave/client/recognizeSession`) over the JVM's Shazam client
+(`DesktopRecognize.kt`): `src/main/recognize/desktopRecognize.ts` decides what is captured and
+`capturePermissions.ts` allows the window only that. The window captures in
+`renderer/src/recognizeCapture.ts` and shows `Recognize.tsx`. A development build passes
+`WAVE_SHAZAM_URL` to the JVM as `--shazam-url`, so Shazam's requests go to a fake; a packaged
+one never does. The JVM in `apps/desktop/jvm` must be rebuilt (`pnpm build:jvm`, JDK 21) after a
+Kotlin change, or point `WAVE_KOTLIN_JAR` at a build that has it.
+
+`e2e/recognize.spec.ts` runs with Chromium's fake microphone
+(`--use-fake-device-for-media-stream`) against a fake Shazam: the card listening with Cancel,
+playback paused and resumed, a Library match with its actions, Add to Shazam creating the
+playlist, No match and No connection with Try Again, and no microphone for the page outside a
+session. A refused microphone, a capture failure and a YT Music match are tested in
+`src/main/recognize/desktopRecognize.test.ts` and Core. Recognizing a real song from the
+microphone and from what the computer plays is an owner check.
+
 ## The dev window
 
 To look at `pnpm dev` from an agent, start it in the background with a debugging port and a
