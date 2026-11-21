@@ -1,0 +1,46 @@
+name: pnpm store
+description: >-
+  Restores the shared pnpm store for this system and lockfile before an install, or, with save,
+  saves it after one on main when the lockfile has no entry yet (docs/spec.md, Build and CI ›
+  Caches). PR runs and tags only read it.
+
+inputs:
+  save:
+    description: >-
+      'true' after the install of the one job per system that keeps the store: a whole install,
+      so the entry holds every package the lockfile names.
+    required: false
+    default: "false"
+
+runs:
+  using: composite
+  steps:
+    - name: Find the pnpm store
+      id: store
+      shell: bash
+      run: echo "path=$(pnpm store path --silent)" >> "$GITHUB_OUTPUT"
+
+    # No restore-keys: an entry holds one lockfile's packages, and a new lockfile starts a new one
+    # instead of growing an old one.
+    - name: Restore the pnpm store
+      if: inputs.save != 'true' && hashFiles('pnpm-lock.yaml') != ''
+      uses: actions/cache/restore@0057852bfaa89a56745cba8c7296529d2fc39830 # v4.3.0
+      with:
+        path: ${{ steps.store.outputs.path }}
+        key: shared-pnpm-${{ runner.os }}-${{ hashFiles('pnpm-lock.yaml') }}
+
+    - name: Look for the saved pnpm store
+      id: saved
+      if: inputs.save == 'true' && github.ref == 'refs/heads/main' && hashFiles('pnpm-lock.yaml') != ''
+      uses: actions/cache/restore@0057852bfaa89a56745cba8c7296529d2fc39830 # v4.3.0
+      with:
+        path: ${{ steps.store.outputs.path }}
+        key: shared-pnpm-${{ runner.os }}-${{ hashFiles('pnpm-lock.yaml') }}
+        lookup-only: true
+
+    - name: Save the pnpm store
+      if: github.ref == 'refs/heads/main' && steps.saved.outcome == 'success' && steps.saved.outputs.cache-hit != 'true'
+      uses: actions/cache/save@0057852bfaa89a56745cba8c7296529d2fc39830 # v4.3.0
+      with:
+        path: ${{ steps.store.outputs.path }}
+        key: shared-pnpm-${{ runner.os }}-${{ hashFiles('pnpm-lock.yaml') }}
