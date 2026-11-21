@@ -10,12 +10,13 @@ import { AlbumCardSkeleton, SKELETON_TILES, SkeletonGroup } from "@/catalog/Skel
  * `discoverMixesSection`): placeholder tiles in the mixes' layout and size.
  * It holds still: an animated pulse would make the glass chrome re-blur on
  * every frame (issue #93), and stillness is what reduce motion asks for anyway.
+ * Home's From your library waits in the same tiles, under its own [label].
  */
-export function DiscoverMixesSkeleton() {
+export function DiscoverMixesSkeleton({ label }: { label?: string }) {
   const { strings } = useLocalisation();
   const { fontScale } = useWindowDimensions();
   return (
-    <SkeletonGroup label={strings.discover.buildingMixes}>
+    <SkeletonGroup label={label ?? strings.discover.buildingMixes}>
       <CoverRow>
         {Array.from({ length: SKELETON_TILES }, (_, index) => (
           <View key={index} style={{ width: COVER_ROW_TILE, paddingTop: SLEEVE_ROOM }}>

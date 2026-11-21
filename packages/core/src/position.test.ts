@@ -35,6 +35,16 @@ describe("scrubPosition", () => {
     assert.equal(scrubPosition({ x: 400, width: 364, durationMs: 200_000 }), 200_000);
   });
 
+  test("a tap at the start, middle, or end maps to that point in the track", () => {
+    assert.equal(scrubPosition({ x: 0, width: 300, durationMs: 120_000 }), 0);
+    assert.equal(scrubPosition({ x: 150, width: 300, durationMs: 120_000 }), 60_000);
+    assert.equal(scrubPosition({ x: 300, width: 300, durationMs: 120_000 }), 120_000);
+  });
+
+  test("a zero-length track has no seek position", () => {
+    assert.equal(scrubPosition({ x: 150, width: 300, durationMs: 0 }), 0);
+  });
+
   test("a bar that hasn't been laid out yet seeks to the start", () => {
     assert.equal(scrubPosition({ x: 10, width: 0, durationMs: 200_000 }), 0);
   });

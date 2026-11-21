@@ -61,3 +61,9 @@ test("a playlist's grip keeps the row's swipe off it only while it shows", () =>
   const playlist = readFileSync(join(src, "library/PlaylistItems.tsx"), "utf8");
   assert.match(playlist, /handleWidth: grip \? GRIP_WIDTH : 0/);
 });
+
+test("the Queue page's swipe back can't begin on Up Next's handles; the player's begins anywhere", () => {
+  const pages = readFileSync(join(src, "nowPlaying/ScreenPages.tsx"), "utf8");
+  assert.match(pages, /const HANDLES = grid\.margin \+ grid\.upNextCell;/);
+  assert.match(pages, /usePanGesture\(\{[^}]*hitSlop: handleSwipeSlop\(player \? 0 : HANDLES\),/);
+});

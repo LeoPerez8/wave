@@ -11,7 +11,7 @@ import { queueState } from "@/playback/Queue";
 import { queuedYtSong, queueTracks } from "@/playback/queueTracks";
 
 import { createNotificationStar } from "./notificationStar";
-import { createPlayingSongLookup, nowPlayingSongActions, songActionFailed } from "./playingSong";
+import { followedSongLookup, nowPlayingSongActions, songActionFailed } from "./playingSong";
 import { playingSongTarget } from "./songLookup";
 
 /**
@@ -20,7 +20,7 @@ import { playingSongTarget } from "./songLookup";
  * (`createNotificationStar`). Call it once per JS runtime (`startServices` does).
  */
 export const startNotificationStar = (): void => {
-  const lookup = createPlayingSongLookup();
+  const lookup = followedSongLookup;
   const star = createNotificationStar({
     lookup,
     starred: (target, answer) => {

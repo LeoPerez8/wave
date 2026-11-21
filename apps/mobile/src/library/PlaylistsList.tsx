@@ -91,7 +91,8 @@ const moveActions = (
 
 /**
  * One playlist as [layout] shows it: a row with a small mosaic (list), a tile
- * with its count (grid), or a full-width card (large), a tile's name leaving
+ * with its count (grid), or a full-width card (large), each cover plain (no
+ * sleeves, unlike Home and Search), a tile's name leaving
  * room for the drag handle over its end. While selecting, it shows a check.
  */
 function PlaylistView({
@@ -143,6 +144,7 @@ function PlaylistView({
         plainDetail={download !== null || (collaborative && progress === null)}
         paths={playlist.thumbPaths}
         ring={ring}
+        sleeves={false}
         {...marks}
         {...press}
         {...moves}
@@ -156,6 +158,7 @@ function PlaylistView({
       paths={playlist.thumbPaths}
       ring={ring}
       size={tile}
+      sleeves={false}
       nameInset={TILE_GRIP_INSET}
       {...marks}
       {...press}
@@ -171,9 +174,9 @@ const useTileSize = (layout: PlaylistLayout): number => {
   return layout === "grid" ? Math.floor((across - grid.gutter) / 2) : Math.floor(across);
 };
 
-/** A row's height in [layout] with [tile] covers, at the font scale. */
+/** A row's height in [layout] with [tile] covers, at the font scale: plain covers, no sleeves. */
 const rowHeight = (layout: PlaylistLayout, tile: number, fontScale: number): number =>
-  layout === "list" ? grid.row : playlistCardRowHeight(tile, fontScale);
+  layout === "list" ? grid.row : playlistCardRowHeight(tile, fontScale, false);
 
 /**
  * The Playlists list (Library › Playlists and the Playlists tab): every

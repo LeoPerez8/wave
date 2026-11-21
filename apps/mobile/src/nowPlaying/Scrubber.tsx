@@ -20,7 +20,12 @@ import {
   useSyncExternalStore,
 } from "react";
 import { StyleSheet, TextInput, View, type TextInputProps } from "react-native";
-import { GestureDetector, usePanGesture } from "react-native-gesture-handler";
+import {
+  GestureDetector,
+  useExclusiveGestures,
+  usePanGesture,
+  useTapGesture,
+} from "react-native-gesture-handler";
 import Animated, {
   createAnimatedComponent,
   useAnimatedProps,
@@ -92,6 +97,7 @@ const playingKey = (): string | null => currentEntry(queueState.get())?.key ?? n
  * where a teal dot sits; then elapsed and remaining time. Touch anywhere on it, or a little above or
  * below its box (Core's `scrubHitSlop`), and drag to scrub;
  * the bar gets bolder, the dot grows, and the track seeks when the finger lifts.
+ * A tap seeks to the point it touched.
  *
  * The finger is followed on the UI thread: the bar and the times move with it
  * while JavaScript is busy, and JavaScript hears only the release, which it
@@ -146,13 +152,16 @@ export function Scrubber() {
     [released],
   );
 
+  const at = useCallback(
+    (x: number): number => {
+      "worklet";
+      const { width: barWidth, durationMs: barDuration } = bar.get();
+      return scrubPosition({ x, width: barWidth, durationMs: barDuration });
+    },
+    [bar],
+  );
   const pan = usePanGesture(
     useMemo(() => {
-      const at = (x: number): number => {
-        "worklet";
-        const { width: barWidth, durationMs: barDuration } = bar.get();
-        return scrubPosition({ x, width: barWidth, durationMs: barDuration });
-      };
       return {
         enabled,
         hitSlop: HIT_SLOP,
@@ -175,8 +184,28 @@ export function Scrubber() {
           scheduleOnRN(commit, target, grabbed.get());
         },
       };
-    }, [enabled, bar, entry, grabbed, scrub, released, commit]),
+    }, [enabled, at, entry, grabbed, scrub, released, commit]),
   );
+  // The pan starts on the finger's first movement, so a finger that lifts
+  // without moving never starts it: that touch is a tap, and seeks as a release does.
+  const tap = useTapGesture(
+    useMemo(
+      () => ({
+        enabled,
+        hitSlop: HIT_SLOP,
+        // A tap activates as the finger lifts.
+        onActivate: (event: { x: number }) => {
+          "worklet";
+          const target = at(event.x);
+          released.set(target);
+          scheduleOnRN(commit, target, entry.get());
+        },
+      }),
+      [enabled, at, entry, released, commit],
+    ),
+  );
+  // A touch is one or the other, so it seeks once.
+  const gesture = useExclusiveGestures(pan, tap);
 
   // The position on show: the finger's, a release's, or the playhead's.
   const shown = useDerivedValue(() => {
@@ -233,7 +262,7 @@ export function Scrubber() {
 
   return (
     <View>
-      <GestureDetector gesture={pan}>
+      <GestureDetector gesture={gesture}>
         <Animated.View
           animatedProps={accessibilityProps}
           accessible

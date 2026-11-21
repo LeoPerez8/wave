@@ -1,6 +1,10 @@
 import {
+  isDisliked,
+  NO_DISLIKES,
   songRowSwipeDirections,
+  songRowTrackId,
   streamedArtistLink,
+  swipesChoose,
   ytDownloadStatus,
   type QueueContext,
   type RowMenuAction,
@@ -18,6 +22,7 @@ import {
 } from "react";
 import type { AccessibilityActionInfo } from "react-native";
 
+import { useDislikedSongs } from "@/library/dislikes";
 import { useFavoriteIds, usePendingFavoriteVideos } from "@/library/favorites";
 import { useCurrentPath } from "@/library/routes";
 import { useSightedStore } from "@/lib/screenSight";
@@ -86,8 +91,8 @@ interface Kept {
 
 /**
  * The rows of one list. It follows the playing ids, the stars, the downloads,
- * the swipe settings, the route, YT Music and the streams that refused to
- * play, once for all its rows; each row gets primitives and stable keyed
+ * the swipe settings, the route, YT Music, the streams that refused to play
+ * and, while a direction is set to Dislike, the dislikes, once for all its rows; each row gets primitives and stable keyed
  * handlers. A row whose inputs didn't change keeps its element, so React
  * skips it (and a memoized `decorateRow` wrapper) entirely.
  */
@@ -111,6 +116,10 @@ export function useSongRows<T>({
   const pending = usePendingFavoriteVideos();
   const downloads = useSongListDownloads();
   const settings = useSwipeSettings();
+  // Only a direction set to Dislike shows whether a song is disliked: unfollowed otherwise.
+  const dislikeSwipes = swipesChoose(settings, "dislike");
+  const followedDislikes = useDislikedSongs(dislikeSwipes);
+  const disliked = dislikeSwipes ? followedDislikes : NO_DISLIKES;
   const here = useCurrentPath(false);
   const ytMusic = useYtMusicEnabled();
   const { language } = useLocalisation();
@@ -211,6 +220,11 @@ export function useSongRows<T>({
             kind: "ytMusic",
             options: {
               favorite: starred,
+              // By its video, or as the Library song it is by now, as its menu reads it.
+              disliked: isDisliked(disliked, {
+                id: knownLibraryFinder()?.(source.song)?.id,
+                videoId: source.song.videoId,
+              }),
               album: (source.song as NativeYtSong).albumId,
               ytAlbumHere: ytAlbumPageHere(here),
               ytMusic,
@@ -228,14 +242,20 @@ export function useSongRows<T>({
       return songRowSwipeDirections(
         {
           kind: "track",
-          item: { ...entry.facts, favorite: starred, download: state.download },
+          item: {
+            ...entry.facts,
+            favorite: starred,
+            // The set holds a disliked Library song's Track id, whatever key keeps it (Core's `dislikedSongs`).
+            disliked: disliked.has(songRowTrackId(source) ?? ""),
+            download: state.download,
+          },
           here,
           onlineLookups: lyricsAndGenreLookupsEnabled(),
         },
         settings,
       );
     },
-    [here, ytMusic, settings],
+    [here, ytMusic, settings, disliked],
   );
 
   /** What [item]'s row shows, or null for a non-song slot. */
@@ -332,8 +352,8 @@ export function useSongRows<T>({
 
   /** Changes whenever a row may render differently: the list's extraData. */
   const state = useMemo(
-    () => ({ snapshot, selection, settings, here }),
-    [snapshot, selection, settings, here],
+    () => ({ snapshot, selection, settings, here, disliked }),
+    [snapshot, selection, settings, here, disliked],
   );
   /**
    * The row of the item keyed [key] as it shows, without its actions or

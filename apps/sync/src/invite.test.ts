@@ -495,7 +495,7 @@ describe("the invite page", () => {
 
 describe("the migration", () => {
   test("adds the invite table and leaves the others as they are", async () => {
-    const db = await freshDatabase({ until: "0016_collaborations" });
+    const db = await freshDatabase({ until: "0017_collaborations" });
     const before = await harness({}, db);
     const ana = await before.signIn({ name: "Ana Souza" });
     await push(before, ana, { playlists: [playlist("list-1")] });
@@ -516,8 +516,8 @@ describe("the migration", () => {
       ]);
     const tables = await schema();
 
-    assert.deepEqual(await migrate(db, { until: "0017_collaboration_invites" }), [
-      "0017_collaboration_invites",
+    assert.deepEqual(await migrate(db, { until: "0018_collaboration_invites" }), [
+      "0018_collaboration_invites",
     ]);
 
     const after = await schema();

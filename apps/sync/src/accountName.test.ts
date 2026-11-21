@@ -67,12 +67,12 @@ describe("a sign-in keeps the Google account's name", () => {
   });
 
   test("an account made before the names were kept signs in and gets one", async () => {
-    const db = await freshDatabase({ until: "0014_playlist_entry_restores" });
+    const db = await freshDatabase({ until: "0015_playlist_entry_restores" });
     await db.execute({
       sql: "INSERT INTO accounts (id, google_sub, email, created_at) VALUES (?, ?, ?, ?)",
       args: ["account-1", "google-sub-1", "ana@example.com", Date.UTC(2026, 0, 1)],
     });
-    assert.equal((await migrate(db))[0], "0015_account_name");
+    assert.equal((await migrate(db))[0], "0016_account_name");
 
     // One place in all: the sign-in works only as the account that was already there.
     const service = await harness({ limits: { maxAccounts: 1 } }, db);

@@ -246,11 +246,14 @@ export const nextUpdateStep = (state: UpdateState): UpdateStep => {
 };
 
 /**
- * What a tap on the update button does, given what's already under way. Install Now takes the ready
- * update at once, music or not: an APK as a tap on the pill does (`install`), a bundle by asking
- * for its reload (`installBundle`).
+ * What Settings' update action does, given what's already under way. A pull on Settings checks now,
+ * past the 15-minute wait, or joins an APK download already running; with an update ready it does
+ * nothing, as Install Now on the Version History row takes that. Install Now takes the ready update
+ * at once, music or not: an APK as a tap on the pill does (`install`), a bundle by asking for its
+ * reload (`installBundle`).
  */
 export const updateButtonAction = ({
+  gesture,
   installTap,
   updateRequest,
   downloadingApk,
@@ -259,13 +262,17 @@ export const updateButtonAction = ({
   UpdateState,
   "nativeUpdate" | "bundleDownloaded" | "offeredApkVersion" | "installTap" | "updateRequest"
 > & {
+  readonly gesture: "pull" | "installNow";
   /** The automatic path is fetching the APK right now. */
   readonly downloadingApk: boolean;
 }): "install" | "installBundle" | "check" | "followDownload" | "none" => {
   if (updateRequest !== "none" || installTap !== "none") return "none";
   const ready = readyUpdate(state);
-  if (ready === "apk") return "install";
-  if (ready === "bundle") return "installBundle";
+  if (gesture === "installNow") {
+    if (ready === "apk") return "install";
+    return ready === "bundle" ? "installBundle" : "none";
+  }
+  if (ready !== null) return "none";
   return downloadingApk ? "followDownload" : "check";
 };
 

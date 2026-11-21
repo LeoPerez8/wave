@@ -102,6 +102,7 @@ test("actual early gestures choose the existing missing song, never create a dup
       star: (_target, answer, on) => {
         Effect.runSync(store.setFavorites([answer.track!.id], on));
       },
+      dislike: async () => {},
     });
     lookup.update(target, true, false);
     const playlist = actions.playlist(target);

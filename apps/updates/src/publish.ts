@@ -92,6 +92,39 @@ export const publishNotes = async ({
   return true;
 };
 
+/** A version whose run tagged it but never published it, with the notes its run built. */
+export interface EarlierRelease {
+  readonly version: string;
+  /** When its run tagged it, in ISO 8601 UTC: its date in Version History. */
+  readonly date: string;
+  readonly notes: ReleaseNotes;
+}
+
+/**
+ * Publishes the notes of versions that never published, each as its own release dated by its
+ * tag, so Version History keeps their lines. A version that already has notes keeps them and
+ * their date. Answers the versions it published.
+ */
+export const publishEarlierNotes = async ({
+  channel,
+  releases,
+  put,
+  read,
+}: {
+  readonly channel: Channel;
+  readonly releases: readonly EarlierRelease[];
+  readonly put: PublishOptions["put"];
+  readonly read: PublishOptions["read"];
+}): Promise<string[]> => {
+  const published: string[] = [];
+  for (const { version, date, notes } of releases) {
+    if ((await read(notesKey(channel, version))) !== null) continue;
+    if (await publishNotes({ channel, version, notes, put, read, now: () => new Date(date) }))
+      published.push(version);
+  }
+  return published;
+};
+
 /**
  * Makes `apk` what the channel's phones are told of, signed like an update: phones install nothing
  * else. Throws on a bad key or on an APK they wouldn't download.

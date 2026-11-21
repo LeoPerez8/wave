@@ -234,3 +234,30 @@ test("an entry whose song can't be read gives its place to another", async () =>
     closeTestDatabase(db);
   }
 });
+
+test("a disliked song, a file or a playlist's entry, is never drawn", async () => {
+  const db = await openTestDatabase();
+  try {
+    const ids = Array.from({ length: 3 }, (_, i) => addTrack(db, { title: `Song ${i}` }));
+    const store = await loadLibraryStore(root, db);
+    await Effect.runPromise(store.createPlaylist("Liked Songs", [streamed("x"), streamed("y")]));
+    const dislike = (key: string) => ({ key, title: key, artists: ["Someone"], durationMs: null });
+    Effect.runSync(store.setDislikes([dislike(String(ids[1])), dislike("yt:x")]));
+    // As the app holds them: the keys the store kept.
+    const disliked = Effect.map(
+      store.listDislikes,
+      (songs) => new Set(songs.map((song) => song.key)),
+    ).pipe(Effect.orDie);
+    const read = randomMagicQueueRead(() => 0);
+    assert.deepEqual(seedIds(Effect.runSync(read.read(store, allEntries(store), disliked))), [
+      ids[0],
+      ids[2],
+      "y",
+    ]);
+    Effect.runSync(store.removeDislikes([String(ids[1]), "yt:x"]));
+    const again = randomMagicQueueRead(() => 0);
+    assert.equal(Effect.runSync(again.read(store, allEntries(store), disliked)).length, 5);
+  } finally {
+    closeTestDatabase(db);
+  }
+});

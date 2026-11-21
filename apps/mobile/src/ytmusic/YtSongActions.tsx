@@ -1,6 +1,7 @@
 import { beginTiming } from "@/lib/timing";
 import { currentLocalisation } from "@/localisation/localisation";
 import {
+  isDisliked,
   menuLayout,
   streamedArtistLink,
   shownSwipeEntry,
@@ -26,6 +27,8 @@ import { Artwork } from "@/catalog/Artwork";
 import { CELL } from "@/catalog/grid";
 import { followStreamedArtistLink } from "@/library/ArtistChoice";
 import { useYtSongStarred, ytSongStarredNow } from "@/library/favorites";
+import { useDislikedSongs } from "@/library/dislikes";
+import { dislikeFailed, dislikeSongs, ytSongDislikedNow } from "@/library/dislikeSongs";
 import { starSongs } from "@/library/starSongs";
 import { openReleaseDate, releaseDateMenuLabel } from "@/library/ReleaseDateSheet";
 import { streamedReleaseSong } from "@/library/releaseSong";
@@ -72,7 +75,7 @@ export interface YtSongMenuOptions extends MenuOptions {
 /**
  * Opens a YT Music song's long-press menu next to its row: Play Next and Add
  * to Queue as cards, then Add to Playlist, Favorite or Remove from Favorites (a star means
- * downloaded: Favorite queues its download), Remove from Playlist for a playlist's entry, Go to
+ * downloaded: Favorite queues its download), Dislike or Remove dislike, Remove from Playlist for a playlist's entry, Go to
  * Album and Go to Artist (Core's `ytSongActions`), then Download, or Cancel Download /
  * Retry Download while one is on its way or has failed. Go to Artist is there from its first frame; unread names resolve only on its tap.
  */
@@ -124,7 +127,8 @@ type Entry =
       readonly artists: StreamedArtistLink<ArtistRow>;
     }
   | { readonly kind: "download"; readonly action: YtDownloadAction }
-  | { readonly kind: "star"; readonly action: "favorite" | "unfavorite" };
+  | { readonly kind: "star"; readonly action: "favorite" | "unfavorite" }
+  | { readonly kind: "dislike"; readonly action: "dislike" | "removeDislike" };
 
 const songEntries = (
   artists: StreamedArtistLink<ArtistRow> | undefined,
@@ -139,6 +143,9 @@ const songEntries = (
       case "favorite":
       case "unfavorite":
         return { kind: "star", action: entry.action };
+      case "dislike":
+      case "removeDislike":
+        return { kind: "dislike", action: entry.action };
       default:
         return { kind: "queue", action: entry.action };
     }
@@ -186,6 +193,14 @@ const run = (
     // A star means downloaded: the song joins the download queue with it.
     void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
     void starSongs({ tracks: [], ytSongs: [song] }, entry.action === "favorite", find, source);
+    return;
+  }
+  if (entry.kind === "dislike") {
+    // Kept by its video, or as the Library's song it is by now; the toast offers Undo.
+    void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+    void dislikeSongs({ tracks: [], ytSongs: [song] }, entry.action === "dislike", find).catch(
+      dislikeFailed,
+    );
     return;
   }
   switch (entry.action) {
@@ -266,6 +281,8 @@ function YtSongActionsMenu({
   // Starred as its pending favorite, or as the Library song it is by now.
   const track = find(song);
   const favorite = useYtSongStarred(song.videoId, track);
+  // Disliked by its video, or as the Library song it is by now.
+  const disliked = isDisliked(useDislikedSongs(), { id: track?.id, videoId: song.videoId });
   // Its artists open integrated: their Library page, else the YouTube Music artist page.
   // Kept as the menu opened with it, so Go to Artist never appears while it's shown.
   const link = useStreamedArtistLink(song.artists);
@@ -278,6 +295,7 @@ function YtSongActionsMenu({
     ...songEntries(artists, {
       inPlaylist: playlistItem !== undefined,
       favorite,
+      disliked,
       album: song.albumId,
       ytAlbumHere,
       ytMusic,
@@ -393,6 +411,7 @@ const ytSongSwipeEntries = (
       {
         inPlaylist: playlistItem !== undefined,
         favorite: ytSongStarredNow(song.videoId, find(song)),
+        disliked: ytSongDislikedNow(song.videoId, find(song)),
         album: song.albumId,
         ytAlbumHere: ytAlbumPageHere(at),
         ytMusic,

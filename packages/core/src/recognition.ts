@@ -116,6 +116,8 @@ export type RecognizeResultAction =
   | "playNext"
   | "addToShazam"
   | "addToPlaylist"
+  | "favorite"
+  | "unfavorite"
   | "goToAlbum"
   | YtDownloadAction
   | "listenAgain";
@@ -124,11 +126,13 @@ export interface RecognizeResultOptions {
   readonly ytMusic: boolean;
   readonly status?: YtDownloadStatus | null;
   readonly inLibrary?: boolean;
+  /** The song has its star, so the result offers taking it off. */
+  readonly starred?: boolean;
 }
 
 export const recognizeResultActions = (
   result: RecognizeResult,
-  { ytMusic, status = null, inLibrary = false }: RecognizeResultOptions,
+  { ytMusic, status = null, inLibrary = false, starred = false }: RecognizeResultOptions,
 ): readonly RecognizeResultAction[] => {
   const playable = result.kind === "library" || (result.kind === "stream" && ytMusic);
   const play: RecognizeResultAction[] = playable ? ["play", "playNext"] : [];
@@ -138,7 +142,32 @@ export const recognizeResultActions = (
       : result.kind === "stream" && ytMusic
         ? ytDownloadActions(status, { inLibrary })
         : [];
-  return [...play, "addToShazam", "addToPlaylist", ...more, "listenAgain"];
+  // A star needs a song Wave can play: the Library's, or YT Music's while it's on.
+  const star: RecognizeResultAction[] = playable ? [starred ? "unfavorite" : "favorite"] : [];
+  return [...play, "addToShazam", "addToPlaylist", ...star, ...more, "listenAgain"];
+};
+
+/** The star button of the tile's match notification: its label, and the star a tap asks for. */
+export interface RecognizeTileFavorite {
+  readonly label: string;
+  /** A tap stars the song (Favorite), or unstars it (Remove from Favorites). */
+  readonly on: boolean;
+}
+
+/**
+ * The match notification's star button, as the song's star reads now. None for a result
+ * that offers no star (`recognizeResultActions`).
+ */
+export const recognizeTileFavorite = (
+  result: RecognizeResult,
+  options: Pick<RecognizeResultOptions, "ytMusic" | "starred">,
+  catalogue: Catalogue = en,
+): RecognizeTileFavorite | null => {
+  const actions = recognizeResultActions(result, options);
+  const labels = catalogue.itemActions.labels;
+  if (actions.includes("favorite")) return { label: labels.favorite, on: true };
+  if (actions.includes("unfavorite")) return { label: labels.unfavorite, on: false };
+  return null;
 };
 
 /** Actions for a Genius Lyrics result's long-press menu. */
@@ -169,6 +198,8 @@ export const geniusLyricsResultActionLabels = (
     play: text.play,
     playNext: text.playNext,
     addToPlaylist: text.addToPlaylist,
+    favorite: catalogue.itemActions.labels.favorite,
+    unfavorite: catalogue.itemActions.labels.unfavorite,
     goToAlbum: text.goToAlbum,
     download: text.download,
     cancelDownload: text.cancelDownload,

@@ -14,7 +14,6 @@ import { GestureDetector } from "react-native-gesture-handler";
 import Animated from "react-native-reanimated";
 
 import { CAPTION_TOP, titleLineHeight } from "@/catalog/cards/CardParts";
-import { SLEEVE_ROOM } from "@/catalog/cards/PlaylistCard";
 import { CELL, grid } from "@/catalog/grid";
 import { useChromeInset } from "@/chrome/chrome";
 import { useListScrollable } from "@/motion/heldTouch";
@@ -96,8 +95,8 @@ function ArrangeableCell({
             : {
                 position: "absolute",
                 right: 0,
-                // Centred on the name's line, which sits under the sleeves and the cover.
-                top: (cells.tile ?? 0) + SLEEVE_ROOM + CAPTION_TOP + (titleHeight - gripHeight) / 2,
+                // Centred on the name's line, which sits under the cover (plain here, no sleeves).
+                top: (cells.tile ?? 0) + CAPTION_TOP + (titleHeight - gripHeight) / 2,
                 width: GRIP_TARGET,
                 height: gripHeight,
               }

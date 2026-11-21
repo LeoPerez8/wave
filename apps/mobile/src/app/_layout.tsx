@@ -193,6 +193,8 @@ export default function RootLayout() {
                     name="recap/[id]"
                     options={{ animation: "fade_from_bottom", gestureEnabled: false }}
                   />
+                  {/* DJ covers them too: its Done bar takes the mini player's place. */}
+                  <Stack.Screen name="dj" options={{ animation: "fade_from_bottom" }} />
                 </Stack.Protected>
                 <Stack.Protected guard={!granted}>
                   <Stack.Screen name="access" options={{ animation: "fade" }} />

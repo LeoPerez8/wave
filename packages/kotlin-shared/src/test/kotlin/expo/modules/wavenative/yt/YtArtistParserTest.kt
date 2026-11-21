@@ -203,6 +203,22 @@ class YtArtistParserTest {
   }
 
   @Test
+  fun readsAboutDescriptionAndCountsFromTheRecordedArtistPage() {
+    val page = YtArtistParser.page(body("artist-page.json"))!!
+    assertTrue(page.description!!.startsWith("Daft Punk were a French electronic music duo"))
+    assertEquals("7.19M", page.subscribers)
+    assertEquals("6,030,217,324", page.views)
+  }
+
+  @Test
+  fun missingAboutFieldsStayMissing() {
+    val page = YtArtistParser.page(pageWithHeader(""""description":{"runs":[{"text":" "}]}"""))!!
+    assertNull(page.description)
+    assertNull(page.subscribers)
+    assertNull(page.views)
+  }
+
+  @Test
   fun aPageWithoutSimilarArtistsHasNone() {
     assertTrue(YtArtistParser.page(pageWithSections())!!.similar.isEmpty())
     val album = """{"musicTwoRowItemRenderer":{"title":{"runs":[{"text":"Not an artist"}]},""" +

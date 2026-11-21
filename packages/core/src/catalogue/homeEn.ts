@@ -2,9 +2,13 @@ import type { HomeSectionId } from "../homeSections.ts";
 
 /** Home: its title's button, section titles, empty states and edit mode. */
 export const homeEn = {
-  /** Each section's title, in sentence case as Home heads it (followed artists' have their own). */
+  /** Home's large title, after the two waves: Wave's name, the same in every language. */
+  title: "Wave",
+  /** Each section's title, in sentence case as Home heads it (the followed artists' sections and Community playlists have their own). */
   sections: {
     discover: "Discover",
+    "in-your-orbit": "In your orbit",
+    "from-your-library": "From your library",
     "recently-added": "Recently added",
     "recently-played": "Recently played",
     "most-played": "Most played",
@@ -12,7 +16,10 @@ export const homeEn = {
     "most-played-artists": "Most played artists",
     favorites: "Favorites",
     stats: "Stats",
-  } satisfies Record<Exclude<HomeSectionId, "new-releases" | "upcoming-shows">, string>,
+  } satisfies Record<
+    Exclude<HomeSectionId, "new-releases" | "upcoming-shows" | "community-playlists">,
+    string
+  >,
   settings: "Settings",
   seeAll: "See all",
   emptyTitle: "Nothing here yet",
@@ -22,6 +29,7 @@ export const homeEn = {
   loadingStats: "Loading Stats",
   loadingArtists: "Loading artists",
   loadingAlbums: "Loading albums",
+  loadingPlaylists: "Loading playlists",
   edit: "Edit Home",
   notOnHome: "Not on Home",
 };

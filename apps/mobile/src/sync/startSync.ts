@@ -1,6 +1,7 @@
 import type { WaveSession } from "@wave/core";
 
 import { libraryEdited, libraryVersion } from "@/library/LibraryScan";
+import { onDislikesSaved, reloadDislikes } from "@/library/dislikes";
 import { onFavoritesSaved, reloadFavorites } from "@/library/favorites";
 import { reloadFollowSuggestionDismissals } from "@/library/followSuggestionDismissals";
 import { reloadFollows } from "@/library/follows";
@@ -38,7 +39,7 @@ const recorded = (what: PlaysRecorded): void => {
 
 /**
  * Shows what the Wave account changed: lists over playlists, stars, plays,
- * follows and dismissed follow suggestions re-read, and every list once
+ * follows, dismissed follow suggestions and dislikes re-read, and every list once
  * missing songs came in or left. Missing songs with a star download
  * (`downloadSyncedStars`).
  */
@@ -49,13 +50,14 @@ const showPulled = (changes: SyncedChanges): void => {
   if (changes.plays) playHistoryChanged();
   if (changes.follows) reloadFollows().catch(() => {});
   if (changes.dismissedSuggestions) reloadFollowSuggestionDismissals().catch(() => {});
+  if (changes.dislikes) void reloadDislikes();
   if (changes.favorites || changes.library) void downloadSyncedStars();
 };
 
 /**
  * Starts syncing the Library with the Wave account while signed in
  * (`WaveSync`), and tells it of the changes made here: playlist edits,
- * stars, follows, plays (Wave's own in batches, imported ones as edits) and the song
+ * stars, dislikes, follows, plays (Wave's own in batches, imported ones as edits) and the song
  * list (scans, downloads, deletions). Plays pulled from the account aren't
  * changes made here, so they start no sync. Synced preferences tell it as they're stamped
  * (`startServices`). Missing songs with a star download, those starred
@@ -75,6 +77,7 @@ export const startSync = (): void => {
   void downloadSyncedStars();
   onPlaylistsEdited(changed(false));
   onFavoritesSaved(changed(false));
+  onDislikesSaved(changed(false));
   followsSaved.subscribe(changed(false));
   onPlaysRecorded(recorded);
   libraryVersion.subscribe(changed(true));

@@ -6,7 +6,7 @@ import {
   readKeptVersionHistory,
   readVersionHistory,
   versionHistoryEntries,
-  versionHistorySummary,
+  versionHistoryRowLine,
   versionHistoryUrl,
   type DatedRelease,
 } from "./index.ts";
@@ -217,29 +217,37 @@ describe("versionHistoryEntries", () => {
   });
 });
 
-describe("versionHistorySummary", () => {
-  const releases = [
-    dated("0.49.0-ti", "2026-11-05T12:00:00.000Z"),
-    dated("0.48.0-ti", "2026-11-04T12:00:00.000Z"),
-  ];
-
-  it("is the running version's date, in Wave's language", () => {
-    const asked = { releases, runningVersion: "0.48.0-ti", channel: "ti" };
-    assert.equal(versionHistorySummary({ ...asked, language: "en" }), "November 4, 2026");
-    assert.equal(versionHistorySummary({ ...asked, language: "pt-BR" }), "4 de novembro de 2026");
+describe("versionHistoryRowLine", () => {
+  it("is the running version, in Wave's language", () => {
+    const asked = { runningVersion: "0.77.1-ti", look: "idle" } as const;
+    assert.equal(versionHistoryRowLine({ ...asked, language: "en" }), "Version 0.77.1-ti");
+    assert.equal(versionHistoryRowLine({ ...asked, language: "pt-BR" }), "Versão 0.77.1-ti");
   });
 
-  it("is nothing when the running version has no notes or no date, or the history isn't read", () => {
-    const asked = { channel: "ti", language: "en" } as const;
-    assert.equal(versionHistorySummary({ ...asked, releases, runningVersion: "0.47.0-ti" }), null);
-    assert.equal(versionHistorySummary({ ...asked, releases, runningVersion: null }), null);
-    const undated = [dated("0.48.0-ti", null)];
+  it("stays the version while a check runs or an update is ready", () => {
+    for (const look of ["checking", "installNow", "installing"] as const) {
+      assert.equal(
+        versionHistoryRowLine({ runningVersion: "0.77.1-ti", look, language: "en" }),
+        "Version 0.77.1-ti",
+      );
+    }
+  });
+
+  it("says an APK is downloading, with its percentage, in place of the version", () => {
+    const look = { downloading: 42 };
     assert.equal(
-      versionHistorySummary({ ...asked, releases: undated, runningVersion: "0.48.0-ti" }),
-      null,
+      versionHistoryRowLine({ runningVersion: "0.77.1-ti", look, language: "en" }),
+      "Downloading the update, 42%",
     );
     assert.equal(
-      versionHistorySummary({ ...asked, releases: null, runningVersion: "0.48.0-ti" }),
+      versionHistoryRowLine({ runningVersion: "0.77.1-ti", look, language: "pt-BR" }),
+      "Baixando a atualização, 42%",
+    );
+  });
+
+  it("is nothing in a build that doesn't know its version", () => {
+    assert.equal(
+      versionHistoryRowLine({ runningVersion: null, look: "idle", language: "en" }),
       null,
     );
   });

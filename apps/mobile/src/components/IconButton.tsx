@@ -27,7 +27,7 @@ export type IconButtonProps = Omit<ComponentProps<typeof Press>, "children"> &
 /**
  * A shared icon target, with optional caption and the usual press/menu
  * feedback. Disabled, it ignores taps but keeps a long press it has (a Now
- * Playing slot's Change Button).
+ * Playing slot's, which starts edit mode).
  */
 export function IconButton({
   icon: Icon,
