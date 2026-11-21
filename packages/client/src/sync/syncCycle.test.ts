@@ -706,6 +706,61 @@ describe("syncCycle", () => {
     assert.deepEqual(dislikedTitles(a.db).toSorted(), ["Exit Music", "Lucky"]);
   });
 
+  test("pulling the account from the start again brings the dislikes an older Wave read past, and changes nothing else", async () => {
+    const service = testSyncService();
+    const a = await phone(service);
+    const b = await phone(service, OK_COMPUTER.toReversed());
+    createPlaylist(a.db, "Drive", [{ source: "library", trackId: a.track("Airbag") }], a.now());
+    setFavorites(a.db, [a.track("Airbag"), a.track("Paranoid Android")], true, a.now());
+    setFavorites(a.db, [a.track("Paranoid Android")], false, a.now());
+    endPlay(
+      a.db,
+      recordPlay(a.db, played(a.track("Airbag"), 5_000)),
+      played(a.track("Airbag"), 5_000),
+    );
+    saveFollow(a.db, { name: "Massive Attack", deezerId: 2_163 }, "releases", a.now());
+    a.setPreference("settings.theme", '{"primary":"rose"}');
+    setDislikes(
+      a.db,
+      [disliked(a.track("Lucky"), "Lucky"), disliked("yt:4D7u5KF7SP8", "Teardrop")],
+      a.now(),
+    );
+    await a.sync();
+    await b.sync();
+    // As a Wave from before dislikes leaves b: the cursor past the dislikes, none of them kept.
+    b.db.delete(schema.dislikes).run();
+    assert.equal((await b.sync()).pulled.dislikes, false);
+    const held = () => ({
+      playlists: playlistTitles(b.db),
+      favorites: favoriteTitles(b.db),
+      plays: playCounts(b.db),
+      follows: countFollows(b.db),
+      preferences: [...b.stored],
+    });
+    const before = held();
+
+    // What migration 0064 does as b updates.
+    b.db.update(schema.syncState).set({ cursor: null }).run();
+    const again = await b.sync();
+
+    assert.deepEqual(dislikedTitles(b.db).toSorted(), ["Lucky", "Teardrop"]);
+    assert.deepEqual(again.pulled, {
+      songs: false,
+      library: false,
+      playlists: false,
+      favorites: false,
+      plays: false,
+      follows: false,
+      dismissedSuggestions: false,
+      dislikes: true,
+      preferences: [],
+    });
+    assert.equal(again.pushed, 0);
+    assert.deepEqual(held(), before);
+    // The account heard nothing new either: a has nothing to pull.
+    assert.equal((await a.sync()).pulled.dislikes, false);
+  });
+
   test("the synced Shazam id fills the same playlist on a second phone with different local ids", async () => {
     const service = testSyncService();
     const a = await phone(service);

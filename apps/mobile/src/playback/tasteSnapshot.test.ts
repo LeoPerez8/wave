@@ -246,6 +246,10 @@ test("the taste revision moves only for what the taste reads", async () => {
     const track = fixture.songIds[5]!;
     const startedAt = fixture.now - 60_000;
     const playId = Effect.runSync(store.recordPlay(ongoing(track, startedAt, 0)));
+    // A dislike waiting to go up, for sync to mark as sent.
+    Effect.runSync(
+      store.setDislikes([{ key: "yt:waiting", title: "t", artists: ["a"], durationMs: null }]),
+    );
     const revision = () => Effect.runSync(store.tasteRevision);
     const unrelated: Record<string, () => void> = {
       "position save": () => Effect.runSync(store.savePosition(1234)),
@@ -260,6 +264,7 @@ test("the taste revision moves only for what the taste reads", async () => {
       "sync's pushed flags": () => {
         fixture.db.run(sql`UPDATE play_events SET pushed = 1`);
         fixture.db.run(sql`UPDATE favorites SET pushed = 1`);
+        fixture.db.run(sql`UPDATE dislikes SET pushed = 1`);
       },
       "an artist image": () =>
         fixture.db.run(

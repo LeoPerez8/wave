@@ -94,7 +94,7 @@ const SAYS_NOTHING = (row: "OLD" | "NEW") => `${row}.end_reason NOT IN ('complet
  * derivation that walks pages on free turns isn't restarted by music playing.
  */
 const TASTE_WRITES: readonly string[] = [
-  ...["tracks", "track_artists", "genres", "dislikes"].flatMap((table) =>
+  ...["tracks", "track_artists", "genres"].flatMap((table) =>
     ["INSERT", "UPDATE", "DELETE"].map((write) => `${write} ON ${table}`),
   ),
   "INSERT ON artists",
@@ -106,6 +106,9 @@ const TASTE_WRITES: readonly string[] = [
   "INSERT ON favorites",
   "DELETE ON favorites",
   "UPDATE OF track_id, changed_at, deleted ON favorites",
+  "INSERT ON dislikes",
+  "DELETE ON dislikes",
+  "UPDATE OF song_key, artists, disliked_at, deleted ON dislikes",
   "INSERT ON play_events",
   "DELETE ON play_events",
   // Progress of a play that says nothing either side reads the same profile, whichever

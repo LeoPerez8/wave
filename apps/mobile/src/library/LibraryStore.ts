@@ -990,11 +990,14 @@ export class LibraryStore extends Context.Service<
     readonly tasteRevision: Effect.Effect<string, LibraryStoreError>;
     /** The ids of every starred track. */
     readonly favoriteTrackIds: Effect.Effect<readonly number[], LibraryStoreError>;
-    /** Stars (or unstars) the tracks; those starred already keep when they were starred. */
+    /**
+     * Stars (or unstars) the tracks; those starred already keep when they were starred.
+     * A star removes its song's dislike: the keys of the dislikes removed come back.
+     */
     readonly setFavorites: (
       trackIds: readonly number[],
       on: boolean,
-    ) => Effect.Effect<void, LibraryStoreError>;
+    ) => Effect.Effect<readonly string[], LibraryStoreError>;
     /** Starred tracks, most recently starred first, for Library › Favorites. */
     readonly listFavorites: Effect.Effect<readonly FavoriteRow[], LibraryStoreError>;
     /**
