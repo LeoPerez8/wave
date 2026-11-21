@@ -13,6 +13,14 @@ export const desktopEn = {
   },
   playbackText: {
     thisPhone: "This computer",
+    // Recognize listens through the computer's microphone or to what the computer plays.
+    holdYourPhoneNearTheMusic: "Bring the music near the microphone.",
+    listeningToAudioFromThisPhone: "Listening to audio from this computer.",
+    allowWaveToCaptureAudioInItsAndroidSettingsToRecognizeSongs:
+      "Allow apps to use the microphone in your system's privacy settings, then try again.",
+    thisAppBlocksAudioCapture: "No sound from this computer",
+    tryTheMicrophoneToRecognizeMusicAroundYou:
+      "Play the song on this computer, or try the microphone to recognize music around you.",
   },
   shows: {
     phoneRegion: "This computer's region",

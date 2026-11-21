@@ -68,6 +68,20 @@ class SentAudio : RecognizeAudio {
   }
 }
 
+/** Shazam's address, which [shazamAt] replaces. */
+const val SHAZAM_ORIGIN = "https://amp.shazam.com"
+
+/**
+ * [http] with Shazam's requests sent to [origin] instead: a development build's fake Shazam
+ * (`--shazam-url`, which main passes only when Wave isn't packaged).
+ */
+fun shazamAt(origin: String, http: ShazamHttp): ShazamHttp = ShazamHttp { request ->
+  http.post(
+    if (request.url.startsWith(SHAZAM_ORIGIN)) request.copy(url = origin.trimEnd('/') + request.url.removePrefix(SHAZAM_ORIGIN))
+    else request,
+  )
+}
+
 /**
  * Recognize on the desktop: the phone's session, signature and Shazam client
  * (`expo.modules.wavenative.recognize`) over audio the host captures and sends.

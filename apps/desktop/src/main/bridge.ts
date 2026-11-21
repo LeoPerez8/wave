@@ -91,6 +91,8 @@ import { homeFollowHandlers } from "./follows/homeFollowHandlers.ts";
 import { FollowedArtists } from "./follows/followedArtists.ts";
 import { followsHandlers } from "./follows/followsHandlers.ts";
 import { streamedHandlers } from "./yt/streamedHandlers.ts";
+import { recognizeHandlers } from "./recognize/recognizeHandlers.ts";
+import { Recognize } from "./recognize/recognizeLayer.ts";
 import { runStreamedAction } from "./yt/streamedSong.ts";
 import {
   clearRecentSearches,
@@ -186,7 +188,8 @@ export type BridgeServices =
   | FollowedArtists
   | YtAccount
   | SpotifyAccount
-  | SpotifyImport;
+  | SpotifyImport
+  | Recognize;
 
 const refuse = (call: BridgeCall, why: string) => Effect.fail(new Error(`Refused ${call}: ${why}`));
 
@@ -836,6 +839,7 @@ const createHandlers = (
     ...homeFollowHandlers,
     ...followsHandlers,
     ...miniPlayerHandlers(miniPlayer),
+    ...recognizeHandlers,
     "search.library": ([query]) =>
       searchQuery(query)
         ? Effect.gen(function* () {

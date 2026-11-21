@@ -44,6 +44,7 @@ import { preference } from "./preferences.ts";
 import { ytMusicLayer } from "./yt/ytMusic.ts";
 import { desktopLinksLayer } from "./links/layer.ts";
 import { geniusLyricsSearchLayer } from "./lyrics/geniusLyricsSearchLayer.ts";
+import { recognizeLayer } from "./recognize/recognizeLayer.ts";
 import { ytFeaturesLayer } from "./yt/ytServices.ts";
 import { ytAccountLayer } from "./yt/ytAccountLayer.ts";
 import { spotifyAccountLayer } from "./spotify/spotifyAccountLayer.ts";
@@ -623,6 +624,17 @@ const connect = (
             account: account.service,
             online: () => true,
             openExternal: async () => {},
+          }),
+          recognizeLayer({
+            online: () => true,
+            microphone: () => "granted",
+            systemAudio: "loopback",
+            catalogue: () => catalogueOf("en", "desktop"),
+            language: () => "en",
+            events: () => () => {},
+            openPrivacySettings: null,
+            fetchCover: async () => null,
+            log: () => {},
           }),
           ytAccountLayer({
             sessions: ytSessions,

@@ -47,6 +47,8 @@ const paths: Record<string, string> = {
   showMain: "M14 4h6v6M20 4l-7 7M10 20H4v-6M4 20l7-7",
   up: "m5 15 7-7 7 7",
   down: "m5 9 7 7 7-7",
+  /** Search's Recognize button, as the phone's. */
+  microphone: "M12 3a3 3 0 0 0-3 3v6a3 3 0 0 0 6 0V6a3 3 0 0 0-3-3M5 11a7 7 0 0 0 14 0M12 18v3M8 21h8",
 };
 export function Icon({ name, size = 20 }: { readonly name: string; readonly size?: number }) {
   return (

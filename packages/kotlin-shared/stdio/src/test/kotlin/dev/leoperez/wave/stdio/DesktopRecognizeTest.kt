@@ -111,4 +111,20 @@ class DesktopRecognizeTest {
     host.write("""{"id":1,"method":"recognize.ask","params":{"session":9,"last":false,"windowMs":12000}}""")
     assertEquals("ERR_RECOGNIZE_ENDED", host.answerTo(1)["error"]!!.jsonObject["code"]!!.jsonPrimitive.content)
   }
+
+  @Test
+  fun aDevelopmentBuildSendsShazamsRequestsToTheOriginItWasGiven() {
+    val sent = mutableListOf<String>()
+    val http = shazamAt("http://127.0.0.1:4100/") { request ->
+      sent += request.url
+      ShazamResponse(200, "{}")
+    }
+    http.post(ShazamRequest("$SHAZAM_ORIGIN/discovery/v5/en-US/US/iphone/-/tag/a/b?sync=true", emptyMap(), "{}"))
+    http.post(ShazamRequest("https://elsewhere.example/x", emptyMap(), "{}"))
+
+    assertEquals(
+      listOf("http://127.0.0.1:4100/discovery/v5/en-US/US/iphone/-/tag/a/b?sync=true", "https://elsewhere.example/x"),
+      sent,
+    )
+  }
 }
