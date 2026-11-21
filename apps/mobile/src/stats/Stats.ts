@@ -2,10 +2,8 @@ import type { PlayedAlbum, PlayedArtist } from "@wave/client/db/playedEntities";
 import {
   type ArtistStats as ArtistStatsLines,
   type Catalogue,
-  type GenreFamily,
   type RecapGenre,
   type RecapPeriod,
-  type RecapSlide,
   type StatsPeriod,
 } from "@wave/core";
 import * as Context from "effect/Context";
@@ -15,11 +13,13 @@ import { lazyService } from "@/lib/lazyService";
 import type { RecapHistoryVersion } from "./recapAvailability";
 
 import type { LibraryStoreError } from "@/library/LibraryStore";
+import type { LoadedRecap } from "@wave/client/db/recapStories";
 import type { Ranked, StatsSong } from "@wave/client/db/statsQueries";
 
 import { make } from "./statsLive";
 
 export type { Ranked, StatsSong } from "@wave/client/db/statsQueries";
+export type { LoadedRecap, LoadedRecapSlide } from "@wave/client/db/recapStories";
 export { topAlbumsAndArtists } from "@wave/client/db/statsQueries";
 
 /** An artist page's stats block, its most played songs loaded. */
@@ -28,35 +28,6 @@ export type ArtistStats =
   | (Omit<Extract<ArtistStatsLines, { played: true }>, "mostPlayed"> & {
       readonly mostPlayed: readonly Ranked<StatsSong>[];
     });
-
-/** A Recap slide with the rows it shows loaded. */
-export type LoadedRecapSlide =
-  | Exclude<RecapSlide, { kind: "topSongs" | "topArtists" | "topAlbum" | "discovered" | "summary" }>
-  | { readonly kind: "topSongs"; readonly songs: readonly Ranked<StatsSong>[] }
-  | { readonly kind: "topArtists"; readonly artists: readonly Ranked<PlayedArtist>[] }
-  | { readonly kind: "topAlbum"; readonly album: Ranked<PlayedAlbum> }
-  | {
-      readonly kind: "discovered";
-      /** How many artists the period discovered. */
-      readonly count: number;
-      /** The most played of them, the top one first. */
-      readonly artists: readonly Ranked<PlayedArtist>[];
-    }
-  | {
-      /** The summary card: the top songs (Library and streamed) and artists. */
-      readonly kind: "summary";
-      readonly minutes: number;
-      readonly songs: readonly Ranked<StatsSong>[];
-      readonly artists: readonly Ranked<PlayedArtist>[];
-      readonly genre: GenreFamily | null;
-    };
-
-/** A Recap as its stories show it: Core's slides, their songs loaded. */
-export interface LoadedRecap {
-  readonly period: RecapPeriod;
-  readonly title: string;
-  readonly slides: readonly LoadedRecapSlide[];
-}
 
 export class Stats extends Context.Service<
   Stats,

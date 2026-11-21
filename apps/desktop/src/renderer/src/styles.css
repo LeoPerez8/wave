@@ -763,6 +763,15 @@ h2 {
   padding: 7px 10px;
   color: var(--color-accent);
 }
+.bring-your-music-sources {
+  margin-top: 12px;
+  list-style: none;
+}
+.bring-your-music-sources li {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
 .player-bar {
   grid-column: 1/-1;
   display: grid;
@@ -1064,8 +1073,10 @@ button.destructive {
   background: var(--color-surface);
   box-shadow: 0 8px 28px #0003;
 }
-.menu [role="menuitem"] {
+.menu [role="menuitem"],
+.menu [role="menuitemradio"] {
   display: flex;
+  align-items: center;
   justify-content: space-between;
   gap: 16px;
   padding: 6px 10px;
@@ -1075,7 +1086,12 @@ button.destructive {
 .menu [role="menuitem"].destructive {
   color: var(--color-destructive);
 }
-.menu [role="menuitem"]:focus {
+.menu-line {
+  font-size: 12px;
+  opacity: 0.7;
+}
+.menu [role="menuitem"]:focus,
+.menu [role="menuitemradio"]:focus {
   outline: none;
   color: var(--color-on-accent);
   background: var(--color-accent);

@@ -2,6 +2,10 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 import {
   CUSTOM_SONG_SORT,
+  nextHeaderSort,
+  PLAYLIST_SONG_SORTS,
+  playlistReorders,
+  playlistSongSortLabelFor,
   PLAYLIST_SONG_SORT_BUCKETS,
   readPlaylistSongSort,
   readPlaylistSongSorts,
@@ -131,4 +135,45 @@ test("equal release dates follow album order when disc or track tags are absent"
       sortPlaylistSongs(songs, { key: "releaseDate", descending }).map((song) => song.id),
       [3, 2, 0, 1],
     );
+});
+
+test("a playlist's headers start a sort, reverse it, and go back to Custom", () => {
+  assert.deepEqual(PLAYLIST_SONG_SORTS[0], CUSTOM_SONG_SORT);
+  assert.deepEqual(nextHeaderSort(PLAYLIST_SONG_SORTS, CUSTOM_SONG_SORT, "title"), {
+    key: "title",
+    descending: false,
+  });
+  assert.deepEqual(
+    nextHeaderSort(PLAYLIST_SONG_SORTS, { key: "title", descending: false }, "title"),
+    { key: "title", descending: true },
+  );
+  assert.deepEqual(nextHeaderSort(PLAYLIST_SONG_SORTS, CUSTOM_SONG_SORT, "added"), {
+    key: "added",
+    descending: true,
+  });
+  assert.deepEqual(nextHeaderSort(PLAYLIST_SONG_SORTS, CUSTOM_SONG_SORT, "releaseDate"), {
+    key: "releaseDate",
+    descending: false,
+  });
+  assert.deepEqual(
+    nextHeaderSort(PLAYLIST_SONG_SORTS, { key: "album", descending: true }, "custom"),
+    CUSTOM_SONG_SORT,
+  );
+  assert.equal(nextHeaderSort(PLAYLIST_SONG_SORTS, CUSTOM_SONG_SORT, "custom"), undefined);
+});
+
+test("a playlist's sort reads as the phone's control names it", () => {
+  const english = playlistSongSortLabelFor("en");
+  assert.equal(english(CUSTOM_SONG_SORT), "Custom");
+  assert.equal(english({ key: "artist", descending: true }), "Artist, Z to A");
+  assert.equal(english({ key: "releaseDate", descending: true }), "Release date · Newest first");
+  assert.equal(
+    playlistSongSortLabelFor("pt-BR")({ key: "releaseDate", descending: false }),
+    "Data de lançamento · Mais antigas primeiro",
+  );
+});
+
+test("only Custom order can be rearranged", () => {
+  assert.equal(playlistReorders(CUSTOM_SONG_SORT), true);
+  assert.equal(playlistReorders({ key: "title", descending: false }), false);
 });

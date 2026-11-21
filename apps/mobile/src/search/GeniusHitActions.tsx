@@ -16,14 +16,14 @@ import { CardHeading } from "@/overlay/CardHeading";
 import { MenuChoices, type MenuChoice } from "@/overlay/MenuChoices";
 import { followUp, openOverlay } from "@/overlay/overlay";
 import { playNext, playSongs, playYtNext, playYtSongs } from "@/playback/actions";
-import type { RecognitionLookup } from "@/recognize/resolveRecognition";
+import type { RecognitionLookup } from "@wave/client/resolveRecognition";
 import { resolveRecognitionSave } from "@/recognize/resolveRecognitionSave";
 import { useYtMusicEnabled, ytMusicEnabled } from "@/settings/ytMusic";
 import { searchRecordingInTurn } from "@/ytmusic/askYtMusic";
 import { useLoadedInLibrary } from "@/ytmusic/libraryFinder";
 import { cancelYtDownload, downloadYtSong, useYtDownloadStatus } from "@/ytmusic/YtDownloads";
 
-import { geniusHitMenu, resolveGeniusHit, type GeniusHitEffects } from "./geniusHitMenu";
+import { geniusHitMenu, resolveGeniusHit, type GeniusHitEffects } from "@wave/client/geniusHitMenu";
 
 type Result = RecognizeResult<SongRow, NativeYtSong>;
 

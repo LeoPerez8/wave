@@ -19,7 +19,7 @@ import { Account } from "./account/accountLayer.ts";
 import type { Page } from "../shared/bridge.ts";
 import { BROWSE_KINDS, MAX_ROW_IDS_PAGE, type BrowseScope } from "../shared/browse.ts";
 import { browseLetter, browseRowIds } from "./library/browse.ts";
-import { toggleBrowseSort } from "./library/browseSort.ts";
+import { toggleBrowseSort, togglePlaylistSort } from "./library/browseSort.ts";
 import { readArtwork } from "./library/artwork.ts";
 import { appearance, preference, savePreference } from "./preferences.ts";
 import {
@@ -69,6 +69,7 @@ import type { MissingSongsDownloadAction } from "@wave/core";
 import { createYtFeatureHandlers, playSearchSong } from "./yt/ytBridge.ts";
 import type { YtFeatures } from "./yt/ytServices.ts";
 import { Lyrics } from "./lyrics/lyrics.ts";
+import { GeniusLyricsSearch } from "./lyrics/geniusLyricsSearchLayer.ts";
 import { DesktopLinks } from "./links/layer.ts";
 import { linkHandlers } from "./links/handlers.ts";
 import { artistPageHandlers } from "./artistPageHandlers.ts";
@@ -88,6 +89,7 @@ import {
   type MiniPlayerCalls,
 } from "./system/miniPlayerHandlers.ts";
 import { statsHandlers } from "./statsHandlers.ts";
+import { CardImages, cardImageHandlers } from "./cards/cardImages.ts";
 import { historyHandlers } from "./historyHandlers.ts";
 import { lyricsAndTagsHandlers } from "./lyricsAndTagsHandlers.ts";
 import { HomeFollow } from "./follows/homeFollow.ts";
@@ -183,12 +185,14 @@ export type BridgeServices =
   | YtFeatures
   | Account
   | Lyrics
+  | GeniusLyricsSearch
   | DesktopPlaylists
   | DesktopLinks
   | HomeFollow
   | FollowedArtists
   | YtAccount
   | SpotifyAccount
+  | CardImages
   | SpotifyImport;
 
 const refuse = (call: BridgeCall, why: string) => Effect.fail(new Error(`Refused ${call}: ${why}`));
@@ -473,6 +477,20 @@ const createHandlers = (
       geniusRequestId(requestId)
         ? Effect.map(Account, (account) => account.genius.cancel(requestId))
         : refuse("lyrics.cancelGenius", "invalid request id"),
+    "lyrics.searchOnline": ([query]) =>
+      searchQuery(query)
+        ? Effect.gen(function* () {
+            const online = yield* GeniusLyricsSearch;
+            return yield* Effect.tryPromise({ try: () => online.search(query), catch: (e) => e });
+          })
+        : refuse("lyrics.searchOnline", "invalid query"),
+    "lyrics.openOnlineHit": ([id]) =>
+      typeof id === "number" && Number.isSafeInteger(id) && id > 0
+        ? Effect.gen(function* () {
+            const online = yield* GeniusLyricsSearch;
+            return yield* Effect.tryPromise({ try: () => online.open(id), catch: (e) => e });
+          })
+        : refuse("lyrics.openOnlineHit", "invalid hit"),
     "lyrics.translateOn": () => Effect.map(Lyrics, ({ translation }) => translation.on()),
     "lyrics.setTranslateOn": ([on]) =>
       typeof on === "boolean"
@@ -524,7 +542,12 @@ const createHandlers = (
     "settings.playback": () => playbackCall((p) => p.settings()),
     "settings.setPlayback": ([change]) =>
       validPlaybackSettings(change)
-        ? playbackCall((p) => p.setSettings(change))
+        ? Effect.gen(function* () {
+            const after = yield* playbackCall((p) => p.setSettings(change));
+            // The change goes up to the account without waiting for the timed sync.
+            (yield* Account).settingsEdited();
+            return after;
+          })
         : refuse("settings.setPlayback", "invalid playback settings"),
     "settings.outputs": () => playbackCall((p) => p.outputs()),
     "settings.setOutput": ([id]) =>
@@ -618,6 +641,7 @@ const createHandlers = (
     "account.signOutEverywhere": () => accountCall((a) => a.signOutEverywhere()),
     "account.deleteAccount": () => accountCall((a) => a.deleteAccount()),
     "account.answerInvitation": () => accountCall((a) => a.answerInvitation()),
+    "account.answerBringYourMusic": () => accountCall((a) => a.answerBringYourMusic()),
     "ytAccount.view": () => ytAccountCall((a) => a.view()),
     "ytAccount.signIn": () => ytAccountCall((a) => a.signIn()),
     "ytAccount.cancelSignIn": () => ytAccountCall((a) => a.cancelSignIn()),
@@ -662,12 +686,24 @@ const createHandlers = (
             return browseLetter(yield* Database, scope, letter);
           })
         : refuse("library.letter", "invalid letter or scope"),
-    "library.sortBy": ([kind, key]) =>
-      typeof kind === "string" &&
+    "library.sortBy": ([kind, key, playlistId]) =>
+      kind === "playlist" &&
       typeof key === "string" &&
-      libraryTableSortsFor(kind).some((sort) => sort.key === key)
-        ? Effect.map(Database, (db) => toggleBrowseSort(db, kind, key))
-        : refuse("library.sortBy", "sort is not offered for this list"),
+      typeof playlistId === "number" &&
+      Number.isSafeInteger(playlistId) &&
+      playlistId > 0
+        ? Effect.gen(function* () {
+            // A playlist's sort is the account's: the phone shows the same one.
+            if (!togglePlaylistSort(yield* Database, playlistId, key))
+              return yield* refuse("library.sortBy", "sort is not offered for this playlist");
+            (yield* Account).settingsEdited();
+          })
+        : typeof kind === "string" &&
+            typeof key === "string" &&
+            playlistId === undefined &&
+            libraryTableSortsFor(kind).some((sort) => sort.key === key)
+          ? Effect.map(Database, (db) => toggleBrowseSort(db, kind, key))
+          : refuse("library.sortBy", "sort is not offered for this list"),
     "library.counts": () =>
       Effect.gen(function* () {
         return libraryCounts(yield* Database);
@@ -874,6 +910,7 @@ const createHandlers = (
     ...playlistHandlers(validTarget),
     ...homeHandlers,
     ...statsHandlers,
+    ...cardImageHandlers,
     ...historyHandlers,
     ...lyricsAndTagsHandlers,
     ...homeFollowHandlers,

@@ -236,6 +236,20 @@ to Playlist and Remove from Library. A target is `{scope, ids}` or `{scope, all:
 until Settings includes it again; the file stays on disk. The renderer's keys go through Core's
 `desktopKey`, with focus read by `keys.ts`.
 
+## Sorting a page's songs
+
+`e2e/pageSort.spec.ts` sorts a playlist's, an artist's and a genre's songs from their headers,
+checks that Move Up and Move Down show only in a playlist's Custom order, that Play queues the
+order shown, and that each choice survives a restart. Screenshots are
+`page-sort-<page>-<platform>.png`.
+
+`library.sortBy(kind, key, playlistId?)` takes a playlist's id for its own sort, which is kept
+in the synced `settings.playlistSongs.<n>` preferences as the phone keeps it; artists and genres
+share `tableSort.artist` and `tableSort.genre` on this computer. `BrowsePage.sort` is the order
+shown, and a row's `order` is its place in the playlist's own order or its Popular rank. A
+sorted playlist and an artist's Popular are ordered by Core in main, which reads the whole list
+for each page. The Release date sort reads the file's date tag, else its Year.
+
 ## Listening History
 
 `e2e/listeningHistory.spec.ts` seeds 3,000 counted plays, a streamed play with YT Music off, a
@@ -290,6 +304,24 @@ and by Move Up, and the failed section. Its screenshots are `downloads-<step>-<p
 JVM, and a live YouTube download with its tags read back and its Library entry visible. The live
 check stops after search on CI; inspect its annotations if YouTube refuses the machine.
 
+## Recap and card images
+
+`e2e/recap.spec.ts` seeds three months of counted plays, opens the Recap from Home's card and
+from Stats' Recaps row, moves with Right and Left, waits for a story to move on after six
+seconds and for the summary to stay, and closes with Esc. It reads the queue before and after,
+and counts `play_events` once the app has closed. Save Image runs with `dialog.showSaveDialog`
+replaced in main, so no dialog opens; the spec reads the file's size from its PNG header and
+the clipboard's image through Electron. Screenshots are `recap-<platform>-home.png`,
+`-songs.png`, `-summary.png`, `-stats.png`, and the saved story is `recap-<platform>-image.png`.
+
+`stats.recaps()` lists the periods with a Recap, `stats.recap(id)` opens one (Home stops
+announcing it), and `stats.recapStory(index)` and `stats.recapClosed()` drive its music.
+`cards.saveImage(fileName, pngBase64)` and `cards.copyImage(pngBase64)` take a PNG of at most
+1080 by 1920 and a file name of the form `Wave - <title> - <yyyyMMdd-HHmmss>.png`; main refuses
+anything else. The window draws the PNG from a card element at the size it is laid out at
+(`renderer/src/cardImage.ts`); a Recap story is 1080 by 1920.
+The native save dialog itself is an owner check.
+
 ## Home's editor
 
 `e2e/homeEditor.spec.ts` edits Home from its Edit Home dialog with the keyboard alone (Move Up,
@@ -334,6 +366,20 @@ the same card and no service is asked anything. It also checks that pasted text 
 does nothing, that a paste into the search field stays a paste, and that Copy Link reaches the
 system clipboard. What a link opens with YT Music on is tested in
 `src/main/links/links.test.ts`, against a fake JVM and `fetch`.
+
+## Online lyrics search
+
+`lyrics.searchOnline(query)` asks Genius through the sync service with the Wave session
+(`src/main/lyrics/geniusLyricsSearch.ts`, the phone's `requestGeniusLyricsSearch` from
+`@wave/client/geniusLyricsSearch`), and `lyrics.openOnlineHit(id)` plays or opens a hit of the
+last answer. The window waits for the typing pause and lists the hits (`OnlineLyrics.tsx`).
+
+`e2e/geniusLyricsSearch.spec.ts` runs it against the sync service in memory and a fake Genius
+(`e2e/geniusFixture.ts`), with YT Music off: the three-word rule, the signed-out, failed and
+offline lines, five hits then twenty, the hit a Library Lyrics row hides, a Library song that
+plays and a Genius page that opens. A hit that plays from YT Music is tested in
+`src/main/lyrics/geniusLyricsSearch.test.ts` against a fake search; the live one is an owner
+check.
 
 ## Opening files
 
@@ -422,3 +468,15 @@ The output contains the installer, the Windows blockmap on Windows, and `build.j
 the release evidence. Linux packaging uses Ubuntu 22.04 with the ALSA and D-Bus headers
 and the FUSE 2 runtime.
 See [Release provenance](../release-provenance.md#desktop-installers) for publication and rollback.
+
+## Kinds of shuffle
+
+`e2e/shuffleKinds.spec.ts` opens the kinds of shuffle from a hero's Shuffle and the player bar's
+by right-click, Shift+F10 and the Menu key, picks one, reads the queue Even Shuffle made, and
+changes the choice in Settings › Playback. It plays silent WAV files it writes, so it needs the
+audio addon. Screenshots are `shuffle-kinds-menu-<platform>.png` and
+`shuffle-kinds-settings-<platform>.png`.
+
+The choice is `shuffleKind` in `settings.playback()`, the phone's synced `settings.shuffleKind`.
+A pick on the menu also sends the queue command `{ type: "reshuffle" }`. `bridge.test.ts` syncs
+it with a phone both ways and checks the order Even Shuffle gives.
