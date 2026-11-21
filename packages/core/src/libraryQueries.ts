@@ -75,12 +75,18 @@ export interface LibraryQueryLimits {
   readonly retainMs: number;
   /** At most this many results nobody shows are kept; the least recently shown go first. */
   readonly maxRetained: number;
+  /**
+   * A kept query (`keep`) no screen in sight shows re-reads for bursts at most
+   * this often, so the next screen to open it draws data at most this old.
+   */
+  readonly keptThrottleMs: number;
 }
 
 export const LIBRARY_QUERY_LIMITS: LibraryQueryLimits = {
   throttleMs: 1500,
   retainMs: 30_000,
   maxRetained: 8,
+  keptThrottleMs: 10_000,
 };
 
 /** The wait per row of `longListBurstPace` (ms): a chosen figure, no phone run has measured it. */
@@ -144,6 +150,8 @@ export interface LibraryQueryStats {
   readonly discarded: number;
   /** Kept results dropped: changed, too old, or over `maxRetained`. */
   readonly evicted: number;
+  /** Queries held ready for screens (`keep`), shown or not. */
+  readonly kept: number;
 }
 
 export interface LibraryQueries<V> {
@@ -161,6 +169,15 @@ export interface LibraryQueries<V> {
       readonly onStateChange?: () => void;
     },
   ) => LibraryQueryConsumer;
+  /**
+   * Holds query [key], which reads [reads], ready for the screens that will
+   * show it (#1352): it is read now, kept however long nobody shows it, and
+   * read again when a change reaches it (an edit at once, bursts at most every
+   * `keptThrottleMs` while no screen in sight shows it), so a screen opening
+   * it starts from a current result and reads nothing. Returns the release:
+   * once every keep is released it is retained as any result nobody shows.
+   */
+  readonly keep: (key: string, reads: LibraryReads, traits?: LibraryQueryTraits<V>) => () => void;
   /** The query's current result, or undefined before its first read. The same box until it changes. */
   readonly current: (key: string) => LibraryQueryResult<V> | undefined;
   readonly state: (key: string) => LibraryQueryState;
@@ -185,6 +202,8 @@ interface Entry<V> {
   readonly reads: LibraryReads;
   readonly traits: LibraryQueryTraits<V>;
   readonly consumers: Set<ConsumerState>;
+  /** How many keeps hold it ready (`keep`). */
+  keepers: number;
   result: LibraryQueryResult<V> | undefined;
   failed: boolean;
   /** A change reached the query since its last read started. */
@@ -283,7 +302,9 @@ export const createLibraryQueries = <V>(options: {
 
   /** Drops kept results nobody shows past `maxRetained`, the least recently shown first. */
   const trimRetained = (): void => {
-    const retained = [...entries.values()].filter((entry) => entry.consumers.size === 0);
+    const retained = [...entries.values()].filter(
+      (entry) => entry.consumers.size === 0 && entry.keepers === 0,
+    );
     // oxlint-disable-next-line unicorn/no-array-sort -- sorts a fresh array; Hermes lacks toSorted
     retained.sort((a, b) => a.releasedAt - b.releasedAt);
     for (const entry of retained.slice(0, Math.max(0, retained.length - limits.maxRetained))) {
@@ -352,7 +373,7 @@ export const createLibraryQueries = <V>(options: {
 
   /** When bursts may next re-read [entry]. */
   const burstReadAt = (entry: Entry<V>): number => {
-    const throttled = entry.readAt + limits.throttleMs;
+    const throttled = entry.readAt + (inSight(entry) ? limits.throttleMs : limits.keptThrottleMs);
     if (entry.traits.burstPace === undefined || entry.result === undefined) return throttled;
     return Math.max(throttled, entry.settledAt + entry.traits.burstPace(entry.result.value));
   };
@@ -372,7 +393,9 @@ export const createLibraryQueries = <V>(options: {
     if (entry.reading !== null) return;
     if (!entry.stale) return;
     // Paused: bursts wait while only hidden screens show it. Edits and its first read don't.
-    if (entry.result !== undefined && !entry.urgent && !inSight(entry)) return;
+    // A kept one keeps reading, at the kept pace (`burstReadAt`).
+    if (entry.result !== undefined && !entry.urgent && !inSight(entry) && entry.keepers === 0)
+      return;
     const wait = entry.urgent || entry.result === undefined ? 0 : burstReadAt(entry) - now();
     if (wait > 0) {
       entry.cancelWait ??= schedule(wait, () => {
@@ -386,28 +409,54 @@ export const createLibraryQueries = <V>(options: {
     startRead(entry);
   };
 
+  const newEntry = (key: string, reads: LibraryReads, traits: LibraryQueryTraits<V>): Entry<V> => ({
+    key,
+    reads,
+    traits,
+    consumers: new Set(),
+    keepers: 0,
+    result: undefined,
+    failed: false,
+    stale: true,
+    urgent: true,
+    reading: null,
+    forEdit: false,
+    outdated: false,
+    readAt: 0,
+    settledAt: 0,
+    cancelWait: null,
+    releasedAt: 0,
+    cancelExpiry: null,
+  });
+
   return {
+    keep: (key, reads, traits = {}) => {
+      let entry = entries.get(key);
+      if (entry === undefined) {
+        entry = newEntry(key, reads, traits);
+        entries.set(key, entry);
+      } else {
+        entry.cancelExpiry?.();
+        entry.cancelExpiry = null;
+        // Its first read failed: keeping it tries again.
+        if (entry.result === undefined && entry.reading === null) entry.stale = entry.urgent = true;
+      }
+      const owner = entry;
+      owner.keepers++;
+      plan(owner);
+      let released = false;
+      return () => {
+        if (released) return;
+        released = true;
+        owner.keepers--;
+        if (owner.keepers === 0 && owner.consumers.size === 0 && entries.get(key) === owner)
+          release(owner);
+      };
+    },
     attach: (key, reads, { visible, onChange, onStateChange, ...traits }) => {
       let entry = entries.get(key);
       if (entry === undefined) {
-        entry = {
-          key,
-          reads,
-          traits,
-          consumers: new Set(),
-          result: undefined,
-          failed: false,
-          stale: true,
-          urgent: true,
-          reading: null,
-          forEdit: false,
-          outdated: false,
-          readAt: 0,
-          settledAt: 0,
-          cancelWait: null,
-          releasedAt: 0,
-          cancelExpiry: null,
-        };
+        entry = newEntry(key, reads, traits);
         entries.set(key, entry);
       } else {
         if (entry.result !== undefined || entry.reading !== null) counts.shared++;
@@ -440,7 +489,8 @@ export const createLibraryQueries = <V>(options: {
         },
         detach: () => {
           if (!owner.consumers.delete(consumer)) return;
-          if (owner.consumers.size === 0 && entries.get(key) === owner) release(owner);
+          if (owner.consumers.size === 0 && owner.keepers === 0 && entries.get(key) === owner)
+            release(owner);
         },
       };
     },
@@ -460,7 +510,7 @@ export const createLibraryQueries = <V>(options: {
       const hidden: Entry<V>[] = [];
       for (const entry of entries.values()) {
         if (!libraryChangeAffects(entry.reads, change) || scanMissesResult(entry, change)) continue;
-        if (entry.consumers.size === 0) {
+        if (entry.consumers.size === 0 && entry.keepers === 0) {
           // Nobody shows it: drop it rather than read it for nobody.
           drop(entry);
           counts.evicted++;
@@ -479,11 +529,13 @@ export const createLibraryQueries = <V>(options: {
     stats: () => {
       let consumers = 0;
       let retained = 0;
+      let kept = 0;
       for (const entry of entries.values()) {
         consumers += entry.consumers.size;
-        if (entry.consumers.size === 0) retained++;
+        if (entry.keepers > 0) kept++;
+        else if (entry.consumers.size === 0) retained++;
       }
-      return { entries: entries.size, retained, consumers, ...counts };
+      return { entries: entries.size, retained, consumers, kept, ...counts };
     },
   };
 };

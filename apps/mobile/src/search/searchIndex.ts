@@ -17,6 +17,7 @@ import { useEffect, useMemo, useSyncExternalStore } from "react";
 import { whenFree } from "@/lib/backgroundWork";
 import { libraryListQueries } from "@/library/hooks";
 import { onLibraryChange } from "@/library/libraryChanges";
+import { publishLibraryRows } from "@/library/libraryRows";
 import { LibraryStore, type LibraryStoreError } from "@/library/LibraryStore";
 import { appRuntime } from "@/library/runtime";
 import type { AlbumRow, ArtistRow, GenreRow, PlaylistRow, SongRow } from "@wave/client";
@@ -138,8 +139,19 @@ let started = false;
 const rowsOf = <R>(source: Source, none: readonly R[]): readonly R[] =>
   (catalog.rows(source) as readonly R[] | null) ?? none;
 
+/** Publishes the catalog's rows as the Library in memory (`libraryRows.ts`, #1352). */
+const showRows = (): void => {
+  const songs = catalog.rows("songs") as readonly SongRow[] | null;
+  const albums = catalog.rows("albums") as readonly AlbumRow[] | null;
+  const artists = catalog.rows("artists") as readonly ArtistRow[] | null;
+  const genres = catalog.rows("genres") as readonly GenreRow[] | null;
+  if (songs === null || albums === null || artists === null || genres === null) return;
+  publishLibraryRows({ songs, albums, artists, genres });
+};
+
 /** Shows the catalog's index as it is now, telling the screens when it changed. */
 const showIndex = (): void => {
+  showRows();
   const index = catalog.index();
   if (index === (shown?.index ?? null)) return;
   shown =

@@ -105,9 +105,16 @@ export default function RootLayout() {
           if (!disposed) stopSearch = startSearchIndex();
         });
       });
+      // The local screens' data, kept in memory before they're opened (#1352).
+      const stopReadyStart = afterFirstSettled("readyScreens", () => {
+        void import("@/library/readyScreens").then(({ startReadyScreens }) => {
+          if (!disposed) stopReady = startReadyScreens();
+        });
+      });
       let disposed = false;
       let stopLyrics: (() => void) | undefined;
       let stopSearch: (() => void) | undefined;
+      let stopReady: (() => void) | undefined;
       // Link imports kept when Wave last closed go on filling their playlists.
       const stopImports = afterFirstSettled("imports", resumePlaylistImports);
       // A From YT Music batch Android stopped reads the playlists it hadn't, in order.
@@ -118,6 +125,8 @@ export default function RootLayout() {
         stopLyrics?.();
         stopSearchIndexStart();
         stopSearch?.();
+        stopReadyStart();
+        stopReady?.();
         stopScan();
         stopImports();
         stopYtImport();

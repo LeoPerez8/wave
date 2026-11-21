@@ -1137,6 +1137,7 @@ export const BACKGROUND_JOBS: Record<string, { readonly turns: string }> = {
   "playback/TasteProfile.ts": { turns: "lib/recommendationWork" },
   "updates/appUpdates.ts": { turns: "lib/backgroundWork" },
   "search/searchIndex.ts": { turns: "lib/backgroundWork" },
+  "library/readyScreens.ts": { turns: "lib/backgroundWork" },
   "library/ytLibraryImport.ts": { turns: "lib/backgroundWork" },
   "library/playlistImports.ts": { turns: "lib/backgroundWork" },
   "library/lyricsSearchIndex.ts": { turns: "lib/backgroundWork" },
