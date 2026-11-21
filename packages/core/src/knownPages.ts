@@ -3,6 +3,10 @@ export interface KnownPages<V> {
   /** The page kept under [key], or undefined when none is. */
   readonly get: (key: string) => V | undefined;
   readonly set: (key: string, page: V) => void;
+  /** Lets go of the page kept under [key] (a read that failed), so it's read again. */
+  readonly forget: (key: string) => void;
+  /** How many pages are kept. */
+  readonly size: () => number;
 }
 
 /** At most [limit] pages, the one used longest ago dropped first (Performance rules, 12). */
@@ -22,5 +26,9 @@ export const knownPages = <V>(limit: number): KnownPages<V> => {
       pages.set(key, page);
       while (pages.size > limit) pages.delete(pages.keys().next().value as string);
     },
+    forget: (key) => {
+      pages.delete(key);
+    },
+    size: () => pages.size,
   };
 };

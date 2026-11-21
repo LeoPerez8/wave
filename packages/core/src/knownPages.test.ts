@@ -30,4 +30,24 @@ describe("knownPages", () => {
     assert.equal(pages.get("A"), "new");
     assert.equal(pages.get("B"), "b");
   });
+
+  test("a page forgotten is read again on its next opening, and frees its place", () => {
+    const pages = knownPages<string>(2);
+    pages.set("A", "a");
+    pages.set("B", "b");
+    pages.forget("A");
+    assert.equal(pages.get("A"), undefined);
+    pages.set("C", "c");
+    assert.equal(pages.get("B"), "b");
+    assert.equal(pages.get("C"), "c");
+    pages.forget("missing");
+  });
+
+  test("it holds at most its bound, however many pages are read (Performance rules, 12)", () => {
+    const pages = knownPages<number>(3);
+    for (let i = 0; i < 1000; i += 1) pages.set(`page ${i}`, i);
+    assert.equal(pages.size(), 3);
+    assert.equal(pages.get("page 999"), 999);
+    assert.equal(pages.get("page 996"), undefined);
+  });
 });

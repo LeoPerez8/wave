@@ -1161,3 +1161,107 @@ export const BACKGROUND_JOBS: Record<string, { readonly turns: string }> = {
   "library/playlistImports.ts": { turns: "lib/backgroundWork" },
   "library/lyricsSearchIndex.ts": { turns: "lib/backgroundWork" },
 };
+
+/**
+ * What bounds each collection a module keeps for the session (Performance
+ * rules, 12; #1358), checked by `memoryGuards.test.ts`. A cache of pages or
+ * answers is bounded by count (`knownPages` or an LRU); the rest are bounded by
+ * what they mirror (the Library, the bar, the jobs going on). The heavy caches
+ * that open screens from memory (#1352's kept queries, #1353's Home snapshot,
+ * Search's index) are bounded in their own modules and documented in
+ * docs/performance/1358-frozen-tabs-memory.md.
+ */
+export const MODULE_COLLECTIONS: Record<string, { readonly bound: string }> = {
+  "home/mixPreDownload.ts#shown": { bound: "one entry per Home mix section, a fixed few" },
+  "lib/networkMeter.ts#timingRuns": { bound: "runs being metered now, removed when each ends" },
+  "lib/persistedSetting.ts#syncedSettings": {
+    bound: "one per synced setting declared in code, a fixed few dozen",
+  },
+  "lib/persistedSetting.ts#pendingWrites": {
+    bound: "writes waiting for their delay, one per setting at most",
+  },
+  "lib/radioDeadline.ts#checks": { bound: "radio deadlines running now, removed as each settles" },
+  "lib/timing.ts#background": { bound: "one per named background kind registered in code" },
+  "lib/timing.ts#nativeTransitions": {
+    bound: "native stack transitions in flight, removed at their end",
+  },
+  "library/backgroundFill.ts#opened": {
+    bound: "one timestamp per playlist opened this run, at most the Library's playlists",
+  },
+  "library/collaborativePlaylists.tsx#EMPTY": { bound: "an empty map that is never written" },
+  "library/collaborativePlaylists.tsx#shownMembers": {
+    bound: "one per collaborative playlist here; pruned on each read",
+  },
+  "library/favorites.ts#writing": { bound: "stars with writes in flight, removed when written" },
+  "library/favorites.ts#knownStars": {
+    bound: "a boolean per song starred or unstarred this run, at most the Library's songs",
+  },
+  "library/favorites.ts#knownPending": {
+    bound: "a boolean per pending song starred this run, at most the songs touched",
+  },
+  "library/follows.ts#artists": {
+    bound: "a store of one follow row per artist page opened this run, tiny each",
+  },
+  "library/genreOpening.ts#made": { bound: "MADE_KEPT (64) query declarations, oldest let go" },
+  "library/pagedSongs.ts#orderQueries": {
+    bound: "one query declaration per song sort, a fixed dozen",
+  },
+  "library/playlistImports.ts#finishing": { bound: "imports running now, removed when done" },
+  "library/releaseDates.ts#sortedIds": { bound: "the playlists sorted by Release date" },
+  "library/releaseDates.ts#sortChosen": {
+    bound: "playlists put on Release date since, removed once looked up",
+  },
+  "library/releaseDates.ts#playlistInputs": {
+    bound: "the playlists on Release date; cleared or trimmed on each playlist change",
+  },
+  "library/sharedQueries.ts#definitions": {
+    bound: "the queries the registry holds: kept screens, RECENT_SCREENS_KEPT (8) pushed ones",
+  },
+  "library/sharedQueries.ts#recentQueries": {
+    bound: "RECENT_SCREENS_KEPT (8) pushed screens' queries, the oldest let go",
+  },
+  "library/songSort.ts#settings": { bound: "one setting per song list kind, a fixed few" },
+  "library/ytExportRun.ts#queued": { bound: "exports pending or running, removed as they send" },
+  "library/ytLibraryImport.ts#queuedAt": {
+    bound: "playlists queued this import run, removed as each is read",
+  },
+  "log/slowLibraryReads.ts#namedHere": {
+    bound: "one name per read kind written in code that stays on the JS thread",
+  },
+  "perf/perf.ts#metaSources": { bound: "one per perf metadata source registered in code" },
+  "playback/playingSearches.ts#asking": {
+    bound: "searches going on for the queue's songs, removed as each settles",
+  },
+  "playback/playingSearches.ts#failedAt": {
+    bound: "one timestamp per queued song whose search failed, at most the queue",
+  },
+  "playback/queueTracks.ts#requested": {
+    bound: "the queue's track ids looked up once, cleared with a new queue",
+  },
+  "playback/trackLyrics.ts#cache": { bound: "CACHE_SIZE (16) tracks' lyrics, the oldest let go" },
+  "search/knownYtSearches.ts#SEARCHES": { bound: "knownPages(24) online Search answers" },
+  "settings/followCountry.ts#countries": {
+    bound: "one country list per app language, two languages",
+  },
+  "stats/hooks.ts#keptReadings": { bound: "STATS_KEPT (32) Stats readings, the oldest let go" },
+  "stats/PlayedEntityViews.tsx#artistImages": {
+    bound: "knownPages(64) artist photo lookups (#1358: was unbounded)",
+  },
+  "sync/bringYourMusic.tsx#importing": { bound: "the two Library services, Spotify and YT Music" },
+  "ytmusic/albumPages.ts#pages": {
+    bound: "knownPages(YT_ALBUM_PAGES_KEPT = 24) YT Music album pages (#1358: was unbounded)",
+  },
+  "ytmusic/knownYtArtists.ts#ANSWERS": { bound: "knownPages(16) YT Music artist answers" },
+  "ytmusic/knownYtPages.ts#LISTS": { bound: "knownPages(12) YT Music album and playlist pages" },
+  "ytmusic/searchAllowance.ts#turns": { bound: "searches waiting their turn, removed as granted" },
+  "ytmusic/YtDownloads.ts#awaitingFillIn": {
+    bound: "imported files waiting for their fill-in, removed when answered",
+  },
+  "ytmusic/YtDownloads.ts#answering": { bound: "download decisions being answered now" },
+  "ytmusic/YtDownloads.ts#recordedNoBetterCopyJobs": {
+    bound: "replacement jobs with no better copy this launch, at most the downloads journal",
+  },
+  "ytmusic/YtDownloads.ts#removedReplacementFiles": {
+    bound: "failed replacements' files this launch, at most the downloads journal",
+  },
+};
