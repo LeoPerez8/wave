@@ -1,5 +1,5 @@
 /** Downloads as the window sees them (`window.wave.downloads`): the journal's songs and the run. */
-import type { MissingSongsDownloadAction } from "@wave/core";
+import type { MissingSongsDownloadAction, YtSongsDownloadAction } from "@wave/core";
 
 /** What every song's row on the Downloads page shows. */
 interface DownloadSong {
@@ -167,6 +167,35 @@ export interface DownloadsView {
 
 export const MISSING_SONGS_ACTIONS: readonly MissingSongsDownloadAction[] = [
   "downloadAll",
+  "retryFailed",
+  "cancel",
+];
+
+/**
+ * A YT Music list whose songs download together, as its page reads them: an album's page by its
+ * browse id. Its page's download button and head line are `YtListDownloadView`.
+ */
+export interface YtSongsList {
+  readonly kind: "album";
+  readonly id: string;
+}
+
+/** Where a YT Music list's download stands, as its page head shows it (Core's `ytSongsDownload`). */
+export interface YtListDownloadView {
+  /**
+   * The button: what a click does and what it says (Download, Cancel, Retry Failed), or
+   * Downloaded once the Library has every song; null with neither.
+   */
+  readonly button: {
+    readonly action: YtSongsDownloadAction | "downloaded";
+    readonly label: string;
+  } | null;
+  /** The head's progress line ("Downloading · 3 of 10"); null with nothing on its way. */
+  readonly line: string | null;
+}
+
+export const YT_SONGS_DOWNLOAD_ACTIONS: readonly YtSongsDownloadAction[] = [
+  "download",
   "retryFailed",
   "cancel",
 ];

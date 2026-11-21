@@ -39,7 +39,12 @@ import type {
   YtRelatedView,
 } from "./ytPages.ts";
 import type { AccountView } from "./account.ts";
-import type { MissingSongsDownloadAction, SleepTimer, SleepTimerChoice } from "@wave/core";
+import type {
+  MissingSongsDownloadAction,
+  SleepTimer,
+  SleepTimerChoice,
+  YtSongsDownloadAction,
+} from "@wave/core";
 import type {
   DownloadMove,
   DownloadRow,
@@ -47,6 +52,8 @@ import type {
   FailedReasonAction,
   MissingSongsList,
   MissingSongsView,
+  YtListDownloadView,
+  YtSongsList,
 } from "./downloads.ts";
 import type { GeniusHitOpened, GeniusLyricsSearchView } from "./geniusLyricsSearch.ts";
 import type { GeniusPhase, SongGenius, SongLyrics, SongTranslation } from "./lyrics.ts";
@@ -165,7 +172,7 @@ export interface BridgeContract
     readonly result: PlayStart;
   };
   readonly "playback.startYt": {
-    readonly args: readonly [videoIds: readonly string[], index: number];
+    readonly args: readonly [videoIds: readonly string[], index: number, shuffle?: boolean];
     readonly result: void;
   };
   readonly "playback.command": {
@@ -325,6 +332,16 @@ export interface BridgeContract
   /** Retry or Remove on every song that failed for one reason. */
   readonly "downloads.failedReason": {
     readonly args: readonly [reason: string, action: FailedReasonAction];
+    readonly result: void;
+  };
+  /** A YT Music album page's download button and head line; null before its page was read. */
+  readonly "downloads.ytList": {
+    readonly args: readonly [list: YtSongsList];
+    readonly result: YtListDownloadView | null;
+  };
+  /** The button's click: Download, Retry Failed or Cancel on the list's songs. */
+  readonly "downloads.ytListAction": {
+    readonly args: readonly [action: YtSongsDownloadAction, list: YtSongsList];
     readonly result: void;
   };
   /** A YouTube Music artist page, by its browse id. */
@@ -667,6 +684,8 @@ export const BRIDGE_CALLS = [
   "downloads.setBestQuality",
   "downloads.move",
   "downloads.failedReason",
+  "downloads.ytList",
+  "downloads.ytListAction",
   "account.view",
   "account.signIn",
   "account.cancelSignIn",
@@ -934,6 +953,8 @@ export interface WaveBridge {
     readonly setBestQuality: (on: boolean) => Promise<boolean>;
     readonly move: (move: DownloadMove) => Promise<void>;
     readonly failedReason: (reason: string, action: FailedReasonAction) => Promise<void>;
+    readonly ytList: (list: YtSongsList) => Promise<YtListDownloadView | null>;
+    readonly ytListAction: (action: YtSongsDownloadAction, list: YtSongsList) => Promise<void>;
   };
   /** The Wave account: the session itself never reaches the window. */
   readonly account: {
@@ -984,7 +1005,7 @@ export const createBridge = (invoke: Invoke): WaveBridge => ({
   playback: {
     view: () => invoke("playback.view"),
     start: (scope, index, shuffle) => invoke("playback.start", scope, index, shuffle),
-    startYt: (videoIds, index) => invoke("playback.startYt", videoIds, index),
+    startYt: (videoIds, index, shuffle) => invoke("playback.startYt", videoIds, index, shuffle),
     command: (command) => invoke("playback.command", command),
     play: () => invoke("playback.play"),
     pause: () => invoke("playback.pause"),
@@ -1100,6 +1121,8 @@ export const createBridge = (invoke: Invoke): WaveBridge => ({
     setBestQuality: (on) => invoke("downloads.setBestQuality", on),
     move: (move) => invoke("downloads.move", move),
     failedReason: (reason, action) => invoke("downloads.failedReason", reason, action),
+    ytList: (list) => invoke("downloads.ytList", list),
+    ytListAction: (action, list) => invoke("downloads.ytListAction", action, list),
   },
   account: {
     view: () => invoke("account.view"),
