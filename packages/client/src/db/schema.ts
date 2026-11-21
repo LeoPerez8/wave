@@ -890,6 +890,16 @@ export const playBuckets = sqliteTable(
   (t) => [primaryKey({ columns: [t.song, t.span, t.bucket] })],
 );
 
+/** Days of a song's `play_buckets` a write to the history changed, to count again. */
+export const owedDays = sqliteTable(
+  "owed_days",
+  {
+    song: text("song").notNull(),
+    day: integer("day").notNull(),
+  },
+  (t) => [primaryKey({ columns: [t.song, t.day] })],
+);
+
 export const playCredits = sqliteTable(
   "play_credits",
   {

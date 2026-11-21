@@ -366,6 +366,36 @@ export const libraryReleaseFinder = <A extends LibraryAlbumKey>(
   };
 };
 
+/**
+ * `libraryReleaseFinder` with every artist's albums indexed up front, a step
+ * per album, for work that runs in slices: it finds the same album.
+ */
+export function* libraryReleaseFinderSteps<A extends LibraryAlbumKey>(
+  artistNamed: (name: string) => { readonly id: number } | null,
+  albums: readonly A[],
+): Generator<void, (release: { readonly title: string; readonly artists: readonly string[] }) => A | null> {
+  const byArtist = new Map<number, Map<string, A>>();
+  for (const album of albums) {
+    const title = releaseTitle(album.title);
+    if (title !== "")
+      for (const artistId of album.albumArtistIds) {
+        let byTitle = byArtist.get(artistId);
+        if (byTitle === undefined) byArtist.set(artistId, (byTitle = new Map()));
+        if (!byTitle.has(title)) byTitle.set(title, album);
+      }
+    yield;
+  }
+  return (release) => {
+    for (const name of release.artists) {
+      const artist = artistNamed(name);
+      const album =
+        artist === null ? null : (byArtist.get(artist.id)?.get(releaseTitle(release.title)) ?? null);
+      if (album !== null) return album;
+    }
+    return null;
+  };
+}
+
 /** The section's state; [S] is the song as the caller has it (the native result, say). */
 export type YtArtistSection<S extends YtSong = YtSong> =
   /** What was saved for the artist is still being read. */

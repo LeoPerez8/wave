@@ -10,9 +10,13 @@
  *   is still owed: 0 its buckets (plays from before this migration), 1 its
  *   credits, 2 nothing.
  * - `play_buckets`: each song's counted plays, time and latest counted start
- *   per day (`span` 0) and block (`span` 1). Triggers on `play_events` keep it
- *   as the play is written: an insert or a growing play adds to it, any other
- *   change sums that day and block again from the plays.
+ *   per day (`span` 0) and block (`span` 1).
+ * - `owed_days`: the days of each song a write to `play_events` changed,
+ *   which the app counts again from the plays, and their blocks from the
+ *   days: the player's write its own at once, the job the rest (a pull, an
+ *   import), many in one statement. The triggers only mark them: summing in
+ *   a trigger compiled the bucket and credit triggers into every statement
+ *   that writes a play, which more than doubled a sync pull.
  * - `play_credits`: what a song's plays count for (`kind` album, artist,
  *   credit or song, `entity` its id), each `weight` times. The app writes it
  *   (`settleKeptTotals`), since a streamed song's credits are Core's.
@@ -32,8 +36,12 @@
  * `generation`.
  */
 
-const DAY_MS = 86_400_000;
-const BLOCK_MS = 32 * DAY_MS;
+import { KEPT_BLOCK_DAYS, KEPT_DAY_MS } from "@wave/core";
+
+/** A kept day's length, as Core's `playBuckets` counts it. */
+export const DAY_MS = KEPT_DAY_MS;
+/** A kept block's length: `KEPT_BLOCK_DAYS` days. */
+export const BLOCK_MS = KEPT_BLOCK_DAYS * KEPT_DAY_MS;
 
 /** The key of the song the play [row] is of. */
 export const songKeySql = (row: string) => `(CASE
@@ -46,45 +54,15 @@ const spans = (row: string) => [
   { span: 1, bucket: `${row}.started_at / ${BLOCK_MS}`, size: BLOCK_MS },
 ];
 
-const ADD_BUCKET = `ON CONFLICT (song, span, bucket) DO UPDATE SET
-    counted_plays = counted_plays + excluded.counted_plays,
-    listened_ms = listened_ms + excluded.listened_ms,
-    latest_play_at = max(latest_play_at, excluded.latest_play_at)`;
-
 const ADD_CREDITED = `ON CONFLICT (kind, span, bucket, entity) DO UPDATE SET
     counted_plays = counted_plays + excluded.counted_plays,
     listened_ms = listened_ms + excluded.listened_ms,
     latest_play_at = max(latest_play_at, excluded.latest_play_at)`;
 
-/** Adds [plays] counted plays of [row] (its time [listened]) to its day and block. */
-const addPlay = (row: string, plays: string, listened: string) => `
-  INSERT INTO play_buckets (song, span, bucket, counted_plays, listened_ms, latest_play_at)
-    VALUES ${spans(row)
-      .map(
-        ({ span, bucket }) =>
-          `(${songKeySql(row)}, ${span}, ${bucket}, ${plays}, ${listened}, ${row}.started_at)`,
-      )
-      .join(", ")}
-    ${ADD_BUCKET};`;
-
-/** Sums the day and block of the play [row] again from its song's counted plays. */
-const sumAgain = (row: string) =>
-  spans(row)
-    .map(
-      ({ span, bucket, size }) => `
-  DELETE FROM play_buckets WHERE song = ${songKeySql(row)} AND span = ${span} AND bucket = ${bucket};
-  INSERT INTO play_buckets (song, span, bucket, counted_plays, listened_ms, latest_play_at)
-    SELECT ${songKeySql(row)}, ${span}, ${bucket}, count(*), sum(e.listened_ms), max(e.started_at)
-    FROM play_events AS e
-    WHERE e.counted AND e.started_at BETWEEN (${bucket}) * ${size} AND (${bucket}) * ${size} + ${size - 1}
-      AND ${songKeySql("e")} = ${songKeySql(row)}
-    GROUP BY 1;`,
-    )
-    .join("");
-
-/** The plays of a song in the same day can only add: listened longer, or counted now. */
-const GROWS = `${songKeySql("old")} = ${songKeySql("new")} AND old.started_at = new.started_at
-  AND new.counted AND (NOT old.counted OR new.listened_ms >= old.listened_ms)`;
+/** Marks the day of the play [row] owed, when it is counted. */
+const oweDay = (row: string) => `
+  INSERT INTO owed_days (song, day) SELECT ${songKeySql(row)}, ${row}.started_at / ${DAY_MS}
+    WHERE ${row}.counted ON CONFLICT DO NOTHING;`;
 
 /** Sums the credited buckets of [song]'s credits in one [span] and [bucket] again. */
 const creditAgain = (song: string, span: string, bucket: string) => `
@@ -98,11 +76,16 @@ const creditAgain = (song: string, span: string, bucket: string) => `
     WHERE (c.kind, c.entity) IN (SELECT kind, entity FROM play_credits WHERE song = ${song})
     GROUP BY c.kind, c.entity;`;
 
-/** Marks the songs [where] selects as owing their credits. */
-const owe = (where: string) => `UPDATE played_songs SET state = 1 WHERE state = 2 AND (${where});`;
+/**
+ * Marks the songs [where] selects as owing their credits. [where] names a
+ * song by a key with its own index; `+state` keeps SQLite from reaching them
+ * through every settled song instead, which made each saved file cost a pass
+ * over the played songs.
+ */
+const owe = (where: string) => `UPDATE played_songs SET state = 1 WHERE +state = 2 AND (${where});`;
 
 /** What Core matches streamed songs against changed: every streamed song the Library hasn't owes. */
-const ONLINE_CHANGED = `${owe("online = 1")}
+const ONLINE_CHANGED = `UPDATE played_songs SET state = 1 WHERE online = 1 AND state = 2;
   UPDATE kept_totals_state SET generation = generation + 1;`;
 
 const PLAY_COLUMNS = "track_id, video_id, recording_key, started_at, listened_ms, counted";
@@ -180,6 +163,12 @@ CREATE TABLE play_buckets (
 	PRIMARY KEY (song, span, bucket)
 ) WITHOUT ROWID;
 --> statement-breakpoint
+CREATE TABLE owed_days (
+	song text NOT NULL,
+	day integer NOT NULL,
+	PRIMARY KEY (song, day)
+) WITHOUT ROWID;
+--> statement-breakpoint
 CREATE TABLE play_credits (
 	song text NOT NULL,
 	kind text NOT NULL,
@@ -242,10 +231,13 @@ CREATE TABLE kept_totals_state (
 INSERT INTO kept_totals_state (id, generation, seeded_through, seed_until)
 	VALUES (1, 0, 0, coalesce((SELECT max(id) FROM play_events), 0));
 --> statement-breakpoint
-CREATE TRIGGER kept_song_insert AFTER INSERT ON play_events BEGIN
+CREATE TRIGGER kept_play_insert AFTER INSERT ON play_events BEGIN
   INSERT INTO played_songs (song, track_id, video_id, recording_key, state)
     VALUES (${songKeySql("new")}, new.track_id, new.video_id, new.recording_key, 1)
     ON CONFLICT (song) DO UPDATE SET state = 1 WHERE state = 2 AND excluded.video_id IS NOT NULL;
+${oweDay("new")}
+${countRecording("new.recording_key", "new.counted")}
+${addPlaylistPlay("new")}
 END;
 --> statement-breakpoint
 CREATE TRIGGER kept_song_change AFTER UPDATE OF track_id, video_id, recording_key ON play_events
@@ -255,30 +247,14 @@ WHEN ${songKeySql("old")} <> ${songKeySql("new")} BEGIN
     ON CONFLICT (song) DO NOTHING;
 END;
 --> statement-breakpoint
-CREATE TRIGGER kept_play_insert AFTER INSERT ON play_events WHEN new.counted BEGIN
-${addPlay("new", "1", "new.listened_ms")}
-END;
---> statement-breakpoint
-CREATE TRIGGER kept_play_grow AFTER UPDATE OF ${PLAY_COLUMNS} ON play_events WHEN ${GROWS} BEGIN
-${addPlay(
-  "new",
-  "CASE WHEN old.counted THEN 0 ELSE 1 END",
-  "new.listened_ms - CASE WHEN old.counted THEN old.listened_ms ELSE 0 END",
-)}
-END;
---> statement-breakpoint
 CREATE TRIGGER kept_play_change AFTER UPDATE OF ${PLAY_COLUMNS} ON play_events
-WHEN (old.counted OR new.counted) AND NOT (${GROWS}) BEGIN
-${sumAgain("old")}
-${sumAgain("new")}
+WHEN old.counted OR new.counted BEGIN
+${oweDay("old")}
+${oweDay("new")}
 END;
 --> statement-breakpoint
 CREATE TRIGGER kept_play_delete AFTER DELETE ON play_events WHEN old.counted BEGIN
-${sumAgain("old")}
-END;
---> statement-breakpoint
-CREATE TRIGGER kept_recording_insert AFTER INSERT ON play_events WHEN new.counted BEGIN
-${countRecording("new.recording_key", "1")}
+${oweDay("old")}
 END;
 --> statement-breakpoint
 CREATE TRIGGER kept_recording_change AFTER UPDATE OF recording_key, counted ON play_events
@@ -290,10 +266,6 @@ END;
 CREATE TRIGGER kept_recording_delete AFTER DELETE ON play_events
 WHEN old.counted AND ${accounted("old.id")} BEGIN
 ${countRecording("old.recording_key", "-1")}
-END;
---> statement-breakpoint
-CREATE TRIGGER kept_playlist_insert AFTER INSERT ON play_events WHEN ${fromPlaylist("new")} BEGIN
-${addPlaylistPlay("new")}
 END;
 --> statement-breakpoint
 CREATE TRIGGER kept_playlist_change
@@ -362,9 +334,8 @@ CREATE TRIGGER kept_credit_delete AFTER DELETE ON play_credits BEGIN
 END;
 --> statement-breakpoint
 CREATE TRIGGER kept_track_insert AFTER INSERT ON tracks BEGIN
-  ${owe(`song_track IS NULL AND song NOT LIKE 't:%'
-    AND (video_id = new.video_id OR recording_key = new.recording_key)`)}
   ${owe("video_id = new.video_id")}
+  ${owe("recording_key = new.recording_key AND +song_track IS NULL AND song NOT LIKE 't:%'")}
   ${ONLINE_CHANGED}
 END;
 --> statement-breakpoint

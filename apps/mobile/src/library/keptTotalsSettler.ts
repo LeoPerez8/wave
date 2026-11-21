@@ -1,7 +1,7 @@
 /**
- * Settles the kept play totals (#1349) in the background: one bounded step
- * (`LibraryStore.settleKeptTotals`) per settled turn until nothing is owed,
- * and again after each Library change, which may leave songs' credits owed
+ * Settles the kept play totals (#1349) in the background: after a settled
+ * turn, what they owe in the scheduler's slices (`LibraryStore.keptTotalsSteps`)
+ * until nothing is, and again after each Library change, which may leave songs' credits owed
  * (a scan, a download, a sync pull, an import). An upgrade's history is
  * summed this way after startup, never in an opening read. Until it settles,
  * readers sum from the history and give the same totals.
@@ -9,7 +9,7 @@
 export interface KeptTotalsSettlerPorts {
   /** Resolves on the next turn the settler may take (settled, the JS thread free). */
   readonly turn: () => Promise<void>;
-  /** One bounded step; true once nothing is owed. */
+  /** Settles what's owed, in slices; true once nothing is. */
   readonly step: () => Promise<boolean>;
   readonly onChange: (listener: () => void) => () => void;
   readonly failed: (cause: unknown) => void;

@@ -14,13 +14,28 @@
   storedGenres,
 } from "./library.ts";
 export type { LibraryTrack, RawTrack } from "./library.ts";
-export { creditSplitter, respreadDeletedSongs, splitCredit } from "./credits.ts";
+export {
+  creditSplitter,
+  creditSplitterSteps,
+  respreadDeletedSongs,
+  splitCredit,
+} from "./credits.ts";
 export type { PrunedArtist } from "./credits.ts";
-export { pickStreamedAlbum, streamedCredits } from "./streamedCredits.ts";
-export type { PlayedAlbumKey, PlayedArtistKey } from "./streamedCredits.ts";
+export {
+  pickStreamedAlbum,
+  streamedCreditResolverSteps,
+  streamedCredits,
+} from "./streamedCredits.ts";
+export type {
+  PlayedAlbumKey,
+  PlayedArtistKey,
+  StreamedCreditResolver,
+  StreamedRelease,
+  StreamedSongCredits,
+} from "./streamedCredits.ts";
 export { rankEntityPlays, rankEntityPlaysSteps } from "./stats.ts";
 export type { EntityPlayTotals } from "./stats.ts";
-export { KEPT_BLOCK_DAYS, keptTotalsPlan, playBuckets } from "./keptPlayTotals.ts";
+export { KEPT_BLOCK_DAYS, KEPT_DAY_MS, keptTotalsPlan, playBuckets } from "./keptPlayTotals.ts";
 export type { KeptRange, KeptTotalsPlan } from "./keptPlayTotals.ts";
 export { mergeCountedPlays } from "./countedPlays.ts";
 export type {
