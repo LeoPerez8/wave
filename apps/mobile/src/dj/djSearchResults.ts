@@ -29,6 +29,9 @@ interface FoundAlbum {
   readonly thumbPath: string | null;
 }
 
+/** What a Library still loading has found: nothing yet. */
+const NOT_READ = { artists: [] as readonly FoundArtist[], albums: [] as readonly FoundAlbum[] };
+
 /** What an artist's row draws: the Library's image files, or YouTube Music's picture. */
 export interface DjSearchImage {
   readonly name: string;
@@ -44,18 +47,24 @@ export interface DjSearchResult {
 }
 
 /**
- * The results for what the [library]'s search found and what YouTube Music
+ * The results for what the Library's search [found] and what YouTube Music
  * added ([yt]: its artists and albums the Library lacks), each list best
  * match first: artists, then albums, the Library's ahead, each tile once.
  * An album YouTube Music found is filed under the first artist it credits.
+ * While the Library's search index loads ([found] null), YouTube Music's
+ * results show alone.
  */
 export const djSearchResults = (
-  library: { readonly artists: readonly FoundArtist[]; readonly albums: readonly FoundAlbum[] },
+  found: {
+    readonly artists: readonly FoundArtist[];
+    readonly albums: readonly FoundAlbum[];
+  } | null,
   yt: {
     readonly artists: readonly YtArtistCandidate[];
     readonly albums: readonly YtArtistAlbum[];
   },
 ): DjSearchResult[] => {
+  const library = found ?? NOT_READ;
   const images = new Map<DjTileKey, DjSearchImage>();
   const picture = (image: DjSearchImage): void => {
     const key = djArtistTile(image.name)?.key;

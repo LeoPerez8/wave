@@ -7,8 +7,9 @@ import {
 } from "@wave/core";
 import * as Effect from "effect/Effect";
 import * as Result from "effect/Result";
-import { useCallback, useEffect, useReducer } from "react";
+import { useCallback, useEffect, useReducer, useSyncExternalStore } from "react";
 
+import { online, subscribeConnectivity } from "@/native/waveNative";
 import type { NativeYtSong } from "@/native/waveYtMusic";
 import { useSearchOnlineAlways } from "@/settings/searchOnline";
 import { useYtMusicEnabled } from "@/settings/ytMusic";
@@ -26,15 +27,47 @@ const inTurn = <A, R>(
   search: Effect.Effect<A, YtMusicError, R>,
 ): Effect.Effect<A, YtMusicError, R> => (always ? withSearchTurn("search", query, search) : search);
 
-/** What a search embedded in another flow asks YT Music for, in place of the Search tab's. */
+/**
+ * YT Music's songs (unless [songless]), artists and albums for [query], and
+ * its matching official music videos when no song matches (Core's
+ * `ytSearchAsksVideos`). Only the query is sent. One that fails fails them all.
+ */
+const searchAll = (query: string, always: boolean, songless: boolean) =>
+  askYtMusic((ytMusic) =>
+    Effect.gen(function* () {
+      const found = yield* Effect.all(
+        {
+          songs: songless
+            ? Effect.succeed({ songs: [] as NativeYtSong[] })
+            : inTurn(always, query, ytMusic.searchSongs(query)),
+          artists: inTurn(always, query, ytMusic.searchArtists(query)),
+          albums: inTurn(always, query, ytMusic.searchAlbums(query)),
+        },
+        { concurrency: "unbounded" },
+      );
+      const videos =
+        !songless && ytSearchAsksVideos(query, found.songs.songs)
+          ? yield* inTurn(always, query, ytMusic.searchVideos(query)).pipe(
+              Effect.map((page) => page.songs),
+              Effect.orElseSucceed(() => []),
+            )
+          : undefined;
+      return { ...found, videos };
+    }),
+  );
+
+/**
+ * What a search embedded in another flow asks YT Music for, in place of the
+ * Search tab's. It asks only while the phone is online (offline, the
+ * Library's results stand alone), and asks again for what's typed once the
+ * phone is back online.
+ */
 export interface YtSearchScope {
   /**
    * Artists and albums alone, every query asked once typing pauses whatever
    * Search online says (the flow has no Library | Online toggle).
    */
   readonly artistsAndAlbums: true;
-  /** Whether the phone is online now; offline, nothing is asked and the Library's results stand alone. */
-  readonly online: () => boolean;
 }
 
 /**
@@ -60,7 +93,9 @@ export const useYtMusicSection = (
   scope?: YtSearchScope,
 ): readonly [YtSection<NativeYtSong>, (pick: YtPick) => void] => {
   const on = useYtMusicEnabled();
-  const enabled = on && (scope === undefined || scope.online());
+  // Followed, so a reconnect asks again for what's typed.
+  const isOnline = useSyncExternalStore(subscribeConnectivity, online);
+  const enabled = on && (scope === undefined || isOnline);
   // A search visit lasts until the field is cleared.
   const preferred = useSearchOnlineAlways(query === "");
   const always = scope === undefined ? preferred : true;
@@ -78,30 +113,8 @@ export const useYtMusicSection = (
   useEffect(() => {
     if (loading === null) return undefined;
     const timer = setTimeout(() => {
-      // Only the query is sent. One that fails fails them all: one quiet line.
-      const search = askYtMusic((ytMusic) =>
-        Effect.gen(function* () {
-          const found = yield* Effect.all(
-            {
-              songs: songless
-                ? Effect.succeed({ songs: [] as NativeYtSong[] })
-                : inTurn(always, loading, ytMusic.searchSongs(loading)),
-              artists: inTurn(always, loading, ytMusic.searchArtists(loading)),
-              albums: inTurn(always, loading, ytMusic.searchAlbums(loading)),
-            },
-            { concurrency: "unbounded" },
-          );
-          const videos =
-            !songless && ytSearchAsksVideos(loading, found.songs.songs)
-              ? yield* inTurn(always, loading, ytMusic.searchVideos(loading)).pipe(
-                  Effect.map((page) => page.songs),
-                  Effect.orElseSucceed(() => []),
-                )
-              : undefined;
-          return { ...found, videos };
-        }),
-      );
-      void search.then((result) => {
+      // A failure is one quiet line.
+      void searchAll(loading, always, songless).then((result) => {
         if (Result.isSuccess(result)) {
           const { songs, artists, albums, videos } = result.success;
           dispatch({ type: "found", query: loading, songs: songs.songs, artists, albums, videos });
