@@ -7,12 +7,14 @@
  * each slice on a free turn, after the owner's touch and the motion it
  * started, never holding the JavaScript thread for a tap.
  */
-import { createBackgroundWork, createJsBlockLog } from "@wave/core";
+import { runReplayPassesWith } from "@wave/client/db/offThreadReads";
+import { BACKGROUND_WORK_LIMITS, createBackgroundWork, createJsBlockLog } from "@wave/core";
 import * as Effect from "effect/Effect";
 import { AppState, type GestureResponderEvent } from "react-native";
 
 import { appLog } from "@/log/appLog";
 import { isScreenSettled, onScreenSettled, onTimingTransition, timingRoute } from "./timing";
+import { createFingerDown } from "./fingerDown";
 import { createStartupWork } from "./startupWork";
 import { BackgroundWorkName, shareSlicesWith } from "./stepped";
 
@@ -23,12 +25,49 @@ import { perfMark, registerPerfMeta } from "@/perf/perf";
 
 /**
  * A JS block over 50 ms while a screen is shown writes one app log line
- * naming the work (#1350): the slice or free turn it ran in, else none.
+ * naming the work (#1350, #1359): the slice it ran in, else the named work
+ * still running, else "startup" before the first screen settled, else none.
  */
 const blocks = createJsBlockLog({
   write: (line) => appLog("warn", "WaveTiming", line),
   screen: () => (AppState.currentState === "active" ? timingRoute() : null),
 });
+
+// Blocks before the first screen settles, with no named work, are startup's.
+if (isScreenSettled()) blocks.firstSettled(performance.now());
+else {
+  const stop = onScreenSettled(() => {
+    if (!isScreenSettled()) return;
+    blocks.firstSettled(performance.now());
+    stop();
+  });
+}
+
+/**
+ * Runs [run] now as a slice of [name]'s work, for the block log: a continuation after an
+ * `await`, which no free turn gave, still says whose it is. Returns what [run] returns.
+ */
+export const inSlice = <A>(name: string, run: () => A): A => {
+  const startedAt = performance.now();
+  try {
+    return run();
+  } finally {
+    blocks.sliceRan(name, startedAt, performance.now() - startedAt);
+  }
+};
+
+// An off-thread read's replay maps its rows on the JS thread once its last answer is in.
+runReplayPassesWith((run) => inSlice("Library read replay", run));
+
+/**
+ * Runs [run], [name]'s asynchronous work, saying to the block log that it runs until its promise
+ * settles: a block meanwhile with no slice of its own is put down to it.
+ */
+export const namedWork = <A>(name: string, run: () => Promise<A>): Promise<A> => {
+  const ended = blocks.workBegan(name, performance.now());
+  const end = () => ended(performance.now());
+  return run().finally(end);
+};
 
 const work = createBackgroundWork({
   // The perf build's marks and React Native's startup timings use this clock too.
@@ -38,6 +77,15 @@ const work = createBackgroundWork({
     return () => clearTimeout(timer);
   },
   sliceRan: blocks.sliceRan,
+});
+
+/** Whether a finger is on Wave now, from the same root touches (Home's snapshot holds its swap). */
+export const fingerDown = createFingerDown({
+  takeoverMs: BACKGROUND_WORK_LIMITS.takeoverMs,
+  schedule: (ms, run) => {
+    const timer = setTimeout(run, ms);
+    return () => clearTimeout(timer);
+  },
 });
 
 // Every stepped slice in the app runs here, within the scheduler's 8 ms.
@@ -83,7 +131,10 @@ const named = (name: string, run: () => void) => (): void => {
 // background, no finger is on Wave, whatever touch end went unheard.
 AppState.addEventListener("change", (state) => {
   if (state === "active") work.resumed();
-  else work.touchEnded();
+  else {
+    work.touchEnded();
+    fingerDown.ended();
+  }
 });
 
 // Headless starts (Android Auto with no activity) report "background" too.
@@ -140,11 +191,11 @@ export const firstContentShown = (): void => {
 };
 
 /** Runs [run], [name]'s work, on the next free turn; returns the cancel. */
-export const whenFree = (run: () => void, name = "unnamed background work"): (() => void) =>
+export const whenFree = (run: () => void, name: string): (() => void) =>
   work.whenFree(named(name, run));
 
 /** Resolves on the next free turn, for [name]'s work. */
-export const freeTurn = (name?: string): Promise<void> =>
+export const freeTurn = (name: string): Promise<void> =>
   new Promise((resolve) => whenFree(resolve, name));
 
 /** Waits for the next free turn, for the fiber's `BackgroundWorkName`; interrupted, it gives the turn up. */
@@ -176,10 +227,15 @@ export const backgroundTransition = {
 };
 
 /** The root view's touches, which background work waits out. */
-export const touchStarted = (): void => work.touchStarted();
+export const touchStarted = (): void => {
+  work.touchStarted();
+  fingerDown.started();
+};
 export const touchEnded = (event: GestureResponderEvent): void => {
   // Another finger still down keeps the touch going.
-  if (event.nativeEvent.touches.length === 0) work.touchEnded();
+  if (event.nativeEvent.touches.length !== 0) return;
+  work.touchEnded();
+  fingerDown.ended();
 };
 
 /**
@@ -187,7 +243,10 @@ export const touchEnded = (event: GestureResponderEvent): void => {
  * handler takes it over, with the finger still down, and the lift then goes
  * unheard: background work goes on waiting, for Core's `takeoverMs` at most.
  */
-export const touchTakenOver = (): void => work.touchTakenOver();
+export const touchTakenOver = (): void => {
+  work.touchTakenOver();
+  fingerDown.takenOver();
+};
 
 // A perf build's runs record when startup work went and how long slices waited.
 registerPerfMeta("startup", () => {

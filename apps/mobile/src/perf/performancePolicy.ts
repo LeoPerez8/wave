@@ -1181,6 +1181,10 @@ export const MODULE_COLLECTIONS: Record<string, { readonly bound: string }> = {
     bound: "writes waiting for their delay, one per setting at most",
   },
   "lib/radioDeadline.ts#checks": { bound: "radio deadlines running now, removed as each settles" },
+  "stats/hooks.ts#statsQueries": {
+    bound:
+      "query descriptors, not rows: each ranking for the 4 periods at Stats' top 10 and See all, plus genres per period",
+  },
   "lib/timing.ts#background": { bound: "one per named background kind registered in code" },
   "lib/timing.ts#nativeTransitions": {
     bound: "native stack transitions in flight, removed at their end",
@@ -1243,7 +1247,6 @@ export const MODULE_COLLECTIONS: Record<string, { readonly bound: string }> = {
   "settings/followCountry.ts#countries": {
     bound: "one country list per app language, two languages",
   },
-  "stats/hooks.ts#keptReadings": { bound: "STATS_KEPT (32) Stats readings, the oldest let go" },
   "stats/PlayedEntityViews.tsx#artistImages": {
     bound: "knownPages(64) artist photo lookups (#1358: was unbounded)",
   },

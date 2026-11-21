@@ -1070,6 +1070,11 @@ export class LibraryStore extends Context.Service<
     readonly tasteHistory: Effect.Effect<TasteHistory, LibraryStoreError>;
     /** Constant-size stamp of writes to what the taste reads (`db/tastePages.ts#watchTasteSources`). */
     readonly tasteRevision: Effect.Effect<string, LibraryStoreError>;
+    /**
+     * Re-files an upgrade's credits, keys its songs and their titles, and starts the taste
+     * sources' write stamp: once, after the first screen settles, not while the layer builds.
+     */
+    readonly startupUpkeep: Effect.Effect<void, LibraryStoreError>;
     /** The ids of every starred track. */
     readonly favoriteTrackIds: Effect.Effect<readonly number[], LibraryStoreError>;
     /**
@@ -1653,27 +1658,40 @@ const make = Effect.gen(function* () {
   const writes = () => databaseWrites(db);
   // Null until this process cleans up: a save before it started may have left something.
   let prunedAt: string | null = null;
-  // After the upgrade that brought credits in, the Library is re-filed under
-  // each credited artist from the tags already stored (no rescan).
-  yield* Effect.try({
-    try: () => relinkCreditsIfUnlinked(db, splits),
-    catch: (cause) => new LibraryStoreError({ operation: "split artist credits", cause }),
-  });
-  // After the upgrade that brought Wave accounts in, every song (and its
-  // plays) gets its recording key from the tags already stored (no rescan).
-  yield* Effect.try({
-    try: () => keyRecordings(db),
-    catch: (cause) => new LibraryStoreError({ operation: "key the Library's songs", cause }),
-  });
-
-  yield* Effect.tryPromise({
-    try: () => backfillRecordingTitles(db),
-    catch: (cause) => new LibraryStoreError({ operation: "key recording titles", cause }),
-  });
-
-  yield* Effect.try({
-    try: () => watchTasteSources(db),
+  // The taste sources' write stamp, made on its first read or by the upkeep, whichever is first.
+  let tasteWatched = false;
+  const watchTaste = Effect.try({
+    try: () => {
+      if (tasteWatched) return;
+      watchTasteSources(db);
+      tasteWatched = true;
+    },
     catch: (cause) => new LibraryStoreError({ operation: "watch the taste sources", cause }),
+  });
+  // What used to run while the first `appRuntime` use built this layer, on the JS thread before
+  // the first screen (#1359): a startup job runs it once the first screen settles
+  // (`app/_layout.tsx`, "libraryUpkeep"). Migrations stay in the connection's opening.
+  let upkept = false;
+  const startupUpkeep = Effect.gen(function* () {
+    if (upkept) return;
+    upkept = true;
+    // After the upgrade that brought credits in, the Library is re-filed under
+    // each credited artist from the tags already stored (no rescan).
+    yield* Effect.try({
+      try: () => relinkCreditsIfUnlinked(db, splits),
+      catch: (cause) => new LibraryStoreError({ operation: "split artist credits", cause }),
+    });
+    // After the upgrade that brought Wave accounts in, every song (and its
+    // plays) gets its recording key from the tags already stored (no rescan).
+    yield* Effect.try({
+      try: () => keyRecordings(db),
+      catch: (cause) => new LibraryStoreError({ operation: "key the Library's songs", cause }),
+    });
+    yield* Effect.tryPromise({
+      try: () => backfillRecordingTitles(db),
+      catch: (cause) => new LibraryStoreError({ operation: "key recording titles", cause }),
+    });
+    yield* watchTaste;
   });
 
   const listeningHistoryVersion = makeExternalStore(0);
@@ -2100,7 +2118,10 @@ const make = Effect.gen(function* () {
       (result) => result.plays.length + result.favorites.length + result.downloads.length,
     ),
 
-    tasteRevision: attempt("read the taste source revision", (db) => tasteRevision(db)),
+    tasteRevision: Effect.flatMap(watchTaste, () =>
+      attempt("read the taste source revision", (db) => tasteRevision(db)),
+    ),
+    startupUpkeep,
 
     favoriteTrackIds: attempt("read favorites", (db) => selectFavoriteTrackIds(db)),
 

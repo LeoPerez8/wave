@@ -34,7 +34,7 @@ import { FollowCurrentRoute } from "@/library/routes";
 import { useOpenSharedText } from "@/library/sharedText";
 import { YtLibraryPickerHost } from "@/library/YtLibraryPickerHost";
 import { launchScanDone } from "@/library/replacementDuplicates";
-import { optimizeLibraryDatabase, startInitialScan } from "@/library/runtime";
+import { optimizeLibraryDatabase, runLibraryUpkeep, startInitialScan } from "@/library/runtime";
 import { ErrorScreen } from "@/log/ErrorScreen";
 import { startPhoneEffects } from "@/glass/phoneEffects";
 import { NowPlayingSheet, UnderNowPlaying } from "@/nowPlaying/NowPlayingSheet";
@@ -85,6 +85,37 @@ export default function RootLayout() {
   // Auto's responder. A no-op when Android Auto already started them headless (src/services.ts).
   useEffect(() => startServices("app"), []);
 
+  // An upgrade's credits, recording keys and titles, and the taste sources' write stamp: first
+  // of the startup jobs, so the layer's first build leaves them out (src/library/runtime.ts).
+  useEffect(() => afterFirstSettled("libraryUpkeep", runLibraryUpkeep), []);
+
+  // Search's index and the local screens' data read the database, not the music files, so they
+  // start whatever All files access says (screensFromMemoryGuard.test.ts).
+  useEffect(() => {
+    let disposed = false;
+    let stopSearch: (() => void) | undefined;
+    let stopReady: (() => void) | undefined;
+    // Search's index, kept in memory and following the Library from then on (#1354).
+    const stopSearchIndexStart = afterFirstSettled("searchIndex", () => {
+      void import("@/search/searchIndex").then(({ startSearchIndex }) => {
+        if (!disposed) stopSearch = startSearchIndex();
+      });
+    });
+    // The local screens' data, kept in memory before they're opened (#1352).
+    const stopReadyStart = afterFirstSettled("readyScreens", () => {
+      void import("@/library/readyScreens").then(({ startReadyScreens }) => {
+        if (!disposed) stopReady = startReadyScreens();
+      });
+    });
+    return () => {
+      disposed = true;
+      stopSearchIndexStart();
+      stopSearch?.();
+      stopReadyStart();
+      stopReady?.();
+    };
+  }, []);
+
   // The rest waits until the first screen has globally settled and quiet frames have passed, then goes one piece per free turn
   // (src/lib/backgroundWork.ts), in this order.
   useEffect(() => {
@@ -100,22 +131,8 @@ export default function RootLayout() {
           if (!disposed) stopLyrics = startLyricsSearchIndex();
         });
       });
-      // Search's index, kept in memory and following the Library from then on (#1354).
-      const stopSearchIndexStart = afterFirstSettled("searchIndex", () => {
-        void import("@/search/searchIndex").then(({ startSearchIndex }) => {
-          if (!disposed) stopSearch = startSearchIndex();
-        });
-      });
-      // The local screens' data, kept in memory before they're opened (#1352).
-      const stopReadyStart = afterFirstSettled("readyScreens", () => {
-        void import("@/library/readyScreens").then(({ startReadyScreens }) => {
-          if (!disposed) stopReady = startReadyScreens();
-        });
-      });
       let disposed = false;
       let stopLyrics: (() => void) | undefined;
-      let stopSearch: (() => void) | undefined;
-      let stopReady: (() => void) | undefined;
       // Link imports kept when Wave last closed go on filling their playlists.
       const stopImports = afterFirstSettled("imports", resumePlaylistImports);
       // A From YT Music batch Android stopped reads the playlists it hadn't, in order.
@@ -124,10 +141,6 @@ export default function RootLayout() {
         disposed = true;
         stopLyricsIndex();
         stopLyrics?.();
-        stopSearchIndexStart();
-        stopSearch?.();
-        stopReadyStart();
-        stopReady?.();
         stopScan();
         stopImports();
         stopYtImport();

@@ -3,6 +3,7 @@ import { test } from "node:test";
 
 import {
   HOME_SNAPSHOT_MAX_LENGTH,
+  HOME_SNAPSHOT_VERSION,
   homeSnapshotList,
   homeSnapshotRecord,
   parseHomeSnapshot,
@@ -55,15 +56,24 @@ test("nothing stored, unreadable text or another format reads as no snapshot", (
     parseHomeSnapshot(JSON.stringify({ version: 0, savedAt: 5, sections: { songs } }), checks),
     null,
   );
+  // Version 1 saved Stats as translated text; version 2 saves the totals (#1346).
+  assert.equal(HOME_SNAPSHOT_VERSION, 2);
   assert.equal(
-    parseHomeSnapshot(JSON.stringify({ version: 1, sections: { songs } }), checks),
+    parseHomeSnapshot(JSON.stringify({ version: 1, savedAt: 5, sections: { songs } }), checks),
+    null,
+  );
+  assert.equal(
+    parseHomeSnapshot(
+      JSON.stringify({ version: HOME_SNAPSHOT_VERSION, sections: { songs } }),
+      checks,
+    ),
     null,
   );
 });
 
 test("a section that doesn't hold what Home draws is left out; the others still show", () => {
   const stored = JSON.stringify({
-    version: 1,
+    version: HOME_SNAPSHOT_VERSION,
     savedAt: 5,
     page: 1,
     sections: {
@@ -80,9 +90,19 @@ test("a section that doesn't hold what Home draws is left out; the others still 
 });
 
 test("a page that isn't a place among pages reads as none", () => {
-  const stored = JSON.stringify({ version: 1, savedAt: 5, page: -1, sections: { songs } });
+  const stored = JSON.stringify({
+    version: HOME_SNAPSHOT_VERSION,
+    savedAt: 5,
+    page: -1,
+    sections: { songs },
+  });
   assert.equal(parseHomeSnapshot(stored, checks)?.page, null);
-  const fraction = JSON.stringify({ version: 1, savedAt: 5, page: 1.5, sections: { songs } });
+  const fraction = JSON.stringify({
+    version: HOME_SNAPSHOT_VERSION,
+    savedAt: 5,
+    page: 1.5,
+    sections: { songs },
+  });
   assert.equal(parseHomeSnapshot(fraction, checks)?.page, null);
 });
 

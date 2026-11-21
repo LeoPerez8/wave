@@ -86,6 +86,20 @@ The new caches total about **1.5 MB** for the reference Library, against a 500 M
 Songs rows themselves (1.4 MB here) were already kept by #1354. Hermes lays objects out
 differently from V8, so the phone run below checks the real figure (PSS).
 
+## Follow-up (#1346 review)
+
+- Search's index and the screens' data start after the first screen settles whatever All files
+  access says: they read the database, not the music files. `perf/screensFromMemoryGuard.test.ts`
+  checks that neither effect in `app/_layout.tsx` reads `granted`.
+- Stats opens from the queries kept at startup (`statsOpeningQueries`: the opening period's seven
+  rankings, each at most `STATS_SEE_ALL` rows, and its genres) with no skeleton. Its See all draws
+  the kept top 10 until its own read answers, and a period change keeps the last ranking in sight
+  until the new one answers. Its rolling periods are re-read on plays and tracks changes, as before.
+  The guard checks the hooks draw kept queries, the routes have no skeleton and readyScreens keeps
+  them. Tests: `stats/hooks.test.ts` (12) and the guard pass on the desktop.
+- Each screen kept only once opened (`recent`) now states why it isn't kept ahead, and the guard
+  asks for that reason.
+
 ## Phone run: pending
 
 Measured on the desktop only (no phone or emulator run here). On the reference phone. **Before:**

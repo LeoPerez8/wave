@@ -4,13 +4,15 @@
  * read before Home's first render, so a cold start draws the last Home in its
  * first frame (artwork comes from the image cache). Each section draws its
  * snapshot only until its first read this session answers, then shows the
- * read: the same rows keep their places, so nothing in sight moves.
+ * read: the same rows keep their places, so nothing in sight moves. While a
+ * finger is down the section keeps drawing the snapshot, and swaps when it
+ * lifts, so no row moves under a tap or a scroll.
  *
  * Sections kept on the phone already (Discover's mixes, Community playlists,
  * New releases and Upcoming shows) draw their own kept copy in the first
  * frame and aren't repeated here.
  *
- * Format and bounds: Core's `storedHomeSnapshot` (version 1, at most
+ * Format and bounds: Core's `storedHomeSnapshot` (version 2, at most
  * `HOME_SNAPSHOT_MAX_LENGTH`). A missing, old-format or unreadable snapshot
  * is none: Home opens as it does without one, with no error line.
  */
@@ -21,20 +23,28 @@ import {
   storedHomeSnapshot,
   type HomeSnapshot,
   type HomeSnapshotChecks,
+  type LibraryTotals,
+  type ListeningTotals,
   type MagicQueueSeed,
-  type StatsFacts,
 } from "@wave/core";
 import type { PlayableSongRow, PlaylistRow } from "@wave/client";
 import type { TopAlbumsAndArtists } from "@wave/client/db/statsQueries";
 import { Storage } from "expo-sqlite/kv-store";
-import { useEffect } from "react";
+import { useEffect, useSyncExternalStore } from "react";
 import { AppState } from "react-native";
 
+import { fingerDown } from "@/lib/backgroundWork";
 import { registerPerfMeta } from "@/perf/perf";
 
 import type { HomeContent } from "./homeOpening";
 
 type Seeds = readonly MagicQueueSeed<PlayableSongRow>[];
+
+/** Stats' totals, kept as numbers so the facts are drawn in the language of the moment. */
+export interface StatsTotals {
+  readonly library: LibraryTotals;
+  readonly listening: ListeningTotals;
+}
 
 /** What the snapshot holds, by section. */
 export interface HomeSnapshotSections {
@@ -44,7 +54,7 @@ export interface HomeSnapshotSections {
   readonly mostPlayed: TopAlbumsAndArtists;
   readonly orbit: Seeds;
   readonly fromYourLibrary: readonly PlaylistRow[];
-  readonly stats: StatsFacts;
+  readonly stats: StatsTotals;
   /** The Magic Queue carousel's pages; the page in sight is the snapshot's `page`. */
   readonly magicQueue: readonly Seeds[];
 }
@@ -93,7 +103,17 @@ const CHECKS: HomeSnapshotChecks<HomeSnapshotSections> = {
     thumbPaths: "object",
   }),
   // not UI text: field kinds the snapshot check expects
-  stats: homeSnapshotList({ label: "string", value: "string" }),
+  stats: (value): value is StatsTotals =>
+    homeSnapshotRecord({ library: "object", listening: "object" })(value) &&
+    homeSnapshotRecord({ songs: "number", albums: "number", artists: "number" })(
+      (value as StatsTotals).library,
+    ) &&
+    homeSnapshotRecord({
+      minutesListened: "number",
+      songsListened: "number",
+      plays: "number",
+      lastPlayedAt: "number?",
+    })((value as StatsTotals).listening),
   magicQueue: (value): value is readonly Seeds[] => isList(value) && value.every(seeds),
 };
 
@@ -126,20 +146,25 @@ export const snapshotSection = <K extends keyof HomeSnapshotSections>(
 
 /**
  * Home's section [name]: [value] once its read answers (noted for the next
- * snapshot), the snapshot's until then.
+ * snapshot), the snapshot's until then. A section drawing the snapshot keeps
+ * it while a finger is down, and shows the read when the finger lifts.
  */
 export const useSnapshotted = <K extends keyof HomeSnapshotSections>(
   name: K,
   value: HomeSnapshotSections[K] | undefined,
 ): HomeSnapshotSections[K] | undefined => {
+  const held = useSyncExternalStore(fingerDown.subscribe, fingerDown.isDown);
+  const snapshot = snapshotSection(name);
+  const shown = value === undefined || (held && snapshot !== undefined) ? snapshot : value;
+  const showsRead = value !== undefined && shown === value;
   useEffect(() => {
-    if (value === undefined) return;
+    if (!showsRead) return;
     live[name] = value;
     // The snapshot's copy is drawn no more: let it go.
     if (cold?.sections[name] !== undefined)
       cold = { ...cold, sections: { ...cold.sections, [name]: undefined } };
-  }, [name, value]);
-  return value ?? snapshotSection(name);
+  }, [name, value, showsRead]);
+  return shown;
 };
 
 /** The carousel's page in sight at the last save, until the carousel shows one this session. */

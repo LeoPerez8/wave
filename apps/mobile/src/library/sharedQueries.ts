@@ -7,12 +7,14 @@ import {
 import type * as Effect from "effect/Effect";
 import { useCallback, useContext, useEffect, useSyncExternalStore } from "react";
 
-import { firstContentShown } from "@/lib/backgroundWork";
+import { firstContentShown, inSlice } from "@/lib/backgroundWork";
 import { CoveredByNowPlaying, useScreenSight } from "@/lib/screenSight";
 import { attachInSight } from "@/lib/sight";
 import { registerPerfMeta } from "@/perf/perf";
 
 import { onLibraryChange } from "./libraryChanges";
+import type { Stats } from "@/stats/Stats";
+
 import type { LibraryStore, LibraryStoreError } from "./LibraryStore";
 
 import { appRuntime } from "./runtime";
@@ -23,10 +25,13 @@ import { appRuntime } from "./runtime";
  * `createLibraryQueries`). The same key must always read the same thing:
  * put every parameter in it (`album:12`).
  */
+/** What a query may read: the Library, or Stats over it (`stats/hooks.ts`). */
+export type LibraryQueryServices = LibraryStore | Stats;
+
 export interface LibraryQuery<A> {
   readonly key: string;
   readonly reads: LibraryReads;
-  readonly read: Effect.Effect<A, LibraryStoreError, LibraryStore>;
+  readonly read: Effect.Effect<A, LibraryStoreError, LibraryQueryServices>;
   readonly traits: LibraryQueryTraits<A>;
 }
 
@@ -34,7 +39,7 @@ export interface LibraryQuery<A> {
 export const libraryQuery = <A>(
   key: string,
   reads: LibraryReads,
-  read: Effect.Effect<A, LibraryStoreError, LibraryStore>,
+  read: Effect.Effect<A, LibraryStoreError, LibraryQueryServices>,
   traits: LibraryQueryTraits<A> = {},
 ): LibraryQuery<A> => ({ key, reads, read, traits });
 
@@ -60,7 +65,8 @@ const registry = createLibraryQueries<unknown>({
         return;
       }
       appRuntime.runPromise(definition.read).then(
-        (value) => settle({ ok: true, value }),
+        // The screens' listeners run here, after the read's await: a named slice (#1359).
+        (value) => inSlice("Library query", () => settle({ ok: true, value })),
         // Keep showing the last good result; scan errors surface in the banner.
         () => settle({ ok: false }),
       );

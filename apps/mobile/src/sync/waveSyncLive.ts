@@ -88,7 +88,7 @@ export const make = Effect.gen(function* () {
             now: Date.now,
             songsChanged: false,
             wait: (ms) => new Promise((resolve) => setTimeout(resolve, ms)),
-            turn: freeTurn,
+            turn: () => freeTurn("collaborative playlist sync"),
             collaboration: collaborations,
           },
           playlistId,
