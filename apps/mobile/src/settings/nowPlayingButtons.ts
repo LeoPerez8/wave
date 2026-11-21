@@ -1,6 +1,7 @@
 import { currentLocalisation } from "@/localisation/localisation";
 import {
   NOW_PLAYING_BUTTONS_KEY,
+  NOW_PLAYING_PREVIOUS_ROW_KEY,
   editNowPlayingButtons,
   readNowPlayingButtons,
   storedNowPlayingButtons,
@@ -9,25 +10,34 @@ import {
   type NowPlayingButtonsEdit,
   type NowPlayingSlot,
 } from "@wave/core";
+import { Storage } from "expo-sqlite/kv-store";
 
 import { persistedSetting, sameFields } from "@/lib/persistedSetting";
 
 /**
- * Now Playing's four button slots, left of Queue (Settings › Layout › Now
- * Playing). Synced with the Wave account, as the tab bar is. Core's key
- * replaced the one rows were kept under before the default changed, which
- * stays stored but is never read.
+ * The row of four slots as stored before there were seven, which Core reads
+ * to keep an edited row. This phone never writes it.
+ */
+const previousRow = (): string | null => Storage.getItemSync(NOW_PLAYING_PREVIOUS_ROW_KEY);
+
+/**
+ * Now Playing's seven slots: five in the footer and one on each side of the
+ * transport (Settings › Layout › Now Playing). Synced with the Wave account,
+ * as the tab bar is, under Core's key.
  */
 const nowPlayingButtons = persistedSetting<NowPlayingButtons>({
   key: NOW_PLAYING_BUTTONS_KEY,
   synced: true,
-  read: readNowPlayingButtons,
-  write: storedNowPlayingButtons,
+  read: (stored) => readNowPlayingButtons(stored, previousRow()),
+  write: (buttons) => storedNowPlayingButtons(buttons, previousRow()),
   equals: sameFields,
 });
 
-/** The four slots; re-renders when one changes. */
+/** The seven slots; re-renders when one changes. */
 export const useNowPlayingButtons = nowPlayingButtons.useValue;
+
+/** The seven slots, as saved. */
+export const savedNowPlayingButtons = nowPlayingButtons.get;
 
 /** Applies [edit] (a slot set, swapping a taken action, or Reset to Default) and saves it at once. */
 export const editSavedNowPlayingButtons = (edit: NowPlayingButtonsEdit): void =>
@@ -37,6 +47,9 @@ export const editSavedNowPlayingButtons = (edit: NowPlayingButtonsEdit): void =>
 const ACTION_LABELS: Readonly<Record<NowPlayingAction, string>> = {
   get lyrics() {
     return currentLocalisation().strings.playbackText.lyrics;
+  },
+  get queue() {
+    return currentLocalisation().strings.playbackText.queue;
   },
   get sleepTimer() {
     return currentLocalisation().strings.playbackText.sleepTimer;
