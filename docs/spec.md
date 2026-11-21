@@ -637,10 +637,11 @@ How it works and why is in `docs/spotify-account.md` (#484). There's no official
   - `DELETE /v1/session`: sign out.
   - `DELETE /v1/sessions`: sign out on all phones (every session of the account).
   - `POST /v1/push`: changed rows in, merged on arrival.
-  - `GET /v1/pull?since=<cursor>`: every row that changed after the cursor, and the next cursor. The service numbers each accepted change, so a pull never misses one.
+  - `GET /v1/pull?since=<cursor>`: every row that changed after the cursor, and the next cursor. The service numbers each accepted change, so a pull never misses one. Every page also lists, whole, the collaborative playlists the account is in with their members' names, and the ones it left or that ended for it.
   - `PUT /v1/soulseek`: the account's Soulseek account in (the password kept encrypted under `SOULSEEK_KEY`); `GET /v1/soulseek`: it, or none. Only the native module sends them.
   - `DELETE /v1/account`: every row, session and the Soulseek account, given a fresh Google ID token for the account.
   - `PUT /v1/account/name`: the account's Google account name in, from an app that signed in before names were kept.
+  - `POST /v1/collaboration`: makes a playlist of the session's account collaborative, with that account as owner. `DELETE /v1/collaboration`: the owner ends it, and the playlist's rows stay. `GET /v1/collaboration/members`: the members, for any of them. `DELETE /v1/collaboration/members`: the owner removes one. `DELETE /v1/collaboration/membership`: a member who isn't the owner leaves (Collaborative playlists).
   - `GET /v1/genius/search`, `/song` and `/referents`, and `GET /v1/ticketmaster/attractions` and `/events`: one fixed Genius or Ticketmaster request each, asked with the service's own key (see Genius About and Followed artists).
 - **Deploying it** is done by hand with `wrangler deploy`. A setup wizard walks through creating the Turso database, Google's OAuth clients (two Android clients, one with the release key's SHA-1 and one with the debug keystore's, which local builds and releases from before the release key sign in with, and the web client id the service checks ID tokens against) and the Worker's secrets.
 

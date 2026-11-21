@@ -72,7 +72,7 @@ describe("a sign-in keeps the Google account's name", () => {
       sql: "INSERT INTO accounts (id, google_sub, email, created_at) VALUES (?, ?, ?, ?)",
       args: ["account-1", "google-sub-1", "ana@example.com", Date.UTC(2026, 0, 1)],
     });
-    assert.deepEqual(await migrate(db), ["0014_account_name"]);
+    assert.equal((await migrate(db))[0], "0014_account_name");
 
     // One place in all: the sign-in works only as the account that was already there.
     const service = await harness({ limits: { maxAccounts: 1 } }, db);

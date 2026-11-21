@@ -9,6 +9,14 @@
 
 import type { Client } from "@libsql/client";
 import { accountName, geniusUpstreamUrl, sha256Hex, ticketmasterUpstreamUrl } from "@wave/core";
+import {
+  type CollaborationRefusal,
+  collaborationMembers,
+  endCollaboration,
+  leaveCollaboration,
+  makeCollaboration,
+  removeMember,
+} from "./collaborations.ts";
 import { type GoogleKeys, googleKeys, verifyGoogleIdToken } from "./google.ts";
 import { type SyncLimitName, type SyncLimits, SYNC_LIMITS } from "./limits.ts";
 import {
@@ -506,7 +514,13 @@ export const createSyncService = (options: SyncServiceOptions): SyncService => {
     const since = url.searchParams.get("since") ?? "0";
     if (!/^\d{1,15}$/.test(since)) throw failure(400, "bad_request");
     const page = await pullRows(db, session.accountId, Number(since), pullPageSize);
-    return json({ ...page.rows, cursor: String(page.cursor), more: page.more });
+    return json({
+      ...page.rows,
+      cursor: String(page.cursor),
+      more: page.more,
+      collaborations: page.collaborations,
+      endedCollaborations: page.endedCollaborations,
+    });
   });
 
   /**
@@ -540,7 +554,7 @@ export const createSyncService = (options: SyncServiceOptions): SyncService => {
     ) {
       throw failure(401, "invalid_id_token");
     }
-    await deleteAccount(db, session.accountId);
+    await deleteAccount(db, session.accountId, now());
     return new Response(null, { status: 204 });
   });
 
@@ -560,6 +574,53 @@ export const createSyncService = (options: SyncServiceOptions): SyncService => {
     });
     return new Response(null, { status: 204 });
   });
+
+  /** The query's `playlist`: the id of the playlist a collaboration route is about. */
+  const playlistAsked = (url: URL): string => {
+    const playlistId = url.searchParams.get("playlist");
+    if (playlistId === null || playlistId === "") throw failure(400, "bad_request");
+    return playlistId;
+  };
+
+  /** A 204, or what a refusal answers: 403, and 404 for an account to remove that isn't in the playlist. */
+  const settled = (refusal: CollaborationRefusal | null): Response => {
+    if (refusal === null) return new Response(null, { status: 204 });
+    throw failure(refusal === "not_found" ? 404 : 403, refusal);
+  };
+
+  /** Makes a playlist of the session's account collaborative; the account is its owner. */
+  const makeCollaborative = withSession(async ({ request }, session) => {
+    const body = await readJson(request);
+    const playlistId =
+      typeof body === "object" && body !== null && "playlistId" in body
+        ? body.playlistId
+        : undefined;
+    if (typeof playlistId !== "string" || playlistId === "") throw failure(400, "bad_request");
+    const made = await makeCollaboration(db, playlistId, session.accountId, now());
+    if (made === "no_playlist") throw failure(404, "not_found");
+    if (made === "taken") throw failure(409, "taken");
+    return json(made);
+  });
+
+  const endCollaborative = withSession(async ({ url }, session) =>
+    settled(await endCollaboration(db, playlistAsked(url), session.accountId, now())),
+  );
+
+  const listMembers = withSession(async ({ url }, session) => {
+    const collaboration = await collaborationMembers(db, playlistAsked(url), session.accountId);
+    if (collaboration === "not_member") throw failure(403, "not_member");
+    return json(collaboration);
+  });
+
+  const removeOneMember = withSession(async ({ url }, session) => {
+    const memberId = url.searchParams.get("account");
+    if (memberId === null || memberId === "") throw failure(400, "bad_request");
+    return settled(await removeMember(db, playlistAsked(url), session.accountId, memberId, now()));
+  });
+
+  const leaveCollaborative = withSession(async ({ url }, session) =>
+    settled(await leaveCollaboration(db, playlistAsked(url), session.accountId, now())),
+  );
 
   // Imported at the first Soulseek request, and again after a failed import.
   let soulseekKeys: Promise<SoulseekKeys> | null = null;
@@ -753,6 +814,11 @@ export const createSyncService = (options: SyncServiceOptions): SyncService => {
     "GET /v1/pull": pullChanges,
     "DELETE /v1/account": removeAccount,
     "PUT /v1/account/name": putAccountName,
+    "POST /v1/collaboration": makeCollaborative,
+    "DELETE /v1/collaboration": endCollaborative,
+    "GET /v1/collaboration/members": listMembers,
+    "DELETE /v1/collaboration/members": removeOneMember,
+    "DELETE /v1/collaboration/membership": leaveCollaborative,
     "PUT /v1/soulseek": putSoulseek,
     "GET /v1/soulseek": getSoulseek,
     "GET /v1/genius/search": genius,
