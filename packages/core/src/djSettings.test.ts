@@ -9,6 +9,7 @@ import {
   djFilterOn,
   djMixSliders,
   djNewMusicShare,
+  djSettingsSummary,
   djToggleFilter,
   djToggleMood,
   parseDjSettings,
@@ -120,5 +121,41 @@ describe("Adjust's mood filters", () => {
     assert.equal(parseDjSettings(JSON.parse(JSON.stringify(energetic))).mood, "energetic");
     assert.equal(parseDjSettings({ mood: "melancholic" }).mood, null);
     assert.equal(parseDjSettings({}).mood, null);
+  });
+});
+
+describe("DJ's summary of its choices", () => {
+  test("with the defaults it names the variety and discovery steps", () => {
+    assert.equal(djSettingsSummary(DEFAULT_DJ_SETTINGS), "Medium variety · Blend");
+  });
+
+  test("a filter or a mood that's on follows them, filters first", () => {
+    const chosen: DjSettings = {
+      variety: "high",
+      discovery: "discover",
+      popularity: "lesserKnown",
+      newReleases: true,
+      mood: "relaxing",
+    };
+    assert.equal(
+      djSettingsSummary(chosen),
+      "High variety · Discover · Lesser-known songs · New releases · Relaxing",
+    );
+    assert.equal(
+      djSettingsSummary({ ...DEFAULT_DJ_SETTINGS, variety: "low", popularity: "trending" }),
+      "Low variety · Blend · Trending",
+    );
+  });
+
+  test("it reads in Brazilian Portuguese", () => {
+    const pt = catalogueOf("pt-BR");
+    assert.equal(djSettingsSummary(DEFAULT_DJ_SETTINGS, pt), "Variedade média · Misturar");
+    assert.equal(
+      djSettingsSummary(
+        { ...DEFAULT_DJ_SETTINGS, variety: "low", discovery: "familiar", mood: "energetic" },
+        pt,
+      ),
+      "Variedade baixa · Conhecidas · Agitada",
+    );
   });
 });

@@ -16,6 +16,7 @@ export const djPtBr: typeof djEn = {
   backToGrid: "Voltar para DJ",
   artistVariety: "Variedade de artistas",
   varietySteps: { low: "Baixa", medium: "Média", high: "Alta" },
+  varietySummary: { low: "Variedade baixa", medium: "Variedade média", high: "Variedade alta" },
   varietyNotes: {
     low: "Quase só os artistas que você escolheu.",
     medium: "Os artistas que você escolheu e os próximos deles.",

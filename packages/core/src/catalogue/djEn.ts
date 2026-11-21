@@ -24,6 +24,8 @@ export const djEn = {
   artistVariety: "Artist variety",
   /** Artist variety's steps: how far the queue strays from the selected artists. */
   varietySteps: { low: "Low", medium: "Medium", high: "High" },
+  /** Each Artist variety step as the bottom bar's summary of Adjust names it. */
+  varietySummary: { low: "Low variety", medium: "Medium variety", high: "High variety" },
   varietyNotes: {
     low: "Almost only the artists you picked.",
     medium: "The artists you picked and those close to them.",
