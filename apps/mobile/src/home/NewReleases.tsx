@@ -44,8 +44,8 @@ const guardedRequest = <A,>(read: Effect.Effect<A, YtMusicError>) =>
     return yield* read;
   });
 /**
- * Where a release the Library lacks opens (`openFollowRelease`): a matched one on its album once
- * the page reads; one whose album is gone loses its match and comes back as not found.
+ * Where a release the Library lacks opens (`openFollowRelease`): a matched one on its album, also
+ * with no answer; one whose album reads with no songs loses its match and comes back as not found.
  */
 const resolve = (release: FollowRelease, artist: string): Promise<FollowReleaseOpening> => {
   const read = async <A,>(ask: Parameters<typeof askYtMusic<A, YtMusicError>>[0]) => {
@@ -65,10 +65,11 @@ const resolve = (release: FollowRelease, artist: string): Promise<FollowReleaseO
           const result = await askYtMusic((yt) =>
             withSearchTurn("search", release.title, guardedRequest(yt.album(browseId))),
           );
-          if (Result.isSuccess(result))
-            return { videoIds: result.success.tracks.map((t) => t.videoId) };
-          // Switched off or offline is no answer; YouTube refusing the page is a gone album.
-          return result.failure.reason === "failed" ? "failed" : "offline";
+          // Any failure is no answer: the page opens and says why, and the match stays. An album
+          // that reads with no songs is gone. The album screen shares this read (`readYtAlbum`).
+          return Result.isSuccess(result)
+            ? { videoIds: result.success.tracks.map((t) => t.videoId) }
+            : "noAnswer";
         },
       }),
     ),
