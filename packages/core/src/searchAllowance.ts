@@ -19,6 +19,7 @@ export type SearchAsker =
   | "share"
   | "discover"
   | "artistPage"
+  | "newReleases"
   | "fill";
 
 /**
@@ -56,6 +57,8 @@ const ASKERS: Readonly<Record<SearchAsker, AskerTurn>> = {
   discover: { rank: 2, most: SEARCH_ALLOWANCE, name: "a Discover mix" },
   // A Library artist's page finding their YouTube Music page for Fans might also like and About: nobody waits on it.
   artistPage: { rank: 2, most: SEARCH_ALLOWANCE, name: "an artist page" },
+  // A Follows check looking for new releases on YT Music: nobody waits on it, so last, as the fill.
+  newReleases: { rank: 3, most: 800, name: "the New releases check" },
   // Unsearched entries searched while Wave runs: last, and never the 200 kept for playing and downloads.
   fill: { rank: 3, most: 800, name: "the background fill" },
 };
