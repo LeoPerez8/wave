@@ -70,8 +70,8 @@ export type {
 } from "./listActions.ts";
 export { describeFolder, filesLeavingWithRoot, isWithin, planAddRoot } from "./scanRoots.ts";
 export type { AddRootPlan, FolderLabel, ScanRootState } from "./scanRoots.ts";
-export { resolveSkipSwipe } from "./swipe.ts";
-export type { SkipDirection, SkipSwipe } from "./swipe.ts";
+export { resolveSkipSwipe, settleScreenSwipe } from "./swipe.ts";
+export type { ScreenSwipe, SkipDirection, SkipSwipe } from "./swipe.ts";
 export { toastDuration, toastSwipeDismisses } from "./toast.ts";
 export type { ToastSwipe } from "./toast.ts";
 export {
@@ -846,6 +846,19 @@ export type {
 export { pendingWriteDelay } from "./writePacing.ts";
 export type { WritePacing } from "./writePacing.ts";
 export { stepNowPlayingSheet } from "./sheetLifecycle.ts";
+export { NOW_PLAYING_OPENS_ON, stepNowPlayingScreens } from "./nowPlayingScreens.ts";
+export {
+  nowPlayingEditHintDue,
+  readNowPlayingEditHintShown,
+  storedNowPlayingEditHintShown,
+} from "./nowPlayingEditHint.ts";
+export type {
+  NowPlayingPage,
+  NowPlayingScreen,
+  NowPlayingScreens,
+  NowPlayingScreensEvent,
+  NowPlayingScreensStep,
+} from "./nowPlayingScreens.ts";
 export {
   QUEUE_COVER_FLUSH_MS,
   createQueueCoverBatcher,
@@ -1030,6 +1043,7 @@ export type {
 } from "./ytAccount.ts";
 export {
   YT_SEARCH_DEBOUNCE_MS,
+  YT_SEARCH_NO_LIBRARY,
   YT_SECTION_HIDDEN,
   stepYtSection,
   ytSearchAsksVideos,
@@ -2806,6 +2820,8 @@ export {
   type SampleTouchEvent,
 } from "./touchSample.ts";
 export type { LongPressFill, SampleMenuEntry } from "./touchSample.ts";
+export { RELATED_PAGE_ROWS, relatedPages, relatedRowsThatFit } from "./relatedPages.ts";
+export type { RelatedPages } from "./relatedPages.ts";
 export {
   createRelatedSearches,
   createRelatedSongsSession,
@@ -2823,9 +2839,16 @@ export type {
 export {
   NOW_PLAYING_ACTIONS,
   NOW_PLAYING_BUTTONS_KEY,
+  NOW_PLAYING_FOOTER_SLOTS,
+  NOW_PLAYING_PREVIOUS_ROW_KEY,
+  NOW_PLAYING_TRANSPORT_SLOTS,
   editNowPlayingButtons,
+  nowPlayingButtonsAreDefault,
+  nowPlayingRelatedChevronShown,
+  nowPlayingSlotRoute,
   nowPlayingSlotChoices,
   nowPlayingSlotShow,
+  nowPlayingSongMenuShow,
   readNowPlayingButtons,
   readNowPlayingSlotRoute,
   storedNowPlayingButtons,
@@ -2977,3 +3000,63 @@ export {
   type LanguageChoice,
 } from "./languageChoice.ts";
 export { displayTag } from "./displayTag.ts";
+export {
+  DJ_GRID_TILES,
+  DJ_MAX_SELECTED,
+  djArtistTile,
+  djCanStart,
+  djGrid,
+  djOpened,
+  djReduce,
+  djSeedTiles,
+  djSelectable,
+  djSelected,
+  startDjQueue,
+} from "./dj.ts";
+export {
+  DEFAULT_DJ_SETTINGS,
+  DJ_DISCOVERIES,
+  DJ_VARIETIES,
+  djDiscoveryLabel,
+  djMixSliders,
+  djNewMusicShare,
+  parseDjSettings,
+} from "./djSettings.ts";
+export type { DjDiscovery, DjPopularity, DjSettings, DjVariety } from "./djSettings.ts";
+export { djVarietyCandidates } from "./djVariety.ts";
+export type { DjCandidatePools } from "./djVariety.ts";
+export {
+  DJ_REMEMBERED_SETTING,
+  djReopened,
+  readDjRemembered,
+  storedDjRemembered,
+} from "./djRemembered.ts";
+export type { DjRemembered } from "./djRemembered.ts";
+export { DJ_FILTERS, djFilterOn, djToggleFilter } from "./djSettings.ts";
+export type { DjFilter } from "./djSettings.ts";
+export {
+  DJ_NEW_RELEASE_BOOST,
+  DJ_RELEASE_PAGES,
+  djNewReleasesRanked,
+  djReleaseArtists,
+} from "./djNewReleases.ts";
+export type { DjReleasePage } from "./djNewReleases.ts";
+export { magicSessionSliders } from "./magicQueue.ts";
+export type {
+  DjAction,
+  DjState,
+  DjArtistTile,
+  DjGridSources,
+  DjPageNeeded,
+  DjTile,
+  DjTileKey,
+} from "./dj.ts";
+export { djOpeningGrid } from "./djOpening.ts";
+export type { DjOpeningGrid, DjOpeningSources } from "./djOpening.ts";
+export { DJ_OPENED_TILES, djCells, djPageRead, djPagesNeeded } from "./dj.ts";
+export { djAlbumTile, djTileArtist } from "./dj.ts";
+export type { DjAlbum, DjAlbumTile } from "./dj.ts";
+export type { DjCell, DjPageRead, DjRow, DjSavedPage } from "./dj.ts";
+export { djSearchTiles } from "./djSearch.ts";
+export { djSeedFull } from "./dj.ts";
+export type { DjSearchFound } from "./djSearch.ts";

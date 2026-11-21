@@ -11,7 +11,7 @@ BlackPlayer EX, the Android player whose features wave builds. A feature is in s
 _Avoid_: BlackPlayer clone
 
 **UI reference**:
-The current iPhone Apple Music app, whose screen structure, navigation and motion wave copies, without Apple's name, icons or artwork.
+The current iPhone Apple Music app, whose screen structure, navigation and motion wave copies, without Apple's name, icons or artwork. Now Playing is the exception: its screens are laid out as YouTube Music's player is, in wave's own look.
 _Avoid_: iTunes (the original idea, since replaced)
 
 ### Music

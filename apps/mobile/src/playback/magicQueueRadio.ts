@@ -1,6 +1,9 @@
 /** Magic Queue reads its seed's radio and ranks it with the last available Wave signals. */
 import {
   catalogSeedKey,
+  djNewReleasesRanked,
+  djVarietyCandidates,
+  identityKey,
   recordingMatches,
   type MixKnownSongs,
   magicLibrarySongs,
@@ -18,12 +21,14 @@ import {
   type MagicSong,
   type MixSliders,
   type TasteProfile,
+  type YtArtistSaved,
 } from "@wave/core";
 import * as Effect from "effect/Effect";
 
 import { lookedUpProfileOf } from "@/home/artistGenres";
+import { djReleasePagesReader } from "@/dj/djReleases";
 import { dislikedSongsNow, loadDislikes } from "@/library/dislikes";
-import { type LibraryStore } from "@/library/LibraryStore";
+import { LibraryStore } from "@/library/LibraryStore";
 import { songHasFile, type SongRow, type ArtistRow } from "@wave/client";
 import { online } from "@/native/waveNative";
 import { WaveYtMusic } from "@/native/waveYtMusic";
@@ -34,6 +39,11 @@ import { createAppSongRadioReaders } from "./songRadioSetup";
 
 let found: readonly MagicSong[] = [];
 const radioReaders = createAppSongRadioReaders("Magic Queue");
+
+/** What's saved for an artist's page, read from the Library's store once a batch has it. */
+let savedPage: (name: string) => Promise<YtArtistSaved | null> = () => Promise.resolve(null);
+/** The saved pages of a DJ session's artists, for its New releases filter. */
+const releasePages = djReleasePagesReader((name) => savedPage(name));
 
 /**
  * The radio an old session reads when it saved none (`magicBatchRadios`
@@ -68,6 +78,7 @@ export const magicQueueYtCandidates = (
     profileOf,
     sliders,
     sessionNow,
+    deadlineAt,
   }: {
     readonly catalog: readonly CatalogSong[];
     readonly graph: ArtistGraph | null;
@@ -75,6 +86,8 @@ export const magicQueueYtCandidates = (
     readonly profileOf: GenreProfileOf;
     readonly sliders: MixSliders;
     readonly sessionNow?: () => MagicSession;
+    /** When the radio reads stop (epoch ms), if they share a deadline with what came before them. */
+    readonly deadlineAt?: number;
   },
 ) =>
   Effect.gen(function* () {
@@ -89,6 +102,10 @@ export const magicQueueYtCandidates = (
         refilled: null,
       };
     const context = yield* Effect.context<LibraryStore>();
+    // A DJ session's New releases ranks with its artists' saved pages; none is asked for.
+    const store = yield* LibraryStore;
+    savedPage = (name) => Effect.runPromise(store.ytArtist(identityKey(name)));
+    const releases = yield* Effect.promise(() => releasePages(sessionNow?.() ?? session, graph));
     const seeds = drawn.length > 0 ? drawn : [legacySeed(session)];
     const liked = ((sessionNow?.() ?? session).likedRadios ?? []).filter(
       (radio) =>
@@ -121,7 +138,19 @@ export const magicQueueYtCandidates = (
           );
     // Read before the first ranking; each ranking takes the dislikes as they are by then.
     yield* Effect.promise(loadDislikes);
-    const rank = (group: readonly SongRadioSeed[], original: boolean, faithfulFallback = false) => {
+    // A DJ session's New releases raises the songs on its artists' recent releases; any other keeps the order.
+    const rank = (group: readonly SongRadioSeed[], original: boolean, faithfulFallback = false) =>
+      djNewReleasesRanked(
+        sessionNow?.() ?? session,
+        radioRanked(group, original, faithfulFallback),
+        releases,
+        Date.now(),
+      );
+    const radioRanked = (
+      group: readonly SongRadioSeed[],
+      original: boolean,
+      faithfulFallback: boolean,
+    ) => {
       const current = sessionNow?.() ?? session;
       const read = readers.current(session.id, group);
       // Old artist radios still provide an offline fallback until an ordered page is saved.
@@ -179,21 +208,29 @@ export const magicQueueYtCandidates = (
         { online: online(), ytMusic: ytMusicEnabled(), cachedVideos },
       );
     };
-    const originalBefore = rank(seeds, true);
-    const likedBefore = rank(liked, false);
+    // A DJ session's Artist variety limits who a batch may hold; any other keeps every song.
+    const allowed = (size: number) =>
+      djVarietyCandidates(
+        sessionNow?.() ?? session,
+        graph,
+        { seed: rank(seeds, true), liked: rank(liked, false) },
+        size,
+      );
+    // Unfilled, so a radio short of allowed songs reads its continuations.
+    const before = allowed(0);
     const plan = magicRadioReadPlan(
       sessionNow?.() ?? session,
-      originalBefore,
-      likedBefore,
+      before.seed,
+      before.liked,
       liked.length > 0,
     );
     const originalIds = new Set(seeds.map((seed) => seed.id));
     const read = yield* readers.read(session.id, [...seeds, ...liked], {
       online: connected,
+      ...(deadlineAt === undefined ? {} : { deadlineAt }),
       low: (seed) => (originalIds.has(seed.id) ? plan.seedLow : plan.likedLow),
     });
-    const candidates = rank(seeds, true);
-    const likedCandidates = rank(liked, false);
+    const { seed: candidates, liked: likedCandidates } = allowed(plan.size);
     // Ranked again at Close only when the faithful batch comes up short (`completeMagicRadioBatch`).
     const fallback = session.faithful
       ? () => ({ seed: rank(seeds, true, true), liked: rank(liked, false, true) })

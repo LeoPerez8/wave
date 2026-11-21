@@ -1,6 +1,10 @@
-import { currentLocalisation } from "@/localisation/localisation";
 import { useLocalisation } from "@/localisation/localisation";
-import { nowPlayingSlotChoices, storedNowPlayingButtons, type NowPlayingSlot } from "@wave/core";
+import {
+  nowPlayingButtonsAreDefault,
+  nowPlayingSlotChoices,
+  nowPlayingSlotRoute,
+  type NowPlayingSlot,
+} from "@wave/core";
 import { Text, View } from "react-native";
 
 import { Hairline } from "@/catalog/Hairline";
@@ -11,21 +15,22 @@ import { ChoiceRow } from "./ChoiceRow";
 import {
   editSavedNowPlayingButtons,
   nowPlayingSlotLabel,
+  nowPlayingSlotTitle,
   useNowPlayingButtons,
 } from "./nowPlayingButtons";
 import { SettingsPageRow, SettingsPageScreen } from "./SettingsPage";
-import { useYtMusicEnabled } from "./ytMusic";
 
-/** A slot's name on its row and its picker's header: "Slot 1" for the leftmost. */
-const slotTitle = (slot: number): string => currentLocalisation().strings.settings.slot(slot + 1);
-
-/** Where slot [slot]'s picker is (also `wave://settings/layout/now-playing/<n>`). */
-const pickerRoute = (slot: number) => `/settings/layout/now-playing/${slot + 1}` as const;
+/**
+ * Where slot [slot]'s picker is (also `wave://settings/layout/now-playing/<n>`,
+ * `left` and `right` for the transport's).
+ */
+const pickerRoute = (slot: number) =>
+  `/settings/layout/now-playing/${nowPlayingSlotRoute(slot) ?? ""}` as const;
 
 /**
  * Settings › Layout › Now Playing's buttons: a row per slot saying what it
- * holds, each opening its picker, then Reset to Default (off while the row is
- * the default).
+ * holds (the footer's five, then the transport's two), each opening its
+ * picker, then Reset to Default (off while the slots are the default).
  */
 export function NowPlayingSlotsSection() {
   const { strings } = useLocalisation();
@@ -36,7 +41,7 @@ export function NowPlayingSlotsSection() {
       {buttons.map((action, slot) => (
         <SettingsPageRow
           key={slot}
-          title={slotTitle(slot)}
+          title={nowPlayingSlotTitle(slot)}
           summary={nowPlayingSlotLabel(action)}
           onPress={() => router.push(pickerRoute(slot))}
         />
@@ -47,7 +52,7 @@ export function NowPlayingSlotsSection() {
       <View className="mt-4 items-start">
         <TextButton
           label={strings.settings.resetToDefault}
-          disabled={storedNowPlayingButtons(buttons) === null}
+          disabled={nowPlayingButtonsAreDefault(buttons)}
           onPress={() => editSavedNowPlayingButtons("reset")}
         />
       </View>
@@ -55,11 +60,8 @@ export function NowPlayingSlotsSection() {
   );
 }
 
-/** Every choice a slot's picker lists: None, then each action ([ytMusic]: Related only with it on). */
-const slotChoices = (ytMusic: boolean): readonly NowPlayingSlot[] => [
-  null,
-  ...nowPlayingSlotChoices(ytMusic),
-];
+/** Every choice a slot's picker lists: None, then each action. */
+const SLOT_CHOICES: readonly NowPlayingSlot[] = [null, ...nowPlayingSlotChoices()];
 
 /** Back to Now Playing's page, there being nothing under a picker opened from a link. */
 const closePicker = (): void => {
@@ -74,16 +76,15 @@ const closePicker = (): void => {
  */
 export function NowPlayingSlotPickerScreen({ slot }: { slot: number }) {
   const { strings } = useLocalisation();
-  const title = slotTitle(slot);
+  const title = nowPlayingSlotTitle(slot);
   const buttons = useNowPlayingButtons();
-  const choices = slotChoices(useYtMusicEnabled());
   const chosen = buttons[slot];
   return (
     <SettingsPageScreen title={title}>
       <View>
         <Hairline />
         <View accessibilityRole="radiogroup" accessibilityLabel={title}>
-          {choices.map((choice) => {
+          {SLOT_CHOICES.map((choice) => {
             const label = nowPlayingSlotLabel(choice);
             const holder = choice === null ? -1 : buttons.indexOf(choice);
             return (
@@ -93,7 +94,7 @@ export function NowPlayingSlotPickerScreen({ slot }: { slot: number }) {
                 accessibilityLabel={
                   holder === -1 || holder === slot
                     ? `${label}, ${title}`
-                    : strings.settings.swapSlot(label, title, slotTitle(holder))
+                    : strings.settings.swapSlot(label, title, nowPlayingSlotTitle(holder))
                 }
                 chosen={choice === chosen}
                 onPress={() => {

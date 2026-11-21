@@ -47,7 +47,7 @@ export function AddToPlaylistButton({
   trackId: string | null;
   ytSong: NativeYtSong | null;
   title: string;
-  /** In a slot, a long press changes it, while it waits for the song included. */
+  /** In a slot, a long press starts edit mode, while it waits for the song included. */
   change?: SlotChange | undefined;
 }) {
   const { strings } = useLocalisation();
@@ -119,7 +119,7 @@ export function DownloadButton({
 }: {
   trackId: string | null;
   ytSong: NativeYtSong | null;
-  /** In a slot, a long press changes it, waiting and downloading included. */
+  /** In a slot, a long press starts edit mode, waiting and downloading included. */
   change?: SlotChange | undefined;
 }) {
   const { strings } = useLocalisation();
