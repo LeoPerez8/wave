@@ -184,9 +184,20 @@ describe("the choices a Now Playing slot offers", () => {
       "shuffle",
       "repeat",
       "share",
+      "dislike",
     ];
     assert.deepEqual(nowPlayingSlotChoices(), choices);
     assert.deepEqual(NOW_PLAYING_ACTIONS, choices);
+  });
+
+  test("Dislike is offered, and the default slots don't hold it", () => {
+    assert.equal(nowPlayingSlotChoices().includes("dislike"), true);
+    assert.equal(readNowPlayingButtons(null).includes("dislike"), false);
+  });
+
+  test("slots holding Dislike come back as saved", () => {
+    const slots = ["lyrics", "dislike", "download", "shuffle", "repeat", null, "queue"] as const;
+    assert.deepEqual(readNowPlayingButtons(storedNowPlayingButtons(slots)), slots);
   });
 });
 
@@ -333,8 +344,10 @@ describe("how a Now Playing slot shows", () => {
     assert.deepEqual(shown, ["lyrics", "sleepTimer", "shuffle", "repeat"]);
   });
 
-  test("while an unsearched entry's search runs, every action's button shows", () => {
-    for (const action of NOW_PLAYING_ACTIONS)
+  test("while an unsearched entry's search runs, Dislike shows off and every other button shows", () => {
+    // No song yet to keep a dislike under.
+    assert.equal(nowPlayingSlotShow("dislike", "unsearched"), "off");
+    for (const action of NOW_PLAYING_ACTIONS.filter((other) => other !== "dislike"))
       assert.equal(nowPlayingSlotShow(action, "unsearched"), "on");
   });
 });

@@ -10,6 +10,7 @@ import {
   magicQueueRow,
   magicQueueSeedId,
   magicQueueShown,
+  withoutDisliked,
   type DiscoverMixesSection,
   type MagicQueueMixPicks,
   type MagicQueueSeed,
@@ -20,6 +21,7 @@ import * as Effect from "effect/Effect";
 import { useMemo, useState } from "react";
 
 import { freeTurnEffect } from "@/lib/backgroundWork";
+import { currentDislikedSongs, useDislikedSongs } from "@/library/dislikes";
 import { onLibraryChange } from "@/library/libraryChanges";
 import { LibraryStore } from "@/library/LibraryStore";
 import { type PlayableSongRow } from "@wave/client";
@@ -68,14 +70,28 @@ const usePoolPicks = (enabled: boolean) => {
       libraryQuery(
         read.key,
         read.reads,
-        Effect.flatMap(LibraryStore, (store) => read.read(store, seedIds.get.pipe(Effect.orDie))),
+        Effect.flatMap(LibraryStore, (store) =>
+          read.read(store, seedIds.get.pipe(Effect.orDie), Effect.promise(currentDislikedSongs)),
+        ),
       ),
     [read],
   );
   const answer = useLibraryQuery<readonly Seed[] | null>(enabled ? query : null, null);
   const [shown, setShown] = useState<readonly Seed[] | null>(null);
   if (answer !== null && answer !== shown) setShown(answer);
-  return { seeds: answer ?? shown, setRead };
+  // A seed disliked while the row shows leaves it at once; the next draw fills its place.
+  const disliked = useDislikedSongs(enabled);
+  const drawn = answer ?? shown;
+  const seeds = useMemo(
+    () =>
+      drawn === null
+        ? null
+        : withoutDisliked(drawn, disliked, (seed) =>
+            seed.source === "library" ? { id: seed.song.id } : { videoId: seed.song.videoId },
+          ),
+    [drawn, disliked],
+  );
+  return { seeds, setRead };
 };
 
 /**

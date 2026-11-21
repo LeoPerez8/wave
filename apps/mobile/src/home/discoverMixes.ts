@@ -46,6 +46,7 @@ import { recommendationTurnEffect } from "@/lib/recommendationWork";
 import { makeExternalStore, type ExternalStore } from "@wave/client/externalStore";
 import { withNetworkLog } from "@/lib/networkMeter";
 import { persistedSetting, type PersistedSetting } from "@/lib/persistedSetting";
+import { currentDislikedSongs, useDislikedSongs } from "@/library/dislikes";
 import { libraryListQueries } from "@/library/hooks";
 import { LibraryStore } from "@/library/LibraryStore";
 import { type SongRow } from "@wave/client";
@@ -104,6 +105,8 @@ const radioMixes = (
       inputs.catalog.map((entry) => [entry.song.videoId, 1 - 0.5 ** entry.radios.length]),
     );
     const profileOf = (name: string) => inputs.profiles.profileOf(name) ?? lookedUpProfileOf(name);
+    // A mix never brings a disliked song; one disliked after the build leaves as it's blended (`useBlend`).
+    const disliked = yield* Effect.promise(currentDislikedSongs);
     const mixes = yield* runSteps(
       rankedDiscoverMixesSteps(
         seeds.map((seed, i) => ({ seed, pages: pages[i] ?? [] })),
@@ -113,6 +116,7 @@ const radioMixes = (
           taste: inputs.taste,
           profileOf,
           popularityOf: (videoId) => popularity.get(videoId) ?? 0,
+          disliked,
         },
         sliders,
         avoid,
@@ -553,7 +557,7 @@ export const refreshMixes = (id: MixSectionId): void => {
  * How [id]'s saved mixes are blended now: its level, leaving out Library
  * songs [tracks] (the Library's songs by id) doesn't have, new songs the
  * owner streamed or put in a playlist since the build (as of the last
- * re-blend, `refreshKnownVideos`), and explicit songs while Don't play
+ * re-blend, `refreshKnownVideos`), songs the owner disliked, and explicit songs while Don't play
  * explicit is on (Core's `discoverMixKeep`). Without [tracks] (Home, which
  * doesn't read every song; or the Library not read yet), every one counts
  * as there, flagged as the build saw it.
@@ -565,16 +569,18 @@ const useBlend = (
   const level = useDiscoverLevel();
   const dontPlayExplicit = useDontPlayExplicit();
   const knownVideos = useKnownVideos();
+  const disliked = useDislikedSongs();
   return useMemo(
     () => ({
       level,
       keep: discoverMixKeep({
         dontPlayExplicit,
         library: tracks,
+        disliked,
         ...(knownVideos === null ? {} : { knownVideos }),
       }),
     }),
-    [level, tracks, dontPlayExplicit, knownVideos],
+    [level, tracks, dontPlayExplicit, knownVideos, disliked],
   );
 };
 

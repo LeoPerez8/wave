@@ -45,6 +45,8 @@ test("YT Music and unavailable directions match their menus, including retries a
     const options = {
       inPlaylist: (mask & 1) !== 0,
       favorite: (mask & 2) !== 0,
+      // Absent (no entry), not disliked, disliked.
+      disliked: [undefined, false, true][mask % 3],
       album: (mask & 4) !== 0 ? "MPREb_1" : null,
       ytAlbumHere: (mask & 8) !== 0 ? "MPREb_1" : null,
       ytMusic: (mask & 16) !== 0,
@@ -140,6 +142,7 @@ test("every configured direction agrees with itemActions across Library, missing
         const item: ActionItem = {
           missing: (mask & 1) !== 0,
           favorite: (mask & 2) !== 0,
+          disliked: (mask & 2) === 0 && (mask & 4) !== 0,
           inPlaylist: (mask & 4) !== 0,
           fixable: (mask & 8) !== 0,
           albumId: 3,
@@ -167,6 +170,7 @@ test("every configured direction agrees with itemActions across Library, missing
   }
   for (const item of [
     {},
+    { disliked: true },
     { artistIds: [] },
     { unsearched: true, streamed: true },
     { streamed: true, downloaded: true },
@@ -181,4 +185,23 @@ test("every configured direction agrees with itemActions across Library, missing
         rowSwipeActions(menu, setting),
       );
   }
+});
+
+test("a row set to Dislike shows Dislike, Remove dislike on a disliked song, and nothing without the entry", () => {
+  const dislike: SwipeSettings = { enabled: true, right: "dislike", left: "dislike" };
+  const track = (item: ActionItem) =>
+    songRowSwipeDirections({ kind: "track", item, here: "/library/songs" }, dislike).left;
+  assert.equal(track({}), "dislike");
+  assert.equal(track({ disliked: true }), "removeDislike");
+  assert.equal(track({ missing: true, disliked: true }), "removeDislike");
+  assert.equal(track({ streamed: true, unsearched: true }), null);
+  const yt = (disliked: boolean | undefined) =>
+    songRowSwipeDirections({ kind: "ytMusic", options: { disliked } }, dislike).right;
+  assert.equal(yt(false), "dislike");
+  assert.equal(yt(true), "removeDislike");
+  assert.equal(yt(undefined), null);
+  assert.deepEqual(songRowSwipeDirections({ kind: "unavailable" }, dislike), {
+    right: null,
+    left: null,
+  });
 });

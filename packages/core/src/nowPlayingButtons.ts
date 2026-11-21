@@ -3,12 +3,21 @@
  * Settings › Layout › Now Playing): five footer slots under the transport,
  * then one on each side of it, left of Previous and right of Next. Related
  * and Song menu have places of their own (the chevron beside the title, the
- * header's button), so no slot holds them.
+ * header's button), so no slot holds them. Dislike is offered, in no slot by
+ * default.
  */
 
 /** What a slot can hold. */
 export type NowPlayingAction =
-  "lyrics" | "queue" | "sleepTimer" | "addToPlaylist" | "download" | "shuffle" | "repeat" | "share";
+  | "lyrics"
+  | "queue"
+  | "sleepTimer"
+  | "addToPlaylist"
+  | "download"
+  | "shuffle"
+  | "repeat"
+  | "share"
+  | "dislike";
 
 /** A slot: an action, or null for None (no button). */
 export type NowPlayingSlot = NowPlayingAction | null;
@@ -51,6 +60,7 @@ export const NOW_PLAYING_ACTIONS: readonly NowPlayingAction[] = [
   "shuffle",
   "repeat",
   "share",
+  "dislike",
 ];
 
 const isSlot = (value: unknown): value is NowPlayingSlot =>
@@ -194,16 +204,21 @@ const NEEDS_SONG: ReadonlySet<NowPlayingAction> = new Set([
   "addToPlaylist",
   "download",
   "share",
+  "dislike",
 ]);
 
 /**
  * How slot [action]'s button shows with [song] on: hidden (its slot stays
- * empty) or on.
+ * empty), off (it shows disabled) or on. Dislike is off while an unsearched
+ * entry's search runs, since there is no song yet to keep a dislike under.
  */
 export const nowPlayingSlotShow = (
   action: NowPlayingAction,
   song: NowPlayingSlotSong,
-): "hidden" | "on" => (song === "nothing" && NEEDS_SONG.has(action) ? "hidden" : "on");
+): "hidden" | "off" | "on" => {
+  if (song === "nothing") return NEEDS_SONG.has(action) ? "hidden" : "on";
+  return song === "unsearched" && action === "dislike" ? "off" : "on";
+};
 
 /**
  * How the song menu button (⋯) in Now Playing's header shows with [song] on:

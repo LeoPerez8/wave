@@ -1,5 +1,6 @@
 import {
   IconBooks,
+  IconCircleMinus,
   IconHistory,
   IconCode,
   IconDownload,
@@ -30,6 +31,7 @@ export const SETTINGS_TITLE_INSET = GLYPH_COLUMN + SETTINGS_GLYPH_GAP;
 const GLYPHS: Readonly<Record<SettingsIcon, Icon>> = {
   books: IconBooks,
   userCheck: IconUserCheck,
+  circleMinus: IconCircleMinus,
   history: IconHistory,
   palette: IconPalette,
   layout: IconLayoutGrid,

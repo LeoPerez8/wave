@@ -345,8 +345,9 @@ export function NowPlayingSheet() {
   const slotButton = (slot: number) => {
     const action = buttons[slot] ?? null;
     if (editing) return <EditSlot key={slot} slot={slot} action={action} />;
-    if (action === null || nowPlayingSlotShow(action, slotSong) === "hidden") return null;
-    return <SlotButton key={slot} action={action} context={slotContext} />;
+    const show = action === null ? "hidden" : nowPlayingSlotShow(action, slotSong);
+    if (action === null || show === "hidden") return null;
+    return <SlotButton key={slot} action={action} off={show === "off"} context={slotContext} />;
   };
   // What edit mode dims: it shows through, takes no touches and screen readers skip it.
   const dimmed = {

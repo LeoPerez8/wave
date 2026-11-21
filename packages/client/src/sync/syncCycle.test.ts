@@ -19,6 +19,7 @@ import {
   selectFavoriteTrackIds,
   setFavorites,
 } from "../db/playHistory.ts";
+import { removeDislikes, selectDislikes, setDislikes } from "../db/dislikes.ts";
 import { stampPreference } from "../db/sync.ts";
 import { countFollows, removeFollow, saveFollow, selectFollow } from "../db/follows.ts";
 import { hideFollowRelease, readFollowReleases } from "../db/followReleases.ts";
@@ -238,6 +239,16 @@ const EXIT_MUSIC: FixtureTrack = {
 };
 
 const favoriteTitles = (db: TestDatabase) => listFavorites(db).map((row) => row.title);
+
+/** A song as its dislike keeps it, under [key] (a Track id as text, or a YT Music song's `yt:` video). */
+const disliked = (key: string | number, title: string) => ({
+  key: String(key),
+  title,
+  artists: ["Radiohead"],
+  durationMs: 259_000,
+});
+
+const dislikedTitles = (db: TestDatabase) => selectDislikes(db).map((row) => row.title);
 
 /** Every song in the Library, album by album in album order, and whether the phone has its file. */
 const files = (db: TestDatabase): [string, boolean][] =>
@@ -571,6 +582,183 @@ describe("syncCycle", () => {
     await a.sync();
     assert.deepEqual(selectDismissedFollowSuggestions(b.db), ["bjork", "portishead", "tricky"]);
     assert.deepEqual(selectDismissedFollowSuggestions(a.db), ["bjork", "portishead", "tricky"]);
+  });
+
+  test("a dislike set on one phone shows on the other, a Library song's and a YT Music song's, and so does its removal", async () => {
+    const service = testSyncService();
+    // The same songs under other Track ids on each phone.
+    const a = await phone(service);
+    const b = await phone(service, OK_COMPUTER.toReversed());
+    assert.notEqual(a.track("Lucky"), b.track("Lucky"));
+    setDislikes(
+      a.db,
+      [disliked(a.track("Lucky"), "Lucky"), disliked("yt:4D7u5KF7SP8", "Teardrop")],
+      a.now(),
+    );
+    await a.sync();
+    const pulled = await b.sync();
+
+    assert.equal(pulled.pulled.dislikes, true);
+    assert.equal(pulled.pulled.favorites, false);
+    assert.deepEqual(
+      selectDislikes(b.db).map((row) => [row.key, row.title, row.artists, row.durationMs]),
+      [
+        ["yt:4D7u5KF7SP8", "Teardrop", ["Radiohead"], 259_000],
+        [String(b.track("Lucky")), "Lucky", ["Radiohead"], 259_000],
+      ],
+    );
+    assert.equal(selectDislikes(b.db)[0]?.dislikedAt, selectDislikes(a.db)[0]?.dislikedAt);
+    // Applied, not changed on b: nothing goes back up.
+    assert.equal((await b.sync()).pushed, 0);
+
+    removeDislikes(b.db, [String(b.track("Lucky")), "yt:4D7u5KF7SP8"], b.now());
+    await b.sync();
+    assert.equal((await a.sync()).pulled.dislikes, true);
+    assert.deepEqual(dislikedTitles(a.db), []);
+
+    // Disliked again after the removal: it comes back on the other phone.
+    setDislikes(a.db, [disliked(a.track("Lucky"), "Lucky")], a.now());
+    await a.sync();
+    await b.sync();
+    assert.deepEqual(dislikedTitles(b.db), ["Lucky"]);
+  });
+
+  test("a song disliked on one phone and starred on the other keeps the later mark on both, never both", async () => {
+    const service = testSyncService();
+    const a = await phone(service);
+    const b = await phone(service);
+    // Disliked on a, then starred on b: the star stays.
+    setDislikes(a.db, [disliked(a.track("Lucky"), "Lucky")], a.now());
+    setFavorites(b.db, [b.track("Lucky")], true, b.now() + 5_000);
+    // Starred on a, then disliked on b: the dislike stays.
+    setFavorites(a.db, [a.track("Airbag")], true, a.now());
+    setDislikes(b.db, [disliked(b.track("Airbag"), "Airbag")], b.now() + 5_000);
+    await a.sync();
+    const pulled = await b.sync();
+    assert.equal(pulled.pulled.favorites, true);
+    assert.equal(pulled.pulled.dislikes, true);
+    await a.sync();
+    await b.sync();
+
+    for (const each of [a, b]) {
+      assert.deepEqual(favoriteTitles(each.db), ["Lucky"]);
+      assert.deepEqual(dislikedTitles(each.db), ["Airbag"]);
+    }
+    // The account holds the removals too, so a third phone sees one mark per song.
+    const live = (rows: readonly { readonly deleted: boolean }[]) =>
+      rows.filter((row) => !row.deleted).length;
+    assert.deepEqual([live(service.rows().favorites), live(service.rows().dislikes)], [1, 1]);
+    const c = await phone(service);
+    await c.sync();
+    assert.deepEqual(favoriteTitles(c.db), ["Lucky"]);
+    assert.deepEqual(dislikedTitles(c.db), ["Airbag"]);
+    // Settled: nothing more goes up from anyone.
+    assert.deepEqual(
+      [(await a.sync()).pushed, (await b.sync()).pushed, (await c.sync()).pushed],
+      [0, 0, 0],
+    );
+
+    // The removed mark set again later wins, as any later change does.
+    setDislikes(a.db, [disliked(a.track("Lucky"), "Lucky")], a.now() + 60_000);
+    setFavorites(a.db, [a.track("Lucky")], false, a.now() + 60_000);
+    await a.sync();
+    await b.sync();
+    assert.deepEqual(favoriteTitles(b.db), []);
+    assert.deepEqual(dislikedTitles(b.db).toSorted(), ["Airbag", "Lucky"]);
+  });
+
+  test("a YT Music song disliked while streamed loses to a later star of its download on another phone", async () => {
+    const service = testSyncService();
+    const downloaded = { ...EXIT_MUSIC, videoId: "4D7u5KF7SP8" };
+    const a = await phone(service);
+    const b = await phone(service, [...OK_COMPUTER, downloaded]);
+    setDislikes(a.db, [disliked("yt:4D7u5KF7SP8", "Exit Music")], a.now());
+    setFavorites(b.db, [b.track("Exit Music")], true, b.now() + 5_000);
+    await a.sync();
+    await b.sync({ songsChanged: true });
+    await a.sync();
+
+    assert.deepEqual(dislikedTitles(b.db), []);
+    assert.deepEqual(favoriteTitles(b.db), ["Exit Music"]);
+    // The song came to a as a missing song, with its star and without the dislike.
+    assert.deepEqual(dislikedTitles(a.db), []);
+    assert.deepEqual(favoriteTitles(a.db), ["Exit Music"]);
+  });
+
+  test("a dislike of a song the phone lacks waits for the song, and signing in again merges dislikes", async () => {
+    const service = testSyncService();
+    const a = await phone(service, [...OK_COMPUTER, EXIT_MUSIC]);
+    const b = await phone(service);
+    setDislikes(a.db, [disliked(a.track("Exit Music"), "Exit Music")], a.now());
+    await a.sync();
+    await b.sync();
+    // The song came in as a missing song, and its dislike with it.
+    assert.deepEqual(
+      selectDislikes(b.db).map((row) => row.key),
+      [String(b.track("Exit Music"))],
+    );
+
+    b.signOut();
+    setDislikes(b.db, [disliked(b.track("Lucky"), "Lucky")], b.now());
+    assert.equal(service.rows().dislikes.length, 1);
+    await b.sync();
+    await a.sync();
+    assert.deepEqual(dislikedTitles(a.db).toSorted(), ["Exit Music", "Lucky"]);
+  });
+
+  test("pulling the account from the start again brings the dislikes an older Wave read past, and changes nothing else", async () => {
+    const service = testSyncService();
+    const a = await phone(service);
+    const b = await phone(service, OK_COMPUTER.toReversed());
+    createPlaylist(a.db, "Drive", [{ source: "library", trackId: a.track("Airbag") }], a.now());
+    setFavorites(a.db, [a.track("Airbag"), a.track("Paranoid Android")], true, a.now());
+    setFavorites(a.db, [a.track("Paranoid Android")], false, a.now());
+    endPlay(
+      a.db,
+      recordPlay(a.db, played(a.track("Airbag"), 5_000)),
+      played(a.track("Airbag"), 5_000),
+    );
+    saveFollow(a.db, { name: "Massive Attack", deezerId: 2_163 }, "releases", a.now());
+    a.setPreference("settings.theme", '{"primary":"rose"}');
+    setDislikes(
+      a.db,
+      [disliked(a.track("Lucky"), "Lucky"), disliked("yt:4D7u5KF7SP8", "Teardrop")],
+      a.now(),
+    );
+    await a.sync();
+    await b.sync();
+    // As a Wave from before dislikes leaves b: the cursor past the dislikes, none of them kept.
+    b.db.delete(schema.dislikes).run();
+    assert.equal((await b.sync()).pulled.dislikes, false);
+    const held = () => ({
+      playlists: playlistTitles(b.db),
+      favorites: favoriteTitles(b.db),
+      plays: playCounts(b.db),
+      follows: countFollows(b.db),
+      preferences: [...b.stored],
+    });
+    const before = held();
+
+    // What migration 0064 does as b updates.
+    b.db.update(schema.syncState).set({ cursor: null }).run();
+    const again = await b.sync();
+
+    assert.deepEqual(dislikedTitles(b.db).toSorted(), ["Lucky", "Teardrop"]);
+    assert.deepEqual(again.pulled, {
+      songs: false,
+      library: false,
+      playlists: false,
+      favorites: false,
+      plays: false,
+      follows: false,
+      dismissedSuggestions: false,
+      dislikes: true,
+      preferences: [],
+    });
+    assert.equal(again.pushed, 0);
+    assert.deepEqual(held(), before);
+    // The account heard nothing new either: a has nothing to pull.
+    assert.equal((await a.sync()).pulled.dislikes, false);
   });
 
   test("the synced Shazam id fills the same playlist on a second phone with different local ids", async () => {

@@ -101,6 +101,12 @@ const builds = await reactCompilerBuilds<Section>(
     ),
     "@/lib/backgroundWork": stubModule(`export const freeTurnEffect = undefined;`),
     "@/library/libraryChanges": stubModule(`export const onLibraryChange = () => {};`),
+    // No song is disliked here; the set is the store's, which isn't run.
+    "@/library/dislikes": stubModule(
+      `const none = new Set();
+       export const currentDislikedSongs = async () => none;
+       export const useDislikedSongs = () => none;`,
+    ),
     "@/library/LibraryStore": stubModule(
       `import * as Effect from ${effect};
        export const LibraryStore = Effect.die("unused");`,

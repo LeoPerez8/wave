@@ -1,5 +1,6 @@
 import { useLocalisation } from "@/localisation/localisation";
 import {
+  IconCircleMinus,
   IconDownload,
   IconListNumbers,
   IconPlaylistAdd,
@@ -25,7 +26,7 @@ import { openChangeSlotMenu, slotEdit, type SlotChange } from "./ChangeSlotMenu"
 import { repeatLabel } from "./QueueView";
 import { useShuffleControl } from "./ShuffleMenu";
 import { SleepTimerButton } from "./SleepTimer";
-import { AddToPlaylistButton, DownloadButton } from "./SongButtons";
+import { AddToPlaylistButton, DislikeButton, DownloadButton } from "./SongButtons";
 
 type IconProps = { size?: number; color?: string; strokeWidth?: number };
 
@@ -109,13 +110,16 @@ function RepeatSlot({ change }: { change: SlotChange }) {
 /**
  * The button slot [slot] of Now Playing holds (0 to 4 for the footer's, then
  * the transport's left and right), for [action]. A tap runs it; a long press
- * starts edit mode.
+ * starts edit mode. [off] shows it disabled (Dislike while an unsearched
+ * entry's search runs).
  */
 export function SlotButton({
   action,
+  off = false,
   context,
 }: {
   action: NowPlayingAction;
+  off?: boolean;
   context: SlotContext;
 }) {
   const { strings } = useLocalisation();
@@ -168,6 +172,15 @@ export function SlotButton({
           onPress={context.share}
         />
       );
+    case "dislike":
+      return (
+        <DislikeButton
+          trackId={context.trackId}
+          ytSong={context.ytSong}
+          off={off}
+          change={change}
+        />
+      );
   }
 }
 
@@ -181,6 +194,7 @@ const EDIT_ICONS: Readonly<Record<Exclude<NowPlayingAction, "shuffle">, Componen
     download: IconDownload,
     repeat: IconRepeat,
     share: IconShare3,
+    dislike: IconCircleMinus,
   };
 
 /** A slot's place: the size of its button. */

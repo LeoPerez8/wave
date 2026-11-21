@@ -3,6 +3,7 @@ import {
   IconArrowsShuffle,
   IconCalendarEvent,
   IconCircleCheck,
+  IconCircleMinus,
   IconCirclesRelation,
   IconCrop,
   IconDeviceFloppy,
@@ -41,6 +42,8 @@ import type {
   YtPlaylistDownloadAction,
 } from "@wave/core";
 import type { ComponentType } from "react";
+
+import { DislikedIcon } from "@/components/DislikedIcon";
 
 /** What a Tabler line icon takes. */
 export type ActionIconProps = { size?: number; color?: string; strokeWidth?: number };
@@ -94,6 +97,9 @@ export const ACTION_ICONS: { readonly [A in MenuAction]: ActionIcon } = {
   releaseDate: IconCalendarEvent,
   favorite: IconStar,
   unfavorite: IconStarOff,
+  // The circle with a minus: outlined to dislike, filled on a disliked song.
+  dislike: IconCircleMinus,
+  removeDislike: DislikedIcon,
   removeFromPlaylist: IconPlaylistX,
   goToAlbum: IconDisc,
   goToArtist: IconMicrophone2,

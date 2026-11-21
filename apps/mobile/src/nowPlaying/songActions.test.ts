@@ -40,6 +40,7 @@ test("early actions share the captured song: a missing entry downloads into its 
       stars.push([captured.trackId, answer.track?.id, on]);
     },
     starred: (_target, answer) => answer.favorite || answer.pendingFavorite,
+    dislike: async () => {},
   });
   lookup.update(target, true, false);
   const playlist = actions.playlist(target);
@@ -73,6 +74,7 @@ test("rapid early toggles stay ordered and a separate artwork double tap only ad
       starred = on;
       shown.push(on);
     },
+    dislike: async () => {},
   });
   await Promise.all([actions.star(target), actions.star(target), actions.star(target, true)]);
   assert.deepEqual(shown, [false, true, true]);
@@ -94,6 +96,7 @@ test("a downloaded song asks to be deleted, and an absent streamed one downloads
     },
     starred: () => false,
     star: () => {},
+    dislike: async () => {},
   });
   lookup.update(target, true, false);
   await actions.download(target);
@@ -108,4 +111,58 @@ test("a downloaded song asks to be deleted, and an absent streamed one downloads
     { kind: "delete", track: file },
     { kind: "stream", song: absent.song },
   ]);
+});
+
+test("Dislike acts on the captured song, as the Library's when the Library has it, and settles once it is saved", async () => {
+  const lookup = createNowPlayingSongLookup({
+    read: async () => ({ track: missing, favorite: false, pendingFavorite: false }),
+  });
+  const dislikes: unknown[] = [];
+  let saved!: () => void;
+  const actions = createNowPlayingSongActions(lookup, {
+    download: () => {},
+    starred: () => false,
+    star: () => {},
+    dislike: (captured, answer, on) => {
+      dislikes.push([captured.trackId, answer.track?.id, on]);
+      return new Promise((resolve) => {
+        saved = resolve;
+      });
+    },
+  });
+  lookup.update(target, true, false);
+  let settled = false;
+  const disliking = actions.dislike(target, true).then(() => {
+    settled = true;
+  });
+  lookup.update({ ...target, trackId: "yt:next" }, true, false);
+  await new Promise((resolve) => setImmediate(resolve));
+  assert.deepEqual(dislikes, [["yt:one", 7, true]]);
+  assert.equal(settled, false);
+  saved();
+  await disliking;
+  const removing = actions.dislike(target, false);
+  await new Promise((resolve) => setImmediate(resolve));
+  saved();
+  await removing;
+  assert.deepEqual(dislikes.at(-1), ["yt:one", 7, false]);
+});
+
+test("an entry with no song to dislike by, neither the Library's nor a video, is left alone", async () => {
+  const lookup = createNowPlayingSongLookup({
+    read: async () => ({ track: null, favorite: false, pendingFavorite: false }),
+  });
+  let dislikes = 0;
+  const actions = createNowPlayingSongActions(lookup, {
+    download: () => {},
+    starred: () => false,
+    star: () => {},
+    dislike: async () => {
+      dislikes++;
+    },
+  });
+  await actions.dislike({ trackId: "41", song: null }, true);
+  assert.equal(dislikes, 0);
+  await actions.dislike(target, true);
+  assert.equal(dislikes, 1);
 });
