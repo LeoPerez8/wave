@@ -10,6 +10,7 @@ import {
   type Catalogue,
   type DiscoverSong,
   type SimilarArtistLink,
+  type YtArtistAbout,
   type YtArtistPageNote,
   type YtArtistRelease,
   type YtArtistShelf,
@@ -42,6 +43,7 @@ import {
 import { ScreenHeader } from "@/components/ScreenHeader";
 import { TextButton } from "@/components/TextButton";
 import { albumRowHeight, toAlbumSummary } from "@/library/AlbumGrid";
+import { ArtistAbout } from "@/library/ArtistAbout";
 import type { AlbumRow, ArtistRow, SongRow } from "@wave/client";
 import { openAlbum, openArtist } from "@/library/routes";
 import { useListScrollable } from "@/motion/heldTouch";
@@ -78,7 +80,7 @@ interface Cover {
 
 type Similar = SimilarArtistLink<ArtistRow>;
 
-type Item = ArtistPageItem<Cover, Song, Similar>;
+type Item = ArtistPageItem<Cover, Song, Similar, YtArtistAbout>;
 
 /** Height of a shelf's row, the gap under it included. */
 const SHELF_ROW = albumRowHeight(COVER_ROW_TILE);
@@ -98,12 +100,13 @@ const pageNote = (note: Exclude<YtArtistPageNote, "loading">, strings: Catalogue
 
 /**
  * As the integrated Library artist page lays it out: the releases, then the
- * songs, then Fans might also like.
+ * songs, then Fans might also like and About.
  */
 const pageItems = (
   shelves: readonly YtArtistShelf<AlbumRow>[],
   songs: readonly Song[],
   similar: readonly Similar[],
+  about: YtArtistAbout | null,
   { library }: Catalogue,
 ): Item[] =>
   artistPageItems(
@@ -114,7 +117,10 @@ const pageItems = (
     songs,
     undefined,
     null,
-    { similar: { label: library.fansAlsoLike, artists: similar } },
+    {
+      similar: { label: library.fansAlsoLike, artists: similar },
+      ...(about === null ? {} : { about }),
+    },
   );
 
 const itemType = (item: Item): Item["type"] => item.type;
@@ -363,7 +369,7 @@ function YtArtistList({
     [selection],
   );
   const items = useMemo(
-    () => (view === null ? [] : pageItems(view.shelves, view.songs, similar, strings)),
+    () => (view === null ? [] : pageItems(view.shelves, view.songs, similar, view.about, strings)),
     [view, similar, strings],
   );
   // Songs key by id, a real duplicate by its occurrence, never by place.
@@ -376,7 +382,9 @@ function YtArtistList({
           ? `shelf-${item.label}`
           : item.type === "similar"
             ? "similar"
-            : (songKeys.get(item.song) ?? discoverTrackId(item.song)),
+            : item.type === "about"
+              ? "about"
+              : (songKeys.get(item.song) ?? discoverTrackId(item.song)),
     [songKeys],
   );
   const context = useMemo(() => ({ kind: "ytArtist", id: contextId }) as const, [contextId]);
@@ -429,13 +437,20 @@ function YtArtistList({
         return (
           <SimilarRow artists={item.artists} height={similarRow} selecting={selection.selecting} />
         );
+      if (item.type === "about") return <ArtistAbout about={item.about} />;
       return null;
     },
     [selection, similarRow],
   );
   const slotSize = useCallback(
-    (item: Item): number =>
-      item.type === "section" ? SECTION_HEAD : item.type === "similar" ? similarRow : SHELF_ROW,
+    (item: Item): number | undefined =>
+      item.type === "section"
+        ? SECTION_HEAD
+        : item.type === "similar"
+          ? similarRow
+          : item.type === "about"
+            ? undefined
+            : SHELF_ROW,
     [similarRow],
   );
 
@@ -477,11 +492,11 @@ function YtArtistList({
  * search; "Not found online." when nobody matches): their image and
  * name, Play and Shuffle, their Albums and Singles & EPs (a release the Library has opens
  * the Library album), every song of theirs, their songs playlist read
- * whole (the Library's play its files, the rest stream), and Fans might also
+ * whole (the Library's play its files, the rest stream), Fans might also
  * like, the similar artists YouTube Music lists for them (one the Library has
- * opens the Library's page). It's read as it opens and saved for a week; offline or
- * failing, a quiet line with Try Again, under the similar artists of a page
- * seen before; with YT Music off, it says so.
+ * opens the Library's page), and About, their description and counts. It's
+ * read as it opens and saved for a week; offline or failing, a quiet line with
+ * Try Again, under the similar artists and the About of a page seen before; with YT Music off, it says so.
  */
 export default function YtArtistScreen() {
   useScreenContent(true);

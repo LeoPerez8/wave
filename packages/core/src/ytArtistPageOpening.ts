@@ -2,6 +2,7 @@ import { ytArtistOpeningState } from "./ytArtistOpening.ts";
 import {
   ytArtistPageAsks,
   ytArtistPageView,
+  ytArtistAbout,
   ytArtistSavedStands,
   type YtArtistPageViewContext,
   type YtArtistSection,
@@ -11,7 +12,7 @@ import type { YtSong } from "./ytMusic.ts";
 /**
  * Remote-only pages can show an offline result without acquiring the Library
  * finder. Offline, a page seen before keeps its similar artists (Fans might
- * also like) with the offline line, however old it is.
+ * also like) and its About with the offline line, however old it is.
  */
 export const ytArtistPageOpening = <S extends YtSong, L, A>(
   state: YtArtistSection<S>,
@@ -26,7 +27,11 @@ export const ytArtistPageOpening = <S extends YtSong, L, A>(
   const read = ytArtistPageView(shown, context);
   const view =
     !context.online && context.enabled && seen !== null
-      ? { ...read, similar: seen.page.similar ?? [] }
+      ? {
+          ...read,
+          similar: seen.page.similar ?? [],
+          about: ytArtistAbout(seen.page),
+        }
       : read;
   const finder =
     context.online &&
@@ -38,7 +43,7 @@ export const ytArtistPageOpening = <S extends YtSong, L, A>(
   return {
     view:
       !finder && view.note === null
-        ? { ...view, songs: [], shelves: [], similar: [], note: "loading" as const }
+        ? { ...view, songs: [], shelves: [], similar: [], about: null, note: "loading" as const }
         : view,
     ask:
       context.online &&

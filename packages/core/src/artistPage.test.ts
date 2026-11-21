@@ -132,4 +132,16 @@ describe("artistPageItems", () => {
       ],
     );
   });
+
+  test("About follows the artist's parts and steps aside while Find narrows songs", () => {
+    const about = { description: "A biography", subscribers: "7.19M", views: null };
+    assert.deepEqual(artistPageItems([], ["t1"], "Songs", null, { about }), [
+      { type: "section", label: "Songs" },
+      { type: "song", song: "t1", index: 0 },
+      { type: "about", about },
+    ]);
+    assert.deepEqual(artistPageItems([], ["t1"], "Songs", [0], { about }), [
+      { type: "song", song: "t1", index: 0 },
+    ]);
+  });
 });

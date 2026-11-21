@@ -35,10 +35,13 @@ export const useArtistPageOpening = <S extends YtSong, L, A>(
       libraryAlbum,
     });
     const offline = artistPageOpening({ online, enabled }).view;
-    // Offline, the similar artists saved with a page seen before stay over the line.
+    // Offline, the similar artists and the About saved with a page seen before stay over the line.
     return {
       ...work,
-      view: offline === null ? work.view : { ...offline, similar: work.view.similar },
+      view:
+        offline === null
+          ? work.view
+          : { ...offline, similar: work.view.similar, about: work.view.about },
     };
   }, [state, enabled, now, settled, online, retry, librarySong, libraryAlbum]);
 
@@ -60,6 +63,7 @@ export const artistPageOpening = (options: {
           songs: [],
           shelves: [],
           similar: [],
+          about: null,
           note: options.enabled ? "offline" : "off",
           retry: options.enabled,
         },
