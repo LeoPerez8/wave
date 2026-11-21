@@ -9,7 +9,8 @@ import { catalogSeedKey } from "./candidateCatalog.ts";
 import { DEFAULT_DJ_SETTINGS, djNewMusicShare, type DjSettings } from "./djSettings.ts";
 import type { MagicSeedSong, MagicSession } from "./magicQueue.ts";
 import type { TasteProfile } from "./tasteProfile.ts";
-import { YT_ARTIST_FRESH_MS } from "./ytArtist.ts";
+import { normalizeSearchText } from "./search.ts";
+import { releaseTitle, YT_ARTIST_FRESH_MS } from "./ytArtist.ts";
 
 /** A tile as the grid tells tiles apart: its kind and what that kind compares by. */
 export type DjTileKey = string & { readonly djTile: true };
@@ -24,8 +25,42 @@ export interface DjArtistTile {
   readonly libraryId: number | null;
 }
 
+/** An album as DJ is told of it: one the Library has, one a saved artist page lists, or both. */
+export interface DjAlbum {
+  readonly title: string;
+  /** Its album artist, by name. */
+  readonly artist: string;
+  /** The Library's album, or none. */
+  readonly libraryId?: number | null;
+  /** Its YT Music page (`MPREb_…`), or none. */
+  readonly browseId?: string | null;
+  /** Its cover: the Library's cached file, or its address on YouTube Music. */
+  readonly cover?: string | null;
+}
+
+/** An album tile: a square cover with the album's title and artist. */
+export interface DjAlbumTile {
+  readonly kind: "album";
+  /** The album by its title and album artist (`djAlbumTile`). */
+  readonly key: DjTileKey;
+  /** The album's title. */
+  readonly name: string;
+  /** Its album artist, whose tile and similar artists it opens. */
+  readonly artist: string;
+  /** The Library's album, whose cover the tile shows and whose songs it seeds; null without. */
+  readonly libraryId: number | null;
+  /** Its YT Music page, where the songs of an album the Library doesn't have are read; null without. */
+  readonly browseId: string | null;
+  /** Its cover as the tile draws it (`DjAlbum.cover`); null without. */
+  readonly cover: string | null;
+}
+
 /** One selectable item of DJ's grid. */
-export type DjTile = DjArtistTile;
+export type DjTile = DjArtistTile | DjAlbumTile;
+
+/** The artist [tile] stands for: an artist tile's own, an album tile's album artist. */
+export const djTileArtist = (tile: DjTile): string =>
+  tile.kind === "album" ? tile.artist : tile.name;
 
 /**
  * The artist tile of [name], the Library's artist [libraryId] when it has
@@ -41,6 +76,27 @@ export const djArtistTile = (
     : { kind: "artist", key: `artist:${key}` as DjTileKey, name, libraryId };
 };
 
+/**
+ * The album tile of [album]; null for one with no title. Two albums are the
+ * same tile when their titles match as releases do (`releaseTitle`: case,
+ * accents, punctuation and edition notes don't count) and their album
+ * artists as the catalog compares seed artists.
+ */
+export const djAlbumTile = (album: DjAlbum): DjAlbumTile | null => {
+  const title = releaseTitle(album.title);
+  if (title === "") return null;
+  const artist = catalogSeedKey(album.artist) ?? normalizeSearchText(album.artist);
+  return {
+    kind: "album",
+    key: `album:${artist}:${title}` as DjTileKey,
+    name: album.title,
+    artist: album.artist,
+    libraryId: album.libraryId ?? null,
+    browseId: album.browseId ?? null,
+    cover: album.cover ?? null,
+  };
+};
+
 /** What DJ's grid is built from, all of it already on the phone. */
 export interface DjGridSources {
   /** The Library's artists. */
@@ -51,6 +107,11 @@ export interface DjGridSources {
   readonly played?: readonly PlayedSeedArtist[];
   /** The artist graph of the last recommendation snapshot, or null while it's cold. */
   readonly graph: ArtistGraph | null;
+  /**
+   * The albums the Library and the saved artist pages know, each artist's
+   * in the order the grid prefers them; none without.
+   */
+  readonly albums?: readonly DjAlbum[];
 }
 
 /** How many tiles DJ's grid opens with. */
@@ -60,13 +121,20 @@ export const DJ_GRID_TILES = 24;
  * DJ's grid, built without the network or a derivation: the taste profile's
  * highest-scored artists, the highest first, each followed by the closest
  * artist graph neighbour of theirs that the Library doesn't have and the
- * grid doesn't show yet. Before the profile's first derivation the most
+ * grid doesn't show yet. Each artist is followed by the first of [albums]
+ * that is theirs, when one is known. Before the profile's first derivation the most
  * played artists stand in for it, in their order. An artist the Library
  * doesn't have shows by the name the plays or the graph know. No tile
  * appears twice, and the grid holds `DJ_GRID_TILES` at most; it's empty with
  * no taste signal and no plays.
  */
-export const djGrid = ({ artists, taste, played = [], graph }: DjGridSources): DjTile[] => {
+export const djGrid = ({
+  artists,
+  taste,
+  played = [],
+  graph,
+  albums = [],
+}: DjGridSources): DjTile[] => {
   const library = new Map<string, DjArtistTile>();
   for (const artist of artists) {
     const tile = djArtistTile(artist.name, artist.id);
@@ -86,16 +154,28 @@ export const djGrid = ({ artists, taste, played = [], graph }: DjGridSources): D
       : scored.map(
           ([key]) => library.get(`artist:${key}`) ?? known(names.get(key) ?? graph?.names.get(key)),
         );
+  const records = new Map<string, DjAlbumTile>();
+  for (const album of albums) {
+    const by = djArtistTile(album.artist)?.key;
+    const tile = djAlbumTile(album);
+    if (by !== undefined && tile !== null && !records.has(by)) records.set(by, tile);
+  }
   const grid = new Map<string, DjTile>();
+  /** Shows [artist], then the album of theirs while the grid has room for it. */
+  const show = (artist: DjArtistTile): void => {
+    grid.set(artist.key, artist);
+    const record = records.get(artist.key);
+    if (record !== undefined && grid.size < DJ_GRID_TILES) grid.set(record.key, record);
+  };
   for (const favourite of favourites) {
     if (grid.size >= DJ_GRID_TILES) break;
     if (favourite === null || grid.has(favourite.key)) continue;
-    grid.set(favourite.key, favourite);
+    show(favourite);
     if (graph === null || grid.size >= DJ_GRID_TILES) continue;
     for (const neighbour of artistNeighbours(graph, favourite.name)) {
       const tile = djArtistTile(neighbour.name);
       if (tile === null || library.has(tile.key) || grid.has(tile.key)) continue;
-      grid.set(tile.key, tile);
+      show(tile);
       break;
     }
   }
@@ -217,7 +297,10 @@ const placedAfter = (
  * [state] once [tile], just selected, opened its row: the closest artist
  * graph neighbours the grid doesn't show yet, up to `DJ_OPENED_TILES`, right
  * after it. With fewer, the row holds the places left for the artist's page
- * (`djPagesNeeded`). A tile that opened a row before opens nothing more.
+ * (`djPagesNeeded`). An album opens its album artist's tile first when the
+ * grid lacks it, then that artist's similar artists, `DJ_OPENED_TILES` in
+ * all; one whose album artist isn't an artist ("Various Artists") opens
+ * nothing. A tile that opened a row before opens nothing more.
  */
 const withRowOpened = (
   state: DjState,
@@ -226,17 +309,18 @@ const withRowOpened = (
   library: DjLibraryArtists,
 ): DjState => {
   if (state.rows.some((row) => row.of === tile.key)) return state;
-  const close = graph === null ? [] : artistNeighbours(graph, tile.name);
+  const artist = djTileArtist(tile);
+  const close = graph === null ? [] : artistNeighbours(graph, artist);
   const opened = tilesToOpen(
     state,
-    close.map((neighbour) => neighbour.name),
+    [...(tile.kind === "album" ? [artist] : []), ...close.map((neighbour) => neighbour.name)],
     DJ_OPENED_TILES,
     library,
   );
   const row: DjRow = {
     of: tile.key,
     after: opened[opened.length - 1]?.key ?? tile.key,
-    waiting: DJ_OPENED_TILES - opened.length,
+    waiting: djArtistTile(artist) === null ? 0 : DJ_OPENED_TILES - opened.length,
   };
   return {
     ...state,
@@ -297,7 +381,10 @@ export const djReduce = (state: DjState, action: DjAction): DjState => {
   );
 };
 
-/** The tiles whose YT Music page DJ reads now: those whose row still holds places for it. */
+/**
+ * The tiles whose row still holds places for a YT Music page, which DJ reads
+ * now: the page of the tile's artist (`djTileArtist`), an album's album artist.
+ */
 export const djPagesNeeded = (state: DjState): DjTile[] =>
   state.rows.flatMap((row) =>
     row.waiting > 0 ? (state.tiles.find((tile) => tile.key === row.of) ?? []) : [],
@@ -328,11 +415,11 @@ export const djCells = (state: DjState): DjCell[] =>
 /** What a DJ seed is called; Up Next's label comes from the catalogue (`magicQueueLabel`). */
 const DJ_SEED_TITLE = "DJ";
 
-/** [tile] as a seed whose radio a batch may read: an artist tile reads that artist's radio. */
-const seedSongOf = (tile: DjTile, plays: number): MagicSeedSong => ({
-  id: tile.key,
-  title: tile.name,
-  artists: [tile.name],
+/** [artist]'s radio as a seed a batch may read, as an artist seed reads it. */
+const artistSeed = (artist: DjArtistTile, plays: number): MagicSeedSong => ({
+  id: artist.key,
+  title: artist.name,
+  artists: [artist.name],
   durationMs: null,
   kind: "artist",
   plays,
@@ -341,10 +428,14 @@ const seedSongOf = (tile: DjTile, plays: number): MagicSeedSong => ({
 /**
  * Starts a Magic Queue from a DJ seed, the selected [tiles] (`djSeedTiles`):
  * no seed song plays first, so the session has queued nothing and its first
- * batch of 10 is its whole queue. Each batch reads the radios of up to 3 of
- * the selected artists (`magicBatchRadios`), those with more counted plays
- * in [played] most often. It ranks with [settings], DJ's own, and starts at
- * their New music share. Null with no tile.
+ * batch of 10 is its whole queue. An artist tile contributes that artist's
+ * radio; an album tile its songs in [albumSongs] (`magicListSeedSongs`), as
+ * an album seed does, or its album artist's radio when none of its songs
+ * could be read. Each batch reads up to 3 of those radios by different
+ * artists (`magicBatchRadios`), artists and albums in one draw: the artists
+ * with more counted plays in [played], and the songs with more of their own,
+ * most often. It ranks with [settings], DJ's own, and starts at their New
+ * music share. Null when the tiles give no radio to read.
  */
 export const startDjQueue = (
   tiles: readonly DjTile[],
@@ -352,28 +443,47 @@ export const startDjQueue = (
     id,
     played = [],
     settings = DEFAULT_DJ_SETTINGS,
+    albumSongs = new Map(),
   }: {
     readonly id: string;
     readonly played?: readonly PlayedSeedArtist[];
     readonly settings?: DjSettings;
+    /** Each selected album's songs, by its tile's key; none for one that couldn't be read. */
+    readonly albumSongs?: ReadonlyMap<DjTileKey, readonly MagicSeedSong[]>;
   },
 ): MagicSession | null => {
-  if (tiles.length === 0) return null;
   const plays = new Map<string, number>();
   for (const artist of played) {
     const tile = djArtistTile(artist.name);
     if (tile !== null) plays.set(tile.key, (plays.get(tile.key) ?? 0) + artist.countedPlays);
   }
+  const seeds = new Map<string, MagicSeedSong>();
+  const artists = new Map<string, string>();
+  const credit = (name: string): void => {
+    const key = djArtistTile(name)?.key;
+    if (key !== undefined && !artists.has(key)) artists.set(key, name);
+  };
+  for (const tile of tiles) {
+    const songs = tile.kind === "album" ? (albumSongs.get(tile.key) ?? []) : [];
+    const artist = tile.kind === "album" ? djArtistTile(tile.artist) : tile;
+    if (artist !== null) credit(artist.name);
+    // A compilation is nobody's: its songs' own artists are the session's.
+    else for (const song of songs) if (song.artists[0] !== undefined) credit(song.artists[0]);
+    if (songs.length === 0 && artist !== null && !seeds.has(artist.key))
+      seeds.set(artist.key, artistSeed(artist, plays.get(artist.key) ?? 0));
+    for (const song of songs) if (!seeds.has(song.id)) seeds.set(song.id, song);
+  }
+  if (seeds.size === 0) return null;
   return {
     id,
     seed: { kind: "dj", id, title: DJ_SEED_TITLE },
     dj: settings,
-    seedSongs: tiles.map((tile) => seedSongOf(tile, plays.get(tile.key) ?? 0)),
+    seedSongs: [...seeds.values()],
     seedDraws: [],
     used: [],
     batches: 0,
     ytShare: djNewMusicShare(settings),
-    radioArtists: tiles.map((tile) => tile.name),
+    radioArtists: [...artists.values()],
     seedProfile: null,
     seedStyle: null,
     seedVideoIds: [],

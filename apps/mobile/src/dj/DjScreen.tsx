@@ -2,6 +2,7 @@ import {
   ARTIST_MIX_COUNT,
   djCanStart,
   djCells,
+  djGrid,
   djOpeningGrid,
   djPagesNeeded,
   djReduce,
@@ -9,6 +10,9 @@ import {
   djSeedTiles,
   djSelectable,
   djSelected,
+  djTileArtist,
+  type DjAlbum,
+  type DjAlbumTile,
   type DjArtistTile,
   type DjOpeningGrid,
   type DjState,
@@ -16,12 +20,14 @@ import {
   identityKey,
 } from "@wave/core";
 import { IconArrowLeft, IconX } from "@tabler/icons-react-native";
+import * as Effect from "effect/Effect";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { ActivityIndicator, ScrollView, Text, View, useWindowDimensions } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import { ArtistImage } from "@/catalog/ArtistImage";
-import { CardTile, CardTitle, titleLineHeight } from "@/catalog/cards/CardParts";
+import { Artwork } from "@/catalog/Artwork";
+import { CardDetail, CardTile, CardTitle, titleLineHeight } from "@/catalog/cards/CardParts";
 import { TileCheck } from "@/catalog/CheckCell";
 import { CELL, grid, widthOf } from "@/catalog/grid";
 import { SkeletonGroup } from "@/catalog/Skeletons";
@@ -36,6 +42,7 @@ import { recommendationSnapshot } from "@/home/recommendationSnapshot";
 import { savedYtArtist } from "@/home/ytArtistPage";
 import { useScreenContent } from "@/lib/screenTiming";
 import { router } from "@/lib/timingRouter";
+import { LibraryStore } from "@/library/LibraryStore";
 import { appRuntime } from "@/library/runtime";
 import { useLocalisation } from "@/localisation/localisation";
 import { addScreenBackHandler } from "@/overlay/back";
@@ -49,6 +56,7 @@ import { fetchArtist } from "@/ytmusic/artistSection";
 import type { ArtistRow } from "@wave/client";
 
 import { DjAdjust } from "./DjAdjust";
+import { readDjAlbums } from "./djAlbums";
 import { runDjDone, type DjDone } from "./djDone";
 import { djRemembered } from "./djRemembered";
 import { readDjSimilar } from "./djSimilar";
@@ -78,11 +86,62 @@ const similarOf = (name: string) =>
     now: Date.now,
   });
 
+/** What DJ's grid ranks its artists by, as Core's `djGrid` takes it. */
+const gridSources = (library: MixIndexes) => ({
+  artists: library.artists,
+  taste: latestTasteProfile(),
+  played: library.topArtists,
+  graph: recommendationSnapshot.peek().graph,
+});
+
+/**
+ * The albums DJ's grid may show over [library] (`readDjAlbums`), all read on
+ * the phone: the Library's albums that aren't compilations, each under its
+ * album artist's name and with its cached cover, then the albums the saved
+ * YT Music pages of the grid's artists list (the grid as it is without
+ * albums, which holds every artist the one with albums shows).
+ */
+const albumsOver = (library: MixIndexes): Promise<DjAlbum[]> => {
+  const names = new Map(library.artists.map((artist) => [artist.id, artist.name]));
+  return readDjAlbums(djGrid(gridSources(library)).map(djTileArtist), {
+    library: () =>
+      appRuntime.runPromise(
+        Effect.gen(function* () {
+          const albums = yield* (yield* LibraryStore).listAlbums;
+          return albums.flatMap((album): DjAlbum[] =>
+            album.compilation
+              ? []
+              : [
+                  {
+                    title: album.title,
+                    artist: names.get(album.albumArtistId) ?? album.albumArtist,
+                    libraryId: album.id,
+                    cover: album.artworkPath ?? album.thumbPath,
+                  },
+                ],
+          );
+        }),
+      ),
+    saved: async (artist) => {
+      const saved = await appRuntime.runPromise(savedYtArtist(artist));
+      return saved?.outcome === "found"
+        ? saved.page.albums.map((album) => ({
+            title: album.title,
+            artist,
+            browseId: album.browseId,
+            cover: album.artworkUrl,
+          }))
+        : [];
+    },
+  });
+};
+
 /**
  * DJ's grid, drawn once per opening from what the phone already has: no
  * derivation and no request is waited for. Only a snapshot whose Library
  * part was never read (DJ opened before Home's mixes asked for it) is read
- * first, from the local database. Core chooses its source (`djOpeningGrid`):
+ * first, from the local database, and then the albums the grid may show
+ * (`albumsOver`). Core chooses its source (`djOpeningGrid`):
  * the last taste profile and artist graph, or with no taste signal the chart
  * artists of the Artist mixes. [state] is null until the grid has tiles;
  * until then [opening] says what stands in their place (null while the
@@ -114,17 +173,23 @@ const useDjGrid = () => {
       current = false;
     };
   }, [waiting]);
+  const [albums, setAlbums] = useState<readonly DjAlbum[] | null>(null);
+  useEffect(() => {
+    if (library === null || library === "failed") return;
+    let current = true;
+    void albumsOver(library).then((read) => {
+      if (current) setAlbums(read);
+    });
+    return () => {
+      current = false;
+    };
+  }, [library]);
   const opening = useMemo((): DjOpeningGrid | null => {
     if (library === null) return null;
     if (library === "failed") return { kind: "nothing" };
-    return djOpeningGrid({
-      artists: library.artists,
-      taste: latestTasteProfile(),
-      played: library.topArtists,
-      graph: recommendationSnapshot.peek().graph,
-      artistMixes,
-    });
-  }, [library, artistMixes]);
+    if (albums === null) return null;
+    return djOpeningGrid({ ...gridSources(library), albums, artistMixes });
+  }, [library, albums, artistMixes]);
   const libraryArtists = library === null || library === "failed" ? NO_ARTISTS : library.artists;
   if (state === null && opening !== null && opening.kind !== "skeleton") {
     // The tiles the last DJ was started from are selected, and in the grid
@@ -168,7 +233,7 @@ const useDjGrid = () => {
               library: libraryArtists,
             }),
         );
-      void similarOf(tile.name).then(settle, () => settle(null));
+      void similarOf(djTileArtist(tile)).then(settle, () => settle(null));
     }
   }, [state, libraryArtists]);
   return { state, opening, artists, toggle };
@@ -249,6 +314,51 @@ function ArtistTile({
 }
 
 /**
+ * An album tile: a square cover, the album's title and artist under it, and
+ * a check over the cover once selected. A screen reader hears its kind, its
+ * title and artist and whether it's selected. A tile the seed has no room
+ * for is dimmed.
+ */
+function AlbumTile({
+  tile,
+  size,
+  selected,
+  selectable,
+  onPress,
+}: {
+  tile: DjAlbumTile;
+  size: number;
+  selected: boolean;
+  selectable: boolean;
+  onPress: () => void;
+}) {
+  const { strings } = useLocalisation();
+  return (
+    <View
+      style={{ opacity: selectable ? 1 : 0.4 }}
+      pointerEvents={selectable ? "auto" : "none"}
+      accessibilityState={{ disabled: !selectable }}
+    >
+      <CardTile
+        width={size}
+        label={strings.dj.albumTile(tile.name, tile.artist)}
+        checked={selected}
+        onPress={onPress}
+      >
+        <View style={{ width: size, height: size }}>
+          <Artwork uri={tile.cover ?? undefined} size={size} radius={CELL * 0.75} />
+          {selected && <TileCheck checked />}
+        </View>
+        <View style={{ paddingTop: CELL }}>
+          <CardTitle>{tile.name}</CardTitle>
+          <CardDetail size="footnote">{tile.artist}</CardDetail>
+        </View>
+      </CardTile>
+    </View>
+  );
+}
+
+/**
  * The place a row holds while its artist's page loads: a still circle and a
  * title bar, as large as an artist tile, so the grid doesn't jump when the
  * page arrives. Screen readers skip it.
@@ -269,11 +379,12 @@ function PlaceholderTile({ size, fontScale }: { size: number; fontScale: number 
 }
 
 /**
- * DJ (docs/spec.md, DJ): the owner picks the artists a Magic Queue starts
- * from. DJ opens with the selection and the choices its last queue was
- * started with, kept on this phone (`djRemembered`). A tap selects or
- * unselects a tile, and a tile selected for the first time in an opening
- * opens up to 3 similar artists right after it; Done reads a new session's
+ * DJ (docs/spec.md, DJ): the owner picks the artists and albums a Magic
+ * Queue starts from. DJ opens with the selection and the choices its last
+ * queue was started with, kept on this phone (`djRemembered`). A tap selects
+ * or unselects a tile, and a tile selected for the first time in an opening
+ * opens up to 3 tiles right after it (an artist's similar artists; an
+ * album's artist, then theirs); Done reads a new session's
  * first batch and plays it, then closes; Close leaves the queue as it is.
  * Adjust, beside Done, shows the Adjust screen in the grid's place: its back
  * arrow (and Android's Back) returns to the grid, which stayed as it was, and
@@ -371,19 +482,24 @@ export function DjScreen() {
                 if (cell.kind === "placeholder" || state === undefined)
                   return <PlaceholderTile key={cell.key} size={size} fontScale={fontScale} />;
                 const { tile } = cell;
-                return (
+                const picking = {
+                  size,
+                  selected: djSelected(state, tile.key),
+                  // A selection can't change while its first batch is read.
+                  selectable: !loading && djSelectable(state, tile.key),
+                  onPress: () => {
+                    setDone("idle");
+                    toggle(tile.key);
+                  },
+                };
+                return tile.kind === "album" ? (
+                  <AlbumTile key={cell.key} tile={tile} {...picking} />
+                ) : (
                   <ArtistTile
                     key={cell.key}
                     tile={tile}
                     artist={tile.libraryId === null ? undefined : artists.get(tile.libraryId)}
-                    size={size}
-                    selected={djSelected(state, tile.key)}
-                    // A selection can't change while its first batch is read.
-                    selectable={!loading && djSelectable(state, tile.key)}
-                    onPress={() => {
-                      setDone("idle");
-                      toggle(tile.key);
-                    }}
+                    {...picking}
                   />
                 );
               })}

@@ -41,6 +41,7 @@ import {
   type MagicSignalKind,
   type QueueState,
   type YtSong,
+  ytAlbumSongs,
   ytTrackId,
 } from "@wave/core";
 import * as Effect from "effect/Effect";
@@ -57,6 +58,8 @@ import { oneAtATime } from "@/lib/oneAtATime";
 import { onStarred, onYtSongSignal } from "@/library/libraryChanges";
 import { LibraryStore } from "@/library/LibraryStore";
 import { songHasFile, type SongRow, type ArtistRow } from "@wave/client";
+import { readDjAlbumSongs } from "@/dj/djAlbums";
+import { readYtAlbum } from "@/ytmusic/albumPages";
 import { YtMusic } from "@/ytmusic/YtMusic";
 import { appLog } from "@/log/appLog";
 import { currentStreamBufferMs, subscribeStreamBuffer } from "@/settings/streamBuffer";
@@ -507,10 +510,70 @@ const batchStreams = (batch: ReturnType<typeof completeMagicRadioBatch>): YtSong
  */
 export type DjStart = "started" | "empty" | "failed";
 
+/** How long a selected album's YT Music page may take, as its radios may. */
+const DJ_ALBUM_PAGE_TIMEOUT = "8 seconds";
+
+/**
+ * The songs of the albums among a DJ seed's [tiles], as seed songs with
+ * their counted plays (`readDjAlbumSongs`): the Library album's, with or
+ * without a file, else the songs of its YT Music page, read under the
+ * radios' deadline. Only the album's browse id is sent.
+ */
+const djAlbumSeedSongs = (tiles: readonly DjTile[]) =>
+  Effect.gen(function* () {
+    const store = yield* LibraryStore;
+    const playsOf = (trackIds: readonly string[]) =>
+      store
+        .songCountedPlays(trackIds)
+        .pipe(Effect.orElseSucceed((): ReadonlyMap<string, number> => new Map()));
+    const library = (albumId: number) =>
+      Effect.gen(function* () {
+        const songs = (yield* store.getAlbum(albumId))?.tracks ?? [];
+        const artists = yield* store.artistsByIds([
+          ...new Set(songs.flatMap((song) => song.artistIds)),
+        ]);
+        const names = new Map(artists.map((artist) => [artist.id, artist.name]));
+        const videoIds = yield* store
+          .videoIds(songs.map((song) => song.id))
+          .pipe(Effect.orElseSucceed((): ReadonlyMap<number, string> => new Map()));
+        return magicListSeedSongs(
+          songs.map((song) => ({
+            source: "library" as const,
+            track: {
+              id: song.id,
+              title: song.title,
+              artists: song.artistIds.flatMap((id) => names.get(id) ?? []),
+              durationMs: song.durationMs,
+              ...(videoIds.get(song.id) === undefined ? {} : { videoId: videoIds.get(song.id)! }),
+            },
+          })),
+          yield* playsOf(songs.map((song) => String(song.id))),
+        );
+      });
+    const page = (browseId: string) =>
+      Effect.gen(function* () {
+        const album = yield* Effect.tryPromise(() => readYtAlbum(browseId)).pipe(
+          Effect.timeout(DJ_ALBUM_PAGE_TIMEOUT),
+        );
+        const songs = ytAlbumSongs(browseId, album);
+        return magicListSeedSongs(
+          songs.map((song) => ({ source: "stream" as const, song })),
+          yield* playsOf(songs.map((song) => ytTrackId(song.videoId))),
+        );
+      });
+    return yield* Effect.promise(() =>
+      readDjAlbumSongs(tiles, {
+        library: (albumId) => Effect.runPromise(library(albumId)),
+        page: (browseId) => Effect.runPromise(page(browseId)),
+      }),
+    );
+  });
+
 /**
  * Starts a Magic Queue from a DJ seed, the selected [tiles] (Core's
  * `startDjQueue`). No seed song plays first: the session's first batch of 10
- * is read, from the radios of up to 3 of the selected artists, and replaces
+ * is read, from the radios of up to 3 of the selected artists and of the
+ * selected albums' songs (`djAlbumSeedSongs`), and replaces
  * the queue (with Undo, as any play does), its first song playing. It ranks
  * with [settings], DJ's own choices from Adjust, not Discover's sliders, and
  * its Artist variety limits who each batch may hold (`magicQueueYtCandidates`). Nothing is waited for but
@@ -527,6 +590,7 @@ export const startDjMagicQueue = (tiles: readonly DjTile[], settings: DjSettings
       id: String(startedAt),
       played: latest.library?.topArtists ?? [],
       settings,
+      albumSongs: yield* djAlbumSeedSongs(tiles),
     });
     if (started === null) return "empty" satisfies DjStart;
     const drawn = magicBatchRadios(started, Math.random);
