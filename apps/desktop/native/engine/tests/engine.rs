@@ -103,3 +103,43 @@ fn songs_are_measured_in_turn_while_one_plays_and_a_cancel_drops_the_rest() {
     assert!(done.iter().any(|(_, kind)| *kind == "cancelled"), "{done:?}");
     assert_eq!(done.iter().map(|(id, _)| id.as_str()).collect::<Vec<_>>().len(), 3);
 }
+
+#[test]
+fn choosing_an_output_keeps_the_song_where_it_is() {
+    let engine = Engine::silent();
+    assert!(engine.outputs().is_empty(), "a silent engine opens no device");
+    engine.load(&fixture("tone.flac")).expect("loads");
+    engine.play().expect("plays");
+    let before = wait_for(&engine, |ms| ms >= 200.0);
+
+    // A device the system doesn't have: the song goes on, on the default.
+    engine.set_output(Some("wasapi:unplugged".into()));
+    let after = wait_for(&engine, |ms| ms >= before + 100.0);
+    assert!(after < 1000.0, "the song didn't start again or run to its end: {after} ms");
+    assert_eq!(engine.status().state, PlayState::Playing);
+    engine.set_output(None);
+    wait_for(&engine, |ms| ms > after);
+}
+
+#[test]
+fn the_system_outputs_are_listed_and_one_can_be_chosen_mid_song() {
+    let engine = Engine::new();
+    engine.load(&fixture("tone.flac")).expect("loads");
+    engine.play().expect("plays");
+    wait_for(&engine, |ms| ms >= 100.0);
+    let outputs = engine.outputs();
+    // Without a device (CI) there is nothing to choose; the song still keeps time.
+    let Some(last) = outputs.last() else {
+        assert_eq!(engine.status().device, None);
+        return;
+    };
+    engine.pause().expect("pauses");
+    let held = engine.status().position_ms;
+    engine.set_output(Some(last.id.clone()));
+    let deadline = Instant::now() + Duration::from_secs(1);
+    while engine.status().device.as_deref() != Some(last.name.as_str()) {
+        assert!(Instant::now() < deadline, "playback didn't move to {} in a second", last.name);
+        sleep(Duration::from_millis(10));
+    }
+    assert_eq!(engine.status().position_ms, held, "the move keeps the position");
+}

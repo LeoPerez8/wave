@@ -148,7 +148,11 @@ export function collectionActions({
         case "share": {
           const graveyard = edits.find((item) => item.key === "graveyard");
           if (graveyard) items.push(graveyard);
-          // Fall through to the playlist's Copy Link.
+          const copy = edits.find((item) => item.key === action);
+          if (copy) items.push(copy);
+          const spotify = edits.find((item) => item.key === "shareToSpotify");
+          if (spotify) items.push(spotify);
+          break;
         }
         case "renamePlaylist":
         case "changeImage":

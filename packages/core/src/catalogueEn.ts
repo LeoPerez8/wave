@@ -1,5 +1,6 @@
 import { desktopShortcutsEn } from "./catalogue/desktopShortcutsEn.ts";
 import { desktopWindowEn } from "./catalogue/desktopWindowEn.ts";
+import { desktopOutputEn } from "./catalogue/desktopOutputEn.ts";
 import { libraryEn } from "./catalogue/libraryEn.ts";
 import { playlistsEn } from "./catalogue/playlistsEn.ts";
 import { importsEn } from "./catalogue/importsEn.ts";
@@ -38,6 +39,7 @@ import type { TabBarTab } from "./tabBar.ts";
 
 export const en = {
   desktopWindow: desktopWindowEn,
+  desktopOutput: desktopOutputEn,
   desktopLayout: {
     language: "Language",
     // Each language under its own name, so it can be found from the other one.

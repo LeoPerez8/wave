@@ -1,6 +1,14 @@
 import { VersionHistory } from "./VersionHistory.tsx";
 import { Links } from "./Links.tsx";
-import { listDuration, readThemeChoice, themeFor, type SearchOnline } from "@wave/core";
+import {
+  checkedTableRow,
+  listDuration,
+  readThemeChoice,
+  tableSelectionOf,
+  themeFor,
+  type SearchOnline,
+  type TableSelection,
+} from "@wave/core";
 import {
   useCallback,
   useEffect,
@@ -13,6 +21,7 @@ import {
 import type { AccountView } from "../../shared/account.ts";
 import type { YtAccountPanel } from "../../shared/ytAccount.ts";
 import { SpotifyAccountSettings } from "./SpotifyAccountSettings.tsx";
+import { PlaylistMissingSongs } from "./SpotifyImport.tsx";
 import type { BrowsePage, BrowseRow, BrowseScope } from "../../shared/browse.ts";
 import type { CollectionTarget } from "../../shared/collectionActions.ts";
 import type { ScanStatus } from "../../shared/library.ts";
@@ -38,7 +47,12 @@ import { DownloadsPage } from "./DownloadsPage.tsx";
 import { downloadPercent, useDownloads } from "./useDownloads.ts";
 import { useDesktopKeys } from "./keys.ts";
 import { ShortcutsSheet } from "./Shortcuts.tsx";
-import { SelectionBar, useSongActions, type Selection } from "./SongActions.tsx";
+import {
+  openTableSongMenu,
+  SelectionBar,
+  useSongActions,
+  type SongSelectionControls,
+} from "./SongActions.tsx";
 import { collectionActions, CollectionSelectionBar } from "./CollectionActions.tsx";
 import { itemMenuEvents, type MenuPoint } from "./Menu.tsx";
 import { usePlaylistEdits } from "./Playlists.tsx";
@@ -149,7 +163,7 @@ export function App() {
   /** Selection mode, for the list it was turned on in. */
   const [selecting, setSelecting] = useState<{
     readonly list: string;
-    readonly selection: Selection;
+    readonly selection: TableSelection;
   }>();
   const [selectedItem, setSelectedItem] = useState<{
     readonly route: Route;
@@ -189,6 +203,7 @@ export function App() {
   }, [appearance, theme]);
 
   const go = (next: Route) => {
+    setSelecting(undefined);
     setHistory((previous) => [...previous.slice(0, position + 1), next]);
     setPosition(position + 1);
     setHero(undefined);
@@ -200,10 +215,12 @@ export function App() {
     if (route.kind !== "settings") go({ kind: "settings" });
   };
   const back = useCallback(() => {
+    setSelecting(undefined);
     setHero(undefined);
     setPosition((p) => Math.max(0, p - 1));
   }, []);
   const forward = useCallback(() => {
+    setSelecting(undefined);
     setHero(undefined);
     setPosition((p) => Math.min(history.length - 1, p + 1));
   }, [history.length]);
@@ -285,19 +302,26 @@ export function App() {
     [route],
   );
   const list = JSON.stringify(scope);
-  const selection = selecting?.list === list ? selecting.selection : undefined;
-  const setSelection = (selection: Selection | undefined) =>
-    setSelecting(selection && { list, selection });
+  const setSelection = (owner: string, selection: TableSelection | undefined) =>
+    setSelecting((current) =>
+      selection ? { list: owner, selection } : current?.list === owner ? undefined : current,
+    );
   const actions = useSongActions({
     go,
     select: (ids) => {
       if (route.kind === "home") go({ kind: "songs" });
-      setSelection({ all: false, ids: new Set(ids) });
+      setSelection(list, tableSelectionOf(ids, true));
     },
     failed: (message) => setError(message ?? text.desktopLibrary.actionFailed),
     changed: playback.refresh,
     newPlaylist: playlistEdits.newPlaylist,
   });
+  const selectionFor = (owner: string): SongSelectionControls => ({
+    selection: selecting?.list === owner ? selecting.selection : undefined,
+    onSelection: (selection) => setSelection(owner, selection),
+    actions,
+  });
+  const table = selectionFor(list);
   // Says a download began, wherever it was asked for; a notice from before the window opened isn't news.
   const noticeSeen = useRef<number | null | undefined>(undefined);
   const notice = downloads?.notice;
@@ -319,7 +343,7 @@ export function App() {
       if (actions.closeMenu()) return;
       if (shortcuts) return setShortcuts(false);
       if (nowPlaying) return setNowPlaying(false);
-      if (selection) return setSelection(undefined);
+      if (selecting) return setSelecting(undefined);
       if (collectionSelection) return setSelectedItem(undefined);
       return false;
     },
@@ -457,7 +481,7 @@ export function App() {
     play: (target, shuffle) => playList(shuffle, target),
     goToArtist: (id) => go({ kind: "artist", id }),
     select: (target) => {
-      setSelection(undefined);
+      setSelecting(undefined);
       setSelectedItem({ route, target });
     },
     newPlaylist: playlistEdits.newPlaylist,
@@ -474,6 +498,7 @@ export function App() {
       at,
     );
   const searchFor = (query: string) => {
+    setSelecting(undefined);
     setQuery(query);
     if (route.kind !== "search") go({ kind: "search", query });
     else
@@ -553,6 +578,16 @@ export function App() {
           )
         }
         onSongMenu={ytSongMenu}
+        onStatsPlay={(row) => playback.run(window.wave.stats.artistPlay(route.id!, row.key))}
+        onStatsMenu={(row, at, element) =>
+          row.videoId !== undefined
+            ? actions.openItems(
+                text.desktopLibrary.songMenu(row.title),
+                streamed.items(row.videoId),
+                element as HTMLElement,
+              )
+            : actions.openMenu({ scope: { kind: "songs" }, ids: [row.id] }, row.title, at)
+        }
         onError={failed}
       >
         {table}
@@ -781,6 +816,12 @@ export function App() {
                   />
                 )}
                 {playlistId !== undefined && (
+                  <PlaylistMissingSongs
+                    playlistId={playlistId}
+                    revision={`${playback.view?.revision}:${playlistEdits.edits}`}
+                  />
+                )}
+                {playlistId !== undefined && (
                   <button
                     aria-label={text.playlists.playlistActions}
                     title={text.playlists.playlistActions}
@@ -809,7 +850,12 @@ export function App() {
             )}
             {route.kind === "playlists" && (
               <div className="hero-actions">
-                <button onClick={playlistEdits.importPlaylists}>
+                <button
+                  onClick={(event) => {
+                    const rect = event.currentTarget.getBoundingClientRect();
+                    playlistEdits.importPlaylists({ x: rect.left, y: rect.bottom + 4 });
+                  }}
+                >
                   <Icon name="folder" size={16} />
                   {text.playlists.importPlaylists}
                 </button>
@@ -1009,7 +1055,7 @@ export function App() {
               rememberSearch();
               playback.run(window.wave.playback.start(scope, index));
             }}
-            onMenu={(row, at) => actions.openMenu({ scope, ids: [row.id] }, row.title, at)}
+            selectionFor={selectionFor}
             onCollectionMenu={openCollectionMenu}
             onUnavailable={() => setError(text.desktopLibrary.driveDisconnected)}
             onPick={(picked) => {
@@ -1027,6 +1073,7 @@ export function App() {
             onStats={() => go(defaultStats)}
             onError={failed}
             notify={notify}
+            selectionFor={selectionFor}
             onCollectionMenu={openCollectionMenu}
             onMenu={(row, at) =>
               actions.openMenu({ scope: { kind: "songs" }, ids: [row.id] }, row.title, at)
@@ -1065,14 +1112,14 @@ export function App() {
           />
         ) : (
           <>
-            {selection && (
+            {table.selection && (
               <SelectionBar
                 scope={scope}
-                selection={selection}
+                selection={table.selection}
                 revision={revision}
                 actions={actions}
-                onChange={setSelection}
-                onDone={() => setSelection(undefined)}
+                onChange={(selection) => setSelection(list, selection)}
+                onDone={() => setSelection(list, undefined)}
               />
             )}
             {artistPage(
@@ -1086,38 +1133,54 @@ export function App() {
                 onError={failed}
                 selection={
                   collectionSelection && collectionSelection.kind === collectionKind
-                    ? { all: false, ids: new Set([collectionSelection.id]) }
-                    : selection
+                    ? tableSelectionOf([collectionSelection.id], true)
+                    : table.selection
                 }
                 onSelection={
                   collectionSelection && collectionSelection.kind === collectionKind
                     ? () => setSelectedItem(undefined)
-                    : setSelection
+                    : table.onSelection
                 }
-                onMenu={
-                  selection || collectionSelection
-                    ? undefined
-                    : (row, at) =>
-                        collectionKind !== undefined
-                          ? openCollectionMenu({ kind: collectionKind, id: row.id }, row.title, at)
-                          : row.videoId !== undefined
-                            ? actions.openItems(
-                                text.desktopLibrary.songMenu(row.title),
-                                streamed.items(row.videoId),
-                                at,
-                              )
-                            : actions.openMenu(
-                                { scope, ids: [row.id] },
-                                row.title,
-                                at,
-                                // Move Up and Move Down only where the playlist shows its own order.
-                                scope.kind === "playlist" &&
-                                  scope.id !== undefined &&
-                                  shownSort?.key === "custom"
-                                  ? playlistEdits.moveItems(scope.id, row.id)
-                                  : [],
-                              )
-                }
+                {...(collectionSelection
+                  ? {}
+                  : {
+                      onMenu: (row: BrowseRow, at: MenuPoint) => {
+                        if (collectionKind !== undefined)
+                          return openCollectionMenu(
+                            { kind: collectionKind, id: row.id },
+                            row.title,
+                            at,
+                          );
+                        if (
+                          row.videoId !== undefined &&
+                          !(table.selection && checkedTableRow(table.selection, row.id))
+                        )
+                          return actions.openItems(
+                            text.desktopLibrary.songMenu(row.title),
+                            streamed.items(row.videoId).then((items) => [
+                              ...items,
+                              {
+                                key: "select",
+                                label: text.itemActions.labels.select,
+                                run: () => table.onSelection?.(tableSelectionOf([row.id], true)),
+                              },
+                            ]),
+                            at,
+                          );
+                        openTableSongMenu(
+                          table,
+                          scope,
+                          row,
+                          at,
+                          // Move Up and Move Down only where the playlist shows its own order.
+                          scope.kind === "playlist" &&
+                            scope.id !== undefined &&
+                            shownSort?.key === "custom"
+                            ? playlistEdits.moveItems(scope.id, row.id)
+                            : [],
+                        );
+                      },
+                    })}
               />,
             )}
           </>

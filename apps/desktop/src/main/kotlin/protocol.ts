@@ -189,6 +189,16 @@ export interface KotlinDownloadMethods {
     readonly params: { readonly ids: readonly string[] };
     readonly result: null;
   };
+  /** The pause on YouTube's downloads the journal keeps, across restarts too; null for none. */
+  readonly "downloads.youtubePause": {
+    readonly params: object;
+    readonly result: { readonly until: number; readonly level: number } | null;
+  };
+  /** YouTube's jobs wait until [until] (epoch ms; 0 lifts the pause), as Core's `ytThrottle` decided. */
+  readonly "downloads.pauseYoutube": {
+    readonly params: { readonly until: number; readonly level: number };
+    readonly result: null;
+  };
   readonly "downloads.start": { readonly params: object; readonly result: null };
   readonly "downloads.stop": { readonly params: object; readonly result: null };
   readonly "download.album": {

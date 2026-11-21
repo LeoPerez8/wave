@@ -1,5 +1,6 @@
 import { desktopShortcutsPtBr } from "./catalogue/desktopShortcutsPtBr.ts";
 import { desktopWindowPtBr } from "./catalogue/desktopWindowPtBr.ts";
+import { desktopOutputPtBr } from "./catalogue/desktopOutputPtBr.ts";
 import { libraryPtBr } from "./catalogue/libraryPtBr.ts";
 import { playlistsPtBr } from "./catalogue/playlistsPtBr.ts";
 import { importsPtBr } from "./catalogue/importsPtBr.ts";
@@ -37,6 +38,7 @@ import type { Catalogue } from "./catalogueEn.ts";
 
 export const ptBR: Catalogue = {
   desktopWindow: desktopWindowPtBr,
+  desktopOutput: desktopOutputPtBr,
   desktopLayout: {
     language: "Idioma",
     languages: { system: "Sistema", en: "English", "pt-BR": "Português (Brasil)" },

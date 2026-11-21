@@ -49,6 +49,7 @@ const AT_ONCE: ReadonlySet<AudioRequest["call"]> = new Set([
   "measure",
   "cancelMeasurements",
   "buffer",
+  "setOutput",
 ]);
 
 const superseded = () =>

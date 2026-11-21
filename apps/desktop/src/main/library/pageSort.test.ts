@@ -13,7 +13,13 @@ import { sql } from "drizzle-orm";
 import * as Effect from "effect/Effect";
 import * as ManagedRuntime from "effect/ManagedRuntime";
 import { libraryLayer } from "../database.ts";
-import { arrangedRowIds, browseLibrary, browseTrackIds, playlistSongs } from "./browse.ts";
+import {
+  arrangedRowIds,
+  browseLibrary,
+  browseRowIds,
+  browseTrackIds,
+  playlistSongs,
+} from "./browse.ts";
 import { playlistSongSort, toggleBrowseSort, togglePlaylistSort } from "./browseSort.ts";
 
 const withLibrary = async (run: (db: LibraryDatabase) => void) => {
@@ -140,8 +146,12 @@ test("a playlist's YT Music songs sort among its files", async () => {
     const keys = shown(db, scope).items.map((row) => row.id);
     assert.deepEqual(arrangedRowIds(db, scope), keys);
     assert.equal(keys[0]! < 0, true);
+    // A Shift range reads its keys in that order too, a page at a time.
+    assert.deepEqual(browseRowIds(db, scope, 0, 50), { items: keys, offset: 0, total: 2 });
+    assert.deepEqual(browseRowIds(db, scope, 1, 1), { items: [road], offset: 1, total: 2 });
     togglePlaylistSort(db, id, "custom");
     assert.equal(arrangedRowIds(db, scope), undefined);
+    assert.deepEqual(browseRowIds(db, scope, 0, 50).items, [road, keys[0]]);
   });
 });
 
@@ -191,8 +201,16 @@ test("an artist's songs sort by Popular once their list is saved, and by the oth
       [1, 3, undefined],
     );
     assert.deepEqual(queued(db, scope), ["One More Time", "Veridis Quo", "Aerodynamic"]);
+    // A Shift range over Popular follows the ranked rows.
+    const ranked = shown(db, scope).items.map((row) => row.id);
+    assert.deepEqual(browseRowIds(db, scope, 0, 50), { items: ranked, offset: 0, total: 3 });
+    assert.deepEqual(browseRowIds(db, scope, 1, 2).items, ranked.slice(1));
 
     toggleBrowseSort(db, "artist", "added");
+    assert.deepEqual(
+      browseRowIds(db, scope, 0, 50).items,
+      shown(db, scope).items.map((row) => row.id),
+    );
     assert.deepEqual(titles(db, scope), ["Aerodynamic", "Veridis Quo", "One More Time"]);
     // The ranks stay on the rows whatever the sort.
     assert.deepEqual(

@@ -16,6 +16,7 @@ import {
   type YtAlbumSong,
   type YtSong,
 } from "@wave/core";
+import type { Page } from "../../shared/bridge.ts";
 import type { BrowsePage, BrowseRow, BrowseScope } from "../../shared/browse.ts";
 import { ytRow } from "../../shared/yt.ts";
 import { searchSongIds } from "./search.ts";
@@ -126,7 +127,7 @@ const row = (value: Partial<BrowseRow> & Pick<BrowseRow, "id" | "title">): Brows
   favorite: Boolean(value.favorite),
 });
 
-type PlaylistSong = (
+export type PlaylistSong = (
   { readonly trackId: number } | { readonly itemId: number; readonly song: YtAlbumSong }
 ) & {
   /** When the entry joined the playlist, and its place (from 1) in the playlist's own order. */
@@ -158,6 +159,16 @@ const listableEntries = (id: number) => sql`
   WHERE i.playlist_id=${id} AND i.deleted=0 AND
     (CASE WHEN i.yt_song IS NULL THEN a.id IS NOT NULL AND p.id IS NOT NULL
       ELSE ${storedStream} END)`;
+
+const mixedEntries = (db: LibraryDatabase, scope: BrowseScope): SQL | undefined =>
+  scope.kind === "playlist" && scope.id !== undefined && hasStoredEntries(db, scope.id)
+    ? listableEntries(scope.id)
+    : undefined;
+
+const rowCount = (db: LibraryDatabase, source: SQL, mixed: SQL | undefined): number =>
+  db.get<{ count: number }>(
+    mixed ? sql`SELECT count(*) AS count ${mixed}` : sql`SELECT count(*) AS count FROM (${source})`,
+  )!.count;
 
 const orderedEntries = (db: LibraryDatabase, source: SQL, page = sql``): PlaylistSong[] =>
   db
@@ -336,15 +347,8 @@ export const browseLibrary = (
     total = songs.length;
     items = songs.slice(offset, offset + limit);
   } else {
-    const mixed =
-      playlist !== undefined && hasStoredEntries(db, playlist)
-        ? listableEntries(playlist)
-        : undefined;
-    total = db.get<{ count: number }>(
-      mixed
-        ? sql`SELECT count(*) AS count ${mixed}`
-        : sql`SELECT count(*) AS count FROM (${source})`,
-    )!.count;
+    const mixed = mixedEntries(db, scope);
+    total = rowCount(db, source, mixed);
     const page = sql`LIMIT ${limit} OFFSET ${offset}`;
     items = mixed
       ? playlistRows(db, orderedEntries(db, mixed, page), keepStreams)
@@ -421,6 +425,35 @@ export const browseLetter = (
     ) WHERE substr(nameKey,1,1) ${comparison} wave_sort_key(${letter}) ORDER BY position LIMIT 1`)
       ?.position ?? 0
   );
+};
+
+/** Only the keys of a page, in the same order as its displayed rows. */
+export const browseRowIds = (
+  db: LibraryDatabase,
+  scope: BrowseScope,
+  offset: number,
+  limit: number,
+): Page<number> => {
+  if (scope.kind === "search") {
+    const ids = searchSongIds(db, scope.query ?? "");
+    return { items: ids.slice(offset, offset + limit), offset, total: ids.length };
+  }
+  // A sorted playlist and an artist's Popular aren't orders SQLite has.
+  const arranged = arrangedRowIds(db, scope);
+  if (arranged !== undefined)
+    return { items: arranged.slice(offset, offset + limit), offset, total: arranged.length };
+  const page = sql`LIMIT ${limit} OFFSET ${offset}`;
+  const { source, order } = listing(scope, readBrowseSort(db, scope.kind));
+  const mixed = mixedEntries(db, scope);
+  const query = mixed
+    ? sql`SELECT CASE WHEN i.yt_song IS NULL THEN i.track_id ELSE -i.id END AS id
+      ${mixed} ORDER BY i.order_key, i.sync_id ${page}`
+    : sql`SELECT id FROM (${source}) ORDER BY ${order} ${page}`;
+  return {
+    items: db.all<{ id: number }>(query).map((row) => row.id),
+    offset,
+    total: rowCount(db, source, mixed),
+  };
 };
 
 /**
