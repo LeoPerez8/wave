@@ -12,7 +12,10 @@ import {
   IconZzz,
 } from "@tabler/icons-react-native";
 import type { NowPlayingAction, NowPlayingSlot } from "@wave/core";
-import type { ComponentType } from "react";
+import { useRef, type ComponentType, type ComponentRef } from "react";
+import { View, type AccessibilityActionEvent } from "react-native";
+import { GestureDetector } from "react-native-gesture-handler";
+import Animated, { useAnimatedStyle } from "react-native-reanimated";
 
 import { CELL } from "@/catalog/grid";
 import { IconButton } from "@/components/IconButton";
@@ -27,6 +30,7 @@ import { repeatLabel } from "./QueueView";
 import { useShuffleControl } from "./ShuffleMenu";
 import { SleepTimerButton } from "./SleepTimer";
 import { AddToPlaylistButton, DislikeButton, DownloadButton } from "./SongButtons";
+import { useSlotDragGesture, type useNowPlayingSlotDrag } from "./slotDrag";
 
 type IconProps = { size?: number; color?: string; strokeWidth?: number };
 
@@ -205,30 +209,106 @@ const SLOT = CELL * 6;
  * ([action]) or a plus while it's empty. A tap opens the card that changes
  * it, anchored here; the action itself doesn't run.
  */
-export function EditSlot({ slot, action }: { slot: number; action: NowPlayingSlot }) {
+export function EditSlot({
+  slot,
+  action,
+  drag,
+}: {
+  slot: number;
+  action: NowPlayingSlot;
+  drag: ReturnType<typeof useNowPlayingSlotDrag>;
+}) {
   const shuffle = useShuffleControl();
-  const [foreground, tertiary] = useThemeColor(["foreground", "tertiary"]);
+  const [foreground, tertiary, accent] = useThemeColor(["foreground", "tertiary", "accent"]);
+  const view = useRef<ComponentRef<typeof View>>(null);
+  const gesture = useSlotDragGesture(drag, slot);
+  const strings = useLocalisation().strings;
   const Icon =
     action === null ? IconPlus : action === "shuffle" ? shuffle.icon : EDIT_ICONS[action];
   return (
-    <IconButton
-      label={`${nowPlayingSlotTitle(slot)}, ${nowPlayingSlotLabel(action)}`}
-      onPress={() => openChangeSlotMenu(slot)}
-      opensMenu
-      haptic="selection"
-      size={SLOT}
-      style={{
-        borderWidth: 1.5,
-        borderStyle: "dashed",
-        borderColor: tertiary,
-        borderRadius: CELL * 1.25,
-      }}
-    >
-      <Icon
-        size={action === null ? 20 : 24}
-        color={action === null ? tertiary : foreground}
-        strokeWidth={1.5}
-      />
-    </IconButton>
+    <GestureDetector gesture={gesture}>
+      <Animated.View
+        ref={view}
+        onLayout={() => drag.register(slot, view.current)}
+        style={{ opacity: drag.dragging === slot ? 0 : 1 }}
+      >
+        <IconButton
+          label={`${nowPlayingSlotTitle(slot)}, ${nowPlayingSlotLabel(action)}`}
+          onPress={() => openChangeSlotMenu(slot)}
+          opensMenu
+          haptic="selection"
+          size={SLOT}
+          accessibilityActions={
+            action === null
+              ? []
+              : Array.from({ length: 7 }, (_, destination) => destination)
+                  .filter((destination) => destination !== slot)
+                  .map((destination) => ({
+                    name: `moveToSlot${destination}`,
+                    label: strings.settings.moveButtonToSlot(nowPlayingSlotTitle(destination)),
+                  }))
+          }
+          onAccessibilityAction={(event: AccessibilityActionEvent) => {
+            const destination = Number(event.nativeEvent.actionName.replace("moveToSlot", ""));
+            if (Number.isInteger(destination) && destination >= 0 && destination < 7)
+              drag.dropped(slot, destination, false);
+          }}
+          style={{
+            borderWidth: 1.5,
+            borderStyle: "dashed",
+            borderColor: drag.dropTarget === slot ? accent : tertiary,
+            borderRadius: CELL * 1.25,
+          }}
+        >
+          <Icon
+            size={action === null ? 20 : 24}
+            color={action === null ? tertiary : foreground}
+            strokeWidth={1.5}
+          />
+        </IconButton>
+      </Animated.View>
+    </GestureDetector>
+  );
+}
+
+/** The held button, rendered above the sheet while its source slot stays outlined. */
+export function SlotDragPreview({
+  drag,
+  action,
+}: {
+  drag: ReturnType<typeof useNowPlayingSlotDrag>;
+  action: NowPlayingSlot;
+}) {
+  const shuffle = useShuffleControl();
+  const [foreground, ground] = useThemeColor(["foreground", "background"]);
+  const Icon =
+    action === null ? IconPlus : action === "shuffle" ? shuffle.icon : EDIT_ICONS[action];
+  const style = useAnimatedStyle(() => ({
+    position: "absolute",
+    left: 0,
+    top: 0,
+    width: SLOT,
+    height: SLOT,
+    transform: [
+      { translateX: drag.state.x.get() - SLOT / 2 },
+      { translateY: drag.state.y.get() - SLOT / 2 },
+    ],
+  }));
+  return (
+    <Animated.View pointerEvents="none" style={[style, { zIndex: 20 }]}>
+      <View
+        className="items-center justify-center rounded-xl"
+        style={{
+          width: SLOT,
+          height: SLOT,
+          backgroundColor: ground,
+          borderColor: foreground,
+          borderWidth: 1.5,
+          opacity: 0.9,
+        }}
+      >
+        <Icon size={action === null ? 20 : 24} color={foreground} strokeWidth={1.5} />
+      </View>
+    </Animated.View>
   );
 }

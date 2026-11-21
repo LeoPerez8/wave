@@ -190,6 +190,41 @@ export const editNowPlayingButtons = (
 };
 
 /**
+ * Move the button from slot [from] to [to]. A filled destination swaps with
+ * it; an empty one leaves the source empty. Invalid slots, an empty source,
+ * or the same slot leave the arrangement alone.
+ */
+export const moveNowPlayingButton = (
+  buttons: NowPlayingButtons,
+  from: number,
+  to: number,
+): NowPlayingButtons => {
+  const action = buttons[from];
+  const destination = buttons[to];
+  if (
+    from === to ||
+    from < 0 ||
+    from >= buttons.length ||
+    to < 0 ||
+    to >= buttons.length ||
+    action == null
+  )
+    return buttons;
+  const moved = [...buttons] as [
+    NowPlayingSlot,
+    NowPlayingSlot,
+    NowPlayingSlot,
+    NowPlayingSlot,
+    NowPlayingSlot,
+    NowPlayingSlot,
+    NowPlayingSlot,
+  ];
+  moved[to] = action;
+  moved[from] = destination ?? null;
+  return moved;
+};
+
+/**
  * What's on, as the slots see it: nothing, an unsearched entry while its
  * search runs, or a song.
  */

@@ -451,6 +451,7 @@ export const settingsPtBr: typeof settingsEn = {
   retryLine: (line) => `Tentar novamente ${line}`,
   removeFailure: (line) => `Remover ${line} dos downloads que falharam`,
   slot: (n) => `Posição ${n}`,
+  moveButtonToSlot: (slot) => `Mover botão para ${slot}`,
   swapSlot: (label, title, holder) => `${label}, ${title}, troca com ${holder}`,
   swipeHint: (side) =>
     `Escolhe a ação de deslizar para a ${side === "left" ? "esquerda" : "direita"}`,

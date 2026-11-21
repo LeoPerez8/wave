@@ -27,7 +27,7 @@ export const playbackTextEn = {
   /** Now Playing's edit mode: the screen reader's action on a slot, the header's button, the line under the slots and the first open's toast. */
   editButtons: "Edit Buttons",
   doneEditing: "Done",
-  tapASlotToChooseItsAction: "Tap a slot to choose its action",
+  tapASlotToChooseItsAction: "Tap to choose, or hold and drag to move",
   holdAButtonToEditThisScreen: "Hold a button to edit this screen",
   checkYourConnectionAndTryAgain: "Check your connection and try again.",
   clear: "Clear",
