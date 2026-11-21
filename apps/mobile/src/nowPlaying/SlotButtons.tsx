@@ -272,7 +272,7 @@ export function EditSlot({
   // Measured as a drag begins, with the other slots and the sheet.
   const { register } = drag;
   const place = useCallback((view: Measurable | null) => register(slot, view), [register, slot]);
-  const gesture = useSlotDragGesture(drag, slot);
+  const gesture = useSlotDragGesture(drag, slot, action);
   const strings = useLocalisation().strings;
   const Icon =
     action === null ? IconPlus : action === "shuffle" ? shuffle.icon : EDIT_ICONS[action];

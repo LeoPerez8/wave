@@ -21,6 +21,23 @@ export type DjOpeningGrid =
   /** A line saying there's nothing to pick yet; Done stays disabled. */
   | { readonly kind: "nothing" };
 
+/** Work a DJ opening still needs, keeping a stored grid out of rebuild work. */
+export const djOpeningWork = ({
+  keptGrid,
+  libraryReady,
+}: {
+  readonly keptGrid: boolean;
+  readonly libraryReady: boolean;
+}): {
+  readonly readLibrary: boolean;
+  readonly buildGrid: boolean;
+  readonly prepareStartup: boolean;
+} => ({
+  readLibrary: !libraryReady,
+  buildGrid: !keptGrid && libraryReady,
+  prepareStartup: !keptGrid,
+});
+
 /**
  * DJ's grid as it opens. With a taste signal (`djGrid` has a tile: a scored
  * artist, or a counted play before the profile's first derivation) the grid
