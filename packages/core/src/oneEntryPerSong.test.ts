@@ -6,6 +6,7 @@ import {
   writePlaylistEntrySong,
   writePlaylistYtSong,
   type DuplicateCandidate,
+  type LibraryEntryFields,
 } from "./index.ts";
 
 const yt = (videoId: string, title: string, artists: string[], durationMs: number | null) =>
@@ -22,14 +23,18 @@ const yt = (videoId: string, title: string, artists: string[], durationMs: numbe
 const entry = (
   id: string,
   addedAt: number,
-  fields: { songId?: string | null; ytSong?: string | null },
+  fields: { songId?: string | null; ytSong?: string | null } & Partial<LibraryEntryFields>,
   more: Partial<DuplicateCandidate> = {},
 ): DuplicateCandidate => ({
   id,
   playlistId: "p1",
   addedAt,
   deleted: false,
-  song: playlistEntrySong({ songId: fields.songId ?? null, ytSong: fields.ytSong ?? null }),
+  song: playlistEntrySong({
+    ...fields,
+    songId: fields.songId ?? null,
+    ytSong: fields.ytSong ?? null,
+  }),
   ...more,
 });
 
@@ -94,6 +99,40 @@ describe("one entry per song", () => {
     const library = entry("a", 100, { songId: "key-airbag" });
     const streamed = entry("b", 200, { ytSong: yt("vid1", "Airbag", ["Radiohead"], 284_000) });
     assert.deepEqual(removed([library, streamed]), []);
+  });
+
+  test("two Libraries' entries of one song are one song by their fields", () => {
+    const mine = entry("a", 100, {
+      songId: "key-mine",
+      title: "Airbag",
+      credit: "Radiohead",
+      album: "OK Computer",
+      durationMs: 284_000,
+      videoId: null,
+    });
+    const theirs = entry("b", 200, {
+      songId: "key-theirs",
+      title: "Airbag (Remastered)",
+      credit: "Radiohead",
+      album: "OK Computer OKNOTOK",
+      durationMs: 285_500,
+      videoId: null,
+    });
+    assert.deepEqual(removed([theirs, mine]), ["b"]);
+  });
+
+  test("a Library entry and a YT Music entry of one song are one song", () => {
+    const library = {
+      songId: "key-airbag",
+      title: "Airbag",
+      credit: "Radiohead",
+      durationMs: 284_000,
+    };
+    const byVideoId = entry("a", 100, { ...library, title: "Other", videoId: "vid1" });
+    const byTags = entry("a", 100, { ...library, videoId: null });
+    const streamed = entry("b", 200, { ytSong: yt("vid1", "Airbag", ["Radiohead"], 283_000) });
+    assert.deepEqual(removed([streamed, byVideoId]), ["b"]);
+    assert.deepEqual(removed([streamed, byTags]), ["b"]);
   });
 
   test("entries of other playlists and removed entries don't count", () => {

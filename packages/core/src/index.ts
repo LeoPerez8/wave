@@ -2878,3 +2878,10 @@ export {
 export { displayTag } from "./displayTag.ts";
 export { duplicatePlaylistEntries, playlistEntrySong, sameEntrySong } from "./oneEntryPerSong.ts";
 export type { DuplicateCandidate, EntrySong } from "./oneEntryPerSong.ts";
+export { collaborativeEntryMatcher, libraryEntryFields } from "./collaborativeEntry.ts";
+export type {
+  CollaborativeEntryMatch,
+  CollaborativeLibraryEntry,
+  EntryTrack,
+  LibraryEntryFields,
+} from "./collaborativeEntry.ts";
