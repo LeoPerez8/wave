@@ -1,13 +1,16 @@
-// The versions a release goes out after that never published: tagged by a run whose release
-// gate failed, so they have a tag but no GitHub release, notes or update. The release carries
+// The versions a phone release goes out after that the phone never published: tagged by a run
+// whose release gate failed, or by one that released only the desktop, so their GitHub Release,
+// if any, holds no APK, and they went out with no phone notes or update. The release carries
 // their notes too, each under its own version (docs/spec.md, Patch notes). earlier-notes.sh
-// lists the commit's tags, its own and the tags GitHub has releases on:
-//   <tags in its history> | node scripts/ci/skipped-releases.ts main|ti <published file> [<its own tag>...]
+// lists the commit's tags, its own, and GitHub's releases (one { tagName, assets } JSON line each):
+//   <tags in its history> | node scripts/ci/skipped-releases.ts main|ti <releases file> [<its own tag>...]
 // Prints the skipped tags, oldest first, one per line. earlier-notes.sh then gathers their notes:
 //   node scripts/ci/skipped-releases.ts --entries [<version> <date> <notes file>]...
 // Prints [{ version, date, notes }] as one line of JSON, the date in ISO 8601 UTC.
 import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
+
+import { type PublishedRelease, publishedIn } from "./changes.ts";
 
 const RELEASE = /^v(\d+)\.(\d+)\.(\d+)(-ti)?$/;
 
@@ -26,8 +29,8 @@ const older = (a: Release, b: Release) =>
   a.numbers[0] - b.numbers[0] || a.numbers[1] - b.numbers[1] || a.numbers[2] - b.numbers[2];
 
 /**
- * The channel's tags in the commit's history, its own left out, that no release was published
- * on, oldest first. Only the channel's `within` newest tags count, so a run asks GitHub about a
+ * The channel's tags in the commit's history, its own left out, whose GitHub Release holds no
+ * APK (or that have none), oldest first. Only the channel's `within` newest tags count, so a run asks GitHub about a
  * bounded number of them.
  */
 export const skippedReleases = (commit: {
@@ -36,12 +39,14 @@ export const skippedReleases = (commit: {
   tags: readonly string[];
   /** The tags on the commit itself. */
   own: readonly string[];
-  /** The tags GitHub has a release on. */
-  published: readonly string[];
+  /** GitHub's releases, with the names of their files. */
+  published: readonly PublishedRelease[];
   within?: number;
 }): string[] => {
   const own = new Set(commit.own);
-  const published = new Set(commit.published);
+  const published = new Set(
+    commit.published.filter((release) => publishedIn("phone", release)).map((r) => r.tagName),
+  );
   return commit.tags
     .filter((tag) => !own.has(tag))
     .flatMap((tag) => parse(tag, commit.channel === "ti") ?? [])
@@ -76,6 +81,8 @@ if (process.argv[1] === fileURLToPath(import.meta.url) && process.argv[2] === "-
   if (channel !== "main" && channel !== "ti")
     throw new Error(`Expected the channel, main or ti, not "${channel}".`);
   const tags = lines(readFileSync(0, "utf8"));
-  const published = lines(readFileSync(publishedFile, "utf8"));
+  const published = lines(readFileSync(publishedFile, "utf8")).map(
+    (line) => JSON.parse(line) as PublishedRelease,
+  );
   for (const tag of skippedReleases({ channel, tags, own, published })) console.log(tag);
 }

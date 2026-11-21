@@ -7,9 +7,23 @@
 set -euo pipefail
 
 tag="$1"
-cd "$(dirname "$0")/../../apps/mobile"
+here="$(cd "$(dirname "$0")" && pwd)"
+cd "$here/../../apps/mobile"
 version="$(pnpm exec expo config --type public --json | jq -r .version)"
-node --disable-warning=MODULE_TYPELESS_PACKAGE_JSON scripts/check-release-tag.ts "$tag" "$version"
+# A promotion may build an app from an older or newer ti release than the tag's own number
+# (PROMOTED_FROM, promote-version.ts): the checkout must be that release, at or below the tag.
+named="$tag"
+promoted="${PROMOTED_FROM:-}"
+if [ -n "$promoted" ] && [ "$promoted" != "$tag-ti" ]; then
+  node "$here/promote-version.ts" --check-source "$tag" "$promoted"
+  if [ "v$version" != "$promoted" ]; then
+    echo "$tag promotes $promoted, but the checkout's version is $version." >&2
+    exit 1
+  fi
+  echo "$tag goes out from $promoted."
+  named="${promoted%-ti}"
+fi
+node --disable-warning=MODULE_TYPELESS_PACKAGE_JSON scripts/check-release-tag.ts "$named" "$version"
 
 # A stable tag over a -ti version is a promotion, which must be that release's own commit.
 if [ "$tag" != "v$version" ]; then
