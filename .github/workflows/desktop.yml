@@ -92,10 +92,12 @@ jobs:
       - name: Install
         run: scripts/ci/step.sh "Install" pnpm install --frozen-lockfile --filter "@wave/desktop..." --filter "@wave/sync..."
 
-      # Windows' store is this job's: no other job installs there. Linux's is Checks'.
+      # Windows' store is this job's: no other job installs there. Linux's is Checks', so on
+      # Linux this call doesn't run (with save off it would restore the store again).
       - uses: ./.github/actions/pnpm-store
+        if: runner.os == 'Windows'
         with:
-          save: ${{ runner.os == 'Windows' }}
+          save: true
 
       - name: Typecheck
         run: scripts/ci/step.sh "Typecheck" pnpm --filter @wave/desktop typecheck

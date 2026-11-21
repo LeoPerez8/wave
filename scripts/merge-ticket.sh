@@ -29,9 +29,16 @@ if ! git merge -q --no-ff --no-verify -m "$message" "origin/$ticket"; then
   exit 2
 fi
 
-app="$("$here/install-for.sh" --print)"
-"$here/install-for.sh" "$app"
-pnpm -s --filter "@wave/$app..." typecheck
+# Install and typecheck every app the merge reaches; shared changes reach both.
+mapfile -t apps < <("$here/install-for.sh" --print)
+"$here/install-for.sh" "${apps[@]}"
+filters=(--filter "@wave/sync...")
+for app in "${apps[@]}"; do
+  filters+=(--filter "@wave/$app...")
+done
+pnpm -s "${filters[@]}" typecheck
+pnpm -s exec tsc -p scripts/ci
+pnpm -s exec tsc -p scripts/perf
 "$here/check-guards.sh"
 git push -q origin "HEAD:refs/heads/$integration"
 echo "$integration is at $(git rev-parse HEAD)"
