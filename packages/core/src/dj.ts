@@ -88,8 +88,8 @@ export interface DjGenreTile {
 /** One selectable item of DJ's grid. */
 export type DjTile = DjArtistTile | DjAlbumTile | DjGenreTile;
 
-/** The first playable Library song covered directly by a DJ selection, in Library order. */
-export const djFirstLibrarySong = <
+/** Playable Library songs covered directly by a DJ selection, in Library order. */
+export const djLibraryCandidates = <
   Song extends {
     readonly id: number;
     readonly path: string | null;
@@ -101,7 +101,7 @@ export const djFirstLibrarySong = <
 >(
   tiles: readonly DjTile[],
   songs: readonly Song[],
-): Song | null => {
+): Song[] => {
   const artistIds = new Set<number>();
   const artistNames = new Set<string>();
   const familyArtistNames = new Set<string>();
@@ -122,24 +122,65 @@ export const djFirstLibrarySong = <
       for (const artist of tile.artists) addArtistName(familyArtistNames, artist.name);
     }
   }
-  return (
-    songs.find(
-      (song) =>
-        song.path !== null &&
-        (albumIds.has(song.albumId) ||
-          song.artistIds.some((id) => artistIds.has(id)) ||
+  return songs.filter(
+    (song) =>
+      song.path !== null &&
+      (albumIds.has(song.albumId) ||
+        song.artistIds.some((id) => artistIds.has(id)) ||
+        song.artistNames.some((name) => {
+          const key = catalogSeedKey(name);
+          return key !== null && artistNames.has(key);
+        }) ||
+        families.has(genreFamily(song.genre ?? "")?.key ?? "") ||
+        (song.genre === null &&
           song.artistNames.some((name) => {
             const key = catalogSeedKey(name);
-            return key !== null && artistNames.has(key);
-          }) ||
-          families.has(genreFamily(song.genre ?? "")?.key ?? "") ||
-          (song.genre === null &&
-            song.artistNames.some((name) => {
-              const key = catalogSeedKey(name);
-              return key !== null && familyArtistNames.has(key);
-            }))),
-    ) ?? null
+            return key !== null && familyArtistNames.has(key);
+          }))),
   );
+};
+
+/** Picks a directly selected Library song by batch rank, excluding picks already unavailable. */
+export const djFirstLibrarySong = <
+  Song extends {
+    readonly id: number;
+    readonly path: string | null;
+    readonly albumId: number;
+    readonly artistIds: readonly number[];
+    readonly artistNames: readonly string[];
+    readonly genre: string | null;
+  },
+>(
+  tiles: readonly DjTile[],
+  songs: readonly Song[],
+  {
+    excluded = new Set<string>(),
+    scoreOf = () => 0,
+    random = () => 0,
+  }: {
+    /** Queue ids the batch would already exclude (dislikes, prior picks and learned signals). */
+    readonly excluded?: ReadonlySet<string>;
+    /** The Library ranking score the batch assigned each matching song. */
+    readonly scoreOf?: (song: Song) => number;
+    /** Breaks equal-score ties, using the batch's random source. */
+    readonly random?: () => number;
+  } = {},
+): Song | null => {
+  const candidates = djLibraryCandidates(tiles, songs).filter(
+    (song) => !excluded.has(String(song.id)),
+  );
+  if (candidates.length === 0) return null;
+  let highest = Number.NEGATIVE_INFINITY;
+  let tied: Song[] = [];
+  for (const candidate of candidates) {
+    const score = scoreOf(candidate);
+    if (score > highest) {
+      highest = score;
+      tied = [candidate];
+    } else if (score === highest) tied.push(candidate);
+  }
+  const at = Math.min(tied.length - 1, Math.floor(Math.max(0, random()) * tied.length));
+  return tied[at] ?? null;
 };
 
 /** The artist [tile] stands for: an artist tile's own, an album tile's album artist. */

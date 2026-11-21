@@ -6,6 +6,8 @@ import {
   artistGraph,
   DJ_GRID_TILES,
   DJ_MAX_SELECTED,
+  EMPTY_QUEUE,
+  MAGIC_QUEUE_CONTEXT,
   djArtistTile,
   djAlbumTile,
   djFamilyRadioAllowed,
@@ -33,6 +35,8 @@ import {
   djSeedTiles,
   djSelectable,
   magicArtistKey,
+  reduceQueue,
+  wantsMagicBatch,
   type DjTile,
   type TasteProfile,
 } from "./index.ts";
@@ -64,6 +68,44 @@ test("DJ can take its first playable Library song from the selected artist or al
   assert.equal(djFirstLibrarySong([album], songs)?.id, 3);
   const family = { ...djGenreTile("Metal")!, artists: [{ id: 10, name: "Metal Act" }] };
   assert.equal(djFirstLibrarySong([family], songs)?.id, 4);
+});
+
+test("DJ's first Library song follows candidate ranking, exclusions and randomized ties", () => {
+  const artist = djArtistTile("Portishead")!;
+  const songs = [
+    {
+      id: 2,
+      path: "first.flac",
+      albumId: 1,
+      artistIds: [7],
+      artistNames: ["Portishead"],
+      genre: null,
+    },
+    {
+      id: 3,
+      path: "second.flac",
+      albumId: 1,
+      artistIds: [7],
+      artistNames: ["Portishead"],
+      genre: null,
+    },
+  ];
+  const ranked = (id: number) => (id === 2 ? 1 : 2);
+  assert.equal(djFirstLibrarySong([artist], songs, { scoreOf: (song) => ranked(song.id) })?.id, 3);
+  assert.equal(
+    djFirstLibrarySong([artist], songs, {
+      scoreOf: (song) => ranked(song.id),
+      excluded: new Set(["3"]),
+    })?.id,
+    2,
+  );
+  assert.equal(
+    djFirstLibrarySong([artist], songs, {
+      scoreOf: () => 1,
+      random: () => 0.99,
+    })?.id,
+    3,
+  );
 });
 
 /** A taste profile scoring [artists] by name. */
@@ -674,6 +716,27 @@ describe("a Magic Queue with a DJ seed", () => {
     const batch = completeMagicRadioBatch({ ...started(), used: ["42"] }, candidates, []);
     assert.equal(batch.trackIds.length, 9);
     assert.equal(batch.session.batches, 1);
+  });
+
+  test("Library and radio starts each complete to ten songs and do not trigger a second batch", () => {
+    const radioFirst = ytTrackId("v0");
+    const candidates = Array.from({ length: 11 }, (_, at) =>
+      rankedSong(`v${at}`, `Artist ${at % 5}`),
+    );
+    for (const first of ["42", radioFirst]) {
+      const batch = completeMagicRadioBatch({ ...started(), used: [first] }, candidates, []);
+      assert.equal(batch.trackIds.length, 9);
+      const queue = reduceQueue(EMPTY_QUEUE, {
+        type: "play",
+        trackIds: [first, ...batch.trackIds],
+        startIndex: 0,
+        context: { kind: MAGIC_QUEUE_CONTEXT, id: batch.session.id },
+        shuffle: false,
+      }).state;
+      assert.equal(queue.entries.length, 10);
+      assert.equal(queue.entries[queue.index]?.trackId, first);
+      assert.equal(wantsMagicBatch(batch.session, queue), false);
+    }
   });
 
   test("ranks at its own choices, whatever Discover's sliders say", () => {

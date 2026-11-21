@@ -13,6 +13,7 @@ import {
   magicQueueDislikedEntries,
   magicBatchRadios,
   djFirstLibrarySong,
+  djLibraryCandidates,
   magicLibrarySongs,
   magicListSeedSongs,
   completeMagicRadioBatch,
@@ -65,6 +66,7 @@ import { onStarred, onYtSongSignal } from "@/library/libraryChanges";
 import { LibraryStore } from "@/library/LibraryStore";
 import { songHasFile, type SongRow, type ArtistRow } from "@wave/client";
 import { readDjAlbumSongs } from "@/dj/djAlbums";
+import { djBatchReadMayResume, djStartWhileOpen } from "@/dj/djDone";
 import { readYtAlbum } from "@/ytmusic/albumPages";
 import { YtMusic } from "@/ytmusic/YtMusic";
 import { appLog } from "@/log/appLog";
@@ -73,7 +75,11 @@ import { continueQueueOn, onContinueQueue } from "@/settings/continueQueue";
 import { ytMusicEnabled, subscribeYtMusicEnabled } from "@/settings/ytMusic";
 import { subscribeConnectivity } from "@/native/waveNative";
 
-import { magicQueueFirstRadioSong, magicQueueYtCandidates } from "./magicQueueRadio";
+import {
+  magicQueueDjLibraryRanking,
+  magicQueueFirstRadioSong,
+  magicQueueYtCandidates,
+} from "./magicQueueRadio";
 import { MAGIC_RADIO_DEADLINE_MS } from "./songRadioSession";
 import { magicSignalsOf } from "./magicSongs";
 import { Player, playbackState, sleepTimerState, sleepTimerLoaded } from "./Player";
@@ -652,32 +658,60 @@ export const startDjMagicQueue = (
       settings,
       albumSongs: localAlbumSongs,
     });
+    if (localAlbumSession === null) return "empty" satisfies DjStart;
+    const drawnLibrary = magicBatchRadios(localAlbumSession, Math.random);
     const artistNames = new Map(library.artists.map((artist) => [artist.id, artist.name]));
+    const playableLibrary = library.songs
+      .filter((song): song is SongRow & { readonly path: string } => song.path !== null)
+      .map((song) => ({
+        ...song,
+        artistNames: song.artistIds.flatMap((id) => {
+          const name = artistNames.get(id);
+          return name === undefined ? [] : [name];
+        }),
+      }));
+    const matchingLibrary = djLibraryCandidates(tiles, playableLibrary);
+    const rankedLibrary = yield* magicQueueDjLibraryRanking(
+      drawnLibrary.session,
+      matchingLibrary,
+      { songs: library.songs, artists: library.artists },
+      {
+        catalog: latest.catalog ?? [],
+        graph: latest.graph,
+        taste: latestTasteProfile(),
+        profileOf: magicProfileOf(library),
+        sliders: magicSessionSliders(drawnLibrary.session, discoverSliders.get()),
+      },
+    );
+    const initialLibraryBatch = completeMagicRadioBatch(drawnLibrary.session, rankedLibrary, []);
+    const initialLibraryOrder = new Map(
+      initialLibraryBatch.trackIds.map((trackId, index) => [trackId, index] as const),
+    );
     const firstLibrarySong = djFirstLibrarySong(
       tiles,
-      library.songs
-        .filter((song): song is SongRow & { readonly path: string } => song.path !== null)
-        .map((song) => ({
-          ...song,
-          artistNames: song.artistIds.flatMap((id) => {
-            const name = artistNames.get(id);
-            return name === undefined ? [] : [name];
-          }),
-        })),
+      matchingLibrary.filter((song) => initialLibraryOrder.has(String(song.id))),
+      {
+        excluded: dislikedSongsNow(),
+        scoreOf: (song) => -(initialLibraryOrder.get(String(song.id)) ?? Number.POSITIVE_INFINITY),
+      },
     );
     if (closed?.aborted) return "failed" satisfies DjStart;
     if (localAlbumSession !== null && firstLibrarySong !== null) {
-      const session = { ...localAlbumSession, used: [String(firstLibrarySong.id)] };
+      const session = { ...drawnLibrary.session, used: [String(firstLibrarySong.id)] };
       const needsAlbumPages = tiles.some(
         (tile) => tile.kind === "album" && tile.browseId !== null && !localAlbumSongs.has(tile.key),
       );
       startingLibrary = { songs: library.songs.filter(songHasFile), artists: library.artists };
       if (needsAlbumPages) pendingDjFirstBatch = session.id;
-      yield* begin(
-        session,
-        startedAt,
-        toQueueTrack({ ...firstLibrarySong, path: firstLibrarySong.path! }),
+      const start = djStartWhileOpen(closed, () =>
+        begin(
+          session,
+          startedAt,
+          toQueueTrack({ ...firstLibrarySong, path: firstLibrarySong.path! }),
+        ),
       );
+      if (start === null) return "failed" satisfies DjStart;
+      yield* start;
       if (needsAlbumPages)
         yield* Effect.forkDetach(
           djAlbumSeedSongs(tiles, deadlineAt).pipe(
@@ -718,11 +752,18 @@ export const startDjMagicQueue = (
     if (firstRadioSong !== null) {
       const firstId = ytTrackId(firstRadioSong.videoId);
       startingLibrary = { songs: library.songs.filter(songHasFile), artists: library.artists };
-      yield* begin(
-        { ...drawn.session, used: [firstId] },
-        startedAt,
-        toYtQueueTrack(firstRadioSong, null),
+      const start = djStartWhileOpen(closed, () =>
+        begin(
+          { ...drawn.session, used: [firstId] },
+          startedAt,
+          toYtQueueTrack(firstRadioSong, null),
+        ),
       );
+      if (start === null) {
+        finishDjFirstBatch(drawn.session.id);
+        return "failed" satisfies DjStart;
+      }
+      yield* start;
       yield* cacheYtCoversInBackground([firstRadioSong]);
       return "started" satisfies DjStart;
     }
@@ -801,7 +842,8 @@ let pendingDjFirstBatch: string | null = null;
 const finishDjFirstBatch = (sessionId: string): void => {
   if (pendingDjFirstBatch !== sessionId) return;
   pendingDjFirstBatch = null;
-  if (activeMagicSession()?.id === sessionId) retryMagicBatch();
+  const activeId = activeMagicSession()?.id ?? null;
+  if (djBatchReadMayResume(sessionId, activeId)) retryMagicBatch();
 };
 
 /**
