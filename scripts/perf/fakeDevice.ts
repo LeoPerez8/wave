@@ -53,6 +53,8 @@ export interface FakeDeviceOptions {
    * several launcher-icon aliases enabled); naming the component still works.
    */
   readonly launcherByPackageFails?: boolean;
+  /** A cold launch outlasts `am start -W`'s wait ("Status: timeout"), though the app comes up. */
+  readonly coldLaunchTimesOut?: boolean;
 }
 
 // The simulated app's code, as ART profile rules: what a launch runs, what its screens run.
@@ -90,6 +92,7 @@ export class FakeDevice implements Device {
   private readonly playlist: string;
   private readonly ignoresGlassProbe: boolean;
   private readonly launcherByPackageFails: boolean;
+  private readonly coldLaunchTimesOut: boolean;
   private glassProbe = "live";
   private running = false;
   private recorder: PerfRecorder | null = null;
@@ -138,6 +141,7 @@ export class FakeDevice implements Device {
     this.playlist = options.playlist ?? "Favorites";
     this.ignoresGlassProbe = options.ignoresGlassProbe ?? false;
     this.launcherByPackageFails = options.launcherByPackageFails ?? false;
+    this.coldLaunchTimesOut = options.coldLaunchTimesOut ?? false;
   }
 
   async sleep(ms: number): Promise<void> {
@@ -276,6 +280,8 @@ export class FakeDevice implements Device {
     this.recorder = this.perfBuild ? createPerfRecorder({ now: () => this.clock }) : null;
     this.render(this.clock + 200, 40);
     this.advance(750);
+    if (this.coldLaunchTimesOut)
+      return "Starting: Intent { act=android.intent.action.MAIN }\nStatus: timeout\nLaunchState: UNKNOWN (-1)\nActivity: dev.leoperez.wave/.MainActivity\nWaitTime: 10012\nComplete\n";
     return "Starting: Intent { act=android.intent.action.MAIN }\nStatus: ok\nLaunchState: COLD\nActivity: dev.leoperez.wave/.MainActivity\nTotalTime: 742\nWaitTime: 760\nComplete\n";
   }
 

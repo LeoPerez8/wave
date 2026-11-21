@@ -221,6 +221,20 @@ export const runPerf = async (
         `am start -W -S -a android.intent.action.MAIN -c android.intent.category.LAUNCHER ${target}${launchExtras}`,
       ),
     );
+    // A slow cold start (an emulator under load) outlasts am start's wait, yet Wave comes up:
+    // the run goes on once it's in front, with no launch time.
+    if (result.status === "timeout") {
+      for (let waited = 0; waited <= options.launchSettleMs; waited += POLL_MS) {
+        const top = await shell(
+          "dumpsys activity activities | grep -E 'topResumedActivity|mResumedActivity'",
+        );
+        if (top.includes(`${pkg}/`)) {
+          log(`  the launch outlasted am start's wait (${ms(result.waitTimeMs)}); Wave is up`);
+          return result;
+        }
+        await device.sleep(POLL_MS);
+      }
+    }
     if (result.status !== "ok")
       throw new ScenarioError(`Couldn't launch ${pkg} (${result.status ?? "no status"}).`);
     return result;
