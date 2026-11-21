@@ -29,7 +29,11 @@ export interface RecognizeTileNative {
    * The match [match] was saved, as [line] says; [favorite] is its star button, or null for
    * a song Wave can't play. Both join the match's notification in one silent update.
    */
-  readonly matchSaved: (line: string, match: string, favorite: RecognizeTileFavorite | null) => void;
+  readonly matchSaved: (
+    line: string,
+    match: string,
+    favorite: RecognizeTileFavorite | null,
+  ) => void;
   readonly notify: (notice: RecognizeTileNotice) => void;
 }
 
