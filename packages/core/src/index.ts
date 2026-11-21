@@ -885,8 +885,9 @@ export { stepNowPlayingSheet } from "./sheetLifecycle.ts";
 export {
   NOW_PLAYING_OPENS_ON,
   nowPlayingPageSwipesEnabled,
-  stepNowPlayingScreens,
   nowPlayingRelatedSwipeEnabled,
+  settleRelatedRise,
+  stepNowPlayingScreens,
 } from "./nowPlayingScreens.ts";
 export {
   nowPlayingEditHintDue,
