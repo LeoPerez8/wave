@@ -1,8 +1,10 @@
 import { createLongPressIntent } from "@wave/core";
 import * as Haptics from "expo-haptics";
 import {
+  memo,
   useContext,
   useEffect,
+  useLayoutEffect,
   useRef,
   useState,
   type ComponentRef,
@@ -24,6 +26,7 @@ import {
   useReducedMotion,
   useSharedValue,
   withTiming,
+  type SharedValue,
 } from "react-native-reanimated";
 import { withUniwind } from "uniwind";
 
@@ -74,6 +77,59 @@ type Props = Omit<PressableProps, "children" | "style"> & {
   highlightAs?: { readonly view: RefObject<Measurable | null>; readonly radius: number };
 };
 
+/** A press's animation once it has one: what it sinks by, and the style that shows it. */
+interface Motion {
+  readonly pressed: SharedValue<number>;
+  readonly lit: SharedValue<number>;
+  readonly style: ReturnType<typeof useAnimatedStyle>;
+}
+
+/**
+ * A press's sink-and-dim animation, mounted the first time it is touched or
+ * highlighted (#1423): a screen of tiles makes no shared values or animated
+ * styles until one is. It starts towards where the press already is
+ * ([pressedTarget]) and hands its values to [onReady].
+ */
+const PressMotion = memo(function PressMotion({
+  pressedTarget,
+  litAtMount,
+  highlighted,
+  depth,
+  reduceMotion,
+  onReady,
+}: {
+  pressedTarget: RefObject<number>;
+  litAtMount: boolean;
+  highlighted: boolean;
+  depth: number;
+  reduceMotion: boolean;
+  onReady: (motion: Motion) => void;
+}) {
+  const pressed = useSharedValue(0);
+  const lit = useSharedValue(litAtMount ? 1 : 0);
+  const style = useAnimatedStyle(() => {
+    const amount = Math.max(pressed.get(), lit.get());
+    return {
+      opacity: 1 - amount * 0.35,
+      transform: [{ scale: reduceMotion ? 1 : 1 - amount * depth }],
+    };
+  });
+  useLayoutEffect(() => {
+    onReady({ pressed, lit, style });
+  }, [onReady, pressed, lit, style]);
+  // A finger already down when this mounted sinks it now.
+  useLayoutEffect(() => {
+    if (pressedTarget.current !== 0)
+      pressed.set(withTiming(pressedTarget.current, { duration: TAP_ANIMATION_MS, easing: EASE }));
+  }, [pressed, pressedTarget]);
+  // Highlighted sinks and dims just like a press, with the same timing.
+  useEffect(() => {
+    const value = highlighted ? 1 : 0;
+    lit.set(withTiming(value, { duration: TAP_ANIMATION_MS, easing: EASE }));
+  }, [highlighted, lit]);
+  return null;
+});
+
 /** Where a touch event's finger is in the window, if it carries one. */
 const pointOf = ({ nativeEvent }: GestureResponderEvent) =>
   Number.isFinite(nativeEvent.pageX) && Number.isFinite(nativeEvent.pageY)
@@ -110,8 +166,17 @@ export function Press({
 }: Props) {
   const longPressDelay = useLongPressDelayMs();
   const reduceMotion = useReducedMotion();
-  const pressed = useSharedValue(0);
-  const lit = useSharedValue(highlighted ? 1 : 0);
+  // The animation mounts on the first touch or highlight and stays (`PressMotion`).
+  const [animated, setAnimated] = useState(highlighted);
+  if (highlighted && !animated) setAnimated(true);
+  const [litAtMount] = useState(highlighted);
+  const [motion, setMotion] = useState<Motion | null>(null);
+  const motionRef = useRef<Motion | null>(null);
+  const pressedTarget = useRef(0);
+  const [onMotionReady] = useState(() => (ready: Motion) => {
+    motionRef.current = ready;
+    setMotion(ready);
+  });
   const view = useRef<ComponentRef<typeof View>>(null);
   // This press's finger long-pressed and is still down: it reports where it goes (`heldTouch`).
   const holding = useRef(false);
@@ -143,7 +208,10 @@ export function Press({
     menuAllowed?: () => boolean,
   ): Promise<boolean> =>
     measurePressed(view.current, {
-      scale: reduceMotion ? 1 : 1 - Math.max(pressed.get(), lit.get()) * depth,
+      scale:
+        reduceMotion || motionRef.current === null
+          ? 1
+          : 1 - Math.max(motionRef.current.pressed.get(), motionRef.current.lit.get()) * depth,
       highlight:
         highlightAs === undefined
           ? undefined
@@ -218,23 +286,14 @@ export function Press({
     });
   };
 
-  const pressStyle = useAnimatedStyle(() => {
-    const amount = Math.max(pressed.get(), lit.get());
-    return {
-      opacity: 1 - amount * 0.35,
-      transform: [{ scale: reduceMotion ? 1 : 1 - amount * depth }],
-    };
-  });
-
   const animateTo = (value: number) => {
-    pressed.set(withTiming(value, { duration: TAP_ANIMATION_MS, easing: EASE }));
+    pressedTarget.current = value;
+    if (motionRef.current === null) setAnimated(true);
+    else
+      motionRef.current.pressed.set(
+        withTiming(value, { duration: TAP_ANIMATION_MS, easing: EASE }),
+      );
   };
-
-  // Highlighted sinks and dims just like a press, with the same timing.
-  useEffect(() => {
-    const value = highlighted ? 1 : 0;
-    lit.set(withTiming(value, { duration: TAP_ANIMATION_MS, easing: EASE }));
-  }, [highlighted, lit]);
 
   return (
     <AnimatedPressable
@@ -247,6 +306,7 @@ export function Press({
       onLongPress={onLongPress == null ? undefined : longPress}
       delayLongPress={delayLongPress ?? longPressDelay}
       onTouchStart={(event) => {
+        if (!animated) setAnimated(true);
         intent.begin();
         touchAt.current = performance.now();
         traceLongPress(key, "touch-start", `delay=${delayLongPress ?? longPressDelay}`);
@@ -278,7 +338,7 @@ export function Press({
         }
         onTouchCancel?.(event);
       }}
-      style={[staticStyle, pressStyle]}
+      style={[staticStyle, motion?.style]}
       onPressIn={(event) => {
         animateTo(1);
         if (haptic === "selection") void Haptics.selectionAsync();
@@ -310,6 +370,16 @@ export function Press({
       ) : (
         // Only the outermost Press is handed over.
         <HandOverPress value={undefined}>{children}</HandOverPress>
+      )}
+      {animated && (
+        <PressMotion
+          pressedTarget={pressedTarget}
+          litAtMount={litAtMount}
+          highlighted={highlighted}
+          depth={depth}
+          reduceMotion={reduceMotion}
+          onReady={onMotionReady}
+        />
       )}
     </AnimatedPressable>
   );
