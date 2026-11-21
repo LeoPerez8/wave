@@ -129,7 +129,7 @@ export const startInitialScan = (): Promise<void> => {
   rescanOnReturn ??= AppState.addEventListener("change", (state) => {
     if (state === "active" && Date.now() - lastScanStartedAt >= RESCAN_ON_RETURN_AFTER_MS) {
       // Its first read (every indexed file) waits until the owner's first tap back is through.
-      whenFree(() => void startRescan());
+      whenFree(() => void startRescan(), "rescan");
     }
   });
   return launchScan;

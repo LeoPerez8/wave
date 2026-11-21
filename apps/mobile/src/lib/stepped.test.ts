@@ -1,8 +1,8 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import * as Effect from "effect/Effect";
-import { runSteps } from "./stepped.ts";
-test("CPU work respects the 6ms target and operation cap with an explicit scheduler", () => {
+import { namedWork, runSteps, shareSlicesWith } from "./stepped.ts";
+test("CPU work stays within its 6 ms of the 8 ms slice and operation cap with an explicit scheduler", () => {
   let clock = 0,
     work = 0,
     previous = 0,
@@ -78,4 +78,26 @@ test("cancelling stepped work closes its iterator and releases the scheduled tur
   await rejected;
   assert.equal(closed, true);
   assert.equal(cancelled, 1);
+});
+
+test("each slice goes to the shared scheduler under the name of the work running it", () => {
+  const names: string[] = [];
+  const stop = shareSlicesWith((name, steps) => {
+    names.push(name);
+    const next = steps.next();
+    return next.done === true ? { done: true, value: next.value } : { done: false };
+  });
+  try {
+    const steps = (function* () {
+      yield;
+      return "ranked";
+    })();
+    const result = Effect.runSync(namedWork("Magic Queue batch")(runSteps(steps, Effect.void)));
+    assert.equal(result, "ranked");
+    assert.deepEqual(names, ["Magic Queue batch", "Magic Queue batch"]);
+    Effect.runSync(runSteps((function* () {})(), Effect.void));
+    assert.equal(names.at(-1), "unnamed background work");
+  } finally {
+    stop();
+  }
 });

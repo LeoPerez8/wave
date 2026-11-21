@@ -14,6 +14,11 @@ export const createRecommendationWork = (host: {
   readonly now: () => number;
   readonly intervalMs: () => number;
   readonly request: (run: () => void) => () => void;
+  /** The shared scheduler's gate: background turns wait out a tap's transition (#1350). */
+  readonly transition?: {
+    readonly inFlight: () => boolean;
+    readonly after: (run: () => void) => () => void;
+  };
 }) => {
   const budget = recommendationFrameBudget(host);
   const waiters = new Set<() => void>();
@@ -45,6 +50,12 @@ export const createRecommendationWork = (host: {
     });
   const turn: Effect.Effect<void> = Effect.suspend(() => {
     checkRadioDeadlines();
+    const transition = host.transition;
+    if (transition?.inFlight() === true)
+      return Effect.callback<void>((resume) => {
+        const cancel = transition.after(() => resume(turn));
+        return Effect.sync(cancel);
+      });
     if (awaitedWork > 0)
       return Effect.callback<void>((resume) => {
         const ready = () => resume(turn);

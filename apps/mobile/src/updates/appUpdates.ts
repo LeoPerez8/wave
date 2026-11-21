@@ -34,6 +34,8 @@ import { playbackState } from "@/playback/Player";
 import { prepareReload, reloadFailed } from "@/playback/reloadResume";
 
 import { createUpdateRunner } from "./updateRunner";
+import { freeTurnEffect } from "@/lib/backgroundWork";
+import { namedWork } from "@/lib/stepped";
 
 /** How long the service gets to say which APK is the newest. */
 const APK_CHECK_TIMEOUT = "15 seconds";
@@ -215,6 +217,7 @@ const runner = createUpdateRunner({
   lastApkAttempt,
   log: (level, message) => appLog(level, "WaveUpdates", message),
   report: (notice) => void showToast(currentLocalisation().strings.appUpdates[notice]),
+  answered: freeTurnEffect.pipe(namedWork("update check")),
 });
 
 WaveSelfInstall?.addListener("onApkDownloadProgress", ({ percent }) =>

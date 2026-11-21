@@ -10,6 +10,7 @@ import {
 } from "@wave/core";
 import { useEffect, useMemo, useSyncExternalStore } from "react";
 
+import { whenFree } from "@/lib/backgroundWork";
 import { libraryListQueries } from "@/library/hooks";
 import type { AlbumRow, ArtistRow, GenreRow, PlaylistRow, SongRow } from "@wave/client";
 import { useLibraryQuery } from "@/library/sharedQueries";
@@ -76,8 +77,9 @@ let shownIndex: SearchIndex<SearchHit> | null = null;
 let scheduled = false;
 
 /**
- * Prepares what changed a slice at a time, each slice a separate task, so a
- * touch or a keystroke waiting on the JS thread goes in between.
+ * Prepares what changed a slice at a time, each slice a free turn of the
+ * background scheduler (#1350), so a touch, a keystroke or a tap's transition
+ * waiting on the JS thread goes first.
  */
 const prepareSlice = (): void => {
   scheduled = false;
@@ -100,7 +102,7 @@ const showIndex = (): void => {
 const schedulePreparing = (): void => {
   if (scheduled) return;
   scheduled = true;
-  setTimeout(prepareSlice, 0);
+  whenFree(prepareSlice, "Search index");
 };
 
 const subscribeIndex = (listener: () => void): (() => void) => {

@@ -6,6 +6,7 @@
  * them. Every Library change and catalog or saved-page write is counted here;
  * a write never cancels a read under way, it goes into the next one.
  */
+import { namedWork } from "@/lib/stepped";
 import {
   RECOMMENDATION_SNAPSHOT,
   snapshotVersionsAfter,
@@ -48,10 +49,10 @@ export const recommendationSnapshot = shareRecommendationSnapshot({
       Date.now(),
     );
     return indexes;
-  }),
+  }).pipe(namedWork("Home mix inputs")),
   catalog: Effect.gen(function* () {
     return yield* readMixCatalog(yield* LibraryStore, recommendationTurnEffect);
-  }),
+  }).pipe(namedWork("Home mix catalog")),
   graph: {
     store: Effect.service(LibraryStore),
     start: settledTurnEffect,
@@ -68,6 +69,6 @@ export const recommendationSnapshot = shareRecommendationSnapshot({
 export const recommendationFavorites = snapshotRead(
   Effect.gen(function* () {
     return yield* readRecommendationFavorites(yield* LibraryStore, recommendationTurnEffect);
-  }),
+  }).pipe(namedWork("recommendation favorites")),
   { part: RECOMMENDATION_SNAPSHOT.favorites, versions: () => versions },
 );

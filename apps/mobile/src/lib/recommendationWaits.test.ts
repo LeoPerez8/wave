@@ -178,7 +178,8 @@ test("cancelling an awaited ranking closes its steps and lets the background go"
 
 test("a background turn cancelled while paused isn't woken", async () => {
   const { work, steps, frame, settled } = paced(0.01);
-  const ranking = Effect.runPromise(work.steps(steps(2000), () => true));
+  // Long enough to still run after the first frame, so the turn below is paused behind it.
+  const ranking = Effect.runPromise(work.steps(steps(4000), () => true));
   await settled();
   await frame();
   const abort = new AbortController();

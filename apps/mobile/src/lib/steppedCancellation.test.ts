@@ -40,12 +40,12 @@ test("CPU work yields with scheduler headroom and interruption releases its iter
   assert.equal(items, 0);
   pending.shift()!();
   await new Promise((resolve) => setImmediate(resolve));
-  assert.equal(items, 4);
+  assert.equal(items, 6);
   assert.equal(pending.length, 1);
   controller.abort();
   await assert.rejects(result);
   assert.equal(cancelled, 1);
   assert.equal(released, true);
   assert.equal(pending.length, 0);
-  assert.equal(items, 4);
+  assert.equal(items, 6);
 });

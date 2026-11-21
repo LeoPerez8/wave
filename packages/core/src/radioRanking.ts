@@ -1,5 +1,6 @@
 /** Shared radio ranking for Magic Queue, mixes and playlist suggestions. */
 import { artistNeighbourhood, type ArtistGraph } from "./artistGraph.ts";
+import { finishSteps, sortSteps } from "./buildSteps.ts";
 import { NO_DISLIKES, withoutDisliked, type DislikedSongs } from "./dislikes.ts";
 import {
   GENRE_AFFINITY_THRESHOLD,
@@ -64,7 +65,14 @@ export const rankRadioSongs = (
   seed: RadioRankingSeed,
   sources: RadioRankingSources,
   options: RadioRankingOptions = {},
-): RankedRadioSong[] => {
+): RankedRadioSong[] => finishSteps(rankRadioSongsSteps(seed, sources, options));
+
+/** `rankRadioSongs`, with a resumable boundary per song, for a background slice (#1350). */
+export function* rankRadioSongsSteps(
+  seed: RadioRankingSeed,
+  sources: RadioRankingSources,
+  options: RadioRankingOptions = {},
+): Generator<void, RankedRadioSong[]> {
   const ranked = new Map<string, RankedRadioSong>();
   const profileOf = sources.profileOf ?? (() => null);
   const excluded = new Set(options.exclude);
@@ -134,6 +142,7 @@ export const rankRadioSongs = (
         radio: { id: page.id, position },
         score: 10 / (1 + position / 10),
       });
+      yield;
     }
   }
   const close = new Set(seed.artists.map(magicArtistKey));
@@ -145,10 +154,11 @@ export const rankRadioSongs = (
     if ((near || options.libraryFallback) && !ranked.has(song.trackId)) {
       add({ ...song, source: "library", song: null, radio: null, score: near ? 5 : 3 });
     }
+    yield;
   }
-  // oxlint-disable-next-line unicorn/no-array-sort -- fresh array; Hermes lacks toSorted
+  // Stable, as Array.sort: equal scores keep their input order.
   const sorted = withoutDisliked(
-    [...ranked.values()].sort((a, b) => b.score - a.score),
+    yield* sortSteps([...ranked.values()], (a, b) => b.score - a.score),
     sources.disliked ?? NO_DISLIKES,
     (candidate) => ({
       id: candidate.source === "library" ? candidate.trackId : null,
@@ -156,8 +166,13 @@ export const rankRadioSongs = (
     }),
   );
   const recordings = new Map<string, YtAlbumSong[]>();
-  return sorted.filter((candidate) => {
-    if (candidate.song === null) return true;
+  const kept: RankedRadioSong[] = [];
+  for (const candidate of sorted) {
+    yield;
+    if (candidate.song === null) {
+      kept.push(candidate);
+      continue;
+    }
     const song = candidate.song;
     const title = recordingMatchTitle(song.title);
     const previous = recordings.get(title) ?? [];
@@ -173,12 +188,13 @@ export const rankRadioSongs = (
         ),
       )
     )
-      return false;
+      continue;
     previous.push(song);
     recordings.set(title, previous);
-    return true;
-  });
-};
+    kept.push(candidate);
+  }
+  return kept;
+}
 
 /** Blend ranked pools at New music's share, filling either short pool from the other. */
 export const radioRankingBatch = (

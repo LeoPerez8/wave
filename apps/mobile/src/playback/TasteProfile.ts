@@ -1,3 +1,4 @@
+import { namedWork } from "@/lib/stepped";
 import { ytTrackId, type MagicSong, type TasteHistory } from "@wave/core";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
@@ -42,7 +43,7 @@ const derive = (snapshotTaken: (history: TasteHistory) => void) =>
       snapshotTaken,
       magicStreamedSong,
     );
-  });
+  }).pipe(namedWork("taste profile"));
 const live = makeLiveTaste({
   derive: derive(() => {}),
   deriveWithSnapshot: (snapshotTaken) => derive(snapshotTaken),
@@ -70,7 +71,7 @@ export const tasteProfileForRecommendation = (library: {
         snapshotTaken,
         magicStreamedSong,
       );
-    }),
+    }).pipe(namedWork("taste profile")),
   );
 
 /**

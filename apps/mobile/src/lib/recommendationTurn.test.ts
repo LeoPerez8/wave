@@ -80,3 +80,44 @@ test("concurrent readers share rendering frames and cancellation releases the la
   await cancelled;
   assert.equal(frames.size, 0);
 });
+
+test("recommendation turns wait out a tap's transition; work someone waits for doesn't", async () => {
+  let inFlight = true;
+  const after: (() => void)[] = [];
+  const work = createRecommendationWork({
+    now: () => 0,
+    intervalMs: () => 1000 / 120,
+    request: () => () => {},
+    transition: {
+      inFlight: () => inFlight,
+      after: (run) => {
+        after.push(run);
+        return () => {
+          const index = after.indexOf(run);
+          if (index !== -1) after.splice(index, 1);
+        };
+      },
+    },
+  });
+  let turned = false;
+  const background = Effect.runPromise(work.turn).then(() => {
+    turned = true;
+  });
+  await new Promise<void>((resolve) => setImmediate(resolve));
+  assert.equal(turned, false);
+  assert.equal(after.length, 1);
+  const awaited = await Effect.runPromise(
+    work.steps(
+      (function* () {
+        yield;
+        return "for the tap";
+      })(),
+      () => true,
+    ),
+  );
+  assert.equal(awaited, "for the tap");
+  inFlight = false;
+  after.shift()!();
+  await background;
+  assert.equal(turned, true);
+});

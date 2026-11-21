@@ -851,12 +851,16 @@ export type {
   LibraryQueryTraits,
   LibraryReads,
 } from "./libraryQueries.ts";
-export { BACKGROUND_WORK_LIMITS, createBackgroundWork } from "./backgroundWork.ts";
+export { BACKGROUND_WORK_LIMITS, createBackgroundWork, runStepSlice } from "./backgroundWork.ts";
+export { JS_BLOCK_MS, createJsBlockLog, jsBlockLine } from "./jsBlocks.ts";
+export type { JsBlockLog, JsBlockLogPorts } from "./jsBlocks.ts";
 export type {
   BackgroundWork,
   BackgroundWorkLimits,
   BackgroundWorkOptions,
   BackgroundWorkStats,
+  SliceLimits,
+  SliceResult,
 } from "./backgroundWork.ts";
 export { pendingWriteDelay } from "./writePacing.ts";
 export type { WritePacing } from "./writePacing.ts";
@@ -2652,6 +2656,7 @@ export {
 } from "./magicRadioLearning.ts";
 export {
   rankRadioSongs,
+  rankRadioSongsSteps,
   radioRankingBatch,
   type RadioRankingPage,
   type RadioRankingSeed,
