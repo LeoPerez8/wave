@@ -32,6 +32,14 @@ const drain = (
   }
 };
 
+/** The job [next] gave, failing the test when it gave none or a wait. */
+const jobOf = (
+  next: SearchIndexJob<Source> | { readonly wait: number } | null,
+): SearchIndexJob<Source> => {
+  assert.ok(next !== null && !("wait" in next), "a job is due");
+  return next;
+};
+
 const built = () => {
   const follow = follower();
   drain(follow, 0);
@@ -101,7 +109,7 @@ describe("search index follower", () => {
 
   test("songs landing while the songs are read are patched in after that read", () => {
     const follow = follower();
-    const read = follow.next(0)!;
+    const read = jobOf(follow.next(0));
     follow.change({ kind: "tracks", ids: [5], burst: true }, 1);
     follow.done(read, 2, true);
     assert.deepEqual(drain(follow, 2), [
@@ -122,7 +130,7 @@ describe("search index follower", () => {
   test("an edit while its source is read reads it again after, its result being out of date", () => {
     const follow = built();
     follow.change({ kind: "playlists" }, 10);
-    const read = follow.next(10)!;
+    const read = jobOf(follow.next(10));
     follow.change({ kind: "playlists" }, 11);
     follow.done(read, 12, true);
     assert.deepEqual(drain(follow, 12), [{ kind: "read", source: "playlists" }]);
@@ -130,7 +138,7 @@ describe("search index follower", () => {
 
   test("a failed read is tried again after the throttle; a failed patch reads the songs again", () => {
     const follow = follower();
-    const read = follow.next(0)!;
+    const read = jobOf(follow.next(0));
     follow.done(read, 0, false);
     drain(follow, 0);
     assert.deepEqual(follow.next(0), { wait: 1500 });
@@ -138,7 +146,7 @@ describe("search index follower", () => {
 
     const later = built();
     later.change({ kind: "tracks", ids: [1], burst: true }, 10);
-    const patch = later.next(10)!;
+    const patch = jobOf(later.next(10));
     later.done(patch, 10, false);
     assert.deepEqual(later.next(10), { kind: "read", source: "songs" });
   });

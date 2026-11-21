@@ -11,12 +11,13 @@ import {
   type YtSearchLibrary,
   type YtSong,
 } from "@wave/core";
+import type * as Effect from "effect/Effect";
 import { useEffect, useMemo, useSyncExternalStore } from "react";
 
 import { whenFree } from "@/lib/backgroundWork";
 import { libraryListQueries } from "@/library/hooks";
 import { onLibraryChange } from "@/library/libraryChanges";
-import { LibraryStore } from "@/library/LibraryStore";
+import { LibraryStore, type LibraryStoreError } from "@/library/LibraryStore";
 import { appRuntime } from "@/library/runtime";
 import type { AlbumRow, ArtistRow, GenreRow, PlaylistRow, SongRow } from "@wave/client";
 import { perfMark, registerPerfMeta } from "@/perf/perf";
@@ -89,6 +90,9 @@ const SOURCES = {
 } as const satisfies Record<Source, unknown>;
 
 const idOf = (row: { readonly id: number }): number => row.id;
+
+/** A source's rows, as the catalog takes them: each with its id. */
+type Rows = readonly { readonly id: number }[];
 
 /**
  * When the index reads (Core's `createSearchIndexFollower`): every source
@@ -175,8 +179,9 @@ const schedulePreparing = (): void => {
 /** Reads [source] whole and gives the catalog its rows. */
 const readSource = async (source: Source): Promise<void> => {
   const { query, hit } = SOURCES[source];
-  const rows = (await appRuntime.runPromise(query.read)) as readonly { readonly id: number }[];
-  catalog.update(source, rows, hit as (row: { readonly id: number }) => SearchHit, idOf);
+  const read = query.read as Effect.Effect<Rows, LibraryStoreError, LibraryStore>;
+  const rows = await appRuntime.runPromise(read);
+  catalog.update(source, rows, hit as (row: Rows[number]) => SearchHit, idOf);
 };
 
 /** Reads the songs [ids] and puts them in their place: a burst asks no whole read of the songs. */
