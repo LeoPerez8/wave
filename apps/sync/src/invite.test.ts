@@ -376,8 +376,10 @@ describe("joining", () => {
     await push(service, ana, {
       playlists: [{ ...playlist("list-1"), changedAt: 2, deleted: true }],
     });
-    assert.deepEqual(await refusal(await lookUp(service, cy, token)), [410, "invite_ended"]);
-    assert.deepEqual(await refusal(await join(service, cy, token)), [410, "invite_ended"]);
+    // Deleting the playlist ends its collaboration, which deletes its links, so the token
+    // names no invite any more.
+    assert.deepEqual(await refusal(await lookUp(service, cy, token)), [404, "not_found"]);
+    assert.deepEqual(await refusal(await join(service, cy, token)), [404, "not_found"]);
   });
 
   test("a token that names no invite is refused", async () => {
