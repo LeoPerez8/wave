@@ -19,6 +19,9 @@ export const LIBRARY_SEEDS = [
   "library/playlistRecommendationInputs.ts#observePlaylistRecommendationInputs",
   "library/LibraryStore.ts#listSongs",
   "library/LibraryStore.ts#matchingSong",
+  "library/LibraryStore.ts#matchingSongs",
+  "library/LibraryStore.ts#mixSongs",
+  "library/LibraryStore.ts#mixArtists",
   "library/LibraryStore.ts#listSortedSongs",
   "library/LibraryStore.ts#listArtists",
   "library/LibraryStore.ts#tasteHistory",
@@ -196,10 +199,21 @@ export const WHOLE_LIBRARY: Record<string, WholeLibraryException> = {
   },
   "home/mixBuildLibrary.ts#readMixBuildLibrary": {
     howOften:
-      "Once per returned streamed radio song in a cold Home mix build; each indexed query finds one match.",
+      "Once per cold Home mix build (before the recommendation snapshot completes), and one radio-song match read per build's radios.",
     reason:
-      "The cold mix build resolves each chosen radio song against its Library recording so the mix picks the file; its inputs are read in bounded pages after Home settlement. Covered by home/mixBuildLibrary.test.ts.",
-    capabilities: ["library/LibraryStore.ts#matchingSong"],
+      "The cold mix build reads the Library's songs and artists whole, one read each off the JS thread (#1348, #1351), and matches all of a build's radio songs to their Library recordings in one indexed read; its steps take Home-only turns. Covered by library/databaseTests/homeMixReads.test.ts and home/mixBuildLibrary.test.ts.",
+    capabilities: [
+      "library/LibraryStore.ts#mixSongs",
+      "library/LibraryStore.ts#mixArtists",
+      "library/LibraryStore.ts#matchingSongs",
+    ],
+  },
+  "home/mixInputs.ts#readMixInputs": {
+    howOften:
+      "Once per recommendation snapshot version: after a Library change reaches Home's mixes, a playlist's suggestions or a Magic Queue.",
+    reason:
+      "Home's mix inputs read each source whole, one read off the JS thread (#1348, #1351), so a build's read count doesn't grow with the Library; sorting and summing run in 8 ms steps. Covered by library/databaseTests/homeMixReads.test.ts and db/mixInputs.test.ts.",
+    capabilities: ["library/LibraryStore.ts#mixSongs", "library/LibraryStore.ts#mixArtists"],
   },
   "playback/hooks.ts#playingIds": {
     howOften:
@@ -804,11 +818,6 @@ export const TASTE_SOURCE_SEEDS = [
   "tasteRevision",
 ].map((name) => `library/LibraryStore.ts#${name}`);
 export const TASTE_SOURCES: Record<string, Exception> = {
-  "home/mixBuildLibrary.ts#readMixBuildLibrary": {
-    reason:
-      "Cold Discover builds seek song and artist seed metadata in 128-row pages after Home settlement, yielding between pages. Stored play totals supply weights; only returned radio songs need indexed SQL recording matches. No history walk or derived matcher is awaited. Covered by home/mixBuildLibrary.test.ts.",
-    capabilities: ["library/LibraryStore.ts#mixSongsPage"],
-  },
   "playback/tasteDerivation.ts#tasteLibraryRows": {
     reason:
       "Due picks/shared taste seek at most 128 songs and identity-only artists per turn; sorting/mapping of the copy uses canonical runSteps. Due Home is screen-settled; taste-source stamps discard writes. Covered by tasteDerivation.test.ts and magicQueueJob.test.ts.",
@@ -835,11 +844,6 @@ export const TASTE_SOURCES: Record<string, Exception> = {
     reason:
       "The same constant-size stamps keep due picks current at publication, at most three attempts. Covered by tasteSnapshot.test.ts and magicQueueJob.test.ts.",
     capabilities: ["library/LibraryStore.ts#tasteRevision"],
-  },
-  "home/mixInputs.ts#readMixInputs": {
-    reason:
-      "Existing #594 daily mix background reader shares the bounded songs page; its multi-genre projection and cancellation remain owned by the mix build. Covered by db/mixInputs.test.ts.",
-    capabilities: ["library/LibraryStore.ts#mixSongsPage"],
   },
 };
 

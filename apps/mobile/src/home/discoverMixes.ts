@@ -41,8 +41,8 @@ import * as Result from "effect/Result";
 import { useCallback, useEffect, useMemo, useSyncExternalStore } from "react";
 
 import { runSteps } from "@/lib/stepped";
-import { settledTurnEffect } from "@/lib/backgroundWork";
-import { recommendationTurnEffect } from "@/lib/recommendationWork";
+import { settledTurnEffect as settledTurn } from "@/lib/backgroundWork";
+import { recommendationTurnEffect as recommendationTurn } from "@/lib/recommendationWork";
 import { makeExternalStore, type ExternalStore } from "@wave/client/externalStore";
 import { withNetworkLog } from "@/lib/networkMeter";
 import { persistedSetting, type PersistedSetting } from "@/lib/persistedSetting";
@@ -67,7 +67,8 @@ import {
   useDiscoverLevel,
   type MixSectionId,
 } from "./discoverMixLevel";
-import { recommendationSnapshot } from "./recommendationSnapshot";
+import { homeRecommendationSnapshot as recommendationSnapshot } from "./recommendationSnapshot";
+import { homeTurnOf } from "./homeWork";
 import { buildHomeMixes } from "./homeMixBuild";
 import { refreshKnownVideos, useKnownVideos } from "./mixKnown";
 import { noteMixesShown } from "./mixPreDownload";
@@ -80,6 +81,10 @@ import { readMixBuildLibrary } from "./mixBuildLibrary";
 import { knownLibraryFinder } from "@/ytmusic/libraryFinder";
 
 export type { MixSectionId } from "./discoverMixLevel";
+
+/** A build or re-rank takes no step while Home is out of sight (#1351). */
+const recommendationTurnEffect = homeTurnOf(recommendationTurn);
+const settledTurnEffect = homeTurnOf(settledTurn);
 
 // Home's local answer is available before the recommendation index on a cold start.
 let emptyLibrary = false;

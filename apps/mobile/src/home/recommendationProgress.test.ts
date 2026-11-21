@@ -69,11 +69,10 @@ test("2,531 Tracks and 900 artists finish paging, refill a Magic Queue online, a
     let pages = 0;
     const reads = {
       ...store,
-      mixSongsPage: (after: number) =>
-        Effect.suspend(() => {
-          pages++;
-          return store.mixSongsPage(after);
-        }),
+      mixSongs: Effect.suspend(() => {
+        pages++;
+        return store.mixSongs;
+      }),
     };
     const indexes = snapshotRead(readMixInputs(reads, between, now), {
       part: RECOMMENDATION_SNAPSHOT.library,
@@ -96,7 +95,7 @@ test("2,531 Tracks and 900 artists finish paging, refill a Magic Queue online, a
       assert.deepEqual(new Set(library.songs.map((track) => track.id)), trackIds);
       assert.equal(library.songs.length, 2531, "every Track appears once");
       assert.equal(library.artists.length, 900);
-      assert.ok(pages > 0 && pages <= 128, "the complete Library fits a bounded read budget");
+      assert.equal(pages, 1, "the complete Library is one songs read (#1351)");
       const mixPages = pages;
       assert.equal(await Effect.runPromise(indexes.get), library);
       assert.equal(pages, mixPages, "a kept derivation never starts paging again");
@@ -216,10 +215,10 @@ test("scan writes while a playlist reads neither fail nor restart its read; the 
     const source = observePlaylistRecommendationInputs(
       {
         ...store,
-        mixSongsPage: (after: number) => {
-          if (after === 0) songPasses++;
-          return store.mixSongsPage(after);
-        },
+        mixSongs: Effect.suspend(() => {
+          songPasses++;
+          return store.mixSongs;
+        }),
       },
       Effect.promise(async () => {
         await setImmediate();

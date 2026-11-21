@@ -114,7 +114,8 @@ test("one/two retained hidden playlists do no recommendation work and catch up o
     assert.equal(replay.sessions[0]!.get().slots.filter((x) => x !== null).length, 5);
     // One snapshot version: the Library as Home's mixes index it, the catalog and the stars.
     const versionRows = replay.work.rowsRead;
-    assert.ok(Math.max(...replay.taskRows) <= 256);
+    // Each source is one read off the JS thread (#1351): a bounded number of tasks read rows.
+    assert.ok(replay.taskRows.filter((rows) => rows > 0).length <= 24);
     replay.begin();
     replay.show(1, true);
     await replay.end();

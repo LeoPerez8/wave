@@ -17,6 +17,7 @@ import { HomeSection, SECTION_GAP } from "@/home/HomeSection";
 import { useHomeScreenContent } from "@/home/homeContent";
 import { afterHomeFrame, homeOpeningState } from "@/home/homeOpening";
 import { startSavingHomeSnapshot } from "@/home/homeSnapshot";
+import { useHomeWorkSight } from "@/home/useHomeWorkSight";
 import { useRenderCount } from "@/perf/perf";
 import { useRecapToAnnounce } from "@/stats/hooks";
 import { RecapCard } from "@/stats/StatsViews";
@@ -53,6 +54,8 @@ startSavingHomeSnapshot();
 export default function HomeScreen() {
   const { strings } = useLocalisation();
   useRenderCount("HomeScreen");
+  // Home's mixes and sections build only while Home is in sight (#1351).
+  useHomeWorkSight();
   const [painted, setPainted] = useState(false);
   const newRecap = useRecapToAnnounce(painted);
   useEffect(
