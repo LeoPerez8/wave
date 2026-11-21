@@ -3368,8 +3368,10 @@ export type {
   DjTile,
   DjTileKey,
 } from "./dj.ts";
-export { djOpeningGrid } from "./djOpening.ts";
+export { djOpeningGrid, djOpeningWork } from "./djOpening.ts";
 export type { DjOpeningGrid, DjOpeningSources } from "./djOpening.ts";
+export { DJ_GRID_SETTING, readDjGridMemory, storedDjGridMemory } from "./djGridMemory.ts";
+export { djRestoredGrid } from "./djRemembered.ts";
 export { DJ_OPENED_TILES, djCells, djPageRead, djPagesNeeded } from "./dj.ts";
 export { djAlbumTile, djTileArtist } from "./dj.ts";
 export type { DjAlbum, DjAlbumTile, DjGenreTile } from "./dj.ts";
