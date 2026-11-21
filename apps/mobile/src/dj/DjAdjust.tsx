@@ -1,0 +1,73 @@
+import {
+  DJ_DISCOVERIES,
+  DJ_VARIETIES,
+  djDiscoveryLabel,
+  type DjSettings,
+  type SliderRange,
+} from "@wave/core";
+import { ScrollView, Text, View } from "react-native";
+
+import { CELL, grid } from "@/catalog/grid";
+import { Hairline } from "@/catalog/Hairline";
+import { SettingsSlider } from "@/components/SettingsSlider";
+import { useLocalisation } from "@/localisation/localisation";
+
+/** Both sliders: three steps, from the left end to the right one. */
+const STEPS: SliderRange = { min: 1, max: 3, step: 1 };
+
+/** The choice a three-step slider's [value] stands for, the middle one for anything else. */
+const choiceAt = <T,>(choices: readonly T[], value: number): T => choices[value - 1] ?? choices[1]!;
+
+/**
+ * DJ's Adjust screen (docs/spec.md, DJ): how the queue Done starts should
+ * behave. Artist variety is how far it strays from the selected artists and
+ * Music discovery how much of it is new. The choices are DJ's own: they
+ * move no slider of Discover's and change no other queue or mix.
+ */
+export function DjAdjust({
+  settings,
+  onChange,
+}: {
+  settings: DjSettings;
+  onChange: (settings: DjSettings) => void;
+}) {
+  const { strings } = useLocalisation();
+  return (
+    <ScrollView
+      contentContainerStyle={{ paddingHorizontal: grid.margin, paddingBottom: CELL * 3 }}
+      keyboardShouldPersistTaps="handled"
+    >
+      <Text
+        accessibilityRole="header"
+        className="font-sans text-title1 font-light text-foreground"
+        style={{ paddingBottom: CELL * 2 }}
+      >
+        {strings.dj.adjust}
+      </Text>
+      <Hairline />
+      <SettingsSlider
+        label={strings.dj.artistVariety}
+        value={DJ_VARIETIES.indexOf(settings.variety) + 1}
+        range={STEPS}
+        format={(value) => strings.dj.varietySteps[choiceAt(DJ_VARIETIES, value)]}
+        onChange={(value) => onChange({ ...settings, variety: choiceAt(DJ_VARIETIES, value) })}
+      />
+      <Text className="pb-3 font-sans text-footnote text-secondary">
+        {strings.dj.varietyNotes[settings.variety]}
+      </Text>
+      <Hairline />
+      <View className="pb-3">
+        <SettingsSlider
+          label={strings.dj.musicDiscovery}
+          value={DJ_DISCOVERIES.indexOf(settings.discovery) + 1}
+          range={STEPS}
+          format={(value) => djDiscoveryLabel(choiceAt(DJ_DISCOVERIES, value), strings)}
+          onChange={(value) =>
+            onChange({ ...settings, discovery: choiceAt(DJ_DISCOVERIES, value) })
+          }
+        />
+      </View>
+      <Hairline />
+    </ScrollView>
+  );
+}
