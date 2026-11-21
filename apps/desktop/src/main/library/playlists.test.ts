@@ -38,6 +38,8 @@ const setUp = async (
     readonly playlists: ReturnType<typeof createPlaylists>;
     readonly picked: { files: string[]; image: string | undefined };
     readonly changes: () => number;
+    readonly kept: string[];
+    readonly played: { songs: unknown[]; index: number; context: unknown }[];
   }) => Promise<void>,
   platform = "win32",
 ) => {
@@ -52,6 +54,8 @@ const setUp = async (
     let changes = 0;
     let clock = 0;
     const picked = { files: [] as string[], image: undefined as string | undefined };
+    const kept: string[] = [];
+    const played: { songs: unknown[]; index: number; context: unknown }[] = [];
     const playlists = createPlaylists({
       db,
       platform,
@@ -62,8 +66,13 @@ const setUp = async (
       changed: () => void changes++,
       // Each edit a second after the last, so the newest removal is told apart.
       now: () => (clock += 1_000),
+      keepStreams: (streams) => kept.push(...streams.map((song) => song.videoId)),
+      play: async (entries, index, context) => {
+        played.push({ songs: [...entries], index, context });
+        return { kind: "playing", streamed: 0, leftOut: 0 };
+      },
     });
-    await run({ db, folder, playlists, picked, changes: () => changes });
+    await run({ db, folder, playlists, picked, changes: () => changes, kept, played });
   } finally {
     await runtime.dispose();
     rmSync(folder, { recursive: true, force: true });
@@ -472,5 +481,58 @@ test("mixed pages count only listable entries and keep the visible stream metada
       browseLibrary(db, scope, 0, 1).items.map((row) => row.id),
       [road],
     );
+  });
+});
+
+test("a Graveyard lists its streamed songs too, and plays from the song chosen without restoring it", async () => {
+  await setUp(async ({ db, playlists, kept, played }) => {
+    const [road, pink] = songs(db, "Road", "Pink Moon");
+    const stream = {
+      videoId: "abcdefghijk",
+      title: "Northern Sky",
+      artists: ["Nick Drake"],
+      album: "Bryter Layter",
+      albumId: null,
+      durationMs: 222_000,
+      artworkUrl: null,
+      explicit: false,
+    };
+    const { playlistId: id } = storePlaylist(
+      db,
+      "Evening",
+      [
+        { source: "library", trackId: road! },
+        { source: "stream", song: stream },
+        { source: "library", trackId: pink! },
+      ],
+      0,
+    );
+    const streamedRow = browseLibrary(db, { kind: "playlist", id }, 0, 50).items[1]!;
+    playlists.removeSongs(id, [road!]);
+    playlists.removeSongs(id, [streamedRow.id]);
+    assert.equal(playlists.info(id)?.graveyard, 2);
+    const graveyard = playlists.graveyard(id, 0, 50);
+    assert.deepEqual(
+      graveyard.items.map((row) => [row.title, row.videoId ?? null]),
+      [
+        ["Northern Sky", "abcdefghijk"],
+        ["Road", null],
+      ],
+    );
+    assert.equal(graveyard.items[0]!.id, streamedRow.id);
+    assert.deepEqual(kept, ["abcdefghijk"]);
+
+    await playlists.playGraveyard(id, graveyard.items[1]!.itemId);
+    assert.deepEqual(played, [
+      {
+        songs: [{ itemId: graveyard.items[0]!.itemId, song: stream }, { trackId: road }],
+        index: 1,
+        context: { kind: "playlist", id: String(id) },
+      },
+    ]);
+    // Playing it leaves it in the Graveyard.
+    assert.deepEqual(pageTitles(db, id), ["Pink Moon"]);
+    assert.equal(playlists.graveyard(id, 0, 50).total, 2);
+    await assert.rejects(playlists.playGraveyard(id, 999_999));
   });
 });

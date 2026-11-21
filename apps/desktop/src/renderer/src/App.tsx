@@ -1309,6 +1309,29 @@ export function App() {
             revision={revision}
             changed={playback.refresh}
             failed={(message) => setError(message ?? text.desktopLibrary.actionFailed)}
+            onPlay={(row) =>
+              row.unavailable
+                ? setError(text.desktopLibrary.driveDisconnected)
+                : playback.run(window.wave.playlists.playGraveyard(route.id, row.itemId))
+            }
+            onMenu={(row, at, extra) =>
+              row.videoId !== undefined
+                ? actions.openItems(
+                    text.desktopLibrary.songMenu(row.title),
+                    streamed.items(row.videoId).then((items) => [...items, ...extra]),
+                    at,
+                  )
+                : // Its own menu, without Select: the Graveyard selects nothing.
+                  actions.openMenu(
+                    { scope: { kind: "songs" }, ids: [row.id] },
+                    row.title,
+                    at,
+                    extra,
+                    {
+                      done: () => {},
+                    },
+                  )
+            }
           />
         ) : route.kind === "search" ? (
           <SearchPage

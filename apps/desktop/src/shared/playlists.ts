@@ -8,6 +8,7 @@ import type { BridgeContract, Invoke, Page } from "./bridge.ts";
 import type { BrowseRow } from "./browse.ts";
 import type { SongTarget } from "./songActions.ts";
 import type { CollectionTarget } from "./collectionActions.ts";
+import type { PlayStart } from "./playerView.ts";
 
 export type PlaylistCreateTarget = SongTarget | CollectionTarget;
 
@@ -95,6 +96,11 @@ export interface PlaylistContract {
     readonly args: readonly [playlistId: number, itemId: number];
     readonly result: void;
   };
+  /** Plays the Graveyard's songs from [itemId]'s; none of them is restored. */
+  readonly "playlists.playGraveyard": {
+    readonly args: readonly [playlistId: number, itemId: number];
+    readonly result: PlayStart;
+  };
   /** Remove from Graveyard for one song, or Empty Graveyard without [itemId]. */
   readonly "playlists.forget": {
     readonly args: readonly [playlistId: number, itemId?: number];
@@ -166,6 +172,7 @@ export const PLAYLIST_CALLS = [
   "playlists.removeImage",
   "playlists.image",
   "playlists.place",
+  "playlists.playGraveyard",
 ] as const satisfies readonly (keyof PlaylistContract)[];
 
 type Call<C extends keyof PlaylistContract> = (
@@ -194,6 +201,7 @@ export interface PlaylistBridge {
   readonly removeImage: Call<"playlists.removeImage">;
   readonly image: Call<"playlists.image">;
   readonly place: Call<"playlists.place">;
+  readonly playGraveyard: Call<"playlists.playGraveyard">;
 }
 
 export const playlistBridge = (invoke: Invoke): PlaylistBridge => ({
@@ -219,4 +227,5 @@ export const playlistBridge = (invoke: Invoke): PlaylistBridge => ({
   removeImage: (playlistId) => invoke("playlists.removeImage", playlistId),
   image: (playlistId, large) => invoke("playlists.image", playlistId, large),
   place: (playlistId, target, before) => invoke("playlists.place", playlistId, target, before),
+  playGraveyard: (playlistId, itemId) => invoke("playlists.playGraveyard", playlistId, itemId),
 });

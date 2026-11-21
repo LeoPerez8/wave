@@ -199,6 +199,7 @@ test("the page has no Node and only the typed bridge", async () => {
       "wave.playlists.removeImage",
       "wave.playlists.image",
       "wave.playlists.place",
+      "wave.playlists.playGraveyard",
       "wave.lyricsAndTags.view",
       "wave.lyricsAndTags.set",
       "wave.lyricsAndTags.fixLibrary",
