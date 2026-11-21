@@ -38,6 +38,8 @@ const paths: Record<string, string> = {
   stats: "M4 20h16M6 16v-4m6 4V5m6 11V9",
   /** Tabler's language glyph, as the phone's Translate button has. */
   translate: "M4 5h7M9 3v2c0 4.4-2.2 8-5 8M5 9c0 2.1 3 3.9 6.7 4M12 20l4-9 4 9M19.1 18h-6.2",
+  /** Tabler's microphone 2, as the phone's Karaoke button has. */
+  karaoke: "M15 12.9a5 5 0 1 0-3.9-3.9M15 12.9l-3.9-3.9-7.5 8.6a2 2 0 1 0 2.8 2.8Z",
   history: "M3 12a9 9 0 1 0 3-6.7L3 8M3 3v5h5M12 7v5l4 2",
   /** A small window over a large one. */
   miniPlayer: "M3 4h18v16H3ZM12 12h6v5h-6Z",

@@ -3438,3 +3438,22 @@ test("the window reads Listening History in pages and main refuses a malformed r
     }
   });
 });
+
+test("the window turns Karaoke on and off, and anything but a switch is refused", async () => {
+  await withFile(async (file) => {
+    const { runtime, exposed, handlers } = connect(file);
+    const wave = exposed.get("wave") as WaveBridge;
+    const call = (channel: string, ...args: unknown[]) => handlers.get(channel)!(trusted, ...args);
+    try {
+      assert.equal(await wave.lyrics.karaokeOn(), false);
+      assert.equal(await wave.lyrics.setKaraokeOn(true), true);
+      assert.equal(await wave.lyrics.karaokeOn(), true);
+      assert.equal(await wave.lyrics.setKaraokeOn(false), false);
+      for (const bad of ["on", 1, null, undefined])
+        await assert.rejects(call("lyrics.setKaraokeOn", bad), /refused/i);
+      assert.equal(await wave.lyrics.karaokeOn(), false);
+    } finally {
+      await runtime.dispose();
+    }
+  });
+});

@@ -1,25 +1,31 @@
 /**
- * The playing song's lyrics, in the side panel and in Now Playing: synced lines follow playback
- * and a click (or Enter on the focused line) seeks to one. Main decides what shows
+ * The playing song's lyrics, in the side panel and in Now Playing: the sung line of synced
+ * lyrics lights, word by word and followed by the scroll with Karaoke on, and a click (or
+ * Enter on the focused line) seeks to one. Main decides what shows
  * (`window.wave.lyrics.song`): the file's own, else LRCLIB's or YT Music's.
  */
 import {
   currentLyricIndex,
+  currentLyricWordIndex,
   desktopKey,
   geniusLineReferents,
   geniusLineSegments,
+  karaokeLyricLines,
   placeGeniusReferents,
   ytTrackId,
+  type KaraokeLyricLine,
 } from "@wave/core";
-import { useEffect, useMemo, useRef, useState, type KeyboardEvent } from "react";
+import { useCallback, useEffect, useMemo, useState, type KeyboardEvent } from "react";
 
 import type { BrowseRow } from "../../shared/browse.ts";
 import type { SongLyrics } from "../../shared/lyrics.ts";
 import { GeniusAbout, GeniusAnnotations, MoreInsights } from "./GeniusInsights.tsx";
+import { KaraokeButton, KaraokeWords } from "./Karaoke.tsx";
 import { pressOf } from "./keys.ts";
 import { LineTranslation, TranslateButton, TranslationNote } from "./LyricsTranslation.tsx";
 import { rovingTarget, scrollToRow } from "./rovingList.ts";
 import { labels, text } from "./text.ts";
+import { useKaraokeOn, useLyricsFollow } from "./useKaraoke.ts";
 import {
   useLyricsTranslation,
   useTranslateOn,
@@ -65,9 +71,6 @@ function useSongLyrics(trackId: string | null) {
   };
 }
 
-/** After the owner scrolls the lyrics, they stay where they put them this long. */
-const HOLD_AFTER_SCROLL_MS = 4000;
-
 function LyricLines({
   lines,
   current,
@@ -76,6 +79,9 @@ function LyricLines({
   translation,
   onGeniusSignIn,
   lineIdPrefix,
+  karaoke,
+  sungWord,
+  shown,
 }: {
   readonly lines: readonly { readonly text: string; readonly timeMs?: number }[];
   /** The line being sung, or -1 (before the first line, or unsynced lyrics). */
@@ -85,8 +91,13 @@ function LyricLines({
   readonly translation: LyricsTranslationView;
   readonly onGeniusSignIn: () => void;
   readonly lineIdPrefix: string;
+  /** With Karaoke on, the synced lines with every word timed; undefined with it off. */
+  readonly karaoke: readonly KaraokeLyricLine[] | undefined;
+  /** The word being sung in the sung line with Karaoke on, or -1. */
+  readonly sungWord: number;
+  /** The view is on screen. */
+  readonly shown: boolean;
 }) {
-  const scroll = useRef<HTMLDivElement>(null);
   /** The keyboard's line, or null while it follows the sung one. */
   const [active, setActive] = useState<number | null>(null);
   const [annotations, setAnnotations] = useState<{
@@ -116,27 +127,35 @@ function LyricLines({
       : selection?.kind === "line" && placement !== undefined
         ? geniusLineReferents(placement.lines[selection.index] ?? [])
         : [];
-  const scrolled = useRef(0);
   const focused = active ?? Math.max(0, current);
-  useEffect(() => {
-    const element = scroll.current;
-    const row = element?.querySelector<HTMLElement>(`[data-line="${current}"]`);
-    if (!element || !row || active !== null) return;
-    if (Date.now() - scrolled.current < HOLD_AFTER_SCROLL_MS) return;
-    scrollToRow(element, row, true, "smooth");
-  }, [current, active]);
+  // When the lyrics move on their own. Share's line picking tells it `pickStarted` and
+  // `pickEnded` through `follow.step`.
+  const follow = useLyricsFollow({
+    current,
+    karaoke: karaoke !== undefined,
+    synced: lines.some((line) => line.timeMs !== undefined),
+    held: active !== null,
+    shown,
+  });
+  const { scroll } = follow;
+  const openLine = useCallback(
+    (index: number) => {
+      if (placement) setAnnotations({ placement, selection: { kind: "line", index } });
+    },
+    [placement],
+  );
   useEffect(() => {
     if (active === null) return;
     const element = scroll.current;
     const row = element?.querySelector<HTMLElement>(`[data-line="${active}"]`);
     if (element && row) scrollToRow(element, row, false);
-  }, [active]);
+  }, [active, scroll]);
   const seek = (index: number) => {
     const time = lines[index]?.timeMs;
     if (time === undefined || onSeek === undefined) return;
     onSeek(time);
     setActive(null);
-    scrolled.current = 0;
+    follow.lineTapped(index);
   };
   const key = (event: KeyboardEvent) => {
     if (event.target !== event.currentTarget) return;
@@ -155,7 +174,17 @@ function LyricLines({
     }
   };
   return (
-    <div ref={scroll} className="lyrics-scroll" onWheel={() => (scrolled.current = Date.now())}>
+    <div
+      ref={scroll}
+      className="lyrics-scroll"
+      onWheel={follow.scrolledByHand}
+      onTouchMove={follow.scrolledByHand}
+      // A press on the view itself, not on a line: its scrollbar.
+      onPointerDown={(event) => {
+        if (event.target === event.currentTarget) follow.scrolledByHand();
+      }}
+      onScroll={follow.scrolled}
+    >
       <GeniusAbout state={genius.state} onRetry={genius.retry} onSignIn={onGeniusSignIn} />
       <TranslationNote {...translation} />
       <div
@@ -172,6 +201,8 @@ function LyricLines({
         {lines.map((line, index) => {
           const highlights = placement?.lines[index];
           const annotated = highlights !== undefined && highlights.length > 0;
+          // The sung line's words, lit one by one; a pause between lines has none.
+          const words = index === current ? karaoke?.[index]?.words : undefined;
           return (
             <div
               key={index}
@@ -184,32 +215,40 @@ function LyricLines({
               aria-current={index === current ? "true" : undefined}
               className={`lyric-line ${line.timeMs === undefined ? "unsynced" : ""} ${
                 index === current ? "sung" : index < current ? "past" : ""
-              } ${active === index ? "keyboard" : ""}`}
+              } ${active === index ? "keyboard" : ""} ${words?.length ? "karaoke" : ""}`}
               onClick={() => seek(index)}
             >
-              {annotated
-                ? geniusLineSegments(line.text, highlights).map(({ start, end, referents }) => {
-                    const fragment = line.text.slice(start, end);
-                    return referents.length === 0 ? (
-                      <span key={start}>{fragment}</span>
-                    ) : (
-                      <button
-                        key={start}
-                        className="genius-highlight"
-                        aria-label={text.playbackText.annotationOn(fragment)}
-                        onClick={(event) => {
-                          event.stopPropagation();
-                          setAnnotations({
-                            placement: placement!,
-                            selection: { kind: "line", index },
-                          });
-                        }}
-                      >
-                        {fragment}
-                      </button>
-                    );
-                  })
-                : line.text || "♪"}
+              {words?.length ? (
+                <KaraokeWords
+                  line={line.text}
+                  words={words}
+                  sung={sungWord}
+                  highlights={highlights}
+                  index={index}
+                  onAnnotation={openLine}
+                />
+              ) : annotated ? (
+                geniusLineSegments(line.text, highlights).map(({ start, end, referents }) => {
+                  const fragment = line.text.slice(start, end);
+                  return referents.length === 0 ? (
+                    <span key={start}>{fragment}</span>
+                  ) : (
+                    <button
+                      key={start}
+                      className="genius-highlight"
+                      aria-label={text.playbackText.annotationOn(fragment)}
+                      onClick={(event) => {
+                        event.stopPropagation();
+                        openLine(index);
+                      }}
+                    >
+                      {fragment}
+                    </button>
+                  );
+                })
+              ) : (
+                line.text || "♪"
+              )}
               {/* What sits under a line's words goes here. */}
               <LineTranslation shown={translation.shown} index={index} line={line.text} />
             </div>
@@ -261,6 +300,12 @@ export function LyricsView({
   const genius = useSongGenius(lines?.length ? trackId : null, song, geniusAccess, foreground);
   const [translateOn, setTranslateOn] = useTranslateOn();
   const translation = useLyricsTranslation(trackId, lines, translateOn);
+  const [karaokeOn, setKaraokeOn] = useKaraokeOn();
+  // Core gives every word a time: Enhanced LRC's stamps, else its share of the line's span.
+  const karaoke = useMemo(
+    () => (karaokeOn && lyrics?.kind === "synced" ? karaokeLyricLines(lyrics.lines) : undefined),
+    [karaokeOn, lyrics],
+  );
   const words = text.playbackText;
   if (song === null) return <p className="lyrics-note">{labels.nothingPlaying}</p>;
   if (lyrics === undefined)
@@ -286,16 +331,22 @@ export function LyricsView({
         {words.noLyrics}
       </p>
     );
+  const current = lyrics.kind === "synced" ? currentLyricIndex(lyrics.lines, positionMs) : -1;
   return (
     <div className="lyrics-view">
       {/* The Lyrics view's buttons, for a song with lyrics. */}
       <div className="lyrics-header">
+        {/* Plain lyrics have no times to follow. */}
+        {lyrics.kind === "synced" && <KaraokeButton on={karaokeOn} onChange={setKaraokeOn} />}
         <TranslateButton on={translateOn} onChange={setTranslateOn} />
       </div>
       <LyricLines
         key={trackId}
         lines={lines ?? []}
-        current={lyrics.kind === "synced" ? currentLyricIndex(lyrics.lines, positionMs) : -1}
+        current={current}
+        karaoke={karaoke}
+        sungWord={currentLyricWordIndex(karaoke?.[current]?.words ?? [], positionMs)}
+        shown={foreground}
         onSeek={onSeek}
         genius={genius}
         translation={translation}

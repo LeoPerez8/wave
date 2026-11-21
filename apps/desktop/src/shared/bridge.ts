@@ -199,6 +199,12 @@ export interface BridgeContract
     readonly args: readonly [trackId: string, language: LanguageView["language"]];
     readonly result: SongTranslation;
   };
+  /** Whether the Lyrics view's Karaoke button is on; kept on this computer. */
+  readonly "lyrics.karaokeOn": { readonly args: readonly []; readonly result: boolean };
+  readonly "lyrics.setKaraokeOn": {
+    readonly args: readonly [on: boolean];
+    readonly result: boolean;
+  };
   readonly "playback.setSleepTimer": {
     readonly args: readonly [choice: SleepTimerChoice | null];
     readonly result: SleepTimer | null;
@@ -513,6 +519,8 @@ export const BRIDGE_CALLS = [
   "lyrics.translateOn",
   "lyrics.setTranslateOn",
   "lyrics.translation",
+  "lyrics.karaokeOn",
+  "lyrics.setKaraokeOn",
 
   "library.artwork",
   "library.cover",
@@ -697,6 +705,8 @@ export interface WaveBridge {
       trackId: string,
       language: LanguageView["language"],
     ) => Promise<SongTranslation>;
+    readonly karaokeOn: () => Promise<boolean>;
+    readonly setKaraokeOn: (on: boolean) => Promise<boolean>;
   };
   readonly library: {
     readonly artwork: (hash: string, large: boolean) => Promise<string | null>;
@@ -876,6 +886,8 @@ export const createBridge = (invoke: Invoke): WaveBridge => ({
     translateOn: () => invoke("lyrics.translateOn"),
     setTranslateOn: (on) => invoke("lyrics.setTranslateOn", on),
     translation: (trackId, language) => invoke("lyrics.translation", trackId, language),
+    karaokeOn: () => invoke("lyrics.karaokeOn"),
+    setKaraokeOn: (on) => invoke("lyrics.setKaraokeOn", on),
   },
   library: {
     artwork: (hash, large) => invoke("library.artwork", hash, large),
