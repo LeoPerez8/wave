@@ -10,6 +10,7 @@ import {
   currentEntry,
   explicitPassOver,
   movedToFollowing,
+  openedFilePath,
   parseTrackId,
   playSoFar,
   queueUndo,
@@ -161,6 +162,12 @@ export interface PlaybackSessionDeps {
    * unknown one is skipped as unplayable. Without it, the queue holds Library songs only.
    */
   readonly streamed?: (videoId: string) => YtAlbumSong | undefined;
+  /**
+   * Whether a file outside the Library can be read now, when the platform opens files. Its queue
+   * entry (`file:<path>`, Core's `openedFileTrackId`) plays from that path and records no play;
+   * one that can't be read is skipped as unplayable, as every such entry is without this.
+   */
+  readonly openedFile?: (path: string) => boolean;
   /** The snapshot changed. */
   readonly changed?: () => void;
   readonly playEnded?: (play: PlayEvent, byNext: boolean) => void;
@@ -210,6 +217,8 @@ export const createPlaybackSession = async (
   };
   /** Where the audio process reads the song [id] from, when it can now. */
   const pathOf = (id: string): string | undefined => {
+    const file = openedFilePath(id);
+    if (file !== null) return deps.openedFile?.(file) === true ? file : undefined;
     if (parseTrackId(id)?.kind === "yt") return streamedSong(id) === undefined ? undefined : id;
     const path = selectPlayableSongs(db, [Number(id)])[0]?.path;
     return path && available(path) ? path : undefined;
@@ -249,6 +258,8 @@ export const createPlaybackSession = async (
     const result = trackPlays(tracker, signal);
     tracker = result.state;
     for (const step of result.steps) {
+      // A file outside the Library is nobody's song: its play is neither kept nor told.
+      if (openedFilePath(step.play.trackId) !== null) continue;
       if (step.type === "started") {
         rowIds.set(
           identity(step.play),

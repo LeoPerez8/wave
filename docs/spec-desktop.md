@@ -422,6 +422,25 @@ The prototype was approved on 2026-11-18 after an Impeccable critique; its decis
   addon (`wave-media.node`). On Windows it is Chromium's Media Session with a silent audio
   element: the check in #1157 found `souvlaki` publishing the song there while the system's Pause
   never reached Wave. Linux falls back to Chromium's session when the addon doesn't load.
+- Opening files (#1233). Wave is an "Open with" choice for the audio formats the engine plays
+  (`.mp3`, `.m4a`, `.flac`, `.ogg`, `.oga`, `.opus`, `.wav`; not `.mp4`, which is a video more
+  often than a song). It never takes a type's default from another player: the Windows installer
+  adds Wave to each extension's `OpenWithProgids` and to `Applications\Wave.exe\SupportedTypes`
+  under the user's own registry keys and leaves the extension's default alone, and uninstalling
+  removes what it added; the AppImage's desktop entry lists the same formats as `MimeType`
+  (`apps/desktop/scripts/file-types.ts`). The files a launch names play in order as a new queue,
+  with "New queue playing" and Undo when a queue was there. A launch while Wave runs hands its
+  files to the running window. The system starts Wave once per file when several are opened
+  together, so files that arrive within half a second of each other play as one queue, and files
+  that arrive while Wave starts wait for its services. A file the Library has plays as its
+  Library song, so its play is counted. Any other file plays as itself (the queue id
+  `file:<path>`, Core's `openedFiles.ts`): it joins nothing, its play isn't kept or synced, it
+  shows by its tags' title and artist (its name until they're read), without a cover, and the
+  star and the song menus are off for it. A path that isn't one of those formats, or isn't
+  there, is ignored. A file left in the queue plays again after a restart while it still exists.
+- No `https` link handler and no floating mini player in v1. Windows lets an app own `https`
+  links only for a domain it proves it owns.
+
 - No file associations and no `https` link handler in v1. Windows lets an app own `https` links
   only for a domain it proves it owns.
 - The mini player (#1232) is a small frameless window that stays above other windows: artwork,
@@ -560,7 +579,7 @@ does for the phone. Audio is checked by the engine's golden tests, not by ear.
 These come after v1, in an order decided when v1 is close to done: Spotify, Recap, Stats and
 Listening History, Genius, Recognize, Karaoke, the lyrics image, Shift/Ctrl multi-select in
 tables, sortable table columns, drag and drop onto sidebar playlists and the queue, Show in
-Folder, file associations, a floating mini player, picking an output device.
+Folder, a floating mini player, picking an output device.
 
 ### Risks
 
