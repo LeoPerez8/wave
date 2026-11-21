@@ -12,6 +12,8 @@ import {
   type Membership,
   forgetAccountStatements,
   membershipStatements,
+  ownedCollaborations,
+  passCollaboration,
   readMembership,
 } from "./collaborations.ts";
 import type { SyncLimitName, SyncLimits } from "./limits.ts";
@@ -292,12 +294,69 @@ export const pullRows = async (
 };
 
 /**
- * Deletes every row and session of [accountId], and the account, at [at]. It
- * leaves the collaborative playlists it is in, and the ones it owns end.
+ * Moves [playlistId]'s playlist row and every entry that names it, Graveyard
+ * ones included, from [from]'s rows to [to]'s, numbered as [to]'s next changes so
+ * its ordinary pull carries them. A row [to] held with the same id is
+ * replaced. They count in [to]'s caps from then on, even past them.
  */
-export const deleteAccount = async (db: Client, accountId: string, at: number): Promise<void> => {
-  await db.batch(
-    [
+const moveCollaborativePlaylist = async (
+  tx: Transaction,
+  playlistId: string,
+  from: string,
+  to: string,
+): Promise<void> => {
+  const counted = await tx.execute({
+    sql: `SELECT (SELECT count(*) FROM playlists WHERE account_id = ? AND id = ?) AS playlists,
+                 (SELECT count(*) FROM playlist_entries
+                  WHERE account_id = ? AND playlist_id = ?) AS entries`,
+    args: [from, playlistId, from, playlistId],
+  });
+  const playlists = Number(counted.rows[0]?.playlists ?? 0);
+  const total = playlists + Number(counted.rows[0]?.entries ?? 0);
+  if (total === 0) return;
+  const numbered = await tx.execute({
+    sql: "UPDATE accounts SET change_seq = change_seq + ? WHERE id = ? RETURNING change_seq",
+    args: [total, to],
+  });
+  const first = Number(numbered.rows[0]?.change_seq) - total;
+  await tx.batch([
+    {
+      sql: "UPDATE playlists SET change_no = ? WHERE account_id = ? AND id = ?",
+      args: [first + 1, from, playlistId],
+    },
+    {
+      sql: `UPDATE playlist_entries SET change_no = ? + ranked.n
+            FROM (SELECT id, row_number() OVER (ORDER BY change_no, id) AS n
+                  FROM playlist_entries WHERE account_id = ? AND playlist_id = ?) AS ranked
+            WHERE playlist_entries.account_id = ? AND playlist_entries.id = ranked.id`,
+      args: [first + playlists, from, playlistId, from],
+    },
+    {
+      sql: "UPDATE OR REPLACE playlists SET account_id = ? WHERE account_id = ? AND id = ?",
+      args: [to, from, playlistId],
+    },
+    {
+      sql: `UPDATE OR REPLACE playlist_entries SET account_id = ?
+            WHERE account_id = ? AND playlist_id = ?`,
+      args: [to, from, playlistId],
+    },
+  ]);
+};
+
+/**
+ * Deletes every row and session of [accountId], and the account. Each
+ * collaborative playlist it owns passes, with its rows, to the member who
+ * joined first, or goes with the account when no other member is left; it
+ * leaves the ones it is in.
+ */
+export const deleteAccount = (db: Client, accountId: string): Promise<void> =>
+  inWriteTransaction(db, async (tx) => {
+    for (const { playlistId, heir } of await ownedCollaborations(tx, accountId)) {
+      if (heir === null) continue;
+      await moveCollaborativePlaylist(tx, playlistId, accountId, heir);
+      await tx.execute(passCollaboration(playlistId, heir));
+    }
+    await tx.batch([
       ...SYNC_TABLES.map((table) => ({
         sql: `DELETE FROM ${table.sqlName} WHERE account_id = ?`,
         args: [accountId],
@@ -305,14 +364,12 @@ export const deleteAccount = async (db: Client, accountId: string, at: number): 
       { sql: "DELETE FROM soulseek_accounts WHERE account_id = ?", args: [accountId] },
       { sql: "DELETE FROM sessions WHERE account_id = ?", args: [accountId] },
       { sql: "DELETE FROM upstream_usage WHERE account_id = ?", args: [accountId] },
-      ...forgetAccountStatements(accountId, at),
+      ...forgetAccountStatements(accountId),
       {
         sql: `DELETE FROM sign_in_windows
               WHERE key = (SELECT 'sub:' || google_sub FROM accounts WHERE id = ?)`,
         args: [accountId],
       },
       { sql: "DELETE FROM accounts WHERE id = ?", args: [accountId] },
-    ],
-    "write",
-  );
-};
+    ]);
+  });

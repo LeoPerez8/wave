@@ -9,7 +9,7 @@
  * record, which its pulls carry until it joins the playlist again.
  */
 
-import type { Client, InStatement, ResultSet } from "@libsql/client";
+import type { Client, InStatement, ResultSet, Transaction } from "@libsql/client";
 
 /** A member as the other members see it: the Google account's name, never its email. */
 export interface CollaborationMember {
@@ -30,8 +30,8 @@ export interface Collaboration {
 
 /**
  * Why an account is no longer in a playlist: it left, or the collaboration
- * ended for it (the owner removed it, ended the collaboration or deleted
- * their account; the record doesn't say which).
+ * ended for it (the owner removed it or ended the collaboration; the
+ * record doesn't say which).
  */
 export type CollaborationEndReason = "left" | "ended";
 
@@ -340,13 +340,48 @@ export const addMember = async (
   return roleOf(joined) !== null;
 };
 
+/** A collaboration a deleted account owned, and the member it passes to (null: none is left). */
+export interface OwnedCollaboration {
+  readonly playlistId: string;
+  readonly heir: string | null;
+}
+
+/**
+ * The collaborations [accountId] owns, each with its member who joined
+ * first apart from the owner, the one the playlist passes to when the
+ * account is deleted (docs/spec.md, "When membership ends").
+ */
+export const ownedCollaborations = async (
+  tx: Transaction,
+  accountId: string,
+): Promise<OwnedCollaboration[]> => {
+  const result = await tx.execute({
+    sql: `SELECT c.playlist_id,
+                 (SELECT m.account_id FROM collaboration_members m
+                  WHERE m.playlist_id = c.playlist_id AND m.account_id <> c.owner_id
+                  ORDER BY m.joined_at, m.account_id LIMIT 1) AS heir
+          FROM collaborations c WHERE c.owner_id = ? ORDER BY c.playlist_id`,
+    args: [accountId],
+  });
+  return result.rows.map((row) => ({
+    playlistId: String(row.playlist_id),
+    heir: typeof row.heir === "string" ? row.heir : null,
+  }));
+};
+
+/** Makes [heir], already a member of [playlistId], its owner. */
+export const passCollaboration = (playlistId: string, heir: string): InStatement => ({
+  sql: "UPDATE collaborations SET owner_id = ? WHERE playlist_id = ?",
+  args: [heir, playlistId],
+});
+
 /**
  * What deleting [accountId] does to the collaborations, as statements for
- * the deletion's transaction: the ones it owns end for their other members,
- * and it goes from the ones it is in.
+ * the deletion's transaction, once the ones it owned with other members
+ * have passed on (`passCollaboration`): the ones it still owns, which have
+ * no other member, go, and it goes from the ones it is in.
  */
-export const forgetAccountStatements = (accountId: string, at: number): InStatement[] => [
-  endForOthers("c.owner_id = ?", [accountId], at),
+export const forgetAccountStatements = (accountId: string): InStatement[] => [
   {
     sql: `DELETE FROM collaboration_members
           WHERE account_id = ?
