@@ -403,7 +403,8 @@ export const removePlaylistImageFlow = (playlist: NamedPlaylist): Promise<void> 
  * playlist's screen).
  */
 export const confirmDeletePlaylists = (
-  playlists: readonly NamedPlaylist[],
+  // [otherMembers]: a collaborative playlist's, whom the question says keep a copy.
+  playlists: readonly (NamedPlaylist & { readonly otherMembers?: number })[],
   {
     onConfirm,
     onDeleted,

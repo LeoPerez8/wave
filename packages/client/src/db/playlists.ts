@@ -107,6 +107,8 @@ export type PlaylistTrack = Omit<ReturnType<typeof playlistTracks>[number], "ite
 export type PlaylistEntry<T = PlaylistTrack> = PlaylistItem<YtAlbumSong, T> & {
   readonly itemId: number;
   readonly addedAt?: number;
+  /** In a collaborative playlist, the account that added it (Core's `entryAdder` names it). */
+  readonly addedBy?: string;
 };
 
 /** A stored song as decoded, and the entry's stamp when it was. */
@@ -193,6 +195,7 @@ export const selectPlaylistEntries = (
     .select({
       id: playlistItems.id,
       addedAt: playlistItems.addedAt,
+      addedBy: playlistItems.addedBy,
       changedAt: playlistItems.changedAt,
       streamed: sql<number>`${playlistItems.ytSong} IS NOT NULL`,
     })
@@ -232,14 +235,18 @@ export const selectPlaylistEntries = (
     ).map(({ itemId, ...track }) => [itemId, track]),
   );
   return items.flatMap((item): PlaylistEntry[] => {
+    // Only a collaborative playlist's entries carry who added them.
+    const adder = item.addedBy === null ? {} : { addedBy: item.addedBy };
     if (item.streamed) {
       const stored = songs.get(item.id)?.song ?? null;
-      return stored === null ? [] : [{ itemId: item.id, addedAt: item.addedAt, ...stored }];
+      return stored === null
+        ? []
+        : [{ itemId: item.id, addedAt: item.addedAt, ...adder, ...stored }];
     }
     const track = tracks.get(item.id);
     return track === undefined
       ? []
-      : [{ itemId: item.id, addedAt: item.addedAt, source: "library", track }];
+      : [{ itemId: item.id, addedAt: item.addedAt, ...adder, source: "library", track }];
   });
 };
 

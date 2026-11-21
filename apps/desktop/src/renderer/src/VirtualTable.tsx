@@ -791,7 +791,9 @@ export function VirtualTable({
                       ? artistName(row.artist)
                       : preview?.ranked && row.id === 0
                         ? null
-                        : labels.songCount(row.count)}
+                        : row.collaborative
+                          ? text.collaborativePage.libraryDetail(labels.songCount(row.count))
+                          : labels.songCount(row.count)}
                   </div>
                   {columns.third !== null && (
                     <div role="gridcell" className="album-column truncate secondary">

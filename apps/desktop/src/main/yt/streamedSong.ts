@@ -9,6 +9,7 @@ import { selectNowPlayingSong } from "@wave/client/db/nowPlayingSong";
 import { addPendingFavorites, removePendingFavorites } from "@wave/client/db/pendingFavorites";
 import { setFavorites } from "@wave/client/db/playHistory";
 import { addToPlaylist } from "@wave/client/db/playlists";
+import { refuseCollaborative } from "../library/collaborativePlaylists.ts";
 import {
   artistPhotoName,
   missingSongJobId,
@@ -185,6 +186,7 @@ export const runStreamedAction = async (
     }
     case "addToPlaylist": {
       if (playlistId === undefined) throw new Error("No playlist to add to");
+      refuseCollaborative(db, playlistId);
       const entry: PlaylistSong =
         track === null ? { source: "stream", song } : { source: "library", trackId: track.id };
       const result = addToPlaylist(db, playlistId, [entry], Date.now());

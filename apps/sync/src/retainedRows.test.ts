@@ -51,6 +51,11 @@ const graveyardEntry = (id: string, changedAt: number) => ({
   addedAt: 100,
   removedAt: changedAt,
   restoredAt: null,
+  title: null,
+  credit: null,
+  album: null,
+  durationMs: null,
+  videoId: null,
 });
 
 describe("retained sync rows", () => {
@@ -219,11 +224,11 @@ describe("retained sync rows", () => {
     service.now += 400 * 24 * 60 * 60 * 1000;
     const pulled = await pullAll(service, await service.signIn());
     assert.equal(pulled.pages, 3);
-    assert.deepEqual(pulled.playlistEntries, [
-      graveyardEntry("e1", 10),
-      graveyardEntry("e2", 11),
-      tombstone("e3", 12),
-    ]);
+    // Who added an entry is not what this test is about.
+    assert.deepEqual(
+      pulled.playlistEntries.map(({ addedBy: _addedBy, ...row }) => row),
+      [graveyardEntry("e1", 10), graveyardEntry("e2", 11), tombstone("e3", 12)],
+    );
   });
   test("a deletion record for a new ID counts against the category's limit", async () => {
     const service = await harness({ limits: { maxFavorites: 2 } });

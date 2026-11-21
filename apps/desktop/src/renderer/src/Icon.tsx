@@ -34,6 +34,9 @@ const paths: Record<string, string> = {
   magicQueue:
     "M3 6h10M3 11h10M3 16h7M18 3l1 3 3 1-3 1-1 3-1-3-3-1 3-1ZM17 14l.8 2.2 2.2.8-2.2.8L17 20l-.8-2.2-2.2-.8 2.2-.8Z",
   playlist: "M3 4h12M3 9h12M3 14h6M15 20V9l6-1M15 20c0 2.7-4 2.7-4 0s4-2.7 4 0",
+  /** A collaborative playlist: two people. */
+  collaborative:
+    "M12 8a3.5 3.5 0 1 1-7 0 3.5 3.5 0 0 1 7 0M2 20v-1a6.5 6.5 0 0 1 13 0v1M15.5 4.6a3.5 3.5 0 0 1 0 6.8M18 13.5a6.5 6.5 0 0 1 4 6v.5",
   close: "M6 6l12 12M6 18 18 6",
   minus: "M4 12h16",
   grip: "M4 9h16M4 15h16",

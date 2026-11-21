@@ -7,6 +7,7 @@
  */
 import {
   geniusUpstreamUrl,
+  isCollaborationRequest,
   stepWaveAccount,
   ticketmasterUpstreamUrl,
   waveAccountView,
@@ -89,9 +90,12 @@ export interface WaveAccountService {
    * keeps the account and the session. Resolves when it ended, however it did.
    */
   readonly deleteAccount: () => Promise<void>;
-  /** A push, pull or supported provider request with the session; a 401 ends it. */
+  /**
+   * A push, pull, supported provider request or collaborative playlist's request (Core's
+   * `isCollaborationRequest`) with the session; a 401 ends it.
+   */
   readonly request: (
-    method: "GET" | "POST",
+    method: "GET" | "POST" | "PUT" | "DELETE",
     path: string,
     body: string | null,
     signal?: AbortSignal,
@@ -389,7 +393,8 @@ export const createWaveAccount = (deps: WaveAccountDeps): WaveAccountService => 
       const allowed =
         (method === "POST" && path === "/v1/push") ||
         (method === "GET" &&
-          (PULL.test(path) || ticketmaster(path) || (body === null && genius(path))));
+          (PULL.test(path) || ticketmaster(path) || (body === null && genius(path)))) ||
+        isCollaborationRequest(method, path);
       if (!allowed) throw new WaveAccountError("ERR_WAVE_FORBIDDEN_REQUEST");
       const response = await send(method, path, body, signal);
       return { status: response.status, body: await response.text() };

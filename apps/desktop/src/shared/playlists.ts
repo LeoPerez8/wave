@@ -25,6 +25,8 @@ export interface PlaylistInfo {
   readonly hasImage: boolean;
   /** Songs in its Graveyard. */
   readonly graveyard: number;
+  /** Several Wave accounts edit it: the desktop offers none of its edits, only its image. */
+  readonly collaborative: boolean;
 }
 
 /** A song removed from a playlist by hand, as its Graveyard lists it. */

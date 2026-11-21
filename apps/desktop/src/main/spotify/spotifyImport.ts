@@ -13,6 +13,7 @@ import {
   settleUnsearchedEntries,
 } from "@wave/client/db/playlists";
 import { trackQuery } from "@wave/client/db/tracks";
+import { isCollaborative, refuseCollaborative } from "../library/collaborativePlaylists.ts";
 import {
   catalogueOf,
   joinArtists,
@@ -290,11 +291,13 @@ export const createSpotifyImport = (deps: SpotifyImportDeps): SpotifyImportShape
         try {
           if (item.replaces === null) made = createPlaylist(db, item.name, songs, now());
           else {
+            // A collaborative playlist is never replaced from the desktop: it is skipped.
+            refuseCollaborative(db, item.replaces);
             replacePlaylistSongs(db, item.replaces, songs, now());
             made = { playlistId: item.replaces, name: item.name };
           }
         } catch {
-          // Its name was taken or its playlist deleted meanwhile.
+          // Its name was taken, its playlist deleted meanwhile, or it is collaborative.
           skipped += 1;
           continue;
         }
@@ -337,7 +340,9 @@ export const createSpotifyImport = (deps: SpotifyImportDeps): SpotifyImportShape
         songs.some((song) => song.state === "unsearched") &&
         deps.yt.enabled() &&
         !finding.has(playlistId) &&
-        now() >= findAgainAt
+        now() >= findAgainAt &&
+        // The songs found would change a collaborative playlist's entries.
+        !isCollaborative(db, playlistId)
       )
         find(playlistId, false);
       return {

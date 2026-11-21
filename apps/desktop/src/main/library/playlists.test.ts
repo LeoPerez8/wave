@@ -143,7 +143,12 @@ test("Remove from Playlist puts songs in the Graveyard; Undo, Restore and Remove
 
     playlists.removeSongs(id, [pink!]);
     playlists.removeSongs(id, [road!]);
-    assert.deepEqual(playlists.info(id), { name: "Evening", hasImage: false, graveyard: 2 });
+    assert.deepEqual(playlists.info(id), {
+      name: "Evening",
+      hasImage: false,
+      graveyard: 2,
+      collaborative: false,
+    });
     const graveyard = playlists.graveyard(id, 0, 50);
     assert.equal(graveyard.total, 2);
     assert.deepEqual(
@@ -387,7 +392,12 @@ test("a playlist's image: Change Image, Adjust Image, Remove Image, and a delete
     assert.throws(() => playlists.saveImage(made.id + 1, edit!.framing), /No photo/);
     const framing = { zoom: 2, centerX: 0.25, centerY: 0.5 };
     playlists.saveImage(made.id, framing);
-    assert.deepEqual(playlists.info(made.id), { name: "Evening", hasImage: true, graveyard: 0 });
+    assert.deepEqual(playlists.info(made.id), {
+      name: "Evening",
+      hasImage: true,
+      graveyard: 0,
+      collaborative: false,
+    });
     const square = framingSquare({ width: 800, height: 600 }, framing);
     const large = await playlists.image(made.id, true);
     assert.equal(

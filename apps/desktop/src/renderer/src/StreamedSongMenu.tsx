@@ -38,7 +38,10 @@ export interface StreamedMenuOptions {
 
 /** The playlists Add to Playlist offers: the sidebar's first page. */
 const playlistRows = async () =>
-  (await window.wave.library.browse({ kind: "playlists" }, 0, 200)).items;
+  (await window.wave.library.browse({ kind: "playlists" }, 0, 200)).items.filter(
+    // The desktop adds nothing to a collaborative playlist.
+    (row) => !row.collaborative,
+  );
 
 /** Add to Playlist's submenu: the playlists, each adding the song with [add]. */
 export const playlistItems = async (

@@ -43,7 +43,11 @@ const migrationsThrough = (through: string): typeof migrations => {
  * Columns a later migration adds to a table the store's writes name in full
  * (Drizzle's insert names every column of today's schema), as `table.column`.
  */
-const LATER_COLUMNS = ["playlist_items.restored_at"] as const;
+const LATER_COLUMNS = [
+  "playlist_items.restored_at",
+  "playlist_items.added_by",
+  "playlist_items.library_entry",
+] as const;
 
 /** The databases lent `LATER_COLUMNS`, with those each was lent. */
 const lent = new WeakMap<TestDatabase, readonly string[]>();
@@ -140,6 +144,33 @@ export const traceQueries = <A>(
   db: TestDatabase,
   read: () => A,
 ): { readonly result: A; readonly queries: readonly TracedQuery[] } => {
+  const trace = startTrace(db);
+  let result: A;
+  try {
+    result = read();
+  } finally {
+    trace.stop();
+  }
+  return { result, queries: trace.queries() };
+};
+
+/** `traceQueries` for a [read] that resolves later: every statement until it settles. */
+export const traceQueriesAsync = async <A>(
+  db: TestDatabase,
+  read: () => Promise<A>,
+): Promise<{ readonly result: A; readonly queries: readonly TracedQuery[] }> => {
+  const trace = startTrace(db);
+  let result: A;
+  try {
+    result = await read();
+  } finally {
+    trace.stop();
+  }
+  return { result, queries: trace.queries() };
+};
+
+/** Records the statements [db] runs until `stop`; `queries` reads them with their plans. */
+const startTrace = (db: TestDatabase) => {
   const client = clients.get(db);
   if (client === undefined) throw new Error("not a test database");
   type Params = Parameters<SqlJsClient["exec"]>[1];
@@ -163,25 +194,24 @@ export const traceQueries = <A>(
     };
     return statement;
   };
-  let result: A;
-  try {
-    result = read();
-  } finally {
-    client.prepare = prepare;
-  }
-  const queries = traced.flatMap(({ sql: text, params, rows, ran }) => {
-    if (!ran) return [];
-    return [
-      {
-        sql: text,
-        rows,
-        plan: client
-          .exec(`EXPLAIN QUERY PLAN ${text}`, params)
-          .flatMap((table) => table.values.map((step) => String(step[3]))),
-      },
-    ];
-  });
-  return { result, queries };
+  return {
+    stop: (): void => {
+      client.prepare = prepare;
+    },
+    queries: (): TracedQuery[] =>
+      traced.flatMap(({ sql: text, params, rows, ran }) => {
+        if (!ran) return [];
+        return [
+          {
+            sql: text,
+            rows,
+            plan: client
+              .exec(`EXPLAIN QUERY PLAN ${text}`, params)
+              .flatMap((table) => table.values.map((step) => String(step[3]))),
+          },
+        ];
+      }),
+  };
 };
 
 /** How [write]'s statements were grouped into transactions. */

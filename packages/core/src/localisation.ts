@@ -33,6 +33,32 @@ export const resolveAppLanguage = (preferred: readonly string[]): AppLanguage =>
   return "en";
 };
 
+const LANGUAGE_TAG = /^[A-Za-z]{1,8}(?:-[A-Za-z0-9]{1,8})*$/;
+
+/**
+ * The language tags of an HTTP `Accept-Language` header, most wanted first
+ * (by `q`, then as written), for `resolveAppLanguage`: the sync service's
+ * pages read in the browser's language. The wildcard, `q=0` and anything
+ * unreadable are left out.
+ */
+export const acceptedLanguages = (header: string | null | undefined): string[] =>
+  (header ?? "")
+    .split(",")
+    .map((part, index) => {
+      const [tag = "", ...params] = part.split(";").map((piece) => piece.trim());
+      const q = params.find((param) => /^q=/i.test(param));
+      const weight =
+        q === undefined
+          ? 1
+          : /^q=(?:0(?:\.\d{0,3})?|1(?:\.0{0,3})?)$/i.test(q)
+            ? Number(q.slice(2))
+            : 0;
+      return { tag, weight, index };
+    })
+    .filter(({ tag, weight }) => weight > 0 && LANGUAGE_TAG.test(tag))
+    .sort((a, b) => b.weight - a.weight || a.index - b.index)
+    .map(({ tag }) => tag);
+
 /** The kind of device Wave runs on, for the phrases that name it. */
 export type Device = "phone" | "desktop";
 

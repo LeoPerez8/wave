@@ -1,4 +1,5 @@
 import {
+  inviteHost,
   SONG_LINK_SAMPLES,
   songLinkSetup,
   songLinkSetupHandling,
@@ -13,6 +14,7 @@ import { AppState } from "react-native";
 
 import { useLocalisation } from "@/localisation/localisation";
 import { WaveNative } from "@/native/waveNative";
+import { waveSyncUrl } from "@/settings/waveAccount";
 
 /** Android's state for Wave and the app each sample link opens in; null on an APK without it. */
 type SongLinkReadings = {
@@ -20,8 +22,23 @@ type SongLinkReadings = {
   readonly openers: SongLinkOpeners | null;
 } | null;
 
-const readSongLinkReadings = (): SongLinkReadings => {
+/** The sync service's host, whose invite links aren't song links. */
+const INVITE_HOST = waveSyncUrl === null ? null : inviteHost(waveSyncUrl);
+
+/**
+ * Android's state for the song-link hosts: the invite filter's host (the sync service) is left
+ * out, so whether it is on never changes what the song-link row says.
+ */
+const readSongLinkState = (): SongLinkHandlingState | null => {
   const state = WaveNative.songLinkHandling?.();
+  if (!state) return null;
+  if (INVITE_HOST === null || !(INVITE_HOST in state.hosts)) return state;
+  const { [INVITE_HOST]: _invite, ...hosts } = state.hosts;
+  return { allowed: state.allowed, hosts };
+};
+
+const readSongLinkReadings = (): SongLinkReadings => {
+  const state = readSongLinkState();
   if (!state) return null;
   return { state, openers: WaveNative.songLinkOpeners?.(SONG_LINK_SAMPLES) ?? null };
 };
@@ -38,7 +55,7 @@ export const readSongLinkSetup = (language: AppLanguage): SongLinkSetup | null =
 
 /** Which song links open in Wave, without the setup's lines; null on an APK without the native read. */
 export const readSongLinkHandling = (): SongLinkHandling | null => {
-  const state = WaveNative.songLinkHandling?.();
+  const state = readSongLinkState();
   if (!state) return null;
   return songLinkSetupHandling(state, WaveNative.songLinkOpeners?.(SONG_LINK_SAMPLES) ?? null);
 };

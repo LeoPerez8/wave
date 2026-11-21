@@ -40,6 +40,7 @@ import type { YtMusicShape } from "../yt/ytMusic.ts";
 import { albumArtists } from "./artistPage.ts";
 import { streamedLibraryFacts } from "../yt/streamedSong.ts";
 import { browseRowIds, browseRows, browseSongs, browseTrackIds } from "./browse.ts";
+import { refuseCollaborative } from "./collaborativePlaylists.ts";
 import { songFacts, targetEntries } from "./songActions.ts";
 
 const lists = {
@@ -190,6 +191,7 @@ const runOnSongs = async (
     }
     case "addToPlaylist": {
       if (destination === undefined) throw new Error("No playlist to add to");
+      refuseCollaborative(db, destination);
       const { name, added, alreadyIn } = addToPlaylist(
         db,
         destination,

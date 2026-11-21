@@ -152,6 +152,63 @@ class WaveAccountClientTest {
     }
   }
 
+  @Test fun `JS can send the collaborative playlists' requests, with the session it never sees`() {
+    FakeWaveService { Reply(200, "{}") }.use { service ->
+      val client = signedIn(service)
+      val list = "5f0c1a2b3c4d5e6f708192a3b4c5d6e7"
+      val allowed = listOf(
+        "PUT" to "/v1/account/name",
+        "POST" to "/v1/collaboration",
+        "DELETE" to "/v1/collaboration?playlist=$list",
+        "GET" to "/v1/collaboration/members?playlist=$list",
+        "DELETE" to "/v1/collaboration/members?playlist=$list&account=0b6e1a2b-3c4d-4e5f-8a9b-0c1d2e3f4a5b",
+        "DELETE" to "/v1/collaboration/membership?playlist=$list",
+        "POST" to "/v1/collaboration/invite",
+        "GET" to "/v1/collaboration/invite?playlist=$list",
+        "DELETE" to "/v1/collaboration/invite?playlist=$list",
+        "POST" to "/v1/invite",
+        "POST" to "/v1/invite/join",
+        "POST" to "/v1/collaboration/push?playlist=$list",
+        "GET" to "/v1/collaboration/pull?playlist=$list",
+        "GET" to "/v1/collaboration/pull?playlist=$list&since=17",
+      )
+      for ((method, path) in allowed) {
+        val body = if (method == "POST" || method == "PUT") "{}" else null
+        val response = client.request(method, path, body)
+        assertEquals("$method $path", 200, response.status)
+        assertFalse(response.toMap().toString().contains("fixture-session-token"))
+      }
+      assertEquals(allowed, service.received.map { it.method to it.path })
+      assertTrue(service.received.all { it.headers["authorization"] == "Bearer fixture-session-token" })
+      for ((method, path) in listOf(
+        "GET" to "/v1/collaboration",
+        "PUT" to "/v1/collaboration",
+        "GET" to "/v1/account/name",
+        "DELETE" to "/v1/collaboration",
+        "DELETE" to "/v1/collaboration?playlist=",
+        "DELETE" to "/v1/collaboration?playlist=a/../../soulseek",
+        "DELETE" to "/v1/collaboration?playlist=a%2F..",
+        "GET" to "/v1/collaboration/members?playlist=a&account=b",
+        "DELETE" to "/v1/collaboration/members?playlist=a",
+        "POST" to "/v1/invite?token=abc",
+        "GET" to "/v1/invite",
+        "GET" to "/v1/collaboration/pull?since=1&playlist=a",
+        "POST" to "/v1/collaboration/push",
+        "POST" to "/v1/collaboration/push?playlist=a#x",
+      ))
+        assertEquals("$method $path", WaveAccountFailure.FORBIDDEN_REQUEST, failure { client.request(method, path, null) })
+      assertEquals(allowed.size, service.received.size)
+    }
+  }
+
+  @Test fun `a refusal of a collaborative playlist's request comes back as the service answered`() {
+    FakeWaveService { Reply(410, """{"error":"invite_ended"}""") }.use { service ->
+      val response = signedIn(service).request("POST", "/v1/invite/join", """{"token":"t"}""")
+      assertEquals(WaveResponse(410, """{"error":"invite_ended"}"""), response)
+      assertTrue(client().session() is WaveSessionState.SignedIn)
+    }
+  }
+
   @Test fun `JS can ask the Genius routes the Lyrics view uses, and nothing else of them`() {
     FakeWaveService { Reply(200, """{"meta":{"status":200}}""") }.use { service ->
       val client = signedIn(service)

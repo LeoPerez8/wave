@@ -38,6 +38,11 @@ interface TableStorage {
    * such a row keeps the value stored. A null sent clears it, as for any field.
    */
   readonly keptWhenOmitted?: readonly string[];
+  /**
+   * The field that names the account whose session first stored the row: a new
+   * row takes it whatever was pushed, and a stored row keeps it.
+   */
+  readonly writtenBy?: string;
 }
 
 export interface SyncTable extends TableStorage {
@@ -56,9 +61,21 @@ const STORAGE: { readonly [K in TableName]: TableStorage } = {
   songs: { limit: "maxSongs", keptWhenOmitted: ["releaseDate"] },
   playlists: { limit: "maxPlaylists" },
   // An entry holds a Library song (by recording key) or a YT Music song (as the app stores it), never both.
+  // A tombstone keeps the playlist it was in, so a member's pull of that playlist carries it;
+  // `addedBy` is the service's to write (`writtenBy`).
   playlistEntries: {
     limit: "maxPlaylistEntries",
-    keptWhenOmitted: ["restoredAt"],
+    keptWhenOmitted: [
+      "playlistId",
+      "restoredAt",
+      "title",
+      "credit",
+      "album",
+      "durationMs",
+      "videoId",
+      "addedBy",
+    ],
+    writtenBy: "addedBy",
     check: (row) =>
       (row.songId === null) === (row.ytSong === null) ? "needs songId or ytSong, not both" : null,
   },
@@ -190,6 +207,23 @@ export const parseRow = (table: SyncTable, row: unknown, where: string): Incomin
         : rowValues(table, row, where),
     omitted: table.keptWhenOmitted?.filter((name) => !(name in row)) ?? [],
   };
+};
+
+/** A checked row's fields by wire name, as pushed (empty for a tombstone with none). */
+export const rowFields = (table: SyncTable, row: IncomingRow): Readonly<Record<string, unknown>> =>
+  row.values === null
+    ? {}
+    : Object.fromEntries(Object.keys(table.fields).map((name, i) => [name, row.values?.[i]]));
+
+/** [row] with its fields set to [fields] (`rowFields`); the same row when they are its own. */
+export const withFields = (
+  table: SyncTable,
+  row: IncomingRow,
+  fields: Readonly<Record<string, unknown>>,
+): IncomingRow => {
+  if (row.values === null) return row;
+  const values = Object.keys(table.fields).map((name) => (fields[name] ?? null) as InValue);
+  return values.every((value, i) => value === row.values?.[i]) ? row : { ...row, values };
 };
 
 /** A stored row on the wire; Graveyard tombstones keep their song fields. */
