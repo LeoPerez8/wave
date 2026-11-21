@@ -1,7 +1,12 @@
 import assert from "node:assert/strict";
 import { describe, test } from "node:test";
 
-import { NOW_PLAYING_OPENS_ON, stepNowPlayingScreens, type NowPlayingScreens } from "./index.ts";
+import {
+  NOW_PLAYING_OPENS_ON,
+  nowPlayingPageSwipesEnabled,
+  stepNowPlayingScreens,
+  type NowPlayingScreens,
+} from "./index.ts";
 
 const player: NowPlayingScreens = { screen: "player", editing: false };
 const queue: NowPlayingScreens = { screen: "queue", editing: false };
@@ -194,5 +199,14 @@ describe("stepNowPlayingScreens", () => {
       { type: "edit" },
     ] as const)
       assert.deepEqual(stepNowPlayingScreens(editing, event), { screens: editing, close: false });
+  });
+});
+
+describe("nowPlayingPageSwipesEnabled", () => {
+  test("page swipes stay available on the player and Queue but not under Related", () => {
+    assert.equal(nowPlayingPageSwipesEnabled(player), true);
+    assert.equal(nowPlayingPageSwipesEnabled(queue), true);
+    assert.equal(nowPlayingPageSwipesEnabled(related), false);
+    assert.equal(nowPlayingPageSwipesEnabled(editing), false);
   });
 });

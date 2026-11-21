@@ -58,6 +58,10 @@ export interface NowPlayingScreensStep {
 /** Every open of Now Playing starts here. */
 export const NOW_PLAYING_OPENS_ON: NowPlayingScreens = { screen: "player", editing: false };
 
+/** Whether the player and Queue pages can take a swipe between them. */
+export const nowPlayingPageSwipesEnabled = (screens: NowPlayingScreens): boolean =>
+  !screens.editing && screens.screen !== "related";
+
 const show = (screen: NowPlayingScreen, editing = false): NowPlayingScreensStep => ({
   screens: { screen, editing },
   close: false,
