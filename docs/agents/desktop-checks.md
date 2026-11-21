@@ -336,6 +336,17 @@ does nothing, that a paste into the search field stays a paste, and that Copy Li
 system clipboard. What a link opens with YT Music on is tested in
 `src/main/links/links.test.ts`, against a fake JVM and `fetch`.
 
+## Opening files
+
+`e2e/openFiles.spec.ts` starts Wave with a file outside the Library as its argument, then launches
+it again with more files while it runs: they play in the running window as a new queue with
+Undo, a text file among them is ignored, and only the Library's song leaves a counted play. The
+screenshot is `open-files-<platform>.png`. `Playback.openFiles` is main's entry
+(`src/main/playback/playback.ts`); `src/main/system/openedFiles.ts` gathers the files of
+launches that come close together. What the installer registers and the AppImage declares is
+`scripts/file-types.ts`, tested in `src/fileTypes.test.ts` without building an installer; "Open
+with" after a real install is an owner check.
+
 ## The dev window
 
 To look at `pnpm dev` from an agent, start it in the background with a debugging port and a

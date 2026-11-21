@@ -1,5 +1,5 @@
 ﻿import assert from "node:assert/strict";
-import { mkdtempSync, rmSync, mkdirSync, writeFileSync } from "node:fs";
+import { mkdtempSync, realpathSync, rmSync, mkdirSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { basename, dirname, join } from "node:path";
 import { test } from "node:test";
@@ -37,7 +37,7 @@ import { kotlinLayer } from "./kotlin/kotlin.ts";
 import type { KotlinEvents } from "./kotlin/supervisor.ts";
 import type { SongTags } from "../shared/tags.ts";
 import { libraryLayer } from "./database.ts";
-import { playbackLayer } from "./playback/playback.ts";
+import { Playback, playbackLayer } from "./playback/playback.ts";
 import { registerBridge, type IpcHandler } from "./bridge.ts";
 import { DesktopLibrary, desktopLibraryLayer } from "./library/library.ts";
 import { preference } from "./preferences.ts";
@@ -3319,6 +3319,73 @@ test("playlist, artist and genre pages download their missing songs in page orde
       assert.equal(await wave.downloads.list({ kind: "playlist", id: 999 }), null);
     } finally {
       await runtime.dispose();
+    }
+  });
+});
+
+test("files opened with Wave play as a new queue: a Library file as its song, another without joining the Library", async () => {
+  await withAlbum(async (wave, _album, { runtime, engineCalls }) => {
+    const folder = mkdtempSync(join(tmpdir(), "wave-opened-"));
+    try {
+      writeFileSync(join(folder, "Demo Tape.mp3"), "");
+      const outside = scanPath(
+        realpathSync.native(join(folder, "Demo Tape.mp3")),
+        process.platform,
+      );
+      writeFileSync(join(folder, "notes.txt"), "");
+      const playback = await runtime.runPromise(Playback);
+      const counts = () =>
+        runtime.runPromise(
+          Effect.map(Database, (db) =>
+            db.get<{ tracks: number; plays: number }>(
+              sql`SELECT (SELECT count(*) FROM tracks) AS tracks, (SELECT count(*) FROM play_events) AS plays`,
+            ),
+          ),
+        );
+      const before = await counts();
+      assert.equal(
+        await playback.openFiles([
+          join(folder, "Demo Tape.mp3"),
+          join(folder, "notes.txt"),
+          join(folder, "Deleted.mp3"),
+          "/Music/Pink Moon/Road.mp3",
+        ]),
+        true,
+      );
+      let view = await wave.playback.view();
+      assert.equal(view.status.state, "playing");
+      assert.equal(engineCalls.includes(`load ${outside}`), true);
+      assert.equal(view.length, 2, "the text file and the file that is gone are ignored");
+      assert.equal(view.undoOffer, null, "nothing was playing before");
+      assert.equal(view.current?.outside, true);
+      assert.equal(view.current?.title, "Demo Tape", "its name, until its tags are read");
+      await new Promise((resolve) => setImmediate(resolve));
+      view = await wave.playback.view();
+      assert.equal(view.current?.title, "Demo Tape.mp3", "the title its tags give");
+      assert.equal(view.current?.artist, "Nick Drake");
+      // Starring is the Library's: the file outside it takes none.
+      await wave.playback.favorite();
+      assert.equal((await wave.playback.view()).current?.favorite, false);
+      assert.deepEqual(await counts(), before, "the file joined nothing and its play isn't kept");
+      await wave.playback.command({ type: "next" });
+      view = await wave.playback.view();
+      assert.equal(view.current?.title, "Road");
+      assert.equal(view.current?.outside, undefined);
+      assert.deepEqual(await counts(), { tracks: before!.tracks, plays: before!.plays + 1 });
+      assert.deepEqual(
+        (await wave.playback.queue(0, 10)).items.map((row) => row.title),
+        ["Demo Tape.mp3", "Road"],
+      );
+      assert.equal(await playback.openFiles(["/Music/Pink Moon/Parasite.mp3"]), true);
+      view = await wave.playback.view();
+      assert.equal(view.current?.title, "Parasite");
+      assert.notEqual(view.undoOffer, null, "opening files over a queue offers Undo");
+      assert.equal(await playback.openFiles([join(folder, "notes.txt")]), false);
+      assert.equal((await wave.playback.view()).current?.title, "Parasite", "nothing changed");
+      await wave.playback.undo();
+      assert.equal((await wave.playback.view()).current?.title, "Road");
+    } finally {
+      rmSync(folder, { recursive: true, force: true });
     }
   });
 });
