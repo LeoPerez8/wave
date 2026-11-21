@@ -1,9 +1,12 @@
 import { Database } from "@wave/client";
-import { HOME_ARRANGEMENT_SETTING } from "@wave/core";
+import { HOME_ARRANGEMENT_SETTING, readHomeArrangementEdit } from "@wave/core";
+import { Account } from "./account/accountLayer.ts";
+import { editDesktopHome, homeArrangement } from "./homeArrangement.ts";
 import * as Effect from "effect/Effect";
 import { readHome } from "./library/home.ts";
 import { DesktopLibrary } from "./library/library.ts";
 import { Playback } from "./playback/playback.ts";
+import { recapToAnnounceNow } from "./library/recaps.ts";
 import { syncedPreference } from "./sync/desktopSync.ts";
 
 const view = Effect.gen(function* () {
@@ -12,6 +15,7 @@ const view = Effect.gen(function* () {
   const home = readHome(db, syncedPreference(db, HOME_ARRANGEMENT_SETTING));
   return {
     ...home,
+    recap: recapToAnnounceNow(db),
     items: home.items.map((section) => ({
       ...section,
       rows: {
@@ -28,6 +32,15 @@ const view = Effect.gen(function* () {
 /** Home accepts a section and a position, never arbitrary paths or a queue from the renderer. */
 export const homeHandlers = {
   "home.view": () => view,
+  "home.arrangement": () => Effect.map(Database, homeArrangement),
+  "home.edit": ([raw]: readonly unknown[]) =>
+    Effect.gen(function* () {
+      const edit = readHomeArrangementEdit(raw);
+      if (edit === null) return yield* Effect.fail(new Error("Refused home.edit: invalid edit"));
+      const arrangement = editDesktopHome(yield* Database, edit);
+      (yield* Account).settingsEdited();
+      return arrangement;
+    }),
   "home.play": ([section, index]: readonly unknown[]) =>
     Effect.gen(function* () {
       if (

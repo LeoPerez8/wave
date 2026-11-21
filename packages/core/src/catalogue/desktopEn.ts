@@ -9,7 +9,7 @@ import { plural } from "../plural.ts";
  */
 export const desktopEn = {
   home: {
-    noSections: "Your Home sections are hidden. Arrange Home on your phone to add them back.",
+    noSections: "Your Home sections are hidden. Choose Edit Home to add them back.",
   },
   playbackText: {
     thisPhone: "This computer",
@@ -82,6 +82,15 @@ export const desktopEn = {
       // A song's link is copied rather than sent from a share sheet.
       share: "Copy Link",
     },
+  },
+  recap: {
+    // Home's card is clicked, not tapped.
+    tapToWatch: "Click to watch",
+  },
+  share: {
+    // Buttons under a card, in the desktop's title case.
+    saveImage: "Save Image",
+    copyImage: "Copy Image",
   },
   library: {
     // The artist page's quiet lines: Online is clicked, not tapped.

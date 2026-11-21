@@ -20,6 +20,7 @@
     "./playlistRecommendationTracks": "./src/playlistRecommendationTracks.ts",
     "./playbackSession": "./src/playbackSession.ts",
     "./queueGains": "./src/queueGains.ts",
+    "./queueShuffle": "./src/queueShuffle.ts",
     "./songMeasurements": "./src/songMeasurements.ts",
     "./externalStore": "./src/externalStore.ts",
     "./playCheckpoints": "./src/playCheckpoints.ts",
@@ -28,6 +29,9 @@
     "./testing/syncService": "./src/sync/testSyncService.ts",
     "./geniusSource": "./src/geniusSource.ts",
     "./geniusStorage": "./src/geniusStorage.ts",
+    "./geniusLyricsSearch": "./src/geniusLyricsSearch.ts",
+    "./geniusHitMenu": "./src/geniusHitMenu.ts",
+    "./resolveRecognition": "./src/resolveRecognition.ts",
     "./lyricsTranslationSource": "./src/lyricsTranslationSource.ts"
   },
   "scripts": {

@@ -1,7 +1,9 @@
 import { readFileSync, renameSync, rmSync, writeFileSync } from "node:fs";
+import { writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import {
   BrowserWindow,
+  ClipboardItem,
   clipboard,
   app,
   dialog,
@@ -45,11 +47,13 @@ import { lookupsEnabled } from "./lookupSettings.ts";
 import { artistPhotosEnabled } from "./library/lyricsAndTags.ts";
 import { ytMusicLayer } from "./yt/ytMusic.ts";
 import { desktopLinksLayer } from "./links/layer.ts";
+import { cardImagesLayer } from "./cards/cardImages.ts";
 import { downloadsLayer } from "./downloads/downloadsLayer.ts";
 import { keyringHost } from "./downloads/keyring.ts";
 import type { KotlinEvent } from "./kotlin/protocol.ts";
 import { ytFeaturesLayer } from "./yt/ytServices.ts";
 import { lyricsLayer } from "./lyrics/lyrics.ts";
+import { geniusLyricsSearchLayer } from "./lyrics/geniusLyricsSearchLayer.ts";
 import { botguardPost, createPoTokens, poTokenHost } from "./yt/poTokens.ts";
 import { openPoTokenPage } from "./yt/poTokenWindow.ts";
 import { createWaveAccount } from "./account/account.ts";
@@ -450,9 +454,35 @@ else {
       }).pipe(
         Layer.provideMerge(
           Layer.mergeAll(
+            cardImagesLayer({
+              save: async (fileName, png) => {
+                const options = {
+                  defaultPath: join(app.getPath("pictures"), fileName),
+                  filters: [{ name: "PNG", extensions: ["png"] }],
+                };
+                const window = BrowserWindow.getFocusedWindow();
+                const result = await (window === null
+                  ? dialog.showSaveDialog(options)
+                  : dialog.showSaveDialog(window, options));
+                if (result.canceled || !result.filePath) return false;
+                await writeFile(result.filePath, png);
+                return true;
+              },
+              copy: (png) =>
+                clipboard.write([
+                  new ClipboardItem({
+                    "image/png": new Blob([Buffer.from(png)], { type: "image/png" }),
+                  }),
+                ]),
+            }),
             desktopLinksLayer({
               online: () => net.isOnline(),
               writeClipboard: (text) => clipboard.writeText(text),
+            }),
+            geniusLyricsSearchLayer({
+              account,
+              online: () => net.isOnline(),
+              openExternal: (url) => shell.openExternal(url),
             }),
             ytAccountLayer({
               sessions: ytSessions,

@@ -1,6 +1,4 @@
 import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
-import { createServer } from "node:http";
-import type { AddressInfo } from "node:net";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { _electron as electron, expect, test, type Page } from "@playwright/test";
@@ -8,12 +6,11 @@ import { Database } from "@wave/client";
 import { addTrack, type TestDatabase } from "@wave/client/testing";
 import { sql } from "drizzle-orm";
 import * as Effect from "effect/Effect";
-import { harness } from "../../sync/src/testing.ts";
+import { fakeGeniusService, GENIUS_E2E_CLIENT as CLIENT, geniusReply } from "./geniusFixture.ts";
 import { libraryLayer } from "../src/main/database.ts";
 import type { WaveBridge } from "../src/shared/bridge.ts";
 
 const appFolder = join(import.meta.dirname, "..");
-const CLIENT = "genius-e2e-client";
 const DESCRIPTION = "First line.\nSecond line.\nThird line.\nFourth line.";
 const SONG_ID = 9;
 
@@ -24,92 +21,32 @@ const annotation = (id: number, fragment: string, plain: string) => ({
   annotations: [{ body: { plain }, state: "pending", authors: [{ user: { name: "Ana" } }] }],
 });
 
-const geniusReply = (response: object) => Response.json({ meta: { status: 200 }, response });
-
-async function fakeService() {
-  const service = await harness({ googleDesktopClientId: CLIENT });
-  const state = {
-    offline: false,
-    fail: false,
-    wait: Promise.resolve(),
-    routes: [] as string[],
-    aborted: 0,
-  };
-  service.upstream.answer = (href) => {
-    const url = new URL(href);
-    if (url.pathname === "/search") {
-      if (url.searchParams.get("q") !== "Teardrop Massive Attack") return geniusReply({ hits: [] });
-      return geniusReply({
-        hits: [
-          {
-            type: "song",
-            result: {
-              id: SONG_ID,
-              title: "Teardrop",
-              url: "https://genius.com/example",
-              primary_artist: { name: "Massive Attack" },
-            },
-          },
-        ],
-      });
-    }
-    if (url.pathname === `/songs/${SONG_ID}`)
-      return geniusReply({ song: { id: SONG_ID, description: { plain: DESCRIPTION } } });
+const answer = (url: URL) => {
+  if (url.pathname === "/search") {
+    if (url.searchParams.get("q") !== "Teardrop Massive Attack") return geniusReply({ hits: [] });
     return geniusReply({
-      referents: [
-        annotation(1, "for the water", "A note about the water."),
-        annotation(2, "[Bridge]", "A note about the bridge."),
+      hits: [
+        {
+          type: "song",
+          result: {
+            id: SONG_ID,
+            title: "Teardrop",
+            url: "https://genius.com/example",
+            primary_artist: { name: "Massive Attack" },
+          },
+        },
       ],
     });
-  };
-
-  const server = createServer((request, reply) => {
-    void (async () => {
-      const path = request.url ?? "/";
-      if (path.startsWith("/v1/genius/")) {
-        state.routes.push(path);
-        request.on("aborted", () => {
-          state.aborted += 1;
-        });
-        await state.wait;
-        if (state.fail) return void reply.writeHead(503).end();
-      }
-      if (state.offline) return void reply.writeHead(503).end();
-      if (path === "/token") {
-        const idToken = await service.google.idToken({ aud: CLIENT, name: "Ana" });
-        return void reply
-          .writeHead(200, { "content-type": "application/json" })
-          .end(JSON.stringify({ id_token: idToken }));
-      }
-      const chunks: Buffer[] = [];
-      for await (const chunk of request) chunks.push(chunk as Buffer);
-      const body = Buffer.concat(chunks).toString("utf8");
-      const headers: Record<string, string> = {};
-      for (const name of ["authorization", "content-type"]) {
-        const value = request.headers[name];
-        if (typeof value === "string") headers[name] = value;
-      }
-      const answer = await service.request(request.method ?? "GET", path, {
-        headers,
-        ...(body ? { body } : {}),
-      });
-      reply
-        .writeHead(answer.status, Object.fromEntries(answer.headers))
-        .end(Buffer.from(await answer.arrayBuffer()));
-    })().catch(() => {
-      if (!reply.headersSent) reply.writeHead(500).end();
-    });
+  }
+  if (url.pathname === `/songs/${SONG_ID}`)
+    return geniusReply({ song: { id: SONG_ID, description: { plain: DESCRIPTION } } });
+  return geniusReply({
+    referents: [
+      annotation(1, "for the water", "A note about the water."),
+      annotation(2, "[Bridge]", "A note about the bridge."),
+    ],
   });
-  await new Promise<void>((resolve) => server.listen(0, "127.0.0.1", resolve));
-  return {
-    url: `http://127.0.0.1:${(server.address() as AddressInfo).port}`,
-    state,
-    close: () => {
-      server.closeAllConnections();
-      server.close();
-    },
-  };
-}
+};
 
 const writeSong = (path: string) => {
   // 30 seconds of mono 16-bit PCM so the test can seek away from the first line.
@@ -145,7 +82,7 @@ const position = (page: Page) =>
 
 test("Genius insights follow Lyrics, keep the answer offline and obey the synced switch", async () => {
   const data = mkdtempSync(join(tmpdir(), "wave-genius-"));
-  const service = await fakeService();
+  const service = await fakeGeniusService(answer);
   const launch = () =>
     electron.launch({
       args: [appFolder, "--lang=en-US"],

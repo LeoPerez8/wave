@@ -1,11 +1,19 @@
-import { homeSectionTitle, statsFacts, tableSelectionOf } from "@wave/core";
+import {
+  homeSectionTitle,
+  recapTitle,
+  statsFacts,
+  tableSelectionOf,
+  type RecapPeriod,
+} from "@wave/core";
 import { useEffect, useMemo, useState } from "react";
 import type { BrowseRow, BrowseScope } from "../../shared/browse.ts";
 import type { HomeSectionView, HomeView } from "../../shared/home.ts";
 import type { CollectionTarget } from "../../shared/collectionActions.ts";
 import type { MenuPoint } from "./Menu.tsx";
 import { HomeDiscover } from "./HomeDiscover.tsx";
+import { HomeEditButton } from "./HomeEditor.tsx";
 import { HomeNewReleases, HomeUpcomingShows, useHomeFollow } from "./HomeFollow.tsx";
+import { recapColour } from "./RecapViewer.tsx";
 import { Shelf } from "./YtLists.tsx";
 import type { YtRoute } from "./YtPages.tsx";
 import { VirtualTable } from "./VirtualTable.tsx";
@@ -83,6 +91,8 @@ export function Home({
   run,
   go,
   onStats,
+  onRecap,
+  recapsOpened,
   onError,
   onMenu,
   selectionFor,
@@ -90,6 +100,10 @@ export function Home({
   onCollectionMenu,
 }: {
   readonly revision: number;
+  /** Opens a Recap's stories. */
+  readonly onRecap: (period: RecapPeriod) => void;
+  /** Changes when a Recap was opened: its card leaves Home. */
+  readonly recapsOpened: number;
   readonly ytMusic: boolean;
   readonly notify: (message: string) => void;
   readonly run: (action: Promise<unknown>) => void;
@@ -120,7 +134,7 @@ export function Home({
     return () => {
       current = false;
     };
-  }, [revision, attempt]);
+  }, [revision, attempt, recapsOpened]);
   const open = (section: HomeSectionView, index: number) => {
     const row = section.rows.items[index]!;
     if (section.kind === "album" || section.kind === "artist")
@@ -130,6 +144,11 @@ export function Home({
   };
   return (
     <div className="home-page" data-testid="home">
+      <HomeEditButton
+        revision={revision}
+        onChanged={() => setAttempt((value) => value + 1)}
+        onError={onError}
+      />
       {readFailed && (
         <div className="home-retry" role="alert">
           <p>{text.desktopLibrary.actionFailed}</p>
@@ -151,6 +170,17 @@ export function Home({
         )
       ) : (
         <>
+          {view.recap && (
+            <button
+              className="recap-home-card"
+              style={{ backgroundColor: `var(--color-recap-${recapColour(view.recap)})` }}
+              onClick={() => onRecap(view.recap!)}
+            >
+              <span>{text.recap.ready[view.recap.kind]}</span>
+              <strong>{recapTitle(view.recap, text)}</strong>
+              <span>{text.recap.tapToWatch}</span>
+            </button>
+          )}
           {view.hint === "empty" && (
             <div className="home-empty">
               <h2>{text.home.emptyTitle}</h2>

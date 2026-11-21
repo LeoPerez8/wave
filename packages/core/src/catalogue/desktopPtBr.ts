@@ -6,7 +6,7 @@ import { plural } from "../plural.ts";
 export const desktopPtBr = {
   home: {
     noSections:
-      "As seções do Início estão ocultas. Organize o Início no celular para adicioná-las de volta.",
+      "As seções do Início estão ocultas. Escolha Editar Início para adicioná-las de volta.",
   },
   playbackText: {
     thisPhone: "Este computador",
@@ -76,6 +76,13 @@ export const desktopPtBr = {
     labels: {
       share: "Copiar Link",
     },
+  },
+  recap: {
+    tapToWatch: "Clique para assistir",
+  },
+  share: {
+    saveImage: "Salvar Imagem",
+    copyImage: "Copiar Imagem",
   },
   library: {
     offlineTapOnline:
