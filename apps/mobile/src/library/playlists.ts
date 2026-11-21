@@ -7,6 +7,7 @@ import {
   type ImageFraming,
   type ImageSize,
   type PlaylistSong,
+  playlistSongKey,
 } from "@wave/core";
 import * as Effect from "effect/Effect";
 import { Image } from "react-native";
@@ -285,6 +286,29 @@ export const addToPlaylist = (
   /** One of a stream of additions (an import filling the playlist): see `playlistsChanged`. */
   { burst = false }: { readonly burst?: boolean } = {},
 ): Promise<PlaylistAddResult> => edit((store) => store.addToPlaylist(id, songs), id, burst);
+
+/** Removes an Add Songs search's just-added copy without a second removal toast. */
+export const undoAddToPlaylist = async (id: number, song: PlaylistSong): Promise<void> => {
+  const detail = await appRuntime.runPromise(
+    // oxlint-disable-next-line react/rules-of-hooks -- Effect Service.use resolves a service; it is not a React Hook.
+    LibraryStore.use((store) => store.getPlaylist(id)),
+  );
+  if (detail === null) return;
+  const key = playlistSongKey(song);
+  const itemIds = detail.items.flatMap((entry) => {
+    const existing: PlaylistSong =
+      entry.source === "library"
+        ? { source: "library", trackId: entry.track.id }
+        : entry.source === "stream"
+          ? { source: "stream", song: entry.song }
+          : entry.source === "unsearched"
+            ? { source: "unsearched", song: entry.song }
+            : { source: "unavailable", song: entry.song };
+    return playlistSongKey(existing) === key ? [entry.itemId] : [];
+  });
+  if (itemIds.length === 0) return;
+  await edit((store) => store.removePlaylistItems(id, itemIds), id);
+};
 
 export const movePlaylistItem = (
   playlistId: number,
