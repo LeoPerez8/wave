@@ -22,7 +22,11 @@ export interface DjSettings {
   readonly variety: DjVariety;
   readonly discovery: DjDiscovery;
   readonly popularity: DjPopularity;
-  /** Whether songs released in the last 12 months are favoured. */
+  /**
+   * Whether songs on a recent release are favoured: one whose year is the
+   * current or the previous one (`djNewReleasesRanked`; saved artist pages
+   * give a year and no date).
+   */
   readonly newReleases: boolean;
 }
 

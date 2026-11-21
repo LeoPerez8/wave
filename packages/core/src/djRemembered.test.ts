@@ -6,6 +6,7 @@ import {
   djAlbumTile,
   djArtistTile,
   djCanStart,
+  djGrid,
   djOpened,
   djReopened,
   djSeedTiles,
@@ -151,6 +152,30 @@ describe("a remembered album", () => {
       ...grid,
     ]);
     assert.deepEqual(djSeedTiles(state), state.tiles.slice(0, 2));
+  });
+
+  test("a Library compilation, which the grid never shows, comes back as the Library's", () => {
+    const tales: DjAlbum = {
+      title: "Late Night Tales",
+      artist: "Bonobo",
+      libraryId: 9,
+      cover: "file:///covers/9.jpg",
+      compilation: true,
+    };
+    const albums = [tales];
+    const grid = djGrid({
+      artists: [{ id: 3, name: "Bonobo" }],
+      taste: null,
+      played: [{ id: 3, name: "Bonobo", countedPlays: 5 }],
+      graph: null,
+      albums,
+    });
+    assert.deepEqual(grid, [tile("Bonobo", 3)]);
+    const remembered = readDjRemembered(
+      storedDjRemembered({ tiles: [albumTile(tales)], settings: chosen }),
+    ).tiles;
+    const state = djReopened({ grid, remembered, albums });
+    assert.deepEqual(djSeedTiles(state), [albumTile(tales)]);
   });
 
   test("is not taken for the artist of the same name", () => {
