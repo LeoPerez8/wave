@@ -23,14 +23,20 @@ const isTab = (value: string): value is TabBarTab => TABS.some((tab) => tab === 
 /**
  * [tabs] held to the bar's rules: Home in its saved position (or first when
  * missing), each tab once, Search last, unknown tabs left out, and no more
- * than `MAX_TABS` (the last ones before Search dropping off).
+ * than `MAX_TABS` (the last ones before Search other than Home dropping off:
+ * Home never does).
  */
 const barOf = (tabs: readonly string[]): TabBar => {
   const known = new Set(tabs.filter(isTab));
   const search = known.has("search");
   const arranged = [...known].filter((tab) => tab !== "search");
   if (!arranged.includes("index")) arranged.unshift("index");
-  const shown = arranged.slice(0, MAX_TABS - (search ? 1 : 0));
+  const room = MAX_TABS - (search ? 1 : 0);
+  let over = arranged.length - room;
+  const shown = arranged
+    .reverse()
+    .filter((tab) => tab === "index" || over-- <= 0)
+    .reverse();
   return [...shown, ...(search ? (["search"] as const) : [])];
 };
 
