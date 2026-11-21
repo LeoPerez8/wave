@@ -33,6 +33,7 @@ export const desktopLinksLayer = (options: {
         call: (method, params) => Effect.runPromise(kotlin.call(method, params)),
         changed: playback.refresh,
         remember: (song) => yt.keep([song]),
+        song: yt.song,
         start: async (song) => {
           if ("videoId" in song) {
             yt.keep([song]);

@@ -82,6 +82,14 @@ export type PlaylistItem<S extends YtSong = YtSong, L = unknown> =
 /** The prefix of the id an unsearched song goes by in the queue. */
 const UNSEARCHED_PREFIX = "unsearched:";
 
+/** The songs a playlist takes, with Library tracks named by id. */
+export const toPlaylistSongs = <S extends YtSong>(
+  entries: readonly QueueSong<S, { readonly id: number }>[],
+): PlaylistSong<S>[] =>
+  entries.map((entry) =>
+    entry.source === "library" ? { source: "library", trackId: entry.track.id } : entry,
+  );
+
 /**
  * The id an unsearched song goes by in the queue and in a playlist: what
  * Spotify listed of it (title, artists, album and length), so the id alone

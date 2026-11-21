@@ -38,6 +38,8 @@ export const installDesktopSystem = (options: {
   readonly mediaAddon: string;
   readonly cache: string;
   readonly show: () => void;
+  /** Opens the floating mini player. */
+  readonly miniPlayer: () => void;
 }) => {
   const { window, db, playback } = options;
   const lifecycle = createWindowLifecycle({
@@ -204,6 +206,7 @@ export const installDesktopSystem = (options: {
           { label: labels.previous, enabled: !!current, click: () => run({ action: "previous" }) },
           { type: "separator" },
           { label: text.desktopWindow.show, click: options.show },
+          { label: text.desktopWindow.miniPlayer, click: options.miniPlayer },
           { label: text.desktopWindow.quit, click: () => app.quit() },
         ]),
       );

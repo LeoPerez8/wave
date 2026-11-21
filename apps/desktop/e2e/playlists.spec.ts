@@ -127,6 +127,7 @@ test("playlists: create, rename, add, remove, Graveyard, import and delete", asy
     }, m3u);
     await page.getByRole("button", { name: text.desktopLayout.playlists, exact: true }).click();
     await page.getByRole("button", { name: text.playlists.importPlaylists }).click();
+    await page.getByRole("menuitem", { name: text.imports.fromFiles }).click();
     const summary = page.getByRole("alertdialog", { name: text.imports.importedName("Road Trip") });
     await expect(summary).toContainText(text.imports.notInLibrary(1));
     await summary.getByRole("button", { name: text.imports.ok }).click();

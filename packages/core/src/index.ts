@@ -78,6 +78,7 @@ export {
   EMPTY_QUEUE,
   REAL_SHUFFLE,
   RESTART_THRESHOLD_MS,
+  SHUFFLE_KINDS,
   currentEntry,
   nextRepeatMode,
   parseQueueState,
@@ -86,15 +87,18 @@ export {
   playReplacesQueue,
   reduceQueue,
   reshuffledUpNext,
+  shuffleReads,
   shuffledTrackIds,
   shufflesQueue,
   upNext,
   upNextMove,
   withPendingMoves,
+  writeShuffleKind,
 } from "./queue.ts";
 export type {
   PendingMove,
   UpNextMove,
+  UpNextPlace,
   QueueCommand,
   QueueContext,
   QueueEntry,
@@ -181,6 +185,7 @@ export {
   FIND_IN_PLAYLIST_NO_MATCH,
   FIND_IN_PLAYLIST_PLACEHOLDER,
   createPlaylistFinder,
+  createFindMatcher,
   findInPlaylistHead,
   foundInPlaylist,
   hasFindQuery,
@@ -524,15 +529,24 @@ export type {
   SongLinkSetup,
   SongLinkTurnOff,
 } from "./songLinkHandling.ts";
-export { PLAYLIST_LAYOUTS, parsePlaylistLayout, storedPlaylistLayout } from "./playlistLayout.ts";
+export {
+  DESKTOP_PLAYLIST_LAYOUTS,
+  PLAYLIST_LAYOUTS,
+  PLAYLIST_LAYOUT_SETTING,
+  desktopPlaylistLayout,
+  parsePlaylistLayout,
+  storedPlaylistLayout,
+} from "./playlistLayout.ts";
 export type { PlaylistLayout } from "./playlistLayout.ts";
 export { keepAddToPlaylistOrder, sortPlaylistsForAdd } from "./addToPlaylistOrder.ts";
 export type { AddToPlaylistChoice } from "./addToPlaylistOrder.ts";
 export {
+  PLAYLIST_ORDER_SETTING,
   PLAYLIST_SORTS,
   choosePlaylistSort,
   movePlaylist,
   parsePlaylistOrder,
+  samePlaylistOrder,
   sortPlaylists,
   storedPlaylistOrder,
 } from "./playlistSort.ts";
@@ -607,6 +621,8 @@ export type {
   ThemeSwatchOption,
   ThemeSwatchRow,
 } from "./themeChoice.ts";
+export { editThemeChoice, readThemeEdit } from "./themeEdit.ts";
+export type { ThemeEdit } from "./themeEdit.ts";
 export {
   LAUNCHER_ICONS,
   LAUNCHER_ICON_ART,
@@ -689,6 +705,7 @@ export {
   sameSongSort,
   SONG_SORTS,
   librarySongSort,
+  songBrowseOrderTerms,
   songOrderTerms,
   songSpineField,
   songSortLabel,
@@ -697,6 +714,10 @@ export {
   songSpineKeys,
   sortSongs,
   writeSongSort,
+  libraryTableSortsFor,
+  readLibraryTableSort,
+  nextHeaderSort,
+  songSortHasSpine,
 } from "./songSort.ts";
 export type {
   LibrarySongSort,
@@ -1031,6 +1052,11 @@ export {
   readDownloadArtistPhotos,
   writeDownloadArtistPhotos,
 } from "./artistPhotosSetting.ts";
+export {
+  GENIUS_INSIGHTS_SETTING,
+  readGeniusInsights,
+  writeGeniusInsights,
+} from "./geniusSetting.ts";
 export type { AccountSession, AccountSignInEvent, AccountSignInState } from "./accountSignIn.ts";
 export {
   SPOTIFY_ACCOUNT_SIGNED_OUT,
@@ -1038,6 +1064,7 @@ export {
   SPOTIFY_SIGN_IN_FAILURE_LINES,
   spotifySignInFailureLines,
   spotifyAccountView,
+  readSpotifyWebProfile,
   stepSpotifyAccount,
 } from "./spotifyAccount.ts";
 export type {
@@ -1465,6 +1492,7 @@ export {
   queueSongTrackId,
   readUnsearchedTrackId,
   unsearchedTrackId,
+  toPlaylistSongs,
   writePlaylistEntrySong,
   writePlaylistYtSong,
 } from "./playlistEntries.ts";
@@ -1647,6 +1675,8 @@ export type {
   SpotifyLibraryPlaylist,
   SpotifyLibraryRead,
 } from "./spotifyLibrary.ts";
+export { readSpotifyWebLibrary, readSpotifyWebPlaylist } from "./spotifyWebLibrary.ts";
+export type { SpotifyWebAnswer, SpotifyWebAsk } from "./spotifyWebLibrary.ts";
 export { compareOrderKeys, orderKeyBetween, placeEntries } from "./orderKey.ts";
 export type { EntryPlacement, OrderedEntry } from "./orderKey.ts";
 export { graveyardRemovalsOf, graveyardRestoreIndex, graveyardSongs } from "./playlistGraveyard.ts";
@@ -1764,6 +1794,7 @@ export {
   parseHomeArrangement,
   storedHomeArrangement,
 } from "./homeSections.ts";
+export { editStoredHomeArrangement, readHomeArrangementEdit } from "./homeArrangementEdit.ts";
 export type {
   HomeArrangement,
   HomeArrangementEdit,
@@ -2064,6 +2095,8 @@ export {
   explicitPlayNotice,
   explicitSkipNotice,
   queuedPassedOver,
+  readDontPlayExplicit,
+  writeDontPlayExplicit,
 } from "./explicitPlayback.ts";
 export type { ExplicitPlayback } from "./explicitPlayback.ts";
 export type { PassOver } from "./queue.ts";
@@ -2291,6 +2324,7 @@ export {
   sharedEditBatches,
   sharedPlaylistChanges,
   sharedPlaylistMoves,
+  sharedSongsCopiedLine,
   sharedSongsLine,
   spotifyPlaylistUrl,
   syncSharedPlaylist,
@@ -2326,6 +2360,7 @@ export {
   spotifyLibraryHas,
   spotifyShareMatch,
   spotifyShareSong,
+  spotifyWebShareMatch,
 } from "./spotifyShare.ts";
 export type { SpotifyPageRead, SpotifyShareItem } from "./spotifyShare.ts";
 export type {
@@ -2609,6 +2644,7 @@ export { libraryMixProfilesSteps } from "./genreAffinity.ts";
 export { rankPlaysSteps } from "./stats.ts";
 
 export * from "./ytAlbumOpening.ts";
+export { albumDiscHeads, type DiscHead } from "./albumDiscs.ts";
 export { ytArtistPageOpening } from "./ytArtistPageOpening.ts";
 
 export { reconcileScanSteps } from "./scanReconcile.ts";
@@ -2668,9 +2704,20 @@ export { RADIO_CACHE_FRESH_MS, radioCacheFresh } from "./radioCache.ts";
 export {
   listeningHistoryDays,
   findListeningHistory,
+  listeningHistoryRowState,
   type ListeningHistoryDay,
+  type ListeningHistoryRowState,
   type PlaySnapshot,
 } from "./listeningHistory.ts";
+export {
+  listeningHistoryReads,
+  startingAt,
+  type ListeningHistoryCursor,
+  type ListeningHistoryFrom,
+  type ListeningHistoryPageOf,
+  type ListeningHistoryRead,
+  type ListeningHistoryReads,
+} from "./listeningHistoryReads.ts";
 export {
   readShuffleCardOpenings,
   shuffleCardOpened,
@@ -2801,6 +2848,7 @@ export type {
   RecognizeCard,
   RecognizeCardAction,
   RecognizeCardView,
+  RecognizeCardOptions,
   RecognizedSong,
   RecognizeEnd,
   RecognizeEvent,
@@ -2828,7 +2876,7 @@ export type {
   RecognizeTrack,
   GeniusLyricsResultAction,
 } from "./recognition.ts";
-export { planShazamAdd } from "./shazamPlaylist.ts";
+export { SHAZAM_PLAYLIST_SETTING, planShazamAdd } from "./shazamPlaylist.ts";
 export { bounceDemoSwipe, sampleSwipeActions } from "./motionSample.ts";
 export type { BounceDemoSwipe } from "./motionSample.ts";
 export {
@@ -2910,6 +2958,9 @@ export {
   readPlaylistSongSorts,
   sortPlaylistSongs,
   storedPlaylistSongSort,
+  PLAYLIST_SONG_SORTS,
+  playlistReorders,
+  playlistSongSortLabelFor,
 } from "./playlistSongSort.ts";
 export type { PlaylistSongSort, PlaylistSortableSong } from "./playlistSongSort.ts";
 
@@ -2975,6 +3026,7 @@ export type {
 } from "./typedReleaseDate.ts";
 export {
   FIRST_RUN_TOUR_CARDS,
+  desktopBringYourMusic,
   firstRunCardAtLaunch,
   nextFirstRunStep,
   signInInvitationAtLaunch,
@@ -3005,9 +3057,24 @@ export { MARQUEE, marqueeOffset, marqueePlan, marqueeStill, readsRightToLeft } f
 export { scanPath, scanPathKey, scanPathWithin, scanFileState } from "./desktopScan.ts";
 export type { ScanFolder } from "./desktopScan.ts";
 export type { MarqueeLine, MarqueeLineSize, MarqueePlan } from "./marquee.ts";
-export { desktopSongActions } from "./desktopSongMenu.ts";
-export type { DesktopSongSubject } from "./desktopSongMenu.ts";
+export { desktopSelectionActions, desktopSongActions } from "./desktopSongMenu.ts";
+export { desktopSongShareMenu, spotifyRecordingLink } from "./desktopSongShare.ts";
+export type { DesktopShareItem, SpotifyRecordingAnswer } from "./desktopSongShare.ts";
+export type {
+  DesktopSelectionItem,
+  DesktopSongEntry,
+  DesktopSongSubject,
+} from "./desktopSongMenu.ts";
 export { DESKTOP_SHORTCUTS, desktopKey, shortcutKeys } from "./desktopKeys.ts";
+export {
+  allTableRows,
+  checkedTableRow,
+  extendTableRange,
+  tableRange,
+  tableSelectionOf,
+  toggleTableRow,
+  type TableSelection,
+} from "./tableSelection.ts";
 export type {
   DesktopCommand,
   DesktopFocus,
@@ -3023,6 +3090,19 @@ export {
   type LanguageChoice,
 } from "./languageChoice.ts";
 export { displayTag } from "./displayTag.ts";
+export {
+  openedAudioFiles,
+  openedFilePath,
+  openedFileTitle,
+  openedFileTrackId,
+  openedFilesQueue,
+} from "./openedFiles.ts";
+export {
+  floatingWindowPosition,
+  readFloatingWindowPosition,
+  storedFloatingWindowPosition,
+} from "./floatingWindow.ts";
+export type { ScreenArea, WindowPosition, WindowSize } from "./floatingWindow.ts";
 export {
   DJ_GRID_TILES,
   DJ_MAX_SELECTED,

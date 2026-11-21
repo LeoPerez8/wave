@@ -3,11 +3,12 @@
 import type { Invoke } from "./bridge.ts";
 import type { FixSongsResult } from "./songActions.ts";
 
-/** The page's two switches, both synced with the account. */
+/** The page's switches, synced with the account. */
 export interface LyricsAndTagsSettings {
   /** Fix songs online: Fix Song's lookups, lyrics online and missing songs' covers. */
   readonly fixSongsOnline: boolean;
   readonly downloadArtistPhotos: boolean;
+  readonly geniusInsights: boolean;
 }
 
 /** How far Fix songs in the whole Library is; total is 0 until its songs are known. */
@@ -33,7 +34,8 @@ export const validLyricsAndTagsChange = (
     entries.length > 0 &&
     entries.every(
       ([key, on]) =>
-        (key === "fixSongsOnline" || key === "downloadArtistPhotos") && typeof on === "boolean",
+        (key === "fixSongsOnline" || key === "downloadArtistPhotos" || key === "geniusInsights") &&
+        typeof on === "boolean",
     )
   );
 };

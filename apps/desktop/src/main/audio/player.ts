@@ -6,7 +6,7 @@ import * as Context from "effect/Context";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import type { AudioMeasurement } from "@wave/client/songMeasurements";
-import type { PlaybackStatus, PlaybackEvent } from "../../shared/playback.ts";
+import type { OutputDevice, PlaybackStatus, PlaybackEvent } from "../../shared/playback.ts";
 import { YtMusic } from "../yt/ytMusic.ts";
 import type { AudioCall } from "./protocol.ts";
 import {
@@ -51,6 +51,13 @@ export interface PlayerShape {
   /** Stops the measurements running and waiting; each answers `cancelled`. */
   readonly cancelMeasurements: () => Effect.Effect<PlaybackStatus, AudioEngineError>;
   readonly subscribe: (listener: (event: PlaybackEvent) => void) => () => void;
+  /** The outputs the system has, as the engine last saw them. */
+  readonly outputs: () => readonly OutputDevice[];
+  /**
+   * Plays on the output with `id` while the system has it, and on the system's default
+   * otherwise or without one. The song goes on from where it is.
+   */
+  readonly setOutput: (id?: string) => Effect.Effect<PlaybackStatus, AudioEngineError>;
   readonly play: () => Effect.Effect<PlaybackStatus, AudioEngineError>;
   readonly pause: () => Effect.Effect<PlaybackStatus, AudioEngineError>;
   readonly seek: (positionMs: number) => Effect.Effect<PlaybackStatus, AudioEngineError>;
@@ -75,6 +82,8 @@ const playerOf = (audio: AudioSupervisor): PlayerShape => {
     measure: audio.measure,
     cancelMeasurements: () => run("cancelMeasurements", []),
     subscribe: audio.subscribe,
+    outputs: audio.outputs,
+    setOutput: (id) => run("setOutput", [id]),
     play: () => run("play", []),
     pause: () => run("pause", []),
     seek: (positionMs) => run("seek", [positionMs]),

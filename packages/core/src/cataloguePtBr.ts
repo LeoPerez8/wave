@@ -1,5 +1,6 @@
 import { desktopShortcutsPtBr } from "./catalogue/desktopShortcutsPtBr.ts";
 import { desktopWindowPtBr } from "./catalogue/desktopWindowPtBr.ts";
+import { desktopOutputPtBr } from "./catalogue/desktopOutputPtBr.ts";
 import { libraryPtBr } from "./catalogue/libraryPtBr.ts";
 import { playlistsPtBr } from "./catalogue/playlistsPtBr.ts";
 import { importsPtBr } from "./catalogue/importsPtBr.ts";
@@ -38,6 +39,7 @@ import type { Catalogue } from "./catalogueEn.ts";
 
 export const ptBR: Catalogue = {
   desktopWindow: desktopWindowPtBr,
+  desktopOutput: desktopOutputPtBr,
   desktopLayout: {
     language: "Idioma",
     languages: { system: "Sistema", en: "English", "pt-BR": "Português (Brasil)" },
@@ -119,6 +121,11 @@ export const ptBR: Catalogue = {
     unavailableFolder: "Pasta indisponível",
     driveDisconnected: "A unidade não está conectada. Reconecte e tente de novo.",
     actionFailed: "Não foi possível concluir essa ação. Tente de novo.",
+    releaseDateKnown: (date) => `Lançada em ${date}`,
+    releaseDateUnknown: "Nenhuma data de lançamento conhecida.",
+    showInFolder: "Mostrar na Pasta",
+    fileGone:
+      "O arquivo da música não está mais lá. Atualize a Biblioteca para encontrá-lo de novo.",
     downloadStarted: (count) => (count === 1 ? "Baixando a música" : `Baixando ${count} músicas`),
     downloading: (title) => `Baixando ${title}`,
     nothingToPlay:
@@ -131,6 +138,9 @@ export const ptBR: Catalogue = {
     titleColumn: "Título",
     artistColumn: "Artista",
     albumColumn: "Álbum",
+    /** The column of a playlist's own order and of an artist's Popular ranks. */
+    orderColumn: "#",
+    releaseDateColumn: "Data de lançamento",
     previous: "Página anterior",
     next: "Próxima página",
     page: (first: number, last: number, total: number) => `${first}–${last} de ${total}`,
@@ -153,6 +163,9 @@ export const ptBR: Catalogue = {
       "Inicie sessão na janela do navegador que abriu e depois feche a janela. O Wave recebe a sessão quando ela é fechada.",
     noBrowser:
       "Iniciar sessão no YouTube precisa do Chrome, Edge, Brave ou Chromium neste computador. Instale um deles e tente novamente.",
+    spotifyUnavailable: "O início de sessão no Spotify não está configurado nesta versão do Wave.",
+    spotifyNote:
+      "Inicie sessão para o Wave ler suas playlists do Spotify e compartilhar as que você criou no Wave.",
   },
   desktopShortcuts: desktopShortcutsPtBr,
   downloadNotice: downloadNoticePtBr,
