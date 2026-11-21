@@ -12,6 +12,7 @@ import {
   moveNowPlayingButton,
   nowPlayingRelatedChevronShown,
   nowPlayingSlotChoices,
+  nowPlayingSlotChoiceHolder,
   nowPlayingSlotRoute,
   nowPlayingSlotShow,
   nowPlayingSongMenuShow,
@@ -199,6 +200,40 @@ describe("the choices a Now Playing slot offers", () => {
   test("slots holding Dislike come back as saved", () => {
     const slots = ["lyrics", "dislike", "download", "shuffle", "repeat", null, "queue"] as const;
     assert.deepEqual(readNowPlayingButtons(storedNowPlayingButtons(slots)), slots);
+  });
+});
+
+describe("the caption a slot's choice shows", () => {
+  const slots = ["lyrics", "addToPlaylist", null, null, null, "shuffle", "repeat"] as const;
+
+  test("an action another footer slot holds is captioned as in the footer", () => {
+    assert.equal(nowPlayingSlotChoiceHolder(slots, 5, "lyrics"), "footer");
+    assert.equal(nowPlayingSlotChoiceHolder(slots, 0, "addToPlaylist"), "footer");
+  });
+
+  test("an action a transport slot holds is captioned by the transport button it sits beside", () => {
+    assert.equal(nowPlayingSlotChoiceHolder(slots, 0, "shuffle"), "previous");
+    assert.equal(nowPlayingSlotChoiceHolder(slots, 0, "repeat"), "next");
+    assert.equal(nowPlayingSlotChoiceHolder(slots, 6, "shuffle"), "previous");
+  });
+
+  test("the slot's own action, a free action and None have no caption", () => {
+    assert.equal(nowPlayingSlotChoiceHolder(slots, 0, "lyrics"), null);
+    assert.equal(nowPlayingSlotChoiceHolder(slots, 5, "shuffle"), null);
+    assert.equal(nowPlayingSlotChoiceHolder(slots, 0, "queue"), null);
+    assert.equal(nowPlayingSlotChoiceHolder(slots, 2, null), null);
+  });
+
+  test("picking a captioned action swaps it with the slot that held it", () => {
+    assert.deepEqual(editNowPlayingButtons(slots, { slot: 0, action: "repeat" }), [
+      "repeat",
+      "addToPlaylist",
+      null,
+      null,
+      null,
+      "shuffle",
+      "lyrics",
+    ]);
   });
 });
 

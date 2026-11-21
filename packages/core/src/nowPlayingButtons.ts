@@ -90,6 +90,25 @@ const parsed = (stored: string): unknown => {
  */
 export const nowPlayingSlotChoices = (): readonly NowPlayingAction[] => NOW_PLAYING_ACTIONS;
 
+/** Where a slot sits, as a choice's caption names it: the footer, or beside Previous or Next. */
+export type NowPlayingSlotPlace = "footer" | "previous" | "next";
+
+/**
+ * The caption [action] shows in slot [slot]'s choices: the place of the
+ * other slot that holds it (picking it swaps the two), or null for the
+ * slot's own action, an action no slot holds, and None.
+ */
+export const nowPlayingSlotChoiceHolder = (
+  buttons: readonly NowPlayingSlot[],
+  slot: number,
+  action: NowPlayingSlot,
+): NowPlayingSlotPlace | null => {
+  const holder = action === null ? -1 : buttons.indexOf(action);
+  if (holder === -1 || holder === slot) return null;
+  if (holder < NOW_PLAYING_FOOTER_SLOTS) return "footer";
+  return holder === NOW_PLAYING_TRANSPORT_SLOTS.left ? "previous" : "next";
+};
+
 /**
  * The default: Lyrics, Add to Playlist, Download, Shuffle and Repeat in the
  * footer, and both transport slots empty.

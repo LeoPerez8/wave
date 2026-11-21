@@ -86,9 +86,10 @@ const hooks = registerHooks({
   },
 });
 let ChoiceSection: (typeof import("./ChoiceRow.tsx"))["ChoiceSection"];
+let ChoiceRow: (typeof import("./ChoiceRow.tsx"))["ChoiceRow"];
 let persistedSetting: (typeof import("../lib/persistedSetting.ts"))["persistedSetting"];
 try {
-  ({ ChoiceSection } = await import("./ChoiceRow.tsx"));
+  ({ ChoiceSection, ChoiceRow } = await import("./ChoiceRow.tsx"));
   ({ persistedSetting } = await import("../lib/persistedSetting.ts"));
 } finally {
   hooks.deregister();
@@ -177,6 +178,37 @@ test("choices without descriptions keep their label and selection behavior", asy
         .findAll((node) => typeof node.type === "string" && node.type === "span")
         .map((node) => node.props.children),
       ["List"],
+    );
+  } finally {
+    await act(() => renderer?.unmount());
+  }
+});
+
+test("a choice whose line says where it already sits is heard with its name, not as a hint", async () => {
+  let renderer: ReactTestRenderer | undefined;
+  try {
+    await act(() => {
+      renderer = create(
+        createElement(ChoiceRow, {
+          label: "Lyrics",
+          line: "In the footer",
+          lineRead: "label",
+          accessibilityLabel: "Lyrics, Slot 6, swaps with Slot 1",
+          chosen: false,
+          onPress: () => {},
+        }),
+      );
+    });
+    const row = renderer!.root.find(
+      (node) => typeof node.type === "string" && node.type === "button",
+    );
+    assert.equal(row.props.accessibilityLabel, "Lyrics, Slot 6, swaps with Slot 1, In the footer");
+    assert.equal(row.props.accessibilityHint, undefined);
+    assert.ok(
+      row
+        .findAll((node) => typeof node.type === "string" && node.type === "span")
+        .some((node) => node.props.children === "In the footer"),
+      "the caption is visible",
     );
   } finally {
     await act(() => renderer?.unmount());

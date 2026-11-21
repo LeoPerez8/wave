@@ -19,20 +19,27 @@ export function ChoiceRow({
   chosen,
   onPress,
   accessibilityLabel = label,
+  lineRead = "hint",
 }: {
   label: string;
-  /** Always shown under the label and read as the radio entry's hint. */
+  /** Always shown under the label and, by default, read as the radio entry's hint. */
   line?: string | undefined;
   chosen: boolean;
   onPress: () => void;
   accessibilityLabel?: string;
+  /**
+   * How screen readers get `line`: as the hint (what the choice does), or
+   * with the label (where a choice already sits), so it's heard with the name.
+   */
+  lineRead?: "hint" | "label";
 }) {
+  const lineInLabel = lineRead === "label" && line !== undefined;
   return (
     <TextButton
       label={label}
       accessibilityRole="radio"
-      accessibilityLabel={accessibilityLabel}
-      accessibilityHint={line}
+      accessibilityLabel={lineInLabel ? `${accessibilityLabel}, ${line}` : accessibilityLabel}
+      accessibilityHint={lineInLabel ? undefined : line}
       accessibilityState={{ checked: chosen }}
       onPress={onPress}
     >
