@@ -8,6 +8,8 @@ import {
   usePanGesture,
   useTapGesture,
 } from "react-native-gesture-handler";
+import { useSharedValue } from "react-native-reanimated";
+import { scheduleOnRN } from "react-native-worklets";
 
 import { grid } from "@/catalog/grid";
 
@@ -33,7 +35,8 @@ const DRAG_SLOP = 6;
 /**
  * Settings' slider: a label with its current value, over a track with a thumb.
  * Drag or tap the track to choose; values land on the range's steps.
- * Screen readers adjust it one step at a time.
+ * Screen readers adjust it one step at a time. A drag finds the step under the
+ * finger on the UI thread and calls JS only when it changes (Performance rule 7).
  */
 export function SettingsSlider({
   label,
@@ -44,11 +47,14 @@ export function SettingsSlider({
   onRelease,
   compact = false,
 }: Props) {
-  const width = useRef(0);
+  const width = useSharedValue(0);
   const last = useRef(value);
+  // The step the drag last landed on, as the UI thread knows it.
+  const landed = useSharedValue(value);
   useEffect(() => {
     last.current = value;
-  }, [value]);
+    landed.set(value);
+  }, [value, landed]);
 
   const choose = (next: number) => {
     if (next === last.current) return;
@@ -56,16 +62,35 @@ export function SettingsSlider({
     void Haptics.selectionAsync();
     onChange(next);
   };
+  const release = (): void => onRelease?.();
   // The thumb's centre travels between the track's ends, inset by half a thumb.
-  const at = (x: number) => sliderValueAt(x - THUMB / 2, width.current - THUMB, range);
+  const at = (x: number) => {
+    "worklet";
+    return sliderValueAt(x - THUMB / 2, width.get() - THUMB, range);
+  };
+  const follow = (x: number) => {
+    "worklet";
+    const next = at(x);
+    if (next === landed.get()) return;
+    landed.set(next);
+    scheduleOnRN(choose, next);
+  };
 
   const pan = usePanGesture({
-    runOnJS: true,
     activeOffsetX: [-DRAG_SLOP, DRAG_SLOP],
     failOffsetY: [-DRAG_SLOP * 2, DRAG_SLOP * 2],
-    onActivate: (event) => choose(at(event.x)),
-    onUpdate: (event) => choose(at(event.x)),
-    onDeactivate: () => onRelease?.(),
+    onActivate: (event) => {
+      "worklet";
+      follow(event.x);
+    },
+    onUpdate: (event) => {
+      "worklet";
+      follow(event.x);
+    },
+    onDeactivate: () => {
+      "worklet";
+      scheduleOnRN(release);
+    },
   });
   const tap = useTapGesture({
     runOnJS: true,
@@ -108,7 +133,7 @@ export function SettingsSlider({
       <GestureDetector gesture={gesture}>
         <View
           onLayout={(event) => {
-            width.current = event.nativeEvent.layout.width;
+            width.set(event.nativeEvent.layout.width);
           }}
           // The touch target is a full row tall; the drawn track is thin.
           style={{ height: grid.row - 8, justifyContent: "center" }}

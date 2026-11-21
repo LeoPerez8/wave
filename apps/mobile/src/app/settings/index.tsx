@@ -1,14 +1,20 @@
 import { useScreenContent } from "@/lib/screenTiming";
 import { useLocalisation } from "@/localisation/localisation";
-import { createDeveloperTitleTaps, visibleSettingsPages, type SettingsPage } from "@wave/core";
+import {
+  createDeveloperTitleTaps,
+  visibleSettingsPages,
+  type SettingsIcon,
+  type SettingsPage,
+} from "@wave/core";
 import { useFocusEffect } from "expo-router";
-import { useCallback, useState } from "react";
+import { memo, useCallback, useState } from "react";
 import { router } from "@/lib/timingRouter";
 import { ScrollView, View } from "react-native";
 
 import { grid } from "@/catalog/grid";
 import { Hairline } from "@/catalog/Hairline";
 import { ScreenHeader } from "@/components/ScreenHeader";
+import { StagedSections } from "@/components/StagedSections";
 import { useRenderCount } from "@/perf/perf";
 import { showToast } from "@/overlay/toast";
 import {
@@ -22,8 +28,37 @@ import { InstallNowButton } from "@/updates/InstallNowButton";
 import { UpdateCheckRefreshControl } from "@/updates/UpdateCheckRefreshControl";
 
 /**
- * A row for each page, in Core's order; a handful, so a plain list. Version History's carries
- * Install Now on its right edge while an update is ready.
+ * One page's row, from primitives so a summary that changes redraws only its
+ * own row (#1355). Version History's carries Install Now on its right edge
+ * while an update is ready.
+ */
+const SettingsIndexRow = memo(function SettingsIndexRow({
+  page,
+  title,
+  summary,
+  icon,
+  route,
+}: {
+  page: SettingsPage;
+  title: string;
+  summary: string | null;
+  icon: SettingsIcon;
+  route: `/settings/${string}`;
+}) {
+  return (
+    <SettingsPageRow
+      title={title}
+      summary={summary}
+      icon={icon}
+      trailing={page === "versionHistory" ? <InstallNowButton /> : undefined}
+      onPress={() => router.push(route)}
+    />
+  );
+});
+
+/**
+ * A row for each page, in Core's order; a handful, so a plain list, mounted
+ * across frames from the top so the first frame holds only the rows on screen.
  */
 function SettingsPageRows({
   summaries,
@@ -33,16 +68,20 @@ function SettingsPageRows({
   developerVisible: boolean;
 }) {
   const { strings } = useLocalisation();
-  return visibleSettingsPages(developerVisible, strings).map(({ page, title, route, icon }) => (
-    <SettingsPageRow
-      key={page}
-      title={title}
-      summary={summaries[page]}
-      icon={icon}
-      trailing={page === "versionHistory" ? <InstallNowButton /> : undefined}
-      onPress={() => router.push(route)}
-    />
-  ));
+  return (
+    <StagedSections estimate={grid.row}>
+      {visibleSettingsPages(developerVisible, strings).map(({ page, title, route, icon }) => (
+        <SettingsIndexRow
+          key={page}
+          page={page}
+          title={title}
+          summary={summaries[page]}
+          icon={icon}
+          route={route}
+        />
+      ))}
+    </StagedSections>
+  );
 }
 
 /**

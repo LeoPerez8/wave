@@ -2,8 +2,10 @@ import { FollowCountryRow } from "@/settings/FollowCountryRow";
 import { useLocalisation } from "@/localisation/localisation";
 import { useState } from "react";
 import { Text, View } from "react-native";
+import { grid } from "@/catalog/grid";
 import { Hairline } from "@/catalog/Hairline";
 import { SettingsSwitch } from "@/components/SettingsSwitch";
+import { StagedSections } from "@/components/StagedSections";
 import { SearchField } from "@/search/SearchField";
 import { useFollowArtistSearch } from "@/library/followArtistSearch";
 import { useFollows } from "@/library/follows";
@@ -84,16 +86,19 @@ export default function FollowedArtistsSettingsScreen() {
             {strings.settings.youArentFollowingAnyArtistsYet}
           </Text>
         )}
-        {!searching &&
-          follows.map((artist) => (
-            <FollowArtistRow
-              key={artist.key}
-              artist={artist}
-              image={{ name: artist.name, thumbPath: null, artworkPath: null }}
-              follow={artist}
-              onOpen={open(artist)}
-            />
-          ))}
+        {!searching && (
+          <StagedSections estimate={grid.row}>
+            {follows.map((artist) => (
+              <FollowArtistRow
+                key={artist.key}
+                artist={artist}
+                image={{ name: artist.name, thumbPath: null, artworkPath: null }}
+                follow={artist}
+                onOpen={open(artist)}
+              />
+            ))}
+          </StagedSections>
+        )}
       </View>
     </SettingsPageScreen>
   );

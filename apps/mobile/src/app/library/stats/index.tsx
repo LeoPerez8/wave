@@ -9,6 +9,7 @@ import { TrackSkeletons } from "@/catalog/Skeletons";
 import { TitledSection } from "@/catalog/TitledSection";
 import { useChromeInset } from "@/chrome/chrome";
 import { ScreenHeader } from "@/components/ScreenHeader";
+import { StagedSections } from "@/components/StagedSections";
 import { openStatsSeeAll } from "@/library/routes";
 import { useListScrollable } from "@/motion/heldTouch";
 import { useRecaps, useTopAlbums, useTopArtists, useTopSongs, useTopGenres } from "@/stats/hooks";
@@ -22,6 +23,12 @@ import {
   RankedSongs,
   statsSongsContext,
 } from "@/stats/StatsViews";
+
+/**
+ * A Stats section's height for mounting them across frames: a title and a few
+ * rows, short so the first frame fills the screen.
+ */
+const STATS_SECTION_ESTIMATE = grid.row * 3;
 
 /** Stats: what was played most over a rolling period ending now. */
 export default function StatsScreen() {
@@ -43,49 +50,54 @@ export default function StatsScreen() {
         scrollEnabled={scrollable}
         contentContainerStyle={{ paddingHorizontal: grid.margin, paddingBottom: bottomInset }}
       >
-        {recaps !== undefined && recaps.length > 0 && (
-          <TitledSection title={strings.stats.recaps} first>
-            <RecapsRow recaps={recaps} />
-          </TitledSection>
-        )}
-        <PeriodTabs period={period} onChange={setPeriod} />
-        {topSongs === undefined && <TrackSkeletons label={strings.stats.loadingListeningStats} />}
-        {topSongs !== undefined && topSongs.length === 0 && <NothingPlayed period={period} />}
-        {topSongs !== undefined && topSongs.length > 0 && (
-          <TitledSection
-            title={strings.stats.rankings.songs}
-            action={{ label: strings.home.seeAll, onPress: () => openStatsSeeAll("songs", period) }}
-          >
-            <RankedSongs ranking={topSongs} context={statsSongsContext(period)} />
-          </TitledSection>
-        )}
-        {topAlbums !== undefined && topAlbums.length > 0 && (
-          <TitledSection
-            title={strings.stats.rankings.albums}
-            action={{
-              label: strings.home.seeAll,
-              onPress: () => openStatsSeeAll("albums", period),
-            }}
-          >
-            <RankedAlbums ranking={topAlbums} />
-          </TitledSection>
-        )}
-        {topArtists !== undefined && topArtists.length > 0 && (
-          <TitledSection
-            title={strings.stats.rankings.artists}
-            action={{
-              label: strings.home.seeAll,
-              onPress: () => openStatsSeeAll("artists", period),
-            }}
-          >
-            <RankedArtists ranking={topArtists} />
-          </TitledSection>
-        )}
-        {topGenres !== undefined && topGenres.length > 0 && (
-          <TitledSection title={strings.stats.genres}>
-            <GenrePodium genres={topGenres} />
-          </TitledSection>
-        )}
+        <StagedSections estimate={STATS_SECTION_ESTIMATE}>
+          {recaps !== undefined && recaps.length > 0 && (
+            <TitledSection title={strings.stats.recaps} first>
+              <RecapsRow recaps={recaps} />
+            </TitledSection>
+          )}
+          <PeriodTabs period={period} onChange={setPeriod} />
+          {topSongs === undefined && <TrackSkeletons label={strings.stats.loadingListeningStats} />}
+          {topSongs !== undefined && topSongs.length === 0 && <NothingPlayed period={period} />}
+          {topSongs !== undefined && topSongs.length > 0 && (
+            <TitledSection
+              title={strings.stats.rankings.songs}
+              action={{
+                label: strings.home.seeAll,
+                onPress: () => openStatsSeeAll("songs", period),
+              }}
+            >
+              <RankedSongs ranking={topSongs} context={statsSongsContext(period)} />
+            </TitledSection>
+          )}
+          {topAlbums !== undefined && topAlbums.length > 0 && (
+            <TitledSection
+              title={strings.stats.rankings.albums}
+              action={{
+                label: strings.home.seeAll,
+                onPress: () => openStatsSeeAll("albums", period),
+              }}
+            >
+              <RankedAlbums ranking={topAlbums} />
+            </TitledSection>
+          )}
+          {topArtists !== undefined && topArtists.length > 0 && (
+            <TitledSection
+              title={strings.stats.rankings.artists}
+              action={{
+                label: strings.home.seeAll,
+                onPress: () => openStatsSeeAll("artists", period),
+              }}
+            >
+              <RankedArtists ranking={topArtists} />
+            </TitledSection>
+          )}
+          {topGenres !== undefined && topGenres.length > 0 && (
+            <TitledSection title={strings.stats.genres}>
+              <GenrePodium genres={topGenres} />
+            </TitledSection>
+          )}
+        </StagedSections>
       </ScrollView>
     </View>
   );

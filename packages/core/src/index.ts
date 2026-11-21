@@ -3085,3 +3085,5 @@ export type { DjCell, DjPageRead, DjRow, DjSavedPage } from "./dj.ts";
 export { djSearchTiles } from "./djSearch.ts";
 export { djSeedFull } from "./dj.ts";
 export type { DjSearchFound } from "./djSearch.ts";
+
+export { stagedMounts, type StagedMountsInput } from "./stagedMounts.ts";
