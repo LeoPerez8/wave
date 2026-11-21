@@ -312,8 +312,8 @@ export function ArtistPage({
       <h2 className="artist-songs-heading">
         {online?.popular ? text.library.popular : text.library.songs}
       </h2>
-      {/* The table stays mounted under Popular: it reads the page's hero. */}
-      {online?.popular ? <div hidden>{children}</div> : children}
+      {/* Under Popular the table keeps only its header: it reads the page's hero and sorts the list. */}
+      {online?.popular ? <div className="artist-popular-head">{children}</div> : children}
       {songs.length > 0 && (
         <YtSongList
           songs={songs}

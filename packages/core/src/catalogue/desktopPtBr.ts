@@ -84,6 +84,13 @@ export const desktopPtBr = {
       share: "Copiar Link",
     },
   },
+  recap: {
+    tapToWatch: "Clique para assistir",
+  },
+  share: {
+    saveImage: "Salvar Imagem",
+    copyImage: "Copiar Imagem",
+  },
   library: {
     offlineTapOnline:
       "Você está offline. Clique em Online para tentar de novo quando estiver online.",

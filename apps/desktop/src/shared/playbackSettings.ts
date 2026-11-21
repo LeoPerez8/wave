@@ -1,3 +1,4 @@
+import type { ShuffleKind } from "@wave/core";
 import type { OutputDevice } from "./playback.ts";
 
 /**
@@ -11,6 +12,8 @@ export interface PlaybackSettings {
   readonly normalizeVolume: boolean;
   /** Minutes of streamed audio kept loaded ahead: 1, 2, 5, 10, 15 or 30. */
   readonly bufferMinutes: 1 | 2 | 5 | 10 | 15 | 30;
+  /** The kind of shuffle every shuffle uses (story 25a): Real, Smart or Even Shuffle. */
+  readonly shuffleKind: ShuffleKind;
   /** The queue passes over the songs marked explicit; off by default. */
   readonly dontPlayExplicit: boolean;
   /** A queue that runs out continues as a Magic Queue; on by default. */

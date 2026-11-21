@@ -78,6 +78,7 @@ export {
   EMPTY_QUEUE,
   REAL_SHUFFLE,
   RESTART_THRESHOLD_MS,
+  SHUFFLE_KINDS,
   currentEntry,
   nextRepeatMode,
   parseQueueState,
@@ -86,11 +87,13 @@ export {
   playReplacesQueue,
   reduceQueue,
   reshuffledUpNext,
+  shuffleReads,
   shuffledTrackIds,
   shufflesQueue,
   upNext,
   upNextMove,
   withPendingMoves,
+  writeShuffleKind,
 } from "./queue.ts";
 export type {
   PendingMove,
@@ -2786,6 +2789,9 @@ export {
   readPlaylistSongSorts,
   sortPlaylistSongs,
   storedPlaylistSongSort,
+  PLAYLIST_SONG_SORTS,
+  playlistReorders,
+  playlistSongSortLabelFor,
 } from "./playlistSongSort.ts";
 export type { PlaylistSongSort, PlaylistSortableSong } from "./playlistSongSort.ts";
 
@@ -2881,8 +2887,8 @@ export { MARQUEE, marqueeOffset, marqueePlan, marqueeStill, readsRightToLeft } f
 export { scanPath, scanPathKey, scanPathWithin, scanFileState } from "./desktopScan.ts";
 export type { ScanFolder } from "./desktopScan.ts";
 export type { MarqueeLine, MarqueeLineSize, MarqueePlan } from "./marquee.ts";
-export { desktopSongActions } from "./desktopSongMenu.ts";
-export type { DesktopSongSubject } from "./desktopSongMenu.ts";
+export { desktopSelectionActions, desktopSongActions } from "./desktopSongMenu.ts";
+export type { DesktopSelectionItem, DesktopSongSubject } from "./desktopSongMenu.ts";
 export { DESKTOP_SHORTCUTS, desktopKey, shortcutKeys } from "./desktopKeys.ts";
 export {
   allTableRows,

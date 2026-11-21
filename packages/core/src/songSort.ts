@@ -298,11 +298,16 @@ export const readSongSort = (saved: string | null, kind: SongListKind = "songs")
 
 const NAME_SORTS = SONG_SORTS.filter(({ key }) => key === "title");
 
-/** The top-level Library lists with sortable desktop headers. */
+/**
+ * The desktop tables with sortable headers that share one sort per kind: the top-level Library
+ * lists, and an artist's and a genre's songs. A playlist keeps its own (`PLAYLIST_SONG_SORTS`).
+ */
 export const libraryTableSortsFor = (kind: string): readonly SongSort[] => {
   switch (kind) {
     case "songs":
     case "favorites":
+    case "artist":
+    case "genre":
       return songSortsFor(kind);
     case "albums":
     case "artists":
@@ -320,5 +325,12 @@ export const readLibraryTableSort = (choices: readonly SongSort[], saved: string
 };
 
 /** A new header starts in its first offered direction. The current one reverses when possible. */
-export const nextHeaderSort = (choices: readonly SongSort[], current: SongSort, key: string) =>
-  choices.find((sort) => sort.key === key && !sameSongSort(sort, current));
+export const nextHeaderSort = <S extends { readonly key: string; readonly descending: boolean }>(
+  choices: readonly S[],
+  current: S,
+  key: string,
+): S | undefined =>
+  choices.find(
+    (sort) =>
+      sort.key === key && !(sort.key === current.key && sort.descending === current.descending),
+  );

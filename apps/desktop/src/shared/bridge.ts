@@ -11,7 +11,13 @@ import type {
   QueueRow,
 } from "./playerView.ts";
 import type { WindowSettings } from "./windowSettings.ts";
-import type { DatedRelease, LanguageChoice, SongSortKey, ThemeEdit } from "@wave/core";
+import type {
+  DatedRelease,
+  LanguageChoice,
+  PlaylistSongSort,
+  SongSortKey,
+  ThemeEdit,
+} from "@wave/core";
 
 import type { LanguageView } from "./language.ts";
 import type { LibraryCounts } from "@wave/client/db/counts";
@@ -42,8 +48,8 @@ import type {
   MissingSongsList,
   MissingSongsView,
 } from "./downloads.ts";
-import type { GeniusPhase, SongGenius, SongLyrics, SongTranslation } from "./lyrics.ts";
 import type { GeniusHitOpened, GeniusLyricsSearchView } from "./geniusLyricsSearch.ts";
+import type { GeniusPhase, SongGenius, SongLyrics, SongTranslation } from "./lyrics.ts";
 import {
   PLAYLIST_CALLS,
   playlistBridge,
@@ -59,8 +65,8 @@ import {
   type FollowsBridge,
   type FollowsContract,
 } from "./follows.ts";
-import type { StatsPeriod, StatsRanking } from "@wave/core";
-import type { ArtistStatsPage, StatsOverview, StatsRow } from "./stats.ts";
+import type { RecapPeriod, StatsPeriod, StatsRanking } from "@wave/core";
+import type { ArtistStatsPage, DesktopRecap, StatsOverview, StatsRow } from "./stats.ts";
 import type {
   ActionSurface,
   SongMenu,
@@ -74,6 +80,10 @@ import type {
   CollectionRunAction,
   CollectionRunResult,
   CollectionTarget,
+  SelectionMenu,
+  SelectionRunAction,
+  SelectionRunResult,
+  SelectionTarget,
 } from "./collectionActions.ts";
 import {
   LYRICS_AND_TAGS_CALLS,
@@ -192,6 +202,16 @@ export interface BridgeContract
     readonly args: readonly [requestId: string];
     readonly result: void;
   };
+  /** Search's online lyrics for a query: Genius's songs, or the line to show instead. */
+  readonly "lyrics.searchOnline": {
+    readonly args: readonly [query: string];
+    readonly result: GeniusLyricsSearchView;
+  };
+  /** A click on a hit of the last answer, by Genius's song id. */
+  readonly "lyrics.openOnlineHit": {
+    readonly args: readonly [id: number];
+    readonly result: GeniusHitOpened;
+  };
   /** Whether the Lyrics view's Translate button is on; kept on this computer. */
   readonly "lyrics.translateOn": { readonly args: readonly []; readonly result: boolean };
   readonly "lyrics.setTranslateOn": {
@@ -202,16 +222,6 @@ export interface BridgeContract
   readonly "lyrics.translation": {
     readonly args: readonly [trackId: string, language: LanguageView["language"]];
     readonly result: SongTranslation;
-  };
-  /** Search's online lyrics for a query: Genius's songs, or the line to show instead. */
-  readonly "lyrics.searchOnline": {
-    readonly args: readonly [query: string];
-    readonly result: GeniusLyricsSearchView;
-  };
-  /** A click on a hit of the last answer, by Genius's song id. */
-  readonly "lyrics.openOnlineHit": {
-    readonly args: readonly [id: number];
-    readonly result: GeniusHitOpened;
   };
   readonly "playback.setSleepTimer": {
     readonly args: readonly [choice: SleepTimerChoice | null];
@@ -380,7 +390,11 @@ export interface BridgeContract
   };
   readonly "library.counts": { readonly args: readonly []; readonly result: LibraryCounts };
   readonly "library.sortBy": {
-    readonly args: readonly [kind: BrowseKind, key: SongSortKey];
+    readonly args: readonly [
+      kind: BrowseKind,
+      key: SongSortKey | PlaylistSongSort["key"],
+      playlistId?: number,
+    ];
     readonly result: void;
   };
   readonly "library.scanStatus": { readonly args: readonly []; readonly result: ScanStatus };
@@ -422,6 +436,18 @@ export interface BridgeContract
       playlistId?: number,
     ];
     readonly result: CollectionRunResult;
+  };
+  readonly "collections.selectionActions": {
+    readonly args: readonly [target: SelectionTarget];
+    readonly result: SelectionMenu;
+  };
+  readonly "collections.runSelection": {
+    readonly args: readonly [
+      target: SelectionTarget,
+      action: SelectionRunAction,
+      playlistId?: number,
+    ];
+    readonly result: SelectionRunResult;
   };
   readonly "songs.run": {
     readonly args: readonly [target: SongTarget, action: SongRunAction, playlistId?: number];
@@ -503,6 +529,33 @@ export interface BridgeContract
     ];
     readonly result: string | null;
   };
+  /** Every period with a Recap now, newest first. */
+  readonly "stats.recaps": { readonly args: readonly []; readonly result: Page<RecapPeriod> };
+  /**
+   * Opens the Recap [id] (Core's `recapId`): Home stops announcing it. Null when the period has
+   * no Recap. Its music follows `stats.recapStory` until `stats.recapClosed`.
+   */
+  readonly "stats.recap": {
+    readonly args: readonly [id: string];
+    readonly result: DesktopRecap | null;
+  };
+  /** Story [index] of the open Recap shows: with nothing playing as it opened, its song plays. */
+  readonly "stats.recapStory": { readonly args: readonly [index: number]; readonly result: void };
+  /** The Recap closed: the queue comes back as it was. */
+  readonly "stats.recapClosed": { readonly args: readonly []; readonly result: void };
+  /**
+   * Saves a rendered card's PNG (base64, at most 1080 by 1920) through the system's save
+   * dialog, which opens at [fileName]. False when the dialog was cancelled.
+   */
+  readonly "cards.saveImage": {
+    readonly args: readonly [fileName: string, pngBase64: string];
+    readonly result: boolean;
+  };
+  /** Puts a rendered card's PNG (base64, at most 1080 by 1920) on the clipboard. */
+  readonly "cards.copyImage": {
+    readonly args: readonly [pngBase64: string];
+    readonly result: void;
+  };
 }
 
 export type BridgeCall = keyof BridgeContract;
@@ -529,11 +582,11 @@ export const BRIDGE_CALLS = [
   "lyrics.song",
   "lyrics.genius",
   "lyrics.cancelGenius",
+  "lyrics.searchOnline",
+  "lyrics.openOnlineHit",
   "lyrics.translateOn",
   "lyrics.setTranslateOn",
   "lyrics.translation",
-  "lyrics.searchOnline",
-  "lyrics.openOnlineHit",
 
   "library.artwork",
   "library.cover",
@@ -616,6 +669,8 @@ export const BRIDGE_CALLS = [
   "account.answerInvitation",
   "collections.actions",
   "collections.run",
+  "collections.selectionActions",
+  "collections.runSelection",
   ...PLAYLIST_CALLS,
   ...LYRICS_AND_TAGS_CALLS,
   "search.library",
@@ -645,6 +700,12 @@ export const BRIDGE_CALLS = [
   "stats.ranking",
   "stats.play",
   "stats.open",
+  "stats.recaps",
+  "stats.recap",
+  "stats.recapStory",
+  "stats.recapClosed",
+  "cards.saveImage",
+  "cards.copyImage",
   ...HISTORY_CALLS,
   ...RECOGNIZE_CALLS,
 ] as const satisfies readonly BridgeCall[] &
@@ -685,6 +746,15 @@ export interface WaveBridge {
       key: string,
       full: boolean,
     ) => Promise<string | null>;
+    readonly recaps: () => Promise<Page<RecapPeriod>>;
+    readonly recap: (id: string) => Promise<DesktopRecap | null>;
+    readonly recapStory: (index: number) => Promise<void>;
+    readonly recapClosed: () => Promise<void>;
+  };
+  /** A rendered card's image (`renderer/src/cardImage.ts` draws it). */
+  readonly cards: {
+    readonly saveImage: (fileName: string, pngBase64: string) => Promise<boolean>;
+    readonly copyImage: (pngBase64: string) => Promise<void>;
   };
   readonly system: { readonly mediaBackend: () => Promise<"native" | "chromium"> };
   readonly home: {
@@ -721,14 +791,14 @@ export interface WaveBridge {
       phase: GeniusPhase,
     ) => Promise<SongGenius>;
     readonly cancelGenius: (requestId: string) => Promise<void>;
+    readonly searchOnline: (query: string) => Promise<GeniusLyricsSearchView>;
+    readonly openOnlineHit: (id: number) => Promise<GeniusHitOpened>;
     readonly translateOn: () => Promise<boolean>;
     readonly setTranslateOn: (on: boolean) => Promise<boolean>;
     readonly translation: (
       trackId: string,
       language: LanguageView["language"],
     ) => Promise<SongTranslation>;
-    readonly searchOnline: (query: string) => Promise<GeniusLyricsSearchView>;
-    readonly openOnlineHit: (id: number) => Promise<GeniusHitOpened>;
   };
   readonly library: {
     readonly artwork: (hash: string, large: boolean) => Promise<string | null>;
@@ -750,7 +820,16 @@ export interface WaveBridge {
     readonly exclude: () => Promise<void>;
     readonly removeRoot: (path: string) => Promise<void>;
     readonly include: (path: string) => Promise<void>;
-    readonly sortBy: (kind: BrowseKind, key: SongSortKey) => Promise<void>;
+    /**
+     * A click on a table's [key] header: starts that sort or reverses it. A playlist's page
+     * ([kind] `playlist`, with its [playlistId]) keeps its own sort; the other tables share one
+     * per kind.
+     */
+    readonly sortBy: (
+      kind: BrowseKind,
+      key: SongSortKey | PlaylistSongSort["key"],
+      playlistId?: number,
+    ) => Promise<void>;
   };
   readonly songs: {
     /** Where each song's download is and whether its file failed to play; 200 songs at most. */
@@ -871,6 +950,13 @@ export interface WaveBridge {
       action: CollectionRunAction,
       playlistId?: number,
     ) => Promise<CollectionRunResult>;
+    /** The selection bar's entries for songs and collections checked together. */
+    readonly selectionActions: (target: SelectionTarget) => Promise<SelectionMenu>;
+    readonly runSelection: (
+      target: SelectionTarget,
+      action: SelectionRunAction,
+      playlistId?: number,
+    ) => Promise<SelectionRunResult>;
   };
   readonly playlists: PlaylistBridge;
   /** Settings › Lyrics and tags. */
@@ -905,11 +991,11 @@ export const createBridge = (invoke: Invoke): WaveBridge => ({
     song: (trackId) => invoke("lyrics.song", trackId),
     genius: (trackId, requestId, phase) => invoke("lyrics.genius", trackId, requestId, phase),
     cancelGenius: (requestId) => invoke("lyrics.cancelGenius", requestId),
+    searchOnline: (query) => invoke("lyrics.searchOnline", query),
+    openOnlineHit: (id) => invoke("lyrics.openOnlineHit", id),
     translateOn: () => invoke("lyrics.translateOn"),
     setTranslateOn: (on) => invoke("lyrics.setTranslateOn", on),
     translation: (trackId, language) => invoke("lyrics.translation", trackId, language),
-    searchOnline: (query) => invoke("lyrics.searchOnline", query),
-    openOnlineHit: (id) => invoke("lyrics.openOnlineHit", id),
   },
   library: {
     artwork: (hash, large) => invoke("library.artwork", hash, large),
@@ -927,7 +1013,10 @@ export const createBridge = (invoke: Invoke): WaveBridge => ({
     exclude: () => invoke("library.exclude"),
     removeRoot: (path) => invoke("library.removeRoot", path),
     include: (path) => invoke("library.include", path),
-    sortBy: (kind, key) => invoke("library.sortBy", kind, key),
+    sortBy: (kind, key, playlistId) =>
+      playlistId === undefined
+        ? invoke("library.sortBy", kind, key)
+        : invoke("library.sortBy", kind, key, playlistId),
   },
   songs: {
     states: (ids) => invoke("songs.states", ids),
@@ -1013,6 +1102,9 @@ export const createBridge = (invoke: Invoke): WaveBridge => ({
   collections: {
     actions: (target, options) => invoke("collections.actions", target, options),
     run: (target, action, playlistId) => invoke("collections.run", target, action, playlistId),
+    selectionActions: (target) => invoke("collections.selectionActions", target),
+    runSelection: (target, action, playlistId) =>
+      invoke("collections.runSelection", target, action, playlistId),
   },
   playlists: playlistBridge(invoke),
   lyricsAndTags: lyricsAndTagsBridge(invoke),
@@ -1048,6 +1140,14 @@ export const createBridge = (invoke: Invoke): WaveBridge => ({
     ranking: (ranking, period) => invoke("stats.ranking", ranking, period),
     play: (period, key, full) => invoke("stats.play", period, key, full),
     open: (ranking, period, key, full) => invoke("stats.open", ranking, period, key, full),
+    recaps: () => invoke("stats.recaps"),
+    recap: (id) => invoke("stats.recap", id),
+    recapStory: (index) => invoke("stats.recapStory", index),
+    recapClosed: () => invoke("stats.recapClosed"),
+  },
+  cards: {
+    saveImage: (fileName, pngBase64) => invoke("cards.saveImage", fileName, pngBase64),
+    copyImage: (pngBase64) => invoke("cards.copyImage", pngBase64),
   },
   history: historyBridge(invoke),
   recognize: recognizeBridge(invoke),

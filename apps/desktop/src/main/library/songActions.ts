@@ -57,7 +57,7 @@ export interface SongActionPorts {
 const rowKey = (song: ListedSong) => ("trackId" in song ? song.trackId : -song.itemId);
 
 /** The target's entries in list order, including stored streamed songs on a playlist page. */
-const targetEntries = (db: LibraryDatabase, target: SongTarget): ListedSong[] => {
+export const targetEntries = (db: LibraryDatabase, target: SongTarget): ListedSong[] => {
   const { scope } = target;
   const mixed =
     scope.kind === "playlist" && scope.id !== undefined ? playlistSongs(db, scope.id) : undefined;
