@@ -189,7 +189,9 @@ test("Share picks lyric lines and makes an image of them, saved or copied", asyn
     await expect(card).toContainText("Wave");
     await expect(card.locator(".lyric-card-cover img")).toHaveCount(1);
     await expect(card.locator(".lyric-card-mark svg")).toHaveCount(1);
-    await expect.poll(() => card.evaluate((element) => element.offsetWidth)).toBe(1080);
+    await expect
+      .poll(() => card.evaluate((element) => (element as HTMLElement).offsetWidth))
+      .toBe(1080);
     await expect(preview).toContainText("Click the card to change its colour");
 
     // A click on the card moves to the cover's next colour.

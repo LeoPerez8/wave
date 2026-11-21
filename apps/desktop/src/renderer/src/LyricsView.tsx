@@ -438,7 +438,9 @@ export function LyricsView({
           {lyrics.kind === "synced" && <KaraokeButton on={karaokeOn} onChange={setKaraokeOn} />}
           <TranslateButton on={translateOn} onChange={setTranslateOn} />
           {shareable !== null && (
-            <ShareLyricsButton onClick={() => setPicked({ trackId, selection: null, card: null })} />
+            <ShareLyricsButton
+              onClick={() => setPicked({ trackId, selection: null, card: null })}
+            />
           )}
         </div>
       )}

@@ -273,7 +273,12 @@ export function LyricCardPreview({
       tabIndex={-1}
     >
       <div className="lyric-card-preview-head">
-        <button className="icon-button" aria-label={share.close} title={share.close} onClick={onClose}>
+        <button
+          className="icon-button"
+          aria-label={share.close}
+          title={share.close}
+          onClick={onClose}
+        >
           <Icon name="close" />
         </button>
       </div>
