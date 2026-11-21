@@ -90,6 +90,7 @@ export const desktopPtBr = {
   share: {
     saveImage: "Salvar Imagem",
     copyImage: "Copiar Imagem",
+    tapToChangeColour: "Clique no cartão para mudar a cor",
   },
   library: {
     offlineTapOnline:

@@ -46,6 +46,7 @@ export function SidePanel({
   geniusAccess,
   onGeniusSignIn,
   onSongDrop,
+  notify,
 }: {
   readonly tab: PanelTab;
   readonly onTab: (tab: PanelTab) => void;
@@ -66,6 +67,8 @@ export function SidePanel({
   readonly onGeniusSignIn: () => void;
   /** Songs dragged from a list and dropped in the Queue's Up Next [at]. */
   readonly onSongDrop?: (songs: DraggedSongs, at: UpNextPlace | undefined) => void;
+  /** Shows a toast: the lyrics card's Save Image and Copy Image answers. */
+  readonly notify: (message: string) => void;
 }) {
   const tab = shownPanelTab(asked, ytMusic);
   const command = (next: PlaybackCommand) => run(window.wave.playback.command(next));
@@ -121,6 +124,7 @@ export function SidePanel({
             onSeek={(positionMs) => run(window.wave.playback.seek(positionMs))}
             geniusAccess={geniusAccess}
             onGeniusSignIn={onGeniusSignIn}
+            notify={notify}
             foreground={!hidden}
           />
         ) : tab === "related" ? (

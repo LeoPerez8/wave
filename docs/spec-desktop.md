@@ -338,6 +338,12 @@ The prototype was approved on 2026-11-18 after an Impeccable critique; its decis
   panel's own control on every tab. Now Playing (artwork,
   title, lyrics) opens from the bar's artwork or title and closes with Esc. Focus lands on Now
   Playing itself, so Space still plays and pauses; Tab reaches its close button.
+- Share in the Lyrics view (the panel's tab and Now Playing, after Karaoke and Translate) picks
+  up to five lines next to each other as the phone does (Core's `tapLyricLine`); while picking, a
+  click picks instead of seeking and synced lyrics stop following the song. Cancel, Esc or a new
+  song leaves picking. Next previews the phone's lyrics card, 1080 px wide; a click on it moves
+  to the cover's next colour, and Save Image (the save dialog, at the phone's file name) and Copy
+  Image (the PNG on the clipboard) stand in for the share sheet.
 - Minimum window 960×600. Below 1120 px wide the sidebar shows icons only, a playlist as
   its first letter, and Ctrl+F opens the Search field in the title bar. When the content is
   narrower than 760 px, tables drop the Album column, the search top result stacks and hero
