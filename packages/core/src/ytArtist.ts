@@ -1072,6 +1072,22 @@ export const ytArtistPageView = <S extends YtSong, L, A>(
     : quiet(state.failure, true, page?.similar ?? [], page === null ? null : ytArtistAbout(page));
 };
 
+/**
+ * [view] while the page waits (for the screen to settle, or for the Library
+ * to say which of its songs it has): its name and image over the loading
+ * rows, with nothing that would move once the songs arrive.
+ */
+export const ytArtistPageWaiting = <S extends YtSong, L, A>(
+  view: YtArtistPageView<S, L, A>,
+): YtArtistPageView<S, L, A> => ({
+  ...view,
+  songs: [],
+  shelves: [],
+  similar: [],
+  about: null,
+  note: "loading",
+});
+
 export function* libraryArtistFinderSteps<A extends { readonly name: string }>(
   artists: readonly A[],
 ): Generator<void, (name: string) => A | null> {

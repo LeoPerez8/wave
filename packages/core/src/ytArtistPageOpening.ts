@@ -2,6 +2,7 @@ import { ytArtistOpeningState } from "./ytArtistOpening.ts";
 import {
   ytArtistPageAsks,
   ytArtistPageView,
+  ytArtistPageWaiting,
   ytArtistAbout,
   ytArtistSavedStands,
   type YtArtistPageViewContext,
@@ -41,10 +42,7 @@ export const ytArtistPageOpening = <S extends YtSong, L, A>(
     state.saved?.outcome === "found" &&
     ytArtistSavedStands(state.saved, context.now);
   return {
-    view:
-      !finder && view.note === null
-        ? { ...view, songs: [], shelves: [], similar: [], about: null, note: "loading" as const }
-        : view,
+    view: !finder && view.note === null ? ytArtistPageWaiting(view) : view,
     ask:
       context.online &&
       context.settled &&

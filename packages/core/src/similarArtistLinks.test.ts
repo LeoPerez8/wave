@@ -34,4 +34,8 @@ describe("which page a similar artist opens", () => {
     );
     assert.equal(link?.library, null);
   });
+
+  test("until the Library's artists have answered, no tile shows", () => {
+    assert.deepEqual(similarArtistLinks([similar("Air", "UCair")], null), []);
+  });
 });
