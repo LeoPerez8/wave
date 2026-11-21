@@ -1,7 +1,7 @@
 /** Magic Queue reads its seed's radio and ranks it with the last available Wave signals. */
 import {
   catalogSeedKey,
-  djFamilyRadioAllowed,
+  djRadioSongAllowed,
   djNewReleasesRanked,
   djMoodRanked,
   djVarietyCandidates,
@@ -172,15 +172,8 @@ export const magicQueueYtCandidates = (
       const current = sessionNow?.() ?? session;
       const read = readers.current(session.id, group);
       // Old artist radios still provide an offline fallback until an ordered page is saved.
-      const familyAllowed = (id: string, songArtists: readonly string[]): boolean => {
-        const families = current.djGenreRadios?.find(
-          (radio) => radio.id === id || `artist:${radio.id}` === id,
-        )?.families;
-        return (
-          families === undefined ||
-          families.every((family) => djFamilyRadioAllowed(family, songArtists, profileOf, graph))
-        );
-      };
+      const familyAllowed = (id: string, songArtists: readonly string[]): boolean =>
+        djRadioSongAllowed(current, id, songArtists, profileOf, graph);
       const fallback = catalog.flatMap((entry) => {
         const matching = entry.radios.filter((radio) =>
           artists.some((name) => catalogSeedKey(name) === radio.seed),
