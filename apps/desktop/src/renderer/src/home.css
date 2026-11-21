@@ -29,6 +29,7 @@
   margin: 0;
 }
 /* Section heads are the phone's catalog lines: small, tracked caps (story 63). */
+.home-page section > .stats-section-heading > h2,
 .home-page section > h2 {
   font-size: 12px;
   line-height: 16px;
@@ -37,6 +38,9 @@
   text-transform: uppercase;
   color: var(--color-secondary);
   margin-bottom: 12px;
+}
+.home-page section > .stats-section-heading > h2 {
+  margin-bottom: 0;
 }
 .home-page .tile > .artwork {
   border-radius: 6px;

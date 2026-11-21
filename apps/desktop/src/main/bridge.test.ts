@@ -3783,6 +3783,81 @@ test("a month with three hours listened has a Recap on Home and Stats until it i
   });
 });
 
+test("Home's Most played streams a streamed song, and See all reads only its own shelves", async () => {
+  await withFile(async (file) => {
+    const { runtime, exposed, handlers } = connect(file);
+    const wave = exposed.get("wave") as WaveBridge;
+    try {
+      await runtime.runPromise(
+        Effect.gen(function* () {
+          const db = (yield* Database) as unknown as TestDatabase;
+          const local = addTrack(db, { title: "Pink Moon", album: "Pink Moon", addedAt: 1 });
+          const song = {
+            videoId: "bcdefghijkl",
+            title: "Streamed Road",
+            artists: ["Streamed Artist"],
+            album: "Streamed Album",
+            albumId: null,
+            artworkUrl: null,
+            durationMs: 180000,
+            explicit: false,
+          };
+          for (const [trackId, at] of [
+            [String(local), 100],
+            ["yt:bcdefghijkl", 200],
+            ["yt:bcdefghijkl", 300],
+          ] as const)
+            recordPlay(
+              db,
+              {
+                trackId,
+                startedAt: at,
+                counted: true,
+                listenedMs: 180000,
+                durationMs: 180000,
+                source: "desktop",
+                endReason: "completed",
+                context: null,
+              },
+              false,
+              trackId === "yt:bcdefghijkl" ? song : undefined,
+            );
+        }),
+      );
+      const mostPlayed = async () =>
+        (await wave.home.view()).items.find((s) => s.id === "most-played")!.rows.items;
+      await wave.settings.setYtMusic(false);
+      const [off] = await mostPlayed();
+      assert.deepEqual([off?.videoId, off?.playCount, off?.unavailable], ["bcdefghijkl", 2, true]);
+      await assert.rejects(wave.home.play("most-played", 0));
+      await wave.settings.setYtMusic(true);
+      assert.deepEqual(
+        (await mostPlayed()).map((row) => [row.title, row.playCount, row.unavailable]),
+        [
+          ["Streamed Road", 2, false],
+          ["Pink Moon", 1, false],
+        ],
+      );
+      await wave.home.play("most-played", 0);
+      assert.equal((await wave.playback.view()).current?.videoId, "bcdefghijkl");
+      assert.deepEqual(
+        (await wave.playback.queue(0, 10)).items.map((row) => row.videoId ?? row.title),
+        ["bcdefghijkl", "Pink Moon"],
+      );
+
+      assert.deepEqual(
+        (await wave.home.seeAll("recently-added")).items.map((row) => row.title),
+        ["Pink Moon"],
+      );
+      assert.equal((await wave.home.seeAll("recently-played")).total, 1);
+      for (const bad of ["favorites", "stats", 1, undefined])
+        await assert.rejects(handlers.get("home.seeAll")!(trusted, bad), /refused/i);
+    } finally {
+      await runtime.dispose();
+    }
+  });
+});
+
 test("Home's editor reorders, removes and adds sections at once, and main refuses a bad edit", async () => {
   await withFile(async (file) => {
     const first = connect(file);

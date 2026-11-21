@@ -64,7 +64,7 @@ import {
   type PlaylistContract,
 } from "./playlists.ts";
 import type { LibrarySearchView } from "./search.ts";
-import type { HomeView } from "./home.ts";
+import type { HomeRow, HomeSeeAllSection, HomeView } from "./home.ts";
 import type { HomeFollowView, HomeReleaseOpening } from "./homeFollow.ts";
 import {
   FOLLOWS_CALLS,
@@ -533,6 +533,10 @@ export interface BridgeContract
     readonly args: readonly [edit: HomeArrangementEdit];
     readonly result: HomeArrangement;
   };
+  readonly "home.seeAll": {
+    readonly args: readonly [section: HomeSeeAllSection];
+    readonly result: Page<HomeRow>;
+  };
   readonly "stats.overview": {
     readonly args: readonly [period: StatsPeriod];
     readonly result: StatsOverview;
@@ -723,6 +727,7 @@ export const BRIDGE_CALLS = [
   "home.releaseArtwork",
   "home.arrangement",
   "home.edit",
+  "home.seeAll",
   ...FOLLOWS_CALLS,
   ...LINK_CALLS,
   ...ARTIST_PAGE_CALLS,
@@ -809,6 +814,8 @@ export interface WaveBridge {
     readonly arrangement: () => Promise<HomeArrangement>;
     /** Makes one change of Home's editor to the synced arrangement and gives it as it is then. */
     readonly edit: (edit: HomeArrangementEdit) => Promise<HomeArrangement>;
+    /** The full list behind Recently Added or Recently Played, for its See all page. */
+    readonly seeAll: (section: HomeSeeAllSection) => Promise<Page<HomeRow>>;
   };
   /** An artist page's Follow button and Settings › Followed artists. */
   readonly follows: FollowsBridge;
@@ -1174,6 +1181,7 @@ export const createBridge = (invoke: Invoke): WaveBridge => ({
     releaseArtwork: (key) => invoke("home.releaseArtwork", key),
     arrangement: () => invoke("home.arrangement"),
     edit: (edit) => invoke("home.edit", edit),
+    seeAll: (section) => invoke("home.seeAll", section),
   },
   follows: followsBridge(invoke),
   links: linkBridge(invoke),

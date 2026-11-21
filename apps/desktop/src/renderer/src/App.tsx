@@ -2,6 +2,7 @@ import { VersionHistory } from "./VersionHistory.tsx";
 import { Links } from "./Links.tsx";
 import {
   checkedTableRow,
+  homeSectionTitle,
   listDuration,
   readThemeChoice,
   recapId,
@@ -82,6 +83,7 @@ import { FollowedArtistsSettings } from "./FollowedArtistsSettings.tsx";
 import { geniusAccess } from "./useSongGenius.ts";
 import { Home } from "./Home.tsx";
 import { HomeSettings } from "./HomeEditor.tsx";
+import { HomeSeeAll, type HomeSeeAllRoute } from "./HomeSeeAll.tsx";
 import { Stats } from "./Stats.tsx";
 import { RecapViewer } from "./RecapViewer.tsx";
 import type { DesktopRecap, StatsRoute } from "../../shared/stats.ts";
@@ -105,6 +107,7 @@ type Route =
   | { readonly kind: "graveyard"; readonly id: number }
   | StatsRoute
   | HistoryRoute
+  | HomeSeeAllRoute
   | YtRoute;
 const defaultStats: StatsRoute = { kind: "stats", period: "month" };
 const sections = ["playlists", "artists", "albums", "songs", "genres", "favorites"] as const;
@@ -374,6 +377,7 @@ export function App() {
       route.kind === "graveyard" ||
       route.kind === "stats" ||
       route.kind === "history" ||
+      route.kind === "homeSeeAll" ||
       isYtRoute(route)
         ? { kind: "songs" }
         : route,
@@ -693,10 +697,12 @@ export function App() {
           : text.stats.rankings[route.ranking]
         : route.kind === "history"
           ? text.settings.pages.history
-          : ((hero && tagTitle(hero.title, route.kind)) ??
-            (route.kind in labels
-              ? (labels[route.kind as keyof typeof labels] as string)
-              : labels.library));
+          : route.kind === "homeSeeAll"
+            ? homeSectionTitle(route.section, text)
+            : ((hero && tagTitle(hero.title, route.kind)) ??
+              (route.kind in labels
+                ? (labels[route.kind as keyof typeof labels] as string)
+                : labels.library));
   const playlistId = route.kind === "playlist" ? route.id : undefined;
   const scanning = scan?.status === "scanning";
   // A playlist's image is an edit none of the three counts, and its page shows it.
@@ -1319,7 +1325,17 @@ export function App() {
             onMenu={(row, at) =>
               actions.openMenu({ scope: { kind: "songs" }, ids: [row.id] }, row.title, at)
             }
+            onStreamedMenu={(row, at) =>
+              actions.openItems(
+                text.desktopLibrary.songMenu(row.title),
+                streamed.items(row.videoId!),
+                at,
+              )
+            }
+            entry={route}
           />
+        ) : route.kind === "homeSeeAll" ? (
+          <HomeSeeAll route={route} revision={revision} go={go} onError={failed} />
         ) : route.kind === "stats" ? (
           <Stats
             route={route}
@@ -1469,6 +1485,7 @@ export function App() {
           geniusAccess={geniusAccess(account)}
           onGeniusSignIn={openGeniusSignIn}
           onSongDrop={(songs, at) => dropSongs(songs, { queue: at })}
+          notify={notify}
           onClose={() => {
             // Focus goes back to the bar's button for this tab; Related opens from Queue's.
             const opener = panel.tab === "lyrics" ? labels.lyrics : labels.queue;
@@ -1488,6 +1505,7 @@ export function App() {
           actions={nowPlayingActions}
           geniusAccess={geniusAccess(account)}
           onGeniusSignIn={openGeniusSignIn}
+          notify={notify}
         />
       )}
       <PlayerBar

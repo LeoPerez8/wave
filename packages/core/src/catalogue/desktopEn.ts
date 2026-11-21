@@ -99,6 +99,8 @@ export const desktopEn = {
     // Buttons under a card, in the desktop's title case.
     saveImage: "Save Image",
     copyImage: "Copy Image",
+    // The lyrics card is clicked, not tapped.
+    tapToChangeColour: "Click the card to change its colour",
   },
   library: {
     // The artist page's quiet lines: Online is clicked, not tapped.
