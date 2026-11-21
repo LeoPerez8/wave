@@ -12,12 +12,26 @@ const JVM_ARGS = "org.gradle.jvmargs";
 /** CI runners have 16 GB; prebuild's 2 GB default leaves Gradle short on a release build. */
 const HEAP = "-Xmx4g";
 
+/**
+ * Prebuild's 512 MB of class metadata ran out in a full release build's ART profile step, and
+ * the out-of-memory Gradle then hung instead of exiting.
+ */
+const METASPACE = "-XX:MaxMetaspaceSize=1g";
+
 const withHeap = (jvmargs: string): string =>
-  [HEAP, ...jvmargs.split(/\s+/).filter((arg) => arg !== "" && !arg.startsWith("-Xmx"))].join(" ");
+  [
+    HEAP,
+    METASPACE,
+    ...jvmargs
+      .split(/\s+/)
+      .filter(
+        (arg) => arg !== "" && !arg.startsWith("-Xmx") && !arg.startsWith("-XX:MaxMetaspaceSize="),
+      ),
+  ].join(" ");
 
 /**
  * Turns on Gradle's build cache, so a build reuses task outputs from earlier
- * builds, and raises Gradle's heap. Replaces the setting from an earlier run.
+ * builds, and raises Gradle's heap and class-metadata limit. Replaces the setting from an earlier run.
  */
 export const addBuildCacheProperties = (properties: Properties): Properties => [
   ...properties
