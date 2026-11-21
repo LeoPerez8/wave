@@ -83,8 +83,16 @@ for app in phone desktop; do
   # The desktop's notes count from its own previous release (the Patch notes job).
   if [ "$app" = desktop ]; then echo "desktopSince=$since" | tee -a "$out"; fi
   bump=()
+  merged=()
   if [ -n "$since" ] && git rev-parse -q --verify "refs/tags/$since^{commit}" > /dev/null; then
-    files="$(git diff --name-only "refs/tags/$since" HEAD)"
+    # A moved file counts under its old path too, so moving the phone's code into the desktop's
+    # still changes the phone.
+    files="$(git diff --name-only --no-renames "refs/tags/$since" HEAD)"
+    # Each change merged since then (a PR's merge or squash, or a commit pushed to main), with its
+    # own files: whether the workspace files reach the phone is decided per change.
+    git log --first-parent --diff-merges=first-parent --no-renames --name-only \
+      --format='commit %H' "refs/tags/$since..HEAD" > "$tmp/merged-$app.txt"
+    merged=(--merged "$tmp/merged-$app.txt")
     # A version bump of the phone's package.json alone (a version the desktop released alone
     # made one) doesn't count.
     git show "refs/tags/$since:$package" > "$tmp/before.json" 2> /dev/null || : > "$tmp/before.json"
@@ -103,6 +111,6 @@ for app in phone desktop; do
     echo "${app}Release=$(promotes "$app")" | tee -a "$out"
     continue
   fi
-  printf '%s\n' "$files" | node "$here/changes.ts" ${bump[@]+"${bump[@]}"} \
+  printf '%s\n' "$files" | node "$here/changes.ts" ${bump[@]+"${bump[@]}"} ${merged[@]+"${merged[@]}"} \
     | grep -E "^${app}Release=" | tee -a "$out"
 done

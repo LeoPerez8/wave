@@ -56,9 +56,11 @@ jobs:
   # What the change touches, by the rule in scripts/ci/changes.ts. Jobs that only
   # matter for some parts of the repo read these outputs to skip themselves. On main and tags,
   # phoneRelease and desktopRelease say whether each app changed since its own previous release,
-  # which decides whether mobile.yml and desktop.yml run at all.
+  # which decides whether mobile.yml and desktop.yml run at all. They count what the release
+  # source holds: on main, the Version job's bump may sit on a newer tip than the pushed commit.
   changes:
     name: Changes
+    needs: [source]
     runs-on: ubuntu-latest
     permissions:
       contents: read
@@ -78,7 +80,7 @@ jobs:
     steps:
       - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.1.0
         with:
-          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+          ref: ${{ needs.source.outputs.sha }}
           fetch-depth: 0
           sparse-checkout: scripts/ci
           persist-credentials: false

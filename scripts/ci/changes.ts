@@ -3,6 +3,7 @@
 // The CI workflow runs it (changes.sh) and turns jobs off by it:
 //   <paths, one per line> | node scripts/ci/changes.ts   # a PR's files, or one app's since its release
 //     [--app-package <before> <after>]                   # the phone's package.json then and now
+//     [--merged <git log file>]                          # each change merged since that release
 //   node scripts/ci/changes.ts --all                      # every area changed
 //   <releases, one JSON line each> | node scripts/ci/changes.ts --previous-release <phone|desktop> <ti|main> [<run's tag>]
 // It prints `<area>=true|false` lines, the decisions `allPackages`, `nativeTests` and
@@ -149,11 +150,40 @@ export const versionOnly = ({ previous, current }: AppPackage): boolean => {
  * own changes since its previous release (previousAppRelease) reach its users. Given the app's
  * package.json before and after, a change of its version alone doesn't count: a version the
  * desktop released alone bumped it, and the phone has nothing new.
+ *
+ * `merged` lists the files of each change merged since then (a PR, or a commit pushed to main),
+ * when there are several. `reachesPhone` leaves out the workspace files a desktop-only change
+ * changed along the way, so it decides per change: the workspace files still count for the phone
+ * when a change that touched them reaches it. Without `merged`, the paths are one change.
  */
-export const releaseChanges = (paths: readonly string[], appPackage?: AppPackage) => {
+export const releaseChanges = (
+  paths: readonly string[],
+  appPackage?: AppPackage,
+  merged?: readonly (readonly string[])[],
+) => {
   const counted =
     appPackage && versionOnly(appPackage) ? paths.filter((path) => path !== APP_PACKAGE) : paths;
-  return { phoneRelease: reachesPhone(counted), desktopRelease: reachesDesktop(counted) };
+  const workspaceForPhone =
+    merged !== undefined &&
+    changes(counted).workspace &&
+    merged.some((change) => changes(change).workspace && reachesPhone(change));
+  return {
+    phoneRelease: reachesPhone(counted) || workspaceForPhone,
+    desktopRelease: reachesDesktop(counted),
+  };
+};
+
+/**
+ * Each change in `git log --name-only --format='commit %H'` output, as its files. A merge
+ * commit's are its diff against main before it (--diff-merges=first-parent).
+ */
+export const mergedChanges = (log: string): string[][] => {
+  const merged: string[][] = [];
+  for (const line of log.split(/\r?\n/)) {
+    if (line.startsWith("commit ")) merged.push([]);
+    else if (line && merged.length > 0) merged.at(-1)!.push(line);
+  }
+  return merged;
 };
 
 /** A GitHub Release, by its tag and the names of the files it holds. */
@@ -223,9 +253,13 @@ if (process.argv[1] === fileURLToPath(import.meta.url)) {
       previous === undefined || current === undefined
         ? undefined
         : { previous: readFileSync(previous, "utf8"), current: readFileSync(current, "utf8") };
+    const mergedAt = args.indexOf("--merged");
+    const log = mergedAt === -1 ? undefined : args[mergedAt + 1];
+    if (mergedAt !== -1 && log === undefined) throw new Error("Expected --merged <git log file>");
+    const merged = log === undefined ? undefined : mergedChanges(readFileSync(log, "utf8"));
     const result = all
       ? { ...decide(() => true), phoneRelease: true, desktopRelease: true }
-      : { ...changes(paths), ...releaseChanges(paths, appPackage) };
+      : { ...changes(paths), ...releaseChanges(paths, appPackage, merged) };
     for (const [name, value] of Object.entries(result)) console.log(`${name}=${value}`);
   }
 }
