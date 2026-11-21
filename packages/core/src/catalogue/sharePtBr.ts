@@ -49,6 +49,14 @@ export const sharePtBr: typeof shareEn = {
       one: `${formatNumber("pt-BR", found)} de ${formatNumber("pt-BR", total)} música encontrada`,
       other: `${formatNumber("pt-BR", found)} de ${formatNumber("pt-BR", total)} músicas encontradas`,
     }),
+  /** A playlist's menu on the desktop, which has no Share card of services. */
+  shareToSpotify: "Compartilhar no Spotify",
+  /** The desktop's toast, which copies the link in place of a share sheet. */
+  foundAndCopied: (found: number, total: number) =>
+    plural("pt-BR", total, {
+      one: `${formatNumber("pt-BR", found)} de ${formatNumber("pt-BR", total)} música encontrada. Link copiado.`,
+      other: `${formatNumber("pt-BR", found)} de ${formatNumber("pt-BR", total)} músicas encontradas. Link copiado.`,
+    }),
   signInTitle: (service: string) => `Iniciar Sessão no ${service}`,
   signInMessage: {
     ytMusic:

@@ -2,16 +2,17 @@
 import type { ActionSurface, ItemActionEntry, SongTagOutcome, TagLookupStop } from "@wave/core";
 import type { BrowseScope } from "./browse.ts";
 
-/** The most songs a target names one by one; Select All names the unchecked ones instead. */
+/** The ordinary array limit; large table selections use a packed vector of IDs. */
 export const MAX_TARGET_IDS = 10_000;
+export type SongIds = readonly number[] | Float64Array;
 
 /**
  * The songs acted on, in [scope]'s list order: the ones named, or every song of the list
- * but the unchecked ones (Select All).
+ * but the unchecked ones (Select All). A negative ID denotes a streamed playlist entry.
  */
 export type SongTarget =
-  | { readonly scope: BrowseScope; readonly ids: readonly number[] }
-  | { readonly scope: BrowseScope; readonly all: true; readonly except: readonly number[] };
+  | { readonly scope: BrowseScope; readonly ids: SongIds }
+  | { readonly scope: BrowseScope; readonly all: true; readonly except: SongIds };
 
 export type { ActionSurface };
 

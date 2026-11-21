@@ -1,15 +1,11 @@
 import { loadRecapStories } from "@wave/client/db/recapStories";
-import { rankSongs, statsQueries } from "@wave/client/db/statsQueries";
+import { artistListeningStats, statsQueries } from "@wave/client/db/statsQueries";
 import {
-  ARTIST_MOST_PLAYED,
-  artistStats,
   availableRecaps,
   createRecapAvailability,
-  rankSongPlays,
   recapId,
   recapWindow,
   type CountedListening,
-  type SongPlayTotals,
   type RecapPeriod,
 } from "@wave/core";
 import * as Effect from "effect/Effect";
@@ -17,7 +13,7 @@ import * as Effect from "effect/Effect";
 import { runSteps } from "@/lib/stepped";
 import { LibraryStore, type LibraryStoreError } from "@/library/LibraryStore";
 
-import type { ArtistStats, LoadedRecap, Stats } from "./Stats";
+import type { LoadedRecap, Stats } from "./Stats";
 
 /** `period`'s Recap from the store, or null when it has none at `now`. */
 const loadRecap = (
@@ -102,30 +98,7 @@ export const make = Effect.gen(function* () {
         return lyricsAndGenreLookupsEnabled();
       }),
     ),
-    artist: (artistId, strings) => {
-      const now = Date.now();
-      return Effect.flatMap(
-        store.playedArtistSongs(artistId, now),
-        (plays): Effect.Effect<ArtistStats, LibraryStoreError> => {
-          const stats = artistStats({ artistId, now, ...plays }, strings);
-          if (!stats.played) return Effect.succeed(stats);
-          const ranking = rankSongPlays(
-            [
-              ...stats.mostPlayed.map(({ id, ...totals }): SongPlayTotals => ({
-                ...totals,
-                song: { kind: "library", id },
-              })),
-              ...plays.streamedSongPlays,
-            ],
-            ARTIST_MOST_PLAYED,
-          );
-          return Effect.map(rankSongs(store, ranking), (mostPlayed) => ({
-            ...stats,
-            mostPlayed,
-          }));
-        },
-      );
-    },
+    artist: (artistId, strings) => artistListeningStats(store, artistId, strings),
     recaps: (now, between) => readRecapAvailability(store, now, between),
     recapHistoryVersion: store.listeningHistoryVersion,
     recap: (period) => Effect.suspend(() => loadRecap(store, period, Date.now())),

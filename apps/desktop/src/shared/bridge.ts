@@ -11,13 +11,13 @@ import type {
   QueueRow,
 } from "./playerView.ts";
 import type { WindowSettings } from "./windowSettings.ts";
-import type { DatedRelease, LanguageChoice, SongSortKey } from "@wave/core";
+import type { DatedRelease, LanguageChoice, SongSortKey, ThemeEdit } from "@wave/core";
 
 import type { LanguageView } from "./language.ts";
 import type { LibraryCounts } from "@wave/client/db/counts";
 import type { PlaybackStatus } from "./playback.ts";
 import type { SongState } from "./songState.ts";
-import type { PlaybackSettings } from "./playbackSettings.ts";
+import type { OutputSettings, PlaybackSettings } from "./playbackSettings.ts";
 import type { SongTags } from "./tags.ts";
 import type { DesktopFolder, DesktopSong, ScanStatus } from "./library.ts";
 import type { BrowseKind, BrowseScope, BrowsePage, BrowseRow } from "./browse.ts";
@@ -34,8 +34,10 @@ import type {
 import type { AccountView } from "./account.ts";
 import type { MissingSongsDownloadAction, SleepTimer, SleepTimerChoice } from "@wave/core";
 import type {
+  DownloadMove,
   DownloadRow,
   DownloadsView,
+  FailedReasonAction,
   MissingSongsList,
   MissingSongsView,
 } from "./downloads.ts";
@@ -50,7 +52,7 @@ import type { LibrarySearchView } from "./search.ts";
 import type { HomeView } from "./home.ts";
 import type { HomeFollowView, HomeReleaseOpening } from "./homeFollow.ts";
 import type { RecapPeriod, StatsPeriod, StatsRanking } from "@wave/core";
-import type { DesktopRecap, StatsOverview, StatsRow } from "./stats.ts";
+import type { ArtistStatsPage, DesktopRecap, StatsOverview, StatsRow } from "./stats.ts";
 import type {
   ActionSurface,
   SongMenu,
@@ -72,6 +74,7 @@ import {
   type LyricsAndTagsContract,
 } from "./lyricsAndTags.ts";
 import { LINK_CALLS, linkBridge, type LinkContract } from "./links.ts";
+import { MINI_PLAYER_CALLS, miniPlayerBridge, type MiniPlayerContract } from "./miniPlayer.ts";
 import { ARTIST_PAGE_CALLS, artistPageBridge, type ArtistPageContract } from "./artistPage.ts";
 import { STREAMED_CALLS, streamedBridge, type StreamedContract } from "./streamedSongs.ts";
 import { YT_ACCOUNT_CALLS, ytAccountBridge, type YtAccountContract } from "./ytAccount.ts";
@@ -80,6 +83,16 @@ import {
   spotifyAccountBridge,
   type SpotifyAccountContract,
 } from "./spotifyAccount.ts";
+import {
+  SPOTIFY_IMPORT_CALLS,
+  spotifyImportBridge,
+  type SpotifyImportContract,
+} from "./spotifyImport.ts";
+import {
+  SPOTIFY_SHARE_CALLS,
+  spotifyShareBridge,
+  type SpotifyShareContract,
+} from "./spotifyShare.ts";
 export type Appearance = "system" | "light" | "dark";
 
 /** One window of a list, as a list call returns it. */
@@ -108,7 +121,10 @@ export interface BridgeContract
     StreamedContract,
     LyricsAndTagsContract,
     YtAccountContract,
-    SpotifyAccountContract {
+    SpotifyAccountContract,
+    SpotifyImportContract,
+    MiniPlayerContract,
+    SpotifyShareContract {
   readonly "system.mediaBackend": {
     readonly args: readonly [];
     readonly result: "native" | "chromium";
@@ -187,10 +203,19 @@ export interface BridgeContract
     readonly args: readonly [appearance: Appearance];
     readonly result: void;
   };
+  readonly "settings.editTheme": {
+    readonly args: readonly [edit: ThemeEdit];
+    readonly result: string;
+  };
   readonly "settings.playback": { readonly args: readonly []; readonly result: PlaybackSettings };
   readonly "settings.setPlayback": {
     readonly args: readonly [change: Partial<PlaybackSettings>];
     readonly result: PlaybackSettings;
+  };
+  readonly "settings.outputs": { readonly args: readonly []; readonly result: OutputSettings };
+  readonly "settings.setOutput": {
+    readonly args: readonly [id: string | null];
+    readonly result: OutputSettings;
   };
   readonly "settings.ytMusic": { readonly args: readonly []; readonly result: boolean };
   readonly "settings.searchOnline": { readonly args: readonly []; readonly result: SearchOnline };
@@ -204,8 +229,9 @@ export interface BridgeContract
   /** A YouTube Music cover as a data URL, or null. */
   readonly "yt.artwork": { readonly args: readonly [url: string]; readonly result: string | null };
   readonly "downloads.view": { readonly args: readonly []; readonly result: DownloadsView };
+  /** The Downloads page's rows; the failed songs only while [failedShown]. */
   readonly "downloads.rows": {
-    readonly args: readonly [offset: number, limit: number];
+    readonly args: readonly [offset: number, limit: number, failedShown?: boolean];
     readonly result: Page<DownloadRow>;
   };
   /** A page's missing songs and their downloads; null for no such page. */
@@ -241,6 +267,16 @@ export interface BridgeContract
   readonly "downloads.setBestQuality": {
     readonly args: readonly [on: boolean];
     readonly result: boolean;
+  };
+  /** Moves a waiting song within its group, or a group among the groups that wait. */
+  readonly "downloads.move": {
+    readonly args: readonly [move: DownloadMove];
+    readonly result: void;
+  };
+  /** Retry or Remove on every song that failed for one reason. */
+  readonly "downloads.failedReason": {
+    readonly args: readonly [reason: string, action: FailedReasonAction];
+    readonly result: void;
   };
   /** A YouTube Music artist page, by its browse id. */
   readonly "yt.artist": {
@@ -299,6 +335,10 @@ export interface BridgeContract
   readonly "library.browse": {
     readonly args: readonly [scope: BrowseScope, offset: number, limit: number];
     readonly result: BrowsePage;
+  };
+  readonly "library.rowIds": {
+    readonly args: readonly [scope: BrowseScope, offset: number, limit: number];
+    readonly result: Page<number>;
   };
   readonly "library.letter": {
     readonly args: readonly [scope: BrowseScope, letter: string];
@@ -399,6 +439,14 @@ export interface BridgeContract
     readonly args: readonly [period: StatsPeriod];
     readonly result: StatsOverview;
   };
+  readonly "stats.artist": {
+    readonly args: readonly [artistId: number, language: "en" | "pt-BR"];
+    readonly result: ArtistStatsPage;
+  };
+  readonly "stats.artistPlay": {
+    readonly args: readonly [artistId: number, key: string];
+    readonly result: void;
+  };
   readonly "stats.ranking": {
     readonly args: readonly [ranking: StatsRanking, period: StatsPeriod];
     readonly result: Page<StatsRow>;
@@ -473,6 +521,7 @@ export const BRIDGE_CALLS = [
   "library.artwork",
   "library.cover",
   "library.browse",
+  "library.rowIds",
   "library.letter",
   "library.counts",
   "library.scanStatus",
@@ -501,8 +550,11 @@ export const BRIDGE_CALLS = [
   "settings.window",
   "settings.setWindow",
   "settings.setAppearance",
+  "settings.editTheme",
   "settings.playback",
   "settings.setPlayback",
+  "settings.outputs",
+  "settings.setOutput",
   "settings.ytMusic",
   "settings.searchOnline",
   "settings.setSearchOnline",
@@ -536,6 +588,8 @@ export const BRIDGE_CALLS = [
   "downloads.pickFolder",
   "downloads.bestQuality",
   "downloads.setBestQuality",
+  "downloads.move",
+  "downloads.failedReason",
   "account.view",
   "account.signIn",
   "account.cancelSignIn",
@@ -562,7 +616,12 @@ export const BRIDGE_CALLS = [
   ...STREAMED_CALLS,
   ...YT_ACCOUNT_CALLS,
   ...SPOTIFY_ACCOUNT_CALLS,
+  ...SPOTIFY_IMPORT_CALLS,
+  ...MINI_PLAYER_CALLS,
+  ...SPOTIFY_SHARE_CALLS,
   "stats.overview",
+  "stats.artist",
+  "stats.artistPlay",
   "stats.ranking",
   "stats.play",
   "stats.open",
@@ -583,14 +642,22 @@ export type Invoke = <C extends BridgeCall>(
 /** `window.wave`. */
 export interface WaveBridge {
   readonly links: ReturnType<typeof linkBridge>;
+  /** The floating mini player's window. */
+  readonly miniPlayer: ReturnType<typeof miniPlayerBridge>;
   readonly artistPage: ReturnType<typeof artistPageBridge>;
   /** A streamed YouTube Music song's menu. */
   readonly streamed: ReturnType<typeof streamedBridge>;
   /** The YouTube account: its session never reaches the window. */
   readonly ytAccount: ReturnType<typeof ytAccountBridge>;
   readonly spotifyAccount: ReturnType<typeof spotifyAccountBridge>;
+  /** Import Playlists › From Spotify: main reads the account, the window never sees a token. */
+  readonly spotifyImport: ReturnType<typeof spotifyImportBridge>;
+  /** Share to Spotify: main asks Spotify and copies the link. */
+  readonly spotifyShare: ReturnType<typeof spotifyShareBridge>;
   readonly stats: {
     readonly overview: (period: StatsPeriod) => Promise<StatsOverview>;
+    readonly artist: (artistId: number, language: "en" | "pt-BR") => Promise<ArtistStatsPage>;
+    readonly artistPlay: (artistId: number, key: string) => Promise<void>;
     readonly ranking: (ranking: StatsRanking, period: StatsPeriod) => Promise<Page<StatsRow>>;
     readonly play: (period: StatsPeriod, key: string, full: boolean) => Promise<void>;
     readonly open: (
@@ -647,6 +714,7 @@ export interface WaveBridge {
       large: boolean,
     ) => Promise<string | null>;
     readonly browse: (scope: BrowseScope, offset: number, limit: number) => Promise<BrowsePage>;
+    readonly rowIds: (scope: BrowseScope, offset: number, limit: number) => Promise<Page<number>>;
     readonly letter: (scope: BrowseScope, letter: string) => Promise<number | null>;
     readonly counts: () => Promise<LibraryCounts>;
     readonly scanStatus: () => Promise<ScanStatus>;
@@ -689,10 +757,19 @@ export interface WaveBridge {
     readonly language: () => Promise<LanguageView>;
     readonly setLanguage: (choice: LanguageChoice) => Promise<void>;
     readonly setAppearance: (appearance: Appearance) => Promise<void>;
+    /**
+     * Makes one change of Settings › Appearance › Theme to the account's theme and gives the
+     * theme as it is kept then (`AccountView.theme`).
+     */
+    readonly editTheme: (edit: ThemeEdit) => Promise<string>;
     /** Settings › Playback: Crossfade, Normalize Volume and Buffer, synced with the account. */
     readonly playback: () => Promise<PlaybackSettings>;
     /** Keeps a change to Settings › Playback; it applies from the next song. */
     readonly setPlayback: (change: Partial<PlaybackSettings>) => Promise<PlaybackSettings>;
+    /** The system's outputs and the one this computer plays on. */
+    readonly outputs: () => Promise<OutputSettings>;
+    /** Moves playback to the output with `id`, or to the system's default with null. */
+    readonly setOutput: (id: string | null) => Promise<OutputSettings>;
     readonly ytMusic: () => Promise<boolean>;
     readonly searchOnline: () => Promise<SearchOnline>;
     readonly setSearchOnline: (value: SearchOnline) => Promise<void>;
@@ -725,7 +802,11 @@ export interface WaveBridge {
   /** Downloads into the Library: YT Music songs and missing songs, from YouTube Music or Soulseek. */
   readonly downloads: {
     readonly view: () => Promise<DownloadsView>;
-    readonly rows: (offset: number, limit: number) => Promise<Page<DownloadRow>>;
+    readonly rows: (
+      offset: number,
+      limit: number,
+      failedShown?: boolean,
+    ) => Promise<Page<DownloadRow>>;
     readonly list: (list: MissingSongsList) => Promise<MissingSongsView | null>;
     readonly yt: (videoIds: readonly string[]) => Promise<void>;
     readonly missing: (trackIds: readonly number[]) => Promise<void>;
@@ -741,6 +822,8 @@ export interface WaveBridge {
     readonly pickFolder: () => Promise<string | null>;
     readonly bestQuality: () => Promise<boolean>;
     readonly setBestQuality: (on: boolean) => Promise<boolean>;
+    readonly move: (move: DownloadMove) => Promise<void>;
+    readonly failedReason: (reason: string, action: FailedReasonAction) => Promise<void>;
   };
   /** The Wave account: the session itself never reaches the window. */
   readonly account: {
@@ -803,6 +886,7 @@ export const createBridge = (invoke: Invoke): WaveBridge => ({
     artwork: (hash, large) => invoke("library.artwork", hash, large),
     cover: (kind, id, large) => invoke("library.cover", kind, id, large),
     browse: (scope, offset, limit) => invoke("library.browse", scope, offset, limit),
+    rowIds: (scope, offset, limit) => invoke("library.rowIds", scope, offset, limit),
     letter: (scope, letter) => invoke("library.letter", scope, letter),
     counts: () => invoke("library.counts"),
     scanStatus: () => invoke("library.scanStatus"),
@@ -839,8 +923,11 @@ export const createBridge = (invoke: Invoke): WaveBridge => ({
     window: () => invoke("settings.window"),
     setWindow: (change) => invoke("settings.setWindow", change),
     setAppearance: (appearance) => invoke("settings.setAppearance", appearance),
+    editTheme: (edit) => invoke("settings.editTheme", edit),
     playback: () => invoke("settings.playback"),
     setPlayback: (change) => invoke("settings.setPlayback", change),
+    outputs: () => invoke("settings.outputs"),
+    setOutput: (id) => invoke("settings.setOutput", id),
     ytMusic: () => invoke("settings.ytMusic"),
     searchOnline: () => invoke("settings.searchOnline"),
     setSearchOnline: (value) => invoke("settings.setSearchOnline", value),
@@ -870,7 +957,7 @@ export const createBridge = (invoke: Invoke): WaveBridge => ({
   },
   downloads: {
     view: () => invoke("downloads.view"),
-    rows: (offset, limit) => invoke("downloads.rows", offset, limit),
+    rows: (offset, limit, failedShown) => invoke("downloads.rows", offset, limit, failedShown),
     list: (list) => invoke("downloads.list", list),
     yt: (videoIds) => invoke("downloads.yt", videoIds),
     missing: (trackIds) => invoke("downloads.missing", trackIds),
@@ -882,6 +969,8 @@ export const createBridge = (invoke: Invoke): WaveBridge => ({
     pickFolder: () => invoke("downloads.pickFolder"),
     bestQuality: () => invoke("downloads.bestQuality"),
     setBestQuality: (on) => invoke("downloads.setBestQuality", on),
+    move: (move) => invoke("downloads.move", move),
+    failedReason: (reason, action) => invoke("downloads.failedReason", reason, action),
   },
   account: {
     view: () => invoke("account.view"),
@@ -917,8 +1006,13 @@ export const createBridge = (invoke: Invoke): WaveBridge => ({
   streamed: streamedBridge(invoke),
   ytAccount: ytAccountBridge(invoke),
   spotifyAccount: spotifyAccountBridge(invoke),
+  spotifyImport: spotifyImportBridge(invoke),
+  miniPlayer: miniPlayerBridge(invoke),
+  spotifyShare: spotifyShareBridge(invoke),
   stats: {
     overview: (period) => invoke("stats.overview", period),
+    artist: (artistId, language) => invoke("stats.artist", artistId, language),
+    artistPlay: (artistId, key) => invoke("stats.artistPlay", artistId, key),
     ranking: (ranking, period) => invoke("stats.ranking", ranking, period),
     play: (period, key, full) => invoke("stats.play", period, key, full),
     open: (ranking, period, key, full) => invoke("stats.open", ranking, period, key, full),

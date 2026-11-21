@@ -2,7 +2,12 @@
  * The messages between main and the audio process. Main sends one request per call; the
  * process answers each with the engine's status after it, or with the engine's error.
  */
-import type { LoudnessResult, PlaybackStatus, PlaybackEvent } from "../../shared/playback.ts";
+import type {
+  LoudnessResult,
+  OutputDevice,
+  PlaybackStatus,
+  PlaybackEvent,
+} from "../../shared/playback.ts";
 
 /** The addon's `AudioEngine`, as `apps/desktop/native/node` exports it. */
 export interface AddonEngine {
@@ -30,6 +35,10 @@ export interface AddonEngine {
   readonly pause: () => void;
   readonly seek: (positionMs: number) => void;
   readonly status: () => PlaybackStatus;
+  /** The outputs the system has; absent on an engine built before one could be picked. */
+  readonly outputs?: () => readonly OutputDevice[];
+  /** Plays on the output with [id] while the system has it, else on the system's default. */
+  readonly setOutput?: (id?: string) => void;
 }
 
 /** A YT Music song's address, as the JVM's `resolveStream` gives it. Never logged. */
@@ -68,6 +77,12 @@ export interface ResolveEvent {
   readonly fresh: boolean;
 }
 
+/** The outputs the system has now, sent as the process starts and when the list changes. */
+export interface OutputsEvent {
+  readonly event: "outputs";
+  readonly outputs: readonly OutputDevice[];
+}
+
 /** Main's answer to a `ResolveEvent`. */
 export type ResolveAnswer =
   | { readonly resolved: number; readonly address: ResolvedStream }
@@ -85,6 +100,8 @@ export type AudioCall =
   | "setNormalize"
   | "measure"
   | "cancelMeasurements"
+  /** The output to play on by its id, or none for the system's default. */
+  | "setOutput"
   /** The YT Music songs to fetch ahead for the Buffer, as video ids in playing order. */
   | "buffer";
 
@@ -140,6 +157,9 @@ const run = (engine: AddonEngine, request: AudioRequest): PlaybackStatus | undef
       return engine.status();
     case "cancelMeasurements":
       engine.cancelMeasurements();
+      return engine.status();
+    case "setOutput":
+      engine.setOutput?.(text(first));
       return engine.status();
     case "play":
       engine.play();
@@ -208,4 +228,20 @@ export const playbackEvent = (
     transitions,
   };
   return measurements.length > 0 ? { ...event, measurements } : event;
+};
+
+/** The engine's outputs when they aren't [previous], for the process to push to main. */
+export const outputsEvent = (
+  engine: AddonEngine,
+  previous: readonly OutputDevice[] | undefined,
+): OutputsEvent | undefined => {
+  const outputs = engine.outputs?.() ?? [];
+  const same =
+    previous !== undefined &&
+    previous.length === outputs.length &&
+    outputs.every((output, at) => {
+      const before = previous[at];
+      return before?.id === output.id && before.name === output.name;
+    });
+  return same ? undefined : { event: "outputs", outputs };
 };

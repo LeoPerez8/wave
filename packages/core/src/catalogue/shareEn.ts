@@ -55,6 +55,14 @@ export const shareEn = {
       one: `${formatNumber("en", found)} of ${formatNumber("en", total)} song found`,
       other: `${formatNumber("en", found)} of ${formatNumber("en", total)} songs found`,
     }),
+  /** A playlist's menu on the desktop, which has no Share card of services. */
+  shareToSpotify: "Share to Spotify",
+  /** The desktop's toast, which copies the link in place of a share sheet. */
+  foundAndCopied: (found: number, total: number) =>
+    plural("en", total, {
+      one: `${formatNumber("en", found)} of ${formatNumber("en", total)} song found. Link copied.`,
+      other: `${formatNumber("en", found)} of ${formatNumber("en", total)} songs found. Link copied.`,
+    }),
   signInTitle: (service: string) => `Sign In to ${service}`,
   signInMessage: {
     ytMusic:

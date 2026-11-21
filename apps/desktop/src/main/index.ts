@@ -25,7 +25,7 @@ import { playbackLayer } from "./playback/playback.ts";
 import { libraryLayer } from "./database.ts";
 import { kotlinLayer } from "./kotlin/kotlin.ts";
 import { jvmCommand, spawnLines } from "./kotlin/spawn.ts";
-import { guardWindow } from "./security.ts";
+import { guardWindow, windowWebPreferences } from "./security.ts";
 import { desktopLibraryLayer } from "./library/library.ts";
 import { desktopPlaylistsLayer } from "./library/playlists.ts";
 import { nativeImageCodec } from "./library/nativeImageCodec.ts";
@@ -62,6 +62,7 @@ import { signInWithBrowser } from "./account/browserSignIn.ts";
 import { accountConfig } from "./account/config.ts";
 import { sessionStore } from "./account/sessionStore.ts";
 import { installDesktopSystem } from "./system/desktopSystem.ts";
+import { installMiniPlayer } from "./system/miniPlayerWindow.ts";
 import { configureAutostart } from "./system/autostart.ts";
 import { followStart } from "./system/startup.ts";
 import { Playback } from "./playback/playback.ts";
@@ -71,6 +72,7 @@ import { createYtSessions, ytSessionStore } from "./yt/ytSessionStore.ts";
 import { ytSignInSystem } from "./yt/ytSignInSystem.ts";
 import { spotifySessionStore } from "./spotify/spotifyAccount.ts";
 import { spotifyAccountLayer } from "./spotify/spotifyAccountLayer.ts";
+import { spotifyImportLayer } from "./spotify/spotifyImportLayer.ts";
 
 // %APPDATA%\Wave or ~/.config/Wave, from the product name; tests point it at a folder of their own.
 const dataFolder = process.env["WAVE_DATA_DIR"];
@@ -139,14 +141,7 @@ const createWindow = (
         }
       : {}),
     title: "Wave",
-    webPreferences: {
-      preload: join(import.meta.dirname, "../preload/index.cjs"),
-      contextIsolation: true,
-      sandbox: true,
-      nodeIntegration: false,
-      webviewTag: false,
-      autoplayPolicy: "no-user-gesture-required",
-    },
+    webPreferences: windowWebPreferences(join(import.meta.dirname, "../preload/index.cjs")),
   });
   guardWindow(created.webContents, (url) => void shell.openExternal(url));
   // Ctrl+Q quits from anywhere in the window, a field included.
@@ -340,6 +335,7 @@ else {
       get catalogue() {
         return text;
       },
+      language: () => language,
       platform: process.platform,
       musicFolder,
       pickFolder,
@@ -431,6 +427,18 @@ else {
           language = view.language;
           text = catalogueOf(language, "desktop");
         },
+        // An edit in Settings › Appearance, or a pull: the window's frame follows at once.
+        themeChanged: (stored) => {
+          theme = readThemeChoice(stored);
+          if (window === undefined || window.isDestroyed()) return;
+          window.setBackgroundColor(colours().background);
+          if (process.platform === "win32")
+            window.setTitleBarOverlay({
+              color: colours().background,
+              symbolColor: colours().foreground,
+              height: 48,
+            });
+        },
         focused: () => BrowserWindow.getFocusedWindow() !== null,
       }).pipe(
         Layer.provideMerge(
@@ -465,38 +473,42 @@ else {
               online: () => net.isOnline(),
               startSignIn: ytSignIn.start,
             }),
-            spotifyAccountLayer({
-              clientId: spotifyClientId,
-              store: spotifySessionStore({
-                box: safeStorage,
-                file: join(app.getPath("userData"), "spotify-session.bin"),
-                files: {
-                  ...sealedFiles,
-                  // A refresh can rotate the token. An interrupted write leaves the old file readable.
-                  write: (file, bytes) => {
-                    const temp = `${file}.tmp`;
-                    try {
-                      sealedFiles.write(temp, bytes);
-                      renameSync(temp, file);
-                    } finally {
-                      sealedFiles.remove(temp);
-                    }
-                  },
-                  remove: (file) => {
-                    sealedFiles.remove(`${file}.tmp`);
-                    sealedFiles.remove(file);
-                  },
-                },
-                platform: process.platform,
-              }),
-              openExternal: (url) => shell.openExternal(url),
-              online: () => net.isOnline(),
-              fetch: (input, init) => globalThis.fetch(input, init),
-              page: () => ({
-                title: text.desktopAccount.browserTitle,
-                message: text.desktopAccount.browserMessage,
-              }),
-            }),
+            spotifyImportLayer({ fetch: (input, init) => globalThis.fetch(input, init) }).pipe(
+              Layer.provideMerge(
+                spotifyAccountLayer({
+                  clientId: spotifyClientId,
+                  store: spotifySessionStore({
+                    box: safeStorage,
+                    file: join(app.getPath("userData"), "spotify-session.bin"),
+                    files: {
+                      ...sealedFiles,
+                      // A refresh can rotate the token. An interrupted write leaves the old file readable.
+                      write: (file, bytes) => {
+                        const temp = `${file}.tmp`;
+                        try {
+                          sealedFiles.write(temp, bytes);
+                          renameSync(temp, file);
+                        } finally {
+                          sealedFiles.remove(temp);
+                        }
+                      },
+                      remove: (file) => {
+                        sealedFiles.remove(`${file}.tmp`);
+                        sealedFiles.remove(file);
+                      },
+                    },
+                    platform: process.platform,
+                  }),
+                  openExternal: (url) => shell.openExternal(url),
+                  online: () => net.isOnline(),
+                  fetch: (input, init) => globalThis.fetch(input, init),
+                  page: () => ({
+                    title: text.desktopAccount.browserTitle,
+                    message: text.desktopAccount.browserMessage,
+                  }),
+                }),
+              ),
+            ),
           ).pipe(
             Layer.provideMerge(
               ytFeaturesLayer({ online: () => net.isOnline() }).pipe(
@@ -532,13 +544,32 @@ else {
       nativeTheme.themeSource = await runtime.runPromise(Effect.map(Database, appearance));
       theme = await readTheme();
     })();
+    // The floating mini player: a second window on the same preload and page rules.
+    const miniPlayer = installMiniPlayer({
+      db: () => started.then(() => runtime.runPromise(Database)),
+      preload: join(import.meta.dirname, "../preload/index.cjs"),
+      load: (mini) => {
+        const devServer = process.env["ELECTRON_RENDERER_URL"];
+        if (!app.isPackaged && devServer !== undefined)
+          void mini.loadURL(new URL("mini.html", devServer).href);
+        else void mini.loadFile(join(import.meta.dirname, "../renderer/mini.html"));
+      },
+      title: () => text.desktopWindow.miniPlayer,
+      background: () => colours().background,
+      openExternal: (url) => void shell.openExternal(url),
+      quit: () => app.quit(),
+    });
     // A call from the page waits for the services it needs.
     registerBridge(
       ipcMain,
       runtime,
-      (event) =>
-        window !== undefined &&
-        (event as Electron.IpcMainInvokeEvent).senderFrame === window.webContents.mainFrame,
+      (event) => {
+        const frame = (event as Electron.IpcMainInvokeEvent).senderFrame;
+        return (
+          (window !== undefined && frame === window.webContents.mainFrame) ||
+          miniPlayer.trusts(frame)
+        );
+      },
       (mode) => {
         nativeTheme.themeSource = mode;
       },
@@ -562,6 +593,7 @@ else {
         channel: desktopBuild?.channel ?? null,
         folder: app.getPath("userData"),
       }),
+      { open: miniPlayer.open, close: miniPlayer.close, showMain: showWindow },
     );
     // The queue's position and the play so far are saved before the app exits.
     let quitting = false;
@@ -581,6 +613,8 @@ else {
       system?.beginQuit();
       system?.close();
       poTokens.close();
+      // Its position is saved while the Library is still open.
+      miniPlayer.close();
       // Services that hang as they close don't keep a process nobody can see.
       void closeServices()
         .then(() => installUpdate?.())
@@ -637,6 +671,7 @@ else {
       mediaAddon: process.env["WAVE_MEDIA_ADDON"] ?? join(resources, "native", "wave-media.node"),
       cache: cacheFolder("system-media"),
       show: showWindow,
+      miniPlayer: () => void miniPlayer.open().catch(() => {}),
     });
   });
 }

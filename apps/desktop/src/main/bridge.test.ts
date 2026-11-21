@@ -8,7 +8,14 @@ import { addTrack, openTestDatabase, star, type TestDatabase } from "@wave/clien
 import { creditSplits } from "@wave/client/db/credits";
 import { stampPreference } from "@wave/client/db/sync";
 import { syncCycle } from "@wave/client/sync/syncCycle";
-import { catalogueOf, recordingMatchTitle, scanPath, type SyncClock } from "@wave/core";
+import {
+  catalogueOf,
+  readThemeChoice,
+  recordingMatchTitle,
+  scanPath,
+  themeFor,
+  type SyncClock,
+} from "@wave/core";
 import { sql } from "drizzle-orm";
 import { createPlaylist } from "@wave/client/db/playlists";
 import * as Effect from "effect/Effect";
@@ -16,7 +23,7 @@ import * as Layer from "effect/Layer";
 import * as ManagedRuntime from "effect/ManagedRuntime";
 import { exposeBridge } from "../preload/expose.ts";
 import { BRIDGE_CALLS, type WaveBridge } from "../shared/bridge.ts";
-import type { PlaybackStatus } from "../shared/playback.ts";
+import type { OutputDevice, PlaybackStatus } from "../shared/playback.ts";
 import type { LanguageView } from "../shared/language.ts";
 import {
   answer,
@@ -40,6 +47,7 @@ import { cardImagesLayer } from "./cards/cardImages.ts";
 import { ytFeaturesLayer } from "./yt/ytServices.ts";
 import { ytAccountLayer } from "./yt/ytAccountLayer.ts";
 import { spotifyAccountLayer } from "./spotify/spotifyAccountLayer.ts";
+import { spotifyImportLayer } from "./spotify/spotifyImportLayer.ts";
 import type { YtBrowserOutcome } from "./yt/ytBrowserSignIn.ts";
 import { createYtSessions, ytSessionStore } from "./yt/ytSessionStore.ts";
 import { lyricsLayer } from "./lyrics/lyrics.ts";
@@ -263,13 +271,21 @@ const audioInMemory = () => {
     measure: (path) => void measured.push(path),
     cancelMeasurements: () => undefined,
     measurements: () => [],
+    setOutput: (id) => void engineCalls.push(`settings output ${id}`),
   };
+  let report: AudioEvents["message"] | undefined;
+  /** The system's outputs change to [outputs], as the audio process reports it. */
+  const plug = (outputs: readonly OutputDevice[]) => report?.({ event: "outputs", outputs });
   const fork = (events: AudioEvents) => ({
     send: (request: AudioRequest | ResolveAnswer) =>
       "resolved" in request || queueMicrotask(() => events.message(answer(engine, request))),
     kill: () => setImmediate(events.exit),
   });
-  return { layer: playerLayer({ fork }), engineCalls, gains, measured, broken };
+  const listening = (events: AudioEvents) => {
+    report = events.message;
+    return fork(events);
+  };
+  return { layer: playerLayer({ fork: listening }), engineCalls, gains, measured, broken, plug };
 };
 
 /** Tags as the shared Kotlin reads them, for a song titled `title`. */
@@ -495,10 +511,12 @@ const connect = (
     fetch: () => Promise.reject(new Error("no network")),
   }).pipe(Layer.provideMerge(library));
   const languages: LanguageView[] = [];
+  const themes: (string | null)[] = [];
   const runtime = ManagedRuntime.make(
     accountLayer({
       account: account.service,
       languageChanged: (view) => languages.push(view),
+      themeChanged: (stored) => themes.push(stored),
       focused: () => true,
       ...(account.clock === undefined ? {} : { clock: account.clock }),
     }).pipe(
@@ -522,19 +540,23 @@ const connect = (
             online: () => true,
             startSignIn: () => ({ outcome: Promise.resolve(browser.outcome), cancel: () => {} }),
           }),
-          spotifyAccountLayer({
-            clientId: null,
-            store: {
-              keyringMissing: () => true,
-              load: () => null,
-              save: () => {},
-              clear: () => {},
-            },
-            fetch: () => Promise.reject(new Error("no network")),
-            online: () => true,
-            openExternal: async () => {},
-            page: () => ({ title: "", message: "" }),
-          }),
+          spotifyImportLayer({ fetch: () => Promise.reject(new Error("no network")) }).pipe(
+            Layer.provideMerge(
+              spotifyAccountLayer({
+                clientId: null,
+                store: {
+                  keyringMissing: () => true,
+                  load: () => null,
+                  save: () => {},
+                  clear: () => {},
+                },
+                fetch: () => Promise.reject(new Error("no network")),
+                online: () => true,
+                openExternal: async () => {},
+                page: () => ({ title: "", message: "" }),
+              }),
+            ),
+          ),
         ).pipe(
           Layer.provideMerge(
             ytFeaturesLayer({ online: () => true }).pipe(
@@ -593,6 +615,7 @@ const connect = (
     exposed,
     sent,
     engineCalls: audio.engineCalls,
+    plug: audio.plug,
     gains: audio.gains,
     measured: audio.measured,
     broken: audio.broken,
@@ -604,6 +627,7 @@ const connect = (
     copied,
     cards,
     languages,
+    themes,
     browser,
   };
 };
@@ -823,6 +847,71 @@ test("the Spotify account bridge refuses extra arguments and exposes no authoriz
       const photo = handlers.get("spotifyAccount.photo");
       assert.ok(photo);
       await assert.rejects(async () => photo(trusted, "https://elsewhere.test/image"), /Refused/);
+    } finally {
+      await runtime.dispose();
+    }
+  });
+});
+
+test("From Spotify's bridge checks what the window sends and answers without the account", async () => {
+  await withFile(async (file) => {
+    const { runtime, handlers, exposed } = connect(file);
+    try {
+      const wave = exposed.get("wave") as WaveBridge;
+      assert.deepEqual(Object.keys(wave.spotifyImport).sort(), [
+        "artwork",
+        "cancel",
+        "library",
+        "missing",
+        "run",
+      ]);
+      // This build names no Spotify client, so there is nothing to read.
+      const library = await wave.spotifyImport.library(false);
+      assert.equal(library.status, "failed");
+      assert.equal(library.status === "failed" && library.action, null);
+      const call = (name: string, ...args: unknown[]) => handlers.get(name)!(trusted, ...args);
+      await assert.rejects(call("spotifyImport.library", "yes"), /Refused/);
+      await assert.rejects(call("spotifyImport.library", false, 1), /Refused/);
+      await assert.rejects(call("spotifyImport.run", [], false), /Refused/);
+      await assert.rejects(call("spotifyImport.run", ["PLnotspotify"], false), /Refused/);
+      await assert.rejects(
+        call("spotifyImport.run", ["spotify:collection", "spotify:collection"], false),
+        /Refused/,
+      );
+      await assert.rejects(call("spotifyImport.run", ["spotify:collection"], "yes"), /Refused/);
+      await assert.rejects(call("spotifyImport.artwork", "https://i.scdn.co/image/a"), /Refused/);
+      await assert.rejects(call("spotifyImport.cancel", 1), /Refused/);
+      await assert.rejects(call("spotifyImport.missing", -1), /Refused/);
+      assert.deepEqual(await wave.spotifyImport.missing(7), {
+        total: 0,
+        songs: [],
+        finding: false,
+      });
+      // Nothing was listed, so Import has nothing to name; the window learns no more than that.
+      await assert.rejects(
+        call("spotifyImport.run", ["spotify:collection"], false),
+        /^Error: Spotify import failed$/,
+      );
+      assert.equal(await wave.spotifyImport.artwork("spotify:collection"), null);
+    } finally {
+      await runtime.dispose();
+    }
+  });
+});
+
+test("Share to Spotify asks for the sign-in when signed out, and takes only a playlist", async () => {
+  await withFile(async (file) => {
+    const { runtime, handlers, exposed, copied } = connect(file);
+    try {
+      const wave = exposed.get("wave") as WaveBridge;
+      const { id } = await wave.playlists.create("Viagem");
+      assert.deepEqual(await wave.spotifyShare.playlist(id), { kind: "signIn", again: false });
+      assert.deepEqual(copied, []);
+      const share = handlers.get("spotifyShare.playlist");
+      assert.ok(share);
+      await assert.rejects(async () => share(trusted, "1"), /Refused/);
+      await assert.rejects(async () => share(trusted, id, "https://elsewhere.test"), /Refused/);
+      await assert.rejects(wave.spotifyShare.playlist(id + 1000));
     } finally {
       await runtime.dispose();
     }
@@ -1153,6 +1242,8 @@ test("Settings › Playback is kept for the account and reaches the engine at on
         crossfadeSeconds: 0,
         normalizeVolume: true,
         bufferMinutes: 2,
+        dontPlayExplicit: false,
+        continueQueue: true,
       });
       assert.ok(engineCalls.includes("settings crossfade 0"), "the engine starts with them");
       assert.ok(engineCalls.includes("settings normalize true"));
@@ -1160,13 +1251,21 @@ test("Settings › Playback is kept for the account and reaches the engine at on
         crossfadeSeconds: 4,
         normalizeVolume: false,
       });
-      assert.deepEqual(after, { crossfadeSeconds: 4, normalizeVolume: false, bufferMinutes: 2 });
+      assert.deepEqual(after, {
+        crossfadeSeconds: 4,
+        normalizeVolume: false,
+        bufferMinutes: 2,
+        dontPlayExplicit: false,
+        continueQueue: true,
+      });
       assert.deepEqual(engineCalls.slice(-2), ["settings crossfade 4", "settings normalize false"]);
       await wave.settings.setPlayback({ bufferMinutes: 15 });
       assert.deepEqual(await wave.settings.playback(), {
         crossfadeSeconds: 4,
         normalizeVolume: false,
         bufferMinutes: 15,
+        dontPlayExplicit: false,
+        continueQueue: true,
       });
 
       for (const change of [
@@ -1174,6 +1273,8 @@ test("Settings › Playback is kept for the account and reaches the engine at on
         { crossfadeSeconds: Number.NaN },
         { normalizeVolume: "off" },
         { bufferMinutes: 3 },
+        { dontPlayExplicit: "on" },
+        { continueQueue: 1 },
         { volume: 1 },
         null,
         "fast",
@@ -1185,6 +1286,69 @@ test("Settings › Playback is kept for the account and reaches the engine at on
         );
     } finally {
       await runtime.dispose();
+    }
+  });
+});
+
+test("Settings › Playback lists the outputs, and the one picked is kept and played on", async () => {
+  await withFile(async (file) => {
+    const speakers = { id: "wasapi:speakers", name: "Speakers" };
+    const headphones = { id: "wasapi:headphones", name: "Headphones" };
+    const first = connect(file);
+    const wave = first.exposed.get("wave") as WaveBridge;
+    const call = (channel: string, ...args: unknown[]) =>
+      first.handlers.get(channel)!(trusted, ...args);
+    try {
+      assert.deepEqual(await wave.settings.outputs(), { outputs: [], chosen: null });
+      first.plug([speakers, headphones]);
+      assert.deepEqual(await wave.settings.outputs(), {
+        outputs: [speakers, headphones],
+        chosen: null,
+      });
+      assert.ok(
+        !first.engineCalls.some((c) => c.startsWith("settings output")),
+        "nothing picked: the engine stays on the system's default",
+      );
+
+      const picked = { ...headphones, connected: true };
+      assert.deepEqual(await wave.settings.setOutput(headphones.id), {
+        outputs: [speakers, headphones],
+        chosen: picked,
+      });
+      assert.equal(first.engineCalls.at(-1), "settings output wasapi:headphones");
+
+      // Unplugged: still the choice, shown as away, for when it comes back.
+      first.plug([speakers]);
+      assert.deepEqual(await wave.settings.outputs(), {
+        outputs: [speakers],
+        chosen: { ...headphones, connected: false },
+      });
+
+      for (const id of ["wasapi:unknown", "", 7, {}, undefined])
+        await assert.rejects(call("settings.setOutput", id), /refused/i, JSON.stringify(id));
+    } finally {
+      await first.runtime.dispose();
+    }
+
+    const second = connect(file);
+    const again = second.exposed.get("wave") as WaveBridge;
+    try {
+      assert.deepEqual((await again.settings.outputs()).chosen, {
+        ...headphones,
+        connected: false,
+      });
+      assert.ok(
+        second.engineCalls.includes("settings output wasapi:headphones"),
+        "a restart plays on the output picked before it",
+      );
+      second.plug([speakers, headphones]);
+      assert.deepEqual(await again.settings.setOutput(null), {
+        outputs: [speakers, headphones],
+        chosen: null,
+      });
+      assert.equal(second.engineCalls.at(-1), "settings output undefined");
+    } finally {
+      await second.runtime.dispose();
     }
   });
 });
@@ -1229,6 +1393,43 @@ test("Search online is kept on this computer, starts as Only on demand and takes
       await assert.rejects(handlers.get("settings.setSearchOnline")!(trusted, "wifi"), /refused/i);
       await wave.settings.setSearchOnline("onDemand");
       assert.equal(await wave.settings.searchOnline(), "onDemand");
+    } finally {
+      await runtime.dispose();
+    }
+  });
+});
+
+test("Don't Play Explicit keeps explicit songs out of the queue and takes them out as it turns on", async () => {
+  await withFile(async (file) => {
+    const { runtime, exposed } = connect(file);
+    try {
+      const wave = exposed.get("wave") as WaveBridge;
+      await runtime.runPromise(
+        Effect.gen(function* () {
+          const db = (yield* Database) as unknown as TestDatabase;
+          addTrack(db, { title: "A Clean" });
+          addTrack(db, { title: "B Explicit", explicit: "explicit" });
+          addTrack(db, { title: "C Clean" });
+        }),
+      );
+      const scope = { kind: "songs" } as const;
+      const queued = async () => (await wave.playback.queue(0, 10)).items.map((row) => row.title);
+      await wave.playback.start(scope, 1);
+      assert.deepEqual(await queued(), ["A Clean", "B Explicit", "C Clean"]);
+      assert.equal((await wave.playback.view()).current?.title, "B Explicit");
+
+      const after = await wave.settings.setPlayback({ dontPlayExplicit: true });
+      assert.equal(after.dontPlayExplicit, true);
+      assert.deepEqual(await queued(), ["A Clean", "C Clean"], "the playing one goes too");
+      assert.equal((await wave.playback.view()).current?.title, "C Clean");
+
+      await wave.playback.start(scope, 1);
+      assert.deepEqual(await queued(), ["A Clean", "C Clean"]);
+      assert.equal(
+        (await wave.playback.view()).current?.title,
+        "C Clean",
+        "a clicked explicit song gives way to the next clean one",
+      );
     } finally {
       await runtime.dispose();
     }
@@ -1673,6 +1874,111 @@ test("the account's language applies on sign-in and later pulls, and desktop cha
   });
 });
 
+test("a theme edit is validated, changes the theme at once and survives reopening", async () => {
+  await withFile(async (file) => {
+    const first = connect(file);
+    const wave = first.exposed.get("wave") as WaveBridge;
+    try {
+      assert.equal((await wave.account.view()).theme, null);
+      const stored = await wave.settings.editTheme({ kind: "swatch", group: "dark", id: "navy" });
+      assert.equal(themeFor(readThemeChoice(stored)).dark.background, "#0a0f1f");
+      assert.equal((await wave.account.view()).theme, stored);
+      assert.equal(first.themes.at(-1), stored);
+      await assert.rejects(
+        first.handlers.get("settings.editTheme")!(trusted, {
+          kind: "swatch",
+          group: "dark",
+          id: "sand",
+        }),
+        /refused/i,
+      );
+      assert.equal((await wave.account.view()).theme, stored);
+    } finally {
+      await first.runtime.dispose();
+    }
+    const second = connect(file);
+    try {
+      const reopened = second.exposed.get("wave") as WaveBridge;
+      await reopened.settings.editTheme({ kind: "save", group: "primary", hex: "#7aaef5" });
+      const custom = await reopened.settings.editTheme({
+        kind: "saved",
+        group: "primary",
+        hex: "#7aaef5",
+      });
+      const theme = themeFor(readThemeChoice(custom));
+      assert.equal(theme.dark.background, "#0a0f1f");
+      assert.equal(theme.dark.accent, "#7aaef5");
+      const reset = readThemeChoice(await reopened.settings.editTheme({ kind: "reset" }));
+      assert.deepEqual(themeFor(reset), themeFor(readThemeChoice(null)));
+      assert.deepEqual(reset.savedPrimary, ["#7aaef5"]);
+    } finally {
+      await second.runtime.dispose();
+    }
+  });
+});
+
+test("the account's theme reaches the desktop on a pull, and a desktop edit reaches the phone", async () => {
+  await withFile(async (file) => {
+    const app = await desktop();
+    const phone = await app.service.signIn();
+    const phoneDb = await openTestDatabase();
+    const values = new Map<string, string>([
+      ["settings.theme", JSON.stringify({ light: "sage", dark: "plum" })],
+    ]);
+    const phoneSync = () =>
+      syncCycle({
+        db: phoneDb,
+        splits: creditSplits(),
+        account: "ana@example.com",
+        transport: {
+          request: async (method, path, body) => {
+            const response = await app.service.request(method, path, {
+              session: phone,
+              ...(body === null ? {} : { body, headers: { "content-type": "application/json" } }),
+            });
+            return { status: response.status, body: await response.text() };
+          },
+        },
+        preferences: {
+          value: (key) => values.get(key) ?? null,
+          apply: (key, value) => {
+            if (value === null) values.delete(key);
+            else values.set(key, value);
+          },
+        },
+        now: Date.now,
+        songsChanged: false,
+        wait: async () => {},
+      });
+    const phoneTheme = () => themeFor(readThemeChoice(values.get("settings.theme") ?? null));
+    stampPreference(phoneDb, "settings.theme", Date.now());
+    await phoneSync();
+    const { clock, pass } = fakeClock();
+    const { runtime, exposed, themes } = connect(file, undefined, {
+      service: app.open(),
+      clock,
+    });
+    const wave = exposed.get("wave") as WaveBridge;
+    try {
+      await wave.account.signIn();
+      await until(async () => (await wave.account.view()).theme !== null);
+      // Main hears of a pulled theme, for the window's frame.
+      assert.equal(themeFor(readThemeChoice(themes.at(-1) ?? null)).dark.background, "#140c17");
+      // The edit is made to the theme the phone pushed: its light background stays.
+      await wave.settings.editTheme({ kind: "custom", group: "secondary", hex: "#e8c454" });
+      await pass(10_000);
+      await until(async () => {
+        await phoneSync();
+        return phoneTheme().dark.highlight === "#e8c454";
+      });
+      assert.equal(phoneTheme().light.background, "#e1eadc");
+      assert.equal(phoneTheme().dark.background, "#140c17");
+    } finally {
+      await runtime.dispose();
+    }
+  });
+});
+
 test("a phone's Settings › Playback reaches the desktop's engine when a sync pulls it", async () => {
   await withFile(async (file) => {
     const app = await desktop();
@@ -1685,6 +1991,8 @@ test("a phone's Settings › Playback reaches the desktop's engine when a sync p
       const values = new Map([
         ["settings.crossfadeSeconds", "6"],
         ["settings.normalizeVolume", "off"],
+        ["settings.dontPlayExplicit", "on"],
+        ["settings.continueQueue", "off"],
       ]);
       for (const key of values.keys()) stampPreference(phoneDb, key, Date.now());
       await syncCycle({
@@ -1717,6 +2025,8 @@ test("a phone's Settings › Playback reaches the desktop's engine when a sync p
         crossfadeSeconds: 6,
         normalizeVolume: false,
         bufferMinutes: 2,
+        dontPlayExplicit: true,
+        continueQueue: false,
       });
       await until(async () => engineCalls.includes("settings normalize false"));
       assert.deepEqual(engineCalls.slice(-2), ["settings crossfade 6", "settings normalize false"]);
@@ -2402,6 +2712,24 @@ test("main refuses download calls with bad songs, actions, ids or pages", async 
       await assert.rejects(call("downloads.retry", [7]), /Refused/);
       await assert.rejects(call("downloads.cancel", "abcdefghijk"), /Refused/);
       await assert.rejects(call("downloads.rows", 0, 10_000), /Refused/);
+      await assert.rejects(call("downloads.rows", 0, 10, "yes"), /Refused/);
+      await assert.rejects(
+        call("downloads.move", { kind: "song", from: "../journal", step: 1 }),
+        /Refused/,
+      );
+      await assert.rejects(
+        call("downloads.move", { kind: "group", from: "songs", step: 2 }),
+        /Refused/,
+      );
+      await assert.rejects(call("downloads.move", { kind: "group", from: "songs" }), /Refused/);
+      await assert.rejects(
+        call("downloads.move", { kind: "group", from: "songs", to: "album:7", step: 1 }),
+        /Refused/,
+      );
+      await assert.rejects(call("downloads.failedReason", "Not found online", "delete"), /Refused/);
+      // A move that names nothing waiting is taken and does nothing.
+      await call("downloads.move", { kind: "group", from: "songs", step: 1 });
+      await call("downloads.failedReason", "Not found online", "retry");
       await assert.rejects(call("downloads.setBestQuality", "on"), /Refused/);
     } finally {
       await runtime.dispose();

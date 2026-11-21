@@ -43,7 +43,7 @@ import type {
   QueueRow,
 } from "../../shared/playerView.ts";
 import { ytRow } from "../../shared/yt.ts";
-import type { PlaybackSettings } from "../../shared/playbackSettings.ts";
+import type { OutputSettings, PlaybackSettings } from "../../shared/playbackSettings.ts";
 import { Player } from "../audio/player.ts";
 import { browseSongs, browseTrackIds, playlistSongs } from "../library/browse.ts";
 import { DesktopLibrary } from "../library/library.ts";
@@ -51,6 +51,7 @@ import { preference, savePreference } from "../preferences.ts";
 import { YtMusic } from "../yt/ytMusic.ts";
 import { streamedStarred } from "../yt/streamedSong.ts";
 import { streamedWithinBuffer } from "./bufferAhead.ts";
+import { outputSettings, readOutput, saveOutput } from "./outputDevice.ts";
 import { readPlaybackSettings, savePlaybackSettings } from "./playbackSettings.ts";
 import { createSleepTimer } from "./sleepTimer.ts";
 import { Downloads } from "../downloads/downloadsLayer.ts";
@@ -99,6 +100,13 @@ export interface PlaybackShape extends PlaybackTransport {
   readonly setSettings: (change: Partial<PlaybackSettings>) => Promise<PlaybackSettings>;
   /** Plays by the stored settings again, after sync pulled the account's values. */
   readonly applySettings: () => Promise<void>;
+  /** The system's outputs and the one picked for this computer. */
+  readonly outputs: () => OutputSettings;
+  /**
+   * Moves playback to the output with [id], one the system has now, or back to the system's
+   * default with null; the song goes on from where it is. Rejects an id the system doesn't have.
+   */
+  readonly setOutput: (id: string | null) => Promise<OutputSettings>;
   /**
    * Starts a sleep timer, replacing the running one; null cancels it. End of queue also means
    * nothing adds songs to a queue that plays out.
@@ -195,6 +203,7 @@ export const playbackLayer = Layer.effect(
         },
         stopped: (why) => stoppedBy(why),
         gainDb: gains.gainDb,
+        dontPlayExplicit: () => settings.dontPlayExplicit,
       }),
     );
     const sleep = createSleepTimer({
@@ -260,16 +269,27 @@ export const playbackLayer = Layer.effect(
       await run(player.setCrossfade(settings.crossfadeSeconds));
       await run(player.setNormalize(settings.normalizeVolume));
     };
-    /** Plays by [next] from here, measuring or not as its Normalize Volume says. */
+    /**
+     * Plays by [next] from here, measuring or not as its Normalize Volume says. Don't Play
+     * Explicit turning on takes the queue's explicit songs out, and the Magic Queue hears
+     * Continue with Magic Queue change.
+     */
     const playBySettings = async (next: typeof settings) => {
       const switched = next.normalizeVolume !== settings.normalizeVolume;
+      const explicitOff = next.dontPlayExplicit && !settings.dontPlayExplicit;
+      const continues = next.continueQueue !== settings.continueQueue;
       settings = next;
       await sendSettings();
       sendBuffer();
       if (switched) measurements.switched();
+      if (explicitOff) await moved(session.dropExplicit());
+      else if (continues) queueChanged();
     };
     yield* Effect.promise(() => run(player.setVolume(muted ? 0 : volume)).catch(failed));
     yield* Effect.promise(() => sendSettings().catch(failed));
+    const picked = readOutput(db);
+    if (picked !== undefined)
+      yield* Effect.promise(() => run(player.setOutput(picked.id)).catch(failed));
     queueChanged();
     let queueFed = session.snapshot().queue;
     let playingFed = false;
@@ -663,6 +683,14 @@ export const playbackLayer = Layer.effect(
         return settings;
       },
       applySettings: () => playBySettings(readPlaybackSettings(db)),
+      outputs: () => outputSettings(player.outputs(), readOutput(db)),
+      setOutput: async (id) => {
+        const output = id === null ? undefined : player.outputs().find((it) => it.id === id);
+        if (id !== null && output === undefined) throw new Error("Refused: unknown output");
+        await run(player.setOutput(output?.id));
+        saveOutput(db, output);
+        return outputSettings(player.outputs(), output);
+      },
       queueState: () => session.snapshot().queue,
       playing: () => session.snapshot().status.state === "playing",
       dispatch: async (command) => {
