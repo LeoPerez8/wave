@@ -134,7 +134,12 @@ export const recognizeTile: (RecognizeTileNative & { readonly capture: Recognize
           // An APK from before the star button takes the line and the match only.
           if (recognizeTileFavorites === null) WaveRecognize.tileMatchSaved(line, match);
           else
-            WaveRecognize.tileMatchSaved(line, match, favorite?.label ?? null, favorite?.on ?? true);
+            WaveRecognize.tileMatchSaved(
+              line,
+              match,
+              favorite?.label ?? null,
+              favorite?.on ?? true,
+            );
         },
         notify: (notice) => {
           if (notice.kind === "match") {
