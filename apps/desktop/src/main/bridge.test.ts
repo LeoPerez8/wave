@@ -43,6 +43,7 @@ import { DesktopLibrary, desktopLibraryLayer } from "./library/library.ts";
 import { preference } from "./preferences.ts";
 import { ytMusicLayer } from "./yt/ytMusic.ts";
 import { desktopLinksLayer } from "./links/layer.ts";
+import { cardImagesLayer } from "./cards/cardImages.ts";
 import { geniusLyricsSearchLayer } from "./lyrics/geniusLyricsSearchLayer.ts";
 import { ytFeaturesLayer } from "./yt/ytServices.ts";
 import { ytAccountLayer } from "./yt/ytAccountLayer.ts";
@@ -570,6 +571,8 @@ const connect = (
   const jvm = jvmInMemory();
   /** What the M3U picker answers. */
   const copied: string[] = [];
+  /** The card images main saved (by file name) and copied; `save` is the dialog's answer. */
+  const cards = { save: true, saved: [] as string[], copied: [] as number[] };
   const picked = { playlists: [] as string[] };
   /** How the browser's YouTube sign-in ends. */
   const browser = { outcome: { kind: "noBrowser" } as YtBrowserOutcome };
@@ -613,6 +616,13 @@ const connect = (
     }).pipe(
       Layer.provideMerge(
         Layer.mergeAll(
+          cardImagesLayer({
+            save: async (fileName, png) => {
+              if (cards.save) cards.saved.push(`${fileName} ${png.length}`);
+              return cards.save;
+            },
+            copy: async (png) => void cards.copied.push(png.length),
+          }),
           desktopLinksLayer({
             online: () => true,
             writeClipboard: (text) => {
@@ -714,6 +724,7 @@ const connect = (
     jvm: jvm.state,
     picked,
     copied,
+    cards,
     languages,
     themes,
     browser,
@@ -3543,6 +3554,89 @@ test("playlist, artist and genre pages download their missing songs in page orde
   });
 });
 
+/** The first day of the month [back] months before this one, local time. */
+const monthBack = (back: number) => {
+  const now = new Date();
+  return new Date(now.getFullYear(), now.getMonth() - back, 1);
+};
+const monthPeriod = (start: Date) =>
+  ({ kind: "month", year: start.getFullYear(), month: start.getMonth() + 1 }) as const;
+const monthId = (start: Date) =>
+  `${start.getFullYear()}-${String(start.getMonth() + 1).padStart(2, "0")}`;
+
+/** [count] counted plays of six minutes in the month that starts at [month]. */
+const playInMonth = (db: TestDatabase, trackId: number, month: Date, count: number) => {
+  for (let n = 0; n < count; n++)
+    recordPlay(db, {
+      trackId: String(trackId),
+      startedAt: month.getTime() + (n % 20) * 24 * 60 * 60_000 + 20 * 60 * 60_000 + n * 1000,
+      counted: true,
+      listenedMs: 6 * 60_000,
+      durationMs: 6 * 60_000,
+      source: "phone",
+      endReason: "completed",
+      context: null,
+    });
+};
+
+test("a month with three hours listened has a Recap on Home and Stats until it is opened; a month with less has none", async () => {
+  await withFile(async (file) => {
+    const { runtime, exposed, handlers } = connect(file);
+    const wave = exposed.get("wave") as WaveBridge;
+    const [last, before, older] = [monthBack(1), monthBack(2), monthBack(3)];
+    try {
+      await runtime.runPromise(
+        Effect.gen(function* () {
+          const db = (yield* Database) as unknown as TestDatabase;
+          const moon = addTrack(db, { title: "Pink Moon", artist: "Nick Drake", genre: "Folk" });
+          const road = addTrack(db, { title: "Road", artist: "Nick Drake", album: "Pink Moon" });
+          // Last month: 3 hours exactly. The month before: 2 h 54 min. The one before that: 4 hours.
+          playInMonth(db, moon, last, 20);
+          playInMonth(db, road, last, 10);
+          playInMonth(db, moon, before, 29);
+          playInMonth(db, road, older, 40);
+        }),
+      );
+      const listed = (await wave.stats.recaps()).items.filter((period) => period.kind === "month");
+      assert.deepEqual(listed, [monthPeriod(last), monthPeriod(older)]);
+      assert.deepEqual((await wave.home.view()).recap, monthPeriod(last));
+
+      const recap = await wave.stats.recap(monthId(last));
+      assert.deepEqual(recap?.period, monthPeriod(last));
+      assert.deepEqual(
+        recap?.slides.map((slide) => slide.kind),
+        ["minutes", "topSongs", "topArtists", "topAlbum", "topGenres", "habits", "summary"],
+      );
+      const [minutes, songs] = recap!.slides;
+      assert.ok(minutes?.kind === "minutes" && minutes.minutes === 180);
+      assert.ok(songs?.kind === "topSongs");
+      assert.deepEqual(
+        songs.songs.map((row) => [row.title, row.artist, row.countedPlays]),
+        [
+          ["Pink Moon", "Nick Drake", 20],
+          ["Road", "Nick Drake", 10],
+        ],
+      );
+      await wave.stats.recapClosed();
+
+      // Opened: Home stops announcing it, and Stats still lists it.
+      assert.equal((await wave.home.view()).recap, null);
+      assert.equal(
+        (await wave.stats.recaps()).items.filter((period) => period.kind === "month").length,
+        2,
+      );
+
+      assert.equal(await wave.stats.recap(monthId(before)), null);
+      for (const bad of ["2026-13", "../2026-01", 202601, ""])
+        await assert.rejects(handlers.get("stats.recap")!(trusted, bad), /refused/i);
+      for (const bad of [-1, 1.5, "0", 99])
+        await assert.rejects(handlers.get("stats.recapStory")!(trusted, bad), /refused/i);
+    } finally {
+      await runtime.dispose();
+    }
+  });
+});
+
 test("Home's editor reorders, removes and adds sections at once, and main refuses a bad edit", async () => {
   await withFile(async (file) => {
     const first = connect(file);
@@ -3682,6 +3776,129 @@ test("Home's arrangement syncs with a phone both ways, and an edit keeps a secti
       await pass(15 * 60_000);
       await until(async () => (await wave.home.arrangement()).sections.length === 2);
       assert.deepEqual((await wave.home.arrangement()).sections, ["most-played", "stats"]);
+    } finally {
+      await runtime.dispose();
+    }
+  });
+});
+
+test("a Recap opened with nothing playing plays its top song, counts no play and gives the queue back", async () => {
+  await withFile(async (file) => {
+    const { runtime, exposed } = connect(file);
+    const wave = exposed.get("wave") as WaveBridge;
+    const last = monthBack(1);
+    const plays = () =>
+      runtime.runPromise(
+        Effect.gen(function* () {
+          const db = yield* Database;
+          return db.get<{ n: number }>(sql`SELECT count(*) AS n FROM play_events`)!.n;
+        }),
+      );
+    try {
+      await runtime.runPromise(
+        Effect.gen(function* () {
+          const db = (yield* Database) as unknown as TestDatabase;
+          const moon = addTrack(db, { title: "Pink Moon", artist: "Nick Drake" });
+          const road = addTrack(db, { title: "Road", artist: "Nick Drake" });
+          addTrack(db, { title: "Parasite", artist: "Nick Drake" });
+          playInMonth(db, moon, last, 10);
+          playInMonth(db, road, last, 25);
+        }),
+      );
+      // A queue waits paused on its first song.
+      await wave.playback.start({ kind: "songs" }, 0);
+      await wave.playback.seek(400);
+      await wave.playback.pause();
+      const queued = (await wave.playback.queue(0, 10)).items.map((row) => row.title);
+      const waiting = (await wave.playback.view()).current?.title;
+      const before = await plays();
+
+      const recap = await wave.stats.recap(monthId(last));
+      await wave.stats.recapStory(0);
+      let view = await wave.playback.view();
+      assert.equal(view.current?.title, "Road", "the Recap's #1 song plays");
+      assert.equal(view.status.state, "playing");
+      assert.equal(view.undoOffer, null);
+      // Its top songs story features the same song: it goes on playing.
+      await wave.stats.recapStory(recap!.slides.findIndex((slide) => slide.kind === "topSongs"));
+      assert.equal((await wave.playback.view()).current?.title, "Road");
+
+      await wave.stats.recapClosed();
+      view = await wave.playback.view();
+      assert.equal(view.status.state, "paused");
+      assert.equal(view.status.positionMs, 400);
+      assert.deepEqual(
+        (await wave.playback.queue(0, 10)).items.map((row) => row.title),
+        queued,
+      );
+      assert.equal(view.current?.title, waiting);
+      assert.equal(await plays(), before, "a Recap's music is never on record");
+
+      // With a song playing, the Recap leaves it alone.
+      await wave.playback.play();
+      await wave.stats.recap(monthId(last));
+      await wave.stats.recapStory(0);
+      view = await wave.playback.view();
+      assert.equal(view.current?.title, waiting);
+      assert.equal(view.status.state, "playing");
+      await wave.stats.recapClosed();
+      assert.equal((await wave.playback.view()).status.state, "playing");
+    } finally {
+      await runtime.dispose();
+    }
+  });
+});
+
+/** A PNG's first bytes: its signature and an IHDR chunk of [width] by [height]. */
+const pngHeader = (width: number, height: number) => {
+  const bytes = Buffer.alloc(33);
+  Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]).copy(bytes);
+  bytes.writeUInt32BE(13, 8);
+  bytes.write("IHDR", 12, "latin1");
+  bytes.writeUInt32BE(width, 16);
+  bytes.writeUInt32BE(height, 20);
+  return bytes.toString("base64");
+};
+
+test("Save Image and Copy Image take only a PNG no larger than a card and a card's file name", async () => {
+  await withFile(async (file) => {
+    const { runtime, exposed, handlers, cards } = connect(file);
+    const wave = exposed.get("wave") as WaveBridge;
+    const name = "Wave - Recap October 2026 - 20261120-101500.png";
+    const card = pngHeader(1080, 1920);
+    try {
+      assert.equal(await wave.cards.saveImage(name, card), true);
+      assert.deepEqual(cards.saved, [`${name} 33`]);
+      cards.save = false;
+      assert.equal(await wave.cards.saveImage(name, card), false, "the dialog was cancelled");
+      await wave.cards.copyImage(card);
+      // A lyrics or song card is as tall as its content.
+      await wave.cards.copyImage(pngHeader(1080, 1350));
+      assert.deepEqual(cards.copied, [33, 33]);
+
+      const save = (...args: unknown[]) => handlers.get("cards.saveImage")!(trusted, ...args);
+      const copy = (...args: unknown[]) => handlers.get("cards.copyImage")!(trusted, ...args);
+      for (const bad of [
+        String.raw`C:\Users\me\Wave - Recap 2026 - 20261120-101500.png`,
+        "../Wave - Recap 2026 - 20261120-101500.png",
+        "Wave - Recap 2026 - 20261120-101500.exe",
+        String.raw`Wave - ..\Recap 2026 - 20261120-101500.png`,
+        "recap.png",
+        7,
+      ])
+        await assert.rejects(save(bad, card), /refused/i);
+      for (const bad of [
+        pngHeader(1081, 1920),
+        pngHeader(1080, 1921),
+        pngHeader(0, 10),
+        "not base64!",
+        "",
+        7,
+      ]) {
+        await assert.rejects(save(name, bad), /refused/i);
+        await assert.rejects(copy(bad), /refused/i);
+      }
+      assert.deepEqual(cards.copied, [33, 33]);
     } finally {
       await runtime.dispose();
     }

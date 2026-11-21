@@ -89,6 +89,7 @@ import {
   type MiniPlayerCalls,
 } from "./system/miniPlayerHandlers.ts";
 import { statsHandlers } from "./statsHandlers.ts";
+import { CardImages, cardImageHandlers } from "./cards/cardImages.ts";
 import { historyHandlers } from "./historyHandlers.ts";
 import { lyricsAndTagsHandlers } from "./lyricsAndTagsHandlers.ts";
 import { HomeFollow } from "./follows/homeFollow.ts";
@@ -191,6 +192,7 @@ export type BridgeServices =
   | FollowedArtists
   | YtAccount
   | SpotifyAccount
+  | CardImages
   | SpotifyImport;
 
 const refuse = (call: BridgeCall, why: string) => Effect.fail(new Error(`Refused ${call}: ${why}`));
@@ -899,6 +901,7 @@ const createHandlers = (
     ...playlistHandlers(validTarget),
     ...homeHandlers,
     ...statsHandlers,
+    ...cardImageHandlers,
     ...historyHandlers,
     ...lyricsAndTagsHandlers,
     ...homeFollowHandlers,

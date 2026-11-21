@@ -4,8 +4,10 @@ import {
   checkedTableRow,
   listDuration,
   readThemeChoice,
+  recapId,
   tableSelectionOf,
   themeFor,
+  type RecapPeriod,
   type SearchOnline,
   type TableSelection,
 } from "@wave/core";
@@ -76,7 +78,8 @@ import { geniusAccess } from "./useSongGenius.ts";
 import { Home } from "./Home.tsx";
 import { HomeSettings } from "./HomeEditor.tsx";
 import { Stats } from "./Stats.tsx";
-import type { StatsRoute } from "../../shared/stats.ts";
+import { RecapViewer } from "./RecapViewer.tsx";
+import type { DesktopRecap, StatsRoute } from "../../shared/stats.ts";
 import { ListeningHistory } from "./ListeningHistory.tsx";
 import type { HistoryRoute } from "../../shared/history.ts";
 import { isYtRoute, YtPage, type YtRoute } from "./YtPages.tsx";
@@ -374,6 +377,24 @@ export function App() {
   const noticeSeen = useRef<number | null | undefined>(undefined);
   const notice = downloads?.notice;
   const { notify } = actions;
+  /** The Recap whose stories fill the window, and how many were opened (Home and Stats read again). */
+  const [recap, setRecap] = useState<DesktopRecap>();
+  const [recapsOpened, setRecapsOpened] = useState(0);
+  const openRecap = (period: RecapPeriod) => {
+    void window.wave.stats
+      .recap(recapId(period))
+      .then((opened) => {
+        if (opened === null) notify(text.recap.unavailable);
+        else setRecap(opened);
+      })
+      .catch(failed);
+  };
+  const closeRecap = () => {
+    setRecap(undefined);
+    setRecapsOpened((count) => count + 1);
+    // The queue comes back as it was before the Recap's music, and the player bar shows it.
+    playback.run(window.wave.stats.recapClosed());
+  };
   useEffect(() => {
     if (downloads === undefined) return;
     const seen = noticeSeen.current;
@@ -1193,6 +1214,8 @@ export function App() {
             run={playback.run}
             go={go}
             onStats={() => go(defaultStats)}
+            onRecap={openRecap}
+            recapsOpened={recapsOpened}
             onError={failed}
             notify={notify}
             selectionFor={selectionFor}
@@ -1219,6 +1242,8 @@ export function App() {
             go={go}
             onError={failed}
             notify={notify}
+            onRecap={openRecap}
+            recapsOpened={recapsOpened}
             onMenu={(row, at) => {
               if (row.unavailable || row.outside) return;
               if (row.videoId === undefined) {
@@ -1381,6 +1406,7 @@ export function App() {
       {actions.overlays}
       {playlistEdits.overlays}
       {shortcuts && <ShortcutsSheet onClose={() => setShortcuts(false)} />}
+      {recap && <RecapViewer recap={recap} onClose={closeRecap} notify={notify} />}
     </main>
   );
 }

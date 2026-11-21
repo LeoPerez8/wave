@@ -1,4 +1,4 @@
-import type { DiscoverRowId, LibraryTotals, ListeningTotals } from "@wave/core";
+import type { DiscoverRowId, LibraryTotals, ListeningTotals, RecapPeriod } from "@wave/core";
 import type { Page } from "./bridge.ts";
 import type { BrowseRow } from "./browse.ts";
 
@@ -20,6 +20,8 @@ export interface HomeSectionView {
 export interface HomeView extends Page<HomeSectionView> {
   readonly discoverRows: readonly DiscoverRowId[];
   readonly hint: "empty" | "play" | "none" | null;
+  /** The Recap Home's card announces (Core's `recapToAnnounce`); null once it was opened. */
+  readonly recap: RecapPeriod | null;
   readonly stats?: {
     readonly library: LibraryTotals;
     readonly listening: ListeningTotals;

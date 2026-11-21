@@ -9,7 +9,11 @@ import { Database } from "@wave/client";
 import { saveMeasurement, selectSongsToMeasure } from "@wave/client/db/loudness";
 import { selectMissingSongs } from "@wave/client/db/missingSongs";
 import { setFavorites } from "@wave/client/db/playHistory";
-import { createPlaybackSession, type AudioPort } from "@wave/client/playbackSession";
+import {
+  createPlaybackSession,
+  type AudioPort,
+  type QueueLoan,
+} from "@wave/client/playbackSession";
 import { queueShuffle } from "@wave/client/queueShuffle";
 import { createQueueGains, queueAlbum } from "@wave/client/queueGains";
 import { createSongMeasurements } from "@wave/client/songMeasurements";
@@ -134,6 +138,18 @@ export interface PlaybackShape extends PlaybackTransport {
   readonly dispatch: (command: QueueCommand) => Promise<void>;
   /** Hears the queue change and plays end, until the returned function is called. */
   readonly watch: (watcher: QueueWatcher) => () => void;
+  /**
+   * A Recap's music (docs/spec.md, Recap): with nothing playing as the Recap opens, its stories'
+   * songs play in place of the queue, on no record, and closing gives the queue back paused
+   * where it was. With a song playing, the Recap leaves it alone.
+   */
+  readonly recap: {
+    /** A Recap opened; [songs] is the Library song each of its stories plays, in story order. */
+    readonly opened: (songs: readonly (number | null)[]) => Promise<void>;
+    /** Story [index] shows. False when no open Recap has that story. */
+    readonly story: (index: number) => Promise<boolean>;
+    readonly closed: () => Promise<void>;
+  };
 }
 
 /** What follows the queue from main: the Magic Queue. */
@@ -591,7 +607,46 @@ export const playbackLayer = Layer.effect(
       };
     };
 
+    /** The open Recap: each story's song, the one playing, and the queue it borrowed. */
+    let recapOpen:
+      | {
+          readonly songs: readonly (number | null)[];
+          readonly silent: boolean;
+          playing: number | null;
+          loan: QueueLoan | undefined;
+        }
+      | undefined;
+    const recapClosed = async () => {
+      const loan = recapOpen?.loan;
+      recapOpen = undefined;
+      if (loan !== undefined) await moved(loan.giveBack());
+    };
+
     return {
+      recap: {
+        opened: async (songs) => {
+          await recapClosed().catch(failed);
+          recapOpen = {
+            songs,
+            silent: session.snapshot().status.state === "playing",
+            playing: null,
+            loan: undefined,
+          };
+        },
+        story: async (index) => {
+          const open = recapOpen;
+          if (open === undefined || !(index in open.songs)) return false;
+          const song = open.songs[index] ?? null;
+          // The same song goes on playing; a story with no song of its own keeps the last one.
+          if (open.silent || song === null || song === open.playing) return true;
+          open.playing = song;
+          open.loan ??= await session.borrow();
+          // A song that won't load leaves the Recap silent.
+          await moved(open.loan.play(String(song))).catch(() => undefined);
+          return true;
+        },
+        closed: recapClosed,
+      },
       fileFailed: (id) => failedFiles.has(id),
       view,
       activate,
