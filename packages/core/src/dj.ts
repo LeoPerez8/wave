@@ -230,6 +230,17 @@ export type DjAction =
       readonly key: DjTileKey;
       readonly artists: readonly { readonly name: string }[] | null;
       readonly library?: DjLibraryArtists;
+    }
+  | {
+      /**
+       * A tap on a result of the grid's search (`djSearchTiles`): [tile]
+       * joins the grid first, selected, and opens its row from [graph] as a
+       * tapped tile does. One the grid already shows is selected where it is.
+       */
+      readonly type: "add";
+      readonly tile: DjTile;
+      readonly graph?: ArtistGraph | null;
+      readonly library?: DjLibraryArtists;
     };
 
 /** How many tiles a DJ seed holds at most, so every pick still weighs in the queue. */
@@ -250,7 +261,10 @@ export const djSelected = (state: DjState, key: DjTileKey): boolean => state.sel
  * (the tap unselects it), or the seed still has room for it.
  */
 export const djSelectable = (state: DjState, key: DjTileKey): boolean =>
-  djSelected(state, key) || state.selected.length < DJ_MAX_SELECTED;
+  djSelected(state, key) || !djSeedFull(state);
+
+/** Whether [state]'s seed is full: `DJ_MAX_SELECTED` tiles are selected, and no further one can be. */
+export const djSeedFull = (state: DjState): boolean => state.selected.length >= DJ_MAX_SELECTED;
 
 /** Whether Done starts a queue from [state]: between 1 and `DJ_MAX_SELECTED` tiles are selected. */
 export const djCanStart = (state: DjState): boolean =>
@@ -365,10 +379,26 @@ const withRowFilled = (
  * [state] after [action]. A tap on a tile the grid doesn't hold, or on a
  * further tile once `DJ_MAX_SELECTED` are selected, leaves it as it is, and
  * so does a page no row waits for. Unselecting a tile keeps the tiles it opened.
+ * A search result never unselects: one that's selected stays so, and at
+ * `DJ_MAX_SELECTED` another can't be added (`djSelectable` says so ahead).
  */
 export const djReduce = (state: DjState, action: DjAction): DjState => {
   if (action.type === "similar")
     return withRowFilled(state, action.key, action.artists, action.library ?? []);
+  if (action.type === "add") {
+    if (djSelected(state, action.tile.key) || !djSelectable(state, action.tile.key)) return state;
+    const shown = state.tiles.find((each) => each.key === action.tile.key);
+    return withRowOpened(
+      {
+        ...state,
+        tiles: shown === undefined ? [action.tile, ...state.tiles] : state.tiles,
+        selected: [...state.selected, action.tile.key],
+      },
+      shown ?? action.tile,
+      action.graph ?? null,
+      action.library ?? [],
+    );
+  }
   if (djSelected(state, action.key))
     return { ...state, selected: state.selected.filter((key) => key !== action.key) };
   const tile = state.tiles.find((each) => each.key === action.key);

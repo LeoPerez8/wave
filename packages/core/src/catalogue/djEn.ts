@@ -38,6 +38,15 @@ export const djEn = {
     lesserKnown: "Lesser-known songs",
     newReleases: "New releases",
   },
+  /** The grid's search button, and what a screen reader calls its field. */
+  search: "Search artists and albums",
+  /** What the empty search field says. */
+  searchPlaceholder: "Artists, albums",
+  /** The search's line when nothing matches what's typed. */
+  searchNoMatches: "No artists or albums match.",
+  /** Why no result can be added: the selection holds its most ([max]) tiles. */
+  searchFull: (max: number) =>
+    `You've picked ${max}, the most a queue can start from. Unselect one to add another.`,
   /** What Up Next says over a queue started from DJ. */
   magicQueueFromDj: "Magic Queue · from DJ",
 };
