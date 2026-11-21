@@ -2,7 +2,7 @@
 /**
  * Collaborative playlists across accounts (docs/spec.md, "Collaborative playlists"): each
  * phone runs the sync cycle against one service holding several accounts
- * (`testCollaborationService.ts`), its collaborative-playlist switch on unless a test says.
+ * (`testCollaborationService.ts`), with the collaboration service unless a test says.
  */
 import assert from "node:assert/strict";
 import { describe, test } from "node:test";
@@ -63,7 +63,7 @@ const AIRBAG_RETAGGED: FixtureTrack = {
   durationMs: 285_000,
 };
 
-/** A phone of [account], signed in, with [songs]; [collaborative] is the Developer switch. */
+/** A phone of [account], signed in, with [songs]; [collaborative] gives it the collaboration service. */
 const phone = async (
   account: TestAccount,
   songs: readonly FixtureTrack[],
@@ -181,7 +181,7 @@ describe("a member's device", () => {
   });
 });
 
-describe("with the switch off", () => {
+describe("without the collaboration service", () => {
   test("a member's phone shows nothing of the playlist and sends no collaboration request", async () => {
     const { world } = await shared();
     const bea = await phone(world.account("bea"), [KARMA], { collaborative: false });
@@ -596,7 +596,7 @@ describe("the page's own pull", () => {
     assert.equal(world.account("bea").service.rows().playlists.length, 1);
   });
 
-  test("an ordinary playlist, or the switch off, sends nothing", async () => {
+  test("an ordinary playlist, or no collaboration service, sends nothing", async () => {
     const world = testCollaborationWorld();
     const ana = await phone(world.account("ana"), [AIRBAG]);
     createPlaylist(

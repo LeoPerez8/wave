@@ -46,7 +46,7 @@ export class WaveSync extends Context.Service<
     /**
      * Pulls the collaborative playlist [playlistId] alone, for its page in sight (docs/spec.md,
      * "Collaborative playlists", Refreshing), after the sync running if one is. Nothing for an
-     * ordinary playlist, signed out or with the switch off; a failure only waits for the next.
+     * ordinary playlist or signed out; a failure only waits for the next.
      */
     readonly syncPlaylist: (playlistId: number) => Effect.Effect<void>;
     /** Syncs now, signed in (an invite was just joined, so its playlist arrives). */

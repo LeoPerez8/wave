@@ -87,10 +87,10 @@ export interface SyncCycleInput {
    */
   readonly turn?: () => Promise<void>;
   /**
-   * The collaborative playlists' requests (`collaborationService`), given while their switch
-   * is on (Settings › Developer): each cycle then keeps the account's collaborative playlists
-   * as its pull states them, and syncs each one the account doesn't own with its own pull and
-   * push. Absent: nothing of them changes.
+   * The collaborative playlists' requests (`collaborationService`), which the phone and the
+   * computer always give: each cycle then keeps the account's collaborative playlists as its
+   * pull states them, and syncs each one the account doesn't own with its own pull and push.
+   * Absent (a test's sync): nothing of them changes.
    */
   readonly collaboration?: CollaborationService;
   /** A member's changes go up (the phone); false only pulls them (the desktop). Default true. */
@@ -344,8 +344,8 @@ export const syncCycle = async (input: SyncCycleInput): Promise<SyncCycleResult>
  * "Collaborative playlists", Refreshing): a member's device pulls it with its own requests,
  * pushes what waits in it and pulls again after a push, keeping a private copy when the
  * membership ended (pushed at once, as a cycle does); the owner's device pulls the account,
- * which holds the playlist's rows. Nothing is sent for an ordinary playlist, with the
- * switch off ([collaboration] absent), or before the Library joined the account.
+ * which holds the playlist's rows. Nothing is sent for an ordinary playlist, without
+ * [collaboration], or before the Library joined the account.
  */
 export const syncCollaborativePlaylist = async (
   input: SyncCycleInput,

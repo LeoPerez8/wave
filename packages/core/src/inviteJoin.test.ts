@@ -50,14 +50,9 @@ describe("inviteToken", () => {
 });
 
 describe("inviteOpening", () => {
-  test("with the switch off, the link asks to update Wave whatever the account", () => {
-    assert.equal(inviteOpening({ switchOn: false, signedIn: true }), "update");
-    assert.equal(inviteOpening({ switchOn: false, signedIn: false }), "update");
-  });
-
   test("signed out asks to sign in, signed in looks the invite up", () => {
-    assert.equal(inviteOpening({ switchOn: true, signedIn: false }), "signIn");
-    assert.equal(inviteOpening({ switchOn: true, signedIn: true }), "lookUp");
+    assert.equal(inviteOpening({ signedIn: false }), "signIn");
+    assert.equal(inviteOpening({ signedIn: true }), "lookUp");
   });
 });
 

@@ -15,9 +15,6 @@ export const inviteJoinPtBr: typeof inviteJoinEn = {
   fullMessage: "O Wave não aceita contas novas agora, então não dá para entrar nesta playlist.",
   notValidTitle: "Este convite não vale mais",
   notValidMessage: "Peça um link novo a quem convidou você.",
-  updateTitle: "Atualize o Wave para entrar",
-  updateMessage:
-    "Esta versão do Wave ainda não abre links de convite. Atualize o app e toque no link de novo.",
   couldntOpen: "Não foi possível abrir o convite",
   couldntJoin: "Não foi possível entrar na playlist",
   offlineMessage: "Conecte-se à internet e toque no link de novo.",

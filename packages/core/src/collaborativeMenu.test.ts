@@ -23,10 +23,10 @@ import {
 const names = (entries: readonly ItemActionEntry[]): string[] =>
   entries.map((entry) => entry.action);
 
-const menu = (item: ActionItem, on = true): string[] =>
-  names(itemActions({ kind: "playlist", items: [item], here: "/", collaborativePlaylists: on }));
+const menu = (item: ActionItem): string[] =>
+  names(itemActions({ kind: "playlist", items: [item], here: "/" }));
 
-/** The selection bar's entries for [items], with the switch on. */
+/** The selection bar's entries for [items]. */
 const bar = (items: ActionItem[]): string[] =>
   names(
     itemActions({
@@ -34,7 +34,6 @@ const bar = (items: ActionItem[]): string[] =>
       items,
       here: "/library/playlists",
       surface: "selection",
-      collaborativePlaylists: true,
     }),
   );
 
@@ -42,7 +41,7 @@ const bar = (items: ActionItem[]): string[] =>
 const afterShare = (entries: readonly string[]): string[] =>
   entries.slice(entries.indexOf("share") + 1);
 
-describe("a playlist's menu with collaborative playlists on", () => {
+describe("a playlist's menu", () => {
   test("an ordinary playlist offers Make Collaborative after Share, then Delete Playlist", () => {
     assert.deepEqual(afterShare(menu({})), ["makeCollaborative", "deletePlaylist"]);
   });
@@ -82,7 +81,6 @@ describe("a playlist's menu with collaborative playlists on", () => {
           items: [{ songs, ...(collaboration === undefined ? {} : { collaboration }) }],
           here: "/",
           onlineLookups: true,
-          collaborativePlaylists: true,
         }),
       );
     assert.deepEqual(subject("owner").slice(-2), ["fixSongs", "deletePlaylist"]);
@@ -103,22 +101,6 @@ describe("a playlist's menu with collaborative playlists on", () => {
       assert.ok(confirmsFirst(action), action);
     }
     assert.ok(!isDestructiveAction("makeCollaborative"));
-  });
-});
-
-describe("a playlist's menu with collaborative playlists off", () => {
-  test("none of it shows: a collaborative playlist's menu is an ordinary one", () => {
-    const ordinary = menu({}, false);
-    assert.deepEqual(afterShare(ordinary), ["deletePlaylist"]);
-    assert.deepEqual(menu({ collaboration: "owner" }, false), ordinary);
-    assert.deepEqual(menu({ collaboration: "member" }, false), ordinary);
-  });
-
-  test("leaving the switch out is off", () => {
-    assert.deepEqual(
-      names(itemActions({ kind: "playlist", items: [{}], here: "/" })),
-      menu({}, false),
-    );
   });
 });
 
