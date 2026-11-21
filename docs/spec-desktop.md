@@ -362,6 +362,8 @@ The prototype was approved on 2026-11-18 after an Impeccable critique; its decis
   star and time; album pages show the track number instead of the thumbnail; on an artist's page
   the artist column shows only featured artists. A selected row has its own tint, separate from
   the keyboard focus ring. Songs keeps the A–Z spine.
+- Songs and Favorites have the song count under their title, then Play and Shuffle in the accent
+  as on a hero; both play the list in the order its table shows (#1220).
 - Artwork has 6 px corners on tiles and heroes, 4 px on row thumbnails, circles for artists.
 - The song menu holds Play Next, Add to Queue, Add to Playlist, Favorite, Go to Album, Go to
   Artist, Start Magic Queue, Share, Select, Fix Song and Remove from Library.
