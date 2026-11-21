@@ -361,6 +361,21 @@ test("missing-song progress is readable by id and a notice records a download st
   }
 });
 
+test("a download Add to Playlist asked for says nothing of its own: the playlist's toast does", async () => {
+  const { downloads, journal } = setup();
+  try {
+    await downloads.yt([song.videoId], "playlist");
+    await downloads.missing([41], "playlist");
+    assert.deepEqual(
+      requests(journal).map(({ song }) => song.videoId),
+      [song.videoId, "missing:41"],
+    );
+    assert.equal(downloads.view().notice, null);
+  } finally {
+    downloads.dispose();
+  }
+});
+
 /** The star's state the service keeps on this computer: a key-value store. */
 const starSetup = (starred: number[]) => {
   const kept = new Map<string, string>();

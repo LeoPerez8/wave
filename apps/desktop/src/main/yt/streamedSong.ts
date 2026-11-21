@@ -30,7 +30,7 @@ import type {
   StreamedRunResult,
   StreamedSongMenu,
 } from "../../shared/streamedSongs.ts";
-import type { DownloadsShape } from "../downloads/downloads.ts";
+import type { AskedBy, DownloadsShape } from "../downloads/downloads.ts";
 
 export interface StreamedSongPorts {
   readonly db: LibraryDatabase;
@@ -157,8 +157,11 @@ export const runStreamedAction = async (
 ): Promise<StreamedRunResult> => {
   const { db, downloads } = ports;
   const { track, hasFile, jobId, status } = libraryFacts(ports, song);
-  /** Asks for the song; [by] a star, taking the star back takes the download back too. */
-  const download = (by?: "star") =>
+  /**
+   * Asks for the song; [by] a star, taking the star back takes the download back too, or Add to
+   * Playlist, whose toast is the only word of it.
+   */
+  const download = (by?: AskedBy) =>
     track !== null && !hasFile
       ? downloads.missing([track.id], by)
       : downloads.yt([song.videoId], by);
@@ -187,7 +190,7 @@ export const runStreamedAction = async (
       const result = addToPlaylist(db, playlistId, [entry], Date.now());
       ports.changed();
       // The desktop's playlists list the Library's songs: the song comes into the Library.
-      if (!hasFile && status === null) await download();
+      if (!hasFile && status === null) await download("playlist");
       return {
         kind: "playlist",
         name: result.name,
