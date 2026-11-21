@@ -1575,6 +1575,7 @@ export {
   signOutPlan,
   syncsPreference,
   vanishedFile,
+  withinServiceClock,
 } from "./sync.ts";
 export type {
   FilledSong,
@@ -1621,9 +1622,11 @@ export {
   pushBatches,
   pushBody,
   readPullPage,
+  readPushAnswer,
   syncFieldFits,
 } from "./syncWire.ts";
 export type {
+  CorrectedChangeTime,
   SyncDismissedSuggestion,
   SyncFavorite,
   SyncFieldKind,
@@ -1631,6 +1634,7 @@ export type {
   SyncHiddenRelease,
   SyncNotifiedShow,
   SyncPullPage,
+  SyncPushAnswer,
   SyncPlayEnd,
   SyncPlayRow,
   SyncPlaylist,
