@@ -45,7 +45,12 @@ describe("release secrets", () => {
     );
     assert.deepEqual(
       readers.map(({ job }) => job),
-      ["ci.yml › sign-windows", "ci.yml › release", "rollback.yml › rollback"],
+      [
+        "desktop.yml › sign-windows",
+        "desktop.yml › release",
+        "mobile.yml › release",
+        "rollback.yml › rollback",
+      ],
     );
     for (const { job, environment } of readers) {
       assert.ok(environment, `${job} reads a release secret without an Environment`);
@@ -62,11 +67,18 @@ describe("release secrets", () => {
   // Only a push to main opens ti, which needs no approval. Every tag run, -ti tags included,
   // takes main and waits for the owner, so a tag on any commit can't publish by itself.
   it("open ti only to pushes to main and main, behind approval, to everything else", () => {
-    const release = jobsOf(workflows.find(({ file }) => file === "ci.yml")!.text).get("release")!;
-    assert.equal(
-      environmentOf(release),
-      "${{ github.ref == 'refs/heads/main' && 'ti' || 'main' }}",
-    );
+    for (const [file, name] of [
+      ["mobile.yml", "release"],
+      ["desktop.yml", "sign-windows"],
+      ["desktop.yml", "release"],
+    ] as const) {
+      const job = jobsOf(workflows.find((workflow) => workflow.file === file)!.text).get(name)!;
+      assert.equal(
+        environmentOf(job),
+        "${{ github.ref == 'refs/heads/main' && 'ti' || 'main' }}",
+        `${file} › ${name}`,
+      );
+    }
     const rollback = jobsOf(workflows.find(({ file }) => file === "rollback.yml")!.text);
     assert.equal(environmentOf(rollback.get("rollback")!), "${{ inputs.channel }}");
   });
@@ -77,7 +89,7 @@ describe("release secrets", () => {
         .filter(([, job]) => job.includes("sign-apk.sh"))
         .map(([name]) => `${file} › ${name}`),
     );
-    assert.deepEqual(signers, ["ci.yml › release"]);
+    assert.deepEqual(signers, ["mobile.yml › release"]);
     for (const { file, text } of workflows) {
       assert.ok(!/debug\.keystore|\.jks\b|\.p12\b/.test(text), `${file} names a keystore file`);
     }

@@ -59,12 +59,13 @@ body="$dir/ci-report/$(printf '%s' "$job" | tr 'A-Z ' 'a-z-' | tr -cd 'a-z0-9.-'
   fi
   # How long the job and each step took, so agents without the Actions API can see
   # where the time goes. The API lags behind the runner, so retry until it shows this
-  # step (named "Report" in the workflow) running; past that, use what it has.
+  # step (named "Report" in the workflow) running; past that, use what it has. A job of a
+  # workflow ci.yml calls (mobile.yml, desktop.yml) is listed as "<caller> / <job>".
   # A skipped job has no steps to time.
   durations=""
   [ "$status" = "skipped" ] || for _ in $(seq 1 15); do
     if durations="$(gh api "repos/${repo}/actions/runs/${GITHUB_RUN_ID}/attempts/${GITHUB_RUN_ATTEMPT:-1}/jobs" \
-      --jq ".jobs[] | select(.name == \"${job}\")" \
+      --jq ".jobs[] | select(.name == \"${job}\" or (.name | endswith(\" / ${job}\")))" \
       | node "$(dirname "$0")/step-durations-cli.ts" "Report")"; then
       break
     fi

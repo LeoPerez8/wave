@@ -76,9 +76,9 @@ const IMAGE = /\.(avif|bmp|gif|heic|heif|ico|jpe?g|ktx|png|psd|svg|tiff?|webp)$/
  * image assets, and the assets Metro emitted for this bundle. Metro's assets are Android
  * resources that Gradle compiles into the APK, and a JS-only change can add one (an image from
  * a package), so a repack is only safe when they match the kept build's exactly.
- * The CI workflow and scripts are part of the recipe too: build flags and the bundle
- * handoff can change the native APK. Hashing all CI files conservatively rebuilds it
- * after a CI-only change; a TS/TSX-only app change still reuses the key. So does a new app
+ * The phone's CI workflow (mobile.yml, which builds the APK) and the CI scripts are part of the
+ * recipe too: build flags and the bundle handoff can change the native APK. Hashing all of them
+ * conservatively rebuilds it after such a CI-only change; a TS/TSX-only app change still reuses the key. So does a new app
  * version: a repack writes this run's into the APK.
  */
 export const apkCacheKey = ({
@@ -119,7 +119,7 @@ export const apkCacheKey = ({
   );
   const repo = resolve(appDir, "../..");
   const recipe = digest(repo, [
-    ".github/workflows/ci.yml",
+    ".github/workflows/mobile.yml",
     ...files(
       join(repo, "scripts/ci"),
       () => false,

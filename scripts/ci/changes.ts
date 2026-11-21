@@ -1,10 +1,13 @@
 // Which parts of the repo a change touches, and whether it can change the result of the
 // native modules' JVM tests.
-// The CI workflow runs it on a PR's changed files and turns jobs off by it:
-//   <paths, one per line> | node scripts/ci/changes.ts   # PRs
-//   node scripts/ci/changes.ts --all                      # everything else
-// It prints `<area>=true|false` lines, then the decisions `allPackages` and
-// `nativeTests`, ready for $GITHUB_OUTPUT. Checks also runs it, through affected-packages.sh.
+// The CI workflow runs it (changes.sh) and turns jobs off by it:
+//   <paths, one per line> | node scripts/ci/changes.ts   # a PR's files, or one app's since its release
+//   node scripts/ci/changes.ts --all                      # every area changed
+//   <releases, one JSON line each> | node scripts/ci/changes.ts --previous-release <phone|desktop> <ti|main> [<run's tag>]
+// It prints `<area>=true|false` lines, the decisions `allPackages`, `nativeTests` and
+// `desktopChecks`, then whether each app releases (`phoneRelease`, `desktopRelease`), ready for
+// $GITHUB_OUTPUT. --previous-release prints the tag the app's changes count from, or nothing.
+// Checks also runs it, through affected-packages.sh.
 import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 
@@ -120,9 +123,77 @@ export const reachesPhone = (paths: readonly string[]): boolean => {
   return touched.app || touched.core || touched.sync;
 };
 
+/**
+ * Which app a set of changes releases. On main and tags each app's workflow runs only when its
+ * own changes since its previous release (previousAppRelease) reach its users.
+ */
+export const releaseChanges = (paths: readonly string[]) => ({
+  phoneRelease: reachesPhone(paths),
+  desktopRelease: reachesDesktop(paths),
+});
+
+/** A GitHub Release, by its tag and the names of the files it holds. */
+export type PublishedRelease = { tagName: string; assets: readonly string[] };
+
+export type App = "phone" | "desktop";
+
+const VERSION_TAG = /^v(\d+)\.(\d+)\.(\d+)(-ti)?$/;
+
+/** The files that show an app published in a release: the APK, or either desktop installer. */
+const publishedIn = (app: App, { tagName, assets }: PublishedRelease) => {
+  const version = tagName.slice(1);
+  const own =
+    app === "phone"
+      ? [`wave-${version}.apk`]
+      : [`wave-${version}-win-x64.exe`, `wave-${version}-linux-x64.AppImage`];
+  return own.some((name) => assets.includes(name));
+};
+
+/**
+ * The tag an app's changes count from: its newest release that published its own files. A
+ * version that never published (a skipped one, or the other app's alone) doesn't count. The ti
+ * channel looks back past stable releases too, which carry a ti release's source; main looks only
+ * at stable ones. The run's own tag is left out. Undefined when the app never published.
+ */
+export const previousAppRelease = (
+  releases: readonly PublishedRelease[],
+  app: App,
+  channel: "ti" | "main",
+  current = "",
+): string | undefined => {
+  const candidates = releases.flatMap((release) => {
+    const match = VERSION_TAG.exec(release.tagName);
+    if (!match || release.tagName === current || !publishedIn(app, release)) return [];
+    const ti = match[4] !== undefined;
+    if (ti && channel === "main") return [];
+    return [{ tag: release.tagName, ti, numbers: [match[1], match[2], match[3]].map(Number) }];
+  });
+  const newer = (left: (typeof candidates)[number], right: (typeof candidates)[number]) =>
+    right.numbers[0]! - left.numbers[0]! ||
+    right.numbers[1]! - left.numbers[1]! ||
+    right.numbers[2]! - left.numbers[2]! ||
+    Number(left.ti) - Number(right.ti);
+  return candidates.toSorted(newer)[0]?.tag;
+};
+
 if (process.argv[1] === fileURLToPath(import.meta.url)) {
-  const result = process.argv.includes("--all")
-    ? decide(() => true)
-    : changes(readFileSync(0, "utf8").split(/\r?\n/).filter(Boolean));
-  for (const [name, value] of Object.entries(result)) console.log(`${name}=${value}`);
+  const args = process.argv.slice(2);
+  if (args[0] === "--previous-release") {
+    const [, app, channel, current] = args;
+    if ((app !== "phone" && app !== "desktop") || (channel !== "ti" && channel !== "main"))
+      throw new Error("Expected --previous-release phone|desktop ti|main [<tag>]");
+    const releases = readFileSync(0, "utf8")
+      .split(/\r?\n/)
+      .filter(Boolean)
+      .map((line) => JSON.parse(line) as PublishedRelease);
+    const tag = previousAppRelease(releases, app, channel, current);
+    if (tag) console.log(tag);
+  } else {
+    const all = args.includes("--all");
+    const paths = all ? [] : readFileSync(0, "utf8").split(/\r?\n/).filter(Boolean);
+    const result = all
+      ? { ...decide(() => true), phoneRelease: true, desktopRelease: true }
+      : { ...changes(paths), ...releaseChanges(paths) };
+    for (const [name, value] of Object.entries(result)) console.log(`${name}=${value}`);
+  }
 }

@@ -1,8 +1,13 @@
 # Release provenance
 
-The release job holds the APK release key and the update signing key, so it opens only after
-the **release gate** has checked that every prerequisite passed on the commit the job is about
-to sign. This file is the contract the gate writes and that later work reads (#1129; promotion and
+CI is three workflows: `.github/workflows/ci.yml` runs the jobs both apps share and calls
+`mobile.yml` for the phone and `desktop.yml` for the desktop (#1336). Each app has its own gate
+and its own release job. The phone's release job holds the APK release key and the update signing
+key, so it opens only after the phone's **Release gate** (`Mobile / Release gate` in the run) has
+checked the phone's prerequisites on the commit it is about to sign. The desktop's release job
+opens only after the desktop's own gate (`Desktop / Release gate`). Neither gate reads the other
+app's jobs, so a failed desktop never refuses the APK and a failed APK never refuses the
+installers. This file is the contract the gates write and later work reads (#1129; promotion and
 rollback in #1130, source delivery in #1135).
 
 ## The release source
@@ -16,9 +21,10 @@ The `source` job in `.github/workflows/ci.yml` picks one commit per run, after C
 | anything else          | the PR head, or the event's commit (`github.sha`) |
 
 On `main` the bump can sit on a newer tip than the pushed commit, so the pushed SHA is never the
-release source when the Version job made a bump. Secret scan, Checks, Native unit tests, Patch
-notes and Android APK all check out `needs.source.outputs.sha`, and each reports the commit it
-actually checked out as its `source` output (`git rev-parse HEAD`). Secret scan also reports the
+release source when the Version job made a bump. Secret scan, Checks and Patch notes check out
+`needs.source.outputs.sha`. `ci.yml` hands the same commit to `mobile.yml` and `desktop.yml` as
+the `source_sha` input, which Native unit tests, Android APK and the Desktop jobs check out. Each
+gated job reports the commit it actually checked out as its `source` output (`git rev-parse HEAD`). Secret scan also reports the
 `range` it scanned. The scan runs on PRs as well, but only release runs (pushes to `main`, `v*`
 tags) reach the gate.
 
@@ -35,8 +41,12 @@ clean scan.
 
 ## The gate
 
-`release-gate` runs on release runs unless the run was cancelled, and calls
-`node scripts/ci/release-gate.ts admit` on `toJSON(needs)`. It has `contents: read`, no
+The phone's `release-gate` (in `mobile.yml`) runs on release runs unless the run was cancelled.
+Its evidence comes in two parts: the shared jobs' results and outputs, which `ci.yml` passes to
+`mobile.yml` as the `evidence` input (its own `toJSON(needs)` of `source`, `changes`,
+`secret-scan`, `checks` and `notes`), and the phone's jobs, which are the gate's own
+`toJSON(needs)` (`native-tests`, `android`). It merges the two and calls
+`node scripts/ci/release-gate.ts admit` on the result. It has `contents: read`, no
 Environment and no secret, so a healthy `ti` release stays automatic and a `main` one still waits
 for the owner at the release job's Environment. It refuses (exits 1, so the release job is
 skipped) when:
@@ -47,7 +57,8 @@ skipped) when:
 - the scan range doesn't end at the source (`<sha>..<source>` or `<source>`);
 - `changes.nativeTests` isn't `true`. Release runs count every area as changed
   (`scripts/ci/changes.sh`), so the only legitimate skip is a PR's, and PRs never reach the gate.
-  Report and comment jobs aren't prerequisites and count for nothing;
+  Report and comment jobs aren't prerequisites and count for nothing, and neither do the
+  desktop's jobs, which aren't in either part of the evidence;
 - a versioned release's Patch notes step didn't succeed;
 - the APK record is incomplete or malformed, a stable tag was repacked, or a repack has no valid
   kept base for the same native key.
@@ -104,7 +115,7 @@ repack published.
 
 ## The release job
 
-It checks out `release-gate.outputs.sha` and, before any step that names a secret, downloads the
+The phone's release job (`release` in `mobile.yml`) checks out `release-gate.outputs.sha` and, before any step that names a secret, downloads the
 record and checks the unsigned APK against it (`release-gate.ts verify`). After signing it
 **seals** the record (`release-gate.ts seal`), which adds `artifact.signedSha256`, and keeps the
 sealed record:
@@ -119,26 +130,46 @@ The over-the-air update is published only when `release-gate.ts verify-update` m
 downloaded update folder to `updateSha256`. A mismatch or an empty digest skips the update and
 leaves the GitHub Release as published, like the other post-release steps.
 
-A re-run of a tag whose GitHub Release already exists replaces its APK and record, and rewrites
-its notes, only when the record there names the same source. One built from another commit stays
-as it is and the step fails. So does a release from before records that holds an APK: nothing
-shows that APK came from this run's source, so the step says so and replaces nothing. A listing
-or download GitHub can't answer fails the step too.
+The phone and the desktop publish to the same GitHub Release, each on its own. Whichever gets
+there first creates it; the other adds its files. When both try to create it at once, the one
+that loses adds its files to the release the other made (`publish-release.sh`). The phone also
+writes the release notes; the desktop leaves them as they are when the release exists.
+
+A re-run of a tag whose GitHub Release already exists replaces the APK and record, and rewrites
+its notes, only when the phone's record there names the same source. One built from another
+commit stays as it is and the step fails. So does a release from before records that holds an
+APK: nothing shows that APK came from this run's source, so the step says so and replaces
+nothing. A listing or download GitHub can't answer fails the step too. The other app's files and
+record don't count: the desktop's installers on a release don't stop the APK, and the other way
+round.
 
 ## Desktop installers
 
-A versioned ti release also admits the Windows x64 NSIS installer and the Linux x64
-AppImage, built on Windows and Ubuntu 22.04. The desktop jobs check out the same release
-source as Android and report their actual checkout, tag, update public key fingerprint and file
-digests. The gate checks both jobs and rehashes the Linux installer and the Windows build output.
+The desktop's gate (`release-gate` in `desktop.yml`) admits the Windows x64 NSIS installer and
+the Linux x64 AppImage on versioned releases. `ci.yml` calls `desktop.yml` on `main` and tags
+only when the desktop changed since its own previous release (`scripts/ci/changes.ts`). The
+Desktop jobs run on Windows and Ubuntu 22.04, check out the same release source as Android and
+report their actual checkout, tag, update public key fingerprint and file digests. The gate needs
+both Desktop jobs to succeed. From the `evidence` input it also checks what the phone's gate
+checks of the shared jobs: `source` picked a commit and it is the one `desktop.yml` was handed,
+Secret scan, Checks and Patch notes succeeded on it, and the scan range ends at it. Then it
+rehashes the Linux installer and the Windows build output (`desktop-release.ts admit`) and
+uploads its record as the workflow artifact **`desktop-release-provenance`**: the same schema,
+`source` and `releaseTag` as the phone's, with the desktop's evidence under `desktop` and no
+`artifact`. A failed Desktop job refuses only the desktop; the phone's gate never sees it.
 Before SignPath is enabled, that Windows output is the unsigned ti installer and its blockmap.
 With SignPath enabled, the gate admits the unpacked Windows app archive. The Windows signing job
 verifies it against the gate record, signs `Wave.exe` before building NSIS, then signs the installer
-and builds its blockmap. Publication verifies both installers and the blockmap, including the
-Windows signing job's final build evidence, before signing the APK.
-See [Windows code signing](windows-code-signing.md) for owner setup.
-The sealed record carries the evidence under `desktop`. A stable release includes the desktop
-when the repository variable `RELEASE_DESKTOP_MAIN` is `on`. The usual stable approval still applies.
+and builds its blockmap. The desktop's release job (`release` in `desktop.yml`, in the release
+Environment) verifies both installers and the blockmap against the record, including the Windows
+signing job's final build evidence (`desktop-release.ts finalize-windows`). It then publishes
+them with the record as **`wave-<version>.desktop.provenance.json`** on the version's GitHub
+Release, and after that their update. It doesn't wait for the phone: a failed APK leaves the
+installers published. See [Windows code signing](windows-code-signing.md) for owner setup.
+A stable release includes the desktop when the repository variable `RELEASE_DESKTOP_MAIN` is
+`on`. The usual stable approval still applies, to the desktop's release job as to the phone's.
+Releases published before #1336 keep the desktop's evidence under `desktop` in the phone's sealed
+record instead.
 
 Android's existing update key is RSA. Desktop uses an Ed25519 PEM public key in the
 `WAVE_DESKTOP_UPDATE_PUBLIC_KEY` repository variable and the matching PEM private key in
@@ -151,7 +182,9 @@ checks the signature, channel, platform and installer digest before installation
 update on quit. On Linux, the installed AppImage must be writable by the user.
 
 In **Roll back an update**, choose the `desktop` target, channel and earlier version. The job
-verifies the tagged GitHub Release and both installers against its sealed record. The publisher
+verifies the tagged GitHub Release with `verified-release.sh`, then both installers against the
+desktop's record (`wave-<version>.desktop.provenance.json`, which must name the same source as the
+phone's sealed record), or against the phone's sealed record for a release from before #1336. The publisher
 also checks the original signed desktop manifests in R2 and signs a fresh channel pointer that
 allows the downgrade. Desktop has no transition for releases without provenance.
 
@@ -179,9 +212,10 @@ release's. What links the two is the shared source and the ti record's seal.
 
 ## Tag runs
 
-Every `v*` tag run, pushed or started with `workflow_dispatch`, has `IS_RELEASE`, runs the gate
-and reaches the release job only through it. The release job takes the `ti` Environment only on a
-push to `main`; any tag, a hand-made `-ti` tag included, takes `main` and waits for the owner.
+Every `v*` tag run, pushed or started with `workflow_dispatch`, has `IS_RELEASE`, runs the gate of
+each app it calls and reaches that app's release job only through it. The release jobs, and Sign
+the Windows release, take the `ti` Environment only on a push to `main`; any tag, a hand-made
+`-ti` tag included, takes `main` and waits for the owner.
 Check release tag still refuses a tag that isn't the app's version or isn't on `main`. A tag run
 can't replace a release built from another source (above).
 

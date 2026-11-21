@@ -1,39 +1,144 @@
-// How ci.yml wires the release gate (docs/release-provenance.md). What the gate decides is
-// tested in release-gate.test.ts; this checks that the workflow gives it the evidence and that
-// nothing reaches the release job's secrets around it.
+// How CI wires the release gates (docs/release-provenance.md). ci.yml runs the shared jobs and
+// calls mobile.yml and desktop.yml, each with its own gate and release. What the phone's gate
+// decides is tested in release-gate.test.ts; this checks that the workflows give each gate its
+// evidence, that neither app's jobs reach the other's gate, and that nothing reaches a release
+// job's secrets around its gate.
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { describe, it } from "node:test";
 
-const workflow = readFileSync(new URL("../../.github/workflows/ci.yml", import.meta.url), "utf8");
+const FILES = ["ci.yml", "mobile.yml", "desktop.yml"] as const;
+type File = (typeof FILES)[number];
 
-/** Each job, by name, as the text under its `  <name>:` line. */
-const jobs = new Map(
-  workflow
-    .slice(workflow.indexOf("\njobs:\n") + "\njobs:\n".length)
-    .split(/\n(?= {2}[\w-]+:\n)/)
-    .flatMap((block) => {
-      const name = /^ {2}([\w-]+):\n/.exec(block)?.[1];
-      return name ? [[name, block] as const] : [];
-    }),
-);
-const job = (name: string) => {
-  const text = jobs.get(name);
-  assert.ok(text, `ci.yml has no ${name} job`);
-  return text;
+const text = Object.fromEntries(
+  FILES.map((file) => [
+    file,
+    readFileSync(new URL(`../../.github/workflows/${file}`, import.meta.url), "utf8"),
+  ]),
+) as Record<File, string>;
+
+/** Each job of a workflow file, by name, as the text under its `  <name>:` line. */
+const jobsOf = (source: string) =>
+  new Map(
+    source
+      .slice(source.indexOf("\njobs:\n") + "\njobs:\n".length)
+      .split(/\n(?= {2}[\w-]+:\n)/)
+      .flatMap((block) => {
+        const name = /^ {2}([\w-]+):\n/.exec(block)?.[1];
+        return name ? [[name, block] as const] : [];
+      }),
+  );
+const jobs = Object.fromEntries(FILES.map((file) => [file, jobsOf(text[file])])) as Record<
+  File,
+  Map<string, string>
+>;
+const job = (name: string, file: File = "ci.yml") => {
+  const found = jobs[file].get(name);
+  assert.ok(found, `${file} has no ${name} job`);
+  return found;
 };
-const needsOf = (name: string) =>
-  (/^ {4}needs: \[(.*)\]$/m.exec(job(name))?.[1] ?? "").split(", ").filter(Boolean);
+const needsOf = (name: string, file: File = "ci.yml") =>
+  (/^ {4}needs: \[(.*)\]$/m.exec(job(name, file))?.[1] ?? "").split(", ").filter(Boolean);
 /** A job's steps, by name (uses: for unnamed ones). */
-const stepsOf = (name: string) =>
-  job(name)
+const stepsOf = (name: string, file: File = "ci.yml") =>
+  job(name, file)
     .split(/\n(?= {6}- )/)
     .slice(1)
     .map((step) => ({
       name: /name: (.*)/.exec(step)?.[1] ?? /uses: ([^@\s]+)/.exec(step)?.[1] ?? "",
       text: step,
     }));
+const step = (job: string, name: string, file: File = "ci.yml") => {
+  const found = stepsOf(job, file).find((step) => step.name === name);
+  assert.ok(found, `${file} › ${job} has no "${name}" step`);
+  return found.text;
+};
 const SOURCE = "${{ needs.source.outputs.sha }}";
+const INPUT_SOURCE = "${{ inputs.source_sha }}";
+/** The jobs both apps share, whose evidence ci.yml hands to each app's workflow. */
+const SHARED = ["changes", "checks", "notes", "secret-scan", "source"];
+
+describe("the split", () => {
+  it("keeps only the shared jobs in ci.yml and calls one workflow per app", () => {
+    assert.deepEqual(
+      [...jobs["ci.yml"].keys()].toSorted(),
+      [...SHARED, "autofix", "autofix-apply", "desktop", "mobile", "report", "version"].toSorted(),
+    );
+    assert.match(job("mobile"), /^ {4}uses: \.\/\.github\/workflows\/mobile\.yml$/m);
+    assert.match(job("desktop"), /^ {4}uses: \.\/\.github\/workflows\/desktop\.yml$/m);
+    for (const file of ["mobile.yml", "desktop.yml"] as const)
+      assert.match(text[file], /^on:\n {2}workflow_call:\n/m, file);
+  });
+
+  it("hands each app's workflow the shared jobs alone, never the other app's", () => {
+    for (const app of ["mobile", "desktop"]) {
+      assert.deepEqual(needsOf(app).toSorted(), SHARED, app);
+      assert.ok(job(app).includes(`source_sha: ${SOURCE}`), app);
+      assert.match(job(app), /release_tag: \$\{\{ needs\.checks\.outputs\.release_tag \}\}/);
+      assert.match(job(app), /evidence: \$\{\{ toJSON\(needs\) \}\}/);
+    }
+    assert.doesNotMatch(text["mobile.yml"], /needs\.(desktop|sign-windows)\b|desktop-release/);
+    assert.doesNotMatch(
+      text["desktop.yml"],
+      /needs\.(android|native-tests)\b|sign-apk|name: release-provenance$/m,
+    );
+  });
+
+  it("calls each app's workflow on main and tags only when that app changed since its release", () => {
+    assert.match(
+      job("mobile"),
+      /\(github\.event_name == 'pull_request' && needs\.changes\.outputs\.nativeTests == 'true'\) \|\|\n\s+\(github\.event_name != 'pull_request' && needs\.changes\.outputs\.phoneRelease == 'true'\)/,
+    );
+    assert.match(
+      job("desktop"),
+      /\(github\.event_name == 'pull_request' && needs\.changes\.outputs\.desktopChecks == 'true'\) \|\|\n\s+\(github\.event_name != 'pull_request' && needs\.changes\.outputs\.desktopRelease == 'true'\)/,
+    );
+    for (const output of ["phoneRelease", "desktopRelease"])
+      assert.ok(job("changes").includes(`${output}: \${{ steps.rule.outputs.${output} }}`));
+  });
+
+  it("grants each app's workflow no more than its jobs ask for, and secrets only from Environments", () => {
+    for (const app of ["mobile", "desktop"]) {
+      assert.match(
+        job(app),
+        /^ {4}permissions:\n {6}contents: write\n {6}actions: read\n {4}uses:/m,
+      );
+      assert.match(job(app), /^ {4}secrets: inherit$/m);
+    }
+    for (const file of ["mobile.yml", "desktop.yml"] as const) {
+      assert.match(text[file], /^permissions: \{\}$/m, file);
+      for (const [name, body] of jobs[file]) {
+        assert.match(body, /^ {4}permissions:\n/m, `${file} › ${name} sets no permissions`);
+        assert.doesNotMatch(body, /pull-requests: write|actions: write/, `${file} › ${name}`);
+      }
+    }
+  });
+
+  it("gives each workflow the run's channel, which its scripts read from the environment", () => {
+    // ci.yml's Patch notes (patch-notes.sh, earlier-notes.sh) and mobile.yml's Android APK
+    // (repack.ts plan) read them; a called workflow doesn't get the caller's env.
+    for (const file of ["ci.yml", "mobile.yml"] as const) {
+      assert.match(
+        text[file],
+        /^ {2}IS_TI: \$\{\{ github\.ref == 'refs\/heads\/main' \|\| \(startsWith\(github\.ref, 'refs\/tags\/v'\) && endsWith\(github\.ref, '-ti'\)\) \}\}$/m,
+        file,
+      );
+      assert.match(text[file], /^ {2}IS_RELEASE: /m, file);
+    }
+  });
+
+  it("posts the reports of both apps' jobs", () => {
+    assert.deepEqual(needsOf("report").toSorted(), [
+      "autofix",
+      "autofix-apply",
+      "changes",
+      "checks",
+      "desktop",
+      "mobile",
+      "secret-scan",
+    ]);
+  });
+});
 
 describe("the release source", () => {
   it("is chosen once, after the version bump and the autofix commit, with no token", () => {
@@ -45,40 +150,52 @@ describe("the release source", () => {
     );
   });
 
-  it("is what every job the gate trusts checks out, and each reports what it checked out", () => {
-    for (const name of ["secret-scan", "checks", "native-tests", "notes", "android"]) {
-      assert.ok(needsOf(name).includes("source"), `${name} doesn't wait for the source`);
-      const checkout = stepsOf(name).find((step) => step.name === "actions/checkout")!;
-      assert.ok(checkout.text.includes(`ref: ${SOURCE}`), `${name} checks out another commit`);
-      assert.match(job(name), /^ {6}source: \$\{\{ steps\.[\w-]+\.outputs\.source \}\}$/m, name);
+  it("is what every job the gates trust checks out, and each reports what it checked out", () => {
+    const trusted: [string, File, string][] = [
+      ["secret-scan", "ci.yml", SOURCE],
+      ["checks", "ci.yml", SOURCE],
+      ["notes", "ci.yml", SOURCE],
+      ["native-tests", "mobile.yml", INPUT_SOURCE],
+      ["android", "mobile.yml", INPUT_SOURCE],
+    ];
+    for (const [name, file, ref] of trusted) {
+      if (file === "ci.yml") assert.ok(needsOf(name).includes("source"), `${name} doesn't wait`);
+      const checkout = stepsOf(name, file).find((step) => step.name === "actions/checkout")!;
+      assert.ok(checkout.text.includes(`ref: ${ref}`), `${name} checks out another commit`);
+      assert.match(job(name, file), /^ {6}source: \$\{\{ steps\.[\w-]+\.outputs\.source \}\}$/m);
     }
+    assert.ok(job("desktop", "desktop.yml").includes(`ref: ${INPUT_SOURCE}`));
   });
 
   it("is what the secret scan scans up to", () => {
-    const step = stepsOf("secret-scan").find((step) => step.name === "Scan for secrets")!;
-    assert.ok(step.text.includes(`SOURCE_SHA: ${SOURCE}`));
+    assert.ok(step("secret-scan", "Scan for secrets").includes(`SOURCE_SHA: ${SOURCE}`));
     assert.match(job("secret-scan"), /fetch-depth: 0/);
   });
 });
 
-describe("the release gate", () => {
+describe("the phone's release gate", () => {
   it("waits for every prerequisite and runs to refuse even when one failed", () => {
-    assert.deepEqual(needsOf("release-gate").toSorted(), [
+    // The shared jobs reach it through the call's needs, the phone's own through its own.
+    assert.deepEqual(needsOf("release-gate", "mobile.yml").toSorted(), ["android", "native-tests"]);
+    assert.deepEqual([...needsOf("mobile"), ...needsOf("release-gate", "mobile.yml")].toSorted(), [
       "android",
       "changes",
       "checks",
-      "desktop",
       "native-tests",
       "notes",
       "secret-scan",
       "source",
     ]);
-    assert.match(job("release-gate"), /if: >-\n\s+\$\{\{ !cancelled\(\) &&/);
+    assert.match(job("release-gate", "mobile.yml"), /if: >-\n\s+\$\{\{ !cancelled\(\) &&/);
+    assert.match(job("mobile"), /if: >-\n\s+\$\{\{ !cancelled\(\) &&/);
   });
 
   it("admits from the prerequisites' own results, with no Environment or secret", () => {
-    const gate = job("release-gate");
-    assert.match(gate, /toJSON\(needs\)/);
+    const gate = job("release-gate", "mobile.yml");
+    const admit = step("release-gate", "Admit the release", "mobile.yml");
+    assert.match(admit, /SHARED: \$\{\{ inputs\.evidence \}\}/);
+    assert.match(admit, /NEEDS: \$\{\{ toJSON\(needs\) \}\}/);
+    assert.match(admit, /\{ \.\.\.shared, \.\.\.own \}/);
     assert.match(gate, /release-gate\.ts admit/);
     assert.doesNotMatch(gate, /environment:|secrets\./);
     assert.match(gate, /^ {6}contents: read$/m);
@@ -86,14 +203,14 @@ describe("the release gate", () => {
   });
 });
 
-describe("the release job", () => {
+describe("the phone's release job", () => {
   it("opens its Environment only after the gate admitted the release", () => {
-    assert.ok(needsOf("release").includes("release-gate"));
-    assert.match(job("release"), /needs\.release-gate\.result == 'success'/);
+    assert.ok(needsOf("release", "mobile.yml").includes("release-gate"));
+    assert.match(job("release", "mobile.yml"), /needs\.release-gate\.result == 'success'/);
   });
 
   it("builds on the admitted source, and signs only the admitted APK", () => {
-    const steps = stepsOf("release");
+    const steps = stepsOf("release", "mobile.yml");
     assert.ok(
       steps
         .find((step) => step.name === "actions/checkout")!
@@ -108,28 +225,36 @@ describe("the release job", () => {
   });
 
   it("publishes only the admitted update, and carries the record with the release", () => {
-    const names = stepsOf("release").map((step) => step.name);
+    const names = stepsOf("release", "mobile.yml").map((step) => step.name);
     const check = names.indexOf("Check the update against the gate's record");
     assert.ok(check > names.indexOf("Fetch the over-the-air update"));
     assert.ok(check < names.indexOf("Publish the over-the-air update"));
     assert.match(
-      stepsOf("release").find((step) => step.name === "Publish the over-the-air update")!.text,
+      step("release", "Publish the over-the-air update", "mobile.yml"),
       /steps\.update_admitted\.outcome == 'success'/,
     );
+    assert.match(step("release", "Publish the release", "mobile.yml"), /PROVENANCE_FILE:/);
+  });
+
+  it("publishes the APK alone, whatever the desktop did", () => {
+    const release = job("release", "mobile.yml");
+    assert.deepEqual(needsOf("release", "mobile.yml"), ["release-gate", "android"]);
+    assert.doesNotMatch(release, /desktop-release\.ts|RELEASE_APP|concurrency:/);
     assert.match(
-      stepsOf("release").find((step) => step.name === "Publish the release")!.text,
-      /PROVENANCE_FILE:/,
+      step("release", "Publish the release", "mobile.yml"),
+      /scripts\/ci\/publish-release\.sh "\$RUNNER_TEMP\/release\/\$APK_NAME"\n/,
     );
   });
 });
 
 describe("the Android job's provenance", () => {
   it("repacks only a kept build whose record holds, and records each full build it keeps", () => {
-    const steps = stepsOf("android");
-    const plan = steps.find((step) => step.name === "Plan the APK build")!;
-    assert.match(plan.text, /KEPT: \$\{\{ steps\.kept_base\.outputs\.base != '' \}\}/);
     assert.match(
-      steps.find((step) => step.name === "Keep the full build for repacks")!.text,
+      step("android", "Plan the APK build", "mobile.yml"),
+      /KEPT: \$\{\{ steps\.kept_base\.outputs\.base != '' \}\}/,
+    );
+    assert.match(
+      step("android", "Keep the full build for repacks", "mobile.yml"),
       /kept-build\.ts keep/,
     );
   });
@@ -137,20 +262,20 @@ describe("the Android job's provenance", () => {
 
 describe("a promotion", () => {
   it("is admitted only with the sealed record of the ti release it promotes", () => {
-    const steps = stepsOf("release-gate");
+    const steps = stepsOf("release-gate", "mobile.yml");
     const names = steps.map((step) => step.name);
     const fetch = names.indexOf("Fetch the promoted ti release's record");
     assert.ok(fetch >= 0 && fetch < names.indexOf("Admit the release"), names.join(", "));
-    const step = steps[fetch]!.text;
+    const text = steps[fetch]!.text;
     // Stable tags only; a ti release has nothing to link.
     assert.match(
-      step,
+      text,
       /startsWith\(github\.ref, 'refs\/tags\/v'\) && !endsWith\(github\.ref, '-ti'\)/,
     );
-    assert.match(step, /gh release download "\$\{GITHUB_REF_NAME\}-ti"/);
-    assert.doesNotMatch(step, /secrets\./);
+    assert.match(text, /gh release download "\$\{GITHUB_REF_NAME\}-ti"/);
+    assert.doesNotMatch(text, /secrets\./);
     assert.match(
-      steps.find((step) => step.name === "Admit the release")!.text,
+      step("release-gate", "Admit the release", "mobile.yml"),
       /release-gate\.ts admit "\$RUNNER_TEMP\/needs\.json" "\$RUNNER_TEMP\/promoted\/wave-\$\{GITHUB_REF_NAME#v\}-ti\.provenance\.json"/,
     );
   });
@@ -164,18 +289,31 @@ describe("a promotion", () => {
 });
 
 describe("a tag run", () => {
-  it("of any v* tag, pushed or started by hand, goes through the gate and the main Environment", () => {
-    assert.match(
-      workflow,
-      /IS_RELEASE: \$\{\{ \(github\.event_name == 'push' \|\| github\.event_name == 'workflow_dispatch'\) && startsWith\(github\.ref, 'refs\/tags\/v'\) \}\}/,
-    );
-    assert.match(job("release-gate"), /startsWith\(github\.ref, 'refs\/tags\/v'\)/);
-    assert.match(job("release"), /needs\.release-gate\.result == 'success'/);
+  it("of any v* tag, pushed or started by hand, goes through the gates and the main Environment", () => {
+    for (const file of ["ci.yml", "mobile.yml"] as const)
+      assert.match(
+        text[file],
+        /IS_RELEASE: \$\{\{ \(github\.event_name == 'push' \|\| github\.event_name == 'workflow_dispatch'\) && startsWith\(github\.ref, 'refs\/tags\/v'\) \}\}/,
+        file,
+      );
+    assert.match(job("release-gate", "mobile.yml"), /startsWith\(github\.ref, 'refs\/tags\/v'\)/);
     // Only a push to main opens ti; a -ti tag made by hand waits for the owner like a stable one.
-    assert.match(
-      job("release"),
-      /environment: \$\{\{ github\.ref == 'refs\/heads\/main' && 'ti' \|\| 'main' \}\}/,
-    );
+    for (const [name, file] of [
+      ["release", "mobile.yml"],
+      ["sign-windows", "desktop.yml"],
+      ["release", "desktop.yml"],
+    ] as const) {
+      assert.match(
+        job(name, file),
+        /needs\.release-gate\.result == 'success'/,
+        `${file} › ${name}`,
+      );
+      assert.match(
+        job(name, file),
+        /environment: \$\{\{ github\.ref == 'refs\/heads\/main' && 'ti' \|\| 'main' \}\}/,
+        `${file} › ${name}`,
+      );
+    }
   });
 });
 
@@ -229,17 +367,27 @@ describe("a rollback", () => {
     assert.doesNotMatch(rollback, /: write$/m);
     assert.match(rollback, /sparse-checkout: \|\n\s+apps\/updates\n\s+scripts\/ci/);
   });
+
+  it("rolls the desktop back on the desktop's own record when the release has one", () => {
+    const verify = named("Verify the published desktop installers");
+    assert.match(verify, /\.desktop\.provenance\.json/);
+    assert.match(verify, /desktop-release\.ts verify-published "\$PROVENANCE"/);
+    assert.match(
+      named("Roll back both desktop installers"),
+      /PROVENANCE: \$\{\{ steps\.desktop_provenance\.outputs\.file \}\}/,
+    );
+  });
 });
 
 describe("desktop release publication", () => {
   it("signs the admitted app before NSIS, then signs the installer before publication", () => {
-    const signer = job("sign-windows");
-    assert.deepEqual(needsOf("sign-windows"), ["release-gate", "checks"]);
+    const signer = job("sign-windows", "desktop.yml");
+    assert.deepEqual(needsOf("sign-windows", "desktop.yml"), ["release-gate"]);
     assert.match(signer, /needs\.release-gate\.result == 'success'/);
     assert.match(signer, /needs\.release-gate\.outputs\.sign_windows == 'true'/);
     assert.match(signer, /github\.event_name == 'push'/);
     assert.match(signer, /ref: \$\{\{ needs\.release-gate\.outputs\.sha \}\}/);
-    const steps = stepsOf("sign-windows");
+    const steps = stepsOf("sign-windows", "desktop.yml");
     const names = steps.map((step) => step.name);
     const ordered = [
       "Verify the admitted Windows app payload",
@@ -262,9 +410,11 @@ describe("desktop release publication", () => {
       assert.ok(text.includes(`steps.${upload}.outputs.artifact-id`));
       assert.match(text, /wait-for-completion: true/);
     }
-    assert.ok(needsOf("release").includes("sign-windows"));
-    assert.match(job("release"), /needs\.sign-windows\.result == 'success'/);
-    assert.match(job("release"), /desktop-release\.ts finalize-windows/);
+    const release = job("release", "desktop.yml");
+    assert.ok(needsOf("release", "desktop.yml").includes("sign-windows"));
+    assert.match(release, /needs\.sign-windows\.result == 'success'/);
+    assert.match(release, /desktop-release\.ts finalize-windows/);
+    assert.doesNotMatch(release, /continue-on-error/);
 
     const packager = readFileSync(
       new URL("../../apps/desktop/scripts/package-release.ts", import.meta.url),
@@ -274,27 +424,53 @@ describe("desktop release publication", () => {
   });
 
   it("builds on the release source and keeps stable desktop publication behind its switch", () => {
-    const desktop = job("desktop");
-    const gate = job("release-gate");
-    assert.ok(desktop.includes(`ref: ${SOURCE}`));
+    const desktop = job("desktop", "desktop.yml");
+    const gate = job("release-gate", "desktop.yml");
+    assert.deepEqual(needsOf("release-gate", "desktop.yml"), ["desktop"]);
     assert.match(desktop, /ubuntu-22\.04/);
     assert.match(desktop, /windows-latest/);
-    for (const text of [desktop, gate]) {
-      assert.match(
-        text,
-        /endsWith\(needs\.checks\.outputs\.release_tag, '-ti'\) \|\| vars\.RELEASE_DESKTOP_MAIN == 'on'/,
-      );
-      assert.doesNotMatch(text, /environment:|secrets\./);
-    }
+    assert.match(
+      gate,
+      /endsWith\(inputs\.release_tag, '-ti'\) \|\| vars\.RELEASE_DESKTOP_MAIN == 'on'/,
+    );
+    for (const text of [desktop, gate]) assert.doesNotMatch(text, /environment:|secrets\./);
     assert.match(gate, /test "\$DESKTOP_RESULT" = success/);
     assert.match(gate, /desktop-release\.ts admit/);
-    assert.match(job("release"), /desktop-release\.ts verify/);
+    assert.doesNotMatch(job("release-gate", "mobile.yml"), /DESKTOP_RESULT|desktop-release\.ts/);
+    assert.match(job("release", "desktop.yml"), /needs\.release-gate\.result == 'success'/);
+    assert.match(job("release", "desktop.yml"), /desktop-release\.ts verify/);
+  });
+
+  it("admits on the same shared evidence as the phone's gate, for the same source", () => {
+    const shared = step("release-gate", "Check shared release evidence", "desktop.yml");
+    for (const [name, job] of [
+      ["SOURCE_RESULT", "source"],
+      ["SCAN_RESULT", "['secret-scan']"],
+      ["SCAN_SOURCE", "['secret-scan']"],
+      ["SCAN_RANGE", "['secret-scan']"],
+      ["CHECKS_RESULT", "checks"],
+      ["CHECKS_SOURCE", "checks"],
+      ["NOTES_RESULT", "notes"],
+      ["NOTES_SOURCE", "notes"],
+      ["NOTES_OUTCOME", "notes"],
+    ] as const)
+      assert.ok(
+        shared.includes(
+          `${name}: \${{ fromJSON(inputs.evidence)${job.startsWith("[") ? job : `.${job}`}`,
+        ),
+        name,
+      );
+    for (const name of ["SCAN_SOURCE", "CHECKS_SOURCE", "NOTES_SOURCE"])
+      assert.ok(shared.includes(`test "$${name}" = "$SOURCE_SHA"`), name);
+    assert.ok(shared.includes('test "$INPUT_SHA" = "$SOURCE_SHA"'));
+    assert.match(
+      job("release-gate", "desktop.yml"),
+      /sha: \$\{\{ steps\.shared\.outputs\.sha \}\}/,
+    );
   });
 
   it("builds the Wave account into the desktop release, and the packager refuses one without it", () => {
-    const pack = stepsOf("desktop").find(
-      (step) => step.name === "Package the desktop release",
-    )!.text;
+    const pack = step("desktop", "Package the desktop release", "desktop.yml");
     for (const name of ["SYNC_URL", "GOOGLE_DESKTOP_CLIENT_ID", "GOOGLE_DESKTOP_CLIENT_SECRET"])
       assert.ok(pack.includes(`MAIN_VITE_WAVE_${name}: \${{ vars.WAVE_${name} }}`), name);
     const packager = readFileSync(
@@ -304,11 +480,25 @@ describe("desktop release publication", () => {
     assert.match(packager, /Desktop release has no Wave account/);
   });
 
-  it("attaches the admitted installers and blockmap to the versioned release", () => {
-    const publish = stepsOf("release").find((step) => step.name === "Publish the release")!.text;
-    assert.match(publish, /DESKTOP_ADMITTED: \$\{\{ needs\.release-gate\.outputs\.desktop \}\}/);
-    assert.match(publish, /if \[ "\$DESKTOP_ADMITTED" = "true" \]; then/);
+  it("publishes the admitted installers and their record on its own, then their update", () => {
+    const publish = step("release", "Publish the release", "desktop.yml");
+    assert.match(publish, /RELEASE_APP: desktop/);
+    assert.match(
+      publish,
+      /PROVENANCE_FILE: \$\{\{ runner\.temp \}\}\/provenance\/provenance\.json/,
+    );
     assert.match(publish, /desktop-release\.ts names "\$RELEASE_TAG" "\$RUNNER_TEMP\/desktop"/);
-    assert.match(publish, /publish-release\.sh.*"\$\{desktop\[@\]\}"/);
+    assert.match(publish, /scripts\/ci\/publish-release\.sh "\$\{desktop\[@\]\}"/);
+    const names = stepsOf("release", "desktop.yml").map((step) => step.name);
+    assert.ok(names.indexOf("Publish the desktop update") > names.indexOf("Publish the release"));
+    assert.match(
+      step("release", "Publish the desktop update", "desktop.yml"),
+      /if: steps\.published\.outputs\.url != ''[\s\S]*desktop-release\.ts publish "\$RUNNER_TEMP\/provenance\/provenance\.json"/,
+    );
+    // One desktop publication or rollback at a time per channel (rollback.yml uses the group too).
+    assert.match(
+      job("release", "desktop.yml"),
+      /group: desktop-release-\$\{\{ endsWith\(inputs\.release_tag, '-ti'\) && 'ti' \|\| 'main' \}\}\n\s+cancel-in-progress: false/,
+    );
   });
 });

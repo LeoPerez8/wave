@@ -183,9 +183,9 @@ describe("publish-release.sh over an existing release", () => {
   });
 });
 
-describe("the release job", () => {
+describe("the release jobs", () => {
   it("prepares the release source only when the owner turned source delivery on", () => {
-    const workflow = readFileSync(repoFile(".github/workflows/ci.yml"), "utf8");
+    const workflow = readFileSync(repoFile(".github/workflows/mobile.yml"), "utf8");
     const job = workflow.slice(workflow.indexOf("\n  release:\n"));
     const steps = job.split(/\n(?= {6}- )/);
     const at = (name: string) => steps.findIndex((step) => step.includes(`name: ${name}\n`));
@@ -197,10 +197,7 @@ describe("the release job", () => {
     assert.match(checkout, /ref: \$\{\{ needs\.release-gate\.outputs\.sha \}\}/);
     assert.match(checkout, /persist-credentials: false/);
     for (const step of [checkout, steps[prepare]!]) {
-      assert.match(
-        step,
-        /if: vars\.RELEASE_SOURCE_DELIVERY == 'on' && needs\.checks\.outputs\.release_tag != ''/,
-      );
+      assert.match(step, /if: vars\.RELEASE_SOURCE_DELIVERY == 'on' && inputs\.release_tag != ''/);
       assert.doesNotMatch(step, /secrets\./);
     }
     for (const command of ["manifest", "verify", "directions"])
@@ -209,22 +206,179 @@ describe("the release job", () => {
     assert.match(steps[prepare]!, /SOURCE_DIRECTIONS_FILE=.*>> "\$GITHUB_ENV"/);
   });
 
-  it("publishes updates only after the GitHub Release exists", () => {
-    const workflow = readFileSync(repoFile(".github/workflows/ci.yml"), "utf8");
-    const afterRelease = workflow.slice(workflow.indexOf("- name: Publish the release\n"));
-    const steps = afterRelease.split(/\n(?= {6}- )/).slice(1);
-    const names = steps.map((step) => /name: (.*)/.exec(step)?.[1] ?? "");
-    assert.deepEqual(names, [
-      "Move the latest build",
-      "Publish the release notes",
-      "Publish the latest APK",
-      "Fetch the over-the-air update",
-      "Check the update against the gate's record",
-      "Publish the over-the-air update",
-      "Publish the desktop update",
-    ]);
-    for (const [index, step] of steps.entries()) {
-      assert.match(step, /if: .*steps\.published\.outputs\.url != ''/, names[index]);
+  it("publish updates only after the GitHub Release exists, each app its own", () => {
+    const after = {
+      "mobile.yml": [
+        "Move the latest build",
+        "Publish the release notes",
+        "Publish the latest APK",
+        "Fetch the over-the-air update",
+        "Check the update against the gate's record",
+        "Publish the over-the-air update",
+      ],
+      "desktop.yml": ["Publish the desktop update"],
+    };
+    for (const [file, expected] of Object.entries(after)) {
+      const workflow = readFileSync(repoFile(`.github/workflows/${file}`), "utf8");
+      const afterRelease = workflow.slice(workflow.indexOf("- name: Publish the release\n"));
+      const steps = afterRelease.split(/\n(?= {6}- )/).slice(1);
+      const names = steps.map((step) => /name: (.*)/.exec(step)?.[1] ?? "");
+      assert.deepEqual(names, expected, file);
+      for (const [index, step] of steps.entries()) {
+        assert.match(step, /if: .*steps\.published\.outputs\.url != ''/, names[index]);
+      }
     }
+  });
+});
+
+/**
+ * Runs the script for a branch push against a GitHub Release that holds `assets` once it exists.
+ * The release is missing for the first `missing` views; `failCreate` makes `gh release create`
+ * fail, as when the other app's release job created it first. `record` is what a downloaded
+ * record holds.
+ */
+const publishTo = (
+  app: "android" | "desktop",
+  { assets = [] as string[], missing = 0, failCreate = false, record = "" } = {},
+) => {
+  const dir = mkdtempSync(join(tmpdir(), "wave-release-"));
+  const script = (name: string, body: string) => {
+    writeFileSync(join(dir, name), `#!/bin/sh\n${body}\n`);
+    chmodSync(join(dir, name), 0o755);
+  };
+  script("git", `printf '%s\trefs/tags/v1.3.0-ti\n' "${SHA}"`);
+  writeFileSync(join(dir, "assets.txt"), assets.map((name) => `${name}\n`).join(""));
+  writeFileSync(join(dir, "record.json"), record);
+  writeFileSync(join(dir, "views"), "0");
+  script(
+    "gh",
+    `case "$2" in
+  view)
+    n="$(cat "${dir}/views")"; echo $((n + 1)) > "${dir}/views"
+    [ "$n" -ge ${missing} ] || exit 1
+    case "$*" in *--json*) cat "${dir}/assets.txt" ;; esac
+    exit 0 ;;
+  download)
+    while [ $# -gt 0 ]; do
+      [ "$1" = "--dir" ] && out="$2"; [ "$1" = "--pattern" ] && pattern="$2"; shift
+    done
+    mkdir -p "$out" && cp "${dir}/record.json" "$out/$pattern"
+    exit 0 ;;
+esac
+echo "gh $*" >> "${dir}/gh.log"
+case "$2" in create) ${failCreate ? "exit 1" : ":"} ;; esac`,
+  );
+  writeFileSync(join(dir, "gh.log"), "");
+  writeFileSync(join(dir, "provenance.json"), JSON.stringify({ source: SHA }));
+  const files =
+    app === "android"
+      ? [join(dir, "app.apk")]
+      : [join(dir, "wave-1.3.0-ti-win-x64.exe"), join(dir, "wave-1.3.0-ti-linux-x64.AppImage")];
+  for (const file of files) writeFileSync(file, "installer");
+  const output = join(dir, "output");
+  writeFileSync(output, "");
+  const { status, stdout } = spawnSync(
+    "bash",
+    [repoFile("scripts/ci/publish-release.sh"), ...files],
+    {
+      encoding: "utf8",
+      env: {
+        PATH: `${dir}:${process.env.PATH}`,
+        RUNNER_TEMP: dir,
+        RELEASE_APP: app,
+        RELEASE_TAG: "v1.3.0-ti",
+        RELEASE_SHA: SHA,
+        GITHUB_REF_TYPE: "branch",
+        GITHUB_REPOSITORY: "o/r",
+        GITHUB_OUTPUT: output,
+        PROVENANCE_FILE: join(dir, "provenance.json"),
+      },
+    },
+  );
+  return {
+    dir,
+    status,
+    stdout,
+    output: readFileSync(output, "utf8"),
+    gh: readFileSync(join(dir, "gh.log"), "utf8"),
+  };
+};
+
+describe("publish-release.sh for either app alone", () => {
+  const PHONE = ["wave-1.3.0-ti.apk", "wave-1.3.0-ti.provenance.json"];
+  const DESKTOP = [
+    "wave-1.3.0-ti-win-x64.exe",
+    "wave-1.3.0-ti-linux-x64.AppImage",
+    "wave-1.3.0-ti.desktop.provenance.json",
+  ];
+
+  it("creates the release with the desktop's installers and record when the phone hasn't", () => {
+    const { status, gh, output, dir } = publishTo("desktop", { missing: 99 });
+    assert.equal(status, 0);
+    const create = /release create (.*)/.exec(gh)?.[1] ?? "";
+    assert.ok(create.includes(join(dir, "wave-1.3.0-ti-win-x64.exe")), create);
+    assert.ok(create.includes(join(dir, "wave-1.3.0-ti-linux-x64.AppImage")), create);
+    assert.ok(create.includes(`${dir}/wave-1.3.0-ti.desktop.provenance.json`), create);
+    assert.doesNotMatch(create, /\.apk|wave-1\.3\.0-ti\.provenance\.json/);
+    assert.match(create, /--prerelease --latest=false --title Wave 1\.3\.0-ti/);
+    assert.match(output, /^url=https:.*\/releases\/tag\/v1\.3\.0-ti$/m);
+  });
+
+  it("adds the desktop's installers to the phone's release and leaves its notes", () => {
+    const { status, gh } = publishTo("desktop", { assets: PHONE });
+    assert.equal(status, 0);
+    assert.match(gh, /release upload v1\.3\.0-ti .*win-x64\.exe.* --clobber/);
+    assert.doesNotMatch(gh, /create|edit|\.apk/);
+  });
+
+  it("adds the APK to the desktop's release, writing the phone's notes", () => {
+    const { status, gh, output } = publishTo("android", { assets: DESKTOP });
+    assert.equal(status, 0);
+    assert.match(gh, /release upload v1\.3\.0-ti .*wave-1\.3\.0-ti\.apk .*--clobber/);
+    assert.match(gh, /release edit v1\.3\.0-ti --notes-file/);
+    assert.doesNotMatch(gh, /create/);
+    assert.match(output, /^url=https:.*wave-1\.3\.0-ti\.apk$/m);
+  });
+
+  it("adds to the release when the other app created it first", () => {
+    for (const app of ["android", "desktop"] as const) {
+      const { status, gh, output } = publishTo(app, { missing: 1, failCreate: true });
+      assert.equal(status, 0, app);
+      assert.match(gh, /release create v1\.3\.0-ti/, app);
+      assert.match(gh, /release upload v1\.3\.0-ti .* --clobber/, app);
+      assert.match(output, /^url=/m, app);
+    }
+  });
+
+  it("fails when the release can't be created and still isn't there", () => {
+    const { status, gh, output } = publishTo("desktop", { missing: 2, failCreate: true });
+    assert.notEqual(status, 0);
+    assert.doesNotMatch(gh, /upload/);
+    assert.equal(output, "");
+  });
+
+  it("re-publishes the desktop's installers only over its own record from the same source", () => {
+    const same = publishTo("desktop", {
+      assets: [...PHONE, ...DESKTOP],
+      record: JSON.stringify({ source: SHA }),
+    });
+    assert.equal(same.status, 0);
+    assert.match(same.gh, /release upload v1\.3\.0-ti .*AppImage.* --clobber/);
+    const other = publishTo("desktop", {
+      assets: [...PHONE, ...DESKTOP],
+      record: JSON.stringify({ source: "c".repeat(40) }),
+    });
+    assert.notEqual(other.status, 0);
+    assert.match(other.stdout, /ccccccc/);
+    assert.doesNotMatch(other.gh, /upload|create|edit/);
+  });
+
+  it("keeps desktop installers published before the desktop had its own record", () => {
+    const { status, gh, stdout } = publishTo("desktop", {
+      assets: [...PHONE, ...DESKTOP.slice(0, 2)],
+    });
+    assert.notEqual(status, 0);
+    assert.match(stdout, /::error::.*before/);
+    assert.doesNotMatch(gh, /upload|create|edit/);
   });
 });
