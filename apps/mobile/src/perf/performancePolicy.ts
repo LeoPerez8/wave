@@ -338,21 +338,18 @@ export const WHOLE_LIBRARY: Record<string, WholeLibraryException> = {
   },
 
   "search/searchIndex.ts#releasesOf": {
-    howOften: "Once per artist/album snapshot version used to rebuild the background search index.",
+    howOften:
+      "Once per artist/album rows the kept search index shows, built on first use; never per keystroke.",
     reason:
       "Search deliberately shares the lists and lazily builds lookups; its index is built in yielding background steps.",
     capabilities: ["../../../packages/core/src/ytArtist.ts#libraryArtistFinder"],
   },
-  "search/searchIndex.ts#useSearchIndex": {
+  "search/searchIndex.ts#SOURCES": {
     howOften:
-      "Once per shared Library query version while Search needs its index; unchanged renders reuse it.",
+      "Each source once per session, then once per edit that reaches it; a scan batch or download patches its songs by id, and the other sources follow bursts at most once per 1.5 s throttle. Never per Search open, focus or keystroke.",
     reason:
-      "Search deliberately shares the lists and lazily builds lookups; its index is built in yielding background steps.",
-    capabilities: [
-      "library/hooks.ts#artists",
-      "library/hooks.ts#songs",
-      "ytmusic/libraryFinder.ts#useLoadedLibraryFinder",
-    ],
+      "Search's index is kept in memory for the session (#1354): Core's createSearchIndexFollower decides each read, reads run off the JS thread (#1348), and preparing only re-prepares rows whose text changed, in background slices.",
+    capabilities: ["library/hooks.ts#artists", "library/hooks.ts#songs"],
   },
   "ytmusic/albumSection.ts#useYtAlbumSection": {
     howOften: FOLLOWED_FINDER,

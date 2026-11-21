@@ -98,8 +98,15 @@ export default function RootLayout() {
           if (!disposed) stopLyrics = startLyricsSearchIndex();
         });
       });
+      // Search's index, kept in memory and following the Library from then on (#1354).
+      const stopSearchIndexStart = afterFirstSettled("searchIndex", () => {
+        void import("@/search/searchIndex").then(({ startSearchIndex }) => {
+          if (!disposed) stopSearch = startSearchIndex();
+        });
+      });
       let disposed = false;
       let stopLyrics: (() => void) | undefined;
+      let stopSearch: (() => void) | undefined;
       // Link imports kept when Wave last closed go on filling their playlists.
       const stopImports = afterFirstSettled("imports", resumePlaylistImports);
       // A From YT Music batch Android stopped reads the playlists it hadn't, in order.
@@ -108,6 +115,8 @@ export default function RootLayout() {
         disposed = true;
         stopLyricsIndex();
         stopLyrics?.();
+        stopSearchIndexStart();
+        stopSearch?.();
         stopScan();
         stopImports();
         stopYtImport();

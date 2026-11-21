@@ -60,6 +60,13 @@ const finders = makeFinderCache<SongRow, FindInLibrary>({
 export const libraryFinderForRows = (songs: readonly SongRow[]): FindInLibrary =>
   finders.forRows(songs);
 
+/**
+ * The shared finder over [songs], the whole Library as something that keeps
+ * it read (Search's index): it becomes the known one, so screens reading no
+ * songs of their own use it.
+ */
+export const libraryFinderOver = (songs: readonly SongRow[]): FindInLibrary => finders.over(songs);
+
 /** A finder current with the Library: at once when one was read at this Library version, else after a read. */
 export const currentLibraryFinder = (): Promise<FindInLibrary> => finders.current();
 

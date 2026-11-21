@@ -208,6 +208,13 @@ export {
 } from "./keepFindVisible.ts";
 export type { FindFieldPlacement } from "./keepFindVisible.ts";
 export { createSearchCatalog } from "./searchCatalog.ts";
+export {
+  compareSongReadOrder,
+  createSearchIndexFollower,
+  type SongReadKeys,
+  type SearchIndexFollower,
+  type SearchIndexJob,
+} from "./searchIndexFollow.ts";
 export type { SearchCatalog, SearchCatalogStats } from "./searchCatalog.ts";
 export { SEARCH_FOCUS_LIMITS, startSearchFocus, stepSearchFocus } from "./searchFocus.ts";
 export type {

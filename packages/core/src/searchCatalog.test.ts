@@ -49,16 +49,18 @@ const filled = () => {
 };
 
 describe("search catalog", () => {
-  test("no index until every source has been read and prepared", () => {
+  test("until every source is prepared, the index finds what the prepared ones hold", () => {
     const catalog = createSearchCatalog<(typeof SOURCES)[number], Hit>(SOURCES);
+    assert.equal(catalog.index(), null);
     catalog.update("artists", ARTISTS, artistOf);
     catalog.update("songs", SONGS, songOf);
     finish(catalog);
-    assert.equal(catalog.index(), null);
+    assert.equal(catalog.complete(), false);
+    assert.deepEqual(names(catalog.index()!.search("love")), ["Love on Top"]);
     catalog.update("playlists", PLAYLISTS, playlistOf);
-    assert.equal(catalog.index(), null);
     finish(catalog);
-    assert.notEqual(catalog.index(), null);
+    assert.equal(catalog.complete(), true);
+    assert.deepEqual(names(catalog.index()!.search("love")), ["Love on Top", "Love songs"]);
   });
 
   test("finds what one index over all the sources finds, in the same order", () => {
@@ -77,7 +79,7 @@ describe("search catalog", () => {
     const catalog = filled();
     // 6 entries, 2 at a time: three steps, the last saying nothing is left.
     assert.equal(catalog.work(2), true);
-    assert.equal(catalog.index(), null);
+    assert.equal(catalog.complete(), false);
     assert.equal(catalog.work(2), true);
     assert.equal(catalog.work(2), false);
     assert.deepEqual(names(catalog.index()!.search("halo")), ["Halo"]);
@@ -175,6 +177,94 @@ describe("search catalog", () => {
     catalog.update("playlists", PLAYLISTS, playlistOf);
     finish(catalog);
     assert.deepEqual(names(catalog.index()!.search("halo")), ["Halo"]);
+  });
+
+  test("rows read again with keys: only rows whose search text changed are prepared, hits carry the new rows", () => {
+    const keyOf = (row: Row): string => row.name;
+    const catalog = createSearchCatalog<(typeof SOURCES)[number], Hit>(SOURCES);
+    catalog.update("artists", ARTISTS, artistOf);
+    catalog.update("songs", SONGS, songOf, keyOf);
+    catalog.update("playlists", PLAYLISTS, playlistOf);
+    finish(catalog);
+    const prepared = catalog.stats().prepared;
+
+    // The same songs read again as new rows, one retagged and one added.
+    const reread: Row[] = [
+      { name: "Halo", by: "Beyoncé" },
+      { name: "Hyperballad", by: "Björk Guðmundsdóttir" },
+      { name: "Joga", by: "Björk" },
+      { name: "Love on Top", by: "Beyoncé" },
+    ];
+    catalog.update("songs", reread, songOf, keyOf);
+    finish(catalog);
+    assert.equal(catalog.stats().prepared - prepared, 2);
+
+    const whole = createSearchIndex([
+      ...ARTISTS.map(artistOf),
+      ...reread.map(songOf),
+      ...PLAYLISTS.map(playlistOf),
+    ]);
+    for (const query of ["b", "bjork", "gudmundsdottir", "love", "joga", "halo"])
+      assert.deepEqual(names(catalog.index()!.search(query)), names(whole.search(query)), query);
+    const halo = catalog.index()!.search("halo").top as Hit;
+    assert.equal(halo.row, reread[0]);
+  });
+
+  test("rows patched in by key take their place in the source's order, as a whole read gives them", () => {
+    interface Song extends Row {
+      readonly id: number;
+    }
+    const byName = (a: Song, b: Song): number =>
+      a.name < b.name ? -1 : a.name > b.name ? 1 : a.id - b.id;
+    const keyOf = (row: Song): number => row.id;
+    const songs: Song[] = [
+      { id: 1, name: "Halo", by: "Beyoncé" },
+      { id: 4, name: "Intro", by: "Beyoncé" },
+      { id: 2, name: "Love on Top", by: "Beyoncé" },
+    ];
+    const catalog = createSearchCatalog<(typeof SOURCES)[number], Hit>(SOURCES);
+    catalog.update("artists", ARTISTS, artistOf);
+    catalog.update("songs", songs, songOf, keyOf);
+    catalog.update("playlists", PLAYLISTS, playlistOf);
+    finish(catalog);
+    const prepared = catalog.stats().prepared;
+
+    // A scan batch: song 4 retagged, songs 3 and 5 new, one of them named like another.
+    const batch: Song[] = [
+      { id: 5, name: "Intro", by: "Björk" },
+      { id: 4, name: "Intro", by: "Beyoncé, Jay-Z" },
+      { id: 3, name: "Crazy in Love", by: "Beyoncé" },
+    ];
+    assert.equal(catalog.patch("songs", batch, byName), true);
+    finish(catalog);
+    assert.equal(catalog.stats().prepared - prepared, 3);
+
+    const read: Song[] = [
+      { id: 3, name: "Crazy in Love", by: "Beyoncé" },
+      { id: 1, name: "Halo", by: "Beyoncé" },
+      { id: 4, name: "Intro", by: "Beyoncé, Jay-Z" },
+      { id: 5, name: "Intro", by: "Björk" },
+      { id: 2, name: "Love on Top", by: "Beyoncé" },
+    ];
+    assert.deepEqual(catalog.rows("songs"), read);
+    const whole = createSearchIndex([
+      ...ARTISTS.map(artistOf),
+      ...read.map(songOf),
+      ...PLAYLISTS.map(playlistOf),
+    ]);
+    const ids = (results: SearchResults<Hit>): number[] =>
+      results.groups.flatMap((group) => group.items.map((item) => (item.row as Song).id ?? -1));
+    for (const query of ["intro", "b", "crazy", "jay"])
+      assert.deepEqual(ids(catalog.index()!.search(query)), ids(whole.search(query)), query);
+  });
+
+  test("a patch before the source's first rows changes nothing: the first read holds it", () => {
+    const catalog = createSearchCatalog<(typeof SOURCES)[number], Hit>(SOURCES);
+    assert.equal(
+      catalog.patch("songs", [{ name: "Joga" }], () => 0),
+      false,
+    );
+    assert.equal(catalog.rows("songs"), null);
   });
 
   test("an empty source is ready at once", () => {
