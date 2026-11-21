@@ -338,6 +338,7 @@ else {
       get catalogue() {
         return text;
       },
+      language: () => language,
       platform: process.platform,
       musicFolder,
       pickFolder,

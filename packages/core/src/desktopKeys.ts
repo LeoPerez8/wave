@@ -41,11 +41,19 @@ export type DesktopCommand =
   | "pageDown"
   | "playRow"
   | "jump"
-  | "songMenu";
+  | "songMenu"
+  | "extendUp"
+  | "extendDown"
+  | "selectAllRows";
 
 /** A list's keys, for the list that has focus. */
 const listKey = ({ key, ctrl, alt, shift }: DesktopKeyPress): DesktopCommand | undefined => {
   if (key === "ContextMenu" || (shift && key === "F10")) return "songMenu";
+  if (!alt && ctrl && !shift && key.toLowerCase() === "a") return "selectAllRows";
+  if (!alt && !ctrl && shift) {
+    if (key === "ArrowUp") return "extendUp";
+    if (key === "ArrowDown") return "extendDown";
+  }
   if (ctrl || alt || shift) return undefined;
   switch (key) {
     case "ArrowUp":
@@ -128,10 +136,17 @@ export type ShortcutKey =
   | "slash"
   | "f"
   | "l"
-  | "q";
+  | "q"
+  | "a"
+  | "click";
 
 /** One line of the list: what it does, and the key combinations that do it. */
-export type ShortcutId = Exclude<DesktopCommand, "volumeUp" | "volumeDown"> | "volume";
+export type ShortcutId =
+  | Exclude<DesktopCommand, "volumeUp" | "volumeDown" | "extendUp" | "extendDown">
+  | "volume"
+  | "toggleRowSelection"
+  | "selectRowRange"
+  | "extendRowSelection";
 
 export interface DesktopShortcut {
   readonly id: ShortcutId;
@@ -161,6 +176,16 @@ export const DESKTOP_SHORTCUTS: readonly DesktopShortcut[] = [
   { id: "close", keys: [["esc"]] },
   { id: "shortcuts", keys: [["ctrl", "slash"]] },
   { id: "quit", keys: [["ctrl", "q"]] },
+  { id: "toggleRowSelection", keys: [["ctrl", "click"]] },
+  { id: "selectRowRange", keys: [["shift", "click"]] },
+  {
+    id: "extendRowSelection",
+    keys: [
+      ["shift", "up"],
+      ["shift", "down"],
+    ],
+  },
+  { id: "selectAllRows", keys: [["ctrl", "a"]] },
 ];
 
 /** [shortcut]'s key combinations as the list shows them ("Ctrl+→"), with [names] for each key. */
