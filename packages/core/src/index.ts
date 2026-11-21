@@ -2328,6 +2328,12 @@ export {
   recentPlaysWindow,
 } from "./magicQueueCarousel.ts";
 export type { MagicQueueCarouselPageId } from "./magicQueueCarousel.ts";
+export { discoveries } from "./discoveries.ts";
+export type {
+  DiscoveriesInput,
+  DiscoveryCatalogSong,
+  DiscoveryLibrarySong,
+} from "./discoveries.ts";
 export { magicQueueShare } from "./magicQueue.ts";
 export { discoverMixesOfRadios, discoverMixesOfRadiosSteps } from "./discoverMixRadios.ts";
 export type { DiscoverMixRead } from "./discoverMixRadios.ts";

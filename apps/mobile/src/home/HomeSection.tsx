@@ -65,6 +65,7 @@ import {
 } from "./magicQueueSection";
 import { useFromYourLibrary } from "./fromYourLibrary";
 import { CarouselPageDots, MagicQueueCarousel } from "./MagicQueueCarousel";
+import { useDiscoveries } from "./discoveries";
 import { useMostListenedRecently } from "./mostListenedRecently";
 import { useHomeArrangement } from "./homeArrangement";
 import { useInYourOrbit } from "./inYourOrbit";
@@ -119,7 +120,7 @@ function MostPlayedAlbums({ title }: SectionProps) {
  * `discoverMixesSection`), the Magic Queue row is gone while none of its
  * carousel's pages has songs to show (Core's `magicQueueCarouselPages`), and
  * until Most listened recently is first read, so the row opens on its pages
- * as they are. The section is gone when every arranged row is gone.
+ * as they are; Discoveries, the last page, joins once it's read. The section is gone when every arranged row is gone.
  */
 function Discover({ home, title }: SectionProps) {
   const ytMusic = useYtMusicEnabled();
@@ -139,12 +140,14 @@ function Discover({ home, title }: SectionProps) {
   const magicQueueOn = ytMusic && discoverRows.includes("magic-queue");
   const magicQueue = useMagicQueueSection(magicQueueOn, artistMixes);
   const recent = useMostListenedRecently(magicQueueOn);
+  const discoveries = useDiscoveries(magicQueueOn);
   const pages =
     recent === undefined
       ? []
       : magicQueueCarouselPages({
           "most-listened-recently": recent.length,
           "magic-queue": magicQueueTiles(magicQueue.shown),
+          discoveries: discoveries.length,
         });
   const rows = discoverRows.filter((id) =>
     id === "magic-queue"
@@ -157,7 +160,13 @@ function Discover({ home, title }: SectionProps) {
       <View style={{ gap: CELL * 3 }}>
         {rows.map((id) =>
           id === "magic-queue" ? (
-            <MagicQueueRow key={id} section={magicQueue} recent={recent ?? []} pages={pages} />
+            <MagicQueueRow
+              key={id}
+              section={magicQueue}
+              recent={recent ?? []}
+              discoveries={discoveries}
+              pages={pages}
+            />
           ) : (
             <MixRow key={id} id={id} section={id === "artist-mixes" ? artistMixes : genreMixes} />
           ),
@@ -347,7 +356,8 @@ const seedTiles = (seeds: readonly MagicQueueSeed<PlayableSongRow>[], size: numb
  * left on. With one page there are no dots and nothing to swipe.
  *
  * Most listened recently holds [recent], the songs played most in the last
- * 14 days. The Magic Queue page holds the Library's songs and the playlists'
+ * 14 days, and Discoveries holds [discoveries], songs never played. The Magic
+ * Queue page holds the Library's songs and the playlists'
  * YT Music entries, or with neither, streamed songs of the Artist mixes, with
  * placeholder tiles while the first mixes build; a new list each visit. Alone,
  * it brings other songs when pulled right past its start, with Undo; after
@@ -358,10 +368,12 @@ const seedTiles = (seeds: readonly MagicQueueSeed<PlayableSongRow>[], size: numb
 function MagicQueueRow({
   section,
   recent,
+  discoveries,
   pages,
 }: {
   section: MagicQueueSection;
   recent: readonly MagicQueueSeed<PlayableSongRow>[];
+  discoveries: readonly MagicQueueSeed<PlayableSongRow>[];
   pages: readonly MagicQueueCarouselPageId[];
 }) {
   const { strings } = useLocalisation();
@@ -404,6 +416,7 @@ function MagicQueueRow({
         : [];
   const page = (id: MagicQueueCarouselPageId): ReactNode => {
     if (id === "most-listened-recently") return tiles(seedTiles(recent, size));
+    if (id === "discoveries") return tiles(seedTiles(discoveries, size));
     if (skeleton)
       return (
         <SkeletonGroup label={strings.discover.findingSongs}>
