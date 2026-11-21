@@ -26,7 +26,7 @@ import {
   ytTrackItem,
   type MixedItem,
 } from "@/playback/mixedItems";
-import type { HomeSelection } from "@/selection/useHomeSelection";
+import { type HomeSelection, useHomeTiles } from "@/selection/useHomeSelection";
 import { MenuChoices } from "@/overlay/MenuChoices";
 import { openOverlay } from "@/overlay/overlay";
 
@@ -45,9 +45,13 @@ export function AlbumShelf<A extends PlayedAlbum>({
 }) {
   const { strings } = useLocalisation();
   const activeSelection = selection?.enabled ? selection : undefined;
+  const items = albums.map((album) =>
+    "online" in album ? onlineAlbumItem(album) : albumItem(album),
+  );
+  useHomeTiles(activeSelection, items);
   return (
     <CoverRow>
-      {albums.map((album) => (
+      {albums.map((album, place) => (
         <PlayedAlbumCard
           key={album.id}
           album={album}
@@ -55,31 +59,18 @@ export function AlbumShelf<A extends PlayedAlbum>({
           size={COVER_ROW_TILE}
           selecting={activeSelection?.selecting ?? false}
           checked={
-            activeSelection?.selecting
-              ? activeSelection.isChecked(
-                  activeSelection.remember(
-                    "online" in album ? onlineAlbumItem(album) : albumItem(album),
-                  ),
-                )
-              : undefined
+            activeSelection?.selecting ? activeSelection.isChecked(items[place]!) : undefined
           }
           onPress={
             activeSelection === undefined || !activeSelection.selecting
               ? undefined
-              : () =>
-                  activeSelection.toggle(
-                    activeSelection.remember(
-                      "online" in album ? onlineAlbumItem(album) : albumItem(album),
-                    ),
-                  )
+              : () => activeSelection.toggle(items[place]!)
           }
           onLongPress={
             activeSelection === undefined || activeSelection.selecting
               ? undefined
               : () => {
-                  const item = activeSelection.remember(
-                    "online" in album ? onlineAlbumItem(album) : albumItem(album),
-                  );
+                  const item = items[place]!;
                   if ("online" in album)
                     openSelectOnlyMenu(album.title, strings.itemActions.labels.select, () =>
                       activeSelection.start(item),
@@ -137,6 +128,10 @@ export function SongRows<A extends SongRow>({
   selection?: HomeSelection;
 }) {
   const places = usePositions(songs);
+  useHomeTiles(
+    selection?.enabled ? selection : undefined,
+    songs.map((song) => trackItem(song)),
+  );
   const source = useCallback(
     (song: A) => librarySongEntry(song, { ...SONG_CARD, countedPlays: plays?.(song) }),
     [plays],
@@ -153,11 +148,14 @@ export function SongRows<A extends SongRow>({
       selection={
         selection === undefined || !selection.enabled
           ? undefined
-          : songSelection<A, MixedItem>(selection, (song) => selection.remember(trackItem(song)))
+          : songSelection<A, MixedItem>(selection, (song) => trackItem(song))
       }
     />
   );
 }
+
+const mostPlayedItem = (row: MostPlayedRow): MixedItem =>
+  row.source === "library" ? trackItem(row.track) : ytTrackItem(row.song);
 
 /**
  * Most played as song rows, like `SongRows`, each with its counted plays in
@@ -176,6 +174,7 @@ export function MostPlayedRows({
 }) {
   const { strings } = useLocalisation();
   const places = usePositions(rows);
+  useHomeTiles(selection?.enabled ? selection : undefined, rows.map(mostPlayedItem));
   const entry = useCallback(
     (row: MostPlayedRow) =>
       mixedSongEntry(
@@ -198,11 +197,7 @@ export function MostPlayedRows({
       selection={
         selection === undefined || !selection.enabled
           ? undefined
-          : songSelection<MostPlayedRow, MixedItem>(selection, (row) =>
-              selection.remember(
-                row.source === "library" ? trackItem(row.track) : ytTrackItem(row.song),
-              ),
-            )
+          : songSelection<MostPlayedRow, MixedItem>(selection, mostPlayedItem)
       }
     />
   );

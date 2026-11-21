@@ -37,7 +37,7 @@ test("Home's selection keeps its identity until the selection itself changes", a
     assert.ok(seen.length >= 2);
     assert.equal(seen.at(-1), seen[0], "an unrelated Home render keeps the same selection");
     const item = { kind: "album", item: { id: "a1" } } as never;
-    await act(() => seen.at(-1)!.start(seen.at(-1)!.remember(item)));
+    await act(() => seen.at(-1)!.start(item));
     assert.notEqual(seen.at(-1), seen[0], "starting a selection gives sections a new one");
     assert.equal(seen.at(-1)!.selecting, true);
   } finally {

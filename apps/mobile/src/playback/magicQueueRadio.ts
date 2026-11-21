@@ -1,6 +1,7 @@
 /** Magic Queue reads its seed's radio and ranks it with the last available Wave signals. */
 import {
   catalogSeedKey,
+  djFirstRadioSong,
   djRadioSongAllowed,
   djNewReleasesRanked,
   djMoodRanked,
@@ -388,28 +389,46 @@ export const magicQueueDjLibraryRanking = (
     return varied.seed as readonly RankedRadioSong[];
   });
 
-/** The first non-placeholder song from any selected radio, while its peers keep loading. */
+/**
+ * The first song a DJ session's first batch could take (`djFirstRadioSong`:
+ * dislikes, used and learned songs, family radios, Artist variety) from any
+ * selected radio, while its peers keep loading.
+ */
 export const magicQueueFirstRadioSong = (
-  sessionId: string,
+  session: MagicSession,
   seeds: readonly SongRadioSeed[],
   deadlineAt: number,
-  onSettled: () => void,
+  {
+    graph,
+    profileOf,
+    onSettled,
+  }: {
+    readonly graph: ArtistGraph | null;
+    readonly profileOf: GenreProfileOf;
+    readonly onSettled: () => void;
+  },
 ) =>
   Effect.gen(function* () {
     const yt = yield* YtMusic;
     const context = yield* Effect.context<LibraryStore>();
     const readers = radioReaders(yt, context);
+    yield* Effect.promise(loadDislikes);
     const first = yield* Deferred.make<YtAlbumSong | null>();
     let chosen = false;
-    const onPage = ({ page }: SongRadioRead) => {
-      const song = page?.songs.find((candidate) => candidate.video !== true) ?? null;
-      if (song === null || chosen) return Effect.void;
+    const onPage = ({ seed, page }: SongRadioRead) => {
+      if (page === null || chosen) return Effect.void;
+      const song = djFirstRadioSong(session, seed.id, page.songs, {
+        graph,
+        profileOf,
+        disliked: dislikedSongsNow(),
+      });
+      if (song === null) return Effect.void;
       chosen = true;
       return Deferred.succeed(first, song).pipe(Effect.asVoid);
     };
     yield* Effect.forkDetach(
       readers
-        .read(sessionId, seeds, {
+        .read(session.id, seeds, {
           online: ytMusicEnabled() && online(),
           low: false,
           deadlineAt,

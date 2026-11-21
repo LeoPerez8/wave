@@ -922,6 +922,35 @@ export const startDjQueue = (
   };
 };
 
+/**
+ * [current], a DJ session that started before its selected albums' pages
+ * were read, with what [refreshed] (`startDjQueue` again, with those pages'
+ * songs) brings: its seed songs, the radio artists it adds and its family
+ * radios. Everything else the session holds since it started stays: its
+ * used songs, signals, learned radios and the artists its first song
+ * credited. A draw for the batch not read yet is dropped, so that batch draws
+ * again from the new seed songs.
+ */
+export const djSessionWithAlbumSongs = (
+  current: MagicSession,
+  refreshed: MagicSession,
+): MagicSession => {
+  const { seedRadios, djGenreRadios: _genreRadios, ...kept } = current;
+  const seedIds = new Set((refreshed.seedSongs ?? []).map((song) => song.id));
+  const artists = new Set(current.radioArtists.map(magicArtistKey));
+  return {
+    ...kept,
+    seedSongs: refreshed.seedSongs ?? [],
+    seedDraws: (current.seedDraws ?? []).filter((id) => seedIds.has(id)),
+    ...(seedRadios === undefined || seedRadios.batch === current.batches ? {} : { seedRadios }),
+    radioArtists: [
+      ...current.radioArtists,
+      ...refreshed.radioArtists.filter((name) => !artists.has(magicArtistKey(name))),
+    ],
+    ...(refreshed.djGenreRadios === undefined ? {} : { djGenreRadios: refreshed.djGenreRadios }),
+  };
+};
+
 /** What's saved for an artist's YT Music page, as DJ reads it (a `YtArtistSaved`). */
 export type DjSavedPage =
   | {
