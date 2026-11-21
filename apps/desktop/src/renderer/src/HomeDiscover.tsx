@@ -32,15 +32,20 @@ function MixRowSkeleton({ row }: { readonly row: MixRowId }) {
   );
 }
 
-/** A mix row: a tile per mix, named after its seed over its lead artists; a click plays it. */
+/**
+ * A mix row: a tile per mix, named after its seed over its lead artists; a click opens the mix's
+ * page, its cover's play glyph plays it.
+ */
 function MixRow({
   row,
   mixes,
   run,
+  onMix,
 }: {
   readonly row: MixRowId;
   readonly mixes: DiscoverMixesView["mixes"];
   readonly run: Run;
+  readonly onMix: (id: string) => void;
 }) {
   return (
     <Shelf
@@ -59,7 +64,8 @@ function MixRow({
           label: [title, mix.artists, line].filter(Boolean).join(", "),
         };
       })}
-      onOpen={(index) => playMix(run, mixes[index]!.id, 0)}
+      onOpen={(index) => onMix(mixes[index]!.id)}
+      onPlay={(index) => playMix(run, mixes[index]!.id, 0)}
     />
   );
 }
@@ -68,9 +74,12 @@ function MixRow({
 export function HomeDiscover({
   rows,
   run,
+  onMix,
 }: {
   readonly rows: readonly DiscoverRowId[];
   readonly run: Run;
+  /** Opens mix [id]'s page. */
+  readonly onMix: (id: string) => void;
 }) {
   const online = useOnline();
   const [revision, setRevision] = useState(0);
@@ -100,6 +109,7 @@ export function HomeDiscover({
             row={row}
             mixes={mixes.mixes.filter((mix) => mix.row === row)}
             run={run}
+            onMix={onMix}
           />
         ),
       )}

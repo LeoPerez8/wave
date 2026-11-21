@@ -1,17 +1,12 @@
-/**
- * Google's sign-in in the default browser (docs/spec-desktop.md, Sign-in): the Desktop OAuth
- * client's authorization code flow with PKCE, returning to a loopback address on a random port.
- * Gives the ID token Wave's sync service trades for a session; the code and the verifier never
- * leave the main process.
- */
+/** Desktop browser sign-in with PKCE and a loopback callback on a random port. */
 import { createHash, randomBytes } from "node:crypto";
 import { createServer, type IncomingMessage, type ServerResponse } from "node:http";
 import type { AddressInfo } from "node:net";
 
 export interface BrowserSignInOptions {
-  /** Google's authorization endpoint. */
+  /** The provider's authorization endpoint. */
   readonly authUrl: string;
-  /** Google's token endpoint. */
+  /** The provider's token endpoint. */
   readonly tokenUrl: string;
   /** The Desktop OAuth client's id. */
   readonly clientId: string;
@@ -20,12 +15,18 @@ export interface BrowserSignInOptions {
   /** Opens [url] in the default browser. */
   readonly openExternal: (url: string) => Promise<void>;
   readonly fetch: typeof fetch;
-  /** What the browser tab shows once Google sent it back. */
+  /** What the browser tab shows after the callback. */
   readonly page: { readonly title: string; readonly message: string };
   /** How long to wait for the browser; 5 minutes by default. */
   readonly timeoutMs?: number;
   /** Cancel in Wave. */
   readonly signal?: AbortSignal;
+}
+
+interface BrowserCodeOptions extends BrowserSignInOptions {
+  readonly scope: string;
+  readonly prompt?: string;
+  readonly callbackPath?: string;
 }
 
 /** Google's ID token and who it names, for display only: the service checks the token. */
@@ -78,11 +79,11 @@ const claimsOf = (idToken: string): Record<string, unknown> => {
 const text = (value: unknown): string | null =>
   typeof value === "string" && value !== "" ? value : null;
 
-/** Waits on a loopback server for Google's redirect: the code, or why there is none. */
+/** Waits on a loopback server for the provider's redirect. */
 const awaitRedirect = (
-  options: BrowserSignInOptions,
+  options: BrowserCodeOptions,
   state: string,
-  listening: (redirectUri: string) => void,
+  open: (redirectUri: string) => Promise<void>,
 ): Promise<{ code: string; redirectUri: string }> =>
   new Promise((resolve, reject) => {
     let redirectUri = "";
@@ -98,8 +99,12 @@ const awaitRedirect = (
       outcome();
     };
     const server = createServer((request: IncomingMessage, response: ServerResponse) => {
-      const url = new URL(request.url ?? "/", redirectUri);
-      if (request.method !== "GET" || url.pathname !== "/") {
+      const url = URL.parse(request.url ?? "/", redirectUri);
+      if (
+        request.method !== "GET" ||
+        url?.pathname !== (options.callbackPath ?? "/") ||
+        url.origin !== new URL(redirectUri).origin
+      ) {
         response.writeHead(404).end();
         return;
       }
@@ -114,6 +119,7 @@ const awaitRedirect = (
           "content-type": "text/html; charset=utf-8",
           "content-security-policy": "default-src 'none'; style-src 'unsafe-inline'",
           "cache-control": "no-store",
+          "referrer-policy": "no-referrer",
         })
         .end(returnPage(options.page));
       finish(() =>
@@ -131,37 +137,35 @@ const awaitRedirect = (
     options.signal?.addEventListener("abort", aborted);
     server.on("error", () => finish(() => reject(new BrowserSignInError("failed"))));
     server.listen(0, "127.0.0.1", () => {
-      redirectUri = `http://127.0.0.1:${(server.address() as AddressInfo).port}/`;
-      listening(redirectUri);
+      if (settled) return;
+      redirectUri = `http://127.0.0.1:${(server.address() as AddressInfo).port}${options.callbackPath ?? "/"}`;
+      void open(redirectUri).catch(() => finish(() => reject(new BrowserSignInError("failed"))));
     });
   });
 
-export const signInWithBrowser = async (
-  options: BrowserSignInOptions,
-): Promise<BrowserIdentity> => {
+/** Trades the authorization code for the provider's token response in main. */
+export const exchangeBrowserCode = async (options: BrowserCodeOptions): Promise<Response> => {
   const verifier = base64url(randomBytes(32));
   const challenge = base64url(createHash("sha256").update(verifier).digest());
   const state = base64url(randomBytes(16));
-  let opening: Promise<void> = Promise.resolve();
-  const { code, redirectUri } = await awaitRedirect(options, state, (redirectUri) => {
+  const { code, redirectUri } = await awaitRedirect(options, state, async (redirectUri) => {
     const url = new URL(options.authUrl);
     url.search = new URLSearchParams({
       client_id: options.clientId,
       redirect_uri: redirectUri,
       response_type: "code",
-      scope: "openid email profile",
+      scope: options.scope,
       code_challenge: challenge,
       code_challenge_method: "S256",
       state,
-      prompt: "select_account",
+      ...(options.prompt === undefined ? {} : { prompt: options.prompt }),
     }).toString();
-    opening = options.openExternal(url.toString());
+    await options.openExternal(url.toString());
   });
-  await opening.catch(() => {});
-  let response: Response;
   try {
-    response = await options.fetch(options.tokenUrl, {
+    return await options.fetch(options.tokenUrl, {
       method: "POST",
+      redirect: "error",
       headers: { "content-type": "application/x-www-form-urlencoded" },
       body: new URLSearchParams({
         code,
@@ -177,6 +181,17 @@ export const signInWithBrowser = async (
     if (options.signal?.aborted) throw new BrowserSignInError("cancelled");
     throw new BrowserSignInError("network");
   }
+};
+
+/** Google's ID token and display fields for Wave account sign-in. */
+export const signInWithBrowser = async (
+  options: BrowserSignInOptions,
+): Promise<BrowserIdentity> => {
+  const response = await exchangeBrowserCode({
+    ...options,
+    scope: "openid email profile",
+    prompt: "select_account",
+  });
   const answer = (await response.json().catch(() => ({}))) as { id_token?: unknown };
   const idToken = text(answer.id_token);
   if (!response.ok || idToken === null) throw new BrowserSignInError("failed");

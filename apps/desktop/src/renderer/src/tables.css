@@ -8,7 +8,68 @@
 .table-area.no-third.no-star .table-columns {
   grid-template-columns: minmax(180px, 1.5fr) minmax(110px, 1fr) 54px;
 }
+.table-area.with-added {
+  --table-dates: minmax(76px, 0.6fr);
+}
+.table-area.with-starred {
+  --table-dates: repeat(2, minmax(76px, 0.6fr));
+}
+.table-area.with-released {
+  --table-dates: repeat(2, minmax(76px, 0.6fr));
+}
+.table-area.with-added .table-columns {
+  grid-template-columns:
+    minmax(180px, 1.5fr) minmax(110px, 1fr) minmax(100px, 1fr) var(--table-dates)
+    28px 54px;
+}
+/* A playlist's own order and an artist's Popular ranks lead the row. */
+.table-area.with-order.with-added .table-columns {
+  grid-template-columns:
+    30px minmax(180px, 1.5fr) minmax(110px, 1fr) minmax(100px, 1fr) var(--table-dates)
+    28px 54px;
+}
+.order-column {
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
+  text-align: right;
+}
+.order-column > .table-sort {
+  justify-content: flex-end;
+}
+.table-date {
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
+}
+.table-sort {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  width: 100%;
+  min-height: 24px;
+  padding: 2px 0;
+  line-height: 1.15;
+  text-align: left;
+  cursor: pointer;
+}
+.table-sort svg {
+  flex: none;
+  transform: rotate(90deg);
+}
+[aria-sort="descending"] > .table-sort svg {
+  transform: rotate(-90deg);
+}
+.table-sort:hover,
+[aria-sort] > .table-sort {
+  color: var(--color-foreground);
+}
 @container (width < 760px) {
+  .table-area.with-added .table-columns {
+    grid-template-columns: minmax(0, 1.5fr) minmax(0, 1fr) var(--table-dates) 22px 48px;
+    gap: 8px;
+  }
+  .table-area.with-order.with-added .table-columns {
+    grid-template-columns: 30px minmax(0, 1.5fr) minmax(0, 1fr) var(--table-dates) 22px 48px;
+  }
   .table-area.no-third .table-columns {
     grid-template-columns: minmax(160px, 1.5fr) minmax(110px, 1fr) 28px 54px;
   }
@@ -16,4 +77,17 @@
   .table-area.no-third.no-star .table-columns {
     grid-template-columns: minmax(160px, 1.5fr) minmax(110px, 1fr) 54px;
   }
+}
+/* An album's "Disc n" head takes a row's place before its disc's first song. */
+.disc-heading {
+  position: absolute;
+  left: 0;
+  right: 0;
+  height: 40px;
+  display: flex;
+  align-items: flex-end;
+  padding: 0 12px 6px;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--color-secondary);
 }

@@ -4,13 +4,16 @@ import { describe, test } from "node:test";
 import {
   EMPTY_QUEUE,
   REAL_SHUFFLE,
+  SHUFFLE_KINDS,
   currentEntry,
   queueHistory,
   readShuffleKind,
   reduceQueue,
+  shuffleReads,
   shuffledTrackIds,
   shufflesQueue,
   upNext,
+  writeShuffleKind,
 } from "./index.ts";
 import type { QueueCommand, QueueState, Shuffle } from "./index.ts";
 
@@ -371,5 +374,46 @@ describe("readShuffleKind", () => {
     assert.equal(readShuffleKind("real"), "real");
     assert.equal(readShuffleKind(null), "real");
     assert.equal(readShuffleKind("something else"), "real");
+  });
+});
+
+describe("shuffleReads", () => {
+  const playing = start(["1", "2", "yt:abc"]);
+  const on = { type: "setShuffle", on: true } as const;
+
+  test("Real Shuffle reads nothing, whatever the command", () => {
+    assert.deepEqual(shuffleReads("real", playing, on), { kind: "real" });
+  });
+
+  test("Smart and Even Shuffle read the songs a shuffling command orders", () => {
+    assert.deepEqual(shuffleReads("smart", playing, on), {
+      kind: "smart",
+      trackIds: ["1", "2", "yt:abc"],
+    });
+    const play = { type: "play", trackIds: ["7", "8", "7"], context: songs, shuffle: true };
+    assert.deepEqual(shuffleReads("even", playing, play as QueueCommand), {
+      kind: "even",
+      trackIds: ["7", "8"],
+    });
+  });
+
+  test("a command that doesn't shuffle reads nothing", () => {
+    assert.deepEqual(shuffleReads("smart", playing, { type: "next" }), { kind: "real" });
+    assert.deepEqual(shuffleReads("even", playing, { type: "setShuffle", on: false }), {
+      kind: "real",
+    });
+  });
+});
+
+describe("the saved shuffle kind", () => {
+  test("lists the kinds in the order every menu shows them", () => {
+    assert.deepEqual(SHUFFLE_KINDS, ["real", "smart", "even"]);
+  });
+
+  test("is stored so that what is read back is what was chosen", () => {
+    assert.equal(writeShuffleKind("real"), null);
+    assert.equal(writeShuffleKind("smart"), "smart");
+    assert.equal(writeShuffleKind("even"), "even");
+    for (const kind of SHUFFLE_KINDS) assert.equal(readShuffleKind(writeShuffleKind(kind)), kind);
   });
 });

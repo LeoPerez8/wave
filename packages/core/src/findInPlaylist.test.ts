@@ -7,6 +7,7 @@ import {
   artistFindText,
   genreFindText,
   createPlaylistFinder,
+  createFindMatcher,
   findInPlaylistHead,
   findNoMatch,
   findPlaceholder,
@@ -304,6 +305,8 @@ describe("what a findable list's field and empty line say", () => {
     assert.equal(findPlaceholder("genres"), "Find in Genres");
     assert.equal(findPlaceholder("playlists"), "Find in Playlists");
     assert.equal(findPlaceholder("artist"), "Find in artist");
+    assert.equal(findPlaceholder("favorites"), "Find in Favorites");
+    assert.equal(findPlaceholder("genre"), "Find in genre");
   });
 
   test("a query that finds nothing says what wasn't found", () => {
@@ -314,6 +317,8 @@ describe("what a findable list's field and empty line say", () => {
     assert.equal(findNoMatch("genres"), "No genres match");
     assert.equal(findNoMatch("playlists"), "No playlists match");
     assert.equal(findNoMatch("artist"), findNoMatch("songs"));
+    assert.equal(findNoMatch("favorites"), "No songs match");
+    assert.equal(findNoMatch("genre"), "No songs match");
   });
 });
 
@@ -328,5 +333,27 @@ describe("Find's text in Portuguese", () => {
     assert.equal(findPlaceholder("artist", "pt-BR"), "Buscar em artista");
     assert.equal(findNoMatch("artist", "pt-BR"), "Nenhuma música encontrada");
     assert.equal(findPlaceholder("genres"), "Find in Genres");
+    assert.equal(findPlaceholder("favorites", "pt-BR"), "Buscar em Favoritas");
+    assert.equal(findPlaceholder("genre", "pt-BR"), "Buscar em gênero");
+    assert.equal(findNoMatch("favorites", "pt-BR"), "Nenhuma música encontrada");
+    assert.equal(findNoMatch("genre", "pt-BR"), "Nenhuma música encontrada");
+  });
+});
+
+describe("a Find query matched one row at a time", () => {
+  test("it finds what a finder over the list finds, ignoring case, accents and word order", () => {
+    const finds = createFindMatcher("beyo")!;
+    assert.equal(finds({ title: "Halo", artist: "Beyoncé", album: "I Am... Sasha Fierce" }), true);
+    assert.equal(finds({ title: "Beyond", artist: null, album: undefined }), true);
+    assert.equal(finds({ title: "Halo", artist: "Adele" }), false);
+    const words = createFindMatcher("FIERCE hal")!;
+    assert.equal(words({ title: "Halo", artist: "Beyoncé", album: "I Am... Sasha Fierce" }), true);
+    // A word has to start a word: "eyo" is inside "Beyoncé", not at a word's start.
+    assert.equal(createFindMatcher("eyo")!({ title: "Beyoncé" }), false);
+  });
+
+  test("a query with nothing to find by matches no row: the whole list shows", () => {
+    assert.equal(createFindMatcher(""), null);
+    assert.equal(createFindMatcher("  ..."), null);
   });
 });

@@ -390,10 +390,18 @@ const failureLines = (catalogue: Catalogue): Readonly<Record<RecognizeFailure, s
   capture: catalogue.playbackText.theAudioCaptureStoppedSendingSound,
 });
 
+export interface RecognizeCardOptions extends RecognizeResultOptions {
+  /**
+   * The microphone-off card's buttons after Close: the phone's Open Settings (it listens again
+   * on coming back), or the desktop's Try Again, after Open Settings where the system has a page.
+   */
+  readonly denied?: readonly ("openSettings" | "tryAgain")[];
+}
+
 /** What the card shows for [card]. */
 export const recognizeCardView = (
   card: RecognizeCard,
-  options: RecognizeResultOptions = {
+  options: RecognizeCardOptions = {
     ytMusic: true,
   },
   catalogue: Catalogue = en,
@@ -441,11 +449,13 @@ export const recognizeCardView = (
         catalogue.playbackText.connectToTheInternetToRecognizeASong,
       );
     case "denied":
-      return notice(
-        catalogue.playbackText.microphoneAccessIsOff,
-        catalogue.playbackText.allowWaveToCaptureAudioInItsAndroidSettingsToRecognizeSongs,
-        "openSettings",
-      );
+      return {
+        ...notice(
+          catalogue.playbackText.microphoneAccessIsOff,
+          catalogue.playbackText.allowWaveToCaptureAudioInItsAndroidSettingsToRecognizeSongs,
+        ),
+        actions: ["close", ...(options.denied ?? ["openSettings"])],
+      };
     case "ended": {
       const ending = card.end;
       switch (ending.kind) {

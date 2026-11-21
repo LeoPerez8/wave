@@ -1,7 +1,7 @@
 import type { RecognizeAnswer, RecognizeSource } from "@wave/core";
 import { NativeModule, requireOptionalNativeModule } from "expo";
 
-import type { RecognizeNative } from "@/recognize/recognizeSession";
+import type { RecognizeNative } from "@wave/client/recognizeSession";
 import type { RecognizeTileNative } from "@/recognize/recognizeTile";
 import type { RecognizeTileFavoriteNative } from "@/recognize/recognizeTileFavorite";
 

@@ -619,6 +619,39 @@ export const movePlaylistItem = (
     tx.update(playlists).set({ updatedAt: now }).where(eq(playlists.id, playlistId)).run();
   });
 
+/**
+ * Moves entries [itemIds] together, in the playlist order they had, before
+ * entry [beforeItemId] (after the last entry when it is null or one of
+ * them): a drag of several rows. Only their order keys change, as
+ * `movePlaylistItem`'s do.
+ */
+export const movePlaylistItems = (
+  db: LibraryDatabase,
+  playlistId: number,
+  itemIds: readonly number[],
+  beforeItemId: number | null,
+  now: number,
+): void =>
+  db.transaction((tx) => {
+    const { playlists, playlistItems } = schema;
+    const named = new Set(itemIds);
+    const entries = orderedEntries(tx, playlistId);
+    const moved = entries.filter((entry) => named.has(entry.itemId));
+    if (moved.length === 0) return;
+    const others = entries.filter((entry) => !named.has(entry.itemId));
+    const at = others.findIndex((entry) => entry.itemId === beforeItemId);
+    const { keys, rekeyed } = placeEntries(others, at === -1 ? others.length : at, moved.length);
+    rekey(tx, rekeyed, now);
+    moved.forEach((entry, i) =>
+      tx
+        .update(playlistItems)
+        .set({ orderKey: keys[i] ?? "", ...stamped(playlistItems, now) })
+        .where(eq(playlistItems.id, entry.itemId))
+        .run(),
+    );
+    tx.update(playlists).set({ updatedAt: now }).where(eq(playlists.id, playlistId)).run();
+  });
+
 /** Track ids per query, well under SQLite's limit on bound values. */
 const LINK_CHUNK = 500;
 

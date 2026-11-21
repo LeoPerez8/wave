@@ -5,7 +5,7 @@ import java.nio.file.Files
 
 /**
  * Test fixtures from `src/testFixtures/resources/fixtures` (see `src/testFixtures/fixtures-src/generate.sh`),
- * shared by this module's tests and the Android module's (its own Shazam fixtures sit beside them).
+ * shared by this module's tests and the Android module's (the Shazam ones are in `shazam/`).
  */
 object Fixtures {
   fun file(name: String): File {

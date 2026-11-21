@@ -46,6 +46,12 @@ import { DesktopLibrary } from "../library/library.ts";
 import { lookupsEnabled } from "../lookupSettings.ts";
 
 import type { SongLyrics } from "../../shared/lyrics.ts";
+import { createKaraokeSwitch, type KaraokeSwitchShape } from "./karaoke.ts";
+import {
+  createLyricsTranslation,
+  TRANSLATION_TIMEOUT_MS,
+  type LyricsTranslationShape,
+} from "./translation.ts";
 
 /** How long a source may take before it counts as unreachable, as on the phone. */
 const LOOKUP_TIMEOUT_MS = 30_000;
@@ -67,15 +73,22 @@ export interface LyricsDeps {
   readonly timeoutMs?: number;
 }
 
-export interface LyricsShape {
+export interface SongLyricsShape {
   /** What the Lyrics view shows for the queue track `trackId`. */
   readonly song: (trackId: string) => Promise<SongLyrics>;
+}
+
+export interface LyricsShape extends SongLyricsShape {
+  /** The Translate button and what it shows under the lines. */
+  readonly translation: LyricsTranslationShape;
+  /** The Karaoke button's switch. */
+  readonly karaoke: KaraokeSwitchShape;
 }
 
 const NONE: SongLyrics = { kind: "none" };
 const FAILED: SongLyrics = { kind: "failed" };
 
-export const createLyrics = (deps: LyricsDeps): LyricsShape => {
+export const createLyrics = (deps: LyricsDeps): SongLyricsShape => {
   const timeoutMs = deps.timeoutMs ?? LOOKUP_TIMEOUT_MS;
   /** Library songs' lyrics found online this session, by track id. */
   const found = new Map<number, SongLyrics>();
@@ -225,7 +238,7 @@ export const lyricsLayer = (options: { readonly fetch?: typeof globalThis.fetch 
       const yt = yield* YtMusic;
       const library = yield* DesktopLibrary;
       const fetch = options.fetch ?? globalThis.fetch;
-      return createLyrics({
+      const lyrics = createLyrics({
         db,
         readFile: (path) => Effect.runPromise(kotlin.call("readLyrics", { path })),
         writeFile: async (path, lyrics) => {
@@ -253,5 +266,27 @@ export const lyricsLayer = (options: { readonly fetch?: typeof globalThis.fetch 
         ytMusicOn: yt.enabled,
         now: Date.now,
       });
+      // Google Translate goes through the `fetch` of the moment, which a check can replace.
+      const translateFetch: typeof globalThis.fetch =
+        options.fetch ?? ((input, init) => globalThis.fetch(input, init));
+      return {
+        ...lyrics,
+        karaoke: createKaraokeSwitch(db),
+        translation: createLyricsTranslation({
+          db,
+          song: lyrics.song,
+          post: async (url, body) => {
+            const response = await translateFetch(url, {
+              method: "POST",
+              headers: { "Content-Type": "application/x-www-form-urlencoded;charset=UTF-8" },
+              body,
+              redirect: "error",
+              signal: AbortSignal.timeout(TRANSLATION_TIMEOUT_MS),
+            });
+            if (!response.ok) throw new Error(`HTTP ${response.status} from Google Translate`);
+            return response.json();
+          },
+        }),
+      };
     }),
   );
