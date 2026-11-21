@@ -41,7 +41,8 @@ export interface NativeGlassViewProps extends ViewProps {
   readonly refraction: number;
   readonly cornerRadius: number;
   readonly tintColor: ColorValue;
-  readonly rim: boolean;
+  /** The rim stroke's strength in percent of the shipped one (Core `GLASS_SETTINGS.rim`); 0 draws none. */
+  readonly rim: number;
   /**
    * Share one backdrop recording with the other glass views over the same
    * backdrop, re-recorded only when the backdrop changed (the glass probe's

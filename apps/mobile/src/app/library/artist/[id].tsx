@@ -9,6 +9,8 @@ import {
   type ArtistPageItem,
   type Catalogue,
   type RankedArtistSong,
+  type SimilarArtistLink,
+  type YtArtistAbout,
   type YtArtistAlbum,
 } from "@wave/core";
 import type { LegendListRef } from "@legendapp/list/react-native";
@@ -43,6 +45,7 @@ import {
 } from "@/playback/mixedItems";
 import { albumSelectionOf, ytAlbumSelectionOf } from "@/selection/mixedSelection";
 import { toAlbumSummary } from "@/library/AlbumGrid";
+import { ArtistAbout } from "@/library/ArtistAbout";
 import { DetailFrame } from "@/library/DetailFrame";
 import { entryText, FindFrame, FindHead, useFindInLegendList } from "@/library/FindInPlaylist";
 
@@ -50,6 +53,7 @@ import { useArtist } from "@/library/hooks";
 import { LibraryAlbumCard } from "@/library/LibraryAlbumCard";
 import type { AlbumRow, ArtistDetail, ArtistRow, SongRow } from "@wave/client";
 import { openAlbum, parseId, useKnownRow, useOpenedIntegrated } from "@/library/routes";
+import { SimilarArtistsRow, similarArtistsRowHeight } from "@/library/SimilarArtistsRow";
 import { SongSortButton } from "@/library/SongSortButton";
 import { useSortedSongs } from "@/library/songSort";
 import { ListIntro, songCount } from "@/library/TrackList";
@@ -62,6 +66,7 @@ import { selectableRow } from "@/selection/selectableRow";
 import { useListSelection, type ListSelection } from "@/selection/useListSelection";
 import { ArtistStatsBlock } from "@/stats/ArtistStatsBlock";
 import type { NativeYtSong } from "@/native/waveYtMusic";
+import { useArtistKeptPage, type ArtistKeptPageShown } from "@/ytmusic/artistKeptPage";
 import { useArtistSongsFinder, useYtArtistSection } from "@/ytmusic/artistSection";
 import { useHeldSongs, useSongsInPlace } from "@/ytmusic/songsInPlace";
 import { ytArtistNote, YtReleaseCard } from "@/ytmusic/YtArtistSection";
@@ -82,7 +87,12 @@ const SKELETON_CELL: AlbumCell = { kind: "skeleton" };
  */
 type PageSong = RankedArtistSong<NativeYtSong, SongRow>;
 
-type Item = ArtistPageItem<AlbumCell, PageSong>;
+type Similar = SimilarArtistLink<ArtistRow>;
+
+type Item = ArtistPageItem<AlbumCell, PageSong, Similar, YtArtistAbout>;
+
+/** Neither Fans might also like nor About: no page kept, or its place taken by skeletons. */
+const NOTHING_KEPT: ArtistKeptPageShown = { similar: [], about: null };
 
 /** Space under an album shelf's row, before the next heading. */
 const SHELF_GAP = CELL * 3;
@@ -119,8 +129,9 @@ const cellKey = (cell: AlbumCell): string => {
 /**
  * The page's shelves and songs, the songs under [songsLabel]. While YouTube
  * Music is asked ([loading]), skeleton tiles follow the Library's albums where
- * its releases will go. While Find in artist narrows the songs ([found]), only
- * the songs found show.
+ * its releases will go. After the songs come Fans might also like and About,
+ * from the artist's [kept] YouTube Music page. While Find in artist narrows
+ * the songs ([found]), only the songs found show.
  */
 const artistItems = (
   detail: ArtistDetail,
@@ -130,6 +141,7 @@ const artistItems = (
   songsLabel: string,
   { library }: Catalogue,
   found: readonly number[] | null,
+  kept: ArtistKeptPageShown,
 ): Item[] =>
   artistPageItems(
     [
@@ -151,6 +163,10 @@ const artistItems = (
     songs,
     songsLabel,
     found,
+    {
+      similar: { label: library.fansAlsoLike, artists: kept.similar },
+      ...(kept.about === null ? {} : { about: kept.about }),
+    },
   );
 
 const itemKey = (item: Item): string => {
@@ -159,6 +175,10 @@ const itemKey = (item: Item): string => {
       return `section-${item.label}`;
     case "shelf":
       return `shelf-${item.label}`;
+    case "similar":
+      return "similar";
+    case "about":
+      return "about";
     case "song":
       return item.song.source === "library"
         ? String(item.song.track.id)
@@ -304,6 +324,7 @@ function ArtistContent({ shown, openedIntegrated }: { shown: Shown; openedIntegr
   const list = useRef<LegendListRef>(null);
   const { fontScale } = useWindowDimensions();
   const shelfHeight = shelfRowHeight(fontScale);
+  const similarRow = similarArtistsRowHeight(fontScale);
   const bottomInset = useChromeInset();
   // The releases among these the Library has aren't YouTube Music's to add.
   const libraryAlbums = useMemo(
@@ -365,6 +386,11 @@ function ArtistContent({ shown, openedIntegrated }: { shown: Shown; openedIntegr
   // streamed; otherwise the Library's songs alone.
   // While YouTube Music is asked, skeletons stand where its releases and songs will go.
   const ytLoading = ytView?.note === "loading";
+  // Fans might also like and About, from the artist's YouTube Music page: looked up once the
+  // page is read and the screen has settled, never before the songs and albums. While
+  // YouTube Music's songs are on their way, their skeletons follow the songs instead.
+  const keptPage = useArtistKeptPage(detail.artist.name, loaded, yt);
+  const kept = ytLoading ? NOTHING_KEPT : keptPage;
   // Find in artist narrows the songs on the page, the Library's or the mixed list with Online.
   const findInArtist = useFindInLegendList(list, pageSongs, entryText, true);
   const { found } = findInArtist;
@@ -380,8 +406,9 @@ function ArtistContent({ shown, openedIntegrated }: { shown: Shown; openedIntegr
         byPopularity ? strings.library.popular : strings.library.songs,
         strings,
         found,
+        kept,
       ),
-    [detail, pageSongs, additions, ytLoading, byPopularity, strings, found],
+    [detail, pageSongs, additions, ytLoading, byPopularity, strings, found, kept],
   );
   // Albums and songs select together; the bar acts on them in page order.
   const selectable = useMemo(
@@ -392,6 +419,7 @@ function ArtistContent({ shown, openedIntegrated }: { shown: Shown; openedIntegr
   const albumSelection = useMemo(() => albumSelectionOf(page), [page]);
   const releaseSelection = useMemo(() => ytAlbumSelectionOf(page), [page]);
   const rowSelection = useMemo(() => songSelection(page, selectedSong), [page]);
+  const { selecting } = page;
   const context = useMemo(
     () => ({ kind: "artist", id: String(detail.artist.id) }) as const,
     [detail.artist.id],
@@ -427,9 +455,26 @@ function ArtistContent({ shown, openedIntegrated }: { shown: Shown; openedIntegr
             height={shelfHeight}
           />
         );
+      if (item.type === "similar")
+        return (
+          <SimilarArtistsRow artists={item.artists} height={similarRow} selecting={selecting} />
+        );
+      if (item.type === "about") return <ArtistAbout about={item.about} />;
       return null;
     },
-    [albumSelection, releaseSelection, integrated, shelfHeight],
+    [albumSelection, releaseSelection, integrated, shelfHeight, similarRow, selecting],
+  );
+  // About's height follows its text, so the list measures it.
+  const slotSize = useCallback(
+    (item: Item): number | undefined =>
+      item.type === "section"
+        ? SECTION_HEAD
+        : item.type === "similar"
+          ? similarRow
+          : item.type === "about"
+            ? undefined
+            : shelfHeight,
+    [shelfHeight, similarRow],
   );
 
   // With Online and an answer found, the counts take in what YouTube Music adds to the page.
@@ -477,8 +522,15 @@ function ArtistContent({ shown, openedIntegrated }: { shown: Shown; openedIntegr
         context={context}
         renderSlot={renderSlot}
         slotType={(item) => item.type}
-        slotSize={(item) => (item.type === "section" ? SECTION_HEAD : shelfHeight)}
-        extraData={{ albumSelection, releaseSelection, integrated, shelfHeight }}
+        slotSize={slotSize}
+        extraData={{
+          albumSelection,
+          releaseSelection,
+          integrated,
+          shelfHeight,
+          similarRow,
+          selecting,
+        }}
         selection={rowSelection}
         onPlay={(item) => {
           if (item.type === "song") void playPage(pageSongs, item.index, context);
@@ -516,8 +568,11 @@ function ArtistContent({ shown, openedIntegrated }: { shown: Shown; openedIntegr
  * Library | Online toggle after Play and Shuffle (asked only once Online is
  * picked): then the releases and every song YouTube Music has of theirs that
  * the Library lacks join the albums and songs, and Play, Shuffle and taps
- * play the mixed list; Library hides them again. Find in artist, over the
- * page, narrows the songs shown (the shelves and the head step aside). Opened integrated
+ * play the mixed list; Library hides them again. After the songs come Fans
+ * might also like and About, from the artist's YouTube Music page, found by
+ * name once and kept (`useArtistKeptPage`); with no page kept there is neither.
+ * Find in artist, over the
+ * page, narrows the songs shown (the shelves, the head and those two step aside). Opened integrated
  * (`openArtist`'s `integrated`, from a streamed song's artist), it opens with
  * Online selected and asks on its own. Opened
  * from a list that knows the artist, the head is there on the first frame and

@@ -18,6 +18,7 @@ export type SearchAsker =
   | "tryAgain"
   | "share"
   | "discover"
+  | "artistPage"
   | "fill";
 
 /**
@@ -53,6 +54,8 @@ const ASKERS: Readonly<Record<SearchAsker, AskerTurn>> = {
   // Sharing a playlist on YT Music searches its songs without a video id: downloads' priority too.
   share: { rank: 1, most: SEARCH_ALLOWANCE, name: "sharing a playlist" },
   discover: { rank: 2, most: SEARCH_ALLOWANCE, name: "a Discover mix" },
+  // A Library artist's page finding their YouTube Music page for Fans might also like and About: nobody waits on it.
+  artistPage: { rank: 2, most: SEARCH_ALLOWANCE, name: "an artist page" },
   // Unsearched entries searched while Wave runs: last, and never the 200 kept for playing and downloads.
   fill: { rank: 3, most: 800, name: "the background fill" },
 };
