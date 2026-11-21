@@ -31,6 +31,7 @@ export const LIBRARY_SEEDS = [
   "library/hooks.ts#songs",
   "library/hooks.ts#artists",
   "library/hooks.ts#useArtists",
+  "library/hooks.ts#useLoadedArtists",
   ...[
     "currentLibraryFinder",
     "useLoadedLibraryFinder",
@@ -363,7 +364,7 @@ export const WHOLE_LIBRARY: Record<string, WholeLibraryException> = {
       "Only a settled artist page (YT Music's, or the Library's through useArtistKeptPage) that lists similar artists reads the Library's artists, to tell which Fans might also like tiles open a Library page. It runs offline too, where the shelf of a page seen before still shows. No request is made. See ytArtistPageOpening.test.ts, artistPageLookup.test.ts and similarArtistLinks.test.ts.",
     capabilities: [
       "../../../packages/core/src/ytArtist.ts#libraryArtistFinder",
-      "library/hooks.ts#useArtists",
+      "library/hooks.ts#useLoadedArtists",
     ],
   },
   "ytmusic/artistPage.ts#useYtArtistPage": {
