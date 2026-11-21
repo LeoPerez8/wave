@@ -12,9 +12,15 @@
 // stderr.
 import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
-import { isDeepStrictEqual, parseArgs } from "node:util";
+import { parseArgs } from "node:util";
 
-import { reachesDesktop, reachesUsers } from "./changes.ts";
+import {
+  APP_PACKAGE,
+  type AppPackage,
+  reachesDesktop,
+  reachesUsers,
+  versionOnly,
+} from "./changes.ts";
 import { listedPullRequests, parseMergedPr, type PatchNotesInput } from "./patch-notes.ts";
 
 type Version = readonly [major: number, minor: number, patch: number];
@@ -32,34 +38,20 @@ const compare = (a: Version, b: Version) => a[0] - b[0] || a[1] - b[1] || a[2] -
 
 const format = ([major, minor, patch]: Version) => `${major}.${minor}.${patch}`;
 
-const APP_PACKAGE = "apps/mobile/package.json";
-
-// Whether package.json's text changed only its `version`, as a release's bump commit does.
-const versionOnly = ({ previous, current }: { previous: string; current: string }) => {
-  try {
-    const [before, after] = [previous, current].map((text) => {
-      const { version: _version, ...rest } = JSON.parse(text) as Record<string, unknown>;
-      return rest;
-    });
-    return isDeepStrictEqual(before, after);
-  } catch {
-    return false;
-  }
-};
-
 /** What a push releases: `version` is unset when it releases nothing. `reason` is for the log. */
 export type NextVersion = { version?: string; reason: string };
 
 /**
- * How big a tag bump is: minor when a PR counted since the channel's previous tag (as its
- * patch notes count them) that no release has shipped yet comes from a `feat/` branch, named
+ * How big a tag bump is: minor when a PR counted since the channel's previous tag (as either
+ * app's patch notes count them) that no release has shipped yet comes from a `feat/` branch, named
  * for the log. Patch otherwise.
  */
 export type Bump =
   { size: "patch" } | { size: "minor"; pr: { readonly number: number; readonly branch: string } };
 
 /**
- * The bump the PRs merged in a release's commits make, counted as its patch notes list them,
+ * The bump the PRs merged in a release's commits make, counted as the phone's or the desktop's
+ * patch notes list them (a desktop-only `feat/` PR makes it minor too),
  * less those whose merge commit a `v*` tag of either channel already contains: the shared
  * counter bumped for them then (a feat/ PR already released doesn't bump the minor again).
  */
@@ -94,21 +86,24 @@ export type NextVersionInput = {
    * apps/mobile/package.json's text at the channel's previous tag (empty when it had none)
    * and now, to tell a change of its version alone.
    */
-  appPackage?: { previous: string; current: string };
+  appPackage?: AppPackage;
   /** How big a bump of the highest tag is. Patch when unset. */
   bump?: Bump;
 };
 
-/**
- * A push releases when users can see what changed since the previous release (by the change
- * rule, `reachesUsers`; a change of the app's package.json version alone doesn't count). Its
- * version bumps the highest version on any tag by `bump`, unless package.json already holds a
- * higher one (a hand-made bump), which is released as it is. Both channels count from the
- * same tags; ti's version gets the -ti suffix. A pushed commit that already carries its
- * channel's tag for package.json's version is released as it is.
- */
+// Whether the phone's or the desktop's users can see a change. One the desktop's alone releases
+// a version too, which publishes only the installers.
 const changesRelease = (paths: readonly string[]) => reachesUsers(paths) || reachesDesktop(paths);
 
+/**
+ * A push releases when the phone's or the desktop's users can see what changed since the
+ * previous release (by the change rule, `reachesUsers` or `reachesDesktop`; a change of the
+ * app's package.json version alone doesn't count). Its version bumps the highest version on any
+ * tag by `bump`, unless package.json already holds a higher one (a hand-made bump), which is
+ * released as it is. Both channels count from the same tags; ti's version gets the -ti suffix. A
+ * pushed commit that already carries its channel's tag for package.json's version is released
+ * as it is.
+ */
 export const nextVersion = (push: NextVersionInput): NextVersion => {
   const suffix = push.channel === "ti" ? "-ti" : "";
   // A run whose bump was pushed and tagged but not published (or a re-run of one).

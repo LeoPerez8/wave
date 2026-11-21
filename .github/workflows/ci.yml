@@ -3,9 +3,10 @@ name: CI
 on:
   pull_request:
   push:
-    # A push to main that changes the app releases the next -ti prerelease to the ti channel:
-    # the Version job commits and tags it on main, and each app's release job publishes it
-    # (mobile.yml, desktop.yml; docs/spec.md, Releases). Pushing v<version> by hand publishes it too.
+    # A push to main that changes the phone or the desktop releases the next -ti prerelease to
+    # the ti channel: the Version job commits and tags it on main, and the release job of each app
+    # that changed publishes it (mobile.yml, desktop.yml; docs/spec.md, Releases). Pushing
+    # v<version> by hand publishes it too.
     branches: [main]
     tags: ["v*"]
   # The promotion's way in (promote.yml): its token's tag push starts no run, so it starts this
@@ -58,6 +59,8 @@ jobs:
       desktopChecks: ${{ steps.rule.outputs.desktopChecks }}
       phoneRelease: ${{ steps.rule.outputs.phoneRelease }}
       desktopRelease: ${{ steps.rule.outputs.desktopRelease }}
+      # The desktop's previous release on main and tags, which its patch notes count from.
+      desktopSince: ${{ steps.rule.outputs.desktopSince }}
     steps:
       - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.1.0
         with:
@@ -159,8 +162,9 @@ jobs:
           if-no-files-found: ignore
           retention-days: 1
 
-  # A push to main that changes the app releases the next -ti version: this commits it to
-  # package.json as "Release Wave <version>", on top of main's latest tip, and tags it v<version> in the same push (scripts/ci/bump-version.sh).
+  # A push to main that changes the phone or the desktop releases the next -ti version: this
+  # commits it to package.json as "Release Wave <version>", on top of main's latest tip, and tags
+  # it v<version> in the same push (scripts/ci/bump-version.sh).
   # The rest of the run checks, builds and publishes that commit. CI, docs and spec-only pushes
   # don't release, and the log says why. Anywhere else the job does nothing.
   version:
@@ -196,10 +200,11 @@ jobs:
 
   # The patch notes a release cut from this run's commit gets (scripts/ci/patch-notes.sh),
   # shown in the run's summary. A run that releases publishes them. They wait for the Version
-  # job, whose bump may sit on a newer tip of main than the pushed commit.
+  # job, whose bump may sit on a newer tip of main than the pushed commit. The phone's count from
+  # the channel's previous tag, and the desktop's from its own previous release (Changes).
   notes:
     name: Patch notes
-    needs: [version, source]
+    needs: [version, source, changes]
     runs-on: ubuntu-latest
     permissions:
       contents: read
@@ -209,6 +214,8 @@ jobs:
       # The same notes in each language, as one line of JSON, for the update service.
       localized: ${{ steps.notes.outputs.localized }}
       desktop_localized: ${{ steps.notes.outputs.desktop_localized }}
+      # The desktop's notes in Markdown, for the GitHub Release of a version it publishes.
+      desktop: ${{ steps.notes.outputs.desktop }}
       # The notes of the versions before it that never published (scripts/ci/earlier-notes.sh),
       # which the release publishes too, each under its own version.
       earlier: ${{ steps.notes.outputs.earlier }}
@@ -243,13 +250,19 @@ jobs:
           GH_TOKEN: ${{ github.token }}
           LOCALIZED_NOTES_FILE: ${{ runner.temp }}/localized-notes.json
           DESKTOP_NOTES_FILE: ${{ runner.temp }}/desktop-notes.json
+          DESKTOP_RELEASE_NOTES_FILE: ${{ runner.temp }}/desktop-notes.md
+          DESKTOP_NOTES_SINCE: ${{ needs.changes.outputs.desktopSince }}
         run: |
           notes="$(scripts/ci/patch-notes.sh)"
           echo "$notes"
           { echo "notes<<WAVE_PATCH_NOTES"; echo "$notes"; echo "WAVE_PATCH_NOTES"; } >> "$GITHUB_OUTPUT"
           if [ -s "$LOCALIZED_NOTES_FILE" ]; then echo "localized=$(cat "$LOCALIZED_NOTES_FILE")" >> "$GITHUB_OUTPUT"; fi
           if [ -s "$DESKTOP_NOTES_FILE" ]; then echo "desktop_localized=$(cat "$DESKTOP_NOTES_FILE")" >> "$GITHUB_OUTPUT"; fi
+          desktop=""
+          if [ -s "$DESKTOP_RELEASE_NOTES_FILE" ]; then desktop="$(cat "$DESKTOP_RELEASE_NOTES_FILE")"; fi
+          { echo "desktop<<WAVE_PATCH_NOTES"; echo "$desktop"; echo "WAVE_PATCH_NOTES"; } >> "$GITHUB_OUTPUT"
           { echo "# Patch notes"; echo; echo "${notes:-Nothing to list: no PR since the last version changes the app.}"; } >> "$GITHUB_STEP_SUMMARY"
+          { echo; echo "# Desktop patch notes"; echo; echo "${desktop:-Nothing to list: no PR since the desktop's last version changes it.}"; } >> "$GITHUB_STEP_SUMMARY"
           if [ "$IS_BUMP" = "true" ] || [ "$IS_RELEASE" = "true" ]; then
             if earlier="$(scripts/ci/earlier-notes.sh)"; then
               echo "earlier=$earlier" >> "$GITHUB_OUTPUT"
@@ -575,7 +588,8 @@ jobs:
       release_tag: ${{ needs.checks.outputs.release_tag }}
       # The shared jobs' results and outputs, which the desktop's gate admits on.
       evidence: ${{ toJSON(needs) }}
-      notes: ${{ needs.notes.outputs.notes }}
+      # The desktop's own notes, so a version it publishes alone doesn't go out with the phone's.
+      notes: ${{ needs.notes.outputs.desktop }}
       desktop_notes: ${{ needs.notes.outputs.desktop_localized }}
 
   # Posts the comments the jobs above left in their ci-report-* artifacts. Those jobs run the

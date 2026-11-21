@@ -4,7 +4,9 @@
 # included. On anything else (main, release tags) every area counts as changed, so every check
 # runs; whether each app releases (phoneRelease, desktopRelease) is whether the files changed
 # since that app's own previous release reach it. Its previous release is the newest GitHub
-# Release of the run's channel that holds its files (changes.ts --previous-release).
+# Release of the run's channel that holds its files (changes.ts --previous-release), and a
+# change of the phone's package.json version alone doesn't count. The desktop's previous release
+# is also written as desktopSince, which its patch notes count from.
 # Env: GH_TOKEN, PR_NUMBER (empty outside PRs), GITHUB_REPOSITORY, GITHUB_REF. Off a PR, runs in
 # a checkout of the run's commit with its history and tags.
 set -euo pipefail
@@ -44,10 +46,22 @@ if ! releases="$(gh api "repos/${GITHUB_REPOSITORY:?}/releases?per_page=100" --p
   exit 0
 fi
 
+tmp="$(mktemp -d)"
+trap 'rm -rf "$tmp"' EXIT
+package=apps/mobile/package.json
+
 for app in phone desktop; do
   since="$(printf '%s\n' "$releases" | node "$here/changes.ts" --previous-release "$app" "$channel" "$current")"
+  # The desktop's notes count from its own previous release (the Patch notes job).
+  if [ "$app" = desktop ]; then echo "desktopSince=$since" | tee -a "$out"; fi
+  bump=()
   if [ -n "$since" ] && git rev-parse -q --verify "refs/tags/$since^{commit}" > /dev/null; then
     files="$(git diff --name-only "refs/tags/$since" HEAD)"
+    # A version bump of the phone's package.json alone (a version the desktop released alone
+    # made one) doesn't count.
+    git show "refs/tags/$since:$package" > "$tmp/before.json" 2> /dev/null || : > "$tmp/before.json"
+    git show "HEAD:$package" > "$tmp/after.json" 2> /dev/null || : > "$tmp/after.json"
+    bump=(--app-package "$tmp/before.json" "$tmp/after.json")
     echo "::group::Changed since the $app's previous release, $since"
   else
     # It never published, or its tag is gone: everything counts as changed.
@@ -56,5 +70,6 @@ for app in phone desktop; do
   fi
   echo "$files"
   echo "::endgroup::"
-  printf '%s\n' "$files" | node "$here/changes.ts" | grep -E "^${app}Release=" | tee -a "$out"
+  printf '%s\n' "$files" | node "$here/changes.ts" ${bump[@]+"${bump[@]}"} \
+    | grep -E "^${app}Release=" | tee -a "$out"
 done

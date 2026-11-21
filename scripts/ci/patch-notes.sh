@@ -8,7 +8,10 @@
 #   scripts/ci/patch-notes.sh [<ref>]
 # Env: GH_TOKEN, GITHUB_REPOSITORY, PATCH_NOTES_SINCE (optional: count from this ref
 # instead of the previous version's tag), LOCALIZED_NOTES_FILE (optional: also write the
-# release's notes in each language there, as localized-notes.ts prints them).
+# release's notes in each language there, as localized-notes.ts prints them),
+# DESKTOP_NOTES_FILE and DESKTOP_RELEASE_NOTES_FILE (optional: the desktop's notes there, in each
+# language as JSON and in Markdown for its GitHub Release), DESKTOP_NOTES_SINCE (optional: the
+# desktop's own previous release, which its notes count from instead).
 set -euo pipefail
 
 here="$(dirname "$0")"
@@ -44,9 +47,30 @@ if [ -n "${LOCALIZED_NOTES_FILE:-}" ]; then
     echo "::warning::Couldn't build the notes in each language; the release goes without them." >&2
 fi
 
-if [ -n "${DESKTOP_NOTES_FILE:-}" ]; then
-  node "$here/localized-notes.ts" "$tmp/commits.txt" "$tmp/bugs.txt" desktop < "$tmp/prs.jsonl" \
-    > "$DESKTOP_NOTES_FILE"
+if [ -n "${DESKTOP_NOTES_FILE:-}" ] || [ -n "${DESKTOP_RELEASE_NOTES_FILE:-}" ]; then
+  # The desktop's notes count from its own previous release when it has one: a version only the
+  # phone released, or whose desktop never published, is no desktop release.
+  desktop_since="${DESKTOP_NOTES_SINCE:-$since}"
+  if ! [[ "$desktop_since" =~ ^v[0-9]+\.[0-9]+\.[0-9]+(-ti)?$ ]] \
+    || ! git rev-parse -q --verify "refs/tags/$desktop_since^{commit}" > /dev/null; then
+    desktop_since="$since"
+  fi
+  if [ "$desktop_since" = "$since" ]; then
+    cp "$tmp/commits.txt" "$tmp/desktop-commits.txt"
+    cp "$tmp/prs.jsonl" "$tmp/desktop-prs.jsonl"
+  else
+    echo "The desktop's notes count from its previous release, $desktop_since." >&2
+    git rev-list "$desktop_since..$head" > "$tmp/desktop-commits.txt"
+    "$here/merged-prs.sh" "$desktop_since" "$head" > "$tmp/desktop-prs.jsonl"
+  fi
+  if [ -n "${DESKTOP_NOTES_FILE:-}" ]; then
+    node "$here/localized-notes.ts" "$tmp/desktop-commits.txt" "$tmp/bugs.txt" desktop \
+      < "$tmp/desktop-prs.jsonl" > "$DESKTOP_NOTES_FILE"
+  fi
+  if [ -n "${DESKTOP_RELEASE_NOTES_FILE:-}" ]; then
+    node "$here/patch-notes.ts" "$tmp/desktop-commits.txt" "$tmp/bugs.txt" desktop \
+      < "$tmp/desktop-prs.jsonl" > "$DESKTOP_RELEASE_NOTES_FILE"
+  fi
 fi
 
 node "$here/patch-notes.ts" "$tmp/commits.txt" "$tmp/bugs.txt" < "$tmp/prs.jsonl"
