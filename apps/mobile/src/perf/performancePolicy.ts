@@ -523,8 +523,10 @@ export const WHOLE_LIBRARY: Record<string, WholeLibraryException> = {
     capabilities: ["ytmusic/libraryFinder.ts#useLoadedInLibrary"],
   },
   "ytmusic/YtSongActions.tsx#runYtSongSwipe": {
-    howOften: "Once per completed song swipe; finder reads are shared per Library version.",
-    reason: "Explicit song menus and completed swipes resolve Library identity for their action.",
+    howOften:
+      "Once per completed song swipe or Magic Queue slot tap in Now Playing; finder reads are shared per Library version.",
+    reason:
+      "Explicit song menus, completed swipes and the Magic Queue slot's tap on a streamed playing song resolve Library identity for their action.",
     capabilities: ["ytmusic/libraryFinder.ts#currentLibraryFinder"],
   },
   "ytmusic/YtSongActions.tsx#YtSongActionsMenu": {
