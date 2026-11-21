@@ -198,7 +198,7 @@ const settle = (
     seen.library ||= syncMissingSongs(db, input.splits, input.now());
   }
   if (pulled || songs) {
-    const changes = applyPending(db, selectAccountTrackIds(db));
+    const changes = applyPending(db, selectAccountTrackIds(db), input.now());
     take(seen, changes);
     if (changes.plays) input.historyChanged?.();
   }
