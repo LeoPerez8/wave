@@ -54,8 +54,9 @@ const dragWithin = async (page: Page, top: Locator, from: Locator, to: Locator) 
     },
     await top.evaluate((row) => parseFloat((row as HTMLElement).style.top)),
   );
-  await expect(from).toBeInViewport({ ratio: 1 });
-  await expect(to).toBeInViewport({ ratio: 1 });
+  // The list's last row can end a fraction of a pixel below its view.
+  await expect(from).toBeInViewport({ ratio: 0.9 });
+  await expect(to).toBeInViewport({ ratio: 0.9 });
   await from.hover();
   const source = (await from.boundingBox())!;
   await page.mouse.down();
