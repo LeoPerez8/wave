@@ -88,7 +88,14 @@ export const useArtistSection = (
 };
 
 /** The Library | Online toggle at the end of the hero's Play and Shuffle. */
-export function ArtistToggle({ section }: { readonly section: ArtistSection }) {
+export function ArtistToggle({
+  section,
+}: {
+  readonly section: {
+    readonly view: { readonly toggle: YtPick } | null;
+    readonly setPick: (pick: YtPick) => void;
+  };
+}) {
   const { view } = section;
   if (view === null) return null;
   return (

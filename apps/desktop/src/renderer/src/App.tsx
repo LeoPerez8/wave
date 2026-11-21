@@ -92,6 +92,8 @@ import type { HistoryRoute } from "../../shared/history.ts";
 import { isYtRoute, YtPage, type YtRoute } from "./YtPages.tsx";
 import { Recognize } from "./Recognize.tsx";
 import { AlbumArtistLink, ArtistPage, ArtistToggle, useArtistSection } from "./ArtistPage.tsx";
+import { AlbumPage, useAlbumSection } from "./AlbumSection.tsx";
+import { YtListDownloadButton } from "./YtListDownloadButton.tsx";
 import {
   NowPlayingSongActions,
   playlistItems,
@@ -627,11 +629,13 @@ export function App() {
       } else if (start.kind === "playing" && start.leftOut > 0)
         notify(text.desktopLibrary.leftOut(start.leftOut), undefined, offer);
     };
-    // An artist's page with Online takes YouTube Music's songs too.
+    // An artist's page with Online takes YouTube Music's songs too, and an album's its release's.
     const started =
       target === scope && scope.kind === "artist" && scope.id !== undefined
         ? window.wave.artistPage.play(scope.id, artistSection.pick, null, shuffle)
-        : window.wave.playback.start(target, undefined, shuffle);
+        : target === scope && scope.kind === "album" && scope.id !== undefined && albumTracklist
+          ? window.wave.artistPage.albumPlay(scope.id, albumSection.pick, null, shuffle)
+          : window.wave.playback.start(target, undefined, shuffle);
     playback.run(started.then(said));
   };
   const here = `/library/${scope.kind}/${scope.id ?? ""}`;
@@ -725,9 +729,29 @@ export function App() {
     revision,
     failed,
   );
+  const albumSection = useAlbumSection(
+    route.kind === "album" ? route.id : undefined,
+    ytMusic,
+    revision,
+    failed,
+  );
+  /** With Online, the album's whole tracklist, its release's other songs among the Library's. */
+  const albumTracklist = albumSection.view?.toggle === "online" ? albumSection.view.tracks : null;
+  /** The album's release, once read with Online: its Download in the hero. */
+  const albumRelease = albumTracklist === null ? null : (albumSection.view?.release ?? null);
   /** An artist's songs table, inside their page's shelves and YouTube Music section. */
   const artistPage = (table: ReactNode) =>
-    route.kind === "artist" && route.id !== undefined ? (
+    route.kind === "album" && route.id !== undefined && albumSection.view !== null ? (
+      <AlbumPage
+        section={albumSection}
+        onPlay={(index) =>
+          playback.run(window.wave.artistPage.albumPlay(route.id!, albumSection.pick, index, false))
+        }
+        onSongMenu={ytSongMenu}
+      >
+        {table}
+      </AlbumPage>
+    ) : route.kind === "artist" && route.id !== undefined ? (
       <ArtistPage
         artistId={route.id}
         revision={revision}
@@ -979,7 +1003,7 @@ export function App() {
                   labels[route.kind as "album" | "artist" | "playlist" | "genre"],
                   hero.genre,
                   hero.year,
-                  labels.songCount(hero.count),
+                  labels.songCount(albumTracklist?.length ?? hero.count),
                   listDuration(hero.durationMs, text.library),
                 ]
                   .filter(Boolean)
@@ -995,6 +1019,7 @@ export function App() {
                   {labels.shuffle}
                 </button>
                 {route.kind === "artist" && <ArtistToggle section={artistSection} />}
+                {route.kind === "album" && <ArtistToggle section={albumSection} />}
                 {route.kind === "artist" && (
                   <FollowButton
                     artist={{ name: hero.title }}
@@ -1002,7 +1027,13 @@ export function App() {
                     onError={setError}
                   />
                 )}
-                {missingList !== undefined && (
+                {albumRelease !== null && (
+                  <YtListDownloadButton
+                    list={{ kind: "album", id: albumRelease }}
+                    onError={failed}
+                  />
+                )}
+                {missingList !== undefined && albumRelease === null && (
                   <ListDownloadButton
                     list={missingList}
                     revision={`${scan?.revision}:${account?.revision}:${downloads?.progress}:${downloads?.failed}`}
@@ -1034,7 +1065,9 @@ export function App() {
               </div>
             </div>
           </div>
-        ) : route.kind === "ytArtist" || route.kind === "ytAlbum" ? null : (
+        ) : route.kind === "ytArtist" ||
+          route.kind === "ytAlbum" ||
+          route.kind === "discoverMix" ? null : (
           <div className="page-heading">
             <h1>{title}</h1>
             {(route.kind === "home" || route.kind === "songs" || route.kind === "favorites") && (
@@ -1497,6 +1530,7 @@ export function App() {
           geniusAccess={geniusAccess(account)}
           onGeniusSignIn={openGeniusSignIn}
           onSongDrop={(songs, at) => dropSongs(songs, { queue: at })}
+          shuffleMenu={shuffleMenu}
           notify={notify}
           onClose={() => {
             // Focus goes back to the bar's button for this tab; Related opens from Queue's.

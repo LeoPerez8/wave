@@ -13,7 +13,7 @@ import { stubDiscover } from "./discoverFixture.ts";
 const appFolder = join(import.meta.dirname, "..");
 const text = catalogueOf("en", "desktop");
 
-test("Home groups Discover's rows in the phone's order, plays a Genre mix, opens its settings and hides Discover offline or with YT Music off", async () => {
+test("Home groups Discover's rows in the phone's order, plays a Genre mix from its tile's glyph, opens its settings and hides Discover offline or with YT Music off", async () => {
   const data = mkdtempSync(join(tmpdir(), "wave-home-discover-"));
   await Effect.runPromise(
     Effect.gen(function* () {
@@ -47,7 +47,13 @@ test("Home groups Discover's rows in the phone's order, plays a Genre mix, opens
     ).toHaveCount(3);
     await page.screenshot({ path: test.info().outputPath("home-discover.png") });
 
-    await discover.getByRole("button", { name: text.discover.mixTitle("Electronic") }).click();
+    // A tile's play glyph plays the mix; the tile itself opens its page (discoverMix.spec.ts).
+    await discover
+      .getByRole("button", {
+        name: text.playbackText.playValue(text.discover.mixTitle("Electronic")),
+        exact: true,
+      })
+      .click();
     expect(await played.jsonValue()).toEqual([["genre:electronic", 0]]);
 
     await discover.getByRole("button", { name: text.discover.settings }).click();

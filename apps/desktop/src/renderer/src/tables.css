@@ -78,3 +78,16 @@
     grid-template-columns: minmax(160px, 1.5fr) minmax(110px, 1fr) 54px;
   }
 }
+/* An album's "Disc n" head takes a row's place before its disc's first song. */
+.disc-heading {
+  position: absolute;
+  left: 0;
+  right: 0;
+  height: 40px;
+  display: flex;
+  align-items: flex-end;
+  padding: 0 12px 6px;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--color-secondary);
+}

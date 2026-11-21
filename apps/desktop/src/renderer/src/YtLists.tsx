@@ -39,6 +39,7 @@ export function YtSongList({
   onMenu,
   accessory,
   ranked = 0,
+  numbered = false,
 }: {
   readonly songs: readonly BrowseRow[];
   readonly label: string;
@@ -47,6 +48,8 @@ export function YtSongList({
   readonly accessory?: (row: BrowseRow) => ReactNode;
   /** How many of the first songs lead with their rank (1, 2, 3…) in place of the cover. */
   readonly ranked?: number;
+  /** Each song leads with its track number in place of the cover (an album's tracklist). */
+  readonly numbered?: boolean;
 }) {
   const [selected, setSelected] = useState<number>();
   return (
@@ -78,7 +81,9 @@ export function YtSongList({
           >
             <span className="title-cell">
               <span className="row-picture">
-                {index < ranked ? (
+                {numbered ? (
+                  <span className="track-number">{row.trackNumber}</span>
+                ) : index < ranked ? (
                   <span className="row-rank secondary">{index + 1}</span>
                 ) : (
                   <Artwork hash={row.artworkHash} url={row.artworkUrl} />
@@ -126,6 +131,7 @@ export function Shelf({
   onOpen,
   onMenu,
   onSeeAll,
+  onPlay,
 }: {
   readonly title: string;
   readonly items: readonly TileItem[];
@@ -136,6 +142,8 @@ export function Shelf({
   readonly onMenu?: (index: number, at: { readonly x: number; readonly y: number }) => void;
   /** Its heading's See all, opening the whole list (Home's shelves). */
   readonly onSeeAll?: () => void;
+  /** A tile that opens a page gets a play glyph on its cover, which plays it without opening. */
+  readonly onPlay?: (index: number) => void;
 }) {
   const states = useSongStates(items.flatMap((item) => (item.song ? [item.song.id] : [])));
   if (items.length === 0) return null;
@@ -155,7 +163,7 @@ export function Shelf({
       )}
       <div className="shelf-row" role="list">
         {items.map((item, index) => (
-          <div key={item.key} role="listitem">
+          <div key={item.key} role="listitem" className={onPlay ? "tile-playable" : undefined}>
             <button
               className={`tile ${marks[index] ? markClass(marks[index]) : ""}`.trimEnd()}
               aria-label={item.label ?? item.title}
@@ -181,6 +189,18 @@ export function Shelf({
                 <span className="tile-caption truncate secondary">{item.caption}</span>
               )}
             </button>
+            {onPlay && (
+              <span className="tile-play-area">
+                <button
+                  className="tile-play"
+                  aria-label={text.playbackText.playValue(item.title)}
+                  title={text.playbackText.playValue(item.title)}
+                  onClick={() => onPlay(index)}
+                >
+                  <Icon name="play" size={16} />
+                </button>
+              </span>
+            )}
           </div>
         ))}
       </div>
