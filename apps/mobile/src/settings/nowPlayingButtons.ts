@@ -59,6 +59,9 @@ const ACTION_LABELS: Readonly<Record<NowPlayingAction, string>> = {
   get share() {
     return currentLocalisation().strings.playbackText.share;
   },
+  get dislike() {
+    return currentLocalisation().strings.itemActions.labels.dislike;
+  },
   get songMenu() {
     return currentLocalisation().strings.playbackText.songMenu;
   },

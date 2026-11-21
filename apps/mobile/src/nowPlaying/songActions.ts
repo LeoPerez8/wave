@@ -19,6 +19,12 @@ export const createNowPlayingSongActions = (
     readonly download: (command: PlayingSongDownload, target: PlayingSongTarget) => void;
     readonly starred: (target: PlayingSongTarget, answer: PlayingSongAnswer) => boolean;
     readonly star: (target: PlayingSongTarget, answer: PlayingSongAnswer, on: boolean) => void;
+    /** Dislikes the song ([on]) or removes its dislike; settles once that is saved. */
+    readonly dislike: (
+      target: PlayingSongTarget,
+      answer: PlayingSongAnswer,
+      on: boolean,
+    ) => Promise<void>;
   },
 ) => {
   // Keep rapid toggles in gesture order, without waiting for their writes/downloads.
@@ -49,6 +55,16 @@ export const createNowPlayingSongActions = (
         })
         .catch(() => {});
       return pending;
+    },
+    /**
+     * Dislikes the captured song ([on], what the button showed it would do) or
+     * removes its dislike, as the Library's song when the Library has it. An
+     * entry with neither a Library song nor a video has nothing to be disliked by.
+     */
+    async dislike(target: PlayingSongTarget, on: boolean): Promise<void> {
+      const answer = await lookup.acquire(target);
+      if (answer.track === null && parseTrackId(target.trackId)?.kind !== "yt") return;
+      await ports.dislike(target, answer, on);
     },
   };
 };
