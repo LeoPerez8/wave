@@ -30,6 +30,8 @@ export const BACKDROP = {
   library: "wave-backdrop-library",
   /** The whole app, under the dialog overlay (src/overlay/OverlayHost.tsx). */
   root: "wave-backdrop-root",
+  /** DJ's grid and bottom bar, under its Adjust sheet (src/dj/DjAdjust.tsx). */
+  dj: "wave-backdrop-dj",
 } as const;
 
 /** Whether the floating tab bar is under the screen. */

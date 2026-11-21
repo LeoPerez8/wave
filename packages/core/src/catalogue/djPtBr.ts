@@ -1,9 +1,12 @@
+import { formatNumber } from "../formatting.ts";
 import type { djEn } from "./djEn.ts";
 
 export const djPtBr: typeof djEn = {
   title: "DJ",
-  cardDetail: "Escolha os artistas que iniciam sua fila",
-  done: "Concluído",
+  cardDetail: "Uma fila feita dos artistas que você escolher",
+  cardAction: "Escolher artistas",
+  play: "Reproduzir",
+  playCount: (count: number) => `Reproduzir · ${count}`,
   close: "Fechar",
   starting: "Iniciando sua fila",
   artistTile: (name: string) => `Artista, ${name}`,
@@ -16,6 +19,7 @@ export const djPtBr: typeof djEn = {
   backToGrid: "Voltar para DJ",
   artistVariety: "Variedade de artistas",
   varietySteps: { low: "Baixa", medium: "Média", high: "Alta" },
+  varietySummary: { low: "Variedade baixa", medium: "Variedade média", high: "Variedade alta" },
   varietyNotes: {
     low: "Quase só os artistas que você escolheu.",
     medium: "Os artistas que você escolheu e os próximos deles.",
@@ -23,6 +27,8 @@ export const djPtBr: typeof djEn = {
   },
   musicDiscovery: "Descoberta de música",
   discoverySteps: { familiar: "Conhecidas", blend: "Misturar", discover: "Descobrir" },
+  discoveryNote: (percent: number) =>
+    `${formatNumber("pt-BR", percent)}% das músicas são novas para você.`,
   filters: "Filtros",
   mood: "Humor",
   moodNames: { energetic: "Agitada", relaxing: "Relaxante", upbeat: "Animada" },
@@ -36,5 +42,10 @@ export const djPtBr: typeof djEn = {
   searchNoMatches: "Nenhum artista ou álbum encontrado.",
   searchFull: (max: number) =>
     `Você escolheu ${max}, o máximo para iniciar uma fila. Desmarque um para adicionar outro.`,
+  selection: (count: number) => `Sua seleção · ${count}`,
+  selectionEmpty: "Toque em artistas para começar",
+  removeFromSelection: (name: string) => `Remover ${name}`,
+  newToYou: "Novo para você",
+  adjustSummary: (summary: string) => `Ajustar, ${summary}`,
   magicQueueFromDj: "Fila Mágica · de DJ",
 };
