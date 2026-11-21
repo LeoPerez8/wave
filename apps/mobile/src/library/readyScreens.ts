@@ -22,15 +22,18 @@
  * - Settings › Disliked songs' list (one row per dislike), read again on a
  *   free turn when the dislikes change; Stats' opening period (`STATS_KEPT`
  *   readings, a few dozen rows each); DJ's opening for the last snapshot;
- *   Settings › History's head (`HISTORY_KEPT_ROWS` plays).
+ *   Settings › History's head (`HISTORY_KEPT_ROWS` plays); the saved YouTube
+ *   Music answers of `ARTIST_PAGES_AHEAD` most played artists, within
+ *   `knownYtArtists`' 16.
  */
-import { librarySongSort } from "@wave/core";
+import { identityKey, librarySongSort } from "@wave/core";
 
 import { listCollaborations } from "@/collaboration/collaborativePlaylists";
 import { prepareDjOpening } from "@/dj/djOpening";
 import { freeTurn, whenFree } from "@/lib/backgroundWork";
 import { currentLocalisation } from "@/localisation/localisation";
-import { readStatsOpening } from "@/stats/hooks";
+import { readStatsOpening, statsOpeningArtists } from "@/stats/hooks";
+import { readSaved } from "@/ytmusic/artistSection";
 import { registerPerfMeta } from "@/perf/perf";
 
 import { noticesQuery } from "./collaborativePlaylists";
@@ -41,6 +44,7 @@ import { genreOpeningQuery } from "./genreOpening";
 import { libraryListQueries, playlistQuery, readyLibraryQueries } from "./hooks";
 import { songOrderQuery } from "./pagedSongs";
 import { playlistsLastPlayedQuery } from "./playlistSort";
+import { appRuntime } from "./runtime";
 import { keepLibraryQuery, libraryQueryResult, type LibraryQuery } from "./sharedQueries";
 import { settingSongSortNow } from "./songSort";
 
@@ -48,6 +52,12 @@ import { settingSongSortNow } from "./songSort";
 export const PLAYLISTS_AHEAD = 8;
 /** A playlist longer than this is kept only once opened. */
 export const PLAYLIST_ENTRIES_AHEAD = 1000;
+/**
+ * Library artists whose saved YouTube Music answer (Fans might also like,
+ * About) is read ahead into this session's answers (`knownYtArtists`, 16 at
+ * most): the opening period's most played.
+ */
+export const ARTIST_PAGES_AHEAD = 8;
 /** Genres whose opening is kept ahead, the first in Library › Genres. */
 export const GENRES_AHEAD = 12;
 
@@ -125,7 +135,18 @@ export const startReadyScreens = (): (() => void) => {
   releases.push(onDislikesChanged(() => whenFree(readDislikes, "Disliked songs page")));
   whenFree(() => {
     if (stopped) return;
-    void readStatsOpening(currentLocalisation().language, () => freeTurn("Stats page"));
+    const { language } = currentLocalisation();
+    void readStatsOpening(language, () => freeTurn("Stats page")).then(async () => {
+      // The most played artists' pages draw Fans might also like and About in their first frame.
+      const names = statsOpeningArtists(language)
+        .flatMap(({ item }) => ("albumCount" in item ? [item.name] : []))
+        .slice(0, ARTIST_PAGES_AHEAD);
+      for (const name of names) {
+        await freeTurn("Artist pages");
+        if (stopped) return;
+        await appRuntime.runPromise(readSaved(identityKey(name))).catch(() => null);
+      }
+    });
   }, "Stats page");
   whenFree(() => {
     if (!stopped) void prepareDjOpening().catch(() => {});

@@ -221,6 +221,12 @@ export const useTopGenres = (period: StatsPeriod): readonly RecapGenre[] | undef
     `topGenres:${period}`,
   );
 
+/** The top artists of Stats' opening period as last read, or none yet (`readStatsOpening`). */
+export const statsOpeningArtists = (language: string): readonly Ranked<PlayedArtist>[] =>
+  (keptReadings.get(`${rankingKey("topArtists", STATS_OPENING_PERIOD, STATS_TOP)}:${language}`) as
+    | readonly Ranked<PlayedArtist>[]
+    | undefined) ?? [];
+
 /** The period Stats opens on. */
 export const STATS_OPENING_PERIOD: StatsPeriod = "month";
 
