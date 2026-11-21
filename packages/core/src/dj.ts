@@ -88,6 +88,60 @@ export interface DjGenreTile {
 /** One selectable item of DJ's grid. */
 export type DjTile = DjArtistTile | DjAlbumTile | DjGenreTile;
 
+/** The first playable Library song covered directly by a DJ selection, in Library order. */
+export const djFirstLibrarySong = <
+  Song extends {
+    readonly id: number;
+    readonly path: string | null;
+    readonly albumId: number;
+    readonly artistIds: readonly number[];
+    readonly artistNames: readonly string[];
+    readonly genre: string | null;
+  },
+>(
+  tiles: readonly DjTile[],
+  songs: readonly Song[],
+): Song | null => {
+  const artistIds = new Set<number>();
+  const artistNames = new Set<string>();
+  const familyArtistNames = new Set<string>();
+  const albumIds = new Set<number>();
+  const families = new Set<string>();
+  const addArtistName = (set: Set<string>, name: string): void => {
+    const key = catalogSeedKey(name);
+    if (key !== null) set.add(key);
+  };
+  for (const tile of tiles) {
+    if (tile.kind === "artist") {
+      if (tile.libraryId !== null) artistIds.add(tile.libraryId);
+      addArtistName(artistNames, tile.name);
+    } else if (tile.kind === "album") {
+      if (tile.libraryId !== null) albumIds.add(tile.libraryId);
+    } else {
+      families.add(tile.family);
+      for (const artist of tile.artists) addArtistName(familyArtistNames, artist.name);
+    }
+  }
+  return (
+    songs.find(
+      (song) =>
+        song.path !== null &&
+        (albumIds.has(song.albumId) ||
+          song.artistIds.some((id) => artistIds.has(id)) ||
+          song.artistNames.some((name) => {
+            const key = catalogSeedKey(name);
+            return key !== null && artistNames.has(key);
+          }) ||
+          families.has(genreFamily(song.genre ?? "")?.key ?? "") ||
+          (song.genre === null &&
+            song.artistNames.some((name) => {
+              const key = catalogSeedKey(name);
+              return key !== null && familyArtistNames.has(key);
+            }))),
+    ) ?? null
+  );
+};
+
 /** The artist [tile] stands for: an artist tile's own, an album tile's album artist. */
 export const djTileArtist = (tile: DjTile): string =>
   tile.kind === "album" ? tile.artist : tile.name;

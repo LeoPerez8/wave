@@ -25,8 +25,10 @@ import {
   type MixSliders,
   type TasteProfile,
   type YtArtistSaved,
+  type YtAlbumSong,
 } from "@wave/core";
 import * as Effect from "effect/Effect";
+import * as Deferred from "effect/Deferred";
 
 import { lookedUpProfileOf } from "@/home/artistGenres";
 import { freeTurnEffect } from "@/lib/backgroundWork";
@@ -40,6 +42,7 @@ import { WaveYtMusic } from "@/native/waveYtMusic";
 import { ytMusicEnabled } from "@/settings/ytMusic";
 import { YtMusic } from "@/ytmusic/YtMusic";
 import type { SongRadioSeed } from "./songRadioSession";
+import type { SongRadioRead } from "./songRadioReaders";
 import { createAppSongRadioReaders } from "./songRadioSetup";
 
 let found: readonly MagicSong[] = [];
@@ -297,6 +300,43 @@ export const magicQueueYtCandidates = (
       eligible: candidates.length + likedCandidates.length,
       refilled: read.every(({ page }) => page === null) ? null : songs,
     };
+  });
+
+/** The first non-placeholder song from any selected radio, while its peers keep loading. */
+export const magicQueueFirstRadioSong = (
+  sessionId: string,
+  seeds: readonly SongRadioSeed[],
+  deadlineAt: number,
+  onSettled: () => void,
+) =>
+  Effect.gen(function* () {
+    const yt = yield* YtMusic;
+    const context = yield* Effect.context<LibraryStore>();
+    const readers = radioReaders(yt, context);
+    const first = yield* Deferred.make<YtAlbumSong | null>();
+    let chosen = false;
+    const onPage = ({ page }: SongRadioRead) => {
+      const song = page?.songs.find((candidate) => candidate.video !== true) ?? null;
+      if (song === null || chosen) return Effect.void;
+      chosen = true;
+      return Deferred.succeed(first, song).pipe(Effect.asVoid);
+    };
+    yield* Effect.forkDetach(
+      readers
+        .read(sessionId, seeds, {
+          online: ytMusicEnabled() && online(),
+          low: false,
+          deadlineAt,
+          onPage,
+        })
+        .pipe(
+          Effect.tap(() =>
+            chosen ? Effect.void : Deferred.succeed(first, null).pipe(Effect.asVoid),
+          ),
+          Effect.ensuring(Effect.sync(onSettled)),
+        ),
+    );
+    return yield* Deferred.await(first);
   });
 
 /** Signals use already known genres; this path never looks an artist up. */
