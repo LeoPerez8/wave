@@ -22,6 +22,16 @@ export type DjDoneRunner = {
   cancel: () => void;
 };
 
+/** Runs the queue commit only when DJ was still open at the ready-song boundary. */
+export const djStartWhileOpen = <A>(signal: AbortSignal | undefined, begin: () => A): A | null =>
+  signal?.aborted === true ? null : begin();
+
+/** A detached first-batch read can resume only the DJ session it started for. */
+export const djBatchReadMayResume = (
+  readSessionId: string,
+  activeSessionId: string | null,
+): boolean => readSessionId === activeSessionId;
+
 /** Done for an opening of DJ, which shows its state with [set] and closes with [close]. */
 export const djDone = (set: (state: DjDone) => void, close: () => void): DjDoneRunner => {
   const closed = new AbortController();
