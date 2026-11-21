@@ -188,3 +188,16 @@ test("a release whose album is gone loses its match and songs, and hides until a
     ["Voyage"],
   );
 });
+
+test("with Don't play explicit on, a check doesn't search an explicit release", () => {
+  const releases = [{ ...release("explicit", 0), explicit: true }, release("clean", 1)];
+  const input = { follows: [follow], releases, hidden: [], countedPlays: [], now };
+  assert.deepEqual(
+    followReleasesToSearch({ ...input, blockExplicit: true }).map((r) => r.key),
+    ["clean"],
+  );
+  assert.deepEqual(
+    followReleasesToSearch(input).map((r) => r.key),
+    ["explicit", "clean"],
+  );
+});

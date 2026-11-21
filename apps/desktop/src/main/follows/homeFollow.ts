@@ -58,7 +58,7 @@ export interface HomeFollowDeps {
     readonly set: (key: string, value: string) => void;
   };
   readonly ytEnabled: () => boolean;
-  readonly pages: Pick<YtPagesShape, "album" | "catalog">;
+  readonly pages: Pick<YtPagesShape, "album" | "catalog" | "searchArtists">;
   /** Deezer's releases and covers. */
   readonly fetch: typeof fetch;
   /** The gap before each show request; a test shortens it. */
@@ -113,6 +113,7 @@ export const createHomeFollow = (deps: HomeFollowDeps): HomeFollowShape => {
         const found = await pages.album(browseId);
         return found.status === "ok" && found.album !== null ? { tracks: found.album.songs } : null;
       }),
+    searchArtists: (name) => read(() => pages.searchArtists(name)),
   };
 
   const checksToday = {
@@ -145,6 +146,9 @@ export const createHomeFollow = (deps: HomeFollowDeps): HomeFollowShape => {
   const checkReleases = followReleasesCheck<YtReadFailed>({
     enabled,
     ytEnabled: deps.ytEnabled,
+    blockExplicit: () => deps.setting(DONT_PLAY_EXPLICIT) === "on",
+    // A read that fails with the computer offline ends the round.
+    offline: () => !deps.online(),
     country: deps.country,
     showsCheckable: async () => deps.configured && deps.signedIn(),
     checkShows: (context) => checkShows(store, context),

@@ -44,6 +44,7 @@ const home = async (over: Partial<HomeFollowDeps> = {}) => {
     pages: {
       album: notAsked,
       catalog: notAsked,
+      searchArtists: notAsked,
     },
     fetch: notAsked as unknown as typeof fetch,
     pause: "0 millis",
@@ -143,6 +144,7 @@ test("a release card opens the Library's album, or its YT Music album with the r
         reads.push(browseId);
         return album;
       },
+      searchArtists: notAsked,
     },
   });
   saveFollow(db, { name: "ABBA" }, "releases", Date.now());
