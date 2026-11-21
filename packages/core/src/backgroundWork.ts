@@ -24,6 +24,13 @@ export interface BackgroundWorkLimits {
    * nothing, not the usual start.
    */
   readonly contentCapMs: number;
+  /**
+   * A tap's transition holds every slice until it settles (#1350), maxWaitMs
+   * or not; one that never reports its end holds work this long at most.
+   */
+  readonly transitionCapMs: number;
+  /** The most one slice of stepped work may hold the JavaScript thread. */
+  readonly sliceMs: number;
 }
 
 export const BACKGROUND_WORK_LIMITS: BackgroundWorkLimits = {
@@ -31,6 +38,8 @@ export const BACKGROUND_WORK_LIMITS: BackgroundWorkLimits = {
   maxWaitMs: 2000,
   takeoverMs: 3000,
   contentCapMs: 3000,
+  transitionCapMs: 5000,
+  sliceMs: 8,
 };
 
 export interface BackgroundWorkOptions {
@@ -38,7 +47,12 @@ export interface BackgroundWorkOptions {
   /** Runs [run] in [ms], on its own turn of the event loop; returns the cancel. */
   readonly schedule: (ms: number, run: () => void) => () => void;
   readonly limits?: Partial<BackgroundWorkLimits>;
+  /** Hears each slice `runSlice` ran: whose it was, when it began and how long it held the thread. */
+  readonly sliceRan?: (name: string, startedAt: number, durationMs: number) => void;
 }
+
+/** What one slice of stepped work came to. */
+export type SliceResult<A> = { readonly done: false } | { readonly done: true; readonly value: A };
 
 /** What a perf build reports of background work since launch. */
 export interface BackgroundWorkStats {
@@ -54,6 +68,10 @@ export interface BackgroundWorkStats {
   readonly longestWaitMs: number;
   /** Slices run by `maxWaitMs` while the owner was still interacting. */
   readonly forcedSlices: number;
+  /** The longest one slice of stepped work held the JavaScript thread. */
+  readonly longestSliceMs: number;
+  /** How many slices went past `sliceMs`, by the work's name (a step too long to split). */
+  readonly overBudget: Readonly<Record<string, number>>;
 }
 
 export interface BackgroundWork {
@@ -70,6 +88,10 @@ export interface BackgroundWork {
   readonly touchTakenOver: () => void;
   /** Wave came back to the foreground: work waits as after a touch, for the owner's first tap. */
   readonly resumed: () => void;
+  /** A tap's transition began: no slice starts until it ends (or `transitionCapMs` passes). */
+  readonly transitionStarted: () => void;
+  /** The tap's transition settled or was cancelled. */
+  readonly transitionEnded: () => void;
   /**
    * Startup work: [start] runs on a free turn once a screen showed its
    * content (`contentShown`), or `contentCapMs` after startup work was first
@@ -78,6 +100,12 @@ export interface BackgroundWork {
   readonly afterContent: (start: () => void) => void;
   /** A screen in sight shows its first content: startup work may begin. */
   readonly contentShown: () => void;
+  /**
+   * Runs [steps] for one slice, on the caller's turn: at least one step, then
+   * more while the longest step so far still fits in `sliceMs`, and at most
+   * [maxSteps]. [name] names the work for the perf stats and the app log.
+   */
+  readonly runSlice: <A>(name: string, steps: Iterator<void, A>, maxSteps?: number) => SliceResult<A>;
   readonly stats: () => BackgroundWorkStats;
 }
 
@@ -90,6 +118,7 @@ export const createBackgroundWork = ({
   now,
   schedule,
   limits: given = {},
+  sliceRan,
 }: BackgroundWorkOptions): BackgroundWork => {
   const limits = { ...BACKGROUND_WORK_LIMITS, ...given };
   const waiters: Waiter[] = [];
@@ -100,12 +129,21 @@ export const createBackgroundWork = ({
   let slices = 0;
   let longestWaitMs = 0;
   let forcedSlices = 0;
+  /** When the transition in flight stops holding work (its cap), or null with none. */
+  let transitionUntil: number | null = null;
 
   /** When the owner leaves the JavaScript thread free: no touch held, quiet since the last. */
   const quietAt = (): number => (held ? Infinity : interactedAt + limits.quietMs);
 
-  /** When [waiter] may run: once quiet, or once it waited `maxWaitMs`. */
-  const dueAt = (waiter: Waiter): number => Math.min(waiter.askedAt + limits.maxWaitMs, quietAt());
+  /**
+   * When [waiter] may run: once quiet, or once it waited `maxWaitMs`, and
+   * never while a tap's transition is in flight.
+   */
+  const dueAt = (waiter: Waiter): number =>
+    Math.max(
+      transitionUntil ?? -Infinity,
+      Math.min(waiter.askedAt + limits.maxWaitMs, quietAt()),
+    );
 
   /** Sets the one timer, for the first waiter. */
   const arm = (): void => {
@@ -150,6 +188,37 @@ export const createBackgroundWork = ({
       waiters.splice(index, 1);
       if (index === 0) arm();
     };
+  };
+
+  let longestSliceMs = 0;
+  const overBudget: Record<string, number> = {};
+
+  const runSlice = <A>(
+    name: string,
+    steps: Iterator<void, A>,
+    maxSteps = Infinity,
+  ): SliceResult<A> => {
+    const startedAt = now();
+    let longestStep = 0;
+    let result: SliceResult<A> = { done: false };
+    try {
+      for (let taken = 0; taken < maxSteps; taken++) {
+        const before = now();
+        if (taken > 0 && before - startedAt + longestStep > limits.sliceMs) break;
+        const next = steps.next();
+        longestStep = Math.max(longestStep, now() - before);
+        if (next.done === true) {
+          result = { done: true, value: next.value };
+          break;
+        }
+      }
+    } finally {
+      const durationMs = now() - startedAt;
+      longestSliceMs = Math.max(longestSliceMs, durationMs);
+      if (durationMs > limits.sliceMs) overBudget[name] = (overBudget[name] ?? 0) + 1;
+      sliceRan?.(name, startedAt, durationMs);
+    }
+    return result;
   };
 
   const startup: (() => void)[] = [];
@@ -204,8 +273,17 @@ export const createBackgroundWork = ({
       interacted(now() + limits.takeoverMs);
     },
     resumed: () => interacted(),
+    transitionStarted: () => {
+      transitionUntil = now() + limits.transitionCapMs;
+      arm();
+    },
+    transitionEnded: () => {
+      transitionUntil = null;
+      arm();
+    },
     afterContent,
     contentShown: () => letGo(false),
+    runSlice,
     stats: () => ({
       contentAt,
       contentCapped,
@@ -213,6 +291,8 @@ export const createBackgroundWork = ({
       slices,
       longestWaitMs,
       forcedSlices,
+      longestSliceMs,
+      overBudget: { ...overBudget },
     }),
   };
 };

@@ -8,6 +8,8 @@ const LIMITS: BackgroundWorkLimits = {
   maxWaitMs: 2000,
   takeoverMs: 3000,
   contentCapMs: 3000,
+  transitionCapMs: 5000,
+  sliceMs: 8,
 };
 
 /** Background work on a virtual clock; `ran` lists what ran, with when. */
@@ -173,6 +175,86 @@ describe("background work yields to interaction", () => {
   });
 });
 
+describe("background work waits out a tap's transition", () => {
+  test("nothing runs while a tap's transition is in flight, not even work past maxWaitMs", () => {
+    const { work, advance, ran, note } = setup();
+    work.whenFree(note("batch"));
+    work.transitionStarted();
+    advance(4000);
+    assert.deepEqual(ran, []);
+    work.transitionEnded();
+    advance(0);
+    assert.deepEqual(ran, ["batch@4000"]);
+  });
+
+  test("a transition that never reports its end holds work for transitionCapMs at most", () => {
+    const { work, advance, ran, note } = setup();
+    work.transitionStarted();
+    work.whenFree(note("batch"));
+    advance(4999);
+    assert.deepEqual(ran, []);
+    advance(1);
+    assert.deepEqual(ran, ["batch@5000"]);
+  });
+
+  test("a new transition starting as one ends keeps work waiting", () => {
+    const { work, advance, ran, note } = setup();
+    work.whenFree(note("scan"));
+    work.transitionStarted();
+    advance(100);
+    work.transitionEnded();
+    work.transitionStarted();
+    advance(0);
+    assert.deepEqual(ran, []);
+    work.transitionEnded();
+    advance(0);
+    assert.deepEqual(ran, ["scan@100"]);
+  });
+});
+
+/** Steps that each take [costs]' ms of the virtual clock, in turn, and count themselves. */
+function* costly(advance: (ms: number) => void, costs: readonly number[], done: string[]) {
+  for (const [index, cost] of costs.entries()) {
+    advance(cost);
+    done.push(String(index));
+    yield;
+  }
+  return "finished";
+}
+
+describe("stepped work runs in slices of at most sliceMs", () => {
+  test("a slice stops before the step that would take it past sliceMs", () => {
+    const { work, advance } = setup();
+    const done: string[] = [];
+    const steps = costly(advance, [3, 3, 3, 3], done);
+    assert.deepEqual(work.runSlice("Magic Queue batch", steps), { done: false });
+    assert.deepEqual(done, ["0", "1"]);
+    assert.deepEqual(work.runSlice("Magic Queue batch", steps), { done: false });
+    assert.deepEqual(done, ["0", "1", "2", "3"]);
+    assert.deepEqual(work.runSlice("Magic Queue batch", steps), {
+      done: true,
+      value: "finished",
+    });
+  });
+
+  test("every slice takes at least one step, so work always moves on", () => {
+    const { work, advance } = setup();
+    const done: string[] = [];
+    const steps = costly(advance, [12, 1], done);
+    work.runSlice("scan", steps);
+    assert.deepEqual(done, ["0"]);
+  });
+
+  test("a perf build hears of the longest slice and those past sliceMs, by name", () => {
+    const { work, advance } = setup();
+    const steps = costly(advance, [2, 12, 2], []);
+    while (!work.runSlice("sync", steps).done);
+    // The 12 ms step came second, after a 2 ms one gave no warning of it.
+    assert.equal(work.stats().longestSliceMs, 14);
+    assert.deepEqual(work.stats().overBudget, { sync: 1 });
+  });
+});
+
 describe("what a perf build reports", () => {
   test("when content showed, how startup ended, and how long work waited", () => {
     const { work, advance, note } = setup();
@@ -191,6 +273,8 @@ describe("what a perf build reports", () => {
       slices: 2,
       longestWaitMs: 2000,
       forcedSlices: 1,
+      longestSliceMs: 0,
+      overBudget: {},
     });
   });
 });
