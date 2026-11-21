@@ -10,18 +10,30 @@ import {
   desktopKey,
   geniusLineReferents,
   geniusLineSegments,
+  isLyricLineSelected,
   karaokeLyricLines,
+  lyricCardColours,
   placeGeniusReferents,
+  shareableLyricLines,
+  sharedLyricLines,
+  tapLyricLine,
   ytTrackId,
   type KaraokeLyricLine,
+  type LyricSelection,
 } from "@wave/core";
-import { useCallback, useEffect, useMemo, useState, type KeyboardEvent } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, type KeyboardEvent } from "react";
 
 import type { BrowseRow } from "../../shared/browse.ts";
 import type { SongLyrics } from "../../shared/lyrics.ts";
 import { GeniusAbout, GeniusAnnotations, MoreInsights } from "./GeniusInsights.tsx";
 import { KaraokeButton, KaraokeWords } from "./Karaoke.tsx";
 import { pressOf } from "./keys.ts";
+import {
+  LyricCardPreview,
+  PickingBar,
+  ShareLyricsButton,
+  type LyricCardContent,
+} from "./LyricsShare.tsx";
 import { LineTranslation, TranslateButton, TranslationNote } from "./LyricsTranslation.tsx";
 import { rovingTarget, scrollToRow } from "./rovingList.ts";
 import { labels, text } from "./text.ts";
@@ -32,6 +44,13 @@ import {
   type LyricsTranslationView,
 } from "./useLyricsTranslation.ts";
 import { useSongGenius, type GeniusAccess } from "./useSongGenius.ts";
+import { usePalette } from "./useSongPalette.ts";
+
+/** While Share picks lines: whether each shows as picked, and what a click on one does. */
+interface Picking {
+  readonly isPicked: (index: number) => boolean;
+  readonly onPick: (index: number) => void;
+}
 
 /** The queue track id main knows a song by (`QueueEntry.trackId`). */
 export const trackIdOf = (song: BrowseRow): string =>
@@ -82,6 +101,7 @@ function LyricLines({
   karaoke,
   sungWord,
   shown,
+  picking,
 }: {
   readonly lines: readonly { readonly text: string; readonly timeMs?: number }[];
   /** The line being sung, or -1 (before the first line, or unsynced lyrics). */
@@ -97,6 +117,8 @@ function LyricLines({
   readonly sungWord: number;
   /** The view is on screen. */
   readonly shown: boolean;
+  /** Share is picking lines: a click picks instead of seeking, and lines show whole. */
+  readonly picking: Picking | null;
 }) {
   /** The keyboard's line, or null while it follows the sung one. */
   const [active, setActive] = useState<number | null>(null);
@@ -106,7 +128,10 @@ function LyricLines({
       | { readonly kind: "line"; readonly index: number }
       | { readonly kind: "referent"; readonly id: number };
   }>();
-  const referents = genius.state.kind === "answer" ? genius.state.referents : undefined;
+  const isPicking = picking !== null;
+  // Genius's fragments aren't buttons while lines are picked.
+  const referents =
+    genius.state.kind === "answer" && !isPicking ? genius.state.referents : undefined;
   const placement = useMemo(
     () =>
       referents?.length
@@ -137,7 +162,14 @@ function LyricLines({
     held: active !== null,
     shown,
   });
-  const { scroll } = follow;
+  const { scroll, step } = follow;
+  // Picking stops the follow; done picking, the sung line comes back with Karaoke on.
+  const wasPicking = useRef(isPicking);
+  useEffect(() => {
+    if (wasPicking.current === isPicking) return;
+    wasPicking.current = isPicking;
+    step(isPicking ? "pickStarted" : "pickEnded");
+  }, [isPicking, step]);
   const openLine = useCallback(
     (index: number) => {
       if (placement) setAnnotations({ placement, selection: { kind: "line", index } });
@@ -151,6 +183,7 @@ function LyricLines({
     if (element && row) scrollToRow(element, row, false);
   }, [active, scroll]);
   const seek = (index: number) => {
+    if (picking !== null) return picking.onPick(index);
     const time = lines[index]?.timeMs;
     if (time === undefined || onSeek === undefined) return;
     onSeek(time);
@@ -188,7 +221,7 @@ function LyricLines({
       <GeniusAbout state={genius.state} onRetry={genius.retry} onSignIn={onGeniusSignIn} />
       <TranslationNote {...translation} />
       <div
-        className="lyric-lines"
+        className={`lyric-lines ${isPicking ? "picking" : ""}`}
         role="listbox"
         aria-label={labels.lyrics}
         tabIndex={0}
@@ -201,8 +234,10 @@ function LyricLines({
         {lines.map((line, index) => {
           const highlights = placement?.lines[index];
           const annotated = highlights !== undefined && highlights.length > 0;
-          // The sung line's words, lit one by one; a pause between lines has none.
-          const words = index === current ? karaoke?.[index]?.words : undefined;
+          // The sung line's words, lit one by one; a pause between lines has none. Lines
+          // being picked show whole.
+          const words = index === current && !isPicking ? karaoke?.[index]?.words : undefined;
+          const picked = picking?.isPicked(index);
           return (
             <div
               key={index}
@@ -213,9 +248,12 @@ function LyricLines({
               aria-keyshortcuts={annotated ? "Shift+F10" : undefined}
               aria-selected={index === focused}
               aria-current={index === current ? "true" : undefined}
+              aria-checked={picked}
               className={`lyric-line ${line.timeMs === undefined ? "unsynced" : ""} ${
                 index === current ? "sung" : index < current ? "past" : ""
-              } ${active === index ? "keyboard" : ""} ${words?.length ? "karaoke" : ""}`}
+              } ${active === index ? "keyboard" : ""} ${words?.length ? "karaoke" : ""} ${
+                picked ? "picked" : ""
+              }`}
               onClick={() => seek(index)}
             >
               {words?.length ? (
@@ -275,6 +313,7 @@ export function LyricsView({
   onSeek,
   geniusAccess,
   onGeniusSignIn,
+  notify,
   foreground = true,
   lineIdPrefix = "lyric",
 }: {
@@ -283,6 +322,8 @@ export function LyricsView({
   readonly onSeek: (positionMs: number) => void;
   readonly geniusAccess: GeniusAccess;
   readonly onGeniusSignIn: () => void;
+  /** Shows a toast: Save Image's and Copy Image's answers. */
+  readonly notify: (message: string) => void;
   readonly foreground?: boolean;
   readonly lineIdPrefix?: string;
 }) {
@@ -306,6 +347,49 @@ export function LyricsView({
     () => (karaokeOn && lyrics?.kind === "synced" ? karaokeLyricLines(lyrics.lines) : undefined),
     [karaokeOn, lyrics],
   );
+  // Share: the lines to pick from (null when none has words, so no Share), the block picked for
+  // this song (another song leaves picking), and the card shown for it after Next.
+  const shareable = useMemo(
+    () => (lyrics === undefined || lyrics.kind === "failed" ? null : shareableLyricLines(lyrics)),
+    [lyrics],
+  );
+  const [picked, setPicked] = useState<{
+    readonly trackId: string | null;
+    readonly selection: LyricSelection | null;
+    readonly card: LyricCardContent | null;
+  } | null>(null);
+  const pick = picked !== null && picked.trackId === trackId && shareable !== null ? picked : null;
+  const selection = pick?.selection ?? null;
+  const shared = shareable === null ? [] : sharedLyricLines(shareable, selection);
+  const isPicking = pick !== null;
+  // The cover's colours, read once Share starts: the card's colours after Next.
+  const palette = usePalette(isPicking ? song : null);
+  const cardShown = pick !== null && pick.card !== null;
+  const picking = useMemo<Picking | null>(
+    () =>
+      isPicking && shareable !== null
+        ? {
+            isPicked: (index) => isLyricLineSelected(shareable, selection, index),
+            onPick: (index) => {
+              const tap = tapLyricLine(shareable, selection, index);
+              // A click that would break the block or pass five lines does nothing.
+              if (tap.accepted) setPicked({ trackId, selection: tap.selection, card: null });
+            },
+          }
+        : null,
+    [isPicking, shareable, selection, trackId],
+  );
+  // Esc leaves picking, before it closes Now Playing; the card's preview takes it first.
+  useEffect(() => {
+    if (!isPicking || cardShown || !foreground) return;
+    const onKey = (event: globalThis.KeyboardEvent) => {
+      if (event.key !== "Escape" || event.defaultPrevented) return;
+      event.preventDefault();
+      setPicked(null);
+    };
+    window.addEventListener("keydown", onKey, true);
+    return () => window.removeEventListener("keydown", onKey, true);
+  }, [isPicking, cardShown, foreground]);
   const words = text.playbackText;
   if (song === null) return <p className="lyrics-note">{labels.nothingPlaying}</p>;
   if (lyrics === undefined)
@@ -335,11 +419,29 @@ export function LyricsView({
   return (
     <div className="lyrics-view">
       {/* The Lyrics view's buttons, for a song with lyrics. */}
-      <div className="lyrics-header">
-        {/* Plain lyrics have no times to follow. */}
-        {lyrics.kind === "synced" && <KaraokeButton on={karaokeOn} onChange={setKaraokeOn} />}
-        <TranslateButton on={translateOn} onChange={setTranslateOn} />
-      </div>
+      {isPicking ? (
+        <PickingBar
+          count={shared.length}
+          onCancel={() => setPicked(null)}
+          onNext={() => {
+            if (shared.length === 0) return;
+            setPicked({
+              trackId,
+              selection,
+              card: { song, lines: shared, colours: lyricCardColours(palette) },
+            });
+          }}
+        />
+      ) : (
+        <div className="lyrics-header">
+          {/* Plain lyrics have no times to follow. */}
+          {lyrics.kind === "synced" && <KaraokeButton on={karaokeOn} onChange={setKaraokeOn} />}
+          <TranslateButton on={translateOn} onChange={setTranslateOn} />
+          {shareable !== null && (
+            <ShareLyricsButton onClick={() => setPicked({ trackId, selection: null, card: null })} />
+          )}
+        </div>
+      )}
       <LyricLines
         key={trackId}
         lines={lines ?? []}
@@ -347,12 +449,20 @@ export function LyricsView({
         karaoke={karaoke}
         sungWord={currentLyricWordIndex(karaoke?.[current]?.words ?? [], positionMs)}
         shown={foreground}
+        picking={picking}
         onSeek={onSeek}
         genius={genius}
         translation={translation}
         onGeniusSignIn={onGeniusSignIn}
         lineIdPrefix={lineIdPrefix}
       />
+      {pick?.card && (
+        <LyricCardPreview
+          content={pick.card}
+          notify={notify}
+          onClose={() => setPicked({ trackId, selection, card: null })}
+        />
+      )}
     </div>
   );
 }

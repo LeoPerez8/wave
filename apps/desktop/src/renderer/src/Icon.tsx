@@ -49,6 +49,8 @@ const paths: Record<string, string> = {
   showMain: "M14 4h6v6M20 4l-7 7M10 20H4v-6M4 20l7-7",
   up: "m5 15 7-7 7 7",
   down: "m5 9 7 7 7-7",
+  /** Tabler's share 3, as the phone's Share Lyrics button has. */
+  share: "M13 4v4C6.4 9 4 14.8 3 20c0 .2 5.4-6 10-6v4l8-7Z",
 };
 export function Icon({ name, size = 20 }: { readonly name: string; readonly size?: number }) {
   return (

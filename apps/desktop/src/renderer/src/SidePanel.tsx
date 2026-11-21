@@ -43,6 +43,7 @@ export function SidePanel({
   onClose,
   geniusAccess,
   onGeniusSignIn,
+  notify,
 }: {
   readonly tab: PanelTab;
   readonly onTab: (tab: PanelTab) => void;
@@ -61,6 +62,8 @@ export function SidePanel({
   readonly onClose: () => void;
   readonly geniusAccess: GeniusAccess;
   readonly onGeniusSignIn: () => void;
+  /** Shows a toast: the lyrics card's Save Image and Copy Image answers. */
+  readonly notify: (message: string) => void;
 }) {
   const tab = shownPanelTab(asked, ytMusic);
   const command = (next: PlaybackCommand) => run(window.wave.playback.command(next));
@@ -112,6 +115,7 @@ export function SidePanel({
             onSeek={(positionMs) => run(window.wave.playback.seek(positionMs))}
             geniusAccess={geniusAccess}
             onGeniusSignIn={onGeniusSignIn}
+            notify={notify}
             foreground={!hidden}
           />
         ) : tab === "related" ? (
