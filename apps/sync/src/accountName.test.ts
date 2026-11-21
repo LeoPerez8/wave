@@ -83,7 +83,11 @@ describe("a sign-in keeps the Google account's name", () => {
 
 describe("PUT /v1/account/name", () => {
   const put = (service: Harness, session: string | undefined, json: unknown): Promise<Response> =>
-    service.request("PUT", "/v1/account/name", { session, json });
+    service.request(
+      "PUT",
+      "/v1/account/name",
+      session === undefined ? { json } : { session, json },
+    );
 
   test("stores the name for the session's account, and no other", async () => {
     const service = await harness();
