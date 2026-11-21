@@ -19,6 +19,8 @@ const WRITES = new Set([
   "clearArtistPhotos",
   "leaveAccount",
   "keptTotalsSteps",
+  // The startup job runs it once the first screen settles, before these reads (`app/_layout.tsx`).
+  "startupUpkeep",
 ]);
 
 const appLog = async () => {
@@ -37,6 +39,8 @@ test("every read gives what the synchronous store gives, without a statement on 
     const log = await appLog();
     const here = await loadLibraryStore(root, fixture.db);
     const away = await loadLibraryStore(root, fixture.db, { offThreadReads: true });
+    await Effect.runPromise(here.startupUpkeep);
+    await Effect.runPromise(away.startupUpkeep);
     const window = { from: fixture.now - 30 * 86_400_000, to: fixture.now };
     const artist = fixture.targets.large.artistId;
     const ids = fixture.songIds.slice(0, 40);
