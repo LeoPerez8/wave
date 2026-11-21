@@ -32,6 +32,7 @@ import {
   startMagicQueue as startSession,
   startStreamedMagicQueue as startStreamedSession,
   wantsMagicBatch,
+  type DjSettings,
   type DjTile,
   type MagicBatchOutcome,
   type MagicSeed,
@@ -511,11 +512,12 @@ export type DjStart = "started" | "empty" | "failed";
  * `startDjQueue`). No seed song plays first: the session's first batch of 10
  * is read, from the radios of up to 3 of the selected artists, and replaces
  * the queue (with Undo, as any play does), its first song playing. It ranks
- * with DJ's own choices, not Discover's sliders. Nothing is waited for but
+ * with [settings], DJ's own choices from Adjust, not Discover's sliders, and
+ * its Artist variety limits who each batch may hold (`magicQueueYtCandidates`). Nothing is waited for but
  * the radios: the Library, catalog, graph and taste profile are the last
  * ones derived. The queue that's playing is left alone unless it starts.
  */
-export const startDjMagicQueue = (tiles: readonly DjTile[]) =>
+export const startDjMagicQueue = (tiles: readonly DjTile[], settings: DjSettings) =>
   Effect.gen(function* () {
     if (!ytMusicEnabled()) return "failed" satisfies DjStart;
     const startedAt = Date.now();
@@ -524,6 +526,7 @@ export const startDjMagicQueue = (tiles: readonly DjTile[]) =>
     const started = startDjSession(tiles, {
       id: String(startedAt),
       played: latest.library?.topArtists ?? [],
+      settings,
     });
     if (started === null) return "empty" satisfies DjStart;
     const drawn = magicBatchRadios(started, Math.random);

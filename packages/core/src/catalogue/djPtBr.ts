@@ -9,5 +9,16 @@ export const djPtBr: typeof djEn = {
   artistTile: (name: string) => `Artista, ${name}`,
   nothingToPick: "Nada para escolher ainda. Ouça algumas músicas e volte depois.",
   noSongsFound: "Nenhuma música encontrada para esses artistas.",
+  adjust: "Ajustar",
+  backToGrid: "Voltar para DJ",
+  artistVariety: "Variedade de artistas",
+  varietySteps: { low: "Baixa", medium: "Média", high: "Alta" },
+  varietyNotes: {
+    low: "Quase só os artistas que você escolheu.",
+    medium: "Os artistas que você escolheu e os próximos deles.",
+    high: "Um círculo maior de artistas, cada um aparecendo menos.",
+  },
+  musicDiscovery: "Descoberta de música",
+  discoverySteps: { familiar: "Conhecidas", blend: "Misturar", discover: "Descobrir" },
   magicQueueFromDj: "Fila Mágica · de DJ",
 };

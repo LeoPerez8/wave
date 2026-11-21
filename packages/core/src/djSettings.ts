@@ -4,6 +4,7 @@
  * own: a session started from DJ carries them and ranks with them, whatever
  * Discover's sliders say.
  */
+import { en, type Catalogue } from "./catalogueEn.ts";
 import { DEFAULT_MIX_SLIDERS, type MixSliders, type MixSliderStep } from "./mixSliders.ts";
 import { isRecord } from "./storedJson.ts";
 
@@ -35,6 +36,12 @@ export const DEFAULT_DJ_SETTINGS: DjSettings = {
 
 const VARIETIES: { readonly [K in DjVariety]: true } = { low: true, medium: true, high: true };
 
+/** Artist variety's steps as Adjust offers them, from its left end to its right one. */
+export const DJ_VARIETIES: readonly DjVariety[] = ["low", "medium", "high"];
+
+/** Music discovery's steps as Adjust offers them, from its left end to its right one. */
+export const DJ_DISCOVERIES: readonly DjDiscovery[] = ["familiar", "blend", "discover"];
+
 const NEW_MUSIC_SHARE: { readonly [K in DjDiscovery]: number } = {
   familiar: 0.2,
   blend: 0.6,
@@ -44,6 +51,10 @@ const NEW_MUSIC_SHARE: { readonly [K in DjDiscovery]: number } = {
 /** The New music share a DJ session starts at; signals then move it as in any session. */
 export const djNewMusicShare = (settings: DjSettings): number =>
   NEW_MUSIC_SHARE[settings.discovery];
+
+/** A Music discovery step as Adjust shows it: its name and the share it starts at ("Blend · 60% new"). */
+export const djDiscoveryLabel = (discovery: DjDiscovery, strings: Catalogue = en): string =>
+  `${strings.dj.discoverySteps[discovery]} · ${strings.discover.newShare(NEW_MUSIC_SHARE[discovery] * 100)}`;
 
 const POPULARITY_STEP: { readonly [K in DjPopularity]: MixSliderStep } = {
   trending: 1,
