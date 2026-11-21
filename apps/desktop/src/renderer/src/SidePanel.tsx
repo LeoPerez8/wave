@@ -6,6 +6,7 @@
 import { useState, type KeyboardEvent, type MouseEvent } from "react";
 
 import type { BrowseRow } from "../../shared/browse.ts";
+import type { UpNextPlace } from "@wave/core";
 import type { PlaybackCommand, PlayerView } from "../../shared/playerView.ts";
 import type { YtArtistCandidate } from "../../shared/ytPages.ts";
 import { Icon } from "./Icon.tsx";
@@ -13,7 +14,10 @@ import { LyricsView, trackIdOf } from "./LyricsView.tsx";
 import { panelTabs, shownPanelTab, stepPanelTab, type PanelTab } from "../../shared/panelTabs.ts";
 import { QueuePanel } from "./QueuePanel.tsx";
 import { RelatedPanel } from "./RelatedPanel.tsx";
+import type { shuffleMenuEvents } from "./ShuffleKinds.tsx";
+import { draggedSongs, type DraggedSongs } from "./songDrag.ts";
 import { labels, text } from "./text.ts";
+import type { GeniusAccess } from "./useSongGenius.ts";
 import "./panel.css";
 
 export type { PanelTab };
@@ -40,6 +44,11 @@ export function SidePanel({
   onError,
   hidden,
   onClose,
+  geniusAccess,
+  onGeniusSignIn,
+  onSongDrop,
+  shuffleMenu,
+  notify,
 }: {
   readonly tab: PanelTab;
   readonly onTab: (tab: PanelTab) => void;
@@ -56,6 +65,14 @@ export function SidePanel({
   readonly hidden: boolean;
   /** The panel's own close control, on every tab. */
   readonly onClose: () => void;
+  readonly geniusAccess: GeniusAccess;
+  readonly onGeniusSignIn: () => void;
+  /** Songs dragged from a list and dropped in the Queue's Up Next [at]. */
+  readonly onSongDrop?: (songs: DraggedSongs, at: UpNextPlace | undefined) => void;
+  /** What opens the kinds of shuffle from the Queue's shuffle toggle. */
+  readonly shuffleMenu?: ReturnType<typeof shuffleMenuEvents>;
+  /** Shows a toast: the lyrics card's Save Image and Copy Image answers. */
+  readonly notify: (message: string) => void;
 }) {
   const tab = shownPanelTab(asked, ytMusic);
   const command = (next: PlaybackCommand) => run(window.wave.playback.command(next));
@@ -80,6 +97,10 @@ export function SidePanel({
               aria-controls="panel-body"
               tabIndex={tab === name ? 0 : -1}
               onClick={() => onTab(name)}
+              // Songs dragged over the Queue tab open it, to be dropped in Up Next.
+              onDragOver={(event) => {
+                if (name === "queue" && tab !== name && draggedSongs(event)) onTab(name);
+              }}
             >
               {name === "related" ? text.playbackText.related : labels[name]}
             </button>
@@ -105,6 +126,10 @@ export function SidePanel({
             song={view?.current ?? null}
             positionMs={view?.status.positionMs ?? 0}
             onSeek={(positionMs) => run(window.wave.playback.seek(positionMs))}
+            geniusAccess={geniusAccess}
+            onGeniusSignIn={onGeniusSignIn}
+            notify={notify}
+            foreground={!hidden}
           />
         ) : tab === "related" ? (
           <RelatedPanel
@@ -114,7 +139,14 @@ export function SidePanel({
             onSongMenu={onSongMenu}
           />
         ) : view === undefined ? null : (
-          <QueuePanel view={view} command={command} onError={onError} onMenu={onSongMenu} />
+          <QueuePanel
+            view={view}
+            command={command}
+            onError={onError}
+            onMenu={onSongMenu}
+            onSongDrop={onSongDrop}
+            shuffleMenu={shuffleMenu}
+          />
         )}
       </div>
     </aside>

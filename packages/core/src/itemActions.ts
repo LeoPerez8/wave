@@ -244,7 +244,7 @@ export const confirmsFirst = (action: ItemAction): boolean =>
  * A song with no file here yet (missing, or streamed, an unsearched one
  * included): Download fetches it.
  */
-const needsDownload = (item: ActionItem): boolean =>
+export const needsDownload = (item: ActionItem): boolean =>
   item.missing === true || (item.streamed === true && item.downloaded !== true);
 
 /** The value every item has, or undefined when they differ or any lacks one. */

@@ -14,6 +14,24 @@
 .artist-page > .shelf + .shelf {
   margin-top: 8px;
 }
+.artist-listening {
+  padding: 8px 22px 0 0;
+}
+.artist-listening-facts {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px 20px;
+  color: var(--color-secondary);
+}
+.artist-listening h2 {
+  margin: 18px 0 6px;
+}
+.artist-listening > .table-area {
+  height: 230px;
+}
+.artist-listening > .table-area .table-viewport {
+  max-height: 200px;
+}
 .artist-songs-heading {
   margin: 22px 0 6px;
 }
@@ -23,6 +41,32 @@
 }
 .artist-page > .yt-list {
   padding-right: 22px;
+}
+/* Online's Popular list takes the songs table's place and keeps its header, to sort by. */
+.artist-popular-head .table-viewport,
+.artist-popular-head .letter-spine {
+  display: none;
+}
+/* The songs YouTube Music adds sit under the table's columns: "#" and Date added stay empty. */
+.artist-page > .yt-list .yt-row {
+  grid-template-columns:
+    30px minmax(180px, 1.5fr) minmax(110px, 1fr) minmax(100px, 1fr) minmax(76px, 0.6fr)
+    28px 54px;
+}
+.artist-page > .yt-list .yt-row > .title-cell {
+  grid-column: 2;
+}
+.artist-page > .yt-list .yt-row > .star-column {
+  grid-column: 6;
+}
+@container (width < 760px) {
+  .artist-page > .yt-list .yt-row {
+    grid-template-columns: 30px minmax(0, 1.5fr) minmax(0, 1fr) minmax(76px, 0.6fr) 22px 48px;
+    gap: 8px;
+  }
+  .artist-page > .yt-list .yt-row > .star-column {
+    grid-column: 5;
+  }
 }
 .row-rank {
   width: 100%;

@@ -8,10 +8,11 @@ import { sql } from "drizzle-orm";
 
 /** The playlist [playlistId] is collaborative: the account's pull said so. */
 export const isCollaborative = (db: LibraryDatabase, playlistId: number): boolean =>
-  db.get(
-    sql`SELECT 1 FROM playlists p JOIN collaborations c ON c.playlist_sync_id = p.sync_id
+  // A count, as a row that isn't there can read back as an empty object.
+  (db.get<{ n: number }>(
+    sql`SELECT COUNT(*) AS n FROM playlists p JOIN collaborations c ON c.playlist_sync_id = p.sync_id
       WHERE p.id = ${playlistId}`,
-  ) !== undefined;
+  )?.n ?? 0) > 0;
 
 /** Throws, changing nothing, when [playlistId] is collaborative. */
 export const refuseCollaborative = (db: LibraryDatabase, playlistId: number): void => {

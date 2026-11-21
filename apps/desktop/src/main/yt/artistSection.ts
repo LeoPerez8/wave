@@ -37,6 +37,7 @@ import * as Result from "effect/Result";
 import type { ArtistSectionView } from "../../shared/artistPage.ts";
 import { ytRow } from "../../shared/yt.ts";
 import { browseSongs, browseTrackIds } from "../library/browse.ts";
+import { readBrowseSort } from "../library/browseSort.ts";
 
 export interface ArtistSectionDeps {
   readonly db: LibraryDatabase;
@@ -73,6 +74,8 @@ export interface ArtistSectionShape {
     artistId: number,
     pick: YtPick | null,
   ) => { readonly ids: string[]; readonly listStart: number };
+  /** What stands for the artist [name], what was saved for them read on first sight. */
+  readonly state: (name: string) => YtArtistSection<YtAlbumSong>;
 }
 
 type Section = YtArtistSection<YtAlbumSong>;
@@ -129,11 +132,14 @@ export const createArtistSection = (deps: ArtistSectionDeps): ArtistSectionShape
   };
 
   /**
-   * With Online and the artist's full list saved, the page's songs as one list: the Library's
-   * files and the songs YouTube Music adds, in its order (`artistSongOrder`). Null otherwise.
+   * With Online, the artist's full list saved and their songs sorted by Popular, the page's
+   * songs as one list: the Library's files and the songs YouTube Music adds, in its order
+   * (`artistSongOrder`). Null otherwise: another sort keeps the Library's table, sorted, with
+   * the songs YouTube Music adds after it.
    */
   const popularList = (artistId: number, found: NonNullable<ReturnType<typeof shown>>) => {
     if (found.view.toggle !== "online") return null;
+    if (readBrowseSort(db, "artist")?.key !== "popular") return null;
     const popular = artistPopularSongs(found.state);
     if (popular === null) return null;
     const library = browseSongs(
@@ -223,5 +229,6 @@ export const createArtistSection = (deps: ArtistSectionDeps): ArtistSectionShape
         listStart: library.length,
       };
     },
+    state: sectionOf,
   };
 };

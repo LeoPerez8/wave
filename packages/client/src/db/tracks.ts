@@ -250,6 +250,14 @@ export const deleteTracksById = (db: LibraryDatabase, ids: readonly number[]): v
  */
 const keepMemberEntries = (db: LibraryDatabase, which: SQL): void => {
   const { tracks, albums, playlistItems, playlists, collaborations } = schema;
+  // Most devices are in no other account's playlist: nothing to keep, and no join to run.
+  const member = db
+    .select({ id: collaborations.playlistSyncId })
+    .from(collaborations)
+    .where(eq(collaborations.owned, false))
+    .limit(1)
+    .all();
+  if (member.length === 0) return;
   const entries = db
     .select({ id: playlistItems.id, ...leavingSongColumns })
     .from(playlistItems)

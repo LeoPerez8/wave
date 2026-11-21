@@ -125,6 +125,7 @@ const ports = (db: LibraryDatabase, playlists: ReturnType<typeof createPlaylists
     changed: () => {},
     fixSongs: async () => ({ fixed: 0, failed: 0 }) as never,
     removeFromPlaylist: playlists.removeSongs,
+    runStreamed: async () => {},
   }) satisfies SongActionPorts;
 
 test("Rename, Delete, Move, Restore, Remove from Graveyard and Remove from Playlist are refused", async () => {

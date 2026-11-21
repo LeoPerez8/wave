@@ -1,7 +1,31 @@
 mod common;
-use common::fixture;
+use common::{fixture, source_16bit};
 use std::time::Duration;
 use wave_audio::player::{Next, PlayState, Player, TransitionKind};
+
+#[test]
+fn preloaded_alac_starts_on_the_frame_after_the_previous_track_ends() {
+    let rate = 22_050;
+    let tone = fixture("tone-alac.m4a");
+    let player = Player::new();
+    player.load(&tone).unwrap();
+    player.preload(Some(Next::new(&tone, "next"))).unwrap();
+    player.seek(u64::from(rate) - 128).unwrap();
+    std::thread::sleep(Duration::from_millis(100));
+    player.play().unwrap();
+    let mut out = [0.0; 512];
+    player.render(&mut out, rate);
+
+    for (frame, pcm) in out.chunks_exact(2).enumerate() {
+        let source_frame = (u64::from(rate) - 128 + frame as u64) % u64::from(rate);
+        assert_eq!(pcm, source_16bit(source_frame, rate), "frame {frame}");
+    }
+    assert_eq!(player.progress().state, PlayState::Playing);
+    assert_eq!(player.progress().position_frames, 128);
+    let transitions = player.take_transitions();
+    assert_eq!(transitions[0].key, "next");
+    assert_eq!(transitions[0].kind, TransitionKind::Gapless);
+}
 
 #[test]
 fn preloaded_aac_crosses_the_trimmed_boundary_without_a_silent_frame() {

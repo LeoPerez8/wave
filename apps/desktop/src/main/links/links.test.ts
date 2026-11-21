@@ -5,7 +5,7 @@ import { tracks } from "@wave/client/db/schema";
 import { eq, sql } from "drizzle-orm";
 import { createDesktopLinks } from "./links.ts";
 import { createPlaylist } from "@wave/client/db/playlists";
-import { catalogueOf } from "@wave/core";
+import { catalogueOf, type DesktopShareItem } from "@wave/core";
 
 test("plain pasted text leaves playback and the clipboard alone", async () => {
   const db = await openTestDatabase();
@@ -336,6 +336,191 @@ test("a pasted song whose radio names no album gets its album from a search for 
     assert.deepEqual(calls, ["songRadio", "search"]);
     assert.equal(remembered[0]?.album, "Pink Moon");
     assert.equal(changes, 1);
+  } finally {
+    closeTestDatabase(db);
+  }
+});
+
+/** Spotify's Web API search as the share submenu asks it: [catalogue] holds the titles it has. */
+const spotifyAccount = (catalogue: readonly string[], status = "signedIn" as string) => {
+  const account = {
+    asked: 0,
+    session: () => ({ status }) as never,
+    request: async (path: string) => {
+      account.asked++;
+      const query = new URL(path, "https://api.spotify.com").searchParams.get("q") ?? "";
+      return {
+        status: "response",
+        response: Response.json({
+          tracks: {
+            items: catalogue
+              .filter((title) => query.startsWith(title))
+              .map((title) => ({
+                id: `${title.replace(/\W/g, "")}1`,
+                uri: `spotify:track:${title.replace(/\W/g, "")}1`,
+                name: title,
+                artists: [{ name: "Nick Drake" }],
+                album: { name: "Pink Moon" },
+                duration_ms: 124_000,
+              })),
+          },
+        }),
+      } as never;
+    },
+  };
+  return account;
+};
+
+const shareLinks = (
+  db: Parameters<typeof createDesktopLinks>[0]["db"],
+  fields: Partial<Parameters<typeof createDesktopLinks>[0]> = {},
+) =>
+  createDesktopLinks({
+    db,
+    enabled: () => true,
+    online: () => true,
+    call: async () => ({ songs: [] }) as never,
+    start: async () => {},
+    writeClipboard: () => {},
+    changed: () => {},
+    ...fields,
+  });
+
+/** Each Share item: a link's address, else why it has none, else the image item's kind. */
+const linkItems = (view: { readonly items: readonly DesktopShareItem[] }) =>
+  view.items.map((item) => (item.kind === "link" ? (item.url ?? item.note) : item.kind));
+
+test("Share gives a Library song's Copy Link, Spotify and YT Music addresses, and its card", async () => {
+  const db = await openTestDatabase();
+  try {
+    db.run(sql`CREATE TABLE desktop_settings (key TEXT PRIMARY KEY, value TEXT NOT NULL)`);
+    const id = addTrack(db, {
+      title: "Pink Moon",
+      artist: "Nick Drake",
+      album: "Pink Moon",
+      durationMs: 124_000,
+    });
+    db.update(tracks).set({ videoId: "abcdefghijk" }).where(eq(tracks.id, id)).run();
+    const view = await shareLinks(db).songShare(
+      { scope: { kind: "songs" }, ids: [id] },
+      "en",
+      spotifyAccount(["Pink Moon"]),
+    );
+    assert.equal(view.title, "Pink Moon");
+    assert.equal(view.artist, "Nick Drake");
+    assert.deepEqual(view.cover, { kind: "song", id });
+    assert.deepEqual(linkItems(view), [
+      "https://song.link/y/abcdefghijk",
+      "https://open.spotify.com/track/PinkMoon1",
+      "https://music.youtube.com/watch?v=abcdefghijk",
+      "saveImage",
+      "copyImage",
+    ]);
+  } finally {
+    closeTestDatabase(db);
+  }
+});
+
+test("Share gives a streamed song's links by its video id, and says No Match and Signed Out", async () => {
+  const db = await openTestDatabase();
+  try {
+    const song = {
+      videoId: "abcdefghijk",
+      title: "Road",
+      artists: ["Nick Drake"],
+      album: "Pink Moon",
+      albumId: null,
+      durationMs: 124_000,
+      artworkUrl: "https://lh3.googleusercontent.com/road=w120-h120",
+      explicit: false,
+    };
+    const links = shareLinks(db, {
+      song: (videoId) => (videoId === song.videoId ? song : undefined),
+    });
+    const missing = await links.songShare("abcdefghijk", "en", spotifyAccount([]));
+    assert.equal(missing.title, "Road");
+    assert.equal(missing.artist, "Nick Drake");
+    assert.deepEqual(missing.cover, { kind: "url", url: song.artworkUrl });
+    assert.deepEqual(linkItems(missing), [
+      "https://song.link/y/abcdefghijk",
+      "No Match",
+      "https://music.youtube.com/watch?v=abcdefghijk",
+      "saveImage",
+      "copyImage",
+    ]);
+    const signedOut = spotifyAccount(["Road"], "signedOut");
+    assert.equal(linkItems(await links.songShare("abcdefghijk", "en", signedOut))[1], "Signed Out");
+    assert.equal(signedOut.asked, 0);
+    const expired = spotifyAccount(["Road"], "expired");
+    assert.equal(linkItems(await links.songShare("abcdefghijk", "en", expired))[1], "Signed Out");
+    await assert.rejects(() => links.songShare("zzzzzzzzzzz", "en", spotifyAccount([])));
+  } finally {
+    closeTestDatabase(db);
+  }
+});
+
+test("Share's links read No Match for a song YT Music doesn't have, Offline without a connection, and none with YT Music off", async () => {
+  const db = await openTestDatabase();
+  try {
+    db.run(sql`CREATE TABLE desktop_settings (key TEXT PRIMARY KEY, value TEXT NOT NULL)`);
+    const id = addTrack(db, {
+      title: "Pink Moon",
+      artist: "Nick Drake",
+      album: "Pink Moon",
+      durationMs: 124_000,
+    });
+    const target = { scope: { kind: "songs" }, ids: [id] } as const;
+    const unmatched = await shareLinks(db).songShare(target, "en", spotifyAccount([]));
+    assert.deepEqual(linkItems(unmatched), [
+      "No Match",
+      "No Match",
+      "No Match",
+      "saveImage",
+      "copyImage",
+    ]);
+    const account = spotifyAccount(["Pink Moon"]);
+    const offline = await shareLinks(db, {
+      online: () => false,
+      call: async () => {
+        throw new Error("Offline asks nothing");
+      },
+    }).songShare(target, "pt-BR", account);
+    assert.deepEqual(linkItems(offline), [
+      "Offline",
+      "Offline",
+      "Offline",
+      "saveImage",
+      "copyImage",
+    ]);
+    assert.equal(account.asked, 0);
+    const off = await shareLinks(db, { enabled: () => false }).songShare(target, "en", account);
+    assert.deepEqual(linkItems(off), ["saveImage", "copyImage"]);
+    assert.equal(account.asked, 0);
+  } finally {
+    closeTestDatabase(db);
+  }
+});
+
+test("Share's link items copy only a song's own share addresses", async () => {
+  const db = await openTestDatabase();
+  try {
+    const clipboard: string[] = [];
+    const links = shareLinks(db, { writeClipboard: (value) => clipboard.push(value) });
+    for (const url of [
+      "https://song.link/y/abcdefghijk",
+      "https://music.youtube.com/watch?v=abcdefghijk",
+      "https://open.spotify.com/track/4uLU6hMCjMI75M1A2tKUQC",
+    ])
+      assert.deepEqual(links.copyShareLink(url, "en"), { kind: "copied", message: "Link copied" });
+    assert.equal(clipboard.length, 3);
+    for (const url of [
+      "https://example.com/",
+      "https://song.link/y/abc",
+      "https://open.spotify.com/track/x?y=1",
+      "javascript:alert(1)",
+    ])
+      assert.throws(() => links.copyShareLink(url, "en"));
+    assert.equal(clipboard.length, 3);
   } finally {
     closeTestDatabase(db);
   }
