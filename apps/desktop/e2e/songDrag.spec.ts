@@ -58,11 +58,11 @@ const queueTitles = (page: Page) =>
   });
 
 /** Drags [from] over [to] with the mouse, checks [to]'s highlight while over it, and drops. */
-const dragOnto = async (page: Page, from: Locator, to: Locator) => {
+const dragOnto = async (page: Page, from: Locator, to: Locator, targetX = 10) => {
   await from.hover();
   await page.mouse.down();
   // A synthetic drag gets one event per move: the drag starts, enters [to], then goes over it.
-  for (const x of [10, 14, 18]) await to.hover({ position: { x, y: 10 } });
+  for (const x of [targetX, targetX + 4, targetX + 8]) await to.hover({ position: { x, y: 10 } });
   await expect(to).toHaveClass(/drop-over/);
   await page.mouse.up();
   await expect(to).not.toHaveClass(/drop-over/);
@@ -160,16 +160,24 @@ test("songs drag onto a sidebar playlist, the Queue panel and the Queue button",
       .poll(() => queueTitles(page))
       .toEqual(["Alpha", "Charlie", "Bravo", "Delta", "Charlie", "Delta"]);
 
-    // The player bar's Queue button: Add to Queue, as its menu entry lines songs up.
+    // Add to Queue follows the last dropped song, even with a context song between drops.
     await dragOnto(page, row("Bravo"), queueButton);
     await expect(toast(text.itemActions.addedToQueue)).toBeVisible();
-    await expect.poll(async () => (await queueTitles(page)).length).toBe(7);
-    expect((await queueTitles(page)).filter((title) => title === "Bravo")).toHaveLength(2);
+    await expect(queue.getByRole("option")).toHaveText([
+      /Alpha/,
+      /Charlie/,
+      /Bravo/,
+      /Delta/,
+      /Bravo/,
+      /Charlie/,
+      /Delta/,
+    ]);
 
     // With the sidebar collapsed to icons, a playlist still takes the drop.
     await page.setViewportSize({ width: 1000, height: 900 });
     await expect(evening.locator(".nav-monogram")).toBeVisible();
-    await dragOnto(page, row("Charlie"), evening);
+    const collapsedPlaylist = (await evening.boundingBox())!;
+    await dragOnto(page, row("Charlie"), evening, collapsedPlaylist.width - 10);
     await expect(toast(describePlaylistAdd("Evening", 1, 0, "en"))).toBeVisible();
     await page.screenshot({
       path: test.info().outputPath(`song-drag-collapsed-${process.platform}.png`),
