@@ -1,7 +1,8 @@
 /**
- * DJ's Done button (docs/spec.md, DJ): it loads while the session's first
- * batch is read, closes DJ once the queue plays, and leaves a quiet line with
- * Try Again when the batch comes back empty or can't be read.
+ * DJ's Play pill, which this module still calls Done (docs/spec.md, DJ): it
+ * loads while the session's first batch is read, closes DJ once the queue
+ * plays, and leaves a quiet line with Try Again when the batch comes back
+ * empty or can't be read.
  */
 import type { DjStart } from "@/playback/MagicQueue";
 

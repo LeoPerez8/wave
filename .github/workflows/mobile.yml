@@ -413,7 +413,9 @@ jobs:
           path: /tmp/metro-cache
           key: ${{ steps.metro_cache.outputs.cache-primary-key }}
 
+      # A full Gradle build takes about 15 min; one that ran out of memory hung for an hour.
       - name: Build release APK
+        timeout-minutes: 40
         if: env.APK_BUILD == 'full'
         working-directory: apps/mobile/android
         run: ../../../scripts/ci/step.sh "Gradle assembleRelease" ./gradlew assembleRelease -PreactNativeArchitectures=arm64-v8a --init-script ../../../scripts/ci/prebuilt-bundle.gradle --no-daemon --console=plain --profile --stacktrace

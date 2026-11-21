@@ -70,10 +70,6 @@ const NEW_MUSIC_SHARE: { readonly [K in DjDiscovery]: number } = {
 export const djNewMusicShare = (settings: DjSettings): number =>
   NEW_MUSIC_SHARE[settings.discovery];
 
-/** A Music discovery step as Adjust shows it: its name and the share it starts at ("Blend · 60% new"). */
-export const djDiscoveryLabel = (discovery: DjDiscovery, strings: Catalogue = en): string =>
-  `${strings.dj.discoverySteps[discovery]} · ${strings.discover.newShare(NEW_MUSIC_SHARE[discovery] * 100)}`;
-
 const POPULARITY_STEP: { readonly [K in DjPopularity]: MixSliderStep } = {
   trending: 1,
   balanced: DEFAULT_MIX_SLIDERS.popularity,
@@ -136,3 +132,18 @@ export const parseDjSettings = (value: unknown): DjSettings => {
         : null,
   };
 };
+
+/**
+ * The line DJ's bottom bar sums Adjust up in: the Artist variety and Music
+ * discovery steps, then each filter and the mood that's on, in Adjust's
+ * order ("Medium variety · Blend · Trending · Energetic").
+ */
+export const djSettingsSummary = (settings: DjSettings, strings: Catalogue = en): string =>
+  [
+    strings.dj.varietySummary[settings.variety],
+    strings.dj.discoverySteps[settings.discovery],
+    ...DJ_FILTERS.filter((filter) => djFilterOn(settings, filter)).map(
+      (filter) => strings.dj.filterNames[filter],
+    ),
+    ...(settings.mood === null ? [] : [strings.dj.moodNames[settings.mood]]),
+  ].join(" · ");

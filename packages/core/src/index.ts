@@ -3232,6 +3232,7 @@ export {
   djRadioSongAllowed,
   djGenreTiles,
   djGenreTile,
+  djNewToYou,
   DJ_MAX_SELECTED,
   djArtistTile,
   djCanStart,
@@ -3247,12 +3248,13 @@ export {
   DEFAULT_DJ_SETTINGS,
   DJ_DISCOVERIES,
   DJ_VARIETIES,
-  djDiscoveryLabel,
   djMixSliders,
   djNewMusicShare,
   parseDjSettings,
 } from "./djSettings.ts";
 export type { DjDiscovery, DjPopularity, DjSettings, DjVariety } from "./djSettings.ts";
+export { djAdjustGroups, djAdjustSheetHeight, djAdjustSheetSwipeCloses } from "./djAdjust.ts";
+export type { DjAdjustGroup, DjAdjustOption, DjAdjustSheetSwipe } from "./djAdjust.ts";
 export { djVarietyCandidates } from "./djVariety.ts";
 export type { DjCandidatePools } from "./djVariety.ts";
 export {
@@ -3262,10 +3264,12 @@ export {
   storedDjRemembered,
 } from "./djRemembered.ts";
 export type { DjRemembered } from "./djRemembered.ts";
+export { DJ_CARD_ARTISTS, djCardArtists } from "./djCard.ts";
 export {
   DJ_FILTERS,
   DJ_MOOD_FILTERS,
   djFilterOn,
+  djSettingsSummary,
   djToggleFilter,
   djToggleMood,
 } from "./djSettings.ts";

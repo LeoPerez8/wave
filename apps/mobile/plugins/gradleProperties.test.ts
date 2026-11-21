@@ -27,9 +27,14 @@ describe("addBuildCacheProperties", () => {
     ]);
   });
 
-  test("gives Gradle a 4 GB heap instead of prebuild's 2 GB, keeping its other JVM flags", () => {
-    assert.deepEqual(values(addBuildCacheProperties(prebuildProperties()), "org.gradle.jvmargs"), [
-      "-Xmx4g -XX:MaxMetaspaceSize=512m",
+  test("gives Gradle a 4 GB heap and 1 GB of class metadata instead of prebuild's 2 GB and 512 MB, keeping its other JVM flags", () => {
+    const properties = prebuildProperties().map((p) =>
+      p.type === "property" && p.key === "org.gradle.jvmargs"
+        ? { ...p, value: `${p.value} -XX:+HeapDumpOnOutOfMemoryError` }
+        : p,
+    );
+    assert.deepEqual(values(addBuildCacheProperties(properties), "org.gradle.jvmargs"), [
+      "-Xmx4g -XX:MaxMetaspaceSize=1g -XX:+HeapDumpOnOutOfMemoryError",
     ]);
   });
 

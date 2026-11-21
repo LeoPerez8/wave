@@ -9,7 +9,6 @@ import {
   DJ_DISCOVERIES,
   DJ_VARIETIES,
   djArtistTile,
-  djDiscoveryLabel,
   djVarietyCandidates,
   magicArtistKey,
   magicSignal,
@@ -273,14 +272,6 @@ describe("Artist variety in a DJ session", () => {
 describe("Music discovery in a DJ session", () => {
   test("offers Familiar, Blend and Discover, in that order", () => {
     assert.deepEqual(DJ_DISCOVERIES, ["familiar", "blend", "discover"]);
-  });
-
-  test("names each step with the share of new songs it starts at", () => {
-    assert.deepEqual(
-      DJ_DISCOVERIES.map((discovery) => djDiscoveryLabel(discovery)),
-      ["Familiar · 20% new", "Blend · 60% new", "Discover · 100% new"],
-    );
-    assert.equal(djDiscoveryLabel("familiar", catalogueOf("pt-BR")), "Conhecidas · 20% novas");
   });
 
   test("Adjust's text is in both languages", () => {
