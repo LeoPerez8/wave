@@ -66,6 +66,8 @@ const silence = () => {
 };
 
 test("the mini player opens from the player bar and the tray, controls playback above other windows, and comes back where it was left", async () => {
+  // Three launches: the window, a restart, and a start after its monitor is gone.
+  test.setTimeout(180_000);
   const data = mkdtempSync(join(tmpdir(), "wave-mini-"));
   const database = libraryLayer(join(data, "wave.db"));
   await Effect.runPromise(
