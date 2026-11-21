@@ -818,7 +818,8 @@ export const pendingFavorites = sqliteTable("pending_favorites", {
  * favorites use, as its queue track id (a Library song's Track id as text, a
  * YT Music song's `yt:` video), with the song as it was listed when disliked,
  * so the list of them needs no other read. A dislike outlives its song's
- * file. This phone only until the Wave account syncs them.
+ * file. They sync with the Wave account (`db/syncRows.ts`), a removed one
+ * staying as a tombstone (`deleted`).
  */
 export const dislikes = sqliteTable(
   "dislikes",
@@ -830,8 +831,12 @@ export const dislikes = sqliteTable(
     durationMs: integer("duration_ms"),
     /** When the song was disliked (the Disliked songs list is newest first). */
     dislikedAt: integer("disliked_at").notNull(),
+    ...changeStamp(),
   },
-  (t) => [index("dislikes_disliked_at_idx").on(t.dislikedAt)],
+  (t) => [
+    index("dislikes_disliked_at_idx").on(t.dislikedAt),
+    index("dislikes_pushed_idx").on(t.pushed),
+  ],
 );
 
 /**

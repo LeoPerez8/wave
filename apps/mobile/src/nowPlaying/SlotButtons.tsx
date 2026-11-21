@@ -20,7 +20,7 @@ import { slotChange, type SlotChange } from "./ChangeSlotMenu";
 import { repeatLabel } from "./QueueView";
 import { useShuffleControl } from "./ShuffleMenu";
 import { SleepTimerButton } from "./SleepTimer";
-import { AddToPlaylistButton, DownloadButton } from "./SongButtons";
+import { AddToPlaylistButton, DislikeButton, DownloadButton } from "./SongButtons";
 
 type IconProps = { size?: number; color?: string; strokeWidth?: number };
 
@@ -162,6 +162,15 @@ export function SlotButton({
           label={strings.playbackText.shareSong}
           tone="secondary"
           onPress={context.share}
+        />
+      );
+    case "dislike":
+      return (
+        <DislikeButton
+          trackId={context.trackId}
+          ytSong={context.ytSong}
+          off={off}
+          change={change}
         />
       );
     case "songMenu":

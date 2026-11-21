@@ -92,9 +92,10 @@ export const make = Effect.gen(function* () {
           playlists: true,
           favorites: true,
           plays: false,
-          // Follows and dismissed suggestions stay on the phone as they are.
+          // Follows, dismissed suggestions and dislikes stay on the phone as they are.
           follows: false,
           dismissedSuggestions: false,
+          dislikes: false,
           preferences: [],
         }),
       (error: unknown) => console.warn("[wave] Couldn't leave the Wave account", error),

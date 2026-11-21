@@ -1,4 +1,6 @@
 import {
+  currentEntry,
+  dislikeSkipsPlaying,
   dislikeSongs as dislikeChange,
   isDisliked,
   noMarkChanges,
@@ -11,6 +13,8 @@ import {
 import type { SongRow } from "@wave/client";
 import type { NativeYtSong } from "@/native/waveYtMusic";
 import { showDislikeToast } from "@/overlay/dislikeToast";
+import { skipToNext } from "@/playback/actions";
+import { queueState } from "@/playback/Queue";
 import type { FindInLibrary } from "@/ytmusic/libraryFinder";
 
 import { dislikedSongsNow, forgetDislikes, keepDislikes, loadDislikes } from "./dislikes";
@@ -30,13 +34,19 @@ interface Subject {
   readonly dislike: Omit<DislikedSong, "dislikedAt">;
   readonly track: SongRow | null;
   readonly ytSong: NativeYtSong | null;
+  /** The videos it was disliked as, which it may be playing as (a streamed song the Library has). */
+  readonly videoIds: string[];
 }
 
 const subjects = ({ tracks, ytSongs }: SongsToStar, find: FindInLibrary): Subject[] => {
   const byKey = new Map<string, Subject>();
-  const addTrack = (track: SongRow): void => {
+  const addTrack = (track: SongRow, videoId?: string): void => {
     const key = String(track.id);
-    if (byKey.has(key)) return;
+    const known = byKey.get(key);
+    if (known !== undefined) {
+      if (videoId !== undefined) known.videoIds.push(videoId);
+      return;
+    }
     byKey.set(key, {
       dislike: {
         key,
@@ -46,13 +56,14 @@ const subjects = ({ tracks, ytSongs }: SongsToStar, find: FindInLibrary): Subjec
       },
       track,
       ytSong: null,
+      videoIds: videoId === undefined ? [] : [videoId],
     });
   };
   for (const track of tracks) addTrack(track);
   for (const ytSong of ytSongs) {
     const track = find(ytSong);
     if (track !== null) {
-      addTrack(track);
+      addTrack(track, ytSong.videoId);
       continue;
     }
     const key = ytTrackId(ytSong.videoId);
@@ -66,6 +77,7 @@ const subjects = ({ tracks, ytSongs }: SongsToStar, find: FindInLibrary): Subjec
       },
       track: null,
       ytSong,
+      videoIds: [ytSong.videoId],
     });
   }
   return [...byKey.values()];
@@ -102,8 +114,10 @@ const write = (changes: MarkChanges<Subject>, find: FindInLibrary): Promise<void
  * Music's ([find] says which YT Music songs the Library has). A dislike
  * unstars the song and is confirmed by a toast whose Undo puts back what was
  * there, the star included; removing one says nothing, as unstarring does.
- * Resolves once the changes are saved, so what follows a dislike (a skip)
- * runs after it.
+ * Once the changes are saved, a dislike of the song that is playing skips to
+ * the next one, in any queue, as the Next button does (Core's
+ * `dislikeSkipsPlaying`); removing a dislike never skips, and Undo doesn't go
+ * back to the song. Resolves after the save and the skip.
  */
 export const dislikeSongs = async (
   songs: SongsToStar,
@@ -130,6 +144,13 @@ export const dislikeSongs = async (
   const saved = write(changes, find);
   showDislikeToast(on, changes.dislike.length, () => void write(undo, find));
   await saved;
+  if (!on) return;
+  const playing = currentEntry(queueState.get())?.trackId ?? null;
+  const set = changes.dislike.flatMap(({ track, videoIds }) => [
+    { id: track?.id },
+    ...videoIds.map((videoId) => ({ videoId })),
+  ]);
+  if (dislikeSkipsPlaying(playing, set)) await skipToNext();
 };
 
 /**

@@ -1620,7 +1620,10 @@ export {
   readPullPage,
   syncFieldFits,
 } from "./syncWire.ts";
+export { settleMarks } from "./syncMarks.ts";
+export type { MarkStamp, SettledMarks } from "./syncMarks.ts";
 export type {
+  SyncDislike,
   SyncDismissedSuggestion,
   SyncFavorite,
   SyncFieldKind,
@@ -2434,6 +2437,7 @@ export type {
   SongIdentity,
   SongMarks,
 } from "./dislikes.ts";
+export { dislikeSkipsPlaying } from "./dislikeSkip.ts";
 export { dislikedSongRows } from "./dislikedSongsPage.ts";
 export type { DislikedSongRow } from "./dislikedSongsPage.ts";
 export { queuedToast } from "./queuedToast.ts";

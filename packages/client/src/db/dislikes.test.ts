@@ -38,10 +38,17 @@ describe("dislikes", () => {
 
   test("a removed dislike is gone, the others stay", () => {
     setDislikes(db, [song("7", "Get Lucky"), song("yt:abc", "Contact")], 1_000);
-    removeDislikes(db, ["7", "7", "unknown"]);
+    removeDislikes(db, ["7", "7", "unknown"], 2_000);
     assert.deepEqual(
       selectDislikes(db).map((dislike) => dislike.key),
       ["yt:abc"],
     );
+  });
+
+  test("a song disliked again after its dislike was removed is disliked since then", () => {
+    setDislikes(db, [song("7", "Get Lucky")], 1_000);
+    removeDislikes(db, ["7"], 2_000);
+    setDislikes(db, [song("7", "Get Lucky")], 3_000);
+    assert.deepEqual(selectDislikes(db), [{ ...song("7", "Get Lucky"), dislikedAt: 3_000 }]);
   });
 });
