@@ -23,7 +23,7 @@ import {
 } from "@wave/core";
 import { IconArrowLeft, IconSearch, IconX } from "@tabler/icons-react-native";
 import * as Effect from "effect/Effect";
-import { type ComponentRef, useEffect, useMemo, useRef, useState } from "react";
+import { type ComponentRef, memo, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { ActivityIndicator, ScrollView, Text, View, useWindowDimensions } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
@@ -36,6 +36,7 @@ import { SkeletonGroup } from "@/catalog/Skeletons";
 import { SkeletonLine } from "@/catalog/SkeletonLine";
 import { IconButton } from "@/components/IconButton";
 import { RecommendationsFailed } from "@/components/RecommendationsFailed";
+import { StagedSections } from "@/components/StagedSections";
 import { TextButton } from "@/components/TextButton";
 import { useBuiltArtistMixes } from "@/home/discoverMixes";
 import { magicQueueGrid } from "@/home/homeOpening";
@@ -207,17 +208,20 @@ const useDjGrid = () => {
     (): LibraryArtists => new Map(libraryArtists.map((artist) => [artist.id, artist])),
     [libraryArtists],
   );
-  const toggle = (key: DjTileKey): void =>
-    setState(
-      (current) =>
-        current &&
-        djReduce(current, {
-          type: "toggle",
-          key,
-          graph: recommendationSnapshot.peek().graph,
-          library: libraryArtists,
-        }),
-    );
+  const toggle = useCallback(
+    (key: DjTileKey): void =>
+      setState(
+        (current) =>
+          current &&
+          djReduce(current, {
+            type: "toggle",
+            key,
+            graph: recommendationSnapshot.peek().graph,
+            library: libraryArtists,
+          }),
+      ),
+    [libraryArtists],
+  );
   const add = (tile: DjTile): void =>
     setState((current) =>
       djReduce(current ?? djOpened([]), {
@@ -283,21 +287,22 @@ function TilesSkeleton({ size, fontScale }: { size: number; fontScale: number })
  * An artist tile: a circle with the artist's image, the name under it, and a
  * check over the circle once selected. A screen reader hears its kind, its
  * name and whether it's selected. A tile the seed has no room for is dimmed.
+ * Memoized with a stable `onToggle`, so a tap redraws the tiles it changes.
  */
-function ArtistTile({
+const ArtistTile = memo(function ArtistTile({
   tile,
   artist,
   size,
   selected,
   selectable,
-  onPress,
+  onToggle,
 }: {
   tile: DjArtistTile;
   artist: ArtistRow | undefined;
   size: number;
   selected: boolean;
   selectable: boolean;
-  onPress: () => void;
+  onToggle: (key: DjTileKey) => void;
 }) {
   const { strings } = useLocalisation();
   const { image } = usePlayedArtist(
@@ -313,7 +318,7 @@ function ArtistTile({
         width={size}
         label={strings.dj.artistTile(tile.name)}
         checked={selected}
-        onPress={onPress}
+        onPress={() => onToggle(tile.key)}
       >
         <View style={{ width: size, height: size }}>
           <ArtistImage artist={image} size={size} large />
@@ -325,7 +330,7 @@ function ArtistTile({
       </CardTile>
     </View>
   );
-}
+});
 
 /**
  * An album tile: a square cover, the album's title and artist under it, and
@@ -333,18 +338,18 @@ function ArtistTile({
  * title and artist and whether it's selected. A tile the seed has no room
  * for is dimmed.
  */
-function AlbumTile({
+const AlbumTile = memo(function AlbumTile({
   tile,
   size,
   selected,
   selectable,
-  onPress,
+  onToggle,
 }: {
   tile: DjAlbumTile;
   size: number;
   selected: boolean;
   selectable: boolean;
-  onPress: () => void;
+  onToggle: (key: DjTileKey) => void;
 }) {
   const { strings } = useLocalisation();
   return (
@@ -357,7 +362,7 @@ function AlbumTile({
         width={size}
         label={strings.dj.albumTile(tile.name, tile.artist)}
         checked={selected}
-        onPress={onPress}
+        onPress={() => onToggle(tile.key)}
       >
         <View style={{ width: size, height: size }}>
           <Artwork uri={tile.cover ?? undefined} size={size} radius={CELL * 0.75} />
@@ -370,7 +375,7 @@ function AlbumTile({
       </CardTile>
     </View>
   );
-}
+});
 
 /**
  * The place a row holds while its artist's page loads: a still circle and a
@@ -434,6 +439,17 @@ export function DjScreen() {
   const seed = useMemo(() => (state === undefined ? [] : djSeedTiles(state)), [state]);
   const cells = useMemo(() => (state === undefined ? [] : djCells(state)), [state]);
   const loading = done === "loading";
+  // One stable handler for every tile, so a tap redraws only the tiles whose selection changed.
+  const onToggle = useCallback(
+    (key: DjTileKey): void => {
+      setDone("idle");
+      toggle(key);
+    },
+    [toggle],
+  );
+  // A tile's row, over the tiles a row holds, for mounting the grid a screen at a time.
+  const perRow = Math.max(1, Math.floor((available + CELL) / (size + CELL)));
+  const cellEstimate = (size + CELL + titleLineHeight(fontScale) + CELL * 2) / perRow;
   const canStart = state !== undefined && djCanStart(state);
   // Done for this opening; leaving DJ (Close, Android's Back) cancels a start
   // still loading, so it never replaces the queue nor closes another screen.
@@ -534,31 +550,30 @@ export function DjScreen() {
                 rowGap: CELL * 2,
               }}
             >
-              {cells.map((cell) => {
-                if (cell.kind === "placeholder" || state === undefined)
-                  return <PlaceholderTile key={cell.key} size={size} fontScale={fontScale} />;
-                const { tile } = cell;
-                const picking = {
-                  size,
-                  selected: djSelected(state, tile.key),
-                  // A selection can't change while its first batch is read.
-                  selectable: !loading && djSelectable(state, tile.key),
-                  onPress: () => {
-                    setDone("idle");
-                    toggle(tile.key);
-                  },
-                };
-                return tile.kind === "album" ? (
-                  <AlbumTile key={cell.key} tile={tile} {...picking} />
-                ) : (
-                  <ArtistTile
-                    key={cell.key}
-                    tile={tile}
-                    artist={tile.libraryId === null ? undefined : artists.get(tile.libraryId)}
-                    {...picking}
-                  />
-                );
-              })}
+              <StagedSections estimate={cellEstimate}>
+                {cells.map((cell) => {
+                  if (cell.kind === "placeholder" || state === undefined)
+                    return <PlaceholderTile key={cell.key} size={size} fontScale={fontScale} />;
+                  const { tile } = cell;
+                  const picking = {
+                    size,
+                    selected: djSelected(state, tile.key),
+                    // A selection can't change while its first batch is read.
+                    selectable: !loading && djSelectable(state, tile.key),
+                    onToggle,
+                  };
+                  return tile.kind === "album" ? (
+                    <AlbumTile key={cell.key} tile={tile} {...picking} />
+                  ) : (
+                    <ArtistTile
+                      key={cell.key}
+                      tile={tile}
+                      artist={tile.libraryId === null ? undefined : artists.get(tile.libraryId)}
+                      {...picking}
+                    />
+                  );
+                })}
+              </StagedSections>
             </View>
           )}
         </View>

@@ -133,7 +133,7 @@ function ReleaseRow({
   const releases = useMemo(() => ytAlbumSelectionOf(selection), [selection]);
   return (
     <View style={{ height: SHELF_ROW }}>
-      <CoverRow>
+      <CoverRow staged>
         {covers.map(({ kind, release: { album, library } }) =>
           library === null ? (
             <YtReleaseTile
