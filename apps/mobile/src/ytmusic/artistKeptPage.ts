@@ -25,15 +25,15 @@ import {
 } from "@wave/core";
 import * as Effect from "effect/Effect";
 import * as Result from "effect/Result";
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
 
 import { persistedSetting } from "@/lib/persistedSetting";
 import { useScreenSight } from "@/lib/screenSight";
-import { useSettledOnce } from "@/lib/screenTiming";
+import { useScreenSettled, useSettledOnce } from "@/lib/screenTiming";
 import { isScreenSettled } from "@/lib/timing";
 import { appRuntime } from "@/library/runtime";
 import { appLog } from "@/log/appLog";
-import { online } from "@/native/waveNative";
+import { online, subscribeConnectivity } from "@/native/waveNative";
 import type { NativeYtSong } from "@/native/waveYtMusic";
 import { useYtMusicEnabled, ytMusicEnabled } from "@/settings/ytMusic";
 
@@ -92,7 +92,10 @@ export interface ArtistKeptPageShown {
  * search takes its turn in the shared allowance (as "an artist page"), each
  * request checks sight, settlement, YT Music's switch and Android's
  * connectivity as it runs, and leaving the page stops it with nothing saved.
- * While the section itself asks, its answer is the lookup. Only the artist's
+ * The lookup waits while the page is out of sight, unsettled or offline, and
+ * one that couldn't be sent (offline, YT Music off) is tried again once it
+ * can be. While the section itself asks, its answer is the lookup; one that
+ * fails leaves the lookup to run. Only the artist's
  * name, their browse id and, for a page kept with every song of theirs, their
  * songs playlist's id are sent.
  */
@@ -102,21 +105,25 @@ export const useArtistKeptPage = (
   section: {
     readonly saved: Saved | null | undefined;
     readonly asking: () => boolean;
+    readonly loading: boolean;
   },
 ): ArtistKeptPageShown => {
   const key = identityKey(name);
   const enabled = useYtMusicEnabled();
   const settled = useSettledOnce(key);
+  // Live, unlike [settled]: a lookup due while the page is covered waits for it to come back.
+  const settledNow = useScreenSettled();
+  const isOnline = useSyncExternalStore(subscribeConnectivity, online);
   const sight = useScreenSight();
   // The lookup's own answer this opening, beside what the section restored or was answered.
   const [answer, setAnswer] = useState<{ readonly key: string; readonly saved: Saved } | null>(
     null,
   );
-  const { saved: restored, asking } = section;
+  const { saved: restored, asking, loading } = section;
   const saved =
     restored === undefined ? undefined : newer(answer?.key === key ? answer.saved : null, restored);
 
-  // One lookup per artist per opening; leaving the page, or another artist on it, stops it.
+  // One lookup per artist per opening, marked once it's sent; leaving the page, or another artist on it, stops it.
   const asked = useRef<string | null>(null);
   const leaving = useRef<AbortController | null>(null);
   useEffect(() => {
@@ -131,17 +138,17 @@ export const useArtistKeptPage = (
     const due = artistPageLookupDue({
       name,
       enabled,
-      online: online(),
-      settled,
+      online: isOnline,
+      settled: settledNow,
       contentReady,
       saved,
       failedAt: artistPageLookupFailedAt(failures.get(), name),
       now: Date.now(),
     });
-    if (!due) return;
+    // The section's own request reads the same page and saves it; once it ends
+    // (`loading`), its answer is in [saved] or the lookup runs.
+    if (!due || asking()) return;
     asked.current = key;
-    // The section's own request reads the same page and saves it.
-    if (asking()) return;
     const canSend = () =>
       !signal.aborted && sight.visible() && isScreenSettled() && ytMusicEnabled() && online();
     const lookup = artistOpeningRequest(
@@ -155,14 +162,19 @@ export const useArtistKeptPage = (
     void appRuntime.runPromise(Effect.result(lookup), { signal }).then(
       (result) => {
         if (signal.aborted) return;
-        if (Result.isFailure(result)) return lookupEnded(name, result.failure.reason);
+        if (Result.isFailure(result)) {
+          const { reason } = result.failure;
+          // Nothing was sent: it's tried again once it can be.
+          if (reason === "offline" || reason === "disabled") asked.current = null;
+          return lookupEnded(name, reason);
+        }
         lookupEnded(name, result.success.outcome);
         setAnswer({ key, saved: result.success });
       },
       // Interrupted: the page is gone, and nothing was saved.
       () => {},
     );
-  }, [key, name, enabled, settled, contentReady, saved, asking, sight]);
+  }, [key, name, enabled, isOnline, settledNow, contentReady, saved, asking, loading, sight]);
 
   const kept = useMemo(() => artistPageKept(saved ?? null, enabled), [saved, enabled]);
   const similar = useSimilarArtists(kept.similar, settled);

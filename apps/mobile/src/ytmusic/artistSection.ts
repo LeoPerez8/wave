@@ -299,6 +299,8 @@ export interface YtArtistSectionShown {
   readonly saved: Saved | null | undefined;
   /** Whether the section is asking YouTube Music right now, read live. */
   readonly asking: () => boolean;
+  /** Whether the section was asking as it last rendered: an ask that ends renders again. */
+  readonly loading: boolean;
 }
 
 /**
@@ -396,7 +398,8 @@ export const useYtArtistSection = (
     [find, state, name, enabled, openedAt, openedIntegrated, always, pick, findAlbum],
   );
   const saved = state.status === "reading" ? undefined : state.saved;
-  return { view, shelves, popular, integrated, toggle, counts, find, saved, asking };
+  const loading = state.status === "loading";
+  return { view, shelves, popular, integrated, toggle, counts, find, saved, asking, loading };
 };
 
 /**
