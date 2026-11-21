@@ -43,10 +43,16 @@ import { useYtMusicEnabled } from "@/settings/ytMusic";
 import type { Ranked } from "@/stats/Stats";
 import { openDiscoverMix, openYtPlaylist } from "@/ytmusic/routes";
 import { openYtSongActions } from "@/ytmusic/YtSongActions";
-import { discoverMixItem, playlistItem, trackItem, ytTrackItem } from "@/playback/mixedItems";
+import {
+  discoverMixItem,
+  playlistItem,
+  trackItem,
+  ytTrackItem,
+  type MixedItem,
+} from "@/playback/mixedItems";
 import { MenuChoices } from "@/overlay/MenuChoices";
 import { openOverlay } from "@/overlay/overlay";
-import { type HomeSelection } from "@/selection/useHomeSelection";
+import { type HomeSelection, useHomeTiles } from "@/selection/useHomeSelection";
 
 import {
   refreshMixes,
@@ -320,12 +326,14 @@ function DiscoverMixRow({
   selection: HomeSelection;
 }) {
   const { strings } = useLocalisation();
+  const items = mixes.map(discoverMixItem);
+  useHomeTiles(selection, items);
   return (
     <PullRefreshRow onRefresh={onRefresh} enabled={!refreshing && !selection.selecting}>
       {mixes.map((mix, place) => {
         const caption = discoverMixCaption(mix, strings);
         const shows = [mix.id, caption.artworkUrl, caption.title, caption.artists, caption.line];
-        const item = selection.remember(discoverMixItem(mix));
+        const item = items[place]!;
         return (
           // oxlint-disable-next-line react/no-array-index-key -- a place crossfades from the mix it had to the one it has now
           <Crossfade key={place} swapKey={shows.join("\n")}>
@@ -578,7 +586,8 @@ function LibraryTile({
   selection: HomeSelection;
 }) {
   const { strings } = useLocalisation();
-  const item = selection.remember(trackItem(song));
+  const item = trackItem(song);
+  useHomeTiles(selection, [item]);
   return (
     <SongCard
       title={song.title}
@@ -612,7 +621,8 @@ function StreamedTile({
 }) {
   const { strings } = useLocalisation();
   const artist = ytSongArtist(song);
-  const item = selection.remember(ytTrackItem(song as import("@/native/waveYtMusic").NativeYtSong));
+  const item = ytTrackItem(song as import("@/native/waveYtMusic").NativeYtSong);
+  useHomeTiles(selection, [item]);
   return (
     <SongCard
       title={song.title}
@@ -689,11 +699,11 @@ function OrbitTile({
   const { strings } = useLocalisation();
   const { title, album } = seed.song;
   const artist = seed.source === "library" ? seed.song.artist : ytSongArtist(seed.song);
-  const item = selection.remember(
+  const item =
     seed.source === "library"
       ? trackItem(seed.song)
-      : ytTrackItem(seed.song as import("@/native/waveYtMusic").NativeYtSong),
-  );
+      : ytTrackItem(seed.song as import("@/native/waveYtMusic").NativeYtSong);
+  useHomeTiles(selection, [item]);
   return (
     <SongCard
       title={title}
@@ -768,14 +778,16 @@ function InYourOrbit({ title, selection }: SectionProps) {
 function FromYourLibrary({ title, selection }: SectionProps) {
   const { strings } = useLocalisation();
   const playlists = useFromYourLibrary();
+  const items = (playlists ?? []).map(playlistItem);
+  useHomeTiles(selection, items);
   if (playlists === undefined) return <HomeSectionSpace id="from-your-library" />;
   if (playlists.length === 0) return null;
   return (
     <TitledSection title={title} selecting={selection.selecting}>
       <CoverRow>
-        {playlists.map((playlist) =>
+        {playlists.map((playlist, place) =>
           (() => {
-            const item = selection.remember(playlistItem(playlist));
+            const item = items[place]!;
             return (
               <PlaylistCard
                 key={playlist.id}
@@ -842,21 +854,23 @@ const openHomePlaylistSelectMenu = (
 function CommunityPlaylists({ title, selection }: SectionProps) {
   const { strings } = useLocalisation();
   const playlists = useCommunityPlaylists();
+  const items = playlists.map((playlist): MixedItem => ({
+    kind: "ytPlaylist",
+    item: {
+      playlistId: playlist.playlistId,
+      title: playlist.title,
+      author: playlist.author ?? "",
+      artworkUrl: playlist.artworkUrl,
+    },
+  }));
+  useHomeTiles(selection, items);
   if (playlists.length === 0) return null;
   return (
     <TitledSection title={title} selecting={selection.selecting}>
       <CoverRow>
-        {playlists.map((playlist) => {
+        {playlists.map((playlist, place) => {
           const author = playlist.author ?? "";
-          const item = selection.remember({
-            kind: "ytPlaylist",
-            item: {
-              playlistId: playlist.playlistId,
-              title: playlist.title,
-              author,
-              artworkUrl: playlist.artworkUrl,
-            },
-          });
+          const item = items[place]!;
           return (
             <PlaylistCard
               key={playlist.playlistId}
@@ -959,7 +973,8 @@ const INERT_HOME_SELECTION: HomeSelection = {
   start: () => undefined,
   toggle: () => undefined,
   end: () => undefined,
-  remember: (item) => item,
+  show: () => undefined,
+  hide: () => undefined,
 };
 
 /**

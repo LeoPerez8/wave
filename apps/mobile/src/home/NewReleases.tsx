@@ -37,7 +37,7 @@ import { hideRelease } from "./followReleases";
 import { playNewReleases } from "./playNewReleases";
 import { useHomeFollow } from "./useHomeFollow";
 import { followReleaseItem } from "@/playback/mixedItems";
-import type { HomeSelection } from "@/selection/useHomeSelection";
+import { type HomeSelection, useHomeTiles } from "@/selection/useHomeSelection";
 import { TileCheck } from "@/catalog/CheckCell";
 
 const guardedRequest = <A,>(read: Effect.Effect<A, YtMusicError>) =>
@@ -110,7 +110,8 @@ function ReleaseTile({
     { action: "goToArtist", label: copy.goToArtist, onPress: () => openYtArtistNamed(follow.name) },
     { action: "removeFromLibrary", label: copy.hide, onPress: hide },
   ];
-  const item = selection.remember(followReleaseItem(release, follow.name));
+  const item = followReleaseItem(release, follow.name);
+  useHomeTiles(selection, [item]);
   const select = () => selection.start(item);
   const open = () =>
     run(async () => {

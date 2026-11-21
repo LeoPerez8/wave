@@ -239,6 +239,8 @@ export const libraryEn = {
   noAnswerTryLater: "No answer online. Try again in a moment.",
   offline: "You're offline",
   noAnswer: "No answer online",
+  /** A checked played album whose songs an action looked for on YouTube Music and didn't find. */
+  albumNotOnYtMusic: "This album isn't on YouTube Music.",
   songsNeedNetwork: "These songs need the network.",
   songsCouldntLoad: "The songs couldn't be loaded. Try again.",
   /** A YT Music playlist whose later pages didn't load (`ytPlaylistRestLine`). */
