@@ -29,6 +29,7 @@ export function YtPage({
   revision,
   go,
   onSongMenu,
+  onError,
 }: {
   readonly route: YtRoute;
   readonly run: Run;
@@ -36,6 +37,8 @@ export function YtPage({
   readonly revision: number;
   readonly go: (route: YtRoute) => void;
   readonly onSongMenu: (row: BrowseRow, event: MouseEvent<HTMLElement>) => void;
+  /** Shows [message] as the window's error line. */
+  readonly onError: (message: string) => void;
 }) {
   switch (route.kind) {
     case "discover":
@@ -51,6 +54,7 @@ export function YtPage({
           onSongMenu={onSongMenu}
           onAlbum={(id) => go({ kind: "ytAlbum", id })}
           onArtist={(id) => go({ kind: "ytArtist", id })}
+          onError={onError}
         />
       );
     case "ytAlbum":

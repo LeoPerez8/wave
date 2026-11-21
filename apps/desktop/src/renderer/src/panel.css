@@ -142,6 +142,53 @@
   position: relative;
   padding: 24px 18px 40%;
 }
+.lyrics-view {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+}
+/* The view's buttons, at the end of a row above the lines. */
+.lyrics-header {
+  flex: none;
+  display: flex;
+  justify-content: flex-end;
+  gap: 4px;
+  padding: 8px 14px 0;
+}
+.lyrics-header button[aria-pressed="true"] {
+  color: var(--color-accent);
+}
+.lyrics-header + .lyrics-scroll {
+  padding-top: 10px;
+}
+.translation-note {
+  display: flex;
+  align-items: baseline;
+  flex-wrap: wrap;
+  gap: 4px 8px;
+  margin: 0 0 14px;
+  padding: 0 8px;
+  color: var(--color-secondary);
+  font-size: 14px;
+}
+/* Under a line's words, lit and dimmed with the line. */
+.lyric-translation,
+.lyric-translation-skeleton {
+  display: block;
+  margin-top: 2px;
+}
+.lyric-translation {
+  font-size: 0.82em;
+  font-weight: 400;
+  color: color-mix(in srgb, var(--color-foreground) 72%, transparent);
+}
+.lyric-translation-skeleton {
+  height: 0.82em;
+  margin-top: 6px;
+  border-radius: 4px;
+  background: var(--color-fill);
+}
 .lyric-lines {
   display: flex;
   flex-direction: column;
