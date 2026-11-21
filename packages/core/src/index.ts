@@ -702,6 +702,7 @@ export {
   sameSongSort,
   SONG_SORTS,
   librarySongSort,
+  songBrowseOrderTerms,
   songOrderTerms,
   songSpineField,
   songSortLabel,

@@ -28,16 +28,19 @@ export const tableRange = (anchor: number, focus: number) => ({
   end: Math.max(anchor, focus),
 });
 
-/** Shift-arrows keep their original anchor until the next ordinary move. */
+/** Shift-arrows keep their original anchor. An empty table has no range. */
 export const extendTableRange = (
   anchor: number | undefined,
   focused: number,
   total: number,
   step: -1 | 1,
-) => ({
-  anchor: anchor ?? focused,
-  focus: Math.max(0, Math.min(total - 1, focused + step)),
-});
+) =>
+  total === 0
+    ? null
+    : {
+        anchor: anchor ?? focused,
+        focus: Math.max(0, Math.min(total - 1, focused + step)),
+      };
 
 /** The first toggle starts from the ordinary clicked row, when there is one. */
 export const toggleTableRow = <K>(

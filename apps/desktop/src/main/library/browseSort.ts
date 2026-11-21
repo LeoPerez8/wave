@@ -11,11 +11,10 @@ import {
   syncedBucket,
   withSyncedBucketEntry,
   type PlaylistSongSort,
-  librarySongSort,
   libraryTableSortsFor,
   nextHeaderSort,
   readLibraryTableSort,
-  songOrderTerms,
+  songBrowseOrderTerms,
   songSpineField,
   writeSongSort,
   type SongOrderField,
@@ -85,7 +84,7 @@ export const togglePlaylistSort = (
 };
 
 /** Fields projected by the songs query in browse.ts. */
-const columns: Record<SongOrderField, SQL> = {
+const columns: Record<SongOrderField | "starredAt", SQL> = {
   titleSort: sql`sort`,
   artistSort: sql`artistSort`,
   albumSort: sql`albumSort`,
@@ -93,28 +92,22 @@ const columns: Record<SongOrderField, SQL> = {
   discNumber: sql`disc`,
   trackNumber: sql`trackNumber`,
   addedAt: sql`addedAt`,
+  starredAt: sql`starredAt`,
   path: sql`path`,
   id: sql`id`,
 };
 
 /** Core's primary and tie orders, applied before paging or starting playback. */
 export const songBrowseOrder = (sort: SongSort): SQL => {
-  const terms = songOrderTerms(librarySongSort(sort));
-  const seen = new Set<SongOrderField>();
-  const order = terms
-    .filter(({ field }) => !seen.has(field) && seen.add(field))
-    .map(({ field, descending, nullAs }) => {
-      const column = columns[field];
-      const value = nullAs === undefined ? column : sql`coalesce(${column}, ${nullAs})`;
-      return descending ? desc(value) : asc(value);
-    });
-  if (sort.key === "starred")
-    order.unshift(sort.descending ? desc(sql`starredAt`) : asc(sql`starredAt`));
+  const order = songBrowseOrderTerms(sort).map(({ field, descending, nullAs }) => {
+    const column = columns[field];
+    const value = nullAs === undefined ? column : sql`coalesce(${column}, ${nullAs})`;
+    return descending ? desc(value) : asc(value);
+  });
   return sql.join(order, sql`, `);
 };
 
 export const songBrowseSpine = (sort: SongSort): SQL | undefined => {
-  if (sort.key === "starred" || sort.key === "popular") return undefined;
-  const field = songSpineField(librarySongSort(sort));
+  const field = songSpineField(sort);
   return field === undefined ? undefined : columns[field];
 };

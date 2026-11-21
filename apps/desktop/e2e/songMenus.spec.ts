@@ -233,10 +233,19 @@ test("table gestures select off-screen songs and right-click uses the clicked ro
   });
   try {
     const page = await app.firstWindow();
-    await page.getByRole("button", { name: "Songs", exact: true }).click();
     const grid = page.getByRole("grid");
-    const row = (index: number) => grid.getByRole("row", { name: new RegExp(title(index)) });
     const bar = page.getByRole("toolbar", { name: text.library.selectionActions });
+
+    await page.getByRole("button", { name: "Favorites", exact: true }).click();
+    await expect(grid).toHaveAttribute("aria-rowcount", "1");
+    await grid.press("Shift+ArrowDown");
+    await grid.press("Shift+ArrowUp");
+    await expect(grid).toBeFocused();
+    await expect(grid).not.toHaveAttribute("aria-activedescendant", /.+/);
+    await expect(bar).toBeHidden();
+
+    await page.getByRole("button", { name: "Songs", exact: true }).click();
+    const row = (index: number) => grid.getByRole("row", { name: new RegExp(title(index)) });
     const count = (n: number) => bar.getByText(text.library.selected(n));
     const favorited = (index: number) =>
       expect.poll(

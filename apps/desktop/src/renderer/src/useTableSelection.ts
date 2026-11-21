@@ -107,20 +107,23 @@ export function useTableSelection({
       clicked.current = index;
     },
     key(command: DesktopCommand, active: number, move: (index: number) => void) {
-      if (onSelection === undefined || total === 0) return false;
+      if (onSelection === undefined) return false;
       if (command === "extendUp" || command === "extendDown") {
-        const { anchor, focus } = extendTableRange(
+        const extension = extendTableRange(
           keyboardAnchor.current,
           active,
           total,
           command === "extendDown" ? 1 : -1,
         );
+        if (extension === null) return false;
+        const { anchor, focus } = extension;
         keyboardAnchor.current = anchor;
         setOrdinary(undefined);
         move(focus);
         void range(anchor, focus);
         return true;
       }
+      if (total === 0) return false;
       keyboardAnchor.current = undefined;
       if (command === "selectAllRows") {
         cancel();
