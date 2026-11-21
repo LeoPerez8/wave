@@ -48,7 +48,7 @@ const rowDate = (date: number | undefined) => {
 export const time = formatDuration;
 const images = new Map<string, Promise<string | null>>();
 /** A streamed cover at the largest size YouTube has (Core's `streamedCoverUrls`), else [url] itself. */
-const largestCover = async (url: string): Promise<string | null> => {
+export const largestCover = async (url: string): Promise<string | null> => {
   for (const asked of [...streamedCoverUrls(url), url]) {
     const image = await window.wave.yt.artwork(asked).catch(() => null);
     if (image !== null) return image;

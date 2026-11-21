@@ -1,7 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import { desktopSelectionActions, desktopSongActions } from "./desktopSongMenu.ts";
-import { catalogueOf } from "./localisation.ts";
 
 const song = { albumId: 7, artistIds: [3], favorite: false };
 const actions = (subject: Parameters<typeof desktopSongActions>[0]) =>
@@ -20,14 +19,14 @@ test("a song's menu holds the desktop's entries in the phone's order", () => {
   ]);
 });
 
-test("Magic Queue, Copy Link and Fix Song join the menu once their features do", () => {
+test("Magic Queue, Share and Fix Song join the menu once their features do", () => {
   assert.deepEqual(
     actions({
       items: [{ ...song, fixable: true }],
       selectable: true,
       ytMusic: true,
       onlineLookups: true,
-      copyLink: true,
+      share: true,
     }),
     [
       "playNext",
@@ -43,13 +42,11 @@ test("Magic Queue, Copy Link and Fix Song join the menu once their features do",
       "removeFromLibrary",
     ],
   );
-  assert.equal(catalogueOf("en", "desktop").itemActions.labels.share, "Copy Link");
-  assert.equal(catalogueOf("pt-BR", "desktop").itemActions.labels.share, "Copiar Link");
 });
 
 test("the selection bar acts on every checked song and leaves out the single-song entries", () => {
   const other = { albumId: 8, artistIds: [4], favorite: true };
-  assert.deepEqual(actions({ items: [song, other], surface: "selection", copyLink: true }), [
+  assert.deepEqual(actions({ items: [song, other], surface: "selection", share: true }), [
     "playNext",
     "addToQueue",
     "addToPlaylist",

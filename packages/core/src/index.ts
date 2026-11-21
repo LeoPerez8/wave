@@ -2888,6 +2888,8 @@ export { scanPath, scanPathKey, scanPathWithin, scanFileState } from "./desktopS
 export type { ScanFolder } from "./desktopScan.ts";
 export type { MarqueeLine, MarqueeLineSize, MarqueePlan } from "./marquee.ts";
 export { desktopSelectionActions, desktopSongActions } from "./desktopSongMenu.ts";
+export { desktopSongShareMenu, spotifyRecordingLink } from "./desktopSongShare.ts";
+export type { DesktopShareItem, SpotifyRecordingAnswer } from "./desktopSongShare.ts";
 export type { DesktopSelectionItem, DesktopSongSubject } from "./desktopSongMenu.ts";
 export { DESKTOP_SHORTCUTS, desktopKey, shortcutKeys } from "./desktopKeys.ts";
 export {

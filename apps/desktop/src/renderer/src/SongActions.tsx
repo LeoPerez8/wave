@@ -27,7 +27,7 @@ import {
   type SongTarget,
 } from "../../shared/songActions.ts";
 import { Menu, type MenuItem, type OpenMenu } from "./Menu.tsx";
-import { copyLink } from "./copyLink.ts";
+import { songShareItems } from "./SongShare.tsx";
 import { songActionToast } from "./songActionToast.ts";
 import { language, text } from "./text.ts";
 import type { TableSelectionProps } from "./useTableSelection.ts";
@@ -246,10 +246,8 @@ export function useSongActions({ go, select, failed, changed, newPlaylist }: Opt
         case "share":
           return {
             ...base,
-            run: () => {
-              finish();
-              void copyLink(window.wave.links.copySong(target));
-            },
+            submenu: text.itemActions.labels.share,
+            open: () => songShareItems(target, (message) => notify(message)),
           };
         case "magicQueue":
           return {
@@ -271,7 +269,7 @@ export function useSongActions({ go, select, failed, changed, newPlaylist }: Opt
           return { ...base, disabled: true };
       }
     },
-    [go, run, select, changed, failed, newPlaylist],
+    [go, run, select, changed, failed, newPlaylist, notify],
   );
 
   /** Opens a song or selection menu at [at]. */

@@ -3133,6 +3133,16 @@ test("Copy Link puts a song's share link on the clipboard, and pasted text that 
       await assert.rejects(call("links.open", 7), /refused/i);
       await assert.rejects(call("links.open", "x".repeat(16_385)), /refused/i);
       await assert.rejects(call("links.copySong", "not a video"), /refused/i);
+      await assert.rejects(call("links.songShare", "not a video"), /refused/i);
+      await assert.rejects(call("links.copyShareLink", "https://example.com/"), /refused/i);
+      assert.deepEqual(
+        await wave.links.copyShareLink("https://music.youtube.com/watch?v=abcdefghijk"),
+        {
+          kind: "copied",
+          message: "Link copied",
+        },
+      );
+      copied.pop();
       await assert.rejects(call("links.copyPlaylist", 0), /refused/i);
       await assert.rejects(call("links.importPlaylist", "token", "yes"), /refused/i);
       // Main answers in the language it resolved, whatever the window believes.
