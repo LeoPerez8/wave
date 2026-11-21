@@ -91,8 +91,7 @@ const renderWithin = (
   let named: Span | undefined;
   for (const span of overlapping) {
     const part = overlap(span, from, to);
-    if (part * 2 >= held && (named === undefined || part < overlap(named, from, to)))
-      named = span;
+    if (part * 2 >= held && (named === undefined || part < overlap(named, from, to))) named = span;
   }
   return { name: named!.name, held };
 };
@@ -138,7 +137,11 @@ export const createJsBlockLog = ({ write, screen }: JsBlockLogPorts): JsBlockLog
       };
     },
     renderRan: (name, startedAt, durationMs) => {
-      keep(renders, { name, from: startedAt, to: startedAt + durationMs, logged: false }, KEPT_RENDERS);
+      keep(
+        renders,
+        { name, from: startedAt, to: startedAt + durationMs, logged: false },
+        KEPT_RENDERS,
+      );
     },
     firstSettled: (at) => {
       settledAt ??= at;
