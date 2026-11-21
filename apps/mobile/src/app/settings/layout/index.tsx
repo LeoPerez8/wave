@@ -8,6 +8,15 @@ import { Hairline } from "@/catalog/Hairline";
 import { SettingsSwitch } from "@/components/SettingsSwitch";
 import { setKeepFindVisible, useKeepFindVisible } from "@/settings/keepFindVisible";
 import { SettingsPageRow, SettingsPageScreen } from "@/settings/SettingsPage";
+import { openNowPlaying } from "@/nowPlaying/sheet";
+
+const layoutDestinations = {
+  home: () => router.push("/"),
+  library: () => router.push("/library"),
+  playlists: () => router.push("/playlists"),
+  tabBar: () => router.push("/"),
+  nowPlaying: openNowPlaying,
+} as const;
 
 /**
  * Settings › Layout: the options a long press opens on Home's, the
@@ -23,12 +32,12 @@ export default function LayoutSettingsScreen() {
     <SettingsPageScreen page="layout">
       <View>
         <Hairline />
-        {LAYOUT_PAGES.map(({ page, route }) => (
+        {LAYOUT_PAGES.map(({ page }) => (
           <SettingsPageRow
             key={page}
             title={strings.settings.layoutPages[page]}
             summary={null}
-            onPress={() => router.push(route)}
+            onPress={layoutDestinations[page]}
           />
         ))}
       </View>
