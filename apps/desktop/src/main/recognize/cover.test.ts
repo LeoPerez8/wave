@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 import { fetchCover } from "./cover.ts";
 
-const answering = (body: Uint8Array, type: string, status = 200) => async () =>
+const answering = (body: Uint8Array<ArrayBuffer>, type: string, status = 200) => async () =>
   new Response(body, { status, headers: { "content-type": type } });
 
 test("a cover is an https image, handed to the window as a data URL", async () => {

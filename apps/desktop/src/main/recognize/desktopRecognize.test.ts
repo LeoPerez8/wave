@@ -45,7 +45,7 @@ const fakes = (
   const ports: DesktopRecognizePorts<RecognizeTrack> = {
     kotlin: async (method, params) => {
       calls.push({ method, params: params as Record<string, unknown> });
-      if (method === "recognize.start") return params.session;
+      if (method === "recognize.start") return (params as { session: number }).session;
       if (method === "recognize.ask") return options.answer ?? { kind: "match", song: SONG };
       return null;
     },

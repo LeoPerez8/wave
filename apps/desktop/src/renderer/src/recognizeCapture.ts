@@ -14,8 +14,10 @@ const RAW_AUDIO = { echoCancellation: false, noiseSuppression: false, autoGainCo
 
 /** Why a capture couldn't start: the system refused it, or anything else. */
 export class CaptureError extends Error {
-  constructor(readonly why: "denied" | "failed") {
+  readonly why: "denied" | "failed";
+  constructor(why: "denied" | "failed") {
     super(why === "denied" ? "Capture refused" : "Capture failed");
+    this.why = why;
   }
 }
 

@@ -11,7 +11,7 @@ export interface PermissionSession<Contents, Source> {
       contents: Contents,
       permission: string,
       callback: (granted: boolean) => void,
-      details: { readonly mediaTypes?: readonly string[] },
+      details: object,
     ) => void,
   ) => void;
   readonly setPermissionCheckHandler: (
@@ -19,7 +19,7 @@ export interface PermissionSession<Contents, Source> {
       contents: Contents | null,
       permission: string,
       origin: string,
-      details: { readonly mediaType?: string },
+      details: object,
     ) => boolean,
   ) => void;
   readonly setDisplayMediaRequestHandler: (
@@ -60,11 +60,13 @@ export const guardCapture = <Contents, Source>(
 ): void => {
   session.setPermissionRequestHandler((contents, permission, callback, details) => {
     if (permission !== "media") return callback(true);
-    callback(guard.trusted(contents) && audioOnly(details.mediaTypes) && guard.allows("microphone"));
+    const { mediaTypes } = details as { readonly mediaTypes?: readonly string[] };
+    callback(guard.trusted(contents) && audioOnly(mediaTypes) && guard.allows("microphone"));
   });
   session.setPermissionCheckHandler((contents, permission, _origin, details) => {
     if (permission !== "media") return true;
-    return guard.trusted(contents) && details.mediaType === "audio" && guard.allows("microphone");
+    const { mediaType } = details as { readonly mediaType?: string };
+    return guard.trusted(contents) && mediaType === "audio" && guard.allows("microphone");
   });
   session.setDisplayMediaRequestHandler((request, callback) => {
     if (!guard.loopback || !guard.trustedFrame(request.frame) || !guard.allows("systemAudio"))
