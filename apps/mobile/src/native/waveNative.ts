@@ -44,6 +44,8 @@ export interface NativeScannedTrack {
   readonly advisory?: string | null;
   /** Its ReplayGain and R128 tags as tagged (Core's `gainTags` reads them); null without any. */
   readonly loudnessTags?: GainTagText | null;
+  /** The ISRC tag as tagged (Core's `isrcFromTag` reads it); null without one. */
+  readonly isrc?: string | null;
 }
 
 /** Colours picked from an artwork, as signed ARGB ints. */

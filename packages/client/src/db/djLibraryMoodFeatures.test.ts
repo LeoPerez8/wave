@@ -1,0 +1,100 @@
+/// <reference types="node" />
+import assert from "node:assert/strict";
+import { test } from "node:test";
+
+import { normalizeTrack } from "@wave/core";
+
+import type { IndexedTrack } from "../types.ts";
+import { creditSplits } from "./credits.ts";
+import {
+  DJ_LIBRARY_MOOD_MISS_TTL_MS,
+  keepDjLibraryMoodFeatures,
+  pendingDjLibraryMoodSongs,
+  selectDjLibraryMoodFeatures,
+} from "./djLibraryMoodFeatures.ts";
+import { saveBatch } from "./save.ts";
+import { openTestDatabase } from "./testDatabase.ts";
+import { trackQuery } from "./tracks.ts";
+
+type Db = Awaited<ReturnType<typeof openTestDatabase>>;
+
+/** A file as the scanner reads it, with the ISRC tag [isrc]. */
+const scanned = (title: string, isrc: string | null): IndexedTrack => ({
+  ...normalizeTrack({ path: `/Music/${title}.mp3`, title, artist: "Artist", durationMs: 1 }),
+  sizeBytes: 1_000,
+  modifiedAt: 1,
+  sampleRate: null,
+  bitrateKbps: null,
+  artworkHash: null,
+  hasLyrics: false,
+  explicit: "unknown",
+  isrc,
+});
+
+const save = (db: Db, tracks: readonly IndexedTrack[]) =>
+  saveBatch(db, creditSplits(), tracks, [], [], 1_000);
+
+const idOf = (db: Db, title: string): number => {
+  const row = trackQuery(db)
+    .all()
+    .find((song) => song.title === title);
+  assert.ok(row, title);
+  return row.id;
+};
+
+const loud = { energy: 0.9, valence: 0.8, acousticness: 0.1, mode: 1 as const };
+
+test("Library songs with an ISRC tag are due for a mood lookup; songs without one never are", async () => {
+  const db = await openTestDatabase();
+  save(db, [scanned("Tagged", "USRC17607839"), scanned("Untagged", null)]);
+  assert.deepEqual(pendingDjLibraryMoodSongs(db, 0, 10), [
+    { trackId: idOf(db, "Tagged"), isrc: "USRC17607839" },
+  ]);
+});
+
+test("a match is kept against the Library track for good, a miss for 30 days", async () => {
+  const db = await openTestDatabase();
+  save(db, [scanned("Found", "USRC17607839"), scanned("Missed", "GBAYE0601498")]);
+  const found = idOf(db, "Found");
+  const missed = idOf(db, "Missed");
+  keepDjLibraryMoodFeatures(db, [
+    { trackId: found, isrc: "USRC17607839", features: loud, checkedAt: 10 },
+    { trackId: missed, isrc: "GBAYE0601498", features: null, checkedAt: 10 },
+  ]);
+  assert.deepEqual(selectDjLibraryMoodFeatures(db), new Map([[String(found), loud]]));
+  assert.deepEqual(pendingDjLibraryMoodSongs(db, 0, 11), []);
+  assert.deepEqual(
+    pendingDjLibraryMoodSongs(db, 0, 10 + DJ_LIBRARY_MOOD_MISS_TTL_MS).map((s) => s.trackId),
+    [missed],
+  );
+  keepDjLibraryMoodFeatures(db, [
+    { trackId: found, isrc: "USRC17607839", features: null, checkedAt: 20 },
+  ]);
+  assert.equal(selectDjLibraryMoodFeatures(db).get(String(found))?.energy, 0.9);
+});
+
+test("a file whose ISRC tag changes is looked up again and its old features stop counting", async () => {
+  const db = await openTestDatabase();
+  save(db, [scanned("Song", "USRC17607839")]);
+  const id = idOf(db, "Song");
+  keepDjLibraryMoodFeatures(db, [
+    { trackId: id, isrc: "USRC17607839", features: loud, checkedAt: 10 },
+  ]);
+  save(db, [{ ...scanned("Song", "GBAYE0601498"), modifiedAt: 2 }]);
+  assert.deepEqual(selectDjLibraryMoodFeatures(db), new Map());
+  assert.deepEqual(pendingDjLibraryMoodSongs(db, 0, 11), [{ trackId: id, isrc: "GBAYE0601498" }]);
+  keepDjLibraryMoodFeatures(db, [
+    { trackId: id, isrc: "GBAYE0601498", features: { ...loud, energy: 0.2 }, checkedAt: 12 },
+  ]);
+  assert.equal(selectDjLibraryMoodFeatures(db).get(String(id))?.energy, 0.2);
+});
+
+test("pages follow track ids after the last one", async () => {
+  const db = await openTestDatabase();
+  save(db, [scanned("A", "USRC17607831"), scanned("B", "USRC17607832")]);
+  const [first, second] = pendingDjLibraryMoodSongs(db, 0, 10, 1).concat(
+    pendingDjLibraryMoodSongs(db, idOf(db, "A"), 10, 1),
+  );
+  assert.equal(first?.trackId, idOf(db, "A"));
+  assert.equal(second?.trackId, idOf(db, "B"));
+});

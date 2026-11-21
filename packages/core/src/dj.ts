@@ -7,11 +7,20 @@ import type { PlayedSeedArtist } from "./artistMixes.ts";
 import { artistNeighbours, type ArtistGraph } from "./artistGraph.ts";
 import { catalogSeedKey } from "./candidateCatalog.ts";
 import { DEFAULT_DJ_SETTINGS, djNewMusicShare, type DjSettings } from "./djSettings.ts";
-import type { MagicSeedSong, MagicSession } from "./magicQueue.ts";
+import { magicArtistKey, type MagicSeedSong, type MagicSession } from "./magicQueue.ts";
 import type { TasteProfile } from "./tasteProfile.ts";
 import { identityKey } from "./library.ts";
 import { normalizeSearchText } from "./search.ts";
 import { releaseTitle, YT_ARTIST_FRESH_MS } from "./ytArtist.ts";
+import {
+  genreFamily,
+  genreFamilyOfArtist,
+  genreMixDjCandidates,
+  type GenreMixDjCandidate,
+  type GenreMixLibrary,
+} from "./genreMixes.ts";
+import type { DiscoverSeedArtist } from "./discoverMixes.ts";
+import type { GenreProfileOf } from "./genreAffinity.ts";
 
 /** A tile as the grid tells tiles apart: its kind and what that kind compares by. */
 export type DjTileKey = string & { readonly djTile: true };
@@ -61,8 +70,23 @@ export interface DjAlbumTile {
   readonly cover: string | null;
 }
 
+/** A genre family tile: a square named for the family and seeded by Genre mixes' artists. */
+export interface DjGenreTile {
+  readonly kind: "genre";
+  readonly key: DjTileKey;
+  /** Genre tiles do not correspond to a Library row. */
+  readonly libraryId: null;
+  readonly name: string;
+  /** The family key used by Genre mixes and by Same genres. */
+  readonly family: string;
+  /** The seed artists Genre mixes selects for this family. */
+  readonly artists: readonly DiscoverSeedArtist[];
+  /** The family artists and albums this tile opens, already ranked by taste. */
+  readonly opens: readonly DjTile[];
+}
+
 /** One selectable item of DJ's grid. */
-export type DjTile = DjArtistTile | DjAlbumTile;
+export type DjTile = DjArtistTile | DjAlbumTile | DjGenreTile;
 
 /** The artist [tile] stands for: an artist tile's own, an album tile's album artist. */
 export const djTileArtist = (tile: DjTile): string =>
@@ -103,6 +127,59 @@ export const djAlbumTile = (album: DjAlbum): DjAlbumTile | null => {
   };
 };
 
+/** A remembered family tile without its current seed artists or opening row. */
+export const djGenreTile = (name: string): DjGenreTile | null => {
+  const family = genreFamily(name);
+  return family === null
+    ? null
+    : {
+        kind: "genre",
+        key: `genre:${family.key}` as DjTileKey,
+        libraryId: null,
+        name: family.name,
+        family: family.key,
+        artists: [],
+        opens: [],
+      };
+};
+
+/** Whether [artists]' known Genre mixes profile is compatible with a DJ family radio. */
+export const djFamilyRadioAllowed = (
+  family: string,
+  artists: readonly string[],
+  profileOf: GenreProfileOf,
+  graph: ArtistGraph | null = null,
+): boolean => {
+  for (const artist of artists) {
+    const known = genreFamilyOfArtist(artist, graph, profileOf);
+    if (known !== null) return known.key === family;
+  }
+  return true;
+};
+
+/**
+ * Whether a song by [artists] on the radio [radioId] (a seed's id, or
+ * `artist:` and a catalog seed key) stays in [session]'s batch. A radio a
+ * family tile alone brought keeps the songs that fit any of its families
+ * (`djFamilyRadioAllowed`); any other radio keeps every song.
+ */
+export const djRadioSongAllowed = (
+  session: Pick<MagicSession, "djGenreRadios">,
+  radioId: string,
+  artists: readonly string[],
+  profileOf: GenreProfileOf,
+  graph: ArtistGraph | null = null,
+): boolean => {
+  const families = session.djGenreRadios?.find(
+    (radio) => radio.id === radioId || `artist:${radio.id}` === radioId,
+  )?.families;
+  return (
+    families === undefined ||
+    families.length === 0 ||
+    families.some((family) => djFamilyRadioAllowed(family, artists, profileOf, graph))
+  );
+};
+
 /** What DJ's grid is built from, all of it already on the phone. */
 export interface DjGridSources {
   /** The Library's artists. */
@@ -118,10 +195,91 @@ export interface DjGridSources {
    * in the order the grid prefers them; none without.
    */
   readonly albums?: readonly DjAlbum[];
+  /** Library inputs for Genre mixes' families and seed artists. */
+  readonly genreLibrary?: GenreMixLibrary | null;
+  /**
+   * Genre mixes' families over [genreLibrary] (`genreMixDjCandidates`),
+   * worked out once per Library snapshot; used in its place when given.
+   */
+  readonly genreCandidates?: readonly GenreMixDjCandidate[] | null;
 }
 
 /** How many tiles DJ's grid opens with. */
 export const DJ_GRID_TILES = 24;
+
+/** How many family tiles DJ's grid may show. */
+export const DJ_GENRE_TILES = 4;
+
+/** The families DJ can seed, ranked by taste; remembered families may include unscored candidates. */
+export const djGenreTiles = (
+  {
+    artists,
+    taste,
+    albums = [],
+    genreLibrary,
+    genreCandidates,
+  }: Pick<DjGridSources, "artists" | "taste" | "albums" | "genreLibrary" | "genreCandidates">,
+  { includeUnscored = false }: { readonly includeUnscored?: boolean } = {},
+): DjGenreTile[] => {
+  const candidates =
+    genreCandidates ?? (genreLibrary == null ? null : genreMixDjCandidates(genreLibrary));
+  if (candidates === null) return [];
+  const library = new Map<string, DjArtistTile>();
+  for (const artist of artists) {
+    const tile = djArtistTile(artist.name, artist.id);
+    if (tile !== null && !library.has(tile.key)) library.set(tile.key, tile);
+  }
+  const records = new Map<string, DjAlbumTile>();
+  for (const album of albums) {
+    if (album.compilation === true) continue;
+    const by = djArtistTile(album.artist)?.key;
+    const tile = djAlbumTile(album);
+    if (by !== undefined && tile !== null && !records.has(by)) records.set(by, tile);
+  }
+  const known = (name: string): DjArtistTile | null => {
+    const tile = djArtistTile(name);
+    return tile === null ? null : (library.get(tile.key) ?? tile);
+  };
+  return candidates
+    .flatMap(({ seed, artists: members }) => {
+      const family = genreFamily(seed.genre ?? seed.name);
+      const score = taste?.genres.get(family?.key ?? "") ?? 0;
+      if (family === null || (!includeUnscored && score <= 0)) return [];
+      const seedArtists = seed.artists ?? [];
+      const opens = members
+        .map((artist) => ({
+          artist,
+          score: taste?.artists.get(magicArtistKey(artist.name)) ?? 0,
+        }))
+        .sort((a, b) => b.score - a.score)
+        .flatMap(({ artist }) => {
+          const tile = known(artist.name);
+          if (tile === null) return [];
+          const album = records.get(tile.key);
+          return album === undefined ? [tile] : [tile, album];
+        })
+        .filter(
+          (tile, index, all) => all.findIndex((candidate) => candidate.key === tile.key) === index,
+        )
+        .slice(0, DJ_GRID_TILES + DJ_OPENED_TILES);
+      return [
+        {
+          score,
+          tile: {
+            kind: "genre",
+            key: `genre:${family.key}` as DjTileKey,
+            libraryId: null,
+            name: family.name,
+            family: family.key,
+            artists: seedArtists,
+            opens,
+          } satisfies DjGenreTile,
+        },
+      ];
+    })
+    .sort((a, b) => b.score - a.score)
+    .map(({ tile }) => tile);
+};
 
 /**
  * DJ's grid, built without the network or a derivation: the taste profile's
@@ -140,6 +298,8 @@ export const djGrid = ({
   played = [],
   graph,
   albums = [],
+  genreLibrary,
+  genreCandidates,
 }: DjGridSources): DjTile[] => {
   const library = new Map<string, DjArtistTile>();
   for (const artist of artists) {
@@ -168,6 +328,14 @@ export const djGrid = ({
     if (by !== undefined && tile !== null && !records.has(by)) records.set(by, tile);
   }
   const grid = new Map<string, DjTile>();
+  const genreTiles = djGenreTiles({
+    artists,
+    taste,
+    albums,
+    genreLibrary: genreLibrary ?? null,
+    genreCandidates: genreCandidates ?? null,
+  }).slice(0, DJ_GENRE_TILES);
+  let nextGenre = 0;
   /** Shows [artist], then the album of theirs while the grid has room for it. */
   const show = (artist: DjArtistTile): void => {
     grid.set(artist.key, artist);
@@ -178,13 +346,23 @@ export const djGrid = ({
     if (grid.size >= DJ_GRID_TILES) break;
     if (favourite === null || grid.has(favourite.key)) continue;
     show(favourite);
-    if (graph === null || grid.size >= DJ_GRID_TILES) continue;
-    for (const neighbour of artistNeighbours(graph, favourite.name)) {
-      const tile = djArtistTile(neighbour.name);
-      if (tile === null || library.has(tile.key) || grid.has(tile.key)) continue;
-      show(tile);
-      break;
+    if (graph !== null && grid.size < DJ_GRID_TILES) {
+      for (const neighbour of artistNeighbours(graph, favourite.name)) {
+        const tile = djArtistTile(neighbour.name);
+        if (tile === null || library.has(tile.key) || grid.has(tile.key)) continue;
+        show(tile);
+        break;
+      }
     }
+    const genre = genreTiles[nextGenre];
+    if (genre !== undefined && grid.size < DJ_GRID_TILES) {
+      grid.set(genre.key, genre);
+      nextGenre += 1;
+    }
+  }
+  while (nextGenre < genreTiles.length && grid.size < DJ_GRID_TILES) {
+    const genre = genreTiles[nextGenre++]!;
+    grid.set(genre.key, genre);
   }
   return [...grid.values()];
 };
@@ -333,16 +511,22 @@ const withRowOpened = (
   if (state.rows.some((row) => row.of === tile.key)) return state;
   const artist = djTileArtist(tile);
   const close = graph === null ? [] : artistNeighbours(graph, artist);
-  const opened = tilesToOpen(
-    state,
-    [...(tile.kind === "album" ? [artist] : []), ...close.map((neighbour) => neighbour.name)],
-    DJ_OPENED_TILES,
-    library,
-  );
+  const opened: DjTile[] =
+    tile.kind === "genre"
+      ? tile.opens
+          .filter((candidate) => !state.tiles.some((shown) => shown.key === candidate.key))
+          .slice(0, DJ_OPENED_TILES)
+      : tilesToOpen(
+          state,
+          [...(tile.kind === "album" ? [artist] : []), ...close.map((neighbour) => neighbour.name)],
+          DJ_OPENED_TILES,
+          library,
+        );
   const row: DjRow = {
     of: tile.key,
     after: opened[opened.length - 1]?.key ?? tile.key,
-    waiting: djArtistTile(artist) === null ? 0 : DJ_OPENED_TILES - opened.length,
+    waiting:
+      tile.kind === "genre" || djArtistTile(artist) === null ? 0 : DJ_OPENED_TILES - opened.length,
   };
   return {
     ...state,
@@ -501,7 +685,9 @@ const artistSeed = (artist: DjArtistTile, plays: number): MagicSeedSong => ({
  * could be read. Each batch reads up to 3 of those radios by different
  * artists (`magicBatchRadios`), artists and albums in one draw: the artists
  * with more counted plays in [played], and the songs with more of their own,
- * most often. It ranks with [settings], DJ's own, and starts at their New
+ * most often. A family tile contributes its seed artists' radios, whose songs
+ * keep to the family (`djRadioSongAllowed`) unless that artist was also
+ * picked as an artist tile or as a selected album's artist. It ranks with [settings], DJ's own, and starts at their New
  * music share. Null when the tiles give no radio to read.
  */
 export const startDjQueue = (
@@ -526,14 +712,33 @@ export const startDjQueue = (
   }
   const seeds = new Map<string, MagicSeedSong>();
   const artists = new Map<string, string>();
+  const genreRadios = new Map<string, Set<string>>();
+  // Artists picked as an artist tile or as a selected album's artist: their radios stay open.
+  const picked = new Set<string>();
   const credit = (name: string): void => {
     const key = djArtistTile(name)?.key;
     if (key !== undefined && !artists.has(key)) artists.set(key, name);
   };
   for (const tile of tiles) {
+    if (tile.kind === "genre") {
+      for (const artist of tile.artists) {
+        const seedArtist = djArtistTile(artist.name);
+        if (seedArtist === null) continue;
+        credit(artist.name);
+        if (!seeds.has(seedArtist.key))
+          seeds.set(seedArtist.key, artistSeed(seedArtist, plays.get(seedArtist.key) ?? 0));
+        const families = genreRadios.get(seedArtist.key) ?? new Set<string>();
+        families.add(tile.family);
+        genreRadios.set(seedArtist.key, families);
+      }
+      continue;
+    }
     const songs = tile.kind === "album" ? (albumSongs.get(tile.key) ?? []) : [];
     const artist = tile.kind === "album" ? djArtistTile(tile.artist) : tile;
-    if (artist !== null) credit(artist.name);
+    if (artist !== null) {
+      picked.add(artist.key);
+      credit(artist.name);
+    }
     // A compilation is nobody's: its songs' own artists are the session's.
     else for (const song of songs) if (song.artists[0] !== undefined) credit(song.artists[0]);
     if (songs.length === 0 && artist !== null && !seeds.has(artist.key))
@@ -541,6 +746,7 @@ export const startDjQueue = (
     for (const song of songs) if (!seeds.has(song.id)) seeds.set(song.id, song);
   }
   if (seeds.size === 0) return null;
+  for (const key of picked) genreRadios.delete(key);
   return {
     id,
     seed: { kind: "dj", id, title: DJ_SEED_TITLE },
@@ -551,6 +757,14 @@ export const startDjQueue = (
     batches: 0,
     ytShare: djNewMusicShare(settings),
     radioArtists: [...artists.values()],
+    ...(genreRadios.size > 0
+      ? {
+          djGenreRadios: [...genreRadios].map(([id, families]) => ({
+            id,
+            families: [...families],
+          })),
+        }
+      : {}),
     seedProfile: null,
     seedStyle: null,
     seedVideoIds: [],
