@@ -50,7 +50,7 @@ import type { LibrarySearchView } from "./search.ts";
 import type { HomeView } from "./home.ts";
 import type { HomeFollowView, HomeReleaseOpening } from "./homeFollow.ts";
 import type { StatsPeriod, StatsRanking } from "@wave/core";
-import type { StatsOverview, StatsRow } from "./stats.ts";
+import type { ArtistStatsPage, StatsOverview, StatsRow } from "./stats.ts";
 import type {
   ActionSurface,
   SongMenu,
@@ -403,6 +403,14 @@ export interface BridgeContract
     readonly args: readonly [period: StatsPeriod];
     readonly result: StatsOverview;
   };
+  readonly "stats.artist": {
+    readonly args: readonly [artistId: number, language: "en" | "pt-BR"];
+    readonly result: ArtistStatsPage;
+  };
+  readonly "stats.artistPlay": {
+    readonly args: readonly [artistId: number, key: string];
+    readonly result: void;
+  };
   readonly "stats.ranking": {
     readonly args: readonly [ranking: StatsRanking, period: StatsPeriod];
     readonly result: Page<StatsRow>;
@@ -541,6 +549,8 @@ export const BRIDGE_CALLS = [
   ...YT_ACCOUNT_CALLS,
   ...SPOTIFY_ACCOUNT_CALLS,
   "stats.overview",
+  "stats.artist",
+  "stats.artistPlay",
   "stats.ranking",
   "stats.play",
   "stats.open",
@@ -563,6 +573,8 @@ export interface WaveBridge {
   readonly spotifyAccount: ReturnType<typeof spotifyAccountBridge>;
   readonly stats: {
     readonly overview: (period: StatsPeriod) => Promise<StatsOverview>;
+    readonly artist: (artistId: number, language: "en" | "pt-BR") => Promise<ArtistStatsPage>;
+    readonly artistPlay: (artistId: number, key: string) => Promise<void>;
     readonly ranking: (ranking: StatsRanking, period: StatsPeriod) => Promise<Page<StatsRow>>;
     readonly play: (period: StatsPeriod, key: string, full: boolean) => Promise<void>;
     readonly open: (
@@ -888,6 +900,8 @@ export const createBridge = (invoke: Invoke): WaveBridge => ({
   spotifyAccount: spotifyAccountBridge(invoke),
   stats: {
     overview: (period) => invoke("stats.overview", period),
+    artist: (artistId, language) => invoke("stats.artist", artistId, language),
+    artistPlay: (artistId, key) => invoke("stats.artistPlay", artistId, key),
     ranking: (ranking, period) => invoke("stats.ranking", ranking, period),
     play: (period, key, full) => invoke("stats.play", period, key, full),
     open: (ranking, period, key, full) => invoke("stats.open", ranking, period, key, full),
