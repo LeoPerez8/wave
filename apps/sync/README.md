@@ -133,7 +133,8 @@ Changed rows in, by table. Every table is optional.
   "follows": [Follow],
   "hiddenReleases": [HiddenRelease],
   "notifiedShows": [NotifiedShow],
-  "dismissedSuggestions": [DismissedSuggestion]
+  "dismissedSuggestions": [DismissedSuggestion],
+  "dislikes": [Dislike]
 }
 ```
 
@@ -148,18 +149,19 @@ Each pushed row is merged with the stored one by `mergeRows`: the later `changed
 the greater `phoneId` breaks a tie. Plays are merged by `mergePlays`: a play whose `id` is
 already held is ignored.
 
-| Table                  | `id`                         | Fields (`?` may be `null`)                                                                                                                                                                                                                                    |
-| ---------------------- | ---------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `songs`                | recording key                | `title`, `credit`, `album?`, `albumArtist`, `discNumber?`, `trackNumber?`, `durationMs`, `year?`, `genre?`, `videoId?`, `addedAt`                                                                                                                             |
-| `playlists`            | playlist id                  | `name`, `createdAt`                                                                                                                                                                                                                                           |
-| `playlistEntries`      | entry id                     | `playlistId`, `orderKey` (Core's `orderKeyBetween`), `songId?` (recording key), `ytSong?` (the YT Music song as the app stores it, text), `addedAt`. Exactly one of `songId` and `ytSong` is set.                                                             |
-| `favorites`            | recording key                | `addedAt`                                                                                                                                                                                                                                                     |
-| `preferences`          | preference key               | `value?` (text: what the app's key-value store holds, `null` for nothing)                                                                                                                                                                                     |
-| `plays`                | play id (made on the device) | `songId` (recording key), `startedAt`, `listenedMs`, `durationMs?`, `endReason` (`completed`, `skipped`, `stopped`, `interrupted`), `counted` (boolean), `contextType?`, `contextId?`, `source` (`phone`, `auto`, `desktop`), `importedFrom?` (`blackplayer`) |
-| `follows`              | artist name key              | `name`, `level` (`releases`, `shows`), `followedAt`, `deezerId?`, `ytBrowseId?`                                                                                                                                                                               |
-| `hiddenReleases`       | release key                  | none                                                                                                                                                                                                                                                          |
-| `notifiedShows`        | Ticketmaster event id        | none                                                                                                                                                                                                                                                          |
-| `dismissedSuggestions` | artist name key              | `dismissedAt` (when the follow suggestion was dismissed; Undo is a tombstone)                                                                                                                                                                                 |
+| Table                  | `id`                             | Fields (`?` may be `null`)                                                                                                                                                                                                                                    |
+| ---------------------- | -------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `songs`                | recording key                    | `title`, `credit`, `album?`, `albumArtist`, `discNumber?`, `trackNumber?`, `durationMs`, `year?`, `genre?`, `videoId?`, `addedAt`                                                                                                                             |
+| `playlists`            | playlist id                      | `name`, `createdAt`                                                                                                                                                                                                                                           |
+| `playlistEntries`      | entry id                         | `playlistId`, `orderKey` (Core's `orderKeyBetween`), `songId?` (recording key), `ytSong?` (the YT Music song as the app stores it, text), `addedAt`. Exactly one of `songId` and `ytSong` is set.                                                             |
+| `favorites`            | recording key                    | `addedAt`                                                                                                                                                                                                                                                     |
+| `preferences`          | preference key                   | `value?` (text: what the app's key-value store holds, `null` for nothing)                                                                                                                                                                                     |
+| `plays`                | play id (made on the device)     | `songId` (recording key), `startedAt`, `listenedMs`, `durationMs?`, `endReason` (`completed`, `skipped`, `stopped`, `interrupted`), `counted` (boolean), `contextType?`, `contextId?`, `source` (`phone`, `auto`, `desktop`), `importedFrom?` (`blackplayer`) |
+| `follows`              | artist name key                  | `name`, `level` (`releases`, `shows`), `followedAt`, `deezerId?`, `ytBrowseId?`                                                                                                                                                                               |
+| `hiddenReleases`       | release key                      | none                                                                                                                                                                                                                                                          |
+| `notifiedShows`        | Ticketmaster event id            | none                                                                                                                                                                                                                                                          |
+| `dismissedSuggestions` | artist name key                  | `dismissedAt` (when the follow suggestion was dismissed; Undo is a tombstone)                                                                                                                                                                                 |
+| `dislikes`             | recording key, or `yt:<videoId>` | `title`, `artists` (a JSON array of names, as text), `durationMs?`, `dislikedAt` (the song as it was listed when disliked; removing the dislike is a tombstone)                                                                                               |
 
 Times are ms since the epoch; numbers are integers. Ids and text are at most 16,384
 characters. The tables and their fields are Core's wire (`SYNC_TABLE_NAMES`, `SYNC_FIELDS` in
@@ -183,6 +185,13 @@ Migration `0009_dismissed_suggestions` adds `dismissed_suggestions`, the follow 
 the owner dismissed. Deploy it before an app that sends them; as with follows, only a phone
 with a dismissal would be refused by an older service.
 
+Migration `0014_dislikes` adds `dislikes`, the songs the owner disliked. A dislike's `id` is
+the song's recording key, or `yt:<videoId>` for a YT Music song the Library has no file of.
+The service merges dislikes and favorites each on their own; a song left with both is settled
+by the app (Core's `settleMarks`), which pushes the removal. Deploy it before an app that
+sends dislikes: an older service refuses a push naming them, so a phone with a dislike would
+push nothing until it's deployed.
+
 `200`, how many rows of each table won (and were stored):
 
 ```json
@@ -197,7 +206,8 @@ with a dismissal would be refused by an older service.
     "follows": 0,
     "hiddenReleases": 0,
     "notifiedShows": 0,
-    "dismissedSuggestions": 0
+    "dismissedSuggestions": 0,
+    "dislikes": 0
   }
 }
 ```
@@ -222,6 +232,7 @@ The rows changed after `since`, oldest change first, at most 1,000 a page. Leave
   "hiddenReleases": [HiddenRelease],
   "notifiedShows": [NotifiedShow],
   "dismissedSuggestions": [DismissedSuggestion],
+  "dislikes": [Dislike],
   "cursor": "1234",
   "more": false
 }
@@ -388,6 +399,7 @@ answer (its over-quota error names the key), nothing cached, and a log line that
 | `maxHiddenReleases`                       | 50,000    |                                                      |
 | `maxNotifiedShows`                        | 50,000    |                                                      |
 | `maxDismissedSuggestions`                 | 50,000    |                                                      |
+| `maxDislikes`                             | 50,000    |                                                      |
 | `maxRequestsPerMinute`                    | 120       | per session                                          |
 | `maxSignInsPerMinute`                     | 10        | `POST /v1/session`, per address and per account      |
 | `maxSignInKeysPerMinute`                  | 1,000     | addresses and accounts counted in a minute, together |

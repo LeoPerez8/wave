@@ -2,20 +2,24 @@
  * Disliked songs (`schema.dislikes`, Core's `DislikedSong`): kept by the
  * identity favorites use, with each song as it was listed when disliked.
  * Core's `dislikes.ts` decides what a dislike changes; this only keeps them.
+ * Each change is stamped for the Wave account (`stamped`), and a removed
+ * dislike stays as a tombstone until the account has it (`syncRows.ts`).
  * Kept free of Expo for the store tests.
  */
 import type { DislikedSong } from "@wave/core";
-import { desc, inArray, sql } from "drizzle-orm";
+import { and, desc, eq, inArray, sql } from "drizzle-orm";
 
 import type { LibraryDatabase } from "./database.ts";
 import * as schema from "./schema.ts";
+import { stamped } from "./sync.ts";
 
 /** SQLite caps the variables in one statement; batches stay well under it. */
 const BATCH = 200;
 
 /**
  * Keeps [songs] as disliked since [now], each once by its key: one disliked
- * already keeps when it was, and takes the song as it's listed now.
+ * already keeps when it was, and takes the song as it's listed now. One whose
+ * dislike was removed is disliked anew, since [now].
  */
 export const setDislikes = (
   db: LibraryDatabase,
@@ -33,6 +37,7 @@ export const setDislikes = (
           artists: JSON.stringify(song.artists),
           durationMs: song.durationMs,
           dislikedAt: now,
+          changedAt: now,
         },
       ]),
     ).values(),
@@ -48,6 +53,9 @@ export const setDislikes = (
             title: sql.raw(`excluded."title"`),
             artists: sql.raw(`excluded."artists"`),
             durationMs: sql.raw(`excluded."duration_ms"`),
+            dislikedAt: sql`CASE WHEN ${t.deleted} THEN ${now} ELSE ${t.dislikedAt} END`,
+            deleted: false,
+            ...stamped(t, now),
           },
         })
         .run();
@@ -55,15 +63,16 @@ export const setDislikes = (
   });
 };
 
-/** Forgets the dislikes kept under [keys]. */
-export const removeDislikes = (db: LibraryDatabase, keys: readonly string[]): void => {
+/** Removes the dislikes kept under [keys] at [now]: each stays as a tombstone, as an unstarred favorite does. */
+export const removeDislikes = (db: LibraryDatabase, keys: readonly string[], now: number): void => {
   const t = schema.dislikes;
   const ids = [...new Set(keys)];
   if (ids.length === 0) return;
   db.transaction((tx) => {
     for (let start = 0; start < ids.length; start += BATCH) {
-      tx.delete(t)
-        .where(inArray(t.songKey, ids.slice(start, start + BATCH)))
+      tx.update(t)
+        .set({ deleted: true, ...stamped(t, now) })
+        .where(and(inArray(t.songKey, ids.slice(start, start + BATCH)), eq(t.deleted, false)))
         .run();
     }
   });
@@ -86,6 +95,7 @@ export const selectDislikes = (db: LibraryDatabase): DislikedSong[] =>
   db
     .select()
     .from(schema.dislikes)
+    .where(eq(schema.dislikes.deleted, false))
     .orderBy(desc(schema.dislikes.dislikedAt), desc(schema.dislikes.songKey))
     .all()
     .map(({ songKey, title, artists, durationMs, dislikedAt }) => ({

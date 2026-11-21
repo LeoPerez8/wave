@@ -1619,7 +1619,10 @@ export {
   readPullPage,
   syncFieldFits,
 } from "./syncWire.ts";
+export { settleMarks } from "./syncMarks.ts";
+export type { MarkStamp, SettledMarks } from "./syncMarks.ts";
 export type {
+  SyncDislike,
   SyncDismissedSuggestion,
   SyncFavorite,
   SyncFieldKind,
