@@ -4,11 +4,12 @@
 # included. On anything else (main, release tags) every area counts as changed, so every check
 # runs; whether each app releases (phoneRelease, desktopRelease) is whether the files changed
 # since that app's own previous release reach it. Its previous release is the newest GitHub
-# Release of the run's channel that holds its files (changes.ts --previous-release), and a
-# change of the phone's package.json version alone doesn't count. The desktop's previous release
-# is also written as desktopSince, which its patch notes count from. A promotion's run on a stable
-# tag names the apps it publishes instead (PROMOTED_APP: both, mobile or desktop; promote.sh picked
-# them), and only those release, whatever changed.
+# Release of the run's channel that holds its files (changes.ts --previous-release; a stable
+# release's desktop counts as the ti release it was built from), and a change of the phone's
+# package.json version alone doesn't count. The desktop's previous release is also written as
+# desktopSince, which its patch notes count from (none when it never released on the channel). A
+# promotion's run on a stable tag names the apps it publishes instead (PROMOTED_APP: both, mobile
+# or desktop; promote.sh picked them), and only those release, whatever changed.
 # Env: GH_TOKEN, PR_NUMBER (empty outside PRs), GITHUB_REPOSITORY, GITHUB_REF, PROMOTED_APP
 # (optional). Off a PR, runs in a checkout of the run's commit with its history and tags.
 set -euo pipefail
@@ -80,8 +81,9 @@ package=apps/mobile/package.json
 
 for app in phone desktop; do
   since="$(printf '%s\n' "$releases" | node "$here/changes.ts" --previous-release "$app" "$channel" "$current")"
-  # The desktop's notes count from its own previous release (the Patch notes job).
-  if [ "$app" = desktop ]; then echo "desktopSince=$since" | tee -a "$out"; fi
+  # The desktop's notes count from its own previous release (the Patch notes job), or are its
+  # first release's when it has none. Without the list of releases (above) it stays unwritten.
+  if [ "$app" = desktop ]; then echo "desktopSince=${since:-none}" | tee -a "$out"; fi
   bump=()
   if [ -n "$since" ] && git rev-parse -q --verify "refs/tags/$since^{commit}" > /dev/null; then
     files="$(git diff --name-only "refs/tags/$since" HEAD)"

@@ -173,11 +173,45 @@ export const publishedIn = (app: App, { tagName, assets }: PublishedRelease) => 
   return own.some((name) => assets.includes(name));
 };
 
+const parseVersion = (tagName: string) => {
+  const match = VERSION_TAG.exec(tagName);
+  return match
+    ? { ti: match[4] !== undefined, numbers: [match[1], match[2], match[3]].map(Number) }
+    : undefined;
+};
+
+const compareNumbers = (left: readonly number[], right: readonly number[]) =>
+  left[0]! - right[0]! || left[1]! - right[1]! || left[2]! - right[2]!;
+
 /**
- * The tag an app's changes count from: its newest release that published its own files. A
- * version that never published (a skipped one, or the other app's alone) doesn't count. The ti
- * channel looks back past stable releases too, which carry a ti release's source; main looks only
- * at stable ones. The run's own tag is left out. Undefined when the app never published.
+ * The ti release a stable release's desktop was built from, as promote-version.ts picks it: the
+ * newest -ti release at or below the stable number that holds both installers. The stable tag
+ * sits on the phone's commit when the phone went out too, so it isn't the desktop's source.
+ * Undefined for a stable release older than any such ti release.
+ */
+const desktopSource = (releases: readonly PublishedRelease[], stable: readonly number[]) =>
+  releases
+    .flatMap((release) => {
+      const version = parseVersion(release.tagName);
+      const files = [
+        `wave-${release.tagName.slice(1)}-win-x64.exe`,
+        `wave-${release.tagName.slice(1)}-linux-x64.AppImage`,
+      ];
+      return version?.ti &&
+        compareNumbers(version.numbers, stable) <= 0 &&
+        files.every((name) => release.assets.includes(name))
+        ? [{ tag: release.tagName, numbers: version.numbers }]
+        : [];
+    })
+    .toSorted((left, right) => compareNumbers(right.numbers, left.numbers))[0]?.tag;
+
+/**
+ * The tag an app's changes count from: the source of its newest release that published its own
+ * files. A version that never published (a skipped one, or the other app's alone) doesn't count.
+ * The ti channel looks back past stable releases too, and prefers the -ti release of the same
+ * number; main looks only at stable ones. A stable release's phone was built from the tag's
+ * commit, and its desktop from its own ti release (desktopSource), which is the tag returned.
+ * The run's own tag is left out. Undefined when the app never published.
  */
 export const previousAppRelease = (
   releases: readonly PublishedRelease[],
@@ -186,17 +220,15 @@ export const previousAppRelease = (
   current = "",
 ): string | undefined => {
   const candidates = releases.flatMap((release) => {
-    const match = VERSION_TAG.exec(release.tagName);
-    if (!match || release.tagName === current || !publishedIn(app, release)) return [];
-    const ti = match[4] !== undefined;
-    if (ti && channel === "main") return [];
-    return [{ tag: release.tagName, ti, numbers: [match[1], match[2], match[3]].map(Number) }];
+    const version = parseVersion(release.tagName);
+    if (!version || release.tagName === current || !publishedIn(app, release)) return [];
+    if (version.ti && channel === "main") return [];
+    const source =
+      app === "desktop" && !version.ti ? desktopSource(releases, version.numbers) : undefined;
+    return [{ ...version, tag: source ?? release.tagName }];
   });
   const newer = (left: (typeof candidates)[number], right: (typeof candidates)[number]) =>
-    right.numbers[0]! - left.numbers[0]! ||
-    right.numbers[1]! - left.numbers[1]! ||
-    right.numbers[2]! - left.numbers[2]! ||
-    Number(left.ti) - Number(right.ti);
+    compareNumbers(right.numbers, left.numbers) || Number(right.ti) - Number(left.ti);
   return candidates.toSorted(newer)[0]?.tag;
 };
 

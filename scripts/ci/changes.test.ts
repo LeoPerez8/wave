@@ -276,6 +276,42 @@ describe("previousAppRelease", () => {
     assert.equal(previousAppRelease(promoted, "desktop", "main"), undefined);
   });
 
+  it("counts a promoted desktop from the ti release it was built from, not the phone's commit", () => {
+    // Promoting 0.6.0: the phone from 0.5.9-ti (the tag's commit), the desktop from 0.6.0-ti.
+    const promoted = [
+      {
+        tagName: "v0.6.0",
+        assets: ["wave-0.6.0.apk", "wave-0.6.0-win-x64.exe", "wave-0.6.0-linux-x64.AppImage"],
+      },
+      {
+        tagName: "v0.6.0-ti",
+        assets: ["wave-0.6.0-ti-win-x64.exe", "wave-0.6.0-ti-linux-x64.AppImage"],
+      },
+      { tagName: "v0.5.9-ti", assets: ["wave-0.5.9-ti.apk"] },
+      {
+        tagName: "v0.5.8-ti",
+        assets: ["wave-0.5.8-ti-win-x64.exe", "wave-0.5.8-ti-linux-x64.AppImage"],
+      },
+    ];
+    assert.equal(previousAppRelease(promoted, "desktop", "ti"), "v0.6.0-ti");
+    assert.equal(previousAppRelease(promoted, "desktop", "main"), "v0.6.0-ti");
+    assert.equal(previousAppRelease(promoted, "phone", "ti"), "v0.6.0");
+    assert.equal(previousAppRelease(promoted, "phone", "main"), "v0.6.0");
+    // The desktop from an older ti release than the phone's: its own, not the tag's commit.
+    const older = [promoted[0]!, { tagName: "v0.6.0-ti", assets: [] }, ...promoted.slice(2)];
+    assert.equal(previousAppRelease(older, "desktop", "ti"), "v0.5.8-ti");
+    assert.equal(previousAppRelease(older, "desktop", "main"), "v0.5.8-ti");
+  });
+
+  it("prefers the ti release on ti when a stable one has the same number", () => {
+    const same = [
+      { tagName: "v1.8.0", assets: ["wave-1.8.0.apk"] },
+      { tagName: "v1.8.0-ti", assets: ["wave-1.8.0-ti.apk"] },
+    ];
+    assert.equal(previousAppRelease(same, "phone", "ti"), "v1.8.0-ti");
+    assert.equal(previousAppRelease(same, "phone", "main"), "v1.8.0");
+  });
+
   it("leaves out the run's own tag, which a re-run may already have published", () => {
     assert.equal(previousAppRelease(releases, "phone", "ti", "v2.0.0-ti"), "v1.9.0-ti");
   });
@@ -338,7 +374,7 @@ describe("changes.ts as a command", () => {
 describe("changes.sh on a promotion's run", () => {
   const shell = fileURLToPath(new URL("./changes.sh", import.meta.url));
   /** A repo whose one commit is tagged v1.0.0, with a `gh` that lists no releases. */
-  const promotion = (ref: string, app: string) => {
+  const promotion = (ref: string, app: string, gh = "exit 0") => {
     const dir = mkdtempSync(join(tmpdir(), "wave-changes-"));
     const git = (...args: string[]) =>
       execFileSync("git", ["-C", dir, ...args], { encoding: "utf8" });
@@ -349,7 +385,7 @@ describe("changes.sh on a promotion's run", () => {
     git("tag", "v1.0.0");
     const bin = join(dir, "bin");
     execFileSync("mkdir", ["-p", bin]);
-    writeFileSync(join(bin, "gh"), "#!/bin/sh\nexit 0\n", { mode: 0o755 });
+    writeFileSync(join(bin, "gh"), `#!/bin/sh\n${gh}\n`, { mode: 0o755 });
     const output = join(dir, "output");
     writeFileSync(output, "");
     const result = spawnSync("bash", [shell], {
@@ -385,5 +421,14 @@ describe("changes.sh on a promotion's run", () => {
     assert.notEqual(promotion("refs/tags/v1.0.0-ti", "mobile").status, 0);
     assert.notEqual(promotion("refs/heads/main", "mobile").status, 0);
     assert.notEqual(promotion("refs/tags/v1.0.0", "tv").status, 0);
+  });
+
+  it("names the desktop's previous release none when it never released, and unknown without the list", () => {
+    const listed = promotion("refs/heads/main", "");
+    assert.equal(listed.status, 0, listed.stderr);
+    assert.match(listed.output, /^desktopSince=none$/m);
+    const unlisted = promotion("refs/heads/main", "", "exit 1");
+    assert.equal(unlisted.status, 0, unlisted.stderr);
+    assert.doesNotMatch(unlisted.output, /^desktopSince=./m);
   });
 });

@@ -444,9 +444,11 @@ The prototype was approved on 2026-11-18 after an Impeccable critique; its decis
   their update (`docs/release-provenance.md`, Desktop installers). A desktop `feat/` PR makes the
   bump minor and a desktop `fix/` PR a patch, as the phone's do; a change to CI or docs alone,
   the desktop's included, bumps nothing. The desktop's patch notes count from its own previous
-  release (the newest GitHub Release of the channel holding a desktop installer), not from the
-  channel's previous tag, so a version only the phone released doesn't drop a line, and the
-  same rule picks what changed since then. They list the PRs that reach what the desktop is
+  release (the newest GitHub Release of the channel holding a desktop installer; a stable one
+  counts as the `-ti` release its desktop was built from), not from the channel's previous tag,
+  so a version only the phone released doesn't drop a line, and the same rule picks what changed
+  since then. With no previous desktop release on the channel, its notes are the hand-written
+  `docs/desktop-first-release-notes.md`. They list the PRs that reach what the desktop is
   built from and leave the phone's out. A version the desktop releases alone has a GitHub
   Release with only the installers, the desktop's record and the desktop's notes; phones skip
   that number. Promote to
