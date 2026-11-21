@@ -1,16 +1,25 @@
-import { IconChevronLeft, IconPlus } from "@tabler/icons-react-native";
+import { IconChevronDown, IconPlus } from "@tabler/icons-react-native";
 
 import { currentLocalisation, useLocalisation } from "@/localisation/localisation";
 import {
   discoverSongs,
   discoverTrackId,
   followArtistKey,
+  relatedPages,
+  relatedRowsThatFit,
   relatedWithoutPlaying,
   type QueueContext,
   type YtArtistCandidate,
 } from "@wave/core";
-import { cloneElement, useCallback, useMemo, type ReactElement, type ReactNode } from "react";
-import { Text, View } from "react-native";
+import {
+  cloneElement,
+  useCallback,
+  useMemo,
+  useState,
+  type ReactElement,
+  type ReactNode,
+} from "react";
+import { ScrollView, Text, View, type LayoutChangeEvent } from "react-native";
 
 import { ArtistCard } from "@/catalog/cards/ArtistCard";
 import { CoverRow } from "@/catalog/CoverRow";
@@ -29,13 +38,13 @@ import {
   type ListedSong,
 } from "@/songs/mixedSongs";
 import type { SongRowActions } from "@/songs/SongRow";
-import { SongList } from "@/songs/SongList";
 import { occurrenceKeys } from "@/songs/songRowState";
 import { activeTiming, beginTiming, timingLinkNavigated } from "@/lib/timing";
 import { openFollowedArtist } from "@/library/openFollowedArtist";
 import { showError } from "@/overlay/alert";
 import { useLibraryFinder } from "@/ytmusic/libraryFinder";
 
+import { RELATED_DOTS_HEIGHT, RelatedCarousel } from "./RelatedCarousel";
 import { RelatedDragArea } from "./RelatedPanel";
 import { useRelatedSongs } from "./relatedSongs";
 import type { ScreenPages } from "./ScreenPages";
@@ -52,9 +61,7 @@ const ARTIST_TILE = CELL * 12;
 const RELATED: QueueContext = { kind: "related", id: null };
 
 const playNow = (song: ListedSong): void => void playListedNow(song);
-const runSwipe = (song: ListedSong, shown: Parameters<typeof runMixedSongSwipe>[1]): void =>
-  runMixedSongSwipe(song, shown);
-/** The + button: the row's own menu's Add to Queue, with its toast, as a swipe runs it. */
+/** The + button: the row's own menu's Add to Queue, with its toast, as a swipe elsewhere runs it. */
 const addToQueue = (song: ListedSong): void => runMixedSongSwipe(song, "addToQueue");
 const titleOf = (song: ListedSong): string =>
   song.source === "library" ? song.track.title : song.song.title;
@@ -62,6 +69,8 @@ const titleOf = (song: ListedSong): string =>
 /** The header's drag area reaches the screen's sides; its arrow lines up with the sheet's chevron. */
 const HEADER = { marginHorizontal: -grid.margin, paddingHorizontal: grid.margin } as const;
 const ARROW_ROW = { height: CELL * 7, marginLeft: -12 } as const;
+/** Under the songs and the artists, so the last of them clears the screen's bottom edge. */
+const BOTTOM = CELL * 2;
 
 /**
  * Now Playing's Related screen, inside its panel (`RelatedPanel`): an arrow
@@ -71,11 +80,16 @@ const ARROW_ROW = { height: CELL * 7, marginLeft: -12 } as const;
  * while it isn't known; [findAgain] is Try Again's search for a Library song
  * none was found for, `usePlayingVideoId`), without the playing song in any version (Core's
  * `relatedWithoutPlaying`). A song the Library has lists and plays as the Library's. The list sits
- * clear over Now Playing's colours (`ClearRowsContext`). A tap plays it now and keeps Up Next; rows
- * swipe and long-press as anywhere. A + on each row's right adds the song to the end of the queue
- * as its menu's Add to Queue does; the row and its + stay, so a second tap adds it again. Offline
- * or on a failure it says "Couldn't load the related songs" with Try Again. Each song's answer is
- * kept for the session. Below the songs, a row of the tab's similar artists (left out with none).
+ * clear over Now Playing's colours. A tap plays it now and keeps Up Next; rows
+ * long-press as anywhere and have no swipe actions. A + on each row's right adds the song to the
+ * end of the queue as its menu's Add to Queue does; the row and its + stay, so a second tap adds
+ * it again. Offline or on a failure it says "Couldn't load the related songs" with Try Again. Each
+ * song's answer is kept for the session.
+ *
+ * The songs sit in a carousel of full pages (`RelatedCarousel`), sized by Core's `relatedPages`
+ * from the rows that fit between the header and the similar artists (`relatedRowsThatFit`), so
+ * the artists row under them (left out with none) shows without scrolling. When even 4 rows
+ * don't fit with it, pages have 4 and the screen scrolls. Loading shows one page of skeleton rows.
  */
 export function RelatedView({
   item,
@@ -105,12 +119,30 @@ export function RelatedView({
     [item.title, item.artist, answered],
   );
   const artists = shown.status === "loaded" ? shown.answer.artists : NO_ARTISTS;
-  const artistsRow = artists.length === 0 ? null : <RelatedArtists artists={artists} />;
   const songs = useMemo((): readonly ListedSong[] => discoverSongs(read, find), [read, find]);
   const entry = useCallback((song: ListedSong) => mixedSongEntry(song), []);
   // Rows key by song, a second related video of the same Library song by its occurrence.
   const keys = useMemo(() => occurrenceKeys(songs, discoverTrackId), [songs]);
   const keyOf = useCallback((song: ListedSong) => keys.get(song) ?? discoverTrackId(song), [keys]);
+  // The space under the header, and how much of it the artists row takes once it is laid out.
+  const [space, setSpace] = useState<{ width: number; height: number } | null>(null);
+  const [artistsHeight, setArtistsHeight] = useState<number | null>(null);
+  const measureSpace = useCallback((event: LayoutChangeEvent) => {
+    const { width, height } = event.nativeEvent.layout;
+    setSpace((was) => (was?.width === width && was.height === height ? was : { width, height }));
+  }, []);
+  const measureArtists = useCallback(
+    (event: LayoutChangeEvent) => setArtistsHeight(event.nativeEvent.layout.height),
+    [],
+  );
+  const under = artists.length === 0 ? 0 : artistsHeight;
+  // Null until both are measured: the songs wait a frame for it, so they never change pages.
+  const fit =
+    space === null || under === null
+      ? null
+      : relatedRowsThatFit(space.height - under - RELATED_DOTS_HEIGHT - BOTTOM, grid.row);
+  const { pageSize, shown: songsShown } = relatedPages(songs.length, fit ?? 0);
+  const paged = useMemo(() => songs.slice(0, songsShown), [songs, songsShown]);
   // Each row's +, kept while the songs and the language stay, so the rows aren't drawn again.
   const pluses = useMemo(
     () =>
@@ -139,7 +171,7 @@ export function RelatedView({
       <RelatedDragArea pages={pages} style={HEADER}>
         <View className="flex-row items-center" style={ARROW_ROW}>
           <IconButton
-            icon={IconChevronLeft}
+            icon={IconChevronDown}
             label={strings.playbackText.showPlayer}
             onPress={arrowBack}
           />
@@ -147,15 +179,13 @@ export function RelatedView({
         <TrackHeader item={item} onShowPlayer={headerTap} />
         <Hairline />
       </RelatedDragArea>
-      {shown.status === "loading" ? (
-        <TrackSkeletons />
-      ) : shown.status === "failed" ? (
+      {shown.status === "failed" ? (
         <RecommendationsFailed
           message={strings.playbackText.couldntLoadTheRelatedSongs}
           onRetry={retry}
           style={{ paddingTop: CELL * 2 }}
         />
-      ) : songs.length === 0 ? (
+      ) : shown.status === "loaded" && songs.length === 0 ? (
         // A song whose watch page has no Related tab: nothing to read again.
         <View>
           <Text
@@ -165,23 +195,38 @@ export function RelatedView({
           >
             {strings.playbackText.couldntLoadTheRelatedSongs}
           </Text>
-          {artistsRow}
+          {artists.length > 0 && <RelatedArtists artists={artists} />}
         </View>
       ) : (
-        <SongList
+        <ScrollView
           className="flex-1"
-          clearRows
-          data={songs}
-          keyExtractor={keyOf}
-          song={entry}
-          context={RELATED}
-          onPlay={playNow}
-          onMenu={openMixedSongActions}
-          onSongSwipe={runSwipe}
-          decorateRow={withPlus}
-          ListFooterComponent={artistsRow}
-          contentContainerStyle={{ paddingBottom: CELL * 2 }}
-        />
+          onLayout={measureSpace}
+          showsVerticalScrollIndicator={false}
+          contentContainerStyle={{ paddingBottom: BOTTOM }}
+        >
+          {fit === null || space === null ? null : shown.status === "loading" ? (
+            <TrackSkeletons count={fit} />
+          ) : (
+            <RelatedCarousel
+              // A new answer, or a new page size, starts on the first page.
+              key={`${keyOf(paged[0]!)}:${pageSize}`}
+              pageSize={pageSize}
+              width={space.width}
+              data={paged}
+              keyExtractor={keyOf}
+              song={entry}
+              context={RELATED}
+              onPlay={playNow}
+              onMenu={openMixedSongActions}
+              decorateRow={withPlus}
+            />
+          )}
+          {artists.length > 0 && (
+            <View onLayout={measureArtists}>
+              <RelatedArtists artists={artists} />
+            </View>
+          )}
+        </ScrollView>
       )}
     </View>
   );
@@ -211,7 +256,7 @@ const openRelatedArtist = (artist: YtArtistCandidate): void => {
 };
 
 /**
- * The Related tab's similar artists, below the songs: a row that scrolls
+ * The Related tab's similar artists, below the songs' pages: a row that scrolls
  * sideways, each artist's photo over their name. A tap opens their page;
  * TalkBack reads each as a button with the artist's name.
  */
