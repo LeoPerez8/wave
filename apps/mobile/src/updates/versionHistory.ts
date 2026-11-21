@@ -1,15 +1,15 @@
 /**
  * Settings › Version History's source (docs/spec.md, Build and CI): the channel's whole history from
- * the update service the manifest comes from, read once per JS runtime for Settings' row and again
- * each time the page opens. The last answer is kept on the phone (`updates.versionHistory`), so the
- * row and the page start from it and keep it when the service doesn't answer. A build with updates
- * off has no address, so with nothing kept its page says it couldn't load.
+ * the update service the manifest comes from, read each time the page opens and at a pull on
+ * Settings. The last answer is kept on the phone (`updates.versionHistory`), so the page starts
+ * from it and keeps it when the service doesn't answer. A build with updates off has no address,
+ * so with nothing kept its page says it couldn't load.
  */
 import {
   keptVersionHistory,
   readKeptVersionHistory,
   readVersionHistory,
-  versionHistorySummary,
+  versionHistoryRowLine,
   versionHistoryUrl,
   type DatedRelease,
   type LogLevel,
@@ -18,11 +18,12 @@ import * as Effect from "effect/Effect";
 import Constants from "expo-constants";
 import { Storage } from "expo-sqlite/kv-store";
 import * as Updates from "expo-updates";
-import { useEffect, useSyncExternalStore } from "react";
+import { useSyncExternalStore } from "react";
 
 import { useLocalisation } from "@/localisation/localisation";
 import { appLog } from "@/log/appLog";
 
+import { useUpdateButtonLook } from "./appUpdates";
 import { RUNNING_VERSION } from "./runningVersion";
 import { createVersionHistoryStore, type VersionHistoryState } from "./versionHistoryStore";
 
@@ -79,17 +80,9 @@ export const versionHistory = createVersionHistoryStore({
 export const useVersionHistory = (): VersionHistoryState =>
   useSyncExternalStore(versionHistory.subscribe, versionHistory.get);
 
-/** The Settings row's line: the running version's date, once the history has been read. */
+/** The Settings row's line: the running version, or how far an APK's download is. */
 export const useVersionHistorySummary = (): string | null => {
   const { language } = useLocalisation();
-  const { status, releases } = useVersionHistory();
-  useEffect(() => {
-    if (status === "idle") versionHistory.load();
-  }, [status]);
-  return versionHistorySummary({
-    releases,
-    runningVersion: RUNNING_VERSION,
-    channel: VERSION_HISTORY_CHANNEL,
-    language,
-  });
+  const look = useUpdateButtonLook();
+  return versionHistoryRowLine({ runningVersion: RUNNING_VERSION, look, language });
 };

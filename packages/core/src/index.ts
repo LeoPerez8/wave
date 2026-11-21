@@ -318,7 +318,7 @@ export {
   readKeptVersionHistory,
   readVersionHistory,
   versionHistoryEntries,
-  versionHistorySummary,
+  versionHistoryRowLine,
   versionHistoryUrl,
 } from "./versionHistory.ts";
 export type { DatedRelease, VersionHistoryEntry, VersionHistorySection } from "./versionHistory.ts";
@@ -2877,6 +2877,7 @@ export type {
 } from "./nowPlayingButtons.ts";
 
 export * from "./followedArtists.ts";
+export * from "./followPlay.ts";
 export * from "./followArtistSearch.ts";
 export * from "./followSuggestions.ts";
 

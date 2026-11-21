@@ -4,9 +4,9 @@ import { createDeveloperTitleTaps, visibleSettingsPages, type SettingsPage } fro
 import { useFocusEffect } from "expo-router";
 import { useCallback, useState } from "react";
 import { router } from "@/lib/timingRouter";
-import { ScrollView, Text, View } from "react-native";
+import { ScrollView, View } from "react-native";
 
-import { CELL, grid } from "@/catalog/grid";
+import { grid } from "@/catalog/grid";
 import { Hairline } from "@/catalog/Hairline";
 import { ScreenHeader } from "@/components/ScreenHeader";
 import { useRenderCount } from "@/perf/perf";
@@ -16,13 +16,15 @@ import {
   setDeveloperSettingsVisible,
   useDeveloperSettingsVisible,
 } from "@/settings/developer";
-import { SETTINGS_TITLE_INSET } from "@/settings/SettingsGlyph";
 import { SettingsPageRow } from "@/settings/SettingsPage";
 import { useSettingsSummaries } from "@/settings/settingsSummaries";
-import { RUNNING_VERSION } from "@/updates/runningVersion";
-import { UpdateButton } from "@/updates/UpdateButton";
+import { InstallNowButton } from "@/updates/InstallNowButton";
+import { UpdateCheckRefreshControl } from "@/updates/UpdateCheckRefreshControl";
 
-/** A row for each page, in Core's order; a handful, so a plain list. */
+/**
+ * A row for each page, in Core's order; a handful, so a plain list. Version History's carries
+ * Install Now on its right edge while an update is ready.
+ */
 function SettingsPageRows({
   summaries,
   developerVisible,
@@ -37,12 +39,16 @@ function SettingsPageRows({
       title={title}
       summary={summaries[page]}
       icon={icon}
+      trailing={page === "versionHistory" ? <InstallNowButton /> : undefined}
       onPress={() => router.push(route)}
     />
   ));
 }
 
-/** Settings: a row for each of its pages (Core's `SETTINGS_PAGES`), with a line on some. */
+/**
+ * Settings: a row for each of its pages (Core's `SETTINGS_PAGES`), with a line on some. A pull
+ * checks for updates now and reads the version history again.
+ */
 export default function SettingsScreen() {
   const { strings } = useLocalisation();
   useScreenContent(true);
@@ -62,21 +68,12 @@ export default function SettingsScreen() {
   return (
     <View className="flex-1 bg-background">
       <ScreenHeader title={strings.settings.settings} onTitlePress={onTitlePress} />
-      <ScrollView contentContainerStyle={{ paddingHorizontal: grid.margin, paddingBottom: 48 }}>
+      <ScrollView
+        refreshControl={<UpdateCheckRefreshControl />}
+        contentContainerStyle={{ paddingHorizontal: grid.margin, paddingBottom: 48 }}
+      >
         <Hairline />
         <SettingsPageRows summaries={summaries} developerVisible={developerVisible} />
-        {RUNNING_VERSION !== null && (
-          // At the rows' title inset, its button on the right edge of the same line.
-          <View
-            className="flex-row items-center pt-6"
-            style={{ paddingLeft: SETTINGS_TITLE_INSET, gap: CELL }}
-          >
-            <Text className="flex-1 font-sans text-footnote text-secondary" selectable>
-              {strings.appUpdates.version(RUNNING_VERSION)}
-            </Text>
-            <UpdateButton />
-          </View>
-        )}
       </ScrollView>
     </View>
   );

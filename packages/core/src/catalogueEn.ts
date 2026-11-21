@@ -208,6 +208,8 @@ export const en = {
   } satisfies Record<TabBarTab, string>,
   newReleases: {
     title: "New from Artists You Follow",
+    /** TalkBack's name for the section header's Play, with the section's title. */
+    playSection: (title: string) => `Play ${title}`,
     single: "Single",
     ep: "EP",
     album: "Album",

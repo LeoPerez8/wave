@@ -260,6 +260,8 @@ export const playbackTextEn = {
   magicQueueFrom: (title: string) => `Magic Queue · from ${title}`,
   /** Up Next's heading over the queue a song played from Search or a link fills. */
   relatedFrom: (title: string) => `Related · from ${title}`,
+  /** Up Next's heading over a queue a section of Home played (New from Artists You Follow). */
+  upNextFrom: (title: string) => `Up next · from ${title}`,
   newQueuePlaying: "New queue playing",
   undo: "Undo",
   actions: "Actions",
