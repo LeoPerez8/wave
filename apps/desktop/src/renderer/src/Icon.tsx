@@ -52,6 +52,8 @@ const paths: Record<string, string> = {
   /** Search's Recognize button, as the phone's. */
   microphone:
     "M12 3a3 3 0 0 0-3 3v6a3 3 0 0 0 6 0V6a3 3 0 0 0-3-3M5 11a7 7 0 0 0 14 0M12 18v3M8 21h8",
+  /** Tabler's share 3, as the phone's Share Lyrics button has. */
+  share: "M13 4v4C6.4 9 4 14.8 3 20c0 .2 5.4-6 10-6v4l8-7Z",
 };
 export function Icon({ name, size = 20 }: { readonly name: string; readonly size?: number }) {
   return (

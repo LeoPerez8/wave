@@ -15,7 +15,7 @@ import {
   type ItemActionEntry,
 } from "./itemActions.ts";
 
-/** The entries a desktop song menu can hold; Share is its Copy Link. A playlist's songs can leave it. */
+/** The entries a desktop song menu can hold; Share opens its submenu. A playlist's songs can leave it. */
 const OFFERED: ReadonlySet<ItemAction> = new Set<ItemAction>([
   "download",
   "playNext",
@@ -46,8 +46,8 @@ export interface DesktopSongSubject {
   readonly ytMusic?: boolean | undefined;
   /** Online lookups are on: songs missing something offer Fix Song. */
   readonly onlineLookups?: boolean | undefined;
-  /** Share links are on: one song's menu offers Copy Link. */
-  readonly copyLink?: boolean | undefined;
+  /** The song can be shared (a Library song): one song's menu offers Share. */
+  readonly share?: boolean | undefined;
 }
 
 /** The entries to offer on [subject]'s songs, in the phone's order. */
@@ -63,7 +63,7 @@ export const desktopSongActions = (subject: DesktopSongSubject): ItemActionEntry
     onlineLookups: subject.onlineLookups,
     here: page === undefined ? "/library" : `/library/${page.kind}/${page.id}`,
   }).filter(
-    (entry) => OFFERED.has(entry.action) && (entry.action !== "share" || subject.copyLink === true),
+    (entry) => OFFERED.has(entry.action) && (entry.action !== "share" || subject.share === true),
   );
   // Streamed songs have no Library entry to take out.
   return items.some((item) => item.streamed === true)

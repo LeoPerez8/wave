@@ -15,6 +15,9 @@ export const shareEn = {
   /** A Recap slide's preview, for TalkBack. */
   recapSlide: (title: string) => `${title} Recap slide`,
   copyLink: "Copy Link",
+  /** The desktop's Share submenu: the song's Spotify and YT Music addresses go to the clipboard. */
+  copySpotifyLink: "Copy Spotify Link",
+  copyYtMusicLink: "Copy YT Music Link",
   /** What the clipboard calls a copied song link. */
   songLink: "Song link",
   linkCopied: "Link copied",

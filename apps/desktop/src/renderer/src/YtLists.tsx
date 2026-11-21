@@ -125,6 +125,7 @@ export function Shelf({
   nested = false,
   onOpen,
   onMenu,
+  onSeeAll,
   onPlay,
 }: {
   readonly title: string;
@@ -134,6 +135,8 @@ export function Shelf({
   readonly nested?: boolean;
   readonly onOpen: (index: number) => void;
   readonly onMenu?: (index: number, at: { readonly x: number; readonly y: number }) => void;
+  /** Its heading's See all, opening the whole list (Home's shelves). */
+  readonly onSeeAll?: () => void;
   /** A tile that opens a page gets a play glyph on its cover, which plays it without opening. */
   readonly onPlay?: (index: number) => void;
 }) {
@@ -145,7 +148,14 @@ export function Shelf({
   );
   return (
     <section className="shelf" aria-label={title}>
-      <Heading>{title}</Heading>
+      {onSeeAll ? (
+        <div className="stats-section-heading">
+          <Heading>{title}</Heading>
+          <button onClick={onSeeAll}>{text.home.seeAll}</button>
+        </div>
+      ) : (
+        <Heading>{title}</Heading>
+      )}
       <div className="shelf-row" role="list">
         {items.map((item, index) => (
           <div key={item.key} role="listitem" className={onPlay ? "tile-playable" : undefined}>

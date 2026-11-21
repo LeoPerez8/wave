@@ -85,12 +85,6 @@ export const desktopEn = {
     waveLooksUpAPhotoOfEach:
       "Wave looks up a photo of each artist on Deezer, which means sending artist names to it, and keeps the photos on this computer. Off, artists show their album artwork and Wave makes no requests.",
   },
-  itemActions: {
-    labels: {
-      // A song's link is copied rather than sent from a share sheet.
-      share: "Copy Link",
-    },
-  },
   recap: {
     // Home's card is clicked, not tapped.
     tapToWatch: "Click to watch",
@@ -99,6 +93,8 @@ export const desktopEn = {
     // Buttons under a card, in the desktop's title case.
     saveImage: "Save Image",
     copyImage: "Copy Image",
+    // The lyrics card is clicked, not tapped.
+    tapToChangeColour: "Click the card to change its colour",
   },
   library: {
     // The artist page's quiet lines: Online is clicked, not tapped.

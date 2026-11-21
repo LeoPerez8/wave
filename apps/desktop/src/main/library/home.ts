@@ -6,6 +6,7 @@ import { playedEntityTotals } from "@wave/client/db/playedEntities";
 import { listeningSums } from "@wave/client/db/playTotals";
 import { parseHomeArrangement, STATS_TOP, statsWindow, summedListeningTotals } from "@wave/core";
 import type { HomeRow, HomeSectionView, HomeView, LocalHomeSectionId } from "../../shared/home.ts";
+import { ytRow } from "../../shared/yt.ts";
 import { browseRows, browseSongs } from "./browse.ts";
 
 const page = <T>(items: readonly T[]) => ({ items, offset: 0, total: items.length });
@@ -25,8 +26,18 @@ export const readHome = (db: LibraryDatabase, stored: string | null): Omit<HomeV
       top.map((r) => Number(r.item.id)),
     ).map((row) => ({ ...row, playCount: counts.get(row.id)! }));
   };
-  const played = home.mostPlayed.filter((r) => r.source === "library");
-  const counts = new Map(played.map((r) => [r.track.id, r.playCount]));
+  const files = new Map(
+    browseSongs(
+      db,
+      home.mostPlayed.flatMap((r) => (r.source === "library" ? [r.track.id] : [])),
+    ).map((row) => [row.id, row]),
+  );
+  // Streamed songs too, each with its counted plays, as the phone lists them.
+  const mostPlayed = home.mostPlayed.flatMap((r): HomeRow[] => {
+    if (r.source === "stream") return [{ ...ytRow(r.song), playCount: r.playCount }];
+    const row = files.get(r.track.id);
+    return row === undefined ? [] : [{ ...row, playCount: r.playCount }];
+  });
   const rows: Record<LocalHomeSectionId, readonly HomeRow[]> = {
     "recently-added": browseRows(
       db,
@@ -38,10 +49,7 @@ export const readHome = (db: LibraryDatabase, stored: string | null): Omit<HomeV
       "albums",
       home.recentlyPlayed.flatMap((r) => (typeof r.id === "number" ? [r.id] : [])),
     ),
-    "most-played": browseSongs(
-      db,
-      played.map((r) => r.track.id),
-    ).map((row) => ({ ...row, playCount: counts.get(row.id)! })),
+    "most-played": mostPlayed,
     "most-played-albums": ranked("albums", STATS_TOP),
     "most-played-artists": ranked("artists", 5),
     favorites: browseSongs(
