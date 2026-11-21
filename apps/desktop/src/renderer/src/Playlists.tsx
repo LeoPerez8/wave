@@ -263,9 +263,12 @@ export function usePlaylistEdits({ go, deleted, failed, changed, importStarted }
           .catch(() => failed(text.desktopLibrary.actionFailed)),
     }));
 
-  /** A drag or Alt+arrow on a playlist's page: [target] goes before row [before], or to the end. */
-  const place = (playlistId: number, target: SongTarget, before: number | null) =>
-    void window.wave.playlists
+  /**
+   * A drag or Alt+arrow on a playlist's page: [target] goes before row [before], or to the end.
+   * Settles once the playlist holds the new order.
+   */
+  const place = (playlistId: number, target: SongTarget, before: number | null): Promise<void> =>
+    window.wave.playlists
       .place(playlistId, target, before)
       .then(changed)
       .catch(() => failed(text.desktopLibrary.actionFailed));

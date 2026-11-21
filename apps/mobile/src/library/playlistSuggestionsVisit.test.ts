@@ -855,11 +855,20 @@ test("leaving right after a tap, its saved offers don't hold the song on the nex
 setFlagsFromString("--expose-gc");
 const collectGarbage = runInNewContext("gc") as () => void;
 
-/** How many reads' whole rows something still holds, once nothing under way needs them. */
+/**
+ * How many reads' whole rows something still holds, once nothing under way needs them. A loaded
+ * machine can finish the work under way, or collect, a few turns late: rows a leak holds stay held
+ * however long it waits, so it asks again until none is held or two seconds have passed.
+ */
 const heldReadRows = async () => {
-  await settledFrames();
-  collectGarbage();
-  return app.readRows.filter((rows) => rows.deref() !== undefined).length;
+  const until = Date.now() + 2_000;
+  for (;;) {
+    await settledFrames();
+    collectGarbage();
+    const held = app.readRows.filter((rows) => rows.deref() !== undefined).length;
+    if (held === 0 || Date.now() > until) return held;
+    await new Promise((resolve) => setTimeout(resolve, 20));
+  }
 };
 
 test("a finished ranking lets go of the read's whole rows, on a Library array that stands", async () => {
