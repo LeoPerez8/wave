@@ -41,5 +41,11 @@ export interface PlaybackEvent {
   readonly measurements?: readonly LoudnessResult[] | undefined;
 }
 
+/** An output the system has; `id` stays the same across restarts. */
+export interface OutputDevice {
+  readonly id: string;
+  readonly name: string;
+}
+
 /** The audio files the engine plays, by extension. */
 export const PLAYABLE_EXTENSIONS = ["mp3", "m4a", "mp4", "flac", "ogg", "oga", "opus", "wav"];

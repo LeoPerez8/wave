@@ -38,6 +38,12 @@ const paths: Record<string, string> = {
   stats: "M4 20h16M6 16v-4m6 4V5m6 11V9",
   /** Tabler's language glyph, as the phone's Translate button has. */
   translate: "M4 5h7M9 3v2c0 4.4-2.2 8-5 8M5 9c0 2.1 3 3.9 6.7 4M12 20l4-9 4 9M19.1 18h-6.2",
+  /** A small window over a large one. */
+  miniPlayer: "M3 4h18v16H3ZM12 12h6v5h-6Z",
+  /** Out to the corners: back to the main window. */
+  showMain: "M14 4h6v6M20 4l-7 7M10 20H4v-6M4 20l7-7",
+  up: "m5 15 7-7 7 7",
+  down: "m5 9 7 7 7-7",
 };
 export function Icon({ name, size = 20 }: { readonly name: string; readonly size?: number }) {
   return (

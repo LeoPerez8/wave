@@ -7,6 +7,7 @@ import {
   spotifyLibraryHas,
   spotifyShareMatch,
   spotifyShareSong,
+  spotifyWebShareMatch,
 } from "./index.ts";
 
 const lucky = { title: "Get Lucky", artists: ["Daft Punk"], album: "RAM", durationMs: 369_000 };
@@ -207,5 +208,58 @@ describe("spotifyLibraryHas", () => {
 
   test("rejects an answer that isn't the library", async () => {
     await assert.rejects(spotifyLibraryHas(PLAYLIST, async () => ({ me: null })));
+  });
+});
+
+/** A track as the official Web API's search lists it. */
+const webTrack = (id: string, name: string, durationMs: number, extra: object = {}) => ({
+  id,
+  uri: `spotify:track:${id}`,
+  name,
+  duration_ms: durationMs,
+  artists: [{ name: "Daft Punk" }],
+  album: { name: "RAM" },
+  ...extra,
+});
+
+describe("spotifyWebShareMatch", () => {
+  test("takes the first result that is the same recording, with a length within 3 seconds", () => {
+    const answer = {
+      tracks: {
+        items: [
+          webTrack("live", "Get Lucky - Live", 369_000),
+          webTrack("long", "Get Lucky", 373_000),
+          webTrack("same", "Get Lucky", 371_500),
+          webTrack("later", "Get Lucky", 369_000),
+        ],
+      },
+    };
+    assert.equal(spotifyWebShareMatch(lucky, answer), "spotify:track:same");
+  });
+
+  test("leaves out a track Spotify doesn't play, and anything that isn't a track", () => {
+    const answer = {
+      tracks: {
+        items: [
+          null,
+          webTrack("gone", "Get Lucky", 369_000, { is_playable: false }),
+          { ...webTrack("nouri", "Get Lucky", 369_000), uri: "" },
+          webTrack("plays", "Get Lucky", 369_000, { is_playable: true }),
+        ],
+      },
+    };
+    assert.equal(spotifyWebShareMatch(lucky, answer), "spotify:track:plays");
+  });
+
+  test("answers null when no result is the same recording", () => {
+    const answer = { tracks: { items: [webTrack("other", "Instant Crush", 337_000)] } };
+    assert.equal(spotifyWebShareMatch(lucky, answer), null);
+    assert.equal(spotifyWebShareMatch(lucky, { tracks: { items: [] } }), null);
+  });
+
+  test("answers undefined for anything that isn't a search answer", () => {
+    assert.equal(spotifyWebShareMatch(lucky, null), undefined);
+    assert.equal(spotifyWebShareMatch(lucky, { error: { status: 500 } }), undefined);
+    assert.equal(spotifyWebShareMatch(lucky, { tracks: { items: "none" } }), undefined);
   });
 });

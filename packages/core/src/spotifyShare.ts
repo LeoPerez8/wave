@@ -71,6 +71,38 @@ export const spotifyShareMatch = (song: SpotifySong, data: unknown): string | nu
   return spotifyYtMatch(song, tracks)?.uri ?? null;
 };
 
+/** A track of the official Web API's search (the desktop's), or null when it isn't one Spotify plays. */
+const webSearchTrack = (item: unknown): SpotifyTrack | null => {
+  const uri = text(at(item, "uri"));
+  const title = text(at(item, "name"));
+  const artists = at(item, "artists");
+  if (!uri || !title || !Array.isArray(artists) || at(item, "is_playable") === false) return null;
+  const durationMs = at(item, "duration_ms");
+  return {
+    uri,
+    title,
+    artists: artists.flatMap((artist) => text(at(artist, "name")) || []),
+    album: text(at(item, "album", "name")) || null,
+    durationMs: typeof durationMs === "number" && Number.isFinite(durationMs) ? durationMs : null,
+  };
+};
+
+/**
+ * `spotifyShareMatch` for the official Web API's answer to
+ * `GET /v1/search?type=track`, which the desktop asks: the track URI of the
+ * first result that is the same recording as [song], null when none is, and
+ * undefined when [answer] isn't a search answer at all.
+ */
+export const spotifyWebShareMatch = (
+  song: SpotifySong,
+  answer: unknown,
+): string | null | undefined => {
+  const items = at(answer, "tracks", "items");
+  if (!Array.isArray(items)) return undefined;
+  const tracks = items.map(webSearchTrack).filter((track) => track !== null);
+  return spotifyYtMatch(song, tracks)?.uri ?? null;
+};
+
 /** The `data` of a paged read's answer for the page starting at [offset]. */
 export type SpotifyPageRead = (offset: number) => Promise<unknown>;
 

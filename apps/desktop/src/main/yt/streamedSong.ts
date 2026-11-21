@@ -85,25 +85,32 @@ export const streamedArtistTarget = (
 };
 
 /** Whether [song] is starred: a pending favorite, or the Library's song for it starred. */
-export const streamedStarred = (db: LibraryDatabase, song: YtAlbumSong): boolean => {
-  const answer = selectNowPlayingSong(db, { trackId: ytTrackId(song.videoId), song });
-  return answer.favorite || answer.pendingFavorite;
+export const streamedStarred = (db: LibraryDatabase, song: YtAlbumSong): boolean =>
+  streamedLibraryFacts(db, song).starred;
+
+export const streamedLibraryFacts = (db: LibraryDatabase, song: YtAlbumSong) => {
+  const { track, favorite, pendingFavorite } = selectNowPlayingSong(db, {
+    trackId: ytTrackId(song.videoId),
+    song,
+  });
+  return { track, starred: favorite || pendingFavorite, hasFile: track?.path != null };
+};
+
+export const streamedPlaylistEntry = (db: LibraryDatabase, song: YtAlbumSong): PlaylistSong => {
+  const { track } = streamedLibraryFacts(db, song);
+  return track === null ? { source: "stream", song } : { source: "library", trackId: track.id };
 };
 
 /** What the Library holds of [song]: its song (with a file or missing) and its star. */
 const libraryFacts = (ports: StreamedSongPorts, song: YtAlbumSong) => {
-  const { track, favorite, pendingFavorite } = selectNowPlayingSong(ports.db, {
-    trackId: ytTrackId(song.videoId),
-    song,
-  });
-  const hasFile = track !== null && track.path !== null;
+  const { track, starred, hasFile } = streamedLibraryFacts(ports.db, song);
   // A missing song downloads into its Library entry; anything else as a new song.
   const jobId = track !== null && !hasFile ? missingSongJobId(track.id) : (song.videoId as string);
   const status =
     track !== null && !hasFile
       ? ports.downloads.status(track.id)
       : ports.downloads.ytStatus(song.videoId);
-  return { track, starred: favorite || pendingFavorite, hasFile, jobId, status };
+  return { track, starred, hasFile, jobId, status };
 };
 
 export const streamedSongMenu = (

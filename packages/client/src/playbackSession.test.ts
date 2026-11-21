@@ -482,3 +482,63 @@ test("Undo to a song that won't load goes back to the old queue, stopped", async
   assert.equal(undone.canUndo, false);
   assert.ok(changes > before, "the change is told");
 });
+
+test("with Don't play explicit on, explicit Library and YT Music songs stay out of the queue, and turning it on takes them out", async (t) => {
+  const db = await openTestDatabase();
+  const clean = addTrack(db, { title: "Clean" });
+  const explicit = addTrack(db, { title: "Explicit", explicit: "explicit" });
+  const unknown = addTrack(db, { title: "Unknown" });
+  const streamed = (videoId: string, isExplicit: boolean) => ({
+    videoId,
+    title: videoId,
+    artists: ["Someone"],
+    album: null,
+    albumId: null,
+    durationMs: 60000,
+    artworkUrl: null,
+    explicit: isExplicit,
+  });
+  const songs = [streamed("cleanstream", false), streamed("explicitone", true)];
+  let on = true;
+  const session = await createPlaybackSession({
+    db,
+    audio: device(),
+    source: "desktop",
+    streamed: (videoId) => songs.find((song) => song.videoId === videoId),
+    dontPlayExplicit: () => on,
+  });
+  t.after(() => session.close());
+  const queued = () => session.snapshot().queue.entries.map((entry) => entry.trackId);
+  const current = () => {
+    const { queue } = session.snapshot();
+    return queue.entries[queue.index]?.trackId;
+  };
+  const all = [
+    String(explicit),
+    String(clean),
+    "yt:explicitone",
+    "yt:cleanstream",
+    String(unknown),
+  ];
+  const play = { type: "play", trackIds: all, context: { kind: "songs", id: null } } as const;
+
+  // The tapped explicit song gives way to the next clean one; a song nothing says about plays.
+  await session.dispatch({ ...play, startIndex: 0 });
+  assert.deepEqual(queued(), [String(clean), "yt:cleanstream", String(unknown)]);
+  assert.equal(current(), String(clean));
+  await session.dispatch({ type: "addToQueue", trackIds: ["yt:explicitone", String(explicit)] });
+  assert.deepEqual(queued(), [String(clean), "yt:cleanstream", String(unknown)]);
+
+  on = false;
+  await session.dispatch({ ...play, startIndex: 2 });
+  assert.deepEqual(queued(), all);
+  assert.equal(current(), "yt:explicitone");
+  assert.equal(session.snapshot().status.state, "playing");
+
+  // The switch turns on: the queue's explicit songs go, the playing one too.
+  on = true;
+  await session.dropExplicit();
+  assert.deepEqual(queued(), [String(clean), "yt:cleanstream", String(unknown)]);
+  assert.equal(current(), "yt:cleanstream");
+  assert.equal(session.snapshot().status.state, "playing");
+});

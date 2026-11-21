@@ -27,6 +27,10 @@ export const desktopShortcutsEn = {
     close: "Close a menu, selection or sheet",
     shortcuts: "List the shortcuts",
     quit: "Quit Wave",
+    toggleRowSelection: "Add or remove a row from selection",
+    selectRowRange: "Select a range of rows",
+    extendRowSelection: "Extend row selection",
+    selectAllRows: "Select all rows",
   } satisfies Record<ShortcutId, string>,
   /** Keys named in words; the others show their own symbol. */
   keys: {
@@ -52,5 +56,7 @@ export const desktopShortcutsEn = {
     f: "F",
     l: "L",
     q: "Q",
+    a: "A",
+    click: "Click",
   } satisfies Record<ShortcutKey, string>,
 };

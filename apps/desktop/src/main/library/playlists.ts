@@ -70,7 +70,7 @@ import type {
 } from "../../shared/playlists.ts";
 import { Playback } from "../playback/playback.ts";
 import { browseSongs } from "./browse.ts";
-import { targetSongs } from "./songActions.ts";
+import { targetPlaylistEntries } from "./songActions.ts";
 import { collectionSongs } from "./collectionActions.ts";
 
 /** Reads and cuts photos for a playlist's image (Electron's `nativeImage` in the app). */
@@ -196,7 +196,7 @@ export const createPlaylists = (options: PlaylistOptions) => {
         target === undefined
           ? []
           : "scope" in target
-            ? songsOf(targetSongs(db, target))
+            ? targetPlaylistEntries(db, target)
             : toPlaylistSongs(collectionSongs(db, target));
       const made = createPlaylist(db, name, songs, now());
       changed();
@@ -223,12 +223,14 @@ export const createPlaylists = (options: PlaylistOptions) => {
             graveyard: libraryGraveyard(playlistId).length,
           };
     },
-    /** Remove from Playlist: every entry of [trackIds]; how many came out. */
-    removeSongs: (playlistId: number, trackIds: readonly number[]): number => {
-      const named = new Set(trackIds);
-      const items = libraryEntries(playlistId)
-        .filter((entry) => named.has(entry.trackId))
-        .map((entry) => entry.itemId);
+    /** Remove from Playlist: Library song IDs and negated streamed entry IDs. */
+    removeSongs: (playlistId: number, rowIds: readonly number[]): number => {
+      const named = new Set(rowIds);
+      const items = selectPlaylistEntries(db, playlistId).flatMap((entry) => {
+        if (entry.source === "unavailable") return [];
+        const key = entry.source === "library" ? entry.track.id : -entry.itemId;
+        return named.has(key) ? [entry.itemId] : [];
+      });
       const removal = removePlaylistItems(db, playlistId, items, now());
       lastRemoval = removal;
       if (removal.entries.length > 0) changed();
