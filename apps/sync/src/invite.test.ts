@@ -498,7 +498,7 @@ describe("the invite page", () => {
 });
 
 describe("Android's check that invite links are Wave's", () => {
-  test("names Wave's package and the release key's certificate, with no session", async () => {
+  test("names Wave's package and both certificates in the signing lineage, with no session", async () => {
     const service = await harness();
     const response = await service.request("GET", "/.well-known/assetlinks.json");
     assert.equal(response.status, 200);
@@ -517,17 +517,26 @@ describe("Android's check that invite links are Wave's", () => {
     assert.equal(statement?.target.namespace, "android_app");
     assert.equal(statement?.target.package_name, "dev.leoperez.wave");
     const fingerprints = statement?.target.sha256_cert_fingerprints ?? [];
-    assert.equal(fingerprints.length, 1);
-    assert.match(fingerprints[0] ?? "", /^(?:[0-9A-F]{2}:){31}[0-9A-F]{2}$/);
-    // The key the release job signs every APK with (scripts/ci/sign-apk.sh), and no other.
+    assert.equal(fingerprints.length, 2);
+    assert.ok(
+      fingerprints.every((fingerprint) => /^(?:[0-9A-F]{2}:){31}[0-9A-F]{2}$/.test(fingerprint)),
+    );
+    // The release key and the debug key its rotation proof starts from (scripts/ci/sign-apk.sh):
+    // Android checks a rotated APK by the latter (#1417).
     const signing = await readFile(
       fileURLToPath(new URL("../../../scripts/ci/sign-apk.sh", import.meta.url)),
       "utf8",
     );
-    const pinned = /release_signer="\$\{WAVE_RELEASE_SIGNER_SHA256:-([0-9a-f]{64})\}"/.exec(
+    const release = /release_signer="\$\{WAVE_RELEASE_SIGNER_SHA256:-([0-9a-f]{64})\}"/.exec(
       signing,
     )?.[1];
-    assert.equal(fingerprints[0]?.replaceAll(":", "").toLowerCase(), pinned);
+    const previous = /previous_signer="\$\{WAVE_PREVIOUS_SIGNER_SHA256:-([0-9a-f]{64})\}"/.exec(
+      signing,
+    )?.[1];
+    assert.deepEqual(
+      fingerprints.map((fingerprint) => fingerprint.replaceAll(":", "").toLowerCase()),
+      [release, previous],
+    );
   });
 });
 

@@ -4,7 +4,7 @@ import { describe, test } from "node:test";
 import {
   planPlaylistSongs,
   playlistAddVisit,
-  holdPlaylistAddVisitSong,
+  settlePlaylistAddVisit,
   stepPlaylistAddVisit,
   playlistEntryLinks,
   playlistPlayback,
@@ -108,7 +108,7 @@ describe("playlist add search visits", () => {
     assert.equal(first.action, "add");
     assert.equal(first.checked, true);
 
-    const undo = stepPlaylistAddVisit(first.visit, added);
+    const undo = stepPlaylistAddVisit(settlePlaylistAddVisit(first.visit, added, "done"), added);
     assert.equal(undo.action, "remove");
     assert.equal(undo.checked, false);
     assert.equal(stepPlaylistAddVisit(undo.visit, held).action, "none");
@@ -118,9 +118,59 @@ describe("playlist add search visits", () => {
     const song = stream(yt("collaborative"));
     const visit = playlistAddVisit([]);
     const tapped = stepPlaylistAddVisit(visit, song);
-    const held = holdPlaylistAddVisitSong(tapped.visit, song);
+    const held = settlePlaylistAddVisit(tapped.visit, song, "held");
     assert.equal(stepPlaylistAddVisit(held, song).action, "none");
     assert.equal(held.added.has("yt:collaborative"), false);
+    assert.equal(held.alreadyIn.has("yt:collaborative"), true);
+  });
+
+  test("a tap on a song still being written does nothing until its write settles", () => {
+    const song = library(3);
+    const adding = stepPlaylistAddVisit(playlistAddVisit([]), song);
+    assert.deepEqual(stepPlaylistAddVisit(adding.visit, song), {
+      visit: adding.visit,
+      action: "none",
+      checked: true,
+    });
+    const added = settlePlaylistAddVisit(adding.visit, song, "done");
+    const removing = stepPlaylistAddVisit(added, song);
+    assert.equal(removing.action, "remove");
+    assert.deepEqual(stepPlaylistAddVisit(removing.visit, song), {
+      visit: removing.visit,
+      action: "none",
+      checked: false,
+    });
+  });
+
+  test("a write's outcome lands on the visit as it is now, keeping other songs' taps", () => {
+    const slow = library(1);
+    const other = library(2);
+    const adding = stepPlaylistAddVisit(playlistAddVisit([]), slow).visit;
+    const both = stepPlaylistAddVisit(adding, other).visit;
+
+    const failed = settlePlaylistAddVisit(both, slow, "failed");
+    assert.equal(failed.added.has("1"), false);
+    assert.equal(failed.added.has("2"), true);
+    assert.equal(stepPlaylistAddVisit(failed, slow).action, "add");
+    assert.equal(stepPlaylistAddVisit(failed, other).action, "none");
+
+    const held = settlePlaylistAddVisit(both, slow, "held");
+    assert.equal(held.alreadyIn.has("1"), true);
+    assert.equal(held.added.has("2"), true);
+    assert.equal(stepPlaylistAddVisit(held, other).action, "none");
+  });
+
+  test("a failed undo checks the song again", () => {
+    const song = library(4);
+    const added = settlePlaylistAddVisit(
+      stepPlaylistAddVisit(playlistAddVisit([]), song).visit,
+      song,
+      "done",
+    );
+    const removing = stepPlaylistAddVisit(added, song).visit;
+    const failed = settlePlaylistAddVisit(removing, song, "failed");
+    assert.equal(failed.added.has("4"), true);
+    assert.equal(stepPlaylistAddVisit(failed, song).action, "remove");
   });
 
   test("the same recording as a Library song and a YT Music song is a different entry", () => {

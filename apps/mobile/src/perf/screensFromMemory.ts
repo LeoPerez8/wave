@@ -175,6 +175,33 @@ export const SCREENS_FROM_MEMORY: Record<string, ScreenFromMemory> = {
       "library/collaborativePlaylists.tsx#usePrivateCopyNotice",
     ],
   },
+  "app/library/playlist/[id]/add.tsx": {
+    draws: ["library/hooks.ts#usePlaylist"],
+  },
+  "app/(tabs)/albums/playlist/[id]/add.tsx": {
+    via: ["app/library/playlist/[id]/add.tsx"],
+    draws: ["library/hooks.ts#usePlaylist"],
+  },
+  "app/(tabs)/artists/playlist/[id]/add.tsx": {
+    via: ["app/library/playlist/[id]/add.tsx"],
+    draws: ["library/hooks.ts#usePlaylist"],
+  },
+  "app/(tabs)/favorites/playlist/[id]/add.tsx": {
+    via: ["app/library/playlist/[id]/add.tsx"],
+    draws: ["library/hooks.ts#usePlaylist"],
+  },
+  "app/(tabs)/genres/playlist/[id]/add.tsx": {
+    via: ["app/library/playlist/[id]/add.tsx"],
+    draws: ["library/hooks.ts#usePlaylist"],
+  },
+  "app/(tabs)/playlists/playlist/[id]/add.tsx": {
+    via: ["app/library/playlist/[id]/add.tsx"],
+    draws: ["library/hooks.ts#usePlaylist"],
+  },
+  "app/(tabs)/songs/playlist/[id]/add.tsx": {
+    via: ["app/library/playlist/[id]/add.tsx"],
+    draws: ["library/hooks.ts#usePlaylist"],
+  },
   "app/library/playlist-graveyard/[id].tsx": { draws: ["library/hooks.ts#usePlaylistGraveyard"] },
   "app/library/stats/index.tsx": {
     draws: [

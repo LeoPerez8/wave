@@ -24,12 +24,13 @@ export interface KeptYtSearch {
 /** A few result pages each; queries typed back and forth during a visit. */
 const SEARCHES = knownPages<KeptYtSearch>(24);
 
-/** [songless]: a search embedded in another flow, which asks for artists and albums alone. */
-const searchKey = (query: string, songless: boolean): string =>
-  `${songless ? "scoped" : "all"}:${query}`;
+type SearchKind = "all" | "artistsAlbums" | "songs";
 
-export const keptYtSearch = (query: string, songless: boolean): KeptYtSearch | undefined =>
-  SEARCHES.get(searchKey(query, songless));
+/** Search scopes keep separate answers because each asks different endpoints. */
+const searchKey = (query: string, kind: SearchKind): string => `${kind}:${query}`;
 
-export const keepYtSearch = (query: string, songless: boolean, answer: KeptYtSearch): void =>
-  SEARCHES.set(searchKey(query, songless), answer);
+export const keptYtSearch = (query: string, kind: SearchKind): KeptYtSearch | undefined =>
+  SEARCHES.get(searchKey(query, kind));
+
+export const keepYtSearch = (query: string, kind: SearchKind, answer: KeptYtSearch): void =>
+  SEARCHES.set(searchKey(query, kind), answer);

@@ -92,8 +92,14 @@ export const homePlaceholderHeight = (
   }
 };
 
+/** Space above every section but the first on a screen: what `TitledSection` puts there. */
+export const SECTION_GAP = CELL * 5;
+
 /** A section's heading as `TitledSection` draws it: its top margin, its line and the gap under it. */
-const SECTION_HEADING = CELL * 5 + CELL * 6 + CELL * 1.5;
+const SECTION_HEADING = SECTION_GAP + CELL * 6 + CELL * 1.5;
+
+/** DJ's card on Home (`DjCard`): its least height. */
+const DJ_CARD = CELL * 21;
 
 /**
  * Sections that often draw nothing (no followed artists, no shows, signed
@@ -111,14 +117,20 @@ const MAY_DRAW_NOTHING: ReadonlySet<HomeSectionId> = new Set([
  * to mount (`StagedSections`, Core's `stagedMounts`, #1380): erring short, so
  * the first frame never leaves the bottom of the screen empty. [width] is the
  * window's. Discover counts only the Magic Queue's grid under its heading;
- * the lines between sections count nothing.
+ * DJ its card under the section gap, and nothing with YouTube Music off
+ * ([ytMusic]), when it draws nothing. The lines between sections count nothing.
  */
-export const homeItemEstimate = (item: HomeItem, fontScale: number, width: number): number => {
+export const homeItemEstimate = (
+  item: HomeItem,
+  fontScale: number,
+  width: number,
+  ytMusic: boolean,
+): number => {
   if (typeof item === "string") return 0;
   const { section } = item;
   if (MAY_DRAW_NOTHING.has(section)) return 0;
   const available = width - grid.margin * 2;
-  if (section === "dj") return CELL * 21;
+  if (section === "dj") return ytMusic ? SECTION_GAP + DJ_CARD : 0;
   if (section === "discover") return SECTION_HEADING + magicQueueGrid(available, fontScale).height;
   return SECTION_HEADING + homePlaceholderHeight(section, fontScale, available);
 };

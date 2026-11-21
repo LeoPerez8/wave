@@ -290,9 +290,7 @@ const KINDS: { readonly [K in ItemKind]: KindInfo<ItemOf[K]> } = {
     songs: (mixed) =>
       mixed.kind === "track" || mixed.kind === "album"
         ? asOwnKind(mixed, (kind, item) => kind.songs(item))
-        : mixed.kind === "playlist"
-          ? Promise.resolve([])
-          : Promise.resolve([]),
+        : Promise.resolve([]),
     heading: (mixed, sectionSongs) =>
       mixed.kind === "ytAlbum"
         ? {
@@ -399,7 +397,7 @@ export const targetEntries = async (target: ActionItems): Promise<readonly Targe
           if (Result.isFailure(search)) throw search.failure;
           browseId = pickStreamedAlbum(album, search.success);
         }
-        if (browseId === null) throw new Error("Album was not found on YouTube Music");
+        if (browseId === null) throw new Error(library().albumNotOnYtMusic);
         const result = await askYtMusic((ytMusic) => ytMusic.album(browseId!));
         if (Result.isFailure(result)) throw result.failure;
         return ytAlbumSongs(browseId, result.success);
@@ -410,7 +408,8 @@ export const targetEntries = async (target: ActionItems): Promise<readonly Targe
             source: "library" as const,
             track,
           }));
-        if (release.browseId === null) throw new Error("Release has no album page");
+        if (release.browseId === null)
+          throw new Error(currentLocalisation().strings.newReleases.unavailable);
         const result = await askYtMusic((ytMusic) => ytMusic.album(release.browseId!));
         if (Result.isFailure(result)) throw result.failure;
         return ytAlbumSongs(release.browseId, result.success).map((song) => ({
