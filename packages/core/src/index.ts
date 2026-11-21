@@ -2490,6 +2490,7 @@ export { libraryMixProfilesSteps } from "./genreAffinity.ts";
 export { rankPlaysSteps } from "./stats.ts";
 
 export * from "./ytAlbumOpening.ts";
+export { albumDiscHeads, type DiscHead } from "./albumDiscs.ts";
 export { ytArtistPageOpening } from "./ytArtistPageOpening.ts";
 
 export { reconcileScanSteps } from "./scanReconcile.ts";
