@@ -206,6 +206,8 @@ export interface MagicSession {
    * in place of Discover's sliders (`magicSessionSliders`); none otherwise.
    */
   readonly dj?: DjSettings;
+  /** Artist tiles selected in DJ, used to cover the first batch. */
+  readonly djArtistSeeds?: readonly string[];
   /** Family constraints for radios contributed by selected DJ family tiles. */
   readonly djGenreRadios?: readonly { readonly id: string; readonly families: readonly string[] }[];
   /** Signals consumed by the shared radio ranking. Old sessions have none. */
@@ -1015,6 +1017,7 @@ export const parseMagicSession = (value: unknown): MagicSession | null => {
       ? { likedRadios: likedRadios as unknown as readonly MagicSongRadioSeed[] }
       : {}),
     ...(seed["kind"] === "dj" ? { dj: parseDjSettings(value["dj"]) } : {}),
+    ...(isStrings(value["djArtistSeeds"]) ? { djArtistSeeds: value["djArtistSeeds"] } : {}),
     ...(validDjGenreRadios
       ? {
           djGenreRadios: djGenreRadios as unknown as NonNullable<MagicSession["djGenreRadios"]>,

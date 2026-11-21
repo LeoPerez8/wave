@@ -853,6 +853,9 @@ export const startDjQueue = (
     id,
     seed: { kind: "dj", id, title: DJ_SEED_TITLE },
     dj: settings,
+    djArtistSeeds: tiles
+      .filter((tile): tile is DjArtistTile => tile.kind === "artist")
+      .map((tile) => tile.name),
     seedSongs: [...seeds.values()],
     seedDraws: [],
     used: [],

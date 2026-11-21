@@ -262,6 +262,54 @@ describe("Artist variety in a DJ session", () => {
     );
   });
 
+  test("the first batch covers selected artist tiles at every variety level", () => {
+    for (const variety of DJ_VARIETIES) {
+      const selected = ["A", "B", "C", "D"];
+      const started = session({ variety }, selected);
+      const candidates = [...songsBy(3, "A", "B", "C", "D"), ...songsBy(12, "A")];
+      const pools = djVarietyCandidates(started, graphOf({}), { seed: candidates, liked: [] }, 10);
+      const songs = completeMagicRadioBatch(started, pools.seed, pools.liked).songs;
+      for (const artist of selected)
+        assert.ok(
+          songs.some((song) => song.song!.artists.includes(artist)),
+          `${variety}: ${artist}`,
+        );
+    }
+  });
+
+  test("the first batch interleaves selected artists and covers at most ten", () => {
+    const selected = Array.from({ length: 12 }, (_, index) => `Artist ${index}`);
+    const started = session({ variety: "low" }, selected);
+    const candidates = selected.flatMap((artist) => songsBy(3, artist));
+    const pools = djVarietyCandidates(started, null, { seed: candidates, liked: [] }, 10);
+    const songs = completeMagicRadioBatch(started, pools.seed, pools.liked).songs;
+    const artists = songs.map((song) => song.song!.artists[0]!);
+    assert.equal(new Set(artists).size, 10);
+    for (let index = 1; index < artists.length; index++)
+      assert.notEqual(artists[index], artists[index - 1]);
+  });
+
+  test("a selected artist without candidates is skipped", () => {
+    const started = session({ variety: "low" }, ["A", "B", "Unavailable"]);
+    const candidates = [...songsBy(5, "A"), ...songsBy(5, "B")];
+    const pools = djVarietyCandidates(started, null, { seed: candidates, liked: [] }, 10);
+    const songs = completeMagicRadioBatch(started, pools.seed, pools.liked).songs;
+    assert.equal(songs.length, 10);
+    assert.ok(songs.some((song) => song.song!.artists.includes("A")));
+    assert.ok(songs.some((song) => song.song!.artists.includes("B")));
+  });
+
+  test("the first batch covers selected artists with Library-only songs", () => {
+    const started = session({ variety: "low" }, ["A", "B"]);
+    const candidates = ["A", "B"].flatMap((artist) =>
+      songsBy(3, artist).map((song) => ({ ...song, song: null, source: "library" as const })),
+    );
+    const pools = djVarietyCandidates(started, null, { seed: candidates, liked: [] }, 10);
+    const songs = completeMagicRadioBatch(started, pools.seed, pools.liked).songs;
+    assert.ok(songs.some((song) => song.artists.includes(magicArtistKey("A"))));
+    assert.ok(songs.some((song) => song.artists.includes(magicArtistKey("B"))));
+  });
+
   test("leaves any other Magic Queue's candidates as they are", () => {
     const ordinary = startStreamedMagicQueue(songBy("Picked").song!, { id: "m1" }).session;
     const pools = { seed: songsBy(3, "Stranger", "Far A"), liked: songsBy(2, "Stranger") };
