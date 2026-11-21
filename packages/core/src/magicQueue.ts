@@ -1,5 +1,6 @@
 import { en, type Catalogue } from "./catalogueEn.ts";
 import { artistPhotoName } from "./artistPhoto.ts";
+import type { DislikedSongs } from "./dislikes.ts";
 import { DISCOVER_MIX_LEVELS, type DiscoverMixLevel } from "./discoverMixLevels.ts";
 import type { DiscoverRadioSong } from "./discoverMixes.ts";
 import { type GenreProfile, type GenreProfileOf, type GenreTagged } from "./genreAffinity.ts";
@@ -813,6 +814,26 @@ export const magicQueueEdits = (
     .map((entry) => entry.trackId);
   return added.length === 0 && removed.length === 0 ? NO_EDITS : { added, removed };
 };
+
+/**
+ * The entries of [session]'s queue a dislike takes out, by key: the
+ * recommendations not yet played whose song is in [disliked] (by
+ * `dislikeKey`, a queue track id). The song playing stays, as does what
+ * played already and what the owner lined up by hand; none when [state]
+ * isn't the session's queue. The app removes each (`remove`), which the
+ * session then learns as a recommendation taken out (`magicQueueEdits`).
+ */
+export const magicQueueDislikedEntries = (
+  session: MagicSession,
+  state: QueueState,
+  disliked: DislikedSongs,
+): string[] =>
+  disliked.size === 0 || !isMagicQueue(session, state)
+    ? []
+    : state.entries
+        .slice(state.index + 1)
+        .filter((entry) => recommended(entry) && disliked.has(entry.trackId))
+        .map((entry) => entry.key);
 
 /** How many artists' radios a Magic Queue's YouTube Music candidates come from. */
 const RADIO_ARTISTS = 2;

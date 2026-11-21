@@ -843,6 +843,7 @@ export {
   magicFaithfulGenreProfile,
   magicYtSong,
   magicPlaySignal,
+  magicQueueDislikedEntries,
   magicQueueEdits,
   magicQueueLabel,
   magicQueueKeepsPlayingSong,

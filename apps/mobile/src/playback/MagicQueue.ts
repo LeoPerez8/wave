@@ -10,6 +10,7 @@ import {
   magicBatchLoading,
   magicPickDue,
   magicPickEnded,
+  magicQueueDislikedEntries,
   magicBatchRadios,
   magicLibrarySongs,
   magicListSeedSongs,
@@ -50,6 +51,7 @@ import { recommendationSnapshot } from "@/home/recommendationSnapshot";
 import { discoverLevel, discoverSliders } from "@/lib/discoverSettings";
 import { makeExternalStore, subscribeAll } from "@wave/client/externalStore";
 import { oneAtATime } from "@/lib/oneAtATime";
+import { dislikedSongsNow, onDislikesChanged } from "@/library/dislikes";
 import { onStarred, onYtSongSignal } from "@/library/libraryChanges";
 import { LibraryStore } from "@/library/LibraryStore";
 import { songHasFile, type SongRow, type ArtistRow } from "@wave/client";
@@ -75,7 +77,7 @@ import { cacheYtCoversInBackground, ytQueueTrack } from "./ytQueueTracks";
 /**
  * The Magic Queue (docs/spec.md, Magic Queue): Core's engine picks the songs
  * and learns; this module starts a session from a long-press menu, feeds it
- * what happens (plays ending, stars, downloads, Up Next edits) and adds a
+ * what happens (plays ending, stars, downloads, dislikes, Up Next edits) and adds a
  * batch once the last recommendation plays, out of the Library and the
  * candidate catalog (`magicQueueRadio`), after every signal so far
  * was learned. The session is saved beside the queue, so it goes on after
@@ -793,6 +795,24 @@ export const layer = Layer.effectDiscard(
       fork(fill);
     };
 
+    /**
+     * Takes the disliked songs out of the recommendations not yet played
+     * (Core's `magicQueueDislikedEntries`): one just disliked, or one the
+     * dislikes read at launch hold. The session learns each as a
+     * recommendation removed, and picks a batch if none is left.
+     */
+    const dropDisliked = (): void => {
+      const session = activeMagicSession();
+      if (session === null) return;
+      const keys = magicQueueDislikedEntries(session, queueState.get(), dislikedSongsNow());
+      if (keys.length === 0) return;
+      fork(
+        Effect.gen(function* () {
+          for (const key of keys) yield* queue.dispatch({ type: "remove", key });
+        }),
+      );
+    };
+
     let previous = queueState.get();
     const onQueue = (): void => {
       const state = queueState.get();
@@ -832,7 +852,10 @@ export const layer = Layer.effectDiscard(
           }),
           onYtSongSignal((kind, videoIds) => teach(kind, videoIds.map(ytTrackId))),
           onStarred((trackIds) => teach("favorite", trackIds.map(String))),
+          onDislikesChanged(dropDisliked),
         ];
+        // Dislikes read before this ran: a queue picked back up may hold one.
+        dropDisliked();
         // A Magic Queue picked back up at launch may want its batch already.
         onQueue();
         return stops;
