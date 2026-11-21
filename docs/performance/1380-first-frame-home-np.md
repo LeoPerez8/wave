@@ -75,6 +75,14 @@ none), so nothing here is a timing.
 | `tsc --noEmit` in `apps/mobile`                                                                        | pass    |
 | Emulator or phone run                                                                                  | not run |
 
+## Queue and Related let go after close (#1346 follow-up)
+
+The Queue and Related panel stayed mounted, hidden, for the rest of the session once Now Playing
+had settled open. They now unmount `WARM_AFTER_CLOSE_MS` (4 s) after Now Playing closes, or at
+once at an Android memory warning with the sheet closed (`nowPlaying/warmPanes.ts`). Reopened
+within the 4 s, they stay warm; reopened later, they warm again once the sheet settles. Desktop
+check: `nowPlaying/warmPanes.test.ts` (6 tests) passes. No timing was taken here.
+
 ## Phone run: pending
 
 On the reference phone (Xiaomi 25118PC98G, Android 15), set up as #1347's run says, first with the
@@ -103,6 +111,8 @@ and Related open and close, and the app log's "Speed since" line. Then, by hand:
 - Open Home and scroll to its end at once: no section appears after the scroll reaches it.
 - Swipe the Magic Queue carousel to its other pages right after Home opens: they are drawn when
   they slide in, with no pop-in, and the app log shows no JS block during the swipe.
+- Close Now Playing, wait 5 s, reopen it and swipe to the Queue as soon as it settles: the Queue
+  is drawn in its first frame, and PSS a minute after closing is lower than with the panel kept.
 - Open Now Playing and, after it settles, swipe to the Queue and raise Related for the first time:
   each shows drawn in its first frame. Close Related, swipe its carousel to page 2, close and open
   it again: it opens on page 1.

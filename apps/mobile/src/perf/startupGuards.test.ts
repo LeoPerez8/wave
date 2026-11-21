@@ -51,12 +51,21 @@ test("Now Playing draws without Skia and mounts the lyrics card's host, not its 
 
 test("the Library's layer build leaves its upkeep for after the first screen settles", () => {
   const store = read("library/LibraryStore.ts");
-  const make = store.slice(store.indexOf("const make = Effect.gen"), store.indexOf("return LibraryStore.of("));
+  const make = store.slice(
+    store.indexOf("const make = Effect.gen"),
+    store.indexOf("return LibraryStore.of("),
+  );
   assert.ok(make.length > 0, "LibraryStore's make moved: update this guard");
   const upkeep = make.indexOf("const startupUpkeep = Effect.gen");
   assert.ok(upkeep >= 0, "LibraryStore's startupUpkeep is gone: update this guard");
-  const onBuild = make.slice(0, make.indexOf("const watchTaste")) + make.slice(make.indexOf("\n  });\n", upkeep));
-  for (const step of ["relinkCreditsIfUnlinked", "keyRecordings", "backfillRecordingTitles", "watchTasteSources"])
+  const onBuild =
+    make.slice(0, make.indexOf("const watchTaste")) + make.slice(make.indexOf("\n  });\n", upkeep));
+  for (const step of [
+    "relinkCreditsIfUnlinked",
+    "keyRecordings",
+    "backfillRecordingTitles",
+    "watchTasteSources",
+  ])
     assert.doesNotMatch(onBuild, new RegExp(`\b${step}\b`), `${step} runs while the layer builds`);
   assert.match(read("app/_layout.tsx"), /afterFirstSettled\("libraryUpkeep", runLibraryUpkeep\)/);
 });

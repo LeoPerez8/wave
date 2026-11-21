@@ -50,7 +50,9 @@ for (const size of FAST_AGAIN_SIZES) {
       size,
       first: Object.fromEntries(Object.entries(first!).map(([step, value]) => [step, ms(value)])),
       steady,
-      steadyTotal: ms(median(rest.map((pass) => pass.relink + pass.keys + pass.titles + pass.taste))),
+      steadyTotal: ms(
+        median(rest.map((pass) => pass.relink + pass.keys + pass.titles + pass.taste)),
+      ),
       note: FAST_AGAIN_DESKTOP,
     }),
   );

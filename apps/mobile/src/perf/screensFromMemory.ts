@@ -185,7 +185,11 @@ export const SCREENS_FROM_MEMORY: Record<string, ScreenFromMemory> = {
     ],
   },
   "app/library/stats/[ranking].tsx": {
-    draws: ["stats/hooks.ts#useTopSongs", "stats/hooks.ts#useTopAlbums", "stats/hooks.ts#useTopArtists"],
+    draws: [
+      "stats/hooks.ts#useTopSongs",
+      "stats/hooks.ts#useTopAlbums",
+      "stats/hooks.ts#useTopArtists",
+    ],
   },
   "app/dj.tsx": { via: ["dj/DjScreen.tsx"], draws: ["dj/DjScreen.tsx#useDjGrid"] },
   "app/music-folders.tsx": {

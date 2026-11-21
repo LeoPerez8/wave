@@ -88,16 +88,16 @@ const playlistsAhead = async (): Promise<readonly number[]> => {
     libraryQueryResult(listCollaborations),
   ]);
   return inSlice("Playlist pages", () => {
-  const short = new Set(
-    (playlists ?? [])
-      .filter((playlist) => playlist.trackCount <= PLAYLIST_ENTRIES_AHEAD)
-      .map((playlist) => playlist.id),
-  );
-  const shared = (collaborations ?? []).flatMap((row) =>
-    row.playlistId !== null && short.has(row.playlistId) ? [row.playlistId] : [],
-  );
-  const ids = [...new Set([...shared, ...short])];
-  return ids.slice(0, PLAYLISTS_AHEAD);
+    const short = new Set(
+      (playlists ?? [])
+        .filter((playlist) => playlist.trackCount <= PLAYLIST_ENTRIES_AHEAD)
+        .map((playlist) => playlist.id),
+    );
+    const shared = (collaborations ?? []).flatMap((row) =>
+      row.playlistId !== null && short.has(row.playlistId) ? [row.playlistId] : [],
+    );
+    const ids = [...new Set([...shared, ...short])];
+    return ids.slice(0, PLAYLISTS_AHEAD);
   });
 };
 

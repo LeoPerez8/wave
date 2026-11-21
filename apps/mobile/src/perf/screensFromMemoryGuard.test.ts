@@ -179,5 +179,8 @@ test("Stats opens from the queries kept at startup, with no skeleton", () => {
   }
   for (const route of ["app/library/stats/index.tsx", "app/library/stats/[ranking].tsx"])
     assert.doesNotMatch(textOf(route), /Skeleton/, `${route} draws a skeleton`);
-  assert.match(textOf("library/readyScreens.ts"), /keepReady\("Stats page", statsOpeningQueries\(\)\)/);
+  assert.match(
+    textOf("library/readyScreens.ts"),
+    /keepReady\("Stats page", statsOpeningQueries\(\)\)/,
+  );
 });

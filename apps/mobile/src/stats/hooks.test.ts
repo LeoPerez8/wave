@@ -122,7 +122,15 @@ function Block({ hooks, artistId, songs }: { hooks: Hooks; artistId: number; son
   return null;
 }
 
-function Ranking({ hooks, period, limit }: { hooks: Hooks; period: "month" | "week"; limit: number }) {
+function Ranking({
+  hooks,
+  period,
+  limit,
+}: {
+  hooks: Hooks;
+  period: "month" | "week";
+  limit: number;
+}) {
   const top = hooks.useTopSongs(period, limit);
   return top === undefined ? null : createElement("ranking", { first: top[0] });
 }
@@ -185,8 +193,10 @@ function Genres({ hooks, period }: { hooks: Hooks; period: "week" | "all" }) {
   return genres === undefined ? null : createElement("genres", { first: genres[0] });
 }
 
-const shownFirst = (renderer: ReactTestRenderer | undefined): unknown =>
-  renderer?.toJSON() === null ? undefined : (renderer!.toJSON() as { props: { first: unknown } }).props.first;
+const shownFirst = (renderer: ReactTestRenderer | undefined): unknown => {
+  const json = renderer?.toJSON();
+  return json === null || json === undefined || Array.isArray(json) ? undefined : json.props.first;
+};
 
 const reset = (): void => {
   results.clear();
