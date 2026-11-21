@@ -35,6 +35,7 @@ import { playedLibraryRows, playedResolver, type PlayedLibraryRows } from "./pla
 import * as schema from "./schema.ts";
 import { streamedSongsOf } from "./streamedSongs.ts";
 
+// Written into the statements: bound, a block's length (past 2^31) would be a real and divide exactly.
 const DAY_MS = 86_400_000;
 const BLOCK_MS = 32 * DAY_MS;
 
@@ -109,10 +110,10 @@ const sumSongs = (db: LibraryDatabase, songs: readonly string[]) => {
     for (const song of songs) {
       tx.run(sql`DELETE FROM play_buckets WHERE song = ${song}`);
       tx.run(sql`INSERT INTO play_buckets (song, span, bucket, counted_plays, listened_ms, latest_play_at)
-        SELECT ${song}, 0, e.started_at / ${DAY_MS}, count(*), sum(e.listened_ms), max(e.started_at)
+        SELECT ${song}, 0, e.started_at / ${sql.raw(String(DAY_MS))}, count(*), sum(e.listened_ms), max(e.started_at)
         FROM play_events AS e WHERE e.counted AND ${playsOf(song)} GROUP BY 3
         UNION ALL
-        SELECT ${song}, 1, e.started_at / ${BLOCK_MS}, count(*), sum(e.listened_ms), max(e.started_at)
+        SELECT ${song}, 1, e.started_at / ${sql.raw(String(BLOCK_MS))}, count(*), sum(e.listened_ms), max(e.started_at)
         FROM play_events AS e WHERE e.counted AND ${playsOf(song)} GROUP BY 3`);
     }
     tx.run(sql`UPDATE played_songs SET state = 1 WHERE state = 0
@@ -503,6 +504,19 @@ export const settleKeptTotals = (
   return keptTotalsSettled(db);
 };
 
+const keeping = new WeakSet<object>();
+
+/** Whether [db] has the kept totals' tables: a database from before 0065 (in tests) writes plays without. */
+const keepsTotals = (db: LibraryDatabase): boolean => {
+  if (keeping.has(connectionOf(db))) return true;
+  const found =
+    db.get<{ found: number }>(
+      sql`SELECT EXISTS (SELECT 1 FROM sqlite_master WHERE name = 'kept_totals_state') AS found`,
+    ).found === 1;
+  if (found) keeping.add(connectionOf(db));
+  return found;
+};
+
 /** How many songs a play's write credits itself: past this, or without the resolver, the job does. */
 const WRITE_SONGS = 8;
 
@@ -511,6 +525,7 @@ const WRITE_SONGS = 8;
  * that needs no whole-Library read; otherwise they wait for the startup job.
  */
 export const creditPlayedSongs = (db: LibraryDatabase): void => {
+  if (!keepsTotals(db)) return;
   const kept = keptState(db);
   if (kept.seededThrough < kept.seedUntil) return;
   const owed = db.all<{ song: string; state: number }>(

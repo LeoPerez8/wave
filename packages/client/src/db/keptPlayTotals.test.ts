@@ -14,6 +14,7 @@ import { creditSplits, relinkCredits } from "./credits.ts";
 import { keptPlayedTotals, keptTotalsSettled, settleKeptTotals } from "./keptPlayTotals.ts";
 import { recordPlay, updatePlay } from "./playHistory.ts";
 import {
+  playedEntityTotals,
   summedPlayedTotals,
   type PlayedEntityTotal,
   type PlayedEntityTotals,
@@ -21,7 +22,15 @@ import {
 import { identifyImportedPlays } from "./sync.ts";
 import { applyPulledPage, selectAccountTrackIds, selectUnpushed } from "./syncRows.ts";
 import { deleteTracksById } from "./tracks.ts";
-import { addTrack, openTestDatabase, type TestDatabase } from "./testDatabase.ts";
+import { migrateDatabase } from "../database.ts";
+import migrations from "./migrations.ts";
+import {
+  addTrack,
+  openTestDatabase,
+  traceQueries,
+  type TestDatabase,
+  type TracedQuery,
+} from "./testDatabase.ts";
 
 const DAY = 86_400_000;
 const NOW = Date.UTC(2026, 10, 21, 15, 30);
@@ -89,8 +98,8 @@ const assertSameTotals = (db: TestDatabase) => {
 };
 
 /** A Library with a collaboration, a compilation and plays over a year and a half, streamed ones too. */
-const library = async () => {
-  const db = await openTestDatabase();
+const library = async (options: { readonly through?: string } = {}) => {
+  const db = await openTestDatabase(options);
   const solo = addTrack(db, { title: "Solo", artist: "A", album: "First" });
   const duet = addTrack(db, { title: "Duet", artist: "A & B", album: "First" });
   const various = addTrack(db, {
@@ -217,5 +226,36 @@ test("an online album is named by the latest played song of it, in every window"
   for (const window of WINDOWS.slice(0, 4)) {
     const album = keptPlayedTotals(db, window, true)!.albums[0]!;
     assert.deepEqual([album.countedPlays, album.item.albumArtist], [2, "D"]);
+  }
+});
+
+/** Whether a traced statement walked the whole play history. */
+const scansHistory = (query: TracedQuery) =>
+  query.plan.some((step) => /^SCAN (play_events|e)\b/u.test(step));
+
+test("an upgrade sums its history after startup in bounded steps, reading today's sum until then", async () => {
+  const { db } = await library({ through: "0064_pull_dislikes" });
+  const before = summedPlayedTotals(db, statsWindow("year", NOW), true);
+  // The migration only notes the last play: the history is summed by the steps below.
+  migrateDatabase(db, migrations);
+  assert.equal(keptTotalsSettled(db), false);
+  assert.deepEqual(playedEntityTotals(db, statsWindow("year", NOW)), before);
+  let steps = 0;
+  for (; steps < 1_000; steps++) {
+    const step = traceQueries(db, () => settleKeptTotals(db, { songs: 2, plays: 500 }));
+    assert.deepEqual(step.queries.filter(scansHistory), [], `step ${steps} reads part of the history`);
+    if (step.result) break;
+  }
+  // 1,850 plays seeded 500 at a time, six songs summed and credited two at a time.
+  assert.equal(steps, 4 + 3 + 3 - 1);
+  assertSameTotals(db);
+});
+
+test("a kept read searches only the plays of its window's partial days", async () => {
+  const { db } = await library();
+  settle(db);
+  for (const window of WINDOWS) {
+    const read = traceQueries(db, () => keptPlayedTotals(db, window, true));
+    assert.deepEqual(read.queries.filter(scansHistory), [], JSON.stringify(window));
   }
 });
